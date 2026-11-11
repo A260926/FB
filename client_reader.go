@@ -59,6 +59,12 @@ func (r *clientReader) runInner() error {
 
 		switch what := what.(type) {
 		case *base.Response:
+			// flip the reception gate before any frame following the response
+			// can be read, so PLAY handovers never lose or leak the first frame.
+			if r.c.epochGate != nil {
+				r.c.epochGate.onResponse(what.StatusCode)
+			}
+
 			select {
 			case r.c.chResponse <- what:
 			case <-r.terminate:
@@ -76,6 +82,13 @@ func (r *clientReader) runInner() error {
 			if !r.allowInterleavedFrames {
 				r.mutex.Unlock()
 				return liberrors.ErrClientUnexpectedFrame{}
+			}
+
+			if r.c.epochGate != nil && !r.c.epochGate.allow() {
+				// frames of the previous position are discarded; frames of the
+				// new one wait here until the new epoch is published.
+				r.mutex.Unlock()
+				continue
 			}
 
 			if cb, ok := r.c.tcpCallbackByChannel[what.Channel]; ok {

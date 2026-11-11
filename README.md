@@ -59,6 +59,7 @@ Features:
 - [client-play-timestamp](examples/client-play-timestamp/main.go)
 - [client-play-options](examples/client-play-options/main.go)
 - [client-play-pause](examples/client-play-pause/main.go)
+- [client-play-reset-on-play](examples/client-play-reset-on-play/main.go)
 - [client-play-backchannel](examples/client-play-backchannel/main.go)
 - [client-play-format-av1](examples/client-play-format-av1/main.go)
 - [client-play-format-av1-to-jpeg](examples/client-play-format-av1-to-jpeg/main.go)
@@ -105,6 +106,22 @@ Features:
 ## API Documentation
 
 [Click to open the API Documentation](https://pkg.go.dev/github.com/bluenviron/gortsplib/v5#pkg-index)
+
+## Seeking inside a session (ResetOnPlay)
+
+A VOD client often seeks repeatedly with PAUSE followed by PLAY without tearing down the RTSP session. By default the RTP reception history survives a PLAY: after a seek, a sequence number that jumps backwards is interpreted as a huge burst of lost packets on TCP, or as a late duplicate and silently dropped on UDP, and `PacketNTP` keeps using the sender report received before the seek.
+
+Setting the boolean `Client.ResetOnPlay` to `true` before calling `Start()` makes every successful PLAY start a new reception epoch:
+
+- RTP/RTCP packets arriving while the PLAY response is in flight are discarded, without calling the packet callbacks and without moving reception statistics or time mappings.
+- Each receiving format's reordering buffer, duplicate detection, extended sequence number cycles, jitter history and sender-report mapping are cleared; the PTS decoder is restarted from the epoch's own origin, so the first packet of the new position is delivered immediately and no loss is fabricated from the sequence number jump.
+- If the PLAY response contains a RTP-Info header with a unique `seq` for a setupped media, that value gates late starting packets of the media. Medias are matched by absolute URL (userinfo is ignored); unknown URLs, malformed headers, missing `seq` values or duplicate matches simply disable the gate.
+- A failed request or a non-200 PLAY response does not publish an epoch, and a failed PAUSE leaves the existing reception state untouched.
+- RECORD sessions and back channels are unaffected.
+
+Statistics use two scopes. In `Client.Stats()`, received, lost, error and byte counters are cumulative and keep accumulating across epochs, while `LastSequenceNumber`, `LastRTP`, `LastNTP` and `Jitter` describe only the current epoch (they are zero until its first packet is received). RTCP receiver reports likewise describe only the current epoch — the extended sequence number, total/fraction lost, jitter, LSR and DLSR are reset, and no receiver report is sent before the epoch receives its first RTP packet. The negotiated local SSRC and transport are preserved.
+
+A complete example is available in [client-play-reset-on-play](examples/client-play-reset-on-play/main.go).
 
 ## RTP Payload Formats
 

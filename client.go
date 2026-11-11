@@ -539,6 +539,16 @@ type Client struct {
 	DisableRTCPSenderReports bool
 	// explicitly request back channels to the server.
 	RequestBackChannels bool
+	// when playing, start a new reception epoch every time a PLAY request
+	// succeeds. The epoch clears RTP reordering buffers, duplicate detection,
+	// extended sequence number cycles, jitter history, sender report mappings
+	// and the PTS decoder of every setupped media, so that seeking inside the
+	// same RTSP session does not fabricate packet loss or reuse data from the
+	// previous position. RTP/RTCP packets arriving while the PLAY response is
+	// in flight are discarded, and a RTP-Info sequence number, when present,
+	// gates late packets of the new position. It defaults to false, and has no
+	// effect when recording or using back channels.
+	ResetOnPlay bool
 	// Range of ports used as source port in outbound UDP packets.
 	// It defaults to [10000, 65535].
 	UDPSourcePortRange [2]uint16
@@ -618,6 +628,8 @@ type Client struct {
 	writerMutex           sync.RWMutex
 	writer                *asyncprocessor.Processor
 	reader                *clientReader
+	epochGate             *receiveEpochGate
+	timeDecoderMutex      sync.RWMutex
 	timeDecoder           *rtptime.GlobalDecoder
 	mustClose             bool
 	tcpFrame              *base.InterleavedFrame
@@ -759,6 +771,10 @@ func (c *Client) Start() error {
 	c.chWriterError = make(chan error)
 	c.chListenError = make(chan error)
 	c.done = make(chan struct{})
+
+	if c.ResetOnPlay {
+		c.epochGate = newReceiveEpochGate()
+	}
 
 	go c.run()
 
@@ -997,6 +1013,11 @@ func (c *Client) handleServerRequest(req *base.Request) error {
 }
 
 func (c *Client) doClose() {
+	if c.epochGate != nil {
+		// unblock any reader waiting for an epoch publication
+		c.epochGate.close()
+	}
+
 	if c.state == clientStatePlay || c.state == clientStateRecord {
 		c.destroyWriter()
 		c.stopTransportRoutines()
@@ -1056,6 +1077,11 @@ func (c *Client) reset() {
 	c.stdChannelSetupped = false
 	c.setuppedMedias = nil
 	c.tcpCallbackByChannel = nil
+
+	// doClose() closed the gate; a fresh one is needed for the new connection.
+	if c.ResetOnPlay {
+		c.epochGate = newReceiveEpochGate()
+	}
 }
 
 func (c *Client) checkState(allowed map[clientState]struct{}) error {
@@ -1114,8 +1140,10 @@ func (c *Client) trySwitchingProtocol() error {
 }
 
 func (c *Client) startTransportRoutines() {
+	c.timeDecoderMutex.Lock()
 	c.timeDecoder = &rtptime.GlobalDecoder{}
 	c.timeDecoder.Initialize()
+	c.timeDecoderMutex.Unlock()
 
 	for _, cm := range c.setuppedMedias {
 		cm.start()
@@ -1162,7 +1190,9 @@ func (c *Client) stopTransportRoutines() {
 		cm.stop()
 	}
 
+	c.timeDecoderMutex.Lock()
 	c.timeDecoder = nil
+	c.timeDecoderMutex.Unlock()
 }
 
 func (c *Client) createWriter() {
@@ -2368,12 +2398,22 @@ func (c *Client) doPlay(ra *headers.Range) (*base.Response, error) {
 		}
 	}
 
+	if c.epochGate != nil {
+		// RTP/RTCP packets arriving before the PLAY response now belong to the
+		// previous position and must be discarded without touching callbacks,
+		// statistics or time mappings.
+		c.epochGate.begin()
+	}
+
 	res, err := c.do(&base.Request{
 		Method: base.Play,
 		URL:    c.baseURL,
 		Header: header,
 	}, false)
 	if err != nil {
+		if c.epochGate != nil {
+			c.abortReceiveEpoch()
+		}
 		c.destroyWriter()
 		c.stopTransportRoutines()
 		c.state = clientStatePrePlay
@@ -2381,12 +2421,21 @@ func (c *Client) doPlay(ra *headers.Range) (*base.Response, error) {
 	}
 
 	if res.StatusCode != base.StatusOK {
+		if c.epochGate != nil {
+			c.abortReceiveEpoch()
+		}
 		c.destroyWriter()
 		c.stopTransportRoutines()
 		c.state = clientStatePrePlay
 		return nil, liberrors.ErrClientBadStatusCode{
 			Code: res.StatusCode, Message: res.StatusMessage,
 		}
+	}
+
+	if c.epochGate != nil {
+		// the response was a success: publish the new epoch, including any
+		// RTP-Info threshold, and only then let packets through again.
+		c.resetReceiveEpoch(res)
 	}
 
 	c.startWriter()
@@ -2587,7 +2636,12 @@ func (c *Client) WritePacketRTCP(medi *description.Media, pkt rtcp.Packet) error
 func (c *Client) PacketPTS(medi *description.Media, pkt *rtp.Packet) (int64, bool) {
 	cm := c.setuppedMedias[medi]
 	ct := cm.formats[pkt.PayloadType]
-	return c.timeDecoder.Decode(ct.format, pkt)
+
+	c.timeDecoderMutex.RLock()
+	decoder := c.timeDecoder
+	c.timeDecoderMutex.RUnlock()
+
+	return decoder.Decode(ct.format, pkt)
 }
 
 // PacketNTP returns the NTP (absolute timestamp) of an inbound RTP packet.

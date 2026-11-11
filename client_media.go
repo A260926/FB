@@ -226,6 +226,25 @@ func (cm *clientMedia) stop() {
 	}
 }
 
+// resetReceive starts a new reception epoch on every format of the media.
+// Reception history of each format is independent, so each receiver is reset
+// separately. If threshold is set, it is used as the RTP-Info sequence number
+// gate for the media's first accepted packet.
+func (cm *clientMedia) resetReceive(threshold *uint16, hasThreshold bool) {
+	for _, ct := range cm.formats {
+		if ct.rtpReceiver == nil {
+			continue
+		}
+
+		ct.resetRemoteSSRC()
+		ct.rtpReceiver.Reset()
+
+		if hasThreshold {
+			ct.rtpReceiver.SetInitialSequenceThreshold(*threshold)
+		}
+	}
+}
+
 func (cm *clientMedia) stats() SessionStatsMedia { //nolint:dupl
 	return SessionStatsMedia{
 		InboundBytes:              cm.bytesReceived.Load(),

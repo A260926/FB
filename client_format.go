@@ -80,8 +80,11 @@ func (cf *clientFormat) close() {
 
 func (cf *clientFormat) stats() SessionStatsFormat { //nolint:dupl
 	var recvStats *rtpreceiver.Stats
+	var recvTotal uint64
+	var lostTotal uint64
 	if cf.rtpReceiver != nil {
 		recvStats = cf.rtpReceiver.Stats()
+		recvTotal, lostTotal = cf.rtpReceiver.Totals()
 	}
 
 	var sentStats *rtpsender.Stats
@@ -90,18 +93,8 @@ func (cf *clientFormat) stats() SessionStatsFormat { //nolint:dupl
 	}
 
 	return SessionStatsFormat{
-		InboundRTPPackets: func() uint64 {
-			if recvStats != nil {
-				return recvStats.Received
-			}
-			return 0
-		}(),
-		InboundRTPPacketsLost: func() uint64 {
-			if recvStats != nil {
-				return recvStats.Lost
-			}
-			return 0
-		}(),
+		InboundRTPPackets:     recvTotal,
+		InboundRTPPacketsLost: lostTotal,
 		InboundRTPPacketsJitter: func() float64 {
 			if recvStats != nil {
 				return recvStats.Jitter
@@ -228,6 +221,13 @@ func (cf *clientFormat) remoteSSRC() (uint32, bool) {
 	cf.remoteSSRCMutex.RLock()
 	defer cf.remoteSSRCMutex.RUnlock()
 	return cf.remoteSSRCValue, cf.remoteSSRCFilled
+}
+
+func (cf *clientFormat) resetRemoteSSRC() {
+	cf.remoteSSRCMutex.Lock()
+	defer cf.remoteSSRCMutex.Unlock()
+	cf.remoteSSRCFilled = false
+	cf.remoteSSRCValue = 0
 }
 
 func (cf *clientFormat) readPacketRTP(payload []byte, header *rtp.Header, headerSize int, now time.Time) bool {

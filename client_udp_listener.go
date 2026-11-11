@@ -152,6 +152,12 @@ func (u *clientUDPListener) run() {
 			continue
 		}
 
+		if u.c.epochGate != nil && !u.c.epochGate.allow() {
+			// packets of the previous position are discarded; packets of the
+			// new one wait here until the new epoch is published.
+			continue
+		}
+
 		now := u.c.timeNow()
 		u.lastPacketTime.Store(now.Unix())
 

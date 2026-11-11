@@ -44,8 +44,13 @@ type Receiver struct {
 
 	mutex sync.RWMutex
 
-	// data from RTP packets
+	// cumulative counters, they survive Reset() and keep growing across epochs
+	receivedTotal uint64
+	lostTotal     uint64
+
+	// data from RTP packets of the current epoch
 	firstRTPPacketReceived     bool
+	initialSequenceThreshold   *uint16
 	timeInitialized            bool
 	buffer                     []*rtp.Packet
 	absPos                     uint16
@@ -61,7 +66,7 @@ type Receiver struct {
 	receivedAndLostSinceReport uint64
 	jitter                     float64
 
-	// data from RTCP sender reports
+	// data from RTCP sender reports of the current epoch
 	firstSenderReportReceived  bool
 	lastSenderReportTimeNTP    uint64
 	lastSenderReportTimeRTP    uint32
@@ -101,6 +106,70 @@ func (rr *Receiver) Initialize() error {
 func (rr *Receiver) Close() {
 	close(rr.terminate)
 	<-rr.done
+}
+
+// Reset starts a new reception epoch.
+//
+// Cumulative counters (total received and total lost packets) are preserved,
+// while all the per-epoch reception state is cleared: the reordering buffer,
+// duplicate detection, extended sequence number cycles, jitter history and
+// sender report mappings. The first packet of the new epoch is delivered
+// immediately and becomes the counting base, so no loss is fabricated from
+// the sequence number jump.
+func (rr *Receiver) Reset() {
+	rr.mutex.Lock()
+	defer rr.mutex.Unlock()
+
+	rr.resetUnsafe()
+}
+
+func (rr *Receiver) resetUnsafe() {
+	if rr.buffer != nil {
+		clear(rr.buffer)
+	}
+
+	rr.firstRTPPacketReceived = false
+	rr.timeInitialized = false
+	rr.absPos = 0
+	rr.negativeCount = 0
+	rr.sequenceNumberCycles = 0
+	rr.lastSequenceNumber = 0
+	rr.remoteSSRC = 0
+	rr.lastRTP = 0
+	rr.lastSystem = time.Time{}
+	rr.lost = 0
+	rr.lostSinceReport = 0
+	rr.received = 0
+	rr.receivedAndLostSinceReport = 0
+	rr.jitter = 0
+
+	rr.firstSenderReportReceived = false
+	rr.lastSenderReportTimeNTP = 0
+	rr.lastSenderReportTimeRTP = 0
+	rr.lastSenderReportTimeSystem = time.Time{}
+
+	rr.initialSequenceThreshold = nil
+}
+
+// SetInitialSequenceThreshold sets a sequence number gate for the first
+// accepted packet of the current (typically, a freshly reset) epoch.
+//
+// Packets are dropped, without being counted, until one is received whose
+// uint16 modular distance from threshold, converted to int16, is non-negative.
+// The first accepted packet then establishes the counting base: the distance
+// from threshold is not reported as lost. After the first accepted packet,
+// ordinary reception rules apply. A threshold set after the first packet of
+// the epoch has been accepted has no effect.
+func (rr *Receiver) SetInitialSequenceThreshold(threshold uint16) {
+	rr.mutex.Lock()
+	defer rr.mutex.Unlock()
+
+	if rr.firstRTPPacketReceived {
+		return
+	}
+
+	v := threshold
+	rr.initialSequenceThreshold = &v
 }
 
 func (rr *Receiver) run() {
@@ -192,10 +261,19 @@ func (rr *Receiver) ProcessPacket2(
 	rr.mutex.Lock()
 	defer rr.mutex.Unlock()
 
+	// first packet of the epoch is gated by the RTP-Info sequence number, if any
+	if !rr.firstRTPPacketReceived && rr.initialSequenceThreshold != nil {
+		if int16(pkt.SequenceNumber-*rr.initialSequenceThreshold) < 0 {
+			return nil, 0
+		}
+		rr.initialSequenceThreshold = nil
+	}
+
 	// first packet
 	if !rr.firstRTPPacketReceived {
 		rr.firstRTPPacketReceived = true
 		rr.received = 1
+		rr.receivedTotal++
 		rr.receivedAndLostSinceReport = 1
 		rr.lastSequenceNumber = pkt.SequenceNumber
 		rr.remoteSSRC = pkt.SSRC
@@ -220,8 +298,10 @@ func (rr *Receiver) ProcessPacket2(
 	}
 
 	rr.lost += lost
+	rr.lostTotal += lost
 	rr.lostSinceReport += lost
 	rr.received += uint64(len(pkts))
+	rr.receivedTotal += uint64(len(pkts))
 	rr.receivedAndLostSinceReport += uint64(len(pkts)) + lost
 
 	for _, pkt := range pkts {
@@ -382,16 +462,18 @@ func (rr *Receiver) PacketNTP(ts uint32) (time.Time, bool) {
 // Stats are statistics.
 type Stats struct {
 	// inbound RTP packets correctly received and processed.
+	// This value is cumulative across reception epochs.
 	Received uint64
 	// lost inbound RTP packets.
+	// This value is cumulative across reception epochs.
 	Lost uint64
-	// Jitter of inbound RTP packets.
+	// Jitter of inbound RTP packets of the current reception epoch.
 	Jitter float64
-	// Last sequence number of inbound RTP packets.
+	// Last sequence number of inbound RTP packets of the current reception epoch.
 	LastSequenceNumber uint16
-	// Last RTP time of inbound RTP packets.
+	// Last RTP time of inbound RTP packets of the current reception epoch.
 	LastRTP uint32
-	// Last NTP time of inbound RTP packets.
+	// Last NTP time of inbound RTP packets of the current reception epoch.
 	LastNTP time.Time
 
 	// Deprecated: use Received.
@@ -402,7 +484,21 @@ type Stats struct {
 	RemoteSSRC uint32
 }
 
+// Totals returns the cumulative number of received and lost packets.
+// Unlike Stats, it keeps returning the accumulated values after Reset(),
+// even before the first packet of the new epoch has been received.
+func (rr *Receiver) Totals() (uint64, uint64) {
+	rr.mutex.RLock()
+	defer rr.mutex.RUnlock()
+
+	return rr.receivedTotal, rr.lostTotal
+}
+
 // Stats returns statistics.
+//
+// Received and Lost are cumulative across reception epochs. The other values
+// (jitter, last sequence number, last RTP/NTP times) describe only the current
+// epoch; nil is returned until its first RTP packet has been received.
 func (rr *Receiver) Stats() *Stats {
 	rr.mutex.RLock()
 	defer rr.mutex.RUnlock()
@@ -414,15 +510,15 @@ func (rr *Receiver) Stats() *Stats {
 	ntp, _ := rr.packetNTPUnsafe(rr.lastRTP)
 
 	return &Stats{
-		Received:           rr.received,
-		Lost:               rr.lost,
+		Received:           rr.receivedTotal,
+		Lost:               rr.lostTotal,
 		Jitter:             rr.jitter,
 		LastSequenceNumber: rr.lastSequenceNumber,
 		LastRTP:            rr.lastRTP,
 		LastNTP:            ntp,
 		// deprecated
-		TotalReceived: rr.received,
-		TotalLost:     rr.lost,
+		TotalReceived: rr.receivedTotal,
+		TotalLost:     rr.lostTotal,
 		RemoteSSRC:    rr.remoteSSRC,
 	}
 }
