@@ -73,6 +73,11 @@ type patternPainter struct {
 // Paint satisfies the Painter interface.
 func (r *patternPainter) Paint(ss []raster.Span, done bool) {
 	b := r.im.Bounds()
+	// the mask's top-left corner maps to device pixel (0,0)
+	var mp image.Point
+	if r.mask != nil {
+		mp = r.mask.Bounds().Min
+	}
 	for _, s := range ss {
 		if s.Y < b.Min.Y {
 			continue
@@ -98,7 +103,7 @@ func (r *patternPainter) Paint(ss []raster.Span, done bool) {
 		for i, x := i0, x0; i < i1; i, x = i+4, x+1 {
 			ma := s.Alpha
 			if r.mask != nil {
-				ma = ma * uint32(r.mask.AlphaAt(x, y).A) / 255
+				ma = ma * uint32(r.mask.AlphaAt(x+mp.X, y+mp.Y).A) / 255
 				if ma == 0 {
 					continue
 				}

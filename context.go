@@ -501,14 +501,18 @@ func (dc *Context) ClipPreserve() {
 		dc.mask = clip
 	} else {
 		mask := image.NewAlpha(image.Rect(0, 0, dc.width, dc.height))
-		draw.DrawMask(mask, mask.Bounds(), clip, image.ZP, dc.mask, image.ZP, draw.Over)
+		draw.DrawMask(mask, mask.Bounds(), clip, image.ZP, dc.mask, dc.mask.Bounds().Min, draw.Over)
 		dc.mask = mask
 	}
 }
 
 // SetMask allows you to directly set the *image.Alpha to be used as a clipping
-// mask. It must be the same size as the context, else an error is returned
-// and the mask is unchanged.
+// mask. The mask's top-left corner (its Bounds().Min) is aligned with device
+// pixel (0,0); only the mask's logical size is compared with the context size,
+// never its absolute origin, so a sub-image of a larger alpha image may be
+// used. The mask is not copied: subsequent changes to the mask's pixels are
+// honored by the next drawing operation. It must be the same size as the
+// context, else an error is returned and the mask is unchanged.
 func (dc *Context) SetMask(mask *image.Alpha) error {
 	if mask.Bounds().Size() != dc.im.Bounds().Size() {
 		return errors.New("mask size must match context size")
@@ -527,13 +531,20 @@ func (dc *Context) AsMask() *image.Alpha {
 }
 
 // InvertMask inverts the alpha values in the current clipping mask such that
-// a fully transparent region becomes fully opaque and vice versa.
+// a fully transparent region becomes fully opaque and vice versa. Only the
+// mask's active region (its Bounds) is modified; if the mask is a sub-image,
+// padding and neighboring pixels of the parent image are left untouched.
 func (dc *Context) InvertMask() {
 	if dc.mask == nil {
 		dc.mask = image.NewAlpha(dc.im.Bounds())
 	} else {
-		for i, a := range dc.mask.Pix {
-			dc.mask.Pix[i] = 255 - a
+		b := dc.mask.Bounds()
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			i := dc.mask.PixOffset(b.Min.X, y)
+			for x := b.Min.X; x < b.Max.X; x++ {
+				dc.mask.Pix[i] = 255 - dc.mask.Pix[i]
+				i++
+			}
 		}
 	}
 }
@@ -682,7 +693,7 @@ func (dc *Context) DrawImageAnchored(im image.Image, x, y int, ax, ay float64) {
 	} else {
 		transformer.Transform(dc.im, s2d, im, im.Bounds(), draw.Over, &draw.Options{
 			DstMask:  dc.mask,
-			DstMaskP: image.ZP,
+			DstMaskP: dc.mask.Bounds().Min,
 		})
 	}
 }
@@ -758,7 +769,7 @@ func (dc *Context) DrawStringAnchored(s string, x, y, ax, ay float64) {
 	} else {
 		im := image.NewRGBA(image.Rect(0, 0, dc.width, dc.height))
 		dc.drawString(im, s, x, y)
-		draw.DrawMask(dc.im, dc.im.Bounds(), im, image.ZP, dc.mask, image.ZP, draw.Over)
+		draw.DrawMask(dc.im, dc.im.Bounds(), im, image.ZP, dc.mask, dc.mask.Bounds().Min, draw.Over)
 	}
 }
 
