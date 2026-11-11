@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-source userfb/test-env.sh
+source regress/test-env.sh
 go version
 go mod download
 go mod verify
