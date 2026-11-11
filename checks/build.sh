@@ -12,5 +12,5 @@ for name in "${sources[@]}"; do
 done
 ar rcs .author-build/libSoundTouch.a "${objects[@]}"
 "$cxx" "${flags[@]}" source/SoundStretch/main.cpp source/SoundStretch/RunParameters.cpp source/SoundStretch/WavFile.cpp .author-build/libSoundTouch.a -o .author-build/soundstretch
-"$cxx" "${flags[@]}" author_checks/baseline.cpp .author-build/libSoundTouch.a -o .author-build/baseline
+"$cxx" "${flags[@]}" checks/baseline.cpp .author-build/libSoundTouch.a -o .author-build/baseline
 printf 'BUILD_OK float scalar c++11\n'
