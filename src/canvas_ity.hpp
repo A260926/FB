@@ -173,6 +173,7 @@ struct line_path { std::vector< xy > points;
                    std::vector< subpath_data > subpaths; };
 struct pixel_run { unsigned short x, y; float delta; };
 typedef std::vector< pixel_run > pixel_runs;
+struct layer;
 
 class canvas
 {
@@ -1147,6 +1148,66 @@ public:
     ///
     void restore();
 
+    // ======== LAYERS ========
+
+    /// @brief  Redirect drawing into a new, transparent offscreen layer.
+    ///
+    /// After this succeeds, all drawing (including get_image_data() and
+    /// put_image_data(), which address the current target) goes into a
+    /// transparent layer of the same size as the canvas instead of into the
+    /// current target.  The pixels of the parent target are not copied into
+    /// the layer.  When the layer is later ended with end_layer(), the whole
+    /// layer is composited onto its direct parent target in a single
+    /// source-over operation, with the given opacity applied exactly once to
+    /// the complete result, so overlapping shapes drawn inside the layer do
+    /// not accumulate opacity.  Colors follow the same linearized,
+    /// premultiplied rules as all other blending.
+    ///
+    /// The layer inherits the parent's full drawing state: transform, fill
+    /// and stroke brushes, global alpha, compositing operation, shadows, line
+    /// and text styles, and all other settings.  The parent clip region is
+    /// special: it is not active while drawing into the layer.  The layer
+    /// instead begins clipped to the complete canvas, clips made inside the
+    /// layer apply only to drawing within it, and the parent clip is applied
+    /// a single time when the layer is composited onto its parent.
+    ///
+    /// The parent's current path and save stack are preserved and hidden:
+    /// the layer begins with an empty path and an empty save stack, so
+    /// restore() against the empty layer stack keeps its usual no-op
+    /// behavior and cannot cross the layer boundary.  Layers may be nested;
+    /// each layer is ended in last-in, first-out order.
+    ///
+    /// The opacity must be a finite value in the range from 0.0 for fully
+    /// transparent to 1.0 for fully opaque, inclusive.  If it is not, this
+    /// returns false and leaves all state unchanged.  Destroying the canvas
+    /// while layers are still active releases every layer and its state.
+    ///
+    /// @param opacity  opacity applied once when the layer is composited
+    /// @return         true if the layer was begun successfully
+    ///
+    bool begin_layer(
+        float opacity );
+
+    /// @brief  End the current layer and composite it onto its parent.
+    ///
+    /// This composites the entire current layer onto its direct parent
+    /// target using source-over blending, with the layer's opacity applied
+    /// exactly once and the parent clip region applied exactly once.  The
+    /// compositing is not affected by the transform, shadows, global alpha,
+    /// or any other drawing setting in effect when the layer ends, nor by
+    /// any settings changed inside the layer.  Compositing modes such as
+    /// destination_out used inside the layer only erase pixels of the
+    /// layer itself, never of the parent target.
+    ///
+    /// Any save() calls inside the layer that were not matched by restore()
+    /// are discarded.  The parent's current path, full drawing state, and
+    /// save stack are then restored.  If no layer is currently active, this
+    /// returns false and has no effect.
+    ///
+    /// @return  true if a layer was ended, false if no layer was active
+    ///
+    bool end_layer();
+
 private:
     int size_x;
     int size_y;
@@ -1170,8 +1231,12 @@ private:
     font_face face;
     rgba *bitmap;
     canvas *saves;
+    layer *layers;
     canvas( canvas const & );
     canvas &operator=( canvas const & );
+    void discard_saves();
+    void full_canvas_mask(
+        pixel_runs &that );
     void add_tessellation( xy, xy, xy, xy, float, int );
     void add_bezier( xy, xy, xy, xy, float );
     void path_to_lines( bool );
@@ -1295,6 +1360,26 @@ static rgba const clamped( rgba that ) {
                  std::min( std::max( that.g, 0.0f ), 1.0f ),
                  std::min( std::max( that.b, 0.0f ), 1.0f ),
                  std::min( std::max( that.a, 0.0f ), 1.0f ) ); }
+
+// An active offscreen layer.  Beginning a layer moves the parent target's
+// pixel buffer, clip mask, and current path here, while the parent drawing
+// state and save stack are preserved through an ordinary save() whose head
+// is stored in saved_saves.  The canvas then gets a fresh transparent
+// buffer, a full-canvas clip, an empty path, and an empty save stack.
+// Ending the layer composites the current buffer back onto the saved parent
+// buffer once, modulated once by the layer opacity and gated once by the
+// saved parent clip, and then restores the saved state.  Nested layers link
+// through the next pointer in last-in, first-out order.
+//
+struct layer
+{
+    rgba *target;
+    pixel_runs clip;
+    bezier_path saved_path;
+    canvas *saved_saves;
+    float opacity;
+    layer *next;
+};
 
 // Helpers for TTF file parsing
 static int unsigned_8( std::vector< unsigned char > &data, int index ) {
@@ -2626,31 +2711,65 @@ canvas::canvas(
       image_brush(),
       face(),
       bitmap( new rgba[ width * height ] ),
-      saves( 0 )
+      saves( 0 ),
+      layers( 0 )
 {
     affine_matrix identity = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
     forward = identity;
     inverse = identity;
     set_color( fill_style, 0.0f, 0.0f, 0.0f, 1.0f );
     set_color( stroke_style, 0.0f, 0.0f, 0.0f, 1.0f );
-    for ( unsigned short y = 0; y < size_y; ++y )
-    {
-        pixel_run piece_1 = { 0, y, 1.0f };
-        pixel_run piece_2 = { static_cast< unsigned short >( size_x ), y,
-                              -1.0f };
-        mask.push_back( piece_1 );
-        mask.push_back( piece_2 );
-    }
+    full_canvas_mask( mask );
 }
 
 canvas::~canvas()
 {
+    while ( layer *head = layers )
+    {
+        discard_saves();
+        delete[] bitmap;
+        bitmap = head->target;
+        saves = head->saved_saves;
+        discard_saves();
+        layers = head->next;
+        delete head;
+    }
     delete[] bitmap;
     while ( canvas *head = saves )
     {
         saves = head->saves;
         head->saves = 0;
         delete head;
+    }
+}
+
+// Release every state on the save stack without restoring any of them.
+// This is used for save() calls left unmatched when a layer ends or when
+// the canvas is destroyed with layers still active.
+//
+void canvas::discard_saves()
+{
+    while ( canvas *head = saves )
+    {
+        saves = head->saves;
+        head->saves = 0;
+        delete head;
+    }
+}
+
+// Fill a clip mask with runs describing an unclipped, full-canvas region.
+//
+void canvas::full_canvas_mask(
+    pixel_runs &that )
+{
+    that.clear();
+    for ( int y = 0; y < size_y; ++y )
+    {
+        pixel_run piece_1 = { 0, static_cast< unsigned short >( y ), 1.0f };
+        pixel_run piece_2 = { static_cast< unsigned short >( size_x ),
+                              static_cast< unsigned short >( y ), -1.0f };
+        that.push_back( piece_1 );
+        that.push_back( piece_2 );
     }
 }
 
@@ -3462,6 +3581,95 @@ void canvas::restore()
     saves = state->saves;
     state->saves = 0;
     delete state;
+}
+
+bool canvas::begin_layer(
+    float opacity )
+{
+    // Reject NaN and positive or negative infinity (NaN compares unequal to
+    // itself, and infinity times zero is NaN) as well as out-of-range values
+    // without changing any state.
+    if ( opacity != opacity || opacity * 0.0f != 0.0f ||
+         opacity < 0.0f || 1.0f < opacity )
+        return false;
+    layer *entry = new layer;
+    save();
+    entry->saved_saves = saves;
+    saves = 0;
+    entry->target = bitmap;
+    entry->clip.swap( mask );
+    entry->saved_path.points.swap( path.points );
+    entry->saved_path.subpaths.swap( path.subpaths );
+    entry->opacity = opacity;
+    entry->next = layers;
+    layers = entry;
+    bitmap = new rgba[ static_cast< size_t >( size_x ) *
+                       static_cast< size_t >( size_y ) ]();
+    full_canvas_mask( mask );
+    lines.points.clear();
+    lines.subpaths.clear();
+    scratch.points.clear();
+    scratch.subpaths.clear();
+    return true;
+}
+
+bool canvas::end_layer()
+{
+    if ( !layers )
+        return false;
+    layer *entry = layers;
+    rgba *source = bitmap;
+    rgba *target = entry->target;
+
+    // Composite the whole layer onto its direct parent in a single
+    // source-over pass.  The layer opacity multiplies the premultiplied
+    // layer color exactly once, and the parent clip mask gates the result
+    // exactly once.  The current transform, shadows, global alpha, and
+    // compositing operation do not affect this pass.
+    int x = -1;
+    int y = -1;
+    float clip_sum = 0.0f;
+    static float const threshold = 1.0f / 8160.0f;
+    for ( size_t index = 0; index < entry->clip.size(); ++index )
+    {
+        pixel_run next = entry->clip[ index ];
+        float visibility = std::min( fabsf( clip_sum ), 1.0f );
+        int to = next.y == y ? next.x : x + 1;
+        if ( visibility >= threshold )
+            for ( ; x < to; ++x )
+            {
+                rgba &back = target[ y * size_x + x ];
+                rgba fore = entry->opacity * source[ y * size_x + x ];
+                rgba blend = fore + ( 1.0f - fore.a ) * back;
+                blend.a = std::min( blend.a, 1.0f );
+                back = visibility * blend + ( 1.0f - visibility ) * back;
+            }
+        x = next.x;
+        if ( next.y != y )
+        {
+            y = next.y;
+            clip_sum = 0.0f;
+        }
+        clip_sum += next.delta;
+    }
+    delete[] source;
+
+    // Discard save() calls left unmatched inside the layer, then restore
+    // the parent drawing state and its save stack.
+    discard_saves();
+    saves = entry->saved_saves;
+    restore();
+    bitmap = target;
+    mask.swap( entry->clip );
+    path.points.swap( entry->saved_path.points );
+    path.subpaths.swap( entry->saved_path.subpaths );
+    lines.points.clear();
+    lines.subpaths.clear();
+    scratch.points.clear();
+    scratch.subpaths.clear();
+    layers = entry->next;
+    delete entry;
+    return true;
 }
 
 }
