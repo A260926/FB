@@ -13,6 +13,7 @@ package chromedp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -552,6 +553,11 @@ func WithBrowserOption(opts ...BrowserOption) ContextOption {
 // HTTP response information for its HTML document. This can be useful to wait
 // for the page to be ready, or to catch 404 status codes, for example.
 //
+// RunResponse only waits for the top-level frame; navigations happening
+// inside iframes, including fragment navigations, do not finish the wait. To
+// wait for the response of a specific frame instead, see
+// [RunResponseForFrame].
+//
 // Note that if the actions trigger multiple navigations, only the first is
 // used. And if the actions trigger no navigations at all, RunResponse will
 // block until the context is cancelled.
@@ -661,9 +667,14 @@ func responseAction(resp **network.Response, actions ...Action) Action {
 					loaderID = ev.LoaderID
 				}
 			case *page.EventNavigatedWithinDocument:
-				// A fragment navigation doesn't need extra steps.
-				finished = true
-				lcancel()
+				// A fragment navigation of the top-level frame
+				// doesn't need extra steps. Fragment navigations
+				// in other frames, such as iframes, must not
+				// finish the wait for the top-level frame.
+				if ev.FrameID == frameID {
+					finished = true
+					lcancel()
+				}
 			}
 			if loaderID != "" {
 				for _, ev := range earlyEvents {
@@ -681,6 +692,209 @@ func responseAction(resp **network.Response, actions ...Action) Action {
 		// Third, block until we have finished loading.
 		select {
 		case <-lctx.Done():
+			if loadErr != nil {
+				return loadErr
+			}
+
+			// If the ctx parameter was cancelled by the caller (or
+			// by a timeout etc.) the select will race between
+			// lctx.Done and ctx.Done, since lctx is a sub-context
+			// of ctx. So we can't return nil here, as otherwise
+			// that race would mean that we would drop 50% of the
+			// parent context cancellation errors.
+			if !finished {
+				return ctx.Err()
+			}
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+}
+
+// RunResponseForFrame is an alternative to RunResponse which waits for the
+// response of the document loaded by the frame with the given ID, instead of
+// the top-level frame. It can be used with actions that trigger a navigation
+// within a frame, such as clicking a link or submitting a form inside an
+// iframe.
+//
+// The frame must already exist in the current target; this includes
+// same-origin iframes, including nested ones. The frame ID of an iframe
+// element can be obtained via [Nodes] and the FrameID field of the returned
+// node, and [FromNode] can be used to run queries and actions within that
+// frame. An empty ID, an ID which does not belong to the current target, or
+// an ID of a frame which has already been removed, results in an error
+// before any of the actions are run.
+//
+// The event listener is set up before the actions are run in order, each
+// exactly once. If an action fails, its error is returned as is, without
+// waiting for any navigation.
+//
+// Once the frame starts its first cross-document navigation, the document
+// request and any redirects are followed, and the response of the final
+// document is returned once the document, including its subresources, has
+// finished loading. Requests, navigations, and load events of other frames
+// do not finish the wait, and neither does the load event of the whole page.
+// If the frame only performs a fragment navigation, RunResponseForFrame
+// returns nil, nil without waiting for any network response. If the actions
+// don't navigate the frame at all, it blocks until the context is cancelled.
+//
+// If the document request fails to load, an error describing the browser
+// error is returned instead of a response. If the frame is removed while
+// waiting, an error containing its ID is returned.
+func RunResponseForFrame(ctx context.Context, frameID cdp.FrameID, actions ...Action) (*network.Response, error) {
+	var resp *network.Response
+	if err := Run(ctx, frameResponseAction(frameID, &resp, actions...)); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func frameResponseAction(frameID cdp.FrameID, resp **network.Response, actions ...Action) Action {
+	return ActionFunc(func(ctx context.Context) error {
+		if frameID == "" {
+			return errors.New("frame ID is empty")
+		}
+
+		// Make sure the frame exists in the current target before
+		// running any of the actions. Note that the target's frame
+		// map can't be used for this, as it keeps frames which have
+		// already been detached.
+		tree, err := page.GetFrameTree().Do(ctx)
+		if err != nil {
+			return err
+		}
+		found := false
+		var findFrame func(ft *page.FrameTree)
+		findFrame = func(ft *page.FrameTree) {
+			if ft.Frame.ID == frameID {
+				found = true
+			}
+			for _, child := range ft.ChildFrames {
+				findFrame(child)
+			}
+		}
+		findFrame(tree)
+		if !found {
+			return fmt.Errorf("frame %s does not belong to the current target", frameID)
+		}
+
+		// loaderID lets us filter the requests from the currently
+		// loading navigation of the selected frame.
+		var loaderID cdp.LoaderID
+
+		// reqID is the request we're currently looking at. This can
+		// go through multiple values, e.g. if the document redirects.
+		var reqID network.RequestID
+
+		var loadErr error
+		var detached bool
+		hasInit := false
+		finished := false
+
+		// First, set up the function to handle events. Like
+		// responseAction, we listen for lifecycle events, but here we
+		// filter them by the selected frame. Note that the page-wide
+		// load event is deliberately not used, as it doesn't tell
+		// whether this particular frame has finished loading.
+
+		lctx, lcancel := context.WithCancel(ctx)
+		defer lcancel()
+		handleEvent := func(ev any) {
+			switch ev := ev.(type) {
+			case *network.EventRequestWillBeSent:
+				if ev.LoaderID == loaderID && ev.Type == network.ResourceTypeDocument {
+					reqID = ev.RequestID
+				}
+			case *network.EventLoadingFailed:
+				if ev.RequestID == reqID {
+					loadErr = fmt.Errorf("page load error %s", ev.ErrorText)
+					// If Canceled is true, we won't receive a
+					// frameStoppedLoading event at all.
+					if ev.Canceled {
+						finished = true
+						lcancel()
+					}
+				}
+			case *network.EventResponseReceived:
+				if ev.RequestID == reqID && resp != nil {
+					*resp = ev.Response
+				}
+			case *page.EventLifecycleEvent:
+				if ev.FrameID == frameID && ev.Name == "init" {
+					hasInit = true
+				}
+			case *page.EventFrameStoppedLoading:
+				// The frame's document, including its
+				// subresources, has finished loading.
+				if hasInit && ev.FrameID == frameID {
+					finished = true
+					lcancel()
+				}
+			case *page.EventFrameDetached:
+				if ev.FrameID == frameID {
+					detached = true
+					lcancel()
+				}
+			}
+		}
+		// earlyEvents is a buffered list of events which happened
+		// before we knew what loaderID to look for.
+		var earlyEvents []any
+
+		ListenTarget(lctx, func(ev any) {
+			if loaderID != "" {
+				handleEvent(ev)
+				return
+			}
+			earlyEvents = append(earlyEvents, ev)
+			switch ev := ev.(type) {
+			case *network.EventRequestWillBeSent:
+				// Under some circumstances like ERR_TOO_MANY_REDIRECTS, we never
+				// see the "init" lifecycle event we want. Those "lone" requests
+				// also tend to have a loaderID that matches their requestID, for
+				// some reason. If such a request is seen, use it.
+				if ev.FrameID == frameID && string(ev.LoaderID) == string(ev.RequestID) {
+					loaderID = ev.LoaderID
+				}
+			case *page.EventLifecycleEvent:
+				if ev.FrameID == frameID && ev.Name == "init" {
+					loaderID = ev.LoaderID
+				}
+			case *page.EventNavigatedWithinDocument:
+				// A fragment navigation of the selected frame
+				// doesn't trigger any network request to wait
+				// for. Fragment navigations in other frames must
+				// not finish the wait.
+				if ev.FrameID == frameID {
+					finished = true
+					lcancel()
+				}
+			case *page.EventFrameDetached:
+				if ev.FrameID == frameID {
+					detached = true
+					lcancel()
+				}
+			}
+			if loaderID != "" {
+				for _, ev := range earlyEvents {
+					handleEvent(ev)
+				}
+				earlyEvents = nil
+			}
+		})
+
+		// Second, run the actions.
+		if err := Run(ctx, actions...); err != nil {
+			return err
+		}
+
+		// Third, block until we have finished loading.
+		select {
+		case <-lctx.Done():
+			if detached {
+				return fmt.Errorf("frame %s was removed while waiting for its response", frameID)
+			}
 			if loadErr != nil {
 				return loadErr
 			}

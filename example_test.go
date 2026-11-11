@@ -114,6 +114,63 @@ func ExampleRunResponse() {
 	// third status code: 200
 }
 
+func ExampleRunResponseForFrame() {
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+
+	// This server hosts a top-level page with an iframe. The iframe shows
+	// a form which POSTs to /submit, and the server redirects the
+	// submission to /result.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", writeHTML(`
+<body>
+	<iframe id="frame" src="/frame"></iframe>
+</body>
+	`))
+	mux.HandleFunc("/frame", writeHTML(`
+<body>
+	<form action="/submit" method="post">
+		<input id="q" name="q">
+		<button id="go" type="submit">go</button>
+	</form>
+</body>
+	`))
+	mux.HandleFunc("/submit", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/result?q="+r.FormValue("q"), http.StatusSeeOther)
+	}))
+	mux.HandleFunc("/result", writeHTML(`<body>result</body>`))
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	if err := chromedp.Run(ctx, chromedp.Navigate(ts.URL+"/")); err != nil {
+		log.Fatal(err)
+	}
+
+	// Find the iframe element; its FrameID identifies the frame it
+	// contains.
+	var iframes []*cdp.Node
+	if err := chromedp.Run(ctx, chromedp.Nodes("iframe", &iframes, chromedp.ByQuery)); err != nil {
+		log.Fatal(err)
+	}
+
+	// Fill in and submit the form inside the iframe, and wait for the
+	// iframe's own document response. The top-level page is not
+	// navigated.
+	resp, err := chromedp.RunResponseForFrame(ctx, iframes[0].FrameID,
+		chromedp.SendKeys("#q", "chromedp", chromedp.ByQuery, chromedp.FromNode(iframes[0])),
+		chromedp.Click("#go", chromedp.ByQuery, chromedp.FromNode(iframes[0])),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("status code:", resp.Status)
+	fmt.Println("redirected to result page:", strings.HasSuffix(resp.URL, "/result?q=chromedp"))
+
+	// Output:
+	// status code: 200
+	// redirected to result page: true
+}
+
 func ExampleExecAllocator() {
 	dir, err := os.MkdirTemp("", "chromedp-example")
 	if err != nil {
