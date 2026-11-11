@@ -17,7 +17,7 @@ func main() {
 	}
 	names := []string{"TestRemoteUploadWire", "TestRemoteUploadPrepare", "TestRemoteUploadFailure", "TestRemoteUploadIsolation"}
 	pattern := "^(TestRemoteUploadWire|TestRemoteUploadPrepare|TestRemoteUploadFailure|TestRemoteUploadIsolation)$"
-	cmd := exec.Command("sh", "userfb/go.sh", "test", "-mod=readonly", "-count=1", "-json", "-run", pattern, ".")
+	cmd := exec.Command("sh", "checks/go.sh", "test", "-mod=readonly", "-count=1", "-json", "-run", pattern, ".")
 	cmd.Stderr = os.Stderr
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
