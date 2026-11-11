@@ -95,6 +95,8 @@
 //!
 //!   * [`DebugLocLists`](./struct.DebugLocLists.html): The `.debug_loclists` section.
 //!
+//!   * [`DebugNames`](./struct.DebugNames.html): The `.debug_names` section.
+//!
 //!   * [`DebugPubNames`](./struct.DebugPubNames.html): The `.debug_pubnames`
 //!     section.
 //!
@@ -215,6 +217,11 @@ pub use self::relocate::*;
 mod abbrev;
 #[cfg(feature = "read")]
 pub use self::abbrev::*;
+
+#[cfg(feature = "read")]
+mod debug_names;
+#[cfg(feature = "read")]
+pub use self::debug_names::*;
 
 mod aranges;
 pub use self::aranges::*;
@@ -463,6 +470,13 @@ pub enum Error {
     InvalidMacroType(constants::DwMacro),
     /// The optional `opcode_operands_table` in `.debug_macro` is currently not supported.
     UnsupportedOpcodeOperandsTable,
+    /// A `.debug_names` name index contained malformed data, such as an
+    /// out-of-bounds bucket, an unterminated name, an invalid parent reference
+    /// or a cycle in the parent chain.
+    InvalidNameIndex,
+    /// A `.debug_names` name index referenced local or foreign type units,
+    /// which are not supported yet.
+    UnsupportedNameIndexTypeUnit,
 }
 
 impl fmt::Display for Error {
@@ -620,6 +634,10 @@ impl Error {
             Error::InvalidMacroType(_) => "Invalid macro type in `.debug_macro`.",
             Error::UnsupportedOpcodeOperandsTable => {
                 "The optional `opcode_operands_table` in `.debug_macro` is currently not supported."
+            }
+            Error::InvalidNameIndex => "Malformed data in a `.debug_names` name index.",
+            Error::UnsupportedNameIndexTypeUnit => {
+                "Type units in `.debug_names` name indexes are not supported."
             }
         }
     }
