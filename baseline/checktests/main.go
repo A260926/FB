@@ -16,7 +16,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: checktests [--baseline]")
 		os.Exit(2)
 	}
-	wanted := []string{"TestCustomDispatchUserFB", "TestCustomContinuationUserFB"}
+	wanted := []string{"TestCustomDispatch", "TestCustomContinuation"}
 	args := []string{"test", "-v", "-json", "-count=1"}
 	marker := "CUSTOM_DISPATCH_TARGET_TESTS_PASS"
 	if baseline {

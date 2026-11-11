@@ -4,4 +4,4 @@ export GOWORK=off
 export GOFLAGS=''
 export GOCACHE="$PWD/.userfb-build/go-cache"
 mkdir -p "$GOCACHE"
-exec go run ./userfb_baseline/checktests "$@"
+exec go run ./baseline/checktests "$@"
