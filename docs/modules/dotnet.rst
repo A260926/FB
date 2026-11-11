@@ -246,6 +246,52 @@ Reference
 
     *Example: dotnet.modulerefs[0] == "kernel32"*
 
+.. c:type:: number_of_pinvokes
+
+    The number of valid P/Invoke (ImplMap) mappings in the .NET file. Only
+    mappings whose ``MemberForwarded`` column references a valid MethodDef row
+    are counted; mappings pointing at fields, referencing missing rows or
+    referencing unreadable names are skipped. A managed file without an
+    ImplMap table reports zero.
+
+.. c:type:: pinvokes
+
+    A zero-based array of structures, one for each valid P/Invoke mapping, in
+    the physical row order of the ImplMap table. Mappings that share the same
+    managed method or identical names are not de-duplicated. Each structure
+    has the following attributes:
+
+    .. c:member:: method_token
+
+        Metadata token of the mapped managed method, computed as
+        ``0x06000000`` plus the 1-based MethodDef row number (integer).
+
+    .. c:member:: managed_name
+
+        Name of the managed method (string).
+
+    .. c:member:: type_name
+
+        Full name of the type declaring the method, using the same naming as
+        ``classes.fullname``, including nested types (string).
+
+    .. c:member:: module_name
+
+        Name referenced by the mapping's ModuleRef row, i.e. the native module
+        the method is imported from (string).
+
+    .. c:member:: import_name
+
+        Name of the native entry point from the ImplMap ``ImportName`` column
+        (string).
+
+    .. c:member:: mapping_flags
+
+        Raw ``MappingFlags`` value from the ImplMap row, kept as its original
+        integer (integer).
+
+    *Example: dotnet.pinvokes[0].module_name == "kernel32" and dotnet.pinvokes[0].import_name == "CreateFileW"*
+
 .. c:type:: typelib
 
     The typelib of the file.

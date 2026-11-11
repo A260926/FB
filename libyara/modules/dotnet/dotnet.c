@@ -493,6 +493,32 @@ static bool read_nestedclass(
   return false;
 }
 
+// ECMA 335 II.22.22 ImplMap. The columns have variable widths, in particular
+// MemberForwarded is a coded index whose size depends on the sizes of the
+// Field and MethodDef tables, so the row cannot be read as a fixed struct.
+static bool read_implmap(
+    const CLASS_CONTEXT* ctx,
+    const uint8_t* data,
+    IMPLMAP_ROW* result)
+{
+  uint32_t row_size = ctx->tables->implmap.RowSize;
+
+  if (!fits_in_pe(ctx->pe, data, row_size))
+    return false;
+
+  // RowSize = 2 (MappingFlags) + MemberForwarded + string + ModuleRef.
+  uint8_t member_fwd_size = (uint8_t)(
+      row_size - 2 - ctx->index_sizes->string -
+      ctx->index_sizes->moduleref);
+
+  result->MappingFlags = read_u16(&data);
+  result->MemberForwarded = read_index(&data, member_fwd_size);
+  result->ImportName = read_index(&data, ctx->index_sizes->string);
+  result->ImportScope = read_index(&data, ctx->index_sizes->moduleref);
+
+  return true;
+}
+
 // ECMA-335 II.23.2 blob heap uses variable length encoding of integers
 static uint32_t read_blob_unsigned(const uint8_t** data, uint32_t* len)
 {
@@ -1684,6 +1710,259 @@ static void parse_user_types(const CLASS_CONTEXT* ctx)
   yr_set_integer(out_idx, ctx->pe->object, "number_of_classes");
 }
 
+// MemberForwarded is a MemberForwarded coded index (ECMA-335 II.24.2.6):
+// the low bit selects the table (0 = Field, 1 = MethodDef) and the remaining
+// bits hold the 1-based row number.
+#define MEMBER_FORWARDED_TAG_BITS 0x1
+#define MEMBER_FORWARDED_TAG_FIELD 0x0
+#define MEMBER_FORWARDED_TAG_METHODDEF 0x1
+
+// Finds the 1-based TypeDef row whose MethodList range contains the given
+// 1-based MethodDef row. Returns false if no owner can be established.
+static bool find_owning_typedef(
+    const CLASS_CONTEXT* ctx,
+    uint32_t method_row,
+    uint32_t* type_idx_out)
+{
+  for (uint32_t type_idx = 0;
+       type_idx < ctx->tables->typedef_.RowCount;
+       ++type_idx)
+  {
+    TYPEDEF_ROW type_row = {0};
+    if (!read_typedef(
+            ctx,
+            get_table_offset(&ctx->tables->typedef_, type_idx + 1),
+            &type_row))
+      continue;
+
+    uint32_t method_end;
+    if (type_idx + 1 < ctx->tables->typedef_.RowCount)
+    {
+      TYPEDEF_ROW next_row = {0};
+      if (!read_typedef(
+              ctx,
+              get_table_offset(&ctx->tables->typedef_, type_idx + 2),
+              &next_row))
+        continue;
+      method_end = next_row.Method;
+    }
+    else
+    {
+      method_end = ctx->tables->methoddef.RowCount + 1;
+    }
+
+    if (type_row.Method <= method_row && method_row < method_end)
+    {
+      *type_idx_out = type_idx + 1;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Builds a map from 1-based MethodDef row to the 1-based TypeDef row that
+// owns it. Unowned entries stay zero. Returns NULL on allocation failure;
+// callers then fall back to find_owning_typedef().
+static uint32_t* build_method_owners(const CLASS_CONTEXT* ctx)
+{
+  uint32_t method_count = ctx->tables->methoddef.RowCount;
+  if (method_count == 0)
+    return NULL;
+
+  uint32_t* owners = yr_calloc(method_count + 1, sizeof(uint32_t));
+  if (owners == NULL)
+    return NULL;
+
+  for (uint32_t type_idx = 0;
+       type_idx < ctx->tables->typedef_.RowCount;
+       ++type_idx)
+  {
+    TYPEDEF_ROW type_row = {0};
+    if (!read_typedef(
+            ctx,
+            get_table_offset(&ctx->tables->typedef_, type_idx + 1),
+            &type_row))
+      continue;
+
+    uint32_t method_end;
+    if (type_idx + 1 < ctx->tables->typedef_.RowCount)
+    {
+      TYPEDEF_ROW next_row = {0};
+      if (!read_typedef(
+              ctx,
+              get_table_offset(&ctx->tables->typedef_, type_idx + 2),
+              &next_row))
+        continue;
+      method_end = next_row.Method;
+    }
+    else
+    {
+      method_end = method_count + 1;
+    }
+
+    for (uint32_t m = type_row.Method; m < method_end; m++)
+    {
+      if (m >= 1 && m <= method_count)
+        owners[m] = type_idx + 1;
+    }
+  }
+
+  return owners;
+}
+
+// Parses the ImplMap table and exposes P/Invoke mappings. Only mappings whose
+// MemberForwarded points at a valid MethodDef row are collected; everything
+// else is skipped without disturbing the sibling rows.
+static void parse_pinvokes(const CLASS_CONTEXT* ctx)
+{
+  YR_OBJECT* module_obj = ctx->pe->object;
+  const uint8_t* str_heap = ctx->str_heap;
+  uint32_t str_size = ctx->str_size;
+
+  // The MethodDef row number is a physical table row, so the ownership map is
+  // unaffected by any classes or methods that were skipped elsewhere.
+  uint32_t* method_owners = build_method_owners(ctx);
+
+  uint32_t counter = 0;
+
+  // Physical row order of the ImplMap table is preserved: the output index
+  // only advances for rows that pass all the validity checks.
+  for (uint32_t idx = 0; idx < ctx->tables->implmap.RowCount; ++idx)
+  {
+    const uint8_t* data = get_table_offset(&ctx->tables->implmap, idx + 1);
+
+    IMPLMAP_ROW row = {0};
+    if (!read_implmap(ctx, data, &row))
+      continue;
+
+    // MemberForwarded must reference a MethodDef, not a Field.
+    if ((row.MemberForwarded & MEMBER_FORWARDED_TAG_BITS) !=
+        MEMBER_FORWARDED_TAG_METHODDEF)
+      continue;
+
+    uint32_t method_row = row.MemberForwarded >> MEMBER_FORWARDED_TAG_BITS;
+
+    // Zero row numbers and references past the end of MethodDef are invalid.
+    if (method_row == 0 ||
+        method_row > ctx->tables->methoddef.RowCount)
+      continue;
+
+    const uint8_t* method_data = get_table_offset(
+        &ctx->tables->methoddef, method_row);
+
+    METHODDEF_ROW method_row_data = {0};
+    if (!read_methoddef(ctx, method_data, &method_row_data))
+      continue;
+
+    const char* managed_name = pe_get_dotnet_string(
+        ctx->pe, str_heap, str_size, method_row_data.Name);
+
+    // A missing or unterminated managed name makes the mapping unusable.
+    if (managed_name == NULL || *managed_name == '\0')
+      continue;
+
+    // ImportScope indexes the ModuleRef table, 1-based.
+    if (row.ImportScope == 0 ||
+        row.ImportScope > ctx->tables->moduleref.RowCount)
+      continue;
+
+    const uint8_t* moduleref_data = get_table_offset(
+        &ctx->tables->moduleref, row.ImportScope);
+
+    if (moduleref_data == NULL ||
+        !fits_in_pe(
+            ctx->pe, moduleref_data, ctx->index_sizes->moduleref))
+      continue;
+
+    const uint8_t* moduleref_ptr = moduleref_data;
+    uint32_t module_name_idx = read_index(
+        &moduleref_ptr, ctx->index_sizes->string);
+
+    const char* module_name = pe_get_dotnet_string(
+        ctx->pe, str_heap, str_size, module_name_idx);
+
+    // Missing module name or an unterminated string in its heap.
+    if (module_name == NULL || *module_name == '\0')
+      continue;
+
+    const char* import_name = pe_get_dotnet_string(
+        ctx->pe, str_heap, str_size, row.ImportName);
+
+    // Missing import name or an unterminated string in its heap.
+    if (import_name == NULL || *import_name == '\0')
+      continue;
+
+    uint32_t owner_idx = 0;
+    if (method_owners != NULL)
+      owner_idx = method_owners[method_row];
+    else if (!find_owning_typedef(ctx, method_row, &owner_idx))
+      owner_idx = 0;
+
+    // The owning type must be recoverable, otherwise the mapping is skipped.
+    if (owner_idx == 0)
+      continue;
+
+    TYPEDEF_ROW owner_row = {0};
+    if (!read_typedef(
+            ctx,
+            get_table_offset(&ctx->tables->typedef_, owner_idx),
+            &owner_row))
+      continue;
+
+    const char* name = pe_get_dotnet_string(
+        ctx->pe, str_heap, str_size, owner_row.Name);
+
+    if (name == NULL || *name == '\0')
+      continue;
+
+    const char* namespace = pe_get_dotnet_string(
+        ctx->pe, str_heap, str_size, owner_row.Namespace);
+
+    char* type_name;
+    if (is_nested(owner_row.Flags))
+    {
+      char* nested_namespace = parse_enclosing_types(ctx, owner_idx, 1);
+      char* tmp = create_full_name(namespace, nested_namespace);
+      type_name = create_full_name(name, tmp);
+      yr_free(nested_namespace);
+      yr_free(tmp);
+    }
+    else
+    {
+      type_name = create_full_name(name, namespace);
+    }
+
+    if (type_name == NULL)
+      continue;
+
+    yr_set_integer(
+        0x06000000 + method_row,
+        module_obj,
+        "pinvokes[%i].method_token",
+        counter);
+    yr_set_string(
+        managed_name, module_obj, "pinvokes[%i].managed_name", counter);
+    yr_set_string(
+        type_name, module_obj, "pinvokes[%i].type_name", counter);
+    yr_set_string(
+        module_name, module_obj, "pinvokes[%i].module_name", counter);
+    yr_set_string(
+        import_name, module_obj, "pinvokes[%i].import_name", counter);
+    yr_set_integer(
+        row.MappingFlags,
+        module_obj,
+        "pinvokes[%i].mapping_flags",
+        counter);
+
+    yr_free(type_name);
+    counter++;
+  }
+
+  yr_free(method_owners);
+  yr_set_integer(counter, module_obj, "number_of_pinvokes");
+}
+
 void dotnet_parse_guid(
     PE* pe,
     int64_t metadata_root,
@@ -2668,9 +2947,14 @@ void dotnet_parse_tilde_2(
       else
         index_size = 2;
 
-      table_offset += (2 + index_size + index_sizes.string +
-                       index_sizes.moduleref) *
-                      num_rows;
+      row_size = 2 + index_size + index_sizes.string +
+                 index_sizes.moduleref;
+
+      tables.implmap.Offset = table_offset;
+      tables.implmap.RowCount = num_rows;
+      tables.implmap.RowSize = row_size;
+
+      table_offset += row_size * num_rows;
       break;
 
     case BIT_FIELDRVA:
@@ -3065,6 +3349,7 @@ void dotnet_parse_tilde_2(
       .blob_size = yr_le32toh(streams->blob->Size)};
 
   parse_user_types(&class_context);
+  parse_pinvokes(&class_context);
 }
 
 // Parsing the #~ stream is done in two parts. The first part (this function)
@@ -3451,6 +3736,17 @@ begin_declarations
 
   declare_string_array("modulerefs");
   declare_integer("number_of_modulerefs");
+
+  begin_struct_array("pinvokes")
+    declare_integer("method_token");
+    declare_string("managed_name");
+    declare_string("type_name");
+    declare_string("module_name");
+    declare_string("import_name");
+    declare_integer("mapping_flags");
+  end_struct_array("pinvokes")
+
+  declare_integer("number_of_pinvokes");
   declare_string_array("user_strings");
   declare_integer("number_of_user_strings");
   declare_string("typelib");

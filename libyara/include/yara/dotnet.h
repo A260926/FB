@@ -449,6 +449,15 @@ typedef struct _NESTEDCLASS_ROW
   uint32_t EnclosingClass;
 } NESTEDCLASS_ROW, *PNESTEDCLASS_ROW;
 
+// ECMA 335 II.22.22 ImplMap
+typedef struct _IMPLMAP_ROW
+{
+  uint16_t MappingFlags;
+  uint32_t MemberForwarded;
+  uint32_t ImportName;
+  uint32_t ImportScope;
+} IMPLMAP_ROW, *PIMPLMAP_ROW;
+
 // For easy passing of gen param collection
 typedef struct _GENERIC_PARAMETERS
 {
@@ -497,6 +506,7 @@ typedef struct _TABLES
   TABLE_INFO intefaceimpl;
   TABLE_INFO genericparam;
   TABLE_INFO nestedclass;
+  TABLE_INFO implmap;
 } TABLES, *PTABLES;
 
 // Used to store the number of rows of each table.
