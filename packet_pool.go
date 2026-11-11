@@ -1,6 +1,7 @@
 package astits
 
 import (
+	"bytes"
 	"sort"
 )
 
@@ -9,6 +10,18 @@ type packetAccumulator struct {
 	pid        uint16
 	programMap *programMap
 	q          []*Packet
+
+	// Continuity state of the last payload packet seen on this PID. It is kept
+	// across queue flushes so that a retransmitted packet is still detected once
+	// the payload it belongs to has been delivered.
+	hasLast     bool
+	lastCounter uint8
+	lastStart   bool
+	lastPayload []byte
+
+	// waitForStart is true while recovering from a continuity conflict: packets
+	// are dropped until the next payload start.
+	waitForStart bool
 }
 
 // newPacketAccumulator creates a new packet queue for a single PID
@@ -21,22 +34,45 @@ func newPacketAccumulator(pid uint16, programMap *programMap) *packetAccumulator
 
 // add adds a new packet for this PID to the queue
 func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
-	mps := b.q
-
-	// Empty buffer if we detect a discontinuity
-	if hasDiscontinuity(mps, p) {
-		// Reset current slice or make new
-		if cap(mps) > 0 {
-			mps = mps[:0]
-		} else {
-			mps = make([]*Packet, 0, 10)
+	if b.hasLast {
+		switch c := p.Header.ContinuityCounter; {
+		case c == b.lastCounter &&
+			p.Header.PayloadUnitStartIndicator == b.lastStart &&
+			bytes.Equal(p.Payload, b.lastPayload):
+			// Exact retransmission of the previous packet on this PID: its payload
+			// has already contributed once. The adaptation field is left out of the
+			// comparison on purpose, an updated PCR doesn't make it a new packet.
+			return
+		case c == b.lastCounter:
+			// Same counter but different content: continuity is broken and the
+			// payload being assembled can't be trusted anymore. Void it and wait
+			// for the next payload start to recover.
+			b.void()
+			if !p.Header.PayloadUnitStartIndicator {
+				b.waitForStart = true
+				return
+			}
+		case c != (b.lastCounter+1)&0x0f:
+			// Counter gap: the payload being assembled is incomplete, void it.
+			b.void()
 		}
 	}
 
-	// Throw away packet if it's the same as the previous one
-	if isSameAsPrevious(mps, p) {
-		return
+	// Recovering from a continuity conflict: only a payload start resumes the assembly
+	if b.waitForStart {
+		if !p.Header.PayloadUnitStartIndicator {
+			return
+		}
+		b.waitForStart = false
 	}
+
+	// Track continuity state
+	b.hasLast = true
+	b.lastCounter = p.Header.ContinuityCounter
+	b.lastStart = p.Header.PayloadUnitStartIndicator
+	b.lastPayload = p.Payload
+
+	mps := b.q
 
 	// Flush buffer if new payload starts here
 	if p.Header.PayloadUnitStartIndicator {
@@ -68,6 +104,23 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 	return
 }
 
+// void drops the payload being assembled
+func (b *packetAccumulator) void() {
+	if cap(b.q) > 0 {
+		b.q = b.q[:0]
+	} else {
+		b.q = nil
+	}
+}
+
+// reset opens a new continuity interval: the payload being assembled, if any,
+// is voided and continuity tracking starts over
+func (b *packetAccumulator) reset() {
+	b.void()
+	b.hasLast = false
+	b.waitForStart = false
+}
+
 // packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
 	// We use map[uint32] instead map[uint16] as go runtime provide optimized hash functions for (u)int32/64 keys
@@ -92,7 +145,17 @@ func (b *packetPool) addUnlocked(p *Packet) (ps []*Packet) {
 		return
 	}
 
-	// Throw away packets that don't have a payload until we figure out what we're going to do with them
+	// An explicit discontinuity indicator opens a new continuity interval for
+	// this PID: the payload being assembled, if any, is voided and a non-start
+	// payload can't be appended to it anymore
+	if p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator {
+		if acc, ok := b.b[uint32(p.Header.PID)]; ok {
+			acc.reset()
+		}
+	}
+
+	// Throw away packets that don't have a payload: they don't advance the
+	// payload continuity counter
 	// TODO figure out what we're going to do with them :D
 	if !p.Header.HasPayload {
 		return
@@ -124,39 +187,4 @@ func (b *packetPool) dumpUnlocked() (ps []*Packet) {
 		}
 	}
 	return
-}
-
-// hasDiscontinuity checks whether a packet is discontinuous with a set of packets
-func hasDiscontinuity(ps []*Packet, p *Packet) bool {
-	if p.Header.PID == PIDNull {
-		return false
-	}
-
-	isDiscontinuityIndicator := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
-	if isDiscontinuityIndicator {
-		return false
-	}
-
-	l := len(ps)
-	if l == 0 {
-		return false
-	}
-
-	var expectedContinuityCounter uint8
-	if p.Header.HasPayload {
-		expectedContinuityCounter = (ps[l-1].Header.ContinuityCounter + 1) & 0x0f
-	} else {
-		expectedContinuityCounter = ps[l-1].Header.ContinuityCounter
-	}
-	if expectedContinuityCounter == p.Header.ContinuityCounter {
-		return false
-	}
-
-	return true
-}
-
-// isSameAsPrevious checks whether a packet is the same as the last packet of a set of packets
-func isSameAsPrevious(ps []*Packet, p *Packet) bool {
-	l := len(ps)
-	return l > 0 && p.Header.HasPayload && p.Header.ContinuityCounter == ps[l-1].Header.ContinuityCounter
 }
