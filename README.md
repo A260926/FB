@@ -31,6 +31,28 @@ This will place a built `alac.js` file, as well as a source map in the `build/` 
 alac.js depends on [Aurora.js](https://github.com/audiocogs/aurora.js), our audio codec framework.
 For detailed information on how to use Aurora.js, check out the [documentation](https://github.com/audiocogs/aurora.js/wiki).
 
+## Decoding notes
+
+Each call to `readChunk` consumes exactly one ALAC packet and returns an
+`Int16Array` whose length is the packet's *actual* frame count times
+`config.numChannels`. The `frameLength` field in the magic cookie is only the
+maximum number of frames a packet may contain: a packet with the partial-frame
+flag set carries its own (smaller) frame count, and the returned array is
+sized to that count, never padded out to `frameLength` with zeros.
+
+Samples are returned interleaved per packet: the SCE/LFE (one channel) and
+CPE (two channels) elements in a packet occupy consecutive output channels in
+the order they appear, and frame *i* of every element is written to frame *i*
+of the interleaved result. For example, an SCE with frames `10, 20` followed
+by a CPE with frames `(30, 40), (50, 60)` yields `[10, 30, 40, 20, 50, 60]`.
+No speaker-role reordering is applied between elements.
+
+All audio elements in a packet must agree on the frame count, and the
+packet's elements must fill exactly `config.numChannels` channels by the
+`ID_END` tag; otherwise the packet is rejected with an error rather than
+returning partial or zero-padded data. Truncated packets keep Aurora's
+`UnderflowError` behavior, so decoding resumes once more data arrives.
+
     
 ## License
 

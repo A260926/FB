@@ -82,47 +82,64 @@ class ALACDecoder extends AV.Decoder
     
     readChunk: (data) ->
         return unless @stream.available(4)
-        
+
         data = @bitstream
-        samples = @config.frameLength
+        frameLength = @config.frameLength
         numChannels = @config.numChannels
         channelIndex = 0
-                
-        output = new ArrayBuffer(samples * numChannels * @config.bitDepth / 8)
+
+        # the actual frame count of this packet is only known once the first
+        # audio element has been parsed; every element in the packet must agree
+        samples = 0
+        output = null
         end = false
-        
-        while not end            
+
+        while not end
             # read element tag
             tag = data.read(3)
-            
+
             switch tag
                 when ID_SCE, ID_LFE, ID_CPE
                     channels = if tag is ID_CPE then 2 else 1
-                
+
                     # if decoding this would take us over the max channel limit, bail
                     if channelIndex + channels > numChannels
                         throw new Error 'Too many channels!'
-                    
+
                     # no idea what this is for... doesn't seem used anywhere
                     elementInstanceTag = data.read(4)
-                    
+
                     # read the 12 unused header bits
                     unused = data.read(12)
-                    
+
                     unless unused is 0
                         throw new Error 'Unused part of header does not contain 0, it should'
-                    
+
                     # read the 1-bit "partial frame" flag, 2-bit "shift-off" flag & 1-bit "escape" flag
                     partialFrame = data.read(1)
                     bytesShifted = data.read(2)
                     escapeFlag = data.read(1)
-                    
+
                     if bytesShifted is 3
                         throw new Error "Bytes are shifted by 3, they shouldn't be"
-                    
-                    # check for partial frame to override requested samples
+
+                    # without a partial frame the element carries a full frameLength
+                    # worth of samples, otherwise the packet states its own length
+                    elementSamples = frameLength
                     if partialFrame
-                        samples = data.read(32)
+                        elementSamples = data.read(32)
+
+                        if elementSamples <= 0 or elementSamples > frameLength
+                            throw new Error "Invalid partial frame length: #{elementSamples}"
+
+                    # all audio elements in one packet must decode to the same
+                    # number of frames; a later element may not silently resize
+                    # the output of earlier ones
+                    if samples is 0
+                        samples = elementSamples
+                        output = new ArrayBuffer(samples * numChannels * @config.bitDepth / 8)
+                    else unless elementSamples is samples
+                        throw new Error "Channel elements disagree on frame count: #{elementSamples} != #{samples}"
                     
                     if escapeFlag is 0
                         shift = bytesShifted * 8
@@ -192,7 +209,10 @@ class ALACDecoder extends AV.Decoder
                     # - note that mixRes = 0 means just interleave so we use that path for uncompressed frames
                     switch @config.bitDepth
                         when 16
-                            out16 = new Int16Array(output, channelIndex)
+                            # byte offset of this element's first channel in the
+                            # interleaved output; frames are written with a
+                            # numChannels stride
+                            out16 = new Int16Array(output, channelIndex * 2)
                             
                             if channels is 2
                                 Matrixlib.unmix16(@mixBuffers[0], @mixBuffers[1], out16, numChannels, samples, mixBits, mixRes)
@@ -243,6 +263,12 @@ class ALACDecoder extends AV.Decoder
                                             
                 when ID_END
                     data.align()
+
+                    # the packet's elements must fill every configured channel;
+                    # never hand out a partially filled (zero-padded) frame
+                    unless channelIndex is numChannels
+                        throw new Error "Expected #{numChannels} channels, but the packet only decoded #{channelIndex}"
+
                     end = true
                     
                 else
