@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "tinynurbs": {
+    "repo": "https://github.com/pradeep-pyro/tinynurbs",
+    "commit": "2669a6b4b6c3d60128f845f599b83e31677045d6",
+    "license": "BSD-3-Clause",
+    "license_path": "LICENSE",
+    "export": "all 26 upstream blobs, excluding .gitmodules; expand gitlink dependencies/glm"
+  },
+  "glm": {
+    "repo": "https://github.com/g-truc/glm",
+    "commit": "fe7c7b5ac15ba8d5c9c45984831dc2e830726b33",
+    "version": "0.9.9.0",
+    "license": "MIT (selected from dual licensing)",
+    "license_path": "dependencies/glm/manual.md",
+    "export": "all 1054 tracked blobs, no archive filters; upstream gitlink exact commit"
+  },
+  "catch": {
+    "version": "2.4.0",
+    "origin": "tests/catch.hpp from tinynurbs commit above",
+    "license": "BSL-1.0",
+    "license_path": "userfb/licenses/Catch-BSL-1.0.txt"
+  },
+  "changes": [
+    {
+      "path": ".gitmodules",
+      "change": "omit declaration after fully expanding pinned gitlink"
+    },
+    {
+      "path": "tests/catch.hpp",
+      "change": "restrict old x86-only macOS debug trap to x86; ARM64 uses existing no-trap fallback; assertions unchanged"
+    },
+    {
+      "path": "dependencies/glm/.gitignore",
+      "change": "unignore two upstream tracked CMake module files so synthetic seed snapshots retain every vendored blob"
+    }
+  ],
+  "added": [
+    "userfb/baseline.cpp",
+    "userfb/build.sh",
+    "userfb/run_baseline.sh",
+    "userfb/run_target.sh",
+    "userfb/SOURCES.json",
+    "userfb/UPSTREAM_FILES.json",
+    "userfb/licenses/Catch-BSL-1.0.txt",
+    "userfb/source-export.patch"
+  ],
+  "patch_path": "userfb/source-export.patch"
+}
