@@ -563,6 +563,9 @@ void glGetIntegerv(GLint pname, GLint* params) {
 	case GL_DEPTH_TEST:
 		*params = (c->zb->depth_test == 1);
 		break;
+	case GL_DEPTH_WRITEMASK:
+		*params = (c->zb->depth_write == 1);
+		break;
 	case GL_DEPTH_FUNC:
 		*params = GL_LESS;
 		break;

@@ -22,5 +22,7 @@ void glopClear(GLParam* p) {
 
 	/* TODO : correct value of Z */
 
-	ZB_clear(c->zb, mask & GL_DEPTH_BUFFER_BIT, z, mask & GL_COLOR_BUFFER_BIT, r, g, b);
+	/* the depth buffer is only cleared when the depth write mask allows
+	   it; the depth test enable state has no effect on glClear */
+	ZB_clear(c->zb, (mask & GL_DEPTH_BUFFER_BIT) && c->zb->depth_write, z, mask & GL_COLOR_BUFFER_BIT, r, g, b);
 }

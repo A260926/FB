@@ -160,10 +160,9 @@ void gl_draw_line(GLVertex* p1, GLVertex* p2) {
 		} else
 #endif
 		{
-			if (c->zb->depth_test)
-				ZB_line_z(c->zb, &p1->zp, &p2->zp);
-			else
-				ZB_line(c->zb, &p1->zp, &p2->zp);
+			/* the Z-aware line path honors depth_test for the comparison
+			   and depth_write for storage independently, so it is always used */
+			ZB_line_z(c->zb, &p1->zp, &p2->zp);
 		}
 	} else if ((cc1 & cc2) != 0) {
 		return;
@@ -194,10 +193,8 @@ void gl_draw_line(GLVertex* p1, GLVertex* p2) {
 			} else
 #endif
 			{
-				if (c->zb->depth_test)
-					ZB_line_z(c->zb, &q1.zp, &q2.zp);
-				else
-					ZB_line(c->zb, &q1.zp, &q2.zp);
+				/* same Z-aware path as the unclipped case */
+				ZB_line_z(c->zb, &q1.zp, &q2.zp);
 			}
 		}
 	}
@@ -446,21 +443,14 @@ void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2) {
 
 void gl_draw_triangle_line(GLVertex* p0, GLVertex* p1, GLVertex* p2) {
 	GLContext* c = gl_get_context();
-	if (c->zb->depth_test) {
-		if (p0->edge_flag)
-			ZB_line_z(c->zb, &p0->zp, &p1->zp);
-		if (p1->edge_flag)
-			ZB_line_z(c->zb, &p1->zp, &p2->zp);
-		if (p2->edge_flag)
-			ZB_line_z(c->zb, &p2->zp, &p0->zp);
-	} else {
-		if (p0->edge_flag)
-			ZB_line(c->zb, &p0->zp, &p1->zp);
-		if (p1->edge_flag)
-			ZB_line(c->zb, &p1->zp, &p2->zp);
-		if (p2->edge_flag)
-			ZB_line(c->zb, &p2->zp, &p0->zp);
-	}
+	/* ZB_line_z independently honors depth_test and depth_write, so the
+	   Z-less line path is never needed for polygon line mode either */
+	if (p0->edge_flag)
+		ZB_line_z(c->zb, &p0->zp, &p1->zp);
+	if (p1->edge_flag)
+		ZB_line_z(c->zb, &p1->zp, &p2->zp);
+	if (p2->edge_flag)
+		ZB_line_z(c->zb, &p2->zp, &p0->zp);
 }
 
 /* Render a clipped triangle in point mode */

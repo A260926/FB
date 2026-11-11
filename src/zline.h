@@ -58,7 +58,7 @@
 		zz = z >> ZB_POINT_Z_FRAC_BITS;                                                                                                                        \
 		if (ZCMP(zz, *pz)) {                                                                                                                                   \
 			RGBPIXEL;                                                                                                                                          \
-			if (zbdw) {                                                                                                                                        \
+			if (zbdw && zbdt) {                                                                                                                                    \
 				*pz = zz;                                                                                                                                      \
 			}                                                                                                                                                  \
 		}                                                                                                                                                      \

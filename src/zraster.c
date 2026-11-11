@@ -172,7 +172,7 @@ void glopDrawPixels(GLParam* p) {
 #else
 							pbuf[tx + ty * tw] = col;
 #endif
-							if (zbdw)
+							if (zbdw && zbdt)
 								*pz = zz;
 						}
 					}
@@ -206,7 +206,7 @@ void glopDrawPixels(GLParam* p) {
 #else
 							pbuf[tx + ty * tw] = col;
 #endif
-							if (zbdw)
+							if (zbdw && zbdt)
 								*pz = zz;
 						}
 					}

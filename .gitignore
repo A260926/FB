@@ -11,3 +11,6 @@ Raw_Demos/bigfont
 Raw_Demos/gears
 Raw_Demos/t2i
 lib/*.a
+
+# Sanity test output
+sanity/*.ppm

@@ -30,7 +30,9 @@ void ZB_plot(ZBuffer* zb, ZBufferPoint* p) {
 #else
 			*pp = RGB_TO_PIXEL(p->r, p->g, p->b);
 #endif
-			if (zbdw)
+			/* depth storage needs both the comparison enable and the write
+			   mask; a disabled depth test never updates the depth buffer */
+			if (zbdw && zbdt)
 				*pz = zz;
 		}
 	} else {
@@ -58,7 +60,7 @@ void ZB_plot(ZBuffer* zb, ZBufferPoint* p) {
 #else
 					*pp = col;
 #endif
-					if (zbdw)
+					if (zbdw && zbdt)
 						*pz = zz;
 				}
 			}

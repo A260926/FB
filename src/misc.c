@@ -87,6 +87,11 @@ void glPointSize(GLfloat f) {
 	gl_add_op(p);
 }
 
+void glopDepthMask(GLParam* p) {
+	GLContext* c = gl_get_context();
+	c->zb->depth_write = (p[1].i != 0);
+}
+
 void glopEnableDisable(GLParam* p) {
 	GLContext* c = gl_get_context();
 	GLint code = p[1].i;
