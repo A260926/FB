@@ -75,6 +75,8 @@ impl Shape for Triangle {
         if u >= 0.0 && v >= 0.0 && w >= 0.0 {
             record.time = time;
             record.normal = (u * self.n1 + v * self.n2 + w * self.n3).normalize();
+            // The geometric orientation is defined solely by the winding order.
+            record.geometric_normal = plane_normal;
             true
         } else {
             false

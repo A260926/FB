@@ -150,18 +150,28 @@ impl<'a> Renderer<'a> {
                 let material = object.material;
                 let wo = -glm::normalize(&ray.dir);
 
+                // Transparent materials must distinguish which side of the surface
+                // the ray is on, so they use the geometry's own oriented normal
+                // instead of the viewer-facing shading normal. Opaque materials
+                // keep their existing shading behavior.
+                let n = if material.transparent {
+                    h.geometric_normal
+                } else {
+                    h.normal
+                };
+
                 let mut color = material.emittance * material.color;
-                color += self.sample_lights(&material, &world_pos, &h.normal, &wo, rng);
+                color += self.sample_lights(&material, &world_pos, &n, &wo, rng);
                 if num_bounces < self.max_bounces {
-                    if let Some((wi, pdf)) = material.sample_f(&h.normal, &wo, rng) {
-                        let f = material.bsdf(&h.normal, &wo, &wi);
+                    if let Some((wi, pdf)) = material.sample_f(&n, &wo, rng) {
+                        let f = material.bsdf(&n, &wo, &wi);
                         let ray = Ray {
                             origin: world_pos,
                             dir: wi,
                         };
                         let indirect = 1.0 / pdf
                             * f.component_mul(&self.trace_ray(ray, num_bounces + 1, rng))
-                            * wi.dot(&h.normal).abs();
+                            * wi.dot(&n).abs();
                         color.x += indirect.x.min(FIREFLY_CLAMP);
                         color.y += indirect.y.min(FIREFLY_CLAMP);
                         color.z += indirect.z.min(FIREFLY_CLAMP);
@@ -196,7 +206,17 @@ impl<'a> Renderer<'a> {
                     .map(|(r, _)| r.time);
                 if closest_hit.is_none() || closest_hit.unwrap() > dist_to_light {
                     let f = material.bsdf(n, wo, &wi);
-                    color += f.component_mul(&intensity) * wi.dot(n);
+                    // Transmitted light is integrated against the absolute cosine of
+                    // the incident direction relative to the geometric normal, so the
+                    // contribution can never be negative, regardless of which side
+                    // the light is on. Opaque materials retain their existing
+                    // one-sided cosine weighting.
+                    let cosine = if material.transparent {
+                        wi.dot(n).abs()
+                    } else {
+                        wi.dot(n)
+                    };
+                    color += f.component_mul(&intensity) * cosine;
                 }
             }
         }

@@ -24,7 +24,11 @@ impl Shape for Plane {
         let time = (self.value - self.normal.dot(&ray.origin)) / cosine;
         if time >= t_min && time < record.time {
             record.time = time;
-            record.normal = -self.normal.normalize() * cosine.signum();
+            let unit_normal = self.normal.normalize();
+            // Keep the existing viewer-facing behavior for shading, but remember the
+            // plane equation's own orientation for transparent materials.
+            record.normal = -unit_normal * cosine.signum();
+            record.geometric_normal = unit_normal;
             true
         } else {
             false

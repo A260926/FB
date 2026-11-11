@@ -38,6 +38,7 @@ impl Shape for Sphere {
         if t < record.time {
             record.time = t;
             record.normal = ray.at(t).normalize();
+            record.geometric_normal = record.normal;
             true
         } else {
             false

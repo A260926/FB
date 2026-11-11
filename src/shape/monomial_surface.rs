@@ -96,6 +96,8 @@ impl Shape for MonomialSurface {
             -1.0,
             self.height * 4.0 * pos.z * (pos.x * pos.x + pos.z * pos.z),
         ));
+        // The analytic surface orientation, preserved independently of the viewer.
+        record.geometric_normal = record.normal;
 
         // The surface is two-sided, so we choose the appropriate normal
         if glm::dot(&record.normal, &ray.dir) > 0.0 {

@@ -71,13 +71,24 @@ impl Ray {
     }
 }
 
-/// Record of when a hit occurs, and the corresponding normal
+/// Record of when a hit occurs, and the corresponding normals
 pub struct HitRecord {
     /// The time at which the hit occurs (see `Ray`)
     pub time: f64,
 
-    /// The normal of the hit in some coordinate system
+    /// The normal of the hit in some coordinate system, used for shading
+    ///
+    /// Two-sided shapes such as `Plane` may orient this normal toward the viewer,
+    /// preserving their existing shading behavior.
     pub normal: glm::DVec3,
+
+    /// The oriented geometric normal of the surface
+    ///
+    /// This is fixed by the geometry itself and does not depend on which side the
+    /// viewer is on. For a `Plane` it is the plane equation's normal (the positive
+    /// side), and for a `Triangle` it is defined by the winding order of its vertices.
+    /// Transparent materials use this normal to tell the two sides of the medium apart.
+    pub geometric_normal: glm::DVec3,
 }
 
 impl Default for HitRecord {
@@ -85,6 +96,7 @@ impl Default for HitRecord {
         Self {
             time: f64::INFINITY,
             normal: glm::vec3(0.0, 0.0, 0.0),
+            geometric_normal: glm::vec3(0.0, 0.0, 0.0),
         }
     }
 }
@@ -130,6 +142,7 @@ impl<T: Shape> Shape for Transformed<T> {
         if self.shape.intersect(&local_ray, t_min, record) {
             // Fix normal vectors by multiplying by M^-T
             record.normal = (self.normal_transform * record.normal).normalize();
+            record.geometric_normal = (self.normal_transform * record.geometric_normal).normalize();
             true
         } else {
             false

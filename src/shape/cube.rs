@@ -65,6 +65,7 @@ impl Shape for Cube {
         if time < record.time {
             record.time = time;
             record.normal = normal;
+            record.geometric_normal = normal;
             true
         } else {
             false

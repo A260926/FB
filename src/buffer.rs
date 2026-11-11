@@ -72,6 +72,15 @@ impl Buffer {
         variance / count
     }
 
+    /// Returns the filtered linear (pre-gamma) color at a pixel
+    ///
+    /// This is useful for numerically validating renderer output without the
+    /// clamping and gamma conversion performed when writing an image.
+    pub fn linear_color(&self, x: u32, y: u32) -> Color {
+        assert!(x < self.width && y < self.height, "Invalid pixel location");
+        self.get_filtered_color(x, y)
+    }
+
     fn get_filtered_color(&self, x: u32, y: u32) -> Color {
         match self.filter {
             Filter::Box(radius) => {
