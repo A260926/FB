@@ -1,5 +1,5 @@
 import { TypeBackedArray } from '../TypeBackedArray.js';
-import { Vector3, Vector4, BufferAttribute } from 'three';
+import { Vector3, Vector4, Matrix3, BufferAttribute } from 'three';
 
 const _vec3 = new Vector3();
 const _vec3_0 = new Vector3();
@@ -10,6 +10,39 @@ const _vec4 = new Vector4();
 const _vec4_0 = new Vector4();
 const _vec4_1 = new Vector4();
 const _vec4_2 = new Vector4();
+
+const _norm = new Vector3();
+const _tan = new Vector3();
+const _mat3 = new Matrix3();
+
+// Tangent frame convention
+//
+// The "tangent" attribute is a float4 render tangent frame: xyz is the tangent
+// direction along U and w is exactly +1 or -1 giving the bitangent sign, so the
+// bitangent is reconstructed as B = w * cross( N, T ). Every source triangle has
+// the same w on all three of its vertices and mirrored UV charts are already
+// split into separate vertices.
+//
+// The frame is carried through CSG with the following rules, applied equally to
+// untouched vertices (a barycoord landing exactly on a source vertex) and to new
+// vertices produced by triangle splitting:
+//
+// - the source normal and the source tangent xyz are interpolated in the source
+//   geometry's local space using the barycentric coordinates within the source
+//   triangle,
+// - the normal is transformed by the inverse-transpose (normal matrix) and the
+//   tangent xyz by the linear part of the relative transform - never by the
+//   normal matrix and never by normalizing the whole vec4,
+// - the tangent is then orthogonalized against the output normal and normalized,
+// - w follows the source triangle and flips sign once per orientation reversal:
+//   a reflection in the relative transform (negative determinant) is one
+//   reversal, and a boolean operation inverting the source surface (eg the inner
+//   walls produced by subtraction) is another, independent one. The tangent
+//   direction along U is NOT flipped by surface inversion so the reconstructed
+//   bitangent keeps pointing along the original texture direction.
+//
+// Degenerate input tangents, missing conventional attributes, and source
+// triangles with mixed w signs are not supported.
 
 function getBarycoordValue( a, b, c, barycoord, target, normalize = false, invert = false ) {
 
@@ -58,6 +91,29 @@ function pushItemSize( vec, itemSize, target ) {
 
 }
 
+// orthogonalizes the tangent against the given output normal and normalizes it,
+// falling back to an arbitrary perpendicular direction if the projection is
+// degenerate so the result is always a finite unit vector
+function orthonormalizeTangent( tangent, normal ) {
+
+	tangent.addScaledVector( normal, - tangent.dot( normal ) );
+	if ( ! ( tangent.lengthSq() > 1e-20 ) ) {
+
+		tangent.set( 1, 0, 0 );
+		if ( Math.abs( normal.x ) > 0.9 ) {
+
+			tangent.set( 0, 1, 0 );
+
+		}
+
+		tangent.addScaledVector( normal, - tangent.dot( normal ) );
+
+	}
+
+	return tangent.normalize();
+
+}
+
 class AttributeData extends TypeBackedArray {
 
 	get count() {
@@ -86,6 +142,10 @@ export class GeometryBuilder {
 		this.forwardIndexMap = new Map();
 		this.invertedIndexMap = new Map();
 		this.interpolatedFields = {};
+
+		// linear part of the relative transform used to carry tangent directions
+		// into the result frame, cached by initInterpolatedAttributeData
+		this._linearMatrix = new Matrix3();
 
 	}
 
@@ -131,6 +191,8 @@ export class GeometryBuilder {
 		const { attributeData, interpolatedFields } = this;
 		const { attributes } = geometry;
 
+		this._linearMatrix.setFromMatrix4( matrix );
+
 		for ( const key in attributeData ) {
 
 			const attr = attributes[ key ];
@@ -156,9 +218,12 @@ export class GeometryBuilder {
 
 			} else if ( key === 'tangent' ) {
 
-				v0 = _vec3_0.fromBufferAttribute( attr, i0 ).transformDirection( matrix );
-				v1 = _vec3_1.fromBufferAttribute( attr, i1 ).transformDirection( matrix );
-				v2 = _vec3_2.fromBufferAttribute( attr, i2 ).transformDirection( matrix );
+				// cache the source-space tangent frame (xyz along U, w = ±1 bitangent
+				// sign). The transform into the result frame happens after the
+				// barycentric interpolation - see appendInterpolatedAttributeData.
+				v0 = _vec4_0.fromBufferAttribute( attr, i0 );
+				v1 = _vec4_1.fromBufferAttribute( attr, i1 );
+				v2 = _vec4_2.fromBufferAttribute( attr, i2 );
 
 			} else {
 
@@ -206,16 +271,64 @@ export class GeometryBuilder {
 			indexMap.set( index, attributeData.position.count );
 			indexData.push( attributeData.position.count );
 
+			// if a tangent frame is being generated then resolve the output normal
+			// first so the tangent can be orthogonalized against it
+			let tangentNormal = null;
+			if ( 'tangent' in interpolatedFields && 'normal' in interpolatedFields ) {
+
+				const [ n0, n1, n2 ] = interpolatedFields.normal;
+				tangentNormal = getBarycoordValue( n0, n1, n2, barycoord, _norm, true, invert );
+
+			}
+
 			for ( const key in interpolatedFields ) {
 
-				// handle normals and positions specially because they require transforming
 				const arr = attributeData[ key ];
-				const isDirection = key === 'normal' || key === 'tangent';
-				const invertVector = invert && isDirection;
-				const itemSize = arr.itemSize;
-				const [ v0, v1, v2 ] = interpolatedFields[ key ];
-				getBarycoordValue( v0, v1, v2, barycoord, _vec4, isDirection, invertVector );
-				pushItemSize( _vec4, itemSize, arr );
+				if ( key === 'tangent' ) {
+
+					// interpolate the tangent direction in the source frame, transform
+					// it by the linear part of the relative transform and
+					// re-orthogonalize it against the output normal. The w component
+					// follows the source triangle and flips with the triangle
+					// inversion (boolean surface inversion XOR transform reflection)
+					// while the direction along U does not.
+					const [ t0, t1, t2 ] = interpolatedFields.tangent;
+					_tan.set( 0, 0, 0 )
+						.addScaledVector( t0, barycoord.x )
+						.addScaledVector( t1, barycoord.y )
+						.addScaledVector( t2, barycoord.z )
+						.applyMatrix3( this._linearMatrix );
+
+					let w = t0.w < 0 ? - 1 : 1;
+					if ( invert ) {
+
+						w = - w;
+
+					}
+
+					if ( tangentNormal ) {
+
+						orthonormalizeTangent( _tan, tangentNormal );
+
+					} else {
+
+						_tan.normalize();
+
+					}
+
+					arr.push( _tan.x, _tan.y, _tan.z, w );
+
+				} else {
+
+					// handle normals and positions specially because they require transforming
+					const isDirection = key === 'normal';
+					const invertVector = invert && isDirection;
+					const itemSize = arr.itemSize;
+					const [ v0, v1, v2 ] = interpolatedFields[ key ];
+					getBarycoordValue( v0, v1, v2, barycoord, _vec4, isDirection, invertVector );
+					pushItemSize( _vec4, itemSize, arr );
+
+				}
 
 			}
 
@@ -275,14 +388,41 @@ export class GeometryBuilder {
 
 				} else if ( key === 'tangent' ) {
 
-					_vec3.fromBufferAttribute( attr, index ).transformDirection( matrix );
+					// transform the tangent direction by the linear part of the
+					// relative transform and re-orthogonalize it against the output
+					// normal. The w component follows the source triangle and flips
+					// with the triangle inversion (boolean surface inversion XOR
+					// transform reflection) while the direction along U does not.
+					_vec4.fromBufferAttribute( attr, index );
+					_tan.set( _vec4.x, _vec4.y, _vec4.z )
+						.applyMatrix3( _mat3.setFromMatrix4( matrix ) );
+
+					let w = _vec4.w < 0 ? - 1 : 1;
 					if ( invert ) {
 
-						_vec3.multiplyScalar( - 1 );
+						w = - w;
 
 					}
 
-					arr.push( _vec3.x, _vec3.y, _vec3.z );
+					const normalAttr = attributes.normal;
+					if ( normalAttr ) {
+
+						_norm.fromBufferAttribute( normalAttr, index ).applyNormalMatrix( normalMatrix );
+						if ( invert ) {
+
+							_norm.multiplyScalar( - 1 );
+
+						}
+
+						orthonormalizeTangent( _tan, _norm );
+
+					} else {
+
+						_tan.normalize();
+
+					}
+
+					arr.push( _tan.x, _tan.y, _tan.z, w );
 
 				} else {
 

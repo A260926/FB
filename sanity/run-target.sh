@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 test -s sanity/tangent-frame.test.mjs
-out=$(mktemp)
+out=$(mktemp "${TMPDIR:-/tmp}/tangent-frame-target.XXXXXX")
 trap 'rm -f "$out"' EXIT
 node --test --test-reporter=tap sanity/tangent-frame.test.mjs | tee "$out"
 grep -Eq '^# tests [1-9][0-9]*$' "$out"
