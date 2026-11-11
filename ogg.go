@@ -101,20 +101,27 @@ func (r *oggReader) LastPosition() (int64, error) {
 }
 
 func (r *oggReader) SeekPageBefore(pos int64) (int64, error) {
-	r.seeker.Seek(0, io.SeekStart)
+	if _, err := r.seeker.Seek(0, io.SeekStart); err != nil {
+		return 0, err
+	}
 	r.buffer = nil
 	r.lastPacket = false
 	var p page
 	var lastOffset int64
 	var lastPos int64
 	for {
-		offset, _ := r.seeker.Seek(0, io.SeekCurrent)
-		err := p.readHeader(r)
+		offset, err := r.seeker.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, err
+		}
+		err = p.readHeader(r)
 		if err != nil {
 			return 0, err
 		}
 		if p.AbsoluteGranulePosition > pos {
-			r.seeker.Seek(lastOffset, io.SeekStart)
+			if _, err := r.seeker.Seek(lastOffset, io.SeekStart); err != nil {
+				return 0, err
+			}
 			err := r.currentPage.read(r)
 			if err != nil {
 				return 0, err
@@ -132,7 +139,9 @@ func (r *oggReader) SeekPageBefore(pos int64) (int64, error) {
 		}
 		lastOffset = offset
 		lastPos = p.AbsoluteGranulePosition
-		r.seeker.Seek(int64(p.totalSize-len(r.buffer)), io.SeekCurrent)
+		if _, err := r.seeker.Seek(int64(p.totalSize-len(r.buffer)), io.SeekCurrent); err != nil {
+			return 0, err
+		}
 		r.buffer = nil
 	}
 }

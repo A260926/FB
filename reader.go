@@ -2,6 +2,7 @@ package oggvorbis
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/jfreymuth/vorbis"
@@ -97,21 +98,59 @@ func (r *Reader) Length() int64 { return r.length }
 
 // SetPosition seeks to a position in samples.
 // It will return an error if the underlying reader is not seekable.
+//
+// SetPosition is atomic: if it returns an error, the position, the length
+// and any buffered audio are left untouched, so playback can continue as if
+// the seek had never been attempted, and the seek can simply be retried.
 func (r *Reader) SetPosition(pos int64) error {
 	if r.r.seeker == nil {
 		return errors.New("oggvorbis: reader is not seekable")
 	}
-	r.buffer = nil
+	if pos < 0 {
+		return fmt.Errorf("oggvorbis: invalid negative position %d", pos)
+	}
 	if pos >= r.length {
+		// clamp to EOF; discard any leftover state from a previous seek
+		r.buffer = nil
+		r.toSkip = 0
 		r.r.lastPacket = true
 		r.position = r.length
 		return nil
 	}
-	start, err := r.r.SeekPageBefore(pos)
+	// Snapshot the playback state and the ogg layer, and remember the
+	// physical offset of the source, so a failure anywhere during the seek
+	// can be rolled back without losing buffered audio.
+	savedOgg := r.r
+	savedPosition := r.position
+	savedBuffer := r.buffer
+	savedToSkip := r.toSkip
+	savedOffset, err := r.r.seeker.Seek(0, io.SeekCurrent)
 	if err != nil {
+		return fmt.Errorf("oggvorbis: seek to sample %d: %w", pos, err)
+	}
+	start, err := r.r.SeekPageBefore(pos)
+	var packet []byte
+	if err == nil {
+		packet, err = r.r.NextPacket()
+		if err != nil {
+			err = fmt.Errorf("oggvorbis: seek to sample %d: %w", pos, err)
+		}
+	} else {
+		err = fmt.Errorf("oggvorbis: seek to sample %d: %w", pos, err)
+	}
+	if err != nil {
+		// Roll back: restore the physical offset of the source and every
+		// piece of state the failed seek may have touched. The decoder was
+		// not modified yet, so buffered audio remains fully valid.
+		r.r.seeker.Seek(savedOffset, io.SeekStart)
+		r.r = savedOgg
+		r.position = savedPosition
+		r.buffer = savedBuffer
+		r.toSkip = savedToSkip
 		return err
 	}
-	packet, err := r.r.NextPacket()
+	// Commit: only now discard the old playback state.
+	r.buffer = nil
 	r.dec.Clear()
 	r.dec.DecodeInto(packet, r.originalBuffer)
 	r.position = start
