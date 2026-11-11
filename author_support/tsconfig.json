@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../source", "../test", "../benchmark", "../test-page-pipeline.ts"]
+}
