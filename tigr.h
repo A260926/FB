@@ -165,6 +165,13 @@ void tigrClip(Tigr *bmp, int cx, int cy, int cw, int ch);
 //
 // RGBAdest = RGBAsrc
 // Clips, does not blend.
+//
+// If dest and src are the same bitmap, every source pixel is read at the
+// value it held when the call began, exactly as if the clipped source
+// rectangle had first been saved into a private snapshot and then blitted
+// back from that snapshot. Overlapping in-place copies (scrolling, shifting)
+// therefore give the same result as the same call between two independent
+// bitmaps; non-overlapping copies keep their direct behaviour.
 void tigrBlit(Tigr *dest, Tigr *src, int dx, int dy, int sx, int sy, int w, int h);
 
 // Same as tigrBlit, but alpha blends the source bitmap with the
@@ -179,6 +186,10 @@ void tigrBlit(Tigr *dest, Tigr *src, int dx, int dy, int sx, int sy, int w, int 
 // Blit mode == TIGR_BLEND_ALPHA:
 // Adest = Asrc * Ablend + Adest * (1 - Ablend)
 // Clips and blends.
+//
+// When dest == src the source pixels are frozen at their start-of-call
+// values (see tigrBlit); the destination pixels still participate in the
+// blending as usual.
 void tigrBlitAlpha(Tigr *dest, Tigr *src, int dx, int dy, int sx, int sy, int w, int h, float alpha);
 
 // Same as tigrBlit, but tints the source bitmap with a color
@@ -197,6 +208,10 @@ void tigrBlitAlpha(Tigr *dest, Tigr *src, int dx, int dy, int sx, int sy, int w,
 // Blit mode == TIGR_BLEND_ALPHA:
 // Adest = Ablend * Ablend + Adest * (1 - Ablend)
 // Clips and blends.
+//
+// When dest == src the source pixels are frozen at their start-of-call
+// values (see tigrBlit); the destination pixels still participate in the
+// blending as usual.
 void tigrBlitTint(Tigr *dest, Tigr *src, int dx, int dy, int sx, int sy, int w, int h, TPixel tint);
 
 enum TIGRBlitMode {

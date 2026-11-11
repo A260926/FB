@@ -343,6 +343,40 @@ void tigrClip(Tigr* bmp, int cx, int cy, int cw, int ch) {
     bmp->ch = ch;
 }
 
+// In-place blit contract:
+//
+// When src and dest are the same bitmap, every source pixel is read at the
+// value it had when the call started, as if the source rectangle had been
+// copied into a private snapshot first and blitted back from that snapshot.
+// The destination pixels still take part in this call's blending exactly as
+// they would for two independent bitmaps; only the source reads are frozen.
+//
+// The snapshot only needs to cover the source rectangle that survives
+// clipping (w*h pixels), so its size tracks the effective copy area rather
+// than the whole bitmap. Copies between distinct bitmaps, and rectangles of
+// the same bitmap that do not overlap, keep their old direct paths and never
+// allocate a snapshot.
+static int tigrBlitOverlaps(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, int h) {
+    return dst == src && dx < sx + w && sx < dx + w && dy < sy + h && sy < dy + h;
+}
+
+// Saves the clipped source rectangle into a compact w*h pixel buffer.
+// Returns NULL if the storage could not be allocated, in which case the
+// caller falls back to the original in-place behaviour.
+static TPixel* tigrBlitSnapshot(Tigr* src, int sx, int sy, int w, int h) {
+    TPixel* snap = (TPixel*)malloc((size_t)w * h * sizeof(TPixel));
+    if (!snap)
+        return 0;
+    TPixel* sp = &src->pix[sy * src->w + sx];
+    TPixel* dp = snap;
+    for (int y = 0; y < h; y++) {
+        memcpy(dp, sp, w * sizeof(TPixel));
+        sp += src->w;
+        dp += w;
+    }
+    return snap;
+}
+
 void tigrBlit(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, int h) {
     int cw = dst->cw >= 0 ? dst->cw : dst->w;
     int ch = dst->ch >= 0 ? dst->ch : dst->h;
@@ -353,11 +387,20 @@ void tigrBlit(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, int h
     TPixel* td = &dst->pix[dy * dst->w + dx];
     int st = src->w;
     int dt = dst->w;
+    TPixel* snap = tigrBlitOverlaps(dst, src, dx, dy, sx, sy, w, h)
+                       ? tigrBlitSnapshot(src, sx, sy, w, h)
+                       : 0;
+    if (snap) {
+        // Source reads are frozen at the start-of-call values.
+        ts = snap;
+        st = w;
+    }
     do {
         memcpy(td, ts, w * sizeof(TPixel));
         ts += st;
         td += dt;
     } while (--h);
+    free(snap);
 }
 
 void tigrBlitTint(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, int h, TPixel tint) {
@@ -375,6 +418,15 @@ void tigrBlitTint(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, i
     TPixel* td = &dst->pix[dy * dst->w + dx];
     int st = src->w;
     int dt = dst->w;
+    TPixel* snap = tigrBlitOverlaps(dst, src, dx, dy, sx, sy, w, h)
+                       ? tigrBlitSnapshot(src, sx, sy, w, h)
+                       : 0;
+    if (snap) {
+        // Only the source reads are frozen; td still points at the live
+        // destination so each pixel blends against its current value.
+        ts = snap;
+        st = w;
+    }
     do {
         for (int x = 0; x < w; x++) {
             unsigned r = (xr * ts[x].r) >> 8;
@@ -389,10 +441,13 @@ void tigrBlitTint(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, i
         ts += st;
         td += dt;
     } while (--h);
+    free(snap);
 }
 
 void tigrBlitAlpha(Tigr* dst, Tigr* src, int dx, int dy, int sx, int sy, int w, int h, float alpha) {
     alpha = (alpha < 0) ? 0 : (alpha > 1 ? 1 : alpha);
+    // tigrBlitTint applies the same in-place snapshot contract, so alpha
+    // blits of a bitmap onto itself are snapshot-consistent as well.
     tigrBlitTint(dst, src, dx, dy, sx, sy, w, h, tigrRGBA(0xff, 0xff, 0xff, (unsigned char)(alpha * 255)));
 }
 
