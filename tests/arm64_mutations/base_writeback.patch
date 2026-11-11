@@ -1,0 +1,13 @@
+diff --git a/arch/AArch64/AArch64Mapping.c b/arch/AArch64/AArch64Mapping.c
+index a987af6..349781b 100644
+--- a/arch/AArch64/AArch64Mapping.c
++++ b/arch/AArch64/AArch64Mapping.c
+@@ -866,7 +866,7 @@ void AArch64_reg_access(const cs_insn *insn,
+ 					regs_read[read_count] = (uint16_t)op->mem.index;
+ 					read_count++;
+ 				}
+-				if ((arm64->writeback) && (op->mem.base != ARM64_REG_INVALID) && !arr_exist(regs_write, write_count, op->mem.base)) {
++				if ((0 && arm64->writeback) && (op->mem.base != ARM64_REG_INVALID) && !arr_exist(regs_write, write_count, op->mem.base)) {
+ 					regs_write[write_count] = (uint16_t)op->mem.base;
+ 					write_count++;
+ 				}

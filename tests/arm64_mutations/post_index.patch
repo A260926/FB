@@ -1,0 +1,12 @@
+diff --git a/arch/AArch64/AArch64InstPrinter.c b/arch/AArch64/AArch64InstPrinter.c
+index 517db25..92d3636 100644
+--- a/arch/AArch64/AArch64InstPrinter.c
++++ b/arch/AArch64/AArch64InstPrinter.c
+@@ -2977,7 +2977,6 @@ void AArch64_post_printer(csh handle, cs_insn *flat_insn, char *insn_asm, MCInst
+ 			case AArch64_LDRWpost:
+ 			case AArch64_LDRXpost:
+ 				flat_insn->detail->arm64.writeback = true;
+-			    flat_insn->detail->arm64.post_index = true;
+ 				break;
+ 			case AArch64_LDRAAwriteback:
+ 			case AArch64_LDRABwriteback:

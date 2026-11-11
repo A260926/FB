@@ -1,0 +1,13 @@
+diff --git a/arch/AArch64/AArch64InstPrinter.c b/arch/AArch64/AArch64InstPrinter.c
+index 517db25..a8a8a58 100644
+--- a/arch/AArch64/AArch64InstPrinter.c
++++ b/arch/AArch64/AArch64InstPrinter.c
+@@ -1081,7 +1081,7 @@ static void printOperand(MCInst *MI, unsigned OpNum, SStream *O)
+ 
+ 		if (MI->csh->detail) {
+ 			if (MI->csh->doing_mem) {
+-				MI->flat_insn->detail->arm64.operands[MI->flat_insn->detail->arm64.op_count].mem.disp = (int32_t)imm;
++				MI->flat_insn->detail->arm64.operands[MI->flat_insn->detail->arm64.op_count].mem.disp = (int32_t)(imm < 0 ? -imm : imm);
+ 			} else if (MI->csh->doing_SME_Index) {
+ 				// Access op_count-1 as We want to add info to previous operand, not create a new one
+ 				MI->flat_insn->detail->arm64.operands[MI->flat_insn->detail->arm64.op_count-1].sme_index.disp = (int32_t)imm; 
