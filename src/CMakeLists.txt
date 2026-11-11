@@ -29,6 +29,7 @@ SET(SOURCE_FILES
     OpenVolumeMesh/Mesh/HexahedralMeshIterators.cc
     OpenVolumeMesh/Mesh/TetrahedralMeshTopologyKernel.cc
     OpenVolumeMesh/Mesh/HexahedralMeshTopologyKernel.cc
+    OpenVolumeMesh/Unstable/Topology/SelectionBoundary.cc
     OpenVolumeMesh/Unstable/Topology/TetTopology.cc
     OpenVolumeMesh/Unstable/Topology/TriangleTopology.cc
 )

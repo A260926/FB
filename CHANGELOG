@@ -1,4 +1,13 @@
 master:
+  - New OpenVolumeMesh/Unstable/Topology/SelectionBoundary.hh:
+    selection_boundary() computes the oriented skin of a set of selected
+    cells (outward-facing halffaces with inside/outside cell handles,
+    grouped into edge-connected surface components). It only relies on
+    top-down incidences, so it works with any combination of bottom-up
+    incidence caches disabled and with pending deferred deletion, and it
+    rejects non-closed-2-manifold selections (edge/vertex contact) with
+    std::domain_error.
+
   - When creating new properties, the user now either has to supply an explicit default,
     or ensure that a matching specialisation of OpenVolumeMesh::default_prop exists.
     See src/OpenVolumeMesh/Core/Properties/Defaults.hh for details.
