@@ -11,6 +11,7 @@ var isArrayLike = require('./src/utils/is-array-like');
 var createEvaluator = require('./src/evaluate');
 var createTransform = require('./src/transform');
 var createSupport = require('./src/support');
+var projectiveTransform = require('./src/projective-transform');
 
 var BOUNDARY_TYPES = {
   open: 'open',
@@ -308,6 +309,18 @@ function nurbs (points, degree, knots, weights, boundary, opts) {
   };
 
   var parseFcn = parseNURBS.bind(ctor);
+
+  // Apply a projective transformation exactly by transforming the
+  // homogeneous control points, then re-run the parser so that
+  // `evaluate`, `evaluator`, `support` and `transform` are regenerated
+  // whenever the rational state or data layout changed. Evaluator
+  // functions fetched before this call are not guaranteed to reflect
+  // the new structure and must be re-fetched.
+  ctor.projectiveTransform = function (m) {
+    projectiveTransform(ctor, m);
+    parseFcn(ctor);
+    return ctor;
+  };
 
   Object.defineProperty(ctor, 'domain', {
     get: domainGetter

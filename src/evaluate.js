@@ -294,6 +294,17 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
   });
   debugLine('\n');
 
+  // For rational b-splines, first derivatives are computed by differentiating
+  // the homogeneous (weighted) coordinates, which are themselves b-splines,
+  // and carrying them through any remaining interpolation steps. The quotient
+  // rule is applied only once, at the very end. This keeps derivatives correct
+  // even when the differentiated parametric dimension is not the last one
+  // to be interpolated.
+  var rationalDerivative = hasWeights && totalDerivativeOrder > 0;
+  var derPointVar = variable('dx');
+  var derWeightVar = variable('dw');
+  var derivativeComputed = false;
+
   debugLine('// Perform De Boor\'s algorithm');
   for (d = n.length - 1; d >= 0; d--) {
     n[d] = [degree[d], degree[d] + 1];
@@ -319,47 +330,56 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
             var ij1 = ii.slice();
             ij[d] = j;
             ij1[d] = j - 1;
-            if (isDerivative && hasWeights) line('h = ' + weightVar(ij) + ';');
+            if (isDerivative) {
+              line('var ' + derWeightVar(ij) + ' = ' + (i + 1) + ' * (' + weightVar(ij) + ' - ' + weightVar(ij1) + ') * m;');
+            } else if (derivativeComputed) {
+              line(derWeightVar(ij) + ' = b * ' + derWeightVar(ij1) + ' + a * ' + derWeightVar(ij) + ';');
+            }
             line(weightVar(ij) + ' = b * ' + weightVar(ij1) + ' + a * ' + weightVar(ij) + ';');
           });
         }
         ndloop(n, function (ii) {
-          var weightFactor, pt1, pt2;
           var ij = ii.slice();
           var ij1 = ii.slice();
           // Replace the dimension being interpolated with the interpolation indices
           ij[d] = j;
           ij1[d] = j - 1;
-          // Create a version to which we can append the dimension when we loop over spatial dimension
-          if (isDerivative) {
+          if (isDerivative && !rationalDerivative) {
             var derivCoeff = i + 1;
             if (isBasis) {
-              weightFactor = hasWeights ? 'h * ' + weightVar(ij1) + ' / ' + weightVar(ij) + ' * ' : '';
-              pt1 = pointVar(ij) + (hasWeights ? ' / h' : '');
-              pt2 = pointVar(ij1) + (hasWeights ? ' / ' + weightVar(ij1) : '');
-              line(pointVar(ij) + ' = ' + derivCoeff + ' * ' + weightFactor + '(' + pt1 + ' - ' + pt2 + ') * m;');
+              line(pointVar(ij) + ' = ' + derivCoeff + ' * (' + pointVar(ij) + ' - ' + pointVar(ij1) + ') * m;');
             } else {
               var ijWithDimension = ij.slice();
               var ij1WithDimension = ij1.slice();
               for (m = 0; m < spaceDimension; m++) {
                 ijWithDimension[splineDimension] = ij1WithDimension[splineDimension] = m;
-                weightFactor = hasWeights ? 'h * ' + weightVar(ij1) + ' / ' + weightVar(ij) + ' * ' : '';
-                pt1 = pointVar(ijWithDimension) + (hasWeights ? ' / h' : '');
-                pt2 = pointVar(ij1WithDimension) + (hasWeights ? ' / ' + weightVar(ij1) : '');
-                line(pointVar(ijWithDimension) + ' = ' + derivCoeff + ' * ' + weightFactor + '(' + pt1 + ' - ' + pt2 + ') * m;');
+                line(pointVar(ijWithDimension) + ' = ' + derivCoeff + ' * (' + pointVar(ijWithDimension) + ' - ' + pointVar(ij1WithDimension) + ') * m;');
               }
             }
           } else {
             if (isBasis) {
+              if (isDerivative) {
+                line('var ' + derPointVar(ij) + ' = ' + (i + 1) + ' * (' + pointVar(ij) + ' - ' + pointVar(ij1) + ') * m;');
+              } else if (derivativeComputed) {
+                line(derPointVar(ij) + ' = b * ' + derPointVar(ij1) + ' + a * ' + derPointVar(ij) + ';');
+              }
               line(pointVar(ij) + ' = b * ' + pointVar(ij1) + ' + a * ' + pointVar(ij) + ';');
             } else {
+              var ijWithDim = ij.slice();
+              var ij1WithDim = ij1.slice();
               for (m = 0; m < spaceDimension; m++) {
-                ij[splineDimension] = ij1[splineDimension] = m;
-                line(pointVar(ij) + ' = b * ' + pointVar(ij1) + ' + a * ' + pointVar(ij) + ';');
+                ijWithDim[splineDimension] = ij1WithDim[splineDimension] = m;
+                if (isDerivative) {
+                  line('var ' + derPointVar(ijWithDim) + ' = ' + (i + 1) + ' * (' + pointVar(ijWithDim) + ' - ' + pointVar(ij1WithDim) + ') * m;');
+                } else if (derivativeComputed) {
+                  line(derPointVar(ijWithDim) + ' = b * ' + derPointVar(ij1WithDim) + ' + a * ' + derPointVar(ijWithDim) + ';');
+                }
+                line(pointVar(ijWithDim) + ' = b * ' + pointVar(ij1WithDim) + ' + a * ' + pointVar(ijWithDim) + ';');
               }
             }
           }
         });
+        if (isDerivative && rationalDerivative) derivativeComputed = true;
         debugLine('\n');
       }
     }
@@ -374,14 +394,22 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
   }
   if (isBasis) {
     if (hasWeights) {
-      line('return ' + pointVar(degree) + ' / ' + weightVar(degree) + ';');
+      if (rationalDerivative) {
+        line('return (' + derPointVar(degree) + ' * ' + weightVar(degree) + ' - ' + pointVar(degree) + ' * ' + derWeightVar(degree) + ') / (' + weightVar(degree) + ' * ' + weightVar(degree) + ');');
+      } else {
+        line('return ' + pointVar(degree) + ' / ' + weightVar(degree) + ';');
+      }
     } else {
       line('return ' + pointVar(degree) + ';');
     }
   } else {
     for (d = 0; d < spaceDimension; d++) {
       if (hasWeights) {
-        line('out[' + d + '] = ' + pointVar(degree.concat([d])) + ' / ' + weightVar(degree) + ';');
+        if (rationalDerivative) {
+          line('out[' + d + '] = (' + derPointVar(degree.concat([d])) + ' * ' + weightVar(degree) + ' - ' + pointVar(degree.concat([d])) + ' * ' + derWeightVar(degree) + ') / (' + weightVar(degree) + ' * ' + weightVar(degree) + ');');
+        } else {
+          line('out[' + d + '] = ' + pointVar(degree.concat([d])) + ' / ' + weightVar(degree) + ';');
+        }
       } else {
         line('out[' + d + '] = ' + pointVar(degree.concat([d])) + ';');
       }

@@ -36,6 +36,7 @@ $ npm install nurbs
     - [`evaluator`](#splineevaluatorderivativeorders-isbasis)
     - [`support`](#splinesupportout-t0-t1--tn_1)
     - [`transform`](#splinetransformm)
+    - [`projectiveTransform`](#splineprojectivetransformm)
 
 
 ## Examples
@@ -335,6 +336,16 @@ Compute the [support][support] of a point on the spline. That is, the integer in
 ### `spline.transform(m)`
 
 Transform a spline in-place using gl-matrix-style matrices (e.g. [gl-mat3](https://github.com/stackgl/gl-mat3) or [gl-mat4](https://github.com/stackgl/gl-mat4)). Modifies spline data and returns a reference to the spline.
+
+---
+
+### `spline.projectiveTransform(m)`
+
+Apply a projective (homogeneous) transformation to a spline exactly, in-place, using a gl-matrix-style column-major homogeneous matrix (`mat3` for 2D splines, `mat4` for 3D splines). Unlike `transform`, which only makes sense for affine matrices, `projectiveTransform` handles matrices with a non-trivial perspective row by transforming the homogeneous control points `(w * P, w)` and renormalizing, so the result is still an exact NURBS curve or surface which may be evaluated, differentiated and further transformed as usual. The degree, knots, boundary, domain and number of control points are unchanged, and the transformation is exact — it is not a sampling or refitting operation. Returns a reference to the spline.
+
+Rational splines remain rational, and non-rational b-splines are promoted to rational splines with freshly allocated weights. Multiplying the matrix by a non-zero scalar does not change the resulting geometry. The transformation is rejected with a `RangeError` — leaving the spline untouched — if the matrix or control points are not finite, if existing weights are not positive and finite, or if the projected homogeneous denominators are zero, of mixed sign, or non-finite. Generic (custom `get`/`set`) ndarray storage is not supported.
+
+Because the rational state and data layout may change, `evaluate`, `evaluator`, `support` and `transform` are regenerated internally. Any evaluator functions fetched *before* calling `projectiveTransform` are not guaranteed to reflect the new structure and must be re-fetched from the spline afterwards.
 
 ## References
 
