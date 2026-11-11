@@ -1,4 +1,4 @@
-//go:build draftbaseline
+//go:build baselinecheck
 
 // Z1152 starting-state witnesses. Not part of the default regression suite.
 package nack
