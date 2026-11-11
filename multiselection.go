@@ -17,13 +17,13 @@ type MultiSelection struct {
 	Selection
 }
 
-func newMultiSelection(session apiSession, selectors target.Selectors) *MultiSelection {
-	return &MultiSelection{*newSelection(session, selectors)}
+func newMultiSelection(session apiSession, selectors target.Selectors, remoteFileUpload bool) *MultiSelection {
+	return &MultiSelection{*newSelection(session, selectors, remoteFileUpload)}
 }
 
 // At finds an element at the provided index. It only applies to the immediate selection,
 // meaning that the returned selection may still refer to multiple elements if any parent
 // of the immediate selection is also a *MultiSelection.
 func (s *MultiSelection) At(index int) *Selection {
-	return newSelection(s.session, s.selectors.At(index))
+	return newSelection(s.session, s.selectors.At(index), s.remoteFileUpload)
 }

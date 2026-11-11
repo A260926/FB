@@ -13,6 +13,7 @@ type config struct {
 	Debug               bool
 	HTTPClient          *http.Client
 	ChromeOptions       map[string]interface{}
+	RemoteFileUpload    bool
 }
 
 // An Option specifies configuration for a new WebDriver or Page.
@@ -65,6 +66,29 @@ var Debug Option = func(c *config) {
 func HTTPClient(client *http.Client) Option {
 	return func(c *config) {
 		c.HTTPClient = client
+	}
+}
+
+// RemoteFileUpload provides an Option for specifying whether file uploads
+// performed with Selection.UploadFile and Selection.UploadFiles should
+// transmit the files to the WebDriver server before filling file inputs.
+//
+// This Option is disabled by default, in which case UploadFile keeps its
+// historical behavior: the client-side absolute path of each file is sent
+// directly to the browser, which only works when the browser runs on the
+// same machine as the client.
+//
+// When enabled (for example, when driving a remote Selenium Grid), each
+// file is first transmitted to the WebDriver server using the Selenium
+// file upload endpoint (POST /session/<id>/se/file), and the returned
+// server-side paths are used to fill the file inputs instead.
+//
+// The Option may be provided to NewPage, JoinPage, or a WebDriver (as a
+// default for all of its pages). A RemoteFileUpload Option passed to an
+// individual page overrides the WebDriver default for that page only.
+func RemoteFileUpload(enabled bool) Option {
+	return func(c *config) {
+		c.RemoteFileUpload = enabled
 	}
 }
 

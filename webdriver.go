@@ -64,5 +64,5 @@ func (w *WebDriver) NewPage(options ...Option) (*Page, error) {
 		return nil, fmt.Errorf("failed to connect to WebDriver: %s", err)
 	}
 
-	return newPage(session), nil
+	return newPage(session, newOptions.RemoteFileUpload), nil
 }

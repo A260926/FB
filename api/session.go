@@ -1,9 +1,13 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/base64"
 	"errors"
+	"io/ioutil"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/sclevine/agouti/api/internal/bus"
@@ -447,6 +451,42 @@ func (s *Session) Keys(text string) error {
 		Value []string `json:"value"`
 	}{splitText}
 	return s.Send("POST", "keys", request, nil)
+}
+
+// UploadFile transmits a single local file to a remote WebDriver server using
+// the Selenium file upload endpoint (POST /session/<id>/se/file) and returns
+// the path of the staged file on the remote host. The file is sent as a
+// base64-encoded ZIP archive containing exactly one entry, named after the
+// file's base name and holding the file's exact bytes. The client-side
+// directory structure is never included in the archive.
+func (s *Session) UploadFile(filename string) (string, error) {
+	contents, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	archive := &bytes.Buffer{}
+	zipWriter := zip.NewWriter(archive)
+	entry, err := zipWriter.Create(filepath.Base(filename))
+	if err != nil {
+		return "", err
+	}
+	if _, err := entry.Write(contents); err != nil {
+		return "", err
+	}
+	if err := zipWriter.Close(); err != nil {
+		return "", err
+	}
+
+	request := struct {
+		File string `json:"file"`
+	}{base64.StdEncoding.EncodeToString(archive.Bytes())}
+
+	var remotePath string
+	if err := s.Send("POST", "se/file", request, &remotePath); err != nil {
+		return "", err
+	}
+	return remotePath, nil
 }
 
 func (s *Session) DeleteLocalStorage() error {

@@ -80,6 +80,17 @@ func (e *Element) GetAttribute(attribute string) (string, error) {
 	return value, nil
 }
 
+// HasAttribute returns whether or not the element has the provided attribute.
+// Unlike GetAttribute, it distinguishes an absent attribute from an attribute
+// that is present with an empty value (such as multiple="").
+func (e *Element) HasAttribute(attribute string) (bool, error) {
+	var value interface{}
+	if err := e.Send("GET", path.Join("attribute", attribute), nil, &value); err != nil {
+		return false, err
+	}
+	return value != nil, nil
+}
+
 func (e *Element) GetCSS(property string) (string, error) {
 	var value string
 	if err := e.Send("GET", path.Join("css", property), nil, &value); err != nil {
@@ -101,6 +112,19 @@ func (e *Element) Value(text string) error {
 	request := struct {
 		Value []string `json:"value"`
 	}{splitText}
+	return e.Send("POST", "value", request, nil)
+}
+
+// UploadValue sets the value of a file upload element to the provided
+// newline-separated paths. The request carries the JSON wire protocol
+// character array as well as the W3C "text" field with the same content,
+// so that both protocol dialects are accepted.
+func (e *Element) UploadValue(text string) error {
+	splitText := strings.Split(text, "")
+	request := struct {
+		Value []string `json:"value"`
+		Text  string   `json:"text"`
+	}{splitText, text}
 	return e.Send("POST", "value", request, nil)
 }
 

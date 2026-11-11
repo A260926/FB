@@ -32,9 +32,9 @@ type elementRepository interface {
 	GetExactlyOne() (element.Element, error)
 }
 
-func newSelection(session apiSession, selectors target.Selectors) *Selection {
+func newSelection(session apiSession, selectors target.Selectors, remoteFileUpload bool) *Selection {
 	return &Selection{
-		selectable{session, selectors},
+		selectable{session, selectors, remoteFileUpload},
 		&element.Repository{
 			Client:    session,
 			Selectors: selectors,

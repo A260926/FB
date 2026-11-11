@@ -74,7 +74,16 @@ func (s *Selection) Fill(text string) error {
 // UploadFile uploads the provided file to all selected <input type="file" />.
 // The provided filename may be a relative or absolute path.
 // Returns an error if elements of any other type are in the selection.
+//
+// When the RemoteFileUpload Option of the owning Page is enabled, this method
+// behaves exactly like UploadFiles with a single file: the file is transmitted
+// to the WebDriver server first and the returned remote path is used.
+// Otherwise, the client-side absolute path is sent to the browser directly,
+// without checking whether the file exists on the client.
 func (s *Selection) UploadFile(filename string) error {
+	if s.remoteFileUpload {
+		return s.UploadFiles(filename)
+	}
 	absFilePath, err := filepath.Abs(filename)
 	if err != nil {
 		return fmt.Errorf("failed to find absolute path for filename: %s", err)

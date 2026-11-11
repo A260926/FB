@@ -45,19 +45,19 @@ func NewPage(url string, options ...Option) (*Page, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to WebDriver: %s", err)
 	}
-	return newPage(session), nil
+	return newPage(session, pageOptions.RemoteFileUpload), nil
 }
 
 // JoinPage creates a Page using existing session URL. This method takes Options
-// but respects only the HTTPClient Option if provided.
+// but respects only the HTTPClient and RemoteFileUpload Options if provided.
 func JoinPage(url string, options ...Option) *Page {
 	pageOptions := config{}.Merge(options)
 	session := api.NewWithClient(url, pageOptions.HTTPClient)
-	return newPage(session)
+	return newPage(session, pageOptions.RemoteFileUpload)
 }
 
-func newPage(session *api.Session) *Page {
-	return &Page{selectable{session, nil}, nil}
+func newPage(session *api.Session, remoteFileUpload bool) *Page {
+	return &Page{selectable{session, nil, remoteFileUpload}, nil}
 }
 
 // String returns a string representation of the Page. Currently: "page"
