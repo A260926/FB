@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+export npm_config_userconfig="$PWD/support/npm-user.conf"
+export npm_config_globalconfig="$PWD/support/npm-global.conf"
+export npm_config_cache="$PWD/.cache/npm"
+export npm_config_registry=https://registry.npmjs.org
+export npm_config_update_notifier=false
+node --version
+npm --version
+node support/lock-check.mjs save
+npm ci --ignore-scripts --no-audit --no-fund
+node support/lock-check.mjs check
+node node_modules/typescript/bin/tsc --noEmit
+printf '%s\n' 'INSTALL_OK locked dependencies and TypeScript'
