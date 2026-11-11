@@ -13,34 +13,35 @@ type Material struct {
 	Tint           float64 // specular and refractive tinting
 	Reflectivity   float64 // metallic reflection
 	Transparent    bool
+	Absorption     Color // per-world-unit extinction coefficients (Beer-Lambert)
 }
 
 func DiffuseMaterial(color Color) Material {
-	return Material{color, nil, nil, nil, nil, 1, 0, 1, 0, 0, -1, false}
+	return Material{color, nil, nil, nil, nil, 1, 0, 1, 0, 0, -1, false, Color{}}
 }
 
 func SpecularMaterial(color Color, index float64) Material {
-	return Material{color, nil, nil, nil, nil, 1, 0, index, 0, 0, -1, false}
+	return Material{color, nil, nil, nil, nil, 1, 0, index, 0, 0, -1, false, Color{}}
 }
 
 func GlossyMaterial(color Color, index, gloss float64) Material {
-	return Material{color, nil, nil, nil, nil, 1, 0, index, gloss, 0, -1, false}
+	return Material{color, nil, nil, nil, nil, 1, 0, index, gloss, 0, -1, false, Color{}}
 }
 
 func ClearMaterial(index, gloss float64) Material {
-	return Material{Black, nil, nil, nil, nil, 1, 0, index, gloss, 0, -1, true}
+	return Material{Black, nil, nil, nil, nil, 1, 0, index, gloss, 0, -1, true, Color{}}
 }
 
 func TransparentMaterial(color Color, index, gloss, tint float64) Material {
-	return Material{color, nil, nil, nil, nil, 1, 0, index, gloss, tint, -1, true}
+	return Material{color, nil, nil, nil, nil, 1, 0, index, gloss, tint, -1, true, Color{}}
 }
 
 func MetallicMaterial(color Color, gloss, tint float64) Material {
-	return Material{color, nil, nil, nil, nil, 1, 0, 1, gloss, tint, 1, false}
+	return Material{color, nil, nil, nil, nil, 1, 0, 1, gloss, tint, 1, false, Color{}}
 }
 
 func LightMaterial(color Color, emittance float64) Material {
-	return Material{color, nil, nil, nil, nil, 1, emittance, 1, 0, 0, -1, false}
+	return Material{color, nil, nil, nil, nil, 1, emittance, 1, 0, 0, -1, false, Color{}}
 }
 
 func MaterialAt(shape Shape, point Vector) Material {

@@ -33,7 +33,7 @@ func (s *SphericalHarmonic) Intersect(r Ray) Hit {
 		return NoHit
 	}
 	// TODO: refine T value
-	return Hit{s, hit.T, nil}
+	return Hit{s, hit.T, nil, nil}
 }
 
 func (s *SphericalHarmonic) UV(p Vector) Vector {

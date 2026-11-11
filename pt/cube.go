@@ -28,7 +28,7 @@ func (c *Cube) Intersect(r Ray) Hit {
 	t0 := math.Max(math.Max(n.X, n.Y), n.Z)
 	t1 := math.Min(math.Min(f.X, f.Y), f.Z)
 	if t0 > 0 && t0 < t1 {
-		return Hit{c, t0, nil}
+		return Hit{c, t0, nil, nil}
 	}
 	return NoHit
 }

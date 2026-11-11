@@ -4,6 +4,7 @@ type Hit struct {
 	Shape   Shape
 	T       float64
 	HitInfo *HitInfo
+	Region  Shape // innermost shape instance, used as an absorption region identity
 }
 
 type HitInfo struct {
@@ -15,7 +16,7 @@ type HitInfo struct {
 	Inside   bool
 }
 
-var NoHit = Hit{nil, INF, nil}
+var NoHit = Hit{nil, INF, nil, nil}
 
 func (hit *Hit) Ok() bool {
 	return hit.T < INF

@@ -54,10 +54,10 @@ func (shape *Cylinder) Intersect(ray Ray) Hit {
 	z0 := o.Z + t0*d.Z
 	z1 := o.Z + t1*d.Z
 	if t0 > EPS && shape.Z0 < z0 && z0 < shape.Z1 {
-		return Hit{shape, t0, nil}
+		return Hit{shape, t0, nil, nil}
 	}
 	if t1 > EPS && shape.Z0 < z1 && z1 < shape.Z1 {
-		return Hit{shape, t1, nil}
+		return Hit{shape, t1, nil, nil}
 	}
 	return NoHit
 

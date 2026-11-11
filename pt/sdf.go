@@ -35,7 +35,7 @@ func (s *SDFShape) Intersect(ray Ray) Hit {
 			continue
 		}
 		if d < epsilon {
-			return Hit{s, t, nil}
+			return Hit{s, t, nil, nil}
 		}
 		if jump && d < jumpSize {
 			d = jumpSize

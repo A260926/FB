@@ -29,7 +29,7 @@ func (f *Function) Intersect(ray Ray) Hit {
 	for t := step; t < 12; t += step {
 		v := ray.Position(t)
 		if f.Contains(v) != sign && f.Box.Contains(v) {
-			return Hit{f, t - step, nil}
+			return Hit{f, t - step, nil, nil}
 		}
 	}
 	return NoHit

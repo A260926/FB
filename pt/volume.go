@@ -111,7 +111,7 @@ func (v *Volume) Intersect(ray Ray) Hit {
 			t += step
 			for i := 0; i < 64; i++ {
 				if v.Sign(ray.Position(t)) == 0 {
-					return Hit{v, t - step, nil}
+					return Hit{v, t - step, nil, nil}
 				}
 				t += step
 			}

@@ -50,19 +50,22 @@ type DefaultSampler struct {
 }
 
 func (s *DefaultSampler) Sample(scene *Scene, ray Ray, rnd *rand.Rand) Color {
-	return s.sample(scene, ray, true, s.FirstHitSamples, 0, rnd)
+	return s.sample(scene, ray, true, s.FirstHitSamples, 0, rnd, mediumState{})
 }
 
-func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, depth int, rnd *rand.Rand) Color {
+func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, depth int, rnd *rand.Rand, medium mediumState) Color {
 	if depth > s.MaxBounces {
 		return Black
 	}
 	hit := scene.Intersect(ray)
 	if !hit.Ok() {
-		return s.sampleEnvironment(scene, ray)
+		return s.sampleEnvironment(scene, ray).Mul(medium.envTransmittance())
 	}
 	info := hit.Info(ray)
 	material := info.Material
+	// Beer-Lambert attenuation over the world-space segment just traversed.
+	// With no active regions this is White, leaving the classic path unchanged.
+	segment := medium.transmittance(hit.T)
 	result := Black
 	if material.Emittance > 0 {
 		if s.DirectLighting && !emission {
@@ -84,19 +87,29 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 			for mode := ma; mode <= mb; mode++ {
 				fu := (float64(u) + rnd.Float64()) / float64(n)
 				fv := (float64(v) + rnd.Float64()) / float64(n)
-				newRay, reflected, p := ray.Bounce(&info, fu, fv, mode, rnd)
+				newRay, reflected, refracted, p := ray.Bounce(&info, fu, fv, mode, rnd)
 				if mode == BounceTypeAny {
 					p = 1
 				}
-				if p > 0 && reflected {
-					// specular
-					indirect := s.sample(scene, newRay, reflected, 1, depth+1, rnd)
+				// only a refractive crossing changes the active media; a
+				// reflection keeps the path in the same medium set
+				nextMedium := medium
+				if refracted && isSphereRegion(hit.Region) {
+					if info.Inside {
+						nextMedium = medium.exit(hit.Region)
+					} else {
+						nextMedium = medium.enter(hit.Region, material.Absorption)
+					}
+				}
+				if p > 0 && (reflected || refracted) {
+					// specular reflection or transmission through a surface
+					indirect := s.sample(scene, newRay, true, 1, depth+1, rnd, nextMedium)
 					tinted := indirect.Mix(material.Color.Mul(indirect), material.Tint)
 					result = result.Add(tinted.MulScalar(p))
 				}
-				if p > 0 && !reflected {
+				if p > 0 && !reflected && !refracted {
 					// diffuse
-					indirect := s.sample(scene, newRay, reflected, 1, depth+1, rnd)
+					indirect := s.sample(scene, newRay, false, 1, depth+1, rnd, nextMedium)
 					direct := Black
 					if s.DirectLighting {
 						direct = s.sampleLights(scene, info.Ray, rnd)
@@ -106,7 +119,7 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 			}
 		}
 	}
-	return result.DivScalar(float64(n * n))
+	return result.DivScalar(float64(n * n)).Mul(segment)
 }
 
 func (s *DefaultSampler) sampleEnvironment(scene *Scene, ray Ray) Color {

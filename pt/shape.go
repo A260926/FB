@@ -44,5 +44,9 @@ func (s *TransformedShape) Intersect(r Ray) Hit {
 	info := HitInfo{shape, position, normal, ray, material, inside}
 	hit.T = position.Sub(r.Origin).Length()
 	hit.HitInfo = &info
+	hit.Shape = s
+	// the outermost transform instance is the region identity, so two
+	// transforms referencing the same original sphere are separate regions
+	hit.Region = s
 	return hit
 }

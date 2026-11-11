@@ -30,7 +30,7 @@ func (p *Plane) Intersect(ray Ray) Hit {
 	if t < EPS {
 		return NoHit
 	}
-	return Hit{p, t, nil}
+	return Hit{p, t, nil, nil}
 }
 
 func (p *Plane) UV(a Vector) Vector {

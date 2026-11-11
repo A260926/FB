@@ -32,11 +32,11 @@ func (s *Sphere) Intersect(r Ray) Hit {
 		d = math.Sqrt(d)
 		t1 := -b - d
 		if t1 > EPS {
-			return Hit{s, t1, nil}
+			return Hit{s, t1, nil, s}
 		}
 		t2 := -b + d
 		if t2 > EPS {
-			return Hit{s, t2, nil}
+			return Hit{s, t2, nil, s}
 		}
 	}
 	return NoHit

@@ -41,7 +41,7 @@ func (r Ray) ConeBounce(theta, u, v float64, rnd *rand.Rand) Ray {
 	return Ray{r.Origin, Cone(r.Direction, theta, u, v, rnd)}
 }
 
-func (i Ray) Bounce(info *HitInfo, u, v float64, bounceType BounceType, rnd *rand.Rand) (Ray, bool, float64) {
+func (i Ray) Bounce(info *HitInfo, u, v float64, bounceType BounceType, rnd *rand.Rand) (Ray, bool, bool, float64) {
 	n := info.Ray
 	material := info.Material
 	n1, n2 := 1.0, material.Index
@@ -65,12 +65,12 @@ func (i Ray) Bounce(info *HitInfo, u, v float64, bounceType BounceType, rnd *ran
 	}
 	if reflect {
 		reflected := n.Reflect(i)
-		return reflected.ConeBounce(material.Gloss, u, v, rnd), true, p
+		return reflected.ConeBounce(material.Gloss, u, v, rnd), true, false, p
 	} else if material.Transparent {
 		refracted := n.Refract(i, n1, n2)
 		refracted.Origin = refracted.Origin.Add(refracted.Direction.MulScalar(1e-4))
-		return refracted.ConeBounce(material.Gloss, u, v, rnd), true, 1 - p
+		return refracted.ConeBounce(material.Gloss, u, v, rnd), false, true, 1 - p
 	} else {
-		return n.WeightedBounce(u, v, rnd), false, 1 - p
+		return n.WeightedBounce(u, v, rnd), false, false, 1 - p
 	}
 }
