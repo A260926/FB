@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "almost-equal": "1.1.0",
+    "ndarray": "1.0.19",
+    "tape": "4.17.0"
+  }
+}
