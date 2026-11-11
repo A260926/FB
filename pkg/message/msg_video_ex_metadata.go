@@ -10,7 +10,7 @@ import (
 
 // VideoExMetadata is a metadata extended message.
 type VideoExMetadata struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	FourCC          FourCC

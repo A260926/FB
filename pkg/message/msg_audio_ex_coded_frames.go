@@ -9,7 +9,7 @@ import (
 
 // AudioExCodedFrames is a CodedFrames extended message.
 type AudioExCodedFrames struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	FourCC          FourCC

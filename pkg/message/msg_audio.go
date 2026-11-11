@@ -54,7 +54,7 @@ const (
 
 // Audio is an audio message.
 type Audio struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	Codec           uint8 // zero in case of empty messages

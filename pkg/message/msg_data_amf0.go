@@ -7,7 +7,7 @@ import (
 
 // DataAMF0 is a AMF0 data message.
 type DataAMF0 struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	MessageStreamID uint32
 	Payload         amf0.Data
 }

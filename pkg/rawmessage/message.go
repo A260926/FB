@@ -7,7 +7,8 @@ import (
 
 // Message is a raw message.
 type Message struct {
-	ChunkStreamID   byte
+	// ChunkStreamID is the chunk stream ID. Valid values range from 2 to 65599.
+	ChunkStreamID   uint32
 	Timestamp       time.Duration
 	Type            uint8
 	MessageStreamID uint32

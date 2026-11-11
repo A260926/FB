@@ -122,7 +122,7 @@ type ServerConn struct {
 	RW io.ReadWriter
 
 	// filled by Initialize
-	connectChunkStreamID byte
+	connectChunkStreamID uint32
 	connectCommandID     int
 	app                  string
 	tcURL                string

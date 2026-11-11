@@ -135,7 +135,7 @@ func TestWriterConcurrent(t *testing.T) {
 
 			for i := range messagesPerWriter {
 				err := w.Write(&rawmessage.Message{
-					ChunkStreamID:   byte(id%2 + 3),
+					ChunkStreamID:   uint32(id%2 + 3),
 					Timestamp:       0,
 					Type:            9,
 					MessageStreamID: uint32(id + 1),
@@ -181,7 +181,7 @@ func TestWriterConcurrent(t *testing.T) {
 		require.Less(t, id, writers)
 		require.GreaterOrEqual(t, i, 0)
 		require.Less(t, i, messagesPerWriter)
-		require.Equal(t, byte(id%2+3), msg.ChunkStreamID)
+		require.Equal(t, uint32(id%2+3), msg.ChunkStreamID)
 		require.False(t, seen[[2]int{id, i}])
 		seen[[2]int{id, i}] = true
 

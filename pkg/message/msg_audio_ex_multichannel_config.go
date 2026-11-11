@@ -18,7 +18,7 @@ const (
 
 // AudioExMultichannelConfig is a multichannel config extended message.
 type AudioExMultichannelConfig struct {
-	ChunkStreamID       byte
+	ChunkStreamID       uint32
 	MessageStreamID     uint32
 	FourCC              FourCC
 	AudioChannelOrder   AudioExChannelOrder

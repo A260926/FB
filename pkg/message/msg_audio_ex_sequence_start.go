@@ -12,7 +12,7 @@ import (
 
 // AudioExSequenceStart is a sequence start extended message.
 type AudioExSequenceStart struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	MessageStreamID uint32
 	FourCC          FourCC
 	OpusConfig      *opus.IDHeader

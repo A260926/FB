@@ -9,7 +9,7 @@ import (
 
 // VideoExCodedFrames is a CodedFrames extended message.
 type VideoExCodedFrames struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	FourCC          FourCC

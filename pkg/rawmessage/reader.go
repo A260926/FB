@@ -248,14 +248,14 @@ type Reader struct {
 	c1            chunk.Chunk1
 	c2            chunk.Chunk2
 	c3            chunk.Chunk3
-	chunkStreams  map[byte]*readerChunkStream
+	chunkStreams  map[uint32]*readerChunkStream
 }
 
 // Initialize initializes the Reader.
 func (r *Reader) Initialize() {
 	r.bufr = bufio.NewReader(r.BR)
 	r.chunkSize = 128
-	r.chunkStreams = make(map[byte]*readerChunkStream)
+	r.chunkStreams = make(map[uint32]*readerChunkStream)
 }
 
 // NewReader allocates a Reader.
@@ -291,12 +291,9 @@ func (r *Reader) SetWindowAckSize(v uint32) {
 }
 
 // AbortChunkStream discards any in-progress message assembly state for a chunk stream.
+// v must be a valid chunk stream ID (2 through 65599).
 func (r *Reader) AbortChunkStream(v uint32) {
-	if v < 2 || v > 63 {
-		return
-	}
-
-	rc, ok := r.chunkStreams[byte(v)]
+	rc, ok := r.chunkStreams[v]
 	if !ok || rc.curBodyRecv == 0 {
 		return
 	}
@@ -307,25 +304,24 @@ func (r *Reader) AbortChunkStream(v uint32) {
 // Read reads a Message.
 func (r *Reader) Read() (*Message, error) {
 	for {
-		byt, err := r.bufr.ReadByte()
+		first, err := r.bufr.Peek(1)
 		if err != nil {
 			return nil, err
 		}
 
-		typ := byt >> 6
-		chunkStreamID := byt & 0x3F
-
-		if chunkStreamID < 2 {
-			return nil, fmt.Errorf("extended chunk stream IDs are not supported (yet)")
+		headerLen := chunk.BasicHeaderLength(first[0])
+		header, err := r.bufr.Peek(headerLen)
+		if err != nil {
+			return nil, err
 		}
+
+		typ, chunkStreamID := chunk.DecodeBasicHeader(header)
 
 		rc, ok := r.chunkStreams[chunkStreamID]
 		if !ok {
 			rc = &readerChunkStream{mr: r}
 			r.chunkStreams[chunkStreamID] = rc
 		}
-
-		r.bufr.UnreadByte() //nolint:errcheck
 
 		msg, err := rc.readMessage(typ)
 		if err != nil {

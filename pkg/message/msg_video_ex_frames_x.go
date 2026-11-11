@@ -9,7 +9,7 @@ import (
 
 // VideoExFramesX is a FramesX extended message.
 type VideoExFramesX struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	FourCC          FourCC

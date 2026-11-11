@@ -8,7 +8,7 @@ import (
 
 // AudioExSequenceEnd is a sequence end extended message.
 type AudioExSequenceEnd struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	MessageStreamID uint32
 	FourCC          FourCC
 }

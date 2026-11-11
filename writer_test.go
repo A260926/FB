@@ -90,17 +90,19 @@ func TestWriterDrainIncomingData(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 
+	// the start of a two-byte extended basic header, truncated by the close
 	_, err = clientConn.Write([]byte{0})
 	require.NoError(t, err)
+	require.NoError(t, clientConn.Close())
 
 	select {
 	case err = <-waitDone:
-		require.EqualError(t, err, "extended chunk stream IDs are not supported (yet)")
+		require.ErrorIs(t, err, io.EOF)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Wait did not return after a read error")
 	}
 
-	require.EqualError(t, w.Wait(), "extended chunk stream IDs are not supported (yet)")
+	require.ErrorIs(t, w.Wait(), io.EOF)
 }
 
 func TestWriter(t *testing.T) {

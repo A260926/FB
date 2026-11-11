@@ -437,11 +437,11 @@ func TestReaderAbortChunkStream(t *testing.T) {
 		abortID uint32
 	}{
 		{
-			name:    "unsupported low csid",
+			name:    "unknown low csid",
 			abortID: 1,
 		},
 		{
-			name:    "unsupported high csid",
+			name:    "unknown high csid",
 			abortID: 64,
 		},
 		{
@@ -503,7 +503,7 @@ func TestReaderAbortChunkStream(t *testing.T) {
 
 			msg, err := r.Read()
 			require.NoError(t, err)
-			require.Equal(t, byte(28), msg.ChunkStreamID)
+			require.Equal(t, uint32(28), msg.ChunkStreamID)
 			require.Equal(t, []byte{1, 2, 3, 4}, msg.Body)
 
 			r.AbortChunkStream(ca.abortID)
@@ -515,7 +515,7 @@ func TestReaderAbortChunkStream(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			require.Equal(t, byte(27), msg.ChunkStreamID)
+			require.Equal(t, uint32(27), msg.ChunkStreamID)
 			require.Equal(t, []byte{9, 8, 7}, msg.Body)
 		})
 	}

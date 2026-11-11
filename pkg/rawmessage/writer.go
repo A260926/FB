@@ -164,17 +164,17 @@ type Writer struct {
 
 	mutex         sync.Mutex
 	bufw          *bufio.Writer
-	headerBuf     [16]byte
+	headerBuf     [18]byte
 	chunkSize     uint32
 	ackWindowSize uint32
-	chunkStreams  map[byte]*writerChunkStream
+	chunkStreams  map[uint32]*writerChunkStream
 }
 
 // Initialize initializes the Writer.
 func (w *Writer) Initialize() {
 	w.bufw = bufio.NewWriter(w.BW)
 	w.chunkSize = 128
-	w.chunkStreams = make(map[byte]*writerChunkStream)
+	w.chunkStreams = make(map[uint32]*writerChunkStream)
 }
 
 // NewWriter allocates a Writer.
@@ -219,7 +219,13 @@ func (w *Writer) SetAcknowledgeValue(v uint32) {
 }
 
 // Write writes a Message. It is safe to call it concurrently.
+// It returns an error, without writing anything, if the chunk stream ID is invalid.
 func (w *Writer) Write(msg *Message) error {
+	err := chunk.ValidateChunkStreamID(msg.ChunkStreamID)
+	if err != nil {
+		return err
+	}
+
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 

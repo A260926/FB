@@ -123,7 +123,7 @@ func h265FindParams(hvcc *mp4.HvcC) ([]byte, []byte, []byte, error) {
 
 // Video is a video message.
 type Video struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	DTS             time.Duration
 	MessageStreamID uint32
 	FrameType       VideoFrameType

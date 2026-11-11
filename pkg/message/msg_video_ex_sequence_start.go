@@ -11,7 +11,7 @@ import (
 
 // VideoExSequenceStart is a sequence start extended message.
 type VideoExSequenceStart struct {
-	ChunkStreamID   byte
+	ChunkStreamID   uint32
 	MessageStreamID uint32
 	FourCC          FourCC
 
