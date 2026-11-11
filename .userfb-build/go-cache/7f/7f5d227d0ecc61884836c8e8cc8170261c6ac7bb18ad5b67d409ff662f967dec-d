@@ -1,0 +1,6 @@
+./consumer.go
+./funcs.go
+./sql.go
+./consumer_test.go
+./funcs_test.go
+./sql_test.go

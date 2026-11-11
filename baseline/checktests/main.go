@@ -24,7 +24,7 @@ func main() {
 		args = append(args, "./...")
 		marker = "BASELINE_GO_OLD_TESTS_PASS"
 	} else {
-		args = append(args, "-run", "^TestCustom(Dispatch|Continuation)UserFB$", ".")
+		args = append(args, "-run", "^TestCustom(Dispatch|Continuation)$", ".")
 	}
 	cmd := exec.Command("go", args...)
 	output, err := cmd.CombinedOutput()

@@ -118,41 +118,60 @@ func (f *ConsumeFuzzer) GenerateStruct(targetStruct interface{}) error {
 	return f.fuzzStruct(e, false)
 }
 
-func (f *ConsumeFuzzer) setCustom(v reflect.Value) error {
-	// First: see if we have a fuzz function for it.
-	doCustom, ok := f.Funcs[v.Type()]
-	if !ok {
-		return fmt.Errorf("could not find a custom function")
+// tryCustom looks for a registered generator that fully takes over
+// the value e. It first checks the addressable pointer type *U; if
+// that does not match and e is a map, it then checks the map's exact
+// type. Matching is exact: Go type aliases share the underlying type
+// and therefore match, while separately defined named types do not.
+//
+// The second return value reports whether a generator was found. When
+// one is found and succeeds, default generation must not touch the
+// value again. When one is found and fails, its error is wrapped in
+// ErrCustomFunction without losing the original error.
+func (f *ConsumeFuzzer) tryCustom(e reflect.Value) (bool, error) {
+	if !e.IsValid() {
+		return false, nil
 	}
 
-	switch v.Kind() {
-	case reflect.Ptr:
-		if v.IsNil() {
-			if !v.CanSet() {
-				return fmt.Errorf("could not use a custom function")
-			}
-			v.Set(reflect.New(v.Type().Elem()))
+	var handler reflect.Value
+	var arg reflect.Value
+
+	if e.CanAddr() {
+		ptrT := reflect.PointerTo(e.Type())
+		if doCustom, ok := f.Funcs[ptrT]; ok {
+			handler = doCustom
+			arg = e.Addr()
 		}
-	case reflect.Map:
-		if v.IsNil() {
-			if !v.CanSet() {
-				return fmt.Errorf("could not use a custom function")
+	}
+	if !handler.IsValid() && e.Kind() == reflect.Map {
+		if doCustom, ok := f.Funcs[e.Type()]; ok {
+			handler = doCustom
+			// A direct map handler receives a writable, non-nil map.
+			if e.IsNil() {
+				if !e.CanSet() {
+					return false, fmt.Errorf("could not use a custom function")
+				}
+				e.Set(reflect.MakeMap(e.Type()))
 			}
-			v.Set(reflect.MakeMap(v.Type()))
+			arg = e
 		}
-	default:
-		return fmt.Errorf("could not use a custom function")
+	}
+	if !handler.IsValid() {
+		// No handler is not an error: keep walking the value normally.
+		return false, nil
 	}
 
-	verr := doCustom.Call([]reflect.Value{v, reflect.ValueOf(Continue{
+	verr := handler.Call([]reflect.Value{arg, reflect.ValueOf(Continue{
 		F: f,
 	})})
 
-	// check if we return an error
 	if verr[0].IsNil() {
-		return nil
+		return true, nil
 	}
-	return fmt.Errorf("could not use a custom function")
+	if err, ok := verr[0].Interface().(error); ok {
+		return true, fmt.Errorf("%w: %w", ErrCustomFunction, err)
+	}
+	return true, ErrCustomFunction
 }
 
 func (f *ConsumeFuzzer) fuzzStruct(e reflect.Value, customFunctions bool) error {
@@ -163,28 +182,36 @@ func (f *ConsumeFuzzer) fuzzStruct(e reflect.Value, customFunctions bool) error 
 	f.curDepth++
 	defer func() { f.curDepth-- }()
 
-	// We check if we should check for custom functions
-	if customFunctions && e.IsValid() && e.CanAddr() {
-		err := f.setCustom(e.Addr())
+	// A matching custom generator completely takes over this value:
+	// on success the default walker below must not run again, and the
+	// generator is responsible for every byte it consumes.
+	if customFunctions && e.IsValid() {
+		handled, err := f.tryCustom(e)
 		if err != nil {
 			return err
+		}
+		if handled {
+			return nil
 		}
 	}
 
 	switch e.Kind() {
 	case reflect.Struct:
 		for i := 0; i < e.NumField(); i++ {
-			var v reflect.Value
-			if !e.Field(i).CanSet() {
-				if f.fuzzUnexportedFields {
-					v = reflect.NewAt(e.Field(i).Type(), unsafe.Pointer(e.Field(i).UnsafeAddr())).Elem()
+			field := e.Field(i)
+			if !field.CanSet() {
+				// Unexported fields are skipped entirely unless the
+				// consumer was explicitly told to fill them: no
+				// custom handler runs and no bytes are consumed.
+				if !f.fuzzUnexportedFields {
+					continue
 				}
+				v := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 				if err := f.fuzzStruct(v, customFunctions); err != nil {
 					return err
 				}
 			} else {
-				v = e.Field(i)
-				if err := f.fuzzStruct(v, customFunctions); err != nil {
+				if err := f.fuzzStruct(field, customFunctions); err != nil {
 					return err
 				}
 			}

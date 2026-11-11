@@ -57,6 +57,53 @@ f.AllowUnexportedFields()
 f.DisallowUnexportedFields()
 ```
 
+### Custom generators
+
+`GenerateWithCustom` works like `GenerateStruct`, but lets registered
+functions take complete control of values whose exact type matches. A
+generator takes a pointer (or a map) and a `Continue` handle:
+
+```go
+type Header struct {
+    Kind    byte
+    Payload byte
+}
+
+type Packet struct {
+    Hdr  Header
+    Tail byte
+}
+
+f.AddFuncs([]interface{}{func(h *Header, c fuzz.Continue) error {
+    // Consume bytes from the same consumer; the handler fully owns
+    // this value, so default generation will not touch it afterwards.
+    kind, err := c.F.GetByte()
+    if err != nil {
+        return err
+    }
+    payload, err := c.F.GetByte()
+    if err != nil {
+        return err
+    }
+    h.Kind, h.Payload = kind, payload
+    return nil
+}})
+
+var p Packet
+// Hdr is filled by the handler; Tail keeps using default generation
+// and reads exactly the next byte after the handler's bytes.
+err := f.GenerateWithCustom(&p)
+```
+
+Matching is by exact type: a type alias is the same type as its
+target, while a separately defined named type only matches a handler
+registered for that named type. Values without a handler are generated
+as usual. Inside a handler, `c.GenerateStruct` fills a subtree with
+default generation while `c.GenerateStructWithCustom` keeps the
+registered handlers active; both share the handler's consumer, so
+sibling fields continue at the next byte. A handler error is wrapped
+in `ErrCustomFunction` and remains recognizable with `errors.Is`.
+
 ### Other types:
 
 Other useful APIs:
