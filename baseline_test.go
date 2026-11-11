@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 )
-func TestAuthorWalkerStopBaseline(t *testing.T) {
+func TestWalkerStopBaseline(t *testing.T) {
 	a, b := net.Pipe()
 	defer a.Close()
 	defer b.Close()
