@@ -523,6 +523,7 @@ int Queue_isCurrentlyPlaying(Queue * aQueue, AudioSource * aSound);
 int Queue_setParamsFromAudioSource(Queue * aQueue, AudioSource * aSound);
 int Queue_setParams(Queue * aQueue, float aSamplerate);
 int Queue_setParamsEx(Queue * aQueue, float aSamplerate, unsigned int aChannels /* = 2 */);
+int Queue_setAutoConvert(Queue * aQueue, int aEnable);
 void Queue_setVolume(Queue * aQueue, float aVolume);
 void Queue_setLooping(Queue * aQueue, int aLoop);
 void Queue_setAutoStop(Queue * aQueue, int aAutoStop);

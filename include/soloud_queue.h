@@ -36,6 +36,33 @@ namespace SoLoud
 	class QueueInstance : public AudioSourceInstance
 	{
 		Queue *mParent;
+
+		enum
+		{
+			// Fixed upper bound for the conversion cache. One chunk is read at
+			// a time, and at most one extra frame is needed for interpolation.
+			CONV_CACHE = SAMPLE_GRANULARITY + 2,
+			CONV_CHUNK = SAMPLE_GRANULARITY
+		};
+
+		// Per-item conversion state. It is reset whenever the queue advances
+		// to the next audio source.
+		bool mConvStarted;
+		unsigned int mConvSrcRate;
+		unsigned int mConvSrcChannels;
+		unsigned int mConvDstRate;
+		unsigned int mConvDstChannels;
+		unsigned long long mConvOutIndex;
+		unsigned long long mConvSrcTotal;
+		unsigned long long mConvBufStart;
+		unsigned int mConvBufLen;
+		float mConvBuffer[2][CONV_CACHE];
+		float mConvReadBuffer[2][CONV_CACHE];
+
+		bool convEnsureFrame(unsigned long long aIndex, unsigned long long aKeepFrom);
+		float convFrame(unsigned long long aIndex, unsigned int aChannel);
+		void convFinishItem();
+		unsigned int getAudioConverted(float *aBuffer, unsigned int aSamplesToRead, unsigned int aBufferSize);
 	public:
 		QueueInstance(Queue *aParent);
 		virtual unsigned int getAudio(float *aBuffer, unsigned int aSamplesToRead, unsigned int aBufferSize);
@@ -47,6 +74,7 @@ namespace SoLoud
 	{
 	public:
 		Queue();
+		virtual ~Queue();
 		virtual QueueInstance *createInstance();
 		// Play sound through the queue
 		result play(AudioSource &aSound);
@@ -58,13 +86,20 @@ namespace SoLoud
 		result setParamsFromAudioSource(AudioSource &aSound);
 		// Set params manually
 		result setParams(float aSamplerate, unsigned int aChannels = 2);
-		
+		// Enable or disable sample rate / channel conversion of queued sources
+		result setAutoConvert(bool aEnable);
+
 	public:
 	    unsigned int mReadIndex, mWriteIndex, mCount;
 	    AudioSourceInstance *mSource[SOLOUD_QUEUE_MAX];
 		QueueInstance *mInstance;
 		handle mQueueHandle;
+		bool mAutoConvert;
+		bool mPlayed;
+		unsigned int mSourceRate[SOLOUD_QUEUE_MAX];
+		unsigned int mSourceChannels[SOLOUD_QUEUE_MAX];
 		void findQueueHandle();
+		void clearQueue();
 		
 	};
 };

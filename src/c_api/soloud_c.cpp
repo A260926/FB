@@ -1845,6 +1845,12 @@ int Queue_setParamsEx(void * aClassPtr, float aSamplerate, unsigned int aChannel
 	return cl->setParams(aSamplerate, aChannels);
 }
 
+int Queue_setAutoConvert(void * aClassPtr, int aEnable)
+{
+	Queue * cl = (Queue *)aClassPtr;
+	return cl->setAutoConvert(!!aEnable);
+}
+
 void Queue_setVolume(void * aClassPtr, float aVolume)
 {
 	Queue * cl = (Queue *)aClassPtr;

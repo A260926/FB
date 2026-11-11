@@ -10,6 +10,9 @@ The parameters of the played audio sources are ignored. This means that all of t
 audio sources should have the same parameters: sample rate, channels - and that the
 queue must be set up to those parameters before playing.
 
+Alternatively, the queue can convert the queued audio sources to the queue's
+parameters on the fly. See Queue.setAutoConvert() below.
+
 Only one instance of a queue can play at a time.
 
 ### Queue.play()
@@ -17,6 +20,40 @@ Only one instance of a queue can play at a time.
 Queues an audio source for playback.
 
     gQueue.play(gAsTimeGoesBy); // Play it, Sam
+
+### Queue.setAutoConvert()
+
+Enables or disables automatic conversion of queued audio sources to the
+queue's output format.
+
+    gQueue.setParams(48000, 1);
+    gQueue.setAutoConvert(true); // 24kHz mono and 48kHz stereo sources now mix
+
+The mode can only be changed while the queue has no queued items and no
+active QueueInstance; otherwise INVALID_PARAMETER is returned. When
+conversion is off (the default), the queue behaves exactly as before and the
+queued sources are expected to match the queue's format.
+
+When conversion is on, the output format is the queue format given with
+setParams() or setParamsFromAudioSource(). Only positive integer sample
+rates and mono or stereo are supported, both for the queue and for the
+queued sources; other formats are rejected with INVALID_PARAMETER. The
+output format may not be changed anymore once the queue has played.
+
+Conversion uses linear interpolation. Output frame k of a queued source is
+taken from source position k * source rate / queue rate, so a finite source
+of N frames produces exactly ceil(N * queue rate / source rate) frames. At
+the end of a source the right neighbor used by the interpolation is clamped
+to the last source frame. Mono to stereo conversion duplicates the channel,
+stereo to mono takes the arithmetic mean of left and right, and interpolation
+is always done per source channel before the channel mapping. Every queued
+source starts from its own source position zero; no interpolation is done
+across sources. Empty sources are skipped.
+
+A short read from a source is not treated as end of stream; only the
+source's hasEnded() decides that. If a source which has not ended keeps
+returning zero frames, the current getAudio() call returns what it has and
+the conversion continues on the next call.
 
 ### Queue.getQueueCount()
 
