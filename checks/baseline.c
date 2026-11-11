@@ -5,8 +5,8 @@
 #include <stdlib.h>
 int main(void) {
  xmp_context a=xmp_create_context(),b=xmp_create_context();
- assert(a && b); assert(xmp_load_module(a,"author_checks/tone.mod")==0);
- assert(xmp_load_module(b,"author_checks/tone.mod")==0);
+ assert(a && b); assert(xmp_load_module(a,"checks/tone.mod")==0);
+ assert(xmp_load_module(b,"checks/tone.mod")==0);
  assert(xmp_start_player(a,48000,0)==0 && xmp_start_player(b,48000,0)==0);
  unsigned char first[4096],via_buffer[4096]; unsigned copied=0; long long energy=0;
  for(int i=0;i<24;i++) {
