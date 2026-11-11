@@ -1,0 +1,1086 @@
+// Copyright 2021-2023 The NATS Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package nats
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/klauspost/compress/flate"
+)
+
+type fakeReader struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	ch     chan []byte
+	closed bool
+}
+
+func (f *fakeReader) Read(p []byte) (int, error) {
+	f.mu.Lock()
+	closed := f.closed
+	f.mu.Unlock()
+	if closed {
+		return 0, io.EOF
+	}
+	for {
+		if f.buf.Len() > 0 {
+			n, err := f.buf.Read(p)
+			return n, err
+		}
+		buf, ok := <-f.ch
+		if !ok {
+			return 0, io.EOF
+		}
+		f.buf.Write(buf)
+	}
+}
+
+func (f *fakeReader) close() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return
+	}
+	f.closed = true
+	close(f.ch)
+}
+
+func TestWSReader(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+
+	p := make([]byte, 100)
+	checkRead := func(limit int, expected []byte, lenPending int) {
+		t.Helper()
+		n, err := r.Read(p[:limit])
+		if err != nil {
+			t.Fatalf("Error reading: %v", err)
+		}
+		if !bytes.Equal(p[:n], expected) {
+			t.Fatalf("Expected %q, got %q", expected, p[:n])
+		}
+		if len(r.pending) != lenPending {
+			t.Fatalf("Expected len(r.pending) to be %v, got %v", lenPending, len(r.pending))
+		}
+	}
+
+	// Test with a buffer that contains a single pending with all data that
+	// fits in the read buffer.
+	mr.buf.Write([]byte{130, 10})
+	mr.buf.WriteString("ABCDEFGHIJ")
+	checkRead(100, []byte("ABCDEFGHIJ"), 0)
+
+	// Write 2 frames in the buffer. Since we will call with a read buffer
+	// that can fit both, we will create 2 pending and consume them at once.
+	mr.buf.Write([]byte{130, 5})
+	mr.buf.WriteString("ABCDE")
+	mr.buf.Write([]byte{130, 5})
+	mr.buf.WriteString("FGHIJ")
+	checkRead(100, []byte("ABCDEFGHIJ"), 0)
+
+	// We also write 2 frames, but this time we will call the first read
+	// with a read buffer that can accommodate only the first frame.
+	// So internally only a single frame is going to be read in pending.
+	mr.buf.Write([]byte{130, 5})
+	mr.buf.WriteString("ABCDE")
+	mr.buf.Write([]byte{130, 5})
+	mr.buf.WriteString("FGHIJ")
+	checkRead(6, []byte("ABCDE"), 0)
+	checkRead(100, []byte("FGHIJ"), 0)
+
+	// To test partials, we need to directly set the pending buffers.
+	r.pending = append(r.pending, []byte("ABCDE"))
+	r.pending = append(r.pending, []byte("FGHIJ"))
+	// Now check that the first read cannot get the full first pending
+	// buffer and gets only a partial.
+	checkRead(3, []byte("ABC"), 2)
+	// Since the read buffer is big enough to get everything else, after
+	// this call we should have no pending.
+	checkRead(7, []byte("DEFGHIJ"), 0)
+
+	// Similar to above but with both partials.
+	r.pending = append(r.pending, []byte("ABCDE"))
+	r.pending = append(r.pending, []byte("FGHIJ"))
+	checkRead(3, []byte("ABC"), 2)
+	// Exact amount of the partial of 1st pending
+	checkRead(2, []byte("DE"), 1)
+	checkRead(3, []byte("FGH"), 1)
+	// More space in read buffer than last partial
+	checkRead(10, []byte("IJ"), 0)
+
+	// This test the fact that read will return only when a frame is complete.
+	mr.buf.Write([]byte{130, 5})
+	mr.buf.WriteString("AB")
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		mr.ch <- []byte{'C', 'D', 'E', 130, 2, 'F', 'G'}
+		wg.Done()
+	}()
+	// Read() will get "load" only the first frame, so after this call there
+	// should be no pending.
+	checkRead(100, []byte("ABCDE"), 0)
+	// This will load the second frame.
+	checkRead(100, []byte("FG"), 0)
+	wg.Wait()
+
+	// Set the buffer that may be populated during the init handshake.
+	// Make sure that we process that one first.
+	r.ib = []byte{130, 4, 'A', 'B'}
+	mr.buf.WriteString("CD")
+	mr.buf.Write([]byte{130, 2})
+	mr.buf.WriteString("EF")
+	// This will only read up to ABCD and have no pending after the call.
+	checkRead(100, []byte("ABCD"), 0)
+	// We need another Read() call to read/load the second frame.
+	checkRead(100, []byte("EF"), 0)
+
+	// Close the underlying reader while reading.
+	mr.buf.Write([]byte{130, 4, 'A', 'B'})
+	wg.Add(1)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		mr.close()
+		wg.Done()
+	}()
+	if _, err := r.Read(p); err != io.EOF {
+		t.Fatalf("Expected EOF, got %v", err)
+	}
+	wg.Wait()
+}
+
+func TestWSParseControlFrames(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+
+	p := make([]byte, 100)
+
+	// Write a PING
+	mr.buf.Write([]byte{137, 0})
+	n, err := r.Read(p)
+	if err != nil || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// Write a PONG
+	mr.buf.Write([]byte{138, 0})
+	n, err = r.Read(p)
+	if err != nil || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// Write a CLOSE
+	mr.buf.Write([]byte{136, 6, 3, 232, 't', 'e', 's', 't'})
+	n, err = r.Read(p)
+	if err != io.EOF || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// Write a CLOSE without payload
+	mr.buf.Write([]byte{136, 2, 3, 232})
+	n, err = r.Read(p)
+	if err != io.EOF || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// Write a CLOSE with a one-byte payload: a protocol error, not a close.
+	mr.buf.Write([]byte{136, 1, 100})
+	n, err = r.Read(p)
+	if err == nil || err == io.EOF || n != 0 || !strings.Contains(err.Error(), "cannot be 1 byte") {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// Write CLOSE with valid status and payload but call with a read buffer
+	// that has capacity of 1.
+	mr.buf.Write([]byte{136, 6, 3, 232, 't', 'e', 's', 't'})
+	pl := []byte{136}
+	n, err = r.Read(pl[:])
+	if err != io.EOF || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+}
+
+func TestWSPongPayloadWhileBuffering(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+	var out bytes.Buffer
+	r.nc = &Conn{bw: &natsWriter{w: &websocketWriter{w: &out}}}
+	// As during a reconnect, the PONG is sent only once pending is flushed.
+	r.nc.bw.switchToPending()
+
+	// A data frame in the same read is drained into the buffer that held
+	// the PING payload.
+	mr.buf.Write([]byte{byte(wsPingMessage) | wsFinalBit, 4})
+	mr.buf.WriteString("ping")
+	mr.buf.Write([]byte{byte(wsBinaryMessage) | wsFinalBit, 5})
+	mr.buf.WriteString("hello")
+
+	p := make([]byte, 100)
+	n, err := r.Read(p)
+	if err != nil || string(p[:n]) != "hello" {
+		t.Fatalf("Unexpected read: n=%v err=%v data=%q", n, err, p[:n])
+	}
+	r.nc.bw.doneWithPending()
+	r.nc.bw.flush()
+
+	frame := out.Bytes()
+	if len(frame) != 10 || frame[0] != byte(wsPongMessage)|wsFinalBit || frame[1] != wsMaskBit|4 {
+		t.Fatalf("Unexpected PONG frame: %v", frame)
+	}
+	payload := frame[6:]
+	wsMaskBuf(frame[2:6], payload)
+	if string(payload) != "ping" {
+		t.Fatalf("Expected PONG payload %q, got %q", "ping", payload)
+	}
+}
+
+func TestWSDataBeforeCloseFrame(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+
+	p := make([]byte, 100)
+
+	// Simulate what happens when a NATS server sends an -ERR message
+	// followed by a WebSocket close frame in the same TCP read.
+	// This is the case described in https://github.com/nats-io/nats.go/issues/2024:
+	// the server sends "-ERR 'Authorization Violation'\r\n" as a text frame,
+	// immediately followed by a WebSocket close frame. The data frame must
+	// be returned to the caller before the close frame's io.EOF.
+	errMsg := []byte("-ERR 'Authorization Violation'\r\n")
+
+	// Binary frame (final=true) with the error message.
+	mr.buf.Write([]byte{byte(wsBinaryMessage) | wsFinalBit, byte(len(errMsg))})
+	mr.buf.Write(errMsg)
+	// Close frame with status 1000 and body "Authentication Failure".
+	closeBody := "Authentication Failure"
+	closePayloadLen := 2 + len(closeBody) // 2 bytes for status + body
+	mr.buf.Write([]byte{byte(wsCloseMessage) | wsFinalBit, byte(closePayloadLen)})
+	// Status code 1000 (normal closure) in network byte order.
+	mr.buf.Write([]byte{0x03, 0xE8})
+	mr.buf.WriteString(closeBody)
+
+	// First Read should return the -ERR data, not an error.
+	n, err := r.Read(p)
+	if err != nil {
+		t.Fatalf("Expected data to be returned before close, got error: %v", err)
+	}
+	if !bytes.Equal(p[:n], errMsg) {
+		t.Fatalf("Expected %q, got %q", errMsg, p[:n])
+	}
+
+	// Second Read should now return the deferred io.EOF from the close frame.
+	n, err = r.Read(p)
+	if err != io.EOF {
+		t.Fatalf("Expected io.EOF, got n=%v err=%v", n, err)
+	}
+	if n != 0 {
+		t.Fatalf("Expected 0 bytes on close, got %v", n)
+	}
+}
+
+func TestWSCloseReplyWithoutStatus(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+	var out bytes.Buffer
+	r.nc = &Conn{bw: &natsWriter{w: &websocketWriter{w: &out}}}
+
+	mr.buf.Write([]byte{byte(wsCloseMessage) | wsFinalBit, 0})
+	p := make([]byte, 100)
+	if n, err := r.Read(p); err != io.EOF || n != 0 {
+		t.Fatalf("Unexpected read: n=%v err=%v", n, err)
+	}
+	// 1005 must not be sent, so the reply has no status either.
+	frame := out.Bytes()
+	if len(frame) != 6 || frame[0] != byte(wsCloseMessage)|wsFinalBit || frame[1] != wsMaskBit {
+		t.Fatalf("Unexpected close frame: %v", frame)
+	}
+}
+
+// TestWSProtocolErrors checks that a close frame with a one-byte payload, a
+// close frame with a status code an endpoint must not send, and a compressed
+// frame received without negotiated compression end the read with an error
+// and are answered with a close frame carrying status 1002 and that error,
+// whether the writer sends directly or buffers (as during a reconnect).
+func TestWSProtocolErrors(t *testing.T) {
+	closeFrame := func(status int, body string) []byte {
+		payload := make([]byte, 2+len(body))
+		binary.BigEndian.PutUint16(payload, uint16(status))
+		copy(payload[2:], body)
+		return append([]byte{byte(wsCloseMessage) | wsFinalBit, byte(len(payload))}, payload...)
+	}
+	cbuf := &bytes.Buffer{}
+	compressor, _ := flate.NewWriter(cbuf, flate.BestSpeed)
+	compressor.Write([]byte("hello"))
+	compressor.Flush()
+	compressed := cbuf.Bytes()
+	compressed = compressed[:len(compressed)-4]
+	compressedFrame := append([]byte{byte(wsBinaryMessage) | wsRsv1Bit | wsFinalBit, byte(len(compressed))}, compressed...)
+
+	for _, test := range []struct {
+		name  string
+		frame []byte
+		err   string
+	}{
+		{"close with one byte payload", []byte{byte(wsCloseMessage) | wsFinalBit, 1, 100}, "close frame payload cannot be 1 byte"},
+		{"close with status 999", closeFrame(999, ""), "invalid close status code 999"},
+		{"close with status 1004", closeFrame(1004, ""), "invalid close status code 1004"},
+		{"close with status 1005", closeFrame(1005, ""), "invalid close status code 1005"},
+		{"close with status 1006", closeFrame(1006, ""), "invalid close status code 1006"},
+		{"close with status 1015", closeFrame(1015, ""), "invalid close status code 1015"},
+		{"close with status 1016", closeFrame(1016, ""), "invalid close status code 1016"},
+		{"close with status 2999", closeFrame(2999, ""), "invalid close status code 2999"},
+		{"close with status 5000", closeFrame(5000, ""), "invalid close status code 5000"},
+		{"close with invalid status and body", closeFrame(1006, "going away"), "invalid close status code 1006"},
+		{"compressed frame without negotiated compression", compressedFrame, "compressed frame received without negotiated permessage-deflate"},
+		// Valid close frames still end the read with io.EOF.
+		{"close with status 1000", closeFrame(1000, ""), ""},
+		{"close with status 3000", closeFrame(3000, "custom"), ""},
+		{"close with status 4999", closeFrame(4999, ""), ""},
+	} {
+		for _, pending := range []bool{false, true} {
+			name := test.name
+			if pending {
+				name += " while buffering"
+			}
+			t.Run(name, func(t *testing.T) {
+				// Whatever follows the offending frame must be ignored.
+				stream := append(bytes.Clone(test.frame), []byte{byte(wsBinaryMessage) | wsFinalBit, 3, 'a', 'b', 'c'}...)
+				r := wsNewReader(bytes.NewReader(stream))
+				var out bytes.Buffer
+				r.nc = &Conn{bw: &natsWriter{w: &websocketWriter{w: &out}}}
+				if pending {
+					r.nc.bw.switchToPending()
+				}
+				n, err := r.Read(make([]byte, 100))
+				if test.err == "" {
+					if err != io.EOF || n != 0 {
+						t.Fatalf("Expected EOF, got n=%v err=%v", n, err)
+					}
+				} else if err == nil || err.Error() != test.err || n != 0 {
+					t.Fatalf("Expected error %q, got n=%v err=%v", test.err, n, err)
+				}
+				if pending {
+					if out.Len() != 0 {
+						t.Fatalf("Nothing should be sent while buffering, got %v", out.Bytes())
+					}
+					r.nc.bw.doneWithPending()
+					r.nc.bw.flush()
+				}
+				frame := out.Bytes()
+				if len(frame) < 6 || frame[0] != byte(wsCloseMessage)|wsFinalBit || frame[1]&wsMaskBit == 0 {
+					t.Fatalf("Expected a masked close frame, got %v", frame)
+				}
+				payload := frame[6:]
+				wsMaskBuf(frame[2:6], payload)
+				if len(frame) != 6+int(frame[1]&0x7f) || len(payload) < 2 {
+					t.Fatalf("Unexpected close frame: %v", frame)
+				}
+				status := int(binary.BigEndian.Uint16(payload))
+				if test.err == "" {
+					if wantStatus := int(binary.BigEndian.Uint16(test.frame[2:])); status != wantStatus {
+						t.Fatalf("Expected echoed status %v, got %v", wantStatus, status)
+					}
+					return
+				}
+				if status != wsCloseStatusProtocolError || string(payload[2:]) != test.err {
+					t.Fatalf("Expected close status 1002 with %q, got %v with %q", test.err, status, payload[2:])
+				}
+			})
+		}
+	}
+}
+
+func TestWSParseInvalidFrames(t *testing.T) {
+
+	newReader := func() (*fakeReader, *websocketReader) {
+		mr := &fakeReader{}
+		r := wsNewReader(mr)
+		return mr, r
+	}
+
+	p := make([]byte, 100)
+
+	// Invalid utf-8 of close message
+	mr, r := newReader()
+	mr.buf.Write([]byte{136, 6, 3, 232, 't', 'e', 0xF1, 't'})
+	n, err := r.Read(p)
+	if err != io.EOF || n != 0 {
+		t.Fatalf("Error on read: n=%v err=%v", n, err)
+	}
+
+	// control frame length too long
+	mr, r = newReader()
+	mr.buf.Write([]byte{137, 126, 0, wsMaxControlPayloadSize + 10})
+	for i := 0; i < wsMaxControlPayloadSize+10; i++ {
+		mr.buf.WriteByte('a')
+	}
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// Not a final frame
+	mr, r = newReader()
+	mr.buf.Write([]byte{byte(wsPingMessage), 0})
+	n, err = r.Read(p[:2])
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "final") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// Marked as compressed
+	mr, r = newReader()
+	mr.buf.Write([]byte{byte(wsPingMessage) | wsRsv1Bit, 0})
+	n, err = r.Read(p[:2])
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "compressed") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// Continuation frame marked as compressed
+	mr, r = newReader()
+	mr.buf.Write([]byte{2, 3})
+	mr.buf.WriteString("ABC")
+	mr.buf.Write([]byte{0 | wsRsv1Bit, 3})
+	mr.buf.WriteString("DEF")
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "invalid continuation frame") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// Continuation frame after a final frame
+	mr, r = newReader()
+	mr.buf.Write([]byte{130, 3})
+	mr.buf.WriteString("ABC")
+	mr.buf.Write([]byte{0, 3})
+	mr.buf.WriteString("DEF")
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "invalid continuation frame") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// New message received before previous ended
+	mr, r = newReader()
+	mr.buf.Write([]byte{2, 3})
+	mr.buf.WriteString("ABC")
+	mr.buf.Write([]byte{0, 3})
+	mr.buf.WriteString("DEF")
+	mr.buf.Write([]byte{130, 3})
+	mr.buf.WriteString("GHI")
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "started before final frame") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// Unknown frame type
+	mr, r = newReader()
+	mr.buf.Write([]byte{99, 3})
+	mr.buf.WriteString("ABC")
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "unknown opcode") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// 64-bit frame length with MSB set
+	mr, r = newReader()
+	mr.buf.Write([]byte{130, 127, 128, 0, 0, 0, 0, 0, 0, 1})
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "MSB set") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// 64-bit frame length exceeding absolute max (64MB)
+	mr, r = newReader()
+	mr.buf.Write([]byte{130, 127, 0, 0, 0, 0, 8, 0, 0, 0}) // 128MB
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+
+	// 64-bit frame length exceeding MaxPayload-derived limit
+	mr, r = newReader()
+	r.nc = &Conn{}
+	r.nc.info.MaxPayload = 1024 * 1024                     // 1MB -> max frame = 8MB
+	mr.buf.Write([]byte{130, 127, 0, 0, 0, 0, 1, 0, 0, 0}) // 16MB
+	n, err = r.Read(p)
+	if n != 0 || err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("Unexpected error: n=%v err=%v", n, err)
+	}
+}
+
+func TestWSControlFrameBetweenDataFrames(t *testing.T) {
+	mr := &fakeReader{ch: make(chan []byte, 1)}
+	defer mr.close()
+	r := wsNewReader(mr)
+
+	p := make([]byte, 100)
+
+	// Write a frame that will continue after the PONG
+	mr.buf.Write([]byte{2, 3})
+	mr.buf.WriteString("ABC")
+	// Write a PONG
+	mr.buf.Write([]byte{138, 0})
+	// Continuation of the frame
+	mr.buf.Write([]byte{0, 3})
+	mr.buf.WriteString("DEF")
+	// Another PONG
+	mr.buf.Write([]byte{138, 0})
+	// End of frame
+	mr.buf.Write([]byte{128, 3})
+	mr.buf.WriteString("GHI")
+
+	n, err := r.Read(p)
+	if err != nil {
+		t.Fatalf("Error on read: %v", err)
+	}
+	if string(p[:n]) != "ABCDEFGHI" {
+		t.Fatalf("Unexpected result: %q", p[:n])
+	}
+}
+
+func TestWSDecompressor(t *testing.T) {
+	var br *wsDecompressor
+
+	p := make([]byte, 100)
+	checkRead := func(limit int, expected []byte) {
+		t.Helper()
+		n, err := br.Read(p[:limit])
+		if err != nil {
+			t.Fatalf("Error on read: %v", err)
+		}
+		if got := p[:n]; !bytes.Equal(expected, got) {
+			t.Fatalf("Expected %v, got %v", expected, got)
+		}
+	}
+	checkEOF := func() {
+		t.Helper()
+		n, err := br.Read(p)
+		if err != io.EOF || n > 0 {
+			t.Fatalf("Unexpected result: n=%v err=%v", n, err)
+		}
+	}
+	checkReadByte := func(expected byte) {
+		t.Helper()
+		b, err := br.ReadByte()
+		if err != nil {
+			t.Fatalf("Error on read: %v", err)
+		}
+		if b != expected {
+			t.Fatalf("Expected %c, got %c", expected, b)
+		}
+	}
+	checkEOFWithReadByte := func() {
+		t.Helper()
+		n, err := br.ReadByte()
+		if err != io.EOF || n > 0 {
+			t.Fatalf("Unexpected result: n=%v err=%v", n, err)
+		}
+	}
+
+	newDecompressor := func(str string) *wsDecompressor {
+		d := &wsDecompressor{}
+		d.addBuf([]byte(str))
+		return d
+	}
+
+	// Read with enough room
+	br = newDecompressor("ABCDE")
+	checkRead(100, []byte("ABCDE"))
+	checkEOF()
+	checkEOFWithReadByte()
+
+	// Read with a partial from our buffer
+	br = newDecompressor("FGHIJ")
+	checkRead(2, []byte("FG"))
+	// Call with more than the end of our buffer.
+	checkRead(10, []byte("HIJ"))
+	checkEOF()
+	checkEOFWithReadByte()
+
+	// Read with a partial from our buffer
+	br = newDecompressor("KLMNO")
+	checkRead(2, []byte("KL"))
+	// Call with exact number of bytes left for our buffer.
+	checkRead(3, []byte("MNO"))
+	checkEOF()
+	checkEOFWithReadByte()
+
+	// Finally, check ReadByte.
+	br = newDecompressor("UVWXYZ")
+	checkRead(4, []byte("UVWX"))
+	checkReadByte('Y')
+	checkReadByte('Z')
+	checkEOFWithReadByte()
+	checkEOF()
+
+	br = newDecompressor("ABC")
+	buf := make([]byte, 0)
+	n, err := br.Read(buf)
+	if n != 0 || err != nil {
+		t.Fatalf("Unexpected n=%v err=%v", n, err)
+	}
+}
+
+func TestWSNoMixingScheme(t *testing.T) {
+	// Check opts.Connect() first
+	for _, test := range []struct {
+		url     string
+		servers []string
+	}{
+		{"ws://127.0.0.1:1234", []string{"nats://127.0.0.1:1235"}},
+		{"ws://127.0.0.1:1234", []string{"ws://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+		{"ws://127.0.0.1:1234", []string{"wss://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+		{"wss://127.0.0.1:1234", []string{"nats://127.0.0.1:1235"}},
+		{"wss://127.0.0.1:1234", []string{"wss://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+		{"wss://127.0.0.1:1234", []string{"ws://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+	} {
+		t.Run("Options", func(t *testing.T) {
+			opts := GetDefaultOptions()
+			opts.Url = test.url
+			opts.Servers = test.servers
+			nc, err := opts.Connect()
+			if err == nil || !strings.Contains(err.Error(), "mixing") {
+				if nc != nil {
+					nc.Close()
+				}
+				t.Fatalf("Expected error about mixing, got %v", err)
+			}
+		})
+	}
+	// Check Connect() now.
+	for _, test := range []struct {
+		urls    string
+		servers []string
+	}{
+		{"ws://127.0.0.1:1234,nats://127.0.0.1:1235", nil},
+		{"ws://127.0.0.1:1234,tcp://127.0.0.1:1235", nil},
+		{"ws://127.0.0.1:1234,tls://127.0.0.1:1235", nil},
+		{"nats://127.0.0.1:1234,ws://127.0.0.1:1235", nil},
+		{"nats://127.0.0.1:1234,wss://127.0.0.1:1235", nil},
+		{"nats://127.0.0.1:1234,tls://127.0.0.1:1235,ws://127.0.0.1:1236", nil},
+		{"nats://127.0.0.1:1234,tls://127.0.0.1:1235,wss://127.0.0.1:1236", nil},
+		// In Connect(), the URL is ignored when Servers() is provided.
+		{"", []string{"nats://127.0.0.1:1235", "ws://127.0.0.1:1236"}},
+		{"", []string{"nats://127.0.0.1:1235", "wss://127.0.0.1:1236"}},
+		{"", []string{"ws://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+		{"", []string{"wss://127.0.0.1:1235", "nats://127.0.0.1:1236"}},
+	} {
+		t.Run("Connect", func(t *testing.T) {
+			var opt Option
+			if len(test.servers) > 0 {
+				opt = func(o *Options) error {
+					o.Servers = test.servers
+					return nil
+				}
+			}
+			nc, err := Connect(test.urls, opt)
+			if err == nil || !strings.Contains(err.Error(), "mixing") {
+				if nc != nil {
+					nc.Close()
+				}
+				t.Fatalf("Expected error about mixing, got %v", err)
+			}
+		})
+	}
+}
+
+func TestWSCompressionWithContinuationFrames(t *testing.T) {
+	uncompressed := []byte("this is an uncompressed message with AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	buf := &bytes.Buffer{}
+	compressor, _ := flate.NewWriter(buf, flate.BestSpeed)
+	compressor.Write(uncompressed)
+	compressor.Close()
+	b := buf.Bytes()
+	if len(b) < 30 {
+		panic("revisit test so that compressed buffer is more than 30 bytes long")
+	}
+
+	srbuf := &bytes.Buffer{}
+	// We are going to split this in several frames.
+	fh := []byte{66, 10}
+	srbuf.Write(fh)
+	srbuf.Write(b[:10])
+	fh = []byte{0, 10}
+	srbuf.Write(fh)
+	srbuf.Write(b[10:20])
+	fh = []byte{wsFinalBit, 0}
+	fh[1] = byte(len(b) - 20)
+	srbuf.Write(fh)
+	srbuf.Write(b[20:])
+
+	r := wsNewReader(srbuf)
+	r.compress = true
+	rbuf := make([]byte, 100)
+	n, err := r.Read(rbuf[:15])
+	// Since we have a partial of compressed message, the library keeps track
+	// of buffer, but it can't return anything at this point, so n==0 err==nil
+	// is the expected result.
+	if n != 0 || err != nil {
+		t.Fatalf("Error reading: n=%v err=%v", n, err)
+	}
+	n, err = r.Read(rbuf)
+	if n != len(uncompressed) || err != nil {
+		t.Fatalf("Error reading: n=%v err=%v", n, err)
+	}
+	if !reflect.DeepEqual(uncompressed, rbuf[:n]) {
+		t.Fatalf("Unexpected uncompressed data: %v", rbuf[:n])
+	}
+}
+
+func TestWSCompressionWithEmptyFrames(t *testing.T) {
+	buf := &bytes.Buffer{}
+	compressor, _ := flate.NewWriter(buf, flate.BestSpeed)
+	compressor.Write([]byte("hello"))
+	compressor.Flush()
+	b := buf.Bytes()
+	b = b[:len(b)-4]
+
+	for _, test := range []struct {
+		name    string
+		frames  [][]byte
+		wantErr bool
+	}{
+		// Not a valid deflate stream, but must fail rather than panic.
+		{"only", [][]byte{nil}, true},
+		{"first", [][]byte{nil, b}, false},
+		{"middle", [][]byte{b[:2], nil, b[2:]}, false},
+		{"last", [][]byte{b, nil}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srbuf := &bytes.Buffer{}
+			for i, frame := range test.frames {
+				b0 := byte(wsContinuationFrame)
+				if i == 0 {
+					b0 = byte(wsBinaryMessage) | wsRsv1Bit
+				}
+				if i == len(test.frames)-1 {
+					b0 |= wsFinalBit
+				}
+				srbuf.Write([]byte{b0, byte(len(frame))})
+				srbuf.Write(frame)
+			}
+			r := wsNewReader(srbuf)
+			r.compress = true
+			rbuf := make([]byte, 100)
+			n, err := r.Read(rbuf)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("Expected error, got n=%v", n)
+				}
+				return
+			}
+			if err != nil || string(rbuf[:n]) != "hello" {
+				t.Fatalf("Unexpected read: n=%v err=%v data=%q", n, err, rbuf[:n])
+			}
+		})
+	}
+}
+
+func TestWSTlsNoConfig(t *testing.T) {
+	opts := GetDefaultOptions()
+	opts.Servers = []string{"wss://localhost:443"}
+
+	nc := &Conn{Opts: opts}
+	if err := nc.setupServerPool(); err != nil {
+		t.Fatalf("Error setting up pool: %v", err)
+	}
+	// Verify that this has set Secure/TLSConfig
+	nc.mu.Lock()
+	ok := nc.Opts.Secure && nc.Opts.TLSConfig != nil
+	nc.mu.Unlock()
+	if !ok {
+		t.Fatal("Secure and TLSConfig were not set")
+	}
+	// Now try to add a bare host:ip to the pool and verify
+	// that the wss:// scheme is added.
+	if err := nc.addURLToPool("1.2.3.4:443", true, false); err != nil {
+		t.Fatalf("Error adding to pool: %v", err)
+	}
+	nc.mu.Lock()
+	for _, srv := range nc.srvPool {
+		if srv.URL.Scheme != wsSchemeTLS {
+			nc.mu.Unlock()
+			t.Fatalf("Expected scheme to be %q, got url: %s", wsSchemeTLS, srv.URL)
+		}
+	}
+	nc.mu.Unlock()
+}
+
+func TestWSProxyPath(t *testing.T) {
+	const proxyPath = "proxy1"
+
+	// Listen to a random port
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("Error in listen: %v", err)
+	}
+	defer l.Close()
+
+	proxyPort := l.Addr().(*net.TCPAddr).Port
+
+	ch := make(chan struct{}, 1)
+	proxySrv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/"+proxyPath {
+				ch <- struct{}{}
+			}
+		}),
+	}
+	defer proxySrv.Shutdown(context.Background())
+	go proxySrv.Serve(l)
+
+	for _, test := range []struct {
+		name string
+		path string
+	}{
+		{"without slash", proxyPath},
+		{"with slash", "/" + proxyPath},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			url := fmt.Sprintf("ws://127.0.0.1:%d", proxyPort)
+			nc, err := Connect(url, ProxyPath(test.path))
+			if err == nil {
+				nc.Close()
+				t.Fatal("Did not expect to connect")
+			}
+			select {
+			case <-ch:
+				// OK:
+			case <-time.After(time.Second):
+				t.Fatal("Proxy was not reached")
+			}
+		})
+	}
+}
+
+func TestWSURLPath(t *testing.T) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("Error in listen: %v", err)
+	}
+	defer l.Close()
+
+	port := l.Addr().(*net.TCPAddr).Port
+
+	ch := make(chan string, 1)
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ch <- r.URL.RequestURI()
+		}),
+	}
+	defer srv.Shutdown(context.Background())
+	go srv.Serve(l)
+
+	for _, test := range []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{"with path", "/mypath", "/mypath"},
+		{"with nested path", "/my/nested/path", "/my/nested/path"},
+		{"with query params", "/mypath?token=abc&foo=bar", "/mypath?token=abc&foo=bar"},
+		{"query only", "/?token=abc", "/?token=abc"},
+		{"encoded query value", "/mypath?msg=hello%20world", "/mypath?msg=hello%20world"},
+		{"trailing slash with query", "/mypath/?key=val", "/mypath/?key=val"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			url := fmt.Sprintf("ws://127.0.0.1:%d%s", port, test.path)
+			nc, err := Connect(url)
+			if err == nil {
+				nc.Close()
+				t.Fatal("Did not expect to connect")
+			}
+			select {
+			case got := <-ch:
+				if got != test.expected {
+					t.Fatalf("Expected URI %q, got %q", test.expected, got)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("Server was not reached")
+			}
+		})
+	}
+
+	// ProxyPath option should take precedence over URL path.
+	t.Run("proxy path overrides url path", func(t *testing.T) {
+		url := fmt.Sprintf("ws://127.0.0.1:%d/url-path", port)
+		nc, err := Connect(url, ProxyPath("/override"))
+		if err == nil {
+			nc.Close()
+			t.Fatal("Did not expect to connect")
+		}
+		select {
+		case got := <-ch:
+			if got != "/override" {
+				t.Fatalf("Expected URI %q, got %q", "/override", got)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("Server was not reached")
+		}
+	})
+
+	// Query params from the URL should be preserved even when ProxyPath is set.
+	t.Run("proxy path preserves query params", func(t *testing.T) {
+		url := fmt.Sprintf("ws://127.0.0.1:%d/ignored?token=secret", port)
+		nc, err := Connect(url, ProxyPath("/proxy"))
+		if err == nil {
+			nc.Close()
+			t.Fatal("Did not expect to connect")
+		}
+		select {
+		case got := <-ch:
+			if got != "/proxy?token=secret" {
+				t.Fatalf("Expected URI %q, got %q", "/proxy?token=secret", got)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("Server was not reached")
+		}
+	})
+}
+
+// --- helpers ---
+
+func startHeaderCatcher(t *testing.T) (addr string, got chan []string, closer func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	got = make(chan []string, 1)
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			// surface nothing; test will timeout
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		var lines []string
+		for {
+			s, err := r.ReadString('\n')
+			if err != nil {
+				break
+			}
+			s = strings.TrimRight(s, "\r\n")
+			if s == "" { // end of HTTP headers
+				break
+			}
+			lines = append(lines, s)
+		}
+		got <- lines
+	}()
+
+	return ln.Addr().String(), got, func() { _ = ln.Close() }
+}
+
+func hasHeaderValue(headers []string, name, want string) bool {
+	prefix := strings.ToLower(name) + ":"
+	for _, h := range headers {
+		if !strings.HasPrefix(strings.ToLower(h), prefix) {
+			continue
+		}
+		val := strings.TrimSpace(strings.SplitN(h, ":", 2)[1])
+		for _, part := range strings.Split(val, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestWSHeaders_StaticAppliedOnHandshake(t *testing.T) {
+	addr, got, closeLn := startHeaderCatcher(t)
+	defer closeLn()
+
+	static := make(http.Header)
+	static.Set("Authorization", "Bearer Random Token")
+	static.Add("X-Multi", "v1")
+	static.Add("X-Multi", "v2")
+
+	// Intentionally connect to our fake server; it won't complete the upgrade.
+	opts := GetDefaultOptions()
+	opts.WebSocketConnectionHeaders = static
+	opts.Url = "ws://" + addr
+	_, err := opts.Connect()
+	if err == nil {
+		t.Fatalf("expected connect to fail because server does not reply")
+	}
+
+	var headers []string
+	select {
+	case headers = <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not capture headers in time")
+	}
+
+	if !hasHeaderValue(headers, "Authorization", "Bearer Random Token") {
+		t.Fatalf("Authorization header missing: %v", headers)
+	}
+	if !hasHeaderValue(headers, "X-Multi", "v1") || !hasHeaderValue(headers, "X-Multi", "v2") {
+		t.Fatalf("X-Multi headers missing/combined incorrectly: %v", headers)
+	}
+}
+
+func TestWSHeaders_HandlerAppliedOnHandshake(t *testing.T) {
+	addr, got, closeLn := startHeaderCatcher(t)
+	defer closeLn()
+
+	provider := func() (http.Header, error) {
+		h := make(http.Header)
+		h.Set("Authorization", "Bearer FromHandler")
+		h.Add("X-Multi", "h1")
+		h.Add("X-Multi", "h2")
+		return h, nil
+	}
+
+	opts := GetDefaultOptions()
+	opts.WebSocketConnectionHeadersHandler = provider
+	opts.Url = "ws://" + addr
+	_, err := opts.Connect()
+	if err == nil {
+		t.Fatalf("expected connect to fail because server does not reply")
+	}
+
+	var headers []string
+	select {
+	case headers = <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not capture headers in time")
+	}
+
+	if !hasHeaderValue(headers, "Authorization", "Bearer FromHandler") {
+		t.Fatalf("Authorization header missing: %v", headers)
+	}
+	if !hasHeaderValue(headers, "X-Multi", "h1") || !hasHeaderValue(headers, "X-Multi", "h2") {
+		t.Fatalf("X-Multi headers missing/combined incorrectly: %v", headers)
+	}
+}

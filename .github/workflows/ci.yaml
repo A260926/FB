@@ -1,0 +1,98 @@
+name: ci
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest-8-cores
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Setup Go
+              uses: actions/setup-go@v6
+              with:
+                go-version: 'stable'
+
+            - name: Install deps
+              shell: bash --noprofile --norc -x -eo pipefail {0}
+              run: |
+                go mod download -modfile=go_test.mod
+                go install honnef.co/go/tools/cmd/staticcheck@latest
+                go install github.com/client9/misspell/cmd/misspell@latest
+                go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+            - name: Run linters
+              shell: bash --noprofile --norc -x -eo pipefail {0}
+              run: |
+                $(exit $(go fmt -modfile=go_test.mod  ./... | wc -l))
+                go vet -modfile=go_test.mod ./...
+                GOFLAGS="-mod=mod -modfile=go_test.mod" staticcheck ./...
+                find . -type f -name "*.go" | xargs misspell -error -locale US
+                GOFLAGS="-mod=mod -modfile=go_test.mod" golangci-lint run --timeout 5m0s ./jetstream/...
+
+    test:
+        runs-on: ubuntu-latest-8-cores
+        # Run inside an alpine container on the same docker network as the
+        # tester service so the spawned NATS servers are reachable by service
+        # name (no host port publishing needed).
+        strategy:
+            matrix:
+              go: [ "1.26", "1.27" ]
+              include:
+                - go: "1.27"
+                  coverage: true
+        container: golang:${{ matrix.go }}-alpine
+        services:
+          nats:
+            # Single source of truth for the tester image; the Makefile parses
+            # the tag from this line.
+            image: synadia/ntf-server:v0.0.9-nats-2.15.0
+            command: serve --advertise nats
+            options: >-
+              --name nats
+              --health-cmd "nc -z localhost 4222"
+              --health-interval 1s
+              --health-retries 30
+        env:
+          TESTER_NATS_URL: nats://nats:4222
+          CGO_ENABLED: "1"
+        steps:
+            # git must exist before checkout, otherwise actions/checkout falls
+            # back to the REST API and leaves no .git in the workspace.
+            - name: Install build deps
+              run: |
+                apk add --no-cache gcc libc-dev git make bash curl ca-certificates
+                go install github.com/mattn/goveralls@latest
+                go install github.com/wadey/gocovmerge@latest
+
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: NoRace tests
+              shell: bash --noprofile --norc -x -eo pipefail {0}
+              run: |
+                go test -modfile=go_test.mod -v -run=TestNoRace -p=1 ./... --failfast -vet=off
+
+            - name: Test and coverage
+              shell: bash --noprofile --norc -x -eo pipefail {0}
+              run: |
+                if [ "${{ matrix.coverage }}" = "true" ]; then
+                  ./scripts/cov.sh CI
+                else
+                  go test -modfile=go_test.mod -race -v -p=1 ./... --failfast -vet=off -tags=internal_testing
+                fi
+
+            - name: Coveralls
+              if: matrix.coverage
+              uses: coverallsapp/github-action@v2
+              with:
+               file: acc.out
