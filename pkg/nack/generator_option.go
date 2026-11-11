@@ -34,8 +34,14 @@ func GeneratorSkipLastN(skipLastN uint16) GeneratorOption {
 	}
 }
 
-// GeneratorMaxNacksPerPacket sets the maximum number of NACKs sent per missing packet, e.g. if set to 2, a missing
-// packet will only be NACKed at most twice. If set to 0 (default), max number of NACKs is unlimited.
+// GeneratorMaxNacksPerPacket sets the maximum number of NACKs sent per missing
+// packet. Only batches whose RTCP writer call succeeds (Write returns nil)
+// count against this limit: a failed write leaves the budget untouched and the
+// missing packet is retried in the next feedback cycle. If set to 0 (the
+// default), the number of NACKs per missing packet is unlimited. The counter
+// is recycled once the missing packet is repaired, leaves the retained window
+// or the stream is unbound, so a sequence number that re-appears after a full
+// 16-bit wrap starts with a fresh budget.
 func GeneratorMaxNacksPerPacket(maxNacks uint16) GeneratorOption {
 	return func(r *GeneratorInterceptor) error {
 		r.maxNacksPerPacket = maxNacks

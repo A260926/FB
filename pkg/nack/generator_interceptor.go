@@ -31,6 +31,9 @@ func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		receiveLogs:       map[uint32]*receiveLog{},
 		nackCountLogs:     map[uint32]map[uint16]uint16{},
 		close:             make(chan struct{}),
+		newTicker: func(d time.Duration) ticker {
+			return timeTicker{time.NewTicker(d)}
+		},
 	}
 
 	for _, opt := range g.opts {
@@ -66,10 +69,44 @@ type GeneratorInterceptor struct {
 	close             chan struct{}
 	log               logging.LeveledLogger
 	loggerFactory     logging.LoggerFactory
-	nackCountLogs     map[uint32]map[uint16]uint16
+	// nackCountLogs records, per SSRC and missing sequence number, how many
+	// NACK batches were actually handed to the RTCP writer successfully
+	// (Write returned err == nil). Failed writes never spend the budget.
+	nackCountLogs map[uint32]map[uint16]uint16
 
 	receiveLogs   map[uint32]*receiveLog
 	receiveLogsMu sync.Mutex
+
+	newTicker func(time.Duration) ticker
+	// onTickDone is invoked after a feedback cycle finished, including every
+	// writer call it triggered. It is intended for in-package tests that need
+	// deterministic ordering; production code leaves it nil.
+	onTickDone func()
+}
+
+// ticker abstracts the feedback period source. Production uses time.Ticker,
+// tests can inject a controllable one while driving the real send flow.
+type ticker interface {
+	C() <-chan time.Time
+	Stop()
+}
+
+type timeTicker struct {
+	*time.Ticker
+}
+
+func (t timeTicker) C() <-chan time.Time {
+	return t.Ticker.C
+}
+
+// nackBatch is the snapshot of one feedback cycle for a single SSRC. The
+// receiveLog pointer identifies the stream binding the batch was prepared
+// for; completions are committed against that identity only.
+type nackBatch struct {
+	ssrc uint32
+	log  *receiveLog
+	seqs []uint16
+	nack *rtcp.TransportLayerNack
 }
 
 // NewGeneratorInterceptor returns a new GeneratorInterceptorFactory.
@@ -106,7 +143,10 @@ func (n *GeneratorInterceptor) BindRemoteStream(
 	// error is already checked in NewGeneratorInterceptor
 	receiveLog, _ := newReceiveLog(n.size)
 	n.receiveLogsMu.Lock()
+	// a fresh receiveLog means a fresh binding identity: any in-flight batch
+	// captured by the previous binding can no longer commit here.
 	n.receiveLogs[info.SSRC] = receiveLog
+	n.nackCountLogs[info.SSRC] = map[uint16]uint16{}
 	n.receiveLogsMu.Unlock()
 
 	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
@@ -137,7 +177,8 @@ func (n *GeneratorInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) 
 	n.receiveLogsMu.Unlock()
 }
 
-// Close closes the interceptor.
+// Close closes the interceptor. It waits for feedback cycles already inside
+// the RTCP writer to return before finishing.
 func (n *GeneratorInterceptor) Close() error {
 	defer n.wg.Wait()
 	n.m.Lock()
@@ -150,88 +191,168 @@ func (n *GeneratorInterceptor) Close() error {
 	return nil
 }
 
-// nolint:gocognit,cyclop
 func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 	defer n.wg.Done()
 
 	senderSSRC := rand.Uint32() // #nosec
 
 	missingPacketSeqNums := make([]uint16, n.size)
-	filteredMissingPacket := make([]uint16, n.size)
 
-	ticker := time.NewTicker(n.interval)
+	ticker := n.newTicker(n.interval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-ticker.C:
-			// save NACKs to send without holding the mutex during Write
-			var toSend []rtcp.Packet
-
-			n.receiveLogsMu.Lock()
-			for ssrc, receiveLog := range n.receiveLogs {
-				missing := receiveLog.missingSeqNumbers(n.skipLastN, missingPacketSeqNums)
-
-				if len(missing) == 0 || n.nackCountLogs[ssrc] == nil {
-					n.nackCountLogs[ssrc] = map[uint16]uint16{}
-				}
-				if len(missing) == 0 {
-					continue
-				}
-
-				var nack *rtcp.TransportLayerNack
-
-				count := 0
-				if n.maxNacksPerPacket > 0 {
-					for _, missingSeq := range missing {
-						if n.nackCountLogs[ssrc][missingSeq] < n.maxNacksPerPacket {
-							filteredMissingPacket[count] = missingSeq
-							count++
-						}
-						n.nackCountLogs[ssrc][missingSeq]++
-					}
-
-					if count == 0 {
-						continue
-					}
-
-					nack = &rtcp.TransportLayerNack{
-						SenderSSRC: senderSSRC,
-						MediaSSRC:  ssrc,
-						Nacks:      rtcp.NackPairsFromSequenceNumbers(filteredMissingPacket[:count]),
-					}
-				} else {
-					nack = &rtcp.TransportLayerNack{
-						SenderSSRC: senderSSRC,
-						MediaSSRC:  ssrc,
-						Nacks:      rtcp.NackPairsFromSequenceNumbers(missing),
-					}
-				}
-
-				for nackSeq := range n.nackCountLogs[ssrc] {
-					if !slices.Contains(missing, nackSeq) {
-						delete(n.nackCountLogs[ssrc], nackSeq)
-					}
-				}
-
-				// clean up the count log for the ssrc if it's empty
-				if len(n.nackCountLogs[ssrc]) == 0 {
-					delete(n.nackCountLogs, ssrc)
-				}
-
-				toSend = append(toSend, nack)
+		case <-ticker.C():
+			n.runFeedbackCycle(rtcpWriter, senderSSRC, missingPacketSeqNums)
+			if n.onTickDone != nil {
+				n.onTickDone()
 			}
-			n.receiveLogsMu.Unlock()
-
-			// send RTCP without holding receiveLogsMu
-			for _, pkt := range toSend {
-				if _, err := rtcpWriter.Write([]rtcp.Packet{pkt}, interceptor.Attributes{}); err != nil {
-					n.log.Warnf("failed sending nack: %+v", err)
-				}
-			}
-
 		case <-n.close:
 			return
 		}
+	}
+}
+
+// nolint:gocognit,cyclop
+func (n *GeneratorInterceptor) runFeedbackCycle(
+	rtcpWriter interceptor.RTCPWriter, senderSSRC uint32, missingPacketSeqNums []uint16,
+) {
+	batches := n.snapshotBatches(senderSSRC, missingPacketSeqNums)
+
+	for _, batch := range batches {
+		// The stream may have been unbound or rebound while an earlier
+		// writer call of this cycle was blocked. Such stale batches must be
+		// dropped without ever reaching the writer.
+		if !n.bindingAlive(batch) {
+			continue
+		}
+
+		// Write without holding the receive state lock: the writer is allowed
+		// to re-enter BindRemoteStream/UnbindRemoteStream or block for a while.
+		if _, err := rtcpWriter.Write([]rtcp.Packet{batch.nack}, interceptor.Attributes{}); err != nil {
+			// A failed write spends no budget: the same gaps are retried in
+			// the next feedback cycle.
+			n.log.Warnf("failed sending nack: %+v", err)
+
+			continue
+		}
+
+		n.commitBatch(batch)
+	}
+}
+
+// snapshotBatches collects the NACK packets for every currently bound stream
+// under the state lock, so the actual writes happen lock-free afterwards.
+func (n *GeneratorInterceptor) snapshotBatches(
+	senderSSRC uint32, missingPacketSeqNums []uint16,
+) []nackBatch {
+	n.receiveLogsMu.Lock()
+	defer n.receiveLogsMu.Unlock()
+
+	ssrcs := make([]uint32, 0, len(n.receiveLogs))
+	for ssrc := range n.receiveLogs {
+		ssrcs = append(ssrcs, ssrc)
+	}
+	slices.Sort(ssrcs)
+
+	batches := make([]nackBatch, 0, len(ssrcs))
+	for _, ssrc := range ssrcs {
+		receiveLog := n.receiveLogs[ssrc]
+		missing := receiveLog.missingSeqNumbers(n.skipLastN, missingPacketSeqNums)
+
+		counts := n.nackCountLogs[ssrc]
+		if counts == nil {
+			counts = map[uint16]uint16{}
+			n.nackCountLogs[ssrc] = counts
+		}
+
+		// counters only retain entries for gaps currently in the window;
+		// repaired, evicted and full-circle re-wrapped sequences are recycled.
+		for nackSeq := range counts {
+			if !slices.Contains(missing, nackSeq) {
+				delete(counts, nackSeq)
+			}
+		}
+
+		if len(missing) == 0 {
+			if len(counts) == 0 {
+				delete(n.nackCountLogs, ssrc)
+			}
+
+			continue
+		}
+
+		chosen := make([]uint16, 0, len(missing))
+		if n.maxNacksPerPacket > 0 {
+			for _, missingSeq := range missing {
+				if counts[missingSeq] < n.maxNacksPerPacket {
+					chosen = append(chosen, missingSeq)
+				}
+			}
+			if len(chosen) == 0 {
+				continue
+			}
+		} else {
+			chosen = append(chosen, missing...)
+		}
+
+		batches = append(batches, nackBatch{
+			ssrc: ssrc,
+			log:  receiveLog,
+			seqs: append([]uint16(nil), chosen...),
+			nack: &rtcp.TransportLayerNack{
+				SenderSSRC: senderSSRC,
+				MediaSSRC:  ssrc,
+				Nacks:      rtcp.NackPairsFromSequenceNumbers(chosen),
+			},
+		})
+	}
+
+	return batches
+}
+
+func (n *GeneratorInterceptor) bindingAlive(batch nackBatch) bool {
+	n.receiveLogsMu.Lock()
+	defer n.receiveLogsMu.Unlock()
+
+	current, ok := n.receiveLogs[batch.ssrc]
+
+	return ok && current == batch.log
+}
+
+// commitBatch accounts a successful writer call against the binding and gap
+// identities that the batch was prepared for. Completions arriving after the
+// gap was repaired, evicted, or after an unbind/rebind of the same SSRC are
+// discarded.
+func (n *GeneratorInterceptor) commitBatch(batch nackBatch) {
+	n.receiveLogsMu.Lock()
+	defer n.receiveLogsMu.Unlock()
+
+	current, ok := n.receiveLogs[batch.ssrc]
+	if !ok || current != batch.log {
+		return
+	}
+
+	counts := n.nackCountLogs[batch.ssrc]
+	if counts == nil {
+		counts = map[uint16]uint16{}
+		n.nackCountLogs[batch.ssrc] = counts
+	}
+
+	for _, seq := range batch.seqs {
+		if !batch.log.trackedMissing(seq) {
+			continue
+		}
+		// clamp at the configured limit so a finite budget can never reopen
+		// through counter wrap-around.
+		if n.maxNacksPerPacket > 0 && counts[seq] >= n.maxNacksPerPacket {
+			continue
+		}
+		counts[seq]++
+	}
+
+	if len(counts) == 0 {
+		delete(n.nackCountLogs, batch.ssrc)
 	}
 }
 
