@@ -1,12 +1,28 @@
 import { CopyObjectAttributes } from '../core/core.js';
 import { Transformation } from '../geometry/transformation.js';
-import { CalculateTriangleNormal, TransformMesh } from '../model/meshutils.js';
+import { CheckSectionPlane, CheckSectionTransformation, ClipMeshByPlane, TransformSectionPlaneToLocal } from '../model/meshsection.js';
+import { CalculateTriangleNormal, IsEmptyMesh, TransformMesh } from '../model/meshutils.js';
+import { Model } from '../model/model.js';
+import { Node } from '../model/node.js';
 
+/**
+ * Settings of an export operation.
+ */
 export class ExporterSettings
 {
     constructor (settings)
     {
         this.transformation = new Transformation ();
+        /**
+         * Optional solid section plane in model world coordinates. When set,
+         * visible mesh instances are cut separately with their full node
+         * transformation, closed with cap faces, and exported as independent
+         * meshes. The plane description needs a normal (not necessarily unit
+         * length), a constant and a valid cap material index. Sectioning runs
+         * before the export transformation, which is applied afterwards.
+         * @type {object|null}
+         */
+        this.sectionPlane = null;
         this.isMeshVisible = (meshInstanceId) => {
             return true;
         };
@@ -15,12 +31,52 @@ export class ExporterSettings
     }
 }
 
+function CreateSectionedModel (model, settings)
+{
+    const sectionPlane = CheckSectionPlane (settings.sectionPlane, model.MaterialCount ());
+    CheckSectionTransformation (settings.transformation.GetMatrix ());
+
+    let sectionedModel = new Model ();
+    sectionedModel.SetUnit (model.GetUnit ());
+    for (let materialIndex = 0; materialIndex < model.MaterialCount (); materialIndex++) {
+        sectionedModel.AddMaterial (model.GetMaterial (materialIndex));
+    }
+    model.EnumerateMeshInstances ((meshInstance) => {
+        if (!settings.isMeshVisible (meshInstance.GetId ())) {
+            return;
+        }
+        let transformation = meshInstance.GetTransformation ();
+        CheckSectionTransformation (transformation.GetMatrix ());
+        let localPlane = TransformSectionPlaneToLocal (sectionPlane.normal, sectionPlane.constant, transformation.GetMatrix ());
+        let sectionedMesh = ClipMeshByPlane (meshInstance.GetMesh (), {
+            normal : localPlane.normal,
+            constant : localPlane.constant,
+            capMaterialIndex : sectionPlane.capMaterialIndex
+        });
+        if (IsEmptyMesh (sectionedMesh)) {
+            return;
+        }
+        let meshIndex = sectionedModel.AddMesh (sectionedMesh);
+        let node = new Node ();
+        node.SetName (meshInstance.node.GetName ());
+        node.SetTransformation (transformation);
+        sectionedModel.GetRootNode ().AddChildNode (node);
+        node.AddMeshIndex (meshIndex);
+    });
+    return sectionedModel;
+}
+
 export class ExporterModel
 {
     constructor (model, settings)
     {
-        this.model = model;
         this.settings = settings || new ExporterSettings ();
+        this.hasSection = (this.settings.sectionPlane !== null && this.settings.sectionPlane !== undefined);
+        if (this.hasSection) {
+            this.model = CreateSectionedModel (model, this.settings);
+        } else {
+            this.model = model;
+        }
         this.visibleMeshes = null;
         this.meshToVisibleMeshIndex = null;
     }
@@ -86,6 +142,10 @@ export class ExporterModel
 
     IsMeshInstanceVisible (meshInstanceId)
     {
+        if (this.hasSection) {
+            // visibility was already applied on the original mesh instance ids
+            return true;
+        }
         return this.settings.isMeshVisible (meshInstanceId);
     }
 
@@ -101,7 +161,7 @@ export class ExporterModel
     EnumerateMeshInstances (onMeshInstance)
     {
         this.model.EnumerateMeshInstances ((meshInstance) => {
-            if (this.settings.isMeshVisible (meshInstance.GetId ())) {
+            if (this.IsMeshInstanceVisible (meshInstance.GetId ())) {
                 onMeshInstance (meshInstance);
             }
         });
@@ -166,7 +226,7 @@ export class ExporterModel
         this.visibleMeshes = new Set ();
         this.model.EnumerateMeshInstances ((meshInstance) => {
             let meshInstanceId = meshInstance.GetId ();
-            if (this.settings.isMeshVisible (meshInstanceId)) {
+            if (this.IsMeshInstanceVisible (meshInstanceId)) {
                 this.visibleMeshes.add (meshInstanceId.meshIndex);
             }
         });

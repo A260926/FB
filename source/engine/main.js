@@ -53,6 +53,7 @@ import { TextureMap, MaterialBase, FaceMaterial, PhongMaterial, PhysicalMaterial
 import { Mesh } from './model/mesh.js';
 import { MeshPrimitiveBuffer, MeshBuffer, ConvertMeshToMeshBuffer } from './model/meshbuffer.js';
 import { MeshInstanceId, MeshInstance } from './model/meshinstance.js';
+import { CheckSectionPlane, CheckSectionTransformation, TransformSectionPlaneToLocal, ClipMeshByPlane } from './model/meshsection.js';
 import { IsEmptyMesh, CalculateTriangleNormal, TransformMesh, FlipMeshTrianglesOrientation } from './model/meshutils.js';
 import { Model } from './model/model.js';
 import { FinalizeModel, CheckModel } from './model/modelfinalization.js';
@@ -254,6 +255,10 @@ export {
     ConvertMeshToMeshBuffer,
     MeshInstanceId,
     MeshInstance,
+    CheckSectionPlane,
+    CheckSectionTransformation,
+    TransformSectionPlaneToLocal,
+    ClipMeshByPlane,
     IsEmptyMesh,
     CalculateTriangleNormal,
     TransformMesh,

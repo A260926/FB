@@ -71,3 +71,45 @@ There are two ways to use the library:
         'model.mtl'
     ]);
 });</code></pre>
+
+<h2>Solid sectioning</h2>
+
+<p>The engine can cut a closed solid triangle mesh with a plane and close the cut with cap faces, so the result is again a closed solid. This is real geometry processing, not camera clipping or Three.js material clipping planes: the triangle mesh is actually split, interpolated corners keep their attributes, and the new cap faces belong to the solid. The half of the solid where <code class="inline">normal &middot; p + constant &le; 0</code> is kept.</p>
+
+<p>The core entry point is the {@link ClipMeshByPlane} function. The plane normal doesn't need to be a unit vector, it is normalized together with the constant. The plane object also carries the material index of the generated cap faces. Cap faces use the unit plane normal, the cap material and no texture coordinates or vertex colors.</p>
+
+<pre><code class="language-js">// keeps the part of the solid with z &le; 5, capped with material 1
+let sectionedMesh = OV.ClipMeshByPlane (mesh, {
+    normal : new OV.Coord3D (0.0, 0.0, 1.0),
+    constant : -5.0,
+    capMaterialIndex : 1
+});</code></pre>
+
+<p>Supported inputs are closed triangle meshes with finite coordinates, outward face orientation and no line elements. Disjoint shells, concave sections, internal cavities and solid islands inside cavities are handled: holes stay open, islands stay capped, and separate instances never share cap loops. Self-intersecting, non-manifold or mutually tangent shells are not required to work. The original mesh is never modified and the returned mesh is independent.</p>
+
+<p>The same section can be applied through the two model level entry points. The plane is always expressed in model world coordinates, so every mesh instance is cut after considering its full parent-child node transformation; shared source meshes are not modified. The cap material index must be a valid index of the model material list, and instance or export transformations must be finite, invertible affine transformations with a positive determinant.</p>
+
+<pre><code class="language-js">// display: the final BufferGeometry contains side and cap faces, so the
+// bounding box and Three.Raycaster see the sectioned solid, including caps
+let params = new OV.ModelToThreeConversionParams ();
+params.sectionPlane = {
+    normal : new OV.Coord3D (0.0, 0.0, 1.0),
+    constant : -5.0,
+    capMaterialIndex : 1
+};
+OV.ConvertModelToThreeObject (model, params, output, callbacks);
+
+// export: visible instances are sectioned first, the export transformation
+// is applied afterwards
+let settings = new OV.ExporterSettings ({
+    sectionPlane : {
+        normal : new OV.Coord3D (0.0, 0.0, 1.0),
+        constant : -5.0,
+        capMaterialIndex : 1
+    },
+    isMeshVisible : (meshInstanceId) => true,
+    transformation : new OV.Transformation (new OV.Matrix ().CreateTranslation (10.0, 0.0, 0.0))
+});
+let exporterModel = new OV.ExporterModel (model, settings);</code></pre>
+
+<p>The export order is: filter mesh instances with <code class="inline">isMeshVisible</code> using their original {@link MeshInstanceId}, cut each visible instance in model world coordinates, then apply <code class="inline">settings.transformation</code>. Counts, mesh enumeration and index offsets of the exporter model all refer to the sectioned output. With sectioning enabled instances may be expanded into independent output meshes; with <code class="inline">sectionPlane</code> set to null the original hierarchy and shared mesh behavior is preserved, and repeated conversions never reuse a previous clipping result.</p>

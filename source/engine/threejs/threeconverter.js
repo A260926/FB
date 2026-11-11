@@ -3,6 +3,7 @@ import { IsEqual } from '../geometry/geometry.js';
 import { CreateObjectUrl, CreateObjectUrlWithMimeType } from '../io/bufferutils.js';
 import { MaterialSource, MaterialType } from '../model/material.js';
 import { MeshInstance, MeshInstanceId } from '../model/meshinstance.js';
+import { CheckSectionPlane, CheckSectionTransformation, ClipMeshByPlane, TransformSectionPlaneToLocal } from '../model/meshsection.js';
 import { IsEmptyMesh } from '../model/meshutils.js';
 import { ConvertColorToThreeColor, GetShadingType, ShadingType } from './threeutils.js';
 
@@ -14,11 +15,25 @@ export const MaterialGeometryType =
 	Face : 2
 };
 
+/**
+ * Parameters of the model to Three.js conversion.
+ */
 export class ModelToThreeConversionParams
 {
 	constructor ()
 	{
 		this.forceMediumpForMaterials = false;
+		/**
+		 * Optional solid section plane in model world coordinates. When set,
+		 * every mesh instance is cut separately with its full node
+		 * transformation, the cut is closed with cap faces, and the resulting
+		 * BufferGeometry contains both the side faces and the cap faces. The
+		 * plane description needs a normal (not necessarily unit length), a
+		 * constant and a valid cap material index. Set to null to keep the
+		 * original hierarchy and shared meshes.
+		 * @type {object|null}
+		 */
+		this.sectionPlane = null;
 	}
 }
 
@@ -326,9 +341,9 @@ export class ThreeMeshMaterialHandler
 
 export function ConvertModelToThreeObject (model, conversionParams, conversionOutput, callbacks)
 {
-	function CreateThreeTriangleMesh (meshInstance, materialHandler)
+	function CreateThreeTriangleMesh (meshInstance, geometryMesh, materialHandler)
 	{
-		let mesh = meshInstance.mesh;
+		let mesh = geometryMesh;
 		let triangleCount = mesh.TriangleCount ();
 		if (triangleCount === 0) {
 			return null;
@@ -469,24 +484,27 @@ export function ConvertModelToThreeObject (model, conversionParams, conversionOu
 		return threeLine;
 	}
 
-	function ConvertMesh (threeObject, meshInstance, materialHandler)
+	function ConvertMesh (threeObject, meshInstance, materialHandler, sectionedMesh)
 	{
-		if (IsEmptyMesh (meshInstance.mesh)) {
+		let geometryMesh = (sectionedMesh !== null ? sectionedMesh : meshInstance.mesh);
+		if (IsEmptyMesh (geometryMesh)) {
 			return;
 		}
 
-		let triangleMesh = CreateThreeTriangleMesh (meshInstance, materialHandler);
+		let triangleMesh = CreateThreeTriangleMesh (meshInstance, geometryMesh, materialHandler);
 		if (triangleMesh !== null) {
 			threeObject.add (triangleMesh);
 		}
 
-		let lineMesh = CreateThreeLineMesh (meshInstance, materialHandler);
-		if (lineMesh !== null) {
-			threeObject.add (lineMesh);
+		if (sectionedMesh === null) {
+			let lineMesh = CreateThreeLineMesh (meshInstance, materialHandler);
+			if (lineMesh !== null) {
+				threeObject.add (lineMesh);
+			}
 		}
 	}
 
-	function ConvertNodeHierarchy (threeRootNode, model, materialHandler, stateHandler)
+	function ConvertNodeHierarchy (threeRootNode, model, materialHandler, stateHandler, sectionedMeshes)
 	{
 		let nodeTree = new ThreeNodeTree (model, threeRootNode);
 		let threeNodeItems = nodeTree.GetNodeItems ();
@@ -495,7 +513,11 @@ export function ConvertModelToThreeObject (model, conversionParams, conversionOu
 			runTask : (firstMeshInstanceIndex, lastMeshInstanceIndex, onReady) => {
 				for (let meshInstanceIndex = firstMeshInstanceIndex; meshInstanceIndex <= lastMeshInstanceIndex; meshInstanceIndex++) {
 					let nodeItem = threeNodeItems[meshInstanceIndex];
-					ConvertMesh (nodeItem.threeNode, nodeItem.meshInstance, materialHandler);
+					let sectionedMesh = null;
+					if (sectionedMeshes !== null) {
+						sectionedMesh = sectionedMeshes.get (nodeItem.meshInstance.GetId ().GetKey ());
+					}
+					ConvertMesh (nodeItem.threeNode, nodeItem.meshInstance, materialHandler, sectionedMesh);
 				}
 				onReady ();
 			},
@@ -508,5 +530,21 @@ export function ConvertModelToThreeObject (model, conversionParams, conversionOu
 	let stateHandler = new ThreeConversionStateHandler (callbacks);
 	let materialHandler = new ThreeMaterialHandler (model, stateHandler, conversionParams, conversionOutput);
 	let threeObject = new THREE.Object3D ();
-	ConvertNodeHierarchy (threeObject, model, materialHandler, stateHandler);
+	let sectionedMeshes = null;
+	if (conversionParams.sectionPlane !== null && conversionParams.sectionPlane !== undefined) {
+		let sectionPlane = CheckSectionPlane (conversionParams.sectionPlane, model.MaterialCount ());
+		sectionedMeshes = new Map ();
+		model.EnumerateMeshInstances ((meshInstance) => {
+			let transformation = meshInstance.GetTransformation ();
+			CheckSectionTransformation (transformation.GetMatrix ());
+			let localPlane = TransformSectionPlaneToLocal (sectionPlane.normal, sectionPlane.constant, transformation.GetMatrix ());
+			let sectionedMesh = ClipMeshByPlane (meshInstance.GetMesh (), {
+				normal : localPlane.normal,
+				constant : localPlane.constant,
+				capMaterialIndex : sectionPlane.capMaterialIndex
+			});
+			sectionedMeshes.set (meshInstance.GetId ().GetKey (), sectionedMesh);
+		});
+	}
+	ConvertNodeHierarchy (threeObject, model, materialHandler, stateHandler, sectionedMeshes);
 }

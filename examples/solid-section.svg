@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="490" viewBox="0 0 1140 490">
+<style>
+.title { font-family: sans-serif; font-size: 17px; font-weight: bold; fill: #1f2d3d; }
+.subtitle { font-family: sans-serif; font-size: 12px; fill: #5a6b7d; }
+.legend { font-family: sans-serif; font-size: 13px; fill: #1f2d3d; }
+.note { font-family: sans-serif; font-size: 12px; fill: #5a6b7d; }
+</style>
+<text x="200" y="40.0" text-anchor="middle" class="title">Section cap (top view)</text>
+<text x="200" y="60.0" text-anchor="middle" class="subtitle">wall ring is capped, the bore stays open</text>
+<rect x="30" y="70.0" width="340" height="300" fill="#f7f9fb" stroke="#c7d0da" stroke-width="1"/>
+<polygon points="151.33,264.00 248.67,264.00 346.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,264.00 346.00,312.67 54.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,264.00 248.67,166.67 346.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,264.00 346.00,118.00 346.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,166.67 151.33,166.67 54.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,166.67 54.00,118.00 346.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,166.67 151.33,264.00 54.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,166.67 54.00,312.67 54.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="54.00,312.67 200.00,312.67 248.67,264.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="200.00,312.67 346.00,312.67 248.67,264.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,264.00 200.00,264.00 54.00,312.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="200.00,264.00 151.33,264.00 54.00,312.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="54.00,118.00 54.00,215.33 151.33,264.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="54.00,215.33 54.00,312.67 151.33,264.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,264.00 151.33,215.33 54.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,215.33 151.33,166.67 54.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="346.00,118.00 200.00,118.00 151.33,166.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="200.00,118.00 54.00,118.00 151.33,166.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,166.67 200.00,166.67 346.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="200.00,166.67 248.67,166.67 346.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="346.00,312.67 346.00,215.33 248.67,166.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="346.00,215.33 346.00,118.00 248.67,166.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,166.67 248.67,215.33 346.00,312.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="248.67,215.33 248.67,264.00 346.00,312.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="151.33,264.00 248.67,264.00 248.67,166.67 151.33,166.67" fill="#ffffff" stroke="#b03a2e" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="42" y="358" class="note">dashed rectangle: open center bore</text>
+<text x="570" y="40.0" text-anchor="middle" class="title">Horizontal section at z = 2</text>
+<text x="570" y="60.0" text-anchor="middle" class="subtitle">walls keep their material, cap faces close the solid</text>
+<rect x="400" y="70.0" width="340" height="300" fill="#f7f9fb" stroke="#c7d0da" stroke-width="1"/>
+<polygon points="716.00,215.33 716.00,118.00 570.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="716.00,215.33 570.00,118.00 424.00,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 424.00,118.00 424.00,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="521.33,118.00 570.00,118.00 521.33,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 618.67,118.00 618.67,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 618.67,215.33 521.33,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="424.00,215.33 424.00,118.00 570.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="424.00,215.33 570.00,118.00 716.00,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 716.00,118.00 716.00,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="618.67,118.00 570.00,118.00 618.67,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 521.33,118.00 521.33,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="570.00,118.00 521.33,215.33 618.67,215.33" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<text x="940" y="40.0" text-anchor="middle" class="title">Oblique section</text>
+<text x="940" y="60.0" text-anchor="middle" class="subtitle">plane normal (0, 0.6, 0.8), cap faces follow the plane</text>
+<rect x="770" y="70.0" width="340" height="300" fill="#f7f9fb" stroke="#c7d0da" stroke-width="1"/>
+<polygon points="794.00,312.67 1086.00,312.67 1086.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="794.00,312.67 1086.00,118.00 794.00,118.00" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="891.33,130.17 982.58,130.17 891.33,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="982.58,130.17 988.67,130.17 988.67,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="982.58,130.17 988.67,312.67 891.33,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="794.00,312.67 794.00,239.67 976.50,239.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="794.00,312.67 976.50,239.67 1086.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="976.50,239.67 1086.00,239.67 1086.00,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="988.67,203.17 933.92,203.17 988.67,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="933.92,203.17 891.33,203.17 891.33,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="933.92,203.17 891.33,312.67 988.67,312.67" fill="#508cbe" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="1021.11,118.00 1064.37,118.00 1086.00,239.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="1086.00,118.00 1086.00,187.52 1064.37,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="1086.00,187.52 1086.00,239.67 1064.37,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="794.00,118.00 858.89,118.00 988.67,130.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="858.89,118.00 923.78,118.00 988.67,130.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="923.78,118.00 1021.11,118.00 988.67,130.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="988.67,130.17 982.58,130.17 794.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="982.58,130.17 891.33,130.17 794.00,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="794.00,239.67 794.00,118.00 891.33,130.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="891.33,130.17 891.33,137.47 794.00,239.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="891.33,137.47 891.33,203.17 794.00,239.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="1086.00,239.67 976.50,239.67 891.33,203.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="976.50,239.67 794.00,239.67 891.33,203.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="891.33,203.17 933.92,203.17 1086.00,239.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="933.92,203.17 988.67,203.17 1086.00,239.67" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="1021.11,118.00 1086.00,239.67 988.67,203.17" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="988.67,203.17 988.67,179.94 1021.11,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<polygon points="988.67,179.94 988.67,130.17 1021.11,118.00" fill="#f0aa28" stroke="#243447" stroke-width="0.6" stroke-linejoin="round"/>
+<rect x="30" y="394" width="16.0" height="16.0" fill="#508cbe" stroke="#243447" stroke-width="0.6"/>
+<text x="54" y="407" class="legend">original tube wall</text>
+<rect x="230" y="394" width="16.0" height="16.0" fill="#f0aa28" stroke="#243447" stroke-width="0.6"/>
+<text x="254" y="407" class="legend">generated cap face</text>
+<text x="30" y="440" class="note">horizontal cut volume: 40.0000, cap area: 20.0000</text>
+<text x="30" y="462" class="note">oblique cut volume: 59.0000, cap area: 20.0000</text>
+</svg>
