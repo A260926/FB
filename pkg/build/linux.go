@@ -8,6 +8,7 @@ package build
 import (
 	"crypto/sha256"
 	"debug/elf"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -378,26 +379,8 @@ func elfBinarySignature(bin string, tracer debugtracer.DebugTracer) (string, err
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// moduleSigningKey is a constant module signing key for reproducible builds.
-const moduleSigningKey = `-----BEGIN PRIVATE KEY-----
-MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAxu5GRXw7d13xTLlZ
-GT1y63U4Firk3WjXapTgf9radlfzpqheFr5HWO8f11U/euZQWXDzi+Bsq+6s/2lJ
-AU9XWQIDAQABAkB24ZxTGBv9iMGURUvOvp83wRRkgvvEqUva4N+M6MAXagav3GRi
-K/gl3htzQVe+PLGDfbIkstPJUvI2izL8ZWmBAiEA/P72IitEYE4NQj4dPcYglEYT
-Hbh2ydGYFbYxvG19DTECIQDJSvg7NdAaZNd9faE5UIAcLF35k988m9hSqBjtz0tC
-qQIgGOJC901mJkrHBxLw8ViBb9QMoUm5dVRGLyyCa9QhDqECIQCQGLX4lP5DVrsY
-X43BnMoI4Q3o8x1Uou/JxAIMg1+J+QIgamNCPBLeP8Ce38HtPcm8BXmhPKkpCXdn
-uUf4bYtfSSw=
------END PRIVATE KEY-----
------BEGIN CERTIFICATE-----
-MIIBvzCCAWmgAwIBAgIUKoM7Idv4nw571nWDgYFpw6I29u0wDQYJKoZIhvcNAQEF
-BQAwLjEsMCoGA1UEAwwjQnVpbGQgdGltZSBhdXRvZ2VuZXJhdGVkIGtlcm5lbCBr
-ZXkwIBcNMjAxMDA4MTAzMzIwWhgPMjEyMDA5MTQxMDMzMjBaMC4xLDAqBgNVBAMM
-I0J1aWxkIHRpbWUgYXV0b2dlbmVyYXRlZCBrZXJuZWwga2V5MFwwDQYJKoZIhvcN
-AQEBBQADSwAwSAJBAMbuRkV8O3dd8Uy5WRk9cut1OBYq5N1o12qU4H/a2nZX86ao
-Xha+R1jvH9dVP3rmUFlw84vgbKvurP9pSQFPV1kCAwEAAaNdMFswDAYDVR0TAQH/
-BAIwADALBgNVHQ8EBAMCB4AwHQYDVR0OBBYEFPhQx4etmYw5auCJwIO5QP8Kmrt3
-MB8GA1UdIwQYMBaAFPhQx4etmYw5auCJwIO5QP8Kmrt3MA0GCSqGSIb3DQEBBQUA
-A0EAK5moCH39eLLn98pBzSm3MXrHpLtOWuu2p696fg/ZjiUmRSdHK3yoRONxMHLJ
-1nL9cAjWPantqCm5eoyhj7V7gg==
------END CERTIFICATE-----`
+// moduleSigningKey is the upstream public, fixed key for reproducible builds.
+// Material preparation: moved unchanged bytes into a documented fixture.
+//
+//go:embed testdata/reproducible-module-signing.pem
+var moduleSigningKey string
