@@ -105,6 +105,18 @@ extrudePolygon(
         // If exclude bottom faces, default to be false.
         // Usefull when bottom side can't be seen.
         excludeBottom?: boolean,
+        // Total radians the cross section rotates from bottom to top around
+        // twistOrigin. Default to be 0, which is no twist.
+        // The side wall is subdivided at z = depth * k / twistSegments so the
+        // section rotates gradually along the height.
+        twist?: number,
+        // Segments of the twist along height. Must be a positive integer
+        // when twist is not zero. Default to be 8.
+        twistSegments?: number,
+        // 2D rotation center of the twist, in the coordinate after
+        // scale/translate/fitRect is applied. Defaults to the center of the
+        // transformed bounding rect of the input polygons.
+        twistOrigin?: ArrayLike<number>,
         // Transform the polygon to fit this rect.
         // Will keep polygon aspect if only width or height is given.
         fitRect?: {x?: number, y?: number, width?: number: height?: number},

@@ -63,6 +63,13 @@ interface GeometryExtrudeStatic {
 
     extrudePolygon(polygons: ArrayLike<Polygon>, opts: BasicExtrudeOpt & {
         depth: ((idx: number) => number) | number
+        // Total radians the section rotates from bottom to top. Default to be 0.
+        twist?: number,
+        // Side segments along height when twist is not zero. Must be a positive integer. Default to be 8.
+        twistSegments?: number,
+        // 2D rotation center in the transformed (scale/translate/fitRect applied) coordinate.
+        // Defaults to the center of the transformed bounding rect of the input polygons.
+        twistOrigin?: ArrayLike<number>
     }): ExtrudeResult
 
     extrudePolyline(polylines: ArrayLike<Polyline>, opts: BasicExtrudeOpt & {

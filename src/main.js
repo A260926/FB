@@ -487,6 +487,283 @@ function addExtrudeSide(
     }
 }
 
+/**
+ * Compute the merged list of side ring heights for a twisted extrusion.
+ * Keeps the original (bevel) ring heights and inserts rings at
+ * z = depth * k / twistSegments. Each entry: {z, connectPrev, inserted}.
+ * `connectPrev` marks if a quad strip connects this ring to the previous one.
+ */
+function computeTwistProfile(depth, opts) {
+    const splitBevel = opts.smoothBevel ? 1 : 2;
+    const bevelSize = Math.min(depth / 2, opts.bevelSize);
+    const bevelSegments = !(bevelSize > 0) ? 0 : opts.bevelSegments;
+
+    const profile = [];
+    if (bevelSegments > 0) {
+        for (let k = 0; k < 2; k++) {
+            // The last ring of the bottom bevel duplicates the previous one when
+            // the bevel is not smooth. It would not be referenced by any face,
+            // so it is skipped in twisted mode to keep all outputs finite.
+            const sMax = bevelSegments * splitBevel - (k === 1 && splitBevel > 1 ? 1 : 0);
+            for (let s = 0; s <= sMax; s++) {
+                const t = (Math.floor(s / splitBevel) + (s % splitBevel)) / bevelSegments;
+                // Reference height of the bevel ring.
+                const z = k === 0
+                    ? depth - bevelSize + bevelSize * Math.cos(t * Math.PI / 2)
+                    : bevelSize * (1 - Math.sin(t * Math.PI / 2));
+                let connectPrev;
+                if (s === 0) {
+                    // First ring of the bottom bevel connects to the last ring
+                    // of the top bevel (the straight side part).
+                    connectPrev = k === 1;
+                }
+                else {
+                    connectPrev = (splitBevel > 1 && (s % splitBevel) === 1)
+                        || (splitBevel === 1 && s >= 1);
+                }
+                profile.push({z: z, connectPrev: connectPrev, inserted: false});
+            }
+        }
+    }
+    else {
+        profile.push({z: depth, connectPrev: false, inserted: false});
+        profile.push({z: 0, connectPrev: true, inserted: false});
+    }
+
+    // Insert rings at the twist heights.
+    const twistSegments = opts.twistSegments;
+    const eps = Math.abs(depth) * 1e-9 + 1e-12;
+    for (let k = twistSegments - 1; k >= 1; k--) {
+        const zk = depth * k / twistSegments;
+        let exists = false;
+        for (let r = 0; r < profile.length; r++) {
+            if (Math.abs(profile[r].z - zk) <= eps) {
+                exists = true;
+                break;
+            }
+        }
+        if (exists) {
+            continue;
+        }
+        // Profile is sorted by descending z. Find the segment containing zk.
+        for (let r = 0; r < profile.length - 1; r++) {
+            if (profile[r].z > zk + eps && profile[r + 1].z < zk - eps) {
+                profile.splice(r + 1, 0, {z: zk, connectPrev: true, inserted: true});
+                break;
+            }
+        }
+    }
+    return profile;
+}
+
+// Interpolate an unrotated cross section at height zk between two adjacent rings.
+function interpolateSideRing(ringA, ringB, zk, ringVertexCount) {
+    const ring = {
+        xy: new Float64Array(ringVertexCount * 2),
+        z: new Float64Array(ringVertexCount),
+        u: new Float64Array(ringVertexCount),
+        v: new Float64Array(ringVertexCount)
+    };
+    for (let i = 0; i < ringVertexCount; i++) {
+        const za = ringA.z[i];
+        const zb = ringB.z[i];
+        let t = (za - zk) / (za - zb);
+        if (!isFinite(t)) {
+            t = 0;
+        }
+        t = Math.min(1, Math.max(0, t));
+        ring.xy[i * 2] = ringA.xy[i * 2] + (ringB.xy[i * 2] - ringA.xy[i * 2]) * t;
+        ring.xy[i * 2 + 1] = ringA.xy[i * 2 + 1] + (ringB.xy[i * 2 + 1] - ringA.xy[i * 2 + 1]) * t;
+        ring.z[i] = zk;
+        ring.u[i] = ringA.u[i] + (ringB.u[i] - ringA.u[i]) * t;
+        ring.v[i] = ringA.v[i] + (ringB.v[i] - ringA.v[i]) * t;
+    }
+    return ring;
+}
+
+// Add side vertices and indices for a twisted extrusion.
+// The untwisted section at each ring height is built first (bevel sections are
+// preserved, new heights are linearly interpolated along height), then every
+// vertex is rotated around the twist origin by twist * z / depth.
+function addExtrudeSideTwisted(
+    out, {vertices, topVertices, splittedMap, depth, rect, twistProfile}, start, end,
+    cursors, opts
+) {
+    const ringVertexCount = end - start;
+
+    const splitBevel = opts.smoothBevel ? 1 : 2;
+    const bevelSize = Math.min(depth / 2, opts.bevelSize);
+    const bevelSegments = !(bevelSize > 0) ? 0 : opts.bevelSegments;
+    const vertexOffset = cursors.vertex;
+    const size = Math.max(rect.width, rect.height, depth);
+    const twist = opts.twist;
+    const twistOrigin = opts.twistOrigin;
+
+    const isDuplicateVertex = splittedMap
+        ? (idx) => {
+            const nextIdx = (idx + 1) % ringVertexCount;
+            return splittedMap[idx + start] === splittedMap[nextIdx + start];
+        }
+        : (idx) => false;
+
+    // Build the untwisted base rings, same profile as the untwisted extrusion.
+    const baseRings = [];
+    const vLen = new Float64Array(ringVertexCount);
+    if (bevelSize > 0) {
+        const v0 = [0, 0, 1];
+        const v1 = [];
+        const v2 = [0, 0, -1];
+        const v = [];
+
+        for (let k = 0; k < 2; k++) {
+            const z = (k === 0 ? (depth - bevelSize) : bevelSize);
+            // Skip the unreferenced duplicated last ring of the bottom bevel
+            // when the bevel is not smooth (see computeTwistProfile).
+            const sMax = bevelSegments * splitBevel - (k === 1 && splitBevel > 1 ? 1 : 0);
+            for (let s = 0; s <= sMax; s++) {
+                const ring = {
+                    xy: new Float64Array(ringVertexCount * 2),
+                    z: new Float64Array(ringVertexCount),
+                    u: new Float64Array(ringVertexCount),
+                    v: new Float64Array(ringVertexCount)
+                };
+                let uLen = 0;
+                let prevX;
+                let prevY;
+                for (let i = 0; i < ringVertexCount; i++) {
+                    const idx = (i % ringVertexCount + start) * 2;
+                    const rawIdx = splittedMap ? splittedMap[idx / 2] * 2 : idx;
+                    v1[0] = vertices[idx] - topVertices[rawIdx];
+                    v1[1] = vertices[idx + 1] - topVertices[rawIdx + 1];
+                    v1[2] = 0;
+                    const l = Math.sqrt(v1[0] * v1[0] + v1[1] * v1[1]);
+                    v1[0] /= l;
+                    v1[1] /= l;
+
+                    const t = (Math.floor(s / splitBevel) + (s % splitBevel)) / bevelSegments;
+                    k === 0 ? slerp(v, v0, v1, t)
+                        : slerp(v, v1, v2, t);
+
+                    const t2 = k === 0  ? t : 1 - t;
+                    const a = bevelSize * Math.sin(t2 * Math.PI / 2);
+                    const b = l * Math.cos(t2 * Math.PI / 2);
+
+                    // ellipse radius
+                    const r = bevelSize * l / Math.sqrt(a * a + b * b);
+
+                    const x = v[0] * r + topVertices[rawIdx];
+                    const y = v[1] * r + topVertices[rawIdx + 1];
+                    const zz = v[2] * r + z;
+                    ring.xy[i * 2] = x;
+                    ring.xy[i * 2 + 1] = y;
+                    ring.z[i] = zz;
+
+                    if (i > 0) {
+                        uLen += Math.sqrt((prevX - x) * (prevX - x) + (prevY - y) * (prevY - y));
+                    }
+                    if (baseRings.length > 0) {
+                        const prevRing = baseRings[baseRings.length - 1];
+                        const dx = prevRing.xy[i * 2] - x;
+                        const dy = prevRing.xy[i * 2 + 1] - y;
+                        const dz = prevRing.z[i] - zz;
+                        vLen[i] += Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    }
+                    ring.u[i] = uLen / size;
+                    ring.v[i] = vLen[i] / size;
+
+                    prevX = x;
+                    prevY = y;
+                }
+                baseRings.push(ring);
+            }
+        }
+    }
+    else {
+        for (let k = 0; k < 2; k++) {
+            const z = k === 0 ? depth : 0;
+            const ring = {
+                xy: new Float64Array(ringVertexCount * 2),
+                z: new Float64Array(ringVertexCount),
+                u: new Float64Array(ringVertexCount),
+                v: new Float64Array(ringVertexCount)
+            };
+            let uLen = 0;
+            let prevX;
+            let prevY;
+            for (let i = 0; i < ringVertexCount; i++) {
+                const idx = (i + start) * 2;
+                const x = vertices[idx];
+                const y = vertices[idx + 1];
+                ring.xy[i * 2] = x;
+                ring.xy[i * 2 + 1] = y;
+                ring.z[i] = z;
+                if (i > 0) {
+                    uLen += Math.sqrt((prevX - x) * (prevX - x) + (prevY - y) * (prevY - y));
+                }
+                ring.u[i] = uLen / size;
+                ring.v[i] = z / size;
+                prevX = x;
+                prevY = y;
+            }
+            baseRings.push(ring);
+        }
+    }
+
+    // Merge with the inserted twist rings according to the profile.
+    const rings = [];
+    let baseIdx = 0;
+    for (let r = 0; r < twistProfile.length; r++) {
+        if (twistProfile[r].inserted) {
+            rings.push(interpolateSideRing(
+                baseRings[baseIdx - 1], baseRings[baseIdx], twistProfile[r].z, ringVertexCount
+            ));
+        }
+        else {
+            rings.push(baseRings[baseIdx++]);
+        }
+    }
+
+    // Emit vertices, rotated around the twist origin by twist * z / depth.
+    for (let r = 0; r < rings.length; r++) {
+        const ring = rings[r];
+        for (let i = 0; i < ringVertexCount; i++) {
+            const x = ring.xy[i * 2];
+            const y = ring.xy[i * 2 + 1];
+            const z = ring.z[i];
+            const angle = twist * z / depth;
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+            const dx = x - twistOrigin[0];
+            const dy = y - twistOrigin[1];
+            const vtx3 = cursors.vertex * 3;
+            const vtx2 = cursors.vertex * 2;
+            out.position[vtx3] = twistOrigin[0] + dx * cosA - dy * sinA;
+            out.position[vtx3 + 1] = twistOrigin[1] + dx * sinA + dy * cosA;
+            out.position[vtx3 + 2] = z;
+            out.uv[vtx2] = ring.u[i];
+            out.uv[vtx2 + 1] = ring.v[i];
+            cursors.vertex++;
+        }
+    }
+    // Connect the rings.
+    for (let r = 1; r < rings.length; r++) {
+        if (!twistProfile[r].connectPrev) {
+            continue;
+        }
+        for (let i = 0; i < ringVertexCount; i++) {
+            // Just ignore this face if vertex are duplicted in `splitVertices`
+            if (isDuplicateVertex(i)) {
+                continue;
+            }
+            for (let f = 0; f < 6; f++) {
+                const m = (quadToTriangle[f][0] + i) % ringVertexCount;
+                const n = quadToTriangle[f][1] + r;
+                out.indices[cursors.index++] = (n - 1) * ringVertexCount + m + vertexOffset;
+            }
+        }
+    }
+}
+
 function addTopAndBottom({indices, topVertices, rect, depth}, out, cursors, opts) {
     if (topVertices.length <= 4) {
         return;
@@ -499,17 +776,32 @@ function addTopAndBottom({indices, topVertices, rect, depth}, out, cursors, opts
         out.indices[cursors.index++] = vertexOffset + indices[i];
     }
     const size = Math.max(rect.width, rect.height);
+    const twist = opts.twist || 0;
+    const twistOrigin = opts.twistOrigin;
     // Top and bottom vertices
     for (let k = 0; k < (opts.excludeBottom ? 1 : 2); k++) {
+        // Rotate the cap around the twist origin. Bottom cap stays unrotated.
+        const angle = (1 - k) * twist;
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
         for (let i = 0; i < topVertices.length; i += 2) {
             const x = topVertices[i];
             const y = topVertices[i + 1];
             const vtx3 = cursors.vertex * 3;
             const vtx2 = cursors.vertex * 2;
-            out.position[vtx3] = x;
-            out.position[vtx3 + 1] = y;
+            if (angle !== 0) {
+                const dx = x - twistOrigin[0];
+                const dy = y - twistOrigin[1];
+                out.position[vtx3] = twistOrigin[0] + dx * cosA - dy * sinA;
+                out.position[vtx3 + 1] = twistOrigin[1] + dx * sinA + dy * cosA;
+            }
+            else {
+                out.position[vtx3] = x;
+                out.position[vtx3 + 1] = y;
+            }
             out.position[vtx3 + 2] = (1 - k) * depth;
 
+            // uv follows the untwisted section parameterization.
             out.uv[vtx2] = (x - rect.x) / size;
             out.uv[vtx2 + 1] = (y - rect.y) / size;
             cursors.vertex++;
@@ -609,6 +901,8 @@ function innerExtrudeTriangulatedPolygon(preparedData, opts) {
     let indexCount = 0;
     let vertexCount = 0;
 
+    const twist = (opts.twist || 0) !== 0;
+
     for (let p = 0; p < preparedData.length; p++) {
         let {indices, vertices, splittedMap, topVertices, holes, depth} = preparedData[p];
         const bevelSize = Math.min(depth / 2, opts.bevelSize);
@@ -616,9 +910,23 @@ function innerExtrudeTriangulatedPolygon(preparedData, opts) {
 
         holes = holes || [];
 
+        if (twist) {
+            preparedData[p].twistProfile = computeTwistProfile(depth, opts);
+        }
+        const twistProfile = preparedData[p].twistProfile;
+
         indexCount += indices.length * (opts.excludeBottom ? 1 : 2);
         vertexCount += topVertices.length / 2 * (opts.excludeBottom ? 1 : 2);
-        const ringCount = 2 + bevelSegments * 2;
+        const ringCount = twistProfile ? twistProfile.length : 2 + bevelSegments * 2;
+        let sideSegmentCount = ringCount - 1;
+        if (twistProfile) {
+            sideSegmentCount = 0;
+            for (let r = 0; r < twistProfile.length; r++) {
+                if (twistProfile[r].connectPrev) {
+                    sideSegmentCount++;
+                }
+            }
+        }
 
         let start = 0;
         let end = 0;
@@ -633,12 +941,12 @@ function innerExtrudeTriangulatedPolygon(preparedData, opts) {
 
             const faceEnd = splittedMap ? splittedMap[end - 1] + 1 : end;
             const faceStart = splittedMap ? splittedMap[start] : start;
-            indexCount += (faceEnd - faceStart) * 6 * (ringCount - 1);
+            indexCount += (faceEnd - faceStart) * 6 * sideSegmentCount;
 
             const sideRingVertexCount = end - start;
             vertexCount += sideRingVertexCount * ringCount
                 // Double the bevel vertex number if not smooth
-                + (!opts.smoothBevel ? bevelSegments * sideRingVertexCount * 2 : 0);
+                + (!twistProfile && !opts.smoothBevel ? bevelSegments * sideRingVertexCount * 2 : 0);
         }
     }
 
@@ -662,14 +970,15 @@ function innerExtrudeTriangulatedPolygon(preparedData, opts) {
 
         let start = 0;
         let end = (holes && holes.length) ? holes[0] : vertexCount;
+        const addSide = twist ? addExtrudeSideTwisted : addExtrudeSide;
         // Add exterior
-        addExtrudeSide(data, preparedData[d], start, end, cursors, opts);
+        addSide(data, preparedData[d], start, end, cursors, opts);
         // Add holes
         if (holes) {
             for (let h = 0; h < holes.length; h++) {
                 start = holes[h];
                 end = holes[h + 1] || vertexCount;
-                addExtrudeSide(data, preparedData[d], start, end, cursors, opts);
+                addSide(data, preparedData[d], start, end, cursors, opts);
             }
         }
     }
@@ -688,6 +997,24 @@ function innerExtrudeTriangulatedPolygon(preparedData, opts) {
     data.normal = generateNormal(data.indices, data.position);
     // PENDING
     data.boundingRect = preparedData[0] && preparedData[0].rect;
+    if (twist && data.position.length > 0) {
+        // Actual extent of the twisted vertices in XY.
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (let i = 0; i < data.position.length; i += 3) {
+            const x = data.position[i];
+            const y = data.position[i + 1];
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        }
+        data.boundingRect = {
+            x: minX, y: minY, width: maxX - minX, height: maxY - minY
+        };
+    }
 
     return data;
 }
@@ -831,6 +1158,10 @@ function simplifyPolygon(polygon, tolerance) {
  * @param {boolean} [opts.smoothSideThreshold = 0.9]    // Will not smooth sharp side.
  * @param {boolean} [opts.smoothBevel = false]
  * @param {boolean} [opts.excludeBottom = false]
+ * @param {number} [opts.twist = 0] Total radians the section rotates from bottom to top.
+ * @param {number} [opts.twistSegments = 8] Side segments along height when twist is not zero. Must be a positive integer.
+ * @param {Array} [opts.twistOrigin] 2D rotation center in the transformed (scale/translate/fitRect applied) coordinate.
+ *        Defaults to the center of the transformed bounding rect of the input polygons.
  * @param {Object} [opts.fitRect] translate and scale will be ignored if fitRect is set
  * @param {Array} [opts.translate]
  * @param {Array} [opts.scale]
@@ -862,6 +1193,30 @@ export function extrudePolygon(polygons, opts) {
         width: boundingRect.width * scale[0],
         height: boundingRect.height * scale[1],
     };
+
+    // Normalize and validate twist options.
+    const twist = opts.twist == null ? 0 : opts.twist;
+    if (!Number.isFinite(twist)) {
+        throw new RangeError('twist must be a finite number');
+    }
+    opts.twist = twist;
+    if (twist !== 0) {
+        const twistSegments = opts.twistSegments == null ? 8 : opts.twistSegments;
+        if (!Number.isInteger(twistSegments) || twistSegments < 1) {
+            throw new RangeError('twistSegments must be a positive integer');
+        }
+        opts.twistSegments = twistSegments;
+        if (opts.twistOrigin == null) {
+            // Center of the transformed bounding rect of this batch of input.
+            opts.twistOrigin = [
+                transformdRect.x + transformdRect.width / 2,
+                transformdRect.y + transformdRect.height / 2
+            ];
+        }
+        else if (!Number.isFinite(opts.twistOrigin[0]) || !Number.isFinite(opts.twistOrigin[1])) {
+            throw new RangeError('twistOrigin must contain finite numbers');
+        }
+    }
 
     const epsilon = Math.min(
         boundingRect.width, boundingRect.height
