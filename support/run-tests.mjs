@@ -7,7 +7,7 @@ if (!file || !existsSync(file) || expected.length === 0 || new Set(expected).siz
 }
 const result = spawnSync(process.execPath, [
   '--import=tsx/esm', '--test', '--test-timeout=15000',
-  '--test-reporter=./author_support/reporter.mjs', file,
+  '--test-reporter=./support/reporter.mjs', file,
 ], {
   stdio: 'inherit',
   env: {...process.env, AUTHOR_EXPECTED_TESTS: JSON.stringify(expected)},
