@@ -1,5 +1,5 @@
 #!/bin/sh
 set -eu
-shasum -a 256 -c userfb_baseline/deps.sha256
+shasum -a 256 -c baseline/deps.sha256
 cmake -S . -B .userfb-build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS_DEBUG='-O0 -g0' -DBUILD_TESTS=ON -DBUILD_GUI=OFF -DUSE_MATCHCOMPILER=Off -DHAVE_RULES=OFF -DDISABLE_DMAKE=ON -DUSERFB_FOCUSED_TESTS=ON -DREGISTER_TESTS=OFF -DUSE_BUNDLED_TINYXML2=ON -DUSE_BOOST=OFF -DCMAKE_DISABLE_FIND_PACKAGE_Boost=TRUE
 cmake --build .userfb-build --target testrunner cppcheck --parallel 6
