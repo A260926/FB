@@ -16,5 +16,5 @@ fetch protobuf https://codeload.github.com/protocolbuffers/protobuf/tar.gz/refs/
 fetch googletest https://codeload.github.com/google/googletest/tar.gz/refs/tags/v1.15.2 7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926
 cmake -S .deps/src/protobuf/cmake -B .deps/protobuf-build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/.deps/install" -Dprotobuf_BUILD_TESTS=OFF -Dprotobuf_WITH_ZLIB=OFF -Dprotobuf_BUILD_SHARED_LIBS=OFF -DCMAKE_CXX_STANDARD=17
 cmake --build .deps/protobuf-build --target install -j4
-cmake -S userfb_baseline -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/.deps/install" -DProtobuf_PROTOC_EXECUTABLE="$PWD/.deps/install/bin/protoc"
+cmake -S baseline -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/.deps/install" -DProtobuf_PROTOC_EXECUTABLE="$PWD/.deps/install/bin/protoc"
 cmake --build build -j4
