@@ -45,7 +45,7 @@ func run() error {
 	}
 	cmd := exec.Command("go", "test", "-mod=readonly", "-race", "-count=1", "-timeout=90s", "-json", "-run", "^("+strings.Join(names, "|")+")$", ".", "./pkg/rtpreceiver", "./pkg/rtptime")
 	cmd.Env = os.Environ()
-	for key, value := range map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOFLAGS": "-mod=readonly", "GOCACHE": filepath.Join(root, ".author-cache/build"), "GOMODCACHE": filepath.Join(root, ".author-cache/mod"), "GOPROXY": "https://proxy.golang.org", "GOSUMDB": "sum.golang.org"} {
+	for key, value := range map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOFLAGS": "-mod=readonly", "GOCACHE": filepath.Join(root, ".cache/build"), "GOMODCACHE": filepath.Join(root, ".cache/mod"), "GOPROXY": "https://proxy.golang.org", "GOSUMDB": "sum.golang.org"} {
 		prefix := key + "="
 		filtered := cmd.Env[:0]
 		for _, s := range cmd.Env {
