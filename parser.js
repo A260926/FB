@@ -22,6 +22,24 @@ class Parser extends EventEmitter {
       '_newPacket'
     ]
 
+    this._resolveTopicAliases = false
+    this._topicAliasMaximum = 0
+    this._topicAliases = Object.create(null)
+    this._aliasModeFailed = false
+
+    if (this.settings.resolveTopicAliases) {
+      if (this.settings.protocolVersion !== 5) {
+        throw new TypeError('option resolveTopicAliases requires options.protocolVersion to be 5')
+      }
+      const maximum = this.settings.topicAliasMaximum
+      if (maximum !== undefined &&
+        (!Number.isInteger(maximum) || maximum < 0 || maximum > 65535)) {
+        throw new TypeError('option topicAliasMaximum must be an integer between 0 and 65535')
+      }
+      this._resolveTopicAliases = true
+      this._topicAliasMaximum = maximum === undefined ? 0 : maximum
+    }
+
     this._resetState()
     return this
   }
@@ -35,6 +53,12 @@ class Parser extends EventEmitter {
   }
 
   parse (buf) {
+    // In topic-alias resolution mode an alias error is terminal for the
+    // connection: no further packets are emitted until resetConnection().
+    if (this._resolveTopicAliases && this._aliasModeFailed) {
+      return this._list.length
+    }
+
     if (this.error) this._resetState()
 
     this._list.append(buf)
@@ -322,6 +346,50 @@ class Parser extends EventEmitter {
 
     packet.payload = this._list.slice(this._pos, packet.length)
     debug('_parsePublish: payload from buffer list: %o', packet.payload)
+
+    if (this._resolveTopicAliases) this._resolvePublishTopicAlias()
+  }
+
+  _resolvePublishTopicAlias () {
+    if (this.error) return
+    const packet = this.packet
+    const alias = packet.properties ? packet.properties.topicAlias : undefined
+    const hasAlias = alias !== undefined
+    const hasTopic = packet.topic.length > 0
+
+    if (hasAlias) {
+      if (alias === 0 || alias > this._topicAliasMaximum) {
+        return this._emitAliasError(new Error('Invalid topic alias'))
+      }
+      if (hasTopic) {
+        // Establish or override the mapping for this connection.
+        this._topicAliases[alias] = packet.topic
+      } else if (Object.prototype.hasOwnProperty.call(this._topicAliases, alias)) {
+        packet.topic = this._topicAliases[alias]
+      } else {
+        return this._emitAliasError(new Error('Topic alias is not mapped'))
+      }
+    } else if (!hasTopic) {
+      return this._emitAliasError(new Error('PUBLISH has neither topic name nor topic alias'))
+    }
+    // A non-empty topic without an alias passes through untouched.
+  }
+
+  _emitAliasError (err) {
+    // The offending packet is never emitted and no mapping is committed
+    // for it; the connection stays failed until resetConnection().
+    this._aliasModeFailed = true
+    this._emitError(err)
+  }
+
+  // Re-arm the parser for a new connection while keeping its listeners and
+  // configuration. Clears the error state, every topic-alias mapping and any
+  // unfinished frame; buffered half-packets are not carried over.
+  resetConnection () {
+    this._topicAliases = Object.create(null)
+    this._aliasModeFailed = false
+    this._resetState()
+    this._pos = 0
   }
 
   _parseSubscribe () {

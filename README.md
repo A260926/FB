@@ -87,6 +87,59 @@ parser.parse(Buffer.from([
 // Returns the number of bytes left in the parser
 ```
 
+### Parsing MQTT 5 topic aliases (offline replay)
+
+An offline collector that replays captured MQTT 5 bytes often needs every
+PUBLISH to carry its full topic, including packets that only contain a topic
+alias. Pass `resolveTopicAliases: true` together with the negotiated
+`topicAliasMaximum` (an integer from 0 to 65535, defaulting to 0, meaning no
+aliases are allowed). The parser then keeps a per-connection alias mapping:
+
+  * a PUBLISH with a non-empty topic and a `properties.topicAlias` creates or
+    overrides that alias mapping;
+  * a PUBLISH with an empty topic and a `properties.topicAlias` is emitted with
+    the mapped topic filled in;
+  * a PUBLISH with a non-empty topic and no alias passes through untouched.
+
+The payload, QoS, messageId and the original properties are preserved. This
+mode only accepts `protocolVersion: 5`; any other version, or a
+`topicAliasMaximum` outside 0..65535, makes `parser()` throw a `TypeError`.
+The default raw decoding behaviour is unchanged when the option is not set.
+
+```js
+const fs = require('node:fs')
+const mqtt = require('mqtt-packet')
+
+const parser = mqtt.parser({
+  protocolVersion: 5,
+  resolveTopicAliases: true,
+  topicAliasMaximum: 100
+})
+
+parser.on('packet', packet => {
+  if (packet.cmd === 'publish') {
+    // packet.topic is always the full topic here, even when the wire packet
+    // only carried properties.topicAlias.
+    routeToTopicPartition(packet.topic, packet.payload)
+  }
+})
+
+parser.on('error', err => {
+  // A bad alias (alias 0, alias above the maximum, an unmapped alias-only
+  // PUBLISH, or a PUBLISH with neither topic nor alias) ends the connection.
+  // The offending packet is not emitted and no mapping is stored for it;
+  // later input stays silent until resetConnection().
+  console.error('connection stream is invalid:', err)
+})
+
+fs.createReadStream('captured-mqtt5.bin').on('data', chunk => parser.parse(chunk))
+
+// When replaying a new connection on the same parser, drop the error state,
+// alias table and any unfinished frame while keeping the listeners and
+// configuration. Half a packet buffered before the reset is discarded.
+parser.resetConnection()
+```
+
 API
 ---
 
@@ -126,6 +179,24 @@ will emit:
     [packets](#packets)
   * `error`, if an error happens
 
+`opts` normally mirrors the parsed CONNECT packet. Two extra options are
+supported for MQTT 5 offline replay:
+
+  * `resolveTopicAliases` (boolean, default off): when true, topic aliases on
+    PUBLISH packets are resolved against a per-connection mapping. Requires
+    `opts.protocolVersion` to be `5`; otherwise a `TypeError` is thrown at
+    construction time.
+  * `topicAliasMaximum` (integer 0..65535, default `0`): the negotiated Topic
+    Alias Maximum. Only meaningful with `resolveTopicAliases`; any other value
+    makes `parser()` throw a `TypeError`. `0` means aliases are not allowed.
+
+In alias resolution mode, an alias of 0, an alias above `topicAliasMaximum`,
+an unmapped alias-only PUBLISH, or a PUBLISH with neither topic nor alias
+emits an `error`: the offending packet is not emitted, no mapping is stored
+for it, and all following input (in the same `parse()` call or later ones)
+stays silent until [`resetConnection()`](#resetconnection) is called. With the
+option disabled, parsing behaviour and error recovery are exactly as before.
+
 <a name="parse">
 
 #### Parser.parse(buffer)
@@ -135,7 +206,20 @@ are included. Returns the number of bytes left to parse.
 
 If an error happens, an `error` event will be emitted, but no `packet` events
 will be emitted after that. Calling `parse()` again clears the error and
-previous buffer, as if you created a new `Parser`.
+previous buffer, as if you created a new `Parser`. In alias resolution mode
+this recovery is disabled for alias errors; use `resetConnection()` instead.
+
+<a name="resetconnection">
+
+#### Parser.resetConnection()
+
+Available on parsers created with `resolveTopicAliases: true`. Resets the
+parser as if a new MQTT connection had started, while keeping the event
+listeners and configuration: the error state, the whole alias mapping and any
+unfinished frame are cleared, including half a packet already buffered. After
+the reset, previously known aliases must be re-bound by a full PUBLISH
+carrying both topic and alias before alias-only packets can be resolved
+again.
 
 Packets
 -------

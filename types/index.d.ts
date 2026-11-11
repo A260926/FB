@@ -238,15 +238,38 @@ export declare type Packet = IConnectPacket |
   IPubrecPacket |
   IAuthPacket
 
+export interface ParserOptions {
+  protocolVersion?: 4 | 5 | 3
+  /**
+   * MQTT 5 only. When enabled, PUBLISH packets carrying only a topic alias
+   * have their topic resolved from a per-connection alias mapping.
+   * Throws a TypeError unless protocolVersion is 5.
+   */
+  resolveTopicAliases?: boolean
+  /**
+   * Negotiated MQTT 5 Topic Alias Maximum. Integer from 0 to 65535,
+   * defaults to 0 (no aliases allowed). Only used with resolveTopicAliases.
+   */
+  topicAliasMaximum?: number
+  [key: string]: any
+}
+
 export interface Parser extends EventEmitter {
   on(event: 'packet', callback: (packet: Packet) => void): this
 
   on(event: 'error', callback: (error: any) => void): this
 
   parse(buffer: Buffer, opts?: Object): number
+
+  /**
+   * Reset connection state of a parser created with resolveTopicAliases.
+   * Keeps event listeners and configuration, but clears the error state,
+   * topic-alias mappings and any unfinished frame.
+   */
+  resetConnection(): void
 }
 
-export declare function parser(opts?: Object): Parser
+export declare function parser(opts?: ParserOptions): Parser
 
 export declare function generate(packet: Packet, opts?: Object): Buffer
 
