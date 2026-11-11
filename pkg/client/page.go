@@ -27,6 +27,13 @@ type Request struct {
 	URL     string            // Relative or absolute URL
 	Body    any               // Will be JSON-marshaled if non-nil
 	Headers map[string]string // Additional headers
+
+	// Merge marks a next-link request carrying the STAC Item Search
+	// "merge": true foreign member. When following pagination, its body and
+	// headers are overlaid on a snapshot of the iteration's initial request
+	// instead of replacing it. It has no effect on requests sent directly via
+	// Client.Do.
+	Merge bool
 }
 
 // Get creates a GET request for the given path.
@@ -75,15 +82,43 @@ func Iterate[V any](ctx context.Context, cli *Client, initial *Request, decoder 
 //
 // The iterator detects pagination cycles (a next-link revisiting a previously
 // fetched URL+method+body) and enforces the client's MaxPages limit.
+//
+// Next-links carrying "merge": true (see Request.Merge) are overlaid onto a
+// snapshot of the initial request taken here, so each iterator gets an
+// independent merge baseline; links without it keep the historical
+// replacement semantics where the link's request is sent as-is.
 func IteratePages[V any](ctx context.Context, cli *Client, initial *Request, decoder PageDecoder[V]) iter.Seq2[*PageResult[V], error] {
 	return func(yield func(*PageResult[V], error) bool) {
+		if initial == nil {
+			return
+		}
+		// Freeze the initial request once. It is the fixed baseline for every
+		// merge=true next-link in this run, and nothing returned by the server
+		// can be written back into the caller's Request or its maps/slices.
+		baseline, err := snapshotMerge(initial)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+
 		seen := map[string]struct{}{}
 		pages := 0
-		req := initial
-		for req != nil {
+		next := initial
+		for next != nil {
 			if cli.maxPages > 0 && pages >= cli.maxPages {
 				yield(nil, fmt.Errorf("%w (limit=%d)", ErrPaginationLimit, cli.maxPages))
 				return
+			}
+
+			// Resolve the merge before any URL work or network call so that
+			// the cycle key and host check describe what is actually sent.
+			req := next
+			if pages > 0 && next.Merge {
+				req, err = baseline.applyMerge(next)
+				if err != nil {
+					yield(nil, err)
+					return
+				}
 			}
 
 			resolved, err := cli.resolveURL(req.URL)
@@ -120,7 +155,7 @@ func IteratePages[V any](ctx context.Context, cli *Client, initial *Request, dec
 				return
 			}
 
-			req = page.Next
+			next = page.Next
 		}
 	}
 }
@@ -265,7 +300,12 @@ func (c *Client) resolveURL(path string) (*url.URL, error) {
 }
 
 // LinkToRequest converts a STAC link to a Request, honoring optional
-// "method", "body", and "headers" foreign members on the link.
+// "method", "body", "headers", and "merge" foreign members on the link.
+//
+// "merge" is only meaningful while following pagination: IteratePages
+// overlays a merge=true link's body and headers onto the initial request of
+// the iteration. Calling this function alone still returns a standalone
+// Request suitable for Client.Do.
 func LinkToRequest(link *stac.Link) *Request {
 	if link == nil {
 		return nil
@@ -277,8 +317,19 @@ func LinkToRequest(link *stac.Link) *Request {
 	if m, ok := link.AdditionalFields["method"].(string); ok {
 		req.Method = strings.ToUpper(m)
 	}
-	if b := link.AdditionalFields["body"]; b != nil {
-		req.Body = b
+	// Presence matters: an explicit "body": null is different from an absent
+	// body. Represent it as a raw null so pagination merge can reject it
+	// (null is not a mergeable object) instead of silently treating it as
+	// missing.
+	if b, ok := link.AdditionalFields["body"]; ok {
+		if b == nil {
+			req.Body = json.RawMessage("null")
+		} else {
+			req.Body = b
+		}
+	}
+	if m, ok := link.AdditionalFields["merge"].(bool); ok {
+		req.Merge = m
 	}
 	if h, ok := link.AdditionalFields["headers"].(map[string]any); ok {
 		req.Headers = make(map[string]string, len(h))
@@ -293,6 +344,11 @@ func LinkToRequest(link *stac.Link) *Request {
 
 // pageKey builds a stable key for a request: METHOD + canonical URL +
 // sha256(body) so that two requests with identical effects collide.
+//
+// The body is round-tripped through any before hashing so that struct- and
+// map-shaped bodies carrying the same JSON content (e.g. an initial
+// SearchParams request and its merge=true reconstruction) produce the same
+// key regardless of member ordering.
 func pageKey(method string, u *url.URL, body any) string {
 	if method == "" {
 		method = http.MethodGet
@@ -306,6 +362,15 @@ func pageKey(method string, u *url.URL, body any) string {
 	if err != nil {
 		// If we can't marshal, fall back to URL only — the cycle guard is
 		// best-effort.
+		return method + " " + u2.String()
+	}
+	var canonical any
+	if err := json.Unmarshal(b, &canonical); err != nil {
+		return method + " " + u2.String()
+	}
+	if b, err = json.Marshal(canonical); err == nil {
+		// keep the canonical bytes
+	} else {
 		return method + " " + u2.String()
 	}
 	sum := sha256.Sum256(b)

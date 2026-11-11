@@ -43,8 +43,20 @@ func TestPostMergeBaseline(t *testing.T) {
 		}
 		ids = append(ids, it.ID)
 	}
-	if !reflect.DeepEqual(ids, []string{"first", "unfiltered"}) || len(bodies) != 2 || bodies[0]["collections"] == nil || bodies[1]["collections"] != nil {
+	if len(bodies) != 2 {
+		t.Fatalf("expected 2 requests, got %d: %v", len(bodies), bodies)
+	}
+	// Both pages must stay inside the original search scope.
+	if !reflect.DeepEqual(ids, []string{"first", "matched"}) {
 		t.Fatalf("ids=%v bodies=%v", ids, bodies)
 	}
-	t.Log("BASELINE_STAC_POST_MERGE_DROPS_COLLECTION_AND_FILTER")
+	if bodies[0]["collections"] == nil || bodies[0]["filter"] == nil {
+		t.Fatalf("initial request lost search scope: %v", bodies[0])
+	}
+	if bodies[1]["collections"] == nil || bodies[1]["filter"] == nil {
+		t.Fatalf("merged next request dropped collections/filter: %v", bodies[1])
+	}
+	if got := bodies[1]["token"]; got != "t2" {
+		t.Fatalf("merged next request missing next-link token, got %v in %v", got, bodies[1])
+	}
 }

@@ -92,6 +92,13 @@
 // a page already fetched) and ErrPaginationLimit (configured MaxPages
 // reached — default 10000).
 //
+// A next-link carrying the STAC Item Search "merge": true foreign member is
+// overlaid onto a snapshot of the iteration's initial request: the link's
+// top-level body fields replace same-named initial fields (arrays are not
+// concatenated, nested expressions are not recursed into, an explicit null
+// stays null) and its headers override case-insensitively. Links without
+// "merge" keep replacement semantics, sending the link's request as-is.
+//
 // Bodies are size-limited (default 64 MiB) to mitigate memory exhaustion;
 // override with WithMaxBodyBytes.
 //

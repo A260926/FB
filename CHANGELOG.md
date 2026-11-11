@@ -34,6 +34,11 @@ First stable release. STAC API 1.0.0 client targeting Go 1.23+.
   opt-in by importing `pkg/client/s3`.
 - Fuzz tests for `Item`, `Collection`, `Catalog`, and `Link` unmarshal.
 - OGC API Features Part 1 conformance constants.
+- STAC Item Search `merge` next-links: pagination overlays a `merge: true`
+  link's body and headers onto a per-iteration snapshot of the initial
+  request (top-level fields only; explicit JSON `null` preserved; headers
+  case-insensitive), covering `Search`, `SearchPages`, and `IteratePages`
+  for struct, map, and `json.RawMessage` bodies.
 
 ### Changed (breaking from pre-1.0)
 

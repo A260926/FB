@@ -102,6 +102,42 @@ params := stacclient.SearchParams{
 For CQL2-text on `GET /search`, encode via `cql2/text.Encode` and set
 `FilterLang: "cql2-text"`.
 
+### POST search pagination (`merge` next-links)
+
+STAC Item Search servers may return a `rel="next"` link whose body carries
+only a continuation token. When the link includes `"merge": true`, the client
+overlays the link's body and headers onto the **initial** search request, so
+the original `collections`, `filter`, `limit`, and other scope fields are
+re-sent on every page instead of being dropped. Links without `"merge"` keep
+the plain replacement behavior (the link's body is sent verbatim):
+
+```go
+params := stacclient.SearchParams{
+    Collections: []string{"sentinel-2-l2a"},
+    FilterLang:  "cql2-json",
+    // Filter built with go-cql2, passed as json.RawMessage.
+    Filter: json.RawMessage(`{"op":"<","args":[{"property":"eo:cloud_cover"},10]}`),
+    Limit:  50,
+}
+
+// No manual parameter juggling on the caller side: Search, SearchPages, and
+// the generic IteratePages all honor the next-link "merge" member.
+for page, err := range cli.SearchPages(ctx, params) {
+    if err != nil {
+        return err
+    }
+    for _, it := range page.Items {
+        fmt.Println(it.ID)
+    }
+}
+```
+
+Merging is top-level only: same-named fields are replaced wholesale (arrays
+are not concatenated and nested CQL expressions are not blended), an explicit
+JSON `null` stays `null`, and headers override case-insensitively. A
+`merge` link whose body is not a JSON object (an array or `null`) returns an
+error rather than sending a request outside the original search scope.
+
 ## Authentication
 
 ```go
