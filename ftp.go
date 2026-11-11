@@ -51,7 +51,11 @@ const timeFormat = "20060102150405"
 
 // ServerConn represents the connection to a remote FTP server.
 // A single connection only supports one in-flight data connection.
-// It is not safe to be called concurrently.
+// It is not safe to be called concurrently. This also applies to a
+// [Walker] created with [ServerConn.Walk] or [ServerConn.WalkWithOptions]:
+// walk options, such as [WalkOptions.OnError], do not make the connection
+// reusable concurrently, and every command (including the ones issued from
+// an OnError callback) still runs on this single connection.
 type ServerConn struct {
 	options *dialOptions
 	conn    *textproto.Conn // connection wrapper for text protocol
@@ -1110,6 +1114,20 @@ func (c *ServerConn) RemoveDir(path string) error {
 
 // Walk prepares the internal walk function so that the caller can begin traversing the directory
 func (c *ServerConn) Walk(root string) *Walker {
+	return c.WalkWithOptions(root, nil)
+}
+
+// WalkWithOptions behaves like [ServerConn.Walk] but lets the caller choose
+// how a failure while listing a directory is handled through the given
+// options. A nil options value, or a nil WalkOptions.OnError callback,
+// reproduces the [ServerConn.Walk] behavior: the first error stops the walk
+// and is returned by [Walker.Err].
+//
+// The traversal itself is unchanged: it is depth-first, follows the listing
+// order returned by the server, does not sort entries, run commands
+// concurrently or follow symbolic links. The connection still supports only
+// one in-flight data connection, see [ServerConn].
+func (c *ServerConn) WalkWithOptions(root string, options *WalkOptions) *Walker {
 	w := new(Walker)
 	w.serverConn = c
 
@@ -1119,6 +1137,10 @@ func (c *ServerConn) Walk(root string) *Walker {
 
 	w.root = root
 	w.descend = true
+
+	if options != nil {
+		w.onError = options.OnError
+	}
 
 	return w
 }

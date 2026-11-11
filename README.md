@@ -60,3 +60,51 @@ defer r.Close()
 buf, err := ioutil.ReadAll(r)
 println(string(buf))
 ```
+
+## Walk a directory tree, skipping inaccessible branches ##
+
+Some servers list subdirectories that then reject `LIST`/`MLSD` with a
+`550` reply. `Walk` stops on the first such error; `WalkWithOptions` lets an
+`OnError` callback decide whether to skip the failed branch and keep
+discovering the sibling entries that were already returned by the parent
+listing.
+
+Only a plain `textproto.Error` with status code `550` can be skipped. Any
+other failure (for example a `421` reply, a broken connection or a data
+transfer error) stops the walk even if the callback returns `true`; a `550`
+joined with another error is not skippable either. When the callback returns
+`true`, `Err` ends up `nil` and the callback is responsible for recording the
+failure; returning `false` (or passing `nil` options) keeps the legacy
+behavior of `Walk`.
+
+```go
+var skippedBranches []string
+
+w := c.WalkWithOptions("/", &ftp.WalkOptions{
+    OnError: func(dir string, err error) bool {
+        var tpErr *textproto.Error
+        if errors.As(err, &tpErr) && tpErr.Code == ftp.StatusFileUnavailable {
+            // Record the failed branch and continue the walk with its
+            // already queued siblings instead of stopping.
+            skippedBranches = append(skippedBranches, dir)
+            return true
+        }
+        // Any other error is not recoverable: stop and expose it via Err.
+        return false
+    },
+})
+
+for w.Next() {
+    fmt.Println(w.Path(), w.Stat().Type)
+}
+if err := w.Err(); err != nil {
+    log.Fatal(err)
+}
+```
+
+A `ServerConn` still supports only one in-flight data connection and is not
+safe for concurrent use; walk options do not change that. Everything,
+including commands issued from the `OnError` callback, runs on the single
+control connection, and the traversal remains depth-first in the server's
+listing order, without sorting, concurrency or symlink following.
+
