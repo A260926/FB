@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 test -s src/dynamic_any_test.cc
-cmake -S userfb_baseline -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/.deps/install" -DProtobuf_PROTOC_EXECUTABLE="$PWD/.deps/install/bin/protoc"
+cmake -S baseline -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/.deps/install" -DProtobuf_PROTOC_EXECUTABLE="$PWD/.deps/install/bin/protoc"
 cmake --build build --target dynamic_any_tests old_mutator_tests -j4
 filter='DynamicAny.RuntimeFix:DynamicAny.MutationAndCrossover:DynamicAny.OpaqueAndReplacement:DynamicAny.CallbackOrderAndIsolation'
 ./build/dynamic_any_tests --gtest_list_tests --gtest_filter="$filter" > build/dynamic-any-list.txt
