@@ -84,4 +84,34 @@ scrapeIt("https://ionicabizau.net", {
         }
     })
     console.log(data)
-})
+});
+
+// Linked extraction: each catalog record carries its own detail-page object
+(async () => {
+    interface ArticleRow {
+        title: string
+        detail: {
+            title: string
+            tags: string[]
+        } | null
+    }
+    const { data } = await scrapeIt<{ articles: ArticleRow[] }>("https://example.com/articles", {
+        articles: {
+            listItem: "article"
+          , data: {
+                title: "h2"
+              , detail: {
+                    selector: "a.detail"
+                  , attr: "href"
+                  , follow: {
+                        data: {
+                            title: "h1"
+                          , tags: { listItem: ".tag" }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    console.log(data.articles[0]?.detail?.title)
+})();

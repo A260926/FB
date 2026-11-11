@@ -111,7 +111,7 @@ Here are some frequent questions and their answers.
 ### 2. Crawling
 
 
-There is no fancy way to crawl pages with `scrape-it`. For simple scenarios, you can parse the list of urls from the initial page and then, using Promises, parse each page. Also, you can use a different crawler to download the website and then use the `.scrapeHTML` method to scrape the local files.
+There is no fancy way to crawl pages with `scrape-it`. For simple scenarios, declare a `follow` field on the link selector to fetch and scrape the linked page declaratively (see [Linked extraction](#linked-extraction-follow)); for anything more involved you can still parse the list of urls from the initial page and then, using Promises, parse each page. Also, you can use a different crawler to download the website and then use the `.scrapeHTML` method to scrape the local files.
 
 ### 3. Local files
 
@@ -231,6 +231,55 @@ scrapeIt("https://ionicabizau.net", {
 })()
 ```
 
+### Linked extraction (`follow`)
+
+A field can declare `follow` to fetch the page behind the selected link and
+replace the raw attribute value with the object extracted from that page.
+Two catalog records below each keep their own detail object — sibling records
+never share results, even when they link to the same URL:
+
+```js
+const { data } = await scrapeIt("https://example.com/articles", {
+    articles: {
+        listItem: "article"
+      , data: {
+            title: "h2"
+          , detail: {
+                selector: "a.detail"
+              , attr: "href"
+              , follow: {
+                    data: {
+                        title: "h1"
+                      , tags: { listItem: ".tag" }
+                    }
+                }
+            }
+        }
+    }
+})
+// { articles: [
+//     { title: "First",  detail: { title: "First article",  tags: ["js"] } },
+//     { title: "Second", detail: { title: "Second article", tags: [] } }
+// ] }
+```
+
+- Relative links resolve against the page's final response URL (after
+  redirects); fragments are stripped and only HTTP(S) links are followed.
+  An empty link or a selector matching nothing yields `null`.
+- Detail pages are fetched with fresh GET requests — the root request's POST
+  body is never inherited. Any failure rejects the whole call; the error
+  carries the field path (e.g. `articles[1].detail`) and keeps `cause`.
+- There is no global de-duplication: the same URL in sibling records is
+  requested and extracted once per record. Cycle detection only looks at the
+  current ancestor chain (request and final response URLs, fragment ignored,
+  query kept): link loops are refused before the request, redirect loops
+  after the response but before extraction.
+- `follow` cannot be combined with `how` or `texteq` (config error before any
+  request); a field's `convert` runs once after the detail object is complete
+  and still receives the original link node.
+- `scrapeHTML` stays synchronous and never sends requests — a schema with
+  `follow` makes it throw `ASYNC_FOLLOW_REQUIRED`. Use async `scrapeIt`.
+
 
 
 
@@ -288,6 +337,13 @@ For the format of the selector, please refer to the [Selectors section of the Ch
          - `texteq` (Number): If provided, it will select the *nth* direct text child.
            Deep text child selection is not possible yet.
            Overwrites the `how` key.
+         - `follow` (Object): Declares linked extraction. When present, the
+           field value is no longer the selected attribute: the first link
+           (selected with `selector`, `eq`, `closest`; `attr` defaults to
+           `href`) is fetched with a new GET request and the field becomes the
+           object extracted from that page:
+            - `data` (Object): The schema applied to the linked page. It may
+              contain nested `data`, `listItem` and further `follow` fields.
          - `listItem` (Object): An object, keeping the recursive schema of
            the `listItem` object. This can be used to create nested lists.
 

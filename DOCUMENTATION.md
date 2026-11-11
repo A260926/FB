@@ -46,6 +46,13 @@ For the format of the selector, please refer to the [Selectors section of the Ch
          - `texteq` (Number): If provided, it will select the *nth* direct text child.
            Deep text child selection is not possible yet.
            Overwrites the `how` key.
+         - `follow` (Object): Declares linked extraction. When present, the
+           field value is no longer the selected attribute: the first link
+           (selected with `selector`, `eq`, `closest`; `attr` defaults to
+           `href`) is fetched with a new GET request and the field becomes the
+           object extracted from that page:
+            - `data` (Object): The schema applied to the linked page. It may
+              contain nested `data`, `listItem` and further `follow` fields.
          - `listItem` (Object): An object, keeping the recursive schema of
            the `listItem` object. This can be used to create nested lists.
 
@@ -91,6 +98,57 @@ For the format of the selector, please refer to the [Selectors section of the Ch
        }
   }
   ```
+
+  **Linked extraction example** — two catalog records, each carrying the
+  object extracted from its own detail page:
+  ```js
+  const { data } = await scrapeIt("https://example.com/articles", {
+      articles: {
+          listItem: "article"
+        , data: {
+              title: "h2"
+            , detail: {
+                  selector: "a.detail"
+                , attr: "href"
+                , follow: {
+                      data: {
+                          title: "h1"
+                        , tags: { listItem: ".tag" }
+                      }
+                  }
+              }
+          }
+      }
+  })
+  // { articles: [
+  //     { title: "First",  detail: { title: "First article",  tags: ["js"] } },
+  //     { title: "Second", detail: { title: "Second article", tags: [] } }
+  // ] }
+  ```
+
+  Linked extraction rules:
+
+   - Relative links are resolved against the final response URL of the page
+     that contains the link (after redirects), never against the initially
+     requested URL or the HTML `<base>` tag. Fragments are removed before the
+     request and only `http:`/`https:` links are followed. An empty link or a
+     selector that matches nothing produces `null`.
+   - Every detail page is a brand new GET request; a POST body on the root
+     request is never inherited. If any detail request fails, the whole call
+     rejects with an error carrying the field path (e.g. `articles[1].detail`)
+     and the original error as `cause`.
+   - The same URL used by different sibling records is still fetched once per
+     record — there is no global de-duplication. Cycle detection only compares
+     against the request and final response URLs of the current ancestor
+     chain: a link back to an ancestor is rejected before the request, while a
+     redirect back to an ancestor is rejected after the response but before
+     extracting it.
+   - `follow` cannot be combined with `how` or `texteq`; such schemas fail
+     before any request is made. A field `convert` runs once after the detail
+     object is complete and still receives the original link node.
+   - `scrapeHTML` is synchronous and never performs requests: schemas
+     containing `follow` make it throw an error with the code
+     `ASYNC_FOLLOW_REQUIRED`. Use the async `scrapeIt(url, opts)` instead.
 
 #### Return
 - **Object** The scraped data.
