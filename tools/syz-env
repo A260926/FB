@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Copyright 2020 syzkaller project authors. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+# syz-env is a wrapper around gcr.io/syzkaller/env container,
+# which includes all tools necessary to develop/test syzkaller.
+# It's recommended to create an alias for this script:
+#
+#	alias syz-env="$(go env GOPATH)/src/github.com/google/syzkaller/tools/syz-env"
+#
+# Then it can be used to wrap almost any make invocation as:
+#
+#	syz-env make format
+#	syz-env make presubmit
+#	syz-env make extract SOURCEDIR=~/linux
+#
+# Or you may run the shell inside of the container with just syz-env.
+#
+# Note: this way everything runs inside of the container
+# and uses all tools bundled in the container rather than host tools.
+#
+# Note: syz-env assumes a sudo-less Docker is installed, see:
+# https://docs.docker.com/engine/install
+# https://docs.docker.com/engine/install/linux-postinstall
+# (Googlers see go/docker).
+
+COMMAND=""
+if [ -n $http_proxy ]; then
+	BUILDARGS+=" --build-arg http_proxy=$http_proxy"
+	DOCKERARGS+=" --env http_proxy=$http_proxy"
+fi
+if [ -n $https_proxy ]; then
+	BUILDARGS+=" --build-arg https_proxy=$https_proxy"
+	DOCKERARGS+=" --env https_proxy=$https_proxy"
+fi
+if [ -n $no_proxy ]; then
+	BUILDARGS+=" --build-arg no_proxy=$no_proxy"
+	DOCKERARGS+=" --env no_proxy=$no_proxy"
+fi
+
+for ARG in "$@"; do
+	while IFS='=' read KEY VAL; do
+		# If we have a kernel path passed in, we mount it in the container
+		# at /syzkaller/kernel and fix up SOURCEDIR argument.
+		if [ "$KEY" == "SOURCEDIR" ]; then
+			DOCKERARGS+=" --volume $VAL:/syzkaller/kernel:z"
+			COMMAND+=" SOURCEDIR=/syzkaller/kernel"
+		else
+			COMMAND+=" $ARG"
+		fi
+	done <<< "$ARG"
+done
+if [ "$CI" == "" ]; then
+	# This gives interactive shell and allows to abort commands with Ctrl+C.
+	DOCKERARGS+=" -it"
+fi
+if [ "$COMMAND" == "" ]; then
+	COMMAND="bash"
+fi
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+IMAGE="env"
+if [ "$(basename -- "$0")" == "syz-old-env" ]; then
+        IMAGE="old-env"
+fi
+
+# If we're running rootless docker, files owned by the host user appear within the
+# container as being owned by root.
+#
+# If we're running regular rootful docker, map the host user to root (uid 0) and
+# the syzkaller sandbox user (uid 2000) in a user namespace so created/modified
+# files in the workspace keep the host user's ownership while sandbox tests can
+# switch between root and the unprivileged syzkaller user.
+DOCKERARGS+=" --cap-add=SYS_ADMIN"
+if [ ! "$(docker info -f "{{println .SecurityOptions}}" | grep rootless)" ]; then
+	DOCKERARGS+=" --env SYZ_HOST_UID=$(id -u ${USER}) --env SYZ_HOST_GID=$(id -g ${USER})"
+fi
+
+# If the repo is checked out as a git worktree, its .git is a file that points
+# to the main repository .git dir (which lies outside of the repo). Mount it at
+# the same path inside of the container, otherwise git won't work there.
+if [ -f "$SCRIPT_DIR/../.git" ]; then
+	GIT_DIR="$(cd "$SCRIPT_DIR/.." && git rev-parse --path-format=absolute --git-common-dir)"
+	DOCKERARGS+=" --volume $GIT_DIR:$GIT_DIR:z"
+fi
+
+# Build or update docker image
+if [ ! -z "$SYZ_ENV_BUILD" ]; then
+	IMAGE_NAME="syz-$IMAGE"
+	docker build "$SCRIPT_DIR/docker/$IMAGE" --tag "$IMAGE_NAME" ${BUILDARGS[@]}
+else
+	IMAGE_NAME="gcr.io/syzkaller/$IMAGE"
+	docker pull -q "$IMAGE_NAME"
+fi
+
+# Run everything as the host user mapped to root inside the container.
+docker run \
+	--rm \
+	--volume "$SCRIPT_DIR/..:/syzkaller/gopath/src/github.com/google/syzkaller:z" \
+	--volume "$HOME/.cache:/syzkaller/.cache:z" \
+	--volume "/var/run/docker.sock":"/var/run/docker.sock" \
+	--workdir /syzkaller/gopath/src/github.com/google/syzkaller \
+	--env HOME=/syzkaller \
+	--env GOPATH=/syzkaller/gopath:/gopath \
+	--env GOPROXY \
+	--env FUZZIT_API_KEY \
+	--env GITHUB_REF \
+	--env GITHUB_SHA \
+	--env GITHUB_PR_HEAD_SHA \
+	--env GITHUB_PR_BASE_SHA \
+	--env GITHUB_PR_COMMITS \
+	--env CI \
+	${DOCKERARGS[@]} \
+	"$IMAGE_NAME" -c '
+		if [ -n "$SYZ_HOST_UID" ] && [ "$SYZ_HOST_UID" != "0" ]; then
+			exec unshare --user --keep-caps \
+				--map-users=0:"$SYZ_HOST_UID":1 --map-users=2000:2000:1 \
+				--map-groups=0:"$SYZ_HOST_GID":1 --map-groups=2000:2000:1 \
+				setpriv --reuid=0 --regid=0 --clear-groups bash -c "$1"
+		fi
+		exec bash -c "$1"
+	' -- "$COMMAND"

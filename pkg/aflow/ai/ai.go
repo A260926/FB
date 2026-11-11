@@ -1,0 +1,241 @@
+// Copyright 2026 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// Package ai contains common workflow definitions.
+package ai
+
+import "time"
+
+type WorkflowType string
+
+// Note: don't change string values of these types w/o a good reason.
+// They are stored in the dashboard database as strings.
+const (
+	WorkflowPatching           = WorkflowType("patching")
+	WorkflowPatchIteration     = WorkflowType("patch-iteration")
+	WorkflowModeration         = WorkflowType("moderation")
+	WorkflowAssessmentKCSAN    = WorkflowType("assessment-kcsan")
+	WorkflowAssessmentSecurity = WorkflowType("assessment-security")
+	WorkflowRepro              = WorkflowType("repro")
+	WorkflowReproC             = WorkflowType("repro-c")
+	WorkflowPatchTriage        = WorkflowType("patch-triage")
+	WorkflowSeedGen            = WorkflowType("seed-gen")
+	WorkflowSeedGenFileLine    = WorkflowType("seed-gen-file-line")
+	WorkflowFindingTriage      = WorkflowType("finding-triage")
+	WorkflowBisectCause        = WorkflowType("bisect-cause")
+	WorkflowBisectFix          = WorkflowType("bisect-fix")
+)
+
+// Outputs of various workflow types.
+// Should be changed carefully since old outputs are stored in the dashboard database.
+
+type PatchIterationOutputs struct {
+	// Base repo/commit for the patch.
+	KernelRepo       string
+	KernelBranch     string
+	KernelCommit     string
+	PatchDescription string
+	PatchDiff        string
+	Recipients       []Recipient
+	Fixes            FixesTag
+
+	ReviewedBy  []string
+	AckedBy     []string
+	TestedBy    []string
+	ReportedBy  []string
+	SuggestedBy []string
+
+	// To/Cc changes requested by reviewers: email addresses to add to Cc and to remove from To/Cc.
+	// They are not applied to Recipients, the dashboard keeps track of them.
+	AddedCc   []string `json:",omitempty"`
+	RemovedCc []string `json:",omitempty"`
+
+	NewChangeLog string
+	Replies      []CommentReply
+}
+
+type CommentReply struct {
+	ReplyTo string // ExtID of the original comment.
+	Quote   string
+	Text    string
+}
+
+type PatchHistoryEntry struct {
+	Version     int
+	Diff        string
+	Description string
+	ChangeLog   string            // What changed in this version compared to the previous one.
+	Comments    []ExternalComment // Comments specifically replying to this version.
+}
+
+type ExternalComment struct {
+	ExtID     string // Unique identifier for the comment (e.g. email Message-ID).
+	Author    string
+	Body      string
+	Timestamp time.Time
+	BotReply  bool // true if this comment was posted by the bot itself.
+	New       bool // true if this comment needs to be addressed in the current iteration.
+}
+
+type PatchingOutputs struct {
+	// Base repo/commit for the patch.
+	KernelRepo       string
+	KernelBranch     string
+	KernelCommit     string
+	PatchDescription string
+	PatchDiff        string
+	Recipients       []Recipient
+	Fixes            FixesTag
+
+	ReviewedBy  []string
+	AckedBy     []string
+	TestedBy    []string
+	ReportedBy  []string
+	SuggestedBy []string
+}
+
+type FixesTag struct {
+	Hash        string
+	Title       string `json:",omitempty"`
+	AuthorName  string `json:",omitempty"`
+	AuthorEmail string `json:",omitempty"`
+}
+
+type Recipient struct {
+	Name  string
+	Email string
+	To    bool // whether the recipient should be on the To or Cc line
+}
+
+type AssessmentKCSANOutputs struct {
+	Benign      bool
+	Explanation string
+}
+
+const (
+	InfoLeakNone      = "none"
+	InfoLeakPointers  = "pointers"
+	InfoLeakArbitrary = "arbitrary"
+)
+
+// AssessmentSecurityOutputs holds security assessment results.
+// Note: this struct is used in dashboard config predicates.
+// Adding new fields is OK, but deleting/renaming fields is likely to require special care
+// (add new fields, update configs, remove old fields).
+type AssessmentSecurityOutputs struct {
+	Explanation       string
+	Exploitable       bool
+	DenialOfService   bool
+	Unprivileged      bool
+	UserNamespace     bool
+	VMGuestTrigger    bool
+	VMHostTrigger     bool
+	NetworkTrigger    bool
+	RemoteTrigger     bool
+	PeripheralTrigger bool
+	FilesystemTrigger bool
+
+	RootCauseSummary  string   `json:",omitempty"`
+	RootCauseAnalysis string   `json:",omitempty"`
+	RootCauseFiles    []string `json:",omitempty"`
+	MemoryCorruption  bool     `json:",omitempty"`
+	InfoLeak          string   `json:",omitempty"`
+	FuzzingArtifact   bool     `json:",omitempty"`
+	RequiredCaps      []string `json:",omitempty"`
+	NetworkNeedsSetup bool     `json:",omitempty"`
+}
+
+type ModerationOutputs struct {
+	Actionable  bool
+	Explanation string
+}
+
+// BisectOutputs holds the results common to the bisect-cause and bisect-fix workflows.
+type BisectOutputs struct {
+	// KernelCommit is the commit the bisection ran on (for bisect-fix, the newer commit
+	// the fix was searched up to).
+	KernelCommit string
+	// Candidate commits that introduced (bisect-cause) or fixed (bisect-fix) the bug,
+	// ordered by relevance with the primary commit first; empty if not identified.
+	Commits         []Commit `json:",omitempty"`
+	BisectReasoning string   `json:",omitempty"`
+}
+
+type BisectCauseOutputs struct {
+	BisectOutputs
+}
+
+type BisectFixOutputs struct {
+	BisectOutputs
+	// BugStillPresent is set if the bug is determined to still be present at KernelCommit,
+	// in which case Commits is empty.
+	BugStillPresent bool `json:",omitempty"`
+}
+
+type Commit struct {
+	Hash        string
+	Title       string
+	AuthorName  string
+	AuthorEmail string
+	Date        time.Time
+	Recipients  []Recipient `json:",omitempty"`
+}
+
+type ReproOutputs struct {
+	ReproSyz              string
+	ReproOpts             string
+	SyzkallerCommit       string
+	Reproduced            bool
+	ReproducedCrashReport string
+	OtherCrashReports     []string
+}
+
+type ReproCOutputs struct {
+	ReproC                string
+	Reproduced            bool
+	ReproducedBugTitle    string
+	ReproducedCrashReport string
+	OtherCrashReports     []string
+	EquivalenceAnalysis   string
+}
+
+type PatchTriageArgs struct {
+	TargetArch string
+	KernelSrc  string
+}
+
+type PatchTriageResult struct {
+	WorthFuzzing   bool
+	NeedsKMSAN     bool
+	KMSANReasoning string
+	// TODO: this is temporarily here. We should do it at the beginning of the fuzzing step,
+	// where we do have the built binary and can extract exact symbol names / KCOV coverage points.
+	FocusSymbols  []string
+	EnableConfigs []string
+	Reasoning     string
+}
+
+type SeedGenOutputs struct {
+	SeedSyz string
+	Success bool
+	GiveUp  bool
+	Reason  string
+}
+
+type SeriesPatch struct {
+	Seq   int
+	Title string
+	Body  string
+}
+
+type FindingTriageArgs struct {
+	TargetArch  string
+	KernelSrc   string
+	Patches     []SeriesPatch `json:",omitempty"`
+	CrashReport string
+}
+
+type FindingTriageResult struct {
+	Introduced bool   `jsonschema:"True only if crash was introduced by the tested patch series."`
+	Reasoning  string `jsonschema:"Detailed explanation analyzing crash report against patch diffs."`
+}

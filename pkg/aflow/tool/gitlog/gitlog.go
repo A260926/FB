@@ -1,0 +1,274 @@
+// Copyright 2026 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// Package gitlog provides tools for inspecting git commit history and blamelists.
+package gitlog
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/google/syzkaller/pkg/aflow"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/pkg/vcs"
+)
+
+var (
+	sinceRegex = regexp.MustCompile(`^\d+\s+(years?|months?|weeks?|days?)$`)
+	// Rejects values starting with '-' or containing whitespace that could smuggle CLI options.
+	revRegex = regexp.MustCompile(`^[^-\s]\S*$`)
+)
+
+func isValidSince(since string) bool {
+	return sinceRegex.MatchString(strings.TrimSpace(since))
+}
+
+var (
+	ToolLog = aflow.NewFuncTool("git-log", gitLog, `
+The tool executes git log on the kernel sources and returns the output.
+Use it to find commits that introduced or modified specific code, symbols, or matched a message.
+
+Supported search modes (you must provide at least one):
+ - Code search (-G): use 'CodeRegexp' to find commits that introduced or removed code matching the regexp.
+ - Symbol search (-L): use 'SymbolName' and 'SourcePath' to trace the history of a specific function or struct.
+   Example: SymbolName="tcp_v4_rcv", SourcePath="net/ipv4/tcp_ipv4.c".
+ - Message search: use 'MessageRegexps' (array of regexps) to find commits with matching titles or descriptions.
+   If multiple regexps are provided, only commits matching ALL of them are returned.
+   The search is case-insensitive.
+ - File history: use 'PathPrefix' to explore the history of a single file or directory.
+   Example: PathPrefix="mm/slub.c".
+
+Use 'Since' to limit how far back to search. It accepts duration strings like "3 years", "1 month", "2 weeks", "5 days".
+`)
+	ToolShow = aflow.NewFuncTool("git-show", gitShow, `
+Tool provides full information about a specific git commit, including its title,
+full description, and the diff.
+Defaults to 'HEAD' if Commit is omitted.
+Use the 'File' parameter to restrict the diff to a specific file or directory path.
+Use the 'Stat' parameter to see a diffstat summary of modified files and line counts.
+`)
+	ToolBlame = aflow.NewFuncTool("git-blame", gitBlame, `
+Tool provides git blame for a given file and line range.
+It helps to identify which commit last modified specific lines of code.
+`)
+
+	Tools = []aflow.Tool{ToolLog, ToolShow, ToolBlame}
+)
+
+const (
+	maxOutputLines = 1000
+	headCommit     = "HEAD"
+)
+
+type state struct {
+	KernelSrc string
+}
+
+type logArgs struct {
+	CodeRegexp string `jsonschema:"Regexp to search in the code diffs (-G)." json:",omitempty"`
+	SymbolName string `jsonschema:"Name of the function or struct to trace (-L)." json:",omitempty"`
+	// nolint: lll
+	SourcePath string `jsonschema:"Source path for the symbol search (-L). Required if SymbolName is set." json:",omitempty"`
+	// nolint: lll
+	MessageRegexps []string `jsonschema:"Regexps to search in the commit messages. All regexps must match." json:",omitempty"`
+	PathPrefix     string   `jsonschema:"Restrict search to this directory or file path." json:",omitempty"`
+	Count          int      `jsonschema:"Max number of commits to return." json:",omitempty"`
+	// nolint: lll
+	Since string `jsonschema:"Optional duration string (e.g. '3 years') to limit how far back to search." json:",omitempty"`
+}
+
+type logResult struct {
+	Output string `jsonschema:"Output of the git log command."`
+}
+
+func gitLog(ctx *aflow.Context, state state, args logArgs) (logResult, error) {
+	if args.CodeRegexp == "" && args.SymbolName == "" && len(args.MessageRegexps) == 0 &&
+		args.PathPrefix == "" {
+		return logResult{}, aflow.BadCallError("at least one of CodeRegexp, SymbolName, " +
+			"MessageRegexps, or PathPrefix must be set")
+	}
+	if args.SymbolName != "" && args.PathPrefix != "" {
+		return logResult{}, aflow.BadCallError("SymbolName and PathPrefix cannot be used together")
+	}
+	if args.Count <= 0 {
+		args.Count = 10
+	}
+	args.Count = min(args.Count, 100)
+
+	gitArgs := []string{"log", "--format=%h %s", "--abbrev=12", "--no-patch", "-n", fmt.Sprint(args.Count)}
+
+	if args.Since != "" {
+		if !isValidSince(args.Since) {
+			return logResult{}, aflow.BadCallError("invalid Since parameter format, must be like '3 years', '1 month', '5 days'")
+		}
+		gitArgs = append(gitArgs, "--since="+args.Since)
+	}
+
+	if args.CodeRegexp != "" {
+		gitArgs = append(gitArgs, "-G", args.CodeRegexp)
+	}
+	if args.SymbolName != "" {
+		if args.SourcePath == "" {
+			return logResult{}, aflow.BadCallError("SourcePath is required when SymbolName is set")
+		}
+		gitArgs = append(gitArgs, fmt.Sprintf("-L:%s:%s", args.SymbolName, args.SourcePath))
+	}
+	if len(args.MessageRegexps) != 0 {
+		gitArgs = append(gitArgs, "--regexp-ignore-case", "--all-match")
+		for _, re := range args.MessageRegexps {
+			gitArgs = append(gitArgs, "--grep", re)
+		}
+	}
+
+	if args.CodeRegexp == "" && args.SymbolName == "" {
+		gitArgs = append(gitArgs, "--no-merges")
+	}
+
+	gitArgs = append(gitArgs, headCommit)
+
+	if args.PathPrefix != "" {
+		gitArgs = append(gitArgs, "--", args.PathPrefix)
+	}
+
+	output, err := vcs.SandboxedGit(state.KernelSrc).RunTimeout(10*time.Minute, gitArgs...)
+	if err != nil {
+		return logResult{}, gitBadCallError(err, "git log", gitAdvice{
+			Timeout: "Please specify a tighter search scope (e.g. by providing a PathPrefix).",
+		})
+	}
+	return logResult{Output: string(output)}, nil
+}
+
+type showArgs struct {
+	Commit string `jsonschema:"Commit hash or reference (e.g. 'HEAD'). Defaults to 'HEAD' if omitted." json:",omitempty"`
+	File   string `jsonschema:"Optional: restrict the commit diff to a specific file or directory." json:",omitempty"`
+	Stat   bool   `jsonschema:"Optional: if true, show diffstat summary of modified files." json:",omitempty"`
+}
+
+type showResult struct {
+	Output string `jsonschema:"Full commit/object information including diff."`
+}
+
+func gitShow(ctx *aflow.Context, state state, args showArgs) (showResult, error) {
+	if args.Commit == "" {
+		args.Commit = headCommit
+	}
+	commitHash, filePath, _ := strings.Cut(args.Commit, ":")
+	if commitHash == "" {
+		commitHash = headCommit
+		args.Commit = headCommit + ":" + filePath
+	}
+
+	if !revRegex.MatchString(commitHash) {
+		return showResult{}, aflow.BadCallError("invalid Commit %q: it must be a git revision"+
+			" (e.g. 'HEAD', 'v6.12' or a commit hash), not a command line option", commitHash)
+	}
+
+	git := vcs.SandboxedGit(state.KernelSrc)
+	if _, err := git.RunTimeout(time.Minute, "cat-file", "-e", commitHash+"^{commit}"); err != nil {
+		return showResult{}, gitBadCallError(err, "git show", gitAdvice{
+			NotFound: fmt.Sprintf("commit %v does not exist", commitHash),
+		})
+	}
+
+	if filePath != "" {
+		out, err := git.RunTimeout(time.Minute, "ls-tree", "--name-only", commitHash, "--", filePath)
+		if err != nil {
+			return showResult{}, gitBadCallError(err, "git show", gitAdvice{})
+		}
+		if len(bytes.TrimSpace(out)) == 0 {
+			return showResult{}, aflow.BadCallError("file %q is not present on commit %q", filePath, commitHash)
+		}
+	}
+
+	gitArgs := []string{"show", "--no-color"}
+	if args.Stat {
+		gitArgs = append(gitArgs, "--stat")
+	}
+	gitArgs = append(gitArgs, args.Commit)
+	if args.File != "" {
+		gitArgs = append(gitArgs, "--", args.File)
+	}
+
+	output, err := git.RunTimeout(5*time.Minute, gitArgs...)
+	if err != nil {
+		return showResult{}, gitBadCallError(err, "git show", gitAdvice{
+			Timeout: "Consider specifying a different commit.",
+		})
+	}
+	return showResult{Output: aflow.TruncateText(string(output), maxOutputLines)}, nil
+}
+
+type blameArgs struct {
+	File  string `jsonschema:"Source file path."`
+	Start int    `jsonschema:"Start line number (1-based)."`
+	End   int    `jsonschema:"End line number (inclusive)."`
+}
+
+type blameResult struct {
+	Output string `jsonschema:"Output of the git blame command."`
+}
+
+func gitBlame(ctx *aflow.Context, state state, args blameArgs) (blameResult, error) {
+	args.Start = max(args.Start, 1)
+	args.End = max(args.End, args.Start)
+	args.End = min(args.End, args.Start+maxOutputLines)
+	lineRange := fmt.Sprintf("%d,%d", args.Start, args.End)
+	output, err := vcs.SandboxedGit(state.KernelSrc).RunTimeout(5*time.Minute,
+		"blame", "-s", "-L", lineRange, "--abbrev=12", headCommit, "--", args.File)
+	if err != nil {
+		return blameResult{}, gitBadCallError(err, "git blame", gitAdvice{
+			Timeout: "Consider specifying a smaller line range.",
+		})
+	}
+	return blameResult{Output: aflow.TruncateText(string(output), maxOutputLines)}, nil
+}
+
+type gitAdvice struct {
+	Timeout  string
+	NotFound string
+}
+
+func gitBadCallError(err error, name string, advice gitAdvice) error {
+	var verr *osutil.VerboseError
+	if !errors.As(err, &verr) {
+		return err
+	}
+	if errors.Is(err, osutil.ErrTimeout) {
+		if advice.Timeout != "" {
+			return aflow.BadCallError("%s timed out. %s", name, advice.Timeout)
+		}
+		return aflow.BadCallError("%s timed out", name)
+	}
+	if verr.ExitCode == 128 {
+		if advice.NotFound != "" && isNotFound(verr.Output) {
+			return aflow.BadCallError("%s failed: %s", name, advice.NotFound)
+		}
+		if isBadCall(verr.Output) || bytes.Contains(verr.Output, []byte("fatal:")) {
+			return aflow.BadCallError("%s failed: %s", name, bytes.TrimSpace(verr.Output))
+		}
+	}
+	if verr.ExitCode == 1 && len(verr.Output) == 0 {
+		return nil // No matches is a valid result.
+	}
+	return err
+}
+
+func isNotFound(output []byte) bool {
+	return bytes.Contains(output, []byte("bad object")) ||
+		bytes.Contains(output, []byte("Not a valid object name")) ||
+		bytes.Contains(output, []byte("bad revision")) ||
+		bytes.Contains(output, []byte("unknown revision"))
+}
+
+func isBadCall(output []byte) bool {
+	return isNotFound(output) ||
+		bytes.Contains(output, []byte("ambiguous argument")) ||
+		bytes.Contains(output, []byte("no match")) ||
+		bytes.Contains(output, []byte("has only")) ||
+		bytes.Contains(output, []byte("no such path"))
+}

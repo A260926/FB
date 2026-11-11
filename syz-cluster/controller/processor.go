@@ -1,0 +1,231 @@
+// Copyright 2024 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/google/syzkaller/syz-cluster/pkg/api"
+	"github.com/google/syzkaller/syz-cluster/pkg/app"
+	"github.com/google/syzkaller/syz-cluster/pkg/blob"
+	"github.com/google/syzkaller/syz-cluster/pkg/db"
+	"github.com/google/syzkaller/syz-cluster/pkg/workflow"
+)
+
+type SeriesProcessor struct {
+	blobStorage       blob.Storage
+	seriesRepo        *db.SeriesRepository
+	sessionRepo       *db.SessionRepository
+	sessionTestRepo   *db.SessionTestRepository
+	workflows         workflow.Service
+	dbPollInterval    time.Duration
+	parallelWorkflows int
+
+	// activeSessions tracks sessions currently queued in memory or running in worker goroutines
+	// so streamSeries does not re-dispatch them before their FinishedAt timestamp is committed.
+	activeSessions sync.Map
+}
+
+func NewSeriesProcessor(env *app.AppEnvironment, cfg *app.AppConfig) *SeriesProcessor {
+	workflows, err := workflow.NewArgoService()
+	if err != nil {
+		app.Fatalf("failed to initialize workflows: %v", err)
+	}
+	return &SeriesProcessor{
+		blobStorage:       env.BlobStorage,
+		seriesRepo:        db.NewSeriesRepository(env.Spanner),
+		sessionRepo:       db.NewSessionRepository(env.Spanner),
+		sessionTestRepo:   db.NewSessionTestRepository(env.Spanner),
+		dbPollInterval:    time.Minute,
+		workflows:         workflows,
+		parallelWorkflows: cfg.ParallelWorkflows,
+	}
+}
+
+func (sp *SeriesProcessor) Loop(ctx context.Context) {
+	if sp.parallelWorkflows <= 0 {
+		<-ctx.Done()
+		return
+	}
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	ch := make(chan *db.Session)
+	for range sp.parallelWorkflows {
+		wg.Go(func() {
+			sp.seriesRunner(ctx, ch)
+		})
+	}
+	sp.streamSeries(ctx, ch)
+	close(ch)
+}
+
+func (sp *SeriesProcessor) streamSeries(ctx context.Context, ch chan<- *db.Session) {
+	for first := true; ; first = false {
+		if !first {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sp.dbPollInterval):
+			}
+		}
+		// Snapshot activeSessions before querying Spanner and check that snapshot below.
+		// streamSeries is the only goroutine that adds to activeSessions, while workers
+		// remove a session only after committing FinishedAt in Spanner. If a session
+		// finishes while ListUnfinished is running, ListUnfinished may still return it
+		// even though the worker has already removed it from activeSessions; checking
+		// the pre-query snapshot prevents re-dispatching that finished session.
+		wasActive := make(map[string]bool)
+		sp.activeSessions.Range(func(key, _ any) bool {
+			wasActive[key.(string)] = true
+			return true
+		})
+		// If k sessions are in activeSessions, k workers are busy and parallelWorkflows-k
+		// are free, so querying parallelWorkflows sessions is enough to fill free workers.
+		list, err := sp.sessionRepo.ListUnfinished(ctx, sp.parallelWorkflows)
+		if err != nil {
+			// Do not log context cancellation errors during shutdown.
+			if ctx.Err() == nil {
+				app.Errorf("failed to query sessions: %v", err)
+			}
+			continue
+		}
+		for _, session := range list {
+			if wasActive[session.ID] {
+				continue
+			}
+			sp.activeSessions.Store(session.ID, struct{}{})
+			select {
+			case ch <- session:
+			case <-ctx.Done():
+				sp.activeSessions.Delete(session.ID)
+				return
+			}
+		}
+	}
+}
+
+func (sp *SeriesProcessor) seriesRunner(ctx context.Context, ch <-chan *db.Session) {
+	for {
+		select {
+		case session, ok := <-ch:
+			if !ok {
+				return
+			}
+			log.Printf("started processing session %q", session.ID)
+			sp.handleSession(ctx, session)
+			log.Printf("finished processing session %q", session.ID)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (sp *SeriesProcessor) handleSession(ctx context.Context, session *db.Session) {
+	defer sp.activeSessions.Delete(session.ID)
+	// TODO: set some sane deadline or just track indefinitely?
+	pollPeriod := sp.workflows.PollPeriod()
+	for first := true; ; first = false {
+		if !first {
+			select {
+			case <-time.After(pollPeriod):
+			case <-ctx.Done():
+				return
+			}
+		}
+		status, workflowLog, err := sp.workflows.Status(session.ID)
+		if err != nil {
+			app.Errorf("failed to query workflow %q status: %v", session.ID, err)
+			continue
+		}
+		if len(workflowLog) > 0 {
+			err := sp.updateSessionLog(ctx, session, workflowLog)
+			if err != nil {
+				app.Errorf("failed to update session log: %v", err)
+			}
+		}
+		switch status {
+		case workflow.StatusNotFound:
+			log.Printf("scheduling a workflow for %q", session.ID)
+			err := sp.sessionRepo.Start(ctx, session.ID)
+			if err == db.ErrSessionAlreadyStarted {
+				// It may happen if the service was restarted right between the moment we updated the DB
+				// and actually started the workflow.
+				log.Printf("session %q was already marked as started, but there's no actual workflow", session.ID)
+			} else if err != nil {
+				app.Errorf("failed to mark session started: %v", err)
+				break
+			}
+			err = sp.workflows.Start(session.ID)
+			if err != nil {
+				app.Errorf("failed to start a workflow: %v", err)
+			}
+		case workflow.StatusFinished, workflow.StatusFailed:
+			log.Printf("workflow for %q completed (status=%q), mark the session finished", session.ID, status)
+			err := sp.stopRunningTests(ctx, session.ID)
+			if err != nil {
+				app.Errorf("failed to check running tests for %s: %v", session.ID, err)
+			}
+			// TODO: StatusFailed needs a different handling.
+			err = sp.sessionRepo.Update(ctx, session.ID, func(session *db.Session) error {
+				session.SetFinishedAt(time.Now())
+				return nil
+			})
+			if err == nil {
+				// Nothing to do here anymore.
+				return
+			}
+			// Let's hope the error was transient.
+			app.Errorf("failed to update session %q: %v", session.ID, err)
+		case workflow.StatusRunning:
+			// Let's keep on tracking.
+			continue
+		default:
+			panic("unexpected workflow status: " + status)
+		}
+	}
+}
+
+// The session steps are expected to report that they are finished themselves.
+// If the workflow was aborted for some external reason (or the session step crashed/timed out),
+// the step may remain forever in the "Running" state.
+// Go through such steps and mark them as finished (with an error).
+func (sp *SeriesProcessor) stopRunningTests(ctx context.Context, sessionID string) error {
+	tests, err := sp.sessionTestRepo.BySessionRaw(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to query session steps: %w", err)
+	}
+	for _, test := range tests {
+		if test.Result != api.TestRunning {
+			continue
+		}
+		log.Printf("session %q is finished, but the test %q is running: marking it stopped",
+			sessionID, test.TestName)
+		err = sp.sessionTestRepo.InsertOrUpdate(ctx, test, func(entity *db.SessionTest) {
+			if entity.Result == api.TestRunning {
+				entity.Result = api.TestError
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update the step %q: %w", test.TestName, err)
+		}
+	}
+	return nil
+}
+
+func (sp *SeriesProcessor) updateSessionLog(ctx context.Context, session *db.Session, log []byte) error {
+	logURI, err := sp.blobStorage.Write(bytes.NewReader(log), "Session", session.ID, "log")
+	if err != nil {
+		return fmt.Errorf("failed to save the log: %w", err)
+	}
+	return sp.sessionRepo.Update(ctx, session.ID, func(session *db.Session) error {
+		session.LogURI = logURI
+		return nil
+	})
+}

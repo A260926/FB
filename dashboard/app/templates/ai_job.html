@@ -1,0 +1,192 @@
+{{/*
+Copyright 2025 syzkaller project authors. All rights reserved.
+Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+Detailed info on a single AI job execution.
+*/}}
+
+<!doctype html>
+<html>
+<head>
+	{{template "head" .Header}}
+	<title>syzbot</title>
+
+</head>
+<body>
+	{{template "header" .Header}}
+	{{template "ai_job_list" .}}
+
+	<b>Agent:</b> {{if .Job.AgentName}}{{.Job.AgentName}}{{else}}---{{end}}<br>
+	<b>External Bug ID:</b> {{if .Job.ExternalBugID}}{{.Job.ExternalBugID}}{{else}}---{{end}}<br><br>
+
+	{{if .CanRestart}}
+	<form method="POST" class="restart-form">
+		<input type="hidden" name="action" value="restart">
+		<button type="submit">Restart Workflow</button>
+	</form>
+	{{end}}
+
+	{{if .Args}}
+	<b>Inputs:</b><br>
+	<table class="list_table">
+		<tbody>
+			{{range .Args}}
+			<tr>
+				<td class="key-col" style="vertical-align: top;">{{.Key}}</td>
+				<td class="title">
+					{{if .Large}}
+						<details>
+							<summary>Show ({{len .Value}} bytes)</summary>
+							<pre style="white-space: pre-wrap; word-wrap: break-word;">{{.Value}}</pre>
+						</details>
+					{{else}}
+						{{.Value}}
+					{{end}}
+				</td>
+			</tr>
+			{{end}}
+		</tbody>
+	</table>
+	<br>
+	{{end}}
+	{{if .CurrentStage}}
+		<b>Current Stage:</b> {{.CurrentStage}}<br>
+		<b>Next Stage:</b> {{.NextStage}}<br><br>
+	{{end}}
+
+	{{if .Job.Error}}
+		<b>Error:</b><br>
+		<pre class="ai_job_error">{{.Job.Error}}</pre>
+		<br>
+	{{end}}
+
+	{{if .Header.AIActions}}
+		{{if and .CanSetCorrectness (ne .Job.Correct "⏳") (ne .Job.Correct "💥") (ne .Job.Correct "🏃")}}
+			<form method="POST">
+				<input type="hidden" name="action" value="set_correctness">
+				<fieldset>
+					<legend>Result correct:</legend>
+					<input type="radio" name="correct" id="✅" value="✅" {{if eq .Job.Correct "✅" }}checked{{end}} title="Correct">
+					<label for="✅" title="Correct">✅</label>
+					<input type="radio" name="correct" id="❌" value="❌" {{if eq .Job.Correct "❌" }}checked{{end}} title="Incorrect">
+					<label for="❌" title="Incorrect">❌</label>
+					<input type="radio" name="correct" id="❓" value="❓" {{if eq .Job.Correct "❓" }}checked{{end}} title="Not yet reviewed">
+					<label for="❓" title="Not yet reviewed">❓</label>
+					<button type="submit">Set</button>
+				</fieldset>
+			</form>
+			<br>
+		{{end}}
+		{{if .CanPushToReporting}}
+			<form method="POST">
+				<input type="hidden" name="action" value="push_to_reporting">
+				<button type="submit">Push to {{.NextStage}}</button>
+			</form>
+			<br>
+		{{end}}
+		{{if .Job.CanTestOnManager}}
+			<form method="POST">
+				<input type="hidden" name="action" value="test_repro_c">
+				<button type="submit">Test C Reproducer</button>
+			</form>
+			<br>
+		{{end}}
+	{{end}}
+
+	{{if .Reportings}}
+	<table class="list_table">
+		<caption>Reporting Stages and Comments:</caption>
+		<thead>
+			<tr>
+				<th>Stage</th>
+				<th>Source</th>
+				<th>Reported At</th>
+				<th>Ext ID</th>
+				<th>Comments</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{range .Reportings}}
+			<tr>
+				<td>{{.Reporting.Stage}}{{if .Reporting.InReplyTo}} (reply){{end}}</td>
+				<td>{{.Reporting.Source}}</td>
+				<td>{{if .Reporting.ReportedAt.Valid}}{{formatTime .Reporting.ReportedAt.Time}}{{else}}-{{end}}</td>
+				<td>{{if .Link}}<a href="{{.Link}}">{{.Reporting.ExtID.StringVal}}</a>{{else if .Reporting.ExtID.Valid}}{{.Reporting.ExtID.StringVal}}{{else}}-{{end}}</td>
+				<td>
+					{{if .Comments}}
+						<details>
+							<summary>{{len .Comments}} Comments</summary>
+							<ul>
+								{{range .Comments}}
+									<li>
+										<b>{{.Author}}</b> ({{formatTime .Date}}):
+										<pre>{{.BodyURI}}</pre>
+									</li>
+								{{end}}
+							</ul>
+						</details>
+					{{else}}
+						No comments
+					{{end}}
+				</td>
+			</tr>
+			{{end}}
+		</tbody>
+	</table>
+	<br>
+	{{end}}
+
+	{{if .History}}
+	<table class="list_table">
+		<caption>Decision History:</caption>
+		<thead>
+			<tr>
+				<th>Time</th>
+				<th>User</th>
+				<th>Decision</th>
+				<th>Source</th>
+				<th>Error</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{range .History}}
+			<tr>
+				<td>{{formatTime .Date}}</td>
+				<td>{{.User}}</td>
+				<td>{{.Correct}}</td>
+				<td>{{.Source}}</td>
+				<td>{{.Error}}</td>
+			</tr>
+			{{end}}
+		</tbody>
+	</table>
+	<br>
+	{{end}}
+
+	<b>Outputs:</b><br>
+	<table class="list_table">
+		<tbody>
+			{{range $res := .Job.Results}}
+			<tr>
+				<td class="key-col" style="vertical-align: top;">{{$res.Name}}</td>
+				<td class="title">
+					{{if $res.IsBool}}
+						{{if $res.Value}}✅{{else}}❌{{end}}
+					{{else}}
+						<div id="ai_result_div"><pre style="white-space: pre-wrap; word-wrap: break-word;">{{$res.Value}}</pre></div>
+					{{end}}
+				</td>
+			</tr>
+			{{end}}
+		</tbody>
+	</table>
+
+	{{if .CrashReport}}
+	<br><b>Crash report:</b><br>
+	<div id="crash_div"><pre>{{.CrashReport}}</pre></div><br>
+	{{end}}
+
+	{{.TrajectoryHTML}}
+
+</body>
+</html>

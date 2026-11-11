@@ -1,0 +1,299 @@
+[
+	{
+		"Seq": 0,
+		"Nesting": 0,
+		"Type": "flow",
+		"Name": "test",
+		"Started": "0001-01-01T00:00:01Z"
+	},
+	{
+		"Seq": 1,
+		"Nesting": 1,
+		"Type": "agent",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:02Z",
+		"Instruction": "Instruction\nPrefer calling several tools at the same time to save round-trips.\n",
+		"Prompt": "Prompt"
+	},
+	{
+		"Seq": 2,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:03Z"
+	},
+	{
+		"Seq": 2,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:03Z",
+		"Finished": "0001-01-01T00:00:04Z",
+		"InputTokens": 150,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 3,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:05Z"
+	},
+	{
+		"Seq": 3,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:05Z",
+		"Finished": "0001-01-01T00:00:06Z",
+		"Results": {
+			"ResFoo": 123
+		}
+	},
+	{
+		"Seq": 4,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:07Z"
+	},
+	{
+		"Seq": 4,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:07Z",
+		"Finished": "0001-01-01T00:00:08Z",
+		"InputTokens": 150,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 5,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:09Z"
+	},
+	{
+		"Seq": 5,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:09Z",
+		"Finished": "0001-01-01T00:00:10Z",
+		"Results": {
+			"ResFoo": 123
+		}
+	},
+	{
+		"Seq": 6,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:11Z"
+	},
+	{
+		"Seq": 6,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:11Z",
+		"Finished": "0001-01-01T00:00:12Z",
+		"InputTokens": 260,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 7,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:13Z"
+	},
+	{
+		"Seq": 7,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:13Z",
+		"Finished": "0001-01-01T00:00:14Z",
+		"Results": {
+			"ResFoo": 123
+		}
+	},
+	{
+		"Seq": 8,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty-compressor",
+		"Model": "lightweight",
+		"Started": "0001-01-01T00:00:15Z"
+	},
+	{
+		"Seq": 8,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty-compressor",
+		"Model": "lightweight",
+		"Started": "0001-01-01T00:00:15Z",
+		"Finished": "0001-01-01T00:00:16Z",
+		"Reply": "compressed summary",
+		"InputTokens": 260,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 9,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:17Z"
+	},
+	{
+		"Seq": 9,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:17Z",
+		"Finished": "0001-01-01T00:00:18Z",
+		"InputTokens": 50,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 10,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:19Z"
+	},
+	{
+		"Seq": 10,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:19Z",
+		"Finished": "0001-01-01T00:00:20Z",
+		"Results": {
+			"ResFoo": 123
+		}
+	},
+	{
+		"Seq": 11,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:21Z"
+	},
+	{
+		"Seq": 11,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:21Z",
+		"Finished": "0001-01-01T00:00:22Z",
+		"InputTokens": 50,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 12,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:23Z"
+	},
+	{
+		"Seq": 12,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:23Z",
+		"Finished": "0001-01-01T00:00:24Z",
+		"Results": {
+			"ResFoo": 123
+		}
+	},
+	{
+		"Seq": 13,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:25Z"
+	},
+	{
+		"Seq": 13,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:25Z",
+		"Finished": "0001-01-01T00:00:26Z",
+		"InputTokens": 50,
+		"OutputTokens": 10
+	},
+	{
+		"Seq": 14,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:27Z"
+	},
+	{
+		"Seq": 14,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "tick",
+		"Started": "0001-01-01T00:00:27Z",
+		"Finished": "0001-01-01T00:00:28Z",
+		"Error": "You are repeating the same tool call with the exact same arguments.\nYou already have the result of this exact tool call in your conversation history.\nDo NOT request it again. You MUST synthesize the information you already have,\ntry a completely different tool, or proceed to the next step."
+	},
+	{
+		"Seq": 15,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:29Z"
+	},
+	{
+		"Seq": 15,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:29Z",
+		"Finished": "0001-01-01T00:00:30Z"
+	},
+	{
+		"Seq": 1,
+		"Nesting": 1,
+		"Type": "agent",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:02Z",
+		"Finished": "0001-01-01T00:00:31Z",
+		"Instruction": "Instruction\nPrefer calling several tools at the same time to save round-trips.\n",
+		"Prompt": "Prompt",
+		"Reply": "Done"
+	},
+	{
+		"Seq": 0,
+		"Nesting": 0,
+		"Type": "flow",
+		"Name": "test",
+		"Started": "0001-01-01T00:00:01Z",
+		"Finished": "0001-01-01T00:00:32Z",
+		"Results": {
+			"Reply": "Done"
+		}
+	}
+]

@@ -1,0 +1,146 @@
+// Copyright 2025 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// Package kernel provides actions for checking out and building target kernel trees.
+package kernel
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"time"
+
+	"github.com/google/syzkaller/pkg/aflow"
+	"github.com/google/syzkaller/pkg/build"
+	"github.com/google/syzkaller/pkg/codesearch"
+	"github.com/google/syzkaller/pkg/hash"
+	"github.com/google/syzkaller/pkg/mgrconfig"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/sys/targets"
+)
+
+// Build action builds the Linux kernel from the given sources,
+// outputs directory with build artifacts.
+var Build = aflow.NewFuncAction("kernel-builder", buildKernel)
+
+type buildArgs struct {
+	TargetOS     string
+	TargetArch   string
+	TargetVMArch string `json:",omitempty"`
+	KernelSrc    string
+	KernelCommit string
+	KernelConfig string
+}
+
+type buildResult struct {
+	KernelObj string // Directory with build artifacts.
+}
+
+var cmdlineRe = regexp.MustCompile(`(?m)^CONFIG_CMDLINE="(.*)"$`)
+
+// vmArch returns the architecture of the kernel image and of the VM that runs it.
+// It may differ from the target arch, e.g. 386 programs are executed under an amd64 kernel.
+func vmArch(targetArch, targetVMArch string) string {
+	if targetVMArch != "" {
+		return targetVMArch
+	}
+	return targetArch
+}
+
+func BuildKernel(buildDir, srcDir, cfg, targetOS, targetArch, targetVMArch string, cleanup bool) error {
+	targetVMArch = vmArch(targetArch, targetVMArch)
+	target := targets.Get(targetOS, targetVMArch)
+	if target == nil {
+		return fmt.Errorf("unsupported target %v/%v", targetOS, targetVMArch)
+	}
+	root, err := os.OpenRoot(buildDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.WriteFile(".config", []byte(cfg), osutil.DefaultFilePerm); err != nil {
+		return err
+	}
+	if err := osutil.SandboxChown(buildDir, filepath.Join(buildDir, ".config")); err != nil {
+		return err
+	}
+	configScript := filepath.Join(srcDir, "scripts", "config")
+	configArgs := []string{"--set-str", "INITRAMFS_SOURCE", ""}
+	switch targetVMArch {
+	case targets.AMD64:
+		// We don't fuzz x32 arch, and it's not very interesting,
+		// but building with this config and ld.lld fails with the following error:
+		// ld.lld: error: arch/x86/entry/vdso/vgetrandom-x32.o:(.note.gnu.property+0x0): data is too short
+		// ld.lld: error: arch/x86/entry/vdso/vgetcpu-x32.o:(.note.gnu.property+0x0): data is too short
+		// Also enforce gzip since lz4 is not present in the Docker container.
+		configArgs = append(configArgs, "-d", "X86_X32_ABI", "-e", "KERNEL_GZIP", "-d", "KERNEL_LZ4")
+		if targetArch == targets.I386 {
+			configArgs = append(configArgs, "-e", "IA32_EMULATION")
+		}
+	case targets.ARM64:
+		// Necessary for booting on GCE.
+		cmdline := "earlyprintk=serial net.ifnames=0 console=ttyAMA0 root=/dev/vda"
+		if match := cmdlineRe.FindStringSubmatch(cfg); len(match) > 1 {
+			cmdline = match[1] + " " + cmdline
+		}
+		configArgs = append(configArgs, "--set-str", "CMDLINE", cmdline)
+	}
+	if _, err := osutil.RunSandboxed(time.Hour, buildDir, configScript, configArgs...); err != nil {
+		return err
+	}
+	image := filepath.FromSlash(build.LinuxKernelImage(targetVMArch))
+	makeArgs := build.LinuxMakeArgs(target, targets.DefaultLLVMCompiler, targets.DefaultLLVMLinker,
+		"ccache", buildDir, runtime.NumCPU())
+	// Newer LLVM versions transform some loops into wcslen() calls, which breaks linking
+	// of kernels older than commit 84ffc79bfbf7 ("kbuild: Add '-fno-builtin-wcslen'"):
+	// ld.lld: error: undefined symbol: wcslen
+	// The fix does not cherry-pick cleanly, so pass the flag explicitly.
+	// For newer kernels this is a no-op.
+	makeArgs = append(makeArgs, "KCFLAGS=-fno-builtin-wcslen")
+	const compileCommands = "compile_commands.json"
+	makeArgs = append(makeArgs, "-s", path.Base(image), compileCommands)
+	if _, err := osutil.RunSandboxed(time.Hour, srcDir, "make", makeArgs...); err != nil {
+		buildErr := build.ExtractRootCause(err, targets.Linux, srcDir)
+		if buildErr == err {
+			return aflow.FlowError(err)
+		}
+		return aflow.FlowError(fmt.Errorf("%w\n\nRoot cause:\n%w", err, buildErr))
+	}
+	if !cleanup {
+		return nil
+	}
+	// Remove main intermediate build files, we don't need them anymore
+	// and they take lots of space. But keep generated source files.
+	keepFiles := map[string]bool{
+		image:               true,
+		target.KernelObject: true,
+		compileCommands:     true,
+	}
+	return fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Type().IsRegular() && (keepFiles[path] || codesearch.IsSourceFile(path)) {
+			return nil
+		}
+		return root.Remove(path)
+	})
+}
+
+func buildKernel(ctx *aflow.Context, args buildArgs) (buildResult, error) {
+	// The target must be part of the key: BuildKernel patches the config depending on the
+	// architecture, so the same config may produce different kernels for different targets.
+	// The source description is part of the key as well, because the build artifacts refer
+	// to the source dir, which changes location whenever we change the way we check it out.
+	desc := fmt.Sprintf("kernel target %v, source %v, kernel config hash %v",
+		mgrconfig.FormatTarget(args.TargetOS, args.TargetVMArch, args.TargetArch),
+		srcCacheDesc(args.KernelCommit), hash.String(args.KernelConfig))
+	dir, err := ctx.Cache("build", desc, func(dir string) error {
+		return BuildKernel(dir, args.KernelSrc, args.KernelConfig, args.TargetOS, args.TargetArch, args.TargetVMArch, true)
+	})
+	return buildResult{KernelObj: dir}, err
+}

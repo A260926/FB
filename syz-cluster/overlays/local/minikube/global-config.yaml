@@ -1,0 +1,22 @@
+# Copyright 2025 syzkaller project authors. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+URL: http://localhost
+parallelWorkflows: 1
+# Whatever, it's just for debugging.
+loreArchives:
+  - linux-wireless
+emailReporting:
+  name: test-name
+  docs: http://docs/
+  sender: smtp
+  supportEmail: name@email.com
+  archiveList: archive@list.com
+  moderationList: moderation@list.com
+  smtpConfig:
+    from: sender@email.com
+
+trees:
+  - name: torvalds
+    URL: https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux
+    branch: master

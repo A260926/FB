@@ -1,0 +1,773 @@
+// Copyright 2016 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// Package gce allows to use Google Compute Engine (GCE) virtual machines as VMs.
+// It is assumed that syz-manager also runs on GCE as VMs are created in the current project/zone.
+//
+// See https://cloud.google.com/compute/docs for details.
+// In particular, how to build GCE-compatible images:
+// https://cloud.google.com/compute/docs/tutorials/building-images
+// Working with serial console:
+// https://cloud.google.com/compute/docs/instances/interacting-with-serial-console
+package gce
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/syzkaller/pkg/config"
+	"github.com/google/syzkaller/pkg/gce"
+	"github.com/google/syzkaller/pkg/gcs"
+	"github.com/google/syzkaller/pkg/hash"
+	"github.com/google/syzkaller/pkg/kd"
+	"github.com/google/syzkaller/pkg/log"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/pkg/report"
+	"github.com/google/syzkaller/sys/targets"
+	"github.com/google/syzkaller/vm/vmimpl"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
+)
+
+func init() {
+	vmimpl.Register("gce", vmimpl.Type{
+		Ctor:        ctor,
+		Overcommit:  true,
+		Preemptible: true,
+	})
+}
+
+type Config struct {
+	Count                int    `json:"count"`                 // number of VMs to use
+	ZoneID               string `json:"zone_id"`               // GCE zone (if it's different from that of syz-manager)
+	ProjectID            string `json:"project_id"`            // GCE project (if it's different from that of syz-manager)
+	MachineType          string `json:"machine_type"`          // GCE machine type (e.g. "n1-highcpu-2")
+	GCSPath              string `json:"gcs_path"`              // GCS path to upload image
+	GCEImage             string `json:"gce_image"`             // pre-created GCE image to use
+	Preemptible          bool   `json:"preemptible"`           // use preemptible VMs if available (defaults to true)
+	DisplayDevice        bool   `json:"display_device"`        // enable a virtual display device
+	NicType              string `json:"nic_type"`              // type of vNIC to be used (e.g. GVNIC).
+	NestedVirtualization bool   `json:"nested_virtualization"` // Whether to enable nested virtualization or not.
+	// Mark the created image for deletion once no manager has used it for a while.
+	// Requires gce_image to be empty.
+	//
+	// Every image created from the image file gets the gce.LabelLastActive label, which is refreshed
+	// every labelRefreshPeriod while a pool uses the image. With this option the image also gets
+	// the gce.LabelAutoDelete label, and an external job (in syz-cluster, an Argo CronWorkflow)
+	// deletes such images once their gce.LabelLastActive is older than gce.StaleImageAge.
+	// The image is intentionally not deleted in Pool.Close(): the same image may be reused
+	// by the next pool of the same manager.
+	AutoDeleteImage bool `json:"auto_delete_image"`
+	// Username to connect to ssh-serialport.googleapis.com.
+	// Leave empty for non-OS Login GCP projects.
+	// Otherwise take the user from `gcloud compute connect-to-serial-port --dry-run`.
+	SerialPortUser string `json:"serial_port_user"`
+	// A private key to connect to ssh-serialport.googleapis.com.
+	// Leave empty for non-OS Login GCP projects.
+	// Otherwise generate one and upload it:
+	// `gcloud compute os-login ssh-keys add --key-file some-key.pub`.
+	SerialPortKey string   `json:"serial_port_key"`
+	Tags          []string `json:"tags"` // GCE instance tags
+}
+
+type Pool struct {
+	env            *vmimpl.Env
+	cfg            *Config
+	GCE            *gce.Context
+	consoleReadCmd string   // optional: command to read non-standard kernel console
+	alreadyCreated sync.Map // Tracks the first creation per instance.
+	closed         chan struct{}
+	wg             sync.WaitGroup // background goroutines, see Close()
+}
+
+type instance struct {
+	env   *vmimpl.Env
+	cfg   *Config
+	GCE   *gce.Context
+	debug bool
+	name  string
+	zone  string
+	vmimpl.SSHOptions
+	gceKey         string // per-instance private ssh key associated with the instance
+	closed         chan bool
+	consolew       io.WriteCloser
+	consoleReadCmd string // optional: command to read non-standard kernel console
+	timeouts       targets.Timeouts
+	preempted      bool
+}
+
+func ctor(env *vmimpl.Env) (vmimpl.Pool, error) {
+	return Ctor(env, "")
+}
+
+func Ctor(env *vmimpl.Env, consoleReadCmd string) (*Pool, error) {
+	cfg, err := parseConfig(env)
+	if err != nil {
+		return nil, err
+	}
+
+	GCE, err := initGCE(cfg.ZoneID, cfg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Logf(0, "GCE initialized: running on %v, internal IP %v, project %v, zone %v, net %v/%v",
+		GCE.Instance, GCE.InternalIP, GCE.ProjectID, GCE.ZoneID, GCE.Network, GCE.Subnetwork)
+
+	createdImage := cfg.GCEImage == ""
+	if createdImage {
+		cfg.GCEImage = env.Name
+		if err := createImage(GCE, cfg, env); err != nil {
+			return nil, err
+		}
+	}
+	pool := &Pool{
+		cfg:            cfg,
+		env:            env,
+		GCE:            GCE,
+		consoleReadCmd: consoleReadCmd,
+		closed:         make(chan struct{}),
+	}
+	// Keep the last-active label of our own image fresh, see Config.AutoDeleteImage.
+	// It's cheap (a few API calls every labelRefreshPeriod), so it's done regardless of the option.
+	if createdImage {
+		pool.wg.Go(pool.refreshImageLabelLoop)
+	}
+	return pool, nil
+}
+
+// createImage creates the GCE image cfg.GCEImage from the env.Image file.
+// If an image with that name already exists and was created from the same file
+// (gce.LabelImageHash), it's reused instead: uploading and converting a multi-GB image
+// takes minutes, and e.g. pkg/instance creates several pools from the same image in a row.
+func createImage(GCE *gce.Context, cfg *Config, env *vmimpl.Env) error {
+	sig, err := hash.File(env.Image)
+	if err != nil {
+		return fmt.Errorf("failed to hash image %v: %w", env.Image, err)
+	}
+	imageHash := sig.String()
+	image, err := GCE.GetImage(cfg.GCEImage)
+	if err != nil {
+		return fmt.Errorf("failed to get GCE image: %w", err)
+	}
+	if canReuseImage(image, imageHash, time.Now()) {
+		log.Logf(0, "reusing GCE image %v created from the same image file", cfg.GCEImage)
+		// Refresh the last-active label right away rather than after the first labelRefreshPeriod,
+		// and mark the image for auto-deletion if this config asks for it (the image may have been
+		// created by a config that did not).
+		image.Labels[gce.LabelLastActive] = gce.LastActiveLabelValue(time.Now())
+		if cfg.AutoDeleteImage {
+			image.Labels[gce.LabelAutoDelete] = "true"
+		}
+		if err := GCE.SetImageLabels(image, image.Labels); err != nil {
+			return fmt.Errorf("failed to update the labels of GCE image %v: %w", cfg.GCEImage, err)
+		}
+		return nil
+	}
+	gcsImage := filepath.Join(cfg.GCSPath, env.Name+"-image.tar.gz")
+	log.Logf(0, "uploading image %v to %v...", env.Image, gcsImage)
+	if err := uploadImageToGCS(env.Image, gcsImage); err != nil {
+		return err
+	}
+	// The tarball is only needed to create the GCE image, delete it afterwards
+	// so that such files don't accumulate in the bucket.
+	defer func() {
+		if err := deleteImageFromGCS(gcsImage); err != nil {
+			log.Logf(0, "failed to delete %v from GCS: %v", gcsImage, err)
+		}
+	}()
+	log.Logf(0, "creating GCE image %v...", cfg.GCEImage)
+	if err := GCE.DeleteImage(cfg.GCEImage); err != nil {
+		return fmt.Errorf("failed to delete GCE image: %w", err)
+	}
+	labels := map[string]string{
+		gce.LabelImageHash:  imageHash,
+		gce.LabelLastActive: gce.LastActiveLabelValue(time.Now()),
+	}
+	if cfg.AutoDeleteImage {
+		labels[gce.LabelAutoDelete] = "true"
+	}
+	if err := GCE.CreateImage(cfg.GCEImage, gcsImage, env.OS, labels); err != nil {
+		return fmt.Errorf("failed to create GCE image: %w", err)
+	}
+	return nil
+}
+
+// maxReuseAge is the maximum age of the gce.LabelLastActive label of an auto-deleted image
+// for it to be reused. Such an image may be deleted by the cleanup job at any moment once
+// the label is older than gce.StaleImageAge, and we don't want to race with it.
+const maxReuseAge = gce.StaleImageAge / 2
+
+// canReuseImage returns whether the existing image (nil if it does not exist) is ready,
+// was created from an image file with the given hash and is not about to be deleted.
+func canReuseImage(image *compute.Image, imageHash string, now time.Time) bool {
+	if image == nil || image.Status != "READY" || image.Labels[gce.LabelImageHash] != imageHash {
+		return false
+	}
+	if _, autoDelete := image.Labels[gce.LabelAutoDelete]; !autoDelete {
+		return true
+	}
+	lastActive, err := time.Parse(gce.LastActiveTimeFormat, image.Labels[gce.LabelLastActive])
+	return err == nil && now.Sub(lastActive) < maxReuseAge
+}
+
+func parseConfig(env *vmimpl.Env) (*Config, error) {
+	if env.Name == "" {
+		return nil, fmt.Errorf("config param name is empty (required for GCE)")
+	}
+	cfg := &Config{
+		Count:       1,
+		Preemptible: true,
+		// Display device is not supported on other platforms.
+		DisplayDevice: env.Arch == targets.AMD64,
+	}
+	if err := config.LoadData(env.Config, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse gce vm config: %w", err)
+	}
+	if cfg.Count < 1 || cfg.Count > 1000 {
+		return nil, fmt.Errorf("invalid config param count: %v, want [1, 1000]", cfg.Count)
+	}
+	if cfg.MachineType == "" {
+		return nil, fmt.Errorf("machine_type parameter is empty")
+	}
+	if cfg.GCEImage == "" && cfg.GCSPath == "" {
+		return nil, fmt.Errorf("gcs_path parameter is empty")
+	}
+	if cfg.GCEImage == "" && env.Image == "" {
+		return nil, fmt.Errorf("config param image is empty (required for GCE)")
+	}
+	if cfg.GCEImage != "" && env.Image != "" {
+		return nil, fmt.Errorf("both image and gce_image are specified")
+	}
+	if cfg.AutoDeleteImage && cfg.GCEImage != "" {
+		return nil, fmt.Errorf("auto_delete_image requires gce_image to be empty")
+	}
+	return cfg, nil
+}
+
+func initGCE(zoneID, projectID string) (*gce.Context, error) {
+	// There happen some transient GCE init errors on and off.
+	// Let's try it several times before aborting.
+	const (
+		gceInitAttempts = 3
+		gceInitBackoff  = 5 * time.Second
+	)
+	var (
+		GCE *gce.Context
+		err error
+	)
+	for i := 1; i <= gceInitAttempts; i++ {
+		if i > 1 {
+			time.Sleep(gceInitBackoff)
+		}
+		GCE, err = gce.NewContext(zoneID, projectID)
+		if err == nil {
+			return GCE, nil
+		}
+		log.Logf(0, "init GCE attempt %d/%d failed: %v", i, gceInitAttempts, err)
+	}
+	return nil, fmt.Errorf("all attempts to init GCE failed: %w", err)
+}
+
+func (pool *Pool) Count() int {
+	return pool.cfg.Count
+}
+
+// Close stops the background goroutines. The GCE image is not deleted here:
+// callers such as pkg/instance.Env.Test create and close multiple pools for
+// the same manager/image in a row, and an external cleanup job is needed anyway
+// in case the process crashes or is killed before Close runs.
+func (pool *Pool) Close() error {
+	close(pool.closed)
+	pool.wg.Wait()
+	return nil
+}
+
+// labelRefreshPeriod is how often the gce.LabelLastActive label of the image is refreshed
+// while the pool is alive (see Config.AutoDeleteImage). It must be much smaller than gce.StaleImageAge.
+const labelRefreshPeriod = 30 * time.Minute
+
+func (pool *Pool) refreshImageLabelLoop() {
+	ticker := time.NewTicker(labelRefreshPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pool.closed:
+			return
+		case <-ticker.C:
+		}
+		if err := refreshLastActiveLabel(pool.GCE, pool.cfg.GCEImage); err != nil {
+			log.Logf(0, "GCE: failed to refresh the %v label of image %v: %v",
+				gce.LabelLastActive, pool.cfg.GCEImage, err)
+		}
+	}
+}
+
+// refreshLastActiveLabel sets the gce.LabelLastActive label of the image to the current time.
+func refreshLastActiveLabel(GCE *gce.Context, imageName string) error {
+	image, err := GCE.GetImage(imageName)
+	if err != nil {
+		return err
+	}
+	if image == nil {
+		return fmt.Errorf("image does not exist")
+	}
+	if image.Labels == nil {
+		image.Labels = make(map[string]string)
+	}
+	image.Labels[gce.LabelLastActive] = gce.LastActiveLabelValue(time.Now())
+	return GCE.SetImageLabels(image, image.Labels)
+}
+
+func (pool *Pool) Create(_ context.Context, workdir string, index int) (vmimpl.Instance, error) {
+	name := fmt.Sprintf("%v-%v", pool.env.Name, index)
+	// Create SSH key for the instance.
+	gceKey := filepath.Join(workdir, "key")
+	keygen := osutil.Command("ssh-keygen", "-t", "ed25519", "-N", "", "-C", "syzkaller", "-f", gceKey)
+	if out, err := keygen.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("failed to execute ssh-keygen: %w\n%s", err, out)
+	}
+	gceKeyPub, err := os.ReadFile(gceKey + ".pub")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	log.Logf(0, "creating instance: %v", name)
+	instCfg := &gce.InstanceConfig{
+		Name:                 name,
+		MachineType:          pool.cfg.MachineType,
+		Image:                pool.cfg.GCEImage,
+		SSHKey:               string(gceKeyPub),
+		Tags:                 pool.cfg.Tags,
+		Preemptible:          pool.cfg.Preemptible,
+		DisplayDevice:        pool.cfg.DisplayDevice,
+		NestedVirtualization: pool.cfg.NestedVirtualization,
+		NicType:              pool.cfg.NicType,
+		VMRunningTime:        pool.env.Timeouts.VMRunningTime,
+	}
+	// In case the manager crashed, we might attempt creation in a different zone than the original VM, and the creation
+	// will not fail. The VM should eventually be deleted anyway, unless it's configured to run forever.
+	// If that's the case, attempt deletion first.
+	if instCfg.VMRunningTime == 0 {
+		if _, loaded := pool.alreadyCreated.LoadOrStore(index, true); !loaded {
+			pool.GCE.DeleteInstanceAcrossZones(name, true)
+		}
+	}
+	ip, zone, err := pool.GCE.CreateInstance(instCfg)
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && apiErr.Code == 409 {
+		log.Logf(0, "deleting existing instance %v at zone %v due to conflict: %v", name, zone, err)
+		if err = pool.GCE.DeleteInstance(name, zone, true); err == nil {
+			ip, zone, err = pool.GCE.CreateInstance(instCfg)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	ok := false
+	defer func() {
+		if !ok {
+			pool.GCE.DeleteInstance(name, zone, true)
+		}
+	}()
+	sshKey := pool.env.SSHKey
+	sshUser := pool.env.SSHUser
+	if sshKey == "GCE" {
+		// Assuming image supports GCE ssh fanciness.
+		sshKey = gceKey
+		sshUser = "syzkaller"
+	}
+	log.Logf(0, "wait instance to boot: %v (%v)", name, ip)
+	inst := &instance{
+		env:   pool.env,
+		cfg:   pool.cfg,
+		debug: pool.env.Debug,
+		GCE:   pool.GCE,
+		name:  name,
+		zone:  zone,
+		SSHOptions: vmimpl.SSHOptions{
+			Addr: ip,
+			Port: 22,
+			Key:  sshKey,
+			User: sshUser,
+		},
+
+		gceKey: gceKey,
+
+		closed:         make(chan bool),
+		consoleReadCmd: pool.consoleReadCmd,
+		timeouts:       pool.env.Timeouts,
+	}
+	if err := vmimpl.WaitForSSH(5*time.Minute, inst.SSHOptions,
+		pool.env.OS, nil, false, pool.env.Debug); err != nil {
+		output, outputErr := inst.getSerialPortOutput()
+		if outputErr != nil {
+			output = []byte(fmt.Sprintf("failed to get boot output: %v", outputErr))
+		}
+		return nil, vmimpl.MakeBootError(err, output)
+	}
+	ok = true
+	return inst, nil
+}
+
+func (inst *instance) Close() error {
+	close(inst.closed)
+	var err error
+	if !inst.preempted {
+		err = inst.GCE.DeleteInstance(inst.name, inst.zone, true)
+	}
+	if inst.consolew != nil {
+		err2 := inst.consolew.Close()
+		if err == nil {
+			err = err2
+		}
+	}
+	return err
+}
+
+func (inst *instance) Forward(port int) (string, error) {
+	return fmt.Sprintf("%v:%v", inst.GCE.InternalIP, port), nil
+}
+
+func (inst *instance) Copy(hostSrc string) (string, error) {
+	vmDstDir := filepath.Join("./", inst.env.Name)
+	if _, err := inst.ssh("mkdir", "-p", vmDstDir); err != nil {
+		return "", err
+	}
+	vmDst := filepath.Join(vmDstDir, filepath.Base(hostSrc))
+	err := vmimpl.SCP(hostSrc, vmDst, vmimpl.SCPOptions{
+		Debug:         inst.debug,
+		Key:           inst.Key,
+		Port:          inst.Port,
+		SystemSSHCfg:  false,
+		User:          inst.User,
+		Addr:          inst.Addr,
+		Timeout:       time.Minute,
+		VerboseOutput: true,
+	})
+	if err != nil {
+		// Passing context.Background will make it uninterruptible, but the other option is to modify the Copy interface
+		// across all vm implementations to accept a context parameter.
+		// TODO: pass context to Copy
+		if inst.hasBeenPreempted(context.Background()) {
+			return "", vmimpl.ErrPreempted
+		}
+		return "", err
+	}
+	return vmDst, nil
+}
+
+func (inst *instance) Run(ctx context.Context, command string) (
+	<-chan vmimpl.Chunk, <-chan error, error) {
+	conRpipe, conWpipe, err := osutil.LongPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var conArgs []string
+	if inst.consoleReadCmd == "" {
+		conArgs = inst.serialPortArgs(false)
+	} else {
+		conArgs = inst.sshArgs(inst.consoleReadCmd)
+	}
+	con := osutil.Command("ssh", conArgs...)
+	con.Env = []string{}
+	con.Stdout = conWpipe
+	con.Stderr = conWpipe
+	conw, err := con.StdinPipe()
+	if err != nil {
+		conRpipe.Close()
+		conWpipe.Close()
+		return nil, nil, err
+	}
+	if inst.consolew != nil {
+		inst.consolew.Close()
+	}
+	inst.consolew = conw
+	if err := con.Start(); err != nil {
+		conRpipe.Close()
+		conWpipe.Close()
+		return nil, nil, fmt.Errorf("failed to connect to console server: %w", err)
+	}
+	conWpipe.Close()
+
+	var tee io.Writer
+	if inst.debug {
+		tee = os.Stdout
+	}
+	merger := vmimpl.NewOutputMerger(tee)
+	var decoder func(data []byte) (int, int, []byte)
+	if inst.env.OS == targets.Windows {
+		decoder = kd.Decode
+	}
+	merger.AddDecoder("console", vmimpl.OutputConsole, conRpipe, decoder)
+	if err := waitForConsoleConnect(merger); err != nil {
+		con.Process.Kill()
+		merger.Wait()
+		return nil, nil, err
+	}
+	sshRpipe, sshWpipe, err := osutil.LongPipe()
+	if err != nil {
+		con.Process.Kill()
+		merger.Wait()
+		return nil, nil, err
+	}
+	sshRpipeErr, sshWpipeErr, err := osutil.LongPipe()
+	if err != nil {
+		con.Process.Kill()
+		merger.Wait()
+		sshRpipe.Close()
+		sshWpipe.Close()
+		return nil, nil, err
+	}
+	ssh := osutil.Command("ssh", inst.sshArgs(command)...)
+	ssh.Stdout = sshWpipe
+	ssh.Stderr = sshWpipeErr
+	if err := ssh.Start(); err != nil {
+		con.Process.Kill()
+		merger.Wait()
+		sshRpipe.Close()
+		sshWpipe.Close()
+		sshRpipeErr.Close()
+		sshWpipeErr.Close()
+		return nil, nil, fmt.Errorf("failed to connect to instance: %w", err)
+	}
+	sshWpipe.Close()
+	sshWpipeErr.Close()
+	merger.Add("ssh", vmimpl.OutputStdout, sshRpipe)
+	merger.Add("ssh-err", vmimpl.OutputStderr, sshRpipeErr)
+
+	return vmimpl.Multiplex(ctx, ssh, merger, vmimpl.MultiplexConfig{
+		Console: vmimpl.CmdCloser{Cmd: con},
+		Close:   inst.closed,
+		Debug:   inst.debug,
+		Scale:   inst.timeouts.Scale,
+		PreemptionError: func(err error) bool {
+			var mergeError *vmimpl.MergerError
+			if errors.As(err, &mergeError) && mergeError.R == conRpipe {
+				// Console connection must never fail. If it does, it's either
+				// instance preemption or a GCE bug. In either case, not a kernel bug.
+				log.Logf(0, "%v: gce console connection failed with %v", inst.name, mergeError.Err)
+				inst.preempted = true
+			} else {
+				// Check if the instance was terminated due to preemption or host maintenance.
+				if inst.hasBeenPreempted(ctx) {
+					log.Logf(0, "%v: ssh exited but instance is not running", inst.name)
+				}
+			}
+			if inst.preempted {
+				inst.GCE.ReportPreemption(inst.zone)
+				return true
+			}
+			return false
+		},
+	})
+}
+
+func waitForConsoleConnect(merger *vmimpl.OutputMerger) error {
+	// We've started the console reading ssh command, but it has not necessary connected yet.
+	// If we proceed to running the target command right away, we can miss part
+	// of console output. During repro we can crash machines very quickly and
+	// would miss beginning of a crash. Before ssh starts piping console output,
+	// it usually prints:
+	// "serialport: Connected to ... port 1 (session ID: ..., active connections: 1)"
+	// So we wait for this line, or at least a minute and at least some output.
+	timeout := time.NewTimer(time.Minute)
+	defer timeout.Stop()
+	connectedMsg := []byte("serialport: Connected")
+	permissionDeniedMsg := []byte("Permission denied (publickey)")
+	var output []byte
+	for {
+		select {
+		case out := <-merger.Output:
+			output = append(output, out.Data...)
+			if bytes.Contains(output, connectedMsg) {
+				// Just to make sure (otherwise we still see trimmed reports).
+				time.Sleep(5 * time.Second)
+				return nil
+			}
+			if bytes.Contains(output, permissionDeniedMsg) {
+				// This is a GCE bug.
+				return fmt.Errorf("broken console: %s", permissionDeniedMsg)
+			}
+		case <-timeout.C:
+			if len(output) == 0 {
+				return fmt.Errorf("broken console: no output")
+			}
+			return nil
+		}
+	}
+}
+
+func (inst *instance) hasBeenPreempted(ctx context.Context) bool {
+	wait := 10 * time.Second
+	select {
+	case <-time.After(wait):
+	case <-ctx.Done():
+		return false
+	}
+	inst.preempted = !inst.GCE.IsInstanceRunning(inst.name, inst.zone)
+	return inst.preempted
+}
+
+func (inst *instance) Diagnose(rep *report.Report) ([]byte, bool) {
+	switch inst.env.OS {
+	case targets.Linux:
+		output, wait, _ := vmimpl.DiagnoseLinux(rep, inst.ssh)
+		return output, wait
+	case targets.FreeBSD:
+		return vmimpl.DiagnoseFreeBSD(inst.consolew)
+	case targets.OpenBSD:
+		return vmimpl.DiagnoseOpenBSD(inst.consolew)
+	}
+	return nil, false
+}
+
+func (inst *instance) ssh(args ...string) ([]byte, error) {
+	return osutil.RunCmd(time.Minute, "", "ssh", inst.sshArgs(args...)...)
+}
+
+func (inst *instance) sshArgs(args ...string) []string {
+	sshArgs := append(vmimpl.SSHArgs(inst.debug, inst.Key, 22, false), inst.User+"@"+inst.Addr)
+	if inst.env.OS == targets.Linux && inst.User != "root" {
+		args = []string{"sudo", "bash", "-c", "'" + strings.Join(args, " ") + "'"}
+	}
+	return append(sshArgs, args...)
+}
+
+func (inst *instance) serialPortArgs(replay bool) []string {
+	user := "syzkaller"
+	if inst.cfg.SerialPortUser != "" {
+		user = inst.cfg.SerialPortUser
+	}
+	key := inst.gceKey
+	if inst.cfg.SerialPortKey != "" {
+		key = inst.cfg.SerialPortKey
+	}
+	replayArg := ""
+	if replay {
+		replayArg = ".replay-lines=10000"
+	}
+	conAddr := fmt.Sprintf("%v.%v.%v.%s.port=1%s@%v-ssh-serialport.googleapis.com",
+		inst.GCE.ProjectID, inst.zone, inst.name, user, replayArg, inst.GCE.RegionID)
+	conArgs := append(vmimpl.SSHArgs(inst.debug, key, 9600, false), conAddr)
+	// TODO(blackgnezdo): Remove this once ssh-serialport.googleapis.com stops using
+	// host key algorithm: ssh-rsa.
+	return append(conArgs, "-o", "HostKeyAlgorithms=+ssh-rsa")
+}
+
+func (inst *instance) getSerialPortOutput() ([]byte, error) {
+	conRpipe, conWpipe, err := osutil.LongPipe()
+	if err != nil {
+		return nil, err
+	}
+	defer conRpipe.Close()
+	defer conWpipe.Close()
+
+	con := osutil.Command("ssh", inst.serialPortArgs(true)...)
+	con.Env = []string{}
+	con.Stdout = conWpipe
+	con.Stderr = conWpipe
+	if _, err := con.StdinPipe(); err != nil { // SSH would close connection on stdin EOF
+		return nil, err
+	}
+	if err := con.Start(); err != nil {
+		return nil, fmt.Errorf("failed to connect to console server: %w", err)
+	}
+	conWpipe.Close()
+	done := make(chan bool)
+	go func() {
+		timeout := time.NewTimer(time.Minute)
+		defer timeout.Stop()
+		select {
+		case <-done:
+		case <-timeout.C:
+		}
+		con.Process.Kill()
+	}()
+	var output []byte
+	buf := make([]byte, 64<<10)
+	for {
+		n, err := conRpipe.Read(buf)
+		if err != nil || n == 0 {
+			break
+		}
+		output = append(output, buf[:n]...)
+	}
+	close(done)
+	con.Wait()
+	return output, nil
+}
+
+func uploadImageToGCS(localImage, gcsImage string) error {
+	GCS, err := gcs.NewClient(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to create GCS client: %w", err)
+	}
+	defer GCS.Close()
+
+	localReader, err := os.Open(localImage)
+	if err != nil {
+		return fmt.Errorf("failed to open image file: %w", err)
+	}
+	defer localReader.Close()
+	localStat, err := localReader.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat image file: %w", err)
+	}
+
+	gcsWriter, err := GCS.FileWriter(gcsImage, "", "")
+	if err != nil {
+		return fmt.Errorf("failed to upload image: %w", err)
+	}
+	defer gcsWriter.Close()
+
+	gzipWriter := gzip.NewWriter(gcsWriter)
+	tarWriter := tar.NewWriter(gzipWriter)
+	tarHeader := &tar.Header{
+		Name:     "disk.raw",
+		Typeflag: tar.TypeReg,
+		Mode:     0640,
+		Size:     localStat.Size(),
+		ModTime:  time.Now(),
+		Uname:    "syzkaller",
+		Gname:    "syzkaller",
+	}
+	setGNUFormat(tarHeader)
+	if err := tarWriter.WriteHeader(tarHeader); err != nil {
+		return fmt.Errorf("failed to write image tar header: %w", err)
+	}
+	if _, err := io.Copy(tarWriter, localReader); err != nil {
+		return fmt.Errorf("failed to write image file: %w", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		return fmt.Errorf("failed to write image file: %w", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to write image file: %w", err)
+	}
+	if err := gcsWriter.Close(); err != nil {
+		return fmt.Errorf("failed to write image file: %w", err)
+	}
+	return nil
+}
+
+func deleteImageFromGCS(gcsImage string) error {
+	GCS, err := gcs.NewClient(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to create GCS client: %w", err)
+	}
+	defer GCS.Close()
+	return GCS.DeleteFile(gcsImage)
+}

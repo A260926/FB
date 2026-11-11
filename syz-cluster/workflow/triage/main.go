@@ -1,0 +1,408 @@
+// Copyright 2024 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"time"
+
+	"github.com/google/syzkaller/pkg/debugtracer"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/syz-cluster/pkg/api"
+	"github.com/google/syzkaller/syz-cluster/pkg/app"
+	"github.com/google/syzkaller/syz-cluster/pkg/triage"
+	"github.com/google/syzkaller/syz-cluster/pkg/workspace"
+)
+
+var (
+	flagSession = flag.String("session", "", "session ID")
+	flagRepo    = flag.String("repository", "", "path to a kernel checkout")
+	flagVerdict = flag.String("verdict", "", "where to save the verdict")
+)
+
+func main() {
+	flag.Parse()
+	if *flagSession == "" || *flagRepo == "" {
+		// TODO: abort the whole workflow, no sense to retry. Alert the error.
+		app.Fatalf("--session and --repo must be set")
+	}
+	client := app.DefaultClient()
+	ctx := context.Background()
+	output := new(bytes.Buffer)
+	tracer := &debugtracer.GenericTracer{WithTime: true, TraceWriter: output}
+
+	ws, err := workspace.New(*flagRepo, tracer)
+	if err != nil {
+		app.Fatalf("failed to initialize workspace: %v", err)
+	}
+
+	cfg, err := app.Config()
+	if err != nil {
+		app.Fatalf("failed to load app config: %v", err)
+	}
+
+	triager := &seriesTriager{
+		DebugTracer: tracer,
+		client:      client,
+		ws:          ws,
+		config:      cfg,
+	}
+	verdict, err := triager.GetVerdict(ctx, *flagSession)
+	if err != nil {
+		app.Fatalf("failed to get the verdict: %v", err)
+	}
+	err = client.UploadTriageResult(ctx, *flagSession, &api.UploadTriageResultReq{
+		SkipReason: verdict.SkipReason,
+		Log:        output.Bytes(),
+		Trajectory: triager.Trajectory(),
+	})
+	if err != nil {
+		app.Fatalf("failed to upload triage results: %v", err)
+	}
+	if *flagVerdict != "" {
+		osutil.WriteJSON(*flagVerdict, verdict)
+	}
+
+	// TODO:
+	// 1. It might be that the kernel builds/boots for one arch and does not build for another.
+	// 2. What if controller does not reply? Let Argo just restart the step.
+}
+
+type seriesTriager struct {
+	debugtracer.DebugTracer
+	client    *api.Client
+	ws        *workspace.Workspace
+	config    *app.AppConfig
+	aiVerdict *triage.AITriageResult
+}
+
+func (triager *seriesTriager) Trajectory() []byte {
+	if triager.aiVerdict != nil {
+		return triager.aiVerdict.Trajectory
+	}
+	return nil
+}
+
+func (triager *seriesTriager) GetVerdict(ctx context.Context, sessionID string) (*api.TriageResult, error) {
+	sessionInfo, err := triager.client.GetSessionInfo(ctx, sessionID)
+	if err != nil {
+		// TODO: the workflow step must be retried.
+		return nil, fmt.Errorf("failed to query series: %w", err)
+	}
+	series := sessionInfo.Series
+	treesResp, err := triager.client.GetTrees(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query trees: %w", err)
+	}
+	if sessionInfo.Job != nil {
+		return triager.prepareJobTask(series, sessionInfo.Job, treesResp.Trees)
+	}
+	fuzzConfigs := triage.MergeKernelFuzzConfigs(triage.SelectFuzzConfigs(series, treesResp.FuzzTargets))
+	if len(fuzzConfigs) == 0 {
+		return &api.TriageResult{
+			SkipReason: "no suitable fuzz configs found",
+		}, nil
+	}
+	ret := &api.TriageResult{}
+	for _, campaign := range fuzzConfigs {
+		fuzzTask, err := triager.prepareFuzzingTask(ctx, series, sessionInfo.Direct, treesResp.Trees, campaign)
+		if skipErr, ok := errors.AsType[*SkipTriageError](err); ok {
+			ret.SkipReason = skipErr.Reason.Error()
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		ret.Targets = append(ret.Targets, fuzzTask)
+	}
+	if len(ret.Targets) > 0 {
+		// If we have prepared at least one fuzzing task, the series was not skipped.
+		ret.SkipReason = ""
+	}
+	return ret, nil
+}
+
+func (triager *seriesTriager) prepareFuzzingTask(ctx context.Context, series *api.Series, forceTriage bool,
+	trees []*api.Tree, target *triage.MergedFuzzConfig) (*api.TestTarget, error) {
+	var result *SelectResult
+	var err error
+	isStableRC := series.IsStableRC()
+	if isStableRC {
+		var tree *api.Tree
+		tree, err = triage.StableTree(trees, series)
+		if err != nil {
+			return nil, SkipError(err.Error())
+		}
+		result, err = triager.selectFromList(series, []*api.Tree{tree})
+	} else {
+		if series.IsStableBackport() {
+			return nil, SkipError("developer stable backport skipped")
+		}
+		nonStableTrees := triage.NonStableTrees(trees)
+		result, err = triager.selectBaseCommit(series, nonStableTrees)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, SkipError("no base commit found")
+	}
+
+	triager.Logf("continuing with %v in %v", result.Commit, result.Tree.Name)
+	if _, err := triager.ws.Checkout(result.Tree.Name, result.Commit, series.PatchBodies()); err != nil {
+		if errors.Is(err, triage.ErrSeriesNotApplicable) {
+			// The base commit candidates are not guaranteed to be the ones the series
+			// actually applies to, e.g. if the patches were mangled by the sender's
+			// email client.
+			return nil, SkipError(err.Error())
+		}
+		return nil, fmt.Errorf("failed to checkout and apply patches: %w", err)
+	}
+
+	isFocusedFuzzing := !isStableRC || len(series.Patches) <= api.MaxRCFocusedPatches
+	if err := triager.evaluateAI(ctx, series, isFocusedFuzzing, forceTriage, target); err != nil {
+		return nil, err
+	}
+
+	return triager.buildTestTarget(ctx, series, result, target)
+}
+
+func (triager *seriesTriager) selectBaseCommit(series *api.Series, candidateTrees []*api.Tree) (*SelectResult, error) {
+	if series.BaseCommitHint != "" {
+		if result, err := triager.selectFromBaseCommitHint(series.BaseCommitHint, candidateTrees); err != nil {
+			return nil, fmt.Errorf("selection by base-commit failed: %w", err)
+		} else if result != nil {
+			return result, nil
+		}
+	}
+
+	if result, err := triager.selectFromBlobs(series, candidateTrees); err != nil {
+		return nil, fmt.Errorf("selection by blob failed: %w", err)
+	} else if result != nil {
+		return result, nil
+	}
+
+	return triager.selectFromList(series, candidateTrees)
+}
+
+func (triager *seriesTriager) evaluateAI(ctx context.Context, series *api.Series, isFocusedFuzzing, forceTriage bool,
+	target *triage.MergedFuzzConfig) error {
+	if triager.aiVerdict == nil {
+		triager.aiVerdict = &triage.AITriageResult{WorthFuzzing: true}
+		if isFocusedFuzzing && !triager.config.AI.Empty() {
+			if err := triager.ws.CommitPatches(); err != nil {
+				return fmt.Errorf("failed to commit patch for aflow: %w", err)
+			}
+			if aiResult, err := triage.EvaluatePatch(ctx, triager.config, series, triager.DebugTracer, "/workdir"); err != nil {
+				triager.Logf("AI evaluation failed: %v", err)
+			} else if aiResult != nil {
+				triager.aiVerdict = aiResult
+			}
+		}
+	}
+
+	if forceTriage && !triager.aiVerdict.WorthFuzzing {
+		triager.Logf("AI determined the patch has no functional impact, but fuzzing is forced")
+		triager.aiVerdict.WorthFuzzing = true
+	}
+
+	if !triager.aiVerdict.WorthFuzzing {
+		return SkipError("AI determined the patch has no functional impact")
+	}
+
+	if target.Track == string(api.TrackKMSAN) && !triager.aiVerdict.NeedsKMSAN {
+		return SkipError("AI determined a dedicated KMSAN fuzzing session is not justified for this patch")
+	}
+
+	return nil
+}
+
+func (triager *seriesTriager) buildTestTarget(ctx context.Context, series *api.Series, result *SelectResult,
+	target *triage.MergedFuzzConfig) (*api.TestTarget, error) {
+	base := api.BuildRequest{
+		TreeName:      result.Tree.Name,
+		TreeURL:       result.Tree.URL,
+		ConfigName:    target.KernelConfig,
+		CommitHash:    result.Commit,
+		Arch:          result.Arch,
+		EnableConfigs: triager.aiVerdict.EnableConfigs,
+	}
+	fuzzCfg := new(api.FuzzConfig)
+	if target.FuzzConfig != nil {
+		*fuzzCfg = *target.FuzzConfig
+	}
+	fuzzCfg.FocusSymbols = triager.aiVerdict.FocusSymbols
+	fuzzCfg.BaseCommit = result.Commit
+	fuzzCfg.BaseTree = result.Tree.Name
+	testTarget := &api.TestTarget{
+		Base:    base,
+		Patched: base,
+		Track:   target.Track,
+		Fuzz:    fuzzCfg,
+	}
+	testTarget.Patched.SeriesID = series.ID
+	retestFindings, err := triager.client.ListPreviousFindings(ctx, &api.ListPreviousFindingsReq{
+		SeriesID: series.ID,
+		Arch:     result.Arch,
+		Config:   target.KernelConfig,
+	})
+	if err != nil {
+		// This is sad, but not critical.
+		app.Errorf("failed to query previous findings: %v", err)
+	} else if len(retestFindings) > 0 {
+		triager.Logf("scheduling retest for %d findings", len(retestFindings))
+		testTarget.Retest = &api.RetestTask{
+			Findings: retestFindings,
+		}
+	}
+	return testTarget, nil
+}
+
+func (triager *seriesTriager) prepareJobTask(
+	series *api.Series, job *api.Job, trees []*api.Tree,
+) (*api.TriageResult, error) {
+	var targets []*api.TestTarget
+	for i, task := range job.FindingGroups {
+		foundTree := triage.FindTreeByName(trees, task.Build.TreeName)
+		if foundTree == nil {
+			return &api.TriageResult{
+				SkipReason: fmt.Sprintf("tree %q is no longer known", task.Build.TreeName),
+			}, nil
+		}
+		triager.Logf("continuing with job's original tree %q", task.Build.TreeName)
+		testTarget := &api.TestTarget{
+			Track: fmt.Sprintf("build %d", i),
+		}
+		testTarget.Patched = api.BuildRequest{
+			TreeName:   task.Build.TreeName,
+			TreeURL:    task.Build.TreeURL,
+			ConfigName: task.Build.ConfigName,
+			CommitHash: task.Build.CommitHash,
+			Arch:       task.Build.Arch,
+			SeriesID:   series.ID,
+			JobID:      job.ID,
+		}
+		if len(task.FindingIDs) > 0 {
+			testTarget.Retest = &api.RetestTask{
+				Findings: task.FindingIDs,
+			}
+		}
+		targets = append(targets, testTarget)
+	}
+	if len(targets) == 0 {
+		return &api.TriageResult{
+			SkipReason: "job has no testing tasks available",
+		}, nil
+	}
+	return &api.TriageResult{
+		Targets: targets,
+	}, nil
+}
+
+type SelectResult struct {
+	Tree   *api.Tree
+	Commit string
+	Arch   string
+}
+
+// For now, only amd64 fuzzing is supported.
+const fuzzArch = "amd64"
+
+func (triager *seriesTriager) selectFromBlobs(series *api.Series, trees []*api.Tree) (*SelectResult, error) {
+	triager.Logf("attempting to guess the base commit by blob hashes")
+	var diff []byte
+	for _, patch := range series.Patches {
+		diff = append(diff, patch.Body...)
+		diff = append(diff, '\n')
+	}
+	baseList, err := triager.ws.BaseForDiff(diff, triager.DebugTracer)
+	if err != nil {
+		return nil, err
+	}
+	tree, commit := triage.FromBaseCommits(series, baseList, trees)
+	if tree == nil {
+		triager.Logf("no candidate base commit is found")
+		return nil, nil
+	}
+	return &SelectResult{
+		Tree:   tree,
+		Commit: commit,
+		Arch:   fuzzArch,
+	}, nil
+}
+
+func (triager *seriesTriager) selectFromBaseCommitHint(commit string, trees []*api.Tree) (*SelectResult, error) {
+	triager.Logf("attempting to use the base commit %s provided by author", commit)
+	commitExists, _ := triager.ws.Git.CommitExists(commit)
+	if !commitExists {
+		triager.Logf("commit doesn't exist")
+		return nil, nil
+	}
+	const cutOffDays = 60
+	branchList, err := triager.ws.BranchesThatContain(commit, time.Now().Add(-time.Hour*24*cutOffDays))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query branches: %w", err)
+	}
+	for _, branch := range branchList {
+		treeIndex, _ := triage.FindTree(trees, branch.Branch)
+		if treeIndex != -1 {
+			return &SelectResult{
+				Tree:   trees[treeIndex],
+				Commit: commit,
+				Arch:   fuzzArch,
+			}, nil
+		}
+	}
+	return nil, nil
+}
+
+func (triager *seriesTriager) selectFromList(series *api.Series, trees []*api.Tree) (*SelectResult, error) {
+	selectedTrees := triage.SelectTrees(series, trees)
+	if len(selectedTrees) == 0 {
+		return nil, SkipError("no suitable base kernel trees found")
+	}
+	var skipErr error
+	for _, tree := range selectedTrees {
+		triager.Logf("considering tree %q", tree.Name)
+		selector := triage.NewCommitSelector(triager.ws.GitTreeOps, triager.DebugTracer)
+		result, err := selector.Select(series, tree)
+		if err != nil {
+			// TODO: the workflow step must be retried.
+			return nil, fmt.Errorf("failed to run the commit selector for %q: %w", tree.Name, err)
+		} else if result.Commit == "" {
+			// If we fail to find a suitable commit for all the trees, return an error just about the first one.
+			if skipErr == nil {
+				skipErr = SkipError("failed to find a base commit: " + result.Reason)
+			}
+			triager.Logf("failed to find a base commit for %q", tree.Name)
+			continue
+		}
+		triager.Logf("result: %s", result.Commit)
+		return &SelectResult{
+			Tree:   tree,
+			Commit: result.Commit,
+			Arch:   fuzzArch,
+		}, nil
+	}
+	return nil, skipErr
+}
+
+type SkipTriageError struct {
+	Reason error
+}
+
+func SkipError(reason string) *SkipTriageError {
+	return &SkipTriageError{Reason: errors.New(reason)}
+}
+
+func (e *SkipTriageError) Error() string {
+	return fmt.Sprintf("series must be skipped: %s", e.Reason)
+}
+
+func (e *SkipTriageError) Unwrap() error {
+	return e.Reason
+}

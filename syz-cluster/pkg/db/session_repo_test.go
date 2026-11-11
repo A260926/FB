@@ -1,0 +1,284 @@
+// Copyright 2024 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package db
+
+import (
+	"testing"
+	"time"
+
+	"cloud.google.com/go/spanner"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSeriesInsertSession(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+	seriesRepo := NewSeriesRepository(client)
+
+	series := &Series{ExtID: "some-series"}
+	err := seriesRepo.Insert(ctx, series, nil)
+	assert.NoError(t, err)
+
+	withSession := func(need int) {
+		list, err := seriesRepo.ListLatest(ctx, SeriesFilter{Limit: 10}, time.Time{})
+		assert.NoError(t, err)
+		var cnt int
+		for _, item := range list {
+			if item.Session != nil {
+				cnt++
+			}
+		}
+		assert.Equal(t, cnt, need)
+	}
+
+	// This series is indeed without a session.
+	withSession(0)
+
+	// Add a new session.
+	session := &Session{SeriesID: series.ID}
+	err = sessionRepo.Insert(ctx, session)
+	assert.NoError(t, err)
+
+	// The sessions is not started yet.
+	withSession(0)
+
+	// Now start it.
+	err = sessionRepo.Start(ctx, session.ID)
+	assert.NoError(t, err)
+	withSession(1)
+}
+
+func TestQueryUnfinishedSessions(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	series := dummy.dummySeries()
+
+	nthTime := func(i int) time.Time {
+		return time.Date(2009, time.January, 1, 1, i, 0, 0, time.UTC)
+	}
+
+	for i := range 5 {
+		session := &Session{
+			SeriesID:  series.ID,
+			CreatedAt: nthTime(i),
+		}
+		err := sessionRepo.Insert(ctx, session)
+		assert.NoError(t, err)
+	}
+	// Tie-break equal CreatedAt by ID.
+	for _, id := range []string{"session-b", "session-a"} {
+		require.NoError(t, sessionRepo.Insert(ctx, &Session{
+			ID:        id,
+			SeriesID:  series.ID,
+			CreatedAt: nthTime(5),
+		}))
+	}
+
+	list, err := sessionRepo.ListUnfinished(ctx, 7)
+	require.NoError(t, err)
+	require.Len(t, list, 7)
+	for i := range 5 {
+		assert.Equal(t, nthTime(i), list[i].CreatedAt)
+	}
+	assert.Equal(t, "session-a", list[5].ID)
+	assert.Equal(t, "session-b", list[6].ID)
+}
+
+func TestPrioritizeStartedSessions(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	series := dummy.dummySeries()
+
+	finishedSession := dummy.dummySession(series)
+	dummy.startSession(finishedSession)
+	dummy.finishSession(finishedSession)
+
+	now := time.Now()
+	directSession := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: now.Add(-time.Hour),
+		Direct:    spanner.NullBool{Bool: true, Valid: true},
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, directSession))
+
+	startedSession := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: now,
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, startedSession))
+	dummy.startSession(startedSession)
+
+	list, err := sessionRepo.ListUnfinished(ctx, 5)
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+	assert.Equal(t, startedSession.ID, list[0].ID)
+	assert.Equal(t, directSession.ID, list[1].ID)
+}
+
+func TestPrioritizeJobSessions(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+	jobRepo := NewJobRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	series := dummy.dummySeries()
+	sessionBase := dummy.dummySession(series)
+	dummy.startSession(sessionBase)
+	dummy.finishSession(sessionBase)
+	report := dummy.dummyReport(sessionBase)
+
+	job := &Job{ID: "job-1", ExtID: "ext-1", Type: JobPatchTest, ReportID: report.ID}
+	err := jobRepo.Insert(ctx, job, nil)
+	assert.NoError(t, err)
+
+	session1 := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: time.Now().Add(-time.Hour),
+	}
+	err = sessionRepo.Insert(ctx, session1)
+	assert.NoError(t, err)
+
+	session2 := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: time.Now(),
+		JobID:     spanner.NullString{StringVal: "job-1", Valid: true},
+	}
+	err = sessionRepo.Insert(ctx, session2)
+	assert.NoError(t, err)
+
+	list, err := sessionRepo.ListUnfinished(ctx, 2)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, "job-1", list[0].JobID.StringVal)
+	assert.Equal(t, session1.ID, list[1].ID)
+}
+
+func TestPrioritizeDirectSessions(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	series := dummy.dummySeries()
+
+	session1 := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: time.Now().Add(-time.Hour),
+	}
+	err := sessionRepo.Insert(ctx, session1)
+	assert.NoError(t, err)
+
+	session2 := &Session{
+		SeriesID:  series.ID,
+		CreatedAt: time.Now(),
+		Direct:    spanner.NullBool{Bool: true, Valid: true},
+	}
+	err = sessionRepo.Insert(ctx, session2)
+	assert.NoError(t, err)
+
+	list, err := sessionRepo.ListUnfinished(ctx, 2)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.True(t, list[0].Direct.Bool)
+	assert.Equal(t, session2.ID, list[0].ID)
+	assert.Equal(t, session1.ID, list[1].ID)
+}
+
+func TestPrioritizeStableRCSessions(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+	seriesRepo := NewSeriesRepository(client)
+	jobRepo := NewJobRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	regularSeries := dummy.dummySeries()
+	sessionBase := dummy.dummySession(regularSeries)
+	dummy.startSession(sessionBase)
+	dummy.finishSession(sessionBase)
+	report := dummy.dummyReport(sessionBase)
+
+	rcSeries := &Series{
+		ExtID:   "rc-series",
+		XStable: spanner.NullString{StringVal: "review", Valid: true},
+	}
+	require.NoError(t, seriesRepo.Insert(ctx, rcSeries, nil))
+
+	job := &Job{ID: "job-1", ExtID: "ext-1", Type: JobPatchTest, ReportID: report.ID}
+	require.NoError(t, jobRepo.Insert(ctx, job, nil))
+
+	now := time.Now()
+	regularSession := &Session{
+		SeriesID:  regularSeries.ID,
+		CreatedAt: now.Add(-3 * time.Hour),
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, regularSession))
+
+	rcSession := &Session{
+		SeriesID:  rcSeries.ID,
+		CreatedAt: now.Add(-2 * time.Hour),
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, rcSession))
+
+	directSession := &Session{
+		SeriesID:  regularSeries.ID,
+		CreatedAt: now.Add(-time.Hour),
+		Direct:    spanner.NullBool{Bool: true, Valid: true},
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, directSession))
+
+	jobSession := &Session{
+		SeriesID:  regularSeries.ID,
+		CreatedAt: now,
+		JobID:     spanner.NullString{StringVal: job.ID, Valid: true},
+	}
+	require.NoError(t, sessionRepo.Insert(ctx, jobSession))
+
+	list, err := sessionRepo.ListUnfinished(ctx, 4)
+	require.NoError(t, err)
+	require.Len(t, list, 4)
+	assert.Equal(t, directSession.ID, list[0].ID)
+	assert.Equal(t, jobSession.ID, list[1].ID)
+	assert.Equal(t, rcSession.ID, list[2].ID)
+	assert.Equal(t, regularSession.ID, list[3].ID)
+}
+
+func TestJobSessionDoesNotUpdateLatestSession(t *testing.T) {
+	client, ctx := NewTransientDB(t)
+	sessionRepo := NewSessionRepository(client)
+	seriesRepo := NewSeriesRepository(client)
+
+	dummy := &dummyTestData{t: t, ctx: ctx, client: client}
+	series := dummy.dummySeries()
+	session1 := dummy.dummySession(series)
+	dummy.startSession(session1)
+
+	dbSeries, err := seriesRepo.GetByID(ctx, series.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.ID, dbSeries.LatestSessionID.StringVal)
+
+	report := dummy.dummyReport(session1)
+
+	jobRepo := NewJobRepository(client)
+	job := &Job{ID: "job-123", ExtID: "ext-123", ReportID: report.ID, Type: JobPatchTest, Reporter: report.Reporter}
+	err = jobRepo.Insert(ctx, job, nil)
+	assert.NoError(t, err)
+
+	jobSession := &Session{
+		SeriesID: series.ID,
+		JobID:    spanner.NullString{StringVal: job.ID, Valid: true},
+	}
+	err = sessionRepo.Insert(ctx, jobSession)
+	assert.NoError(t, err)
+
+	err = sessionRepo.Start(ctx, jobSession.ID)
+	assert.NoError(t, err)
+
+	dbSeries, err = seriesRepo.GetByID(ctx, series.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.ID, dbSeries.LatestSessionID.StringVal)
+}

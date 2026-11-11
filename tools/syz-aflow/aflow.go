@@ -1,0 +1,298 @@
+// Copyright 2025 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// syz-aflow tool can be used to invoke any agentic workflow registered with pkg/aflow.
+// See tools/syz-aflow/README.md for instructions.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"maps"
+	"net/http"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/google/syzkaller/pkg/aflow"
+	_ "github.com/google/syzkaller/pkg/aflow/flow"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/pkg/tool"
+	"github.com/google/syzkaller/vm"
+	"golang.org/x/oauth2/google"
+)
+
+func main() {
+	var (
+		flagFlow        = flag.String("workflow", "", "workflow to execute")
+		flagInput       = flag.String("input", "", "input JSON file or directory containing task input files")
+		flagParallel    = flag.Int("parallel", 1, "number of parallel workflows to run in batch execution")
+		flagWorkdir     = flag.String("workdir", "", "directory for kernel checkout, kernel builds, etc")
+		flagModel       = flag.String("model", "", "use this LLM model, if empty use default models")
+		flagProvider    = flag.String("provider", "gemini", "LLM provider to use (gemini, vertex)")
+		flagCacheSize   = flag.String("cache-size", "10GB", "max cache size (e.g. 100MB, 5GB, 1TB)")
+		flagDownloadBug = flag.String("download-bug", "", "extid or id of a bug to download from the dashboard"+
+			" and save into -input file")
+		flagAuth = flag.Bool("auth", false, "use gcloud auth token for downloading bugs (set it up with"+
+			" gcloud auth application-default login)")
+		flagHTML       = flag.String("html", "", "write execution trajectory into this local HTML file in real-time")
+		flagOutput     = flag.String("output", "", "save final workflow output to this JSON file")
+		flagDebug      = flag.Bool("debug", false, "enable runner debug logging")
+		flagTokenLimit = flag.Int("token-limit", 0, "maximum tokens allowed for the workflow run (0 = no limit)")
+		flagCorpus     = flag.String("corpus", "", "save all programs executed in batch execution to this corpus.db")
+	)
+	defer tool.Init()()
+	if *flagDownloadBug != "" {
+		if err := handleDownloadBug(*flagDownloadBug, *flagInput, *flagAuth); err != nil {
+			tool.Fail(err)
+		}
+		return
+	}
+	if *flagFlow == "" || *flagInput == "" {
+		printUsage()
+		return
+	}
+	tasks, isBatch, err := findTaskFiles(*flagInput)
+	if err != nil {
+		tool.Fail(err)
+	}
+	if len(tasks) == 0 {
+		tool.Failf("no task files found in %q", *flagInput)
+	}
+	cacheSize, err := parseSize(*flagCacheSize)
+	if err != nil {
+		tool.Fail(err)
+	}
+	args := RunnerArgs{
+		FlowName:   *flagFlow,
+		Provider:   *flagProvider,
+		Model:      *flagModel,
+		Workdir:    *flagWorkdir,
+		CacheSize:  cacheSize,
+		Debug:      *flagDebug,
+		TokenLimit: *flagTokenLimit,
+		Parallel:   *flagParallel,
+		HTML:       *flagHTML,
+		Output:     *flagOutput,
+		Corpus:     *flagCorpus,
+	}
+	if err := validateBatchMode(isBatch, args); err != nil {
+		tool.Fail(err)
+	}
+
+	// On SIGINT/SIGTERM, cancel running workflows and shut down their VMs gracefully.
+	// Aborted batch tasks keep their in-progress files and are resumed first on restart.
+	osutil.HandleInterrupts(vm.Shutdown)
+	ctx := vm.ShutdownCtx()
+	runner, err := newRunner(ctx, args)
+	if err != nil {
+		tool.Fail(err)
+	}
+	if isBatch {
+		err = runner.runBatch(ctx, tasks)
+	} else {
+		err = runner.runSingle(ctx, tasks[0].Path)
+	}
+	runner.Close()
+	if err != nil {
+		tool.Failf("%v", osutil.VerboseMessage(err))
+	}
+}
+
+func handleDownloadBug(bugID, inputFile string, useAuth bool) error {
+	token := ""
+	if useAuth {
+		var err error
+		token, err = getAccessToken()
+		if err != nil {
+			return err
+		}
+	}
+	return downloadBug(bugID, inputFile, token)
+}
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "syz-aflow usage:\n")
+	flag.PrintDefaults()
+	fmt.Fprintf(os.Stderr, "available workflows:\n")
+	for _, name := range slices.Sorted(maps.Keys(aflow.Flows)) {
+		flow := aflow.Flows[name]
+		fmt.Fprintf(os.Stderr, "\t%v: %v\n", flow.Name, flow.Description)
+	}
+}
+
+func downloadBug(id, inputFile, token string) error {
+	if inputFile == "" {
+		return fmt.Errorf("-download-bug requires -input flag")
+	}
+	resp, err := get(fmt.Sprintf("/bug?extid=%v&json=1", id), token)
+	if err != nil {
+		// Retry with "id=" if we failed with "extid="
+		resp, err = get(fmt.Sprintf("/bug?id=%v&json=1", id), token)
+		if err != nil {
+			return err
+		}
+	}
+	var info map[string]any
+	if err := json.Unmarshal([]byte(resp), &info); err != nil {
+		return fmt.Errorf(
+			"response for bug ID %v was not valid JSON: %w",
+			id, err,
+		)
+	}
+	crash := info["crashes"].([]any)[0].(map[string]any)
+
+	inputs := map[string]any{
+		"KernelRepo":   crash["kernel-source-git"],
+		"KernelCommit": crash["kernel-source-commit"],
+		"BugTitle":     crash["title"],
+	}
+
+	fetchText := func(key string) (string, error) {
+		path, ok := crash[key].(string)
+		if !ok || path == "" {
+			return "", nil
+		}
+		return get(path, token)
+	}
+
+	inputs["ReproSyz"], err = fetchText("syz-reproducer")
+	if err != nil {
+		return err
+	}
+	inputs["ReproOpts"] = crash["repro-opts"]
+	inputs["ReproC"], err = fetchText("c-reproducer")
+	if err != nil {
+		return err
+	}
+	inputs["KernelConfig"], err = fetchText("kernel-config")
+	if err != nil {
+		return err
+	}
+	inputs["CrashReport"], err = fetchText("crash-report-link")
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(inputs, "", "\t")
+	if err != nil {
+		return err
+	}
+	return osutil.WriteFile(inputFile, data)
+}
+
+func get(path, token string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	const host = "https://syzbot.org"
+	req, err := http.NewRequest("GET", fmt.Sprintf("%v%v", host, path), nil)
+	if err != nil {
+		return "", err
+	}
+	if token != "" {
+		req.Header.Add("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("request failed: %v", resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	return string(body), err
+}
+
+func getAccessToken() (string, error) {
+	ctx := context.Background()
+	scopes := []string{"https://www.googleapis.com/auth/cloud-platform"}
+	creds, err := google.FindDefaultCredentials(ctx, scopes...)
+	if err != nil {
+		return "", err
+	}
+	token, err := creds.TokenSource.Token()
+	if err != nil {
+		return "", fmt.Errorf("error retrieving token from source: %w", err)
+	}
+
+	return token.AccessToken, nil
+}
+
+func parseSize(s string) (uint64, error) {
+	var size uint64
+	var suffix string
+	if _, err := fmt.Sscanf(s, "%d%s", &size, &suffix); err != nil {
+		return 0, fmt.Errorf("failed to parse cache size %q: %w", s, err)
+	}
+	switch suffix {
+	case "KB":
+		size <<= 10
+	case "MB":
+		size <<= 20
+	case "GB":
+		size <<= 30
+	case "TB":
+		size <<= 40
+	case "":
+	default:
+		return 0, fmt.Errorf("unknown size suffix %q", suffix)
+	}
+	return size, nil
+}
+
+// expandFileInputs recursively traverses workflow inputs and replaces any
+// string value prefixed with "@" with the contents of the referenced file on
+// disk. Relative file paths are resolved against baseDir (the directory
+// containing the -input JSON file). Literal leading "@" characters can be
+// escaped using "@@".
+func expandFileInputs(inputs map[string]any, baseDir string) error {
+	for key, val := range inputs {
+		expanded, err := expandValue(val, baseDir)
+		if err != nil {
+			return fmt.Errorf("failed to read input file for %q: %w", key, err)
+		}
+		inputs[key] = expanded
+	}
+	return nil
+}
+
+func expandValue(val any, baseDir string) (any, error) {
+	switch v := val.(type) {
+	case string:
+		if strings.HasPrefix(v, "@@") {
+			return v[1:], nil
+		}
+		if !strings.HasPrefix(v, "@") {
+			return v, nil
+		}
+		path := v[1:]
+		if !filepath.IsAbs(path) && baseDir != "" {
+			path = filepath.Join(baseDir, path)
+		}
+		data, err := os.ReadFile(osutil.Abs(path))
+		if err != nil {
+			return nil, fmt.Errorf("(%s): %w", v, err)
+		}
+		return string(data), nil
+	case map[string]any:
+		// Recursively traverse nested JSON objects (e.g. "VM" config object).
+		return v, expandFileInputs(v, baseDir)
+	case []any:
+		// Traverse JSON arrays of strings, nested lists, or nested objects.
+		for i, elem := range v {
+			expanded, err := expandValue(elem, baseDir)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]%w", i, err)
+			}
+			v[i] = expanded
+		}
+		return v, nil
+	default:
+		return val, nil
+	}
+}

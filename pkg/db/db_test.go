@@ -1,0 +1,506 @@
+// Copyright 2017 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package db
+
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+
+	"github.com/google/syzkaller/pkg/hash"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/prog"
+	_ "github.com/google/syzkaller/sys"
+	"github.com/google/syzkaller/sys/targets"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBasic(t *testing.T) {
+	fn := tempFile(t)
+	defer os.Remove(fn)
+	db, err := Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	if len(db.Records) != 0 {
+		t.Fatalf("empty db contains records")
+	}
+	db.Save("", nil, 0)
+	db.Save("1", []byte("ab"), 1)
+	db.Save("23", []byte("abcd"), 2)
+
+	want := map[string]Record{
+		"":   {Val: nil, Seq: 0},
+		"1":  {Val: []byte("ab"), Seq: 1},
+		"23": {Val: []byte("abcd"), Seq: 2},
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after save: %v, want: %v", db.Records, want)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after flush: %v, want: %v", db.Records, want)
+	}
+	db, err = Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after reopen: %v, want: %v", db.Records, want)
+	}
+}
+
+func TestModify(t *testing.T) {
+	fn := tempFile(t)
+	defer os.Remove(fn)
+	db, err := Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	db.Save("1", []byte("ab"), 0)
+	db.Save("23", nil, 1)
+	db.Save("456", []byte("abcd"), 1)
+	db.Save("7890", []byte("a"), 0)
+	db.Delete("23")
+	db.Save("1", nil, 5)
+	db.Save("456", []byte("ef"), 6)
+	db.Delete("7890")
+	db.Save("456", []byte("efg"), 0)
+	db.Save("7890", []byte("bc"), 0)
+
+	want := map[string]Record{
+		"1":    {Val: nil, Seq: 5},
+		"456":  {Val: []byte("efg"), Seq: 0},
+		"7890": {Val: []byte("bc"), Seq: 0},
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after modification: %v, want: %v", db.Records, want)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after flush: %v, want: %v", db.Records, want)
+	}
+	db, err = Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after reopen: %v, want: %v", db.Records, want)
+	}
+}
+
+func TestLarge(t *testing.T) {
+	fn := tempFile(t)
+	defer os.Remove(fn)
+	db, err := Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	const nrec = 1000
+	val := make([]byte, 1000)
+	for i := range val {
+		val[i] = byte(rand.Intn(256))
+	}
+	for i := range nrec {
+		db.Save(fmt.Sprintf("%v", i), val, 0)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	db, err = Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	if len(db.Records) != nrec {
+		t.Fatalf("wrong record count: %v, want %v", len(db.Records), nrec)
+	}
+}
+
+func TestDiscardData(t *testing.T) {
+	fn := tempFile(t)
+	defer os.Remove(fn)
+	db, err := Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	db.DiscardData()
+
+	db.Save("1", []byte("11"), 1)
+	db.Save("2", []byte("22"), 2)
+	db.Save("3", []byte("33"), 3)
+	db.Delete("2")
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	assert.Nil(t, db.Records["1"].Val)
+	assert.Nil(t, db.Records["2"].Val)
+	assert.Nil(t, db.Records["3"].Val)
+
+	db, err = Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	want := map[string]Record{
+		"1": {Val: []byte("11"), Seq: 1},
+		"3": {Val: []byte("33"), Seq: 3},
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after save: %v, want: %v", db.Records, want)
+	}
+	db.Save("3", []byte("333"), 33)
+	db.Save("4", []byte("44"), 4)
+	db.Delete("1")
+	db.DiscardData()
+	assert.Nil(t, db.Records["3"].Val)
+	assert.Nil(t, db.Records["4"].Val)
+	// Force compaction.
+	for range 200 {
+		db.Save("5", []byte("55"), 5)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	db, err = Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	want = map[string]Record{
+		"3": {Val: []byte("333"), Seq: 33},
+		"4": {Val: []byte("44"), Seq: 4},
+		"5": {Val: []byte("55"), Seq: 5},
+	}
+	if !reflect.DeepEqual(db.Records, want) {
+		t.Fatalf("bad db after save: %v, want: %v", db.Records, want)
+	}
+}
+
+func TestOpenInvalid(t *testing.T) {
+	f, err := os.CreateTemp("", "syz-db-test")
+	if err != nil {
+		t.Error(err)
+	}
+
+	defer f.Close()
+	defer os.Remove(f.Name())
+	if _, err := f.Write([]byte(`some invalid data`)); err != nil {
+		t.Error(err)
+	}
+	if db, err := Open(f.Name(), true); err == nil {
+		t.Fatal("opened invalid db")
+	} else if db == nil {
+		t.Fatal("db is nil")
+	}
+}
+
+func TestOpenInaccessible(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("opening inaccessible file won't fail under root")
+	}
+	f, err := os.CreateTemp("", "syz-db-test")
+	if err != nil {
+		t.Error(err)
+	}
+	f.Close()
+	os.Chmod(f.Name(), 0)
+	defer os.Chmod(f.Name(), 0777)
+	defer os.Remove(f.Name())
+	if db, err := Open(f.Name(), false); err == nil {
+		t.Fatal("opened inaccessible db")
+	} else if db != nil {
+		t.Fatal("db is not nil")
+	}
+}
+
+func TestOpenCorrupted(t *testing.T) {
+	fn := tempFile(t)
+	defer os.Remove(fn)
+	db, err := Open(fn, false)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	// Write 1000 records, then wipe half of the file and test that we
+	// (1) get an error, (2) still get 450-550 records.
+	for i := range 1000 {
+		db.Save(fmt.Sprintf("%v", i), []byte{byte(i)}, 0)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatalf("failed to flush db: %v", err)
+	}
+	data, err := os.ReadFile(fn)
+	if err != nil {
+		t.Fatalf("failed to read db: %v", err)
+	}
+	for i := len(data) / 2; i < len(data); i++ {
+		data[i] = 0
+	}
+	if err := osutil.WriteFile(fn, data); err != nil {
+		t.Fatalf("failed to write db: %v", err)
+	}
+	db, err = Open(fn, true)
+	if err == nil {
+		t.Fatalf("no error for corrutped db")
+	}
+	t.Logf("records %v, error: %v", len(db.Records), err)
+	if len(db.Records) < 450 || len(db.Records) > 550 {
+		t.Fatalf("wrong record count: %v", len(db.Records))
+	}
+}
+
+func tempFile(t *testing.T) string {
+	fn, err := osutil.TempFile("syzkaller.test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fn
+}
+
+func TestDecompressionBombValLen(t *testing.T) {
+	// Regression test for decompression bomb: io.ReadAll(flate.NewReader(...))
+	// had no output size limit. A record whose decompressed value exceeds
+	// maxValLen must be rejected with an error.
+	fn := tempFile(t)
+	defer os.Remove(fn)
+
+	// Build a corpus DB with a single record whose value decompresses to
+	// maxValLen+1 bytes (a long run of zeros compresses very well).
+	bigVal := make([]byte, maxValLen+1)
+	var buf bytes.Buffer
+	serializeHeader(&buf, 0)
+	serializeRecord(&buf, "testkey", bigVal, 1)
+	if err := os.WriteFile(fn, buf.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(fn, true)
+	if err == nil {
+		t.Fatal("Open should have returned an error for decompression bomb value")
+	}
+	if db == nil {
+		t.Fatal("db must be non-nil in repair mode even on error")
+	}
+	t.Logf("correctly rejected decompression bomb: %v", err)
+}
+
+func TestOversizeKeyLen(t *testing.T) {
+	// Regression test for OOM: keyLen is a raw uint32 with no bounds check.
+	// A crafted 24-byte corpus DB file with keyLen=maxKeyLen+1 must be rejected
+	// with an error rather than causing a large allocation.
+	f, err := os.CreateTemp("", "syz-db-oom-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+
+	// Header: dbMagic(4) + curVersion(4) + userVersion(8)
+	header := make([]byte, 0, 16)
+	header = binary.LittleEndian.AppendUint32(header, dbMagic)
+	header = binary.LittleEndian.AppendUint32(header, curVersion)
+	header = binary.LittleEndian.AppendUint64(header, 0)
+	// Record: recMagic(4) + keyLen > maxKeyLen (4)
+	header = binary.LittleEndian.AppendUint32(header, recMagic)
+	header = binary.LittleEndian.AppendUint32(header, maxKeyLen+1)
+
+	if _, err := f.Write(header); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(f.Name(), true)
+	if err == nil {
+		t.Fatal("Open should have returned an error for oversize keyLen")
+	}
+	if db == nil {
+		t.Fatal("db must be non-nil in repair mode even on error")
+	}
+	// No records should have been recovered — the first record was malformed.
+	if len(db.Records) != 0 {
+		t.Fatalf("expected 0 records, got %d", len(db.Records))
+	}
+}
+
+func TestDeterministic(t *testing.T) {
+	target, err := prog.GetTarget(targets.TestOS, targets.TestArch64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcFn := tempFile(t)
+	defer os.Remove(srcFn)
+	db, err := Open(srcFn, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := target.DefaultChoiceTable()
+	rs := rand.NewSource(0)
+	for i := range 50 {
+		p := target.Generate(rand.New(rs), 5, ct)
+		data := p.Serialize()
+		db.Save(hash.String(data), data, uint64(i))
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	mergeAndRead := func() ([]byte, [][]byte) {
+		dstFn := tempFile(t)
+		defer os.Remove(dstFn)
+		if _, err := Merge(dstFn, []string{srcFn}, target); err != nil {
+			t.Fatal(err)
+		}
+		rawBytes, err := os.ReadFile(dstFn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		progs, err := ReadCorpus(dstFn, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var serializedProgs [][]byte
+		for _, p := range progs {
+			serializedProgs = append(serializedProgs, p.Serialize())
+		}
+		return rawBytes, serializedProgs
+	}
+
+	firstBytes, firstProgs := mergeAndRead()
+	for range 10 {
+		gotBytes, gotProgs := mergeAndRead()
+		if !bytes.Equal(firstBytes, gotBytes) {
+			t.Fatal("Merge output file bytes are non-deterministic")
+		}
+		if !reflect.DeepEqual(firstProgs, gotProgs) {
+			t.Fatal("ReadCorpus output program order is non-deterministic")
+		}
+	}
+}
+
+func TestOpenReadOnly(t *testing.T) {
+	t.Run("NonexistentFile", func(t *testing.T) {
+		nonexistent := filepath.Join(t.TempDir(), "nonexistent")
+		_, err := OpenReadOnly(nonexistent)
+		require.Error(t, err)
+		require.NoFileExists(t, nonexistent)
+	})
+
+	t.Run("ReadRecords", func(t *testing.T) {
+		fn := tempFile(t)
+		defer os.Remove(fn)
+
+		writableDB, err := Open(fn, false)
+		require.NoError(t, err)
+		writableDB.Save("key1", []byte("val1"), 1)
+		writableDB.Save("key2", []byte("val2"), 2)
+		require.NoError(t, writableDB.Flush())
+
+		require.NoError(t, os.Chmod(fn, 0400))
+		defer os.Chmod(fn, 0600)
+
+		roDB, err := OpenReadOnly(fn)
+		require.NoError(t, err)
+		require.Len(t, roDB.Records, 2)
+		require.Equal(t, []byte("val1"), roDB.Records["key1"].Val)
+		require.Equal(t, []byte("val2"), roDB.Records["key2"].Val)
+		require.NoFileExists(t, fn+".tmp")
+
+		require.Panics(t, func() { roDB.Save("key3", []byte("val3"), 3) })
+		require.Panics(t, func() { roDB.Delete("key1") })
+		require.Panics(t, func() { roDB.Flush() })
+		require.Panics(t, func() { roDB.BumpVersion(3) })
+	})
+}
+
+func TestMergeVersion(t *testing.T) {
+	target, err := prog.GetTarget(targets.TestOS, targets.TestArch64)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	createDB := func(name string, version uint64, vals ...string) string {
+		fn := filepath.Join(dir, name)
+		var records []Record
+		for _, val := range vals {
+			records = append(records, Record{Val: []byte(val), Seq: 0})
+		}
+		require.NoError(t, Create(fn, version, records))
+		return fn
+	}
+	readVersion := func(fn string) uint64 {
+		db, err := OpenReadOnly(fn)
+		require.NoError(t, err)
+		return db.Version
+	}
+	rawProg := filepath.Join(dir, "prog.txt")
+	require.NoError(t, os.WriteFile(rawProg, []byte("test()\n"), osutil.DefaultFilePerm))
+
+	tests := []struct {
+		name  string
+		into  string
+		other []string
+		want  uint64
+	}{
+		{
+			name:  "fresh dst inherits min of inputs",
+			into:  filepath.Join(dir, "fresh1"),
+			other: []string{createDB("a1", 5, "a"), createDB("b1", 3, "b"), createDB("c1", 4, "c")},
+			want:  3,
+		},
+		{
+			name:  "fresh dst with only raw programs",
+			into:  filepath.Join(dir, "fresh2"),
+			other: []string{rawProg},
+			want:  0,
+		},
+		{
+			name:  "existing dst keeps version if inputs are newer",
+			into:  createDB("dst1", 2, "x"),
+			other: []string{createDB("a2", 5, "a")},
+			want:  2,
+		},
+		{
+			name:  "existing dst is downgraded by older input",
+			into:  createDB("dst2", 5, "x"),
+			other: []string{createDB("a3", 5, "a"), createDB("b3", 1, "b")},
+			want:  1,
+		},
+		{
+			name:  "raw program resets version to 0",
+			into:  createDB("dst3", 5, "x"),
+			other: []string{createDB("a4", 5, "a"), rawProg},
+			want:  0,
+		},
+		{
+			name:  "nothing merged keeps version",
+			into:  createDB("dst4", 5, "x"),
+			other: nil,
+			want:  5,
+		},
+		{
+			name:  "empty dst inherits min of inputs",
+			into:  createDB("dst5", 0),
+			other: []string{createDB("a5", 5, "a"), createDB("b5", 3, "b")},
+			want:  3,
+		},
+		{
+			name:  "empty input does not downgrade version",
+			into:  createDB("dst6", 5, "x"),
+			other: []string{createDB("a6", 0), createDB("b6", 7, "b")},
+			want:  5,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			failed, err := Merge(test.into, test.other, target)
+			require.NoError(t, err)
+			require.Empty(t, failed)
+			require.Equal(t, test.want, readVersion(test.into))
+		})
+	}
+}

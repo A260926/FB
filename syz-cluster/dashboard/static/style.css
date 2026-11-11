@@ -1,0 +1,30 @@
+body {
+  font-size: 0.9rem;
+}
+
+.patch-subject {
+  font-family: monospace;
+}
+
+.navbar {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.table td, .table th {
+  padding: 0.3rem 0.75rem;
+}
+
+.btn-collapse::after {
+  content: "\25BC"; /* DOWN-POINTING TRIANGLE */
+}
+
+.btn-collapse[aria-expanded="true"]::after {
+  content: "\25B2"; /* UP-POINTING TRIANGLE */
+}
+
+#patches-box.collapsed {
+  max-height: 220px;
+  overflow: auto;
+  border-bottom: 1px solid #dee2e6;
+}

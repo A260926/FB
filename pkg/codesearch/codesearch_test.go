@@ -1,0 +1,225 @@
+// Copyright 2025 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package codesearch
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/syzkaller/pkg/aflow"
+	"github.com/google/syzkaller/pkg/clangtool/tooltest"
+	"github.com/google/syzkaller/pkg/osutil"
+	clangtoolimpl "github.com/google/syzkaller/tools/clang/codesearch"
+	"github.com/stretchr/testify/require"
+)
+
+func TestClangTool(t *testing.T) {
+	tooltest.TestClangTool[Database](t, clangtoolimpl.Tool)
+}
+
+func TestCommands(t *testing.T) {
+	index := NewTestIndex(t, "testdata")
+	files, err := filepath.Glob(filepath.Join(osutil.Abs("testdata"), "query*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("found no qeury files")
+	}
+	covered := make(map[string]bool)
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			testCommand(t, index, covered, file)
+		})
+	}
+	for _, cmd := range Commands {
+		if !covered[cmd.Name] {
+			t.Errorf("command %v is not covered, add at least one test", cmd.Name)
+		}
+	}
+}
+
+func testCommand(t *testing.T, index *Index, covered map[string]bool, file string) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query, _, _ := bytes.Cut(data, []byte{'\n'})
+	fields := strings.Fields(string(query))
+	if len(fields) == 0 {
+		t.Fatal("no command found")
+	}
+	cmd := fields[0]
+	var args []string
+	for _, arg := range fields[1:] {
+		if len(arg) >= 2 && arg[0] == '"' && arg[len(arg)-1] == '"' {
+			arg = arg[1 : len(arg)-1]
+		}
+		args = append(args, arg)
+	}
+	result, err := index.Command(cmd, args)
+	if err != nil {
+		// This is supposed to test aflow.BadCallError messages.
+		result = err.Error() + "\n"
+	}
+	got := append([]byte(strings.Join(fields, " ")+"\n\n"), result...)
+	tooltest.CompareGoldenData(t, file, got)
+	covered[cmd] = true
+}
+
+func TestFindReferencesInvalidRange(t *testing.T) {
+	index := &Index{
+		db: &Database{
+			Definitions: []*Definition{
+				{
+					Name: "dummy",
+					Kind: EntityKindFunction,
+					Body: LineRange{
+						File:      "source0.c",
+						StartLine: 10,
+						EndLine:   20,
+					},
+					Refs: []Reference{
+						{
+							Name:       "dummy",
+							EntityKind: EntityKindFunction,
+							Line:       100,
+						},
+						{
+							Name:       "dummy",
+							EntityKind: EntityKindFunction,
+							File:       "refs.c",
+							Line:       1000,
+						},
+					},
+				},
+			},
+		},
+		srcDirs: []string{osutil.Abs("testdata")},
+	}
+
+	info, count, err := index.FindReferences("source0.c", "dummy", "", 5, 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.Len(t, info, 2)
+	require.Empty(t, info[0].SourceSnippet)
+	require.Empty(t, info[1].SourceSnippet)
+}
+
+func TestIsDocumentationFile(t *testing.T) {
+	docFiles := []string{
+		"Documentation/admin-guide/index.rst",
+		"README.md",
+		"notes.txt",
+	}
+	for _, file := range docFiles {
+		t.Run(file, func(t *testing.T) {
+			require.True(t, isDocumentationFile(file))
+		})
+	}
+
+	nonDocFiles := []string{
+		"source.c",
+		"header.h",
+		"Makefile",
+	}
+	for _, file := range nonDocFiles {
+		t.Run(file, func(t *testing.T) {
+			require.False(t, isDocumentationFile(file))
+		})
+	}
+}
+
+func TestFindFunctionAtLine(t *testing.T) {
+	index := &Index{
+		db: &Database{
+			Definitions: []*Definition{
+				{
+					Name: "target_func",
+					Kind: EntityKindFunction,
+					Body: LineRange{
+						File:      "source.c",
+						StartLine: 10,
+						EndLine:   20,
+					},
+				},
+				{
+					Name: "some_struct",
+					Kind: EntityKindStruct,
+					Body: LineRange{
+						File:      "source.c",
+						StartLine: 25,
+						EndLine:   35,
+					},
+				},
+			},
+		},
+		srcDirs: []string{t.TempDir()},
+	}
+	src := "void target_func(void) {\n\treturn;\n}\n"
+	err := os.WriteFile(filepath.Join(index.srcDirs[0], "source.c"), []byte(strings.Repeat("\n", 9)+src), 0644)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		file     string
+		line     int
+		wantName string
+		wantErr  bool
+	}{
+		{
+			name:     "start line match",
+			file:     "source.c",
+			line:     10,
+			wantName: "target_func",
+		},
+		{
+			name:     "middle line match",
+			file:     "source.c",
+			line:     15,
+			wantName: "target_func",
+		},
+		{
+			name:     "end line match",
+			file:     "source.c",
+			line:     20,
+			wantName: "target_func",
+		},
+		{
+			name:    "before start line",
+			file:    "source.c",
+			line:    9,
+			wantErr: true,
+		},
+		{
+			name:    "non-function entity at line",
+			file:    "source.c",
+			line:    30,
+			wantErr: true,
+		},
+		{
+			name:    "nonexistent file",
+			file:    "nonexistent.c",
+			line:    15,
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info, err := index.FindFunctionAtLine(test.file, test.line)
+			if test.wantErr {
+				require.Error(t, err)
+				require.IsType(t, aflow.BadCallError(""), err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.wantName, info.Name)
+			require.Equal(t, test.file, info.File)
+		})
+	}
+}

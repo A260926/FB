@@ -1,0 +1,485 @@
+[
+	{
+		"Seq": 0,
+		"Nesting": 0,
+		"Type": "flow",
+		"Name": "test",
+		"Started": "0001-01-01T00:00:01Z"
+	},
+	{
+		"Seq": 1,
+		"Nesting": 1,
+		"Type": "agent",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:02Z",
+		"Instruction": "Instruction\nPrefer calling several tools at the same time to save round-trips.\n",
+		"Prompt": "Prompt"
+	},
+	{
+		"Seq": 2,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:03Z"
+	},
+	{
+		"Seq": 2,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:03Z",
+		"Finished": "0001-01-01T00:00:04Z"
+	},
+	{
+		"Seq": 3,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:05Z",
+		"Args": {
+			"Question": "What do you think?"
+		}
+	},
+	{
+		"Seq": 4,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:06Z",
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "What do you think?"
+	},
+	{
+		"Seq": 5,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:07Z"
+	},
+	{
+		"Seq": 5,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:07Z",
+		"Finished": "0001-01-01T00:00:08Z"
+	},
+	{
+		"Seq": 6,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:09Z",
+		"Args": {
+			"Something": "subtool input 1"
+		}
+	},
+	{
+		"Seq": 6,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:09Z",
+		"Finished": "0001-01-01T00:00:10Z",
+		"Args": {
+			"Something": "subtool input 1"
+		},
+		"Results": {}
+	},
+	{
+		"Seq": 7,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:11Z"
+	},
+	{
+		"Seq": 7,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:11Z",
+		"Finished": "0001-01-01T00:00:12Z"
+	},
+	{
+		"Seq": 8,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "set-results",
+		"Started": "0001-01-01T00:00:13Z",
+		"Args": {
+			"Answer": "Nothing."
+		}
+	},
+	{
+		"Seq": 8,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "set-results",
+		"Started": "0001-01-01T00:00:13Z",
+		"Finished": "0001-01-01T00:00:14Z",
+		"Args": {
+			"Answer": "Nothing."
+		},
+		"Results": {
+			"Answer": "Nothing."
+		}
+	},
+	{
+		"Seq": 4,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:06Z",
+		"Finished": "0001-01-01T00:00:15Z",
+		"Results": {
+			"Answer": "Nothing."
+		},
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "What do you think?"
+	},
+	{
+		"Seq": 3,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:05Z",
+		"Finished": "0001-01-01T00:00:16Z",
+		"Args": {
+			"Question": "What do you think?"
+		},
+		"Results": {
+			"Answer": "Nothing."
+		}
+	},
+	{
+		"Seq": 9,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:17Z"
+	},
+	{
+		"Seq": 9,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:17Z",
+		"Finished": "0001-01-01T00:00:18Z"
+	},
+	{
+		"Seq": 10,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:19Z",
+		"Args": {
+			"Question": "But really?"
+		}
+	},
+	{
+		"Seq": 11,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:20Z",
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "But really?"
+	},
+	{
+		"Seq": 12,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:21Z"
+	},
+	{
+		"Seq": 12,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:21Z",
+		"Finished": "0001-01-01T00:00:22Z"
+	},
+	{
+		"Seq": 13,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:23Z",
+		"Args": {
+			"Something": "subtool input 2"
+		}
+	},
+	{
+		"Seq": 13,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:23Z",
+		"Finished": "0001-01-01T00:00:24Z",
+		"Args": {
+			"Something": "subtool input 2"
+		},
+		"Results": {}
+	},
+	{
+		"Seq": 14,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:25Z"
+	},
+	{
+		"Seq": 14,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:25Z",
+		"Finished": "0001-01-01T00:00:26Z"
+	},
+	{
+		"Seq": 15,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:27Z",
+		"Args": {
+			"Something": "subtool input 3"
+		}
+	},
+	{
+		"Seq": 15,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "researcher-tool",
+		"Started": "0001-01-01T00:00:27Z",
+		"Finished": "0001-01-01T00:00:28Z",
+		"Args": {
+			"Something": "subtool input 3"
+		},
+		"Results": {}
+	},
+	{
+		"Seq": 16,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:29Z"
+	},
+	{
+		"Seq": 16,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:29Z",
+		"Finished": "0001-01-01T00:00:30Z",
+		"Error": "the input token count exceeds the maximum"
+	},
+	{
+		"Seq": 17,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:31Z"
+	},
+	{
+		"Seq": 17,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:31Z",
+		"Finished": "0001-01-01T00:00:32Z"
+	},
+	{
+		"Seq": 18,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "set-results",
+		"Started": "0001-01-01T00:00:33Z",
+		"Args": {
+			"Answer": "Still nothing."
+		}
+	},
+	{
+		"Seq": 18,
+		"Nesting": 4,
+		"Type": "tool",
+		"Name": "set-results",
+		"Started": "0001-01-01T00:00:33Z",
+		"Finished": "0001-01-01T00:00:34Z",
+		"Args": {
+			"Answer": "Still nothing."
+		},
+		"Results": {
+			"Answer": "Still nothing."
+		}
+	},
+	{
+		"Seq": 11,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:20Z",
+		"Finished": "0001-01-01T00:00:35Z",
+		"Results": {
+			"Answer": "Still nothing."
+		},
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "But really?"
+	},
+	{
+		"Seq": 10,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:19Z",
+		"Finished": "0001-01-01T00:00:36Z",
+		"Args": {
+			"Question": "But really?"
+		},
+		"Results": {
+			"Answer": "Still nothing."
+		}
+	},
+	{
+		"Seq": 19,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:37Z"
+	},
+	{
+		"Seq": 19,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:37Z",
+		"Finished": "0001-01-01T00:00:38Z"
+	},
+	{
+		"Seq": 20,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:39Z",
+		"Args": {
+			"Question": "Blocked question?"
+		}
+	},
+	{
+		"Seq": 21,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:40Z",
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "Blocked question?"
+	},
+	{
+		"Seq": 22,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:41Z"
+	},
+	{
+		"Seq": 22,
+		"Nesting": 4,
+		"Type": "llm",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:41Z",
+		"Finished": "0001-01-01T00:00:42Z",
+		"Error": "request blocked: OTHER"
+	},
+	{
+		"Seq": 21,
+		"Nesting": 3,
+		"Type": "agent",
+		"Name": "researcher",
+		"Model": "sub-agent-model",
+		"Started": "0001-01-01T00:00:40Z",
+		"Finished": "0001-01-01T00:00:43Z",
+		"Error": "request blocked: OTHER",
+		"Instruction": "researcher instruction\nPrefer calling several tools at the same time to save round-trips.\n\n\nUse set-results tool to provide results of the analysis.\nIt must be called exactly once before the final reply.\nIgnore results of this tool.\n",
+		"Prompt": "Blocked question?"
+	},
+	{
+		"Seq": 20,
+		"Nesting": 2,
+		"Type": "tool",
+		"Name": "researcher",
+		"Started": "0001-01-01T00:00:39Z",
+		"Finished": "0001-01-01T00:00:44Z",
+		"Error": "request blocked: OTHER",
+		"Args": {
+			"Question": "Blocked question?"
+		}
+	},
+	{
+		"Seq": 23,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:45Z"
+	},
+	{
+		"Seq": 23,
+		"Nesting": 2,
+		"Type": "llm",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:45Z",
+		"Finished": "0001-01-01T00:00:46Z"
+	},
+	{
+		"Seq": 1,
+		"Nesting": 1,
+		"Type": "agent",
+		"Name": "smarty",
+		"Model": "model",
+		"Started": "0001-01-01T00:00:02Z",
+		"Finished": "0001-01-01T00:00:47Z",
+		"Instruction": "Instruction\nPrefer calling several tools at the same time to save round-trips.\n",
+		"Prompt": "Prompt",
+		"Reply": "YES"
+	},
+	{
+		"Seq": 0,
+		"Nesting": 0,
+		"Type": "flow",
+		"Name": "test",
+		"Started": "0001-01-01T00:00:01Z",
+		"Finished": "0001-01-01T00:00:48Z",
+		"Results": {
+			"Reply": "YES"
+		}
+	}
+]

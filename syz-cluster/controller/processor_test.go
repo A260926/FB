@@ -1,0 +1,290 @@
+// Copyright 2024 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/syzkaller/syz-cluster/pkg/api"
+	"github.com/google/syzkaller/syz-cluster/pkg/app"
+	"github.com/google/syzkaller/syz-cluster/pkg/controller"
+	"github.com/google/syzkaller/syz-cluster/pkg/db"
+	"github.com/google/syzkaller/syz-cluster/pkg/workflow"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// It's a bit too long for a unit test, but it captures the whole main scenario of operation.
+func TestProcessor(t *testing.T) {
+	workflows := newMockedWorkflows()
+	processor, client, ctx := prepareProcessorTest(t, workflows)
+
+	stop := startTestLoop(t, ctx, processor)
+
+	// Add some series.
+	var allSeries []*api.Series
+	for i := range 10 {
+		id := fmt.Sprintf("series-%d", i)
+		allSeries = append(allSeries, &api.Series{
+			ExtID: id,
+			Title: id,
+		})
+	}
+	for _, series := range allSeries[0:5] {
+		controller.UploadTestSeries(t, ctx, client, series)
+	}
+
+	// Let some workflows finish.
+	for range 2 {
+		workflows.finish <- struct{}{}
+	}
+
+	awaitFinishedSessions(t, processor.seriesRepo, 2)
+
+	// Emulate the service restart by aborting the loop.
+	// This may break the execution in arbitrary places, which actually resembles the environment in which the code
+	// will actually work. The bugs it triggers may be difficult to reproduce though.
+	stop()
+	stop = startTestLoop(t, ctx, processor)
+
+	// Add some more series.
+	for _, series := range allSeries[5:10] {
+		controller.UploadTestSeries(t, ctx, client, series)
+	}
+
+	// Finish all of them.
+	for range 8 {
+		workflows.finish <- struct{}{}
+	}
+
+	awaitFinishedSessions(t, processor.seriesRepo, 10)
+	stop()
+}
+
+func TestFinishRunningSteps(t *testing.T) {
+	workflows := newMockedWorkflows()
+	processor, client, ctx := prepareProcessorTest(t, workflows)
+
+	stop := startTestLoop(t, ctx, processor)
+
+	series := &api.Series{
+		ExtID: "ext-id",
+		Title: "title",
+	}
+	ids := controller.UploadTestSeries(t, ctx, client, series)
+	buildResp := controller.UploadTestBuild(t, ctx, client, &api.Build{
+		Arch:       "amd64",
+		TreeName:   "mainline",
+		ConfigName: "config",
+		CommitHash: "abcd",
+	})
+	err := client.UploadSessionTest(ctx, &api.SessionTest{
+		SessionID:   ids.SessionID,
+		BaseBuildID: buildResp.ID,
+		TestName:    "test",
+		Result:      api.TestRunning,
+	})
+	assert.NoError(t, err)
+
+	// Let the workflow finish.
+	workflows.finish <- struct{}{}
+	awaitFinishedSessions(t, processor.seriesRepo, 1)
+	stop()
+
+	// Verify that the session test is finished.
+	// A bit hacky, but it works.
+	list, err := processor.sessionTestRepo.BySessionRaw(ctx, ids.SessionID)
+	assert.NoError(t, err)
+	assert.Equal(t, api.TestError, list[0].Result)
+}
+
+func awaitFinishedSessions(t *testing.T, seriesRepo *db.SeriesRepository, wantFinished int) {
+	t.Logf("awaiting %d finished sessions", wantFinished)
+	deadline := time.Second * 2
+	interval := time.Second / 10
+	for range int(deadline / interval) {
+		time.Sleep(interval)
+
+		list, err := seriesRepo.ListLatest(context.Background(), db.SeriesFilter{}, time.Time{})
+		assert.NoError(t, err)
+		withFinishedSeries := 0
+		for _, item := range list {
+			if item.Session == nil {
+				continue
+			}
+			if item.Session.FinishedAt.IsNull() {
+				continue
+			}
+			withFinishedSeries++
+		}
+		t.Logf("have %d finished", withFinishedSeries)
+		if withFinishedSeries == wantFinished {
+			return
+		}
+	}
+	t.Fatalf("never reached %d finished series", wantFinished)
+}
+
+type mockedWorkflows struct {
+	workflow.MockService
+	finish   chan struct{}
+	created  map[string]struct{}
+	finished map[string]struct{}
+	mu       sync.Mutex
+}
+
+func newMockedWorkflows() *mockedWorkflows {
+	obj := mockedWorkflows{
+		finish:   make(chan struct{}, 100),
+		created:  make(map[string]struct{}),
+		finished: make(map[string]struct{}),
+	}
+	obj.PollDelayValue = time.Millisecond
+	obj.OnStart = func(id string) error {
+		obj.mu.Lock()
+		defer obj.mu.Unlock()
+		obj.created[id] = struct{}{}
+		return nil
+	}
+	obj.OnStatus = func(id string) (workflow.Status, []byte, error) {
+		obj.mu.Lock()
+		defer obj.mu.Unlock()
+		if _, ok := obj.created[id]; !ok {
+			return workflow.StatusNotFound, nil, nil
+		}
+		if _, ok := obj.finished[id]; ok {
+			return workflow.StatusFinished, nil, nil
+		}
+		select {
+		case <-obj.finish:
+			obj.finished[id] = struct{}{}
+			return workflow.StatusFinished, nil, nil
+		default:
+		}
+		return workflow.StatusRunning, nil, nil
+	}
+	return &obj
+}
+
+func TestParallelWorkflowsLimit(t *testing.T) {
+	workflows := newMockedWorkflows()
+	processor, client, ctx := prepareProcessorTest(t, workflows)
+	processor.parallelWorkflows = 1
+
+	stop := startTestLoop(t, ctx, processor)
+
+	// Add 3 series.
+	for i := range 3 {
+		id := fmt.Sprintf("series-%d", i)
+		controller.UploadTestSeries(t, ctx, client, &api.Series{
+			ExtID: id,
+			Title: id,
+		})
+	}
+
+	// Wait for the first workflow to be created.
+	assert.Eventually(t, func() bool {
+		workflows.mu.Lock()
+		defer workflows.mu.Unlock()
+		return len(workflows.created) == 1
+	}, 2*time.Second, time.Millisecond*50)
+
+	// Check the series statuses.
+	inProgress, err := processor.seriesRepo.ListLatest(ctx, db.SeriesFilter{
+		Status: db.SessionStatusInProgress,
+	}, time.Time{})
+	assert.NoError(t, err)
+	assert.Len(t, inProgress, 1)
+
+	waiting, err := processor.seriesRepo.ListLatest(ctx, db.SeriesFilter{
+		Status: db.SessionStatusWaiting,
+	}, time.Time{})
+	assert.NoError(t, err)
+	assert.Len(t, waiting, 2)
+
+	// Finish the first workflow.
+	workflows.finish <- struct{}{}
+	awaitFinishedSessions(t, processor.seriesRepo, 1)
+
+	// Wait for the second workflow to start.
+	assert.Eventually(t, func() bool {
+		workflows.mu.Lock()
+		defer workflows.mu.Unlock()
+		return len(workflows.created) == 2
+	}, 2*time.Second, time.Millisecond*50)
+
+	inProgress, err = processor.seriesRepo.ListLatest(ctx, db.SeriesFilter{
+		Status: db.SessionStatusInProgress,
+	}, time.Time{})
+	assert.NoError(t, err)
+	assert.Len(t, inProgress, 1)
+
+	// Finish remaining workflows.
+	workflows.finish <- struct{}{}
+	workflows.finish <- struct{}{}
+	awaitFinishedSessions(t, processor.seriesRepo, 3)
+	stop()
+}
+
+func TestRecoverStartedSession(t *testing.T) {
+	workflows := newMockedWorkflows()
+	processor, client, ctx := prepareProcessorTest(t, workflows)
+
+	stop := startTestLoop(t, ctx, processor)
+
+	// Process one normal series first so Loop is guaranteed to be past its initial poll.
+	controller.UploadTestSeries(t, ctx, client, &api.Series{
+		ExtID: "series-1",
+		Title: "series-1",
+	})
+	workflows.finish <- struct{}{}
+	awaitFinishedSessions(t, processor.seriesRepo, 1)
+
+	// Simulate an in-flight Start commit from a previous controller instance that became
+	// visible only after the new Loop had already started polling.
+	series := &db.Series{ExtID: "series-2", PublishedAt: time.Now()}
+	require.NoError(t, processor.seriesRepo.Insert(ctx, series, nil))
+	session := &db.Session{SeriesID: series.ID, CreatedAt: time.Now()}
+	session.SetStartedAt(time.Now())
+	require.NoError(t, processor.sessionRepo.Insert(ctx, session))
+
+	workflows.finish <- struct{}{}
+	require.Eventually(t, func() bool {
+		updated, err := processor.sessionRepo.GetByID(ctx, session.ID)
+		return err == nil && !updated.FinishedAt.IsNull()
+	}, 2*time.Second, 50*time.Millisecond)
+	stop()
+}
+
+func startTestLoop(t *testing.T, ctx context.Context, processor *SeriesProcessor) func() {
+	loopCtx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		processor.Loop(loopCtx)
+	})
+	stop := func() {
+		cancel()
+		wg.Wait()
+	}
+	t.Cleanup(stop)
+	return stop
+}
+
+func prepareProcessorTest(t *testing.T, workflows workflow.Service) (*SeriesProcessor,
+	*api.Client, context.Context) {
+	env, ctx := app.TestEnvironment(t)
+	client := controller.TestServer(t, env)
+	return &SeriesProcessor{
+		seriesRepo:        db.NewSeriesRepository(env.Spanner),
+		sessionRepo:       db.NewSessionRepository(env.Spanner),
+		sessionTestRepo:   db.NewSessionTestRepository(env.Spanner),
+		workflows:         workflows,
+		dbPollInterval:    time.Second / 10,
+		parallelWorkflows: 2,
+	}, client, ctx
+}

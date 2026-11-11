@@ -1,0 +1,10 @@
+# Copyright 2020 syzkaller project authors. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+kernel:
+ repo: git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+ tag: v7.3
+config:
+ # Parameters were changed from y/n to the count of hangs/lockups before panic.
+ - BOOTPARAM_HUNG_TASK_PANIC: [1, -nonoise]
+ - BOOTPARAM_SOFTLOCKUP_PANIC: [1, -nonoise, -s390]

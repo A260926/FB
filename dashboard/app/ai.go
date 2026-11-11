@@ -1,0 +1,2544 @@
+// Copyright 2025 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"maps"
+	"math/rand"
+	"net/http"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/spanner"
+	"github.com/google/syzkaller/dashboard/app/aidb"
+	"github.com/google/syzkaller/dashboard/dashapi"
+	"github.com/google/syzkaller/pkg/aflow/ai"
+	aflowhtml "github.com/google/syzkaller/pkg/aflow/trajectory/html"
+	"github.com/google/syzkaller/pkg/email"
+	"github.com/google/syzkaller/pkg/email/lore"
+	"github.com/google/syzkaller/pkg/gerrit"
+	"github.com/google/syzkaller/pkg/html"
+	"github.com/google/syzkaller/pkg/osutil"
+	"github.com/google/syzkaller/pkg/report/crash"
+	"github.com/google/syzkaller/pkg/vcs"
+	"github.com/google/syzkaller/sys/targets"
+	db "google.golang.org/appengine/v2/datastore"
+	"google.golang.org/appengine/v2/log"
+)
+
+type uiAIJobsPage struct {
+	Header          *uiHeader
+	Jobs            []*uiAIJob
+	Workflows       []string
+	CurrentWorkflow string
+	ShowAborted     bool
+	ManualWorkflows []ManualWorkflowSpec
+	Managers        []string
+	HasNextPage     bool
+	NextCursorTime  string
+	NextCursorID    string
+	HasPrevPage     bool
+	PrevCursorTime  string
+	PrevCursorID    string
+}
+
+func (p *uiAIJobsPage) GetJobs() []*uiAIJob {
+	return p.Jobs
+}
+
+func (p *uiAIJobsPage) IsAdmin() bool {
+	return p.Header.Admin
+}
+
+func (p *uiAIJobsPage) ShowTestOnManager() bool {
+	return false
+}
+
+type ManualWorkflowSpec struct {
+	Name        string
+	Type        ai.WorkflowType
+	Description string
+	Fields      []ManualWorkflowField
+}
+
+type ManualWorkflowField struct {
+	ID           string
+	Title        string
+	Placeholder  string
+	DefaultValue string
+	Required     bool
+	Hidden       bool
+	IsDBColumn   bool
+	Options      []string
+}
+
+const (
+	maxAIJobDoneErrorLen     = 1 << 20
+	maxAIJobListErrorSummary = 200
+	aiErrorPlaceholder       = "log-in to see details"
+)
+
+func manualAIWorkflows(cfg *Config) []ManualWorkflowSpec {
+	if cfg == nil || cfg.AI == nil {
+		return nil
+	}
+	defaultRepo, defaultBranch := cfg.mainRepoBranch()
+	ret := []ManualWorkflowSpec{
+		{
+			Name: string(ai.WorkflowPatching),
+			Type: ai.WorkflowPatching,
+			Fields: []ManualWorkflowField{
+				{
+					ID:       "ReproC",
+					Title:    "C reproducer",
+					Required: true,
+				},
+				{
+					ID:     "ReproSyz",
+					Hidden: true,
+				},
+				{
+					ID:     "ReproOpts",
+					Hidden: true,
+				},
+				{
+					ID:           "BaseRepository",
+					DefaultValue: cfg.AI.BaseRepository,
+					Hidden:       true,
+				},
+				{
+					ID:           "BaseBranch",
+					DefaultValue: cfg.AI.BaseBranch,
+					Hidden:       true,
+				},
+				{
+					ID:           "BaseCommit",
+					DefaultValue: cfg.AI.BaseCommit,
+					Hidden:       true,
+				},
+			},
+		},
+		{
+			Name: string(ai.WorkflowReproC),
+			Type: ai.WorkflowReproC,
+			Fields: []ManualWorkflowField{
+				{
+					ID:          "BugDescription",
+					Title:       "Bug Description",
+					Placeholder: "Describe the bug here...",
+					Required:    true,
+				},
+				{
+					ID:           "KernelRepo",
+					Title:        "Kernel repo git address",
+					DefaultValue: defaultRepo,
+					Required:     true,
+				},
+				{
+					ID:           "KernelCommit",
+					Title:        "Kernel Commit Hash or branch name",
+					DefaultValue: defaultBranch,
+					Required:     true,
+				},
+			},
+		},
+	}
+	for i := range ret {
+		ret[i].Fields = append(ret[i].Fields,
+			ManualWorkflowField{
+				ID:           "TargetOS",
+				DefaultValue: targets.Linux,
+				Hidden:       true,
+			},
+			ManualWorkflowField{
+				ID:           "TargetArch",
+				Title:        "Target Arch",
+				DefaultValue: targets.AMD64,
+				Required:     true,
+				Hidden:       ret[i].Type != ai.WorkflowReproC,
+				Options:      aiSupportedArches,
+			},
+			ManualWorkflowField{
+				ID:          "ExternalBugID",
+				Title:       "External Bug ID",
+				Placeholder: "e.g. b/12345",
+				IsDBColumn:  true,
+			},
+		)
+	}
+	return ret
+}
+
+func getManualWorkflowSpec(cfg *Config, name string) *ManualWorkflowSpec {
+	specs := manualAIWorkflows(cfg)
+	if i := slices.IndexFunc(specs, func(s ManualWorkflowSpec) bool { return s.Name == name }); i != -1 {
+		return &specs[i]
+	}
+	return nil
+}
+
+type uiAIJobArg struct {
+	Key   string
+	Value string
+	Large bool
+}
+
+type uiAIJobPage struct {
+	Header *uiHeader
+	Job    *uiAIJob
+	// The slice contains the same single Job, just for HTML templates convenience.
+	Jobs               []*uiAIJob
+	Args               []*uiAIJobArg
+	CrashReport        template.HTML
+	TrajectoryHTML     template.HTML
+	History            []*uiJobReviewHistory
+	CurrentStage       string
+	NextStage          string
+	CanPushToReporting bool
+	CanSetCorrectness  bool
+	Reportings         []*uiJobReporting
+	CanRestart         bool
+}
+
+func (p *uiAIJobPage) GetJobs() []*uiAIJob {
+	return p.Jobs
+}
+
+func (p *uiAIJobPage) IsAdmin() bool {
+	return p.Header.Admin
+}
+
+func (p *uiAIJobPage) ShowTestOnManager() bool {
+	return p.Header.AIActions
+}
+
+type uiAIJobDetails struct {
+	Job        *uiAIJob
+	Trajectory []*aflowhtml.UIAITrajectorySpan
+	Args       []*uiAIJobArg
+}
+
+type uiJobReporting struct {
+	Reporting *aidb.JobReporting
+	Comments  []*aidb.JobComment
+	Link      string
+}
+
+type uiJobReviewHistory struct {
+	Date    time.Time
+	User    string
+	Correct string
+	Source  string
+	Stage   string
+	Error   string
+}
+
+type uiPatchVersion struct {
+	Version     int
+	Stage       string
+	Reported    time.Time
+	Link        string
+	JobID       string
+	JobLink     string
+	ReportingID string
+	CanIterate  bool
+}
+
+type uiAIJob struct {
+	ID               string
+	Link             string
+	Workflow         string
+	Description      string
+	DescriptionLink  string
+	ExternalBugID    string
+	AgentName        string
+	Created          time.Time
+	Started          time.Time
+	Finished         time.Time
+	CodeRevision     string
+	CodeRevisionLink string
+	Error            string
+	ErrorSummary     string
+	Correct          string
+	CorrectTitle     string
+	Results          []*uiAIResult
+	IsCurrent        bool
+	CanTestOnManager bool
+}
+
+type uiAIResult struct {
+	Name   string
+	IsBool bool
+	Value  any
+}
+
+func handleAIJobsPage(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	hdr, err := commonHeader(ctx, r, w, "")
+	if err != nil {
+		return err
+	}
+	if r.Method == http.MethodPost {
+		if err := handleAIJobCreate(ctx, r, hdr); err != nil {
+			hdr.Message = err.Error()
+		} else {
+			hdr.Message = fmt.Sprintf("AI workflow %v is created", r.FormValue("ai-job-create"))
+		}
+	}
+	currentWorkflow := r.FormValue("workflow")
+	showAborted := r.FormValue("show_aborted") != ""
+
+	cursorTimeStr := r.FormValue("cursor_time")
+	var cursorTime time.Time
+	if cursorTimeStr != "" {
+		t, err := time.Parse(time.RFC3339Nano, cursorTimeStr)
+		if err != nil {
+			return fmt.Errorf("%w: invalid cursor_time %q", ErrClientBadRequest, cursorTimeStr)
+		}
+		cursorTime = t
+	}
+	cursorIDStr := r.FormValue("cursor_id")
+	reverse := r.FormValue("reverse") != ""
+	const limit = 300
+
+	jobs, err := aidb.LoadNamespaceJobsSummary(ctx, hdr.Namespace, &aidb.JobFilter{
+		Workflow:    currentWorkflow,
+		ShowAborted: showAborted,
+		CursorTime:  cursorTime,
+		CursorID:    cursorIDStr,
+		Reverse:     reverse,
+		Limit:       limit + 1,
+	})
+	if err != nil {
+		return err
+	}
+
+	hasNextPage := false
+	hasPrevPage := false
+
+	if reverse {
+		if len(jobs) > limit {
+			hasPrevPage = true
+			jobs = jobs[1:]
+		}
+		if cursorTimeStr != "" {
+			hasNextPage = true
+		}
+	} else {
+		if len(jobs) > limit {
+			hasNextPage = true
+			jobs = jobs[:limit]
+		}
+		if cursorTimeStr != "" {
+			hasPrevPage = true
+		}
+	}
+
+	var nextCursorTime string
+	var nextCursorID string
+	var prevCursorTime string
+	var prevCursorID string
+
+	if len(jobs) > 0 {
+		firstJob := jobs[0]
+		prevCursorTime = firstJob.Created.Format(time.RFC3339Nano)
+		prevCursorID = firstJob.ID
+
+		lastJob := jobs[len(jobs)-1]
+		nextCursorTime = lastJob.Created.Format(time.RFC3339Nano)
+		nextCursorID = lastJob.ID
+	}
+
+	jobs, err = filterJobsAccess(ctx, r, jobs)
+	if err != nil {
+		return err
+	}
+
+	var uiJobs []*uiAIJob
+	for _, job := range jobs {
+		uiJobs = append(uiJobs, makeUIAIJob(job))
+	}
+	if !hdr.Admin {
+		sanitizeUIJobs(uiJobs...)
+	}
+	workflows, err := aidb.LoadActiveWorkflows(ctx)
+	if err != nil {
+		return err
+	}
+	workflowNames := []string{aidb.WorkflowAll, aidb.WorkflowNeedsModeration}
+	for _, w := range workflows {
+		workflowNames = append(workflowNames, w.Name)
+	}
+	slices.Sort(workflowNames)
+	if currentWorkflow == "" {
+		currentWorkflow = aidb.WorkflowAll
+	}
+	managers, err := CachedManagerList(ctx, hdr.Namespace)
+	if err != nil {
+		return err
+	}
+	slices.Sort(managers)
+
+	cfg := getNsConfig(ctx, hdr.Namespace)
+	page := &uiAIJobsPage{
+		Header:          hdr,
+		Jobs:            uiJobs,
+		Workflows:       workflowNames,
+		CurrentWorkflow: currentWorkflow,
+		ShowAborted:     showAborted,
+		ManualWorkflows: manualAIWorkflows(cfg),
+		Managers:        managers,
+		HasNextPage:     hasNextPage,
+		NextCursorTime:  nextCursorTime,
+		NextCursorID:    nextCursorID,
+		HasPrevPage:     hasPrevPage,
+		PrevCursorTime:  prevCursorTime,
+		PrevCursorID:    prevCursorID,
+	}
+
+	if r.FormValue("json") == "1" {
+		w.Header().Set("Content-Type", "application/json")
+		return writeJSONVersionOf(w, page)
+	}
+
+	return serveTemplate(w, "ai_jobs.html", page)
+}
+
+func handleAIJobCreate(ctx context.Context, r *http.Request, hdr *uiHeader) error {
+	if !hdr.AIActions {
+		return ErrAccess
+	}
+	workflow := r.FormValue("ai-job-create")
+
+	if workflow == "" {
+		return fmt.Errorf("%w: workflow is required", ErrClientBadRequest)
+	}
+
+	cfg := getNsConfig(ctx, hdr.Namespace)
+	spec := getManualWorkflowSpec(cfg, workflow)
+	if spec == nil {
+		return fmt.Errorf("%w: manual workflow schema for %v not found", ErrClientBadRequest, workflow)
+	}
+
+	args := map[string]any{}
+
+	if config := r.FormValue("KernelConfig"); config != "" {
+		args["KernelConfig"] = config
+	} else if manager := r.FormValue("KernelConfigManager"); manager != "" {
+		build, err := lastManagerBuild(ctx, hdr.Namespace, manager)
+		if err != nil {
+			return fmt.Errorf("%w: failed to get manager build config: %w", ErrClientBadRequest, err)
+		}
+		args["KernelConfigID"] = build.KernelConfig
+		args["KernelConfigManager"] = manager
+		args["VMType"] = build.BuildEnv.VMType
+	} else {
+		return fmt.Errorf("%w: either a custom kernel config or a manager is required", ErrClientBadRequest)
+	}
+
+	for _, field := range spec.Fields {
+		if field.Hidden {
+			args[field.ID] = field.DefaultValue
+			continue
+		}
+		val := r.FormValue(field.ID)
+		if field.Required && val == "" {
+			return fmt.Errorf("%w: %v is required", ErrClientBadRequest, field.Title)
+		}
+		if field.IsDBColumn {
+			continue
+		}
+		args[field.ID] = val
+	}
+
+	externalBugID := strings.TrimSpace(r.FormValue("ExternalBugID"))
+	_, err := aidb.CreateJob(ctx, &aidb.Job{
+		Type:          spec.Type,
+		Workflow:      workflow,
+		Namespace:     hdr.Namespace,
+		ExternalBugID: spanner.NullString{StringVal: externalBugID, Valid: externalBugID != ""},
+		Args:          spanner.NullJSON{Valid: true, Value: args},
+	})
+	return err
+}
+
+func getJobStageInfo(ctx context.Context, job *aidb.Job) (*aidb.JobReporting, *AIPatchStageConfig, error) {
+	reportings, err := aidb.LoadJobReportings(ctx, job.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var latest *aidb.JobReporting
+	currentStage := ""
+	nsCfg := getNsConfig(ctx, job.Namespace)
+
+	if len(reportings) > 0 && nsCfg.AI != nil && len(nsCfg.AI.Stages) > 0 {
+		stageMap := make(map[string]*aidb.JobReporting)
+		for _, r := range reportings {
+			stageMap[r.Stage] = r
+		}
+		for _, v := range slices.Backward(nsCfg.AI.Stages) {
+			stageName := v.Name
+			if r, ok := stageMap[stageName]; ok {
+				latest = r
+				currentStage = stageName
+				break
+			}
+		}
+	}
+
+	var nextStageCfg *AIPatchStageConfig
+	if nsCfg.AI != nil && len(nsCfg.AI.Stages) > 0 {
+		nextStageCfg, _ = determineNextStage(ctx, nsCfg.AI, job, currentStage)
+	}
+	return latest, nextStageCfg, nil
+}
+
+func handleAIJobPagePost(ctx context.Context, job *aidb.Job, r *http.Request, hdr *uiHeader) (string, error) {
+	if r.Method != http.MethodPost {
+		return "", nil
+	}
+
+	action := r.FormValue("action")
+	if action == "" {
+		return "", nil
+	}
+	if !hdr.AIActions {
+		return "", ErrAccess
+	}
+	user := currentUser(ctx)
+	if user == nil {
+		return "", ErrAccess
+	}
+
+	switch action {
+	case "restart":
+		if err := checkJobRestartable(job, hdr.AIActions); err != nil {
+			return "", err
+		}
+		newJobID, err := aidb.RestartJob(ctx, job.ID)
+		if err != nil {
+			return "", err
+		}
+		return newJobID, nil
+
+	case "push_to_reporting":
+		if !job.Finished.Valid || job.Error != "" {
+			return "", fmt.Errorf("job is in wrong state to be modified")
+		}
+		return "", handleAIJobPagePushToReporting(ctx, job, "", user.Email)
+
+	case "set_correctness":
+		if !job.Finished.Valid || job.Error != "" {
+			return "", fmt.Errorf("job is in wrong state to be modified")
+		}
+		correct := r.FormValue("correct")
+		return "", handleAIJobPageCorrectness(ctx, job, correct, "", user.Email)
+
+	case "test_repro_c":
+		if job.Workflow != string(ai.WorkflowReproC) {
+			return "", fmt.Errorf("%w: only C reproducer jobs can be tested", ErrClientBadRequest)
+		}
+		return handleAITestReproCJob(ctx, job, r)
+
+	default:
+		return "", fmt.Errorf("%w: unknown action %q", ErrClientBadRequest, action)
+	}
+}
+
+func handleAIJobPagePushToReporting(ctx context.Context, job *aidb.Job, userName, userEmail string) error {
+	if !aiJobUsesReportingStages(ctx, job) {
+		return fmt.Errorf("job is not configured to use AI reporting stages")
+	}
+	if job.Type != ai.WorkflowPatching {
+		return fmt.Errorf("only patching jobs can be manually pushed to reporting")
+	}
+
+	if err := checkJobUpstreamable(job); err != nil {
+		return err
+	}
+
+	reportings, err := aidb.LoadJobReportings(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	if len(reportings) > 0 {
+		return fmt.Errorf("job already has reportings")
+	}
+
+	nsCfg := getNsConfig(ctx, job.Namespace)
+	stageCfg, err := determineNextStage(ctx, nsCfg.AI, job, "")
+	if err != nil {
+		return err
+	}
+	if stageCfg == nil {
+		return fmt.Errorf("no valid next stage found")
+	}
+
+	upstreamedBy := email.FormatAddress(userName, userEmail)
+	args := aidb.UpstreamReportArgs{
+		Job: job,
+		Reporting: &aidb.JobReporting{
+			Stage:        stageCfg.Name,
+			Source:       stageCfg.ServingIntegration,
+			Version:      spanner.NullInt64{Int64: 1, Valid: true},
+			UpstreamedAt: spanner.NullTime{Time: aidb.TimeNow(ctx), Valid: true},
+			UpstreamedBy: spanner.NullString{StringVal: upstreamedBy, Valid: upstreamedBy != ""},
+		},
+		NoParallel:    stageCfg.NoParallelReports,
+		CommandSource: SourceWebUI,
+		CommandExtID:  "",
+		User:          userEmail,
+		Reason:        "Manual push to reporting",
+	}
+	if err := aidb.UpstreamReportCommand(ctx, args); err != nil {
+		return fmt.Errorf("failed to upstream job: %w", err)
+	}
+	return nil
+}
+
+func handleAIJobPageCorrectness(ctx context.Context, job *aidb.Job, correct, userName, userEmail string) error {
+	if aiJobUsesReportingStages(ctx, job) {
+		return fmt.Errorf("correctness cannot be set manually for jobs reported via stages")
+	}
+
+	switch correct {
+	case aiCorrectnessCorrect:
+		currentReporting, _, err := getJobStageInfo(ctx, job)
+		if err != nil {
+			return err
+		}
+		var cmdErr error
+		if err := checkJobUpstreamable(job); err == nil {
+			cmdErr = processUpstreamSubcommand(ctx, job, currentReporting, &dashapi.SendExternalCommandReq{
+				Source:     SourceWebUI,
+				Author:     userEmail,
+				AuthorName: userName,
+			})
+		} else {
+			cmdErr = aidb.UpstreamReportCommand(ctx, aidb.UpstreamReportArgs{
+				Job:           job,
+				CommandSource: SourceWebUI,
+				User:          userEmail,
+			})
+		}
+		if cmdErr != nil {
+			return cmdErr
+		}
+	case aiCorrectnessIncorrect:
+		err := aidb.RejectReportCommand(ctx, aidb.RejectReportArgs{
+			Job:           job,
+			CommandSource: SourceWebUI,
+			CommandExtID:  "",
+			User:          userEmail,
+			Reason:        "",
+		})
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("%w: unknown correct value %q", ErrClientBadRequest, correct)
+	}
+	job, err := aidb.LoadJob(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	return aiJobApplyLabels(ctx, job)
+}
+
+func buildUIJobChain(ctx context.Context, r *http.Request, job *aidb.Job, uiJob *uiAIJob) ([]*uiAIJob, error) {
+	lineage, err := loadPatchLineage(ctx, job.ID)
+	if err == nil && len(lineage) > 0 {
+		var chainJobs []*aidb.Job
+		for _, item := range slices.Backward(lineage) {
+			chainJobs = append(chainJobs, item.Job)
+		}
+		chainJobs, err = filterJobsAccess(ctx, r, chainJobs)
+		if err != nil {
+			return nil, err
+		}
+		var uiJobs []*uiAIJob
+		for _, j := range chainJobs {
+			if j.ID == job.ID {
+				uiJob.IsCurrent = true
+				uiJobs = append(uiJobs, uiJob)
+			} else {
+				uiJobs = append(uiJobs, makeUIAIJob(j))
+			}
+		}
+		return uiJobs, nil
+	}
+	uiJob.IsCurrent = true
+	return []*uiAIJob{uiJob}, nil
+}
+
+func loadAndFilterJob(ctx context.Context, r *http.Request) (*aidb.Job, error) {
+	job, err := aidb.LoadJob(ctx, r.FormValue("id"))
+	if err != nil {
+		if errors.Is(err, aidb.ErrNotFound) {
+			return nil, fmt.Errorf("failed to query the job: %w", ErrClientNotFound)
+		}
+		return nil, err
+	}
+	if jobs, err := filterJobsAccess(ctx, r, []*aidb.Job{job}); err != nil {
+		return nil, err
+	} else if len(jobs) == 0 {
+		return nil, ErrAccess
+	}
+	return job, nil
+}
+
+func checkJobRestartable(job *aidb.Job, userHasAIActions bool) error {
+	if !userHasAIActions {
+		return ErrAccess
+	}
+	if job.Type == ai.WorkflowPatchIteration {
+		return fmt.Errorf("%w: cannot restart a patch iteration workflow", ErrClientBadRequest)
+	}
+	if !job.Finished.Valid {
+		return fmt.Errorf("%w: cannot restart a running job", ErrClientBadRequest)
+	}
+	if job.Error == "" {
+		return fmt.Errorf("%w: cannot restart a successful job", ErrClientBadRequest)
+	}
+	return nil
+}
+
+func determineJobActions(ctx context.Context, job *aidb.Job, hdr *uiHeader,
+	uiReportings []*uiJobReporting) (bool, bool, bool) {
+	usesReportingStages := aiJobUsesReportingStages(ctx, job)
+
+	canPushToReporting := false
+	if len(uiReportings) == 0 && job.Type == ai.WorkflowPatching && job.Finished.Valid && job.Error == "" {
+		if usesReportingStages && checkJobUpstreamable(job) == nil {
+			canPushToReporting = true
+		}
+	}
+
+	canSetCorrectness := !usesReportingStages
+	canRestart := checkJobRestartable(job, hdr.AIActions) == nil
+
+	return canPushToReporting, canSetCorrectness, canRestart
+}
+
+func handleAIJobPage(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	job, err := loadAndFilterJob(ctx, r)
+	if err != nil {
+		return err
+	}
+	hdr, err := commonHeader(ctx, r, w, job.Namespace)
+	if err != nil {
+		return err
+	}
+
+	newJobID, err := handleAIJobPagePost(ctx, job, r, hdr)
+	if err != nil {
+		return err
+	}
+	if newJobID != "" {
+		redirectURL := newJobID
+		if !strings.HasPrefix(redirectURL, "/") {
+			redirectURL = "/ai_job?id=" + newJobID
+		}
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return nil
+	}
+
+	trajectory, err := aidb.LoadTrajectory(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	uiHistory, err := LoadUIJobReviewHistory(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+
+	currentReporting, nextStageCfg, err := getJobStageInfo(ctx, job)
+	if err != nil {
+		return err
+	}
+
+	currentStageStr := ""
+	if currentReporting != nil {
+		currentStageStr = currentReporting.Stage
+	}
+	nextStageStr := ""
+	if nextStageCfg != nil {
+		nextStageStr = nextStageCfg.Name
+	}
+
+	var args map[string]any
+	if job.Args.Valid {
+		args = job.Args.Value.(map[string]any)
+	}
+	uiArgs, crashReport, err := formatUIJobArgs(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	uiJob := makeUIAIJob(job)
+	uiTrajectory := makeUIAITrajectory(trajectory)
+	uiReportings, err := loadJobReportingsWithComments(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+
+	uiJobs, err := buildUIJobChain(ctx, r, job, uiJob)
+	if err != nil {
+		return err
+	}
+
+	if !hdr.Admin {
+		sanitizeUIJobs(uiJobs...)
+		for _, h := range uiHistory {
+			if h.Error != "" {
+				h.Error = aiErrorPlaceholder
+			}
+		}
+		for _, span := range uiTrajectory {
+			if span.Error != "" {
+				span.Error = aiErrorPlaceholder
+			}
+		}
+	}
+
+	trajectoryHTML, err := aflowhtml.RenderTrajectory(uiTrajectory)
+	if err != nil {
+		return err
+	}
+
+	canPushToReporting, canSetCorrectness, canRestart := determineJobActions(ctx, job, hdr, uiReportings)
+
+	page := &uiAIJobPage{
+		Header:             hdr,
+		Job:                uiJob,
+		Jobs:               uiJobs,
+		Args:               uiArgs,
+		CrashReport:        crashReport,
+		History:            uiHistory,
+		TrajectoryHTML:     trajectoryHTML,
+		CurrentStage:       currentStageStr,
+		NextStage:          nextStageStr,
+		CanPushToReporting: canPushToReporting,
+		CanSetCorrectness:  canSetCorrectness,
+		Reportings:         uiReportings,
+		CanRestart:         canRestart,
+	}
+	if handled, err := handleAIJobPageJSON(ctx, w, r, job, uiJob, uiTrajectory, uiArgs); handled {
+		return err
+	}
+	return serveTemplate(w, "ai_job.html", page)
+}
+
+func handleAIJobPageJSON(ctx context.Context, w http.ResponseWriter, r *http.Request,
+	job *aidb.Job, uiJob *uiAIJob, uiTrajectory []*aflowhtml.UIAITrajectorySpan, uiArgs []*uiAIJobArg) (bool, error) {
+	if r.FormValue("json") == "1" {
+		w.Header().Set("Content-Type", "application/json")
+		return true, writeJSONVersionOf(w, &uiAIJobDetails{
+			Job:        uiJob,
+			Trajectory: uiTrajectory,
+			Args:       uiArgs,
+		})
+	}
+	if r.FormValue("export") == "1" {
+		w.Header().Set("Content-Type", "application/json")
+		pollArgs, err := buildAIJobPollArgs(ctx, job)
+		if err != nil {
+			return true, err
+		}
+		return true, json.NewEncoder(w).Encode(&dashapi.AIJobPollResp{
+			ID:       job.ID,
+			Workflow: job.Workflow,
+			Args:     pollArgs,
+		})
+	}
+	return false, nil
+}
+
+func formatUIJobArgs(ctx context.Context, args map[string]any) ([]*uiAIJobArg, template.HTML, error) {
+	args = maps.Clone(args)
+	var crashReport template.HTML
+	report, err := loadTextArg(ctx, args["CrashReportID"], textCrashReport)
+	if err != nil {
+		return nil, "", err
+	}
+	if report != "" {
+		repo, _ := args["KernelRepo"].(string)
+		commit, _ := args["KernelCommit"].(string)
+		crashReport = linkifyText(ctx, report, repo, commit)
+	}
+
+	config, err := loadTextArg(ctx, args["KernelConfigID"], textKernelConfig)
+	if err == nil && config != "" {
+		args["KernelConfig"] = config
+		delete(args, "KernelConfigID")
+	}
+	analysis, err := loadTextArg(ctx, args["RootCauseAnalysisID"], textAIRootCause)
+	if err == nil && analysis != "" {
+		args["RootCauseAnalysis"] = analysis
+		delete(args, "RootCauseAnalysisID")
+	}
+
+	const maxArgLength = 100
+	var uiArgs []*uiAIJobArg
+	for k, v := range args {
+		valStr := fmt.Sprintf("%v", v)
+		uiArgs = append(uiArgs, &uiAIJobArg{
+			Key:   k,
+			Value: valStr,
+			Large: len(valStr) > maxArgLength || strings.Contains(valStr, "\n"),
+		})
+	}
+	slices.SortFunc(uiArgs, func(a, b *uiAIJobArg) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+	return uiArgs, crashReport, nil
+}
+
+// loadTextArg loads the text referenced by a text ID job argument.
+// It returns an empty string if the argument is not set or is 0.
+func loadTextArg(ctx context.Context, arg any, tag string) (string, error) {
+	if arg == nil {
+		return "", nil
+	}
+	num, ok := arg.(json.Number)
+	if !ok {
+		return "", fmt.Errorf("unexpected text ID type %T", arg)
+	}
+	id, err := num.Int64()
+	if err != nil {
+		return "", err
+	}
+	if id == 0 {
+		return "", nil
+	}
+	text, _, err := getText(ctx, tag, id)
+	return string(text), err
+}
+
+func loadJobReportingsWithComments(ctx context.Context, jobID string) ([]*uiJobReporting, error) {
+	allReportings, err := aidb.LoadJobReportings(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	allComments, err := aidb.LoadJobComments(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	var uris []string
+	for _, c := range allComments {
+		uris = append(uris, c.BodyURI)
+	}
+	resolved, err := loadContent(ctx, uris)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range allComments {
+		if text, ok := resolved[c.BodyURI]; ok {
+			c.BodyURI = text
+		}
+	}
+
+	var uiReportings []*uiJobReporting
+	for _, r := range allReportings {
+		var comments []*aidb.JobComment
+		for _, c := range allComments {
+			if c.ReportingID == r.ID {
+				comments = append(comments, c)
+			}
+		}
+		link := ""
+		if r.Source == string(dashapi.AIJobSourceLore) && r.ExtID.Valid {
+			link = lore.LinkToMessage(r.ExtID.StringVal)
+		}
+		uiReportings = append(uiReportings, &uiJobReporting{
+			Reporting: r,
+			Comments:  comments,
+			Link:      link,
+		})
+	}
+	return uiReportings, nil
+}
+
+func loadContent(ctx context.Context, uris []string) (map[string]string, error) {
+	res := make(map[string]string)
+	for _, uri := range uris {
+		if !strings.HasPrefix(uri, "text://") {
+			return nil, fmt.Errorf("unrecognized content prefix: %q", uri)
+		}
+		idStr := strings.TrimPrefix(uri, "text://")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid content id %q: %w", idStr, err)
+		}
+		if id != 0 {
+			body, _, err := getText(ctx, textJobComment, id)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch content for %v: %w", id, err)
+			}
+			res[uri] = string(body)
+		}
+	}
+	return res, nil
+}
+
+func filterJobsAccess(ctx context.Context, r *http.Request, jobs []*aidb.Job) ([]*aidb.Job, error) {
+	if accessLevel(ctx, r) == AccessAdmin {
+		return jobs, nil
+	}
+	bugKeyIDs := map[string]bool{}
+	bugAccess := map[string]AccessLevel{}
+	// Datastore has this limit for number of entities selected with GetMulti.
+	// Pretend that older bugs are AccessAdmin for simplicity until we have proper pagination/filtering.
+	const maxBugs = 1000
+	for _, job := range jobs {
+		if !job.BugID.Valid {
+			// Jobs not associated with bugs are internal manual jobs. Only authorized users can see them.
+			bugAccess[job.BugID.StringVal] = AccessUser
+		} else if len(bugKeyIDs) < maxBugs {
+			bugKeyIDs[job.BugID.StringVal] = true
+		} else {
+			bugAccess[job.BugID.StringVal] = AccessAdmin
+		}
+	}
+	var bugKeys []*db.Key
+	for id := range bugKeyIDs {
+		bugKeys = append(bugKeys, db.NewKey(ctx, "Bug", id, 0, nil))
+	}
+	bugs := make([]*Bug, len(bugKeys))
+	if err := db.GetMulti(ctx, bugKeys, bugs); err != nil {
+		return nil, err
+	}
+	accessLevel := accessLevel(ctx, r)
+	for _, bug := range bugs {
+		bugAccess[bug.keyHash(ctx)] = bug.sanitizeAccess(ctx, accessLevel)
+	}
+	jobs = slices.DeleteFunc(jobs, func(job *aidb.Job) bool {
+		return accessLevel < bugAccess[job.BugID.StringVal]
+	})
+	return jobs, nil
+}
+
+func sanitizeUIJobs(jobs ...*uiAIJob) {
+	for _, job := range jobs {
+		if job != nil && job.Error != "" {
+			job.Error = aiErrorPlaceholder
+			job.ErrorSummary = ""
+		}
+	}
+}
+
+func makeUIAIJob(job *aidb.Job) *uiAIJob {
+	var results []*uiAIResult
+	if m, ok := job.Results.Value.(map[string]any); ok && job.Results.Valid {
+		for name, value := range m {
+			_, isBool := value.(bool)
+			results = append(results, &uiAIResult{
+				Name:   name,
+				IsBool: isBool,
+				Value:  value,
+			})
+		}
+	}
+	slices.SortFunc(results, func(a, b *uiAIResult) int {
+		// Pop up bool flags to the top.
+		if a.IsBool != b.IsBool {
+			if a.IsBool {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	correct := aiCorrectnessIncorrect
+	title := "Incorrect"
+	if !job.Started.Valid {
+		correct = aiCorrectnessPending
+		title = "Job is pending"
+	} else if !job.Finished.Valid {
+		correct = aiCorrectnessRunning
+		title = "Job is running"
+	} else if job.Error != "" {
+		correct = aiCorrectnessErrored
+		title = "Job failed with an error"
+	} else if !job.Correct.Valid {
+		correct = aiCorrectnessUnset
+		title = "Not yet reviewed"
+	} else if job.Correct.Bool {
+		correct = aiCorrectnessCorrect
+		title = "Correct"
+	}
+	desc := job.Description
+	if desc == "" {
+		desc = "---"
+	}
+	canTestOnManager := false
+	if job.Workflow == string(ai.WorkflowReproC) && job.Error == "" && job.Finished.Valid {
+		if resMap, ok := job.Results.Value.(map[string]any); ok {
+			if reproC, _ := resMap[textReproC].(string); reproC != "" {
+				canTestOnManager = true
+			}
+		}
+	}
+	return &uiAIJob{
+		ID:               job.ID,
+		Link:             fmt.Sprintf("/ai_job?id=%v", job.ID),
+		Workflow:         job.Workflow,
+		Description:      desc,
+		DescriptionLink:  job.Link,
+		ExternalBugID:    job.ExternalBugID.StringVal,
+		AgentName:        nullString(job.AgentName),
+		Created:          job.Created,
+		Started:          nullTime(job.Started),
+		Finished:         nullTime(job.Finished),
+		CodeRevision:     job.CodeRevision,
+		CodeRevisionLink: vcs.LogLink(vcs.SyzkallerRepo, job.CodeRevision),
+		Error:            job.Error,
+		Correct:          correct,
+		CorrectTitle:     title,
+		Results:          results,
+		ErrorSummary:     summarizeAIJobError(job.Error),
+		CanTestOnManager: canTestOnManager,
+	}
+}
+
+func makeUIAITrajectory(trajetory []*aidb.TrajectorySpan) []*aflowhtml.UIAITrajectorySpan {
+	var res []*aflowhtml.UIAITrajectorySpan
+	for _, span := range trajetory {
+		var duration time.Duration
+		if span.Finished.Valid {
+			duration = span.Finished.Time.Sub(span.Started)
+		}
+		res = append(res, &aflowhtml.UIAITrajectorySpan{
+			Started:              span.Started,
+			Seq:                  span.Seq,
+			Nesting:              span.Nesting,
+			Type:                 span.Type,
+			Name:                 span.Name,
+			Model:                span.Model,
+			Duration:             duration,
+			Error:                nullString(span.Error),
+			Args:                 nullJSON(span.Args),
+			Results:              nullJSON(span.Results),
+			Instruction:          nullString(span.Instruction),
+			Prompt:               nullString(span.Prompt),
+			Reply:                nullString(span.Reply),
+			Thoughts:             nullString(span.Thoughts),
+			InputTokens:          nullInt64(span.InputTokens),
+			OutputTokens:         nullInt64(span.OutputTokens),
+			OutputThoughtsTokens: nullInt64(span.OutputThoughtsTokens),
+		})
+	}
+	return res
+}
+
+func makeUIJobReviewHistory(history []*aidb.Journal, reportings []*aidb.JobReporting) []*uiJobReviewHistory {
+	stageMap := make(map[string]string)
+	for _, r := range reportings {
+		stageMap[r.ID] = r.Stage
+	}
+	var res []*uiJobReviewHistory
+	for _, h := range history {
+		val := aiCorrectnessUnset
+		switch h.Action {
+		case aidb.ActionApprove:
+			val = aiCorrectnessCorrect
+		case aidb.ActionReject:
+			val = aiCorrectnessIncorrect
+		case aidb.ActionJobReview:
+			// ActionJobReview is obsolete, we only keep it because there are entities in the DB.
+			if h.Details.Valid {
+				if details, err := parseJSON[aidb.JobReviewDetails](h.Details); err == nil {
+					if details.Correct {
+						val = aiCorrectnessCorrect
+					} else {
+						val = aiCorrectnessIncorrect
+					}
+				}
+			}
+		default:
+			val = "?"
+		}
+		res = append(res, &uiJobReviewHistory{
+			Date:    h.Date,
+			User:    h.User,
+			Correct: val,
+			Error:   h.Error.StringVal,
+			Source:  h.Source.StringVal,
+			Stage:   stageMap[h.ReportingID.StringVal],
+		})
+	}
+	return res
+}
+
+func LoadUIJobReviewHistory(ctx context.Context, jobID string) ([]*uiJobReviewHistory, error) {
+	history, err := aidb.LoadJobJournal(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	reportings, err := aidb.LoadJobReportings(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	return makeUIJobReviewHistory(history, reportings), nil
+}
+
+func apiAIJobPoll(ctx context.Context, req *dashapi.AIJobPollReq) (any, error) {
+	if len(req.Workflows) == 0 || req.CodeRevision == "" || req.AgentName == "" {
+		return nil, fmt.Errorf("invalid request")
+	}
+	client := apiContext(ctx).client
+	if err := aidb.AgentIsAlive(ctx, req.AgentName); err != nil {
+		log.Errorf(ctx, "failed to update agent %q: %v", req.AgentName, err)
+	}
+	for _, flow := range req.Workflows {
+		if flow.Type == "" || flow.Name == "" {
+			return nil, fmt.Errorf("invalid request")
+		}
+		if err := aiCheckClientWorkflow(ctx, flow.Name); err != nil {
+			return nil, err
+		}
+	}
+	if err := aidb.UpdateWorkflows(ctx, req.AgentName, req.Workflows); err != nil {
+		return nil, fmt.Errorf("failed UpdateWorkflows: %w", err)
+	}
+	job, err := pollAIJob(ctx, req, client)
+	if err != nil {
+		return nil, err
+	}
+	if job == nil {
+		return &dashapi.AIJobPollResp{}, nil
+	}
+	args, err := buildAIJobPollArgs(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dashapi.AIJobPollResp{
+		ID:       job.ID,
+		Workflow: job.Workflow,
+		Args:     args,
+	}, nil
+}
+
+func buildAIJobPollArgs(ctx context.Context, job *aidb.Job) (map[string]any, error) {
+	if !job.Args.Valid {
+		return map[string]any{}, nil
+	}
+	args := make(map[string]any)
+	textFields := map[string]struct{ tag, name string }{
+		"ReproSyzID":          {textReproSyz, "ReproSyz"},
+		"ReproCID":            {textReproC, "ReproC"},
+		"CrashReportID":       {textCrashReport, "CrashReport"},
+		"CrashLogID":          {textCrashLog, "CrashLog"},
+		"KernelConfigID":      {textKernelConfig, "KernelConfig"},
+		"RootCauseAnalysisID": {textAIRootCause, "RootCauseAnalysis"},
+	}
+	for name, val := range job.Args.Value.(map[string]any) {
+		if text, ok := textFields[name]; ok {
+			data, err := loadTextArg(ctx, val, text.tag)
+			if err != nil {
+				return nil, err
+			}
+			args[text.name] = data
+		} else {
+			args[name] = val
+		}
+	}
+
+	if spec := getManualWorkflowSpec(getNsConfig(ctx, job.Namespace), job.Workflow); spec != nil {
+		for _, field := range spec.Fields {
+			if field.IsDBColumn {
+				continue
+			}
+			if args[field.ID] == nil {
+				args[field.ID] = field.DefaultValue
+			}
+		}
+	}
+	if job.Type == ai.WorkflowReproC {
+		if args["BugDescription"] == nil || args["BugDescription"] == "" {
+			args["BugDescription"] = fmt.Sprintf("%v\n\n%v", args["BugTitle"], args["CrashReport"])
+		}
+	}
+
+	if job.Type == ai.WorkflowPatchIteration {
+		history, err := buildPatchHistory(ctx, job)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build patch history: %w", err)
+		}
+		args["PatchHistory"] = history
+	}
+
+	return args, nil
+}
+
+func pollAIJob(ctx context.Context, req *dashapi.AIJobPollReq, client APIClient) (*aidb.Job, error) {
+	job, err := aidb.NextStaleJob(ctx, req, client.AIJobNamespaces)
+	if err != nil {
+		log.Errorf(ctx, "NextStaleJob failed: %v", err)
+	}
+	if job != nil {
+		return job, nil
+	}
+	// These jobs are important for UX, others can wait.
+	job, err = pollPatchIterationJob(ctx, req, client)
+	if err != nil || job != nil {
+		return job, err
+	}
+	// Filter out patch-iteration, as it has already been processed above.
+	var remainingWorkflows []dashapi.AIWorkflow
+	for _, w := range req.Workflows {
+		if w.Type != ai.WorkflowPatchIteration {
+			remainingWorkflows = append(remainingWorkflows, w)
+		}
+	}
+	req.Workflows = remainingWorkflows
+	if len(req.Workflows) == 0 {
+		return nil, nil
+	}
+	job, err = aidb.StartJob(ctx, req, client.AIJobNamespaces)
+	if err != nil {
+		return nil, fmt.Errorf("failed StartJob: %w", err)
+	}
+	if job != nil {
+		return job, nil
+	}
+	if _, err := autoCreateAIJobs(ctx, req.Workflows, client); err != nil {
+		return nil, fmt.Errorf("autoCreateAIJobs failed: %w", err)
+	}
+	job, err = aidb.StartJob(ctx, req, client.AIJobNamespaces)
+	if err != nil {
+		return nil, fmt.Errorf("failed StartJob after autoCreate: %w", err)
+	}
+	return job, nil
+}
+
+func pollPatchIterationJob(ctx context.Context, req *dashapi.AIJobPollReq, client APIClient) (*aidb.Job, error) {
+	idx := -1
+	for i, w := range req.Workflows {
+		if w.Type == ai.WorkflowPatchIteration {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return nil, nil
+	}
+
+	reqCopy := *req
+	reqCopy.Workflows = []dashapi.AIWorkflow{req.Workflows[idx]}
+
+	if job, err := aidb.StartJob(ctx, &reqCopy, client.AIJobNamespaces); err != nil || job != nil {
+		return job, err
+	}
+	if _, err := autoCreatePatchIterationJobs(ctx, client); err != nil {
+		return nil, fmt.Errorf("autoCreatePatchIterationJobs failed: %w", err)
+	}
+	return aidb.StartJob(ctx, &reqCopy, client.AIJobNamespaces)
+}
+
+func finishIterationJob(ctx context.Context, job *aidb.Job) error {
+	if !job.Finished.Valid || job.Error != "" {
+		return nil
+	}
+
+	var args PatchIterationArgs
+	if m, ok := job.Args.Value.(map[string]any); ok {
+		if ids, _ := m["TargetCommentIDs"].([]any); ids != nil {
+			for _, id := range ids {
+				if s, ok := id.(string); ok {
+					args.TargetCommentIDs = append(args.TargetCommentIDs, s)
+				}
+			}
+		}
+	}
+
+	res, err := castJobResults[ai.PatchIterationOutputs](job)
+	if err != nil {
+		return fmt.Errorf("failed to cast job results: %w", err)
+	}
+	hasPatch := res.PatchDiff != ""
+	var replyToIDs []string
+	seen := make(map[string]struct{})
+	for _, r := range res.Replies {
+		if _, ok := seen[r.ReplyTo]; ok || r.ReplyTo == "" {
+			return fmt.Errorf("invalid or duplicate ReplyTo %q", r.ReplyTo)
+		}
+		seen[r.ReplyTo] = struct{}{}
+		replyToIDs = append(replyToIDs, r.ReplyTo)
+	}
+
+	// Don't let reviewers add our own emails or the stage mailing lists to Cc.
+	// Note: the agent may have already confirmed such additions in its replies, but this should be rare.
+	addedCc := filterOwnEmails(ctx, res.AddedCc)
+	addedCc = filterStageEmails(getNsConfig(ctx, job.Namespace), addedCc)
+	err = aidb.IterationJobDone(ctx, aidb.IterationJobDoneArgs{
+		JobID:             job.ID,
+		ParentReportingID: job.ParentReportingID.StringVal,
+		CommentIDs:        args.TargetCommentIDs,
+		HasPatch:          hasPatch,
+		ReplyToIDs:        replyToIDs,
+		AddedCc:           addedCc,
+		RemovedCc:         res.RemovedCc,
+		IsReplyAllowed: func(ns, stage string) bool {
+			nsCfg := getNsConfig(ctx, ns)
+			if nsCfg == nil || nsCfg.AI == nil {
+				return false
+			}
+			idx := nsCfg.AI.StageIndexByName(stage)
+			if idx == -1 {
+				return false
+			}
+			return nsCfg.AI.Stages[idx].ReplyToComments
+		},
+	})
+	if err != nil {
+		log.Errorf(ctx, "failed to finalize iteration job %v: %v", job.ID, err)
+	}
+	return err
+}
+
+func checkAiJobAccess(ctx context.Context, jobID string) (*aidb.Job, error) {
+	job, err := aidb.LoadJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	client := apiContext(ctx).client
+	if !client.AllowedNamespace(job.Namespace) {
+		return nil, fmt.Errorf("client not authorized for namespace %q", job.Namespace)
+	}
+	return job, nil
+}
+
+type PatchIterationArgs struct {
+	TargetCommentIDs []string
+}
+
+func apiAIJobDone(ctx context.Context, req *dashapi.AIJobDoneReq) (any, error) {
+	job, err := checkAiJobAccess(ctx, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := aiCheckClientWorkflow(ctx, job.Workflow); err != nil {
+		return nil, err
+	}
+	if job.Finished.Valid {
+		return nil, fmt.Errorf("the job %v is already finished", req.ID)
+	}
+	finished := timeNow(ctx)
+	jobError := truncateAIJobError(req.Error)
+	job, err = aidb.SetJobDone(ctx, req.ID, finished, jobError, req.Results)
+	if err != nil {
+		return nil, err
+	}
+	if err = aiJobApplyLabels(ctx, job); err != nil {
+		return nil, err
+	}
+	if job.Type == ai.WorkflowPatchIteration {
+		if err := finishIterationJob(ctx, job); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	if !shouldReportJob(job) {
+		return nil, nil
+	}
+	nsCfg := getNsConfig(ctx, job.Namespace)
+	if nsCfg.AI == nil {
+		return nil, nil
+	}
+	if nsCfg.AI.UploadPatchesToGerrit {
+		if err := createGerritChange(ctx, job); err != nil {
+			log.Errorf(ctx, "failed to create gerrit change for job %v: %v", job.ID, err)
+		}
+	}
+	stageCfg, err := determineNextStage(ctx, nsCfg.AI, job, "")
+	if err != nil {
+		log.Errorf(ctx, "failed to determine next stage for job %v: %v", job.ID, err)
+		return nil, nil
+	}
+	if stageCfg == nil {
+		return nil, nil
+	}
+	reporting := &aidb.JobReporting{
+		Stage:   stageCfg.Name,
+		Source:  stageCfg.ServingIntegration,
+		Version: spanner.NullInt64{Int64: 1, Valid: true},
+	}
+	if err := aidb.AddJobReportingTransactional(ctx, job, reporting, stageCfg.NoParallelReports); err != nil {
+		log.Errorf(ctx, "failed to add initial job reporting for job %v: %v", job.ID, err)
+	}
+	return nil, nil
+}
+
+func truncateAIJobError(err string) string {
+	if len(err) > maxAIJobDoneErrorLen {
+		err = err[:maxAIJobDoneErrorLen] + "\n... [truncated]"
+	}
+	return err
+}
+
+func summarizeAIJobError(err string) string {
+	if len(err) <= maxAIJobListErrorSummary {
+		return err
+	}
+	return err[:maxAIJobListErrorSummary] + "..."
+}
+
+func shouldReportJob(job *aidb.Job) bool {
+	return job.Type == ai.WorkflowPatching &&
+		job.BugID.Valid &&
+		job.Finished.Valid &&
+		job.Error == ""
+}
+
+func aiCheckClientWorkflow(ctx context.Context, workflow string) error {
+	suffix := apiContext(ctx).client.AIWorkflowSuffix
+	if !strings.HasSuffix(workflow, suffix) {
+		return fmt.Errorf("the client is not allowed to execute AI jobs without %q suffix", suffix)
+	}
+	return nil
+}
+
+func aiJobApplyLabels(ctx context.Context, job *aidb.Job) error {
+	if !job.BugID.Valid || !job.Finished.Valid || job.Error != "" {
+		return nil
+	}
+	bug, err := loadBug(ctx, job.BugID.StringVal)
+	if err != nil {
+		return err
+	}
+	labels, labelAdd, err := aiBugLabels(ctx, bug, job)
+	if err != nil {
+		return err
+	}
+	var rootCause *BugAIRootCause
+	if job.Type == ai.WorkflowAssessmentSecurity {
+		rc, analysis, err := aiBugRootCause(job)
+		if err != nil {
+			// The root cause is best-effort information, don't fail the whole update.
+			log.Errorf(ctx, "failed to extract AI root cause from job %v: %v", job.ID, err)
+		} else {
+			if analysis != "" {
+				// Text entities are deduplicated, so applying the same result again
+				// (e.g. when it's marked as correct) does not create new entities.
+				if rc.Text, err = putText(ctx, bug.Namespace, textAIRootCause, []byte(analysis)); err != nil {
+					return err
+				}
+			}
+			rootCause = &rc
+		}
+	}
+	if len(labels) == 0 && rootCause == nil {
+		return nil
+	}
+	labelSet := makeLabelSet(ctx, bug)
+	return updateSingleBug(ctx, bug.key(ctx), func(bug *Bug) error {
+		if rootCause != nil {
+			bug.AIRootCause = *rootCause
+		}
+		for _, label := range labels {
+			if bug.HasUserLabel(label.Label) {
+				continue
+			}
+			// RouteLabel is used for bug reporting stage filters, so never overwrite it once set.
+			if label.Label == RouteLabel && len(bug.LabelValues(RouteLabel)) > 0 {
+				continue
+			}
+			if !labelAdd {
+				bug.UnsetLabels(label.Label)
+				continue
+			}
+			label.Link = job.ID
+			if err := bug.SetLabels(labelSet, []BugLabel{label}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// aiBugRootCause extracts the root cause and the full analysis from an assessment-security job result.
+// Both are empty if there is no analysis, or if the job result was marked as incorrect.
+// Text in the returned root cause is not set.
+func aiBugRootCause(job *aidb.Job) (BugAIRootCause, string, error) {
+	if job.Correct.Valid && !job.Correct.Bool {
+		return BugAIRootCause{}, "", nil
+	}
+	res, err := castJobResults[ai.AssessmentSecurityOutputs](job)
+	if err != nil {
+		return BugAIRootCause{}, "", err
+	}
+	if res.RootCauseSummary == "" || res.RootCauseAnalysis == "" {
+		return BugAIRootCause{}, "", nil
+	}
+	// The analysis refers to specific files and lines, so remember the kernel revision it was done on.
+	args, _ := job.Args.Value.(map[string]any)
+	repo, _ := args["KernelRepo"].(string)
+	commit, _ := args["KernelCommit"].(string)
+	if repo == "" || commit == "" {
+		return BugAIRootCause{}, "", fmt.Errorf("the job has no KernelRepo/KernelCommit arguments")
+	}
+	rootCause := BugAIRootCause{
+		Summary:      res.RootCauseSummary,
+		KernelRepo:   repo,
+		KernelCommit: commit,
+	}
+	return rootCause, res.RootCauseAnalysis, nil
+}
+
+// loadAIRootCauseAnalysis returns the full AI root cause analysis for the bug (if any).
+// The analysis is best-effort information, so errors are only logged.
+func loadAIRootCauseAnalysis(ctx context.Context, bug *Bug) string {
+	data, _, err := getText(ctx, textAIRootCause, bug.AIRootCause.Text)
+	if err != nil {
+		log.Errorf(ctx, "failed to load AI root cause text for bug %v: %v", bug.keyHash(ctx), err)
+	}
+	return string(data)
+}
+
+// makeUIAIRootCause returns the AI root cause analysis of the bug for the bug page,
+// or whether the analysis was requested, but the bug does not have it.
+// Source file references in the analysis are linked to the kernel revision the analysis was done on.
+func makeUIAIRootCause(ctx context.Context, bug *Bug, requested bool) (*uiAIRootCause, bool) {
+	rc := &bug.AIRootCause
+	if rc.Summary == "" {
+		return nil, requested
+	}
+	render := func(text string) template.HTML {
+		md, err := html.LinkifyMarkdown(text, rc.KernelRepo, rc.KernelCommit)
+		if err != nil {
+			// The links are only cosmetic, so show the analysis without them.
+			log.Errorf(ctx, "failed to linkify AI root cause for bug %v: %v", bug.keyHash(ctx), err)
+			md = text
+		}
+		return html.RenderMarkdown(md)
+	}
+	return &uiAIRootCause{
+		Summary:          render(rc.Summary),
+		Analysis:         render(loadAIRootCauseAnalysis(ctx, bug)),
+		KernelCommit:     rc.KernelCommit,
+		KernelCommitLink: vcs.CommitLink(rc.KernelRepo, rc.KernelCommit),
+		Expanded:         requested,
+	}, false
+}
+
+// The bug page shows the full AI root cause analysis expanded if aiRootCauseParam is set.
+const aiRootCauseParam = "ai_root_cause"
+
+// aiRootCauseLink returns a short link to the AI root cause analysis of the bug with the given reporting ID.
+// It redirects to the bug page, which always shows the current state of the analysis,
+// so the links that were already published don't break if the analysis is later replaced or dropped.
+func aiRootCauseLink(ctx context.Context, extID string) string {
+	return fmt.Sprintf("%v/x/ai_root_cause?x=%v", appURL(ctx), extID)
+}
+
+func handleAIRootCause(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	extID := r.FormValue("x")
+	if !looksLikeReportingHash(extID) {
+		return fmt.Errorf("%w: bad bug id %q", ErrClientBadRequest, extID)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/bug?extid=%v&%v=1#ai-root-cause", extID, aiRootCauseParam), http.StatusFound)
+	return nil
+}
+
+// aiBugLabels returns the labels to set (or to unset, if set is false) based on the AI job results.
+func aiBugLabels(ctx context.Context, bug *Bug, job *aidb.Job) (labels []BugLabel, set bool, err0 error) {
+	switch job.Type {
+	case ai.WorkflowAssessmentKCSAN:
+		if job.Correct.Valid && !job.Correct.Bool {
+			return []BugLabel{{Label: RaceLabel}}, false, nil
+		}
+		res, err := castJobResults[ai.AssessmentKCSANOutputs](job)
+		if err != nil {
+			err0 = err
+			return
+		}
+		if res.Benign {
+			return []BugLabel{{Label: RaceLabel, Value: BenignRace}}, true, nil
+		}
+		return []BugLabel{{Label: RaceLabel, Value: HarmfulRace}}, true, nil
+	case ai.WorkflowAssessmentSecurity:
+		if job.Correct.Valid && !job.Correct.Bool {
+			return nil, false, nil
+		}
+		res, err := castJobResults[ai.AssessmentSecurityOutputs](job)
+		if err != nil {
+			err0 = err
+			return
+		}
+		assessment := getNsConfig(ctx, job.Namespace).AI.SecurityAssessment(bug, res)
+		if assessment.Prio != "" {
+			labels = append(labels, BugLabel{Label: PriorityLabel, Value: string(assessment.Prio)})
+		}
+		if assessment.Route != "" && len(bug.LabelValues(RouteLabel)) == 0 {
+			labels = append(labels, BugLabel{Label: RouteLabel, Value: assessment.Route})
+		}
+		return labels, true, nil
+	case ai.WorkflowModeration:
+		if job.Correct.Valid && !job.Correct.Bool {
+			return []BugLabel{{Label: ActionableLabel}}, false, nil
+		}
+		res, err := castJobResults[ai.ModerationOutputs](job)
+		if err != nil {
+			err0 = err
+			return
+		}
+		return []BugLabel{{Label: ActionableLabel}}, res.Actionable, nil
+	}
+	return
+}
+
+func castJobResults[T any](job *aidb.Job) (T, error) {
+	if !job.Results.Valid {
+		var res T
+		return res, fmt.Errorf("finished job %v %v does not have results", job.Type, job.ID)
+	}
+	return parseJSON[T](job.Results)
+}
+
+func parseJSON[T any](val spanner.NullJSON) (T, error) {
+	var res T
+	// Database may store older versions of the output structs.
+	// It's not possible to automatically handle all possible changes to the structs.
+	// For now we just parse in some way. Later when we start changing output structs,
+	// we may need to reconsider and use more careful parsing.
+	data, err := json.Marshal(val.Value)
+	if err != nil {
+		return res, err
+	}
+	return osutil.ParseJSON[T](data)
+}
+
+func apiAITrajectoryLog(ctx context.Context, req *dashapi.AITrajectoryReq) (any, error) {
+	_, err := checkAiJobAccess(ctx, req.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if req.AgentName != "" {
+		if err := aidb.AgentIsAlive(ctx, req.AgentName); err != nil {
+			log.Errorf(ctx, "failed to update agent %q: %v", req.AgentName, err)
+		}
+	}
+	err = aidb.StoreTrajectorySpan(ctx, req.JobID, req.Span)
+	return nil, err
+}
+
+type uiWorkflow struct {
+	Name             string
+	CustomBaseCommit bool
+	SelectManager    bool
+}
+
+// aiBugWorkflows returns active workflows that are applicable for the bug.
+func aiBugWorkflows(ctx context.Context, bug *Bug) ([]*uiWorkflow, error) {
+	workflows, err := aidb.LoadActiveWorkflows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	applicable := workflowsForBug(ctx, bug, true)
+	var result []*uiWorkflow
+	for _, flow := range workflows {
+		// Also check that the workflow is active on some syz-agent's.
+		if applicable[flow.Type] && timeSince(ctx, flow.LastActive) < 25*time.Hour {
+			result = append(result, &uiWorkflow{
+				Name:             flow.Name,
+				CustomBaseCommit: flow.Type == ai.WorkflowPatching,
+				SelectManager:    flow.Type == ai.WorkflowReproC || flow.Type == ai.WorkflowRepro,
+			})
+		}
+	}
+	slices.SortFunc(result, func(a, b *uiWorkflow) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return result, nil
+}
+
+func aiBugJobCreate(ctx context.Context, workflow string, bug *Bug, extraArgs map[string]any) (string, error) {
+	workflows, err := aidb.LoadActiveWorkflows(ctx)
+	if err != nil {
+		return "", err
+	}
+	var typ ai.WorkflowType
+	for _, flow := range workflows {
+		if flow.Name == workflow {
+			typ = flow.Type
+			break
+		}
+	}
+	if typ == "" {
+		return "", fmt.Errorf("workflow %v does not exist", workflow)
+	}
+	return bugJobCreate(ctx, workflow, typ, bug, extraArgs)
+}
+
+func bugJobCreate(ctx context.Context, workflow string, typ ai.WorkflowType, bug *Bug, extraArgs map[string]any) (
+	string, error) {
+	crash, crashKey, err := findCrashForBug(ctx, bug)
+	if err != nil {
+		return "", err
+	}
+	build, err := loadBuild(ctx, bug.Namespace, crash.BuildID)
+	if err != nil {
+		return "", err
+	}
+	tx := func(ctx context.Context) error {
+		return addCrashReference(ctx, crashKey.IntID(), bug.key(ctx),
+			CrashReference{CrashReferenceAIJob, "", timeNow(ctx)})
+	}
+	if err := runInTransaction(ctx, tx, &db.TransactionOptions{
+		XG: true,
+	}); err != nil {
+		return "", fmt.Errorf("addCrashReference failed: %w", err)
+	}
+	cfg := getNsConfig(ctx, bug.Namespace)
+	args := map[string]any{
+		"BugTitle":        bug.Title,
+		"ReproOpts":       string(crash.ReproOpts),
+		"ReproSyzID":      crash.ReproSyz,
+		"ReproCID":        crash.ReproC,
+		"CrashReportID":   crash.Report,
+		"CrashLogID":      crash.Log,
+		"KernelRepo":      build.KernelRepo,
+		"KernelCommit":    build.KernelCommit,
+		"KernelConfigID":  build.KernelConfig,
+		"SyzkallerCommit": build.SyzkallerCommit,
+		"TargetOS":        build.OS,
+		"TargetArch":      build.Arch,
+		"TargetVMArch":    build.VMArch,
+		"VMType":          build.BuildEnv.VMType,
+		"BaseRepository":  cfg.AI.BaseRepository,
+		"BaseBranch":      cfg.AI.BaseBranch,
+		"BaseCommit":      cfg.AI.BaseCommit,
+	}
+	if (typ == ai.WorkflowBisectCause || typ == ai.WorkflowBisectFix) && bug.AIRootCause.Text != 0 {
+		args["RootCauseAnalysisID"] = bug.AIRootCause.Text
+		args["RootCauseCommit"] = bug.AIRootCause.KernelCommit
+	}
+	if manager, ok := extraArgs["KernelConfigManager"].(string); ok && manager != "" {
+		manager, _ = activeManager(ctx, manager, bug.Namespace)
+		mgrBuild, err := lastManagerBuild(ctx, bug.Namespace, manager)
+		if err != nil {
+			return "", fmt.Errorf("failed to get manager build config: %w", err)
+		}
+		args["KernelConfigID"] = mgrBuild.KernelConfig
+		args["KernelConfigManager"] = manager
+		args["TargetArch"] = mgrBuild.Arch
+		args["TargetVMArch"] = mgrBuild.VMArch
+		args["VMType"] = mgrBuild.BuildEnv.VMType
+	}
+	maps.Copy(args, extraArgs)
+	return aidb.CreateJob(ctx, &aidb.Job{
+		Type:        typ,
+		Workflow:    workflow,
+		Namespace:   bug.Namespace,
+		BugID:       spanner.NullString{StringVal: bug.keyHash(ctx), Valid: true},
+		Description: bug.displayTitle(),
+		Link:        fmt.Sprintf("/bug?id=%v", bug.keyHash(ctx)),
+		Args:        spanner.NullJSON{Valid: true, Value: args},
+	})
+}
+
+// TODO: We could probably be more smart at avoiding looking into the specific
+// reportings each time, e.g. in case of retrials on errors.
+func autoCreatePatchIterationJobs(ctx context.Context, client APIClient) (bool, error) {
+	var groups []*aidb.PendingCommentGroup
+	for ns, cfg := range getConfig(ctx).Namespaces {
+		if cfg.AI == nil || !client.AllowedNamespace(ns) {
+			continue
+		}
+		for _, stage := range cfg.AI.Stages {
+			if !stage.AddressComments {
+				continue
+			}
+			grp, err := aidb.LoadPendingCommentGroups(ctx, ns, stage.Name)
+			if err != nil {
+				return false, fmt.Errorf("failed to load pending comment groups for %v/%v: %w", ns, stage.Name, err)
+			}
+			for _, g := range grp {
+				g.ReplyToComments = stage.ReplyToComments
+				if timeNow(ctx).Sub(g.LatestComment) < stage.IterationDebounce {
+					continue
+				}
+				groups = append(groups, g)
+			}
+		}
+	}
+
+	// Each attempt is an expensive transaction, and our query for selecting pending jobs is imprecise,
+	// so limit the number, other jobs will be checked on next polls due to the random shuffle.
+	rand.Shuffle(len(groups), func(i, j int) {
+		groups[i], groups[j] = groups[j], groups[i]
+	})
+	const maxGroupsPerPoll = 5
+	for _, g := range groups[:min(len(groups), maxGroupsPerPoll)] {
+		job, err := aidb.CreatePatchIterationJob(ctx, g.ReportingID, g.ReplyToComments)
+		if err != nil {
+			log.Errorf(ctx, "failed to create patch iteration job for %v: %v", g.ReportingID, err)
+		} else if job != nil {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func buildPatchHistory(ctx context.Context, job *aidb.Job) ([]ai.PatchHistoryEntry, error) {
+	lineage, err := loadPatchLineage(ctx, job.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load patch lineage: %w", err)
+	}
+
+	var history []ai.PatchHistoryEntry
+	targetIDs := make(map[string]bool)
+	if m, ok := job.Args.Value.(map[string]any); ok {
+		if ids, _ := m["TargetCommentIDs"].([]any); ids != nil {
+			for _, id := range ids {
+				if s, ok := id.(string); ok {
+					targetIDs[s] = true
+				}
+			}
+		}
+	}
+
+	for _, node := range lineage {
+		if node.Reporting == nil {
+			continue // Skip the last node which is the job currently being polled.
+		}
+
+		reporting := node.Reporting
+		parentDiff, parentDesc := extractPatch(node.Job)
+
+		comments, err := aidb.LoadJobCommentsByReporting(ctx, reporting.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load comments for %s: %w", reporting.ID, err)
+		}
+
+		var uris []string
+		for _, c := range comments {
+			if c.BodyURI != "" {
+				uris = append(uris, c.BodyURI)
+			}
+		}
+		bodies, err := loadContent(ctx, uris)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load comment bodies: %w", err)
+		}
+
+		var commentsInfo []ai.ExternalComment
+		for _, c := range comments {
+			isTarget := false
+			if len(targetIDs) > 0 {
+				isTarget = targetIDs[c.ID]
+			} else {
+				isTarget = !c.Processed
+			}
+
+			if !c.Processed && !isTarget {
+				// This comment arrived after the job was created, or is not meant to be processed by this job.
+				continue
+			}
+
+			commentsInfo = append(commentsInfo, ai.ExternalComment{
+				ExtID:     c.ExtID,
+				Author:    c.Author,
+				Body:      bodies[c.BodyURI],
+				Timestamp: c.Date,
+				BotReply:  c.OwnEmail,
+				New:       isTarget,
+			})
+		}
+
+		history = append(history, ai.PatchHistoryEntry{
+			Version:     int(reporting.Version.Int64),
+			Diff:        parentDiff,
+			Description: parentDesc,
+			Comments:    commentsInfo,
+		})
+	}
+
+	return history, nil
+}
+
+func extractPatch(job *aidb.Job) (diff, desc string) {
+	if job != nil && job.Results.Valid {
+		if m, ok := job.Results.Value.(map[string]any); ok {
+			diff, _ = m["PatchDiff"].(string)
+			desc, _ = m["PatchDescription"].(string)
+		}
+	}
+	return diff, desc
+}
+
+type patchIterationNode struct {
+	Job       *aidb.Job
+	Reporting *aidb.JobReporting // The reporting of this job that led to the next iteration. (nil for the target job)
+}
+
+// loadPatchLineage returns the linear history of iterations up to the given job.
+// The oldest job (root) is at index 0. The target job is at the last index.
+func loadPatchLineage(ctx context.Context, jobID string) ([]patchIterationNode, error) {
+	var nodes []patchIterationNode
+	var childReporting *aidb.JobReporting
+	for jobID != "" {
+		j, err := aidb.LoadJob(ctx, jobID)
+		if err != nil || j == nil {
+			break
+		}
+
+		nodes = append(nodes, patchIterationNode{
+			Job:       j,
+			Reporting: childReporting,
+		})
+
+		if !j.ParentReportingID.Valid {
+			break
+		}
+
+		rep, err := aidb.LoadJobReporting(ctx, j.ParentReportingID.StringVal)
+		if err != nil || rep == nil {
+			break
+		}
+
+		childReporting = rep
+		jobID = rep.JobID
+	}
+
+	slices.Reverse(nodes)
+	return nodes, nil
+}
+
+func collectChangelog(ctx context.Context, jobID, currentStage string) []dashapi.ChangelogEntry {
+	lineage, _ := loadPatchLineage(ctx, jobID)
+	var stageNodes []patchIterationNode
+	for _, node := range lineage {
+		if node.Reporting != nil && node.Reporting.Stage != currentStage {
+			stageNodes = nil
+		} else {
+			stageNodes = append(stageNodes, node)
+		}
+	}
+
+	var changes []dashapi.ChangelogEntry
+	for i, node := range stageNodes {
+		link := ""
+		if node.Reporting != nil {
+			link = node.Reporting.ExternalLink()
+		}
+
+		text := ""
+		if i > 0 && node.Job.Results.Valid {
+			if m, ok := node.Job.Results.Value.(map[string]any); ok {
+				text, _ = m["NewChangeLog"].(string)
+			}
+		}
+		if text == "" && link == "" {
+			continue
+		}
+		changes = append(changes, dashapi.ChangelogEntry{
+			Version: i + 1,
+			Link:    link,
+			Text:    text,
+		})
+	}
+	slices.Reverse(changes)
+	return changes
+}
+
+const (
+	maxAutoReproCJobs     = 5
+	autoReproCRateWindow  = 6 * time.Hour
+	maxAutoReproCAttempts = 2
+	reproCMinAge          = 48 * time.Hour
+	reproCMaxAge          = 30 * 24 * time.Hour
+	reproCPatchAge        = 30 * 24 * time.Hour
+)
+
+func canAutoCreateReproC(ctx context.Context, ns string) (bool, error) {
+	if !getNsConfig(ctx, ns).AI.AutoReproC {
+		return false, nil
+	}
+	count, err := aidb.CountJobsSince(ctx, ns, ai.WorkflowReproC, timeNow(ctx).Add(-autoReproCRateWindow))
+	if err != nil {
+		return false, fmt.Errorf("failed to check repro-c rate limit for %v: %w", ns, err)
+	}
+	return count < maxAutoReproCJobs, nil
+}
+
+// autoCreateAIJobs attempts to auto-assign AI jobs for the given requested workflows.
+// To avoid race conditions between concurrent agents, it operates in two phases,
+// both leveraging Datastore transactions:
+//  1. findPendingJobs: checks bugs that have matching AIPendingWorkflows.
+//  2. processStaleBugs: evaluates stale bugs (AIJobCheck < currentDate).
+//
+// Both phases (re-)compute applicable workflows and update AIJobCheck and AIPendingWorkflows.
+func autoCreateAIJobs(ctx context.Context, reqWorkflows []dashapi.AIWorkflow, client APIClient) (bool, error) {
+	date := int64(timeDate(timeNow(ctx)))
+	for ns, cfg := range getConfig(ctx).Namespaces {
+		if cfg.AI == nil || !client.AllowedNamespace(ns) {
+			continue
+		}
+		isReproC := func(w dashapi.AIWorkflow) bool { return w.Type == ai.WorkflowReproC }
+		workflowsForNS := reqWorkflows
+		if slices.ContainsFunc(reqWorkflows, isReproC) {
+			canReproC, err := canAutoCreateReproC(ctx, ns)
+			if err != nil {
+				return false, err
+			}
+			if !canReproC {
+				workflowsForNS = slices.DeleteFunc(slices.Clone(reqWorkflows), isReproC)
+			}
+		}
+		if len(workflowsForNS) == 0 {
+			continue
+		}
+		if created, err := findPendingJobs(ctx, ns, date, workflowsForNS); err != nil {
+			return false, err
+		} else if created {
+			return true, nil
+		}
+		if created, err := processStaleBugs(ctx, ns, date, workflowsForNS); err != nil {
+			return false, err
+		} else if created {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func findPendingJobs(ctx context.Context, ns string, date int64, reqWorkflows []dashapi.AIWorkflow) (bool, error) {
+	for _, req := range reqWorkflows {
+		var bugs []*Bug
+		keys, err := db.NewQuery("Bug").
+			Filter("Namespace=", ns).
+			Filter("Status=", BugStatusOpen).
+			Filter("AIPendingWorkflows=", string(req.Type)).
+			Limit(1).
+			GetAll(ctx, &bugs)
+		if err != nil {
+			return false, fmt.Errorf("failed to fetch pending bugs: %w", err)
+		}
+		if len(bugs) == 0 {
+			continue
+		}
+		created, err := tryCreateAIJobForBug(ctx, bugs[0], keys[0], date, reqWorkflows)
+		if created || err != nil {
+			return created, err
+		}
+	}
+	return false, nil
+}
+
+func processStaleBugs(ctx context.Context, ns string, date int64, reqWorkflows []dashapi.AIWorkflow) (bool, error) {
+	var bugs []*Bug
+	keys, err := db.NewQuery("Bug").
+		Filter("Namespace=", ns).
+		Filter("Status=", BugStatusOpen).
+		Filter("AIJobCheck<", date).
+		Limit(100).
+		GetAll(ctx, &bugs)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch stale bugs: %w", err)
+	}
+
+	for i, bug := range bugs {
+		created, err := tryCreateAIJobForBug(ctx, bug, keys[i], date, reqWorkflows)
+		if created || err != nil {
+			return created, err
+		}
+	}
+	return false, nil
+}
+
+func tryCreateAIJobForBug(ctx context.Context, bug *Bug, bugKey *db.Key, date int64,
+	reqWorkflows []dashapi.AIWorkflow) (bool, error) {
+	pending, err := pendingWorkflowsForBug(ctx, bug, bugKey)
+	if err != nil {
+		log.Errorf(ctx, "failed to get pending workflows for bug %v: %v", bugKey.StringID(), err)
+		return false, nil
+	}
+
+	created := false
+	var matchedReq dashapi.AIWorkflow
+	for _, req := range reqWorkflows {
+		idx := slices.Index(pending, string(req.Type))
+		if idx != -1 {
+			pending = slices.Delete(pending, idx, idx+1)
+			created = true
+			matchedReq = req
+			break
+		}
+	}
+
+	errConflict := fmt.Errorf("bug already evaluated or modified")
+	err = updateSingleBug(ctx, bugKey, func(txBug *Bug) error {
+		if txBug.AIJobCheck != bug.AIJobCheck || !slices.Equal(txBug.AIPendingWorkflows, bug.AIPendingWorkflows) {
+			return errConflict
+		}
+		txBug.AIJobCheck = max(txBug.AIJobCheck, date)
+		txBug.AIPendingWorkflows = pending
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, errConflict) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if created {
+		if _, createErr := bugJobCreate(ctx, matchedReq.Name, matchedReq.Type, bug, nil); createErr != nil {
+			return false, fmt.Errorf("failed to create ai job %v for bug %v: %w", matchedReq.Type, bugKey.StringID(), createErr)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// pendingWorkflowsForBug returns a list of workflow types that the bug qualifies for,
+// excluding workflows that already have running or completed jobs, or jobs that are
+// in exponential backoff.
+func pendingWorkflowsForBug(ctx context.Context, bug *Bug, bugKey *db.Key) ([]string, error) {
+	workflows := workflowsForBug(ctx, bug, false)
+	if len(workflows) == 0 {
+		return nil, nil
+	}
+	jobs, err := aidb.LoadBugJobs(ctx, bugKey.StringID())
+	if err != nil {
+		return nil, err
+	}
+	workflowAttempts := map[ai.WorkflowType]struct {
+		count int
+		last  time.Time
+	}{}
+	for _, job := range jobs {
+		typ := job.Type
+		// Have finished successful job.
+		if job.Finished.Valid && job.Error == "" ||
+			// Or already have a pending or a running job.
+			!job.Finished.Valid {
+			// Don't create new jobs for these types.
+			delete(workflows, typ)
+			continue
+		}
+		// Have a failed, or aborted job.
+		attempts := workflowAttempts[typ]
+		attempts.count++
+		jobTime := job.Created
+		if job.Started.Valid {
+			jobTime = job.Started.Time
+		}
+		if jobTime.After(attempts.last) {
+			attempts.last = jobTime
+		}
+		workflowAttempts[typ] = attempts
+	}
+	// For failed/aborted jobs, we don't know if the reason was temporary or permanent.
+	// Failed kernel builds and failed repros may be permanent, but also may be flakes,
+	// or may be fixed over time. So we retry failed/aborted jobs with an exponential
+	// backoff based on attempts count. 1 job is retried in 1 day; 2 jobs - in 2 days;
+	// 3 jobs - in 4 days, and so on up to the cap of 30 days.
+	// For repro-c, cap automatic retries to avoid repeatedly creating doomed or costly jobs.
+	for typ, attempts := range workflowAttempts {
+		if typ == ai.WorkflowReproC && attempts.count >= maxAutoReproCAttempts {
+			delete(workflows, typ)
+			continue
+		}
+		retryPeriod := time.Duration(min(30, 1<<(attempts.count-1))) * 24 * time.Hour
+		if timeSince(ctx, attempts.last) < retryPeriod {
+			delete(workflows, typ)
+		}
+	}
+	if len(workflows) == 0 {
+		return nil, nil
+	}
+	supported, err := bugHasSupportedAIArch(ctx, bug)
+	if err != nil || !supported {
+		return nil, err
+	}
+	var pending []string
+	for workflow := range workflows {
+		pending = append(pending, string(workflow))
+	}
+	slices.Sort(pending)
+	return pending, nil
+}
+
+// Arches supported by syz-agent (see syz-agent/k8s/overlays/prod-agent/agent-config.json).
+var aiSupportedArches = []string{targets.AMD64, targets.ARM64, targets.ARM, targets.I386, targets.RiscV64}
+
+func bugHasSupportedAIArch(ctx context.Context, bug *Bug) (bool, error) {
+	crash, _, err := findCrashForBug(ctx, bug)
+	if err != nil {
+		return false, err
+	}
+	build, err := loadBuild(ctx, bug.Namespace, crash.BuildID)
+	if err != nil {
+		return false, err
+	}
+	return build.Type != BuildFailed && build.OS == targets.Linux &&
+		slices.Contains(aiSupportedArches, build.Arch), nil
+}
+
+func (bug *Bug) hasRecentPatchCandidate(ctx context.Context, maxAge time.Duration) bool {
+	lastPatch := bug.discussionSummary().LastPatchMessage
+	return !lastPatch.IsZero() && timeSince(ctx, lastPatch) < maxAge
+}
+
+func canAutoReproCBugTitle(title string, typ crash.Type) bool {
+	if strings.HasPrefix(title, "INFO:") ||
+		strings.HasPrefix(title, "panic:") ||
+		strings.HasPrefix(title, "go runtime error") ||
+		strings.Contains(title, "build error") ||
+		strings.Contains(title, "boot error") ||
+		strings.Contains(title, "test error") {
+		return false
+	}
+	if typ.IsKCSAN() {
+		return false
+	}
+	switch typ {
+	case crash.SyzFailure, crash.NoOutput, crash.LostConnection, crash.Hang, crash.UnexpectedReboot:
+		return false
+	}
+	return true
+}
+
+func workflowsForBug(ctx context.Context, bug *Bug, manual bool) map[ai.WorkflowType]bool {
+	workflows := make(map[ai.WorkflowType]bool)
+	typ := crash.TitleToType(bug.Title)
+	// UAF bugs stuck in last but one reporting.
+	if typ.IsUAF() && len(bug.Reporting) > 1 &&
+		bug.Reporting[len(bug.Reporting)-1].Reported.IsZero() &&
+		!bug.Reporting[len(bug.Reporting)-2].Reported.IsZero() {
+		workflows[ai.WorkflowModeration] = true
+	}
+	if typ == crash.KCSANDataRace {
+		workflows[ai.WorkflowAssessmentKCSAN] = true
+	}
+	workflows[ai.WorkflowAssessmentSecurity] = true
+	if manual {
+		// Workflows created only manually, or manual overrides bypassing auto-creation filters.
+		if typ.IsUAF() {
+			workflows[ai.WorkflowModeration] = true
+		}
+		if bug.HasHeadRepro() {
+			workflows[ai.WorkflowPatching] = true
+		}
+		workflows[ai.WorkflowRepro] = true
+		workflows[ai.WorkflowReproC] = true
+	} else {
+		// Automatic C reproducer generation heuristics:
+		// - Namespace must have AutoReproC enabled.
+		// - Open bugs only, with no fixing commits.
+		// - Must have a crash report, but no existing C reproducer.
+		// - Wait at least 48h for human / syzkaller-native reproducers to arrive.
+		// - Last crash must be within 30 days to ensure the bug is still fresh / relevant.
+		// - Skip non-fatal issues (INFO), KCSAN bugs, non-kernel/syzkaller panics, and build/boot/test errors.
+		// - Skip bugs that have recent patch candidates being discussed / tested.
+		nsCfg := getNsConfig(ctx, bug.Namespace)
+		canAutoReproC := nsCfg.AI != nil && nsCfg.AI.AutoReproC &&
+			bug.Status == BugStatusOpen && len(bug.Commits) == 0 &&
+			!bug.HasCRepro && bug.HasReport &&
+			timeSince(ctx, bug.FirstTime) > reproCMinAge &&
+			timeSince(ctx, bug.LastTime) < reproCMaxAge &&
+			canAutoReproCBugTitle(bug.Title, typ) &&
+			!bug.hasRecentPatchCandidate(ctx, reproCPatchAge)
+		if canAutoReproC {
+			workflows[ai.WorkflowReproC] = true
+		}
+	}
+	return workflows
+}
+
+func createGerritChange(ctx context.Context, job *aidb.Job) error {
+	res, err := castJobResults[ai.PatchingOutputs](job)
+	if err != nil {
+		return err
+	}
+	trajectory, err := aidb.LoadTrajectory(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	models := extractExecutedModels(trajectory)
+	// Add Fixes tag if we have cause bisection, but we need to verify it with LLMs
+	// somehow since lots of them are wrong.
+	// Probably shouldn't cc stable for all patches (e.g. removing a WARNING)?
+	// If we run assessment-security workflow for the bug, we can check the results,
+	// or priority label (don't cc stable on low prio bugs).
+	res.Recipients = append(res.Recipients, ai.Recipient{Email: "stable@vger.kernel.org"})
+	// TODO: add a human who reviewed the patch to authors.
+	var links []string
+	var closes []string
+	var reportedBy []string
+	if job.BugID.Valid {
+		link, reporter := jobBugInfo(ctx, job.BugID)
+		closes = append(closes, link)
+		if reporter != "" {
+			reportedBy = append(reportedBy, reporter)
+		}
+	}
+	links = append(links, fmt.Sprintf("%s/ai_job?id=%s", appURL(ctx), job.ID))
+	description := email.FormatPatchDescription(res.PatchDescription, email.PatchTemplateData{
+		Fixes:      res.Fixes,
+		Tools:      models,
+		Recipients: res.Recipients,
+		Links:      links,
+		Closes:     closes,
+		ReportedBy: reportedBy,
+	})
+	changeID, link, err := gerrit.CreateChange(ctx, res.KernelRepo, res.KernelBranch,
+		res.KernelCommit, description, res.PatchDiff)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "created gerrit change %v for job %v: %v", changeID, job.ID, link)
+	return nil
+}
+
+const (
+	aiCorrectnessCorrect   = "✅"
+	aiCorrectnessIncorrect = "❌"
+	aiCorrectnessUnset     = "❓"
+	aiCorrectnessPending   = "⏳"
+	aiCorrectnessRunning   = "🏃"
+	aiCorrectnessErrored   = "💥"
+)
+
+func nullTime(v spanner.NullTime) time.Time {
+	if !v.Valid {
+		return time.Time{}
+	}
+	return v.Time
+}
+
+func nullString(v spanner.NullString) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.StringVal
+}
+
+func nullJSON(v spanner.NullJSON) string {
+	if !v.Valid {
+		return ""
+	}
+	return fmt.Sprint(v.Value)
+}
+
+func nullInt64(v spanner.NullInt64) int {
+	if !v.Valid {
+		return 0
+	}
+	return int(v.Int64)
+}
+
+func compactAIJobs(jobs []*aidb.Job) []*aidb.Job {
+	// Only keep non-aborted jobs, and show aborted jobs if they are newest per workflow.
+	newestJob := make(map[string]*aidb.Job)
+	for _, job := range jobs {
+		g := newestJob[job.Workflow]
+		if g == nil || job.Created.After(g.Created) {
+			newestJob[job.Workflow] = job
+		}
+	}
+
+	var filtered []*aidb.Job
+	for _, job := range jobs {
+		if !job.Aborted {
+			filtered = append(filtered, job)
+		} else if job == newestJob[job.Workflow] {
+			filtered = append(filtered, job)
+		}
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Created.After(filtered[j].Created)
+	})
+
+	return filtered
+}
+
+func jobBugInfo(ctx context.Context, bugID spanner.NullString) (string, string) {
+	if !bugID.Valid {
+		return "", ""
+	}
+	bugKey := db.NewKey(ctx, "Bug", bugID.StringVal, 0, nil)
+	bug := new(Bug)
+	if err := db.Get(ctx, bugKey, bug); err == nil {
+		_, bugReporting, _, _, _ := currentReporting(ctx, bug)
+		reportedBy := ""
+		if bugReporting != nil && bugReporting.ID != "" {
+			if creditEmail, err := email.AddAddrContext(ownEmail(ctx), bugReporting.ID); err == nil {
+				reportedBy = creditEmail
+			}
+		}
+		return appURL(ctx) + bugExtLink(ctx, bug), reportedBy
+	}
+	return appURL(ctx) + bugLink(bugID.StringVal), ""
+}
+
+func extractExecutedModels(trajectory []*aidb.TrajectorySpan) []string {
+	models := make(map[string]bool)
+	for _, span := range trajectory {
+		// We only collect models from "llm" type spans because they represent the actual
+		// successful executions of the model. "agent" type spans represent the agent
+		// configuration and contain the full model pool (including models that might have failed).
+		if span.Type == "llm" && span.Model != "" {
+			models[span.Model] = true
+		}
+	}
+	res := slices.Collect(maps.Keys(models))
+	slices.Sort(res)
+	return res
+}
+
+// handleAITestReproCJob launches a C reproducer test job for a given AI job.
+func handleAITestReproCJob(ctx context.Context, aiJob *aidb.Job, r *http.Request) (string, error) {
+	user := currentUser(ctx)
+	if user == nil {
+		return "", ErrAccess
+	}
+	if !aiJob.BugID.Valid || aiJob.BugID.StringVal == "" {
+		return "", fmt.Errorf("%w: AI job has no associated Bug ID", ErrClientBadRequest)
+	}
+	bugKey := db.NewKey(ctx, "Bug", aiJob.BugID.StringVal, 0, nil)
+	bug := new(Bug)
+	if err := db.Get(ctx, bugKey, bug); err != nil {
+		return "", fmt.Errorf("failed to get bug %v: %w", aiJob.BugID.StringVal, err)
+	}
+	if err := checkAccessLevel(ctx, r, bug.sanitizeAccess(ctx, accessLevel(ctx, r))); err != nil {
+		return "", err
+	}
+	reproC, manager := extractAIJobReproC(aiJob, bug)
+	if len(reproC) == 0 {
+		return "", fmt.Errorf("%w: C reproducer is empty", ErrClientBadRequest)
+	}
+	if manager == "" {
+		return "", fmt.Errorf("%w: could not determine target manager for bug", ErrClientBadRequest)
+	}
+	_, _, err := handleTestReproCRequest(ctx, &testReproCReqArgs{
+		bug:     bug,
+		bugKey:  bugKey,
+		user:    user.Email,
+		manager: manager,
+		reproC:  reproC,
+	})
+	if err != nil {
+		return "", err
+	}
+	if redirect := r.FormValue("redirect"); redirect != "" {
+		if strings.HasPrefix(redirect, "/") && !strings.HasPrefix(redirect, "//") {
+			return redirect, nil
+		}
+	}
+	return fmt.Sprintf("/bug?id=%v", bug.keyHash(ctx)), nil
+}

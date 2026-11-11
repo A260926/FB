@@ -1,0 +1,74 @@
+// Copyright 2016 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+// Package hash provides hashing utilities for calculating signatures of objects and data.
+package hash
+
+import (
+	"bytes"
+	"crypto/sha1"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+type Sig [sha1.Size]byte
+
+func Hash(pieces ...any) Sig {
+	h := sha1.New()
+	for _, data := range pieces {
+		if str, ok := data.(string); ok {
+			data = []byte(str)
+		}
+	retry:
+		if binary.Write(h, binary.LittleEndian, data) == nil {
+			continue
+		}
+		marshalled, err := json.Marshal(data)
+		if err != nil {
+			panic(err)
+		}
+		data = marshalled
+		goto retry
+	}
+	var sig Sig
+	copy(sig[:], h.Sum(nil))
+	return sig
+}
+
+func String(pieces ...any) string {
+	sig := Hash(pieces...)
+	return sig.String()
+}
+
+// File computes the SHA-1 hash of a file by streaming its contents.
+func File(path string) (Sig, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Sig{}, err
+	}
+	defer f.Close()
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return Sig{}, err
+	}
+	var sig Sig
+	copy(sig[:], h.Sum(nil))
+	return sig, nil
+}
+
+func (sig *Sig) String() string {
+	return hex.EncodeToString((*sig)[:])
+}
+
+// Truncate64 returns first 64 bits of the hash as int64.
+func (sig *Sig) Truncate64() int64 {
+	var v int64
+	if err := binary.Read(bytes.NewReader((*sig)[:]), binary.LittleEndian, &v); err != nil {
+		panic(fmt.Sprintf("failed convert hash to id: %v", err))
+	}
+	return v
+}

@@ -1,0 +1,53 @@
+# Copyright 2026 syzkaller project authors. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-spanner-emulator
+  labels:
+    app: cloud-spanner-emulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-spanner-emulator
+  template:
+    metadata:
+      labels:
+        app: cloud-spanner-emulator
+    spec:
+      containers:
+      - name: emulator
+        image: gcr.io/cloud-spanner-emulator/emulator:latest
+        ports:
+        - containerPort: 9010
+        - containerPort: 9020
+        # Setting requests equal to limits gives the pod the Guaranteed QoS
+        # class, which makes it the least likely victim of the OOM killer.
+        # The emulator keeps all data in memory, so a restart wipes the DB.
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-spanner-emulator
+  labels:
+    app: cloud-spanner-emulator
+spec:
+  ports:
+  - name: grpc
+    port: 9010
+    targetPort: 9010
+  - name: http
+    port: 9020
+    targetPort: 9020
+  selector:
+    app: cloud-spanner-emulator

@@ -1,0 +1,728 @@
+// Copyright 2023 syzkaller project authors. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+package lore
+
+import (
+	"fmt"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/google/syzkaller/dashboard/dashapi"
+	"github.com/google/syzkaller/pkg/email"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestThreadsCollection(t *testing.T) {
+	messages := []string{
+		// <A-Base> <-- <A-Child-1> <-- <A-Child-1-1>.
+		`Date: Sun, 7 May 2017 19:54:00 -0700
+Subject: Thread A
+Message-ID: <A-Base>
+From: UserA <a@user.com>
+Content-Type: text/plain
+
+
+Some text`,
+		`Date: Sun, 7 May 2017 19:55:00 -0700
+Subject: Re: Thread A
+Message-ID: <A-Child-1>
+From: UserB <b@user.com>
+To: UserA <a@user.com>
+Content-Type: text/plain
+In-Reply-To: <A-Base>
+
+
+Some reply`,
+		`Date: Sun, 7 May 2017 19:56:00 -0700
+Subject: Re: Re: Thread A
+Message-ID: <A-Child-1-1>
+From: UserC <c@user.com>
+To: UserA <a@user.com>, UserB <b@user.com>
+Content-Type: text/plain
+In-Reply-To: <A-Child-1>
+
+
+Some reply (2)`,
+		// <Bug> with two children: <Bug-Reply1>, <Bug-Reply2>.
+		`Date: Sun, 7 May 2017 19:57:00 -0700
+Subject: [syzbot] Some bug
+Message-ID: <Bug>
+From: syzbot <syzbot+4564456@bar.com>
+Content-Type: text/plain
+
+
+Bug report`,
+		`Date: Sun, 7 May 2017 19:58:00 -0700
+Subject: Re: [syzbot] Some bug
+Message-ID: <Bug-Reply1>
+From: UserC <c@user.com>
+To: syzbot <syzbot+4564456@bar.com>
+In-Reply-To: <Bug>
+Content-Type: text/plain
+
+
+Bug report reply`,
+		`Date: Sun, 7 May 2017 19:58:01 -0700
+Subject: Re: [syzbot] Some bug
+Message-ID: <Bug-Reply2>
+From: UserD <d@user.com>
+To: syzbot <syzbot+4564456@bar.com>
+In-Reply-To: <Bug>B
+Content-Type: text/plain
+
+
+Bug report reply 2`,
+		// And one PATCH without replies.
+		`Date: Sun, 7 May 2017 19:58:01 -0700
+Subject: [PATCH] Some bug fixed
+Message-ID: <Patch>
+From: UserE <e@user.com>
+Cc: syzbot <syzbot+12345@bar.com>
+Content-Type: text/plain
+
+
+Patch`,
+		// An orphaned reply from a human.
+		`Date: Sun, 7 May 2017 19:57:00 -0700
+Subject: Another bug discussion
+In-Reply-To: <Unknown>
+Message-ID: <Sub-Discussion>
+From: person@email.com
+Cc: syzbot <syzbot+4564456@bar.com>
+Content-Type: text/plain
+
+
+Bug report`,
+		// An orphaned reply from a bot.
+		`Date: Sun, 7 May 2017 19:57:00 -0700
+Subject: Re: [syzbot] Some bug 3
+In-Reply-To: <Unknown>
+Message-ID: <Sub-Discussion-Bot>
+From: syzbot+4564456@bar.com
+To: all@email.com
+Content-Type: text/plain
+
+
+Bug report`,
+	}
+
+	zone := time.UTC
+	expected := map[string]*Thread{
+		"<A-Base>": {
+			Subject:   "Thread A",
+			MessageID: "<A-Base>",
+			Type:      dashapi.DiscussionMention,
+			Messages: []*Email{
+				{
+					Email: &email.Email{
+						MessageID:  "<A-Base>",
+						Subject:    "Thread A",
+						Date:       time.Date(2017, time.May, 8, 2, 54, 0, 0, zone),
+						Author:     "a@user.com",
+						AuthorName: "UserA",
+						Cc:         []string{"a@user.com"},
+					},
+				},
+				{
+					Email: &email.Email{
+						MessageID:  "<A-Child-1>",
+						Subject:    "Re: Thread A",
+						Date:       time.Date(2017, time.May, 8, 2, 55, 0, 0, zone),
+						Author:     "b@user.com",
+						AuthorName: "UserB",
+						Cc:         []string{"a@user.com", "b@user.com"},
+						InReplyTo:  "<A-Base>",
+					},
+				},
+				{
+					Email: &email.Email{
+						MessageID:  "<A-Child-1-1>",
+						Subject:    "Re: Re: Thread A",
+						Date:       time.Date(2017, time.May, 8, 2, 56, 0, 0, zone),
+						Author:     "c@user.com",
+						AuthorName: "UserC",
+						Cc:         []string{"a@user.com", "b@user.com", "c@user.com"},
+						InReplyTo:  "<A-Child-1>",
+					},
+				},
+			},
+		},
+		"<Bug>": {
+			Subject:   "[syzbot] Some bug",
+			MessageID: "<Bug>",
+			Type:      dashapi.DiscussionReport,
+			BugIDs:    []string{"4564456"},
+			Messages: []*Email{
+				{
+					Email: &email.Email{
+						MessageID:    "<Bug>",
+						BugIDs:       []string{"4564456"},
+						OwnEmailsCcd: true,
+						Subject:      "[syzbot] Some bug",
+						Date:         time.Date(2017, time.May, 8, 2, 57, 0, 0, zone),
+						Author:       "syzbot@bar.com",
+						AuthorName:   "syzbot",
+						OwnEmail:     true,
+						Cc:           []string{},
+					},
+				},
+				{
+					Email: &email.Email{
+						MessageID:    "<Bug-Reply1>",
+						BugIDs:       []string{"4564456"},
+						OwnEmailsCcd: true,
+						Subject:      "Re: [syzbot] Some bug",
+						Date:         time.Date(2017, time.May, 8, 2, 58, 0, 0, zone),
+						Author:       "c@user.com",
+						AuthorName:   "UserC",
+						Cc:           []string{"c@user.com"},
+						InReplyTo:    "<Bug>",
+					},
+				},
+				{
+					Email: &email.Email{
+						MessageID:    "<Bug-Reply2>",
+						BugIDs:       []string{"4564456"},
+						OwnEmailsCcd: true,
+						Subject:      "Re: [syzbot] Some bug",
+						Date:         time.Date(2017, time.May, 8, 2, 58, 1, 0, zone),
+						Author:       "d@user.com",
+						AuthorName:   "UserD",
+						Cc:           []string{"d@user.com"},
+						InReplyTo:    "<Bug>",
+					},
+				},
+			},
+		},
+		"<Patch>": {
+			Subject:   "[PATCH] Some bug fixed",
+			MessageID: "<Patch>",
+			Type:      dashapi.DiscussionPatch,
+			BugIDs:    []string{"12345"},
+			Messages: []*Email{
+				{
+					Email: &email.Email{
+						MessageID:    "<Patch>",
+						BugIDs:       []string{"12345"},
+						OwnEmailsCcd: true,
+						Subject:      "[PATCH] Some bug fixed",
+						Date:         time.Date(2017, time.May, 8, 2, 58, 1, 0, zone),
+						Author:       "e@user.com",
+						AuthorName:   "UserE",
+						Cc:           []string{"e@user.com"},
+					},
+				},
+			},
+		},
+		"<Sub-Discussion>": {
+			Subject:   "Another bug discussion",
+			MessageID: "<Sub-Discussion>",
+			Type:      dashapi.DiscussionMention,
+			BugIDs:    []string{"4564456"},
+			Messages: []*Email{
+				{
+					Email: &email.Email{
+						MessageID:    "<Sub-Discussion>",
+						InReplyTo:    "<Unknown>",
+						Date:         time.Date(2017, time.May, 8, 2, 57, 0, 0, zone),
+						BugIDs:       []string{"4564456"},
+						OwnEmailsCcd: true,
+						Cc:           []string{"person@email.com"},
+						Subject:      "Another bug discussion",
+						Author:       "person@email.com",
+						AuthorName:   "",
+					},
+				},
+			},
+		},
+		"<Sub-Discussion-Bot>": nil,
+	}
+
+	var emails []*Email
+	for _, m := range messages {
+		msg, err := Parse([]byte(m), []string{"syzbot@bar.com"}, []string{"bar.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg.RawCc = nil
+		msg.Body = ""
+		msg.Patch = ""
+		emails = append(emails, msg)
+	}
+
+	threads := Threads(emails)
+	got := map[string]*Thread{}
+
+	for _, d := range threads {
+		slices.SortFunc(d.Messages, func(a, b *Email) int {
+			return a.Date.Compare(b.Date)
+		})
+		got[d.MessageID] = d
+	}
+
+	for key, val := range expected {
+		require.Equal(t, val, got[key], key)
+	}
+
+	if len(threads) > len(expected) {
+		t.Fatalf("expected %d threads, got %d", len(expected), len(threads))
+	}
+}
+
+func TestParsePatchSubject(t *testing.T) {
+	tests := []struct {
+		subj string
+		ret  PatchSubject
+	}{
+		{
+			subj: `[PATCH] abcd`,
+			ret:  PatchSubject{Title: "abcd"},
+		},
+		{
+			subj: `[PATCH 00/20] abcd`,
+			ret:  PatchSubject{Title: "abcd", Seq: value[int](0), Total: value[int](20)},
+		},
+		{
+			subj: `[PATCH 5/6] abcd`,
+			ret:  PatchSubject{Title: "abcd", Seq: value[int](5), Total: value[int](6)},
+		},
+		{
+			subj: `[PATCH RFC v3 0/4] abcd`,
+			ret: PatchSubject{
+				Title:   "abcd",
+				Tags:    []string{"RFC"},
+				Version: value[int](3),
+				Seq:     value[int](0),
+				Total:   value[int](4),
+			},
+		},
+		{
+			subj: `[RFC PATCH] abcd`,
+			ret:  PatchSubject{Title: "abcd", Tags: []string{"RFC"}},
+		},
+		{
+			subj: `[PATCH net-next v2 00/21] abcd`,
+			ret: PatchSubject{
+				Title:   "abcd",
+				Tags:    []string{"net-next"},
+				Version: value[int](2),
+				Seq:     value[int](0),
+				Total:   value[int](21),
+			},
+		},
+		{
+			subj: `[PATCH v2 RESEND] abcd`,
+			ret:  PatchSubject{Title: "abcd", Version: value[int](2), Tags: []string{"RESEND"}},
+		},
+		{
+			subj: `[PATCH RFC net-next v3 05/21] abcd`,
+			ret: PatchSubject{
+				Title:   "abcd",
+				Tags:    []string{"RFC", "net-next"},
+				Version: value[int](3),
+				Seq:     value[int](5),
+				Total:   value[int](21),
+			},
+		},
+		{
+			subj: `[PATCH 6.18 00/29] 6.18.1-rc1 review`,
+			ret: PatchSubject{
+				Title: "6.18.1-rc1 review",
+				Tags:  []string{"6.18"},
+				Seq:   value[int](0),
+				Total: value[int](29),
+			},
+		},
+		{
+			subj: `[PATCH 6.1 000/451] 6.1.83-rc1 review`,
+			ret: PatchSubject{
+				Title: "6.1.83-rc1 review",
+				Tags:  []string{"6.1"},
+				Seq:   value[int](0),
+				Total: value[int](451),
+			},
+		},
+	}
+	for id, test := range tests {
+		t.Run(fmt.Sprint(id), func(t *testing.T) {
+			ret, ok := parsePatchSubject(test.subj)
+			assert.True(t, ok)
+			assert.Equal(t, test.ret, ret)
+		})
+	}
+}
+
+func TestDiscussionType(t *testing.T) {
+	tests := []struct {
+		msg *email.Email
+		ret dashapi.DiscussionType
+	}{
+		{
+			msg: &email.Email{
+				Subject: "[PATCH] Bla-bla",
+			},
+			ret: dashapi.DiscussionPatch,
+		},
+		{
+			msg: &email.Email{
+				Subject: "[patch v3] Bla-bla",
+			},
+			ret: dashapi.DiscussionPatch,
+		},
+		{
+			msg: &email.Email{
+				Subject: "[RFC PATCH] Bla-bla",
+			},
+			ret: dashapi.DiscussionPatch,
+		},
+		{
+			msg: &email.Email{
+				Subject: "[RESEND PATCH] Bla-bla",
+			},
+			ret: dashapi.DiscussionPatch,
+		},
+		{
+			msg: &email.Email{
+				Subject:  "[syzbot] Monthly ext4 report",
+				OwnEmail: true,
+			},
+			ret: dashapi.DiscussionReminder,
+		},
+		{
+			msg: &email.Email{
+				Subject:  "[syzbot] WARNING in abcd",
+				OwnEmail: true,
+			},
+			ret: dashapi.DiscussionReport,
+		},
+		{
+			msg: &email.Email{
+				Subject: "Some human-reported bug",
+			},
+			ret: dashapi.DiscussionMention,
+		},
+	}
+	for _, test := range tests {
+		got := DiscussionType(test.msg)
+		if got != test.ret {
+			t.Fatalf("expected %v got %v for %v", test.ret, got, test.msg)
+		}
+	}
+}
+
+const dummyPatch = `diff --git a/kernel/kcov.c b/kernel/kcov.c
+index 85e5546cd791..949ea4574412 100644
+--- a/kernel/kcov.c
++++ b/kernel/kcov.c
+@@ -127,7 +127,6 @@ void kcov_task_exit(struct task_struct *t)
+ 	if (kcov == NULL)
+ 		return;
+-	spin_lock(&kcov->lock);
+ 	if (WARN_ON(kcov->t != t)) {
+`
+
+func TestParseSeries(t *testing.T) {
+	messages := []string{
+		// A simple patch series.
+		`Date: Sun, 7 May 2017 19:54:00 -0700
+Subject: [PATCH] Small patch
+Message-ID: <First>
+From: UserA <a@user.com>
+Content-Type: text/plain
+
+` + dummyPatch,
+		// A series with a cover.
+		`Date: Sun, 7 May 2017 19:55:00 -0700
+Subject: [PATCH net v2 00/02] A longer series
+Message-ID: <Second>
+From: UserB <b@user.com>
+To: UserA <a@user.com>
+Content-Type: text/plain
+
+Some cover`,
+		`Date: Sun, 7 May 2017 19:56:00 -0700
+Subject: [PATCH net v2 01/02] First patch
+Message-ID: <Second-1>
+From: UserC <c@user.com>
+To: UserA <a@user.com>, UserB <b@user.com>
+Content-Type: text/plain
+In-Reply-To: <Second>
+
+` + dummyPatch,
+		`Date: Sun, 7 May 2017 19:56:00 -0700
+Subject: [PATCH net v2 02/02] Second patch
+Message-ID: <Second-2>
+From: UserC <c@user.com>
+To: UserA <a@user.com>, UserB <b@user.com>
+Content-Type: text/plain
+In-Reply-To: <Second>
+
+` + dummyPatch,
+		// Some missing patches.
+		`Date: Sun, 7 May 2017 19:57:00 -0700
+Subject: [PATCH 01/03] Series
+Message-ID: <Third>
+From: Someone <a@b.com>
+Content-Type: text/plain
+
+` + dummyPatch,
+		// Reply with a patch subject.
+		`Date: Sun, 7 May 2017 19:57:00 -0700
+Subject: [PATCH] Series
+Message-ID: <Fourth>
+From: Someone <a@b.com>
+Content-Type: text/plain
+In-Reply-To: <Something>
+
+No patch, just text`,
+		// A stable review series.
+		`Date: Fri, 24 Apr 2026 15:30:39 +0200
+Subject: [PATCH 6.18 00/01] 6.18.25-rc1 review
+Message-ID: <Fifth>
+From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+To: stable@vger.kernel.org
+X-stable: review
+X-KernelTest-Branch: linux-6.18.y
+Content-Type: text/plain
+
+This is the start of the stable review cycle.`,
+		`Date: Fri, 24 Apr 2026 15:31:00 +0200
+Subject: [PATCH 6.18 01/01] rxrpc: Fix missing validation
+Message-ID: <Fifth-1>
+From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+To: stable@vger.kernel.org
+Content-Type: text/plain
+In-Reply-To: <Fifth>
+
+` + dummyPatch,
+	}
+
+	var emails []*Email
+	for _, m := range messages {
+		msg, err := Parse([]byte(m), nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		emails = append(emails, msg)
+	}
+
+	series := PatchSeries(emails)
+	assert.Len(t, series, 5)
+
+	expectPerID := map[string]*Series{
+		"<First>": {
+			Subject: "Small patch",
+			Version: 1,
+			Patches: []Patch{
+				{
+					Seq:   1,
+					Email: &Email{Email: &email.Email{Subject: "[PATCH] Small patch"}},
+				},
+			},
+		},
+		"<Second>": {
+			Subject: "A longer series",
+			Version: 2,
+			Tags:    []string{"net"},
+			CoverCc: []string{"a@user.com", "b@user.com"},
+			Patches: []Patch{
+				{
+					Seq:   1,
+					Email: &Email{Email: &email.Email{Subject: "[PATCH v2 01/02] First patch"}},
+				},
+				{
+					Seq:   2,
+					Email: &Email{Email: &email.Email{Subject: "[PATCH v2 02/02] Second patch"}},
+				},
+			},
+		},
+		"<Third>": {
+			Subject:   "Series",
+			Version:   1,
+			Corrupted: "the subject mentions 3 patches, 1 are found",
+			Patches: []Patch{
+				{
+					Seq:   1,
+					Email: &Email{Email: &email.Email{Subject: "[PATCH 01/03] Series"}},
+				},
+			},
+		},
+		"<Fourth>": {
+			Subject:   "Series",
+			Version:   1,
+			Corrupted: "the subject mentions 1 patches, 0 are found",
+			Patches:   nil,
+		},
+		"<Fifth>": {
+			Subject:           "6.18.25-rc1 review",
+			Version:           1,
+			Tags:              []string{"6.18"},
+			XStable:           "review",
+			XKernelTestBranch: "linux-6.18.y",
+			CoverCc:           []string{"gregkh@linuxfoundation.org", "stable@vger.kernel.org"},
+			Patches: []Patch{
+				{
+					Seq:   1,
+					Email: &Email{Email: &email.Email{Subject: "[PATCH 6.18 01/01] rxrpc: Fix missing validation"}},
+				},
+			},
+		},
+	}
+	for _, s := range series {
+		expect := expectPerID[s.MessageID]
+		if expect == nil {
+			t.Fatalf("unexpected message: %q", s.MessageID)
+		}
+		expectPerID[s.MessageID] = nil
+		t.Run(s.MessageID, func(t *testing.T) {
+			assert.Equal(t, expect.Corrupted, s.Corrupted, "corrupted differs")
+			assert.Equal(t, expect.Subject, s.Subject, "subject differs")
+			assert.Equal(t, expect.Version, s.Version, "version differs")
+			assert.Equal(t, expect.XStable, s.XStable, "XStable differs")
+			assert.Equal(t, expect.XKernelTestBranch, s.XKernelTestBranch, "XKernelTestBranch differs")
+			require.Equal(t, expect.CoverCc, s.CoverCc, "CoverCc differs")
+			require.Len(t, s.Patches, len(expect.Patches), "patch count differs")
+			for i, expectPatch := range expect.Patches {
+				got := s.Patches[i]
+				assert.Equal(t, expectPatch.Seq, got.Seq, "seq differs")
+			}
+		})
+	}
+}
+
+func TestLink(t *testing.T) {
+	tests := []struct {
+		id     string
+		thread bool
+		want   string
+	}{
+		{
+			id:     "<id@domain>",
+			thread: true,
+			want:   "https://lore.kernel.org/all/id@domain/T/",
+		},
+		{
+			id:     "<id@domain>",
+			thread: false,
+			want:   "https://lore.kernel.org/all/id@domain",
+		},
+		{
+			id:     "id@domain",
+			thread: true,
+			want:   "https://lore.kernel.org/all/id@domain/T/",
+		},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s/%v", test.id, test.thread), func(t *testing.T) {
+			var got string
+			if test.thread {
+				got = LinkToThread(test.id)
+			} else {
+				got = LinkToMessage(test.id)
+			}
+			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestPatchSeriesMinRate(t *testing.T) {
+	// A series with 100 patches where 99 are present (99% rate >= 0.99) should be accepted.
+	var acceptedEmails []*Email
+	acceptedEmails = append(acceptedEmails, &Email{
+		Email: &email.Email{
+			MessageID: "<cover>",
+			Subject:   "[PATCH 000/100] Big series",
+		},
+	})
+	for i := 1; i <= 99; i++ {
+		acceptedEmails = append(acceptedEmails, &Email{
+			Email: &email.Email{
+				MessageID: fmt.Sprintf("<p%d>", i),
+				InReplyTo: "<cover>",
+				Subject:   fmt.Sprintf("[PATCH %03d/100] Patch %d", i, i),
+			},
+			HasPatch: true,
+		})
+	}
+	series := PatchSeries(acceptedEmails)
+	require.Len(t, series, 1)
+	assert.Empty(t, series[0].Corrupted)
+	assert.Len(t, series[0].Patches, 99)
+
+	// A series with 100 patches where 98 are present (98% rate < 0.99) should be corrupted.
+	var corruptedEmails []*Email
+	corruptedEmails = append(corruptedEmails, &Email{
+		Email: &email.Email{
+			MessageID: "<cover2>",
+			Subject:   "[PATCH 000/100] Another big series",
+		},
+	})
+	for i := 1; i <= 98; i++ {
+		corruptedEmails = append(corruptedEmails, &Email{
+			Email: &email.Email{
+				MessageID: fmt.Sprintf("<p2-%d>", i),
+				InReplyTo: "<cover2>",
+				Subject:   fmt.Sprintf("[PATCH %03d/100] Patch %d", i, i),
+			},
+			HasPatch: true,
+		})
+	}
+	series2 := PatchSeries(corruptedEmails)
+	require.Len(t, series2, 1)
+	assert.Equal(t, "the subject mentions 100 patches, 98 are found", series2[0].Corrupted)
+}
+
+// Series that consist only of a cover letter (and no actual patches) must be rejected.
+func TestPatchSeriesNoPatches(t *testing.T) {
+	tests := []struct {
+		name      string
+		emails    []*Email
+		corrupted string
+	}{
+		{
+			name: "only cover letter",
+			emails: []*Email{
+				{Email: &email.Email{MessageID: "<cover>", Subject: "[PATCH 0/2] Series"}},
+			},
+			corrupted: "the subject mentions 2 patches, 0 are found",
+		},
+		{
+			name: "cover letter and replies without patches",
+			emails: []*Email{
+				{Email: &email.Email{MessageID: "<cover>", Subject: "[PATCH 0/1] Series"}},
+				{Email: &email.Email{MessageID: "<reply>", InReplyTo: "<cover>", Subject: "Re: [PATCH 1/1] Series"}},
+			},
+			corrupted: "the subject mentions 1 patches, 0 are found",
+		},
+		{
+			name: "zero-sized series",
+			emails: []*Email{
+				{Email: &email.Email{MessageID: "<cover>", Subject: "[PATCH 0/0] Series"}},
+			},
+			corrupted: "the subject mentions 0 patches, 0 are found",
+		},
+		{
+			name: "cover letter and one patch",
+			emails: []*Email{
+				{Email: &email.Email{MessageID: "<cover>", Subject: "[PATCH 0/1] Series"}},
+				{Email: &email.Email{MessageID: "<patch>", InReplyTo: "<cover>", Subject: "[PATCH 1/1] Series"},
+					HasPatch: true},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			series := PatchSeries(test.emails)
+			require.Len(t, series, 1)
+			assert.Equal(t, test.corrupted, series[0].Corrupted)
+			if test.corrupted != "" {
+				assert.Empty(t, series[0].Patches)
+			} else {
+				assert.NotEmpty(t, series[0].Patches)
+			}
+		})
+	}
+}

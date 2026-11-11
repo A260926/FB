@@ -1,0 +1,11 @@
+# Copyright 2026 syzkaller project authors. All rights reserved.
+# Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
+# Configuration options to enforce panics on hung tasks and soft lockups on
+# pre-7.0 kernels, where these options were bools rather than ints (see commits
+# 9544f9e6947f6 ("hung_task: panic when there are more than N hung tasks at the same time")
+# and e700f5d156079 ("watchdog: softlockup: panic when lockup duration exceeds N thresholds")).
+
+config:
+ - BOOTPARAM_HUNG_TASK_PANIC
+ - BOOTPARAM_SOFTLOCKUP_PANIC: [-s390]
