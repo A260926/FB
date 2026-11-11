@@ -10,5 +10,5 @@ cc -std=c99 -Iinclude "$file" "$b/libxmp.a" -lm -o "$b/check"
 "$b/check"
 printf 'declare_test(test_mixer_note_cut_ac);\n' > "$b/all_tests.c"
 
-cc -std=c99 -Iinclude -Isrc -I"$b" author_checks/old_anticlick.c "$b/libxmp.a" -lm -o "$b/oldcheck"
+cc -std=c99 -Iinclude -Isrc -I"$b" checks/old_anticlick.c "$b/libxmp.a" -lm -o "$b/oldcheck"
 (cd test-dev && "$b/oldcheck")
