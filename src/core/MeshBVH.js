@@ -815,15 +815,21 @@ export class MeshBVH extends GeometryBVH {
 	 * is created and returned from the function.
 	 *
 	 * The `geometryToBvh` parameter is the transform of the geometry in the BVH's local frame.
+	 * It can include any combination of translation, rotation, and uniform, non-uniform, or
+	 * negative scale. All distance comparisons and threshold checks are performed in the local
+	 * frame of this BVH. The `target2.distance` value is computed in the local frame of the
+	 * other geometry instead.
 	 *
 	 * If a point is found that is closer than `minThreshold` then the function will return that
 	 * result early. Any triangles or points outside of `maxThreshold` are ignored. If no point
 	 * is found within the min / max thresholds then `null` is returned and the target objects
 	 * are not modified.
 	 *
-	 * The returned faceIndex in `target1` and `target2` can be used with the standalone function
-	 * `getTriangleHitPointInfo` to obtain more information like UV coordinates, triangle normal
-	 * and materialIndex.
+	 * The returned faceIndex in `target1` and `target2` is the triangle index in the respective
+	 * geometry's own index buffer (or position attribute when not indexed) so it can be used
+	 * with the standalone function `getTriangleHitPointInfo` to obtain more information like UV
+	 * coordinates, triangle normal and materialIndex. The result is independent of whether the
+	 * other geometry has a `boundsTree` and of either BVH being built in direct or indirect mode.
 	 *
 	 * @note This function can be very slow if `geometry` does not have a `geometry.boundsTree`
 	 * computed.

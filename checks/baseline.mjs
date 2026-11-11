@@ -18,8 +18,8 @@ let accelerated;
 try { accelerated=tree.closestPointToGeometry(b,matrix,{}, {},0,.1); }
 catch(e) { console.log('ACCELERATED_ERROR',e.message); }
 console.log('ACCELERATED_DISTANCE',accelerated?.distance??null);
-assert.ok(accelerated===null || Math.abs(accelerated.distance-.02)>1e-6);
-console.log('BASELINE_BVH_OK nonuniform-accelerated-mismatch-reproduced');
+assert.ok(accelerated!==null && Math.abs(accelerated.distance-plain.distance)<1e-6);
+console.log('BASELINE_BVH_OK nonuniform-accelerated-matches-plain');
 const c=geometry([0,4,2,6]);
 const d=geometry([1,5,3,7]);
 const ct=new MeshBVH(c,{targetLeafSize:1,indirect:true});

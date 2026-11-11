@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - BVHComputeData: Geometry attributes are copied directly from the backing arrays when packing, making "update" several times faster on large scenes.
 
 ### Fixed
+- MeshBVH: "closestPointToGeometry" now returns the same result whether or not the other geometry has a `boundsTree`. Bounds pruning is performed in the local frame of the first BVH so non-uniform and negative scales no longer mix units across frames, which could make the closest pair be pruned and return `null`. The reported `faceIndex` values are now the triangle indices in each geometry's own index buffer, matching `getTriangleHitPointInfo`, and indirect second trees are resolved correctly regardless of the first tree's mode.
 - ParallelMeshBVHWorker: A build that throws now rejects instead of never settling and blocking later builds.
 - Workers: A failed build no longer also logs an unhandled promise rejection when the caller handles it.
 

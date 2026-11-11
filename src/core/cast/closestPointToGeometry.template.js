@@ -1,4 +1,4 @@
-import { Vector3, Matrix4 } from 'three';
+import { Vector3, Matrix4, Box3 } from 'three';
 import { OrientedBox } from '../../math/OrientedBox.js';
 import { setTriangle } from '../../utils/TriangleUtilities.js';
 import { getTriCount } from '../build/geometryUtils.js';
@@ -6,11 +6,36 @@ import { ExtendedTrianglePool } from '../../utils/ExtendedTrianglePool.js';
 
 const tempMatrix = /* @__PURE__ */ new Matrix4();
 const obb = /* @__PURE__ */ new OrientedBox();
-const obb2 = /* @__PURE__ */ new OrientedBox();
+const leafBox = /* @__PURE__ */ new Box3();
+const otherBox = /* @__PURE__ */ new Box3();
 const temp1 = /* @__PURE__ */ new Vector3();
 const temp2 = /* @__PURE__ */ new Vector3();
 const temp3 = /* @__PURE__ */ new Vector3();
 const temp4 = /* @__PURE__ */ new Vector3();
+
+const boxFields = [ 'x', 'y', 'z' ];
+
+// Returns the distance between two axis aligned boxes. The boxes have to be expressed in the same
+// frame so the result is an actual distance rather than a per-axis gap measured in different
+// units. All distance and threshold comparisons in this function run in the BVH local frame.
+function distanceToBox( box1, box2 ) {
+
+	let distSq = 0;
+	for ( let i = 0; i < 3; i ++ ) {
+
+		const field = boxFields[ i ];
+		const d = Math.max(
+			0,
+			box1.min[ field ] - box2.max[ field ],
+			box2.min[ field ] - box1.max[ field ],
+		);
+		distSq += d * d;
+
+	}
+
+	return Math.sqrt( distSq );
+
+}
 
 export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 	bvh,
@@ -28,6 +53,8 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 
 	}
 
+	// oriented box representing the full other geometry in the BVH frame. Even with non-uniform
+	// scaling the transformed axis-aligned box stays a valid (conservative) bounds of the geometry.
 	obb.set( otherGeometry.boundingBox.min, otherGeometry.boundingBox.max, geometryToBvh );
 	obb.needsUpdate = true;
 
@@ -55,7 +82,6 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 	let closestDistanceTriIndex = null;
 	let closestDistanceOtherTriIndex = null;
 	tempMatrix.copy( geometryToBvh ).invert();
-	obb2.matrix.copy( tempMatrix );
 	bvh.shapecast(
 		{
 
@@ -67,27 +93,15 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 
 			intersectsBounds: ( box, isLeaf, score ) => {
 
-				if ( score < closestDistance && score < maxThreshold ) {
-
-					// if we know the triangles of this bounds will be intersected next then
-					// save the bounds to use during triangle checks.
-					if ( isLeaf ) {
-
-						obb2.min.copy( box.min );
-						obb2.max.copy( box.max );
-						obb2.needsUpdate = true;
-
-					}
-
-					return true;
-
-				}
-
-				return false;
+				return score < closestDistance && score < maxThreshold;
 
 			},
 
-			intersectsRange: ( offset, count ) => {
+			intersectsRange: ( offset, count, contained, depth, nodeIndex, box ) => {
+
+				// the bounds are passed directly to the range function which also covers the case
+				// where the root node is a leaf (and "intersectsBounds" is never invoked for it)
+				leafBox.copy( box );
 
 				if ( otherGeometry.boundsTree ) {
 
@@ -97,7 +111,12 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 					return otherBvh.shapecast( {
 						boundsTraverseOrder: box => {
 
-							return obb2.distanceToBox( box );
+							// transform the other bounds into the BVH frame so the gap is measured in the
+							// same units as the closest distance and the thresholds. Comparing boxes in the
+							// other geometry frame would mix units whenever the transform contains a
+							// non-uniform or negative scale.
+							otherBox.copy( box ).applyMatrix4( geometryToBvh );
+							return distanceToBox( leafBox, otherBox );
 
 						},
 
@@ -111,16 +130,11 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 
 							for ( let i2 = otherOffset, l2 = otherOffset + otherCount; i2 < l2; i2 ++ ) {
 
-								/* @if INDIRECT */
-
-								const ti2 = otherBvh.resolveTriangleIndex( i2 );
+								// the other BVH may be indirect even if this one is not so the index has
+								// to be resolved at runtime instead of at preprocess time
+								const ti2 = otherBvh.indirect ? otherBvh.resolveTriangleIndex( i2 ) : i2;
 								setTriangle( triangle2, 3 * ti2, otherIndex, otherPos );
 
-								/* @else */
-
-								setTriangle( triangle2, 3 * i2, otherIndex, otherPos );
-
-								/* @endif */
 								triangle2.a.applyMatrix4( geometryToBvh );
 								triangle2.b.applyMatrix4( geometryToBvh );
 								triangle2.c.applyMatrix4( geometryToBvh );
@@ -135,13 +149,14 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 
 									/* @else */
 
+									const ti = i;
 									setTriangle( triangle, 3 * i, index, pos );
 
 									/* @endif */
 									triangle.needsUpdate = true;
 
 									const dist = triangle.distanceToTriangle( triangle2, tempTarget1, tempTarget2 );
-									if ( dist < closestDistance ) {
+									if ( dist < closestDistance && dist < maxThreshold ) {
 
 										tempTargetDest1.copy( tempTarget1 );
 
@@ -152,8 +167,10 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 										}
 
 										closestDistance = dist;
-										closestDistanceTriIndex = i;
-										closestDistanceOtherTriIndex = i2;
+										// store the triangle index in the geometry's own index buffer so it can be
+										// passed straight to getTriangleHitPointInfo regardless of BVH layout
+										closestDistanceTriIndex = ti;
+										closestDistanceOtherTriIndex = ti2;
 
 									}
 
@@ -192,13 +209,14 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 
 							/* @else */
 
+							const ti = i;
 							setTriangle( triangle, 3 * i, index, pos );
 
 							/* @endif */
 							triangle.needsUpdate = true;
 
 							const dist = triangle.distanceToTriangle( triangle2, tempTarget1, tempTarget2 );
-							if ( dist < closestDistance ) {
+							if ( dist < closestDistance && dist < maxThreshold ) {
 
 								tempTargetDest1.copy( tempTarget1 );
 
@@ -209,7 +227,9 @@ export function closestPointToGeometry/* @echo INDIRECT_STRING */(
 								}
 
 								closestDistance = dist;
-								closestDistanceTriIndex = i;
+								// store the triangle index in the geometry's own index buffer so it can be
+								// passed straight to getTriangleHitPointInfo regardless of BVH layout
+								closestDistanceTriIndex = ti;
 								closestDistanceOtherTriIndex = i2;
 
 							}
