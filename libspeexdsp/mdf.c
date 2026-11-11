@@ -119,7 +119,7 @@ static const spx_float_t VAR_BACKTRACK = 4.f;
 
 #define PLAYBACK_DELAY 2
 
-void speex_echo_get_residual(SpeexEchoState *st, spx_word32_t *Yout, int len);
+void speex_echo_get_residual(SpeexEchoState *st, int channel, spx_word32_t *Yout, int len);
 
 
 /** Speex echo cancellation state. */
@@ -145,7 +145,6 @@ struct SpeexEchoState_ {
    spx_word16_t *X;      /* Far-end buffer (M+1 frames) in frequency domain */
    spx_word16_t *input;  /* scratch */
    spx_word16_t *y;      /* scratch */
-   spx_word16_t *last_y;
    spx_word16_t *Y;      /* scratch */
    spx_word16_t *E;
    spx_word32_t *PHI;    /* scratch */
@@ -182,6 +181,10 @@ struct SpeexEchoState_ {
    spx_int16_t *play_buf;
    int play_buf_pos;
    int play_buf_started;
+   int play_frame_size;    /* Interleaved samples in one playback frame (frame_size*K) */
+   int play_buf_capacity;  /* Playback buffer capacity in interleaved samples */
+   spx_word16_t *residual_y;  /* Per-microphone estimated echo history for the residual echo post-filter */
+   spx_word16_t *residual_fft; /* FFT scratch used only by residual echo queries, never clobbering next-frame cancellation state */
 };
 
 static inline void filter_dc_notch16(const spx_int16_t *in, spx_word16_t radius, spx_word16_t *out, int len, spx_mem_t *mem, int stride)
@@ -441,7 +444,6 @@ EXPORT SpeexEchoState *speex_echo_state_init_mc(int frame_size, int filter_lengt
    st->x = (spx_word16_t*)speex_alloc(K*N*sizeof(spx_word16_t));
    st->input = (spx_word16_t*)speex_alloc(C*st->frame_size*sizeof(spx_word16_t));
    st->y = (spx_word16_t*)speex_alloc(C*N*sizeof(spx_word16_t));
-   st->last_y = (spx_word16_t*)speex_alloc(C*N*sizeof(spx_word16_t));
    st->Yf = (spx_word32_t*)speex_alloc((st->frame_size+1)*sizeof(spx_word32_t));
    st->Rf = (spx_word32_t*)speex_alloc((st->frame_size+1)*sizeof(spx_word32_t));
    st->Xf = (spx_word32_t*)speex_alloc((st->frame_size+1)*sizeof(spx_word32_t));
@@ -513,9 +515,18 @@ EXPORT SpeexEchoState *speex_echo_state_init_mc(int frame_size, int filter_lengt
    st->Dvar1 = st->Dvar2 = FLOAT_ZERO;
 #endif
 
-   st->play_buf = (spx_int16_t*)speex_alloc(K*(PLAYBACK_DELAY+1)*st->frame_size*sizeof(spx_int16_t));
-   st->play_buf_pos = PLAYBACK_DELAY*st->frame_size;
+   /* The playback buffer holds complete interleaved frames: each frame always
+      contains frame_size samples per loudspeaker channel. */
+   st->play_frame_size = st->frame_size*K;
+   st->play_buf_capacity = (PLAYBACK_DELAY+1)*st->play_frame_size;
+   st->play_buf = (spx_int16_t*)speex_alloc(st->play_buf_capacity*sizeof(spx_int16_t));
+   st->play_buf_pos = PLAYBACK_DELAY*st->play_frame_size;
    st->play_buf_started = 0;
+
+   /* Per-microphone estimated echo history so each preprocessor can query its
+      own channel; the FFT scratch is separate from the cancellation scratch. */
+   st->residual_y = (spx_word16_t*)speex_alloc(C*N*sizeof(spx_word16_t));
+   st->residual_fft = (spx_word16_t*)speex_alloc(2*N*sizeof(spx_word16_t));
 
    return st;
 }
@@ -545,10 +556,6 @@ EXPORT void speex_echo_state_reset(SpeexEchoState *st)
       st->Eh[i] = 0;
       st->Yh[i] = 0;
    }
-   for (i=0;i<st->frame_size;i++)
-   {
-      st->last_y[i] = 0;
-   }
    for (i=0;i<N*C;i++)
    {
       st->E[i] = 0;
@@ -572,9 +579,11 @@ EXPORT void speex_echo_state_reset(SpeexEchoState *st)
    st->Davg1 = st->Davg2 = 0;
    st->Dvar1 = st->Dvar2 = FLOAT_ZERO;
 #endif
-   for (i=0;i<3*st->frame_size;i++)
+   for (i=0;i<st->play_buf_capacity;i++)
       st->play_buf[i] = 0;
-   st->play_buf_pos = PLAYBACK_DELAY*st->frame_size;
+   for (i=0;i<N*C;i++)
+      st->residual_y[i] = 0;
+   st->play_buf_pos = PLAYBACK_DELAY*st->play_frame_size;
    st->play_buf_started = 0;
 
 }
@@ -588,7 +597,6 @@ EXPORT void speex_echo_state_destroy(SpeexEchoState *st)
    speex_free(st->x);
    speex_free(st->input);
    speex_free(st->y);
-   speex_free(st->last_y);
    speex_free(st->Yf);
    speex_free(st->Rf);
    speex_free(st->Xf);
@@ -617,6 +625,8 @@ EXPORT void speex_echo_state_destroy(SpeexEchoState *st)
    speex_free(st->notch_mem);
 
    speex_free(st->play_buf);
+   speex_free(st->residual_y);
+   speex_free(st->residual_fft);
    speex_free(st);
 
 #ifdef DUMP_ECHO_CANCEL_DATA
@@ -630,14 +640,15 @@ EXPORT void speex_echo_state_destroy(SpeexEchoState *st)
 EXPORT void speex_echo_capture(SpeexEchoState *st, const spx_int16_t *rec, spx_int16_t *out)
 {
    int i;
+   int frame = st->play_frame_size;
    /*speex_warning_int("capture with fill level ", st->play_buf_pos/st->frame_size);*/
    st->play_buf_started = 1;
-   if (st->play_buf_pos>=st->frame_size)
+   if (st->play_buf_pos>=frame)
    {
       speex_echo_cancellation(st, rec, st->play_buf, out);
-      st->play_buf_pos -= st->frame_size;
+      st->play_buf_pos -= frame;
       for (i=0;i<st->play_buf_pos;i++)
-         st->play_buf[i] = st->play_buf[i+st->frame_size];
+         st->play_buf[i] = st->play_buf[i+frame];
    } else {
       speex_warning("No playback frame available (your application is buggy and/or got xruns)");
       if (st->play_buf_pos!=0)
@@ -645,31 +656,35 @@ EXPORT void speex_echo_capture(SpeexEchoState *st, const spx_int16_t *rec, spx_i
          speex_warning("internal playback buffer corruption?");
          st->play_buf_pos = 0;
       }
-      for (i=0;i<st->frame_size;i++)
+      /* No reference available: pass the raw interleaved input through for all
+         microphones and do not advance the canceller adaptation state. The
+         output may alias rec and samples beyond the frame are left untouched. */
+      for (i=0;i<st->frame_size*st->C;i++)
          out[i] = rec[i];
    }
 }
 
 EXPORT void speex_echo_playback(SpeexEchoState *st, const spx_int16_t *play)
 {
+   int frame = st->play_frame_size;
    /*speex_warning_int("playback with fill level ", st->play_buf_pos/st->frame_size);*/
    if (!st->play_buf_started)
    {
       speex_warning("discarded first playback frame");
       return;
    }
-   if (st->play_buf_pos<=PLAYBACK_DELAY*st->frame_size)
+   if (st->play_buf_pos<=PLAYBACK_DELAY*frame)
    {
       int i;
-      for (i=0;i<st->frame_size;i++)
+      for (i=0;i<frame;i++)
          st->play_buf[st->play_buf_pos+i] = play[i];
-      st->play_buf_pos += st->frame_size;
-      if (st->play_buf_pos <= (PLAYBACK_DELAY-1)*st->frame_size)
+      st->play_buf_pos += frame;
+      if (st->play_buf_pos <= (PLAYBACK_DELAY-1)*frame)
       {
          speex_warning("Auto-filling the buffer (your application is buggy and/or got xruns)");
-         for (i=0;i<st->frame_size;i++)
+         for (i=0;i<frame;i++)
             st->play_buf[st->play_buf_pos+i] = play[i];
-         st->play_buf_pos += st->frame_size;
+         st->play_buf_pos += frame;
       }
    } else {
       speex_warning("Had to discard a playback frame (your application is buggy and/or got xruns)");
@@ -1170,38 +1185,52 @@ EXPORT void speex_echo_cancellation(SpeexEchoState *st, const spx_int16_t *in, c
       st->sum_adapt = ADD32(st->sum_adapt,adapt_rate);
    }
 
-   /* FIXME: MC conversion required */
-      for (i=0;i<st->frame_size;i++)
-         st->last_y[i] = st->last_y[st->frame_size+i];
-   if (st->adapted)
+   /* Per-microphone estimated echo history used by the residual echo post-filter.
+      Each channel keeps its own two-frame window so the preprocessors can be
+      attached to different microphones. */
+   for (chan = 0; chan < C; chan++)
    {
-      /* If the filter is adapted, take the filtered echo */
       for (i=0;i<st->frame_size;i++)
-         st->last_y[st->frame_size+i] = in[i]-out[i];
-   } else {
-      /* If filter isn't adapted yet, all we can do is take the far end signal directly */
-      /* moved earlier: for (i=0;i<N;i++)
-      st->last_y[i] = st->x[i];*/
+         st->residual_y[chan*N+i] = st->residual_y[chan*N+st->frame_size+i];
+      if (st->adapted)
+      {
+         /* If the filter is adapted, take the filtered echo (mic input minus AEC output) */
+         for (i=0;i<st->frame_size;i++)
+            st->residual_y[chan*N+st->frame_size+i] = in[i*C+chan]-out[i*C+chan];
+      }
    }
 
 }
 
-/* Compute spectrum of estimated echo for use in an echo post-filter */
-void speex_echo_get_residual(SpeexEchoState *st, spx_word32_t *residual_echo, int len)
+/* Compute spectrum of estimated echo for use in an echo post-filter.
+   The history of each microphone is kept separately and the FFT uses private
+   scratch arrays, so querying one channel never disturbs the cancellation
+   state (nor another channel's next-frame processing). */
+void speex_echo_get_residual(SpeexEchoState *st, int channel, spx_word32_t *residual_echo, int len)
 {
    int i;
    spx_word16_t leak2;
    int N;
+   spx_word16_t *ry;
+   spx_word16_t *tmp_time;
+   spx_word16_t *tmp_freq;
 
    N = st->window_size;
+   if (channel < 0)
+      channel = 0;
+   else if (channel >= st->C)
+      channel = st->C-1;
+   ry = st->residual_y + channel*N;
+   tmp_time = st->residual_fft;
+   tmp_freq = st->residual_fft + N;
 
    /* Apply hanning window (should pre-compute it)*/
    for (i=0;i<N;i++)
-      st->y[i] = MULT16_16_Q15(st->window[i],st->last_y[i]);
+      tmp_time[i] = MULT16_16_Q15(st->window[i],ry[i]);
 
    /* Compute power spectrum of the echo */
-   spx_fft(st->fft_table, st->y, st->Y);
-   power_spectrum(st->Y, residual_echo, N);
+   spx_fft(st->fft_table, tmp_time, tmp_freq);
+   power_spectrum(tmp_freq, residual_echo, N);
 
 #ifdef FIXED_POINT
    if (st->leak_estimate > 16383)
@@ -1247,6 +1276,9 @@ EXPORT int speex_echo_ctl(SpeexEchoState *st, int request, void *ptr)
          break;
       case SPEEX_ECHO_GET_SAMPLING_RATE:
          (*(int*)ptr) = st->sampling_rate;
+         break;
+      case SPEEX_ECHO_GET_NB_MIC:
+         (*(spx_int32_t*)ptr) = st->C;
          break;
       case SPEEX_ECHO_GET_IMPULSE_RESPONSE_SIZE:
          /*FIXME: Implement this for multiple channels */

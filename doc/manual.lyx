@@ -4423,6 +4423,21 @@ SPEEX_PREPROCESS_SET_ECHO_STATE Set the associated echo canceller for residual
 SPEEX_PREPROCESS_GET_ECHO_STATE Get the associated echo canceller (pointer)
 \end_layout
 
+\begin_layout Description
+SPEEX_PREPROCESS_SET_ECHO_CHANNEL Set which microphone channel of an attached
+ multi-channel echo canceller supplies the residual echo estimate (int32,
+ default 0). The value must be non-negative and, once an echo state is attached,
+ smaller than the number of microphones of that state; otherwise the call returns
+ -1 and the previous channel selection is kept. A new echo state can only be
+ attached when the selected channel exists in it, otherwise the previous binding
+ is kept.
+\end_layout
+
+\begin_layout Description
+SPEEX_PREPROCESS_GET_ECHO_CHANNEL Get the selected microphone channel used for
+ the residual echo estimate (int32)
+\end_layout
+
 \begin_layout Section
 Echo Cancellation
 \begin_inset CommandInset label
@@ -4751,6 +4766,74 @@ status open
 \begin_layout Plain Layout
 
 speex_echo_state_reset(echo_state);
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Multi-channel Processing
+\end_layout
+
+\begin_layout Standard
+For more than one microphone and/or loudspeaker, create the canceller with
+ speex_echo_state_init_mc() and pass interleaved frames: each frame contains
+ frame_size samples per channel, with the loudspeaker channels interleaved
+ for speex_echo_playback() and the microphone channels interleaved for speex_echo_capture().
+ The internal playback buffer stores complete interleaved loudspeaker frames,
+ so the two-frame delay and the underrun/overrun behaviour are identical to
+ the mono case: an underrun copies the raw microphone samples of every channel
+ to the output without advancing adaptation, while a full buffer discards the
+ newest playback frame.
+\end_layout
+
+\begin_layout Standard
+Each microphone needs its own preprocessing state. Several preprocessors may
+ attach to the same multi-channel echo canceller and each selects its microphone
+ with SPEEX_PREPROCESS_SET_ECHO_CHANNEL. The canceller keeps a separate residual
+ echo estimate per microphone, so the order of the speex_preprocess_run() calls
+ does not change any channel's result. The recommended per-frame order is one
+ speex_echo_capture() followed by the speex_echo_playback() of the played frame,
+ then one speex_preprocess_run() per microphone on the de-interleaved channel
+ samples.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "breaklines=true"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+speex_echo_capture(echo_state, mic_frame, aec_frame);
+\end_layout
+
+\begin_layout Plain Layout
+
+speex_echo_playback(echo_state, play_frame);
+\end_layout
+
+\begin_layout Plain Layout
+
+for (chan = 0; chan < nb_mic; chan++) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  /* de-interleave microphone chan from aec_frame into chan_frame */
+\end_layout
+
+\begin_layout Plain Layout
+
+  speex_preprocess_run(preprocess_state[chan], chan_frame);
+\end_layout
+
+\begin_layout Plain Layout
+
+}
 \end_layout
 
 \end_inset

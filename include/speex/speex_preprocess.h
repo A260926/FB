@@ -211,6 +211,13 @@ int speex_preprocess_ctl(SpeexPreprocessState *st, int request, void *ptr);
 /** Get preprocessor Automatic Gain Control level (int32) */
 #define SPEEX_PREPROCESS_GET_AGC_TARGET 47
 
+/** Set the microphone channel whose residual echo estimate is used when an
+ *  echo canceller is attached (int32, default 0). Only valid when the
+ *  selected channel exists in the associated multi-channel echo state. */
+#define SPEEX_PREPROCESS_SET_ECHO_CHANNEL 48
+/** Get the selected microphone channel used for the residual echo estimate (int32) */
+#define SPEEX_PREPROCESS_GET_ECHO_CHANNEL 49
+
 #ifdef __cplusplus
 }
 #endif

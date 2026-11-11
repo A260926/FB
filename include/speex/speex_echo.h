@@ -59,6 +59,9 @@ extern "C" {
 /** Get impulse response (int32[]) */
 #define SPEEX_ECHO_GET_IMPULSE_RESPONSE 29
 
+/** Get number of microphone channels of the canceller (int32) */
+#define SPEEX_ECHO_GET_NB_MIC 30
+
 /** Internal echo canceller state. Should never be accessed directly. */
 struct SpeexEchoState_;
 
@@ -106,14 +109,19 @@ void speex_echo_cancel(SpeexEchoState *st, const spx_int16_t *rec, const spx_int
 /** Perform echo cancellation using internal playback buffer, which is delayed by two frames
  * to account for the delay introduced by most soundcards (but it could be off!)
  * @param st Echo canceller state
- * @param rec Signal from the microphone (near end + far end echo)
- * @param out Returns near-end signal with echo removed
+ * @param rec Signal from the microphone (near end + far end echo); interleaved
+ * microphone channels for a multi-channel state, frame_size*nb_mic samples
+ * @param out Returns near-end signal with echo removed (same interleaved layout;
+ * may alias rec). On playback buffer underrun the raw input is copied through
+ * for every channel and the adaptation state is not updated
 */
 void speex_echo_capture(SpeexEchoState *st, const spx_int16_t *rec, spx_int16_t *out);
 
 /** Let the echo canceller know that a frame was just queued to the soundcard
  * @param st Echo canceller state
- * @param play Signal played to the speaker (received from far end)
+ * @param play Signal played to the speaker (received from far end); interleaved
+ * loudspeaker channels for a multi-channel state, frame_size*nb_speakers samples.
+ * One buffered frame always contains all loudspeaker channels.
 */
 void speex_echo_playback(SpeexEchoState *st, const spx_int16_t *play);
 

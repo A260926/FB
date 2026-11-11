@@ -23,7 +23,12 @@ int main(void) {
   speex_echo_capture(mc,in,out); speex_echo_capture(mc,in,out);
   for(int i=0;i<2*F;i++) out[i]=-12345;
   speex_echo_capture(mc,in,out);
-  int stale=0; for(int i=F;i<2*F;i++) stale+=(out[i]==-12345);
-  assert(stale==F); printf("AEC_CURRENT_MULTIMIC_UNDERRUN_STALE samples=%d\n",stale);
+  int copied=0, stale=0;
+  for(int i=0;i<2*F;i++) { copied+=(out[i]==in[i]); stale+=(out[i]==-12345); }
+  /* Underrun: every microphone channel is copied through untouched and no
+     sentinel sample may survive inside the frame. */
+  assert(copied==2*F);
+  assert(stale==0);
+  printf("AEC_MULTIMIC_UNDERRUN_COPY samples=%d\n",copied);
   speex_echo_state_destroy(mc);
 }

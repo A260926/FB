@@ -194,6 +194,7 @@ struct SpeexPreprocessState_ {
    int    echo_suppress;
    int    echo_suppress_active;
    SpeexEchoState *echo_state;
+   int    echo_channel;     /**< Microphone channel used for the residual echo estimate */
 
    spx_word16_t	speech_prob;  /**< Probability last frame was speech */
 
@@ -436,6 +437,7 @@ EXPORT SpeexPreprocessState *speex_preprocess_state_init(int frame_size, int sam
    st->speech_prob_continue = SPEECH_PROB_CONTINUE_DEFAULT;
 
    st->echo_state = NULL;
+   st->echo_channel = 0;
 
    st->nbands = NB_BANDS;
    M = st->nbands;
@@ -712,7 +714,7 @@ static void update_noise_prob(SpeexPreprocessState *st)
 
 #define NOISE_OVERCOMPENS 1.
 
-void speex_echo_get_residual(SpeexEchoState *st, spx_word32_t *Yout, int len);
+void speex_echo_get_residual(SpeexEchoState *st, int channel, spx_word32_t *Yout, int len);
 
 EXPORT int speex_preprocess(SpeexPreprocessState *st, spx_int16_t *x, spx_int32_t *echo)
 {
@@ -743,7 +745,7 @@ EXPORT int speex_preprocess_run(SpeexPreprocessState *st, spx_int16_t *x)
    /* Deal with residual echo if provided */
    if (st->echo_state)
    {
-      speex_echo_get_residual(st->echo_state, st->residual_echo, N);
+      speex_echo_get_residual(st->echo_state, st->echo_channel, st->residual_echo, N);
 #ifndef FIXED_POINT
       /* If there are NaNs or ridiculous values, it'll show up in the DC and we just reset everything to zero */
       if (!(st->residual_echo[0] >=0 && st->residual_echo[0]<N*1e9f))
@@ -1162,10 +1164,42 @@ EXPORT int speex_preprocess_ctl(SpeexPreprocessState *state, int request, void *
       (*(spx_int32_t*)ptr) = st->echo_suppress_active;
       break;
    case SPEEX_PREPROCESS_SET_ECHO_STATE:
-      st->echo_state = (SpeexEchoState*)ptr;
+   {
+      SpeexEchoState *new_state = (SpeexEchoState*)ptr;
+      if (new_state)
+      {
+         /* Reject an incompatible echo state and keep the previous binding:
+            the selected microphone channel must exist in that state. */
+         spx_int32_t nb_mic = 0;
+         if (speex_echo_ctl(new_state, SPEEX_ECHO_GET_NB_MIC, &nb_mic) != 0
+               || st->echo_channel < 0 || st->echo_channel >= nb_mic)
+            return -1;
+      }
+      st->echo_state = new_state;
       break;
+   }
    case SPEEX_PREPROCESS_GET_ECHO_STATE:
       (*(SpeexEchoState**)ptr) = (SpeexEchoState*)st->echo_state;
+      break;
+   case SPEEX_PREPROCESS_SET_ECHO_CHANNEL:
+   {
+      int channel = (*(spx_int32_t*)ptr);
+      /* Negative indices are never accepted. */
+      if (channel < 0)
+         return -1;
+      if (st->echo_state)
+      {
+         /* Once bound, the channel must exist in the echo canceller. */
+         spx_int32_t nb_mic = 0;
+         if (speex_echo_ctl(st->echo_state, SPEEX_ECHO_GET_NB_MIC, &nb_mic) != 0
+               || channel >= nb_mic)
+            return -1;
+      }
+      st->echo_channel = channel;
+      break;
+   }
+   case SPEEX_PREPROCESS_GET_ECHO_CHANNEL:
+      (*(spx_int32_t*)ptr) = st->echo_channel;
       break;
 #ifndef FIXED_POINT
    case SPEEX_PREPROCESS_GET_AGC_LOUDNESS:
