@@ -28,4 +28,4 @@ examples/sfu-ws/key.pem
 wasm_exec.js
 
 # Draft-local dependency and build caches
-.draft-build/
+.build/
