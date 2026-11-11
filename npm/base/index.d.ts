@@ -161,6 +161,7 @@ export interface UniformBlockInfo {
     asFloat: Float32Array;
     buffer: WebGLBuffer;
     offset?: number;
+    arrayOffset?: number;
     uniforms: { [key: string]: ArrayBufferView }
 }
 
@@ -174,6 +175,9 @@ export interface UniformData {
     size: number;
     blockNdx: number;
     offset: number;
+    arrayStride?: number;
+    matrixStride?: number;
+    isRowMajor?: boolean;
 }
 
 export interface VertexArrayInfo {

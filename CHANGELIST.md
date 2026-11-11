@@ -1,5 +1,35 @@
 # Change List
 
+*   next
+
+    Uniform block layout refactor and fixes.
+
+    *   The CPU side uniform block packing (typed array views and setters
+        generated from reflection data) moved out of `programs.js` into a
+        new WebGL free module, `src/uniform-block-layout.js`, so tools
+        without a WebGL context can share the exact same packing code.
+        `createUniformBlockInfoFromProgram`, `createUniformBlockInfo`,
+        `setBlockUniforms`, `bindUniformBlock` and `setUniformBlock` keep
+        their existing call signatures.
+
+    *   `createUniformBlockSpecFromProgram` now also captures
+        `UNIFORM_ARRAY_STRIDE`, `UNIFORM_MATRIX_STRIDE` and
+        `UNIFORM_IS_ROW_MAJOR` on each `UniformData` entry. Blocks are
+        packed using the actual offsets, strides and matrix order instead
+        of assuming every matrix and array element is 4 components per
+        row. This fixes row major matrices (previously stored column
+        major). Matrix values passed to `setBlockUniforms` are still
+        compact column major. Hand written `UniformBlockSpec`s without
+        the new fields are still interpreted as column major std140.
+
+    *   Fixed `setUniformBlock` mixing up the CPU and GPU offsets when a
+        block uses `options.offset` together with `options.bufferOffset`.
+        `offset` (CPU array) and `bufferOffset` (GPU buffer) are now
+        independent: exactly `size` bytes are copied from the CPU offset
+        to the GPU offset and `bindBufferRange` binds that same GPU
+        range. `UniformBlockInfo` gains an `arrayOffset` property for
+        the CPU offset; `offset` remains the GPU offset.
+
 *   7.0.0
 
     Support for uploading mipmaps in 1 call.

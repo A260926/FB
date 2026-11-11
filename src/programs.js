@@ -22,6 +22,10 @@
 
 import * as utils from './utils.js';
 import * as helper from './helper.js';
+import {
+  addSetterToUniformTree,
+  createUniformBlockLayout,
+} from './uniform-block-layout.js';
 
 /**
  * Low level shader program related functions
@@ -985,43 +989,6 @@ function isBuiltIn(info) {
   return name.startsWith("gl_") || name.startsWith("webgl_");
 }
 
-const tokenRE = /(\.|\[|]|\w+)/g;
-const isDigit = s => s >= '0' && s <= '9';
-function addSetterToUniformTree(fullPath, setter, node, uniformSetters) {
-  const tokens = fullPath.split(tokenRE).filter(s => s !== '');
-  let tokenNdx = 0;
-  let path = '';
-
-  for (;;) {
-    const token = tokens[tokenNdx++];  // has to be name or number
-    path += token;
-    const isArrayIndex = isDigit(token[0]);
-    const accessor = isArrayIndex
-        ? parseInt(token)
-        : token;
-    if (isArrayIndex) {
-      path += tokens[tokenNdx++];  // skip ']'
-    }
-    const isLastToken = tokenNdx === tokens.length;
-    if (isLastToken) {
-      node[accessor] = setter;
-      break;
-    } else {
-      const token = tokens[tokenNdx++];  // has to be . or [
-      const isArray = token === '[';
-      const child = node[accessor] || (isArray ? [] : {});
-      node[accessor] = child;
-      node = child;
-      uniformSetters[path] = uniformSetters[path] || function(node) {
-        return function(value) {
-          setUniformTree(node, value);
-        };
-      }(child);
-      path += token;
-    }
-  }
-}
-
 /**
  * Creates setter functions for all uniforms of a shader
  * program.
@@ -1178,6 +1145,13 @@ function createTransformFeedback(gl, programInfo, bufferInfo) {
  * @property {number} size The number of elements for this uniform
  * @property {number} blockNdx The block index this uniform appears in
  * @property {number} offset The byte offset in the block for this uniform's value
+ * @property {number} [arrayStride] `UNIFORM_ARRAY_STRIDE`: the byte stride between
+ *    elements of an array uniform. Only present when captured from reflection.
+ * @property {number} [matrixStride] `UNIFORM_MATRIX_STRIDE`: the byte stride between
+ *    the columns (or rows for row major matrices) of a matrix uniform.
+ *    Only present when captured from reflection.
+ * @property {boolean} [isRowMajor] `UNIFORM_IS_ROW_MAJOR`: true if a matrix uniform
+ *    is stored row major. Only present when captured from reflection.
  * @memberOf module:twgl
  */
 
@@ -1209,7 +1183,11 @@ function createTransformFeedback(gl, programInfo, bufferInfo) {
  * Creates a UniformBlockSpec for the given program.
  *
  * A UniformBlockSpec represents the data needed to create and bind
- * UniformBlockObjects
+ * UniformBlockObjects. Each `UniformData` entry captures the reflected
+ * `UNIFORM_OFFSET`, `UNIFORM_ARRAY_STRIDE`, `UNIFORM_MATRIX_STRIDE` and
+ * `UNIFORM_IS_ROW_MAJOR` so the block can be packed with its actual
+ * layout (see `src/uniform-block-layout.js` for the WebGL free packing
+ * code that consumes this data).
  *
  * @param {WebGL2RenderingContext} gl A WebGL2 Rendering Context
  * @param {WebGLProgram} program A WebGLProgram for a successfully linked program
@@ -1233,6 +1211,9 @@ function createUniformBlockSpecFromProgram(gl, program) {
     [ "UNIFORM_SIZE", "size" ],  // num elements
     [ "UNIFORM_BLOCK_INDEX", "blockNdx" ],
     [ "UNIFORM_OFFSET", "offset", ],
+    [ "UNIFORM_ARRAY_STRIDE", "arrayStride", ],
+    [ "UNIFORM_MATRIX_STRIDE", "matrixStride", ],
+    [ "UNIFORM_IS_ROW_MAJOR", "isRowMajor", ],
   ].forEach(function(pair) {
     const pname = pair[0];
     const key = pair[1];
@@ -1263,36 +1244,6 @@ function createUniformBlockSpecFromProgram(gl, program) {
   };
 }
 
-const arraySuffixRE = /\[\d+\]\.$/;  // better way to check?
-
-const pad = (v, padding) => ((v + (padding - 1)) / padding | 0) * padding;
-
-function createUniformBlockUniformSetter(view, isArray, rows, cols) {
-  if (isArray || rows) {
-    cols = cols || 1;
-    const numElements = view.length;
-    const totalRows = numElements / 4;
-    return function(value) {
-      let dst = 0;
-      let src = 0;
-      for (let row = 0; row < totalRows; ++row) {
-        for (let col = 0; col < cols; ++col) {
-          view[dst++] = value[src++];
-        }
-        dst += 4 - cols;
-      }
-    };
-  } else {
-    return function(value) {
-      if (value.length) {
-        view.set(value);
-      } else {
-        view[0] = value;
-      }
-    };
-  }
-}
-
 /**
  * Represents a UniformBlockObject including an ArrayBuffer with all the uniform values
  * and a corresponding WebGLBuffer to hold those values on the GPU
@@ -1304,7 +1255,10 @@ function createUniformBlockUniformSetter(view, isArray, rows, cols) {
  *    inspecting the contents of the buffer in the debugger.
  * @property {Uint8Array} asUint8t A uint8 view on the array buffer.
  * @property {WebGLBuffer} buffer A WebGL buffer that will hold a copy of the uniform values for rendering.
- * @property {number} [offset] offset into buffer
+ * @property {number} [offset] offset in bytes into the GPU buffer where this block starts
+ *    (this is `options.bufferOffset` or, if that was not passed, `options.offset`).
+ * @property {number} [arrayOffset] offset in bytes into `array` (the CPU side) where this
+ *    block starts (this is `options.offset`).
  * @property {Object<string, ArrayBufferView>} uniforms A uniform name to ArrayBufferView map.
  *   each Uniform has a correctly typed `ArrayBufferView` into array at the correct offset
  *   and length of that uniform. So for example a float uniform would have a 1 float `Float32Array`
@@ -1325,9 +1279,13 @@ function createUniformBlockUniformSetter(view, isArray, rows, cols) {
  * Options to allow createUniformBlockInfo to use an existing buffer and arrayBuffer at an offset
  * @typedef {Object} UniformBlockInfoOptions
  * @property {ArrayBuffer} [array] an existing array buffer to use for values
- * @property {number} [offset] the offset in bytes to use in the array buffer (default = 0)
+ * @property {number} [offset] the offset in bytes to use in the array buffer, the CPU side (default = 0)
  * @property {WebGLBuffer} [buffer] the buffer to use for this uniform block info
- * @property {number} [bufferOffset] the offset in bytes in the buffer to use (default = use offset above)
+ * @property {number} [bufferOffset] the offset in bytes in the GPU buffer to use (default = use offset above).
+ *    `offset` and `bufferOffset` are independent: `offset` only locates the block in `array`,
+ *    `bufferOffset` only locates it in `buffer`. `setUniformBlock` uploads exactly `size` bytes
+ *    from `array` at `offset` to `buffer` at `bufferOffset` and `bindUniformBlock` binds that
+ *    same GPU range.
  */
 
 /**
@@ -1349,9 +1307,7 @@ function createUniformBlockUniformSetter(view, isArray, rows, cols) {
  * @memberOf module:twgl/programs
  */
 function createUniformBlockInfoFromProgram(gl, program, uniformBlockSpec, blockName, options = {}) {
-  const blockSpecs = uniformBlockSpec.blockSpecs;
-  const uniformData = uniformBlockSpec.uniformData;
-  const blockSpec = blockSpecs[blockName];
+  const blockSpec = uniformBlockSpec.blockSpecs[blockName];
   if (!blockSpec) {
     warn("no uniform block object named:", blockName);
     return {
@@ -1369,59 +1325,10 @@ function createUniformBlockInfoFromProgram(gl, program, uniformBlockSpec, blockN
   }
   gl.uniformBlockBinding(program, blockSpec.index, uniformBufferIndex);
 
-  let prefix = blockName + ".";
-  if (arraySuffixRE.test(prefix)) {
-    prefix = prefix.replace(arraySuffixRE, ".");
-  }
-  const uniforms = {};
-  const setters = {};
-  const setterTree = {};
-  blockSpec.uniformIndices.forEach(function(uniformNdx) {
-    const data = uniformData[uniformNdx];
-    let name = data.name;
-    if (name.startsWith(prefix)) {
-      name = name.substr(prefix.length);
-    }
-    const isArray = name.endsWith('[0]');
-    if (isArray) {
-      name = name.substr(0, name.length - 3);
-    }
-    const typeInfo = typeMap[data.type];
-    const Type = typeInfo.Type;
-    const byteLength = isArray
-        ? pad(typeInfo.size, 16) * data.size
-        : typeInfo.size * data.size;
-    const uniformView = new Type(array, offset + data.offset, byteLength / Type.BYTES_PER_ELEMENT);
-    uniforms[name] = uniformView;
-    // Note: I'm not sure what to do here. The original
-    // idea was to create TypedArray views into each part
-    // of the block. This is useful, for example if you have
-    // a block with { mat4: model; mat4 view; mat4 projection; }
-    // you'll get a Float32Array for each one suitable for
-    // passing to most JS math libraries including twgl's and glMatrix.js.
-    //
-    // But, if you have a an array of structures, especially if that
-    // array is large, you get a whole bunch of TypedArray views.
-    // Every one of them has overhead and switching between them all
-    // is probably a cache miss. In that case it would really be better
-    // to just have one view (asFloat) and have all the setters
-    // just reference the correct portion. But, then you can't easily
-    // treat a matrix, or a vec4, as a standalone thing like you can
-    // with all the views.
-    //
-    // Another problem with the views is they are not shared. With
-    // uniforms you have one set of setters. With UniformBlockInfo
-    // you have a set of setters *pre block instance*. That's because
-    // TypedArray views can't be mapped to different buffers.
-    //
-    // My gut right now is if you really want the speed and compactness
-    // then you should probably roll your own solution. TWGL's goal
-    // here is ease of use as AFAICT there is no simple generic efficient
-    // solution.
-    const setter = createUniformBlockUniformSetter(uniformView, isArray, typeInfo.rows, typeInfo.cols);
-    setters[name] = setter;
-    addSetterToUniformTree(name, setter, setterTree, setters);
-  });
+  // The CPU side layout (views + setters) lives in uniform-block-layout.js
+  // so it can be shared with tools that have no WebGL context.
+  const { uniforms, setters } = createUniformBlockLayout(
+      blockSpec, uniformBlockSpec.uniformData, blockName, array, offset);
   return {
     name: blockName,
     array,
@@ -1430,7 +1337,8 @@ function createUniformBlockInfoFromProgram(gl, program, uniformBlockSpec, blockN
     buffer,
     uniforms,
     setters,
-    offset: options.bufferOffset ?? offset,
+    offset: options.bufferOffset ?? offset,  // GPU offset in buffer
+    arrayOffset: offset,                     // CPU offset in array
     size: blockSpec.size,
   };
 }
@@ -1502,7 +1410,14 @@ function bindUniformBlock(gl, programInfo, uniformBlockInfo) {
  */
 function setUniformBlock(gl, programInfo, uniformBlockInfo) {
   if (bindUniformBlock(gl, programInfo, uniformBlockInfo)) {
-    gl.bufferSubData(UNIFORM_BUFFER, 0, uniformBlockInfo.asUint8, uniformBlockInfo.offset || 0, uniformBlockInfo.size || 0);
+    // `offset` is where the block lives in the GPU buffer, `arrayOffset`
+    // is where it lives in the CPU array. They are independent.
+    gl.bufferSubData(
+        UNIFORM_BUFFER,
+        uniformBlockInfo.offset || 0,
+        uniformBlockInfo.asUint8,
+        uniformBlockInfo.arrayOffset || 0,
+        uniformBlockInfo.size || 0);
   }
 }
 
@@ -1583,6 +1498,11 @@ function setUniformBlock(gl, programInfo, uniformBlockInfo) {
  *  as shown about and copies them, skipping the padding. This might
  *  be confusing if you're already familiar with Uniform blocks.
  *
+ *  Matrix values are always passed in as compact column major (the same
+ *  format as `gl.uniformMatrix*fv`) and are scattered to the reflected
+ *  offsets, `UNIFORM_MATRIX_STRIDE` and `UNIFORM_IS_ROW_MAJOR` of the
+ *  block. The same applies to array elements and `UNIFORM_ARRAY_STRIDE`.
+ *
  *  If you want to deal with the padding yourself you can access the array
  *  buffer views directly. eg:
  *
@@ -1598,17 +1518,6 @@ function setBlockUniforms(uniformBlockInfo, values) {
     if (setter) {
       const value = values[name];
       setter(value);
-    }
-  }
-}
-
-function setUniformTree(tree, values) {
-  for (const name in values) {
-    const prop = tree[name];
-    if (typeof prop === 'function') {
-      prop(values[name]);
-    } else {
-      setUniformTree(tree[name], values[name]);
     }
   }
 }

@@ -537,6 +537,13 @@ export function createTransformFeedback(gl: WebGLRenderingContext, programInfo: 
  * @property {number} size The number of elements for this uniform
  * @property {number} blockNdx The block index this uniform appears in
  * @property {number} offset The byte offset in the block for this uniform's value
+ * @property {number} [arrayStride] `UNIFORM_ARRAY_STRIDE`: the byte stride between
+ *    elements of an array uniform. Only present when captured from reflection.
+ * @property {number} [matrixStride] `UNIFORM_MATRIX_STRIDE`: the byte stride between
+ *    the columns (or rows for row major matrices) of a matrix uniform.
+ *    Only present when captured from reflection.
+ * @property {boolean} [isRowMajor] `UNIFORM_IS_ROW_MAJOR`: true if a matrix uniform
+ *    is stored row major. Only present when captured from reflection.
  * @memberOf module:twgl
  */
 export type UniformData = {
@@ -545,6 +552,9 @@ export type UniformData = {
     size: number;
     blockNdx: number;
     offset: number;
+    arrayStride?: number;
+    matrixStride?: number;
+    isRowMajor?: boolean;
 };
 /**
  * The specification for one UniformBlockObject
@@ -593,7 +603,10 @@ export type UniformBlockSpec = {
  *    inspecting the contents of the buffer in the debugger.
  * @property {Uint8Array} asUint8t A uint8 view on the array buffer.
  * @property {WebGLBuffer} buffer A WebGL buffer that will hold a copy of the uniform values for rendering.
- * @property {number} [offset] offset into buffer
+ * @property {number} [offset] offset in bytes into the GPU buffer where this block starts
+ *    (this is `options.bufferOffset` or, if that was not passed, `options.offset`).
+ * @property {number} [arrayOffset] offset in bytes into `array` (the CPU side) where this
+ *    block starts (this is `options.offset`).
  * @property {Object<string, ArrayBufferView>} uniforms A uniform name to ArrayBufferView map.
  *   each Uniform has a correctly typed `ArrayBufferView` into array at the correct offset
  *   and length of that uniform. So for example a float uniform would have a 1 float `Float32Array`
@@ -616,6 +629,7 @@ export type UniformBlockInfo = {
     asUint8t: Uint8Array;
     buffer: WebGLBuffer;
     offset?: number;
+    arrayOffset?: number;
     uniforms: {
         [key: string]: ArrayBufferView;
     };
@@ -2285,9 +2299,13 @@ export function createUniformBlockSpecFromProgram(gl: WebGL2RenderingContext, pr
  * Options to allow createUniformBlockInfo to use an existing buffer and arrayBuffer at an offset
  * @typedef {Object} UniformBlockInfoOptions
  * @property {ArrayBuffer} [array] an existing array buffer to use for values
- * @property {number} [offset] the offset in bytes to use in the array buffer (default = 0)
+ * @property {number} [offset] the offset in bytes to use in the array buffer, the CPU side (default = 0)
  * @property {WebGLBuffer} [buffer] the buffer to use for this uniform block info
- * @property {number} [bufferOffset] the offset in bytes in the buffer to use (default = use offset above)
+ * @property {number} [bufferOffset] the offset in bytes in the GPU buffer to use (default = use offset above).
+ *    `offset` and `bufferOffset` are independent: `offset` only locates the block in `array`,
+ *    `bufferOffset` only locates it in `buffer`. `setUniformBlock` uploads exactly `size` bytes
+ *    from `array` at `offset` to `buffer` at `bufferOffset` and `bindUniformBlock` binds that
+ *    same GPU range.
  */
 export type UniformBlockInfoOptions = {
     array?: ArrayBuffer;
