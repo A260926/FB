@@ -63,38 +63,40 @@ func (b *Block) packFlags() byte {
 }
 
 // UnmarshalBlock unmarshals EBML Block structure.
+// n is the declared size of the whole Block: the track number VINT, the
+// 2-byte signed timecode, the flags byte and the lacing area (lace count,
+// length table and frame data). The underlying reader is never read past n
+// bytes, so bytes following the Block stay available for the next element.
 func UnmarshalBlock(r io.Reader, n int64) (*Block, error) {
+	if n < 0 {
+		return nil, wrapErrorf(ErrInvalidElementSize, "block size must not be negative: %d", n)
+	}
+
+	// Every read of the Block goes through this budget reader, which never
+	// requests more than the remaining declared size from r.
+	br := &budgetReader{r: r, left: n}
+
 	var b Block
 	var err error
-	var nRead int
 
 	vd := &valueDecoder{}
 
-	if b.TrackNumber, nRead, err = vd.readVUInt(r); err != nil {
+	if b.TrackNumber, _, err = vd.readVUInt(br); err != nil {
 		return nil, err
 	}
-	n -= int64(nRead)
-	if v, err := vd.readInt(r, 2); err == nil {
+
+	if v, err := vd.readInt(br, 2); err == nil {
 		b.Timecode = int16(v.(int64))
 	} else {
 		return nil, err
 	}
-	n -= 2
 
-	switch _, err := r.Read(vd.bs[:]); err {
-	case nil:
-	case io.EOF:
-		return nil, io.ErrUnexpectedEOF
-	default:
+	var flag [1]byte
+	if _, err := br.Read(flag[:]); err != nil {
 		return nil, err
 	}
-	n--
 
-	if n < 0 {
-		return nil, io.ErrUnexpectedEOF
-	}
-
-	f := vd.bs[0]
+	f := flag[0]
 	if f&blockFlagMaskKeyframe != 0 {
 		b.Keyframe = true
 	}
@@ -106,30 +108,36 @@ func UnmarshalBlock(r io.Reader, n int64) (*Block, error) {
 	}
 	b.Lacing = LacingMode((f & blockFlagMaskLacing) >> 1)
 
+	// The remaining budget is exactly the lacing area.
+	lacingSize := br.remaining()
 	var ul Unlacer
 	switch b.Lacing {
 	case LacingNo:
-		ul, err = NewNoUnlacer(r, n)
+		ul, err = NewNoUnlacer(br, lacingSize)
 	case LacingXiph:
-		ul, err = NewXiphUnlacer(r, n)
+		ul, err = NewXiphUnlacer(br, lacingSize)
 	case LacingEBML:
-		ul, err = NewEBMLUnlacer(r, n)
+		ul, err = NewEBMLUnlacer(br, lacingSize)
 	case LacingFixed:
-		ul, err = NewFixedUnlacer(r, n)
+		ul, err = NewFixedUnlacer(br, lacingSize)
 	}
 	if err != nil {
 		return nil, err
 	}
 
+	// Frames are collected into a local slice first so that a failure while
+	// reading later frames never returns a partially decoded Block.
+	var data [][]byte
 	for {
 		frame, err := ul.Read()
 		if err == io.EOF {
+			b.Data = data
 			return &b, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		b.Data = append(b.Data, frame)
+		data = append(data, frame)
 	}
 }
 

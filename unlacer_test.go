@@ -64,7 +64,9 @@ func TestUnlacer(t *testing.T) {
 				0x01,
 			},
 			frames: [][]byte{{0x00, 0x01}},
-			err:    io.ErrUnexpectedEOF,
+			// The length table is fully readable inside the budget, but it
+			// leaves no room for the last frame: a format error.
+			err: ErrInvalidLaceSize,
 		},
 		"XiphMissingLastFrame": {
 			newUnlacer: NewXiphUnlacer,
@@ -74,7 +76,8 @@ func TestUnlacer(t *testing.T) {
 				0x01,
 			},
 			frames: [][]byte{{0x00, 0x01}, {0x02}},
-			err:    io.ErrUnexpectedEOF,
+			// Same: the table fits, but the computed last frame size is zero.
+			err: ErrInvalidLaceSize,
 		},
 		"Fixed": {
 			newUnlacer: NewFixedUnlacer,
@@ -162,7 +165,9 @@ func TestUnlacer(t *testing.T) {
 				0x9F, // 2 bytes
 			},
 			frames: [][]byte{{0x00, 0x01}},
-			err:    io.ErrUnexpectedEOF,
+			// The table is fully read but the signed difference makes the
+			// second frame size negative: a format error.
+			err: ErrInvalidLaceSize,
 		},
 		"EBMLMissingLastFrame": {
 			newUnlacer: NewEBMLUnlacer,
@@ -172,7 +177,8 @@ func TestUnlacer(t *testing.T) {
 				0x9E, // 1 byte
 			},
 			frames: [][]byte{{0x00, 0x01}, {0x02}},
-			err:    io.ErrUnexpectedEOF,
+			// Same: the table fits, but the computed frame size is negative.
+			err: ErrInvalidLaceSize,
 		},
 		"EBMLBroken": {
 			newUnlacer: NewEBMLUnlacer,
@@ -184,7 +190,9 @@ func TestUnlacer(t *testing.T) {
 				// Huge frame size and large frame number to make last frame size underflow to positive
 			},
 			frames: [][]byte{make([]byte, 4096)},
-			err:    io.ErrUnexpectedEOF,
+			// The huge declared first frame size cannot fit the frame budget.
+			// It must be rejected as a format error without allocating it.
+			err: ErrInvalidLaceSize,
 		},
 	}
 	for name, c := range cases {

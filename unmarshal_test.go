@@ -762,9 +762,23 @@ func TestUnmarshal_Error(t *testing.T) {
 			SimpleBlock Block `ebml:"SimpleBlock"`
 		}
 		// SimpleBlock with fixed lacing whose declared body size leaves a
-		// negative per-frame size. This must return an error, not panic in
-		// make([]byte, size) inside the unlacer.
+		// negative per-frame size. The count byte does not even fit in the
+		// declared body, so this is truncation: it must return an error (and
+		// never panic in make([]byte, size) inside the unlacer), without
+		// consuming the byte following the Block.
 		b := []byte{0xa3, 0x86, 0x30, 0x30, 0x30, 0x30, 0x30, 0x24, 0x00}
+		if err := Unmarshal(bytes.NewBuffer(b), &val); !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Errorf("Expected error: '%v', got: '%v'", io.ErrUnexpectedEOF, err)
+		}
+	})
+	t.Run("FixedLaceUndivisible", func(t *testing.T) {
+		var val struct {
+			SimpleBlock Block `ebml:"SimpleBlock"`
+		}
+		// A correctly bounded fixed-lacing Block: 9 body bytes hold the 4-byte
+		// Block header, the frame-count byte (0x02 -> 3 frames) and 4 frame
+		// bytes, which 3 frames cannot share equally.
+		b := []byte{0xa3, 0x89, 0x81, 0x00, 0x00, 0x04, 0x02, 0xAA, 0xAA, 0xAA, 0xAA}
 		if err := Unmarshal(bytes.NewBuffer(b), &val); !errors.Is(err, ErrFixedLaceUndivisible) {
 			t.Errorf("Expected error: '%v', got: '%v'", ErrFixedLaceUndivisible, err)
 		}
