@@ -49,6 +49,27 @@ Go &ge; 1.26 is required.
 | [ETSI EN 300 743, Digital Video Broadcasting (DVB), Subtitling systems](https://www.etsi.org/deliver/etsi_en/300700_300799/300743/01.06.01_20/en_300743v010601a.pdf)                                        | formats / MPEG-TS + DVB subtitles |
 | [ETSI EN 300 468, Digital Video Broadcasting (DVB), Specification for Service Information (SI) in DVB systems](https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.17.01_20/en_300468v011701a.pdf) | formats / MPEG-TS + DVB subtitles |
 
+## H264 DTS extraction
+
+`h264.DTSExtractor` converts PTS into DTS. It supports streams that carry multiple
+SPS and PPS units:
+
+- Until the first PPS is received, the historical single-SPS behavior is kept: the
+  most recent SPS becomes active and a new SPS resets POC derivation.
+- Once a PPS has been received, SPS and PPS units are stored by ID and resolution
+  becomes explicit: the slice's `pic_parameter_set_id` selects a PPS and the
+  PPS's `seq_parameter_set_id` selects an SPS. An unknown PPS, or a PPS that
+  references a missing SPS, is an error; the extractor never falls back to the
+  most recent SPS.
+- Parameter sets take effect in NAL order: declarations that precede a slice can
+  be used by that picture, while declarations that follow a slice only affect
+  subsequent pictures.
+- All slices of an access unit must reference the same PPS and share the same
+  picture identity (`frame_num`, IDR identity and POC).
+- Changing the active SPS requires an IDR picture. POC derivation is restarted
+  for the new configuration, while the previously produced DTS lower bound is
+  retained, so the timeline remains continuous.
+
 ## Related projects
 
 - [MediaMTX](https://github.com/bluenviron/mediamtx)

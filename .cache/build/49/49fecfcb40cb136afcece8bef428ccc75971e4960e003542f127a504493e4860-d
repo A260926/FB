@@ -1,0 +1,12 @@
+./metadata_au_cell.go
+./metadata_descriptor.go
+./metadata_std_descriptor.go
+./opus_access_unit.go
+./opus_audio_descriptor.go
+./opus_control_header.go
+./metadata_au_cell_test.go
+./metadata_descriptor_test.go
+./metadata_std_descriptor_test.go
+./opus_access_unit_test.go
+./opus_audio_descriptor_test.go
+./opus_control_header_test.go

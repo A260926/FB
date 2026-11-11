@@ -1,0 +1,5 @@
+./ac3.go
+./bsi.go
+./sync_info.go
+./bsi_test.go
+./sync_info_test.go

@@ -1,0 +1,10 @@
+./annexb.go
+./avcc.go
+./dts_extractor.go
+./emulation_prevention.go
+./h264.go
+./is_random_access.go
+./nalu_type.go
+./pps.go
+./sei.go
+./sps.go

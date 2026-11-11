@@ -1,0 +1,12 @@
+./av1.go
+./bitstream.go
+./is_random_access.go
+./leb128.go
+./obu_header.go
+./obu_type.go
+./sequence_header.go
+./bitstream_test.go
+./is_random_access_test.go
+./leb128_test.go
+./obu_header_test.go
+./sequence_header_test.go

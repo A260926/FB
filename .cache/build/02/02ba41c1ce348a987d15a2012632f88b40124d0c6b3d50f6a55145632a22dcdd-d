@@ -1,0 +1,15 @@
+./ac3.go
+./av1.go
+./codec.go
+./eac3.go
+./flac.go
+./h264.go
+./h265.go
+./lpcm.go
+./mjpeg.go
+./mpeg1_audio.go
+./mpeg1_video.go
+./mpeg4_audio.go
+./mpeg4_video.go
+./opus.go
+./vp9.go

@@ -1,0 +1,13 @@
+./define_huffman_table.go
+./define_quantization_table.go
+./define_restart_interval.go
+./jpeg.go
+./start_of_frame1.go
+./start_of_image.go
+./start_of_scan.go
+./define_huffman_table_test.go
+./define_quantization_table_test.go
+./define_restart_interval_test.go
+./start_of_frame1_test.go
+./start_of_image_test.go
+./start_of_scan_test.go
