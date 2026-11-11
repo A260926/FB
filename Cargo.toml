@@ -1,0 +1,80 @@
+[package]
+name = "pathtrace-rs"
+version = "0.1.2"
+edition = "2024"
+description = "A Rust implementation of Peter Shirley's Ray Tracing in One Weekend ray tracer"
+readme = "README.md"
+repository = "https://github.com/bitshifter/pathtrace-rs"
+license = "MIT OR Apache-2.0"
+keywords = ["graphics", "path-tracer", "raytracer", "simd"]
+categories = ["graphics", "rendering"]
+
+[dependencies]
+glam = "0.34"
+rand = "0.10"
+rand_xoshiro = "0.8"
+rayon = "1"
+# serde = "1"
+# serde_derive = "1"
+# serde_json = "1"
+typed-arena = "2"
+
+# Optional: fearless_simd-backed SpheresSoA ray hit implementations.
+fearless_simd = { version = "1", optional = true }
+fearless_simd_macros = { version = "0.1", optional = true }
+
+[dependencies.clap]
+version = "4"
+default-features = false
+features = ["std", "help", "usage", "error-context", "suggestions"]
+
+[dependencies.pixels]
+version = "0.17"
+
+[dependencies.winit]
+version = "0.30"
+
+[dependencies.image]
+version = "0.25"
+default-features = false
+features = ["jpeg", "png"]
+
+[features]
+default = ["fearless_simd"]
+core_intrinsics = []
+fearless_simd = ["dep:fearless_simd", "dep:fearless_simd_macros"]
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+debug = true
+# lto = true
+
+# [patch.crates-io]
+# glam = { path = "../glam-rs" }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+# Only the criterion targets in `benches/` are benchmarks; keep cargo from also running the
+# (empty) built-in test harnesses for the lib and bin targets.
+[lib]
+bench = false
+
+[[bin]]
+name = "pathtrace-rs"
+path = "src/main.rs"
+bench = false
+
+[[bench]]
+name = "bvh"
+harness = false
+
+[[bench]]
+name = "hitable_list"
+harness = false
+
+[[bench]]
+name = "spheres_soa"
+harness = false
