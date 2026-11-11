@@ -1,0 +1,118 @@
+
+typedef struct vec4
+{
+	float x;
+	float y;
+	float z;
+	float w;
+} vec4;
+
+#define SET_V4(v, _x, _y, _z, _w) \
+	do {\
+	(v).x = _x;\
+	(v).y = _y;\
+	(v).z = _z;\
+	(v).w = _w;\
+	} while (0)
+
+RSW_INLINE vec4 make_v4(float x, float y, float z, float w)
+{
+	vec4 v = { x, y, z, w };
+	return v;
+}
+
+RSW_INLINE vec4 neg_v4(vec4 v)
+{
+	vec4 r = { -v.x, -v.y, -v.z, -v.w };
+	return r;
+}
+
+RSW_INLINE void fprint_v4(FILE* f, vec4 v, const char* append)
+{
+	fprintf(f, "(%f, %f, %f, %f)%s", v.x, v.y, v.z, v.w, append);
+}
+
+RSW_INLINE void print_v4(vec4 v, const char* append)
+{
+	printf("(%f, %f, %f, %f)%s", v.x, v.y, v.z, v.w, append);
+}
+
+RSW_INLINE int fread_v4(FILE* f, vec4* v)
+{
+	int tmp = fscanf(f, " (%f, %f, %f, %f)", &v->x, &v->y, &v->z, &v->w);
+	return (tmp == 4);
+}
+
+RSW_INLINE float len_v4(vec4 a)
+{
+	return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z + a.w * a.w);
+}
+
+RSW_INLINE vec4 norm_v4(vec4 a)
+{
+	float l = len_v4(a);
+	vec4 c = { a.x/l, a.y/l, a.z/l, a.w/l };
+	return c;
+}
+
+RSW_INLINE void normalize_v4(vec4* a)
+{
+	float l = len_v4(*a);
+	a->x /= l;
+	a->y /= l;
+	a->z /= l;
+	a->w /= l;
+}
+
+RSW_INLINE vec4 add_v4s(vec4 a, vec4 b)
+{
+	vec4 c = { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
+	return c;
+}
+
+RSW_INLINE vec4 sub_v4s(vec4 a, vec4 b)
+{
+	vec4 c = { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w };
+	return c;
+}
+
+RSW_INLINE vec4 mult_v4s(vec4 a, vec4 b)
+{
+	vec4 c = { a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w };
+	return c;
+}
+
+RSW_INLINE vec4 div_v4s(vec4 a, vec4 b)
+{
+	vec4 c = { a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w };
+	return c;
+}
+
+RSW_INLINE float dot_v4s(vec4 a, vec4 b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+RSW_INLINE vec4 add_v4(vec4 a, float s)
+{
+	vec4 b = { a.x + s, a.y + s, a.z + s, a.w + s };
+	return b;
+}
+
+RSW_INLINE vec4 scale_v4(vec4 a, float s)
+{
+	vec4 b = { a.x * s, a.y * s, a.z * s, a.w * s };
+	return b;
+}
+
+RSW_INLINE int equal_v4s(vec4 a, vec4 b)
+{
+	return (a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w);
+}
+
+RSW_INLINE int equal_epsilon_v4s(vec4 a, vec4 b, float epsilon)
+{
+	return (fabsf(a.x-b.x) < epsilon && fabsf(a.y - b.y) < epsilon &&
+	        fabsf(a.z - b.z) < epsilon && fabsf(a.w - b.w) < epsilon);
+}
+

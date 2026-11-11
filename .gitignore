@@ -1,0 +1,200 @@
+# Object files etc.
+*.o
+*.ilk
+*.pdb
+*.obj
+*.d
+
+# Libraries
+*.lib
+*.a
+# Vendored Windows SDL2 import libs (needed for VS project files)
+!external/SDL2/**/*.lib
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+# Vendored Windows SDL2 runtime DLLs (copied next to test exes on build)
+!external/SDL2/**/*.dll
+
+# Executables
+*.exe
+*.out
+*.pyc
+*.app
+
+# Bundled tools (e.g. premake for generating IDE projects)
+!tools/windows/*.exe
+!tools/mac/arm/premake5
+!tools/mac/x64/premake5
+
+# Premake / IDE project files (regenerate with tools/premake5 or system premake5)
+# Makefiles (*.make, Makefile) are still committed; .sln is left trackable for now.
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vcproj
+*.csproj
+*.fsproj
+*.dbproj
+# CodeLite, Code::Blocks, etc.
+*.project
+*.workspace
+*.cbp
+*.depend
+*.layout
+# CodeLite: when you build a Premake-generated .project it writes per-target
+# makefiles (*.mk) and dependency lists (*.txt) next to the project file.
+# Do not ignore all *.txt repo-wide (e.g. testing/official_perf_results.txt)
+# Scope to demos/testing/examples project locations only.
+demos/*.mk
+demos/*.txt
+testing/*.mk
+testing/*.txt
+!testing/official_perf_results.txt
+!testing/current_perf_results.txt
+examples/original/*.mk
+examples/original/*.txt
+examples/classic/*.mk
+examples/classic/*.txt
+examples/webgl_lessons/*.mk
+examples/webgl_lessons/*.txt
+# CodeLite workspace cache / session data
+demos/.codelite/
+examples/.codelite/
+testing/.codelite/
+# CodeLite (and clang tooling) compilation database
+compile_commands.json
+**/compile_commands.json
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+# Visual Studio user / cache (never commit)
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+
+#ignore ~ files
+*~
+*.kate-swp
+*.swp
+*.vim
+CMakeFiles/*
+CMakeCache.txt
+cmake_install.cmake
+stats/*
+scratch/*
+references/*
+tags
+
+demos/imgui/imgui.ini
+demos/imgui/example_sdl_sdlrenderer
+
+# Intermediate object dirs (any depth).
+**/obj/
+
+build/*
+!build/Makefile
+!build/*.make
+
+*.zip
+*.tbz2
+*.tgz
+*.tar
+
+media/music/*
+media/video/*
+
+src/portablegl.h
+
+examples/obj/*
+examples/original/c_ex1
+examples/original/c_ex2
+examples/original/c_ex3
+examples/original/ex1
+examples/original/ex2
+examples/original/ex3
+examples/original/std_shader_ex1
+examples/original/std_shader_ex2
+examples/classic/gears
+examples/webgl_lessons/lesson1
+examples/webgl_lessons/lesson2
+examples/webgl_lessons/lesson3
+examples/webgl_lessons/lesson4
+examples/webgl_lessons/lesson5
+examples/webgl_lessons/lesson6
+examples/webgl_lessons/lesson7
+examples/webgl_lessons/lesson8
+examples/webgl_lessons/lesson9
+examples/webgl_lessons/lesson10
+examples/webgl_lessons/lesson11
+examples/webgl_lessons/lesson12
+examples/webgl_lessons/lesson13
+examples/webgl_lessons/lesson14
+examples/webgl_lessons/lesson15
+examples/webgl_lessons/lesson16
+
+
+backends/x11_xlib/xlib_demo
+backends/x11_xlib/xlib_demo2
+backends/gtk3/gtk3_demo
+backends/gtk4/gtk4_demo
+backends/qt/qt_demo
+backends/fltk/fltk_demo
+backends/wayland/wayland_demo
+backends/win32/*.exe
+
+demos/cubemap
+demos/grass
+demos/shadertoy
+demos/sphereworld
+demos/sphereworld_color
+demos/glm_sphereworld_color
+demos/swrenderer
+demos/texturing
+demos/texturing_ext
+demos/video_texturing
+demos/modelviewer
+demos/multidraw
+demos/testprimitives
+demos/pointsprites
+demos/particles
+demos/raytracing_1weekend
+demos/sdl_renderer_imgui
+demos/pgl_imgui
+demos/pgl_geometry_imgui
+demos/imgui.ini
+demos/assimp_convert
+
+demos/polyline
+demos/polyline.make
+demos/polyline.cpp
+
+testing/run_tests
+testing/run_tests_d16
+testing/run_tests_rgb565
+testing/run_tests_d16_no_stencil
+testing/run_tests_clamp_border
+testing/run_tests_no_depth_no_stencil
+testing/perf_tests
+testing/perf_tests_small_tex
+testing/math_testing
+testing/skybox_clipping
+testing/line_testing
+testing/minimal_pgl
+testing/test_mipmap_phase1
+testing/test_mipmap_lod
+testing/test_mipmap_auto
+testing/test_core_profile_mips
+
+testing/test_output/*
+!testing/test_output/emptyfile

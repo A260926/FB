@@ -1,0 +1,19 @@
+{
+  "name": "portablegl",
+  "version": "0.100.0",
+  "repo": "rswinkle/PortableGL",
+  "description": "An implementation of OpenGL 3.x-ish in clean C",
+  "keywords": [
+    "opengl",
+    "gl",
+    "graphics",
+    "rendering",
+    "3d",
+    "software-renderer",
+    "single-header-library"
+  ],
+  "license": "MIT",
+  "src": [
+    "portablegl.h"
+  ]
+}
