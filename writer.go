@@ -1,0 +1,943 @@
+package gortmplib
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/abema/go-mp4"
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/av1"
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/h264"
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/h265"
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/mpeg1audio"
+
+	"github.com/bluenviron/gortmplib/pkg/amf0"
+	"github.com/bluenviron/gortmplib/pkg/codecs"
+	"github.com/bluenviron/gortmplib/pkg/message"
+)
+
+var (
+	h265DefaultVPS = []byte{
+		0x40, 0x01, 0x0c, 0x01, 0xff, 0xff, 0x02, 0x20,
+		0x00, 0x00, 0x03, 0x00, 0xb0, 0x00, 0x00, 0x03,
+		0x00, 0x00, 0x03, 0x00, 0x7b, 0x18, 0xb0, 0x24,
+	}
+
+	h265DefaultSPS = []byte{
+		0x42, 0x01, 0x01, 0x02, 0x20, 0x00, 0x00, 0x03,
+		0x00, 0xb0, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03,
+		0x00, 0x7b, 0xa0, 0x07, 0x82, 0x00, 0x88, 0x7d,
+		0xb6, 0x71, 0x8b, 0x92, 0x44, 0x80, 0x53, 0x88,
+		0x88, 0x92, 0xcf, 0x24, 0xa6, 0x92, 0x72, 0xc9,
+		0x12, 0x49, 0x22, 0xdc, 0x91, 0xaa, 0x48, 0xfc,
+		0xa2, 0x23, 0xff, 0x00, 0x01, 0x00, 0x01, 0x6a,
+		0x02, 0x02, 0x02, 0x01,
+	}
+
+	h265DefaultPPS = []byte{
+		0x44, 0x01, 0xc0, 0x25, 0x2f, 0x05, 0x32, 0x40,
+	}
+
+	h264DefaultSPS = []byte{ // 1920x1080 baseline
+		0x67, 0x42, 0xc0, 0x28, 0xd9, 0x00, 0x78, 0x02,
+		0x27, 0xe5, 0x84, 0x00, 0x00, 0x03, 0x00, 0x04,
+		0x00, 0x00, 0x03, 0x00, 0xf0, 0x3c, 0x60, 0xc9, 0x20,
+	}
+
+	h264DefaultPPS = []byte{0x08, 0x06, 0x07, 0x08}
+)
+
+func boolToUint8(v bool) uint8 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func generateHvcC(vps, sps, pps []byte) (*mp4.HvcC, error) {
+	var psps h265.SPS
+	err := psps.Unmarshal(sps)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mp4.HvcC{
+		ConfigurationVersion:        1,
+		GeneralProfileIdc:           psps.ProfileTierLevel.GeneralProfileIdc,
+		GeneralProfileCompatibility: psps.ProfileTierLevel.GeneralProfileCompatibilityFlag,
+		GeneralConstraintIndicator: [6]uint8{
+			sps[7], sps[8], sps[9],
+			sps[10], sps[11], sps[12],
+		},
+		GeneralLevelIdc: psps.ProfileTierLevel.GeneralLevelIdc,
+		Reserved1:       0b1111,
+		// MinSpatialSegmentationIdc
+		Reserved2: 0b111111,
+		// ParallelismType
+		Reserved3:            0b111111,
+		ChromaFormatIdc:      uint8(psps.ChromaFormatIdc),
+		Reserved4:            0b11111,
+		BitDepthLumaMinus8:   uint8(psps.BitDepthLumaMinus8),
+		Reserved5:            0b11111,
+		BitDepthChromaMinus8: uint8(psps.BitDepthChromaMinus8),
+		// AvgFrameRate
+		// ConstantFrameRate
+		NumTemporalLayers:  (psps.MaxSubLayersMinus1 + 1),
+		TemporalIdNested:   boolToUint8(psps.TemporalIDNestingFlag),
+		LengthSizeMinusOne: 3,
+		NumOfNaluArrays:    3,
+		NaluArrays: []mp4.HEVCNaluArray{
+			{
+				NaluType: byte(h265.NALUType_VPS_NUT),
+				NumNalus: 1,
+				Nalus: []mp4.HEVCNalu{{
+					Length:  uint16(len(vps)),
+					NALUnit: vps,
+				}},
+			},
+			{
+				NaluType: byte(h265.NALUType_SPS_NUT),
+				NumNalus: 1,
+				Nalus: []mp4.HEVCNalu{{
+					Length:  uint16(len(sps)),
+					NALUnit: sps,
+				}},
+			},
+			{
+				NaluType: byte(h265.NALUType_PPS_NUT),
+				NumNalus: 1,
+				Nalus: []mp4.HEVCNalu{{
+					Length:  uint16(len(pps)),
+					NALUnit: pps,
+				}},
+			},
+		},
+	}, nil
+}
+
+func generateAvcC(sps, pps []byte) (*mp4.AVCDecoderConfiguration, error) {
+	var psps h264.SPS
+	err := psps.Unmarshal(sps)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mp4.AVCDecoderConfiguration{ // <avcc/>
+		AnyTypeBox: mp4.AnyTypeBox{
+			Type: mp4.BoxTypeAvcC(),
+		},
+		ConfigurationVersion:       1,
+		Profile:                    psps.ProfileIdc,
+		ProfileCompatibility:       sps[2],
+		Level:                      psps.LevelIdc,
+		Reserved:                   0b111111,
+		LengthSizeMinusOne:         3,
+		Reserved2:                  0b111,
+		NumOfSequenceParameterSets: 1,
+		SequenceParameterSets: []mp4.AVCParameterSet{
+			{
+				Length:  uint16(len(sps)),
+				NALUnit: sps,
+			},
+		},
+		NumOfPictureParameterSets: 1,
+		PictureParameterSets: []mp4.AVCParameterSet{
+			{
+				Length:  uint16(len(pps)),
+				NALUnit: pps,
+			},
+		},
+	}, nil
+}
+
+func audioRateRTMPToInt(v message.AudioRate) int {
+	switch v {
+	case message.AudioRate5512:
+		return 5512
+	case message.AudioRate11025:
+		return 11025
+	case message.AudioRate22050:
+		return 22050
+	default:
+		return 44100
+	}
+}
+
+func audioRateIntToRTMP(v int) (message.AudioRate, bool) {
+	switch v {
+	case 5512:
+		return message.AudioRate5512, true
+	case 11025:
+		return message.AudioRate11025, true
+	case 22050:
+		return message.AudioRate22050, true
+	case 44100:
+		return message.AudioRate44100, true
+	}
+
+	return 0, false
+}
+
+func mpeg1AudioChannels(m mpeg1audio.ChannelMode) bool {
+	return m != mpeg1audio.ChannelModeMono
+}
+
+// Writer provides functions to write outgoing data.
+type Writer struct {
+	Conn   Conn
+	Tracks []*Track
+
+	videoTrackToID map[*Track]uint8
+	audioTrackToID map[*Track]uint8
+	readerDone     chan struct{}
+	readerErr      error
+}
+
+// Initialize initializes Writer.
+func (w *Writer) Initialize() error {
+	if sc, ok := w.Conn.(*ServerConn); ok && !sc.actionAccepted {
+		err := sc.AcceptAction()
+		if err != nil {
+			return err
+		}
+	}
+
+	err := w.writeTracks()
+	if err != nil {
+		return err
+	}
+
+	// Drain incoming data until the connection returns a read error.
+	w.readerDone = make(chan struct{})
+	go w.reader()
+
+	return nil
+}
+
+// Wait waits until reading from the connection fails and returns the read error.
+func (w *Writer) Wait() error {
+	<-w.readerDone
+	return w.readerErr
+}
+
+func (w *Writer) writeTracks() error {
+	w.videoTrackToID = make(map[*Track]uint8)
+	w.audioTrackToID = make(map[*Track]uint8)
+
+	var videoTracks []*Track
+	var audioTracks []*Track
+
+	for _, track := range w.Tracks {
+		if track.Codec.IsVideo() {
+			w.videoTrackToID[track] = uint8(len(videoTracks))
+			videoTracks = append(videoTracks, track)
+		} else {
+			w.audioTrackToID[track] = uint8(len(audioTracks))
+			audioTracks = append(audioTracks, track)
+		}
+	}
+
+	metadata := amf0.Object{
+		{
+			Key: "videocodecid",
+			Value: func() float64 {
+				if len(videoTracks) != 0 {
+					return float64(videoTracks[0].Codec.ID())
+				}
+				return 0
+			}(),
+		},
+		{
+			Key:   "videodatarate",
+			Value: float64(0),
+		},
+		{
+			Key: "audiocodecid",
+			Value: func() float64 {
+				if len(audioTracks) != 0 {
+					return float64(audioTracks[0].Codec.ID())
+				}
+				return 0
+			}(),
+		},
+		{
+			Key:   "audiodatarate",
+			Value: float64(0),
+		},
+	}
+
+	if len(videoTracks) > 1 {
+		val := make(amf0.Object, len(videoTracks)-1)
+
+		for i, track := range videoTracks[1:] {
+			val[i] = amf0.ObjectEntry{
+				Key: strconv.FormatInt(int64(i+2), 10),
+				Value: amf0.Object{
+					{
+						Key:   "videocodecid",
+						Value: float64(track.Codec.ID()),
+					},
+					{
+						Key:   "videodatarate",
+						Value: float64(0),
+					},
+				},
+			}
+		}
+
+		metadata = append(metadata, amf0.ObjectEntry{
+			Key:   "videoTrackIdInfoMap",
+			Value: val,
+		})
+	}
+
+	if len(audioTracks) > 1 {
+		val := make(amf0.Object, len(audioTracks)-1)
+
+		for i, track := range audioTracks[1:] {
+			val[i] = amf0.ObjectEntry{
+				Key: strconv.FormatInt(int64(i+2), 10),
+				Value: amf0.Object{
+					{
+						Key:   "audiocodecid",
+						Value: float64(track.Codec.ID()),
+					},
+					{
+						Key:   "audiodatarate",
+						Value: float64(0),
+					},
+				},
+			}
+		}
+
+		metadata = append(metadata, amf0.ObjectEntry{
+			Key:   "audioTrackIdInfoMap",
+			Value: val,
+		})
+	}
+
+	err := w.Conn.Write(&message.DataAMF0{
+		ChunkStreamID:   4,
+		MessageStreamID: 0x1000000,
+		Payload: []any{
+			"@setDataFrame",
+			"onMetaData",
+			metadata,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	for id, track := range videoTracks {
+		switch codec := track.Codec.(type) {
+		case *codecs.AV1:
+			// TODO: fill properly.
+			// unfortunately, AV1 config is not available at this stage.
+			var msg message.Message = &message.VideoExSequenceStart{
+				ChunkStreamID:   message.VideoChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCAV1,
+				AV1Config: &mp4.Av1C{
+					Marker:             0x1,
+					Version:            0x1,
+					SeqLevelIdx0:       0x8,
+					ChromaSubsamplingX: 0x1,
+					ChromaSubsamplingY: 0x1,
+					ConfigOBUs:         []uint8{0xa, 0xb, 0x0, 0x0, 0x0, 0x42, 0xab, 0xbf, 0xc3, 0x70, 0xb, 0xe0, 0x1},
+				},
+			}
+
+			if id != 0 {
+				msg = &message.VideoExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.VP9:
+			// TODO: fill properly.
+			// unfortunately, VP9 config is not available at this stage.
+			var msg message.Message = &message.VideoExSequenceStart{
+				ChunkStreamID:   message.VideoChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCVP9,
+				VP9Config: &mp4.VpcC{
+					FullBox:                 mp4.FullBox{Version: 0x1},
+					Level:                   0x28,
+					BitDepth:                0x8,
+					ChromaSubsampling:       0x1,
+					ColourPrimaries:         0x2,
+					TransferCharacteristics: 0x2,
+					MatrixCoefficients:      0x2,
+					CodecInitializationData: []uint8{},
+				},
+			}
+
+			if id != 0 {
+				msg = &message.VideoExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.H265:
+			vps, sps, pps := codec.VPS, codec.SPS, codec.PPS
+			if vps == nil || sps == nil || pps == nil {
+				vps = h265DefaultVPS
+				sps = h265DefaultSPS
+				pps = h265DefaultPPS
+			}
+
+			var hvcc *mp4.HvcC
+			hvcc, err = generateHvcC(vps, sps, pps)
+			if err != nil {
+				return err
+			}
+
+			var msg message.Message = &message.VideoExSequenceStart{
+				ChunkStreamID:   message.VideoChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCHEVC,
+				HEVCConfig:      hvcc,
+			}
+
+			if id != 0 {
+				msg = &message.VideoExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.H264:
+			sps, pps := codec.SPS, codec.PPS
+			if sps == nil || pps == nil {
+				sps = h264DefaultSPS
+				pps = h264DefaultPPS
+			}
+
+			var avcc *mp4.AVCDecoderConfiguration
+			avcc, err = generateAvcC(sps, pps)
+			if err != nil {
+				return err
+			}
+
+			if id == 0 {
+				err = w.Conn.Write(&message.Video{
+					ChunkStreamID:   message.VideoChunkStreamID,
+					MessageStreamID: 0x1000000,
+					Codec:           message.CodecH264,
+					FrameType:       message.VideoFrameTypeKeyFrame,
+					PacketType:      message.VideoPacketTypeConfig,
+					AVCConfig:       avcc,
+				})
+				if err != nil {
+					return err
+				}
+			} else {
+				err = w.Conn.Write(&message.VideoExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped: &message.VideoExSequenceStart{
+						ChunkStreamID:   message.VideoChunkStreamID,
+						MessageStreamID: 0x1000000,
+						FourCC:          message.FourCCAVC,
+						AVCConfig:       avcc,
+					},
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	for id, track := range audioTracks {
+		switch codec := track.Codec.(type) {
+		case *codecs.Opus:
+			var msg message.Message = &message.AudioExSequenceStart{
+				ChunkStreamID:   message.AudioChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCOpus,
+				OpusConfig:      codec.IDHeader,
+			}
+
+			if id != 0 {
+				msg = &message.AudioExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.FLAC:
+			var msg message.Message = &message.AudioExSequenceStart{
+				ChunkStreamID:   message.AudioChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCFLAC,
+				FlacConfig:      codec.StreamInfo,
+			}
+
+			if id != 0 {
+				msg = &message.AudioExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.MPEG4Audio:
+			audioConf := codec.Config
+
+			if id == 0 {
+				err = w.Conn.Write(&message.Audio{
+					ChunkStreamID:   message.AudioChunkStreamID,
+					MessageStreamID: 0x1000000,
+					Codec:           message.CodecMPEG4Audio,
+					Rate:            message.AudioRate44100,
+					Depth:           message.AudioDepth16,
+					IsStereo:        true,
+					AACType:         message.AudioAACTypeConfig,
+					AACConfig:       audioConf,
+				})
+				if err != nil {
+					return err
+				}
+			} else {
+				err = w.Conn.Write(&message.AudioExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped: &message.AudioExSequenceStart{
+						ChunkStreamID:   message.VideoChunkStreamID,
+						MessageStreamID: 0x1000000,
+						FourCC:          message.FourCCMP4A,
+						AACConfig:       audioConf,
+					},
+				})
+				if err != nil {
+					return err
+				}
+			}
+
+		case *codecs.AC3:
+			var msg message.Message = &message.AudioExSequenceStart{
+				ChunkStreamID:   message.AudioChunkStreamID,
+				MessageStreamID: 0x1000000,
+				FourCC:          message.FourCCAC3,
+			}
+
+			if id != 0 {
+				msg = &message.AudioExMultitrack{
+					MultitrackType: 0x0,
+					TrackID:        uint8(id),
+					Wrapped:        msg,
+				}
+			}
+
+			err = w.Conn.Write(msg)
+			if err != nil {
+				return err
+			}
+
+		case *codecs.G711:
+			if id != 0 {
+				return fmt.Errorf("it is not possible to use G711 tracks as secondary tracks")
+			}
+
+		case *codecs.LPCM:
+			if id != 0 {
+				return fmt.Errorf("it is not possible to use LPCM tracks as secondary tracks")
+			}
+
+			_, ok := audioRateIntToRTMP(codec.SampleRate)
+			if !ok {
+				return fmt.Errorf("unsupported sample rate: %v", codec.SampleRate)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (w *Writer) reader() {
+	for {
+		_, err := w.Conn.Read()
+		if err != nil {
+			w.readerErr = err
+			close(w.readerDone)
+			return
+		}
+	}
+}
+
+// WriteAV1 writes a AV1 temporal unit.
+func (w *Writer) WriteAV1(track *Track, pts time.Duration, tu [][]byte) error {
+	// FFmpeg requires this.
+	tu = append([][]byte{{byte(av1.OBUTypeTemporalDelimiter << 3)}}, tu...)
+
+	enc, err := av1.Bitstream(tu).Marshal()
+	if err != nil {
+		return err
+	}
+
+	var msg message.Message = &message.VideoExFramesX{
+		ChunkStreamID:   message.VideoChunkStreamID,
+		MessageStreamID: 0x1000000,
+		FourCC:          message.FourCCAV1,
+		DTS:             pts,
+		Payload:         enc,
+	}
+
+	id := w.videoTrackToID[track]
+
+	if id != 0 {
+		msg = &message.VideoExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteVP9 writes a VP9 frame.
+func (w *Writer) WriteVP9(track *Track, pts time.Duration, frame []byte) error {
+	var msg message.Message = &message.VideoExFramesX{
+		ChunkStreamID:   message.VideoChunkStreamID,
+		MessageStreamID: 0x1000000,
+		FourCC:          message.FourCCVP9,
+		DTS:             pts,
+		Payload:         frame,
+	}
+
+	id := w.videoTrackToID[track]
+
+	if id != 0 {
+		msg = &message.VideoExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteH265 writes a H265 access unit.
+func (w *Writer) WriteH265(track *Track, pts time.Duration, dts time.Duration, au [][]byte) error {
+	avcc, err := h264.AVCC(au).Marshal()
+	if err != nil {
+		return err
+	}
+
+	var msg message.Message
+
+	if pts == dts {
+		msg = &message.VideoExFramesX{
+			ChunkStreamID:   message.VideoChunkStreamID,
+			MessageStreamID: 0x1000000,
+			FourCC:          message.FourCCHEVC,
+			DTS:             dts,
+			Payload:         avcc,
+		}
+	} else {
+		msg = &message.VideoExCodedFrames{
+			ChunkStreamID:   message.VideoChunkStreamID,
+			MessageStreamID: 0x1000000,
+			FourCC:          message.FourCCHEVC,
+			DTS:             dts,
+			PTSDelta:        pts - dts,
+			Payload:         avcc,
+		}
+	}
+
+	id := w.videoTrackToID[track]
+
+	if id != 0 {
+		msg = &message.VideoExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteH264 writes a H264 access unit.
+func (w *Writer) WriteH264(track *Track, pts time.Duration, dts time.Duration, au [][]byte) error {
+	avcc, err := h264.AVCC(au).Marshal()
+	if err != nil {
+		return err
+	}
+
+	id := w.videoTrackToID[track]
+
+	if id == 0 {
+		frameType := message.VideoFrameTypeInterFrame
+		if h264.IsRandomAccess(au) {
+			frameType = message.VideoFrameTypeKeyFrame
+		}
+
+		return w.Conn.Write(&message.Video{
+			ChunkStreamID:   message.VideoChunkStreamID,
+			MessageStreamID: 0x1000000,
+			Codec:           message.CodecH264,
+			FrameType:       frameType,
+			PacketType:      message.VideoPacketTypeAU,
+			AU:              avcc,
+			DTS:             dts,
+			PTSDelta:        pts - dts,
+		})
+	}
+
+	var msg message.Message
+
+	if pts == dts {
+		msg = &message.VideoExFramesX{
+			ChunkStreamID:   message.VideoChunkStreamID,
+			MessageStreamID: 0x1000000,
+			FourCC:          message.FourCCAVC,
+			DTS:             dts,
+			Payload:         avcc,
+		}
+	} else {
+		msg = &message.VideoExCodedFrames{
+			ChunkStreamID:   message.VideoChunkStreamID,
+			MessageStreamID: 0x1000000,
+			FourCC:          message.FourCCAVC,
+			DTS:             dts,
+			PTSDelta:        pts - dts,
+			Payload:         avcc,
+		}
+	}
+
+	return w.Conn.Write(&message.VideoExMultitrack{
+		MultitrackType: 0x0,
+		TrackID:        id,
+		Wrapped:        msg,
+	})
+}
+
+// WriteOpus writes a Opus packet.
+func (w *Writer) WriteOpus(track *Track, pts time.Duration, pkt []byte) error {
+	var msg message.Message = &message.AudioExCodedFrames{
+		ChunkStreamID:   message.AudioChunkStreamID,
+		MessageStreamID: 0x1000000,
+		DTS:             pts,
+		FourCC:          message.FourCCOpus,
+		Payload:         pkt,
+	}
+
+	id := w.audioTrackToID[track]
+
+	if id != 0 {
+		msg = &message.AudioExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteFLAC writes a FLAC frame.
+func (w *Writer) WriteFLAC(track *Track, pts time.Duration, frame []byte) error {
+	var msg message.Message = &message.AudioExCodedFrames{
+		ChunkStreamID:   message.AudioChunkStreamID,
+		MessageStreamID: 0x1000000,
+		FourCC:          message.FourCCFLAC,
+		Payload:         frame,
+		DTS:             pts,
+	}
+
+	id := w.audioTrackToID[track]
+
+	if id != 0 {
+		msg = &message.AudioExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteMPEG4Audio writes a MPEG-4 Audio access unit.
+func (w *Writer) WriteMPEG4Audio(track *Track, pts time.Duration, au []byte) error {
+	id := w.audioTrackToID[track]
+
+	if id == 0 {
+		return w.Conn.Write(&message.Audio{
+			ChunkStreamID:   message.AudioChunkStreamID,
+			MessageStreamID: 0x1000000,
+			Codec:           message.CodecMPEG4Audio,
+			Rate:            message.AudioRate44100,
+			Depth:           message.AudioDepth16,
+			IsStereo:        true,
+			AACType:         message.AudioAACTypeAU,
+			AU:              au,
+			DTS:             pts,
+		})
+	}
+
+	return w.Conn.Write(&message.AudioExMultitrack{
+		MultitrackType: 0x0,
+		TrackID:        id,
+		Wrapped: &message.AudioExCodedFrames{
+			ChunkStreamID:   message.AudioChunkStreamID,
+			MessageStreamID: 0x1000000,
+			DTS:             pts,
+			FourCC:          message.FourCCMP4A,
+			Payload:         au,
+		},
+	})
+}
+
+// WriteMPEG1Audio writes a MPEG-1 Audio frame.
+func (w *Writer) WriteMPEG1Audio(track *Track, pts time.Duration, frame []byte) error {
+	var h mpeg1audio.FrameHeader
+	err := h.Unmarshal(frame)
+	if err != nil {
+		return err
+	}
+
+	if h.MPEG2 || h.Layer != 3 {
+		return fmt.Errorf("RTMP only supports MPEG-1 layer 3 audio")
+	}
+
+	id := w.audioTrackToID[track]
+
+	if id == 0 {
+		rate, ok := audioRateIntToRTMP(h.SampleRate)
+		if !ok {
+			return fmt.Errorf("unsupported sample rate: %v", h.SampleRate)
+		}
+
+		return w.Conn.Write(&message.Audio{
+			ChunkStreamID:   message.AudioChunkStreamID,
+			MessageStreamID: 0x1000000,
+			Codec:           message.CodecMPEG1Audio,
+			Rate:            rate,
+			Depth:           message.AudioDepth16,
+			IsStereo:        mpeg1AudioChannels(h.ChannelMode),
+			AU:              frame,
+			DTS:             pts,
+		})
+	}
+
+	return w.Conn.Write(&message.AudioExMultitrack{
+		MultitrackType: 0x0,
+		TrackID:        id,
+		Wrapped: &message.AudioExCodedFrames{
+			ChunkStreamID:   message.AudioChunkStreamID,
+			MessageStreamID: 0x1000000,
+			DTS:             pts,
+			FourCC:          message.FourCCMP3,
+			Payload:         frame,
+		},
+	})
+}
+
+// WriteAC3 writes an AC-3 frame.
+func (w *Writer) WriteAC3(track *Track, pts time.Duration, frame []byte) error {
+	var msg message.Message = &message.AudioExCodedFrames{
+		ChunkStreamID:   message.AudioChunkStreamID,
+		MessageStreamID: 0x1000000,
+		FourCC:          message.FourCCAC3,
+		Payload:         frame,
+		DTS:             pts,
+	}
+
+	id := w.audioTrackToID[track]
+
+	if id != 0 {
+		msg = &message.AudioExMultitrack{
+			MultitrackType: 0x0,
+			TrackID:        id,
+			Wrapped:        msg,
+		}
+	}
+
+	return w.Conn.Write(msg)
+}
+
+// WriteG711 writes G711 samples.
+func (w *Writer) WriteG711(track *Track, pts time.Duration, samples []byte) error {
+	codec := track.Codec.(*codecs.G711)
+	var codecID uint8
+
+	if codec.MULaw {
+		codecID = message.CodecPCMU
+	} else {
+		codecID = message.CodecPCMA
+	}
+
+	return w.Conn.Write(&message.Audio{
+		ChunkStreamID:   message.AudioChunkStreamID,
+		MessageStreamID: 0x1000000,
+		Codec:           codecID,
+		Rate:            message.AudioRate5512,
+		Depth:           message.AudioDepth16,
+		IsStereo:        codec.ChannelCount == 2,
+		AU:              samples,
+		DTS:             pts,
+	})
+}
+
+// WriteLPCM writes LPCM samples.
+func (w *Writer) WriteLPCM(track *Track, pts time.Duration, samples []byte) error {
+	codec := track.Codec.(*codecs.LPCM)
+
+	rate, _ := audioRateIntToRTMP(codec.SampleRate)
+
+	le := len(samples)
+	samplesCopy := append([]byte(nil), samples...)
+
+	// convert from big endian to little endian
+	for i := 0; i < le; i += 2 {
+		samplesCopy[i], samplesCopy[i+1] = samplesCopy[i+1], samplesCopy[i]
+	}
+
+	return w.Conn.Write(&message.Audio{
+		ChunkStreamID:   message.AudioChunkStreamID,
+		MessageStreamID: 0x1000000,
+		Codec:           message.CodecLPCM,
+		Rate:            rate,
+		Depth:           message.AudioDepth16,
+		IsStereo:        (codec.ChannelCount == 2),
+		AU:              samplesCopy,
+		DTS:             pts,
+	})
+}

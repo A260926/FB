@@ -1,0 +1,233 @@
+package rawmessage
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"sync"
+	"time"
+
+	"github.com/bluenviron/gortmplib/pkg/bytecounter"
+	"github.com/bluenviron/gortmplib/pkg/chunk"
+)
+
+type writerChunkStream struct {
+	mw                   *Writer
+	lastMessageStreamID  *uint32
+	lastType             *uint8
+	lastBodyLen          *uint32
+	lastTimestamp        *int64
+	lastTimestampDelta   *int64
+	hasExtendedTimestamp bool
+	extendedTimestamp    uint32
+}
+
+func (wc *writerChunkStream) writeChunk(ch chunk.Chunk) error {
+	// check if we received an acknowledge
+	if wc.mw.CheckAcknowledge && wc.mw.ackWindowSize != 0 {
+		diff := uint32(wc.mw.BCW.Count()) - wc.mw.AckValue
+
+		if diff > (wc.mw.ackWindowSize * 3 / 2) {
+			return fmt.Errorf("no acknowledge received within window")
+		}
+	}
+
+	// write header and body separately, in order to avoid allocating
+	// and copying a buffer for each chunk.
+	n := ch.MarshalHeaderTo(wc.mw.headerBuf[:], wc.hasExtendedTimestamp)
+	_, err := wc.mw.bufw.Write(wc.mw.headerBuf[:n])
+	if err != nil {
+		return err
+	}
+
+	_, err = wc.mw.bufw.Write(ch.GetBody())
+	return err
+}
+
+func (wc *writerChunkStream) writeMessage(msg *Message) error {
+	bodyLen := uint32(len(msg.Body))
+	pos := uint32(0)
+	firstChunk := true
+
+	// convert timestamp to milliseconds before splitting message in chunks
+	/// otherwise timestampDelta gets messed up.
+	timestamp := int64(msg.Timestamp / time.Millisecond)
+
+	var timestampDelta *int64
+	if wc.lastTimestamp != nil {
+		diff := timestamp - *wc.lastTimestamp
+
+		// use delta only if it is positive
+		if diff >= 0 {
+			timestampDelta = &diff
+		}
+	}
+
+	for {
+		chunkBodyLen := min(bodyLen-pos, wc.mw.chunkSize)
+
+		if firstChunk {
+			firstChunk = false
+
+			switch {
+			case wc.lastMessageStreamID == nil || timestampDelta == nil || *wc.lastMessageStreamID != msg.MessageStreamID:
+				ts := uint32(timestamp)
+				err := wc.writeChunk(&chunk.Chunk0{
+					ChunkStreamID:   msg.ChunkStreamID,
+					Timestamp:       ts,
+					Type:            msg.Type,
+					MessageStreamID: msg.MessageStreamID,
+					BodyLen:         bodyLen,
+					Body:            msg.Body[pos : pos+chunkBodyLen],
+				})
+				if err != nil {
+					return err
+				}
+				wc.hasExtendedTimestamp = ts >= 0xFFFFFF
+				wc.extendedTimestamp = ts
+
+			case *wc.lastType != msg.Type || *wc.lastBodyLen != bodyLen:
+				ts := uint32(*timestampDelta)
+				err := wc.writeChunk(&chunk.Chunk1{
+					ChunkStreamID:  msg.ChunkStreamID,
+					TimestampDelta: ts,
+					Type:           msg.Type,
+					BodyLen:        bodyLen,
+					Body:           msg.Body[pos : pos+chunkBodyLen],
+				})
+				if err != nil {
+					return err
+				}
+				wc.hasExtendedTimestamp = ts >= 0xFFFFFF
+				wc.extendedTimestamp = ts
+
+			case wc.lastTimestampDelta == nil || *wc.lastTimestampDelta != *timestampDelta:
+				ts := uint32(*timestampDelta)
+				err := wc.writeChunk(&chunk.Chunk2{
+					ChunkStreamID:  msg.ChunkStreamID,
+					TimestampDelta: ts,
+					Body:           msg.Body[pos : pos+chunkBodyLen],
+				})
+				if err != nil {
+					return err
+				}
+				wc.hasExtendedTimestamp = ts >= 0xFFFFFF
+				wc.extendedTimestamp = ts
+
+			default:
+				err := wc.writeChunk(&chunk.Chunk3{
+					ChunkStreamID:     msg.ChunkStreamID,
+					ExtendedTimestamp: wc.extendedTimestamp,
+					Body:              msg.Body[pos : pos+chunkBodyLen],
+				})
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			err := wc.writeChunk(&chunk.Chunk3{
+				ChunkStreamID:     msg.ChunkStreamID,
+				ExtendedTimestamp: wc.extendedTimestamp,
+				Body:              msg.Body[pos : pos+chunkBodyLen],
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		pos += chunkBodyLen
+
+		if (bodyLen - pos) == 0 {
+			break
+		}
+	}
+
+	v1 := msg.MessageStreamID
+	wc.lastMessageStreamID = &v1
+	v2 := msg.Type
+	wc.lastType = &v2
+	v3 := bodyLen
+	wc.lastBodyLen = &v3
+	v4 := timestamp
+	wc.lastTimestamp = &v4
+	wc.lastTimestampDelta = timestampDelta
+
+	return wc.mw.bufw.Flush()
+}
+
+// Writer is a raw message writer.
+type Writer struct {
+	BW               io.Writer
+	BCW              *bytecounter.Writer
+	CheckAcknowledge bool
+	AckValue         uint32
+
+	mutex         sync.Mutex
+	bufw          *bufio.Writer
+	headerBuf     [16]byte
+	chunkSize     uint32
+	ackWindowSize uint32
+	chunkStreams  map[byte]*writerChunkStream
+}
+
+// Initialize initializes the Writer.
+func (w *Writer) Initialize() {
+	w.bufw = bufio.NewWriter(w.BW)
+	w.chunkSize = 128
+	w.chunkStreams = make(map[byte]*writerChunkStream)
+}
+
+// NewWriter allocates a Writer.
+//
+// Deprecated: use Initialize() instead.
+func NewWriter(
+	bw io.Writer,
+	bcw *bytecounter.Writer,
+	checkAcknowledge bool,
+) *Writer {
+	w := &Writer{
+		BW:               bw,
+		BCW:              bcw,
+		CheckAcknowledge: checkAcknowledge,
+	}
+	w.Initialize()
+	return w
+}
+
+// SetChunkSize sets the maximum chunk size.
+func (w *Writer) SetChunkSize(v uint32) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.chunkSize = v
+}
+
+// SetWindowAckSize sets the window acknowledgement size.
+func (w *Writer) SetWindowAckSize(v uint32) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.ackWindowSize = v
+}
+
+// SetAcknowledgeValue sets the acknowledge sequence number.
+func (w *Writer) SetAcknowledgeValue(v uint32) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.AckValue = v
+}
+
+// Write writes a Message. It is safe to call it concurrently.
+func (w *Writer) Write(msg *Message) error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	wc, ok := w.chunkStreams[msg.ChunkStreamID]
+	if !ok {
+		wc = &writerChunkStream{mw: w}
+		w.chunkStreams[msg.ChunkStreamID] = wc
+	}
+
+	return wc.writeMessage(msg)
+}
