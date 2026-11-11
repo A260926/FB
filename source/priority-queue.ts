@@ -8,9 +8,11 @@ export type PriorityQueueOptions = {
 	priority?: number | undefined;
 } & QueueAddOptions;
 
+type Element = PriorityQueueOptions & {run: RunFunction};
+
 export default class PriorityQueue implements Queue<RunFunction, PriorityQueueOptions> {
 	// The slots before `#head` are `undefined`.
-	readonly #queue: Array<PriorityQueueOptions & {run: RunFunction} | undefined> = [];
+	readonly #queue: Array<Element | undefined> = [];
 
 	// The queue is stored as a sorted array, but dequeued slots are left before `#head` until compaction. Only items from `#head` onward are live, which keeps repeated dequeues amortized O(1).
 	#head = 0;
@@ -26,7 +28,7 @@ export default class PriorityQueue implements Queue<RunFunction, PriorityQueueOp
 	}
 
 	// Only the live items, because a dequeued item with the same id or function is no longer part of the queue.
-	#findIndex(isMatch: (element: PriorityQueueOptions & {run: RunFunction}) => boolean): number {
+	#findIndex(isMatch: (element: Element) => boolean): number {
 		for (let index = this.#head; index < this.#queue.length; index++) {
 			if (isMatch(this.#queue[index]!)) {
 				return index;
@@ -55,16 +57,24 @@ export default class PriorityQueue implements Queue<RunFunction, PriorityQueueOp
 		return item.run;
 	}
 
+	// Removes the live item at `index`, shifting the later items forward. Used when the first eligible item is not at the head, because its group is at capacity.
+	#removeAt(index: number): RunFunction {
+		const [item] = this.#queue.splice(index, 1);
+		return item!.run;
+	}
+
 	enqueue(run: RunFunction, options?: Partial<PriorityQueueOptions>): void {
 		const {
 			priority = 0,
 			id,
+			group,
 		} = options ?? {};
 
 		const {size} = this;
-		const element = {
+		const element: Element = {
 			priority,
 			id,
+			group,
 			run,
 		};
 
@@ -100,8 +110,9 @@ export default class PriorityQueue implements Queue<RunFunction, PriorityQueueOp
 			return;
 		}
 
-		const [item] = this.#queue.splice(index, 1);
-		this.enqueue(item!.run, {priority, id});
+		const item = this.#queue[index]!;
+		this.#queue.splice(index, 1);
+		this.enqueue(item.run, {priority, id: item.id, group: item.group});
 	}
 
 	remove(id: string): void;
@@ -121,14 +132,32 @@ export default class PriorityQueue implements Queue<RunFunction, PriorityQueueOp
 		return this.#head === this.#queue.length ? undefined : this.#removeFirst();
 	}
 
+	// Takes the highest-priority task whose group still has capacity, keeping the enqueue order within each priority. Returns `undefined` when no waiting task can start. `isGroupBlocked` is only called for tasks that have a group. Unlike `dequeue()`, a blocked task stays in the queue, so its priority and order are preserved for when the group frees a slot.
+	dequeueWithGroups(isGroupBlocked: (group: string) => boolean): RunFunction | undefined {
+		for (let index = this.#head; index < this.#queue.length; index++) {
+			const element = this.#queue[index]!;
+			if (element.group === undefined || !isGroupBlocked(element.group)) {
+				return index === this.#head ? this.#removeFirst() : this.#removeAt(index);
+			}
+		}
+
+		return undefined;
+	}
+
 	filter(options: Readonly<Partial<PriorityQueueOptions>>): RunFunction[] {
 		const result: RunFunction[] = [];
 
 		for (let index = this.#head; index < this.#queue.length; index++) {
 			const element = this.#queue[index]!;
-			if (element.priority === options.priority) {
-				result.push(element.run);
+			if ('priority' in options && element.priority !== options.priority) {
+				continue;
 			}
+
+			if ('group' in options && element.group !== options.group) {
+				continue;
+			}
+
+			result.push(element.run);
 		}
 
 		return result;

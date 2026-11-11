@@ -39,6 +39,7 @@ The project is feature complete. We are happy to review pull requests, but we do
 ## Highlights
 
 - Concurrency limit
+- Per-group concurrency limit
 - [Priorities](#priority)
 - [Rate limiting](#interval)
 - [Timeouts](#handling-timeouts)
@@ -94,6 +95,18 @@ Default: `Infinity`\
 Minimum: `1`
 
 The maximum number of tasks that run at the same time. Must be an integer or `Infinity`.
+
+##### groupConcurrency
+
+Type: `number`\
+Default: `Infinity`\
+Minimum: `1`
+
+The maximum number of tasks with the same [`group`](#group) that run at the same time. Must be a positive integer or `Infinity`. It applies on top of `concurrency`, so a task only starts when both limits allow it. Invalid values (`0`, negative, `NaN`, or a fraction) throw a `TypeError` when the queue is constructed.
+
+Only the built-in [`PriorityQueue`](#custom-queueclass) enforces it. With a custom `queueClass`, a finite `groupConcurrency` throws a `TypeError` instead of being silently ignored; `Infinity` keeps the original behavior and works with any queue.
+
+With `Infinity` (the default), `group` is ignored and scheduling is unchanged.
 
 ##### timeout
 
@@ -199,6 +212,28 @@ Tasks with a higher priority start first. `Infinity` and `-Infinity` work. `.add
 Type: `string`
 
 A unique identifier for the task, used to change its priority with `.setPriority()`. Defaults to an incrementing number as a string (`'1'`, `'2'`, and so on), so do not use such strings as your own ids.
+
+##### group
+
+Type: `string`
+
+The group of the task. Tasks that share the same `group` also share the [`groupConcurrency`](#groupconcurrency) limit, in addition to `concurrency`. An empty string is a valid group, and a task without a `group` is only limited by `concurrency`.
+
+The queue does not interpret the value and never makes a request, so derive the key yourself, for example from the host of a URL:
+
+```js
+import PQueue from 'p-queue';
+
+// At most 8 tasks overall, and at most 2 per site.
+const queue = new PQueue({concurrency: 8, groupConcurrency: 2});
+
+for (const url of urls) {
+	const group = new URL(url).host;
+	queue.add(() => fetch(url), {group});
+}
+```
+
+A task whose group is at capacity stays a waiting task: it does not count as pending and does not spend an `intervalCap` start. The scheduler picks the highest-priority runnable task, skipping blocked ones, and a blocked task keeps its priority and enqueue order for when its group frees a slot. Has no effect when `groupConcurrency` is `Infinity` (the default).
 
 ##### timeout
 
@@ -392,7 +427,7 @@ The number of tasks waiting to run.
 
 #### .sizeBy(options)
 
-The number of waiting tasks with the given `priority`.
+The number of waiting tasks with the given `priority`. Any option of `.add()` can be matched, for example `queue.sizeBy({group: 'site-a'})`, or both: `queue.sizeBy({group: 'site-a', priority: 1})`.
 
 ```js
 import PQueue from 'p-queue';
@@ -810,6 +845,33 @@ await queue.add(() => slowTask(), {timeout: 10000});
 await queue.add(() => verySlowTask(), {timeout: undefined});
 ```
 
+## Per-group concurrency
+
+`groupConcurrency` limits how many tasks of the same `group` run at once, while `concurrency` keeps limiting the whole queue. This stops one site from filling every slot when you collect many sites in one queue:
+
+```js
+import PQueue from 'p-queue';
+
+const queue = new PQueue({concurrency: 2, groupConcurrency: 1});
+
+const a1 = queue.add(blockingTask, {group: 'site-a'});
+// Higher priority, but site-a already runs a task, so it waits instead of taking a global slot.
+const a2 = queue.add(task, {group: 'site-a', priority: 9});
+const b1 = queue.add(task, {group: 'site-b', priority: 0});
+
+// The first two tasks that start are a1 and b1. Only after a1 finishes can a2 start.
+```
+
+Scheduling rules:
+
+- A task whose group is at capacity stays a **waiting** task. It does not count toward `pending`, and it does not consume an `intervalCap` start, so a blocked task cannot spend the global rate quota.
+- The scheduler takes the highest-priority task that can currently run, preserving enqueue order within a priority, and skips tasks that are blocked by their group. When a group frees a slot, its blocked tasks keep their original priority and order.
+- The group slot is acquired when the task starts and released at the same point as the concurrency slot: when the running task settles, whether it completes, throws, rejects, or its `signal` aborts (including a timeout). Cancelling a task that has not started, or calling `.clear()`, does not release anyone else's slot, because those tasks never held one.
+- `.clear()` only removes waiting tasks; the group count of a task that is still running is kept, and `onEmpty()` / `onIdle()` do not resolve early while a group is full with a backlog.
+- `.setPriority()` keeps the `group`, and duplicated task `id`s never share a count: every task acquires and releases its own group slot.
+
+Only the built-in `PriorityQueue` supports a finite `groupConcurrency`. A custom `queueClass` together with a finite value throws a `TypeError`; set it to `Infinity` (the default) to keep using a custom queue.
+
 ## Custom QueueClass
 
 For other scheduling policies, give a class as the `queueClass` option:
@@ -862,6 +924,8 @@ const queue = new PQueue({queueClass: FifoQueue});
 #### How do the `concurrency` and `intervalCap` options affect each other?
 
 They are separate limits. `concurrency` limits how many tasks run at the same time. `intervalCap` limits how many tasks start in each interval.
+
+[`groupConcurrency`](#groupconcurrency) is a third, optional limit: it caps how many tasks sharing a `group` run at once. A task starts only when `concurrency`, `groupConcurrency` (for its group), and `intervalCap` all allow it. A group-blocked task stays waiting and does not consume an interval start.
 
 #### When should I use `strict` mode for rate limiting?
 

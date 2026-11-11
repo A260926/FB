@@ -56,6 +56,17 @@ const validateLimit = (name: string, value: unknown): void => {
 	}
 };
 
+// `groupConcurrency` has its own message, because the task option it pairs with is named `group`.
+const validateGroupConcurrency = (value: unknown): void => {
+	if (value === Infinity) {
+		return;
+	}
+
+	if (!(typeof value === 'number' && Number.isInteger(value) && value >= 1)) {
+		throw new TypeError(`Expected \`groupConcurrency\` to be a positive integer or \`Infinity\`, got \`${String(value)}\` (${typeof value})`);
+	}
+};
+
 const validateRateLimit = (interval: number, intervalCap: number, isStrict: boolean): void => {
 	validateLimit('intervalCap', intervalCap);
 
@@ -82,6 +93,8 @@ type WaitingTask = {
 	id?: string;
 	// Kept here, because `.setPriority()` changes it while the task waits, and `runningTasks` reports it.
 	priority?: number;
+	// Only present for tasks that share a `groupConcurrency` limit. Kept until the task finishes, so that every release matches exactly one acquire, also for tasks with a duplicated `id`.
+	group?: string;
 	promise?: Promise<unknown>;
 	reject?: (reason: unknown) => void;
 	// Stops listening for the abort of the `signal` of the task, when it starts or `.clear()` removes it.
@@ -134,6 +147,12 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 	// The `!` is needed because of https://github.com/microsoft/TypeScript/issues/32194
 	#concurrency!: number;
 
+	// `Infinity` disables group limiting and preserves the original scheduling path. A finite value is only supported with the built-in `PriorityQueue`, which the constructor enforces.
+	readonly #groupConcurrency: number;
+
+	// How many tasks of each group currently run. A group only has an entry while at least one of its tasks runs, so `.clear()` of waiting tasks cannot reset the count of a running group.
+	readonly #activeGroups = new Map<string, number>();
+
 	#isPaused: boolean;
 
 	// Use to assign a unique identifier to a promise function, if not explicitly specified
@@ -167,6 +186,7 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 			intervalCap = Infinity,
 			interval = 0,
 			concurrency = Infinity,
+			groupConcurrency = Infinity,
 			autoStart = true,
 			queueClass = PriorityQueue as unknown as new () => QueueType,
 			strict = false,
@@ -174,6 +194,12 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		} = options ?? {};
 
 		validateRateLimit(interval, intervalCap, strict);
+		validateGroupConcurrency(groupConcurrency);
+
+		// Group limiting needs the group-aware `dequeueWithGroups()` of the built-in queue. A custom queue cannot be assumed to have it, so reject instead of silently ignoring the limit.
+		if (groupConcurrency !== Infinity && queueClass !== (PriorityQueue as unknown as new () => QueueType)) {
+			throw new TypeError('The `groupConcurrency` option is only supported with the built-in `PriorityQueue`. Use the default `queueClass`, or set `groupConcurrency` to `Infinity`.');
+		}
 
 		this.#carryoverIntervalCount = carryoverIntervalCount;
 		this.#isIntervalIgnored = intervalCap === Infinity || interval === 0;
@@ -182,6 +208,7 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		this.#strict = strict;
 		this.#queueClass = queueClass;
 		this.#queue = new this.#queueClass();
+		this.#groupConcurrency = groupConcurrency;
 		this.concurrency = concurrency;
 		this.timeout = timeout;
 		this.#isPaused = !autoStart;
@@ -390,6 +417,30 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		return this.#pending < this.#concurrency;
 	}
 
+	// Whether a task of `group` may start under the group limit. Only the built-in queue is used with a finite limit, so this is only consulted on that path.
+	#isGroupBlocked(group: string): boolean {
+		return (this.#activeGroups.get(group) ?? 0) >= this.#groupConcurrency;
+	}
+
+	// Counts the task against its group when it starts.
+	#acquireGroup(group: string): void {
+		this.#activeGroups.set(group, (this.#activeGroups.get(group) ?? 0) + 1);
+	}
+
+	// Releases the group slot at the same point the pending slot is released: when a running task settles, whatever the outcome.
+	#releaseGroup(group: string): void {
+		const count = this.#activeGroups.get(group);
+		if (count === undefined) {
+			return;
+		}
+
+		if (count <= 1) {
+			this.#activeGroups.delete(group);
+		} else {
+			this.#activeGroups.set(group, count - 1);
+		}
+	}
+
 	#next(): void {
 		this.#pending--;
 
@@ -527,7 +578,13 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		const canInitializeInterval = !this.#isIntervalPausedAt(now);
 
 		if (this.#doesIntervalAllowAnother && this.#doesConcurrentAllowAnother) {
-			const job = this.#queue.dequeue()!;
+			// With a finite group limit, a task whose group is at capacity stays queued and does not take an interval slot or a concurrency slot; a lower-priority task of another group can start instead.
+			const job = this.#dequeueNextRunnable();
+
+			if (job === undefined) {
+				// Every waiting task is blocked by its group. It stays a waiting task, and a group release calls `#processQueue()` again.
+				return false;
+			}
 
 			if (!this.#isIntervalIgnored) {
 				this.#consumeIntervalSlot(now);
@@ -554,6 +611,15 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		}
 
 		return false;
+	}
+
+	#dequeueNextRunnable(): RunFunction | undefined {
+		if (this.#groupConcurrency === Infinity) {
+			return this.#queue.dequeue();
+		}
+
+		// The constructor guarantees the built-in `PriorityQueue` whenever the limit is finite.
+		return (this.#queue as unknown as PriorityQueue).dequeueWithGroups(group => this.#isGroupBlocked(group));
 	}
 
 	#initializeIntervalIfNeeded(): void {
@@ -631,6 +697,11 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 		waitingTask.id = id;
 		waitingTask.priority = options.priority ?? 0; // Match priority-queue default
 
+		// Only tasks that actually share a group limit carry the key, so that its presence means the task holds (or will hold) one group slot.
+		if (this.#groupConcurrency !== Infinity && options.group !== undefined) {
+			waitingTask.group = options.group;
+		}
+
 		return new Promise<Awaited<TaskResultType>>((resolve, reject) => {
 			// A task with an already aborted signal is never added, so it emits no events.
 			if (options.signal?.aborted) {
@@ -651,6 +722,11 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 				}
 
 				this.#pending++;
+
+				// The task passed the group check while waiting, so it now holds its group slot. Released in `finally`, at the same settle point as the pending slot.
+				if (waitingTask.group !== undefined) {
+					this.#acquireGroup(waitingTask.group);
+				}
 
 				// Track this running task
 				const runningTask = {
@@ -724,6 +800,11 @@ export default class PQueue<QueueType extends Queue<RunFunction, EnqueueOptionsT
 
 					// Remove from running tasks
 					this.#runningTasks.delete(runningTask);
+
+					// Release the group slot with the pending slot, whether the task completed, threw, or aborted while running. The next task of the group can then start when `#next()` processes the queue.
+					if (waitingTask.group !== undefined) {
+						this.#releaseGroup(waitingTask.group);
+					}
 
 					// Use queueMicrotask to prevent deep recursion while maintaining timing
 					queueMicrotask(() => {

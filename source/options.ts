@@ -101,6 +101,17 @@ export type Options<QueueType extends Queue<RunFunction, QueueOptions> = Priorit
 	@default false
 	*/
 	readonly strict?: boolean | undefined;
+
+	/**
+	The maximum number of tasks with the same `group` that run at the same time. Must be a positive integer or `Infinity`.
+
+	Only the built-in `PriorityQueue` enforces it. With a custom [`queueClass`](#queueclass), a finite value makes the constructor throw a `TypeError`. `Infinity` keeps the original behavior, where every task is only limited by `concurrency`.
+
+	Minimum: `1`.
+
+	@default Infinity
+	*/
+	readonly groupConcurrency?: number | undefined;
 } & TimeoutOptions;
 
 export type QueueAddOptions = {
@@ -115,6 +126,13 @@ export type QueueAddOptions = {
 	A unique identifier for the task, used to change its priority with `.setPriority()`. Defaults to an incrementing number as a string (`'1'`, `'2'`, and so on), so do not use such strings as your own ids.
 	*/
 	id?: string | undefined;
+
+	/**
+	The group of the task. Tasks with the same `group` share the `groupConcurrency` limit of the queue, in addition to `concurrency`. An empty string is a valid group. A task without a `group` is only limited by `concurrency`.
+
+	The queue does not interpret the value, so derive it yourself, for example from the host of a URL. Has no effect when `groupConcurrency` is `Infinity` (the default).
+	*/
+	readonly group?: string | undefined;
 
 	/**
 	Override the timeout of the queue for this task. `undefined` means no timeout.
