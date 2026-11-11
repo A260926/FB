@@ -1,0 +1,4 @@
+/coverage*.txt
+
+# Local caches for the reproducible Go commands.
+.cache/
