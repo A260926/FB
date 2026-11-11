@@ -401,8 +401,8 @@ public final class ToHMeshConverter {
 					faceIndex) -> cycleGraph.addCycle(faceIndex,
 							source.face(faceIndex));
 
-			CycleGraph cycleGraph = indices.collect(supplier, accumulator,
-					null);
+			CycleGraph cycleGraph = supplier.get();
+			indices.sequential().forEachOrdered(i -> accumulator.accept(cycleGraph, i));
 
 			CycleGraphToHFaces cycleGraphToHFaces = new CycleGraphToHFaces(
 					elementFactory, arrowSorter, faceIndices);
@@ -428,8 +428,8 @@ public final class ToHMeshConverter {
 			ObjIntConsumer<ArrowGraph> accumulator = (arrowGraph,
 					edgeIndex) -> addArrows(source, arrowGraph, edgeIndex);
 
-			ArrowGraph arrowGraph = indices.collect(ArrowGraph::new,
-					accumulator, null);
+			ArrowGraph arrowGraph = new ArrowGraph();
+			indices.sequential().forEachOrdered(i -> accumulator.accept(arrowGraph, i));
 
 			ArrowGraphToHFaces arrowGraphToHFaces = new ArrowGraphToHFaces(
 					elementFactory, arrowSorter);
