@@ -160,6 +160,10 @@ typedef struct shine_global_flags {
   priv_shine_wave_t wave;
   priv_shine_mpeg_t mpeg;
   bitstream_t bs;
+  /* Scratch stream holding the header and side information while the
+   * Layer III CRC is being computed. Only allocated when error
+   * protection (mpeg.crc) is enabled; NULL otherwise. */
+  bitstream_t *crc_bs;
   shine_side_info_t side_info;
   int sideinfo_len;
   int mean_bits;

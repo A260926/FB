@@ -109,6 +109,22 @@ int shine_check_config(int freq, int bitr);
  * the encoder. */
 shine_t shine_initialise(shine_config_t *config);
 
+/* Like shine_initialise, but additionally selects whether Layer III error
+ * protection is added to every output frame.
+ *
+ * crc_enabled must be either 0 or 1:
+ *   - 0 produces an unprotected stream byte-for-byte identical to the one
+ *     returned by shine_initialise with the same configuration;
+ *   - 1 clears the frame header protection bit and inserts a 16-bit, big
+ *     endian CRC immediately after the four header bytes. The two CRC bytes
+ *     are taken out of the frame's own bit budget, so the frame length keeps
+ *     being determined solely by version, samplerate, bitrate and padding.
+ *
+ * Any other crc_enabled value makes the function return NULL without
+ * allocating an encoder. The public shine_config_t structure is unchanged
+ * and no extra field has to be initialized by the caller. */
+shine_t shine_initialise_crc(shine_config_t *config, int crc_enabled);
+
 /* Maximun possible value for the function below. */
 #define SHINE_MAX_SAMPLES 1152
 

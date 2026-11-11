@@ -39,6 +39,65 @@ write(written, data);
 shine_close(s);
 ```
 
+### Optional Layer III error protection (CRC)
+
+`shine_initialise_crc(config, crc_enabled)` behaves exactly like
+`shine_initialise`, but when `crc_enabled` is `1` every output frame carries
+the Layer III 16-bit CRC: the header protection bit is cleared and a big
+endian checksum is written immediately after the four header bytes. The CRC
+bytes come out of the frame's own bit budget, so frame length and CBR
+behaviour are unchanged. Passing `0` is byte-for-byte identical to
+`shine_initialise`; any other value returns `NULL`.
+
+```c
+#include <stdint.h>
+#include <stdio.h>
+#include <shine/layer3.h>
+
+int main(void) {
+  shine_config_t config = {0};
+  config.wave.channels = PCM_STEREO;
+  config.wave.samplerate = 44100;
+  shine_set_config_mpeg_defaults(&config.mpeg);
+  config.mpeg.mode = STEREO;
+
+  if (shine_check_config(config.wave.samplerate, config.mpeg.bitr) < 0)
+    return 1;
+
+  /* Only 0 or 1 are accepted; anything else returns NULL. */
+  shine_t s = shine_initialise_crc(&config, 1);
+  if (!s)
+    return 1;
+
+  int samples_per_pass = shine_samples_per_pass(s);
+  int16_t left[SHINE_MAX_SAMPLES], right[SHINE_MAX_SAMPLES];
+  int16_t *planes[2] = {left, right};
+  int frame = 0, written;
+
+  /* A real program would read PCM here; this just feeds deterministic data. */
+  while (frame++ < 25) {
+    for (int i = 0; i < samples_per_pass; i++) {
+      left[i] = (int16_t)(((i * 37 + frame) % 4001) - 2000);
+      right[i] = (int16_t)(((i * 53 + frame) % 3001) - 1500);
+    }
+    unsigned char *data = shine_encode_buffer(s, planes, &written);
+    fwrite(data, 1, written, stdout);
+  }
+
+  unsigned char *data = shine_flush(s, &written);
+  fwrite(data, 1, written, stdout);
+
+  shine_close(s);
+  return 0;
+}
+```
+
+Build it against the installed library, for example:
+
+```sh
+cc example.c -lshine -o example
+```
+
 How fast is it?
 ---------------
 

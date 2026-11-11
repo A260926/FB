@@ -78,7 +78,8 @@ int shine_samples_per_pass(shine_t s) {
 }
 
 /* Compute default encoding values. */
-shine_global_config *shine_initialise(shine_config_t *pub_config) {
+static shine_global_config *shine_initialise_internal(shine_config_t *pub_config,
+                                                      int crc_enabled) {
   double avg_slots_per_frame;
   shine_global_config *config;
 
@@ -107,7 +108,7 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
   config->ResvMax = 0;
   config->ResvSize = 0;
   config->mpeg.layer = LAYER_III;
-  config->mpeg.crc = 0;
+  config->mpeg.crc = crc_enabled;
   config->mpeg.ext = 0;
   config->mpeg.mode_ext = 0;
   config->mpeg.bits_per_slot = 8;
@@ -125,6 +126,18 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
        ((double)config->wave.samplerate)) *
       (1000 * (double)config->mpeg.bitr / (double)config->mpeg.bits_per_slot);
 
+  /* Some legal samplerate/bitrate pairs yield an exact whole number of slots
+   * (e.g. MPEG-I 32 kHz / 48 kbps = 216.0). Floating-point rounding can leave
+   * the result just below that integer, which would make the encoder write a
+   * whole_slots-length frame while setting the padding bit and so declare a
+   * frame one byte longer than what is actually emitted. Snap such values to
+   * the integer; genuine fractional rates are never closer than ~0.02. */
+  {
+    double rounded = floor(avg_slots_per_frame + 0.5);
+    if (fabs(avg_slots_per_frame - rounded) < 1e-6)
+      avg_slots_per_frame = rounded;
+  }
+
   config->mpeg.whole_slots_per_frame = (int)avg_slots_per_frame;
 
   config->mpeg.frac_slots_per_frame =
@@ -136,6 +149,17 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
 
   shine_open_bit_stream(&config->bs, BUFFER_SIZE);
 
+  if (crc_enabled) {
+    /* Header plus the largest side information block (MPEG-I stereo,
+     * 32 bytes) fits comfortably in this scratch stream. */
+    config->crc_bs = shine_new_bit_stream(64);
+    if (config->crc_bs == NULL) {
+      shine_close_bit_stream(&config->bs);
+      free(config);
+      return NULL;
+    }
+  }
+
   memset((char *)&config->side_info, 0, sizeof(shine_side_info_t));
 
   /* determine the mean bitrate for main data */
@@ -145,6 +169,18 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
     config->sideinfo_len = 8 * ((config->wave.channels == 1) ? 4 + 9 : 4 + 17);
 
   return config;
+}
+
+shine_global_config *shine_initialise(shine_config_t *pub_config) {
+  return shine_initialise_internal(pub_config, 0);
+}
+
+shine_global_config *shine_initialise_crc(shine_config_t *pub_config,
+                                          int crc_enabled) {
+  if (crc_enabled != 0 && crc_enabled != 1)
+    return NULL;
+
+  return shine_initialise_internal(pub_config, crc_enabled);
 }
 
 static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
@@ -158,8 +194,13 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
 
   config->mpeg.bits_per_frame =
       8 * (config->mpeg.whole_slots_per_frame + config->mpeg.padding);
-  config->mean_bits = (config->mpeg.bits_per_frame - config->sideinfo_len) /
-                      config->mpeg.granules_per_frame;
+  /* When error protection is on, the 16 CRC bits are part of this frame's
+   * fixed overhead: they come out of the same bit budget instead of being
+   * inserted as extra bytes, so frame length and CBR behaviour are kept. */
+  config->mean_bits =
+      (config->mpeg.bits_per_frame - config->sideinfo_len -
+       (config->mpeg.crc ? 16 : 0)) /
+      config->mpeg.granules_per_frame;
 
   /* apply mdct to the polyphase output */
   shine_mdct_sub(config, stride);
@@ -196,6 +237,16 @@ unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
 }
 
 unsigned char *shine_flush(shine_global_config *config, int *written) {
+  if (config->mpeg.crc) {
+    /* Protected frames are byte aligned, but the writer's 32-bit cache
+     * may still hold the last bytes of the final frame. Drain them once;
+     * a second flush has nothing left to deliver. */
+    shine_drain_bit_stream(&config->bs);
+    *written = config->bs.data_position;
+    config->bs.data_position = 0;
+    return config->bs.data;
+  }
+
   *written = config->bs.data_position;
   config->bs.data_position = 0;
 
@@ -203,6 +254,7 @@ unsigned char *shine_flush(shine_global_config *config, int *written) {
 }
 
 void shine_close(shine_global_config *config) {
+  shine_free_bit_stream(config->crc_bs);
   shine_close_bit_stream(&config->bs);
   free(config);
 }

@@ -14,7 +14,9 @@ static void shine_huffman_coder_count1(bitstream_t *bs,
                                        const struct huffcodetab *h, int v,
                                        int w, int x, int y);
 
-static void encodeSideInfo(shine_global_config *config);
+static void encodeSideInfo(shine_global_config *config, bitstream_t *out,
+                           unsigned int *crc);
+static void encodeProtectedFrame(shine_global_config *config);
 static void encodeMainData(shine_global_config *config);
 static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi);
 
@@ -42,7 +44,139 @@ void shine_format_bitstream(shine_global_config *config) {
       }
     }
 
-  encodeSideInfo(config);
+  if (config->mpeg.crc)
+    encodeProtectedFrame(config);
+  else {
+    encodeSideInfo(config, &config->bs, NULL);
+    encodeMainData(config);
+  }
+}
+
+/*
+ * Emit one field into out and, when crc is not NULL, fold the same bits
+ * into the Layer III checksum in their transmitted (MSB-first) order.
+ */
+static void putCrcField(bitstream_t *out, unsigned int *crc, unsigned int val,
+                        unsigned int N, int covered) {
+  shine_putbits(out, val, N);
+  if (covered && crc != NULL)
+    *crc = shine_crc16(*crc, val, N);
+}
+
+/*
+ * Write the 32-bit frame header followed by the side information. When crc
+ * is NULL the fields go straight to the output stream, as in the
+ * unprotected path. Otherwise they are assembled in the encoder's scratch
+ * stream and every covered field (the header's last 16 bits and all side
+ * information) is simultaneously fed to an independent CRC accumulator.
+ * The 11 sync bits, version, layer and protection bit are never covered.
+ */
+static void encodeSideInfo(shine_global_config *config, bitstream_t *out,
+                           unsigned int *crc) {
+  int gr, ch, scfsi_band, region;
+  shine_side_info_t si = config->side_info;
+
+  putCrcField(out, crc, 0x7ff, 11, 0);
+  putCrcField(out, crc, config->mpeg.version, 2, 0);
+  putCrcField(out, crc, config->mpeg.layer, 2, 0);
+  putCrcField(out, crc, !config->mpeg.crc, 1, 0);
+  /* Everything from here on is covered by the Layer III CRC. */
+  putCrcField(out, crc, config->mpeg.bitrate_index, 4, 1);
+  putCrcField(out, crc, config->mpeg.samplerate_index % 3, 2, 1);
+  putCrcField(out, crc, config->mpeg.padding, 1, 1);
+  putCrcField(out, crc, config->mpeg.ext, 1, 1);
+  putCrcField(out, crc, config->mpeg.mode, 2, 1);
+  putCrcField(out, crc, config->mpeg.mode_ext, 2, 1);
+  putCrcField(out, crc, config->mpeg.copyright, 1, 1);
+  putCrcField(out, crc, config->mpeg.original, 1, 1);
+  putCrcField(out, crc, config->mpeg.emph, 2, 1);
+
+  if (config->mpeg.version == MPEG_I) {
+    putCrcField(out, crc, 0, 9, 1);
+    if (config->wave.channels == 2)
+      putCrcField(out, crc, si.private_bits, 3, 1);
+    else
+      putCrcField(out, crc, si.private_bits, 5, 1);
+  } else {
+    putCrcField(out, crc, 0, 8, 1);
+    if (config->wave.channels == 2)
+      putCrcField(out, crc, si.private_bits, 2, 1);
+    else
+      putCrcField(out, crc, si.private_bits, 1, 1);
+  }
+
+  if (config->mpeg.version == MPEG_I)
+    for (ch = 0; ch < config->wave.channels; ch++) {
+      for (scfsi_band = 0; scfsi_band < 4; scfsi_band++)
+        putCrcField(out, crc, si.scfsi[ch][scfsi_band], 1, 1);
+    }
+
+  for (gr = 0; gr < config->mpeg.granules_per_frame; gr++)
+    for (ch = 0; ch < config->wave.channels; ch++) {
+      gr_info *gi = &(si.gr[gr].ch[ch].tt);
+
+      putCrcField(out, crc, gi->part2_3_length, 12, 1);
+      putCrcField(out, crc, gi->big_values, 9, 1);
+      putCrcField(out, crc, gi->global_gain, 8, 1);
+      if (config->mpeg.version == MPEG_I)
+        putCrcField(out, crc, gi->scalefac_compress, 4, 1);
+      else
+        putCrcField(out, crc, gi->scalefac_compress, 9, 1);
+      putCrcField(out, crc, 0, 1, 1);
+
+      for (region = 0; region < 3; region++)
+        putCrcField(out, crc, gi->table_select[region], 5, 1);
+
+      putCrcField(out, crc, gi->region0_count, 4, 1);
+      putCrcField(out, crc, gi->region1_count, 3, 1);
+
+      if (config->mpeg.version == MPEG_I)
+        putCrcField(out, crc, gi->preflag, 1, 1);
+      putCrcField(out, crc, gi->scalefac_scale, 1, 1);
+      putCrcField(out, crc, gi->count1table_select, 1, 1);
+    }
+}
+
+/*
+ * Assemble a CRC-protected frame into the output bit stream.
+ *
+ * The full header and the side information are first built in a private
+ * scratch stream, which lets the 16-bit checksum be computed before anything
+ * is committed. The on-wire layout is:
+ *
+ *   4-byte header | CRC (16 bits, big endian) | side information | main data
+ *
+ * The CRC covers only the header's last 16 bits (scratch bytes 2-3) and the
+ * side information. The checksum word itself, the sync/version/layer bits and
+ * the main data are excluded. Main data and ancillary data are written
+ * afterwards by the shared, unchanged encoder.
+ */
+static void encodeProtectedFrame(shine_global_config *config) {
+  bitstream_t *scratch = config->crc_bs;
+  bitstream_t *out = &config->bs;
+  unsigned int crc = 0xffff;
+  int total_bytes, i;
+
+  encodeSideInfo(config, scratch, &crc);
+
+  /* Header (4 bytes) plus side information is byte aligned. */
+  shine_drain_bit_stream(scratch);
+  total_bytes = scratch->data_position;
+
+  /* The complete, contiguous four-byte frame header goes first. */
+  for (i = 0; i < 4; i++)
+    shine_putbits(out, scratch->data[i], 8);
+  /* Checksum immediately follows the four-byte header. */
+  shine_putbits(out, crc, 16);
+  /* Then the side information, unchanged from the scratch assembly. */
+  for (i = 4; i < total_bytes; i++)
+    shine_putbits(out, scratch->data[i], 8);
+
+  /* Rewind the scratch stream for the next frame. */
+  scratch->data_position = 0;
+  scratch->cache = 0;
+  scratch->cache_bits = 32;
+
   encodeMainData(config);
 }
 
@@ -73,70 +207,6 @@ static void encodeMainData(shine_global_config *config) {
       Huffmancodebits(config, ix, gi);
     }
   }
-}
-
-static void encodeSideInfo(shine_global_config *config) {
-  int gr, ch, scfsi_band, region;
-  shine_side_info_t si = config->side_info;
-
-  shine_putbits(&config->bs, 0x7ff, 11);
-  shine_putbits(&config->bs, config->mpeg.version, 2);
-  shine_putbits(&config->bs, config->mpeg.layer, 2);
-  shine_putbits(&config->bs, !config->mpeg.crc, 1);
-  shine_putbits(&config->bs, config->mpeg.bitrate_index, 4);
-  shine_putbits(&config->bs, config->mpeg.samplerate_index % 3, 2);
-  shine_putbits(&config->bs, config->mpeg.padding, 1);
-  shine_putbits(&config->bs, config->mpeg.ext, 1);
-  shine_putbits(&config->bs, config->mpeg.mode, 2);
-  shine_putbits(&config->bs, config->mpeg.mode_ext, 2);
-  shine_putbits(&config->bs, config->mpeg.copyright, 1);
-  shine_putbits(&config->bs, config->mpeg.original, 1);
-  shine_putbits(&config->bs, config->mpeg.emph, 2);
-
-  if (config->mpeg.version == MPEG_I) {
-    shine_putbits(&config->bs, 0, 9);
-    if (config->wave.channels == 2)
-      shine_putbits(&config->bs, si.private_bits, 3);
-    else
-      shine_putbits(&config->bs, si.private_bits, 5);
-  } else {
-    shine_putbits(&config->bs, 0, 8);
-    if (config->wave.channels == 2)
-      shine_putbits(&config->bs, si.private_bits, 2);
-    else
-      shine_putbits(&config->bs, si.private_bits, 1);
-  }
-
-  if (config->mpeg.version == MPEG_I)
-    for (ch = 0; ch < config->wave.channels; ch++) {
-      for (scfsi_band = 0; scfsi_band < 4; scfsi_band++)
-        shine_putbits(&config->bs, si.scfsi[ch][scfsi_band], 1);
-    }
-
-  for (gr = 0; gr < config->mpeg.granules_per_frame; gr++)
-    for (ch = 0; ch < config->wave.channels; ch++) {
-      gr_info *gi = &(si.gr[gr].ch[ch].tt);
-
-      shine_putbits(&config->bs, gi->part2_3_length, 12);
-      shine_putbits(&config->bs, gi->big_values, 9);
-      shine_putbits(&config->bs, gi->global_gain, 8);
-      if (config->mpeg.version == MPEG_I)
-        shine_putbits(&config->bs, gi->scalefac_compress, 4);
-      else
-        shine_putbits(&config->bs, gi->scalefac_compress, 9);
-      shine_putbits(&config->bs, 0, 1);
-
-      for (region = 0; region < 3; region++)
-        shine_putbits(&config->bs, gi->table_select[region], 5);
-
-      shine_putbits(&config->bs, gi->region0_count, 4);
-      shine_putbits(&config->bs, gi->region1_count, 3);
-
-      if (config->mpeg.version == MPEG_I)
-        shine_putbits(&config->bs, gi->preflag, 1);
-      shine_putbits(&config->bs, gi->scalefac_scale, 1);
-      shine_putbits(&config->bs, gi->count1table_select, 1);
-    }
 }
 
 /* Note the discussion of huffmancodebits() on pages 28 and 29 of the IS, as

@@ -29,6 +29,70 @@ void shine_close_bit_stream(bitstream_t *bs) {
     free(bs->data);
 }
 
+/* Allocate a standalone bit stream with its own data buffer. */
+bitstream_t *shine_new_bit_stream(int size) {
+  bitstream_t *bs = (bitstream_t *)calloc(1, sizeof(bitstream_t));
+  if (bs == NULL)
+    return NULL;
+  shine_open_bit_stream(bs, size);
+  if (bs->data == NULL) {
+    free(bs);
+    return NULL;
+  }
+  return bs;
+}
+
+/* Free a bit stream created by shine_new_bit_stream. */
+void shine_free_bit_stream(bitstream_t *bs) {
+  if (bs == NULL)
+    return;
+  shine_close_bit_stream(bs);
+  free(bs);
+}
+
+/* Write out any complete bytes that are still held in the cache, leaving
+ * only sub-byte residue (Layer III frame boundaries are byte aligned). */
+void shine_drain_bit_stream(bitstream_t *bs) {
+  int full_bytes = (32 - bs->cache_bits) / 8;
+  int i;
+
+  if (full_bytes == 0)
+    return;
+
+  if (bs->data_position + full_bytes >= bs->data_size) {
+    int new_size = bs->data_size + (bs->data_size / 2);
+    while (new_size < bs->data_position + full_bytes + 1)
+      new_size += (new_size / 2);
+    bs->data = (unsigned char *)realloc(bs->data, new_size);
+    bs->data_size = new_size;
+  }
+
+  for (i = 0; i < full_bytes; i++) {
+    bs->data[bs->data_position++] = (unsigned char)(bs->cache >> 24);
+    bs->cache <<= 8;
+    bs->cache_bits += 8;
+  }
+}
+
+/*
+ * Layer III error protection checksum.
+ *
+ * 16-bit shift register, initial value 0xffff, MSB first, generator
+ * polynomial 0x8005, no final exclusive-or. Each fed bit is XORed into
+ * the most significant position before the feedback shift.
+ */
+unsigned int shine_crc16(unsigned int crc, unsigned int val, unsigned int N) {
+  while (N--) {
+    unsigned int bit = (val >> N) & 1;
+    unsigned int msb = (crc >> 15) & 1;
+
+    crc = (crc << 1) & 0xffff;
+    if (msb ^ bit)
+      crc ^= 0x8005;
+  }
+  return crc;
+}
+
 /*
  * shine_putbits:
  * --------
