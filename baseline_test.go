@@ -9,7 +9,7 @@ func authorAIFF(bits uint16, frames uint32, offset uint32, pcm []byte) []byte {
  body.WriteString("AIFF");body.Write(chunk("COMM",comm.Bytes()));body.Write(chunk("SSND",ssnd.Bytes()))
  out.WriteString("FORM");binary.Write(&out,binary.BigEndian,uint32(body.Len()));out.Write(body.Bytes());return out.Bytes()
 }
-func TestAuthorBaseline(t *testing.T){
+func TestBaseline(t *testing.T){
  d:=NewDecoder(bytes.NewReader(authorAIFF(16,2,0,[]byte{0x04,0xd2,0xfb,0x2e})))
  b,err:=d.FullPCMBuffer();if err!=nil||!reflect.DeepEqual(b.Data,[]int{1234,-1234}) {t.Fatalf("normal: %v %v",b,err)}
  if d.PCMLen()!=0 {t.Fatalf("current blockSize interpretation changed: %d",d.PCMLen())}
