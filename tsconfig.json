@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "lib": [ "dom", "es2017" ],
+    "module": "node20",
+    "strict": true,
+    "noEmit": true
+  },
+  "include": [
+    "src",
+    "test"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

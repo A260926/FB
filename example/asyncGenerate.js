@@ -1,0 +1,309 @@
+import * as THREE from 'three';
+import Stats from 'stats.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { AVERAGE, CENTER, MeshBVH, BVHHelper, SAH } from 'three-mesh-bvh';
+
+// Parallel BVH generation is only supported with SharedArrayBuffer
+const sharedArrayBufferSupported = typeof SharedArrayBuffer !== 'undefined';
+
+const params = {
+
+	useWebWorker: true,
+	maxWorkerCount: sharedArrayBufferSupported ? navigator.hardwareConcurrency : 1,
+	strategy: CENTER,
+	indirect: false,
+
+	useGroups: false,
+	radius: 1,
+	tube: 0.3,
+	tubularSegments: 500,
+	radialSegments: 500,
+	p: 3,
+	q: 5,
+
+	displayBVH: false,
+	displayDepth: 10,
+
+};
+
+let renderer, camera, scene, knot, clock, gui, helper, group, stats;
+let outputContainer, loadContainer, loadBar, loadText;
+let bvhGenerationWorker;
+let generating = false;
+
+init();
+
+function init() {
+
+	const bgColor = 0xffca28;
+
+	outputContainer = document.getElementById( 'output' );
+	loadContainer = document.getElementById( 'loading-container' );
+	loadBar = document.querySelector( '#loading-container .bar' );
+	loadText = document.querySelector( '#loading-container .text' );
+
+	// renderer setup
+	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setClearColor( bgColor, 1 );
+	renderer.setAnimationLoop( render );
+	document.body.appendChild( renderer.domElement );
+
+	// scene setup
+	scene = new THREE.Scene();
+	scene.fog = new THREE.Fog( 0xffca28, 20, 60 );
+
+	const light = new THREE.DirectionalLight( 0xffffff, 3 );
+	light.position.set( 1, 1, 1 );
+	scene.add( light );
+	scene.add( new THREE.AmbientLight( 0xb0bec5, 2.5 ) );
+
+	// camera setup
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
+	camera.position.set( 0, 0, 4 );
+	camera.far = 100;
+	camera.updateProjectionMatrix();
+
+	clock = new THREE.Clock();
+
+	// stats setup
+	stats = new Stats();
+	document.body.appendChild( stats.dom );
+
+	group = new THREE.Group();
+	scene.add( group );
+
+	for ( let i = 0; i < 400; i ++ ) {
+
+		const sphere = new THREE.Mesh(
+			new THREE.SphereGeometry( 1, 32, 32 ),
+			new THREE.MeshBasicMaterial()
+		);
+		sphere.position.set(
+			Math.random() - 0.5,
+			Math.random() - 0.5,
+			Math.random() - 0.5
+		).multiplyScalar( 70 );
+		sphere.scale.setScalar( Math.random() * 0.3 + 0.1 );
+		group.add( sphere );
+
+	}
+
+	bvhGenerationWorker = new ParallelMeshBVHWorker();
+	window.WORKER = bvhGenerationWorker;
+
+	gui = new GUI();
+	const helperFolder = gui.addFolder( 'helper' );
+	helperFolder.add( params, 'displayBVH' ).name( 'enabled' ).onChange( v => {
+
+		if ( v && helper ) {
+
+			helper.update();
+
+		}
+
+	} );
+	helperFolder.add( params, 'displayDepth', 1, 50, 1 ).onChange( v => {
+
+		if ( helper ) {
+
+			helper.depth = v;
+			helper.update();
+
+		}
+
+	} );
+	helperFolder.open();
+
+	const knotFolder = gui.addFolder( 'knot' );
+	knotFolder.add( params, 'useGroups' );
+	knotFolder.add( params, 'radius', 0.5, 2, 0.01 );
+	knotFolder.add( params, 'tube', 0.2, 1.2, 0.01 );
+	knotFolder.add( params, 'tubularSegments', 50, 2000, 1 );
+	knotFolder.add( params, 'radialSegments', 5, 2000, 1 );
+	knotFolder.add( params, 'p', 1, 10, 1 );
+	knotFolder.add( params, 'q', 1, 10, 1 );
+	knotFolder.open();
+
+	const bvhFolder = gui.addFolder( 'bvh' );
+	bvhFolder.add( params, 'useWebWorker' );
+	bvhFolder.add( params, 'indirect' );
+	bvhFolder.add( params, 'maxWorkerCount', 1, 16, 1 ).disable( ! sharedArrayBufferSupported );
+	bvhFolder.add( params, 'strategy', { CENTER, AVERAGE, SAH } );
+
+	gui.add( { regenerateKnot }, 'regenerateKnot' ).name( 'regenerate' );
+
+	regenerateKnot();
+
+	window.addEventListener( 'resize', function () {
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}, false );
+
+}
+
+function regenerateKnot() {
+
+	if ( generating ) {
+
+		return;
+
+	}
+
+	generating = true;
+
+	if ( knot ) {
+
+		if ( Array.isArray( knot.material ) ) {
+
+			knot.material.forEach( m => m.dispose() );
+
+		} else {
+
+			knot.material.dispose();
+
+		}
+
+		knot.geometry.dispose();
+		group.remove( knot );
+		group.remove( helper );
+
+	}
+
+	const stallStartTime = window.performance.now();
+	const geomStartTime = window.performance.now();
+
+	// Create geometry with multiple groups to test parallel worker offset handling
+	let material;
+	const geometry = new THREE.TorusKnotGeometry(
+		params.radius,
+		params.tube,
+		params.tubularSegments,
+		params.radialSegments,
+		params.p,
+		params.q
+	);
+
+
+	if ( params.useGroups ) {
+
+		geometry.clearGroups();
+
+		const triCount = geometry.index.count / 3;
+		const groupSize = Math.floor( triCount / 3 );
+		geometry.addGroup( 0, groupSize * 3, 0 );
+		geometry.addGroup( ( groupSize * 1 ) * 3, groupSize * 3, 1 );
+		geometry.addGroup( ( groupSize * 2 ) * 3, groupSize * 3, 2 );
+
+		material = [
+			new THREE.MeshStandardMaterial( { color: 0x4db6ac, roughness: 0.75 } ),
+			new THREE.MeshStandardMaterial( { color: 0xf06292, roughness: 0.75 } ),
+			new THREE.MeshStandardMaterial( { color: 0x64b5f6, roughness: 0.75 } )
+		];
+
+	} else {
+
+		material = new THREE.MeshStandardMaterial( {
+			color: new THREE.Color( 0x4db6ac ),
+			roughness: 0.75
+		} );
+
+	}
+
+
+	knot = new THREE.Mesh( geometry, material );
+
+	const geomTime = window.performance.now() - geomStartTime;
+	const startTime = window.performance.now();
+	const options = { strategy: params.strategy, indirect: params.indirect };
+	let totalStallTime;
+	if ( params.useWebWorker ) {
+
+		const onProgress = v => {
+
+			const perc = ( v * 100 ).toFixed( 0 );
+			loadContainer.style.visibility = 'visible';
+			loadBar.style.width = `${ perc }%`;
+			loadText.innerText = `${ perc }%`;
+
+		};
+
+		bvhGenerationWorker.maxWorkerCount = params.maxWorkerCount;
+		bvhGenerationWorker.generate( knot.geometry, { onProgress, ...options } ).then( bvh => {
+
+			loadContainer.style.visibility = 'hidden';
+
+			knot.geometry.boundsTree = bvh;
+			group.add( knot );
+
+			const deltaTime = window.performance.now() - startTime;
+			generating = false;
+
+			helper = new BVHHelper( knot, 0 );
+			helper.depth = params.displayDepth;
+
+			if ( params.displayBVH ) {
+
+				helper.update();
+
+			}
+
+			group.add( helper );
+
+			outputContainer.textContent =
+				`Geometry Generation Time  : ${ geomTime.toFixed( 3 ) }ms\n` +
+				`BVH Generation Time       : ${ deltaTime.toFixed( 3 ) }ms\n` +
+				`Frame Stall Time          : ${ totalStallTime.toFixed( 3 ) }\n` +
+				`SharedArrayBuffer Support : ${ sharedArrayBufferSupported }`;
+
+		} );
+
+		totalStallTime = window.performance.now() - stallStartTime;
+
+	} else {
+
+		knot.geometry.boundsTree = new MeshBVH( knot.geometry, options );
+		totalStallTime = window.performance.now() - stallStartTime;
+
+		group.add( knot );
+
+		const deltaTime = window.performance.now() - startTime;
+		generating = false;
+
+		helper = new BVHHelper( knot );
+		helper.depth = params.displayDepth;
+		helper.update();
+		group.add( helper );
+
+		outputContainer.textContent =
+			`Geometry Generation Time  : ${ geomTime.toFixed( 3 ) }ms\n` +
+			`BVH Generation Time       : ${ deltaTime.toFixed( 3 ) }ms\n` +
+			`Frame Stall Time          : ${ totalStallTime.toFixed( 3 ) }`;
+
+	}
+
+}
+
+function render() {
+
+	stats.update();
+
+	let delta = clock.getDelta();
+	group.rotation.x += 0.4 * delta;
+	group.rotation.y += 0.6 * delta;
+
+	if ( helper ) {
+
+		helper.visible = params.displayBVH;
+
+	}
+
+	renderer.render( scene, camera );
+
+}

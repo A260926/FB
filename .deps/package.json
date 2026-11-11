@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "preprocess": "3.2.0",
+    "three": "0.180.0",
+    "vitest": "4.0.14"
+  }
+}
