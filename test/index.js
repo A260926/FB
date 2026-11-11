@@ -1500,3 +1500,178 @@ test('redact multi trailing wildcard', ({ end, is }) => {
   is(o.a.b.c, 'value')
   end()
 })
+
+test('restores the input when the serializer throws, and rethrows the original error', ({ end, is, throws }) => {
+  const error = Error('serialize failure')
+  let calls = 0
+  const redact = fastRedact({
+    paths: ['key', 'nested.key'],
+    serialize () {
+      calls++
+      throw error
+    }
+  })
+  const o = { key: 'value', nested: { key: 'value' } }
+  throws(() => redact(o), (e) => {
+    is(e, error)
+    return true
+  })
+  is(calls, 1)
+  is(o.key, 'value')
+  is(o.nested.key, 'value')
+  end()
+})
+
+test('restores the input when a custom censor throws part way through', ({ end, is, throws }) => {
+  const error = Error('censor failure')
+  let calls = 0
+  const redact = fastRedact({
+    paths: ['a', 'b', 'c'],
+    censor (value) {
+      calls++
+      if (calls === 2) throw error
+      return 'masked'
+    },
+    serialize: false
+  })
+  const o = { a: 'value', b: 'value', c: 'value' }
+  throws(() => redact(o), (e) => {
+    is(e, error)
+    return true
+  })
+  is(calls, 2)
+  is(o.a, 'value')
+  is(o.b, 'value')
+  is(o.c, 'value')
+  end()
+})
+
+test('restores the input when a custom censor throws part way through a trailing wildcard', ({ end, is, throws }) => {
+  const error = Error('censor failure')
+  let calls = 0
+  const redact = fastRedact({
+    paths: ['o.*'],
+    censor (value) {
+      calls++
+      if (calls === 2) throw error
+      return 'masked'
+    },
+    serialize: false
+  })
+  const o = { o: { a: 'value', b: 'value' } }
+  throws(() => redact(o), (e) => {
+    is(e, error)
+    return true
+  })
+  is(calls, 2)
+  is(o.o.a, 'value')
+  is(o.o.b, 'value')
+  end()
+})
+
+test('restores the input when a custom censor throws part way through an intermediate wildcard', ({ end, is, throws }) => {
+  const error = Error('censor failure')
+  let calls = 0
+  const redact = fastRedact({
+    paths: ['rows.*.key'],
+    censor (value) {
+      calls++
+      if (calls === 2) throw error
+      return 'masked'
+    },
+    serialize: false
+  })
+  const o = { rows: [{ key: 'value' }, { key: 'value' }] }
+  throws(() => redact(o), (e) => {
+    is(e, error)
+    return true
+  })
+  is(calls, 2)
+  is(o.rows[0].key, 'value')
+  is(o.rows[1].key, 'value')
+  end()
+})
+
+test('a redactor can be reused consecutively after a serializer failure', ({ end, is, throws }) => {
+  const error = Error('serialize failure')
+  let fail = true
+  const redact = fastRedact({
+    paths: ['key'],
+    serialize (o) {
+      if (fail) throw error
+      return JSON.stringify(o)
+    }
+  })
+  const first = { key: 'value' }
+  throws(() => redact(first))
+  is(first.key, 'value')
+  fail = false
+  const second = { key: 'value' }
+  is(redact(second), '{"key":"[REDACTED]"}')
+  is(second.key, 'value')
+  end()
+})
+
+test('supports re-entrant redaction of an independent object from within the serializer', ({ end, is }) => {
+  const outer = { key: 'outer' }
+  const inner = { key: 'inner' }
+  let inside = false
+  let outerKeyDuringSerialize
+  const redact = fastRedact({
+    paths: ['key'],
+    serialize (o) {
+      if (!inside) {
+        inside = true
+        is(redact(inner), '{"key":"[REDACTED]"}')
+        inside = false
+      }
+      outerKeyDuringSerialize = o.key
+      return JSON.stringify(o)
+    }
+  })
+  is(redact(outer), '{"key":"[REDACTED]"}')
+  is(outerKeyDuringSerialize, '[REDACTED]')
+  is(outer.key, 'outer')
+  is(inner.key, 'inner')
+  end()
+})
+
+test('a failed re-entrant call caught by the outer serializer does not clobber the outer restore', ({ end, is, throws }) => {
+  const error = Error('inner failure')
+  const outer = { key: 'outer' }
+  const inner = { key: 'inner' }
+  let inside = false
+  let outerKeyDuringSerialize
+  const redact = fastRedact({
+    paths: ['key'],
+    serialize (o) {
+      if (!inside) {
+        inside = true
+        throws(() => redact(inner), (e) => {
+          is(e, error)
+          return true
+        })
+        is(inner.key, 'inner')
+        inside = false
+      } else {
+        throw error
+      }
+      outerKeyDuringSerialize = o.key
+      return JSON.stringify(o)
+    }
+  })
+  is(redact(outer), '{"key":"[REDACTED]"}')
+  is(outerKeyDuringSerialize, '[REDACTED]')
+  is(outer.key, 'outer')
+  end()
+})
+
+test('restores a field whose original value is undefined', ({ end, is }) => {
+  const redact = fastRedact({ paths: ['o.*'] })
+  const o = { o: { key: undefined, other: 'value' } }
+  is(redact(o), '{"o":{"key":"[REDACTED]","other":"[REDACTED]"}}')
+  is(Object.prototype.hasOwnProperty.call(o.o, 'key'), true)
+  is(o.o.key, undefined)
+  is(o.o.other, 'value')
+  end()
+})

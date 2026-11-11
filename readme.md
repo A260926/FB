@@ -163,6 +163,35 @@ will treat the primitive value as having already been redacted, and return it se
 `JSON.stringify` or the user's custom `serialize` function), or as-is if the `serialize` option
 was set to false.
 
+## Error handling and re-entrancy
+
+Because `fast-redact` mutates the input object and restores it afterwards, it guarantees
+the following around failures and nested usage:
+
+* If the `serialize` function throws, every field redacted during that call is restored
+  before the error reaches the caller, and the original error object is rethrown as-is.
+  The serializer is never retried.
+* If a custom `censor` function throws part way through a call, every field already
+  redacted during that call is restored before the error reaches the caller, and the
+  original error object is rethrown as-is. The censor is never retried. This holds for
+  static paths, trailing wildcards and intermediate wildcards alike.
+* A serializer may synchronously call the *same* redactor on another, independent object
+  (a different object graph). Whether the inner call succeeds or fails (and its error is
+  caught by the outer serializer), the outer call's restore records are left untouched:
+  the outer object is still redacted when the outer serializer resumes, and is only
+  restored when the outer call ends.
+* When `serialize` is `false`, restoration remains the caller's responsibility via
+  `redact.restore(o)`; successful calls are never restored automatically.
+
+Regression checks for these guarantees can be run without installing any dependencies:
+
+```
+node test/privacy-rollback.js
+node test/privacy-rollback-edge.js
+```
+
+Both print `PASS` for every case and exit with a non-zero code on failure.
+
 ## Approach
 
 In order to achieve lowest cost/highest performance redaction `fast-redact`
