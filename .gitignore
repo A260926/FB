@@ -48,3 +48,5 @@ unix/objs
 unix/opusfile_example
 unix/seeking_example
 build
+.chain-gain.*
+.opus-build.*
