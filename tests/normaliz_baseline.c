@@ -15,6 +15,6 @@ int main(void) {
  n=0; f0r_set_param_value(s,&n,2); image(in,70); f0r_update(s,3,in,out);
  unsigned char *b=(unsigned char*)out;
  printf("shrink N=3->1 observed RGB=%u/%u, desired=0/255\n",b[0],b[4]);
- assert(b[0]!=0 || b[4]!=255); assert(b[3]==37 && b[7]==38);
- f0r_destruct(s); f0r_deinit(); puts("normaliz0r animated-window defect: reproduced");
+ assert(b[0]==0 && b[4]==255); assert(b[3]==37 && b[7]==38);
+ f0r_destruct(s); f0r_deinit(); puts("normaliz0r animated-window behavior: correct");
 }

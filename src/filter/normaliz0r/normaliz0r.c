@@ -54,8 +54,8 @@
  *   Smoothing  The amount of temporal smoothing.  The parameter is converted
  *              into a number of frames N in the range [1,MAX_HISTORY_LEN], and
  *              the minimum and maximum input value of each channel are then
- *              smoothed using a rolling average over the last N frames.
- *              Defaults to 0.0 (no temporal smoothing).
+ *              smoothed using an arithmetic average over the last N retained
+ *              frames.  Defaults to 0.0 (no temporal smoothing).
  *
  *   Independence
  *              Controls the ratio of independent (color shifting) channel
@@ -67,9 +67,30 @@
  *              a rather expensive no-op.  Values in between can give a gentle
  *              boost to low-contrast video without creating an artificial
  *              over-processed look.  The default is full strength.
+ *
+ * Temporal history and host time handling
+ * ---------------------------------------
+ * The filter retains the per-channel extrema (never full frames) of the at
+ * most MAX_HISTORY_LEN most recent distinct video times.  The video time
+ * passed by the host is handled like this:
+ *
+ *   - a time strictly greater than the previous one appends a new entry;
+ *   - the exact same time replaces the current entry, so a redraw is neither
+ *     weighted twice nor occupies an extra history slot;
+ *   - a time smaller than the previous one starts a new playback segment and
+ *     discards every previously retained entry;
+ *   - a non-finite time (NaN/infinity) is processed as a standalone frame and
+ *     clears the history; the next finite time starts afresh.
+ *
+ * Changing the Smoothing parameter never clears the history: shrinking the
+ * window takes effect immediately, while growing it can reuse entries that
+ * are still retained.  Only the input extrema are smoothed; the linked /
+ * independent mixing, black and white points, Strength, quantization and
+ * clamping below keep operating on the current frame's pixels.
  */
 
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -78,25 +99,79 @@
 
 #define MAX_HISTORY_LEN     128
 
+/* Per-channel input extrema observed at one video time. */
+typedef struct
+{
+  uint8_t min[3];
+  uint8_t max[3];
+} history_entry_t;
+
 typedef struct
 {
   int num_pixels;     // Number of pixels in a frame.
-  int frame_num;      // Increments on each frame, starting from 0.
 
-  // Per-extrema, per-channel fri0r params
+  // Ring of extrema, one entry per distinct video time.  The next append
+  // writes at history_head; chronological entry j (0 = oldest) lives in slot
+  // (history_head - history_count + j) mod MAX_HISTORY_LEN.
+  history_entry_t history[MAX_HISTORY_LEN];
+  int history_count;      // Entries currently stored, [0,MAX_HISTORY_LEN].
+  int history_head;       // Slot where the next append is written.
+  double last_time;       // Video time of the newest stored entry.
+  int have_last_time;     // Whether the history currently holds any entry.
+
+  // Per-extrema, per-channel frei0r params: target output values [0,255].
   struct
   {
-    uint8_t history[MAX_HISTORY_LEN]; // Param history, for temporal smoothing.
-    uint16_t history_sum;       // Sum of history entries.
-    float param;                // Target output value [0,255]
-  } min[3], max[3];             // Min and max for each channel in {R,G,B}.
+    float param;
+  } min[3], max[3];
 
   // Per-instance frei0r params, each a float in the range [0,1].
-  int history_len;      // Global max history length, which controls amount of
-                        // temporal smoothing.  [1,MAX_HISTORY_LEN].
+  int history_len;      // Smoothing window N, [1,MAX_HISTORY_LEN].
   float independence;   // Ratio of independent vs linked normalization [0,1].
   float strength;       // Mixing strength for the normalization [0,1].
 } normaliz0r_instance_t;
+
+static void
+clear_history (normaliz0r_instance_t* inst)
+{
+  inst->history_count = 0;
+  inst->history_head = 0;
+  inst->have_last_time = 0;
+}
+
+/* Append a new video time, overwriting the oldest entry once the ring is
+ * full.  Called only for a strictly increasing, finite time. */
+static void
+append_history (normaliz0r_instance_t* inst, const uint8_t mn[3],
+                const uint8_t mx[3])
+{
+  history_entry_t* entry = &inst->history[inst->history_head];
+  int c;
+  for (c = 0; c < 3; c++)
+  {
+    entry->min[c] = mn[c];
+    entry->max[c] = mx[c];
+  }
+  inst->history_head = (inst->history_head + 1) % MAX_HISTORY_LEN;
+  if (inst->history_count < MAX_HISTORY_LEN)
+    inst->history_count++;
+}
+
+/* Replace the extrema of the current (newest) video time, without changing
+ * the number of retained entries. */
+static void
+replace_newest_history (normaliz0r_instance_t* inst, const uint8_t mn[3],
+                        const uint8_t mx[3])
+{
+  int slot = (inst->history_head - 1 + MAX_HISTORY_LEN) % MAX_HISTORY_LEN;
+  history_entry_t* entry = &inst->history[slot];
+  int c;
+  for (c = 0; c < 3; c++)
+  {
+    entry->min[c] = mn[c];
+    entry->max[c] = mx[c];
+  }
+}
 
 int
 f0r_init ()
@@ -146,11 +221,9 @@ f0r_construct (unsigned int width, unsigned int height)
   normaliz0r_instance_t* inst = (normaliz0r_instance_t*)calloc(1, sizeof(*inst));
   int c;
   inst->num_pixels = width * height;
-  inst->frame_num = 0;
+  clear_history(inst);
   for (c = 0; c < 3; c++)
   {
-    inst->min[c].history_sum = 0;
-    inst->max[c].history_sum = 0;
     // Set default per-channel frei0r param values.
     inst->min[c].param = 0.0;   // black
     inst->max[c].param = 255.0; // white
@@ -190,7 +263,8 @@ f0r_set_param_value (f0r_instance_t instance, f0r_param_t param,
       break;
     case 2:
       val = (float)CLAMP(*((double* )param), 0.0, 1.0);
-      // Map [0,1] <-> [1,MAX_HISTORY_LEN]
+      // Map [0,1] <-> [1,MAX_HISTORY_LEN].  Only the window size changes;
+      // the retained history is left untouched.
       inst->history_len = (int)(val * (MAX_HISTORY_LEN - 1)) + 1;
       break;
     case 3:
@@ -274,31 +348,79 @@ f0r_update (f0r_instance_t instance, double time, const uint32_t* inframe,
     }
   }
 
-  // Next, for each channel, push min.in and max.in into their respective
-  // histories, to determine the min.smoothed and max.smoothed for this frame.
+  // Apply the shared host-time rules.  A non-finite time is a standalone
+  // frame: the history is cleared and this frame alone feeds the smoothing.
+  uint8_t cur_min[3] = { min[0].in, min[1].in, min[2].in };
+  uint8_t cur_max[3] = { max[0].in, max[1].in, max[2].in };
+  int standalone = !isfinite(time);
+  if (standalone)
   {
-    int history_idx = inst->frame_num % inst->history_len;
-    // Assume the history is not yet full; num_history_vals is the number of
-    // frames received so far including the current frame.
-    int num_history_vals = inst->frame_num + 1;
-    if (inst->frame_num >= inst->history_len)
+    clear_history(inst);
+  }
+  else if (!inst->have_last_time)
+  {
+    append_history(inst, cur_min, cur_max);
+    inst->last_time = time;
+    inst->have_last_time = 1;
+  }
+  else if (time == inst->last_time)
+  {
+    // Redraw of the same video time: replace, do not count twice.
+    replace_newest_history(inst, cur_min, cur_max);
+  }
+  else if (time < inst->last_time)
+  {
+    // Time went backwards: a new playback segment, old frames are gone.
+    clear_history(inst);
+    append_history(inst, cur_min, cur_max);
+    inst->last_time = time;
+    inst->have_last_time = 1;
+  }
+  else
+  {
+    append_history(inst, cur_min, cur_max);
+    inst->last_time = time;
+  }
+
+  // Average the retained input extrema over the most recent N entries (or all
+  // of them if fewer than N are available).  The sums are rebuilt from the
+  // ring on every call so that resizing the window never inherits stale
+  // totals, and a redrawn frame is weighted exactly once.
+  {
+    int num_history_vals;
+    int start_slot;
+    if (standalone)
     {
-      //The history is full; drop oldest value and cap num_history_vals.
-      for (c = 0; c < 3; c++)
-      {
-        inst->min[c].history_sum -= inst->min[c].history[history_idx];
-        inst->max[c].history_sum -= inst->max[c].history[history_idx];
-      }
-      num_history_vals = inst->history_len;
+      num_history_vals = 1;
+      start_slot = -1;      // Flag: use the current frame's extrema directly.
     }
-    // For each extremum, update history_sum and calculate smoothed value as
-    // the rolling average of the history entries.
+    else
+    {
+      num_history_vals = MIN(inst->history_len, inst->history_count);
+      start_slot = (inst->history_head - num_history_vals + MAX_HISTORY_LEN)
+                   % MAX_HISTORY_LEN;
+    }
+
     for (c = 0; c < 3; c++)
     {
-      inst->min[c].history_sum += (inst->min[c].history[history_idx] = min[c].in);
-      min[c].smoothed = (float)inst->min[c].history_sum / (float)num_history_vals;
-      inst->max[c].history_sum += (inst->max[c].history[history_idx] = max[c].in);
-      max[c].smoothed = (float)inst->max[c].history_sum / (float)num_history_vals;
+      uint32_t min_sum = 0;
+      uint32_t max_sum = 0;
+      int j;
+      if (standalone)
+      {
+        min[c].smoothed = (float)min[c].in;
+        max[c].smoothed = (float)max[c].in;
+        continue;
+      }
+      for (j = 0; j < num_history_vals; j++)
+      {
+        const history_entry_t* entry =
+            &inst->history[(start_slot + j) % MAX_HISTORY_LEN];
+        min_sum += entry->min[c];
+        max_sum += entry->max[c];
+      }
+      min[c].smoothed = (float)min_sum / (float)num_history_vals;
+      max[c].smoothed = (float)max_sum / (float)num_history_vals;
     }
   }
 
@@ -362,7 +484,8 @@ f0r_update (f0r_instance_t instance, double time, const uint32_t* inframe,
   }
 
   // Finally, process the pixels of the input frame using the lookup tables.
-  // Copy alpha as-is.
+  // Copy alpha as-is.  The LUTs are fully built before any output is written,
+  // so inframe and outframe may point at the same buffer.
   {
     const uint8_t *in = (const uint8_t*)inframe;
     uint8_t *out = (uint8_t*)outframe;
@@ -380,6 +503,4 @@ f0r_update (f0r_instance_t instance, double time, const uint32_t* inframe,
       out += 4;
     }
   }
-
-  inst->frame_num++;
 }
