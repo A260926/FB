@@ -57,6 +57,15 @@ public:
 	bool Match(const std::vector<uint32_t> &fp1, const std::vector<uint32_t> &fp2);
 	bool Match(const uint32_t fp1_data[], size_t fp1_size, const uint32_t fp2_data[], size_t fp2_size);
 
+	// Ordered edit matching. Finds maximal, non-extendable runs along a single
+	// offset where every pairwise Hamming distance is at most max_bit_error,
+	// keeps runs of at least min_duration items, and selects a chain of such
+	// segments that is strictly increasing and non-overlapping on both time
+	// axes. Results are read from segments(). Any previous results are cleared,
+	// including when no candidate is found or the parameters are invalid.
+	bool MatchOrdered(const std::vector<uint32_t> &fp1, const std::vector<uint32_t> &fp2,
+	                  int max_bit_error, size_t min_duration);
+
 	double GetHashTime(size_t i) const;
 	double GetHashDuration(size_t i) const;
 

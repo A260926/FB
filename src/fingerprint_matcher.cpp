@@ -13,6 +13,69 @@
 
 namespace chromaprint {
 
+namespace {
+
+// A maximal run along a single offset: every pairwise Hamming distance in the
+// run is at most the threshold, neither end can be extended, and the run is at
+// least as long as the requested minimum duration.
+struct OrderedCandidate
+{
+	size_t pos1;
+	size_t pos2;
+	size_t duration;
+	size_t bit_errors;
+};
+
+// Comparison of the chain selection metrics that do not depend on the segment
+// tuple sequence. Returns true if the first chain is strictly better.
+bool ChainMetricsBetter(size_t duration1, size_t errors1, size_t count1,
+                        size_t duration2, size_t errors2, size_t count2)
+{
+	if (duration1 != duration2) {
+		return duration1 > duration2; // most matched items first
+	}
+	if (errors1 != errors2) {
+		return errors1 < errors2; // then fewest total bit errors
+	}
+	return count1 < count2; // then fewest segments
+}
+
+// Reconstruct the candidate indices of a chain, ending at last_index and
+// following predecessor links, in chain order.
+std::vector<size_t> ReconstructChain(int last_index, const std::vector<int> &previous)
+{
+	std::vector<size_t> chain;
+	for (int index = last_index; index >= 0; index = previous[static_cast<size_t>(index)]) {
+		chain.push_back(static_cast<size_t>(index));
+	}
+	std::reverse(chain.begin(), chain.end());
+	return chain;
+}
+
+// Lexicographic comparison of the (pos1, pos2, duration) tuple sequences.
+bool ChainTupleLexicographicallyLess(const std::vector<size_t> &chain1,
+                                     const std::vector<size_t> &chain2,
+                                     const std::vector<OrderedCandidate> &candidates)
+{
+	const size_t count = std::min(chain1.size(), chain2.size());
+	for (size_t i = 0; i < count; i++) {
+		const OrderedCandidate &a = candidates[chain1[i]];
+		const OrderedCandidate &b = candidates[chain2[i]];
+		if (a.pos1 != b.pos1) {
+			return a.pos1 < b.pos1;
+		}
+		if (a.pos2 != b.pos2) {
+			return a.pos2 < b.pos2;
+		}
+		if (a.duration != b.duration) {
+			return a.duration < b.duration;
+		}
+	}
+	return chain1.size() < chain2.size();
+}
+
+}; // namespace
+
 /* fingerprint matcher settings */
 #define ACOUSTID_MAX_BIT_ERROR 2
 #define ACOUSTID_MAX_ALIGN_OFFSET 120
@@ -176,7 +239,152 @@ bool FingerprintMatcher::Match(const uint32_t fp1_data[], size_t fp1_size, const
 
 		break;
 	}
-	
+
+	return true;
+}
+
+bool FingerprintMatcher::MatchOrdered(const std::vector<uint32_t> &fp1, const std::vector<uint32_t> &fp2,
+                                      int max_bit_error, size_t min_duration)
+{
+	// Always start from an empty result so that stale segments can never leak
+	// into a later call, including failure and no-match cases.
+	m_segments.clear();
+
+	if (max_bit_error < 0 || max_bit_error > 32 || min_duration == 0) {
+		return false;
+	}
+
+	const size_t n1 = fp1.size();
+	const size_t n2 = fp2.size();
+	if (n1 == 0 || n2 == 0) {
+		return true;
+	}
+
+	// Enumerate every offset d = pos1 - pos2. Each diagonal is split into
+	// maximal runs where every pairwise Hamming distance is within the
+	// threshold. A run is a candidate only if it cannot be extended at either
+	// end and it is at least min_duration items long.
+	std::vector<OrderedCandidate> candidates;
+	for (ptrdiff_t d = -ptrdiff_t(n2) + 1; d <= ptrdiff_t(n1) - 1; d++) {
+		const size_t start1 = d >= 0 ? size_t(d) : 0;
+		const size_t start2 = d >= 0 ? 0 : size_t(-d);
+		const size_t len = std::min(n1 - start1, n2 - start2);
+
+		size_t run_duration = 0;
+		size_t run_errors = 0;
+		for (size_t k = 0; k <= len; k++) {
+			unsigned int dist = 0;
+			const bool within =
+				k < len && (dist = HammingDistance(fp1[start1 + k], fp2[start2 + k])) <= unsigned(max_bit_error);
+			if (within) {
+				run_duration++;
+				run_errors += dist;
+			}
+			else {
+				if (run_duration >= min_duration) {
+					candidates.push_back(OrderedCandidate{
+						start1 + k - run_duration, start2 + k - run_duration, run_duration, run_errors});
+				}
+				run_duration = 0;
+				run_errors = 0;
+			}
+		}
+	}
+
+	if (candidates.empty()) {
+		return true;
+	}
+
+	// Canonical enumeration order so equivalent inputs give identical results.
+	std::sort(candidates.begin(), candidates.end(),
+	          [](const OrderedCandidate &a, const OrderedCandidate &b) {
+		if (a.pos1 != b.pos1) return a.pos1 < b.pos1;
+		if (a.pos2 != b.pos2) return a.pos2 < b.pos2;
+		if (a.duration != b.duration) return a.duration < b.duration;
+		return a.bit_errors < b.bit_errors;
+	});
+
+	// Dynamic programming over candidates. A chain ending at candidate i may
+	// append candidate j only when j starts at or after i ends on both axes,
+	// so segments stay ordered and never overlap on either time line.
+	struct ChainState {
+		size_t total_duration = 0;
+		size_t total_errors = 0;
+		size_t segment_count = 0;
+	};
+
+	const size_t num_candidates = candidates.size();
+	std::vector<ChainState> best(num_candidates);
+	std::vector<int> previous(num_candidates, -1);
+
+	auto metrics_equal = [](const ChainState &a, const ChainState &b) {
+		return a.total_duration == b.total_duration &&
+		       a.total_errors == b.total_errors &&
+		       a.segment_count == b.segment_count;
+	};
+
+	for (size_t i = 0; i < num_candidates; i++) {
+		const OrderedCandidate &current = candidates[i];
+		best[i] = ChainState{current.duration, current.bit_errors, 1};
+		previous[i] = -1;
+
+		for (size_t j = 0; j < i; j++) {
+			const OrderedCandidate &earlier = candidates[j];
+			if (earlier.pos1 + earlier.duration > current.pos1 ||
+			    earlier.pos2 + earlier.duration > current.pos2) {
+				continue;
+			}
+
+			ChainState candidate_state{
+				best[j].total_duration + current.duration,
+				best[j].total_errors + current.bit_errors,
+				best[j].segment_count + 1
+			};
+
+			bool take = false;
+			if (ChainMetricsBetter(candidate_state.total_duration, candidate_state.total_errors,
+			                       candidate_state.segment_count,
+			                       best[i].total_duration, best[i].total_errors,
+			                       best[i].segment_count)) {
+				take = true;
+			}
+			else if (metrics_equal(candidate_state, best[i])) {
+				// Final tie-break: lexicographically smallest tuple sequence.
+				const auto candidate_chain = ReconstructChain(int(j), previous);
+				const auto current_chain = ReconstructChain(previous[i], previous);
+				take = ChainTupleLexicographicallyLess(candidate_chain, current_chain, candidates);
+			}
+
+			if (take) {
+				best[i] = candidate_state;
+				previous[i] = int(j);
+			}
+		}
+	}
+
+	// Select the best chain among all possible end points.
+	size_t best_index = 0;
+	for (size_t i = 1; i < num_candidates; i++) {
+		if (ChainMetricsBetter(best[i].total_duration, best[i].total_errors, best[i].segment_count,
+		                       best[best_index].total_duration, best[best_index].total_errors,
+		                       best[best_index].segment_count)) {
+			best_index = i;
+		}
+		else if (metrics_equal(best[i], best[best_index])) {
+			const auto chain_i = ReconstructChain(int(i), previous);
+			const auto chain_best = ReconstructChain(int(best_index), previous);
+			if (ChainTupleLexicographicallyLess(chain_i, chain_best, candidates)) {
+				best_index = i;
+			}
+		}
+	}
+
+	for (size_t index : ReconstructChain(int(best_index), previous)) {
+		const OrderedCandidate &candidate = candidates[index];
+		const double score = double(candidate.bit_errors) / double(candidate.duration);
+		m_segments.emplace_back(candidate.pos1, candidate.pos2, candidate.duration, score);
+	}
+
 	return true;
 }
 

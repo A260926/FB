@@ -64,3 +64,31 @@ gtest_discover_tests(all_tests
 )
 
 set_target_properties(all_tests PROPERTIES FOLDER tests)
+
+# Ordered edit matching tests, including the chromaprint_match_ordered()
+# C entry point. Both binaries are written to the tests subdirectory of the
+# build directory.
+add_executable(ordered_tests
+  $<TARGET_OBJECTS:chromaprint_objs>
+  ordered/ordered_match_test.cpp
+)
+
+target_include_directories(ordered_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ordered_tests PRIVATE chromaprint gtest gtest_main)
+set_target_properties(ordered_tests PROPERTIES
+  FOLDER tests
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+)
+
+add_executable(ordered_c_smoke
+  $<TARGET_OBJECTS:chromaprint_objs>
+  ordered/ordered_c_smoke.c
+)
+
+target_link_libraries(ordered_c_smoke PRIVATE chromaprint)
+set_target_properties(ordered_c_smoke PROPERTIES
+  FOLDER tests
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+)

@@ -258,6 +258,82 @@ int chromaprint_hash_fingerprint(const uint32_t *fp, int size, uint32_t *hash)
 	return 1;
 }
 
+int chromaprint_match_ordered(const char *fp1, int size1,
+                              const char *fp2, int size2,
+                              int base64,
+                              int max_bit_error, int min_duration,
+                              ChromaprintSegment **segments,
+                              int *num_segments)
+{
+	if (segments == NULL || num_segments == NULL) {
+		return 0;
+	}
+	// Every exit path leaves valid output parameters in a cleared state.
+	*segments = NULL;
+	*num_segments = 0;
+
+	if (size1 < 0 || size2 < 0 ||
+	    (fp1 == NULL && size1 != 0) || (fp2 == NULL && size2 != 0)) {
+		return 0;
+	}
+
+	std::vector<uint32_t> raw1;
+	std::vector<uint32_t> raw2;
+	int algorithm1 = -1;
+	int algorithm2 = -1;
+
+	// The buffers are read by their explicit lengths, binary data included,
+	// so no NUL terminator is required.
+	std::string encoded1(size1 != 0 ? fp1 : "", size1);
+	if (base64) {
+		encoded1 = Base64Decode(encoded1);
+	}
+	// A header shorter than four bytes or a declared item count that the
+	// remaining data cannot satisfy makes DecompressFingerprint fail.
+	if (!DecompressFingerprint(encoded1, raw1, algorithm1)) {
+		return 0;
+	}
+
+	std::string encoded2(size2 != 0 ? fp2 : "", size2);
+	if (base64) {
+		encoded2 = Base64Decode(encoded2);
+	}
+	if (!DecompressFingerprint(encoded2, raw2, algorithm2)) {
+		return 0;
+	}
+
+	if (algorithm1 < CHROMAPRINT_ALGORITHM_TEST1 ||
+	    algorithm1 > CHROMAPRINT_ALGORITHM_TEST5 ||
+	    algorithm1 != algorithm2) {
+		return 0;
+	}
+
+	if (max_bit_error < 0 || max_bit_error > 32 || min_duration <= 0) {
+		return 0;
+	}
+
+	FingerprintMatcher matcher(CreateFingerprinterConfiguration(algorithm1));
+	matcher.MatchOrdered(raw1, raw2, max_bit_error, static_cast<size_t>(min_duration));
+
+	const std::vector<Segment> &result = matcher.segments();
+	if (!result.empty()) {
+		ChromaprintSegment *output = static_cast<ChromaprintSegment *>(
+			malloc(sizeof(ChromaprintSegment) * result.size()));
+		if (output == NULL) {
+			return 0;
+		}
+		for (size_t i = 0; i < result.size(); i++) {
+			output[i].pos1 = static_cast<int>(result[i].pos1);
+			output[i].pos2 = static_cast<int>(result[i].pos2);
+			output[i].duration = static_cast<int>(result[i].duration);
+			output[i].score = result[i].score;
+		}
+		*segments = output;
+		*num_segments = static_cast<int>(result.size());
+	}
+	return 1;
+}
+
 void chromaprint_dealloc(void *ptr)
 {
 	free(ptr);

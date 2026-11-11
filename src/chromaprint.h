@@ -82,6 +82,21 @@ typedef struct ChromaprintContextPrivate ChromaprintContext;
 struct ChromaprintMatcherContextPrivate;
 typedef struct ChromaprintMatcherContextPrivate ChromaprintMatcherContext;
 
+/**
+ * One matched segment returned by chromaprint_match_ordered().
+ *
+ * pos1 and pos2 are zero-based item positions in the first and the second
+ * fingerprint, duration is the number of consecutive fingerprint items covered
+ * by the segment and score is the mean per-item Hamming distance inside the
+ * segment. All positions and durations are in fingerprint items, not seconds.
+ */
+typedef struct ChromaprintSegment {
+	int pos1;
+	int pos2;
+	int duration;
+	double score;
+} ChromaprintSegment;
+
 #define CHROMAPRINT_VERSION_MAJOR 1
 #define CHROMAPRINT_VERSION_MINOR 6
 #define CHROMAPRINT_VERSION_PATCH 2
@@ -391,6 +406,51 @@ CHROMAPRINT_API int chromaprint_decode_fingerprint_header(const char *encoded_fp
  * @return 0 on error, 1 on success
  */
 CHROMAPRINT_API int chromaprint_hash_fingerprint(const uint32_t *fp, int size, uint32_t *hash);
+
+/**
+ * Match two compressed fingerprints in ordered edit mode.
+ *
+ * The inputs are fingerprints produced by chromaprint_encode_fingerprint(),
+ * passed together with their explicit byte lengths. The data is read using the
+ * given lengths, so embedded NUL bytes in binary fingerprints are handled.
+ * Both fingerprints must have been generated with the same, supported
+ * algorithm version.
+ *
+ * For every offset, maximal consecutive ranges whose per-item Hamming
+ * distance is at most max_bit_error (0-32) and whose length is at least
+ * min_duration (positive, in fingerprint items) are collected as candidates.
+ * A chain of candidates that is strictly increasing and non-overlapping on
+ * both time lines is then selected, preferring the most matched items, then
+ * the lowest total bit error, then the fewest segments, then the
+ * lexicographically smallest sequence of (pos1, pos2, duration) tuples.
+ *
+ * The returned array is allocated by the library and must be freed with
+ * chromaprint_dealloc(). It is independent of the input buffers: freeing or
+ * reusing the inputs does not invalidate the result, and arrays from separate
+ * calls can be freed independently.
+ *
+ * @param[in] fp1 first compressed fingerprint
+ * @param[in] size1 byte length of the first compressed fingerprint
+ * @param[in] fp2 second compressed fingerprint
+ * @param[in] size2 byte length of the second compressed fingerprint
+ * @param[in] base64 1 if the fingerprints are base64-encoded, 0 for binary
+ * @param[in] max_bit_error maximum accepted per-item Hamming distance, 0-32
+ * @param[in] min_duration minimum segment length in fingerprint items, > 0
+ * @param[out] segments receives the allocated segment array, set to NULL on
+ *                 empty results or failures when the pointer is valid
+ * @param[out] num_segments receives the number of returned segments, set to 0
+ *                 on empty results or failures when the pointer is valid
+ *
+ * @return 1 on success, including valid empty fingerprints and inputs with no
+ *         matching segment; 0 on truncated or undecodable input, unknown or
+ *         mismatched algorithm versions, or invalid parameters
+ */
+CHROMAPRINT_API int chromaprint_match_ordered(const char *fp1, int size1,
+                                              const char *fp2, int size2,
+                                              int base64,
+                                              int max_bit_error, int min_duration,
+                                              ChromaprintSegment **segments,
+                                              int *num_segments);
 
 /**
  * Free memory allocated by any function from the Chromaprint API.

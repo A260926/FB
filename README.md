@@ -75,6 +75,89 @@ In order to build the test suite, you will need the sources of the [Google Test]
 
 [gtest]: https://github.com/google/googletest
 
+## Ordered Edit Matching
+
+Besides the regular `Match()` method, which follows a single time offset, the
+library provides an "ordered" matching mode for comparing a long recording
+with an edited version of it (for example a long take and a cut with sections
+removed). It reports every common section that survives the edit, in order,
+instead of only the longest single-offset stretch.
+
+### C++ interface
+
+`FingerprintMatcher::MatchOrdered()` takes two raw 32-bit fingerprints, a
+`max_bit_error` value between 0 and 32 and a positive `min_duration`. Both
+thresholds are counted in fingerprint items. Results are read from the usual
+`segments()` accessor; calling the method always clears any previous result,
+including after invalid parameters or when nothing matches.
+
+```cpp
+chromaprint::FingerprintMatcher matcher(
+    chromaprint::CreateFingerprinterConfiguration(CHROMAPRINT_ALGORITHM_DEFAULT));
+matcher.MatchOrdered(long_fingerprint, edited_fingerprint, /*max_bit_error=*/0,
+                     /*min_duration=*/16);
+for (const auto &segment : matcher.segments()) {
+    // segment.pos1, segment.pos2: zero-based item positions
+    // segment.duration: number of consecutive matched items
+    // segment.score: mean per-item Hamming distance inside the segment
+}
+```
+
+For every offset, a candidate is a maximal consecutive range where each
+pairwise Hamming distance is at most `max_bit_error`; the range cannot be
+extended at either end and must be at least `min_duration` items long. A
+candidate is always selected as a whole, never shortened. The returned chain
+of candidates is strictly increasing and non-overlapping on both time lines,
+so a repeated section cannot claim the same audio twice and a failed item can
+never bridge a cut.
+
+The best chain is selected by, in order:
+
+1. the largest total number of matched items;
+2. the smallest total number of bit errors;
+3. the smallest number of segments;
+4. the lexicographically smallest sequence of `(pos1, pos2, duration)` tuples.
+
+### C interface
+
+`chromaprint_match_ordered()` accepts two compressed fingerprints produced by
+`chromaprint_encode_fingerprint()`, their explicit byte lengths (binary data
+is never assumed to be NUL-terminated), a shared base64 flag and the same two
+parameters. It returns an array of `ChromaprintSegment` values with the
+`pos1`, `pos2`, `duration` and `score` fields; the array is allocated by the
+library and freed with `chromaprint_dealloc()`, and arrays from separate
+calls are independent.
+
+```c
+ChromaprintSegment *segments = NULL;
+int num_segments = 0;
+int ok = chromaprint_match_ordered(fp1, size1, fp2, size2, /*base64=*/1,
+                                   0, 16, &segments, &num_segments);
+if (ok) {
+    for (int i = 0; i < num_segments; i++) {
+        /* segments[i].pos1, .pos2, .duration, .score */
+    }
+    chromaprint_dealloc(segments);
+}
+```
+
+It returns `1` on success, including legal empty fingerprints and inputs with
+no matching segment (the array is then `NULL` and the count is zero). It
+returns `0` on truncated data whose header or declared item count cannot be
+decoded, on an unknown algorithm or mismatched algorithms between the two
+inputs, or on invalid parameters; valid output pointers are cleared in every
+failure case.
+
+### Time units
+
+All positions and durations of both interfaces are expressed in fingerprint
+items, not in seconds. Convert an item position to time with the
+configuration's item duration (`FingerprintMatcher::GetHashTime()` in C++, or
+`chromaprint_get_item_duration_ms()` through a context in C). The analysis
+delay (`GetHashDuration()`, `chromaprint_get_delay_ms()`) is a constant offset
+of the whole time line and is added once per position; it is never part of a
+segment's duration, so it must not be counted once per segment.
+
 ## Related Projects
 
 Bindings, wrappers and reimplementations in other languages:
