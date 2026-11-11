@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { GraphNode } from '../src/scene/graph-node.js';
+import { Vec3 } from '../src/core/math/vec3.js';
+const a = new GraphNode('a'), b = new GraphNode('b');
+const child = new GraphNode('part'), tip = new GraphNode('tip');
+a.setLocalPosition(10, 0, 0); a.setLocalScale(2, 2, 2);
+b.setLocalPosition(-4, 0, 0); b.setLocalScale(3, 3, 3);
+child.setLocalPosition(1, 0, 0); tip.setLocalPosition(0, 1, 0);
+a.addChild(child); child.addChild(tip);
+assert.deepEqual(child.getPosition().toArray(), [12,0,0]);
+assert.deepEqual(tip.getPosition().toArray(), [12,2,0]);
+child.reparent(b);
+assert.deepEqual(child.getPosition().toArray(), [-1,0,0]);
+assert.deepEqual(tip.getPosition().toArray(), [-1,3,0]);
+assert.equal(child.graphDepth, 1); assert.equal(tip.graphDepth, 2);
+assert.equal(child.getWorldTransform().transformPoint(new Vec3()).x, -1);
+console.log('BASELINE_GRAPH_REPARENT local-preserved child=-1 tip=-1,3,0');

@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Build PlayCanvas
+        run: npm run build
+
+      - name: Run Publint
+        run: npm run publint
+
+      - name: Run Post-build tests
+        run: npm run test:build
+
+      - name: Compile TypeScript declarations
+        run: npm run test:types
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Build API reference manual
+        run: npm run docs
+
+      - name: Build Scripts API reference manual
+        run: npm run docs:scripts
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Run ESLint
+        run: npm run lint
+
+  unit-test:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Run unit tests
+        run: npm test
+
+  unit-test-webgpu:
+    name: Unit Test (WebGPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Run unit tests on WebGPU (Dawn)
+        run: npm run test:webgpu
+
+  build-examples:
+    name: Build Examples Browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 26.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Install examples dependencies
+        working-directory: ./examples
+        run: npm clean-install --progress=false --no-fund
+
+      - name: Run Prettier on examples
+        working-directory: ./examples
+        run: npm run fmt
+
+      - name: Run ESLint on examples
+        working-directory: ./examples
+        run: npm run lint
+
+      - name: Check example thumbnails
+        working-directory: ./examples
+        run: npm run check:thumbnails
+
+      - name: Build TypeScript declarations
+        run: npm run build:types
+
+      - name: Type check examples
+        working-directory: ./examples
+        run: npm run typecheck
+
+      - name: Build Examples Browser
+        working-directory: ./examples
+        run: npm run build
