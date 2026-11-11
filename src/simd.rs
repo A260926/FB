@@ -93,6 +93,7 @@ fn fearless_native_bits<S: fearless_simd::Simd>(_: S) -> usize {
 
 macro_rules! _ps_const_ty {
     ($name:ident, $field:ident, $x:expr) => {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         const $name: UnionCast = UnionCast {
             $field: [$x, $x, $x, $x],
         };
@@ -263,6 +264,7 @@ pub unsafe fn sinf_cosf_sse2(x: __m128) -> (__m128, __m128) {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "sse2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn blend_i32_sse2(lhs: __m128i, rhs: __m128i, cond: __m128) -> __m128i {
     let d = _mm_srai_epi32(_mm_castps_si128(cond), 31);
     _mm_or_si128(_mm_and_si128(d, rhs), _mm_andnot_si128(d, lhs))
@@ -272,6 +274,7 @@ pub unsafe fn blend_i32_sse2(lhs: __m128i, rhs: __m128i, cond: __m128) -> __m128
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "sse2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn hmin_sse2(v: __m128) -> f32 {
     let v = _mm_min_ps(v, _mm_shuffle_ps(v, v, 0b00_00_11_10));
     let v = _mm_min_ps(v, _mm_shuffle_ps(v, v, 0b00_00_00_01));
@@ -282,6 +285,7 @@ pub unsafe fn hmin_sse2(v: __m128) -> f32 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "avx2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn hmin_avx2(v: __m256) -> f32 {
     let v = _mm256_min_ps(v, _mm256_permute_ps(v, 0b00_00_11_10));
     let v = _mm256_min_ps(v, _mm256_permute_ps(v, 0b00_00_00_01));
@@ -293,6 +297,7 @@ pub unsafe fn hmin_avx2(v: __m256) -> f32 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "sse2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn blend_f32_sse2(lhs: __m128, rhs: __m128, cond: __m128) -> __m128 {
     let d = _mm_castsi128_ps(_mm_srai_epi32(_mm_castps_si128(cond), 31));
     _mm_or_ps(_mm_and_ps(d, rhs), _mm_andnot_ps(d, lhs))
@@ -302,6 +307,7 @@ pub unsafe fn blend_f32_sse2(lhs: __m128, rhs: __m128, cond: __m128) -> __m128 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "sse2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn dot3_sse2(
     x0: __m128,
     x1: __m128,
@@ -320,6 +326,7 @@ pub unsafe fn dot3_sse2(
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature(enable = "avx2")
 )]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe fn dot3_avx2(
     x0: __m256,
     x1: __m256,

@@ -107,13 +107,17 @@ impl<'a> SpheresSoA<'a> {
 
     pub fn ray_hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<(RayHit, &Material<'_>)> {
         match self.feature {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             TargetFeature::AVX2 => unsafe { self.hit_avx2(ray, t_min, t_max) },
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             TargetFeature::SSE4_1 => unsafe { self.hit_sse4_1(ray, t_min, t_max) },
             #[cfg(feature = "fearless_simd")]
             TargetFeature::PortableSimd => self.hit_portable_simd(ray, t_min, t_max),
             #[cfg(feature = "fearless_simd")]
             TargetFeature::AutoVectorize => self.hit_auto_vectorize(ray, t_min, t_max),
             TargetFeature::FallBack => self.hit_scalar(ray, t_min, t_max),
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            TargetFeature::AVX2 | TargetFeature::SSE4_1 => self.hit_scalar(ray, t_min, t_max),
         }
     }
 
@@ -316,6 +320,7 @@ impl<'a> SpheresSoA<'a> {
         any(target_arch = "x86", target_arch = "x86_64"),
         target_feature(enable = "sse4.1")
     )]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     pub unsafe fn hit_sse4_1(
         &self,
         ray: &Ray,
@@ -436,6 +441,7 @@ impl<'a> SpheresSoA<'a> {
         any(target_arch = "x86", target_arch = "x86_64"),
         target_feature(enable = "avx2")
     )]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     pub unsafe fn hit_avx2(
         &self,
         ray: &Ray,
