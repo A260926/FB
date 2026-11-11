@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Extrude with Hole</title>
+</head>
+<body>
+    <style>
+        html, body, #main {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+    <canvas id="main"></canvas>
+    <script src="../dist/geometry-extrude.js"></script>
+    <script src="./lib/claygl.js"></script>
+    <script>
+        const polygons = [
+            [
+                [
+                    [0, 0], [10, 0], [10, 10], [0, 10]
+                ].reverse(),
+                // Hole
+                // [
+                //     [2, 2], [8, 2], [8, 8], [2, 8]
+                // ]
+            ],
+
+            [[
+                [15, 0], [20, 0], [20, 10], [15, 10]
+            ].reverse()]
+        ];
+
+        clay.application.create('#main', {
+
+            autoRender: false,
+
+            init(app) {
+                this._camera = app.createCamera([5, 5, 20], [5, 5, 0]);
+                const result = geometryExtrude.extrudePolygon(polygons, {
+                    depth: 2
+                });
+
+                app.createDirectionalLight([-1, -2, -1], '#aaa');
+                app.createAmbientLight('#333');
+
+                console.log(result.indices, result.position);
+
+                const geometry = new clay.Geometry();
+                geometry.attributes.position.value = result.position;
+                geometry.indices = result.indices;
+                geometry.generateVertexNormals();
+                geometry.generateBarycentric();
+
+                const mesh = app.createMesh(geometry, {});
+                mesh.material.set('lineWidth', 1);
+
+                this._control = new clay.plugin.OrbitControl({
+                    target: this._camera,
+                    domElement: app.container,
+                    timeline: app.timeline,
+                    rotateSensitivity: 2
+                });
+
+                this._control.on('update', function () {
+                    app.render();
+                });
+            },
+
+            loop() {}
+        });
+    </script>
+</body>
+</html>

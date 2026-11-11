@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>GeoJSON Buildings Example</title>
+</head>
+<body>
+    <style>
+        html, body, #main {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+        body {
+            background: #a49e9b;
+        }
+        #thumb {
+            position: absolute;
+            z-index: 1;
+            left: 0;
+            bottom: 0;
+        }
+    </style>
+    <canvas id="main"></canvas>
+    <canvas id="thumb" width="400" height="400"></canvas>
+    <script src="../dist/geometry-extrude.js"></script>
+    <script src="./lib/dat.gui.js"></script>
+    <script src="./lib/claygl.js"></script>
+    <script src="./lib/claygl-advanced-renderer.js"></script>
+    <script>
+
+        const config = {
+            bevelSize: 0,
+            bevelSegments: 2,
+        };
+
+        function init(buildingsGeojson) {
+            clay.application.create('#main', {
+
+                autoRender: false,
+
+                init(app) {
+
+                    const advRenderer = this._advancedRenderer = new ClayAdvancedRenderer(app.renderer, app.scene, app.timeline, {
+                        shadow: true,
+                        temporalSuperSampling: {
+                            enable: true,
+                            dynamic: false
+                        },
+                        postEffect: {
+                            enable: true,
+                            bloom: {
+                                enable: false
+                            },
+                            screenSpaceAmbientOcclusion: {
+                                enable: true,
+                                intensity: 1.2,
+                                radius: 5
+                            },
+                            FXAA: {
+                                enable: true
+                            }
+                        }
+                    });
+
+                    const light = app.createDirectionalLight([-1, -2, -1], '#fff');
+                    light.shadowResolution = 2048;
+                    light.shadowBias = 0.005;
+
+                    app.createAmbientCubemapLight('./asset/pisa.hdr', 1, 0.3).then(() => {
+                        advRenderer.render();
+                    });
+
+                    const geometry = new clay.Geometry({
+                        dynamic: true
+                    });
+
+                    const outlineGeometry = new clay.Geometry({
+                        dynamic: true
+                    });
+                    const backGeometry = new clay.Geometry({
+                        dynamic: true
+                    });
+
+                    function setGeometry(geo, result) {
+                        geo.attributes.position.value = result.position;
+                        geo.attributes.texcoord0.value = result.uv;
+                        geo.indices = result.indices;
+                        geo.generateVertexNormals();
+                        geo.generateTangents();
+                        geo.updateBoundingBox();
+                        geo.dirty();
+                    }
+
+                    function updateGeometriesAll(firstTime) {
+                        const result1 = geometryExtrude.extrudeGeoJSON(buildingsGeojson, {
+                            fitRect: { x: 0, y: 0, width: 100 },
+                            depth: feature => {
+                                return feature.properties.height / 10 + 1;
+                            },
+                            bevelSize: config.bevelSize,
+                            bevelSegments: config.bevelSegments,
+                            miterLimit: 10
+                        });
+                        setGeometry(geometry, result1.polygon);
+                        const corners = [
+                            [0, 0],
+                            [result1.polygon.boundingRect.width, 0],
+                            [result1.polygon.boundingRect.width, result1.polygon.boundingRect.height],
+                            [0, result1.polygon.boundingRect.height],
+                            [0, 0]
+                        ];
+                        const boxOutline = buildOutlinePolygon(corners);
+
+                        const result2 = geometryExtrude.extrudePolyline([boxOutline], {
+                            lineWidth: 2,
+                            depth: 5,
+                            bevelSize: 0.4
+                        });
+                        setGeometry(outlineGeometry, result2);
+                        const result3 = geometryExtrude.extrudePolygon([[boxOutline]], {
+                            depth: 1,
+                            bevelSize: 0
+                        });
+                        setGeometry(backGeometry, result3);
+
+                        if (!firstTime) {
+                            advRenderer.render();
+                        }
+                    }
+
+                    const streetMesh = app.createMesh(geometry, {
+                        diffuseMap: './asset/woods.jpg',
+                        uvRepeat: [4, 4],
+                        metalness: 0,
+                        roughness: 0.2,
+                        color: '#fff'
+                    });
+                    const outlineMesh = app.createMesh(outlineGeometry, {
+                        color: '#fff',
+                        metalness: 1,
+                        roughness: 0.5
+                    });
+                    const backMesh = app.createMesh(backGeometry, {
+                        diffuseMap: './asset/paper-detail.png',
+                        uvRepeat: [3, 3],
+                        // color: '#559',
+                        roughness: 1
+                    });
+
+                    const plane = app.createPlane({
+                        diffuseMap: './asset/patchy_cement1/patchy_cement1_Base_Color.jpg',
+                        occlusionMap: './asset/patchy_cement1/patchy_cement1_Ambient_Occlusion.jpg',
+                        normalMap: './asset/patchy_cement1/patchy_cement1_Normal.jpg',
+                        roughness: 0.6,
+                        uvRepeat: [10, 10],
+                        textureLoaded: function (textureName, texture) {
+                            texture.anisotropic = 8;
+                        },
+                        texturesReady: function () {
+                            advRenderer.render();
+                        }
+                    });
+                    plane.castShadow = false;
+                    plane.scale.set(300, 300, 1);
+                    plane.position.set(150, 150, 0);
+
+                    const gui = new dat.GUI();
+                    gui.add(config, 'bevelSize', 0, 2).onChange(updateGeometriesAll);
+                    gui.add(config, 'bevelSegments', 0, 10).step(1).onChange(updateGeometriesAll);
+
+                    updateGeometriesAll(true);
+                    const center = geometry.boundingBox.min.clone();
+                    center.add(geometry.boundingBox.max).scale(0.5);
+
+                    this._camera = app.createCamera([center.x, center.y, 150], [center.x, center.y, 0]);
+
+                    this._control = new clay.plugin.OrbitControl({
+                        target: this._camera,
+                        domElement: app.container,
+                        timeline: app.timeline,
+                        rotateSensitivity: 2
+                    });
+
+                    this._control.on('update', function () {
+                        advRenderer.render();
+                    });
+
+                },
+
+                loop() {}
+            });
+        }
+
+        function buildOutlinePolygon(corners) {
+            return corners;
+        }
+
+        fetch('./asset/buildings-ny.geojson')
+            .then(result => result.json())
+            .then(geojson => {
+                // geojson.features = geojson.features.slice(0, 10);
+                init(geojson);
+            });
+    </script>
+</body>
+</html>
