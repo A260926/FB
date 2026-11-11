@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"time"
 
@@ -52,6 +53,16 @@ type Decoder struct {
 	err             error
 	pcmDataAccessed bool
 
+	// ssndTrailing is the number of bytes remaining in the SSND chunk after
+	// the end of the sound data (block alignment slack). Those bytes are
+	// part of the chunk but not of the audio and are skipped once the
+	// decoder moves on to the next chunk.
+	ssndTrailing int64
+	// pendingPad indicates that a pad byte follows the previously returned
+	// chunk (chunk data is aligned on even byte boundaries but the
+	// declared chunk size doesn't account for it).
+	pendingPad bool
+
 	byteOrder binary.ByteOrder
 
 	// read the file information to setup the audio clip
@@ -73,7 +84,13 @@ func (d *Decoder) SampleBitDepth() int32 {
 	return int32(d.BitDepth)
 }
 
-// PCMLen returns the total number of bytes in the PCM data chunk
+// PCMLen returns the total number of bytes of sound data located in the
+// SSND chunk. The sound data starts right after the SSND offset and its
+// length is derived from the COMM chunk (NumSampleFrames * NumChans *
+// bytes per sample); the SSND offset, block alignment slack and chunk
+// pad bytes are not included. The value is only meaningful once the
+// audio has been located (e.g. through PCMBuffer, FullPCMBuffer or
+// FwdToPCM).
 func (d *Decoder) PCMLen() int64 {
 	if d == nil {
 		return 0
@@ -116,12 +133,40 @@ func (d *Decoder) Format() *audio.Format {
 	}
 }
 
-// NextChunk returns the next available chunk
+// NextChunk returns the next available chunk. If the sound data was
+// previously located, any unread audio bytes and the SSND padding
+// (alignment slack and pad byte) are skipped first so the following
+// chunk header is read at the right position. The returned chunk size
+// is the declared size; the pad byte of an odd sized chunk is not part
+// of the chunk data and is consumed before the next call.
 func (d *Decoder) NextChunk() (*Chunk, error) {
 	// we need to read the info so we have access to the encoding.
 	if d.ReadInfo(); d.err != nil {
 		d.err = fmt.Errorf("failed to read info - %v", d.err)
 		return nil, d.err
+	}
+
+	// if the PCM data was located, skip whatever is left of the SSND
+	// chunk (unread audio and alignment slack) before moving on.
+	if d.PCMChunk != nil {
+		d.PCMChunk.Done()
+		d.PCMChunk = nil
+		if d.ssndTrailing > 0 {
+			if _, err := io.CopyN(ioutil.Discard, d.r, d.ssndTrailing); err != nil {
+				d.err = fmt.Errorf("failed to skip the SSND padding - %v", err)
+				return nil, d.err
+			}
+			d.ssndTrailing = 0
+		}
+	}
+	// chunks are aligned on even byte boundaries, skip the pad byte of
+	// an odd sized chunk.
+	if d.pendingPad {
+		if _, err := io.CopyN(ioutil.Discard, d.r, 1); err != nil {
+			d.err = fmt.Errorf("failed to skip the chunk pad byte - %v", err)
+			return nil, d.err
+		}
+		d.pendingPad = false
 	}
 
 	var (
@@ -130,10 +175,6 @@ func (d *Decoder) NextChunk() (*Chunk, error) {
 	)
 
 	id, size, d.err = d.iDnSize()
-	if size%2 != 0 {
-		// realign, the encoder lied about the size of the chunk header :(
-		size++
-	}
 	if d.err != nil {
 		if d.err == io.EOF || d.err == io.ErrUnexpectedEOF {
 			return nil, io.EOF
@@ -145,6 +186,9 @@ func (d *Decoder) NextChunk() (*Chunk, error) {
 		ID:   id,
 		Size: int(size),
 		R:    io.LimitReader(d.r, int64(size)),
+	}
+	if size%2 != 0 {
+		d.pendingPad = true
 	}
 
 	return c, d.err
@@ -199,7 +243,10 @@ func (d *Decoder) Tempo() float64 {
 	return round(float64(d.AppleInfo.Beats)/(duration.Seconds()/60.0), 2)
 }
 
-// Drain parses the remaining chunks
+// Drain parses the remaining chunks. If the sound data was located but
+// not fully read, the unread audio bytes and the SSND padding are
+// skipped first so the parsing resumes on a chunk boundary, never in
+// the middle of the sample data.
 func (d *Decoder) Drain() error {
 	var chunk *Chunk
 	for d.err == nil {
@@ -225,7 +272,7 @@ func (d *Decoder) Drain() error {
 func (d *Decoder) FwdToPCM() error {
 	if d.err = d.readHeaders(); d.err != nil {
 		d.err = fmt.Errorf("failed to read header - %v", d.err)
-		return nil
+		return d.err
 	}
 
 	var chunk *Chunk
@@ -237,38 +284,7 @@ func (d *Decoder) FwdToPCM() error {
 		}
 
 		if chunk.ID == SSNDID {
-			//            SSND chunk: Must be defined
-			//   0      4 bytes  "SSND"
-			//   4      4 bytes  <Chunk size(x)>
-			//   8      4 bytes  <Offset(n)>
-			//  12      4 bytes  <block size>
-			//  16     (n)bytes  Comment
-			//  16+(n) (s)bytes  <Sample data>
-
-			var offset uint32
-			if d.err = chunk.ReadBE(&offset); d.err != nil {
-				d.err = fmt.Errorf("PCM offset failed to parse - %s", d.err)
-				return d.err
-			}
-
-			if d.err = chunk.ReadBE(&d.PCMSize); d.err != nil {
-				d.err = fmt.Errorf("PCMSize failed to parse - %s", d.err)
-				return d.err
-			}
-			if offset > 0 {
-				d.PCMSize -= offset
-				// skip pcm comment
-				buf := make([]byte, offset)
-				if err := chunk.ReadBE(&buf); err != nil {
-					d.err = fmt.Errorf("failed to read the offsetted buffer - %v", err)
-					return d.err
-				}
-			}
-			d.PCMChunk = chunk
-			d.pcmDataAccessed = true
-			if d.err != nil {
-				d.err = fmt.Errorf("failed to read the SSND chunk - %v", d.err)
-			}
+			d.err = d.locatePCM(chunk)
 			return d.err
 		}
 
@@ -276,6 +292,93 @@ func (d *Decoder) FwdToPCM() error {
 			return fmt.Errorf("failed to parse the chunk - %v", err)
 		}
 	}
+	return d.err
+}
+
+// locatePCM interprets the SSND chunk header and sets up the bounded
+// reader for the sound data.
+//
+// The SSND chunk data starts with two uint32 values: an offset and a
+// block size. Neither of them is the audio length. The sound data begins
+// offset bytes after those 8 bytes and its extent is derived from the
+// COMM chunk: NumSampleFrames * NumChans * bytes per sample. The
+// blockSize only indicates the alignment of the sound data (it can be
+// 0); any alignment slack after the sound data, just like the offset
+// bytes and the chunk pad byte, is not part of the PCM stream.
+func (d *Decoder) locatePCM(chunk *Chunk) error {
+	//   SSND chunk: Must be defined
+	//   0      4 bytes  "SSND"
+	//   4      4 bytes  <Chunk size(x)>
+	//   8      4 bytes  <Offset(n)>
+	//  12      4 bytes  <block size>
+	//  16     (n)bytes  offset bytes (unused)
+	//  16+(n) (s)bytes  <Sample data>
+
+	if d.NumChans == 0 {
+		// without the COMM chunk we can't know the extent of the sound data
+		d.err = fmt.Errorf("SSND chunk found before any COMM chunk")
+		return d.err
+	}
+
+	body := int64(chunk.Size) - 8
+	if body < 0 {
+		d.err = fmt.Errorf("SSND chunk too small (%d bytes) to hold its header", chunk.Size)
+		return d.err
+	}
+
+	var offset uint32
+	if d.err = chunk.ReadBE(&offset); d.err != nil {
+		d.err = fmt.Errorf("PCM offset failed to parse - %s", d.err)
+		return d.err
+	}
+	var blockSize uint32
+	if d.err = chunk.ReadBE(&blockSize); d.err != nil {
+		d.err = fmt.Errorf("SSND block size failed to parse - %s", d.err)
+		return d.err
+	}
+
+	if int64(offset) > body {
+		d.err = fmt.Errorf("SSND offset (%d) goes beyond the chunk body (%d bytes)", offset, body)
+		return d.err
+	}
+	if offset > 0 {
+		// skip the offset bytes, the sound data starts after them
+		if err := chunk.Jump(int(offset)); err != nil {
+			d.err = fmt.Errorf("failed to skip the SSND offset - %v", err)
+			return d.err
+		}
+	}
+
+	var bps int64
+	switch d.BitDepth {
+	case 8, 16, 24, 32:
+		bps = int64(d.BitDepth) / 8
+	default:
+		d.err = fmt.Errorf("unsupported bit depth: %d", d.BitDepth)
+		return d.err
+	}
+	audioBytes := uint64(d.NumSampleFrames) * uint64(d.NumChans) * uint64(bps)
+	if audioBytes > math.MaxInt32 {
+		d.err = fmt.Errorf("declared sound data size overflows: %d bytes", audioBytes)
+		return d.err
+	}
+
+	avail := body - int64(offset)
+	if int64(audioBytes) > avail {
+		d.err = fmt.Errorf("SSND chunk body too small: %d bytes of sound data declared but only %d available", audioBytes, avail)
+		return d.err
+	}
+
+	d.PCMSize = uint32(audioBytes)
+	// alignment slack after the sound data belongs to the chunk but
+	// not to the audio.
+	d.ssndTrailing = avail - int64(audioBytes)
+	d.PCMChunk = &Chunk{
+		ID:   SSNDID,
+		Size: int(audioBytes),
+		R:    io.LimitReader(d.r, int64(audioBytes)),
+	}
+	d.pcmDataAccessed = true
 	return d.err
 }
 
@@ -291,6 +394,10 @@ func (d *Decoder) Reset() {
 	d.SampleRate = 0
 	d.Encoding = [4]byte{}
 	d.EncodingName = ""
+	d.PCMSize = 0
+	d.PCMChunk = nil
+	d.ssndTrailing = 0
+	d.pendingPad = false
 	d.err = nil
 	d.pcmDataAccessed = false
 	d.r.Seek(0, 0)
@@ -323,8 +430,7 @@ func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
 		SampleRate:  int(d.SampleRate),
 	}
 
-	chunkSize := 4096
-	buf := &audio.IntBuffer{Data: make([]int, chunkSize),
+	buf := &audio.IntBuffer{Data: make([]int, 4096),
 		Format:         format,
 		SourceBitDepth: int(d.BitDepth),
 	}
@@ -333,63 +439,51 @@ func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
 		return nil, fmt.Errorf("could not get sample decode func %v", err)
 	}
 
+	bPerSample := bytesPerSample(buf.SourceBitDepth)
+	// to avoid doing too many small reads (bad performance)
+	// we are loading part of the sound data in memory and reading from there.
+	// The PCM chunk reader is bounded to the sound data extent so we can
+	// never read past it into the alignment slack or the next chunk.
+	tmpBuf := make([]byte, 2048*bPerSample)
 	sampleBuf := make([]byte, 4, 4)
-	n := 0
 	i := 0
-	chunkSize = 2048 * bytesPerSample(buf.SourceBitDepth)
-	sizeToRead := chunkSize
-	var innerErr error
-	for err == nil {
-		// to avoid doing too many small reads (bad performance)
-		// we are loading part of the chunk in memory and reading from there
-		sizeToRead = chunkSize
-		if adjust := sizeToRead % bytesPerSample(buf.SourceBitDepth); adjust != 0 {
-			fmt.Fprintf(os.Stderr, "should be 0: %d %d %d\n", adjust, sizeToRead, buf.SourceBitDepth)
-		}
-
-		if leftOverSize := d.PCMChunk.Size - d.PCMChunk.Pos; leftOverSize < chunkSize {
-			sizeToRead = leftOverSize
-		}
-		if sizeToRead < 1 {
-			break
-		}
-		optBuf := make([]byte, sizeToRead)
-		n, err = d.PCMChunk.Read(optBuf)
-		if err != nil {
-			// fmt.Println("-->", sizeToRead, err)
-			break
-		}
-		if n != sizeToRead {
-			optBuf = optBuf[:n]
-		}
-
-		bufReader := bytes.NewReader(optBuf)
-		for innerErr == nil {
-			buf.Data[i], innerErr = decodeF(bufReader, sampleBuf)
-			if innerErr != nil {
-				if innerErr == io.EOF {
-					innerErr = nil
+	for {
+		// io.ReadFull so a short read from the underlying reader isn't
+		// mistaken for the end of the sound data.
+		n, rerr := io.ReadFull(d.PCMChunk, tmpBuf)
+		if n > 0 {
+			bufReader := bytes.NewReader(tmpBuf[:n])
+			for bufReader.Len() >= bPerSample {
+				if i >= len(buf.Data) {
+					buf.Data = append(buf.Data, make([]int, 4096)...)
 				}
+				v, derr := decodeF(bufReader, sampleBuf)
+				if derr != nil {
+					return nil, derr
+				}
+				buf.Data[i] = v
+				i++
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF || rerr == io.ErrUnexpectedEOF {
 				break
 			}
-			i++
-			// grow the underlying slice if needed
-			if i >= len(buf.Data) {
-				buf.Data = append(buf.Data, make([]int, chunkSize)...)
-			}
+			return nil, rerr
 		}
+	}
+	if !d.PCMChunk.IsFullyRead() {
+		return nil, fmt.Errorf("truncated sound data: %d of %d bytes read", d.PCMChunk.Pos, d.PCMChunk.Size)
 	}
 	buf.Data = buf.Data[:i]
 
-	if err == io.EOF {
-		err = nil
-	}
-
-	return buf, err
+	return buf, nil
 }
 
 // PCMBuffer populates the passed PCM buffer and returns the number of samples
 // read and a potential error. If the reader reaches EOF, an io.EOF error will be returned.
+// Note that the buffer doesn't have to be a multiple of the frame size,
+// samples are never lost between calls.
 func (d *Decoder) PCMBuffer(buf *audio.IntBuffer) (n int, err error) {
 	if buf == nil {
 		return 0, nil
@@ -416,36 +510,38 @@ func (d *Decoder) PCMBuffer(buf *audio.IntBuffer) (n int, err error) {
 
 	bPerSample := bytesPerSample(int(d.BitDepth))
 	// populate a file buffer to avoid multiple very small reads
-	// we need to cap the buffer size to not be bigger than the pcm chunk.
+	// the PCM chunk reader is bounded to the sound data extent so we
+	// can't read past it.
 	size := len(buf.Data) * bPerSample
+	if size == 0 {
+		return 0, nil
+	}
 	tmpBuf := make([]byte, size)
-	var m int
-	m, err = d.PCMChunk.R.Read(tmpBuf)
-	if err != nil {
-		if err == io.EOF {
-			return m, nil
+	// io.ReadFull so a short read from the underlying reader isn't
+	// mistaken for the last batch of samples.
+	m, rerr := io.ReadFull(d.PCMChunk, tmpBuf)
+	if rerr != nil {
+		if rerr != io.EOF && rerr != io.ErrUnexpectedEOF {
+			return 0, rerr
 		}
-		return m, err
+		if !d.PCMChunk.IsFullyRead() {
+			// the underlying reader ran out of data before the
+			// declared sound data extent was reached.
+			return 0, fmt.Errorf("truncated sound data: %d of %d bytes read", d.PCMChunk.Pos, d.PCMChunk.Size)
+		}
 	}
 	if m == 0 {
-		return m, nil
+		return 0, io.EOF
 	}
+
 	bufR := bytes.NewReader(tmpBuf[:m])
 	sampleBuf := make([]byte, bPerSample, bPerSample)
-	var misaligned bool
-	if m%bPerSample > 0 {
-		misaligned = true
-	}
 
 	// Note that we populate the buffer even if the
 	// size of the buffer doesn't fit an even number of frames.
-	for n = 0; n < len(buf.Data); n++ {
+	for n = 0; n < len(buf.Data) && bufR.Len() >= bPerSample; n++ {
 		buf.Data[n], err = decodeF(bufR, sampleBuf)
 		if err != nil {
-			// the last sample isn't a full sample but just padding.
-			if misaligned {
-				n--
-			}
 			break
 		}
 	}
@@ -571,9 +667,18 @@ func (d *Decoder) ReadInfo() {
 			d.err = fmt.Errorf("error reading chunk header - %v", d.err)
 			break
 		}
+		// chunk data is aligned on even byte boundaries, the pad byte
+		// is not included in the declared size.
+		var pad int64
+		if size%2 != 0 {
+			pad = 1
+		}
 		switch id {
 		case COMMID:
 			d.parseCommChunk(size)
+			if d.err != nil {
+				return
+			}
 			// if we found other chunks before the COMM,
 			// we need to rewind the reader so we can properly
 			// read the rest later.
@@ -581,6 +686,8 @@ func (d *Decoder) ReadInfo() {
 				// we need to rewind rewindBytes+size of chunk ID and size
 				d.r.Seek(-(rewindBytes + int64(size) + 8), io.SeekCurrent)
 				rewindBytes = 0
+			} else if pad > 0 {
+				d.err = d.jumpTo(1)
 			}
 			return
 		case COMTID:
@@ -592,12 +699,17 @@ func (d *Decoder) ReadInfo() {
 			if err := d.parseCommentsChunk(chunk); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to read comments (ignored) - %v", err)
 			}
+			if pad > 0 {
+				if d.err = d.jumpTo(1); d.err != nil {
+					return
+				}
+			}
 		default:
 			// we haven't read the COMM chunk yet, we need to track location to rewind
 			if d.SampleRate == 0 {
-				rewindBytes += int64(size) + 8 // we add 8 for the ID and size of this chunk
+				rewindBytes += int64(size) + pad + 8 // we add 8 for the ID and size of this chunk
 			}
-			if d.err = d.jumpTo(int(size)); d.err != nil {
+			if d.err = d.jumpTo(int(size) + int(pad)); d.err != nil {
 				return
 			}
 		}

@@ -12,9 +12,9 @@ func authorAIFF(bits uint16, frames uint32, offset uint32, pcm []byte) []byte {
 func TestBaseline(t *testing.T){
  d:=NewDecoder(bytes.NewReader(authorAIFF(16,2,0,[]byte{0x04,0xd2,0xfb,0x2e})))
  b,err:=d.FullPCMBuffer();if err!=nil||!reflect.DeepEqual(b.Data,[]int{1234,-1234}) {t.Fatalf("normal: %v %v",b,err)}
- if d.PCMLen()!=0 {t.Fatalf("current blockSize interpretation changed: %d",d.PCMLen())}
+ if d.PCMLen()!=4 {t.Fatalf("16bit pcm len: expected 4, got %d",d.PCMLen())}
  odd:=NewDecoder(bytes.NewReader(authorAIFF(8,1,2,[]byte{17})))
- ob,err:=odd.FullPCMBuffer();if err!=nil||!reflect.DeepEqual(ob.Data,[]int{17,0}) {t.Fatalf("odd current: %v %v",ob,err)}
- if odd.PCMLen()!=4294967294 {t.Fatalf("current offset underflow: %d",odd.PCMLen())}
- fmt.Println("BASELINE normal_pcm=1234,-1234 odd_pcm=17,0 pcm_len=4294967294")
+ ob,err:=odd.FullPCMBuffer();if err!=nil||!reflect.DeepEqual(ob.Data,[]int{17}) {t.Fatalf("odd: %v %v",ob,err)}
+ if odd.PCMLen()!=1 {t.Fatalf("8bit pcm len: expected 1, got %d",odd.PCMLen())}
+ fmt.Println("BASELINE normal_pcm=1234,-1234 odd_pcm=17 pcm_len=4/1")
 }
