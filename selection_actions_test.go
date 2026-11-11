@@ -161,9 +161,11 @@ var _ = Describe("Selection Actions", func() {
 		})
 
 		It("should successfully enter the absolute file path into each element", func() {
+			absolutePath, err := filepath.Abs("some-file")
+			Expect(err).NotTo(HaveOccurred())
 			Expect(selection.UploadFile("some-file")).To(Succeed())
-			Expect(firstElement.ValueCall.Text).To(HaveSuffix(filepath.Join("agouti", "some-file")))
-			Expect(secondElement.ValueCall.Text).To(HaveSuffix(filepath.Join("agouti", "some-file")))
+			Expect(firstElement.ValueCall.Text).To(Equal(absolutePath))
+			Expect(secondElement.ValueCall.Text).To(Equal(absolutePath))
 		})
 
 		It("should request the 'type' attribute for each element", func() {

@@ -101,7 +101,7 @@ var _ = Describe("Session", func() {
 			It("should return an invalid request error", func() {
 				client.SessionURL = "%@#$%"
 				err := client.Send("GET", "some/endpoint", nil, nil)
-				Expect(err).To(MatchError(`invalid request: parse %@: invalid URL escape "%@"`))
+				Expect(err).To(MatchError(`invalid request: parse "%@": invalid URL escape "%@"`))
 			})
 		})
 

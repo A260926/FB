@@ -4,3 +4,4 @@
 *.test
 *~
 *.jar
+.userfb-build/

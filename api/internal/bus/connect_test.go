@@ -113,7 +113,7 @@ var _ = Describe(".Connect", func() {
 	Context("when the request is invalid", func() {
 		It("should return an error", func() {
 			_, err := Connect("%@#$%", nil, nil)
-			Expect(err.Error()).To(ContainSubstring(`parse %@: invalid URL escape "%@"`))
+			Expect(err.Error()).To(ContainSubstring(`parse "%@": invalid URL escape "%@"`))
 		})
 	})
 
