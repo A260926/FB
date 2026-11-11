@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-file=${1:-author_checks/baseline.cpp}
+file=${1:-checks/baseline.cpp}
 test -s "$file"
 b=$(mktemp -d)
 trap 'rm -rf "$b"' EXIT
