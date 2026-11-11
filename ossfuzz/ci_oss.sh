@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+
+set -ex
+
+PROJECT_NAME=libsndfile
+
+# Clone the oss-fuzz repository
+git clone https://github.com/google/oss-fuzz.git /tmp/ossfuzz
+
+if test ! -d "/tmp/ossfuzz/projects/${PROJECT_NAME}"
+then
+    echo "Could not find the ${PROJECT_NAME} project in ossfuzz"
+
+    # Exit with a success code while the libsndfile project is not expected to exist
+    # on oss-fuzz.
+    exit 0
+fi
+
+# Work out which branch to clone from, inside Docker
+BRANCH=${GITHUB_REF}
+
+# Modify the oss-fuzz Dockerfile so that we're checking out the current reference on CI.
+DOCKERFILE="/tmp/ossfuzz/projects/${PROJECT_NAME}/Dockerfile"
+sed "s@RUN.*@RUN git config --global remote.origin.fetch '+refs/pull/*:refs/remotes/origin/pull/*' \&\& git clone https://github.com/libsndfile/libsndfile.git /src/libsndfile \&\& cd /src/libsndfile \&\& git checkout -b ${BRANCH}@" "${DOCKERFILE}" > "${DOCKERFILE}.tmp"
+mv "${DOCKERFILE}.tmp" "${DOCKERFILE}"
+
+# Try and build the fuzzers
+cd /tmp/ossfuzz
+python3 infra/helper.py build_image --pull "${PROJECT_NAME}"
+python3 infra/helper.py build_fuzzers "${PROJECT_NAME}"
+python3 infra/helper.py check_build "${PROJECT_NAME}" --engine libfuzzer --sanitizer address --architecture x86_64
