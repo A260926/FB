@@ -9,9 +9,9 @@ const malformed = 'tool $VALUE "unterminated';
 if (!contract) {
   assert.deepEqual(parse('tool \\*'), ['tool', {op:'glob', pattern:'*'}]);
   console.log('legacy escaped wildcard becomes glob; no shell is executed');
-  console.log('legacy malformed=' + JSON.stringify(parse(malformed, () => { lookups++; return 'data'; }, opts)));
+  console.log('legacy malformed=' + JSON.stringify(parse(malformed, () => { lookups++; return 'data'; })));
   console.log('legacy resolver calls=' + lookups);
-  console.log('legacy operator=' + JSON.stringify(parse('tool ok; other', {}, opts)));
+  console.log('legacy operator=' + JSON.stringify(parse('tool ok; other', {})));
   console.log('BASELINE OK');
   process.exit(0);
 }

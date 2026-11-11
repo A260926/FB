@@ -8,6 +8,7 @@ export type GlobPattern = parse.GlobPattern;
 export type Comment = parse.Comment;
 export type ParseEntry = parse.ParseEntry;
 export type ParseOptions = parse.ParseOptions;
+export type ArgvEnv = parse.ArgvEnv;
 
 type Join<T extends readonly string[], D extends string> = T extends readonly []
 	? ''

@@ -24,11 +24,18 @@ declare namespace parse {
 		escape?: string;
 		/** Field-splits an unquoted variable expansion, the way a shell does using `IFS`; quoted expansions are never split. `true` uses the default IFS (space, tab, newline); a string uses its characters as the IFS. An empty string, `false`, or omitting the option disables splitting. Defaults to false. */
 		splitUnquoted?: boolean | string;
+		/** Strict argv-only mode: accepts only the argument syntax of a single command and returns `string[]`. Cannot be combined with a non-default `escape` or an enabled `splitUnquoted`. Defaults to false. */
+		argvOnly?: boolean;
 	}
 
 	export type Env =
 		| Record<string, string | undefined>
 		| ((key: string) => string | object | undefined);
+
+	/** Environment for `argvOnly` mode: lookups may only yield strings or `undefined`. */
+	export type ArgvEnv =
+		| Record<string, string | undefined>
+		| ((key: string) => string | undefined);
 }
 
 /**
@@ -42,7 +49,25 @@ declare namespace parse {
 declare function parse<T extends string | object = never>(
 	s: string,
 	env?: parse.Env,
-	opts?: parse.ParseOptions,
+	opts?: parse.ParseOptions & { argvOnly?: false },
 ): (parse.ParseEntry | T)[];
+
+/**
+ * Parses the argument syntax of a single command into a plain `string[]`.
+ *
+ * The source is fully validated before `env` is consulted, so a rejected
+ * source performs zero lookups. Operator objects, globs, and comments are
+ * never produced: anything that would become one is a `SyntaxError`.
+ *
+ * @param s - The argument string to parse.
+ * @param env - Optional environment variables; values must be strings or `undefined`, anything else throws a `TypeError`.
+ * @param opts - Must set `argvOnly: true`; cannot enable `splitUnquoted` or set a non-default `escape`.
+ * @returns The parsed arguments, ready to hand to a non-shell spawn API.
+ */
+declare function parse(
+	s: string,
+	env: parse.ArgvEnv | undefined,
+	opts: parse.ParseOptions & { argvOnly: true },
+): string[];
 
 export = parse;

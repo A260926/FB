@@ -95,6 +95,20 @@ output
 [ 'a', 'c', 'd' ]
 ```
 
+## parse a single command's arguments (argvOnly)
+
+```js
+var parse = require('shell-quote/parse');
+var xs = parse('tool "a b" \'c;d\' \\*', {}, { argvOnly: true });
+console.dir(xs);
+```
+
+output
+
+```
+[ 'tool', 'a b', 'c;d', '*' ]
+```
+
 ## parsing shell operators
 
 ```js
@@ -197,6 +211,48 @@ Whitespace inside `${...}` throws a `Bad substitution` error.
 When `env(key)` returns a string, its result will be output just like `env[key]` would.
 When `env(key)` returns an object, it will be inserted into the result
 array like the operator objects.
+
+### argvOnly mode
+
+Pass `{ argvOnly: true }` to parse only the argument syntax of a single
+command and always get a flat `string[]` back, suitable for handing directly
+to a non-shell API such as `child_process.spawn`.
+Operator objects, globs, and comments are never produced in this mode.
+
+The accepted syntax is a deliberate subset:
+
+- spaces and tabs separate arguments;
+- single quotes preserve their contents literally;
+- double quotes preserve their contents literally except for `$VARNAME` /
+  `${VARNAME}` expansion and backslash escapes of `\`, `"`, `$`, and `` ` ``
+  (any other backslash is kept literally);
+- adjacent quoted and unquoted fragments concatenate into one argument,
+  and empty quotes (`''`, `""`) produce an empty argument;
+- an unquoted backslash escapes the next character;
+- only `$VARNAME` and `${VARNAME}` references are expanded
+  (`VARNAME` is `[A-Za-z_][A-Za-z0-9_]*`); an undefined variable expands to
+  `""` and is never field-split;
+- newlines inside quotes are kept as argument content.
+
+Anything outside the subset throws a `SyntaxError`: unterminated quotes, a
+dangling backslash, NUL, unquoted newlines or carriage returns, the control
+operators `|&;()<>`, the glob characters `*?`, the comment character `#`,
+command substitution (`$(...)` or backticks, unquoted or inside double
+quotes), ANSI-C quoting (`$'...'`), special parameters (`$$`, `$1`, `$*`,
+…), any `${...}` form beyond a plain name, and any other unquoted `$` that
+does not form a valid reference. Backslash line continuation is not
+supported. The same characters are ordinary data when quoted or escaped,
+and expansion results are never re-interpreted as source syntax.
+
+The whole source is validated before `env` is consulted, so a rejected
+source performs zero env lookups — important when lookups audit or fetch
+externally. In this mode env values must be strings or `undefined`;
+anything else (including objects such as `{ op: ';' }`) throws a
+`TypeError`, so objects can never reach the returned array.
+
+`argvOnly` cannot be combined with an enabled `splitUnquoted` or a
+non-default `escape`; those combinations throw a `TypeError`.
+Neither `env` nor `opts` is modified.
 
 When a bash operator is encountered,
 the element in the array with be an object with an `"op"` key set to the operator string.

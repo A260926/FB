@@ -356,8 +356,194 @@ function parseInternal(string, env, opts) {
 	}, /** @type {ParseEntry[]} */ ([]));
 }
 
+var ARGV_NAME_START = /** @type {const} */ (/[A-Za-z_]/);
+var ARGV_NAME = /** @type {const} */ (/[A-Za-z0-9_]/);
+var ARGV_CONTROL = /** @type {const} */ ('|&;()<>');
+var ARGV_GLOB = /** @type {const} */ ('*?');
+var ARGV_DQ_ESCAPABLE = /** @type {const} */ ('\\"$`');
+
+/**
+ * Strict `argvOnly` subset parser: accepts only the argument syntax of a
+ * single command and always returns a flat `string[]`.
+ *
+ * The whole source is scanned and validated before `env` is touched, so a
+ * rejected source performs zero env lookups. Expansion results are data:
+ * they are never re-interpreted as source syntax.
+ *
+ * @param {string} string
+ * @param {Env} [env]
+ * @param {{ escape?: string, splitUnquoted?: boolean | string, argvOnly?: boolean }} [opts]
+ * @returns {string[]}
+ */
+function parseArgvOnly(string, env, opts) {
+	if (opts && typeof opts === 'object') {
+		var split = opts.splitUnquoted;
+		if (split === true || (typeof split === 'string' && split !== '')) {
+			throw new TypeError('`argvOnly` cannot be combined with `splitUnquoted`');
+		}
+		if (typeof opts.escape !== 'undefined' && opts.escape !== '\\') {
+			throw new TypeError('`argvOnly` cannot be combined with a non-default `escape`');
+		}
+	}
+
+	/** @type {({ lit: string } | { var: string })[][]} */
+	var args = [];
+	/** @type {({ lit: string } | { var: string })[] | null} */
+	var cur = null;
+
+	function startArg() {
+		if (cur === null) {
+			cur = [];
+			args[args.length] = cur;
+		}
+	}
+	/** @param {string} text */
+	function pushLit(text) {
+		/** @type {NonNullable<typeof cur>} */ (cur)[cur.length] = { lit: text };
+	}
+	/** @param {string} name */
+	function pushVar(name) {
+		/** @type {NonNullable<typeof cur>} */ (cur)[cur.length] = { var: name };
+	}
+
+	/**
+	 * Parses `$NAME` or `${NAME}` at `i` (which points at the `$`).
+	 * @param {number} i
+	 * @returns {number} the index just past the reference
+	 */
+	function parseVarRef(i) {
+		var next = string.charAt(i + 1);
+		if (next === '{') {
+			var j = i + 2;
+			while (j < string.length && ARGV_NAME.test(string.charAt(j))) {
+				j += 1;
+			}
+			var braced = string.slice(i + 2, j);
+			if (braced.length === 0 || !ARGV_NAME_START.test(braced.charAt(0)) || string.charAt(j) !== '}') {
+				throw new SyntaxError('argvOnly: unsupported substitution: ' + JSON.stringify(string.slice(i, j + 1)));
+			}
+			pushVar(braced);
+			return j + 1;
+		}
+		if (!ARGV_NAME_START.test(next)) {
+			throw new SyntaxError('argvOnly: `$` does not form a `$NAME` or `${NAME}` reference at index ' + i);
+		}
+		var k = i + 1;
+		while (k < string.length && ARGV_NAME.test(string.charAt(k))) {
+			k += 1;
+		}
+		pushVar(string.slice(i + 1, k));
+		return k;
+	}
+
+	if (string.indexOf('\0') !== -1) {
+		throw new SyntaxError('argvOnly: source contains a NUL character');
+	}
+
+	var i = 0;
+	while (i < string.length) {
+		var c = string.charAt(i);
+		if (c === ' ' || c === '\t') {
+			cur = null;
+			i += 1;
+		} else if (c === '\n' || c === '\r') {
+			throw new SyntaxError('argvOnly: unquoted line terminator at index ' + i);
+		} else if (c === SQ) {
+			startArg();
+			var close = string.indexOf(SQ, i + 1);
+			if (close === -1) {
+				throw new SyntaxError('argvOnly: unterminated single quote');
+			}
+			pushLit(string.slice(i + 1, close));
+			i = close + 1;
+		} else if (c === DQ) {
+			startArg();
+			i += 1;
+			var closed = false;
+			while (i < string.length && !closed) {
+				var d = string.charAt(i);
+				if (d === DQ) {
+					closed = true;
+					i += 1;
+				} else if (d === '\\') {
+					var escd = string.charAt(i + 1);
+					if (ARGV_DQ_ESCAPABLE.indexOf(escd) !== -1) {
+						pushLit(escd);
+						i += 2;
+					} else {
+						pushLit('\\');
+						i += 1;
+					}
+				} else if (d === DS) {
+					i = parseVarRef(i);
+				} else if (d === '`') {
+					throw new SyntaxError('argvOnly: command substitution (backtick) inside double quotes at index ' + i);
+				} else {
+					pushLit(d);
+					i += 1;
+				}
+			}
+			if (!closed) {
+				throw new SyntaxError('argvOnly: unterminated double quote');
+			}
+		} else if (c === '\\') {
+			startArg();
+			var escaped = string.charAt(i + 1);
+			if (escaped === '') {
+				throw new SyntaxError('argvOnly: dangling backslash at end of input');
+			}
+			if (escaped === '\n' || escaped === '\r') {
+				throw new SyntaxError('argvOnly: backslash line continuation is not supported');
+			}
+			pushLit(escaped);
+			i += 2;
+		} else if (ARGV_CONTROL.indexOf(c) !== -1) {
+			throw new SyntaxError('argvOnly: control operator ' + JSON.stringify(c) + ' at index ' + i);
+		} else if (ARGV_GLOB.indexOf(c) !== -1) {
+			throw new SyntaxError('argvOnly: glob character ' + JSON.stringify(c) + ' at index ' + i);
+		} else if (c === '#') {
+			throw new SyntaxError('argvOnly: comment character `#` at index ' + i);
+		} else if (c === '`') {
+			throw new SyntaxError('argvOnly: command substitution (backtick) at index ' + i);
+		} else if (c === DS) {
+			startArg();
+			i = parseVarRef(i);
+		} else {
+			startArg();
+			pushLit(c);
+			i += 1;
+		}
+	}
+
+	// The source is fully validated at this point; only now may `env` be
+	// consulted, since lookups can audit or fetch externally.
+	return args.map(function (segments) {
+		var out = '';
+		for (var si = 0; si < segments.length; si++) {
+			var segment = segments[si];
+			if ('lit' in segment) {
+				out += segment.lit;
+			} else {
+				var name = segment['var'];
+				var value = typeof env === 'function' ? env(name) : (env ? env[name] : void undefined);
+				if (typeof value === 'undefined') {
+					value = '';
+				}
+				if (typeof value !== 'string') {
+					throw new TypeError('argvOnly: env value for ' + JSON.stringify(name) + ' must be a string or undefined, got ' + (value === null ? 'null' : typeof value));
+				}
+				out += value;
+			}
+		}
+		return out;
+	});
+}
+
 /** @type {typeof import('./parse')} */
 module.exports = function parse(s, env, opts) {
+	if (opts && opts.argvOnly) {
+		return parseArgvOnly(s, env, opts);
+	}
 	var mapped = parseInternal(s, env, opts);
 	if (typeof env !== 'function') {
 		return mapped;
