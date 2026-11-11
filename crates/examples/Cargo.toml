@@ -1,0 +1,48 @@
+[package]
+name = "gimli-examples"
+version = "0.0.0"
+edition = "2018"
+
+[dependencies]
+gimli = { path = "../..", default-features = false }
+crossbeam = "0.8"
+fallible-iterator = { version = "0.3.0", default-features = false, optional = true }
+getopts = "0.2"
+memmap2 = "0.9.4"
+num_cpus = "1"
+object = { version = "0.37.1", features = ["wasm", "write", "build"] }
+rayon = "1.0"
+regex = "1"
+typed-arena = "2"
+
+[features]
+read = ["gimli/read"]
+read-all = ["read", "std", "fallible-iterator"]
+fallible-iterator = ["dep:fallible-iterator", "gimli/fallible-iterator"]
+write = ["gimli/write"]
+std = ["gimli/std"]
+default = ["read-all", "write"]
+
+[[bin]]
+name = "simple"
+required-features = ["read", "std"]
+
+[[bin]]
+name = "simple_line"
+required-features = ["read", "std"]
+
+[[bin]]
+name = "simple_write"
+required-features = ["write"]
+
+[[bin]]
+name = "simple_convert"
+required-features = ["read", "write"]
+
+[[bin]]
+name = "dwarfdump"
+required-features = ["read", "std", "fallible-iterator"]
+
+[[bin]]
+name = "dwarf-validate"
+required-features = ["read", "std"]
