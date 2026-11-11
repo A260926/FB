@@ -75,6 +75,8 @@ how to configure and build the library.
 1. Code components
 2. Using the Rubber Band command-line tool
 3. Using Rubber Band Library
+4. Live shifter contract checks
+5. Further documentation
 
 
 ## 1. Code components
@@ -179,7 +181,41 @@ available for modification and redistribution) unless you have
 separately acquired a commercial licence from the author.
 
 
-## 4. Further documentation
+## 4. Live shifter contract checks
+
+The `checks/` directory contains small, dependency-free regression
+programs for the block-by-block Live shifter.  They build through the
+single-file compilation unit using the built-in FFT and resampler (no
+third-party libraries and no audio device), and analyse signals they
+synthesise themselves with their own direct-DFT frequency scan.
+
+  * `checks/baseline.cpp` - the original short-window, unity-ratio
+    stereo anti-phase sanity check (retained and still run).
+  * `checks/live_contract.cpp`, driven by `checks/live_contract.sh` -
+    the full Live contract at 48 kHz over both `OptionWindowShort` and
+    `OptionWindowMedium`, at pitch scales 0.5, 1.0 and 2.0, through
+    both the C++ `RubberBandLiveShifter::shift()` and the C
+    `rubberband_live_shift()` interfaces on independent instances.
+    It separates pitch, left/right-relation and start-delay failures
+    into named `LIVE_PITCH_DETECTED`, `LIVE_RELATION_DETECTED` and
+    `LIVE_LATENCY_DETECTED` markers, and prints `LIVE_CONTRACT_OK`
+    when every assertion passes.
+  * `checks/live_mutations.sh` - builds three temporary source copies,
+    each with one injected defect (an ignored C-wrapper pitch scale,
+    a mid/side decode with the right-channel sign flipped, and a start
+    delay over-reported by one block), and verifies that each copy
+    still compiles and is then rejected by the unchanged contract
+    binary with the matching marker.
+
+Run them from the repository root:
+
+```
+  $ bash checks/live_contract.sh
+  $ bash checks/live_mutations.sh
+```
+
+
+## 5. Further documentation
 
  * The [API documentation](https://breakfastquay.com/rubberband/code-doc/index.html) is thorough and we encourage you to read it
  * [Conceptual notes and examples](https://breakfastquay.com/rubberband/integration.html) for integration into an application

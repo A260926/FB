@@ -30,6 +30,13 @@ build using the built-in FFT and resampler implementations with no
 further library dependencies. See the comments at the top of that file
 for more information.
 
+**Contract checks.** The dependency-free regression programs under
+`checks/` build on this single-file unit.  Run
+`bash checks/live_contract.sh` for the Live shifter pitch/channel/
+latency contract (it prints `LIVE_CONTRACT_OK` on success) and
+`bash checks/live_mutations.sh` to confirm that injected defects are
+caught by the contract; see section 4 of README.md for details.
+
 **Other build options.** If you only need a static library and don't
 wish to use Meson, some alternative build files (Makefiles and Visual
 C++ projects) are included in the `otherbuilds` directory. See the
