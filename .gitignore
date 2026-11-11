@@ -23,3 +23,6 @@ build/
 debug/
 compile_commands.json
 CMakeLists.txt.user
+
+# harness output artifacts
+harness/*.ppm

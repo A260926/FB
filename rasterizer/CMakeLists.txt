@@ -24,6 +24,7 @@ set( HDR
     "${CMAKE_CURRENT_SOURCE_DIR}/texture.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/sampler.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/framebuffer.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/multisample_framebuffer.h"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/math/base.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/math/vector2.h"
