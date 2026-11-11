@@ -1,0 +1,21 @@
+--- a/tests/catch.hpp
++++ b/tests/catch.hpp
+@@ -5177,7 +5177,7 @@
+     bool isDebuggerActive();
+ }
+ 
+-#ifdef CATCH_PLATFORM_MAC
++#if defined(CATCH_PLATFORM_MAC) && (defined(__i386__) || defined(__x86_64__))
+ 
+     #define CATCH_TRAP() __asm__("int $3\n" : : ) /* NOLINT */
+ 
+--- a/dependencies/glm/.gitignore
++++ b/dependencies/glm/.gitignore
+@@ -55,3 +55,7 @@
+ /.vs
+ /CMakeSettings.json
+ .DS_Store
++
++# Retain upstream tracked CMake modules in source snapshots.
++!/cmake/CMakePackageConfigHelpers.cmake
++!/cmake/GNUInstallDirs.cmake
