@@ -1,0 +1,16 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1107,9 +1107,10 @@
+ 				const target = Descriptor(`${base}[${positions[0]}]`, { type: value.type })
+ 				return update(target, v => `${target} = ${v}`)
+ 			}
+-			const target = Descriptor(positions.length === 1 ? `${object}[${positions[0]}]` : `[${positions.map(i => `${object}[${i}]`)}]`, { type: value.type })
+-			const write = v => positions.length === 1 ? `${object}[${positions[0]}] = ${v}` : `((${result}) => { ${positions.map((p, i) => `${object}[${p}] = ${result}[${i}];`).join(' ')} return ${result}; })(${v})`
+-			return `((${object}) => ${update(target, write)})(${base})`
++			const direct = String(base)
++			const target = Descriptor(positions.length === 1 ? `${direct}[${positions[0]}]` : `[${positions.map(i => `${direct}[${i}]`)}]`, { type: value.type })
++			const write = v => positions.length === 1 ? `${direct}[${positions[0]}] = ${v}` : `((${result}) => { ${positions.map((p, i) => `${direct}[${p}] = ${result}[${i}];`).join(' ')} return ${result}; })(${v})`
++			return update(target, write)
+ 		}
+ 		return `((${object}) => ${update(Descriptor(`${object}.${prop}`, value), v => `${object}.${prop} = ${v}`)})(${base})`
+ 	}

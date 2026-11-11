@@ -1,0 +1,1622 @@
+{
+  "generatedAt": "2026-11-11T17:12:35.168Z",
+  "mode": "capture",
+  "patch": "shallow-inner-copy",
+  "expectedHits": [
+    "in_struct_unchanged",
+    "in_struct_array_unchanged",
+    "struct_by_value_return"
+  ],
+  "optimizeModes": [
+    false,
+    true
+  ],
+  "caseCount": 23,
+  "controls": 3,
+  "summary": {
+    "records": 48,
+    "compiled": 48,
+    "executed": 48,
+    "passed": 42,
+    "failed": 6,
+    "controls": 8,
+    "controlsPassed": 8,
+    "errors": 0
+  },
+  "records": [
+    {
+      "kind": "case",
+      "name": "in_vec_unchanged",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_vec_unchanged",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_mat_unchanged",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_mat_unchanged",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_struct_unchanged",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        9,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        9,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_struct_unchanged",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        9,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        9,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_struct_array_unchanged",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        8,
+        7
+      ],
+      "actualSecond": [
+        1,
+        9,
+        8,
+        7
+      ],
+      "mismatches": [
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 9
+        },
+        {
+          "index": 2,
+          "component": "z",
+          "expected": 3,
+          "actual": 8
+        },
+        {
+          "index": 3,
+          "component": "w",
+          "expected": 4,
+          "actual": 7
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 9
+        },
+        {
+          "index": 2,
+          "component": "z",
+          "expected": 3,
+          "actual": 8
+        },
+        {
+          "index": 3,
+          "component": "w",
+          "expected": 4,
+          "actual": 7
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "in_struct_array_unchanged",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        8,
+        7
+      ],
+      "actualSecond": [
+        1,
+        9,
+        8,
+        7
+      ],
+      "mismatches": [
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 9
+        },
+        {
+          "index": 2,
+          "component": "z",
+          "expected": 3,
+          "actual": 8
+        },
+        {
+          "index": 3,
+          "component": "w",
+          "expected": 4,
+          "actual": 7
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 9
+        },
+        {
+          "index": 2,
+          "component": "z",
+          "expected": 3,
+          "actual": 8
+        },
+        {
+          "index": 3,
+          "component": "w",
+          "expected": 4,
+          "actual": 7
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_normal_end",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "actualSecond": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_normal_end",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "actualSecond": [
+        5,
+        6,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_early_return",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "actualSecond": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_early_return",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "actualSecond": [
+        7,
+        8,
+        9,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_early_return_value",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "actualSecond": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_early_return_value",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "actualSecond": [
+        7,
+        8,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_normal_end",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "actualSecond": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_normal_end",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "actualSecond": [
+        6,
+        0,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_partial_vec",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_partial_vec",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        12,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_early_return_value",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "actualSecond": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_early_return_value",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "actualSecond": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_and_return_value",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "actualSecond": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "out_and_return_value",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "actualSecond": [
+        2.5,
+        4,
+        6,
+        9
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "array_element_out",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "array_element_out",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "struct_field_out",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "struct_field_out",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        9,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "swizzle_reorder_out",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "actualSecond": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "swizzle_reorder_out",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "actualSecond": [
+        8,
+        2,
+        7,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "matrix_column_out",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "actualSecond": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "matrix_column_out",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "actualSecond": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "matrix_element_out",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "actualSecond": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "matrix_element_out",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "actualSecond": [
+        1,
+        9,
+        3,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "dynamic_index_single_eval",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "actualSecond": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "dynamic_index_single_eval",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "actualSecond": [
+        1,
+        5,
+        1,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "struct_by_value_return",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        9,
+        7
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        9,
+        7,
+        9,
+        7
+      ],
+      "actualSecond": [
+        9,
+        7,
+        9,
+        7
+      ],
+      "mismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        },
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 7
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        },
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 7
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "struct_by_value_return",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        2,
+        9,
+        7
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        9,
+        7,
+        9,
+        7
+      ],
+      "actualSecond": [
+        9,
+        7,
+        9,
+        7
+      ],
+      "mismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        },
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 7
+        }
+      ],
+      "repeatMismatches": [
+        {
+          "index": 0,
+          "component": "x",
+          "expected": 1,
+          "actual": 9
+        },
+        {
+          "index": 1,
+          "component": "y",
+          "expected": 2,
+          "actual": 7
+        }
+      ],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "multi_out_inout_return",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "actualSecond": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "multi_out_inout_return",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "actualSecond": [
+        0.25,
+        2,
+        3,
+        0.5
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_struct_deep",
+      "optimize": false,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "actualSecond": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "inout_struct_deep",
+      "optimize": true,
+      "control": false,
+      "expected": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "actualSecond": [
+        1,
+        9,
+        8,
+        4
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_scalar_arithmetic",
+      "optimize": false,
+      "control": true,
+      "expected": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "actualSecond": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_scalar_arithmetic",
+      "optimize": true,
+      "control": true,
+      "expected": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "actualSecond": [
+        3,
+        4,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_in_scalar_modified",
+      "optimize": false,
+      "control": true,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_in_scalar_modified",
+      "optimize": true,
+      "control": true,
+      "expected": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_struct_scalar_only",
+      "optimize": false,
+      "control": true,
+      "expected": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "case",
+      "name": "control_struct_scalar_only",
+      "optimize": true,
+      "control": true,
+      "expected": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        0,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "interleave",
+      "name": "in_vec_unchanged+out_normal_end",
+      "optimize": false,
+      "control": true,
+      "expected": null,
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    },
+    {
+      "kind": "interleave",
+      "name": "in_vec_unchanged+out_normal_end",
+      "optimize": true,
+      "control": true,
+      "expected": null,
+      "compiled": true,
+      "executed": true,
+      "stable": true,
+      "actual": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "actualSecond": [
+        1,
+        2,
+        3,
+        1
+      ],
+      "mismatches": [],
+      "repeatMismatches": [],
+      "error": null
+    }
+  ],
+  "capture": {
+    "ok": true,
+    "hits": [
+      "in_struct_unchanged[component=x,actual=9,expected=1]",
+      "in_struct_array_unchanged[component=y,actual=9,expected=2]",
+      "struct_by_value_return[component=x,actual=9,expected=1]"
+    ]
+  }
+}

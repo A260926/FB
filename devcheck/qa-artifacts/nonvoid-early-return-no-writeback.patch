@@ -1,0 +1,25 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -724,7 +724,8 @@
+ 				// func.__return__ = <expression>;
+ 				// func.__out__ = [outArg1, outArg2, ...];
+ 				// return func.__return__;
+-				result = `${scope.callName}.__return__ = ${expr};\n${outStmt};\nreturn ${scope.callName}.__return__`
++				const topLevel = node.parent?.parent?.parent?.type === 'function'
++				result = `${scope.callName}.__return__ = ${expr};` + (topLevel ? `\n${outStmt};` : '') + `\nreturn ${scope.callName}.__return__`
+ 			} else {
+ 				// func.__out__ = [outArg1, outArg2, ...];
+ 				// return;
+@@ -1007,7 +1008,11 @@
+ 				if (outArgs) {
+ 					const writes = [], values = argValues.slice()
+ 					const output = index => {
+-						if (index === outArgs.length) return `(${callName}(${values.join(', ')}), ${writes.map((write, i) => write(`${callName}.__out__[${i}]`)).join(', ')}, ${callName}.__return__)`
++						if (index === outArgs.length) {
++						const out = `${callName}.__out__`
++						const guarded = writes.map((write, i) => `(${out} ? ${write(`${out}[${i}]`)} : 0)`).join(', ')
++						return `(${callName}(${values.join(', ')}), ${guarded}, ${callName}.__return__)`
++					}
+ 						const argIndex = outArgs[index].index
+ 						return this.reference(args[argIndex], (target, write) => {
+ 							values[argIndex] = target; writes[index] = write

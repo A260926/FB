@@ -1,0 +1,13 @@
+--- a/lib/stdlib300.js
++++ b/lib/stdlib300.js
+@@ -90,8 +90,8 @@
+ }
+ function cloneValue(value) {
+ 	if (ArrayBuffer.isView(value)) return value.slice()
+-	if (Array.isArray(value)) return value.map(cloneValue)
+-	if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cloneValue(v)]))
++	if (Array.isArray(value)) return value.slice()
++	if (value && typeof value === 'object') return Object.assign({}, value)
+ 	return value
+ }
+ 

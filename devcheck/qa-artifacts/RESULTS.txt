@@ -1,0 +1,8 @@
+parameter-copy QA summary
+normal: cases=23 controls=3 executed=48 failed=0 optimize=false/true=equal
+baseline: pass
+test/functions.js: pass
+test/structs.js: pass
+patch shallow-inner-copy: detected (deep copy of struct members)
+patch reevaluate-output-index: detected (single evaluation of a[k++].y)
+patch nonvoid-early-return-no-writeback: detected (early-return out/inout write-back)
