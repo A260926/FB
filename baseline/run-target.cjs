@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 function fail(message) { console.error(message); process.exit(1); }
-const file = 'test/userfb/regexp-flow.test.cjs';
+const file = 'test/harness/regexp-flow.test.cjs';
 if (!fs.existsSync(file)) fail(`Missing required new test file: ${file}`);
 if (!fs.existsSync('docs/regexp-flow.md') || !fs.readFileSync('docs/regexp-flow.md', 'utf8').trim()) fail('Missing required new documentation: docs/regexp-flow.md');
 function run(executable, args, timeout) {
