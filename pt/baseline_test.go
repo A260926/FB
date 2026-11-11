@@ -101,8 +101,19 @@ func TestSeedNestedHitInfo(t *testing.T) {
 	}
 	i, o := hi.Info(r), ho.Info(r)
 	seedNear(t, hi.T, ho.T)
-	if i.Inside || !o.Inside || i.Normal.X <= 0 || o.Normal.X >= 0 {
-		t.Fatal("nested hit-info witness changed")
+	// The Identity wrapper must preserve the child's resolved hit
+	// information instead of reinterpreting the leaf primitive.
+	if i.Inside || o.Inside {
+		t.Fatal("outside hit was misreported as inside through a nested transform")
+	}
+	if i.Normal.X <= 0 || o.Normal.X <= 0 {
+		t.Fatal("shading normal sign lost through nested transform")
+	}
+	seedNear(t, o.Normal.X, i.Normal.X)
+	seedNear(t, o.Normal.Y, i.Normal.Y)
+	seedNear(t, o.Normal.Z, i.Normal.Z)
+	if o.Material.Color != i.Material.Color {
+		t.Fatal("material lost through nested transform")
 	}
 	fmt.Printf("NESTED_HITINFO inner_inside=%t outer_inside=%t inner_nx=%.9f outer_nx=%.9f\n", i.Inside, o.Inside, i.Normal.X, o.Normal.X)
 }

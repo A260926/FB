@@ -81,6 +81,54 @@ func main() {
 
 ![Hello World](http://i.imgur.com/FyAmeMx.png)
 
+### Constructive Solid Geometry (CSG)
+
+Analytic Boolean solids can be built directly from spheres and cubes — no
+intermediate triangle mesh is generated. A `CSGShape` plugs into the same
+`Shape`, `Scene` and `DefaultSampler` paths as any other primitive, so
+direct hits, specular reflections and light-visibility rays all see one
+continuous solid: overlapping surfaces never expose internal walls.
+
+```go
+type CSGOp int
+
+const (
+	CSGUnion        CSGOp = iota // union of the two solids
+	CSGIntersection              // overlap of the two solids
+	CSGDifference                // left minus right
+)
+
+func NewCSG(op CSGOp, left, right Shape) (Shape, error)
+```
+
+Operands may be a `*Sphere`, a `*Cube`, any number of
+`TransformedShape` wrappers around those (non-uniform scale, shear and
+mirroring included), or another nested CSG solid. The same primitive may
+be referenced by more than one operand. `NewCSG` returns an error for nil
+operands, unknown operations or unsupported shape types; materials must be
+opaque and non-emissive. Meshes, planes, SDFs, volumes, transparent media
+and mutating a shape after `Compile` are not supported by CSG.
+
+Boundary semantics along a ray of unit world direction:
+
+- `Intersect` returns the first boundary at `t > EPS` where the Boolean
+  occupancy actually changes, not merely the nearest child hit.
+- Rays may start inside either operand, inside a difference cavity, or in
+  empty space; all such origins are handled.
+- Tangent contact that never crosses the interior produces no boundary.
+- Coincident entry and exit events are evaluated together, so touching
+  solids leave no seam and identical-minus-identical yields an empty solid.
+- The returned `HitInfo` uses the material and local UVs of the primitive
+  that produces the boundary. For a difference, the cavity wall uses the
+  right operand's material and its geometric outward normal is reversed
+  to face the cavity. `HitInfo.Normal` always faces the incident ray and
+  `Inside` reports whether the ray was inside the final Boolean solid
+  before the hit.
+
+See `examples/csg/main.go` for a complete example that renders a block
+with three crossing tunnels plus a perforated spherical shell and writes
+`.cache/csg.ppm`.
+
 ### Adaptive Sampling
 
 There are several sampling options that can reduce the amount of time needed to converge to an acceptable noise level. Both images below were rendered in 60 seconds. On the left, no advanced features were enabled. On the right, the features listed below were used.

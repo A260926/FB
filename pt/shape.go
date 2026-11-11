@@ -29,6 +29,23 @@ func (s *TransformedShape) Intersect(r Ray) Hit {
 	if !hit.Ok() {
 		return hit
 	}
+	if hit.HitInfo != nil {
+		// The child already resolved shading data against the leaf
+		// primitive; transform that information instead of reinterpreting
+		// the leaf in this wrapper's coordinate frame.
+		inner := *hit.HitInfo
+		position := s.Matrix.MulPosition(inner.Position)
+		normal := s.Inverse.Transpose().MulDirection(inner.Normal)
+		if normal.Dot(r.Direction) > 0 {
+			normal = normal.Negate()
+		}
+		normal = normal.Normalize()
+		ray := Ray{position, normal}
+		info := HitInfo{inner.Shape, position, normal, ray, inner.Material, inner.Inside}
+		hit.T = position.Sub(r.Origin).Length()
+		hit.HitInfo = &info
+		return hit
+	}
 	shape := hit.Shape
 	shapePosition := shapeRay.Position(hit.T)
 	shapeNormal := shape.NormalAt(shapePosition)
