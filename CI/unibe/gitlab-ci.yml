@@ -1,0 +1,133 @@
+stages: [build]
+
+variables:
+  GIT_STRATEGY: fetch
+
+include:
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-trixie-gcc-cxx17
+      debian_release: 'trixie'
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=17"
+      enable_ctest: true
+      enable_asan: true
+      enable_ubsan: true
+      enable_coverage: true
+      # Only the library itself counts; the tests produce the coverage but must
+      # not dilute it, and FetchContent's googletest lives in the build dir.
+      coverage_filters:
+        - src
+      coverage_exclude_filters:
+        - src/Unittests
+        - src/FileConverter
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-forky-gcc-cxx20-shared
+      debian_release: 'forky'
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=20"
+      BUILD_SHARED_LIBS: true
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-forky-clang-cxx20-shared
+      debian_release: 'forky'
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=20"
+      BUILD_SHARED_LIBS: true
+      CXX_COMPILER: "clang++"
+      C_COMPILER: "clang"
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-trixie-gcc-cxx20
+      debian_release: 'trixie'
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=20"
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-trixie-gcc-cxx23
+      debian_release: 'trixie'
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=23"
+      enable_ctest: true
+
+  # Debug build with the libstdc++/libc++ debug modes, as CI/ci-linux.sh used to
+  # do. Linux only: the macro combination is unsupported by Apple's libc++.
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-trixie-gcc-debug
+      debian_release: 'trixie'
+      stage: build
+      CMAKE_BUILD_TYPE: Debug
+      cmake_options: "-DSTL_DEBUG=ON"
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/debian@v0.6.0
+    inputs:
+      job_name: debian-trixie-clang-cxx20
+      debian_release: 'trixie'
+      stage: build
+      C_COMPILER: clang
+      CXX_COMPILER: clang++
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      cmake_options: "-DCMAKE_CXX_STANDARD=20"
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/macos@v0.6.0
+    inputs:
+      job_name: macos-tahoe-cxx17
+      macos_release: 'tahoe'
+      stage: build
+      CMAKE_BUILD_TYPE: Debug
+      cmake_options: "-DCMAKE_CXX_STANDARD=17"
+      enable_ctest: true
+      enable_asan: false
+      enable_ubsan: false
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/macos@v0.6.0
+    inputs:
+      job_name: macos-golden-gate-cxx23
+      macos_release: 'golden-gate'
+      stage: build
+      CMAKE_BUILD_TYPE: Debug
+      cmake_options: "-DCMAKE_CXX_STANDARD=23"
+      enable_ctest: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/windows@v0.6.0
+    inputs:
+      job_name: windows-vs2026-debug-static
+      stage: build
+      CMAKE_BUILD_TYPE: Debug
+      enable_ctest: true
+      msvc_release: vs2026
+      BUILD_SHARED_LIBS: false
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/windows@v0.6.0
+    inputs:
+      job_name: windows-vs2026-release-shared
+      stage: build
+      CMAKE_BUILD_TYPE: Release
+      enable_ctest: true
+      msvc_release: vs2026
+      BUILD_SHARED_LIBS: true
+
+  - component: $CI_SERVER_FQDN/CGG-public/ci-components/cmake-cxx/windows@v0.6.0
+    inputs:
+      job_name: windows-vs2022-reldeb-shared
+      stage: build
+      CMAKE_BUILD_TYPE: RelWithDebInfo
+      enable_ctest: true
+      msvc_release: vs2022
+      BUILD_SHARED_LIBS: true
