@@ -1,0 +1,7 @@
+{
+  "repo": "https://github.com/jarikomppa/soloud",
+  "commit": "e82fd32c1f62183922f08c14c814a02b58db1873",
+  "license": "Zlib",
+  "removed_declaration": ".gitmodules",
+  "reason": "Orphan declaration only: upstream b28baf7403ad1750e0c4395e89bc3e69a006953d removed ext/libmodplug and replaced optional decoder with runtime DLL; no gitlink or ext tree in pinned commit. Entire current tracked tree exported, no source omitted. Added only author_checks and this provenance."
+}
