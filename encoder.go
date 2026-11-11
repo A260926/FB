@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
 	"time"
 
@@ -27,7 +28,22 @@ type Encoder struct {
 	// interpretation of the waveform data, depend on this value. PCM = 1 (i.e.
 	// Linear quantization) Values other than 1 indicate some form of
 	// compression.
+	// Set this to 0xfffe (WAVE_FORMAT_EXTENSIBLE) to write an extensible fmt
+	// chunk carrying ValidBitsPerSample and ChannelMask.
 	WavAudioFormat int
+
+	// ValidBitsPerSample is the number of bits actually used per sample when
+	// encoding a WAVE_FORMAT_EXTENSIBLE (0xfffe) file. BitDepth stays the
+	// container width (16, 24 or 32). IntBuffer.Data values are shifted into
+	// the high ValidBitsPerSample bits of the container and the remaining low
+	// bits are written as zero. It must be between 1 and BitDepth and has to be
+	// set before the first Write call. It is ignored for regular PCM files.
+	ValidBitsPerSample uint16
+	// ChannelMask describes the speaker layout of the channels when encoding
+	// a WAVE_FORMAT_EXTENSIBLE (0xfffe) file. A zero value means the layout is
+	// unspecified; otherwise the number of set bits must equal NumChans. It is
+	// ignored for regular PCM files.
+	ChannelMask uint32
 
 	// Metadata contains metadata to inject in the file.
 	Metadata *Metadata
@@ -41,6 +57,9 @@ type Encoder struct {
 
 // NewEncoder creates a new encoder to create a new wav file.
 // Don't forget to add Frames to the encoder before writing.
+// Set audioFormat to 0xfffe to produce a WAVE_FORMAT_EXTENSIBLE file, in which
+// case BitDepth is the container width and the ValidBitsPerSample and
+// ChannelMask fields have to be populated before the first Write call.
 func NewEncoder(w io.WriteSeeker, sampleRate, bitDepth, numChans, audioFormat int) *Encoder {
 	return &Encoder{
 		w:              w,
@@ -64,17 +83,108 @@ func (e *Encoder) AddBE(src interface{}) error {
 	return binary.Write(e.w, binary.BigEndian, src)
 }
 
-func (e *Encoder) addBuffer(buf *audio.IntBuffer) error {
+func (e *Encoder) extensible() bool {
+	return e.WavAudioFormat == int(waveFormatExtensible)
+}
+
+// validateWriteBuffer verifies the encoder parameters and the input buffer
+// without touching the underlying writer, so a rejected Write leaves the
+// encoder in a state where a later, valid Write still succeeds.
+func (e *Encoder) validateWriteBuffer(buf *audio.IntBuffer) error {
+	if e == nil {
+		return fmt.Errorf("can't write with a nil encoder")
+	}
+	if e.w == nil {
+		return fmt.Errorf("can't write to a nil writer")
+	}
 	if buf == nil {
 		return fmt.Errorf("can't add a nil buffer")
 	}
+	if buf.Format == nil {
+		return fmt.Errorf("can't write a buffer without a format")
+	}
+	if buf.Format.NumChannels != e.NumChans {
+		return fmt.Errorf("buffer channel count %d doesn't match the encoder channel count %d",
+			buf.Format.NumChannels, e.NumChans)
+	}
+	if buf.Format.SampleRate != e.SampleRate {
+		return fmt.Errorf("buffer sample rate %d doesn't match the encoder sample rate %d",
+			buf.Format.SampleRate, e.SampleRate)
+	}
+	if e.NumChans < 1 {
+		return fmt.Errorf("invalid number of channels: %d", e.NumChans)
+	}
+	if e.SampleRate < 1 {
+		return fmt.Errorf("invalid sample rate: %d", e.SampleRate)
+	}
+	switch e.BitDepth {
+	case 8, 16, 24, 32:
+	default:
+		return fmt.Errorf("can't encode samples of bit size %d, supported container sizes are 8, 16, 24 and 32", e.BitDepth)
+	}
+	if len(buf.Data)%e.NumChans != 0 {
+		return fmt.Errorf("buffer of %d samples doesn't contain an integer number of %d channel frames",
+			len(buf.Data), e.NumChans)
+	}
 
+	validBits := uint16(e.BitDepth)
+	if e.extensible() {
+		// Only integer PCM containers are supported in extensible mode.
+		if e.BitDepth != 16 && e.BitDepth != 24 && e.BitDepth != 32 {
+			return fmt.Errorf("WAVE_FORMAT_EXTENSIBLE only supports 16, 24 or 32 bit containers, got %d", e.BitDepth)
+		}
+		if e.ValidBitsPerSample < 1 || e.ValidBitsPerSample > uint16(e.BitDepth) {
+			return fmt.Errorf("invalid valid bits per sample: %d for a %d bit container",
+				e.ValidBitsPerSample, e.BitDepth)
+		}
+		validBits = e.ValidBitsPerSample
+		if e.ChannelMask != 0 && bits.OnesCount32(e.ChannelMask) != e.NumChans {
+			return fmt.Errorf("channel mask 0x%x sets %d channel(s) but the encoder declares %d",
+				e.ChannelMask, bits.OnesCount32(e.ChannelMask), e.NumChans)
+		}
+	}
+
+	// Make sure every sample fits in the effective bit depth.
+	if e.BitDepth == 8 {
+		// 8-bit WAV PCM is unsigned, every other container width is signed.
+		for _, v := range buf.Data {
+			if v < 0 || v > 255 {
+				return fmt.Errorf("sample value %d doesn't fit in an unsigned 8 bit container (range [0, 255])", v)
+			}
+		}
+		return nil
+	}
+	limit := 1 << (validBits - 1)
+	for _, v := range buf.Data {
+		if v < -limit || v >= limit {
+			return fmt.Errorf("sample value %d doesn't fit in %d valid bits (range [%d, %d])",
+				v, validBits, -limit, limit-1)
+		}
+	}
+	return nil
+}
+
+// shift returns the left-alignment shift applied to extensible samples.
+func (e *Encoder) shift() uint {
+	if !e.extensible() || e.ValidBitsPerSample == 0 || int(e.ValidBitsPerSample) == e.BitDepth {
+		return 0
+	}
+	return uint(e.BitDepth - int(e.ValidBitsPerSample))
+}
+
+func (e *Encoder) addBuffer(buf *audio.IntBuffer) error {
 	frameCount := buf.NumFrames()
+	shift := e.shift()
 	// performance tweak: setup a buffer so we don't do too many writes
 	var err error
 	for i := 0; i < frameCount; i++ {
 		for j := 0; j < buf.Format.NumChannels; j++ {
 			v := buf.Data[i*buf.Format.NumChannels+j]
+			if shift > 0 {
+				// Left-align the effective-depth integer into its container, the
+				// low padding bits are emitted as zero.
+				v <<= shift
+			}
 			switch e.BitDepth {
 			case 8:
 				if err = binary.Write(e.buf, binary.LittleEndian, uint8(v)); err != nil {
@@ -140,8 +250,12 @@ func (e *Encoder) writeHeader() error {
 	if err := e.AddLE(riff.FmtID); err != nil {
 		return err
 	}
-	// chunk size
-	if err := e.AddLE(uint32(16)); err != nil {
+	// chunk size: 16 standard bytes, plus 24 extension bytes for extensible
+	fmtChunkSize := uint32(16)
+	if e.extensible() {
+		fmtChunkSize = 40
+	}
+	if err := e.AddLE(fmtChunkSize); err != nil {
 		return err
 	}
 	// wave format
@@ -165,17 +279,41 @@ func (e *Encoder) writeHeader() error {
 	if err := e.AddLE(uint16(blockAlign)); err != nil {
 		return err
 	}
-	// bits per sample
+	// bits per sample (container width)
 	if err := e.AddLE(uint16(e.BitDepth)); err != nil {
 		return fmt.Errorf("error encoding bits per sample - %w", err)
+	}
+
+	if e.extensible() {
+		// extension size, always 22 bytes for the PCM subformat
+		if err := e.AddLE(uint16(22)); err != nil {
+			return fmt.Errorf("error encoding the extension size - %w", err)
+		}
+		// number of bits actually carrying signal
+		if err := e.AddLE(e.ValidBitsPerSample); err != nil {
+			return fmt.Errorf("error encoding valid bits per sample - %w", err)
+		}
+		// speaker layout, 0 means unspecified
+		if err := e.AddLE(e.ChannelMask); err != nil {
+			return fmt.Errorf("error encoding the channel mask - %w", err)
+		}
+		// PCM subformat GUID
+		if err := e.AddLE(pcmSubformatGUID); err != nil {
+			return fmt.Errorf("error encoding the subformat GUID - %w", err)
+		}
 	}
 
 	return nil
 }
 
 // Write encodes and writes the passed buffer to the underlying writer.
-// Don't forget to Close() the encoder or the file won't be valid.
+// Each call must carry complete channel frames. Don't forget to Close() the
+// encoder or the file won't be valid. Invalid parameters or samples make the
+// call fail before any byte is written, leaving the encoder still usable.
 func (e *Encoder) Write(buf *audio.IntBuffer) error {
+	if err := e.validateWriteBuffer(buf); err != nil {
+		return err
+	}
 	if !e.wroteHeader {
 		if err := e.writeHeader(); err != nil {
 			return err
@@ -200,7 +338,12 @@ func (e *Encoder) Write(buf *audio.IntBuffer) error {
 }
 
 // WriteFrame writes a single frame of data to the underlying writer.
+// WAVE_FORMAT_EXTENSIBLE encoders reject it because a raw frame carries no
+// notion of valid bits; use Write with an audio.IntBuffer instead.
 func (e *Encoder) WriteFrame(value interface{}) error {
+	if e.extensible() {
+		return errors.New("WriteFrame is not supported for WAVE_FORMAT_EXTENSIBLE files, use Write with an audio.IntBuffer")
+	}
 	if !e.wroteHeader {
 		e.writeHeader()
 	}

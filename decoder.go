@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"time"
 
 	"github.com/go-audio/audio"
@@ -23,6 +24,19 @@ var (
 	CIDCue = [4]byte{'c', 'u', 'e', 0x20}
 )
 
+// WAVE_FORMAT_EXTENSIBLE is the format tag of an extensible fmt chunk.
+const waveFormatExtensible uint16 = 0xfffe
+
+// pcmSubformatGUID is the GUID identifying the PCM subformat inside a
+// WAVE_FORMAT_EXTENSIBLE fmt chunk. Its on-disk byte representation is:
+// 01 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71
+var pcmSubformatGUID = [16]byte{
+	0x01, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x10, 0x00,
+	0x80, 0x00, 0x00, 0xaa,
+	0x00, 0x38, 0x9b, 0x71,
+}
+
 // Decoder handles the decoding of wav files.
 type Decoder struct {
 	r      io.ReadSeeker
@@ -34,6 +48,17 @@ type Decoder struct {
 
 	AvgBytesPerSec uint32
 	WavAudioFormat uint16
+
+	// ValidBitsPerSample is the number of bits actually used per sample, as
+	// advertised by a WAVE_FORMAT_EXTENSIBLE fmt chunk. For regular PCM files
+	// it equals BitDepth (the container width). The unused low bits of
+	// extensible samples are padding and are removed before the data is handed
+	// out, so IntBuffer.Data holds signed integers at this effective bit depth.
+	ValidBitsPerSample uint16
+	// ChannelMask describes the speaker layout of the channels as advertised
+	// by a WAVE_FORMAT_EXTENSIBLE fmt chunk. A zero value means the layout is
+	// unspecified. Regular PCM files always report 0.
+	ChannelMask uint32
 
 	err             error
 	PCMSize         int
@@ -72,6 +97,8 @@ func (d *Decoder) Rewind() error {
 	d.PCMChunk = nil
 	d.err = nil
 	d.NumChans = 0
+	d.ValidBitsPerSample = 0
+	d.ChannelMask = 0
 	err = d.FwdToPCM()
 	if err != nil {
 		return fmt.Errorf("failed to seek to the PCM data: %w", err)
@@ -80,6 +107,8 @@ func (d *Decoder) Rewind() error {
 }
 
 // SampleBitDepth returns the bit depth encoding of each sample.
+// Note that this is the container width; for WAVE_FORMAT_EXTENSIBLE files the
+// number of bits actually carrying signal is exposed via ValidBitsPerSample.
 func (d *Decoder) SampleBitDepth() int32 {
 	if d == nil {
 		return 0
@@ -196,7 +225,7 @@ func (d *Decoder) FwdToPCM() error {
 	}
 	d.err = d.readHeaders()
 	if d.err != nil {
-		return nil
+		return d.err
 	}
 
 	var chunk *riff.Chunk
@@ -249,10 +278,10 @@ func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
 		SampleRate:  int(d.SampleRate),
 	}
 
-	buf := &audio.IntBuffer{Data: make([]int, 4096), Format: format, SourceBitDepth: int(d.BitDepth)}
+	buf := &audio.IntBuffer{Data: make([]int, 4096), Format: format, SourceBitDepth: int(d.ValidBitsPerSample)}
 	bytesPerSample := (d.BitDepth-1)/8 + 1
 	sampleBufData := make([]byte, bytesPerSample)
-	decodeF, err := sampleDecodeFunc(int(d.BitDepth))
+	decodeF, err := d.sampleDecodeFunc()
 	if err != nil {
 		return nil, fmt.Errorf("could not get sample decode func %w", err)
 	}
@@ -299,8 +328,8 @@ func (d *Decoder) PCMBuffer(buf *audio.IntBuffer) (n int, err error) {
 		SampleRate:  int(d.SampleRate),
 	}
 
-	buf.SourceBitDepth = int(d.BitDepth)
-	decodeF, err := sampleDecodeFunc(int(d.BitDepth))
+	buf.SourceBitDepth = int(d.ValidBitsPerSample)
+	decodeF, err := d.sampleDecodeFunc()
 	if err != nil {
 		return 0, fmt.Errorf("could not get sample decode func %w", err)
 	}
@@ -438,13 +467,9 @@ func (d *Decoder) readHeaders() error {
 		}
 
 		if chunk.ID == riff.FmtID {
-			chunk.DecodeWavHeader(d.parser)
-			d.NumChans = d.parser.NumChannels
-			d.BitDepth = d.parser.BitsPerSample
-			d.SampleRate = d.parser.SampleRate
-			d.WavAudioFormat = d.parser.WavAudioFormat
-			d.AvgBytesPerSec = d.parser.AvgBytesPerSec
-
+			if err = d.decodeFmtChunk(chunk); err != nil {
+				break
+			}
 			if rewindBytes > 0 {
 				d.r.Seek(-(rewindBytes + int64(chunk.Size) + 8), 1)
 			}
@@ -466,8 +491,134 @@ func (d *Decoder) readHeaders() error {
 			io.CopyN(io.Discard, d.r, int64(chunk.Size))
 		}
 	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		d.err = err
+		return err
+	}
 
 	return d.err
+}
+
+// decodeFmtChunk parses a fmt chunk, including the WAVE_FORMAT_EXTENSIBLE
+// extension. The chunk size declared in the RIFF container (including its word
+// alignment padding) is honored: extension bytes are never borrowed from the
+// following chunks.
+func (d *Decoder) decodeFmtChunk(chunk *riff.Chunk) error {
+	// The RIFF chunk size is rounded up to an even number of bytes, while the
+	// declared fmt chunk size might be odd. Keep the on-disk length around to
+	// know exactly how many bytes belong to this chunk.
+	onDiskSize := chunk.Size
+	fmtData := make([]byte, onDiskSize)
+	if _, err := io.ReadFull(chunk.R, fmtData); err != nil {
+		return fmt.Errorf("failed to read the fmt chunk: %w", err)
+	}
+	// Drain the word-alignment padding (if any) so the underlying reader ends
+	// up positioned right after the chunk, regardless of how the rest of the
+	// parsing goes. The chunk reader is limited to the chunk's own bytes, so
+	// nothing can be borrowed from the following chunks.
+	if _, err := io.Copy(io.Discard, chunk.R); err != nil {
+		return fmt.Errorf("failed to drain the fmt chunk: %w", err)
+	}
+	r := bytes.NewReader(fmtData)
+
+	var (
+		audioFormat   uint16
+		numChannels   uint16
+		sampleRate    uint32
+		avgBytesPerS  uint32
+		blockAlign    uint16
+		bitsPerSample uint16
+	)
+	for _, v := range []interface{}{&audioFormat, &numChannels, &sampleRate, &avgBytesPerS, &blockAlign, &bitsPerSample} {
+		if err := binary.Read(r, binary.LittleEndian, v); err != nil {
+			return fmt.Errorf("truncated standard fmt chunk: %w", err)
+		}
+	}
+
+	validBits := bitsPerSample
+	var channelMask uint32
+
+	if audioFormat == waveFormatExtensible {
+		// Only 16/24/32 bit integer PCM containers are supported in
+		// extensible mode; float and compressed audio are not extended.
+		switch bitsPerSample {
+		case 16, 24, 32:
+		default:
+			return fmt.Errorf("WAVE_FORMAT_EXTENSIBLE only supports 16, 24 or 32 bit containers, got %d", bitsPerSample)
+		}
+		var cbSize uint16
+		if err := binary.Read(r, binary.LittleEndian, &cbSize); err != nil {
+			return errors.New("truncated WAVE_FORMAT_EXTENSIBLE fmt chunk: missing cbSize")
+		}
+		if cbSize < 22 {
+			return fmt.Errorf("unsupported extensible fmt chunk: cbSize=%d, want at least 22", cbSize)
+		}
+		if r.Len() < 22 {
+			return fmt.Errorf("truncated WAVE_FORMAT_EXTENSIBLE fmt chunk: %d extension byte(s) available, want 22", r.Len())
+		}
+		if err := binary.Read(r, binary.LittleEndian, &validBits); err != nil {
+			return fmt.Errorf("truncated WAVE_FORMAT_EXTENSIBLE fmt chunk: missing valid bits per sample: %w", err)
+		}
+		if err := binary.Read(r, binary.LittleEndian, &channelMask); err != nil {
+			return fmt.Errorf("truncated WAVE_FORMAT_EXTENSIBLE fmt chunk: missing channel mask: %w", err)
+		}
+		var subformat [16]byte
+		if _, err := io.ReadFull(r, subformat[:]); err != nil {
+			return fmt.Errorf("truncated WAVE_FORMAT_EXTENSIBLE fmt chunk: missing subformat GUID: %w", err)
+		}
+		if subformat != pcmSubformatGUID {
+			return fmt.Errorf("unsupported WAVE_FORMAT_EXTENSIBLE subformat GUID % x, only PCM is supported", subformat)
+		}
+		// Any further extension bytes (cbSize > 22) are part of this chunk and
+		// are intentionally ignored.
+	}
+
+	if validBits == 0 || validBits > bitsPerSample {
+		return fmt.Errorf("invalid valid bits per sample: %d for a %d bit container", validBits, bitsPerSample)
+	}
+	if channelMask != 0 && bits.OnesCount32(channelMask) != int(numChannels) {
+		return fmt.Errorf("channel mask 0x%x sets %d channel(s) but the fmt chunk declares %d",
+			channelMask, bits.OnesCount32(channelMask), numChannels)
+	}
+
+	d.WavAudioFormat = audioFormat
+	d.NumChans = numChannels
+	d.SampleRate = sampleRate
+	d.AvgBytesPerSec = avgBytesPerS
+	d.BitDepth = bitsPerSample
+	d.ValidBitsPerSample = validBits
+	d.ChannelMask = channelMask
+	// Keep the riff parser's header view in sync with the manually parsed data.
+	d.parser.WavAudioFormat = audioFormat
+	d.parser.NumChannels = numChannels
+	d.parser.SampleRate = sampleRate
+	d.parser.AvgBytesPerSec = avgBytesPerS
+	d.parser.BitsPerSample = bitsPerSample
+
+	return nil
+}
+
+// sampleDecodeFunc returns the decode function matching the file's container
+// width. For WAVE_FORMAT_EXTENSIBLE files, the low padding bits are shifted out
+// so the returned integer is the signed value at the effective bit depth.
+func (d *Decoder) sampleDecodeFunc() (func(io.Reader, []byte) (int, error), error) {
+	containerDecode, err := sampleDecodeFunc(int(d.BitDepth))
+	if err != nil {
+		return nil, err
+	}
+	if d.WavAudioFormat != waveFormatExtensible || d.ValidBitsPerSample == 0 || d.ValidBitsPerSample == d.BitDepth {
+		return containerDecode, nil
+	}
+	shift := d.BitDepth - d.ValidBitsPerSample
+	return func(r io.Reader, buf []byte) (int, error) {
+		v, err := containerDecode(r, buf)
+		if err != nil {
+			return 0, err
+		}
+		// Samples are stored left-aligned: shift the padding bits away to get
+		// the signed integer carried in the valid bits.
+		return v >> shift, nil
+	}, nil
 }
 
 func bytesPerSample(bitDepth int) int {
