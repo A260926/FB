@@ -1,0 +1,35 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.27", "1.26"]
+        directory: ["./v3"]
+    name: Go ${{ matrix.go }}.x PR Validate ${{ matrix.directory }} (Modules)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Version
+        run: go version
+
+      - name: Setup local directory server
+        run: make local-server
+
+      - name: Build, Validate, and Test
+        run: |
+          cd ${{ matrix.directory }}
+          go vet ./...
+          go test -v -cover -race -count=1 ./...
+          go build ./...
