@@ -44,8 +44,10 @@ const {
 const fs = require("fs-extra");
 const path = require("node:path");
 const childProcess = require("node:child_process");
-const crypto = require("node:crypto");
-const { eventHandler, eventRegexMap } = require("./eventBus");
+const {
+  eventHandler,
+  addDialogRegistration,
+} = require("./eventBus");
 const { highlightElement } = require("./elements/elementHelper");
 const { launchBrowser } = require("./browser/launcher");
 // @injectable — connect_to_cri, cleanUpListenersOnClient, validate are reassignable by test seam
@@ -2300,6 +2302,11 @@ module.exports.within = (selector) => {
  * alert('Message', async () => await accept())
  * await click('Show Alert')
  *
+ * // Each call registers a one-shot handler that handles a single matching
+ * // popup. Registering the same message for the same dialog type more than
+ * // once is allowed; matching registrations are consumed in registration
+ * // order, and a message matcher takes precedence over a callback-only one.
+ *
  * @param {string | RegExp | function } messageOrCallback - Identify prompt based on this message, regex or callback.
  * @param {function} callback - Action to perform. accept/dismiss.
  */
@@ -2337,6 +2344,11 @@ module.exports.alert = (message, callback) =>
  *
  * prompt('Message', async () => await accept())
  * await click('Open Prompt')
+ *
+ * // Each call registers a one-shot handler that handles a single matching
+ * // popup. Registering the same message for the same dialog type more than
+ * // once is allowed; matching registrations are consumed in registration
+ * // order, and a message matcher takes precedence over a callback-only one.
  *
  * @param {string | RegExp | function } messageOrCallback - Identify prompt based on this message, regex or callback.
  * @param {function} callback - Action to perform. accept/dismiss.
@@ -2376,6 +2388,11 @@ module.exports.prompt = (message, callback) =>
  *
  * confirm('Message', async () => await accept())
  * await click('Show Confirm')
+ *
+ * // Each call registers a one-shot handler that handles a single matching
+ * // popup. Registering the same message for the same dialog type more than
+ * // once is allowed; matching registrations are consumed in registration
+ * // order, and a message matcher takes precedence over a callback-only one.
  *
  * @param {string | RegExp | function } messageOrCallback - Identify alert based on this message, regex or callback.
  * @param {function} callback - Action to perform. accept/dismiss.
@@ -2724,28 +2741,24 @@ const dialog = (dialogType, dialogMessage, callback) => {
         resolver = resolve;
       }),
     );
+    const beforeUnloadCallback = isFunction(dialogMessage)
+      ? dialogMessage
+      : callback;
+    return eventHandler.once("beforeunload", async (args) => {
+      await beforeUnloadCallback(args);
+      resolver?.();
+    });
   }
-  const _callback = isFunction(dialogMessage) ? dialogMessage : callback;
-  const eventName = isFunction(dialogMessage)
-    ? dialogType
-    : createJsDialogEvent(dialogMessage, dialogType);
 
-  if (!isFunction(dialogMessage)) {
-    eventRegexMap.set(eventName, new RegExp(dialogMessage));
-  }
-
-  return eventHandler.once(eventName, async (args) => {
-    await _callback(args);
-    resolver?.();
-  });
-};
-
-const createJsDialogEvent = (message, dType) => {
-  const hash = crypto
-    .createHash("md5")
-    .update(message.toString())
-    .digest("hex");
-  return `${dType}_${hash}`;
+  const hasMatcher = !isFunction(dialogMessage);
+  const dialogCallback = hasMatcher ? callback : dialogMessage;
+  // Every call is an independent one-shot record. Duplicate registrations for
+  // the same type and matcher are allowed and consumed in registration order.
+  addDialogRegistration(
+    dialogType,
+    hasMatcher ? dialogMessage : null,
+    dialogCallback,
+  );
 };
 
 const rectangle = async (selector, callback) => {

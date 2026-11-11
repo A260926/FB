@@ -735,7 +735,7 @@ export interface DialogValue {
   defaultPrompt: string;
 }
 
-export type DialogHandler = (value: DialogValue) => void;
+export type DialogHandler = (value: DialogValue) => void | Promise<void>;
 
 // https://docs.taiko.dev/api/alert
 export function alert(

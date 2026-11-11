@@ -4,7 +4,12 @@ const {
   isSelector,
   parseUrl,
 } = require("../helper");
-const { eventHandler, eventRegexMap } = require("../eventBus");
+const {
+  eventHandler,
+  isDialogType,
+  pickDialogRegistration,
+  removeDialogRegistration,
+} = require("../eventBus");
 const { logEvent } = require("../logger");
 const { findElements } = require("../elementSearch");
 const path = require("node:path");
@@ -65,38 +70,44 @@ eventHandler.on("navigationFulfilledByIntercept", ({ frameId }) => {
   resolveFrameNavigationEvent({ frameId, frame: { frameId } });
 });
 
-const getJsDialogEventName = (message, type) => {
-  if (eventRegexMap.size) {
-    for (const [key, value] of eventRegexMap.entries()) {
-      if (key.startsWith(type) && value.test(message)) {
-        return key;
-      }
-    }
-  }
-  if (eventHandler.listenerCount(type)) {
-    return type;
-  }
-};
-
 const addJavascriptDialogOpeningListener = () => {
   page.javascriptDialogOpening((data) => {
-    const eventName = getJsDialogEventName(data.message, data.type);
-    if (eventName) {
-      eventHandler.emit(eventName, data);
-      eventRegexMap.delete(eventName);
-    } else if (data.type === "beforeunload" && isClosingBrowser) {
-      page
-        .handleJavaScriptDialog({
-          accept: true,
-        })
-        .catch(() => {});
-    } else {
-      throw new Error(
-        `There is no handler registered for ${data.type} popup displayed on the page ${data.url}.
+    if (isDialogType(data.type)) {
+      const registration = pickDialogRegistration(data.type, data.message);
+      if (registration) {
+        // Consume the record before invoking the callback so a synchronous
+        // reentrant dialog with the same message picks the next registration.
+        removeDialogRegistration(registration);
+        try {
+          Promise.resolve(registration.callback(data)).catch((error) => {
+            eventHandler.emit("uncaughtException", error);
+          });
+        } catch (error) {
+          eventHandler.emit("uncaughtException", error);
+        }
+        return;
+      }
+    } else if (data.type === "beforeunload") {
+      // beforeunload stays on its own event path and is not part of the
+      // one-shot dialog registry above.
+      if (eventHandler.listenerCount("beforeunload")) {
+        eventHandler.emit("beforeunload", data);
+        return;
+      }
+      if (isClosingBrowser) {
+        page
+          .handleJavaScriptDialog({
+            accept: true,
+          })
+          .catch(() => {});
+        return;
+      }
+    }
+    throw new Error(
+      `There is no handler registered for ${data.type} popup displayed on the page ${data.url}.
           This might interfere with your test flow. You can use Taiko's ${data.type} API to handle this popup.
           Please visit https://docs.taiko.dev/#${data.type} for more details`,
-      );
-    }
+    );
   });
 };
 
