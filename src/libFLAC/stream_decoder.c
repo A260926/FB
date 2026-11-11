@@ -704,13 +704,11 @@ FLAC_API FLAC__bool FLAC__stream_decoder_set_decode_chained_stream(FLAC__StreamD
 	FLAC__ASSERT(0 != decoder->protected_);
 	if (decoder->protected_->state != FLAC__STREAM_DECODER_UNINITIALIZED)
 		return false;
+	decoder->protected_->decode_chained_stream = value;
 #if FLAC__HAS_OGG
 	FLAC__ogg_decoder_aspect_set_decode_chained_stream(&decoder->protected_->ogg_decoder_aspect, value);
-	return true;
-#else
-	(void)value;
-	return false;
 #endif
+	return true;
 }
 
 FLAC_API FLAC__bool FLAC__stream_decoder_set_md5_checking(FLAC__StreamDecoder *decoder, FLAC__bool value)
@@ -843,12 +841,7 @@ FLAC_API FLAC__bool FLAC__stream_decoder_get_decode_chained_stream(const FLAC__S
 {
 	FLAC__ASSERT(0 != decoder);
 	FLAC__ASSERT(0 != decoder->protected_);
-#if FLAC__HAS_OGG
-	return FLAC__ogg_decoder_aspect_get_decode_chained_stream(&decoder->protected_->ogg_decoder_aspect);
-#else
-	(void)decoder;
-	return false;
-#endif
+	return decoder->protected_->decode_chained_stream;
 }
 
 FLAC_API FLAC__bool FLAC__stream_decoder_get_md5_checking(const FLAC__StreamDecoder *decoder)
@@ -1187,7 +1180,14 @@ FLAC_API FLAC__bool FLAC__stream_decoder_process_until_end_of_stream(FLAC__Strea
 					return false; /* above function sets the status for us */
 				break;
 			case FLAC__STREAM_DECODER_END_OF_LINK:
-				FLAC__stream_decoder_finish_link(decoder);
+				if(!FLAC__stream_decoder_finish_link(decoder)) {
+					/* The MD5 signature of the link that just ended did
+					 * not match: stop right at the link boundary
+					 * instead of decoding the next link, so no audio
+					 * from that next link is delivered. */
+					decoder->protected_->state = FLAC__STREAM_DECODER_END_OF_LINK;
+					return false;
+				}
 				break;
 			case FLAC__STREAM_DECODER_END_OF_STREAM:
 			case FLAC__STREAM_DECODER_ABORTED:
@@ -1546,6 +1546,7 @@ void set_defaults_(FLAC__StreamDecoder *decoder)
 	decoder->private_->metadata_filter_ids_count = 0;
 
 	decoder->protected_->md5_checking = false;
+	decoder->protected_->decode_chained_stream = false;
 
 #if FLAC__HAS_OGG
 	FLAC__ogg_decoder_aspect_set_defaults(&decoder->protected_->ogg_decoder_aspect);
@@ -3421,7 +3422,7 @@ FLAC__bool read_callback_(FLAC__byte buffer[], size_t *bytes, void *client_data)
 				return false;
 			}
 			else if(*bytes == 0) {
-				if(status == FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK) {
+				if(status == FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK && decoder->protected_->decode_chained_stream) {
 					if(FLAC__bitreader_is_consumed_byte_aligned(decoder->private_->input))
 						decoder->protected_->state = FLAC__STREAM_DECODER_END_OF_LINK;
 					else
@@ -3430,6 +3431,9 @@ FLAC__bool read_callback_(FLAC__byte buffer[], size_t *bytes, void *client_data)
 				}
 				else if(
 					status == FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM ||
+					/* when chained decoding is disabled, the end of a link
+					 * is treated as the end of the whole stream */
+					status == FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK ||
 					(
 #if FLAC__HAS_OGG
 						/* see [1] HACK NOTE below for why we don't call the eof_callback when decoding Ogg FLAC */

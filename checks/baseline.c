@@ -30,10 +30,13 @@ int main(void){
   c.f[part]=fopen(name,"rb");assert(c.f[part]);
  }
  FLAC__StreamDecoder*d=FLAC__stream_decoder_new();assert(d);assert(FLAC__stream_decoder_set_md5_checking(d,1));
- int accepted=FLAC__stream_decoder_set_decode_chained_stream(d,1);assert(!accepted);
+ assert(!FLAC__stream_decoder_get_decode_chained_stream(d));
+ int accepted=FLAC__stream_decoder_set_decode_chained_stream(d,1);assert(accepted);
+ assert(FLAC__stream_decoder_get_decode_chained_stream(d));
  assert(FLAC__stream_decoder_init_stream(d,rd,NULL,NULL,NULL,NULL,wr,md,er,&c)==FLAC__STREAM_DECODER_INIT_STATUS_OK);
+ assert(!FLAC__stream_decoder_set_decode_chained_stream(d,0));
  assert(FLAC__stream_decoder_process_until_end_of_link(d));assert(FLAC__stream_decoder_get_state(d)==FLAC__STREAM_DECODER_END_OF_LINK);
  assert(c.meta==1&&c.frames==1);assert(FLAC__stream_decoder_finish_link(d));
  assert(FLAC__stream_decoder_process_until_end_of_stream(d));assert(c.meta==2&&c.frames==2);assert(FLAC__stream_decoder_finish(d));
- FLAC__stream_decoder_delete(d);fclose(c.f[0]);fclose(c.f[1]);puts("BASELINE native_links=2 pcm_exact=1 md5_ok=1 chained_flag_rejected=1");return 0;
+ FLAC__stream_decoder_delete(d);fclose(c.f[0]);fclose(c.f[1]);puts("BASELINE native_links=2 pcm_exact=1 md5_ok=1 chained_flag_accepted=1");return 0;
 }

@@ -47,6 +47,7 @@ typedef struct FLAC__StreamDecoderProtected {
 	uint32_t sample_rate; /* in Hz */
 	uint32_t blocksize; /* in samples (per channel) */
 	FLAC__bool md5_checking; /* if true, generate MD5 signature of decoded data and compare against signature in the STREAMINFO metadata block */
+	FLAC__bool decode_chained_stream; /* if true, decode a chained stream (chained Ogg or native FLAC links offered through the read callback) link by link */
 #if FLAC__HAS_OGG
 	FLAC__OggDecoderAspect ogg_decoder_aspect;
 #endif

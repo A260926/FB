@@ -242,11 +242,14 @@ typedef enum {
 	 */
 
 	FLAC__STREAM_DECODER_END_OF_LINK
-	/**< The decoder has reached the end of an Ogg FLAC chain link and a new
+	/**< The decoder has reached the end of a chain link and a new
 	 * link follows; FLAC__stream_decoder_finish_link() has to be called to
 	 * progress. This state is only returned when decoding of chained
 	 * streams is enabled with
-	 * FLAC__stream_decoder_set_decode_chained_stream()
+	 * FLAC__stream_decoder_set_decode_chained_stream(). Links can be
+	 * Ogg FLAC chain links or native FLAC streams offered one after
+	 * the other through the read callback, see
+	 * FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK
 	 */
 
 } FLAC__StreamDecoderState;
@@ -321,6 +324,13 @@ typedef enum {
 	FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK
 	/**< The read was attempted while at the end of the link.  The semantics
 	 * are the same as for FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM.
+	 * A client feeding a chain of native FLAC streams through the read
+	 * callback returns this value (with a byte count of \c 0) at the end of
+	 * each stream but the last; the next read callback is then expected to
+	 * provide data from the start of the next stream.  When decoding of
+	 * chained streams is not enabled with
+	 * FLAC__stream_decoder_set_decode_chained_stream(), this value is
+	 * treated like FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM.
 	 */
 
 } FLAC__StreamDecoderReadStatus;
@@ -813,16 +823,19 @@ FLAC_API FLAC__bool FLAC__stream_decoder_set_ogg_serial_number(FLAC__StreamDecod
  *  continue: at the start of each link, FLAC__stream_decoder_get_state
  *  will return FLAC__STREAM_DECODER_SEARCH_FOR_METADATA.
  *
- *  This function was made to decode chained Ogg streams, but it should
- *  be possible to chain regular FLAC files through the read callback
- *  by using FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK
- *  appropriately.
+ *  This function was made to decode chained Ogg streams, but it can
+ *  also be used to decode a chain of native FLAC streams fed through
+ *  the read callback: the client returns
+ *  FLAC__STREAM_DECODER_READ_STATUS_END_OF_LINK at the end of each
+ *  stream but the last, and the decoder then expects the next stream
+ *  (starting with its own \c fLaC marker and STREAMINFO block) on the
+ *  following reads. Each link is treated as a stream of its own: its
+ *  metadata (including its MD5 signature) and its sample numbering are
+ *  interpreted afresh, and no decoder state leaks from one link to the
+ *  next.
  *
  *  Note that when this flag is set to true, the serial number set
  *  with FLAC__stream_decoder_set_ogg_serial_number is ignored.
- *
- * \note
- * This function has no effect with native FLAC decoding.
  *
  * \default \c false
  * \param  decoder          A decoder instance to set.
@@ -1524,7 +1537,10 @@ FLAC_API FLAC__bool FLAC__stream_decoder_finish(FLAC__StreamDecoder *decoder);
  *  Checks MD5 for current link and start processing of the next link. This
  *  function should only be used when the decoder state is
  *  FLAC__STREAM_DECODER_END_OF_LINK. After calling this function, the state
- *  is set to FLAC__STREAM_DECODER_SEARCH_FOR_METADATA.
+ *  is set to FLAC__STREAM_DECODER_SEARCH_FOR_METADATA. This applies both
+ *  to chained Ogg streams and to chains of native FLAC streams fed
+ *  through the read callback, see
+ *  FLAC__stream_decoder_set_decode_chained_stream().
  *
  * \param  decoder  An uninitialized decoder instance.
  * \assert
@@ -1638,7 +1654,7 @@ FLAC_API FLAC__bool FLAC__stream_decoder_process_single(FLAC__StreamDecoder *dec
  */
 FLAC_API FLAC__bool FLAC__stream_decoder_process_until_end_of_metadata(FLAC__StreamDecoder *decoder);
 
-/** Decode until the end of the Ogg chain link.
+/** Decode until the end of the chain link.
  *  This version instructs the decoder to decode from the current
  *  position and continue until the end of link or until the
  *  callbacks return a fatal error. This function should not be
@@ -1668,6 +1684,15 @@ FLAC_API FLAC__bool FLAC__stream_decoder_process_until_end_of_link(FLAC__StreamD
  *  and continue until the end of stream (the read callback returns
  *  \c FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM), or until the
  *  callbacks return a fatal error.
+ *
+ *  When decoding of chained streams is enabled with
+ *  FLAC__stream_decoder_set_decode_chained_stream(), links are decoded
+ *  one after the other until the physical end of stream is reached.
+ *  If MD5 checking is on and a link with a non-zero MD5 signature in
+ *  its STREAMINFO block does not match the decoded audio, this
+ *  function returns \c false and stops at the end of that link (the
+ *  decoder state will be FLAC__STREAM_DECODER_END_OF_LINK); no audio
+ *  of the following link is delivered.
  *
  *  As the decoder needs more input it will call the read callback.
  *  As each metadata block and frame is decoded, the metadata or write
