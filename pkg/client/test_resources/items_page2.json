@@ -1,0 +1,15 @@
+{
+  "type": "FeatureCollection",
+  "stac_version": "1.0.0",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "item-page2-001",
+      "stac_version": "1.0.0",
+      "collection": "test-collection-paginated",
+      "properties": {"prop": "value2"},
+      "geometry": null, "assets": {}, "links": []
+    }
+  ],
+  "links": []
+}

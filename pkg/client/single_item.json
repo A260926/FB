@@ -1,0 +1,58 @@
+{
+    "type": "Feature",
+    "stac_version": "1.0.0",
+    "stac_extensions": [
+      "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+      "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+    ],
+    "id": "S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE",
+    "collection": "SENTINEL-1",
+    "geometry": null,
+    "properties": {
+      "origin": "ESA",
+      "processingDate": "2024-03-27T10:11:57.000000+00:00",
+      "processingCenter": "CLS-Brest",
+      "platformShortName": "SENTINEL-1",
+      "instrumentShortName": "SAR",
+      "platformSerialIdentifier": "A",
+      "instrumentConfigurationID": 3,
+      "datetime": "2014-09-08T00:00:00.000000Z",
+      "end_datetime": "2014-09-08T00:00:00.000000Z",
+      "start_datetime": "2014-09-08T00:00:00.000000Z",
+      "productType": "AUX_CAL"
+    },
+    "bbox": null,
+    "links": [
+      {
+        "rel": "root",
+        "type": "application/json",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac"
+      },
+      {
+        "rel": "self",
+        "type": "application/json",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE"
+      },
+      {
+        "rel": "collection",
+        "type": "application/json",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+      }
+    ],
+    "assets": {
+      "PRODUCT": {
+        "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(cf1a597c-ec22-11ee-8006-fa163e7968e5)/$value",
+        "title": "Product",
+        "type": "application/octet-stream",
+        "alternate": {
+          "s3": {
+            "href": "/eodata/Sentinel-1/AUX/AUX_CAL/2014/09/08/S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE.zip",
+            "storage:platform": "CLOUDFERRO",
+            "storage:region": "waw",
+            "storage:requester_pays": false,
+            "storage:tier": "Online"
+          }
+        }
+      }
+    }
+  }

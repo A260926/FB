@@ -1,0 +1,15 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "id": "test-item-001",
+  "collection": "test-collection",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [0, 0]
+  },
+  "properties": {
+    "datetime": "2023-01-01T12:00:00Z"
+  },
+  "links": [],
+  "assets": {}
+}

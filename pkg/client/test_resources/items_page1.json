@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "stac_version": "1.0.0",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "item-page1-001",
+      "stac_version": "1.0.0",
+      "collection": "test-collection-paginated",
+      "properties": {"prop": "value1"},
+      "geometry": null, "assets": {}, "links": []
+    }
+  ],
+  "links": [
+    {
+      "rel": "next",
+      "href": "/collections/test-collection-paginated/items?page=2",
+      "type": "application/json"
+    }
+  ]
+}

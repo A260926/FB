@@ -1,0 +1,1124 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "processingDate": "2024-03-27T10:11:57.000000+00:00",
+          "processingCenter": "CLS-Brest",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "platformSerialIdentifier": "A",
+          "instrumentConfigurationID": 3,
+          "datetime": "2014-09-08T00:00:00.000000Z",
+          "end_datetime": "2014-09-08T00:00:00.000000Z",
+          "start_datetime": "2014-09-08T00:00:00.000000Z",
+          "productType": "AUX_CAL"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(cf1a597c-ec22-11ee-8006-fa163e7968e5)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_CAL/2014/09/08/S1A_AUX_CAL_V20140908T000000_G20240327T101157.SAFE.zip",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_AUX_CAL_V20150722T120000_G20240327T101830.SAFE",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "processingDate": "2024-03-27T10:18:30.000000+00:00",
+          "processingCenter": "CLS-Brest",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "platformSerialIdentifier": "A",
+          "instrumentConfigurationID": 5,
+          "datetime": "2015-07-22T12:00:00.000000Z",
+          "end_datetime": "2015-07-22T12:00:00.000000Z",
+          "start_datetime": "2015-07-22T12:00:00.000000Z",
+          "productType": "AUX_CAL"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_AUX_CAL_V20150722T120000_G20240327T101830.SAFE"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(e4df93b6-ec23-11ee-a49a-fa163e7968e5)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_CAL/2015/07/22/S1A_AUX_CAL_V20150722T120000_G20240327T101830.SAFE.zip",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_AUX_CAL_V20150519T120000_G20240327T101700.SAFE",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "processingDate": "2024-03-27T10:17:00.000000+00:00",
+          "processingCenter": "CLS-Brest",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "platformSerialIdentifier": "A",
+          "instrumentConfigurationID": 4,
+          "datetime": "2015-05-19T12:00:00.000000Z",
+          "end_datetime": "2015-05-19T12:00:00.000000Z",
+          "start_datetime": "2015-05-19T12:00:00.000000Z",
+          "productType": "AUX_CAL"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_AUX_CAL_V20150519T120000_G20240327T101700.SAFE"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(e4e0c2f4-ec23-11ee-8bea-fa163e7968e5)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_CAL/2015/05/19/S1A_AUX_CAL_V20150519T120000_G20240327T101700.SAFE.zip",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T100627_V20140623T235949_20140624T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-24T00:00:05.000000Z",
+          "end_datetime": "2014-06-24T23:59:55.000000Z",
+          "start_datetime": "2014-06-24T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T100627_V20140623T235949_20140624T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(b732b7c9-648d-45e1-927e-c3a69c638599)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/24/S1A_OPER_AUX_GNSSRD_POD__20171211T100627_V20140623T235949_20140624T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T095126_V20140608T235949_20140609T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-09T00:00:05.000000Z",
+          "end_datetime": "2014-06-09T23:59:55.000000Z",
+          "start_datetime": "2014-06-09T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T095126_V20140608T235949_20140609T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(2c4eadf8-31b4-43bb-87c0-b31ce532415d)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/09/S1A_OPER_AUX_GNSSRD_POD__20171211T095126_V20140608T235949_20140609T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T100425_V20140621T235949_20140622T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-22T00:00:05.000000Z",
+          "end_datetime": "2014-06-22T23:59:55.000000Z",
+          "start_datetime": "2014-06-22T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T100425_V20140621T235949_20140622T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(9f35a88f-40cc-44e2-bd92-db64775d2a78)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/22/S1A_OPER_AUX_GNSSRD_POD__20171211T100425_V20140621T235949_20140622T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T100324_V20140620T235949_20140621T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-21T00:00:05.000000Z",
+          "end_datetime": "2014-06-21T23:59:55.000000Z",
+          "start_datetime": "2014-06-21T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T100324_V20140620T235949_20140621T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(f0e7cb45-aba3-4351-8e1e-e35894e36cea)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/21/S1A_OPER_AUX_GNSSRD_POD__20171211T100324_V20140620T235949_20140621T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T094636_V20140603T235949_20140604T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-04T00:00:05.000000Z",
+          "end_datetime": "2014-06-04T23:59:55.000000Z",
+          "start_datetime": "2014-06-04T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T094636_V20140603T235949_20140604T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(e74ff0cc-b8c2-46e2-b6e7-f5cf8cacd0cc)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/04/S1A_OPER_AUX_GNSSRD_POD__20171211T094636_V20140603T235949_20140604T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T094729_V20140604T235949_20140605T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-05T00:00:05.000000Z",
+          "end_datetime": "2014-06-05T23:59:55.000000Z",
+          "start_datetime": "2014-06-05T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T094729_V20140604T235949_20140605T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(e8c2b1eb-0a06-45a8-9328-1006b59654d0)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/05/S1A_OPER_AUX_GNSSRD_POD__20171211T094729_V20140604T235949_20140605T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T095728_V20140614T235949_20140615T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-15T00:00:05.000000Z",
+          "end_datetime": "2014-06-15T23:59:55.000000Z",
+          "start_datetime": "2014-06-15T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T095728_V20140614T235949_20140615T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(eee137c1-58e0-4de0-906e-61bd4dfbd336)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/15/S1A_OPER_AUX_GNSSRD_POD__20171211T095728_V20140614T235949_20140615T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T100937_V20140626T235949_20140627T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-27T00:00:05.000000Z",
+          "end_datetime": "2014-06-27T23:59:55.000000Z",
+          "start_datetime": "2014-06-27T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T100937_V20140626T235949_20140627T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(b176f138-5ff6-4d00-b520-935d5cdaa780)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/27/S1A_OPER_AUX_GNSSRD_POD__20171211T100937_V20140626T235949_20140627T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T101148_V20140628T235949_20140629T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-29T00:00:05.000000Z",
+          "end_datetime": "2014-06-29T23:59:55.000000Z",
+          "start_datetime": "2014-06-29T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T101148_V20140628T235949_20140629T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(171fd093-b1bc-4528-910b-73156cd0b5d3)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/29/S1A_OPER_AUX_GNSSRD_POD__20171211T101148_V20140628T235949_20140629T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T095530_V20140612T235949_20140613T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-13T00:00:05.000000Z",
+          "end_datetime": "2014-06-13T23:59:55.000000Z",
+          "start_datetime": "2014-06-13T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T095530_V20140612T235949_20140613T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(eda054be-6a01-4130-8c01-3d5ad3a94693)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/13/S1A_OPER_AUX_GNSSRD_POD__20171211T095530_V20140612T235949_20140613T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T095430_V20140611T235949_20140612T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-12T00:00:05.000000Z",
+          "end_datetime": "2014-06-12T23:59:55.000000Z",
+          "start_datetime": "2014-06-12T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T095430_V20140611T235949_20140612T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(cdaf523e-7a69-4227-8cb9-6f14bc0004e8)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/12/S1A_OPER_AUX_GNSSRD_POD__20171211T095430_V20140611T235949_20140612T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T095233_V20140609T235949_20140610T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-10T00:00:05.000000Z",
+          "end_datetime": "2014-06-10T23:59:55.000000Z",
+          "start_datetime": "2014-06-10T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T095233_V20140609T235949_20140610T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(f01b4f7e-7dff-4b33-8760-546e2144b32e)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/10/S1A_OPER_AUX_GNSSRD_POD__20171211T095233_V20140609T235949_20140610T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T100838_V20140625T235949_20140626T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-06-26T00:00:05.000000Z",
+          "end_datetime": "2014-06-26T23:59:55.000000Z",
+          "start_datetime": "2014-06-26T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T100838_V20140625T235949_20140626T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(bc9bde44-6222-4bdf-95e4-9eae6b4929f5)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/06/26/S1A_OPER_AUX_GNSSRD_POD__20171211T100838_V20140625T235949_20140626T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T102025_V20140709T235949_20140710T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-07-10T00:00:05.000000Z",
+          "end_datetime": "2014-07-10T23:59:55.000000Z",
+          "start_datetime": "2014-07-10T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T102025_V20140709T235949_20140710T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(e4d27279-33c8-4669-bffa-6ffa66e19436)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/07/10/S1A_OPER_AUX_GNSSRD_POD__20171211T102025_V20140709T235949_20140710T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T101926_V20140708T235949_20140709T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-07-09T00:00:05.000000Z",
+          "end_datetime": "2014-07-09T23:59:55.000000Z",
+          "start_datetime": "2014-07-09T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T101926_V20140708T235949_20140709T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(27a12bd8-1470-4d23-bb79-70bbe61a7b69)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/07/09/S1A_OPER_AUX_GNSSRD_POD__20171211T101926_V20140708T235949_20140709T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T103035_V20140720T235949_20140721T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-07-21T00:00:05.000000Z",
+          "end_datetime": "2014-07-21T23:59:55.000000Z",
+          "start_datetime": "2014-07-21T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T103035_V20140720T235949_20140721T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(9d58d834-f33a-4383-b99c-e4d15e289865)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/07/21/S1A_OPER_AUX_GNSSRD_POD__20171211T103035_V20140720T235949_20140721T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [
+          "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+          "https://stac-extensions.github.io/storage/v1.0.0/schema.json"
+        ],
+        "id": "S1A_OPER_AUX_GNSSRD_POD__20171211T102941_V20140719T235949_20140720T235939",
+        "collection": "SENTINEL-1",
+        "geometry": null,
+        "properties": {
+          "origin": "ESA",
+          "platformShortName": "SENTINEL-1",
+          "instrumentShortName": "SAR",
+          "datetime": "2014-07-20T00:00:05.000000Z",
+          "end_datetime": "2014-07-20T23:59:55.000000Z",
+          "start_datetime": "2014-07-20T00:00:05.000000Z",
+          "productType": "AUX_GNSSRD"
+        },
+        "bbox": null,
+        "links": [
+          {
+            "rel": "root",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac"
+          },
+          {
+            "rel": "self",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items/S1A_OPER_AUX_GNSSRD_POD__20171211T102941_V20140719T235949_20140720T235939"
+          },
+          {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+          }
+        ],
+        "assets": {
+          "PRODUCT": {
+            "href": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products(1ef238bc-8a4f-4c49-a83a-c569c75af2cc)/$value",
+            "title": "Product",
+            "type": "application/octet-stream",
+            "alternate": {
+              "s3": {
+                "href": "/eodata/Sentinel-1/AUX/AUX_GNSSRD/2014/07/20/S1A_OPER_AUX_GNSSRD_POD__20171211T102941_V20140719T235949_20140720T235939",
+                "storage:platform": "CLOUDFERRO",
+                "storage:region": "waw",
+                "storage:requester_pays": false,
+                "storage:tier": "Online"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "rel": "next",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items?page=2",
+        "type": "application/json"
+      },
+      {
+        "rel": "self",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items",
+        "type": "application/json"
+      },
+      {
+        "rel": "root",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac",
+        "type": "application/json"
+      },
+      {
+        "rel": "collection",
+        "type": "application/json",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+      },
+      {
+        "rel": "parent",
+        "type": "application/json",
+        "href": "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1"
+      }
+    ]
+  }

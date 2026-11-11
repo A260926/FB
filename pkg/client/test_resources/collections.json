@@ -1,0 +1,60 @@
+{
+    "collections": [
+      {
+        "id": "sentinel-2",
+        "type": "Collection",
+        "stac_version": "1.0.0",
+        "description": "Sentinel-2 imagery collection",
+        "license": "proprietary",
+        "extent": {
+          "spatial": {
+            "bbox": [[-180, -90, 180, 90]]
+          },
+          "temporal": {
+            "interval": [["2015-06-23T00:00:00Z", null]]
+          }
+        },
+        "links": [
+          {
+            "rel": "self",
+            "href": "https://example.com/collections/sentinel-2"
+          },
+          {
+            "rel": "items",
+            "href": "https://example.com/collections/sentinel-2/items"
+          }
+        ]
+      },
+      {
+        "id": "landsat-8",
+        "type": "Collection",
+        "stac_version": "1.0.0",
+        "description": "Landsat 8 imagery collection",
+        "license": "proprietary",
+        "extent": {
+          "spatial": {
+            "bbox": [[-180, -90, 180, 90]]
+          },
+          "temporal": {
+            "interval": [["2013-02-11T00:00:00Z", null]]
+          }
+        },
+        "links": [
+          {
+            "rel": "self",
+            "href": "https://example.com/collections/landsat-8"
+          },
+          {
+            "rel": "items",
+            "href": "https://example.com/collections/landsat-8/items"
+          }
+        ]
+      }
+    ],
+    "links": [
+      {
+        "rel": "self",
+        "href": "https://example.com/collections"
+      }
+    ]
+  }

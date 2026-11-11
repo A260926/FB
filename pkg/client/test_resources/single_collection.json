@@ -1,0 +1,25 @@
+{
+    "id": "sentinel-2",
+    "type": "Collection",
+    "stac_version": "1.0.0",
+    "description": "Sentinel-2 imagery collection",
+    "license": "proprietary",
+    "extent": {
+      "spatial": {
+        "bbox": [[-180, -90, 180, 90]]
+      },
+      "temporal": {
+        "interval": [["2015-06-23T00:00:00Z", null]]
+      }
+    },
+    "links": [
+      {
+        "rel": "self",
+        "href": "https://example.com/collections/sentinel-2"
+      },
+      {
+        "rel": "items",
+        "href": "https://example.com/collections/sentinel-2/items"
+      }
+    ]
+  }
