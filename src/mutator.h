@@ -74,6 +74,23 @@ class Mutator {
   void RegisterPostProcessor(const protobuf::Descriptor* desc,
                              PostProcess callback);
 
+  // Resolves the payload type of a google.protobuf.Any from its complete
+  // type_url. The resolver must return an empty message created with the
+  // caller supplied descriptor and message factory. Returning nullptr means
+  // that the type is not handled and the Any stays opaque.
+  //
+  // The descriptor, message factory and message pool referenced by the
+  // returned messages must outlive the calls that use this resolver. The
+  // resolver and the state it references belong to this Mutator only; the
+  // global generated pool is not modified.
+  using AnyResolver =
+      std::function<std::unique_ptr<google::protobuf::Message>(
+          const std::string& type_url)>;
+
+  // Enables structured Any mutation. Passing an empty function restores the
+  // legacy handling.
+  void SetAnyResolver(AnyResolver resolver);
+
  protected:
   // TODO(vitalybuka): Consider to replace with single mutate (uint8_t*, size).
   virtual int32_t MutateInt32(int32_t value);
@@ -94,13 +111,19 @@ class Mutator {
   friend class TestMutator;
   bool MutateImpl(const std::vector<const protobuf::Message*>& sources,
                   const std::vector<protobuf::Message*>& messages,
+                  const std::unordered_map<const protobuf::Message*, int>&
+                      message_depths,
                   bool copy_clone_only, int size_increase_hint);
   std::string MutateUtf8String(const std::string& value,
                                int size_increase_hint);
   bool IsInitialized(const protobuf::Message& message) const;
+  bool StructuredAnyEnabled() const {
+    return static_cast<bool>(any_resolver_);
+  }
   bool keep_initialized_ = true;
   size_t random_to_default_ratio_ = 100;
   RandomEngine random_;
+  AnyResolver any_resolver_;
   using PostProcessors =
       std::unordered_multimap<const protobuf::Descriptor*, PostProcess>;
   PostProcessors post_processors_;

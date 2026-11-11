@@ -90,6 +90,26 @@ bool IsProto3SimpleField(const FieldDescriptor& field) {
   return !field.is_repeated() && !HasPresence(field);
 }
 
+const char kAnyFullName[] = "google.protobuf.Any";
+
+// Returns true for both generated google.protobuf.Any messages and messages
+// built at runtime from a copied Any descriptor in an independent pool.
+bool IsAnyMessage(const Message& message) {
+  const Descriptor* descriptor = message.GetDescriptor();
+  if (descriptor->full_name() != kAnyFullName) return false;
+  const FieldDescriptor* type_url = descriptor->FindFieldByNumber(1);
+  const FieldDescriptor* value = descriptor->FindFieldByNumber(2);
+  return type_url && value &&
+         type_url->cpp_type() == FieldDescriptor::CPPTYPE_STRING &&
+         value->cpp_type() == FieldDescriptor::CPPTYPE_STRING;
+}
+
+int GetMessageDepth(const std::unordered_map<const Message*, int>& depths,
+                    const Message* message) {
+  auto it = depths.find(message);
+  return it == depths.end() ? 0 : it->second;
+}
+
 struct CreateDefaultField : public FieldFunction<CreateDefaultField> {
   template <class T>
   void ForType(const FieldInstance& field) const {
@@ -176,10 +196,11 @@ class CanCopyAndDifferentField
 class MutationSampler {
  public:
   MutationSampler(bool keep_initialized, MutationBitset allowed_mutations,
-                  RandomEngine* random)
+                  RandomEngine* random, bool structured_any)
       : keep_initialized_(keep_initialized),
         allowed_mutations_(allowed_mutations),
         random_(random),
+        structured_any_(structured_any),
         sampler_(random) {}
 
   // Returns selected field.
@@ -188,15 +209,21 @@ class MutationSampler {
   // Returns selected mutation.
   Mutation mutation() const { return sampler_.selected().mutation; }
 
-  void Sample(Message* message) {
-    SampleImpl(message);
+  void Sample(Message* message, int depth) {
+    SampleImpl(message, depth);
     assert(mutation() != Mutation::None ||
            !allowed_mutations_[static_cast<size_t>(Mutation::Mutate)] ||
-           message->GetDescriptor()->field_count() == 0);
+           message->GetDescriptor()->field_count() == 0 ||
+           depth + 1 > kMaxInitializeDepth ||
+           (structured_any_ && IsAnyMessage(*message)));
   }
 
  private:
-  void SampleImpl(Message* message) {
+  void SampleImpl(Message* message, int depth) {
+    // A structured Any envelope is managed as a whole. Its type_url and value
+    // fields are not independent mutation targets.
+    if (structured_any_ && IsAnyMessage(*message)) return;
+
     const Descriptor* descriptor = message->GetDescriptor();
     const Reflection* reflection = message->GetReflection();
 
@@ -257,13 +284,15 @@ class MutationSampler {
         }
       }
 
-      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
+          (!structured_any_ || depth + 1 <= kMaxInitializeDepth)) {
         if (field->is_repeated()) {
           const int field_size = reflection->FieldSize(*message, field);
           for (int j = 0; j < field_size; ++j)
-            SampleImpl(reflection->MutableRepeatedMessage(message, field, j));
+            SampleImpl(reflection->MutableRepeatedMessage(message, field, j),
+                       depth + 1);
         } else if (reflection->HasField(*message, field)) {
-          SampleImpl(reflection->MutableMessage(message, field));
+          SampleImpl(reflection->MutableMessage(message, field), depth + 1);
         }
       }
     }
@@ -279,6 +308,7 @@ class MutationSampler {
   MutationBitset allowed_mutations_;
 
   RandomEngine* random_;
+  bool structured_any_;
 
   struct Result {
     Result() = default;
@@ -294,13 +324,14 @@ class MutationSampler {
 class DataSourceSampler {
  public:
   DataSourceSampler(const ConstFieldInstance& match, RandomEngine* random,
-                    int size_increase_hint)
+                    int size_increase_hint, bool structured_any)
       : match_(match),
         random_(random),
         size_increase_hint_(size_increase_hint),
+        structured_any_(structured_any),
         sampler_(random) {}
 
-  void Sample(const Message& message) { SampleImpl(message); }
+  void Sample(const Message& message, int depth) { SampleImpl(message, depth); }
 
   // Returns selected field.
   const ConstFieldInstance& field() const {
@@ -311,21 +342,27 @@ class DataSourceSampler {
   bool IsEmpty() const { return sampler_.IsEmpty(); }
 
  private:
-  void SampleImpl(const Message& message) {
+  void SampleImpl(const Message& message, int depth) {
+    // Do not expose type_url or value bytes of an Any as independent sources.
+    // Whole Any envelopes can still be copied through their message fields.
+    if (structured_any_ && IsAnyMessage(message)) return;
+
     const Descriptor* descriptor = message.GetDescriptor();
     const Reflection* reflection = message.GetReflection();
 
     int field_count = descriptor->field_count();
     for (int i = 0; i < field_count; ++i) {
       const FieldDescriptor* field = descriptor->field(i);
-      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
+          (!structured_any_ || depth + 1 <= kMaxInitializeDepth)) {
         if (field->is_repeated()) {
           const int field_size = reflection->FieldSize(message, field);
           for (int j = 0; j < field_size; ++j) {
-            SampleImpl(reflection->GetRepeatedMessage(message, field, j));
+            SampleImpl(reflection->GetRepeatedMessage(message, field, j),
+                       depth + 1);
           }
         } else if (reflection->HasField(message, field)) {
-          SampleImpl(reflection->GetMessage(message, field));
+          SampleImpl(reflection->GetMessage(message, field), depth + 1);
         }
       }
 
@@ -356,6 +393,7 @@ class DataSourceSampler {
   ConstFieldInstance match_;
   RandomEngine* random_;
   int size_increase_hint_;
+  bool structured_any_;
 
   WeightedReservoirSampler<ConstFieldInstance, RandomEngine> sampler_;
 };
@@ -500,6 +538,228 @@ class PostProcessing {
   RandomEngine* random_;
 };
 
+// Describes one Any envelope. A null |payload| means the envelope is opaque
+// (unknown type, invalid URL, name mismatch or malformed bytes). |value| is
+// the envelope value at expansion time and is used to detect envelopes
+// replaced by a Copy or Clone mutation.
+struct AnyExpansion {
+  std::string type_url;
+  std::string value;
+  std::unique_ptr<Message> payload;
+  int payload_depth = 0;
+};
+
+using AnyExpansions = std::unordered_map<const Message*, AnyExpansion>;
+
+bool ParseAnyTypeName(const std::string& type_url, std::string* type_name) {
+  size_t slash = type_url.rfind('/');
+  if (slash == std::string::npos) return false;
+  *type_name = type_url.substr(slash + 1);
+  return !type_name->empty();
+}
+
+std::string GetAnyTypeUrl(const Message& message) {
+  const Descriptor* descriptor = message.GetDescriptor();
+  return message.GetReflection()->GetString(
+      message, descriptor->FindFieldByNumber(1));
+}
+
+std::string GetAnyValue(const Message& message) {
+  const Descriptor* descriptor = message.GetDescriptor();
+  return message.GetReflection()->GetString(
+      message, descriptor->FindFieldByNumber(2));
+}
+
+void SetAnyValue(Message* message, const std::string& value) {
+  const Descriptor* descriptor = message->GetDescriptor();
+  message->GetReflection()->SetString(message,
+                                      descriptor->FindFieldByNumber(2), value);
+}
+
+// Expands structured Any envelopes reachable from a message tree. If a
+// previous expansion is supplied, payloads of envelopes whose type_url and
+// value did not change are reused so that mutations made to the payload this
+// round are preserved. Envelopes introduced by structural mutations are
+// resolved again. Records which are no longer reachable are dropped.
+class AnyExpander {
+ public:
+  explicit AnyExpander(const Mutator::AnyResolver& resolver)
+      : resolver_(resolver) {}
+
+  AnyExpansions Expand(const Message& message,
+                       AnyExpansions* previous = nullptr) {
+    AnyExpansions empty;
+    if (!previous) previous = &empty;
+    AnyExpansions result;
+    ExpandMessage(message, 0, previous, &result);
+    return result;
+  }
+
+ private:
+  void ExpandMessage(const Message& message, int depth,
+                     AnyExpansions* previous, AnyExpansions* result) {
+    if (IsAnyMessage(message)) {
+      ExpandAny(message, depth, previous, result);
+      return;
+    }
+    if (depth + 1 > kMaxInitializeDepth) return;
+
+    const Descriptor* descriptor = message.GetDescriptor();
+    const Reflection* reflection = message.GetReflection();
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+      const FieldDescriptor* field = descriptor->field(i);
+      if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) continue;
+      if (field->is_repeated()) {
+        const int field_size = reflection->FieldSize(message, field);
+        for (int j = 0; j < field_size; ++j) {
+          ExpandMessage(reflection->GetRepeatedMessage(message, field, j),
+                        depth + 1, previous, result);
+        }
+      } else if (reflection->HasField(message, field)) {
+        ExpandMessage(reflection->GetMessage(message, field), depth + 1,
+                      previous, result);
+      }
+    }
+  }
+
+  void ExpandAny(const Message& message, int depth, AnyExpansions* previous,
+                 AnyExpansions* result) {
+    // Crossing an Any payload consumes the shared depth budget. Once it would
+    // be exceeded the envelope remains an opaque terminal.
+    if (depth + 1 > kMaxInitializeDepth) return;
+
+    std::string type_url = GetAnyTypeUrl(message);
+    std::string value = GetAnyValue(message);
+    auto it = previous->find(&message);
+    if (it != previous->end() && it->second.type_url == type_url &&
+        it->second.value == value) {
+      AnyExpansion expansion = std::move(it->second);
+      previous->erase(it);
+      if (expansion.payload) {
+        ExpandMessage(*expansion.payload, expansion.payload_depth, previous,
+                      result);
+      }
+      result->emplace(&message, std::move(expansion));
+      return;
+    }
+
+    std::unique_ptr<Message> payload;
+    if (!Resolve(type_url, value, &payload)) {
+      // Remember the opaque decision so a later reconciliation in the same
+      // call does not resolve the same envelope again.
+      AnyExpansion opaque;
+      opaque.type_url = std::move(type_url);
+      opaque.value = std::move(value);
+      result->emplace(&message, std::move(opaque));
+      return;
+    }
+
+    AnyExpansion expansion;
+    expansion.type_url = std::move(type_url);
+    expansion.value = std::move(value);
+    expansion.payload_depth = depth + 1;
+    expansion.payload = std::move(payload);
+    ExpandMessage(*expansion.payload, expansion.payload_depth, previous, result);
+    result->emplace(&message, std::move(expansion));
+  }
+
+  bool Resolve(const std::string& type_url, const std::string& value,
+               std::unique_ptr<Message>* payload) const {
+    std::string type_name;
+    if (!ParseAnyTypeName(type_url, &type_name)) return false;
+    std::unique_ptr<Message> message = resolver_(type_url);
+    if (!message) return false;
+    if (std::string(message->GetDescriptor()->full_name()) != type_name)
+      return false;
+    // A missing proto2 required field does not make the payload malformed;
+    // ParsePartial accepts it and Fix fills the field later.
+    if (!message->ParsePartialFromString(value)) return false;
+    *payload = std::move(message);
+    return true;
+  }
+
+  const Mutator::AnyResolver& resolver_;
+};
+
+// Post-processes a message tree using only the envelopes which are reachable
+// in its final state. Payloads are processed before their Any envelope and
+// ordinary parents, callbacks for opaque envelopes are not called, and
+// callback rewrites of an envelope are left untouched.
+class StructuredPostProcessing {
+ public:
+  using PostProcessors =
+      std::unordered_multimap<const Descriptor*, Mutator::PostProcess>;
+
+  StructuredPostProcessing(bool keep_initialized,
+                           const PostProcessors& post_processors,
+                           const AnyExpansions& expansions,
+                           RandomEngine* random)
+      : keep_initialized_(keep_initialized),
+        post_processors_(post_processors),
+        expansions_(expansions),
+        random_(random) {}
+
+  void Run(Message* message, int depth) {
+    if (depth > kMaxInitializeDepth) return;
+
+    if (IsAnyMessage(*message)) {
+      auto it = expansions_.find(message);
+      if (it == expansions_.end() || !it->second.payload) return;
+      if (depth + 1 > kMaxInitializeDepth) return;
+
+      Run(it->second.payload.get(), depth + 1);
+      std::string value;
+      it->second.payload->SerializePartialToString(&value);
+      SetAnyValue(message, value);
+      // The Any callback runs after the payload bytes are written. Its own
+      // changes are final and are not expanded or overwritten afterwards.
+      CallPostProcessors(message);
+      return;
+    }
+
+    const Descriptor* descriptor = message->GetDescriptor();
+    const Reflection* reflection = message->GetReflection();
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+      const FieldDescriptor* field = descriptor->field(i);
+      if (keep_initialized_ &&
+          (field->is_required() || descriptor->options().map_entry()) &&
+          !reflection->HasField(*message, field)) {
+        // Do not create a message branch which lies beyond the depth budget.
+        if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE ||
+            depth + 1 <= kMaxInitializeDepth) {
+          CreateDefaultField()(FieldInstance(message, field));
+        }
+      }
+
+      if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) continue;
+      if (depth + 1 > kMaxInitializeDepth) continue;
+
+      if (field->is_repeated()) {
+        const int field_size = reflection->FieldSize(*message, field);
+        for (int j = 0; j < field_size; ++j) {
+          Run(reflection->MutableRepeatedMessage(message, field, j), depth + 1);
+        }
+      } else if (reflection->HasField(*message, field)) {
+        Run(reflection->MutableMessage(message, field), depth + 1);
+      }
+    }
+
+    CallPostProcessors(message);
+  }
+
+ private:
+  void CallPostProcessors(Message* message) {
+    auto range = post_processors_.equal_range(message->GetDescriptor());
+    for (auto it = range.first; it != range.second; ++it)
+      it->second(message, (*random_)());
+  }
+
+  bool keep_initialized_;
+  const PostProcessors& post_processors_;
+  const AnyExpansions& expansions_;
+  RandomEngine* random_;
+};
+
 }  // namespace
 
 class FieldMutator {
@@ -562,7 +822,8 @@ class FieldMutator {
     assert(*message);
     if (GetRandomBool(mutator_->random(), mutator_->random_to_default_ratio_))
       return;
-    mutator_->MutateImpl(sources_, {message->get()}, false,
+    const std::unordered_map<const Message*, int> depths;
+    mutator_->MutateImpl(sources_, {message->get()}, depths, false,
                          size_increase_hint_);
   }
 
@@ -622,6 +883,16 @@ struct CreateField : public FieldFunction<CreateField> {
 void Mutator::Seed(uint32_t value) { random_.seed(value); }
 
 void Mutator::Fix(Message* message) {
+  if (StructuredAnyEnabled()) {
+    AnyExpander expander(any_resolver_);
+    AnyExpansions expansions = expander.Expand(*message);
+    StructuredPostProcessing(keep_initialized_, post_processors_, expansions,
+                             &random_)
+        .Run(message, 0);
+    assert(IsInitialized(*message));
+    return;
+  }
+
   UnpackedAny any;
   UnpackAny(*message, &any);
 
@@ -631,6 +902,38 @@ void Mutator::Fix(Message* message) {
 }
 
 void Mutator::Mutate(Message* message, size_t max_size_hint) {
+  if (StructuredAnyEnabled()) {
+    AnyExpander expander(any_resolver_);
+    AnyExpansions expansions = expander.Expand(*message);
+
+    Messages messages;
+    std::unordered_map<const Message*, int> depths;
+    messages.reserve(expansions.size() + 1);
+    messages.push_back(message);
+    depths.emplace(message, 0);
+    for (const auto& kv : expansions) {
+      if (!kv.second.payload) continue;
+      messages.push_back(kv.second.payload.get());
+      depths.emplace(kv.second.payload.get(), kv.second.payload_depth);
+    }
+
+    ConstMessages sources(messages.begin(), messages.end());
+    MutateImpl(sources, messages, depths, false,
+               static_cast<int>(max_size_hint) -
+                   static_cast<int>(message->ByteSizeLong()));
+
+    // Reconcile the expansion with structural mutations and expand Any
+    // envelopes which were copied in during this round. Unchanged envelopes
+    // keep the payload that was just mutated.
+    expansions = expander.Expand(*message, &expansions);
+
+    StructuredPostProcessing(keep_initialized_, post_processors_, expansions,
+                             &random_)
+        .Run(message, 0);
+    assert(IsInitialized(*message));
+    return;
+  }
+
   UnpackedAny any;
   UnpackAny(*message, &any);
 
@@ -640,7 +943,7 @@ void Mutator::Mutate(Message* message, size_t max_size_hint) {
   for (const auto& kv : any) messages.push_back(kv.second.get());
 
   ConstMessages sources(messages.begin(), messages.end());
-  MutateImpl(sources, messages, false,
+  MutateImpl(sources, messages, {}, false,
              static_cast<int>(max_size_hint) -
                  static_cast<int>(message->ByteSizeLong()));
 
@@ -651,6 +954,53 @@ void Mutator::Mutate(Message* message, size_t max_size_hint) {
 
 void Mutator::CrossOver(const Message& message1, Message* message2,
                         size_t max_size_hint) {
+  if (StructuredAnyEnabled()) {
+    AnyExpander expander(any_resolver_);
+    AnyExpansions destinations = expander.Expand(*message2);
+    AnyExpansions donor = expander.Expand(message1);
+
+    Messages messages;
+    std::unordered_map<const Message*, int> depths;
+    messages.reserve(destinations.size() + 1);
+    messages.push_back(message2);
+    depths.emplace(message2, 0);
+    for (const auto& kv : destinations) {
+      if (!kv.second.payload) continue;
+      messages.push_back(kv.second.payload.get());
+      depths.emplace(kv.second.payload.get(), kv.second.payload_depth);
+    }
+
+    ConstMessages sources;
+    sources.reserve(destinations.size() + donor.size() + 2);
+    sources.push_back(&message1);
+    sources.push_back(message2);
+    depths.emplace(&message1, 0);
+    for (const auto& kv : destinations) {
+      if (!kv.second.payload) continue;
+      sources.push_back(kv.second.payload.get());
+      depths.emplace(kv.second.payload.get(), kv.second.payload_depth);
+    }
+    for (const auto& kv : donor) {
+      if (!kv.second.payload) continue;
+      sources.push_back(kv.second.payload.get());
+      depths.emplace(kv.second.payload.get(), kv.second.payload_depth);
+    }
+
+    MutateImpl(sources, messages, depths, true,
+               static_cast<int>(max_size_hint) -
+                   static_cast<int>(message2->ByteSizeLong()));
+
+    // Expand envelopes copied from the donor and drop records belonging to
+    // nodes removed by the mutation. Payloads mutated in place are retained.
+    destinations = expander.Expand(*message2, &destinations);
+
+    StructuredPostProcessing(keep_initialized_, post_processors_, destinations,
+                             &random_)
+        .Run(message2, 0);
+    assert(IsInitialized(*message2));
+    return;
+  }
+
   UnpackedAny any;
   UnpackAny(*message2, &any);
 
@@ -667,7 +1017,7 @@ void Mutator::CrossOver(const Message& message1, Message* message2,
   sources.push_back(message2);
   for (const auto& kv : any) sources.push_back(kv.second.get());
 
-  MutateImpl(sources, messages, true,
+  MutateImpl(sources, messages, {}, true,
              static_cast<int>(max_size_hint) -
                  static_cast<int>(message2->ByteSizeLong()));
 
@@ -681,8 +1031,15 @@ void Mutator::RegisterPostProcessor(const Descriptor* desc,
   post_processors_.emplace(desc, callback);
 }
 
-bool Mutator::MutateImpl(const ConstMessages& sources, const Messages& messages,
-                         bool copy_clone_only, int size_increase_hint) {
+void Mutator::SetAnyResolver(AnyResolver resolver) {
+  any_resolver_ = std::move(resolver);
+}
+
+bool Mutator::MutateImpl(
+    const ConstMessages& sources, const Messages& messages,
+    const std::unordered_map<const Message*, int>& message_depths,
+    bool copy_clone_only, int size_increase_hint) {
+  const bool structured_any = StructuredAnyEnabled();
   MutationBitset mutations;
   if (copy_clone_only) {
     mutations[static_cast<size_t>(Mutation::Copy)] = true;
@@ -695,8 +1052,11 @@ bool Mutator::MutateImpl(const ConstMessages& sources, const Messages& messages,
     mutations[static_cast<size_t>(Mutation::Clone)] = false;
   }
   while (mutations.any()) {
-    MutationSampler mutation(keep_initialized_, mutations, &random_);
-    for (Message* message : messages) mutation.Sample(message);
+    MutationSampler mutation(keep_initialized_, mutations, &random_,
+                             structured_any);
+    for (Message* message : messages)
+      mutation.Sample(message,
+                      GetMessageDepth(message_depths, message));
 
     switch (mutation.mutation()) {
       case Mutation::None:
@@ -713,8 +1073,10 @@ bool Mutator::MutateImpl(const ConstMessages& sources, const Messages& messages,
       case Mutation::Clone: {
         CreateDefaultField()(mutation.field());
         DataSourceSampler source_sampler(mutation.field(), &random_,
-                                         size_increase_hint);
-        for (const Message* source : sources) source_sampler.Sample(*source);
+                                         size_increase_hint, structured_any);
+        for (const Message* source : sources)
+          source_sampler.Sample(
+              *source, GetMessageDepth(message_depths, source));
         if (source_sampler.IsEmpty()) {
           if (!IsProto3SimpleField(*mutation.field().descriptor()))
             return true;  // CreateField is enough for proto2.
@@ -725,8 +1087,10 @@ bool Mutator::MutateImpl(const ConstMessages& sources, const Messages& messages,
       }
       case Mutation::Copy: {
         DataSourceSampler source_sampler(mutation.field(), &random_,
-                                         size_increase_hint);
-        for (const Message* source : sources) source_sampler.Sample(*source);
+                                         size_increase_hint, structured_any);
+        for (const Message* source : sources)
+          source_sampler.Sample(
+              *source, GetMessageDepth(message_depths, source));
         if (source_sampler.IsEmpty()) break;
         CopyField()(source_sampler.field(), mutation.field());
         return true;
