@@ -1,6 +1,7 @@
 import {setTimeout as delay} from 'node:timers/promises';
 import is, {assert} from '@sindresorhus/is';
 import asPromise from './as-promise/index.js';
+import createPagesIterator from './pagination-pages.js';
 import type {
 	GotReturn,
 	ExtendOptions,
@@ -17,6 +18,7 @@ import Request from './core/index.js';
 import type {Response} from './core/response.js';
 import Options, {type OptionsInit} from './core/options.js';
 import type {CancelableRequest} from './as-promise/types.js';
+import type {PagePaginationOptions, PageRequestOptions} from './pagination-pages.js';
 
 const isGotInstance = (value: Got | ExtendOptions): value is Got => is.function(value);
 
@@ -218,6 +220,13 @@ const create = (defaults: InstanceDefaults): Got => {
 
 	// For those who like very descriptive names
 	got.paginate.each = paginateEach as GotPaginate['each'];
+
+	// Page-by-page collection: full `Response` objects with background prefetch.
+	got.paginate.pages = <R>(
+		url: string | URL,
+		options?: PageRequestOptions,
+		pageOptions?: PagePaginationOptions<R>,
+	) => createPagesIterator<R>({got, defaultOptions: defaults.options, url, options, pageOptions});
 
 	// Stream API
 	got.stream = ((url: string | URL, options?: StreamOptions) => got(url, {...options, isStream: true})) as GotStream;

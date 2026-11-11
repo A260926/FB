@@ -5,6 +5,7 @@ import type {Response} from './core/response.js';
 import type Options from './core/options.js';
 import {type PaginationOptions, type OptionsInit} from './core/options.js';
 import type Request from './core/index.js';
+import type {PagePaginationOptions, PageRequestOptions, PagesIterator} from './pagination-pages.js';
 
 // `type-fest` utilities
 type Except<ObjectType, KeysType extends keyof ObjectType> = Pick<ObjectType, Exclude<keyof ObjectType, KeysType>>;
@@ -135,6 +136,32 @@ export type GotPaginate = {
 	*/
 	all: (<T, R = unknown>(url: string | URL, options?: OptionsWithPagination<T, R>) => Promise<T[]>)
 	& (<T, R = unknown>(options?: OptionsWithPagination<T, R>) => Promise<T[]>);
+
+	/**
+	Returns an async iterator of full [`Response`](source/core/response.ts) objects, one per page.
+
+	Unlike `got.paginate()`, each iteration yields the complete parsed page (including
+	`body`, `headers`, the final `url` and `request`) instead of individual items. The next
+	page is downloaded in the background and overlaps processing of the current one.
+
+	The third argument configures page-by-page collection (`prefetch`, `requestLimit`,
+	`backoff` and a synchronous `paginate` continuation). Item level `transform`, `filter`
+	and `shouldContinue` are not executed.
+
+	@example
+	```
+	import got from 'got';
+
+	const pages = got.paginate.pages('https://api.example.com/items', {
+		responseType: 'json'
+	});
+
+	for await (const response of pages) {
+		console.log(response.url, response.body);
+	}
+	```
+	*/
+	pages: <R = unknown>(url: string | URL, options?: PageRequestOptions, pageOptions?: PagePaginationOptions<R>) => PagesIterator<R>;
 };
 
 export type OptionsOfTextResponseBody = Merge<StrictOptions, {isStream?: false; responseType?: 'text'}>;

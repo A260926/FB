@@ -27,3 +27,4 @@ export * from './as-promise/types.js';
 export * from './types.js';
 export {default as create} from './create.js';
 export {default as parseLinkHeader} from './core/parse-link-header.js';
+export type {PagePaginationOptions, PagePaginateFunction, PageRequestOptions, PagesIterator} from './pagination-pages.js';

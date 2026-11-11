@@ -130,7 +130,8 @@
 	},
 	"xo": {
 		"ignores": [
-			"documentation/examples/*"
+			"documentation/examples/*",
+			"test-page-pipeline.ts"
 		],
 		"rules": {
 			"@typescript-eslint/no-empty-function": "off",

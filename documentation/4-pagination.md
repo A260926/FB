@@ -63,6 +63,118 @@ console.log(`Printing latest ${countLimit} Got commits (newest to oldest):`);
 console.log(results);
 ```
 
+### `got.paginate.pages(url, options?, pageOptions?)`
+
+Returns an [async iterator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of) of full [`Response`](3-streams.md#response-1) objects — one complete, parsed page per iteration instead of individual items.
+
+Each yielded value is the whole `Response`, including the parsed `body`, `headers`, the final `url` (after redirects) and `request`. This is independent of the `resolveBodyOnly` request option, which is ignored here so you always receive the wrapped response.
+
+Unlike `got.paginate()`, this entry point:
+
+- yields whole pages rather than running item level `transform`, `filter` or `shouldContinue`,
+- takes its collection settings from the **third** argument (`pageOptions`); the second argument is ordinary request configuration and does **not** accept the legacy `pagination` object,
+- downloads the next page in the background so that downloading overlaps processing of the current page.
+
+`pageOptions` has four fields, all optional:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `prefetch` | `true` | Download the next page (and wait out its `backoff`) before the current page is consumed with `next()`. |
+| `requestLimit` | `10000` | Maximum number of page requests. Retries do not count towards it. |
+| `backoff` | `0` | Milliseconds to wait before requesting the next page. The timer starts as soon as the previous page is fully received and runs in the background, so it never delays delivery of the current page. |
+| `paginate` | `Link` header logic (`rel="next"`, resolved against `response.url`) | A **synchronous** function receiving the current full `Response`. Return incremental request options for the next page, or `false` to stop. A returned `url` must be a `URL` instance, just like the legacy `pagination.paginate`. |
+
+The incremental options returned by `paginate` are merged onto a private copy of the previous request options; merging never mutates an already delivered response's `request.options`, the caller's options or the instance defaults. A returned `url` is cloned as well.
+
+#### Prefetch timing and the "one undelivered page" bound
+
+With `prefetch: true` (the default), once a page has been fully received the iterator first computes its successor, then **schedules the next request before handing the current page back to the caller**. While you process the current page, the next page downloads in the background.
+
+At any instant the iterator holds **at most one** undelivered response or in-flight request. Even if that successor finishes downloading very quickly, its `paginate` callback is not run and a third page is never requested until you actually take the successor with `next()`. For example, if page 1 links to page 2 and page 2 links to page 3 but you stop while holding page 1, the most that can ever happen is the download of page 2 — page 3 is never touched.
+
+An empty array (`[]`) or empty object (`{}`) body is still a normal page; the iterator never ends on its own based on body length. The collection ends normally only when `paginate` returns `false` or when `requestLimit` is reached (reaching the limit never invokes `paginate` again).
+
+Set `prefetch: false` to request each page strictly on demand: the next request (and any backoff) does not begin until the following `next()` call.
+
+#### Stopping a collection
+
+Break out of a `for await…of` loop (or call `iterator.return()`) to terminate the collection. This immediately enters a terminated state, cancels the in-flight Got request and any background backoff timer owned by the iterator, and settles a still-pending `next()` as `done`. A `return()` does not wait for a stalled network read or a long backoff to finish naturally. The caller's `AbortController`, the shared agent and other requests on the same Got instance are not affected. Repeating `return()` stays successful, and every later `next()` resolves `done: true`.
+
+If you instead abort an external `AbortSignal` passed through `options.signal`, the waiting `next()` rejects with Got's `AbortError` (`code: 'ERR_ABORTED'`); when there is no pending `next()`, the error is thrown once by the following `next()`, after which the iterator ends.
+
+A failure of a prefetched page — an HTTP error, a body parse error or a `paginate` callback that throws — is captured immediately. It never surfaces as an unhandled rejection and never disturbs the page already in hand. When you ask for that successor with `next()`, the same error is thrown once and the iterator ends. If you `return()` first, the undelivered error is discarded.
+
+#### TypeScript example
+
+```ts
+import got, {type Response} from 'got';
+
+type Item = {id: number; name: string};
+type PageBody = {items: Item[]};
+
+const pages = got.paginate.pages<PageBody>(
+	'https://api.example.com/items',
+	{
+		responseType: 'json',
+		// Ordinary request options only; no legacy `pagination` object here.
+		retry: {limit: 2},
+	},
+	{
+		// Defaults shown for clarity; all are optional.
+		prefetch: true,
+		requestLimit: 10_000,
+		backoff: 0,
+		paginate(response: Response<PageBody>) {
+			const next = response.headers['x-next-page'];
+
+			if (!next) {
+				return false; // No more pages.
+			}
+
+			// Incremental options: just the URL change. A `URL` instance is
+			// required when you set `url` directly.
+			return {
+				url: new URL(next, response.url),
+			};
+		},
+	},
+);
+
+for await (const response of pages) {
+	// `response` is the full page: parsed body, headers, final url and request.
+	console.log(response.url, response.statusCode);
+
+	for (const item of response.body.items) {
+		// While this runs, the next page is already downloading in the background.
+		await processItem(item);
+	}
+}
+
+async function processItem(item: Item): Promise<void> {
+	// Your downstream work, which may be slower than the download.
+}
+```
+
+The same iterator can be driven manually, which is useful when you want explicit control over stopping:
+
+```ts
+const iterator = got.paginate.pages<PageBody>('https://api.example.com/items', {
+	responseType: 'json'
+});
+
+let result = await iterator.next();
+while (!result.done) {
+	const response = result.value; // Response<PageBody>
+
+	if (shouldStop(response)) {
+		await iterator.return(); // Cancels the prefetch and any in-flight request.
+		break;
+	}
+
+	result = await iterator.next();
+}
+```
+
 ### `pagination`
 
 **Type: `object`**\
