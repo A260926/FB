@@ -25,7 +25,7 @@ function audio(left, right) {
   b.put(0, 1); for (let i = 0; i < 64; ++i) b.put(0, 1); return b.bytes();
 }
 const fixtures = {headers:[ident,comment,setup].map(b=>b.toString('base64')),left:audio(1,0).toString('base64'),right:audio(0,1).toString('base64')};
-fs.writeFileSync('author/residue2.json', JSON.stringify(fixtures, null, 2) + '\n');
+fs.writeFileSync('harness/residue2.json', JSON.stringify(fixtures, null, 2) + '\n');
 function page(packet, seq, flags, granule) {
   const laces = Buffer.alloc(Math.floor(packet.length / 255) + 1, 255); laces[laces.length - 1] = packet.length % 255;
   const header = Buffer.alloc(27); header.write('OggS'); header[5] = flags; header.writeBigUInt64LE(BigInt(granule), 6); header.writeUInt32LE(7, 14); header.writeUInt32LE(seq, 18); header[26] = laces.length;
@@ -35,5 +35,5 @@ function page(packet, seq, flags, granule) {
 }
 for (const side of ['left', 'right']) {
   const packet = Buffer.from(fixtures[side], 'base64'); const packets = [ident, comment, setup, packet, packet];
-  fs.writeFileSync('author/' + side + '.ogg', Buffer.concat(packets.map((p, i) => page(p, i, i === 0 ? 2 : i === 4 ? 4 : 0, i === 4 ? 32 : 0))));
+  fs.writeFileSync('harness/' + side + '.ogg', Buffer.concat(packets.map((p, i) => page(p, i, i === 0 ? 2 : i === 4 ? 4 : 0, i === 4 ? 32 : 0))));
 }
