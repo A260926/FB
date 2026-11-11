@@ -1,0 +1,30 @@
+{
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**/*.js",
+      "**/*.ts",
+      "**/*.json",
+      "**/*.jsonc",
+      "!**/dist/**",
+      "!**/coverage/**",
+      "!**/node_modules/**",
+      "!**/src/gen/**",
+      "!**/.vscode/**",
+      "!**/reports/**",
+      "!**/.gauge/**",
+      "!**/examples/**",
+      "!**/.local-chromium/**",
+      "!**/types/**",
+      "!**/lib/api.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true
+  }
+}

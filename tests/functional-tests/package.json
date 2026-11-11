@@ -1,0 +1,36 @@
+{
+  "name": "taiko-functional-tests",
+  "version": "0.0.1",
+  "description": "Functional tests for Taiko",
+  "private": true,
+  "scripts": {
+    "test": "gauge run -v --tags=\\!knownIssue --simple-console",
+    "format": "prettier --write --single-quote '**/*.{js,jsx,ts,tsx}'",
+    "eslint": "eslint tests/* --ext .js --ext .jsx"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getgauge/taiko.git"
+  },
+  "devDependencies": {
+    "@getgauge/cli": "latest",
+    "gauge-ts": "^0.3.6",
+    "taiko": "file:../..",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "@types/node": "latest",
+    "the-internet-express": "git+https://github.com/getgauge-contrib/the-internet-express.git"
+  },
+  "allowScripts": {
+    "@getgauge/cli": true
+  },
+  "overrides": {
+    "the-internet-express": {
+      "express": "^5.2.1",
+      "multer": "^2.2.0"
+    },
+    "gauge-ts": {
+      "uuid": "^14.0.2"
+    }
+  }
+}

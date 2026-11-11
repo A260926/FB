@@ -1,0 +1,7 @@
+[build]
+  command = "npm ci && npm run doc:starlight"
+  publish = "packages/docs/dist"
+
+[[redirects]]
+  from = "/devices"
+  to = "https://github.com/getgauge/taiko/blob/master/packages/taiko/lib/data/devices.js"
