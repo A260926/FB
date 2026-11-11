@@ -2,4 +2,4 @@
 *-fuzz$
 
 .userfb-cache/
-userfb_baseline/testee-bin
+baseline/testee-bin

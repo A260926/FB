@@ -12,10 +12,10 @@ import (
 )
 
 // This test records the starting behavior; it is not a regression for the requested change.
-func TestUserFBBaseline(t *testing.T) {
-	name := os.Getenv("USERFB_TESTEE")
+func TestBaseline(t *testing.T) {
+	name := os.Getenv("CHECK_TESTEE")
 	if name == "" {
-		t.Fatal("build userfb_baseline/testee and set USERFB_TESTEE")
+		t.Fatal("build baseline/testee and set CHECK_TESTEE")
 	}
 	name, err := filepath.Abs(name)
 	if err != nil {
