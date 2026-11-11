@@ -1,4 +1,4 @@
-use crate::collision::{AABB, Ray, RayHit};
+use crate::collision::{AABB, Ray, RayHit, sphere_uv};
 use glam::Vec3;
 
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -47,24 +47,26 @@ impl MovingSphere {
             if t < t_max && t > t_min {
                 let point = ray.point_at_parameter(t);
                 let normal = (point - centre) / self.radius;
+                let (u, v) = sphere_uv(normal);
                 return Some(RayHit {
                     point,
                     normal,
                     t,
-                    u: 0.0,
-                    v: 0.0,
+                    u,
+                    v,
                 });
             }
             let t = (-b + discriminant_sqrt) / a;
             if t < t_max && t > t_min {
                 let point = ray.point_at_parameter(t);
                 let normal = (point - centre) / self.radius;
+                let (u, v) = sphere_uv(normal);
                 return Some(RayHit {
                     point,
                     normal,
                     t,
-                    u: 0.0,
-                    v: 0.0,
+                    u,
+                    v,
                 });
             }
         }

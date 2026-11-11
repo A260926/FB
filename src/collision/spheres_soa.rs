@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::{
-    collision::{AABB, Hitable, Ray, RayHit},
+    collision::{AABB, Hitable, Ray, RayHit, sphere_uv},
     material::Material,
     math::align_to,
     simd::*,
@@ -156,7 +156,7 @@ impl<'a> SpheresSoA<'a> {
             );
             let normal = (point - centre) / self.radius[hit_index];
             let material = self.material[hit_index].unwrap();
-            let (u, v) = material.get_sphere_uv(normal);
+            let (u, v) = sphere_uv(normal);
             Some((
                 RayHit {
                     point,
@@ -190,7 +190,7 @@ impl<'a> SpheresSoA<'a> {
             );
             let normal = (point - centre) / self.radius[hit_index];
             let material = self.material[hit_index].unwrap();
-            let (u, v) = material.get_sphere_uv(normal);
+            let (u, v) = sphere_uv(normal);
             Some((
                 RayHit {
                     point,
@@ -420,7 +420,7 @@ impl<'a> SpheresSoA<'a> {
                     let normal =
                         (point - centre) / *self.radius.get_unchecked(hit_index_scalar);
                     let material = self.material.get_unchecked(hit_index_scalar).unwrap();
-                    let (u, v) = material.get_sphere_uv(normal);
+                    let (u, v) = sphere_uv(normal);
                     return Some((
                         RayHit {
                             point,
@@ -551,7 +551,7 @@ impl<'a> SpheresSoA<'a> {
                     let normal =
                         (point - centre) / *self.radius.get_unchecked(hit_index_scalar);
                     let material = self.material.get_unchecked(hit_index_scalar).unwrap();
-                    let (u, v) = material.get_sphere_uv(normal);
+                    let (u, v) = sphere_uv(normal);
                     return Some((
                         RayHit {
                             point,

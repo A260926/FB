@@ -5,6 +5,10 @@ edition = "2024"
 [[bin]]
 name = "baseline"
 path = "baseline.rs"
+
+[[test]]
+name = "sphere_uv_contract"
+path = "sphere_uv_contract.rs"
 [features]
 default = []
 fearless_simd = []

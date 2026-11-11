@@ -1,5 +1,5 @@
 use crate::{
-    collision::{Ray, RayHit},
+    collision::{Ray, RayHit, sphere_uv},
     math::{random_in_unit_sphere, random_unit_vector, reflect, refract, schlick},
     texture::Texture,
 };
@@ -37,15 +37,6 @@ pub fn isotropic<'a>(albedo: &'a Texture<'a>) -> Material<'a> {
     Material::Isotropic { albedo }
 }
 
-fn get_sphere_uv(normal: Vec3) -> (f32, f32) {
-    const FRAC_1_2PI: f32 = 1.0 / (2.0 * core::f32::consts::PI);
-    let (x, y, _) = normal.into();
-    let phi = x.atan2(y);
-    let theta = y.asin();
-    let u = 1.0 - (phi + core::f32::consts::PI) * FRAC_1_2PI;
-    let v = (theta + core::f32::consts::FRAC_PI_2) * core::f32::consts::FRAC_1_PI;
-    (u, v)
-}
 
 impl<'a> Material<'a> {
     fn scatter_lambertian(
@@ -166,15 +157,9 @@ impl<'a> Material<'a> {
     }
 
     pub fn get_sphere_uv(&self, normal: Vec3) -> (f32, f32) {
-        if let Material::Lambertian { albedo } = self {
-            if let Texture::Image { image: _ } = albedo {
-                return get_sphere_uv(normal);
-            }
-        } else if let Material::DiffuseLight { emit } = self
-            && let Texture::Image { image: _ } = emit
-        {
-            return get_sphere_uv(normal);
-        }
-        (0.0, 0.0)
+        // Kept as a public compatibility helper. Geometry no longer calls this method to
+        // decide whether a sphere has UVs; `Sphere::ray_hit` and `MovingSphere::ray_hit`
+        // always attach the geometric parameterization themselves.
+        sphere_uv(normal)
     }
 }
