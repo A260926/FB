@@ -1,0 +1,7 @@
+#!/bin/sh
+# Sandbox shim: macOS mktemp ignores TMPDIR and uses a Darwin user temp
+# directory that the sandbox blocks. Force a template inside TMPDIR instead.
+if [ "$1" = "-d" ]; then
+	exec /usr/bin/mktemp -d "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX"
+fi
+exec /usr/bin/mktemp "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX"

@@ -1,0 +1,76 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestMainEntityExtraction
+=== RUN   TestMainEntityExtraction/default_mode_keeps_legacy_merged_output
+=== RUN   TestMainEntityExtraction/main_entity_mode_selects_the_main_article
+=== RUN   TestMainEntityExtraction/public_Extract_entry_keeps_the_article_body
+=== RUN   TestMainEntityExtraction/public_ExtractDocument_entry_behaves_the_same
+=== RUN   TestMainEntityExtraction/fragment_in_the_original_URL_is_ignored
+=== RUN   TestMainEntityExtraction/relative_ids_resolve_against_the_original_URL
+=== RUN   TestMainEntityExtraction/inline_mainEntity_object
+=== RUN   TestMainEntityExtraction/mainEntityOfPage_back_reference_is_used_without_positive_statement
+=== RUN   TestMainEntityExtraction/mainEntityOfPage_object_form
+=== RUN   TestMainEntityExtraction/positive_statement_wins_over_mainEntityOfPage_articles
+=== RUN   TestMainEntityExtraction/author_and_publisher_references_cross_scripts_and_chain
+=== RUN   TestMainEntityExtraction/repeated_declarations_of_the_same_object_count_once
+=== RUN   TestMainEntityExtraction/distinct_mainEntity_targets_are_ambiguous
+=== RUN   TestMainEntityExtraction/missing_mainEntity_reference_skips_JSON-LD
+=== RUN   TestMainEntityExtraction/cyclic_main_article_author_reference_only_drops_the_field
+=== RUN   TestMainEntityExtraction/mainEntity_pointing_back_at_the_page_is_a_cycle_and_skips_JSON-LD
+=== RUN   TestMainEntityExtraction/several_mainEntityOfPage_articles_are_ambiguous
+=== RUN   TestMainEntityExtraction/used_id_with_several_definitions_skips_JSON-LD
+=== RUN   TestMainEntityExtraction/unused_duplicate_id_does_not_poison_a_clear_relation
+=== RUN   TestMainEntityExtraction/malformed_script_is_ignored,_other_scripts_still_apply
+=== RUN   TestMainEntityExtraction/result_is_independent_of_script_order
+=== RUN   TestMainEntityExtraction/blacklisted_main_article_author_is_removed
+=== RUN   TestMainEntityExtraction/meta_author_survives_when_the_main_article_provides_none
+=== RUN   TestMainEntityExtraction/missing_original_URL_skips_JSON-LD
+=== RUN   TestMainEntityExtraction/non_HTTP(S)_original_URL_skips_JSON-LD
+--- PASS: TestMainEntityExtraction (0.00s)
+    --- PASS: TestMainEntityExtraction/default_mode_keeps_legacy_merged_output (0.00s)
+    --- PASS: TestMainEntityExtraction/main_entity_mode_selects_the_main_article (0.00s)
+    --- PASS: TestMainEntityExtraction/public_Extract_entry_keeps_the_article_body (0.00s)
+    --- PASS: TestMainEntityExtraction/public_ExtractDocument_entry_behaves_the_same (0.00s)
+    --- PASS: TestMainEntityExtraction/fragment_in_the_original_URL_is_ignored (0.00s)
+    --- PASS: TestMainEntityExtraction/relative_ids_resolve_against_the_original_URL (0.00s)
+    --- PASS: TestMainEntityExtraction/inline_mainEntity_object (0.00s)
+    --- PASS: TestMainEntityExtraction/mainEntityOfPage_back_reference_is_used_without_positive_statement (0.00s)
+    --- PASS: TestMainEntityExtraction/mainEntityOfPage_object_form (0.00s)
+    --- PASS: TestMainEntityExtraction/positive_statement_wins_over_mainEntityOfPage_articles (0.00s)
+    --- PASS: TestMainEntityExtraction/author_and_publisher_references_cross_scripts_and_chain (0.00s)
+    --- PASS: TestMainEntityExtraction/repeated_declarations_of_the_same_object_count_once (0.00s)
+    --- PASS: TestMainEntityExtraction/distinct_mainEntity_targets_are_ambiguous (0.00s)
+    --- PASS: TestMainEntityExtraction/missing_mainEntity_reference_skips_JSON-LD (0.00s)
+    --- PASS: TestMainEntityExtraction/cyclic_main_article_author_reference_only_drops_the_field (0.00s)
+    --- PASS: TestMainEntityExtraction/mainEntity_pointing_back_at_the_page_is_a_cycle_and_skips_JSON-LD (0.00s)
+    --- PASS: TestMainEntityExtraction/several_mainEntityOfPage_articles_are_ambiguous (0.00s)
+    --- PASS: TestMainEntityExtraction/used_id_with_several_definitions_skips_JSON-LD (0.00s)
+    --- PASS: TestMainEntityExtraction/unused_duplicate_id_does_not_poison_a_clear_relation (0.00s)
+    --- PASS: TestMainEntityExtraction/malformed_script_is_ignored,_other_scripts_still_apply (0.00s)
+    --- PASS: TestMainEntityExtraction/result_is_independent_of_script_order (0.00s)
+    --- PASS: TestMainEntityExtraction/blacklisted_main_article_author_is_removed (0.00s)
+    --- PASS: TestMainEntityExtraction/meta_author_survives_when_the_main_article_provides_none (0.00s)
+    --- PASS: TestMainEntityExtraction/missing_original_URL_skips_JSON-LD (0.00s)
+    --- PASS: TestMainEntityExtraction/non_HTTP(S)_original_URL_skips_JSON-LD (0.00s)
+=== RUN   TestMainEntityIsolation
+=== RUN   TestMainEntityIsolation/sequential_interleaved_calls_keep_per-document_indexes
+=== RUN   TestMainEntityIsolation/concurrent_interleaved_calls_keep_per-document_indexes
+=== RUN   TestMainEntityIsolation/ExtractDocument_does_not_modify_the_supplied_tree
+=== RUN   TestMainEntityIsolation/node_identity_is_preserved_through_the_call
+--- PASS: TestMainEntityIsolation (0.01s)
+    --- PASS: TestMainEntityIsolation/sequential_interleaved_calls_keep_per-document_indexes (0.00s)
+    --- PASS: TestMainEntityIsolation/concurrent_interleaved_calls_keep_per-document_indexes (0.01s)
+    --- PASS: TestMainEntityIsolation/ExtractDocument_does_not_modify_the_supplied_tree (0.00s)
+    --- PASS: TestMainEntityIsolation/node_identity_is_preserved_through_the_call (0.00s)
+PASS
+ok  	github.com/markusmobius/go-trafilatura	0.445s
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   Test_Metadata
+--- PASS: Test_Metadata (0.00s)
+=== RUN   Test_Metadata_Titles
+--- PASS: Test_Metadata_Titles (0.00s)
+=== RUN   Test_Metadata_Authors
+--- PASS: Test_Metadata_Authors (0.00s)
+=== RUN   Test_Metadata_URLs
+--- PASS: Test_Metadata_URLs (0.00s)
+PASS
+ok  	github.com/markusmobius/go-trafilatura	0.219s

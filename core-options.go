@@ -143,6 +143,22 @@ type Options struct {
 
 	// PruneSelector is the CSS selector to select nodes to be pruned before extraction.
 	PruneSelector string
+
+	// UseMainEntity limits the JSON-LD metadata contribution to the page's main
+	// article. When it is true, the article referenced by the page's WebPage
+	// "mainEntity" (or, when there is no such positive statement, an article whose
+	// "mainEntityOfPage" points back to OriginalURL) is the only JSON-LD object that
+	// may supply article-level metadata such as title, author, publisher, categories
+	// and tags. Recommended articles and unrelated Person or Organization objects
+	// are then ignored. If no unique main article can be determined, or a used
+	// reference is missing, cyclic or multiply defined, JSON-LD metadata is skipped
+	// for this page and the regular meta tag and DOM fallbacks are used instead.
+	//
+	// This mode requires OriginalURL to be an absolute HTTP(S) URL, which is used as
+	// the page identity: relative "@id" values are resolved against it, and identity
+	// comparisons ignore the URL fragment. When false (the default), JSON-LD
+	// extraction behaves exactly as before.
+	UseMainEntity bool
 }
 
 // Config is advanced setting to fine tune the extraction result.

@@ -44,6 +44,39 @@ import "github.com/markusmobius/go-trafilatura"
 
 Now you can use Trafilatura to extract content of a web page. For basic usage you can check the [example](examples/from-url.go).
 
+### Restricting JSON-LD metadata to the main article
+
+Pages that embed several JSON-LD objects (the article itself, recommended
+articles, site organization data) can make the default extraction report a
+recommended article's title or author, because every article-shaped object is
+merged together. Set `Options.UseMainEntity` to `true` to collect article-level
+metadata (title, author, publisher, categories, tags, page type) only from the
+page's main article:
+
+```go
+parsedURL, _ := url.ParseRequestURI("https://example.com/story")
+result, err := trafilatura.Extract(reader, trafilatura.Options{
+    OriginalURL:   parsedURL,
+    UseMainEntity: true,
+})
+```
+
+The main article is the target of the `WebPage.mainEntity` relation (inline
+objects and `@id` references are both supported); when no such positive
+statement exists, an article whose `mainEntityOfPage` points back at
+`OriginalURL` is used instead. Relative `@id` values are resolved against
+`OriginalURL`, and URL fragments are ignored when comparing page identities.
+Author and publisher references may cross scripts and chain through several
+objects.
+
+The option requires an absolute HTTP(S) `OriginalURL`. If no unique main
+article can be determined (missing or cyclic reference, ambiguous or duplicate
+definitions), the JSON-LD contribution is skipped for that page and the regular
+meta tag and DOM fallbacks are used; the readable content, links, images and
+dates are unaffected. The default (`false`) keeps the original behavior
+unchanged. A runnable example is available in
+[`examples/main-entity`](examples/main-entity).
+
 ## Usage as CLI Application
 
 To use CLI, you need to build it from source. Make sure you use `go >= 1.16` then run following commands :

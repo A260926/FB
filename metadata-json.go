@@ -21,6 +21,19 @@ type SchemaData struct {
 // (https://schema.org). Here we don't really care about error here, so if parse failed
 // we just return the original metadata.
 func extractJsonLd(opts Options, doc *html.Node, originalMetadata Metadata) Metadata {
+	// When requested, only let the page's main article contribute metadata.
+	// Any failure to identify a unique main article means JSON-LD is skipped
+	// entirely, leaving the meta tag and DOM fallbacks untouched.
+	if opts.UseMainEntity {
+		if mainArticle, registry, ok := extractMainEntityArticle(opts, doc); ok {
+			if updated, ok := extractJsonLdFromArticle(registry, mainArticle, originalMetadata); ok {
+				return updated
+			}
+		}
+		logDebug(opts, "main entity could not be uniquely identified, skipping JSON-LD metadata: %s", opts.OriginalURL)
+		return originalMetadata
+	}
+
 	var metadata Metadata
 
 	// Decode all script nodes that contain JSON+Ld schema
