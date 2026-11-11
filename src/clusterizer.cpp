@@ -1,5 +1,6 @@
 // This file is part of meshoptimizer library; see meshoptimizer.h for version/license details
 #include "meshoptimizer.h"
+#include "motionbounds.h"
 
 #include <assert.h>
 #include <float.h>
@@ -1373,6 +1374,462 @@ size_t meshopt_buildMeshletsSpatial(struct meshopt_Meshlet* meshlets, unsigned i
 
 	assert(meshlet_offset <= meshlet_bound);
 	assert(meshlet.triangle_offset + meshlet.triangle_count * 3 <= index_count && meshlet.vertex_offset + meshlet.vertex_count <= index_count);
+	return meshlet_offset;
+}
+
+namespace meshopt
+{
+
+// Per-face data needed by the motion builder: static scoring cone plus the analytic normal polynomial of the face.
+struct MotionFace
+{
+	Cone cone;
+	MotionPoly poly;
+};
+
+// Hard cone admission test: the current cluster plus one candidate must keep a provable cone within the dot-product limit.
+// Only read-only builder state is inspected; a rejection never mutates emitted flags, adjacency counts, used[] or cluster bounds.
+static bool motionAdmissible(const unsigned int* cluster_tris, size_t cluster_count, const MotionFace* faces, unsigned int candidate, const meshopt_Meshlet& meshlet, const short* used, const unsigned int* indices, size_t max_vertices, size_t max_triangles, float limit, const float axis_sum[3])
+{
+	unsigned int a = indices[candidate * 3 + 0], b = indices[candidate * 3 + 1], c = indices[candidate * 3 + 2];
+
+	int extra = (used[a] < 0) + (used[b] < 0) + (used[c] < 0);
+
+	if (cluster_count >= max_triangles || meshlet.vertex_count + size_t(extra) > max_vertices)
+		return false;
+
+	// the candidate axis is the normalized sum of representative directions of every face the cluster would contain
+	float sum[3] = {axis_sum[0], axis_sum[1], axis_sum[2]};
+
+	float dir[3];
+
+	if (motionPolyDirection(faces[candidate].poly, dir))
+	{
+		sum[0] += dir[0];
+		sum[1] += dir[1];
+		sum[2] += dir[2];
+	}
+
+	float sumlen = sqrtf(sum[0] * sum[0] + sum[1] * sum[1] + sum[2] * sum[2]);
+
+	float axis[3];
+
+	if (sumlen == 0.f)
+	{
+		// zero sum means the directions cancel (e.g. opposite winding), not that every face is degenerate;
+		// pick any concrete face direction and let the interval test reject the incompatible faces
+		float candidate_dir[3];
+
+		if (motionPolyDirection(faces[candidate].poly, candidate_dir))
+		{
+			axis[0] = candidate_dir[0];
+			axis[1] = candidate_dir[1];
+			axis[2] = candidate_dir[2];
+		}
+		else
+		{
+			bool found = false;
+
+			for (size_t i = 0; i < cluster_count; ++i)
+			{
+				float cluster_dir[3];
+
+				if (motionPolyDirection(faces[cluster_tris[i]].poly, cluster_dir))
+				{
+					axis[0] = cluster_dir[0];
+					axis[1] = cluster_dir[1];
+					axis[2] = cluster_dir[2];
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+			{
+				// every involved face is always degenerate; such faces never constrain the cone
+				return true;
+			}
+		}
+	}
+	else
+	{
+		axis[0] = sum[0] / sumlen;
+		axis[1] = sum[1] / sumlen;
+		axis[2] = sum[2] / sumlen;
+	}
+
+	// the analytic interval test is shared verbatim with meshopt_computeMeshletMotionBounds
+	for (size_t i = 0; i < cluster_count; ++i)
+		if (!motionConeTestPoly(axis, faces[cluster_tris[i]].poly, limit))
+			return false;
+
+	return motionConeTestPoly(axis, faces[candidate].poly, limit);
+}
+
+// Neighbor selection matching getNeighborTriangle's priority/score scheme, but cone-inadmissible candidates are skipped.
+static unsigned int getNeighborTriangleMotion(const meshopt_Meshlet& meshlet, const Cone& meshlet_cone, const unsigned int* meshlet_vertices, const unsigned int* indices, const TriangleAdjacency2& adjacency, const MotionFace* faces, const unsigned int* live_triangles, const short* used, float meshlet_expected_radius, float cone_weight, const unsigned int* cluster_tris, size_t cluster_count, float limit, const float axis_sum[3], size_t max_vertices, size_t max_triangles)
+{
+	unsigned int best_triangle = ~0u;
+	int best_priority = 5;
+	float best_score = FLT_MAX;
+
+	for (size_t i = 0; i < meshlet.vertex_count; ++i)
+	{
+		unsigned int index = meshlet_vertices[meshlet.vertex_offset + i];
+
+		unsigned int* neighbors = &adjacency.data[0] + adjacency.offsets[index];
+		size_t neighbors_size = adjacency.counts[index];
+
+		for (size_t j = 0; j < neighbors_size; ++j)
+		{
+			unsigned int triangle = neighbors[j];
+			unsigned int a = indices[triangle * 3 + 0], b = indices[triangle * 3 + 1], c = indices[triangle * 3 + 2];
+
+			int extra = (used[a] < 0) + (used[b] < 0) + (used[c] < 0);
+			assert(extra <= 2);
+
+			// hard motion cone gate; a rejected candidate keeps every marker and can seed a later meshlet
+			if (!motionAdmissible(cluster_tris, cluster_count, faces, triangle, meshlet, used, indices, max_vertices, max_triangles, limit, axis_sum))
+				continue;
+
+			int priority = -1;
+
+			// triangles that don't add new vertices to meshlets are max. priority
+			if (extra == 0)
+				priority = 0;
+			// artificially increase the priority of dangling triangles as they're expensive to add to new meshlets
+			else if (live_triangles[a] == 1 || live_triangles[b] == 1 || live_triangles[c] == 1)
+				priority = 1;
+			// if two vertices have live count of 2, removing this triangle will make another triangle dangling which is good for overall flow
+			else if ((live_triangles[a] == 2) + (live_triangles[b] == 2) + (live_triangles[c] == 2) >= 2)
+				priority = 1 + extra;
+			// otherwise adjust priority to be after the above cases, 3 or 4 based on used[] count
+			else
+				priority = 2 + extra;
+
+			// since topology-based priority is always more important than the score, we can skip scoring in some cases
+			if (priority > best_priority)
+				continue;
+
+			const Cone& tri_cone = faces[triangle].cone;
+
+			float dx = tri_cone.px - meshlet_cone.px, dy = tri_cone.py - meshlet_cone.py, dz = tri_cone.pz - meshlet_cone.pz;
+			float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+			float spread = tri_cone.nx * meshlet_cone.nx + tri_cone.ny * meshlet_cone.ny + tri_cone.nz * meshlet_cone.nz;
+
+			float score = getMeshletScore(distance, spread, cone_weight, meshlet_expected_radius);
+
+			// note that topology-based priority is always more important than the score
+			if (priority < best_priority || score < best_score)
+			{
+				best_triangle = triangle;
+				best_priority = priority;
+				best_score = score;
+			}
+		}
+	}
+
+	return best_triangle;
+}
+
+// Refreshes the seed list from the current meshlet and picks the best surviving seed; ~0u when none is available.
+static unsigned int motionHarvestSeed(unsigned int* seeds, size_t& seed_count, const meshopt_Meshlet& meshlet, const unsigned int* meshlet_vertices, const unsigned int* indices, const TriangleAdjacency2& adjacency, const Cone* triangles, const unsigned int* live_triangles, const unsigned char* emitted_flags, float cornerx, float cornery, float cornerz)
+{
+	seed_count = pruneSeedTriangles(seeds, seed_count, emitted_flags);
+	seed_count = (seed_count + kMeshletAddSeeds <= kMeshletMaxSeeds) ? seed_count : kMeshletMaxSeeds - kMeshletAddSeeds;
+	seed_count += appendSeedTriangles(seeds + seed_count, meshlet, meshlet_vertices, indices, adjacency, triangles, live_triangles, cornerx, cornery, cornerz);
+
+	return selectSeedTriangle(seeds, seed_count, indices, triangles, live_triangles, cornerx, cornery, cornerz);
+}
+
+// Closes the current meshlet and resets all cluster-local motion state.
+static void motionSealMeshlet(meshopt_Meshlet& meshlet, size_t& meshlet_offset, meshopt_Meshlet* meshlets, const unsigned int* meshlet_vertices, short* used, Cone& meshlet_cone_acc, size_t& cluster_count, float axis_sum[3])
+{
+	if (meshlet.triangle_count == 0)
+		return;
+
+	for (size_t j = 0; j < meshlet.vertex_count; ++j)
+		used[meshlet_vertices[meshlet.vertex_offset + j]] = -1;
+
+	meshlets[meshlet_offset++] = meshlet;
+	meshlet.vertex_offset += meshlet.vertex_count;
+	meshlet.triangle_offset += meshlet.triangle_count * 3;
+	meshlet.vertex_count = 0;
+	meshlet.triangle_count = 0;
+
+	memset(&meshlet_cone_acc, 0, sizeof(meshlet_cone_acc));
+	cluster_count = 0;
+	axis_sum[0] = axis_sum[1] = axis_sum[2] = 0.f;
+}
+
+} // namespace meshopt
+
+size_t meshopt_buildMeshletsMotion(meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const unsigned int* indices, size_t index_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride, size_t max_vertices, size_t max_triangles, float cone_weight, float max_cone_cutoff)
+{
+	using namespace meshopt;
+
+	assert(index_count % 3 == 0);
+	assert(vertex_positions_stride >= 12 && vertex_positions_stride <= 256);
+	assert(vertex_positions_stride % sizeof(float) == 0);
+
+	assert(max_vertices >= 3 && max_vertices <= 256);
+	assert(max_triangles >= 1 && max_triangles <= 512);
+
+	assert(cone_weight >= 0 && cone_weight <= 1);
+	assert(max_cone_cutoff >= 0.05f && max_cone_cutoff <= 0.9f);
+
+	if (index_count == 0)
+		return 0;
+
+	meshopt_Allocator allocator;
+
+	TriangleAdjacency2 adjacency = {};
+	if (vertex_count > index_count && index_count < (1u << 31))
+		buildTriangleAdjacencySparse(adjacency, indices, index_count, vertex_count, allocator);
+	else
+		buildTriangleAdjacency(adjacency, indices, index_count, vertex_count, allocator);
+
+	// live triangle counts; note, we alias adjacency.counts as we remove triangles after emitting them so the counts always match
+	unsigned int* live_triangles = adjacency.counts;
+
+	size_t face_count = index_count / 3;
+	size_t vertex_stride_float = vertex_positions_stride / sizeof(float);
+
+	unsigned char* emitted_flags = allocator.allocate<unsigned char>(face_count);
+	memset(emitted_flags, 0, face_count);
+
+	// per-face scoring cones (begin pose) and analytic motion polynomials (shared interval logic with motion bounds)
+	MotionFace* faces = allocator.allocate<MotionFace>(face_count);
+
+	Cone* triangles = allocator.allocate<Cone>(face_count);
+	float mesh_area = computeTriangleCones(triangles, indices, index_count, positions_begin, vertex_count, vertex_positions_stride);
+
+	for (size_t i = 0; i < face_count; ++i)
+	{
+		faces[i].cone = triangles[i];
+		faces[i].poly = motionComputePoly(positions_begin, positions_end, vertex_stride_float, indices[i * 3 + 0], indices[i * 3 + 1], indices[i * 3 + 2]);
+	}
+
+	// assuming each meshlet is a square patch, expected radius is sqrt(expected area)
+	float triangle_area_avg = mesh_area / float(face_count) * 0.5f;
+	float meshlet_expected_radius = sqrtf(triangle_area_avg * max_triangles) * 0.5f;
+
+	// build a kd-tree for nearest neighbor lookup
+	unsigned int* kdindices = allocator.allocate<unsigned int>(face_count);
+	for (size_t i = 0; i < face_count; ++i)
+		kdindices[i] = unsigned(i);
+
+	KDNode* nodes = allocator.allocate<KDNode>(face_count * 2);
+	kdtreeBuild(0, nodes, face_count * 2, &triangles[0].px, sizeof(Cone) / sizeof(float), kdindices, face_count, /* leaf_size= */ 8, 0);
+
+	// find a specific corner of the mesh to use as a starting point for meshlet flow
+	float cornerx = FLT_MAX, cornery = FLT_MAX, cornerz = FLT_MAX;
+
+	for (size_t i = 0; i < face_count; ++i)
+	{
+		const Cone& tri = triangles[i];
+
+		cornerx = cornerx > tri.px ? tri.px : cornerx;
+		cornery = cornery > tri.py ? tri.py : cornery;
+		cornerz = cornerz > tri.pz ? tri.pz : cornerz;
+	}
+
+	// index of the vertex in the meshlet, -1 if the vertex isn't used
+	short* used = allocator.allocate<short>(vertex_count);
+	clearUsed(used, vertex_count, indices, index_count);
+
+	// initial seed triangle is the one closest to the corner
+	unsigned int initial_seed = ~0u;
+	float initial_score = FLT_MAX;
+
+	for (size_t i = 0; i < face_count; ++i)
+	{
+		const Cone& tri = triangles[i];
+
+		float dx = tri.px - cornerx, dy = tri.py - cornery, dz = tri.pz - cornerz;
+		float score = sqrtf(dx * dx + dy * dy + dz * dz);
+
+		if (initial_seed == ~0u || score < initial_score)
+		{
+			initial_seed = unsigned(i);
+			initial_score = score;
+		}
+	}
+
+	// seed triangles to continue meshlet flow
+	unsigned int seeds[kMeshletMaxSeeds] = {};
+	size_t seed_count = 0;
+
+	meshopt_Meshlet meshlet = {};
+	size_t meshlet_offset = 0;
+
+	Cone meshlet_cone_acc = {};
+
+	// current cluster motion state; reset every time a meshlet is emitted
+	unsigned int cluster_tris[512];
+	size_t cluster_count = 0;
+	float axis_sum[3] = {0, 0, 0};
+
+	// gate budget: bounds add kMotionConeCutoffMargin to the proven cutoff, so require the cone against the
+	// de-margined budget here; the gate axis is identical to the bounds axis (same face directions, same sum order),
+	// which guarantees every non-fallback meshlet recomputes within max_cone_cutoff
+	float effective_budget = max_cone_cutoff - kMotionConeCutoffMargin;
+	assert(effective_budget > 0.f);
+
+	float limit = sqrtf(1.f - effective_budget * effective_budget);
+
+	assert(limit > 0.f && limit < 1.f);
+
+	for (;;)
+	{
+		unsigned int best_triangle = ~0u;
+
+		if (meshlet.triangle_count == 0)
+		{
+			// start a new meshlet: the spatial seed starts the very first one, adjacency seeds continue the flow afterwards
+			if (meshlet_offset == 0)
+			{
+				best_triangle = initial_seed;
+			}
+			else
+			{
+				best_triangle = motionHarvestSeed(seeds, seed_count, meshlet, meshlet_vertices, indices, adjacency, triangles, live_triangles, emitted_flags, cornerx, cornery, cornerz);
+
+				if (best_triangle == ~0u)
+				{
+					// disconnected remainder: fall back to spatial search without scanning the whole input
+					Cone meshlet_cone = getMeshletCone(meshlet_cone_acc, meshlet.triangle_count);
+					float position[3] = {meshlet_cone.px, meshlet_cone.py, meshlet_cone.pz};
+					float distance = FLT_MAX;
+
+					kdtreeNearest(nodes, 0, &triangles[0].px, sizeof(Cone) / sizeof(float), emitted_flags, position, best_triangle, distance);
+				}
+			}
+
+			if (best_triangle == ~0u)
+				break;
+		}
+		else
+		{
+			Cone meshlet_cone = getMeshletCone(meshlet_cone_acc, meshlet.triangle_count);
+
+			// adjacency-driven candidate search with the cone as a hard gate
+			best_triangle = getNeighborTriangleMotion(meshlet, meshlet_cone, meshlet_vertices, indices, adjacency, faces, live_triangles, used, meshlet_expected_radius, cone_weight, cluster_tris, cluster_count, limit, axis_sum, max_vertices, max_triangles);
+
+			if (best_triangle == ~0u)
+			{
+				// disconnected remainder or a face that fails its own cone budget: fall back to spatial search
+				float position[3] = {meshlet_cone.px, meshlet_cone.py, meshlet_cone.pz};
+				float distance = FLT_MAX;
+
+				kdtreeNearest(nodes, 0, &triangles[0].px, sizeof(Cone) / sizeof(float), emitted_flags, position, best_triangle, distance);
+
+				if (best_triangle == ~0u)
+					break;
+
+				// an empty cluster always takes the face; it is emitted as a one-triangle fallback below when it can't meet the budget
+				if (cluster_count != 0 && !motionAdmissible(cluster_tris, cluster_count, faces, best_triangle, meshlet, used, indices, max_vertices, max_triangles, limit, axis_sum))
+				{
+					// cone split: harvest seeds before sealing since seeds are derived from meshlet vertices
+					unsigned int best_seed = motionHarvestSeed(seeds, seed_count, meshlet, meshlet_vertices, indices, adjacency, triangles, live_triangles, emitted_flags, cornerx, cornery, cornerz);
+
+					motionSealMeshlet(meshlet, meshlet_offset, meshlets, meshlet_vertices, used, meshlet_cone_acc, cluster_count, axis_sum);
+
+					// the rejected triangle is untouched; it becomes a seed, or a fallback on the next iteration
+					if (best_seed != ~0u)
+						best_triangle = best_seed;
+					else
+						continue;
+				}
+			}
+		}
+
+		int best_extra = (used[indices[best_triangle * 3 + 0]] < 0) + (used[indices[best_triangle * 3 + 1]] < 0) + (used[indices[best_triangle * 3 + 2]] < 0);
+
+		// capacity split, same flow as the static builder: re-select through seeds to maintain global flow
+		if (meshlet.vertex_count + best_extra > max_vertices || meshlet.triangle_count >= max_triangles)
+		{
+			unsigned int best_seed = motionHarvestSeed(seeds, seed_count, meshlet, meshlet_vertices, indices, adjacency, triangles, live_triangles, emitted_flags, cornerx, cornery, cornerz);
+
+			if (best_seed != ~0u)
+				best_triangle = best_seed;
+
+			// seal the full meshlet *before* the fallback classification so the seed is validated against an empty cluster;
+			// appendMeshlet's own capacity seal then never triggers on this path
+			motionSealMeshlet(meshlet, meshlet_offset, meshlets, meshlet_vertices, used, meshlet_cone_acc, cluster_count, axis_sum);
+		}
+
+		unsigned int a = indices[best_triangle * 3 + 0], b = indices[best_triangle * 3 + 1], c = indices[best_triangle * 3 + 2];
+		assert(a < vertex_count && b < vertex_count && c < vertex_count);
+
+		// a face that violates the budget even by itself can only be emitted as a one-triangle fallback
+		bool fallback = cluster_count == 0 && !motionAdmissible(cluster_tris, cluster_count, faces, best_triangle, meshlet, used, indices, max_vertices, max_triangles, limit, axis_sum);
+
+		// add meshlet to the output; a capacity seal (if any path above missed it) resets the accumulated bounds
+		if (appendMeshlet(meshlet, a, b, c, used, meshlets, meshlet_vertices, meshlet_triangles, meshlet_offset, max_vertices, max_triangles))
+		{
+			meshlet_offset++;
+			memset(&meshlet_cone_acc, 0, sizeof(meshlet_cone_acc));
+			cluster_count = 0;
+			axis_sum[0] = axis_sum[1] = axis_sum[2] = 0.f;
+		}
+
+		// remove emitted triangle from adjacency data
+		// this makes sure that we spend less time traversing these lists on subsequent iterations
+		// live triangle counts are updated as a byproduct of these adjustments
+		for (size_t k = 0; k < 3; ++k)
+		{
+			unsigned int index = indices[best_triangle * 3 + k];
+
+			unsigned int* neighbors = &adjacency.data[0] + adjacency.offsets[index];
+			size_t neighbors_size = adjacency.counts[index];
+
+			for (size_t i = 0; i < neighbors_size; ++i)
+			{
+				unsigned int tri = neighbors[i];
+
+				if (tri == best_triangle)
+				{
+					neighbors[i] = neighbors[neighbors_size - 1];
+					adjacency.counts[index]--;
+					break;
+				}
+			}
+		}
+
+		// update aggregated meshlet cone data for scoring subsequent triangles
+		meshlet_cone_acc.px += triangles[best_triangle].px;
+		meshlet_cone_acc.py += triangles[best_triangle].py;
+		meshlet_cone_acc.pz += triangles[best_triangle].pz;
+		meshlet_cone_acc.nx += triangles[best_triangle].nx;
+		meshlet_cone_acc.ny += triangles[best_triangle].ny;
+		meshlet_cone_acc.nz += triangles[best_triangle].nz;
+
+		// update cluster motion state
+		float dir[3];
+
+		if (motionPolyDirection(faces[best_triangle].poly, dir))
+		{
+			axis_sum[0] += dir[0];
+			axis_sum[1] += dir[1];
+			axis_sum[2] += dir[2];
+		}
+
+		cluster_tris[cluster_count++] = best_triangle;
+
+		// fallbacks are sealed immediately so they can never contaminate other meshlets
+		if (fallback)
+			motionSealMeshlet(meshlet, meshlet_offset, meshlets, meshlet_vertices, used, meshlet_cone_acc, cluster_count, axis_sum);
+
+		assert(!emitted_flags[best_triangle]);
+		emitted_flags[best_triangle] = 1;
+	}
+
+	motionSealMeshlet(meshlet, meshlet_offset, meshlets, meshlet_vertices, used, meshlet_cone_acc, cluster_count, axis_sum);
+
+	// every face is emitted exactly once and outputs stay within the documented allocations
+	assert(meshlet.triangle_offset <= index_count && meshlet.vertex_offset <= index_count);
+	assert(meshlet_offset <= face_count);
 	return meshlet_offset;
 }
 

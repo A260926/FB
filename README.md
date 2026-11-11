@@ -273,6 +273,42 @@ if (dot(normalize(cone_apex - camera_position), cone_axis) >= cone_cutoff) rejec
 
 Cluster culling should ideally run at a lower frequency than mesh shading, either using amplification/task shaders, or using a separate compute dispatch.
 
+### Morphing (motion) meshlets
+
+When a skinned or morphing mesh interpolates linearly between two poses, `p(t) = (1-t)*begin + t*end` with `t` in `[0,1]`, each meshlet can be built once and its culling data uploaded once, provided the bounds cover the whole interval. Reusing the bounds of either endpoint is unsafe: the normals of the endpoints do not bound the normals in between. For example, a triangle moving from `(0,0,0),(1,0,0),(0,3,0)` to `(0,0,0),(-3,0,0),(0,-1,0)` faces `+Z` at both endpoints but faces `-Z` in the middle, and the union of the two endpoint cones would still cull it incorrectly.
+
+For this case the library provides `meshopt_MotionBounds` and `meshopt_computeMeshletMotionBounds`, which take both position buffers (they may be the same pointer) and compute a sphere and a normal cone valid for every `t`:
+
+```c++
+meshopt_MotionBounds bounds = meshopt_computeMeshletMotionBounds(&meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset],
+    m.triangle_count, positions_begin, positions_end, vertex_count, sizeof(Vertex));
+```
+
+The sphere contains the full linear trajectory of every referenced vertex; always-degenerate triangles contribute their vertices to the sphere but do not constrain the cone. When a useful cone can be proven, `cone_axis` is a unit vector and `cone_cutoff` is in `[0,1)` such that every unit geometric normal `n(t)` of every non-zero-area triangle satisfies `dot(n(t), cone_axis) >= sqrt(1-cone_cutoff^2)`. Otherwise `cone_cutoff` is `1` and `cone_axis` is zero, which tells the caller to skip cone culling; empty input returns a zero sphere and a disabled cone. Unlike `meshopt_Bounds`, this structure has no apex. Backface culling is valid only while `cone_cutoff < 1`:
+
+```c++
+// orthographic camera, view is the camera direction
+if (dot(view, cone_axis) >= cone_cutoff) reject();
+// perspective camera, sphere-based test
+if (dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius) reject();
+```
+
+The guarantee is analytic rather than based on a fixed number of time samples, which could miss narrow intervals. A triangle's unnormalized geometric normal `q(t)` is a quadratic polynomial in `t`; after dividing by its length, the cone condition becomes a quartic non-negativity problem over `[0,1]`. The minimum of a quartic on a closed interval is at an endpoint or at a root of its cubic derivative, so the roots are solved exactly (Cardano/trigonometric form) and the minimum is evaluated directly. A `1e-5` relative-scale slack is added inside the tested polynomial so that it stays uniform over the interval even when `|q(t)|` varies by orders of magnitude; when the result is numerically uncertain, the test fails conservatively (the geometry is retained).
+
+To build meshlets that are guaranteed to stay within a cone budget across the whole morph, use `meshopt_buildMeshletsMotion`. It follows the same adjacency, spatial-seed and vertex-reuse flow as `meshopt_buildMeshlets`, but the motion cone is a hard admission constraint: a candidate triangle that would make the cluster's provable cone exceed the budget is rejected without touching any builder state and remains eligible as a seed for a later meshlet; `cone_weight` only tunes the heuristic preference between admissible candidates. Because the cone constraint can force additional meshlets, `meshopt_buildMeshletsBound` is no longer a valid upper bound — allocate `index_count/3` meshlets, and `index_count` entries each for meshlet vertices and micro-triangle indices:
+
+```c++
+std::vector<meshopt_Meshlet> meshlets(index_count / 3);
+std::vector<unsigned int> meshlet_vertices(index_count);
+std::vector<unsigned char> meshlet_triangles(index_count);
+
+size_t meshlet_count = meshopt_buildMeshletsMotion(meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(),
+    indices.data(), index_count, positions_begin, positions_end, vertex_count, sizeof(Vertex),
+    max_vertices, max_triangles, /*cone_weight=*/0.25f, /*max_cone_cutoff=*/0.6f);
+```
+
+`max_cone_cutoff` must be in `[0.05, 0.9]`; every ordinary meshlet recomputes with `meshopt_computeMeshletMotionBounds` to a cutoff no larger than it. If a single triangle cannot meet the budget on its own, it is emitted alone as a *fallback* meshlet — precisely the one-triangle meshlets whose recomputed cutoff exceeds the budget (or whose cone is disabled). Callers skip cone culling for fallbacks; they never contaminate the other meshlets. Always-degenerate triangles are merged into ordinary meshlets when possible, and a leftover isolated one is handled as the same kind of one-triangle fallback. The face multiset is preserved exactly, including duplicate, reversed-winding and degenerate faces; nothing is removed, moved, re-wound or re-parameterized. The static `meshopt_buildMeshlets` entry points and their results are unchanged.
+
 By default, the meshlet builder tries to form complete meshlets even if that requires merging disconnected regions of the mesh into a single meshlet. In some cases, such as hierarchical level of detail, or when advanced culling is used, it may be beneficial to prioritize spatial locality of triangles in a meshlet even if that results in partially filled meshlets. To that end, `meshopt_buildMeshletsFlex` function can be used instead of `meshopt_buildMeshlets`; it provides two triangle limits, `min_triangles` and `max_triangles`, and uses an additional configuration parameter, `split_factor` (recommended value is 2.0), to decide whether increasing the meshlet radius is worth it to fit more triangles in the meshlet. When using this function, the worst case bound for the number of meshlets has to be computed using `meshopt_buildMeshletsBound` with `min_triangles` parameter instead of `max_triangles`.
 
 ### Clustered raytracing

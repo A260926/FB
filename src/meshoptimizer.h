@@ -821,6 +821,60 @@ struct meshopt_Bounds
 MESHOPTIMIZER_API struct meshopt_Bounds meshopt_computeClusterBounds(const unsigned int* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride);
 MESHOPTIMIZER_API struct meshopt_Bounds meshopt_computeMeshletBounds(const unsigned int* meshlet_vertices, const unsigned char* meshlet_triangles, size_t triangle_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride);
 
+struct meshopt_MotionBounds
+{
+	/* bounding sphere covering the full motion segments of all referenced vertices */
+	float center[3];
+	float radius;
+
+	/* normal cone covering every non-degenerate triangle over the whole motion interval; cone_cutoff == 1 disables cone culling */
+	float cone_axis[3];
+	float cone_cutoff;
+};
+
+/**
+ * Motion meshlet bounds generator
+ * Creates bounding volumes that cover a meshlet whose vertices are linearly morphed between two poses:
+ *   p(t) = (1-t)*positions_begin + t*positions_end, t in [0,1]
+ * Both position buffers use the same topology and the same byte stride; the two pointers may be equal (static mesh).
+ *
+ * The sphere covers the entire trajectory of every referenced vertex.
+ * When a useful normal cone can be proven for the whole interval, cone_axis is unit length and cone_cutoff is in [0,1):
+ * every unit geometric normal n(t) of every non-zero-area triangle satisfies dot(n(t), cone_axis) >= sqrt(1-cone_cutoff^2).
+ * If no useful cone can be proven, cone_cutoff is 1 and cone_axis is zero; the caller must skip cone culling.
+ * Always-degenerate triangles do not constrain the cone but their vertices are still included in the sphere.
+ * Empty input returns a zero sphere and a disabled cone.
+ *
+ * Backface culling formulas, valid only when cone_cutoff < 1:
+ *   orthographic: dot(view, cone_axis) >= cone_cutoff
+ *   perspective:  dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
+ *
+ * The interval guarantee is analytic, never a fixed set of time samples or a union of endpoint normals.
+ * Each triangle's unnormalized normal q(t) is a quadratic polynomial in t, so the cone condition
+ * dot(n(t), axis) >= limit reduces to non-negativity of a quartic over [0,1]; its minimum is located exactly
+ * from the roots of the cubic derivative (Cardano/trigonometric form), with a 1e-5 relative-scale slack added
+ * inside the polynomial so that localized, narrow direction changes cannot be hidden by a global tolerance.
+ */
+MESHOPTIMIZER_API struct meshopt_MotionBounds meshopt_computeMeshletMotionBounds(const unsigned int* meshlet_vertices, const unsigned char* meshlet_triangles, size_t triangle_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride);
+
+/**
+ * Motion meshlet builder
+ * Splits the mesh into meshlets the same way meshopt_buildMeshlets does, but every emitted meshlet is guaranteed to have
+ * a motion cone (meshopt_computeMeshletMotionBounds) with cone_cutoff <= max_cone_cutoff for the entire morph interval.
+ *
+ * The cone budget is a hard admission constraint: candidate triangles that would violate it are rejected without mutating
+ * any builder state, and stay eligible as seeds for subsequent meshlets. A single triangle whose own motion cone exceeds
+ * the budget is emitted as a one-triangle fallback meshlet; callers can detect fallbacks as one-triangle meshlets whose
+ * recomputed cone_cutoff exceeds max_cone_cutoff and skip cone culling for them.
+ * cone_weight keeps its meaning as a heuristic preference between admissible candidates only.
+ *
+ * Because the cone constraint can force additional meshlets, meshopt_buildMeshletsBound is NOT a valid worst-case bound:
+ * allocate meshlets for index_count/3 entries; meshlet_vertices and meshlet_triangles each for index_count entries.
+ * max_cone_cutoff must be in [0.05, 0.9].
+ */
+MESHOPTIMIZER_API size_t meshopt_buildMeshletsMotion(struct meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const unsigned int* indices, size_t index_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride, size_t max_vertices, size_t max_triangles, float cone_weight, float max_cone_cutoff);
+
+
 /**
  * Sphere bounds generator
  * Creates bounding sphere around a set of points or a set of spheres; returns the center and radius of the sphere, with other fields of the result set to 0.
@@ -1157,6 +1211,8 @@ template <typename T>
 inline meshopt_CoverageStatistics meshopt_analyzeCoverage(const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride);
 template <typename T>
 inline size_t meshopt_buildMeshlets(meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, size_t max_vertices, size_t max_triangles, float cone_weight);
+template <typename T>
+inline size_t meshopt_buildMeshletsMotion(meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const T* indices, size_t index_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride, size_t max_vertices, size_t max_triangles, float cone_weight, float max_cone_cutoff);
 template <typename T>
 inline size_t meshopt_buildMeshletsScan(meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const T* indices, size_t index_count, size_t vertex_count, size_t max_vertices, size_t max_triangles);
 template <typename T>
@@ -1633,6 +1689,14 @@ inline size_t meshopt_buildMeshlets(meshopt_Meshlet* meshlets, unsigned int* mes
 	meshopt_IndexAdapter<T> in(NULL, indices, index_count);
 
 	return meshopt_buildMeshlets(meshlets, meshlet_vertices, meshlet_triangles, in.data, index_count, vertex_positions, vertex_count, vertex_positions_stride, max_vertices, max_triangles, cone_weight);
+}
+
+template <typename T>
+inline size_t meshopt_buildMeshletsMotion(meshopt_Meshlet* meshlets, unsigned int* meshlet_vertices, unsigned char* meshlet_triangles, const T* indices, size_t index_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride, size_t max_vertices, size_t max_triangles, float cone_weight, float max_cone_cutoff)
+{
+	meshopt_IndexAdapter<T> in(NULL, indices, index_count);
+
+	return meshopt_buildMeshletsMotion(meshlets, meshlet_vertices, meshlet_triangles, in.data, index_count, positions_begin, positions_end, vertex_count, vertex_positions_stride, max_vertices, max_triangles, cone_weight, max_cone_cutoff);
 }
 
 template <typename T>

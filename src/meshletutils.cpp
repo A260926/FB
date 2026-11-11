@@ -1,5 +1,6 @@
 // This file is part of meshoptimizer library; see meshoptimizer.h for version/license details
 #include "meshoptimizer.h"
+#include "motionbounds.h"
 
 #include <assert.h>
 #include <float.h>
@@ -335,6 +336,63 @@ meshopt_Bounds meshopt_computeMeshletBounds(const unsigned int* meshlet_vertices
 	}
 
 	return computeClusterBounds(indices, triangle_count * 3, meshlet_vertices, corner_count, vertex_positions, vertex_positions_stride);
+}
+
+meshopt_MotionBounds meshopt_computeMeshletMotionBounds(const unsigned int* meshlet_vertices, const unsigned char* meshlet_triangles, size_t triangle_count, const float* positions_begin, const float* positions_end, size_t vertex_count, size_t vertex_positions_stride)
+{
+	using namespace meshopt;
+
+	assert(triangle_count <= kMeshletMaxTriangles);
+	assert(vertex_positions_stride >= 12 && vertex_positions_stride <= 256);
+	assert(vertex_positions_stride % sizeof(float) == 0);
+
+	meshopt_MotionBounds result = {};
+	result.cone_cutoff = 1.f;
+
+	if (triangle_count == 0)
+		return result;
+
+	size_t vertex_stride_float = vertex_positions_stride / sizeof(float);
+
+	unsigned int indices[kMeshletMaxTriangles * 3];
+	size_t corner_count = 0;
+
+	for (size_t i = 0; i < triangle_count * 3; ++i)
+	{
+		unsigned char t = meshlet_triangles[i];
+		unsigned int index = meshlet_vertices[t];
+		assert(index < vertex_count);
+
+		indices[i] = index;
+		corner_count = t >= corner_count ? t + 1 : corner_count;
+	}
+
+	// per-face normal polynomials over the whole motion interval; this is the shared analytic interval test
+	MotionPoly polys[kMeshletMaxTriangles];
+
+	for (size_t i = 0; i < triangle_count; ++i)
+		polys[i] = motionComputePoly(positions_begin, positions_end, vertex_stride_float, indices[i * 3 + 0], indices[i * 3 + 1], indices[i * 3 + 2]);
+
+	// sphere covers every vertex trajectory, including vertices that only belong to always-degenerate faces
+	motionBoundingSphere(result.center, result.radius, positions_begin, positions_end, vertex_stride_float, meshlet_vertices, corner_count);
+
+	// cone: always-degenerate faces carry no direction constraint; if nothing constrains the cone it stays disabled
+	float axis[3];
+
+	if (motionConeAxis(polys, triangle_count, axis))
+	{
+		float cutoff = motionConeCutoff(polys, triangle_count, axis);
+
+		if (cutoff < 1.f)
+		{
+			result.cone_axis[0] = axis[0];
+			result.cone_axis[1] = axis[1];
+			result.cone_axis[2] = axis[2];
+			result.cone_cutoff = cutoff;
+		}
+	}
+
+	return result;
 }
 
 meshopt_Bounds meshopt_computeSphereBounds(const float* positions, size_t count, size_t positions_stride, const float* radii, size_t radii_stride)

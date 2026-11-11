@@ -8,8 +8,12 @@ BUILD=build/$(config)
 LIBRARY_SOURCES=$(wildcard src/*.cpp)
 LIBRARY_OBJECTS=$(LIBRARY_SOURCES:%=$(BUILD)/%.o)
 
-DEMO_SOURCES=$(wildcard demo/*.c demo/*.cpp)
+DEMO_SOURCES=$(filter-out demo/motion_meshlets.cpp,$(wildcard demo/*.c demo/*.cpp))
 DEMO_OBJECTS=$(DEMO_SOURCES:%=$(BUILD)/%.o)
+
+# standalone motion meshlet regression program, built separately by demo/check_motion_meshlets.sh
+MOTION_DEMO_SOURCES=demo/motion_meshlets.cpp
+MOTION_DEMO_OBJECTS=$(MOTION_DEMO_SOURCES:%=$(BUILD)/%.o)
 
 GLTFPACK_SOURCES=$(wildcard gltf/*.cpp)
 GLTFPACK_OBJECTS=$(GLTFPACK_SOURCES:%=$(BUILD)/%.o)
@@ -206,6 +210,11 @@ js/meshopt_decoder.cjs: js/meshopt_decoder.mjs
 
 $(DEMO): $(DEMO_OBJECTS) $(LIBRARY)
 	$(CXX) $^ $(LDFLAGS) -o $@
+
+$(BUILD)/motion_meshlets: $(MOTION_DEMO_OBJECTS) $(LIBRARY)
+	$(CXX) $^ $(LDFLAGS) -o $@
+
+motion_meshlets: $(BUILD)/motion_meshlets
 
 vcachetuner: tools/vcachetuner.cpp $(LIBRARY)
 	$(CXX) $^ -fopenmp $(CXXFLAGS) $(LDFLAGS) -o $@
