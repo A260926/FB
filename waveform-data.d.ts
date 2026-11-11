@@ -63,6 +63,66 @@ declare module 'waveform-data' {
     audioBuffer: AudioBuffer
   ) => void;
 
+  export interface WaveformDataBuilderOptions {
+
+    /**
+     * Number of audio samples per second
+     */
+
+    sample_rate: number;
+
+    /**
+     * Number of audio channels in the PCM data passed to append()
+     */
+
+    channels: number;
+
+    /**
+     * Number of audio samples per pixel. Default: 512
+     */
+
+    scale?: number;
+
+    /**
+     * Number of bits per sample (8 or 16). Default: 8
+     */
+
+    bits?: number;
+
+    /**
+     * Amplitude scale. Must be a finite, non-negative number. Default: 1.0
+     */
+
+    amplitude_scale?: number;
+
+    /**
+     * Create a single or multi-channel waveform. Default: false
+     */
+
+    split_channels?: boolean;
+  }
+
+  export interface WaveformDataBuilder {
+
+    /**
+     * Appends a chunk of PCM audio samples: an array of Float32Array
+     * objects, one per channel, each of the same length. The arrays may be
+     * views onto a larger buffer, and may be reused by the caller once
+     * append() returns. Throws (ignoring the whole chunk) if the number of
+     * channels is wrong, the channel lengths differ, or any sample is not
+     * a finite number
+     */
+
+    append: (channelData: Array<Float32Array>) => void;
+
+    /**
+     * Completes the waveform and returns a WaveformData object. May be
+     * called multiple times, returning the same waveform data
+     */
+
+    finish: () => WaveformData;
+  }
+
   export interface JsonWaveformData {
     version: number;
     channels: number;
@@ -118,6 +178,13 @@ declare module 'waveform-data' {
       options: WaveformDataAudioContextOptions | WaveformDataAudioBufferOptions,
       callback: WaveformDataFromAudioCallback
     ) => void;
+
+    /**
+     * Creates and returns a builder that incrementally computes waveform
+     * data from chunks of PCM audio samples
+     */
+
+    static createBuilder: (options: WaveformDataBuilderOptions) => WaveformDataBuilder;
 
     /**
      * Returns the sample rate of the original audio, in Hz

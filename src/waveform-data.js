@@ -1,4 +1,5 @@
 import WaveformDataChannel from './waveform-data-channel';
+import WaveformDataBuilder from './waveform-builder';
 import { generateWaveformData } from './waveform-generator';
 import { isJsonWaveformData, isBinaryWaveformData, convertJsonToBinary } from './waveform-utils';
 import { isNullOrUndefined } from './utils';
@@ -151,6 +152,32 @@ WaveformData.createFromAudio = function(options, callback) {
       'WaveformData.createFromAudio(): Pass either an AudioContext and ArrayBuffer, or an AudioBuffer object'
     );
   }
+};
+
+/**
+ * Creates and returns a builder that incrementally computes waveform data
+ * from chunks of PCM audio samples.
+ *
+ * The returned object has two methods:
+ *
+ * - append(channelData): consumes an array of Float32Array objects, one per
+ *   audio channel, each of the same length. Throws if the chunk is invalid;
+ *   invalid chunks are ignored entirely.
+ * - finish(): returns a WaveformData instance. May be called multiple times.
+ */
+
+WaveformData.createBuilder = function createBuilder(options) {
+  const builder = new WaveformDataBuilder(options);
+
+  return {
+    append: function(channelData) {
+      builder.append(channelData);
+    },
+
+    finish: function() {
+      return new WaveformData(builder.finish());
+    }
+  };
 };
 
 function WaveformResampler(options) {
