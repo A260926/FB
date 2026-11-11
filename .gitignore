@@ -34,3 +34,7 @@ webm2pes
 webm2pes_tests
 webm2ts
 webm_info
+
+# Local dependencies and build outputs for the public replay commands.
+/.deps/
+/build-userfb/
