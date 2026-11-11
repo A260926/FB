@@ -355,10 +355,17 @@ func newSRTConn(config srtConnConfig) *srtConn {
 	c.dropThreshold = max(uint64(float64(c.peerTsbpdDelay)*1.25)+uint64(c.config.SendDropDelay.Microseconds()), uint64(time.Second.Microseconds()))
 	c.dropThreshold += 20_000
 
+	// Absolute bandwidth pacing with a positive MaxBW is only defined for
+	// live transmission without a packet filter.
+	maxBW := c.config.MaxBW
+	if len(c.config.PacketFilter) > 0 {
+		maxBW = -1
+	}
+
 	c.snd = live.NewSender(live.SendConfig{
 		InitialSequenceNumber: c.initialPacketSequenceNumber,
 		DropThreshold:         c.dropThreshold,
-		MaxBW:                 c.config.MaxBW,
+		MaxBW:                 maxBW,
 		InputBW:               c.config.InputBW,
 		MinInputBW:            c.config.MinInputBW,
 		OverheadBW:            c.config.OverheadBW,

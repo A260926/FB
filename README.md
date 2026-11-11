@@ -196,7 +196,7 @@ known options (similar to [srt-live-transmit](https://github.com/Haivision/srt/b
 | `kmrefreshrate`      | `packets`              | Stream encryption key refresh rate.                                     |
 | `latency`            | `ms`                   | Maximum accepted transmission latency.                                  |
 | `lossmaxttl`         | `packets`              | Max. packet reorder tolerance. A gap is reported with a NAK only after that many more packets arrived. The tolerance adapts to the reordering on the link, as in libsrt. Default: 0 (immediate NAK). |
-| `maxbw`              | `bytes`                | Bandwidth limit. Ignored.                                               |
+| `maxbw`              | `bytes`                | Bandwidth limit in bytes/s. A positive value enforces an absolute send rate for live connections without `packetfilter`: every delivered packet (original or retransmission) is charged with its payload plus 16 bytes of SRT header and deliveries are paced accordingly. `0` or `-1` (default) keep the previous, unthrottled behavior. |
 | `mininputbw`         | `bytes`                | Minimum allowed estimate of `inputbw`.                                  |
 | `messageapi`         | `bool`                 | Enable SRT message mode. Must be `false`.                               |
 | `mss`                | 76...                  | MTU size.                                                               |

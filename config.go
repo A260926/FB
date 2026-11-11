@@ -92,7 +92,11 @@ type Config struct {
 	// SRTO_LOSSMAXTTL
 	LossMaxTTL uint32
 
-	// Bandwidth limit in bytes/s.
+	// Bandwidth limit in bytes/s. A positive value enforces an absolute
+	// send rate for live connections without a packet filter: every
+	// delivered packet (original or retransmission) is charged with its
+	// payload size plus 16 bytes of SRT header and deliveries are paced
+	// accordingly. 0 and -1 (default) keep the previous behavior.
 	// SRTO_MAXBW
 	MaxBW int64
 
@@ -690,6 +694,10 @@ func (c *Config) Validate() error {
 	if c.Latency >= 0 {
 		c.PeerLatency = c.Latency
 		c.ReceiverLatency = c.Latency
+	}
+
+	if c.MaxBW < -1 {
+		return fmt.Errorf("config: MaxBW must be -1, 0, or a positive value")
 	}
 
 	if c.MinVersion != SRT_VERSION {

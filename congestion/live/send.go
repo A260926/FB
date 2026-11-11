@@ -26,15 +26,31 @@ type sender struct {
 	nextSequenceNumber circular.Number
 	dropThreshold      uint64
 
-	packetList *list.List
-	lossList   *list.List
-	lock       sync.RWMutex
+	packetList  *list.List
+	lossList    *list.List
+	retransList *list.List
+	lock        sync.RWMutex
 
 	avgPayloadSize float64 // bytes
 	pktSndPeriod   float64 // microseconds
 	maxBW          float64 // bytes/s
 	inputBW        float64 // bytes/s
 	overheadBW     float64 // percent
+
+	// absolute is true if maxBW is a positive, absolute bandwidth limit.
+	// In this mode the delivery of original and retransmitted packets is
+	// paced by nextSendTime.
+	absolute bool
+	absMaxBW uint64 // bytes/s
+
+	// nextSendTime is the earliest connection time in microseconds at which
+	// the next packet may be delivered. Only used in absolute bandwidth mode.
+	// The exact time is nextSendTime + nextSendTimeRem/maxBW. Keeping the
+	// remainder avoids any rounding error that would otherwise accumulate
+	// over the packets and systematically deviate from the configured
+	// bandwidth.
+	nextSendTime    uint64 // microseconds
+	nextSendTimeRem uint64 // 1/maxBW microseconds
 
 	statistics congestion.SendStats
 
@@ -64,6 +80,7 @@ func NewSender(config SendConfig) congestion.Sender {
 		dropThreshold:      config.DropThreshold,
 		packetList:         list.New(),
 		lossList:           list.New(),
+		retransList:        list.New(),
 
 		avgPayloadSize: packet.MAX_PAYLOAD_SIZE, //  5.1.2. SRT's Default LiveCC Algorithm
 		maxBW:          float64(config.MaxBW),
@@ -77,7 +94,15 @@ func NewSender(config SendConfig) congestion.Sender {
 		s.deliver = func(p packet.Packet) {}
 	}
 
-	s.maxBW = 128 * 1024 * 1024 // 1 Gbit/s
+	if s.maxBW > 0 {
+		// A positive MaxBW is an absolute bandwidth limit in bytes/s that
+		// paces the delivery of original and retransmitted packets.
+		s.absolute = true
+		s.absMaxBW = uint64(config.MaxBW)
+	} else {
+		s.maxBW = 128 * 1024 * 1024 // 1 Gbit/s
+	}
+
 	s.pktSndPeriod = (s.avgPayloadSize + 16) * 1_000_000 / s.maxBW
 
 	s.rate.period = uint64(time.Second.Microseconds())
@@ -115,6 +140,9 @@ func (s *sender) Flush() {
 
 	s.packetList = s.packetList.Init()
 	s.lossList = s.lossList.Init()
+	s.retransList = s.retransList.Init()
+	s.nextSendTime = 0
+	s.nextSendTimeRem = 0
 }
 
 func (s *sender) Push(p packet.Packet) {
@@ -162,6 +190,11 @@ func (s *sender) Push(p packet.Packet) {
 }
 
 func (s *sender) Tick(now uint64) {
+	if s.absolute {
+		s.tickAbsolute(now)
+		return
+	}
+
 	// Deliver packets whose PktTsbpdTime is ripe
 	s.lock.Lock()
 	removeList := make([]*list.Element, 0, s.packetList.Len())
@@ -227,6 +260,149 @@ func (s *sender) Tick(now uint64) {
 	s.lock.Unlock()
 
 	s.lock.Lock()
+	s.updateRates(now)
+	s.lock.Unlock()
+}
+
+// tickAbsolute paces the delivery of packets according to the configured
+// absolute bandwidth limit. At most one packet is delivered per call. The
+// next delivery time is advanced by the exact, fractional time it takes to
+// transmit the delivered packet at the configured bandwidth.
+func (s *sender) tickAbsolute(now uint64) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Drop original packets that waited too long to be sent. They must
+	// not be delivered past their TSBPD time plus the drop threshold.
+	for e := s.packetList.Front(); e != nil; {
+		p := e.Value.(packet.Packet)
+		if p.Header().PktTsbpdTime+s.dropThreshold > now {
+			break
+		}
+
+		next := e.Next()
+
+		s.statistics.PktDrop++
+		s.statistics.PktLoss++
+		s.statistics.ByteDrop += p.Len()
+		s.statistics.ByteLoss += p.Len()
+
+		s.statistics.PktBuf--
+		s.statistics.ByteBuf -= p.Len()
+
+		s.packetList.Remove(e)
+
+		p.Decommission()
+
+		e = next
+	}
+
+	// Drop sent packets that are too old to be of any use. Any pending
+	// retransmission request for them is dropped as well.
+	removeList := make([]*list.Element, 0, s.lossList.Len())
+	for e := s.lossList.Front(); e != nil; e = e.Next() {
+		p := e.Value.(packet.Packet)
+
+		if p.Header().PktTsbpdTime+s.dropThreshold <= now {
+			removeList = append(removeList, e)
+		}
+	}
+
+	for _, e := range removeList {
+		p := e.Value.(packet.Packet)
+
+		s.removeRetransmissionLocked(p)
+
+		s.statistics.PktDrop++
+		s.statistics.PktLoss++
+		s.statistics.ByteDrop += p.Len()
+		s.statistics.ByteLoss += p.Len()
+
+		s.statistics.PktBuf--
+		s.statistics.ByteBuf -= p.Len()
+
+		s.lossList.Remove(e)
+
+		p.Decommission()
+	}
+
+	// Deliver at most one packet if the pacing schedule permits it. Queued
+	// retransmissions have priority over original packets.
+	delivered := false
+	if s.nextSendTime < now || (s.nextSendTime == now && s.nextSendTimeRem == 0) {
+		var p packet.Packet
+		retransmission := false
+
+		if e := s.retransList.Front(); e != nil {
+			p = e.Value.(packet.Packet)
+			s.retransList.Remove(e)
+			retransmission = true
+		} else if e := s.packetList.Front(); e != nil {
+			if pp := e.Value.(packet.Packet); pp.Header().PktTsbpdTime <= now {
+				p = pp
+				s.packetList.Remove(e)
+				s.lossList.PushBack(p)
+			}
+		}
+
+		if p != nil {
+			pktLen := p.Len()
+
+			// The packet is charged with its payload size plus the
+			// 16 bytes of the SRT header. The schedule is advanced by the
+			// exact, fractional transmit time of the packet.
+			charge := (pktLen + 16) * 1_000_000
+
+			s.nextSendTime += charge / s.absMaxBW
+			s.nextSendTimeRem += charge % s.absMaxBW
+			if s.nextSendTimeRem >= s.absMaxBW {
+				s.nextSendTime++
+				s.nextSendTimeRem -= s.absMaxBW
+			}
+
+			s.pktSndPeriod = float64(charge) / float64(s.absMaxBW)
+
+			s.statistics.Pkt++
+			s.statistics.Byte += pktLen
+
+			if retransmission {
+				p.Header().RetransmittedPacketFlag = true
+
+				s.statistics.PktRetrans++
+				s.statistics.ByteRetrans += pktLen
+
+				s.rate.bytesRetrans += pktLen
+			} else {
+				s.statistics.PktUnique++
+				s.statistics.ByteUnique += pktLen
+			}
+
+			s.statistics.UsSndDuration += uint64(s.pktSndPeriod)
+
+			//  5.1.2. SRT's Default LiveCC Algorithm
+			s.avgPayloadSize = 0.875*s.avgPayloadSize + 0.125*float64(pktLen)
+
+			s.rate.bytesSent += pktLen
+
+			s.deliver(p)
+
+			delivered = true
+		}
+	}
+
+	if !delivered && s.nextSendTime < now {
+		// Nothing was ready to be sent. Don't accumulate send
+		// opportunities while idling that could be spent in a burst
+		// once data becomes available again.
+		s.nextSendTime = now
+		s.nextSendTimeRem = 0
+	}
+
+	s.updateRates(now)
+}
+
+// updateRates updates the bandwidth and loss rate estimates. The lock must be held.
+func (s *sender) updateRates(now uint64) {
 	tdiff := now - s.rate.last
 
 	if tdiff > s.rate.period {
@@ -244,7 +420,29 @@ func (s *sender) Tick(now uint64) {
 
 		s.rate.last = now
 	}
-	s.lock.Unlock()
+}
+
+// retransmissionQueuedLocked returns whether the packet is already queued for
+// retransmission. The lock must be held.
+func (s *sender) retransmissionQueuedLocked(p packet.Packet) bool {
+	for e := s.retransList.Front(); e != nil; e = e.Next() {
+		if e.Value.(packet.Packet) == p {
+			return true
+		}
+	}
+
+	return false
+}
+
+// removeRetransmissionLocked removes a pending retransmission request for the
+// packet, if any. The lock must be held.
+func (s *sender) removeRetransmissionLocked(p packet.Packet) {
+	for e := s.retransList.Front(); e != nil; e = e.Next() {
+		if e.Value.(packet.Packet) == p {
+			s.retransList.Remove(e)
+			return
+		}
+	}
 }
 
 func (s *sender) ACK(sequenceNumber circular.Number) {
@@ -266,6 +464,9 @@ func (s *sender) ACK(sequenceNumber circular.Number) {
 	for _, e := range removeList {
 		p := e.Value.(packet.Packet)
 
+		// A pending retransmission request for this packet is obsolete
+		s.removeRetransmissionLocked(p)
+
 		s.statistics.PktBuf--
 		s.statistics.ByteBuf -= p.Len()
 
@@ -275,7 +476,9 @@ func (s *sender) ACK(sequenceNumber circular.Number) {
 		p.Decommission()
 	}
 
-	s.pktSndPeriod = (s.avgPayloadSize + 16) * 1000000 / s.maxBW
+	if !s.absolute {
+		s.pktSndPeriod = (s.avgPayloadSize + 16) * 1000000 / s.maxBW
+	}
 }
 
 func (s *sender) NAK(sequenceNumbers []circular.Number) {
@@ -285,6 +488,29 @@ func (s *sender) NAK(sequenceNumbers []circular.Number) {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	if s.absolute {
+		// Queue the lost packets for retransmission. They are delivered
+		// from Tick, paced by the bandwidth limit like original packets.
+		for e := s.lossList.Front(); e != nil; e = e.Next() {
+			p := e.Value.(packet.Packet)
+
+			for i := 0; i+1 < len(sequenceNumbers); i += 2 {
+				if p.Header().PacketSequenceNumber.Gte(sequenceNumbers[i]) && p.Header().PacketSequenceNumber.Lte(sequenceNumbers[i+1]) {
+					if !s.retransmissionQueuedLocked(p) {
+						s.statistics.PktLoss++
+						s.statistics.ByteLoss += p.Len()
+
+						s.retransList.PushBack(p)
+					}
+
+					break
+				}
+			}
+		}
+
+		return
+	}
 
 	for e := s.lossList.Back(); e != nil; e = e.Prev() {
 		p := e.Value.(packet.Packet)
