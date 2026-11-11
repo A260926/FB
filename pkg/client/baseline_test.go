@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestAuthorPostMergeBaseline(t *testing.T) {
+func TestPostMergeBaseline(t *testing.T) {
 	var bodies []map[string]any
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
