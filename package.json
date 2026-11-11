@@ -1,0 +1,62 @@
+{
+  "name": "glsl-transpiler",
+  "version": "4.0.0",
+  "description": "Transpile GLSL to JS",
+  "main": "index.js",
+  "type": "module",
+  "dependencies": {
+    "inherits": "^2.0.1",
+    "pick-by-alias": "^1.2.0",
+    "prepr": "^1.2.5",
+    "subscript": "^7.3.1"
+  },
+  "devDependencies": {
+    "almost-equal": "^1.1.0",
+    "tape": "^4.9.1"
+  },
+  "files": [
+    "index.js",
+    "stream.js",
+    "lib",
+    "process.md"
+  ],
+  "directories": {
+    "lib": "./lib"
+  },
+  "scripts": {
+    "test": "node test/index.js",
+    "benchmark": "node test/benchmark.js",
+    "test:coverage": "node test/coverage.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stackgl/glsl-transpiler.git"
+  },
+  "keywords": [
+    "headless-gl",
+    "gl",
+    "glsl",
+    "glsl.js",
+    "glsl-transpiler",
+    "transpiler",
+    "stackgl",
+    "js",
+    "nogl",
+    "opengl",
+    "shaders",
+    "webgl",
+    "gpu"
+  ],
+  "author": "Dmitry Yv <df.creative@gmail.com>",
+  "contributors": [
+    "Xiaoji Chen (http://pessimistress.github.io/)"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stackgl/glsl-transpiler/issues"
+  },
+  "homepage": "https://github.com/stackgl/glsl-transpiler#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}
