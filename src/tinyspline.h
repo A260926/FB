@@ -1974,6 +1974,21 @@ ts_bspline_is_closed(const tsBSpline *spline,
  *     }
  *
  * @pre \p knots and \p frames have \p num entries.
+ *
+ * \p knots may contain consecutive duplicates (i.e., the sequence may be
+ * non-decreasing rather than strictly increasing). If two (or more)
+ * consecutive knots are equal, or, more generally, if the evaluation points
+ * of two consecutive knots coincide while their tangents point into the same
+ * direction, the frame of the preceding knot is continued (i.e., position,
+ * tangent, normal, and binormal are carried over). Hence, the number of
+ * output frames always equals \p num and no frame is re-initialized from an
+ * arbitrary axis (which would introduce visible twist in sweep surfaces).
+ * If, however, the evaluation points of two consecutive knots coincide while
+ * their tangents point into different directions, the direction in which the
+ * frame is to be propagated cannot be determined and ::TS_NO_RESULT is
+ * returned. Likewise, ::TS_NO_RESULT is returned if the derivative of
+ * \p spline at one of the knots is zero or non-finite.
+ *
  * @param[in] spline
  * 	The spline to query.
  * @param[in] knots
@@ -1984,15 +1999,23 @@ ts_bspline_is_closed(const tsBSpline *spline,
  * 	Indicates whether the normal of the first element of \p frames should
  * 	be taken as starting value for the algorithm. If \c 0, the starting
  * 	normal is determined based on the tangent of \p spline at \c knots[0].
- * 	Note that, if the argument value is not \c 0, it is up to the caller of
- * 	this function to ensure that the supplied normal is valid. The function
- * 	only normalizes the supplied value.
+ * 	If not \c 0, the supplied normal is projected onto the plane
+ * 	perpendicular to the tangent at \c knots[0] (thereby maintaining its
+ * 	orientation) and normalized. The supplied normal must be finite and
+ * 	non-zero and must not be parallel to the tangent at \c knots[0];
+ * 	otherwise ::TS_NO_RESULT is returned.
  * @param[in, out] frames
  * 	Stores the computed frames.
  * @param[out] status
  * 	The status of this function. May be NULL.
  * @return TS_SUCCESS
  * 	On success.
+ * @return TS_NO_RESULT
+ * 	If the derivative of \p spline at one of the knots is zero or
+ * 	non-finite, if the evaluation points of two consecutive knots
+ * 	coincide while their tangents point into different directions, or
+ * 	if \p has_first_normal is not \c 0 and the supplied normal is zero,
+ * 	non-finite, or parallel to the tangent at \c knots[0].
  * @return TS_MALLOC
  * 	If memory allocation failed.
  */

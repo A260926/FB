@@ -631,6 +631,18 @@ public:
 	                 size_t maxIter = 50) const;
 	Domain domain() const;
 	bool isClosed(real epsilon = TS_POINT_EPSILON) const;
+	/**
+	 * Computes a sequence of rotation minimizing frames (see
+	 * ts_bspline_compute_rmf for details). \p knots may contain
+	 * consecutive duplicates; the number of returned frames always
+	 * equals the number of knots. If \p firstNormal is not \c nullptr,
+	 * it is projected onto the plane perpendicular to the tangent at
+	 * the first knot (maintaining its orientation); it must be finite,
+	 * non-zero, and not parallel to that tangent. Throws
+	 * std::runtime_error if the frames cannot be computed (e.g., zero
+	 * or non-finite derivative, coincident points with deviating
+	 * tangents, or an invalid \p firstNormal).
+	 */
 	FrameSeq computeRMF(std_real_vector_in knots,
 	                    Vec3 *firstNormal = nullptr) const;
 	BSpline subSpline(real knot0, real knot1) const;

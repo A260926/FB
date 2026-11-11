@@ -8,6 +8,12 @@
 #include <stdio.h>  /* FILE, fopen */
 #include <stdarg.h> /* varargs */
 
+/* isfinite is C99. Provide a fallback for older MSVC versions. */
+#if defined(_MSC_VER) && _MSC_VER < 1800
+#include <float.h>
+#define isfinite(x) (_finite((x)) != 0)
+#endif
+
 /* Suppress some useless MSVC warnings. */
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -1544,7 +1550,8 @@ ts_bspline_compute_rmf(const tsBSpline *spline,
 	tsError err;
 	size_t i;
 	tsReal fx, fy, fz, fmin;
-	tsReal xc[3], xn[3], v1[3], c1, v2[3], c2, rL[3], tL[3];
+	tsReal xc[3], xn[3], xt[3], v1[3], c1, v2[3], c2, rL[3], tL[3];
+	tsReal mag, dot;
 	tsBSpline deriv = ts_bspline_init();
 	tsDeBoorNet curr = ts_deboornet_init();
 	tsDeBoorNet next = ts_deboornet_init();
@@ -1572,6 +1579,11 @@ ts_bspline_compute_rmf(const tsBSpline *spline,
 		ts_vec3_set(frames[0].tangent,
 		            ts_int_deboornet_access_result(&curr),
 		            ts_bspline_dimension(&deriv));
+		mag = ts_vec_mag(frames[0].tangent, 3);
+		if (!isfinite(mag) || mag < TS_LENGTH_ZERO)
+			TS_THROW_1(try, err, status, TS_NO_RESULT,
+			           "zero or non-finite derivative at index: %lu",
+			           (unsigned long) 0)
 		ts_vec_norm(frames[0].tangent, 3, frames[0].tangent);
 		/* Set normal. */
 		if (!has_first_normal) {
@@ -1610,7 +1622,25 @@ ts_bspline_compute_rmf(const tsBSpline *spline,
 				              frames[0].normal);
 			}
 		} else {
-			/* Never trust user input! */
+			/* Never trust user input! Project the supplied
+			   normal onto the plane perpendicular to the
+			   tangent (thereby maintaining its orientation)
+			   and make sure the projection is well-defined. */
+			mag = ts_vec_mag(frames[0].normal, 3);
+			if (!isfinite(mag) || mag < TS_LENGTH_ZERO)
+				TS_THROW_0(try, err, status, TS_NO_RESULT,
+				           "first normal is zero or "
+				           "non-finite")
+			c1 = ts_vec_dot(frames[0].tangent,
+			                frames[0].normal, 3);
+			ts_vec_mul(frames[0].tangent, 3, c1, v1);
+			ts_vec_sub(frames[0].normal, v1, 3,
+			           frames[0].normal);
+			c2 = ts_vec_mag(frames[0].normal, 3);
+			if (!isfinite(c2) || c2 <= TS_LENGTH_ZERO * mag)
+				TS_THROW_0(try, err, status, TS_NO_RESULT,
+				           "first normal is parallel to "
+				           "tangent")
 			ts_vec_norm(frames[0].normal, 3, frames[0].normal);
 		}
 		/* Set binormal. */
@@ -1634,9 +1664,49 @@ ts_bspline_compute_rmf(const tsBSpline *spline,
 			/* Set position of U_{i+1}. */
 			ts_vec3_set(frames[i+1].position, xn, 3);
 
+			/* Eval and set tangent of U_{i+1}. */
+			TS_CALL(try, err, ts_int_bspline_eval_woa(
+			        &deriv, knots[i+1], &next, status))
+			ts_vec3_set(xt, /* xt is now the next tangent */
+			            ts_int_deboornet_access_result(&next),
+			            ts_bspline_dimension(&deriv));
+			mag = ts_vec_mag(xt, 3);
+			if (!isfinite(mag) || mag < TS_LENGTH_ZERO)
+				TS_THROW_1(try, err, status, TS_NO_RESULT,
+				           "zero or non-finite derivative "
+				           "at index: %lu",
+				           (unsigned long) (i+1))
+			ts_vec_norm(xt, 3, xt);
+
 			/* Compute reflection vector of R_{1}. */
 			ts_vec_sub(xn, xc, 3, v1);
 			c1 = ts_vec_dot(v1, v1, 3);
+
+			if (c1 == (tsReal) 0.0) {
+				/* The evaluation points of U_{i} and
+				   U_{i+1} coincide (e.g., due to repeated
+				   knots). The reflection R_{1} (and thus
+				   the double reflection) is undefined. If
+				   the tangent did not change direction,
+				   the previous frame can be continued
+				   without introducing any twist. */
+				dot = ts_vec_dot(xt, frames[i].tangent, 3);
+				if (dot < (tsReal) 0.999999)
+					TS_THROW_1(try, err, status,
+					           TS_NO_RESULT,
+					           "cannot determine "
+					           "propagation direction "
+					           "at coincident points "
+					           "(index: %lu)",
+					           (unsigned long) (i+1))
+				ts_vec3_set(frames[i+1].tangent, xt, 3);
+				ts_vec3_set(frames[i+1].normal,
+				            frames[i].normal, 3);
+				ts_vec3_cross(xt,
+				              frames[i+1].normal,
+				              frames[i+1].binormal);
+				continue;
+			}
 
 			/* Compute r_{i}^{L} = R_{1} * r_{i}. */
 			rL[0] = (tsReal) 2.0 / c1;
@@ -1653,30 +1723,30 @@ ts_bspline_compute_rmf(const tsBSpline *spline,
 			ts_vec_sub(frames[i].tangent, tL, 3, tL);
 
 			/* Compute reflection vector of R_{2}. */
-			TS_CALL(try, err, ts_int_bspline_eval_woa(
-			        &deriv, knots[i+1], &next, status))
-			ts_vec3_set(xn, /* xn is now the next tangent */
-			            ts_int_deboornet_access_result(&next),
-			            ts_bspline_dimension(&deriv));
-			ts_vec_norm(xn, 3, xn);
-			ts_vec_sub(xn, tL, 3, v2);
+			ts_vec_sub(xt, tL, 3, v2);
 			c2 = ts_vec_dot(v2, v2, 3);
 
-			/* Compute r_{i+1} = R_{2} * r_{i}^{L}. */
+			/* Compute r_{i+1} = R_{2} * r_{i}^{L}. If the
+			   reflection vector of R_{2} is zero (i.e.,
+			   t_{i}^{L} already coincides with t_{i+1}),
+			   R_{2} is the identity and r_{i}^{L} is
+			   used as is. */
 			ts_vec3_set(xc, /* xc is now the next normal */
-			            frames[i+1].normal, 3);
-			xc[0] = (tsReal) 2.0 / c2;
-			xc[1] = ts_vec_dot(v2, rL, 3);
-			xc[2] = xc[0] * xc[1];
-			ts_vec_mul(v2, 3, xc[2], xc);
-			ts_vec_sub(rL, xc, 3, xc);
+			            rL, 3);
+			if (c2 > (tsReal) 0.0) {
+				xc[0] = (tsReal) 2.0 / c2;
+				xc[1] = ts_vec_dot(v2, rL, 3);
+				xc[2] = xc[0] * xc[1];
+				ts_vec_mul(v2, 3, xc[2], xc);
+				ts_vec_sub(rL, xc, 3, xc);
+			}
 			ts_vec_norm(xc, 3, xc);
 
 			/* Compute vector s_{i+1} of U_{i+1}. */
-			ts_vec3_cross(xn, xc, frames[i+1].binormal);
+			ts_vec3_cross(xt, xc, frames[i+1].binormal);
 
 			/* Set vectors t_{i+1} and r_{i+1} of U_{i+1}. */
-			ts_vec3_set(frames[i+1].tangent, xn, 3);
+			ts_vec3_set(frames[i+1].tangent, xt, 3);
 			ts_vec3_set(frames[i+1].normal, xc, 3);
 		}
 	TS_FINALLY

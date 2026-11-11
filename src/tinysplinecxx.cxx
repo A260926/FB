@@ -1203,8 +1203,14 @@ tinyspline::BSpline::computeRMF(std_real_vector_in knots,
 	                           num,
 	                           firstNormal != nullptr,
 	                           frames,
-	                           &status))
-		throw std::runtime_error(status.message);
+	                           &status)) {
+		/* `frames` is not owned by a FrameSeq, yet; make
+		   sure it does not leak. Copy the error message
+		   beforehand as `status` is a local variable. */
+		std::string message = status.message;
+		delete [] frames;
+		throw std::runtime_error(message);
+	}
 	FrameSeq seq = FrameSeq(frames, num);
 	return seq;
 }
