@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "Test.h"
+#include "TileAccumulator.h"
 #include "Maths.h"
 #include <algorithm>
 #if CPU_CAN_DO_THREADS
@@ -381,4 +382,131 @@ void GetSceneDesc(void* outObjects, void* outMaterials, void* outCam, void* outE
     memcpy(outCam, &s_Cam, sizeof(s_Cam));
     memcpy(outEmissives, s_EmissiveSpheres, s_EmissiveSphereCount * sizeof(s_EmissiveSpheres[0]));
     *outEmissiveCount = s_EmissiveSphereCount;
+}
+
+
+// ---- TileAccumulator: window-independent CPU tile rendering ----
+
+// Random identity of a single path: only the user seed, the full-frame pixel
+// coordinates and the absolute sample index participate. Never the bounce
+// count, the worker thread or the tile edges.
+static uint32_t TilePathRandomState(uint32_t seed, uint32_t x, uint32_t y, uint32_t sample)
+{
+    uint32_t h = seed + 0x9E3779B9u;
+    h ^= x * 0x85EBCA6Bu;      h = (h ^ (h >> 13)) * 0xC2B2AE35u;
+    h ^= y * 0x27D4EB2Fu;      h = (h ^ (h >> 15)) * 0x165667B1u;
+    h ^= sample * 0x94D049BBu; h = (h ^ (h >> 16)) * 0x2545F491u;
+    h ^= h >> 16;
+    return h | 1; // xorshift state must be non-zero
+}
+
+bool TileAccumulatorInit(TileAccumulator& acc, int width, int height, uint32_t seed)
+{
+    if (width <= 0 || height <= 0)
+        return false;
+    acc.width = width;
+    acc.height = height;
+    acc.seed = seed;
+    acc.rgbSum.assign((size_t)width * height * 3, 0.0f);
+    acc.counts.assign((size_t)width * height, 0);
+    return true;
+}
+
+struct TileJobData
+{
+    TileAccumulator* acc;
+    int x0, y0, x1;
+    uint32_t firstSample, sampleCount;
+    std::atomic<int> rayCount;
+};
+
+static void TraceTileRowsJob(uint32_t start, uint32_t end, uint32_t threadnum, void* data_)
+{
+    TileJobData& data = *(TileJobData*)data_;
+    TileAccumulator& acc = *data.acc;
+    // camera and ray differentials always use full-frame dimensions,
+    // regardless of which tile rows this job covers
+    float invWidth = 1.0f / acc.width;
+    float invHeight = 1.0f / acc.height;
+    int rayCount = 0;
+    for (uint32_t y = data.y0 + start; y < data.y0 + end; ++y)
+    {
+        for (int x = data.x0; x < data.x1; ++x)
+        {
+            float3 col(0, 0, 0);
+            for (uint32_t s = 0; s < data.sampleCount; ++s)
+            {
+                uint32_t state = TilePathRandomState(acc.seed, x, y, data.firstSample + s);
+                float u = float(x + RandomFloat01(state)) * invWidth;
+                float v = float(y + RandomFloat01(state)) * invHeight;
+                Ray r = s_Cam.GetRay(u, v, state);
+                col += Trace(r, 0, rayCount, state);
+            }
+            size_t pix = (size_t)y * acc.width + x;
+            acc.rgbSum[pix*3+0] += col.getX();
+            acc.rgbSum[pix*3+1] += col.getY();
+            acc.rgbSum[pix*3+2] += col.getZ();
+            acc.counts[pix] += data.sampleCount;
+        }
+    }
+    data.rayCount += rayCount;
+}
+
+TileSubmitResult TileAccumulatorSubmit(TileAccumulator& acc, int x0, int y0, int x1, int y1, uint32_t firstSample, uint32_t sampleCount)
+{
+    // validate everything up front; on error nothing is written
+    if (acc.width <= 0 || acc.height <= 0)
+        return kTileSubmitBadRect;
+    if (x0 < 0 || y0 < 0 || x1 > acc.width || y1 > acc.height || x1 < x0 || y1 < y0)
+        return kTileSubmitBadRect;
+    if (sampleCount == 0 || x0 == x1 || y0 == y1)
+        return kTileSubmitOk; // no-op
+    if (uint64_t(firstSample) + sampleCount > 0xFFFFFFFFull)
+        return kTileSubmitOverflow;
+    // per-pixel sample counts must not overflow either; check before rendering
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x)
+            if (acc.counts[(size_t)y * acc.width + x] > 0xFFFFFFFFu - sampleCount)
+                return kTileSubmitOverflow;
+
+    TileJobData args;
+    args.acc = &acc;
+    args.x0 = x0;
+    args.y0 = y0;
+    args.x1 = x1;
+    args.firstSample = firstSample;
+    args.sampleCount = sampleCount;
+    args.rayCount = 0;
+
+    #if CPU_CAN_DO_THREADS
+    enkiTaskSet* task = enkiCreateTaskSet(g_TS, TraceTileRowsJob);
+    enkiAddTaskSetMinRange(g_TS, task, &args, y1 - y0, 4);
+    enkiWaitForTaskSet(g_TS, task);
+    enkiDeleteTaskSet(g_TS, task);
+    #else
+    TraceTileRowsJob(0, y1 - y0, 0, &args);
+    #endif
+
+    return kTileSubmitOk;
+}
+
+void TileAccumulatorResolve(const TileAccumulator& acc, float* outRGB)
+{
+    size_t pixelCount = (size_t)acc.width * acc.height;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        uint32_t n = acc.counts[i];
+        if (n == 0)
+        {
+            outRGB[0] = outRGB[1] = outRGB[2] = 0.0f; // empty pixel: zero, never NaN
+        }
+        else
+        {
+            float inv = 1.0f / n;
+            outRGB[0] = acc.rgbSum[i*3+0] * inv;
+            outRGB[1] = acc.rgbSum[i*3+1] * inv;
+            outRGB[2] = acc.rgbSum[i*3+2] * inv;
+        }
+        outRGB += 3;
+    }
 }
