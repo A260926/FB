@@ -1,0 +1,210 @@
+package mp4
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// MoovBox - Movie Box (moov - mandatory)
+//
+// Contains all meta-data. To be able to stream a file, the moov box should be placed before the mdat box.
+type MoovBox struct {
+	Mvhd     *MvhdBox
+	Trak     *TrakBox // The first trak box
+	Traks    []*TrakBox
+	Mvex     *MvexBox
+	Pssh     *PsshBox
+	Psshs    []*PsshBox
+	Children []Box
+	StartPos uint64
+}
+
+// NewMoovBox - Generate a new empty moov box
+func NewMoovBox() *MoovBox {
+	return &MoovBox{}
+}
+
+// AddChild - Add a child box
+func (m *MoovBox) AddChild(child Box) {
+	m.setChildField(child)
+	if box, ok := child.(*TrakBox); ok {
+		// Possibly re-order to keep traks together on same
+		// side of mvex or similar. Put this trak box after last previous trak
+		lastTrakIdx := 0
+		for i, child := range m.Children {
+			if child.Type() == "trak" {
+				lastTrakIdx = i
+			}
+		}
+		if lastTrakIdx != 0 && lastTrakIdx != len(m.Children)-1 { // last one in middle
+			m.Children = append(m.Children[:lastTrakIdx+2], m.Children[lastTrakIdx+1:]...)
+			m.Children[lastTrakIdx+1] = box
+			return
+		}
+	}
+	m.Children = append(m.Children, child)
+}
+
+// setChildField sets the field that refers to child, if there is one, without adding child to Children.
+func (m *MoovBox) setChildField(child Box) {
+	switch box := child.(type) {
+	case *MvhdBox:
+		m.Mvhd = box
+	case *TrakBox:
+		if m.Trak == nil {
+			m.Trak = box
+		}
+		m.Traks = append(m.Traks, box)
+	case *MvexBox:
+		m.Mvex = box
+	case *PsshBox:
+		if m.Pssh == nil {
+			m.Pssh = box
+		}
+		m.Psshs = append(m.Psshs, box)
+	}
+}
+
+// moovWithChildren returns a moov box holding children in the given order, with the child fields set.
+func moovWithChildren(startPos uint64, children []Box) *MoovBox {
+	m := MoovBox{Children: children, StartPos: startPos}
+	for _, c := range children {
+		m.setChildField(c)
+	}
+	return &m
+}
+
+// DecodeMoov - box-specific decode
+func DecodeMoov(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	data, err := readPayload(r, uint64(hdr.payloadLen()))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) != int(hdr.payloadLen()) {
+		return nil, fmt.Errorf("moov: expected %d bytes, got %d", hdr.payloadLen(), len(data))
+	}
+	sr := ioPayloadReader(data)
+	children, err := DecodeContainerChildrenSR(hdr, startPos+8, startPos+hdr.Size, sr)
+	if err != nil {
+		return nil, err
+	}
+	return moovWithChildren(startPos, children), nil
+}
+
+// DecodeMoovSR - box-specific decode
+func DecodeMoovSR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	children, err := DecodeContainerChildrenSR(hdr, startPos+8, startPos+hdr.Size, sr)
+	if err != nil {
+		return nil, err
+	}
+	return moovWithChildren(startPos, children), nil
+}
+
+// Type - box type
+func (m *MoovBox) Type() string {
+	return "moov"
+}
+
+// Size - calculated size of box
+func (m *MoovBox) Size() uint64 {
+	return containerSize(m.Children)
+}
+
+// GetChildren - list of child boxes
+func (m *MoovBox) GetChildren() []Box {
+	return m.Children
+}
+
+// Encode - write moov container to w
+func (m *MoovBox) Encode(w io.Writer) error {
+	return EncodeContainer(m, w)
+}
+
+// EncodeSW - write moov container to sw
+func (m *MoovBox) EncodeSW(sw bits.SliceWriter) error {
+	return EncodeContainerSW(m, sw)
+}
+
+// Info - write box-specific information
+func (m *MoovBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	return ContainerInfo(m, w, specificBoxLevels, indent, indentStep)
+}
+
+// RemovePsshs - remove and return all psshs children boxes
+func (m *MoovBox) RemovePsshs() []*PsshBox {
+	if m.Pssh == nil {
+		return nil
+	}
+	psshs := m.Psshs
+	newChildren := make([]Box, 0, len(m.Children)-len(m.Psshs))
+	for i := range m.Children {
+		if m.Children[i].Type() != "pssh" {
+			newChildren = append(newChildren, m.Children[i])
+		}
+	}
+	m.Children = newChildren
+	m.Pssh = nil
+	m.Psshs = nil
+
+	return psshs
+}
+
+// GetSinf returns the sinf box of the first sample entry of the track with trackID,
+// or nil if there is no such track, sample entry or sinf box.
+func (m *MoovBox) GetSinf(trackID uint32) *SinfBox {
+	for _, trak := range m.Traks {
+		if trak.Tkhd == nil || trak.Tkhd.TrackID != trackID {
+			continue
+		}
+		switch box := firstSampleEntry(trak).(type) {
+		case *VisualSampleEntryBox:
+			return box.Sinf
+		case *AudioSampleEntryBox:
+			return box.Sinf
+		}
+	}
+	return nil
+}
+
+// IsEncrypted returns true if the first sample entry of the track with trackID is "encv" or "enca".
+// It returns false if there is no such track, or it has no sample entry.
+func (m *MoovBox) IsEncrypted(trackID uint32) bool {
+	for _, trak := range m.Traks {
+		if trak.Tkhd == nil || trak.Tkhd.TrackID != trackID {
+			continue
+		}
+		switch box := firstSampleEntry(trak).(type) {
+		case *VisualSampleEntryBox:
+			return box.Type() == "encv"
+		case *AudioSampleEntryBox:
+			return box.Type() == "enca"
+		}
+	}
+	return false
+}
+
+// firstSampleEntry returns the first sample entry of trak, or nil if it has none
+// or any of the mdia, minf, stbl and stsd boxes that hold it is missing.
+func firstSampleEntry(trak *TrakBox) Box {
+	if trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil {
+		return nil
+	}
+	stsd := trak.Mdia.Minf.Stbl.Stsd
+	if stsd == nil || len(stsd.Children) == 0 {
+		return nil
+	}
+	return stsd.Children[0]
+}
+
+// firstTrackStts returns the stts box of the first track, or nil if there is no track
+// or any of the mdia, minf, stbl and stts boxes is missing.
+// An stts without entries means that the samples are in movie fragments.
+func (m *MoovBox) firstTrackStts() *SttsBox {
+	t := m.Trak
+	if t == nil || t.Mdia == nil || t.Mdia.Minf == nil || t.Mdia.Minf.Stbl == nil {
+		return nil
+	}
+	return t.Mdia.Minf.Stbl.Stts
+}

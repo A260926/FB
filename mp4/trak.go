@@ -1,0 +1,342 @@
+package mp4
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// DefaultTrakID - trakID used when generating new fragmented content
+const DefaultTrakID = 1
+
+// TrakBox - Track Box (tkhd - mandatory)
+//
+// Contained in : Movie Box (moov)
+//
+// A media file can contain one or more tracks.
+type TrakBox struct {
+	Tkhd     *TkhdBox
+	Edts     *EdtsBox
+	Mdia     *MdiaBox
+	Trgr     *TrgrBox
+	Udta     *UdtaBox
+	Children []Box
+}
+
+// NewTrakBox - Make a new empty TrakBox
+func NewTrakBox() *TrakBox {
+	return &TrakBox{}
+}
+
+// insertEdts adds edts right after tkhd, matching the conventional box
+// order, unlike the appending AddChild.
+func (t *TrakBox) insertEdts(edts *EdtsBox) {
+	t.Edts = edts
+	for i, child := range t.Children {
+		if _, ok := child.(*TkhdBox); ok {
+			children := make([]Box, 0, len(t.Children)+1)
+			children = append(children, t.Children[:i+1]...)
+			children = append(children, edts)
+			children = append(children, t.Children[i+1:]...)
+			t.Children = children
+			return
+		}
+	}
+	t.Children = append(t.Children, edts)
+}
+
+// AddChild - Add a child box
+func (t *TrakBox) AddChild(child Box) {
+	switch box := child.(type) {
+	case *TkhdBox:
+		t.Tkhd = box
+	case *MdiaBox:
+		t.Mdia = box
+	case *EdtsBox:
+		t.Edts = box
+	case *TrgrBox:
+		t.Trgr = box
+	case *UdtaBox:
+		t.Udta = box
+	}
+	t.Children = append(t.Children, child)
+}
+
+// DecodeTrak - box-specific decode
+func DecodeTrak(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	children, err := DecodeContainerChildren(hdr, startPos+8, startPos+hdr.Size, r)
+	if err != nil {
+		return nil, err
+	}
+	t := TrakBox{Children: make([]Box, 0, len(children))}
+	for _, c := range children {
+		t.AddChild(c)
+	}
+	return &t, nil
+}
+
+// DecodeTrakSR - box-specific decode
+func DecodeTrakSR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	children, err := DecodeContainerChildrenSR(hdr, startPos+8, startPos+hdr.Size, sr)
+	if err != nil {
+		return nil, err
+	}
+	t := TrakBox{Children: make([]Box, 0, len(children))}
+	for _, c := range children {
+		t.AddChild(c)
+	}
+	return &t, nil
+}
+
+// Type - box type
+func (t *TrakBox) Type() string {
+	return "trak"
+}
+
+// Size - calculated size of box
+func (t *TrakBox) Size() uint64 {
+	return containerSize(t.Children)
+}
+
+// GetChildren - list of child boxes
+func (t *TrakBox) GetChildren() []Box {
+	return t.Children
+}
+
+// Encode - write trak container to w
+func (t *TrakBox) Encode(w io.Writer) error {
+	return EncodeContainer(t, w)
+}
+
+// EncodeSW - write trak container to sw
+func (b *TrakBox) EncodeSW(sw bits.SliceWriter) error {
+	return EncodeContainerSW(b, sw)
+}
+
+// Info - write box info to w
+func (t *TrakBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	return ContainerInfo(t, w, specificBoxLevels, indent, indentStep)
+}
+
+// getSampleTable returns the sample table for this track, or an error when a
+// required parent box is missing.
+func (t *TrakBox) getSampleTable() (*StblBox, error) {
+	if t == nil {
+		return nil, fmt.Errorf("track is nil")
+	}
+	if t.Mdia == nil {
+		return nil, fmt.Errorf("track has no mdia box")
+	}
+	if t.Mdia.Minf == nil {
+		return nil, fmt.Errorf("track has no minf box")
+	}
+	if t.Mdia.Minf.Stbl == nil {
+		return nil, fmt.Errorf("track has no stbl box")
+	}
+	return t.Mdia.Minf.Stbl, nil
+}
+
+// GetNrSamples - get number of samples for this track defined in the parent moov box.
+// It returns 0 when the track has no sample table or sample size box.
+func (t *TrakBox) GetNrSamples() uint32 {
+	stbl, err := t.getSampleTable()
+	if err != nil || stbl.Stsz == nil {
+		return 0
+	}
+	return stbl.Stsz.GetNrSamples()
+}
+
+// GetSampleData - get sample metadata for a specific interval of samples defined in moov.
+// If going outside the range of available samples, an error is returned.
+// The result has a Sample for each sample in the interval. An stsz box with a uniform sample size gives the number
+// of samples without listing them, so a small file can declare up to 2^32-1 samples, which needs 64 GiB for all
+// samples. For a file from an untrusted source, check that the samples fit in the file, or ask for fewer at a time.
+func (t *TrakBox) GetSampleData(startSampleNr, endSampleNr uint32) ([]Sample, error) {
+	stbl, err := t.getSampleTable()
+	if err != nil {
+		return nil, err
+	}
+	if stbl.Stsz == nil {
+		return nil, fmt.Errorf("track has no stsz box")
+	}
+	if stbl.Stts == nil {
+		return nil, fmt.Errorf("track has no stts box")
+	}
+	nrSamples := stbl.Stsz.GetNrSamples()
+	if startSampleNr < 1 || endSampleNr > nrSamples {
+		return nil, fmt.Errorf("sample interval %d-%d not inside available %d-%d", startSampleNr, endSampleNr, 1, nrSamples)
+	}
+	if endSampleNr < startSampleNr {
+		return nil, fmt.Errorf("sample interval %d-%d ends before it starts", startSampleNr, endSampleNr)
+	}
+	samples := make([]Sample, endSampleNr-startSampleNr+1)
+	stts := stbl.Stts
+	ctts := stbl.Ctts
+	stss := stbl.Stss
+	sdtp := stbl.Sdtp
+
+	for nr := startSampleNr; nr <= endSampleNr; nr++ {
+		var cto int32
+		if ctts != nil {
+			cto = ctts.GetCompositionTimeOffset(nr)
+		}
+		samples[nr-startSampleNr] = Sample{
+			Flags:                 createSampleFlagsFromProgressiveBoxes(stss, sdtp, nr),
+			Dur:                   stts.GetDur(nr),
+			Size:                  stbl.Stsz.GetSampleSize(int(nr)),
+			CompositionTimeOffset: cto,
+		}
+	}
+	return samples, nil
+}
+
+func createSampleFlagsFromProgressiveBoxes(stss *StssBox, sdtp *SdtpBox, sampleNr uint32) uint32 {
+	var sampleFlags SampleFlags
+	if stss != nil {
+		isSync := stss.IsSyncSample(uint32(sampleNr))
+		sampleFlags.SampleIsNonSync = !isSync
+		if isSync {
+			sampleFlags.SampleDependsOn = 2 //2 = does not depend on others (I-picture). May be overridden by sdtp entry
+		}
+	}
+	// Nothing ties the number of sdtp entries to the number of samples in
+	// stsz, so a short sdtp must not be indexed outside its entries.
+	if sdtp != nil && sampleNr >= 1 && int(sampleNr) <= len(sdtp.Entries) {
+		entry := sdtp.Entries[sampleNr-1] // table starts at 0, but sampleNr is one-based
+		sampleFlags.IsLeading = entry.IsLeading()
+		sampleFlags.SampleDependsOn = entry.SampleDependsOn()
+		sampleFlags.SampleHasRedundancy = entry.SampleHasRedundancy()
+		sampleFlags.SampleIsDependedOn = entry.SampleIsDependedOn()
+	}
+	return sampleFlags.Encode()
+}
+
+// DataRange is a range for sample data in a file relative to file start
+type DataRange struct {
+	Offset uint64
+	Size   uint64
+}
+
+// GetRangesForSampleInterval - get ranges inside file for sample range [startSampleNr, endSampleNr]
+func (t *TrakBox) GetRangesForSampleInterval(startSampleNr, endSampleNr uint32) ([]DataRange, error) {
+	stbl, err := t.getSampleTable()
+	if err != nil {
+		return nil, err
+	}
+	if stbl.Stsz == nil {
+		return nil, fmt.Errorf("track has no stsz box")
+	}
+	if stbl.Stsc == nil {
+		return nil, fmt.Errorf("track has no stsc box")
+	}
+	if stbl.Stco == nil && stbl.Co64 == nil {
+		return nil, fmt.Errorf("track has no stco or co64 box")
+	}
+	stco := stbl.Stco
+	co64 := stbl.Co64
+	stsz := stbl.Stsz
+	nrSamples := stbl.Stsz.GetNrSamples()
+	if startSampleNr < 1 || endSampleNr > nrSamples {
+		return nil, fmt.Errorf("sample interval %d-%d not inside available %d-%d", startSampleNr, endSampleNr, 1, nrSamples)
+	}
+	chunks, err := stbl.GetContainingChunks(startSampleNr, endSampleNr)
+	if err != nil {
+		return nil, err
+	}
+	dataRanges := make([]DataRange, len(chunks))
+	lastChunkIdx := len(chunks) - 1
+	for idx, chunk := range chunks {
+		var offset uint64
+		if stco != nil {
+			offset, err = stco.GetOffset(int(chunk.ChunkNr))
+		} else {
+			offset, err = co64.GetOffset(int(chunk.ChunkNr))
+		}
+		if err != nil {
+			return nil, err
+		}
+		startNrInChunk := chunk.StartSampleNr
+		endNrInChunk := chunk.StartSampleNr + chunk.NrSamples - 1
+		if idx == 0 { // First chunk, adapt startPoint
+			sizeUpToFirst, err := stsz.GetTotalSampleSize(chunk.StartSampleNr, startSampleNr-1)
+			if err != nil {
+				return nil, err
+			}
+			offset += sizeUpToFirst
+			startNrInChunk = startSampleNr
+		}
+		if idx == lastChunkIdx {
+			endNrInChunk = endSampleNr
+		}
+		size, err := stsz.GetTotalSampleSize(startNrInChunk, endNrInChunk)
+		if err != nil {
+			return nil, err
+		}
+		dataRanges[idx] = DataRange{Offset: offset, Size: size}
+	}
+	return dataRanges, nil
+}
+
+// CheckDataIsSelfContained returns an error if a sample description of the
+// track refers, through its data_reference_index, to a data entry that puts the
+// sample data outside this file, for example a url entry with the location of
+// another file as in Unified Streaming's dref MP4 files. The chunk offsets of
+// such a track are offsets into the referenced data, so reading them from this
+// file's mdat box gives the wrong bytes. [File.ReadSampleData] reads such data
+// through a [DataResolver]. A missing dref box, or an index outside it, is not
+// reported, since nothing then says the data is elsewhere.
+func (t *TrakBox) CheckDataIsSelfContained() error {
+	if t.Mdia == nil || t.Mdia.Minf == nil || t.Mdia.Minf.Stbl == nil || t.Mdia.Minf.Stbl.Stsd == nil {
+		return nil
+	}
+	for i, sampleEntry := range t.Mdia.Minf.Stbl.Stsd.Children {
+		dataEntry, dataRefIdx := t.externalDataEntry(uint32(i + 1))
+		if dataEntry == nil {
+			continue
+		}
+		var trackID uint32
+		if t.Tkhd != nil {
+			trackID = t.Tkhd.TrackID
+		}
+		return fmt.Errorf("track %d: sample description %d (%s) has its data outside this file (data reference %d: %s)",
+			trackID, i+1, sampleEntry.Type(), dataRefIdx, dataEntryDescription(dataEntry))
+	}
+	return nil
+}
+
+// externalDataEntry returns the data entry that the 1-based sample description sdID refers to
+// through its data_reference_index, and that index, if the entry puts the data outside this file.
+// It returns nil if the data is in this file, and also if the sample description, the dref box
+// or the data entry is missing, since nothing then says the data is elsewhere.
+func (t *TrakBox) externalDataEntry(sdID uint32) (Box, uint16) {
+	if t.Mdia == nil || t.Mdia.Minf == nil {
+		return nil, 0
+	}
+	minf := t.Mdia.Minf
+	if minf.Dinf == nil || minf.Dinf.Dref == nil || minf.Stbl == nil || minf.Stbl.Stsd == nil {
+		return nil, 0
+	}
+	sampleEntries := minf.Stbl.Stsd.Children
+	if sdID == 0 || uint64(sdID) > uint64(len(sampleEntries)) {
+		return nil, 0
+	}
+	dataRefIdx, ok := sampleEntryDataReferenceIndex(sampleEntries[sdID-1])
+	dataEntries := minf.Dinf.Dref.Children
+	if !ok || dataRefIdx == 0 || int(dataRefIdx) > len(dataEntries) {
+		return nil, 0
+	}
+	dataEntry := dataEntries[dataRefIdx-1]
+	if dataEntryIsSelfContained(dataEntry) {
+		return nil, 0
+	}
+	return dataEntry, dataRefIdx
+}
+
+// dataEntryDescription names a data entry by its location if it is a url entry, and else by its type.
+func dataEntryDescription(entry Box) string {
+	if u, ok := entry.(*URLBox); ok {
+		return fmt.Sprintf("url %q", u.Location)
+	}
+	return fmt.Sprintf("%q entry", entry.Type())
+}

@@ -1,0 +1,534 @@
+package bits_test
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/Eyevinn/mp4ff/bits"
+	"github.com/go-test/deep"
+)
+
+func TestAccErrReader(t *testing.T) {
+	t.Run("Read bits", func(t *testing.T) {
+		input := []byte{0xff, 0x0f} // 1111 1111 0000 1111
+		rd := bytes.NewReader(input)
+		reader := bits.NewReader(rd)
+
+		cases := []struct {
+			readNrBits  int
+			want        uint
+			nrBytesRead int
+			nrBitsRead  int
+		}{
+			{2, 3, 1, 2},   // 11
+			{3, 7, 1, 5},   // 111
+			{5, 28, 2, 10}, // 11100
+			{3, 1, 2, 13},  // 001
+			{3, 7, 2, 16},  // 111
+		}
+
+		for _, tc := range cases {
+			got := reader.Read(tc.readNrBits)
+
+			if got != tc.want {
+				t.Errorf("Read(%d)=%b, want=%b", tc.readNrBits, got, tc.want)
+			}
+			if reader.NrBytesRead() != tc.nrBytesRead {
+				t.Errorf("NrBytesRead()=%d, want=%d", reader.NrBytesRead(), tc.nrBytesRead)
+			}
+			if reader.NrBitsRead() != tc.nrBitsRead {
+				t.Errorf("NrBitsRead()=%d, want=%d", reader.NrBitsRead(), tc.nrBitsRead)
+			}
+		}
+		err := reader.AccError()
+		if err != nil {
+			t.Errorf("Got accumulated error: %s", err.Error())
+		}
+	})
+	t.Run("Read signed bits", func(t *testing.T) {
+		input := []byte{0xff, 0x0f} // 1111 1111 0000 1111
+		rd := bytes.NewReader(input)
+		reader := bits.NewReader(rd)
+
+		cases := []struct {
+			n    int
+			want uint
+		}{
+			{2, 3},  // 11
+			{3, 7},  // 111
+			{5, 28}, // 11100
+			{3, 1},  // 001
+			{3, 7},  // 111
+		}
+
+		for _, tc := range cases {
+			got := reader.Read(tc.n)
+
+			if got != tc.want {
+				t.Errorf("Read(%d)=%b, want=%b", tc.n, got, tc.want)
+			}
+		}
+		err := reader.AccError()
+		if err != nil {
+			t.Errorf("Got accumulated error: %s", err.Error())
+		}
+	})
+	t.Run("Read remaining bytes", func(t *testing.T) {
+		input := []byte{0xef, 0x0f} // 1110 1111 0000 1111
+		rd := bytes.NewReader(input)
+		r := bits.NewReader(rd)
+		gotRemaining := r.ReadRemainingBytes()
+		if !bytes.Equal(gotRemaining, input) {
+			t.Errorf("ReadRemainingBytes()=%b, want=%b", gotRemaining, input)
+		}
+		// Next check with non-bytealigned status
+		rd = bytes.NewReader(input)
+		r = bits.NewReader(rd)
+		_ = r.ReadFlag()
+		_ = r.ReadRemainingBytes()
+		err := r.AccError()
+		if err == nil {
+			t.Errorf("Expected error due to not byte-aligned, but got nil")
+		}
+	})
+
+	t.Run("Read flags", func(t *testing.T) {
+		input := []byte{0xe5} // 1110 0101
+		rd := bytes.NewReader(input)
+		r := bits.NewReader(rd)
+		for i := 0; i < 8; i++ {
+			expectedValue := (input[0] >> (7 - i) & 1) > 0
+			gotFlag := r.ReadFlag()
+			if gotFlag != expectedValue {
+				t.Errorf("Read flag %t, but wanted %t, case %d", gotFlag, expectedValue, i)
+			}
+		}
+		_ = r.ReadFlag()
+		wantedError := io.EOF
+		if err := r.AccError(); err != wantedError {
+			t.Errorf("wanted error %s, got %s", wantedError, err.Error())
+		}
+	})
+}
+
+func TestAccErrReaderSigned(t *testing.T) {
+	input := []byte{0xff, 0x0c} // 1111 1111 0000 1100
+	rd := bytes.NewReader(input)
+	reader := bits.NewReader(rd)
+
+	cases := []struct {
+		readNrBits int
+		want       int
+	}{
+		{2, -1}, // 11
+		{3, -1}, // 111
+		{5, -4}, // 11100
+		{3, 1},  // 001
+		{3, -4}, // 100
+	}
+
+	for _, tc := range cases {
+		got := reader.ReadSigned(tc.readNrBits)
+
+		if got != tc.want {
+			t.Errorf("Read(%d)=%b, want=%b", tc.readNrBits, got, tc.want)
+		}
+	}
+	err := reader.AccError()
+	if err != nil {
+		t.Errorf("Got accumulated error: %s", err.Error())
+	}
+}
+
+func TestBadAccErrReader(t *testing.T) {
+	// Check that reading beyond EOF provides value = 0 after acc error
+	input := []byte{0xff, 0x0f} // 1111 1111 0000 1111
+	rd := bytes.NewReader(input)
+	reader := bits.NewReader(rd)
+
+	cases := []struct {
+		err  error
+		n    int
+		want uint
+	}{
+		{nil, 2, 3},     // 11
+		{nil, 3, 7},     // 111
+		{io.EOF, 12, 0}, // 0 because of error
+		{io.EOF, 3, 0},  // 0 because of acc error
+		{io.EOF, 3, 0},  // 0 because of acc error
+	}
+
+	for _, tc := range cases {
+		got := reader.Read(tc.n)
+
+		if got != tc.want {
+			t.Errorf("Read(%d)=%b, want=%b", tc.n, got, tc.want)
+		}
+	}
+	err := reader.AccError()
+	if err != io.EOF {
+		t.Errorf("Wanted io.EOF but got %v", err)
+	}
+}
+
+func TestByteAlign(t *testing.T) {
+	t.Run("align from middle of byte", func(t *testing.T) {
+		input := []byte{0xAB, 0xCD, 0xEF} // 10101011 11001101 11101111
+		rd := bytes.NewReader(input)
+		r := bits.NewReader(rd)
+
+		// Read 3 bits: 101 (5 bits remaining in first byte)
+		got := r.Read(3)
+		if got != 5 { // 101 binary = 5 decimal
+			t.Errorf("Expected 5, got %d", got)
+		}
+
+		// Now we should have 5 bits left in current byte
+		nrBitsInCurrentByte := r.NrBitsReadInCurrentByte()
+		if nrBitsInCurrentByte != 3 {
+			t.Errorf("Expected 3 bits read in current byte, got %d", nrBitsInCurrentByte)
+		}
+
+		// Align to byte boundary
+		r.ByteAlign()
+
+		// Now reading should start from next byte (0xCD)
+		got = r.Read(8)
+		if got != 0xCD {
+			t.Errorf("Expected 0xCD (%d), got %d", 0xCD, got)
+		}
+
+		// Verify no error occurred
+		if err := r.AccError(); err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("align when already byte-aligned", func(t *testing.T) {
+		input := []byte{0xAB, 0xCD}
+		rd := bytes.NewReader(input)
+		r := bits.NewReader(rd)
+
+		// Read exactly 8 bits (already byte-aligned)
+		got := r.Read(8)
+		if got != 0xAB {
+			t.Errorf("Expected 0xAB (%d), got %d", 0xAB, got)
+		}
+
+		// Align (should be no-op)
+		r.ByteAlign()
+
+		// Next read should get the next byte
+		got = r.Read(8)
+		if got != 0xCD {
+			t.Errorf("Expected 0xCD (%d), got %d", 0xCD, got)
+		}
+
+		// Verify no error occurred
+		if err := r.AccError(); err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("align with accumulated error", func(t *testing.T) {
+		input := []byte{0xAB}
+		rd := bytes.NewReader(input)
+		r := bits.NewReader(rd)
+
+		// Read more bits than available to cause error
+		_ = r.Read(16) // Only 8 bits available
+
+		// Ensure error is accumulated
+		if err := r.AccError(); err == nil {
+			t.Error("Expected error but got none")
+		}
+
+		// ByteAlign should not crash and should do nothing with error present
+		r.ByteAlign()
+
+		// Error should still be there
+		if err := r.AccError(); err == nil {
+			t.Error("Expected error to persist after ByteAlign")
+		}
+	})
+
+	t.Run("align after reading various bit counts", func(t *testing.T) {
+		testCases := []struct {
+			name           string
+			bitsToRead     int
+			expectedResult uint
+		}{
+			{"1 bit", 1, 1},   // First bit of 0xAB (1010 1011) = 1
+			{"2 bits", 2, 2},  // First 2 bits = 10 = 2
+			{"3 bits", 3, 5},  // First 3 bits = 101 = 5
+			{"4 bits", 4, 10}, // First 4 bits = 1010 = 10
+			{"5 bits", 5, 21}, // First 5 bits = 10101 = 21
+			{"6 bits", 6, 42}, // First 6 bits = 101010 = 42
+			{"7 bits", 7, 85}, // First 7 bits = 1010101 = 85
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				input := []byte{0xAB, 0xCD} // 10101011 11001101
+				rd := bytes.NewReader(input)
+				r := bits.NewReader(rd)
+
+				// Read specified number of bits
+				got := r.Read(tc.bitsToRead)
+				if got != tc.expectedResult {
+					t.Errorf("Read(%d) = %d, expected %d", tc.bitsToRead, got, tc.expectedResult)
+				}
+
+				// Align to byte boundary
+				r.ByteAlign()
+
+				// Next read should get the second byte (0xCD)
+				nextByte := r.Read(8)
+				if nextByte != 0xCD {
+					t.Errorf("After ByteAlign, expected 0xCD (%d), got %d", 0xCD, nextByte)
+				}
+
+				// Verify no error occurred
+				if err := r.AccError(); err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			})
+		}
+	})
+}
+
+// TestRead32BitsNotByteAligned checks that 32 bits read after 7 bits keep their first bit, also where uint is
+// 32 bits wide.
+func TestRead32BitsNotByteAligned(t *testing.T) {
+	data := []byte{0x01, 0x23, 0x45, 0x67, 0x89} // 0000000 1 00100011 01000101 01100111 1000100 1
+	readers := []struct {
+		name string
+		read func(n int) uint
+	}{
+		{"Reader", bits.NewReaderFromSlice(data).Read},
+		{"EBSPReader", bits.NewEBSPReaderFromSlice(data).Read},
+	}
+	for _, r := range readers {
+		_ = r.read(7)
+		if got := r.read(32); got != 0x91a2b3c4 {
+			t.Errorf("%s: Read(32)=%#x, want 0x91a2b3c4", r.name, got)
+		}
+		if got := r.read(1); got != 1 {
+			t.Errorf("%s: last Read(1)=%d, want 1", r.name, got)
+		}
+	}
+}
+
+func TestReaderExpGolomb(t *testing.T) {
+	cases := []struct {
+		input  byte
+		wanted uint
+	}{
+		{0b10000000, 0},
+		{0b01000000, 1},
+		{0b01100000, 2},
+		{0b00010000, 7},
+		{0b00010010, 8},
+		{0b00011110, 14},
+	}
+	for _, c := range cases {
+		r := bits.NewReader(bytes.NewReader([]byte{c.input}))
+		got := r.ReadExpGolomb()
+		if r.AccError() != nil {
+			t.Errorf("unexpected error: %v", r.AccError())
+		}
+		if got != c.wanted {
+			t.Errorf("ReadExpGolomb(%08b)=%d, want %d", c.input, got, c.wanted)
+		}
+	}
+	// Reading beyond available data sets an accumulated error.
+	r := bits.NewReader(bytes.NewReader([]byte{0x00}))
+	_ = r.ReadExpGolomb()
+	if r.AccError() == nil {
+		t.Error("expected accumulated error when reading past end")
+	}
+}
+
+func TestReaderSignedGolomb(t *testing.T) {
+	cases := []struct {
+		input  byte
+		wanted int
+	}{
+		{0b10000000, 0},
+		{0b01000000, 1},
+		{0b01100000, -1},
+		{0b00010000, 4},
+		{0b00010010, -4},
+		{0b00011110, -7},
+	}
+	for _, c := range cases {
+		r := bits.NewReader(bytes.NewReader([]byte{c.input}))
+		got := r.ReadSignedGolomb()
+		if r.AccError() != nil {
+			t.Errorf("unexpected error: %v", r.AccError())
+		}
+		if got != c.wanted {
+			t.Errorf("ReadSignedGolomb(%08b)=%d, want %d", c.input, got, c.wanted)
+		}
+	}
+}
+
+// bitStringBytes packs a string of 0 and 1 characters into bytes, padding the last byte with zeros.
+func bitStringBytes(s string) []byte {
+	data := make([]byte, (len(s)+7)/8)
+	for i, c := range s {
+		if c == '1' {
+			data[i/8] |= 0x80 >> (i % 8)
+		}
+	}
+	return data
+}
+
+// TestReadExpGolombLimit checks that both readers accept codes of up to 31 leading zero bits and
+// reject a code of 32.
+func TestReadExpGolombLimit(t *testing.T) {
+	zeros := func(n int) string { return strings.Repeat("0", n) }
+	ones := func(n int) string { return strings.Repeat("1", n) }
+	cases := []struct {
+		desc     string
+		code     string
+		signed   bool
+		wantUint uint
+		wantInt  int
+		wantErr  bool
+	}{
+		{desc: "ue(2^32-2)", code: zeros(31) + "1" + ones(31), wantUint: 1<<32 - 2},
+		{desc: "ue(2^32-1)", code: zeros(32) + "1" + zeros(32), wantErr: true},
+		{desc: "se(2^31-1)", code: zeros(31) + "1" + ones(30) + "0", signed: true, wantInt: 1<<31 - 1},
+		{desc: "se(-(2^31-1))", code: zeros(31) + "1" + ones(31), signed: true, wantInt: -(1<<31 - 1)},
+		{desc: "se(2^31)", code: zeros(32) + "1" + zeros(32), signed: true, wantErr: true},
+	}
+	type golombReader interface {
+		Read(n int) uint
+		ReadExpGolomb() uint
+		ReadSignedGolomb() int
+		AccError() error
+	}
+	for _, c := range cases {
+		data := bitStringBytes(c.code + "1") // a 1 bit after the code
+		readers := []struct {
+			name string
+			r    golombReader
+		}{
+			{"Reader", bits.NewReaderFromSlice(data)},
+			{"EBSPReader", bits.NewEBSPReaderFromSlice(data)},
+		}
+		for _, rd := range readers {
+			r := rd.r
+			var gotUint uint
+			var gotInt int
+			if c.signed {
+				gotInt = r.ReadSignedGolomb()
+			} else {
+				gotUint = r.ReadExpGolomb()
+			}
+			if c.wantErr {
+				if !errors.Is(r.AccError(), bits.ErrExpGolombTooLong) || gotUint != 0 || gotInt != 0 {
+					t.Errorf("%s %s: got %d, %d with error %v, want 0 with ErrExpGolombTooLong",
+						rd.name, c.desc, gotUint, gotInt, r.AccError())
+				}
+				continue
+			}
+			if gotUint != c.wantUint || gotInt != c.wantInt {
+				t.Errorf("%s %s: got %d, %d", rd.name, c.desc, gotUint, gotInt)
+			}
+			if after := r.Read(1); after != 1 || r.AccError() != nil {
+				t.Errorf("%s %s: read %d after the code, error %v", rd.name, c.desc, after, r.AccError())
+			}
+		}
+	}
+}
+
+// endlessReader returns the bytes of data over and over. It is not an io.ByteReader.
+type endlessReader struct {
+	data []byte
+	pos  int
+}
+
+func (e *endlessReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = e.data[e.pos]
+		e.pos = (e.pos + 1) % len(e.data)
+	}
+	return len(p), nil
+}
+
+// TestReaderKinds checks that a Reader of an io.ByteReader, of a plain io.Reader and of a slice return the same
+// values, positions and errors, for Exp-Golomb codes, signed values, the remaining bytes and the end of data.
+func TestReaderKinds(t *testing.T) {
+	data := []byte{0xa6, 0x42, 0x1f, 0xe0, 0x55, 0x01, 0x02}
+	trace := func(r *bits.Reader) []string {
+		var tr []string
+		log := func(op string, v any) {
+			tr = append(tr, fmt.Sprintf("%s=%v bytes=%d bits=%d err=%v", op, v, r.NrBytesRead(), r.NrBitsRead(),
+				r.AccError()))
+		}
+		log("ue", r.ReadExpGolomb())
+		log("ue", r.ReadExpGolomb())
+		log("se", r.ReadSignedGolomb())
+		log("se", r.ReadSignedGolomb())
+		log("flag", r.ReadFlag())
+		log("signed", r.ReadSigned(5))
+		r.ByteAlign()
+		log("align", 0)
+		log("bits", r.Read(16))
+		log("remaining", r.ReadRemainingBytes())
+		log("bits", r.Read(1))
+		return tr
+	}
+	want := trace(bits.NewReader(bytes.NewReader(data)))
+	if diff := deep.Equal(trace(bits.NewReader(plainReader{bytes.NewReader(data)})), want); diff != nil {
+		t.Errorf("plain io.Reader and io.ByteReader differ: %v", diff)
+	}
+	if diff := deep.Equal(trace(bits.NewReaderFromSlice(data)), want); diff != nil {
+		t.Errorf("slice and io.ByteReader differ: %v", diff)
+	}
+	if last := want[len(want)-1]; !strings.HasSuffix(last, "err=EOF") {
+		t.Errorf("reading after the end gave %q, want EOF", last)
+	}
+}
+
+// TestReaderAllocations checks that reading bits does not allocate, from an io.ByteReader, a plain io.Reader or a
+// slice. Reading from an io.Reader used to cost an allocation per byte.
+func TestReaderAllocations(t *testing.T) {
+	data := bytes.Repeat([]byte{0x5a}, 100)
+	br := bytes.NewReader(data)
+	r := bits.NewReader(br)
+	allocs := testing.AllocsPerRun(10, func() {
+		br.Reset(data)
+		*r = *bits.NewReader(br)
+		for r.AccError() == nil {
+			r.Read(7)
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("io.ByteReader: got %.0f allocations, want 0", allocs)
+	}
+	plain := bits.NewReader(&endlessReader{data: data})
+	allocs = testing.AllocsPerRun(10, func() {
+		for i := 0; i < 100; i++ {
+			plain.Read(8)
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("plain io.Reader: got %.0f allocations for 100 bytes, want 0", allocs)
+	}
+	allocs = testing.AllocsPerRun(10, func() {
+		r := bits.NewReaderFromSlice(data)
+		for r.AccError() == nil {
+			r.Read(7)
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("slice: got %.0f allocations, want 0", allocs)
+	}
+}

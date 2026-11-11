@@ -1,0 +1,641 @@
+package mp4
+
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// AudioSampleEntryBox according to ISO/IEC 14496-12.
+// QuickTime overlays its sound sample description version, revision level,
+// and vendor on the first ISO reserved bytes; all three are preserved on
+// encode. Versions 1 and 2 insert extra fields before the child boxes,
+// carried in QuickTimeV1 and QuickTimeV2 — those pointers (not the number)
+// decide the encoded layout, and encoding fails when they disagree with
+// QuickTimeVersion.
+type AudioSampleEntryBox struct {
+	name                   string
+	DataReferenceIndex     uint16
+	QuickTimeVersion       uint16
+	QuickTimeRevisionLevel uint16
+	QuickTimeVendor        uint32
+	ChannelCount           uint16
+	SampleSize             uint16
+	// CompressionID is pre_defined (0) in ISO; QuickTime writes -2 in
+	// version 2 entries and in version 1 entries with redefined (VBR)
+	// sample tables.
+	CompressionID int16
+	SampleRate    uint16 // Integer part
+	QuickTimeV1   *QuickTimeV1SoundDescription
+	QuickTimeV2   *QuickTimeV2SoundDescription
+	Esds          *EsdsBox
+	Alac          *AlacBox
+	Dac3          *Dac3Box
+	Dac4          *Dac4Box
+	Dec3          *Dec3Box
+	DfLa          *DfLaBox
+	Dops          *DopsBox
+	Iacb          *IacbBox
+	MhaC          *MhaCBox
+	Btrt          *BtrtBox
+	Sinf          *SinfBox
+	Wave          *WaveBox
+	Chan          *ChanBox
+	Children      []Box
+}
+
+// QuickTimeV1SoundDescription - the 16 bytes that a QuickTime sound sample
+// description version 1 inserts before the child boxes
+// (QuickTime File Format Specification, Sound Sample Description v1).
+type QuickTimeV1SoundDescription struct {
+	SamplesPerPacket uint32
+	BytesPerPacket   uint32
+	BytesPerFrame    uint32
+	BytesPerSample   uint32
+}
+
+// QuickTimeV2Marker - the defined value of the always7F000000 field in a
+// QuickTime version 2 sound sample description.
+const QuickTimeV2Marker = 0x7f000000
+
+// QuickTimeV2SoundDescription - the 36 bytes that a QuickTime sound sample
+// description version 2 inserts before the child boxes
+// (QuickTime File Format Specification, Sound Sample Description v2).
+// In a version 2 entry the fixed fields hold the constants 3 (channel count),
+// 16 (sample size), and 1.0 (the raw 16.16 sample rate value 0x00010000);
+// the actual values live here. Child boxes are expected directly after the
+// 36 bytes; SizeOfStructOnly (72 for this layout) is preserved but not used
+// to place them.
+type QuickTimeV2SoundDescription struct {
+	SizeOfStructOnly              uint32
+	AudioSampleRate               float64
+	NumAudioChannels              uint32
+	Always7F000000                uint32
+	ConstBitsPerChannel           uint32
+	FormatSpecificFlags           uint32
+	ConstBytesPerAudioPacket      uint32
+	ConstLPCMFramesPerAudioPacket uint32
+}
+
+// Linear-PCM format flags for QuickTimeV2SoundDescription.FormatSpecificFlags
+// according to the QTFF specification and CoreAudioTypes (kAudioFormatFlag*).
+const (
+	QuickTimeFormatFlagIsFloat          uint32 = 1 << 0 // floating-point, not integer, samples
+	QuickTimeFormatFlagIsBigEndian      uint32 = 1 << 1 // big-endian samples
+	QuickTimeFormatFlagIsSignedInteger  uint32 = 1 << 2 // signed integer samples
+	QuickTimeFormatFlagIsPacked         uint32 = 1 << 3 // sample bits fill their channel bytes
+	QuickTimeFormatFlagIsAlignedHigh    uint32 = 1 << 4 // unpacked sample bits are high-aligned
+	QuickTimeFormatFlagIsNonInterleaved uint32 = 1 << 5 // channels are in separate buffers
+	QuickTimeFormatFlagIsNonMixable     uint32 = 1 << 6 // stream must not be mixed
+)
+
+// IsFloat - whether FormatSpecificFlags marks the samples as floating point.
+// The flags are only meaningful for lpcm-family entries.
+func (q *QuickTimeV2SoundDescription) IsFloat() bool {
+	return q.FormatSpecificFlags&QuickTimeFormatFlagIsFloat != 0
+}
+
+// IsBigEndian - whether FormatSpecificFlags marks the samples as big-endian.
+func (q *QuickTimeV2SoundDescription) IsBigEndian() bool {
+	return q.FormatSpecificFlags&QuickTimeFormatFlagIsBigEndian != 0
+}
+
+// IsSignedInteger - whether FormatSpecificFlags marks the integer samples as signed.
+func (q *QuickTimeV2SoundDescription) IsSignedInteger() bool {
+	return q.FormatSpecificFlags&QuickTimeFormatFlagIsSignedInteger != 0
+}
+
+// NewAudioSampleEntryBox - Create new empty mp4a box
+func NewAudioSampleEntryBox(name string) *AudioSampleEntryBox {
+	return &AudioSampleEntryBox{name: name, DataReferenceIndex: 1}
+}
+
+func makeFixed32Uint(nr uint16) uint32 {
+	return uint32(nr) << 16
+}
+
+func makeUint16FromFixed32(nr uint32) uint16 {
+	return uint16(nr >> 16)
+}
+
+// CreateAudioSampleEntryBox - Create new AudioSampleEntry such as mp4
+func CreateAudioSampleEntryBox(name string, nrChannels, sampleSize, sampleRate uint16, child Box) *AudioSampleEntryBox {
+	a := &AudioSampleEntryBox{
+		name:               name,
+		DataReferenceIndex: 1,
+		ChannelCount:       nrChannels,
+		SampleSize:         sampleSize,
+		SampleRate:         sampleRate,
+		Children:           nil,
+	}
+	if child != nil {
+		a.AddChild(child)
+	}
+	return a
+}
+
+// AddChild - add a child box (avcC normally, but clap and pasp could be part of visual entry)
+func (a *AudioSampleEntryBox) AddChild(child Box) {
+	switch child.Type() {
+	case "esds":
+		a.Esds = child.(*EsdsBox)
+	case "alac":
+		if alac, ok := child.(*AlacBox); ok {
+			a.Alac = alac
+		}
+	case "dac3":
+		a.Dac3 = child.(*Dac3Box)
+	case "dac4":
+		a.Dac4 = child.(*Dac4Box)
+	case "dec3":
+		a.Dec3 = child.(*Dec3Box)
+	case "dfLa":
+		a.DfLa = child.(*DfLaBox)
+	case "dOps":
+		a.Dops = child.(*DopsBox)
+	case "iacb":
+		a.Iacb = child.(*IacbBox)
+	case "mhaC":
+		a.MhaC = child.(*MhaCBox)
+	case "btrt":
+		a.Btrt = child.(*BtrtBox)
+	case "sinf":
+		a.Sinf = child.(*SinfBox)
+	case "wave":
+		a.Wave = child.(*WaveBox)
+	case "chan":
+		if c, ok := child.(*ChanBox); ok {
+			a.Chan = c
+		}
+	}
+
+	a.Children = append(a.Children, child)
+}
+
+const nrAudioSampleBytesBeforeChildren = 36
+
+// preChildrenSize - number of bytes before the child boxes, including
+// the box header and any QuickTime version 1 or 2 extension.
+func (a *AudioSampleEntryBox) preChildrenSize() uint64 {
+	switch {
+	case a.QuickTimeV1 != nil:
+		return nrAudioSampleBytesBeforeChildren + 16
+	case a.QuickTimeV2 != nil:
+		return nrAudioSampleBytesBeforeChildren + 36
+	default:
+		return nrAudioSampleBytesBeforeChildren
+	}
+}
+
+// decodeAudioSampleEntryFromData decodes the entry body, whose box is at the box depth depth. The child boxes
+// are at the offset that the QuickTime version 1 or 2 dictates, unless the box headers there do not add up to the
+// payload, or a version 2 entry lacks its marker, while they do with the plain ISO layout (children directly after
+// the fixed fields). Then the ISO layout is used, so that files whose reserved bytes merely look like a QuickTime
+// version still decode. The layout is chosen before decoding, so the children are decoded once.
+func decodeAudioSampleEntryFromData(hdr BoxHeader, startPos uint64, data []byte,
+	depth int) (*AudioSampleEntryBox, error) {
+	useQuickTimeLayout := true
+	const isoStart = nrAudioSampleBytesBeforeChildren - boxHeaderSize
+	if len(data) >= 10 {
+		qtStart := isoStart
+		qtFits := true
+		switch binary.BigEndian.Uint16(data[8:10]) {
+		case 1:
+			qtStart += 16
+		case 2:
+			qtStart += 36
+			const markerPos = isoStart + 16
+			qtFits = len(data) >= markerPos+4 &&
+				binary.BigEndian.Uint32(data[markerPos:markerPos+4]) == QuickTimeV2Marker
+		}
+		qtFits = qtFits && len(data) >= qtStart && boxesTile(data[qtStart:])
+		if !qtFits && len(data) >= isoStart && boxesTile(data[isoStart:]) {
+			useQuickTimeLayout = false
+		}
+	}
+	return decodeAudioSampleEntryLayout(hdr, startPos, data, useQuickTimeLayout, depth)
+}
+
+func decodeAudioSampleEntryLayout(hdr BoxHeader, startPos uint64, data []byte,
+	useQuickTimeLayout bool, depth int) (*AudioSampleEntryBox, error) {
+	sr := bits.NewFixedSliceReader(data)
+	sr.SetDepth(depth)
+	a := NewAudioSampleEntryBox(hdr.Name)
+
+	// 14496-12 8.5.2.2 Sample entry (8 bytes)
+	sr.SkipBytes(6) // Skip 6 reserved bytes
+	a.DataReferenceIndex = sr.ReadUint16()
+
+	// 14496-12 12.2.3.2 Audio Sample entry (20 bytes).
+	// QuickTime overlays version + revision + vendor on the first 8 reserved bytes.
+	a.QuickTimeVersion = sr.ReadUint16()
+	a.QuickTimeRevisionLevel = sr.ReadUint16()
+	a.QuickTimeVendor = sr.ReadUint32()
+	a.ChannelCount = sr.ReadUint16()
+	a.SampleSize = sr.ReadUint16()
+	a.CompressionID = int16(sr.ReadUint16())
+	sr.SkipBytes(2) // packet size / reserved
+	a.SampleRate = makeUint16FromFixed32(sr.ReadUint32())
+
+	if useQuickTimeLayout {
+		switch a.QuickTimeVersion {
+		case 1:
+			a.QuickTimeV1 = &QuickTimeV1SoundDescription{
+				SamplesPerPacket: sr.ReadUint32(),
+				BytesPerPacket:   sr.ReadUint32(),
+				BytesPerFrame:    sr.ReadUint32(),
+				BytesPerSample:   sr.ReadUint32(),
+			}
+		case 2:
+			q := &QuickTimeV2SoundDescription{
+				SizeOfStructOnly:              sr.ReadUint32(),
+				AudioSampleRate:               math.Float64frombits(sr.ReadUint64()),
+				NumAudioChannels:              sr.ReadUint32(),
+				Always7F000000:                sr.ReadUint32(),
+				ConstBitsPerChannel:           sr.ReadUint32(),
+				FormatSpecificFlags:           sr.ReadUint32(),
+				ConstBytesPerAudioPacket:      sr.ReadUint32(),
+				ConstLPCMFramesPerAudioPacket: sr.ReadUint32(),
+			}
+			if sr.AccError() == nil && q.Always7F000000 != QuickTimeV2Marker {
+				return nil, fmt.Errorf("version 2 sound description has %#x instead of the always7F000000 marker",
+					q.Always7F000000)
+			}
+			a.QuickTimeV2 = q
+		}
+	}
+	if sr.AccError() != nil {
+		return nil, sr.AccError()
+	}
+
+	pos := startPos + a.preChildrenSize() // Size of all previous data
+	lastPos := startPos + hdr.Size
+	for pos < lastPos {
+		box, err := decodeAudioChildBoxSR(pos, sr)
+		if err != nil {
+			return nil, err
+		}
+		if box != nil {
+			a.AddChild(box)
+			pos += box.Size()
+		}
+		if pos > lastPos {
+			return nil, fmt.Errorf("bad size when decoding %s", hdr.Name)
+		}
+	}
+	return a, sr.AccError()
+}
+
+// DecodeAudioSampleEntry - decode mp4a... box
+func DecodeAudioSampleEntry(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	data, err := readBoxBody(r, hdr)
+	if err != nil {
+		return nil, err
+	}
+	return decodeAudioSampleEntryFromData(hdr, startPos, data, ioBoxDepth)
+}
+
+// DecodeAudioSampleEntrySR - decode mp4a... box
+func DecodeAudioSampleEntrySR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	data := sr.ReadBytes(hdr.payloadLen())
+	if sr.AccError() != nil {
+		return nil, sr.AccError()
+	}
+	return decodeAudioSampleEntryFromData(hdr, startPos, data, boxDepth(sr))
+}
+
+// DecodeQuickTimeAudioSampleEntry - decode a legacy QuickTime audio sample
+// entry (.mp3, lpcm, twos, sowt, in24, in32, fl32, fl64, ulaw, alaw, ima4,
+// MAC3, MAC6, QDM2, QDMC, agsm) or an Apple Lossless entry (alac). These names
+// decoded as UnknownBox before they were registered, so a body that does not
+// parse as a sound sample description falls back to UnknownBox instead of
+// failing the file.
+func DecodeQuickTimeAudioSampleEntry(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	data, err := readBoxBody(r, hdr)
+	if err != nil {
+		return nil, err
+	}
+	box, err := decodeAudioSampleEntryFromData(hdr, startPos, data, ioBoxDepth)
+	if errors.Is(err, ErrBoxTooDeep) {
+		return nil, err
+	}
+	if err != nil {
+		return CreateUnknownBox(hdr.Name, hdr.Size, data), nil
+	}
+	return box, nil
+}
+
+// DecodeQuickTimeAudioSampleEntrySR - decode a legacy QuickTime audio sample
+// entry, as listed for DecodeQuickTimeAudioSampleEntry, or an Apple Lossless
+// entry (alac) with UnknownBox fallback.
+func DecodeQuickTimeAudioSampleEntrySR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	data := sr.ReadBytes(hdr.payloadLen())
+	if sr.AccError() != nil {
+		return nil, sr.AccError()
+	}
+	box, err := decodeAudioSampleEntryFromData(hdr, startPos, data, boxDepth(sr))
+	if errors.Is(err, ErrBoxTooDeep) {
+		return nil, err
+	}
+	if err != nil {
+		payload := make([]byte, len(data))
+		copy(payload, data)
+		return CreateUnknownBox(hdr.Name, hdr.Size, payload), nil
+	}
+	return box, nil
+}
+
+// Type - return box type
+func (a *AudioSampleEntryBox) Type() string {
+	return a.name
+}
+
+// GetChildren - list of child boxes
+func (a *AudioSampleEntryBox) GetChildren() []Box {
+	return a.Children
+}
+
+// SetType sets the type (name) of the box
+func (a *AudioSampleEntryBox) SetType(name string) {
+	a.name = name
+}
+
+// Size - return calculated size
+func (a *AudioSampleEntryBox) Size() uint64 {
+	totalSize := a.preChildrenSize()
+	for _, child := range a.Children {
+		totalSize += child.Size()
+	}
+	return totalSize
+}
+
+// validateQuickTime checks that the QuickTime version halfword agrees with
+// the version-specific extension pointers before encoding. A mismatch would
+// produce an entry that this package itself cannot decode. A nonzero
+// QuickTimeVersion without a pointer stays valid: that is how entries whose
+// reserved bytes merely look like a version are preserved.
+func (a *AudioSampleEntryBox) validateQuickTime() error {
+	switch {
+	case a.QuickTimeV1 != nil && a.QuickTimeV2 != nil:
+		return fmt.Errorf("both QuickTimeV1 and QuickTimeV2 are set")
+	case a.QuickTimeV1 != nil && a.QuickTimeVersion != 1:
+		return fmt.Errorf("QuickTimeV1 is set, but QuickTimeVersion is %d, not 1", a.QuickTimeVersion)
+	case a.QuickTimeV2 != nil && a.QuickTimeVersion != 2:
+		return fmt.Errorf("QuickTimeV2 is set, but QuickTimeVersion is %d, not 2", a.QuickTimeVersion)
+	case a.QuickTimeV2 != nil && a.QuickTimeV2.Always7F000000 != QuickTimeV2Marker:
+		return fmt.Errorf("QuickTimeV2.Always7F000000 is %#x, not the defined %#x",
+			a.QuickTimeV2.Always7F000000, uint32(QuickTimeV2Marker))
+	}
+	return nil
+}
+
+// encodeAudioSampleEntryStart - encode the fields before the child boxes.
+func (a *AudioSampleEntryBox) encodeAudioSampleEntryStart(sw bits.SliceWriter) {
+	sw.WriteZeroBytes(6)
+	sw.WriteUint16(a.DataReferenceIndex)
+	sw.WriteUint16(a.QuickTimeVersion)
+	sw.WriteUint16(a.QuickTimeRevisionLevel)
+	sw.WriteUint32(a.QuickTimeVendor)
+	sw.WriteUint16(a.ChannelCount)
+	sw.WriteUint16(a.SampleSize)
+	sw.WriteUint16(uint16(a.CompressionID))
+	sw.WriteZeroBytes(2)                          // packet size / reserved
+	sw.WriteUint32(makeFixed32Uint(a.SampleRate)) // nrAudioSampleBytesBeforeChildren bytes this far
+
+	switch {
+	case a.QuickTimeV1 != nil:
+		q := a.QuickTimeV1
+		sw.WriteUint32(q.SamplesPerPacket)
+		sw.WriteUint32(q.BytesPerPacket)
+		sw.WriteUint32(q.BytesPerFrame)
+		sw.WriteUint32(q.BytesPerSample)
+	case a.QuickTimeV2 != nil:
+		q := a.QuickTimeV2
+		sw.WriteUint32(q.SizeOfStructOnly)
+		sw.WriteUint64(math.Float64bits(q.AudioSampleRate))
+		sw.WriteUint32(q.NumAudioChannels)
+		sw.WriteUint32(q.Always7F000000)
+		sw.WriteUint32(q.ConstBitsPerChannel)
+		sw.WriteUint32(q.FormatSpecificFlags)
+		sw.WriteUint32(q.ConstBytesPerAudioPacket)
+		sw.WriteUint32(q.ConstLPCMFramesPerAudioPacket)
+	}
+}
+
+// Encode - write box to w
+func (a *AudioSampleEntryBox) Encode(w io.Writer) error {
+	if err := a.validateQuickTime(); err != nil {
+		return err
+	}
+	err := EncodeHeader(a, w)
+	if err != nil {
+		return err
+	}
+	buf := makebuf(a)
+	sw := bits.NewFixedSliceWriterFromSlice(buf)
+	a.encodeAudioSampleEntryStart(sw)
+
+	_, err = w.Write(buf[:sw.Offset()]) // Only write written bytes
+	if err != nil {
+		return err
+	}
+
+	// Next output child boxes in order
+	for _, child := range a.Children {
+		err = child.Encode(w)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// EncodeSW - write box to sw
+func (a *AudioSampleEntryBox) EncodeSW(sw bits.SliceWriter) error {
+	if err := a.validateQuickTime(); err != nil {
+		return err
+	}
+	err := EncodeHeaderSW(a, sw)
+	if err != nil {
+		return err
+	}
+	a.encodeAudioSampleEntryStart(sw)
+
+	// Next output child boxes in order
+	for _, child := range a.Children {
+		err = child.EncodeSW(sw)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// Info - write box info to w
+func (a *AudioSampleEntryBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	bd := newInfoDumper(w, indent, a, -1, 0)
+	if bd.err != nil {
+		return bd.err
+	}
+	bd.write(" - data_reference_index: %d", a.DataReferenceIndex)
+	if a.QuickTimeVersion != 0 {
+		bd.write(" - quicktime_version: %d", a.QuickTimeVersion)
+	}
+	if a.QuickTimeRevisionLevel != 0 {
+		bd.write(" - quicktime_revision_level: %d", a.QuickTimeRevisionLevel)
+	}
+	if a.QuickTimeVendor != 0 {
+		bd.write(" - quicktime_vendor: %s", quickTimeVendorString(a.QuickTimeVendor))
+	}
+	if q := a.QuickTimeV2; q != nil {
+		// The fixed fields of a version 2 entry hold mandated constants
+		// (3, 16, -2, 1.0); the true values live in the version 2 struct.
+		bd.write(" - channel_count: %d", q.NumAudioChannels)
+		if q.ConstBitsPerChannel != 0 {
+			bd.write(" - sample_size: %d", q.ConstBitsPerChannel)
+		} else {
+			bd.write(" - sample_size: %d", a.SampleSize)
+		}
+		bd.write(" - sample_rate: %g", q.AudioSampleRate)
+		bd.write(" - size_of_struct_only: %d, always_7f000000: %#x, format_specific_flags: %#x",
+			q.SizeOfStructOnly, q.Always7F000000, q.FormatSpecificFlags)
+		bd.write(" - const_bytes_per_audio_packet: %d, const_lpcm_frames_per_audio_packet: %d",
+			q.ConstBytesPerAudioPacket, q.ConstLPCMFramesPerAudioPacket)
+	} else {
+		bd.write(" - channel_count: %d", a.ChannelCount)
+		bd.write(" - sample_size: %d", a.SampleSize)
+		if a.CompressionID != 0 {
+			bd.write(" - compression_id: %d", a.CompressionID)
+		}
+		bd.write(" - sample_rate: %d", a.SampleRate)
+		if q := a.QuickTimeV1; q != nil {
+			bd.write(" - samples_per_packet: %d, bytes_per_packet: %d, bytes_per_frame: %d, bytes_per_sample: %d",
+				q.SamplesPerPacket, q.BytesPerPacket, q.BytesPerFrame, q.BytesPerSample)
+		}
+	}
+	var err error
+	for _, child := range a.Children {
+		err = child.Info(w, specificBoxLevels, indent+indentStep, indentStep)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// waveDropSafe reports whether the wave box holds only the decoder-init
+// atoms that normalization knowingly discards — frma, esds, the terminator
+// atom, and the 12-byte QuickTime stub named after the entry — with at most
+// an all-zero RawTail (a size-zero terminator).
+func waveDropSafe(wave *WaveBox, entryName string) bool {
+	for _, child := range wave.Children {
+		switch child.Type() {
+		case "frma", "esds", "\x00\x00\x00\x00":
+		case entryName:
+			if child.Size() > 12 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	for _, b := range wave.RawTail {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// NormalizeQuickTime rewrites a QuickTime-shaped entry (sound sample
+// description version 1 or 2, QuickTime residue in the version 0 reserved
+// fields, or an esds wrapped in a wave box) to the plain ISO version 0 form:
+// the esds becomes a direct child, and the wave box and the QuickTime
+// version, revision level, vendor, and compressionID are dropped. A version
+// 2 entry gets its channel count, sample size, and sample rate restored.
+// It is a no-op (returns false) without a QuickTime shape or a reachable
+// esds, or when the wave box holds anything besides its recognized
+// decoder-init atoms.
+func (a *AudioSampleEntryBox) NormalizeQuickTime() bool {
+	if a.QuickTimeVersion == 0 && a.Wave == nil &&
+		a.QuickTimeRevisionLevel == 0 && a.QuickTimeVendor == 0 && a.CompressionID == 0 {
+		return false
+	}
+	esds := a.Esds
+	if esds == nil && a.Wave != nil {
+		esds = a.Wave.Esds
+	}
+	if esds == nil {
+		// No esds means the decode parameters live in the version fields or
+		// the wave content itself (e.g. lpcm, ima4); such an entry has no
+		// ISO version 0 form and must keep its QuickTime shape.
+		return false
+	}
+	if a.Wave != nil && !waveDropSafe(a.Wave, a.name) {
+		// The wave box holds something beyond the decoder-init atoms that
+		// the esds replaces; dropping it would silently lose that content.
+		return false
+	}
+	children := []Box{esds}
+	for _, child := range a.Children {
+		if child.Type() == "esds" || child.Type() == "wave" {
+			continue
+		}
+		children = append(children, child)
+	}
+	if a.QuickTimeV2 != nil {
+		q := a.QuickTimeV2
+		a.ChannelCount = 0
+		if q.NumAudioChannels <= math.MaxUint16 {
+			a.ChannelCount = uint16(q.NumAudioChannels)
+		}
+		a.SampleSize = 16
+		if q.ConstBitsPerChannel > 0 && q.ConstBitsPerChannel <= math.MaxUint16 {
+			a.SampleSize = uint16(q.ConstBitsPerChannel)
+		}
+		// A rate above 65535 Hz does not fit the 16.16 sample rate field and
+		// leaves 0, as ffmpeg writes; the authoritative rate is in the esds
+		// AudioSpecificConfig.
+		a.SampleRate = 0
+		if q.AudioSampleRate > 0 && q.AudioSampleRate <= math.MaxUint16 {
+			a.SampleRate = uint16(math.Round(q.AudioSampleRate))
+		}
+	}
+	a.QuickTimeVersion = 0
+	a.QuickTimeRevisionLevel = 0
+	a.QuickTimeVendor = 0
+	a.CompressionID = 0
+	a.QuickTimeV1 = nil
+	a.QuickTimeV2 = nil
+	a.Esds = esds
+	a.Wave = nil
+	a.Children = children
+	return true
+}
+
+// RemoveEncryption - remove sinf box and set type to unencrypted type
+func (a *AudioSampleEntryBox) RemoveEncryption() (*SinfBox, error) {
+	if a.name != "enca" {
+		return nil, fmt.Errorf("is not encrypted: %s", a.name)
+	}
+	sinf := a.Sinf
+	if sinf == nil {
+		return nil, fmt.Errorf("does not have sinf box")
+	}
+	if sinf.Frma == nil {
+		return nil, fmt.Errorf("sinf box does not have frma box")
+	}
+	for i := range a.Children {
+		if a.Children[i].Type() == "sinf" {
+			a.Children = append(a.Children[:i], a.Children[i+1:]...)
+			a.Sinf = nil
+			break
+		}
+	}
+	a.name = sinf.Frma.DataFormat
+	return sinf, nil
+}

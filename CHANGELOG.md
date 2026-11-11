@@ -1,0 +1,1742 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+## [Unreleased]
+
+## [0.62.1] - 2026-11-10
+
+### Changed
+
+- README.md, cmd/README.md and `mp4ff-info -h` point to [mp4lens](https://github.com/Eyevinn/mp4lens), an interactive
+  box viewer built on mp4ff, for the terminal and the web browser
+
+### Fixed
+
+- `DecodeBoxSR` from a `bits.SliceReader` that is not a `bits.FixedSliceReader` reads the fields of the QuickTime and
+  3GPP text boxes that fall back to `UnknownBox`, such as `alis`, `chan`, `tmcd` and `tx3g`, from that reader again
+
+## [0.62.0] - 2026-11-04
+
+### Added
+
+- `UserDataTextBox`: QuickTime user data text atoms, whose types start with ©, such as `©nam` and `©swr` in `udta`,
+  decode with their texts and language codes
+- QuickTime `wide` atoms decode as a `FreeBox`, and `NewWideBox` makes one
+- The QuickTime sound sample entries `in24`, `in32`, `fl32`, `fl64`, `ulaw`, `alaw`, `ima4`, `MAC3`, `MAC6`, `QDM2`,
+  `QDMC` and `agsm` decode as `AudioSampleEntryBox`, with the PCM ones in `StsdBox.QtPcm`
+- `ChanBox` for the QuickTime audio channel layout atom `chan`, also in the new `AudioSampleEntryBox.Chan`
+- `KeysBox` for the QuickTime metadata keys atom `keys`, also in the new `MetaBox.Keys`, with `KeyOfItem` to find
+  the key of an item in `ilst`
+- `TrackApertureDimensionsBox` for the QuickTime track aperture atoms `clef`, `prof` and `enof`, in a `tapt` atom that
+  decodes as a `GenericContainerBox`
+- `GminBox`, `TcmiBox` and `TimecodeSampleEntryBox` for the QuickTime atoms `gmin`, `tcmi` and `tmcd` of timecode
+  tracks, with the timecode sample entry also in the new `StsdBox.Tmcd`; `gmhd` decodes as a `GenericContainerBox`
+- `AlisBox` for the QuickTime alias data reference `alis` in `dref`
+- The Apple ProRes sample entries `apch`, `apcn`, `apcs`, `apco`, `ap4h` and `ap4x` decode as `VisualSampleEntryBox`,
+  also in the new `StsdBox.ProRes`
+- `MeanBox` and `NameBox` for the `mean` and `name` atoms of freeform items `----` in `ilst`, such as iTunSMPB;
+  a QuickTime `name` atom in `udta` decodes as a `NameBox`, and one in a timecode sample entry as a `UserDataTextBox`
+- `TextSampleEntryBox` with `FtabBox` for 3GPP timed text `tx3g` and the chapter tracks that use it, and
+  `QuickTimeTextSampleEntryBox` for QuickTime `text`, in the new `StsdBox.Tx3g` and `StsdBox.QtText`
+- `ChplBox` for the Nero chapter list `chpl` in `udta`, which Nero, ffmpeg and GPAC write
+- `DataBox.Meaning` tells what a metadata value means, such as `track 2 of 21` for `trkn`, an integer, or the gapless
+  playback information of `iTunSMPB`
+- `boxtree` package that decodes the box tree of a file with box positions, and keeps going after errors,
+  reporting them for the smallest box that fails
+- `mp4ff-info -tree` and `-json` print the box tree with box positions and errors, as text or JSON,
+  and files that cannot be decoded completely get that tree instead of a partial box list
+- `StsdBox`, `DrefBox`, `VisualSampleEntryBox`, `AudioSampleEntryBox`, `StppBox`, `WvttBox`, `TrepBox` and
+  `EvteBox` implement `ContainerBox`
+- `StblBox.GetContainingChunks` returns the chunks of a sample interval, checked against the chunk offsets
+- `avc.SPS.PicWidthInMbsMinus1` and `PicHeightInMapUnitsMinus1` hold the picture size in macroblocks and map units
+- `aac.AudioSpecificConfig` decodes and encodes AAC Main, 960-sample frames, core coder delays, program config
+  elements (`aac.ProgramConfigElement`) and SBR and PS sync extensions; `TrakBox.SetAACDescriptorFromConfig` uses one
+- `aac.DecodeAudioSpecificConfig` and `AudioSpecificConfig.Encode` support USAC (xHE-AAC), object type `aac.USAC`,
+  with the UsacConfig kept unchanged in `aac.USACConfig` and its sampling frequency, frame lengths and channels decoded
+- `bits.FixedSliceReader.Depth` and `SetDepth`, which hold the box nesting depth that `mp4` counts while decoding
+
+### Changed
+
+- `DataBox.Info` adds what the value means, using the item type and freeform name that `IlstBox` gives its data
+  boxes, and writes images as their kind and size, with their bytes in hex at info level 1
+- `VisualSampleEntryBox.Info` and `AudioSampleEntryBox.Info` print the QuickTime vendor as its four characters, such
+  as `appl (0x6170706c)`, and `VisualSampleEntryBox.Info` names the quality levels, such as `0x200 (normal)`
+- `TrefBox` decodes every child as a `TrefTypeBox`, including reference types that mp4ff does not register, such as
+  the QuickTime `tmcd` and `chap`
+- `IlstBox` decodes items whose type mp4ff does not know, such as `trkn`, `covr` and the key indices of QuickTime
+  metadata, as `GenericContainerBox` with their data boxes, instead of as `UnknownBox`
+- `VisualSampleEntryBox.Info` prints `trailingBytes` before the child boxes
+- `aac.DecodeAudioSpecificConfig` reads its whole reader, which must end where the config ends, and returns the
+  fields decoded before an error together with the error
+- `ReadExpGolomb` and `ReadSignedGolomb` of `bits.EBSPReader` and `bits.Reader` return the error
+  `bits.ErrExpGolombTooLong` for codes with more than 31 leading zero bits, the longest in AVC, HEVC and VVC
+- `avc.SPS.OffsetForNonRefPic`, `OffsetForTopToBottomField` and `RefFramesInPicOrderCntCycle` are signed (`int`),
+  holding the se(v) values of the SPS. This is a breaking change
+- `aac.ADTSHeader.Frequency` returns an `int`, so that it gives 88200 and 96000 Hz instead of wrapping them around
+  in a `uint16`. This is a breaking change
+- README.md is a shorter overview with a complete codec list; tool installation moved to cmd/README.md, contribution
+  rules to CONTRIBUTING.md, and the library guide is the `mp4` package documentation
+- The logo is an SVG with the Go gopher, and `images/social-preview.png` is the social preview of the repository
+- Container boxes decoded from an `io.Reader` read their payload into memory before decoding their children, as `moov`
+  and `moof` already did
+- `DecodeFile`, `DecodeBox` and the other `io.Reader` decoders read box payloads of up to 1 MiB into one buffer of
+  their size, allocating less and decoding faster
+
+### Fixed
+
+- `avc.ParseSliceHeader`, `ParseSliceHeaderInto` and `SliceHeaderSize` return an error instead of panicking for a bad
+  `slice_group_change_rate_minus1`, and read `slice_group_change_cycle` with the length the SPS picture size gives
+- `avc.ParsePPSNALUnit` reads the slice groups of map types 2 and 6, and the fields after them, as specified
+- `avc.ParseSPSNALUnit`, `ParsePPSNALUnit` and `ParseSliceHeader` return an error for scaling list deltas, QSY,
+  `slice_type` and other syntax elements out of range
+- `mp4ff-pslister` and `mp4ff-nallister` give an error naming the unsupported codec, such as VVC for pslister and AV1
+  for nallister, instead of no output or a NALU length error; `mp4ff-nallister -c` takes h264, h265 and h266 also
+  for Annex B
+- `mp4ff-mvhevc -h` prints the usage instead of failing with an unknown subcommand
+- `aac.NewADTSHeader` accepts AAC Main and returns an error for a channel configuration above 7 or a payload above
+  8184 bytes, which do not fit in the ADTS header fields
+- `avc.GetParameterSetsFromByteStream` and `hevc.GetParameterSetsFromByteStream` include the final parameter set
+  when an Annex-B stream ends before video, and appending to a returned parameter set leaves the other sets unchanged
+- The Annex B functions of `avc` and `hevc`, such as `GetParameterSetsFromByteStream` and
+  `ConvertByteStreamToNaluSample`, leave a start code that ends the stream out of the last NAL unit, and
+  `ConvertByteStreamToNaluSample` drops the zero bytes after NAL units, as the others do
+- `DecodeFile` and the other decoders accept QuickTime files with the text atoms `©nam`, `©ART`, `©too` or `©cpy`
+  in `udta`
+- `SencBox.ParseReadBox` returns an error for a senc box with fewer IVs than samples, instead of allocating memory
+  for the declared samples when `DecodeFile`, `DecodeFileSR`, `FragmentDecoder` or `boxtree.Decode` parse it
+- `BoxSeekReader`, `MdatBox.ReadData` for a lazy mdat, and the `SampleAccessor` of `InitDecodeStream` allocate
+  memory only as data is read, not for sizes from box headers or truns that the stream does not hold
+- `File.ReadSampleData`, `File.CopySampleData` and `TrakBox.GetRangesForSampleInterval` return an error for samples
+  in chunks without a chunk offset, and `CopySampleData` returns for sample number 0xFFFFFFFF
+- `hevc.ParseVPSNALUnit`, `ParseSPSNALUnit`, `ParsePPSNALUnit` and `ParseSliceHeader` return an error for counts,
+  bit depths and reference picture sets out of range, instead of hanging, allocating memory for them or panicking
+- `iamf.ObuInfo.ReadDescriptors` returns an error for counts larger than the OBU payload, and reads the subblock
+  durations of parameter definitions with `constant_subblock_duration` 0
+- `ivf.Reader.ReadFrame` allocates memory as the frame is read, not for the size in the frame header
+- `sei.ExtractSEIData` allocates memory only as payload bytes are read, and `sei.DecodePicTimingHevcSEI` decodes
+  decoding-unit timing instead of panicking
+- `DecodeFile`, `DecodeFileSR` and the other decoders decode nested QuickTime `gmhd`, `tapt` and `tmcd` atoms, and audio
+  sample entries that claim QuickTime version 1 or 2, in linear instead of exponential time
+- `DecodeFile`, `DecodeFileSR`, `FragmentDecoder` and `boxtree.Decode` return the new `mp4.ErrBoxTooDeep` for boxes
+  nested deeper than `mp4.MaxBoxDepth` (64), instead of taking time quadratic in the depth or overflowing the stack
+
+## [0.61.0] - 2026-10-27
+
+### Added
+
+- `alac` (Apple Lossless) sample entries decode as `AudioSampleEntryBox` and `StsdBox.Alac`, with the magic cookie as
+  `AlacBox` in `AudioSampleEntryBox.Alac`, or in `WaveBox.Alac` for QuickTime files
+- `InitProtect` and `ExtractInitProtectData` support VP9 (`vp09`) with scheme cenc, and `GetVP9ProtectRanges`
+  gives the subsample protection ranges of a VP9 sample
+
+### Changed
+
+- `DecModeLazyMdat` also skips the payload of `free` and `skip` boxes; `FreeBox.Payload` is then nil and
+  `FreeBox.Encode` writes zeros of the original payload size
+- `DataBox` keeps its type and locale in the new `DataType`, `Country` and `Language` fields instead of always writing
+  type 1 (UTF-8) and locale 0, so a `DataBox` with text needs `DataType: DataTypeUTF8`
+
+### Fixed
+
+- `ExtractInitProtectData` accepts `avc3` and `hev1` sample entries, as `InitProtect` already does
+- `DecodeFile` with `DecModeLazyMdat` returns an error for an mdat size above `math.MaxInt64` instead of looping
+- `SgpdBox` decodes entries with `descriptionLength` 0, such as `tsas`, and checks that every entry is exactly
+  `descriptionLength` bytes
+- On 32-bit architectures, `hevc.ParseSPSNALUnit` and `hevc.ParseVPSNALUnit` read the 48-bit constraint flags of
+  the profile, tier and level, and the `bits` readers and writers handle up to 32 bits at any bit position
+- On 32-bit architectures, `File.CopySampleData` copies chunks of 2 GiB or more, and sizes beyond the `int` range in
+  `mdat`, `stsc`, `BoxSeekReader.Seek`, `ivf.Reader.ReadFrame` and the IAMF parser give errors instead of wrong data
+- `bits.EBSPWriter.WriteExpGolomb` and `bits.FixedSliceWriter.WriteExpGolomb` write values up to 2^32-1 at any bit
+  position
+- `bits.FixedSliceReader.SkipBytes` and `bits.EBSPReader.ReadBytes` set an error for a negative or too large length
+  instead of moving backwards or panicking
+- `hevc.DecodeHEVCDecConfRec`, `hevc.DecodeLHEVCDecConfRec` and `vvc.DecodeVVCDecConfRec` stop at the end of the
+  record, instead of adding or allocating an empty NAL unit for each one that the record announces but does not hold
+- Decoding a `traf` without `tfhd`, with `DecodeBox`, `DecodeBoxSR`, `DecodeFile` or `FragmentDecoder`, returns an
+  error instead of a `TrafBox` with a nil `Tfhd`
+- `MoovBox.IsEncrypted`, `MoovBox.GetSinf`, `DecodeFile`, `DecodeFileSR`, `FragmentDecoder` and `InitDecodeStream` no
+  longer panic on a track without the boxes down to its sample entry or stts, or on an empty `saio` or seig `sgpd`
+- `TrakBox.GetNrSamples`, `GetSampleData`, `GetRangesForSampleInterval` and `File.CopySampleData` return 0 or an
+  error instead of panicking or using chunk offset 0 when the track lacks a box of its sample table
+- `MoofBox.Encode`, `File.UpdateSidx`, `MediaSegment.Fragmentify`, `InitSegment.GetMediaType` and the `Fragment` methods
+  `Encode`, `GetSampleInterval`, `GetSampleNrFromTime` and `AddSampleInterval` handle missing boxes instead of panicking
+- `InitProtect`, `ExtractInitProtectData`, `DecryptInit`, `DecryptSegment`, `DecryptFragment` and `RemoveEncryption`
+  return an error instead of panicking when a box they need is missing, or `ExtractInitProtectData` gets a clear init
+- `mp4ff-crop`, `mp4ff-decrypt`, `mp4ff-mvhevc`, `mp4ff-nallister`, `mp4ff-pslister` and `mp4ff-subslister` give an
+  error, or skip the track, instead of panicking on a file without a box they need
+- The segmenter example segments a video track without `stss`, in which every sample is a sync sample, and gives an
+  error instead of panicking on a file without video track or without a box it needs
+- `hevc.ParseSPSNALUnit` refuses a coding tree block outside 16x16..64x64 or a picture size that is not a multiple of
+  the minimum coding block, and `hevc.ParseSliceHeader` gives an error instead of dividing by zero on such an SPS
+- cbcs encryption of AVC and HEVC in `GetAVCProtectRanges`, `GetHEVCProtectRanges` and `FragmentEncryptor` parses
+  slice headers with the SPS and PPS that the samples carry, not only with those of the decoder configuration record
+- `MetaBox.EncodeSW` writes a QuickTime `meta` box without version and flags, as `Encode` does, so `File.EncodeSW` no
+  longer fails with an overflow on `.mov` files with QuickTime metadata
+- `VisualSampleEntryBox` keeps the QuickTime version, revision level, vendor, temporal and spatial quality, depth and
+  color table ID in new fields, instead of writing ISO defaults, so `.mov` video sample entries round-trip
+- `File.EncodeSW` writes the `mfra` box of a fragmented file, as `File.Encode` does
+- `udta` boxes decode when fewer bytes than a box header follow the last child, such as the 32-bit zero that ends the
+  QuickTime user data list; the bytes are kept in the new `UdtaBox.TrailingBytes` and written back
+- `MvhdBox` keeps its transformation matrix in the new `Matrix` field instead of always writing the unity matrix
+- `MvhdBox`, `MdhdBox` and `TkhdBox` keep the values that QuickTime files may have in ISO pre_defined and reserved
+  fields: the preview, poster, selection and current times of `mvhd`, the quality of `mdhd` and a `tkhd` reserved field
+
+## [0.60.0] - 2026-10-13
+
+### Added
+
+- `File.ReadSampleData` reads a progressive track's samples, through a `DataResolver` such as `LocalFileResolver`
+  also from the files that its `dref` names, as in Unified Streaming dref MP4s; the segmenter example uses it
+- `avc.ParseSliceHeaderInto` parses a slice header into a caller's `SliceHeader` without allocating
+- `TrakBox.SetAACDescriptorWithChannelConfig` sets an AAC sample entry with any fixed channel configuration,
+  such as 5.1 or 7.1, and `aac.NrChannels` gives the number of channels of a configuration
+
+### Changed
+
+- Go 1.24 is the minimum Go version
+- The tools' `-version` reports the version that Go embeds from git, which names the commit between releases.
+  Builds from a source archive set it with `-ldflags "-X github.com/Eyevinn/mp4ff/internal.commitVersion=vX.Y.Z"`
+
+### Fixed
+
+- `StscBox.GetSampleDescriptionID` returns the ID of the entry that the chunk belongs to, and `mp4ff-crop` keeps
+  the right sample description ID in a cropped `stsc` with several of them
+- The segmenter example includes the last sample of each track in its last segment
+- `avc.ParseSliceHeader` and `avc.ParseSliceHeaderInto` set `SliceHeader.SeqParamID` to the ID of the SPS that the
+  slice's PPS refers to
+- `aac.DecodeADTSHeader` returns an error for a `frame_length` shorter than the header, instead of a wrapped
+  `PayloadLength` close to 65535
+- `HdlrBox` keeps its reserved words in `Reserved`, so a QuickTime or iTunes `mdir` handler with the "appl"
+  manufacturer, as ffmpeg writes, encodes as it was decoded
+
+## [0.59.0] - 2026-10-07
+
+### Added
+
+- `Fragment.Reset` puts a single-track fragment back in the state `CreateFragment` returns, keeping `EncOptimize` and
+  its storage, so building, encrypting and encoding fragment after fragment in one `Fragment` reuses its boxes,
+  its encryption boxes and the sample data copied into it
+- `FragmentDecoder` decodes fragment after fragment into the styp, sidx, moof and mdat boxes of the last one without
+  allocating, fed by `ReadFragmentBytes` from an `io.Reader`; `bits.FixedSliceReader.Reset` reuses a reader
+- Experimental `ttma` box (`TtmaBox`) with the maximum period of activation in `stpc` and `wvtc`
+  sample entries. `SetStpcDescriptor` and `SetWvtcDescriptor` add it with 5 s in the track
+  timescale, so they now need the media header set first. The 4CC is unregistered and may change
+- `WithTrailingBoxesCallback` passes the boxes after the last fragment of a stream to a callback instead of returning
+  a `TrailingBoxesError`
+- `File.MisplacedBoxes` lists the top-level boxes that the segment structure has no place for at their position, such
+  as a box after the `mfra`, which `Encode` writes elsewhere or not at all, and `mp4ff-info` warns about them
+
+### Deprecated
+
+- `TrailingBoxesErrror`, now an alias of the correctly spelled `TrailingBoxesError`
+
+### Fixed
+
+- File decoding keeps every top-level box with its fragment, not only `emsg` and `prft`, before the `moof` or, at the
+  end of a segment, after the `mdat`, so re-encoding no longer drops or moves boxes such as C2PA `uuid` boxes
+- `InitSegment.Children` keeps the boxes between `ftyp` and `moov`, such as a C2PA manifest box, so re-encoding an
+  init segment no longer drops them
+- `avc.ParseSliceHeader` rejects out-of-range `disable_deblocking_filter_idc`, `slice_alpha_c0_offset_div2`
+  and `slice_beta_offset_div2`, so decoders no longer index their deblocking tables out of range
+- `DecodeContainerChildren`, `DecodeContainerChildrenSR` and `FragmentDecoder` list only the last 10 children in the
+  error for children that overrun their container, so a crafted file can no longer make that error huge and slow
+- `TrakBox.GetSampleData` returns an error for an interval that ends before it starts
+- Decoding a `moov` box keeps its children in file order, so it re-encodes to the same bytes
+- `StscBox.GetContainingChunks` applies the last of several entries sharing a `firstChunk`, as `GetChunk` does,
+  returns an error when the entries give more chunks than samples, and handles chunk number 0xFFFFFFFF
+- `DecodeBoxSR` and `DecodeFileSR` return an error when a box decoder does not read exactly the box payload, a
+  short `elng` returns its reader error, and a `colr` of unknown colour type reads only its own payload
+
+## [0.58.0] - 2026-10-04
+
+### Added
+
+- `Fragment.Prfts` holds all `prft` boxes of a fragment, such as one per reference track or flags value, and
+  `Fragment.Prft` is now the first of them instead of the last
+- `bits.NewEBSPReaderFromSlice`, `bits.NewReaderFromSlice` and `avc.SliceHeaderSize`, which parse without allocating
+- `MdatBox.Payload` returns the payload as one slice, also for a fragment built with `AddFullSamples`, without
+  copying when it is held in one slice
+
+### Changed
+
+- Box decoding finds the box type and its decoder with one integer-keyed lookup and reuses the
+  child slices of `moof` and `traf`, so decoding a fragment makes about 40% fewer allocations
+- `LevaLevel.GroupingType` and the `groupingType` argument of `NewLevaLevel`
+  are four-character strings, as in `SbgpBox` and `SgpdBox`, and `Info()`
+  prints them as such instead of as a number. This is a breaking change
+- `Fragment.Encode` writes everything but the mdat payload through one pooled buffer, so encoding a
+  fragment no longer allocates, and `Fragment.SetTrunDataOffsets` no longer allocates either
+- `bits.EBSPReader` and `bits.Reader` no longer allocate for each byte they read, nor `bits.ByteWriter` for
+  each value it writes, and the AV1 and VP9 parsers read from slices, so AVC, HEVC and AV1 header parsing
+  allocate far less (`avc.ParseSliceHeader`: 13 to 1, `mp4.GetAV1ProtectRanges` for three samples: 77 to 16)
+- `FragmentEncryptor` reuses its CBC mode and keeps a fragment's IVs and subsamples in one array each,
+  so cbcs encryption no longer allocates per sample and cenc allocates less
+
+### Fixed
+
+- File decoding adds `prft` boxes to the fragment of the following `moof`, so re-encoding no longer drops
+  them, and no longer panics on a `sidx`-indexed file whose fragments start with a `prft`
+- `emsg` boxes before a later `moof` and with `DecStartOnMoof` belong to that `moof`'s fragment, and the
+  stream decoder sets `Fragment.Emsgs` and `Fragment.Prfts`
+- `FragmentEncryptor.IV` returns a copy, so changing the returned IV no longer changes the next IV
+- `avc.ParseSliceHeader` no longer hangs on a huge `num_ref_idx_l0_active_minus1`,
+  nor `avc.ParseSPSNALUnit` on a huge VUI HRD `cpb_cnt_minus1`, and
+  `ParseSliceHeader` returns an error for a NAL unit that ends inside the slice header
+- `avc.ParseSPSNALUnit`, `ParsePPSNALUnit` and `ParseSliceHeader` reject
+  out-of-range values (dimensions, cropping, bit depths, QPs and more), so
+  cropping can no longer wrap `SPS.Width` and `SPS.Height` around
+- `File.CopySampleData` and the tools reject tracks whose sample data are in another file (`dref` url entries)
+  instead of panicking or writing wrong bytes, with the new `TrakBox.CheckDataIsSelfContained`
+- `Fragment.GetFullSamples`, `Samples`, `GetSampleInterval` and `EncryptFragment` work on built fragments: with
+  `AddFullSamples` data, after `Encode`, and for each track; `MdatBox.ReadData` and `CopyData` read `DataParts`
+- `avc.ExtractNalusFromByteStream`, `GetFirstAVCVideoNALUFromByteStream` and `ExtractNalusOfTypeFromByteStream` in
+  `avc` and `hevc` drop trailing zero bytes from the last NAL unit too, as they already did from the others
+
+## [0.57.0] - 2026-09-29
+
+### Added
+
+- `saiz` versions 1 and 2 (16- and 32-bit sizes, ISO/IEC 14496-12:2026) are
+  decoded and encoded, and `SaizBox.AddSampleInfo` picks the lowest version
+  that fits, so samples with more than 39 subsamples can be encrypted.
+  `GenerateFtyp` adds the `saie` brand for them and `CheckBrands` checks it
+- Constants for `ftyp`/`styp` brands from ISOBMFF, MP4, CMAF, DASH and codec
+  specifications (`mp4.BrandIso6`, `mp4.BrandCmfc`, `mp4.BrandLmsg`, ...), and
+  `HasCompatibleBrand` on `FtypBox` and `StypBox`
+- `InitSegment.GenerateFtyp`, `InitSegment.SetFtyp` and
+  `MediaSegment.GenerateStyp` set ftyp/styp brands from the content: lowest
+  isoN brand, codec brands, CMAF brands, and DASH `msdh`/`msix`/`lmsg`
+- `File.CheckBrands` reports ftyp/styp brands that the content contradicts or
+  that miss spec recommendations, as `BrandIssue` errors and warnings, also
+  available as `mp4ff-info -brands`
+- Experimental paint-model subtitle boxes: `stpc`/`wvtc` sample entries, and
+  `ttmn`/`vttn` (no change) and `ttmb` (TTML body only) samples, also handled
+  by `mp4ff-subslister`. The 4CCs are unregistered and may change
+- `Fragment.AppendFullSamples`, `TrunBox.AppendFullSamples`,
+  `SampleAccessor.AppendSamples` and `AppendSampleRange` extract samples into
+  caller-provided storage, so reused slices avoid allocation. Implementations
+  of `SampleAccessor` outside mp4ff must add the two methods
+- `Fragment.Samples` iterates over the full samples of a track without
+  allocating
+- `hevc.ParseSPSNALUnitWithVPS` parses an SPS with a map of the VPSs it may
+  refer to, so that a multilayer extension SPS gets the chroma format, picture
+  size, conformance window and bit depths that it does not signal itself
+  inherited from the `rep_format()` of its VPS. `hevc.ParseSPSNALUnit` is
+  unchanged and leaves those values unset, since the SPS payload can be parsed
+  without them
+- `hevc.SPS` exposes `NuhLayerID`, `ExtOrMaxSubLayersMinus1`,
+  `MultiLayerExtSpsFlag`, `UpdateRepFormatFlag`, `SpsRepFormatIdx`,
+  `InferScalingListFlag` and `ScalingListRefLayerID`, and `hevc.RepFormat`
+  exposes `SeparateColourPlaneFlag`, `ConformanceWindowFlag` and
+  `ConformanceWindow`
+- `RsotBox` for the Redundant Sample Original Timing Box (`rsot`) of
+  ISO/IEC 14496-12:2026 Section 8.8.18, a `traf` child that documents that the
+  first sample of a track fragment is a copy of the previous sample and how long
+  that sample has already run (`ElapsedDuration`), and that the fragment's last
+  sample was truncated to fit and how long it was meant to last
+  (`OriginalDuration`). Either duration may be signalled on its own, and
+  `CreateRsotBox` sets the flags from the non-zero arguments. It is reachable as
+  `TrafBox.Rsot`
+- `AudioSampleEntryBox.NormalizeQuickTime` rewrites a QuickTime-shaped audio
+  sample entry (sound sample description version 1 or 2, QuickTime residue in
+  the version 0 reserved fields, or a wave-wrapped esds) to the plain ISO
+  version 0 form with the esds as a direct child. Entries without a reachable
+  esds, and wave boxes holding anything besides their recognized decoder-init
+  atoms, are left untouched
+- `CloneBox` returns a deep copy of a box (via an encode/decode round trip),
+  so a box tree that shares parts with another structure can be mutated
+  safely — for example handing `InitProtect` (which rewrites the stsd sample
+  entry in place) an init segment built from a cached, shared trak
+- `Fragment.AddFullSamples` adds many samples to a fragment at once. Adjacent
+  sample slices (such as the output of `GetFullSamples`) are coalesced into
+  runs that are added as mdat data parts, so the payload is never copied and
+  contiguous input becomes a single part. Any data already in the mdat is
+  closed into a part first, so samples can be added before or after with
+  `AddFullSample`. Since the samples are referenced rather than copied, their
+  buffers must be kept alive and unmodified until the fragment is encoded. The
+  output is byte-identical to adding the samples one by one with
+  `AddFullSample`
+
+- `mp4.Defragment` and `mp4.DefragmentTracks` convert a fragmented file to a
+  progressive one: sample tables (stts, ctts, stsc, stsz, stss, stco/co64)
+  are synthesized from the fragment metadata while sample data and sample
+  descriptions are preserved. Every track is rebased so that its first tfdt
+  becomes media time zero, edit-list media times are shifted along, a final
+  edit with zero segment duration (open-ended in a fragmented file, where the
+  movie duration is unknown) is resolved to the remaining media duration so
+  progressive readers do not apply it as a zero-length edit, and a track
+  starting later than the earliest one keeps its presentation alignment
+  through an empty edit; a trivial identity edit list is dropped.
+  The output ftyp has major brand mp42, the lowest isoN brand the output
+  needs, the codec brands, and the ISO/IEC 14496-15 brands of the input. Per-sample encryption auxiliary information (senc or
+  saiz/saio; constant-IV full-sample encryption without such data passes
+  through losslessly), unsupported edit lists, zero timescales, truncated
+  byte ranges, and payloads larger than the input file are rejected
+- `mp4.Defragment` and `mp4.DefragmentTracks` resolve overlapping fragments:
+  when a fragment's tfdt re-declares an earlier decode time (a
+  retransmission), the fragment appearing later in the file wins and the
+  superseded samples are dropped at sample granularity, whether or not the
+  re-sent bytes are identical. Every abandoned time range must be declared
+  again by surviving fragments, so no declared content is ever silently
+  dropped. Ambiguous overlaps fail closed: cuts inside a sample, abandoned
+  time ranges that no surviving later fragment declares again, and
+  overlapping files whose fragments use absolute base data offsets are
+  rejected
+- `mp4.Defragment` and `mp4.DefragmentTracks` accept hybrid files that carry
+  progressive samples in the moov before the first fragment: the progressive
+  samples come first with their chunk structure preserved (also when stco
+  offsets are not monotone), and the fragment samples are appended.
+  Fragments may supersede progressive samples under the same
+  later-declarer-wins and coverage rules as fragment overlaps, and hostile
+  sample tables are validated before any count-proportional allocation
+- `SttsBox.SampleDurations`, `CttsBox.CompositionTimeOffsets`, and
+  `StssBox.SampleIsSync` expand a whole sample table into one value per
+  sample, validating the entries against the declared sample count
+- `mp4ff-defragment` command line tool exposing the defragmentation with
+  optional track selection
+
+### Changed
+
+- `SaizBox.DefaultSampleInfoSize` is a `uint32` and `SaizBox.SampleInfo` a
+  `[]uint32`, to hold the sizes of saiz versions 1 and 2
+- `CreateFtyp` gives `cmfc` + `[cmfc, iso6]` and `CreateStyp` gives
+  `cmfs` + `[cmfs, cmff, cmfl, msdh]`: the major brand is repeated and `dash` is dropped
+- Minimum Go version bumped from 1.19 to 1.23, for `slices` and `iter`
+- The commands and examples that create their own output file now buffer their
+  writes, like `WriteToFile` already does. `Encode` makes about one write call
+  per box, so writing straight to a file cost a syscall per box: affects
+  `mp4ff-encrypt`, `mp4ff-decrypt`, `mp4ff-crop`, `mp4ff-mvhevc` and the
+  `add-sidx`, `combine-segs`, `initcreator`, `ivf-to-mp4`, `resegmenter` and
+  `segmenter` examples. Output bytes are unchanged
+- New package documentation section "Writing files and segments efficiently"
+  covering when to use a buffered `Encode` and when a reused
+  `bits.FixedSliceWriter` with `EncodeSW` is better
+- `WriteToFile` buffers its output instead of writing straight to the file.
+  The many small boxes of a moof cost one write syscall each without it, while
+  a large mdat payload is unaffected, since a write larger than the buffer goes
+  directly to the file. Output bytes are unchanged
+- `SttsBox.GetDecodeTime` returns an error instead of panicking with index out
+  of range when the stts entries cover fewer samples than the requested sample
+  number (a file whose stts and stsz disagree), or when called with sampleNr 0.
+  Signature change: `GetDecodeTime(sampleNr uint32) (decTime uint64, dur uint32)`
+  → `GetDecodeTime(sampleNr uint32) (decTime uint64, dur uint32, err error)`.
+  `SttsBox.GetSampleNrAtTime` returns an error instead of panicking for an
+  stts box without entries
+- `TrunBox.GetFullSamples` returns an error when the trun-declared sample
+  sizes point outside the mdat data (a truncated or corrupt file), instead
+  of panicking with index out of range. Signature change:
+  `GetFullSamples(...) []FullSample` → `GetFullSamples(...) ([]FullSample, error)`.
+  `Fragment.GetFullSamples` (unchanged signature) propagates the error
+- `StscBox.GetChunk` returns an error instead of panicking for chunk numbers
+  that no stsc entry covers. Signature change:
+  `GetChunk(chunkNr uint32) Chunk` → `GetChunk(chunkNr uint32) (Chunk, error)`
+- Sample-table decode (`stsz`, `stts`, `ctts`, `stco`, `co64`, `stss`) bulk-reads
+  each table with one slice-reader call instead of one call per entry, roughly
+  halving moov parse time for long progressive files
+- Fragment encryption and decryption expand the AES key once per run instead
+  of once per sample (cenc) or per protected subsample range (cbcs), making
+  fragment encryption roughly 40% (cenc) / 18% (cbcs) faster. A bad key
+  length is now reported by `NewFragmentEncryptor` instead of by the first
+  sample encryption
+
+### Fixed
+
+- `CreateEmptyTrak`/`AddEmptyTrack` pick the media header from the handler
+  type: `subt`, `stpp` and `clcp` tracks get `sthd`, and `stpp` gets handler `subt`
+- The streaming `SampleAccessor.GetSample`, `GetSampleRange` and `GetSamples`
+  allocated the sample size a trun claimed before checking it against the mdat
+- Invalid NALU length sizes are rejected: the 3-byte size in lhvC and vvcC,
+  anything but 1, 2 or 4 bytes when encoding hvcC, lhvC and vvcC
+  (`ErrInvalidLengthSize`), and differing lhvC and hvcC sizes in a sample
+  entry. `mp4ff-nallister` rejects VVC tracks without 4-byte lengths
+- `hevc.SplitNalusByLayerID` panicked on 32-bit platforms for a length field of
+  2^31 or more
+- `DecodeSgpd`/`DecodeSgpdSR` did not bound the per-entry `description_length`
+  against the bytes left in the `sgpd` box, and the sample group entry
+  decoders size their slices from it. A 32-byte box declaring
+  `description_length = 0xfffffff0` for an `alst` entry allocated 4GB in
+  `DecodeAlstSampleGroupEntry`. The length is now checked against what is left
+  of the box before the entry is decoded
+- `avc.ParsePPSNALUnit` skipped the six 4x4 picture scaling lists when
+  `pic_scaling_matrix_present_flag` was set but `transform_8x8_mode_flag` was
+  not, since the read loop was nested inside the 8x8 mode check. The lists are
+  always present when a picture scaling matrix is signalled; only the two or
+  six extra 8x8 lists depend on 8x8 mode, so such a PPS misparsed
+  `second_chroma_qp_index_offset` and then failed the trailing-bits check. As a
+  consequence, `chroma_format_idc` from the SPS is now only looked up when 8x8
+  mode makes the list count depend on it, so a PPS whose SPS is not in the map
+  no longer fails in the cases where the SPS is not needed
+- HEVC slice header and PPS parsing accepted `num_ref_idx_l0_active_minus1`,
+  `num_ref_idx_l1_active_minus1` and their PPS defaults outside the range 0 to
+  14 that the spec allows. The values were stored in a `uint8` without a check,
+  so a stream declaring 255 made `parsePredWeightTable` allocate a
+  zero-length slice while its loop guard still ran, and parsing panicked with
+  an index out of range. All four read sites now check the bound and return an
+  error naming the syntax element, its value and the legal range
+- `hevc.ParseSPSNALUnit` misparsed a non-base-layer SPS that uses the
+  multilayer extension form, as MV-HEVC and SHVC enhancement layers do. Such an
+  SPS signals `sps_ext_or_max_sub_layers_minus1` instead of
+  `sps_max_sub_layers_minus1` and then omits `profile_tier_level()`, the chroma
+  format, the picture size, the conformance window and the bit depths, and it
+  carries `sps_infer_scaling_list_flag`. The parser always took the base-layer
+  branch, so it read those absent fields from the following bits and typically
+  failed with `EOF`. `nuh_layer_id` is now taken from the NAL unit header and
+  the two forms are parsed accordingly
+- `rep_format()` in the VPS extension dropped `separate_colour_plane_vps_flag`
+  and the conformance window, and left the chroma format and bit depths unset
+  for a `rep_format()` with `chroma_and_bit_depth_vps_present_flag` equal to
+  zero instead of inferring them from the preceding one
+- `DecodeContainerChildren` and `DecodeContainerChildrenSR` reported a wrapped
+  parent size for a box too small to hold the fixed fields before its children,
+  as `dref`, `stsd`, `trep` and `meta` can be. Such a box is now rejected up
+  front, naming the declared and the minimum size
+- `DecodeEsdsSR` derived its descriptor size from `hdr.Size-12` without a length
+  check, wrapping for a shorter box. Both the check and the size now measure the
+  payload, which is also correct for an extended-size header
+- `DecodeContainerChildren` now checks the child position against the
+  container end before decoding each child, matching
+  `DecodeContainerChildrenSR`. A container truncated exactly on a child
+  boundary is reported instead of silently decoding short, and an empty
+  container box no longer consumes its next sibling
+- `ftyp` and `styp` boxes with a payload shorter than 8 bytes are rejected at
+  decode instead of panicking. `MajorBrand` and `MinorVersion` slice the payload
+  at fixed offsets, so a short box made `Info` panic, including in `mp4ff-info`
+- `IsSyncSampleFlags` only inspected `sample_depends_on` and ignored
+  `sample_is_non_sync_sample`, so flags that mark a sample non-sync while also
+  saying `sample_depends_on = 2` were reported as a sync sample. It now
+  requires both indications to agree, like `Sample.IsSync` always has, and no
+  longer accepts the reserved `sample_depends_on = 3`. `Sample.IsSync` is
+  unchanged in behaviour and now delegates to it, so the two cannot drift
+  apart again
+- The mdat payload is now the concatenation of its data parts and its
+  monolithic data, so the two can be combined in any order and are written in
+  the order they were added. Adding a part on top of monolithic data no longer
+  panics with "cannot mix sample parts with monolithic sample data", and data
+  added with `AddSampleData` on top of data parts is no longer silently
+  dropped at encode time, which produced a fragment whose trun declared
+  samples that were never written. `MdatBox.SetData` replaces the whole
+  payload and so now also drops any data parts
+- `NewSdtpEntry` packed the `sampleDependedOn` argument into both two-bit
+  dependency fields and dropped `sampleDependsOn`, so every entry it built
+  carried a wrong sample_depends_on value. Note that entries built with the
+  broken constructor re-encode byte-identically; only newly constructed
+  entries change
+- `TrakBox.GetSampleData` indexed its result slice with the absolute sample
+  number instead of the offset within the requested interval, panicking with
+  index out of range for any interval not starting at sample 1
+- `TrunBox.GetSampleInterval` (and thereby `Fragment.GetSampleInterval`)
+  returns an error instead of panicking when the requested interval points
+  outside the mdat data
+- `File.CopySampleData` returns an error instead of panicking when a chunk
+  offset or sample size in the sample tables points outside the mdat data.
+  This is the progressive-file counterpart of the fragmented `trun` case
+- `MdatBox.ReadData` and `MdatBox.CopyData` rejected valid ranges ending at
+  the very end of the mdat payload, so reading the last sample (or the full
+  payload) failed with "invalid range provided". They now also reject a start
+  before the mdat payload, which previously underflowed and panicked
+- `mp4ff-nallister`, `mp4ff-pslister` and `mp4ff-subslister` panicked instead
+  of reporting an error on a progressive file with sample tables pointing
+  outside the mdat data
+- `CttsBox.GetCompositionTimeOffset` panicked for a sample beyond the entries
+  of the box, which a file with a ctts and stsz that disagree on the sample
+  count triggers. Such a sample now gets composition time offset 0
+- `TrakBox.GetSampleData` panicked for an sdtp with fewer entries than the
+  track has samples. The sample flags from a missing sdtp entry are now left
+  at their default
+- `StscBox.GetContainingChunks` and `StscBox.ChunkNrFromSampleNr` panicked
+  with index out of range for an stsc without entries (which is valid, and
+  what init segments have) and divided by zero for an entry with
+  samplesPerChunk == 0. Both now return an error
+- `StscBox.GetSampleDescriptionID` and `StszBox.GetSampleSize` indexed outside
+  their tables for out-of-range chunk and sample numbers
+- `StszBox.GetTotalSampleSize` validated the sample interval against
+  `SampleNumber` but indexed `SampleSize`, so a box where the two disagree
+  panicked
+- `mp4ff-crop` panicked on a file whose ctts, stts, stsc or stsz does not
+  cover all samples of the track, and reported only the last of several
+  cropping errors
+- `CryptSampleCenc`, `DecryptSampleCbcs` and `EncryptSampleCbcs` panicked for
+  subsample patterns whose byte counts reach outside the sample. Nothing ties
+  the senc byte counts to the actual sample sizes, and big counts could also
+  wrap in uint32. They now return an error
+- `DecryptFragment` and `DecryptFragmentWithKeys` panicked when the senc box
+  held subsample information for a different number of samples than the trun
+  declares
+- The nalu scanning functions in the `avc` and `hevc` packages trusted the
+  4-byte nalu length fields of a sample, so a bad length field made them slice
+  outside the sample and panic. A length field close to 2^32 also wrapped when
+  added to the position, which defeated the check in `avc.GetNalusFromSample`
+  and in `GetAVCProtectRanges`/`GetHEVCProtectRanges`. Affected are
+  `FindNaluTypes`, `FindNaluTypesUpToFirstVideoNALU`/`...Nalu`,
+  `ContainsNaluType`, `IsIDRSample`, `IsRAPSample`, `HasParameterSets`,
+  `GetParameterSets`, `GetNalusFromSample` and `ConvertSampleToByteStream`
+- `avc.ContainsNaluType` (and thereby `avc.IsIDRSample`) lacked the guard
+  against samples shorter than 4 bytes that the other scanning functions have,
+  so the loop limit underflowed and the first read went outside the sample
+- `DecodeStssSR` and `DecodeSttsSR` returned a zero-filled table and no error
+  when the reader held fewer bytes than the declared entry count; all
+  sample-table decoders now report truncated input as an error, before
+  allocating the table
+
+## [0.56.0] - 2026-08-22
+
+### Added
+
+- `LablBox` for the Label box `labl` (ISO/IEC 14496-12:2026 Section 8.10.5) with
+  the `LablIsGroupLabelFlag` flag mask and an `IsGroupLabel()` accessor, as used
+  for track labels in DASH-IF Ingest
+- `UdtaBox.Labls` with the `labl` children of a user data box, and
+  `UdtaBox.GroupLabl()` to find the group label of a label group
+- `TrakBox.Udta` reference to the user data box of a track
+- QuickTime sound sample description versions 1 and 2 are parsed into
+  `AudioSampleEntryBox.QuickTimeVersion`, `QuickTimeV1`, and `QuickTimeV2`,
+  preserved on encode (along with the QuickTime revision level, vendor, and
+  `CompressionID`), and the child boxes are read at the version-dependent
+  offset. `Info()` reports the effective channel count, sample size, and
+  sample rate from the version 2 struct
+- `WaveBox` for the QuickTime siDecompressionParam atom, so an esds wrapped
+  in a wave child of an audio sample entry becomes reachable as `Wave.Esds`.
+  Children that are not well-formed boxes (such as the spec-mandated
+  terminator atom when written with size zero) are preserved verbatim
+- `WaveBox.GetChildren`, so a wave box satisfies the `ContainerBox` interface
+- `DecoderConfigDescriptor.StreamTypeValue` and `UpStream` decompose the
+  packed streamType byte, and named constants cover the common stream types
+  (ISO/IEC 14496-1 Table 6) and object type indications (mp4ra.org), so
+  callers no longer need magic numbers for the esds vocabulary
+- `aac.DecodeAudioSpecificConfigHeader` parses the leading
+  AudioSpecificConfig fields (object type including the 31-escape, base
+  sampling frequency, channel configuration) for every audio object type,
+  not just the AAC-LC and HE-AAC types the full decoder supports
+- `ElstEntry.MediaRateFixed32` and `SetMediaRateFixed32` combine and split
+  the media rate halves as one signed 16.16 fixed-point number, so callers
+  no longer need to know the bit layout
+- `QuickTimeFormatFlagIsFloat` and the other CoreAudio/QTFF linear-PCM
+  format flags name the bits of
+  `QuickTimeV2SoundDescription.FormatSpecificFlags`, and the `IsFloat`,
+  `IsBigEndian`, and `IsSignedInteger` accessors read the common ones, so
+  lpcm entries can be interpreted without magic numbers
+
+### Changed
+
+- `Info()` escapes control characters in box types as `\xNN`, so a type such
+  as the four zero bytes of the QuickTime wave terminator atom stays visible
+- audio sample entries whose reserved bytes claim a QuickTime version whose
+  layout does not parse fall back to the plain ISO interpretation, so
+  previously decodable files keep decoding; the overlaid QuickTime bytes
+  (version, revision level, vendor) are now preserved on encode instead of
+  being zeroed
+- `DecodeAudioSampleEntry` now errors on bodies too short for the fixed
+  fields, and encoding errors on inconsistent
+  `QuickTimeVersion`/`QuickTimeV1`/`QuickTimeV2` combinations
+- The QuickTime audio sample entries `.mp3`, `lpcm`, `twos`, and `sowt`
+  decode as `AudioSampleEntryBox` (reachable as `StsdBox.Mp3` and
+  `StsdBox.QtPcm`) instead of falling through to `UnknownBox`. A body that
+  does not parse as a sound sample description still becomes an
+  `UnknownBox`, so previously decodable files keep decoding; a body that
+  does parse now re-encodes with the same fidelity as `mp4a` (zeroed
+  packet-size bytes, integer sample rate) instead of byte-verbatim. Note
+  that a `.mp3` entry carries no esds; its codec facts live in the sound
+  description fields themselves
+
+### Fixed
+
+- `hevc.ParseSliceHeader` applies the Section 7.4.7.1 inferences for slice
+  header fields that are absent from the bitstream, instead of leaving them at
+  the Go zero value:
+  - `slice_deblocking_filter_disabled_flag` from
+    `pps_deblocking_filter_disabled_flag`. This one also caused a parse failure:
+    a stream with deblocking disabled in the PPS and no slice header override
+    read a `slice_loop_filter_across_slices_enabled_flag` bit that is not there
+    and then failed byte_alignment (x265 `--no-deblock` output)
+  - `slice_loop_filter_across_slices_enabled_flag` from
+    `pps_loop_filter_across_slices_enabled_flag`
+  - `slice_beta_offset_div2` and `slice_tc_offset_div2` from
+    `pps_beta_offset_div2` and `pps_tc_offset_div2` when the slice header does
+    not override the deblocking parameters
+  - `pic_output_flag` as 1 when `output_flag_present_flag` is 0
+- `avc.ParsePPSNALUnit` rejects an out-of-range `num_slice_groups_minus1`
+  (max 7 for any profile) instead of appending one entry per signalled slice
+  group, which let a 7-byte malformed PPS NAL unit allocate over 10 GiB
+- `hevc.ParseVPSNALUnit` rejects an out-of-range `vps_num_hrd_parameters`
+  (max `vps_num_layer_sets_minus1 + 1`) and `vps_num_layer_sets_minus1`
+  (valid range 0-1023), which let a 33-byte malformed VPS NAL unit churn
+  30 GiB of HRD parameter allocations
+- the `alst` sample group entry no longer underflows its count of optional
+  entries when `roll_count` implies more bytes than the signalled
+  `description_length`, which let a 32-byte `sgpd` box allocate over 4 GiB
+- `avc.ParseSPSNALUnit` rejects an out-of-range
+  `num_ref_frames_in_pic_order_cnt_cycle` (valid range 0-255) instead of
+  allocating a slice sized from the raw field, which let a tiny malformed SPS
+  NAL unit trigger a multi-gigabyte allocation (found by fuzzing)
+- `MdatBox.HeaderSize` accounts for large lazy payloads, so trun data
+  offsets are no longer 8 bytes short for fragments above 4 GiB
+
+## [0.55.0] - 2026-07-27
+
+### Added
+
+- `Dec3Box.JOCComplexity` from the JOC (Joint Object Coding) extension of the `dec3` box
+  (ETSI TS 103 420 C.3) to detect Dolby Atmos in E-AC-3 tracks
+- `avc.CreateSEINalu` and `hevc.CreateSEINalu` to build a full SEI NAL unit (codec
+  NAL header + EBSP payload) from `sei.SEIMessage` values; the encode-side inverse of
+  `ParseSEINalu`
+- tkhd: the transformation matrix is parsed into `TkhdBox.Matrix` and preserved
+  on encode, so rotation metadata survives round trips; a zero-value `Matrix`
+  still encodes as the unity matrix. New helper `mp4.UnityMatrix()`
+- AV1 metadata OBUs in the `av1` package, in reusable layers: `MetadataOBU`
+  (`metadata_type` + payload) with `ParseMetadataOBU`, `ParseMetadataOBUFromOBU`,
+  `Encode` and `Size`, handling the mandatory `trailing_bits` and the reverse scan
+  for the last non-zero payload byte (AV1 spec 6.7.1), and `MetadataType` constants
+  for HDR CLL/MDCV, scalability, ITU-T T.35 and timecode. A payload that is not
+  byte-aligned shares its last byte with `trailing_bits`; `PayloadHasTrailingBits`
+  marks it so that `Encode` does not add a second `trailing_one_bit`
+- `av1.ITUTT35` for the `metadata_itu_t_t35` body (country code, its `0xff`
+  extension byte, and payload) with `ParseITUTT35`, `Encode`, `Size` and
+  `MetadataOBU`; it carries CTA-608 captions as well as HDR10+
+- CTA-608 closed captions in AV1: `av1.CreateCTA608MetadataOBU` builds a complete
+  caption metadata OBU from a `cc_data()` structure and `av1.ExtractCTA608` reads the
+  field 1 and field 2 byte pairs back from the OBUs of a temporal unit, plus
+  `ITUTT35.ITUData` and `ITUTT35.CTA608CCData`. The payload is identical to the
+  AVC/HEVC SEI one, so only the envelope differs between the codecs
+- `sei.CreateCTA608SEIMessage` builds a CTA-608 `user_data_registered_itu_t_t35`
+  (type 4) SEI message from a `cc_data()` structure, the encode-side counterpart of
+  `sei.ExtractCTA608sei`. Wrap it with `avc.CreateSEINalu` or `hevc.CreateSEINalu`.
+  Supporting helpers: `sei.CTA608ITUData`, `sei.CreateCTA608Payload`,
+  `sei.ITUData.Encode` and `sei.ITUDataSize`
+- Motion JPEG support: `mjpg` sample entry (JPEG image sequences, ISO/IEC 23008-12 Annex H)
+  with the `jpgC` (JPEGConfigurationBox) and `fiel` (field handling) boxes.
+  `mp4.TrakBox.SetMJpegDescriptor` creates an mjpg sample entry with an optional jpgC JPEG prefix
+- Decode support for the legacy motion JPEG sample entries `mp4v` (with esds JPEG object type,
+  ISO/IEC 14496-14) and `jpeg` (QuickTime), and `Esds` child access in `VisualSampleEntryBox`
+
+### Changed
+
+- CEA-608 is renamed to its current designation CTA-608 in the `sei` API:
+  `sei.CEA608sei`, `sei.ParseCEA608`, `sei.ExtractCEA608sei` and
+  `sei.ITUData.IsCEA608` become `sei.CTA608sei`, `sei.ParseCTA608`,
+  `sei.ExtractCTA608sei` and `sei.ITUData.IsCTA608`. This is a breaking change; the
+  old names are gone
+
+### Fixed
+
+- avcC encode now writes the 4 trailing-info bytes for all AVC profiles outside
+  66/77/88, symmetric with `Size()` and decode (e.g. profile 244)
+- unknown bytes after the avcC trailing info are preserved through decode/encode
+  in the new `DecConfRec.TrailingBytes` field instead of being dropped
+- visual sample entries with a too long compressor name length byte are decoded
+  by clamping the length to 31 like ffmpeg does, instead of failing
+- Panic in `hevc.ParseSEINalu` and `avc.ParseSEINalu` on NAL units shorter than
+  the codec's NAL unit header (e.g. an empty or single-byte HEVC SEI NALU);
+  such input now returns `ErrNotSEINalu`
+- `sei.DecodeUserDataRegisteredSEI`, `sei.ExtractCTA608sei` and `sei.ParseCTA608` no
+  longer panic on a short/truncated type-4 (user_data_registered_itu_t_t35) SEI
+  payload; they return an error that propagates through `avc`/`hevc.ParseSEINalu`
+- the build date in the `--version` output of the command line tools is rendered in
+  UTC, so that a commit made close to midnight is no longer reported as the
+  neighbouring day for users west of UTC
+
+## [0.54.0] - 2026-07-13
+
+### Added
+
+- AV1 bitstream parsing in the `av1` package: OBU splitting (`SplitOBUs`,
+  `ParseOBUHeader`, `ReadLEB128`), sequence headers (`ParseSequenceHeader`,
+  `SequenceHeader`, `CodecConfRec.SequenceHeader`), frame-header decoding
+  (`FrameHeaderDecoder`, `FrameHeader`) with per-frame resolution and tile layout,
+  random-access detection (`FrameType`, `ParseFrameHeaderStart`, `IsRAPSample`) and
+  tile-data location (`GetTileRanges`, verified byte-exact against shaka-packager)
+- AV1 RFC 6381 codecs string: `CodecConfRec.CodecString`, `SequenceHeader.CodecString`
+  and `av1.CodecString`; the `av1C` box `Info` and `mp4ff-pslister` now show the
+  sequence header, coded resolution, color configuration and codecs string for `av01`
+- AV1 common encryption (cenc/cbcs): `mp4.GetAV1ProtectRanges` protects only tile data
+  (OBU/frame/tile-group headers and tile-size fields stay clear) per the AV1 ISOBMFF
+  binding; `mp4ff-encrypt`/`mp4ff-decrypt` support `av01` tracks
+- `EncryptFragments` and `FragmentEncryptor` (from `InitProtectData.NewFragmentEncryptor`)
+  encrypt a decode sequence with a fresh per-sequence sample protector; `InitProtectData` is
+  immutable and safe to share across goroutines
+- `ivf` package to read and write the IVF container used for raw VP8/VP9/AV1 bitstreams (the
+  VPx/AV1 counterpart of Annex B), and an `ivf-to-mp4` example that muxes AV1 and VP9 IVF files
+  into fragmented MP4. Supported by `av1.OBU.Encode`/`Size`, `av1.CodecConfRecFromSequenceHeader`
+  and `mp4.TrakBox.SetAV1Descriptor`
+- `vp9` package parsing the VP9 uncompressed frame header (key-frame/random-access detection,
+  color configuration and picture size) with vpcC level computation, plus
+  `mp4.TrakBox.SetVPxDescriptor` to build vp08/vp09 sample entries from a vpcC box
+- `vp8` package parsing the VP8 frame tag and key-frame header (key-frame detection and picture
+  size); `ivf-to-mp4` now also muxes VP8 IVF into fragmented MP4
+
+### Fixed
+
+- Panic in `hevc.ParseSPSNALUnit` on malformed input where cpb_cnt_minus1 in
+  the sub-layer HRD parameters is 255 (found by fuzzing)
+
+## [0.53.0] - 2026-07-07
+
+### Added
+
+- `mp4ff-mvhevc` command line tool with `info` and `add` subcommands to inspect
+  MV-HEVC (Multi-View HEVC) files and to mux HEVC (Annex B or mp4) into a
+  single-track MV-HEVC mp4 with `hvcC`/`lhvC`, `oinf`/`linf` sample groups and
+  optional Apple spatial-video (`vexu`/`hfov`) metadata
+- `TrgrBox` for the Track Group Box (`trgr`, ISO/IEC 14496-12 Sec. 8.3.4) and a
+  generic `TrackGroupTypeBox` for its children (registered for the standard
+  `msrc` and `ster` track group types, and `cstg` — the complete subset track
+  grouping for L-HEVC, ISO/IEC 14496-15 Sec. 9.5.1), with a
+  `CreateTrackGroupTypeBox` helper and a `TrakBox.Trgr` reference.
+  Type-specific data after `track_group_id` (e.g. the `ster` `left_view_flag`)
+  is preserved for round-tripping
+- Apple spatial/stereo video metadata boxes in the Video Extended Usage box
+  (`vexu`) family: `VexuBox`, `EyesBox` (`eyes`), `CamsBox` (`cams`),
+  `ProjBox` (`proj`), `StriBox` (`stri`), `HeroBox` (`hero`), `BlinBox`
+  (`blin`), `PrjiBox` (`prji`) and `HfovBox` (`hfov`), with a `CreateVexuBox`
+  helper and `VisualSampleEntryBox.Vexu`/`.Hfov` child references (Apple
+  "QuickTime and ISO Base Media File Formats and Spatial and Immersive Media")
+- `LhvCBox` for the L-HEVC configuration box (`lhvC`, ISO/IEC 14496-15 Ed. 7
+  Sec. 9.5.3.1), carrying the L-HEVC decoder configuration record for the
+  enhancement layers of a layered HEVC (MV-HEVC/SHVC) stream, with a
+  `CreateLhvCFromNalus` constructor and a `VisualSampleEntryBox.LhvC` child
+  reference
+- Parsing of the HEVC multilayer/multiview VPS extension (`vps_extension()`,
+  ISO/IEC 23008-2 Annex F.7.3.2.1.1) used by MV-HEVC and SHVC, exposed as an
+  optional `hevc.VPS.Extension` (`*VPSExtension`) with scalability mask,
+  per-layer dimension/dependency info, layer profile-tier-levels, output layer
+  sets and `rep_format()` resolutions, plus `VPS.GetNumLayers`,
+  `IsMultiLayer`, `GetNumViews` and `ScalabilityMaskBits` helpers
+- L-HEVC (`lhvC`) decoder configuration record support in the hevc package:
+  `DecConfRec.DecodeLHEVCDecConfRec`, `EncodeLHEVC`, `EncodeLHEVCSW` and
+  `LHEVCSize` (ISO/IEC 14496-15 Ed. 7 Sec. 9.4.3)
+- `OinfSampleGroupEntry` for the Operating Points Information sample group
+  (`oinf`, ISO/IEC 14496-15 Ed. 7 Sec. 9.6.2) and `LinfSampleGroupEntry` for
+  the Layer Information sample group (`linf`, Sec. 4.15), used by layered HEVC
+  (MV-HEVC/SHVC)
+- `BuildOinfFromVPS` and `BuildLinfFromVPS` to derive the `oinf` and `linf`
+  sample group entries for a layered HEVC track from a parsed multilayer
+  `hevc.VPS`
+- `LbliSampleGroupEntry` for the L-HEVC external base layer sample group
+  (`lbli`, LhvcExternalBaseLayerInfo, ISO/IEC 14496-15 Ed. 7 Sec. 9.6.1),
+  used by L-HEVC tracks that predict from an external base layer in a
+  separate track
+- `SampleAccessor.ReadMdatData` for bulk reading of the raw mdat payload of a
+  fragment in a single read, intended for streaming with lazy mdat decoding
+- HDR metadata boxes `ClliBox` (Content Light Level, `clli`, ISO/IEC 14496-12
+  Sec. 12.1.6) and `MdcvBox` (Mastering Display Colour Volume, `mdcv`, ISO/IEC
+  14496-12 Sec. 12.1.7), including `VisualSampleEntryBox.Clli` and `.Mdcv`
+  child references
+- Support for Dolby Vision HEVC sample entries `dvh1` and `dvhe`: box decoding,
+  `StsdBox.HvcX` mapping, `TrakBox.SetHEVCDescriptor` (dvh1 like hvc1, dvhe like
+  hev1), and CENC/CBCS encryption via `InitProtect`/`ExtractInitProtectData`
+- `DoViConfigurationBox` for the Dolby Vision Configuration Box (`dvcC` for
+  dv_profile <= 7, `dvvC` for 8-9, `dvwC` for >= 10), carrying the
+  DOVIDecoderConfigurationRecord, with a `VisualSampleEntryBox.DoViConfig`
+  child reference
+- Parsing and writing of the recovery point SEI message (type 6) for both AVC
+  (`RecoveryPointAvcSEI`, ISO/IEC 14496-10 D.1.8) and HEVC (`RecoveryPointHevcSEI`,
+  ISO/IEC 23008-2 D.2.8)
+- Exponential Golomb support on the bit-level types used by the sei package:
+  `ReadExpGolomb`/`ReadSignedGolomb` on `bits.Reader` and
+  `WriteExpGolomb`/`WriteSignedGolomb` on `bits.FixedSliceWriter`
+
+### Changed
+
+- Minimum Go version bumped from 1.17 to 1.19. Fuzz tests require native
+  fuzzing (`testing.F`, Go 1.18), and Go 1.19 fixes fuzz-corpus CRLF handling
+  so the seed corpus loads on Windows CI
+- cenc encryption with an 8-byte input IV is now CMAF-conformant
+  (ISO/IEC 23000-19 Sec. 8.2.3.1): `InitProtect` sets
+  `tenc.DefaultPerSampleIVSize` to 8, `EncryptFragment` writes 8-byte
+  per-sample IVs to `senc` and increments the IV by one per sample
+  (ISO/IEC 23001-7 Sec. 9.2), and the returned chaining IV is 8 bytes.
+  A 16-byte input IV keeps the previous 16-byte behavior
+- `EncryptFragment` omits the `senc`, `saiz`, and `saio` boxes when a
+  fragment has no sample auxiliary information (full-sample encryption
+  with a constant IV, e.g. cbcs audio), as CMAF Sec. 8.2.2.1 recommends
+- `SaizBox.AddSampleInfo` now returns an error (sample-info sizes above
+  255 do not fit the 8-bit `sample_info_size`) instead of panicking on
+  inconsistent sizes, collapses uniform sizes into
+  `default_sample_info_size`, and switches to per-sample sizes when a
+  differing size arrives
+
+### Fixed
+
+- `DecryptFragment` no longer fails on fragments without a `senc` box
+  when the track uses full-sample encryption with a constant IV
+- `SencBox` keeps its subsample entries aligned with the sample index, so
+  a fragment mixing samples with and without subsamples encodes a zero
+  subsample count instead of panicking, and `saiz` sizes match the
+  `senc` layout
+- `GetAVCProtectRanges` and `GetHEVCProtectRanges` return an all-clear
+  subsample entry for a degenerate sample instead of an empty list
+
+## [0.52.0] - 2026-05-12
+
+### Added
+
+- KID-aware decryption key selection in mp4ff-decrypt via repeated `--key kid:key` flags (PR #490)
+- `DecryptSegmentWithKeys` and `DecryptFragmentWithKeys` functions in mp4 package for
+  multi-key decryption using KID/key maps. Currently only reads KID from tenc box
+  (seig sample group entry overrides are not yet supported)
+- `Fragment.ParseSenc()` and `MediaSegment.ParseSenc()` methods to parse senc boxes
+  using encryption info from a separate init segment
+- `SencBox.IsParsedByGuess()` to check if senc was parsed by heuristic
+- Support for IAMF (Immersive Audio Model and Formats) `iamf` sample entry and
+  `iacb` configuration box, including parsing of IAMF OBU headers for info dumping
+- Support for the legacy PIFF protection scheme (`schm.scheme_type = 'piff'`)
+  with PIFF TrackEncryption UUID box `8974dbce-7be7-4c51-84f9-7148f9882554`.
+  AlgorithmID 1/2 are mapped to cenc/cbcs respectively (issue #496)
+
+### Fixed
+
+- senc parsing when init segment is in a separate file (issue #492).
+  The perSampleIVSize is now determined with correct priority:
+  1. seig sample group entry, 2. tenc from init segment, 3. heuristic with saiz validation
+- `DecodeSenc` now delegates to `DecodeSencSR` removing duplicated code
+- Heuristic senc parsing validates candidates against saiz sample sizes,
+  preventing incorrect perSampleIVSize selection
+- `mp4.NewPsshBox` now stores the supplied `data` argument on the returned
+  box instead of dropping it (issue #497)
+- IV is now advanced between fragments when encrypting multiple cenc fragments
+  with `mp4ff-encrypt`, avoiding IV/keystream reuse across fragments (issue #499)
+
+### Changed
+
+- Minimum Go version bumped from 1.16 to 1.17 (ARM64 macOS support)
+- `mp4.EncryptFragment` now returns `(nextIV []byte, err error)` so callers
+  can chain the IV across fragments. Update call sites that previously
+  captured only the error
+
+## [0.51.0] - 2026-02-20
+
+### Added
+
+- Copy methods for FtypBox and StypBox
+- StreamFile for decoding a stream of fragmented mp4
+  - BoxSeekReader to make an io.Reader available for lazy mdat processing
+  - examples/stream-encrypt showing how to read and process a multi-segment file
+    - On an HTTP request, a file is read, optionally further fragmented, and then encrypted
+- New functions DecodeBoxBody and similar to allow for two-step header and body parsing
+- Support for FLAC audio including fLaC and dfLa boxes
+- Support for ID32 (ID3v2) box
+- Support Spherical Video V1 Metadata
+
+### Fixed
+
+- AddEmptyTrack returns reference to newly added track
+- duration is printed by `MdhdBox.Info()`
+- extended size usage only allowed for `mdat` boxes
+- trackID is checked when decrypting content
+- Proper handling of trailing bytes in avc1 (VisualSampleEntryBox). Issue 444
+- Proper removal of boxes when decrypting PR 464
+- More robust decode of malformed files
+
+## [0.50.0] - 2025-09-05
+
+### Added
+
+- Support for VVC with vvcC box and VvcDecoderConfigurationRecord
+- Support for parsing of VVC NALU headers and listing types in mp4ff-nallister
+- Support for AC-4 audio including ac-4 and dac4 boxes
+- Support for Opus and dOps boxes
+- Support for MPEG-H sample descriptors including mhaC configuration boxes
+- Support for AVS3 video sample descriptors: avs3 and av3c boxes
+- Improved error handling for too short box header
+
+### Changed
+
+- Makefile update to setup and run pre-commit with configuration
+- Return type of Sample.PresentationTime to int64 instead of uint64
+  This may happen together with edit lists (seen for VVC video)
+- Corrected SetSyncSampleFlags and SetNonSyncSampleFlags functions
+- Allow for trailing less than 8-bytes in VisualSampleEntry. Solves issue 444
+- Allow unspecified `aspect_radio_idc == 0` in avc VUI
+
+### Fixed
+
+- The SliceHeader parser for AVC now uses SPS ID and not PPS ID to look up the SPS
+
+## [0.49.0] - 2025-06-26
+
+### Added
+
+- NewPsshBox function
+
+### Changed
+
+* `mp4.DecodeFile` can return a partially decoded file with an error
+* `mp4ff-info` may print a partially parsed box tree together with an error
+
+### Fixed
+
+- Handle multi-segment files with sidx without styp #430
+- Improved RemoveEncryptionBoxes function
+
+## [0.48.0] - 2025-03-28
+
+### Changed
+
+- mp4.NewUUIDFromHex() changed to more general mp4.NewUUIDFromString()
+- cmd/mp4ff-decrypt -key option instead of -k. Takes hex or base64 value
+- cmd/mp4ff-encrypt -key and -kid options now take hex or base64 values
+- Replaced mp4.AlouBox and mp4.TlouBox with a common mp4.LoudnessBaseBox
+- mp4.Measurement changed to clearer mp4.LoudnessMeasurement
+
+### Added
+
+- mp4.SetUUID() can take base64 string as well as hex-encoded.
+- Support for weird dac3 box with initial 4 zero bytes (#395)
+- Lots of fuzzying tests and changes to avoid panic on bad input data
+- Support for SMPTE-2086 Mastering Display Metadata Box (SmDm)
+- Support for Content Light Level Box (CoLL)
+- Better test coverage for VisualSampleEntryBox
+- IsVideoNaluType functions in both avc and hevc packages
+- Exported constants for ColrBox's ColorType
+- mp4.NewFreeBox, mp4.NewSkipBox functions
+- mp4.FreeBox.Payload method
+- mp4.SencBox methods: SetPerSampleIVSize, PerSampleIVSize, and ReadButNotParsed
+- Function mp4.CreateUnknownBox
+- Functions mp4.NewTfrfBox and mp4.NewTfxdBox
+- HEVC (hvc1) encryption
+- AppendProtectRange function is now public
+- Tfhd bit masks are now public (#423)
+- Skip bytes support for AVCDecoderConfigurationRecord (#420)
+
+### Fixed
+
+- Support short ESDS without SLConfig descriptor (issue #393)
+- HEVC Slice Header CollocatedFromL0Flag should be true by default
+- Update to golangci-lint/v2 and fixed all warnings
+- Remove more boxes when decrypting files (pr #424)
+
+## [0.47.0] - 2024-11-12
+
+### Changed
+
+- CreatePrftBox now takes flags parameter
+- PrftBox Info output
+- Removed ReplaceChild method of StsdBox
+- CreateHdlr name for timed metadata
+- extension .m4s is interpreted as MP4 file in mp4ff-pslister
+- moved mp4.GetVersion() to internal.GetVersion()
+
+### Added
+
+- NTP64 struct with methods to convert to time.Time
+- Constants for PrftBox flags
+- Unittest to all programs in [cmd](cmd) and [examples](examples).
+- Documentation in doc.go files for all packages
+
+### Fixed
+
+- Allow missing optional DecoderSpecificInfo
+- Avoid mp4.File.Mdat pointing to an empty mdat box
+- `cmd/mp4ff-encrypt` did not parse command line
+- `SeigSampleGroupEntry` calculated skipBytes incorrectly
+- `cmd/mp4ff-pslister` did not parse annex B HEVC correctly
+- error when decrypting and re-encrypting a segment (issue #378)
+
+### Removed
+
+- Too specific functions DumpWithSampleData and Fragment.DumpSampleData
+
+## [0.46.0] - 2024-08-08
+
+### Fixed
+
+- mvhd, tkhd, and mdhd timestamps were off by one day
+- allow other sbgp and sgpd types than seig with senc
+
+### Added
+
+- mvhd, tkhd, and mdhd methods to set and get creation and modification times
+- Event Message boxes evte, emib, emeb
+- GetBtrt method to StsdBox
+- Btrt pointer attribute in AudioSampleEnntry
+- stpp can be used as value to CreateEmptyTrak
+
+## [0.45.1] - 2024-07-12
+
+### Added
+
+- Box decoder error messages include start position
+
+### Fixed
+
+- Overflow in calculating sample decode time
+- elng box errononously did not include full box headers
+
+## [0.45.0] - 2024-06-06
+
+### Changed
+
+- minimum Go version 1.16.
+- ioutil imports replaced by io and os imports
+- Info (mp4ff-info) output for esds boxes
+- API of descriptors
+- Parsing and info output for url boxes
+
+### Fixed
+
+- support for parsing of hierarchical sidx boxes
+- handling of partially bad descriptors
+- handle url boxes missing mandatory zero-ending byte
+
+### Added
+
+- support for ssix box
+- support for leva box
+- details of descriptors as Info output (mp4ff-info)
+
+## [0.44.0] - 2024-04-19
+
+### Added
+
+- New `TryDecodeMfro` function
+- New `mp4ff-subslister` tool replacing `mp4ff-wvttlister`. It supports `wvtt` and `stpp`
+- `File.UpdateSidx()` to update or add a top level sidx box for a fragmented file
+- `mp4.DecStartSegmentOnMoof` flag to make the Decoder interpret every moof as
+  a new segment start, unless styp, sidx, or mfra boxes give that information.
+- New example `add-sidx` shows how on can add a top-level `sidx` box to a fragmented file.
+  It further has the option to remove unused encryption boxes, and to interpret each
+  moof box as starting a new segment.
+- New method `MoovBox.IsEncrypted()` checks if an encrypted codec is signaled
+
+### Fixed
+
+- More robust check for mfro at the end of file
+- GetTrex() return value
+- Can now write PIFF `uuid` box that has previously been read
+- Does now avoid the second parsing of `senc` box if the file is to encrypted as seen in moov box.
+
+### Removed
+
+- mp4ff-wvttlister tool removed and replaced by mp4ff-subslister
+
+## [0.43.0] - 2024-04-04
+
+### Added
+
+- InitSegment.TweakSingleTrakLive changes an init segment to fit live streaming
+- Made bits.Mask() function public
+- New counter methods added to bits.Reader
+- colr box support for nclc and unknown colour_type
+- av01, encv, and enca direct pointers in stsd
+
+### Changed
+
+- All readers and writers in bits package now stop working at first error and provides the first error as AccError()
+- Renamed bits.AccErrReader, bits.AccErrEBSPReader, bits.AccErrWriter to corresponiding names without AccErr
+- Renamed bits.SliceWriterError to bits.ErrSliceWrite
+- colr box supports unknown colrType
+
+### Fixed
+
+- kind box full-box header
+- stpp support when the optional fields do not have a zero-termination byte
+- mp4ff-wvttlister now lists all boxes in a sample
+
+## [0.42.0] - 2024-01-26
+
+### Fixed
+
+- Support avc3 sample description when encrypting
+- Full ProfileLevelTier parsing for HEVC
+- Make pssh UUID comparison case-insensitive
+
+### Added
+
+- W3C Common PSSH Box UUID
+- HEVC PicTiming SEI message parsing
+- JSON marshaling of AVC PicTiming SEI message
+- HEVC single-layer VPS parsing including profile/tier/level, timing info, and HRD parameters
+- HEVC NALU header helpers: GetNaluLayerID, GetNaluTemporalID, ParseNaluHeader, SplitNalusByLayerID
+- mp4ff-pslister: verbose output now includes parsed VPS details for HEVC
+
+## [0.41.0] - 2024-01-12
+
+### Added
+
+- Support for decrypting PIFF-encrypted segments
+
+### Fixed
+
+- Parsing of AVCDecoderConfigurationRecord
+- Parsing of time offset in AVC PicTiming SEI
+- Set senc.perSampleIVSize properly
+
+## [0.40.2] - 2023-11-17
+
+### Fixed
+
+- Test of AVC PicTiming SEI with cbpDbpDelay set
+- mp4ff-nallister has nicer output for annexb streams
+- mp4ff-nallister handles AVC PicTiming SEI with cbpDbpDelay set
+
+## [0.40.1] - 2023-11-01
+
+### Fixed
+
+- Swap of parameters in mp4ff-decrypt
+
+## [0.40.0] - 2023-10-28
+
+### Added
+
+- New CLI app: mp4ff-encrypt to encrypt segments
+- New CLI app: mp4ff-decrypt to decrypt segments
+- New encyption-related functions in mp4
+  - GetAVCProtectRanges to fine protection ranges for AVC video
+  - CryptSampleCenc for encrypting of decrypting with cenc scheme
+  - EncryptSampleCbcs - for encrypting with cbcs scheme
+  - DecryptSampleCbcs - for decrypting with cbcs scheme
+  - InitProtect to protect an init segment
+  - EncryptFragment to encrypt a fragment
+  - DecryptInit to extract and remove  decryption info from an init segment
+  - DecryptFragment to decrypt a fragment
+  - ExtractInitProtect to generate data needed for encryption
+- AccErrEBSPReader.NrBitsRead method
+- PsshBoxesFromBase64 and PsshBoxesFromBytes functions
+
+### Fixed
+
+- SPS.ChromaArrayType method
+- Makefile now builds all CLI applications with version
+- DecryptInit extracts pssh boxes
+
+### Changed
+
+- Removed examples/decrypt-cenc and instead made cmd/mp4ff-decrypt
+
+## [0.39.0] - 2023-10-13
+
+### Changed
+
+- TfraEntry Time and MoofOffset types changed to unsigned
+- TfraEntr attribute name SampleDelta corrected to SampleNumber
+
+### Added
+
+- MediaSegment and Fragment have new StartPos attribute
+- mp4.File now has Mfra pointer
+- MfraBox has new method FindEntry
+- MediaSegment, Fragment, and Trun method CommonSampleDuration
+- Added two MSS UUID constants
+
+### Fixed
+
+- fix AVC slice header parsing #272
+- mp4ff-wvttlister works with Unified Streaming wvtt ismt file
+- Fragment.GetFullSamples() allows tfdt to be absent
+- Fragment.GetFullSamples() defaults to offset being moof
+- mp4ff-wvttlister works for Unified Streaming wvtt asset
+- mp4crop now crops elst entries
+- mp4crop now handles multiple sample durations correctly
+- HEVC SPS parsing details
+
+## [0.38.1] - 2023-09-22
+
+### Fixed
+
+- ReadMP4File() failed when mfro not present
+
+## [0.38.0] - 2023-09-06
+
+### Added
+
+- Loudness boxes `ludt`, `tlou`, and `alou`
+- Description boxes `desc`, `©cpy`, `©nam`, `©ART` boxes
+- `GenericContainerBox` struct
+- new `DecFileFlags` provide option to `DecodeFile` to look for mfra box
+
+### Changed
+
+- Made `©too` use `GenericContainerBox`
+- SidxBox got new attribute `AnchorPoint`
+
+### Fixed
+
+- DecodeFile uses sidx or mfra data to find segment boundaries
+
+## [0.37.0] - 2023-08-14
+
+### Added
+
+- Pointer to stpp sample entry in StsdBox
+- Doc strings for pointers in StsdBox
+
+### Fixed
+
+- discard of parsing HEVC SPS data
+- `SttsBox.GetSampleNrAtTime` now supports a final zero sample duration
+
+## [0.36.0] - 2023-06-07
+
+### Changed
+
+- SEI NAL unit parser reports ErrRbspTrailingBitsMissing error together with NAL units
+- mp4ff-nallister reports error and SEI data when `rbsp_trailing_bits` are missing
+- AVC SPS HRD parameter name corrected to DpbOutputDelayLengthMinus1
+
+### Fixed
+
+- Add WriteFlag method to SliceWriter interface (present in FixedSliceWriter)
+- Parsing of AVC SEI pic_timing with HRD parameters
+- mp4ff-nallister handles AVC SEI pic_timing with HRD parameters if SPS is present
+- fix error in TimeOffset output of SEI 136
+
+### Added
+
+- Support for SEI message 1 pic_timing for AVC
+- Example `combine-segs` that shows how to multiplex init and media segments into multi-track segments
+
+## [0.35.0] - 2023-04-18
+
+### Fixed
+
+- `stpp` box handles optional empty lists properly (a single zero byte)
+- AVC slice size value
+
+### Added
+
+- Exported function: `bits.CeilLog2`
+- PPS parsing for HEVC
+- `mp4ff-pslister` now provides PPS details for HEVC
+- `mp4ff-pslister` now extracts inband parameter sets in progressive mp4 files
+- Complete parsing of HEVC SPS extensions
+- Parsing of HEVC slice header
+- `SetType` method for `mp4.AudioSampleEntryBox`
+
+## [0.34.1] - 2023-03-09
+
+### Fixed
+
+- Only start new segment at start or styp box
+
+## [0.34.0] - 2023-02-28
+
+### Added
+
+- New function: `mp4.NewMediaSegmentWithStyp()`
+- Associate emsg boxes with fragments
+- New Fragment method: `AddEmsg()`
+- `colr` box support
+- CHANGELOG.md (this file) instead of Versions.md
+- More tests
+
+### Fixed
+
+- Bugs in FixedSliceReader: ReadUint24 and LookAhead
+
+### Changed
+
+- Optimized translation from Annex B (start-code separated) video byte streams into length-field
+  separated one
+- Output of cenc example changed with styp boxes not included
+- ADTS parsing somewhat more robust
+- LastFragment() returns nil if no fragment in Segment
+- Makefile target `coverage`
+
+## [0.33.2] - 2023-01-26
+
+### Changed
+
+- Restored parsing of non-complete mdat box to v0.33.0 behavior, where a partial
+  mdat box is not an error
+
+## [0.33.1] - 2023-01-25
+
+### Fixed
+
+- Added missing parsing of sps_scaling_list_data_present_flag in HEVC SPS
+
+## [0.33.0] - 2023-01-25
+
+### Added
+
+- Support QuickTime meta box as well as ISOBMFF meta box
+- New possibility to disable parsing of specific boxes
+
+## [0.32.0] - 2023-01-05
+
+### Changed
+
+- Moved repo to github.com/Eyevinn/mp4ff
+
+### Deprecated
+
+- The github.com/edgeware package path (but redirected by GitHub)
+
+## [0.31.0] - 2022-12-28
+
+### Changed
+
+- Support multiple sidx
+- Optimize stsc lookups
+- New return type for NewNaluArray
+
+### Fixed
+
+- Fixed bugs in prft, adts and avc interlace
+
+## [0.30.1] - 2022-11-06
+
+### Fixed
+
+- Fixed optimized sample copying bug introduced in v0.30.0
+
+## [0.30.0] - 2022-11-04
+
+### Added
+
+- Full AVC slice header parsing.
+- Complete set of AVC and HEVC SEI message detection
+- Parsing of some SEI messages (136, 137, 144)
+- Write of SEI message (#182)
+- Optimizations in ctts and sample copying
+- More byte stream methods
+- mp4ff-pslister can now work on mp4 segments
+- New functions for extracting NALUs for AVC and HEVC
+- Optimized ctts lookup
+- Optimized file.CopySampleData output allocations
+
+### Fixed
+
+- mp4ff-nallister NALU output
+- emsg parsing
+- HEVC nalu array bug
+- Overflow in tfdt time (#177)
+
+## [0.29.0] - 2022-06-21
+
+### Changed
+
+- Improved uuid box handling
+- Improved esds box and underlying descriptor handling
+- Extended decryption example with cbcs encryption
+- Improved the decryption example with in-place cenc decryption
+
+## [0.28.0] - 2022-05-12
+
+### Added
+
+- Full HEVC SPS parsing
+
+### Changed
+
+- Better video sample entry generation
+- More AC-3/EC-3 support.
+- Extended EBSPWriter
+- Optimize: struct field alignments in bits package
+
+### Fixed
+
+- sdtp reference in StblBox
+- decrypt-cenc example
+- mp4ff-crop bad command line parameters
+
+## [0.27.0] - 2022-03-06
+
+### Added
+
+- New more efficient SliceReader/SliceWriter based Box methods
+- AC-3 and Enhanced AC-3 support
+
+### Changed
+
+- Public trun flag bits
+- Public DecodeHeader method and BoxHeader structure
+- mp4ff-nallister now takes Annex B byte stream
+- mp4ff-pslister now takes Annex B byte stream and prints codec string
+
+### Fixed
+
+- mp4ff-crop stss bug
+- ffmpeg data box decode
+- stsz uniform size decode
+
+## [0.26.1] - 2022-01-14
+
+### Fixed
+
+- Don't move trak boxes to be before mvex
+
+## [0.26.0] - 2022-01-13
+
+### Added
+
+- New tool mp4ff-crop for cropping mp4 file
+- New example decrypt-cenc for decrypting segment
+- SEI parsing for H.264
+- Interpret timestamps in mvhd, tkhd, and mdhd
+
+## [0.25.0] - 2021-10-04
+
+### Added
+
+- Size() methods added to InitSegment, Fragment and MediaSegment
+- SampleIntervals for more efficient transformation of segments
+- Slices of samples and fullsamples
+- Create init segments for wvtt and stpp
+
+### Changed
+
+- Improvements to ctts and stts boxes
+- Changed sample slices to remove pointers
+- Spell out compositionTimeOffset instead of cto
+- More efficient code to check for AVC and HEVC parameter sets
+
+## [0.24.0] - 2021-06-26
+
+### Added
+
+- Support for cslg and ©too boxes
+
+### Changed
+
+- DecodeFile API change to allow for lazy mdat decode
+- segmenter example extension with lazy mode for decode and encode
+- StssBox.IsSyncSample thread safe
+
+## [0.23.1] - 2021-05-20
+
+### Fixed
+
+- Fixed segment encode mode without optimization
+
+## [0.23.0] - 2021-04-30
+
+### Changed
+
+- API change: Verbatim encode more flexible with FragEncMode and EncOptimize
+
+## [0.22.0] - 2021-04-23
+
+### Added
+
+- Construct AVC and HEVC codec strings from SPS
+
+### Changed
+
+- More robust parsing of ADTS
+
+## [0.21.1] - 2021-03-24
+
+### Fixed
+
+- Allow ADTS ID corresponding to MPEG-2
+
+## [0.21.0] - 2021-03-18
+
+### Added
+
+- Version number can be retrieved from cmd apps and from mp4 library.
+
+### Changed
+
+- Updated version is inserted as cmd apps are built using top-level Makefile.
+
+## [0.20.0] - 2021-03-09
+
+### Added
+
+- New tool `mp4ff-pslister` for SPS and other parameter sets
+
+## [0.19.0] - 2021-03-08
+
+### Added
+
+- Added mfra, mfro, tfra boxes
+- Added kind, trep, skip, ilst boxes
+
+### Fixed
+
+- Fix for double trun-optimization
+
+## [0.18.0] - 2021-01-26
+
+### Added
+
+- New tool `mp4ff-wvttlister` lists details of wvtt (WebVTT in ISOBMFF) samples
+- More functions and methods for HEVC video handling
+
+### Fixed
+
+## [0.17.1] - 2021-01-19
+
+### Fixed
+
+- Fixed bugs in encoding/decoding hvcC box and HEVCDecoderConfigurationRecord
+
+## [0.17.0] - 2021-01-15
+
+### Added
+
+- Support for HEVC/H.265 video parsing and encoding of boxes.
+- New tool `mp4ff-nallister` to list nal units inside video samples in MP4 files.
+- Support for multi-track fragmented files including new example
+- Support for some new boxes: meta, udta, pasp, clap
+
+### Changed
+
+- mp4ff-pslister updated to support HEVC and reading parameter sets from byte streams and hex strings
+- Improvements to Info output from mp4ff-info
+
+## [0.16.2] - 2021-01-05
+
+### Fixed
+
+- Fixed and clarified that sample number starts at one
+
+## [0.16.1] - 2021-01-04
+
+### Fixed
+
+- Fixed isNonSync flag definition
+- Use sdtp entries and transfer to sample flags in segmenter example
+
+## [0.16.0] - 2020-12-31
+
+### Added
+
+- New tool `mp4ff-info` prints details of a hierarchy of boxes. Has configurable levels of details
+- Many new boxes: saio, saiz, enca, encv, frma, schm, schi, sinf, tenc, sbgp, sgpd, sdtp
+- Support for writing largesize mdat box, even for smaller sizes
+- Support for adts encode and decode
+
+### Changed
+
+- Much more detailed box info via recursive Info method
+- Better tests vs golden files that can be updated with -update flag
+- More error robustness in aac reading with new AccErrReader
+- Replaced some panic calls with return of errors
+
+## [0.15.0] - 2020-12-09
+
+### Changed
+
+- API for AVC video to to allow multiple SPS.
+- Some more NALU types identified.
+
+### Fixed
+
+- Bug in handling of start-code emulation prevention bytes
+
+## [0.14.0] - 2020-12-09
+
+### Added
+
+- AVC Byte stream (Annex B) support
+
+## [0.13.0] - 2020-11-17
+
+### Fixed
+
+- Removed non-standard log package dependency
+
+## [0.12.0] - 2020-11-17
+
+### Changed
+
+- Complete parsing of AVC (H.264) SPS and PP
+
+## [0.11.1] - 2020-11-13
+
+### Fixed
+
+- Made SPS parser more robust
+
+## [0.11.0] - 2020-11-13
+
+### Added
+
+- Lots of stuff
+
+## [0.10.1] - 2020-09-23
+
+### Fixed
+
+- First sample-flag in trun and traf boxes
+
+## [0.10.0] - 2020-09-03
+
+### Added
+
+- First release tag on GitHub
+- Lots of stuff
+
+### Changed
+
+- New unique repo name: `mp4ff`
+
+[Unreleased]: https://github.com/Eyevinn/mp4ff/compare/v0.62.1...HEAD
+[0.62.1]: https://github.com/Eyevinn/mp4ff/compare/v0.62.0...v0.62.1
+[0.62.0]: https://github.com/Eyevinn/mp4ff/compare/v0.61.0...v0.62.0
+[0.61.0]: https://github.com/Eyevinn/mp4ff/compare/v0.60.0...v0.61.0
+[0.60.0]: https://github.com/Eyevinn/mp4ff/compare/v0.59.0...v0.60.0
+[0.59.0]: https://github.com/Eyevinn/mp4ff/compare/v0.58.0...v0.59.0
+[0.58.0]: https://github.com/Eyevinn/mp4ff/compare/v0.57.0...v0.58.0
+[0.57.0]: https://github.com/Eyevinn/mp4ff/compare/v0.56.0...v0.57.0
+[0.56.0]: https://github.com/Eyevinn/mp4ff/compare/v0.55.0...v0.56.0
+[0.55.0]: https://github.com/Eyevinn/mp4ff/compare/v0.54.0...v0.55.0
+[0.54.0]: https://github.com/Eyevinn/mp4ff/compare/v0.53.0...v0.54.0
+[0.53.0]: https://github.com/Eyevinn/mp4ff/compare/v0.52.0...v0.53.0
+[0.52.0]: https://github.com/Eyevinn/mp4ff/compare/v0.51.0...v0.52.0
+[0.51.0]: https://github.com/Eyevinn/mp4ff/compare/v0.50.0...v0.51.0
+[0.50.0]: https://github.com/Eyevinn/mp4ff/compare/v0.49.0...v0.50.0
+[0.49.0]: https://github.com/Eyevinn/mp4ff/compare/v0.48.0...v0.49.0
+[0.48.0]: https://github.com/Eyevinn/mp4ff/compare/v0.47.0...v0.48.0
+[0.47.0]: https://github.com/Eyevinn/mp4ff/compare/v0.46.0...v0.47.0
+[0.46.0]: https://github.com/Eyevinn/mp4ff/compare/v0.45.1...v0.46.0
+[0.45.1]: https://github.com/Eyevinn/mp4ff/compare/v0.45.0...v0.45.1
+[0.45.0]: https://github.com/Eyevinn/mp4ff/compare/v0.44.0...v0.45.0
+[0.44.0]: https://github.com/Eyevinn/mp4ff/compare/v0.43.0...v0.44.0
+[0.43.0]: https://github.com/Eyevinn/mp4ff/compare/v0.42.0...v0.43.0
+[0.42.0]: https://github.com/Eyevinn/mp4ff/compare/v0.41.0...v0.42.0
+[0.41.0]: https://github.com/Eyevinn/mp4ff/compare/v0.40.2...v0.41.0
+[0.40.2]: https://github.com/Eyevinn/mp4ff/compare/v0.40.1...v0.40.2
+[0.40.1]: https://github.com/Eyevinn/mp4ff/compare/v0.40.0...v0.40.1
+[0.40.0]: https://github.com/Eyevinn/mp4ff/compare/v0.39.0...v0.40.0
+[0.39.0]: https://github.com/Eyevinn/mp4ff/compare/v0.38.0...v0.39.0
+[0.38.1]: https://github.com/Eyevinn/mp4ff/compare/v0.37.0...v0.38.0
+[0.38.0]: https://github.com/Eyevinn/mp4ff/compare/v0.37.0...v0.38.0
+[0.37.0]: https://github.com/Eyevinn/mp4ff/compare/v0.36.0...v0.37.0
+[0.36.0]: https://github.com/Eyevinn/mp4ff/compare/v0.35.0...v0.36.0
+[0.35.0]: https://github.com/Eyevinn/mp4ff/compare/v0.34.1...v0.35.0
+[0.34.1]: https://github.com/Eyevinn/mp4ff/compare/v0.34.0...v0.34.1
+[0.34.0]: https://github.com/Eyevinn/mp4ff/compare/v0.33.2...v0.34.0
+[0.33.2]: https://github.com/Eyevinn/mp4ff/compare/v0.33.1...v0.33.2
+[0.33.1]: https://github.com/Eyevinn/mp4ff/compare/v0.33.0...v0.33.1
+[0.33.0]: https://github.com/Eyevinn/mp4ff/compare/v0.32.0...v0.33.0
+[0.32.0]: https://github.com/Eyevinn/mp4ff/compare/v0.31.0...v0.32.0
+[0.31.0]: https://github.com/Eyevinn/mp4ff/compare/v0.30.0...v0.31.0
+[0.30.1]: https://github.com/Eyevinn/mp4ff/compare/v0.30.0...v0.30.1
+[0.30.0]: https://github.com/Eyevinn/mp4ff/compare/v0.29.0...v0.30.0
+[0.29.0]: https://github.com/Eyevinn/mp4ff/compare/v0.28.0...v0.29.0
+[0.28.0]: https://github.com/Eyevinn/mp4ff/compare/v0.27.0...v0.28.0
+[0.27.0]: https://github.com/Eyevinn/mp4ff/compare/v0.26.0...v0.27.0
+[0.26.1]: https://github.com/Eyevinn/mp4ff/compare/v0.26.0...v0.26.1
+[0.26.0]: https://github.com/Eyevinn/mp4ff/compare/v0.25.0...v0.26.0
+[0.25.0]: https://github.com/Eyevinn/mp4ff/compare/v0.24.0...v0.25.0
+[0.24.0]: https://github.com/Eyevinn/mp4ff/compare/v0.23.0...v0.24.0
+[0.23.1]: https://github.com/Eyevinn/mp4ff/compare/v0.23.0...v0.23.1
+[0.23.0]: https://github.com/Eyevinn/mp4ff/compare/v0.22.0...v0.23.0
+[0.22.0]: https://github.com/Eyevinn/mp4ff/compare/v0.21.0...v0.22.0
+[0.21.1]: https://github.com/Eyevinn/mp4ff/compare/v0.21.0...v0.21.1
+[0.21.0]: https://github.com/Eyevinn/mp4ff/compare/v0.20.0...v0.21.0
+[0.20.0]: https://github.com/Eyevinn/mp4ff/compare/v0.19.0...v0.20.0
+[0.19.0]: https://github.com/Eyevinn/mp4ff/compare/v0.18.0...v0.19.0
+[0.18.0]: https://github.com/Eyevinn/mp4ff/compare/v0.17.0...v0.18.0
+[0.17.1]: https://github.com/Eyevinn/mp4ff/compare/v0.17.0...v0.17.1
+[0.17.0]: https://github.com/Eyevinn/mp4ff/compare/v0.16.0...v0.17.0
+[0.16.2]: https://github.com/Eyevinn/mp4ff/compare/v0.16.1...v0.16.2
+[0.16.1]: https://github.com/Eyevinn/mp4ff/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/Eyevinn/mp4ff/compare/v0.15.0...v0.16.0
+[0.15.0]: https://github.com/Eyevinn/mp4ff/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/Eyevinn/mp4ff/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/Eyevinn/mp4ff/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/Eyevinn/mp4ff/compare/v0.11.0...v0.12.0
+[0.11.1]: https://github.com/Eyevinn/mp4ff/compare/v0.11.0...v0.11.1
+[0.11.0]: https://github.com/Eyevinn/mp4ff/compare/v0.10.0...v0.11.0
+[0.10.1]: https://github.com/Eyevinn/mp4ff/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/Eyevinn/mp4ff/compare/v0.9.0...v0.10.0

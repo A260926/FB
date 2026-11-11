@@ -1,0 +1,263 @@
+package main
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/mp4"
+)
+
+// Segmenter - segment the progressive inFIle
+type Segmenter struct {
+	inFile   *mp4.File
+	resolver mp4.DataResolver // reads sample data that the tracks' dref boxes place in other files
+	tracks   []*Track
+	nrSegs   int //  target number of segments
+}
+
+// Track - media track defined by inTrak
+type Track struct {
+	trackType string
+	inTrak    *mp4.TrakBox
+	timeScale uint32
+	trackID   uint32 // trackID in segmented output
+	lang      string
+	segments  []sampleInterval
+}
+
+// NewSegmenter - create a Segmenter from inFile and fill in track information.
+// resolver reads sample data that the tracks' dref boxes place in other files.
+func NewSegmenter(inFile *mp4.File, resolver mp4.DataResolver) (*Segmenter, error) {
+	if inFile.IsFragmented() {
+		return nil, fmt.Errorf("segmented input file not supported")
+	}
+	if inFile.Moov == nil || inFile.Moov.Mvhd == nil {
+		return nil, fmt.Errorf("no moov box with an mvhd box found")
+	}
+	s := Segmenter{inFile: inFile, resolver: resolver}
+	traks := inFile.Moov.Traks
+	for i, trak := range traks {
+		if missing := missingTrakBox(trak); missing != "" {
+			return nil, fmt.Errorf("track %d has no %s box", i+1, missing)
+		}
+		track := &Track{trackType: "", lang: ""}
+		switch hdlrType := trak.Mdia.Hdlr.HandlerType; hdlrType {
+		case "vide":
+			track.trackType = "video"
+		case "soun":
+			track.trackType = "audio"
+		default:
+			return nil, fmt.Errorf("hdlr type %q not supported", hdlrType)
+		}
+		track.lang = trak.Mdia.Mdhd.GetLanguage()
+		if trak.Mdia.Elng != nil {
+			track.lang = trak.Mdia.Elng.Language
+		}
+		track.inTrak = trak
+		track.timeScale = trak.Mdia.Mdhd.Timescale
+		s.tracks = append(s.tracks, track)
+	}
+	return &s, nil
+}
+
+// missingTrakBox returns the type of the first box that segmenting trak needs and trak lacks,
+// or "" if trak has them all.
+func missingTrakBox(trak *mp4.TrakBox) string {
+	switch {
+	case trak.Mdia == nil:
+		return "mdia"
+	case trak.Mdia.Mdhd == nil:
+		return "mdhd"
+	case trak.Mdia.Hdlr == nil:
+		return "hdlr"
+	case trak.Mdia.Minf == nil:
+		return "minf"
+	case trak.Mdia.Minf.Stbl == nil:
+		return "stbl"
+	}
+	stbl := trak.Mdia.Minf.Stbl
+	switch {
+	case stbl.Stsd == nil:
+		return "stsd"
+	case stbl.Stts == nil:
+		return "stts"
+	case stbl.Stsc == nil:
+		return "stsc"
+	case stbl.Stsz == nil:
+		return "stsz"
+	case stbl.Stco == nil && stbl.Co64 == nil:
+		return "stco or co64"
+	}
+	return ""
+}
+
+// SetTargetSegmentation - set segment start points
+func (s *Segmenter) SetTargetSegmentation(syncTimescale uint32, segStarts []syncPoint) error {
+	var err error
+	for i := range s.tracks {
+		s.tracks[i].segments, err = getSegmentIntervals(syncTimescale, segStarts, s.tracks[i].inTrak)
+		if err != nil {
+			return err
+		}
+	}
+	s.nrSegs = len(segStarts)
+	return nil
+}
+
+// MakeInitSegments - initialized and return init segments for all the tracks
+func (s *Segmenter) MakeInitSegments() ([]*mp4.InitSegment, error) {
+	var inits []*mp4.InitSegment
+	for _, tr := range s.tracks {
+		init := mp4.CreateEmptyInit()
+		init.Moov.Mvhd.Timescale = s.inFile.Moov.Mvhd.Timescale
+		inMovieDuration := s.inFile.Moov.Mvhd.Duration
+		init.Moov.Mvex.AddChild(&mp4.MehdBox{FragmentDuration: int64(inMovieDuration)})
+		outTrak := init.AddEmptyTrack(tr.timeScale, tr.trackType, tr.lang)
+		tr.trackID = outTrak.Tkhd.TrackID
+
+		inStsd := tr.inTrak.Mdia.Minf.Stbl.Stsd
+		outStsd := outTrak.Mdia.Minf.Stbl.Stsd
+		switch tr.trackType {
+		case "audio":
+			if inStsd.Mp4a != nil {
+				outStsd.AddChild(inStsd.Mp4a)
+			} else if inStsd.AC3 != nil {
+				outStsd.AddChild(inStsd.AC3)
+			} else if inStsd.EC3 != nil {
+				outStsd.AddChild(inStsd.EC3)
+			}
+		case "video":
+			if inStsd.AvcX != nil {
+				outStsd.AddChild(inStsd.AvcX)
+			} else if inStsd.HvcX != nil {
+				outStsd.AddChild(inStsd.HvcX)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported tracktype: %s", tr.trackType)
+		}
+		inits = append(inits, init)
+	}
+	return inits, nil
+}
+
+// MakeMuxedInitSegment - initialized and return one init segments for all the tracks
+func (s *Segmenter) MakeMuxedInitSegment() (*mp4.InitSegment, error) {
+	init := mp4.CreateEmptyInit()
+	inMovieDuration := s.inFile.Moov.Mvhd.Duration
+	init.Moov.Mvex.AddChild(&mp4.MehdBox{FragmentDuration: int64(inMovieDuration)})
+	for _, tr := range s.tracks {
+		outTrak := init.AddEmptyTrack(tr.timeScale, tr.trackType, tr.lang)
+		tr.trackID = outTrak.Tkhd.TrackID
+		inStsd := tr.inTrak.Mdia.Minf.Stbl.Stsd
+		outStsd := outTrak.Mdia.Minf.Stbl.Stsd
+		switch tr.trackType {
+		case "audio":
+			if inStsd.Mp4a != nil {
+				outStsd.AddChild(inStsd.Mp4a)
+			} else if inStsd.AC3 != nil {
+				outStsd.AddChild(inStsd.AC3)
+			} else if inStsd.EC3 != nil {
+				outStsd.AddChild(inStsd.EC3)
+			}
+		case "video":
+			if inStsd.AvcX != nil {
+				outStsd.AddChild(inStsd.AvcX)
+			} else if inStsd.HvcX != nil {
+				outStsd.AddChild(inStsd.HvcX)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported tracktype: %s", tr.trackType)
+		}
+	}
+	// A CMAF header has only one track, so the default cmfc brand does not apply.
+	ftyp, err := init.GenerateFtyp(mp4.FtypOptions{})
+	if err != nil {
+		return nil, err
+	}
+	init.SetFtyp(ftyp)
+	return init, nil
+}
+
+// GetFullSamplesForInterval - get slice of fullsamples with numbers startSampleNr to endSampleNr (inclusive)
+func (s *Segmenter) GetFullSamplesForInterval(mp4f *mp4.File, tr *Track, startSampleNr, endSampleNr uint32,
+	rs io.ReadSeeker) ([]mp4.FullSample, error) {
+	stbl := tr.inTrak.Mdia.Minf.Stbl
+	samples := make([]mp4.FullSample, 0, endSampleNr-startSampleNr+1)
+	data, err := mp4f.ReadSampleData(tr.inTrak, startSampleNr, endSampleNr, rs, s.resolver)
+	if err != nil {
+		return nil, err
+	}
+	var pos uint32
+	for sampleNr := startSampleNr; sampleNr <= endSampleNr; sampleNr++ {
+		size := stbl.Stsz.GetSampleSize(int(sampleNr))
+		decTime, dur, err := stbl.Stts.GetDecodeTime(sampleNr)
+		if err != nil {
+			return nil, fmt.Errorf("sample %d: %w", sampleNr, err)
+		}
+		var cto int32 = 0
+		if stbl.Ctts != nil {
+			cto = stbl.Ctts.GetCompositionTimeOffset(sampleNr)
+		}
+		sc := mp4.FullSample{
+			Sample: mp4.Sample{
+				Flags:                 TranslateSampleFlagsForFragment(stbl, sampleNr),
+				Size:                  size,
+				Dur:                   dur,
+				CompositionTimeOffset: cto,
+			},
+			DecodeTime: decTime,
+			Data:       data[pos : pos+size],
+		}
+		pos += size
+		samples = append(samples, sc)
+	}
+	return samples, nil
+}
+
+// GetSamplesForInterval - get slice of samples with numbers startSampleNr to endSampleNr (inclusive)
+func (s *Segmenter) GetSamplesForInterval(mp4f *mp4.File, trak *mp4.TrakBox, startSampleNr, endSampleNr uint32) ([]mp4.Sample, error) {
+	stbl := trak.Mdia.Minf.Stbl
+	samples := make([]mp4.Sample, 0, endSampleNr-startSampleNr+1)
+	for sampleNr := startSampleNr; sampleNr <= endSampleNr; sampleNr++ {
+		size := stbl.Stsz.GetSampleSize(int(sampleNr))
+		dur := stbl.Stts.GetDur(sampleNr)
+		var cto int32 = 0
+		if stbl.Ctts != nil {
+			cto = stbl.Ctts.GetCompositionTimeOffset(sampleNr)
+		}
+
+		//presTime := uint64(int64(decTime) + int64(cto))
+		//One can either segment on presentationTime or DecodeTime
+		//presTimeMs := presTime * 1000 / uint64(trak.timeScale)
+		sc := mp4.Sample{
+			Flags:                 TranslateSampleFlagsForFragment(stbl, sampleNr),
+			Size:                  size,
+			Dur:                   dur,
+			CompositionTimeOffset: cto,
+		}
+
+		//fmt.Printf("Sample %d times %d %d, sync %v, offset %d, size %d\n", sampleNr, decTime, cto, isSync, offset, size)
+		samples = append(samples, sc)
+	}
+	return samples, nil
+}
+
+// TranslateSampleFlagsForFragment - translate sample flags from stss and sdtp to what is needed in trun
+func TranslateSampleFlagsForFragment(stbl *mp4.StblBox, sampleNr uint32) (flags uint32) {
+	var sampleFlags mp4.SampleFlags
+	if stbl.Stss != nil {
+		isSync := stbl.Stss.IsSyncSample(uint32(sampleNr))
+		sampleFlags.SampleIsNonSync = !isSync
+		if isSync {
+			sampleFlags.SampleDependsOn = 2 //2 == does not depend on others (I-picture). May be overridden by sdtp entry
+		}
+	}
+	if stbl.Sdtp != nil {
+		entry := stbl.Sdtp.Entries[uint32(sampleNr)-1] // table starts at 0, but sampleNr is one-based
+		sampleFlags.IsLeading = entry.IsLeading()
+		sampleFlags.SampleDependsOn = entry.SampleDependsOn()
+		sampleFlags.SampleHasRedundancy = entry.SampleHasRedundancy()
+		sampleFlags.SampleIsDependedOn = entry.SampleIsDependedOn()
+	}
+	return sampleFlags.Encode()
+}

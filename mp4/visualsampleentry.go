@@ -1,0 +1,463 @@
+package mp4
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+	"github.com/Eyevinn/mp4ff/hevc"
+)
+
+// Default values of VisualSampleEntryBox.Depth and VisualSampleEntryBox.ColorTableID in ISO/IEC 14496-12.
+const (
+	VisualSampleEntryDefaultDepth        = 0x0018
+	VisualSampleEntryDefaultColorTableID = -1
+)
+
+// VisualSampleEntryBox Video Sample Description box (avc1/avc3/hvc1/hev1...)
+// QuickTime overlays its video sample description version, revision level, vendor,
+// and temporal and spatial quality on ISO pre_defined and reserved fields, which are 0
+// in ISO files. Depth and ColorTableID (ISO pre_defined) are 0x0018 and -1 in ISO files,
+// as NewVisualSampleEntryBox and CreateVisualSampleEntryBox set them; QuickTime also
+// uses other depths, such as 32 for video with alpha. All these fields are kept on encode.
+type VisualSampleEntryBox struct {
+	name                     string
+	DataReferenceIndex       uint16
+	QuickTimeVersion         uint16
+	QuickTimeRevisionLevel   uint16
+	QuickTimeVendor          uint32
+	QuickTimeTemporalQuality uint32
+	QuickTimeSpatialQuality  uint32
+	Width                    uint16
+	Height                   uint16
+	Horizresolution          uint32
+	Vertresolution           uint32
+	FrameCount               uint16
+	CompressorName           string
+	Depth                    uint16
+	ColorTableID             int16
+	AvcC                     *AvcCBox
+	HvcC                     *HvcCBox
+	LhvC                     *LhvCBox
+	DoViConfig               *DoViConfigurationBox
+	Av1C                     *Av1CBox
+	Av3c                     *Av3cBox
+	VvcC                     *VvcCBox
+	VppC                     *VppCBox
+	JpgC                     *JpgCBox
+	Fiel                     *FielBox
+	Esds                     *EsdsBox
+	Btrt                     *BtrtBox
+	Clap                     *ClapBox
+	Pasp                     *PaspBox
+	Sinf                     *SinfBox
+	Clli                     *ClliBox
+	Mdcv                     *MdcvBox
+	SmDm                     *SmDmBox
+	CoLL                     *CoLLBox
+	Vexu                     *VexuBox
+	Hfov                     *HfovBox
+	Children                 []Box
+	TrailingBytes            []byte
+}
+
+// NewVisualSampleEntryBox creates new empty box with an appropriate name such as avc1
+func NewVisualSampleEntryBox(name string) *VisualSampleEntryBox {
+	b := &VisualSampleEntryBox{
+		Depth:        VisualSampleEntryDefaultDepth,
+		ColorTableID: VisualSampleEntryDefaultColorTableID,
+	}
+	b.name = name
+	return b
+}
+
+// CreateVisualSampleEntryBox creates a new VisualSampleEntry such as avc1, avc3, hev1, hvc1, vvc1, vvi1
+func CreateVisualSampleEntryBox(name string, width, height uint16, sampleEntry Box) *VisualSampleEntryBox {
+	b := &VisualSampleEntryBox{
+		name:               name,
+		DataReferenceIndex: 1,
+		Width:              width,
+		Height:             height,
+		Horizresolution:    0x00480000, // 72dpi
+		Vertresolution:     0x00480000, // 72dpi
+		FrameCount:         1,
+		CompressorName:     "mp4ff video packager",
+		Depth:              VisualSampleEntryDefaultDepth,
+		ColorTableID:       VisualSampleEntryDefaultColorTableID,
+		Children:           []Box{},
+		TrailingBytes:      nil,
+	}
+	if sampleEntry != nil {
+		b.AddChild(sampleEntry)
+	}
+	return b
+}
+
+// AddChild adds a child box and sets pointer to common types
+func (b *VisualSampleEntryBox) AddChild(child Box) {
+	switch box := child.(type) {
+	case *AvcCBox:
+		b.AvcC = box
+	case *HvcCBox:
+		b.HvcC = box
+	case *LhvCBox:
+		b.LhvC = box
+	case *DoViConfigurationBox:
+		b.DoViConfig = box
+	case *Av1CBox:
+		b.Av1C = box
+	case *Av3cBox:
+		b.Av3c = box
+	case *VvcCBox:
+		b.VvcC = box
+	case *VppCBox:
+		b.VppC = box
+	case *JpgCBox:
+		b.JpgC = box
+	case *FielBox:
+		b.Fiel = box
+	case *EsdsBox:
+		b.Esds = box
+	case *BtrtBox:
+		b.Btrt = box
+	case *ClapBox:
+		b.Clap = box
+	case *PaspBox:
+		b.Pasp = box
+	case *SinfBox:
+		b.Sinf = box
+	case *ClliBox:
+		b.Clli = box
+	case *MdcvBox:
+		b.Mdcv = box
+	case *SmDmBox:
+		b.SmDm = box
+	case *CoLLBox:
+		b.CoLL = box
+	case *VexuBox:
+		b.Vexu = box
+	case *HfovBox:
+		b.Hfov = box
+	}
+	b.Children = append(b.Children, child)
+}
+
+// DecodeVisualSampleEntry decodes avc1/avc3/hvc1/hev1/vvc1/vvi1 box
+func DecodeVisualSampleEntry(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	data, err := readBoxBody(r, hdr)
+	if err != nil {
+		return nil, err
+	}
+	sr := ioPayloadReader(data)
+	return DecodeVisualSampleEntrySR(hdr, startPos, sr)
+}
+
+// DecodeQuickTimeVisualSampleEntry decodes a QuickTime visual sample entry, such as the Apple ProRes entries
+// apch, apcn, apcs, apco, ap4h and ap4x. These names decoded as UnknownBox before they were registered, so a
+// body that does not parse as a visual sample entry falls back to UnknownBox instead of failing the file.
+func DecodeQuickTimeVisualSampleEntry(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	data, err := readBoxBody(r, hdr)
+	if err != nil {
+		return nil, err
+	}
+	return decodeOrUnknown(hdr, startPos, data, DecodeVisualSampleEntrySR)
+}
+
+// DecodeQuickTimeVisualSampleEntrySR decodes a QuickTime visual sample entry, as DecodeQuickTimeVisualSampleEntry.
+func DecodeQuickTimeVisualSampleEntrySR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	return decodeOrUnknownSR(hdr, startPos, sr, DecodeVisualSampleEntrySR)
+}
+
+// DecodeVisualSampleEntrySR decodes avc1/avc3/hvc1/hev1/vvc1/vvi1 box
+func DecodeVisualSampleEntrySR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	b := VisualSampleEntryBox{name: hdr.Name}
+
+	// 14496-12 8.5.2.2 Sample entry (8 bytes)
+	sr.SkipBytes(6) // Skip 6 reserved bytes
+	b.DataReferenceIndex = sr.ReadUint16()
+
+	// 14496-12 12.1.3.2 Visual Sample entry (70 bytes)
+	// QuickTime overlays version, revision level, vendor, and temporal and spatial quality
+	// on the 16 bytes of pre_defined and reserved fields.
+	b.QuickTimeVersion = sr.ReadUint16()
+	b.QuickTimeRevisionLevel = sr.ReadUint16()
+	b.QuickTimeVendor = sr.ReadUint32()
+	b.QuickTimeTemporalQuality = sr.ReadUint32()
+	b.QuickTimeSpatialQuality = sr.ReadUint32()
+	b.Width = sr.ReadUint16()
+	b.Height = sr.ReadUint16()
+
+	b.Horizresolution = sr.ReadUint32()
+	b.Vertresolution = sr.ReadUint32()
+
+	sr.ReadUint32()                // reserved
+	b.FrameCount = sr.ReadUint16() // Should be 1
+	compressorNameLength := sr.ReadUint8()
+	if compressorNameLength > 31 {
+		// Invalid, but occurs. Clamp like ffmpeg does. The field is 32 bytes in any case.
+		compressorNameLength = 31
+	}
+	b.CompressorName = sr.ReadFixedLengthString(int(compressorNameLength))
+	sr.SkipBytes(int(31 - compressorNameLength))
+	b.Depth = sr.ReadUint16()
+	b.ColorTableID = int16(sr.ReadUint16())
+
+	// Now there may be clap, pasp, btrt and other boxes
+	// 14496-15  5.4.2.1.2 avcC should be inside avc1, avc3 box
+	pos := startPos + 86 // Size of all previous data
+	endPos := startPos + uint64(hdr.Hdrlen) + uint64(hdr.payloadLen())
+	for pos < endPos {
+		remainingBytes := endPos - pos
+		if remainingBytes < boxHeaderSize {
+			// This should not happen, but was reported in issue #444
+			b.TrailingBytes = sr.ReadBytes(int(remainingBytes))
+			break
+		}
+		box, err := DecodeBoxSR(pos, sr)
+		if err != nil {
+			return nil, fmt.Errorf("error decoding childBox of VisualSampleEntry: %w", err)
+		}
+		if box != nil {
+			b.AddChild(box)
+			pos += box.Size()
+		} else {
+			return nil, fmt.Errorf("not childbox of VisualSampleEntry")
+		}
+	}
+	if err := b.checkLengthSizes(); err != nil {
+		return nil, err
+	}
+	return &b, sr.AccError()
+}
+
+// checkLengthSizes checks that the hvcC and lhvC, if both are present, have the same lengthSizeMinusOne.
+// 14496-15 9.5.3 requires this, since the NALUs of all layers share the length fields of the samples.
+func (b *VisualSampleEntryBox) checkLengthSizes() error {
+	if b.HvcC != nil && b.LhvC != nil && b.HvcC.LengthSizeMinusOne != b.LhvC.LengthSizeMinusOne {
+		return fmt.Errorf("lhvC lengthSizeMinusOne %d differs from hvcC lengthSizeMinusOne %d",
+			b.LhvC.LengthSizeMinusOne, b.HvcC.LengthSizeMinusOne)
+	}
+	return nil
+}
+
+// Type returns box type
+func (b *VisualSampleEntryBox) Type() string {
+	return b.name
+}
+
+// GetChildren - list of child boxes
+func (b *VisualSampleEntryBox) GetChildren() []Box {
+	return b.Children
+}
+
+// SetType sets the type (name) of the box
+func (b *VisualSampleEntryBox) SetType(name string) {
+	b.name = name
+}
+
+// Size - return calculated size
+func (b *VisualSampleEntryBox) Size() uint64 {
+	totalSize := uint64(boxHeaderSize + 78)
+	for _, child := range b.Children {
+		totalSize += child.Size()
+	}
+	totalSize += uint64(len(b.TrailingBytes))
+	return totalSize
+}
+
+// encodeVisualSampleEntryStart writes the 78 bytes between the box header and the child boxes.
+func (b *VisualSampleEntryBox) encodeVisualSampleEntryStart(sw bits.SliceWriter) {
+	sw.WriteZeroBytes(6)
+	sw.WriteUint16(b.DataReferenceIndex)
+	sw.WriteUint16(b.QuickTimeVersion)
+	sw.WriteUint16(b.QuickTimeRevisionLevel)
+	sw.WriteUint32(b.QuickTimeVendor)
+	sw.WriteUint32(b.QuickTimeTemporalQuality)
+	sw.WriteUint32(b.QuickTimeSpatialQuality)
+	sw.WriteUint16(b.Width)
+	sw.WriteUint16(b.Height) //36 bytes
+
+	sw.WriteUint32(b.Horizresolution)
+	sw.WriteUint32(b.Vertresolution)
+	sw.WriteZeroBytes(4)
+	sw.WriteUint16(b.FrameCount) //50 bytes
+
+	compressorNameLength := byte(len(b.CompressorName))
+	sw.WriteUint8(compressorNameLength)
+	sw.WriteString(b.CompressorName, false)
+	sw.WriteZeroBytes(int(31 - compressorNameLength))
+	sw.WriteUint16(b.Depth)
+	sw.WriteUint16(uint16(b.ColorTableID)) //86 bytes
+}
+
+// Encode writes box to w
+func (b *VisualSampleEntryBox) Encode(w io.Writer) error {
+	if err := b.checkLengthSizes(); err != nil {
+		return err
+	}
+	err := EncodeHeader(b, w)
+	if err != nil {
+		return err
+	}
+	buf := makebuf(b)
+	sw := bits.NewFixedSliceWriterFromSlice(buf)
+	b.encodeVisualSampleEntryStart(sw)
+
+	_, err = w.Write(buf[:sw.Offset()]) // Only write  written bytes
+	if err != nil {
+		return err
+	}
+
+	// Next output child boxes in order
+	for _, child := range b.Children {
+		err = child.Encode(w)
+		if err != nil {
+			return err
+		}
+	}
+	if len(b.TrailingBytes) > 0 {
+		_, err = w.Write(b.TrailingBytes)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// EncodeSW writes box to sw
+func (b *VisualSampleEntryBox) EncodeSW(sw bits.SliceWriter) error {
+	if err := b.checkLengthSizes(); err != nil {
+		return err
+	}
+	err := EncodeHeaderSW(b, sw)
+	if err != nil {
+		return err
+	}
+	b.encodeVisualSampleEntryStart(sw)
+
+	// Next output child boxes in order
+	for _, child := range b.Children {
+		err = child.EncodeSW(sw)
+		if err != nil {
+			return err
+		}
+	}
+	if len(b.TrailingBytes) > 0 {
+		sw.WriteBytes(b.TrailingBytes)
+	}
+	return sw.AccError()
+}
+
+// Info writes box-specific information
+func (b *VisualSampleEntryBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	bd := newInfoDumper(w, indent, b, -1, 0)
+	bd.write(" - width: %d", b.Width)
+	bd.write(" - height: %d", b.Height)
+	bd.write(" - compressorName: %q", b.CompressorName)
+	if b.QuickTimeVersion != 0 {
+		bd.write(" - quickTimeVersion: %d", b.QuickTimeVersion)
+	}
+	if b.QuickTimeRevisionLevel != 0 {
+		bd.write(" - quickTimeRevisionLevel: %d", b.QuickTimeRevisionLevel)
+	}
+	if b.QuickTimeVendor != 0 {
+		bd.write(" - quickTimeVendor: %s", quickTimeVendorString(b.QuickTimeVendor))
+	}
+	if b.QuickTimeTemporalQuality != 0 {
+		bd.write(" - quickTimeTemporalQuality: %s", quickTimeQualityString(b.QuickTimeTemporalQuality))
+	}
+	if b.QuickTimeSpatialQuality != 0 {
+		bd.write(" - quickTimeSpatialQuality: %s", quickTimeQualityString(b.QuickTimeSpatialQuality))
+	}
+	if b.Depth != VisualSampleEntryDefaultDepth {
+		bd.write(" - depth: %d", b.Depth)
+	}
+	if b.ColorTableID != VisualSampleEntryDefaultColorTableID {
+		bd.write(" - colorTableID: %d", b.ColorTableID)
+	}
+	if len(b.TrailingBytes) > 0 {
+		bd.write(" - trailingBytes: %x", b.TrailingBytes)
+	}
+	if bd.err != nil {
+		return bd.err
+	}
+	var err error
+	for _, child := range b.Children {
+		err = child.Info(w, specificBoxLevels, indent+indentStep, indentStep)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RemoveEncryption removes sinf box and set type to unencrypted type
+func (b *VisualSampleEntryBox) RemoveEncryption() (*SinfBox, error) {
+	if b.name != "encv" {
+		return nil, fmt.Errorf("is not encrypted: %s", b.name)
+	}
+	sinf := b.Sinf
+	if sinf == nil {
+		return nil, fmt.Errorf("does not have sinf box")
+	}
+	if sinf.Frma == nil {
+		return nil, fmt.Errorf("sinf box does not have frma box")
+	}
+	for i := range b.Children {
+		if b.Children[i].Type() == "sinf" {
+			b.Children = append(b.Children[:i], b.Children[i+1:]...)
+			b.Sinf = nil
+			break
+		}
+	}
+	b.name = sinf.Frma.DataFormat
+	return sinf, nil
+}
+
+// ConvertHev1ToHvc1 converts visual sample entry box type and insert VPS, SPS, and PPS parameter sets
+func (b *VisualSampleEntryBox) ConvertHev1ToHvc1(vpss [][]byte, spss [][]byte, ppss [][]byte) error {
+	if b.Type() != "hev1" {
+		return fmt.Errorf("type is %s and not hev1", b.Type())
+	}
+	b.SetType("hvc1")
+	b.HvcC.NaluArrays = append(b.HvcC.NaluArrays, hevc.NewNaluArray(true, hevc.NALU_VPS, vpss))
+	b.HvcC.NaluArrays = append(b.HvcC.NaluArrays, hevc.NewNaluArray(true, hevc.NALU_SPS, spss))
+	b.HvcC.NaluArrays = append(b.HvcC.NaluArrays, hevc.NewNaluArray(true, hevc.NALU_PPS, ppss))
+	return nil
+}
+
+// ConvertAvc3ToAvc1 converts visual sample entry box type and insert SPS and PPS parameter sets
+func (b *VisualSampleEntryBox) ConvertAvc3ToAvc1(spss [][]byte, ppss [][]byte) error {
+	if b.Type() != "avc3" {
+		return fmt.Errorf("type is %s and not avc3", b.Type())
+	}
+	b.SetType("avc1")
+	b.AvcC.SPSnalus = spss
+	b.AvcC.PPSnalus = ppss
+	return nil
+}
+
+// quickTimeQualityNames are the names of the codec quality levels of QuickTime.
+var quickTimeQualityNames = map[uint32]string{0x100: "low", 0x200: "normal", 0x300: "high", 0x3ff: "max",
+	0x400: "lossless"}
+
+// quickTimeQualityString writes a QuickTime temporal or spatial quality in hex, with the name of the level if it is
+// one of the levels that QuickTime names, such as 0x200 (normal).
+func quickTimeQualityString(q uint32) string {
+	if name, ok := quickTimeQualityNames[q]; ok {
+		return fmt.Sprintf("%#x (%s)", q, name)
+	}
+	return fmt.Sprintf("%#x", q)
+}
+
+// quickTimeVendorString writes a QuickTime vendor code as its four characters, such as appl or FFMP, followed by
+// the number in hex, or as the number alone if the characters are not printable ASCII.
+func quickTimeVendorString(v uint32) string {
+	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
+	for _, c := range b {
+		if c < 0x20 || c > 0x7e {
+			return fmt.Sprintf("%#08x", v)
+		}
+	}
+	return fmt.Sprintf("%s (%#08x)", b, v)
+}

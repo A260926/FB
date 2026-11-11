@@ -1,0 +1,314 @@
+package mp4_test
+
+import (
+	"bytes"
+	"encoding/hex"
+	"testing"
+
+	"github.com/Eyevinn/mp4ff/mp4"
+)
+
+func TestUUIDVariants(t *testing.T) {
+
+	testInputs := []struct {
+		expectedSubType string
+		rawData         string
+	}{
+		{
+			"tfxd", "0000002c757569646d1d9b0542d544e680e2141daff757b201000000000105c649bda4000000000000054600",
+		},
+		{
+			"tfrf", "0000002d75756964d4807ef2ca3946958e5426cb9e46a79f0100000001000105c649c2ea000000000000054600",
+		},
+		{
+			"unknown", "0000002c757569646e1d9b0542d544e680e2141daff757b201000000000105c649bda4000000000000054600",
+		},
+		{
+			// PIFF TrackEncryption UUID: 8974dbce-7be7-4c51-84f9-7148f9882554
+			// version+flags=0, AlgorithmID=1 (AES-CTR), IV_size=8, KID=c5c9...cbd7
+			"piff-tenc", "00000030757569648974dbce7be74c5184f97148f9882554" +
+				"0000000000000108c5c971897e674646949e0cd4dd92cbd7",
+		},
+	}
+
+	for _, ti := range testInputs {
+		inRawBox, _ := hex.DecodeString(ti.rawData)
+		inbuf := bytes.NewBuffer(inRawBox)
+		hdr, err := mp4.DecodeHeader(inbuf)
+		if err != nil {
+			t.Error(err)
+		}
+		uuidRead, err := mp4.DecodeUUIDBox(hdr, 0, inbuf)
+		if err != nil {
+			t.Error(err)
+		}
+		uBox := uuidRead.(*mp4.UUIDBox)
+		if uBox.SubType() != ti.expectedSubType {
+			t.Errorf("got subtype %s instead of %s", uBox.SubType(), ti.expectedSubType)
+		}
+
+		outbuf := &bytes.Buffer{}
+
+		err = uuidRead.Encode(outbuf)
+		if err != nil {
+			t.Error(err)
+		}
+
+		outRawBox := outbuf.Bytes()
+
+		if !bytes.Equal(inRawBox, outRawBox) {
+			for i := 0; i < len(inRawBox); i++ {
+				t.Logf("%3d %02x %02x\n", i, inRawBox[i], outRawBox[i])
+			}
+			t.Errorf("%s: Non-matching in and out binaries", ti.expectedSubType)
+		}
+	}
+}
+
+func TestPiffSencOverrideFlagRejected(t *testing.T) {
+	// PIFF 1.1 §5.3.2: flag 0x1 ("Override TrackEncryptionBox parameters")
+	// prepends a 24-byte AlgorithmID+IV_size+KID block. We currently reject
+	// such senc boxes rather than silently misparse them.
+	// header(8) + uuid(16) + flags(4)=0x00000001 + AlgoID(3)=0x000001 +
+	// IV_size(1)=8 + KID(16) + sample_count(4)=0 = 52 bytes (0x34)
+	raw, _ := hex.DecodeString(
+		"00000034" + "75756964" + // size=52, type='uuid'
+			"a2394f525a9b4f14a2446c427c648df4" + // UUIDPiffSenc
+			"00000001" + // version+flags=0x1 (override)
+			"000001" + "08" + // AlgorithmID=1, IV_size=8
+			"c5c971897e674646949e0cd4dd92cbd7" + // KID
+			"00000000") // sample_count=0
+	inbuf := bytes.NewBuffer(raw)
+	hdr, err := mp4.DecodeHeader(inbuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = mp4.DecodeUUIDBox(hdr, 0, inbuf)
+	if err == nil {
+		t.Fatal("expected error for PIFF senc with override flag, got nil")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("override")) {
+		t.Errorf("error %q does not mention override", err)
+	}
+}
+
+func TestSetUUID(t *testing.T) {
+	testCases := []struct {
+		uuidStr    string
+		expected   mp4.UUID
+		shouldFail bool
+	}{
+		{
+			uuidStr:    "6d1d9b05-42d5-44e6-80e2-141daff757b2",
+			shouldFail: false,
+		},
+		{
+			uuidStr:    "6d1d9b05-42d5-44e6-80e2-141daff757",
+			shouldFail: true,
+		},
+	}
+	for i, tc := range testCases {
+		u := mp4.UUIDBox{}
+		err := u.SetUUID(tc.uuidStr)
+		if tc.shouldFail {
+			if err == nil {
+				t.Errorf("case %d did not fail as expected", i)
+			}
+			continue
+		}
+		if u.UUID() != tc.uuidStr {
+			t.Errorf("got %s instead of %s", u.UUID(), tc.uuidStr)
+		}
+	}
+}
+
+func TestUUIDEncodeDecoder(t *testing.T) {
+
+	tfrf := mp4.NewTfrfBox(1, []uint64{0}, []uint64{1000000})
+	boxDiffAfterEncodeAndDecode(t, tfrf)
+
+	tfxd := mp4.NewTfxdBox(0, 1_000_000)
+	boxDiffAfterEncodeAndDecode(t, tfxd)
+}
+
+func TestUnpackKey(t *testing.T) {
+	cases := []struct {
+		desc        string
+		keyStr      string
+		expected    []byte
+		expectedErr string
+	}{
+		{
+			desc:   "valid hex key",
+			keyStr: "00112233445566778899aabbccddeeff",
+			expected: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+				0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+			expectedErr: "",
+		},
+		{
+			desc:        "invalid hex key",
+			keyStr:      "0011223x445566778899aabbccddeeff",
+			expectedErr: "bad hex 001122...ddeeff: encoding/hex: invalid byte: U+0078 'x'",
+		},
+		{
+			desc:        "wrong length key",
+			keyStr:      "00112233445566778899aab",
+			expectedErr: "cannot decode key 00112233445566778899aab",
+		},
+		{
+			desc:   "good uuid",
+			keyStr: "00112233-4455-6677-8899-aabbccddeeff",
+			expected: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+				0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+			expectedErr: "",
+		},
+		{
+			desc:        "bad uuid, misplaced dashes",
+			keyStr:      "00----112233445566778899aabbccddeeff",
+			expectedErr: "bad uuid format: 00----...ddeeff",
+		},
+		{
+			desc:        "bad uuid too many dashes",
+			keyStr:      "00112233-4-55-6677-8899-aabbccddeeff",
+			expectedErr: "bad uuid format: 001122...ddeeff",
+		},
+		{
+			desc:        "bad hex in uuid",
+			keyStr:      "0011223x-4455-6677-8899-aabbccddeeff",
+			expectedErr: "bad uuid 001122...ddeeff: encoding/hex: invalid byte: U+0078 'x'",
+		},
+		{
+			desc:        "valid base64 key",
+			keyStr:      "ABEiM0RVZneImaq7zN3u/w=-",
+			expectedErr: "bad base64 ABEiM0...3u/w=-: illegal base64 data at input byte 22",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			key, err := mp4.UnpackKey(c.keyStr)
+			if c.expectedErr != "" {
+				if err == nil {
+					t.Error("expected error but got nil")
+				}
+				if err.Error() != c.expectedErr {
+					t.Errorf("error %q not matching expected error %q", err, c.expectedErr)
+				}
+				return
+			}
+			if !bytes.Equal(key, c.expected) {
+				t.Errorf("got %x instead of %x", key, c.expected)
+			}
+		})
+	}
+
+}
+
+func TestSphericalVideoV1(t *testing.T) {
+	// Sample spherical video v1 XML metadata
+	xmlData := `<?xml version="1.0"?><rdf:SphericalVideo
+xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+xmlns:GSpherical="http://ns.google.com/videos/1.0/spherical/">` +
+		`<GSpherical:Spherical>true</GSpherical:Spherical>` +
+		`<GSpherical:Stitched>true</GSpherical:Stitched>` +
+		`<GSpherical:StitchingSoftware>Spherical Metadata Tool</GSpherical:StitchingSoftware>` +
+		`<GSpherical:ProjectionType>equirectangular</GSpherical:ProjectionType>` +
+		`<GSpherical:StereoMode>top-bottom</GSpherical:StereoMode>` +
+		`</rdf:SphericalVideo>`
+
+	// Create a UUID box with spherical v1 UUID
+	uuidBytes, _ := hex.DecodeString("ffcc8263f8554a938814587a02521fdd")
+
+	// Create the raw box data: size + type + uuid + xml
+	size := uint32(8 + 16 + len(xmlData))
+	var buf bytes.Buffer
+
+	// Write manually since we're building from scratch
+	buf.Write([]byte{byte(size >> 24), byte(size >> 16), byte(size >> 8), byte(size)})
+	buf.Write([]byte{'u', 'u', 'i', 'd'})
+	buf.Write(uuidBytes)
+	buf.Write([]byte(xmlData))
+
+	reader := bytes.NewReader(buf.Bytes())
+	hdr, err := mp4.DecodeHeader(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	box, err := mp4.DecodeUUIDBox(hdr, 0, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	uuidBox := box.(*mp4.UUIDBox)
+
+	if uuidBox.SubType() != "spherical-v1" {
+		t.Errorf("got subtype %s instead of spherical-v1", uuidBox.SubType())
+	}
+
+	expectedUUID := "ffcc8263-f855-4a93-8814-587a02521fdd"
+	if uuidBox.UUID() != expectedUUID {
+		t.Errorf("got uuid %s instead of %s", uuidBox.UUID(), expectedUUID)
+	}
+
+	if uuidBox.SphericalV1 == nil {
+		t.Fatal("SphericalV1 data is nil")
+	}
+
+	if uuidBox.SphericalV1.XMLData != xmlData {
+		t.Errorf("XMLData mismatch")
+	}
+
+	// Test encode/decode round-trip
+	var outBuf bytes.Buffer
+	err = uuidBox.Encode(&outBuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if uint64(outBuf.Len()) != uuidBox.Size() {
+		t.Errorf("encoded size %d doesn't match Size() %d", outBuf.Len(), uuidBox.Size())
+	}
+
+	// Test decode of re-encoded box
+	reader2 := bytes.NewReader(outBuf.Bytes())
+	hdr2, err := mp4.DecodeHeader(reader2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box2, err := mp4.DecodeUUIDBox(hdr2, 0, reader2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uuidBox2 := box2.(*mp4.UUIDBox)
+	if uuidBox2.SphericalV1.XMLData != xmlData {
+		t.Error("round-trip XMLData mismatch")
+	}
+
+	// Test Info method output at level 1 (no XML content)
+	var infoBuf bytes.Buffer
+	err = uuidBox.Info(&infoBuf, "uuid:1", "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	infoStr := infoBuf.String()
+	if !bytes.Contains([]byte(infoStr), []byte("spherical-v1")) {
+		t.Error("Info output should contain spherical-v1")
+	}
+	if !bytes.Contains([]byte(infoStr), []byte("xmlDataLength")) {
+		t.Error("Info output should contain xmlDataLength")
+	}
+	if bytes.Contains([]byte(infoStr), []byte("xmlData:")) {
+		t.Error("Info output at level 1 should not contain xmlData")
+	}
+
+	// Test Info method output at level 2 (includes XML content)
+	var infoBuf2 bytes.Buffer
+	err = uuidBox.Info(&infoBuf2, "uuid:2", "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	infoStr2 := infoBuf2.String()
+	if !bytes.Contains([]byte(infoStr2), []byte("xmlData:")) {
+		t.Error("Info output at level 2 should contain xmlData")
+	}
+}

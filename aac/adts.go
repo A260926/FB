@@ -1,0 +1,153 @@
+package aac
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// ADTSHeader - data for an unencrypted ADTS Header with one AAC frame.
+// Not used in mp4 files, but in MPEG-2 TS.
+// Defined in ISO/IEC 13818-7
+type ADTSHeader struct {
+	ID                     byte // 0 is MPEG-4, 1 is MPEG-2
+	ObjectType             byte
+	SamplingFrequencyIndex byte
+	ChannelConfig          byte
+	HeaderLength           byte // Should be 7 or 9
+	PayloadLength          uint16
+	BufferFullness         uint16
+}
+
+// maxADTSPayloadLength is the largest payload whose frame length, including
+// the 7-byte header, fits in the 13-bit frame_length field.
+const maxADTSPayloadLength = 1<<13 - 1 - 7
+
+// NewADTSHeader creates the 7-byte header of an MPEG-4 ADTS frame with one raw
+// data block and no CRC (ISO/IEC 14496-3:2019 Table 1.A.6), and checks that
+// the values fit the header fields:
+//   - objectType is AACMain or AAClc. HE-AAC is sent as AAC-LC with implicit SBR signaling.
+//   - samplingFrequency has a sampling frequency index in ReverseFrequencies.
+//   - channelConfig is at most 7. 0 means that a program config element in the payload gives the layout.
+//   - plLen is at most 8184 bytes, so that the frame length fits in 13 bits.
+func NewADTSHeader(samplingFrequency int, channelConfig byte, objectType byte, plLen uint16) (*ADTSHeader, error) {
+	switch objectType {
+	case AACMain, AAClc:
+	default:
+		return nil, fmt.Errorf("must use AAC Main (1) or AAC-LC (2), not %d", objectType)
+	}
+	sfi, ok := ReverseFrequencies[samplingFrequency]
+	if !ok {
+		return nil, fmt.Errorf("sampling frequency %d not supported", samplingFrequency)
+	}
+	if channelConfig > 7 {
+		return nil, fmt.Errorf("channel configuration %d does not fit in 3 bits", channelConfig)
+	}
+	if plLen > maxADTSPayloadLength {
+		return nil, fmt.Errorf("payload length %d exceeds the ADTS maximum %d", plLen, maxADTSPayloadLength)
+	}
+	return &ADTSHeader{
+		ObjectType:             objectType,
+		SamplingFrequencyIndex: sfi,
+		ChannelConfig:          channelConfig,
+		HeaderLength:           7,
+		PayloadLength:          plLen,
+		BufferFullness:         0x7ff, // variable bitrate
+	}, nil
+}
+
+// Encode writes the header as a 7-byte MPEG-4 ADTS header without CRC. The
+// fields are written as they are, so they must fit, as NewADTSHeader checks.
+func (a ADTSHeader) Encode() []byte {
+	buf := bytes.Buffer{}
+	bw := bits.NewWriter(&buf)
+	bw.Write(0xfff, 12)                         // sync word
+	bw.Write(0x01, 4)                           //ID=0 for MPEG-4 + layer + protection absent
+	bw.Write(uint(a.ObjectType)-1, 2)           // profile
+	bw.Write(uint(a.SamplingFrequencyIndex), 4) // sampling frequency index (3 = 48KHz)
+	bw.Write(0, 1)                              // private
+	bw.Write(uint(a.ChannelConfig), 3)          // Channel configuration
+	bw.Write(0, 4)                              // Copyright etc
+	bw.Write(uint(a.PayloadLength+7), 13)       // The length should include this 7-byte header
+	bw.Write(uint(a.BufferFullness), 11)        // Buffer fullness value
+	bw.Write(0, 2)                              // Nr AAC frames in ADTS frame minus 1
+	return buf.Bytes()
+}
+
+// DecodeADTSHeader by first looking for sync word
+func DecodeADTSHeader(r io.Reader) (header *ADTSHeader, offset int, err error) {
+	br := bits.NewReader(r)
+	tsPacketSize := 188 // Find sync 0xfff in first 188 bytes (MPEG-TS related)
+	syncFound := false
+	offset = 0
+	var sync1, sync2, mpegID, layer, protectionAbsent byte
+	for i := 0; i < tsPacketSize; i++ {
+		if sync2 != 0xff {
+			sync1 = byte(br.Read(8))
+		} else {
+			sync1 = sync2
+			offset--
+		}
+		if sync1 == 0xff {
+			sync2 = byte(br.Read(8))
+			startPattern := sync2 >> 4
+			mpegID = (sync2 >> 3) & 1
+			layer = (sync2 >> 1) & 3
+			protectionAbsent = sync2 & 1
+			if startPattern == 0xf && layer == 0 {
+				syncFound = true
+				break
+			}
+			offset++
+		}
+		offset++
+	}
+	if br.AccError() != nil {
+		return nil, 0, fmt.Errorf("searching for 0xfff: %w", br.AccError())
+	}
+
+	if !syncFound {
+		return nil, 0, fmt.Errorf("no 0xfff sync found")
+	}
+	if layer != 0 {
+		return nil, 0, fmt.Errorf("non-permitted layer value %d", layer)
+	}
+	ah := &ADTSHeader{ID: mpegID, HeaderLength: 7}
+	if protectionAbsent != 1 {
+		ah.HeaderLength += 2 // 16-bit CRC
+	}
+
+	profile := br.Read(2)
+	ah.ObjectType = byte(profile + 1)
+	ah.SamplingFrequencyIndex = byte(br.Read(4))
+	_ = br.Read(1) // ignore private
+	ah.ChannelConfig = byte(br.Read(3))
+	_ = br.Read(4) // ignore original/copy, home, copyright
+	frameLength := br.Read(13)
+	ah.BufferFullness = uint16(br.Read(11))
+	nrRawBlocksMinus1 := br.Read(2)
+	if nrRawBlocksMinus1 != 0 {
+		return nil, 0, fmt.Errorf("only 1 raw block supported")
+	}
+	if protectionAbsent != 1 {
+		_ = br.Read(16) // CRC
+	}
+
+	if br.AccError() != nil {
+		return nil, 0, br.AccError()
+	}
+	if frameLength < uint(ah.HeaderLength) {
+		return nil, 0, fmt.Errorf("frame length %d is shorter than the %d-byte header", frameLength, ah.HeaderLength)
+	}
+	ah.PayloadLength = uint16(frameLength) - uint16(ah.HeaderLength)
+
+	return ah, offset, nil
+}
+
+// Frequency returns the sampling frequency in Hz of the sampling frequency index in a, or 0 for an index that has
+// no frequency.
+func (a ADTSHeader) Frequency() int {
+	return FrequencyTable[a.SamplingFrequencyIndex]
+}

@@ -1,0 +1,535 @@
+package mp4
+
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+var decodersSR map[string]BoxDecoderSR
+
+func init() {
+	decodersSR = map[string]BoxDecoderSR{
+		"\xa9ART": DecodeGenericContainerBoxSR,
+		"\xa9cpy": DecodeGenericContainerBoxSR,
+		"\xa9nam": DecodeGenericContainerBoxSR,
+		"\xa9too": DecodeGenericContainerBoxSR,
+		".mp3":    DecodeQuickTimeAudioSampleEntrySR,
+		"ac-3":    DecodeAudioSampleEntrySR,
+		"ac-4":    DecodeAudioSampleEntrySR,
+		"agsm":    DecodeQuickTimeAudioSampleEntrySR,
+		"alac":    DecodeQuickTimeAudioSampleEntrySR,
+		"alaw":    DecodeQuickTimeAudioSampleEntrySR,
+		"alis":    DecodeAlisSR,
+		"alou":    DecodeLoudnessBaseBoxSR,
+		"ap4h":    DecodeQuickTimeVisualSampleEntrySR,
+		"ap4x":    DecodeQuickTimeVisualSampleEntrySR,
+		"apch":    DecodeQuickTimeVisualSampleEntrySR,
+		"apcn":    DecodeQuickTimeVisualSampleEntrySR,
+		"apco":    DecodeQuickTimeVisualSampleEntrySR,
+		"apcs":    DecodeQuickTimeVisualSampleEntrySR,
+		"av01":    DecodeVisualSampleEntrySR,
+		"av1C":    DecodeAv1CSR,
+		"avc1":    DecodeVisualSampleEntrySR,
+		"avc3":    DecodeVisualSampleEntrySR,
+		"av3c":    DecodeAv3cSR,
+		"avcC":    DecodeAvcCSR,
+		"avs3":    DecodeVisualSampleEntrySR,
+		"blin":    DecodeBlinSR,
+		"btrt":    DecodeBtrtSR,
+		"cams":    DecodeCamsSR,
+		"cdat":    DecodeCdatSR,
+		"cdsc":    DecodeTrefTypeSR,
+		"chan":    DecodeChanSR,
+		"chpl":    DecodeChplSR,
+		"clap":    DecodeClapSR,
+		"clef":    DecodeTrackApertureDimensionsSR,
+		"clli":    DecodeClliSR,
+		"co64":    DecodeCo64SR,
+		"CoLL":    DecodeCoLLSR,
+		"colr":    DecodeColrSR,
+		"cslg":    DecodeCslgSR,
+		"cstg":    DecodeTrackGroupTypeSR,
+		"ctim":    DecodeCtimSR,
+		"ctts":    DecodeCttsSR,
+		"dac3":    DecodeDac3SR,
+		"dac4":    DecodeDac4SR,
+		"enof":    DecodeTrackApertureDimensionsSR,
+		"fl32":    DecodeQuickTimeAudioSampleEntrySR,
+		"fl64":    DecodeQuickTimeAudioSampleEntrySR,
+		"ftab":    DecodeFtabSR,
+		"gmhd":    DecodeGmhdSR,
+		"gmin":    DecodeGminSR,
+		"ima4":    DecodeQuickTimeAudioSampleEntrySR,
+		"in24":    DecodeQuickTimeAudioSampleEntrySR,
+		"in32":    DecodeQuickTimeAudioSampleEntrySR,
+		"keys":    DecodeKeysSR,
+		"MAC3":    DecodeQuickTimeAudioSampleEntrySR,
+		"MAC6":    DecodeQuickTimeAudioSampleEntrySR,
+		"mean":    DecodeMeanSR,
+		"mhaC":    DecodeMhaCSR,
+		"data":    DecodeDataSR,
+		"dec3":    DecodeDec3SR,
+		"dfLa":    DecodeDfLaSR,
+		"dOps":    DecodeDopsSR,
+		"desc":    DecodeGenericContainerBoxSR,
+		"dinf":    DecodeDinfSR,
+		"dpnd":    DecodeTrefTypeSR,
+		"dref":    DecodeDrefSR,
+		"dvcC":    DecodeDoViConfigSR,
+		"dvh1":    DecodeVisualSampleEntrySR,
+		"dvhe":    DecodeVisualSampleEntrySR,
+		"dvvC":    DecodeDoViConfigSR,
+		"dvwC":    DecodeDoViConfigSR,
+		"ec-3":    DecodeAudioSampleEntrySR,
+		"edts":    DecodeEdtsSR,
+		"elng":    DecodeElngSR,
+		"elst":    DecodeElstSR,
+		"emeb":    DecodeEmebSR,
+		"emib":    DecodeEmibSR,
+		"emsg":    DecodeEmsgSR,
+		"enca":    DecodeAudioSampleEntrySR,
+		"encv":    DecodeVisualSampleEntrySR,
+		"esds":    DecodeEsdsSR,
+		"evte":    DecodeEvteSR,
+		"eyes":    DecodeEyesSR,
+		"fiel":    DecodeFielSR,
+		"fLaC":    DecodeAudioSampleEntrySR,
+		"font":    DecodeTrefTypeSR,
+		"free":    DecodeFreeSR,
+		"frma":    DecodeFrmaSR,
+		"ftyp":    DecodeFtypSR,
+		"hdlr":    DecodeHdlrSR,
+		"hero":    DecodeHeroSR,
+		"hev1":    DecodeVisualSampleEntrySR,
+		"hfov":    DecodeHfovSR,
+		"hind":    DecodeTrefTypeSR,
+		"hint":    DecodeTrefTypeSR,
+		"hvc1":    DecodeVisualSampleEntrySR,
+		"hvcC":    DecodeHvcCSR,
+		"lhvC":    DecodeLhvCSR,
+		"iacb":    DecodeIacbSR,
+		"iamf":    DecodeAudioSampleEntrySR,
+		"iden":    DecodeIdenSR,
+		"ID32":    DecodeID32SR,
+		"ilst":    DecodeIlstSR,
+		"iods":    DecodeUnknownSR,
+		"ipir":    DecodeTrefTypeSR,
+		"jpeg":    DecodeVisualSampleEntrySR,
+		"jpgC":    DecodeJpgCSR,
+		"kind":    DecodeKindSR,
+		"labl":    DecodeLablSR,
+		"leva":    DecodeLevaSR,
+		"lpcm":    DecodeQuickTimeAudioSampleEntrySR,
+		"ludt":    DecodeLudtSR,
+		"mdat":    DecodeMdatSR,
+		"mdcv":    DecodeMdcvSR,
+		"mehd":    DecodeMehdSR,
+		"mdhd":    DecodeMdhdSR,
+		"mdia":    DecodeMdiaSR,
+		"meta":    DecodeMetaSR,
+		"mfhd":    DecodeMfhdSR,
+		"mfra":    DecodeMfraSR,
+		"mfro":    DecodeMfroSR,
+		"mha1":    DecodeAudioSampleEntrySR,
+		"mha2":    DecodeAudioSampleEntrySR,
+		"mhm1":    DecodeAudioSampleEntrySR,
+		"mhm2":    DecodeAudioSampleEntrySR,
+		"mime":    DecodeMimeSR,
+		"minf":    DecodeMinfSR,
+		"mjpg":    DecodeVisualSampleEntrySR,
+		"moof":    DecodeMoofSR,
+		"moov":    DecodeMoovSR,
+		"mp4a":    DecodeAudioSampleEntrySR,
+		"mp4v":    DecodeVisualSampleEntrySR,
+		"mpod":    DecodeTrefTypeSR,
+		"msrc":    DecodeTrackGroupTypeSR,
+		"mvex":    DecodeMvexSR,
+		"mvhd":    DecodeMvhdSR,
+		"name":    DecodeNameSR,
+		"nmhd":    DecodeNmhdSR,
+		"Opus":    DecodeAudioSampleEntrySR,
+		"pasp":    DecodePaspSR,
+		"payl":    DecodePaylSR,
+		"prft":    DecodePrftSR,
+		"prji":    DecodePrjiSR,
+		"prof":    DecodeTrackApertureDimensionsSR,
+		"proj":    DecodeProjSR,
+		"pssh":    DecodePsshSR,
+		"QDM2":    DecodeQuickTimeAudioSampleEntrySR,
+		"QDMC":    DecodeQuickTimeAudioSampleEntrySR,
+		"rsot":    DecodeRsotSR,
+		"saio":    DecodeSaioSR,
+		"saiz":    DecodeSaizSR,
+		"sbgp":    DecodeSbgpSR,
+		"schi":    DecodeSchiSR,
+		"schm":    DecodeSchmSR,
+		"sdtp":    DecodeSdtpSR,
+		"senc":    DecodeSencSR,
+		"sgpd":    DecodeSgpdSR,
+		"sidx":    DecodeSidxSR,
+		"silb":    DecodeSilbSR,
+		"sinf":    DecodeSinfSR,
+		"skip":    DecodeFreeSR,
+		"SmDm":    DecodeSmDmSR,
+		"smhd":    DecodeSmhdSR,
+		"sowt":    DecodeQuickTimeAudioSampleEntrySR,
+		"ssix":    DecodeSsixSR,
+		"stbl":    DecodeStblSR,
+		"stco":    DecodeStcoSR,
+		"ster":    DecodeTrackGroupTypeSR,
+		"sthd":    DecodeSthdSR,
+		"stpc":    DecodeStppSR,
+		"stpp":    DecodeStppSR,
+		"stri":    DecodeStriSR,
+		"stsc":    DecodeStscSR,
+		"stsd":    DecodeStsdSR,
+		"stss":    DecodeStssSR,
+		"stsz":    DecodeStszSR,
+		"sttg":    DecodeSttgSR,
+		"stts":    DecodeSttsSR,
+		"styp":    DecodeStypSR,
+		"subs":    DecodeSubsSR,
+		"subt":    DecodeTrefTypeSR,
+		"sync":    DecodeTrefTypeSR,
+		"tapt":    DecodeTaptSR,
+		"tcmi":    DecodeTcmiSR,
+		"tenc":    DecodeTencSR,
+		"text":    DecodeTextSR,
+		"tfdt":    DecodeTfdtSR,
+		"tfhd":    DecodeTfhdSR,
+		"tfra":    DecodeTfraSR,
+		"tkhd":    DecodeTkhdSR,
+		"tlou":    DecodeLoudnessBaseBoxSR,
+		"tmcd":    DecodeTmcdSR,
+		"traf":    DecodeTrafSR,
+		"trak":    DecodeTrakSR,
+		"tref":    DecodeTrefSR,
+		"trep":    DecodeTrepSR,
+		"trex":    DecodeTrexSR,
+		"trgr":    DecodeTrgrSR,
+		"trun":    DecodeTrunSR,
+		"ttma":    DecodeTtmaSR,
+		"ttmb":    DecodeTtmbSR,
+		"ttmn":    DecodeTtmnSR,
+		"twos":    DecodeQuickTimeAudioSampleEntrySR,
+		"tx3g":    DecodeTx3gSR,
+		"udta":    DecodeUdtaSR,
+		"ulaw":    DecodeQuickTimeAudioSampleEntrySR,
+		"url ":    DecodeURLBoxSR,
+		"uuid":    DecodeUUIDBoxSR,
+		"vdep":    DecodeTrefTypeSR,
+		"vexu":    DecodeVexuSR,
+		"vlab":    DecodeVlabSR,
+		"vmhd":    DecodeVmhdSR,
+		"vp08":    DecodeVisualSampleEntrySR,
+		"vp09":    DecodeVisualSampleEntrySR,
+		"vpcC":    DecodeVppCSR,
+		"vplx":    DecodeTrefTypeSR,
+		"vsid":    DecodeVsidSR,
+		"vtta":    DecodeVttaSR,
+		"vvc1":    DecodeVisualSampleEntrySR,
+		"vvcC":    DecodeVvcCSR,
+		"vvi1":    DecodeVisualSampleEntrySR,
+		"vttc":    DecodeVttcSR,
+		"vttC":    DecodeVttCSR,
+		"vtte":    DecodeVtteSR,
+		"vttn":    DecodeVttnSR,
+		"wave":    DecodeWaveSR,
+		"wide":    DecodeFreeSR,
+		"wvtc":    DecodeWvttSR,
+		"wvtt":    DecodeWvttSR,
+	}
+	boxTypes = make(map[uint32]boxTypeEntry, len(decodersSR))
+	for k, d := range decodersSR {
+		setBoxType(k, d)
+	}
+}
+
+// BoxDecoderSR is function signature of the Box DecodeSR method
+type BoxDecoderSR func(hdr BoxHeader, startPos uint64, sw bits.SliceReader) (Box, error)
+
+// DecodeBoxSR - decode a box from SliceReader
+func DecodeBoxSR(startPos uint64, sr bits.SliceReader) (Box, error) {
+	h, d, err := decodeHeaderSR(sr)
+	if err != nil {
+		return nil, err
+	}
+	return decodeBoxBodySR(startPos, h, d, sr)
+}
+
+// boxTypeEntry is what a box type read from the input maps to: the type as a string, so that no
+// string has to be allocated for it, and its SliceReader decoder.
+type boxTypeEntry struct {
+	name  string
+	decSR BoxDecoderSR
+}
+
+// boxTypes mirrors decodersSR, keyed by the four bytes of the box type as a big-endian uint32, so
+// that one lookup of the bytes in a header gives both the type and its decoder.
+var boxTypes map[uint32]boxTypeEntry
+
+// setBoxType adds boxType to boxTypes, or removes it if decSR is nil.
+func setBoxType(boxType string, decSR BoxDecoderSR) {
+	if len(boxType) != 4 {
+		return
+	}
+	key := binary.BigEndian.Uint32([]byte(boxType))
+	if decSR == nil {
+		delete(boxTypes, key)
+		return
+	}
+	boxTypes[key] = boxTypeEntry{name: boxType, decSR: decSR}
+}
+
+// lookupBoxType returns the box type b as a string and its decoder, or nil for a type without a
+// decoder. Only the string of a type without a decoder is allocated.
+func lookupBoxType(b []byte) (string, BoxDecoderSR) {
+	if len(b) == 4 {
+		if e, ok := boxTypes[binary.BigEndian.Uint32(b)]; ok {
+			return e.name, e.decSR
+		}
+	}
+	return string(b), nil
+}
+
+// DecodeHeaderSR - decode a box header (size + box type + possible largeSize) from sr
+func DecodeHeaderSR(sr bits.SliceReader) (BoxHeader, error) {
+	hdr, _, err := decodeHeaderSR(sr)
+	return hdr, err
+}
+
+// decodeHeaderSR is DecodeHeaderSR also returning the decoder of the box type.
+func decodeHeaderSR(sr bits.SliceReader) (BoxHeader, BoxDecoderSR, error) {
+	if sr.NrRemainingBytes() < boxHeaderSize {
+		return BoxHeader{}, nil, fmt.Errorf("not enough bytes to read box header, need %d, have %d", boxHeaderSize, sr.NrRemainingBytes())
+	}
+	size := uint64(sr.ReadUint32())
+	boxType, decSR := lookupBoxType(sr.ReadBytes(4))
+	headerLen := boxHeaderSize
+	switch size {
+	case 1: // size 1 means large size in next 8 bytes
+		if boxType != "mdat" {
+			return BoxHeader{}, nil, fmt.Errorf("extended size not supported for box type %s", boxType)
+		}
+		size = sr.ReadUint64()
+		headerLen += largeSizeLen
+	case 0: // size 0 means to end of file
+		return BoxHeader{}, nil, fmt.Errorf("Size 0, meaning to end of file, not supported")
+	}
+	if uint64(headerLen) > size {
+		return BoxHeader{}, nil, fmt.Errorf("box header size %d exceeds box size %d", headerLen, size)
+	}
+	return BoxHeader{boxType, size, headerLen}, decSR, sr.AccError()
+}
+
+// rawHeader is a box header whose type has not yet been turned into a string.
+type rawHeader struct {
+	typ    []byte
+	size   uint64
+	hdrLen int
+}
+
+// readRawHeaderSR reads a box header with the checks of decodeHeaderSR, but leaves the type as bytes, so that a box
+// to decode into can be matched without looking the type up.
+func readRawHeaderSR(sr bits.SliceReader) (rawHeader, error) {
+	if sr.NrRemainingBytes() < boxHeaderSize {
+		return rawHeader{}, fmt.Errorf("not enough bytes to read box header, need %d, have %d", boxHeaderSize,
+			sr.NrRemainingBytes())
+	}
+	h := rawHeader{size: uint64(sr.ReadUint32()), typ: sr.ReadBytes(4), hdrLen: boxHeaderSize}
+	switch h.size {
+	case 1: // size 1 means large size in next 8 bytes
+		if string(h.typ) != "mdat" {
+			return rawHeader{}, fmt.Errorf("extended size not supported for box type %s", h.typ)
+		}
+		h.size = sr.ReadUint64()
+		h.hdrLen += largeSizeLen
+	case 0: // size 0 means to end of file
+		return rawHeader{}, fmt.Errorf("Size 0, meaning to end of file, not supported")
+	}
+	if uint64(h.hdrLen) > h.size {
+		return rawHeader{}, fmt.Errorf("box header size %d exceeds box size %d", h.hdrLen, h.size)
+	}
+	return h, sr.AccError()
+}
+
+// lookup returns the BoxHeader and the decoder of the box type.
+func (h rawHeader) lookup() (BoxHeader, BoxDecoderSR) {
+	name, d := lookupBoxType(h.typ)
+	return BoxHeader{name, h.size, h.hdrLen}, d
+}
+
+// MaxBoxDepth is the deepest nesting of boxes that the decoders accept, counting the outermost box as depth 1.
+// The deepest files seen nest 11 boxes, for example moov/trak/mdia/minf/stbl/stsd/hvc1/vexu/eyes/cams/blin.
+// The depth is counted on a bits.FixedSliceReader, so a box decoded from another bits.SliceReader is not checked.
+const MaxBoxDepth = 64
+
+// ErrBoxTooDeep is the error for boxes nested deeper than MaxBoxDepth.
+var ErrBoxTooDeep = fmt.Errorf("boxes nested more than %d deep", MaxBoxDepth)
+
+// boxDepth returns the box depth that sr counts, or 0 if sr is not a bits.FixedSliceReader.
+func boxDepth(sr bits.SliceReader) int {
+	if fsr, ok := sr.(*bits.FixedSliceReader); ok {
+		return fsr.Depth()
+	}
+	return 0
+}
+
+// childReader returns a reader of data, a payload read from parent, that continues the box depth of parent.
+func childReader(parent bits.SliceReader, data []byte) *bits.FixedSliceReader {
+	sr := bits.NewFixedSliceReader(data)
+	sr.SetDepth(boxDepth(parent))
+	return sr
+}
+
+// ioBoxDepth is the box depth of a box decoded from an io.Reader. Boxes below it are decoded from a
+// bits.FixedSliceReader of its payload, so it is a top-level box.
+const ioBoxDepth = 1
+
+// ioPayloadReader returns a reader of data, the payload of a box decoded from an io.Reader.
+func ioPayloadReader(data []byte) *bits.FixedSliceReader {
+	sr := bits.NewFixedSliceReader(data)
+	sr.SetDepth(ioBoxDepth)
+	return sr
+}
+
+// DecodeBoxBodySR - decode box body from SliceReader given BoxHeader
+func DecodeBoxBodySR(startPos uint64, hdr BoxHeader, sr bits.SliceReader) (Box, error) {
+	d, _ := decodersSR[hdr.Name]
+	return decodeBoxBodySR(startPos, hdr, d, sr)
+}
+
+// decodeBoxBodySR is DecodeBoxBodySR with the decoder of the box type already looked up, nil if
+// there is none.
+func decodeBoxBodySR(startPos uint64, hdr BoxHeader, d BoxDecoderSR, sr bits.SliceReader) (Box, error) {
+	maxSize := uint64(sr.NrRemainingBytes()) + uint64(hdr.Hdrlen)
+	// In the following, we do not block mdat to allow for the case
+	// that the first kiloBytes of a file are fetched and parsed to
+	// get the init part of a file. In the future, a new decode option that
+	// stops before the mdat starts is a better alternative.
+	if hdr.Size > maxSize && hdr.Name != "mdat" {
+		return nil, fmt.Errorf("decode box %q, size %d too big (max %d)", hdr.Name, hdr.Size, maxSize)
+	}
+
+	fsr, counted := sr.(*bits.FixedSliceReader)
+	if counted {
+		depth := fsr.Depth() + 1
+		if depth > MaxBoxDepth {
+			return nil, fmt.Errorf("decode %s pos %d: %w", hdr.Name, startPos, ErrBoxTooDeep)
+		}
+		fsr.SetDepth(depth)
+	}
+	var b Box
+	var err error
+	payloadStart := sr.GetPos()
+	switch {
+	case isUserDataTextSR(hdr, sr):
+		b, err = DecodeUserDataTextSR(hdr, startPos, sr)
+	case d == nil:
+		b, err = DecodeUnknownSR(hdr, startPos, sr)
+	default:
+		b, err = d(hdr, startPos, sr)
+	}
+	if counted {
+		fsr.SetDepth(fsr.Depth() - 1)
+	}
+	// The next box starts where this decoder stopped, so it must read exactly the payload.
+	// mdat is exempt, as it may extend beyond sr (see above).
+	if err == nil && hdr.Name != "mdat" {
+		err = sr.AccError()
+		if read := sr.GetPos() - payloadStart; err == nil && read != hdr.payloadLen() {
+			err = fmt.Errorf("decoded %d bytes of a %d-byte payload", read, hdr.payloadLen())
+		}
+	}
+	if err != nil {
+		if errors.Is(err, ErrBoxTooDeep) {
+			return nil, err // already names the box that is too deep
+		}
+		return nil, fmt.Errorf("decode %s pos %d: %w", hdr.Name, startPos, err)
+	}
+
+	return b, nil
+}
+
+// DecodeFileSR - parse and decode a file from SliceReader sr with optional file options.
+// For example, the file options overwrite the default decode or encode mode.
+func DecodeFileSR(sr bits.SliceReader, options ...Option) (*File, error) {
+	f := NewFile()
+
+	// apply options to change the default decode or encode mode
+	f.ApplyOptions(options...)
+
+	var boxStartPos uint64 = 0
+	lastBoxType := ""
+
+	if f.fileDecMode == DecModeLazyMdat {
+		return nil, fmt.Errorf("no support for lazy mdat in DecodeFileSR")
+	}
+
+LoopBoxes:
+	for {
+		var box Box
+		var err error
+		if sr.NrRemainingBytes() == 0 {
+			break LoopBoxes
+		}
+
+		box, err = DecodeBoxSR(boxStartPos, sr)
+		if err != nil {
+			return nil, err
+		}
+		boxType, boxSize := box.Type(), box.Size()
+		switch boxType {
+		case "mdat":
+			if f.isFragmented {
+				if lastBoxType != "moof" {
+					return nil, fmt.Errorf("does not support %v between moof and mdat", lastBoxType)
+				}
+			} else {
+				if f.Mdat != nil {
+					oldPayloadSize := f.Mdat.Size() - f.Mdat.HeaderSize()
+					newMdat := box.(*MdatBox)
+					newPayloadSize := newMdat.Size() - newMdat.HeaderSize()
+					if oldPayloadSize > 0 && newPayloadSize > 0 {
+						return nil, fmt.Errorf("only one non-empty mdat box supported (payload sizes %d and %d)",
+							oldPayloadSize, newPayloadSize)
+					}
+				}
+			}
+		case "moof":
+			moof := box.(*MoofBox)
+			for _, traf := range moof.Trafs {
+				if ok, parsed := traf.ContainsSencBox(); ok && !parsed {
+					defaultIVSize := byte(0)
+					if f.Moov != nil {
+						trackID := traf.Tfhd.TrackID
+						if !f.Moov.IsEncrypted(trackID) {
+							continue
+						}
+						sinf := f.Moov.GetSinf(trackID)
+						if sinf != nil && sinf.Schi != nil && sinf.Schi.Tenc != nil {
+							defaultIVSize = sinf.Schi.Tenc.DefaultPerSampleIVSize
+						}
+					}
+					err = traf.ParseReadSenc(defaultIVSize, moof.StartPos)
+					if err != nil {
+						if f.Moov == nil {
+							// No moov and heuristic failed.
+							// Leave senc deferred for caller to parse later with init info.
+							continue
+						}
+						return nil, err
+					}
+				}
+			}
+		}
+		f.AddChild(box, boxStartPos)
+		lastBoxType = boxType
+		boxStartPos += boxSize
+	}
+	f.addFinalPreMoofBoxes()
+	return f, nil
+}
