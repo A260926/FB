@@ -30,3 +30,6 @@ executor/syscalls.h
 .gemini/
 gha-creds-*.json
 .agents/
+
+# Local baseline Go caches.
+.userfb-cache/
