@@ -101,6 +101,9 @@ The three dots (...) indicate that various "overloads" are available.
     - Contains()
     - Is...()
 
+* table.go : read-only flattening of an HTML table into a grid.
+    - TableGrid(), with the TableSlot result type
+
 * traversal.go : methods to traverse the HTML document tree.
     - Children...()
     - Contents()

@@ -146,3 +146,54 @@ func ExampleText() {
 	// Output:
 	// Hello world
 }
+
+// This example shows how to flatten an HTML table, including multi-row headers
+// and colspan/rowspan cells, into a two-dimensional grid that keeps the source
+// cell of every position.
+func ExampleSelection_TableGrid() {
+	page := `
+<table>
+  <thead>
+    <tr><th rowspan="2">Site</th><th colspan="2">Traffic</th></tr>
+    <tr><th>In</th><th>Out</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>A</td><td>10</td><td>20</td></tr>
+  </tbody>
+</table>`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 0 selects the default budget of 65536 slots; the receiver must be the
+	// single table element to flatten.
+	grid, err := doc.Find("table").First().TableGrid(0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for r, row := range grid {
+		for c, slot := range row {
+			if !slot.Present {
+				continue
+			}
+			kind := "td"
+			if slot.Header {
+				kind = "th"
+			}
+			fmt.Printf("(%d,%d) %s %q from (%d,%d)\n",
+				r, c, kind, slot.Text, slot.OriginRow, slot.OriginCol)
+		}
+	}
+	// Output:
+	// (0,0) th "Site" from (0,0)
+	// (0,1) th "Traffic" from (0,1)
+	// (0,2) th "Traffic" from (0,1)
+	// (1,0) th "Site" from (0,0)
+	// (1,1) th "In" from (1,1)
+	// (1,2) th "Out" from (1,2)
+	// (2,0) td "A" from (2,0)
+	// (2,1) td "10" from (2,1)
+	// (2,2) td "20" from (2,2)
+}
