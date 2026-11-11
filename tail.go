@@ -81,6 +81,18 @@ type Config struct {
 	MaxLineSize   int  // If non-zero, split longer lines into multiple lines
 	CompleteLines bool // Only return complete lines (that end with "\n" or EOF when Follow is false)
 
+	// Delimiter, when non-empty, switches record splitting from the
+	// default newline handling to this literal byte sequence. The value is
+	// matched byte for byte: it is not a regular expression nor a set of
+	// alternative delimiters, and NUL bytes and multi-byte UTF-8 sequences
+	// are treated as raw bytes. A delimiter never appears in Line.Text;
+	// consecutive or leading delimiters produce empty records, while a file
+	// that ends exactly on a delimiter does not produce a trailing empty
+	// record. A custom Delimiter requires CompleteLines to be true and is
+	// rejected by TailFile otherwise. An empty Delimiter keeps the default
+	// "\n"-based behavior.
+	Delimiter string
+
 	// Optionally, use a ratelimiter (e.g. created by the ratelimiter/NewLeakyBucket function)
 	RateLimiter *ratelimiter.LeakyBucket
 
@@ -98,7 +110,8 @@ type Tail struct {
 	reader  *bufio.Reader
 	lineNum int
 
-	lineBuf *strings.Builder
+	lineBuf  *strings.Builder
+	splitter *delimiterSplitter
 
 	watcher watch.FileWatcher
 	changes *watch.FileChanges
@@ -125,6 +138,13 @@ func TailFile(filename string, config Config) (*Tail, error) {
 		util.Fatal("cannot set ReOpen without Follow.")
 	}
 
+	// A custom delimiter is only supported in complete-records mode. The
+	// check happens before any goroutine is started or file opened so the
+	// caller gets the error synchronously instead of through the tomb.
+	if config.Delimiter != "" && !config.CompleteLines {
+		return nil, errDelimiterWithoutCompleteLines
+	}
+
 	t := &Tail{
 		Filename: filename,
 		Lines:    make(chan *Line),
@@ -133,6 +153,10 @@ func TailFile(filename string, config Config) (*Tail, error) {
 
 	if config.CompleteLines {
 		t.lineBuf = new(strings.Builder)
+	}
+
+	if config.Delimiter != "" {
+		t.splitter = &delimiterSplitter{delim: []byte(config.Delimiter)}
 	}
 
 	// when Logger was not specified in config, use default logger
@@ -211,6 +235,12 @@ func (tail *Tail) closeFile() {
 func (tail *Tail) reopen() error {
 	if tail.lineBuf != nil {
 		tail.lineBuf.Reset()
+	}
+	if tail.splitter != nil {
+		// A replaced or truncated file is brand new content: an unfinished
+		// record and any partially matched delimiter prefix from the old
+		// file must not be joined with bytes of the new one.
+		tail.splitter.reset()
 	}
 	tail.closeFile()
 	tail.lineNum = 0
@@ -292,6 +322,13 @@ func (tail *Tail) tailFileSync() {
 	}
 
 	tail.openReader()
+
+	if tail.Delimiter != "" {
+		// Custom delimiter mode uses its own read loop so the default
+		// newline behavior is left untouched for every other config.
+		tail.tailFileRecords()
+		return
+	}
 
 	// Read line by line.
 	for {
