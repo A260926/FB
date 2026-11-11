@@ -166,6 +166,9 @@ func (p *MediaPlaylist) decode(buf *bytes.Buffer, strict bool) error {
 	if strict && !state.m3u {
 		return errors.New("#EXTM3U absent")
 	}
+	if strict && len(p.dateRanges) > 0 && !state.sawProgramDateTime {
+		return errors.New("EXT-X-DATERANGE requires at least one EXT-X-PROGRAM-DATE-TIME")
+	}
 	return nil
 }
 
@@ -268,6 +271,9 @@ func decode(buf *bytes.Buffer, strict bool, customDecoders []CustomDecoder) (Pla
 	case MASTER:
 		return master, MASTER, nil
 	case MEDIA:
+		if strict && len(media.dateRanges) > 0 && !state.sawProgramDateTime {
+			return nil, state.listType, errors.New("EXT-X-DATERANGE requires at least one EXT-X-PROGRAM-DATE-TIME")
+		}
 		if media.Closed || media.MediaType == EVENT {
 			// VoD and Event's should show the entire playlist
 			media.SetWinSize(0)
@@ -673,9 +679,24 @@ func decodeLineOfMediaPlaylist(p *MediaPlaylist, wv *WV, state *decodingState, l
 		state.tagMap = true
 	case !state.tagProgramDateTime && strings.HasPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"):
 		state.tagProgramDateTime = true
+		state.sawProgramDateTime = true
 		state.listType = MEDIA
 		if state.programDateTime, err = TimeParse(line[25:]); strict && err != nil {
 			return err
+		}
+	case strings.HasPrefix(line, "#EXT-X-DATERANGE:"):
+		state.listType = MEDIA
+		var dr *DateRange
+		if dr, err = parseDateRange(line[17:]); err != nil {
+			if strict {
+				return err
+			}
+			err = nil
+		} else if err = p.SetDateRange(dr); err != nil {
+			if strict {
+				return err
+			}
+			err = nil
 		}
 	case !state.tagRange && strings.HasPrefix(line, "#EXT-X-BYTERANGE:"):
 		state.tagRange = true

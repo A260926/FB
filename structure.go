@@ -130,6 +130,8 @@ type MediaPlaylist struct {
 	WV               *WV  // Widevine related tags outside of M3U8 specs
 	Custom           map[string]CustomTag
 	customDecoders   []CustomDecoder
+	dateRanges       []*DateRange // EXT-X-DATERANGE tags merged by ID, in first-seen ID order
+	dateRangeIdx     map[string]*DateRange
 }
 
 // MasterPlaylist structure represents a master playlist which
@@ -227,6 +229,50 @@ type SCTE struct {
 	Elapsed float64
 }
 
+// DateRangeAttributeType defines the type of a client-defined (X-)
+// attribute value carried by an EXT-X-DATERANGE tag. The type is kept
+// so a value is written back with the same representation it was read
+// with (a quoted string never becomes a number and vice versa).
+type DateRangeAttributeType uint
+
+const (
+	// DateRangeAttributeString is a quoted-string value.
+	DateRangeAttributeString DateRangeAttributeType = iota + 1
+	// DateRangeAttributeNumber is a decimal-integer or
+	// decimal-floating-point value.
+	DateRangeAttributeNumber
+	// DateRangeAttributeHex is a hexadecimal-sequence value.
+	DateRangeAttributeHex
+)
+
+// DateRangeAttribute is a client-defined X- attribute of an
+// EXT-X-DATERANGE tag. Value keeps the raw value without quotes for
+// strings and the literal token for numbers and hexadecimal sequences.
+type DateRangeAttribute struct {
+	Name  string
+	Value string
+	Type  DateRangeAttributeType
+}
+
+// DateRange structure represents a single EXT-X-DATERANGE tag of a
+// media playlist. Date ranges with the same ID are merged into one
+// DateRange as they appear in the playlist.
+//
+// Realizes EXT-X-DATERANGE tag.
+type DateRange struct {
+	ID                 string
+	Class              string
+	StartDate          time.Time
+	EndDate            time.Time // valid only if EndDateSet is true
+	Duration           float64   // seconds, valid only if DurationSet is true
+	PlannedDuration    float64   // seconds, valid only if PlannedDurationSet is true
+	EndOnNext          bool
+	X                  []DateRangeAttribute // client-defined X- attributes in first-seen order
+	EndDateSet         bool                 // distinguishes an absent END-DATE from a zero time
+	DurationSet        bool                 // distinguishes an absent DURATION from an explicit zero
+	PlannedDurationSet bool                 // distinguishes an absent PLANNED-DURATION from an explicit zero
+}
+
 // Key structure represents information about stream encryption.
 //
 // Realizes EXT-X-KEY tag.
@@ -318,6 +364,7 @@ type decodingState struct {
 	tagRange           bool
 	tagDiscontinuity   bool
 	tagProgramDateTime bool
+	sawProgramDateTime bool
 	tagKey             bool
 	tagMap             bool
 	tagCustom          bool

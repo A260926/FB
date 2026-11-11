@@ -485,6 +485,11 @@ func (p *MediaPlaylist) Encode() *bytes.Buffer {
 		p.buf.WriteString(strconv.FormatUint(uint64(p.DiscontinuitySeq), 10))
 		p.buf.WriteRune('\n')
 	}
+	// Date ranges are written in the order their IDs first appeared.
+	for _, dr := range p.dateRanges {
+		p.buf.WriteString(dr.encode())
+		p.buf.WriteRune('\n')
+	}
 	if p.Iframe {
 		p.buf.WriteString("#EXT-X-I-FRAMES-ONLY\n")
 	}

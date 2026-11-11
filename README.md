@@ -97,6 +97,43 @@ You may use API methods to fill structures or create them manually to generate p
 	fmt.Println(p.Encode().String())
 ```
 
+Date ranges (EXT-X-DATERANGE) for ad signaling
+----------------------------------------------
+
+Media playlists parse and generate `EXT-X-DATERANGE` tags out of the box,
+no custom decoders needed. Tags with the same `ID` are merged into one
+`DateRange` structure; `SetDateRange` applies the same merge rules for
+updates made from code (conflicting values are rejected with a
+`*DateRangeError` that carries the ID and the attribute name). The query
+methods `DateRange`/`DateRanges` return the effective attributes with the
+known end of the range — derived from `DURATION` or, for
+`END-ON-NEXT=YES` ranges, from the nearest later range of the same
+`CLASS` — without altering the attributes written back on encode.
+
+```go
+	p, _, err := m3u8.DecodeFrom(strings.NewReader(mediaPlaylistWithDateRanges), true)
+	if err != nil {
+		panic(err)
+	}
+	mp := p.(*m3u8.MediaPlaylist)
+
+	// Add a later break; an END-ON-NEXT range of class "break" that
+	// started before it now ends at 2026-01-01T00:00:30Z.
+	err = mp.SetDateRange(&m3u8.DateRange{
+		ID:        "break-2",
+		Class:     "break",
+		StartDate: time.Date(2026, 1, 1, 0, 0, 30, 0, time.UTC),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	if dr, ok := mp.DateRange("break-1"); ok && dr.EndDateSet {
+		fmt.Printf("break-1 ends at %s\n", dr.EndDate.Format(time.RFC3339Nano))
+	}
+	fmt.Println(mp.Encode().String())
+```
+
 Custom Tags
 -----------
 
