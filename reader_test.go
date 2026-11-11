@@ -89,7 +89,7 @@ func TestReadMulaw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Equal(t, "4.59125s", duration.String())
+	assert.Equal(t, "4.591125s", duration.String())
 
 	samples, err := reader.ReadSamples(1)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestReadAlaw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Equal(t, "4.59125s", duration.String())
+	assert.Equal(t, "4.591125s", duration.String())
 
 	samples, err := reader.ReadSamples(1)
 	if err != nil {

@@ -1,9 +1,5 @@
 package wav
 
-import (
-	"io"
-)
-
 const (
 	AudioFormatPCM       = 1
 	AudioFormatIEEEFloat = 3
@@ -21,9 +17,16 @@ type WavFormat struct {
 }
 
 type WavData struct {
-	io.Reader
-	Size uint32
-	pos  uint32
+	stream *audioStream
+	Size   uint32
+	pos    uint32
+}
+
+func (d *WavData) Read(p []byte) (n int, err error) {
+	n, err = d.stream.Read(p)
+	d.pos += uint32(n)
+
+	return
 }
 
 type Sample struct {
