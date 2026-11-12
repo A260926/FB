@@ -32,6 +32,10 @@ function(configure_g722_target target_name)
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
       $<INSTALL_INTERFACE:include>
   )
+  if(NOT WIN32)
+    # g722_fillin() uses sqrt() for the pitch correlation.
+    target_link_libraries(${target_name} PRIVATE m)
+  endif()
   if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     target_compile_options(${target_name} PRIVATE -Wdouble-promotion -Wno-attributes)
   endif()

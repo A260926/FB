@@ -28,7 +28,7 @@ libg722.a: $(OBJS) $(SRCS_H)
 	ranlib $@
 
 libg722.so.0: $(OBJS_PIC) $(SRCS_H)
-	$(CC) -shared -o $@ -Wl,${SONAME},$@ $(OBJS_PIC)
+	$(CC) -shared -o $@ -Wl,${SONAME},$@ $(OBJS_PIC) -lm
 
 libg722.so: libg722.so.0
 	ln -sf libg722.so.0 $@

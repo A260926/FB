@@ -96,9 +96,35 @@ struct g722_decode_state
     int x[24];
 
     struct g722_band band[2];
-    
+
     unsigned int in_buffer;
     int in_bits;
     unsigned int out_buffer;
     int out_bits;
+
+    /*! Packet loss concealment (fill-in) state.  Everything below is private
+        to the decoder instance; no allocation is performed while filling in. */
+    /*! Recent limited low-band reconstructions, oldest first in chronological
+        order.  Only the last 320 values are retained. */
+    int plc_hist[320];
+    /*! Next write position in the history ring. */
+    int plc_hist_pos;
+    /*! Number of valid entries in the history ring (0..320). */
+    int plc_hist_len;
+    /*! One complete pitch period copied from the end of the real history. */
+    int plc_period[120];
+    /*! Selected pitch period in subband samples; 0 means zero fill. */
+    int plc_pitch;
+    /*! Last real high-band reconstruction before the current gap. */
+    int plc_high_seed;
+    /*! Last real high-band reconstruction seen at any time. */
+    int plc_last_rhigh;
+    /*! Number of subband instants produced for the current gap. */
+    int plc_k;
+    /*! TRUE while a missing interval is being filled and no real code arrived. */
+    int plc_gap;
+    /*! TRUE during the 40-subband-sample crossfade back to real data. */
+    int plc_transition;
+    /*! Crossfade position 0..39 since the first real subband instant. */
+    int plc_recover;
 };

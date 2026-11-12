@@ -13,6 +13,55 @@ encoder and decoder support an option for the linear audio to be an 8 kHz
 stream. In this mode the codec is considerably faster, and
 still fully compatible with wideband terminals using G.722.
 
+## Decoder Fill-In (Packet Loss Concealment)
+
+`g722_fillin()` extends the decoder across a missing interval and hands the
+concealed signal back to real codewords at the same subband clock:
+
+```c
+int g722_fillin(G722_DEC_CTX *ctx, int16_t out[], int missing_pairs);
+```
+
+`missing_pairs` is counted in 8 kHz subband instants. A decoder created with
+`G722_SAMPLE_RATE_8000` writes exactly `missing_pairs` samples; a normal
+16 kHz-output decoder writes `2*missing_pairs` samples. The function returns
+the number of samples written.
+
+Hidden intervals are reconstructed after the subband reconstructions and
+before the receive QMF. Both bands keep the real ADPCM predictor and
+quantiser adaptation state unchanged (no fake codewords are built), while the
+QMF history advances for every concealed instant so that chunked calls and
+one large call produce identical output.
+
+- The low band repeats the pitch period selected from the last 320 real,
+  limited low-band reconstructions. Delays of 40..120 subband samples are
+  scored with a mean-removed normalised correlation over the most recent 160
+  samples; the highest score wins (ties go to the shorter delay). Fewer than
+  280 real history samples, or a best correlation below 0.6, concealed with
+  zeroes. The period is then looped while the amplitude factor
+  `min(1, max(0, (960-k)/640))` holds it for 40 ms and fades it to silence by
+  120 ms, where `k` counts subband instants from the start of the interval.
+  Anything at or beyond `k = 960` is silent.
+- The high band does not loop: it starts from the last real high-band
+  reconstruction and decays as `max(0, (16-k)/16)`.
+- When real codewords resume, the first 40 subband instants crossfade linearly
+  from the concealed extension to the real reconstruction (real weight
+  `(j+1)/40` for `j = 0..39`), still before the QMF. A new loss during that
+  crossfade restarts concealment from the real history received so far.
+  `g722_fillin()` never carries the crossfade forward on its own: only real
+  codewords advance it, and an empty `g722_decode()` call does not.
+- The look-ahead is zero: a decoder instance starts with an empty real
+  history, so a loss right after construction conceals with zeroes until at
+  least 280 real subband values have been seen.
+- `missing_pairs == 0` returns 0 and changes nothing. Negative counts, counts
+  above 8000, or a packed 48/56 kbps context return -1 with the output and
+  state untouched. The caller supplies enough space for the non-empty output.
+  Each decoder instance keeps its own pitch, decay and recovery progress; no
+  memory is allocated during fill-in and no audio is stored beyond the
+  rolling 320-sample history.
+
+Decoding without any missing interval is bit-exact with the original decoder.
+
 ## History
 
 The code was originally written by Milton Anderson <milton@thumper.bellcore.com>

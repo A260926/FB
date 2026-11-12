@@ -233,7 +233,8 @@ def main():
         ],
         'include_dirs': [src_dir, py_src_dir],
         'extra_compile_args': compile_args,
-        'extra_link_args': link_args
+        'extra_link_args': link_args,
+        'libraries': [] if is_win else ['m']
     }
     mod_debug_args = mod_common_args.copy()
     mod_debug_args['extra_compile_args'] = mod_debug_args['extra_compile_args'] + debug_cflags
