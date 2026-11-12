@@ -139,6 +139,44 @@ func main() {
 }
 ```
 
+#### Reconnection and the delivery cursor
+
+A normal end of the response stream (EOF) ends one connection, not the
+subscription. Both `SubscribeWithContext` and `SubscribeChanWithContext`
+reconnect using `ReconnectStrategy` (or a default exponential backoff) and send
+the last delivered event ID in the `Last-Event-ID` request header. Read errors
+take the same reconnect path, and `ReconnectNotify` is called for every wait
+before the next attempt. When the strategy reports `backoff.Stop`, the callback
+entry point returns the error from the last connection; if the last connection
+ended normally, that error is `io.EOF`.
+
+The cursor represents what has been *delivered downstream*, not what the reader
+has prefetched:
+
+* the callback entry point marks a record delivered when the handler returns;
+* the channel entry point marks it delivered when the send succeeds, including
+  an enqueue into a buffered channel.
+
+A record that is blocked and then canceled without being delivered does not
+advance the cursor, so the next connection or a later resubscribe still starts
+from the last delivered position. IDs are kept as opaque bytes: they are not
+sorted, interpreted, or deduplicated. Records without an ID inherit the
+preceding record's ID as before.
+
+#### Stopping a subscription
+
+Canceling the context interrupts a blocked body read, a blocked channel send,
+and a retry wait. The callback entry point then returns `ctx.Err()` and no new
+request is made. A handler that is already running is allowed to return and is
+counted as delivered before the subscription stops.
+
+`Unsubscribe(ch)` stops a channel subscription. It may be called repeatedly or
+concurrently and returns only after that subscription's reader and reconnect
+goroutine have exited, its response body has been closed, and its internal
+registration has been removed. It never closes the caller's event channel.
+After it returns, the same `Client` and channel can be subscribed again, and a
+late cleanup from the old subscription cannot remove the new one.
+
 #### HTTP client parameters
 
 To add additional parameters to the http client, such as disabling ssl verification for self signed certs, you can override the http client or update its options:

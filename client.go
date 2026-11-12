@@ -24,6 +24,10 @@ var (
 	headerData  = []byte("data:")
 	headerEvent = []byte("event:")
 	headerRetry = []byte("retry:")
+
+	// errSubscriptionStopped is used internally to unwind a connection
+	// attempt after Unsubscribe has been called.
+	errSubscriptionStopped = errors.New("sse: subscription stopped")
 )
 
 func ClientMaxBufferSize(s int) func(c *Client) {
@@ -44,7 +48,7 @@ type Client struct {
 	ReconnectStrategy backoff.BackOff
 	disconnectcb      ConnCallback
 	connectedcb       ConnCallback
-	subscribed        map[chan *Event]chan struct{}
+	subscribed        map[chan *Event]*subscription
 	Headers           map[string]string
 	ReconnectNotify   backoff.Notify
 	ResponseValidator ResponseValidator
@@ -63,7 +67,7 @@ func NewClient(url string, opts ...func(c *Client)) *Client {
 		URL:           url,
 		Connection:    &http.Client{},
 		Headers:       make(map[string]string),
-		subscribed:    make(map[chan *Event]chan struct{}),
+		subscribed:    make(map[chan *Event]*subscription),
 		maxBufferSize: 1 << 16,
 	}
 
@@ -81,43 +85,8 @@ func (c *Client) Subscribe(stream string, handler func(msg *Event)) error {
 
 // SubscribeWithContext to a data stream with context
 func (c *Client) SubscribeWithContext(ctx context.Context, stream string, handler func(msg *Event)) error {
-	operation := func() error {
-		resp, err := c.request(ctx, stream)
-		if err != nil {
-			return err
-		}
-		if validator := c.ResponseValidator; validator != nil {
-			err = validator(c, resp)
-			if err != nil {
-				return err
-			}
-		} else if resp.StatusCode != 200 {
-			resp.Body.Close()
-			return fmt.Errorf("could not connect to stream: %s", http.StatusText(resp.StatusCode))
-		}
-		defer resp.Body.Close()
-
-		reader := NewEventStreamReader(resp.Body, c.maxBufferSize)
-		eventChan, errorChan := c.startReadLoop(reader)
-
-		for {
-			select {
-			case err = <-errorChan:
-				return err
-			case msg := <-eventChan:
-				handler(msg)
-			}
-		}
-	}
-
-	// Apply user specified reconnection strategy or default to standard NewExponentialBackOff() reconnection method
-	var err error
-	if c.ReconnectStrategy != nil {
-		err = backoff.RetryNotify(operation, c.ReconnectStrategy, c.ReconnectNotify)
-	} else {
-		err = backoff.RetryNotify(operation, backoff.NewExponentialBackOff(), c.ReconnectNotify)
-	}
-	return err
+	sub := newSubscription(c, ctx, stream, handler, nil)
+	return sub.run()
 }
 
 // SubscribeChan sends all events to the provided channel
@@ -127,94 +96,329 @@ func (c *Client) SubscribeChan(stream string, ch chan *Event) error {
 
 // SubscribeChanWithContext sends all events to the provided channel with context
 func (c *Client) SubscribeChanWithContext(ctx context.Context, stream string, ch chan *Event) error {
-	var connected bool
-	errch := make(chan error)
+	sub := newSubscription(c, ctx, stream, nil, ch)
+	sub.resultCh = make(chan error, 1)
+
 	c.mu.Lock()
-	c.subscribed[ch] = make(chan struct{})
+	c.subscribed[ch] = sub
 	c.mu.Unlock()
 
-	operation := func() error {
-		resp, err := c.request(ctx, stream)
-		if err != nil {
+	sub.start()
+
+	// The subscription reports back once the first connection is established,
+	// or with the final error when no connection could be established.
+	return <-sub.resultCh
+}
+
+// Unsubscribe unsubscribes a channel. It is safe to call it repeatedly or
+// concurrently; it returns only after this subscription has fully stopped and
+// its bookkeeping has been removed. The caller's event channel is never closed.
+func (c *Client) Unsubscribe(ch chan *Event) {
+	c.mu.Lock()
+	sub := c.subscribed[ch]
+	c.mu.Unlock()
+
+	if sub == nil {
+		return
+	}
+
+	sub.stop()
+	<-sub.done
+}
+
+// OnDisconnect specifies the function to run when the connection disconnects
+func (c *Client) OnDisconnect(fn ConnCallback) {
+	c.disconnectcb = fn
+}
+
+// OnConnect specifies the function to run when the connection is successful
+func (c *Client) OnConnect(fn ConnCallback) {
+	c.connectedcb = fn
+}
+
+// subscription is the lifetime of one Subscribe/SubscribeChan call. It owns
+// the reconnection loop, the current response body and the delivery of events
+// downstream. The LastEventID cursor is only advanced once an event has been
+// handed to the caller (handler returned, or channel send succeeded).
+type subscription struct {
+	client   *Client
+	stream   string
+	handler  func(msg *Event)
+	ch       chan *Event
+	ctx      context.Context // caller supplied context
+	runCtx   context.Context // canceled by either the caller or stop
+	cancel   context.CancelFunc
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	done     chan struct{}
+
+	connectOnce sync.Once
+	connected   int32
+	resultCh    chan error // non-nil for the channel entry points
+}
+
+func newSubscription(c *Client, ctx context.Context, stream string, handler func(*Event), ch chan *Event) *subscription {
+	runCtx, cancel := context.WithCancel(ctx)
+	return &subscription{
+		client:  c,
+		stream:  stream,
+		handler: handler,
+		ch:      ch,
+		ctx:     ctx,
+		runCtx:  runCtx,
+		cancel:  cancel,
+		stopCh:  make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+}
+
+func (s *subscription) start() {
+	go func() {
+		// Delete registration before publishing done so that an Unsubscribe
+		// returning from <-done can never observe stale bookkeeping.
+		defer close(s.done)
+		defer func() {
+			s.client.mu.Lock()
+			if s.ch != nil && s.client.subscribed[s.ch] == s {
+				delete(s.client.subscribed, s.ch)
+			}
+			s.client.mu.Unlock()
+		}()
+
+		err := s.run()
+
+		// If we never established a connection, report the final error (or
+		// nil when the subscription was merely stopped) to the caller.
+		if s.resultCh != nil && atomic.LoadInt32(&s.connected) == 0 {
+			s.resultCh <- err
+		}
+	}()
+}
+
+func (s *subscription) stop() {
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+		s.cancel()
+	})
+}
+
+func (s *subscription) stopped() bool {
+	select {
+	case <-s.stopCh:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *subscription) run() error {
+	defer s.cancel()
+
+	strategy := s.client.ReconnectStrategy
+	if strategy == nil {
+		strategy = backoff.NewExponentialBackOff()
+	}
+	// Reset once at the beginning of the subscription, never per event.
+	strategy.Reset()
+
+	var lastErr error
+	for {
+		if s.stopped() {
+			return nil
+		}
+		if err := s.ctx.Err(); err != nil {
 			return err
 		}
-		if validator := c.ResponseValidator; validator != nil {
-			err = validator(c, resp)
-			if err != nil {
-				return err
-			}
-		} else if resp.StatusCode != 200 {
-			resp.Body.Close()
-			return fmt.Errorf("could not connect to stream: %s", http.StatusText(resp.StatusCode))
-		}
-		defer resp.Body.Close()
 
-		if !connected {
-			// Notify connect
-			errch <- nil
-			connected = true
+		lastErr = s.session()
+
+		if s.stopped() {
+			return nil
+		}
+		if err := s.ctx.Err(); err != nil {
+			return err
+		}
+		if lastErr == nil {
+			return nil
 		}
 
-		reader := NewEventStreamReader(resp.Body, c.maxBufferSize)
-		eventChan, errorChan := c.startReadLoop(reader)
+		// Match RetryNotify's handling of permanent errors: do not retry.
+		if permanent, ok := lastErr.(*backoff.PermanentError); ok {
+			return permanent.Err
+		}
 
-		for {
-			var msg *Event
-			// Wait for message to arrive or exit
-			select {
-			case <-c.subscribed[ch]:
+		next := strategy.NextBackOff()
+		if next == backoff.Stop {
+			if s.stopped() {
 				return nil
-			case err = <-errorChan:
-				return err
-			case msg = <-eventChan:
 			}
+			if err := s.ctx.Err(); err != nil {
+				return err
+			}
+			// Report the error from the last connection attempt. A normal
+			// end of stream therefore surfaces as io.EOF.
+			return lastErr
+		}
 
-			// Wait for message to be sent or exit
-			if msg != nil {
-				select {
-				case <-c.subscribed[ch]:
-					return nil
-				case ch <- msg:
-					// message sent
-				}
+		if s.client.ReconnectNotify != nil {
+			s.client.ReconnectNotify(lastErr, next)
+		}
+
+		if next <= 0 {
+			continue
+		}
+
+		timer := time.NewTimer(next)
+		select {
+		case <-s.runCtx.Done():
+			timer.Stop()
+			if s.stopped() {
+				return nil
+			}
+			if err := s.ctx.Err(); err != nil {
+				return err
+			}
+			return lastErr
+		case <-timer.C:
+		}
+	}
+}
+
+// session runs one request/response connection until it ends. A clean EOF is
+// returned as io.EOF; the caller decides whether to reconnect.
+func (s *subscription) session() error {
+	resp, err := s.client.request(s.runCtx, s.stream)
+	if err != nil {
+		// http.Client guarantees the body is already closed when both a
+		// response and an error are returned, but close defensively anyway.
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		return err
+	}
+
+	body := &onceCloseBody{ReadCloser: resp.Body}
+	defer body.Close()
+
+	// Closing the body is what interrupts a read that is blocked inside the
+	// scanner when the context is canceled or Unsubscribe is called.
+	watcherDone := make(chan struct{})
+	defer close(watcherDone)
+	go func() {
+		select {
+		case <-s.runCtx.Done():
+			body.Close()
+		case <-watcherDone:
+		}
+	}()
+
+	if validator := s.client.ResponseValidator; validator != nil {
+		if err := validator(s.client, resp); err != nil {
+			return err
+		}
+	} else if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("could not connect to stream: %s", http.StatusText(resp.StatusCode))
+	}
+
+	s.signalConnected()
+
+	reader := NewEventStreamReader(body, s.client.maxBufferSize)
+	eventCh := make(chan *Event)
+	errCh := make(chan error, 1)
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		s.readLoop(reader, eventCh, errCh)
+	}()
+
+	// Always close the body first (unblocking a pending read), then wait for
+	// the read goroutine so that this session leaves no reader behind.
+	defer func() {
+		body.Close()
+		<-readDone
+	}()
+
+	for {
+		select {
+		case <-s.runCtx.Done():
+			if s.stopped() {
+				return errSubscriptionStopped
+			}
+			return s.ctx.Err()
+		case err := <-errCh:
+			return err
+		case msg := <-eventCh:
+			if err := s.deliver(msg); err != nil {
+				return err
 			}
 		}
 	}
-
-	go func() {
-		defer c.cleanup(ch)
-		// Apply user specified reconnection strategy or default to standard NewExponentialBackOff() reconnection method
-		var err error
-		if c.ReconnectStrategy != nil {
-			err = backoff.RetryNotify(operation, c.ReconnectStrategy, c.ReconnectNotify)
-		} else {
-			err = backoff.RetryNotify(operation, backoff.NewExponentialBackOff(), c.ReconnectNotify)
-		}
-
-		// channel closed once connected
-		if err != nil && !connected {
-			errch <- err
-		}
-	}()
-	err := <-errch
-	close(errch)
-	return err
 }
 
-func (c *Client) startReadLoop(reader *EventStreamReader) (chan *Event, chan error) {
-	outCh := make(chan *Event)
-	erChan := make(chan error)
-	go c.readLoop(reader, outCh, erChan)
-	return outCh, erChan
+// deliver hands one event downstream and only then advances the resume
+// cursor. The ID is snapshotted first so that callers mutating Event.ID cannot
+// corrupt the Last-Event-ID header used by later requests.
+func (s *subscription) deliver(msg *Event) error {
+	id := append([]byte(nil), msg.ID...)
+
+	if s.handler != nil {
+		// Do not start a handler once the subscription is stopping.
+		select {
+		case <-s.runCtx.Done():
+			if s.stopped() {
+				return errSubscriptionStopped
+			}
+			return s.ctx.Err()
+		default:
+		}
+
+		s.handler(msg)
+		s.advance(id)
+		return nil
+	}
+
+	select {
+	case s.ch <- msg:
+		// A successful send, including to a buffered channel, counts as
+		// delivered.
+		s.advance(id)
+		return nil
+	case <-s.runCtx.Done():
+		if s.stopped() {
+			return errSubscriptionStopped
+		}
+		return s.ctx.Err()
+	}
 }
 
-func (c *Client) readLoop(reader *EventStreamReader, outCh chan *Event, erChan chan error) {
+func (s *subscription) advance(id []byte) {
+	if len(id) == 0 {
+		return
+	}
+	// id is already a private copy; never share it with a caller's Event.ID.
+	s.client.LastEventID.Store(id)
+}
+
+func (s *subscription) signalConnected() {
+	atomic.StoreInt32(&s.connected, 1)
+	s.connectOnce.Do(func() {
+		if s.resultCh != nil {
+			s.resultCh <- nil
+		}
+	})
+}
+
+func (s *subscription) readLoop(reader *EventStreamReader, outCh chan<- *Event, erChan chan<- error) {
+	c := s.client
+	lastID := c.lastDeliveredID()
+
 	for {
 		// Read each new line and process the type of event
 		event, err := reader.ReadEvent()
 		if err != nil {
 			if err == io.EOF {
-				erChan <- nil
+				// A normal end of stream is still a reconnectable event.
+				erChan <- io.EOF
 				return
 			}
 			// run user specified disconnect function
@@ -232,20 +436,37 @@ func (c *Client) readLoop(reader *EventStreamReader, outCh chan *Event, erChan c
 		}
 
 		// If we get an error, ignore it.
-		var msg *Event
-		if msg, err = c.processEvent(event); err == nil {
-			if len(msg.ID) > 0 {
-				c.LastEventID.Store(msg.ID)
-			} else {
-				msg.ID, _ = c.LastEventID.Load().([]byte)
-			}
+		msg, err := c.processEvent(event)
+		if err != nil {
+			continue
+		}
 
-			// Send downstream if the event has something useful
-			if msg.hasContent() {
-				outCh <- msg
+		// Preserve the original inheritance rule: an event without an ID
+		// keeps the ID of the preceding record. This is only used for the
+		// Event handed downstream; the resume cursor is advanced on delivery.
+		if len(msg.ID) > 0 {
+			lastID = append([]byte(nil), msg.ID...)
+		} else if len(lastID) > 0 {
+			msg.ID = append([]byte(nil), lastID...)
+		}
+
+		// Send downstream if the event has something useful
+		if msg.hasContent() {
+			select {
+			case outCh <- msg:
+			case <-s.runCtx.Done():
+				return
 			}
 		}
 	}
+}
+
+func (c *Client) lastDeliveredID() []byte {
+	v, ok := c.LastEventID.Load().([]byte)
+	if !ok || len(v) == 0 {
+		return nil
+	}
+	return append([]byte(nil), v...)
 }
 
 // SubscribeRaw to an sse endpoint
@@ -266,26 +487,6 @@ func (c *Client) SubscribeChanRaw(ch chan *Event) error {
 // SubscribeChanRawWithContext sends all events to the provided channel with context
 func (c *Client) SubscribeChanRawWithContext(ctx context.Context, ch chan *Event) error {
 	return c.SubscribeChanWithContext(ctx, "", ch)
-}
-
-// Unsubscribe unsubscribes a channel
-func (c *Client) Unsubscribe(ch chan *Event) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.subscribed[ch] != nil {
-		c.subscribed[ch] <- struct{}{}
-	}
-}
-
-// OnDisconnect specifies the function to run when the connection disconnects
-func (c *Client) OnDisconnect(fn ConnCallback) {
-	c.disconnectcb = fn
-}
-
-// OnConnect specifies the function to run when the connection is successful
-func (c *Client) OnConnect(fn ConnCallback) {
-	c.connectedcb = fn
 }
 
 func (c *Client) request(ctx context.Context, stream string) (*http.Response, error) {
@@ -362,14 +563,19 @@ func (c *Client) processEvent(msg []byte) (event *Event, err error) {
 	return &e, err
 }
 
-func (c *Client) cleanup(ch chan *Event) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// onceCloseBody makes the response body close idempotent so that concurrent
+// cancellation and normal session teardown cannot double-close it.
+type onceCloseBody struct {
+	io.ReadCloser
+	once sync.Once
+	err  error
+}
 
-	if c.subscribed[ch] != nil {
-		close(c.subscribed[ch])
-		delete(c.subscribed, ch)
-	}
+func (b *onceCloseBody) Close() error {
+	b.once.Do(func() {
+		b.err = b.ReadCloser.Close()
+	})
+	return b.err
 }
 
 func trimHeader(size int, data []byte) []byte {
