@@ -56,6 +56,7 @@ loadwav \
 lpc \
 lpf18 \
 maygate \
+mbcompress \
 metro \
 mincer \
 mode \
