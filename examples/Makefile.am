@@ -23,6 +23,11 @@ if BUILD_WEBPINFO
   bin_PROGRAMS += webpinfo
 endif
 
+# Small standalone example; built alongside the image utilities.
+if BUILD_DEMUX
+  noinst_PROGRAMS += webp_color_convert
+endif
+
 noinst_LTLIBRARIES = libexample_util.la
 noinst_LTLIBRARIES += libanim_util.la
 
@@ -111,6 +116,12 @@ img2webp_LDADD += ../imageio/libimagedec.la
 img2webp_LDADD += ../src/mux/libwebpmux.la
 img2webp_LDADD += ../src/libwebp.la
 img2webp_LDADD += $(PNG_LIBS) $(JPEG_LIBS) $(TIFF_LIBS)
+
+webp_color_convert_SOURCES = webp_color_convert.c
+webp_color_convert_CPPFLAGS = $(AM_CPPFLAGS)
+webp_color_convert_LDADD  =
+webp_color_convert_LDADD += ../src/libwebp.la
+webp_color_convert_LDADD += -lm
 
 webpinfo_SOURCES = webpinfo.c
 webpinfo_CPPFLAGS = $(AM_CPPFLAGS)

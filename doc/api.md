@@ -240,6 +240,58 @@ WebPIDelete(idec);
 WebPFreeDecBuffer(&config.output);
 ```
 
+#### Explicit Y'CbCr matrix and range for lossy VP8
+
+Lossy VP8 stores its samples as Y'CbCr (4:2:0) without any usable color
+metadata. The decoder's historical behavior is a BT.601 limited-range
+conversion. When the producer of a file has signalled, out of band, a different
+matrix or range (for example a BT.709 pipeline that tagged its output itself),
+the caller can tell the decoder how to interpret the samples:
+
+```c
+// 'conv' selects the matrix and range used to interpret the existing Y'CbCr
+// samples:
+//   0: built-in BT.601 limited conversion (the default, unchanged)
+//   1: BT.709 limited     2: BT.2020 limited
+//   3: BT.601 full        4: BT.709 full        5: BT.2020 full
+int conv = 4;  // e.g. a BT.709 full-range source
+WebPDecoderConfig config;
+CHECK(WebPInitDecoderConfig(&config));
+config.options.yuv_conversion = conv;
+config.output.colorspace = MODE_rgbA;  // one of RGBA/BGRA/rgbA/bgrA
+CHECK(WebPDecode(data, data_size, &config) == VP8_STATUS_OK);
+// ... use config.output ...
+WebPFreeDecBuffer(&config.output);
+```
+
+The option is an interpretation of the data the file already contains: it
+neither reads nor writes color metadata in the bitstream, and it does not
+change how the file is encoded. It applies only to lossy VP8 decoded to one of
+`MODE_RGBA`, `MODE_BGRA`, `MODE_rgbA` or `MODE_bgrA`. Other RGB layouts are
+rejected with `VP8_STATUS_INVALID_PARAM` for a non-zero value, as are values
+outside `0..5` for every input and output; rejection happens before any pixel
+is written. YUV/YUVA output and lossless VP8L keep their existing behavior.
+
+The conversion is applied before the samples are clipped to 8-bit RGB: full
+range uses `Y` and `U/V` centered on 128, limited range uses
+`255*(Y-16)/219` and `255*(U/V-128)/224`; with `Kr`/`Kb` being the matrix
+weights the channels are
+`R = Y + 2*(1-Kr)*Cr`, `B = Y + 2*(1-Kb)*Cb` and
+`G = Y - 2*(1-Kr)*Kr/Kg*Cr - 2*(1-Kb)*Kg*Cb` with `Kg = 1-Kr-Kb`, rounded to
+the nearest integer and clipped only at the end. Cropping, fancy upsampling
+and scaling keep their existing stages: fancy upsampling interpolates chroma
+exactly as before and the matrix is applied to the resulting YUV samples;
+scaling resamples Y, U and V independently (U/V go from chroma size directly
+to the full target size), then converts, with alpha resampled separately and
+multiplied in only for premultiplied output.
+
+The 601, 709 and 2020 `(Kr, Kb)` pairs are `(0.299, 0.114)`,
+`(0.2126, 0.0722)` and `(0.2627, 0.0593)`. A value of 0 keeps the historical
+byte-exact conversion. Incremental decoding created through `WebPIDecode()`
+honors the option as well; the option is fixed for the lifetime of the
+incremental decoder (it is not re-read mid-stream), so separate decoders with
+different matrices can run interleaved or concurrently.
+
 ## WebP Mux
 
 WebPMux is a set of two libraries 'Mux' and 'Demux' for creation, extraction and

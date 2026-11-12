@@ -44,6 +44,9 @@ struct WebPDecParams {
 
   int last_y;  // coordinate of the line that was last output
   const WebPDecoderOptions* options;  // if not NULL, use alt decoding features
+  // Y'CbCr conversion selection, captured once during setup() so that a single
+  // decoding instance can never see two different matrices.
+  int yuv_conversion;
 
   // Precise reason for a setup() failure, VP8_STATUS_OK otherwise.
   VP8StatusCode status;

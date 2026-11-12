@@ -543,6 +543,14 @@ if(WEBP_BUILD_ANIM_UTILS
     TARGET exampleutil imageioutil imagedec imageenc
     PROPERTY INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/src
              ${CMAKE_CURRENT_BINARY_DIR}/src)
+
+  # Small standalone example for the explicit Y'CbCr conversion option.
+  add_executable(webp_color_convert EXCLUDE_FROM_ALL
+                 ${CMAKE_CURRENT_SOURCE_DIR}/examples/webp_color_convert.c)
+  target_link_libraries(webp_color_convert webp)
+  target_include_directories(webp_color_convert
+                             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                     ${CMAKE_CURRENT_BINARY_DIR}/src)
 endif()
 
 if(WEBP_BUILD_DWEBP)

@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "src/dec/alphai_dec.h"
+#include "src/dec/color_conversion.h"
 #include "src/dec/vp8_dec.h"
 #include "src/dec/vp8i_dec.h"
 #include "src/dec/vp8li_dec.h"
@@ -495,6 +496,14 @@ static VP8StatusCode DecodePartition0(WebPIDecoder* const idec) {
     return IDecError(idec, status);
   }
 
+  // Reject an unsupported explicit Y'CbCr conversion here: the bitstream
+  // format is known and no output pixel has been written yet. (For lossless
+  // input the option is simply ignored.)
+  if (WebPValidateColorConversionOptions(params->options, idec->is_lossless,
+                                         output->colorspace) !=
+      VP8_STATUS_OK) {
+    return IDecError(idec, VP8_STATUS_INVALID_PARAM);
+  }
   // Allocate/Verify output buffer now
   dec->status =
       WebPAllocateDecBuffer(io->width, io->height, params->options, output);
@@ -752,7 +761,21 @@ WebPIDecoder* WebPIDecode(const uint8_t* WEBP_COUNTED_BY(data_size) data,
   }
   // Finish initialization
   if (config != NULL) {
+    // The conversion range itself can be rejected right away; whether a
+    // non-zero selection is acceptable also depends on the bitstream (lossless
+    // or not) and is checked once its headers are known, before any pixel is
+    // written. See DecodePartition0().
+    // Keep a reference to the caller's options: they must outlive the decoder,
+    // as documented for WebPIDecode(). No copy is made, and the selection is
+    // captured in WebPDecParams::yuv_conversion during setup(), so an
+    // instance's matrix is fixed for its whole lifetime and concurrent
+    // decoders created from different configs remain independent.
     idec->params.options = &config->options;
+    if (config->options.yuv_conversion < 0 ||
+        config->options.yuv_conversion > 5) {
+      WebPIDelete(idec);
+      return NULL;
+    }
   }
   return idec;
 }

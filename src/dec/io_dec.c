@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "src/dec/color_conversion.h"
 #include "src/dec/vp8_dec.h"
 #include "src/dec/vp8i_dec.h"
 #include "src/dec/webpi_dec.h"
@@ -48,14 +49,30 @@ static int EmitYUV(const VP8Io* const io, WebPDecParams* const p) {
   return io->mb_h;
 }
 
+// Selects the per-row sampler: either the historical one for 'conv' == 0, or
+// the explicit Y'CbCr matrix conversion otherwise.
+static WebPSamplerRowFunc GetSamplerRow(const WebPDecParams* const p) {
+  const WEBP_CSP_MODE colorspace = p->output->colorspace;
+  const int conv = p->yuv_conversion;
+  if (conv == 0) return WebPSamplers[colorspace];
+  {
+    const WebPSamplerRowFunc func = WebPGetColorSamplerRow(colorspace, conv);
+    assert(func != NULL);  // options were validated before allocation
+    return func;
+  }
+}
+
 // Point-sampling U/V sampler.
 static int EmitSampledRGB(const VP8Io* const io, WebPDecParams* const p) {
   WebPDecBuffer* const output = p->output;
   WebPRGBABuffer* const buf = &output->u.RGBA;
   uint8_t* const dst = buf->rgba + (ptrdiff_t)io->mb_y * buf->stride;
-  WebPSamplerProcessPlane(io->y, io->y_stride, io->u, io->v, io->uv_stride, dst,
-                          buf->stride, io->mb_w, io->mb_h,
-                          WebPSamplers[output->colorspace]);
+  // The explicit conversion writes 4 bytes per pixel, like the legacy
+  // RGBA/BGRA samplers it replaces; only those modes are reachable for a
+  // non-zero conversion (see WebPValidateColorConversionOptions()).
+  WebPSamplerProcessPlane(io->y, io->y_stride, io->u, io->v, io->uv_stride,
+                          dst, buf->stride, io->mb_w, io->mb_h,
+                          GetSamplerRow(p));
   return io->mb_h;
 }
 
@@ -63,11 +80,53 @@ static int EmitSampledRGB(const VP8Io* const io, WebPDecParams* const p) {
 // Fancy upsampling
 
 #ifdef FANCY_UPSAMPLING
+// Fancy upsampling with the explicit Y'CbCr conversion, or NULL to keep the
+// built-in upsampler (legacy conversion, or mode without explicit support).
+static WebPColorLinePairFunc GetFancyColorLinePair(
+    const WebPDecParams* const p, WebPColorPixelFunc* const pixel) {
+  const int conv = p->yuv_conversion;
+  if (conv == 0) return NULL;
+  {
+    const WebPColorLinePairFunc line_pair =
+        WebPGetColorLinePair(p->output->colorspace);
+    if (line_pair == NULL) return NULL;  // validated earlier, defensive
+    *pixel = WebPGetColorPixelFunc(p->output->colorspace, conv);
+    assert(*pixel != NULL);
+    return line_pair;
+  }
+}
+
+// Dispatches one line-pair to either the built-in upsampler or the explicit
+// conversion wrapper; both share the exact same chroma interpolation.
+static void EmitLinePair(const WebPUpsampleLinePairFunc upsample,
+                         const WebPColorLinePairFunc color_upsample,
+                         const WebPColorPixelFunc pixel,
+                         const uint8_t* const top_y,
+                         const uint8_t* const bottom_y,
+                         const uint8_t* const top_u,
+                         const uint8_t* const top_v,
+                         const uint8_t* const cur_u,
+                         const uint8_t* const cur_v, uint8_t* const top_dst,
+                         uint8_t* const bottom_dst, int len) {
+  if (color_upsample != NULL) {
+    color_upsample(top_y, bottom_y, top_u, top_v, cur_u, cur_v, top_dst,
+                   bottom_dst, len, pixel);
+  } else {
+    upsample(top_y, bottom_y, top_u, top_v, cur_u, cur_v, top_dst, bottom_dst,
+             len);
+  }
+}
+
 static int EmitFancyRGB(const VP8Io* const io, WebPDecParams* const p) {
   int num_lines_out = io->mb_h;  // a priori guess
   const WebPRGBABuffer* const buf = &p->output->u.RGBA;
   uint8_t* dst = buf->rgba + (ptrdiff_t)io->mb_y * buf->stride;
   WebPUpsampleLinePairFunc upsample = WebPUpsamplers[p->output->colorspace];
+  // The explicit conversion, when selected, uses the same chroma interpolation
+  // (phase, edge extension, integer rounding) as the built-in upsampler.
+  WebPColorPixelFunc pixel = NULL;
+  const WebPColorLinePairFunc color_upsample =
+      GetFancyColorLinePair(p, &pixel);
   const uint8_t* cur_y = io->y;
   const uint8_t* cur_u = io->u;
   const uint8_t* cur_v = io->v;
@@ -80,11 +139,12 @@ static int EmitFancyRGB(const VP8Io* const io, WebPDecParams* const p) {
 
   if (y == 0) {
     // First line is special cased. We mirror the u/v samples at boundary.
-    upsample(cur_y, NULL, cur_u, cur_v, cur_u, cur_v, dst, NULL, mb_w);
+    EmitLinePair(upsample, color_upsample, pixel, cur_y, NULL, cur_u, cur_v,
+                 cur_u, cur_v, dst, NULL, mb_w);
   } else {
     // We can finish the left-over line from previous call.
-    upsample(p->tmp_y, cur_y, top_u, top_v, cur_u, cur_v, dst - buf->stride,
-             dst, mb_w);
+    EmitLinePair(upsample, color_upsample, pixel, p->tmp_y, cur_y, top_u,
+                 top_v, cur_u, cur_v, dst - buf->stride, dst, mb_w);
     ++num_lines_out;
   }
   // Loop over each output pairs of row.
@@ -95,8 +155,8 @@ static int EmitFancyRGB(const VP8Io* const io, WebPDecParams* const p) {
     cur_v += io->uv_stride;
     dst += 2 * (ptrdiff_t)buf->stride;
     cur_y += 2 * (ptrdiff_t)io->y_stride;
-    upsample(cur_y - io->y_stride, cur_y, top_u, top_v, cur_u, cur_v,
-             dst - buf->stride, dst, mb_w);
+    EmitLinePair(upsample, color_upsample, pixel, cur_y - io->y_stride, cur_y,
+                 top_u, top_v, cur_u, cur_v, dst - buf->stride, dst, mb_w);
   }
   // move to last row
   cur_y += io->y_stride;
@@ -111,8 +171,8 @@ static int EmitFancyRGB(const VP8Io* const io, WebPDecParams* const p) {
   } else {
     // Process the very last row of even-sized picture
     if (!(y_end & 1)) {
-      upsample(cur_y, NULL, cur_u, cur_v, cur_u, cur_v, dst + buf->stride, NULL,
-               mb_w);
+      EmitLinePair(upsample, color_upsample, pixel, cur_y, NULL, cur_u, cur_v,
+                   cur_u, cur_v, dst + buf->stride, NULL, mb_w);
     }
   }
   return num_lines_out;
@@ -388,11 +448,14 @@ WEBP_NODISCARD static int InitYUVRescaler(const VP8Io* const io,
 // RGBA rescaling
 
 static int ExportRGB(WebPDecParams* const p, int y_pos) {
+  const int conv = p->yuv_conversion;
   const WebPYUV444Converter convert =
-      WebPYUV444Converters[p->output->colorspace];
+      (conv == 0) ? WebPYUV444Converters[p->output->colorspace]
+                  : WebPGetColorYuv444Converter(p->output->colorspace, conv);
   const WebPRGBABuffer* const buf = &p->output->u.RGBA;
   uint8_t* dst = buf->rgba + (ptrdiff_t)y_pos * buf->stride;
   int num_lines_out = 0;
+  assert(convert != NULL);  // options were validated before allocation
   // For RGB rescaling, because of the YUV420, current scan position
   // U/V can be +1/-1 line from the Y one.  Hence the double test.
   while (WebPRescalerHasPendingOutput(p->scaler_y) &&
@@ -615,6 +678,7 @@ WEBP_NODISCARD static int CustomSetup(VP8Io* io) {
 
   p->memory = NULL;
   p->status = VP8_STATUS_OK;
+  p->yuv_conversion = (p->options == NULL) ? 0 : p->options->yuv_conversion;
   p->emit = NULL;
   p->emit_alpha = NULL;
   p->emit_alpha_row = NULL;

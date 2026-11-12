@@ -193,6 +193,7 @@ SHARPYUV_OBJS = \
 DEC_OBJS = \
     $(DIROBJ)\dec\alpha_dec.obj \
     $(DIROBJ)\dec\buffer_dec.obj \
+    $(DIROBJ)\dec\color_conversion.obj \
     $(DIROBJ)\dec\frame_dec.obj \
     $(DIROBJ)\dec\idec_dec.obj \
     $(DIROBJ)\dec\io_dec.obj \

@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "src/dec/color_conversion.h"
 #include "src/dec/common_dec.h"
 #include "src/dec/vp8_dec.h"
 #include "src/dec/vp8i_dec.h"
@@ -487,6 +488,14 @@ WEBP_NODISCARD static VP8StatusCode DecodeInto(
   }
 
   assert(params != NULL);
+  // Validate the color conversion option before any output pixel (or its
+  // padding) can be written. A non-zero value only applies to lossy VP8 output
+  // in one of the four supported packed RGB(A) layouts.
+  status = WebPValidateColorConversionOptions(
+      params->options, headers.is_lossless, params->output->colorspace);
+  if (status != VP8_STATUS_OK) {
+    return status;
+  }
   if (!VP8InitIo(&io)) {
     return VP8_STATUS_INVALID_PARAM;
   }
@@ -840,6 +849,20 @@ int WebPValidateDecoderConfig(const WebPDecoderConfig* config) {
   if (options->dithering_strength < 0 || options->dithering_strength > 100 ||
       options->alpha_dithering_strength < 0 ||
       options->alpha_dithering_strength > 100) {
+    return 0;
+  }
+
+  // Check the explicit Y'CbCr conversion, if any.
+  if (options->yuv_conversion < 0 || options->yuv_conversion > 5) {
+    return 0;
+  }
+  // Lossless VP8L and YUV/YUVA output are unaffected by this option; for lossy
+  // VP8 output to RGB, a non-zero value requires one of the supported packed
+  // layouts. When the format is not known yet (format == 0), the stricter
+  // check is deferred until the headers have been parsed.
+  if (options->yuv_conversion != 0 && config->input.format == 1 &&
+      WebPIsRGBMode(config->output.colorspace) &&
+      !WebPIsSupportedColorConversionOutput(config->output.colorspace)) {
     return 0;
   }
 

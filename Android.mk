@@ -47,6 +47,7 @@ sharpyuv_srcs := \
 dec_srcs := \
     src/dec/alpha_dec.c \
     src/dec/buffer_dec.c \
+    src/dec/color_conversion.c \
     src/dec/frame_dec.c \
     src/dec/idec_dec.c \
     src/dec/io_dec.c \

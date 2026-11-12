@@ -494,8 +494,22 @@ struct WebPDecoderOptions {
   int dithering_strength;           // dithering strength (0=Off, 100=full)
   int flip;                         // if true, flip output vertically
   int alpha_dithering_strength;     // alpha dithering strength in [0..100]
+  int yuv_conversion;               // Y'CbCr matrix/range used when converting
+                                    // lossy VP8 (YUV420) samples to RGB.
+                                    // 0 = built-in BT.601 limited conversion,
+                                    // 1 = BT.709 limited, 2 = BT.2020 limited,
+                                    // 3 = BT.601 full, 4 = BT.709 full,
+                                    // 5 = BT.2020 full. Values outside [0..5]
+                                    // are rejected. This only changes the
+                                    // interpretation of samples already in
+                                    // the file; it neither reads nor writes
+                                    // any color metadata in the bitstream.
+                                    // Output must be MODE_RGBA, MODE_BGRA,
+                                    // MODE_rgbA or MODE_bgrA for non-zero
+                                    // values. YUV/YUVA output and lossless
+                                    // VP8L are unaffected.
 
-  uint32_t pad[5];  // padding for later use
+  uint32_t pad[4];  // padding for later use
 };
 
 // Main object storing the configuration for advanced decoding.

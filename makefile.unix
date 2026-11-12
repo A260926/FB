@@ -138,6 +138,7 @@ SHARPYUV_OBJS = \
 DEC_OBJS = \
     src/dec/alpha_dec.o \
     src/dec/buffer_dec.o \
+    src/dec/color_conversion.o \
     src/dec/frame_dec.o \
     src/dec/idec_dec.o \
     src/dec/io_dec.o \
@@ -316,6 +317,7 @@ SHARPYUV_HDRS_INSTALLED = \
 
 HDRS = \
     src/dec/alphai_dec.h \
+    src/dec/color_conversion.h \
     src/dec/common_dec.h \
     src/dec/vp8_dec.h \
     src/dec/vp8i_dec.h \
