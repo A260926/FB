@@ -89,6 +89,18 @@ bool WriteEbmlElement(IMkvWriter* writer, uint64 type, uint64 value,
 uint64 WriteFrame(IMkvWriter* writer, const Frame* const frame,
                   Cluster* cluster);
 
+// Output an Xiph-laced SimpleBlock containing |count| frames. All frames must
+// belong to the same track and must be valid. |count| must be in the range
+// [2, 256]. The block timecode is taken from the first frame. Returns the
+// number of bytes written, or 0 on error.
+uint64 WriteLacedFrame(IMkvWriter* writer, const Frame* const frames[],
+                       uint32 count, Cluster* cluster);
+
+// Returns the size in bytes of a block containing |count| frames. When
+// |count| is 1 the size matches a plain SimpleBlock; otherwise the Xiph lacing
+// length table is included. Returns 0 on error.
+uint64 LacedFrameElementSize(const Frame* const frames[], uint32 count);
+
 // Output a void element. |size| must be the entire size in bytes that will be
 // void. The function will calculate the size of the void header and subtract
 // it from |size|.

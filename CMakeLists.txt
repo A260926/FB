@@ -478,6 +478,10 @@ install(FILES ${mkvparser_public_headers}
 # Public baseline and a build slot for the requested C++ regression tests.
 add_executable(userfb_lacing_baseline baseline/baseline.cc)
 target_link_libraries(userfb_lacing_baseline PRIVATE webm)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/audio_lacing.cc")
+  add_executable(audio_lacing_example examples/audio_lacing.cc)
+  target_link_libraries(audio_lacing_example PRIVATE webm)
+endif()
 if(ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/audio_lacing_test.cc")
   add_executable(audio_lacing_tests testing/audio_lacing_test.cc)
   target_link_libraries(audio_lacing_tests PRIVATE gtest_main webm)

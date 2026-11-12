@@ -179,6 +179,29 @@ uint64 WriteSimpleBlock(IMkvWriter* writer, const Frame* const frame,
          frame->length();
 }
 
+// Returns the number of bytes occupied by the Xiph lacing size table for the
+// first |count - 1| frames of a laced block. A length that is an exact multiple
+// of 255 is followed by a terminating zero byte.
+uint64 XiphSizeTableSize(const Frame* const frames[], uint32 count) {
+  uint64 size = 0;
+  for (uint32 i = 0; i + 1 < count; ++i) {
+    size += frames[i]->length() / 255 + 1;
+  }
+  return size;
+}
+
+// Returns the payload size of a laced SimpleBlock. |count| must be >= 2.
+uint64 LacedBlockPayloadSize(const Frame* const frames[], uint32 count) {
+  uint64 payload_size = GetCodedUIntSize(frames[0]->track_number());
+  payload_size += 2;  // 16-bit relative timecode
+  payload_size += 1;  // flags
+  payload_size += 1;  // frame count
+  payload_size += XiphSizeTableSize(frames, count);
+  for (uint32 i = 0; i < count; ++i)
+    payload_size += frames[i]->length();
+  return payload_size;
+}
+
 }  // namespace
 
 int32 GetCodedUIntSize(uint64 value) {
@@ -566,6 +589,98 @@ uint64 WriteFrame(IMkvWriter* writer, const Frame* const frame,
              ? WriteSimpleBlock(writer, frame, relative_timecode)
              : WriteBlock(writer, frame, relative_timecode,
                           cluster->timecode_scale());
+}
+
+uint64 LacedFrameElementSize(const Frame* const frames[], uint32 count) {
+  if (!frames || count < 1 || count > 256)
+    return 0;
+
+  for (uint32 i = 0; i < count; ++i) {
+    if (!frames[i] || !frames[i]->IsValid())
+      return 0;
+    if (frames[i]->track_number() != frames[0]->track_number())
+      return 0;
+  }
+
+  if (count == 1) {
+    const uint64 payload_size =
+        GetCodedUIntSize(frames[0]->track_number()) + 3 + frames[0]->length();
+    return GetUIntSize(libwebm::kMkvSimpleBlock) +
+           GetCodedUIntSize(payload_size) + payload_size;
+  }
+
+  const uint64 payload_size = LacedBlockPayloadSize(frames, count);
+  return GetUIntSize(libwebm::kMkvSimpleBlock) +
+         GetCodedUIntSize(payload_size) + payload_size;
+}
+
+uint64 WriteLacedFrame(IMkvWriter* writer, const Frame* const frames[],
+                       uint32 count, Cluster* cluster) {
+  if (!writer || !cluster || !cluster->timecode_scale() || !frames ||
+      count < 2 || count > 256)
+    return 0;
+
+  for (uint32 i = 0; i < count; ++i) {
+    if (!frames[i] || !frames[i]->IsValid())
+      return 0;
+    if (frames[i]->track_number() != frames[0]->track_number())
+      return 0;
+  }
+
+  // The block timecode is the timestamp of the first frame.
+  const int64 relative_timecode = cluster->GetRelativeTimecode(
+      frames[0]->timestamp() / cluster->timecode_scale());
+  if (relative_timecode < 0 || relative_timecode > kMaxBlockTimecode)
+    return 0;
+
+  const uint64 payload_size = LacedBlockPayloadSize(frames, count);
+
+  if (WriteID(writer, libwebm::kMkvSimpleBlock))
+    return 0;
+
+  if (WriteUInt(writer, payload_size))
+    return 0;
+
+  if (WriteUInt(writer, frames[0]->track_number()))
+    return 0;
+
+  if (SerializeInt(writer, relative_timecode, 2))
+    return 0;
+
+  // Xiph lacing uses bits 1 and 2 of the flags byte; the key flag is preserved.
+  uint64 flags = 0x02;
+  if (frames[0]->is_key())
+    flags |= 0x80;
+
+  if (SerializeInt(writer, flags, 1))
+    return 0;
+
+  // Number of frames is stored biased by one.
+  if (SerializeInt(writer, static_cast<int64>(count - 1), 1))
+    return 0;
+
+  // Xiph lacing size table for all frames except the last one.
+  for (uint32 i = 0; i + 1 < count; ++i) {
+    uint64 length = frames[i]->length();
+    while (length >= 255) {
+      const uint8 separator = 255;
+      if (writer->Write(&separator, 1))
+        return 0;
+      length -= 255;
+    }
+    const uint8 remainder = static_cast<uint8>(length);
+    if (writer->Write(&remainder, 1))
+      return 0;
+  }
+
+  for (uint32 i = 0; i < count; ++i) {
+    if (writer->Write(frames[i]->frame(),
+                      static_cast<uint32>(frames[i]->length())))
+      return 0;
+  }
+
+  return GetUIntSize(libwebm::kMkvSimpleBlock) +
+         GetCodedUIntSize(payload_size) + payload_size;
 }
 
 uint64 WriteVoidElement(IMkvWriter* writer, uint64 size) {

@@ -2607,6 +2607,31 @@ bool Cluster::AddFrame(const uint8_t* data, uint64_t length,
   return QueueOrWriteFrame(&frame);
 }
 
+bool Cluster::AddLacedFrames(const Frame* const frames[], uint32_t count) {
+  if (!frames || count < 2 || count > 256)
+    return false;
+
+  const uint64_t track_number = frames[0]->track_number();
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!frames[i] || !frames[i]->IsValid() ||
+        frames[i]->track_number() != track_number ||
+        !frames[i]->CanBeSimpleBlock() || !frames[i]->is_key()) {
+      return false;
+    }
+  }
+
+  if (!PreWriteBlock())
+    return false;
+
+  const uint64_t element_size = WriteLacedFrame(writer_, frames, count, this);
+  if (element_size == 0)
+    return false;
+
+  PostWriteBlock(element_size);
+  last_block_timestamp_[track_number] = frames[count - 1]->timestamp();
+  return true;
+}
+
 bool Cluster::AddFrameWithAdditional(const uint8_t* data, uint64_t length,
                                      const uint8_t* additional,
                                      uint64_t additional_length,
@@ -3168,6 +3193,10 @@ Segment::Segment()
       frames_(NULL),
       frames_capacity_(0),
       frames_size_(0),
+      pending_laced_track_(0),
+      pending_laced_max_frames_(0),
+      pending_laced_default_duration_(0),
+      lacing_write_failed_(false),
       has_video_(false),
       header_written_(false),
       last_block_duration_(0),
@@ -3189,6 +3218,8 @@ Segment::Segment()
       writer_cluster_(NULL),
       writer_cues_(NULL),
       writer_header_(NULL) {
+  for (uint64_t i = 0; i < kMaxTrackNumber; ++i)
+    audio_lacing_max_frames_[i] = 1;
   const time_t curr_time = time(NULL);
   seed_ = static_cast<unsigned int>(curr_time);
 #ifdef _WIN32
@@ -3212,6 +3243,8 @@ Segment::~Segment() {
     }
     delete[] frames_;
   }
+
+  ClearPendingLacedFrames();
 
   delete[] chunk_name_;
   delete[] chunking_base_name_;
@@ -3343,6 +3376,10 @@ bool Segment::Finalize() {
       cluster_list_size_ > 0) {
     // Update last cluster's size
     Cluster* const old_cluster = cluster_list_[cluster_list_size_ - 1];
+
+    // Write any incomplete laced group before closing the final cluster.
+    if (old_cluster && !FlushLacedFrames(old_cluster))
+      return false;
 
     // For the last frame of the last Cluster, we don't write it as a BlockGroup
     // with Duration unless the frame itself has duration set explicitly.
@@ -3684,10 +3721,11 @@ bool Segment::AddGenericFrame(const Frame* frame) {
     frame_created = true;
   }
 
-  if (!cluster->AddFrame(frame))
+  bool buffered = false;
+  if (!WriteFrameWithLacing(cluster, frame, &buffered))
     return false;
 
-  if (new_cuepoint_ && cues_track_ == frame->track_number()) {
+  if (!buffered && new_cuepoint_ && cues_track_ == frame->track_number()) {
     // Only add a cue point at the start of a cluster if the frame is a
     // keyframe.
     if (frame->is_key() && !AddCuePoint(frame->timestamp(), cues_track_)) {
@@ -3717,8 +3755,243 @@ void Segment::UseFixedSizeClusterTimecode(bool fixed_size_cluster_timecode) {
   fixed_size_cluster_timecode_ = fixed_size_cluster_timecode;
 }
 
+bool Segment::SetAudioLacing(uint64_t track_number, uint32_t max_frames) {
+  if (header_written_)
+    return false;
+
+  if (track_number == 0 || track_number > kMaxTrackNumber)
+    return false;
+
+  const Track* const track = GetTrackByNumber(track_number);
+  if (!track || track->type() != Tracks::kAudio)
+    return false;
+
+  if (max_frames == 0 || max_frames > 256)
+    return false;
+
+  if (max_frames >= 2) {
+    if (mode_ != kFile || chunking_ || accurate_cluster_duration_)
+      return false;
+
+    // Only the normal seekable file writer is supported.
+    if (!writer_cluster_ || !writer_cluster_->Seekable())
+      return false;
+
+    if (segment_info_.timecode_scale() == 0 ||
+        track->default_duration() == 0 ||
+        track->default_duration() % segment_info_.timecode_scale() != 0) {
+      return false;
+    }
+  }
+
+  audio_lacing_max_frames_[track_number - 1] = max_frames;
+  return true;
+}
+
+bool Segment::ValidateAudioLacing() const {
+  const uint64_t timecode_scale = segment_info_.timecode_scale();
+
+  for (uint64_t track_number = 1; track_number <= kMaxTrackNumber;
+       ++track_number) {
+    if (audio_lacing_max_frames_[track_number - 1] < 2)
+      continue;
+
+    if (mode_ != kFile || chunking_ || accurate_cluster_duration_)
+      return false;
+
+    if (!writer_cluster_ || !writer_cluster_->Seekable())
+      return false;
+
+    const Track* const track = GetTrackByNumber(track_number);
+    if (!track || track->type() != Tracks::kAudio)
+      return false;
+
+    if (timecode_scale == 0 || track->default_duration() == 0 ||
+        track->default_duration() % timecode_scale != 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool Segment::AudioLacingEnabled() const {
+  for (uint64_t i = 0; i < kMaxTrackNumber; ++i) {
+    if (audio_lacing_max_frames_[i] >= 2)
+      return true;
+  }
+  return false;
+}
+
+bool Segment::FrameCanBeLaced(const Frame* frame, uint64_t* default_duration,
+                              uint32_t* max_frames) const {
+  if (!frame)
+    return false;
+
+  const uint64_t track_number = frame->track_number();
+  if (track_number == 0 || track_number > kMaxTrackNumber)
+    return false;
+
+  const uint32_t max = audio_lacing_max_frames_[track_number - 1];
+  if (max < 2 || max > 256)
+    return false;
+
+  const Track* const track = GetTrackByNumber(track_number);
+  if (!track || track->type() != Tracks::kAudio)
+    return false;
+
+  const uint64_t duration = track->default_duration();
+  if (segment_info_.timecode_scale() == 0 || duration == 0 ||
+      duration % segment_info_.timecode_scale() != 0) {
+    return false;
+  }
+
+  // Only ordinary key SimpleBlocks may be laced. Frames carrying additional
+  // data, discard padding, an explicit duration, or a reference block are
+  // written individually.
+  if (!frame->is_key() || !frame->CanBeSimpleBlock())
+    return false;
+  if (frame->duration_set() || frame->reference_block_timestamp_set())
+    return false;
+
+  if (default_duration)
+    *default_duration = duration;
+  if (max_frames)
+    *max_frames = max;
+  return true;
+}
+
+uint64_t Segment::PendingLacedPayloadSize() const {
+  if (pending_laced_frames_.empty())
+    return 0;
+  return LacedFrameElementSize(pending_laced_frames_.data(),
+                               static_cast<uint32_t>(
+                                   pending_laced_frames_.size()));
+}
+
+void Segment::ClearPendingLacedFrames() {
+  for (size_t i = 0; i < pending_laced_frames_.size(); ++i)
+    delete pending_laced_frames_[i];
+  pending_laced_frames_.clear();
+  pending_laced_track_ = 0;
+  pending_laced_max_frames_ = 0;
+  pending_laced_default_duration_ = 0;
+}
+
+bool Segment::FlushLacedFrames(Cluster* cluster) {
+  if (pending_laced_frames_.empty())
+    return true;
+
+  if (!cluster) {
+    ClearPendingLacedFrames();
+    return false;
+  }
+
+  const uint32_t count =
+      static_cast<uint32_t>(pending_laced_frames_.size());
+  const Frame* const first = pending_laced_frames_[0];
+
+  bool wrote_frame = false;
+  if (count == 1) {
+    wrote_frame = cluster->AddFrame(first);
+  } else {
+    wrote_frame = cluster->AddLacedFrames(pending_laced_frames_.data(), count);
+  }
+
+  if (!wrote_frame) {
+    lacing_write_failed_ = true;
+    ClearPendingLacedFrames();
+    return false;
+  }
+
+  if (new_cuepoint_ && cues_track_ == first->track_number()) {
+    if (first->is_key()) {
+      if (!AddCuePoint(first->timestamp(), cues_track_)) {
+        lacing_write_failed_ = true;
+        ClearPendingLacedFrames();
+        return false;
+      }
+    } else {
+      new_cuepoint_ = false;
+    }
+  }
+
+  ClearPendingLacedFrames();
+  return true;
+}
+
+bool Segment::WriteFrameWithLacing(Cluster* cluster, const Frame* frame,
+                                   bool* buffered) {
+  if (buffered)
+    *buffered = false;
+  lacing_write_failed_ = false;
+
+  if (!cluster || !frame)
+    return false;
+
+  uint64_t default_duration = 0;
+  uint32_t max_frames = 1;
+  const bool can_lace =
+      FrameCanBeLaced(frame, &default_duration, &max_frames);
+
+  // A frame belonging to another track always terminates the pending group,
+  // even if the frame itself cannot be laced.
+  if (!pending_laced_frames_.empty() &&
+      pending_laced_track_ != frame->track_number()) {
+    if (!FlushLacedFrames(cluster))
+      return false;
+  }
+
+  if (!can_lace) {
+    // Special frames (different track, gaps, additional data, discard padding,
+    // explicit duration, or reference blocks) terminate the current group and
+    // are written individually so their metadata is not shared with the group.
+    if (!pending_laced_frames_.empty() && !FlushLacedFrames(cluster))
+      return false;
+    return cluster->AddFrame(frame);
+  }
+
+  if (!pending_laced_frames_.empty()) {
+    const Frame* const last = pending_laced_frames_.back();
+    const bool adjacent =
+        frame->timestamp() ==
+        last->timestamp() + pending_laced_default_duration_;
+    if (!adjacent || default_duration != pending_laced_default_duration_ ||
+        pending_laced_frames_.size() >= pending_laced_max_frames_) {
+      if (!FlushLacedFrames(cluster))
+        return false;
+    }
+  }
+
+  Frame* const copy = new (std::nothrow) Frame();
+  if (!copy || !copy->CopyFrom(*frame)) {
+    delete copy;
+    lacing_write_failed_ = true;
+    return false;
+  }
+
+  pending_laced_frames_.push_back(copy);
+  pending_laced_track_ = frame->track_number();
+  pending_laced_max_frames_ = max_frames;
+  pending_laced_default_duration_ = default_duration;
+
+  if (buffered)
+    *buffered = true;
+
+  // Write a complete group immediately; do not wait for EOF.
+  if (pending_laced_frames_.size() >= max_frames) {
+    if (!FlushLacedFrames(cluster))
+      return false;
+  }
+
+  return true;
+}
+
 bool Segment::SetChunking(bool chunking, const char* filename) {
   if (chunk_count_ > 0)
+    return false;
+
+  if (chunking && AudioLacingEnabled())
     return false;
 
   if (chunking) {
@@ -3944,7 +4217,8 @@ int Segment::TestFrame(uint64_t track_number, uint64_t frame_timestamp_ns,
   // cluster is created when the size of the current cluster exceeds a
   // threshold.
 
-  const uint64_t cluster_size = last_cluster->payload_size();
+  const uint64_t cluster_size =
+      last_cluster->payload_size() + PendingLacedPayloadSize();
 
   if (max_cluster_size_ > 0 && cluster_size >= max_cluster_size_)
     return 1;
@@ -3982,6 +4256,10 @@ bool Segment::MakeNewCluster(uint64_t frame_timestamp_ns) {
   if (cluster_list_size_ > 0) {
     // Update old cluster's size
     Cluster* const old_cluster = cluster_list_[cluster_list_size_ - 1];
+
+    // A pending laced group must never cross a cluster boundary.
+    if (old_cluster && !FlushLacedFrames(old_cluster))
+      return false;
 
     if (!old_cluster || !old_cluster->Finalize(true, frame_timestamp_ns))
       return false;
@@ -4063,6 +4341,9 @@ bool Segment::DoNewClusterProcessing(uint64_t track_number,
 
 bool Segment::CheckHeaderInfo() {
   if (!header_written_) {
+    if (!ValidateAudioLacing())
+      return false;
+
     if (!WriteSegmentHeader())
       return false;
 
@@ -4201,16 +4482,29 @@ int Segment::WriteFramesAll() {
     // places where |doc_type_version_| needs to be updated.
     if (frame->discard_padding() != 0)
       doc_type_version_ = 4;
-    if (!cluster->AddFrame(frame)) {
+    bool buffered = false;
+    if (!WriteFrameWithLacing(cluster, frame, &buffered)) {
+      if (lacing_write_failed_) {
+        // A laced group could not be written. Do not silently drop it; report
+        // the failure to the caller.
+        for (int32_t j = i; j < frames_size_; ++j) {
+          delete frames_[j];
+          frames_[j] = NULL;
+        }
+        frames_size_ = 0;
+        return -1;
+      }
       delete frame;
+      frame = NULL;
       continue;
     }
 
-    if (new_cuepoint_ && cues_track_ == frame->track_number()) {
+    if (!buffered && new_cuepoint_ && cues_track_ == frame->track_number()) {
       // Only add a cue point at the start of a cluster if the frame is a
       // keyframe.
       if (frame->is_key() && !AddCuePoint(frame->timestamp(), cues_track_)) {
         delete frame;
+        frame = NULL;
         continue;
       } else {
         new_cuepoint_ = false;
@@ -4257,13 +4551,25 @@ bool Segment::WriteFramesLessThan(uint64_t timestamp) {
       const Frame* const frame_prev = frames_[i - 1];
       if (frame_prev->discard_padding() != 0)
         doc_type_version_ = 4;
-      if (!cluster->AddFrame(frame_prev)) {
+      bool buffered = false;
+      if (!WriteFrameWithLacing(cluster, frame_prev, &buffered)) {
+        if (lacing_write_failed_) {
+          // A laced group could not be written. Compact the remaining queued
+          // frames and report the failure instead of silently dropping data.
+          delete frame_prev;
+          const int32_t new_frames_size = frames_size_ - i;
+          for (int32_t j = 0; j < new_frames_size; ++j)
+            frames_[j] = frames_[i + j];
+          frames_size_ = new_frames_size;
+          return false;
+        }
         delete frame_prev;
         ++shift_left;
         continue;
       }
 
-      if (new_cuepoint_ && cues_track_ == frame_prev->track_number()) {
+      if (!buffered && new_cuepoint_ &&
+          cues_track_ == frame_prev->track_number()) {
         if (!AddCuePoint(frame_prev->timestamp(), cues_track_)) {
           delete frame_prev;
           ++shift_left;

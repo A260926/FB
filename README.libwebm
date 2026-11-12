@@ -82,6 +82,42 @@ Note: Libwebm Googletest integration was built with googletest from
       ddb8012eb48bc203aa93dcc2b22c1db516302b29.
 
 
+Audio lacing
+
+The muxer can automatically combine consecutive fixed-duration audio packets
+into a single Xiph-laced SimpleBlock. Enable it with:
+
+$ segment.SetAudioLacing(track_number, max_frames);
+
+|track_number| is the value returned by AddAudioTrack(). The default is
+|max_frames| == 1, which preserves the legacy one-frame-per-block output.
+Values in [2, 256] enable Xiph lacing and limit each block to that many audio
+frames. SetAudioLacing() must be called after the audio track is added and
+before the first frame is written (the first frame writes the segment header).
+
+When lacing is enabled, the audio track must have a positive DefaultDuration
+and that duration must be an integer multiple of the Segment timecode scale.
+Lacing is supported for the seekable kFile writer mode and may be used with
+multiple audio tracks and one video track. It cannot be combined with
+chunking, kLive mode, or AccurateClusterDuration.
+
+Only ordinary key SimpleBlock frames from the same audio track and the same
+cluster are combined. Frames must be adjacent in write order and their
+timestamps must differ by exactly one DefaultDuration. Different tracks, time
+gaps, duplicate timestamps, and frames carrying DiscardPadding, BlockAdditional
+data, an explicit duration, or a reference block terminate the current group.
+Such frames are still written individually so their metadata is not applied to
+the entire group. Groups are written immediately when full, when the cluster
+changes, and when Finalize() is called; input buffers may be released as soon
+as AddFrame() returns.
+
+The block timecode is the first frame's timestamp; per-frame times follow
+DefaultDuration. Cluster payload sizes, block counts, and CueBlockNumber
+values refer to the blocks actually written, so audio cues point at the first
+frame of the group while video cues continue to point at keyframes. See
+examples/audio_lacing.cc for a complete C++ example.
+
+
 CMake Include-what-you-use integration
 
 Include-what-you-use is an analysis tool that helps ensure libwebm includes the

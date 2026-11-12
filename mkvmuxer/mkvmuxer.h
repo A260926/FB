@@ -1312,6 +1312,12 @@ class Cluster {
   bool AddMetadata(const uint8_t* data, uint64_t length, uint64_t track_number,
                    uint64_t timecode, uint64_t duration);
 
+  // Writes multiple frames as a single Xiph-laced SimpleBlock. All |frames|
+  // must belong to the same track and must be valid key SimpleBlocks. |count|
+  // must be in the range [2, 256]. The block timecode is taken from the first
+  // frame. Returns true on success.
+  bool AddLacedFrames(const Frame* const frames[], uint32_t count);
+
   // Increments the size of the cluster's data in bytes.
   void AddPayloadSize(uint64_t size);
 
@@ -1696,6 +1702,19 @@ class Segment {
   // Toggles whether to write the last frame in each Cluster with Duration.
   void AccurateClusterDuration(bool accurate_cluster_duration);
 
+  // Configures automatic Xiph lacing for the audio track |track_number|
+  // (returned by AddAudioTrack). |max_frames| is the maximum number of audio
+  // frames written in a single block; the default is 1 which preserves the
+  // legacy one-frame-per-block behavior, and values in [2, 256] enable lacing.
+  // This must be called after the track has been added and before the segment
+  // header is written. Enabling lacing requires the track to have a positive
+  // DefaultDuration that is a multiple of the Segment timecode scale, and is
+  // only supported in kFile mode without chunking and without
+  // AccurateClusterDuration. Returns false on invalid input or a conflicting
+  // configuration; when false is returned the existing configuration is
+  // unchanged.
+  bool SetAudioLacing(uint64_t track_number, uint32_t max_frames);
+
   // Toggles whether to write the Cluster Timecode using exactly 8 bytes.
   void UseFixedSizeClusterTimecode(bool fixed_size_cluster_timecode);
 
@@ -1765,6 +1784,38 @@ class Segment {
   // then |timestamp|. Returns true on success and if there are no frames
   // queued.
   bool WriteFramesLessThan(uint64_t timestamp);
+
+  // Writes |frame| to |cluster|, applying audio lacing when configured for the
+  // frame's track. Frames that become part of a pending laced group are copied
+  // so the caller may release its buffer immediately. |buffered| is set to true
+  // when the frame was added to a pending group and cue handling (if any) will
+  // happen when the group is written. Returns false on error.
+  bool WriteFrameWithLacing(Cluster* cluster, const Frame* frame,
+                            bool* buffered);
+
+  // Writes the pending laced group, if any, to |cluster|. A single pending
+  // frame is written as a plain SimpleBlock. Handles the audio cue point for
+  // the group's first frame. Returns false on error.
+  bool FlushLacedFrames(Cluster* cluster);
+
+  // Deletes all frames held in the pending laced group.
+  void ClearPendingLacedFrames();
+
+  // Returns true when |frame| can be combined with adjacent audio frames using
+  // Xiph lacing. On success |default_duration| and |max_frames| are filled in.
+  bool FrameCanBeLaced(const Frame* frame, uint64_t* default_duration,
+                       uint32_t* max_frames) const;
+
+  // Returns the size in bytes of the pending laced group as it would be written
+  // to the current cluster, or 0 when nothing is pending.
+  uint64_t PendingLacedPayloadSize() const;
+
+  // Returns true if the audio lacing configuration is compatible with the
+  // segment settings. Used before writing the header.
+  bool ValidateAudioLacing() const;
+
+  // Returns true if any track has Xiph lacing enabled.
+  bool AudioLacingEnabled() const;
 
   // Outputs the segment header, Segment Information element, SeekHead element,
   // and Tracks element to |writer_|.
@@ -1873,6 +1924,30 @@ class Segment {
 
   // Number of frames in the frame list.
   int32_t frames_size_;
+
+  // Maximum number of audio frames per Xiph-laced block for each track. A value
+  // of 1 keeps the legacy one-frame-per-block behavior; values in [2, 256]
+  // enable lacing.
+  uint32_t audio_lacing_max_frames_[kMaxTrackNumber];
+
+  // Audio frames held back while a laced group is being assembled. At most
+  // |pending_laced_max_frames_| - 1 frames are held here because a full
+  // group is written immediately.
+  // written immediately.
+  std::vector<Frame*> pending_laced_frames_;
+
+  // Track number associated with |pending_laced_frames_|.
+  uint64_t pending_laced_track_;
+
+  // Maximum number of frames for the pending laced group.
+  uint32_t pending_laced_max_frames_;
+
+  // DefaultDuration, in nanoseconds, of the pending laced group's track.
+  uint64_t pending_laced_default_duration_;
+
+  // Set when a failure occurred while writing a laced group. Callers use this
+  // to distinguish failures that must be propagated from legacy behavior.
+  bool lacing_write_failed_;
 
   // Flag telling if a video track has been added to the segment.
   bool has_video_;
