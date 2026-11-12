@@ -1,0 +1,16 @@
+
+   SoundStretch v1.8.0 -  Written by Olli Parviainen 2001 - 2014
+==================================================================
+author e-mail: <oparviai@iki.fi> - WWW: http://www.surina.net/soundtouch
+
+This program is subject to (L)GPL license. Run "soundstretch -license" for
+more information.
+
+Uses 32bit floating point sample type in processing.
+
+Processing the file with the following changes:
+  tempo change = +20 %
+  pitch change = +0 semitones
+  rate change  = +0 %
+
+Working...Done!

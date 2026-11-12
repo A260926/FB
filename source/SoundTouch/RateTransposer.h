@@ -96,6 +96,9 @@ public:
 
     // static function to set interpolation algorithm
     static void setAlgorithm(ALGORITHM a);
+
+    // static function to query the current interpolation algorithm
+    static ALGORITHM getAlgorithm();
 };
 
 
@@ -120,12 +123,60 @@ protected:
 
     BOOL bUseAAFilter;
 
+    /// Rate ramp mode state. In ramp mode the transposer walks a continuous
+    /// source coordinate (in input frames, double precision) that starts at 0
+    /// after construction/clear and is advanced by the per-output-frame
+    /// increment. All channels share the same coordinate.
+    BOOL bRateRamp;
 
-    /// Transposes sample rate by applying anti-alias filter to prevent folding. 
+    /// Nonzero once a non-empty input batch has been fed since construction
+    /// or the last clear(). The ramp mode can only be toggled while zero.
+    BOOL rampInputSeen;
+
+    /// Source coordinate of the next output frame to generate.
+    double rampSrcPos;
+
+    /// Source coordinate increment used for the next output frame when no
+    /// ramp is active (and the value the active ramp was started from).
+    double rampCurRate;
+
+    /// Active ramp: increment for frame k (0-based) is
+    /// rampR0 + (rampRt - rampR0) * k / rampTotal for k < rampTotal,
+    /// rampRt afterwards.
+    double rampR0;
+    double rampRt;
+    uint rampTotal;
+    uint rampDone;
+
+    /// Source coordinate (input frame index) of the first frame currently in
+    /// 'inputBuffer'. In ramp mode inputBuffer holds the still-needed input
+    /// history; frames older than floor(rampSrcPos) - 31 are discarded.
+    long long rampHistBase;
+
+    /// Rate limits accepted in ramp mode
+    enum { RAMP_FILTER_HALFLEN = 32 };
+    static double rampMinRate() { return 0.5; }
+    static double rampMaxRate() { return 2.0; }
+
+    /// Throws std::invalid_argument if the rate is not finite or outside
+    /// the [0.5, 2.0] range supported in ramp mode.
+    static void checkRampRate(double rate);
+
+    /// Ramp-mode processing: generates as many output frames as the buffered
+    /// input history allows, advancing the rate trajectory only for frames
+    /// that actually enter the output FIFO.
+    void processSamplesRamp(const SAMPLETYPE *src,
+                            uint numSamples);
+
+    /// Legacy constant-rate setRate body (also updates AA filter cutoff).
+    void setRateLegacy(float newRate);
+
+
+    /// Transposes sample rate by applying anti-alias filter to prevent folding.
     /// Returns amount of samples returned in the "dest" buffer.
     /// The maximum amount of samples that can be returned at a time is set by
     /// the 'set_returnBuffer_size' function.
-    void processSamples(const SAMPLETYPE *src, 
+    void processSamples(const SAMPLETYPE *src,
                         uint numSamples);
 
 public:
@@ -156,9 +207,44 @@ public:
     /// Returns nonzero if anti-alias filter is enabled.
     BOOL isAAFilterEnabled() const;
 
-    /// Sets new target rate. Normal rate = 1.0, smaller values represent slower 
+    /// Sets new target rate. Normal rate = 1.0, smaller values represent slower
     /// rate, larger faster rates.
+    ///
+    /// In rate ramp mode this sets the source coordinate increment of the next
+    /// output frame immediately and cancels any active ramp; the new rate must
+    /// be finite and within [0.5, 2.0] or std::invalid_argument is thrown and
+    /// the object state is left untouched.
     virtual void setRate(float newRate);
+
+    /// Enables/disables the output-frame clocked rate ramp mode. The mode can
+    /// only be switched right after construction or clear(), before any
+    /// non-empty input has been fed; switching does not change the current
+    /// rate. Throws std::invalid_argument if the interpolation algorithm does
+    /// not support ramping (SHANNON, or integer sample builds), if the current
+    /// rate is outside [0.5, 2.0], or if input has already been fed.
+    void enableRateRamp(BOOL enabled);
+
+    /// Returns nonzero if rate ramp mode is enabled.
+    BOOL isRateRampEnabled() const;
+
+    /// Schedules a rate ramp starting from the next not-yet-generated output
+    /// frame: the source coordinate increment of frame k (0-based) is
+    /// getCurrentRate() + (targetRate - getCurrentRate()) * k / outputFrames
+    /// for k < outputFrames, and targetRate afterwards. Sound already queued
+    /// in the output FIFO is not affected. A repeated call continues from the
+    /// current increment, replacing the unfinished ramp. outputFrames == 0
+    /// sets the next increment immediately and cancels the ramp.
+    /// Throws std::invalid_argument if ramp mode is off or targetRate is not
+    /// finite and within [0.5, 2.0]; the object state is then left untouched.
+    void setRateRamp(double targetRate, uint outputFrames);
+
+    /// Returns the source coordinate increment that will be used for the next
+    /// output frame that gets generated into the output FIFO.
+    double getCurrentRate() const;
+
+    /// Returns how many output frames of the active ramp remain to be
+    /// generated into the output FIFO; zero when no ramp is active.
+    uint getRateRampRemaining() const;
 
     /// Sets the number of channels, 1 = mono, 2 = stereo
     void setChannels(int channels);

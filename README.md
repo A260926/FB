@@ -203,6 +203,26 @@ The time-stretch routine has a 'quick' mode that substantially speeds up the alg
 *   Intel SSE optimized routines are used with compatible CPUs when floating point sample type is used. SSE optimizations are currently implemented for Win32 platform only. Processors compatible with SSE extension are Intel processors starting from Pentium-III, and AMD processors starting from Athlon XP.
 *   AMD 3DNow! optimized routines are used with compatible CPUs when floating point sample type is used, but SSE extension isn't supported . 3DNow! optimizations are currently implemented for Win32 platform only. These optimizations are used in AMD K6-2 and Athlon (classic) CPU's; better performing SSE routines are used with AMD processor starting from Athlon XP.
 
+### 3.6 Rate ramp mode: continuous, output-frame clocked rate changes
+
+Besides the classic constant-rate control where the caller re-issues **setRate()** (which ties the effective rate-change timing to the caller's input block size), **RateTransposer** offers an optional *rate ramp mode* for floating point processing that advances the playback rate once per generated **output frame**, independent of how the input is chopped into **putSamples()** calls.
+
+**Clock model.** In ramp mode the transposer walks a continuous source coordinate **x** (in input frames, double precision). After construction or **clear()** the coordinate starts at 0. Output frame *k* is produced at coordinate *x_k* using the increment *r_k*, and the coordinate then advances: *x_{k+1} = x_k + r_k*. All channels share the same coordinate, so interleaved multi-channel audio (mono, stereo, 6-channel, ...) stays phase coherent. The trajectory advances only for frames that actually enter the output FIFO: when the input history is insufficient to produce the next frame the trajectory simply stops, and zero-length **putSamples()** calls or queries never advance it.
+
+**API.**
+
+*   **enableRateRamp(BOOL)** — switches the mode. Allowed only right after construction or **clear()**, before any non-empty input has been fed; switching does not change the current rate. Throws **std::invalid_argument** if the interpolation algorithm doesn't support ramping (SHANNON, or integer sample builds), if the current rate is outside [0.5, 2.0], or if input has already been fed; the object is left unchanged in these cases.
+*   **setRateRamp(double targetRate, uint outputFrames)** — schedules a ramp that starts from the next not-yet-generated output frame. If the current increment is *r0* at call time, frame *k* of the ramp uses increment *r0 + (targetRate - r0) \* k / outputFrames* for *k = 0 .. outputFrames-1*, and *targetRate* afterwards. Sound already queued in the output FIFO is unaffected. Calling it again continues from the current increment and replaces the unfinished ramp. **outputFrames == 0** sets the next increment immediately and cancels the ramp.
+*   **setRate()** — in ramp mode, sets the next increment immediately and cancels any active ramp.
+*   **getCurrentRate()** — returns the increment the next generated output frame will use.
+*   **getRateRampRemaining()** — returns how many ramp frames are still ungenerated (0 when no ramp is active).
+
+In ramp mode both the current and the target rate must be finite and within **[0.5, 2.0]**; invalid calls throw **std::invalid_argument** and leave the audio history, trajectory and queued output untouched. **clear()** drops the buffered sound and the fractional phase and cancels the ramp, but keeps the current increment and the mode; the next segment restarts from source coordinate 0. Ramp mode supports the LINEAR and CUBIC interpolation algorithms.
+
+**Buffering and filtering.** Processing still works block-wise with bounded history: the transposer keeps the real input history around the current coordinate (older frames are discarded once the coordinate has moved past them) and needs a lookahead of at most 32 input frames per output frame. When the anti-alias filter is enabled and the current increment is above 1, each output frame is low-pass filtered in the input domain with a 64-tap Hamming-windowed sinc (cutoff 0.5/r, DC-normalized per frame) whose kernel is centered on the exact source coordinate of that frame — the filter center never shifts with call blocks or rate changes, and the cutoff follows the per-frame rate instead of any global minimum. History before source coordinate zero is treated as zero. When the increment is at or below 1 the filter cutoff reaches the input Nyquist and plain interpolation is used, so crossing rate 1 in either direction is seamless and requires no buffer resets.
+
+See **examples/rate_ramp.cpp** for a usage example (it writes source coordinates, next rates and output samples to a CSV file) and **checks/rate_ramp.sh** for a self-contained build + test run.
+
 * * *
 
 ## <a name="SoundStretch"></a>4\. SoundStretch audio processing utility
