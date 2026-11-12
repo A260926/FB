@@ -1,0 +1,7 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestFloor0BaselineObservation
+    floor0_baseline_observe_test.go:40: floor0-baseline: map1=16 want=16
+    floor0_baseline_observe_test.go:59: floor0-baseline: lsp=[0.2 0.4 0.6] want=[0.2 0.4 0.6]
+--- PASS: TestFloor0BaselineObservation (0.00s)
+PASS
+ok  	github.com/jfreymuth/vorbis	0.270s
