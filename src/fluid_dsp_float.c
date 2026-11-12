@@ -46,6 +46,7 @@
 #include "fluidsynth_priv.h"
 #include "fluid_synth.h"
 #include "fluid_voice.h"
+#include "fluid_legato.h"
 
 
 /* Interpolation (find a value between two samples of the original waveform) */
@@ -129,6 +130,7 @@ fluid_dsp_float_interpolate_none (fluid_voice_t *voice)
 {
   fluid_phase_t dsp_phase = voice->phase;
   fluid_phase_t dsp_phase_incr;
+  fluid_legato_group_t* dsp_legato = voice->legato_group;
   short int *dsp_data = voice->sample->data;
   fluid_real_t *dsp_buf = voice->dsp_buf;
   fluid_real_t dsp_amp = voice->amp;
@@ -159,6 +161,9 @@ fluid_dsp_float_interpolate_none (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index_round (dsp_phase);	/* round to nearest point */
       dsp_amp += dsp_amp_incr;
     }
@@ -192,6 +197,7 @@ fluid_dsp_float_interpolate_linear (fluid_voice_t *voice)
 {
   fluid_phase_t dsp_phase = voice->phase;
   fluid_phase_t dsp_phase_incr;
+  fluid_legato_group_t* dsp_legato = voice->legato_group;
   short int *dsp_data = voice->sample->data;
   fluid_real_t *dsp_buf = voice->dsp_buf;
   fluid_real_t dsp_amp = voice->amp;
@@ -231,6 +237,9 @@ fluid_dsp_float_interpolate_linear (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -249,6 +258,9 @@ fluid_dsp_float_interpolate_linear (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;	/* increment amplitude */
     }
@@ -283,6 +295,7 @@ fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice)
 {
   fluid_phase_t dsp_phase = voice->phase;
   fluid_phase_t dsp_phase_incr;
+  fluid_legato_group_t* dsp_legato = voice->legato_group;
   short int *dsp_data = voice->sample->data;
   fluid_real_t *dsp_buf = voice->dsp_buf;
   fluid_real_t dsp_amp = voice->amp;
@@ -343,6 +356,9 @@ fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -358,6 +374,9 @@ fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -378,6 +397,9 @@ fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -395,6 +417,9 @@ fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -435,6 +460,7 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 {
   fluid_phase_t dsp_phase = voice->phase;
   fluid_phase_t dsp_phase_incr;
+  fluid_legato_group_t* dsp_legato = voice->legato_group;
   short int *dsp_data = voice->sample->data;
   fluid_real_t *dsp_buf = voice->dsp_buf;
   fluid_real_t dsp_amp = voice->amp;
@@ -511,6 +537,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -533,6 +562,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -555,6 +587,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -578,6 +613,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -603,6 +641,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -625,6 +666,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }
@@ -647,6 +691,9 @@ fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice)
 
       /* increment phase and amplitude */
       fluid_phase_incr (dsp_phase, dsp_phase_incr);
+      if (dsp_legato != NULL)
+	fluid_phase_set_float (dsp_phase_incr,
+			       fluid_legato_voice_phase_incr (voice, dsp_i + 1));
       dsp_phase_index = fluid_phase_index (dsp_phase);
       dsp_amp += dsp_amp_incr;
     }

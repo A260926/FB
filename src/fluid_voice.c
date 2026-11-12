@@ -26,6 +26,7 @@
 #include "fluid_synth.h"
 #include "fluid_sys.h"
 #include "fluid_sfont.h"
+#include "fluid_legato.h"
 
 /* used for filter turn off optimization - if filter cutoff is above the
    specified value and filter q is below the other value, turn filter off */
@@ -70,6 +71,7 @@ new_fluid_voice(fluid_real_t output_rate)
   voice->channel = NULL;
   voice->sample = NULL;
   voice->output_rate = output_rate;
+  voice->legato_group = NULL;
 
   /* The 'sustain' and 'finished' segments of the volume / modulation
    * envelope are constant. They are never affected by any modulator
@@ -142,6 +144,7 @@ fluid_voice_init(fluid_voice_t* voice, fluid_sample_t* sample,
   voice->ticks = 0;
   voice->noteoff_ticks = 0;
   voice->debug = 0;
+  voice->legato_group = NULL;
   voice->has_looped = 0; /* Will be set during voice_write when the 2nd loop point is reached */
   voice->last_fres = -1; /* The filter coefficients have to be calculated later in the DSP loop. */
   voice->filter_startup = 1; /* Set the filter immediately, don't fade between old and new settings */
@@ -455,13 +458,20 @@ fluid_voice_write(fluid_voice_t* voice,
    * through the original waveform with each step in the output
    * buffer. It is the ratio between the frequencies of original
    * waveform and output waveform.*/
-  voice->phase_incr = fluid_ct2hz_real
-    (voice->pitch + voice->modlfo_val * voice->modlfo_to_pitch
-     + voice->viblfo_val * voice->viblfo_to_pitch
-     + voice->modenv_val * voice->modenv_to_pitch) / voice->root_pitch;
+  if (voice->legato_group != NULL) {
+    /* Legato voices advance the glide sample by sample; this value is
+     * only the starting increment, the DSP routines refresh it for
+     * every output sample. */
+    voice->phase_incr = fluid_legato_voice_phase_incr(voice, 0);
+  } else {
+    voice->phase_incr = fluid_ct2hz_real
+      (voice->pitch + voice->modlfo_val * voice->modlfo_to_pitch
+       + voice->viblfo_val * voice->viblfo_to_pitch
+       + voice->modenv_val * voice->modenv_to_pitch) / voice->root_pitch;
 
-  /* if phase_incr is not advancing, set it to the minimum fraction value (prevent stuckage) */
-  if (voice->phase_incr == 0) voice->phase_incr = 1;
+    /* if phase_incr is not advancing, set it to the minimum fraction value (prevent stuckage) */
+    if (voice->phase_incr == 0) voice->phase_incr = 1;
+  }
 
   /*************** resonant filter ******************/
 
@@ -757,6 +767,34 @@ fluid_voice_effects (fluid_voice_t *voice, int count,
 }
 
 /*
+ * fluid_legato_voice_phase_incr
+ */
+fluid_real_t
+fluid_legato_voice_phase_incr(fluid_voice_t* voice, int j)
+{
+  fluid_real_t pitch;
+  fluid_real_t incr;
+
+  /* The group trajectory lives in the plain midicents domain, without
+   * pitch bend.  Bend and fine/coarse tuning were frozen into
+   * legato_pitch_offset at group adoption, while the LFO and
+   * modulation envelope pitch terms keep evolving on their own. */
+  pitch = fluid_legato_base_pitch(voice->legato_group, j)
+          + voice->legato_pitch_offset
+          + voice->modlfo_val * voice->modlfo_to_pitch
+          + voice->viblfo_val * voice->viblfo_to_pitch
+          + voice->modenv_val * voice->modenv_to_pitch;
+
+  incr = fluid_ct2hz_real(pitch) / voice->root_pitch;
+
+  /* if phase_incr is not advancing, set it to the minimum fraction value (prevent stuckage) */
+  if (incr == 0.0f) {
+    incr = 1.0f;
+  }
+  return incr;
+}
+
+/*
  * fluid_voice_get_channel
  */
 fluid_channel_t*
@@ -1037,6 +1075,14 @@ fluid_voice_update_param(fluid_voice_t* voice, int gen)
   case GEN_PITCH:
   case GEN_COARSETUNE:
   case GEN_FINETUNE:
+    /* A legato voice keeps the tuning offset captured when its group
+     * was adopted.  Its base pitch is driven sample-by-sample by the
+     * group's glide (see fluid_legato_voice_phase_incr), so pitch bend
+     * modulation - including the wheel returning to center - must not
+     * rewrite the frozen offset. */
+    if (voice->legato_group != NULL) {
+      break;
+    }
     /* The testing for allowed range is done in 'fluid_ct2hz' */
     voice->pitch = (_GEN(voice, GEN_PITCH)
 		    + 100.0f * _GEN(voice, GEN_COARSETUNE)
@@ -1615,6 +1661,25 @@ fluid_voice_kill_excl(fluid_voice_t* voice){
 int
 fluid_voice_off(fluid_voice_t* voice)
 {
+  if (voice->legato_group != NULL) {
+    /* The voice leaves the synthesis loop: drop it from the group so no
+     * later glide update can touch a recycled voice slot.  Keep the
+     * table compact so later iterations cannot skip voices. */
+    fluid_legato_group_t* group = voice->legato_group;
+    int i, j;
+    for (i = 0; i < group->nvoice; i++) {
+      if (group->voice[i] == voice) {
+	for (j = i; j < group->nvoice - 1; j++) {
+	  group->voice[j] = group->voice[j + 1];
+	}
+	group->voice[group->nvoice - 1] = NULL;
+	group->nvoice--;
+	break;
+      }
+    }
+    voice->legato_group = NULL;
+  }
+
   voice->chan = NO_CHANNEL;
   voice->volenv_section = FLUID_VOICE_ENVFINISHED;
   voice->volenv_count = 0;

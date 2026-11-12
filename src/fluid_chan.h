@@ -25,6 +25,8 @@
 #include "fluid_midi.h"
 #include "fluid_tuning.h"
 
+struct _fluid_legato_t;
+
 /*
  * fluid_channel_t
  */
@@ -72,6 +74,10 @@ struct _fluid_channel_t
    * flag indicating whether the NRPN value is absolute or not.
    */
   char gen_abs[GEN_LAST];
+
+  /* Monophonic legato state (NULL on channels without the feature;
+   * allocated by the synthesizer). */
+  struct _fluid_legato_t* legato;
 };
 
 fluid_channel_t* new_fluid_channel(fluid_synth_t* synth, int num);

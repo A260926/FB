@@ -32,6 +32,7 @@ list(APPEND SOURCES
     src/fluid_dsp_float.c
     src/fluid_gen.c
     src/fluid_hash.c
+    src/fluid_legato.c
     src/fluid_list.c
     src/fluid_mod.c
     src/fluid_ramsfont.c

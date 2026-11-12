@@ -412,13 +412,37 @@ enum fluid_interp {
   FLUID_INTERP_NONE = 0,
   /* Straight-line interpolation: A bit slower, reasonable audio quality */
   FLUID_INTERP_LINEAR = 1,
-  /* Fourth-order interpolation: Requires 50 % of the whole DSP processing time, good quality 
+  /* Fourth-order interpolation: Requires 50 % of the whole DSP processing time, good quality
    * Default. */
   FLUID_INTERP_DEFAULT = 4,
   FLUID_INTERP_4THORDER = 4,
   FLUID_INTERP_7THORDER = 7,
   FLUID_INTERP_HIGHEST=7
 };
+
+  /** Enable or disable monophonic legato on a channel.
+   *
+   *  While enabled, note-on events while another key is held reuse the
+   *  voices of the first articulation: the sounding sample, phase,
+   *  envelopes, LFOs, filter history and velocity modulation are kept
+   *  and only the base pitch glides towards the new key over
+   *  glide_seconds, linearly in the cents domain.  Releasing the last
+   *  held key ends the group through the ordinary note-off (sustain
+   *  pedal rules still apply).  Disabled by default; classic
+   *  polyphonic playback is unchanged when off.
+   *
+   *  The mode may only be toggled while the channel has no held keys
+   *  or active legato group.  glide_seconds must be finite and between
+   *  0 and 10 seconds (0 means instantaneous pitch changes).
+   *
+   *  \param synth The synthesizer
+   *  \param chan The MIDI channel
+   *  \param enabled Nonzero to enable legato, zero to disable it
+   *  \param glide_seconds Glide duration in seconds, in [0, 10]
+   *  \return 0 on success, -1 on invalid arguments or state
+   */
+FLUIDSYNTH_API int fluid_synth_set_legato(fluid_synth_t* synth, int chan,
+                                          int enabled, double glide_seconds);
 
 
 

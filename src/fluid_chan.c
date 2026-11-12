@@ -22,6 +22,7 @@
 #include "fluid_mod.h"
 #include "fluid_synth.h"
 #include "fluid_sfont.h"
+#include "fluid_legato.h"
 
 #define SETCC(_c,_n,_v)  _c->cc[_n] = _v
 
@@ -149,8 +150,19 @@ fluid_channel_init_ctrl(fluid_channel_t* chan, int is_all_ctrl_off)
 void
 fluid_channel_reset(fluid_channel_t* chan)
 {
+  /* system_reset must clear the legato key list and glide target, but
+   * it must not change whether legato mode itself is enabled. */
+  char legato_enabled = chan->legato ? chan->legato->enabled : 0;
+  double glide_seconds = chan->legato ? chan->legato->glide_seconds : 0.0;
+
   fluid_channel_init(chan);
   fluid_channel_init_ctrl(chan,0);
+
+  if (chan->legato != NULL) {
+    fluid_legato_reset(chan->legato);
+    chan->legato->enabled = legato_enabled;
+    chan->legato->glide_seconds = glide_seconds;
+  }
 }
 
 /*
@@ -160,6 +172,7 @@ int
 delete_fluid_channel(fluid_channel_t* chan)
 {
   if (chan->preset) delete_fluid_preset (chan->preset);
+  if (chan->legato != NULL) delete_fluid_legato(chan->legato);
   FLUID_FREE(chan);
   return FLUID_OK;
 }

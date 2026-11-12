@@ -28,6 +28,10 @@
 
 #define NO_CHANNEL             0xff
 
+/* Legato group a monophonic legato voice belongs to; the full type is
+ * defined in fluid_legato.h.  Non-NULL while the voice follows a glide. */
+struct _fluid_legato_group_t;
+
 enum fluid_voice_status
 {
 	FLUID_VOICE_CLEAN,
@@ -207,6 +211,16 @@ struct _fluid_voice_t
     /* interpolation method, as in fluid_interp in fluidlite.h */
 	int interp_method;
 
+	/* Set while the voice is part of an active legato group.  Its
+	 * base pitch then follows the group's glide and ignores pitch
+	 * bend modulation; NULL gives the classic behaviour. */
+	struct _fluid_legato_group_t* legato_group;
+
+	/* Cached difference between the voice's (tuning-inclusive) pitch
+	 * and its group's plain key base pitch; valid while legato_group
+	 * is non-NULL. */
+	fluid_real_t legato_pitch_offset;
+
 	/* for debugging */
 	int debug;
 };
@@ -287,5 +301,14 @@ int fluid_dsp_float_interpolate_none (fluid_voice_t *voice);
 int fluid_dsp_float_interpolate_linear (fluid_voice_t *voice);
 int fluid_dsp_float_interpolate_4th_order (fluid_voice_t *voice);
 int fluid_dsp_float_interpolate_7th_order (fluid_voice_t *voice);
+
+/*
+ * Phase increment for output sample j (0-based) of the 64-sample block
+ * currently being rendered, for a voice attached to a legato group.
+ * The cents-domain glide is evaluated per generated sample so that all
+ * four interpolation modes follow the same trajectory; SoundFont
+ * tuning and the LFO / mod-env pitch contributions still apply.
+ */
+fluid_real_t fluid_legato_voice_phase_incr(fluid_voice_t* voice, int j);
 
 #endif /* _FLUID_VOICE_H */

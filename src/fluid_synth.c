@@ -26,6 +26,7 @@
 #include "fluid_tuning.h"
 #include "fluid_settings.h"
 #include "fluid_sfont.h"
+#include "fluid_legato.h"
 
 fluid_sfloader_t* new_fluid_defsfloader(void);
 
@@ -459,6 +460,10 @@ new_fluid_synth(fluid_settings_t *settings)
     if (synth->channel[i] == NULL) {
       goto error_recovery;
     }
+    synth->channel[i]->legato = new_fluid_legato(synth->polyphony);
+    if (synth->channel[i]->legato == NULL) {
+      goto error_recovery;
+    }
   }
 
   /* allocate all synthesis processes */
@@ -573,6 +578,11 @@ void
 fluid_synth_set_sample_rate(fluid_synth_t* synth, float sample_rate)
 {
     int i;
+    /* Voices are recreated below; drop any legato group so it cannot
+     * keep pointers to the destroyed voice slots. */
+    for (i = 0; i < synth->midi_channels; i++) {
+      fluid_legato_reset(synth->channel[i]->legato);
+    }
     for (i = 0; i < synth->nvoice; i++) {
       delete_fluid_voice(synth->voice[i]);
       synth->voice[i] = new_fluid_voice(synth->sample_rate);
@@ -747,6 +757,8 @@ int
 fluid_synth_noteon(fluid_synth_t* synth, int chan, int key, int vel)
 {
   fluid_channel_t* channel;
+  int start_noteon;
+  unsigned int noteid;
 
   /* check the ranges of the arguments */
   if ((chan < 0) || (chan >= synth->midi_channels)) {
@@ -772,11 +784,29 @@ fluid_synth_noteon(fluid_synth_t* synth, int chan, int key, int vel)
     return FLUID_FAILED;
   }
 
+  /* Monophonic legato: while a group is sounding, a note-on only
+   * updates the physical key priority list and retargets the glide.
+   * No zone is reselected and no voice is restarted. */
+  if (fluid_legato_noteon(synth, chan, key, &start_noteon) != FLUID_OK) {
+    return FLUID_FAILED;
+  }
+  if (!start_noteon) {
+    return FLUID_OK;
+  }
+
   /* If there is another voice process on the same channel and key,
      advance it to the release phase. */
   fluid_synth_release_voice_on_same_note(synth, chan, key);
 
-  return fluid_synth_start(synth, synth->noteid++, channel->preset, 0, chan, key, vel);
+  noteid = synth->noteid++;
+  if (fluid_synth_start(synth, noteid, channel->preset, 0, chan, key, vel)
+      != FLUID_OK) {
+    return FLUID_FAILED;
+  }
+
+  /* Hand the freshly created voices over to the legato group.  In
+   * classic mode this is a no-op. */
+  return fluid_legato_adopt_group(synth, chan, key, noteid);
 }
 
 /*
@@ -788,12 +818,24 @@ fluid_synth_noteoff(fluid_synth_t* synth, int chan, int key)
   int i;
   fluid_voice_t* voice;
   int status = FLUID_FAILED;
+  int release_group = 0;
 /*   fluid_mutex_lock(synth->busy); /\* Don't interfere with the audio thread *\/ */
 /*   fluid_mutex_unlock(synth->busy); */
 
+  /* Legato bookkeeping first: remove the physical key and, if it was
+   * the last one, ask for an ordinary group note-off below. */
+  if (fluid_legato_noteoff(synth, chan, key, &release_group)) {
+    status = FLUID_OK;
+  }
+
   for (i = 0; i < synth->polyphony; i++) {
     voice = synth->voice[i];
-    if (_ON(voice) && (voice->chan == chan) && (voice->key == key)) {
+    /* Voices of an active legato group keep the first key's key number;
+     * their lifetime is driven by the physical key list, so they must
+     * not be matched by an ordinary key note-off.  They are released
+     * explicitly below when the last held key goes up. */
+    if (_ON(voice) && (voice->chan == chan) && (voice->key == key)
+        && (voice->legato_group == NULL)) {
       if (synth->verbose) {
 	int used_voices = 0;
 	int k;
@@ -812,6 +854,25 @@ fluid_synth_noteoff(fluid_synth_t* synth, int chan, int key)
       status = FLUID_OK;
     } /* if voice on */
   } /* for all voices */
+
+  /* In legato mode the group's voices keep the first key's key number,
+   * so the loop above cannot match them.  Releasing the last physical
+   * key note-offs the whole group here (sustain pedal included). */
+  if (release_group) {
+    fluid_legato_t* legato = synth->channel[chan]->legato;
+    fluid_legato_group_t* group = legato->group;
+    for (i = 0; i < group->nvoice; i++) {
+      voice = group->voice[i];
+      if (voice != NULL && _ON(voice)) {
+	fluid_voice_noteoff(voice);
+	status = FLUID_OK;
+      }
+    }
+    /* Detach after the voices have taken their release state: they
+     * keep the glide pitch reached so far but stop following updates. */
+    fluid_legato_detach_group(synth, chan);
+  }
+
   return status;
 }
 
@@ -1177,6 +1238,11 @@ fluid_synth_all_notes_off(fluid_synth_t* synth, int chan)
   int i;
   fluid_voice_t* voice;
 
+  /* Clear the legato key list and glide target; the voices themselves
+   * are released below through the ordinary note-off path, and any
+   * sustain-pedal group is detached so it cannot follow later keys. */
+  fluid_legato_detach_group(synth, chan);
+
   for (i = 0; i < synth->polyphony; i++) {
     voice = synth->voice[i];
     if (_PLAYING(voice) && (voice->chan == chan)) {
@@ -1196,6 +1262,10 @@ fluid_synth_all_sounds_off(fluid_synth_t* synth, int chan)
 {
   int i;
   fluid_voice_t* voice;
+
+  /* Clear the legato state first; every voice of this channel is
+   * stopped immediately below. */
+  fluid_legato_detach_group(synth, chan);
 
   for (i = 0; i < synth->polyphony; i++) {
     voice = synth->voice[i];
@@ -1226,6 +1296,8 @@ fluid_synth_system_reset(fluid_synth_t* synth)
   }
 
   for (i = 0; i < synth->midi_channels; i++) {
+    /* fluid_channel_reset() clears the legato key list and glide
+     * target of every channel while preserving the enabled flag. */
     fluid_channel_reset(synth->channel[i]);
   }
 
@@ -1551,6 +1623,12 @@ fluid_synth_program_change(fluid_synth_t* synth, int chan, int prognum)
   channel = synth->channel[chan];
   banknum = fluid_channel_get_banknum(channel);
 
+  /* A program change clears the held key list and glide target.  Any
+   * voices of the previous group keep sounding under their original
+   * behaviour (program change never released voices), but are detached
+   * so they cannot follow later keys. */
+  fluid_legato_detach_group(synth, chan);
+
   /* inform the channel of the new program number */
   fluid_channel_set_prognum(channel, prognum);
 
@@ -1677,6 +1755,11 @@ int fluid_synth_program_select(fluid_synth_t* synth,
   fluid_channel_set_sfontnum(channel, sfont_id);
   fluid_channel_set_banknum(channel, bank_num);
   fluid_channel_set_prognum(channel, preset_num);
+
+  /* Selecting a different preset clears any legato key list and glide
+   * target, just like a program change.  Existing voices keep sounding
+   * under their original behaviour but are detached from later keys. */
+  fluid_legato_detach_group(synth, chan);
 
   fluid_channel_set_preset(channel, preset);
 
@@ -2298,6 +2381,11 @@ fluid_synth_one_block(fluid_synth_t* synth, int do_not_mix_fx_to_out)
 #endif
 
   synth->ticks += FLUID_BUFSIZE;
+
+  /* Advance the legato glide clocks by the samples that have just
+   * been generated, so the clock follows real rendering rather than
+   * the number of write_float() calls. */
+  fluid_legato_process_block(synth);
 
   /* Testcase, that provokes a denormal floating point error */
 #if 0
@@ -2952,6 +3040,49 @@ int fluid_synth_set_interp_method(fluid_synth_t* synth, int chan, int interp_met
   };
   return FLUID_OK;
 };
+
+/*
+ * fluid_synth_set_legato
+ *
+ * Enable or disable monophonic legato on one MIDI channel and set the
+ * glide (portamento) time in seconds.  Legato is disabled by default;
+ * when disabled the classic polyphonic behaviour is unchanged.
+ *
+ * Toggling the mode is only allowed while the channel holds no
+ * physical keys and owns no active legato group; otherwise the call
+ * fails without touching any state.  glide_seconds must be finite and
+ * within [0, 10]; a value of zero makes retargeting instantaneous.
+ */
+int fluid_synth_set_legato(fluid_synth_t* synth, int chan, int enabled,
+                           double glide_seconds)
+{
+  fluid_legato_t* legato;
+
+  if ((chan < 0) || (chan >= synth->midi_channels)) {
+    FLUID_LOG(FLUID_WARN, "Channel out of range");
+    return FLUID_FAILED;
+  }
+
+  if (!isfinite(glide_seconds) || glide_seconds < 0.0 || glide_seconds > 10.0) {
+    FLUID_LOG(FLUID_WARN, "Legato glide time out of range");
+    return FLUID_FAILED;
+  }
+
+  legato = synth->channel[chan]->legato;
+
+  if ((enabled != 0) != (legato->enabled != 0)) {
+    /* The mode is being switched on or off. */
+    if (!fluid_legato_can_set_mode(legato)) {
+      FLUID_LOG(FLUID_WARN, "Legato mode can only be toggled while the "
+                            "channel has no held keys or active group");
+      return FLUID_FAILED;
+    }
+    legato->enabled = (enabled != 0);
+  }
+
+  legato->glide_seconds = glide_seconds;
+  return FLUID_OK;
+}
 
 /* Purpose:
  * Returns the number of allocated midi channels
