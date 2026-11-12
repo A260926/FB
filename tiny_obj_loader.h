@@ -474,11 +474,56 @@ struct points_t {
   std::vector<index_t> indices;  // indices for points
 };
 
+// A clamped (open, non-periodic), one-dimensional B-spline free-form curve
+// parsed from an OBJ free-form curve block (`cstype bspline`/`cstype rat
+// bspline`, `deg`, `curv`, `parm u`, `end`).
+//
+// Only degrees 1..3 are accepted. `indices` are resolved, zero-based vertex
+// indices into `attrib_t::vertices` (negative indices on the `curv` line are
+// resolved against the number of vertices present at that line). `knots` has
+// exactly indices.size() + degree + 1 entries, is non-decreasing, has end
+// multiplicity degree+1, and internal multiplicity at most degree+1.
+// `param_begin`/`param_end` are the start/end parameters given on `curv`.
+// For rational curves the per-vertex weight comes from the optional 4th
+// component of the `v` line (stored in `attrib_t::vertex_weights`); plain
+// xyz vertices have implicit weight 1.
+struct curve_t {
+  int degree;                       // B-spline degree (1..3)
+  bool rational;                    // true for `cstype rat bspline`
+  real_t param_begin;               // start parameter from `curv`
+  real_t param_end;                 // end parameter from `curv`
+  std::vector<unsigned int> indices;  // zero-based control vertex indices
+  std::vector<real_t> knots;       // clamped knot vector
+  int material_id;                  // material active at the `end` line (-1 if none)
+
+  curve_t()
+      : degree(0),
+        rational(false),
+        param_begin(0),
+        param_end(0),
+        material_id(-1) {}
+};
+
 struct shape_t {
   std::string name;
   mesh_t mesh;
   lines_t lines;
   points_t points;
+  std::vector<curve_t> curves;  // B-spline free-form curves
+};
+
+// One tessellated sample: 3D position on the curve and the curve parameter
+// that produced it.
+struct curve_sample_t {
+  real_t position[3];
+  real_t param;
+};
+
+// One continuous run of a tessellated curve. Internal knots whose
+// multiplicity reaches degree+1 split the curve into separate polylines;
+// such a boundary is never connected by a segment.
+struct curve_polyline_t {
+  std::vector<curve_sample_t> samples;  // >= 2 samples on success
 };
 
 // Vertex attributes
@@ -487,6 +532,10 @@ struct attrib_t {
 
   // For backward compatibility, we store vertex weight in separate array.
   std::vector<real_t> vertex_weights;  // 'v'(w)
+  // Number of components on the corresponding `v` line: 3 (xyz), 4 (xyzw)
+  // or 6 (xyz + vertex color). Lets rational curves tell a real `w` weight
+  // apart from the first red channel of a 6-component color vertex.
+  std::vector<unsigned char> vertex_components;
   std::vector<real_t> normals;         // 'vn'
   std::vector<real_t> texcoords;       // 'vt'(uv)
 
@@ -741,6 +790,48 @@ void LoadMtl(std::map<std::string, int> *material_map,
 ///
 bool ParseTextureNameAndOption(std::string *texname, texture_option_t *texopt,
                                const char *linebuf);
+
+///
+/// Tessellate a parsed B-spline free-form curve into drawable polylines.
+///
+/// Only the container APIs (`ObjReader`, `LoadObj`) populate `curve_t`;
+/// the callback and optimized/arena APIs do not parse free-form curves.
+///
+/// The curve is evaluated on exactly the valid sub-interval given by
+/// `curve.param_begin`/`curve.param_end` (these are not assumed to be
+/// [0, 1]). Internal knots with multiplicity `degree+1` are discontinuities:
+/// each continuous run is emitted as a separate `curve_polyline_t`, and the
+/// two sides of a break are never joined by a segment. A knot boundary shared
+/// by adjacent runs is evaluated only once per run.
+///
+/// Every output segment approximates its span of the curve within
+/// `tolerance`: subdivision uses a recursive midpoint split with a
+/// *convex-hull deviation bound* -- the maximum distance of any control
+/// point of a span's Bezier control polygon from the endpoint chord
+/// *segment* (the projection is clamped to the segment). The radius-d
+/// capsule around a segment is convex, so when every control point lies
+/// within d the whole convex hull, and therefore the (rational) curve arc,
+/// lies within d of the chord segment. Measuring against the segment rather
+/// than its supporting line is essential when the polygon bulges past a
+/// chord endpoint, and the bound is valid for any shape -- including S-bends
+/// whose midpoint happens to lie on the chord -- so a single midpoint check
+/// is never used as a flatness test.
+///
+/// On success returns true and appends one or more polylines to
+/// `polylines`; every sample stores both its 3D position and its source
+/// parameter, and the two end samples are evaluated exactly at
+/// `param_begin`/`param_end`. Neither `attrib` nor `curve` is modified.
+///
+/// Returns false (with `error` filled) when `tolerance` is not positive, the
+/// curve references missing/non-finite vertices, a rational curve references a
+/// vertex whose stored weight is not finite or not positive, evaluation
+/// produces non-finite values, or floating-point precision is exhausted
+/// before the deviation bound can be met -- in that last case no
+/// out-of-tolerance geometry is emitted.
+bool TessellateCurve(const attrib_t &attrib, const curve_t &curve,
+                     real_t tolerance,
+                     std::vector<curve_polyline_t> *polylines,
+                     std::string *error);
 
 /// =<<========== Legacy v1 API =============================================
 
@@ -6337,18 +6428,52 @@ struct PrimGroup {
   std::vector<face_t> faceGroup;
   std::vector<__line_t> lineGroup;
   std::vector<__points_t> pointsGroup;
+  std::vector<curve_t> curveGroup;
 
   void clear() {
     faceGroup.clear();
     lineGroup.clear();
     pointsGroup.clear();
+    curveGroup.clear();
   }
 
   bool IsEmpty() const {
-    return faceGroup.empty() && lineGroup.empty() && pointsGroup.empty();
+    return faceGroup.empty() && lineGroup.empty() && pointsGroup.empty() &&
+           curveGroup.empty();
   }
+};
 
-  // TODO(syoyo): bspline, surface, ...
+// Per-line validation state for a free-form curve block (between `cstype`
+// and its closing `end`). Only B-spline curve blocks are parsed; blocks for
+// any other free-form geometry are still skipped line by line.
+struct CurveParseState {
+  bool active;          // inside any free-form block
+  bool supported;       // the active block is a (rational) B-spline curve
+  bool has_deg;
+  bool has_curv;
+  bool rational;
+  int degree;
+  size_t start_line;    // line of the `cstype` that opened the block
+  real_t param_begin;
+  real_t param_end;
+  std::vector<unsigned int> ctrl;  // zero-based indices, resolved on `curv`
+  std::vector<real_t> knots;
+
+  CurveParseState() { reset(); }
+
+  void reset() {
+    active = false;
+    supported = false;
+    has_deg = false;
+    has_curv = false;
+    rational = false;
+    degree = 0;
+    start_line = 0;
+    param_begin = 0;
+    param_end = 0;
+    ctrl.clear();
+    knots.clear();
+  }
 };
 
 // See
@@ -8211,6 +8336,13 @@ static bool exportGroupsToShape(shape_t *shape, const PrimGroup &prim_group,
     }
   }
 
+  // free-form B-spline curves (material id is stored per curve at its `end`)
+  if (!prim_group.curveGroup.empty()) {
+    shape->curves.insert(shape->curves.end(),
+                         prim_group.curveGroup.begin(),
+                         prim_group.curveGroup.end());
+  }
+
   return true;
 }
 
@@ -8841,6 +8973,320 @@ bool MaterialStreamReader::operator()(const std::string &matId,
   return LoadMtlInternal(matMap, materials, mtl_sr, warn, err, "<stream>");
 }
 
+// Validate and finalize a supported curve block into `out`. Returns false
+// (with a line-numbered message in `err`) on any constraint violation.
+static inline bool curve_finalize(
+    const CurveParseState &st, int material_id,
+    const std::vector<real_t> &vertex_weights,
+    const std::vector<unsigned char> &v_components, StreamReader &sr,
+    const std::string &filename, std::string *err, curve_t *out) {
+  if (!st.has_deg) {
+    if (err)
+      (*err) += sr.format_error(
+          filename, "free-form curve block is missing required `deg' line");
+    return false;
+  }
+  if (!st.has_curv) {
+    if (err)
+      (*err) += sr.format_error(
+          filename, "free-form curve block is missing required `curv' line");
+    return false;
+  }
+  if (st.knots.empty()) {
+    if (err)
+      (*err) += sr.format_error(
+          filename,
+          "free-form curve block is missing required `parm u' line");
+    return false;
+  }
+  const size_t nctrl = st.ctrl.size();
+  const size_t p = static_cast<size_t>(st.degree);
+  if (nctrl <= p) {
+    if (err)
+      (*err) += sr.format_error(
+          filename,
+          "free-form curve needs more control points than its degree");
+    return false;
+  }
+  if (st.knots.size() != nctrl + p + 1) {
+    if (err) {
+      std::stringstream ss;
+      ss << "knot count " << st.knots.size()
+         << " does not equal control-point count + degree + 1 ("
+         << (nctrl + p + 1) << ")";
+      (*err) += sr.format_error(filename, ss.str());
+    }
+    return false;
+  }
+  for (size_t i = 0; i < st.knots.size(); ++i) {
+    if (!std::isfinite(st.knots[i])) {
+      if (err)
+        (*err) += sr.format_error(filename,
+                                  "non-finite value in `parm u' knot vector");
+      return false;
+    }
+    if (i > 0 && st.knots[i] < st.knots[i - 1]) {
+      if (err)
+        (*err) += sr.format_error(filename,
+                                  "knot vector must be non-decreasing");
+      return false;
+    }
+  }
+  // Clamped (non-periodic): multiplicity exactly degree+1 at both ends.
+  for (size_t i = 0; i <= p; ++i) {
+    if (st.knots[i] != st.knots[0] ||
+        st.knots[st.knots.size() - 1 - i] != st.knots.back()) {
+      if (err)
+        (*err) += sr.format_error(
+            filename,
+            "only clamped curves with end multiplicity degree+1 are supported");
+      return false;
+    }
+  }
+  // Internal multiplicity must not exceed degree+1.
+  for (size_t i = p + 1; i + p + 1 < st.knots.size();) {
+    size_t j = i + 1;
+    while (j < st.knots.size() && st.knots[j] == st.knots[i]) ++j;
+    if (j - i > p + 1) {
+      if (err)
+        (*err) += sr.format_error(
+            filename, "internal knot multiplicity exceeds degree+1");
+      return false;
+    }
+    i = j;
+  }
+  if (!std::isfinite(st.param_begin) || !std::isfinite(st.param_end) ||
+      !(st.param_end > st.param_begin)) {
+    if (err) {
+      std::stringstream ss;
+      ss << "invalid curve parameter interval [" << st.param_begin << ", "
+         << st.param_end << "] on `curv' line";
+      (*err) += sr.format_error(filename, ss.str());
+    }
+    return false;
+  }
+  if (st.param_begin < st.knots.front() || st.param_end > st.knots.back()) {
+    if (err)
+      (*err) += sr.format_error(
+          filename, "`curv' parameter interval lies outside the knot range");
+    return false;
+  }
+  // Every referenced control vertex must resolve to finite geometry. For
+  // rational curves only xyz/xyzw vertices are legal: the 6-component vertex
+  // color extension does not carry a weight, and every weight must be finite
+  // and strictly positive (an implicit xyz weight is 1).
+  for (size_t i = 0; i < nctrl; ++i) {
+    unsigned int vi = st.ctrl[i];
+    if (static_cast<size_t>(vi) >= vertex_weights.size()) {
+      if (err)
+        (*err) += sr.format_error(
+            filename, "`curv' references a vertex that does not exist");
+      return false;
+    }
+    if (st.rational &&
+        vi < v_components.size() && v_components[vi] == 6) {
+      if (err)
+        (*err) += sr.format_error(
+            filename,
+            "rational curve cannot reference a 6-component vertex-color "
+            "vertex; use xyz or xyzw vertices");
+      return false;
+    }
+    real_t w = static_cast<real_t>(1.0);
+    if (st.rational && vi < v_components.size() &&
+        v_components[vi] == 4 && vi < vertex_weights.size()) {
+      w = vertex_weights[vi];
+    }
+    if (st.rational && (!std::isfinite(w) || w <= static_cast<real_t>(0.0) ||
+                        // The generic vertex parser maps a literal `inf`
+                        // weight to real_t max; treat that sentinel as the
+                        // non-finite value it represents.
+                        w == (std::numeric_limits<real_t>::max)())) {
+      if (err)
+        (*err) += sr.format_error(
+            filename,
+            "rational curve weight must be finite and positive");
+      return false;
+    }
+  }
+  out->degree = st.degree;
+  out->rational = st.rational;
+  out->param_begin = st.param_begin;
+  out->param_end = st.param_end;
+  out->indices = st.ctrl;
+  out->knots = st.knots;
+  out->material_id = material_id;
+  return true;
+}
+
+// Parse one real inside a free-form block. Unlike the generic real parser
+// this rejects literal `nan`/`inf`/`infinity` tokens (the generic parser
+// intentionally maps them to 0 / DBL_MAX, but non-finite curve parameters
+// and knots are invalid).
+static inline bool curve_parse_real(StreamReader &sr, real_t *out,
+                                    const std::string &filename,
+                                    std::string *err) {
+  sr.skip_space();
+  const char *start = sr.current_ptr();
+  size_t rem = sr.remaining();
+  size_t len = 0;
+  while (len < rem) {
+    char c = start[len];
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\0') break;
+    ++len;
+  }
+  if (len == 0) {
+    if (err)
+      (*err) += sr.format_error(filename, "expected a numeric value");
+    return false;
+  }
+  size_t i = 0;
+  if (i < len && (start[i] == '+' || start[i] == '-')) ++i;
+  char word[16];
+  size_t wl = len - i;
+  if (wl >= sizeof(word)) wl = sizeof(word) - 1;
+  for (size_t k = 0; k < wl; ++k) {
+    char c = start[i + k];
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+    word[k] = c;
+  }
+  word[wl] = '\0';
+  if (std::strcmp(word, "nan") == 0 || std::strcmp(word, "inf") == 0 ||
+      std::strcmp(word, "infinity") == 0) {
+    if (err)
+      (*err) += sr.format_error(
+          filename, "non-finite value (nan/inf) is not allowed in a curve "
+                    "parameter or knot vector");
+    sr.advance(len);
+    return false;
+  }
+  return sr_parseReal(sr, out, 0.0, err, filename);
+}
+
+// Handle a line while a free-form block (`cstype` .. `end`) is active.
+// Returns true on success, false after filling `err` with a line-numbered
+// diagnostic. Unsupported block types are consumed and ignored until `end`.
+static inline bool curve_parse_block_line(
+    StreamReader &sr, const std::string &token, int num_vertices,
+    const std::vector<real_t> &vertex_weights,
+    const std::vector<unsigned char> &v_components,
+    const std::string &filename, std::string *err, CurveParseState *st,
+    std::vector<curve_t> *curve_group, int material_id) {
+  if (token == "end") {
+    if (st->supported) {
+      curve_t out;
+      if (!curve_finalize(*st, material_id, vertex_weights, v_components, sr,
+                          filename, err, &out))
+        return false;
+      curve_group->push_back(out);
+    }
+    st->reset();
+    sr.skip_line();
+    return true;
+  }
+
+  if (!st->supported) {
+    // Unknown/unsupported free-form element: ignore its body until `end`.
+    sr.skip_line();
+    return true;
+  }
+
+  if (token == "deg") {
+    sr.skip_space();
+    int d;
+    if (!sr_parseInt(sr, &d, err, filename)) return false;
+    if (d < 1 || d > 3) {
+      if (err)
+        (*err) += sr.format_error(
+            filename, "only B-spline curve degrees 1 to 3 are supported");
+      return false;
+    }
+    st->degree = d;
+    st->has_deg = true;
+    sr.skip_line();
+    return true;
+  }
+
+  if (token == "curv") {
+    sr.skip_space();
+    real_t u0, u1;
+    if (!curve_parse_real(sr, &u0, filename, err)) return false;
+    if (!curve_parse_real(sr, &u1, filename, err)) return false;
+    if (!std::isfinite(u0) || !std::isfinite(u1) || !(u1 > u0)) {
+      if (err)
+        (*err) += sr.format_error(
+            filename, "invalid parameter interval on `curv' line");
+      return false;
+    }
+    st->param_begin = u0;
+    st->param_end = u1;
+    // Resolve indices immediately: negative indices refer to the vertices
+    // that exist when this line is read, never to vertices added later.
+    std::vector<unsigned int> ctrl;
+    while (!sr.at_line_end() && sr.peek() != '#') {
+      sr.skip_space();
+      if (sr.at_line_end()) break;
+      int idx;
+      if (!sr_parseInt(sr, &idx, err, filename)) return false;
+      int fixed;
+      warning_context wctx;
+      wctx.warn = err;
+      wctx.line_number = sr.line_num();
+      wctx.filename = filename;
+      if (!fixIndex(idx, num_vertices, &fixed, false, wctx)) {
+        if (err)
+          (*err) += sr.format_error(
+              filename, "`curv' line contains an out-of-range vertex index");
+        return false;
+      }
+      if (fixed < 0 || fixed >= num_vertices) {
+        if (err)
+          (*err) += sr.format_error(
+              filename, "`curv' line contains an out-of-range vertex index");
+        return false;
+      }
+      ctrl.push_back(static_cast<unsigned int>(fixed));
+      sr.skip_space_and_cr();
+    }
+    if (ctrl.empty()) {
+      if (err)
+        (*err) += sr.format_error(
+            filename, "`curv' line must name at least one control vertex");
+      return false;
+    }
+    st->ctrl.swap(ctrl);
+    st->has_curv = true;
+    sr.skip_line();
+    return true;
+  }
+
+  if (token == "parm") {
+    sr.skip_space();
+    std::string axis = sr.read_token();
+    if (axis != "u") {
+      // Only one-dimensional curves are supported; other parameter values
+      // are ignored but must not break the block.
+      sr.skip_line();
+      return true;
+    }
+    while (!sr.at_line_end() && sr.peek() != '#') {
+      sr.skip_space();
+      if (sr.at_line_end()) break;
+      real_t knot;
+      if (!curve_parse_real(sr, &knot, filename, err)) return false;
+      st->knots.push_back(knot);
+      sr.skip_space_and_cr();
+    }
+    sr.skip_line();
+    return true;
+  }
+
+  // Any other in-block statement (bmat, step, trim, hole, scrv, ...) is not
+  // needed for these restricted curves: ignore the rest of the line.
+  sr.skip_line();
+  return true;
+}
+
 static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
                             std::vector<material_t> *materials,
                             std::string *warn, std::string *err,
@@ -8857,6 +9303,9 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
 
   std::vector<real_t> v;
   std::vector<real_t> vertex_weights;
+  // Number of components on each `v` line (3, 4, or 6), so rational curves
+  // can tell xyzw weights apart from the 6-component vertex color extension.
+  std::vector<unsigned char> v_components;
   std::vector<real_t> vn;
   std::vector<real_t> vt;
   std::vector<real_t> vt_w;  // optional [w] component in `vt`
@@ -8879,6 +9328,9 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
 
   shape_t shape;
 
+  // Open free-form curve block (if any) between `cstype` and `end`.
+  CurveParseState curve_st;
+
   bool found_all_colors = true;
 
   // Handle BOM
@@ -8900,6 +9352,39 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
 
     size_t line_num = sr.line_num();
 
+    // Inside a free-form block every line belongs to the block until `end`.
+    if (curve_st.active) {
+      std::string block_token = sr.read_token();
+      if (!curve_parse_block_line(sr, block_token,
+                                  size_to_int(static_cast<int>(v.size() / 3)),
+                                  vertex_weights, v_components, filename, err,
+                                  &curve_st, &prim_group.curveGroup,
+                                  material)) {
+        return false;
+      }
+      continue;
+    }
+
+    // Open a free-form block. Only B-spline curve blocks are parsed; all
+    // other free-form element types are consumed and ignored until `end`.
+    if (sr.match("cstype", 6) &&
+        (sr.peek_at(6) == ' ' || sr.peek_at(6) == '\t')) {
+      sr.advance(6);
+      std::string kind = sr.read_token();
+      bool rational = false;
+      if (kind == "rat") {
+        rational = true;
+        kind = sr.read_token();
+      }
+      curve_st.reset();
+      curve_st.active = true;
+      curve_st.supported = (kind == "bspline");
+      curve_st.rational = rational;
+      curve_st.start_line = line_num;
+      sr.skip_line();
+      continue;
+    }
+
     // vertex
     if (sr.peek() == 'v' && (sr.peek_at(1) == ' ' || sr.peek_at(1) == '\t')) {
       sr.advance(2);
@@ -8915,6 +9400,7 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
       v.push_back(z);
 
       vertex_weights.push_back(r);
+      v_components.push_back(static_cast<unsigned char>(num_components));
 
       if ((num_components == 6) || default_vcols_fallback) {
         vc.push_back(r);
@@ -9127,6 +9613,9 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
         exportGroupsToShape(&shape, prim_group, tags, material, name,
                             triangulate, v, warn);
         prim_group.faceGroup.clear();
+        // Curves were just copied into the shape by the export; drop them so
+        // a later material switch cannot export the same curve twice.
+        prim_group.curveGroup.clear();
         material = newMaterialId;
       }
 
@@ -9201,7 +9690,7 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
                                      triangulate, v, warn);
       (void)ret;
 
-      if (shape.mesh.indices.size() > 0) {
+      if (shape.mesh.indices.size() > 0 || shape.curves.size() > 0) {
         shapes->push_back(shape);
       }
 
@@ -9255,7 +9744,7 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
       (void)ret;
 
       if (shape.mesh.indices.size() > 0 || shape.lines.indices.size() > 0 ||
-          shape.points.indices.size() > 0) {
+          shape.points.indices.size() > 0 || shape.curves.size() > 0) {
         shapes->push_back(shape);
       }
 
@@ -9358,6 +9847,17 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
     sr.skip_line();
   }
 
+  // An unclosed free-form block is an error; report the actual line numbers.
+  if (curve_st.active) {
+    if (err) {
+      std::stringstream ss;
+      ss << "free-form block opened on line " << curve_st.start_line
+         << " was not closed by an `end' line";
+      (*err) += sr.format_error(filename, ss.str());
+    }
+    return false;
+  }
+
   // not all vertices have colors, no default colors desired? -> clear colors
   if (!found_all_colors && !default_vcols_fallback) {
     vc.clear();
@@ -9389,13 +9889,14 @@ static bool LoadObjInternal(attrib_t *attrib, std::vector<shape_t> *shapes,
 
   bool ret = exportGroupsToShape(&shape, prim_group, tags, material, name,
                                  triangulate, v, warn);
-  if (ret || shape.mesh.indices.size()) {
+  if (ret || shape.mesh.indices.size() || shape.curves.size()) {
     shapes->push_back(shape);
   }
   prim_group.clear();
 
   attrib->vertices.swap(v);
   attrib->vertex_weights.swap(vertex_weights);
+  attrib->vertex_components.swap(v_components);
   attrib->normals.swap(vn);
   attrib->texcoords.swap(vt);
   attrib->texcoord_ws.swap(vt_w);
@@ -9411,6 +9912,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              bool triangulate, bool default_vcols_fallback) {
   attrib->vertices.clear();
   attrib->vertex_weights.clear();
+  attrib->vertex_components.clear();
   attrib->normals.clear();
   attrib->texcoords.clear();
   attrib->texcoord_ws.clear();
@@ -9485,6 +9987,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              bool default_vcols_fallback) {
   attrib->vertices.clear();
   attrib->vertex_weights.clear();
+  attrib->vertex_components.clear();
   attrib->normals.clear();
   attrib->texcoords.clear();
   attrib->texcoord_ws.clear();
@@ -9834,6 +10337,453 @@ bool ObjReader::ParseFromString(const std::string &obj_text,
                    &obj_ifs, &mtl_ss, config.triangulate, config.vertex_color);
 
   return valid_;
+}
+
+// ===========================================================================
+// Free-form curve tessellation
+// ===========================================================================
+//
+// Strategy: the clamped B-spline is turned into a chain of degree-p Bezier
+// segments by Boehm knot insertion (every distinct interior knot is raised
+// to multiplicity p), the requested [param_begin, param_end] window is cut
+// out with de Casteljau clipping, and each Bezier segment is recursively
+// subdivided at its midpoint until a convex-hull deviation bound guarantees
+// the chord error is within tolerance. Rational curves are handled entirely
+// in homogeneous (x*w, y*w, z*w, w) space and projected only for the
+// flatness test and the emitted samples.
+
+namespace tess_detail {
+
+struct HPoint {
+  real_t x, y, z, w;
+};
+
+static inline bool tess_finite(real_t v) {
+  return v == v &&
+         v < (std::numeric_limits<real_t>::max)() &&
+         v > -(std::numeric_limits<real_t>::max)();
+}
+
+static inline HPoint tess_lerp(const HPoint &a, const HPoint &b, real_t t) {
+  HPoint r;
+  r.x = a.x + (b.x - a.x) * t;
+  r.y = a.y + (b.y - a.y) * t;
+  r.z = a.z + (b.z - a.z) * t;
+  r.w = a.w + (b.w - a.w) * t;
+  return r;
+}
+
+// Distance from point q to the chord SEGMENT a-b (the projection is clamped
+// to the segment). Distance to a segment is convex, so the capsule of radius
+// d around the chord is a convex set containing the convex hull whenever all
+// control points are within d -- which is what makes the subdivision bound a
+// true curve-to-chord-segment guarantee (an unclamped infinite-line distance
+// can miss a control polygon that bulges past a chord endpoint).
+static inline real_t tess_point_line_distance(real_t qx, real_t qy, real_t qz,
+                                               real_t ax, real_t ay, real_t az,
+                                               real_t bx, real_t by, real_t bz) {
+  real_t vx = bx - ax, vy = by - ay, vz = bz - az;
+  real_t len2 = vx * vx + vy * vy + vz * vz;
+  real_t wx = qx - ax, wy = qy - ay, wz = qz - az;
+  if (len2 <= static_cast<real_t>(0.0)) {
+    real_t dx = qx - ax, dy = qy - ay, dz = qz - az;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  real_t t = (wx * vx + wy * vy + wz * vz) / len2;
+  if (t < static_cast<real_t>(0.0)) t = static_cast<real_t>(0.0);
+  if (t > static_cast<real_t>(1.0)) t = static_cast<real_t>(1.0);
+  real_t cx = ax + t * vx, cy = ay + t * vy, cz = az + t * vz;
+  real_t dx = qx - cx, dy = qy - cy, dz = qz - cz;
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// Project homogeneous control points to Euclidean space.
+static inline bool tess_project(const std::vector<HPoint> &cp,
+                                std::vector<real_t> *xyz,
+                                std::string *error) {
+  const size_t n = cp.size();
+  xyz->resize(n * 3);
+  for (size_t i = 0; i < n; ++i) {
+    if (!tess_finite(cp[i].x) || !tess_finite(cp[i].y) ||
+        !tess_finite(cp[i].z) || !tess_finite(cp[i].w) ||
+        cp[i].w == static_cast<real_t>(0.0)) {
+      if (error) *error = "TessellateCurve: non-finite or zero homogeneous "
+                          "weight while evaluating the curve";
+      return false;
+    }
+    real_t inv = static_cast<real_t>(1.0) / cp[i].w;
+    real_t px = cp[i].x * inv, py = cp[i].y * inv, pz = cp[i].z * inv;
+    if (!tess_finite(px) || !tess_finite(py) || !tess_finite(pz)) {
+      if (error) *error = "TessellateCurve: projection produced a non-finite "
+                          "point";
+      return false;
+    }
+    (*xyz)[3 * i + 0] = px;
+    (*xyz)[3 * i + 1] = py;
+    (*xyz)[3 * i + 2] = pz;
+  }
+  return true;
+}
+
+// Collect the homogeneous control polygon. For rational curves only xyz and
+// xyzw vertices are accepted; the 6-component color extension is rejected.
+static inline bool tess_gather(const attrib_t &attrib, const curve_t &curve,
+                               std::vector<HPoint> *cp, std::string *error) {
+  const size_t n = curve.indices.size();
+  cp->resize(n);
+  const bool have_components =
+      attrib.vertex_components.size() == attrib.vertices.size() / 3;
+  for (size_t i = 0; i < n; ++i) {
+    unsigned int vi = curve.indices[i];
+    if (static_cast<size_t>(3 * vi) + 2 >= attrib.vertices.size()) {
+      if (error) *error = "TessellateCurve: curve references a missing vertex";
+      return false;
+    }
+    real_t px = attrib.vertices[3 * vi + 0];
+    real_t py = attrib.vertices[3 * vi + 1];
+    real_t pz = attrib.vertices[3 * vi + 2];
+    if (!tess_finite(px) || !tess_finite(py) || !tess_finite(pz)) {
+      if (error) *error = "TessellateCurve: control vertex is not finite";
+      return false;
+    }
+    real_t w = static_cast<real_t>(1.0);
+    if (curve.rational) {
+      unsigned char comps = have_components ? attrib.vertex_components[vi] : 0;
+      if (comps == 6) {
+        if (error)
+          *error = "TessellateCurve: rational curve references a 6-component "
+                   "vertex color vertex; only xyz and xyzw vertices carry "
+                   "rational weights";
+        return false;
+      }
+      if (comps == 4) {
+        if (vi >= attrib.vertex_weights.size()) {
+          if (error) *error = "TessellateCurve: missing weight for an xyzw "
+                              "control vertex";
+          return false;
+        }
+        w = attrib.vertex_weights[vi];
+      } else if (!have_components && vi < attrib.vertex_weights.size()) {
+        // Manually built curve without component tracking: plain xyz
+        // vertices still carry the implicit weight 1 in vertex_weights.
+        w = attrib.vertex_weights[vi];
+      }
+      if (!tess_finite(w) || !(w > static_cast<real_t>(0.0))) {
+        if (error)
+          *error = "TessellateCurve: rational weight must be finite and "
+                   "positive";
+        return false;
+      }
+    }
+    (*cp)[i].x = px * w;
+    (*cp)[i].y = py * w;
+    (*cp)[i].z = pz * w;
+    (*cp)[i].w = w;
+  }
+  return true;
+}
+
+// One Boehm insertion of knot `t` into a degree-p B-spline. The knot is
+// assumed to lie inside the current knot range and not yet have full
+// multiplicity at the insertion position.
+static inline void tess_boehm(std::vector<HPoint> *cp,
+                              std::vector<real_t> *knots, real_t t, int p) {
+  std::vector<real_t> &U = *knots;
+  const size_t n = cp->size();  // control points
+  // Largest index k with U[k] <= t.
+  size_t k = 0;
+  while (k + 1 < U.size() && U[k + 1] <= t) ++k;
+  std::vector<HPoint> out(n + 1);
+  for (size_t i = 0; i <= n; ++i) {
+    if (i < k - static_cast<size_t>(p) + 1 || i > k) {
+      size_t src = i <= k ? i : i - 1;
+      out[i] = (*cp)[src];
+    } else {
+      real_t denom = U[i + p] - U[i];
+      real_t alpha = denom > static_cast<real_t>(0.0)
+                         ? (t - U[i]) / denom
+                         : static_cast<real_t>(0.0);
+      out[i] = tess_lerp((*cp)[i - 1], (*cp)[i], alpha);
+    }
+  }
+  std::vector<real_t> new_knots;
+  new_knots.reserve(U.size() + 1);
+  for (size_t i = 0; i < U.size(); ++i) {
+    new_knots.push_back(U[i]);
+    if (i == k) new_knots.push_back(t);
+  }
+  cp->swap(out);
+  knots->swap(new_knots);
+}
+
+// Raise every distinct interior knot to multiplicity p, producing a chain
+// of independent degree-p Bezier segments.
+static inline void tess_bezier_segments(std::vector<HPoint> cp,
+                                        std::vector<real_t> knots, int p,
+                                        std::vector<std::vector<HPoint> > *segs,
+                                        std::vector<std::pair<real_t, real_t> > *spans) {
+  // The first knot group occupies indices [0, p]. Walk the remaining groups.
+  size_t idx = static_cast<size_t>(p) + 1;
+  while (idx < knots.size()) {
+    real_t t = knots[idx];
+    size_t mult = 0;
+    while (idx + mult < knots.size() && knots[idx + mult] == t) ++mult;
+    if (mult < static_cast<size_t>(p)) {
+      int inserts = p - static_cast<int>(mult);
+      for (int q = 0; q < inserts; ++q) tess_boehm(&cp, &knots, t, p);
+      idx += static_cast<size_t>(p);  // the group now has multiplicity p
+    } else {
+      idx += mult;  // already full (includes the degree+1 end group)
+    }
+  }
+  // Each non-empty knot interval [knots[i], knots[i+1]) is one Bezier
+  // segment driven by control points [i-p, i].
+  for (size_t k = static_cast<size_t>(p); k + 1 < knots.size(); ++k) {
+    if (!(knots[k + 1] > knots[k])) continue;
+    std::vector<HPoint> seg(p + 1);
+    for (int q = 0; q <= p; ++q) seg[q] = cp[k - p + q];
+    segs->push_back(seg);
+    spans->push_back(std::make_pair(knots[k], knots[k + 1]));
+  }
+}
+
+// De Casteljau split of a degree-p Bezier at local parameter t. Returns the
+// left and right control polygons (each p+1 points).
+static inline void tess_decasteljau_split(const std::vector<HPoint> &seg,
+                                          real_t t,
+                                          std::vector<HPoint> *left,
+                                          std::vector<HPoint> *right) {
+  const size_t p = seg.size() - 1;
+  std::vector<HPoint> cur = seg;
+  left->clear();
+  right->clear();
+  left->push_back(cur[0]);
+  right->push_back(cur[p]);
+  while (cur.size() > 1) {
+    std::vector<HPoint> nxt(cur.size() - 1);
+    for (size_t i = 0; i + 1 < cur.size(); ++i)
+      nxt[i] = tess_lerp(cur[i], cur[i + 1], t);
+    left->push_back(nxt[0]);
+    right->push_back(nxt[nxt.size() - 1]);
+    cur.swap(nxt);
+  }
+  // right was collected back-to-front
+  std::reverse(right->begin(), right->end());
+}
+
+// Maximum perpendicular distance of the interior control points from the
+// endpoint chord SEGMENT, on the projected Euclidean polygon. The capsule
+// (segment neighborhood) of that radius is convex and contains the control
+// polygon's convex hull, hence the whole curve arc, so this maximum is a
+// valid upper bound on the curve-to-chord-segment deviation for both the
+// polynomial and the rational case.
+static inline bool tess_max_chord_deviation(const std::vector<HPoint> &seg,
+                                            int p,
+                                            real_t *dev, std::string *error) {
+  std::vector<real_t> xyz;
+  if (!tess_project(seg, &xyz, error)) return false;
+  real_t ax = xyz[0], ay = xyz[1], az = xyz[2];
+  real_t bx = xyz[3 * p + 0], by = xyz[3 * p + 1], bz = xyz[3 * p + 2];
+  real_t dmax = static_cast<real_t>(0.0);
+  for (int i = 1; i < p; ++i) {
+    real_t d = tess_point_line_distance(xyz[3 * i], xyz[3 * i + 1],
+                                        xyz[3 * i + 2], ax, ay, az, bx, by, bz);
+    if (d > dmax) dmax = d;
+  }
+  *dev = dmax;
+  return true;
+}
+
+static inline bool tess_recurse(const std::vector<HPoint> &seg, real_t t0,
+                                real_t t1, int p,
+                                real_t tolerance, int depth,
+                                curve_polyline_t *line, std::string *error) {
+  const int kMaxDepth = 64;
+  real_t dev;
+  if (!tess_max_chord_deviation(seg, p, &dev, error)) return false;
+
+  auto emit = [&]() -> bool {
+    std::vector<real_t> xyz;
+    if (!tess_project(seg, &xyz, error)) return false;
+    // The first sample of a run is written by the caller; each accepted span
+    // only contributes its end point.
+    curve_sample_t s;
+    s.position[0] = xyz[3 * p + 0];
+    s.position[1] = xyz[3 * p + 1];
+    s.position[2] = xyz[3 * p + 2];
+    s.param = t1;
+    line->samples.push_back(s);
+    return true;
+  };
+
+  if (!(dev > tolerance)) {  // NaN-safe: NaN fails the test and subdivides
+    return emit();
+  }
+
+  if (depth >= kMaxDepth) {
+    if (error)
+      *error = "TessellateCurve: floating-point precision exhausted before "
+               "the requested tolerance was reached";
+    return false;
+  }
+
+  std::vector<HPoint> left, right;
+  tess_decasteljau_split(seg, static_cast<real_t>(0.5), &left, &right);
+
+  // Detect the point where further subdivision changes nothing: if both
+  // halves are numerically identical to the parent, no out-of-tolerance
+  // result can ever be improved, so fail instead of emitting bad geometry.
+  bool stalled = true;
+  for (size_t i = 0; i < left.size() && stalled; ++i) {
+    if (left[i].x != seg[i].x || left[i].y != seg[i].y ||
+        left[i].z != seg[i].z || left[i].w != seg[i].w) {
+      stalled = false;
+    }
+  }
+  if (stalled) {
+    if (error)
+      *error = "TessellateCurve: floating-point precision exhausted before "
+               "the requested tolerance was reached";
+    return false;
+  }
+
+  real_t tm = static_cast<real_t>(0.5) * (t0 + t1);
+  if (!tess_recurse(left, t0, tm, p, tolerance, depth + 1, line, error))
+    return false;
+  if (!tess_recurse(right, tm, t1, p, tolerance, depth + 1, line, error))
+    return false;
+  return true;
+}
+
+// Clip one Bezier segment to [lo, hi] (global parameters inside its span)
+// and tessellate the result, appending samples to `line`.
+static inline bool tess_clip_and_run(const std::vector<HPoint> &seg,
+                                     real_t s0, real_t s1, real_t lo,
+                                     real_t hi, int p,
+                                     real_t tolerance, bool first,
+                                     curve_polyline_t *line,
+                                     std::string *error) {
+  std::vector<HPoint> cur = seg;
+  real_t cur0 = s0, cur1 = s1;
+  if (lo > s0) {
+    std::vector<HPoint> left, right;
+    real_t u = (lo - s0) / (s1 - s0);
+    tess_decasteljau_split(cur, u, &left, &right);
+    cur.swap(right);
+    cur0 = lo;
+  }
+  if (hi < cur1) {
+    std::vector<HPoint> left, right;
+    real_t u = (hi - cur0) / (cur1 - cur0);
+    tess_decasteljau_split(cur, u, &left, &right);
+    cur.swap(left);
+    cur1 = hi;
+  }
+  if (first) {
+    std::vector<real_t> xyz;
+    if (!tess_project(cur, &xyz, error)) return false;
+    curve_sample_t s;
+    s.position[0] = xyz[0];
+    s.position[1] = xyz[1];
+    s.position[2] = xyz[2];
+    s.param = cur0;
+    line->samples.push_back(s);
+  }
+  return tess_recurse(cur, cur0, cur1, p, tolerance, 0, line, error);
+}
+
+}  // namespace tess_detail
+
+bool TessellateCurve(const attrib_t &attrib, const curve_t &curve,
+                     real_t tolerance,
+                     std::vector<curve_polyline_t> *polylines,
+                     std::string *error) {
+  if (!polylines) {
+    if (error) *error = "TessellateCurve: polylines output pointer is null";
+    return false;
+  }
+  if (!tess_detail::tess_finite(tolerance) ||
+      !(tolerance > static_cast<real_t>(0.0))) {
+    if (error) *error = "TessellateCurve: tolerance must be a positive number";
+    return false;
+  }
+  const int p = curve.degree;
+  if (p < 1 || p > 3) {
+    if (error) *error = "TessellateCurve: unsupported curve degree";
+    return false;
+  }
+  const size_t n = curve.indices.size();
+  if (n <= static_cast<size_t>(p) ||
+      curve.knots.size() != n + static_cast<size_t>(p) + 1 ||
+      !tess_detail::tess_finite(curve.param_begin) ||
+      !tess_detail::tess_finite(curve.param_end) ||
+      !(curve.param_end > curve.param_begin)) {
+    if (error) *error = "TessellateCurve: invalid curve data";
+    return false;
+  }
+
+  std::vector<tess_detail::HPoint> cp;
+  if (!tess_detail::tess_gather(attrib, curve, &cp, error)) return false;
+
+  std::vector<std::vector<tess_detail::HPoint> > segs;
+  std::vector<std::pair<real_t, real_t> > spans;
+  tess_detail::tess_bezier_segments(cp, curve.knots, p, &segs, &spans);
+  if (segs.empty()) {
+    if (error) *error = "TessellateCurve: no non-empty knot intervals";
+    return false;
+  }
+
+  // Interior knots with multiplicity degree+1 are discontinuities: split the
+  // requested window into continuous runs there.
+  const real_t u0 = curve.param_begin;
+  const real_t u1 = curve.param_end;
+  std::vector<real_t> breaks;
+  for (size_t i = static_cast<size_t>(p); i + 1 < curve.knots.size();) {
+    real_t t = curve.knots[i];
+    size_t mult = 0;
+    while (i + mult < curve.knots.size() && curve.knots[i + mult] == t)
+      ++mult;
+    if (static_cast<int>(mult) == p + 1 && t > u0 && t < u1)
+      breaks.push_back(t);
+    i += mult;
+  }
+
+  std::vector<std::pair<real_t, real_t> > runs;
+  real_t cursor = u0;
+  for (size_t i = 0; i < breaks.size(); ++i) {
+    runs.push_back(std::make_pair(cursor, breaks[i]));
+    cursor = breaks[i];
+  }
+  runs.push_back(std::make_pair(cursor, u1));
+
+  // Build into a local result so a precision failure on any run cannot leave
+  // partial, possibly out-of-tolerance geometry in the caller's vector.
+  std::vector<curve_polyline_t> result;
+  for (size_t r = 0; r < runs.size(); ++r) {
+    const real_t lo = runs[r].first;
+    const real_t hi = runs[r].second;
+    curve_polyline_t line;
+    bool first = true;
+    for (size_t k = 0; k < segs.size(); ++k) {
+      const real_t s0 = spans[k].first;
+      const real_t s1 = spans[k].second;
+      if (s1 <= lo || s0 >= hi) continue;
+      if (!tess_detail::tess_clip_and_run(segs[k], s0, s1, lo, hi, p,
+                                          tolerance, first,
+                                          &line, error))
+        return false;
+      first = false;
+    }
+    if (line.samples.size() < 2) {
+      if (error) *error = "TessellateCurve: produced an empty polyline run";
+      return false;
+    }
+    // The shared knot boundary is evaluated once per run; adjacent runs are
+    // separate polylines and are never connected.
+    result.push_back(line);
+  }
+  polylines->insert(polylines->end(), result.begin(), result.end());
+  return true;
 }
 
 // ===========================================================================

@@ -67,7 +67,7 @@ http://casual-effects.com/data/index.html
 * [x] face(`f`)
 * [x] lines(`l`)
 * [ ] points(`p`)
-* [ ] curve
+* [x] curve(restricted 1D clamped B-spline free-form curves, see [Free-form curves](#free-form-curves))
 * [ ] 2D curve
 * [ ] surface.
 * [ ] Free form curve/surfaces
@@ -75,6 +75,57 @@ http://casual-effects.com/data/index.html
 The pure C11 loader additionally supports points (`p`) and free-form geometry
 (`curv`/`curv2`/`surf` and friends, parsed & retained) — see
 [Pure C11 loader](#pure-c11-loader-tiny_obj_c).
+
+### Free-form curves
+
+The container APIs (`ObjReader` and `LoadObj`) parse a restricted form of the
+Wavefront free-form curve element:
+
+* `cstype bspline` and `cstype rat bspline` only; every other free-form
+  element type (`bezier`, `surf`, …) is still ignored.
+* Degree 1 to 3, one-dimensional, non-periodic (clamped) curves only. The knot
+  vector must be non-decreasing, have end multiplicity `degree+1`, and
+  internal multiplicity at most `degree+1`.
+* `deg`, `curv` and `parm u` (which may span several lines and accumulates)
+  are read between `cstype` and the closing `end`; an unclosed block is a
+  hard parse error with the offending line number.
+* Negative indices on a `curv` line are resolved against the vertices that
+  exist when that line is read — vertices added later never change an
+  earlier curve.
+* Rational curves accept `xyz` (implicit weight 1) and `xyzw` vertices. The
+  six-component vertex-color extension is never treated as a weight and is
+  rejected when referenced by a rational curve; all rational weights must be
+  finite and positive.
+
+Parsed curves land in `shape_t::curves` as `curve_t` (degree, rational flag,
+the `curv` parameter range, resolved zero-based control-vertex indices, the
+knot vector, and the material id active at `end`). Draw them with
+
+```cpp
+bool TessellateCurve(const attrib_t& attrib, const curve_t& curve,
+                     real_t tolerance,
+                     std::vector<curve_polyline_t>* polylines,
+                     std::string* error);
+```
+
+It returns one or more ordered polylines whose samples carry both the 3D
+position and the source curve parameter. Only the exact `curv` sub-interval
+is emitted (it is not assumed to be `[0,1]`); internal knots of multiplicity
+`degree+1` are discontinuities and produce separate polylines that are never
+connected, while continuous knot boundaries are kept once. Each output
+segment approximates its curve span within `tolerance` using a recursive
+midpoint subdivision with a convex-hull deviation bound measured against the
+chord *segment* (the radius-`tolerance` capsule around a segment is convex,
+so control points inside it guarantee the whole curve arc is inside it) —
+not a midpoint-only test — so shapes whose midpoint happens to lie on the
+chord are still subdivided. If floating-point precision cannot reach the
+requested tolerance the call fails instead of emitting out-of-tolerance
+geometry.
+
+Scope: only the ordinary container interfaces are extended. The callback API
+(`LoadObjWithCallback`) and the optimized/arena APIs (`LoadObjOpt`,
+`LoadObjOptTyped`, the arena allocator) do not parse free-form curves, and no
+spline library or Python binding is required.
 
 ### Material
 
