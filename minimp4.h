@@ -294,6 +294,20 @@ typedef struct
     // MP4D_frame_offset() must bound-check against what was actually
     // allocated, not what stsz merely claims.
     unsigned timestamp_count;
+
+    // Composition time-to-sample ('ctts') data, when the box is present.
+    // Stored expanded per sample, mirroring timestamp/duration above.
+    uint32_t *cts_offset;        // raw per-sample composition offsets
+    unsigned ctts_sample_count;  // number of samples covered by ctts
+    unsigned ctts_version;       // 0: offsets are unsigned, 1: signed
+
+    // MP4D_frame_timing()'s DTS accumulation resume point: DTS is summed
+    // from the stts durations in 64-bit (the public timestamp[] array above
+    // is 32-bit and wraps on long streams, so it cannot be reused), and
+    // callers query samples in non-decreasing order.
+    unsigned dts_cache_valid;
+    unsigned dts_cache_nsample;
+    uint64_t dts_cache_sum;
 #endif
 
 } MP4D_track_t;
@@ -395,6 +409,21 @@ int MP4D_open(MP4D_demux_t *mp4, int (*read_callback)(int64_t offset, void *buff
 MP4D_file_offset_t MP4D_frame_offset(const MP4D_demux_t *mp4, unsigned int ntrack, unsigned int nsample, unsigned int *frame_bytes, unsigned *timestamp, unsigned *duration);
 
 /**
+*   Return decoding/presentation timing for given sample (frame) of given
+*   track. Sample numbers start from 0. Applies to non-fragmented MP4 files.
+*
+*   dts [OUT]      - decoding timestamp (track timescale units)
+*   pts [OUT]      - presentation timestamp: dts + composition offset from
+*                    the 'ctts' box, or dts when the file has no 'ctts' box;
+*                    may be negative
+*   duration [OUT] - sample duration (track timescale units)
+*
+*   function return 1 on success, 0 on failure (invalid index or
+*   unrepresentable timestamp); on failure output parameters are not modified
+*/
+int MP4D_frame_timing(const MP4D_demux_t *mp4, unsigned int ntrack, unsigned int nsample, uint64_t *dts, int64_t *pts, uint32_t *duration);
+
+/**
 *   De-allocated memory
 */
 void MP4D_close(MP4D_demux_t *mp4);
@@ -453,8 +482,25 @@ int MP4E_add_track(MP4E_mux_t *mux, const MP4E_track_t *track_data);
 *
 *   Example:
 *       MP4E_put_sample(mux, 0, data, data_bytes, duration, MP4E_SAMPLE_DEFAULT);
+*
+*   Equivalent to MP4E_put_sample_cts() with zero composition offset.
 */
 int MP4E_put_sample(MP4E_mux_t *mux, int track_num, const void *data, int data_bytes, int duration, int kind);
+
+/**
+*   Add new sample to specified track, with composition (presentation) offset.
+*   Same as MP4E_put_sample(), but records the offset between decoding and
+*   presentation time (ISO/IEC 14496-12 'ctts' box), in track timescale units.
+*   Samples are still submitted, stored in mdat and marked as sync points in
+*   decoding order; presentation timestamp of a sample is DTS + offset.
+*   A MP4E_SAMPLE_CONTINUATION slice must carry the same offset as the sample
+*   it extends, otherwise MP4E_STATUS_BAD_ARGUMENTS is returned (and no data
+*   is written). Not supported in fragmentation mode: returns
+*   MP4E_STATUS_BAD_ARGUMENTS there.
+*
+*   return error code MP4E_STATUS_*
+*/
+int MP4E_put_sample_cts(MP4E_mux_t *mux, int track_num, const void *data, int data_bytes, int duration, int kind, int32_t composition_offset);
 
 /**
 *   Finalize MP4 file, de-allocated memory, and closes MP4 multiplexer.
@@ -689,6 +735,7 @@ typedef struct
     boxsize_t offset;
     unsigned duration;
     unsigned flag_random_access;
+    int32_t cts_offset; // composition (presentation) offset, track timescale units
 } sample_t;
 
 typedef struct {
@@ -999,13 +1046,14 @@ static int write_pending_data(MP4E_mux_t *mux, track_t *tr)
     return MP4E_STATUS_OK;
 }
 
-static int add_sample_descriptor(MP4E_mux_t *mux, track_t *tr, int data_bytes, int duration, int kind)
+static int add_sample_descriptor(MP4E_mux_t *mux, track_t *tr, int data_bytes, int duration, int kind, int32_t composition_offset)
 {
     sample_t smp;
     smp.size = data_bytes;
     smp.offset = (boxsize_t)mux->write_pos;
     smp.duration = (duration ? duration : tr->info.default_duration);
     smp.flag_random_access = (kind == MP4E_SAMPLE_RANDOM_ACCESS);
+    smp.cts_offset = composition_offset;
     return NULL != minimp4_vector_put(&tr->smpl, &smp, sizeof(sample_t));
 }
 
@@ -1118,14 +1166,56 @@ static int mp4e_write_mdat_box(MP4E_mux_t *mux, uint32_t size)
 }
 
 /**
+*   Add new sample to specified track (non-fragmented modes)
+*/
+static int mp4e_put_sample(MP4E_mux_t *mux, int track_num, const void *data, int data_bytes, int duration, int kind, int32_t composition_offset)
+{
+    track_t *tr = ((track_t*)mux->tracks.data) + track_num;
+
+    if (kind != MP4E_SAMPLE_CONTINUATION)
+    {
+        if (mux->sequential_mode_flag)
+            ERR(write_pending_data(mux, tr));
+        if (!add_sample_descriptor(mux, tr, data_bytes, duration, kind, composition_offset))
+            return MP4E_STATUS_NO_MEMORY;
+    } else
+    {
+        // A continuation slice only extends the previous sample's byte
+        // count; it must not introduce a new timing point, so it has to
+        // carry the same composition offset as that sample. Reject before
+        // any data is written out.
+        sample_t *smpl_desc;
+        if (tr->smpl.bytes < sizeof(sample_t))
+            return MP4E_STATUS_BAD_ARGUMENTS; // write continuation, but there are no samples in the index
+        smpl_desc = (sample_t*)(tr->smpl.data + tr->smpl.bytes) - 1;
+        if (smpl_desc->cts_offset != composition_offset)
+            return MP4E_STATUS_BAD_ARGUMENTS;
+        if (!mux->sequential_mode_flag)
+        {
+            // Accumulate size of the continuation in the sample descriptor
+            smpl_desc->size += data_bytes;
+        }
+    }
+
+    if (mux->sequential_mode_flag)
+    {
+        if (!minimp4_vector_put(&tr->pending_sample, data, data_bytes))
+            return MP4E_STATUS_NO_MEMORY;
+    } else
+    {
+        ERR(mux->write_callback(mux->write_pos, data, data_bytes, mux->token));
+        mux->write_pos += data_bytes;
+    }
+    return MP4E_STATUS_OK;
+}
+
+/**
 *   Add new sample to specified track
 */
 int MP4E_put_sample(MP4E_mux_t *mux, int track_num, const void *data, int data_bytes, int duration, int kind)
 {
-    track_t *tr;
     if (!mux || !data)
         return MP4E_STATUS_BAD_ARGUMENTS;
-    tr = ((track_t*)mux->tracks.data) + track_num;
 
     if (mux->enable_fragmentation)
     {
@@ -1148,35 +1238,19 @@ int MP4E_put_sample(MP4E_mux_t *mux, int track_num, const void *data, int data_b
         return MP4E_STATUS_OK;
     }
 
-    if (kind != MP4E_SAMPLE_CONTINUATION)
-    {
-        if (mux->sequential_mode_flag)
-            ERR(write_pending_data(mux, tr));
-        if (!add_sample_descriptor(mux, tr, data_bytes, duration, kind))
-            return MP4E_STATUS_NO_MEMORY;
-    } else
-    {
-        if (!mux->sequential_mode_flag)
-        {
-            sample_t *smpl_desc;
-            if (tr->smpl.bytes < sizeof(sample_t))
-                return MP4E_STATUS_NO_MEMORY; // write continuation, but there are no samples in the index
-            // Accumulate size of the continuation in the sample descriptor
-            smpl_desc = (sample_t*)(tr->smpl.data + tr->smpl.bytes) - 1;
-            smpl_desc->size += data_bytes;
-        }
-    }
+    return mp4e_put_sample(mux, track_num, data, data_bytes, duration, kind, 0);
+}
 
-    if (mux->sequential_mode_flag)
-    {
-        if (!minimp4_vector_put(&tr->pending_sample, data, data_bytes))
-            return MP4E_STATUS_NO_MEMORY;
-    } else
-    {
-        ERR(mux->write_callback(mux->write_pos, data, data_bytes, mux->token));
-        mux->write_pos += data_bytes;
-    }
-    return MP4E_STATUS_OK;
+/**
+*   Add new sample to specified track, with composition (presentation) offset
+*/
+int MP4E_put_sample_cts(MP4E_mux_t *mux, int track_num, const void *data, int data_bytes, int duration, int kind, int32_t composition_offset)
+{
+    if (!mux || !data)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (mux->enable_fragmentation)
+        return MP4E_STATUS_BAD_ARGUMENTS; // per-sample composition offset is not supported in fragmentation mode
+    return mp4e_put_sample(mux, track_num, data, data_bytes, duration, kind, composition_offset);
 }
 
 /**
@@ -1660,6 +1734,46 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
                             WR4(pentry_count, entry_count);
                         }
                         END_ATOM;
+
+                        // Composition Time to Sample Box. Written only when at
+                        // least one sample carries a non-zero composition
+                        // offset, so files produced through the old zero-offset
+                        // path stay byte-identical. Version 1 is used whenever
+                        // any offset is negative (signed offsets), version 0
+                        // otherwise. Consecutive equal offsets are merged into
+                        // a single run, same as stts durations above.
+                        {
+                            int has_nonzero_offset = 0, has_negative_offset = 0;
+                            for (i = 0; i < samples_count; i++)
+                            {
+                                if (sample[i].cts_offset)
+                                {
+                                    has_nonzero_offset = 1;
+                                    if (sample[i].cts_offset < 0)
+                                        has_negative_offset = 1;
+                                }
+                            }
+                            if (has_nonzero_offset)
+                            {
+                                unsigned char *pentry_count;
+                                int cnt = 1, entry_count = 0;
+                                ATOM_FULL(BOX_ctts, has_negative_offset ? 0x01000000 : 0);
+                                pentry_count = p;
+                                WRITE_4(0);
+                                for (i = 0; i < samples_count; i++, cnt++)
+                                {
+                                    if (i == (samples_count - 1) || sample[i].cts_offset != sample[i + 1].cts_offset)
+                                    {
+                                        WRITE_4(cnt);
+                                        WRITE_4((uint32_t)sample[i].cts_offset);
+                                        cnt = 0;
+                                        entry_count++;
+                                    }
+                                }
+                                WR4(pentry_count, entry_count);
+                                END_ATOM;
+                            }
+                        }
 
                         // Sample To Chunk Box
                         ATOM_FULL(BOX_stsc, 0);
@@ -2687,7 +2801,7 @@ int MP4D_open(MP4D_demux_t *mp4, int (*read_callback)(int64_t offset, void *buff
 #endif
 #if MP4D_TRACE_TIMESTAMPS
             {BOX_stts, 0, 0},
-            {BOX_ctts, 0, 0},
+            {BOX_ctts, 1, 1},
 #endif
             {BOX_stz2, 0, 1},
             {BOX_stsz, 0, 1},
@@ -3038,19 +3152,82 @@ broken_android_meta_hack:
             }
             break;
         case BOX_ctts:
+#if MP4D_TIMESTAMPS_SUPPORTED
+            {
+                unsigned count, j, k = 0, cts_capacity;
+                unsigned ctts_version = FullAtomVersionAndFlags >> 24;
+                // Same depth-0 use_track_flag gap as BOX_stsz above.
+                if (!tr)
+                    break;
+                if (tr->cts_offset)
+                {
+                    ERROR("duplicate ctts box");
+                }
+                count = READ(4);
+                if (!count)
+                {
+                    ERROR("ctts box with zero entry count");
+                }
+                // Each entry is 8 bytes: a table that does not fit in its
+                // own box payload is truncated by definition. (Before this
+                // check was added, READ() would keep returning zero-padding
+                // past the end of the payload, so a few-byte box could claim
+                // ~4 billion entries and spin here -- fuzzer-found hang.)
+                if ((boxsize_t)count*8 > payload_bytes)
+                {
+                    ERROR("truncated ctts box");
+                }
+                cts_capacity = count;
+                MALLOC(uint32_t*, tr->cts_offset, (uint64_t)cts_capacity*4);
+                tr->ctts_sample_count = 0;
+                for (i = 0; i < count; i++)
+                {
+                    unsigned sc = READ(4);
+                    uint32_t off = READ(4);
+                    uint64_t new_k = (uint64_t)k + sc; // avoid 32-bit wraparound below
+                    if (eof_flag)
+                    {
+                        ERROR("premature EOF in ctts box");
+                    }
+                    if (!sc)
+                    {
+                        ERROR("ctts box with zero-length run");
+                    }
+                    if (new_k > cts_capacity)
+                    {
+                        // Same doubling-growth (and bound-check) rationale as
+                        // the BOX_stts expansion above.
+                        uint64_t new_capacity = (uint64_t)cts_capacity * 2;
+                        if (new_capacity < new_k)
+                            new_capacity = new_k;
+                        if (new_capacity * sizeof(uint32_t) > MINIMP4_MAX_ALLOC_BYTES)
+                            new_capacity = MINIMP4_MAX_ALLOC_BYTES / sizeof(uint32_t);
+                        if (new_capacity < new_k)
+                        {
+                            ERROR("out of memory");
+                        }
+                        cts_capacity = (unsigned)new_capacity;
+                        tr->cts_offset = (uint32_t*)realloc(tr->cts_offset, cts_capacity*sizeof(uint32_t));
+                        if (!tr->cts_offset)
+                        {
+                            ERROR("out of memory");
+                        }
+                    }
+                    for (j = 0; j < sc; j++)
+                    {
+                        tr->cts_offset[k++] = off;
+                    }
+                    tr->ctts_sample_count = k;
+                    TRACE(("sample %8d count %8d decoding to composition offset %8d\n", i, sc, (int)off));
+                }
+                tr->ctts_version = ctts_version;
+            }
+#else
             {
                 unsigned count = READ(4);
                 for (i = 0; i < count; i++)
                 {
                     int sc, d;
-                    // count is an unbounded, file-declared value with no
-                    // backing allocation to size-check against (unlike
-                    // stsz/stsc/stco/stts above); once the box's actual
-                    // payload is exhausted, READ() keeps returning
-                    // zero-padding forever rather than stopping the loop,
-                    // so a file can claim ~4 billion entries in a few
-                    // bytes on disk. Fuzzer found this as a multi-second
-                    // hang (pure wasted CPU, not memory-unsafe on its own).
                     if (payload_bytes == 0)
                         break;
                     sc = READ(4);
@@ -3060,6 +3237,7 @@ broken_android_meta_hack:
                     TRACE(("sample %8d count %8d decoding to composition offset %8d\n", i, sc, d));
                 }
             }
+#endif
             break;
 #endif
         case BOX_stco:  //ISO/IEC 14496-12 Page 39. Section 8.19 - Chunk Offset Box.
@@ -3397,6 +3575,20 @@ broken_android_meta_hack:
 
     } while(!eof_flag);
 
+#if MP4D_TIMESTAMPS_SUPPORTED
+    // The ctts table covers exactly the track's samples. This is checked
+    // here rather than in the box handler because ctts may legitimately
+    // appear before the stsz box that declares the sample count.
+    for (i = 0; i < mp4->track_count; i++)
+    {
+        MP4D_track_t *t = mp4->track + i;
+        if (t->cts_offset && t->ctts_sample_count != t->sample_count)
+        {
+            RETURN_ERROR("ctts table does not cover all samples");
+        }
+    }
+#endif
+
     if (!mp4->track_count)
     {
         RETURN_ERROR("no tracks found");
@@ -3563,6 +3755,75 @@ MP4D_file_offset_t MP4D_frame_offset(const MP4D_demux_t *mp4, unsigned ntrack, u
     return offset;
 }
 
+// Exported API function
+int MP4D_frame_timing(const MP4D_demux_t *mp4, unsigned ntrack, unsigned nsample, uint64_t *dts, int64_t *pts, uint32_t *duration)
+{
+#if MP4D_TIMESTAMPS_SUPPORTED
+    MP4D_track_t *tr;
+    uint64_t decode_time;
+    int64_t composition_offset = 0;
+    unsigned i;
+
+    if (!mp4 || !dts || !pts || !duration)
+        return 0;
+    if (ntrack >= mp4->track_count)
+        return 0;
+    tr = mp4->track + ntrack;
+    if (!tr->timestamp || !tr->duration)
+        return 0;
+    if (nsample >= tr->sample_count || nsample >= tr->timestamp_count)
+        return 0;
+
+    // Accumulate DTS from the stts durations in 64-bit: the per-sample
+    // tr->timestamp[] array is 32-bit and wraps on long streams, so its
+    // wrapped values cannot be borrowed here. Resume from the previous
+    // query when possible, so callers scanning samples in non-decreasing
+    // order stay O(1) amortized.
+    if (tr->dts_cache_valid && nsample >= tr->dts_cache_nsample)
+    {
+        decode_time = tr->dts_cache_sum;
+        i = tr->dts_cache_nsample;
+    } else
+    {
+        decode_time = 0;
+        i = 0;
+    }
+    for (; i < nsample; i++)
+    {
+        decode_time += tr->duration[i];
+    }
+    tr->dts_cache_valid = 1;
+    tr->dts_cache_nsample = nsample;
+    tr->dts_cache_sum = decode_time;
+
+    if (tr->cts_offset && nsample < tr->ctts_sample_count)
+    {
+        uint32_t raw = tr->cts_offset[nsample];
+        // ctts version 0 offsets are unsigned 32-bit, version 1 signed 32-bit
+        composition_offset = tr->ctts_version ? (int64_t)(int32_t)raw : (int64_t)raw;
+    }
+
+    // Fail without touching the outputs if the PTS is not representable
+    if (composition_offset >= 0)
+    {
+        if (decode_time > (uint64_t)INT64_MAX - (uint64_t)composition_offset)
+            return 0;
+    } else if (decode_time > (uint64_t)INT64_MAX)
+    {
+        return 0;
+    }
+
+    *dts = decode_time;
+    *pts = (int64_t)decode_time + composition_offset;
+    *duration = tr->duration[nsample];
+    return 1;
+#else
+    (void)mp4; (void)ntrack; (void)nsample;
+    (void)dts; (void)pts; (void)duration;
+    return 0;
+#endif
+}
+
 #define FREE(x) if (x) {free(x); x = NULL;}
 
 // Exported API function
@@ -3575,6 +3836,7 @@ void MP4D_close(MP4D_demux_t *mp4)
 #if MP4D_TIMESTAMPS_SUPPORTED
         FREE(tr->timestamp);
         FREE(tr->duration);
+        FREE(tr->cts_offset);
 #endif
         FREE(tr->sample_to_chunk);
         FREE(tr->chunk_offset);
