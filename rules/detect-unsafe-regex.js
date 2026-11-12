@@ -10,6 +10,7 @@
 //-----------------------------------------------------------------------------
 
 const safe = require('safe-regex');
+const { getRegExpCallValues } = require('../utils/regexp-flow');
 
 //------------------------------------------------------------------------------
 // Rule Definition
@@ -41,10 +42,25 @@ module.exports = {
       },
       // `RegExp(pattern)` without `new` creates a regular expression too
       'NewExpression, CallExpression': function (node) {
-        if (node.callee.name === 'RegExp' && node.arguments && node.arguments.length > 0 && node.arguments[0].type === 'Literal') {
-          if (!safe(node.arguments[0].value)) {
+        if (node.callee.type !== 'Identifier' || node.callee.name !== 'RegExp' || !node.arguments || node.arguments.length === 0) {
+          return;
+        }
+        const value = getRegExpCallValues(sourceCode).get(node);
+        if (value === null) {
+          // `RegExp` is shadowed by a parameter or local binding.
+          return;
+        }
+        const firstArgument = node.arguments[0];
+        if (firstArgument.type === 'Literal') {
+          if (!safe(firstArgument.value)) {
             context.report({ node: node, message: 'Unsafe Regular Expression (new RegExp)' });
           }
+          return;
+        }
+        // Non-literal argument: report when a known candidate pattern of the
+        // flow-sensitive value at this call site is unsafe.
+        if (value && value.strings.some((pattern) => !safe(pattern))) {
+          context.report({ node: node, message: 'Unsafe Regular Expression (new RegExp)' });
         }
       },
     };

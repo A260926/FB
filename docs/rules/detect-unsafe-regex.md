@@ -5,3 +5,5 @@
 <!-- end auto-generated rule header -->
 
 More information: [Regular Expression DoS and Node.js](../regular-expression-dos-and-node.md)
+
+This rule resolves the pattern of `RegExp(...)` / `new RegExp(...)` calls through a flow-sensitive value analysis; see [Flow-sensitive RegExp constructor checks](../regexp-flow.md).
