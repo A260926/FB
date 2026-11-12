@@ -1,0 +1,63 @@
+\doxysubsection{Math\+Supplement.\+h}
+\hypertarget{MathSupplement_8h_source}{}\label{MathSupplement_8h_source}\index{iir/MathSupplement.h@{iir/MathSupplement.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ }
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00036\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00037\ }
+\DoxyCodeLine{00038\ \textcolor{preprocessor}{\#include\ "{}Common.h"{}}}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \textcolor{preprocessor}{\#include<complex>}}
+\DoxyCodeLine{00041\ }
+\DoxyCodeLine{00042\ \textcolor{preprocessor}{\#ifdef\ \_MSC\_VER}}
+\DoxyCodeLine{00043\ \ \textcolor{comment}{//\ Under\ Unix\ these\ have\ already\ default\ instantiations\ but\ not\ under\ Vis\ Studio}}
+\DoxyCodeLine{00044\ \textcolor{keyword}{template}\ \textcolor{keyword}{class\ }IIR\_EXPORT\ std::complex<double>;}
+\DoxyCodeLine{00045\ \textcolor{keyword}{template}\ \textcolor{keyword}{class\ }IIR\_EXPORT\ std::complex<float>;}
+\DoxyCodeLine{00046\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{00047\ }
+\DoxyCodeLine{00048\ \textcolor{keyword}{namespace\ }\mbox{\hyperlink{namespaceIir}{Iir}}\ \{}
+\DoxyCodeLine{00049\ }
+\DoxyCodeLine{00050\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{double}\ doublePi\ \ \ =3.1415926535897932384626433832795028841971;}
+\DoxyCodeLine{00051\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{double}\ doublePi\_2\ =1.5707963267948966192313216916397514420986;}
+\DoxyCodeLine{00052\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{double}\ doubleLn2\ \ =0.69314718055994530941723212145818;}
+\DoxyCodeLine{00053\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{double}\ doubleLn10\ =2.3025850929940456840179914546844;}
+\DoxyCodeLine{00054\ }
+\DoxyCodeLine{00055\ \textcolor{keyword}{typedef}\ std::complex<double>\ complex\_t;}
+\DoxyCodeLine{00056\ \textcolor{keyword}{typedef}\ std::pair<complex\_t,\ complex\_t>\ complex\_pair\_t;}
+\DoxyCodeLine{00057\ }
+\DoxyCodeLine{00058\ \textcolor{keyword}{inline}\ \textcolor{keyword}{const}\ complex\_t\ infinity()}
+\DoxyCodeLine{00059\ \{}
+\DoxyCodeLine{00060\ \ \ \textcolor{keywordflow}{return}\ complex\_t\ (std::numeric\_limits<double>::infinity());}
+\DoxyCodeLine{00061\ \}}
+\DoxyCodeLine{00062\ }
+\DoxyCodeLine{00063\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Ty,\ \textcolor{keyword}{typename}\ To>}
+\DoxyCodeLine{00064\ \textcolor{keyword}{inline}\ std::complex<Ty>\ addmul\ (\textcolor{keyword}{const}\ std::complex<Ty>\&\ c,}
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Ty\ v,}
+\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ std::complex<To>\&\ c1)}
+\DoxyCodeLine{00067\ \{}
+\DoxyCodeLine{00068\ \ \ \textcolor{keywordflow}{return}\ std::complex\ <Ty>\ (}
+\DoxyCodeLine{00069\ \ \ \ \ c.real()\ +\ v\ *\ c1.real(),\ c.imag()\ +\ v\ *\ c1.imag());}
+\DoxyCodeLine{00070\ \}}
+\DoxyCodeLine{00071\ }
+\DoxyCodeLine{00072\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Ty>}
+\DoxyCodeLine{00073\ \textcolor{keyword}{inline}\ Ty\ asinh\ (Ty\ x)}
+\DoxyCodeLine{00074\ \{}
+\DoxyCodeLine{00075\ \ \ \textcolor{keywordflow}{return}\ log\ (x\ +\ std::sqrt\ (x\ *\ x\ +\ 1\ ));}
+\DoxyCodeLine{00076\ \}}
+\DoxyCodeLine{00077\ }
+\DoxyCodeLine{00078\ \textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Ty>}
+\DoxyCodeLine{00079\ \textcolor{keyword}{inline}\ \textcolor{keywordtype}{bool}\ is\_nan\ (Ty\ v)}
+\DoxyCodeLine{00080\ \{}
+\DoxyCodeLine{00081\ \ \ \textcolor{keywordflow}{return}\ !(v\ ==\ v);}
+\DoxyCodeLine{00082\ \}}
+\DoxyCodeLine{00083\ }
+\DoxyCodeLine{00084\ \textcolor{keyword}{template}\ <>}
+\DoxyCodeLine{00085\ \textcolor{keyword}{inline}\ \textcolor{keywordtype}{bool}\ is\_nan<complex\_t>\ (complex\_t\ v)}
+\DoxyCodeLine{00086\ \{}
+\DoxyCodeLine{00087\ \ \ \textcolor{keywordflow}{return}\ Iir::is\_nan\ (v.real())\ ||\ Iir::is\_nan\ (v.imag());}
+\DoxyCodeLine{00088\ \}}
+\DoxyCodeLine{00089\ }
+\DoxyCodeLine{00090\ \}}
+
+\end{DoxyCode}
