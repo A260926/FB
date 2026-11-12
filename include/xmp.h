@@ -5,6 +5,8 @@
 # include <emscripten.h>
 #endif
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -353,6 +355,27 @@ struct xmp_callbacks {
 
 typedef char *xmp_context;
 
+/* Mixer tap callback, see xmp_set_mix_tap(). Called once for each
+ * successfully mixed tick with the read-only per-channel 32-bit
+ * accumulation buffers that make up the master mix of this tick.
+ *
+ * user:       the user pointer given to xmp_set_mix_tap().
+ * lanes:      lane_count pointers to the per-lane sample data. Lanes 0 to
+ *             lane_count - 2 are the module's tracker channels in channel
+ *             number order; the last lane is an auxiliary lane collecting
+ *             sound not belonging to a module channel (e.g. smix). Each
+ *             lane holds frames interleaved samples per channel in the
+ *             same channel order as the master mix. The pointers are only
+ *             valid for the duration of the call and the data must not be
+ *             modified.
+ * lane_count: number of lanes (module channels + 1 auxiliary lane).
+ * frames:     number of sample frames in this tick (not multiplied by
+ *             the number of channels).
+ * channels:   number of interleaved channels per lane (1 or 2). */
+typedef void (*xmp_mix_tap_callback)(void *user,
+		const int32_t *const *lanes, int lane_count,
+		int frames, int channels);
+
 LIBXMP_EXPORT_VAR extern const char *xmp_version;
 LIBXMP_EXPORT_VAR extern const unsigned int xmp_vercode;
 
@@ -399,6 +422,7 @@ LIBXMP_EXPORT int         xmp_channel_vol     (xmp_context, int, int);
 LIBXMP_EXPORT int         xmp_set_player      (xmp_context, int, int);
 LIBXMP_EXPORT int         xmp_get_player      (xmp_context, int);
 LIBXMP_EXPORT int         xmp_set_instrument_path (xmp_context, const char *);
+LIBXMP_EXPORT int         xmp_set_mix_tap     (xmp_context, xmp_mix_tap_callback, void *);
 
 /* External sample mixer API */
 LIBXMP_EXPORT int         xmp_start_smix       (xmp_context, int, int);

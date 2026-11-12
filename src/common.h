@@ -670,6 +670,14 @@ struct mixer_data {
 	int dtleft;		/* anticlick control, left channel */
 	int bidir_adjust;	/* adjustment for IT bidirectional loops */
 	double pbase;		/* period base */
+
+	/* Mix tap (read-only per-channel contribution observer) */
+	xmp_mix_tap_callback tap_cb; /* tap callback, NULL if disabled */
+	void *tap_user;		/* tap callback user pointer */
+	int32 *tap_buf;		/* per-lane accumulation buffers */
+	int32 **tap_ptrs;	/* per-lane pointer table for the callback */
+	int *tap_voc_lane;	/* last tap lane used by each mixer voice */
+	int tap_lanes;		/* number of lanes (module channels + 1) */
 };
 
 struct rng_state {

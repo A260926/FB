@@ -29,6 +29,7 @@ EXPORTS
  _xmp_seek_time
  _xmp_seek_time_frame
  _xmp_set_instrument_path
+ _xmp_set_mix_tap
  _xmp_set_player
  _xmp_set_position
  _xmp_set_row

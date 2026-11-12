@@ -741,3 +741,20 @@ double xmp_get_tempo_factor_relative(xmp_context opaque)
 
 	return ctx->p.time_factor_relative;
 }
+
+int xmp_set_mix_tap(xmp_context opaque, xmp_mix_tap_callback cb, void *user)
+{
+	struct context_data *ctx = (struct context_data *)opaque;
+	struct mixer_data *s = &ctx->s;
+
+	/* The tap can only be installed or removed while the player is
+	 * stopped; the tap storage is prepared by xmp_start_player(). */
+	if (ctx->state >= XMP_STATE_PLAYING) {
+		return -XMP_ERROR_STATE;
+	}
+
+	s->tap_cb = cb;
+	s->tap_user = user;
+
+	return 0;
+}

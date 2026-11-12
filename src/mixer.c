@@ -466,6 +466,14 @@ static void libxmp_mixer_prepare(struct context_data *ctx)
 		bytelen *= 2;
 	}
 	memset(s->buf32, 0, bytelen);
+
+	if (s->tap_cb != NULL && s->tap_buf != NULL) {
+		/* Lanes are strided by total_size, clear each lane's tick. */
+		int l;
+		for (l = 0; l < s->tap_lanes; l++) {
+			memset(s->tap_buf + (size_t)l * s->total_size, 0, bytelen);
+		}
+	}
 }
 
 /* Fill the output buffer calling one of the handlers. The buffer contains
@@ -486,6 +494,7 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 	int vol, vol_l, vol_r, voc, usmp;
 	int prev_l, prev_r = 0;
 	int32 *buf_pos;
+	int tap;
 	MIXER_FP  mix_fn;
 	const MIXER_FP *mixerset;
 
@@ -524,20 +533,46 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 
 	libxmp_mixer_prepare(ctx);
 
+	tap = (s->tap_cb != NULL && s->tap_buf != NULL);
+
 	for (voc = 0; voc < p->virt.maxvoc; voc++) {
 		int c5spd, rampsize, delta_l, delta_r;
+		int32 *voice_buf = s->buf32;
 
 		vi = &p->virt.voice_array[voc];
 
 		if (vi->flags & ANTICLICK) {
 			if (s->interp > XMP_INTERP_NEAREST) {
-				do_anticlick(ctx, voc, NULL, 0);
+				if (tap) {
+					/* Discharge the pending anticlick decay
+					 * into the lane of the channel this voice
+					 * last contributed to, even if the voice
+					 * slot has been reset or reused since. */
+					int lane = s->tap_voc_lane[voc];
+					do_anticlick(ctx, voc, s->tap_buf +
+						(size_t)lane * s->total_size,
+						s->ticksize >> ANTICLICK_SHIFT);
+				} else {
+					do_anticlick(ctx, voc, NULL, 0);
+				}
 			}
 			vi->flags &= ~ANTICLICK;
 		}
 
 		if (vi->chn < 0) {
 			continue;
+		}
+
+		if (tap) {
+			/* Attribute the voice to the tracker channel its
+			 * note originated from. NNA voices moved to a
+			 * virtual channel keep their root channel; smix and
+			 * other non-module voices go to the auxiliary lane. */
+			int root = vi->root;
+			int lane = ((uint32)root < (uint32)mod->chn) ?
+					root : mod->chn;
+			s->tap_voc_lane[voc] = lane;
+			voice_buf = s->tap_buf + (size_t)lane * s->total_size;
 		}
 
 		if (vi->period < 1) {
@@ -552,7 +587,7 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 
 		vi->pos0 = vi->pos;
 
-		buf_pos = s->buf32;
+		buf_pos = voice_buf;
 		vol = vi->vol;
 
 		/* Mix volume (S3M and IT) */
@@ -770,6 +805,29 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 
 	if (size > s->total_size) {
 		size = s->total_size;
+	}
+
+	if (tap) {
+		/* Recombine the lanes into the main accumulation buffer.
+		 * This is identical to mixing the voices directly into
+		 * buf32 because integer addition is order-independent.
+		 * Then report this tick's per-lane contributions. */
+		int lanes = s->tap_lanes;
+		int i, l;
+
+		for (i = 0; i < size; i++) {
+			uint32 acc = 0;
+			for (l = 0; l < lanes; l++) {
+				acc += (uint32)s->tap_buf[(size_t)l * s->total_size + i];
+			}
+			s->buf32[i] = (int32)acc;
+		}
+
+		for (l = 0; l < lanes; l++) {
+			s->tap_ptrs[l] = s->tap_buf + (size_t)l * s->total_size;
+		}
+		s->tap_cb(s->tap_user, (const int32_t *const *)s->tap_ptrs,
+			lanes, s->ticksize, s->output_chn);
 	}
 
 	if (s->format & XMP_FORMAT_32BIT) {
@@ -1045,6 +1103,7 @@ int libxmp_mixer_numvoices(struct context_data *ctx, int num)
 int libxmp_mixer_on(struct context_data *ctx, int rate, int format, int c4rate)
 {
 	struct mixer_data *s = &ctx->s;
+	struct module_data *m = &ctx->m;
 	int total_size;
 	int sample_size;
 	int output_chn;
@@ -1081,6 +1140,38 @@ int libxmp_mixer_on(struct context_data *ctx, int rate, int format, int c4rate)
 	if (s->buf32 == NULL)
 		goto err1;
 
+	/* Prepare the mix tap storage if a tap callback was set while the
+	 * player was stopped. One lane per module channel, plus an
+	 * auxiliary lane for sound that doesn't belong to a module
+	 * channel (e.g. smix). */
+	s->tap_buf = NULL;
+	s->tap_ptrs = NULL;
+	s->tap_voc_lane = NULL;
+	s->tap_lanes = 0;
+
+	if (s->tap_cb != NULL) {
+		int i, numvoc;
+
+		s->tap_lanes = m->mod.chn + 1;
+		s->tap_buf = (int32 *) calloc((size_t)s->tap_lanes * total_size,
+							sizeof(int32));
+		if (s->tap_buf == NULL)
+			goto err2;
+
+		s->tap_ptrs = (int32 **) malloc(s->tap_lanes * sizeof(int32 *));
+		if (s->tap_ptrs == NULL)
+			goto err3;
+
+		numvoc = s->numvoc > 0 ? s->numvoc : 1;
+		s->tap_voc_lane = (int *) malloc(numvoc * sizeof(int));
+		if (s->tap_voc_lane == NULL)
+			goto err4;
+
+		for (i = 0; i < numvoc; i++) {
+			s->tap_voc_lane[i] = s->tap_lanes - 1;
+		}
+	}
+
 	s->total_size = total_size;
 	s->sample_size = sample_size;
 	s->output_chn = output_chn;
@@ -1097,6 +1188,16 @@ int libxmp_mixer_on(struct context_data *ctx, int rate, int format, int c4rate)
 
 	return 0;
 
+    err4:
+	free(s->tap_ptrs);
+	s->tap_ptrs = NULL;
+    err3:
+	free(s->tap_buf);
+	s->tap_buf = NULL;
+	s->tap_lanes = 0;
+    err2:
+	free(s->buf32);
+	s->buf32 = NULL;
     err1:
 	free(s->buffer);
 	s->buffer = NULL;
@@ -1112,4 +1213,12 @@ void libxmp_mixer_off(struct context_data *ctx)
 	free(s->buf32);
 	s->buf32 = NULL;
 	s->buffer = NULL;
+
+	free(s->tap_buf);
+	free(s->tap_ptrs);
+	free(s->tap_voc_lane);
+	s->tap_buf = NULL;
+	s->tap_ptrs = NULL;
+	s->tap_voc_lane = NULL;
+	s->tap_lanes = 0;
 }

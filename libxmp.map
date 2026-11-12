@@ -81,3 +81,8 @@ XMP_4.7 {
     xmp_set_tempo_factor_relative;
     xmp_seek_time_frame;
 } XMP_4.5;
+
+XMP_4.8 {
+  global:
+    xmp_set_mix_tap;
+} XMP_4.7;

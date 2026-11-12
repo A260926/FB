@@ -1237,6 +1237,61 @@ int xmp_set_player(xmp_context c, int param, int val)
     parameter or values are out of the valid ranges, or ``-XMP_ERROR_STATE``
     if the player is not in playing state.
 
+.. _xmp_set_mix_tap():
+
+int xmp_set_mix_tap(xmp_context c, xmp_mix_tap_callback cb, void \*user)
+````````````````````````````````````````````````````````````````````````
+
+  *[Added in libxmp 4.8]* Install a read-only callback observing the
+  per-channel contributions that make up the master mix, for applications
+  such as stem export, per-channel post-processing, or visualization.
+  The callback is invoked once for each successfully mixed tick, from
+  inside `xmp_play_frame()`_ or `xmp_play_buffer()`_, with the 32-bit
+  integer accumulation buffers of that tick before final amplification,
+  quantization, and saturation are applied. The callback receives one
+  lane per module channel (in tracker channel order) plus a final
+  auxiliary lane collecting sound that does not belong to a module
+  channel (such as the external sample mixer). Notes moved to virtual
+  voices (e.g. IT NNA) and residual anticlick decay after a note cut
+  remain attributed to the channel the note originated from. Summing all
+  lanes at any sample position yields the master accumulation buffer of
+  the same tick. Enabling the tap does not change the generated PCM in
+  any way.
+
+  The callback has the following prototype::
+
+    void callback(void *user, const int32_t *const *lanes,
+                  int lane_count, int frames, int channels);
+
+  **Callback parameters:**
+    :user: the user pointer given to ``xmp_set_mix_tap()``.
+
+    :lanes: ``lane_count`` pointers to the per-lane sample data. Each
+      lane holds ``frames`` interleaved samples per channel in the same
+      channel order as the master mix. The pointers are valid only for
+      the duration of the call, and the data must not be modified.
+
+    :lane_count: number of lanes (module channels + 1 auxiliary lane).
+
+    :frames: number of sample frames in this tick (not multiplied by
+      the number of channels).
+
+    :channels: number of interleaved channels per lane (1 or 2).
+
+  The callback must not call player control functions (such as
+  `xmp_play_frame()`_ or `xmp_end_player()`_) reentrantly.
+
+  **Parameters:**
+    :c: the player context handle.
+
+    :cb: the callback function, or ``NULL`` to disable the tap.
+
+    :user: a user-defined pointer passed to the callback.
+
+  **Returns:**
+    0 on success, or ``-XMP_ERROR_STATE`` if the player is currently
+    playing (the tap can only be installed or removed while the player
+    is stopped).
 
 .. raw:: pdf
 
