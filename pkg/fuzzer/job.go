@@ -573,16 +573,36 @@ func (job *hintsJob) run(fuzzer *Fuzzer) {
 	// Then mutate the initial program for every match between
 	// a syscall argument and a comparison operand.
 	// Execute each of such mutants to check if it gives new coverage.
-	p.MutateWithHints(job.call, comps,
-		func(p *prog.Prog) bool {
-			defer job.info.Execs.Add(1)
+	// The mutants are generated in pages: the next page is requested only
+	// after all mutants of the current page have been executed.
+	const hintsPageSize = 16
+	var cursor []byte
+	for {
+		mutants, next, err := p.HintsPage(job.call, comps, cursor, hintsPageSize)
+		if err != nil {
+			job.info.Logf("failed to generate a hints page: %v", err)
+			return
+		}
+		stop := false
+		for _, mutant := range mutants {
 			result := fuzzer.execute(job.exec, &queue.Request{
-				Prog:     p,
+				Prog:     mutant,
 				ExecOpts: setFlags(flatrpc.ExecFlagCollectSignal),
 				Stat:     fuzzer.statExecHint,
 			})
-			return !result.Stop()
-		})
+			job.info.Execs.Add(1)
+			if result.Stop() {
+				// Drop the remaining mutants of the page and don't
+				// request any further pages.
+				stop = true
+				break
+			}
+		}
+		if stop || len(next) == 0 {
+			return
+		}
+		cursor = next
+	}
 }
 
 func (job *hintsJob) getInfo() *JobInfo {

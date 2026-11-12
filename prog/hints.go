@@ -98,12 +98,22 @@ func (m CompMap) InplaceIntersect(other CompMap) {
 // MutateWithHints mutates the program using the comparison operands stored in compMaps.
 // For each of the mutants executes the exec callback.
 // The callback must return whether we should continue substitution (true)
-// or abort the process (false).
+// or abort the process (false). Once the callback has returned false,
+// it is not called again for any argument type.
 func (p *Prog) MutateWithHints(callIndex int, comps CompMap, exec func(p *Prog) bool) {
 	p = p.Clone()
 	c := p.Calls[callIndex]
-	doMore := true
-	execValidate := func() bool {
+	foreachValidHint(p, c, comps, new(hintState), func() bool {
+		return exec(p)
+	})
+}
+
+// foreachValidHint enumerates hint candidates for the call and invokes exec
+// for every candidate that passes the standard validity checks.
+// Candidates that fail the checks are silently skipped (they are not fixed
+// by repairing arguments or re-selecting union options).
+func foreachValidHint(p *Prog, c *Call, comps CompMap, st *hintState, exec func() bool) {
+	foreachHint(c, comps, st, func() bool {
 		// Don't try to fix the candidate program.
 		// Assuming the original call was sanitized, we've got a bad call
 		// as the result of hint substitution, so just throw it away.
@@ -113,51 +123,88 @@ func (p *Prog) MutateWithHints(callIndex int, comps CompMap, exec func(p *Prog) 
 		if p.checkConditions() != nil {
 			// Patching unions that no longer satisfy conditions would
 			// require much deeped changes to prog arguments than
-			// generateHints() expects.
+			// the hint enumeration expects.
 			// Let's just ignore such mutations.
 			return true
 		}
 		p.debugValidate()
-		doMore = exec(p)
-		return doMore
-	}
+		return exec()
+	})
+}
+
+// hintPos identifies a position in the hint candidate enumeration of a call:
+// the argument ordinal in the ForeachArg traversal order, the byte offset
+// within the argument's data, and the index in the sorted replacer list
+// produced for that (argument, offset) pair.
+type hintPos struct {
+	arg      int
+	offset   int
+	replacer int
+}
+
+// hintState carries the enumeration state shared by the hint generators.
+type hintState struct {
+	from hintPos // candidates before this position are skipped
+	cur  hintPos // position of the candidate being delivered
+}
+
+// foreachHint enumerates hint candidates for the call in the ForeachArg
+// traversal order, skipping all candidates before st.from. For every
+// candidate it applies the mutation to the call, records the candidate
+// position in st.cur and calls exec. If exec returns false, the enumeration
+// stops immediately and no further exec calls are made.
+func foreachHint(c *Call, comps CompMap, st *hintState, exec func() bool) {
+	ord := -1
+	stop := false
 	ForeachArg(c, func(arg Arg, ctx *ArgCtx) {
-		if !doMore {
+		if stop {
 			ctx.Stop = true
 			return
 		}
-		generateHints(comps, arg, ctx.Field, execValidate)
+		ord++
+		if ord < st.from.arg {
+			return
+		}
+		if !generateHintsAt(comps, arg, ctx.Field, ord, st, exec) {
+			stop = true
+		}
 	})
 }
 
 func generateHints(compMap CompMap, arg Arg, field *Field, exec func() bool) {
+	generateHintsAt(compMap, arg, field, 0, new(hintState), exec)
+}
+
+// generateHintsAt applies the type-based filters and dispatches to the
+// per-argument-kind generators. It returns false iff exec requested a stop.
+func generateHintsAt(compMap CompMap, arg Arg, field *Field, ord int, st *hintState, exec func() bool) bool {
 	typ := arg.Type()
 	if typ == nil || arg.Dir() == DirOut {
-		return
+		return true
 	}
 	switch t := typ.(type) {
 	case *ProcType:
 		// Random proc will not pass validation.
 		// We can mutate it, but only if the resulting value is within the legal range.
-		return
+		return true
 	case *ConstType:
 		if IsPad(typ) {
-			return
+			return true
 		}
 	case *CsumType:
 		// Csum will not pass validation and is always computed.
-		return
+		return true
 	case *BufferType:
 		switch t.Kind {
 		case BufferFilename:
 			// This can generate escaping paths and is probably not too useful anyway.
-			return
+			return true
 		case BufferString, BufferGlob:
 			if len(t.Values) != 0 {
 				// These are frequently file names or complete enumerations.
 				// Mutating these may be useful iff we intercept strcmp
 				// (and filter out file names).
-				return
+				return true
 			}
 		}
 	}
@@ -166,29 +213,39 @@ func generateHints(compMap CompMap, arg Arg, field *Field, exec func() bool) {
 	case *ConstArg:
 		if arg.Type().TypeBitSize() <= 8 {
 			// Very small arg, hopefully we can guess it w/o hints help.
-			return
+			return true
 		}
-		checkConstArg(a, field, compMap, exec)
+		return checkConstArgAt(a, field, compMap, ord, st, exec)
 	case *DataArg:
 		if arg.Size() <= 3 {
 			// Let's assume it either does not contain anything interesting,
 			// or we can guess everything eventually by brute force.
-			return
+			return true
 		}
 		if typ.(*BufferType).Kind == BufferCompressed {
-			checkCompressedArg(a, compMap, exec)
-		} else {
-			checkDataArg(a, compMap, exec)
+			return checkCompressedArgAt(a, compMap, ord, st, exec)
 		}
+		return checkDataArgAt(a, compMap, ord, st, exec)
 	}
+	return true
 }
 
 func checkConstArg(arg *ConstArg, field *Field, compMap CompMap, exec func() bool) {
+	checkConstArgAt(arg, field, compMap, 0, new(hintState), exec)
+}
+
+func checkConstArgAt(arg *ConstArg, field *Field, compMap CompMap, ord int, st *hintState, exec func() bool) bool {
 	original := arg.Val
+	defer func() {
+		arg.Val = original
+	}()
 	// Note: because shrinkExpand returns a map, order of programs is non-deterministic.
 	// This can affect test coverage reports.
 replacerLoop:
-	for _, replacer := range shrinkExpand(original, compMap, arg.Type().TypeBitSize(), false) {
+	for idx, replacer := range shrinkExpand(original, compMap, arg.Type().TypeBitSize(), false) {
+		if ord == st.from.arg && idx < st.from.replacer {
+			continue
+		}
 		if field != nil && len(field.relatedFields) != 0 {
 			for related := range field.relatedFields {
 				if related.(uselessHinter).uselessHint(replacer) {
@@ -199,33 +256,51 @@ replacerLoop:
 			continue
 		}
 		arg.Val = replacer
+		st.cur = hintPos{arg: ord, replacer: idx}
 		if !exec() {
-			break
+			return false
 		}
 	}
-	arg.Val = original
+	return true
 }
 
 func checkDataArg(arg *DataArg, compMap CompMap, exec func() bool) {
+	checkDataArgAt(arg, compMap, 0, new(hintState), exec)
+}
+
+func checkDataArgAt(arg *DataArg, compMap CompMap, ord int, st *hintState, exec func() bool) bool {
 	bytes := make([]byte, 8)
 	data := arg.Data()
 	size := min(len(data), maxDataLength)
 	for i := range size {
+		if ord == st.from.arg && i < st.from.offset {
+			continue
+		}
 		original := make([]byte, 8)
 		copy(original, data[i:])
 		val := binary.LittleEndian.Uint64(original)
-		for _, replacer := range shrinkExpand(val, compMap, 64, false) {
+		for idx, replacer := range shrinkExpand(val, compMap, 64, false) {
+			if ord == st.from.arg && i == st.from.offset && idx < st.from.replacer {
+				continue
+			}
 			binary.LittleEndian.PutUint64(bytes, replacer)
 			copy(data[i:], bytes)
+			st.cur = hintPos{arg: ord, offset: i, replacer: idx}
 			if !exec() {
-				break
+				copy(data[i:], original)
+				return false
 			}
 		}
 		copy(data[i:], original)
 	}
+	return true
 }
 
 func checkCompressedArg(arg *DataArg, compMap CompMap, exec func() bool) {
+	checkCompressedArgAt(arg, compMap, 0, new(hintState), exec)
+}
+
+func checkCompressedArgAt(arg *DataArg, compMap CompMap, ord int, st *hintState, exec func() bool) bool {
 	data0 := arg.Data()
 	data, dtor := image.MustDecompress(data0)
 	// Images are very large so the generic algorithm for data arguments
@@ -233,13 +308,23 @@ func checkCompressedArg(arg *DataArg, compMap CompMap, exec func() bool) {
 	// 4/8-byte aligned ints. This is enough to handle all magic
 	// numbers and checksums. We also ignore 0 and ^uint64(0) source bytes,
 	// because there are too many of these in lots of images.
+	// On return the image is unmapped and the original data is restored.
+	defer func() {
+		dtor()
+		arg.SetData(data0)
+	}()
 	bytes := make([]byte, 8)
-	doMore := true
-	for i := 0; i < len(data) && doMore; i += 4 {
+	for i := 0; i < len(data); i += 4 {
+		if ord == st.from.arg && i < st.from.offset {
+			continue
+		}
 		original := make([]byte, 8)
 		copy(original, data[i:])
 		val := binary.LittleEndian.Uint64(original)
-		for _, replacer := range shrinkExpand(val, compMap, 64, true) {
+		for idx, replacer := range shrinkExpand(val, compMap, 64, true) {
+			if ord == st.from.arg && i == st.from.offset && idx < st.from.replacer {
+				continue
+			}
 			binary.LittleEndian.PutUint64(bytes, replacer)
 			copy(data[i:], bytes)
 			arg.SetData(image.Compress(data))
@@ -247,16 +332,16 @@ func checkCompressedArg(arg *DataArg, compMap CompMap, exec func() bool) {
 			// Execution can take a while and uncompressed images are large,
 			// since hints jobs are executed round-robin, we can have thousands of them running.
 			dtor()
-			doMore = exec()
-			data, dtor = image.MustDecompress(data0)
-			if !doMore {
-				break
+			dtor = func() {}
+			st.cur = hintPos{arg: ord, offset: i, replacer: idx}
+			if !exec() {
+				return false
 			}
+			data, dtor = image.MustDecompress(data0)
 		}
 		copy(data[i:], original)
 	}
-	dtor()
-	arg.SetData(data0)
+	return true
 }
 
 // Shrink and expand mutations model the cases when the syscall arguments
