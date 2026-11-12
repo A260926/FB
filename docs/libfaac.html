@@ -1,0 +1,285 @@
+<html>
+
+<head>
+<meta charset="utf-8">
+<title>FAAC - ISO/MPEG 2/4 AAC Encoder Library</title>
+</head>
+
+<body>
+
+<h3>
+<center>
+FAAC - ISO/MPEG 2/4 AAC Encoder Library
+</center>
+</h3>
+
+<h4>
+Contents
+</h4>
+<menu>
+ <li><a href="#scope">Scope</a>
+ <li><a href="#interface">Interface description</a>
+ <li><a href="#api">API (faac.h)</a>
+ <menu>
+  <li><a href="#api-callseq">Calling sequence</a>
+  <li><a href="#api-errors">Error handling</a>
+  <li><a href="#api-funcref">Function reference</a>
+  <li><a href="#api-rate">Rate control modes</a>
+  <li><a href="#api-peak">Capping the peak frame size</a>
+ </menu>
+ <li><a href="#porting">Porting from the legacy faacEnc* API</a>
+</menu>
+
+
+<a name="scope">
+<h4>Scope</h4>
+This document describes the interface and usage of the
+FAAC - ISO/MPEG 2/4 AAC Encoder Library
+Developed for the Freeware Advanced Audio Coding project.
+
+<a name="interface">
+<h4>Interface description</h4>
+The ISO/MPEG 2/4 AAC Encoder Library provides a high-level
+interface for encoding MPEG2 and MPEG4 ISO AAC files. A single header file is
+provided for usage in C/C++ programs:<br><br>
+
+<b>faac.h</b>: the <b>faac_*</b> API &mdash; function prototypes and types.<br><br>
+
+The encoder is the shared library <b>libfaac</b> (libfaac.so.<i>N</i>,
+libfaac.dylib or libfaac.dll; the build also produces the static archive). The
+<b>faac</b> command-line encoder in <i>frontend/</i> is the reference
+user of the API.<br><br>
+
+<a name="api">
+<h4>API (faac.h)</h4>
+
+The API supplies all encoder parameters once, up front, to
+<i>faac_encoder_open()</i>. The encoder therefore never exists in a
+half-configured state, and every derived quantity (frame size, output-buffer
+bound, effective sample rate, resolved object type) is known and queryable the
+instant open returns. Every fallible call returns a <i>faac_status</i> code;
+fixed-width integer types and width-pinned enums keep the ABI identical across
+platforms.
+
+<a name="api-callseq">
+<h5>Calling sequence</h5>
+<menu>
+<li>Zero-initialize a <i>faac_params</i> with
+ <i>faac_params_init(&amp;p, sizeof p)</i>. This is mandatory &mdash; it
+ stamps <i>struct_size</i> and clears padding, which is how the struct stays
+ compatible as it grows in future releases; the size argument keeps a newer
+ library from writing past an older caller's struct.
+<li>Set the fields you care about (at minimum <i>sample_rate</i> and
+ <i>num_channels</i>), then call <i>faac_encoder_open()</i>.
+<li>Fill a <i>faac_encoder_info</i> with <i>faac_encoder_get_info()</i> (set its
+ <i>struct_size</i> first) and size your buffers from it: input PCM holds
+ <i>info.frame_samples</i> &times; <i>num_channels</i> samples; the output buffer
+ must be at least <i>info.max_output_bytes</i>. The same struct also reports the
+ resolved sample rate, object type, and rate-control settings. If you write a
+ raw stream, fetch the AudioSpecificConfig with <i>faac_encoder_asc()</i>
+ (library-owned &mdash; do <b>not</b> free it).
+<li>Call <i>faac_encoder_encode()</i> for each block of input; it emits at most
+ one frame per call and reports the byte count via an out-parameter.
+<li>Pass <i>in_samples</i> == 0 to flush; keep calling until
+ <i>bytes_written</i> is 0.
+<li>Call <i>faac_encoder_close()</i>, passing the address of your handle; it is
+ set to NULL on success.
+</menu>
+
+<a name="api-errors">
+<h5>Error handling</h5>
+Every fallible entry point returns a <i>faac_status</i>. <i>FAAC_OK</i> is 0 and
+all error codes are negative, so <code>status &lt; 0</code> tests for failure.
+<i>faac_strerror()</i> maps any status to a static human-readable string (never
+NULL). Notable codes: <i>FAAC_ERR_INVALID_ARGUMENT</i> (NULL, bad
+<i>struct_size</i>, or an out-of-range field), <i>FAAC_ERR_UNSUPPORTED</i> (an
+object type this build does not implement, or a request with no ASC),
+<i>FAAC_ERR_OUTPUT_TOO_SMALL</i>, and <i>FAAC_ERR_INPUT_OVERFLOW</i>.
+
+<a name="api-funcref">
+<h5>Function reference</h5>
+<pre>
+/* library-global facts: compiled channel ceiling, version/copyright */
+faac_status faac_get_library_info(faac_library_info *out);
+
+faac_status faac_params_init(faac_params *p, uint32_t caller_size);  /* sizeof(*p) */
+faac_status faac_encoder_open(const faac_params *p, faac_encoder **out);
+faac_status faac_encoder_close(faac_encoder **enc);   /* sets *enc = NULL */
+
+/* resolved properties, valid after open; set out.struct_size first */
+faac_status faac_encoder_get_info(faac_encoder *enc, faac_encoder_info *out);
+
+/* AudioSpecificConfig: library-owned, valid until close, do NOT free */
+faac_status faac_encoder_asc(faac_encoder *enc, const uint8_t **buf, uint32_t *len);
+
+faac_status faac_encoder_encode(faac_encoder *enc,
+                                const void *in, uint32_t in_samples,
+                                uint8_t *out, uint32_t out_cap,
+                                uint32_t *bytes_written);
+
+const char *faac_strerror(faac_status status);
+</pre>
+The <i>object_type</i> field of <i>faac_params</i> uses MPEG-4 Audio Object Type
+numbers: <i>FAAC_OBJ_LOW</i> (2) is AAC-LC and <i>FAAC_OBJ_HE_AAC_V1</i> (5) is
+HE-AAC v1 (AAC-LC core + SBR). <i>FAAC_OBJ_AUTO</i> (0) lets the library choose
+LC or HE-AAC from the bitrate, or from <i>quant_quality</i> when there is none. <i>FAAC_OBJ_HE_AAC_V2</i> (29) is defined but not
+implemented; requesting it returns <i>FAAC_ERR_UNSUPPORTED</i>.
+<br><br>
+For an HE-AAC encoder the SBR core runs at half the input rate and codes a
+2048-sample frame, so <i>faac_encoder_get_info()</i> reports
+<i>frame_samples</i> == 2048 and <i>sample_rate</i> == the full (un-halved)
+output rate. Buffer sizing and rate reporting therefore stay correct without
+the caller knowing any SBR internals.
+
+<a name="api-rate">
+<h5>Rate control modes</h5>
+<i>faac_params.rate_control</i> selects how a rate is held. <i>FAAC_RC_AUTO</i>,
+the default, keeps the legacy meaning of the two rate fields: a <i>bit_rate</i>
+is ABR, none is VBR. <i>FAAC_RC_ABR</i> holds <i>bit_rate</i> as an average:
+frames are bounded only by the ISO/IEC 14496-3 ceiling of 6144 bits per channel,
+a transient may take several times the mean, and silence stays small.
+<i>FAAC_RC_CBR</i> holds it as a constant-rate stream: a bit reservoir models the
+decoder's input buffer, every frame fits <i>mean + fill</i>, a frame that would
+leave the buffer to overflow is stuffed up to it, and the rate lands exactly.
+ADTS output carries the fill in every header's <i>buffer_fullness</i> (ABR and
+VBR write the 0x7FF sentinel); MP4 output declares <i>bufferSizeDB</i> = 768
+bytes per channel and <i>maxBitrate</i> == <i>avgBitrate</i>. CBR is for
+constant-rate channels and matched-bitrate comparisons; on a file or a packet
+network its stuffing is bytes for nothing, and a transient may take only what
+the buffer holds. <i>FAAC_RC_VBR</i> or <i>FAAC_RC_ABR</i>/<i>FAAC_RC_CBR</i>
+with, respectively, a <i>bit_rate</i> set or unset is rejected by
+<i>faac_encoder_open()</i> with <i>FAAC_ERR_INVALID_ARGUMENT</i>.
+<i>faac_encoder_info.rate_control</i> reports the resolved mode.
+<br><br>
+In ABR and CBR the cutoff follows <i>bit_rate</i>; in VBR it is the top of
+that curve, 18750 Hz. A non-zero <i>bandwidth</i> overrides either. A non-zero <i>quant_quality</i> given
+together with a <i>bit_rate</i> is not rejected: it is the rate loop's starting
+quality, and the loop moves on from it. <i>faac_encoder_info.bandwidth</i>
+reports the cutoff in use.
+<br><br>
+<a name="api-peak">
+<h5>Capping the peak frame size</h5>
+Packet-oriented transports often cannot fragment a frame: one that overruns the
+link MTU is dropped, not split. <i>bit_rate</i> cannot prevent that, being an
+average individual frames are free to exceed &mdash; a transient easily produces
+a frame several times the mean. <i>faac_params.max_bit_rate</i> puts a hard
+ceiling on any single frame; 0, the default, means none beyond the encoder's
+own ISO/IEC 14496-3 peak ceiling of 6144 bits per channel per frame, enforced
+unconditionally to guarantee decoder compatibility across portable devices.
+Unlike <i>bit_rate</i> it is a whole-stream rate, so it stays independent of
+<i>num_channels</i> and follows directly from the payload one packet can carry:
+<pre>
+    max_bit_rate = payload_bytes * 8 * sample_rate / 1024
+</pre>
+It must be at least <i>bit_rate</i> &times; <i>num_channels</i> &mdash; a peak
+below the average is unsatisfiable &mdash; and at most
+<i>FAAC_MAX_BIT_RATE</i>; <i>faac_encoder_open()</i> returns
+<i>FAAC_ERR_INVALID_ARGUMENT</i> otherwise. More headroom means fewer retries.
+<br><br>
+It is a ceiling, not a second average: frames that already fit are untouched, so
+the stream stays ABR rather than becoming CBR, and a frame re-quantized to meet
+the cap does not drag down the frames after it. Enforcement is best-effort
+&mdash; a frame cannot shrink below the cost of its own side info and
+scalefactors, so a small enough cap is still exceeded on a few percent of frames
+(measured on transient-heavy stereo, the cap holds everywhere at and above
+roughly 64 kbit/s and starts to slip around 48). Callers that must guarantee the
+packet fits should check <i>bytes_written</i> and drop the frame themselves.
+
+<a name="porting">
+<h4>Porting from the legacy faacEnc* API</h4>
+The classic <i>faacEnc*</i> surface (<i>faacEncOpen</i>,
+<i>faacEncGetCurrentConfiguration</i>/<i>faacEncSetConfiguration</i>,
+<i>faacEncEncode</i>, <i>faacEncClose</i>, <i>faacEncGetVersion</i>,
+<i>faacEncGetDecoderSpecificInfo</i>, and the <i>faacEncConfiguration</i>
+struct from <i>faaccfg.h</i>) has been removed. There is no compatibility
+shim &mdash; callers must move to <i>faac_*</i>. The changes are mechanical:
+
+<menu>
+<li><b>Open sequence.</b> The old two-step open (<i>faacEncOpen()</i> to get a
+ handle plus <i>inputSamples</i>/<i>maxOutputBytes</i> out-params, then
+ <i>faacEncGetCurrentConfiguration()</i> / <i>faacEncSetConfiguration()</i> to
+ apply options after the fact) collapses into one step: build a
+ <i>faac_params</i>, fill in the fields you care about, and call
+ <i>faac_encoder_open()</i> once. There is no live-pointer configuration
+ struct to mutate after opening.
+<li><b>Buffer sizing.</b> Where you previously read <i>inputSamples</i> and
+ <i>maxOutputBytes</i> from <i>faacEncOpen()</i>, call
+ <i>faac_encoder_get_info()</i> after <i>faac_encoder_open()</i> and use
+ <i>info.frame_samples</i> &times; <i>num_channels</i> and
+ <i>info.max_output_bytes</i> instead.
+<li><b>Version info.</b> <i>faacEncGetVersion()</i> is replaced by
+ <i>faac_get_library_info()</i>, which also reports <i>max_channels</i>; the
+ removed <i>name</i>/<i>copyright</i> write-only config fields are gone along
+ with it.
+<li><b>Decoder-specific info.</b> <i>faacEncGetDecoderSpecificInfo()</i> is
+ replaced by <i>faac_encoder_asc()</i>. The buffer is still library-owned and
+ valid until close &mdash; do not free it.
+<li><b>Encoding loop.</b> <i>faacEncEncode()</i> becomes
+ <i>faac_encoder_encode()</i> with the byte count returned via an
+ out-parameter (<i>bytes_written</i>) instead of the return value; the return
+ value is now a <i>faac_status</i>. Flush and end-of-stream detection are
+ unchanged: pass <i>in_samples</i> == 0 to flush, and keep calling until
+ <i>bytes_written</i> is 0.
+<li><b>Close.</b> <i>faacEncClose(hEncoder)</i> becomes
+ <i>faac_encoder_close(&amp;enc)</i> &mdash; pass the address of your handle,
+ not the handle itself; the library NULLs it on success.
+<li><b>Return values.</b> Where the old API returned NULL handles or -1 on
+ error, every fallible <i>faac_*</i> call returns a <i>faac_status</i>; test
+ <code>status &lt; 0</code> and use <i>faac_strerror()</i> for a message.
+<li><b>Configuration field renames.</b> <i>faacEncConfiguration</i> fields map
+ onto <i>faac_params</i> fields as follows:
+ <menu>
+ <li><i>aacObjectType</i> &rarr; <i>object_type</i> (now uses
+  <i>FAAC_OBJ_*</i> constants, numbered per the MPEG-4 AOT registry, rather
+  than the old MAIN/LOW/SSR/LTP enum &mdash; MAIN, SSR, and LTP are retired,
+  unimplemented object types).
+ <li><i>mpegVersion</i> &rarr; <i>mpeg_version</i> (<i>FAAC_MPEG4</i> /
+  <i>FAAC_MPEG2</i>).
+ <li><i>jointmode</i> &rarr; <i>joint_mode</i> (<i>FAAC_JOINT_*</i>).
+  <i>allowMidside</i> was a compatibility alias sharing storage with
+  <i>jointmode</i> in a union; it has no separate replacement, use
+  <i>joint_mode</i> directly.
+ <li><i>useLfe</i> &rarr; <i>use_lfe</i>; <i>useTns</i> &rarr; <i>use_tns</i>
+  (now <i>bool</i>).
+ <li><i>shortctl</i> &rarr; <i>short_control</i> (<i>FAAC_SHORTCTL_*</i>).
+ <li><i>bitRate</i> &rarr; <i>bit_rate</i>; <i>bandWidth</i> &rarr;
+  <i>bandwidth</i>; <i>quantqual</i> &rarr; <i>quant_quality</i>.
+ <li><i>pnslevel</i> &rarr; <i>use_pns</i>: the level is now chosen by the
+  encoder, leaving the caller an on/off switch.
+ <li><i>outputFormat</i> &rarr; <i>output_format</i> (<i>FAAC_STREAM_*</i>);
+  <i>inputFormat</i> &rarr; <i>input_format</i> (<i>FAAC_INPUT_*</i>).
+ <li><i>channel_map[64]</i> &rarr; <i>channel_map</i> plus an explicit
+  <i>channel_map_count</i> (the old fixed-size array was implicitly sized by
+  <i>numChannels</i>).
+ <li><i>version</i>, <i>name</i>, and <i>copyright</i> were unused or
+  library-populated informational fields in the legacy config struct; their
+  closest analogs are <i>faac_params.struct_size</i> (for <i>version</i>-style
+  compatibility checks) and <i>faac_library_info.version</i>/<i>copyright</i>
+  (queried via <i>faac_get_library_info()</i>), not a <i>faac_params</i> field.
+ </menu>
+<li><b>Struct growth.</b> Always call <i>faac_params_init()</i> before setting
+ any fields, and set <i>struct_size</i> on any struct you pass to a query
+ function (<i>faac_encoder_get_info()</i>, <i>faac_get_library_info()</i>).
+ This is how the ABI stays stable as these structs grow in later releases;
+ the legacy config struct had no equivalent versioning.
+</menu>
+
+
+<center>
+<br>
+<i>
+FAAC is free software, licensed under the GNU Lesser General Public License (LGPL), version 2.1 or later.<br>
+Copyright &copy; 1999-2001, Menno Bakker &middot;
+Copyright &copy; 2002-2017, Krzysztof Nikiel &middot;
+Copyright &copy; 2004, Dan Villiom P. Christiansen &middot;
+Copyright &copy; 2005-2026, Fabian Greffrath &middot;
+Copyright &copy; 2026, Nils Schimmelmann
+</i>
+</center>
+
+</body>
+
+</html>
+
+
+

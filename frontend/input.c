@@ -1,0 +1,440 @@
+/*
+ * FAAC - Freeware Advanced Audio Coder
+ * Copyright (C) 2002 Krzysztof Nikiel
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
+
+#include "input.h"
+#include "charset.h"
+#include "endian.h"
+
+#define PCM_16BIT_FLOAT_SCALE 32768.0f
+#define PCM_32BIT_FLOAT_SCALE 65536.0f
+
+
+typedef struct
+{
+  uint32_t label;           /* 'RIFF' */
+  uint32_t length;        /* Length of rest of file */
+  uint32_t chunk_type;      /* 'WAVE' */
+}
+riff_t;
+
+typedef struct
+{
+  uint32_t label;
+  uint32_t len;
+}
+riffsub_t;
+
+#ifdef _MSC_VER
+#pragma pack(push, 1)
+#endif
+
+#define WAVE_FORMAT_PCM		1
+#define WAVE_FORMAT_FLOAT	3
+#define WAVE_FORMAT_EXTENSIBLE	0xfffe
+struct WAVEFORMATEX
+{
+  uint16_t wFormatTag;
+  uint16_t nChannels;
+  uint32_t nSamplesPerSec;
+  uint32_t nAvgBytesPerSec;
+  uint16_t nBlockAlign;
+  uint16_t wBitsPerSample;
+  uint16_t cbSize;
+}
+#ifdef __GNUC__
+__attribute__((packed))
+#endif
+;
+
+struct WAVEFORMATEXTENSIBLE
+{
+  struct WAVEFORMATEX Format;
+  union {
+    uint16_t wValidBitsPerSample;	// bits of precision
+    uint16_t wSamplesPerBlock;		// valid if wBitsPerSample==0
+    uint16_t wReserved;		// If neither applies, set to zero.
+  } Samples;
+  uint32_t dwChannelMask;		// which channels are present in stream
+  unsigned char SubFormat[16];		// guid
+}
+#ifdef __GNUC__
+__attribute__((packed))
+#endif
+;
+
+#ifdef _MSC_VER
+#pragma pack(pop)
+#endif
+
+static const unsigned char waveformat_pcm_guid[16] =
+{
+  WAVE_FORMAT_PCM,0,0,0,
+  0x00, 0x00,
+  0x10, 0x00,
+  0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71
+};
+
+static const unsigned char waveformat_float_guid[16] =
+{
+  WAVE_FORMAT_FLOAT,0,0,0,
+  0x00, 0x00,
+  0x10, 0x00,
+  0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71
+};
+
+static void unsuperr(const char *name)
+{
+  fprintf(stderr, "%s: file format not supported\n", name);
+}
+
+static void seekcur(FILE *f, int ofs)
+{
+    if (ofs < 0)
+        return;
+
+    if (fseek(f, ofs, SEEK_CUR) != 0)
+    {
+        /* fseek fails on non-seekable streams (stdin/pipes); fall back to
+           reading and discarding bytes one at a time */
+        while (ofs--)
+        {
+            if (fgetc(f) == EOF)
+                break;
+        }
+    }
+}
+
+static int seekchunk(FILE *f, riffsub_t *riffsub, const char *name)
+{
+ int skipped;
+
+ for(skipped = 0; skipped < 10; skipped++)
+ {
+   if (fread(riffsub, 1, sizeof(*riffsub), f) != sizeof(*riffsub))
+     return 0;
+
+   riffsub->len = le32toh(riffsub->len);
+   if (riffsub->len & 1)
+     riffsub->len++;
+
+   if (!memcmp(&(riffsub->label), name, 4))
+     return 1;
+
+   seekcur(f, riffsub->len);
+ }
+
+ return 0;
+}
+
+pcmfile_t *wav_open_read(const char *name, bool rawinput)
+{
+  FILE *wave_f;
+  riff_t riff;
+  riffsub_t riffsub = {0};
+  struct WAVEFORMATEXTENSIBLE wave = {0};
+  int fmtsize;
+  pcmfile_t *sndf;
+  int dostdin = 0;
+
+  if (!strcmp(name, "-"))
+  {
+#ifdef _WIN32
+    _setmode(_fileno(stdin), O_BINARY);
+#endif
+    wave_f = stdin;
+    dostdin = 1;
+  }
+  else
+  {
+#ifdef _WIN32
+    wave_f = win32_fopen_utf8(name, "rb");
+#else
+    wave_f = fopen(name, "rb");
+#endif
+    if (!wave_f)
+    {
+      perror(name);
+      return NULL;
+    }
+  }
+
+  if (!rawinput) // header input
+  {
+    if (fread(&riff, 1, sizeof(riff), wave_f) != sizeof(riff))
+      return NULL;
+    if (memcmp(&(riff.label), "RIFF", 4))
+      return NULL;
+    if (memcmp(&(riff.chunk_type), "WAVE", 4))
+      return NULL;
+
+    if (!seekchunk(wave_f, &riffsub, "fmt "))
+      return NULL;
+
+    if (memcmp(&(riffsub.label), "fmt ", 4))
+        return NULL;
+    memset(&wave, 0, sizeof(wave));
+
+    fmtsize = (riffsub.len < sizeof(wave)) ? riffsub.len : sizeof(wave);
+    // check if format is at least 16 bytes long
+    if (fmtsize < 16)
+	return NULL;
+
+   if (fread(&wave, 1, fmtsize, wave_f) != (size_t)fmtsize)
+        return NULL;
+
+    seekcur(wave_f, riffsub.len - fmtsize);
+
+    if (!seekchunk(wave_f, &riffsub, "data"))
+      return NULL;
+
+    uint16_t tag = le16toh(wave.Format.wFormatTag);
+    if (tag != WAVE_FORMAT_PCM && tag != WAVE_FORMAT_FLOAT)
+    {
+      if (tag == WAVE_FORMAT_EXTENSIBLE)
+      {
+        if (le16toh(wave.Format.cbSize) < 22) // struct too small
+          return NULL;
+        if (memcmp(wave.SubFormat, waveformat_pcm_guid, 16) != 0 &&
+            memcmp(wave.SubFormat, waveformat_float_guid, 16) != 0)
+        {
+          unsuperr(name);
+          return NULL;
+        }
+      }
+      else
+      {
+        unsuperr(name);
+        return NULL;
+      }
+    }
+  }
+
+  sndf = (pcmfile_t*)malloc(sizeof(*sndf));
+  if (!sndf)
+  {
+      if (wave_f != stdin) fclose(wave_f);
+      return NULL;
+  }
+  memset(sndf, 0, sizeof(*sndf));
+  sndf->f = wave_f;
+
+  /* rawinput never populates `wave` (no header to parse), and raw mode has
+     no float flag of its own -- isfloat stays false, its memset() default. */
+  if (!rawinput)
+  {
+    if (le16toh(wave.Format.wFormatTag) == WAVE_FORMAT_FLOAT) {
+      sndf->isfloat = true;
+    } else {
+      sndf->isfloat = (wave.SubFormat[0] == WAVE_FORMAT_FLOAT);
+    }
+  }
+
+  if (rawinput)
+  {
+    sndf->bigendian = true;
+    if (dostdin)
+      sndf->samples = 0;
+    else
+    {
+#ifdef _WIN32
+      _fseeki64(sndf->f, 0, SEEK_END);
+      sndf->samples = _ftelli64(sndf->f);
+#else
+      fseeko(sndf->f, 0, SEEK_END);
+      sndf->samples = (int64_t)ftello(sndf->f);
+#endif
+      rewind(sndf->f);
+    }
+  }
+  else
+  {
+    sndf->bigendian = false;
+    sndf->channels = le16toh(wave.Format.nChannels);
+    sndf->samplebytes = (uint8_t)(le16toh(wave.Format.wBitsPerSample) / 8);
+    sndf->samplerate = le32toh(wave.Format.nSamplesPerSec);
+
+    /* channel/sample-width bounds guard against a corrupt header (e.g. a
+       bogus huge channel count) driving an oversized allocation downstream */
+    if (sndf->channels < 1 || sndf->channels > 64 ||
+        sndf->samplebytes < 1 || sndf->samplebytes > 4)
+    {
+      if (wave_f != stdin) fclose(wave_f);
+      free(sndf);
+      return NULL;
+    }
+
+    sndf->samples = (int64_t)riffsub.len / ((int64_t)sndf->samplebytes * sndf->channels);
+  }
+
+  return sndf;
+}
+
+int *mk_chan_map(uint16_t channels, uint16_t center, uint16_t lf)
+{
+  if (!center && !lf)
+    return NULL;
+
+  if (channels < 3)
+    return NULL;
+
+  uint16_t lf_pos = (lf > 0) ? (lf - 1) : (uint16_t)(channels - 1);       /* default AAC position */
+  uint16_t center_pos = (center > 0) ? (center - 1) : 0;                 /* default AAC position */
+
+  int *map = malloc((size_t)channels * sizeof(int));
+  if (!map)
+    return NULL;
+  memset(map, 0, (size_t)channels * sizeof(int));
+
+  uint16_t outpos = 0;
+  if (center_pos < channels)
+    map[outpos++] = (int)center_pos;
+
+  uint16_t inpos = 0;
+  for (; outpos < (channels - 1) && inpos < channels; inpos++)
+  {
+    if (inpos == center_pos || inpos == lf_pos)
+      continue;
+
+    map[outpos++] = (int)inpos;
+  }
+  if (outpos < channels)
+  {
+    if (lf_pos < channels)
+      map[outpos] = (int)lf_pos;
+    else if (inpos < channels)
+      map[outpos] = (int)inpos;
+  }
+
+  return map;
+}
+
+static void chan_remap(int32_t *buf, int channels, int blocks, int *map)
+{
+  if (channels < 1)
+    return;
+
+  int32_t tmp_stack[64];
+  int32_t *tmp = tmp_stack;
+
+  if (channels > 64)
+  {
+    tmp = (int32_t *)malloc((size_t)channels * sizeof(int32_t));
+    if (!tmp)
+      return;
+  }
+
+  for (int i = 0; i < blocks; i++)
+  {
+    memcpy(tmp, buf + i * channels, (size_t)channels * sizeof(int32_t));
+
+    for (int chn = 0; chn < channels; chn++)
+      buf[i * channels + chn] = tmp[map[chn]];
+  }
+
+  if (channels > 64)
+    free(tmp);
+}
+
+size_t wav_read_float32(pcmfile_t *sndf, float *buf, size_t num, int *map)
+{
+  size_t cnt;
+  size_t isize;
+  char *bufi;
+
+  if ((sndf->samplebytes > 4) || (sndf->samplebytes < 1))
+    return 0;
+
+  isize = num * sndf->samplebytes;
+  bufi = (char*)(buf + num);
+  bufi -= isize;
+  isize = fread(bufi, 1, isize, sndf->f);
+  isize /= sndf->samplebytes;
+
+  // perform in-place conversion
+  cnt = (num < isize) ? num : isize;
+
+  if (sndf->isfloat)
+  {
+      if (sndf->samplebytes == 4)
+      {
+          for (size_t i = 0; i < cnt; i++)
+              buf[i] *= PCM_16BIT_FLOAT_SCALE;
+      }
+      else
+      {
+          return 0;
+      }
+  }
+  else
+  {
+      switch (sndf->samplebytes)
+      {
+      case 1:
+          {
+              uint8_t *in = (uint8_t*)bufi;
+              for (size_t i = 0; i < cnt; i++)
+                  buf[i] = ((float)in[i] - 128.0f) * 256.0f;
+          }
+          break;
+      case 2:
+          {
+              const int16_t *in = (const int16_t *)bufi;
+              bool be = sndf->bigendian;
+              for (size_t i = 0; i < cnt; i++)
+                  buf[i] = (float)read_pcm16(&in[i], be);
+          }
+          break;
+      case 3:
+          {
+              const uint8_t *in = (const uint8_t *)bufi;
+              bool be = sndf->bigendian;
+              for (size_t i = 0; i < cnt; i++)
+                  buf[i] = (float)read_pcm24(&in[3*i], be) / 256.0f;
+          }
+          break;
+      case 4:
+          {
+              const int32_t *in = (const int32_t *)bufi;
+              bool be = sndf->bigendian;
+              for (size_t i = 0; i < cnt; i++)
+                  buf[i] = (float)read_pcm32(&in[i], be) / PCM_32BIT_FLOAT_SCALE;
+          }
+          break;
+      default:
+          return 0;
+      }
+  }
+
+  if (map)
+    chan_remap((int32_t *)buf, sndf->channels, (int)(cnt / sndf->channels), map);
+
+  return cnt;
+}
+
+int wav_close(pcmfile_t *sndf)
+{
+  int i = fclose(sndf->f);
+  free(sndf);
+  return i;
+}
