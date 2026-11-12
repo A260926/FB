@@ -1,0 +1,10 @@
+--- a/src/loaders/itsex.c
++++ b/src/loaders/itsex.c
+@@ -55,6 +55,7 @@
+ 		in->left -= used;
+ 
+ 		n -= offset;
++		retval = 0;
+ 		retval |= (in->bits & READ_BITS_MASK(n)) << offset;
+ 	}
+ 

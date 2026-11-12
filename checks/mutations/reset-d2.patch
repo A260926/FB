@@ -1,0 +1,20 @@
+--- a/src/loaders/itsex.c
++++ b/src/loaders/itsex.c
+@@ -101,7 +101,7 @@
+ 		if (!block_count) {
+ 			block_count = 0x8000;
+ 			left = 9;
+-			temp = temp2 = 0;
++			temp = 0;
+ 
+ 			if (init_block(&in, tmp, tmplen, src) < 0)
+ 				return -1;
+@@ -198,7 +198,7 @@
+ 		if (!block_count) {
+ 			block_count = 0x4000;
+ 			left = 17;
+-			temp = temp2 = 0;
++			temp = 0;
+ 
+ 			if (init_block(&in, tmp, tmplen, src) < 0)
+ 				return -1;
