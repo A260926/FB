@@ -318,6 +318,37 @@ void ge_p3_to_p2(ge_p2 *r, const ge_p3 *p) {
 }
 
 
+/*
+r = p + q, both points in extended coordinates.
+*/
+
+void ge_p3_add(ge_p3 *r, const ge_p3 *p, const ge_p3 *q) {
+    ge_cached c;
+    ge_p1p1 t;
+
+    ge_p3_to_cached(&c, q);
+    ge_add(&t, p, &c);
+    ge_p1p1_to_p3(r, &t);
+}
+
+
+/*
+r = 8 * p (cofactor clearing for edwards25519, h_eff = 8).
+*/
+
+void ge_p3_mul8(ge_p3 *r, const ge_p3 *p) {
+    ge_p1p1 t;
+    ge_p3 tmp;
+
+    ge_p3_dbl(&t, p);
+    ge_p1p1_to_p3(&tmp, &t);
+    ge_p3_dbl(&t, &tmp);
+    ge_p1p1_to_p3(&tmp, &t);
+    ge_p3_dbl(&t, &tmp);
+    ge_p1p1_to_p3(r, &t);
+}
+
+
 void ge_p3_tobytes(unsigned char *s, const ge_p3 *h) {
     fe recip;
     fe x;

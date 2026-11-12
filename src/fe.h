@@ -22,6 +22,14 @@ void fe_1(fe h);
 void fe_frombytes(fe h, const unsigned char *s);
 void fe_tobytes(unsigned char *s, const fe h);
 
+/*
+    Reduce a 48-byte big-endian integer (OS2IP) modulo the field prime
+    p = 2^255 - 19.  This is field arithmetic for hash_to_field (RFC 9380);
+    it consumes the full 384-bit width and never reduces modulo the group
+    order l or truncates high bytes.
+*/
+void fe_fromwide(fe h, const unsigned char *s);
+
 void fe_copy(fe h, const fe f);
 int fe_isnegative(const fe f);
 int fe_isnonzero(const fe f);

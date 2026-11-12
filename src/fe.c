@@ -291,6 +291,125 @@ void fe_copy(fe h, const fe f) {
 
 
 /*
+    h = OS2IP(s) mod p, where s is a 48-byte (384-bit) big-endian integer.
+
+    Unlike fe_frombytes this keeps every high byte: the integer is split
+    into its low 255 bits and its high part, and the latter is folded back
+    multiplied by 19 (since 2^255 == 19 mod p).  No bytes are truncated and
+    no reduction modulo the group order l is involved.
+*/
+
+static uint64_t fe_take_bits(uint32_t w[12], int bits) {
+    uint64_t res;
+    uint32_t carry;
+    int i;
+
+    /* w[11] is the least significant 32-bit word. */
+    res = (uint64_t) w[11] & (((uint64_t) 1 << bits) - 1);
+    carry = 0;
+    for (i = 0; i < 12; ++i) {
+        uint32_t next_carry = w[i] << (32 - bits);
+        w[i] = (w[i] >> bits) | carry;
+        carry = next_carry;
+    }
+    return res;
+}
+
+void fe_fromwide(fe h, const unsigned char *s) {
+    uint32_t w[12];
+    uint32_t g[12];
+    static const int widths[10] = {26, 25, 26, 25, 26, 25, 26, 25, 26, 25};
+    int64_t h0, h1, h2, h3, h4, h5, h6, h7, h8, h9;
+    uint64_t carry;
+    int i;
+    int64_t carry0, carry1, carry2, carry3, carry4, carry5, carry6,
+        carry7, carry8, carry9;
+
+    for (i = 0; i < 12; ++i) {
+        w[i] = ((uint32_t) s[4 * i] << 24) |
+               ((uint32_t) s[4 * i + 1] << 16) |
+               ((uint32_t) s[4 * i + 2] << 8) |
+               ((uint32_t) s[4 * i + 3]);
+    }
+
+    h0 = (int64_t) fe_take_bits(w, widths[0]);
+    h1 = (int64_t) fe_take_bits(w, widths[1]);
+    h2 = (int64_t) fe_take_bits(w, widths[2]);
+    h3 = (int64_t) fe_take_bits(w, widths[3]);
+    h4 = (int64_t) fe_take_bits(w, widths[4]);
+    h5 = (int64_t) fe_take_bits(w, widths[5]);
+    h6 = (int64_t) fe_take_bits(w, widths[6]);
+    h7 = (int64_t) fe_take_bits(w, widths[7]);
+    h8 = (int64_t) fe_take_bits(w, widths[8]);
+    h9 = (int64_t) fe_take_bits(w, widths[9]);
+
+    /* w now holds floor(n / 2^255); fold in 19 * that part.  w[11] is the
+       least significant word, so carry propagation starts there. */
+    carry = 0;
+    for (i = 11; i >= 0; --i) {
+        uint64_t v = (uint64_t) w[i] * 19 + carry;
+        g[i] = (uint32_t) v;
+        carry = v >> 32;
+    }
+
+    h0 += (int64_t) fe_take_bits(g, widths[0]);
+    h1 += (int64_t) fe_take_bits(g, widths[1]);
+    h2 += (int64_t) fe_take_bits(g, widths[2]);
+    h3 += (int64_t) fe_take_bits(g, widths[3]);
+    h4 += (int64_t) fe_take_bits(g, widths[4]);
+    h5 += (int64_t) fe_take_bits(g, widths[5]);
+    h6 += (int64_t) fe_take_bits(g, widths[6]);
+    h7 += (int64_t) fe_take_bits(g, widths[7]);
+    h8 += (int64_t) fe_take_bits(g, widths[8]);
+    h9 += (int64_t) fe_take_bits(g, widths[9]);
+
+    /* Same carry chain as fe_frombytes: canonicalize mod 2^255 - 19. */
+    carry9 = (h9 + (int64_t) (1 << 24)) >> 25;
+    h0 += carry9 * 19;
+    h9 -= carry9 << 25;
+    carry1 = (h1 + (int64_t) (1 << 24)) >> 25;
+    h2 += carry1;
+    h1 -= carry1 << 25;
+    carry3 = (h3 + (int64_t) (1 << 24)) >> 25;
+    h4 += carry3;
+    h3 -= carry3 << 25;
+    carry5 = (h5 + (int64_t) (1 << 24)) >> 25;
+    h6 += carry5;
+    h5 -= carry5 << 25;
+    carry7 = (h7 + (int64_t) (1 << 24)) >> 25;
+    h8 += carry7;
+    h7 -= carry7 << 25;
+    carry0 = (h0 + (int64_t) (1 << 25)) >> 26;
+    h1 += carry0;
+    h0 -= carry0 << 26;
+    carry2 = (h2 + (int64_t) (1 << 25)) >> 26;
+    h3 += carry2;
+    h2 -= carry2 << 26;
+    carry4 = (h4 + (int64_t) (1 << 25)) >> 26;
+    h5 += carry4;
+    h4 -= carry4 << 26;
+    carry6 = (h6 + (int64_t) (1 << 25)) >> 26;
+    h7 += carry6;
+    h6 -= carry6 << 26;
+    carry8 = (h8 + (int64_t) (1 << 25)) >> 26;
+    h9 += carry8;
+    h8 -= carry8 << 26;
+
+    h[0] = (int32_t) h0;
+    h[1] = (int32_t) h1;
+    h[2] = (int32_t) h2;
+    h[3] = (int32_t) h3;
+    h[4] = (int32_t) h4;
+    h[5] = (int32_t) h5;
+    h[6] = (int32_t) h6;
+    h[7] = (int32_t) h7;
+    h[8] = (int32_t) h8;
+    h[9] = (int32_t) h9;
+}
+
+
+
+/*
     Ignores top bit of h.
 */
 

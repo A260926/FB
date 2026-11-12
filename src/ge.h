@@ -71,4 +71,10 @@ void ge_p3_dbl(ge_p1p1 *r, const ge_p3 *p);
 void ge_p3_to_cached(ge_cached *r, const ge_p3 *p);
 void ge_p3_to_p2(ge_p2 *r, const ge_p3 *p);
 
+/* r = p + q for two extended (ge_p3) points (used by hash-to-curve). */
+void ge_p3_add(ge_p3 *r, const ge_p3 *p, const ge_p3 *q);
+
+/* r = 8 * p, used to clear the edwards25519 cofactor (RFC 9380 Section 7). */
+void ge_p3_mul8(ge_p3 *r, const ge_p3 *p);
+
 #endif
