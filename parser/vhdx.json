@@ -9,7 +9,11 @@
     }],
     "Header": [4096, {
         "Signature": [0, ["String", {"length": 4}]],
-        "SequenceNumber": [8, ["unsigned long long"]]
+        "CheckSum": [4, ["unsigned long"]],
+        "SequenceNumber": [8, ["unsigned long long"]],
+        "FileWriteGuid": [16, ["GUID"]],
+        "DataWriteGuid": [32, ["GUID"]],
+        "LogGuid": [48, ["GUID"]]
     }],
     "Region": [16, {
         "Signature": [0, ["String", {"length": 4}]],
@@ -41,6 +45,16 @@
     "FileParameters": [8, {
         "BlockSize": [0, ["unsigned long"]],
         "HasParent": [4, ["BitField", {"start_bit": 1, "end_bit": 2}]]
+    }],
+    "ParentLocator": [0, {
+        "Signature": [0, ["String", {"length": 4}]],
+        "EntryCount": [8, ["unsigned long"]],
+        "Entries": [16, ["Array", {"target": "ParentLocatorEntry"}]]
+    }],
+    "ParentLocatorEntry": [24, {
+        "KeyOffset": [0, ["unsigned long"]],
+        "ValueOffset": [8, ["unsigned long"]],
+        "ValueLength": [16, ["unsigned short"]]
     }],
     "GUID": [16, {
         "Data1": [0, ["unsigned long", {}]],

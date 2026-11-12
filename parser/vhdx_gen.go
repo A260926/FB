@@ -68,11 +68,21 @@ type VHDXProfile struct {
     Off_RegionEntry_FileOffset int64
     Off_RegionEntry_Length int64
     Off_RegionEntry_IsRequired int64
+    Off_Header_CheckSum int64
+    Off_Header_FileWriteGuid int64
+    Off_Header_DataWriteGuid int64
+    Off_Header_LogGuid int64
+    Off_ParentLocator_Signature int64
+    Off_ParentLocator_EntryCount int64
+    Off_ParentLocator_Entries int64
+    Off_ParentLocatorEntry_KeyOffset int64
+    Off_ParentLocatorEntry_ValueOffset int64
+    Off_ParentLocatorEntry_ValueLength int64
 }
 
 func NewVHDXProfile() *VHDXProfile {
     // Specific offsets can be tweaked to cater for slight version mismatches.
-    self := &VHDXProfile{0,0,0,4,0,8,65536,131072,196608,262144,0,4,6,8,0,8,0,10,32,0,16,20,0,0,0,8,0,16,24,28}
+    self := &VHDXProfile{0,0,0,4,0,8,65536,131072,196608,262144,0,4,6,8,0,8,0,10,32,0,16,20,0,0,0,8,0,16,24,28,4,16,32,48,0,8,16,0,8,16}
     return self
 }
 
@@ -106,6 +116,14 @@ func (self *VHDXProfile) MetadataEntry(reader io.ReaderAt, offset int64) *Metada
 
 func (self *VHDXProfile) Misc(reader io.ReaderAt, offset int64) *Misc {
     return &Misc{Reader: reader, Offset: offset, Profile: self}
+}
+
+func (self *VHDXProfile) ParentLocator(reader io.ReaderAt, offset int64) *ParentLocator {
+    return &ParentLocator{Reader: reader, Offset: offset, Profile: self}
+}
+
+func (self *VHDXProfile) ParentLocatorEntry(reader io.ReaderAt, offset int64) *ParentLocatorEntry {
+    return &ParentLocatorEntry{Reader: reader, Offset: offset, Profile: self}
 }
 
 func (self *VHDXProfile) Region(reader io.ReaderAt, offset int64) *Region {
@@ -262,13 +280,92 @@ func (self *Header) Signature() string {
   return ParseString(self.Reader, self.Profile.Off_Header_Signature + self.Offset, 4)
 }
 
+func (self *Header) CheckSum() uint32 {
+   return ParseUint32(self.Reader, self.Profile.Off_Header_CheckSum + self.Offset)
+}
+
 func (self *Header) SequenceNumber() uint64 {
     return ParseUint64(self.Reader, self.Profile.Off_Header_SequenceNumber + self.Offset)
+}
+
+func (self *Header) FileWriteGuid() *GUID {
+    return self.Profile.GUID(self.Reader, self.Profile.Off_Header_FileWriteGuid + self.Offset)
+}
+
+func (self *Header) DataWriteGuid() *GUID {
+    return self.Profile.GUID(self.Reader, self.Profile.Off_Header_DataWriteGuid + self.Offset)
+}
+
+func (self *Header) LogGuid() *GUID {
+    return self.Profile.GUID(self.Reader, self.Profile.Off_Header_LogGuid + self.Offset)
 }
 func (self *Header) DebugString() string {
     result := fmt.Sprintf("struct Header @ %#x:\n", self.Offset)
     result += fmt.Sprintf("  Signature: %v\n", string(self.Signature()))
+    result += fmt.Sprintf("  CheckSum: %#0x\n", self.CheckSum())
     result += fmt.Sprintf("  SequenceNumber: %#0x\n", self.SequenceNumber())
+    result += fmt.Sprintf("  FileWriteGuid: %#x\n", self.FileWriteGuid().RawBytes())
+    result += fmt.Sprintf("  DataWriteGuid: %#x\n", self.DataWriteGuid().RawBytes())
+    result += fmt.Sprintf("  LogGuid: %#x\n", self.LogGuid().RawBytes())
+    return result
+}
+
+type ParentLocator struct {
+    Reader io.ReaderAt
+    Offset int64
+    Profile *VHDXProfile
+}
+
+func (self *ParentLocator) Size() int {
+    return 0
+}
+
+
+func (self *ParentLocator) Signature() string {
+  return ParseString(self.Reader, self.Profile.Off_ParentLocator_Signature + self.Offset, 4)
+}
+
+func (self *ParentLocator) EntryCount() uint32 {
+   return ParseUint32(self.Reader, self.Profile.Off_ParentLocator_EntryCount + self.Offset)
+}
+
+func (self *ParentLocator) Entries() []*ParentLocatorEntry {
+   return ParseArray_ParentLocatorEntry(self.Profile, self.Reader, self.Profile.Off_ParentLocator_Entries + self.Offset, 0)
+}
+func (self *ParentLocator) DebugString() string {
+    result := fmt.Sprintf("struct ParentLocator @ %#x:\n", self.Offset)
+    result += fmt.Sprintf("  Signature: %v\n", string(self.Signature()))
+    result += fmt.Sprintf("  EntryCount: %#0x\n", self.EntryCount())
+    return result
+}
+
+type ParentLocatorEntry struct {
+    Reader io.ReaderAt
+    Offset int64
+    Profile *VHDXProfile
+}
+
+func (self *ParentLocatorEntry) Size() int {
+    return 24
+}
+
+
+func (self *ParentLocatorEntry) KeyOffset() uint32 {
+   return ParseUint32(self.Reader, self.Profile.Off_ParentLocatorEntry_KeyOffset + self.Offset)
+}
+
+func (self *ParentLocatorEntry) ValueOffset() uint32 {
+   return ParseUint32(self.Reader, self.Profile.Off_ParentLocatorEntry_ValueOffset + self.Offset)
+}
+
+func (self *ParentLocatorEntry) ValueLength() uint16 {
+   return ParseUint16(self.Reader, self.Profile.Off_ParentLocatorEntry_ValueLength + self.Offset)
+}
+func (self *ParentLocatorEntry) DebugString() string {
+    result := fmt.Sprintf("struct ParentLocatorEntry @ %#x:\n", self.Offset)
+    result += fmt.Sprintf("  KeyOffset: %#0x\n", self.KeyOffset())
+    result += fmt.Sprintf("  ValueOffset: %#0x\n", self.ValueOffset())
+    result += fmt.Sprintf("  ValueLength: %#0x\n", self.ValueLength())
     return result
 }
 
@@ -437,6 +534,16 @@ func ParseArray_RegionEntry(profile *VHDXProfile, reader io.ReaderAt, offset int
     result := make([]*RegionEntry, 0, count)
     for i:=0; i<count; i++ {
       value := profile.RegionEntry(reader, offset)
+      result = append(result, value)
+      offset += int64(value.Size())
+    }
+    return result
+}
+
+func ParseArray_ParentLocatorEntry(profile *VHDXProfile, reader io.ReaderAt, offset int64, count int) []*ParentLocatorEntry {
+    result := make([]*ParentLocatorEntry, 0, count)
+    for i:=0; i<count; i++ {
+      value := profile.ParentLocatorEntry(reader, offset)
       result = append(result, value)
       offset += int64(value.Size())
     }

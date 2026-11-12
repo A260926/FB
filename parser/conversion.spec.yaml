@@ -11,5 +11,7 @@ Structs:
   - Metadata
   - MetadataEntry
   - FileParameters
+  - ParentLocator
+  - ParentLocatorEntry
   - GUID
   - Misc

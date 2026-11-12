@@ -18,13 +18,70 @@ type VHDXFile struct {
 	// Expose this reader to our callers: Reassemble the reader from
 	// the BAT
 	bat_reader *BatReader
+
+	// The header copy selected as currently effective (valid CRC32C
+	// and unique highest sequence number).
+	currentHeader *Header
+
+	// Parent disk, only set by NewVHDXFileWithParent.
+	parent *VHDXFile
 }
 
 func (self *VHDXFile) ReadAt(buff []byte, off int64) (int, error) {
+	if self.parent != nil {
+		return readChainAt(self, buff, off)
+	}
 	return self.bat_reader.ReadAt(buff, off)
 }
 
+// NewVHDXFile opens a standalone VHDX image. Differencing disks
+// (HasParent set) are rejected here: they must be opened together with
+// an explicit parent through NewVHDXFileWithParent rather than being
+// silently zero filled.
 func NewVHDXFile(reader io.ReaderAt) (*VHDXFile, error) {
+	self, err := newVHDXFile(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if self.Metadata.HasParent {
+		return nil, errors.New("differencing VHDX requires an explicit parent: " +
+			"open it with NewVHDXFileWithParent")
+	}
+
+	return self, nil
+}
+
+// NewVHDXFileWithParent opens a differencing VHDX image combined with
+// its parent. The parent itself may be another differencing disk opened
+// the same way. The parent is supplied explicitly: parent locator path
+// strings are treated as metadata only and never cause a file to be
+// opened.
+func NewVHDXFileWithParent(reader io.ReaderAt, parent *VHDXFile) (*VHDXFile, error) {
+	if parent == nil {
+		return nil, errors.New("NewVHDXFileWithParent requires a non-nil parent")
+	}
+
+	self, err := newVHDXFile(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if !self.Metadata.HasParent {
+		return nil, errors.New("NewVHDXFileWithParent requires a differencing disk: " +
+			"metadata does not declare a parent")
+	}
+
+	err = validateChain(self, parent)
+	if err != nil {
+		return nil, err
+	}
+
+	self.parent = parent
+	return self, nil
+}
+
+func newVHDXFile(reader io.ReaderAt) (*VHDXFile, error) {
 	profile := NewVHDXProfile()
 	self := &VHDXFile{
 		reader:  reader,
@@ -96,6 +153,11 @@ func NewVHDXFile(reader io.ReaderAt) (*VHDXFile, error) {
 	bat.EntriesPerChunk = (1 << 23) * self.Metadata.LogicalSectorSize / self.Metadata.BlockSize
 	if bat.EntriesPerChunk == 0 {
 		return nil, fmt.Errorf("EntriesPerChunk invalid: %v", bat.EntriesPerChunk)
+	}
+
+	self.currentHeader, err = self.selectCurrentHeader()
+	if err != nil {
+		return nil, err
 	}
 
 	return self, nil
