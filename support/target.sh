@@ -12,4 +12,4 @@ if ! go test -mod=readonly -race -json -count=1 -run '^TestEffectiveRedirect(Liv
 fi
 cat "$log"
 # Read go test JSON with Go's JSON decoder so a log string cannot forge a PASS event.
-go run -mod=readonly author_support/check_events/main.go "$log"
+go run -mod=readonly support/check_events/main.go "$log"
