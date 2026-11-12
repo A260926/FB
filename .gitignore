@@ -1,4 +1,5 @@
 *.o
+.build/
 libschrift.a
 /demo
 /stress

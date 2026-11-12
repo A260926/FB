@@ -83,6 +83,8 @@ typedef struct Curve   Curve;
 typedef struct Cell    Cell;
 typedef struct Outline Outline;
 typedef struct Raster  Raster;
+typedef struct Edge    Edge;
+typedef struct EdgePool EdgePool;
 
 struct Point { double x, y; };
 struct Line  { uint_least16_t beg, end; };
@@ -104,9 +106,33 @@ struct Outline
 
 struct Raster
 {
-	Cell *cells;
-	int   width;
-	int   height;
+	Cell     *cells;
+	int       width;
+	int       height;
+	EdgePool *edges;     /* cover contributions outside of a window */
+	int       x0, y0;    /* window origin in the full image coordinate system */
+	int       x1, y1;    /* window end (exclusive) in the same coordinate system */
+};
+
+/* One cover contribution that fell into a full-image cell outside of the
+ * rasterized window, but inside one of its rows. The cumulative coverage that
+ * determines a pixel's value depends on those contributions, so they cannot
+ * simply be discarded when only a window is rasterized. Since they are also
+ * much rarer than the window's pixels, they are stored sparsely. */
+struct Edge
+{
+	int    x, y;
+	double cover;
+};
+
+/* Sparse store for the edges above. Only used by windowed rendering;
+ * regular glyph rendering never allocates it. */
+struct EdgePool
+{
+	Edge  *data;
+	size_t num;
+	size_t cap;
+	int    failed;
 };
 
 struct SFT_Font
@@ -174,12 +200,19 @@ static int  is_flat(Outline *outl, Curve curve);
 static int  tesselate_curve(Curve curve, Outline *outl);
 static int  tesselate_curves(Outline *outl);
 /* silhouette rasterization */
-static void draw_line(Raster buf, Point origin, Point goal);
-static void draw_lines(Outline *outl, Raster buf);
+static int  raster_add(Raster buf, int x, int y, double xAverage, double yDifference);
+static int  draw_line(Raster buf, Point origin, Point goal);
+static int  draw_lines(Outline *outl, Raster buf);
+/* edge pool management */
+static int  edge_pool_add(EdgePool *pool, int x, int y, double cover);
+static void edge_pool_free(EdgePool *pool);
 /* post-processing */
 static void post_process(Raster buf, uint8_t *image);
 /* glyph rendering */
 static int  render_outline(Outline *outl, double transform[6], SFT_Image image);
+static int  render_window(Outline *outl, double transform[6], SFT_Target target,
+                          int x, int y, int gx0, int gy0, int minWidth, int minHeight,
+                          int gx1, int gy1);
 
 /* function implementations */
 
@@ -394,6 +427,164 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 	if (decode_outline(sft->font, outline, 0, &outl) < 0)
 		goto failure;
 	if (render_outline(&outl, transform, image) < 0)
+		goto failure;
+
+	free_outline(&outl);
+	return 0;
+
+failure:
+	free_outline(&outl);
+	return -1;
+}
+
+/* Renders the part of the glyph's tightly fitting image that falls into
+ * [gx0, gx1) x [gy0, gy1), where that window is expressed in the coordinate
+ * system of the full image that sft_render would produce. Only the cells
+ * inside this window are allocated; the cover values of cells outside of it
+ * within its rows are tracked sparsely because they still contribute to the
+ * cumulative coverage used when converting cells to pixel values. */
+static int
+render_window(Outline *outl, double transform[6], SFT_Target target, int x, int y,
+              int gx0, int gy0, int minWidth, int minHeight, int gx1, int gy1)
+{
+	Cell *cells = NULL;
+	EdgePool pool;
+	Raster buf;
+	uint8_t *window = NULL;
+	size_t numPixels, i;
+	int width, height;
+
+	width  = gx1 - gx0;
+	height = gy1 - gy0;
+	if (width <= 0 || height <= 0)
+		return 0;
+
+	numPixels = (size_t) width * (size_t) height;
+
+	cells  = calloc(numPixels, sizeof *cells);
+	window = calloc(numPixels, 1);
+	if (!cells || !window) {
+		free(cells);
+		free(window);
+		return -1;
+	}
+	memset(&pool, 0, sizeof pool);
+	buf.cells  = cells;
+	buf.width  = width;
+	buf.height = height;
+	buf.edges  = &pool;
+	buf.x0     = gx0;
+	buf.y0     = gy0;
+	buf.x1     = gx0 + width;
+	buf.y1     = gy0 + height;
+
+	transform_points(outl->numPoints, outl->points, transform);
+
+	clip_points(outl->numPoints, outl->points, minWidth, minHeight);
+
+	if (tesselate_curves(outl) < 0 ||
+	    draw_lines(outl, buf) < 0 || pool.failed) {
+		edge_pool_free(&pool);
+		free(cells);
+		free(window);
+		return -1;
+	}
+
+	post_process(buf, window);
+
+	/* Only now that the whole glyph has been rasterized successfully are the
+	 * pixels copied, so a failure can never leave a partial glyph behind.
+	 * The rendered window is in glyph-image coordinates; the placement
+	 * rectangle's top-left corner lands at (x, y) in the target. */
+	for (i = 0; i < (size_t) height; ++i) {
+		memcpy((uint8_t *) target.pixels + (size_t) (gy0 + y + (int) i) * target.stride
+		        + (size_t) (gx0 + x),
+		       window + i * (size_t) width, (size_t) width);
+	}
+
+	edge_pool_free(&pool);
+	free(cells);
+	free(window);
+	return 0;
+}
+
+int
+sft_render_into(const SFT *sft, SFT_Glyph glyph, SFT_Target target, int x, int y)
+{
+	uint_fast32_t outline;
+	double transform[6];
+	int bbox[4];
+	Outline outl;
+	SFT_GMetrics metrics;
+	long long gx0, gy0, gx1, gy1;
+
+	/* Reject nonsensical target dimensions first, then validate the glyph:
+	 * an invalid glyph is an error even when the target is empty. Using the
+	 * metrics entry point for this also rejects glyph ids whose spacing
+	 * table lookup would otherwise wrap around silently. */
+	if (target.width < 0 || target.height < 0)
+		return -1;
+	if (sft_gmetrics(sft, glyph, &metrics) < 0)
+		return -1;
+
+	/* An empty target is a successful no-op for a valid glyph; its stride
+	 * and pointer are irrelevant in that case, and a NULL pointer is fine
+	 * because nothing can be written. */
+	if (target.width == 0 || target.height == 0)
+		return 0;
+
+	/* Validate the rest of the target before looking at the outline. */
+	if (target.stride < (size_t) target.width)
+		return -1;
+	if (!target.pixels)
+		return -1;
+	/* (height - 1) * stride + width must not overflow size_t. */
+	if ((size_t) (target.height - 1) > (SIZE_MAX - (size_t) target.width) / target.stride)
+		return -1;
+
+	/* A valid glyph without an outline (e.g. a space) renders nothing. */
+	if (metrics.minWidth <= 0 || metrics.minHeight <= 0)
+		return 0;
+
+	if (outline_offset(sft->font, glyph, &outline) < 0 || !outline)
+		return -1;
+	if (glyph_bbox(sft, outline, bbox) < 0)
+		return -1;
+
+	/* The placement may be anywhere in the int range; clipping must not
+	 * overflow, so the arithmetic is done in a wider type. */
+	gx0 = x < 0 ? -(long long) x : 0;
+	gy0 = y < 0 ? -(long long) y : 0;
+	gx1 = (long long) target.width  - x;
+	gy1 = (long long) target.height - y;
+	if (gx1 > metrics.minWidth)
+		gx1 = metrics.minWidth;
+	if (gy1 > metrics.minHeight)
+		gy1 = metrics.minHeight;
+	if (gx1 <= gx0 || gy1 <= gy0)
+		return 0;
+
+	transform[0] = sft->xScale / sft->font->unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[4] = sft->xOffset - bbox[0];
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		transform[3] = -sft->yScale / sft->font->unitsPerEm;
+		transform[5] = bbox[3] - sft->yOffset;
+	} else {
+		transform[3] = +sft->yScale / sft->font->unitsPerEm;
+		transform[5] = sft->yOffset - bbox[1];
+	}
+
+	memset(&outl, 0, sizeof outl);
+	if (init_outline(&outl) < 0)
+		goto failure;
+
+	if (decode_outline(sft->font, outline, 0, &outl) < 0)
+		goto failure;
+
+	if (render_window(&outl, transform, target, x, y, (int) gx0, (int) gy0,
+	                  metrics.minWidth, metrics.minHeight, (int) gx1, (int) gy1) < 0)
 		goto failure;
 
 	free_outline(&outl);
@@ -1424,7 +1615,7 @@ tesselate_curves(Outline *outl)
 }
 
 /* Draws a line into the buffer. Uses a custom 2D raycasting algorithm to do so. */
-static void
+static int
 draw_line(Raster buf, Point origin, Point goal)
 {
 	Point delta;
@@ -1436,7 +1627,6 @@ draw_line(Raster buf, Point origin, Point goal)
 	struct { int x, y; } pixel;
 	struct { int x, y; } dir;
 	int step, numSteps = 0;
-	Cell *restrict cptr, cell;
 
 	delta.x = goal.x - origin.x;
 	delta.y = goal.y - origin.y;
@@ -1444,7 +1634,7 @@ draw_line(Raster buf, Point origin, Point goal)
 	dir.y = SIGN(delta.y);
 
 	if (!dir.y) {
-		return;
+		return 0;
 	}
 	
 	crossingIncr.x = dir.x ? fabs(1.0 / delta.x) : 1.0;
@@ -1483,12 +1673,8 @@ draw_line(Raster buf, Point origin, Point goal)
 	for (step = 0; step < numSteps; ++step) {
 		xAverage = origin.x + (prevDistance + nextDistance) * halfDeltaX;
 		yDifference = (nextDistance - prevDistance) * delta.y;
-		cptr = &buf.cells[pixel.y * buf.width + pixel.x];
-		cell = *cptr;
-		cell.cover += yDifference;
-		xAverage -= (double) pixel.x;
-		cell.area += (1.0 - xAverage) * yDifference;
-		*cptr = cell;
+		if (raster_add(buf, pixel.x, pixel.y, xAverage, yDifference) < 0)
+			return -1;
 		prevDistance = nextDistance;
 		int alongX = nextCrossing.x < nextCrossing.y;
 		pixel.x += alongX ? dir.x : 0;
@@ -1500,15 +1686,68 @@ draw_line(Raster buf, Point origin, Point goal)
 
 	xAverage = origin.x + (prevDistance + 1.0) * halfDeltaX;
 	yDifference = (1.0 - prevDistance) * delta.y;
-	cptr = &buf.cells[pixel.y * buf.width + pixel.x];
+	if (raster_add(buf, pixel.x, pixel.y, xAverage, yDifference) < 0)
+		return -1;
+	return 0;
+}
+
+/* Adds one ray casting contribution to the raster buffer.
+ * When only a window of the full glyph image is rasterized, cells outside of
+ * it still affect the cumulative coverage of the cells inside it, because
+ * post-processing carries that cumulative value from row to row. Cover
+ * contributions within the window's rows that fall outside of it are
+ * therefore recorded in a sparse pool instead of being discarded. */
+static int
+raster_add(Raster buf, int x, int y, double xAverage, double yDifference)
+{
+	Cell *cptr, cell;
+	if (y < buf.y0 || y >= buf.y1)
+		return 0;
+	if (x < buf.x0 || x >= buf.x1) {
+		if (x >= 0 && buf.edges && !edge_pool_add(buf.edges, x, y, yDifference))
+			return -1;
+		return 0;
+	}
+	cptr = &buf.cells[(y - buf.y0) * buf.width + (x - buf.x0)];
 	cell = *cptr;
 	cell.cover += yDifference;
-	xAverage -= (double) pixel.x;
+	xAverage -= (double) x;
 	cell.area += (1.0 - xAverage) * yDifference;
 	*cptr = cell;
+	return 0;
+}
+
+static int
+edge_pool_add(EdgePool *pool, int x, int y, double cover)
+{
+	Edge *mem;
+	size_t cap;
+	if (pool->num >= pool->cap) {
+		cap = pool->cap ? 2U * pool->cap : 16U;
+		if (!(mem = reallocarray(pool->data, cap, sizeof *pool->data))) {
+			pool->failed = 1;
+			return 0;
+		}
+		pool->data = mem;
+		pool->cap  = cap;
+	}
+	pool->data[pool->num].x     = x;
+	pool->data[pool->num].y     = y;
+	pool->data[pool->num].cover = cover;
+	++pool->num;
+	return 1;
 }
 
 static void
+edge_pool_free(EdgePool *pool)
+{
+	free(pool->data);
+	pool->data = NULL;
+	pool->num  = 0;
+	pool->cap  = 0;
+}
+
+static int
 draw_lines(Outline *outl, Raster buf)
 {
 	unsigned int i;
@@ -1516,25 +1755,85 @@ draw_lines(Outline *outl, Raster buf)
 		Line  line   = outl->lines[i];
 		Point origin = outl->points[line.beg];
 		Point goal   = outl->points[line.end];
-		draw_line(buf, origin, goal);
+		if (draw_line(buf, origin, goal) < 0)
+			return -1;
+	}
+	return 0;
+}
+
+/* Sorts the sparse edges the way the flat full-image post-processing would
+ * consume them: row-major, and within one cell in the order in which the
+ * ray casting generated them (the sort is stable). The arrays involved are
+ * small, so a simple insertion sort is fine and, unlike qsort(), cannot
+ * allocate. */
+static void
+sort_edges(Edge *edges, size_t num)
+{
+	size_t i, j;
+	for (i = 1; i < num; ++i) {
+		Edge tmp = edges[i];
+		for (j = i; j > 0; --j) {
+			const Edge *prev = &edges[j - 1];
+			if (prev->y < tmp.y) break;
+			if (prev->y == tmp.y && prev->x < tmp.x) break;
+			/* Equal positions keep their generation order. */
+			edges[j] = edges[j - 1];
+		}
+		edges[j] = tmp;
 	}
 }
 
-/* Integrate the values in the buffer to arrive at the final grayscale image. */
+/* Integrate the values in the buffer to arrive at the final grayscale image.
+ * For a windowed raster, the cover values of the cells outside of the window
+ * are folded in at the exact position where the flat post-processing of the
+ * full image would have consumed them: those left of the window at the start
+ * of a row, those right of it at the end. */
 static void
 post_process(Raster buf, uint8_t *image)
 {
 	Cell cell;
 	double accum = 0.0, value;
-	unsigned int i, num;
-	num = (unsigned int) buf.width * (unsigned int) buf.height;
-	for (i = 0; i < num; ++i) {
-		cell     = buf.cells[i];
-		value    = fabs(accum + cell.area);
-		value    = MIN(value, 1.0);
-		value    = value * 255.0 + 0.5;
-		image[i] = (uint8_t) value;
-		accum   += cell.cover;
+	size_t i, edge = 0;
+	int x, y;
+
+	if (buf.edges && buf.edges->num)
+		sort_edges(buf.edges->data, buf.edges->num);
+
+	for (y = 0; y < buf.height; ++y) {
+		if (buf.edges) {
+			while (edge < buf.edges->num && buf.edges->data[edge].y == buf.y0 + y &&
+			       buf.edges->data[edge].x < buf.x0) {
+				int ex = buf.edges->data[edge].x;
+				double cover = 0.0;
+				while (edge < buf.edges->num && buf.edges->data[edge].y == buf.y0 + y &&
+				       buf.edges->data[edge].x == ex) {
+					cover += buf.edges->data[edge].cover;
+					++edge;
+				}
+				accum += cover;
+			}
+		}
+		for (x = 0; x < buf.width; ++x) {
+			i        = (size_t) y * (size_t) buf.width + (size_t) x;
+			cell     = buf.cells[i];
+			value    = fabs(accum + cell.area);
+			value    = MIN(value, 1.0);
+			value    = value * 255.0 + 0.5;
+			image[i] = (uint8_t) value;
+			accum   += cell.cover;
+		}
+		if (buf.edges) {
+			while (edge < buf.edges->num && buf.edges->data[edge].y == buf.y0 + y) {
+				int ex = buf.edges->data[edge].x;
+				double cover = 0.0;
+				while (edge < buf.edges->num && buf.edges->data[edge].y == buf.y0 + y &&
+				       buf.edges->data[edge].x == ex) {
+					cover += buf.edges->data[edge].cover;
+					++edge;
+				}
+				accum += cover;
+			}
+		}
 	}
 }
 
@@ -1555,6 +1854,11 @@ render_outline(Outline *outl, double transform[6], SFT_Image image)
 	buf.cells  = cells;
 	buf.width  = image.width;
 	buf.height = image.height;
+	buf.edges  = NULL;
+	buf.x0     = 0;
+	buf.y0     = 0;
+	buf.x1     = image.width;
+	buf.y1     = image.height;
 
 	transform_points(outl->numPoints, outl->points, transform);
 
@@ -1565,7 +1869,10 @@ render_outline(Outline *outl, double transform[6], SFT_Image image)
 		return -1;
 	}
 
-	draw_lines(outl, buf);
+	if (draw_lines(outl, buf) < 0) {
+		STACK_FREE(cells);
+		return -1;
+	}
 
 	post_process(buf, image.pixels);
 

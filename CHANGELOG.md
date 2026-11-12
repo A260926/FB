@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+- Added `SFT_Target` and `sft_render_into` for rendering directly into
+  grayscale image buffers with per-row padding, such as shared glyph atlases.
+  Unlike `sft_render`, it accepts a stride, clips to the target bounds and
+  leaves the padding untouched. Its temporary rasterization memory is bounded
+  by the visible intersection rather than the glyph's full bitmap.
+
 ## v0.10.2
 - Support for Unicode codepoints outside of the Basic Multilingual Plane.
   Things like Hieroglyphs should work now! (Courtesy of `@flying-kestrel`!)

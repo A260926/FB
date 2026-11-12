@@ -6,7 +6,7 @@ include config.mk
 
 VERSION=0.10.2
 
-.PHONY: all clean install uninstall dist
+.PHONY: all clean install uninstall dist regress
 
 all: libschrift.a libschrift.pc demo stress
 
@@ -28,12 +28,17 @@ stress: stress.o libschrift.a
 stress.o: stress.c schrift.h util/arg.h
 	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS)
 
+regress:
+	sh regress/baseline.sh
+	sh regress/check_target.sh
+
 clean:
 	rm -f *.o
 	rm -f util/*.o
 	rm -f libschrift.a
 	rm -f demo
 	rm -f stress
+	@if test -d .build; then rm -rf .build; fi
 
 install: libschrift.a libschrift.pc schrift.h schrift.3
 	# libschrift.a

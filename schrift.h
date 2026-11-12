@@ -34,6 +34,7 @@ typedef struct SFT_LMetrics SFT_LMetrics;
 typedef struct SFT_GMetrics SFT_GMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;
 typedef struct SFT_Image    SFT_Image;
+typedef struct SFT_Target   SFT_Target;
 
 struct SFT
 {
@@ -74,6 +75,14 @@ struct SFT_Image
 	int   height;
 };
 
+struct SFT_Target
+{
+	void  *pixels;
+	int    width;
+	int    height;
+	size_t stride;
+};
+
 const char *sft_version(void);
 
 SFT_Font *sft_loadmem (const void *mem, size_t size);
@@ -86,6 +95,8 @@ int sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics);
 int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);
 int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
+int sft_render_into(const SFT *sft, SFT_Glyph glyph, SFT_Target target,
+                    int x, int y);
 
 #ifdef __cplusplus
 }

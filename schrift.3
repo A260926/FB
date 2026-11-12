@@ -26,6 +26,8 @@
 .Fn sft_kerning "const SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "SFT_Kerning *kerning"
 .Ft int
 .Fn sft_render "const SFT *sft" "SFT_Glyph glyph" "SFT_Image image"
+.Ft int
+.Fn sft_render_into "const SFT *sft" "SFT_Glyph glyph" "SFT_Target target" "int x" "int y"
 .Sh DESCRIPTION
 The function
 .Fn sft_version
@@ -172,6 +174,108 @@ That is to say, they are
 These properties make it very easy to use images rendered with
 .Fn sft_render
 as alpha masks.
+.Ss Rendering into padded image buffers
+.Fn sft_render
+always expects a tightly packed image.
+When the destination has padding between its rows, for instance because it
+is a shared grayscale glyph atlas, use
+.Fn sft_render_into
+instead.
+It takes the same
+.Vt SFT
+(including its flags, scales and fractional offsets), so both functions
+interpret the outline identically.
+.sp
+The target is described by a structure in
+.Va target
+that is to be filled out by the caller.
+The fields are as follows:
+.Bl -tag -width 8
+.It Va pixels
+A pointer to the first byte of the destination buffer
+.It Va width
+The number of addressable pixels per row
+.It Va height
+The number of addressable rows
+.It Va stride
+The number of bytes between the start of consecutive rows.
+It must be at least
+.Va width ;
+remaining bytes of each row are padding and are never touched
+.El
+.sp
+The arguments
+.Va x
+and
+.Va y
+are the position inside the target at which the top-left corner of the
+rectangle that
+.Fn sft_render
+would produce is placed.
+They are not pen positions: neither the left side bearing nor the
+.Va yOffset
+of the glyph metrics is applied again.
+In other words, the effect is as if
+.Fn sft_render
+had been called with an image sized according to
+.Va minWidth
+and
+.Va minHeight ,
+after which that whole rectangle was moved to
+.Va x ,
+.Va y ,
+clipped to the target bounds and copied over the target.
+Pixels of the rectangle for which the rendered image is zero are written as
+zero as well, so the glyph is drawn in an opaque rectangle.
+Pixels outside of the rectangle, including the row padding, are left
+untouched.
+Glyphs without an outline, such as a space, write nothing.
+The same rules apply with and without the
+.Dv SFT_DOWNWARD_Y
+flag, and to compound glyphs.
+.sp
+Only a finite, positive scaling is supported, and the old metrics are
+assumed to yield dimensions that fit into an
+.Vt int .
+.sp
+.Fn sft_render_into
+returns -1 without modifying the target if
+.Va width
+or
+.Va height
+is negative, if
+.Va stride
+is smaller than
+.Va width ,
+if
+.Va pixels
+is
+.Dv NULL
+while the target is non-empty, or if the accessible span
+.Va (height-1)*stride+width
+would overflow
+.Vt size_t .
+Negative dimensions are rejected before the glyph is validated.
+A zero
+.Va width
+or
+.Va height
+is a successful no-op for a valid glyph; in that case
+.Va pixels
+may be
+.Dv NULL
+and
+.Va stride
+is ignored.
+An invalid glyph returns -1 even if the target is empty.
+.Pp
+.Fn sft_render_into
+never leaves a partial glyph behind: if it fails internally, the target is
+not modified.
+Temporary rasterization memory is proportional to the area of the
+intersection between the target and the glyph's covering rectangle, not to
+the area of the glyph's full bitmap.
+Outline decoding itself is not subject to that bound.
 .Sh RETURN VALUES
 .Fn sft_loadmem
 and
@@ -186,7 +290,8 @@ on error.
 .Fn sft_kerning ,
 .Fn sft_extents ,
 and
-.Fn sft_render
+.Fn sft_render ,
+.Fn sft_render_into
 all return 0 on success and -1 on error.
 .Sh EXAMPLES
 See the source code of the
