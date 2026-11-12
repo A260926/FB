@@ -196,6 +196,22 @@ each `article` have any HTML stripped if you let feedparser normalize the output
 If you really need the HTML in those elements, there are always the originals:
 e.g., `meta['atom:subtitle']['#']`.
 
+#### Atom XHTML text constructs
+
+For an Atom text construct (`title`, `subtitle`, `summary`, `rights`, or
+`content`) declared with `type="xhtml"`, feedparser returns the inline XHTML as
+a **fragment string**, not a parsed object. The string starts with the XHTML
+wrapper element as it appeared in the feed (for example
+`<div xmlns="http://www.w3.org/1999/xhtml">…</div>`); no extra wrapper is added
+and no body tags are removed. The fragment can be parsed again as XML: element
+and attribute order, namespace prefixes and the namespace declarations needed
+to interpret them are preserved, and text, CDATA and attribute values are XML
+escaped exactly once at their position, so decoded entities never become live
+markup. The same fragment string is used for the normalized `summary` /
+`description` fields and for the native element's `#` value when
+`normalize` is `false`. A `type="xhtml"` attribute on an element outside the
+Atom namespace does not trigger this behavior.
+
 ### List of meta properties
 
 * title
