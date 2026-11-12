@@ -1,0 +1,11 @@
+--- a/src/read/line.rs
++++ b/src/read/line.rs
+@@ -782,7 +782,7 @@
+                 if !self.tombstone {
+                     let address_size = program.header().address_size();
+                     self.address = self.address.add_sized(u64::from(operand), address_size)?;
+-                    self.op_index.0 = 0;
++                    // regression: retain previous operation slot
+                 }
+                 false
+             }

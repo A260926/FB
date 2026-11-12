@@ -1,0 +1,9 @@
+[package]
+name = "line-baseline"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+gimli = { path = "../..", default-features = false, features = ["read", "std"] }

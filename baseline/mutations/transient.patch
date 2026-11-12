@@ -1,0 +1,11 @@
+--- a/src/read/line.rs
++++ b/src/read/line.rs
+@@ -854,7 +854,7 @@
+             // - Special - specified in Section 6.2.5.1, steps 4-7
+             // - Copy - specified in Section 6.2.5.2
+             // The reset behaviour is the same in both cases.
+-            self.discriminator = 0;
++            // regression: retain the previous discriminator
+             self.basic_block = false;
+             self.prologue_end = false;
+             self.epilogue_begin = false;
