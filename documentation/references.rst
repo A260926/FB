@@ -1,0 +1,94 @@
+..  
+     Copyright 2015 Pixar
+  
+     Licensed under the terms set forth in the LICENSE.txt file available at
+     https://opensubdiv.org/license.
+  
+
+References
+----------
+
+
+.. contents::
+   :local:
+   :backlinks: none
+
+----
+
+References
+==========
+
+
+    | *Analytic Displacement Mapping using Hardware Tessellation*
+    | Matthias Niessner, Charles Loop
+    | ACM Transactions on Graphics, Vol. 32 No. 3 Article 26 June 2013
+    | `<https://doi.org/10.1145/2487228.2487234>`_
+    |
+    | *Feature Adaptive GPU Rendering of Catmull-Clark Subdivision Surfaces*
+    | Matthias Niessner, Charles Loop, Mark Meyer, and Tony DeRose
+    | ACM Transactions on Graphics, Vol. 31 No. 1 Article 6 January 2012
+    | `<https://doi.org/10.1145/2077341.2077347>`_
+    |
+    | *Efficient Evaluation of Semi-Smooth Creases in Catmull-Clark Subdivision Surfaces*
+    | Matthias Niessner, Charles Loop, and Guenter Greiner.
+    | Eurographics Proceedings, Cagliari, 2012
+    | `<https://doi.org/10.2312/conf/EG2012/short/041-044>`_
+    |
+    | *Approximating Subdivision Surfaces with Gregory Patches for Hardware Tessellation*
+    | Charles Loop, Scott Schaefer, Tianyun Ni, Ignacio Castano
+    | SIGGRAPH Asia Conference Proceedings 2009
+    | `<https://doi.org/10.1145/1661412.1618497>`_
+    |
+    | GPU Smoothing of Quad Meshes
+    | T. L. Ni, Y. Yeo, A. Myles, V. Goel and J. Peters
+    | Proc. IEEE SMI 2008
+    | `<https://www.cise.ufl.edu/research/SurfLab/papers/smi08.pdf>`_
+    | `<https://doi.org/10.1109/SMI.2008.4547938>`_
+    |
+    | *Fast Parallel Construction of Smooth Surfaces from Meshes with Tri/Quad/Pent Facets*
+    | A. Myles and T. Ni and J. Peters
+    | Eurographics Symposium on Geometry Processing 2008
+    | `<https://www.cise.ufl.edu/research/SurfLab/papers/08poly.pdf>`_
+    | `<https://doi.org/10.1111/j.1467-8659.2008.01276.x>`_
+    |
+    | *Approximating Catmull-Clark Subdivision Surfaces with Bicubic Patches*
+    | Charles Loop, Scott Schaefer
+    | ACM Transactions on Graphics, Vol. 27 No. 1 Article 8 March 2008
+    | `<https://doi.org/10.1145/1330511.1330519>`_
+    |
+    | *Rapid Evaluation of Catmull-Clark Subdivision Surfaces*
+    | Jeffrey Bolz and Peter Schroder
+    | Web3D Proceedings 2002
+    | `<https://www.multires.caltech.edu/pubs/fastsubd.pdf>`_
+    | `<https://doi.org/10.1145/504502.504505>`_
+    |
+    | *Piecewise Smooth Subdivision Surfaces with Normal Control*
+    | Henning Biermann, Adi Levin and Denis Zorin
+    | SIGGRAPH 2000 Conference Proceedings
+    | `<https://doi.org/10.1145/344779.344841>`_
+    |
+    | *Subdivision for Modeling and Animation*
+    | Denis Zorin, Peter Schroder
+    | Course Notes of SIGGRAPH 1999
+    | `<https://www.multires.caltech.edu/pubs/sig99notes.pdf>`_
+    |
+    | *Exact Evaluation of Catmull-Clark Subdivision Surfaces at Arbitrary Parameter Values*
+    | Jos Stam
+    | SIGGRAPH 98 Conference Proceedings, Annual Conference Series,  July 1998
+    | `<https://www.dgp.toronto.edu/people/stam/reality/Research/pdf/sig98.pdf>`_
+    | `<https://doi.org/10.1145/280814.280945>`_
+    |
+    | *Subdivision Surfaces in Character Animation*
+    | Tony DeRose, Michael Kass, Tien Truong
+    | Proceedings of SIGGRAPH 1998
+    | `<https://research.pixar.com/docs/1998.SiggraphPapers.DKT.pdf>`_
+    | `<https://doi.org/10.1145/280814.280826>`_
+    |
+    | *Efficient, Fair Interpolation Using Catmull-Clark Surfaces*
+    | Mark Halstead, Michael Kass, Tony DeRose
+    | SIGGRAPH 93 Conference Proceedings
+    | `<https://doi.org/10.1145/166117.166121>`_
+    |
+    | *Recursively generated B-spline surfaces on arbitrary topological meshes*
+    | Catmull, E.; Clark, J. Computer-Aided Design 10 (6) (1978)
+    | `<https://doi.org/10.1016/0010-4485%2878%2990110-0>`_
