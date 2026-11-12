@@ -182,5 +182,12 @@ typedef struct glContext
 
 	// Bits 0..2: polygon-mode edges v0-v1, v1-v2, v2-v0. One triangle call.
 	int assemble_edges;
+
+	// Synchronous occlusion query (pglBeginOcclusionQuery/pglEndOcclusionQuery).
+	// At most one active query per context; each context keeps its own count.
+	// occlusion_active gates accumulation, so an inactive query costs one
+	// branch per tested fragment and nothing else.
+	GLboolean occlusion_active;
+	GLuint64 occlusion_samples;
 } glContext;
 

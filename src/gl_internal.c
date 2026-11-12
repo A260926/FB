@@ -1,6 +1,16 @@
 
 static glContext* c;
 
+// One passing sample for the active occlusion query (if any). Called only
+// after a generated fragment has survived clipping/scissor, the fragment
+// shader (no discard) and the stencil/depth tests, so the same pixel covered
+// twice is counted twice while MRT fragments are counted only once.
+static inline void pgl_count_query_sample(void)
+{
+	if (c->occlusion_active)
+		++c->occlusion_samples;
+}
+
 static vec4 blend_pixel(vec4 src, vec4 dst, int buf);
 static int fragment_processing(int x, int y, float z);
 static void draw_pixel(vec4 cf, int x, int y, float z, int do_frag_processing);
@@ -2688,6 +2698,10 @@ static void draw_pixel(vec4 cf, int x, int y, float z, int do_frag_processing)
 	if (do_frag_processing && !fragment_processing(x, y, z)) {
 		return;
 	}
+	// The pglDrawFrame helpers call this with do_frag_processing == GL_FALSE;
+	// those extension draws are outside the glDraw* pipeline and never count.
+	if (do_frag_processing)
+		pgl_count_query_sample();
 	if (!c->fbo_color_is_rt) {
 		draw_pixel_fb(&c->back_buffer, cf, x, y);
 		return;
@@ -2713,6 +2727,9 @@ static void draw_fragment(Shader_Builtins* b, int x, int y, int do_frag_processi
 	if (do_frag_processing && !fragment_processing(x, y, b->gl_FragDepth)) {
 		return;
 	}
+	// gl_FragDepth-capable shaders defer the test until after the FS, so this
+	// is also the point where a discarded fragment is known to not count.
+	pgl_count_query_sample();
 
 	if (!c->fbo_color_is_rt) {
 		draw_pixel_fb(&c->back_buffer, b->gl_FragColor, x, y);

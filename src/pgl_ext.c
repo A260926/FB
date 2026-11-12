@@ -17,6 +17,27 @@ PGLDEF void pglClearScreen(void)
 	memset(c->back_buffer.buf, 255, c->back_buffer.w * c->back_buffer.h * sizeof(pix_t));
 }
 
+PGLDEF GLboolean pglBeginOcclusionQuery(void)
+{
+	// Nested queries are not allowed; leave the running query untouched.
+	PGL_ERR_RET_VAL(c->occlusion_active, GL_INVALID_OPERATION, GL_FALSE);
+
+	c->occlusion_samples = 0;
+	c->occlusion_active = GL_TRUE;
+	return GL_TRUE;
+}
+
+PGLDEF GLboolean pglEndOcclusionQuery(GLuint64* samples)
+{
+	// No active query, or a NULL output: keep any active query and the
+	// caller's storage exactly as they were.
+	PGL_ERR_RET_VAL(!c->occlusion_active || !samples, GL_INVALID_OPERATION, GL_FALSE);
+
+	c->occlusion_active = GL_FALSE;
+	*samples = c->occlusion_samples;
+	return GL_TRUE;
+}
+
 PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation)
 {
 	c->programs.a[c->cur_program].vs_output_size = n;

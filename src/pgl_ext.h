@@ -25,6 +25,30 @@ typedef struct pgl_copy_data
 
 PGLDEF void pglClearScreen(void);
 
+// Synchronous occlusion query. A context has at most one active query at a
+// time. pglBeginOcclusionQuery() zeroes the per-context sample counter and
+// starts accumulation; pglEndOcclusionQuery() stops it and writes the count
+// to *samples. Both return GL_TRUE on success.
+//
+// The counter is incremented once for every fragment produced by the
+// glDrawArrays/glDrawElements family (including instanced variants) that
+// survives clipping and the scissor test, is not discarded by the fragment
+// shader, and then passes the stencil and depth tests. It is a count of
+// passing samples, not a count of colored framebuffer pixels: the same pixel
+// is counted once per qualifying fragment even if it is covered repeatedly,
+// and a fragment writing several color attachments is still counted once.
+// Fragments count regardless of the color write mask, the depth write mask,
+// or all draw buffers being GL_NONE. glClear() is never counted; fragments
+// that may write gl_FragDepth are tested with the shader-written depth, and
+// discardable fragments are never counted before they are discarded.
+// put_pixel() and the other direct pgl drawing helpers are not counted.
+//
+// Nested Begin, End without an active query, and End with a NULL pointer
+// return GL_FALSE and set GL_INVALID_OPERATION; the active query (if any)
+// and the caller's *samples are left untouched.
+PGLDEF GLboolean pglBeginOcclusionQuery(void);
+PGLDEF GLboolean pglEndOcclusionQuery(GLuint64* samples);
+
 //This isn't possible in regular OpenGL, changing the interpolation of vs output of
 //an existing shader.  You'd have to switch between 2 almost identical shaders.
 PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation);
