@@ -1,0 +1,10 @@
+./client.go
+./doc.go
+./error.go
+./grab.go
+./rate_limiter.go
+./request.go
+./response.go
+./sparse_ranges.go
+./transfer.go
+./util.go
