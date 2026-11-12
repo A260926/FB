@@ -36,6 +36,7 @@ install:
 	$(INSTALL) $(IFLAGS) man/voro++.1 $(PREFIX)/man/man1
 	$(INSTALL) $(IFLAGS) src/libvoro++.a $(PREFIX)/lib
 	$(INSTALL) $(IFLAGS) src/voro++.hh $(PREFIX)/include/voro++
+	$(INSTALL) $(IFLAGS) src/capacity.hh $(PREFIX)/include/voro++
 	$(INSTALL) $(IFLAGS) src/c_loops.hh $(PREFIX)/include/voro++
 	$(INSTALL) $(IFLAGS) src/cell.hh $(PREFIX)/include/voro++
 	$(INSTALL) $(IFLAGS) src/common.hh $(PREFIX)/include/voro++
@@ -56,6 +57,7 @@ uninstall:
 	rm -f $(PREFIX)/man/man1/voro++.1
 	rm -f $(PREFIX)/lib/libvoro++.a
 	rm -f $(PREFIX)/include/voro++/voro++.hh
+	rm -f $(PREFIX)/include/voro++/capacity.hh
 	rm -f $(PREFIX)/include/voro++/c_loops.hh
 	rm -f $(PREFIX)/include/voro++/cell.hh
 	rm -f $(PREFIX)/include/voro++/common.hh

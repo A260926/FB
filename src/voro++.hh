@@ -329,5 +329,6 @@
 #include "v_compute.hh"
 #include "c_loops.hh"
 #include "wall.hh"
+#include "capacity.hh"
 
 #endif

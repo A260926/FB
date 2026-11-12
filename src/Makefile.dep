@@ -16,3 +16,6 @@ pre_container.o: pre_container.cc config.hh pre_container.hh c_loops.hh \
 container_prd.o: container_prd.cc container_prd.hh config.hh common.hh \
   v_base.hh worklist.hh cell.hh c_loops.hh v_compute.hh unitcell.hh \
   rad_option.hh
+capacity.o: capacity.cc capacity.hh voro++.hh config.hh common.hh cell.hh \
+  v_base.hh worklist.hh rad_option.hh container.hh c_loops.hh \
+  v_compute.hh unitcell.hh container_prd.hh pre_container.hh wall.hh
