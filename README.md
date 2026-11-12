@@ -298,6 +298,56 @@ _As defined by CSS 4 and / or jQuery._
       Selects elements that are part of the scope of the current selector. This
       uses the context from the passed options.
 
+## Rank contract checks
+
+`:nth-child(An+B [of S])` and the other positional pseudo-classes follow a
+specific ordering contract. The `checks/` directory contains regression tests
+that lock it in, so a compiler change cannot silently switch from "filter
+siblings first, then number" to "number first, then filter":
+
+- With an `of S` list, the matching sibling set is computed **before** any
+  numbering. A node that fails `S` never occupies a slot, even when it sits at
+  the correct raw position, and the candidate itself has to match `S`.
+- Numbering starts at one inside the filtered set. `:nth-last-child` and
+  `:nth-last-of-type` count the same set from the last sibling.
+- Without an `of` list, only element siblings are counted; text and comment
+  nodes never take an element position. `:nth-of-type` uses a separate domain
+  restricted to siblings sharing the candidate's tag name.
+- With `cacheResults: false`, a compiled query stays live: changing classes,
+  moving siblings, or inserting non-element nodes changes the result on the
+  next evaluation without recompiling.
+
+Run everything through the single entry point:
+
+```sh
+sh checks/check-target.sh
+```
+
+It first builds the project, then:
+
+1. Runs `checks/rank-contract.test.mjs` with Node's built-in test runner
+   (`node --test`). It keeps its own small page model — element order, tag,
+   classes and direct-child markers per parent — and derives every expectation
+   from the integer An+B formula. The reference never calls the library's
+   positional pseudo-classes, its internal compiler, or `nth-check`, and never
+   reuses one query's result as another query's answer. The two top-level cases
+   are `rank-model` (static model vs. `selectAll` and a compiled, per-node
+   predicate) and `rank-contexts` (the same compiled objects re-evaluated,
+   interleaved across two structurally different trees that reuse element
+   ids, as classes change, siblings move and non-element nodes are inserted).
+2. Runs `checks/run-rank-mutants.mjs`, which builds three independent temporary
+   source copies, each with one buildable behavior regression, and runs the
+   same test against each build. A regression only counts as caught when the
+   pristine copy passes and the mutated copy fails on a concrete assertion
+   (missing modules, syntax errors and timeouts do not count). It prints
+   `CANDIDATE_GUARD_KILLED`, `REVERSE_RANK_KILLED` and `NON_ELEMENT_KILLED`,
+   along with the cases that detected each one.
+3. Runs the existing `test/pseudo-classes.ts` and `test/api.ts` suites with
+   Vitest.
+
+`checks/baseline.mjs` is a minimal, dependency-free example of the expected
+behavior and can be run directly with `node checks/baseline.mjs`.
+
 ---
 
 License: BSD-2-Clause
