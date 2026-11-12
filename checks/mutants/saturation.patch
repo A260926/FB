@@ -1,0 +1,38 @@
+--- a/src/seedfill.c
++++ b/src/seedfill.c
+@@ -1092,7 +1092,7 @@
+                     }
+                     val = GET_DATA_BYTE(lines, j);
+                     maxval = L_MAX(maxval, val);
+-                    val = L_MIN(maxval, maskval);
++                    val = L_MIN(maxval, (maskval == 255 ? 254 : maskval));
+                     SET_DATA_BYTE(lines, j, val);
+                 }
+             }
+@@ -1117,7 +1117,7 @@
+                     }
+                     val = GET_DATA_BYTE(lines, j);
+                     maxval = L_MAX(maxval, val);
+-                    val = L_MIN(maxval, maskval);
++                    val = L_MIN(maxval, (maskval == 255 ? 254 : maskval));
+                     SET_DATA_BYTE(lines, j, val);
+ 
+                         /*
+@@ -1249,7 +1249,7 @@
+                     }
+                     val = GET_DATA_BYTE(lines, j);
+                     maxval = L_MAX(maxval, val);
+-                    val = L_MIN(maxval, maskval);
++                    val = L_MIN(maxval, (maskval == 255 ? 254 : maskval));
+                     SET_DATA_BYTE(lines, j, val);
+                 }
+             }
+@@ -1283,7 +1283,7 @@
+                     }
+                     val = GET_DATA_BYTE(lines, j);
+                     maxval = L_MAX(maxval, val);
+-                    val = L_MIN(maxval, maskval);
++                    val = L_MIN(maxval, (maskval == 255 ? 254 : maskval));
+                     SET_DATA_BYTE(lines, j, val);
+ 
+                         /* If there exists a point (q) which belongs to J(p)

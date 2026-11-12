@@ -1,0 +1,11 @@
+--- a/src/seedfill.c
++++ b/src/seedfill.c
+@@ -1192,7 +1192,7 @@
+                         lqueueAdd(lq_pixel, pixel);
+                     }
+                 }
+-                if (i < imax) {
++                if (i < imax && j > 0) {
+                     val7 = GET_DATA_BYTE(lines + wpls, j);
+                     maskval = GET_DATA_BYTE(linem + wplm, j);
+                     if (val > val7 && val7 != maskval) {
