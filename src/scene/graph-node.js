@@ -23,6 +23,18 @@ const matrix = new Mat4();
 const target = new Vec3();
 const up = new Vec3();
 
+// Scratch storage for GraphNode#reparentPreservingWorld
+const rpwWorldTransform = new Mat4();
+const rpwParentTransform = new Mat4();
+const rpwInvParentTransform = new Mat4();
+const rpwLocalTransform = new Mat4();
+const rpwLocalRotation = new Quat();
+const rpwLocalScale = new Vec3();
+
+// A column of the candidate local matrix deviating from an orthonormal basis by more than this
+// is treated as substantial shear. Plain Float32 rounding stays orders of magnitude below it.
+const RPW_SHEAR_EPSILON = 1e-5;
+
 /**
  * Helper function that handles signature overloading to receive a test function.
  *
@@ -106,7 +118,9 @@ function findNode(node, test) {
  *
  * Build the hierarchy with {@link addChild}, {@link insertChild}, {@link removeChild} and
  * {@link reparent}, and search it with {@link findByName}, {@link findByPath}, {@link findByTag}
- * and {@link find}. Setting {@link enabled} to false disables the node and its whole subtree.
+ * and {@link find}. Use {@link reparentPreservingWorld} to move a node between parents while
+ * keeping its world transform. Setting {@link enabled} to false disables the node and its whole
+ * subtree.
  *
  * @example
  * // Move a node one unit in its own facing direction, then turn it to face a target
@@ -1007,6 +1021,156 @@ class GraphNode extends EventHandler {
                 parent.addChild(this);
             }
         }
+    }
+
+    /**
+     * Remove graph node from current parent and add as child to new parent while keeping the
+     * node's world transform, and therefore the world transforms of its whole subtree, unchanged.
+     *
+     * Unlike {@link GraphNode#reparent}, which keeps the local transform, this re-derives the
+     * local position, rotation and scale from the world transform at the moment of the call. Only
+     * transforms that can be expressed as translation, rotation and scale are accepted: non-uniform
+     * scale and reflections (negative scale) are supported, while a singular new parent or a
+     * resulting local transform with shear is rejected before anything is removed from the
+     * hierarchy.
+     *
+     * @param {GraphNode|null} parent - New parent to attach graph node to. Pass null to detach the
+     * node to the root of its hierarchy.
+     * @param {number} [index] - The child index where the child node should be placed, following
+     * the same rules as {@link GraphNode#reparent}.
+     * @returns {GraphNode} This graph node, for chaining.
+     * @throws {RangeError} If the new parent's world transform is not invertible, if the resulting
+     * local transform contains shear or non-finite values, or if scale compensation is enabled on
+     * the moved subtree or any of the node's old or new ancestors.
+     * @throws {Error} If the new parent is the node itself or one of its descendants.
+     */
+    reparentPreservingWorld(parent, index) {
+        // The hierarchy must not be touched until every failure case has been checked, so that a
+        // rejected call leaves local TRS, child order and remove/insert events untouched.
+        if (parent && (parent === this || parent.isDescendantOf(this))) {
+            throw new Error(`GraphNode ${this.name} cannot be reparented under itself or one of its descendants`);
+        }
+
+        if (this.scaleCompensation) {
+            throw new RangeError(`GraphNode ${this.name} cannot reparent with scale compensation enabled`);
+        }
+        const stack = [...this._children];
+        while (stack.length) {
+            const child = stack.pop();
+            if (child.scaleCompensation) {
+                throw new RangeError(`GraphNode ${child.name} cannot be part of a reparented subtree with scale compensation enabled`);
+            }
+            stack.push(...child._children);
+        }
+        for (let ancestor = this._parent; ancestor; ancestor = ancestor._parent) {
+            if (ancestor.scaleCompensation) {
+                throw new RangeError(`GraphNode ${ancestor.name} cannot be an ancestor of a world-preserving reparent with scale compensation enabled`);
+            }
+        }
+        for (let ancestor = parent; ancestor; ancestor = ancestor._parent) {
+            if (ancestor.scaleCompensation) {
+                throw new RangeError(`GraphNode ${ancestor.name} cannot be a new ancestor of a world-preserving reparent with scale compensation enabled`);
+            }
+        }
+
+        // These calls sync any pending TRS changes up the ancestor chains, so the matrices used
+        // below match the transforms at the moment of the call even without syncHierarchy.
+        rpwWorldTransform.copy(this.getWorldTransform());
+        if (parent) {
+            rpwParentTransform.copy(parent.getWorldTransform());
+
+            const p = rpwParentTransform.data;
+            const a00 = p[0];
+            const a01 = p[1];
+            const a02 = p[2];
+            const a10 = p[4];
+            const a11 = p[5];
+            const a12 = p[6];
+            const a20 = p[8];
+            const a21 = p[9];
+            const a22 = p[10];
+            const det = a00 * (a11 * a22 - a12 * a21) -
+                        a01 * (a10 * a22 - a12 * a20) +
+                        a02 * (a10 * a21 - a11 * a20);
+            if (!Number.isFinite(det) || det === 0) {
+                throw new RangeError(`GraphNode ${parent.name} has a non-invertible world transform and cannot be a world-preserving parent`);
+            }
+
+            rpwInvParentTransform.copy(rpwParentTransform).invert();
+            rpwLocalTransform.mul2(rpwInvParentTransform, rpwWorldTransform);
+        } else {
+            rpwLocalTransform.copy(rpwWorldTransform);
+        }
+
+        // The candidate local matrix must decompose into TRS: finite entries, an affine last
+        // row, and three mutually orthogonal basis columns. Float32 rounding on ordinary TRS
+        // hierarchies stays well below the relative shear tolerance.
+        const m = rpwLocalTransform.data;
+        let maxAbs = 1;
+        for (let i = 0; i < 16; i++) {
+            if (!Number.isFinite(m[i])) {
+                throw new RangeError('World-preserving reparent produced a non-finite local transform');
+            }
+            const abs = Math.abs(m[i]);
+            if (abs > maxAbs) {
+                maxAbs = abs;
+            }
+        }
+        const affineTolerance = RPW_SHEAR_EPSILON * maxAbs;
+        if (Math.abs(m[3]) > affineTolerance ||
+            Math.abs(m[7]) > affineTolerance ||
+            Math.abs(m[11]) > affineTolerance ||
+            Math.abs(m[15] - 1) > affineTolerance) {
+            throw new RangeError('World-preserving reparent cannot express the local transform as translation, rotation and scale');
+        }
+
+        const col0x = m[0];
+        const col0y = m[1];
+        const col0z = m[2];
+        const col1x = m[4];
+        const col1y = m[5];
+        const col1z = m[6];
+        const col2x = m[8];
+        const col2y = m[9];
+        const col2z = m[10];
+        const len0 = Math.hypot(col0x, col0y, col0z);
+        const len1 = Math.hypot(col1x, col1y, col1z);
+        const len2 = Math.hypot(col2x, col2y, col2z);
+        const maxAxis = Math.max(len0, len1, len2, 1);
+        const shear01 = col0x * col1x + col0y * col1y + col0z * col1z;
+        const shear02 = col0x * col2x + col0y * col2y + col0z * col2z;
+        const shear12 = col1x * col2x + col1y * col2y + col1z * col2z;
+        if (Math.abs(shear01) > RPW_SHEAR_EPSILON * maxAxis * maxAxis ||
+            Math.abs(shear02) > RPW_SHEAR_EPSILON * maxAxis * maxAxis ||
+            Math.abs(shear12) > RPW_SHEAR_EPSILON * maxAxis * maxAxis ||
+            len0 === 0 || len1 === 0 || len2 === 0) {
+            throw new RangeError('World-preserving reparent cannot express a sheared or degenerate local transform as translation, rotation and scale');
+        }
+
+        // Decompose the candidate matrix into local TRS. The sign of the scale is not unique for
+        // reflections, so it is folded into the X scale to keep the rotation right-handed.
+        rpwLocalRotation.setFromMat4(rpwLocalTransform);
+        rpwLocalScale.set(len0 * (rpwLocalTransform.scaleSign < 0 ? -1 : 1), len1, len2);
+
+        // From here on the reparent cannot fail: apply the new local TRS before the hierarchy
+        // change so the standard insert path keeps the subtree's world matrices in place.
+        this.localPosition.set(m[12], m[13], m[14]);
+        this.localRotation.copy(rpwLocalRotation);
+        this.localScale.copy(rpwLocalScale);
+        if (!this._dirtyLocal) {
+            this._dirtifyLocal();
+        }
+
+        this.remove();
+        if (parent) {
+            if (index >= 0) {
+                parent.insertChild(this, index);
+            } else {
+                parent.addChild(this);
+            }
+        }
+
+        return this;
     }
 
     /**
