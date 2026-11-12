@@ -4,6 +4,7 @@
 #include "../core/api.h"
 #include "cache_helper.h"
 #include "pbr_shader.h"
+#include "shadow.h"
 
 /* low-level api */
 
@@ -54,6 +55,7 @@ static vec4_t shadow_vertex_shader(pbr_attribs_t *attribs,
     vec4_t depth_position = mat4_mul_vec4(light_vp_matrix, world_position);
 
     varyings->texcoord = attribs->texcoord;
+    varyings->light_position = depth_position;
     return depth_position;
 }
 
@@ -93,6 +95,7 @@ static vec4_t common_vertex_shader(pbr_attribs_t *attribs,
 
     varyings->world_position = vec3_from_vec4(world_position);
     varyings->depth_position = vec3_from_vec4(depth_position);
+    varyings->light_position = depth_position;
     varyings->clip_position = clip_position;
     varyings->texcoord = attribs->texcoord;
     return clip_position;
@@ -308,22 +311,19 @@ static vec3_t get_ibl_shade(material_t material, ibldata_t *ibldata,
     return vec3_add(diffuse_shade, specular_shade);
 }
 
-static int is_in_shadow(pbr_varyings_t *varyings,
-                        pbr_uniforms_t *uniforms,
-                        float n_dot_l) {
+static float get_shadow_visibility(pbr_varyings_t *varyings,
+                                   pbr_uniforms_t *uniforms,
+                                   float n_dot_l) {
     if (uniforms->shadow_map) {
-        float u = (varyings->depth_position.x + 1) * 0.5f;
-        float v = (varyings->depth_position.y + 1) * 0.5f;
-        float d = (varyings->depth_position.z + 1) * 0.5f;
-
-        float depth_bias = float_max(0.05f * (1 - n_dot_l), 0.005f);
-        float current_depth = d - depth_bias;
-        vec2_t texcoord = vec2_new(u, v);
-        float closest_depth = texture_sample(uniforms->shadow_map, texcoord).x;
-
-        return current_depth > closest_depth;
+        if (pcss_config_is_soft(&uniforms->pcss_config)) {
+            return shadow_pcss_visibility(varyings->light_position,
+                                          uniforms->shadow_map,
+                                          &uniforms->pcss_config, n_dot_l);
+        }
+        return shadow_hard_visibility(varyings->light_position,
+                                      uniforms->shadow_map, n_dot_l);
     } else {
-        return 0;
+        return 1.0f;
     }
 }
 
@@ -478,10 +478,13 @@ static vec4_t common_fragment_shader(pbr_varyings_t *varyings,
 
         if (uniforms->punctual_intensity > 0 && n_dot_l > 0) {
             float intensity = uniforms->punctual_intensity;
-            if (!is_in_shadow(varyings, uniforms, n_dot_l)) {
+            float visibility = get_shadow_visibility(varyings, uniforms,
+                                                     n_dot_l);
+            if (visibility > 0) {
                 vec3_t shade = get_dir_shade(material, light_dir,
                                              normal_dir, view_dir);
-                color = vec3_add(color, vec3_mul(shade, intensity));
+                color = vec3_add(
+                    color, vec3_mul(vec3_mul(shade, intensity), visibility));
             }
         }
 
@@ -543,6 +546,7 @@ static void update_model(model_t *model, perframe_t *perframe) {
     uniforms->ambient_intensity = float_clamp(ambient_intensity, 0, 5);
     uniforms->punctual_intensity = float_clamp(punctual_intensity, 0, 5);
     uniforms->shadow_map = perframe->shadow_map;
+    uniforms->pcss_config = perframe->pcss_config;
     uniforms->layer_view = perframe->layer_view;
 }
 

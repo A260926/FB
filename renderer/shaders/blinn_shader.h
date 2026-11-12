@@ -16,6 +16,7 @@ typedef struct {
 typedef struct {
     vec3_t world_position;
     vec3_t depth_position;
+    vec4_t light_position;
     vec2_t texcoord;
     vec3_t normal;
 } blinn_varyings_t;
@@ -32,6 +33,8 @@ typedef struct {
     float ambient_intensity;
     float punctual_intensity;
     texture_t *shadow_map;
+    /* optional pcss config; hard shadows are used when not soft */
+    pcss_config_t pcss_config;
     /* surface parameters */
     vec4_t basecolor;
     float shininess;

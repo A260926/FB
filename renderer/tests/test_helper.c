@@ -390,6 +390,8 @@ perframe_t test_build_perframe(scene_t *scene, context_t *context) {
     perframe.ambient_intensity = scene->ambient_intensity;
     perframe.punctual_intensity = scene->punctual_intensity;
     perframe.shadow_map = scene->shadow_map;
+    memset(&perframe.pcss_config, 0, sizeof(pcss_config_t));
+    perframe.pcss_config.mode = SHADOW_MODE_HARD;
     perframe.layer_view = -1;
 
     return perframe;

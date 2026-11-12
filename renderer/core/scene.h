@@ -4,6 +4,7 @@
 #include "graphics.h"
 #include "maths.h"
 #include "mesh.h"
+#include "../shaders/shadow.h"
 #include "skeleton.h"
 #include "texture.h"
 
@@ -19,6 +20,8 @@ typedef struct {
     float ambient_intensity;
     float punctual_intensity;
     texture_t *shadow_map;
+    /* optional pcss config; hard shadows are used when not soft */
+    pcss_config_t pcss_config;
     int layer_view;
 } perframe_t;
 

@@ -26,6 +26,7 @@ set(HEADERS
     renderer/shaders/blinn_shader.h
     renderer/shaders/cache_helper.h
     renderer/shaders/pbr_shader.h
+    renderer/shaders/shadow.h
     renderer/shaders/skybox_shader.h
     renderer/tests/test_blinn.h
     renderer/tests/test_helper.h
@@ -49,6 +50,7 @@ set(SOURCES
     renderer/shaders/blinn_shader.c
     renderer/shaders/cache_helper.c
     renderer/shaders/pbr_shader.c
+    renderer/shaders/shadow.c
     renderer/shaders/skybox_shader.c
     renderer/tests/test_blinn.c
     renderer/tests/test_helper.c

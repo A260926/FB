@@ -3,6 +3,7 @@
 #include "../core/api.h"
 #include "blinn_shader.h"
 #include "cache_helper.h"
+#include "shadow.h"
 
 /* low-level api */
 
@@ -53,6 +54,7 @@ static vec4_t shadow_vertex_shader(blinn_attribs_t *attribs,
     vec4_t depth_position = mat4_mul_vec4(light_vp_matrix, world_position);
 
     varyings->texcoord = attribs->texcoord;
+    varyings->light_position = depth_position;
     return depth_position;
 }
 
@@ -74,6 +76,7 @@ static vec4_t common_vertex_shader(blinn_attribs_t *attribs,
 
     varyings->world_position = vec3_from_vec4(world_position);
     varyings->depth_position = vec3_from_vec4(depth_position);
+    varyings->light_position = depth_position;
     varyings->texcoord = attribs->texcoord;
     varyings->normal = vec3_normalize(world_normal);
     return clip_position;
@@ -166,22 +169,19 @@ static vec3_t get_view_dir(blinn_varyings_t *varyings,
     return vec3_normalize(vec3_sub(camera_pos, world_pos));
 }
 
-static int is_in_shadow(blinn_varyings_t *varyings,
-                        blinn_uniforms_t *uniforms,
-                        float n_dot_l) {
+static float get_shadow_visibility(blinn_varyings_t *varyings,
+                                   blinn_uniforms_t *uniforms,
+                                   float n_dot_l) {
     if (uniforms->shadow_map) {
-        float u = (varyings->depth_position.x + 1) * 0.5f;
-        float v = (varyings->depth_position.y + 1) * 0.5f;
-        float d = (varyings->depth_position.z + 1) * 0.5f;
-
-        float depth_bias = float_max(0.05f * (1 - n_dot_l), 0.005f);
-        float current_depth = d - depth_bias;
-        vec2_t texcoord = vec2_new(u, v);
-        float closest_depth = texture_sample(uniforms->shadow_map, texcoord).x;
-
-        return current_depth > closest_depth;
+        if (pcss_config_is_soft(&uniforms->pcss_config)) {
+            return shadow_pcss_visibility(varyings->light_position,
+                                          uniforms->shadow_map,
+                                          &uniforms->pcss_config, n_dot_l);
+        }
+        return shadow_hard_visibility(varyings->light_position,
+                                      uniforms->shadow_map, n_dot_l);
     } else {
-        return 0;
+        return 1.0f;
     }
 }
 
@@ -222,13 +222,20 @@ static vec4_t common_fragment_shader(blinn_varyings_t *varyings,
         if (uniforms->punctual_intensity > 0) {
             vec3_t light_dir = vec3_negate(uniforms->light_dir);
             float n_dot_l = vec3_dot(material.normal, light_dir);
-            if (n_dot_l > 0 && !is_in_shadow(varyings, uniforms, n_dot_l)) {
-                vec3_t view_dir = get_view_dir(varyings, uniforms);
-                vec3_t specular = get_specular(light_dir, view_dir, material);
-                vec3_t diffuse = vec3_mul(material.diffuse, n_dot_l);
-                vec3_t punctual = vec3_add(diffuse, specular);
-                float intensity = uniforms->punctual_intensity;
-                color = vec3_add(color, vec3_mul(punctual, intensity));
+            if (n_dot_l > 0) {
+                float visibility = get_shadow_visibility(varyings, uniforms,
+                                                         n_dot_l);
+                if (visibility > 0) {
+                    vec3_t view_dir = get_view_dir(varyings, uniforms);
+                    vec3_t specular = get_specular(light_dir, view_dir,
+                                                   material);
+                    vec3_t diffuse = vec3_mul(material.diffuse, n_dot_l);
+                    vec3_t punctual = vec3_add(diffuse, specular);
+                    float intensity = uniforms->punctual_intensity;
+                    color = vec3_add(color,
+                                     vec3_mul(vec3_mul(punctual, intensity),
+                                              visibility));
+                }
             }
         }
 
@@ -290,6 +297,7 @@ static void update_model(model_t *model, perframe_t *perframe) {
     uniforms->ambient_intensity = float_clamp(ambient_intensity, 0, 5);
     uniforms->punctual_intensity = float_clamp(punctual_intensity, 0, 5);
     uniforms->shadow_map = perframe->shadow_map;
+    uniforms->pcss_config = perframe->pcss_config;
 }
 
 static void draw_model(model_t *model, framebuffer_t *framebuffer,

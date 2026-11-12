@@ -29,6 +29,7 @@ typedef struct {
 typedef struct {
     vec3_t world_position;
     vec3_t depth_position;
+    vec4_t light_position;
     vec4_t clip_position;
     vec3_t world_normal;
     vec3_t world_tangent;
@@ -48,6 +49,8 @@ typedef struct {
     float ambient_intensity;
     float punctual_intensity;
     texture_t *shadow_map;
+    /* optional pcss config; hard shadows are used when not soft */
+    pcss_config_t pcss_config;
     /* metalness workflow */
     vec4_t basecolor_factor;
     float metalness_factor;
