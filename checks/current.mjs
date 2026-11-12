@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {Effect} from '../src/effects/Effect.js';
+import {EffectPass} from '../src/passes/EffectPass.js';
+import {Uniform} from 'three';
+const shader = 'uniform float gain; float shade(float x) { return gain*x; } void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) { outputColor=vec4(shade(inputColor.r)); }';
+const a = new Effect('a', shader, {uniforms:new Map([['gain',new Uniform(2)]])});
+const b = new Effect('b', shader, {uniforms:new Map([['gain',new Uniform(3)]])});
+const pass = new EffectPass(null,a,b); pass.recompile();
+const material=pass.fullscreenMaterial;
+assert.match(material.fragmentShader,/e0Shade/); assert.match(material.fragmentShader,/e1Shade/);
+assert.equal(material.uniforms.e0Gain.value,2); assert.equal(material.uniforms.e1Gain.value,3);
+assert.match(material.fragmentShader,/e0MainImage\(color0/);
+pass.recompile(); assert.equal(material.uniforms.e1Gain,b.uniforms.get('gain'));
+pass.dispose();
+console.log('EFFECT_COMPOSE_BASELINE_OK');

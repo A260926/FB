@@ -1,0 +1,54 @@
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*.swp
+*.swo
+*.*-swp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.AppleDB
+.AppleDesktop
+Network Trash Folder/
+Temporary Items/
+.apdisk
+
+# IDE settings
+.project
+.idea/
+.vscode/
+
+# AI tooling
+.agents/
+.codex/
+memory-bank/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Generated files
+dist/
+build/
+public/
+pagefind/
+resources/
+temp/
+*.log
+*.lock
+*.tmp
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
