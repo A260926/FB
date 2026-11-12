@@ -59,6 +59,7 @@ ex_line \
 ex_lpc \
 ex_lpf18 \
 ex_maygate \
+ex_mbcompress \
 ex_metro \
 ex_mincer \
 ex_mode \
