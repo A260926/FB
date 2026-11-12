@@ -1,0 +1,13 @@
+[package]
+name = "line-contract-harness"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Only the in-repo gimli read/std path is needed. EndianSlice is part of the
+# `read` feature and pulls in no registry crates, so this harness resolves
+# entirely offline.
+[dependencies]
+gimli = { path = "../gimli", default-features = false, features = ["read"] }
+
+[workspace]

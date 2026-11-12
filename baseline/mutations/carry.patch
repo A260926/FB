@@ -1,0 +1,12 @@
+--- a/src/read/line.rs
++++ b/src/read/line.rs
+@@ -898,7 +898,7 @@
+         let address_advance = if maximum_operations_per_instruction.0 == 1 {
+             self.op_index.0 = 0;
+             minimum_instruction_length * operation_advance
+         } else {
+-            let op_index_with_advance = self.op_index + operation_advance;
++            let op_index_with_advance = Wrapping(0) + operation_advance;
+             self.op_index = op_index_with_advance % maximum_operations_per_instruction;
+             minimum_instruction_length
+                 * (op_index_with_advance / maximum_operations_per_instruction)
