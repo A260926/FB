@@ -1,0 +1,476 @@
+import { describe, expect, it, vi } from "vitest";
+import { Parser, Tokenizer } from "./index.js";
+import type { Handler } from "./Parser.js";
+
+const arrayIndex = /^\d+$/;
+
+// Count indexed reads, including the moves made by shift/unshift/splice.
+function countArrayReads(parser: Parser, key: string, run: () => void): number {
+    const arrays = parser as unknown as Record<string, string[]>;
+    let reads = 0;
+    arrays[key] = new Proxy(arrays[key], {
+        get(target, property, receiver) {
+            if (typeof property === "string" && arrayIndex.test(property)) {
+                reads++;
+            }
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    run();
+    return reads;
+}
+
+// Record open and close tag events in the order they are emitted.
+function tagEvents(html: string): string[] {
+    const events: string[] = [];
+    new Parser({
+        onopentagname(name) {
+            events.push(`<${name}>`);
+        },
+        onclosetag(name) {
+            events.push(`</${name}>`);
+        },
+    }).end(html);
+    return events;
+}
+
+describe("API", () => {
+    it("should preserve prototype-named attributes", () => {
+        const onopentag = vi.fn<Handler["onopentag"]>();
+        new Parser({ onopentag }).end(
+            '<div __proto__="first" __proto__="second" constructor="third"></div>',
+        );
+
+        const expected = {
+            ["__proto__"]: "first",
+            constructor: "third",
+        };
+        expect(onopentag).toHaveBeenCalledWith("div", expected, false);
+        const attributes = onopentag.mock.calls[0][1];
+        expect(Object.keys(attributes)).toStrictEqual([
+            "__proto__",
+            "constructor",
+        ]);
+        expect(Object.getPrototypeOf(attributes)).toBe(Object.prototype);
+    });
+
+    it("should work without callbacks", () => {
+        const cbs: Partial<Handler> = { onerror: vi.fn() };
+        const p = new Parser(cbs, {
+            xmlMode: true,
+            lowerCaseAttributeNames: true,
+        });
+
+        p.end("<a foo><bar></a><!-- --><![CDATA[]]]><?foo?><!bar><boo/>boohay");
+        p.write("foo");
+
+        // Check for an error
+        p.end();
+        p.write("foo");
+        expect(cbs.onerror).toHaveBeenLastCalledWith(
+            new Error(".write() after done!"),
+        );
+        p.end();
+        expect(cbs.onerror).toHaveBeenLastCalledWith(
+            new Error(".end() after done!"),
+        );
+
+        // Should ignore the error if there is no callback
+        delete cbs.onerror;
+        p.write("foo");
+
+        p.reset();
+
+        // Remove method
+        cbs.onopentag = vi.fn();
+        p.write("<a foo");
+        delete cbs.onopentag;
+        p.write(">");
+
+        // Pause/resume
+        const onText = vi.fn();
+        cbs.ontext = onText;
+        p.pause();
+        p.write("foo");
+        expect(onText).not.toHaveBeenCalled();
+        p.resume();
+        expect(onText).toHaveBeenLastCalledWith("foo");
+        p.pause();
+        expect(onText).toHaveBeenCalledTimes(1);
+        p.resume();
+        expect(onText).toHaveBeenCalledTimes(1);
+        p.pause();
+        p.end("bar");
+        expect(onText).toHaveBeenCalledTimes(1);
+        p.resume();
+        expect(onText).toHaveBeenCalledTimes(2);
+        expect(onText).toHaveBeenLastCalledWith("bar");
+    });
+
+    it("should back out of numeric entities (#125)", () => {
+        const onend = vi.fn();
+        let text = "";
+        const p = new Parser({
+            ontext(data) {
+                text += data;
+            },
+            onend,
+        });
+
+        p.end("id=770&#anchor");
+
+        expect(onend).toHaveBeenCalledTimes(1);
+        expect(text).toBe("id=770&#anchor");
+
+        p.reset();
+        text = "";
+
+        p.end("0&#xn");
+
+        expect(onend).toHaveBeenCalledTimes(2);
+        expect(text).toBe("0&#xn");
+    });
+
+    it("should not have the start index be greater than the end index", () => {
+        const onopentag = vi.fn();
+        const onclosetag = vi.fn();
+
+        const p = new Parser({
+            onopentag(tag) {
+                expect(p.startIndex).toBeLessThanOrEqual(p.endIndex);
+                onopentag(tag, p.startIndex, p.endIndex);
+            },
+            onclosetag(tag) {
+                expect(p.startIndex).toBeLessThanOrEqual(p.endIndex);
+                onclosetag(tag, p.endIndex);
+            },
+        });
+
+        p.write("<p>");
+
+        expect(onopentag).toHaveBeenLastCalledWith("p", 0, 2);
+        expect(onclosetag).not.toHaveBeenCalled();
+
+        p.write("Foo");
+
+        p.write("<hr>");
+
+        expect(onopentag).toHaveBeenLastCalledWith("hr", 6, 9);
+        expect(onclosetag).toHaveBeenCalledTimes(2);
+        expect(onclosetag).toHaveBeenNthCalledWith(1, "p", 9);
+        expect(onclosetag).toHaveBeenNthCalledWith(2, "hr", 9);
+    });
+
+    it("should preserve declaration names outside of HTML mode", () => {
+        const onprocessinginstruction = vi.fn();
+
+        new Parser(
+            {
+                onprocessinginstruction,
+            },
+            { xmlMode: true },
+        ).end("<!DOCTYPEhtml>");
+
+        expect(onprocessinginstruction).toHaveBeenCalledWith(
+            "!DOCTYPEhtml",
+            "!DOCTYPEhtml",
+        );
+    });
+
+    it("should preserve declaration casing when lowerCaseTags is disabled", () => {
+        const onprocessinginstruction = vi.fn();
+
+        new Parser(
+            {
+                onprocessinginstruction,
+            },
+            { lowerCaseTags: false },
+        ).end("<!DOCTYPEhtml>");
+
+        expect(onprocessinginstruction).toHaveBeenCalledWith(
+            "!DOCTYPE",
+            "!DOCTYPEhtml",
+        );
+    });
+
+    it("should update the position when a single tag is spread across multiple chunks", () => {
+        let isCalled = false;
+        const p = new Parser({
+            onopentag() {
+                isCalled = true;
+                expect(p.startIndex).toBe(0);
+                expect(p.endIndex).toBe(12);
+            },
+        });
+
+        p.write("<div ");
+        p.write("foo=bar>");
+
+        expect(isCalled).toBe(true);
+    });
+
+    it("should have the correct position for implied opening tags", () => {
+        let isCalled = false;
+        const p = new Parser({
+            onopentag() {
+                isCalled = true;
+                expect(p.startIndex).toBe(0);
+                expect(p.endIndex).toBe(3);
+            },
+        });
+
+        p.write("</p>");
+        expect(isCalled).toBe(true);
+    });
+
+    it("should parse <__proto__> (#387)", () => {
+        const p = new Parser(null);
+
+        // Should not throw
+        p.write("<__proto__>");
+    });
+
+    it("should implicitly close table sections when another section opens", () => {
+        const onopentagname = vi.fn();
+        const onclosetag = vi.fn();
+
+        // <tbody> must auto-close <tfoot>
+        new Parser({ onopentagname, onclosetag }).end(
+            "<table><tfoot><tr><td>F<tbody><tr><td>B</table>",
+        );
+
+        expect(onclosetag).toHaveBeenCalledWith("tfoot", true);
+        const tfootClose = onclosetag.mock.calls.findIndex(
+            ([name]) => name === "tfoot",
+        );
+        const tbodyOpen = onopentagname.mock.calls.findIndex(
+            ([name]) => name === "tbody",
+        );
+        expect(tfootClose).toBeLessThan(tbodyOpen);
+    });
+
+    it("should close an open <p> when a block element that implies closing starts", () => {
+        const onopentag = vi.fn();
+        const onclosetag = vi.fn();
+
+        new Parser({ onopentag, onclosetag }).end(
+            "<p>text<hgroup>inner</hgroup>",
+        );
+
+        expect(onclosetag).toHaveBeenCalledWith("p", true);
+        const pClose = onclosetag.mock.calls.findIndex(
+            ([name]) => name === "p",
+        );
+        const hgroupOpen = onopentag.mock.calls.findIndex(
+            ([name]) => name === "hgroup",
+        );
+        expect(pClose).toBeLessThan(hgroupOpen);
+    });
+
+    it("should close an open <p> when <listing> starts", () => {
+        expect(tagEvents("<p>text<listing>inner")).toEqual([
+            "<p>",
+            "</p>",
+            "<listing>",
+            "</listing>",
+        ]);
+    });
+
+    it("should close an open <p> together with the previous list item", () => {
+        expect(
+            tagEvents("<ul><li><p>a<li>b</ul><dl><dt><p>c<dd>d</dl>"),
+        ).toEqual([
+            "<ul>",
+            "<li>",
+            "<p>",
+            "</p>",
+            "</li>",
+            "<li>",
+            "</li>",
+            "</ul>",
+            "<dl>",
+            "<dt>",
+            "<p>",
+            "</p>",
+            "</dt>",
+            "<dd>",
+            "</dd>",
+            "</dl>",
+        ]);
+    });
+
+    it("should implicitly close <tbody> when <thead> opens", () => {
+        const onopentagname = vi.fn();
+        const onclosetag = vi.fn();
+
+        new Parser({ onopentagname, onclosetag }).end(
+            "<table><tbody><tr><td>B<thead><tr><th>H</table>",
+        );
+
+        expect(onclosetag).toHaveBeenCalledWith("tbody", true);
+        const tbodyClose = onclosetag.mock.calls.findIndex(
+            ([name]) => name === "tbody",
+        );
+        const theadOpen = onopentagname.mock.calls.findIndex(
+            ([name]) => name === "thead",
+        );
+        expect(tbodyClose).toBeLessThan(theadOpen);
+    });
+
+    it("should implicitly close <td> when <th> opens", () => {
+        const onclosetag = vi.fn();
+        const onopentagname = vi.fn();
+
+        new Parser({ onclosetag, onopentagname }).end(
+            "<table><tr><td>A<th>B</tr></table>",
+        );
+
+        // <th> must auto-close <td>, making them siblings per the HTML spec
+        expect(onclosetag).toHaveBeenCalledWith("td", true);
+        const tdClose = onclosetag.mock.calls.findIndex(
+            ([name]) => name === "td",
+        );
+        const thOpen = onopentagname.mock.calls.findIndex(
+            ([name]) => name === "th",
+        );
+        expect(tdClose).toBeLessThan(thOpen);
+    });
+
+    it.each(["div", "svg", "a"])(
+        "should do linear stack work for nested %s elements",
+        (name) => {
+            const depth = 500;
+            const parser = new Parser({}, { xmlMode: name === "a" });
+            const input =
+                `<${name}>`.repeat(depth) + `</${name}>`.repeat(depth);
+            const reads = countArrayReads(parser, "stack", () =>
+                parser.end(input),
+            );
+            expect(reads).toBeLessThan(depth * 10);
+        },
+    );
+
+    it("should do linear work on the foreign context stack", () => {
+        const depth = 500;
+        const parser = new Parser({});
+        const reads = countArrayReads(parser, "foreignContext", () =>
+            parser.end("<svg>".repeat(depth) + "</svg>".repeat(depth)),
+        );
+        expect(reads).toBeLessThan(depth * 10);
+    });
+
+    it.each([
+        ["end tags nobody opened", "<div>", "</span>"],
+        ["repeated form tags", "<div>", "<form>"],
+        ["SVG-cased names in an integration point", "<div>", "<clippath>"],
+    ])("should do linear stack work for %s", (_, open, next) => {
+        const depth = 500;
+        const parser = new Parser({});
+        const prefix = next === "<clippath>" ? "<svg><foreignObject>" : "";
+        const input = prefix + open.repeat(depth) + next.repeat(depth);
+        const reads = countArrayReads(parser, "stack", () => parser.end(input));
+        expect(reads).toBeLessThan(depth * 10);
+    });
+
+    it("should stop closing elements when reset at the end of the input", () => {
+        const closed: string[] = [];
+        const parser = new Parser({
+            onclosetag(name) {
+                closed.push(name);
+                if (name === "b") parser.reset();
+            },
+        });
+        parser.end("<a><b><c>");
+        expect(closed).toStrictEqual(["c", "b"]);
+    });
+
+    it.each(["abc", "<!--ab", "&amp"])(
+        "should only handle the end of %s once after pause/resume",
+        (input) => {
+            const events: string[] = [];
+            const parser = new Parser({
+                ontext(data) {
+                    events.push(data);
+                    parser.pause();
+                },
+                oncomment(data) {
+                    events.push(data);
+                    parser.pause();
+                },
+                onend() {
+                    events.push("end");
+                },
+            });
+            parser.end(input);
+            parser.resume();
+            const first = [...events];
+            parser.resume();
+            expect(events).toStrictEqual(first);
+            expect(events.filter((event) => event === "end")).toHaveLength(1);
+            parser.reset();
+            parser.end("next");
+            parser.resume();
+            expect(events.slice(first.length)).toStrictEqual(["next", "end"]);
+        },
+    );
+
+    it("should not parse an entity suffix again after end", () => {
+        const events: string[] = [];
+        const parser = new Parser({
+            ontext: (data) => {
+                events.push(data);
+            },
+            onend: () => {
+                events.push("end");
+            },
+        });
+        parser.end("&timesbar");
+        expect(events).toStrictEqual(["×", "bar", "end"]);
+        parser.resume();
+        expect(events).toStrictEqual(["×", "bar", "end"]);
+    });
+
+    it("should parse chunks queued after reset in a callback", () => {
+        const texts: string[] = [];
+        const parser = new Parser({
+            ontext(text) {
+                texts.push(text);
+                if (text === "first") parser.reset();
+                else if (text === "second") parser.pause();
+            },
+        });
+        parser.write("first");
+        parser.write("second");
+        parser.write("third");
+        parser.resume();
+        parser.end();
+        expect(texts).toStrictEqual(["first", "second", "third"]);
+    });
+
+    it("should stop closing elements after reset in onclosetag", () => {
+        const closed: string[] = [];
+        const parser = new Parser({
+            onclosetag(name) {
+                closed.push(name);
+                if (name === "c") parser.reset();
+            },
+        });
+        parser.write("<a><b><c></a>");
+        expect(closed).toStrictEqual(["c"]);
+    });
+
+    it("should support custom tokenizer", () => {
+        class CustomTokenizer extends Tokenizer {}
+
+        const p = new Parser(
+            {
+                onparserinit(parser: Parser) {
+                    // @ts-expect-error Accessing private tokenizer here
+                    expect(parser.tokenizer).toBeInstanceOf(CustomTokenizer);
+                },
+            },
+            { Tokenizer: CustomTokenizer },
+        );
+        p.end();
+    });
+});

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {Parser} from '../dist/index.js';
+const seen=[];let ended=0;let parser;
+parser=new Parser({onattribute:(n,v)=>seen.push([n,v]),ontext:t=>{if(t==='&')seen.push(['range',parser.startIndex,parser.endIndex]);},onend:()=>ended++});
+const html='<p a="&notit=7">&amp;</p>';
+parser.end(html);
+assert.equal(seen[0][1],'&notit=7');assert.deepEqual(seen[1],['range',html.indexOf('&amp;'),html.indexOf('&amp;')+4]);assert.equal(ended,1);
+let count=0;let pause=true;let q;
+q=new Parser({onopentag:()=>{if(pause){pause=false;q.pause();}},onend:()=>count++});
+q.write('<b>');q.write('queued');q.end('</b>');assert.equal(count,0);q.resume();assert.equal(count,1);
+console.log('HTMLPARSER_STATIC_SEMANTICS_OK attribute range paused-end');
