@@ -3,6 +3,9 @@ out/
 examples-out/
 dist/
 
+# Local Go toolchain, module and build caches used by support/go.sh
+.cache/
+
 # References to non-public MPEG standards
 references/
 

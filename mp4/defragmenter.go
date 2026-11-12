@@ -36,6 +36,11 @@ import (
 // Full-sample encryption with a constant IV has no such auxiliary data and
 // passes through losslessly, keeping the sinf of the sample description.
 //
+// The gradual-decoding-recovery sample groups roll and prol follow the samples
+// that survive the overlap rules and are rebuilt into each output stbl as one
+// sgpd/sbgp pair per type that has a member. See defragment_recovery.go for
+// the supported box versions and the validation applied to their indices.
+//
 // The ftyp is made for the output: major brand mp42 and the lowest brand of
 // ISO/IEC 14496-12 Annex E that the rebuilt moov needs, plus the codec brands
 // and the ISO/IEC 14496-15 track brands of the input. Input brands of the
@@ -112,6 +117,12 @@ type defragTrack struct {
 	frags        []*defragFragRec // one record per collected traf, plus the progressive part
 	live         []*defragFragRec // the records with kept > 0, in collection order
 	extendedDurs []paddedDur      // durations before gap padding, by increasing sample index
+	// globalRecovery holds the validated stbl sgpd recovery descriptions per
+	// grouping type, which fragment sbgp boxes address with indices 1..65535.
+	globalRecovery map[string][]int16
+	// recovery holds one entry per surviving sample in final decode order,
+	// interleaving the roll and prol grouping types.
+	recovery []recoveryGroup
 }
 
 // paddedDur remembers a sample's duration before a tfdt gap padded it.
@@ -211,6 +222,9 @@ func newDefragmenter(f *File, rs io.ReadSeeker, keptTrackIDs []uint32) (*defragm
 		}
 	}
 	if err := d.collectProgressivePart(); err != nil {
+		return nil, err
+	}
+	if err := d.collectProgressiveRecovery(); err != nil {
 		return nil, err
 	}
 	for _, seg := range f.Segments {
@@ -676,6 +690,9 @@ func (d *defragmenter) collectTraf(moof *MoofBox, traf *TrafBox, track *defragTr
 		track.chunks = append(track.chunks, chunk)
 		d.chunks = append(d.chunks, chunk)
 	}
+	if err := d.collectTrafRecovery(moof, traf, track, int(chunk.nrSamples)); err != nil {
+		return err
+	}
 	rec.end = track.endDts
 	rec.total = int(chunk.nrSamples)
 	rec.kept = rec.total
@@ -745,8 +762,35 @@ func (d *defragmenter) dropTrackSamplesFrom(track *defragTrack, cutTime uint64) 
 		}
 		track.samples = track.samples[:keep]
 	}
+	// Recovery groups follow the same sample fate: groups of superseded
+	// samples (both roll and prol) are dropped with them.
+	track.recovery = trimRecoveryGroups(track.recovery, keep)
 	track.endDts = cutTime
 	return nil
+}
+
+// trimRecoveryGroups keeps the groups of the surviving samples. Each grouping
+// type contributes one entry per collected sample, in decode order, so the
+// first keep entries of each type are the surviving ones.
+func trimRecoveryGroups(groups []recoveryGroup, keep int) []recoveryGroup {
+	perKind := make(map[string]int)
+	for _, group := range groups {
+		perKind[group.kind]++
+	}
+	for kind := range perKind {
+		if perKind[kind] > keep {
+			perKind[kind] = keep
+		}
+	}
+	trimmed := make([]recoveryGroup, 0, len(groups))
+	for _, group := range groups {
+		if perKind[group.kind] == 0 {
+			continue
+		}
+		perKind[group.kind]--
+		trimmed = append(trimmed, group)
+	}
+	return trimmed
 }
 
 // trimTrackChunksTail removes the byte ranges of the samples from index
@@ -1141,6 +1185,10 @@ func fillSampleTables(track *defragTrack) error {
 		children = append(children, stss)
 	}
 	children = append(children, stco)
+	for _, box := range buildRecoveryGroupBoxes(track.recovery) {
+		stbl.AddChild(box)
+		children = append(children, box)
+	}
 	stbl.Children = children
 	return nil
 }

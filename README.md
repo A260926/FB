@@ -126,6 +126,66 @@ It describes
 
 Sample numbers in the APIs start at 1, as in the ISOBMFF standard.
 
+### Defragmenting fragmented files
+
+`mp4.Defragment` turns a fragmented file into a progressive (moov-before-mdat)
+file without re-encoding: sample bytes are copied verbatim and the progressive
+sample tables are synthesized from the fragment metadata.
+`mp4.DefragmentTracks` does the same while keeping only the given tracks.
+The gradual-decoding-recovery sample groups `roll` and `prol` are carried into
+each output track's `stbl` as an `sgpd` (version 1, `default_length` 2) and
+`sbgp` (version 0) pair, rebuilt around the samples that survive retransmission
+overlap rather than copied from the source boxes.
+
+```go
+f, err := os.Open("fragmented.mp4")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+parsed, err := mp4.DecodeFile(f, mp4.WithDecodeMode(mp4.DecModeLazyMdat))
+if err != nil {
+    log.Fatal(err)
+}
+var out bytes.Buffer
+if err := mp4.Defragment(parsed, f, &out); err != nil {
+    log.Fatal(err)
+}
+// out now holds a progressive MP4; its roll/prol groups follow the final
+// samples, with one sgpd/sbgp pair per type that has at least one member.
+
+// To keep only some tracks, reset the reader, decode again and select them.
+if _, err := f.Seek(0, io.SeekStart); err != nil {
+    log.Fatal(err)
+}
+selected, err := mp4.DecodeFile(f, mp4.WithDecodeMode(mp4.DecModeLazyMdat))
+if err != nil {
+    log.Fatal(err)
+}
+var kept bytes.Buffer
+if err := mp4.DefragmentTracks(selected, f, &kept, 1, 2); err != nil {
+    log.Fatal(err)
+}
+```
+
+The recovery-group support is limited to the two recovery grouping types:
+
+* `sgpd` version 1, and version 2 with `default_group_description_index` 0;
+  every description is a signed big-endian 16-bit recovery distance.
+* `sbgp` version 0, and version 1 with `grouping_type_parameter` 0. Indices
+  1..65535 resolve against the track-level `sgpd`, 65537 and above against the
+  fragment's own `sgpd` (counted from 1), 0 means no group, and 65536 is
+  rejected. Samples that no `sbgp` run covers have no group.
+* Group indices are validated per `stbl` and per `traf`; malformed boxes
+  (unsupported versions or nonzero defaults/parameters, zero-length runs,
+  counts outside their scope, mismatched arrays, missing or out-of-range
+  descriptions, duplicate boxes, or descriptions that are not two bytes) fail
+  the conversion with a message naming the track and the `stbl` or fragment
+  position before any output is written.
+* Other `grouping_type` values and encrypted content keep their current
+  handling; no new recovery distances are computed.
+
 ### Packages
 
 The packages in the mp4ff module are
@@ -162,6 +222,8 @@ Example code for some common use cases is in the [examples](examples) directory:
   with one or more tracks, and can read and write `mdat` in lazy mode
 * [multitrack](examples/multitrack) parses a fragmented file with multiple tracks
 * [combine-segs](examples/combine-segs) combines single-track init and media segments into multi-track segments
+* [defragmenter](examples/defragmenter) converts a fragmented mp4 file into a progressive one with
+  `mp4.Defragment` / `mp4.DefragmentTracks`, preserving the roll and prol recovery groups
 * [add-sidx](examples/add-sidx) adds a top-level sidx box describing the segments of a fragmented file
 * [ivf-to-mp4](examples/ivf-to-mp4) muxes an AV1, VP9 or VP8 IVF bitstream into a fragmented mp4
   (one fragment per GOP)

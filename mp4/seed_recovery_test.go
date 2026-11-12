@@ -114,7 +114,7 @@ func seedRecoveryBytes(t *testing.T, f *mp4.File, track uint32) string {
 	return ""
 }
 
-func TestSeedRecoveryGroupLoss(t *testing.T) {
+func TestSeedRecoveryGroupRetention(t *testing.T) {
 	i := seedRecoveryInit(t)
 	i.Moov.Traks[0].Mdia.Minf.Stbl.AddChild(seedRecoveryDesc("roll", -1))
 	a := seedRecoveryFrag(t, 1, 1, 0, "AB")
@@ -131,9 +131,29 @@ func TestSeedRecoveryGroupLoss(t *testing.T) {
 			groups++
 		}
 	}
+	if groups != 2 {
+		t.Fatalf("source fragment sbgp boxes = %d, want 2", groups)
+	}
 	stbl := out.Moov.Traks[0].Mdia.Minf.Stbl
-	if groups != 2 || len(stbl.Sgpds) != 0 || len(stbl.Sbgps) != 0 {
-		t.Fatalf("unexpected starting-point groups: input=%d output sgpd=%d sbgp=%d", groups, len(stbl.Sgpds), len(stbl.Sbgps))
+	if len(stbl.Sgpds) != 2 || len(stbl.Sbgps) != 2 {
+		t.Fatalf("retained groups: sgpd=%d sbgp=%d, want one pair per recovery type",
+			len(stbl.Sgpds), len(stbl.Sbgps))
+	}
+	rollSgpd, rollSbgp := stbl.Sgpds[0], stbl.Sbgps[0]
+	if rollSgpd.GroupingType != "roll" || rollSbgp.GroupingType != "roll" {
+		t.Fatalf("first output pair is %s/%s, want roll", rollSgpd.GroupingType, rollSbgp.GroupingType)
+	}
+	if rollSgpd.Version != 1 || rollSgpd.DefaultLength != 2 || rollSbgp.Version != 0 {
+		t.Fatal("output recovery boxes must be sgpd version 1 default_length 2 and sbgp version 0")
+	}
+	if got := rollDistances(t, rollSgpd); fmt.Sprint(got) != "[-1 -3]" {
+		t.Fatalf("roll dictionary %v, want [-1 -3]", got)
+	}
+	if got := rollSbgp.SampleCounts; fmt.Sprint(got) != "[1 1]" {
+		t.Fatalf("roll run counts %v, want [1 1]", got)
+	}
+	if got := rollSbgp.GroupDescriptionIndices; fmt.Sprint(got) != "[1 2]" {
+		t.Fatalf("roll run indices %v, want [1 2]", got)
 	}
 	if got := seedRecoveryBytes(t, out, 1); got != "AB" {
 		t.Fatalf("payload %q", got)
@@ -141,7 +161,7 @@ func TestSeedRecoveryGroupLoss(t *testing.T) {
 	if got := seedRecoveryBytes(t, out, 2); got != "xy" {
 		t.Fatalf("second track payload %q", got)
 	}
-	fmt.Println("MP4FF_SEED_GROUPS input_global=1 input_local_types=2 output_groups=0 payload=AB/xy")
+	fmt.Println("MP4FF_SEED_GROUPS input_global=1 input_local_types=2 output_types=2 payload=AB/xy")
 }
 
 func TestSeedRecoveryGroupOverlap(t *testing.T) {
@@ -158,8 +178,33 @@ func TestSeedRecoveryGroupOverlap(t *testing.T) {
 	if got := seedRecoveryBytes(t, out, 2); got != "xy" {
 		t.Fatalf("unrelated track bytes %q", got)
 	}
-	if len(out.Moov.Traks[0].Mdia.Minf.Stbl.Sbgps) != 0 {
-		t.Fatal("starting point unexpectedly retained recovery groups")
+	stbl := out.Moov.Traks[0].Mdia.Minf.Stbl
+	if len(stbl.Sgpds) != 1 || len(stbl.Sbgps) != 1 || stbl.Sbgps[0].GroupingType != "roll" {
+		t.Fatalf("output groups sgpd=%d sbgp=%d, want one roll pair", len(stbl.Sgpds), len(stbl.Sbgps))
 	}
-	fmt.Println("MP4FF_SEED_OVERLAP surviving_payload=ABEF other_track=xy output_groups=0")
+	if got := rollDistances(t, stbl.Sgpds[0]); fmt.Sprint(got) != "[-1 -3]" {
+		t.Fatalf("roll dictionary %v, want [-1 -3]", got)
+	}
+	sbgp := stbl.Sbgps[0]
+	if got := sbgp.SampleCounts; fmt.Sprint(got) != "[2 2]" {
+		t.Fatalf("roll run counts %v, want [2 2]", got)
+	}
+	if got := sbgp.GroupDescriptionIndices; fmt.Sprint(got) != "[1 2]" {
+		t.Fatalf("roll run indices %v, want [1 2]", got)
+	}
+	fmt.Println("MP4FF_SEED_OVERLAP surviving_payload=ABEF other_track=xy roll=[-1 -1 -3 -3]")
+}
+
+// rollDistances reads the signed recovery distances of a roll sgpd box back.
+func rollDistances(t *testing.T, sgpd *mp4.SgpdBox) []int16 {
+	t.Helper()
+	distances := make([]int16, 0, len(sgpd.SampleGroupEntries))
+	for _, entry := range sgpd.SampleGroupEntries {
+		roll, ok := entry.(*mp4.RollSampleGroupEntry)
+		if !ok {
+			t.Fatalf("roll sgpd entry %T is not a roll entry", entry)
+		}
+		distances = append(distances, roll.RollDistance)
+	}
+	return distances
 }

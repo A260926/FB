@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Defragment` and `DefragmentTracks` preserve the gradual-decoding-recovery sample groups `roll` and `prol`.
+  They follow the samples that survive retransmission overlap (including progressive-prefix samples) and are rebuilt
+  into each output `stbl` as an `sgpd` version 1 / `sbgp` version 0 pair per grouping type that has a member, with
+  descriptions deduplicated and numbered by first reference. Supported inputs are `sgpd` version 1 and version 2 with
+  `default_group_description_index` 0, and `sbgp` version 0 and version 1 with `grouping_type_parameter` 0; malformed
+  recovery boxes fail the conversion with the track and scope named before any output is written
+
 ## [0.62.1] - 2026-11-10
 
 ### Changed
