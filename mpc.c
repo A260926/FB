@@ -4127,3 +4127,1091 @@ void mpc_optimise(mpc_parser_t *p) {
   mpc_optimise_unretained(p, 1);
 }
 
+
+/*
+** Progress Analysis
+** -----------------
+**
+** Read-only static analysis of a parser object graph.  The analysis only
+** reads `type`, `data`, `name` and `retained`; it never parses input and
+** never invokes a user callback.  Effect sets are the least fixed point of
+** a monotone transfer function over the four effect bits.
+*/
+
+#define MPC_PA_FAILS \
+  (MPC_PROGRESS_FAIL_EMPTY | MPC_PROGRESS_FAIL_CONSUMED)
+#define MPC_PA_SUCCS \
+  (MPC_PROGRESS_SUCC_EMPTY | MPC_PROGRESS_SUCC_CONSUMED)
+#define MPC_PA_EMPTY  \
+  (MPC_PROGRESS_FAIL_EMPTY | MPC_PROGRESS_SUCC_EMPTY)
+
+/* Edge prefix requirements (how control can reach a structural child). */
+enum {
+  MPC_PA_EDGE_PLAIN = 0,  /* child is called unconditionally              */
+  MPC_PA_EDGE_SUCC  = 1,  /* requires a zero-consumption success prefix   */
+  MPC_PA_EDGE_FAIL  = 2,  /* requires zero-consumption failing prefixes   */
+  MPC_PA_EDGE_SEP   = 3   /* sepby1 separator: element succeeded empty    */
+};
+
+typedef struct mpc_pa_edge {
+  int to;
+  int kind;
+  int zero;
+} mpc_pa_edge_t;
+
+typedef struct mpc_pa_node {
+  mpc_parser_t  *p;
+  int            index;
+  int            effects;
+  int            unsupported;
+  int            dfs;       /* Tarjan visit state */
+  int            disc;
+  int            lowlink;
+  int            scc;
+  int            edge_num;
+  int            edge_slots;
+  mpc_pa_edge_t *edges;
+  char          *name;
+} mpc_pa_node_t;
+
+typedef struct {
+  mpc_pa_node_t *nodes;
+  int            node_num;
+  int            node_slots;
+  mpc_parser_t **keys;
+  int           *vals;
+  int            map_slots;
+  int            map_count;
+} mpc_pa_ctx_t;
+
+static char *mpc_pa_strdup(const char *s) {
+  size_t n;
+  char *r;
+  if (!s) { s = ""; }
+  n = strlen(s) + 1;
+  r = malloc(n);
+  if (r) { memcpy(r, s, n); }
+  return r;
+}
+
+static int mpc_pa_map_lookup(mpc_pa_ctx_t *c, mpc_parser_t *p) {
+  int h, mask;
+  if (c->map_slots == 0) { return -1; }
+  mask = c->map_slots - 1;
+  h = ((size_t)p >> 3) & mask;
+  while (c->keys[h] != NULL) {
+    if (c->keys[h] == p) { return c->vals[h]; }
+    h = (h + 1) & mask;
+  }
+  return -1;
+}
+
+static int mpc_pa_map_grow(mpc_pa_ctx_t *c) {
+  int n = c->map_slots == 0 ? 16 : c->map_slots * 2;
+  mpc_parser_t **k = calloc((size_t)n, sizeof(mpc_parser_t*));
+  int *v = malloc((size_t)n * sizeof(int));
+  if (!k || !v) { free(k); free(v); return 0; }
+  c->keys = k;
+  c->vals = v;
+  c->map_slots = n;
+  return 1;
+}
+
+static int mpc_pa_map_insert(mpc_pa_ctx_t *c, mpc_parser_t *p, int idx) {
+  int h, mask;
+  if (c->map_slots == 0 || c->map_count * 10 >= c->map_slots * 7) {
+    mpc_parser_t **oldk = c->keys;
+    int *oldv = c->vals;
+    int old = c->map_slots;
+    int j, n;
+    if (!mpc_pa_map_grow(c)) { return 0; }
+    n = c->map_slots;
+    for (j = 0; j < old; j++) {
+      if (oldk[j]) {
+        int hh, mm = n - 1;
+        hh = ((size_t)oldk[j] >> 3) & mm;
+        while (c->keys[hh] != NULL) { hh = (hh + 1) & mm; }
+        c->keys[hh] = oldk[j];
+        c->vals[hh] = oldv[j];
+      }
+    }
+    free(oldk);
+    free(oldv);
+  }
+  mask = c->map_slots - 1;
+  h = ((size_t)p >> 3) & mask;
+  while (c->keys[h] != NULL) {
+    if (c->keys[h] == p) { c->vals[h] = idx; return 1; }
+    h = (h + 1) & mask;
+  }
+  c->keys[h] = p;
+  c->vals[h] = idx;
+  c->map_count++;
+  return 1;
+}
+
+static int mpc_pa_add_edge(mpc_pa_node_t *n, int to, int kind) {
+  if (n->edge_num == n->edge_slots) {
+    int s = n->edge_slots == 0 ? 2 : n->edge_slots * 2;
+    mpc_pa_edge_t *e = realloc(n->edges, (size_t)s * sizeof(mpc_pa_edge_t));
+    if (!e) { return 0; }
+    n->edges = e;
+    n->edge_slots = s;
+  }
+  n->edges[n->edge_num].to = to;
+  n->edges[n->edge_num].kind = kind;
+  n->edges[n->edge_num].zero = 0;
+  n->edge_num++;
+  return 1;
+}
+
+static void mpc_pa_discover(mpc_pa_ctx_t *c, mpc_parser_t *p);
+
+/*
+** Discovery is recursive and may grow c->nodes, so every node reference is
+** re-derived from its index instead of holding a pointer across the call.
+*/
+static int mpc_pa_link(mpc_pa_ctx_t *c, int parent_idx,
+                       mpc_parser_t *child, int kind) {
+  int idx;
+  mpc_pa_discover(c, child);
+  idx = mpc_pa_map_lookup(c, child);
+  if (idx < 0) { return 0; }
+  return mpc_pa_add_edge(&c->nodes[parent_idx], idx, kind);
+}
+
+static void mpc_pa_discover(mpc_pa_ctx_t *c, mpc_parser_t *p) {
+  int idx, j;
+
+  if (mpc_pa_map_lookup(c, p) >= 0) { return; }
+
+  if (c->node_num == c->node_slots) {
+    int s = c->node_slots == 0 ? 16 : c->node_slots * 2;
+    mpc_pa_node_t *t = realloc(c->nodes, (size_t)s * sizeof(mpc_pa_node_t));
+    if (!t) { return; }
+    c->nodes = t;
+    c->node_slots = s;
+  }
+
+  idx = c->node_num;
+  memset(&c->nodes[idx], 0, sizeof(mpc_pa_node_t));
+  c->nodes[idx].p = p;
+  c->nodes[idx].index = idx;
+  c->nodes[idx].scc = -1;
+  c->node_num++;
+  if (!mpc_pa_map_insert(c, p, idx)) { return; }
+
+  switch (p->type) {
+
+    case MPC_TYPE_EXPECT:
+      mpc_pa_link(c, idx, p->data.expect.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_APPLY:
+      mpc_pa_link(c, idx, p->data.apply.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_APPLY_TO:
+      mpc_pa_link(c, idx, p->data.apply_to.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_PREDICT:
+      c->nodes[idx].unsupported = MPC_PROGRESS_UNSUPPORTED_PREDICTIVE;
+      mpc_pa_link(c, idx, p->data.predict.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_CHECK:
+      mpc_pa_link(c, idx, p->data.check.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_CHECK_WITH:
+      mpc_pa_link(c, idx, p->data.check_with.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_NOT:
+    case MPC_TYPE_MAYBE:
+      mpc_pa_link(c, idx, p->data.not.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_MANY:
+    case MPC_TYPE_MANY1:
+      mpc_pa_link(c, idx, p->data.repeat.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_COUNT:
+      if (p->data.repeat.n <= 0) {
+        c->nodes[idx].unsupported =
+          MPC_PROGRESS_UNSUPPORTED_NONPOSITIVE_COUNT;
+      }
+      mpc_pa_link(c, idx, p->data.repeat.x, MPC_PA_EDGE_PLAIN);
+      break;
+
+    case MPC_TYPE_SEPBY1:
+      /* structural child order: element first, separator second */
+      mpc_pa_link(c, idx, p->data.sepby1.x, MPC_PA_EDGE_PLAIN);
+      mpc_pa_link(c, idx, p->data.sepby1.sep, MPC_PA_EDGE_SEP);
+      break;
+
+    case MPC_TYPE_OR:
+      for (j = 0; j < p->data.or.n; j++) {
+        mpc_pa_link(c, idx, p->data.or.xs[j],
+          j == 0 ? MPC_PA_EDGE_PLAIN : MPC_PA_EDGE_FAIL);
+      }
+      break;
+
+    case MPC_TYPE_AND:
+      for (j = 0; j < p->data.and.n; j++) {
+        mpc_pa_link(c, idx, p->data.and.xs[j],
+          j == 0 ? MPC_PA_EDGE_PLAIN : MPC_PA_EDGE_SUCC);
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+/* Effect transfer for a count of n positive repetitions of a body. */
+static int mpc_pa_count_effects(int fx, int n) {
+  int z = 1, c = 0, fe = 0, fc = 0;
+  int k;
+  for (k = 0; k < n; k++) {
+    int nfe = fe || (z && (fx & MPC_PROGRESS_FAIL_EMPTY));
+    int nfc = fc
+      || (z && (fx & MPC_PROGRESS_FAIL_CONSUMED))
+      || (c && (fx & MPC_PA_FAILS));
+    int nz = z && (fx & MPC_PROGRESS_SUCC_EMPTY);
+    int nc = (z && (fx & MPC_PROGRESS_SUCC_CONSUMED))
+          || (c && (fx & MPC_PA_SUCCS));
+    if (nz == z && nc == c && nfe == fe && nfc == fc) { break; }
+    z = nz; c = nc; fe = nfe; fc = nfc;
+    if (!z && !c) { break; }
+  }
+  return (fe ? MPC_PROGRESS_FAIL_EMPTY    : 0)
+       | (fc ? MPC_PROGRESS_FAIL_CONSUMED : 0)
+       | (z  ? MPC_PROGRESS_SUCC_EMPTY    : 0)
+       | (c  ? MPC_PROGRESS_SUCC_CONSUMED : 0);
+}
+
+static int mpc_pa_or_effects(mpc_pa_ctx_t *c, mpc_pa_node_t *n) {
+  int z = 1, co = 0, out = 0;
+  int j;
+  if (n->edge_num == 0) { return MPC_PROGRESS_SUCC_EMPTY; }
+  for (j = 0; j < n->edge_num; j++) {
+    int fx = c->nodes[n->edges[j].to].effects;
+    int nz, nco;
+    if (z) { out |= fx; }
+    if (co) {
+      if (fx & MPC_PA_FAILS) { out |= MPC_PROGRESS_FAIL_CONSUMED; }
+      if (fx & MPC_PA_SUCCS) { out |= MPC_PROGRESS_SUCC_CONSUMED; }
+    }
+    /* only failures carry control into the next alternative */
+    nz = z && (fx & MPC_PROGRESS_FAIL_EMPTY);
+    nco = (co && (fx & MPC_PA_FAILS))
+       || (z && (fx & MPC_PROGRESS_FAIL_CONSUMED));
+    z = nz;
+    co = nco;
+    if (!z && !co) { break; }
+  }
+  return out;
+}
+
+static int mpc_pa_and_effects(mpc_pa_ctx_t *c, mpc_pa_node_t *n) {
+  int z = 1, co = 0, fe = 0;
+  int j;
+  if (n->edge_num == 0) { return MPC_PROGRESS_SUCC_EMPTY; }
+  for (j = 0; j < n->edge_num; j++) {
+    int fx = c->nodes[n->edges[j].to].effects;
+    int nz, nc;
+    if ((z || co) && (fx & MPC_PA_FAILS)) { fe = 1; }
+    nz = z && (fx & MPC_PROGRESS_SUCC_EMPTY);
+    nc = (z && (fx & MPC_PROGRESS_SUCC_CONSUMED))
+      || (co && (fx & MPC_PA_SUCCS));
+    z = nz;
+    co = nc;
+    if (!z && !co) { break; }
+  }
+  return (fe ? MPC_PROGRESS_FAIL_EMPTY    : 0)
+       | (z  ? MPC_PROGRESS_SUCC_EMPTY    : 0)
+       | (co ? MPC_PROGRESS_SUCC_CONSUMED : 0);
+}
+
+/*
+** sepby1 transfer modelled on its real control flow.  States mark where
+** the element or the separator is called: F is the first element call;
+** R_z/R_co are later element calls at the entry position / a consumed
+** position; S_z/S_co are separator calls at those positions.  Only the
+** first element's failure fails the whole parser; a later failure ends
+** the repetition successfully while retaining the current position.
+*/
+static int mpc_pa_sepby1_effects(int ex, int sp) {
+  int F = 1, Rz = 0, Rco = 0, Sz = 0, Sco = 0;
+  int out = 0;
+  int changed = 1;
+
+  #define MPC_PA_EMIT(bit) do { if (!(out & (bit))) { out |= (bit); changed = 1; } } while (0)
+
+  while (changed) {
+    changed = 0;
+
+    if (F) {
+      if (ex & MPC_PROGRESS_FAIL_EMPTY)    { MPC_PA_EMIT(MPC_PROGRESS_FAIL_EMPTY); }
+      if (ex & MPC_PROGRESS_FAIL_CONSUMED) { MPC_PA_EMIT(MPC_PROGRESS_FAIL_CONSUMED); }
+      if (ex & MPC_PROGRESS_SUCC_EMPTY)    { if (!Sz)  { Sz = 1;  changed = 1; } }
+      if (ex & MPC_PROGRESS_SUCC_CONSUMED) { if (!Sco) { Sco = 1; changed = 1; } }
+      F = 0;
+    }
+
+    if (Rz) {
+      /* a later element failing ends the repetition successfully */
+      if (ex & MPC_PA_FAILS) { MPC_PA_EMIT(MPC_PROGRESS_SUCC_EMPTY); }
+      if (ex & MPC_PROGRESS_SUCC_EMPTY)    { if (!Sz)  { Sz = 1;  changed = 1; } }
+      if (ex & MPC_PROGRESS_SUCC_CONSUMED) { if (!Sco) { Sco = 1; changed = 1; } }
+    }
+
+    if (Rco) {
+      if (ex & MPC_PA_FAILS) { MPC_PA_EMIT(MPC_PROGRESS_SUCC_CONSUMED); }
+      if (ex & MPC_PA_SUCCS) { if (!Sco) { Sco = 1; changed = 1; } }
+    }
+
+    if (Sz) {
+      if (sp & MPC_PA_FAILS) { MPC_PA_EMIT(MPC_PROGRESS_SUCC_EMPTY); }
+      if (sp & MPC_PROGRESS_SUCC_EMPTY)    { if (!Rz)  { Rz = 1;  changed = 1; } }
+      if (sp & MPC_PROGRESS_SUCC_CONSUMED) { if (!Rco) { Rco = 1; changed = 1; } }
+    }
+
+    if (Sco) {
+      if (sp & MPC_PA_FAILS) { MPC_PA_EMIT(MPC_PROGRESS_SUCC_CONSUMED); }
+      if (sp & MPC_PA_SUCCS) { if (!Rco) { Rco = 1; changed = 1; } }
+    }
+  }
+
+  #undef MPC_PA_EMIT
+  return out;
+}
+
+static int mpc_pa_transfer(mpc_pa_ctx_t *c, mpc_pa_node_t *n) {
+  mpc_parser_t *p = n->p;
+  int fx;
+
+  /* a child-bearing node without an edge only happens on allocation
+     failure during discovery; contribute nothing until the graph exists */
+  switch (p->type) {
+    case MPC_TYPE_EXPECT:
+    case MPC_TYPE_APPLY:
+    case MPC_TYPE_APPLY_TO:
+    case MPC_TYPE_PREDICT:
+    case MPC_TYPE_CHECK:
+    case MPC_TYPE_CHECK_WITH:
+    case MPC_TYPE_NOT:
+    case MPC_TYPE_MAYBE:
+    case MPC_TYPE_MANY:
+    case MPC_TYPE_MANY1:
+    case MPC_TYPE_COUNT:
+      if (n->edge_num == 0) { return 0; }
+      break;
+    case MPC_TYPE_SEPBY1:
+      if (n->edge_num < 2) { return 0; }
+      break;
+    case MPC_TYPE_OR:
+    case MPC_TYPE_AND:
+      if (n->edge_num == 0) { return MPC_PROGRESS_SUCC_EMPTY; }
+      break;
+    default:
+      break;
+  }
+
+  switch (p->type) {
+
+    case MPC_TYPE_UNDEFINED:
+    case MPC_TYPE_FAIL:
+      return MPC_PROGRESS_FAIL_EMPTY;
+
+    case MPC_TYPE_PASS:
+    case MPC_TYPE_LIFT:
+    case MPC_TYPE_LIFT_VAL:
+    case MPC_TYPE_STATE:
+      return MPC_PROGRESS_SUCC_EMPTY;
+
+    case MPC_TYPE_ANCHOR:
+    case MPC_TYPE_SOI:
+    case MPC_TYPE_EOI:
+      return MPC_PROGRESS_FAIL_EMPTY | MPC_PROGRESS_SUCC_EMPTY;
+
+    case MPC_TYPE_ANY:
+    case MPC_TYPE_SINGLE:
+    case MPC_TYPE_ONEOF:
+    case MPC_TYPE_NONEOF:
+    case MPC_TYPE_RANGE:
+    case MPC_TYPE_SATISFY:
+      return MPC_PROGRESS_FAIL_EMPTY | MPC_PROGRESS_SUCC_CONSUMED;
+
+    case MPC_TYPE_STRING:
+      if (p->data.string.x && p->data.string.x[0] != '\0') {
+        return MPC_PROGRESS_FAIL_EMPTY | MPC_PROGRESS_SUCC_CONSUMED;
+      }
+      return MPC_PROGRESS_SUCC_EMPTY;
+
+    case MPC_TYPE_APPLY:
+      return c->nodes[n->edges[0].to].effects;
+
+    case MPC_TYPE_APPLY_TO:
+      return c->nodes[n->edges[0].to].effects;
+
+    case MPC_TYPE_EXPECT:
+      return c->nodes[n->edges[0].to].effects;
+
+    case MPC_TYPE_PREDICT:
+      return c->nodes[n->edges[0].to].effects;
+
+    case MPC_TYPE_CHECK:
+    case MPC_TYPE_CHECK_WITH:
+      fx = c->nodes[n->edges[0].to].effects;
+      return (fx & MPC_PA_FAILS)
+           | (fx & MPC_PA_SUCCS)
+           | ((fx & MPC_PROGRESS_SUCC_EMPTY)
+                ? MPC_PROGRESS_FAIL_EMPTY : 0)
+           | ((fx & MPC_PROGRESS_SUCC_CONSUMED)
+                ? MPC_PROGRESS_FAIL_CONSUMED : 0);
+
+    case MPC_TYPE_NOT:
+      fx = c->nodes[n->edges[0].to].effects;
+      return ((fx & MPC_PROGRESS_FAIL_EMPTY)
+                ? MPC_PROGRESS_SUCC_EMPTY : 0)
+           | ((fx & MPC_PROGRESS_FAIL_CONSUMED)
+                ? MPC_PROGRESS_SUCC_CONSUMED : 0)
+           | ((fx & MPC_PA_SUCCS)
+                ? MPC_PROGRESS_FAIL_EMPTY : 0);
+
+    case MPC_TYPE_MAYBE:
+      fx = c->nodes[n->edges[0].to].effects;
+      return (fx & MPC_PA_SUCCS)
+           | ((fx & MPC_PROGRESS_FAIL_EMPTY)
+                ? MPC_PROGRESS_SUCC_EMPTY : 0)
+           | ((fx & MPC_PROGRESS_FAIL_CONSUMED)
+                ? MPC_PROGRESS_SUCC_CONSUMED : 0);
+
+    case MPC_TYPE_MANY: {
+      int b = c->nodes[n->edges[0].to].effects;
+      /* the terminating failed attempt leaves its position behind */
+      int se = (b & MPC_PROGRESS_FAIL_EMPTY) ? 1 : 0;
+      int sc = ((b & MPC_PROGRESS_SUCC_CONSUMED)
+                && (b & MPC_PA_FAILS))
+            || ((b & MPC_PA_SUCCS)
+                && (b & MPC_PROGRESS_FAIL_CONSUMED));
+      return (se ? MPC_PROGRESS_SUCC_EMPTY : 0)
+           | (sc ? MPC_PROGRESS_SUCC_CONSUMED : 0);
+    }
+
+    case MPC_TYPE_MANY1: {
+      int b = c->nodes[n->edges[0].to].effects;
+      int fe = (b & MPC_PROGRESS_FAIL_EMPTY) ? 1 : 0;
+      int fc = (b & MPC_PROGRESS_FAIL_CONSUMED) ? 1 : 0;
+      int se = (b & MPC_PROGRESS_SUCC_EMPTY)
+            && (b & MPC_PROGRESS_FAIL_EMPTY);
+      int sc = ((b & MPC_PROGRESS_SUCC_CONSUMED)
+                && (b & MPC_PA_FAILS))
+            || ((b & MPC_PA_SUCCS)
+                && (b & MPC_PROGRESS_FAIL_CONSUMED));
+      return (fe ? MPC_PROGRESS_FAIL_EMPTY    : 0)
+           | (fc ? MPC_PROGRESS_FAIL_CONSUMED : 0)
+           | (se ? MPC_PROGRESS_SUCC_EMPTY    : 0)
+           | (sc ? MPC_PROGRESS_SUCC_CONSUMED : 0);
+    }
+
+    case MPC_TYPE_COUNT:
+      if (p->data.repeat.n <= 0) { return 0; }
+      fx = c->nodes[n->edges[0].to].effects;
+      return mpc_pa_count_effects(fx, p->data.repeat.n);
+
+    case MPC_TYPE_OR:
+      return mpc_pa_or_effects(c, n);
+
+    case MPC_TYPE_AND:
+      return mpc_pa_and_effects(c, n);
+
+    case MPC_TYPE_SEPBY1: {
+      int ex = c->nodes[n->edges[0].to].effects;
+      int sp = c->nodes[n->edges[1].to].effects;
+      return mpc_pa_sepby1_effects(ex, sp);
+    }
+
+    default:
+      return 0;
+  }
+}
+
+static int mpc_pa_solve_effects(mpc_pa_ctx_t *c) {
+  int changed = 1, passes = 0;
+  while (changed) {
+    int j;
+    changed = 0;
+    if (++passes > c->node_num * 4 + 4) { return 0; }
+    for (j = 0; j < c->node_num; j++) {
+      int fx = mpc_pa_transfer(c, &c->nodes[j]);
+      if ((fx & ~c->nodes[j].effects) != 0) {
+        c->nodes[j].effects |= fx;
+        changed = 1;
+      }
+    }
+  }
+  return 1;
+}
+
+/*
+** Decide which structural edges can be entered at the parent's entry
+** position.  Only the prefix control flow matters: the child's own effects
+** decide what happens after it is entered, not where the call happens.
+*/
+static void mpc_pa_compute_zero_edges(mpc_pa_ctx_t *c) {
+  int j;
+  for (j = 0; j < c->node_num; j++) {
+    mpc_pa_node_t *n = &c->nodes[j];
+    int k;
+
+    for (k = 0; k < n->edge_num; k++) {
+      mpc_pa_edge_t *e = &n->edges[k];
+      int prefix_zero = 1;
+      int m;
+
+      switch (e->kind) {
+
+        case MPC_PA_EDGE_PLAIN:
+          prefix_zero = 1;
+          break;
+
+        case MPC_PA_EDGE_SUCC:
+          /* AND item: all earlier items must succeed empty */
+          prefix_zero = 1;
+          for (m = 0; m < k; m++) {
+            int pf = c->nodes[n->edges[m].to].effects;
+            if (!(pf & MPC_PROGRESS_SUCC_EMPTY)) { prefix_zero = 0; }
+          }
+          break;
+
+        case MPC_PA_EDGE_FAIL:
+          /* OR item: every earlier item must fail empty */
+          prefix_zero = 1;
+          for (m = 0; m < k; m++) {
+            int pf = c->nodes[n->edges[m].to].effects;
+            if (!(pf & MPC_PROGRESS_FAIL_EMPTY)) { prefix_zero = 0; }
+          }
+          break;
+
+        case MPC_PA_EDGE_SEP:
+          /* sepby1 separator: the leading element must succeed empty */
+          prefix_zero =
+            (c->nodes[n->edges[0].to].effects &
+             MPC_PROGRESS_SUCC_EMPTY) != 0;
+          break;
+
+        default:
+          prefix_zero = 0;
+          break;
+      }
+
+      e->zero = prefix_zero;
+    }
+  }
+}
+
+/*
+** General reachability: which structural children control flow can actually
+** reach.  AND items need a succeeding prefix, OR items a failing prefix and
+** the sepby1 separator a succeeding element.  Consumed prefixes still count
+** as reachable so local stagnation inside their subgraphs is not missed.
+*/
+static void mpc_pa_reach(mpc_pa_ctx_t *c, int *reach) {
+  int *stk;
+  int top = 0, slots = c->node_num > 0 ? c->node_num : 1;
+  int j;
+  stk = malloc((size_t)slots * sizeof(int));
+  if (!stk) { return; }
+  stk[top++] = 0;
+  reach[0] = 1;
+  while (top > 0) {
+    mpc_pa_node_t *n;
+    int u = stk[--top];
+    n = &c->nodes[u];
+    for (j = 0; j < n->edge_num; j++) {
+      mpc_pa_edge_t *e = &n->edges[j];
+      int feasible = 1;
+      int m;
+
+      switch (e->kind) {
+        case MPC_PA_EDGE_PLAIN:
+          feasible = 1;
+          break;
+        case MPC_PA_EDGE_SUCC:
+          for (m = 0; m < j; m++) {
+            int pf = c->nodes[n->edges[m].to].effects;
+            if (!(pf & MPC_PA_SUCCS)) { feasible = 0; }
+          }
+          break;
+        case MPC_PA_EDGE_FAIL:
+          for (m = 0; m < j; m++) {
+            int pf = c->nodes[n->edges[m].to].effects;
+            if (!(pf & MPC_PA_FAILS)) { feasible = 0; }
+          }
+          break;
+        case MPC_PA_EDGE_SEP:
+          feasible =
+            (c->nodes[n->edges[0].to].effects & MPC_PA_SUCCS) != 0;
+          break;
+        default:
+          feasible = 0;
+          break;
+      }
+
+      if (feasible && !reach[e->to]) {
+        reach[e->to] = 1;
+        stk[top++] = e->to;
+      }
+    }
+  }
+  free(stk);
+}
+
+/* Iterative Tarjan SCC over the zero-edge subgraph. */
+typedef struct {
+  int *stk;
+  int top;
+  int *onstack;
+  int *dfs_stk;
+  int *dfs_edge;
+  int dfs_top;
+  int clock;
+  int scc_count;
+} mpc_pa_tarjan_t;
+
+static void mpc_pa_tarjan(mpc_pa_ctx_t *c, const int *reach) {
+  int n = c->node_num;
+  mpc_pa_tarjan_t t;
+  int s;
+  int j;
+
+  t.stk = malloc((size_t)n * sizeof(int));
+  t.onstack = calloc((size_t)n, sizeof(int));
+  t.dfs_stk = malloc((size_t)n * sizeof(int));
+  t.dfs_edge = calloc((size_t)n, sizeof(int));
+  t.top = 0;
+  t.dfs_top = 0;
+  t.clock = 0;
+  t.scc_count = 0;
+  if (!t.stk || !t.onstack || !t.dfs_stk || !t.dfs_edge) {
+    free(t.stk); free(t.onstack); free(t.dfs_stk); free(t.dfs_edge);
+    return;
+  }
+
+  for (s = 0; s < n; s++) {
+    if (!reach[s] || c->nodes[s].dfs != 0) { continue; }
+
+    t.dfs_stk[t.dfs_top++] = s;
+    c->nodes[s].disc = c->nodes[s].lowlink = t.clock++;
+    c->nodes[s].dfs = 1;
+    t.stk[t.top++] = s;
+    t.onstack[s] = 1;
+    t.dfs_edge[s] = 0;
+
+    while (t.dfs_top > 0) {
+      int u = t.dfs_stk[t.dfs_top - 1];
+      mpc_pa_node_t *u_node = &c->nodes[u];
+      mpc_pa_edge_t *e = NULL;
+      int v = -1;
+
+      while (t.dfs_edge[u] < u_node->edge_num) {
+        e = &u_node->edges[t.dfs_edge[u]];
+        if (e->zero && reach[e->to]) {
+          v = e->to;
+          break;
+        }
+        t.dfs_edge[u]++;
+      }
+
+      if (v < 0) {
+        if (u_node->lowlink == u_node->disc) {
+          while (t.top > 0) {
+            int w = t.stk[--t.top];
+            t.onstack[w] = 0;
+            c->nodes[w].scc = t.scc_count;
+            if (w == u) { break; }
+          }
+          t.scc_count++;
+        }
+        t.dfs_top--;
+        if (t.dfs_top > 0) {
+          int par = t.dfs_stk[t.dfs_top - 1];
+          if (c->nodes[par].lowlink > u_node->lowlink) {
+            c->nodes[par].lowlink = u_node->lowlink;
+          }
+        }
+        continue;
+      }
+
+      t.dfs_edge[u]++;
+
+      if (c->nodes[v].dfs == 0) {
+        c->nodes[v].disc = c->nodes[v].lowlink = t.clock++;
+        c->nodes[v].dfs = 1;
+        t.stk[t.top++] = v;
+        t.onstack[v] = 1;
+        t.dfs_edge[v] = 0;
+        t.dfs_stk[t.dfs_top++] = v;
+      } else if (t.onstack[v]) {
+        if (u_node->lowlink > c->nodes[v].disc) {
+          u_node->lowlink = c->nodes[v].disc;
+        }
+      }
+    }
+  }
+
+  for (j = 0; j < n; j++) {
+    if (c->nodes[j].dfs == 0) { c->nodes[j].scc = -1; }
+  }
+  free(t.stk);
+  free(t.onstack);
+  free(t.dfs_stk);
+  free(t.dfs_edge);
+}
+
+/* Find one closed cycle path inside a cyclic SCC, DFS edges in order. */
+typedef struct {
+  int *pos;     /* position on the DFS path, -1 absent */
+  int *path;
+  int len;
+  int *out;
+  int out_len;
+  int scc;
+} mpc_pa_cycle_t;
+
+static int mpc_pa_cycle_dfs(mpc_pa_ctx_t *c, mpc_pa_cycle_t *q, int u) {
+  mpc_pa_node_t *n = &c->nodes[u];
+  int j;
+  q->pos[u] = q->len;
+  q->path[q->len++] = u;
+
+  for (j = 0; j < n->edge_num; j++) {
+    mpc_pa_edge_t *e = &n->edges[j];
+    int v;
+    int start, k;
+    if (!e->zero || c->nodes[e->to].scc != q->scc) { continue; }
+    v = e->to;
+    if (q->pos[v] >= 0) {
+      start = q->pos[v];
+      q->out_len = q->len - start + 1;
+      for (k = 0; k < q->len - start; k++) {
+        q->out[k] = q->path[start + k];
+      }
+      q->out[q->out_len - 1] = v;
+      return 1;
+    }
+    if (mpc_pa_cycle_dfs(c, q, v)) { return 1; }
+  }
+
+  q->pos[u] = -1;
+  q->len--;
+  return 0;
+}
+
+typedef struct {
+  int risk;
+  int node_index;
+  int path_len;
+  int *path;
+} mpc_pa_finding_t;
+
+static int mpc_pa_finding_cmp(const void *a, const void *b) {
+  const mpc_pa_finding_t *x = a;
+  const mpc_pa_finding_t *y = b;
+  if (x->node_index != y->node_index) {
+    return x->node_index < y->node_index ? -1 : 1;
+  }
+  if (x->risk != y->risk) { return x->risk < y->risk ? -1 : 1; }
+  return 0;
+}
+
+static char *mpc_pa_node_name(mpc_pa_node_t *n) {
+  char buf[64];
+  if (n->p->name) { return mpc_pa_strdup(n->p->name); }
+  snprintf(buf, sizeof(buf), "#%d", n->index);
+  return mpc_pa_strdup(buf);
+}
+
+mpc_progress_report_t *mpc_analyze_progress(mpc_parser_t *root) {
+  mpc_pa_ctx_t c;
+  mpc_progress_report_t *report;
+  mpc_progress_node_t *pub_nodes;
+  mpc_progress_risk_t *pub_risks;
+  mpc_progress_unsupported_t *pub_unsup;
+  int *reach;
+  int *scc_min;
+  int *scc_cyclic;
+  int scc_count = 0;
+  mpc_pa_finding_t *findings = NULL;
+  int finding_num = 0;
+  int finding_slots = 0;
+  int j, k, incomplete = 0;
+
+  if (!root) { return NULL; }
+
+  memset(&c, 0, sizeof(c));
+  mpc_pa_discover(&c, root);
+
+  if (!mpc_pa_solve_effects(&c)) { goto fail; }
+  mpc_pa_compute_zero_edges(&c);
+
+  reach = calloc((size_t)c.node_num, sizeof(int));
+  if (!reach) { goto fail; }
+  mpc_pa_reach(&c, reach);
+  mpc_pa_tarjan(&c, reach);
+
+  for (j = 0; j < c.node_num; j++) {
+    if (c.nodes[j].scc >= 0 && c.nodes[j].scc + 1 > scc_count) {
+      scc_count = c.nodes[j].scc + 1;
+    }
+  }
+
+  scc_min = malloc((size_t)(scc_count > 0 ? scc_count : 1) * sizeof(int));
+  scc_cyclic = calloc((size_t)(scc_count > 0 ? scc_count : 1), sizeof(int));
+  if (!scc_min || !scc_cyclic) {
+    free(reach); free(scc_min); free(scc_cyclic); goto fail;
+  }
+  for (j = 0; j < scc_count; j++) { scc_min[j] = c.node_num; }
+
+  for (j = 0; j < c.node_num; j++) {
+    int s = c.nodes[j].scc;
+    if (s < 0) { continue; }
+    if (j < scc_min[s]) { scc_min[s] = j; }
+    for (k = 0; k < c.nodes[j].edge_num; k++) {
+      mpc_pa_edge_t *e = &c.nodes[j].edges[k];
+      /* every SCC here lies in the reachable zero-edge subgraph */
+      if (e->zero && c.nodes[e->to].scc == s) {
+        scc_cyclic[s] = 1;
+      }
+    }
+  }
+
+  for (j = 0; j < scc_count; j++) {
+    mpc_pa_cycle_t q;
+    int *path_copy;
+    if (!scc_cyclic[j]) { continue; }
+    q.scc = j;
+    q.pos = malloc((size_t)c.node_num * sizeof(int));
+    q.path = malloc((size_t)(c.node_num + 1) * sizeof(int));
+    q.out = malloc((size_t)(c.node_num + 1) * sizeof(int));
+    if (!q.pos || !q.path || !q.out) {
+      free(q.pos); free(q.path); free(q.out);
+      free(reach); free(scc_min); free(scc_cyclic);
+      goto fail;
+    }
+    for (k = 0; k < c.node_num; k++) { q.pos[k] = -1; }
+    q.len = 0;
+    q.out_len = 0;
+    if (!mpc_pa_cycle_dfs(&c, &q, scc_min[j])) {
+      free(q.pos); free(q.path); free(q.out);
+      continue;
+    }
+    path_copy = malloc((size_t)q.out_len * sizeof(int));
+    if (!path_copy) {
+      free(q.pos); free(q.path); free(q.out);
+      free(reach); free(scc_min); free(scc_cyclic);
+      goto fail;
+    }
+    memcpy(path_copy, q.out, (size_t)q.out_len * sizeof(int));
+    if (finding_num == finding_slots) {
+      int s = finding_slots == 0 ? 8 : finding_slots * 2;
+      mpc_pa_finding_t *t = realloc(findings,
+        (size_t)s * sizeof(mpc_pa_finding_t));
+      if (!t) {
+        free(path_copy); free(q.pos); free(q.path); free(q.out);
+        free(reach); free(scc_min); free(scc_cyclic);
+        goto fail;
+      }
+      findings = t;
+      finding_slots = s;
+    }
+    findings[finding_num].risk = MPC_PROGRESS_RISK_CYCLE;
+    findings[finding_num].node_index = path_copy[0];
+    findings[finding_num].path_len = q.out_len;
+    findings[finding_num].path = path_copy;
+    finding_num++;
+    free(q.pos); free(q.path); free(q.out);
+  }
+
+  /* Repetition stagnation findings (reachable nodes only). */
+  for (j = 0; j < c.node_num; j++) {
+    mpc_pa_node_t *n = &c.nodes[j];
+    int flag = 0;
+    int plen = 0;
+    int *path = NULL;
+
+    if (!reach[j]) { continue; }
+
+    if (n->p->type == MPC_TYPE_MANY || n->p->type == MPC_TYPE_MANY1) {
+      int b;
+      if (n->edge_num < 1) { continue; }
+      b = c.nodes[n->edges[0].to].effects;
+      if (b & MPC_PROGRESS_SUCC_EMPTY) {
+        flag = 1;
+        plen = 3;
+        path = malloc((size_t)plen * sizeof(int));
+        if (path) {
+          path[0] = n->index;
+          path[1] = n->edges[0].to;
+          path[2] = n->index;
+        }
+      }
+    } else if (n->p->type == MPC_TYPE_SEPBY1) {
+      int ex, sp;
+      if (n->edge_num < 2) { continue; }
+      ex = c.nodes[n->edges[0].to].effects;
+      sp = c.nodes[n->edges[1].to].effects;
+      if ((ex & MPC_PROGRESS_SUCC_EMPTY)
+       && (sp & MPC_PROGRESS_SUCC_EMPTY)) {
+        flag = 1;
+        plen = 4;
+        path = malloc((size_t)plen * sizeof(int));
+        if (path) {
+          path[0] = n->index;
+          path[1] = n->edges[1].to;
+          path[2] = n->edges[0].to;
+          path[3] = n->index;
+        }
+      }
+    }
+
+    if (flag) {
+      if (!path) { free(reach); free(scc_min); free(scc_cyclic); goto fail; }
+      if (finding_num == finding_slots) {
+        int s = finding_slots == 0 ? 8 : finding_slots * 2;
+        mpc_pa_finding_t *t = realloc(findings,
+          (size_t)s * sizeof(mpc_pa_finding_t));
+        if (!t) {
+          free(path); free(reach); free(scc_min); free(scc_cyclic);
+          goto fail;
+        }
+        findings = t;
+        finding_slots = s;
+      }
+      findings[finding_num].risk = MPC_PROGRESS_RISK_REPETITION;
+      findings[finding_num].node_index = n->index;
+      findings[finding_num].path_len = plen;
+      findings[finding_num].path = path;
+      finding_num++;
+    }
+  }
+
+  qsort(findings, (size_t)finding_num, sizeof(mpc_pa_finding_t),
+    mpc_pa_finding_cmp);
+
+  for (j = 0; j < c.node_num; j++) {
+    c.nodes[j].name = mpc_pa_node_name(&c.nodes[j]);
+    if (!c.nodes[j].name) {
+      free(reach); free(scc_min); free(scc_cyclic); goto fail;
+    }
+    if (c.nodes[j].unsupported) { incomplete = 1; }
+  }
+
+  report = calloc(1, sizeof(mpc_progress_report_t));
+  pub_nodes = malloc((size_t)c.node_num * sizeof(mpc_progress_node_t));
+  pub_risks = malloc((size_t)(finding_num > 0 ? finding_num : 1)
+                     * sizeof(mpc_progress_risk_t));
+  if (!report || !pub_nodes || !pub_risks) {
+    free(report); free(pub_nodes); free(pub_risks);
+    free(reach); free(scc_min); free(scc_cyclic);
+    goto fail;
+  }
+
+  for (j = 0; j < c.node_num; j++) {
+    pub_nodes[j].index = c.nodes[j].index;
+    pub_nodes[j].parser = c.nodes[j].p;
+    pub_nodes[j].name = c.nodes[j].name;
+    pub_nodes[j].type = c.nodes[j].p->type;
+    pub_nodes[j].effects = c.nodes[j].effects;
+    pub_nodes[j].reachable = reach[j];
+    pub_nodes[j].unsupported = c.nodes[j].unsupported;
+  }
+
+  for (j = 0; j < finding_num; j++) {
+    pub_risks[j].risk = findings[j].risk;
+    pub_risks[j].node_index = findings[j].node_index;
+    pub_risks[j].path_len = findings[j].path_len;
+    pub_risks[j].node_path = findings[j].path;
+  }
+
+  {
+    int unsup_num = 0;
+    for (j = 0; j < c.node_num; j++) {
+      if (c.nodes[j].unsupported) { unsup_num++; }
+    }
+    pub_unsup = malloc((size_t)(unsup_num > 0 ? unsup_num : 1)
+                       * sizeof(mpc_progress_unsupported_t));
+    if (!pub_unsup) {
+      free(report); free(pub_nodes); free(pub_risks);
+      free(reach); free(scc_min); free(scc_cyclic);
+      goto fail;
+    }
+    k = 0;
+    for (j = 0; j < c.node_num; j++) {
+      if (c.nodes[j].unsupported) {
+        pub_unsup[k].node_index = c.nodes[j].index;
+        pub_unsup[k].reason = c.nodes[j].unsupported;
+        pub_unsup[k].name = c.nodes[j].name;
+        k++;
+      }
+    }
+    report->unsupported_num = unsup_num;
+    report->unsupported = pub_unsup;
+  }
+
+  report->complete = !incomplete;
+  report->node_num = c.node_num;
+  report->nodes = pub_nodes;
+  report->risk_num = finding_num;
+  report->risks = pub_risks;
+
+  for (j = 0; j < c.node_num; j++) { free(c.nodes[j].edges); }
+  free(c.nodes);
+  free(c.keys);
+  free(c.vals);
+  free(reach);
+  free(scc_min);
+  free(scc_cyclic);
+  free(findings);
+
+  return report;
+
+fail:
+  for (j = 0; j < c.node_num; j++) {
+    free(c.nodes[j].edges);
+    free(c.nodes[j].name);
+  }
+  free(c.nodes);
+  free(c.keys);
+  free(c.vals);
+  for (j = 0; j < finding_num; j++) {
+    free(findings[j].path);
+  }
+  free(findings);
+  return NULL;
+}
+
+void mpc_progress_report_delete(mpc_progress_report_t *report) {
+  int j;
+  if (!report) { return; }
+  if (report->risks) {
+    for (j = 0; j < report->risk_num; j++) {
+      free((void*)report->risks[j].node_path);
+    }
+    free((void*)report->risks);
+  }
+  if (report->nodes) {
+    for (j = 0; j < report->node_num; j++) {
+      free((void*)report->nodes[j].name);
+    }
+    free((void*)report->nodes);
+  }
+  /* unsupported names alias node names and need no separate free */
+  free((void*)report->unsupported);
+  free(report);
+}

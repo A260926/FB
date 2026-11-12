@@ -384,6 +384,72 @@ int mpc_test_fail(mpc_parser_t *p, const char *s, const void *d,
   mpc_dtor_t destructor,
   void(*printer)(const void*));
 
+/*
+** Progress Analysis
+**
+** Read-only static analysis of a parser object graph.  It never parses
+** input, never runs user callbacks and never mutates the analysed parsers.
+** See docs/progress.md for the effect lattice, edge semantics and limits.
+*/
+
+/* Possible effects of a single parser call, relative to its entry position. */
+enum {
+  MPC_PROGRESS_FAIL_EMPTY    = 1,  /* failed without consuming input       */
+  MPC_PROGRESS_FAIL_CONSUMED = 2,  /* failed after consuming input          */
+  MPC_PROGRESS_SUCC_EMPTY    = 4,  /* succeeded without consuming input     */
+  MPC_PROGRESS_SUCC_CONSUMED = 8   /* succeeded after consuming input       */
+};
+
+/* Kinds of structural stagnation risk reported per finding. */
+enum {
+  MPC_PROGRESS_RISK_CYCLE       = 1,  /* zero-consumption recursive cycle    */
+  MPC_PROGRESS_RISK_REPETITION  = 2   /* empty-success repetition body       */
+};
+
+/* Reasons a node cannot be analysed completely. */
+enum {
+  MPC_PROGRESS_UNSUPPORTED_NONPOSITIVE_COUNT = 1,
+  MPC_PROGRESS_UNSUPPORTED_PREDICTIVE        = 2
+};
+
+typedef struct {
+  int            index;       /* DFS first-visit number, root is 0          */
+  mpc_parser_t  *parser;      /* identity: distinct object pointers differ  */
+  const char    *name;        /* report-owned copy, never NULL              */
+  int            type;        /* internal parser type id                    */
+  int            effects;     /* bitmask of MPC_PROGRESS_* effect values    */
+  int            reachable;   /* structurally reachable from root           */
+  int            unsupported; /* 0 or an MPC_PROGRESS_UNSUPPORTED_* reason  */
+} mpc_progress_node_t;
+
+typedef struct {
+  int            risk;        /* an MPC_PROGRESS_RISK_* value               */
+  int            node_index;  /* node the finding is anchored at            */
+  int            path_len;    /* number of indices in node_path             */
+  const int     *node_path;   /* report-owned node indices; cycle paths are
+                                 closed (first node repeated at the end)    */
+} mpc_progress_risk_t;
+
+typedef struct {
+  int            node_index;
+  int            reason;      /* an MPC_PROGRESS_UNSUPPORTED_* value        */
+  const char    *name;        /* report-owned copy, never NULL              */
+} mpc_progress_unsupported_t;
+
+typedef struct {
+  int                                complete; /* 0 if unsupported nodes
+                                                   make the result partial  */
+  int                                node_num;
+  const mpc_progress_node_t         *nodes;
+  int                                risk_num;
+  const mpc_progress_risk_t         *risks;
+  int                                unsupported_num;
+  const mpc_progress_unsupported_t  *unsupported;
+} mpc_progress_report_t;
+
+mpc_progress_report_t *mpc_analyze_progress(mpc_parser_t *root);
+void mpc_progress_report_delete(mpc_progress_report_t *report);
+
 #ifdef __cplusplus
 }
 #endif
