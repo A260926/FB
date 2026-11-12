@@ -1,0 +1,7 @@
+converter
+converter.exe
+player
+player.exe
+*.wav
+
+.build/
