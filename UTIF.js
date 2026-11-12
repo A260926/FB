@@ -140,7 +140,13 @@ UTIF.decodeImage = function(buff, img, ifds)
 	var spp = img["t277"]?img["t277"][0]:1;  //if(cmpr==7) spp=3; // jpg
 	var pco = img["t284"]?img["t284"][0]:1;  if(spp!=3) pco=1;  // planar configuration
 	if(pco==2) log("PlanarConfiguration 2 should not be used!");
-	
+
+	// IEEE floating-point samples (SampleFormat=3): decompressed bytes stay in
+	// the file's byte order and planar blocks are interleaved per pixel. The
+	// data is never mutated; toRGBA8() interprets it read-only.
+	var isFloat = (img["t339"]!=null) && (bps==32 || bps==64) && img["t339"].slice(0,spp).every(function(f){return f==3;});
+	if(isFloat) { UTIF._decodeImageFloat(img, ifds, data, cmpr, fo, bps, spp, pco); return; }
+
 	var bipp = bps*spp;  // bits per pixel
 	/*
 	var bipp;  // bits per pixel
@@ -212,6 +218,105 @@ UTIF.decodeImage = function(buff, img, ifds)
 		bilen = Math.min(bilen, bytes.length*8);
 	}
 	img.data = new Uint8Array(bytes.buffer, 0, Math.ceil(bilen/8)|0);
+}
+
+// Decode an IEEE-float image (SampleFormat=3). The decompressed blocks keep the
+// file's byte order (II/MM); planar blocks are interleaved into per-pixel
+// samples. Storage-block geometry (partial last strip, physical tile size)
+// drives every stride and copy range. The produced bytes are a fresh buffer,
+// so the source view and its surroundings are never written.
+UTIF._decodeImageFloat = function(img, ifds, data, cmpr, fo, bps, spp, pco)
+{
+	var unit = bps>>>3, w = img.width, h = img.height, little = !!img.isLE;
+	var tiled = img["t322"]!=null;
+	var soff = tiled ? img["t324"] : img["t273"];
+	var bcnt = tiled ? img["t325"] : img["t279"];
+	if(soff==null || bcnt==null) return;
+
+	// One decompressed block, sized by the storage block (not the image edge).
+	function blockBuffer(bw, bh, channels) { return new Uint8Array(bw*bh*unit*channels); }
+
+	if(tiled)
+	{
+		var tw = img["t322"][0], th = img["t323"][0];
+		var tx = Math.ceil(w/tw), ty = Math.ceil(h/th), blocks = tx*ty;
+		var bpr = tw*spp*unit;                 // bytes per tile row when interleaved
+		var out = new Uint8Array(w*h*spp*unit);
+		for(var tyi=0; tyi<ty; tyi++)
+			for(var txi=0; txi<tx; txi++)
+			{
+				var x0 = txi*tw, y0 = tyi*th;
+				var cw = Math.min(tw, w-x0), ch = Math.min(th, h-y0);  // in-image extent
+				if(pco==2)
+				{
+					var planes = [];
+					for(var c=0; c<spp; c++)
+					{
+						var tb = blockBuffer(tw, th, 1);
+						UTIF.decode._decompress(img, ifds, data, soff[c*blocks+tyi*tx+txi], bcnt[c*blocks+tyi*tx+txi], cmpr, tb, 0, fo, tw, th);
+						planes.push(tb);
+					}
+					// Interleave whole samples from the planes; never treat a byte as a channel.
+					for(var yy=0; yy<ch; yy++)
+						for(var xx=0; xx<cw; xx++)
+							for(var cc=0; cc<spp; cc++)
+							{
+								var sp = (yy*tw+xx)*unit, dp = ((y0+yy)*w+(x0+xx))*spp*unit+cc*unit;
+								for(var q=0; q<unit; q++) out[dp+q] = planes[cc][sp+q];
+							}
+				}
+				else
+				{
+					var tile = blockBuffer(tw, th, spp);
+					UTIF.decode._decompress(img, ifds, data, soff[tyi*tx+txi], bcnt[tyi*tx+txi], cmpr, tile, 0, fo, tw, th);
+					var rowBytes = cw*spp*unit;
+					for(var yy=0; yy<ch; yy++)
+						out.set(tile.subarray(yy*bpr, yy*bpr+rowBytes), ((y0+yy)*w+x0)*spp*unit);
+				}
+			}
+		img.data = out;
+	}
+	else
+	{
+		var rps = img["t278"] ? img["t278"][0] : h;
+		var strips = soff.length;
+		var out = new Uint8Array(w*h*spp*unit);
+		if(pco==2)
+		{
+			var planeStrips = strips/spp;
+			for(var si=0; si<planeStrips; si++)
+			{
+				var y0 = si*rps, ch = Math.min(rps, h-y0);   // last strip may be short
+				var planes = [];
+				for(var c=0; c<spp; c++)
+				{
+					var pb = new Uint8Array(w*rps*unit);
+					UTIF.decode._decompress(img, ifds, data, soff[c*planeStrips+si], bcnt[c*planeStrips+si], cmpr, pb, 0, fo, w, rps);
+					planes.push(pb);
+				}
+				for(var yy=0; yy<ch; yy++)
+					for(var xx=0; xx<w; xx++)
+						for(var cc=0; cc<spp; cc++)
+						{
+							var sp = (yy*w+xx)*unit, dp = ((y0+yy)*w+xx)*spp*unit+cc*unit;
+							for(var q=0; q<unit; q++) out[dp+q] = planes[cc][sp+q];
+						}
+			}
+		}
+		else
+		{
+			var rowBytes = w*spp*unit;
+			for(var si=0; si<strips; si++)
+			{
+				var y0 = si*rps, ch = Math.min(rps, h-y0);
+				var sb = new Uint8Array(w*rps*spp*unit);
+				UTIF.decode._decompress(img, ifds, data, soff[si], bcnt[si], cmpr, sb, 0, fo, w, rps);
+				for(var yy=0; yy<ch; yy++)
+					out.set(sb.subarray(yy*rowBytes, (yy+1)*rowBytes), ((y0+yy)*w)*spp*unit);
+			}
+		}
+		img.data = out;
+	}
 }
 
 UTIF.decode._decompress = function(img,ifds, data, off, len, cmpr, tgt, toff, fo, w, h)  // fill order
@@ -1465,6 +1570,77 @@ UTIF._writeIFD = function(bin, types, data, offset, ifd)
 	return [offset, eoff];
 }
 
+// ---- IEEE floating-point display path (SampleFormat=3), read-only ----
+UTIF._floatAllSamples = function(out, smpls) {
+	var sf = out["t339"];
+	if(sf==null) return false;
+	for(var i=0; i<smpls; i++) if(sf[i]!==3) return false;
+	return true;
+};
+// NaN and -Infinity map to 0, +Infinity to 1; finite values clamp to [0,1].
+UTIF._floatNorm = function(x) {
+	if(Number.isNaN(x) || x===Number.NEGATIVE_INFINITY) return 0;
+	if(x===Number.POSITIVE_INFINITY) return 1;
+	return x<0 ? 0 : (x>1 ? 1 : x);
+};
+// Standard sRGB electro-optical transfer function, applied to linear sRGB.
+UTIF._sRGBGamma = function(x) {
+	return x < 0.0031308 ? 12.92*x : 1.055*Math.pow(x, 1.0/2.4) - 0.055;
+};
+UTIF._floatToRGBA8 = function(out, img)
+{
+	var data = out.data, w = out.width, h = out.height, area = w*h;
+	var bps = out["t258"][0], unit = bps>>>3;
+	var intp = out["t262"] ? out["t262"][0] : 2;
+	var smpls = out["t277"] ? out["t277"][0] : 1;
+	var little = !!out.isLE;
+	// Only the view's own range is interpreted, even with a non-zero byteOffset.
+	var dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+	function rd(i) { var o=i*unit; return unit===4 ? dv.getFloat32(o, little) : dv.getFloat64(o, little); }
+
+	if(intp==1)
+	{
+		// Grayscale: linear intensity, clamp then round. No sRGB gamma here.
+		for(var p=0; p<area; p++)
+		{
+			var g = Math.round(UTIF._floatNorm(rd(p))*255), qi = p<<2;
+			img[qi] = img[qi+1] = img[qi+2] = g;
+			img[qi+3] = 255;
+		}
+		return;
+	}
+
+	var hasAlpha = smpls===4;
+	var premul = hasAlpha && out["t338"]!=null && out["t338"][0]===1;  // ExtraSamples=1
+	for(var p=0; p<area; p++)
+	{
+		var base = p*smpls, qi = p<<2;
+		if(hasAlpha)
+		{
+			var a = UTIF._floatNorm(rd(base+3));  // alpha is never gamma-corrected
+			if(premul && a===0)
+			{
+				// Associated alpha 0: transparent black.
+				img[qi] = img[qi+1] = img[qi+2] = img[qi+3] = 0;
+				continue;
+			}
+			for(var c=0; c<3; c++)
+			{
+				var lin = rd(base+c);
+				if(premul) lin = lin/a;          // unassociate before the transfer function
+				img[qi+c] = Math.round(UTIF._sRGBGamma(UTIF._floatNorm(lin))*255);
+			}
+			img[qi+3] = Math.round(a*255);       // non-associated a=0 keeps its color
+		}
+		else
+		{
+			for(var c=0; c<3; c++)
+				img[qi+c] = Math.round(UTIF._sRGBGamma(UTIF._floatNorm(rd(base+c)))*255);
+			img[qi+3] = 255;
+		}
+	}
+};
+
 UTIF.toRGBA8 = function(out, scl)
 {
 	function gamma(x) {  return x < 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1.0 / 2.4) - 0.055;  }
@@ -1482,7 +1658,14 @@ UTIF.toRGBA8 = function(out, scl)
 	var bpl = Math.ceil(smpls*bps*w/8);
 	
 	log("interpretation: ", intp, "smpls", smpls, "bps", bps, "sample format",sfmt, out);
-	
+
+	// IEEE float path: read samples and tags only; the data bytes are never modified.
+	if(sfmt==3 && (bps==32 || bps==64) && UTIF._floatAllSamples(out, smpls))
+	{
+		UTIF._floatToRGBA8(out, img);
+		return img;
+	}
+
 	if(false) {}
 	else if(intp==0)
 	{
