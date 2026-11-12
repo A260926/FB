@@ -76,6 +76,96 @@ int main() {
 
 See the API documentation and sample programs for more details.
 
+Resolved styles and resource capture
+====================================
+
+`katana_parse` produces a declaration tree, but it does not compute custom
+properties or resolve `var()`. When archiving a page offline you therefore
+need a second step that turns the declarations matched against one element
+into a resolved style. Include `capture_values.h`:
+
+```C
+#include "capture_values.h"
+
+/* Declarations already matched against the element, concatenated in
+ * cascade order: lowest priority first. */
+const char* css =
+    "--hero: url(a.png);"
+    "background-image: var(--hero, url(b.png));";
+
+KatanaResolvedStyle* style = katana_resolve_style(css, strlen(css), NULL);
+
+const KatanaArray* urls = katana_resolved_urls(style, "background-image");
+/* urls->length == 1, urls->data[0] == "a.png": the fallback is never used. */
+
+katana_resolved_style_destroy(style);
+```
+
+Selector matching, network downloads, rendering, base-URL completion and
+per-property value grammars are deliberately outside this entry point. It
+tokenizes at CSS component-token boundaries (so comments, strings,
+escapes, functions and nested parentheses are handled correctly rather
+than split on raw `;` or `,`), applies the cascade, computes custom
+properties following [css-variables][], and answers two queries:
+
+* `katana_resolved_value(style, property)` — the normalized token text of
+  a resolved normal property.
+* `katana_resolved_urls(style, property)` — the decoded URL strings of the
+  real URL tokens / `url()` functions in that resolved value, in order,
+  duplicates kept. A `url(...)` sequence inside a string token is not a
+  resource and is ignored.
+
+A parent style may be passed for inheritance. Only its already-computed
+custom properties are inherited (frozen by value); normal properties are
+never inherited, and a variable redefined in the child cannot re-expand an
+expression the parent already computed.
+
+Ownership of the returned data
+------------------------------
+
+* Every `KatanaResolvedStyle` owns all of its memory. The strings returned
+  by `katana_resolved_value` and the `KatanaArray` (and its strings)
+  returned by `katana_resolved_urls` are borrowed from the style and must
+  not be freed individually; they become invalid when
+  `katana_resolved_style_destroy` is called.
+* A child style deep-copies the custom properties it inherits, so it keeps
+  working after the parent has been destroyed.
+* The input CSS text and the parent style are only read: the input buffer
+  may be reused or freed as soon as `katana_resolve_style` returns.
+
+Return-value conventions:
+
+* Value query: the empty string means a legal empty value; `NULL` means the
+  property is absent or its winning declaration is computed-invalid.
+* URL query: a non-`NULL` (possibly empty) array means the property
+  resolved; `NULL` means it is absent or computed-invalid.
+
+"Computed invalid" vs. "syntax discard"
+---------------------------------------
+
+These are distinct failure modes and they interact with the cascade
+differently:
+
+* **Syntax discard** — the text is not a well-formed declaration (for
+  example a stray token where a property name is expected). It is dropped
+  while parsing, exactly as the CSS parser would drop it, and an earlier
+  valid declaration of the same property may still win.
+* **Computed invalid** — the declaration is well-formed and wins the
+  cascade, but becomes invalid at computed-value time when `var()` is
+  substituted: a referenced variable is missing without a usable fallback,
+  participates in a dependency cycle (references inside fallbacks count),
+  or is itself invalid, or a custom property is explicitly set to
+  `initial`. Such a declaration still wins, so an earlier declaration of
+  the same property is **not** revisited, and both queries return `NULL`.
+
+For example, `background-image: url(old.png); background-image: var(--missing)`
+resolves to an invalid property: `old.png` must not be downloaded.
+
+`examples/capture_values.c` is a small command-line demonstration, and
+`tests/capture_values.c` exercises priority, cycles and side branches,
+frozen inheritance, legal empty values, escaped URLs, comments, nested
+separators and plain `url()` controls.
+
 Contributing
 ===========
 Bug reports are very much welcome.  Please use GitHub's issue-tracking feature, as it makes it easier to keep track of bugs and makes it possible for other project watchers to view the existing issues.
@@ -88,6 +178,7 @@ If you're unwilling to do this, it would be most helpful if you could file bug r
 
 [CSS]: http://www.w3.org/Style/CSS/current-work
 [CSS-syntax]: http://www.w3.org/TR/css3-syntax
+[css-variables]: https://www.w3.org/TR/css-variables-1/
 [Gumbo]: https://github.com/google/gumbo-parser
 [reworkcss/css]: https://github.com/reworkcss/css
 [Official W3C Test Suites]: http://www.w3.org/Style/CSS/Test/
