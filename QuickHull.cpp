@@ -159,7 +159,11 @@ namespace quickhull {
 				else {
 					const Plane<T>& P = pvf.m_P;
 					pvf.m_visibilityCheckedOnIteration = iter;
-					const T d = P.m_N.dotProduct(activePoint)+P.m_D;
+					// Anchored residual N.(Pnt - P.m_point): translation invariant and
+					// immune to the cancellation that N.Pnt + P.m_D suffers far from
+					// the origin. Only the sign is used, so the unnormalized normal
+					// length does not matter.
+					const T d = P.m_N.dotProduct(activePoint - P.m_point);
 					if (d>0) {
 						pvf.m_isVisibleFaceOnCurrentIteration = 1;
 						pvf.m_horizonEdgesOnCurrentIteration = 0;
@@ -376,16 +380,14 @@ namespace quickhull {
 	
 	template <typename T>
 	T QuickHull<T>::getScale(const std::array<size_t,6>& extremeValues) {
-		T s = 0;
-		for (size_t i=0;i<6;i++) {
-			const T* v = (const T*)(&m_vertexData[extremeValues[i]]);
-			v += i/2;
-			auto a = std::abs(*v);
-			if (a>s) {
-				s = a;
-			}
-		}
-		return s;
+		// Geometric size of the point cloud: the largest axis-aligned bounding box
+		// span, i.e. max of (maxX-minX, maxY-minY, maxZ-minZ). Only differences of
+		// coordinates are used, never their absolute values, so translating the whole
+		// point cloud leaves the scale (and therefore epsilon) unchanged.
+		const T spanX = std::abs(m_vertexData[extremeValues[0]].x - m_vertexData[extremeValues[1]].x);
+		const T spanY = std::abs(m_vertexData[extremeValues[2]].y - m_vertexData[extremeValues[3]].y);
+		const T spanZ = std::abs(m_vertexData[extremeValues[4]].z - m_vertexData[extremeValues[5]].z);
+		return std::max(spanX, std::max(spanY, spanZ));
 	}
 
 	template<typename T>
@@ -453,12 +455,16 @@ namespace quickhull {
 		const Vector3<T> baseTriangleVertices[]={ m_vertexData[baseTriangle[0]], m_vertexData[baseTriangle[1]],  m_vertexData[baseTriangle[2]] };
 		
 		// Next step is to find the 4th vertex of the tetrahedron. We naturally choose the point farthest away from the triangle plane.
+		// The plane residual N.(v - P) carries units of (normal length)*(distance), so it
+		// has to be divided by |N| before it can be compared against m_epsilon, which is a
+		// plain distance. All residuals are anchored to a point of the plane.
 		maxD=m_epsilon;
 		maxI=0;
 		const Vector3<T> N = mathutils::getTriangleNormal(baseTriangleVertices[0],baseTriangleVertices[1],baseTriangleVertices[2]);
 		Plane<T> trianglePlane(N,baseTriangleVertices[0]);
+		const T nLength = std::sqrt(trianglePlane.m_sqrNLength);
 		for (size_t i=0;i<vCount;i++) {
-			const T d = std::abs(mathutils::getSignedDistanceToPlane(m_vertexData[i],trianglePlane));
+			const T d = std::abs(mathutils::getSignedDistanceToPlane(m_vertexData[i],trianglePlane)) / nLength;
 			if (d>maxD) {
 				maxD=d;
 				maxI=i;

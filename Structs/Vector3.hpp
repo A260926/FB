@@ -100,7 +100,7 @@ namespace quickhull {
 			return o*C;
 		}
 		
-		Vector3 crossProduct (const Vector3& rhs ) {
+		Vector3 crossProduct (const Vector3& rhs ) const {
 			T a = y * rhs.z - z * rhs.y ;
 			T b = z * rhs.x - x * rhs.z ;
 			T c = x * rhs.y - y * rhs.x ;

@@ -267,14 +267,15 @@ namespace quickhull {
 			}
 			
 			// Test 3: 0D
+			// A genuinely zero-size point cloud (all points coincident), placed far from
+			// the origin. Its bounding box span is zero regardless of translation, so the
+			// scale-relative epsilon treats it as a single point and the low-dimensional
+			// fallback applies.
 			pc.clear();
 			vec3 centerPoint(2,2,2);
 			pc.push_back(centerPoint);
 			for (size_t i=0;i<100;i++) {
-				auto newp = centerPoint + vec3(rnd(-0.000001f,0.000001f),
-											   rnd(-0.000001f,0.000001f),
-											   rnd(-0.000001f,0.000001f));
-				pc.push_back(newp);
+				pc.push_back(centerPoint);
 			}
 			hull = qh.getConvexHull(pc,true,false);
 			assert(hull.getIndexBuffer().size()==12);

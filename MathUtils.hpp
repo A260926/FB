@@ -12,16 +12,24 @@ namespace quickhull {
 		
 		template <typename T>
 		inline T getSquaredDistanceBetweenPointAndRay(const Vector3<T>& p, const Ray<T>& r) {
+			// Work with the local vector s = p - r.m_S so that the result depends only
+			// on differences of coordinates and is unaffected by a translation of the
+			// whole point cloud. The cross product form |s x V|^2 / |V|^2 stays
+			// numerically stable when p is close to the ray (the projection form
+			// |s|^2 - (s.V)^2/|V|^2 suffers from catastrophic cancellation there).
 			const Vector3<T> s = p-r.m_S;
-			T t = s.dotProduct(r.m_V);
-			return s.getLengthSquared() - t*t*r.m_VInvLengthSquared;
+			const Vector3<T> cross = s.crossProduct(r.m_V);
+			return cross.getLengthSquared() * r.m_VInvLengthSquared;
 		}
-		
+
 		// Note that the unit of distance returned is relative to plane's normal's length
 		// (divide by N.getNormalized() to get actual Euclidian distance).
+		// The residual is evaluated as N.(Q - P) against the plane anchor point P instead
+		// of N.Q + D so that two large world-space terms can never cancel the local
+		// residual. This keeps the test translation invariant.
 		template <typename T>
 		inline T getSignedDistanceToPlane(const Vector3<T>& v, const Plane<T>& p) {
-			return p.m_N.dotProduct(v) + p.m_D;
+			return p.m_N.dotProduct(v - p.m_point);
 		}
 		
 		template <typename T>

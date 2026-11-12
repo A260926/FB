@@ -1,0 +1,30 @@
+QuickHull.cpp:45:130: warning: unused parameter 'CCW' [-Wunused-parameter]
+   45 |         HalfEdgeMesh<FloatType, size_t> QuickHull<FloatType>::getConvexHullAsMesh(const FloatType* vertexData, size_t vertexCount, bool CCW, FloatType epsilon) {
+      |                                                                                                                                         ^
+1 warning generated.
+Tests/main.cpp:7:22: warning: unused parameter 'argv' [-Wunused-parameter]
+    7 | int main(int, char** argv) {
+      |                      ^
+1 warning generated.
+Tests/QuickHullTests.cpp:46:49: warning: unused parameter 'radius' [-Wunused-parameter]
+   46 |                 static std::vector<Vector3<T>> createSphere(T radius, size_t M,
+      |                                                               ^
+Tests/QuickHullTests.cpp:50:18: warning: comparison of integers of different signs: 'int' and 'size_t' (aka 'unsigned long') [-Wsign-compare]
+   50 |                         for (int i=0;i<=M;i++) {
+      |                                      ~^ ~
+In file included from Tests/QuickHullTests.cpp:1:
+In file included from Tests/../QuickHull.hpp:10:
+In file included from Tests/../Structs/Mesh.hpp:12:
+Tests/../Structs/VertexDataSource.hpp:26:21: warning: definition of implicit copy constructor for 'VertexDataSource<float>' is deprecated because it has a user-declared copy assignment operator [-Wdeprecated-copy]
+   26 |                 VertexDataSource& operator=(const VertexDataSource& other) = default;
+      |                                   ^
+Tests/QuickHullTests.cpp:172:27: note: in implicit copy constructor for 'quickhull::VertexDataSource<float>' first required here
+  172 |                                 const auto vertices = hull.getVertexBuffer();
+      |                                                       ^
+Tests/QuickHullTests.cpp:50:18: warning: comparison of integers of different signs: 'int' and 'size_t' (aka 'unsigned long') [-Wsign-compare]
+   50 |                         for (int i=0;i<=M;i++) {
+      |                                      ~^ ~
+Tests/QuickHullTests.cpp:69:15: note: in instantiation of function template specialization 'quickhull::tests::createSphere<float>' requested here
+   69 |                                 auto pc = createSphere<FloatType>(1, 100, Vector3<FloatType>(0,y,0));
+      |                                           ^
+4 warnings generated.

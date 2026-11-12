@@ -26,6 +26,9 @@ int main(int argc,char**argv){
  auto cube=q.getConvexHull(p,true,true,1e-9);auto idx=cube.getIndexBuffer();double volume=0;
  for(size_t i=0;i<idx.size();i+=3){V a=p[idx[i]]-p[0],b=p[idx[i+1]]-p[0],c=p[idx[i+2]]-p[0];volume+=a.dotProduct(b.crossProduct(c))/6;}
  printf("translation witness faces=%zu volume_ratio=%.6f\n",idx.size()/3,std::abs(volume)/1e-9);
- if(small.getIndexBuffer().size()/3!=20||idx.size()/3!=6||std::abs(std::abs(volume)/1e-9-.5)>1e-4)return 2;
- puts("QUICKHULL_BASELINE_OK scale-and-translation-defects-reproduced");
+ // After the scale/translation fix both witnesses must describe the same genuine
+ // 3D convex hull as the untransformed input: the small cloud keeps 18 faces and
+ // the far, tiny cube is a closed 12-triangle solid with its full volume.
+ if(small.getIndexBuffer().size()/3!=18||idx.size()/3!=12||std::abs(std::abs(volume)/1e-9-1.0)>1e-4)return 2;
+ puts("QUICKHULL_BASELINE_OK scale-and-translation-invariant");
 }
