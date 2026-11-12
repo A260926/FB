@@ -21,6 +21,7 @@
 
 #undef  SBC_BITS_TRACE
 #include "bits.h"
+#include "sbc_internal.h"
 
 
 /**
@@ -171,7 +172,7 @@ static int compute_crc(
  * frame           The frame description to check
  * return          True when valid, False otherwise
  */
-static bool check_frame(const struct sbc_frame *frame)
+bool sbc_check_frame(const struct sbc_frame *frame)
 {
     /* --- Check number of sub-blocks and sub-bands --- */
 
@@ -207,7 +208,7 @@ static bool check_frame(const struct sbc_frame *frame)
  * scale_factors   Scale-factor values
  * nbits           Return of allocated bits for each channels / subbands
  */
-static void compute_nbits(const struct sbc_frame *frame,
+void sbc_compute_nbits(const struct sbc_frame *frame,
     const int (*scale_factors)[SBC_MAX_SUBBANDS],
     int (*nbits)[SBC_MAX_SUBBANDS])
 {
@@ -327,7 +328,7 @@ int sbc_get_freq_hz(enum sbc_freq freq)
  */
 unsigned sbc_get_frame_size(const struct sbc_frame *frame)
 {
-    if (!check_frame(frame))
+    if (!sbc_check_frame(frame))
         return 0;
 
     bool two_channels = (frame->mode != SBC_MODE_MONO);
@@ -347,7 +348,7 @@ unsigned sbc_get_frame_size(const struct sbc_frame *frame)
  */
 unsigned sbc_get_frame_bitrate(const struct sbc_frame *frame)
 {
-    if (!check_frame(frame))
+    if (!sbc_check_frame(frame))
         return 0;
 
     unsigned nsamples = frame->nblocks * frame->nsubbands;
@@ -434,7 +435,7 @@ static bool decode_header(sbc_bits_t *bits, struct sbc_frame *frame, int *crc)
 
     /* --- Check bitpool value and return --- */
 
-    return check_frame(frame);
+    return sbc_check_frame(frame);
 }
 
 /**
@@ -487,9 +488,9 @@ static void decode_frame(sbc_bits_t *bits, const struct sbc_frame *frame,
         for (int isb = 0; isb < nsubbands; isb++)
             scale_factors[ich][isb] = SBC_GET_BITS("scale_factor", 4);
 
-    compute_nbits(frame, scale_factors, nbits);
+    sbc_compute_nbits(frame, scale_factors, nbits);
     if (frame->mode == SBC_MODE_DUAL_CHANNEL)
-        compute_nbits(frame, scale_factors + 1, nbits + 1);
+        sbc_compute_nbits(frame, scale_factors + 1, nbits + 1);
 
     /* --- Decode samples ---
      *
@@ -997,7 +998,7 @@ static void compute_scale_factors(const struct sbc_frame *frame,
  * bits            Bitstream writer
  * frame           Frame description to encode
  */
-static void encode_header(sbc_bits_t *bits, const struct sbc_frame *frame)
+void sbc_encode_header(sbc_bits_t *bits, const struct sbc_frame *frame)
 {
     static const int enc_freq[SBC_NUM_FREQ] = {
         /* SBC_FREQ_16K  */ 0, /* SBC_FREQ_32K  */ 1,
@@ -1040,35 +1041,27 @@ static void encode_header(sbc_bits_t *bits, const struct sbc_frame *frame)
  * data, size      Frame data, and maximum writable size
  * return          0: On success  -1: size too small
  */
-static int put_crc(const struct sbc_frame *frame, void *data, unsigned size)
+int sbc_put_crc(const struct sbc_frame *frame, void *data, unsigned size)
 {
     int crc = compute_crc(frame, data, size);
     return crc < 0 ? -1 : (((uint8_t *)data)[3] = crc), 0;
 }
 
 /**
- * Encode frame data
+ * Encode frame data from already decided joint-stereo decisions
  * bits            Bitstream writer
  * frame           Frame description
- * sb_samples      Sub-band samples, by channels
+ * sb_samples      Sub-band samples, by channels (coupled in place)
+ * mjoint          Mask of joint sub-bands
+ * scale_factors   Scale factors of the two channels
  */
-static void encode_frame(sbc_bits_t *bits,
-    const struct sbc_frame *frame, int16_t (*sb_samples)[SBC_MAX_SAMPLES] )
+void sbc_encode_frame_decided(sbc_bits_t *bits,
+    const struct sbc_frame *frame,
+    int16_t sb_samples[2][SBC_MAX_SAMPLES],
+    unsigned mjoint,
+    const int scale_factors[2][SBC_MAX_SUBBANDS])
 {
     SBC_WITH_BITS(bits);
-
-    /* --- Compute Scale Factors --- */
-
-    int scale_factors[2][SBC_MAX_SUBBANDS];
-    unsigned mjoint = 0;
-
-    if (frame->mode == SBC_MODE_JOINT_STEREO)
-        compute_scale_factors_js(frame, sb_samples, scale_factors, &mjoint);
-    else
-        compute_scale_factors(frame, sb_samples, scale_factors);
-
-    if (frame->mode == SBC_MODE_DUAL_CHANNEL)
-        compute_scale_factors(frame, sb_samples + 1, scale_factors + 1);
 
     /* --- Joint-Stereo mask --- */
 
@@ -1094,9 +1087,9 @@ static void encode_frame(sbc_bits_t *bits,
         for (int isb = 0; isb < nsubbands; isb++)
             SBC_PUT_BITS("scale_factor", scale_factors[ich][isb], 4);
 
-    compute_nbits(frame, scale_factors, nbits);
+    sbc_compute_nbits(frame, scale_factors, nbits);
     if (frame->mode == SBC_MODE_DUAL_CHANNEL)
-        compute_nbits(frame, scale_factors + 1, nbits + 1);
+        sbc_compute_nbits(frame, scale_factors + 1, nbits + 1);
 
     /* --- Coupling Joint-Stereo --- */
 
@@ -1147,6 +1140,31 @@ static void encode_frame(sbc_bits_t *bits,
     SBC_PUT_BITS("padding_bits", 0, padding_nbits < 8 ? padding_nbits : 0);
 
     SBC_END_WITH_BITS();
+}
+
+/**
+ * Encode frame data
+ * bits            Bitstream writer
+ * frame           Frame description
+ * sb_samples      Sub-band samples, by channels
+ */
+static void encode_frame(sbc_bits_t *bits,
+    const struct sbc_frame *frame, int16_t (*sb_samples)[SBC_MAX_SAMPLES] )
+{
+    /* --- Compute Scale Factors --- */
+
+    int scale_factors[2][SBC_MAX_SUBBANDS];
+    unsigned mjoint = 0;
+
+    if (frame->mode == SBC_MODE_JOINT_STEREO)
+        compute_scale_factors_js(frame, sb_samples, scale_factors, &mjoint);
+    else
+        compute_scale_factors(frame, sb_samples, scale_factors);
+
+    if (frame->mode == SBC_MODE_DUAL_CHANNEL)
+        compute_scale_factors(frame, sb_samples + 1, scale_factors + 1);
+
+    sbc_encode_frame_decided(bits, frame, sb_samples, mjoint, scale_factors);
 }
 
 /**
@@ -1519,6 +1537,24 @@ static inline void analyze(struct sbc_estate *state,
 }
 
 /**
+ * Run the analysis filter bank once per channel
+ * sbc             Encoding context, advanced exactly once per channel
+ * frame           Frame description
+ * pcml/r, pitchl/r  PCM inputs of the two channels
+ * sb_samples      Returned raw sub-band samples
+ */
+void sbc_analyze_frame(sbc_t *sbc, const struct sbc_frame *frame,
+    const int16_t *pcml, int pitchl,
+    const int16_t *pcmr, int pitchr,
+    int16_t sb_samples[2][SBC_MAX_SAMPLES])
+{
+    analyze(&sbc->estates[0], frame, pcml, pitchl, sb_samples[0]);
+
+    if (frame->mode != SBC_MODE_MONO)
+        analyze(&sbc->estates[1], frame, pcmr, pitchr, sb_samples[1]);
+}
+
+/**
  * Encode a frame
  */
 int sbc_encode(struct sbc *sbc,
@@ -1532,7 +1568,7 @@ int sbc_encode(struct sbc *sbc,
 
     /* --- Check the given frame description --- */
 
-    if (!check_frame(frame) || size < sbc_get_frame_size(frame))
+    if (!sbc_check_frame(frame) || size < sbc_get_frame_size(frame))
         return -1;
 
     /* -- Analyse PCM samples --- */
@@ -1554,10 +1590,10 @@ int sbc_encode(struct sbc *sbc,
     sbc_flush_bits(&bits);
 
     sbc_setup_bits(&bits, SBC_BITS_WRITE, data, SBC_HEADER_SIZE);
-    encode_header(&bits, frame);
+    sbc_encode_header(&bits, frame);
     sbc_flush_bits(&bits);
 
-    put_crc(frame, data, size);
+    sbc_put_crc(frame, data, size);
 
     return 0;
 }

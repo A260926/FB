@@ -19,7 +19,8 @@ SRC_DIR := src
 
 libsbc_src += \
     $(SRC_DIR)/bits.c \
-    $(SRC_DIR)/sbc.c
+    $(SRC_DIR)/sbc.c \
+    $(SRC_DIR)/sbc_rd.c
 
 ifneq ($(if $(ARCH),$(wildcard $(SRC_DIR)/$(ARCH))),)
     libsbc_define += SBC_ASM

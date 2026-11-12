@@ -209,6 +209,26 @@ int sbc_encode(sbc_t *sbc,
     const int16_t *pcml, int pitchl, const int16_t *pcmr, int pitchr,
     const struct sbc_frame *frame, void *data, unsigned size);
 
+/**
+ * Encode a frame with offline rate-distortion joint-stereo selection
+ * sbc             Encoding context
+ * pcmx            Input PCM buffer for channel L/R
+ * pitchx          Number of samples between two consecutives
+ * frame           Frame description as encoding parameters
+ * data, size      Output frame data, and maximum writable size
+ * return          0 on success, -1 otherwise
+ *
+ * Same parameters and return convention as sbc_encode(), but only
+ * non-mSBC JOINT_STEREO frames with 4 or 8 sub-bands are accepted : any
+ * other configuration is rejected instead of being silently re-encoded at
+ * another rate. The bitpool is never raised; among all legal joint masks
+ * (the highest sub-band is never coupled), the one with the lowest total
+ * sub-band squared error for that fixed bitpool is selected.
+ */
+int sbc_encode_rd(sbc_t *sbc,
+    const int16_t *pcml, int pitchl, const int16_t *pcmr, int pitchr,
+    const struct sbc_frame *frame, void *data, unsigned size);
+
 
 #ifdef __cplusplus
 }
