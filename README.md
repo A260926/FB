@@ -13,7 +13,17 @@ projection, also in pixels. `previous_depth` is the same surface point's depth i
 previous camera, before jitter. Invalid previous projection sets depth zero and motion
 outside the viewport. `object==0` is background. Color is linear radiance multiplied
 by `Frame.exposure`; values above one remain intact until PPM output tone mapping.
-No history, temporal reuse, or temporal filtering is implemented.
+
+`temporal.hpp` adds `TemporalAccumulator::resolve(frame, settings)` on top of the
+unmodified rasterizer. Reprojection adds the two frames' jitter difference to the
+unjittered motion vector. History color is bilinearly rebuilt from four texels, each
+validated independently by object id and relative depth, with the surviving weights
+renormalized. Validated history is exposure-rescaled, clamped in YCoCg against the
+current 3x3 same-object neighborhood, and linearly blended with `history_weight`
+(default 0.9). No clamping to [0,1], gamma, or tone mapping is applied. First frame,
+size change, `camera_cut`, non-consecutive `sequence`, `reset()`, and background
+(`object==0`) pixels use the current color only. Run `bash tools/check-temporal.sh <dir>`
+for the temporal checks and PPM outputs.
 
 Camera project/unproject, depth and varying raster interpolation, Lambert/checker
 material shading, bilinear image sampling and PPM display conversion are independent
