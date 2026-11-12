@@ -37,6 +37,8 @@ MIT License - see the LICENSE file in the source distribution.
   - Sampling (multiple knots at once)
   - Equidistant points
   - Components (find y for given x)
+  - Global point projection / snapping (nearest point with a certified
+    distance bracket)
 - Reparametrization by arc length
   - Mapping length <--> knot
 - Knot insertion (refinement)
@@ -152,6 +154,92 @@ plt.show()
 Result:
 
 ![Getting Started](res/getting_started.png)
+
+### Point Projection (Snapping)
+
+Snapping a cursor or a point to a curve is a *global* nearest-point problem.
+Sampling the curve at uniform parameters only finds the nearest of a finite
+set of samples, so it misses solutions on a fold-back; `ts_bspline_bisect`
+(and `BSpline::bisect`) solve a single monotone coordinate and therefore
+cannot be applied to a spline that doubles back. Point projection is neither
+of those: a reusable `tsProjectionIndex` / `tinyspline::ProjectionIndex`
+searches every knot interval with certified distance bounds and returns the
+globally nearest curve point.
+
+The index is built once and answers many queries. It is an independent,
+owning snapshot of the source spline — modifying or freeing the spline
+afterwards does not affect it — and queries on a `const` index use no shared
+mutable state, so they may run concurrently.
+
+Each result carries a **certified distance bracket** rather than a single
+guess:
+
+```
+distance_lower <= true shortest distance <= distance_upper
+0 <= distance_upper - distance_lower <= epsilon
+```
+
+`distance_upper` is the Euclidean distance from the query point to the
+returned curve point. `epsilon` is a tolerance in *curve space* (a distance),
+not a parameter step; it must be at least `1e-10 * max(1, diagonal of the
+control point bounding box)`. Pieces that cannot improve the bracket are
+pruned from their bounding-box lower bounds without any local geometry work,
+so a query does not rescan the whole curve and `visited_pieces` reports how
+many original knot intervals were actually refined.
+
+At an internal knot with full multiplicity the curve is discontinuous. The
+result's `span_index` is the left index (in the original knot vector) of the
+non-zero interval that contains the returned point, which distinguishes the
+left-hand and right-hand one-sided limits at the break instead of
+arbitrarily choosing one of the two `DeBoorNet` results.
+
+C example:
+
+```c
+#include "tinyspline.h"
+#include "tinyspline_projection.h"
+
+tsBSpline spline = ts_bspline_init();
+tsProjectionIndex index = ts_projection_index_init();
+tsProjection result;
+
+ts_bspline_new(4, 2, 3, TS_BEZIERS, &spline, NULL);
+ts_bspline_set_control_points(&spline,
+    (tsReal[]){0,0, 10,5, 10,15, 0,20}, NULL);
+
+/* Reusable snapshot; the spline may be changed or freed afterwards. */
+ts_projection_index_new(&spline, &index, NULL);
+
+/* epsilon is a space distance, not a parameter step. */
+if (!ts_projection_index_query(&index, (tsReal[]){5.0, 10.0}, 2,
+                               1e-7, &result, NULL)) {
+    /* result.knot, result.span_index, result.point,
+       result.distance_lower / distance_upper, result.visited_pieces */
+}
+
+ts_projection_index_free(&index);
+ts_bspline_free(&spline);
+```
+
+C++ example:
+
+```cpp
+#include "tinysplinecxx.h"
+using namespace tinyspline;
+
+BSpline curve(4, 2, 3, BSpline::Beziers);
+curve.setControlPoints({0.0, 0.0, 10.0, 5.0, 10.0, 15.0, 0.0, 20.0});
+
+ProjectionIndex index(curve);                 // reusable, thread-safe
+Projection nearest = index.query({5.0, 10.0}, /* epsilon */ 1e-7);
+
+nearest.knot();          // parameter of the nearest curve point
+nearest.spanIndex();     // original knot interval; disambiguates break sides
+nearest.point();         // the actual curve point
+nearest.distanceLower(); // certified lower bound of the true minimum
+nearest.distanceUpper(); // Euclidean distance to point()
+nearest.visitedPieces(); // intervals that needed local refinement
+```
 
 ### Documentation
 

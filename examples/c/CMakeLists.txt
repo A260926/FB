@@ -2,6 +2,10 @@ add_executable(quickstart_c quickstart.c)
 target_link_libraries(quickstart_c PRIVATE tinyspline)
 set_target_properties(quickstart_c PROPERTIES FOLDER "examples/c")
 
+add_executable(projection_c projection.c)
+target_link_libraries(projection_c PRIVATE tinyspline)
+set_target_properties(projection_c PROPERTIES FOLDER "examples/c")
+
 add_executable(json_export_c json_export.c)
 target_link_libraries(json_export_c PRIVATE tinyspline)
 set_target_properties(json_export_c PROPERTIES FOLDER "examples/c")

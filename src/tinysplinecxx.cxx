@@ -1,5 +1,6 @@
 #define TINYSPLINE_EXPORT
 #include "tinysplinecxx.h"
+#include "tinyspline_projection.h"
 
 #include <stdlib.h>
 #include <cstring>
@@ -1735,6 +1736,181 @@ tinyspline::ChordLengths::toString() const
 	    << "spline: " << m_spline.toString()
 	    << ", values: " << m_size
 	    << "}";
+	return oss.str();
+}
+/*! @} */
+
+
+
+/*! @name Projection
+ *
+ * @{
+ */
+tinyspline::Projection::Projection()
+: m_dimension(0)
+{
+	std::memset(&m_projection, 0, sizeof(m_projection));
+}
+
+tinyspline::Projection::Projection(const tsProjection &projection,
+                                   size_t dimension)
+: m_projection(projection),
+  m_dimension(dimension)
+{}
+
+tinyspline::real
+tinyspline::Projection::knot() const
+{
+	return m_projection.knot;
+}
+
+size_t
+tinyspline::Projection::spanIndex() const
+{
+	return m_projection.span_index;
+}
+
+std::vector<tinyspline::real>
+tinyspline::Projection::point() const
+{
+	return std::vector<real>(m_projection.point,
+	                         m_projection.point + m_dimension);
+}
+
+tinyspline::real
+tinyspline::Projection::distanceLower() const
+{
+	return m_projection.distance_lower;
+}
+
+tinyspline::real
+tinyspline::Projection::distanceUpper() const
+{
+	return m_projection.distance_upper;
+}
+
+size_t
+tinyspline::Projection::visitedPieces() const
+{
+	return m_projection.visited_pieces;
+}
+
+std::string
+tinyspline::Projection::toString() const
+{
+	std::ostringstream oss;
+	oss << "Projection{"
+	    << "knot: " << knot()
+	    << ", spanIndex: " << spanIndex()
+	    << ", distance: [" << distanceLower()
+	    << ", " << distanceUpper() << "]"
+	    << ", visitedPieces: " << visitedPieces()
+	    << "}";
+	return oss.str();
+}
+/*! @} */
+
+
+
+/*! @name ProjectionIndex
+ *
+ * @{
+ */
+tinyspline::ProjectionIndex::ProjectionIndex()
+: m_index(ts_projection_index_init()),
+  m_dimension(0)
+{}
+
+tinyspline::ProjectionIndex::ProjectionIndex(const BSpline &spline)
+: m_index(ts_projection_index_init()),
+  m_dimension(spline.dimension())
+{
+	tsStatus status;
+	if (ts_projection_index_new(&spline.m_spline, &m_index, &status))
+		throw std::runtime_error(status.message);
+}
+
+tinyspline::ProjectionIndex::ProjectionIndex(const ProjectionIndex &other)
+: m_index(ts_projection_index_init()),
+  m_dimension(other.m_dimension)
+{
+	tsStatus status;
+	if (ts_projection_index_copy(&other.m_index, &m_index, &status))
+		throw std::runtime_error(status.message);
+}
+
+tinyspline::ProjectionIndex::ProjectionIndex(ProjectionIndex &&other)
+: m_index(ts_projection_index_init()),
+  m_dimension(other.m_dimension)
+{
+	/* Transfer ownership of the C handle. */
+	m_index.pImpl = other.m_index.pImpl;
+	other.m_index.pImpl = NULL;
+}
+
+tinyspline::ProjectionIndex::~ProjectionIndex()
+{
+	ts_projection_index_free(&m_index);
+}
+
+tinyspline::ProjectionIndex &
+tinyspline::ProjectionIndex::operator=(const ProjectionIndex &other)
+{
+	if (this != &other) {
+		tsProjectionIndex tmp = ts_projection_index_init();
+		tsStatus status;
+		if (ts_projection_index_copy(&other.m_index, &tmp, &status))
+			throw std::runtime_error(status.message);
+		ts_projection_index_free(&m_index);
+		m_index = tmp;
+		m_dimension = other.m_dimension;
+	}
+	return *this;
+}
+
+tinyspline::ProjectionIndex &
+tinyspline::ProjectionIndex::operator=(ProjectionIndex &&other)
+{
+	if (this != &other) {
+		ts_projection_index_free(&m_index);
+		m_index.pImpl = other.m_index.pImpl;
+		other.m_index.pImpl = NULL;
+		m_dimension = other.m_dimension;
+	}
+	return *this;
+}
+
+size_t
+tinyspline::ProjectionIndex::dimension() const
+{
+	return m_dimension;
+}
+
+tinyspline::Projection
+tinyspline::ProjectionIndex::query(std_real_vector_in point,
+                                   real epsilon) const
+{
+	if (std_real_vector_read(point)size() != m_dimension)
+		throw std::runtime_error(
+		    "point dimension does not match index dimension");
+	tsProjection result;
+	tsStatus status;
+	if (ts_projection_index_query(
+	            &m_index,
+	            std_real_vector_read(point)data(),
+	            m_dimension,
+	            epsilon,
+	            &result,
+	            &status))
+		throw std::runtime_error(status.message);
+	return Projection(result, m_dimension);
+}
+
+std::string
+tinyspline::ProjectionIndex::toString() const
+{
+	std::ostringstream oss;
+	oss << "ProjectionIndex{dimension: " << m_dimension << "}";
 	return oss.str();
 }
 /*! @} */

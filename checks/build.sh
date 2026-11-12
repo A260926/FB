@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 out=$1; shift
-b=$(mktemp -d); trap 'rm -rf "$b"' EXIT
+b=$(mktemp -d "${TMPDIR:-/tmp}/tinyspline.XXXXXX") || exit 1; trap 'rm -rf "$b"' EXIT
 objects=()
 for f in src/tinyspline.c src/parson.c src/tinyspline_projection.c; do
  if [[ -f "$f" ]]; then

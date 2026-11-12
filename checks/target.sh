@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-b=$(mktemp -d); trap 'rm -rf "$b"' EXIT
+b=$(mktemp -d "${TMPDIR:-/tmp}/tinyspline.XXXXXX") || exit 1; trap 'rm -rf "$b"' EXIT
 bash checks/build.sh "$b/contracts" checks/qa_main.cpp checks/contracts.cpp
 "$b/contracts"
 bash checks/baseline.sh

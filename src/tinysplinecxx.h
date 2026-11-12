@@ -3,6 +3,7 @@
 #pragma once
 
 #include "tinyspline.h"
+#include "tinyspline_projection.h"
 #include <vector>
 #include <string>
 
@@ -678,6 +679,7 @@ private:
 
 	/* Needs to access ::spline. */
 	friend class Morphism;
+	friend class ProjectionIndex;
 
 #ifdef TINYSPLINE_EMSCRIPTEN
 public:
@@ -754,6 +756,66 @@ private:
 	             real *lengths,
 	             size_t size);
 	friend class BSpline;
+};
+/*! @} */
+
+
+
+/*! @name Global Point Projection
+ *
+ * Wrapper classes for ::tsProjection and ::tsProjectionIndex. A projection
+ * index solves the global nearest-point problem on a spline: unlike uniform
+ * sampling it does not miss fold-backs, and unlike ::BSpline::bisect it does
+ * not assume a monotone component. The index is a reusable, thread-safe
+ * snapshot of the spline it is created from.
+ *
+ * @{
+ */
+class TINYSPLINECXX_API Projection {
+public:
+	Projection();
+
+	real knot() const;
+	size_t spanIndex() const;
+	std::vector<real> point() const;
+	real distanceLower() const;
+	real distanceUpper() const;
+	size_t visitedPieces() const;
+
+	std::string toString() const;
+
+private:
+	tsProjection m_projection;
+	size_t m_dimension;
+
+	Projection(const tsProjection &projection, size_t dimension);
+	friend class ProjectionIndex;
+};
+
+class TINYSPLINECXX_API ProjectionIndex {
+public:
+	/* Constructors & Destructors */
+	ProjectionIndex();
+	explicit ProjectionIndex(const BSpline &spline);
+	ProjectionIndex(const ProjectionIndex &other);
+	ProjectionIndex(ProjectionIndex &&other);
+	virtual ~ProjectionIndex();
+
+	/* Operators */
+	ProjectionIndex &operator=(const ProjectionIndex &other);
+	ProjectionIndex &operator=(ProjectionIndex &&other);
+
+	/* Accessors */
+	size_t dimension() const;
+
+	/* Query */
+	Projection query(std_real_vector_in point, real epsilon) const;
+
+	std::string toString() const;
+
+private:
+	tsProjectionIndex m_index;
+	size_t m_dimension;
 };
 /*! @} */
 

@@ -903,6 +903,7 @@ set(TINYSPLINE_CXX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # TINYSPLINE_C_SOURCE_FILES
 list(APPEND TINYSPLINE_C_SOURCE_FILES
      "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline.c"
+     "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline_projection.c"
      "${CMAKE_CURRENT_SOURCE_DIR}/parson.c"
 )
 
@@ -937,7 +938,7 @@ set_target_properties(
              DEFINE_SYMBOL TINYSPLINE_SHARED
              C_VISIBILITY_PRESET hidden
              COMPILE_FLAGS "${TINYSPLINE_LIBRARY_C_FLAGS}"
-             PUBLIC_HEADER "tinyspline.h"
+             PUBLIC_HEADER "tinyspline.h;tinyspline_projection.h"
 )
 target_link_libraries(tinyspline PRIVATE ${TINYSPLINE_C_LINK_LIBRARIES})
 
@@ -1036,7 +1037,7 @@ if(TINYSPLINE_ENABLE_CXX)
       set_property(
         TARGET ${target}
         APPEND
-        PROPERTY PUBLIC_HEADER "tinysplinecxx.h"
+        PROPERTY PUBLIC_HEADER "tinysplinecxx.h;tinyspline_projection.h;tinyspline.h"
       )
     endif()
     target_link_libraries(${target} PRIVATE ${TINYSPLINE_CXX_LINK_LIBRARIES})
