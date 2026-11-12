@@ -1,6 +1,8 @@
 import { is, selectAll, selectOne } from 'css-select';
 import { decodeHTML, decodeHTMLAttribute, encode } from 'entities';
 import arr_back from '../back';
+import kBlockElements from '../block-elements';
+import { ComposedView, getStructuredTextComposed } from '../composed';
 import Matcher from '../matcher';
 import VoidTag from '../void-tag';
 import CommentNode from './comment';
@@ -58,28 +60,6 @@ export interface RawAttributes {
 
 export type InsertPosition = 'beforebegin' | 'afterbegin' | 'beforeend' | 'afterend';
 export type NodeInsertable = Node | string;
-
-// https://developer.mozilla.org/en-US/docs/Web/HTML/Block-level_elements
-const Htags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup'];
-const Dtags = ['details', 'dialog', 'dd', 'div', 'dt'];
-const Ftags = ['fieldset', 'figcaption', 'figure', 'footer', 'form'];
-const tableTags = ['table', 'td', 'tr'];
-const htmlTags = ['address', 'article', 'aside', 'blockquote', 'br', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'ul'];
-const kBlockElements = new Set<string>();
-
-function addToKBlockElement(...args: string[][]) {
-	const addToSet = (array: string[]) => {
-		for (let index = 0; index < array.length; index++) {
-			const element = array[index];
-			kBlockElements.add(element);
-			kBlockElements.add(element.toUpperCase());
-		}
-	};
-
-	for (const arg of args) addToSet(arg);
-}
-
-addToKBlockElement(Htags, Dtags, Ftags, tableTags, htmlTags);
 
 class DOMTokenList {
 	private _set: Set<string>;
@@ -538,6 +518,36 @@ export default class HTMLElement extends Node {
 			xmlMode: true,
 			adapter: Matcher,
 		});
+	}
+
+	/**
+	 * Query CSS selector against the composed view: declarative open shadow
+	 * roots (`<template shadowrootmode="open">`) are expanded with slot
+	 * assignment, so slots and templates take no position and unassigned light
+	 * DOM is hidden. The matching elements are the very same objects as in the
+	 * physical tree, which is left untouched; like {@link querySelectorAll}
+	 * this never returns the calling element itself.
+	 * @param  {string}         selector Simplified CSS selector
+	 * @return {HTMLElement[]}  matching elements
+	 */
+	public querySelectorAllComposed(selector: string): HTMLElement[] {
+		const adapter = new ComposedView().toAdapter();
+		return selectAll(selector, this as HTMLElement, {
+			xmlMode: true,
+			context: [this as HTMLElement],
+			adapter,
+		});
+	}
+
+	/**
+	 * Structured text read from the composed view (see
+	 * {@link querySelectorAllComposed}). Block boundaries, entity decoding and
+	 * whitespace normalization are the same as in {@link structuredText}; only
+	 * the traversed tree differs. A fresh view is built on every access, so
+	 * slot, light-DOM and template changes are always reflected.
+	 */
+	public get structuredTextComposed(): string {
+		return getStructuredTextComposed(this);
 	}
 
 	/**
