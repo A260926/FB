@@ -118,6 +118,24 @@ Status TableCache::Get(const ReadOptions& options,
   return s;
 }
 
+Status TableCache::GetTable(uint64_t file_number,
+                            uint64_t file_size,
+                            Table** table,
+                            Cache::Handle** handle) {
+  Status s = FindTable(file_number, file_size, handle);
+  if (s.ok()) {
+    *table = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->table;
+  } else {
+    *table = NULL;
+    *handle = NULL;
+  }
+  return s;
+}
+
+void TableCache::ReleaseTable(Cache::Handle* handle) {
+  cache_->Release(handle);
+}
+
 void TableCache::Evict(uint64_t file_number) {
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);

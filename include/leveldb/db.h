@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string>
+#include <vector>
 #include "leveldb/iterator.h"
 #include "leveldb/options.h"
 
@@ -82,6 +84,28 @@ class DB {
   // May return some other Status on an error.
   virtual Status Get(const ReadOptions& options,
                      const Slice& key, std::string* value) = 0;
+
+  // Apply Get() to every key in "keys" as one batched read.
+  //
+  // The whole batch observes a single consistent view of the database:
+  // options.snapshot is used when non-NULL, otherwise an implicit snapshot is
+  // chosen once at the start of the call and shared by every lookup.
+  //
+  // On return, statuses[i] corresponds to keys[i] and "*values" is resized to
+  // keys.size(): values[i] holds the found value, or is left empty when the
+  // key was missing or the lookup failed.  Keys may be supplied in any order
+  // and may repeat; logical equality follows the database comparator, not byte
+  // equality.  Returned values are copied, so the caller may free the buffers
+  // backing "keys" as soon as this call returns.
+  //
+  // If "values" is NULL, every returned status is InvalidArgument.  With an
+  // empty "keys", "*values" is cleared and an empty status vector is returned.
+  //
+  // The default implementation simply issues one Get() per key against the
+  // same snapshot, so existing DB subclasses keep working unchanged.
+  virtual std::vector<Status> MultiGet(const ReadOptions& options,
+                                       const std::vector<Slice>& keys,
+                                       std::vector<std::string>* values);
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must

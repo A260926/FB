@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_INCLUDE_TABLE_H_
 
 #include <stdint.h>
+#include <vector>
 #include "leveldb/iterator.h"
 
 namespace leveldb {
@@ -17,6 +18,7 @@ struct Options;
 class RandomAccessFile;
 struct ReadOptions;
 class TableCache;
+class BatchTableReader;
 
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
@@ -70,6 +72,18 @@ class Table {
       const ReadOptions&, const Slice& key,
       void* arg,
       void (*handle_result)(void* arg, const Slice& k, const Slice& v));
+
+  // Batched counterpart of InternalGet().  "items" must be sorted by
+  // internal key according to the table comparator.  Every data block needed
+  // by more than one item is loaded and checksum-verified at most once, even
+  // when the configured block cache has zero capacity or fill_cache is
+  // false; block content is only held for the duration of this call.  The
+  // filter policy and verify_checksums keep their existing semantics.  Per
+  // item failures are reported on the items themselves and do not stop the
+  // remaining lookups.
+  friend class BatchTableReader;
+  Status InternalMultiGet(const ReadOptions& options,
+                          std::vector<struct TableBatchItem>* items);
 
 
   void ReadMeta(const Footer& footer);

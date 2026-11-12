@@ -4,11 +4,13 @@
 
 #include "leveldb/table.h"
 
+#include <map>
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "table/batch_table.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -251,6 +253,165 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
     s = iiter->status();
   }
   delete iiter;
+  return s;
+}
+
+Status Table::InternalMultiGet(const ReadOptions& options,
+                               std::vector<TableBatchItem>* items) {
+  const Comparator* cmp = rep_->options.comparator;
+  Cache* block_cache = rep_->options.block_cache;
+  Iterator* iiter = rep_->index_block->NewIterator(cmp);
+
+  // Call-scoped sharing of data blocks.  A block needed by several lookup
+  // items is read and checksum-verified at most once, independently of the
+  // permanent block cache capacity and of fill_cache.  Everything is
+  // released before this method returns.
+  std::vector<Block*> owned_blocks;
+  std::vector<Cache::Handle*> pinned_handles;
+  std::map<uint64_t, Block*> shared_blocks;  // keyed by block offset
+
+  size_t i = 0;
+  const size_t n = items->size();
+  while (i < n) {
+    TableBatchItem& first = (*items)[i];
+    if (first.done) {
+      ++i;
+      continue;
+    }
+
+    // Gallop the index iterator forward to the block covering first.
+    iiter->SeekForward(first.internal_key);
+    if (!iiter->Valid()) {
+      // No index entry at or past this key: it cannot be in this table.
+      first.done = true;
+      ++i;
+      continue;
+    }
+
+    // Every still-pending item not greater than the current index separator
+    // routes to the same data block; gather them as one group.
+    const Slice separator = iiter->key();
+    size_t j = i + 1;
+    while (j < n && !(*items)[j].done &&
+           cmp->Compare(separator, (*items)[j].internal_key) >= 0) {
+      ++j;
+    }
+
+    Slice handle_value = iiter->value();
+    BlockHandle handle;
+    bool handle_ok = handle.DecodeFrom(&handle_value).ok();
+    FilterBlockReader* filter = rep_->filter;
+
+    // Filter membership is per key, even though the items share one block.
+    // Only skip the block read when every item in the group is rejected;
+    // otherwise load it once and honor per-item rejections individually.
+    bool all_filter_rejected = true;
+    if (filter == NULL || !handle_ok) {
+      all_filter_rejected = false;
+    } else {
+      for (size_t k = i; k < j; k++) {
+        if (filter->KeyMayMatch(handle.offset(),
+                                (*items)[k].internal_key)) {
+          all_filter_rejected = false;
+          break;
+        }
+      }
+    }
+
+    if (all_filter_rejected) {
+      for (size_t k = i; k < j; k++) {
+        (*items)[k].done = true;
+      }
+    } else if (!handle_ok) {
+      Status err = Status::Corruption("bad block handle");
+      for (size_t k = i; k < j; k++) {
+        (*items)[k].status = err;
+        (*items)[k].done = true;
+      }
+    } else {
+      Block* block = NULL;
+      std::map<uint64_t, Block*>::iterator found =
+          shared_blocks.find(handle.offset());
+      if (found != shared_blocks.end()) {
+        block = found->second;
+      } else {
+        // Mirror Table::BlockReader's permanent-cache/fill_cache behavior,
+        // then keep the block in the call-scoped map as well.
+        char cache_key_buffer[16];
+        Slice cache_key;
+        Cache::Handle* cache_handle = NULL;
+        if (block_cache != NULL) {
+          EncodeFixed64(cache_key_buffer, rep_->cache_id);
+          EncodeFixed64(cache_key_buffer + 8, handle.offset());
+          cache_key = Slice(cache_key_buffer, sizeof(cache_key_buffer));
+          cache_handle = block_cache->Lookup(cache_key);
+          if (cache_handle != NULL) {
+            block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+            pinned_handles.push_back(cache_handle);
+          }
+        }
+        if (block == NULL) {
+          BlockContents contents;
+          Status read_status =
+              ReadBlock(rep_->file, options, handle, &contents);
+          if (!read_status.ok()) {
+            // A read/checksum failure is an error for these keys, not a miss
+            // that would allow older versions to surface.
+            for (size_t k = i; k < j; k++) {
+              (*items)[k].status = read_status;
+              (*items)[k].done = true;
+            }
+            i = j;
+            continue;
+          }
+          block = new Block(contents);
+          if (block_cache != NULL && contents.cachable &&
+              options.fill_cache) {
+            cache_handle = block_cache->Insert(
+                cache_key, block, block->size(), &DeleteCachedBlock);
+            pinned_handles.push_back(cache_handle);
+          } else {
+            owned_blocks.push_back(block);
+          }
+        }
+        shared_blocks[handle.offset()] = block;
+      }
+
+      Iterator* block_iter = block->NewIterator(cmp);
+      for (size_t k = i; k < j; k++) {
+        TableBatchItem& item = (*items)[k];
+        if (filter != NULL &&
+            !filter->KeyMayMatch(handle.offset(), item.internal_key)) {
+          // Definitively absent from this block; leave the saver untouched
+          // so the version layer continues into older files.  Do not move
+          // the block iterator, preserving the forward ordering.
+          item.done = true;
+          continue;
+        }
+        block_iter->SeekForward(item.internal_key);
+        if (block_iter->Valid()) {
+          (*item.handle_result)(item.arg, block_iter->key(),
+                                block_iter->value());
+        }
+        Status bs = block_iter->status();
+        if (!bs.ok()) {
+          item.status = bs;
+        }
+        item.done = true;
+      }
+      delete block_iter;
+    }
+    i = j;
+  }
+
+  Status s = iiter->status();
+  delete iiter;
+  for (size_t k = 0; k < owned_blocks.size(); k++) {
+    delete owned_blocks[k];
+  }
+  for (size_t k = 0; k < pinned_handles.size(); k++) {
+    block_cache->Release(pinned_handles[k]);
+  }
   return s;
 }
 

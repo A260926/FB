@@ -44,6 +44,17 @@ class TableCache {
              void* arg,
              void (*handle_result)(void*, const Slice&, const Slice&));
 
+  // Open (or fetch from cache) the table for "file_number" and pin the
+  // table-cache handle for the duration of a batched read.  On success,
+  // *table points at the cached Table (valid until ReleaseTable()) and
+  // *handle must later be passed to ReleaseTable().  Used by the call-scoped
+  // MultiGet path so every lookup in the same file shares one open table.
+  Status GetTable(uint64_t file_number,
+                  uint64_t file_size,
+                  Table** table,
+                  Cache::Handle** handle);
+  void ReleaseTable(Cache::Handle* handle);
+
   // Evict any entry for the specified file number
   void Evict(uint64_t file_number);
 

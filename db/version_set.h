@@ -73,6 +73,16 @@ class Version {
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
+  // Batched counterpart of Get().  "states" must be sorted by internal key;
+  // only states not yet marked done are considered.  Routing across L0
+  // overlaps and higher-level files is shared across the batch.  File/block
+  // errors are recorded on the affected states and never treated as misses.
+  // REQUIRES: lock is not held
+  void MultiGet(const ReadOptions&,
+                class BatchTableReader* reader,
+                std::vector<struct BatchGetState*>* states,
+                GetStats* stats);
+
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held

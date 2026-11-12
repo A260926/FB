@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <vector>
 #include "db/builder.h"
+#include "db/db_batch.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "db/filename.h"
@@ -1153,6 +1154,139 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
+std::vector<Status> DBImpl::MultiGet(const ReadOptions& options,
+                                     const std::vector<Slice>& keys,
+                                     std::vector<std::string>* values) {
+  if (values == NULL) {
+    return std::vector<Status>(
+        keys.size(), Status::InvalidArgument("values must not be null"));
+  }
+  if (keys.empty()) {
+    values->clear();
+    return std::vector<Status>();
+  }
+
+  const size_t n = keys.size();
+  values->assign(n, std::string());
+  std::vector<Status> statuses(n);
+  const Comparator* ucmp = user_comparator();
+
+  // Copy every input key into owned storage up front so that no result can
+  // reference the caller's buffers after this call returns.
+  std::vector<std::string> owned_keys(n);
+  for (size_t i = 0; i < n; i++) {
+    owned_keys[i].assign(keys[i].data(), keys[i].size());
+  }
+
+  // Choose one sequence number for the whole batch: the explicit snapshot if
+  // given, otherwise the current last sequence captured under the mutex.
+  SequenceNumber snapshot;
+  MemTable* mem = NULL;
+  MemTable* imm = NULL;
+  Version* current = NULL;
+  {
+    MutexLock l(&mutex_);
+    if (options.snapshot != NULL) {
+      snapshot = reinterpret_cast<const SnapshotImpl*>(options.snapshot)->number_;
+    } else {
+      snapshot = versions_->LastSequence();
+    }
+    mem = mem_;
+    imm = imm_;
+    current = versions_->current();
+    mem->Ref();
+    if (imm != NULL) imm->Ref();
+    current->Ref();
+  }
+
+  // Build one routing state per input position first; equal keys are
+  // coalesced below so all repeated lookups share the same work.
+  std::vector<BatchGetState*> all_states(n);
+  for (size_t i = 0; i < n; i++) {
+    Slice user_key(owned_keys[i]);
+    LookupKey* lkey = new LookupKey(user_key, snapshot);
+    all_states[i] = new BatchGetState(lkey, ucmp);
+  }
+
+  // Order positions by user key.  A single adjacent pass detects input that
+  // is already ordered (the common ETL case), avoiding a full re-sort.
+  std::vector<size_t> order(n);
+  for (size_t i = 0; i < n; i++) {
+    order[i] = i;
+  }
+  bool already_ordered = true;
+  for (size_t i = 1; i < n; i++) {
+    if (ucmp->Compare(all_states[i - 1]->lkey->user_key(),
+                      all_states[i]->lkey->user_key()) > 0) {
+      already_ordered = false;
+      break;
+    }
+  }
+  if (!already_ordered) {
+    std::sort(order.begin(), order.end(),
+              [&](size_t a, size_t b) {
+                return ucmp->Compare(all_states[a]->lkey->user_key(),
+                                     all_states[b]->lkey->user_key()) < 0;
+              });
+  }
+
+  // Coalesce comparator-equal keys: one canonical state per distinct key.
+  std::vector<BatchGetState*> states;
+  std::vector<BatchGetState*> by_position(n);
+  states.reserve(n);
+  BatchGetState* canonical = NULL;
+  for (size_t k = 0; k < n; k++) {
+    size_t pos = order[k];
+    BatchGetState* st = all_states[pos];
+    if (canonical == NULL ||
+        ucmp->Compare(canonical->lkey->user_key(),
+                      st->lkey->user_key()) != 0) {
+      canonical = st;
+      states.push_back(canonical);
+    } else {
+      delete st;
+    }
+    by_position[pos] = canonical;
+  }
+
+  bool have_stat_update = false;
+  Version::GetStats stats;
+  {
+    // No global write lock is held while memtable and file I/O runs.
+    MemTableBatchGet(mem, &states);
+    if (imm != NULL) {
+      MemTableBatchGet(imm, &states);
+    }
+    BatchTableReader reader(table_cache_, options);
+    current->MultiGet(options, &reader, &states, &stats);
+    have_stat_update = true;
+  }
+
+  {
+    MutexLock l(&mutex_);
+    if (have_stat_update && current->UpdateStats(stats)) {
+      MaybeScheduleCompaction();
+    }
+  }
+  mem->Unref();
+  if (imm != NULL) imm->Unref();
+  current->Unref();
+
+  // Fan the shared per-key results back to input positions.  Failed or
+  // missing positions keep their pre-cleared (empty) value.
+  for (size_t i = 0; i < n; i++) {
+    BatchGetState* st = by_position[i];
+    statuses[i] = st->status;
+    if (st->status.ok()) {
+      (*values)[i] = st->result_storage;
+    }
+  }
+  for (size_t i = 0; i < states.size(); i++) {
+    delete states[i];
+  }
+  return statuses;
+}
+
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;
@@ -1483,6 +1617,44 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
   return Write(opt, &batch);
+}
+
+// Default batched read for DB subclasses that do not override MultiGet():
+// issue one Get() per key, all against one snapshot.  The explicit snapshot
+// is used as-is; otherwise an implicit snapshot is taken once up front so the
+// whole batch observes a single point-in-time view.
+std::vector<Status> DB::MultiGet(const ReadOptions& options,
+                                 const std::vector<Slice>& keys,
+                                 std::vector<std::string>* values) {
+  if (values == NULL) {
+    return std::vector<Status>(
+        keys.size(), Status::InvalidArgument("values must not be null"));
+  }
+  if (keys.empty()) {
+    values->clear();
+    return std::vector<Status>();
+  }
+
+  const size_t n = keys.size();
+  values->assign(n, std::string());
+  std::vector<Status> result(n);
+
+  ReadOptions ro = options;
+  const Snapshot* owned_snapshot = NULL;
+  if (ro.snapshot == NULL) {
+    owned_snapshot = GetSnapshot();
+    ro.snapshot = owned_snapshot;
+  }
+  for (size_t i = 0; i < n; i++) {
+    result[i] = Get(ro, keys[i], &(*values)[i]);
+    if (!result[i].ok()) {
+      (*values)[i].clear();
+    }
+  }
+  if (owned_snapshot != NULL) {
+    ReleaseSnapshot(owned_snapshot);
+  }
+  return result;
 }
 
 DB::~DB() { }

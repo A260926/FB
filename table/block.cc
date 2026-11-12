@@ -83,6 +83,9 @@ class Block::Iter : public Iterator {
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
   uint32_t current_;
   uint32_t restart_index_;  // Index of restart block in which current_ falls
+  // Starting stride hint for SeekForward(), adapted from the gap between
+  // consecutive lookups.  Only meaningful for ordered batched reads.
+  uint32_t hop_hint_;
   std::string key_;
   Slice value_;
   Status status_;
@@ -121,7 +124,8 @@ class Block::Iter : public Iterator {
         restarts_(restarts),
         num_restarts_(num_restarts),
         current_(restarts_),
-        restart_index_(num_restarts_) {
+        restart_index_(num_restarts_),
+        hop_hint_(1) {
     assert(num_restarts_ > 0);
   }
 
@@ -192,6 +196,95 @@ class Block::Iter : public Iterator {
 
     // Linear search (within restart block) for first key >= target
     SeekToRestartPoint(left);
+    while (true) {
+      if (!ParseNextKey()) {
+        return;
+      }
+      if (Compare(key_, target) >= 0) {
+        return;
+      }
+    }
+  }
+
+  // Forward-only Seek() used by batched reads.  Targets must arrive in
+  // increasing order.  Gallops over restart points from the current position
+  // so sorted batches share the routing work instead of re-binary-searching
+  // the whole block for every target.
+  virtual void SeekForward(const Slice& target) {
+    if (!Valid()) {
+      hop_hint_ = 1;
+      Seek(target);
+      return;
+    }
+    if (Compare(key_, target) >= 0) {
+      return;  // Already at or past the target.
+    }
+
+    const uint32_t start_restart = restart_index_;
+    // The restart point backing the current entry is known to be < target.
+    // Gallop forward to find the first restart point whose key is >= target.
+    // hop_hint_ remembers the stride of previous calls, which keeps the
+    // gallop short for evenly spaced batches.
+    uint32_t bound = num_restarts_;  // First restart index with key >= target
+    uint32_t lo = restart_index_ + 1;
+    uint32_t step = hop_hint_;
+    while (lo < num_restarts_) {
+      uint32_t hi = lo + step;
+      if (hi < lo || hi >= num_restarts_) {
+        // Overflow or ran off the end: every remaining restart is a
+        // candidate, let the final linear scan decide.
+        break;
+      }
+      uint32_t region_offset = GetRestartPoint(hi);
+      uint32_t shared, non_shared, value_length;
+      const char* key_ptr = DecodeEntry(data_ + region_offset,
+                                        data_ + restarts_,
+                                        &shared, &non_shared, &value_length);
+      if (key_ptr == NULL || (shared != 0)) {
+        CorruptionError();
+        return;
+      }
+      Slice mid_key(key_ptr, non_shared);
+      if (Compare(mid_key, target) < 0) {
+        lo = hi + 1;
+        step <<= 1;
+      } else {
+        bound = hi;
+        break;
+      }
+    }
+
+    // Binary search the bounded restart range [lo, bound) for the first
+    // restart point whose key is >= target.
+    uint32_t left = lo;
+    uint32_t right = bound;
+    while (left < right) {
+      uint32_t mid = (left + right) / 2;
+      uint32_t region_offset = GetRestartPoint(mid);
+      uint32_t shared, non_shared, value_length;
+      const char* key_ptr = DecodeEntry(data_ + region_offset,
+                                        data_ + restarts_,
+                                        &shared, &non_shared, &value_length);
+      if (key_ptr == NULL || (shared != 0)) {
+        CorruptionError();
+        return;
+      }
+      Slice mid_key(key_ptr, non_shared);
+      if (Compare(mid_key, target) < 0) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+    bound = left;
+    // Remember how far this search travelled to seed the next gallop.
+    uint32_t chosen = (bound == 0 ? 0 : bound - 1);
+    hop_hint_ = chosen > start_restart ? chosen - start_restart : 1;
+
+    // The first entry >= target lives in the restart region immediately
+    // before "bound" (or the last region when no restart reaches target).
+    uint32_t region = (bound == 0 ? 0 : bound - 1);
+    SeekToRestartPoint(region);
     while (true) {
       if (!ParseNextKey()) {
         return;

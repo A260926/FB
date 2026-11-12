@@ -7,6 +7,8 @@
 
 #include <deque>
 #include <set>
+#include <string>
+#include <vector>
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
@@ -35,6 +37,10 @@ class DBImpl : public DB {
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
                      std::string* value);
+  virtual std::vector<Status> MultiGet(
+      const ReadOptions& options,
+      const std::vector<Slice>& keys,
+      std::vector<std::string>* values);
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const Snapshot* GetSnapshot();
   virtual void ReleaseSnapshot(const Snapshot* snapshot);

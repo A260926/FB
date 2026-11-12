@@ -42,6 +42,12 @@ class Iterator {
   // an entry that comes at or past target.
   virtual void Seek(const Slice& target) = 0;
 
+  // Forward-only counterpart of Seek() for callers that visit targets in
+  // increasing key order.  Implementations may reuse the current position to
+  // avoid re-searching the part of the source already passed; the default
+  // simply performs a full Seek().
+  virtual void SeekForward(const Slice& target) { Seek(target); }
+
   // Moves to the next entry in the source.  After this call, Valid() is
   // true iff the iterator was not positioned at the last entry in the source.
   // REQUIRES: Valid()

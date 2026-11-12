@@ -65,6 +65,57 @@ if (s.ok()) s = db->Put(leveldb::WriteOptions(), key2, value);
 if (s.ok()) s = db->Delete(leveldb::WriteOptions(), key1);
 ```
 
+## Batched Reads
+
+When an offline job has to resolve many keys at once, issuing one `Get()` per
+key repeats the same routing work: every key re-searches the level files and
+the table indexes, and keys that happen to land in the same data block each
+trigger their own block read.  `MultiGet()` resolves a whole batch against
+one snapshot and shares that routing work across all of the keys.
+
+```c++
+#include <vector>
+#include "leveldb/db.h"
+
+std::vector<leveldb::Slice> keys;
+// ... fill keys with the fact keys to resolve (any order, duplicates OK) ...
+
+std::vector<std::string> values;
+std::vector<leveldb::Status> statuses =
+    db->MultiGet(leveldb::ReadOptions(), keys, &values);
+for (size_t i = 0; i < keys.size(); i++) {
+  if (statuses[i].ok()) {
+    // values[i] is the value for keys[i].
+  } else if (statuses[i].IsNotFound()) {
+    // keys[i] has no visible value (or is deleted at the snapshot).
+  } else {
+    // An I/O or corruption error affected keys[i]; other keys are still
+    // reported independently in the same returned vector.
+  }
+}
+```
+
+Semantics:
+
+* The whole batch observes a single consistent view.  If
+  `ReadOptions::snapshot` is non-NULL that snapshot is used; otherwise one
+  implicit snapshot is chosen at the start of the call and shared by every
+  lookup in the batch.
+* `statuses[i]` and `values[i]` correspond positionally to `keys[i]`.  Keys
+  may be supplied in any order and may repeat; equality follows the database
+  comparator.  A failed or missing position keeps an empty value.
+* Passing a NULL `values` pointer returns `InvalidArgument` for every key;
+  an empty key vector clears `*values` and returns an empty status vector.
+* Results are copied into `values`, so the buffers backing the input keys can
+  be freed as soon as the call returns.
+* Keys routed to the same table file share one open table, and keys routed to
+  the same data block load and checksum-verify that block at most once, even
+  when the block cache has zero capacity or `fill_cache` is false.  This
+  call-scoped state is released when `MultiGet()` returns; the file format is
+  unchanged and no permanent global index is built.
+* Deletion records terminate the search for older values exactly as they do
+  for `Get()`.
+
 ## Atomic Updates
 
 Note that if the process dies after the Put of key2 but before the delete of

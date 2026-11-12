@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <stdio.h>
+#include "db/db_batch.h"
 #include "db/filename.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
@@ -426,6 +427,172 @@ Status Version::Get(const ReadOptions& options,
   }
 
   return Status::NotFound(Slice());  // Use an empty error message for speed
+}
+
+void Version::MultiGet(const ReadOptions& options,
+                       BatchTableReader* reader,
+                       std::vector<BatchGetState*>* all_states,
+                       GetStats* stats) {
+  stats->seek_file = NULL;
+  stats->seek_file_level = -1;
+  const Comparator* ucmp = vset_->icmp_.user_comparator();
+
+  // Compact working set to the still-unresolved states.
+  std::vector<BatchGetState*> pending;
+  pending.reserve(all_states->size());
+  for (size_t i = 0; i < all_states->size(); i++) {
+    if (!(*all_states)[i]->done) {
+      pending.push_back((*all_states)[i]);
+    }
+  }
+  if (pending.empty()) {
+    return;
+  }
+
+  // Record a multi-file seek on the first state that crosses a file boundary.
+  for (size_t i = 0; i < pending.size(); i++) {
+    pending[i]->seek_file = NULL;
+    pending[i]->seek_file_level = -1;
+    pending[i]->last_file_read = NULL;
+    pending[i]->last_file_read_level = -1;
+    pending[i]->files_touched = 0;
+  }
+
+  std::vector<BatchGetState*> group;
+  for (int level = 0; level < config::kNumLevels; level++) {
+    size_t num_files = files_[level].size();
+    if (num_files == 0 || pending.empty()) {
+      continue;
+    }
+
+    if (level == 0) {
+      // Level-0 files may overlap.  Find every file overlapping the range of
+      // pending keys, then visit them from newest to oldest.
+      Slice min_key = pending.front()->lkey->user_key();
+      Slice max_key = pending.back()->lkey->user_key();
+      InternalKey begin(min_key, kMaxSequenceNumber, kValueTypeForSeek);
+      InternalKey end(max_key, 0, kTypeDeletion);
+      std::vector<FileMetaData*> overlaps;
+      GetOverlappingInputs(0, &begin, &end, &overlaps);
+      std::sort(overlaps.begin(), overlaps.end(), NewestFirst);
+
+      for (size_t fi = 0; fi < overlaps.size() && !pending.empty(); fi++) {
+        FileMetaData* f = overlaps[fi];
+        group.clear();
+        for (size_t i = 0; i < pending.size(); i++) {
+          BatchGetState* st = pending[i];
+          Slice k = st->lkey->user_key();
+          if (ucmp->Compare(k, f->smallest.user_key()) >= 0 &&
+              ucmp->Compare(k, f->largest.user_key()) <= 0) {
+            group.push_back(st);
+          }
+        }
+        if (group.empty()) {
+          continue;
+        }
+        reader->LookupGroup(f->number, f->file_size, &group);
+        for (size_t i = 0; i < group.size(); i++) {
+          BatchGetState* st = group[i];
+          st->files_touched++;
+          if (st->files_touched == 1) {
+            st->last_file_read = f;
+            st->last_file_read_level = 0;
+          } else if (st->seek_file == NULL) {
+            st->seek_file = st->last_file_read;
+            st->seek_file_level = st->last_file_read_level;
+          }
+        }
+        // Drop states resolved by this (newer) file.
+        std::vector<BatchGetState*> remaining;
+        remaining.reserve(pending.size());
+        for (size_t i = 0; i < pending.size(); i++) {
+          if (!pending[i]->done) {
+            remaining.push_back(pending[i]);
+          }
+        }
+        pending.swap(remaining);
+      }
+      continue;
+    }
+
+    // Levels > 0 hold disjoint, sorted files.  A single forward cursor maps
+    // the sorted states to files, so the whole level is scanned once instead
+    // of re-binary-searching the file list for every key.
+    const std::vector<FileMetaData*>& level_files = files_[level];
+    size_t cursor = 0;
+    size_t idx = 0;
+    while (idx < pending.size()) {
+      BatchGetState* first = pending[idx];
+      Slice key = first->lkey->user_key();
+      // First file whose largest key is at or past this key.
+      while (cursor < num_files &&
+             ucmp->Compare(level_files[cursor]->largest.user_key(), key) < 0) {
+        cursor++;
+      }
+      if (cursor >= num_files) {
+        break;  // This and every later key are beyond the whole level.
+      }
+      FileMetaData* f = level_files[cursor];
+      if (ucmp->Compare(key, f->smallest.user_key()) < 0) {
+        // The key falls in a gap before "f"; a later key may land in it.
+        idx++;
+        continue;
+      }
+
+      // "first" is inside f.  Files are disjoint and ordered, so every
+      // following state up to f's largest key belongs to the same file and
+      // forms one lookup group.
+      group.clear();
+      group.push_back(first);
+      size_t j = idx + 1;
+      while (j < pending.size() &&
+             ucmp->Compare(pending[j]->lkey->user_key(),
+                           f->largest.user_key()) <= 0) {
+        group.push_back(pending[j]);
+        j++;
+      }
+      reader->LookupGroup(f->number, f->file_size, &group);
+      for (size_t i = 0; i < group.size(); i++) {
+        BatchGetState* st = group[i];
+        st->files_touched++;
+        if (st->files_touched == 1) {
+          st->last_file_read = f;
+          st->last_file_read_level = level;
+        } else if (st->seek_file == NULL) {
+          st->seek_file = st->last_file_read;
+          st->seek_file_level = st->last_file_read_level;
+        }
+      }
+      idx = j;
+      cursor++;
+    }
+
+    // Remove states resolved (or failed) at this level.
+    std::vector<BatchGetState*> remaining;
+    remaining.reserve(pending.size());
+    for (size_t i = 0; i < pending.size(); i++) {
+      if (!pending[i]->done) {
+        remaining.push_back(pending[i]);
+      }
+    }
+    pending.swap(remaining);
+  }
+
+  // Aggregate seek compaction stats from the first key that needed >1 file.
+  for (size_t i = 0; i < all_states->size(); i++) {
+    BatchGetState* st = (*all_states)[i];
+    if (st->seek_file != NULL) {
+      stats->seek_file = st->seek_file;
+      stats->seek_file_level = st->seek_file_level;
+      break;
+    }
+  }
+
+  // Anything still unresolved is genuinely absent from the snapshot.
+  for (size_t i = 0; i < pending.size(); i++) {
+    pending[i]->status = Status::NotFound(Slice());
+    pending[i]->done = true;
+  }
 }
 
 bool Version::UpdateStats(const GetStats& stats) {
