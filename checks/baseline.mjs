@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {parseDocument} from 'htmlparser2';
+import {selectAll, compile} from '../dist/index.js';
+const doc = parseDocument('<main><i id="a" class="pick"></i>text<!--x--><b id="b"></b><i id="c" class="pick"></i><b id="d" class="pick"></b></main>');
+const ids = q => selectAll(q, doc, {cacheResults:false}).map(n => n.attribs.id);
+assert.deepEqual(ids(':nth-child(2 of .pick)'), ['c']);
+assert.deepEqual(ids(':nth-last-child(1 of .pick)'), ['d']);
+assert.deepEqual(ids(':nth-child(2 of .pick, i)'), ['c']);
+const predicate = compile(':nth-child(2 of .pick)', {cacheResults:false});
+assert.deepEqual(selectAll(predicate, doc).map(n=>n.attribs.id), ['c']);
+assert.deepEqual(ids('main > :nth-child(2)'), ['b']);
+console.log('RANK_BASELINE_OK filtered=c reverse=d element-only=b');
