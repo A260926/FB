@@ -2,7 +2,7 @@
 const EPSILON = Math.pow(2, -52);
 const EDGE_STACK = new Uint32Array(512);
 
-import {orient2d} from 'robust-predicates';
+import {orient2d, incircle} from 'robust-predicates';
 
 /** @template {ArrayLike<number>} T */
 export default class Delaunator {
@@ -63,6 +63,9 @@ export default class Delaunator {
         /** @private */ this._cy = 0;
         /** @private */ this._hullStart = 0;
 
+        // point indices removed through `removePoint` (a full `update()` restores them)
+        /** @private */ this._removed = new Set();
+
 
         /** A `Uint32Array` array of indices that reference points on the convex hull of the input data, counterclockwise (assuming the y axis points down). */
         this.hull = this._triangles;
@@ -85,6 +88,9 @@ export default class Delaunator {
     update() {
         const {coords, _hullPrev: hullPrev, _hullNext: hullNext, _hullTri: hullTri, _hullHash: hullHash} =  this;
         const n = coords.length >> 1;
+
+        // a full rebuild works from the complete coords, so it brings back any removed points
+        this._removed.clear();
 
         // populate an array of point indices; calculate input data bbox
         let minX = Infinity;
@@ -293,6 +299,277 @@ export default class Delaunator {
     }
 
     /**
+     * Removes an interior point from the current triangulation, patching only the ring of
+     * triangles around it (its star neighborhood). The `coords` array is left untouched and all
+     * remaining triangle vertices keep referencing the original input indices. Removing a convex
+     * hull vertex is not supported.
+     *
+     * Returns `true` when the point was part of the triangulation and got removed, and `false`
+     * when the index is valid but the point is not part of the current triangulation (e.g. it was
+     * already removed). Throws a `RangeError` on a non-integer, out-of-bounds index, or for a
+     * current convex hull vertex; in that case the triangulation is left unchanged and usable.
+     *
+     * A later `update()` rebuilds from the full `coords` and restores removed points.
+     *
+     * @param {number} index
+     * @returns {boolean}
+     */
+    removePoint(index) {
+        if (!Number.isInteger(index) || index < 0 || index >= (this.coords.length >> 1)) {
+            throw new RangeError(`Invalid point index: ${index}`);
+        }
+        if (this._removed.has(index)) return false;
+
+        const {_triangles: oldTriangles, halfedges: oldHalfedges, hull} = this;
+
+        // locate a half-edge (and its triangle) incident on the target point
+        let edge = -1;
+        for (let i = 0; i < this.trianglesLen; i++) {
+            if (oldTriangles[i] === index) {
+                edge = i;
+                break;
+            }
+        }
+        if (edge === -1) {
+            // not part of the current triangulation (e.g. a duplicate point skipped on construction)
+            return false;
+        }
+
+        // convex hull vertices can't be removed through this local patch
+        for (let i = 0; i < hull.length; i++) {
+            if (hull[i] === index) throw new RangeError(`Removing convex hull vertex ${index} is not supported.`);
+        }
+
+        // collect the boundary of the star neighborhood as an ordered ring of neighbor points;
+        // each boundary edge joins ring[k] and ring[k + 1]. An interior point has no hull edge,
+        // so every crossed half-edge is always defined.
+        const ring = [];
+        const boundary = []; // for each k, the outside half-edge (oriented ring[k + 1] -> ring[k]) in old ids
+        const removedTriangles = new Set();
+        let e = edge;
+        do {
+            const t = e - e % 3;
+            ring.push(oldTriangles[t + (e + 1) % 3]); // neighbor following the target point
+            boundary.push(oldHalfedges[t + (e + 1) % 3]); // twin of the edge opposite the target
+            removedTriangles.add(t); // the star triangle itself gets removed
+            e = oldHalfedges[t + (e + 2) % 3]; // cross the other edge incident to the target point
+        } while (e !== edge);
+
+        const m = ring.length;
+
+        // build a compacted copy of the mesh without the star triangles, remapping half-edge ids.
+        // the backing arrays keep their original capacity (update() relies on it); only
+        // `trianglesLen` marks the active prefix.
+        const oldLen = this.trianglesLen;
+        const capacity = oldTriangles.length;
+        const newTriangles = new Uint32Array(capacity);
+        const newHalfedges = new Int32Array(capacity);
+        const edgeMap = new Int32Array(oldLen).fill(-2);
+        const oldIndex = new Uint32Array(oldLen);
+        let pos = 0;
+        for (let t = 0; t < oldLen; t += 3) {
+            if (removedTriangles.has(t)) continue;
+            for (let j = 0; j < 3; j++) {
+                edgeMap[t + j] = pos + j;
+                oldIndex[pos + j] = t + j;
+            }
+            newTriangles[pos] = oldTriangles[t];
+            newTriangles[pos + 1] = oldTriangles[t + 1];
+            newTriangles[pos + 2] = oldTriangles[t + 2];
+            pos += 3;
+        }
+        for (let i = 0; i < pos; i++) {
+            const twin = oldHalfedges[oldIndex[i]];
+            newHalfedges[i] = twin === -1 ? -1 : edgeMap[twin];
+        }
+        // remap the cavity boundary half-edges to the compacted mesh (-1 marks a hull edge:
+        // a star triangle's opposite edge can itself lie on the convex hull)
+        for (let i = 0; i < m; i++) {
+            const b = boundary[i];
+            boundary[i] = b === -1 ? -1 : edgeMap[b];
+        }
+
+        // retriangulate the cavity polygon locally: ear clipping for arbitrary (possibly
+        // non-convex) rings, then edge flips to restore the local Delaunay condition
+        this._triangles = newTriangles;
+        this._halfedges = newHalfedges;
+        this.trianglesLen = pos;
+        this.triangles = newTriangles;
+        this.halfedges = newHalfedges;
+
+        this._fillCavity(ring, boundary, pos);
+
+        this.triangles = this._triangles.subarray(0, this.trianglesLen);
+        this.halfedges = this._halfedges.subarray(0, this.trianglesLen);
+        this._removed.add(index);
+
+        return true;
+    }
+
+    /**
+     * Retriangulate the cavity polygon left by a removed point.
+     *
+     * @param {number[]} ring cavity vertices in counterclockwise order
+     * @param {number[]} boundary for each k, the half-edge outside the cavity on ring edge
+     * `ring[k] -> ring[k + 1]` (it is oriented `ring[k + 1] -> ring[k]`), in compacted ids
+     * @param {number} prefix length of the compacted mesh before cavity triangles get appended
+     * @private
+     */
+    _fillCavity(ring, boundary, prefix) {
+        const {coords} = this;
+        const m = ring.length;
+
+        // active polygon as a singly linked list over ring positions
+        const next = new Int32Array(m);
+        for (let i = 0; i < m; i++) {
+            next[i] = (i + 1) % m;
+        }
+        let active = m;
+
+        const orient = (i, j, k) => orient2d(
+            coords[2 * ring[i]], coords[2 * ring[i] + 1],
+            coords[2 * ring[j]], coords[2 * ring[j] + 1],
+            coords[2 * ring[k]], coords[2 * ring[k] + 1]);
+
+        // clip ears until only one triangle remains
+        let guard = 0;
+        let i = 0;
+        while (active > 3 && guard++ < m * m) {
+            const j = next[i];
+            const k = next[j];
+
+            if (this._isEar(ring, next, active, orient, i, j, k)) {
+                this._addCavityTriangle(ring[i], ring[j], ring[k],
+                    boundary[i], boundary[j], -1);
+                // slot 2 is the new diagonal (ring[k] -> ring[i]) bounding the remaining polygon
+                boundary[i] = this.trianglesLen - 1;
+                next[i] = k;
+                active--;
+                i = k;
+            } else {
+                i = j;
+            }
+        }
+        if (active === 3) {
+            const j = next[i];
+            const k = next[j];
+            this._addCavityTriangle(ring[i], ring[j], ring[k],
+                boundary[i], boundary[j], boundary[k]);
+        }
+
+        // restore the Delaunay condition on the new diagonals; cavity boundary edges can't flip
+        this._legalizeCavity(prefix);
+    }
+
+    /**
+     * Whether the triangle (i, j, k) is an ear of the active polygon: strictly convex at j and
+     * empty of other active vertices.
+     *
+     * @private
+     */
+    _isEar(ring, next, active, orient, i, j, k) {
+        if (orient(i, j, k) <= 0) return false; // reflex or degenerate corner
+
+        let p = next[k];
+        for (let count = 0; count < active - 3; count++, p = next[p]) {
+            if (pointInTriangle(this.coords, ring[p], ring[i], ring[j], ring[k])) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Append a cavity triangle, growing the compacted mesh arrays as needed.
+     *
+     * @private
+     */
+    _addCavityTriangle(i0, i1, i2, a, b, c) {
+        if (this.trianglesLen + 3 > this._triangles.length) {
+            const newLength = Math.max(this._triangles.length * 2, this.trianglesLen + 3);
+            const triangles = new Uint32Array(newLength);
+            const halfedges = new Int32Array(newLength);
+            triangles.set(this._triangles.subarray(0, this.trianglesLen));
+            halfedges.set(this._halfedges.subarray(0, this.trianglesLen));
+            this._triangles = triangles;
+            this._halfedges = halfedges;
+        }
+        const t = this.trianglesLen;
+        this._triangles[t] = i0;
+        this._triangles[t + 1] = i1;
+        this._triangles[t + 2] = i2;
+        this._link(t, a);
+        this._link(t + 1, b);
+        this._link(t + 2, c);
+        this.trianglesLen += 3;
+    }
+
+    /**
+     * Flip interior diagonals of the retriangulated cavity until every shared edge satisfies the
+     * local Delaunay condition. Cavity triangles are everything appended after the compacted
+     * surviving prefix; an edge whose twin leaves the cavity is a boundary edge and never flips,
+     * so the hull bookkeeping in `_legalize` is never needed.
+     *
+     * @param {number} prefix length of the compacted mesh before cavity triangles were appended
+     * @private
+     */
+    _legalizeCavity(prefix) {
+        const {coords, _triangles: triangles, _halfedges: halfedges} = this;
+
+        const stack = [];
+        for (let e = prefix; e < this.trianglesLen; e++) {
+            const twin = halfedges[e];
+            if (twin !== -1 && twin >= prefix) stack.push(e); // interior diagonal only
+        }
+        const queued = new Set(stack);
+
+        while (stack.length) {
+            const a = stack.pop();
+            queued.delete(a);
+            const b = halfedges[a];
+            if (b === -1 || b < prefix) continue; // cavity boundary edge: never flip
+
+            const a0 = a - a % 3;
+            const ar = a0 + (a + 2) % 3;
+            const b0 = b - b % 3;
+            const al = a0 + (a + 1) % 3;
+            const bl = b0 + (b + 2) % 3;
+
+            const p0 = triangles[ar];
+            const pr = triangles[a];
+            const pl = triangles[al];
+            const p1 = triangles[bl];
+
+            const illegal = incircle(
+                coords[2 * p0], coords[2 * p0 + 1],
+                coords[2 * pr], coords[2 * pr + 1],
+                coords[2 * pl], coords[2 * pl + 1],
+                coords[2 * p1], coords[2 * p1 + 1]) < 0;
+
+            if (!illegal) continue;
+
+            triangles[a] = p1;
+            triangles[b] = p0;
+
+            const hbl = halfedges[bl];
+            this._link(a, hbl);
+            this._link(b, halfedges[ar]);
+            this._link(ar, bl);
+
+            // a flip changes the opposite vertex on each edge of the quad, so re-check every
+            // edge of the two flipped triangles (the Lawson queue always terminates because
+            // each strict flip improves the global angle ordering)
+            for (let q = 0; q < 3; q++) {
+                for (const e of [a0 + q, b0 + q]) {
+                    const twin = halfedges[e];
+                    if (twin !== -1 && twin >= prefix && !queued.has(e)) {
+                        stack.push(e);
+                        queued.add(e);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Calculate an angle-based key for the edge hash used for advancing convex hull.
      *
      * @param {number} x
@@ -442,6 +719,25 @@ export default class Delaunator {
 function pseudoAngle(dx, dy) {
     const p = dx / (Math.abs(dx) + Math.abs(dy) || 1);
     return (dy > 0 ? 3 - p : 1 + p) / 4; // [0..1]
+}
+
+/**
+ * Check whether point P is strictly inside the triangle A, B, C
+ * (points on the boundary are considered outside). Independent of the triangle winding.
+ *
+ * @param {ArrayLike<number>} coords
+ * @param {number} p
+ * @param {number} a
+ * @param {number} b
+ * @param {number} c
+ */
+function pointInTriangle(coords, p, a, b, c) {
+    const px = coords[2 * p];
+    const py = coords[2 * p + 1];
+    const o1 = orient2d(coords[2 * a], coords[2 * a + 1], coords[2 * b], coords[2 * b + 1], px, py);
+    const o2 = orient2d(coords[2 * b], coords[2 * b + 1], coords[2 * c], coords[2 * c + 1], px, py);
+    const o3 = orient2d(coords[2 * c], coords[2 * c + 1], coords[2 * a], coords[2 * a + 1], px, py);
+    return o1 > 0 && o2 > 0 && o3 > 0 || o1 < 0 && o2 < 0 && o3 < 0;
 }
 
 /**

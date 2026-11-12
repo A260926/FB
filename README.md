@@ -114,6 +114,31 @@ of the type provided in the constructor (or `Float64Array` if you used `Delaunat
 Updates the triangulation if you modified `delaunay.coords` values in place, avoiding expensive memory allocations.
 Useful for iterative relaxation algorithms such as [Lloyd's](https://en.wikipedia.org/wiki/Lloyd%27s_algorithm).
 
+`update()` always rebuilds from the complete current `coords`, so calling it after `removePoint()`
+brings every previously removed point back into the triangulation (removal only patches the mesh,
+it never touches `coords`). After such a rebuild the restored points can be removed again.
+
+#### delaunay.removePoint(index)
+
+Removes an interior point without a full rebuild, by deleting the star of triangles around it and
+retriangulating the resulting cavity polygon (the patch is local, using ear clipping followed by
+Delaunay edge flips; `update()` is not called and no second triangulation is built).
+
+- Returns `true` when the point was part of the triangulation and got removed.
+- Returns `false` when the index is valid but the point is not part of the current triangulation
+  (e.g. it was already removed, or it was a duplicate skipped during construction). Repeating a
+  removal therefore never changes the arrays again.
+- Throws a `RangeError` for a non-integer or out-of-bounds index, and for a current convex hull
+  vertex (removing hull points is not supported). On a throw the triangulation is left unchanged
+  and still usable.
+
+The `coords` array (object, length and values) is never modified, and all remaining triangle
+vertices keep referencing the original input indices — coordinates are not compacted. The compact
+`triangles`/`halfedges` arrays may be reallocated and triangle slots may be compacted, with all
+half-edge reciprocity updated; every boundary half-edge stays `-1`. The convex hull keeps its point
+order and geometry. Only interior vertices of finite, distinct, non-degenerate 2D meshes are
+supported.
+
 ## Performance
 
 Benchmark results against other Delaunay JS libraries
