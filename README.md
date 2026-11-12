@@ -10,6 +10,7 @@ The library implements the following specifications:
 - https://datatracker.ietf.org/doc/html/rfc4533 for Content Synchronization Operation
 - https://datatracker.ietf.org/doc/html/draft-armijo-ldap-treedelete-02 for Tree Delete Control
 - https://datatracker.ietf.org/doc/html/rfc2891 for Server Side Sorting of Search Results
+- https://datatracker.ietf.org/doc/html/rfc2696 for the Paged Results control
 - https://datatracker.ietf.org/doc/html/rfc4532 for WhoAmI requests
 
 ## Features:
@@ -17,7 +18,7 @@ The library implements the following specifications:
 - Connecting to LDAP server (non-TLS, TLS, STARTTLS, through a custom dialer)
 - Bind Requests / Responses (Simple Bind, GSSAPI, SASL)
 - "Who Am I" Requests / Responses
-- Search Requests / Responses (normal, paging and asynchronous)
+- Search Requests / Responses (normal, page-by-page paging, buffered paging and asynchronous)
 - Modify Requests / Responses
 - Add Requests / Responses
 - Delete Requests / Responses
@@ -33,6 +34,48 @@ The library implements the following specifications:
 ## Go Modules:
 
 `go get github.com/go-ldap/ldap/v3`
+
+## Paged search
+
+`SearchWithPaging` pulls every page before returning and mutates the paging
+control on the request you pass in. When you need to decide after each page
+whether to continue, release the server-side cursor early, or bound the work
+with a `context.Context`, use `Conn.SearchPages` instead.
+
+`SearchPages` performs no network I/O when called: the query and the wire
+encoding of its controls are snapshotted, so later changes to the request
+cannot affect subsequent pages. Each `Next` sends exactly one paged
+SearchRequest and publishes one complete page; an empty-entry page that still
+carries a continuation cookie is returned as well. Stopping between complete
+pages and calling `Close` releases the directory server's result set with an
+RFC 2696 size=0 search. The shared `Conn` is never closed, and distinct
+paged searches can share one connection.
+
+```go
+paged, err := conn.SearchPages(searchRequest, 100)
+if err != nil {
+    // invalid request or out-of-range page size; no packet was sent
+    log.Fatal(err)
+}
+// Close releases the cursor when iteration stops before the last page.
+defer func() { _ = paged.Close(context.Background()) }()
+
+for paged.Next(ctx) {
+    page := paged.Page()
+    for _, entry := range page.Entries {
+        // hand this page's entries to the existing batch processing
+    }
+    // An empty continuation cookie on the last page ends the iteration;
+    // returning early and calling Close releases the remaining cursor.
+}
+if err := paged.Err(); err != nil {
+    log.Fatal(err)
+}
+```
+
+The older entry points keep their original behavior: `Search` runs one
+request, `SearchAsync` streams entries, and `SearchWithPaging` buffers all
+pages into a single `SearchResult`.
 
 ## Contributing:
 
