@@ -3715,10 +3715,238 @@
     }
     else this._emit(msg);
   }
-  function M2M1() {
+  function _m2m1MPEValidate(opt) {
+    if (!opt || typeof opt != 'object') throw TypeError('Bad MPE options: ' + opt);
+    var master = opt.master;
+    var members = opt.members;
+    var bendRange = opt.bendRange;
+    if (master != parseInt(master) || master < 0 || master > 15)
+      throw RangeError('Bad MPE master channel value (must be an integer from 0 to 15): ' + master);
+    if (!(members instanceof Array) || !members.length)
+      throw RangeError('MPE members must be a non-empty array of channel numbers');
+    var seen = {};
+    for (var i = 0; i < members.length; i++) {
+      var c = members[i];
+      if (c != parseInt(c) || c < 0 || c > 15)
+        throw RangeError('Bad MPE member channel value (must be an integer from 0 to 15): ' + c);
+      if (c == master)
+        throw RangeError('MPE member channel cannot be the master channel: ' + c);
+      if (seen[c])
+        throw RangeError('Duplicate MPE member channel: ' + c);
+      seen[c] = true;
+    }
+    if (bendRange != parseInt(bendRange) || bendRange < 1 || bendRange > 96)
+      throw RangeError('Bad MPE bend range value (must be an integer from 1 to 96 semitones): ' + bendRange);
+  }
+  function _u32(msg, off) {
+    return msg[off] * 0x1000000 + msg[off + 1] * 0x10000 + msg[off + 2] * 0x100 + msg[off + 3];
+  }
+  // M2M1MPE: MIDI 2.0 per-note expression to MPE bridge
+  function M2M1MPE(opt) {
+    this.master = opt.master;
+    this.members = opt.members.slice();
+    this.bendRange = opt.bendRange;
+    this.notes = [];        // active notes, oldest first
+    this.byKey = {};        // group:channel:note -> active note
+    this.chans = {};        // group:channel -> source channel state
+    this.memberOf = {};     // member channel -> active note
+    this.memberInit = {};   // member channel -> bend range RPN already sent
+  }
+  M2M1MPE.validate = _m2m1MPEValidate;
+  M2M1MPE.prototype._key = function(g, c, n) { return g + ':' + c + ':' + n; };
+  M2M1MPE.prototype._src = function(g, c) {
+    var k = g + ':' + c;
+    if (!this.chans[k]) this.chans[k] = { g: g, c: c, bend: 0x80000000, cc1: 0, cc11: 127, notes: [] };
+    return this.chans[k];
+  };
+  // 32-bit MIDI 2.0 wheel value to semitone offset; both endpoints reach the full range
+  M2M1MPE.prototype._bend = function(v, range) {
+    if (v < 0x80000000) return (v - 0x80000000) / 0x80000000 * range;
+    if (v > 0x80000000) return (v - 0x80000000) / 0x7fffffff * range;
+    return 0;
+  };
+  // combine the source channel and the per-note offsets, clamp and map to the 14-bit MPE wheel
+  M2M1MPE.prototype._wheel = function(note) {
+    var src = this._src(note.g, note.c);
+    var s = this._bend(src.bend, 2) + this._bend(note.bend, this.bendRange);
+    if (s > this.bendRange) s = this.bendRange;
+    else if (s < -this.bendRange) s = -this.bendRange;
+    var w = Math.round(8192 + s * 8192 / this.bendRange);
+    if (w > 0x3fff) w = 0x3fff;
+    else if (w < 0) w = 0;
+    return w;
+  };
+  M2M1MPE.prototype._out = function(ctx, arr) {
+    var msg = new MIDI(arr);
+    msg.gr = ctx.g;
+    ctx.emit(msg);
+  };
+  M2M1MPE.prototype._sendWheel = function(ctx, note) {
+    var w = this._wheel(note);
+    this._out(ctx, [0xe0 + note.member, w & 127, (w >> 7) & 127]);
+  };
+  // one-time per member: RPN 0 sets the bend range, RPN null ends the selection
+  M2M1MPE.prototype._rpn = function(ctx, ch) {
+    this._out(ctx, [0xb0 + ch, 101, 0]);
+    this._out(ctx, [0xb0 + ch, 100, 0]);
+    this._out(ctx, [0xb0 + ch, 6, this.bendRange]);
+    this._out(ctx, [0xb0 + ch, 38, 0]);
+    this._out(ctx, [0xb0 + ch, 101, 127]);
+    this._out(ctx, [0xb0 + ch, 100, 127]);
+    this.memberInit[ch] = true;
+  };
+  // reset the expressive state before a member channel is reused
+  M2M1MPE.prototype._resetMember = function(ctx, ch) {
+    this._out(ctx, [0xb0 + ch, 121, 0]);
+  };
+  // cached controllers, zero pressure and the combined wheel precede every Note On
+  M2M1MPE.prototype._preflight = function(ctx, note) {
+    var ch = note.member;
+    if (!this.memberInit[ch]) this._rpn(ctx, ch);
+    var src = this._src(note.g, note.c);
+    this._out(ctx, [0xb0 + ch, 1, src.cc1]);
+    this._out(ctx, [0xb0 + ch, 11, src.cc11]);
+    this._out(ctx, [0xd0 + ch, 0]);
+    this._sendWheel(ctx, note);
+  };
+  M2M1MPE.prototype._forget = function(note) {
+    var i = this.notes.indexOf(note);
+    if (i > -1) this.notes.splice(i, 1);
+    delete this.byKey[this._key(note.g, note.c, note.n)];
+    if (this.memberOf[note.member] == note) delete this.memberOf[note.member];
+    i = note.src.notes.indexOf(note);
+    if (i > -1) note.src.notes.splice(i, 1);
+  };
+  M2M1MPE.prototype._release = function(ctx, note, vel) {
+    if (typeof vel == 'undefined') vel = 0;
+    this._out(ctx, [0x80 + note.member, note.n, vel]);
+    this._forget(note);
+  };
+  M2M1MPE.prototype._steal = function(ctx, victim) {
+    this._out(ctx, [0x80 + victim.member, victim.n, 0]);
+    this._forget(victim);
+    this._resetMember(ctx, victim.member);
+  };
+  M2M1MPE.prototype._spawn = function(ctx, g, c, n, member) {
+    if (typeof member == 'undefined') {
+      for (var i = 0; i < this.members.length; i++) {
+        if (!this.memberOf[this.members[i]]) { member = this.members[i]; break; }
+      }
+    }
+    var src = this._src(g, c);
+    var note = { g: g, c: c, n: n, member: member, bend: 0x80000000, pressure: 0, src: src };
+    this.notes.push(note);
+    this.byKey[this._key(g, c, n)] = note;
+    this.memberOf[member] = note;
+    src.notes.push(note);
+    this._preflight(ctx, note);
+    return note;
+  };
+  M2M1MPE.prototype._alloc = function(ctx, g, c, n) {
+    var old = this.byKey[this._key(g, c, n)];
+    if (old) {
+      // same triplet retrigger: finish the old sound, then start the new one
+      this._release(ctx, old);
+      return this._spawn(ctx, g, c, n);
+    }
+    var member;
+    for (var i = 0; i < this.members.length; i++) {
+      if (!this.memberOf[this.members[i]]) { member = this.members[i]; break; }
+    }
+    if (typeof member == 'undefined') {
+      // pool exhausted: steal the oldest still active note
+      var victim = this.notes[0];
+      this._steal(ctx, victim);
+      member = victim.member;
+    }
+    return this._spawn(ctx, g, c, n, member);
+  };
+  function _m2m1Mpe(msg) {
+    var orig = this._orig;
+    if (orig._mpeBusy) {
+      // a receiver echoed a new message synchronously: process it after the current batch
+      orig._mpeQueue.push(msg);
+      return;
+    }
+    orig._mpeBusy = true;
+    try {
+      var mpe = orig._mpeBridge;
+      if (!msg.isMidi2) {
+        this._emit(msg);
+        return;
+      }
+      var t = msg[0] >> 4;
+      var g = msg[0] & 15;
+      if (t != 4) {
+        // system, SysEx and all other conversions stay as in the plain bridge
+        _m2m1.call(this, msg);
+        return;
+      }
+      var n = msg[1] >> 4;
+      var c = msg[1] & 15;
+      var ctx = { g: g, emit: this._emit.bind(this) };
+      var i, note, src, val;
+      if (n == 9 || n == 8) {
+        var vel = _16_7(msg[4], msg[5]);
+        if (n == 9 && vel) {
+          note = mpe._alloc(ctx, g, c, msg[2]);
+          mpe._out(ctx, [0x90 + note.member, msg[2], vel]);
+        }
+        else {
+          // status 9 zero velocity ends the note just like Note Off
+          note = mpe.byKey[mpe._key(g, c, msg[2])];
+          if (note) mpe._release(ctx, note, vel);
+        }
+      }
+      else if (n == 6) {
+        // per-note pitch bend
+        note = mpe.byKey[mpe._key(g, c, msg[2])];
+        if (note) {
+          note.bend = _u32(msg, 4);
+          mpe._sendWheel(ctx, note);
+        }
+      }
+      else if (n == 10) {
+        // per-note poly pressure becomes channel pressure on the member channel
+        note = mpe.byKey[mpe._key(g, c, msg[2])];
+        if (note) {
+          note.pressure = (_u32(msg, 4) >> 25) & 127;
+          mpe._out(ctx, [0xd0 + note.member, note.pressure]);
+        }
+      }
+      else if (n == 14) {
+        // source channel pitch bend: update all its notes, keep their per-note offset
+        src = mpe._src(g, c);
+        src.bend = _u32(msg, 4);
+        for (i = 0; i < src.notes.length; i++) mpe._sendWheel(ctx, src.notes[i]);
+      }
+      else if (n == 11 && (msg[2] == 1 || msg[2] == 11)) {
+        // source channel CC1/CC11: cache and fan out to the active members
+        src = mpe._src(g, c);
+        val = (_u32(msg, 4) >> 25) & 127;
+        if (msg[2] == 1) src.cc1 = val;
+        else src.cc11 = val;
+        for (i = 0; i < src.notes.length; i++)
+          mpe._out(ctx, [0xb0 + src.notes[i].member, msg[2], val]);
+      }
+      // any other type 4 message (sustain, per-note registered controllers,
+      // per-note management, pitch attributes, ...) is ignored in MPE mode
+    }
+    finally {
+      orig._mpeBusy = false;
+    }
+    while (orig._mpeQueue.length) orig._receive(orig._mpeQueue.shift());
+  }
+  function M2M1(opt) {
     var self = new _M();
     self._sx = [];
-    self._receive = _m2m1;
+    if (opt && typeof opt.mpe != 'undefined') {
+      _m2m1MPEValidate(opt.mpe);
+      self._mpeBridge = new M2M1MPE(opt.mpe);
+      self._mpeQueue = [];
+      self._receive = _m2m1Mpe;
+    }
+    else self._receive = _m2m1;
     self._resume();
     return self.MIDI2();
   }

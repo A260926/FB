@@ -250,6 +250,35 @@ first
 
 More on [MIDI 2.0 support](https://jazz-soft.net/doc/JZZ/jzzmidi2.html)...
 
+## MIDI 2.0 to MPE bridge
+
+`JZZ.M2M1({ mpe: ... })` creates an in-memory bridge that plays MIDI 2.0 per-note expression
+on an MPE-only synthesizer: active notes are assigned to MPE member channels,
+per-note pitch bend and poly pressure are combined with the source channel controllers,
+and each member channel gets its bend range configured via RPN 0.
+No real MIDI devices are required — everything below is wired in memory:
+
+```js
+// master: MPE master channel; members: member channels in allocation priority order
+// (unique, none equal to the master); bendRange: 1 to 96 semitones
+var bridge = JZZ.M2M1({ mpe: { master: 0, members: [1, 2], bendRange: 48 } });
+var synth = JZZ.Widget({ _receive: function(msg) { console.log(msg.toString()); }});
+bridge.connect(synth);
+
+bridge.MIDI2()
+  .umpNoteOn(0, 0, 'C5')                       // routed to member channel 1
+  .umpPnPitchBendF(0, 0, 'C5', 0.5)            // per-note bend on that member
+  .umpAftertouch(0, 0, 'C5', 0x80000000)       // becomes channel pressure
+  .umpNoteOff(0, 0, 'C5');
+
+// JZZ.M2M1() without arguments keeps the original MIDI 2.0 -> MIDI 1.0 conversion,
+// where per-note pitch bend is ignored and message order is unchanged
+var plain = JZZ.M2M1();
+```
+
+Invalid `mpe` options (bad channels, duplicate members, empty member list,
+bend range outside 1..96) make the constructor throw before any message is sent.
+
 ## Additional modules
 - [**JZZ-midi-SMF**](https://github.com/jazz-soft/JZZ-midi-SMF) - Standard MIDI files: read / write / play
 - [**JZZ-midi-WS**](https://github.com/jazz-soft/JZZ-midi-WS) - MIDI via WebSockets

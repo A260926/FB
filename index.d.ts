@@ -834,6 +834,23 @@ declare namespace JZZ {
     close(): Stub.Async;
   }
 
+  /** MPE output mode of the MIDI 2.0 to MIDI 1.0 bridge */
+  interface M2M1MPEOptions {
+    /** MPE master (zone) channel: integer from 0 to 15; member channels cannot use it */
+    master: number;
+    /** MPE member channels in allocation priority order:
+     *  a non-empty array of unique integers from 0 to 15, none equal to `master` */
+    members: number[];
+    /** Pitch bend range set on every member channel via RPN 0,
+     *  in semitones: integer from 1 to 96 */
+    bendRange: number;
+  }
+  /** Options of `JZZ.M2M1()`; omit entirely to keep the plain MIDI 2.0 to MIDI 1.0 bridge */
+  interface M2M1Options {
+    /** Enable the MPE output mode: active notes are mapped to member channels
+     *  and per-note expression is synthesized into MPE channel messages */
+    mpe?: M2M1MPEOptions;
+  }
   namespace Port {
     interface Async extends Port, PromiseLike<Port> {}
   }
@@ -1929,6 +1946,17 @@ interface JZZ {
    *
    * https://jazz-soft.net/doc/JZZ/midithru.html#Widget */
   readonly Widget: (...args: any[]) => JZZ.Port;
+  /** Create a MIDI 2.0 to MIDI 1.0 bridge.
+   *
+   * Without arguments the bridge keeps the original conversion and message order;
+   * with `{ mpe: ... }` it enables the MPE output mode, whose invalid options
+   * make the constructor throw before any message is sent. */
+  readonly M2M1: {
+    (): JZZ.Port;
+    (options: JZZ.M2M1Options): JZZ.Port;
+  };
+  /** Create a MIDI 1.0 to MIDI 2.0 bridge */
+  readonly M1M2: () => JZZ.Port;
   /** MIDI message
    *
    * https://jazz-soft.net/doc/JZZ/jzzmidi.html */
