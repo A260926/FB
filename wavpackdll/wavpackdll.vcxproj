@@ -94,7 +94,7 @@
     </ClCompile>
     <Link>
       <AdditionalOptions>/export:WavpackOpenFileInput /export:WavpackOpenFileInputEx /export:WavpackGetMode
-/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples
+/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples /export:WavpackUnpackSamplesWithQuality
 /export:WavpackSeekSample /export:WavpackGetNumTagItems /export:WavpackGetNumBinaryTagItems /export:WavpackGetTagItem /export:WavpackGetBinaryTagItem
 /export:WavpackGetEncodedNoise
 
@@ -152,7 +152,7 @@
     </ClCompile>
     <Link>
       <AdditionalOptions>/export:WavpackOpenFileInput /export:WavpackOpenFileInputEx /export:WavpackGetMode
-/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples
+/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples /export:WavpackUnpackSamplesWithQuality
 /export:WavpackSeekSample /export:WavpackGetNumTagItems /export:WavpackGetNumBinaryTagItems /export:WavpackGetTagItem /export:WavpackGetBinaryTagItem
 /export:WavpackGetEncodedNoise
 
@@ -210,7 +210,7 @@
     </ClCompile>
     <Link>
       <AdditionalOptions>/export:WavpackOpenFileInput /export:WavpackOpenFileInputEx /export:WavpackGetMode
-/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples
+/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples /export:WavpackUnpackSamplesWithQuality
 /export:WavpackSeekSample /export:WavpackGetNumTagItems /export:WavpackGetNumBinaryTagItems /export:WavpackGetTagItem /export:WavpackGetBinaryTagItem
 /export:WavpackGetEncodedNoise
 
@@ -273,7 +273,7 @@
     </ClCompile>
     <Link>
       <AdditionalOptions>/export:WavpackOpenFileInput /export:WavpackOpenFileInputEx /export:WavpackGetMode
-/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples
+/export:WavpackGetVersion /export:WavpackGetErrorMessage /export:WavpackUnpackSamples /export:WavpackUnpackSamplesWithQuality
 /export:WavpackSeekSample /export:WavpackGetNumTagItems /export:WavpackGetNumBinaryTagItems /export:WavpackGetTagItem /export:WavpackGetBinaryTagItem
 /export:WavpackGetEncodedNoise
 

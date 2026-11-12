@@ -230,7 +230,7 @@ int WavpackSeekSample64 (WavpackContext *wpc, int64_t sample)
                 unpack_dsd_samples (wpc->streams [stream_index], buffer, samples_to_skip);
             else
 #endif
-                unpack_samples (wpc->streams [stream_index], buffer, samples_to_skip);
+                unpack_samples (wpc->streams [stream_index], buffer, samples_to_skip, NULL);
 
         free (buffer);
     }

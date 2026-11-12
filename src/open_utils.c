@@ -190,6 +190,11 @@ WavpackContext *WavpackOpenFileInputEx64 (WavpackStreamReader64 *reader, void *w
     wpc->config.flags &= ~0xff;
     wpc->config.flags |= wps->wphdr.flags & 0xff;
 
+    // record the decoded format for the quality map API (0 = PCM, 1 = float, 2 = DSD)
+
+    wpc->quality_format = (wps->wphdr.flags & DSD_FLAG) ? 2 :
+        ((wps->wphdr.flags & FLOAT_DATA) ? 1 : 0);
+
     if (!wpc->config.num_channels) {
         wpc->config.num_channels = (wps->wphdr.flags & MONO_FLAG) ? 1 : 2;
         wpc->config.channel_mask = 0x5 - wpc->config.num_channels;

@@ -360,6 +360,31 @@ int WavpackGetVersion (WavpackContext *wpc);
 char *WavpackGetFileExtension (WavpackContext *wpc);
 unsigned char WavpackGetFileFormat (WavpackContext *wpc);
 uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t samples);
+
+// "Quality" values returned by WavpackUnpackSamplesWithQuality() for each unpacked audio
+// frame. Note that these describe the path actually taken to produce the returned samples
+// during this call, and are NOT a promise about the future or complete integrity of the
+// compressed block (for example, a block whose final CRC check has not yet been performed
+// may still be reported here as lossless until the corrupt range is actually muted).
+
+#define WV_QUALITY_LOSSLESS     0   // exact reconstruction (plain lossless or hybrid with correction)
+#define WV_QUALITY_LOSSY        1   // hybrid substream decoded from WV only (no usable WVC)
+#define WV_QUALITY_CONCEALED    2   // samples zeroed by the library (gap, decoding error or CRC mute)
+
+// This is identical to WavpackUnpackSamples() in every way (same PCM layout, sample counts,
+// short reads at EOF, sample index and error accounting) but additionally returns a per-frame
+// quality map. "samples" and the return value are still the number of sample frames per
+// channel. The quality array must be at least "samples" bytes and only the positions for
+// frames actually returned are written (the rest are left untouched). For multichannel files
+// the value for each frame is the worst of the substreams that were actually delivered for
+// that frame. A zero-frame call does not change any state, and this function and the original
+// WavpackUnpackSamples() can be freely alternated on the same context. Passing quality == NULL
+// is exactly equivalent to calling WavpackUnpackSamples(). Note that quality maps are not
+// currently available for floating-point, DSD or pre-4.0 (legacy) streams: for those a
+// request with non-NULL quality and a non-zero sample count returns 0, sets an error message,
+// and does not consume input or write either output buffer.
+
+uint32_t WavpackUnpackSamplesWithQuality (WavpackContext *wpc, int32_t *buffer, uint32_t samples, unsigned char *quality);
 uint32_t WavpackGetNumSamples (WavpackContext *wpc);
 int64_t WavpackGetNumSamples64 (WavpackContext *wpc);
 uint32_t WavpackGetNumSamplesInFrame (WavpackContext *wpc);

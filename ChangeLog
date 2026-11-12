@@ -1,3 +1,26 @@
+2026-11-13
+
+  * src/unpack.c, src/unpack_utils.c, include/wavpack.h:
+    add WavpackUnpackSamplesWithQuality()
+    - identical to WavpackUnpackSamples() (same PCM layout, sample counts, EOF
+      handling, sample index and error accounting) but also produces a per-frame
+      quality map (WV_QUALITY_LOSSLESS, WV_QUALITY_LOSSY or WV_QUALITY_CONCEALED)
+      in the same decoding pass (no second decode of the file)
+    - for multichannel files the map is the worst quality of all substreams that
+      were actually delivered for each frame, and only the frames actually
+      returned by this call are written (the rest of the buffer is untouched)
+    - hybrid substreams decoded without usable correction data are reported as
+      lossy even if their decoded values happen to be exact, and only samples
+      actually zeroed by the library (gaps, decoding errors, block-end CRC mutes)
+      are reported as concealed
+    - works in both the serial and worker-thread decoding paths (quality from
+      asynchronous worker jobs is merged only after those jobs are complete)
+    - quality maps are not available for floating-point, DSD or pre-4.0 streams;
+      those requests return zero without consuming input, while a NULL quality
+      map keeps the original behavior for all formats
+    - passing NULL quality is exactly equivalent to WavpackUnpackSamples(), and
+      the two entry points can be alternated on the same context
+
 2026-01-15  David Bryant  <david@wavpack.com>
 
   * cli/utils.c:

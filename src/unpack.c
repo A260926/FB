@@ -71,13 +71,47 @@ static void decorr_stereo_pass (struct decorr_pass *dpp, int32_t *buffer, int32_
 static void decorr_mono_pass (struct decorr_pass *dpp, int32_t *buffer, int32_t sample_count);
 static void fixup_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_count);
 
-int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_count)
+// Fill the specified per-frame quality map with the given value. A NULL map is
+// allowed and simply means that no quality map was requested.
+
+static void fill_quality (unsigned char *quality, uint32_t sample_count, unsigned char value)
+{
+    if (quality)
+        memset (quality, value, sample_count);
+}
+
+// Determine the quality of a normally decoded (i.e., not muted) frame in this
+// stream. This reflects the path actually taken to decode the stream: hybrid
+// substreams that did not have usable correction data (or that had correction
+// data but could not use it) are lossy, even if the decoded values happen to
+// match the original. Extended integer data with sent bits that has no WVX
+// bitstream is also lossy because those bits are simply not recoverable.
+
+static unsigned char stream_quality (WavpackStream *wps)
+{
+    uint32_t flags = wps->wphdr.flags;
+
+    // the decoder uses the presence of the correction block to select its
+    // lossless decoding path, so this is the definitive indication of whether
+    // the correction data was actually available for this block
+
+    if ((flags & HYBRID_FLAG) && !wps->block2buff)
+        return WV_QUALITY_LOSSY;
+
+    if ((flags & INT32_DATA) && wps->int32_sent_bits && !bs_is_open (&wps->wvxbits))
+        return WV_QUALITY_LOSSY;
+
+    return WV_QUALITY_LOSSLESS;
+}
+
+int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_count, unsigned char *quality)
 {
     uint32_t flags = wps->wphdr.flags, crc = wps->crc, i;
     int32_t mute_limit = (1L << ((flags & MAG_MASK) >> MAG_LSB)) + 2;
     int32_t correction [2], read_word, *bptr;
     struct decorr_pass *dpp;
     int tcount, m = 0;
+    unsigned char base_quality = stream_quality (wps);
 
     // don't attempt to decode past the end of the block, but watch out for overflow!
 
@@ -95,6 +129,7 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
             memset (buffer, 0, sample_count * 8);
 
         wps->sample_index += sample_count;
+        fill_quality (quality, sample_count, WV_QUALITY_CONCEALED);
         return sample_count;
     }
 
@@ -459,10 +494,13 @@ get_word_eof:
         memset (buffer, 0, sample_count * (flags & MONO_FLAG ? 4 : 8));
         wps->mute_error = TRUE;
         i = sample_count;
+        fill_quality (quality, i, WV_QUALITY_CONCEALED);
 
         if (bs_is_open (&wps->wvxbits))
             bs_close_read (&wps->wvxbits);
     }
+    else if (quality)
+        fill_quality (quality, i, base_quality);
 
     if (m)
         for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
@@ -508,6 +546,13 @@ get_word_eof:
         if (wps->crc != wps->wphdr.crc || (bs_is_open (&wps->wvxbits) && wps->crc_x != wps->crc_wvx)) {
             memset (buffer, 0, sample_count * (flags & MONO_FLAG ? 4 : 8));
             wps->mute_error = TRUE;
+
+            // the entire range delivered by this call has just been muted, so mark
+            // all of it as concealed (frames that were already delivered by earlier
+            // calls are not retroactively changed)
+
+            if (quality)
+                fill_quality (quality, i, WV_QUALITY_CONCEALED);
         }
     }
 

@@ -459,6 +459,18 @@ WavpackContext *WavpackCloseFile (WavpackContext *wpc)
 
 #ifdef ENABLE_THREADS
     worker_threads_destroy (wpc);
+
+    // discard any quality job buffers that were not merged (which can only happen
+    // if an error or a very early exit occurred while a quality map was requested)
+
+    if (wpc->quality_jobs) {
+        int i;
+
+        for (i = 0; i < wpc->quality_jobs_cnt; ++i)
+            free (wpc->quality_jobs [i].buffer);
+
+        free (wpc->quality_jobs);
+    }
 #endif
 
     free (wpc);

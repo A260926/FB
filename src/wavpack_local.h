@@ -371,12 +371,29 @@ typedef struct {
     uint32_t samcnt, offset;
     int result, free_wps;
 
+    // when a quality map is being produced, this is a private buffer (owned by the
+    // worker until the job is complete) that receives one byte per frame decoded;
+    // it is merged into the caller's map by the main thread after the worker finishes
+
+    unsigned char *quality;
+
     wp_condvar_t *global_cond, worker_cond;
     wp_mutex_t *mutex;
     wp_thread_t thread;
 } WorkerInfo;
 
 #endif
+
+// A completed worker decode job whose quality map still needs to be merged into the
+// quality map of the current WavpackUnpackSamplesWithQuality() call. This is only
+// touched by the main thread (after worker_threads_finish() guarantees the worker
+// is no longer writing the buffer).
+
+typedef struct {
+    int64_t offset;
+    uint32_t samcnt;
+    unsigned char *buffer;
+} QualityJob;
 
 struct WavpackContext {
     WavpackConfig config;
@@ -411,12 +428,23 @@ struct WavpackContext {
     void *decimation_context;
     char file_extension [8];
 
+    // this records the decoded format so that the quality map API can reject formats
+    // for which quality maps are not available (0 = normal PCM, 1 = float, 2 = DSD)
+
+    int quality_format;
+
 #ifdef ENABLE_THREADS
     // these items support multithreaded operations on multichannel streams
     WorkerInfo *workers;
     int num_workers, workers_ready, worker_errors;
     wp_condvar_t global_cond;
     wp_mutex_t mutex;
+
+    // these are only valid during a WavpackUnpackSamplesWithQuality() call and support
+    // returning quality for decodes performed by worker threads
+
+    QualityJob *quality_jobs;
+    int quality_jobs_cnt, quality_jobs_max;
 #endif
 
     void (*close_callback)(void *wpc);
@@ -491,7 +519,7 @@ int read_decorr_terms (WavpackStream *wps, WavpackMetadata *wpmd);
 int read_decorr_weights (WavpackStream *wps, WavpackMetadata *wpmd);
 int read_decorr_samples (WavpackStream *wps, WavpackMetadata *wpmd);
 int read_shaping_info (WavpackStream *wps, WavpackMetadata *wpmd);
-int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_count);
+int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_count, unsigned char *quality);
 int scan_float_data (WavpackStream *wps, f32 *values, int32_t num_values);
 void send_float_data (WavpackStream *wps, f32 *values, int32_t num_values);
 void float_values (WavpackStream *wps, int32_t *values, int32_t num_values);

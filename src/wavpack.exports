@@ -11,6 +11,7 @@
 ++'WavpackGetFileExtension'.'wavpack.dll'.'WavpackGetFileExtension'
 ++'WavpackGetFileFormat'.'wavpack.dll'.'WavpackGetFileFormat'
 ++'WavpackUnpackSamples'.'wavpack.dll'.'WavpackUnpackSamples'
+++'WavpackUnpackSamplesWithQuality'.'wavpack.dll'.'WavpackUnpackSamplesWithQuality'
 ++'WavpackGetNumSamples'.'wavpack.dll'.'WavpackGetNumSamples'
 ++'WavpackGetNumSamples64'.'wavpack.dll'.'WavpackGetNumSamples64'
 ++'WavpackGetNumSamplesInFrame'.'wavpack.dll'.'WavpackGetNumSamplesInFrame'

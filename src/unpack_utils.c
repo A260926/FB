@@ -19,23 +19,65 @@
 #include "wavpack_local.h"
 
 #ifdef ENABLE_THREADS
-static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int offset, uint32_t samcnt, int free_wps);
+static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int offset, uint32_t samcnt, int free_wps,
+    unsigned char *quality, int *queued);
 static void worker_threads_finish (WavpackContext *wpc);
 static void worker_threads_create (WavpackContext *wpc);
 static int worker_available (WavpackContext *wpc);
+
+// Merge all the quality maps produced by worker threads into the specified per-frame
+// quality map (keeping the worst value for any overlapping frames) and free the buffers.
+// This must only be called after worker_threads_finish() has guaranteed that no worker
+// can still be writing to these buffers.
+
+static void merge_quality_jobs (WavpackContext *wpc, unsigned char *quality)
+{
+    int i;
+
+    for (i = 0; i < wpc->quality_jobs_cnt; ++i) {
+        QualityJob *job = wpc->quality_jobs + i;
+        uint32_t j;
+
+        for (j = 0; j < job->samcnt; ++j)
+            if (job->buffer [j] > quality [job->offset + j])
+                quality [job->offset + j] = job->buffer [j];
+
+        free (job->buffer);
+    }
+
+    wpc->quality_jobs_cnt = 0;
+}
 #endif
 
 ///////////////////////////// executable code ////////////////////////////////
 
-// This function unpacks the specified number of samples from the given stream (which must be
-// completely loaded and initialized). The samples are written (interleaved) into the given
-// buffer at the specified offset. This function is threadsafe across streams, so it may be
-// called directly from the main unpack code or from the worker threads.
+// Determine the quality of a stream without decoding it. This is only used as a
+// fallback on an allocation failure and cannot account for concealed ranges.
 
-static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int offset, int32_t *tmpbuf, uint32_t samcnt)
+static unsigned char stream_quality_coarse (WavpackStream *wps)
+{
+    uint32_t flags = wps->wphdr.flags;
+
+    if ((flags & HYBRID_FLAG) && !wps->block2buff)
+        return WV_QUALITY_LOSSY;
+
+    if ((flags & INT32_DATA) && wps->int32_sent_bits && !bs_is_open (&wps->wvxbits))
+        return WV_QUALITY_LOSSY;
+
+    return WV_QUALITY_LOSSLESS;
+}
+
+// This is the underlying (non-recursive) worker for unpack_samples_interleave(). It
+// decodes the specified stream, either directly into "outbuf" (when the stream exactly
+// matches the file's channels) or into "tmpbuf" for interleaving, and writes the per-frame
+// quality of this stream into "stream_quality" (which has one byte per frame) if it is
+// non-NULL. Returns TRUE if the samples went directly into "outbuf" (so the caller knows
+// whether interleaving is required).
+
+static int unpack_samples_stream (WavpackStream *wps, int32_t *outbuf, int32_t *tmpbuf,
+    unsigned char *stream_quality, uint32_t samcnt)
 {
     int num_channels = wps->wpc->config.num_channels;
-    int32_t *src = tmpbuf, *dst = outbuf + offset;
 
     // if the number of channels in the stream exactly matches the channels in the file, we
     // don't actually have to interleave and can render directly without the temp buffer
@@ -46,22 +88,32 @@ static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int 
             unpack_dsd_samples (wps, outbuf, samcnt);
         else
 #endif
-            unpack_samples (wps, outbuf, samcnt);
+            unpack_samples (wps, outbuf, samcnt, stream_quality);
 
-        return;
+        return TRUE;
     }
 
-    // otherwise we do have to use the temp buffer
+    // otherwise we have to use the temp buffer
 
 #ifdef ENABLE_DSD
     if (wps->wphdr.flags & DSD_FLAG)
         unpack_dsd_samples (wps, tmpbuf, samcnt);
     else
 #endif
-        unpack_samples (wps, tmpbuf, samcnt);
+        unpack_samples (wps, tmpbuf, samcnt, stream_quality);
 
-    // if the block is mono, copy the samples from the single channel into the destination
-    // using num_channels as the stride
+    return FALSE;
+}
+
+// Copy the samples from the temporary buffer produced by unpack_samples_stream() into
+// the caller's interleaved buffer, placing this stream's channels at "offset" and using
+// the file's channel count as the stride. Exactly one of the mono / stereo-tail-copy /
+// full-stereo cases applies (matching the original interleaving logic).
+
+static void interleave_from_tmp (WavpackStream *wps, int32_t *outbuf, int offset, int32_t *tmpbuf, uint32_t samcnt)
+{
+    int num_channels = wps->wpc->config.num_channels;
+    int32_t *src = tmpbuf, *dst = outbuf + offset;
 
     if (wps->wphdr.flags & MONO_FLAG) {
         while (samcnt--) {
@@ -69,9 +121,6 @@ static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int 
             dst += num_channels;
         }
     }
-
-    // if the block is stereo, and we don't have room for two more channels, just copy one
-
     else if (offset == num_channels - 1) {
         while (samcnt--) {
             dst [0] = src [0];
@@ -79,9 +128,6 @@ static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int 
             src += 2;
         }
     }
-
-    // otherwise copy the stereo samples into the destination
-
     else {
         while (samcnt--) {
             dst [0] = *src++;
@@ -89,6 +135,64 @@ static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int 
             dst += num_channels;
         }
     }
+}
+
+// Merge the per-frame quality ("stream_quality", one byte for each of "count" frames)
+// into the caller's quality map at "quality", keeping the worst (highest) value for
+// any frame that has already been touched by another substream.
+
+static void merge_stream_quality (unsigned char *quality, unsigned char *stream_quality, uint32_t count)
+{
+    uint32_t i;
+
+    for (i = 0; i < count; ++i)
+        if (stream_quality [i] > quality [i])
+            quality [i] = stream_quality [i];
+}
+
+// This function unpacks the specified number of samples from the given stream (which must be
+// completely loaded and initialized). The samples are written (interleaved) into the given
+// buffer at the specified offset. If "quality" is non-NULL then the per-frame quality values
+// are merged into it (taking the worst value for any frame already present, because several
+// substreams are delivered to the same frame range), otherwise no quality information is
+// produced. Only frames actually decoded are merged, so any remaining entries are untouched.
+// This function is threadsafe across streams, so it may be called directly from the main
+// unpack code or from the worker threads, but the caller's quality map itself must not be
+// shared by multiple streams being decoded concurrently for the same frame range.
+
+static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int offset, int32_t *tmpbuf,
+    unsigned char *quality, uint32_t samcnt)
+{
+    if (quality) {
+        unsigned char *stream_quality = (unsigned char *) calloc (samcnt ? samcnt : 1, 1);
+
+        // if we cannot allocate the temporary quality map, fall back on plain decoding and
+        // apply the stream's coarse quality (which is lossless unless this stream lacks the
+        // correction data it needs) to the frames it delivers
+
+        if (!stream_quality) {
+            unsigned char coarse = stream_quality_coarse (wps);
+            uint32_t i;
+
+            unpack_samples_interleave (wps, outbuf, offset, tmpbuf, NULL, samcnt);
+
+            for (i = 0; i < samcnt; ++i)
+                if (coarse > quality [i])
+                    quality [i] = coarse;
+
+            return;
+        }
+
+        if (!unpack_samples_stream (wps, outbuf, tmpbuf, stream_quality, samcnt))
+            interleave_from_tmp (wps, outbuf, offset, tmpbuf, samcnt);
+
+        merge_stream_quality (quality, stream_quality, samcnt);
+        free (stream_quality);
+        return;
+    }
+
+    if (!unpack_samples_stream (wps, outbuf, tmpbuf, NULL, samcnt))
+        interleave_from_tmp (wps, outbuf, offset, tmpbuf, samcnt);
 }
 
 // Unpack the specified number of samples from the current file position.
@@ -105,11 +209,28 @@ static void unpack_samples_interleave (WavpackStream *wps, int32_t *outbuf, int 
 // the end of file is encountered or an error occurs. After all samples have
 // been unpacked then 0 will be returned.
 
-uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t samples)
+// The following is the implementation of both WavpackUnpackSamples() and
+// WavpackUnpackSamplesWithQuality(). When "quality" is NULL this is exactly the
+// original behavior. Otherwise a per-frame quality map is produced as well.
+
+static uint32_t unpack_samples_core (WavpackContext *wpc, int32_t *buffer, uint32_t samples, unsigned char *quality)
 {
     int num_channels = wpc->config.num_channels, file_done = FALSE;
-    uint32_t bcount, samples_unpacked = 0, samples_to_unpack;
+    uint32_t bcount, samples_unpacked = 0, samples_to_unpack, samples_requested = samples;
     int32_t *bptr = buffer;
+    unsigned char *scratch_quality = NULL;
+
+    // if quality information was requested, allocate a scratch map that can hold the
+    // quality for the frames in this call (this is only used by the serial path)
+
+    if (quality) {
+        scratch_quality = (unsigned char *) calloc (1, samples ? samples : 1);
+
+        if (!scratch_quality) {
+            strcpy (wpc->error_message, "can't allocate memory for quality map!");
+            return 0;
+        }
+    }
 
     memset (buffer, 0, (wpc->reduced_channels ? wpc->reduced_channels : num_channels) * samples * sizeof (int32_t));
 
@@ -121,8 +242,17 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
 #endif
 
 #ifdef ENABLE_LEGACY
-    if (wpc->stream3)
-        return unpack_samples3 (wpc, buffer, samples);
+    if (wpc->stream3) {
+        uint32_t result = unpack_samples3 (wpc, buffer, samples);
+
+        // the caller has already verified that no quality map was requested for this
+        // legacy stream, so there is nothing else to do here
+
+        if (quality)
+            free (scratch_quality);
+
+        return result;
+    }
 #endif
 
     while (samples) {
@@ -229,6 +359,12 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
 
             if (samples_to_unpack > samples)
                 samples_to_unpack = samples;
+
+            // these frames correspond to a gap in the file (e.g., a missing or corrupt
+            // block) that we are filling with silence, so mark them as concealed
+
+            if (quality)
+                memset (scratch_quality + samples_unpacked, WV_QUALITY_CONCEALED, samples_to_unpack);
 
             wps->sample_index += samples_to_unpack;
             samples_unpacked += samples_to_unpack;
@@ -340,14 +476,75 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
                 // If there is a worker thread available, and there have been no errors, and this is not
                 // the final block of the multichannel stream, then give it to a worker thread to decode.
                 // To reduce context switches, we do the final block in the foreground because we have to
-                // wait around anyway for all the workers to complete.
+                // wait around anyway for all the workers to complete. When quality information has been
+                // requested, the worker also gets a private quality buffer for this frame range which is
+                // merged into the caller's quality map after worker_threads_finish() guarantees that the
+                // worker is no longer touching it.
 
-                if (worker_available (wpc) && !wps->mute_error && !(wps->wphdr.flags & FINAL_BLOCK))
-                    unpack_samples_enqueue (wps, bptr, offset, samples_to_unpack, FALSE);
+                if (worker_available (wpc) && !wps->mute_error && !(wps->wphdr.flags & FINAL_BLOCK)) {
+                    unsigned char *worker_quality = NULL;
+                    int queued = FALSE;
+
+                    if (quality) {
+                        if (wpc->quality_jobs_cnt == wpc->quality_jobs_max) {
+                            int new_max = wpc->quality_jobs_max ? wpc->quality_jobs_max * 2 : 16;
+                            QualityJob *new_jobs = (QualityJob *) realloc (wpc->quality_jobs,
+                                new_max * sizeof (QualityJob));
+
+                            if (new_jobs) {
+                                wpc->quality_jobs = new_jobs;
+                                wpc->quality_jobs_max = new_max;
+                            }
+                        }
+
+                        if (wpc->quality_jobs_cnt < wpc->quality_jobs_max) {
+                            worker_quality = (unsigned char *) calloc (1, samples_to_unpack);
+
+                            if (worker_quality)
+                                wpc->quality_jobs [wpc->quality_jobs_cnt].buffer = worker_quality;
+                        }
+                    }
+
+                    if (quality && !worker_quality) {
+                        // we could not allocate a quality buffer for a worker job, so decode
+                        // this stream in the foreground to produce the quality information
+
+                        unpack_samples_interleave (wps, bptr, offset, temp_buffer,
+                            scratch_quality + samples_unpacked, samples_to_unpack);
+
+                        if (wps->sample_index == GET_BLOCK_INDEX (wps->wphdr) + wps->wphdr.block_samples && wps->mute_error)
+                            wpc->crc_errors++;
+                    }
+                    else {
+                        unpack_samples_enqueue (wps, bptr, offset, samples_to_unpack, FALSE,
+                            worker_quality, &queued);
+
+                        if (quality) {
+                            if (queued) {
+                                wpc->quality_jobs [wpc->quality_jobs_cnt].offset = (int64_t) samples_unpacked;
+                                wpc->quality_jobs [wpc->quality_jobs_cnt].samcnt = samples_to_unpack;
+                                wpc->quality_jobs_cnt++;
+                            }
+                            else {
+                                // no worker took the job (which should not happen since one
+                                // was reported available), so decode in the foreground
+
+                                free (worker_quality);
+
+                                unpack_samples_interleave (wps, bptr, offset, temp_buffer,
+                                    scratch_quality + samples_unpacked, samples_to_unpack);
+
+                                if (wps->sample_index == GET_BLOCK_INDEX (wps->wphdr) + wps->wphdr.block_samples && wps->mute_error)
+                                    wpc->crc_errors++;
+                            }
+                        }
+                    }
+                }
                 else
 #endif
                 {
-                    unpack_samples_interleave (wps, bptr, offset, temp_buffer, samples_to_unpack);
+                    unpack_samples_interleave (wps, bptr, offset, temp_buffer,
+                        quality ? scratch_quality + samples_unpacked : NULL, samples_to_unpack);
 
                     if (wps->sample_index == GET_BLOCK_INDEX (wps->wphdr) + wps->wphdr.block_samples && wps->mute_error)
                         wpc->crc_errors++;
@@ -373,6 +570,21 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
 #ifdef ENABLE_THREADS
             worker_threads_finish (wpc);    // for multichannel, wait for all threads to finish before freeing anything
 #endif
+
+            if (quality) {
+#ifdef ENABLE_THREADS
+                // all of the worker jobs for this block are now complete, so merge their
+                // quality maps into our scratch map before freeing the buffers
+
+                merge_quality_jobs (wpc, scratch_quality);
+#endif
+
+                // if not all of the channels were delivered, the entire frame range was just
+                // muted by the library, so mark those frames as concealed
+
+                if (offset != num_channels)
+                    memset (scratch_quality + samples_unpacked, WV_QUALITY_CONCEALED, samples_to_unpack);
+            }
 
             free (temp_buffer);
 
@@ -402,6 +614,9 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
             memset (bptr, 0, samples_to_unpack * sizeof (*bptr));
             wps->sample_index += samples_to_unpack;
             wpc->crc_errors++;
+
+            if (quality)
+                memset (scratch_quality + samples_unpacked, WV_QUALITY_CONCEALED, samples_to_unpack);
         }
 #ifdef ENABLE_THREADS
         // This is where temporal multithreaded decoding occurs. If there's a worker thread available, and no errors
@@ -433,7 +648,61 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
                 wps->dsd.ptable = NULL;
 #endif
 
-                unpack_samples_enqueue (wps_copy, bptr, 0, samples_to_unpack, TRUE);
+                // if a quality map was requested, attach a private quality buffer to this
+                // job so the worker can report the quality of the frames it decodes; like
+                // the other worker quality buffers it is merged after the worker is done
+
+                if (quality) {
+                    unsigned char *worker_quality = NULL;
+
+                    if (wpc->quality_jobs_cnt == wpc->quality_jobs_max) {
+                        int new_max = wpc->quality_jobs_max ? wpc->quality_jobs_max * 2 : 16;
+                        QualityJob *new_jobs = (QualityJob *) realloc (wpc->quality_jobs,
+                            new_max * sizeof (QualityJob));
+
+                        if (new_jobs) {
+                            wpc->quality_jobs = new_jobs;
+                            wpc->quality_jobs_max = new_max;
+                        }
+                    }
+
+                    if (wpc->quality_jobs_cnt < wpc->quality_jobs_max) {
+                        worker_quality = (unsigned char *) calloc (1, samples_to_unpack);
+
+                        if (worker_quality) {
+                            wpc->quality_jobs [wpc->quality_jobs_cnt].buffer = worker_quality;
+                            wpc->quality_jobs [wpc->quality_jobs_cnt].offset = (int64_t) samples_unpacked;
+                            wpc->quality_jobs [wpc->quality_jobs_cnt].samcnt = samples_to_unpack;
+                            wpc->quality_jobs_cnt++;
+                        }
+                    }
+
+                    if (!worker_quality) {
+                        // couldn't allocate a quality buffer, so decode this range in the
+                        // foreground instead of handing it to a worker (using the stream
+                        // copy because the original context was already advanced); a temp
+                        // buffer is only needed if the stream does not match the file's
+                        // channel count (e.g., reduced channel output)
+
+                        int32_t *fbuf = (num_channels == (wps_copy->wphdr.flags & MONO_FLAG ? 1 : 2)) ?
+                            NULL : (int32_t *) calloc (1, samples_to_unpack * 8);
+
+                        unpack_samples_interleave (wps_copy, bptr, 0, fbuf,
+                            scratch_quality + samples_unpacked, samples_to_unpack);
+
+                        if (fbuf)
+                            free (fbuf);
+
+                        free_single_stream (wps_copy);
+                        free (wps_copy);
+                    }
+                    else
+                        unpack_samples_enqueue (wps_copy, bptr, 0, samples_to_unpack, TRUE,
+                            worker_quality, NULL);
+                }
+                else
+                    unpack_samples_enqueue (wps_copy, bptr, 0, samples_to_unpack, TRUE,
+                        NULL, NULL);
         }
 #endif
         else {
@@ -442,7 +711,8 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
                 unpack_dsd_samples (wps, bptr, samples_to_unpack);
             else
 #endif
-                unpack_samples (wps, bptr, samples_to_unpack);
+                unpack_samples (wps, bptr, samples_to_unpack,
+                    quality ? scratch_quality + samples_unpacked : NULL);
 
             if (wps->sample_index == GET_BLOCK_INDEX (wps->wphdr) + wps->wphdr.block_samples && wps->mute_error)
                 wpc->crc_errors++;
@@ -467,6 +737,13 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
 
 #ifdef ENABLE_THREADS
     worker_threads_finish (wpc);    // we don't return until all decoding by worker threads is complete
+
+    // merge any quality produced by worker threads into the scratch map (this includes
+    // both the multichannel and temporal decode paths, and is safe here because all of
+    // the workers have been shut down)
+
+    if (quality)
+        merge_quality_jobs (wpc, scratch_quality);
 #endif
 
 #ifdef ENABLE_DSD
@@ -474,7 +751,71 @@ uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t sa
         decimate_dsd_run (wpc->decimation_context, buffer, samples_unpacked);
 #endif
 
+    // copy the quality map for all the frames actually returned (if requested) and then
+    // discard the scratch map; note that the caller's remaining entries are untouched
+
+    if (quality) {
+        uint32_t count = samples_unpacked;
+
+        if (count > samples_requested)
+            count = samples_requested;
+
+        memcpy (quality, scratch_quality, count);
+        free (scratch_quality);
+    }
+
     return samples_unpacked;
+}
+
+// This is the standard unpack entry point. It is identical to the quality-map version
+// with a NULL quality map (i.e., no quality information is produced).
+
+uint32_t WavpackUnpackSamples (WavpackContext *wpc, int32_t *buffer, uint32_t samples)
+{
+    return unpack_samples_core (wpc, buffer, samples, NULL);
+}
+
+// This is the quality-map version of WavpackUnpackSamples(). The arguments and return
+// value are identical (i.e., the return is the number of complete sample frames per
+// channel actually delivered), but an additional per-frame quality map is produced for
+// exactly those frames. The quality map is not currently available for floating-point,
+// DSD, or legacy (pre-4.0) streams; for those, a request with a non-NULL quality map and
+// a non-zero sample count does not consume input, does not write either output buffer,
+// returns zero, and sets an error message. A zero-frame request never changes any state
+// and returns zero. A NULL quality map makes this exactly equivalent to the original
+// entry point (including those formats that are not supported for quality maps).
+
+uint32_t WavpackUnpackSamplesWithQuality (WavpackContext *wpc, int32_t *buffer, uint32_t samples, unsigned char *quality)
+{
+    if (!wpc)
+        return 0;
+
+    // a zero-frame request never changes any state, consumes no input and touches
+    // neither output buffer (this also applies to formats without quality support)
+
+    if (quality && !samples)
+        return 0;
+
+    if (quality && samples) {
+        if (wpc->quality_format == 1) {
+            strcpy (wpc->error_message, "quality map not available for floating-point data!");
+            return 0;
+        }
+
+        if (wpc->quality_format == 2) {
+            strcpy (wpc->error_message, "quality map not available for DSD data!");
+            return 0;
+        }
+
+#ifdef ENABLE_LEGACY
+        if (wpc->stream3) {
+            strcpy (wpc->error_message, "quality map not available for legacy WavPack files!");
+            return 0;
+        }
+#endif
+    }
+
+    return unpack_samples_core (wpc, buffer, samples, quality);
 }
 
 ///////////////////////////// multithreading code ////////////////////////////////
@@ -522,7 +863,7 @@ static void *unpack_samples_worker_thread (void *param)
         }
 
         // this is where the work is done
-        unpack_samples_interleave (cxt->wps, cxt->outbuf, cxt->offset, temp_buffer, cxt->samcnt);
+        unpack_samples_interleave (cxt->wps, cxt->outbuf, cxt->offset, temp_buffer, cxt->quality, cxt->samcnt);
 
         if (cxt->wps->mute_error) {                 // this is where we pass back decoding errors
             wp_mutex_obtain (*cxt->mutex);
@@ -546,10 +887,14 @@ static void *unpack_samples_worker_thread (void *param)
 // flag indicates that the WavpackStream structure should be freed once the unpack operation is
 // complete because it is a copy of the original created for this operation only.
 
-static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int offset, uint32_t samcnt, int free_wps)
+static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int offset, uint32_t samcnt, int free_wps,
+    unsigned char *quality, int *queued)
 {
     WavpackContext *wpc = (WavpackContext *) wps->wpc;  // this is safe here because single-threaded
     int i;
+
+    if (queued)
+        *queued = FALSE;
 
     wp_mutex_obtain (wpc->mutex);
 
@@ -564,8 +909,13 @@ static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int off
             wpc->workers [i].offset = offset;
             wpc->workers [i].samcnt = samcnt;
             wpc->workers [i].free_wps = free_wps;
+            wpc->workers [i].quality = quality;
             wp_condvar_signal (wpc->workers [i].worker_cond);
             wpc->workers_ready--;
+
+            if (queued)
+                *queued = TRUE;
+
             break;
         }
 
@@ -574,6 +924,8 @@ static void unpack_samples_enqueue (WavpackStream *wps, int32_t *outbuf, int off
 
 static void worker_threads_finish (WavpackContext *wpc)
 {
+    int i;
+
     if (wpc->workers) {
         wp_mutex_obtain (wpc->mutex);
 
@@ -587,6 +939,14 @@ static void worker_threads_finish (WavpackContext *wpc)
         wpc->crc_errors += wpc->worker_errors;
         wpc->worker_errors = 0;
     }
+
+    // any quality buffers associated with jobs that are now finished are consumed by
+    // the caller (which merges them into its quality map), so clear out the worker
+    // references here to leave a clean slate for the next block
+
+    if (wpc->workers)
+        for (i = 0; i < wpc->num_workers; ++i)
+            wpc->workers [i].quality = NULL;
 }
 
 // Create the worker thread contexts and start the threads
