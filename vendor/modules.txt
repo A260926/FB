@@ -1,0 +1,75 @@
+# github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b
+## explicit; go 1.15
+github.com/ajstarks/svgo/float
+# github.com/davecgh/go-spew v1.1.0
+## explicit
+github.com/davecgh/go-spew/spew
+# github.com/dhconnelly/rtreego v1.2.0
+## explicit; go 1.13
+github.com/dhconnelly/rtreego
+# github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+## explicit
+github.com/golang/freetype/raster
+github.com/golang/freetype/truetype
+# github.com/hpinc/go3mf v0.24.2
+## explicit; go 1.13
+github.com/hpinc/go3mf
+github.com/hpinc/go3mf/errors
+github.com/hpinc/go3mf/internal/xml
+github.com/hpinc/go3mf/spec
+# github.com/llgcode/draw2d v0.0.0-20260422081035-c4331ac66734
+## explicit; go 1.24.0
+github.com/llgcode/draw2d
+github.com/llgcode/draw2d/draw2dbase
+github.com/llgcode/draw2d/draw2dimg
+# github.com/pmezard/go-difflib v1.0.0
+## explicit
+github.com/pmezard/go-difflib/difflib
+# github.com/qmuntal/opc v0.7.12
+## explicit; go 1.13
+github.com/qmuntal/opc
+# github.com/stretchr/testify v1.7.0
+## explicit; go 1.13
+github.com/stretchr/testify/assert
+# github.com/yofu/dxf v0.0.0-20250806094206-f3988c7f0176
+## explicit; go 1.22
+github.com/yofu/dxf
+github.com/yofu/dxf/block
+github.com/yofu/dxf/class
+github.com/yofu/dxf/color
+github.com/yofu/dxf/drawing
+github.com/yofu/dxf/entity
+github.com/yofu/dxf/format
+github.com/yofu/dxf/geometry
+github.com/yofu/dxf/handle
+github.com/yofu/dxf/header
+github.com/yofu/dxf/insunit
+github.com/yofu/dxf/object
+github.com/yofu/dxf/table
+# golang.org/x/image v0.45.0
+## explicit; go 1.25.0
+golang.org/x/image/draw
+golang.org/x/image/font
+golang.org/x/image/math/f64
+golang.org/x/image/math/fixed
+# gonum.org/v1/gonum v0.17.0
+## explicit; go 1.24.0
+gonum.org/v1/gonum/blas
+gonum.org/v1/gonum/blas/blas64
+gonum.org/v1/gonum/blas/cblas128
+gonum.org/v1/gonum/blas/gonum
+gonum.org/v1/gonum/floats
+gonum.org/v1/gonum/floats/scalar
+gonum.org/v1/gonum/internal/asm/c128
+gonum.org/v1/gonum/internal/asm/c64
+gonum.org/v1/gonum/internal/asm/f32
+gonum.org/v1/gonum/internal/asm/f64
+gonum.org/v1/gonum/internal/cmplx64
+gonum.org/v1/gonum/internal/math32
+gonum.org/v1/gonum/lapack
+gonum.org/v1/gonum/lapack/gonum
+gonum.org/v1/gonum/lapack/lapack64
+gonum.org/v1/gonum/mat
+# gopkg.in/yaml.v3 v3.0.1
+## explicit
+gopkg.in/yaml.v3

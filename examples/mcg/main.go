@@ -1,0 +1,140 @@
+//-----------------------------------------------------------------------------
+/*
+
+Mac Cheese Grater Plate
+http://saccade.com/blog/2019/06/how-to-make-apples-mac-pro-holes/
+
+*/
+//-----------------------------------------------------------------------------
+
+package main
+
+import (
+	"log"
+	"math"
+
+	"github.com/deadsy/sdfx/render"
+	"github.com/deadsy/sdfx/sdf"
+	v3 "github.com/deadsy/sdfx/vec/v3"
+)
+
+//-----------------------------------------------------------------------------
+
+// material shrinkage
+var shrink = 1.0 / 0.999 // PLA ~0.1%
+//var shrink = 1.0/0.995; // ABS ~0.5%
+
+//-----------------------------------------------------------------------------
+
+// colSpace returns the space between columns
+func colSpace(radius float64) float64 {
+	return (4.0 * radius) / math.Sqrt(3.0)
+}
+
+// rowSpace returns the space between rows
+func rowSpace(radius float64) float64 {
+	return 2.0 * radius
+}
+
+// xOffset returns the x-offset between adjacent rows
+func xOffset(radius float64) float64 {
+	return (2.0 * radius) / math.Sqrt(3.0)
+}
+
+// yOffset returns the y-offset between adjacent rows
+func yOffset(radius float64) float64 {
+	return (2.0 * radius) / 3.0
+}
+
+// zOffset returns the z-offset between ball grids
+func zOffset(radius float64) float64 {
+	return (4.0 * radius) / 3.0
+}
+
+//-----------------------------------------------------------------------------
+
+// ballRow returns a ball row
+func ballRow(ncol int, radius float64) (sdf.SDF3, error) {
+
+	space := colSpace(radius)
+	x := v3.Vec{-0.5 * ((float64(ncol) - 1) * space), 0, 0}
+	dx := v3.Vec{space, 0, 0}
+
+	var balls []sdf.SDF3
+	s, err := sdf.Sphere3D(radius)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < ncol; i++ {
+		balls = append(balls, sdf.Transform3D(s, sdf.Translate3d(x)))
+		x = x.Add(dx)
+	}
+	return sdf.Union3D(balls...), nil
+}
+
+// ballGrid returns a ball grid
+func ballGrid(
+	ncol int, // number of columns
+	nrow int, // number of rows
+	radius float64, // radius of ball
+) (sdf.SDF3, error) {
+
+	space := rowSpace(radius)
+	x := v3.Vec{0, -0.5 * ((float64(nrow) - 1) * space), 0}
+	dy0 := v3.Vec{-xOffset(radius), space, 0}
+	dy1 := v3.Vec{xOffset(radius), space, 0}
+
+	var rows []sdf.SDF3
+	s, err := ballRow(ncol, radius)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < nrow; i++ {
+		rows = append(rows, sdf.Transform3D(s, sdf.Translate3d(x)))
+		if i%2 == 0 {
+			x = x.Add(dy0)
+		} else {
+			x = x.Add(dy1)
+		}
+	}
+	return sdf.Union3D(rows...), nil
+}
+
+// macCheeseGrater returns a Apple Mac style cheese grater plate.
+func macCheeseGrater(
+	ncol int, // number of columns
+	nrow int, // number of rows
+	radius float64, // radius of ball
+) (sdf.SDF3, error) {
+
+	dx := v3.Vec{xOffset(radius), yOffset(radius), zOffset(radius)}.MulScalar(0.5)
+	g, err := ballGrid(ncol, nrow, radius)
+	if err != nil {
+		return nil, err
+	}
+	g0 := sdf.Transform3D(g, sdf.Translate3d(dx.Neg()))
+	g1 := sdf.Transform3D(g, sdf.Translate3d(dx))
+	balls := sdf.Union3D(g0, g1)
+
+	pX := colSpace(radius) * (float64(ncol) - 1)
+	pY := rowSpace(radius) * (float64(nrow) - 1)
+	pZ := 0.5 * colSpace(radius)
+	plate, err := sdf.Box3D(v3.Vec{pX, pY, pZ}, 0)
+	if err != nil {
+		return nil, err
+	}
+	return sdf.Difference3D(plate, balls), nil
+}
+
+//-----------------------------------------------------------------------------
+
+func main() {
+	s, err := macCheeseGrater(15, 6, 10.0)
+	if err != nil {
+		log.Fatalf("error: %s", err)
+	}
+	s = sdf.ScaleUniform3D(s, shrink)
+	render.ToSTL(s, "mcg.stl", render.NewMarchingCubesOctree(500))
+}
+
+//-----------------------------------------------------------------------------

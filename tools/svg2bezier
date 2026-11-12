@@ -1,0 +1,432 @@
+#!/usr/bin/python
+#------------------------------------------------------------------------------
+'''
+Convert SVG Curve Paths to sdfx Bezier Curve Code.
+See: https://www.w3.org/TR/SVG/paths.html#PathData
+'''
+#------------------------------------------------------------------------------
+
+import sys
+import lxml.etree as ET
+
+import ply.lex as lex
+from ply.lex import TOKEN
+import ply.yacc as yacc
+
+#------------------------------------------------------------------------------
+# Scanner
+
+digits = r'(\d+)'
+sign = r'[+-]'
+exponent = r'([eE]' + sign + r'?' + digits + r')'
+fractional_constant = r'((' + digits + r'?\.' + digits + r')|(' + digits + r'\.))'
+floating_point_constant =  r'((' + fractional_constant + exponent + r'?)|(' + digits + exponent + r'))'
+number = r'(' + sign + r'?' + floating_point_constant + r')|(' + sign + r'?' + digits + r')'
+
+tokens = (
+  'NUMBER',
+  'ELLIPTICAL_ARC',
+  'CURVETO',
+  'HORIZONTAL_LINETO',
+  'LINETO',
+  'MOVETO',
+  'QUADRATIC_BEZIER_CURVETO',
+  'SMOOTH_CURVETO',
+  'SMOOTH_QUADRATIC_BEZIER_CURVETO',
+  'VERTICAL_LINETO',
+  'CLOSEPATH',
+)
+
+@TOKEN(number)
+def t_NUMBER(t):
+    t.value = float(t.value)
+    return t
+
+t_ELLIPTICAL_ARC = r'[aA]'
+t_CURVETO = r'[cC]'
+t_HORIZONTAL_LINETO = r'[hH]'
+t_LINETO = r'[lL]'
+t_MOVETO = r'[mM]'
+t_QUADRATIC_BEZIER_CURVETO = r'[qQ]'
+t_SMOOTH_CURVETO = r'[sS]'
+t_SMOOTH_QUADRATIC_BEZIER_CURVETO = r'[tT]'
+t_VERTICAL_LINETO = r'[vV]'
+t_CLOSEPATH = r'[zZ]'
+
+t_ignore = ' ,\t\r\n'
+
+def t_error(t):
+    print("illegal character '%s'" % t.value[0])
+    t.lexer.skip(1)
+
+lexer = lex.lex()
+
+#------------------------------------------------------------------------------
+# Parser
+
+def vertices(cmd, l):
+  if len(l) % 2 != 0:
+    print('%s needs number pair arguments' % cmd)
+    raise SyntaxError
+  return [(l[i], l[i+1]) for i in range(0, len(l), 2)]
+
+def relative(x):
+  if x.islower():
+    if x == 'h':
+      return 'rel_x'
+    if x == 'v':
+      return 'rel_y'
+    return 'rel_xy'
+  if x == 'H':
+    return 'abs_x'
+  if x == 'V':
+    return 'abs_y'
+  return 'abs_xy'
+
+def p_path_command(t):
+  '''path_command : moveto_drawto_commands'''
+  pass
+
+def p_moveto_drawto_commands(t):
+  '''moveto_drawto_commands : moveto_drawto_command
+                            | moveto_drawto_command moveto_drawto_commands'''
+  pass
+
+def p_moveto_drawto_command(t):
+  '''moveto_drawto_command : moveto
+                           | moveto drawto_commands'''
+  pass
+
+def p_moveto(t):
+  '''moveto : MOVETO number_list'''
+  v = vertices('M', t[2])
+  global g_curve
+  if len(v) >= 1:
+    # the first m/M is always absolute
+    x,y = v[0]
+    g_curve.add_start(x,y)
+    g_curve.add_endpoint(x,y)
+    g_curve.set_xy(x,y)
+  if len(v) >= 2:
+    # any remaining vertices are rel/abs lineto commands
+    r = relative(t[1])
+    for p in v[1:]:
+      x,y = p
+      g_curve.add_endpoint(x, y, r)
+    # set the absolute position with the last value
+    p = v[-1]
+    g_curve.set_xy(p[0],p[1], r)
+
+def p_drawto_commands(t):
+  '''drawto_commands : drawto_command
+                     | drawto_command drawto_commands'''
+  pass
+
+def p_drawto_command(t):
+  '''drawto_command : closepath
+                    | lineto
+                    | horizontal_lineto
+                    | vertical_lineto
+                    | curveto
+                    | smooth_curveto
+                    | quadratic_bezier_curveto
+                    | smooth_quadratic_bezier_curveto
+                    | elliptical_arc'''
+  pass
+
+def p_closepath(t):
+  'closepath : CLOSEPATH'
+  global g_curve
+  g_curve.closepath()
+
+def p_lineto(t):
+  'lineto : LINETO number_list'
+  v = vertices('L', t[2])
+  global g_curve
+  r = relative(t[1])
+  for p in v:
+    g_curve.add_endpoint(p[0], p[1], r)
+  # set the absolute position with the last value
+  p = v[-1]
+  g_curve.set_xy(p[0], p[1], r)
+
+def p_horizontal_lineto(t):
+  'horizontal_lineto : HORIZONTAL_LINETO number_list'
+  n = len(t[2])
+  if n > 1:
+    print('H has multiple numbers')
+    raise SyntaxError
+  global g_curve
+  r = relative(t[1])
+  x = t[2][0]
+  g_curve.add_endpoint(x, 0, r)
+  g_curve.set_xy(x, 0, r)
+
+def p_vertical_lineto(t):
+  'vertical_lineto : VERTICAL_LINETO number_list'
+  n = len(t[2])
+  if n > 1:
+    print('V has multiple numbers')
+    raise SyntaxError
+  global g_curve
+  r = relative(t[1])
+  y = t[2][0]
+  g_curve.add_endpoint(0, y, r)
+  g_curve.set_xy(0, y, r)
+
+def p_curveto(t):
+  'curveto : CURVETO number_list'
+  v = vertices('C', t[2])
+  if len(v) % 3 != 0:
+    print('C needs splines with 3 vertices each')
+    raise SyntaxError
+  splines = [(v[i], v[i+1], v[i+2]) for i in range(0, len(v), 3)]
+  # emit
+  global g_curve
+  r = relative(t[1])
+  for s in splines:
+    p0,p1,p2 = s
+    g_curve.add_midpoint(p0[0], p0[1], r)
+    g_curve.add_midpoint(p1[0], p1[1], r)
+    g_curve.add_endpoint(p2[0], p2[1], r)
+    g_curve.set_xy(p2[0], p2[1], r)
+
+def p_smooth_curveto(t):
+  'smooth_curveto : SMOOTH_CURVETO number_list'
+  v = vertices('S', t[2])
+  if len(v) % 2 != 0:
+    print('S needs splines with 2 vertices each')
+    raise SyntaxError
+  splines = [(v[i], v[i+1]) for i in range(0, len(v), 2)]
+  # emit
+  global g_curve
+  r = relative(t[1])
+  for s in splines:
+    p0,p1 = s
+    # the first midpoint is a reflection across the
+    # current point of the previous midpoint
+    g_curve.implicit_midpoint()
+    g_curve.add_midpoint(p0[0], p0[1], r)
+    g_curve.add_endpoint(p1[0], p1[1], r)
+    g_curve.set_xy(p1[0], p1[1], r)
+
+def p_quadratic_bezier_curveto(t):
+  'quadratic_bezier_curveto : QUADRATIC_BEZIER_CURVETO number_list'
+  v = vertices('Q', t[2])
+  if len(v) % 2 != 0:
+    print('Q needs splines with 2 vertices each')
+    raise SyntaxError
+  splines = [(v[i], v[i+1]) for i in range(0, len(v), 2)]
+  # emit
+  global g_curve
+  r = relative(t[1])
+  for s in splines:
+    p0, p1 = s
+    g_curve.add_midpoint(p0[0], p0[1], r)
+    g_curve.add_endpoint(p1[0], p1[1], r)
+    g_curve.set_xy(p1[0], p1[1], r)
+
+def p_smooth_quadratic_bezier_curveto(t):
+  'smooth_quadratic_bezier_curveto : SMOOTH_QUADRATIC_BEZIER_CURVETO number_list'
+  v = vertices('T', t[2])
+  # emit
+  global g_curve
+  r = relative(t[1])
+  for p in v:
+    # the first midpoint is a reflection across the
+    # current point of the previous midpoint
+    g_curve.implicit_midpoint()
+    g_curve.add_endpoint(p[0], p[1], r)
+    g_curve.set_xy(p[0], p[1], r)
+
+def p_elliptical_arc(t):
+  'elliptical_arc : ELLIPTICAL_ARC number_list'
+  print("A %s" % t[2])
+
+def p_number_list(t):
+  '''number_list : NUMBER
+                 | NUMBER number_list'''
+  n = len(t)
+  if n == 2:
+    t[0] = [t[1],]
+  elif n == 3:
+    t[0] = [t[1],] + t[2]
+  else:
+    assert False
+
+def p_error(t):
+  print("syntax error at '%s'" % t.value)
+
+parser = yacc.yacc()
+
+#------------------------------------------------------------------------------
+
+class vertex(object):
+
+  def __init__(self, x, y, t):
+    self.x = x
+    self.y = y
+    self.t = t
+
+  def __str__(self):
+    """return a string for the vertex"""
+    s = []
+    if self.t == 'start':
+      s.append('b := NewBezier()')
+    else:
+      s.append('b.Add(%f,%f)' % (self.x, self.y))
+      if self.t == 'mid':
+        s.append('.Mid()')
+    return ''.join(s)
+
+class bezier_curve(object):
+
+  def __init__(self):
+    self.x, self.y = 0.0, 0.0
+    self.vlist = []
+    self.closed = False
+
+  def vertex(self, x, y, r):
+    """calculate a vertex"""
+    if r == 'rel_xy':
+      return (self.x + x, self.y + y)
+    elif r == 'rel_x':
+      return (self.x + x, self.y)
+    elif r == 'rel_y':
+      return (self.x, self.y + y)
+    elif r == 'abs_xy':
+      return (x, y)
+    elif r == 'abs_x':
+      return (x, self.y)
+    elif r == 'abs_y':
+      return (self.x, y)
+    else:
+      assert False
+
+  def set_xy(self, x, y, r = 'abs_xy'):
+    """set the x/y position"""
+    self.x, self.y = self.vertex(x, y, r)
+
+  def add_start(self, x, y):
+    self.vlist.append(vertex(x, y, 'start'))
+
+  def add_endpoint(self, x, y, r = 'abs_xy'):
+    """add an endpoint vertex"""
+    x, y = self.vertex(x, y, r)
+    self.vlist.append(vertex(x,y,'end'))
+
+  def add_midpoint(self, x, y, r = 'abs_xy'):
+    """add a midpoint vertex"""
+    x, y = self.vertex(x, y, r)
+    self.vlist.append(vertex(x,y,'mid'))
+
+  def implicit_midpoint(self):
+    """add an implicit midpoint"""
+    if len(self.vlist) >= 2:
+      ep = self.vlist[-1]
+      mp = self.vlist[-2]
+      assert ep.t == 'end'
+      assert mp.t == 'mid'
+      x = 2 * ep.x - mp.x
+      y = 2 * ep.y - mp.y
+      self.vlist.append(vertex(x,y,'mid'))
+    else:
+      assert False
+
+  def closepath(self):
+    """close a bezier curve"""
+    self.closed = True
+
+  def flipy(self):
+    """flip the y axis"""
+    for v in self.vlist:
+      # flip the y-axis
+      v.y = -v.y
+
+  def offset(self,ofs):
+    """offset the curve"""
+    for v in self.vlist:
+      v.x -= ofs[0]
+      v.y -= ofs[1]
+
+  def vmin(self):
+    """return the minimum endpoint vertex"""
+    x, y = None, None
+    for v in self.vlist:
+      if v.t == 'end':
+        x = (min(x, v.x), v.x)[x is None]
+        y = (min(y, v.y), v.y)[y is None]
+    return (x, y)
+
+  def vmax(self):
+    """return the maximum endpoint vertex"""
+    x, y = None, None
+    for v in self.vlist:
+      if v.t == 'end':
+        x = (max(x, v.x), v.x)[x is None]
+        y = (max(y, v.y), v.y)[y is None]
+    return (x, y)
+
+  def __str__(self):
+    s = []
+    for v in self.vlist:
+      s.append(str(v))
+    if self.closed:
+      s.append('b.Close()')
+    return '\n'.join(s)
+
+#------------------------------------------------------------------------------
+
+def Print_Usage(argv):
+  print 'Usage: %s <svg file>' % argv[0]
+
+#------------------------------------------------------------------------------
+
+xmlns_svg = "http://www.w3.org/2000/svg"
+
+class svg_parser(object):
+
+  def __init__(self, path):
+    self.tree = ET.parse(path)
+    self.root = self.tree.getroot()
+
+  def get_paths(self, node):
+    node = node.find('{%s}g' % xmlns_svg)
+    paths = node.findall('{%s}path' % xmlns_svg)
+    return [p.get('d') for p in paths]
+
+  def parse(self):
+    return self.get_paths(self.root)
+
+#------------------------------------------------------------------------------
+
+def main():
+
+  if len(sys.argv) != 2:
+    Print_Usage(sys.argv)
+    sys.exit(-1)
+
+  svg = svg_parser(sys.argv[1])
+  paths = svg.parse()
+
+  # for each path create a curve
+  curves = []
+  for p in paths:
+    global g_curve
+    g_curve = bezier_curve()
+    parser.parse(p)
+    curves.append(g_curve)
+
+  for c in curves:
+    print('%s' % c)
+
+  #curve.flipy()
+  #curve.offset(curve.vmin())
+
+
+
+
+
+main()
+
+#------------------------------------------------------------------------------

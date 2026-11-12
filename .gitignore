@@ -1,0 +1,9 @@
+tools/md5tool/md5tool
+tools/parser.out
+tools/parsetab.py
+*.pyc
+examples/*/*.stl
+!examples/monkey_hat/monkey.stl
+examples/*/*.dxf
+examples/*/*.png
+examples/*/*.svg

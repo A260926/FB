@@ -1,0 +1,576 @@
+//-----------------------------------------------------------------------------
+/*
+
+Screws
+
+Screws are made by taking a 2D thread profile, rotating it about the z-axis and
+spiralling it upwards as we move along z.
+
+The 2D thread profiles are a polygon of a single thread centered on the y-axis with
+the x-axis as the screw axis. Most thread profiles are symmetric about the y-axis
+but a few aren't (E.g. buttress threads) so in general we build the profile of
+an entire pitch period.
+
+This code doesn't deal with thread tolerancing. If you want threads to fit properly
+the radius of the thread will need to be tweaked (+/-) to give internal/external thread
+clearance.
+
+*/
+//-----------------------------------------------------------------------------
+
+package sdf
+
+import (
+	"fmt"
+	"log"
+	"math"
+
+	v2 "github.com/deadsy/sdfx/vec/v2"
+	v3 "github.com/deadsy/sdfx/vec/v3"
+)
+
+//-----------------------------------------------------------------------------
+// Thread Database - lookup standard screw threads by name
+
+// ThreadParameters stores the values that define a thread.
+type ThreadParameters struct {
+	Name         string  // name of screw thread
+	Radius       float64 // nominal major radius of screw
+	Pitch        float64 // thread to thread distance of screw
+	Taper        float64 // thread taper (radians)
+	HexFlat2Flat float64 // hex head flat to flat distance
+	Units        string  // "inch" or "mm"
+}
+
+// ToMillimetre converts thread parameters from inch to millimetre.
+func (t *ThreadParameters) ToMillimetre() *ThreadParameters {
+	if t.Units == "mm" {
+		return t
+	}
+	return &ThreadParameters{
+		Name:         t.Name,
+		Radius:       t.Radius * MillimetresPerInch,
+		Pitch:        t.Pitch * MillimetresPerInch,
+		Taper:        t.Taper,
+		HexFlat2Flat: t.HexFlat2Flat * MillimetresPerInch,
+		Units:        "mm",
+	}
+}
+
+type threadDatabase map[string]*ThreadParameters
+
+var threadDB = initThreadLookup()
+
+// UTSAdd adds a Unified Thread Standard to the thread database.
+func (m threadDatabase) UTSAdd(
+	name string, // thread name
+	diameter float64, // screw major diameter
+	tpi float64, // threads per inch
+	ftof float64, // hex head flat to flat distance
+) {
+	if ftof <= 0 {
+		log.Panicf("bad flat to flat distance for thread \"%s\"", name)
+	}
+	t := ThreadParameters{}
+	t.Name = name
+	t.Radius = 0.5 * diameter
+	t.Pitch = 1.0 / tpi
+	t.HexFlat2Flat = ftof
+	t.Units = "inch"
+	m[name] = &t
+}
+
+// ISOAdd adds an ISO Thread Standard to the thread database.
+func (m threadDatabase) ISOAdd(
+	name string, // thread name
+	diameter float64, // screw major diamater
+	pitch float64, // thread pitch
+	ftof float64, // hex head flat to flat distance
+) {
+	if ftof <= 0 {
+		log.Panicf("bad flat to flat distance for thread \"%s\"", name)
+	}
+	t := ThreadParameters{}
+	t.Name = name
+	t.Radius = 0.5 * diameter
+	t.Pitch = pitch
+	t.HexFlat2Flat = ftof
+	t.Units = "mm"
+	m[name] = &t
+}
+
+// NPTAdd adds an National Pipe Thread to the thread database.
+func (m threadDatabase) NPTAdd(
+	name string, // thread name
+	diameter float64, // screw major diameter
+	tpi float64, // threads per inch
+	ftof float64, // hex head flat to flat distance
+) {
+	if ftof <= 0 {
+		log.Panicf("bad flat to flat distance for thread \"%s\"", name)
+	}
+	t := ThreadParameters{}
+	t.Name = name
+	t.Radius = 0.5 * diameter
+	t.Pitch = 1.0 / tpi
+	t.Taper = math.Atan(1.0 / 32.0)
+	t.HexFlat2Flat = ftof
+	t.Units = "inch"
+	m[name] = &t
+}
+
+// initThreadLookup adds a collection of standard threads to the thread database.
+func initThreadLookup() threadDatabase {
+	m := make(threadDatabase)
+	// UTS Coarse
+	m.UTSAdd("unc_4_40", 0.112, 40, 0.183) // ftof?
+	m.UTSAdd("unc_6_32", 0.138, 32, 0.226) // ftof?
+	m.UTSAdd("unc_8_32", 0.164, 32, 0.27)  // ftof?
+	m.UTSAdd("unc_10_24", 0.19, 24, 0.312) // ftof?
+	m.UTSAdd("unc_1/4", 1.0/4.0, 20, 7.0/16.0)
+	m.UTSAdd("unc_5/16", 5.0/16.0, 18, 1.0/2.0)
+	m.UTSAdd("unc_3/8", 3.0/8.0, 16, 9.0/16.0)
+	m.UTSAdd("unc_7/16", 7.0/16.0, 14, 5.0/8.0)
+	m.UTSAdd("unc_1/2", 1.0/2.0, 13, 3.0/4.0)
+	m.UTSAdd("unc_9/16", 9.0/16.0, 12, 13.0/16.0)
+	m.UTSAdd("unc_5/8", 5.0/8.0, 11, 15.0/16.0)
+	m.UTSAdd("unc_3/4", 3.0/4.0, 10, 9.0/8.0)
+	m.UTSAdd("unc_7/8", 7.0/8.0, 9, 21.0/16.0)
+	m.UTSAdd("unc_1", 1.0, 8, 3.0/2.0)
+
+	// UTS Fine
+	m.UTSAdd("unf_4_48", 0.112, 48, 0.183) // ftof?
+	m.UTSAdd("unf_6_40", 0.138, 40, 0.226) // ftof?
+	m.UTSAdd("unf_8_36", 0.164, 36, 0.27)  // ftof?
+	m.UTSAdd("unf_10_32", 0.19, 32, 0.312) // ftof?
+	m.UTSAdd("unf_1/4", 1.0/4.0, 28, 7.0/16.0)
+	m.UTSAdd("unf_5/16", 5.0/16.0, 24, 1.0/2.0)
+	m.UTSAdd("unf_3/8", 3.0/8.0, 24, 9.0/16.0)
+	m.UTSAdd("unf_7/16", 7.0/16.0, 20, 5.0/8.0)
+	m.UTSAdd("unf_1/2", 1.0/2.0, 20, 3.0/4.0)
+	m.UTSAdd("unf_9/16", 9.0/16.0, 18, 13.0/16.0)
+	m.UTSAdd("unf_5/8", 5.0/8.0, 18, 15.0/16.0)
+	m.UTSAdd("unf_3/4", 3.0/4.0, 16, 9.0/8.0)
+	m.UTSAdd("unf_7/8", 7.0/8.0, 14, 21.0/16.0)
+	m.UTSAdd("unf_1", 1.0, 12, 3.0/2.0)
+
+	// National Pipe Thread. Face to face distance taken from ASME B16.11 Plug Manufacturer (mm)
+	m.NPTAdd("npt_1/8", 0.405, 27, 11.2*InchesPerMillimetre)
+	m.NPTAdd("npt_1/4", 0.540, 18, 15.7*InchesPerMillimetre)
+	m.NPTAdd("npt_3/8", 0.675, 18, 17.5*InchesPerMillimetre)
+	m.NPTAdd("npt_1/2", 0.840, 14, 22.4*InchesPerMillimetre)
+	m.NPTAdd("npt_3/4", 1.050, 14, 26.9*InchesPerMillimetre)
+	m.NPTAdd("npt_1", 1.315, 11.5, 35.1*InchesPerMillimetre)
+	m.NPTAdd("npt_1_1/4", 1.660, 11.5, 44.5*InchesPerMillimetre)
+	m.NPTAdd("npt_1_1/2", 1.900, 11.5, 50.8*InchesPerMillimetre)
+	m.NPTAdd("npt_2", 2.375, 11.5, 63.5*InchesPerMillimetre)
+	m.NPTAdd("npt_2_1/2", 2.875, 8, 76.2*InchesPerMillimetre)
+	m.NPTAdd("npt_3", 3.500, 8, 88.9*InchesPerMillimetre)
+	m.NPTAdd("npt_4", 4.500, 8, 117.3*InchesPerMillimetre)
+
+	// ISO Coarse
+	m.ISOAdd("M1x0.25", 1, 0.25, 1.75)    // ftof?
+	m.ISOAdd("M1.2x0.25", 1.2, 0.25, 2.0) // ftof?
+	m.ISOAdd("M1.6x0.35", 1.6, 0.35, 3.2)
+	m.ISOAdd("M2x0.4", 2, 0.4, 4)
+	m.ISOAdd("M2.5x0.45", 2.5, 0.45, 5)
+	m.ISOAdd("M3x0.5", 3, 0.5, 6)
+	m.ISOAdd("M4x0.7", 4, 0.7, 7)
+	m.ISOAdd("M5x0.8", 5, 0.8, 8)
+	m.ISOAdd("M6x1", 6, 1, 10)
+	m.ISOAdd("M8x1.25", 8, 1.25, 13)
+	m.ISOAdd("M10x1.5", 10, 1.5, 17)
+	m.ISOAdd("M12x1.75", 12, 1.75, 19)
+	m.ISOAdd("M16x2", 16, 2, 24)
+	m.ISOAdd("M20x2.5", 20, 2.5, 30)
+	m.ISOAdd("M24x3", 24, 3, 36)
+	m.ISOAdd("M30x3.5", 30, 3.5, 46)
+	m.ISOAdd("M36x4", 36, 4, 55)
+	m.ISOAdd("M42x4.5", 42, 4.5, 65)
+	m.ISOAdd("M48x5", 48, 5, 75)
+	m.ISOAdd("M56x5.5", 56, 5.5, 85)
+	m.ISOAdd("M64x6", 64, 6, 95)
+
+	// ISO Fine
+	m.ISOAdd("M1x0.2", 1, 0.2, 1.75)    // ftof?
+	m.ISOAdd("M1.2x0.2", 1.2, 0.2, 2.0) // ftof?
+	m.ISOAdd("M1.6x0.2", 1.6, 0.2, 3.2)
+	m.ISOAdd("M2x0.25", 2, 0.25, 4)
+	m.ISOAdd("M2.5x0.35", 2.5, 0.35, 5)
+	m.ISOAdd("M3x0.35", 3, 0.35, 6)
+	m.ISOAdd("M4x0.5", 4, 0.5, 7)
+	m.ISOAdd("M5x0.5", 5, 0.5, 8)
+	m.ISOAdd("M6x0.75", 6, 0.75, 10)
+	m.ISOAdd("M8x1", 8, 1, 13)
+	m.ISOAdd("M10x1.25", 10, 1.25, 17)
+	m.ISOAdd("M12x1.5", 12, 1.5, 19)
+	m.ISOAdd("M16x1.5", 16, 1.5, 24)
+	m.ISOAdd("M20x2", 20, 2, 30)
+	m.ISOAdd("M24x2", 24, 2, 36)
+	m.ISOAdd("M30x2", 30, 2, 46)
+	m.ISOAdd("M36x3", 36, 3, 55)
+	m.ISOAdd("M42x3", 42, 3, 65)
+	m.ISOAdd("M48x3", 48, 3, 75)
+	m.ISOAdd("M56x4", 56, 4, 85)
+	m.ISOAdd("M64x4", 64, 4, 95)
+	return m
+}
+
+// ThreadLookup lookups the parameters for a thread by name.
+func ThreadLookup(name string) (*ThreadParameters, error) {
+	if t, ok := threadDB[name]; ok {
+		return t, nil
+	}
+	return nil, fmt.Errorf("thread \"%s\" not found", name)
+}
+
+// HexRadius returns the hex head radius.
+func (t *ThreadParameters) HexRadius() float64 {
+	return t.HexFlat2Flat / (2.0 * math.Cos(DtoR(30)))
+}
+
+// HexHeight returns the hex head height (empirical).
+func (t *ThreadParameters) HexHeight() float64 {
+	return 2.0 * t.HexRadius() * (5.0 / 12.0)
+}
+
+//-----------------------------------------------------------------------------
+// Thread Profiles
+
+// AcmeThread returns the 2d profile for an acme thread.
+func AcmeThread(
+	radius float64, // radius of thread
+	pitch float64, // thread to thread distance
+) (SDF2, error) {
+
+	h := radius - 0.5*pitch
+	theta := DtoR(29.0 / 2.0)
+	delta := 0.25 * pitch * math.Tan(theta)
+	xOfs0 := 0.25*pitch - delta
+	xOfs1 := 0.25*pitch + delta
+
+	acme := NewPolygon()
+	acme.Add(radius, 0)
+	acme.Add(radius, h)
+	acme.Add(xOfs1, h)
+	acme.Add(xOfs0, radius)
+	acme.Add(-xOfs0, radius)
+	acme.Add(-xOfs1, h)
+	acme.Add(-radius, h)
+	acme.Add(-radius, 0)
+
+	return Polygon2D(acme.Vertices())
+}
+
+// ISOThread returns the 2d profile for an ISO/UTS thread.
+// https://en.wikipedia.org/wiki/ISO_metric_screw_thread
+// https://en.wikipedia.org/wiki/Unified_Thread_Standard
+func ISOThread(
+	radius float64, // radius of thread
+	pitch float64, // thread to thread distance
+	external bool, // external (or internal) thread
+) (SDF2, error) {
+
+	theta := DtoR(30.0)
+	h := pitch / (2.0 * math.Tan(theta))
+	rMajor := radius
+	r0 := rMajor - (7.0/8.0)*h
+
+	iso := NewPolygon()
+	if external {
+		rRoot := (pitch / 8.0) / math.Cos(theta)
+		xOfs := (1.0 / 16.0) * pitch
+		iso.Add(pitch, 0)
+		iso.Add(pitch, r0+h)
+		iso.Add(pitch/2.0, r0).Smooth(rRoot, 5)
+		iso.Add(xOfs, rMajor)
+		iso.Add(-xOfs, rMajor)
+		iso.Add(-pitch/2.0, r0).Smooth(rRoot, 5)
+		iso.Add(-pitch, r0+h)
+		iso.Add(-pitch, 0)
+	} else {
+		rMinor := r0 + (1.0/4.0)*h
+		rCrest := (pitch / 16.0) / math.Cos(theta)
+		xOfs := (1.0 / 8.0) * pitch
+		iso.Add(pitch, 0)
+		iso.Add(pitch, rMinor)
+		iso.Add(pitch/2-xOfs, rMinor)
+		iso.Add(0, r0+h).Smooth(rCrest, 5)
+		iso.Add(-pitch/2+xOfs, rMinor)
+		iso.Add(-pitch, rMinor)
+		iso.Add(-pitch, 0)
+	}
+	return Polygon2D(iso.Vertices())
+}
+
+// ANSIButtressThread returns the 2d profile for an ANSI 45/7 buttress thread.
+// https://en.wikipedia.org/wiki/Buttress_thread
+// AMSE B1.9-1973
+//
+// The polygon spans x ∈ [-pitch, +pitch] and is evaluated by Screw3D within
+// the central pitch period x ∈ [-pitch/2, +pitch/2]. The extensions on both
+// sides reproduce the periodic thread structure (45° flank descending toward
+// next/previous valley) so the SDF is continuous across the SawTooth wrap
+// boundary at x = ±pitch/2 — required because buttress profiles are
+// asymmetric and a flat crest extension would create a wrap discontinuity
+// that breaks octree marching cubes.
+func ANSIButtressThread(
+	radius float64, // radius of thread
+	pitch float64, // thread to thread distance
+) (SDF2, error) {
+	t0 := math.Tan(DtoR(45.0))
+	t1 := math.Tan(DtoR(7.0))
+	b := 0.6 // thread engagement
+
+	h0 := pitch / (t0 + t1)
+	h1 := ((b / 2.0) * pitch) + (0.5 * h0)
+	hp := pitch / 2.0
+
+	xV := t0*h0 - hp       // valley root x
+	x7 := hp - (h0-h1)*t1  // 7° flank top x (start of right-side crest)
+	x45 := (h0-h1)*t0 - hp // 45° flank top x (end of left-side crest)
+	yEdge := radius + x45  // y on 45° flank at x=±pitch (slope -1, x45<0)
+
+	tp := NewPolygon()
+	tp.Add(pitch, 0)
+	tp.Add(pitch, yEdge)
+	tp.Add(x45+pitch, radius)
+	tp.Add(x7, radius)
+	tp.Add(xV, radius-h1).Smooth(0.0714*pitch, 5)
+	tp.Add(x45, radius)
+	tp.Add(x7-pitch, radius)
+	tp.Add(xV-pitch, radius-h1).Smooth(0.0714*pitch, 5)
+	tp.Add(-pitch, yEdge)
+	tp.Add(-pitch, 0)
+
+	return Polygon2D(tp.Vertices())
+}
+
+// PlasticButtressThread returns the 2d profile for a screw top style plastic buttress thread.
+// Similar to ANSI 45/7 - but with more corner rounding.
+// See ANSIButtressThread for an explanation of the 2-period polygon shape.
+func PlasticButtressThread(
+	radius float64, // radius of thread
+	pitch float64, // thread to thread distance
+) (SDF2, error) {
+	t0 := math.Tan(DtoR(45.0))
+	t1 := math.Tan(DtoR(7.0))
+	b := 0.6 // thread engagement
+
+	h0 := pitch / (t0 + t1)
+	h1 := ((b / 2.0) * pitch) + (0.5 * h0)
+	hp := pitch / 2.0
+
+	xV := t0*h0 - hp
+	x7 := hp - (h0-h1)*t1
+	x45 := (h0-h1)*t0 - hp
+	yEdge := radius + x45
+
+	tp := NewPolygon()
+	tp.Add(pitch, 0)
+	tp.Add(pitch, yEdge)
+	tp.Add(x45+pitch, radius).Smooth(0.15*pitch, 5)
+	tp.Add(x7, radius).Smooth(0.05*pitch, 5)
+	tp.Add(xV, radius-h1).Smooth(0.15*pitch, 5)
+	tp.Add(x45, radius).Smooth(0.15*pitch, 5)
+	tp.Add(x7-pitch, radius).Smooth(0.05*pitch, 5)
+	tp.Add(xV-pitch, radius-h1).Smooth(0.15*pitch, 5)
+	tp.Add(-pitch, yEdge)
+	tp.Add(-pitch, 0)
+
+	return Polygon2D(tp.Vertices())
+}
+
+//-----------------------------------------------------------------------------
+
+// ScrewSDF3 is a 3d screw form.
+type ScrewSDF3 struct {
+	thread      SDF2    // 2D thread profile
+	pitch       float64 // thread to thread distance
+	lead        float64 // distance per turn (starts * pitch)
+	leadOver2π  float64 // lead / (2π), precomputed for the helical correction
+	length      float64 // total length of screw
+	taper       float64 // thread taper angle
+	tanTaper    float64 // tan(taper), precomputed
+	tan2Taper   float64 // tan²(taper), precomputed
+	threadDepth float64 // radial extent of thread profile (max.Y - min.Y)
+	starts      int     // number of thread starts
+	bb          Box3    // bounding box
+}
+
+// Screw3D returns a screw SDF3.
+//
+// The thread SDF2 represents the 2D thread profile, which is helically swept
+// to form the screw. Screw3D's evaluation maps any 3D point back to a 2D
+// coordinate via SawTooth-wrapping the helical position into [-pitch/2,
+// +pitch/2] and queries thread.Evaluate at that point.
+//
+// For the resulting SDF to be continuous (and therefore usable with the
+// octree marching cubes renderer, which prunes "empty" cubes by SDF
+// magnitude), the thread profile must satisfy:
+//
+//	thread.Evaluate(+pitch/2, y) == thread.Evaluate(-pitch/2, y)  for all y
+//
+// at least up to floating-point tolerance. In other words, the profile must
+// describe the periodic shape such that what's just to the left of x=+pitch/2
+// matches what's just to the right of x=-pitch/2 — including any flanks,
+// crests, or other features near the boundary.
+//
+// This is automatic for symmetric profiles like ISO and ACME, where the
+// polygon is mirror-symmetric in x and the wrap point sits in a region of
+// constant curvature. For asymmetric profiles like buttress threads, the
+// polygon must be authored to extend past ±pitch/2 with the actual periodic
+// continuation (next/previous flank descending into next/previous valley)
+// rather than flat scaffolding. See ANSIButtressThread for an example.
+//
+// Screw3D verifies wrap continuity at construction time and returns an error
+// if the profile is discontinuous. The uniform renderer is forgiving of
+// discontinuities (it samples on a regular grid), but the octree renderer
+// will silently produce holes — fail-fast at construction is preferable.
+func Screw3D(
+	thread SDF2, // 2D thread profile
+	length float64, // length of screw
+	taper float64, // thread taper angle (radians)
+	pitch float64, // thread to thread distance
+	starts int, // number of thread starts (< 0 for left hand threads)
+) (SDF3, error) {
+	if thread == nil {
+		return nil, ErrMsg("thread == nil")
+	}
+	if length <= 0 {
+		return nil, ErrMsg("length <= 0")
+	}
+	if taper < 0 {
+		return nil, ErrMsg("taper < 0")
+	}
+	if taper >= Pi*0.5 {
+		return nil, ErrMsg("taper >= Pi * 0.5")
+	}
+	if pitch <= 0 {
+		return nil, ErrMsg("pitch <= 0")
+	}
+	if err := checkThreadWrapContinuous(thread, pitch); err != nil {
+		return nil, err
+	}
+	s := ScrewSDF3{}
+	s.thread = thread
+	s.pitch = pitch
+	s.length = length / 2
+	s.taper = taper
+	s.lead = -pitch * float64(starts)
+	s.leadOver2π = s.lead / Tau
+	s.tanTaper = math.Tan(taper)
+	s.tan2Taper = s.tanTaper * s.tanTaper
+	// Work out the bounding box.
+	// The max-y axis of the sdf2 bounding box is the radius of the thread.
+	bb := s.thread.BoundingBox()
+	s.threadDepth = bb.Max.Y - bb.Min.Y
+	r := bb.Max.Y
+	// add the taper increment
+	r += s.length * s.tanTaper
+	s.bb = Box3{v3.Vec{-r, -r, -s.length}, v3.Vec{r, r, s.length}}
+	return &s, nil
+}
+
+// checkThreadWrapContinuous asserts that the thread profile's SDF agrees at
+// x=+pitch/2 and x=-pitch/2 — the SawTooth wrap boundary — at sample radii
+// across the profile. A mismatch indicates the profile doesn't represent the
+// actual periodic shape near the wrap and will produce holes when rendered
+// with the octree marching cubes renderer.
+func checkThreadWrapContinuous(thread SDF2, pitch float64) error {
+	bb := thread.BoundingBox()
+	hp := pitch / 2
+	yMin, yMax := bb.Min.Y, bb.Max.Y
+	// Sample at several radii spanning the profile. The crest level is the
+	// region that matters most (the surface is there); valleys are inside the
+	// material so a small wrap mismatch deep below the crest is harmless,
+	// but anywhere near or above the surface a discontinuity is fatal for
+	// the octree's empty-cube check.
+	const tol = 1e-6
+	for _, frac := range []float64{0.5, 0.7, 0.9, 1.0} {
+		y := yMin + frac*(yMax-yMin)
+		dPlus := thread.Evaluate(v2.Vec{X: hp, Y: y})
+		dMinus := thread.Evaluate(v2.Vec{X: -hp, Y: y})
+		if math.Abs(dPlus-dMinus) > tol {
+			return ErrMsg(fmt.Sprintf(
+				"thread profile is discontinuous at the SawTooth wrap boundary "+
+					"x=±pitch/2 (pitch=%g): SDF(+pitch/2,%g)=%g vs SDF(-pitch/2,%g)=%g, "+
+					"|Δ|=%g. Asymmetric profiles must extend past ±pitch/2 with the "+
+					"actual periodic continuation; see ANSIButtressThread for an example.",
+				pitch, y, dPlus, y, dMinus, math.Abs(dPlus-dMinus)))
+		}
+	}
+	return nil
+}
+
+// Evaluate returns the minimum distance to a 3d screw form.
+func (s *ScrewSDF3) Evaluate(p v3.Vec) float64 {
+	// Map the 3d point back to the 2d thread profile space.
+	p0 := v2.Vec{}
+	// The distance from the z-axis maps to the 2d y-axis (radial coordinate).
+	r := math.Sqrt(p.X*p.X + p.Y*p.Y)
+	p0.Y = r
+	if s.taper != 0 {
+		// Adjust radial position for taper: the thread radius changes linearly
+		// with z. tanTaper converts the taper angle to a slope (rise/run).
+		p0.Y += p.Z * s.tanTaper
+	}
+	// The x/y angle and z-height map to the 2d x-axis: this unwraps the
+	// helical path into a linear coordinate along the thread pitch.
+	theta := math.Atan2(p.Y, p.X)
+	z := p.Z + s.lead*theta/Tau
+	p0.X = SawTooth(z, s.pitch)
+	// Get the thread profile distance in the 2d mapped space.
+	d0 := s.thread.Evaluate(p0)
+	// Create a region for the screw length.
+	d1 := math.Abs(p.Z) - s.length
+	// Intersect the thread with the length constraint.
+	d := math.Max(d0, d1)
+	// The 3D→2D mapping stretches distances: a unit step in 3D maps to
+	// a larger step in the unwrapped 2D space. Without correction, the
+	// SDF overestimates distances, causing the octree renderer's isEmpty
+	// check to skip cubes that contain the surface (producing holes).
+	//
+	// The Jacobian of the mapping (r,θ,z) → (p0.X, p0.Y) in physical
+	// cylindrical coordinates is:
+	//   J = | 0      k      1      |   where k = lead/(2πr)
+	//       | 1      0      tan(t) |   and t = taper angle
+	//
+	// The maximum stretch factor is the largest singular value of J,
+	// i.e. sqrt(λ_max) of J·Jᵀ:
+	//   | 1+k²     tan(t)      |
+	//   | tan(t)    1+tan²(t)  |
+	//
+	// When taper=0 this reduces to sqrt(1+k²).
+	//
+	// Dividing by this factor gives a correct distance bound (Lipschitz-1).
+	// Applied to the final intersection result rather than d0 alone to
+	// preserve end cap surface positions (d=0 stays at 0).
+	//
+	// The stretch factor varies with r (larger near the axis). The octree
+	// isEmpty check evaluates at cube centers, but the nearest surface may
+	// be at a smaller r where the stretch is larger. Using r reduced by the
+	// thread depth gives a conservative bound: the nearest surface point
+	// on the thread can be at most threadDepth closer to the axis.
+	if r > 0 {
+		rEff := r - s.threadDepth
+		if rEff < r*0.5 {
+			rEff = r * 0.5
+		}
+		k2 := s.leadOver2π / rEff
+		k2 *= k2
+		a := 1 + k2
+		c := 1 + s.tan2Taper
+		disc := (a-c)*(a-c) + 4*s.tan2Taper
+		stretch2 := (a + c + math.Sqrt(disc)) * 0.5
+		d /= math.Sqrt(stretch2)
+	}
+	return d
+}
+
+// BoundingBox returns the bounding box for a 3d screw form.
+func (s *ScrewSDF3) BoundingBox() Box3 {
+	return s.bb
+}
+
+//-----------------------------------------------------------------------------
