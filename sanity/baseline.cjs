@@ -1,0 +1,11 @@
+const assert = require('node:assert/strict');
+const {parse} = require('../.build/index.cjs');
+const html = '<product-card><template shadowrootmode="open"><section><slot name="price">Unknown</slot></section></template><b slot="price" id="cost">12 &amp; 34</b><i id="unassigned">private</i></product-card>';
+const root = parse(html), host = root.firstChild;
+assert.equal(host.querySelector('#cost').text, '12 & 34');
+assert.equal(host.querySelector('section').parentNode.rawTagName, 'template');
+assert.equal(host.querySelector('slot').text, 'Unknown');
+assert.match(host.structuredText, /Unknown/);
+assert.match(host.structuredText, /private/);
+assert.equal(root.toString(), html);
+console.log('SHADOW_BASELINE_OK physical-template fallback=Unknown light=12&34');

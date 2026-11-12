@@ -1,0 +1,30 @@
+{
+	"include": [
+		"./src/"
+	],
+	"compilerOptions": {
+		"module": "commonjs",
+		"target": "es6",
+		"lib": [
+			"esnext",
+			"dom"
+		],
+		"rootDir": "./src/",
+		"outDir": "./dist",
+		"noImplicitAny": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		"declaration": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"newLine": "lf",
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"pretty": true,
+		"skipDefaultLibCheck": true,
+		"skipLibCheck": true,
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"strictNullChecks": false
+	}
+}
