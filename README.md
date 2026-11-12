@@ -66,6 +66,42 @@ for (int i=0; i<wb->sheets.count; i++) { // sheets
 xls_close_WB(wb);
 ```
 
+Formula dependencies (BIFF8)
+---
+
+The cached value of a formula cell does not reveal which cells fed into it.
+After `xls_parseWorkSheet`, you can ask for the formula's static, direct
+references without evaluating anything:
+
+```c
+xls_formula_dependencies *deps = NULL;
+xls_formula_query_status st =
+    xls_get_formula_dependencies(work_sheet, row, col, &deps);
+if (st == XLS_FORMULA_QUERY_OK) {
+    for (DWORD i = 0; i < deps->count; i++) {
+        // zero-based, closed rectangle inside this worksheet
+        xls_formula_dependency *d = &deps->dependencies[i];
+        // rows d->row_first..d->row_last, cols d->col_first..d->col_last
+    }
+}
+xls_free_formula_dependencies(deps);
+```
+
+The returned rectangles are de-duplicated and sorted by
+`(row_first, col_first, row_last, col_last)`; overlapping but distinct
+rectangles are kept separate. The status distinguishes a plain cell
+(`XLS_FORMULA_QUERY_NOT_A_FORMULA`) from a legal formula with no static
+reference (`XLS_FORMULA_QUERY_NO_REFERENCES`). Shared formulas are resolved per
+usage cell, so relative `PtgRefN`/`PtgAreaN` offsets are interpreted against the
+queried cell rather than the shared anchor. A signed offset leaving the
+65536 x 256 sheet is reported as `XLS_FORMULA_QUERY_OUT_OF_BOUNDS` rather than
+wrapped. Constructs that cannot be resolved statically (defined names,
+external/3D references, `INDIRECT`/`OFFSET`, array constants, unknown tokens)
+return `XLS_FORMULA_QUERY_UNSUPPORTED` with an empty list, and malformed
+formula metadata returns `XLS_FORMULA_QUERY_CORRUPT`; in both cases the cached
+cell value stays available through the regular cell API. Each result is owned
+by the caller and released with `xls_free_formula_dependencies`.
+
 The library also includes a CLI tool for converting Excel files to CSV:
 
     ./xls2csv /path/to/file.xls

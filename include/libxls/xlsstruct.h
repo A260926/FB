@@ -80,6 +80,7 @@
 #define XLS_RECORD_STYLE        0x0293
 #define XLS_RECORD_FORMULA      0x0006
 #define XLS_RECORD_FORMULA_ALT  0x0406 // Apple Numbers bug
+#define XLS_RECORD_SHRFMLA      0x04BC // Shared formula definition
 #define XLS_RECORD_FORMAT       0x041E
 #define XLS_RECORD_BOF          0x0809
 
@@ -518,6 +519,7 @@ typedef struct xlsWorkSheet
     st_row		rows;
     xlsWorkBook *workbook;
     st_colinfo	colinfo;
+    void        *formula_deps;	// internal BIFF8 formula dependency metadata
 }
 xlsWorkSheet;
 

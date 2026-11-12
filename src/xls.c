@@ -52,6 +52,7 @@
 #include "../include/libxls/endian.h"
 #include "../include/libxls/locale.h"
 #include "../include/xls.h"
+#include "formula_deps.h"
 
 #ifndef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -1289,6 +1290,10 @@ xls_error_t xls_parseWorkSheet(xlsWorkSheet* pWS)
     }
 	// printf("size=%d fatpos=%d)\n", pWS->workbook->olestr->size, pWS->workbook->olestr->fatpos);
 
+    /* Per-worksheet BIFF8 formula dependency metadata. Collection never
+     * fails the parse: malformed formulas are tagged for lazy queries. */
+    xls_fd_init(pWS);
+
     if ((retval = xls_makeTable(pWS)) != LIBXLS_OK) {
         goto cleanup;
     }
@@ -1406,10 +1411,17 @@ xls_error_t xls_parseWorkSheet(xlsWorkSheet* pWS)
         case XLS_RECORD_RSTRING:
         case XLS_RECORD_FORMULA:
         case XLS_RECORD_FORMULA_ALT:
+            /* Capture the raw, little-endian record before xls_addCell()
+             * converts the multi-byte fields in place. */
+            xls_fd_record(pWS, tmp.id, tmp.size, buf, (DWORD)lastPos);
             if ((cell = xls_addCell(pWS, &tmp, buf)) == NULL) {
                 retval = LIBXLS_ERROR_PARSE;
                 goto cleanup;
             }
+            break;
+        case XLS_RECORD_SHRFMLA:
+            /* Shared formula definition; always follows its anchor FORMULA. */
+            xls_fd_record(pWS, tmp.id, tmp.size, buf, (DWORD)lastPos);
             break;
 		case XLS_RECORD_ARRAY:
 			if(formula_handler) formula_handler(tmp.id, tmp.size, buf);
@@ -1731,6 +1743,9 @@ void xls_close_WS(xlsWorkSheet* pWS)
     {
         free(pWS->colinfo.col);
     }
+
+    xls_fd_free(pWS);
+
     free(pWS);
 }
 

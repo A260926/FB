@@ -42,7 +42,8 @@ libxlsreader_la_SOURCES = \
 	src/endian.c \
 	src/locale.c \
 	src/ole.c \
-	src/xls.c
+	src/xls.c \
+	src/formula_deps.c
 
 libxlsreader_la_LDFLAGS = -version-info $(VERSION_INFO) $(LIBXLS_LIBS) @EXTRA_LDFLAGS@
 libxlsreader_la_CFLAGS = -Wall -Wextra -Wstrict-prototypes -Wno-unused-parameter -pedantic-errors
