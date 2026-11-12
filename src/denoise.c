@@ -41,6 +41,15 @@
 #include "rnn.h"
 #include "rnn_data.h"
 
+/* Test-only, read-only observation hook.  Compiled out of every normal
+ * build; see checks/rnn-observe.h and checks/build.sh. */
+#ifdef RNNOISE_TEST_OBSERVE
+#include "rnn-observe.h"
+typedef RNNOISE_TEST_OBS RNNOISE_TEST_FRAME;
+#define RNNOISE_FEATURES RNNOISE_TEST_OBS_FEATURES
+#define RNNOISE_STATE_MAX RNNOISE_TEST_OBS_STATE_MAX
+#endif
+
 #define FRAME_SIZE_SHIFT 2
 #define FRAME_SIZE (120<<FRAME_SIZE_SHIFT)
 #define WINDOW_SIZE (2*FRAME_SIZE)
@@ -472,8 +481,41 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in) {
   biquad(x, st->mem_hp_x, in, b_hp, a_hp, FRAME_SIZE);
   silence = compute_frame_features(st, X, P, Ex, Ep, Exp, features, x);
 
+#ifdef RNNOISE_TEST_OBSERVE
+  /* Read-only snapshot; nothing here writes back to *st or to the model.
+   * The frame index lives in a test-local side table keyed by instance,
+   * not in DenoiseState, so a normal build has exactly the same ABI and
+   * no extra state is attached to the object. */
+  RNNOISE_TEST_FRAME rec;
+  {
+    int i;
+    int frame_index = rnnoise_test_next_frame(st);
+    memset(&rec, 0, sizeof(rec));
+    rec.instance = st;
+    rec.frame = frame_index;
+    rec.executed = !silence;
+    for (i=0;i<RNNOISE_FEATURES;i++) rec.features[i] = features[i];
+    rec.in_size = st->rnn.model->vad_gru_size;
+    rec.noise_size = st->rnn.model->noise_gru_size;
+    rec.denoise_size = st->rnn.model->denoise_gru_size;
+    for (i=0;i<rec.in_size;i++) rec.vad_state_before[i] = st->rnn.vad_gru_state[i];
+    for (i=0;i<rec.noise_size;i++) rec.noise_state_before[i] = st->rnn.noise_gru_state[i];
+    for (i=0;i<rec.denoise_size;i++) rec.denoise_state_before[i] = st->rnn.denoise_gru_state[i];
+  }
+#endif
+
   if (!silence) {
     compute_rnn(&st->rnn, g, &vad_prob, features);
+#ifdef RNNOISE_TEST_OBSERVE
+    {
+      int i;
+      rec.vad_out = vad_prob;
+      for (i=0;i<NB_BANDS;i++) rec.gains_out[i] = g[i];
+      for (i=0;i<rec.in_size;i++) rec.vad_state_after[i] = st->rnn.vad_gru_state[i];
+      for (i=0;i<rec.noise_size;i++) rec.noise_state_after[i] = st->rnn.noise_gru_state[i];
+      for (i=0;i<rec.denoise_size;i++) rec.denoise_state_after[i] = st->rnn.denoise_gru_state[i];
+    }
+#endif
     pitch_filter(X, P, Ex, Ep, Exp, g);
     for (i=0;i<NB_BANDS;i++) {
       float alpha = .6f;
@@ -490,6 +532,15 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in) {
   }
 
   frame_synthesis(st, out, X);
+#ifdef RNNOISE_TEST_OBSERVE
+  if (!rec.executed) {
+    int i;
+    for (i=0;i<rec.in_size;i++) rec.vad_state_after[i] = rec.vad_state_before[i];
+    for (i=0;i<rec.noise_size;i++) rec.noise_state_after[i] = rec.noise_state_before[i];
+    for (i=0;i<rec.denoise_size;i++) rec.denoise_state_after[i] = rec.denoise_state_before[i];
+  }
+  rnnoise_test_observe(&rec);
+#endif
   return vad_prob;
 }
 
