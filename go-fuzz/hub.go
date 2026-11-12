@@ -37,8 +37,14 @@ type Hub struct {
 
 	ro atomic.Value // *ROData
 
-	maxCoverMu sync.Mutex
-	maxCover   atomic.Value // []byte
+	// coverMu guards pending and updates of maxCover.
+	// maxCover is the effective maximum of the confirmed corpusCover and
+	// all pending (speculative) reservations; it is kept separately from
+	// the confirmed corpus coverage so that unconfirmed reservations can
+	// be withdrawn without touching confirmed evidence.
+	coverMu  sync.Mutex
+	maxCover atomic.Value   // []byte
+	pending  map[Sig][]byte // bucketed cover reserved by unconfirmed candidates
 
 	initialTriage uint32
 
@@ -77,6 +83,7 @@ func newHub(metadata MetaData) *Hub {
 	procs := *flagProcs
 	hub := &Hub{
 		corpusSigs:  make(map[Sig]struct{}),
+		pending:     make(map[Sig][]byte),
 		triageC:     make(chan CoordinatorInput, procs),
 		newInputC:   make(chan Input, procs),
 		newCrasherC: make(chan NewCrasherArgs, procs),
@@ -220,52 +227,8 @@ func (hub *Hub) loop() {
 
 		case input := <-hub.newInputC:
 			// New interesting input from workers.
-			ro := hub.ro.Load().(*ROData)
-			if !compareCover(ro.corpusCover, input.cover) {
-				break
-			}
-			sig := hash(input.data)
-			if _, ok := hub.corpusSigs[sig]; ok {
-				break
-			}
-
-			// Passed deduplication, taking it.
-			if *flagV >= 2 {
-				log.Printf("hub received new input [%v]%v mine=%v", len(input.data), hash(input.data), input.mine)
-			}
-			hub.corpusSigs[sig] = struct{}{}
-			ro1 := new(ROData)
-			*ro1 = *ro
-			// Assign it the default score, but mark corpus for score recalculation.
-			hub.corpusStale = true
-			scoreSum := 0
-			if len(ro1.corpus) > 0 {
-				scoreSum = ro1.corpus[len(ro1.corpus)-1].runningScoreSum
-			}
-			input.score = defScore
-			input.runningScoreSum = scoreSum + defScore
-			ro1.corpus = append(ro1.corpus, input)
-			hub.updateMaxCover(input.cover)
-			ro1.corpusCover = makeCopy(ro.corpusCover)
-			hub.corpusCoverSize = updateMaxCover(ro1.corpusCover, input.cover)
-			if input.res > 0 || input.typ == execBootstrap {
-				ro1.verse = versifier.BuildVerse(ro.verse, input.data)
-			}
-			hub.ro.Store(ro1)
-			hub.corpusOrigins[input.typ]++
-
-			if input.mine {
-				if err := hub.coordinator.Call("Coordinator.NewInput", NewInputArgs{hub.id, input.data, uint64(input.depth)}, nil); err != nil {
-					log.Printf("new input call failed: %v, reconnecting to coordinator", err)
-					if err := hub.connect(); err != nil {
-						log.Printf("failed to connect to coordinator: %v, killing worker", err)
-						return
-					}
-				}
-			}
-
-			if *flagDumpCover {
-				dumpCover(filepath.Join(*flagWorkdir, "coverprofile"), ro.coverBlocks, ro.corpusCover)
+			if !hub.handleNewInput(input) {
+				return
 			}
 
 		case crash := <-hub.newCrasherC:
@@ -297,23 +260,126 @@ func (hub *Hub) loop() {
 	}
 }
 
-// Preliminary cover update to prevent new input thundering herd.
-// This function is synchronous to reduce latency.
-func (hub *Hub) updateMaxCover(cover []byte) bool {
-	oldMaxCover := hub.maxCover.Load().([]byte)
-	if !compareCover(oldMaxCover, cover) {
-		return false
+// handleNewInput integrates a triaged input into the corpus.
+// It returns false only if the hub loop should terminate.
+func (hub *Hub) handleNewInput(input Input) bool {
+	ro := hub.ro.Load().(*ROData)
+	if !compareCover(ro.corpusCover, input.cover) {
+		// Confirmed corpus coverage already includes everything this
+		// input offers; release its speculative reservation.
+		hub.withdrawPending(input.pendingSig)
+		return true
 	}
-	hub.maxCoverMu.Lock()
-	defer hub.maxCoverMu.Unlock()
-	oldMaxCover = hub.maxCover.Load().([]byte)
-	if !compareCover(oldMaxCover, cover) {
-		return false
+	sig := hash(input.data)
+	if _, ok := hub.corpusSigs[sig]; ok {
+		hub.withdrawPending(input.pendingSig)
+		return true
 	}
-	maxCover := makeCopy(oldMaxCover)
-	updateMaxCover(maxCover, cover)
-	hub.maxCover.Store(maxCover)
+
+	// Passed deduplication, taking it.
+	if *flagV >= 2 {
+		log.Printf("hub received new input [%v]%v mine=%v", len(input.data), hash(input.data), input.mine)
+	}
+	hub.corpusSigs[sig] = struct{}{}
+	ro1 := new(ROData)
+	*ro1 = *ro
+	// Assign it the default score, but mark corpus for score recalculation.
+	hub.corpusStale = true
+	scoreSum := 0
+	if len(ro1.corpus) > 0 {
+		scoreSum = ro1.corpus[len(ro1.corpus)-1].runningScoreSum
+	}
+	input.score = defScore
+	input.runningScoreSum = scoreSum + defScore
+	ro1.corpus = append(ro1.corpus, input)
+	ro1.corpusCover = makeCopy(ro.corpusCover)
+	hub.corpusCoverSize = updateMaxCover(ro1.corpusCover, input.cover)
+	if input.res > 0 || input.typ == execBootstrap {
+		ro1.verse = versifier.BuildVerse(ro.verse, input.data)
+	}
+	hub.ro.Store(ro1)
+	hub.corpusOrigins[input.typ]++
+	// The coverage is confirmed in corpusCover now; the speculative
+	// reservation is converted instead of being kept on the side.
+	hub.confirmPending(input.pendingSig)
+
+	if input.mine {
+		if err := hub.coordinator.Call("Coordinator.NewInput", NewInputArgs{hub.id, input.data, uint64(input.depth)}, nil); err != nil {
+			log.Printf("new input call failed: %v, reconnecting to coordinator", err)
+			if err := hub.connect(); err != nil {
+				log.Printf("failed to connect to coordinator: %v, killing worker", err)
+				return false
+			}
+		}
+	}
+
+	if *flagDumpCover {
+		dumpCover(filepath.Join(*flagWorkdir, "coverprofile"), ro.coverBlocks, ro.corpusCover)
+	}
 	return true
+}
+
+// notePending speculatively reserves coverage of an unconfirmed candidate
+// to prevent new input thundering herd. It reports whether cover contains
+// anything that is neither confirmed nor already reserved. This function
+// is synchronous to reduce latency.
+func (hub *Hub) notePending(sig Sig, cover []byte) bool {
+	hub.coverMu.Lock()
+	defer hub.coverMu.Unlock()
+	if hub.pending == nil {
+		hub.pending = make(map[Sig][]byte)
+	}
+	if _, ok := hub.pending[sig]; ok {
+		// The same unconfirmed candidate is already queued once.
+		return false
+	}
+	maxCover := hub.maxCover.Load().([]byte)
+	if !compareCover(maxCover, cover) {
+		return false
+	}
+	// Bucketing happens here, when the evidence is merged into the hub.
+	entry := make([]byte, CoverSize)
+	for i, v := range cover {
+		entry[i] = roundUpCover(v)
+	}
+	hub.pending[sig] = entry
+	newMax := makeCopy(maxCover)
+	updateMaxCover(newMax, cover)
+	hub.maxCover.Store(newMax)
+	return true
+}
+
+// withdrawPending releases the speculative reservation of a candidate that
+// failed validation (unstable, negative result, crash, or no longer new).
+// Confirmed corpus coverage and reservations of other candidates are kept.
+func (hub *Hub) withdrawPending(sig Sig) {
+	hub.coverMu.Lock()
+	defer hub.coverMu.Unlock()
+	if _, ok := hub.pending[sig]; !ok {
+		return
+	}
+	delete(hub.pending, sig)
+	hub.recomputeMaxCoverLocked()
+}
+
+// confirmPending converts the speculative reservation of an accepted input
+// into confirmed coverage (already reflected in corpusCover).
+func (hub *Hub) confirmPending(sig Sig) {
+	hub.coverMu.Lock()
+	defer hub.coverMu.Unlock()
+	delete(hub.pending, sig)
+	hub.recomputeMaxCoverLocked()
+}
+
+// recomputeMaxCoverLocked rebuilds the effective maxCover from the
+// confirmed corpusCover and the remaining pending reservations.
+func (hub *Hub) recomputeMaxCoverLocked() {
+	ro := hub.ro.Load().(*ROData)
+	maxCover := makeCopy(ro.corpusCover)
+	for _, entry := range hub.pending {
+		updateMaxCover(maxCover, entry)
+	}
+	hub.maxCover.Store(maxCover)
 }
 
 func (hub *Hub) updateScores() {

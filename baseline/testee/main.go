@@ -24,6 +24,12 @@ func target(data []byte) int {
 	case 'n':
 		dep.CoverTab[4] = 1
 		return -1
+	case 'N':
+		// Negative result only on the third observation.
+		dep.CoverTab[5] = 1
+		if calls['N'] == 3 {
+			return -1
+		}
 	case 'c':
 		if calls['c'] == 2 {
 			panic("local toy replay stopped")
@@ -31,6 +37,9 @@ func target(data []byte) int {
 		dep.CoverTab[6] = 1
 	case 'g':
 		dep.CoverTab[6] = 1
+	case 'G':
+		// Same block as 'g' but a different counter bucket.
+		dep.CoverTab[6] = 3
 	}
 	return 0
 }

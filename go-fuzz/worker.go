@@ -69,6 +69,10 @@ type Input struct {
 	favored         bool
 	score           int
 	runningScoreSum int
+	// pendingSig identifies the speculative maxCover reservation made for
+	// this input before it was triaged (zero if there was none). The hub
+	// uses it to confirm or withdraw the reservation.
+	pendingSig Sig
 }
 
 func workerMain() {
@@ -259,6 +263,54 @@ func (w *Worker) loop() {
 	w.shutdown()
 }
 
+// stableObs is coverage evidence combined from repeated executions of the
+// same input. Cover is the slot-wise minimum of the observed counters
+// (zeros participate), res is the maximum Fuzz result, execTime is the
+// minimum execution time. Cover is a private copy, not shared memory.
+type stableObs struct {
+	cover    []byte
+	res      int
+	execTime uint64
+}
+
+// observeStable executes data 3 times and combines the runs into stable
+// evidence. A crashed or hanged run is routed to the crasher queue and
+// invalidates the observation; a negative Fuzz result in any run also
+// invalidates it. There are no retries: exactly 3 executions happen.
+func (w *Worker) observeStable(data []byte, stat *uint64) (obs stableObs, ok bool) {
+	obs.execTime = 1 << 60
+	for i := 0; i < 3; i++ {
+		*stat++
+		res, ns, cover, _, output, crashed, hanged := w.coverBin.test(data)
+		if crashed {
+			// Inputs in corpus should not crash.
+			w.noteCrasher(data, output, hanged)
+			return stableObs{}, false
+		}
+		if res < 0 {
+			// User said to not add this input to corpus.
+			return stableObs{}, false
+		}
+		if obs.cover == nil {
+			obs.cover = make([]byte, CoverSize)
+			copy(obs.cover, cover)
+		} else {
+			for i, v := range cover {
+				if v < obs.cover[i] {
+					obs.cover[i] = v
+				}
+			}
+		}
+		if obs.res < res {
+			obs.res = res
+		}
+		if obs.execTime > ns {
+			obs.execTime = ns
+		}
+	}
+	return obs, true
+}
+
 // triageInput processes every new input.
 // It calculates per-input metrics like execution time, coverage mask,
 // and minimizes the input to the minimal input with the same coverage.
@@ -266,63 +318,70 @@ func (w *Worker) triageInput(input CoordinatorInput) {
 	if len(input.Data) > MaxInputSize {
 		input.Data = input.Data[:MaxInputSize]
 	}
+	// The input may carry a speculative maxCover reservation made when it
+	// was discovered; if we don't publish it, the reservation is released.
+	pendingSig := hash(input.Data)
+	obs, ok := w.observeStable(input.Data, &w.execs[execTriageInput])
+	if !ok {
+		w.hub.withdrawPending(pendingSig)
+		return
+	}
 	inp := Input{
-		data:     input.Data,
-		depth:    int(input.Prio),
-		typ:      input.Type,
-		execTime: 1 << 60,
+		data:       input.Data,
+		res:        obs.res,
+		depth:      int(input.Prio),
+		typ:        input.Type,
+		execTime:   obs.execTime,
+		pendingSig: pendingSig,
 	}
-	// Calculate min exec time, min coverage and max result of 3 runs.
-	for i := 0; i < 3; i++ {
-		w.execs[execTriageInput]++
-		res, ns, cover, _, output, crashed, hanged := w.coverBin.test(inp.data)
-		if crashed {
-			// Inputs in corpus should not crash.
-			w.noteCrasher(inp.data, output, hanged)
-			return
-		}
-		if inp.cover == nil {
-			inp.cover = make([]byte, CoverSize)
-			copy(inp.cover, cover)
-		} else {
-			for i, v := range cover {
-				x := inp.cover[i]
-				if v > x {
-					inp.cover[i] = v
-				}
-			}
-		}
-		if inp.res < res {
-			inp.res = res
-		}
-		if inp.execTime > ns {
-			inp.execTime = ns
-		}
-	}
+	finalObs := obs
 	if !input.Minimized {
 		inp.mine = true
 		ro := w.hub.ro.Load().(*ROData)
 		// When minimizing new inputs we don't pursue exactly the same coverage,
 		// instead we pursue just the "novelty" in coverage.
 		// Here we use corpusCover, because maxCover already includes the input coverage.
-		newCover, ok := findNewCover(ro.corpusCover, inp.cover)
+		newCover, ok := findNewCover(ro.corpusCover, obs.cover)
 		if !ok {
+			w.hub.withdrawPending(pendingSig)
 			return // covered by somebody else
 		}
-		inp.data = w.minimizeInput(inp.data, false, func(candidate, cover, output []byte, res int, crashed, hanged bool) bool {
-			if crashed {
-				w.noteCrasher(candidate, output, hanged)
+		// Every candidate accepted during minimization is backed by its own
+		// stable observation; the last accepted one matches what
+		// minimizeInput will return.
+		lastSig, lastObs := pendingSig, obs
+		inp.data = w.minimizeInput(inp.data, false, func(candidate []byte) bool {
+			candObs, ok := w.observeStable(candidate, &w.execs[execMinimizeInput])
+			if !ok {
 				return false
 			}
-			if inp.res != res || worseCover(newCover, cover) {
-				w.noteNewInput(candidate, cover, res, inp.depth+1, execMinimizeInput)
+			if candObs.res != obs.res || worseCover(newCover, candObs.cover) {
+				w.noteNewInput(candidate, candObs.cover, candObs.res, inp.depth+1, execMinimizeInput)
 				return false
 			}
+			lastSig, lastObs = hash(candidate), candObs
 			return true
 		})
+		if hash(inp.data) == lastSig {
+			finalObs = lastObs
+		} else {
+			// minimizeInput only returns the original input or the last
+			// accepted candidate, both fully observed. If that ever changes,
+			// obtain evidence for the exact bytes instead of publishing
+			// stale coverage.
+			finalObs, ok = w.observeStable(inp.data, &w.execs[execMinimizeInput])
+			if !ok {
+				w.hub.withdrawPending(pendingSig)
+				return
+			}
+		}
 	} else if !input.Smashed {
 		w.smash(inp.data, inp.depth)
 	}
+	// data, cover, res and execTime all describe the same final candidate.
+	inp.cover = finalObs.cover
+	inp.res = finalObs.res
+	inp.execTime = finalObs.execTime
 	inp.coverSize = 0
 	for _, v := range inp.cover {
 		if v != 0 {
@@ -336,7 +395,9 @@ func (w *Worker) triageInput(input CoordinatorInput) {
 func (w *Worker) processCrasher(crash NewCrasherArgs) {
 	// Hanging inputs can take very long time to minimize.
 	if !crash.Hanging {
-		crash.Data = w.minimizeInput(crash.Data, true, func(candidate, cover, output []byte, res int, crashed, hanged bool) bool {
+		crash.Data = w.minimizeInput(crash.Data, true, func(candidate []byte) bool {
+			w.execs[execMinimizeCrasher]++
+			_, _, _, _, output, crashed, hanged := w.coverBin.test(candidate)
 			if !crashed {
 				return false
 			}
@@ -353,15 +414,13 @@ func (w *Worker) processCrasher(crash NewCrasherArgs) {
 }
 
 // minimizeInput applies series of minimizing transformations to data
-// and asks pred whether the input is equivalent to the original one or not.
-func (w *Worker) minimizeInput(data []byte, canonicalize bool, pred func(candidate, cover, output []byte, result int, crashed, hanged bool) bool) []byte {
+// and asks accept whether a candidate is equivalent to the original one
+// or not. accept performs its own executions of the candidate, so any
+// evidence it relies on belongs to the candidate itself.
+func (w *Worker) minimizeInput(data []byte, canonicalize bool, accept func(candidate []byte) bool) []byte {
 	res := make([]byte, len(data))
 	copy(res, data)
 	start := time.Now()
-	stat := &w.execs[execMinimizeInput]
-	if canonicalize {
-		stat = &w.execs[execMinimizeCrasher]
-	}
 
 	// First, try to cut tail.
 	for n := 1024; n != 0; n /= 2 {
@@ -370,9 +429,7 @@ func (w *Worker) minimizeInput(data []byte, canonicalize bool, pred func(candida
 				return res
 			}
 			candidate := res[:len(res)-n]
-			*stat++
-			result, _, cover, _, output, crashed, hanged := w.coverBin.test(candidate)
-			if !pred(candidate, cover, output, result, crashed, hanged) {
+			if !accept(candidate) {
 				break
 			}
 			res = candidate
@@ -388,9 +445,7 @@ func (w *Worker) minimizeInput(data []byte, canonicalize bool, pred func(candida
 		candidate := tmp[:len(res)-1]
 		copy(candidate[:i], res[:i])
 		copy(candidate[i:], res[i+1:])
-		*stat++
-		result, _, cover, _, output, crashed, hanged := w.coverBin.test(candidate)
-		if !pred(candidate, cover, output, result, crashed, hanged) {
+		if !accept(candidate) {
 			continue
 		}
 		res = makeCopy(candidate)
@@ -406,9 +461,7 @@ func (w *Worker) minimizeInput(data []byte, canonicalize bool, pred func(candida
 			}
 			candidate := tmp[:len(res)-j+i]
 			copy(candidate[i:], res[j:])
-			*stat++
-			result, _, cover, _, output, crashed, hanged := w.coverBin.test(candidate)
-			if !pred(candidate, cover, output, result, crashed, hanged) {
+			if !accept(candidate) {
 				continue
 			}
 			res = makeCopy(candidate)
@@ -428,9 +481,7 @@ func (w *Worker) minimizeInput(data []byte, canonicalize bool, pred func(candida
 			candidate := tmp[:len(res)]
 			copy(candidate, res)
 			candidate[i] = '0'
-			*stat++
-			result, _, cover, _, output, crashed, hanged := w.coverBin.test(candidate)
-			if !pred(candidate, cover, output, result, crashed, hanged) {
+			if !accept(candidate) {
 				continue
 			}
 			res = makeCopy(candidate)
@@ -617,7 +668,10 @@ func (w *Worker) noteNewInput(data, cover []byte, res, depth int, typ execType) 
 		// User said to not add this input to corpus.
 		return
 	}
-	if w.hub.updateMaxCover(cover) {
+	// Speculatively reserve the coverage so that other workers don't
+	// queue the same blocks; the reservation is confirmed or withdrawn
+	// when the input is triaged.
+	if w.hub.notePending(hash(data), cover) {
 		w.triageQueue = append(w.triageQueue, CoordinatorInput{makeCopy(data), uint64(depth), typ, false, false})
 	}
 }
