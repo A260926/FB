@@ -84,11 +84,30 @@ public:
     bool ConnectOutToIn( int fromComponent, int fromOutput, Component::SCPtr const& toComponent, int toInput );
     bool ConnectOutToIn( int fromComponent, int fromOutput, int toComponent, int toInput );
 
+    // Delayed wire: the target input receives the source output produced `delay` ticks ago.
+    // Only meaningful in explicit delay mode (see SetExplicitDelayMode()). `delay` must be > 0.
+    bool ConnectOutToInDelayed( Component::SCPtr const& fromComponent, int fromOutput, Component::SCPtr const& toComponent,
+                                int toInput, int delay );
+    bool ConnectOutToInDelayed( Component::SCPtr const& fromComponent, int fromOutput, int toComponent, int toInput, int delay );
+    bool ConnectOutToInDelayed( int fromComponent, int fromOutput, Component::SCPtr const& toComponent, int toInput, int delay );
+    bool ConnectOutToInDelayed( int fromComponent, int fromOutput, int toComponent, int toInput, int delay );
+
     void DisconnectComponent( Component::SCPtr const& component );
     void DisconnectComponent( int componentIndex );
 
     void SetBufferCount( int bufferCount );
     int GetBufferCount() const;
+
+    /// Enables explicit delay scheduling. In this mode delayed wires are honoured literally and the
+    /// circuit must be prepared with PrepareTick() before every Tick(). Multi-buffering
+    /// (SetBufferCount() > 0) and the auto-tick thread are not supported.
+    void SetExplicitDelayMode( bool enabled );
+    bool GetExplicitDelayMode() const;
+
+    /// Validates and schedules the current wiring. Normal wires must form a DAG once the delayed
+    /// wires are removed; returns false and runs nothing if a cycle is found. On success all delay
+    /// histories are cleared and ticking restarts at tick 0. Must be re-run after any re-wiring.
+    bool PrepareTick();
 
     void Tick( Component::TickMode mode = Component::TickMode::Parallel );
 

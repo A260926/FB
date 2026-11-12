@@ -30,6 +30,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <internal/AutoTickThread.h>
 #include <internal/CircuitThread.h>
+#include <internal/ExplicitScheduler.h>
+
+#include <stdexcept>
 
 using namespace DSPatch;
 
@@ -51,6 +54,40 @@ public:
     std::vector<DSPatch::Component::SPtr> components;
 
     std::vector<CircuitThread::UPtr> circuitThreads;
+
+    // explicit delay mode state
+    struct NormalWire
+    {
+        DSPatch::Component::SPtr fromComponent;
+        int fromOutput;
+        DSPatch::Component::SPtr toComponent;
+        int toInput;
+    };
+
+    struct DelayedWire
+    {
+        DSPatch::Component::SPtr fromComponent;
+        int fromOutput;
+        DSPatch::Component::SPtr toComponent;
+        int toInput;
+        int delay;
+    };
+
+    bool explicitMode = false;
+    bool prepared = false;
+    std::vector<NormalWire> explicitWires;
+    std::vector<DelayedWire> delayedWires;
+    ExplicitScheduler explicitScheduler;
+
+    // Moves every legacy component wire into explicitWires (and disconnects it from the legacy
+    // feedback machinery), so connections made before enabling explicit mode keep working.
+    void HarvestLegacyWires();
+
+    // Re-connects the harvested normal wires through the legacy machinery and drops delayed wires.
+    void RestoreLegacyWires();
+
+    void InvalidatePreparation();
+    void RemoveExplicitConnections( int componentIndex );
 };
 
 }  // namespace internal
@@ -86,6 +123,8 @@ int Circuit::AddComponent( Component::SPtr const& component )
         p->components.emplace_back( component );
         ResumeAutoTick();
 
+        p->InvalidatePreparation();
+
         return (int)p->components.size() - 1;
     }
 
@@ -106,12 +145,21 @@ void Circuit::RemoveComponent( int componentIndex )
 {
     PauseAutoTick();
 
-    DisconnectComponent( componentIndex );
+    if ( p->explicitMode )
+    {
+        p->RemoveExplicitConnections( componentIndex );
+    }
+    else
+    {
+        DisconnectComponent( componentIndex );
+    }
 
     if ( !p->components.empty() )
     {
         p->components.erase( p->components.begin() + componentIndex );
     }
+
+    p->InvalidatePreparation();
 
     ResumeAutoTick();
 }
@@ -171,11 +219,137 @@ bool Circuit::ConnectOutToIn( int fromComponent, int fromOutput, int toComponent
         return false;
     }
 
+    if ( p->explicitMode )
+    {
+        auto& from = p->components[fromComponent];
+        auto& to = p->components[toComponent];
+
+        if ( fromOutput >= from->GetOutputCount() || toInput >= to->GetInputCount() )
+        {
+            return false;
+        }
+
+        // each input accepts a single wire: drop any wire already connected to this input
+        for ( auto it = p->explicitWires.begin(); it != p->explicitWires.end(); )
+        {
+            if ( it->toComponent == to && it->toInput == toInput )
+            {
+                it = p->explicitWires.erase( it );
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        for ( auto it = p->delayedWires.begin(); it != p->delayedWires.end(); )
+        {
+            if ( it->toComponent == to && it->toInput == toInput )
+            {
+                it = p->delayedWires.erase( it );
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        p->explicitWires.push_back( { from, fromOutput, to, toInput } );
+        p->InvalidatePreparation();
+        return true;
+    }
+
     PauseAutoTick();
     bool result = p->components[toComponent]->ConnectInput( p->components[fromComponent], fromOutput, toInput );
     ResumeAutoTick();
 
     return result;
+}
+
+bool Circuit::ConnectOutToInDelayed( Component::SCPtr const& fromComponent, int fromOutput,
+                                     Component::SCPtr const& toComponent, int toInput, int delay )
+{
+    int toComponentIndex;
+    int fromComponentIndex;
+    if ( p->FindComponent( fromComponent, fromComponentIndex ) && p->FindComponent( toComponent, toComponentIndex ) )
+    {
+        return ConnectOutToInDelayed( fromComponentIndex, fromOutput, toComponentIndex, toInput, delay );
+    }
+
+    return false;
+}
+
+bool Circuit::ConnectOutToInDelayed( Component::SCPtr const& fromComponent, int fromOutput, int toComponent,
+                                     int toInput, int delay )
+{
+    int fromComponentIndex;
+    if ( p->FindComponent( fromComponent, fromComponentIndex ) )
+    {
+        return ConnectOutToInDelayed( fromComponentIndex, fromOutput, toComponent, toInput, delay );
+    }
+
+    return false;
+}
+
+bool Circuit::ConnectOutToInDelayed( int fromComponent, int fromOutput, Component::SCPtr const& toComponent,
+                                     int toInput, int delay )
+{
+    int toComponentIndex;
+    if ( p->FindComponent( toComponent, toComponentIndex ) )
+    {
+        return ConnectOutToInDelayed( fromComponent, fromOutput, toComponentIndex, toInput, delay );
+    }
+
+    return false;
+}
+
+bool Circuit::ConnectOutToInDelayed( int fromComponent, int fromOutput, int toComponent, int toInput, int delay )
+{
+    if ( !p->explicitMode )
+    {
+        // delayed wires only exist in explicit delay mode
+        return false;
+    }
+
+    if ( delay <= 0 || (size_t)fromComponent >= p->components.size() || (size_t)toComponent >= p->components.size() )
+    {
+        return false;
+    }
+
+    auto& from = p->components[fromComponent];
+    auto& to = p->components[toComponent];
+
+    if ( fromOutput >= from->GetOutputCount() || toInput >= to->GetInputCount() )
+    {
+        return false;
+    }
+
+    // each input accepts a single wire: drop any wire already connected to this input
+    for ( auto it = p->explicitWires.begin(); it != p->explicitWires.end(); )
+    {
+        if ( it->toComponent == to && it->toInput == toInput )
+        {
+            it = p->explicitWires.erase( it );
+        }
+        else
+        {
+            ++it;
+        }
+    }
+    for ( auto it = p->delayedWires.begin(); it != p->delayedWires.end(); )
+    {
+        if ( it->toComponent == to && it->toInput == toInput )
+        {
+            it = p->delayedWires.erase( it );
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    p->delayedWires.push_back( { from, fromOutput, to, toInput, delay } );
+    p->InvalidatePreparation();
+    return true;
 }
 
 void Circuit::DisconnectComponent( Component::SCPtr const& component )
@@ -192,6 +366,14 @@ void Circuit::DisconnectComponent( int componentIndex )
 {
     PauseAutoTick();
 
+    if ( p->explicitMode )
+    {
+        p->RemoveExplicitConnections( componentIndex );
+        p->InvalidatePreparation();
+        ResumeAutoTick();
+        return;
+    }
+
     // remove component from _inputComponents and _inputWires
     p->components[componentIndex]->DisconnectAllInputs();
 
@@ -206,6 +388,13 @@ void Circuit::DisconnectComponent( int componentIndex )
 
 void Circuit::SetBufferCount( int bufferCount )
 {
+    if ( p->explicitMode && bufferCount != 0 )
+    {
+        // explicit delay mode only supports the un-pipelined (single buffer) configuration
+        throw std::runtime_error(
+            "DSPatch: explicit delay mode only supports SetBufferCount(0); disable explicit mode before multi-buffering" );
+    }
+
     if ( (size_t)bufferCount != p->circuitThreads.size() )
     {
         PauseAutoTick();
@@ -244,8 +433,98 @@ int Circuit::GetBufferCount() const
     return (int)p->circuitThreads.size();
 }
 
+void Circuit::SetExplicitDelayMode( bool enabled )
+{
+    if ( enabled == p->explicitMode )
+    {
+        return;
+    }
+
+    PauseAutoTick();
+
+    if ( enabled )
+    {
+        if ( !p->circuitThreads.empty() )
+        {
+            ResumeAutoTick();
+            throw std::runtime_error(
+                "DSPatch: cannot enable explicit delay mode while multi-buffering is active; call SetBufferCount(0) first" );
+        }
+
+        p->explicitMode = true;
+        p->HarvestLegacyWires();
+    }
+    else
+    {
+        p->explicitMode = false;
+        p->RestoreLegacyWires();
+    }
+
+    p->InvalidatePreparation();
+    ResumeAutoTick();
+}
+
+bool Circuit::GetExplicitDelayMode() const
+{
+    return p->explicitMode;
+}
+
+bool Circuit::PrepareTick()
+{
+    if ( !p->explicitMode )
+    {
+        return false;
+    }
+
+    std::vector<internal::ExplicitScheduler::NormalEdge> normalEdges;
+    std::vector<internal::ExplicitScheduler::DelayedEdge> delayedEdges;
+
+    normalEdges.reserve( p->explicitWires.size() );
+    for ( auto const& wire : p->explicitWires )
+    {
+        int fromIndex;
+        int toIndex;
+        if ( p->FindComponent( wire.fromComponent, fromIndex ) && p->FindComponent( wire.toComponent, toIndex ) )
+        {
+            normalEdges.push_back( { fromIndex, wire.fromOutput, toIndex, wire.toInput } );
+        }
+    }
+
+    delayedEdges.reserve( p->delayedWires.size() );
+    for ( auto const& wire : p->delayedWires )
+    {
+        int fromIndex;
+        int toIndex;
+        if ( p->FindComponent( wire.fromComponent, fromIndex ) && p->FindComponent( wire.toComponent, toIndex ) )
+        {
+            delayedEdges.push_back( { fromIndex, wire.fromOutput, toIndex, wire.toInput, wire.delay } );
+        }
+    }
+
+    if ( !p->explicitScheduler.Prepare( &p->components, normalEdges, delayedEdges ) )
+    {
+        // a zero-delay cycle remains: preparation fails and nothing may be processed
+        p->prepared = false;
+        return false;
+    }
+
+    p->prepared = true;
+    return true;
+}
+
 void Circuit::Tick( Component::TickMode mode )
 {
+    if ( p->explicitMode )
+    {
+        if ( !p->prepared )
+        {
+            throw std::runtime_error( "DSPatch: explicit delay circuit must be prepared with PrepareTick() before Tick()" );
+        }
+
+        p->explicitScheduler.Tick( mode );
+        return;
+    }
+
     // process in a single thread if this circuit has no threads
     // =========================================================
     if ( p->circuitThreads.empty() )
@@ -274,6 +553,12 @@ void Circuit::Tick( Component::TickMode mode )
 
 void Circuit::StartAutoTick( Component::TickMode mode )
 {
+    if ( p->explicitMode )
+    {
+        // the explicit delay scheduler is driven manually; the auto-tick thread is not wired to it
+        throw std::runtime_error( "DSPatch: auto-tick is not available in explicit delay mode; call Tick() manually" );
+    }
+
     if ( p->autoTickThread.IsStopped() )
     {
         p->autoTickThread.Start( this, mode );
@@ -349,4 +634,66 @@ bool internal::Circuit::FindComponent( DSPatch::Component::SCPtr const& componen
     }
 
     return false;
+}
+
+void internal::Circuit::InvalidatePreparation()
+{
+    prepared = false;
+}
+
+void internal::Circuit::HarvestLegacyWires()
+{
+    explicitWires.clear();
+    delayedWires.clear();
+
+    for ( auto& component : components )
+    {
+        // Component keeps its legacy wires privately; disconnect and re-record each one here
+        auto wires = component->GetLegacyWires_();
+        for ( auto const& wire : wires )
+        {
+            explicitWires.push_back( { wire.fromComponent, wire.fromOutput, component, wire.toInput } );
+        }
+        component->DisconnectAllInputs();
+    }
+}
+
+void internal::Circuit::RestoreLegacyWires()
+{
+    for ( auto const& wire : explicitWires )
+    {
+        wire.toComponent->ConnectInput( wire.fromComponent, wire.fromOutput, wire.toInput );
+    }
+
+    explicitWires.clear();
+    delayedWires.clear();
+}
+
+void internal::Circuit::RemoveExplicitConnections( int componentIndex )
+{
+    auto const& component = components[componentIndex];
+
+    for ( auto it = explicitWires.begin(); it != explicitWires.end(); )
+    {
+        if ( it->toComponent == component || it->fromComponent == component )
+        {
+            it = explicitWires.erase( it );
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    for ( auto it = delayedWires.begin(); it != delayedWires.end(); )
+    {
+        if ( it->toComponent == component || it->fromComponent == component )
+        {
+            it = delayedWires.erase( it );
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }

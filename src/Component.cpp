@@ -476,3 +476,43 @@ void internal::Component::DecRefs( int output )
         --ref[output].first;
     }
 }
+
+// =================================================================================================
+// Explicit delay-scheduler entry points (buffer 0 only, see internal::ExplicitScheduler)
+// =================================================================================================
+
+void Component::ExplicitClearInputs_()
+{
+    p->inputBuses[0].ClearAllValues();
+}
+
+void Component::ExplicitClearOutputs_()
+{
+    p->outputBuses[0].ClearAllValues();
+}
+
+void Component::ExplicitProcess_()
+{
+    Process_( p->inputBuses[0], p->outputBuses[0] );
+}
+
+SignalBus& Component::ExplicitInputBus_()
+{
+    return p->inputBuses[0];
+}
+
+SignalBus& Component::ExplicitOutputBus_()
+{
+    return p->outputBuses[0];
+}
+
+std::vector<Component::LegacyWire> Component::GetLegacyWires_() const
+{
+    std::vector<LegacyWire> wires;
+    wires.reserve( p->inputWires.size() );
+    for ( auto const& wire : p->inputWires )
+    {
+        wires.push_back( { wire.fromComponent, wire.fromOutput, wire.toInput } );
+    }
+    return wires;
+}

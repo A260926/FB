@@ -38,6 +38,8 @@ namespace DSPatch
 namespace internal
 {
 class Component;
+class Circuit;
+class ExplicitScheduler;
 }  // namespace internal
 
 /// Abstract base class for DSPatch components
@@ -87,6 +89,15 @@ public:
         Parallel
     };
 
+    /// Snapshot of a legacy (recursive-tick) input wire, used when a Circuit switches to explicit
+    /// delay mode so its existing connections can be adopted by the explicit scheduler.
+    struct LegacyWire
+    {
+        SPtr fromComponent;
+        int fromOutput;
+        int toInput;
+    };
+
     Component( ProcessOrder processOrder = ProcessOrder::InOrder );
     virtual ~Component();
 
@@ -115,6 +126,17 @@ protected:
     void SetOutputCount_( int outputCount, std::vector<std::string> const& outputNames = {} );
 
 private:
+    friend class internal::Circuit;
+    friend class internal::ExplicitScheduler;
+
+    // Buffer-0 entry points used by the Circuit's explicit delay scheduler.
+    void ExplicitClearInputs_();
+    void ExplicitClearOutputs_();
+    void ExplicitProcess_();
+    SignalBus& ExplicitInputBus_();
+    SignalBus& ExplicitOutputBus_();
+    std::vector<LegacyWire> GetLegacyWires_() const;
+
     std::unique_ptr<internal::Component> p;
 };
 

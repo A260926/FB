@@ -110,3 +110,4 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 add_subdirectory(docs)
 add_subdirectory(tests)
 add_subdirectory(tutorial)
+add_subdirectory(examples)

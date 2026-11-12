@@ -119,3 +119,4 @@ dspatch_dep = declare_dependency(
 
 subdir('tests')
 subdir('tutorial')
+subdir('examples')
