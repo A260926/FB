@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+- Support for name-keyed OpenType CFF1 fonts (CharstringType 2) with the
+  `.otf`/`OTTO` scaler type.  The new decoder lives in `schrift_cff.c` and
+  feeds cubic outlines into the existing CPU rasterizer, so no FreeType or
+  system font service is needed.  TrueType fonts and the public struct
+  layout are unchanged.
+- Cubic outlines are flattened in device space (tight bounding boxes are
+  computed from the real curve extrema), giving smooth rasters at large
+  scales.
+- Unsupported CFF constructs (CID fonts, CFF2, seac, Type 2 arithmetic /
+  storage operators) are rejected explicitly.
+
 ## v0.10.2
 - Support for Unicode codepoints outside of the Basic Multilingual Plane.
   Things like Hieroglyphs should work now! (Courtesy of `@flying-kestrel`!)

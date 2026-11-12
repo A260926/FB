@@ -25,8 +25,11 @@ Limitations
 -----------
 - Unicode is the only supported text encoding.
 - Support for most TrueType (.ttf) and certain OpenType (.otf) fonts.
-  No bitmap or PostScript fonts.
+  OpenType fonts with a name-keyed CFF1 table (Type 2 charstrings) are
+  supported as well; CID-keyed CFF, CFF2, font variations, seac and
+  bitmap fonts are not.
 - No hinting. Especially no auto-hinting as found in FreeType2.
+  CFF stem hints and hint masks are consumed but not applied.
 - No color emojis.
 
 Building

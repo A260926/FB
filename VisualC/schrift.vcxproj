@@ -100,9 +100,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\schrift.c" />
+    <ClCompile Include="..\schrift_cff.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\schrift.h" />
+    <ClInclude Include="..\schrift_cff.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

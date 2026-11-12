@@ -10,10 +10,11 @@ VERSION=0.10.2
 
 all: libschrift.a libschrift.pc demo stress
 
-libschrift.a: schrift.o
-	$(AR) rc $@ schrift.o
+libschrift.a: schrift.o schrift_cff.o
+	$(AR) rc $@ schrift.o schrift_cff.o
 	$(RANLIB) $@
 schrift.o: schrift.h
+schrift_cff.o: schrift_cff.c schrift_cff.h
 
 libschrift.pc: libschrift.pc.in
 	@sed 's,@prefix@,$(PREFIX),;s,@version@,$(VERSION),' libschrift.pc.in > $@
@@ -64,7 +65,7 @@ dist:
 	mkdir -p "schrift-$(VERSION)"
 	cp -R README.md LICENSE CHANGELOG.md TODO.md schrift.3 \
 		Makefile config.mk libschrift.pc.in \
-		schrift.c schrift.h demo.c stress.c \
+		schrift.c schrift_cff.c schrift_cff.h schrift.h demo.c stress.c \
 		resources/ util/ \
 		"schrift-$(VERSION)"
 	tar -cf - "schrift-$(VERSION)" | gzip -c > "schrift-$(VERSION).tar.gz"

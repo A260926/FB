@@ -200,12 +200,27 @@ The only text encoding that
 .Nm
 understands is Unicode.
 .sp
-Similarly, the only kind of font file supported right now
-are TrueType (.ttf) fonts (Some OpenType fonts might work too,
-as OpenType is effectively a superset of TrueType).
+.Nm
+reads TrueType (`
+.Dv glyf '
+') and name-keyed OpenType CFF1 (`
+.Dv CFF '
+', CharstringType 2) outlines.
+Both are fed through the same small CPU rasterizer, so no FreeType or
+system font service is required.
+CFF support is deliberately narrow: only single-font CFF1 with Type 2
+charstrings is accepted.
+CID-keyed fonts, CFF2, font variations, the deprecated
+.Pa seac
+construction and the Type 2 arithmetic / storage / random operators are
+rejected with an error rather than approximated.
+Cubic outlines are flattened in device space, so the raster stays smooth
+when scaled up.
 .sp
 As of v0.10.2, there is no support for right-to-left scripts
 .Em yet .
 .sp
 .Nm
 currently does not implement font hinting and probably never will.
+Stem hints and hint masks in CFF charstrings are parsed only far enough
+to consume their bytes correctly; they do not influence the raster.

@@ -18,9 +18,15 @@
     <ClCompile Include="..\schrift.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\schrift_cff.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\schrift.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\schrift_cff.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

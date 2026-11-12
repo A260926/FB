@@ -37,11 +37,13 @@
 #endif
 
 #include "schrift.h"
+#include "schrift_cff.h"
 
 #define SCHRIFT_VERSION "0.10.2"
 
 #define FILE_MAGIC_ONE             0x00010000
 #define FILE_MAGIC_TWO             0x74727565
+#define FILE_MAGIC_OTTO            0x4F54544F
 
 #define HORIZONTAL_KERNING         0x01
 #define MINIMUM_KERNING            0x02
@@ -75,11 +77,13 @@
 	if (var != var##_stack_) free(var);
 
 enum { SrcMapping, SrcUser };
+enum { FontTrueType, FontCFF };
 
 /* structs */
 typedef struct Point   Point;
 typedef struct Line    Line;
 typedef struct Curve   Curve;
+typedef struct Cubic   Cubic;
 typedef struct Cell    Cell;
 typedef struct Outline Outline;
 typedef struct Raster  Raster;
@@ -87,17 +91,21 @@ typedef struct Raster  Raster;
 struct Point { double x, y; };
 struct Line  { uint_least16_t beg, end; };
 struct Curve { uint_least16_t beg, end, ctrl; };
+struct Cubic { uint_least16_t beg, ctrl0, ctrl1, end; };
 struct Cell  { double area, cover; };
 
 struct Outline
 {
 	Point *points;
 	Curve *curves;
+	Cubic *cubics;
 	Line  *lines;
 	uint_least16_t numPoints;
 	uint_least16_t capPoints;
 	uint_least16_t numCurves;
 	uint_least16_t capCurves;
+	uint_least16_t numCubics;
+	uint_least16_t capCubics;
 	uint_least16_t numLines;
 	uint_least16_t capLines;
 };
@@ -117,10 +125,13 @@ struct SFT_Font
 	HANDLE         mapping;
 #endif
 	int            source;
-	
+	int            kind;
+
 	uint_least16_t unitsPerEm;
 	int_least16_t  locaFormat;
 	uint_least16_t numLongHmtx;
+
+	SFT_CFF        cff;
 };
 
 /* function declarations */
@@ -141,6 +152,7 @@ static int  init_outline(Outline *outl);
 static void free_outline(Outline *outl);
 static int  grow_points (Outline *outl);
 static int  grow_curves (Outline *outl);
+static int  grow_cubics (Outline *outl);
 static int  grow_lines  (Outline *outl);
 /* TTF parsing utilities */
 static inline int is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
@@ -154,6 +166,8 @@ static inline uint_least16_t getu16(SFT_Font *font, uint_fast32_t offset);
 static inline int_least16_t  geti16(SFT_Font *font, uint_fast32_t offset);
 static inline uint_least32_t getu32(SFT_Font *font, uint_fast32_t offset);
 static int gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset);
+static int gettable_size(SFT_Font *font, char tag[4],
+	uint_fast32_t *offset, uint_fast32_t *length);
 /* codepoint to glyph id translation */
 static int  cmap_fmt4(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, uint_fast32_t *glyph);
 static int  cmap_fmt6(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, uint_fast32_t *glyph);
@@ -169,10 +183,22 @@ static int  decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_
 static int  simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, Outline *outl);
 static int  compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl);
 static int  decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl);
+/* decoding CFF (Type 2 charstring) outlines */
+static int  cff_unit_bbox(const SFT *sft, uint_fast32_t glyph,
+	double unitBBox[4], int *hasOutline);
+static int  cff_device_bbox(const SFT *sft, const double unitBBox[4], int box[4]);
+static int  cff_append_point(Outline *outl, double x, double y, uint32_t *index);
+static int  cff_sink_point(void *user, double x, double y, uint32_t *index);
+static int  cff_sink_line(void *user, uint32_t begin, uint32_t end);
+static int  cff_sink_curve(void *user, uint32_t begin, uint32_t control1,
+	uint32_t control2, uint32_t end);
 /* tesselation */
 static int  is_flat(Outline *outl, Curve curve);
 static int  tesselate_curve(Curve curve, Outline *outl);
 static int  tesselate_curves(Outline *outl);
+static int  cubic_is_flat(Outline *outl, Cubic cubic);
+static int  tesselate_cubic(Cubic cubic, Outline *outl);
+static int  tesselate_cubics(Outline *outl);
 /* silhouette rasterization */
 static void draw_line(Raster buf, Point origin, Point goal);
 static void draw_lines(Outline *outl, Raster buf);
@@ -267,7 +293,6 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 {
 	int adv, lsb;
 	double xScale = sft->xScale / sft->font->unitsPerEm;
-	uint_fast32_t outline;
 	int bbox[4];
 
 	memset(metrics, 0, sizeof *metrics);
@@ -277,12 +302,25 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 	metrics->advanceWidth    = adv * xScale;
 	metrics->leftSideBearing = lsb * xScale + sft->xOffset;
 
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	if (!outline)
-		return 0;
-	if (glyph_bbox(sft, outline, bbox) < 0)
-		return -1;
+	if (sft->font->kind == FontCFF) {
+		double unitBBox[4];
+		int hasOutline;
+		if (cff_unit_bbox(sft, glyph, unitBBox, &hasOutline) < 0)
+			return -1;
+		if (!hasOutline)
+			return 0;
+		if (cff_device_bbox(sft, unitBBox, bbox) < 0)
+			return -1;
+	} else {
+		uint_fast32_t outline;
+		if (outline_offset(sft->font, glyph, &outline) < 0)
+			return -1;
+		if (!outline)
+			return 0;
+		if (glyph_bbox(sft, outline, bbox) < 0)
+			return -1;
+	}
+
 	metrics->minWidth  = bbox[2] - bbox[0] + 1;
 	metrics->minHeight = bbox[3] - bbox[1] + 1;
 	metrics->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
@@ -365,13 +403,48 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 	double transform[6];
 	int bbox[4];
 	Outline outl;
+	int isCFF = sft->font->kind == FontCFF;
+	double unitBBox[4];
+	int hasOutline = 0;
 
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	if (!outline)
-		return 0;
-	if (glyph_bbox(sft, outline, bbox) < 0)
-		return -1;
+	if (!isCFF) {
+		if (outline_offset(sft->font, glyph, &outline) < 0)
+			return -1;
+		if (!outline)
+			return 0;
+		if (glyph_bbox(sft, outline, bbox) < 0)
+			return -1;
+	}
+
+	memset(&outl, 0, sizeof outl);
+	if (init_outline(&outl) < 0)
+		 return -1;
+
+	if (isCFF) {
+		SFT_CFFSink sink;
+
+		/* Decode once: the exact bounding box comes from the same
+		 * interpretation that produces the outline. */
+		sink.user  = &outl;
+		sink.point = cff_sink_point;
+		sink.line  = cff_sink_line;
+		sink.curve = cff_sink_curve;
+		if (sfti_cff_decode(sft->font->memory,
+		                    (uint32_t) sft->font->size,
+		                    &sft->font->cff, (uint32_t) glyph,
+		                    &sink, unitBBox, &hasOutline) < 0)
+			goto failure;
+		if (!hasOutline)
+			goto done;
+		if (cff_device_bbox(sft, unitBBox, bbox) < 0)
+			goto failure;
+		if (bbox[2] <= bbox[0] || bbox[3] <= bbox[1])
+			goto done;
+	} else {
+		if (decode_outline(sft->font, outline, 0, &outl) < 0)
+			goto failure;
+	}
+
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
 	 * up with the (0, 0) point. */
@@ -386,16 +459,30 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 		transform[3] = +sft->yScale / sft->font->unitsPerEm;
 		transform[5] = sft->yOffset - bbox[1];
 	}
-	
-	memset(&outl, 0, sizeof outl);
-	if (init_outline(&outl) < 0)
-		goto failure;
 
-	if (decode_outline(sft->font, outline, 0, &outl) < 0)
-		goto failure;
-	if (render_outline(&outl, transform, image) < 0)
-		goto failure;
+	if (isCFF) {
+		/* Scale the font-unit points into device space before
+		 * tesselating, so the flattening tolerance is measured in
+		 * device pixels.  The cubics are flattened here, before
+		 * render_outline clips anything: control points may lie
+		 * outside the tight box, and clipping them first would
+		 * distort the curve.  The rasterizer then sees only
+		 * on-curve points. */
+		double identity[6] = { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
+		transform_points(outl.numPoints, outl.points, transform);
+		if (tesselate_cubics(&outl) < 0)
+			goto failure;
+		/* The curves are now plain line segments; render_outline must
+		 * not flatten them a second time. */
+		outl.numCubics = 0;
+		if (render_outline(&outl, identity, image) < 0)
+			goto failure;
+	} else {
+		if (render_outline(&outl, transform, image) < 0)
+			goto failure;
+	}
 
+done:
 	free_outline(&outl);
 	return 0;
 
@@ -528,13 +615,15 @@ unmap_file(SFT_Font *font)
 static int
 init_font(SFT_Font *font)
 {
-	uint_fast32_t scalerType, head, hhea;
+	uint_fast32_t scalerType, head, hhea, maxp, cff, cffSize;
+	uint_fast32_t numGlyphs = 0;
 
 	if (!is_safe_offset(font, 0, 12))
 		return -1;
 	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
-	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO &&
+	    scalerType != FILE_MAGIC_OTTO)
 		return -1;
 
 	if (gettable(font, "head", &head) < 0)
@@ -542,14 +631,33 @@ init_font(SFT_Font *font)
 	if (!is_safe_offset(font, head, 54))
 		return -1;
 	font->unitsPerEm = getu16(font, head + 18);
-	font->locaFormat = geti16(font, head + 50);
-	
+
 	if (gettable(font, "hhea", &hhea) < 0)
 		return -1;
 	if (!is_safe_offset(font, hhea, 36))
 		return -1;
 	font->numLongHmtx = getu16(font, hhea + 34);
 
+	/* maxp is optional for the TrueType path, but it is the authority on
+	 * the glyph count for the CFF path. */
+	if (gettable(font, "maxp", &maxp) == 0 &&
+	    is_safe_offset(font, maxp, 6)) {
+		numGlyphs = getu16(font, maxp + 4);
+	}
+
+	if (scalerType == FILE_MAGIC_OTTO) {
+		if (gettable_size(font, "CFF ", &cff, &cffSize) < 0)
+			return -1;
+		if (sfti_cff_init(font->memory, (uint32_t) font->size,
+		                  (uint32_t) cff, (uint32_t) cffSize,
+		                  (uint32_t) numGlyphs, &font->cff) < 0)
+			return -1;
+		font->kind = FontCFF;
+		return 0;
+	}
+
+	font->kind = FontTrueType;
+	font->locaFormat = geti16(font, head + 50);
 	return 0;
 }
 
@@ -613,6 +721,10 @@ init_outline(Outline *outl)
 	outl->capCurves = 64;
 	if (!(outl->curves = malloc(outl->capCurves * sizeof *outl->curves)))
 		return -1;
+	outl->numCubics = 0;
+	outl->capCubics = 64;
+	if (!(outl->cubics = malloc(outl->capCubics * sizeof *outl->cubics)))
+		return -1;
 	outl->numLines = 0;
 	outl->capLines = 64;
 	if (!(outl->lines = malloc(outl->capLines * sizeof *outl->lines)))
@@ -625,6 +737,7 @@ free_outline(Outline *outl)
 {
 	free(outl->points);
 	free(outl->curves);
+	free(outl->cubics);
 	free(outl->lines);
 }
 
@@ -674,6 +787,22 @@ grow_lines(Outline *outl)
 		return -1;
 	outl->capLines = (uint_least16_t) cap;
 	outl->lines    = mem;
+	return 0;
+}
+
+static int
+grow_cubics(Outline *outl)
+{
+	void *mem;
+	uint_fast16_t cap;
+	assert(outl->capCubics);
+	if (outl->capCubics > UINT16_MAX / 2)
+		return -1;
+	cap = (uint_fast16_t) (2U * outl->capCubics);
+	if (!(mem = reallocarray(outl->cubics, cap, sizeof *outl->cubics)))
+		return -1;
+	outl->capCubics = (uint_least16_t) cap;
+	outl->cubics    = mem;
 	return 0;
 }
 
@@ -769,6 +898,24 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 	if (!(match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)))
 		return -1;
 	*offset = getu32(font, (uint_fast32_t) ((uint8_t *) match - font->memory + 8));
+	return 0;
+}
+
+static int
+gettable_size(SFT_Font *font, char tag[4], uint_fast32_t *offset,
+	uint_fast32_t *length)
+{
+	void *match;
+	unsigned int numTables;
+	numTables = getu16(font, 4);
+	if (!is_safe_offset(font, 12, (uint_fast32_t) numTables * 16))
+		return -1;
+	if (!(match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)))
+		return -1;
+	*offset = getu32(font, (uint_fast32_t) ((uint8_t *) match - font->memory + 8));
+	*length = getu32(font, (uint_fast32_t) ((uint8_t *) match - font->memory + 12));
+	if (!is_safe_offset(font, *offset, *length))
+		return -1;
 	return 0;
 }
 
@@ -1354,6 +1501,92 @@ decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl
 	}
 }
 
+/* ---------------------------------------------------------------------- */
+/* CFF outline plumbing.  The interpreter in schrift_cff.c hands us points */
+/* and segments in font units; the points of a single glyph are collected  */
+/* here (in device space by the time tesselation happens) and then chased   */
+/* through the very same flattener and rasterizer as TrueType glyphs.       */
+
+static int
+cff_append_point(Outline *outl, double x, double y, uint32_t *index)
+{
+	if (outl->numPoints >= UINT16_MAX)
+		return -1;
+	if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+		return -1;
+	outl->points[outl->numPoints] = (Point) { x, y };
+	*index = outl->numPoints;
+	outl->numPoints++;
+	return 0;
+}
+
+static int
+cff_sink_point(void *user, double x, double y, uint32_t *index)
+{
+	return cff_append_point((Outline *) user, x, y, index);
+}
+
+static int
+cff_sink_line(void *user, uint32_t begin, uint32_t end)
+{
+	Outline *outl = user;
+	if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+		return -1;
+	outl->lines[outl->numLines++] =
+		(Line) { (uint_least16_t) begin, (uint_least16_t) end };
+	return 0;
+}
+
+static int
+cff_sink_curve(void *user, uint32_t begin, uint32_t control1,
+	uint32_t control2, uint32_t end)
+{
+	Outline *outl = user;
+	if (outl->numCubics >= outl->capCubics && grow_cubics(outl) < 0)
+		return -1;
+	outl->cubics[outl->numCubics++] = (Cubic) {
+		(uint_least16_t) begin, (uint_least16_t) control1,
+		(uint_least16_t) control2, (uint_least16_t) end
+	};
+	return 0;
+}
+
+/* Decodes a CFF glyph without producing geometry, solely to obtain the
+ * tight bounding box in font units. */
+static int
+cff_unit_bbox(const SFT *sft, uint_fast32_t glyph,
+	double unitBBox[4], int *hasOutline)
+{
+	return sfti_cff_decode(sft->font->memory, (uint32_t) sft->font->size,
+	                       &sft->font->cff, (uint32_t) glyph, NULL,
+	                       unitBBox, hasOutline);
+}
+
+/* The single place where a font-unit bounding box becomes the integer
+ * device-space rectangle shared by sft_gmetrics and sft_render. */
+static int
+cff_device_bbox(const SFT *sft, const double unitBBox[4], int box[4])
+{
+	double xScale = sft->xScale / sft->font->unitsPerEm;
+	double yScale = sft->yScale / sft->font->unitsPerEm;
+	double coords[4];
+	coords[0] = unitBBox[0] * xScale + sft->xOffset;
+	coords[1] = unitBBox[1] * yScale + sft->yOffset;
+	coords[2] = unitBBox[2] * xScale + sft->xOffset;
+	coords[3] = unitBBox[3] * yScale + sft->yOffset;
+	/* Guard against absurd sizes that would overflow the integer image. */
+	if (!(coords[0] > -2147483647.0 && coords[0] < 2147483647.0) ||
+	    !(coords[1] > -2147483647.0 && coords[1] < 2147483647.0) ||
+	    !(coords[2] > -2147483647.0 && coords[2] < 2147483647.0) ||
+	    !(coords[3] > -2147483647.0 && coords[3] < 2147483647.0))
+		return -1;
+	box[0] = (int) floor(coords[0]);
+	box[1] = (int) floor(coords[1]);
+	box[2] = (int) ceil (coords[2]);
+	box[3] = (int) ceil (coords[3]);
+	return 0;
+}
+
 /* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
 is_flat(Outline *outl, Curve curve)
@@ -1418,6 +1651,95 @@ tesselate_curves(Outline *outl)
 	unsigned int i;
 	for (i = 0; i < outl->numCurves; ++i) {
 		if (tesselate_curve(outl->curves[i], outl) < 0)
+			return -1;
+	}
+	return 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Cubic flattening.                                                       */
+
+/* The points are already in device space here, so the tolerance is a */
+/* genuine pixel distance, independent of the font size and the scale. */
+
+static int
+cubic_is_flat(Outline *outl, Cubic cubic)
+{
+	const double tolerance = 0.25;
+	Point p0 = outl->points[cubic.beg];
+	Point p1 = outl->points[cubic.ctrl0];
+	Point p2 = outl->points[cubic.ctrl1];
+	Point p3 = outl->points[cubic.end];
+	double dx1 = p0.x - 2.0 * p1.x + p2.x;
+	double dy1 = p0.y - 2.0 * p1.y + p2.y;
+	double dx2 = p1.x - 2.0 * p2.x + p3.x;
+	double dy2 = p1.y - 2.0 * p2.y + p3.y;
+	/* The maximum distance between the curve and the chord p0-p3 is
+	 * bounded by 3/4 of the larger of the two second differences. */
+	return fmax(dx1 * dx1 + dy1 * dy1, dx2 * dx2 + dy2 * dy2) <=
+	       (16.0 / 9.0) * tolerance * tolerance;
+}
+
+static int
+tesselate_cubic(Cubic cubic, Outline *outl)
+{
+#define STACK_SIZE 24
+	Cubic stack[STACK_SIZE];
+	unsigned int top = 0;
+	int failed = 0;
+	for (;;) {
+		if (cubic_is_flat(outl, cubic) || top >= STACK_SIZE) {
+			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0) {
+				failed = 1;
+				break;
+			}
+			outl->lines[outl->numLines++] =
+				(Line) { cubic.beg, cubic.end };
+			if (top == 0)
+				break;
+			cubic = stack[--top];
+		} else {
+			Point a, b, c, d, e, f;
+			uint32_t ia, ib, ic, id, ie;
+			Point p0 = outl->points[cubic.beg];
+			Point p1 = outl->points[cubic.ctrl0];
+			Point p2 = outl->points[cubic.ctrl1];
+			Point p3 = outl->points[cubic.end];
+			/* de Casteljau subdivision at t = 1/2. */
+			a = midpoint(p0, p1);
+			b = midpoint(p1, p2);
+			c = midpoint(p2, p3);
+			d = midpoint(a, b);
+			e = midpoint(b, c);
+			f = midpoint(d, e);
+			if (cff_append_point(outl, a.x, a.y, &ia) < 0 ||
+			    cff_append_point(outl, d.x, d.y, &id) < 0 ||
+			    cff_append_point(outl, f.x, f.y, &ie) < 0 ||
+			    cff_append_point(outl, e.x, e.y, &ib) < 0 ||
+			    cff_append_point(outl, c.x, c.y, &ic) < 0) {
+				failed = 1;
+				break;
+			}
+			stack[top++] = (Cubic) {
+				cubic.beg, (uint_least16_t) ia,
+				(uint_least16_t) id, (uint_least16_t) ie
+			};
+			cubic = (Cubic) {
+				(uint_least16_t) ie, (uint_least16_t) ib,
+				(uint_least16_t) ic, cubic.end
+			};
+		}
+	}
+	return failed ? -1 : 0;
+#undef STACK_SIZE
+}
+
+static int
+tesselate_cubics(Outline *outl)
+{
+	unsigned int i;
+	for (i = 0; i < outl->numCubics; ++i) {
+		if (tesselate_cubic(outl->cubics[i], outl) < 0)
 			return -1;
 	}
 	return 0;
@@ -1561,6 +1883,10 @@ render_outline(Outline *outl, double transform[6], SFT_Image image)
 	clip_points(outl->numPoints, outl->points, image.width, image.height);
 
 	if (tesselate_curves(outl) < 0) {
+		STACK_FREE(cells);
+		return -1;
+	}
+	if (tesselate_cubics(outl) < 0) {
 		STACK_FREE(cells);
 		return -1;
 	}
