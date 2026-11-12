@@ -44,6 +44,10 @@ const (
 	tokenPropertyListEnd   // ']'
 	tokenCollectionStart   // '('
 	tokenCollectionEnd     // ')'
+	tokenQuotedStart       // '<<'
+	tokenQuotedEnd         // '>>'
+	tokenAnnotationStart   // '{|'
+	tokenAnnotationEnd     // '|}'
 )
 
 const eof = -1
@@ -377,8 +381,42 @@ func lexAny(l *lexer) stateFn {
 		//l.ignore()
 		return lexBNode
 	case '<':
+		if l.peek() == '<' {
+			// start of quoted triple: '<<'
+			l.next() // consume second '<'
+			l.ignore()
+			l.emit(tokenQuotedStart)
+			return lexAny
+		}
 		l.ignore()
 		return lexIRI
+	case '>':
+		if l.peek() == '>' {
+			// end of quoted triple: '>>'
+			l.next() // consume second '>'
+			l.ignore()
+			l.emit(tokenQuotedEnd)
+			return lexAny
+		}
+		return l.errorf("unexpected character: %q", r)
+	case '{':
+		if l.peek() == '|' {
+			// start of annotation block: '{|'
+			l.next() // consume '|'
+			l.ignore()
+			l.emit(tokenAnnotationStart)
+			return lexAny
+		}
+		return l.errorf("unexpected character: %q", r)
+	case '|':
+		if l.peek() == '}' {
+			// end of annotation block: '|}'
+			l.next() // consume '}'
+			l.ignore()
+			l.emit(tokenAnnotationEnd)
+			return lexAny
+		}
+		return l.errorf("unexpected character: %q", r)
 	case 'a':
 		p := l.peek()
 		for _, a := range okAfterRDFType {

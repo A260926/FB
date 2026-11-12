@@ -163,6 +163,12 @@ func parseEnd(d *ttlDecoder) parseFn {
 		d.current.Obj = nil
 		d.pushContext()
 		return nil
+	case tokenAnnotationStart:
+		// Annotation block on the just emitted triple: '{|' has been consumed,
+		// parse the block and emit one triple per annotation property, with the
+		// quoted form of the annotated triple as subject.
+		d.parseAnnotation(d.current.Triple)
+		return parseEnd
 	case tokenPropertyListEnd:
 		d.popContext()
 		if d.peek().typ == tokenDot {
@@ -268,6 +274,8 @@ func parseSubject(d *ttlDecoder) parseFn {
 		d.current.Pred = IRI{str: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"}
 		d.current.Ctx = ctxColl
 		return parseObject
+	case tokenQuotedStart:
+		d.current.Subj = d.parseQuotedTriple()
 	case tokenError:
 		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
 	default:
@@ -318,33 +326,11 @@ func parseObject(d *ttlDecoder) parseFn {
 		d.bnodeN++
 		d.current.Obj = Blank{id: fmt.Sprintf("_:b%d", d.bnodeN)}
 	case tokenLiteral, tokenLiteral3:
-		val := tok.text
 		l := Literal{
-			str:      val,
+			str:      tok.text,
 			DataType: xsdString,
 		}
-		p := d.peek()
-		switch p.typ {
-		case tokenLangMarker:
-			d.next() // consume peeked token
-			tok = d.expect1As("literal language", tokenLang)
-			l.lang = tok.text
-			l.DataType = rdfLangString
-		case tokenDataTypeMarker:
-			d.next() // consume peeked token
-			tok = d.expectAs("literal datatype", tokenIRIAbs, tokenPrefixLabel)
-			switch tok.typ {
-			case tokenIRIAbs:
-				l.DataType = IRI{str: tok.text}
-			case tokenPrefixLabel:
-				ns, ok := d.ns[tok.text]
-				if !ok {
-					d.errorf("missing namespace for prefix: '%s'", tok.text)
-				}
-				tok2 := d.expect1As("IRI suffix", tokenIRISuffix)
-				l.DataType = IRI{str: ns + tok2.text}
-			}
-		}
+		d.parseLiteralSuffix(&l)
 		d.current.Obj = l
 	case tokenLiteralDouble:
 		d.current.Obj = Literal{
@@ -409,6 +395,8 @@ func parseObject(d *ttlDecoder) parseFn {
 		d.current.Ctx = ctxColl
 		d.pushContext()
 		return nil
+	case tokenQuotedStart:
+		d.current.Obj = d.parseQuotedTriple()
 	case tokenError:
 		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
 	default:
@@ -447,6 +435,228 @@ func (d *ttlDecoder) popContext() {
 // emit adds the current triple to the slice of completed triples.
 func (d *ttlDecoder) emit() {
 	d.triples = append(d.triples, d.current.Triple)
+}
+
+// parseQuotedTriple parses a quoted triple: the opening '<<' has allready been
+// consumed. It parses subject, predicate, object and the closing '>>', and
+// returns the QuotedTriple. Quoted triples can be nested, and can use the
+// currently effective prefixes, 'a', relative IRIs and literals - but not
+// blank node property lists or collections.
+//
+// The parser's current triple context is left untouched, and nothing is added
+// to the emit queue: a quoted triple is only referenced, not asserted.
+func (d *ttlDecoder) parseQuotedTriple() QuotedTriple {
+	var qt Triple
+	qt.Subj = d.parseQuotedSubject()
+	qt.Pred = d.parseQuotedPredicate()
+	qt.Obj = d.parseQuotedObject()
+	d.expect1As("quoted triple end (>>)", tokenQuotedEnd)
+	return QuotedTriple{triple: qt}
+}
+
+// parseQuotedSubject parses the subject of a quoted triple.
+func (d *ttlDecoder) parseQuotedSubject() Subject {
+	tok := d.next()
+	switch tok.typ {
+	case tokenIRIAbs:
+		return IRI{str: tok.text}
+	case tokenIRIRel:
+		return IRI{str: d.base.str + tok.text}
+	case tokenBNode:
+		return Blank{id: tok.text}
+	case tokenPrefixLabel:
+		return IRI{str: d.resolveLabel(tok)}
+	case tokenQuotedStart:
+		return d.parseQuotedTriple()
+	case tokenError:
+		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
+	}
+	d.errorf("%d:%d: unexpected %v as quoted triple subject", tok.line, tok.col, tok.typ)
+	return nil
+}
+
+// parseQuotedPredicate parses the predicate of a quoted triple.
+func (d *ttlDecoder) parseQuotedPredicate() Predicate {
+	tok := d.next()
+	switch tok.typ {
+	case tokenIRIAbs:
+		return IRI{str: tok.text}
+	case tokenIRIRel:
+		return IRI{str: d.base.str + tok.text}
+	case tokenRDFType:
+		return IRI{str: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"}
+	case tokenPrefixLabel:
+		return IRI{str: d.resolveLabel(tok)}
+	case tokenError:
+		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
+	}
+	d.errorf("%d:%d: unexpected %v as quoted triple predicate", tok.line, tok.col, tok.typ)
+	return nil
+}
+
+// parseQuotedObject parses the object of a quoted triple.
+func (d *ttlDecoder) parseQuotedObject() Object {
+	tok := d.next()
+	switch tok.typ {
+	case tokenIRIAbs:
+		return IRI{str: tok.text}
+	case tokenIRIRel:
+		return IRI{str: d.base.str + tok.text}
+	case tokenBNode:
+		return Blank{id: tok.text}
+	case tokenPrefixLabel:
+		return IRI{str: d.resolveLabel(tok)}
+	case tokenLiteral, tokenLiteral3:
+		l := Literal{
+			str:      tok.text,
+			DataType: xsdString,
+		}
+		d.parseLiteralSuffix(&l)
+		return l
+	case tokenLiteralDouble:
+		return Literal{str: tok.text, DataType: xsdDouble}
+	case tokenLiteralDecimal:
+		return Literal{str: tok.text, DataType: xsdDecimal}
+	case tokenLiteralInteger:
+		return Literal{str: tok.text, DataType: xsdInteger}
+	case tokenLiteralBoolean:
+		return Literal{str: tok.text, DataType: xsdBoolean}
+	case tokenQuotedStart:
+		return d.parseQuotedTriple()
+	case tokenError:
+		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
+	}
+	d.errorf("%d:%d: unexpected %v as quoted triple object", tok.line, tok.col, tok.typ)
+	return nil
+}
+
+// parseAnnotation parses an annotation block: '{|' has allready been consumed.
+// For each predicate/object pair in the block, a triple with the quoted form
+// of the annotated triple as subject is emitted. The block is closed by '|}'.
+// Each annotation object can itself carry a nested annotation block; the
+// annotated relation is always emitted before its annotations.
+func (d *ttlDecoder) parseAnnotation(annotated Triple) {
+	subj := QuotedTriple{triple: annotated}
+	for {
+		tok := d.next()
+		if tok.typ == tokenAnnotationEnd {
+			// empty annotation block, or trailing ';'
+			return
+		}
+		var pred Predicate
+		switch tok.typ {
+		case tokenIRIAbs:
+			pred = IRI{str: tok.text}
+		case tokenIRIRel:
+			pred = IRI{str: d.base.str + tok.text}
+		case tokenRDFType:
+			pred = IRI{str: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"}
+		case tokenPrefixLabel:
+			pred = IRI{str: d.resolveLabel(tok)}
+		case tokenError:
+			d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
+		default:
+			d.errorf("%d:%d: unexpected %v as annotation predicate", tok.line, tok.col, tok.typ)
+		}
+
+		// parse the annotation property's object list; each object can
+		// carry its own nested annotation block
+		for {
+			obj := d.parseAnnotationObject()
+			t := Triple{Subj: subj, Pred: pred, Obj: obj}
+			d.triples = append(d.triples, t)
+			if d.peek().typ == tokenAnnotationStart {
+				d.next() // consume '{|'
+				d.parseAnnotation(t)
+			}
+			if d.peek().typ != tokenComma {
+				break
+			}
+			d.next() // consume ','
+		}
+
+		switch d.peek().typ {
+		case tokenSemicolon:
+			d.next() // consume ';', more annotation properties follow
+		case tokenAnnotationEnd:
+			d.next() // consume '|}'
+			return
+		default:
+			d.expect1As("annotation block end (|})", tokenAnnotationEnd)
+		}
+	}
+}
+
+// parseAnnotationObject parses the object of an annotation property.
+func (d *ttlDecoder) parseAnnotationObject() Object {
+	tok := d.next()
+	switch tok.typ {
+	case tokenIRIAbs:
+		return IRI{str: tok.text}
+	case tokenIRIRel:
+		return IRI{str: d.base.str + tok.text}
+	case tokenBNode:
+		return Blank{id: tok.text}
+	case tokenAnonBNode:
+		d.bnodeN++
+		return Blank{id: fmt.Sprintf("_:b%d", d.bnodeN)}
+	case tokenPrefixLabel:
+		return IRI{str: d.resolveLabel(tok)}
+	case tokenLiteral, tokenLiteral3:
+		l := Literal{
+			str:      tok.text,
+			DataType: xsdString,
+		}
+		d.parseLiteralSuffix(&l)
+		return l
+	case tokenLiteralDouble:
+		return Literal{str: tok.text, DataType: xsdDouble}
+	case tokenLiteralDecimal:
+		return Literal{str: tok.text, DataType: xsdDecimal}
+	case tokenLiteralInteger:
+		return Literal{str: tok.text, DataType: xsdInteger}
+	case tokenLiteralBoolean:
+		return Literal{str: tok.text, DataType: xsdBoolean}
+	case tokenQuotedStart:
+		return d.parseQuotedTriple()
+	case tokenError:
+		d.errorf("%d:%d: syntax error: %v", tok.line, tok.col, tok.text)
+	}
+	d.errorf("%d:%d: unexpected %v as annotation object", tok.line, tok.col, tok.typ)
+	return nil
+}
+
+// parseLiteralSuffix parses the optional language tag or datatype IRI
+// following a literal, updating the Literal in place.
+func (d *ttlDecoder) parseLiteralSuffix(l *Literal) {
+	p := d.peek()
+	switch p.typ {
+	case tokenLangMarker:
+		d.next() // consume peeked token
+		tok := d.expect1As("literal language", tokenLang)
+		l.lang = tok.text
+		l.DataType = rdfLangString
+	case tokenDataTypeMarker:
+		d.next() // consume peeked token
+		tok := d.expectAs("literal datatype", tokenIRIAbs, tokenPrefixLabel)
+		switch tok.typ {
+		case tokenIRIAbs:
+			l.DataType = IRI{str: tok.text}
+		case tokenPrefixLabel:
+			l.DataType = IRI{str: d.resolveLabel(tok)}
+		}
+	}
+}
+
+// resolveLabel resolves a prefix label token and its following IRI suffix
+// against the declared namespaces.
+func (d *ttlDecoder) resolveLabel(tok token) string {
+	ns, ok := d.ns[tok.text]
+	if !ok {
+		d.errorf("missing namespace for prefix: '%s'", tok.text)
+	}
+	suf := d.expect1As("IRI suffix", tokenIRISuffix)
+	return ns + suf.text
 }
 
 // next returns the next token.

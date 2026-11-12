@@ -5,6 +5,27 @@
 //
 // The package adhers to the RDF data model as described in http://www.w3.org/TR/rdf11-concepts/.
 //
+// In addition to the three basic RDF term types (Blank node, IRI and Literal),
+// the package supports quoted triples (RDF-star): a QuotedTriple is a term
+// which quotes a Triple, and can itself be used as the subject or object of
+// another Triple. A quoted triple only refers to the statement it quotes; it
+// does not assert it. This makes it possible to attach metadata - such as
+// source, capture batch or confidence - to one concrete statement:
+//
+//    << <https://e/s> <https://e/p> <https://e/o> >> <https://e/src> "capture" .
+//
+// The N-Triples, N-Quads and Turtle decoders parse the quoted triple syntax
+// << s p o >>, including nested quoted triples, and the encoders serialize
+// quoted terms in the same explicit syntax. The Turtle decoder additionally
+// supports annotation blocks:
+//
+//    s p o {| ap ao ; bp bo |} .
+//
+// which is syntactic sugar for first stating s p o, and then one statement per
+// annotation property with << s p o >> as subject. The Turtle encoder does not
+// compress statements back into annotation blocks; it always emits the
+// explicit quoted triple syntax.
+//
 // Data structures
 //
 // TODO.
@@ -117,7 +138,8 @@ const (
 	formatInternal
 )
 
-// Term represents an RDF term. There are 3 term types: Blank node, Literal and IRI.
+// Term represents an RDF term. There are 4 term types: Blank node, Literal, IRI
+// and QuotedTriple.
 type Term interface {
 	// Serialize returns a string representation of the Term in the specified serialization format.
 	Serialize(Format) string
@@ -129,7 +151,7 @@ type Term interface {
 	Type() TermType
 }
 
-// TermType describes the type of RDF term: Blank node, IRI or Literal
+// TermType describes the type of RDF term: Blank node, IRI, Literal or QuotedTriple
 type TermType int
 
 // Exported RDF term types.
@@ -137,6 +159,7 @@ const (
 	TermBlank TermType = iota
 	TermIRI
 	TermLiteral
+	TermQuoted
 )
 
 // Blank represents a RDF blank node; an unqualified IRI with identified by a label.
@@ -396,6 +419,91 @@ func NewTypedLiteral(v string, dt IRI) Literal {
 	return Literal{str: v, DataType: dt}
 }
 
+// QuotedTriple represents a RDF triple quoted as a term (RDF-star). It can be
+// used as the Subject or Object of a Triple, and can itself contain quoted
+// triples as subject or object. A QuotedTriple only refers to the triple it
+// quotes; the quoted triple itself is not asserted.
+//
+// Note that although a QuotedTriple satisfies the Context interface (which has
+// the same shape as Subject), it is not a valid graph name; the N-Quads
+// decoder rejects quoted triples in the graph position.
+type QuotedTriple struct {
+	triple Triple
+}
+
+// NewQuotedTriple returns a QuotedTriple quoting the given Triple, or an error
+// if the Triple is not fit for quoting: the subject must be an IRI, Blank node
+// or another QuotedTriple, the predicate must be an IRI, and the object must
+// be an IRI, Blank node, Literal or QuotedTriple. Empty fields are an error.
+func NewQuotedTriple(t Triple) (QuotedTriple, error) {
+	if err := validateQuotedTriple(t); err != nil {
+		return QuotedTriple{}, err
+	}
+	return QuotedTriple{triple: t}, nil
+}
+
+// validateQuotedTriple validates that a Triple, and any quoted triples nested
+// within it, can be quoted.
+func validateQuotedTriple(t Triple) error {
+	switch s := t.Subj.(type) {
+	case IRI, Blank:
+	case QuotedTriple:
+		if err := validateQuotedTriple(s.triple); err != nil {
+			return err
+		}
+	case nil:
+		return errors.New("quoted triple: missing subject")
+	default:
+		return fmt.Errorf("quoted triple: invalid subject type %T", t.Subj)
+	}
+	switch t.Pred.(type) {
+	case IRI:
+	case nil:
+		return errors.New("quoted triple: missing predicate")
+	default:
+		return fmt.Errorf("quoted triple: invalid predicate type %T", t.Pred)
+	}
+	switch o := t.Obj.(type) {
+	case IRI, Blank, Literal:
+	case QuotedTriple:
+		if err := validateQuotedTriple(o.triple); err != nil {
+			return err
+		}
+	case nil:
+		return errors.New("quoted triple: missing object")
+	default:
+		return fmt.Errorf("quoted triple: invalid object type %T", t.Obj)
+	}
+	return nil
+}
+
+// Triple returns the quoted Triple.
+func (qt QuotedTriple) Triple() Triple {
+	return qt.triple
+}
+
+// validAsSubject denotes that a QuotedTriple is valid as a Triple's Subject.
+func (qt QuotedTriple) validAsSubject() {}
+
+// validAsObject denotes that a QuotedTriple is valid as a Triple's Object.
+func (qt QuotedTriple) validAsObject() {}
+
+// Type returns the TermType of a QuotedTriple.
+func (qt QuotedTriple) Type() TermType {
+	return TermQuoted
+}
+
+// String returns the quoted triple as it is stored, without any modifications.
+func (qt QuotedTriple) String() string {
+	return "<< " + qt.triple.Subj.String() + " " + qt.triple.Pred.String() + " " + qt.triple.Obj.String() + " >>"
+}
+
+// Serialize returns a string representation of a QuotedTriple in the explicit
+// quoted triple syntax: << subject predicate object >>.
+func (qt QuotedTriple) Serialize(f Format) string {
+	return "<< " + qt.triple.Subj.Serialize(f) + " " + qt.triple.Pred.Serialize(f) + " " + qt.triple.Obj.Serialize(f) + " >>"
+}
+
 // Subject interface distiguishes which Terms are valid as a Subject of a Triple.
 type Subject interface {
 	Term
@@ -439,6 +547,8 @@ func (t Triple) Serialize(f Format) string {
 		s = term.Serialize(f)
 	case Blank:
 		s = term.Serialize(f)
+	case QuotedTriple:
+		s = term.Serialize(f)
 	}
 	switch term := t.Obj.(type) {
 	case IRI:
@@ -446,6 +556,8 @@ func (t Triple) Serialize(f Format) string {
 	case Literal:
 		o = term.Serialize(f)
 	case Blank:
+		o = term.Serialize(f)
+	case QuotedTriple:
 		o = term.Serialize(f)
 	}
 	return fmt.Sprintf(
@@ -470,6 +582,8 @@ func (q Quad) Serialize(f Format) string {
 		s = term.Serialize(f)
 	case Blank:
 		s = term.Serialize(f)
+	case QuotedTriple:
+		s = term.Serialize(f)
 	}
 	switch term := q.Obj.(type) {
 	case IRI:
@@ -477,6 +591,8 @@ func (q Quad) Serialize(f Format) string {
 	case Literal:
 		o = term.Serialize(f)
 	case Blank:
+		o = term.Serialize(f)
+	case QuotedTriple:
 		o = term.Serialize(f)
 	}
 	switch term := q.Ctx.(type) {
@@ -495,9 +611,24 @@ func (q Quad) Serialize(f Format) string {
 }
 
 // TermsEqual returns true if two Terms are equal, or false if they are not.
+//
+// Quoted triples are compared by their content, recursively: two QuotedTriples
+// are equal when their quoted Triples are equal, regardless of object identity
+// or the surface syntax they were parsed from.
 func TermsEqual(a, b Term) bool {
 	if a.Type() != b.Type() {
 		return false
+	}
+	if a.Type() == TermQuoted {
+		qa, ok := a.(QuotedTriple)
+		if !ok {
+			return false
+		}
+		qb, ok := b.(QuotedTriple)
+		if !ok {
+			return false
+		}
+		return TriplesEqual(qa.triple, qb.triple)
 	}
 	return a.Serialize(formatInternal) == b.Serialize(formatInternal)
 }
