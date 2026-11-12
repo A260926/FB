@@ -86,6 +86,37 @@ WarcResponse response = new WarcResponse.Builder()
 writer.write(response);
 ```
 
+### Reassembling segmented records
+
+A large capture may be split across a first `response` or `resource` record and one or more `continuation` records,
+with other captures interleaved between them. A plain `WarcReader` hands back each physical segment separately, so the
+HTTP header of a response can even be cut in half. `WarcReassemblyReader` wraps a `WarcReader` and transparently joins
+the segments of each capture back into a single, independently readable `WarcRecord` (still a `WarcResponse` or
+`WarcResource`), preserving the first segment's type, Record-ID, date, target URI and business headers:
+
+```java
+Path tempDirectory = Files.createTempDirectory("jwarc-reassembly");
+try (WarcReader source = new WarcReader(Paths.get("capture.warc.gz"));
+     WarcReassemblyReader reader = new WarcReassemblyReader(source, tempDirectory)) {
+    Optional<WarcRecord> next;
+    while ((next = reader.next()).isPresent()) {
+        WarcRecord record = next.get();           // always a complete record
+        if (record instanceof WarcResponse) {
+            HttpResponse http = ((WarcResponse) record).http(); // works even if the split fell mid HTTP header
+            // ... http.payload() decodes the full, possibly chunked, body
+        }
+    }
+}
+```
+
+Records come back in the order in which each capture (or ordinary unsegmented record) first appeared; a chain that
+finishes early never overtakes an earlier capture that is still open. Reassembled bodies are spooled to temporary
+files inside the supplied directory using a fixed-size buffer, so very large captures and many chains waiting in
+parallel never have to fit into memory. `close()` deletes those temporary files (leaving any other files in the
+directory untouched) and closes the underlying reader. A malformed chain or a chain left unfinished at end of file
+raises an `IOException` that names the offending chain or segment; afterwards the reader is in a failed state and
+further calls to `next()` keep throwing.
+
 ### Filter expressions
 
 The [WarcFilter](https://www.javadoc.io/page/org.netpreserve/jwarc/latest/org/netpreserve/jwarc/WarcFilter.html) class
@@ -183,6 +214,17 @@ See the [javadoc](https://www.javadoc.io/doc/org.netpreserve/jwarc) for more det
              (long) writer.position();                 // byte position the next record will be written to
                     writer.write(record);              // adds a record to the WARC file
 ```
+
+### WarcReassemblyReader
+
+Reassembles a `response` or `resource` split across continuation records (WARC 1.0/1.1) into one logical record:
+
+```java
+new WarcReassemblyReader(reader, tempDirectory);  // wraps a WarcReader, spools bodies to tempDirectory
+   (Optional<WarcRecord>) reader.next();          // the next complete record (a WarcResponse stays a WarcResponse)
+                     reader.close();               // closes the source reader and deletes its temp files
+```
+
         
 ### Record types
 

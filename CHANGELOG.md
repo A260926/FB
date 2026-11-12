@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### New features
+
+- `WarcReassemblyReader`: reassembles a segmented `response` or `resource` record (WARC 1.0/1.1) and its interleaved
+  `continuation` records into a single logical record, spooling reassembled bodies to temporary files so that large
+  captures do not have to fit into memory
+
 ## 0.37.0 (2026-09-01)
 
 ### New features
