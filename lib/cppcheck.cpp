@@ -2034,6 +2034,7 @@ bool CppCheck::analyseWholeProgram()
             if (fi2) {
                 ctu.functionCalls.insert(ctu.functionCalls.end(), fi2->functionCalls.cbegin(), fi2->functionCalls.cend());
                 ctu.nestedCalls.insert(ctu.nestedCalls.end(), fi2->nestedCalls.cbegin(), fi2->nestedCalls.cend());
+                ctu.forwardCalls.insert(ctu.forwardCalls.end(), fi2->forwardCalls.cbegin(), fi2->forwardCalls.cend());
             }
         }
     }

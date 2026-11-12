@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -g0 -Wl,-search_paths_first -Wl,-headerpad_max_install_names -rdynamic "CMakeFiles/test-signalhandler.dir/test-signalhandler.cpp.o" "CMakeFiles/test-signalhandler.dir/__/__/cli/signalhandler.cpp.o" "CMakeFiles/test-signalhandler.dir/__/__/cli/stacktrace.cpp.o" -o ../../bin/test-signalhandler

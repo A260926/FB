@@ -42,6 +42,7 @@
 #include <functional>
 #include <iterator>
 #include <numeric> // std::accumulate
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -902,6 +903,9 @@ namespace
         /** unsafe pointer arithmetics */
         std::list<CTU::FileInfo::UnsafeUsage> unsafePointerArith;
 
+        /** array index usage computed from a function parameter */
+        std::list<CTU::FileInfo::ArrayIndexUsage> arrayIndexParamUsage;
+
         /** Convert data into xml string */
         std::string toString() const override
         {
@@ -910,6 +914,8 @@ namespace
                 xml = "    <array-index>\n" + CTU::toString(unsafeArrayIndex) + "    </array-index>\n";
             if (!unsafePointerArith.empty())
                 xml += "    <pointer-arith>\n" + CTU::toString(unsafePointerArith) + "    </pointer-arith>\n";
+            if (!arrayIndexParamUsage.empty())
+                xml += "    <array-index-param>\n" + CTU::toString(arrayIndexParamUsage) + "    </array-index-param>\n";
             return xml;
         }
     };
@@ -946,17 +952,147 @@ bool CheckBufferOverrun::isCtuUnsafePointerArith(const Settings &settings, const
     return isCtuUnsafeBufferUsage(settings, argtok, offset, 2);
 }
 
+/** @brief Match a subscript index expression of the form i, i+k, k+i or i-k where i is an integer parameter */
+static const Variable *getParamIndexVariable(const Token *idxTok, MathLib::bigint &indexOffset, const Settings &settings)
+{
+    indexOffset = 0;
+    const Token *vartok = nullptr;
+    if (idxTok->variable()) {
+        vartok = idxTok;
+    } else if (idxTok->str() == "+" || idxTok->str() == "-") {
+        const Token *op1 = idxTok->astOperand1();
+        const Token *op2 = idxTok->astOperand2();
+        if (!op1 || !op2)
+            return nullptr;
+        if (op1->variable() && op2->hasKnownIntValue()) {
+            vartok = op1;
+            indexOffset = op2->getKnownIntValue();
+            if (idxTok->str() == "-")
+                indexOffset = -indexOffset;
+        } else if (op2->variable() && idxTok->str() == "+" && op1->hasKnownIntValue()) {
+            vartok = op2;
+            indexOffset = op1->getKnownIntValue();
+        } else {
+            return nullptr;
+        }
+        if (!settings.platform.isIntValue(indexOffset))
+            return nullptr;
+    } else {
+        return nullptr;
+    }
+    const Variable *var = vartok->variable();
+    if (!var || !var->isArgument() || !var->valueType())
+        return nullptr;
+    if (var->valueType()->reference != Reference::None)
+        return nullptr;
+    if (var->valueType()->pointer != 0 || var->valueType()->type != ValueType::Type::INT)
+        return nullptr;
+    return var;
+}
+
+/** @brief Extract unconditional parameter indexed array accesses (p[i], p[i+k], p[k+i], p[i-k]) */
+static std::list<CTU::FileInfo::ArrayIndexUsage> getCtuParamIndexUsage(const Tokenizer &tokenizer, const Settings &settings)
+{
+    std::list<CTU::FileInfo::ArrayIndexUsage> ret;
+
+    const SymbolDatabase * const symbolDatabase = tokenizer.getSymbolDatabase();
+
+    for (const Scope &scope : symbolDatabase->scopeList) {
+        if (!scope.isExecutable() || scope.type != ScopeType::eFunction || !scope.function)
+            continue;
+        const Function * const function = scope.function;
+
+        // Collect candidate parameters: pointers to char/int and plain ints
+        std::map<int, const Variable *> pointerArgs;
+        std::map<int, const Variable *> intArgs;
+        for (int argnr = 0; argnr < function->argCount(); ++argnr) {
+            const Variable * const argvar = function->getArgumentVar(argnr);
+            if (!argvar || !argvar->valueType() || argvar->valueType()->reference != Reference::None)
+                continue;
+            const ValueType *vt = argvar->valueType();
+            if (vt->pointer == 1 && (vt->type == ValueType::Type::CHAR || vt->type == ValueType::Type::INT) && vt->typeSize(settings.platform) > 0)
+                pointerArgs[argnr] = argvar;
+            else if (vt->pointer == 0 && vt->type == ValueType::Type::INT)
+                intArgs[argnr] = argvar;
+        }
+        if (pointerArgs.empty() || intArgs.empty())
+            continue;
+
+        std::set<std::pair<int, int>> recorded;
+        for (const Token *tok = scope.bodyStart; tok != scope.bodyEnd; tok = tok->next()) {
+            if (tok->str() != "[")
+                continue;
+            const Token *arrayTok = tok->astOperand1();
+            if (!arrayTok || !arrayTok->variable())
+                continue;
+            if (tok->astParent() && tok->astParent()->str() == "[" && tok->astParent()->astOperand1() == tok)
+                continue; // multi-dimensional subscript
+            int pointerArgNr = -1;
+            for (const auto &p : pointerArgs) {
+                if (p.second == arrayTok->variable()) {
+                    pointerArgNr = p.first;
+                    break;
+                }
+            }
+            if (pointerArgNr < 0)
+                continue;
+            const Token *idxTok = tok->astOperand2();
+            if (!idxTok)
+                continue;
+            MathLib::bigint indexOffset = 0;
+            const Variable *indexVar = getParamIndexVariable(idxTok, indexOffset, settings);
+            if (!indexVar)
+                continue;
+            int indexArgNr = -1;
+            for (const auto &p : intArgs) {
+                if (p.second == indexVar) {
+                    indexArgNr = p.first;
+                    break;
+                }
+            }
+            if (indexArgNr < 0)
+                continue;
+            if (recorded.find(std::make_pair(pointerArgNr, indexArgNr)) != recorded.end())
+                continue;
+            // The access must be unconditional
+            bool conditional = false;
+            for (const Scope *s = tok->scope(); s && s != &scope; s = s->nestedIn) {
+                if (s->type != ScopeType::eUnconditional) {
+                    conditional = true;
+                    break;
+                }
+            }
+            if (conditional)
+                continue;
+            // Neither parameter may have been changed before the access
+            if (isVariableChanged(scope.bodyStart->next(), arrayTok, 0, pointerArgs[pointerArgNr]->declarationId(), false, settings))
+                continue;
+            if (isVariableChanged(scope.bodyStart->next(), arrayTok, 0, indexVar->declarationId(), false, settings))
+                continue;
+            recorded.insert(std::make_pair(pointerArgNr, indexArgNr));
+            const MathLib::bigint elementSize = pointerArgs[pointerArgNr]->valueType()->typeSize(settings.platform);
+            ret.emplace_back(CTU::getFunctionId(tokenizer, function), pointerArgNr + 1, indexArgNr + 1,
+                             pointerArgs[pointerArgNr]->name(), CTU::FileInfo::Location(tokenizer, arrayTok),
+                             indexOffset, elementSize);
+        }
+    }
+
+    return ret;
+}
+
 /** @brief Parse current TU and extract file info */
 Check::FileInfo *CheckBufferOverrun::getFileInfo(const Tokenizer &tokenizer, const Settings &settings, const std::string& /*currentConfig*/) const
 {
     const std::list<CTU::FileInfo::UnsafeUsage> &unsafeArrayIndex = CTU::getUnsafeUsage(tokenizer, settings, isCtuUnsafeArrayIndex);
     const std::list<CTU::FileInfo::UnsafeUsage> &unsafePointerArith = CTU::getUnsafeUsage(tokenizer, settings, isCtuUnsafePointerArith);
-    if (unsafeArrayIndex.empty() && unsafePointerArith.empty()) {
+    const std::list<CTU::FileInfo::ArrayIndexUsage> &arrayIndexParamUsage = getCtuParamIndexUsage(tokenizer, settings);
+    if (unsafeArrayIndex.empty() && unsafePointerArith.empty() && arrayIndexParamUsage.empty()) {
         return nullptr;
     }
     auto *fileInfo = new MyFileInfo(tokenizer.list.getFiles()[0]);
     fileInfo->unsafeArrayIndex = unsafeArrayIndex;
     fileInfo->unsafePointerArith = unsafePointerArith;
+    fileInfo->arrayIndexParamUsage = arrayIndexParamUsage;
     return fileInfo;
 }
 
@@ -965,6 +1101,7 @@ Check::FileInfo * CheckBufferOverrun::loadFileInfoFromXml(const tinyxml2::XMLEle
     // cppcheck-suppress shadowFunction - TODO: fix this
     const std::string arrayIndex("array-index");
     const std::string pointerArith("pointer-arith");
+    const std::string arrayIndexParam("array-index-param");
 
     auto *fileInfo = new MyFileInfo;
     for (const tinyxml2::XMLElement *e = xmlElement->FirstChildElement(); e; e = e->NextSiblingElement()) {
@@ -973,9 +1110,11 @@ Check::FileInfo * CheckBufferOverrun::loadFileInfoFromXml(const tinyxml2::XMLEle
             fileInfo->unsafeArrayIndex = CTU::loadUnsafeUsageListFromXml(e);
         else if (name == pointerArith)
             fileInfo->unsafePointerArith = CTU::loadUnsafeUsageListFromXml(e);
+        else if (name == arrayIndexParam)
+            fileInfo->arrayIndexParamUsage = CTU::loadArrayIndexUsageListFromXml(e);
     }
 
-    if (fileInfo->unsafeArrayIndex.empty() && fileInfo->unsafePointerArith.empty()) {
+    if (fileInfo->unsafeArrayIndex.empty() && fileInfo->unsafePointerArith.empty() && fileInfo->arrayIndexParamUsage.empty()) {
         delete fileInfo;
         return nullptr;
     }
@@ -1005,6 +1144,8 @@ bool CheckBufferOverrun::analyseWholeProgram(const CTU::FileInfo &ctu, const std
             foundErrors |= analyseWholeProgram1(callsMap, unsafeUsage, 1, errorLogger, settings.maxCtuDepth, fi->file0);
         for (const CTU::FileInfo::UnsafeUsage &unsafeUsage : fi->unsafePointerArith)
             foundErrors |= analyseWholeProgram1(callsMap, unsafeUsage, 2, errorLogger, settings.maxCtuDepth, fi->file0);
+        for (const CTU::FileInfo::ArrayIndexUsage &arrayIndexUsage : fi->arrayIndexParamUsage)
+            foundErrors |= analyseWholeProgramParamIndex(ctu, arrayIndexUsage, errorLogger, settings, fi->file0);
     }
     return foundErrors;
 }
@@ -1047,6 +1188,321 @@ bool CheckBufferOverrun::analyseWholeProgram1(const std::map<std::string, std::l
                                     Severity::error,
                                     errmsg,
                                     errorId,
+                                    cwe, Certainty::normal);
+    errorLogger.reportErr(errorMessage);
+
+    return true;
+}
+
+//---------------------------------------------------------------------------
+// CTU parameter index analysis: a function unconditionally accesses a pointer
+// parameter at an index computed from an integer parameter. The buffer size
+// and the integer value must be determined by the same call at every level of
+// the call chain.
+//---------------------------------------------------------------------------
+
+namespace {
+    struct CtuParamArgValues {
+        std::map<int, const CTU::FileInfo::FunctionCall *> values;
+        std::set<int> conflicts;
+
+        void add(int argnr, const CTU::FileInfo::FunctionCall *functionCall)
+        {
+            if (conflicts.find(argnr) != conflicts.end())
+                return;
+            const auto it = values.find(argnr);
+            if (it == values.end()) {
+                values.emplace(argnr, functionCall);
+            } else if (it->second->callArgValue.value != functionCall->callArgValue.value) {
+                // conflicting facts about the same argument of the same call: stay conservative
+                values.erase(it);
+                conflicts.insert(argnr);
+            }
+        }
+
+        const CTU::FileInfo::FunctionCall *find(int argnr) const
+        {
+            if (conflicts.find(argnr) != conflicts.end())
+                return nullptr;
+            const auto it = values.find(argnr);
+            return it == values.end() ? nullptr : it->second;
+        }
+    };
+
+    /** All argument bindings that belong to the same call */
+    struct CtuParamCallSite {
+        const CTU::FileInfo::CallBase *representative = nullptr;
+        CtuParamArgValues bufferSizeArgs;
+        CtuParamArgValues knownIntArgs;
+        std::map<int, const CTU::FileInfo::ForwardCall *> forwardedArgs;
+    };
+
+    struct CtuParamChainEntry {
+        const CTU::FileInfo::CallBase *call;
+        std::string info;
+    };
+
+    struct CtuParamIndexResult {
+        MathLib::bigint bufferSize{};
+        MathLib::bigint index{};
+        const CTU::FileInfo::FunctionCall *bufferCall = nullptr;
+        const CTU::FileInfo::FunctionCall *indexCall = nullptr;
+        std::vector<CtuParamChainEntry> chain; // innermost call first
+    };
+
+    static std::string bufferArgInfo(nonneg int argnr, MathLib::bigint bufferSize)
+    {
+        return std::to_string(argnr) + getOrdinalText(argnr) + " argument is a buffer of " + MathLib::toString(bufferSize) + " bytes";
+    }
+
+    static std::string indexArgInfo(nonneg int argnr, MathLib::bigint value)
+    {
+        return std::to_string(argnr) + getOrdinalText(argnr) + " argument is " + MathLib::toString(value);
+    }
+
+    static std::string forwardedArgInfo(nonneg int argnr)
+    {
+        return std::to_string(argnr) + getOrdinalText(argnr) + " argument is forwarded";
+    }
+
+    class CtuParamIndexSolver {
+    public:
+        CtuParamIndexSolver(const CTU::FileInfo &ctu, const Settings &settings)
+            : mSettings(settings)
+        {
+            for (const CTU::FileInfo::FunctionCall &fc : ctu.functionCalls) {
+                if (fc.warning || fc.callArgValue.unknownFunctionReturn != ValueFlow::Value::UnknownFunctionReturn::no)
+                    continue;
+                const bool isBufferSize = fc.callValueType == ValueFlow::Value::ValueType::BUFFER_SIZE && fc.callArgValue.value >= 0;
+                const bool isKnownInt = fc.callValueType == ValueFlow::Value::ValueType::INT && fc.callArgValueKnown;
+                if (!isBufferSize && !isKnownInt)
+                    continue;
+                CtuParamCallSite &site = getSite(fc);
+                if (isBufferSize)
+                    site.bufferSizeArgs.add(fc.callArgNr, &fc);
+                else
+                    site.knownIntArgs.add(fc.callArgNr, &fc);
+            }
+            for (const CTU::FileInfo::ForwardCall &fw : ctu.forwardCalls) {
+                CtuParamCallSite &site = getSite(fw);
+                site.forwardedArgs.emplace(fw.callArgNr, &fw);
+            }
+        }
+
+        bool solve(const CTU::FileInfo::ArrayIndexUsage &usage, CtuParamIndexResult &result)
+        {
+            std::vector<CtuParamChainEntry> chain;
+            return solveBoth(usage.myId, usage.pointerArgNr, usage.indexArgNr, usage.indexOffset, usage.elementSize, chain, result);
+        }
+
+    private:
+        CtuParamCallSite &getSite(const CTU::FileInfo::CallBase &call)
+        {
+            std::list<CtuParamCallSite> &sites = mCallSites[call.callId];
+            for (CtuParamCallSite &site : sites) {
+                const CTU::FileInfo::Location &loc = site.representative->location;
+                if (loc.fileName == call.location.fileName && loc.lineNumber == call.location.lineNumber && loc.column == call.location.column)
+                    return site;
+            }
+            sites.emplace_back();
+            sites.back().representative = &call;
+            return sites.back();
+        }
+
+        static const CTU::FileInfo::ForwardCall *findForward(const CtuParamCallSite &site, nonneg int argnr)
+        {
+            const auto it = site.forwardedArgs.find(argnr);
+            return it == site.forwardedArgs.end() ? nullptr : it->second;
+        }
+
+        static bool isOutOfBounds(MathLib::bigint index, MathLib::bigint elementSize, MathLib::bigint bufferSize)
+        {
+            if (bufferSize < 0)
+                return false;
+            if (index < 0)
+                return true;
+            return index * elementSize >= bufferSize;
+        }
+
+        bool solveBoth(const std::string &funcId, nonneg int ptrArg, nonneg int idxArg, MathLib::bigint offset, MathLib::bigint elementSize,
+                       std::vector<CtuParamChainEntry> chain, CtuParamIndexResult &result)
+        {
+            if (chain.size() >= static_cast<std::size_t>(mSettings.maxCtuDepth))
+                return false;
+            const auto it = mCallSites.find(funcId);
+            if (it == mCallSites.end())
+                return false;
+            for (const CtuParamCallSite &site : it->second) {
+                const CTU::FileInfo::FunctionCall *bufVal = site.bufferSizeArgs.find(ptrArg);
+                const CTU::FileInfo::ForwardCall *bufFwd = findForward(site, ptrArg);
+                const CTU::FileInfo::FunctionCall *idxVal = site.knownIntArgs.find(idxArg);
+                const CTU::FileInfo::ForwardCall *idxFwd = findForward(site, idxArg);
+                if ((!bufVal && !bufFwd) || (!idxVal && !idxFwd))
+                    continue; // this call does not determine the relation
+                if (bufFwd && bufFwd->callArgDelta != 0)
+                    continue; // pointer arguments must be passed as-is
+                std::vector<CtuParamChainEntry> chain2 = chain;
+                MathLib::bigint newOffset = offset;
+                if (idxFwd) {
+                    newOffset += idxFwd->callArgDelta;
+                    if (!mSettings.platform.isIntValue(newOffset))
+                        continue; // the relation would overflow C int
+                }
+                if (bufVal && idxVal) {
+                    const MathLib::bigint index = idxVal->callArgValue.value + newOffset;
+                    if (!mSettings.platform.isIntValue(index))
+                        continue;
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      bufferArgInfo(ptrArg, bufVal->callArgValue.value) + " and " + indexArgInfo(idxArg, idxVal->callArgValue.value)});
+                    if (isOutOfBounds(index, elementSize, bufVal->callArgValue.value)) {
+                        result.bufferSize = bufVal->callArgValue.value;
+                        result.index = index;
+                        result.bufferCall = bufVal;
+                        result.indexCall = idxVal;
+                        result.chain = std::move(chain2);
+                        return true;
+                    }
+                    continue; // safe call: keep looking for a real overflow
+                }
+                const std::string &callerId = bufFwd ? bufFwd->myId : idxFwd->myId;
+                if (bufFwd && idxFwd && bufFwd->myId != idxFwd->myId)
+                    continue;
+                if (bufFwd && idxFwd) {
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      forwardedArgInfo(ptrArg) + " and " + forwardedArgInfo(idxArg)});
+                    if (solveBoth(callerId, bufFwd->myArgNr, idxFwd->myArgNr, newOffset, elementSize, chain2, result))
+                        return true;
+                } else if (bufFwd) {
+                    const MathLib::bigint index = idxVal->callArgValue.value + offset;
+                    if (!mSettings.platform.isIntValue(index))
+                        continue;
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      forwardedArgInfo(ptrArg) + " and " + indexArgInfo(idxArg, idxVal->callArgValue.value)});
+                    CtuParamIndexResult sub;
+                    if (solveBuffer(callerId, bufFwd->myArgNr, chain2, sub) && isOutOfBounds(index, elementSize, sub.bufferSize)) {
+                        result.bufferSize = sub.bufferSize;
+                        result.index = index;
+                        result.bufferCall = sub.bufferCall;
+                        result.indexCall = idxVal;
+                        result.chain = std::move(sub.chain);
+                        return true;
+                    }
+                } else { // idxFwd
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      bufferArgInfo(ptrArg, bufVal->callArgValue.value) + " and " + forwardedArgInfo(idxArg)});
+                    CtuParamIndexResult sub;
+                    if (solveIndex(callerId, idxFwd->myArgNr, newOffset, chain2, sub) && isOutOfBounds(sub.index, elementSize, bufVal->callArgValue.value)) {
+                        result.bufferSize = bufVal->callArgValue.value;
+                        result.index = sub.index;
+                        result.bufferCall = bufVal;
+                        result.indexCall = sub.indexCall;
+                        result.chain = std::move(sub.chain);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        bool solveBuffer(const std::string &funcId, nonneg int arg, std::vector<CtuParamChainEntry> chain, CtuParamIndexResult &result)
+        {
+            if (chain.size() >= static_cast<std::size_t>(mSettings.maxCtuDepth))
+                return false;
+            const auto it = mCallSites.find(funcId);
+            if (it == mCallSites.end())
+                return false;
+            for (const CtuParamCallSite &site : it->second) {
+                const CTU::FileInfo::FunctionCall *bufVal = site.bufferSizeArgs.find(arg);
+                std::vector<CtuParamChainEntry> chain2 = chain;
+                if (bufVal) {
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      bufferArgInfo(arg, bufVal->callArgValue.value)});
+                    result.bufferSize = bufVal->callArgValue.value;
+                    result.bufferCall = bufVal;
+                    result.chain = std::move(chain2);
+                    return true;
+                }
+                const CTU::FileInfo::ForwardCall *bufFwd = findForward(site, arg);
+                if (!bufFwd || bufFwd->callArgDelta != 0)
+                    continue;
+                chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " + forwardedArgInfo(arg)});
+                if (solveBuffer(bufFwd->myId, bufFwd->myArgNr, chain2, result))
+                    return true;
+            }
+            return false;
+        }
+
+        bool solveIndex(const std::string &funcId, nonneg int arg, MathLib::bigint offset, std::vector<CtuParamChainEntry> chain, CtuParamIndexResult &result)
+        {
+            if (chain.size() >= static_cast<std::size_t>(mSettings.maxCtuDepth))
+                return false;
+            const auto it = mCallSites.find(funcId);
+            if (it == mCallSites.end())
+                return false;
+            for (const CtuParamCallSite &site : it->second) {
+                const CTU::FileInfo::FunctionCall *idxVal = site.knownIntArgs.find(arg);
+                std::vector<CtuParamChainEntry> chain2 = chain;
+                if (idxVal) {
+                    const MathLib::bigint index = idxVal->callArgValue.value + offset;
+                    if (!mSettings.platform.isIntValue(index))
+                        continue;
+                    chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " +
+                                      indexArgInfo(arg, idxVal->callArgValue.value)});
+                    result.index = index;
+                    result.indexCall = idxVal;
+                    result.chain = std::move(chain2);
+                    return true;
+                }
+                const CTU::FileInfo::ForwardCall *idxFwd = findForward(site, arg);
+                if (!idxFwd)
+                    continue;
+                const MathLib::bigint newOffset = offset + idxFwd->callArgDelta;
+                if (!mSettings.platform.isIntValue(newOffset))
+                    continue;
+                chain2.push_back({site.representative, "Calling function " + site.representative->callFunctionName + ", " + forwardedArgInfo(arg)});
+                if (solveIndex(idxFwd->myId, idxFwd->myArgNr, newOffset, chain2, result))
+                    return true;
+            }
+            return false;
+        }
+
+        const Settings &mSettings;
+        std::map<std::string, std::list<CtuParamCallSite>> mCallSites;
+    };
+}
+
+bool CheckBufferOverrun::analyseWholeProgramParamIndex(const CTU::FileInfo &ctu, const CTU::FileInfo::ArrayIndexUsage &arrayIndexUsage,
+                                                       ErrorLogger &errorLogger, const Settings &settings, const std::string& file0)
+{
+    CtuParamIndexSolver solver(ctu, settings);
+    CtuParamIndexResult result;
+    if (!solver.solve(arrayIndexUsage, result))
+        return false;
+
+    std::list<ErrorMessage::FileLocation> locationList;
+
+    if (result.bufferCall)
+        std::copy(result.bufferCall->callValuePath.cbegin(), result.bufferCall->callValuePath.cend(), std::back_inserter(locationList));
+
+    // call chain: outermost call first
+    for (auto it = result.chain.crbegin(); it != result.chain.crend(); ++it) {
+        const CTU::FileInfo::CallBase *call = it->call;
+        locationList.emplace_back(call->location.fileName, it->info, call->location.lineNumber, call->location.column);
+    }
+
+    locationList.emplace_back(arrayIndexUsage.location.fileName, "Using argument " + arrayIndexUsage.myArgumentName,
+                              arrayIndexUsage.location.lineNumber, arrayIndexUsage.location.column);
+
+    const MathLib::bigint byteOffset = result.index * arrayIndexUsage.elementSize;
+    const std::string errmsg = "Array index out of bounds; '" + arrayIndexUsage.myArgumentName + "' buffer size is " +
+                               MathLib::toString(result.bufferSize) + " and it is accessed at offset " + MathLib::toString(byteOffset) + ".";
+    const CWE cwe = (byteOffset > 0) ? CWE_BUFFER_OVERRUN : CWE_BUFFER_UNDERRUN;
+
+    const ErrorMessage errorMessage(std::move(locationList),
+                                    file0,
+                                    Severity::error,
+                                    errmsg,
+                                    "ctuArrayIndex",
                                     cwe, Certainty::normal);
     errorLogger.reportErr(errorMessage);
 

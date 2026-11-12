@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -g0 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/dmake.dir/dmake.cpp.o CMakeFiles/dmake.dir/__/__/cli/filelister.cpp.o CMakeFiles/dmake.dir/__/__/lib/pathmatch.cpp.o CMakeFiles/dmake.dir/__/__/lib/path.cpp.o CMakeFiles/dmake.dir/__/__/lib/utils.cpp.o ../../externals/simplecpp/CMakeFiles/simplecpp_objs.dir/simplecpp.cpp.o -o ../../bin/dmake

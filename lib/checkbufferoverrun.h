@@ -117,6 +117,8 @@ private:
     Check::FileInfo * loadFileInfoFromXml(const tinyxml2::XMLElement *xmlElement) const override;
     static bool analyseWholeProgram1(const std::map<std::string, std::list<const CTU::FileInfo::CallBase *>> &callsMap, const CTU::FileInfo::UnsafeUsage &unsafeUsage,
                                      int type, ErrorLogger &errorLogger, int maxCtuDepth, const std::string& file0);
+    static bool analyseWholeProgramParamIndex(const CTU::FileInfo &ctu, const CTU::FileInfo::ArrayIndexUsage &arrayIndexUsage,
+                                              ErrorLogger &errorLogger, const Settings &settings, const std::string& file0);
 
 
     static std::string myName() {

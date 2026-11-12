@@ -45,6 +45,8 @@ static constexpr char ATTR_CALL_ARGNR[] = "call-argnr";
 static constexpr char ATTR_CALL_ARGEXPR[] = "call-argexpr";
 static constexpr char ATTR_CALL_ARGVALUETYPE[] = "call-argvaluetype";
 static constexpr char ATTR_CALL_ARGVALUE[] = "call-argvalue";
+static constexpr char ATTR_CALL_ARGVALUE_KNOWN[] = "call-argvalue-known";
+static constexpr char ATTR_CALL_ARGDELTA[] = "call-argdelta";
 static constexpr char ATTR_CALL_UNKNOWN_FUNCTION_RETURN[] = "call-argvalue-ufr";
 static constexpr char ATTR_WARNING[] = "warning";
 static constexpr char ATTR_LOC_FILENAME[] = "file";
@@ -55,6 +57,10 @@ static constexpr char ATTR_MY_ID[] = "my-id";
 static constexpr char ATTR_MY_ARGNR[] = "my-argnr";
 static constexpr char ATTR_MY_ARGNAME[] = "my-argname";
 static constexpr char ATTR_VALUE[] = "value";
+static constexpr char ATTR_POINTER_ARGNR[] = "pointer-argnr";
+static constexpr char ATTR_INDEX_ARGNR[] = "index-argnr";
+static constexpr char ATTR_INDEX_OFFSET[] = "index-offset";
+static constexpr char ATTR_ELEMENT_SIZE[] = "element-size";
 
 std::string CTU::getFunctionId(const Tokenizer &tokenizer, const Function *function)
 {
@@ -81,6 +87,11 @@ std::string CTU::FileInfo::toString() const
         out << nestedCall.toXmlString() << "\n";
     }
 
+    // Forwarded calls..
+    for (const CTU::FileInfo::ForwardCall &forwardCall : forwardCalls) {
+        out << forwardCall.toXmlString() << "\n";
+    }
+
     return out.str();
 }
 
@@ -105,6 +116,8 @@ std::string CTU::FileInfo::FunctionCall::toXmlString() const
         << " " << ATTR_CALL_ARGVALUETYPE << "=\"" << static_cast<int>(callValueType) << "\""
         << " " << ATTR_CALL_ARGVALUE << "=\"" << callArgValue.value << "\""
         << " " << ATTR_CALL_UNKNOWN_FUNCTION_RETURN << "=\"" << static_cast<int>(callArgValue.unknownFunctionReturn) << "\"";
+    if (callArgValueKnown)
+        out << " " << ATTR_CALL_ARGVALUE_KNOWN << "=\"1\"";
     if (warning)
         out << " " << ATTR_WARNING << "=\"true\"";
     if (callValuePath.empty())
@@ -131,6 +144,44 @@ std::string CTU::FileInfo::NestedCall::toXmlString() const
         << " " << ATTR_MY_ARGNR << "=\"" << myArgNr << "\""
         << "/>";
     return out.str();
+}
+
+std::string CTU::FileInfo::ForwardCall::toXmlString() const
+{
+    std::ostringstream out;
+    out << "<forward-call"
+        << toBaseXmlString()
+        << " " << ATTR_MY_ID << "=\"" << myId << "\""
+        << " " << ATTR_MY_ARGNR << "=\"" << myArgNr << "\"";
+    if (callArgDelta != 0)
+        out << " " << ATTR_CALL_ARGDELTA << "=\"" << callArgDelta << "\"";
+    out << "/>";
+    return out.str();
+}
+
+std::string CTU::FileInfo::ArrayIndexUsage::toString() const
+{
+    std::ostringstream out;
+    out << "    <unsafe-array-index"
+        << " " << ATTR_MY_ID << "=\"" << myId << '\"'
+        << " " << ATTR_POINTER_ARGNR << "=\"" << pointerArgNr << '\"'
+        << " " << ATTR_INDEX_ARGNR << "=\"" << indexArgNr << '\"'
+        << " " << ATTR_MY_ARGNAME << "=\"" << myArgumentName << '\"'
+        << " " << ATTR_LOC_FILENAME << "=\"" << ErrorLogger::toxml(location.fileName) << '\"'
+        << " " << ATTR_LOC_LINENR << "=\"" << location.lineNumber << '\"'
+        << " " << ATTR_LOC_COLUMN << "=\"" << location.column << '\"'
+        << " " << ATTR_INDEX_OFFSET << "=\"" << indexOffset << '\"'
+        << " " << ATTR_ELEMENT_SIZE << "=\"" << elementSize << "\""
+        << "/>\n";
+    return out.str();
+}
+
+std::string CTU::toString(const std::list<CTU::FileInfo::ArrayIndexUsage> &arrayIndexUsage)
+{
+    std::ostringstream ret;
+    for (const CTU::FileInfo::ArrayIndexUsage &u : arrayIndexUsage)
+        ret << u.toString();
+    return ret.str();
 }
 
 std::string CTU::FileInfo::UnsafeUsage::toString() const
@@ -209,6 +260,8 @@ bool CTU::FileInfo::FunctionCall::loadFromXml(const tinyxml2::XMLElement *xmlEle
     callArgValue.unknownFunctionReturn = static_cast<ValueFlow::Value::UnknownFunctionReturn>(ufr>=0 && ufr <=0xff ? ufr : 0xff);
     const char *w = xmlElement->Attribute(ATTR_WARNING);
     warning = w && std::strcmp(w, "true") == 0;
+    const char *known = xmlElement->Attribute(ATTR_CALL_ARGVALUE_KNOWN);
+    callArgValueKnown = known && std::strcmp(known, "1") == 0;
     for (const tinyxml2::XMLElement *e2 = xmlElement->FirstChildElement(); !error && e2; e2 = e2->NextSiblingElement()) {
         if (std::strcmp(e2->Name(), "path") != 0)
             continue;
@@ -232,6 +285,18 @@ bool CTU::FileInfo::NestedCall::loadFromXml(const tinyxml2::XMLElement *xmlEleme
     return !error;
 }
 
+bool CTU::FileInfo::ForwardCall::loadFromXml(const tinyxml2::XMLElement *xmlElement)
+{
+    if (!loadBaseFromXml(xmlElement))
+        return false;
+    bool error = false;
+    myId = readAttrString(xmlElement, ATTR_MY_ID, &error);
+    myArgNr = readAttrInt(xmlElement, ATTR_MY_ARGNR, &error);
+    // Old file info has no delta attribute; a missing attribute means the argument is passed as-is
+    callArgDelta = readAttrInt(xmlElement, ATTR_CALL_ARGDELTA, nullptr);
+    return !error;
+}
+
 void CTU::FileInfo::loadFromXml(const tinyxml2::XMLElement *xmlElement)
 {
     for (const tinyxml2::XMLElement *e = xmlElement->FirstChildElement(); e; e = e->NextSiblingElement()) {
@@ -244,6 +309,10 @@ void CTU::FileInfo::loadFromXml(const tinyxml2::XMLElement *xmlElement)
             NestedCall nestedCall;
             if (nestedCall.loadFromXml(e))
                 nestedCalls.push_back(std::move(nestedCall));
+        } else if (std::strcmp(name, "forward-call") == 0) {
+            ForwardCall forwardCall;
+            if (forwardCall.loadFromXml(e))
+                forwardCalls.push_back(std::move(forwardCall));
         }
     }
 }
@@ -280,6 +349,30 @@ std::list<CTU::FileInfo::UnsafeUsage> CTU::loadUnsafeUsageListFromXml(const tiny
     return ret;
 }
 
+std::list<CTU::FileInfo::ArrayIndexUsage> CTU::loadArrayIndexUsageListFromXml(const tinyxml2::XMLElement *xmlElement)
+{
+    std::list<CTU::FileInfo::ArrayIndexUsage> ret;
+    for (const tinyxml2::XMLElement *e = xmlElement->FirstChildElement(); e; e = e->NextSiblingElement()) {
+        if (std::strcmp(e->Name(), "unsafe-array-index") != 0)
+            continue;
+        bool error = false;
+        FileInfo::ArrayIndexUsage usage;
+        usage.myId = readAttrString(e, ATTR_MY_ID, &error);
+        usage.pointerArgNr = readAttrInt(e, ATTR_POINTER_ARGNR, &error);
+        usage.indexArgNr = readAttrInt(e, ATTR_INDEX_ARGNR, &error);
+        usage.myArgumentName = readAttrString(e, ATTR_MY_ARGNAME, &error);
+        usage.location.fileName = readAttrString(e, ATTR_LOC_FILENAME, &error);
+        usage.location.lineNumber = readAttrInt(e, ATTR_LOC_LINENR, &error);
+        usage.location.column = readAttrInt(e, ATTR_LOC_COLUMN, &error);
+        usage.indexOffset = readAttrInt(e, ATTR_INDEX_OFFSET, &error);
+        usage.elementSize = readAttrInt(e, ATTR_ELEMENT_SIZE, &error);
+
+        if (!error)
+            ret.push_back(std::move(usage));
+    }
+    return ret;
+}
+
 static int isCallFunction(const Scope *scope, int argnr, const Token *&tok)
 {
     const Variable * const argvar = scope->function->getArgumentVar(argnr);
@@ -309,10 +402,54 @@ static int isCallFunction(const Scope *scope, int argnr, const Token *&tok)
     return -1;
 }
 
+/** @brief If argtok passes a function parameter on as-is or with a constant offset, return the parameter variable */
+static const Variable *getForwardedVariable(const Token *argtok, MathLib::bigint &delta, const Settings &settings)
+{
+    delta = 0;
+    const Token *vartok = nullptr;
+    if (argtok->variable()) {
+        vartok = argtok;
+    } else if (argtok->str() == "+" || argtok->str() == "-") {
+        const Token *op1 = argtok->astOperand1();
+        const Token *op2 = argtok->astOperand2();
+        if (!op1 || !op2)
+            return nullptr;
+        if (op1->variable() && op2->hasKnownIntValue()) {
+            vartok = op1;
+            delta = op2->getKnownIntValue();
+            if (argtok->str() == "-")
+                delta = -delta;
+        } else if (op2->variable() && argtok->str() == "+" && op1->hasKnownIntValue()) {
+            vartok = op2;
+            delta = op1->getKnownIntValue();
+        } else {
+            return nullptr;
+        }
+        if (!settings.platform.isIntValue(delta))
+            return nullptr;
+    } else {
+        return nullptr;
+    }
+    const Variable *var = vartok->variable();
+    if (!var || !var->isArgument() || !var->valueType())
+        return nullptr;
+    if (var->valueType()->reference != Reference::None)
+        return nullptr;
+    const ValueType *vt = var->valueType();
+    const bool isPointerArg = vt->pointer == 1 && (vt->type == ValueType::Type::CHAR || vt->type == ValueType::Type::INT);
+    const bool isIntArg = vt->pointer == 0 && vt->type == ValueType::Type::INT;
+    if (!isPointerArg && !isIntArg)
+        return nullptr;
+    if (delta != 0 && !isIntArg)
+        return nullptr; // pointer arithmetic is not a plain forwarding
+    return var;
+}
+
 
 CTU::FileInfo *CTU::getFileInfo(const Tokenizer &tokenizer)
 {
     const SymbolDatabase * const symbolDatabase = tokenizer.getSymbolDatabase();
+    const Settings &settings = tokenizer.getSettings();
 
     auto *fileInfo = new FileInfo;
 
@@ -335,7 +472,10 @@ CTU::FileInfo *CTU::getFileInfo(const Tokenizer &tokenizer)
                 if (!argtok)
                     continue;
                 for (const ValueFlow::Value &value : argtok->values()) {
-                    if ((!value.isIntValue() || value.intvalue != 0 || value.isInconclusive()) && !value.isBufferSizeValue())
+                    // Known integer argument values are also recorded for CTU parameter index analysis
+                    const bool knownIntValue = value.isIntValue() && value.isKnown() && !value.isInconclusive() &&
+                                               settings.platform.isIntValue(value.intvalue);
+                    if ((!value.isIntValue() || value.intvalue != 0 || value.isInconclusive()) && !value.isBufferSizeValue() && !knownIntValue)
                         continue;
                     // Skip impossible values since they cannot be represented
                     if (value.isImpossible())
@@ -348,6 +488,7 @@ CTU::FileInfo *CTU::getFileInfo(const Tokenizer &tokenizer)
                     functionCall.callArgNr = argnr + 1;
                     functionCall.callArgumentExpression = argtok->expressionString();
                     functionCall.callArgValue = value;
+                    functionCall.callArgValueKnown = knownIntValue;
                     functionCall.warning = !value.errorSeverity();
                     for (const ErrorPathItem &i : value.errorPath) {
                         const std::string& file = tokenizer.list.file(i.first);
@@ -423,6 +564,33 @@ CTU::FileInfo *CTU::getFileInfo(const Tokenizer &tokenizer)
                     fileInfo->functionCalls.push_back(std::move(functionCall));
                     continue;
                 }
+            }
+
+            // Parameter forwarding relations
+            for (int argnr = 0; argnr < args.size(); ++argnr) {
+                const Token *argtok = args[argnr];
+                if (!argtok)
+                    continue;
+                MathLib::bigint delta = 0;
+                const Variable *argvar = getForwardedVariable(argtok, delta, settings);
+                if (!argvar)
+                    continue;
+                int myArgNr = 0;
+                for (int i = 0; i < scopeFunction->argCount(); ++i) {
+                    if (scopeFunction->getArgumentVar(i) == argvar) {
+                        myArgNr = i + 1;
+                        break;
+                    }
+                }
+                if (myArgNr == 0)
+                    continue;
+                // The parameter must not have been changed before it is forwarded
+                if (isVariableChanged(scope.bodyStart->next(), tok, 0, argvar->declarationId(), false, settings))
+                    continue;
+                fileInfo->forwardCalls.emplace_back(getFunctionId(tokenizer, scopeFunction), myArgNr,
+                                                    getFunctionId(tokenizer, tokFunction), argnr + 1,
+                                                    tok->astOperand1()->expressionString(),
+                                                    FileInfo::Location(tokenizer, tok), delta);
             }
         }
 

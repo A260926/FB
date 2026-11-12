@@ -30,6 +30,8 @@
 #include <list>
 #include <string>
 
+#include "xml.h"
+
 class TestBufferOverrun : public TestFixture {
 public:
     TestBufferOverrun() : TestFixture("TestBufferOverrun") {}
@@ -302,6 +304,9 @@ private:
         TEST_CASE(ctu_array);
         TEST_CASE(ctu_variable);
         TEST_CASE(ctu_arithmetic);
+        TEST_CASE(ctuParameterIndex);
+        TEST_CASE(ctuParameterCorrelation);
+        TEST_CASE(ctuParameterXml);
 
         TEST_CASE(objectIndex);
 
@@ -5331,8 +5336,7 @@ private:
             "    char str[5];\n"
             "    memclr( 10, str );\n"
             "}");
-        TODO_ASSERT_EQUALS("[test.cpp:9] -> [test.cpp:3]: (possible error) Array index out of bounds.\n",
-                           "", errout_str());
+        ASSERT_EQUALS("[test.cpp:9:11] -> [test.cpp:3:5]: (error) Array index out of bounds; 'data' buffer size is 5 and it is accessed at offset 10. [ctuArrayIndex]\n", errout_str());
 
         // This is not an error
         ctu("static void memclr( char *data, int size )\n"
@@ -5449,6 +5453,223 @@ private:
             "    f(s);\n"
             "}\n");
         ASSERT_EQUALS("", errout_str());
+    }
+
+#define ctuSettings(code, settings) ctuSettings_(code, settings, __FILE__, __LINE__)
+    template<size_t size>
+    void ctuSettings_(const char (&code)[size], const Settings &settings, const char* file, int line) {
+        // Tokenize..
+        SimpleTokenizer tokenizer(settings, *this);
+        ASSERT_LOC(tokenizer.tokenize(code), file, line);
+
+        CTU::FileInfo *ctu = CTU::getFileInfo(tokenizer);
+
+        // Check code..
+        std::list<Check::FileInfo*> fileInfo;
+        Check& c = getCheck<CheckBufferOverrun>();
+        fileInfo.push_back(c.getFileInfo(tokenizer, settings, ""));
+        c.analyseWholeProgram(*ctu, fileInfo, settings, *this);
+        while (!fileInfo.empty()) {
+            delete fileInfo.back();
+            fileInfo.pop_back();
+        }
+        delete ctu;
+    }
+
+    void ctuParameterIndex() {
+        // int array: index past the last element
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 4); }\n");
+        ASSERT_EQUALS("[test.cpp:2:40] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // int array: index of the last element is fine
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 3); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // char array: sizes and offsets are computed with the element size of the platform
+        ctu("void leaf(char *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { char a[4] = {0}; leaf(a, 4); }\n");
+        ASSERT_EQUALS("[test.cpp:2:41] -> [test.cpp:1:29]: (error) Array index out of bounds; 'p' buffer size is 4 and it is accessed at offset 4. [ctuArrayIndex]\n", errout_str());
+
+        // read access is also checked
+        ctu("int leaf(int *p, int i) { return p[i]; }\n"
+            "void entry(void) { int a[4] = {0}; (void)leaf(a, 4); }\n");
+        ASSERT_EQUALS("[test.cpp:2:46] -> [test.cpp:1:34]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // p[i+k]
+        ctu("void leaf(int *p, int i) { p[i+2] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 2); }\n");
+        ASSERT_EQUALS("[test.cpp:2:40] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // p[k+i]
+        ctu("void leaf(int *p, int i) { p[2+i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 2); }\n");
+        ASSERT_EQUALS("[test.cpp:2:40] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // p[i-k] with a negative result
+        ctu("void leaf(int *p, int i) { p[i-1] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 0); }\n");
+        ASSERT_EQUALS("[test.cpp:2:40] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset -4. [ctuArrayIndex]\n", errout_str());
+
+        // negative index argument
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, -1); }\n");
+        ASSERT_EQUALS("[test.cpp:2:40] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset -4. [ctuArrayIndex]\n", errout_str());
+
+        // straight forwarding with a constant added at the relay
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+            "void entry(void) { int a[4] = {0}; relay(3, a); }\n");
+        ASSERT_EQUALS("[test.cpp:3:41] -> [test.cpp:2:33] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // the same relay with a safe value
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+            "void entry(void) { int a[4] = {0}; relay(2, a); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // swapped parameter positions and a constant subtracted at the relay
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int *q, int n) { leaf(q, n - 1); }\n"
+            "void entry(void) { int a[4] = {0}; relay(a, 5); }\n");
+        ASSERT_EQUALS("[test.cpp:3:41] -> [test.cpp:2:33] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n", errout_str());
+
+        // unknown integer argument: no definite error
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(int x) { int a[4] = {0}; leaf(a, x); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // the integer parameter is overwritten before the access
+        ctu("void leaf(int *p, int i) { i = 0; p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 4); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // the access is conditional
+        ctu("void leaf(int *p, int i) { if (i > 0) p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 4); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // the buffer is not passed as-is
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a + 1, 4); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // the pointer parameter is given to another function by address before the access
+        ctu("void sink(int **pp);\n"
+            "void leaf(int *p, int i) { sink(&p); p[i] = 1; }\n"
+            "void entry(void) { int a[4] = {0}; leaf(a, 4); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // three levels with swapped positions and constants: relay(0,a2) -> leaf index 1, relay(9,a20) -> leaf index 10
+        /*const*/ Settings settings = settings0;
+        settings.maxCtuDepth = 4;
+        ctuSettings("void leaf(int *p, int i) { p[i] = 1; }\n"
+                    "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+                    "void pass(int *p, int i) { relay(i, p); }\n"
+                    "void entry(void) { int a2[2] = {0}; int a20[20] = {0}; pass(a2, 0); pass(a20, 9); }\n", settings);
+        ASSERT_EQUALS("", errout_str());
+
+        // same chain but the first call overflows: pass(a2, 5) -> leaf index 6 in a 8 byte buffer
+        ctuSettings("void leaf(int *p, int i) { p[i] = 1; }\n"
+                    "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+                    "void pass(int *p, int i) { relay(i, p); }\n"
+                    "void entry(void) { int a2[2] = {0}; int a20[20] = {0}; pass(a2, 5); pass(a20, 9); }\n", settings);
+        ASSERT_EQUALS("[test.cpp:4:60] -> [test.cpp:3:33] -> [test.cpp:2:33] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 8 and it is accessed at offset 24. [ctuArrayIndex]\n", errout_str());
+    }
+
+    void ctuParameterCorrelation() {
+        // two calls on the same line: each buffer is paired with the index of its own call
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[2] = {0}; int b[20] = {0}; leaf(a, 1); leaf(b, 10); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // a safe call does not stop the analysis: the overflowing call is found
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[2] = {0}; int b[20] = {0}; leaf(a, 1); leaf(b, 10); leaf(a, 5); }\n");
+        ASSERT_EQUALS("[test.cpp:2:82] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 8 and it is accessed at offset 20. [ctuArrayIndex]\n", errout_str());
+
+        // the overflowing call comes first
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[2] = {0}; int b[20] = {0}; leaf(a, 5); leaf(b, 10); }\n");
+        ASSERT_EQUALS("[test.cpp:2:57] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 8 and it is accessed at offset 20. [ctuArrayIndex]\n", errout_str());
+
+        // the buffer of one call must not be combined with the index of another call
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void entry(void) { int a[2] = {0}; int b[20] = {0}; leaf(a, 1);\n"
+            "                   leaf(b, 10); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // forwarding keeps the pairing of its own call: relay(0,a2) is safe, relay(9,a20) is safe
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+            "void entry(void) { int a2[2] = {0}; int a20[20] = {0}; relay(0, a2); relay(9, a20); }\n");
+        ASSERT_EQUALS("", errout_str());
+
+        // one forwarded call overflows with the buffer and index of its own call
+        ctu("void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+            "void entry(void) { int a2[2] = {0}; int a20[20] = {0}; relay(5, a2); relay(9, a20); }\n");
+        ASSERT_EQUALS("[test.cpp:3:61] -> [test.cpp:2:33] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 8 and it is accessed at offset 24. [ctuArrayIndex]\n", errout_str());
+    }
+
+    void ctuParameterXml() {
+        // The summaries are produced from real source: a parameter index relation with a
+        // forwarding relay (new information) and a constant index violation (old information).
+        const char code[] =
+            "void leaf(int *p, int i) { p[i] = 1; }\n"
+            "void relay(int n, int *q) { leaf(q, n + 1); }\n"
+            "void konst(char *p) { p[10] = 0; }\n"
+            "void entry(void) {\n"
+            "    int a[4] = {0};\n"
+            "    char str[5];\n"
+            "    relay(3, a);\n"
+            "    konst(str);\n"
+            "}\n";
+
+        SimpleTokenizer tokenizer(settings0, *this);
+        ASSERT(tokenizer.tokenize(code));
+
+        CTU::FileInfo *ctuInfo = CTU::getFileInfo(tokenizer);
+        Check& check = getCheck<CheckBufferOverrun>();
+        Check::FileInfo *fileInfo = check.getFileInfo(tokenizer, settings0, "");
+        ASSERT(fileInfo != nullptr);
+        ASSERT_EQUALS(2, ctuInfo->forwardCalls.size());
+
+        // analysis with the in-memory information
+        std::list<Check::FileInfo*> fileInfos;
+        fileInfos.push_back(fileInfo);
+        check.analyseWholeProgram(*ctuInfo, fileInfos, settings0, *this);
+        const std::string expected =
+            "[test.cpp:8:10] -> [test.cpp:3:23]: (error) Array index out of bounds; 'p' buffer size is 5 and it is accessed at offset 10. [ctuArrayIndex]\n"
+            "[test.cpp:7:10] -> [test.cpp:2:33] -> [test.cpp:1:28]: (error) Array index out of bounds; 'p' buffer size is 16 and it is accessed at offset 16. [ctuArrayIndex]\n";
+        ASSERT_EQUALS(expected, errout_str());
+
+        // round trip through the XML file information
+        CTU::FileInfo ctuInfoXml;
+        {
+            tinyxml2::XMLDocument doc;
+            ASSERT_EQUALS(tinyxml2::XML_SUCCESS, doc.Parse(("<ctu>" + ctuInfo->toString() + "</ctu>").c_str()));
+            ctuInfoXml.loadFromXml(doc.FirstChildElement());
+        }
+        ASSERT_EQUALS(2, ctuInfoXml.forwardCalls.size());
+        Check::FileInfo *fileInfoXml = nullptr;
+        {
+            tinyxml2::XMLDocument doc;
+            ASSERT_EQUALS(tinyxml2::XML_SUCCESS, doc.Parse(("<FileInfo>" + fileInfo->toString() + "</FileInfo>").c_str()));
+            fileInfoXml = check.loadFileInfoFromXml(doc.FirstChildElement());
+        }
+        ASSERT(fileInfoXml != nullptr);
+
+        // the reloaded information gives the same results as the in-memory information
+        std::list<Check::FileInfo*> fileInfosXml;
+        fileInfosXml.push_back(fileInfoXml);
+        check.analyseWholeProgram(ctuInfoXml, fileInfosXml, settings0, *this);
+        ASSERT_EQUALS(expected, errout_str());
+
+        delete fileInfoXml;
+        delete fileInfo;
+        delete ctuInfo;
     }
 
     void objectIndex() {

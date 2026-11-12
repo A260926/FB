@@ -116,6 +116,8 @@ namespace CTU {
             ValueFlow::Value::ValueType callValueType;
             std::vector<ErrorMessage::FileLocation> callValuePath;
             bool warning;
+            /** true if this is a known integer argument value recorded for CTU parameter index analysis */
+            bool callArgValueKnown = false;
 
             std::string toXmlString() const;
             bool loadFromXml(const tinyxml2::XMLElement *xmlElement);
@@ -139,8 +141,52 @@ namespace CTU {
             nonneg int myArgNr{};
         };
 
+        /** @brief How a function parameter is passed on to a called function */
+        class ForwardCall : public CallBase {
+        public:
+            ForwardCall() = default;
+
+            ForwardCall(std::string myId, nonneg int myArgNr, const std::string &callId, nonneg int callArgnr, const std::string &callFunctionName, const Location &location, MathLib::bigint delta)
+                : CallBase(callId, callArgnr, callFunctionName, location),
+                myId(std::move(myId)),
+                myArgNr(myArgNr),
+                callArgDelta(delta) {}
+
+            std::string toXmlString() const;
+            bool loadFromXml(const tinyxml2::XMLElement *xmlElement);
+
+            std::string myId;
+            nonneg int myArgNr{};
+            /** constant added to the forwarded integer argument (0 when the argument is passed as-is) */
+            MathLib::bigint callArgDelta{};
+        };
+
+        /** @brief A function unconditionally accesses a pointer parameter at an index computed from an integer parameter */
+        struct ArrayIndexUsage {
+            ArrayIndexUsage() = default;
+            ArrayIndexUsage(std::string myId, nonneg int pointerArgNr, nonneg int indexArgNr, std::string myArgumentName, Location location, MathLib::bigint indexOffset, MathLib::bigint elementSize)
+                : myId(std::move(myId))
+                , pointerArgNr(pointerArgNr)
+                , indexArgNr(indexArgNr)
+                , myArgumentName(std::move(myArgumentName))
+                , location(std::move(location))
+                , indexOffset(indexOffset)
+                , elementSize(elementSize) {}
+            std::string myId;
+            nonneg int pointerArgNr{};
+            nonneg int indexArgNr{};
+            std::string myArgumentName;
+            Location location;
+            /** constant offset in elements added to the integer parameter in the subscript expression */
+            MathLib::bigint indexOffset{};
+            /** size in bytes of the accessed element */
+            MathLib::bigint elementSize{};
+            std::string toString() const;
+        };
+
         std::list<FunctionCall> functionCalls;
         std::list<NestedCall> nestedCalls;
+        std::list<ForwardCall> forwardCalls;
 
         void loadFromXml(const tinyxml2::XMLElement *xmlElement);
         std::map<std::string, std::list<const CallBase *>> getCallsMap() const;
@@ -157,6 +203,8 @@ namespace CTU {
 
     CPPCHECKLIB std::string toString(const std::list<FileInfo::UnsafeUsage> &unsafeUsage);
 
+    CPPCHECKLIB std::string toString(const std::list<FileInfo::ArrayIndexUsage> &arrayIndexUsage);
+
     CPPCHECKLIB std::string getFunctionId(const Tokenizer &tokenizer, const Function *function);
 
     /** @brief Parse current TU and extract file info */
@@ -165,6 +213,8 @@ namespace CTU {
     CPPCHECKLIB std::list<FileInfo::UnsafeUsage> getUnsafeUsage(const Tokenizer &tokenizer, const Settings &settings, bool (*isUnsafeUsage)(const Settings &settings, const Token *argtok, FileInfo::Value *value));
 
     CPPCHECKLIB std::list<FileInfo::UnsafeUsage> loadUnsafeUsageListFromXml(const tinyxml2::XMLElement *xmlElement);
+
+    CPPCHECKLIB std::list<FileInfo::ArrayIndexUsage> loadArrayIndexUsageListFromXml(const tinyxml2::XMLElement *xmlElement);
 }
 
 /// @}
