@@ -35,6 +35,15 @@ type Decoder struct {
 	AvgBytesPerSec uint32
 	WavAudioFormat uint16
 
+	// UsePlaylist switches the decoder to logical playback driven by the
+	// cue and plst chunks instead of reading the data chunk from start to
+	// end. It must be set before the first read. When enabled, the playlist
+	// and every range it references are validated before any sample is
+	// returned. Files without a plst chunk play back as the raw data; an
+	// empty playlist produces an empty stream. The default false value
+	// preserves the historical behavior and interface semantics.
+	UsePlaylist bool
+
 	err             error
 	PCMSize         int
 	pcmDataAccessed bool
@@ -42,6 +51,13 @@ type Decoder struct {
 	PCMChunk *riff.Chunk
 	// Metadata for the current file
 	Metadata *Metadata
+
+	// pl is the prepared playlist view, nil until playlist mode is
+	// activated and prepared.
+	pl *playlistState
+	// metadataRead records that the whole container was already scanned
+	// while preparing the playlist.
+	metadataRead bool
 }
 
 // NewDecoder creates a decoder for the passed wav reader.
@@ -53,14 +69,30 @@ func NewDecoder(r io.ReadSeeker) *Decoder {
 	}
 }
 
-// Seek provides access to the cursor position in the PCM data
+// Seek provides access to the cursor position in the PCM data.
+// In playlist mode raw byte seeking is rejected because the logical
+// stream is assembled out of playlist segments; use
+// SeekPlaylistFrame to move along the logical stream.
 func (d *Decoder) Seek(offset int64, whence int) (int64, error) {
+	if d.UsePlaylist {
+		return 0, errPlaylistRawSeek
+	}
 	return d.r.Seek(offset, whence)
 }
 
 // Rewind allows the decoder to be rewound to the beginning of the PCM data.
 // This is useful if you want to keep on decoding the same file in a loop.
+// In playlist mode it restarts the logical stream at frame 0, keeping the
+// already validated playlist and its loop counters reset.
 func (d *Decoder) Rewind() error {
+	if d.UsePlaylist {
+		if err := d.ensurePlaylistPrepared(); err != nil {
+			return err
+		}
+		d.pl.reset()
+		d.err = nil
+		return nil
+	}
 
 	_, err := d.r.Seek(0, io.SeekStart)
 	if err != nil {
@@ -87,10 +119,18 @@ func (d *Decoder) SampleBitDepth() int32 {
 	return int32(d.BitDepth)
 }
 
-// PCMLen returns the total number of bytes in the PCM data chunk
+// PCMLen returns the total number of bytes in the PCM data chunk.
+// In playlist mode it reports the length of the expanded logical stream,
+// not the size of the underlying data chunk.
 func (d *Decoder) PCMLen() int64 {
 	if d == nil {
 		return 0
+	}
+	if d.UsePlaylist {
+		if err := d.ensurePlaylistPrepared(); err != nil {
+			return 0
+		}
+		return d.pl.totalBytes
 	}
 	return int64(d.PCMSize)
 }
@@ -104,9 +144,16 @@ func (d *Decoder) Err() error {
 }
 
 // EOF returns positively if the underlying reader reached the end of file.
+// In playlist mode it reports the end of the logical playlist stream.
 func (d *Decoder) EOF() bool {
-	if d == nil || errors.Is(d.err, io.EOF) {
+	if d == nil {
 		return true
+	}
+	if errors.Is(d.err, io.EOF) {
+		return true
+	}
+	if d.UsePlaylist && d.pl != nil {
+		return d.pl.logicalPos >= d.pl.totalFrames
 	}
 	return false
 }
@@ -140,6 +187,18 @@ func (d *Decoder) ReadInfo() {
 // The entire file will be read and should be rewinded if more data must be
 // accessed.
 func (d *Decoder) ReadMetadata() {
+	if d.UsePlaylist {
+		// The playlist preparation scans the whole container once and
+		// populates the metadata along the way, without moving the
+		// logical playback position.
+		if d.metadataRead {
+			return
+		}
+		if err := d.ensurePlaylistPrepared(); err != nil {
+			return
+		}
+		return
+	}
 	if d.Metadata != nil {
 		return
 	}
@@ -190,9 +249,13 @@ func (d *Decoder) ReadMetadata() {
 
 // FwdToPCM forwards the underlying reader until the start of the PCM chunk.
 // If the PCM chunk was already read, no data will be found (you need to rewind).
+// In playlist mode it instead prepares and validates the logical stream.
 func (d *Decoder) FwdToPCM() error {
 	if d == nil {
 		return fmt.Errorf("PCM data not found")
+	}
+	if d.UsePlaylist {
+		return d.ensurePlaylistPrepared()
 	}
 	d.err = d.readHeaders()
 	if d.err != nil {
@@ -234,7 +297,12 @@ func (d *Decoder) WasPCMAccessed() bool {
 // FullPCMBuffer is an inefficient way to access all the PCM data contained in the
 // audio container. The entire PCM data is held in memory.
 // Consider using PCMBuffer() instead.
+// In playlist mode it reads from the current logical position to the end
+// of the expanded playlist.
 func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
+	if d.UsePlaylist {
+		return d.fullPCMBufferPlaylist()
+	}
 	if !d.WasPCMAccessed() {
 		err := d.FwdToPCM()
 		if err != nil {
@@ -278,10 +346,17 @@ func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
 	return buf, err
 }
 
-// PCMBuffer populates the passed PCM buffer
+// PCMBuffer populates the passed PCM buffer.
+// In playlist mode n is still a sample count and the buffer length must
+// be a multiple of the channel count; an invalid length leaves the logical
+// position untouched. A final partial buffer of samples is returned and
+// the following read yields no sample.
 func (d *Decoder) PCMBuffer(buf *audio.IntBuffer) (n int, err error) {
 	if buf == nil {
 		return 0, nil
+	}
+	if d.UsePlaylist {
+		return d.pcmBufferPlaylist(buf)
 	}
 
 	if !d.pcmDataAccessed {
@@ -396,10 +471,18 @@ func (d *Decoder) NextChunk() (*riff.Chunk, error) {
 	return c, d.err
 }
 
-// Duration returns the time duration for the current audio container
+// Duration returns the time duration for the current audio container.
+// In playlist mode it is the duration of the expanded logical stream.
+// Querying it does not move the logical playback position.
 func (d *Decoder) Duration() (time.Duration, error) {
 	if d == nil || d.parser == nil {
 		return 0, errors.New("can't calculate the duration of a nil pointer")
+	}
+	if d.UsePlaylist {
+		if err := d.ensurePlaylistPrepared(); err != nil {
+			return 0, err
+		}
+		return d.pl.duration, nil
 	}
 	return d.parser.Duration()
 }
