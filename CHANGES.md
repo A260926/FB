@@ -1,3 +1,7 @@
+Unreleased
+==========
+* Node Graph: Fixed splitter/passthrough fan-out so that a scheduled (time-windowed) branch reads the same shared upstream samples as its sibling branches at the correct global frame position instead of restarting the shared input at the branch's own first frame. The shared upstream source is still consumed only once; per-bus volume is still applied exactly once.
+
 v0.11.26 - 2026-10-31
 =====================
 * Fixed a bug where the ends of sounds are cutoff. This affects `ma_sound`.

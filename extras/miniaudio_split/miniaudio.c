@@ -62479,7 +62479,23 @@ MA_API ma_result ma_node_graph_read_pcm_frames(ma_node_graph* pNodeGraph, void* 
                 }
 
                 framesToRead = pNodeGraph->processingSizeInFrames;
+            } else {
+                /*
+                Keep each internal pass within the per-node cache capacity. This bounds the processing
+                window that multi-output nodes (splitters) need to hold in their shared fanout cache.
+                */
+                if (framesToRead > MA_DEFAULT_NODE_CACHE_CAP_IN_FRAMES_PER_BUS) {
+                    framesToRead = MA_DEFAULT_NODE_CACHE_CAP_IN_FRAMES_PER_BUS;
+                }
             }
+
+            /*
+            Record the global frame range this internal processing pass is producing. Multi-output
+            nodes (splitters) anchor their shared fanout cache to this window so that time-windowed
+            downstream branches read the same shared upstream samples as their siblings.
+            */
+            pNodeGraph->readWindowBegInFrames = ma_node_get_time(&pNodeGraph->endpoint);
+            pNodeGraph->readWindowEndInFrames = pNodeGraph->readWindowBegInFrames + framesToRead;
 
             ma_node_graph_set_is_reading(pNodeGraph, MA_TRUE);
             {
@@ -62741,6 +62757,18 @@ static void ma_node_input_bus_detach__no_output_bus_lock(ma_node_input_bus* pInp
     pOutputBus->pInputNode             = NULL;
     pOutputBus->inputNodeInputBusIndex = 0;
 
+    /*
+    A topology change can no longer be served from a multi-output node's (splitter's) shared fanout
+    cache. Drop it so a branch detached and re-attached at a processing boundary reads from the
+    current track position instead of stale samples from before the detach.
+    */
+    {
+        ma_node_base* pOutputNode = (ma_node_base*)pOutputBus->pNode;
+        if (pOutputNode != NULL && pOutputNode->outputBusCount > 1) {
+            pOutputNode->fanoutCacheFrames = 0;
+        }
+    }
+
 
     /*
     For thread-safety reasons, we don't want to be returning from this straight away. We need to
@@ -62843,6 +62871,14 @@ static void ma_node_input_bus_attach(ma_node_input_bus* pInputBus, ma_node_outpu
         iterated on the audio thread. Mainly required for detachment purposes.
         */
         ma_node_output_bus_set_is_attached(pOutputBus, MA_TRUE);
+
+        /* Topology change: force a multi-output node's (splitter's) shared fanout cache to be rebuilt. */
+        {
+            ma_node_base* pOutputNode = (ma_node_base*)pOutputBus->pNode;
+            if (pOutputNode != NULL && pOutputNode->outputBusCount > 1) {
+                pOutputNode->fanoutCacheFrames = 0;
+            }
+        }
     }
     ma_node_output_bus_unlock(pOutputBus);
 }
@@ -63762,6 +63798,118 @@ static void ma_node_process_pcm_frames_internal(ma_node* pNode, const float** pp
     }
 }
 
+/*
+Read path for nodes with more than one output bus (splitters).
+
+All output buses of such a node share a single pull of the input stream. The shared, pre-gain samples
+are produced once per processing window and held in the node's cache; each output bus request is then
+served from that cache at its true global frame position. A time-windowed downstream branch therefore
+sees the same shared samples as its siblings instead of the stream being restarted at the branch's own
+first frame, and the upstream source is still consumed only once.
+
+Only the graph's current internal processing window is ever served. Requests wholly outside it return
+zero frames, which lets a fully stopped branch participate without pulling any data. Samples handed to
+siblings are the unmodified, un-gained cache contents; each bus still applies its own volume exactly
+once in ma_node_read_pcm_frames().
+*/
+static ma_result ma_node_read_pcm_frames_multi_output(ma_node* pNode, ma_uint32 outputBusIndex, float* pFramesOut, ma_uint32 frameCount, ma_uint32* pFramesRead, ma_uint64 globalTime)
+{
+    ma_node_base* pNodeBase = (ma_node_base*)pNode;
+    ma_node_graph* pNodeGraph = pNodeBase->pNodeGraph;
+    ma_uint32 channels = ma_node_get_output_channels(pNodeBase, outputBusIndex);
+    ma_uint64 windowBeg;
+    ma_uint64 windowEnd;
+    ma_uint64 reqBeg;
+    ma_uint64 reqEnd;
+    ma_uint64 overlapBeg;
+    ma_uint64 overlapEnd;
+    ma_uint32 framesToPull;
+    ma_result result = MA_SUCCESS;
+
+    MA_ASSERT(pNodeBase->outputBusCount > 1);
+
+    *pFramesRead = 0;
+
+    if (frameCount == 0 || pFramesOut == NULL) {
+        return MA_SUCCESS;   /* Nothing to produce. Shared data is advanced by the windowed pulls, never per bus. */
+    }
+
+    windowBeg = pNodeGraph->readWindowBegInFrames;
+    windowEnd = pNodeGraph->readWindowEndInFrames;
+    reqBeg    = globalTime;
+    reqEnd    = globalTime + frameCount;
+
+    /* Only the current processing window can be served from the shared cache. */
+    if (reqEnd <= windowBeg || reqBeg >= windowEnd) {
+        return MA_SUCCESS;
+    }
+
+    overlapBeg = (reqBeg > windowBeg) ? reqBeg : windowBeg;
+    overlapEnd = (reqEnd < windowEnd) ? reqEnd : windowEnd;
+
+    /* Refresh the shared cache if it does not already cover this window. The cache holds at most one window at a time. */
+    if (pNodeBase->fanoutCacheFrames == 0 || pNodeBase->fanoutCacheBegInFrames != windowBeg || pNodeBase->fanoutCacheBegInFrames + pNodeBase->fanoutCacheFrames != windowEnd) {
+        ma_uint32 framesReadIn;
+        float* pCachedInput = ma_node_get_cached_input_ptr(pNodeBase, 0);
+        float* ppFramesIn[1];
+        float* ppFramesOut[MA_MAX_NODE_BUS_COUNT];
+        ma_uint32 iOutputBus;
+        ma_uint32 frameCountIn;
+        ma_uint32 frameCountOut;
+
+        framesToPull = (ma_uint32)(windowEnd - windowBeg);
+        MA_ASSERT(framesToPull <= pNodeBase->cachedDataCapInFramesPerBus);  /* The graph caps each internal processing window at the node cache capacity. */
+        if (framesToPull > pNodeBase->cachedDataCapInFramesPerBus) {
+            framesToPull = pNodeBase->cachedDataCapInFramesPerBus;
+        }
+
+        /* Pull the shared input exactly once for this window. */
+        ppFramesIn[0] = pCachedInput;
+        result = ma_node_input_bus_read_pcm_frames(pNodeBase, &pNodeBase->pInputBuses[0], pCachedInput, framesToPull, &framesReadIn, windowBeg);
+        if (result != MA_SUCCESS) {
+            framesReadIn = 0;
+        }
+
+        if (framesReadIn < framesToPull) {
+            ma_silence_pcm_frames(pCachedInput + (framesReadIn * ma_node_get_input_channels(pNodeBase, 0)), (framesToPull - framesReadIn), ma_format_f32, ma_node_get_input_channels(pNodeBase, 0));
+        }
+
+        /* Fan the shared, un-gained samples out to every output bus cache in the one processing pass. */
+        frameCountIn  = framesToPull;
+        frameCountOut = framesToPull;
+        for (iOutputBus = 0; iOutputBus < pNodeBase->outputBusCount; iOutputBus += 1) {
+            ppFramesOut[iOutputBus] = ma_node_get_cached_output_ptr(pNodeBase, iOutputBus);
+        }
+
+        ma_node_process_pcm_frames_internal(pNodeBase, (const float**)ppFramesIn, &frameCountIn, ppFramesOut, &frameCountOut);
+
+        pNodeBase->fanoutCacheBegInFrames = windowBeg;
+        pNodeBase->fanoutCacheFrames      = framesToPull;
+    }
+
+    /* Serve the requested sub-range from the output bus cache, written at its real global offset. */
+    {
+        ma_uint32 cacheOffset = (ma_uint32)(overlapBeg - windowBeg);
+        ma_uint32 overlapFrames = (ma_uint32)(overlapEnd - overlapBeg);
+        ma_uint32 outOffset = (ma_uint32)(overlapBeg - reqBeg);
+        const float* pCachedOutput = ma_node_get_cached_output_ptr(pNodeBase, outputBusIndex);
+
+        if (outOffset > 0) {
+            ma_silence_pcm_frames(pFramesOut, outOffset, ma_format_f32, channels);
+        }
+
+        ma_copy_pcm_frames(pFramesOut + (outOffset * channels), pCachedOutput + (cacheOffset * channels), overlapFrames, ma_format_f32, channels);
+
+        if (outOffset + overlapFrames < frameCount) {
+            ma_silence_pcm_frames(pFramesOut + ((outOffset + overlapFrames) * channels), (frameCount - (outOffset + overlapFrames)), ma_format_f32, channels);
+        }
+
+        *pFramesRead = frameCount;
+    }
+
+    return result;
+}
+
 static ma_result ma_node_read_pcm_frames(ma_node* pNode, ma_uint32 outputBusIndex, float* pFramesOut, ma_uint32 frameCount, ma_uint32* pFramesRead, ma_uint64 globalTime)
 {
     ma_node_base* pNodeBase = (ma_node_base*)pNode;
@@ -63808,6 +63956,26 @@ static ma_result ma_node_read_pcm_frames(ma_node* pNode, ma_uint32 outputBusInde
     /* Don't do anything if we're in a stopped state. */
     if (ma_node_get_state_by_time_range(pNode, globalTimeBeg, globalTimeEnd) != ma_node_state_started) {
         return MA_SUCCESS;  /* We're in a stopped state. This is not an error - we just need to not read anything. */
+    }
+
+    /*
+    Multi-output nodes (splitters) share a single pull of their input across every output bus. They
+    use a dedicated fanout path so that a time-windowed downstream branch reads the same shared
+    upstream samples as its siblings instead of each branch restarting the stream from its own first
+    frame. These nodes are always running, so the timing trim below does not apply to them.
+    */
+    if (ma_node_get_output_bus_count(pNodeBase) > 1) {
+        ma_uint32 fanoutFramesRead = 0;
+
+        result = ma_node_read_pcm_frames_multi_output(pNodeBase, outputBusIndex, pFramesOut, frameCount, &fanoutFramesRead, globalTime);
+
+        /* Apply this bus's own volume exactly once. The shared cache handed to siblings stays un-gained. */
+        ma_apply_volume_factor_f32(pFramesOut, (ma_uint64)fanoutFramesRead * ma_node_get_output_channels(pNodeBase, outputBusIndex), ma_node_output_bus_get_volume(&pNodeBase->pOutputBuses[outputBusIndex]));
+
+        ma_atomic_fetch_add_64(&pNodeBase->localTime, (ma_uint64)fanoutFramesRead);
+
+        *pFramesRead = fanoutFramesRead;
+        return result;
     }
 
     startTime = ma_node_get_state_time(pNode, ma_node_state_started);

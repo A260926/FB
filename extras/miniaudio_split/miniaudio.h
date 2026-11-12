@@ -7067,6 +7067,15 @@ struct ma_node_base
     ma_uint16 cachedFrameCountIn;
     ma_uint16 consumedFrameCountIn;
 
+    /*
+    Fanout state for multi-output-bus nodes (splitters). All output buses share one pull of the
+    input data. The cache below records which global frame range is currently held so that each
+    output bus request can be served from the same samples at its true global position. These are
+    only ever touched from the audio thread.
+    */
+    ma_uint64 fanoutCacheBegInFrames;    /* Global frame index of the first frame held in the fanout cache. */
+    ma_uint32 fanoutCacheFrames;         /* Number of valid frames currently held in the fanout cache. */
+
     /* These variables are read and written between different threads. */
     MA_ATOMIC(4, ma_node_state) state;          /* When set to stopped, nothing will be read, regardless of the times in stateTimes. */
     MA_ATOMIC(8, ma_uint64) stateTimes[2];      /* Indexed by ma_node_state. Specifies the time based on the global clock that a node should be considered to be in the relevant state. */
@@ -7121,6 +7130,14 @@ struct ma_node_graph
     float* pProcessingCache;            /* This will be allocated when processingSizeInFrames is non-zero. This is needed because ma_node_graph_read_pcm_frames() can be called with a variable number of frames, and we may need to do some buffering in situations where the caller requests a frame count that's not a multiple of processingSizeInFrames. */
     ma_uint32 processingCacheFramesRemaining;
     ma_uint32 processingSizeInFrames;
+
+    /*
+    The global frame range produced by the in-flight internal processing pass. Multi-output nodes
+    (splitters) anchor their shared fanout cache to this range so that time-windowed branches read
+    the same shared upstream samples as their siblings. Only touched from the audio thread.
+    */
+    ma_uint64 readWindowBegInFrames;
+    ma_uint64 readWindowEndInFrames;
 
     /* Read and written by multiple threads. */
     MA_ATOMIC(4, ma_bool32) isReading;
