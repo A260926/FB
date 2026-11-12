@@ -21,6 +21,7 @@ set(HEADER_FILES
     include/tinynurbs/core/evaluate.h
     include/tinynurbs/core/modify.h
     include/tinynurbs/core/surface.h
+    include/tinynurbs/core/tessellate.h
     include/tinynurbs/io/obj.h
     include/tinynurbs/util/util.h
     include/tinynurbs/util/array2.h

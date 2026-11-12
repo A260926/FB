@@ -9,6 +9,7 @@ Some of the main features include:
 - Supports non-rational and rational curves and surfaces of any order
 - Evaluate point and derivatives of any order
 - Knot insertion, splitting without affecting the original shape
+- Adaptive tessellation of several surfaces into one seam-conforming triangle mesh
 - Wavefront OBJ format I/O
 
 The library is under development.
@@ -142,6 +143,131 @@ surf 0 1 0 1 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 parm u 0 0 0 0 1 1 1 1
 parm v 0 0 0 0 1 1 1 1
 end
+```
+
+## Tessellating several surfaces together
+
+`tinynurbs::tessellatePatches` converts a list of rational surfaces into one
+indexed triangle mesh.  Unlike per-surface grids it processes all inputs in a
+single pass, so declared shared boundaries are meshed identically and the
+result has no chord gaps along them.  Plain `Surface` objects can be passed by
+converting them with the existing constructor, which assigns unit weights:
+
+```cpp
+tinynurbs::Surface3d srf = /* ... */;
+std::vector<tinynurbs::RationalSurface3d> patches;
+patches.push_back(tinynurbs::RationalSurface3d(srf)); // unit weights
+```
+
+The API lives in `include/tinynurbs/core/tessellate.h` and is exported from
+`tinynurbs/tinynurbs.h`.
+
+### Seams
+
+Two boundary edges are declared coincident with `PatchSeam`:
+
+```cpp
+tinynurbs::PatchSeam seam;
+seam.patch_a = 0;                      // index into the surface list
+seam.patch_b = 1;
+seam.edge_a = tinynurbs::PatchEdge::UMax;
+seam.edge_b = tinynurbs::PatchEdge::UMin;
+seam.reversed = true;                  // t on A maps to 1 - t on B
+```
+
+`UMin`/`UMax` traverse the boundary in the direction of increasing `v`,
+`VMin`/`VMax` in the direction of increasing `u`.  The seam parameter is
+normalized over each patch's valid domain (the interval between the first and
+last non-zero knot spans, which need not be `[0, 1]`) before `reversed` is
+applied.  Only whole-edge correspondences are supported; no automatic
+adjacency search or non-linear reparameterization is attempted.
+
+### Options and result
+
+```cpp
+tinynurbs::TessellationOptions options;
+options.chord_tolerance = 1e-3;   // positive and finite
+options.seam_tolerance  = 1e-9;   // positive and finite
+options.max_depth       = 12;     // subdivision generations per initial knot span
+
+tinynurbs::TessellationMesh mesh =
+    tinynurbs::tessellatePatches(patches, {seam}, options);
+```
+
+`TessellationMesh` contains:
+
+- `positions`: one `glm::dvec3` per vertex,
+- `triangles`: three `size_t` vertex indices per triangle,
+- `triangle_patch`: the source surface index per triangle,
+- `triangle_uv`: three `glm::dvec2` values per triangle, one per corner, in
+  the source patch's own parameter domain.
+
+UVs are stored per corner rather than per vertex: a welded seam vertex has one
+shared position but keeps a distinct UV for each adjacent patch.  Vertices
+that are not on a seam are the exact surface point of their own UV.
+
+### Error criterion
+
+Refinement is driven by the distance between the true surface and the linear
+triangle at four sample points of each parameter triangle: the three edge
+midpoints and the centroid.  Every such distance must stay within
+`chord_tolerance`.  This is a sampled flatness criterion, not a continuous
+global bound on the surface-to-mesh distance.  Each non-zero knot interval is
+refined independently, no parameter triangle crosses a knot line, and cells
+outside the admissible range of `max_depth` cause an explicit
+`std::runtime_error` rather than a partially refined mesh.
+
+### Guarantees
+
+- Every non-zero knot interval is covered; refined cells meet without
+  T-junctions, overlaps or gaps.
+- Seam sites sampled on either side appear as actual polygon vertices on both
+  sides, so one side's refinement is reflected in the other side's triangles.
+- Each seam segment borders exactly one triangle in each adjacent patch.
+- Corners shared by several seams get a single merged vertex identity.
+- Patches with coincident geometry but no declared seam are never welded.
+- The seam position is taken from one side's true surface point; mismatches
+  beyond `seam_tolerance` at seam sites or segment midpoints are rejected.
+- Triangle winding is kept positive in each patch's own UV domain; input
+  orientation is never flipped.
+- The input surfaces are never modified, and repeated calls produce identical
+  vertex and triangle ordering.
+
+### Supported inputs
+
+Degrees 1 to 3, clamped and continuous surfaces, interior knot multiplicities
+at most the degree, finite control points, and positive finite weights.
+
+`std::invalid_argument` is thrown for malformed knots, weights, parameters,
+out-of-range seam indices, a patch edge paired with itself, or an edge used by
+two seams; these checks run before any evaluation.  `std::runtime_error` is
+thrown for degenerate parameter regions, numerical subdivision limits, or an
+unmet error/connection requirement within `max_depth`.  Trimming, periodic
+surfaces and automatic repair of mismatched boundaries are out of scope.
+
+### Example
+
+Two quarter-cylinder bands that share an edge, running in opposite directions:
+
+```cpp
+std::vector<tinynurbs::RationalSurface3d> bands = {first_band, second_band};
+
+tinynurbs::PatchSeam seam;
+seam.patch_a = 0;
+seam.patch_b = 1;
+seam.edge_a = tinynurbs::PatchEdge::UMax;
+seam.edge_b = tinynurbs::PatchEdge::UMin;
+seam.reversed = true;
+
+tinynurbs::TessellationOptions options;
+options.chord_tolerance = 1e-3;
+
+tinynurbs::TessellationMesh mesh =
+    tinynurbs::tessellatePatches(bands, {seam}, options);
+
+// mesh.triangles[t] indexes mesh.positions; mesh.triangle_patch[t] says
+// which band the triangle came from, and mesh.triangle_uv[t] holds that
+// band's own parameter values for each corner.
 ```
 
 ## Primary Reference

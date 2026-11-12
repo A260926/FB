@@ -11,4 +11,5 @@
 #include "core/evaluate.h"
 #include "core/modify.h"
 #include "core/surface.h"
+#include "core/tessellate.h"
 #include "io/obj.h"
