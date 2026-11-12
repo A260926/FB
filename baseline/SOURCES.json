@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "upstream": {
+    "repo": "https://github.com/google/gumbo-parser",
+    "commit": "6fd66040a8eecdb1359a6de221f3f9325cf52ba6"
+  },
+  "initial_snapshot": {
+    "repo": "https://github.com/a260926/fb",
+    "commit": "4f448ac3731553320fcb8caa81dc53d367f4a141"
+  },
+  "dependencies": [
+    {
+      "path": "third_party/gtest",
+      "repo": "https://chromium.googlesource.com/external/googletest/",
+      "commit": "1cb04aa3e99c736bbd1eb90ebda3d6117355aacc",
+      "tree": "be89ba3a0f06a281e3c5e40cb230c5baf0a65a80",
+      "files": 165
+    },
+    {
+      "path": "testdata",
+      "repo": "https://github.com/html5lib/html5lib-tests.git",
+      "commit": "e633ddfeb0180f71238763576b1f5fdd26a7038f",
+      "tree": "c353a93a8c1ca9e5cf51b7a245e06f32687a1637",
+      "files": 102
+    }
+  ],
+  "licenses": [
+    "COPYING",
+    "third_party/gtest/LICENSE",
+    "testdata/LICENSE"
+  ],
+  "changes": [
+    "Expand both pinned gitlinks into ordinary source files.",
+    "Preserve baseline scripts byte-for-byte from the initial snapshot.",
+    "Append .gitignore exceptions for vendored GoogleTest sources."
+  ],
+  "added": [
+    "baseline/SOURCES.json",
+    "baseline/UPSTREAM_FILES.json"
+  ]
+}
