@@ -905,6 +905,17 @@ func (ps *Parser) grabArticle() *html.Node {
 		// on how content-y they look. Then add their score to their
 		// parent node. A score is determined by things like number of
 		// commas, class names, etc. Maybe eventually link density.
+		//
+		// Build the text statistics index for this round's clone of the
+		// document. From here until the candidates are sorted below, the
+		// tree is not mutated, so the normalized text length, comma count
+		// and link density of every candidate can be answered from the
+		// index instead of re-scanning the same subtrees for each
+		// ancestor. The index belongs to this round only: it is rebuilt
+		// on every retry, and later stages that mutate the tree (sibling
+		// merging, prepArticle, ...) keep using the regular path.
+		textStats := buildTextStatsIndex(doc)
+
 		var candidates []*html.Node
 		ps.forEachNode(elementsToScore, func(elementToScore *html.Node, _ int) {
 			if elementToScore.Parent == nil || dom.TagName(elementToScore.Parent) == "" {
@@ -912,8 +923,8 @@ func (ps *Parser) grabArticle() *html.Node {
 			}
 
 			// If this paragraph is less than 25 characters, don't even count it.
-			innerText := ps.getInnerText(elementToScore, true)
-			if charCount(innerText) < 25 {
+			innerLength := textStats.charCount(elementToScore)
+			if innerLength < 25 {
 				return
 			}
 
@@ -927,10 +938,10 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += re2go.CountCommas(innerText)
+			contentScore += textStats.commas(elementToScore)
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
-			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
+			contentScore += int(math.Min(math.Floor(float64(innerLength)/100.0), 3.0))
 
 			// Initialize and score ancestors.
 			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
@@ -975,7 +986,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		// less) and be mostly unaffected by this operation.
 		for i := 0; i < len(candidates); i++ {
 			candidate := candidates[i]
-			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
+			candidateScore := ps.getContentScore(candidate) * (1 - textStats.linkDensity(candidate))
 			ps.logf("candidate %q with score: %f\n", dom.OuterHTML(candidate), candidateScore)
 			ps.setContentScore(candidate, candidateScore)
 		}
