@@ -1,4 +1,5 @@
 /**
+ * Fixture key path relocated for this seed; TLS fixture bytes are unchanged.
  * @license
  * Copyright 2017 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
@@ -76,7 +77,7 @@ export class TestServer {
       res = resolve;
     });
     const server = new TestServer(dirPath, {
-      key: readFileSync(join(__dirname, '..', 'key.pem')),
+      key: readFileSync(join(__dirname, '..', 'fixtures', 'key.pem')),
       cert: readFileSync(join(__dirname, '..', 'cert.pem')),
       passphrase: 'aaaa',
     });
