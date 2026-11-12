@@ -239,54 +239,180 @@ static void huffcode_write(const int * __restrict qs, int len, int bnum, CoderIn
 }
 
 /* Choose every band's book jointly: per window group, a Viterbi over books
- * where a band costs its codewords in that book and each new section costs
- * a header, so a band can take a dearer book to stay in its neighbours'
- * section. qs holds the regular bands' values back to back, and book[] the
- * lowest book that covers each one's peak. State 0 stands for the band's
- * own zero/PNS/intensity book. Emits the codewords once the books are known. */
+ * where a band costs its codewords in that book and a section costs exactly
+ * what writebooks emits for it: a 4-bit book number followed by its run
+ * length in fields of max_run, where every full field means "more follows"
+ * and the final field (a zero remainder after an exact multiple too)
+ * terminates the section. A run of R bands therefore costs
+ * (floor(R / max_run) + 1) run fields, so extending a section is free except
+ * when the run crosses a multiple of max_run.
+ *
+ * The state is the current book plus the run length modulo max_run. Special
+ * books (zero, PNS, both intensity codes) keep their own identity and carry
+ * no spectrum cost: a special band has exactly one candidate book, and a
+ * different special value is a different section. qs holds the regular
+ * bands' values back to back. Sections never merge across a window-group
+ * boundary. Emits the codewords once the books are known. */
 void huffbook(CoderInfo *coder, const int *qs)
 {
-    enum { NSTATE = HCB_ESC + 1 };
-    unsigned char from[MAX_SCFAC_BANDS][NSTATE];
-    int header = 4 + ((coder->block_type == ONLY_SHORT_WINDOW) ? 3 : 5);
+    /* States are indexed by the book value writebooks will emit: 0..11 are
+     * the spectral books, 13..16 the special ones. HCB_DELTA (12) never
+     * names a spectral section, so its slot stays unused. */
+    enum { NBOOK = HCB_NONE + 1, MAX_RUN = 31 };
+    enum { MAX_STATES = NBOOK * MAX_RUN };
+    /* For each band and book, how the run-state 1 there was reached: an
+     * opening after some other book's state, or a continuation from that
+     * book's run-state 0. Every other run-state is an unambiguous
+     * continuation. 0xFFFF marks the continuation. */
+    unsigned short src1[MAX_SCFAC_BANDS][NBOOK];
+    int dp[MAX_STATES], ndp[MAX_STATES];
+    int run_bits = (coder->block_type == ONLY_SHORT_WINDOW) ? 3 : 5;
+    int max_run = (coder->block_type == ONLY_SHORT_WINDOW) ? 7 : 31;
+    int open_cost = 4 + run_bits;
     int g, b, k, off = 0;
+    const int INF = INT_MAX / 4;
 
     for (g = 0, b = 0; g < coder->groups.n; g++) {
-        int end = b + coder->sfbn, dp[NSTATE], c[NSTATE];
-        /* the previous band's states and its cheapest; none before the first */
-        int plo = 1, phi = 0, best = 0, arg = 0;
+        int start = b;
+        int end = b + coder->sfbn;
+        int state, prev, nstates = NBOOK * max_run;
+
+        for (state = 0; state < nstates; state++)
+            dp[state] = INF;
 
         for (; b < end; b++) {
-            int book = coder->book[b], lo = 0, hi = 0, nbest = INT_MAX, narg = 0;
+            int book = coder->book[b], lo, hi, cost[NBOOK], c[HCB_ESC + 1];
+            int sfb = b % coder->sfbn;
+            int len = (coder->sfb_offset[sfb + 1] - coder->sfb_offset[sfb])
+                    * coder->groups.len[g];
 
-            c[0] = 0;
+            for (k = 0; k < NBOOK; k++)
+                cost[k] = INF;
             if (book >= HCB_1 && book <= HCB_ESC) {
-                int sfb = b % coder->sfbn;
-                int len = (coder->sfb_offset[sfb + 1] - coder->sfb_offset[sfb]) * coder->groups.len[g];
-                lo = ((book - 1) & ~1) + 1;
+                int first = ((book - 1) & ~1) + 1;
+                lo = first;
                 hi = HCB_ESC;
-                /* An escape-only band has one choice, so its cost is moot. */
-                if (lo < HCB_ESC)
-                    size_books(qs + off, len, lo, c);
-                else
-                    c[HCB_ESC] = 0;
+                size_books(qs + off, len, first, c);
+                for (k = lo; k <= hi; k++)
+                    cost[k] = c[k];
                 off += len;
+            } else {
+                /* A special band has one book only: its own identity. */
+                lo = hi = (book >= 0 && book <= HCB_NONE) ? book : HCB_NONE;
+                cost[lo] = 0;
             }
 
-            for (k = lo; k <= hi; k++) {
-                int open = best + header;
-                int stay = (k >= plo && k <= phi && (k || coder->book[b - 1] == book)) ? dp[k] : INT_MAX;
-                from[b][k] = (stay <= open) ? k : arg;
-                dp[k] = c[k] + ((stay <= open) ? stay : open);
-                if (dp[k] < nbest) { nbest = dp[k]; narg = k; }
+            if (b == start) {
+                /* First band of a group: only a section can open; nothing
+                 * merges in from the previous group, whatever its book. */
+                for (k = lo; k <= hi; k++)
+                    dp[k * max_run + 1] = (cost[k] < INF) ? open_cost + cost[k] : INF;
+            } else {
+                /* Cheapest state of every book in the previous band, with
+                 * the run it sat at, so both continuations and openings can
+                 * see it. */
+                int same[NBOOK], same_run[NBOOK];
+
+                for (k = 0; k < NBOOK; k++) {
+                    int m = INF, arg = 0;
+                    for (state = 0; state < max_run; state++) {
+                        int v = dp[k * max_run + state];
+                        if (v < m) { m = v; arg = state; }
+                    }
+                    same[k] = m;
+                    same_run[k] = arg;
+                }
+
+                for (state = 0; state < nstates; state++)
+                    ndp[state] = INF;
+                for (k = 0; k < NBOOK; k++)
+                    src1[b][k] = 0xFFFF;
+
+                for (k = lo; k <= hi; k++) {
+                    int cst = cost[k];
+                    int other, obook = -1, orun = 0;
+
+                    if (cst >= INF)
+                        continue;
+
+                    /* Continue this book's section: one more band, plus one
+                     * more run field when the run reaches max_run.  A
+                     * continuation out of run-state 0 lands in run-state 1
+                     * too, so it must clear the opening mark if it wins. */
+                    for (prev = 0; prev < max_run; prev++) {
+                        int v = dp[k * max_run + prev];
+                        int nr, nv;
+                        if (v >= INF)
+                            continue;
+                        nr = prev + 1;
+                        nv = v + cst;
+                        if (nr == max_run) { nr = 0; nv += run_bits; }
+                        if (nv < ndp[k * max_run + nr]) {
+                            ndp[k * max_run + nr] = nv;
+                            if (nr == 1)
+                                src1[b][k] = 0xFFFF;
+                        }
+                    }
+
+                    /* Or open a section in this book after one ending in a
+                     * different book; same-book neighbours would be emitted
+                     * as one run, so they must continue instead. */
+                    other = INF;
+                    for (state = 0; state < NBOOK; state++) {
+                        if (state != k && same[state] < other) {
+                            other = same[state];
+                            obook = state;
+                            orun = same_run[state];
+                        }
+                    }
+                    if (other < INF) {
+                        int nv = other + open_cost + cst;
+                        int slot = k * max_run + 1;
+                        if (nv < ndp[slot]) {
+                            ndp[slot] = nv;
+                            src1[b][k] = (unsigned short)(obook * max_run + orun);
+                        }
+                    }
+                }
+
+                for (state = 0; state < nstates; state++)
+                    dp[state] = ndp[state];
             }
-            plo = lo; phi = hi; best = nbest; arg = narg;
         }
 
-        for (k = arg, b = end - 1; b >= end - coder->sfbn; b--) {
-            if (k)
-                coder->book[b] = k;
-            k = from[b][k];
+        /* Backtrack from the cheapest final state, reconstructing each
+         * band's book. Special bands were never candidates here, so their
+         * own books stay untouched. */
+        {
+            int kbest = -1, rbest = 0, m = INF;
+            for (state = 0; state < nstates; state++) {
+                if (dp[state] < m) {
+                    m = dp[state];
+                    kbest = state / max_run;
+                    rbest = state % max_run;
+                }
+            }
+            for (b = end - 1; b >= start; b--) {
+                if (kbest < 0)
+                    break;
+                if (kbest >= HCB_1 && kbest <= HCB_ESC)
+                    coder->book[b] = kbest;
+                if (b == start)
+                    break;
+                if (rbest == 0) {
+                    rbest = max_run - 1;          /* continued at a boundary */
+                } else if (rbest == 1) {
+                    if (src1[b][kbest] == 0xFFFF) {
+                        rbest = 0;                /* continued in this book */
+                    } else {
+                        unsigned short p2 = src1[b][kbest];
+                        kbest = p2 / max_run;     /* opened after another book */
+                        rbest = p2 % max_run;
+                    }
+                } else {
+                    rbest--;                      /* continued in this book */
+                }
+            }
         }
         b = end;
     }
