@@ -1611,6 +1611,87 @@ int  mdb_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 	 */
 int  mdb_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 
+	/** @brief Delete all keys in a key range from a named database.
+	 *
+	 * Removes every key \b k of the database for which the database's own
+	 * comparator orders <tt>lower <= k < upper</tt>.  The interval is
+	 * half-open: a key equal to \b upper is retained.  Either bound may be
+	 * NULL, meaning that side of the range is unbounded; with both bounds
+	 * NULL the whole database is emptied.  Whether a bound key exists does
+	 * not change the meaning of the interval.
+	 *
+	 * All comparisons use the comparator in effect for the database,
+	 * including any application-supplied comparator set with
+	 * #mdb_set_compare(); raw byte order is never assumed.
+	 *
+	 * Fully covered leaf pages, together with their overflow pages, are
+	 * detached and reclaimed as whole pages instead of being rewritten for
+	 * every record.  Only the up to two pages straddling the range edges are
+	 * edited record by record.  The database is never exported, dropped and
+	 * rebuilt.
+	 *
+	 * Only ordinary named databases are currently supported.  The main
+	 * database, #MDB_DUPSORT databases and invalid arguments are rejected
+	 * with an error before any record is modified.
+	 *
+	 * @param[in] txn A write transaction handle returned by #mdb_txn_begin().
+	 * 	Using a read-only transaction returns #MDB_IS_READONLY, following
+	 * 	the same convention as the other write operations.
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open() for an
+	 * 	ordinary named database.
+	 * @param[in] lower The inclusive lower bound, or NULL for no lower bound.
+	 * @param[in] upper The exclusive upper bound, or NULL for no upper bound.
+	 * @param[out] deleted Required.  On success it receives the number of
+	 * 	keys that were removed; on any failure it is set to zero.
+	 * @return A non-zero error value on failure and 0 on success.  Some
+	 * 	possible errors are:
+	 * <ul>
+	 *	<li>EINVAL - a NULL \b deleted pointer, an invalid handle, or
+	 *		an inverted range (lower ordered after upper).
+	 *	<li>#MDB_INCOMPATIBLE - the database uses #MDB_DUPSORT, or the
+	 *		handle refers to the main/free database rather than a
+	 *		named database.
+	 *	<li>#MDB_IS_READONLY - an attempt was made to write in a
+	 *		read-only transaction.
+	 *	<li>#MDB_BAD_TXN - the transaction is blocked or unusable.
+	 * </ul>
+	 * When both bounds are given and compare equal, no key can match and
+	 * the call succeeds having deleted zero keys.
+	 *
+	 * Cursor behavior:
+	 * <ul>
+	 *	<li>A write-transaction cursor positioned on a retained record
+	 *		stays on that exact key; a subsequent #MDB_NEXT or #MDB_PREV
+	 *		does not skip entries.
+	 *	<li>A cursor whose current record was deleted becomes
+	 *		unpositioned: #MDB_GET_CURRENT returns EINVAL until it is
+	 *		re-positioned, e.g. with #MDB_FIRST or #MDB_SET_RANGE.
+	 *	<li>Read transactions already open keep their snapshot and still
+	 *		see the old values; a read transaction started after the
+	 *		deleting transaction commits sees the result of the deletion.
+	 *	<li>When run inside a nested transaction, cursor and visibility
+	 *		rules follow the existing parent/child transaction semantics
+	 *		on commit or abort.
+	 * </ul>
+	 */
+int  mdb_del_range(MDB_txn *txn, MDB_dbi dbi, const MDB_val *lower,
+		    const MDB_val *upper, mdb_size_t *deleted);
+
+	/** @brief Report batching statistics for the last #mdb_del_range().
+	 *
+	 * Diagnostic helper that returns how many leaf pages were reclaimed as a
+	 * whole and how many keys were removed on partially covered pages during
+	 * the most recent #mdb_del_range() call in this process.  Either pointer
+	 * may be NULL.  The counters are reset to zero at the start of every
+	 * #mdb_del_range() call; they are informational and not part of the
+	 * on-disk format.
+	 * @param[out] full_pages Number of fully covered leaf pages reclaimed
+	 * 	wholesale.
+	 * @param[out] edge_records Number of keys deleted record by record on
+	 * 	the pages straddling the range edges.
+	 */
+void mdb_del_range_counters(mdb_size_t *full_pages, mdb_size_t *edge_records);
+
 	/** @brief Create a cursor handle.
 	 *
 	 * A cursor is associated with a specific transaction and database.

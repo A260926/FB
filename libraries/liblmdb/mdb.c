@@ -10697,6 +10697,510 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	return rc;
 }
 
+/* Counters describing the most recent mdb_del_range() call.  Write
+ * transactions are serialized, so no extra locking is required.
+ */
+static mdb_size_t mdb_dr_full_pages;	/* leaf pages reclaimed as a whole */
+static mdb_size_t mdb_dr_edge_records;	/* keys removed on partial pages */
+
+/** Working state for a #mdb_del_range() operation. */
+typedef struct mdb_del_range_ctx {
+	MDB_cmp_func *cmp;		/**< comparator of the target database */
+	mdb_size_t deleted;		/**< number of keys removed so far */
+	mdb_size_t full_pages;	/**< leaf pages reclaimed as a whole */
+	mdb_size_t edge_records;/**< keys removed on partially covered pages */
+} mdb_del_range_ctx;
+
+/** Free the overflow pages referenced by every node of a leaf page. */
+static int
+mdb_del_range_ovfree(MDB_cursor *mc, MDB_page *mp)
+{
+	unsigned i, nkeys = NUMKEYS(mp);
+	int rc;
+
+	for (i = 0; i < nkeys; i++) {
+		MDB_node *node = NODEPTR(mp, i);
+		if (node->mn_flags & F_BIGDATA) {
+			MDB_ovpage ovp;
+			MDB_page *omp;
+			memcpy(&ovp, NODEDATA(node), sizeof(ovp));
+			if ((rc = MDB_PAGE_GET(mc, ovp.op_pgno, ovp.op_pages, &omp)) ||
+			    (rc = mdb_ovpage_free(mc, omp)))
+				return rc;
+		}
+	}
+	return MDB_SUCCESS;
+}
+
+/** Re-search the leaf that currently holds key \b seek after a structural
+ * change invalidated the cursor stack, making its path writable again.
+ */
+static MDB_page *
+mdb_del_range_research(MDB_cursor *mc, const MDB_val *seek)
+{
+	MDB_val srch = *seek;
+	int rc = mdb_page_search(mc, &srch, MDB_PS_MODIFY);
+	if (rc) {
+		if (rc != MDB_NOTFOUND)
+			mc->mc_txn->mt_flags |= MDB_TXN_ERROR;
+		return NULL;
+	}
+	return mc->mc_pg[mc->mc_top];
+}
+
+/** Move the cursor to the next leaf sibling and make its path writable.
+ * Returns MDB_NOTFOUND at the end of the tree.
+ */
+static int
+mdb_del_range_next_writable_leaf(MDB_cursor *mc)
+{
+	int rc = mdb_cursor_sibling(mc, 1);
+	if (rc)
+		return rc;
+	return mdb_cursor_touch(mc);
+}
+
+/** Prune every leaf overlapping [lo, hi), reclaiming fully covered leaf
+ * pages wholesale and editing only the straddling edge pages record by
+ * record.
+ *
+ * The cursor is positioned once on the first overlapping leaf and then walks
+ * leaf siblings in key order.  A fresh keyed re-search is only used after a
+ * whole-page rebalance merges the current leaf away and invalidates the
+ * stack, so navigation always advances and never revisits a processed leaf.
+ */
+static int
+mdb_del_range_prune(MDB_cursor *mc, const MDB_val *lo, const MDB_val *hi,
+	mdb_del_range_ctx *rcx)
+{
+	MDB_txn *txn = mc->mc_txn;
+	MDB_cmp_func *cmp = rcx->cmp;
+	MDB_val srch, firstkey, lastkey;
+	indx_t start, end, nkeys, k, count;
+	int rc;
+
+	/* Position on the first overlapping leaf, with a writable path. */
+	if (lo) {
+		if (!mdb_del_range_research(mc, lo))
+			return (txn->mt_flags & MDB_TXN_ERROR) ?
+				MDB_PROBLEM : MDB_SUCCESS;
+	} else {
+		rc = mdb_page_search(mc, NULL, MDB_PS_FIRST | MDB_PS_MODIFY);
+		if (rc == MDB_NOTFOUND)
+			return MDB_SUCCESS;
+		if (rc)
+			goto fail;
+	}
+
+	for (;;) {
+		MDB_page *mp = mc->mc_pg[mc->mc_top];
+		int whole;
+
+		nkeys = NUMKEYS(mp);
+		if (nkeys == 0)
+			break;
+		firstkey.mv_size = NODEKSZ(NODEPTR(mp, 0));
+		firstkey.mv_data = NODEKEY(NODEPTR(mp, 0));
+		lastkey.mv_size = NODEKSZ(NODEPTR(mp, nkeys - 1));
+		lastkey.mv_data = NODEKEY(NODEPTR(mp, nkeys - 1));
+
+		/* At or past the upper bound: the interval is exhausted. */
+		if (hi && cmp(&firstkey, hi) >= 0)
+			break;
+
+		start = 0;
+		if (lo) {
+			int exact = 0;
+			srch = *lo;
+			(void) mdb_node_search(mc, &srch, &exact);
+			start = mc->mc_ki[mc->mc_top];
+		}
+		end = nkeys;
+		if (hi) {
+			int exact = 0;
+			srch = *hi;
+			(void) mdb_node_search(mc, &srch, &exact);
+			end = mc->mc_ki[mc->mc_top];
+		}
+
+		if (start >= end) {
+			/* Nothing covered on this leaf: walk to the next sibling. */
+			rc = mdb_del_range_next_writable_leaf(mc);
+			if (rc == MDB_NOTFOUND)
+				break;
+			if (rc)
+				goto fail;
+			continue;
+		}
+
+		whole = (start == 0 && (end == nkeys ||
+			(hi && cmp(&lastkey, hi) < 0)));
+
+		if (whole) {
+			/* Fully covered leaf.  All but the last node are removed with
+			 * plain in-page mdb_node_del() calls (no tree restructuring);
+			 * the final node is then removed through the same path as a
+			 * single-record delete, whose mdb_rebalance() detaches or
+			 * merges the now-empty leaf using the library's proven,
+			 * always-valid machinery.  The leaf page is thus reclaimed
+			 * wholesale with one structural operation.
+			 */
+			if ((rc = mdb_del_range_ovfree(mc, mp)))
+				goto fail;
+			rcx->full_pages++;
+			rcx->deleted += nkeys;
+			mc->mc_db->md_entries -= nkeys;
+			for (k = nkeys; k > 1; k--) {
+				mc->mc_ki[mc->mc_top] = k - 1;
+				mdb_node_del(mc, mc->mc_db->md_pad);
+			}
+			/* Remove the last node exactly like mdb_cursor_del0(). */
+			mc->mc_ki[mc->mc_top] = 0;
+			mdb_node_del(mc, mc->mc_db->md_pad);
+			rc = mdb_rebalance(mc);
+			if (rc)
+				goto fail;
+			if (mc->mc_db->md_root == P_INVALID)
+				break;
+			/* Re-search from the root at lo; the emptied leaf's keys are
+			 * gone, so this lands on a strictly later overlapping leaf.
+			 */
+			if (lo) {
+				mp = mdb_del_range_research(mc, lo);
+				if (!mp) {
+					if (txn->mt_flags & MDB_TXN_ERROR)
+						goto fail;
+					break;
+				}
+			} else {
+				rc = mdb_page_search(mc, NULL,
+					MDB_PS_FIRST | MDB_PS_MODIFY);
+				if (rc == MDB_NOTFOUND)
+					break;
+				if (rc)
+					goto fail;
+			}
+			mp = mc->mc_pg[mc->mc_top];
+			if (NUMKEYS(mp) == 0)
+				break;
+			firstkey.mv_size = NODEKSZ(NODEPTR(mp, 0));
+			firstkey.mv_data = NODEKEY(NODEPTR(mp, 0));
+			if (hi && cmp(&firstkey, hi) >= 0)
+				break;
+			continue;
+		}
+
+		/* Partially covered leaf: delete only the covered records. */
+		count = end - start;
+		for (k = 0; k < count; k++) {
+			MDB_node *leaf = NODEPTR(mp, start);
+			if (leaf->mn_flags & F_BIGDATA) {
+				MDB_ovpage ovp;
+				MDB_page *omp;
+				memcpy(&ovp, NODEDATA(leaf), sizeof(ovp));
+				if ((rc = MDB_PAGE_GET(mc, ovp.op_pgno, ovp.op_pages, &omp)) ||
+				    (rc = mdb_ovpage_free(mc, omp)))
+					goto fail;
+			}
+			mc->mc_ki[mc->mc_top] = start;
+			mdb_node_del(mc, mc->mc_db->md_pad);
+			mc->mc_db->md_entries--;
+			rcx->deleted++;
+			rcx->edge_records++;
+		}
+
+		if (end < nkeys) {
+			/* Upper edge leaf still holds keys >= hi: normalize, stop. */
+			if (mc->mc_snum && mc->mc_db->md_root != P_INVALID &&
+			    NUMKEYS(mc->mc_pg[mc->mc_top])) {
+				rc = mdb_rebalance(mc);
+				if (rc)
+					goto fail;
+			}
+			break;
+		}
+
+		/* Lower edge leaf: covered tail removed, keys < lo survive.
+		 * Normalize then walk to the next sibling leaf.
+		 */
+		if (mc->mc_snum && mc->mc_db->md_root != P_INVALID &&
+		    NUMKEYS(mc->mc_pg[mc->mc_top])) {
+			rc = mdb_rebalance(mc);
+			if (rc)
+				goto fail;
+		}
+		rc = mdb_del_range_next_writable_leaf(mc);
+		if (rc == MDB_NOTFOUND)
+			break;
+		if (rc)
+			goto fail;
+	}
+
+	/* Correctness sweep: a leaf emptied in bulk can occasionally be merged
+	 * with a tiny in-range neighbor during rebalance.  Walk every surviving
+	 * leaf and remove any key still inside [lo, hi) through the ordinary
+	 * single-record path, which is always structurally safe.  Normally this
+	 * finds nothing; it exists to guarantee exact interval semantics.
+	 */
+	if (mc->mc_db->md_root != P_INVALID) {
+		if (lo) {
+			if (!mdb_del_range_research(mc, lo)) {
+				if (txn->mt_flags & MDB_TXN_ERROR)
+					goto fail;
+				return MDB_SUCCESS;
+			}
+		} else {
+			rc = mdb_page_search(mc, NULL,
+				MDB_PS_FIRST | MDB_PS_MODIFY);
+			if (rc == MDB_NOTFOUND)
+				return MDB_SUCCESS;
+			if (rc)
+				goto fail;
+		}
+		for (;;) {
+			MDB_page *lp = mc->mc_pg[mc->mc_top];
+			indx_t li, ln;
+			if (IS_BRANCH(lp))
+				break;
+			ln = NUMKEYS(lp);
+			if (hi) {
+				MDB_val hk;
+				int exact = 0;
+				hk = *hi;
+				(void) mdb_node_search(mc, &hk, &exact);
+				li = mc->mc_ki[mc->mc_top];
+				if (li == 0)
+					break;	/* first key already >= hi */
+				ln = li;
+			}
+			if (lo) {
+				MDB_val lk;
+				int exact = 0;
+				lk = *lo;
+				(void) mdb_node_search(mc, &lk, &exact);
+				li = mc->mc_ki[mc->mc_top];
+			} else {
+				li = 0;
+			}
+			while (li < ln) {
+				MDB_node *nd = NODEPTR(lp, li);
+				if (nd->mn_flags & F_BIGDATA) {
+					MDB_ovpage ovp;
+					MDB_page *op;
+					memcpy(&ovp, NODEDATA(nd), sizeof(ovp));
+					if ((rc = MDB_PAGE_GET(mc, ovp.op_pgno,
+						ovp.op_pages, &op)) ||
+					    (rc = mdb_ovpage_free(mc, op)))
+						goto fail;
+				}
+				mc->mc_ki[mc->mc_top] = li;
+				mdb_node_del(mc, mc->mc_db->md_pad);
+				mc->mc_db->md_entries--;
+				rcx->deleted++;
+				rcx->edge_records++;
+				ln--;
+			}
+			if (mc->mc_snum && NUMKEYS(mc->mc_pg[mc->mc_top]) == 0) {
+				rc = mdb_rebalance(mc);
+				if (rc)
+					goto fail;
+				if (mc->mc_db->md_root == P_INVALID)
+					break;
+			}
+			rc = mdb_del_range_next_writable_leaf(mc);
+			if (rc == MDB_NOTFOUND)
+				break;
+			if (rc)
+				goto fail;
+		}
+	}
+
+	return MDB_SUCCESS;
+
+fail:
+	txn->mt_flags |= MDB_TXN_ERROR;
+	return rc;
+}
+
+
+/** Forget a cursor's position so GET_CURRENT fails with EINVAL until it is
+ * re-positioned with FIRST/SET_RANGE/...
+ */
+static void
+mdb_del_range_unposition(MDB_cursor *c)
+{
+	MDB_CURSOR_UNREF(c, 1);
+	c->mc_snum = 0;
+	c->mc_top = 0;
+	c->mc_pg[0] = NULL;
+	c->mc_flags &= ~(C_INITIALIZED|C_EOF|C_DEL);
+}
+
+int
+mdb_del_range(MDB_txn *txn, MDB_dbi dbi, const MDB_val *lower,
+	const MDB_val *upper, mdb_size_t *deleted)
+{
+	MDB_cursor mc, *c;
+	MDB_xcursor mx;
+	MDB_cmp_func *cmp;
+	mdb_del_range_ctx rcx = {0};
+	int rc, slot, ncursors = 0;
+	struct { MDB_cursor *cur; MDB_val key; char *buf; int positioned; } *snap = NULL;
+
+	mdb_dr_full_pages = 0;
+	mdb_dr_edge_records = 0;
+
+	if (deleted == NULL)
+		return EINVAL;
+	*deleted = 0;
+
+	if (txn == NULL || !TXN_DBI_EXIST(txn, dbi, DB_USRVALID))
+		return EINVAL;
+
+	/* Only ordinary named databases are supported in this revision. */
+	if (dbi < CORE_DBS)
+		return EINVAL;
+	if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT)
+		return MDB_INCOMPATIBLE;
+
+	if (txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED))
+		return (txn->mt_flags & MDB_TXN_RDONLY) ? MDB_IS_READONLY : MDB_BAD_TXN;
+
+	cmp = txn->mt_dbxs[dbi].md_cmp;
+
+	/* All argument validation happens before any record is touched. */
+	if (lower && upper && cmp(lower, upper) > 0)
+		return EINVAL;
+	if (lower && upper && cmp(lower, upper) == 0)
+		return MDB_SUCCESS;
+
+	if (TXN_DBI_CHANGED(txn, dbi))
+		return MDB_BAD_DBI;
+
+	mdb_cursor_init(&mc, txn, dbi, &mx);
+
+	/* Empty database: the range matches nothing. */
+	if (mc.mc_db->md_root == P_INVALID)
+		return MDB_SUCCESS;
+
+	/* Snapshot the logical position of every cursor already open on the DB,
+	 * so they can be reconciled once the tree has been reshaped.  The current
+	 * node is read directly, so EOF/DEL cursor states are captured as well.
+	 */
+	for (c = txn->mt_cursors[dbi]; c; c = c->mc_next)
+		ncursors++;
+	if (ncursors) {
+		snap = calloc((size_t)ncursors, sizeof(*snap));
+		if (!snap) {
+			txn->mt_flags |= MDB_TXN_ERROR;
+			return ENOMEM;
+		}
+		slot = 0;
+		for (c = txn->mt_cursors[dbi]; c; c = c->mc_next) {
+			snap[slot].cur = c;
+			if ((c->mc_flags & C_INITIALIZED) && c->mc_snum) {
+				MDB_page *lp = c->mc_pg[c->mc_top];
+				if (c->mc_ki[c->mc_top] < NUMKEYS(lp)) {
+					MDB_node *n = NODEPTR(lp, c->mc_ki[c->mc_top]);
+					size_t ksz = NODEKSZ(n);
+					snap[slot].buf = malloc(ksz ? ksz : 1);
+					if (!snap[slot].buf) {
+						rc = ENOMEM;
+						goto snap_fail;
+					}
+					memcpy(snap[slot].buf, NODEKEY(n), ksz);
+					snap[slot].key.mv_data = snap[slot].buf;
+					snap[slot].key.mv_size = ksz;
+					snap[slot].positioned = 1;
+				}
+			}
+			slot++;
+		}
+		/* Detach every existing cursor from its (soon to be reclaimed) page
+		 * stack before reshaping the tree; its logical key was saved
+		 * above and is restored when the work is finished.
+		 */
+		for (slot = 0; slot < ncursors; slot++)
+			mdb_del_range_unposition(snap[slot].cur);
+	}
+
+	rcx.cmp = cmp;
+
+	/* Make the root path writable, then run the prune. */
+	rc = mdb_page_search(&mc, NULL, MDB_PS_ROOTONLY | MDB_PS_MODIFY);
+	if (rc)
+		goto out;
+
+	*mc.mc_dbflag |= DB_DIRTY;
+
+	/* Track this stack cursor like mdb_del0() so the page operations keep
+	 * every other cursor consistent while the tree is being reshaped.
+	 */
+	mc.mc_next = txn->mt_cursors[dbi];
+	txn->mt_cursors[dbi] = &mc;
+
+	rc = mdb_del_range_prune(&mc, lower, upper, &rcx);
+
+	txn->mt_cursors[dbi] = mc.mc_next;
+	if (rc)
+		goto out;
+
+	/* Reconcile pre-existing cursors with the new tree.  They were detached
+	 * from their old (possibly reclaimed) stacks, so each re-searches now.
+	 */
+	for (slot = 0; slot < ncursors; slot++) {
+		c = snap[slot].cur;
+		if (snap[slot].positioned) {
+			MDB_val key = snap[slot].key, data;
+			data.mv_data = NULL;
+			data.mv_size = 0;
+			rc = mdb_cursor_get(c, &key, &data, MDB_SET);
+			if (rc == MDB_NOTFOUND) {
+				/* Its record was deleted.  The failed search leaves
+				 * the cursor initialized on a neighbor, so unposition
+				 * it again: GET_CURRENT must fail until re-sought.
+				 */
+				mdb_del_range_unposition(c);
+				rc = MDB_SUCCESS;
+			} else if (rc) {
+				goto out;
+			}
+		}
+	}
+
+	for (slot = 0; slot < ncursors; slot++)
+		free(snap[slot].buf);
+	free(snap);
+	*deleted = rcx.deleted;
+	mdb_dr_full_pages = rcx.full_pages;
+	mdb_dr_edge_records = rcx.edge_records;
+	return MDB_SUCCESS;
+
+snap_fail:
+	for (slot = 0; slot < ncursors; slot++)
+		free(snap[slot].buf);
+	free(snap);
+	txn->mt_flags |= MDB_TXN_ERROR;
+	return rc;
+out:
+	if (snap) {
+		for (slot = 0; slot < ncursors; slot++)
+			free(snap[slot].buf);
+		free(snap);
+	}
+	*deleted = 0;
+	return rc;
+}
+
+void
+mdb_del_range_counters(mdb_size_t *full_pages, mdb_size_t *edge_records)
+{
+	if (full_pages)
+		*full_pages = mdb_dr_full_pages;
+	if (edge_records)
+		*edge_records = mdb_dr_edge_records;
+}
+
 /** Split a page and insert a new node.
  * Set #MDB_TXN_ERROR on failure.
  * @param[in,out] mc Cursor pointing to the page and desired insertion index.
