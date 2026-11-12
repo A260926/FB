@@ -656,6 +656,7 @@ bool ts__irBlockHasTerminator(IRInst *block)
     switch (last_inst->kind)
     {
     case IR_INST_COND_BRANCH:
+    case IR_INST_SWITCH:
     case IR_INST_BRANCH:
     case IR_INST_DISCARD:
     case IR_INST_RETURN: return true;
@@ -1371,6 +1372,43 @@ void ts__irBuildCondBr(
     arrPush(m->compiler, &block->block.insts, inst);
 }
 
+IRInst *ts__irBuildSwitch(
+    IRModule *m,
+    IRInst *selector,
+    IRInst *merge_block,
+    uint32_t *case_literals,
+    IRInst **case_labels,
+    uint32_t case_count,
+    IRInst *default_label)
+{
+    IRInst *inst = NEW(m->compiler, IRInst);
+    inst->kind = IR_INST_SWITCH;
+    inst->switch_.selector = selector;
+    inst->switch_.merge_block = merge_block;
+    inst->switch_.case_count = case_count;
+    inst->switch_.default_label = default_label;
+
+    if (case_count > 0)
+    {
+        inst->switch_.case_literals = NEW_ARRAY(m->compiler, uint32_t, case_count);
+        memcpy(
+            inst->switch_.case_literals,
+            case_literals,
+            sizeof(uint32_t) * case_count);
+
+        inst->switch_.case_labels = NEW_ARRAY(m->compiler, IRInst *, case_count);
+        memcpy(
+            inst->switch_.case_labels,
+            case_labels,
+            sizeof(IRInst *) * case_count);
+    }
+
+    IRInst *block = ts__irGetCurrentBlock(m);
+    arrPush(m->compiler, &block->block.insts, inst);
+
+    return inst;
+}
+
 ////////////////////////////////
 //
 // IR instruction encoding
@@ -1851,6 +1889,35 @@ static void irModuleEncodeBlock(IRModule *m, IRInst *block)
                 };
                 irModuleEncodeInst(m, SpvOpBranchConditional, params, 3);
             }
+            break;
+        }
+
+        case IR_INST_SWITCH: {
+            if (inst->switch_.merge_block)
+            {
+                TS_ASSERT(inst->switch_.default_label);
+                uint32_t params[2] = {
+                    inst->switch_.merge_block->id,
+                    SpvSelectionControlMaskNone,
+                };
+                irModuleEncodeInst(m, SpvOpSelectionMerge, params, 2);
+            }
+
+            uint32_t param_count = 2 + (inst->switch_.case_count * 2);
+            uint32_t *params = NEW_ARRAY(m->compiler, uint32_t, param_count);
+
+            TS_ASSERT(inst->switch_.selector->id);
+            params[0] = inst->switch_.selector->id;
+            params[1] = inst->switch_.default_label->id;
+
+            for (uint32_t i = 0; i < inst->switch_.case_count; ++i)
+            {
+                TS_ASSERT(inst->switch_.case_labels[i]->id);
+                params[2 + (i * 2)] = inst->switch_.case_literals[i];
+                params[3 + (i * 2)] = inst->switch_.case_labels[i]->id;
+            }
+
+            irModuleEncodeInst(m, SpvOpSwitch, params, param_count);
             break;
         }
 

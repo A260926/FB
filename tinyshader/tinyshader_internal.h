@@ -492,6 +492,8 @@ typedef enum IRInstKind {
     IR_INST_UNARY,
     IR_INST_BINARY,
     IR_INST_SELECT,
+
+    IR_INST_SWITCH,
 } IRInstKind;
 
 typedef enum IRBuiltinInstKind {
@@ -756,6 +758,18 @@ struct IRInst
             IRInst *true_value;
             IRInst *false_value;
         } select;
+
+        struct
+        {
+            IRInst *selector;
+            IRInst *merge_block;
+
+            uint32_t *case_literals;
+            IRInst **case_labels;
+            uint32_t case_count;
+
+            IRInst *default_label;
+        } switch_;
     };
 };
 
@@ -1048,7 +1062,26 @@ typedef enum AstStmtKind {
     STMT_WHILE,
     STMT_DO_WHILE,
     STMT_FOR,
+    STMT_SWITCH,
 } AstStmtKind;
+
+typedef enum AstSwitchEntryKind {
+    SWITCH_ENTRY_CASE,
+    SWITCH_ENTRY_DEFAULT,
+    SWITCH_ENTRY_STMT,
+} AstSwitchEntryKind;
+
+typedef struct AstSwitchEntry
+{
+    AstSwitchEntryKind kind;
+    Location loc;
+
+    AstExpr *value; // for SWITCH_ENTRY_CASE
+    AstStmt *stmt;  // for SWITCH_ENTRY_STMT
+} AstSwitchEntry;
+
+typedef ARRAY_OF(AstSwitchEntry) ArrayOfAstSwitchEntry;
+typedef ARRAY_OF(AstSwitchEntry *) ArrayOfAstSwitchEntryPtr;
 
 typedef enum AstDeclKind {
     DECL_FUNC,
@@ -1127,6 +1160,14 @@ struct AstStmt
 
             AstStmt *stmt;
         } for_;
+
+        struct
+        {
+            AstExpr *value;
+            ArrayOfAstSwitchEntry entries;
+            AstSwitchEntry *default_entry; // NULL if there is no default
+            Scope *scope;                  // scope opened by the switch body
+        } switch_;
     };
 };
 
@@ -1527,6 +1568,14 @@ void ts__irBuildCondBr(
     IRInst *false_block,
     IRInst *merge_block,
     IRInst *continue_block);
+IRInst *ts__irBuildSwitch(
+    IRModule *m,
+    IRInst *selector,
+    IRInst *merge_block,
+    uint32_t *case_literals,
+    IRInst **case_labels,
+    uint32_t case_count,
+    IRInst *default_label);
 
 uint32_t *ts__irModuleCodegen(IRModule *mod, size_t *word_count);
 

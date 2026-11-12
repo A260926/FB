@@ -14,6 +14,28 @@ static void astBuildDecl(Module *ast_mod, IRModule *ir_mod, AstDecl *decl);
 static void astBuildStmt(Module *ast_mod, IRModule *ir_mod, AstStmt *stmt);
 static void astBuildExpr(Module *ast_mod, IRModule *ir_mod, AstExpr *expr);
 
+// A switch label group together with the statements following it, up to
+// the next label. Statements flow into the next region by falling through.
+typedef struct SwitchRegion
+{
+    ArrayOfAstSwitchEntryPtr labels;
+    ArrayOfAstStmtPtr stmts;
+} SwitchRegion;
+
+// Returns the 32-bit literal used by OpSwitch for the given resolved
+// integer value and integer type.
+static uint32_t switchCaseLiteral(int64_t value, AstType *type)
+{
+    switch (type->int_.bits)
+    {
+    case 8: return (uint32_t)(uint8_t)value;
+    case 16: return (uint32_t)(uint16_t)value;
+    case 64: return (uint32_t)(uint64_t)value;
+    case 32:
+    default: return (uint32_t)(uint64_t)value;
+    }
+}
+
 static IRInst *boolVal(IRModule *m, IRInst *value)
 {
     IRType *bool_type = ts__irNewBasicType(m, IR_TYPE_BOOL);
@@ -1857,6 +1879,216 @@ static void astBuildStmt(Module *ast_mod, IRModule *ir_mod, AstStmt *stmt)
             if (!ts__irBlockHasTerminator(ts__irGetCurrentBlock(ir_mod)))
             {
                 ts__irBuildBr(ir_mod, merge_block, NULL, NULL);
+            }
+        }
+
+        ts__irPositionAtEnd(ir_mod, merge_block);
+        ts__irAddBlock(ir_mod, merge_block);
+
+        break;
+    }
+
+    case STMT_SWITCH: {
+        AstType *selector_type = stmt->switch_.value->type;
+        TS_ASSERT(selector_type);
+        if (selector_type->kind != TYPE_INT)
+        {
+            // Diagnostics were emitted during analysis.
+            break;
+        }
+
+        IRInst *current_block = ts__irGetCurrentBlock(ir_mod);
+        IRInst *func = current_block->block.func;
+
+        // Evaluate the selector exactly once, before any label is reached.
+        astBuildExpr(ast_mod, ir_mod, stmt->switch_.value);
+        IRInst *selector = stmt->switch_.value->value;
+        TS_ASSERT(selector);
+        selector = loadVal(ir_mod, selector);
+
+        ArrayOfAstSwitchEntry *entries = &stmt->switch_.entries;
+
+        // A region is a label (or a group of adjacent labels sharing their
+        // statements) plus the statements that follow it. Adjacent labels
+        // that resolve to the same source position share one block, so the
+        // SPIR-V switch target is identical for all of them.
+        //
+        // Statements that appear before the first label form an unlabeled
+        // region. That region is entered by the switch only when nothing
+        // matches, exactly like a default placed at the top of the body.
+        ARRAY_OF(SwitchRegion) regions = {0};
+        uint32_t region_count = 0;
+
+        // Index of the region that is currently collecting statements, or
+        // SIZE_MAX before the first label / immediately after one that has
+        // no statements yet. An index is used instead of a pointer because
+        // pushing onto `regions` may reallocate its storage.
+        size_t current = (size_t)-1;
+        for (uint32_t i = 0; i < arrLength(*entries); ++i)
+        {
+            AstSwitchEntry *entry = &entries->ptr[i];
+
+            if (entry->kind != SWITCH_ENTRY_STMT)
+            {
+                // A label always begins a fresh region, unless it directly
+                // follows another label with no statements in between, in
+                // which case the labels share that region.
+                if (current != (size_t)-1 &&
+                    arrLength(regions.ptr[current].labels) > 0 &&
+                    arrLength(regions.ptr[current].stmts) == 0)
+                {
+                    arrPush(compiler, &regions.ptr[current].labels, entry);
+                    continue;
+                }
+
+                SwitchRegion region = {0};
+                arrPush(compiler, &region.labels, entry);
+                arrPush(compiler, &regions, region);
+                region_count++;
+                current = region_count - 1;
+            }
+            else
+            {
+                if (current == (size_t)-1)
+                {
+                    // Statements before the first label: an unlabeled
+                    // region that is never a switch target.
+                    SwitchRegion region = {0};
+                    arrPush(compiler, &regions, region);
+                    region_count++;
+                    current = region_count - 1;
+                }
+
+                arrPush(compiler, &regions.ptr[current].stmts, entry->stmt);
+            }
+        }
+
+        IRInst *merge_block = ts__irCreateBlock(ir_mod, func);
+
+        IRInst **region_blocks = NEW_ARRAY_UNINIT(compiler, IRInst *, region_count);
+        for (uint32_t i = 0; i < region_count; ++i)
+        {
+            region_blocks[i] = ts__irCreateBlock(ir_mod, func);
+        }
+
+        // The target used when no case matches: an explicit default wins;
+        // otherwise execution continues with the statement after the
+        // switch, i.e. the merge block. Statements that precede the first
+        // label are unreachable, just like they are in C/HLSL.
+        IRInst *default_block = NULL;
+        if (stmt->switch_.default_entry)
+        {
+            for (uint32_t i = 0; i < region_count && !default_block; ++i)
+            {
+                for (uint32_t j = 0; j < arrLength(regions.ptr[i].labels); ++j)
+                {
+                    if (regions.ptr[i].labels.ptr[j] == stmt->switch_.default_entry)
+                    {
+                        default_block = region_blocks[i];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!default_block)
+        {
+            default_block = merge_block;
+        }
+
+        uint32_t case_count = 0;
+        for (uint32_t i = 0; i < arrLength(*entries); ++i)
+        {
+            if (entries->ptr[i].kind == SWITCH_ENTRY_CASE) case_count++;
+        }
+
+        uint32_t *case_literals = NEW_ARRAY_UNINIT(compiler, uint32_t, case_count);
+        IRInst **case_labels = NEW_ARRAY_UNINIT(compiler, IRInst *, case_count);
+
+        {
+            uint32_t case_index = 0;
+            for (uint32_t i = 0; i < arrLength(*entries); ++i)
+            {
+                AstSwitchEntry *entry = &entries->ptr[i];
+                if (entry->kind != SWITCH_ENTRY_CASE) continue;
+
+                IRInst *label_block = NULL;
+                for (uint32_t r = 0; r < region_count && !label_block; ++r)
+                {
+                    for (uint32_t j = 0; j < arrLength(regions.ptr[r].labels); ++j)
+                    {
+                        if (regions.ptr[r].labels.ptr[j] == entry)
+                        {
+                            label_block = region_blocks[r];
+                            break;
+                        }
+                    }
+                }
+                TS_ASSERT(label_block);
+
+                case_literals[case_index] =
+                    switchCaseLiteral(*entry->value->resolved_int, selector_type);
+                case_labels[case_index] = label_block;
+                case_index++;
+            }
+        }
+
+        if (case_count > 0)
+        {
+            ts__irBuildSwitch(
+                ir_mod,
+                selector,
+                merge_block,
+                case_literals,
+                case_labels,
+                case_count,
+                default_block);
+        }
+        else
+        {
+            // No case labels at all: dispatch straight to the default
+            // target (which is the merge block when there is no default).
+            ts__irBuildBr(ir_mod, default_block, NULL, NULL);
+        }
+
+        // Emit each region in source order. A region that does not end in a
+        // terminator falls through to the next one, and the last one falls
+        // out to the merge block. `break` targets the merge block.
+        for (uint32_t i = 0; i < region_count; ++i)
+        {
+            if (i == 0 && arrLength(regions.ptr[0].labels) == 0)
+            {
+                // Statements before the first label are unreachable (there
+                // is no way to branch to them), so they are not emitted.
+                continue;
+            }
+
+            ts__irPositionAtEnd(ir_mod, region_blocks[i]);
+            ts__irAddBlock(ir_mod, region_blocks[i]);
+
+            arrPush(compiler, &ast_mod->break_stack, merge_block);
+
+            for (uint32_t j = 0; j < arrLength(regions.ptr[i].stmts); ++j)
+            {
+                astBuildStmt(ast_mod, ir_mod, regions.ptr[i].stmts.ptr[j]);
+                if (ts__irBlockHasTerminator(ts__irGetCurrentBlock(ir_mod)))
+                {
+                    break;
+                }
+            }
+
+            arrPop(&ast_mod->break_stack);
+
+            if (!ts__irBlockHasTerminator(ts__irGetCurrentBlock(ir_mod)))
+            {
+                if (i + 1 < region_count)
+                {
+                    ts__irBuildBr(ir_mod, region_blocks[i + 1], NULL, NULL);
+                }
+                else
+                {
+                    ts__irBuildBr(ir_mod, merge_block, NULL, NULL);
+                }
             }
         }
 

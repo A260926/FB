@@ -1012,7 +1012,7 @@ static AstDecl *parseVarDecl(
                 AstExpr *value_expr = NEW(compiler, AstExpr);
                 value_expr->kind = EXPR_COMPOSITE_LITERAL;
 
-                while (parserPeek(p, 0)->kind != TOKEN_RCURLY)
+                while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
                 {
                     AstExpr *elem_expr = parseExpr(p);
                     if (!elem_expr) return NULL;
@@ -1257,6 +1257,94 @@ static AstStmt *parseStmt(Parser *p)
         return stmt;
     }
 
+    case TOKEN_SWITCH: {
+        Location stmt_loc = parserBeginLoc(p);
+
+        parserNext(p, 1);
+        AstStmt *stmt = NEW(compiler, AstStmt);
+        stmt->kind = STMT_SWITCH;
+
+        if (!parserConsume(p, TOKEN_LPAREN)) return NULL;
+
+        stmt->switch_.value = parseExpr(p);
+        if (!stmt->switch_.value) return NULL;
+
+        if (!parserConsume(p, TOKEN_RPAREN)) return NULL;
+
+        if (!parserConsume(p, TOKEN_LCURLY)) return NULL;
+
+        while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
+        {
+            if (parserPeek(p, 0)->kind == TOKEN_CASE)
+            {
+                Location case_loc = parserBeginLoc(p);
+                parserNext(p, 1);
+
+                AstSwitchEntry entry;
+                memset(&entry, 0, sizeof(entry));
+                entry.kind = SWITCH_ENTRY_CASE;
+                entry.value = parseExpr(p);
+                if (!entry.value) return NULL;
+
+                if (!parserConsume(p, TOKEN_COLON)) return NULL;
+
+                parserEndLoc(p, &case_loc);
+                entry.loc = case_loc;
+
+                arrPush(compiler, &stmt->switch_.entries, entry);
+            }
+            else if (parserPeek(p, 0)->kind == TOKEN_DEFAULT)
+            {
+                Location default_loc = parserBeginLoc(p);
+                parserNext(p, 1);
+
+                if (!parserConsume(p, TOKEN_COLON)) return NULL;
+
+                AstSwitchEntry entry;
+                memset(&entry, 0, sizeof(entry));
+                entry.kind = SWITCH_ENTRY_DEFAULT;
+
+                parserEndLoc(p, &default_loc);
+                entry.loc = default_loc;
+
+                arrPush(compiler, &stmt->switch_.entries, entry);
+            }
+            else
+            {
+                size_t prev_pos = p->pos;
+                AstStmt *sub_stmt = parseStmt(p);
+                if (sub_stmt)
+                {
+                    AstSwitchEntry entry;
+                    memset(&entry, 0, sizeof(entry));
+                    entry.kind = SWITCH_ENTRY_STMT;
+                    entry.stmt = sub_stmt;
+                    entry.loc = sub_stmt->loc;
+
+                    arrPush(compiler, &stmt->switch_.entries, entry);
+                }
+                else if (p->pos == prev_pos && !parserIsAtEnd(p))
+                {
+                    ts__addErr(
+                        compiler,
+                        &parserPeek(p, 0)->loc,
+                        "unexpected token in switch statement: '%.*s'",
+                        (int)parserPeek(p, 0)->loc.length,
+                        &parserPeek(p, 0)->loc.buffer[parserPeek(p, 0)->loc.pos]);
+                    parserNext(p, 1);
+                }
+            }
+
+        }
+
+        if (!parserConsume(p, TOKEN_RCURLY)) return NULL;
+
+        parserEndLoc(p, &stmt_loc);
+        stmt->loc = stmt_loc;
+
+        return stmt;
+    }
+
     case TOKEN_LCURLY: {
         Location stmt_loc = parserBeginLoc(p);
 
@@ -1265,7 +1353,7 @@ static AstStmt *parseStmt(Parser *p)
         AstStmt *stmt = NEW(compiler, AstStmt);
         stmt->kind = STMT_BLOCK;
 
-        while (parserPeek(p, 0)->kind != TOKEN_RCURLY)
+        while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
         {
             AstStmt *sub_stmt = parseStmt(p);
             if (sub_stmt)
@@ -1511,7 +1599,7 @@ static AstDecl *parseTopLevel(Parser *p)
 
         if (!parserConsume(p, TOKEN_LCURLY)) return NULL;
 
-        while (parserPeek(p, 0)->kind != TOKEN_RCURLY)
+        while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
         {
             AstDecl *field_decl = parseVarDecl(p, false, NULL, false, false, true);
             field_decl->kind = DECL_STRUCT_FIELD;
@@ -1575,7 +1663,7 @@ static AstDecl *parseTopLevel(Parser *p)
 
         if (!parserConsume(p, TOKEN_LCURLY)) return NULL;
 
-        while (parserPeek(p, 0)->kind != TOKEN_RCURLY)
+        while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
         {
             AstDecl *field_decl = parseVarDecl(p, false, NULL, false, false, true);
             field_decl->kind = DECL_STRUCT_FIELD;
@@ -1708,7 +1796,7 @@ static AstDecl *parseTopLevel(Parser *p)
 
             if (!parserConsume(p, TOKEN_LCURLY)) return NULL;
 
-            while (parserPeek(p, 0)->kind != TOKEN_RCURLY)
+            while (!parserIsAtEnd(p) && parserPeek(p, 0)->kind != TOKEN_RCURLY)
             {
                 AstStmt *stmt = parseStmt(p);
                 if (stmt)

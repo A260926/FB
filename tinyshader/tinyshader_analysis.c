@@ -4077,6 +4077,145 @@ static void analyzerAnalyzeStmt(Analyzer *a, AstStmt *stmt)
         arrPop(&a->break_stack);
         break;
     }
+
+    case STMT_SWITCH: {
+        analyzerAnalyzeExpr(a, stmt->switch_.value, NULL);
+
+        AstType *value_type = stmt->switch_.value->type;
+        if (value_type && value_type->kind != TYPE_INT)
+        {
+            ts__addErr(
+                compiler,
+                &stmt->switch_.value->loc,
+                "switch expression must be a scalar integer, instead got '%s'",
+                ts__typeToPrettyString(compiler, value_type));
+        }
+
+        stmt->switch_.scope = NEW(compiler, Scope);
+        scopeInit(compiler, stmt->switch_.scope, analyzerCurrentScope(a), NULL);
+
+        analyzerPushScope(a, stmt->switch_.scope);
+
+        ArrayOfAstSwitchEntry *entries = &stmt->switch_.entries;
+
+        // 'break' inside the switch exits the switch itself; 'continue' has
+        // no target inside a switch and must refer to an enclosing loop, so
+        // the continue stack is deliberately left untouched.
+        arrPush(a->compiler, &a->break_stack, stmt);
+
+        bool have_default = false;
+        AstDecl *preceding_decl = NULL;
+        for (uint32_t i = 0; i < arrLength(*entries); ++i)
+        {
+            AstSwitchEntry *entry = &entries->ptr[i];
+            if (entry->kind == SWITCH_ENTRY_CASE)
+            {
+                if (preceding_decl)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->loc,
+                        "case label jumps into the scope of variable '%s' declared "
+                        "earlier in the switch statement",
+                        preceding_decl->name ? preceding_decl->name : "<unnamed>");
+                }
+
+                analyzerAnalyzeExpr(a, entry->value, value_type);
+
+                if (!entry->value->type) continue;
+
+                if (entry->value->type->kind != TYPE_INT)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->value->loc,
+                        "case label must be a scalar integer, instead got '%s'",
+                        ts__typeToPrettyString(compiler, entry->value->type));
+                }
+                else if (value_type && entry->value->type != value_type)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->value->loc,
+                        "case label type '%s' does not match switch expression type '%s'",
+                        ts__typeToPrettyString(compiler, entry->value->type),
+                        ts__typeToPrettyString(compiler, value_type));
+                }
+                else if (!entry->value->resolved_int)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->value->loc,
+                        "case label must be a constant integer expression");
+                }
+            }
+            else if (entry->kind == SWITCH_ENTRY_DEFAULT)
+            {
+                if (preceding_decl)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->loc,
+                        "default label jumps into the scope of variable '%s' "
+                        "declared earlier in the switch statement",
+                        preceding_decl->name ? preceding_decl->name : "<unnamed>");
+                }
+
+                if (have_default)
+                {
+                    ts__addErr(
+                        compiler,
+                        &entry->loc,
+                        "duplicate 'default' label in switch statement");
+                }
+                have_default = true;
+                stmt->switch_.default_entry = entry;
+            }
+            else if (entry->kind == SWITCH_ENTRY_STMT)
+            {
+                if (entry->stmt->kind == STMT_DECL && entry->stmt->decl->name)
+                {
+                    preceding_decl = entry->stmt->decl;
+                }
+
+                analyzerAnalyzeStmt(a, entry->stmt);
+            }
+        }
+
+        arrPop(&a->break_stack);
+
+        analyzerPopScope(a, stmt->switch_.scope);
+
+        // Duplicate case values are diagnosed with the location of the
+        // repeated label.
+        if (value_type && value_type->kind == TYPE_INT)
+        {
+            for (uint32_t i = 0; i < arrLength(*entries); ++i)
+            {
+                AstSwitchEntry *left = &entries->ptr[i];
+                if (left->kind != SWITCH_ENTRY_CASE || !left->value->resolved_int)
+                    continue;
+
+                for (uint32_t j = i + 1; j < arrLength(*entries); ++j)
+                {
+                    AstSwitchEntry *right = &entries->ptr[j];
+                    if (right->kind != SWITCH_ENTRY_CASE || !right->value->resolved_int)
+                        continue;
+
+                    if (*left->value->resolved_int == *right->value->resolved_int)
+                    {
+                        ts__addErr(
+                            compiler,
+                            &right->loc,
+                            "duplicate case label '%lld' in switch statement",
+                            (long long)*right->value->resolved_int);
+                    }
+                }
+            }
+        }
+
+        break;
+    }
     }
 }
 
@@ -4271,6 +4410,16 @@ static void analyzerAnalyzeDecl(Analyzer *a, AstDecl *decl)
         }
 
         decl->type = decl->var.type_expr->as_type;
+
+        // A const integer initialized with a constant expression can be used
+        // wherever an integer constant is required (e.g. case labels).
+        if ((decl->var.type_modifiers & TYPE_MODIFIER_CONST) && decl->type &&
+            decl->type->kind == TYPE_INT && decl->var.value_expr &&
+            decl->var.value_expr->resolved_int)
+        {
+            decl->resolved_int = NEW(compiler, int64_t);
+            *decl->resolved_int = *decl->var.value_expr->resolved_int;
+        }
 
         if (decl->var.storage_class == VAR_STORAGE_CLASS_FUNCTION && a->scope_func)
         {
