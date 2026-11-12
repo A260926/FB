@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 function fail(message) { console.error(message); process.exit(1); }
-const file = 'test/userfb/regexp-flow.test.cjs';
+const file = 'test/harness/regexp-flow.test.cjs';
 if (!fs.existsSync(file)) fail(`Missing required new test file: ${file}`);
 if (!fs.existsSync('docs/regexp-flow.md') || !fs.readFileSync('docs/regexp-flow.md', 'utf8').trim()) fail('Missing required new documentation: docs/regexp-flow.md');
 function run(executable, args, timeout) {
@@ -26,7 +26,7 @@ const total = count('tests');
 if (total < 4 || count('pass') !== total || ['fail', 'cancelled', 'skipped', 'todo'].some(k => count(k) !== 0)) {
   fail('New tests must execute, all pass, and have no skipped/todo/cancelled cases');
 }
-const old = run(process.execPath, [path.join('userfb_baseline', 'node_modules', 'mocha', 'bin', 'mocha.js'),
+const old = run(process.execPath, [path.join('baseline', 'node_modules', 'mocha', 'bin', 'mocha.js'),
   'test/rules/detect-unsafe-regexp.js', 'test/rules/detect-non-literal-regexp.js',
   'test/utils/is-static-expression.js', '--reporter', 'dot'], 30000);
 if (!/^\s*40 passing\b/m.test(old) || /\bpending\b/.test(old)) fail('Expected all 40 selected upstream tests');
