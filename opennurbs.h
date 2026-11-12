@@ -181,6 +181,7 @@
 #include "opennurbs_mesh_modifiers.h"      // Mesh Modifiers support.
 #include "opennurbs_extensions.h"
 #include "opennurbs_freetype.h"
+#include "opennurbs_face_reparameterize.h" // exact face reparameterization
 
 
 #endif

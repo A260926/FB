@@ -134,6 +134,7 @@ ON_INC = opennurbs.h \
 	opennurbs_error.h \
 	opennurbs_evaluate_nurbs.h \
 	opennurbs_extensions.h \
+	opennurbs_face_reparameterize.h \
 	opennurbs_file_utilities.h \
 	opennurbs_font.h \
 	opennurbs_fpoint.h \
@@ -306,6 +307,7 @@ ON_SRC = opennurbs_3dm_attributes.cpp \
 	opennurbs_error_message.cpp \
 	opennurbs_evaluate_nurbs.cpp \
 	opennurbs_extensions.cpp \
+	opennurbs_face_reparameterize.cpp \
 	opennurbs_file_utilities.cpp \
 	opennurbs_font.cpp \
 	opennurbs_freetype.cpp \
