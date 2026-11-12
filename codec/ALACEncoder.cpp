@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "ALACEncoder.h"
 
@@ -53,6 +54,14 @@ const uint32_t kMaxRes			= 4;
 const uint32_t kDefaultNumUV		= 8;
 const uint32_t kMinUV				= 4;
 const uint32_t kMaxUV				= 8;
+
+// LPC analysis constants
+// - candidate predictor orders (must be representable in the existing 5-bit numU/numV header field)
+// - the fit runs at DENSHIFT_DEFAULT precision on the actual (U/V or mono) signal
+const uint32_t kLPCOrders[]			= { 4, 8, 12, 16 };
+const uint32_t kNumLPCOrders		= sizeof(kLPCOrders) / sizeof(kLPCOrders[0]);
+const double   kLPCPivotMin			= 1e-8;	// relative pivot floor for rank detection
+const int32_t  kLPCFitFailed			= 1;		// LPCFit: this order is unusable for this packet
 
 // static functions
 #if VERBOSE_DEBUG
@@ -102,12 +111,14 @@ static const uint32_t sSupportediPodSampleRates[] =
 ALACEncoder::ALACEncoder() :
 	mBitDepth( 0 ),
     mFastMode( 0 ),
+	mLPCAnalysis( false ),
 	mMixBufferU( nil ),
 	mMixBufferV( nil ),
 	mPredictorU( nil ),
 	mPredictorV( nil ),
 	mShiftBufferUV( nil ),
 	mWorkBuffer( nil ),
+	mLPCDryBuffer( nil ),
 
 
 	mTotalBytesGenerated( 0 ),
@@ -160,6 +171,13 @@ ALACEncoder::~ALACEncoder()
 		free(mWorkBuffer);
         mWorkBuffer = NULL;
     }	
+
+	// delete the LPC analysis dry-run buffer
+	if ( mLPCDryBuffer )
+    {
+		free(mLPCDryBuffer);
+        mLPCDryBuffer = NULL;
+    }
 }
 
 #if PRAGMA_MARK
@@ -258,6 +276,213 @@ ALACEncoder::~ALACEncoder()
         The relevance of the ALAC coefficients is explained in detail
         in patent documents.
 */
+
+/*
+	LPCFit()
+	- estimate a linear predictor of the given order directly from the current
+	  packet's actual samples (in the difference form used by pc_block():
+	  del = in[j] - in[j-lag])
+	- works at the codec's standard coefficient precision (DENSHIFT_DEFAULT):
+	  the returned integer coefficients feed the existing adaptive predictor
+	  exactly like any other initial coefficient set
+	- returns ALAC_noErr (0) on success and a non-zero code when the order has
+	  no usable history in this packet, or when the normal equations are
+	  degenerate (silence, constant data, rank deficiency, non-finite results)
+	- the returned coefficients are always finite int16 values; a global scale
+	  reduction is applied when needed so the predictor arithmetic cannot
+	  overflow int32 for this chanBits
+*/
+int32_t ALACEncoder::LPCFit( const int32_t * signal, uint32_t numSamples, uint32_t order, uint32_t chanBits, int16_t * coefs )
+{
+	// history requirement: the predictor needs numactive + 1 samples before it can predict
+	if ( (order < 2) || (order > kALACMaxCoefs) )
+		return kLPCFitFailed;
+	if ( numSamples < (order + 2) )
+		return kLPCFitFailed;
+	// keep the 64-bit normal-equation accumulation exact for very large frames
+	if ( numSamples > ( 1u << 20 ) )
+		return kLPCFitFailed;
+
+	// Find the magnitude of the signal so the integer accumulation below stays exact.
+	uint32_t	maxMagnitude = 0;
+
+	for ( uint32_t j = 0; j < numSamples; j++ )
+	{
+		int64_t		v = signal[j];
+		uint32_t	mag = (uint32_t)((v < 0) ? -v : v);
+
+		if ( mag > maxMagnitude )
+			maxMagnitude = mag;
+	}
+	if ( maxMagnitude == 0 )
+		return kLPCFitFailed;						// silence
+
+	uint32_t	bits = 0;
+	for ( uint32_t t = maxMagnitude; t != 0; t >>= 1 )
+		bits++;
+	uint32_t	shift = (bits > 20) ? (bits - 20) : 0;		// keep |samples| below 2^20
+
+	// Normal equations over the difference basis used by pc_block().
+	// Accumulation bound: |b| < 2^21, |target| < 2^21, so every product
+	// is < 2^42 and a full 4096-sample packet stays below 2^54.
+	int64_t	C[kALACMaxCoefs * kALACMaxCoefs];
+	int64_t	d[kALACMaxCoefs];
+
+	for ( uint32_t k = 0; k < order; k++ )
+	{
+		d[k] = 0;
+		for ( uint32_t l = 0; l < order; l++ )
+			C[k * order + l] = 0;
+	}
+
+	int64_t	b[kALACMaxCoefs];
+	for ( uint32_t j = order + 1; j < numSamples; j++ )
+	{
+		int64_t	top = (int64_t)(signal[j - order - 1] >> shift);
+		int64_t	target = (int64_t)(signal[j] >> shift) - top;
+
+		for ( uint32_t k = 0; k < order; k++ )
+			b[k] = (int64_t)(signal[j - 1 - k] >> shift) - top;
+
+		for ( uint32_t k = 0; k < order; k++ )
+		{
+			int64_t bk = b[k];
+			d[k] += bk * target;
+			for ( uint32_t l = 0; l <= k; l++ )
+				C[k * order + l] += bk * b[l];
+		}
+	}
+
+	for ( uint32_t k = 0; k < order; k++ )
+		for ( uint32_t l = k + 1; l < order; l++ )
+			C[k * order + l] = C[l * order + k];
+
+	// Column-scale the normal equations so rank detection and pivoting are
+	// independent of the per-delay energies.
+	double	scale[kALACMaxCoefs];
+	double	R[kALACMaxCoefs * kALACMaxCoefs];
+	double	e[kALACMaxCoefs];
+
+	for ( uint32_t k = 0; k < order; k++ )
+	{
+		double diag = (double)C[k * order + k];
+		if ( !(diag > 0.0) )
+			return kLPCFitFailed;			// zero energy at this delay (silence / constant / rank drop)
+		scale[k] = sqrt(diag);
+	}
+
+	for ( uint32_t k = 0; k < order; k++ )
+	{
+		for ( uint32_t l = 0; l < order; l++ )
+			R[k * order + l] = (double)C[k * order + l] / (scale[k] * scale[l]);
+		e[k] = (double)d[k] / scale[k];
+	}
+
+	// Gaussian elimination with partial pivoting.
+	for ( uint32_t col = 0; col < order; col++ )
+	{
+		uint32_t	pivot = col;
+		double		best = fabs(R[col * order + col]);
+
+		for ( uint32_t r = col + 1; r < order; r++ )
+		{
+			double v = fabs(R[r * order + col]);
+			if ( v > best )
+			{
+				best = v;
+				pivot = r;
+			}
+		}
+		if ( !(best > kLPCPivotMin) )
+			return kLPCFitFailed;			// rank deficient (e.g. perfectly correlated lags)
+
+		if ( pivot != col )
+		{
+			for ( uint32_t c = 0; c < order; c++ )
+			{
+				double t = R[col * order + c];
+				R[col * order + c] = R[pivot * order + c];
+				R[pivot * order + c] = t;
+			}
+			double t = e[col];
+			e[col] = e[pivot];
+			e[pivot] = t;
+		}
+
+		double p = R[col * order + col];
+		for ( uint32_t r = col + 1; r < order; r++ )
+		{
+			double factor = R[r * order + col] / p;
+			if ( factor == 0.0 )
+				continue;
+			for ( uint32_t c = col; c < order; c++ )
+				R[r * order + c] -= factor * R[col * order + c];
+			e[r] -= factor * e[col];
+		}
+	}
+
+	double	z[kALACMaxCoefs];
+	for ( int32_t r = (int32_t)order - 1; r >= 0; r-- )
+	{
+		double sum = e[r];
+		for ( uint32_t c = (uint32_t)r + 1; c < order; c++ )
+			sum -= R[r * order + c] * z[c];
+		double p = R[r * order + r];
+		if ( !(fabs(p) > kLPCPivotMin) )
+			return kLPCFitFailed;
+		z[r] = sum / p;
+		if ( !isfinite(z[r]) )
+			return kLPCFitFailed;
+	}
+
+	// Undo the column scaling and apply the predictor's DENSHIFT scale.
+	double	a[kALACMaxCoefs];
+	int64_t	sumAbs = 0;
+	for ( uint32_t k = 0; k < order; k++ )
+	{
+		a[k] = z[k] / scale[k] * (double)(1 << DENSHIFT_DEFAULT);
+		if ( !isfinite(a[k]) )
+			return kLPCFitFailed;
+		sumAbs += (int64_t)(fabs(a[k]) + 0.5);
+	}
+
+	// Bound the coefficient magnitude so that the int32 predictor accumulations
+	// (sum |coef| * |difference|) stay in range.
+	int64_t limit = (chanBits < 29) ? ((int64_t)1 << (29 - chanBits)) : 1;
+	if ( limit > 30000 )
+		limit = 30000;
+
+	if ( sumAbs > limit )
+	{
+		double factor = (double)limit / (double)sumAbs;
+		for ( uint32_t k = 0; k < order; k++ )
+			a[k] *= factor;
+	}
+
+	// Quantize; a final guard absorbs the rounding of the scale reduction.
+	for ( uint32_t pass = 0; pass < 3; pass++ )
+	{
+		int64_t	qsum = 0;
+		for ( uint32_t k = 0; k < order; k++ )
+		{
+			double q = a[k];
+			int32_t v = (int32_t)((q >= 0.0) ? (q + 0.5) : (q - 0.5));
+			if ( v > 32767 )
+				v = 32767;
+			else if ( v < -32768 )
+				v = -32768;
+			coefs[k] = (int16_t)v;
+			qsum += (v < 0) ? -v : v;
+		}
+		if ( qsum <= limit )
+			break;
+		double factor = (double)limit / (double)qsum;
+		for ( uint32_t k = 0; k < order; k++ )
+			a[k] *= factor;
+	}
+
+	return ALAC_noErr;
+}
 
 /*
 	EncodeStereo()
@@ -537,6 +762,314 @@ int32_t ALACEncoder::EncodeStereo( BitBuffer * bitstream, void * inputBuffer, ui
 #endif
 	}
 	
+Exit:
+	return status;
+}
+
+/*
+	SaveEncoderState() / RestoreEncoderState()
+	- snapshot and restore the adaptive predictor state so candidate encodings
+	  can be evaluated without contaminating each other
+*/
+void ALACEncoder::SaveEncoderState( LPCEncoderState * state )
+{
+	for ( uint32_t channel = 0; channel < kALACMaxChannels; channel++ )
+	{
+		state->mLastMixRes[channel] = mLastMixRes[channel];
+		for ( uint32_t search = 0; search < kALACMaxSearches; search++ )
+		{
+			for ( uint32_t k = 0; k < kALACMaxCoefs; k++ )
+			{
+				state->mCoefsU[channel][search][k] = mCoefsU[channel][search][k];
+				state->mCoefsV[channel][search][k] = mCoefsV[channel][search][k];
+			}
+		}
+	}
+}
+
+void ALACEncoder::RestoreEncoderState( const LPCEncoderState * state )
+{
+	for ( uint32_t channel = 0; channel < kALACMaxChannels; channel++ )
+	{
+		mLastMixRes[channel] = state->mLastMixRes[channel];
+		for ( uint32_t search = 0; search < kALACMaxSearches; search++ )
+		{
+			for ( uint32_t k = 0; k < kALACMaxCoefs; k++ )
+			{
+				mCoefsU[channel][search][k] = state->mCoefsU[channel][search][k];
+				mCoefsV[channel][search][k] = state->mCoefsV[channel][search][k];
+			}
+		}
+	}
+}
+
+/*
+	EncodeStereoLPC()
+	- encode a channel pair using coefficients estimated from the actual U/V
+	  data of this packet
+	- the existing matrix selection is run first on a private copy so the mix
+	  resolution choice is preserved; U and V are then fitted separately on the
+	  exact (matrixed, shift-off-stripped) signals that will be predicted
+	- per channel, either one of the fitted orders or the untouched original
+	  coefficient set may be chosen; candidates are measured with the real
+	  entropy coder on copies of the adaptive state, and the winning pass is
+	  re-run so the state left behind belongs to the chosen path
+*/
+int32_t ALACEncoder::EncodeStereoLPC( BitBuffer * bitstream, void * inputBuffer, uint32_t stride, uint32_t channelIndex, uint32_t numSamples )
+{
+	BitBuffer		startBits = *bitstream;
+	BitBuffer		workBits;
+	AGParamRec		agParams;
+	uint32_t			bits1, bits2;
+	int32_t			mixBits, mixRes;
+	uint32_t			chanBits;
+	uint8_t			bytesShifted;
+	SearchCoefs		coefsU;
+	SearchCoefs		coefsV;
+	uint32_t			index;
+	uint8_t			partialFrame;
+	uint32_t			escapeBits;
+	bool			doEscape;
+	int32_t			status = ALAC_noErr;
+	uint8_t			pbFactor;
+	uint32_t			numU, numV;
+
+	// analysis mode only targets 16/24-bit input
+	RequireAction( (mBitDepth == 16) || (mBitDepth == 24), return kALAC_ParamError; );
+
+	coefsU = (SearchCoefs) mCoefsU[channelIndex];
+	coefsV = (SearchCoefs) mCoefsV[channelIndex];
+
+	// keep the shift-off rule intact: 24-bit data still uses one shifted byte,
+	// and the analysis runs on the already-shifted U/V data below
+	bytesShifted = (mBitDepth >= 24) ? 1 : 0;
+	chanBits = mBitDepth - (bytesShifted * 8) + 1;
+
+	partialFrame = (numSamples == mFrameSize) ? 0 : 1;
+	pbFactor = 4;
+
+	// candidate tables: index 0..kNumLPCOrders-1 are fitted orders, index
+	// kNumLPCOrders is the original (untouched) coefficient set
+	struct Candidate
+	{
+		uint32_t	choiceU;
+		uint32_t	choiceV;
+		uint32_t	cost;
+	};
+
+	Candidate	candidates[( kNumLPCOrders + 1 ) * ( kNumLPCOrders + 1 )];
+	uint32_t	numCandidates = 0;
+	uint32_t	bestCandidate = 0;
+	uint32_t	minBits = 0;
+
+	int16_t		fittedU[kNumLPCOrders][kALACMaxCoefs];
+	int16_t		fittedV[kNumLPCOrders][kALACMaxCoefs];
+	bool			validU[kNumLPCOrders];
+	bool			validV[kNumLPCOrders];
+
+	LPCEncoderState	postSearchState;
+
+	// ---- Step 1: matrix selection, as the original path does it ----
+	mixBits = kDefaultMixBits;
+	int32_t bestRes = mLastMixRes[channelIndex];
+	uint32_t minBits1 = 1ul << 31;
+	uint32_t dilate = 8;
+	uint32_t mixSamples = numSamples / dilate;
+
+	for ( mixRes = 0; mixRes <= (int32_t)kMaxRes; mixRes++ )
+	{
+		switch ( mBitDepth )
+		{
+			case 16:
+				mix16( (int16_t *) inputBuffer, stride, mMixBufferU, mMixBufferV, mixSamples, mixBits, mixRes );
+				break;
+			case 24:
+				mix24( (uint8_t *) inputBuffer, stride, mMixBufferU, mMixBufferV, mixSamples,
+						mixBits, mixRes, mShiftBufferUV, bytesShifted );
+				break;
+		}
+
+		BitBufferInit( &workBits, mWorkBuffer, mMaxOutputBytes );
+
+		pc_block( mMixBufferU, mPredictorU, mixSamples, coefsU[kDefaultNumUV - 1], kDefaultNumUV, chanBits, DENSHIFT_DEFAULT );
+		pc_block( mMixBufferV, mPredictorV, mixSamples, coefsV[kDefaultNumUV - 1], kDefaultNumUV, chanBits, DENSHIFT_DEFAULT );
+
+		set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, mixSamples, mixSamples, MAX_RUN_DEFAULT );
+		status = dyn_comp( &agParams, mPredictorU, &workBits, mixSamples, chanBits, &bits1 );
+		RequireNoErr( status, goto Exit; );
+
+		set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, mixSamples, mixSamples, MAX_RUN_DEFAULT );
+		status = dyn_comp( &agParams, mPredictorV, &workBits, mixSamples, chanBits, &bits2 );
+		RequireNoErr( status, goto Exit; );
+
+		if ( (bits1 + bits2) < minBits1 )
+		{
+			minBits1 = bits1 + bits2;
+			bestRes = mixRes;
+		}
+	}
+
+	// snapshot the state the matrix search leaves behind: this is the state the
+	// original path predicts from, and the state every candidate starts from
+	SaveEncoderState( &postSearchState );
+	mixRes = bestRes;
+	mLastMixRes[channelIndex] = (int16_t)bestRes;
+
+	// ---- Step 2: build the actual U/V data for this packet ----
+	switch ( mBitDepth )
+	{
+		case 16:
+			mix16( (int16_t *) inputBuffer, stride, mMixBufferU, mMixBufferV, numSamples, mixBits, mixRes );
+			break;
+		case 24:
+			mix24( (uint8_t *) inputBuffer, stride, mMixBufferU, mMixBufferV, numSamples,
+					mixBits, mixRes, mShiftBufferUV, bytesShifted );
+			break;
+	}
+
+	// ---- Step 3: fit each candidate order on the actual U/V data ----
+	for ( uint32_t i = 0; i < kNumLPCOrders; i++ )
+	{
+		validU[i] = (LPCFit( mMixBufferU, numSamples, kLPCOrders[i], chanBits, fittedU[i] ) == ALAC_noErr);
+		validV[i] = (LPCFit( mMixBufferV, numSamples, kLPCOrders[i], chanBits, fittedV[i] ) == ALAC_noErr);
+	}
+
+	// ---- Step 4: measure each candidate pair on a private state ----
+	for ( uint32_t iu = 0; iu <= kNumLPCOrders; iu++ )
+	{
+		bool	origU = ( iu == kNumLPCOrders );
+		if ( !origU && !validU[iu] )
+			continue;
+
+		for ( uint32_t iv = 0; iv <= kNumLPCOrders; iv++ )
+		{
+			bool	origV = ( iv == kNumLPCOrders );
+			if ( !origV && !validV[iv] )
+				continue;
+
+			RestoreEncoderState( &postSearchState );
+			mLastMixRes[channelIndex] = (int16_t)bestRes;
+			BitBufferInit( &workBits, mWorkBuffer, mMaxOutputBytes );
+
+			numU = origU ? kDefaultNumUV : kLPCOrders[iu];
+			numV = origV ? kDefaultNumUV : kLPCOrders[iv];
+			if ( !origU )
+				copy_coefs( fittedU[iu], coefsU[numU - 1], numU );
+			if ( !origV )
+				copy_coefs( fittedV[iv], coefsV[numV - 1], numV );
+
+			pc_block( mMixBufferU, mPredictorU, numSamples, coefsU[numU - 1], numU, chanBits, DENSHIFT_DEFAULT );
+			set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, numSamples, numSamples, MAX_RUN_DEFAULT );
+			status = dyn_comp( &agParams, mPredictorU, &workBits, numSamples, chanBits, &bits1 );
+			RequireNoErr( status, goto Exit; );
+
+			pc_block( mMixBufferV, mPredictorV, numSamples, coefsV[numV - 1], numV, chanBits, DENSHIFT_DEFAULT );
+			set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, numSamples, numSamples, MAX_RUN_DEFAULT );
+			status = dyn_comp( &agParams, mPredictorV, &workBits, numSamples, chanBits, &bits2 );
+			RequireNoErr( status, goto Exit; );
+
+			candidates[numCandidates].choiceU = iu;
+			candidates[numCandidates].choiceV = iv;
+			candidates[numCandidates].cost = bits1 + bits2
+											+ (numU * 8 * (uint32_t)sizeof(int16_t))
+											+ (numV * 8 * (uint32_t)sizeof(int16_t));
+			numCandidates++;
+		}
+	}
+
+	for ( uint32_t c = 1; c < numCandidates; c++ )
+	{
+		if ( candidates[c].cost < candidates[bestCandidate].cost )
+			bestCandidate = c;
+	}
+
+	// ---- Step 5: re-run the chosen pair so the state matches the frame ----
+	RestoreEncoderState( &postSearchState );
+	mLastMixRes[channelIndex] = (int16_t)bestRes;
+	BitBufferInit( &workBits, mWorkBuffer, mMaxOutputBytes );
+
+	{
+		uint32_t	iu = candidates[bestCandidate].choiceU;
+		uint32_t	iv = candidates[bestCandidate].choiceV;
+
+		numU = ( iu == kNumLPCOrders ) ? kDefaultNumUV : kLPCOrders[iu];
+		numV = ( iv == kNumLPCOrders ) ? kDefaultNumUV : kLPCOrders[iv];
+
+		if ( iu != kNumLPCOrders )
+			copy_coefs( fittedU[iu], coefsU[numU - 1], numU );
+		if ( iv != kNumLPCOrders )
+			copy_coefs( fittedV[iv], coefsV[numV - 1], numV );
+	}
+
+	// escape check uses the measured candidate cost (header + shift data included)
+	minBits = candidates[bestCandidate].cost + (8 /* mixRes/maxRes/etc. */ * 8) + ((partialFrame == true) ? 32 : 0);
+	if ( bytesShifted != 0 )
+		minBits += (numSamples * (bytesShifted * 8) * 2);
+
+	escapeBits = (numSamples * mBitDepth * 2) + ((partialFrame == true) ? 32 : 0) + (2 * 8);
+
+	doEscape = (minBits >= escapeBits) ? true : false;
+
+	if ( doEscape == false )
+	{
+		// write bitstream header and coefficients; the predictor below is run
+		// with exactly this transmitted initial set
+		BitBufferWrite( bitstream, 0, 12 );
+		BitBufferWrite( bitstream, (partialFrame << 3) | (bytesShifted << 1), 4 );
+		if ( partialFrame )
+			BitBufferWrite( bitstream, numSamples, 32 );
+		BitBufferWrite( bitstream, mixBits, 8 );
+		BitBufferWrite( bitstream, mixRes, 8 );
+
+		BitBufferWrite( bitstream, (0 << 4) | DENSHIFT_DEFAULT, 8 );
+		BitBufferWrite( bitstream, (pbFactor << 5) | numU, 8 );
+		for ( index = 0; index < numU; index++ )
+			BitBufferWrite( bitstream, coefsU[numU - 1][index], 16 );
+
+		BitBufferWrite( bitstream, (0 << 4) | DENSHIFT_DEFAULT, 8 );
+		BitBufferWrite( bitstream, (pbFactor << 5) | numV, 8 );
+		for ( index = 0; index < numV; index++ )
+			BitBufferWrite( bitstream, coefsV[numV - 1][index], 16 );
+
+		// if shift active, write the interleaved shift buffers
+		if ( bytesShifted != 0 )
+		{
+			uint32_t		bitShift = bytesShifted * 8;
+
+			for ( index = 0; index < (numSamples * 2); index += 2 )
+			{
+				uint32_t shiftedVal;
+
+				shiftedVal = ((uint32_t)mShiftBufferUV[index + 0] << bitShift) | (uint32_t)mShiftBufferUV[index + 1];
+				BitBufferWrite( bitstream, shiftedVal, bitShift * 2 );
+			}
+		}
+
+		pc_block( mMixBufferU, mPredictorU, numSamples, coefsU[numU - 1], numU, chanBits, DENSHIFT_DEFAULT );
+		pc_block( mMixBufferV, mPredictorV, numSamples, coefsV[numV - 1], numV, chanBits, DENSHIFT_DEFAULT );
+
+		set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, numSamples, numSamples, MAX_RUN_DEFAULT );
+		status = dyn_comp( &agParams, mPredictorU, bitstream, numSamples, chanBits, &bits1 );
+		RequireNoErr( status, goto Exit; );
+
+		set_ag_params( &agParams, MB0, (pbFactor * PB0) / 4, KB0, numSamples, numSamples, MAX_RUN_DEFAULT );
+		status = dyn_comp( &agParams, mPredictorV, bitstream, numSamples, chanBits, &bits2 );
+		RequireNoErr( status, goto Exit; );
+
+		minBits = BitBufferGetPosition( bitstream ) - BitBufferGetPosition( &startBits );
+		if ( minBits >= escapeBits )
+		{
+			*bitstream = startBits;
+			doEscape = true;
+			printf( "compressed frame too big: %u vs. %u \n", minBits, escapeBits );
+		}
+	}
+
+	if ( doEscape == true )
+	{
+		status = this->EncodeStereoEscape( bitstream, inputBuffer, stride, numSamples );
+	}
+
 Exit:
 	return status;
 }
@@ -1012,6 +1545,195 @@ Exit:
 	return status;
 }
 
+/*
+	EncodeMonoLPC()
+	- encode a mono input buffer using coefficients estimated from this packet's
+	  actual samples
+	- candidate orders and the original (untouched) coefficient set are measured
+	  with the real entropy coder on private state copies; the winning pass is
+	  re-run so the state left behind belongs to the chosen path
+*/
+int32_t ALACEncoder::EncodeMonoLPC( BitBuffer * bitstream, void * inputBuffer, uint32_t stride, uint32_t channelIndex, uint32_t numSamples )
+{
+	BitBuffer		startBits = *bitstream;
+	BitBuffer		workBits;
+	AGParamRec		agParams;
+	uint32_t			bits1;
+	uint32_t			numU;
+	SearchCoefs		coefsU;
+	uint32_t			index, index2;
+	uint8_t			bytesShifted;
+	uint32_t			shift;
+	uint32_t			mask;
+	uint32_t			chanBits;
+	uint8_t			pbFactor;
+	uint8_t			partialFrame;
+	int16_t *		input16;
+	uint32_t			escapeBits;
+	bool			doEscape;
+	int32_t			status = ALAC_noErr;
+	uint32_t			minBits;
+	LPCEncoderState	entryState;
+
+	int16_t		fitted[kNumLPCOrders][kALACMaxCoefs];
+	bool			fittedValid[kNumLPCOrders];
+	uint32_t		candidateChoice[kNumLPCOrders + 1];
+	uint32_t		candidateCost[kNumLPCOrders + 1];
+	uint32_t		numCandidates = 0;
+	uint32_t		best = 0;
+
+	// analysis mode only targets 16/24-bit input
+	RequireAction( (mBitDepth == 16) || (mBitDepth == 24), return kALAC_ParamError; );
+
+	coefsU = (SearchCoefs) mCoefsU[channelIndex];
+
+	// keep the existing shift-off rule for 24-bit mono
+	bytesShifted = (mBitDepth >= 24) ? 1 : 0;
+	shift = bytesShifted * 8;
+	mask = (1ul << shift) - 1;
+	chanBits = mBitDepth - (bytesShifted * 8);
+
+	partialFrame = (numSamples == mFrameSize) ? 0 : 1;
+	pbFactor = 4;
+
+	// convert the input to the predictor domain exactly like the original path,
+	// including the 24-bit shift-off extraction
+	switch ( mBitDepth )
+	{
+		case 16:
+			input16 = (int16_t *) inputBuffer;
+			for ( index = 0, index2 = 0; index < numSamples; index++, index2 += stride )
+				mMixBufferU[index] = (int32_t) input16[index2];
+			break;
+		case 24:
+			copy24ToPredictor( (uint8_t *) inputBuffer, stride, mMixBufferU, numSamples );
+			for ( index = 0; index < numSamples; index++ )
+			{
+				mShiftBufferUV[index] = (uint16_t)(mMixBufferU[index] & mask);
+				mMixBufferU[index] >>= shift;
+			}
+			break;
+	}
+
+	SaveEncoderState( &entryState );
+
+	// fit the candidate orders on the actual predictor-domain signal
+	for ( uint32_t i = 0; i < kNumLPCOrders; i++ )
+		fittedValid[i] = (LPCFit( mMixBufferU, numSamples, kLPCOrders[i], chanBits, fitted[i] ) == ALAC_noErr);
+
+	// measure each fitted candidate and the original path on a private state
+	for ( uint32_t i = 0; i <= kNumLPCOrders; i++ )
+	{
+		bool	original = ( i == kNumLPCOrders );
+		if ( !original && !fittedValid[i] )
+			continue;
+
+		RestoreEncoderState( &entryState );
+		BitBufferInit( &workBits, mWorkBuffer, mMaxOutputBytes );
+
+		numU = original ? kDefaultNumUV : kLPCOrders[i];
+		if ( !original )
+			copy_coefs( fitted[i], coefsU[numU - 1], numU );
+
+		pc_block( mMixBufferU, mPredictorU, numSamples, coefsU[numU - 1], numU, chanBits, DENSHIFT_DEFAULT );
+
+		set_standard_ag_params( &agParams, numSamples, numSamples );
+		status = dyn_comp( &agParams, mPredictorU, &workBits, numSamples, chanBits, &bits1 );
+		RequireNoErr( status, goto Exit; );
+
+		candidateChoice[numCandidates] = i;
+		candidateCost[numCandidates] = bits1 + (numU * 8 * (uint32_t)sizeof(int16_t));
+		numCandidates++;
+	}
+
+	for ( uint32_t c = 1; c < numCandidates; c++ )
+	{
+		if ( candidateCost[c] < candidateCost[best] )
+			best = c;
+	}
+
+	// re-run the chosen candidate so the adaptive state matches the frame
+	RestoreEncoderState( &entryState );
+	BitBufferInit( &workBits, mWorkBuffer, mMaxOutputBytes );
+	{
+		uint32_t	choice = candidateChoice[best];
+		numU = ( choice == kNumLPCOrders ) ? kDefaultNumUV : kLPCOrders[choice];
+		if ( choice != kNumLPCOrders )
+			copy_coefs( fitted[choice], coefsU[numU - 1], numU );
+	}
+
+	minBits = candidateCost[best] + (4 /* mixRes/maxRes/etc. */ * 8) + ((partialFrame == true) ? 32 : 0);
+	if ( bytesShifted != 0 )
+		minBits += (numSamples * (bytesShifted * 8));
+
+	escapeBits = (numSamples * mBitDepth) + ((partialFrame == true) ? 32 : 0) + (2 * 8);
+
+	doEscape = (minBits >= escapeBits) ? true : false;
+
+	if ( doEscape == false )
+	{
+		// write bitstream header; the coefficients written here are the ones the
+		// residual below is generated from
+		BitBufferWrite( bitstream, 0, 12 );
+		BitBufferWrite( bitstream, (partialFrame << 3) | (bytesShifted << 1), 4 );
+		if ( partialFrame )
+			BitBufferWrite( bitstream, numSamples, 32 );
+		BitBufferWrite( bitstream, 0, 16 );								// mixBits = mixRes = 0
+
+		BitBufferWrite( bitstream, (0 << 4) | DENSHIFT_DEFAULT, 8 );	// modeU = 0
+		BitBufferWrite( bitstream, (pbFactor << 5) | numU, 8 );
+		for ( index = 0; index < numU; index++ )
+			BitBufferWrite( bitstream, coefsU[numU-1][index], 16 );
+
+		// if shift active, write the interleaved shift buffers
+		if ( bytesShifted != 0 )
+		{
+			for ( index = 0; index < numSamples; index++ )
+				BitBufferWrite( bitstream, mShiftBufferUV[index], shift );
+		}
+
+		// run the predictor with exactly the initial coefficients just written
+		pc_block( mMixBufferU, mPredictorU, numSamples, coefsU[numU - 1], numU, chanBits, DENSHIFT_DEFAULT );
+
+		set_standard_ag_params( &agParams, numSamples, numSamples );
+		status = dyn_comp( &agParams, mPredictorU, bitstream, numSamples, chanBits, &bits1 );
+		RequireNoErr( status, goto Exit; );
+
+		minBits = BitBufferGetPosition( bitstream ) - BitBufferGetPosition( &startBits );
+		if ( minBits >= escapeBits )
+		{
+			*bitstream = startBits;
+			doEscape = true;
+			printf( "compressed frame too big: %u vs. %u\n", minBits, escapeBits );
+		}
+	}
+
+	if ( doEscape == true )
+	{
+		BitBufferWrite( bitstream, 0, 12 );
+		BitBufferWrite( bitstream, (partialFrame << 3) | 1, 4 );
+		if ( partialFrame )
+			BitBufferWrite( bitstream, numSamples, 32 );
+
+		switch ( mBitDepth )
+		{
+			case 16:
+				input16 = (int16_t *) inputBuffer;
+				for ( index = 0; index < (numSamples * stride); index += stride )
+					BitBufferWrite( bitstream, input16[index], 16 );
+				break;
+			case 24:
+				copy24ToPredictor( (uint8_t *) inputBuffer, stride, mMixBufferU, numSamples );
+				for ( index = 0; index < numSamples; index++ )
+					BitBufferWrite( bitstream, mMixBufferU[index], 24 );
+				break;
+		}
+	}
+
+Exit:
+	return status;
+}
+
 #if PRAGMA_MARK
 #pragma mark -
 #endif
@@ -1027,33 +1749,118 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 	uint32_t				outputSize;
 	BitBuffer			bitstream;
 	int32_t			status;
+	bool			useAnalysis;
 
 	numFrames = *ioNumBytes/theInputFormat.mBytesPerPacket;
 
 	// create a bit buffer structure pointing to our output buffer
 	BitBufferInit( &bitstream, theWriteBuffer, mMaxOutputBytes );
 
+	// LPC analysis applies to 16/24-bit integer PCM in mono or stereo only;
+	// it also requires the private packet buffer allocated by InitializeEncoder()
+	useAnalysis = mLPCAnalysis && ( mLPCDryBuffer != nil ) &&
+				  ( (mBitDepth == 16) || (mBitDepth == 24) ) &&
+				  ( (theInputFormat.mChannelsPerFrame == 1) || (theInputFormat.mChannelsPerFrame == 2) );
+
+	if ( useAnalysis == false )
+	{
+		// unchanged legacy behaviour (including the fast-mode selection)
+		status = this->EncodePacket( false, &bitstream, theInputFormat, theReadBuffer, numFrames );
+		RequireNoErr( status, goto Exit; );
+	}
+	else
+	{
+		// Evaluate the analysis pass and the original pass from the same starting
+		// state. The generated packet sizes are compared exactly; the analysis
+		// packet is only kept if it is strictly smaller than the original packet.
+		LPCEncoderState	startState;
+		LPCEncoderState	analysisState;
+		BitBuffer		analysisBits;
+		uint32_t		analysisSize;
+		uint32_t		originalSize;
+
+		SaveEncoderState( &startState );
+
+		BitBufferInit( &analysisBits, mLPCDryBuffer, mMaxOutputBytes );
+		status = this->EncodePacket( true, &analysisBits, theInputFormat, theReadBuffer, numFrames );
+		RequireNoErr( status, goto Exit; );
+		analysisSize = BitBufferGetPosition( &analysisBits ) / 8;
+		SaveEncoderState( &analysisState );
+
+		RestoreEncoderState( &startState );
+		status = this->EncodePacket( false, &bitstream, theInputFormat, theReadBuffer, numFrames );
+		RequireNoErr( status, goto Exit; );
+		originalSize = BitBufferGetPosition( &bitstream ) / 8;
+
+		if ( analysisSize < originalSize )
+		{
+			memcpy( theWriteBuffer, mLPCDryBuffer, analysisSize );
+			BitBufferInit( &bitstream, theWriteBuffer, mMaxOutputBytes );
+			BitBufferAdvance( &bitstream, analysisSize * 8 );
+			RestoreEncoderState( &analysisState );
+		}
+	}
+
+	// byte-align the output data
+	BitBufferByteAlign( &bitstream, true );
+
+	outputSize = BitBufferGetPosition( &bitstream ) / 8;
+	//Assert( outputSize <= mMaxOutputBytes );
+
+
+	// all good, let iTunes know what happened and remember the total number of input sample frames
+	*ioNumBytes = outputSize;
+	//mEncodedFrames		   	   += encodeMsg->numInputSamples;
+
+	// gather encoding stats
+	mTotalBytesGenerated += outputSize;
+	mMaxFrameBytes = MAX( mMaxFrameBytes, outputSize );
+
+	status = ALAC_noErr;
+
+Exit:
+	return status;
+}
+
+/*
+	EncodePacket()
+	- write one complete packet (elements, ID_END tag, byte alignment) into bits
+	- when useLPCAnalysis is set, 16/24-bit mono and stereo elements use the
+	  per-packet coefficient analysis paths; otherwise the original paths are
+	  used, including the original fast-mode selection
+	- does not touch the encoding statistics, so a packet can be measured privately
+*/
+int32_t ALACEncoder::EncodePacket( bool useLPCAnalysis, BitBuffer * bitstream, AudioFormatDescription theInputFormat,
+									unsigned char * theReadBuffer, uint32_t numFrames )
+{
+	int32_t			status = ALAC_noErr;
+
 	if ( theInputFormat.mChannelsPerFrame == 2 )
 	{
 		// add 3-bit frame start tag ID_CPE = channel pair & 4-bit element instance tag = 0
-		BitBufferWrite( &bitstream, ID_CPE, 3 );
-		BitBufferWrite( &bitstream, 0, 4 );
+		BitBufferWrite( bitstream, ID_CPE, 3 );
+		BitBufferWrite( bitstream, 0, 4 );
 
 		// encode stereo input buffer
-		if ( mFastMode == false )
-			status = this->EncodeStereo( &bitstream, theReadBuffer, 2, 0, numFrames );
+		if ( useLPCAnalysis )
+			status = this->EncodeStereoLPC( bitstream, theReadBuffer, 2, 0, numFrames );
+		else if ( mFastMode == false )
+			status = this->EncodeStereo( bitstream, theReadBuffer, 2, 0, numFrames );
 		else
-			status = this->EncodeStereoFast( &bitstream, theReadBuffer, 2, 0, numFrames );
+			status = this->EncodeStereoFast( bitstream, theReadBuffer, 2, 0, numFrames );
 		RequireNoErr( status, goto Exit; );
 	}
 	else if ( theInputFormat.mChannelsPerFrame == 1 )
 	{
 		// add 3-bit frame start tag ID_SCE = mono channel & 4-bit element instance tag = 0
-		BitBufferWrite( &bitstream, ID_SCE, 3 );
-		BitBufferWrite( &bitstream, 0, 4 );
+		BitBufferWrite( bitstream, ID_SCE, 3 );
+		BitBufferWrite( bitstream, 0, 4 );
 
 		// encode mono input buffer
-		status = this->EncodeMono( &bitstream, theReadBuffer, 1, 0, numFrames );
+		if ( useLPCAnalysis )
+			status = this->EncodeMonoLPC( bitstream, theReadBuffer, 1, 0, numFrames );
+		else
+			status = this->EncodeMono( bitstream, theReadBuffer, 1, 0, numFrames );
 		RequireNoErr( status, goto Exit; );
 	}
 	else
@@ -1065,10 +1872,10 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 		uint8_t				stereoElementTag;
 		uint8_t				monoElementTag;
 		uint8_t				lfeElementTag;
-		
+
 		inputBuffer		= (char *) theReadBuffer;
 		inputIncrement	= ((mBitDepth + 7) / 8);
-		
+
 		stereoElementTag	= 0;
 		monoElementTag		= 0;
 		lfeElementTag		= 0;
@@ -1076,16 +1883,16 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 		for ( channelIndex = 0; channelIndex < theInputFormat.mChannelsPerFrame; )
 		{
 			tag = (sChannelMaps[theInputFormat.mChannelsPerFrame - 1] & (0x7ul << (channelIndex * 3))) >> (channelIndex * 3);
-	
-			BitBufferWrite( &bitstream, tag, 3 );
+
+			BitBufferWrite( bitstream, tag, 3 );
 			switch ( tag )
 			{
 				case ID_SCE:
 					// mono
-					BitBufferWrite( &bitstream, monoElementTag, 4 );
+					BitBufferWrite( bitstream, monoElementTag, 4 );
 
-					status = this->EncodeMono( &bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
-					
+					status = this->EncodeMono( bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
+
 					inputBuffer += inputIncrement;
 					channelIndex++;
 					monoElementTag++;
@@ -1093,9 +1900,9 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 
 				case ID_CPE:
 					// stereo
-					BitBufferWrite( &bitstream, stereoElementTag, 4 );
+					BitBufferWrite( bitstream, stereoElementTag, 4 );
 
-					status = this->EncodeStereo( &bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
+					status = this->EncodeStereo( bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
 
 					inputBuffer += (inputIncrement * 2);
 					channelIndex += 2;
@@ -1104,9 +1911,9 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 
 				case ID_LFE:
 					// LFE channel (subwoofer)
-					BitBufferWrite( &bitstream, lfeElementTag, 4 );
+					BitBufferWrite( bitstream, lfeElementTag, 4 );
 
-					status = this->EncodeMono( &bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
+					status = this->EncodeMono( bitstream, inputBuffer, theInputFormat.mChannelsPerFrame, channelIndex, numFrames );
 
 					inputBuffer += inputIncrement;
 					channelIndex++;
@@ -1128,34 +1935,20 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 	// if there is room left in the output buffer, add some random fill data to test decoder
 	int32_t			bitsLeft;
 	int32_t			bytesLeft;
-	
-	bitsLeft = BitBufferGetPosition( &bitstream ) - 3;	// - 3 for ID_END tag
-	bytesLeft = bitstream.byteSize - ((bitsLeft + 7) / 8);
-	
+
+	bitsLeft = BitBufferGetPosition( bitstream ) - 3;	// - 3 for ID_END tag
+	bytesLeft = bitstream->byteSize - ((bitsLeft + 7) / 8);
+
 	if ( (bytesLeft > 20) && ((bytesLeft & 0x4u) != 0) )
-		AddFiller( &bitstream, bytesLeft );
+		AddFiller( bitstream, bytesLeft );
 }
 #endif
 
 	// add 3-bit frame end tag: ID_END
-	BitBufferWrite( &bitstream, ID_END, 3 );
+	BitBufferWrite( bitstream, ID_END, 3 );
 
 	// byte-align the output data
-	BitBufferByteAlign( &bitstream, true );
-
-	outputSize = BitBufferGetPosition( &bitstream ) / 8;
-	//Assert( outputSize <= mMaxOutputBytes );
-
-
-	// all good, let iTunes know what happened and remember the total number of input sample frames
-	*ioNumBytes = outputSize;
-	//mEncodedFrames		   	   += encodeMsg->numInputSamples;
-
-	// gather encoding stats
-	mTotalBytesGenerated += outputSize;
-	mMaxFrameBytes = MAX( mMaxFrameBytes, outputSize );
-
-	status = ALAC_noErr;
+	BitBufferByteAlign( bitstream, true );
 
 Exit:
 	return status;
@@ -1296,9 +2089,14 @@ int32_t ALACEncoder::InitializeEncoder(AudioFormatDescription theOutputFormat)
 	// allocate work buffer for search loop
 	mWorkBuffer = (uint8_t *) calloc( mMaxOutputBytes, 1 );
 
+	// allocate the private packet buffer used to evaluate LPC analysis candidates
+	if ( mLPCAnalysis )
+		mLPCDryBuffer = (uint8_t *) calloc( mMaxOutputBytes, 1 );
+
 	RequireAction( (mMixBufferU != nil) && (mMixBufferV != nil) &&
 					(mPredictorU != nil) && (mPredictorV != nil) &&
-					(mShiftBufferUV != nil) && (mWorkBuffer != nil ),
+					(mShiftBufferUV != nil) && (mWorkBuffer != nil ) &&
+					(mLPCAnalysis ? (mLPCDryBuffer != nil) : true),
 					status = kALAC_MemFullError; goto Exit; );
 
 	status = ALAC_noErr;
