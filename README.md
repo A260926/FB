@@ -113,6 +113,18 @@ crawler.start();
 
 simplecrawler's API is event driven, and there are plenty of events emitted during the different stages of the crawl.
 
+### Request settlement and failure states
+
+Each request has exactly one terminal outcome, and the terminal notification is emitted only after that outcome has been written to the queue. The crawler also releases that request's concurrency slot only after the final queue write succeeds, so the batch `complete` event cannot fire while a terminal write is still pending. Late download-condition callbacks, stream events, queue callbacks and decompression callbacks cannot reopen a settled request, overwrite its final state, or cause cache and link-discovery side effects.
+
+- `fetchcomplete` is emitted only when the complete body has been received and any required decompression or processing has finished. An ordinary `end` followed by `close` is not a failure.
+- A declared or actual body size above `maxResourceSize` emits `fetchdataerror` and settles the item as `fetched: true`, `status: "failed"`. No partial body is delivered, cached or used for link discovery.
+- A download condition that returns an error emits `downloadconditionerror` and settles the item as `fetched: true`, `status: "failed"`. A condition that returns a falsy result keeps the existing `downloadprevented` outcome (`fetched: true`, `status: "downloadprevented"`).
+- A timeout emits `fetchtimeout` and keeps `status: "timeout"`.
+- A transport error, aborted response, truncated body or premature close emits `fetchclienterror` and settles the item as `fetched: true`, `status: "failed"`. When the stream provides an error object, that same object is emitted; otherwise the crawler supplies an `Error` with `code: "PREMATURE_CLOSE"`.
+- `gziperror` is diagnostic only. After it, the raw response bytes are still delivered exactly once through `fetchcomplete`.
+- If a `queue.update` write returns an error, the crawler emits `queueerror`, closes the transfer and releases this request without emitting a success notification.
+
 <a name="Crawler+event_crawlstart"></a>
 
 #### "crawlstart"
@@ -848,7 +860,7 @@ QueueItems represent resources in the queue that have been fetched, or will be e
 | depth | <code>Number</code> | How many steps simplecrawler has taken from the initial page (which is depth 1) to this resource. |
 | referrer | <code>String</code> | The URL of the resource where the URL of this queue item was discovered |
 | fetched | <code>Boolean</code> | Has the request for this item been completed? You can monitor this as requests are processed. |
-| status | <code>&#x27;queued&#x27;</code> \| <code>&#x27;spooled&#x27;</code> \| <code>&#x27;headers&#x27;</code> \| <code>&#x27;downloaded&#x27;</code> \| <code>&#x27;redirected&#x27;</code> \| <code>&#x27;notfound&#x27;</code> \| <code>&#x27;failed&#x27;</code> | The internal status of the item. |
+| status | <code>&#x27;queued&#x27;</code> \| <code>&#x27;spooled&#x27;</code> \| <code>&#x27;headers&#x27;</code> \| <code>&#x27;downloaded&#x27;</code> \| <code>&#x27;redirected&#x27;</code> \| <code>&#x27;notfound&#x27;</code> \| <code>&#x27;failed&#x27;</code> \| <code>&#x27;timeout&#x27;</code> \| <code>&#x27;downloadprevented&#x27;</code> \| <code>&#x27;disallowed&#x27;</code> | The internal status of the item. |
 | stateData | <code>Object</code> | An object containing state data and other information about the request. |
 | stateData.requestLatency | <code>Number</code> | The time (in ms) taken for headers to be received after the request was made. |
 | stateData.requestTime | <code>Number</code> | The total time (in ms) taken for the request (including download time.) |
