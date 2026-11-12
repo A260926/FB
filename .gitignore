@@ -1,0 +1,7 @@
+tags
+TAGS
+build
+*.spv
+CMakeSettings.json
+.vs
+.cache
