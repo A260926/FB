@@ -1,0 +1,11 @@
+.*
+minified
+scripts
+utils
+web-midi-api
+test*
+coverage
+Gruntfile.js
+eslint.config.mjs
+*.html
+*.bat
