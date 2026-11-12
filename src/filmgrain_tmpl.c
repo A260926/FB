@@ -412,6 +412,309 @@ fguv_ss_fn(420, 1, 1);
 fguv_ss_fn(422, 1, 0);
 fguv_ss_fn(444, 0, 0);
 
+/* ------------------------------------------------------------------ */
+/* Region film grain kernels.                                         */
+/*                                                                    */
+/* These mirror the arithmetic of fgy_32x32xn_c/fguv_32x32xn_c above */
+/* exactly, but only write the caller's rectangle. Block coordinates */
+/* stay in picture space (picture origin at (0, 0)) so block offsets */
+/* and LUT sampling are bit-identical to a full-frame application;   */
+/* the per-block PRNG is merely fast-forwarded through blocks that   */
+/* lie completely before the region.                                  */
+/* ------------------------------------------------------------------ */
+
+static void fgy_region_c(pixel *const dst, const pixel *const src,
+                         const ptrdiff_t dst_stride,
+                         const ptrdiff_t src_stride,
+                         const Dav1dFilmGrainData *const data,
+                         const int pic_w, const int pic_h,
+                         const int x0, const int y0, const int rw,
+                         const int rh,
+                         const uint8_t scaling[SCALING_SIZE],
+                         const entry grain_lut[][GRAIN_WIDTH]
+                         HIGHBD_DECL_SUFFIX)
+{
+    const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
+    const int grain_ctr = 128 << bitdepth_min_8;
+    const int grain_min = -grain_ctr, grain_max = grain_ctr - 1;
+
+    int min_value, max_value;
+    if (data->clip_to_restricted_range) {
+        min_value = 16 << bitdepth_min_8;
+        max_value = 235 << bitdepth_min_8;
+    } else {
+        min_value = 0;
+        max_value = BITDEPTH_MAX;
+    }
+
+    const int sxd = PXSTRIDE(src_stride);
+    const int dxd = PXSTRIDE(dst_stride);
+
+    const int row_start = y0 / FG_BLOCK_SIZE;
+    const int row_end   = (y0 + rh - 1) / FG_BLOCK_SIZE; /* inclusive */
+
+    for (int row = row_start; row <= row_end; row++) {
+        const int block_top = row * FG_BLOCK_SIZE;
+        const int bh = imin(pic_h - block_top, FG_BLOCK_SIZE);
+
+        // seed[0] contains the current row, seed[1] contains the previous
+        unsigned seed[2];
+        const int nseed = 1 + (data->overlap_flag && row > 0);
+        for (int i = 0; i < nseed; i++) {
+            seed[i] = data->seed;
+            seed[i] ^= (((row - i) * 37  + 178) & 0xFF) << 8;
+            seed[i] ^= (((row - i) * 173 + 105) & 0xFF);
+        }
+
+        const int col_start = x0 / FG_BLOCK_SIZE;
+        const int col_end   = (x0 + rw - 1) / FG_BLOCK_SIZE; /* inclusive */
+
+        int offsets[2 /* col offset */][2 /* row offset */];
+
+        for (int col = 0; col <= col_end; col++) {
+            const int block_left = col * FG_BLOCK_SIZE;
+            const int bw = imin(pic_w - block_left, FG_BLOCK_SIZE);
+
+            if (data->overlap_flag && col) {
+                // shift previous offsets left
+                for (int i = 0; i < nseed; i++)
+                    offsets[1][i] = offsets[0][i];
+            }
+
+            // update current offsets (fast-forwards the picture-anchored
+            // random stream through blocks outside the region)
+            for (int i = 0; i < nseed; i++)
+                offsets[0][i] = get_random_number(8, &seed[i]);
+
+            if (col < col_start)
+                continue;
+
+            // picture-space span of this block inside the region
+            const int lo_x = imax(x0, block_left);
+            const int hi_x = imin(x0 + rw, block_left + bw);
+            const int lo_y = imax(y0, block_top);
+            const int hi_y = imin(y0 + rh, block_top + bh);
+
+            const int ystart = data->overlap_flag && row ? imin(2, bh) : 0;
+            const int xstart = data->overlap_flag && col ? imin(2, bw) : 0;
+
+            static const int w[2][2] = { { 27, 17 }, { 17, 27 } };
+
+            for (int gy = lo_y; gy < hi_y; gy++) {
+                const int by = gy - block_top;
+                pixel *const drow = dst + (gy - y0) * dxd;
+                const pixel *const srow = src + gy * sxd;
+
+                for (int gx = lo_x; gx < hi_x; gx++) {
+                    const int bx = gx - block_left;
+                    int grain;
+                    if (by >= ystart && bx >= xstart) {
+                        grain = sample_lut(grain_lut, offsets, 0, 0, 0, 0, bx, by);
+                    } else if (by >= ystart) {
+                        // overlapped column
+                        grain = sample_lut(grain_lut, offsets, 0, 0, 0, 0, bx, by);
+                        int old = sample_lut(grain_lut, offsets, 0, 0, 1, 0, bx, by);
+                        grain = round2(old * w[bx][0] + grain * w[bx][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    } else if (bx >= xstart) {
+                        // overlapped row (sans corner)
+                        grain = sample_lut(grain_lut, offsets, 0, 0, 0, 0, bx, by);
+                        int old = sample_lut(grain_lut, offsets, 0, 0, 0, 1, bx, by);
+                        grain = round2(old * w[by][0] + grain * w[by][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    } else {
+                        // doubly-overlapped corner
+                        int top = sample_lut(grain_lut, offsets, 0, 0, 0, 1, bx, by);
+                        int old = sample_lut(grain_lut, offsets, 0, 0, 1, 1, bx, by);
+                        top = round2(old * w[bx][0] + top * w[bx][1], 5);
+                        top = iclip(top, grain_min, grain_max);
+
+                        grain = sample_lut(grain_lut, offsets, 0, 0, 0, 0, bx, by);
+                        old = sample_lut(grain_lut, offsets, 0, 0, 1, 0, bx, by);
+                        grain = round2(old * w[bx][0] + grain * w[bx][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+
+                        grain = round2(top * w[by][0] + grain * w[by][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    }
+
+                    const pixel *const sp = srow + gx;
+                    const int noise = round2(scaling[*sp] * grain, data->scaling_shift);
+                    drow[gx - x0] = iclip(*sp + noise, min_value, max_value);
+                }
+            }
+        }
+    }
+}
+
+static NOINLINE void
+fguv_region_c(pixel *const dst, const pixel *const src,
+              const ptrdiff_t dst_stride, const ptrdiff_t src_stride,
+              const Dav1dFilmGrainData *const data,
+              const int pw, const int ph,
+              const int x0, const int y0, const int rw, const int rh,
+              const uint8_t scaling[SCALING_SIZE],
+              const entry grain_lut[][GRAIN_WIDTH],
+              const pixel *const luma, const ptrdiff_t luma_stride,
+              const int luma_pic_w,
+              const int uv_pl, const int is_id,
+              const int sx, const int sy HIGHBD_DECL_SUFFIX)
+{
+    const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
+    const int grain_ctr = 128 << bitdepth_min_8;
+    const int grain_min = -grain_ctr, grain_max = grain_ctr - 1;
+
+    int min_value, max_value;
+    if (data->clip_to_restricted_range) {
+        min_value = 16 << bitdepth_min_8;
+        max_value = (is_id ? 235 : 240) << bitdepth_min_8;
+    } else {
+        min_value = 0;
+        max_value = BITDEPTH_MAX;
+    }
+
+    const int sxd = PXSTRIDE(src_stride);
+    const int dxd = PXSTRIDE(dst_stride);
+    const int lxd = PXSTRIDE(luma_stride);
+    const int block_w = FG_BLOCK_SIZE >> sx;
+    const int block_h = FG_BLOCK_SIZE >> sy;
+
+    const int row_start = y0 / block_h;
+    const int row_end   = (y0 + rh - 1) / block_h; /* inclusive */
+
+    for (int row = row_start; row <= row_end; row++) {
+        const int block_top = row * block_h;
+        const int bh = imin(ph - block_top, block_h);
+
+        // seed[0] contains the current row, seed[1] contains the previous
+        unsigned seed[2];
+        const int nseed = 1 + (data->overlap_flag && row > 0);
+        for (int i = 0; i < nseed; i++) {
+            seed[i] = data->seed;
+            seed[i] ^= (((row - i) * 37  + 178) & 0xFF) << 8;
+            seed[i] ^= (((row - i) * 173 + 105) & 0xFF);
+        }
+
+        const int col_start = x0 / block_w;
+        const int col_end   = (x0 + rw - 1) / block_w; /* inclusive */
+
+        int offsets[2 /* col offset */][2 /* row offset */];
+
+        for (int col = 0; col <= col_end; col++) {
+            const int block_left = col * block_w;
+            const int bw = imin(pw - block_left, block_w);
+
+            if (data->overlap_flag && col) {
+                // shift previous offsets left
+                for (int i = 0; i < nseed; i++)
+                    offsets[1][i] = offsets[0][i];
+            }
+
+            // update current offsets (fast-forwards the picture-anchored
+            // random stream through blocks outside the region)
+            for (int i = 0; i < nseed; i++)
+                offsets[0][i] = get_random_number(8, &seed[i]);
+
+            if (col < col_start)
+                continue;
+
+            // picture-space span of this block inside the region
+            const int lo_x = imax(x0, block_left);
+            const int hi_x = imin(x0 + rw, block_left + bw);
+            const int lo_y = imax(y0, block_top);
+            const int hi_y = imin(y0 + rh, block_top + bh);
+
+            const int ystart = data->overlap_flag && row ? imin(2 >> sy, bh) : 0;
+            const int xstart = data->overlap_flag && col ? imin(2 >> sx, bw) : 0;
+
+            static const int w[2 /* sub */][2 /* off */][2] = {
+                { { 27, 17 }, { 17, 27 } },
+                { { 23, 22 } },
+            };
+
+            for (int gy = lo_y; gy < hi_y; gy++) {
+                const int by = gy - block_top;
+                pixel *const drow = dst + (gy - y0) * dxd;
+                const pixel *const srow = src + gy * sxd;
+
+                for (int gx = lo_x; gx < hi_x; gx++) {
+                    const int bx = gx - block_left;
+                    int grain;
+                    if (by >= ystart && bx >= xstart) {
+                        grain = sample_lut(grain_lut, offsets, sx, sy, 0, 0, bx, by);
+                    } else if (by >= ystart) {
+                        // overlapped column
+                        grain = sample_lut(grain_lut, offsets, sx, sy, 0, 0, bx, by);
+                        int old = sample_lut(grain_lut, offsets, sx, sy, 1, 0, bx, by);
+                        grain = round2(old * w[sx][bx][0] + grain * w[sx][bx][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    } else if (bx >= xstart) {
+                        // overlapped row (sans corner)
+                        grain = sample_lut(grain_lut, offsets, sx, sy, 0, 0, bx, by);
+                        int old = sample_lut(grain_lut, offsets, sx, sy, 0, 1, bx, by);
+                        grain = round2(old * w[sy][by][0] + grain * w[sy][by][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    } else {
+                        // doubly-overlapped corner
+                        int top = sample_lut(grain_lut, offsets, sx, sy, 0, 1, bx, by);
+                        int old = sample_lut(grain_lut, offsets, sx, sy, 1, 1, bx, by);
+                        top = round2(old * w[sx][bx][0] + top * w[sx][bx][1], 5);
+                        top = iclip(top, grain_min, grain_max);
+
+                        grain = sample_lut(grain_lut, offsets, sx, sy, 0, 0, bx, by);
+                        old = sample_lut(grain_lut, offsets, sx, sy, 1, 0, bx, by);
+                        grain = round2(old * w[sx][bx][0] + grain * w[sx][bx][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+
+                        grain = round2(top * w[sy][by][0] + grain * w[sy][by][1], 5);
+                        grain = iclip(grain, grain_min, grain_max);
+                    }
+
+                    // Original un-grained luma at the picture position. The
+                    // input plane is only read, never extended: a pair that
+                    // would leave the picture on the right (odd picture
+                    // width) clamps to the final column, exactly matching the
+                    // full-frame edge extension, without treating the region
+                    // edge as a border.
+                    const int full_lx = gx << sx;
+                    const int full_ly = gy << sy;
+                    const pixel *const lp = luma + full_ly * lxd + full_lx;
+                    pixel avg = lp[0];
+                    if (sx) {
+                        int pair_col = full_lx + 1;
+                        if (pair_col >= luma_pic_w)
+                            pair_col = luma_pic_w - 1;
+                        avg = (avg + luma[full_ly * lxd + pair_col] + 1) >> 1;
+                    }
+
+                    const pixel *const sp = srow + gx;
+                    int val = avg;
+                    if (!data->chroma_scaling_from_luma) {
+                        const int combined = avg * data->uv_luma_mult[uv_pl] +
+                                       *sp * data->uv_mult[uv_pl];
+                        val = iclip_pixel((combined >> 6) +
+                                          (data->uv_offset[uv_pl] * (1 << bitdepth_min_8)));
+                    }
+                    const int noise = round2(scaling[val] * grain, data->scaling_shift);
+                    drow[gx - x0] = iclip(*sp + noise, min_value, max_value);
+                }
+            }
+        }
+    }
+}
+
+#define fguv_region_ss_fn(nm, ss_x, ss_y) \
+static decl_fguv_region_fn(fguv_region_##nm##_c) { \
+    fguv_region_c(dst, src, dst_stride, src_stride, data, pic_pw, pic_ph, \
+                  x0, y0, rw, rh, scaling, grain_lut, luma, luma_stride, \
+                  luma_pic_w, uv_pl, is_id, ss_x, ss_y \
+                  HIGHBD_TAIL_SUFFIX); \
+}
+
+fguv_region_ss_fn(420, 1, 1);
+fguv_region_ss_fn(422, 1, 0);
+fguv_region_ss_fn(444, 0, 0);
+
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/filmgrain.h"
@@ -432,6 +735,12 @@ COLD void bitfn(dav1d_film_grain_dsp_init)(Dav1dFilmGrainDSPContext *const c) {
     c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I420 - 1] = fguv_32x32xn_420_c;
     c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I422 - 1] = fguv_32x32xn_422_c;
     c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I444 - 1] = fguv_32x32xn_444_c;
+
+    // Region processing always uses the pure-C path; no SIMD variants exist.
+    c->fgy_region = fgy_region_c;
+    c->fguv_region[DAV1D_PIXEL_LAYOUT_I420 - 1] = fguv_region_420_c;
+    c->fguv_region[DAV1D_PIXEL_LAYOUT_I422 - 1] = fguv_region_422_c;
+    c->fguv_region[DAV1D_PIXEL_LAYOUT_I444 - 1] = fguv_region_444_c;
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM

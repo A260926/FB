@@ -117,6 +117,29 @@ foreach header : dav1d_api_headers
     test(target, header_test_exe, suite: 'headers')
 endforeach
 
+# Regional film grain verification. Compares dav1d_apply_grain_region() output
+# against the full-frame dav1d_apply_grain() reference on the embedded
+# fixtures; see verification/check_grain_region.sh which drives both bit
+# depths and asserts the scenario/pixel counters.
+grain_region_exe = executable('grain_region',
+    'grain_region.c',
+    config_h_target,
+    include_directories: dav1d_inc_dirs,
+    link_with: libdav1d,
+    dependencies: [
+        thread_dependency,
+        libm_dependency,
+        ],
+    build_by_default: true,
+)
+
+test('grain_region_8bpc', grain_region_exe,
+     args: [meson.current_source_dir() / '../verification/fixtures/420-8.ivf', '8'],
+     suite: 'grain_region', timeout: 120)
+test('grain_region_10bpc', grain_region_exe,
+     args: [meson.current_source_dir() / '../verification/fixtures/420-10.ivf', '10'],
+     suite: 'grain_region', timeout: 120)
+
 
 # fuzzing binaries
 subdir('libfuzzer')

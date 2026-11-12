@@ -29,6 +29,7 @@
 #include "config.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include "dav1d/common.h"
 #include "dav1d/picture.h"
@@ -97,15 +98,16 @@ static void generate_scaling(const int bitdepth,
 }
 
 #ifndef UNIT_TEST
-void bitfn(dav1d_prep_grain)(const Dav1dFilmGrainDSPContext *const dsp,
-                             Dav1dPicture *const out,
-                             const Dav1dPicture *const in,
-                             uint8_t scaling[3][SCALING_SIZE],
-                             entry grain_lut[3][GRAIN_HEIGHT+1][GRAIN_WIDTH])
+// Generates only the grain LUTs and scaling tables, without touching any
+// picture plane. Shared by the full-frame and the region grain entry points.
+void bitfn(dav1d_prep_grain_tables)(const Dav1dFilmGrainDSPContext *const dsp,
+                                    const Dav1dPicture *const in,
+                                    uint8_t scaling[3][SCALING_SIZE],
+                                    entry grain_lut[3][GRAIN_HEIGHT+1][GRAIN_WIDTH])
 {
-    const Dav1dFilmGrainData *const data = &out->frame_hdr->film_grain.data;
+    const Dav1dFilmGrainData *const data = &in->frame_hdr->film_grain.data;
 #if BITDEPTH != 8
-    const int bitdepth_max = (1 << out->p.bpc) - 1;
+    const int bitdepth_max = (1 << in->p.bpc) - 1;
 #endif
 
     // Generate grain LUTs as needed
@@ -124,6 +126,17 @@ void bitfn(dav1d_prep_grain)(const Dav1dFilmGrainDSPContext *const dsp,
         generate_scaling(in->p.bpc, data->uv_points[0], data->num_uv_points[0], scaling[1]);
     if (data->num_uv_points[1])
         generate_scaling(in->p.bpc, data->uv_points[1], data->num_uv_points[1], scaling[2]);
+}
+
+void bitfn(dav1d_prep_grain)(const Dav1dFilmGrainDSPContext *const dsp,
+                             Dav1dPicture *const out,
+                             const Dav1dPicture *const in,
+                             uint8_t scaling[3][SCALING_SIZE],
+                             entry grain_lut[3][GRAIN_HEIGHT+1][GRAIN_WIDTH])
+{
+    const Dav1dFilmGrainData *const data = &out->frame_hdr->film_grain.data;
+
+    bitfn(dav1d_prep_grain_tables)(dsp, in, scaling, grain_lut);
 
     // Copy over the non-modified planes
     assert(out->stride[0] == in->stride[0]);
@@ -237,5 +250,125 @@ void bitfn(dav1d_apply_grain)(const Dav1dFilmGrainDSPContext *const dsp,
     bitfn(dav1d_prep_grain)(dsp, out, in, scaling, grain_lut);
     for (int row = 0; row < rows; row++)
         bitfn(dav1d_apply_grain_row)(dsp, out, in, scaling, grain_lut, row);
+}
+
+// Copy a rectangular region of an input plane into a top-left-aligned output
+// buffer. Coordinates and sizes are in plane pixels.
+static void bitfn(copy_region)(pixel *const dst, const ptrdiff_t dst_stride,
+                               const pixel *const src, const ptrdiff_t src_stride,
+                               const int x0, const int y0,
+                               const int rw, const int rh)
+{
+    const int dxd = PXSTRIDE(dst_stride);
+    const int sxd = PXSTRIDE(src_stride);
+    for (int y = 0; y < rh; y++)
+        memcpy(dst + y * dxd,
+               src + (y0 + y) * sxd + x0,
+               (size_t) rw * sizeof(pixel));
+}
+
+// Region film grain application. Only the caller's rectangle is produced; the
+// function performs no heap allocation at all - its only working storage is
+// the fixed-size grain/scaling tables on the stack, and chroma scaling reads
+// the input's original luma plane read-only.
+int bitfn(dav1d_apply_grain_region)(const Dav1dFilmGrainDSPContext *const dsp,
+                                    const Dav1dPicture *const in,
+                                    const Dav1dGrainRegion *const region)
+{
+    const Dav1dFilmGrainData *const data = &in->frame_hdr->film_grain.data;
+#if BITDEPTH != 8
+    const int bitdepth_max = (1 << in->p.bpc) - 1;
+#endif
+    const int pic_w = in->p.w;
+    const int pic_h = in->p.h;
+    const int x0 = region->x;
+    const int y0 = region->y;
+    const int rw = region->w;
+    const int rh = region->h;
+
+    // I420 chroma is subsampled by two in both directions.
+    const int cx0 = x0 >> 1;
+    const int cy0 = y0 >> 1;
+    const int crw = (rw + 1) >> 1;
+    const int crh = (rh + 1) >> 1;
+    const int cpw = (pic_w + 1) >> 1;
+    const int cph = (pic_h + 1) >> 1;
+
+    // No grain metadata affects any plane: copy the region of every plane
+    // verbatim, without generating grain tables or touching the input beyond
+    // reading it. Output buffers are always written (never aliased to input).
+    // This mirrors has_grain() in lib.c so the result always matches what a
+    // full-frame dav1d_apply_grain() would produce.
+    const int any_grain = data->num_y_points || data->num_uv_points[0] ||
+                          data->num_uv_points[1] ||
+                          (data->clip_to_restricted_range &&
+                           data->chroma_scaling_from_luma);
+    if (!any_grain) {
+        bitfn(copy_region)((pixel *) region->data[0], region->stride[0],
+                           (const pixel *) in->data[0], in->stride[0],
+                           x0, y0, rw, rh);
+        bitfn(copy_region)((pixel *) region->data[1], region->stride[1],
+                           (const pixel *) in->data[1], in->stride[1],
+                           cx0, cy0, crw, crh);
+        bitfn(copy_region)((pixel *) region->data[2], region->stride[1],
+                           (const pixel *) in->data[2], in->stride[1],
+                           cx0, cy0, crw, crh);
+        return 0;
+    }
+
+    ALIGN_STK_16(entry, grain_lut, 3,[GRAIN_HEIGHT + 1][GRAIN_WIDTH]);
+    uint8_t scaling[3][SCALING_SIZE];
+    bitfn(dav1d_prep_grain_tables)(dsp, in, scaling, grain_lut);
+
+    // Luma plane
+    if (data->num_y_points) {
+        dsp->fgy_region((pixel *) region->data[0], (const pixel *) in->data[0],
+                        region->stride[0], in->stride[0], data,
+                        pic_w, pic_h, x0, y0, rw, rh,
+                        scaling[0], grain_lut[0] HIGHBD_TAIL_SUFFIX);
+    } else {
+        bitfn(copy_region)((pixel *) region->data[0], region->stride[0],
+                           (const pixel *) in->data[0], in->stride[0],
+                           x0, y0, rw, rh);
+    }
+
+    const int chroma_grain = data->num_uv_points[0] || data->num_uv_points[1] ||
+                             data->chroma_scaling_from_luma;
+    if (!chroma_grain) {
+        bitfn(copy_region)((pixel *) region->data[1], region->stride[1],
+                           (const pixel *) in->data[1], in->stride[1],
+                           cx0, cy0, crw, crh);
+        bitfn(copy_region)((pixel *) region->data[2], region->stride[1],
+                           (const pixel *) in->data[2], in->stride[1],
+                           cx0, cy0, crw, crh);
+        return 0;
+    }
+
+    // Chroma scaling reads the original, un-grained luma plane directly. It is
+    // only read, never extended or modified, so the region path needs no
+    // pixel scratch buffer at all: the only working storage is the fixed-size
+    // grain/scaling tables on the stack. An odd picture width is clamped to
+    // the final luma column inside the kernel instead of touching padding.
+    const int is_id = in->seq_hdr->mtrx == DAV1D_MC_IDENTITY;
+    for (int pl = 0; pl < 2; pl++) {
+        if (!data->chroma_scaling_from_luma && !data->num_uv_points[pl]) {
+            bitfn(copy_region)((pixel *) region->data[1 + pl], region->stride[1],
+                               (const pixel *) in->data[1 + pl], in->stride[1],
+                               cx0, cy0, crw, crh);
+            continue;
+        }
+
+        dsp->fguv_region[in->p.layout - 1](
+            (pixel *) region->data[1 + pl],
+            (const pixel *) in->data[1 + pl],
+            region->stride[1], in->stride[1], data,
+            cpw, cph, cx0, cy0, crw, crh,
+            data->chroma_scaling_from_luma ? scaling[0] : scaling[1 + pl],
+            grain_lut[1 + pl],
+            (const pixel *) in->data[0], in->stride[0], pic_w,
+            pl, is_id HIGHBD_TAIL_SUFFIX);
+    }
+
+    return 0;
 }
 #endif

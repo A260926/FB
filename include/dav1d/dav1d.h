@@ -247,6 +247,71 @@ DAV1D_API int dav1d_apply_grain(Dav1dContext *c, Dav1dPicture *out,
                                 const Dav1dPicture *in);
 
 /**
+ * Output rectangle for a region film grain application.
+ *
+ * The rectangle (@x, @y, @w, @h) is expressed in luma pixel coordinates of
+ * the input picture. @x and @y must be even; @w and @h may be odd. For
+ * subsampled chroma planes the region dimensions are rounded up, i.e. the
+ * chroma region size is ((@w + 1) / 2) x ((@h + 1) / 2) for 4:2:0.
+ *
+ * @data[0], @data[1] and @data[2] point at caller-provided output buffers for
+ * the luma and the two chroma planes. Each plane is written starting at the
+ * top-left corner of its buffer (i.e. plane row 0 corresponds to region row
+ * @y, not to picture row 0). The buffers never alias the input picture and do
+ * not overlap each other; the caller guarantees they are large enough.
+ *
+ * @stride[0] and @stride[1] are the positive byte strides between two rows of
+ * the luma and chroma output buffers respectively. A stride must be at least
+ * the number of valid bytes in a row. 10 bpc samples are stored in uint16_t,
+ * exactly like Dav1dPicture data, and the strides must be even in that case.
+ */
+typedef struct Dav1dGrainRegion {
+    int x; ///< left luma coordinate of the region (must be even)
+    int y; ///< top luma coordinate of the region (must be even)
+    int w; ///< region width in luma pixels (must be > 0, may be odd)
+    int h; ///< region height in luma pixels (must be > 0, may be odd)
+    void *data[3]; ///< output buffers for Y, U and V, top-left aligned
+    ptrdiff_t stride[2]; ///< positive byte strides of the Y and UV buffers
+} Dav1dGrainRegion;
+
+/**
+ * Apply film grain to a rectangular region of a previously decoded picture
+ * without touching pixels outside the region.
+ *
+ * The grain is bit-identical to what dav1d_apply_grain() would produce for
+ * the same region of a full-frame output: the random number stream is always
+ * anchored at the top-left corner of the input picture, including the block
+ * offsets of blocks the region starts in the middle of. The output is written
+ * into the region buffers only; no full-frame temporary image is allocated.
+ *
+ * Planes without grain metadata are copied from the corresponding region of
+ * the input instead of being passed through as aliased pointers. The input
+ * picture is never modified, including its padding and frame headers, and its
+ * reference counts are untouched.
+ *
+ * Only DAV1D_PIXEL_LAYOUT_I420 pictures at 8 or 10 bpc are supported; other
+ * layouts or bit depths return DAV1D_ERR(ENOSYS). Invalid or out-of-picture
+ * rectangles, zero width/height, NULL pointers, non-positive strides or
+ * strides smaller than the valid row size, and integer overflow while
+ * computing coordinates are rejected with DAV1D_ERR(EINVAL) before any
+ * output pixel is written.
+ *
+ * @param   c Input decoder instance.
+ * @param  in Input frame. No ownership is transferred and it is not modified.
+ * @param region Region geometry and caller-owned output buffers.
+ *
+ * @return
+ *         0: Success.
+ *  DAV1D_ERR(EINVAL): Invalid arguments, as described above.
+ *  DAV1D_ERR(ENOSYS): Unsupported pixel layout or bit depth.
+ *
+ * @note This call allocates no scratch memory beyond fixed-size stack
+ *       tables, so it cannot fail for lack of memory.
+ */
+DAV1D_API int dav1d_apply_grain_region(Dav1dContext *c, const Dav1dPicture *in,
+                                       const Dav1dGrainRegion *region);
+
+/**
  * Close a decoder instance and free all associated memory.
  *
  * @param c_out The decoder instance to close. *c_out will be set to NULL.

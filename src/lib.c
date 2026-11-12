@@ -524,6 +524,79 @@ error:
     return res;
 }
 
+int dav1d_apply_grain_region(Dav1dContext *const c, const Dav1dPicture *const in,
+                             const Dav1dGrainRegion *const region)
+{
+    validate_input_or_ret(c != NULL, DAV1D_ERR(EINVAL));
+    validate_input_or_ret(in != NULL, DAV1D_ERR(EINVAL));
+    validate_input_or_ret(region != NULL, DAV1D_ERR(EINVAL));
+    validate_input_or_ret(in->frame_hdr != NULL, DAV1D_ERR(EINVAL));
+    validate_input_or_ret(in->seq_hdr != NULL, DAV1D_ERR(EINVAL));
+
+    // Only I420 at 8/10 bpc for now.
+    if (in->p.layout != DAV1D_PIXEL_LAYOUT_I420 ||
+        (in->p.bpc != 8 && in->p.bpc != 10))
+        return DAV1D_ERR(ENOSYS);
+
+    if (!in->data[0] || !in->data[1] || !in->data[2])
+        return DAV1D_ERR(EINVAL);
+
+    const int pic_w = in->p.w;
+    const int pic_h = in->p.h;
+    if (pic_w <= 0 || pic_h <= 0)
+        return DAV1D_ERR(EINVAL);
+
+    // Rectangle validation, all before any pixel is written.
+    const int x = region->x, y = region->y;
+    const int w = region->w, h = region->h;
+    if (w <= 0 || h <= 0 || x < 0 || y < 0 || (x & 1) || (y & 1))
+        return DAV1D_ERR(EINVAL);
+
+    // The coordinate additions must not overflow; int64 arithmetic makes the
+    // check itself overflow-free.
+    const int64_t x_end = (int64_t) x + w;
+    const int64_t y_end = (int64_t) y + h;
+    if (x_end > pic_w || y_end > pic_h)
+        return DAV1D_ERR(EINVAL);
+
+    if (!region->data[0] || !region->data[1] || !region->data[2])
+        return DAV1D_ERR(EINVAL);
+
+    const int bps = in->p.bpc > 8 ? (int) sizeof(uint16_t) : (int) sizeof(uint8_t);
+    const int cw = (w + 1) >> 1;
+    const int64_t row_bytes_luma = (int64_t) w * bps;
+    const int64_t row_bytes_chroma = (int64_t) cw * bps;
+    if (region->stride[0] <= 0 || region->stride[1] <= 0 ||
+        (int64_t) region->stride[0] < row_bytes_luma ||
+        (int64_t) region->stride[1] < row_bytes_chroma)
+        return DAV1D_ERR(EINVAL);
+
+    // 10 bpc samples are uint16_t rows, so both byte strides must stay even.
+    if (in->p.bpc > 8 &&
+        ((region->stride[0] & 1) || (region->stride[1] & 1)))
+        return DAV1D_ERR(EINVAL);
+
+    const Dav1dFilmGrainDSPContext *fg;
+    switch (in->p.bpc) {
+#if CONFIG_8BPC
+    case 8:
+        fg = &c->dsp[0].fg;
+        break;
+#endif
+#if CONFIG_16BPC
+    case 10:
+        fg = &c->dsp[(in->p.bpc >> 1) - 4].fg;
+        break;
+#endif
+    default:
+        return DAV1D_ERR(ENOSYS);
+    }
+
+    if (in->p.bpc == 8)
+        return dav1d_apply_grain_region_8bpc(fg, in, region);
+    return dav1d_apply_grain_region_16bpc(fg, in, region);
+}
+
 void dav1d_flush(Dav1dContext *const c) {
     dav1d_data_unref_internal(&c->in);
     if (c->out.p.frame_hdr)

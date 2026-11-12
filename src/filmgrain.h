@@ -71,12 +71,42 @@ void (name)(pixel *dst_row, const pixel *src_row, ptrdiff_t stride, \
             int uv_pl, int is_id HIGHBD_DECL_SUFFIX)
 typedef decl_fguv_32x32xn_fn(*fguv_32x32xn_fn);
 
+/* Region film grain: rectangle coordinates are in the plane's own pixel
+ * coordinate system, with the picture origin at (0, 0), so the random number
+ * stream stays anchored at the picture's top-left corner. dst points at the
+ * top-left of a caller-owned region buffer; src/luma point at the picture's
+ * own (0, 0) pixel and are only read. The chroma variants read original,
+ * un-grained luma for chroma scaling; an odd picture width is handled by
+ * clamping the paired luma column to the final column instead of extending
+ * the input padding. */
+#define decl_fgy_region_fn(name) \
+void (name)(pixel *dst, const pixel *src, ptrdiff_t dst_stride, \
+            ptrdiff_t src_stride, const Dav1dFilmGrainData *data, \
+            int pic_w, int pic_h, int x0, int y0, int rw, int rh, \
+            const uint8_t scaling[SCALING_SIZE], \
+            const entry grain_lut[][GRAIN_WIDTH] HIGHBD_DECL_SUFFIX)
+typedef decl_fgy_region_fn(*fgy_region_fn);
+
+#define decl_fguv_region_fn(name) \
+void (name)(pixel *dst, const pixel *src, ptrdiff_t dst_stride, \
+            ptrdiff_t src_stride, const Dav1dFilmGrainData *data, \
+            int pic_pw, int pic_ph, int x0, int y0, int rw, int rh, \
+            const uint8_t scaling[SCALING_SIZE], \
+            const entry grain_lut[][GRAIN_WIDTH], \
+            const pixel *luma, ptrdiff_t luma_stride, int luma_pic_w, \
+            int uv_pl, int is_id HIGHBD_DECL_SUFFIX)
+typedef decl_fguv_region_fn(*fguv_region_fn);
+
 typedef struct Dav1dFilmGrainDSPContext {
     generate_grain_y_fn generate_grain_y;
     generate_grain_uv_fn generate_grain_uv[3];
 
     fgy_32x32xn_fn fgy_32x32xn;
     fguv_32x32xn_fn fguv_32x32xn[3];
+
+    /* Pure-C region entry points; never replaced by SIMD implementations. */
+    fgy_region_fn fgy_region;
+    fguv_region_fn fguv_region[3];
 } Dav1dFilmGrainDSPContext;
 
 bitfn_decls(void dav1d_film_grain_dsp_init, Dav1dFilmGrainDSPContext *c);

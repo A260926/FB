@@ -28,7 +28,7 @@
 #ifndef DAV1D_SRC_FG_APPLY_H
 #define DAV1D_SRC_FG_APPLY_H
 
-#include "dav1d/picture.h"
+#include "dav1d/dav1d.h"
 
 #include "common/bitdepth.h"
 
@@ -48,6 +48,16 @@ bitfn_decls(void dav1d_prep_grain,
             Dav1dPicture *const out, const Dav1dPicture *const in,
             array_decl(uint8_t, scaling, [3][SCALING_SIZE]),
             array_decl(entry, grain_lut, [3][GRAIN_HEIGHT+1][GRAIN_WIDTH]));
+bitfn_decls(void dav1d_prep_grain_tables,
+            const Dav1dFilmGrainDSPContext *const dsp,
+            const Dav1dPicture *const in,
+            array_decl(uint8_t, scaling, [3][SCALING_SIZE]),
+            array_decl(entry, grain_lut, [3][GRAIN_HEIGHT+1][GRAIN_WIDTH]));
+bitfn_decls(int dav1d_apply_grain_region,
+            const Dav1dFilmGrainDSPContext *const dsp,
+            const Dav1dPicture *const in,
+            const Dav1dGrainRegion *const region);
+
 bitfn_decls(void dav1d_apply_grain_row,
             const Dav1dFilmGrainDSPContext *const dsp,
             Dav1dPicture *const out, const Dav1dPicture *const in,
