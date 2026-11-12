@@ -371,6 +371,112 @@ TCHAR* f_gets (TCHAR* buff, int len, FIL* fp);						/* Get a string from the fil
 
 
 /*--------------------------------------------------------------*/
+/* exFAT deleted-entry recovery (read-only)                     */
+/*--------------------------------------------------------------*/
+/* This interface is intended for offline analysis of an already-synchronized,
+/  effectively read-only exFAT image. It never writes to the volume: no
+/  disk_write(), no bitmap change and no directory entry is modified. The
+/  caller must not modify the volume between a scan and the subsequent reads.
+/  Normal directory access (f_readdir()/f_open()/f_unlink()) is unaffected and
+/  the read position of the DIR object passed to the scanner is preserved.
+/
+/  The scanner walks a directory from its start and reports every entry set
+/  whose InUse bits are cleared (a deleted file/directory candidate). Each
+/  candidate is identified by the byte offset of its entry-set start within
+/  the directory; this offset is stable and repeatable for a given image. The
+/  scan always starts at offset 0 regardless of the DIR object's current read
+/  position, and leaves that position unchanged.
+/
+/  Candidates that do not pass structural validation (incomplete set, mixed
+/  live entries, unexpected entry types, bad SetChecksum, bad name length or
+/  bad NameHash) are still reported, but with state INVALID and a diagnostic
+/  reason. They must not be treated as recoverable files.
+/
+/  For a structurally valid file, the stream extension fields and the current
+/  allocation bitmap determine what can be read:
+/    - a NoFatChain file is resolved from its contiguous cluster range only;
+/      the FAT is deliberately not consulted because it may be stale;
+/    - a FAT-chained file is followed on the FAT and checked for loops,
+/      invalid clusters, premature end and overlong chains;
+/    - recovery data is offered only when every cluster covering DataLength is
+/      currently free in the allocation bitmap. If any of them is allocated,
+/      the candidate is marked REUSED and cannot be read, so that fragments of
+/      a newer file are never mixed into an older one.
+/    - a zero-length file needs no data cluster and is readable as empty.
+/    - a deleted directory is only classified as DIR; its data is not followed
+/      and its children are not scanned.
+/
+/  IMPORTANT: a fully free allocation bitmap only proves that the clusters are
+/  not allocated *at scan time*. It does NOT prove that the bytes were never
+/  overwritten after the directory entry was deleted. Recovered content is a
+/  best-effort snapshot and must be verified by the caller.
+/
+/  f_exfat_recovery_scan() returns FR_OK after walking the whole directory (the
+/  callback has seen every candidate, including the damaged ones; *ncand counts
+/  them all), or FR_DISK_ERR if a low-level read failed. A candidate whose entry
+/  set cannot be read completely is reported and scanning resumes at the next
+/  directory slot, so a corrupt SecondaryCount cannot swallow a later good set.
+/  Scanning stops at the first 0x00 end-of-directory marker.
+/
+/  f_exfat_recovery_read() reads a VALID, non-directory candidate by logical
+/  offset and length, crossing cluster/fragment boundaries. Bytes between
+/  ValidDataLength and DataLength are returned as zeros; cluster tails beyond
+/  ValidDataLength are never exposed. INVALID, DIR and REUSED candidates are
+/  rejected with FR_DENIED. On a disk read error or a short image, *br receives
+/  the exact number of bytes produced before the failure and the remaining
+/  bytes are not zero-filled.
+*/
+
+#define FF_RECOVERY_STATE_VALID		0	/* Structurally valid; every data cluster currently free */
+#define FF_RECOVERY_STATE_REUSED	1	/* Structurally valid but data clusters currently allocated */
+#define FF_RECOVERY_STATE_DIR		2	/* Structurally valid directory (data not analyzed) */
+#define FF_RECOVERY_STATE_INVALID	3	/* Damaged/untrustworthy candidate (see diag) */
+
+#define FF_RECOVERY_DIAG_NONE			0	/* No diagnostic (valid candidate) */
+#define FF_RECOVERY_DIAG_SECCOUNT		1	/* SecondaryCount outside 2..18 */
+#define FF_RECOVERY_DIAG_INCOMPLETE		2	/* Entry set truncated by directory end */
+#define FF_RECOVERY_DIAG_TYPE			3	/* Unexpected secondary entry type */
+#define FF_RECOVERY_DIAG_LIVE			4	/* InUse set on part of a deleted entry set */
+#define FF_RECOVERY_DIAG_CHECKSUM		5	/* SetChecksum mismatch after restoring InUse */
+#define FF_RECOVERY_DIAG_NAME_LEN		6	/* NameLength/FileName entry count/padding invalid */
+#define FF_RECOVERY_DIAG_NAME_HASH		7	/* NameHash mismatch against the volume up-case table */
+#define FF_RECOVERY_DIAG_UPCASE			8	/* Volume up-case table missing or corrupt */
+#define FF_RECOVERY_DIAG_VALID_LEN		9	/* ValidDataLength greater than DataLength */
+#define FF_RECOVERY_DIAG_DATA			10	/* DataLength/FirstCluster range inconsistent */
+#define FF_RECOVERY_DIAG_CHAIN_LOOP		11	/* FAT chain contains a loop */
+#define FF_RECOVERY_DIAG_CHAIN_CLUSTER	12	/* FAT chain reaches an invalid/free cluster */
+#define FF_RECOVERY_DIAG_CHAIN_EARLY		13	/* FAT chain ends before DataLength is covered */
+#define FF_RECOVERY_DIAG_CHAIN_LONG		14	/* FAT chain continues beyond DataLength */
+#define FF_RECOVERY_DIAG_IO			15	/* Low-level disk I/O failure during validation */
+
+#define FF_RECOVERY_FLAG_NOFATCHAIN		0x01	/* Stream extension NoFatChain is set (contiguous) */
+
+#if FF_FS_EXFAT
+typedef struct {
+	FATFS*	fs;			/* Volume that owns the candidate (used by the read function) */
+	WORD	fsid;		/* Mount ID of that volume at scan time */
+	BYTE	state;		/* FF_RECOVERY_STATE_* */
+	BYTE	diag;		/* FF_RECOVERY_DIAG_* */
+	BYTE	attr;		/* exFAT file attribute (AM_* bits) */
+	BYTE	flags;		/* FF_RECOVERY_FLAG_* */
+	WORD	name_len;	/* UTF-16 code units in name[] (0 if unavailable) */
+	DWORD	ofs;		/* Byte offset of the entry-set start in the directory */
+	DWORD	first_clst;	/* Stream extension FirstCluster */
+	DWORD	n_clust;	/* Number of clusters covering data_len */
+	QWORD	data_len;	/* Stream extension DataLength */
+	QWORD	valid_len;	/* Stream extension ValidDataLength */
+	QWORD	readable_len;	/* Bytes readable (0 unless state == VALID) */
+	WCHAR	name[FF_MAX_LFN + 1];	/* NUL-terminated UTF-16 name (empty if unavailable) */
+} FF_RECOVERY_INFO;
+
+typedef void (*FF_RECOVERY_CB)(void* user, const FF_RECOVERY_INFO* rec);
+
+FRESULT f_exfat_recovery_scan (DIR* dp, FF_RECOVERY_CB cb, void* user, UINT* ncand);	/* Scan deleted entry sets in an open directory */
+FRESULT f_exfat_recovery_read (const FF_RECOVERY_INFO* rec, void* buff, QWORD ofs, QWORD len, QWORD* br);	/* Read a valid candidate's content */
+#endif	/* FF_FS_EXFAT */
+
+
+/*--------------------------------------------------------------*/
 /* Additional Functions                                         */
 /*--------------------------------------------------------------*/
 

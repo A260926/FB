@@ -3729,6 +3729,678 @@ static FRESULT validate (	/* Returns FR_OK or FR_INVALID_OBJECT */
 
 
 
+/*-----------------------------------------------------------------------*/
+/* exFAT deleted-entry recovery (read-only image analysis)               */
+/*-----------------------------------------------------------------------*/
+/* Everything here uses raw disk_read() only: it never touches fs->win,  */
+/* never writes a sector, never changes the allocation bitmap and never   */
+/* modifies the directory object given by the caller.                     */
+
+#if FF_FS_EXFAT
+
+typedef struct {			/* Local sector cache (does not use fs->win) */
+	FATFS*	fs;
+	LBA_t	lba;
+	int		valid;
+	BYTE	buf[FF_MAX_SS];
+} XRSEC;
+
+
+static FRESULT xr_sector_read (XRSEC* c, LBA_t lba)
+{
+	if (c->valid && c->lba == lba) return FR_OK;
+	c->valid = 0;
+	if (disk_read(c->fs->pdrv, c->buf, lba, 1) != RES_OK) return FR_DISK_ERR;
+	c->lba = lba; c->valid = 1;
+	return FR_OK;
+}
+
+
+static FRESULT xr_fat_read (	/* Read an exFAT FAT entry (masked to 31 bits) */
+	FATFS* fs, DWORD clst, DWORD* val, XRSEC* c
+)
+{
+	QWORD off;
+	LBA_t sect;
+	UINT boff;
+
+	if (clst < 2 || clst >= fs->n_fatent) return FR_INT_ERR;
+	off = (QWORD)clst * 4;
+	sect = fs->fatbase + (LBA_t)(off / SS(fs));
+	boff = (UINT)(off % SS(fs));
+	if (xr_sector_read(c, sect) != FR_OK) return FR_DISK_ERR;
+	*val = ld_32(c->buf + boff) & 0x7FFFFFFF;
+	return FR_OK;
+}
+
+
+static int xr_bitmap_free (	/* 1:free, 0:allocated, -1:error */
+	FATFS* fs, DWORD clst, XRSEC* c
+)
+{
+	QWORD bit;
+	LBA_t sect;
+	UINT boff;
+	BYTE bm;
+
+	if (clst < 2 || clst >= fs->n_fatent) return -1;
+	bit = (QWORD)(clst - 2);
+	sect = fs->bitbase + (LBA_t)(bit / 8 / SS(fs));
+	boff = (UINT)(bit / 8 % SS(fs));
+	if (xr_sector_read(c, sect) != FR_OK) return -1;
+	bm = (BYTE)(1 << (UINT)(bit % 8));
+	return (c->buf[boff] & bm) == 0;
+}
+
+
+/* Follow one link of a directory chain (root dir and FAT-chained dirs). */
+
+static FRESULT xr_dir_next_clst (FFOBJID* obj, DWORD clst, DWORD* nxt, XRSEC* c)
+{
+	FATFS* fs = obj->fs;
+	DWORD v, csb;
+	FRESULT res;
+
+	csb = (DWORD)fs->csize * SS(fs);
+	if (obj->sclust != 0 && (obj->stat & 2)) {	/* Contiguous sub-directory (NoFatChain) */
+		QWORD n = ((QWORD)obj->objsize + csb - 1) / csb;
+		if ((QWORD)clst - obj->sclust + 1 >= n) return FR_NO_FILE;
+		*nxt = clst + 1;
+		return FR_OK;
+	}
+	res = xr_fat_read(fs, clst, &v, c);
+	if (res != FR_OK) return res;
+	if (v >= 0x7FFFFFF8) return FR_NO_FILE;		/* End of FAT chain */
+	if (v < 2 || v >= fs->n_fatent) return FR_INT_ERR;
+	*nxt = v;
+	return FR_OK;
+}
+
+
+/* Fetch one 32-byte directory entry at a byte offset in the directory. */
+
+static FRESULT xr_dir_fetch (FATFS* fs, const FFOBJID* dobj, DWORD ofs, BYTE* ent, XRSEC* c)
+{
+	FFOBJID obj;
+	DWORD clst, csb;
+	LBA_t sect;
+	FRESULT res;
+
+	if (ofs % SZDIRE || ofs >= MAX_DIR_EX) return FR_INT_ERR;
+	obj = *dobj;
+	obj.fs = fs;
+	clst = dobj->sclust ? dobj->sclust : (DWORD)fs->dirbase;
+	csb = (DWORD)fs->csize * SS(fs);
+	while (ofs >= csb) {
+		DWORD nxt;
+		res = xr_dir_next_clst(&obj, clst, &nxt, c);	/* FR_NO_FILE: end of directory */
+		if (res != FR_OK) return res;
+		clst = nxt;
+		ofs -= csb;
+	}
+	sect = clst2sect(fs, clst);
+	if (sect == 0) return FR_INT_ERR;
+	sect += ofs / SS(fs);
+	res = xr_sector_read(c, sect);
+	if (res != FR_OK) return res;
+	memcpy(ent, c->buf + ofs % SS(fs), SZDIRE);
+	return FR_OK;
+}
+
+
+/* Sequential reader for the compressed volume up-case table. */
+
+typedef struct {
+	FATFS*	fs;
+	XRSEC	sec;
+	DWORD	clst;
+	UINT	boff;		/* Byte offset within the cluster */
+	UINT	soff;		/* Byte offset within the sector */
+	QWORD	remain;		/* Bytes left in the table */
+} XRUPCASE;
+
+
+static FRESULT xr_up_token (XRUPCASE* u, WORD* tok)
+{
+	BYTE b[2];
+	UINT i;
+	FATFS* fs = u->fs;
+	DWORD csb = (DWORD)fs->csize * SS(fs);
+
+	for (i = 0; i < 2; i++) {
+		if (u->remain == 0) return FR_NO_FILE;
+		if (u->soff == 0) {
+			LBA_t sect = clst2sect(fs, u->clst);
+			if (sect == 0) return FR_INT_ERR;
+			sect += u->boff / SS(fs);
+			if (xr_sector_read(&u->sec, sect) != FR_OK) return FR_DISK_ERR;
+		}
+		b[i] = u->sec.buf[u->soff++];
+		u->remain--;
+		if (u->soff == SS(fs)) {
+			u->soff = 0;
+			u->boff += SS(fs);
+			if (u->boff >= csb && u->remain != 0) {
+				DWORD v;
+				if (xr_fat_read(fs, u->clst, &v, &u->sec) != FR_OK) return FR_INT_ERR;
+				if (v >= 0x7FFFFFF8 || v < 2 || v >= fs->n_fatent) return FR_INT_ERR;
+				u->clst = v;
+				u->boff = 0;
+			}
+		}
+	}
+	*tok = (WORD)(b[0] | ((WORD)b[1] << 8));
+	return FR_OK;
+}
+
+
+/* Resolve the up-cased value of every UTF-16 unit in a name using the
+/  volume's up-case table (not the library's built-in table). */
+
+static FRESULT xr_upcase_map (
+	FATFS* fs, DWORD first, QWORD tlen, const WCHAR* name, UINT nlen, WORD* upper
+)
+{
+	XRUPCASE u;
+	WORD tok, skip;
+	UINT c, j, lo, hi;
+	FRESULT res;
+
+	if (first < 2 || first >= fs->n_fatent || tlen == 0) return FR_NO_FILE;
+	memset(&u, 0, sizeof u);
+	u.fs = fs; u.sec.fs = fs; u.clst = first; u.remain = tlen;
+	for (j = 0; j < nlen; j++) upper[j] = 0xFFFF;	/* Sentinel: unset */
+
+	c = 0;
+	while (c < 0x10000) {
+		res = xr_up_token(&u, &tok);
+		if (res != FR_OK) return res;
+		if (tok == 0xFFFF) {			/* Skip run: identity mapping */
+			res = xr_up_token(&u, &skip);
+			if (res != FR_OK) return res;
+			if (skip == 0) skip = 1;
+			lo = c;
+			hi = c + skip;
+			if (hi > 0x10000) hi = 0x10000;
+			for (j = 0; j < nlen; j++) {
+				if ((UINT)name[j] >= lo && (UINT)name[j] < hi) upper[j] = name[j];
+			}
+			c = hi;
+		} else {
+			for (j = 0; j < nlen; j++) {
+				if ((UINT)name[j] == c && upper[j] == 0xFFFF) upper[j] = tok;
+			}
+			c++;
+		}
+	}
+	for (j = 0; j < nlen; j++) {
+		if (upper[j] == 0xFFFF) return FR_INT_ERR;	/* Table does not cover the name */
+	}
+	return FR_OK;
+}
+
+
+/* Locate the up-case table entry in the root directory. */
+
+static FRESULT xr_find_upcase (FATFS* fs, DWORD* first, QWORD* tlen)
+{
+	FFOBJID root;
+	BYTE ent[SZDIRE];
+	XRSEC c;
+	DWORD ofs;
+	FRESULT res;
+
+	memset(&root, 0, sizeof root);
+	root.fs = fs;			/* sclust = 0: root directory */
+	c.fs = fs; c.valid = 0;
+	for (ofs = 0; ofs < MAX_DIR_EX; ofs += SZDIRE) {
+		res = xr_dir_fetch(fs, &root, ofs, ent, &c);
+		if (res != FR_OK) return res;
+		if (ent[XDIR_Type] == 0) return FR_NO_FILE;		/* End of directory */
+		if (ent[XDIR_Type] == ET_UPCASE) {
+			*first = ld_32(ent + 20);
+			*tlen = ld_64(ent + 24);
+			return FR_OK;
+		}
+	}
+	return FR_NO_FILE;
+}
+
+
+typedef struct {			/* State shared by one scan */
+	FATFS*	fs;
+	FFOBJID	dobj;
+	XRSEC	ecache;			/* Directory entries */
+	XRSEC	bcache;			/* Allocation bitmap */
+	XRSEC	fcache;			/* FAT */
+	int		upcase_ok;
+	DWORD	up_first;
+	QWORD	up_len;
+} XRSCAN;
+
+
+/* Walk the part of a chain past the clusters needed by DataLength, using
+/  Floyd cycle detection. Returns 0:chain ends (overlong), 1:loop,
+/  2:invalid cluster, 3:disk error. */
+
+static int xr_chain_tail (FATFS* fs, DWORD first, XRSEC* c)
+{
+	DWORD slow, fast, v;
+	FRESULT res;
+
+	slow = fast = first;
+	for (;;) {
+		res = xr_fat_read(fs, slow, &v, c);
+		if (res == FR_DISK_ERR) return 3;
+		if (res != FR_OK) return 2;
+		if (v >= 0x7FFFFFF8) return 0;			/* End of chain */
+		if (v < 2 || v >= fs->n_fatent) return 2;
+		slow = v;
+		res = xr_fat_read(fs, fast, &v, c);		/* Fast pointer, two steps */
+		if (res == FR_DISK_ERR) return 3;
+		if (res != FR_OK) return 2;
+		if (v >= 0x7FFFFFF8) return 0;
+		if (v < 2 || v >= fs->n_fatent) return 2;
+		fast = v;
+		res = xr_fat_read(fs, fast, &v, c);
+		if (res == FR_DISK_ERR) return 3;
+		if (res != FR_OK) return 2;
+		if (v >= 0x7FFFFFF8) return 0;
+		if (v < 2 || v >= fs->n_fatent) return 2;
+		fast = v;
+		if (slow == fast) return 1;				/* Cycle detected */
+	}
+}
+
+
+/* Validate one deleted entry-set at `ofs` and report its recovery status. */
+
+static FRESULT xr_scan_candidate (
+	XRSCAN* s, DWORD ofs, const BYTE* first, FF_RECOVERY_INFO* rec, DWORD* adv, int* stop
+)
+{
+	FATFS* fs = s->fs;
+	BYTE set[19 * SZDIRE];
+	WCHAR nm[FF_MAX_LFN + 1];
+	WORD upper[FF_MAX_LFN];
+	UINT sec, i, j, k, numname, nent, live, typeok, badpad, reused;
+	WORD sum, hash;
+	QWORD csb, ncl;
+	DWORD sec_bytes;
+	FRESULT res;
+
+	memset(rec, 0, sizeof *rec);
+	rec->fs = fs; rec->fsid = fs->id; rec->ofs = ofs;
+	rec->state = FF_RECOVERY_STATE_INVALID;
+	*adv = SZDIRE; *stop = 0;
+
+	sec = first[XDIR_NumSec];
+	if (sec < 2 || sec > 18) {
+		rec->diag = FF_RECOVERY_DIAG_SECCOUNT;
+		return FR_OK;
+	}
+	sec_bytes = (1 + sec) * SZDIRE;
+
+	/* Gather the whole set. Never let a damaged set hide later good records:
+	   an incomplete set is reported, then scanning resumes one slot later. */
+	memcpy(set, first, SZDIRE);
+	for (i = 1; i <= sec; i++) {
+		res = xr_dir_fetch(fs, &s->dobj, ofs + i * SZDIRE, set + i * SZDIRE, &s->ecache);
+		if (res == FR_NO_FILE || set[i * SZDIRE + XDIR_Type] == 0) {
+			rec->diag = FF_RECOVERY_DIAG_INCOMPLETE;
+			return FR_OK;					/* Resume at the next slot */
+		}
+		if (res == FR_DISK_ERR) { rec->diag = FF_RECOVERY_DIAG_IO; return FR_DISK_ERR; }
+		if (res != FR_OK) { rec->diag = FF_RECOVERY_DIAG_INCOMPLETE; return FR_OK; }
+	}
+
+	/* Entry types and InUse bits of the secondaries. */
+	live = 0; typeok = 1;
+	for (i = 1; i <= sec; i++) {
+		BYTE t = set[i * SZDIRE + XDIR_Type];
+		if (t & 0x80) live = 1;
+		if ((t & 0x7F) != ((i == 1) ? 0x40 : 0x41)) typeok = 0;
+	}
+	if (live) { rec->diag = FF_RECOVERY_DIAG_LIVE; return FR_OK; }
+	if (!typeok) { rec->diag = FF_RECOVERY_DIAG_TYPE; return FR_OK; }
+
+	/* Restore InUse flags in the temporary copy and check the set checksum. */
+	for (i = 0; i <= sec; i++) set[i * SZDIRE + XDIR_Type] |= 0x80;
+	sum = xdir_sum(set);
+	if (sum != ld_16(set + XDIR_SetSum)) {
+		rec->diag = FF_RECOVERY_DIAG_CHECKSUM;
+		return FR_OK;
+	}
+
+	/* File name length and number of C1 entries (XDIR_* offsets index the
+	   whole 85+C0+C1 block buffer, so the stream extension fields are at
+	   XDIR_* directly). */
+	numname = set[XDIR_NumName];
+	nent = sec - 1;
+	if (numname == 0 || numname > FF_MAX_LFN || (numname + 14) / 15 != nent) {
+		rec->diag = FF_RECOVERY_DIAG_NAME_LEN;
+		return FR_OK;
+	}
+	j = 0; badpad = 0;
+	for (i = 2; i <= sec; i++) {
+		for (k = 2; k < SZDIRE; k += 2) {
+			WORD ch = ld_16(set + i * SZDIRE + k);
+			if (j < numname) nm[j++] = (WCHAR)ch;
+			else if (ch != 0 && ch != 0xFFFF) badpad = 1;	/* Unused chars: 0 or 0xFFFF */
+		}
+	}
+	if (badpad) {
+		rec->diag = FF_RECOVERY_DIAG_NAME_LEN;
+		return FR_OK;
+	}
+	if (j != numname) {
+		rec->diag = FF_RECOVERY_DIAG_NAME_LEN;
+		return FR_OK;
+	}
+	nm[numname] = 0;
+
+	/* Name hash, verified through the volume up-case table. */
+	if (!s->upcase_ok) {
+		if (xr_find_upcase(fs, &s->up_first, &s->up_len) == FR_OK) s->upcase_ok = 1;
+	}
+	if (!s->upcase_ok) {
+		rec->diag = FF_RECOVERY_DIAG_UPCASE;
+	} else {
+		res = xr_upcase_map(fs, s->up_first, s->up_len, nm, numname, upper);
+		if (res != FR_OK) {
+			rec->diag = FF_RECOVERY_DIAG_UPCASE;
+		} else {
+			hash = 0;
+			for (i = 0; i < numname; i++) {
+				WORD ch = upper[i];
+				hash = (WORD)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + (ch & 0xFF));
+				hash = (WORD)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + (ch >> 8));
+			}
+			/* Verify NameHash against the up-cased name. */
+			if (hash != ld_16(set + XDIR_NameHash)) {
+				rec->diag = FF_RECOVERY_DIAG_NAME_HASH;
+			}
+		}
+	}
+	if (rec->diag == FF_RECOVERY_DIAG_UPCASE || rec->diag == FF_RECOVERY_DIAG_NAME_HASH) {
+		rec->name_len = (WORD)numname;		/* Report name only as unverified text */
+		for (i = 0; i < numname; i++) rec->name[i] = nm[i];
+		rec->name[numname] = 0;
+		return FR_OK;
+	}
+
+	/* The set is structurally trustworthy from here on. */
+	rec->name_len = (WORD)numname;
+	for (i = 0; i < numname; i++) rec->name[i] = nm[i];
+	rec->name[numname] = 0;
+	rec->attr = (BYTE)(ld_16(set + XDIR_Attr) & AM_MASKX);
+	rec->data_len = ld_64(set + XDIR_FileSize);
+	rec->valid_len = ld_64(set + XDIR_ValidFileSize);
+	rec->first_clst = ld_32(set + XDIR_FstClus);
+	if (set[XDIR_GenFlags] & 2) rec->flags |= FF_RECOVERY_FLAG_NOFATCHAIN;
+
+	if (rec->attr & AM_DIR) {			/* Deleted directory: classify only */
+		rec->state = FF_RECOVERY_STATE_DIR;
+		*adv = sec_bytes;
+		return FR_OK;
+	}
+	if (rec->valid_len > rec->data_len) {
+		rec->diag = FF_RECOVERY_DIAG_VALID_LEN;
+		return FR_OK;
+	}
+
+	csb = (QWORD)fs->csize * SS(fs);
+	if (rec->data_len > ((QWORD)fs->n_fatent - 2) * csb) {
+		rec->diag = FF_RECOVERY_DIAG_DATA;
+		return FR_OK;
+	}
+	ncl = (rec->data_len + csb - 1) / csb;
+	rec->n_clust = (DWORD)ncl;
+
+	reused = 0;
+	if (ncl != 0) {
+		if (rec->first_clst < 2 || rec->first_clst >= fs->n_fatent) {
+			rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER;
+			return FR_OK;
+		}
+		if (rec->flags & FF_RECOVERY_FLAG_NOFATCHAIN) {
+			/* Contiguous range; the on-disk FAT may be stale so it is not used. */
+			if ((QWORD)rec->first_clst + ncl > (QWORD)fs->n_fatent) {
+				rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER;
+				return FR_OK;
+			}
+			for (i = 0; i < (UINT)ncl; i++) {
+				int f = xr_bitmap_free(fs, rec->first_clst + i, &s->bcache);
+				if (f < 0) { rec->diag = FF_RECOVERY_DIAG_IO; return FR_DISK_ERR; }
+				if (!f) reused = 1;
+			}
+		} else {
+			/* FAT-chained file: validate the remaining chain and its length. */
+			DWORD clst = rec->first_clst;
+			for (i = 0; i < (UINT)ncl; i++) {
+				DWORD v;
+				int f;
+				if (clst < 2 || clst >= fs->n_fatent) {
+					rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER;
+					return FR_OK;
+				}
+				f = xr_bitmap_free(fs, clst, &s->bcache);
+				if (f < 0) { rec->diag = FF_RECOVERY_DIAG_IO; return FR_DISK_ERR; }
+				if (!f) reused = 1;
+				res = xr_fat_read(fs, clst, &v, &s->fcache);
+				if (res != FR_OK) { rec->diag = FF_RECOVERY_DIAG_IO; return FR_DISK_ERR; }
+				if (i + 1 < (UINT)ncl) {
+					if (v >= 0x7FFFFFF8) { rec->diag = FF_RECOVERY_DIAG_CHAIN_EARLY; return FR_OK; }
+					if (v < 2 || v >= fs->n_fatent) { rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER; return FR_OK; }
+					clst = v;
+				} else {
+					if (v >= 0x7FFFFFF8) break;		/* Proper end of chain */
+					if (v < 2 || v >= fs->n_fatent) {
+						rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER;
+						return FR_OK;
+					}
+					{	/* Chain still continues past DataLength: loop or overlong */
+						int t = xr_chain_tail(fs, v, &s->fcache);
+						if (t == 3) { rec->diag = FF_RECOVERY_DIAG_IO; return FR_DISK_ERR; }
+						if (t == 2) { rec->diag = FF_RECOVERY_DIAG_CHAIN_CLUSTER; return FR_OK; }
+						rec->diag = (t == 1) ? FF_RECOVERY_DIAG_CHAIN_LOOP : FF_RECOVERY_DIAG_CHAIN_LONG;
+						return FR_OK;
+					}
+				}
+			}
+		}
+	}
+
+	if (reused) {
+		rec->state = FF_RECOVERY_STATE_REUSED;
+	} else {
+		rec->state = FF_RECOVERY_STATE_VALID;
+		rec->readable_len = rec->data_len;
+	}
+	*adv = sec_bytes;
+	return FR_OK;
+}
+
+
+/* Read a byte segment of one cluster. *got reports bytes produced. */
+
+static FRESULT xr_read_segment (
+	FATFS* fs, XRSEC* c, DWORD clst, UINT off, UINT len, BYTE* dst, QWORD* got
+)
+{
+	LBA_t base = clst2sect(fs, clst);
+	UINT done = 0;
+
+	*got = 0;
+	if (base == 0) return FR_INT_ERR;
+	while (len != 0) {
+		UINT boff = off % SS(fs);
+		UINT n = SS(fs) - boff;
+		LBA_t sect = base + off / SS(fs);
+		if (n > len) n = len;
+		if (xr_sector_read(c, sect) != FR_OK) { *got = done; return FR_DISK_ERR; }
+		memcpy(dst + done, c->buf + boff, n);
+		done += n; off += n; len -= n;
+	}
+	*got = done;
+	return FR_OK;
+}
+
+
+/*-----------------------------------------------------------------------*/
+/* API: Scan deleted entry sets in an open directory                     */
+/*-----------------------------------------------------------------------*/FRESULT f_exfat_recovery_scan (
+	DIR* dp,				/* Already opened directory */
+	FF_RECOVERY_CB cb,		/* Candidate callback (may be NULL) */
+	void* user,				/* Opaque pointer passed to cb */
+	UINT* ncand				/* Number of candidates reported (may be NULL) */
+)
+{
+	FRESULT res;
+	FATFS* fs;
+	XRSCAN s;
+	BYTE ent[SZDIRE];
+	DWORD ofs;
+	UINT count = 0;
+
+	if (!dp) return FR_INVALID_OBJECT;
+	res = validate(&dp->obj, &fs);
+	if (res != FR_OK) return res;
+	if (fs->fs_type != FS_EXFAT) return FR_INVALID_PARAMETER;
+
+	/* Work on a private copy; the caller's read position is not touched. */
+	s.fs = fs;
+	s.dobj = dp->obj;
+	s.dobj.fs = fs;
+	s.ecache.fs = fs; s.ecache.valid = 0;
+	s.bcache.fs = fs; s.bcache.valid = 0;
+	s.fcache.fs = fs; s.fcache.valid = 0;
+	s.upcase_ok = 0; s.up_first = 0; s.up_len = 0;
+	if (xr_find_upcase(fs, &s.up_first, &s.up_len) == FR_OK) s.upcase_ok = 1;
+
+	ofs = 0;
+	for (;;) {
+		if (ofs >= (DWORD)MAX_DIR_EX) { res = FR_OK; break; }
+		res = xr_dir_fetch(fs, &s.dobj, ofs, ent, &s.ecache);
+		if (res == FR_NO_FILE) { res = FR_OK; break; }		/* Directory ends */
+		if (res != FR_OK) break;							/* Disk/internal error */
+		if (ent[XDIR_Type] == 0) { res = FR_OK; break; }	/* End-of-directory marker */
+		if (ent[XDIR_Type] != 0x05) { ofs += SZDIRE; continue; }	/* Not a deleted file entry */
+		{
+			FF_RECOVERY_INFO rec;
+			DWORD adv; int stop;
+			res = xr_scan_candidate(&s, ofs, ent, &rec, &adv, &stop);
+			count++;
+			if (cb) cb(user, &rec);
+			if (res != FR_OK) break;		/* Report the candidate, then stop on I/O error */
+			if (stop) { res = FR_OK; break; }
+			ofs += adv;
+		}
+	}
+
+	if (ncand) *ncand = count;
+	return res;
+}
+
+
+/*-----------------------------------------------------------------------*/
+/* API: Read content of a valid deleted file candidate                  */
+/*-----------------------------------------------------------------------*/
+
+FRESULT f_exfat_recovery_read (
+	const FF_RECOVERY_INFO* rec,	/* Candidate returned by the scan */
+	void* buff,						/* Output buffer */
+	QWORD ofs,						/* Logical offset in the file */
+	QWORD len,						/* Number of bytes to read */
+	QWORD* br						/* Number of bytes produced */
+)
+{
+	FATFS* fs;
+	XRSEC dcache, fcache;
+	QWORD done, pos, end, datend, idx, csb;
+	UINT coff;
+	DWORD cur;
+	FRESULT res;
+
+	if (!br) return FR_INVALID_PARAMETER;
+	*br = 0;
+	if (!rec || !rec->fs) return FR_INVALID_OBJECT;
+	fs = rec->fs;
+	if (fs->fs_type != FS_EXFAT || fs->id != rec->fsid) return FR_INVALID_OBJECT;
+	if (rec->state != FF_RECOVERY_STATE_VALID || (rec->attr & AM_DIR)) return FR_DENIED;
+	if (!buff && len != 0) return FR_INVALID_PARAMETER;
+	if (len == 0 || ofs >= rec->data_len) return FR_OK;
+
+	if (len > rec->data_len - ofs) len = rec->data_len - ofs;
+	end = ofs + len;
+	datend = (rec->valid_len < end) ? rec->valid_len : end;
+	if (datend < ofs) datend = ofs;
+
+	dcache.fs = fs; dcache.valid = 0;
+	fcache.fs = fs; fcache.valid = 0;
+	csb = (QWORD)fs->csize * SS(fs);
+	done = 0;
+	pos = ofs;
+
+	if (pos < datend) {
+		QWORD skip;
+		/* Position on the first needed cluster (walk the chain once). */
+		idx = pos / csb;
+		coff = (UINT)(pos % csb);
+		cur = rec->first_clst;
+		if (cur < 2 || cur >= fs->n_fatent) return FR_INT_ERR;
+		if (rec->flags & FF_RECOVERY_FLAG_NOFATCHAIN) {
+			if ((QWORD)cur + idx >= (QWORD)fs->n_fatent) return FR_INT_ERR;
+			cur = (DWORD)((QWORD)cur + idx);
+		} else {
+			for (skip = 0; skip < idx; skip++) {
+				DWORD v;
+				if (xr_fat_read(fs, cur, &v, &fcache) != FR_OK) return FR_DISK_ERR;
+				if (v >= 0x7FFFFFF8 || v < 2 || v >= fs->n_fatent) return FR_INT_ERR;
+				cur = v;
+			}
+		}
+		while (pos < datend) {
+			QWORD got;
+			UINT n = (UINT)(csb - coff);		/* Never cross a cluster boundary here */
+			if ((QWORD)n > datend - pos) n = (UINT)(datend - pos);
+			res = xr_read_segment(fs, &dcache, cur, coff, n, (BYTE*)buff + done, &got);
+			done += got; *br = done;
+			if (res != FR_OK) return res;		/* Exact partial count, no zero fill */
+			pos += n;
+			if (coff + n >= (UINT)csb) {		/* Cluster consumed */
+				coff = 0;
+				if (pos < datend) {
+					if (rec->flags & FF_RECOVERY_FLAG_NOFATCHAIN) {
+						if ((QWORD)cur + 1 >= (QWORD)fs->n_fatent) return FR_INT_ERR;
+						cur++;
+					} else {
+						DWORD v;
+						if (xr_fat_read(fs, cur, &v, &fcache) != FR_OK) return FR_DISK_ERR;
+						if (v >= 0x7FFFFFF8 || v < 2 || v >= fs->n_fatent) return FR_INT_ERR;
+						cur = v;
+					}
+				}
+			} else {
+				coff += n;
+			}
+		}
+	}
+
+	/* Bytes in [ValidDataLength, DataLength) are not stored: return zeros. */
+	if (end > pos) {
+		memset((BYTE*)buff + done, 0, (size_t)(end - pos));
+		done += end - pos;
+		*br = done;
+	}
+	return FR_OK;
+}
+
+#endif	/* FF_FS_EXFAT */
+
+
+
+
 /*---------------------------------------------------------------------------
 
    Public Functions (FatFs API)
