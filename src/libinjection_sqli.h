@@ -27,7 +27,12 @@ enum sqli_flags {
     FLAG_QUOTE_SINGLE = 2, /* 1 << 1 */
     FLAG_QUOTE_DOUBLE = 4, /* 1 << 2 */
     FLAG_SQL_ANSI = 8,     /* 1 << 3 */
-    FLAG_SQL_MYSQL = 16    /* 1 << 4 */
+    FLAG_SQL_MYSQL = 16,   /* 1 << 4 */
+    FLAG_SQL_PG = 32,      /* 1 << 5: PostgreSQL lexer */
+    /* 1 << 6: in PG mode, backslash escapes the next byte in
+     * ordinary single-quoted strings (pre-9.1 standard_conforming_strings
+     * behavior).  Without it, backslash is an ordinary byte. */
+    FLAG_PG_LEGACY_STRINGS = 64
 };
 
 enum lookup_type {

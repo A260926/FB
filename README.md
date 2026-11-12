@@ -61,6 +61,58 @@ More advanced samples:
 * [reader.c](/src/reader.c)
 * [fptool](/src/fptool.c)
 
+POSTGRESQL MODE
+===============
+
+When the backend is known to be PostgreSQL, use the PostgreSQL lexer instead
+of the default mixed-dialect guessing. It understands nested block comments,
+dollar-quoted strings (`$$ ... $$` and `$tag$ ... $tag$`), double-quoted
+identifiers and `E'...'` escape strings. Folding and the fingerprint table are
+unchanged; only the lexer differs. The default API keeps its historical
+behavior.
+
+The simple entry point takes a `standard_strings` argument:
+
+* `1` — backslash is an ordinary byte inside ordinary single-quoted strings
+  (the PostgreSQL default since 9.1, `standard_conforming_strings = on`).
+* `0` — backslash escapes the next byte inside ordinary single-quoted strings.
+* `E'...'` / `e'...'` strings always honor backslash escapes, regardless of
+  this value. Doubled single quotes never terminate a string.
+
+```c
+#include "libinjection.h"
+
+char fingerprint[8];
+injection_result_t result =
+    libinjection_sqli_pg(input, slen, 1 /* standard_strings */, fingerprint);
+
+if (result == LIBINJECTION_RESULT_ERROR) {
+    /* only an invalid standard_strings argument (not 0 or 1) errors out;
+     * fingerprint[] is cleared on error and on a miss */
+} else if (result == LIBINJECTION_RESULT_TRUE) {
+    /* fingerprint[] holds the same fingerprint vocabulary as libinjection_sqli */
+}
+```
+
+For the streaming tokenizer, folding, custom lookup callbacks or a simulated
+outer single quote, initialize a state with the `FLAG_SQL_PG` flag (optionally
+OR-ed with `FLAG_PG_LEGACY_STRINGS` to select the `standard_strings = 0`
+behavior). Once a state is initialized for PG, tokenize, fold, fingerprint and
+`libinjection_is_sqli` all use the same PG lexer. `libinjection_is_sqli` still
+tries the no-outer-quote and simulated-single-quote contexts, but never falls
+back to MySQL and never tries a double-quote string context.
+
+```c
+struct libinjection_sqli_state state;
+int flags = FLAG_SQL_PG | FLAG_QUOTE_NONE;      /* add FLAG_PG_LEGACY_STRINGS
+                                                   for backslash escapes */
+libinjection_sqli_init(&state, input, slen, flags);
+/* optional: libinjection_sqli_callback(&state, my_lookup, my_userdata); */
+if (libinjection_is_sqli(&state) == LIBINJECTION_RESULT_TRUE) {
+    /* state.fingerprint is set; callback and userdata survive any reparse */
+}
+```
+
 VERSION INFORMATION
 ===================
 

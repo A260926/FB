@@ -54,6 +54,30 @@ const char *libinjection_version(void);
 injection_result_t libinjection_sqli(const char *s, size_t slen,
                                      char fingerprint[]);
 
+/** PostgreSQL-aware SQLi detection.
+ *
+ * Uses a PostgreSQL-only lexer: nested block comments, dollar-quoted
+ * strings, double-quoted identifiers and E'...' escape strings are
+ * understood.  Unlike libinjection_sqli(), no MySQL or double-quote
+ * string contexts are tried.
+ *
+ * \param[in] s  input string, may contain nulls, does not need to be
+ *               null-terminated
+ * \param[in] len input string length
+ * \param[in] standard_strings  1: backslash is an ordinary byte inside
+ *               ordinary single-quoted strings (PostgreSQL default since
+ *               9.1).  0: backslash escapes the next byte.  E'/e' strings
+ *               always honor backslash escapes regardless of this value.
+ *               Any other value is an error.
+ * \param[out] fingerprint buffer of 8+ characters.  Set to the fingerprint
+ *               on a match, cleared to an empty string on no match or error.
+ * \return LIBINJECTION_RESULT_TRUE, LIBINJECTION_RESULT_FALSE or
+ *         LIBINJECTION_RESULT_ERROR
+ */
+injection_result_t libinjection_sqli_pg(const char *s, size_t len,
+                                        int standard_strings,
+                                        char fingerprint[]);
+
 /** ALPHA version of xss detector.
  *
  * NOT DONE.

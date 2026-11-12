@@ -458,9 +458,10 @@ static size_t parse_dash(struct libinjection_sqli_state *sf) {
     } else if (pos + 2 == slen && cs[pos + 1] == '-') {
         return parse_eol_comment(sf);
     } else if (pos + 1 < slen && cs[pos + 1] == '-' &&
-               (sf->flags & FLAG_SQL_ANSI)) {
+               ((sf->flags & FLAG_SQL_ANSI) ||
+                (sf->flags & FLAG_SQL_PG))) {
         /* --[not-white] not-white case:
-         *
+         * ANSI SQL and PostgreSQL both treat this as a comment
          */
         sf->stats_comment_ddx += 1;
         return parse_eol_comment(sf);
@@ -509,6 +510,227 @@ static size_t is_mysql_comment(const char *cs, const size_t len, size_t pos) {
     return 1;
 }
 
+/*
+ * PostgreSQL lexer.
+ *
+ * Enabled with FLAG_SQL_PG.  All of tokenize, fold, fingerprint and
+ * libinjection_is_sqli consult the same normalized flags, so once a state
+ * is initialized for PG the whole pipeline uses the PG lexer.
+ *
+ * Differences from the legacy mixed-dialect lexer:
+ *  - block comments nest and never turn into TYPE_EVIL
+ *  - double quotes delimit identifiers, not strings
+ *  - dollar-quoted strings ($tag$ ... $tag$) follow the PG tag rules
+ *  - ordinary single-quoted strings only honor backslash escapes when
+ *    FLAG_PG_LEGACY_STRINGS is set; E'...' strings always do
+ */
+
+/*
+ * Nested C-style block comment.  Called with cs[pos] == '/' and
+ * cs[pos + 1] == '*'.  Consumes through the outermost closing
+ * star-slash, or to slen if the comment is never closed.  Quotes,
+ * dollar tags and the MySQL conditional-comment opener inside are
+ * plain comment content.
+ */
+static size_t parse_pg_comment(struct libinjection_sqli_state *sf) {
+    const char *cs = sf->s;
+    const size_t slen = sf->slen;
+    size_t pos = sf->pos;
+    size_t i = pos + 2;
+    int depth = 1;
+
+    while (i + 1 < slen) {
+        if (cs[i] == '/' && cs[i + 1] == '*') {
+            depth += 1;
+            i += 2;
+        } else if (cs[i] == '*' && cs[i + 1] == '/') {
+            depth -= 1;
+            i += 2;
+            if (depth == 0) {
+                break;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    if (depth != 0) {
+        /* unclosed comment: consume the rest, do not manufacture an X */
+        i = slen;
+    }
+
+    st_assign(sf->current, TYPE_COMMENT, pos, i - pos, cs + pos);
+    return i;
+}
+
+/*
+ * Double-quoted identifier.  Doubled quotes stay in the same identifier
+ * and a backslash can never swallow the closing quote.
+ */
+static size_t parse_pg_identifier(struct libinjection_sqli_state *sf) {
+    const char *cs = sf->s;
+    const size_t slen = sf->slen;
+    size_t pos = sf->pos;
+    size_t i = pos + 1;
+
+    while (i < slen) {
+        if (cs[i] == CHAR_DOUBLE) {
+            if (i + 1 < slen && cs[i + 1] == CHAR_DOUBLE) {
+                i += 2;
+                continue;
+            }
+            st_assign(sf->current, TYPE_BAREWORD, pos, i + 1 - pos, cs + pos);
+            sf->current->str_open = CHAR_DOUBLE;
+            sf->current->str_close = CHAR_DOUBLE;
+            return i + 1;
+        }
+        i += 1;
+    }
+
+    /* unclosed identifier: same open/close convention as unclosed strings */
+    st_assign(sf->current, TYPE_BAREWORD, pos, slen - pos, cs + pos);
+    sf->current->str_open = CHAR_DOUBLE;
+    sf->current->str_close = CHAR_NULL;
+    return slen;
+}
+
+/*
+ * If cs[pos] opens a PostgreSQL dollar quote, set *tag_len to the length
+ * of the opening "$tag$" marker and return 1.  Otherwise return 0.
+ *
+ * The tag is either empty ("$$") or an ASCII identifier: the first byte
+ * is an ASCII letter or '_', the rest letters, digits or '_'.  A tag
+ * starting with a digit therefore never matches.
+ */
+static int pg_dollar_tag_len(const char *cs, size_t slen, size_t pos,
+                             size_t *tag_len) {
+    size_t i;
+
+    if (pos >= slen || cs[pos] != '$') {
+        return 0;
+    }
+
+    i = pos + 1;
+    if (i < slen && cs[i] == '$') {
+        *tag_len = 2;
+        return 1;
+    }
+
+    if (i >= slen ||
+        !((cs[i] >= 'a' && cs[i] <= 'z') ||
+          (cs[i] >= 'A' && cs[i] <= 'Z') || cs[i] == '_')) {
+        return 0;
+    }
+
+    i += 1;
+    while (i < slen &&
+           ((cs[i] >= 'a' && cs[i] <= 'z') ||
+            (cs[i] >= 'A' && cs[i] <= 'Z') ||
+            (cs[i] >= '0' && cs[i] <= '9') || cs[i] == '_')) {
+        i += 1;
+    }
+
+    if (i >= slen || cs[i] != '$') {
+        return 0;
+    }
+
+    *tag_len = i + 1 - pos;
+    return 1;
+}
+
+/*
+ * Dollar-quoted string.  The closing tag is compared byte-for-byte and is
+ * case-sensitive, so tags, comments and quotes in the content do not
+ * affect scanning.  An unclosed dollar string uses the same token
+ * representation as any other unclosed string.
+ */
+static size_t parse_pg_dollar(struct libinjection_sqli_state *sf) {
+    const char *cs = sf->s;
+    const size_t slen = sf->slen;
+    size_t pos = sf->pos;
+    size_t tag_len;
+    size_t remain;
+    const char *close;
+
+    if (!pg_dollar_tag_len(cs, slen, pos, &tag_len)) {
+        st_assign_char(sf->current, TYPE_BAREWORD, pos, 1, '$');
+        return pos + 1;
+    }
+
+    remain = slen - (pos + tag_len);
+    if (remain < tag_len) {
+        close = NULL;
+    } else {
+        close = my_memmem(cs + pos + tag_len, remain, cs + pos, tag_len);
+    }
+
+    if (close == NULL) {
+        st_assign(sf->current, TYPE_STRING, pos + tag_len,
+                  slen - pos - tag_len, cs + pos + tag_len);
+        sf->current->str_open = '$';
+        sf->current->str_close = CHAR_NULL;
+        return slen;
+    }
+
+    st_assign(sf->current, TYPE_STRING, pos + tag_len,
+              (size_t)(close - (cs + pos + tag_len)), cs + pos + tag_len);
+    sf->current->str_open = '$';
+    sf->current->str_close = '$';
+    return (size_t)((close + tag_len) - cs);
+}
+
+/*
+ * PostgreSQL single-quoted string core.
+ *
+ * offset == 1: cs[pos] is the opening quote (real quote context)
+ * offset == 2: cs[pos] is an E/e prefix followed by the quote
+ * offset == 0: simulated outer quote, nothing is consumed for the opener
+ *
+ * backslash_escapes: 1 means a backslash quotes the next byte, 0 means
+ * it is an ordinary byte.  Doubled delimiters never close the string.
+ * Index-based scanning so embedded NUL bytes and non-terminated slices
+ * work correctly.
+ */
+static size_t parse_pg_string_core(struct libinjection_sqli_state *sf,
+                                   char delim, size_t offset,
+                                   int backslash_escapes) {
+    const char *cs = sf->s;
+    const size_t slen = sf->slen;
+    size_t pos = sf->pos;
+    stoken_t *st = sf->current;
+    size_t content = pos + offset;
+    size_t i = content;
+
+    st->str_open = (offset > 0) ? delim : CHAR_NULL;
+
+    while (i < slen) {
+        if (backslash_escapes && cs[i] == '\\') {
+            /* a trailing backslash has no next byte to eat */
+            i += (i + 1 < slen) ? 2 : 1;
+            continue;
+        }
+        if (cs[i] == delim) {
+            if (i + 1 < slen && cs[i + 1] == delim) {
+                /* doubled quote: still inside the string */
+                i += 2;
+                continue;
+            }
+            st_assign(st, TYPE_STRING, content, i - content, cs + content);
+            st->str_close = delim;
+            return i + 1;
+        }
+        i += 1;
+    }
+
+    /* no closing quote: consume to end */
+    st_assign(st, TYPE_STRING, content, slen - content, cs + content);
+    st->str_close = CHAR_NULL;
+    return slen;
+}
+
+/* E'...' / e'...' dispatch lives in parse_estring() so the E and N
+ * prefixes share the same char_parse_map entry. */
+
 static size_t parse_slash(struct libinjection_sqli_state *sf) {
     const char *ptr;
     size_t clen;
@@ -520,6 +742,11 @@ static size_t parse_slash(struct libinjection_sqli_state *sf) {
     size_t pos1 = pos + 1;
     if (pos1 == slen || cs[pos1] != '*') {
         return parse_operator1(sf);
+    }
+
+    if (sf->flags & FLAG_SQL_PG) {
+        /* PostgreSQL: block comments nest, '/ *!' is just content */
+        return parse_pg_comment(sf);
     }
 
     /*
@@ -560,9 +787,11 @@ static size_t parse_backslash(struct libinjection_sqli_state *sf) {
     size_t pos = sf->pos;
 
     /*
-     * Weird MySQL alias for NULL, "\N" (capital N only)
+     * Weird MySQL alias for NULL, "\N" (capital N only).
+     * PostgreSQL has no such alias.
      */
-    if (pos + 1 < slen && cs[pos + 1] == 'N') {
+    if (!(sf->flags & FLAG_SQL_PG) && pos + 1 < slen &&
+        cs[pos + 1] == 'N') {
         st_assign(sf->current, TYPE_NUMBER, pos, 2, cs + pos);
         return pos + 2;
     } else {
@@ -716,6 +945,15 @@ static size_t parse_string(struct libinjection_sqli_state *sf) {
     const size_t slen = sf->slen;
     size_t pos = sf->pos;
 
+    if (sf->flags & FLAG_SQL_PG) {
+        if (cs[pos] == CHAR_DOUBLE) {
+            /* double quotes delimit identifiers in PostgreSQL */
+            return parse_pg_identifier(sf);
+        }
+        return parse_pg_string_core(
+            sf, CHAR_SINGLE, 1, (sf->flags & FLAG_PG_LEGACY_STRINGS) ? 1 : 0);
+    }
+
     /*
      * assert cs[pos] == single or double quote
      */
@@ -731,6 +969,20 @@ static size_t parse_estring(struct libinjection_sqli_state *sf) {
     const char *cs = sf->s;
     const size_t slen = sf->slen;
     size_t pos = sf->pos;
+
+    if (sf->flags & FLAG_SQL_PG) {
+        if (pos + 2 >= slen || cs[pos + 1] != CHAR_SINGLE) {
+            return parse_word(sf);
+        }
+        if (cs[pos] == 'e' || cs[pos] == 'E') {
+            /* E'...' always honors backslash escapes */
+            return parse_pg_string_core(sf, CHAR_SINGLE, 2, 1);
+        }
+        /* n'...' national literal follows the ordinary string setting */
+        return parse_pg_string_core(
+            sf, CHAR_SINGLE, 2,
+            (sf->flags & FLAG_PG_LEGACY_STRINGS) ? 1 : 0);
+    }
 
     if (pos + 2 >= slen || cs[pos + 1] != CHAR_SINGLE) {
         return parse_word(sf);
@@ -1041,6 +1293,16 @@ static size_t parse_money(struct libinjection_sqli_state *sf) {
     const size_t slen = sf->slen;
     size_t pos = sf->pos;
 
+    if (sf->flags & FLAG_SQL_PG) {
+        size_t tag_len;
+        /* a digit-leading tag (e.g. "$1$") never opens a dollar string;
+         * anything else that is not a valid tag falls through to the
+         * legacy '$' handling below */
+        if (pg_dollar_tag_len(cs, slen, pos, &tag_len)) {
+            return parse_pg_dollar(sf);
+        }
+    }
+
     if (pos + 1 == slen) {
         /* end of line */
         st_assign_char(sf->current, TYPE_BAREWORD, pos, 1, '$');
@@ -1255,9 +1517,24 @@ int libinjection_sqli_tokenize(struct libinjection_sqli_state *sf) {
      *  then pretend the input starts with a quote
      */
     if (*pos == 0 && (sf->flags & (FLAG_QUOTE_SINGLE | FLAG_QUOTE_DOUBLE))) {
-        *pos = parse_string_core(s, slen, 0, current, flag2delim(sf->flags), 0);
-        sf->stats_tokens += 1;
-        return TRUE;
+        if (sf->flags & FLAG_SQL_PG) {
+            if (sf->flags & FLAG_QUOTE_SINGLE) {
+                /* simulated outer single quote, PG string semantics */
+                *pos = parse_pg_string_core(
+                    sf, CHAR_SINGLE, 0,
+                    (sf->flags & FLAG_PG_LEGACY_STRINGS) ? 1 : 0);
+                sf->stats_tokens += 1;
+                return TRUE;
+            }
+            /* PostgreSQL has no double-quote string context; fall
+             * through and let the lexer handle a leading '"' as an
+             * identifier */
+        } else {
+            *pos = parse_string_core(s, slen, 0, current,
+                                     flag2delim(sf->flags), 0);
+            sf->stats_tokens += 1;
+            return TRUE;
+        }
     }
 
     while (*pos < slen) {
@@ -1288,11 +1565,31 @@ int libinjection_sqli_tokenize(struct libinjection_sqli_state *sf) {
     return FALSE;
 }
 
+/*
+ * Normalize caller-supplied flags.
+ *
+ * In PG mode the ANSI/MySQL dialect bits and the double-quote string
+ * context do not apply; the string option bit is preserved so every
+ * reparse in the pipeline keeps the same lexer.
+ */
+static int sqli_normalize_flags(int flags) {
+    if (flags == 0) {
+        return FLAG_QUOTE_NONE | FLAG_SQL_ANSI;
+    }
+    if (flags & FLAG_SQL_PG) {
+        flags &= ~(FLAG_SQL_ANSI | FLAG_SQL_MYSQL | FLAG_QUOTE_DOUBLE);
+        if (flags & FLAG_QUOTE_SINGLE) {
+            flags &= ~FLAG_QUOTE_NONE;
+        } else {
+            flags |= FLAG_QUOTE_NONE;
+        }
+    }
+    return flags;
+}
+
 void libinjection_sqli_init(struct libinjection_sqli_state *sf, const char *s,
                             size_t len, int flags) {
-    if (flags == 0) {
-        flags = FLAG_QUOTE_NONE | FLAG_SQL_ANSI;
-    }
+    flags = sqli_normalize_flags(flags);
 
     memset(sf, 0, sizeof(struct libinjection_sqli_state));
     sf->s = s;
@@ -1308,10 +1605,7 @@ static void libinjection_sqli_reset(struct libinjection_sqli_state *sf,
     void *userdata = sf->userdata;
     ptr_lookup_fn lookup = sf->lookup;
 
-    if (flags == 0) {
-        flags = FLAG_QUOTE_NONE | FLAG_SQL_ANSI;
-    }
-    libinjection_sqli_init(sf, sf->s, sf->slen, flags);
+    libinjection_sqli_init(sf, sf->s, sf->slen, sqli_normalize_flags(flags));
     sf->lookup = lookup;
     sf->userdata = userdata;
 }
@@ -2304,6 +2598,35 @@ libinjection_is_sqli(struct libinjection_sqli_state *sql_state) {
         return FALSE;
     }
 
+    if (sql_state->flags & FLAG_SQL_PG) {
+        /*
+         * PostgreSQL mode: the dialect and string-option bits stay on
+         * for both contexts.  No MySQL fallback and no double-quote
+         * string context are attempted.
+         */
+        int pg_flags = FLAG_SQL_PG | FLAG_QUOTE_NONE |
+                       (sql_state->flags & FLAG_PG_LEGACY_STRINGS);
+
+        libinjection_sqli_fingerprint(sql_state, pg_flags);
+        if (sql_state->lookup(sql_state, LOOKUP_FINGERPRINT,
+                              sql_state->fingerprint,
+                              strlen(sql_state->fingerprint))) {
+            return TRUE;
+        }
+
+        if (memchr(s, CHAR_SINGLE, slen)) {
+            libinjection_sqli_fingerprint(
+                sql_state, pg_flags | FLAG_QUOTE_SINGLE);
+            if (sql_state->lookup(sql_state, LOOKUP_FINGERPRINT,
+                                  sql_state->fingerprint,
+                                  strlen(sql_state->fingerprint))) {
+                return TRUE;
+            }
+        }
+
+        return FALSE;
+    }
+
     /*
      * test input "as-is"
      */
@@ -2378,6 +2701,33 @@ injection_result_t libinjection_sqli(const char *s, size_t slen,
         strcpy(fingerprint, state.fingerprint);
     } else {
         fingerprint[0] = '\0';
+    }
+    return issqli;
+}
+
+injection_result_t libinjection_sqli_pg(const char *s, size_t len,
+                                        int standard_strings,
+                                        char fingerprint[]) {
+    struct libinjection_sqli_state state;
+    int issqli;
+    int flags;
+
+    /* output is cleared on every path: error, miss and hit-overwrite */
+    fingerprint[0] = '\0';
+
+    if (standard_strings != 0 && standard_strings != 1) {
+        return LIBINJECTION_RESULT_ERROR;
+    }
+
+    flags = FLAG_SQL_PG | FLAG_QUOTE_NONE;
+    if (!standard_strings) {
+        flags |= FLAG_PG_LEGACY_STRINGS;
+    }
+
+    libinjection_sqli_init(&state, s, len, flags);
+    issqli = libinjection_is_sqli(&state);
+    if (issqli == LIBINJECTION_RESULT_TRUE) {
+        strcpy(fingerprint, state.fingerprint);
     }
     return issqli;
 }
