@@ -23,27 +23,10 @@
 #include <string.h>
 
 #include <openaptx.h>
-
-#if (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 199901L) && !defined(inline)
-#define inline
-#endif
+#include "openaptx_internal.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 #define DIFFSIGN(x,y) (((x)>(y)) - ((x)<(y)))
-
-/*
- * Clip a signed integer into the -(2^p),(2^p-1) range.
- * @param  a value to clip
- * @param  p bit position to clip at
- * @return clipped value
- */
-static inline int32_t clip_intp2(int32_t a, unsigned p)
-{
-    if (((uint32_t)a + ((uint32_t)1 << p)) & ~(((uint32_t)2 << p) - 1))
-        return (a >> 31) ^ ((1 << p) - 1);
-    else
-        return a;
-}
 
 /*
  * Clip a signed integer value into the amin-amax range.
@@ -66,27 +49,6 @@ static inline int32_t sign_extend(int32_t val, unsigned bits)
     v.u = (uint32_t)val << shift;
     return v.s >> shift;
 }
-
-enum channels {
-    LEFT,
-    RIGHT,
-    NB_CHANNELS
-};
-
-#define NB_SUBBANDS 4
-#define NB_FILTERS 2
-#define FILTER_TAPS 16
-#define LATENCY_SAMPLES 90
-
-struct aptx_filter_signal {
-    int32_t buffer[2*FILTER_TAPS];
-    uint8_t pos;
-};
-
-struct aptx_QMF_analysis {
-    struct aptx_filter_signal outer_filter_signal[NB_FILTERS];
-    struct aptx_filter_signal inner_filter_signal[NB_FILTERS][NB_FILTERS];
-};
 
 struct aptx_quantize {
     int32_t quantized_sample;
@@ -526,7 +488,9 @@ static const int16_t quantization_factors[32] = {
 };
 
 
-/* Rounded right shift with optional clipping */
+/* Rounded right shift with optional clipping (32bit variant). The 64bit
+ * variant lives in openaptx_internal.h so the NEON kernels share the exact
+ * same midpoint rounding and 24bit saturation. */
 #define RSHIFT_SIZE(size)                                                         \
 static inline int##size##_t rshift##size(int##size##_t value, unsigned shift)     \
 {                                                                                 \
@@ -539,7 +503,6 @@ static inline int32_t rshift##size##_clip24(int##size##_t value, unsigned shift)
     return clip_intp2((int32_t)rshift##size(value, shift), 23);                   \
 }
 RSHIFT_SIZE(32)
-RSHIFT_SIZE(64)
 
 
 static inline void aptx_update_codeword_history(struct aptx_channel *channel)
@@ -568,8 +531,9 @@ static void aptx_generate_dither(struct aptx_channel *channel)
 /*
  * Convolution filter coefficients for the outer QMF of the QMF tree.
  * The 2 sets are a mirror of each other.
+ * Non-static so the NEON kernels in qmf_neon.c share the exact tables.
  */
-static const int32_t aptx_qmf_outer_coeffs[NB_FILTERS][FILTER_TAPS] = {
+const int32_t aptx_qmf_outer_coeffs[NB_FILTERS][FILTER_TAPS] = {
     {
         730, -413, -9611, 43626, -121026, 269973, -585547, 2801966,
         697128, -160481, 27611, 8478, -10043, 3511, 688, -897,
@@ -584,7 +548,7 @@ static const int32_t aptx_qmf_outer_coeffs[NB_FILTERS][FILTER_TAPS] = {
  * Convolution filter coefficients for the inner QMF of the QMF tree.
  * The 2 sets are a mirror of each other.
  */
-static const int32_t aptx_qmf_inner_coeffs[NB_FILTERS][FILTER_TAPS] = {
+const int32_t aptx_qmf_inner_coeffs[NB_FILTERS][FILTER_TAPS] = {
     {
        1033, -584, -13592, 61697, -171156, 381799, -828088, 3962579,
        985888, -226954, 39048, 11990, -14203, 4966, 973, -1268,
@@ -594,6 +558,8 @@ static const int32_t aptx_qmf_inner_coeffs[NB_FILTERS][FILTER_TAPS] = {
       3962579, -828088, 381799, -171156, 61697, -13592, -584, 1033,
     },
 };
+
+#if !APTX_NEON_KERNELS
 
 /*
  * Push one sample into a circular signal buffer.
@@ -732,6 +698,18 @@ static void aptx_qmf_tree_synthesis(struct aptx_QMF_analysis *qmf,
                                      &samples[2*i]);
 }
 
+#else /* APTX_NEON_KERNELS */
+
+/*
+ * On AArch64 the scalar QMF trees are omitted. The stereo hot path in
+ * aptx_encode_samples() / aptx_decode_samples() calls the stereo NEON entry
+ * points from qmf_neon.c directly: both channels' polyphase branches are
+ * processed together with shared coefficient loads and joint reduction,
+ * covering the outer and the inner tree stage in both directions.
+ */
+
+#endif
+
 
 static inline int32_t aptx_bin_search(int32_t value, int32_t factor,
                                       const int32_t *intervals, int nb_intervals)
@@ -791,13 +769,21 @@ static void aptx_quantize_difference(struct aptx_quantize *quantize,
     quantize->quantized_sample_parity_change = parity_change    ^ inv;
 }
 
-static void aptx_encode_channel(struct aptx_channel *channel, const int32_t samples[4], int hd)
+static void aptx_encode_channel(struct aptx_channel *channel, const int32_t samples[4], int hd
+#if APTX_NEON_KERNELS
+                                , const int32_t subband_samples[NB_SUBBANDS]
+#endif
+)
 {
+#if !APTX_NEON_KERNELS
     int32_t subband_samples[NB_SUBBANDS];
+    aptx_qmf_tree_analysis(&channel->qmf, samples, subband_samples);
+#else
+    (void)samples; /* analysis already performed by the stereo NEON entry */
+#endif
     int32_t diff;
     unsigned subband;
 
-    aptx_qmf_tree_analysis(&channel->qmf, samples, subband_samples);
     aptx_generate_dither(channel);
 
     for (subband = 0; subband < NB_SUBBANDS; subband++) {
@@ -809,6 +795,7 @@ static void aptx_encode_channel(struct aptx_channel *channel, const int32_t samp
     }
 }
 
+#if !APTX_NEON_KERNELS
 static void aptx_decode_channel(struct aptx_channel *channel, int32_t samples[4])
 {
     int32_t subband_samples[NB_SUBBANDS];
@@ -818,6 +805,7 @@ static void aptx_decode_channel(struct aptx_channel *channel, int32_t samples[4]
         subband_samples[subband] = channel->prediction[subband].previous_reconstructed_sample;
     aptx_qmf_tree_synthesis(&channel->qmf, subband_samples, samples);
 }
+#endif
 
 
 static void aptx_invert_quantization(struct aptx_invert_quantize *invert_quantize,
@@ -1017,8 +1005,20 @@ static void aptx_encode_samples(struct aptx_context *ctx,
                                 uint8_t *output)
 {
     unsigned channel;
+#if APTX_NEON_KERNELS
+    int32_t subbands[NB_CHANNELS][NB_SUBBANDS];
+
+    /* Both channels' two-stage analysis trees in one stereo NEON call. */
+    aptx_qmf_tree_analysis_stereo_neon(&ctx->channels[LEFT].qmf,
+                                       &ctx->channels[RIGHT].qmf,
+                                       samples[LEFT], samples[RIGHT],
+                                       subbands[LEFT], subbands[RIGHT]);
+    aptx_encode_channel(&ctx->channels[LEFT], samples[LEFT], ctx->hd, subbands[LEFT]);
+    aptx_encode_channel(&ctx->channels[RIGHT], samples[RIGHT], ctx->hd, subbands[RIGHT]);
+#else
     for (channel = 0; channel < NB_CHANNELS; channel++)
         aptx_encode_channel(&ctx->channels[channel], samples[channel], ctx->hd);
+#endif
 
     aptx_insert_sync(ctx->channels, &ctx->sync_idx);
 
@@ -1061,8 +1061,26 @@ static int aptx_decode_samples(struct aptx_context *ctx,
 
     ret = aptx_check_parity(ctx->channels, &ctx->sync_idx);
 
+#if APTX_NEON_KERNELS
+    {
+        int32_t subband_samples[NB_CHANNELS][NB_SUBBANDS];
+        for (channel = 0; channel < NB_CHANNELS; channel++) {
+            unsigned subband;
+            for (subband = 0; subband < NB_SUBBANDS; subband++)
+                subband_samples[channel][subband] =
+                    ctx->channels[channel].prediction[subband].previous_reconstructed_sample;
+        }
+        /* Both channels' two-stage synthesis trees in one stereo NEON call. */
+        aptx_qmf_tree_synthesis_stereo_neon(&ctx->channels[LEFT].qmf,
+                                            &ctx->channels[RIGHT].qmf,
+                                            subband_samples[LEFT],
+                                            subband_samples[RIGHT],
+                                            samples[LEFT], samples[RIGHT]);
+    }
+#else
     for (channel = 0; channel < NB_CHANNELS; channel++)
         aptx_decode_channel(&ctx->channels[channel], samples[channel]);
+#endif
 
     return ret;
 }

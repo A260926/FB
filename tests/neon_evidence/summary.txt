@@ -1,0 +1,5 @@
+kernel named cases: 6
+kernel NEON calls : 1560
+stream scenarios  : 10
+smlal/smlal2      : 150
+addp.2d           : 25

@@ -32,9 +32,9 @@ PCNAME = lib$(NAME).pc
 UTILITIES = $(NAME)enc $(NAME)dec
 STATIC_UTILITIES = $(NAME)enc.static $(NAME)dec.static
 
-HEADERS = $(NAME).h
-SOURCES = $(NAME).c
-AOBJECTS = $(NAME).o
+HEADERS = $(NAME).h openaptx_internal.h
+SOURCES = $(NAME).c qmf_neon.c
+AOBJECTS = $(NAME).o qmf_neon.o
 IOBJECTS = $(NAME)enc.o $(NAME)dec.o
 
 BUILD = $(SOFILENAME) $(SONAME) $(LIBNAME) $(ANAME) $(AOBJECTS) $(IOBJECTS) $(UTILITIES) $(STATIC_UTILITIES)
