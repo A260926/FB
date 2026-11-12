@@ -50,3 +50,5 @@
 #include "iir/ChebyshevII.h"
 #include "iir/Custom.h"
 #include "iir/RBJ.h"
+
+#include "iir/ZeroPhase.h"

@@ -26,6 +26,10 @@ add_executable (rbj_update rbj_update.cpp)
 target_link_libraries(rbj_update iir_static)
 target_compile_features(rbj_update PRIVATE cxx_std_11)
 
+add_executable (zero_phase_segments zero_phase_segments.cpp)
+target_link_libraries(zero_phase_segments iir_static)
+target_compile_features(zero_phase_segments PRIVATE cxx_std_17)
+
 add_executable (ecg50hzfilt ecg50hzfilt.cpp)
 target_link_libraries(ecg50hzfilt iir_static)
 target_compile_features(ecg50hzfilt PRIVATE cxx_std_11)

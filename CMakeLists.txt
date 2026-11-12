@@ -47,7 +47,8 @@ set(LIBSRC
   iir/ChebyshevII.cpp
   iir/Custom.cpp
   iir/PoleFilter.cpp
-  iir/RBJ.cpp)
+  iir/RBJ.cpp
+  iir/ZeroPhase.cpp)
 
 set(LIBINCLUDE
   iir/Biquad.h
@@ -62,7 +63,8 @@ set(LIBINCLUDE
   iir/PoleFilter.h
   iir/RBJ.h
   iir/State.h
-  iir/Types.h)
+  iir/Types.h
+  iir/ZeroPhase.h)
 
 add_library(iir SHARED ${LIBSRC})
 add_library(iir::iir ALIAS iir)
