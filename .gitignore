@@ -1,0 +1,9 @@
+/target
+Cargo.lock
+
+# Editor files
+.vscode/
+
+# Rendered image
+*.png
+*.mp4

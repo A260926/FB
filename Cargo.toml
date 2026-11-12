@@ -1,0 +1,31 @@
+[package]
+name = "rpt"
+version = "0.2.2-alpha.0"
+authors = ["Eric Zhang <ekzhang1@gmail.com>", "Alexander Morozov <scanhex@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Physically-based path tracing renderer written in Rust"
+repository = "https://github.com/ekzhang/rpt"
+documentation = "https://docs.rs/rpt"
+keywords = ["path-tracing", "ray-tracing", "pbr", "rendering", "graphics"]
+categories = ["graphics", "rendering::engine", "rendering::data-formats", "multimedia::images"]
+edition = "2018"
+
+[dependencies]
+glm = { version = "0.10.0", package = "nalgebra-glm" }
+image = "0.23.13"
+rand = "0.8.3"
+rand_distr = "0.4.0"
+rayon = "1.5.0"
+
+[dev-dependencies]
+color-eyre = "0.5.10"
+ureq = "2.0.2"
+zip = "0.5.10"
+tempfile = "3.2.0"
+
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
