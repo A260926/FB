@@ -1,0 +1,572 @@
+package model2d
+
+import (
+	"math"
+	"math/rand"
+	"testing"
+)
+
+func TestBezierEval(t *testing.T) {
+	curves := []BezierCurve{
+		// 4th order.
+		{
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+		},
+		// 5th order.
+		{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+			Coord{X: 2, Y: 3},
+		},
+		// 7th order.
+		{
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+			Coord{X: 2, Y: -5},
+			Coord{X: 7, Y: -2},
+			Coord{X: 8, Y: 2},
+		},
+		// 17th order.
+		{
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+			Coord{X: 2, Y: -5},
+			Coord{X: 7, Y: -2},
+			Coord{X: 8, Y: 2},
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+			Coord{X: 2, Y: -5},
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+			Coord{X: 2, Y: -5},
+		},
+	}
+	for i, c := range curves {
+		for j := 0; j < 100; j++ {
+			x := rand.Float64()
+			v1 := evalSimpleRecursive(c, x)
+			v2 := c.Eval(x)
+			if v1.Dist(v2) > 1e-5 {
+				t.Errorf("curve %d: time %f: expected %v but got %v", i, x, v1, v2)
+			}
+		}
+	}
+}
+
+func TestArcCurve(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		radii := NewCoordRandUniform().AddScalar(0.1)
+		theta1 := rand.Float64() * math.Pi * 2
+		theta2 := rand.Float64() * math.Pi * 2
+		center := NewCoordRandUniform()
+		sweep := theta2 > theta1
+		largeArc := math.Abs(theta2-theta1) > math.Pi
+		rotation := rand.Float64() * math.Pi * 2
+
+		pOnCurve := func(t float64) Coord {
+			theta := theta1*(1-t) + theta2*t
+			base := XY(math.Cos(theta), math.Sin(theta)).Mul(radii)
+			return center.Add(Rotation(rotation).Apply(base))
+		}
+
+		arc := NewArcCurve(radii, pOnCurve(0), pOnCurve(1), rotation, largeArc, sweep)
+		for x := 0.0; x <= 1.0; x += 0.01 {
+			actual := arc.Eval(x)
+			expected := pOnCurve(x)
+			if actual.Dist(expected) > 0.0001 {
+				t.Fatalf("point at theta %f should be %v but got %v", x, expected, actual)
+			}
+		}
+	}
+}
+
+func TestArcCurveArcLen(t *testing.T) {
+	arcLengthApprox := func(c Curve, n int) float64 {
+		var length float64
+		last := c.Eval(0)
+		for i := 1; i <= n; i++ {
+			next := c.Eval(float64(i) / float64(n))
+			length += next.Dist(last)
+			last = next
+		}
+		return length
+	}
+
+	pointOnEllipse := func(center, radii Coord, rotation, theta float64) Coord {
+		base := XY(math.Cos(theta), math.Sin(theta)).Mul(radii)
+		return center.Add(Rotation(rotation).Apply(base))
+	}
+
+	testCases := []struct {
+		name      string
+		arc       *ArcCurve
+		tolerance float64
+	}{
+		{
+			name: "CircularQuarterArc",
+			arc: func() *ArcCurve {
+				center := XY(1.2, -0.7)
+				radii := XY(2.0, 2.0)
+				rotation := 0.0
+				theta1 := 0.2
+				theta2 := theta1 + math.Pi/2
+				return NewArcCurve(
+					radii,
+					pointOnEllipse(center, radii, rotation, theta1),
+					pointOnEllipse(center, radii, rotation, theta2),
+					rotation,
+					false,
+					true,
+				)
+			}(),
+			tolerance: 1e-4,
+		},
+		{
+			name: "RotatedEllipseSmallArc",
+			arc: func() *ArcCurve {
+				center := XY(-0.3, 0.8)
+				radii := XY(2.5, 1.25)
+				rotation := 0.7
+				theta1 := 0.4
+				theta2 := 2.2
+				return NewArcCurve(
+					radii,
+					pointOnEllipse(center, radii, rotation, theta1),
+					pointOnEllipse(center, radii, rotation, theta2),
+					rotation,
+					false,
+					true,
+				)
+			}(),
+			tolerance: 2e-4,
+		},
+		{
+			name: "RotatedEllipseLargeArc",
+			arc: func() *ArcCurve {
+				center := XY(0.6, -1.1)
+				radii := XY(1.4, 2.8)
+				rotation := -0.45
+				theta1 := 1.1
+				theta2 := theta1 - 1.45*math.Pi
+				return NewArcCurve(
+					radii,
+					pointOnEllipse(center, radii, rotation, theta1),
+					pointOnEllipse(center, radii, rotation, theta2),
+					rotation,
+					true,
+					false,
+				)
+			}(),
+			tolerance: 3e-4,
+		},
+		{
+			name:      "DegenerateLine",
+			arc:       NewArcCurve(XY(0, 2), XY(-1.2, 0.4), XY(2.3, -0.7), 1.2, false, true),
+			tolerance: 1e-8,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := arcLengthApprox(tc.arc, 1000)
+			actual := tc.arc.ArcLen()
+			if math.Abs(actual-expected) > tc.tolerance {
+				t.Fatalf("expected length %f but got %f", expected, actual)
+			}
+		})
+	}
+}
+
+func evalSimpleRecursive(b BezierCurve, t float64) Coord {
+	if len(b) < 2 {
+		panic("need at least two points")
+	}
+	if len(b) == 2 {
+		return b[0].Scale(1 - t).Add(b[1].Scale(t))
+	}
+	term1 := evalSimpleRecursive(b[:len(b)-1], t).Scale(1 - t)
+	term2 := evalSimpleRecursive(b[1:], t).Scale(t)
+	return term1.Add(term2)
+}
+
+func TestBezierInverseX(t *testing.T) {
+	curves := []BezierCurve{
+		{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+		},
+		{
+			Coord{X: 3, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: -2},
+		},
+	}
+
+	for _, curve := range curves {
+		testX := func(x float64) {
+			tValue := curve.InverseX(x)
+			if math.IsNaN(tValue) {
+				t.Errorf("unexpected NaN for x: %f", x)
+			} else if math.Abs(x-curve.Eval(tValue).X) > 1e-8 {
+				t.Errorf("invalid inverse for x: %f", x)
+			}
+		}
+		testX(1)
+		testX(3)
+		for i := 0; i < 10; i++ {
+			testX(rand.Float64()*1.9 + 1.05)
+		}
+		if !math.IsNaN(curve.InverseX(0.5)) {
+			t.Error("not NaN before bounds")
+		}
+		if !math.IsNaN(curve.InverseX(3.5)) {
+			t.Error("not NaN after bounds")
+		}
+	}
+}
+
+func TestBezierSplit(t *testing.T) {
+	c := BezierCurve{
+		Coord{X: 1, Y: 3},
+		Coord{X: 2, Y: 2},
+		Coord{X: 2, Y: 3},
+		Coord{X: 3, Y: -2},
+	}
+	for _, t0 := range []float64{0.01, 0.5, 0.99} {
+		expected1 := func(x float64) Coord {
+			return c.Eval(x * t0)
+		}
+		expected2 := func(x float64) Coord {
+			return c.Eval(t0 + x*(1-t0))
+		}
+		actual1, actual2 := c.Split(t0)
+		for x := 0.0; x < 1.0; x += 0.001 {
+			e1, e2 := expected1(x), expected2(x)
+			a1, a2 := actual1.Eval(x), actual2.Eval(x)
+			for i, a := range []Coord{a1, a2} {
+				e := []Coord{e1, e2}[i]
+				if a.Dist(e) > 1e-6 {
+					t.Errorf("disagreement at split %f (half %d): x=%f actual %f expected %f",
+						t0, i, x, a, e)
+				}
+			}
+		}
+	}
+}
+
+func TestBezierPolynomials(t *testing.T) {
+	curve := BezierCurve{
+		Coord{X: 3, Y: 3},
+		Coord{X: 2, Y: 2},
+		Coord{X: 2, Y: 3},
+		Coord{X: 1, Y: -2},
+		Coord{X: 2, Y: -5},
+		Coord{X: 7, Y: -2},
+		Coord{X: 8, Y: 2},
+	}
+	ps := curve.Polynomials()
+	for i := 0; i < 1000; i++ {
+		x := rand.Float64()
+		expected := curve.Eval(x)
+		actual := XY(ps[0].Eval(x), ps[1].Eval(x))
+		if actual.Dist(expected) > 1e-5 {
+			t.Errorf("at time %f point should be %v but got %v", x, expected, actual)
+		}
+	}
+}
+
+func TestBezierLength(t *testing.T) {
+	testCurve := func(t *testing.T, c BezierCurve) {
+		expected := 0.0
+		n := 100000
+		for i := 0; i < n; i++ {
+			t1 := float64(i) / float64(n)
+			t2 := float64(i+1) / float64(n)
+			expected += c.Eval(t1).Dist(c.Eval(t2))
+		}
+		actual := c.Length(1e-8, 0)
+		if math.Abs(actual-expected) > 1e-7 {
+			t.Errorf("expected length %f but got %f", expected, actual)
+		}
+	}
+	t.Run("Quad", func(t *testing.T) {
+		testCurve(t, BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 3, Y: 1},
+		})
+	})
+	t.Run("Cubic", func(t *testing.T) {
+		testCurve(t, BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+		})
+
+		// This curve seems to push close to the error bound
+		// for cubics.
+		testCurve(t, BezierCurve{
+			{-0.15410584557718454, -0.49385517630417675},
+			{-0.15154246403697602, -0.5155318553225691},
+			{0.8225331751788417, 1.5556997675590987},
+			{1.5195600606132607, 0.8079498332492203},
+		})
+
+		for i := 0; i < 100; i++ {
+			c := BezierCurve{
+				NewCoordRandNorm(),
+				NewCoordRandNorm(),
+				NewCoordRandNorm(),
+				NewCoordRandNorm(),
+			}
+			expected := c.length(1e-6, 16)
+			actual := c.Length(9e-5, 0)
+			if math.Abs(actual-expected) > 1e-4 {
+				t.Errorf("incorrect length for %v: got %f expected %f (error %f)",
+					c, actual, expected, math.Abs(actual-expected))
+			}
+		}
+	})
+	t.Run("Quartic", func(t *testing.T) {
+		testCurve(t, BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+			Coord{X: 4, Y: 2},
+		})
+	})
+}
+
+func TestSmoothBezier(t *testing.T) {
+	actualCurve := SmoothBezier(
+		Coord{}, Coord{X: 1, Y: 1}, Coord{X: 2, Y: 1}, Coord{X: 2},
+		Coord{X: 3, Y: -1}, Coord{X: 4},
+		Coord{X: 5, Y: 1}, Coord{X: 5},
+	)
+	expectedCurve := JoinedCurve{
+		BezierCurve{Coord{}, Coord{X: 1, Y: 1}, Coord{X: 2, Y: 1}, Coord{X: 2}},
+		BezierCurve{Coord{X: 2}, Coord{X: 2, Y: -1}, Coord{X: 3, Y: -1}, Coord{X: 4}},
+		BezierCurve{Coord{X: 4}, Coord{X: 5, Y: 1}, Coord{X: 5, Y: 1}, Coord{X: 5}},
+	}
+	for i := 0; i < 1000; i++ {
+		ti := rand.Float64()
+		actual := actualCurve.Eval(ti)
+		expected := expectedCurve.Eval(ti)
+		if actual.Dist(expected) > 1e-5 {
+			t.Errorf("expected %v but got %v", expected, actual)
+		}
+	}
+}
+
+func TestJoinedCurveEval(t *testing.T) {
+	curve := JoinedCurve{
+		BezierCurve{
+			Coord{X: 3, Y: 3},
+			Coord{X: 3, Y: 2},
+			Coord{X: 4, Y: 4},
+		},
+		BezierCurve{
+			Coord{X: 4, Y: 4},
+			Coord{X: 5, Y: -2},
+			Coord{X: 3, Y: 3},
+		},
+		BezierCurve{
+			Coord{X: 3, Y: 3},
+			Coord{X: 5, Y: 2},
+			Coord{X: -1, Y: 3},
+		},
+	}
+	actualExpected := [][2]Coord{
+		{curve.Eval(0.0), curve[0].Eval(0.0)},
+		{curve.Eval(0.1), curve[0].Eval(0.1 * 3)},
+		{curve.Eval(0.4), curve[1].Eval((0.4 - 1.0/3) * 3)},
+		{curve.Eval(0.8), curve[2].Eval((0.8 - 2.0/3) * 3)},
+		{curve.Eval(1.0), curve[2].Eval(1.0)},
+		{curve.Eval(1.1), curve[2].Eval((1.1 - 2.0/3) * 3)},
+		{curve.Eval(-0.1), curve[0].Eval(-0.1 * 3)},
+		{curve.Eval(-10), curve[0].Eval(-10 * 3)},
+	}
+	for i, pair := range actualExpected {
+		if d := pair[0].Dist(pair[1]); math.IsNaN(d) || d > 1e-5 {
+			t.Errorf("case %d: expected %f but got %f", i, pair[1], pair[0])
+		}
+	}
+}
+
+func TestJoinedArcLenCurveEval(t *testing.T) {
+	curves := []BezierCurve{
+		{XY(0, 0), XY(1, 0)},
+		{XY(1, 0), XY(1, 2)},
+		{XY(1, 2), XY(4, 2)},
+	}
+	curve := NewJoinedArcLenCurve(curves)
+	actualExpected := [][2]Coord{
+		{curve.Eval(0.0), curves[0].Eval(0.0)},
+		{curve.Eval(0.1), curves[0].Eval(0.6)},
+		{curve.Eval(0.3), curves[1].Eval(0.4)},
+		{curve.Eval(0.6), curves[2].Eval(0.2)},
+		{curve.Eval(1.0), curves[2].Eval(1.0)},
+	}
+	for i, pair := range actualExpected {
+		if d := pair[0].Dist(pair[1]); math.IsNaN(d) || d > 1e-8 {
+			t.Errorf("case %d: expected %v but got %v", i, pair[1], pair[0])
+		}
+	}
+}
+
+func TestJoinedArcLenCurveMeshSDF(t *testing.T) {
+	curves := []BezierCurve{
+		{
+			XY(0, -1.1),
+			XY(0.1, -1.8),
+			XY(1.0, -1.4),
+			XY(1.5, -0.4),
+		},
+		{
+			XY(1.5, -0.4),
+			XY(2.0, 0.4),
+			XY(1.7, 1.2),
+			XY(0.6, 1.7),
+		},
+		{
+			XY(0.6, 1.7),
+			XY(-0.2, 1.9),
+			XY(-1.2, 1.5),
+			XY(-1.6, 0.4),
+		},
+		{
+			XY(-1.6, 0.4),
+			XY(-1.9, -0.3),
+			XY(-0.8, -1.3),
+			XY(0, -1.1),
+		},
+	}
+
+	joinedCurve := JoinedCurve{
+		curves[0],
+		curves[1],
+		curves[2],
+		curves[3],
+	}
+	weightedCurve := NewJoinedArcLenCurve(curves)
+
+	const numSegments = 800
+	joinedMesh := CurveMesh(joinedCurve, numSegments)
+	weightedMesh := CurveMesh(weightedCurve, numSegments)
+	MustValidateMesh(t, joinedMesh, false)
+	MustValidateMesh(t, weightedMesh, false)
+
+	joinedSDF := MeshToSDF(joinedMesh)
+	weightedSDF := MeshToSDF(weightedMesh)
+
+	min := joinedMesh.Min().Min(weightedMesh.Min())
+	max := joinedMesh.Max().Max(weightedMesh.Max())
+	padding := max.Sub(min).Scale(0.15)
+	sampleMin := min.Sub(padding)
+	sampleMax := max.Add(padding)
+
+	rng := rand.New(rand.NewSource(1337))
+	for i := 0; i < 1000; i++ {
+		coord := NewCoordRandBounds(sampleMin, sampleMax, rng)
+		joinedDist := joinedSDF.SDF(coord)
+		weightedDist := weightedSDF.SDF(coord)
+		if math.Abs(joinedDist-weightedDist) > 0.025 {
+			t.Fatalf("point %v: joined SDF=%f weighted SDF=%f", coord, joinedDist, weightedDist)
+		}
+	}
+}
+
+func TestCurveTranspose(t *testing.T) {
+	c1 := BezierCurve{
+		Coord{X: 4, Y: 4},
+		Coord{X: 5, Y: -2},
+		Coord{X: 3, Y: 3},
+	}
+	c2 := CurveTranspose(c1)
+	c1 = c1.Transpose()
+
+	for i := 0; i < 1000; i++ {
+		ti := rand.Float64()
+		expected := c1.Eval(ti)
+		actual := c2.Eval(ti)
+		if actual.Dist(expected) > 1e-5 {
+			t.Errorf("expected %v but got %v", expected, actual)
+		}
+	}
+}
+
+func BenchmarkBezierEval(b *testing.B) {
+	b.Run("Order5", func(b *testing.B) {
+		curve := BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+			Coord{X: 2, Y: 3},
+		}
+		for i := 0; i < b.N; i++ {
+			curve.Eval(0.3)
+		}
+	})
+	b.Run("Order7", func(b *testing.B) {
+		curve := BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: 4},
+			Coord{X: 0, Y: -3},
+		}
+		for i := 0; i < b.N; i++ {
+			curve.Eval(0.3)
+		}
+	})
+	b.Run("Order10", func(b *testing.B) {
+		curve := BezierCurve{
+			Coord{X: 1, Y: 3},
+			Coord{X: 2, Y: 2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 3, Y: -2},
+			Coord{X: 2, Y: 3},
+			Coord{X: 1, Y: 4},
+			Coord{X: 0, Y: -3},
+			Coord{X: 3, Y: -7},
+			Coord{X: 4, Y: -8},
+			Coord{X: 5, Y: -9},
+		}
+		for i := 0; i < b.N; i++ {
+			curve.Eval(0.3)
+		}
+	})
+}
+
+func BenchmarkBezierLength(b *testing.B) {
+	c := BezierCurve{
+		Coord{X: 1, Y: 3},
+		Coord{X: 2, Y: 2},
+		Coord{X: 2, Y: 3},
+		Coord{X: 3, Y: -2},
+	}
+	for i := 0; i < b.N; i++ {
+		c.Length(1e-6, 0)
+	}
+}
