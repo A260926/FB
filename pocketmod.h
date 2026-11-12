@@ -34,8 +34,14 @@ typedef struct {
     unsigned short delayed;     /* Delayed note period (113..856)          */
     unsigned short target;      /* Target period (for tone portamento)     */
     unsigned char finetune;     /* Note finetune (0..15)                   */
-    unsigned char loop_count;   /* E6x loop counter                        */
-    unsigned char loop_line;    /* E6x target line                         */
+    unsigned char loop_count;   /* E6x local playback counter              */
+    unsigned char loop_start;   /* E60 local playback origin (default 0)   */
+    unsigned char delayed_sample;   /* Sample selected by a delayed attack */
+    unsigned char delayed_finetune; /* Finetune of the delayed sample      */
+    unsigned char delayed_volume;   /* Default volume of the delayed sample*/
+    unsigned char delayed_sample_set; /* Delayed attack picks a new sample  */
+    unsigned char delayed_pending;  /* Pitched EDx attack awaiting its tick */
+    unsigned char delayed_tick;     /* Tick that triggers the delayed attack*/
     unsigned char lfo_step;     /* Vibrato/tremolo LFO step counter        */
     unsigned char lfo_type[2];  /* LFO type for vibrato/tremolo            */
     unsigned char effect;       /* Current effect (0x0..0xf or 0xe0..0xef) */
@@ -77,7 +83,11 @@ struct pocketmod_context
 
     /* Render state */
     _pocketmod_chan channels[POCKETMOD_MAX_CHANNELS];
-    unsigned char pattern_delay;/* EEx pattern delay counter               */
+    unsigned char line_delay;   /* EEx extra speed cycles for this line    */
+    unsigned char dest_kind;    /* 0 none, 1 order jump, 2 local E6 repeat  */
+    unsigned char dest_order;   /* Destination order selected by this line  */
+    unsigned char dest_line;    /* Destination line selected by this line   */
+    unsigned char order_ret;    /* Order-level transition awaiting return  */
     unsigned int lfo_rng;       /* RNG used for the random LFO waveform    */
 
     /* Position in song (from least to most granular) */
@@ -257,23 +267,29 @@ static void _pocketmod_volume_slide(_pocketmod_chan *ch, int param)
     ch->dirty |= POCKETMOD_VOLUME;
 }
 
-static void _pocketmod_next_line(pocketmod_context *c)
+
+/* Clear the per-channel local playback counters. Natural flow and B/D */
+/* transitions start a fresh visit of an order; E6 repeats keep counting. */
+static void _pocketmod_reset_local(pocketmod_context *c)
+{
+    int i;
+    for (i = 0; i < c->num_channels; i++) {
+        c->channels[i].loop_count = 0;
+        c->channels[i].loop_start = 0;
+    }
+}
+
+/* Decode the current row into channel state and work out where the row */
+/* leads. Rows are decoded exactly once, however long they last.        */
+static void _pocketmod_load_row(pocketmod_context *c)
 {
     unsigned char (*data)[4];
-    int i, pos, pattern_break = -1;
+    int i, pos;
+    int jump_order = -1, break_line = -1;
+    int loop_target = -1, loop_channel = -1;
 
-    /* When entering a new pattern order index, mark it as "visited" */
-    if (c->line == 0) {
-        c->visited[c->pattern >> 3] |= 1 << (c->pattern & 7);
-    }
-
-    /* Move to the next pattern if this was the last line */
-    if (++c->line == 64) {
-        if (++c->pattern == c->length) {
-            c->pattern = c->reset;
-        }
-        c->line = 0;
-    }
+    c->line_delay = 0;
+    c->dest_kind = 0;
 
     /* Find the pattern data for the current line */
     pos = (c->order[c->pattern] * 64 + c->line) * c->num_channels * 4;
@@ -290,15 +306,26 @@ static void _pocketmod_next_line(pocketmod_context *c)
         ch->effect = (effect >> 8) != 0xe ? (effect >> 8) : (effect >> 4);
         ch->param = (effect >> 8) != 0xe ? (effect & 0xff) : (effect & 0x0f);
 
-        /* Set sample */
+        /* A new row cancels a delayed attack that never got to fire */
+        ch->delayed_pending = 0;
+        ch->delayed_sample_set = 0;
+
+        /* Set sample. A pitched EDx defers the selection with its note. */
         if (sample) {
             if (sample <= POCKETMOD_MAX_SAMPLES) {
                 unsigned char *sample_data = POCKETMOD_SAMPLE(c, sample);
-                ch->sample = sample;
-                ch->finetune = sample_data[2] & 0x0f;
-                ch->volume = _pocketmod_min(sample_data[3], 0x40);
-                if (ch->effect != 0xED) {
-                    ch->dirty |= POCKETMOD_VOLUME;
+                if (ch->effect == 0xED && period) {
+                    ch->delayed_sample = sample;
+                    ch->delayed_finetune = sample_data[2] & 0x0f;
+                    ch->delayed_volume = _pocketmod_min(sample_data[3], 0x40);
+                    ch->delayed_sample_set = 1;
+                } else {
+                    ch->sample = sample;
+                    ch->finetune = sample_data[2] & 0x0f;
+                    ch->volume = _pocketmod_min(sample_data[3], 0x40);
+                    if (ch->effect != 0xED) {
+                        ch->dirty |= POCKETMOD_VOLUME;
+                    }
                 }
             } else {
                 ch->sample = 0;
@@ -308,7 +335,10 @@ static void _pocketmod_next_line(pocketmod_context *c)
         /* Set note */
         if (period) {
             int note = _pocketmod_period_to_note(period);
-            period += _pocketmod_finetune[ch->finetune][note];
+            unsigned char finetune = ch->effect == 0xED && period
+                    ? (ch->delayed_sample_set ? ch->delayed_finetune : ch->finetune)
+                    : ch->finetune;
+            period += _pocketmod_finetune[finetune][note];
             if (ch->effect != 0x3) {
                 if (ch->effect != 0xED) {
                     ch->period = period;
@@ -347,10 +377,9 @@ static void _pocketmod_next_line(pocketmod_context *c)
                 }
             } break;
 
-            /* Bxx: Jump to pattern */
+            /* Bxx: Jump to an order */
             case 0xB: {
-                c->pattern = ch->param < c->length ? ch->param : 0;
-                c->line = -1;
+                jump_order = ch->param < c->length ? ch->param : 0;
             } break;
 
             /* Cxx: Set volume */
@@ -359,9 +388,9 @@ static void _pocketmod_next_line(pocketmod_context *c)
                 ch->dirty |= POCKETMOD_VOLUME;
             } break;
 
-            /* Dxy: Pattern break */
+            /* Dxy: Pattern break, decimal row number */
             case 0xD: {
-                pattern_break = (ch->param >> 4) * 10 + (ch->param & 15);
+                break_line = (ch->param >> 4) * 10 + (ch->param & 15);
             } break;
 
             /* E4x: Set vibrato waveform */
@@ -375,17 +404,27 @@ static void _pocketmod_next_line(pocketmod_context *c)
                 ch->dirty |= POCKETMOD_PITCH;
             } break;
 
-            /* E6x: Pattern loop */
+            /* E6x: Local pattern loop. E6x plays its segment x extra  */
+            /* times. Each channel updates its own counter exactly once */
+            /* per pass; the highest channel that still wants a repeat */
+            /* this pass chooses where the row goes.                    */
             case 0xE6: {
                 if (ch->param) {
+                    int wants;
                     if (!ch->loop_count) {
+                        /* First encounter: x extra plays, so x rewinds */
                         ch->loop_count = ch->param;
-                        c->line = ch->loop_line;
-                    } else if (--ch->loop_count) {
-                        c->line = ch->loop_line;
+                        wants = 1;
+                    } else {
+                        ch->loop_count--;
+                        wants = ch->loop_count != 0;
+                    }
+                    if (wants) {
+                        loop_target = ch->loop_start;
+                        loop_channel = i;
                     }
                 } else {
-                    ch->loop_line = c->line - 1;
+                    ch->loop_start = c->line;
                 }
             } break;
 
@@ -399,12 +438,12 @@ static void _pocketmod_next_line(pocketmod_context *c)
                 ch->balance = ch->param << 4;
             } break;
 
-            /* EEx: Pattern delay */
+            /* EEx: Pattern delay. The highest-numbered channel wins. */
             case 0xEE: {
-                c->pattern_delay = ch->param;
+                c->line_delay = ch->param;
             } break;
 
-            /* Fxx: Set speed */
+            /* Fxx: Set speed, effective on this row */
             case 0xF: {
                 if (ch->param != 0) {
                     if (ch->param < 0x20) {
@@ -418,31 +457,92 @@ static void _pocketmod_next_line(pocketmod_context *c)
 
             default: break;
         }
+
+        /* Schedule the pitched delayed attack for this channel. ED0 fires */
+        /* at tick 0; an attack at or past the speed is cancelled below.    */
+        if (ch->effect == 0xED && period) {
+            ch->delayed_tick = ch->param;
+            ch->delayed_pending = 1;
+        }
     }
 
-    /* Pattern breaks are handled here, so that only one jump happens even  */
-    /* when multiple Dxy commands appear on the same line. (You guessed it: */
-    /* There are songs that rely on this behavior!)                         */
-    if (pattern_break != -1) {
-        c->line = (pattern_break < 64 ? pattern_break : 0) - 1;
-        if (++c->pattern == c->length) {
-            c->pattern = c->reset;
+    /* Drop attacks scheduled at or beyond this row's speed. They are  */
+    /* cancelled outright, and the EE extension must not fire them.    */
+    for (i = 0; i < c->num_channels; i++) {
+        _pocketmod_chan *ch = &c->channels[i];
+        if (ch->delayed_pending && ch->delayed_tick >= c->ticks_per_line) {
+            ch->delayed_pending = 0;
+            ch->delayed_sample_set = 0;
         }
+    }
+
+    /* Resolve the destination for the next line. B/D outrank E6, and  */
+    /* the highest-numbered channel wins for each command separately.  */
+    if (jump_order >= 0 || break_line >= 0) {
+        int line = break_line < 0 ? 0 : (break_line < 64 ? break_line : 0);
+        if (jump_order < 0) {
+            /* Dxy alone enters the next order at its row */
+            jump_order = c->pattern;
+            if (++jump_order == c->length) { jump_order = c->reset; }
+        }
+        c->dest_kind = 1;
+        c->dest_order = jump_order;
+        c->dest_line = line;
+    } else if (loop_channel >= 0) {
+        c->dest_kind = 2;
+        c->dest_order = c->pattern;
+        c->dest_line = loop_target;
     }
 }
 
+/* Advance past the current line. Called after its final speed cycle. */
+static void _pocketmod_next_line(pocketmod_context *c)
+{
+    int order_transition = 0;
+
+    if (c->dest_kind == 1) {
+        c->pattern = c->dest_order;
+        c->line = c->dest_line;
+        order_transition = 1;
+        _pocketmod_reset_local(c);
+    } else if (c->dest_kind == 2) {
+        c->line = c->dest_line;
+    } else if (++c->line == 64) {
+        c->line = 0;
+        if (++c->pattern == c->length) { c->pattern = c->reset; }
+        order_transition = 1;
+        _pocketmod_reset_local(c);
+    }
+
+    if (order_transition) {
+        /* Entering an already visited order restarts the visit round */
+        if (c->visited[c->pattern >> 3] & (1 << (c->pattern & 7))) {
+            _pocketmod_zero(c->visited, sizeof(c->visited));
+            c->loop_count++;
+        }
+        c->visited[c->pattern >> 3] |= 1 << (c->pattern & 7);
+        c->order_ret = 1;
+    }
+
+    _pocketmod_load_row(c);
+}
 static void _pocketmod_next_tick(pocketmod_context *c)
 {
     int i;
 
-    /* Move to the next line if this was the last tick */
-    if (++c->tick == c->ticks_per_line) {
-        if (c->pattern_delay > 0) {
-            c->pattern_delay--;
-        } else {
-            _pocketmod_next_line(c);
-        }
+    /* Run the row's extra EEx speed cycles before moving on. The cycle  */
+    /* count can grow on the fly, so compare against it every time.      */
+    if (++c->tick >= c->ticks_per_line + c->line_delay) {
+        _pocketmod_next_line(c);
         c->tick = 0;
+    }
+
+    /* A pitched delayed attack survives into the extra EEx cycles, but */
+    /* is cancelled as soon as the row's real cycles have all run.      */
+    if (c->tick >= c->ticks_per_line) {
+        for (i = 0; i < c->num_channels; i++) {
+            c->channels[i].delayed_pending = 0;
+        }
     }
 
     /* Make per-tick adjustments for all channels */
@@ -477,13 +577,24 @@ static void _pocketmod_next_tick(pocketmod_context *c)
                 }
             } break;
 
-            /* EDx: Delay note for x ticks */
+            /* EDx: Delay the whole attack for x ticks. Until then the  */
+            /* previous voice keeps playing untouched.                  */
             case 0xED: {
-                if (c->tick == param && ch->sample) {
-                    ch->dirty |= POCKETMOD_VOLUME | POCKETMOD_PITCH;
-                    ch->period = ch->delayed;
+                if (ch->delayed_pending && c->tick == ch->delayed_tick) {
+                    if (ch->delayed_sample_set) {
+                        ch->sample = ch->delayed_sample;
+                        ch->finetune = ch->delayed_finetune;
+                        ch->volume = ch->delayed_volume;
+                        ch->dirty |= POCKETMOD_VOLUME;
+                        ch->delayed_sample_set = 0;
+                    }
+                    if (ch->delayed) {
+                        ch->period = ch->delayed;
+                        ch->dirty |= POCKETMOD_PITCH;
+                    }
                     ch->position = 0.0f;
                     ch->lfo_step = 0;
+                    ch->delayed_pending = 0;
                 }
             } break;
 
@@ -780,8 +891,12 @@ int pocketmod_init(pocketmod_context *c, const void *data, int size, int rate)
     c->samples_per_second = rate;
     c->samples_per_tick = rate / 50.0f;
     c->lfo_rng = 0xbadc0de;
-    c->line = -1;
-    c->tick = c->ticks_per_line - 1;
+    c->pattern = 0;
+    c->line = 0;
+    c->tick = 0;
+    c->visited[0] = 1;          /* Entering order 0 at line 0 counts as visited */
+    _pocketmod_load_row(c);
+    c->tick = -1;               /* Apply the row's tick-0 effects immediately */
     _pocketmod_next_tick(c);
     return 1;
 }
@@ -815,14 +930,10 @@ int pocketmod_render(pocketmod_context *c, void *buffer, int buffer_size)
                 c->sample -= c->samples_per_tick;
                 _pocketmod_next_tick(c);
 
-                /* Stop if a new pattern was reached */
-                if (c->line == 0 && c->tick == 0) {
-
-                    /* Increment loop counter as needed */
-                    if (c->visited[c->pattern >> 3] & (1 << (c->pattern & 7))) {
-                        _pocketmod_zero(c->visited, sizeof(c->visited));
-                        c->loop_count++;
-                    }
+                /* Return here whenever an order-level transition happens, */
+                /* including jumps to a nonzero line.                      */
+                if (c->order_ret) {
+                    c->order_ret = 0;
                     break;
                 }
             }

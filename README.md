@@ -96,6 +96,39 @@ position.
 
 
 
+### Song flow, local repeat and song loop ###
+
+These three things are deliberately kept distinct while rendering:
+
+- **Order-level short return.** Whenever rendering crosses from one order to
+  another — by natural end-of-pattern flow, by `Bxx`/`Dxy`, or by a `Dxy` that
+  enters a nonzero line — `pocketmod_render()` returns after the last sample of
+  the row that made the decision. The next call continues from the destination.
+  This lets callers create one file per order chunk without ever recomputing
+  the row that triggered the jump.
+- **Local playback (E6x).** `E60` records the current line as a per-channel
+  origin, and `E6x` replays the segment between that origin and the command
+  `x` extra times. Each channel keeps its own origin and counter; when several
+  channels ask for a repeat on the same row, the highest-numbered one decides
+  where playback continues, but every channel's counter still advances once.
+  A local repeat is *not* an order-level transition, so it does not cause a
+  short return by itself and it never changes `pocketmod_loop_count()`.
+  Entering an order by natural flow or by `Bxx`/`Dxy` resets all local
+  counters and origins, even when the jump lands in the same order.
+- **Song loop.** `pocketmod_loop_count()` only rises when an order-level
+  transition enters an order that has already been visited in the current
+  round. Order 0 at line 0 and any order entered at a nonzero line both count
+  as visited. After a loop is detected, the visit bookkeeping starts a fresh
+  round with the current order marked visited.
+
+A row always plays to completion before any jump takes effect, and `Bxx` +
+`Dxy` on the same row combine into a single destination (`Dxy` supplies the
+line, `Bxx` the order). `EEx` extends a row by `x` speed cycles, and `EDx` can
+delay an attack into those real cycles, but neither of them is allowed to fire
+a delayed attack more than once or to re-decode the row.
+
+
+
 # Configuration #
 
 There are a few preprocessor symbols that may be #defined before including
