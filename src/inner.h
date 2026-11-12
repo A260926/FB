@@ -1703,4 +1703,17 @@ int br_ssl_choose_hash(unsigned bf);
 
 /* ==================================================================== */
 
+/*
+ * Name Constraints hooks (x509_nc.c). These are called by the "minimal"
+ * X.509 engine vtable wrappers when the optional name-constraint mode is
+ * enabled.
+ */
+void br_nc_start_chain(br_x509_minimal_context *cc);
+void br_nc_start_cert(br_x509_minimal_context *cc, uint32_t length);
+void br_nc_append(br_x509_minimal_context *cc,
+	const unsigned char *buf, size_t len);
+void br_nc_t0_post_byte(br_x509_minimal_context *cc);
+void br_nc_end_cert(br_x509_minimal_context *cc);
+void br_nc_end_chain(br_x509_minimal_context *cc);
+
 #endif

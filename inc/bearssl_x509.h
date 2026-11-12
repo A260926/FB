@@ -108,9 +108,12 @@
  *     extensions are ignored, and CRL or OCSP responses are not gathered
  *     or checked.
  *
- *   - The "minimal" engine does not currently support Name Constraints
- *     (some basic functionality to handle sub-domains may be added in a
- *     later version).
+ *   - Name Constraints are enforced only when the optional name-constraint
+ *     mode has been enabled with
+ *     `br_x509_minimal_set_name_constraints()`. When that mode is not
+ *     enabled, the historical behaviour is preserved: Name Constraints
+ *     extensions are ignored when non-critical, and a critical Name
+ *     Constraints extension yields `BR_ERR_X509_CRITICAL_EXTENSION`.
  *
  *   - The decoder is not "validating" in the sense that it won't reject
  *     some certificates with invalid field values when these fields are
@@ -214,6 +217,10 @@
 
 /** \brief X.509 status: public key found in certificate is too small. */
 #define BR_ERR_X509_WEAK_PUBLIC_KEY       60
+
+/** \brief X.509 status: a certificate name violates the configured
+    Name Constraints. */
+#define BR_ERR_X509_NAME_CONSTRAINTS      61
 
 /** \brief X.509 status: chain could not be linked to a trust anchor. */
 #define BR_ERR_X509_NOT_TRUSTED           62
@@ -549,6 +556,24 @@ void br_x509_knownkey_init_ec(br_x509_knownkey_context *ctx,
  */
 #define BR_X509_BUFSIZE_KEY   520
 #define BR_X509_BUFSIZE_SIG   512
+
+/*
+ * Size of the guard patterns placed at both ends of the Name
+ * Constraints workspace when that mode is enabled.
+ */
+#define BR_X509_NC_SENTINEL_LEN   16
+
+/*
+ * Maximum number of certificates handled in one name-constrained chain.
+ */
+#define BR_X509_NC_MAX_CERTS     16
+
+/*
+ * Guard pattern written at both ends of an active Name Constraints
+ * workspace. It is used internally to detect workspace overruns and is
+ * exposed so that callers may audit their buffers after validation.
+ */
+extern const unsigned char br_x509_nc_sentinel[BR_X509_NC_SENTINEL_LEN];
 #endif
 
 /**
@@ -718,6 +743,37 @@ typedef struct {
 	 */
 	br_name_element *name_elts;
 	size_t num_name_elts;
+
+	/*
+	 * Optional Name Constraints mode. When nc_mode is non-zero, the
+	 * caller-provided nc_workspace buffer (nc_workspace_len bytes) is
+	 * used to accumulate constraints and subject names while a chain is
+	 * streamed in. All variable-length data lives in that buffer; the
+	 * fields below hold only fixed-size parser/evaluation state.
+	 */
+	unsigned char *nc_workspace;
+	size_t nc_workspace_len;
+	unsigned char nc_mode;
+	struct br_x509_nc_state {
+		/* Pending configuration error, reported at the next chain. */
+		int config_err;
+		/* Bytes of the upward-growing record arena. */
+		size_t arena_used;
+		/* Start of the downward-growing certificate scratch area. */
+		size_t scratch_start;
+		/* Advertised and received length of the current certificate. */
+		uint32_t cert_len;
+		size_t cert_recv;
+		/* Number of certificates started in the current chain. */
+		uint32_t cert_index;
+		/* Per-certificate self-issued flag (issuer DN == subject DN). */
+		unsigned char self_issued[BR_X509_NC_MAX_CERTS];
+		/* Hashes of the issuer and subject DNs of the current cert. */
+		unsigned char issuer_dn[64];
+		unsigned char subject_dn[64];
+		/* Hasher used for the DN comparisons above. */
+		br_hash_compat_context dn_hash;
+	} nc;
 
 	/*
 	 * Public key cryptography implementations (signature verification).
@@ -907,6 +963,63 @@ br_x509_minimal_set_name_elements(br_x509_minimal_context *ctx,
 	ctx->name_elts = elts;
 	ctx->num_name_elts = num_elts;
 }
+
+/**
+ * \brief Enable or disable the optional Name Constraints mode.
+ *
+ * This function shall be called after engine initialisation (e.g.
+ * `br_x509_minimal_init()` or `br_x509_minimal_init_full()`) and before
+ * `start_chain()`.
+ *
+ * When `workspace` is non-`NULL` and `len` is non-zero, Name Constraints
+ * support is enabled: the engine parses the Name Constraints extension of
+ * intermediate CA certificates (whether critical or not) and enforces
+ * `permittedSubtrees` and `excludedSubtrees` of type `dNSName` and
+ * `iPAddress` against the subjectAltName DNS and IP entries of every
+ * certificate below the constraining CA. Other GeneralName forms, and
+ * non-zero minimum/maximum fields, are rejected with
+ * `BR_ERR_X509_UNSUPPORTED`. Malformed constraints (including an empty
+ * extension, an empty subtree list, duplicate Name Constraints
+ * extensions, out-of-range lengths, truncated TLV, illegal supported
+ * values, or a Name Constraints extension on the end-entity certificate)
+ * fail validation. A name that violates the constraints makes the next
+ * `end_chain()` return `BR_ERR_X509_NAME_CONSTRAINTS`.
+ *
+ * When `workspace` is `NULL` and `len` is zero, the mode is disabled and
+ * the historical behaviour is preserved. Any other parameter combination
+ * (one of them zero/`NULL` but not both) does not change the mode
+ * immediately; the next validation instead fails with
+ * `BR_ERR_X509_INVALID_VALUE`.
+ *
+ * The engine never calls `malloc()`, `calloc()` or `realloc()`, and it
+ * does not retain encoded copies of the certificates or of the chain.
+ * All variable-length data (constraint entries, subject names and
+ * transient parsing data) is stored in the caller-provided workspace;
+ * only fixed-size parser state lives in the context. If the workspace is
+ * too small to hold the data required by the chain, validation fails
+ * with `BR_ERR_X509_LIMIT_EXCEEDED`; names are never silently dropped.
+ * The pass/fail result for a given input and workspace capacity does not
+ * depend on how the certificate bytes are split across `append()` calls.
+ *
+ * The workspace is owned by the context for the whole duration of the
+ * validation; it must remain valid and must not be modified by the
+ * caller between this call and the matching `end_chain()`. Each context
+ * keeps its own workspace pointer, so two contexts may be driven
+ * interleaved without sharing state. The workspace is reset on every
+ * `start_chain()`: data and errors from the previous chain do not carry
+ * over, and a workspace that was too small for one chain can be replaced
+ * (through a new call to this function) by a larger one for the next
+ * chain. A workspace length of a few kilobytes is sufficient for typical
+ * chains; very small workspaces are expected to report
+ * `BR_ERR_X509_LIMIT_EXCEEDED` rather than overflow.
+ *
+ * \param ctx        validation context.
+ * \param workspace  caller-provided workspace, or `NULL` to disable.
+ * \param len        workspace length in bytes, or 0 to disable.
+ */
+void
+br_x509_minimal_set_name_constraints(br_x509_minimal_context *ctx,
+	void *workspace, size_t len);
 
 /**
  * \brief X.509 decoder context.

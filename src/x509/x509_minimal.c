@@ -260,6 +260,11 @@ xm_start_chain(const br_x509_class **ctx, const char *server_name)
 	} else {
 		cc->server_name = server_name;
 	}
+	/* Optional Name Constraints mode (also reports a pending
+	   configuration error, if any). */
+	if (cc->nc_mode != 0 || cc->nc.config_err != 0) {
+		br_nc_start_chain(cc);
+	}
 }
 
 static void
@@ -268,12 +273,20 @@ xm_start_cert(const br_x509_class **ctx, uint32_t length)
 	br_x509_minimal_context *cc;
 
 	cc = (br_x509_minimal_context *)ctx;
-	if (cc->err != 0) {
+	if (cc->err != 0
+		&& !(cc->nc_mode != 0 && cc->err == BR_ERR_X509_OK)) {
 		return;
 	}
 	if (length == 0) {
 		cc->err = BR_ERR_X509_TRUNCATED;
 		return;
+	}
+	if (cc->nc_mode != 0) {
+		br_nc_start_cert(cc, length);
+		if (cc->err != 0
+		&& !(cc->nc_mode != 0 && cc->err == BR_ERR_X509_OK)) {
+			return;
+		}
 	}
 	cc->cert_length = length;
 }
@@ -284,7 +297,42 @@ xm_append(const br_x509_class **ctx, const unsigned char *buf, size_t len)
 	br_x509_minimal_context *cc;
 
 	cc = (br_x509_minimal_context *)ctx;
-	if (cc->err != 0) {
+	if (cc->err != 0
+		&& !(cc->nc_mode != 0 && cc->err == BR_ERR_X509_OK)) {
+		return;
+	}
+	if (cc->nc_mode != 0) {
+		/*
+		 * In Name Constraints mode the T0 machine is driven one
+		 * byte at a time so a critical Name Constraints extension
+		 * can be recognised at its exact halt point and turned
+		 * into a resumable condition; all other checks keep
+		 * running normally. The scratch buffer is fed one byte at
+		 * a time as well so its fill level matches the decoder's
+		 * consumption point regardless of append() chunking.
+		 */
+		size_t u;
+
+		for (u = 0; u < len; u ++) {
+			if (cc->err != 0
+		&& !(cc->nc_mode != 0 && cc->err == BR_ERR_X509_OK)) {
+				return;
+			}
+			br_nc_append(cc, buf + u, 1);
+			if (cc->err != 0
+		&& !(cc->nc_mode != 0 && cc->err == BR_ERR_X509_OK)) {
+				return;
+			}
+			if (cc->err == BR_ERR_X509_OK) {
+				/* VM halted at the trust anchor; only the
+				   workspace recording above continues. */
+				continue;
+			}
+			cc->hbuf = buf + u;
+			cc->hlen = 1;
+			br_x509_minimal_run(&cc->cpu);
+			br_nc_t0_post_byte(cc);
+		}
 		return;
 	}
 	cc->hbuf = buf;
@@ -301,6 +349,9 @@ xm_end_cert(const br_x509_class **ctx)
 	if (cc->err == 0 && cc->cert_length != 0) {
 		cc->err = BR_ERR_X509_TRUNCATED;
 	}
+	if (cc->nc_mode != 0) {
+		br_nc_end_cert(cc);
+	}
 	cc->num_certs ++;
 }
 
@@ -310,6 +361,9 @@ xm_end_chain(const br_x509_class **ctx)
 	br_x509_minimal_context *cc;
 
 	cc = (br_x509_minimal_context *)ctx;
+	if (cc->nc_mode != 0 || cc->nc.config_err != 0) {
+		br_nc_end_chain(cc);
+	}
 	if (cc->err == 0) {
 		if (cc->num_certs == 0) {
 			cc->err = BR_ERR_X509_EMPTY_CHAIN;
