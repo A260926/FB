@@ -49,6 +49,7 @@ endif()
 set(CAPTION_SOURCES
   src/caption.c
   src/cea708.c
+  src/dtvcc.c
   src/eia608.c
   src/eia608_charmap.c
   src/eia608_from_utf8.c
@@ -63,6 +64,7 @@ set(CAPTION_SOURCES
 set(CAPTION_HEADERS
   caption/caption.h
   caption/cea708.h
+  caption/dtvcc.h
   caption/eia608.h
   caption/eia608_charmap.h
   caption/mpeg.h
@@ -97,6 +99,9 @@ endif()
 
 add_executable(test_wrap unit_tests/test_wrap.c )
 target_link_libraries(test_wrap caption)
+
+add_executable(test_dtvcc unit_tests/test_dtvcc.c )
+target_link_libraries(test_dtvcc caption)
 
 install (TARGETS caption DESTINATION lib EXPORT caption-targets)
 install (FILES ${CAPTION_HEADERS} DESTINATION include/caption)

@@ -1,5 +1,9 @@
 set(CMAKE_BUILD_TYPE Debug)
 
+add_executable(dtvccdump dtvccdump.c)
+target_link_libraries(dtvccdump caption)
+install(TARGETS dtvccdump DESTINATION bin)
+
 add_executable(flv2srt flv2srt.c flv.c)
 target_link_libraries(flv2srt caption)
 install(TARGETS flv2srt DESTINATION bin)

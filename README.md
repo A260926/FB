@@ -8,11 +8,38 @@ libcaption is a library written in C to aid in the creating and parsing of close
 
 608 support is currently limited to encoding and decoding the necessary control and preamble codes as well as support for the Basic North American, Special North American and Extended Western European character sets.
 
-708 support is limited to encoding the 608 data in NTSC field 1 user data type structure.
+708 support is limited to encoding the 608 data in NTSC field 1 user data type structure. Decoding of native DTVCC (CEA-708) caption packets into per-service windows is available through `caption/dtvcc.h`, see below.
 
 In addition, utility functions to create h.264 SEI (Supplementary enhancement information) NALUs (Network Abstraction Layer Unit) for inclusion into an h.264 elementary stream are provided.
 
 H.264 utility functions are limited to wrapping the 708 payload into a SEI NALU. This is accomplished by prepending the 708 payload with 3 bytes (nal_unit_type = 6, payloadType = 4, and PayloadSize = variable), and appending a stop bit encoded into a full byte (with a value of 127). In addition if the 708 payload contains an emulated start code, a three byte sequence equaling 0,0,1 an emulation prevention byte (3) is inserted. Functions to reverse this operation are also provided.
+
+## DTVCC (CEA-708) window decoder
+
+`caption/dtvcc.h` decodes native DTVCC caption packets (cc_type 2/3 of GA94 user data) into per-service caption windows. The decoder covers transport and window/text state only: fonts, colors and pixel rendering are out of scope, and the window model is kept as-is (it is not reduced to the 15x32 608 screen). The player reads window snapshots and performs its own layout.
+
+Supported subset: services 1-6 and extended services 7-63 (service 0 is padding); commands DF0-DF7, CW0-CW7, CLW, DSW, HDW, TGW, DLW, RST and SPL; G0 printable characters (Basic North American set), BS, CR, FF and NUL. Anything else (SPA, SPC, SWA, DLY, DLC, G1/G2/G3 characters, ...) is rejected with `DTVCC_STATUS_UNSUPPORTED`, malformed input (e.g. truncated command parameters, a service block running past its packet) with `DTVCC_STATUS_ERROR`. A rejected packet is discarded as a whole, previously received packets are not affected. Detected packet loss clears all service windows until the next complete packet arrives.
+
+```c
+#include "caption/dtvcc.h"
+
+dtvcc_decoder_t* dec = dtvcc_decoder_create();
+
+// for each cea708_t (parsed from h.264, or constructed with cea708_add_cc_data):
+// 608 entries (cc_type 0/1) are ignored here, keep feeding them to caption_frame_decode
+dtvcc_status_t status = dtvcc_decoder_decode(dec, &cea708);
+
+// read a self contained snapshot, later input never modifies it
+dtvcc_window_snapshot_t snap;
+if (dtvcc_decoder_window_snapshot(dec, 1 /*service*/, 0 /*window*/, &snap)) {
+    // snap.visible, snap.row_count/col_count, snap.pen_row/pen_col, snap.text[row], ...
+}
+
+dtvcc_decoder_reset(dec); // drop all state, e.g. on a seek
+dtvcc_decoder_free(dec);
+```
+
+A complete runnable version of this snippet is available in `examples/dtvccdump.c`.
 
 ## Characters
 | | | | | | | | | | | | | | | | | |
