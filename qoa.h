@@ -144,6 +144,15 @@ unsigned int qoa_encode_header(qoa_desc *qoa, unsigned char *bytes);
 unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned int frame_len, unsigned char *bytes);
 void *qoa_encode(const short *sample_data, qoa_desc *qoa, unsigned int *out_len);
 
+/* Beam search variants. beam_width must be in 1 .. 16. The search keeps the
+beam_width best scalefactor sequences per channel per frame, ranked by the
+cumulative squared PCM reconstruction error (lexicographic scalefactor order
+breaks ties), and always also evaluates the legacy greedy path as an
+independent candidate: the chosen path's error never exceeds the greedy one,
+and ties prefer the greedy path. Output is a regular QOA file/frame. */
+unsigned int qoa_encode_frame_beam(const short *sample_data, qoa_desc *qoa, unsigned int frame_len, unsigned char *bytes, unsigned int capacity, unsigned int beam_width);
+void *qoa_encode_beam(const short *sample_data, qoa_desc *qoa, unsigned int *out_len, unsigned int beam_width);
+
 unsigned int qoa_max_frame_size(qoa_desc *qoa);
 unsigned int qoa_decode_header(const unsigned char *bytes, int size, qoa_desc *qoa);
 unsigned int qoa_decode_frame(const unsigned char *bytes, unsigned int size, qoa_desc *qoa, short *sample_data, unsigned int *frame_len);
@@ -168,6 +177,9 @@ void *qoa_read(const char *filename, qoa_desc *qoa);
 
 #ifdef QOA_IMPLEMENTATION
 #include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <stdint.h>
 
 #ifndef QOA_MALLOC
 	#define QOA_MALLOC(sz) malloc(sz)
@@ -264,10 +276,18 @@ the history. This, surprisingly, is sufficient to get worthwhile predictions.
 This is all done with fixed point integers. Hence the right-shifts when updating
 the weights and calculating the prediction. */
 
+/* Explicit signed 32 bit two's-complement result. The legacy encoder and the
+decoder accumulate in 32 bit and rely on wraparound; routing those operations
+through here keeps the same bytes while avoiding undefined signed overflow. */
+static inline int qoa_wrap_i32(long long v) {
+	return (int)(int32_t)(uint32_t)(v & 0xffffffffLL);
+}
+
 static int qoa_lms_predict(qoa_lms_t *lms) {
 	int prediction = 0;
 	for (int i = 0; i < QOA_LMS_LEN; i++) {
-		prediction += lms->weights[i] * lms->history[i];
+		prediction = qoa_wrap_i32((long long)prediction +
+			(long long)lms->weights[i] * (long long)lms->history[i]);
 	}
 	return prediction >> 13;
 }
@@ -275,7 +295,8 @@ static int qoa_lms_predict(qoa_lms_t *lms) {
 static void qoa_lms_update(qoa_lms_t *lms, int sample, int residual) {
 	int delta = residual >> 4;
 	for (int i = 0; i < QOA_LMS_LEN; i++) {
-		lms->weights[i] += lms->history[i] < 0 ? -delta : delta;
+		lms->weights[i] = qoa_wrap_i32((long long)lms->weights[i] +
+			(lms->history[i] < 0 ? -delta : delta));
 	}
 
 	for (int i = 0; i < QOA_LMS_LEN-1; i++) {
@@ -293,7 +314,12 @@ argument, so it can do the division with a cheaper integer multiplication. */
 
 static inline int qoa_div(int v, int scalefactor) {
 	int reciprocal = qoa_reciprocal_tab[scalefactor];
-	int n = (v * reciprocal + (1 << 15)) >> 16;
+	/* The legacy encoder relied on signed 32 bit wraparound of the
+	multiply-add. Replicate that two's complement result explicitly so the
+	behavior stays defined while every emitted byte remains identical. */
+	long long wide = (long long)v * reciprocal + (1LL << 15);
+	int wrapped = (int)(int32_t)(uint32_t)(wide & 0xffffffffLL);
+	int n = wrapped >> 16;
 	n = n + ((v > 0) - (v < 0)) - ((n > 0) - (n < 0)); /* round away from 0 */
 	return n;
 }
@@ -309,10 +335,8 @@ performance quite a bit. The extra if() statement works nicely with the CPUs
 branch prediction as this branch is rarely taken. */
 
 static inline int qoa_clamp_s16(int v) {
-	if ((unsigned int)(v + 32768) > 65535) {
-		if (v < -32768) { return -32768; }
-		if (v >  32767) { return  32767; }
-	}
+	if (v < -32768) { return -32768; }
+	if (v >  32767) { return  32767; }
 	return v;
 }
 
@@ -418,30 +442,33 @@ unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned 
 					int sample = sample_data[si];
 					int predicted = qoa_lms_predict(&lms);
 
-					int residual = sample - predicted;
+					int residual = qoa_wrap_i32((long long)sample - predicted);
 					int scaled = qoa_div(residual, scalefactor);
 					int clamped = qoa_clamp(scaled, -8, 8);
 					int quantized = qoa_quant_tab[clamped + 8];
 					int dequantized = qoa_dequant_tab[scalefactor][quantized];
-					int reconstructed = qoa_clamp_s16(predicted + dequantized);
+					int reconstructed = qoa_clamp_s16(qoa_wrap_i32(
+						(long long)predicted + dequantized));
 
 
 					/* If the weights have grown too large, we introduce a penalty
 					here. This prevents pops/clicks in certain problem cases */
-					int weights_penalty = ((
-						lms.weights[0] * lms.weights[0] + 
-						lms.weights[1] * lms.weights[1] + 
-						lms.weights[2] * lms.weights[2] + 
-						lms.weights[3] * lms.weights[3]
-					) >> 18) - 0x8ff;
+					int weight_squares = 0;
+					for (int wi = 0; wi < QOA_LMS_LEN; wi++) {
+						weight_squares = qoa_wrap_i32((long long)weight_squares +
+							(long long)lms.weights[wi] * (long long)lms.weights[wi]);
+					}
+					int weights_penalty = (weight_squares >> 18) - 0x8ff;
 					if (weights_penalty < 0) {
 						weights_penalty = 0;
 					}
 
 					long long error = (sample - reconstructed);
 					qoa_uint64_t error_sq = error * error;
+					qoa_uint64_t penalty_sq = (qoa_uint64_t)(long long)weights_penalty *
+						(qoa_uint64_t)(long long)weights_penalty;
 
-					current_rank += error_sq + weights_penalty * weights_penalty;
+					current_rank += error_sq + penalty_sq;
 					#ifdef QOA_RECORD_TOTAL_ERROR
 						current_error += error_sq;
 					#endif
@@ -536,6 +563,473 @@ void *qoa_encode(const short *sample_data, qoa_desc *qoa, unsigned int *out_len)
 	return bytes;
 }
 
+
+
+/* -----------------------------------------------------------------------------
+	Beam search encoder
+
+	The regular encoder commits a scalefactor per slice as it goes. The beam
+	search instead keeps up to beam_width competing scalefactor sequences per
+	channel for the whole frame, ranking them by the cumulative squared error
+	of the reconstructed PCM, and only commits one sequence at the frame end.
+	All arithmetic the legacy decoder would replay is checked to fit in signed
+	32 bit; candidates that do not fit are discarded rather than emitted. */
+
+typedef struct {
+	qoa_lms_t lms;
+	qoa_uint64_t sse;                       /* cumulative PCM squared error */
+	unsigned char scales[QOA_SLICES_PER_FRAME];
+	int valid;
+} qoa_beam_node_t;
+
+static int qoa_beam_i32(long long v) {
+	return v >= INT32_MIN && v <= INT32_MAX;
+}
+
+static int qoa_beam_s16(int v) {
+	return qoa_clamp(v, -32768, 32767);
+}
+
+/* Encode a single sample with a fixed scalefactor, evolving lms in place.
+	Decoder-consumed arithmetic (the prediction products/accumulation, the
+	reconstruction and the weight update) must stay within signed 32 bit; if
+	any of it does not, the candidate is not representable and the function
+	returns 0. Encoder-only math (the residual, the reciprocal scaling and the
+	weight penalty) is carried out in wide integers or with explicit 32 bit
+	wrapping and never rejects a candidate by itself. */
+static int qoa_beam_encode_sample(int sample, int scalefactor, qoa_lms_t *lms,
+	int *quantized_out, int *dequantized_out, int *reconstructed_out,
+	int *penalty_out, qoa_uint64_t *error_sq_out)
+{
+	long long prediction_sum = 0;
+	for (int i = 0; i < QOA_LMS_LEN; i++) {
+		long long product = (long long)lms->weights[i] * (long long)lms->history[i];
+		if (!qoa_beam_i32(product)) { return 0; }
+		prediction_sum += product;
+		if (!qoa_beam_i32(prediction_sum)) { return 0; }
+	}
+	int predicted = (int)(prediction_sum >> 13);
+
+	/* Encoder-only residual and quantization. The path is i32 safe up to the
+	prediction, so the residual fits, and we keep the original (wrapping)
+	qoa_div quantization rule exactly. */
+	int residual = (int)((long long)sample - (long long)predicted);
+	int scaled = qoa_div(residual, scalefactor);
+
+	int clamped = qoa_clamp(scaled, -8, 8);
+	int quantized = qoa_quant_tab[clamped + 8];
+	int dequantized = qoa_dequant_tab[scalefactor][quantized];
+
+	/* Decoder-consumed: the reconstructed sample must be 32 bit expressible
+	before the s16 clamp. */
+	long long reconstructed = (long long)predicted + (long long)dequantized;
+	if (!qoa_beam_i32(reconstructed)) { return 0; }
+	reconstructed = qoa_clamp_s16((int)reconstructed);
+
+	/* Encoder-only penalty, bit-identical to the legacy encoder's wrapping
+	32 bit sum. It only feeds greedy ranking, never the output stream. */
+	int weight_squares = 0;
+	for (int i = 0; i < QOA_LMS_LEN; i++) {
+		weight_squares = qoa_wrap_i32((long long)weight_squares +
+			(long long)lms->weights[i] * (long long)lms->weights[i]);
+	}
+	int weights_penalty = (weight_squares >> 18) - 0x8ff;
+	if (weights_penalty < 0) { weights_penalty = 0; }
+
+	long long error = (long long)sample - reconstructed;
+	qoa_uint64_t error_sq = (qoa_uint64_t)(error * error);
+
+	/* Decoder-consumed: every updated weight must remain 32 bit expressible. */
+	long long delta = (long long)dequantized >> 4;
+	for (int i = 0; i < QOA_LMS_LEN; i++) {
+		long long updated = (long long)lms->weights[i] +
+			(lms->history[i] < 0 ? -delta : delta);
+		if (!qoa_beam_i32(updated)) { return 0; }
+		lms->weights[i] = (int)updated;
+	}
+	for (int i = 0; i < QOA_LMS_LEN - 1; i++) {
+		lms->history[i] = lms->history[i+1];
+	}
+	lms->history[QOA_LMS_LEN - 1] = (int)reconstructed;
+
+	*quantized_out = quantized;
+	*dequantized_out = dequantized;
+	*reconstructed_out = (int)reconstructed;
+	*penalty_out = weights_penalty;
+	*error_sq_out = error_sq;
+	return 1;
+}
+
+/* Run one slice (up to 20 samples) at a fixed scalefactor from the state in
+	in. Fails on any 32 bit overflow or SSE accumulation overflow. */
+static int qoa_beam_simulate_slice(const short *sample_data, unsigned int channels,
+	unsigned int slice_start, unsigned int sample_count, int scalefactor,
+	const qoa_lms_t *in, qoa_lms_t *out, qoa_uint64_t *slice_word,
+	qoa_uint64_t *slice_sse)
+{
+	qoa_lms_t lms = *in;
+	qoa_uint64_t word = (qoa_uint64_t)scalefactor;
+	qoa_uint64_t sse = 0;
+	unsigned int slice_end = slice_start + sample_count * channels;
+
+	for (unsigned int si = slice_start; si < slice_end; si += channels) {
+		int quantized, dequantized, reconstructed, penalty;
+		qoa_uint64_t error_sq;
+		if (!qoa_beam_encode_sample(sample_data[si], scalefactor, &lms,
+			&quantized, &dequantized, &reconstructed, &penalty, &error_sq))
+		{
+			return 0;
+		}
+		if (error_sq > UINT64_MAX - sse) { return 0; }
+		sse += error_sq;
+		word = (word << 3) | (qoa_uint64_t)quantized;
+	}
+
+	word <<= (QOA_SLICE_LEN - sample_count) * 3;
+	*out = lms;
+	*slice_word = word;
+	*slice_sse = sse;
+	return 1;
+}
+
+/* The legacy greedy strategy, run independently from the normalized frame
+	start state: per slice, try all 16 scalefactors (previous winner first),
+	rank with the squared error plus the weights penalty, and keep the best.
+	Returns 0 only if no complete, 32 bit safe path exists. */
+static int qoa_beam_greedy(const short *sample_data, qoa_desc *qoa,
+	unsigned int frame_len, unsigned int channel, const qoa_lms_t *start,
+	qoa_beam_node_t *result)
+{
+	unsigned int channels = qoa->channels;
+	unsigned int slices = (frame_len + QOA_SLICE_LEN - 1) / QOA_SLICE_LEN;
+	qoa_lms_t lms = *start;
+	int prev_scalefactor = 0;
+	qoa_uint64_t total_sse = 0;
+
+	for (unsigned int slice_index = 0; slice_index < slices; slice_index++) {
+		unsigned int sample_index = slice_index * QOA_SLICE_LEN;
+		unsigned int sample_count = qoa_clamp(QOA_SLICE_LEN, 0, frame_len - sample_index);
+		unsigned int slice_start = sample_index * channels + channel;
+		unsigned int slice_end = (sample_index + sample_count) * channels + channel;
+
+		qoa_uint64_t best_rank = UINT64_MAX;
+		qoa_uint64_t best_sse = 0;
+		qoa_lms_t best_lms;
+		int best_scalefactor = -1;
+
+		for (int sfi = 0; sfi < 16; sfi++) {
+			int scalefactor = (sfi + prev_scalefactor) & 15;
+			qoa_lms_t trial = lms;
+			qoa_uint64_t rank = 0;
+			qoa_uint64_t sse = 0;
+			int ok = 1;
+
+			for (unsigned int si = slice_start; si < slice_end; si += channels) {
+				int quantized, dequantized, reconstructed, penalty;
+				qoa_uint64_t error_sq;
+				if (!qoa_beam_encode_sample(sample_data[si], scalefactor, &trial,
+					&quantized, &dequantized, &reconstructed, &penalty, &error_sq))
+				{
+					ok = 0;
+					break;
+				}
+				qoa_uint64_t penalty_sq = (qoa_uint64_t)penalty * (qoa_uint64_t)penalty;
+				if (error_sq > UINT64_MAX - rank || penalty_sq > UINT64_MAX - rank - error_sq) {
+					ok = 0;
+					break;
+				}
+				rank += error_sq + penalty_sq;
+				if (rank > best_rank) {
+					ok = 0;
+					break;
+				}
+				sse += error_sq;
+			}
+
+			if (ok) {
+				if (sse > UINT64_MAX - total_sse) { ok = 0; }
+			}
+			if (ok && rank < best_rank) {
+				best_rank = rank;
+				best_sse = sse;
+				best_lms = trial;
+				best_scalefactor = scalefactor;
+			}
+		}
+
+		if (best_scalefactor < 0) { return 0; }
+		lms = best_lms;
+		prev_scalefactor = best_scalefactor;
+		result->scales[slice_index] = (unsigned char)best_scalefactor;
+		if (best_sse > UINT64_MAX - total_sse) { return 0; }
+		total_sse += best_sse;
+	}
+
+	result->lms = lms;
+	result->sse = total_sse;
+	result->valid = 1;
+	return 1;
+}
+
+/* Lexicographic order on the scalefactor prefixes breaks SSE ties. */
+static int qoa_beam_node_better(const qoa_beam_node_t *a, const qoa_beam_node_t *b,
+	unsigned int prefix_len)
+{
+	if (a->sse != b->sse) { return a->sse < b->sse; }
+	return memcmp(a->scales, b->scales, prefix_len) < 0;
+}
+
+unsigned int qoa_encode_frame_beam(const short *sample_data, qoa_desc *qoa,
+	unsigned int frame_len, unsigned char *bytes, unsigned int capacity,
+	unsigned int beam_width)
+{
+	if (!sample_data || !qoa || !bytes) { return 0; }
+	if (beam_width < 1 || beam_width > 16) { return 0; }
+	unsigned int channels = qoa->channels;
+	if (channels < 1 || channels > QOA_MAX_CHANNELS) { return 0; }
+	if (qoa->samplerate < 1 || qoa->samplerate > 0xffffff) { return 0; }
+	if (frame_len < 1 || frame_len > QOA_FRAME_LEN) { return 0; }
+
+	unsigned int slices = (frame_len + QOA_SLICE_LEN - 1) / QOA_SLICE_LEN;
+	unsigned int frame_size = QOA_FRAME_SIZE(channels, slices);
+	if (frame_size > capacity) { return 0; }
+
+	/* Snapshot the descriptor: on any failure both it and the output area
+	stay untouched. */
+	qoa_lms_t snapshot[QOA_MAX_CHANNELS];
+	memcpy(snapshot, qoa->lms, sizeof(qoa_lms_t) * channels);
+
+	qoa_lms_t start[QOA_MAX_CHANNELS];
+	for (unsigned int c = 0; c < channels; c++) {
+		for (int i = 0; i < QOA_LMS_LEN; i++) {
+			start[c].history[i] = qoa_beam_s16(qoa->lms[c].history[i]);
+			start[c].weights[i] = qoa_beam_s16(qoa->lms[c].weights[i]);
+		}
+	}
+
+	/* Workspace bounds only depend on channels, beam width and slices per
+	frame, never on the number of frames in a file. */
+	size_t node_size = sizeof(qoa_beam_node_t);
+	size_t cur_count = (size_t)channels * beam_width;
+	size_t work_count = (size_t)beam_width * 16;
+	if (cur_count > SIZE_MAX / node_size || work_count > SIZE_MAX / node_size) {
+		memcpy(qoa->lms, snapshot, sizeof(qoa_lms_t) * channels);
+		return 0;
+	}
+	size_t cur_bytes = cur_count * node_size;
+	size_t work_bytes = work_count * node_size;
+	size_t words_count = (size_t)channels * slices;
+	size_t words_bytes = words_count * sizeof(qoa_uint64_t);
+	size_t taken_bytes = work_count;
+	if (work_bytes > SIZE_MAX - cur_bytes ||
+		words_bytes > SIZE_MAX - cur_bytes - work_bytes ||
+		taken_bytes > SIZE_MAX - cur_bytes - work_bytes - words_bytes)
+	{
+		memcpy(qoa->lms, snapshot, sizeof(qoa_lms_t) * channels);
+		return 0;
+	}
+	size_t total = cur_bytes + work_bytes + words_bytes + taken_bytes;
+	void *mem = QOA_MALLOC(total);
+	if (!mem) {
+		memcpy(qoa->lms, snapshot, sizeof(qoa_lms_t) * channels);
+		return 0;
+	}
+	unsigned char *alloc_p = (unsigned char *)mem;
+	qoa_beam_node_t *cur = (qoa_beam_node_t *)alloc_p; alloc_p += cur_bytes;
+	qoa_beam_node_t *work = (qoa_beam_node_t *)alloc_p; alloc_p += work_bytes;
+	qoa_uint64_t *slice_words = (qoa_uint64_t *)alloc_p; alloc_p += words_count * sizeof(qoa_uint64_t);
+	unsigned char *taken = alloc_p;
+
+	int success = 0;
+	for (unsigned int c = 0; c < channels; c++) {
+		memset(cur, 0, cur_bytes);
+		cur[0].lms = start[c];
+		cur[0].sse = 0;
+		cur[0].valid = 1;
+		unsigned int live = 1;
+
+		for (unsigned int slice_index = 0; slice_index < slices; slice_index++) {
+			unsigned int sample_index = slice_index * QOA_SLICE_LEN;
+			unsigned int sample_count = qoa_clamp(QOA_SLICE_LEN, 0, frame_len - sample_index);
+			unsigned int slice_start = sample_index * channels + c;
+
+			memset(work, 0, work_bytes);
+			unsigned int expansions = 0;
+			for (unsigned int n = 0; n < live; n++) {
+				for (int sf = 0; sf < 16; sf++) {
+					qoa_beam_node_t *dst = &work[n * 16 + sf];
+					dst->valid = 0;
+					dst->sse = UINT64_MAX;
+					memcpy(dst->scales, cur[n].scales, slice_index);
+					dst->scales[slice_index] = (unsigned char)sf;
+
+					qoa_uint64_t word, slice_sse;
+					if (!qoa_beam_simulate_slice(sample_data, channels, slice_start,
+						sample_count, sf, &cur[n].lms, &dst->lms, &word, &slice_sse))
+					{
+						continue;
+					}
+					if (slice_sse > UINT64_MAX - cur[n].sse) { continue; }
+					dst->sse = cur[n].sse + slice_sse;
+					dst->valid = 1;
+					expansions++;
+				}
+			}
+
+			if (!expansions) { goto beam_fail; }
+
+			/* Keep the best beam_width nodes; SSE ties go to the
+			lexicographically smaller scalefactor sequence. */
+			memset(taken, 0, work_count);
+			unsigned int next_live = 0;
+			while (next_live < beam_width) {
+				int best = -1;
+				for (unsigned int n = 0; n < work_count; n++) {
+					if (taken[n] || !work[n].valid) { continue; }
+					if (best < 0 || qoa_beam_node_better(&work[n], &work[best], slice_index + 1)) {
+						best = (int)n;
+					}
+				}
+				if (best < 0) { break; }
+				taken[best] = 1;
+				cur[next_live] = work[best];
+				next_live++;
+			}
+			live = next_live;
+		}
+
+		/* The independent greedy control, seeded from the same normalized
+		frame header state. It never inherits a pruned search node. */
+		qoa_beam_node_t greedy;
+		memset(&greedy, 0, sizeof(greedy));
+		int greedy_ok = qoa_beam_greedy(sample_data, qoa, frame_len, c, &start[c], &greedy);
+
+		const qoa_beam_node_t *chosen = NULL;
+		if (greedy_ok) {
+			/* Equal SSE always prefers the greedy path. */
+			chosen = (greedy.sse <= cur[0].sse) ? &greedy : &cur[0];
+		}
+		else {
+			chosen = &cur[0];
+		}
+
+		/* Replay the committed scales to produce the slice bytes and final
+		state. Every step already proved 32 bit safe above. */
+		qoa_lms_t replay = start[c];
+		for (unsigned int slice_index = 0; slice_index < slices; slice_index++) {
+			unsigned int sample_index2 = slice_index * QOA_SLICE_LEN;
+			unsigned int sample_count2 = qoa_clamp(QOA_SLICE_LEN, 0, frame_len - sample_index2);
+			unsigned int slice_start2 = sample_index2 * channels + c;
+			qoa_lms_t evolved;
+			qoa_uint64_t word, slice_sse;
+			int sf = chosen->scales[slice_index];
+			if (!qoa_beam_simulate_slice(sample_data, channels, slice_start2,
+				sample_count2, sf, &replay, &evolved, &word, &slice_sse))
+			{
+				goto beam_fail;
+			}
+			replay = evolved;
+			slice_words[slice_index * channels + c] = word;
+		}
+		qoa->lms[c] = replay;
+	}
+	success = 1;
+
+beam_fail:
+	if (!success) {
+		QOA_FREE(mem);
+		memcpy(qoa->lms, snapshot, sizeof(qoa_lms_t) * channels);
+		return 0;
+	}
+
+	/* All channels have safe complete paths: only now touch the output. */
+	unsigned int p = 0;
+	qoa_write_u64((
+		(qoa_uint64_t)qoa->channels   << 56 |
+		(qoa_uint64_t)qoa->samplerate << 32 |
+		(qoa_uint64_t)frame_len       << 16 |
+		(qoa_uint64_t)frame_size
+	), bytes, &p);
+
+	for (unsigned int c = 0; c < channels; c++) {
+		qoa_uint64_t weights = 0;
+		qoa_uint64_t history = 0;
+		for (int i = 0; i < QOA_LMS_LEN; i++) {
+			history = (history << 16) | (start[c].history[i] & 0xffff);
+			weights = (weights << 16) | (start[c].weights[i] & 0xffff);
+		}
+		qoa_write_u64(history, bytes, &p);
+		qoa_write_u64(weights, bytes, &p);
+	}
+
+	for (unsigned int i = 0; i < words_count; i++) {
+		qoa_write_u64(slice_words[i], bytes, &p);
+	}
+
+	QOA_FREE(mem);
+	return p;
+}
+
+void *qoa_encode_beam(const short *sample_data, qoa_desc *qoa, unsigned int *out_len,
+	unsigned int beam_width)
+{
+	if (!sample_data || !qoa || !out_len) { return NULL; }
+	if (beam_width < 1 || beam_width > 16) { return NULL; }
+	if (
+		qoa->samples == 0 ||
+		qoa->samplerate == 0 || qoa->samplerate > 0xffffff ||
+		qoa->channels == 0 || qoa->channels > QOA_MAX_CHANNELS
+	) {
+		return NULL;
+	}
+
+	/* Wide arithmetic so an unrepresentable total size is rejected instead
+	of wrapping in 32 bit frame/slice counts. */
+	unsigned long long num_frames =
+		((unsigned long long)qoa->samples + QOA_FRAME_LEN - 1) / QOA_FRAME_LEN;
+	unsigned long long num_slices =
+		((unsigned long long)qoa->samples + QOA_SLICE_LEN - 1) / QOA_SLICE_LEN;
+
+	unsigned long long encoded_size = 8ULL +
+		num_frames * 8ULL +
+		num_frames * QOA_LMS_LEN * 4ULL * qoa->channels +
+		num_slices * 8ULL * qoa->channels;
+	if (encoded_size > UINT32_MAX) { return NULL; }
+
+	qoa_desc snapshot = *qoa;
+
+	unsigned char *bytes = QOA_MALLOC((size_t)encoded_size);
+	if (!bytes) { return NULL; }
+
+	for (unsigned int c = 0; c < qoa->channels; c++) {
+		qoa->lms[c].weights[0] = 0;
+		qoa->lms[c].weights[1] = 0;
+		qoa->lms[c].weights[2] = -(1<<13);
+		qoa->lms[c].weights[3] =  (1<<14);
+		for (int i = 0; i < QOA_LMS_LEN; i++) {
+			qoa->lms[c].history[i] = 0;
+		}
+	}
+
+	unsigned int p = qoa_encode_header(qoa, bytes);
+
+	int frame_len = QOA_FRAME_LEN;
+	for (unsigned int sample_index = 0; sample_index < qoa->samples; sample_index += frame_len) {
+		frame_len = qoa_clamp(QOA_FRAME_LEN, 0, qoa->samples - sample_index);
+		const short *frame_samples = sample_data + sample_index * qoa->channels;
+		unsigned int frame_size = qoa_encode_frame_beam(frame_samples, qoa,
+			(unsigned int)frame_len, bytes + p, (unsigned int)encoded_size - p, beam_width);
+		if (!frame_size) {
+			QOA_FREE(bytes);
+			*qoa = snapshot;
+			return NULL;
+		}
+		p += frame_size;
+	}
+
+	*out_len = p;
+	return bytes;
+}
 
 
 /* -----------------------------------------------------------------------------
@@ -643,7 +1137,8 @@ unsigned int qoa_decode_frame(const unsigned char *bytes, unsigned int size, qoa
 				int predicted = qoa_lms_predict(&qoa->lms[c]);
 				int quantized = (slice >> 61) & 0x7;
 				int dequantized = qoa_dequant_tab[scalefactor][quantized];
-				int reconstructed = qoa_clamp_s16(predicted + dequantized);
+				int reconstructed = qoa_clamp_s16(qoa_wrap_i32(
+					(long long)predicted + dequantized));
 				
 				sample_data[si] = reconstructed;
 				slice <<= 3;
