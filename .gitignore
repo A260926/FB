@@ -1,0 +1,2 @@
+# Local Go build/module caches used by the offline check scripts.
+.cache/
