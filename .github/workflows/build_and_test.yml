@@ -1,0 +1,457 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build, Test & Publush
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on all push or pull request events
+  push:
+  pull_request:
+
+  release:
+    types: [published]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+  schedule:
+    - cron: "15 1 * * 0"
+
+# added using https://github.com/step-security/secure-repo
+permissions:
+  contents: read
+
+# Cancels previous runs of this workflow for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref_name, 'codex/') || github.ref_name == 'wip' }}
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build_test:
+    name: 'Build&Test: C'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos, ubuntu, windows]
+
+    runs-on: ${{ matrix.os }}-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v6
+
+    - name: Install Dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bmake cmake
+
+    - name: Install Dependencies (macOS)
+      if: matrix.os == 'macos'
+      run: |
+        brew update
+        brew install bmake cmake
+
+    - name: Build with GNU Make
+      if: matrix.os != 'windows'
+      run: make clean all
+
+    - name: Test with GNU Make
+      if: matrix.os != 'windows'
+      run: make test
+
+    - name: Build with BSD Make
+      if: matrix.os != 'windows'
+      run: bmake clean all
+
+    - name: Test with BSD Make
+      if: matrix.os != 'windows'
+      run: bmake test
+
+    - name: Build with CMake
+      env:
+        CMAKE_ARGS: ${{ matrix.os == 'windows' && '-DENABLE_STATIC_LIB=OFF -DG722_REQUIRE_TEST_SHELL=ON' || '-DCMAKE_BUILD_TYPE=Release' }}
+      run: |
+        cmake -S . -B build ${CMAKE_ARGS}
+        cmake --build build --config Release --clean-first
+      shell: bash
+
+    - name: Test with CMake
+      run: ctest --test-dir build --build-config Release --output-on-failure
+      shell: bash
+
+    - name: Upload Windows DLL
+      if: matrix.os == 'windows'
+      uses: actions/upload-artifact@v7
+      with:
+        name: g722.dll
+        path: build/**/g722.dll
+        if-no-files-found: error
+        retention-days: 7
+
+    - name: Build iOS Framework (macos)
+      if: matrix.os == 'macos'
+      run: ONLY_BUILD=yes sh -x scripts/build/build_ios.sh
+
+    - name: Setup GitHub Actions artifact client
+      if: matrix.os == 'macos'
+      uses: lhotari/gh-actions-artifact-client@v2
+
+    - name: Upload Artifacts
+      if: matrix.os == 'macos'
+      run: |
+        set -euo pipefail
+        name="g722.xcframework"
+        file="${name}.zip"
+        echo "Uploading ${name}, file: ${file}"
+        zip - "${file}" | gh-actions-artifact-client.js upload "${name}" --retentionDays=7
+
+  build_test_python:
+    name: 'Build&Test: Python'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15-dev']
+        compiler: ['gcc', 'clang']
+        os: [macos, ubuntu]
+        include:
+        - python-version: '3.10'
+          compiler: microsoft
+          os: windows
+        - python-version: '3.11'
+          compiler: microsoft
+          os: windows
+        - python-version: '3.12'
+          compiler: microsoft
+          os: windows
+        - python-version: '3.13'
+          compiler: microsoft
+          os: windows
+        - python-version: '3.14'
+          compiler: microsoft
+          os: windows
+
+    runs-on: ${{ matrix.os }}-latest
+    env:
+      COMPILER: ${{ matrix.compiler }}
+      PIP_NO_CACHE_DIR: 1
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v6
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade setuptools wheel
+      shell: bash
+
+    - name: build core
+      run: |
+        rm -rf dist build
+        CC=${COMPILER} python setup.py sdist build
+      shell: bash
+
+    - name: install core
+      run: pip install --force-reinstall dist/[Gg]722-*.gz
+      shell: bash
+
+    - name: test core
+      if: matrix.os != 'windows'
+      run: ./scripts/do-test.sh "python test.py"
+      shell: bash
+
+    - name: unit tests (core smoke)
+      run: python -m unittest discover tests 'test_decode.py'
+      shell: bash
+
+    - name: build numpy addon
+      run: |
+        rm -rf build
+        LIBG722_PACKAGE_VARIANT=numpy-addon CC=${COMPILER} python setup.py sdist build
+      shell: bash
+
+    - name: install numpy addon
+      run: LIBG722_PACKAGE_VARIANT=numpy-addon pip install --force-reinstall --find-links dist dist/*numpy*.gz
+      shell: bash
+
+    - name: test with numpy addon
+      if: matrix.os != 'windows'
+      run: ./scripts/do-test.sh "python test.py"
+      shell: bash
+
+    - name: unit tests
+      run: python -m unittest discover tests '*.py'
+      shell: bash
+
+  build_lin_wheels:
+    name: Build Python Wheels (linux)
+    permissions:
+      packages: write
+    needs:
+    - build_test_python
+    - cache_qemu_image
+    - cache_buildkit_image
+    uses: sippy/cimagic/.github/workflows/BuildPythonWheels.yml@v3
+    with:
+      maximize_space: true
+      qemu_image_cache_key: ${{ needs.cache_qemu_image.outputs.image-cache-key }}
+      qemu_image_cache_path: ${{ needs.cache_qemu_image.outputs.image-cache-path }}
+      qemu_image_cache_tar: ${{ needs.cache_qemu_image.outputs.image-cache-tar }}
+      buildkit_image_cache_key: ${{ needs.cache_buildkit_image.outputs.image-cache-key }}
+      buildkit_image_cache_path: ${{ needs.cache_buildkit_image.outputs.image-cache-path }}
+      buildkit_image_cache_tar: ${{ needs.cache_buildkit_image.outputs.image-cache-tar }}
+
+  build_win_mac_wheels:
+    name: Build Python Wheels (${{ matrix.artifact-suffix }})
+    needs: build_test_python
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: macos
+          artifact-suffix: macos
+        - os: windows
+          artifact-suffix: windows
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.x"
+
+    - name: Install cibuildwheel
+      run: python -m pip install --upgrade cibuildwheel
+
+    - name: Build core wheels
+      run: python -m cibuildwheel . --output-dir dist
+      env:
+        LIBG722_BUILD_MODE: production
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        CIBW_SKIP: "*-musllinux_*"
+        CIBW_TEST_COMMAND: "python -c \"from G722 import G722; codec = G722(8000, 64000); assert len(codec.decode(codec.encode(bytes(320)))) > 0\""
+
+    - name: Build numpy addon wheels
+      run: python -m cibuildwheel . --output-dir dist
+      env:
+        LIBG722_BUILD_MODE: production
+        LIBG722_PACKAGE_VARIANT: numpy-addon
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+        CIBW_SKIP: "*-musllinux_*"
+
+    - name: Upload wheel artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: dist-${{ matrix.artifact-suffix }}
+        path: dist/*.whl
+        if-no-files-found: error
+
+  publish_all_wheels:
+    name: Publish Python Wheels
+    needs: [build_lin_wheels, build_win_mac_wheels, build_in_docker]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/G722
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Download all wheel artifacts
+      uses: actions/download-artifact@v8
+      with:
+        path: dist
+        pattern: 'dist-*'
+        merge-multiple: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel
+
+    - name: Build SDist
+      run: |
+        python setup.py sdist
+        LIBG722_PACKAGE_VARIANT=numpy-addon python setup.py sdist
+
+    - name: Show context tree
+      run: ls -lR dist
+
+    - name: Check release version number
+      if: github.event_name == 'release' && github.event.action == 'published'
+      run: |
+        GIT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+        GIT_BRANCH="${GIT_BRANCH#refs/tags/}"
+        python setup.py checkversion --tag="${GIT_BRANCH}"
+        LIBG722_PACKAGE_VARIANT=numpy-addon python setup.py checkversion --tag="${GIT_BRANCH}"
+
+    - name: Publish package distributions to PyPI
+      if: github.event_name == 'release' && github.event.action == 'published'
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+  cache_qemu_image:
+    name: Cache QEMU Image
+    uses: sippy/cimagic/.github/workflows/GetCachedContainer.yml@v3
+    with:
+      image: tonistiigi/binfmt:latest
+      platforms: host
+      cache-key-prefix: qemu-binfmt-image
+      cache-name: qemu-binfmt-image
+
+  cache_buildkit_image:
+    name: Cache BuildKit Image
+    uses: sippy/cimagic/.github/workflows/GetCachedContainer.yml@v3
+    with:
+      image: moby/buildkit:buildx-stable-1
+      platforms: host
+      cache-key-prefix: buildkit-image
+      cache-name: buildkit-image
+
+  build_in_docker:
+    name: Build in Docker
+    needs:
+    - build_test
+    - cache_qemu_image
+    - cache_buildkit_image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        base_image: ['debian:sid-slim', 'debian:12-slim', 'debian:13-slim', 'ubuntu:24.04', 'ubuntu:latest']
+    env:
+      DOCKER_REPO: sippylabs/libg722
+      BASE_IMAGE: ${{ matrix.base_image }}
+      DOCKER_RW: ${{ ( github.repository == 'sippy/libg722' && github.event_name != 'pull_request' ) && 'true' || 'false' }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Restore QEMU binfmt image cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ needs.cache_qemu_image.outputs.image-cache-path }}
+        key: ${{ needs.cache_qemu_image.outputs.image-cache-key }}
+        fail-on-cache-miss: true
+
+    - name: Load QEMU binfmt image
+      run: docker load --input "${{ needs.cache_qemu_image.outputs.image-cache-tar }}"
+
+    - name: Set up QEMU
+      run: |
+        set -euo pipefail
+        docker image inspect tonistiigi/binfmt:latest >/dev/null
+        docker run --rm --privileged tonistiigi/binfmt:latest --version
+        docker run --rm --privileged tonistiigi/binfmt:latest --install all
+
+    - name: Log in to Docker Hub
+      if: env.DOCKER_RW == 'true'
+      uses: docker/login-action@v4
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Restore BuildKit image cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ needs.cache_buildkit_image.outputs.image-cache-path }}
+        key: ${{ needs.cache_buildkit_image.outputs.image-cache-key }}
+        fail-on-cache-miss: true
+
+    - name: Load BuildKit image
+      run: docker load --input "${{ needs.cache_buildkit_image.outputs.image-cache-tar }}"
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+      with:
+        driver-opts: |
+          image=moby/buildkit:buildx-stable-1
+
+    - name: Set environments
+      run: |
+        # mips64 seems to be broken at the moment...
+        if [ "${{ env.BASE_IMAGE }}" = "debian:sid-slim" ]
+        then
+          FILT="grep -v mips64le"
+        else
+          FILT="cat"
+        fi
+        PLATFORMS="`docker manifest inspect ${{ env.BASE_IMAGE }} | \
+         jq -r '.manifests[] | "\(.platform.os)/\(.platform.architecture)\(if .platform.variant != null then "/\(.platform.variant)" else "" end)"' | \
+         sort -u | grep -v unknown | ${FILT} | paste -sd ','`"
+        echo "PLATFORMS=${PLATFORMS}" >> $GITHUB_ENV
+        GIT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+        GIT_BRANCH="${GIT_BRANCH#refs/tags/}"
+        echo "GIT_BRANCH=${GIT_BRANCH}" >> $GITHUB_ENV
+        OS_TAG="`echo ${BASE_IMAGE} | sed 's|:|_|g'`"
+        echo "OS_TAG=${OS_TAG}" >> $GITHUB_ENV
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ env.DOCKER_REPO }}
+        tags: |
+          type=schedule,suffix=-${{ env.OS_TAG}}
+          type=ref,event=branch,suffix=-${{ env.OS_TAG }}
+          type=ref,event=tag,suffix=-${{ env.OS_TAG }}
+          type=ref,event=pr,suffix=-${{ env.OS_TAG }}
+          type=raw,value=latest-${{ env.OS_TAG }},enable={{is_default_branch}}
+          type=sha,suffix=-${{ env.OS_TAG }}
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v7
+      env:
+        CACHE_SPEC: "type=registry,ref=${{ env.DOCKER_REPO }}:${{ env.GIT_BRANCH }}-${{ env.OS_TAG}}-buildcache"
+        DOCKER_BUILD_SUMMARY: false
+        DOCKER_BUILD_RECORD_UPLOAD: false
+      with:
+        context: .
+        file: ./docker/Dockerfile.build
+        build-args: |
+          BASE_IMAGE=${{ env.BASE_IMAGE }}
+        platforms: ${{ env.PLATFORMS }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        push: ${{ env.DOCKER_RW }}
+        cache-from: ${{ env.CACHE_SPEC }}
+        cache-to: ${{ env.CACHE_SPEC }},mode=max
+
+  build_packages:
+    name: Build Packages
+    needs: [build_test]
+    uses: sippy/cimagic/.github/workflows/BuildDPKGs.yml@v3
+    with:
+      apt_depends: pkg-config cmake ninja-build
+
+  roll_release:
+    name: Release
+    needs: [publish_all_wheels, build_packages]
+    permissions:
+      contents: write
+    uses: sippy/cimagic/.github/workflows/RollReleaseDraft.yml@v3
+    with:
+      release_files_artifacts: |
+        g722.xcframework
+        g722.dll
+        ${{ needs.build_packages.outputs.dpkgs_artifacts }}
