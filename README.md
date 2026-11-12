@@ -58,6 +58,81 @@ Additional Algorithms:
 ## Visualization
 [LNLibViewer](https://github.com/BIMCoderLiang/LNLibViewer) based on [VTK](https://vtk.org/)
 
+## Surface Geodesic Tracing
+`LNLib::SurfaceGeodesic::Trace` performs arc-length initial-value geodesic
+tracing on a clamped tensor-product NURBS surface. Given a start parameter and
+an initial UV velocity, it normalizes the velocity to unit spatial speed with
+the first fundamental form and integrates the geodesic equation in spatial arc
+length; it is not a two-point shortest path and not a straight line drawn in
+the UV plane. Multiplying the initial direction by any positive factor gives
+the same trace.
+
+Supported surfaces have degrees 2 to 7 in both directions, a rectangular
+control net whose counts match the knot vectors, finite knots and homogeneous
+coordinates, strictly positive finite weights, a positive-width valid
+parameter rectangle, and interior knot multiplicities no greater than
+`degree - 1` (at least C1 continuity). The surface is never modified.
+
+```cpp
+#include "SurfaceGeodesic.h"
+#include "NurbsSurface.h"
+#include "LNObject.h"
+#include "UV.h"
+#include "XYZ.h"
+
+#include <vector>
+
+using namespace LNLib;
+
+void TraceExample(const LN_NurbsSurface& surface)
+{
+    UV start(0.3, 0.4);
+    UV direction(1.0, -0.6);          // any positive scaling gives the same line
+    std::vector<double> distances = { 0.0, 0.1, 0.25, 0.5 }; // arc-length stations
+
+    GeodesicOptions options;
+    options.tolerance = 1e-8;         // finite, positive
+    options.maxStep = 0.1;            // max accepted step in spatial arc length
+    options.maxTrials = 100000;       // accepted + rejected integration trials
+
+    GeodesicTrace trace =
+        SurfaceGeodesic::Trace(surface, start, direction, distances, options);
+
+    // trace.status, trace.acceptedSteps, trace.rejectedSteps
+    for (const GeodesicSample& sample : trace.samples)
+    {
+        double arcLength = sample.distance;       // cumulative spatial arc length
+        UV uv = sample.parameter;                 // surface parameter
+        XYZ point = sample.position;              // S(uv)
+        XYZ unitTangent = sample.tangent;         // unit spatial tangent
+    }
+}
+```
+
+`distances` must be non-empty, start with `0.0`, and then list finite, strictly
+increasing cumulative arc lengths; `{ 0.0 }` alone is valid. Every interior
+knot crossing is added as a sample, coincident stations and events are stored
+once, and sample distances are strictly increasing.
+
+Status values returned in `GeodesicTrace::status`:
+
+- `GeodesicStatus::completed` — every requested station was reached while the
+  trace stayed inside the parameter rectangle.
+- `GeodesicStatus::boundary` — the trace first touched the outer boundary; the
+  final sample sits exactly on the first edge reached (a corner lies on two
+  edges). Contact stops the trace without sliding along the edge or clamping
+  out-of-range candidates back into the rectangle. A last station that lands
+  exactly on the boundary still reports `boundary`.
+- `GeodesicStatus::step_limit` — the accepted/rejected trial budget was
+  exhausted. Only accepted states are published; rejected candidates never
+  appear, and `acceptedSteps + rejectedSteps` never exceeds `maxTrials`.
+
+Bad structure, degrees, knots, control net, weights, start parameter,
+direction, station list, or options throw `std::invalid_argument` before any
+surface evaluator is called. Zero progress or a degenerate metric
+(`E <= 0`, `G <= 0`, or `(E*G - F*F)/(E*G) <= 1e-12`) throws
+`std::runtime_error`.
+
 ## Contributing
 Welcome join this project including discussions in **Issues** and make **Pull requests**.
 
