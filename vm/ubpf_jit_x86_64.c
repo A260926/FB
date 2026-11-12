@@ -130,6 +130,19 @@ translate(struct ubpf_vm *vm, struct jit_state *state, char **errmsg)
 {
     int i;
 
+    /* Local (src == 1) calls are interpreter-only.  Refuse to generate code
+     * for any program containing one, and report the first offending PC. */
+    for (i = 0; i < vm->num_insts; i++) {
+        if (vm->insts[i].opcode == EBPF_OP_LDDW) {
+            i++;
+            continue;
+        }
+        if (vm->insts[i].opcode == EBPF_OP_CALL && vm->insts[i].src == 1) {
+            *errmsg = ubpf_error("local call is not supported by the JIT at PC %d", i);
+            return -1;
+        }
+    }
+
     /* Save platform non-volatile registers */
     for (i = 0; i < _countof(platform_nonvolatile_registers); i++)
     {

@@ -23,6 +23,12 @@
 struct ebpf_inst;
 typedef uint64_t (*ext_func)(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4);
 
+/* Maximum number of simultaneously active interpreter frames (the entry
+ * frame counts as one). */
+#ifndef UBPF_MAX_FRAMES
+#define UBPF_MAX_FRAMES 8
+#endif
+
 struct ubpf_vm {
     struct ebpf_inst *insts;
     uint16_t num_insts;
@@ -37,6 +43,16 @@ struct ubpf_vm {
 
 char *ubpf_error(const char *fmt, ...);
 unsigned int ubpf_lookup_registered_function(struct ubpf_vm *vm, const char *name);
+
+/*
+ * Local (intra-bytecode) function-call support.
+ *
+ * A CALL with src == 1 is a local call whose target is
+ * (call_pc + 1 + imm) in 8-byte instruction slots.  Such programs need the
+ * function-boundary and call-graph checks implemented here.
+ */
+bool ubpf_has_local_calls(const struct ebpf_inst *insts, uint32_t num_insts);
+bool ubpf_validate_local_calls(const struct ebpf_inst *insts, uint32_t num_insts, char **errmsg);
 
 extern const char* ubpf_string_table[1];
 #define UBPF_STRING_ID_DIVIDE_BY_ZERO 0

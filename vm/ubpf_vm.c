@@ -31,7 +31,7 @@ const char* ubpf_string_table[1] = {
 };
 
 static bool validate(const struct ubpf_vm *vm, const struct ebpf_inst *insts, uint32_t num_insts, char **errmsg);
-static bool bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint16_t cur_pc, void *mem, size_t mem_len, void *stack);
+static bool bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint32_t cur_pc, void *mem, size_t mem_len, void *stack, size_t stack_size);
 
 bool ubpf_toggle_bounds_check(struct ubpf_vm *vm, bool enable)
 {
@@ -139,6 +139,14 @@ ubpf_load(struct ubpf_vm *vm, const void *code, uint32_t code_len, char **errmsg
         return -1;
     }
 
+    /* Programs that use local (src == 1) calls need function boundaries and a
+     * call-graph check on top of the historical instruction validation.  Old
+     * helper-only programs skip this entirely. */
+    if (ubpf_has_local_calls(code, code_len/8) &&
+        !ubpf_validate_local_calls(code, code_len/8, errmsg)) {
+        return -1;
+    }
+
     vm->insts = malloc(code_len);
     if (vm->insts == NULL) {
         *errmsg = ubpf_error("out of memory");
@@ -172,13 +180,26 @@ u32(uint64_t x)
     return x;
 }
 
-int 
+/*
+ * One interpreter activation record.  Frame 0 is the entry frame created by
+ * ubpf_exec; every local CALL pushes another record.  The per-frame stack is
+ * an independent UBPF_STACK_SIZE region inside stack_pool.
+ */
+struct ubpf_frame {
+    uint32_t return_pc;
+    uint64_t saved_regs[4]; /* r6..r9 as seen by the caller */
+};
+
+int
 ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len, uint64_t* bpf_return_value)
 {
-    uint16_t pc = 0;
+    uint32_t pc = 0;
     const struct ebpf_inst *insts = vm->insts;
     uint64_t reg[16];
-    uint64_t stack[(UBPF_STACK_SIZE+7)/8];
+    /* Each frame gets its own stack.  Rows are padded to 8-byte alignment. */
+    uint64_t stack_pool[UBPF_MAX_FRAMES][(UBPF_STACK_SIZE+7)/8];
+    struct ubpf_frame frames[UBPF_MAX_FRAMES];
+    uint32_t frame_depth = 0;
 
     if (!insts) {
         /* Code must be loaded before we can execute */
@@ -187,10 +208,10 @@ ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len, uint64_t* bpf_ret
 
     reg[1] = (uintptr_t)mem;
     reg[2] = (uint64_t)mem_len;
-    reg[10] = (uintptr_t)stack + sizeof(stack);
+    reg[10] = (uintptr_t)&stack_pool[0][0] + UBPF_STACK_SIZE;
 
     while (1) {
-        const uint16_t cur_pc = pc;
+        const uint32_t cur_pc = pc;
         struct ebpf_inst inst = insts[pc++];
 
         switch (inst.opcode) {
@@ -413,13 +434,13 @@ ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len, uint64_t* bpf_ret
          */
 #define BOUNDS_CHECK_LOAD(size) \
     do { \
-        if (!bounds_check(vm, (char *)reg[inst.src] + inst.offset, size, "load", cur_pc, mem, mem_len, stack)) { \
+        if (!bounds_check(vm, (char *)reg[inst.src] + inst.offset, size, "load", cur_pc, mem, mem_len, stack_pool, frame_depth + 1)) { \
             return -1; \
         } \
     } while (0)
 #define BOUNDS_CHECK_STORE(size) \
     do { \
-        if (!bounds_check(vm, (char *)reg[inst.dst] + inst.offset, size, "store", cur_pc, mem, mem_len, stack)) { \
+        if (!bounds_check(vm, (char *)reg[inst.dst] + inst.offset, size, "store", cur_pc, mem, mem_len, stack_pool, frame_depth + 1)) { \
             return -1; \
         } \
     } while (0)
@@ -593,14 +614,51 @@ ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len, uint64_t* bpf_ret
             }
             break;
         case EBPF_OP_EXIT:
-            *bpf_return_value = reg[0];
-            return 0;
-        case EBPF_OP_CALL:
-            reg[0] = vm->ext_funcs[inst.imm](reg[1], reg[2], reg[3], reg[4], reg[5]);
-            // Unwind the stack if unwind extension returns success.
-            if (inst.imm == vm->unwind_stack_extension_index && reg[0] == 0) {
+            if (frame_depth == 0) {
+                /* Root frame: return to the host. */
                 *bpf_return_value = reg[0];
                 return 0;
+            } else {
+                /* Return to the caller, keeping r0 and restoring r6-r9.  The
+                 * caller's stack is not touched. */
+                const struct ubpf_frame *frame = &frames[frame_depth];
+                uint32_t i;
+                for (i = 0; i < 4; i++) {
+                    reg[6 + i] = frame->saved_regs[i];
+                }
+                pc = frame->return_pc;
+                reg[10] = (uintptr_t)&stack_pool[frame_depth - 1][0] + UBPF_STACK_SIZE;
+                frame_depth--;
+            }
+            break;
+        case EBPF_OP_CALL:
+            if (inst.src == 1) {
+                /* Local call: the target was checked at load time and the
+                 * call graph is acyclic, so the frame limit is also guaranteed
+                 * by the call-graph depth check.  Keep the guard anyway. */
+                if (frame_depth + 1 >= UBPF_MAX_FRAMES) {
+                    vm->error_printf(stderr, "uBPF error: too many call frames at PC %u\n", cur_pc);
+                    return -1;
+                }
+
+                struct ubpf_frame *frame = &frames[frame_depth + 1];
+                uint32_t i;
+                for (i = 0; i < 4; i++) {
+                    frame->saved_regs[i] = reg[6 + i];
+                }
+                frame->return_pc = pc; /* continuation already advanced */
+
+                uint32_t target = (uint32_t)((int64_t)cur_pc + 1 + (int64_t)inst.imm);
+                frame_depth++;
+                reg[10] = (uintptr_t)&stack_pool[frame_depth][0] + UBPF_STACK_SIZE;
+                pc = target;
+            } else {
+                reg[0] = vm->ext_funcs[inst.imm](reg[1], reg[2], reg[3], reg[4], reg[5]);
+                // Unwind the stack if unwind extension returns success.
+                if (inst.imm == vm->unwind_stack_extension_index && reg[0] == 0) {
+                    *bpf_return_value = reg[0];
+                    return 0;
+                }
             }
             break;
         }
@@ -742,12 +800,30 @@ validate(const struct ubpf_vm *vm, const struct ebpf_inst *insts, uint32_t num_i
             break;
 
         case EBPF_OP_CALL:
-            if (inst.imm < 0 || inst.imm >= MAX_EXT_FUNCS) {
-                *errmsg = ubpf_error("invalid call immediate at PC %d", i);
-                return false;
-            }
-            if (!vm->ext_funcs[inst.imm]) {
-                *errmsg = ubpf_error("call to nonexistent function %u at PC %d", inst.imm, i);
+            if (inst.src == 0) {
+                /* Helper call: immediate is a registered helper index. */
+                if (inst.imm < 0 || inst.imm >= MAX_EXT_FUNCS) {
+                    *errmsg = ubpf_error("invalid call immediate at PC %d", i);
+                    return false;
+                }
+                if (!vm->ext_funcs[inst.imm]) {
+                    *errmsg = ubpf_error("call to nonexistent function %u at PC %d", inst.imm, i);
+                    return false;
+                }
+            } else if (inst.src == 1) {
+                /* Local call: target is i + 1 + imm.  Detailed target,
+                 * segment and call-graph checks run in
+                 * ubpf_validate_local_calls() once the whole program is known. */
+                if (inst.dst != 0) {
+                    *errmsg = ubpf_error("local call with nonzero dst at PC %d", i);
+                    return false;
+                }
+                if (inst.offset != 0) {
+                    *errmsg = ubpf_error("local call with nonzero offset at PC %d", i);
+                    return false;
+                }
+            } else {
+                *errmsg = ubpf_error("invalid call src %u at PC %d", inst.src, i);
                 return false;
             }
             break;
@@ -785,20 +861,45 @@ validate(const struct ubpf_vm *vm, const struct ebpf_inst *insts, uint32_t num_i
 }
 
 static bool
-bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint16_t cur_pc, void *mem, size_t mem_len, void *stack)
+bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint32_t cur_pc, void *mem, size_t mem_len, void *stack_pool, size_t num_active_frames)
 {
     if (!vm->bounds_check_enabled)
         return true;
-    if (mem && (addr >= mem && ((char*)addr + size) <= ((char*)mem + mem_len))) {
+
+    /* Do the interval arithmetic in uintptr_t so that a wrap at either end
+     * cannot make the address pass a containment test. */
+    uintptr_t base = (uintptr_t)addr;
+    uintptr_t end = base + (uintptr_t)size;
+
+    if (size < 0 || end < base) {
+        goto out_of_bounds;
+    }
+
+    if (mem && base >= (uintptr_t)mem &&
+        end <= (uintptr_t)mem + (uintptr_t)mem_len &&
+        (uintptr_t)mem + (uintptr_t)mem_len >= (uintptr_t)mem) {
         /* Context access */
         return true;
-    } else if (addr >= stack && ((char*)addr + size) <= ((char*)stack + UBPF_STACK_SIZE)) {
-        /* Stack access */
-        return true;
-    } else {
-        vm->error_printf(stderr, "uBPF error: out of bounds memory %s at PC %u, addr %p, size %d\nmem %p/%zd stack %p/%d\n", type, cur_pc, addr, size, mem, mem_len, stack, UBPF_STACK_SIZE);
-        return false;
     }
+
+    /* Each active frame owns a separate UBPF_STACK_SIZE region.  The bytes
+     * must fall entirely inside one such region; the stack pool is not one
+     * contiguous valid block, and frames that already returned are not
+     * active any more. */
+    uintptr_t pool = (uintptr_t)stack_pool;
+    size_t frame_size = (UBPF_STACK_SIZE + 7) / 8 * 8;
+    size_t f;
+    for (f = 0; f < num_active_frames; f++) {
+        uintptr_t lo = pool + f * frame_size;
+        uintptr_t hi = lo + UBPF_STACK_SIZE;
+        if (base >= lo && end <= hi) {
+            return true;
+        }
+    }
+
+out_of_bounds:
+    vm->error_printf(stderr, "uBPF error: out of bounds memory %s at PC %u, addr %p, size %d\nmem %p/%zd stack %p/%d\n", type, cur_pc, addr, size, mem, mem_len, stack_pool, UBPF_STACK_SIZE);
+    return false;
 }
 
 char *
