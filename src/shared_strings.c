@@ -74,6 +74,10 @@ lxw_sst_free(lxw_sst *sst)
     if (!sst)
         return;
 
+    /* Free the disk backed table and its temporary files, if in use. */
+    if (sst->disk)
+        lxw_disk_sst_free(sst->disk);
+
     /* Free the sst_elements and their data using the ordered linked list. */
     if (sst->order_list) {
         STAILQ_FOREACH_SAFE(sst_element, sst->order_list, sst_order_pointers,
@@ -204,6 +208,12 @@ _write_sst_strings(lxw_sst *self)
 {
     struct sst_element *sst_element;
 
+    if (self->disk_mode) {
+        /* Stream the si elements from the disk records in index order. */
+        lxw_disk_sst_write_si(self->disk, self->file);
+        return;
+    }
+
     STAILQ_FOREACH(sst_element, self->order_list, sst_order_pointers) {
         /* Write the si element. */
         if (sst_element->is_rich_string)
@@ -231,6 +241,100 @@ lxw_sst_assemble_xml_file(lxw_sst *self)
 
     /* Close the sst tag. */
     lxw_xml_end_tag(self->file, "sst");
+}
+
+/*****************************************************************************
+ *
+ * Disk mode support.
+ *
+ ****************************************************************************/
+
+/*
+ * Switch the table to its disk backed implementation.
+ */
+lxw_error
+lxw_sst_enable_disk_mode(lxw_sst *sst, const char *tmpdir, size_t cache_size)
+{
+    lxw_disk_sst *disk;
+
+    if (!sst)
+        return LXW_ERROR_NULL_PARAMETER_IGNORED;
+
+    /* Only an empty table can switch implementation. */
+    if (sst->disk_mode || sst->string_count || sst->unique_count)
+        return LXW_ERROR_PARAMETER_VALIDATION;
+
+    /* Reject an invalid non-zero budget up front with a clear error. */
+    if (cache_size && cache_size < LXW_SST_MIN_CACHE_SIZE)
+        return LXW_ERROR_PARAMETER_VALIDATION;
+
+    disk = lxw_disk_sst_new(tmpdir, cache_size);
+    if (!disk)
+        return LXW_ERROR_CREATING_TMPFILE;
+
+    sst->disk = disk;
+    sst->disk_mode = LXW_TRUE;
+
+    return LXW_NO_ERROR;
+}
+
+/*
+ * Add or find a string in either SST implementation and return its index.
+ */
+lxw_error
+lxw_sst_lookup_index(lxw_sst *sst, const char *string,
+                     uint8_t is_rich_string, uint32_t *index)
+{
+    struct sst_element *element;
+
+    if (sst->disk_mode) {
+        lxw_error err;
+        err = lxw_disk_sst_get_index(sst->disk, string, is_rich_string,
+                                     index, NULL);
+        if (err)
+            return err;
+
+        sst->string_count = sst->disk->string_count;
+        sst->unique_count = sst->disk->unique_count;
+        return LXW_NO_ERROR;
+    }
+
+    element = lxw_get_sst_index(sst, string, is_rich_string);
+    if (!element)
+        return LXW_ERROR_SHARED_STRING_INDEX_NOT_FOUND;
+
+    *index = element->index;
+    return LXW_NO_ERROR;
+}
+
+/*
+ * Return the total number of string references stored in the table.
+ */
+uint32_t
+lxw_sst_get_string_count(lxw_sst *sst)
+{
+    return sst->string_count;
+}
+
+/*
+ * Return the number of unique strings stored in the table.
+ */
+uint32_t
+lxw_sst_get_unique_count(lxw_sst *sst)
+{
+    return sst->unique_count;
+}
+
+/*
+ * Return the first backend error recorded, or LXW_NO_ERROR.
+ */
+lxw_error
+lxw_sst_get_error(lxw_sst *sst)
+{
+    if (sst->disk_mode && sst->disk)
+        return sst->disk->error;
+
+    return LXW_NO_ERROR;
 }
 
 /*****************************************************************************

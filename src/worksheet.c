@@ -7959,7 +7959,18 @@ worksheet_write_string(lxw_worksheet *self,
     if (lxw_utf8_strlen(string) > LXW_STR_MAX)
         return LXW_ERROR_MAX_STRING_LENGTH_EXCEEDED;
 
-    if (!self->optimize) {
+    if (self->sst->disk_mode) {
+        /* Disk backed shared strings, available in constant_memory mode. */
+        uint32_t disk_string_id = 0;
+        err = lxw_sst_lookup_index(self->sst, string, LXW_FALSE,
+                                   &disk_string_id);
+        if (err)
+            return err;
+
+        string_id = (int32_t) disk_string_id;
+        cell = _new_string_cell(row_num, col_num, string_id, NULL, format);
+    }
+    else if (!self->optimize) {
         /* Get the SST element and string id. */
         sst_element = lxw_get_sst_index(self->sst, string, LXW_FALSE);
 
@@ -8701,7 +8712,19 @@ worksheet_write_rich_string(lxw_worksheet *self,
         return LXW_ERROR_MAX_STRING_LENGTH_EXCEEDED;
     }
 
-    if (!self->optimize) {
+    if (self->sst->disk_mode) {
+        /* Disk backed shared strings, available in constant_memory mode. */
+        uint32_t disk_string_id = 0;
+        err = lxw_sst_lookup_index(self->sst, rich_string, LXW_TRUE,
+                                   &disk_string_id);
+        free((void *) rich_string);
+        if (err)
+            return err;
+
+        string_id = (int32_t) disk_string_id;
+        cell = _new_string_cell(row_num, col_num, string_id, NULL, format);
+    }
+    else if (!self->optimize) {
         /* Get the SST element and string id. */
         sst_element = lxw_get_sst_index(self->sst, rich_string, LXW_TRUE);
         free((void *) rich_string);

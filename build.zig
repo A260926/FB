@@ -52,6 +52,7 @@ pub fn build(b: *std.Build) void {
             "src/drawing.c",
             "src/chart.c",
             "src/shared_strings.c",
+            "src/disk_sst.c",
             "src/worksheet.c",
             "src/format.c",
             "src/table.c",
@@ -153,6 +154,11 @@ pub fn build(b: *std.Build) void {
             .options = options,
             .lib = lib,
             .path = "examples/data_validate.c",
+        });
+        buildExe(b, .{
+            .options = options,
+            .lib = lib,
+            .path = "examples/disk_shared_strings.c",
         });
         buildExe(b, .{
             .options = options,

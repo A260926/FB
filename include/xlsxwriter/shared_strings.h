@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #include "common.h"
+#include "disk_sst.h"
 
 /* Define a tree.h RB structure for storing shared strings. */
 RB_HEAD(sst_rb_tree, sst_element);
@@ -56,6 +57,10 @@ typedef struct lxw_sst {
     struct sst_order_list *order_list;
     struct sst_rb_tree *rb_tree;
 
+    /* Non-NULL when the table is backed by temporary files on disk. */
+    lxw_disk_sst *disk;
+    uint8_t disk_mode;
+
 } lxw_sst;
 
 /* *INDENT-OFF* */
@@ -69,6 +74,32 @@ void lxw_sst_free(lxw_sst *sst);
 struct sst_element *lxw_get_sst_index(lxw_sst *sst, const char *string,
                                       uint8_t is_rich_string);
 void lxw_sst_assemble_xml_file(lxw_sst *self);
+
+/*
+ * Switch the table to its disk backed implementation. Only valid before
+ * any strings have been registered. Returns LXW_ERROR_CREATING_TMPFILE if
+ * the temporary files cannot be created and
+ * LXW_ERROR_PARAMETER_VALIDATION for an invalid cache budget.
+ */
+lxw_error lxw_sst_enable_disk_mode(lxw_sst *sst, const char *tmpdir,
+                                   size_t cache_size);
+
+/*
+ * Add or find a string and return its stable index in either SST mode.
+ * Returns an error code instead of a NULL element so disk write failures
+ * are propagated to the worksheet write call.
+ */
+lxw_error lxw_sst_lookup_index(lxw_sst *sst, const char *string,
+                               uint8_t is_rich_string, uint32_t *index);
+
+/* Return the total number of string references stored in the table. */
+uint32_t lxw_sst_get_string_count(lxw_sst *sst);
+
+/* Return the number of unique strings stored in the table. */
+uint32_t lxw_sst_get_unique_count(lxw_sst *sst);
+
+/* Return the first backend error recorded, or LXW_NO_ERROR. */
+lxw_error lxw_sst_get_error(lxw_sst *sst);
 
 /* Declarations required for unit testing. */
 #ifdef TESTING

@@ -911,11 +911,25 @@ _write_shared_strings_file(lxw_packager *self)
     if (!sst->string_count)
         return LXW_NO_ERROR;
 
+    /* A disk SST failure recorded while writing cells is sticky. */
+    err = lxw_sst_get_error(sst);
+    if (err)
+        return err;
+
     sst->file = lxw_get_filehandle(&buffer, &buffer_size, self->tmpdir);
     if (!sst->file)
         return LXW_ERROR_CREATING_TMPFILE;
 
     lxw_sst_assemble_xml_file(sst);
+
+    /* Report any failure while streaming the disk backed string records. */
+    err = lxw_sst_get_error(sst);
+    if (err) {
+        fclose(sst->file);
+        sst->file = NULL;
+        free(buffer);
+        return err;
+    }
 
     err = _add_to_zip(self, sst->file, &buffer, &buffer_size,
                       "xl/sharedStrings.xml");

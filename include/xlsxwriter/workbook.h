@@ -252,6 +252,22 @@ typedef struct lxw_doc_properties {
  * - `output_buffer_size`: Used with output_buffer to get the size of the
  *   created buffer. This option can only be used if filename is NULL.
  *
+ * - `disk_shared_strings`: In `constant_memory` mode string cells are
+ *   normally written as inline strings, which makes repeated text bloat the
+ *   output. Setting this option keeps the standard shared string table but
+ *   stores the unique strings and their lookup index in temporary files, so
+ *   the resident memory used by the table is bounded by `sst_cache_size`
+ *   instead of growing with the number of unique strings. This option
+ *   requires `constant_memory` to be on; a zero value keeps the original
+ *   behavior.
+ *
+ * - `sst_cache_size`: The memory budget, in bytes, for the resident SST
+ *   index and key cache used by `disk_shared_strings`. A zero value selects
+ *   the default budget of 65536 bytes. A non-zero value smaller than 4096
+ *   bytes is rejected when the workbook is created. The budget covers the
+ *   new SST backend only; caller input, the string currently being written
+ *   and the one-off XML output buffer are not counted against it.
+ *
  * @note In `constant_memory` mode each row of in-memory data is written to
  * disk and then freed when a new row is started via one of the
  * `worksheet_write_*()` functions. Therefore, once this option is active data
@@ -281,6 +297,12 @@ typedef struct lxw_workbook_options {
 
     /** Used with output_buffer to get the size of the created buffer */
     size_t *output_buffer_size;
+
+    /** Use a disk backed shared string table in constant_memory mode. */
+    uint8_t disk_shared_strings;
+
+    /** Memory budget for the disk SST index/key cache, in bytes. */
+    size_t sst_cache_size;
 } lxw_workbook_options;
 
 /**
@@ -431,6 +453,14 @@ lxw_workbook *workbook_new(const char *filename);
  *
  * - `output_buffer_size`: Used with output_buffer to get the size of the
  *   created buffer. This option can only be used if filename is `NULL`.
+ *
+ * - `disk_shared_strings`: Keep the shared string table in
+ *   `constant_memory` mode but back it with temporary files so the memory
+ *   used by unique strings stays bounded. Requires `constant_memory`.
+ *
+ * - `sst_cache_size`: Memory budget in bytes for the disk SST resident
+ *   cache. Zero means the 65536 byte default; values from 1 to 4095 are
+ *   rejected.
  *
  * @note In `constant_memory` mode each row of in-memory data is written to
  * disk and then freed when a new row is started via one of the

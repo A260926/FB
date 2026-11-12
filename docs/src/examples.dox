@@ -288,7 +288,7 @@ A simple Unicode UTF-8 example. Note, the source file is UTF-8 encoded.
 <table  width="600">
 <tr>
   <td>@ref utf8.c "&lt;&lt; utf8.c"</td>
-  <td align="right">@ref output_buffer.c "output_buffer.c &gt;&gt;"</td>
+  <td align="right">@ref disk_shared_strings.c "disk_shared_strings.c &gt;&gt;"</td>
 </tr>
 </table>
 
@@ -300,11 +300,27 @@ mode.
 
 
 
-@example output_buffer.c
+@example disk_shared_strings.c
 
 <table  width="600">
 <tr>
   <td>@ref constant_memory.c "&lt;&lt; constant_memory.c"</td>
+  <td align="right">@ref output_buffer.c "output_buffer.c &gt;&gt;"</td>
+</tr>
+</table>
+
+Example of keeping the shared string table in constant_memory mode but
+backing it with temporary files so repeated text is deduplicated while the
+memory used by unique strings stays bounded.
+
+
+
+
+@example output_buffer.c
+
+<table  width="600">
+<tr>
+  <td>@ref disk_shared_strings.c "&lt;&lt; disk_shared_strings.c"</td>
   <td align="right">@ref image_buffer.c "image_buffer.c &gt;&gt;"</td>
 </tr>
 </table>

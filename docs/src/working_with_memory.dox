@@ -83,6 +83,49 @@ applications. Also, the size of the output file can increase by 20%-100%
 depending on the amount of repeated string data.
 
 
+@subsection ww_mem_disk_sst Disk backed shared strings
+
+If the repeated text makes inline strings too large but you still need the
+bounded memory of `constant_memory` mode, set the `disk_shared_strings`
+option. Cells are then written with the standard `t="s"` shared string
+indices (so repeated values are stored once), while the unique strings and
+the hash index that locates them are kept in temporary files instead of in
+process memory.
+
+@code
+    lxw_workbook_options options = {
+        .constant_memory      = LXW_TRUE,
+        .disk_shared_strings  = LXW_TRUE,
+        .sst_cache_size       = 64 * 1024,
+    };
+
+    lxw_workbook *workbook = workbook_new_opt("filename.xlsx", &options);
+@endcode
+
+`disk_shared_strings` requires `constant_memory`; without it the option is
+rejected when the workbook is created. A zero value (the default) keeps the
+original in-memory table when `constant_memory` is off and the original
+inline string behavior when it is on.
+
+The `sst_cache_size` option is the byte budget for the resident part of the
+disk table: the cached index entries and their string copies. Zero selects
+the 64 KiB default. A non-zero value below 4 KiB is rejected at workbook
+creation. The budget does not include the caller's input, the single string
+currently being registered, or the one-off XML output buffer, and it does
+not limit any other workbook objects. The temporary files are created in the
+configured `tmpdir`, use a fixed number of file handles regardless of how
+many unique strings are stored, and are removed when the workbook closes.
+
+Unique values receive a stable index starting at zero in the order they are
+first successfully registered. The numbering is shared across all
+worksheets and is reused after a value is evicted from the cache or after
+the on-disk index grows. Plain strings and rich strings are distinguished
+both by their exact bytes and by their kind, so identical display text with
+different rich text formatting is never merged.
+
+See @ref disk_shared_strings.c for a complete example.
+
+
 @section ww_mem_performance Performance
 
 Currently the library is optimized but not highly optimized. Also, the library

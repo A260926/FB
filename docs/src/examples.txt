@@ -136,6 +136,13 @@ mode.
 @image html constant_memory.png
 
 ##############################################################
+@example disk_shared_strings.c
+
+Example of keeping the shared string table in constant_memory mode but
+backing it with temporary files so repeated text is deduplicated while the
+memory used by unique strings stays bounded.
+
+##############################################################
 @example output_buffer.c
 
 Example of using libxlsxwriter to write a workbook file to a memory buffer.

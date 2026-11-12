@@ -1974,6 +1974,36 @@ workbook_new_opt(const char *filename, lxw_workbook_options *options)
         workbook->options.use_zip64 = options->use_zip64;
         workbook->options.output_buffer = options->output_buffer;
         workbook->options.output_buffer_size = options->output_buffer_size;
+        workbook->options.disk_shared_strings =
+            options->disk_shared_strings;
+        workbook->options.sst_cache_size = options->sst_cache_size;
+
+        /* The disk SST is only defined for the row streaming mode. */
+        if (workbook->options.disk_shared_strings &&
+            !workbook->options.constant_memory) {
+            LXW_ERROR("disk_shared_strings requires constant_memory mode");
+            goto mem_error;
+        }
+
+        /* Reject an unusable cache budget explicitly at creation time. */
+        if (workbook->options.sst_cache_size &&
+            workbook->options.sst_cache_size < LXW_SST_MIN_CACHE_SIZE) {
+            LXW_ERROR("sst_cache_size must be zero or at least 4096 bytes");
+            goto mem_error;
+        }
+
+        /* Switch the shared string table to its disk backed backend. */
+        if (workbook->options.disk_shared_strings) {
+            lxw_error sst_error =
+                lxw_sst_enable_disk_mode(workbook->sst,
+                                         workbook->options.tmpdir,
+                                         workbook->options.sst_cache_size);
+            if (sst_error) {
+                LXW_ERROR("could not initialize the disk shared string "
+                          "table");
+                goto mem_error;
+            }
+        }
     }
 
     workbook->max_url_length = 2079;
@@ -2283,6 +2313,12 @@ workbook_close(lxw_workbook *self)
 
     /* Set the table ids for the worksheet tables. */
     _prepare_tables(self);
+
+    /* A disk backed SST failure recorded while writing cells is sticky and
+     * must be reported even if no shared string made it into the table. */
+    error = lxw_sst_get_error(self->sst);
+    if (error)
+        goto mem_error;
 
     /* Create a packager object to assemble sub-elements into a zip file. */
     packager = lxw_packager_new(self->filename,
