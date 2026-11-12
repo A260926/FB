@@ -328,6 +328,122 @@ return GIF_ERROR (which can be ignored); EGifGCBToSavedExtension()
 will create a new leading extension block.</para>
 
 </sect1>
+<sect1><title>Whole-animation planning (gif_plan.c)</title>
+
+<para>Where the encoding routines emit one image at a time,
+GifMakeAnimationPlan() takes a whole animation at once: an array of
+complete indexed display canvases that share one global color map.
+Each input canvas is exactly what must be on screen while its frame is
+showing; it is never a difference image.  Index 0 of the global color
+map is reserved as the transparent index.  A zero input pixel means
+"transparent here"; every other index names a real color.  No
+quantization, palette merging, or lossy simplification is done.</para>
+
+<programlisting>
+GifAnimationPlan *GifMakeAnimationPlan(int Width, int Height,
+                                       const ColorMapObject *ColorMap,
+                                       const GifPlanFrame *Frames,
+                                       int FrameCount, int LoopCount,
+                                       int *ErrorCode);
+void GifFreeAnimationPlan(GifAnimationPlan *Plan);
+</programlisting>
+
+<para>For every frame the planner chooses between two rectangles: the
+full canvas, or the bounding box of the positions changed relative to
+the previous input together with the positions that are colored now but
+transparent in the next input.  Inside a rectangle it either copies the
+pixels verbatim or rewrites the pixels equal to the canvas on entry to
+the transparent index.  It then tries all three disposal modes.  The
+objective is the real rendered GIF89a byte count: each candidate image
+is priced by the same EGif LZW compressor used everywhere else in the
+library, including every sub-block and its terminator, never by pixel
+counts or an entropy estimate.  A dynamic program merges identical
+intermediate canvases, so repeated flicker cannot make the search
+exponential.  Exact byte ties are resolved by one fixed lexicographic
+rule over the per-frame tuple (left, top, width, height, disposal,
+transparentize-with-false-first), giving a unique result.  The canvas
+after the final disposal is always fully transparent, so looping back
+to the start stays pixel-exact.</para>
+
+<para><emphasis>Transparent background.</emphasis>  Inside an emitted
+image, index 0 only means "do not cover this pixel"; it never erases an
+old pixel.  A candidate that cannot composite to the required full
+canvas under that rule is simply discarded.  Transparentizing leaves
+the unchanged pixels at index 0, so the frame only has to carry the
+pixels that actually differ.</para>
+
+<para><emphasis>Disposal 3 holding period.</emphasis>
+DISPOSE_PREVIOUS (3) restores the canvas to what it was immediately
+before the frame was displayed.  The pre-frame canvas is implicitly held
+for the whole time the frame is on screen; at the next frame boundary
+the held content replaces the frame's rectangle.  This lets a temporary
+overlay disappear without writing a separate clearing image, and the
+next frame may then need little more than transparent pixels.
+DISPOSE_BACKGROUND (2) instead clears the frame's own rectangle to
+transparent; DISPOSE_DO_NOT (1) leaves the displayed canvas in place.
+The disposal always takes effect only when the next frame begins.</para>
+
+<para>The returned GifAnimationPlan owns two heap allocations: the
+complete GIF89a byte stream (Data, Size bytes, starting with the
+"GIF89a" signature and ending with the 0x3b trailer) and the Steps
+array describing each emitted image.  Release the whole structure,
+including both allocations, with GifFreeAnimationPlan(); passing NULL
+is harmless.  The input frames and color map are never modified.</para>
+
+<para>A minimal caller looks like this:</para>
+
+<programlisting>
+#include "gif_lib.h"
+#include "gif_plan.h"
+
+struct buffer {
+    unsigned char *data;
+    size_t size;
+};
+
+static int
+write_cb(GifFileType *g, const GifByteType *p, int n)
+{
+    struct buffer *b = g->UserData;
+    unsigned char *q = realloc(b->data, b->size + (size_t)n);
+    if (q == NULL)
+        return 0;
+    b->data = q;
+    memcpy(q + b->size, p, (size_t)n);
+    b->size += (size_t)n;
+    return n;
+}
+
+int
+build_animation(const GifPlanFrame *frames, int frame_count,
+                int width, int height, const ColorMapObject *cmap,
+                int loop_count, struct buffer *out)
+{
+    int error = E_GIF_SUCCEEDED;
+    GifAnimationPlan *plan;
+
+    plan = GifMakeAnimationPlan(width, height, cmap, frames,
+                                frame_count, loop_count, &amp;error);
+    if (plan == NULL)
+        return error;                /* see GifErrorString(error) */
+
+    /* plan->Data is already a finished GIF89a stream; copy it out. */
+    out->data = malloc(plan->Size);
+    if (out->data == NULL) {
+        GifFreeAnimationPlan(plan);
+        return E_GIF_ERR_NOT_ENOUGH_MEM;
+    }
+    memcpy(out->data, plan->Data, plan->Size);
+    out->size = plan->Size;
+
+    /* Steps[0..frame_count-1] expose the rectangles, disposals and
+       transparentize decisions behind the byte stream, for inspection. */
+    GifFreeAnimationPlan(plan);
+    return E_GIF_SUCCEEDED;
+}
+</programlisting>
+
+</sect1>
 <sect1><title>Error Handling (gif_err.c)</title>
 
 <programlisting>
@@ -500,6 +616,27 @@ briefly.</para>
    of library) and write (EGIF part of library). This error occurs
    when a file is opened for read (using DGIF) is given to one of the
    encoding (EGIF) routines.</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><errorname>E_GIF_PLAN_ERR_BAD_ARGUMENT</errorname></term>
+<listitem>
+   <para>Returned by GifMakeAnimationPlan(): an argument is outside its
+   documented range (canvas dimension not in 1..256, frame count not in
+   1..64, a non power-of-two or out-of-range color count, a delay or loop
+   count outside 0..65535, a pixel index outside the global color map,
+   or a NULL frame pointer / stride shorter than the width).</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><errorname>E_GIF_PLAN_ERR_NO_REPRESENTATION</errorname></term>
+<listitem>
+   <para>Returned by GifMakeAnimationPlan(): none of the legal frame
+   representations leaves the canvas fully transparent after the last
+   disposal, so the animation could not loop back to its initial
+   all-transparent canvas.</para>
 </listitem>
 </varlistentry>
 

@@ -4,7 +4,7 @@ EXTRA_DIST = Makefile.unx
 
 lib_LTLIBRARIES = libgif.la
 
-include_HEADERS = gif_lib.h
+include_HEADERS = gif_lib.h gif_plan.h
 
 libgif_la_SOURCES = dgif_lib.c  \
                     egif_lib.c  \
@@ -14,6 +14,7 @@ libgif_la_SOURCES = dgif_lib.c  \
                     gifalloc.c  \
 		    openbsd-reallocarray.c \
                     gif_err.c   \
+                    gif_plan.c  \
 					gif_lib_private.h \
 		    quantize.c
 

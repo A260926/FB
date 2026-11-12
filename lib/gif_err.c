@@ -48,6 +48,12 @@ GifErrorString(int ErrorCode)
       case E_GIF_ERR_NOT_WRITEABLE:
         Err = "Given file was not opened for write";
         break;
+      case E_GIF_PLAN_ERR_BAD_ARGUMENT:
+        Err = "Animation plan argument outside its documented range";
+        break;
+      case E_GIF_PLAN_ERR_NO_REPRESENTATION:
+        Err = "No legal frame representation ends on a transparent canvas";
+        break;
       case D_GIF_ERR_OPEN_FAILED:
         Err = "Failed to open given file";
         break;

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-build=$(mktemp -d)
+build=$(mktemp -d "${TMPDIR:-/tmp}/gifplan-target.XXXXXX")
 trap 'rm -rf "$build"' EXIT
 bash support/build.sh "$build" target
 "$build/run" | tee "$build/target.log"

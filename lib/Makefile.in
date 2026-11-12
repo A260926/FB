@@ -134,7 +134,7 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libgif_la_LIBADD =
 am_libgif_la_OBJECTS = dgif_lib.lo egif_lib.lo gif_font.lo gif_hash.lo \
-	gifalloc.lo openbsd-reallocarray.lo gif_err.lo quantize.lo
+	gifalloc.lo openbsd-reallocarray.lo gif_err.lo gif_plan.lo quantize.lo
 libgif_la_OBJECTS = $(am_libgif_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -324,7 +324,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 EXTRA_DIST = Makefile.unx
 lib_LTLIBRARIES = libgif.la
-include_HEADERS = gif_lib.h
+include_HEADERS = gif_lib.h gif_plan.h
 libgif_la_SOURCES = dgif_lib.c  \
                     egif_lib.c  \
                     gif_font.c  \
@@ -333,6 +333,7 @@ libgif_la_SOURCES = dgif_lib.c  \
                     gifalloc.c  \
 		    openbsd-reallocarray.c \
                     gif_err.c   \
+                    gif_plan.c  \
 					gif_lib_private.h \
 		    quantize.c
 
@@ -419,6 +420,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dgif_lib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/egif_lib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gif_err.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gif_plan.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gif_font.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gif_hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gifalloc.Plo@am__quote@

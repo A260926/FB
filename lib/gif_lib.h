@@ -143,6 +143,10 @@ int EGifCloseFile(GifFileType *GifFile, int *ErrorCode);
 #define E_GIF_ERR_CLOSE_FAILED   9
 #define E_GIF_ERR_NOT_WRITEABLE  10
 
+/* GifMakeAnimationPlan() argument/result errors (gif_plan.c). */
+#define E_GIF_PLAN_ERR_BAD_ARGUMENT       20
+#define E_GIF_PLAN_ERR_NO_REPRESENTATION  21
+
 /* These are legacy.  You probably do not want to call them directly */
 int EGifPutScreenDesc(GifFileType *GifFile,
                       const int GifWidth, const int GifHeight, 
