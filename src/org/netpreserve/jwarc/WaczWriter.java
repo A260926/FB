@@ -1,0 +1,261 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (C) 2025 National Library of Australia and the jwarc contributors
+ */
+
+package org.netpreserve.jwarc;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.*;
+import java.util.zip.CRC32;
+import java.util.zip.GZIPOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import org.netpreserve.jwarc.cdx.CdxFormat;
+import org.netpreserve.jwarc.cdx.CdxWriter;
+
+import static java.nio.file.StandardOpenOption.DELETE_ON_CLOSE;
+import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.WRITE;
+
+/**
+ * Writer for Web Archive Collection Zipped (WACZ) files.
+ *
+ * EXPERIMENTAL API: May change or be removed without notice.
+ *
+ * @see <a href="https://specs.webrecorder.net/wacz/latest/">WACZ Specification</a>
+ */
+public class WaczWriter implements Closeable {
+    private final ZipOutputStream zip;
+    private final Map<String, Object> metadata = new LinkedHashMap<>();
+    private final ArrayList<Map<String, Object>> resources = new ArrayList<>();
+    private final MessageDigest messageDigest;
+    private final FileChannel cdxChannel;
+    private final CdxWriter cdxWriter;
+    private final FileChannel pagesChannel;
+    private final JsonPagesWriter pagesWriter;
+    private boolean autoPages = true;
+    private boolean finished;
+
+    public WaczWriter(Path path) throws IOException {
+        this(Files.newOutputStream(path));
+    }
+
+    public WaczWriter(OutputStream out) throws IOException {
+        this.zip = new ZipOutputStream(out);
+        Path tempFile = Files.createTempFile("jwarc-cdx", ".cdx.gz");
+        this.cdxChannel = FileChannel.open(tempFile, READ, WRITE, DELETE_ON_CLOSE);
+        OutputStream cdxGzipStream = new GZIPOutputStream(Channels.newOutputStream(cdxChannel), 8192) {
+            @Override
+            public void close() throws IOException {
+                finish(); // don't close the underlying channel
+            }
+        };
+        this.cdxWriter = new CdxWriter(new BufferedWriter(new OutputStreamWriter(cdxGzipStream, StandardCharsets.UTF_8)));
+        cdxWriter.setFormat(CdxFormat.CDXJ);
+        cdxWriter.setSort(true);
+
+        Path pagesTempFile = Files.createTempFile("jwarc-pages", ".jsonl");
+        this.pagesChannel = FileChannel.open(pagesTempFile, READ, WRITE, DELETE_ON_CLOSE);
+        this.pagesWriter = new JsonPagesWriter(new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(pagesChannel), StandardCharsets.UTF_8)));
+
+        set("profile", "data-package");
+        set("wacz_version", "1.1.1");
+        try  {
+            messageDigest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Writes the content of the provided source file to a WACZ resource at the specified path.
+     * The source file is read twice as the zip CRC needs to be calculated before writing the
+     * ZIP entry.
+     *
+     * @param path   the path of the resource where the content will be written
+     * @param source the {@code Path} of the file whose content is to be copied to the resource
+     * @throws IOException if an I/O error occurs while writing the resource or reading the source file
+     * @throws IllegalArgumentException if a resource with the same path has already been written
+     * @throws IllegalStateException if the WACZ file has already been finished
+     */
+    public void writeResource(String path, Path source) throws IOException {
+        try (FileChannel channel = FileChannel.open(source)) {
+            writeResource(path, channel);
+        }
+    }
+
+    private void writeResource(String path, SeekableByteChannel source) throws IOException {
+        if (finished) throw new IllegalStateException("WACZ file is already finished");
+
+        ZipEntry entry = new ZipEntry(path);
+        int slash = path.lastIndexOf('/');
+        String filename = slash >= 0 ? path.substring(slash + 1) : path;
+
+        // https://specs.webrecorder.net/wacz/1.1.1/#zip-compression
+        // All archive/ files should be stored in ZIP with 'STORE' mode.
+        // All index/*.cdx.gz files should be stored in ZIP with 'STORE' mode.
+        if (path.startsWith("archive/") || (path.startsWith("indexes/") && path.endsWith(".cdx.gz"))) {
+            entry.setMethod(ZipEntry.STORED);
+
+            // method STORED requires size and CRC to be set before writing the entry
+            long start = source.position();
+            long crc32 = calculateCrc32(Channels.newInputStream(source));
+            long size = source.position() - start;
+            source.position(start);
+
+            entry.setCrc(crc32);
+            entry.setCompressedSize(size);
+            entry.setSize(size);
+        }
+
+        // Add archive files to CDX index
+        if (path.startsWith("archive/")) {
+            long start = source.position();
+            cdxWriter.process(new WarcReader(source), filename);
+            source.position(start);
+            if (autoPages) {
+                pagesWriter.process(new WarcReader(source));
+                source.position(start);
+            }
+        }
+
+        zip.putNextEntry(entry);
+        messageDigest.reset();
+        byte[] buffer = new byte[8192];
+        long size = 0;
+        while (true) {
+            int n = source.read(ByteBuffer.wrap(buffer));
+            if (n < 0) break;
+            zip.write(buffer, 0, n);
+            messageDigest.update(buffer, 0, n);
+            size += n;
+        }
+        zip.closeEntry();
+
+        Map<String, Object> resource = new LinkedHashMap<>();
+        resource.put("name", filename);
+        resource.put("path", path);
+        resource.put("hash", "sha256:" + WarcDigest.hexEncode(messageDigest.digest()));
+        resource.put("bytes", size);
+        resources.add(resource);
+    }
+
+    private static long calculateCrc32(InputStream stream) throws IOException {
+        CRC32 crc = new CRC32();
+        byte[] buffer = new byte[8192];
+        while (true) {
+            int n = stream.read(buffer);
+            if (n < 0) break;
+            crc.update(buffer, 0, n);
+        }
+        return crc.getValue();
+    }
+
+    /**
+     * Adds a page entry to pages.jsonl.
+     *
+     * @param url   the URL of the page
+     * @param ts    the timestamp in RFC3339 format
+     * @param title an optional title for the page
+     */
+    public void addPage(String url, Instant ts, String title) throws IOException {
+        pagesWriter.addPage(url, ts, title);
+    }
+
+    private void writeDatapackageJson() throws IOException {
+        // https://specs.webrecorder.net/wacz/1.1.1/#datapackage-json
+        zip.putNextEntry(new ZipEntry("datapackage.json"));
+        metadata.put("resources", resources);
+        messageDigest.reset();
+        Json.write(new DigestOutputStream(zip, messageDigest), metadata);
+        zip.closeEntry();
+
+        // https://specs.webrecorder.net/wacz/1.1.1/#datapackage-digest-json
+        Map<String, Object> digestMetadata = new LinkedHashMap<>();
+        digestMetadata.put("path", "datapackage.json");
+        digestMetadata.put("hash", "sha256:" + WarcDigest.hexEncode(messageDigest.digest()));
+        zip.putNextEntry(new ZipEntry("datapackage-digest.json"));
+        Json.write(zip, digestMetadata);
+        zip.closeEntry();
+    }
+
+    /**
+     * Finishes writing the WACZ file without closing the underlying output stream.
+     *
+     * @throws IOException if an I/O error occurs
+     */
+    public void finish() throws IOException {
+        if (finished) return;
+        cdxWriter.close();
+        if (cdxChannel.size() > 0) {
+            cdxChannel.position(0);
+            writeResource("indexes/index.cdx.gz", cdxChannel);
+        }
+        pagesWriter.flush();
+        boolean pagesProvided = resources.stream().anyMatch(r -> "pages/pages.jsonl".equals(r.get("path")));
+        if (!pagesProvided && pagesChannel.size() > 0) {
+            pagesChannel.position(0);
+            writeResource("pages/pages.jsonl", pagesChannel);
+        }
+        writeDatapackageJson();
+        zip.finish();
+        metadata.clear();
+        resources.clear();
+        resources.trimToSize();
+        finished = true;
+    }
+
+    /**
+     * Finishes writing the WACZ file and closes the underlying output stream.
+     *
+     * @throws IOException if an I/O error occurs
+     */
+    public void close() throws IOException {
+        try {
+            finish();
+        } finally {
+            try {
+                cdxChannel.close();
+            } catch (IOException e) {
+                // ignore
+            }
+            try {
+                pagesChannel.close();
+            } catch (IOException e) {
+                // ignore
+            }
+            zip.close();
+        }
+    }
+
+    /**
+     * Sets a metadata property to be included in datapackage.json.
+     *
+     * @param name  the name of the property to be set
+     * @param value the value of the property to be set (must be JSON serializable)
+     */
+    public void set(String name, Object value) {
+        metadata.put(name, value);
+    }
+
+    /**
+     * Enables or disables automatic detection of pages from WARC records.
+     * If disabled, only pages added via {@link #addPage} will be included.
+     */
+    public void setAutoPages(boolean enabled) {
+        this.autoPages = enabled;
+    }
+}
