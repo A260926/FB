@@ -250,6 +250,39 @@ first
 
 More on [MIDI 2.0 support](https://jazz-soft.net/doc/JZZ/jzzmidi2.html)...
 
+### MIDI 2.0 -> MPE bridge
+
+`JZZ.M2M1()` converts MIDI 2.0 UMP packages into MIDI 1.0 messages.
+When a MIDI 2.0 keyboard with per-note pitch bend is connected to an
+MPE-only synthesizer, pass an `mpe` option to translate the per-note
+expression into MPE member channels. The whole setup works in memory,
+without any real MIDI device:
+
+```js
+// master channel 0, member channels 1 and 2 (allocated in this order),
+// member bend range 48 semitones
+var bridge = JZZ.M2M1({ mpe: { master: 0, members: [1, 2], bendRange: 48 } });
+var synth = JZZ.Widget();           // stand-in for the MPE synthesizer
+bridge.connect(synth);              // pure in-memory connection
+
+var log = [];
+synth.connect(function (msg) { log.push(msg); });
+
+bridge
+  .umpControl(0, 1, 11, 0x80000000) // cached expression, sent with the next note
+  .umpNoteOn(0, 1, 'C5')            // member 1: bend range RPN, CCs, pressure, wheel, Note On
+  .umpPnPitchBend(0, 1, 'C5', 0xffffffff) // per-note bend -> member 1 pitch bend
+  .umpPnPressure(0, 1, 'C5', 0xa0000000)  // per-note pressure -> member 1 channel pressure
+  .umpNoteOn(0, 2, 'E5')            // member 2 bends independently
+  .umpNoteOff(0, 1, 'C5');          // frees member 1
+```
+
+`members` are allocated from one pool shared by all input groups: the same
+pitch on two groups or two source channels receives two independent members.
+When the pool is full, the oldest active note is stolen. The configuration
+is validated at construction and an invalid one throws before any message is
+sent; calling `JZZ.M2M1()` without arguments keeps the original conversion.
+
 ## Additional modules
 - [**JZZ-midi-SMF**](https://github.com/jazz-soft/JZZ-midi-SMF) - Standard MIDI files: read / write / play
 - [**JZZ-midi-WS**](https://github.com/jazz-soft/JZZ-midi-WS) - MIDI via WebSockets

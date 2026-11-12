@@ -3652,6 +3652,212 @@
     return (n >> 25) & 127;
   }
   function _grp(m, g) { m.gr = g; return m; }
+
+  // MPE output mode for JZZ.M2M1({ mpe: { master, members, bendRange } })
+  function _M2M1Mpe(cfg) {
+    this.cfg = cfg;
+    this.notes = [];     // active voices, oldest first
+    this.members = {};   // member channel -> active voice
+    this.poolUsed = {};  // member channel -> RPN bend range already sent
+    this.src = {};       // source (group, channel) -> cached bend/CC state
+  }
+  function _m2m1MpeValidate(cfg) {
+    var err;
+    if (!cfg || typeof cfg != 'object' || cfg instanceof Array) err = 'Bad MPE config';
+    else if (cfg.master != parseInt(cfg.master) || cfg.master < 0 || cfg.master > 15)
+      err = 'Bad MPE master channel value: ' + cfg.master;
+    else if (!(cfg.members instanceof Array) || !cfg.members.length)
+      err = 'MPE member channel list must not be empty';
+    else if (cfg.bendRange != parseInt(cfg.bendRange) || cfg.bendRange < 1 || cfg.bendRange > 96)
+      err = 'Bad MPE bend range value: ' + cfg.bendRange;
+    else {
+      var seen = {};
+      for (var i = 0; i < cfg.members.length; i++) {
+        var c = cfg.members[i];
+        if (c != parseInt(c) || c < 0 || c > 15) { err = 'Bad MPE member channel value: ' + c; break; }
+        if (c == cfg.master) { err = 'MPE member channel must not include the master channel: ' + c; break; }
+        if (seen[c]) { err = 'Duplicate MPE member channel value: ' + c; break; }
+        seen[c] = true;
+      }
+    }
+    if (err) throw RangeError(err);
+  }
+  function _m2m1Src(self, g, c) {
+    var k = g * 16 + c;
+    if (!self.src[k]) self.src[k] = { bend32: 0x80000000, cc1: 0, cc11: 127 };
+    return self.src[k];
+  }
+  function _m2m1Bend(x, semitones) {
+    if (x < 0x80000000) return (x - 0x80000000) / 0x80000000 * semitones;
+    return (x - 0x80000000) / 0x7fffffff * semitones;
+  }
+  function _m2m1Wheel(self, voice) {
+    var st = _m2m1Src(self, voice.g, voice.c);
+    var semis = _m2m1Bend(st.bend32, 2) + _m2m1Bend(voice.pn, self.cfg.bendRange);
+    if (semis > self.cfg.bendRange) semis = self.cfg.bendRange;
+    if (semis < -self.cfg.bendRange) semis = -self.cfg.bendRange;
+    var w = 8192 + Math.round(semis / self.cfg.bendRange * 8192);
+    if (w < 0) w = 0;
+    else if (w > 0x3fff) w = 0x3fff;
+    return w;
+  }
+  function _m2m1Emit(bridge, g, arr) {
+    bridge._emit(_grp(new MIDI(arr), g));
+  }
+  function _m2m1InitMember(self, bridge, g, ch) {
+    if (self.poolUsed[ch]) return;
+    var b = 0xb0 + ch;
+    _m2m1Emit(bridge, g, [b, 101, 0]);
+    _m2m1Emit(bridge, g, [b, 100, 0]);
+    _m2m1Emit(bridge, g, [b, 6, self.cfg.bendRange]);
+    _m2m1Emit(bridge, g, [b, 38, 0]);
+    _m2m1Emit(bridge, g, [b, 101, 127]);
+    _m2m1Emit(bridge, g, [b, 100, 127]);
+    self.poolUsed[ch] = true;
+  }
+  function _m2m1SendWheel(self, bridge, voice) {
+    var w = _m2m1Wheel(self, voice);
+    _m2m1Emit(bridge, voice.g, [0xe0 + voice.member, w & 127, (w >> 7) & 127]);
+  }
+  function _m2m1Preset(self, bridge, voice) {
+    var st = _m2m1Src(self, voice.g, voice.c);
+    var ch = voice.member;
+    _m2m1Emit(bridge, voice.g, [0xb0 + ch, 1, st.cc1]);
+    _m2m1Emit(bridge, voice.g, [0xb0 + ch, 11, st.cc11]);
+    _m2m1Emit(bridge, voice.g, [0xd0 + ch, 0]);
+    _m2m1SendWheel(self, bridge, voice);
+  }
+  function _m2m1FindVoice(self, g, c, note) {
+    for (var i = 0; i < self.notes.length; i++) {
+      var v = self.notes[i];
+      if (v.g == g && v.c == c && v.note == note) return v;
+    }
+    return null;
+  }
+  function _m2m1Alloc(self) {
+    for (var i = 0; i < self.cfg.members.length; i++) {
+      if (!self.members[self.cfg.members[i]]) return self.cfg.members[i];
+    }
+    return -1;
+  }
+  function _m2m1RemoveVoice(self, voice) {
+    delete self.members[voice.member];
+    var i = self.notes.indexOf(voice);
+    if (i >= 0) self.notes.splice(i, 1);
+  }
+  function _m2m1Release(self, bridge, msg, voice) {
+    _m2m1Emit(bridge, voice.g, [0x80 + voice.member, voice.note, _16_7(msg[4], msg[5])]);
+    _m2m1RemoveVoice(self, voice);
+  }
+  function _m2m1NoteOn(self, bridge, msg) {
+    var g = msg[0] & 15;
+    var c = msg[1] & 15;
+    var note = msg[2];
+    var vel = _16_7(msg[4], msg[5]);
+    if (!vel) {
+      var off = _m2m1FindVoice(self, g, c, note);
+      if (off) _m2m1Release(self, bridge, msg, off);
+      return;
+    }
+    var old = _m2m1FindVoice(self, g, c, note);
+    if (old) {
+      // retrigger: end the old note first, with a clean velocity-0 Note Off
+      _m2m1Emit(bridge, old.g, [0x80 + old.member, old.note, 0]);
+      _m2m1RemoveVoice(self, old);
+    }
+    var member = _m2m1Alloc(self);
+    if (member < 0) {
+      // pool full: steal the oldest still-active voice
+      var victim = self.notes[0];
+      _m2m1Emit(bridge, victim.g, [0x80 + victim.member, victim.note, 0]);
+      member = victim.member;
+      _m2m1RemoveVoice(self, victim);
+    }
+    _m2m1InitMember(self, bridge, g, member);
+    var voice = { g: g, c: c, note: note, member: member, pn: 0x80000000 };
+    self.notes.push(voice);
+    self.members[member] = voice;
+    _m2m1Preset(self, bridge, voice);
+    _m2m1Emit(bridge, g, [0x90 + member, note, vel]);
+  }
+  function _m2m1MpeReceive(msg) {
+    var root = this._orig;
+    // a receiver may synchronously send another message back into the bridge:
+    // queue it until the whole output batch of the current input is delivered
+    if (root._m2m1mpeBusy) {
+      root._m2m1mpeIn.push(msg);
+      return;
+    }
+    root._m2m1mpeBusy = true;
+    try {
+      _m2m1MpeProcess.call(this, msg);
+    }
+    finally {
+      root._m2m1mpeBusy = false;
+      while (root._m2m1mpeIn.length) {
+        var q = root._m2m1mpeIn;
+        root._m2m1mpeIn = [];
+        for (var i = 0; i < q.length; i++) _m2m1MpeReceive.call(this, q[i]);
+      }
+    }
+  }
+  function _m2m1MpeProcess(msg) {
+    if (!msg.isMidi2) {
+      this._emit(msg);
+      return;
+    }
+    if ((msg[0] >> 4) != 4) {
+      _m2m1.call(this, msg);
+      return;
+    }
+    var self = this._m2m1mpe;
+    var g = msg[0] & 15;
+    var n = msg[1] >> 4;
+    var c = msg[1] & 15;
+    var i, v, st, val;
+    if (n == 9) {
+      _m2m1NoteOn(self, this, msg);
+    }
+    else if (n == 8) {
+      v = _m2m1FindVoice(self, g, c, msg[2]);
+      if (v) _m2m1Release(self, this, msg, v);
+    }
+    else if (n == 6) {
+      // per-note pitch bend
+      v = _m2m1FindVoice(self, g, c, msg[2]);
+      if (v) {
+        v.pn = msg[4] * 0x1000000 + msg[5] * 0x10000 + msg[6] * 0x100 + msg[7];
+        _m2m1SendWheel(self, this, v);
+      }
+    }
+    else if (n == 10) {
+      // per-note poly pressure -> member channel pressure
+      v = _m2m1FindVoice(self, g, c, msg[2]);
+      if (v) _m2m1Emit(this, g, [0xd0 + v.member, _32_7(msg[4], msg[5], msg[6], msg[7])]);
+    }
+    else if (n == 14) {
+      // source channel pitch bend: update all voices of this source, keep per-note offsets
+      st = _m2m1Src(self, g, c);
+      st.bend32 = msg[4] * 0x1000000 + msg[5] * 0x10000 + msg[6] * 0x100 + msg[7];
+      for (i = 0; i < self.notes.length; i++) {
+        v = self.notes[i];
+        if (v.g == g && v.c == c) _m2m1SendWheel(self, this, v);
+      }
+    }
+    else if (n == 11 && (msg[2] == 1 || msg[2] == 11)) {
+      // source channel CC1 / CC11: cache, then send to active members of this source
+      st = _m2m1Src(self, g, c);
+      val = _32_7(msg[4], msg[5], msg[6], msg[7]);
+      if (msg[2] == 1) st.cc1 = val;
+      else st.cc11 = val;
+      for (i = 0; i < self.notes.length; i++) {
+        v = self.notes[i];
+        if (v.g == g && v.c == c) _m2m1Emit(this, g, [0xb0 + v.member, msg[2], val]);
+      }
+    }
+    // other type 4 messages (per-note RPN/NRPN/management, registered/assignable
+    // controllers, program change, channel pressure, unsupported CCs) are ignored
+  }
   function _m2m1(msg) {
     if (msg.isMidi2) {
       var n, c, x;
@@ -3715,10 +3921,17 @@
     }
     else this._emit(msg);
   }
-  function M2M1() {
+  function M2M1(opt) {
     var self = new _M();
     self._sx = [];
-    self._receive = _m2m1;
+    if (opt && typeof opt.mpe != 'undefined') {
+      _m2m1MpeValidate(opt.mpe);
+      self._m2m1mpe = new _M2M1Mpe(opt.mpe);
+      self._m2m1mpeIn = [];
+      self._m2m1mpeBusy = false;
+      self._receive = _m2m1MpeReceive;
+    }
+    else self._receive = _m2m1;
     self._resume();
     return self.MIDI2();
   }

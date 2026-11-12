@@ -1913,6 +1913,28 @@ declare namespace JZZ {
      * https://jazz-soft.net/doc/JZZ/lib.html#fromUTF8 */
     fromUTF8(txt: string): string;
   }
+  namespace M2M1 {
+    /** MPE output configuration for `JZZ.M2M1({ mpe: ... })` */
+    interface MpeOptions {
+      /** Master (zone management) channel: integer in the 0..15 range.
+       *  Must not appear in `members`. */
+      master: number;
+      /** Member channels in allocation priority order.
+       *  Non-empty list of integer channels in the 0..15 range;
+       *  values must be unique and must not include `master`.
+       *  New notes take the first free member; when the pool is full,
+       *  the oldest still-active voice is stolen. */
+      members: number[];
+      /** Member pitch bend range in semitones: integer in the 1..96 range.
+       *  Sent to each member as RPN 0 before its first Note On. */
+      bendRange: number;
+    }
+    /** Options for `JZZ.M2M1`; without the `mpe` key (or with no arguments)
+     *  the bridge performs the plain MIDI 2.0 -> MIDI 1.0 conversion. */
+    interface Options {
+      mpe?: MpeOptions;
+    }
+  }
 }
 
 interface JZZ {
@@ -1929,6 +1951,16 @@ interface JZZ {
    *
    * https://jazz-soft.net/doc/JZZ/midithru.html#Widget */
   readonly Widget: (...args: any[]) => JZZ.Port;
+  /** Create a MIDI 2.0 -> MIDI 1.0 bridge.
+   *  With no arguments (or without an `mpe` option) it performs the plain
+   *  conversion; with `mpe` it allocates member channels per the MPE
+   *  configuration and throws `RangeError` on an invalid configuration.
+   *
+   * https://jazz-soft.net/doc/JZZ/jzzmidi2.html */
+  readonly M2M1: {
+    (): JZZ.Port;
+    (options: JZZ.M2M1.Options): JZZ.Port;
+  };
   /** MIDI message
    *
    * https://jazz-soft.net/doc/JZZ/jzzmidi.html */
