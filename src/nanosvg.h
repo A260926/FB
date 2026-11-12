@@ -402,6 +402,17 @@ typedef struct NSVGradialData {
 	NSVGcoordinate cx, cy, r, fx, fy;
 } NSVGradialData;
 
+// Gradient attributes that were explicitly declared on an element, used to
+// resolve xlink:href inheritance attribute by attribute.
+#define NSVG_GRADIENT_CX		0x0001
+#define NSVG_GRADIENT_CY		0x0002
+#define NSVG_GRADIENT_R			0x0004
+#define NSVG_GRADIENT_FX		0x0008
+#define NSVG_GRADIENT_FY		0x0010
+#define NSVG_GRADIENT_UNITS		0x0020
+#define NSVG_GRADIENT_XFORM		0x0040
+#define NSVG_GRADIENT_SPREAD	0x0080
+
 typedef struct NSVGgradientData
 {
 	char id[64];
@@ -413,6 +424,7 @@ typedef struct NSVGgradientData
 	};
 	char spread;
 	char units;
+	unsigned int setFlags;
 	float xform[6];
 	int nstops;
 	NSVGgradientStop* stops;
@@ -860,33 +872,84 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 	float ox, oy, sw, sh, sl;
 	int nstops = 0;
 	int refIter;
+	char gunits;
+	char gspread;
+	float gxform[6];
+	NSVGcoordinate rgcx, rgcy, rgr, rgfx, rgfy;
+	unsigned int rgot = 0;
+	float rcx = 0.0f, rcy = 0.0f, rr = 0.0f, rfx = 0.0f, rfy = 0.0f;
+	int rsolid = 0;
 
 	data = nsvg__findGradientData(p, id);
 	if (data == NULL) return NULL;
 
-	// TODO: use ref to fill in all unset values too.
-	ref = data;
-	refIter = 0;
-	while (ref != NULL) {
-		NSVGgradientData* nextRef = NULL;
-		if (stops == NULL && ref->stops != NULL) {
-			stops = ref->stops;
-			nstops = ref->nstops;
-			break;
-		}
-		nextRef = nsvg__findGradientData(p, ref->ref);
-		if (nextRef == ref) break; // prevent infite loops on malformed data
-		ref = nextRef;
-		refIter++;
-		if (refIter > 32) break; // prevent infite loops on malformed data
-	}
-	if (stops == NULL) return NULL;
+	gunits = data->units;
+	gspread = data->spread;
+	memcpy(gxform, data->xform, sizeof(float)*6);
 
-	grad = (NSVGgradient*)malloc(sizeof(NSVGgradient) + sizeof(NSVGgradientStop)*(nstops-1));
-	if (grad == NULL) return NULL;
+	if (data->type == NSVG_PAINT_RADIAL_GRADIENT) {
+		// Resolve the xlink:href chain: every attribute takes the nearest
+		// explicitly declared value and the stops come from the nearest
+		// definition that has any. The referenced definitions are left
+		// unmodified. A missing reference or a reference cycle invalidates
+		// the paint.
+		int maxRefs = 0, nrefs = 0;
+		rgcx.value = 50.0f; rgcx.units = NSVG_UNITS_PERCENT;
+		rgcy.value = 50.0f; rgcy.units = NSVG_UNITS_PERCENT;
+		rgr.value = 50.0f; rgr.units = NSVG_UNITS_PERCENT;
+		rgfx.value = 0.0f; rgfx.units = NSVG_UNITS_USER;
+		rgfy.value = 0.0f; rgfy.units = NSVG_UNITS_USER;
+		gunits = NSVG_OBJECT_SPACE;
+		gspread = NSVG_SPREAD_PAD;
+		nsvg__xformIdentity(gxform);
+		for (ref = p->gradients; ref != NULL; ref = ref->next)
+			maxRefs++;
+		ref = data;
+		while (ref != NULL) {
+			if (!(rgot & NSVG_GRADIENT_CX) && (ref->setFlags & NSVG_GRADIENT_CX)) { rgcx = ref->radial.cx; rgot |= NSVG_GRADIENT_CX; }
+			if (!(rgot & NSVG_GRADIENT_CY) && (ref->setFlags & NSVG_GRADIENT_CY)) { rgcy = ref->radial.cy; rgot |= NSVG_GRADIENT_CY; }
+			if (!(rgot & NSVG_GRADIENT_R) && (ref->setFlags & NSVG_GRADIENT_R)) { rgr = ref->radial.r; rgot |= NSVG_GRADIENT_R; }
+			if (!(rgot & NSVG_GRADIENT_FX) && (ref->setFlags & NSVG_GRADIENT_FX)) { rgfx = ref->radial.fx; rgot |= NSVG_GRADIENT_FX; }
+			if (!(rgot & NSVG_GRADIENT_FY) && (ref->setFlags & NSVG_GRADIENT_FY)) { rgfy = ref->radial.fy; rgot |= NSVG_GRADIENT_FY; }
+			if (!(rgot & NSVG_GRADIENT_UNITS) && (ref->setFlags & NSVG_GRADIENT_UNITS)) { gunits = ref->units; rgot |= NSVG_GRADIENT_UNITS; }
+			if (!(rgot & NSVG_GRADIENT_XFORM) && (ref->setFlags & NSVG_GRADIENT_XFORM)) { memcpy(gxform, ref->xform, sizeof(float)*6); rgot |= NSVG_GRADIENT_XFORM; }
+			if (!(rgot & NSVG_GRADIENT_SPREAD) && (ref->setFlags & NSVG_GRADIENT_SPREAD)) { gspread = ref->spread; rgot |= NSVG_GRADIENT_SPREAD; }
+			if (stops == NULL && ref->stops != NULL) {
+				stops = ref->stops;
+				nstops = ref->nstops;
+			}
+			if (ref->ref[0] == '\0') break;
+			ref = nsvg__findGradientData(p, ref->ref);
+			if (ref == NULL) return NULL;	// referenced gradient is missing
+			if (++nrefs > maxRefs) return NULL;	// reference cycle
+		}
+		if (stops == NULL) return NULL;
+		// A focus that is never declared follows the resolved center, an
+		// undeclared focus must not be mistaken for an explicit zero.
+		if (!(rgot & NSVG_GRADIENT_FX)) rgfx = rgcx;
+		if (!(rgot & NSVG_GRADIENT_FY)) rgfy = rgcy;
+	} else {
+		// TODO: use ref to fill in all unset values too.
+		ref = data;
+		refIter = 0;
+		while (ref != NULL) {
+			NSVGgradientData* nextRef = NULL;
+			if (stops == NULL && ref->stops != NULL) {
+				stops = ref->stops;
+				nstops = ref->nstops;
+				break;
+			}
+			nextRef = nsvg__findGradientData(p, ref->ref);
+			if (nextRef == ref) break; // prevent infite loops on malformed data
+			ref = nextRef;
+			refIter++;
+			if (refIter > 32) break; // prevent infite loops on malformed data
+		}
+		if (stops == NULL) return NULL;
+	}
 
 	// The shape width and height.
-	if (data->units == NSVG_OBJECT_SPACE) {
+	if (gunits == NSVG_OBJECT_SPACE) {
 		ox = localBounds[0];
 		oy = localBounds[1];
 		sw = localBounds[2] - localBounds[0];
@@ -898,6 +961,47 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 		sh = nsvg__actualHeight(p);
 	}
 	sl = sqrtf(sw*sw + sh*sh) / sqrtf(2.0f);
+
+	if (data->type == NSVG_PAINT_RADIAL_GRADIENT) {
+		float fdx, fdy, fd;
+		if (gunits == NSVG_OBJECT_SPACE) {
+			// Establish the circle and the focus in the normalized bounding
+			// box, the bounding box transform then maps them onto the shape
+			// (so a circle may become an ellipse on non-square shapes).
+			rcx = nsvg__convertToPixels(p, rgcx, 0.0f, 1.0f);
+			rcy = nsvg__convertToPixels(p, rgcy, 0.0f, 1.0f);
+			rfx = nsvg__convertToPixels(p, rgfx, 0.0f, 1.0f);
+			rfy = nsvg__convertToPixels(p, rgfy, 0.0f, 1.0f);
+			rr = nsvg__convertToPixels(p, rgr, 0.0f, 1.0f);
+		} else {
+			rcx = nsvg__convertToPixels(p, rgcx, ox, sw);
+			rcy = nsvg__convertToPixels(p, rgcy, oy, sh);
+			rfx = nsvg__convertToPixels(p, rgfx, ox, sw);
+			rfy = nsvg__convertToPixels(p, rgfy, oy, sh);
+			rr = nsvg__convertToPixels(p, rgr, 0.0f, sl);
+		}
+		if (rr < 0.0f) return NULL;	// negative radius: the paint is not drawn
+		if (rr == 0.0f) {
+			// Zero radius paints everything with the last stop.
+			stops = &stops[nstops-1];
+			nstops = 1;
+			rsolid = 1;
+		} else {
+			// A focus on or outside the outer circle is pulled back towards
+			// the center, keeping the direction from the center.
+			fdx = rfx - rcx;
+			fdy = rfy - rcy;
+			fd = sqrtf(fdx*fdx + fdy*fdy);
+			if (fd >= rr) {
+				float fscale = 0.99999f * rr / fd;
+				rfx = rcx + fdx * fscale;
+				rfy = rcy + fdy * fscale;
+			}
+		}
+	}
+
+	grad = (NSVGgradient*)malloc(sizeof(NSVGgradient) + sizeof(NSVGgradientStop)*(nstops-1));
+	if (grad == NULL) return NULL;
 
 	if (data->type == NSVG_PAINT_LINEAR_GRADIENT) {
 		float x1, y1, x2, y2, dx, dy;
@@ -911,25 +1015,30 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 		grad->xform[0] = dy; grad->xform[1] = -dx;
 		grad->xform[2] = dx; grad->xform[3] = dy;
 		grad->xform[4] = x1; grad->xform[5] = y1;
+		grad->fx = 0.0f;
+		grad->fy = 0.0f;
 	} else {
-		float cx, cy, fx, fy, r;
-		cx = nsvg__convertToPixels(p, data->radial.cx, ox, sw);
-		cy = nsvg__convertToPixels(p, data->radial.cy, oy, sh);
-		fx = nsvg__convertToPixels(p, data->radial.fx, ox, sw);
-		fy = nsvg__convertToPixels(p, data->radial.fy, oy, sh);
-		r = nsvg__convertToPixels(p, data->radial.r, 0, sl);
 		// Calculate transform aligned to the circle
-		grad->xform[0] = r; grad->xform[1] = 0;
-		grad->xform[2] = 0; grad->xform[3] = r;
-		grad->xform[4] = cx; grad->xform[5] = cy;
-		grad->fx = fx / r;
-		grad->fy = fy / r;
+		grad->xform[0] = rsolid ? 1.0f : rr; grad->xform[1] = 0;
+		grad->xform[2] = 0; grad->xform[3] = rsolid ? 1.0f : rr;
+		grad->xform[4] = rcx; grad->xform[5] = rcy;
+		if (gunits == NSVG_OBJECT_SPACE) {
+			// Map the normalized box onto the bounds of the shape.
+			float box[6];
+			box[0] = sw; box[1] = 0;
+			box[2] = 0; box[3] = sh;
+			box[4] = ox; box[5] = oy;
+			nsvg__xformMultiply(grad->xform, box);
+		}
+		// Focus in the unit circle space of the gradient.
+		grad->fx = rsolid ? 0.0f : (rfx - rcx) / rr;
+		grad->fy = rsolid ? 0.0f : (rfy - rcy) / rr;
 	}
 
-	nsvg__xformMultiply(grad->xform, data->xform);
+	nsvg__xformMultiply(grad->xform, gxform);
 	nsvg__xformMultiply(grad->xform, xform);
 
-	grad->spread = data->spread;
+	grad->spread = gspread;
 	memcpy(grad->stops, stops, nstops*sizeof(NSVGgradientStop));
 	grad->nstops = nstops;
 
@@ -2752,18 +2861,25 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, signed char ty
 					grad->units = NSVG_OBJECT_SPACE;
 				else
 					grad->units = NSVG_USER_SPACE;
+				grad->setFlags |= NSVG_GRADIENT_UNITS;
 			} else if (strcmp(attr[i], "gradientTransform") == 0) {
 				nsvg__parseTransform(grad->xform, attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_XFORM;
 			} else if (strcmp(attr[i], "cx") == 0) {
 				grad->radial.cx = nsvg__parseCoordinateRaw(attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_CX;
 			} else if (strcmp(attr[i], "cy") == 0) {
 				grad->radial.cy = nsvg__parseCoordinateRaw(attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_CY;
 			} else if (strcmp(attr[i], "r") == 0) {
 				grad->radial.r = nsvg__parseCoordinateRaw(attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_R;
 			} else if (strcmp(attr[i], "fx") == 0) {
 				grad->radial.fx = nsvg__parseCoordinateRaw(attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_FX;
 			} else if (strcmp(attr[i], "fy") == 0) {
 				grad->radial.fy = nsvg__parseCoordinateRaw(attr[i + 1]);
+				grad->setFlags |= NSVG_GRADIENT_FY;
 			} else if (strcmp(attr[i], "x1") == 0) {
 				grad->linear.x1 = nsvg__parseCoordinateRaw(attr[i + 1]);
 			} else if (strcmp(attr[i], "y1") == 0) {
@@ -2779,6 +2895,7 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, signed char ty
 					grad->spread = NSVG_SPREAD_REFLECT;
 				else if (strcmp(attr[i+1], "repeat") == 0)
 					grad->spread = NSVG_SPREAD_REPEAT;
+				grad->setFlags |= NSVG_GRADIENT_SPREAD;
 			} else if (strcmp(attr[i], "xlink:href") == 0) {
 				const char *href = attr[i+1];
 				strncpy(grad->ref, href+1, 62);

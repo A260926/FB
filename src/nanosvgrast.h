@@ -117,6 +117,7 @@ typedef struct NSVGcachedPaint {
 	signed char type;
 	char spread;
 	float xform[6];
+	float fx, fy;
 	unsigned int colors[256];
 } NSVGcachedPaint;
 
@@ -963,6 +964,17 @@ static float nsvg__clampf(float a, float mn, float mx) {
 	return a < mn ? mn : (a > mx ? mx : a);
 }
 
+// Maps a gradient color position into [0,1] according to the spread method.
+static float nsvg__applySpread(float t, char spread) {
+	if (spread == NSVG_SPREAD_REPEAT) {
+		t = t - floorf(t);
+	} else if (spread == NSVG_SPREAD_REFLECT) {
+		t = t - 2.0f*floorf(t*0.5f);
+		if (t > 1.0f) t = 2.0f - t;
+	}
+	return nsvg__clampf(t, 0.0f, 1.0f);
+}
+
 static unsigned int nsvg__RGBA(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
 {
 	return ((unsigned int)r) | ((unsigned int)g << 8) | ((unsigned int)b << 16) | ((unsigned int)a << 24);
@@ -1072,10 +1084,8 @@ static void nsvg__scanlineSolid(unsigned char* dst, int count, unsigned char* co
 			fx += dx;
 		}
 	} else if (cache->type == NSVG_PAINT_RADIAL_GRADIENT) {
-		// TODO: spread modes.
 		// TODO: plenty of opportunities to optimize.
-		// TODO: focus (fx,fy)
-		float fx, fy, dx, gx, gy, gd;
+		float fx, fy, dx, gx, gy, gd, fcx, fcy, fc;
 		float* t = cache->xform;
 		int i, cr, cg, cb, ca;
 		unsigned int c;
@@ -1083,12 +1093,33 @@ static void nsvg__scanlineSolid(unsigned char* dst, int count, unsigned char* co
 		fx = ((float)x - tx) / scale;
 		fy = ((float)y - ty) / scale;
 		dx = 1.0f / scale;
+		// Focus in the unit circle space of the gradient.
+		fcx = cache->fx;
+		fcy = cache->fy;
+		fc = fcx*fcx + fcy*fcy - 1.0f;
 
 		for (i = 0; i < count; i++) {
 			int r,g,b,a,ia;
-			gx = fx*t[0] + fy*t[2] + t[4];
-			gy = fx*t[1] + fy*t[3] + t[5];
-			gd = sqrtf(gx*gx + gy*gy);
+			float da, db, ddisc;
+			// Direction from the focus to the sample, in gradient space.
+			gx = fx*t[0] + fy*t[2] + t[4] - fcx;
+			gy = fx*t[1] + fy*t[3] + t[5] - fcy;
+			da = gx*gx + gy*gy;
+			if (da < 1e-12f) {
+				gd = 0.0f;	// sampling the focus itself
+			} else {
+				// The ray f + s*d hits the outer circle at s > 0, the color
+				// position is FP/FQ = 1/s. With |f| < 1 the root is finite.
+				// Pick the cancellation free form of the quadratic root.
+				db = fcx*gx + fcy*gy;
+				ddisc = db*db - da*fc;
+				if (ddisc < 0.0f) ddisc = 0.0f;
+				if (db <= 0.0f)
+					gd = da / (-db + sqrtf(ddisc));
+				else
+					gd = (-db - sqrtf(ddisc)) / fc;
+			}
+			gd = nsvg__applySpread(gd, cache->spread);
 			c = cache->colors[(int)nsvg__clampf(gd*255.0f, 0, 255.0f)];
 			cr = (c) & 0xff;
 			cg = (c >> 8) & 0xff;
@@ -1285,6 +1316,8 @@ static void nsvg__initPaint(NSVGcachedPaint* cache, NSVGpaint* paint, float opac
 
 	cache->spread = grad->spread;
 	memcpy(cache->xform, grad->xform, sizeof(float)*6);
+	cache->fx = grad->fx;
+	cache->fy = grad->fy;
 
 	if (grad->nstops == 0) {
 		for (i = 0; i < 256; i++)

@@ -53,6 +53,41 @@ for (shape = image->shapes; shape != NULL; shape = shape->next) {
 nsvgDelete(image);
 ```
 
+## Radial gradients
+
+A `radialGradient` is defined once in `<defs>` and referenced by any number of
+shapes through `fill="url(#id)"`. The gradient is evaluated in the coordinate
+system of each referencing shape, so a single definition adapts to shapes of
+different sizes. The color starts at the focus (`fx`,`fy`) and ramps to the
+outer circle (`cx`,`cy`,`r`); when the focus is omitted it coincides with the
+center. A second gradient can reuse and override a definition through
+`xlink:href`:
+
+```xml
+<svg width="160" height="60" xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <!-- One definition, evaluated per referencing shape. -->
+    <radialGradient id="shade" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#3060c0"/>
+    </radialGradient>
+    <!-- Inherits the geometry and stops of "shade", moves the focus. -->
+    <radialGradient id="shadeCentered" xlink:href="#shade" fx="50%" fy="50%"/>
+  </defs>
+  <!-- The same definition is shared by shapes of different sizes. -->
+  <rect x="4" y="4" width="48" height="52" fill="url(#shade)"/>
+  <circle cx="84" cy="30" r="26" fill="url(#shade)"/>
+  <rect x="116" y="4" width="40" height="52" fill="url(#shadeCentered)"/>
+</svg>
+```
+
+With the default `gradientUnits="objectBoundingBox"` the circle and focus are
+established in the normalized bounding box of each shape and then mapped onto
+it, so on a non-square shape the gradient stretches into an ellipse. With
+`gradientUnits="userSpaceOnUse"` the values are read in the user coordinate
+system of the referencing element instead.
+
 ## Using NanoSVG in your project
 
 In order to use NanoSVG in your own project, just copy nanosvg.h to your project.
