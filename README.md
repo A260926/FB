@@ -10,6 +10,51 @@ Aims to provide access to stream metadata; does not actually decode the video.
 
 The implementation attempts to minimise copying of source data, for efficiency, at the cost of a more complicated API
 
+## Picture order count
+
+The [`poc`](src/poc.rs) module provides [`poc::PocReader`], an access-unit-level
+reader that derives the H.264 picture order count (section 8.2.1) for each
+primary coded picture.
+
+`PocReader::push_access_unit` takes one access unit at a time, as a slice of
+complete NAL units (Annex B start codes already removed; the NAL header and
+emulation-prevention bytes are still present). It returns:
+
+ * `Ok(None)` for an access unit containing only non-VCL NAL units (SPS/PPS,
+   AUD, SEI and similar), and
+ * `Ok(Some(PictureOrder))` exactly once for an access unit containing a
+   primary coded picture.
+
+`PictureOrder` records `frame_num`, the referenced SPS/PPS ids, the optional
+`TopFieldOrderCnt`/`BottomFieldOrderCnt` (a field that does not exist stays
+`None` rather than being reported as zero), and the minimum of the field
+counts that are present. All counts are signed 64-bit integers.
+
+Scope and limitations:
+
+ * All three `pic_order_cnt_type` values (0, 1 and 2) are supported, for coded
+   frames, separately coded top/bottom fields and complementary field pairs.
+ * Only picture order counts are derived. No timestamps are generated, no pixel
+   data is decoded, and no reference picture store is maintained.
+ * SVC/MVC extension NAL units, data-partitioned and redundant coded pictures
+   are rejected with an explicit error rather than decoded.
+ * SPS/PPS parameter sets are stored by the reader and take effect in NAL
+   order. A re-sent parameter set with identical content does not reset POC
+   state; a changed SPS only establishes new POC history when an IDR picture
+   references it. A failed access unit commits neither parameter sets nor POC
+   history.
+ * `PocReader::reset` clears the POC/frame_num history (the next primary coded
+   picture must then be an IDR) while retaining the declared parameter sets.
+
+### Access unit boundaries
+
+Access unit grouping is the **caller's responsibility**, not the reader's. The
+NAL units handed to `push_access_unit` must already belong to a single access
+unit in decoding order. The [`AnnexBReader`](src/annexb.rs) only splits the byte
+stream into NAL units; the [`poc_dump` example](examples/poc_dump.rs) shows how
+to group those NAL units into access units (a new access unit begins at each VCL
+NAL that follows another VCL NAL) before feeding them to `PocReader`.
+
 ## Supported syntax
 
 The following list shows the current state of support per H264 syntax element:

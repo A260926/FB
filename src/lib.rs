@@ -8,12 +8,13 @@ use std::fmt::Debug;
 pub mod annexb;
 pub mod avcc;
 pub mod nal;
+pub mod poc;
 pub mod push;
 pub mod rbsp;
 
 /// Contextual data that needs to be tracked between evaluations of different portions of H264
 /// syntax.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Context {
     seq_param_sets: ParamSetMap<nal::sps::SeqParameterSet>,
     pic_param_sets: ParamSetMap<nal::pps::PicParameterSet>,
@@ -72,6 +73,7 @@ impl Context {
 }
 
 /// A map for very small indexes; SPS/PPS IDs must be in `[0, 32)`, and typically only 0 is used.
+#[derive(Clone)]
 struct ParamSetMap<T>(Vec<Option<T>>);
 impl<T> Default for ParamSetMap<T> {
     fn default() -> Self {
