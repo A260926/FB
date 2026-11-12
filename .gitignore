@@ -2,6 +2,9 @@ tools/md5tool/md5tool
 tools/parser.out
 tools/parsetab.py
 *.pyc
+
+# offline Go build/module caches used by the sanity scripts
+.cache/
 examples/*/*.stl
 !examples/monkey_hat/monkey.stl
 examples/*/*.dxf
