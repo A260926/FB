@@ -58,6 +58,8 @@ libgumbo_la_SOURCES = \
 				src/string_buffer.h \
 				src/string_piece.c \
 				src/string_piece.h \
+				src/table_headers.c \
+				src/table_headers.h \
 				src/tag.c \
 				src/tag_enum.h \
 				src/tag_gperf.h \
@@ -73,7 +75,7 @@ libgumbo_la_SOURCES = \
 				src/util.h \
 				src/vector.c \
 				src/vector.h
-include_HEADERS = src/gumbo.h src/tag_enum.h
+include_HEADERS = src/gumbo.h src/table_headers.h src/tag_enum.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = gumbo.pc
@@ -105,7 +107,7 @@ gumbo_test_DEPENDENCIES += check-local
 gumbo_test_LDADD += gtest/lib/libgtest.la gtest/lib/libgtest_main.la
 endif
 
-noinst_PROGRAMS = clean_text find_links get_title positions_of_class benchmark serialize prettyprint
+noinst_PROGRAMS = clean_text find_links get_title positions_of_class benchmark serialize prettyprint table_headers_demo
 LDADD = libgumbo.la
 AM_CPPFLAGS = -I"$(srcdir)/src"
 
@@ -116,3 +118,4 @@ positions_of_class_SOURCES = examples/positions_of_class.cc
 benchmark_SOURCES = benchmarks/benchmark.cc
 serialize_SOURCES = examples/serialize.cc
 prettyprint_SOURCES = examples/prettyprint.cc
+table_headers_demo_SOURCES = examples/table_headers_demo.c

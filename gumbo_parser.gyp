@@ -33,6 +33,8 @@
         'src/string_buffer.h',
         'src/string_piece.c',
         'src/string_piece.h',
+        'src/table_headers.c',
+        'src/table_headers.h',
         'src/tag.c',
         'src/token_type.h',
         'src/tokenizer.c',
