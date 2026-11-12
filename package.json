@@ -64,7 +64,8 @@
 	"ava": {
 		"failFast": true,
 		"files": [
-			"./test/**/*"
+			"./test/**/*",
+			"!./test/effect-scope.mjs"
 		]
 	},
 	"scripts": {

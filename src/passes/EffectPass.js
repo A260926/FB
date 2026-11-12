@@ -3,6 +3,7 @@ import { EffectShaderData } from "../core/EffectShaderData.js";
 import { BlendFunction } from "../enums/BlendFunction.js";
 import { EffectAttribute } from "../enums/EffectAttribute.js";
 import { EffectShaderSection as Section } from "../enums/EffectShaderSection.js";
+import { GLSLScoper } from "../utils/GLSLScoper.js";
 
 import { EffectMaterial } from "../materials/EffectMaterial.js";
 import { Pass } from "./Pass.js";
@@ -40,6 +41,127 @@ function prefixSubstrings(prefix, substrings, strings) {
 }
 
 /**
+ * Renames the effect-private symbols of the given shaders with a unique prefix.
+ *
+ * Top-level structures, global variables, constants, function declarations and function definitions are
+ * renamed together with all references to them. Falls back to legacy substring prefixing if the source
+ * cannot be parsed.
+ *
+ * @private
+ * @param {String} prefix - A prefix.
+ * @param {Effect} effect - The effect.
+ * @param {String} fragmentShader - The fragment shader.
+ * @param {String} vertexShader - The vertex shader, or null.
+ * @return {Object} The renamed shaders, macros and varyings.
+ */
+
+function renameEffectSymbols(prefix, effect, fragmentShader, vertexShader) {
+
+	try {
+
+		const scoper = new GLSLScoper(prefix, effect.uniforms.keys(), effect.defines.keys());
+		const scopedFragmentShader = scoper.scope(fragmentShader);
+		const scopedVertexShader = (vertexShader !== null) ? scoper.scope(vertexShader) : null;
+
+		return {
+			fragmentShader: scopedFragmentShader,
+			vertexShader: scopedVertexShader,
+			defines: scoper.scopeDefines(effect.defines),
+			varyings: [...scoper.varyings]
+		};
+
+	} catch(error) {
+
+		return legacyRenameEffectSymbols(prefix, effect, fragmentShader, vertexShader);
+
+	}
+
+}
+
+/**
+ * Renames functions, varyings, uniforms and macros of the given shaders using regular expressions.
+ *
+ * @private
+ * @param {String} prefix - A prefix.
+ * @param {Effect} effect - The effect.
+ * @param {String} fragmentShader - The fragment shader.
+ * @param {String} vertexShader - The vertex shader, or null.
+ * @return {Object} The renamed shaders, macros and varyings.
+ */
+
+function legacyRenameEffectSymbols(prefix, effect, fragmentShader, vertexShader) {
+
+	const functionRegExp = /\w+\s+(\w+)\([\w\s,]*\)\s*{/g;
+
+	const varyings = [];
+	const names = new Set();
+
+	if(vertexShader !== null && /mainSupport/.test(vertexShader)) {
+
+		// Collect names of varyings and functions.
+		for(const m of vertexShader.matchAll(/(?:varying\s+\w+\s+([\S\s]*?);)/g)) {
+
+			// Handle unusual formatting and commas.
+			for(const n of m[1].split(/\s*,\s*/)) {
+
+				varyings.push(n);
+				names.add(n);
+
+			}
+
+		}
+
+		for(const m of vertexShader.matchAll(functionRegExp)) {
+
+			names.add(m[1]);
+
+		}
+
+	}
+
+	for(const m of fragmentShader.matchAll(functionRegExp)) {
+
+		names.add(m[1]);
+
+	}
+
+	for(const d of effect.defines.keys()) {
+
+		// Ignore parameters of function-like macros.
+		names.add(d.replace(/\([\w\s,]*\)/g, ""));
+
+	}
+
+	for(const u of effect.uniforms.keys()) {
+
+		names.add(u);
+
+	}
+
+	// Remove potential false positives.
+	names.delete("while");
+	names.delete("for");
+	names.delete("if");
+
+	// Store prefixed macros and rename global references in their values.
+	const defines = new Map();
+	effect.defines.forEach((val, key) => defines.set(prefix + key.charAt(0).toUpperCase() + key.slice(1), val));
+	prefixSubstrings(prefix, names, defines);
+
+	// Prefix varyings, functions, uniforms and macro names.
+	const shaders = new Map([["fragment", fragmentShader], ["vertex", vertexShader]]);
+	prefixSubstrings(prefix, names, shaders);
+
+	return {
+		fragmentShader: shaders.get("fragment"),
+		vertexShader: shaders.get("vertex"),
+		defines,
+		varyings
+	};
+
+}
+
+/**
  * Integrates the given effect.
  *
  * @private
@@ -72,17 +194,12 @@ function integrateEffect(prefix, effect, data) {
 
 	} else {
 
-		const functionRegExp = /\w+\s+(\w+)\([\w\s,]*\)\s*{/g;
-
 		const shaderParts = data.shaderParts;
 		let fragmentHead = shaderParts.get(Section.FRAGMENT_HEAD) || "";
 		let fragmentMainUv = shaderParts.get(Section.FRAGMENT_MAIN_UV) || "";
 		let fragmentMainImage = shaderParts.get(Section.FRAGMENT_MAIN_IMAGE) || "";
 		let vertexHead = shaderParts.get(Section.VERTEX_HEAD) || "";
 		let vertexMainSupport = shaderParts.get(Section.VERTEX_MAIN_SUPPORT) || "";
-
-		const varyings = new Set();
-		const names = new Set();
 
 		if(mainUvExists) {
 
@@ -98,62 +215,22 @@ function integrateEffect(prefix, effect, data) {
 			vertexMainSupport += `\t${prefix}MainSupport(`;
 			vertexMainSupport += needsUv ? "vUv);\n" : ");\n";
 
-			// Collect names of varyings and functions.
-			for(const m of vertexShader.matchAll(/(?:varying\s+\w+\s+([\S\s]*?);)/g)) {
+		}
 
-				// Handle unusual formatting and commas.
-				for(const n of m[1].split(/\s*,\s*/)) {
+		// Move the effect's private symbols into a unique namespace.
+		const renamed = renameEffectSymbols(prefix, effect, fragmentShader, vertexShader);
+		fragmentShader = renamed.fragmentShader;
+		vertexShader = renamed.vertexShader;
 
-					data.varyings.add(n);
-					varyings.add(n);
-					names.add(n);
+		for(const varying of renamed.varyings) {
 
-				}
-
-			}
-
-			for(const m of vertexShader.matchAll(functionRegExp)) {
-
-				names.add(m[1]);
-
-			}
+			data.varyings.add(varying);
 
 		}
 
-		for(const m of fragmentShader.matchAll(functionRegExp)) {
-
-			names.add(m[1]);
-
-		}
-
-		for(const d of effect.defines.keys()) {
-
-			// Ignore parameters of function-like macros.
-			names.add(d.replace(/\([\w\s,]*\)/g, ""));
-
-		}
-
-		for(const u of effect.uniforms.keys()) {
-
-			names.add(u);
-
-		}
-
-		// Remove potential false positives.
-		names.delete("while");
-		names.delete("for");
-		names.delete("if");
-
-		// Store prefixed uniforms and macros.
+		// Store prefixed macros and uniforms.
+		renamed.defines.forEach((val, key) => data.defines.set(key, val));
 		effect.uniforms.forEach((val, key) => data.uniforms.set(prefix + key.charAt(0).toUpperCase() + key.slice(1), val));
-		effect.defines.forEach((val, key) => data.defines.set(prefix + key.charAt(0).toUpperCase() + key.slice(1), val));
-
-		// Prefix varyings, functions, uniforms and macro values.
-		const shaders = new Map([["fragment", fragmentShader], ["vertex", vertexShader]]);
-		prefixSubstrings(prefix, names, data.defines);
-		prefixSubstrings(prefix, names, shaders);
-		fragmentShader = shaders.get("fragment");
-		vertexShader = shaders.get("vertex");
 
 		// Collect unique blend modes.
 		const blendMode = effect.blendMode;
