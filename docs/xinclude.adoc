@@ -1,0 +1,159 @@
+[[xinclude]]
+== XInclude assembly (extras/xinclude.hpp)
+
+The core parser treats `xi:include` elements as ordinary markup: `load_string`,
+`load_buffer`, XPath queries and serialization are unchanged. XInclude expansion
+is an explicit, separate step provided by `extras/xinclude.hpp` /
+`extras/xinclude.cpp`. Add both files to your build alongside the pugixml
+sources and include the header:
+
+[source,c++]
+----
+#include "extras/xinclude.hpp"
+----
+
+[[xinclude.assemble]]
+=== assemble()
+
+[source,c++]
+----
+namespace pugi { namespace xinclude {
+
+struct Resource {
+    const void* data;   // null means "resource does not exist"
+    size_t      size;
+    static Resource not_found();
+};
+
+typedef std::function<Resource(const std::string& absolute_uri)> ResourceResolver;
+
+struct Error {
+    ErrorCode   code;          // xi_error_*
+    std::string message;       // human readable explanation
+    std::string resource_uri;  // URI of the failing include
+    std::vector<std::string> include_chain; // main document first
+};
+
+struct Result {
+    xml_document document;     // independent, fully expanded tree
+    Error        error;        // populated only on failure
+    operator bool() const;     // true on success
+};
+
+Result assemble(const xml_document& input,
+                const std::string& document_uri,
+                const ResourceResolver& resolve);
+
+}}
+----
+
+`assemble` takes a *read-only* main document, the document's absolute URI, and a
+resolver callback. It returns a new `xml_document` that owns every expanded
+node; the input document is never modified and no node handle is moved out of
+it. The returned tree does not depend on the lifetime of the input or of any
+temporary resource document. On failure the returned document is empty and
+`Result::error` carries the failing `resource_uri` plus the include chain from
+the main document to the failure point.
+
+The implementation performs no file system or network access of its own. The
+resolver is the single place where bytes enter the assembler; it is always
+called with an absolute URI whose `.` and `..` path segments have already been
+removed. Return `Resource::not_found()` (a null `data` pointer) for a missing
+resource; an empty resource is a non-null pointer with `size == 0`.
+
+[[xinclude.uris]]
+=== URI handling
+
+* Supported reference forms: URIs with a scheme, URIs with an authority
+  (`//host/...`), absolute paths (`/...`) and relative paths (`a/b.xml`,
+  `../c.xml`).
+* Each `href` is resolved against the *effective* `xml:base` inherited at the
+  include's own position, not just against the main document URI. `xml:base`
+  attributes are applied cumulatively as the tree is traversed.
+* Query (`?...`) and fragment (`#...`) components are rejected. Percent
+  decoding is not performed: hrefs are passed through verbatim (after path
+  normalization) to the resolver.
+* Including the same URI from two sibling positions is legal. A URI that
+  already appears in the active reference chain is a circular reference and is
+  reported as a structural error.
+
+[[xinclude.semantics]]
+=== Include semantics
+
+Only elements whose namespace name is exactly
+`http://www.w3.org/2001/XInclude` are recognized; the prefix spelling is
+irrelevant. Two local names are handled: `include` and `fallback`.
+
+* `parse="xml"` (the default) inserts the referenced document's nodes. The XML
+  declaration is not part of the included infoset and is dropped.
++
+`xpointer` may be omitted or written as `element(/1/2/...)`, where each number
+is a 1-based index among element children. The selected element itself (not a
+copy of its parent) is inserted. Any other xpointer language is a structural
+error. An empty selection is a recoverable error.
++
+When a selected subtree is relocated, namespace declarations inherited from its
+ancestors, the effective `xml:lang`, and the absolute effective `xml:base` are
+materialized on the inserted root so element/attribute names and relative links
+keep their meaning.
+* `parse="text"` accepts only UTF-8, UTF-16LE and UTF-16BE. A BOM that
+  contradicts an `encoding` declaration, or any malformed byte sequence, makes
+  decoding fail. CR and CRLF line endings are normalized to LF. The content is
+  inserted as a single text node and is never parsed as XML.
+* Includes inside a referenced document are expanded recursively.
+
+[[xinclude.fallback]]
+=== Fallback and error classification
+
+A recoverable failure — missing resource, XML syntax error, empty
+`element()` selection, or text decoding failure — is replaced by the include's
+single direct `xi:fallback`, whose children are inserted in order and whose own
+includes are then processed. Without a fallback, `assemble` fails.
+
+Structural errors are *not* swallowed by a fallback:
+
+* an unknown `parse` value;
+* more than one `xi:fallback`, or an element child other than `xi:fallback`;
+* an unsupported `xpointer`;
+* a circular reference in the active include chain;
+* a query/fragment URI.
+
+[[xinclude.example]]
+=== In-memory resource table example
+
+A complete, compilable example is provided in
+`samples/xinclude_assemble.cpp`. Its resolver is backed by a simple map from
+absolute URI to byte vector, so an entire offline package can be assembled with
+no I/O:
+
+[source,c++]
+----
+class MemoryPackage
+{
+public:
+    void store(const std::string& uri, const std::string& bytes)
+    {
+        resources_[uri].assign(bytes.begin(), bytes.end());
+    }
+
+    pugi::xinclude::ResourceResolver resolver()
+    {
+        return [this](const std::string& uri) -> pugi::xinclude::Resource
+        {
+            auto it = resources_.find(uri);
+            if (it == resources_.end())
+                return pugi::xinclude::Resource::not_found();
+            return pugi::xinclude::Resource(it->second.data(), it->second.size());
+        };
+    }
+private:
+    std::map<std::string, std::vector<std::uint8_t> > resources_;
+};
+
+pugi::xinclude::Result result =
+    pugi::xinclude::assemble(input, main_uri, package.resolver());
+if (!result)
+    std::cerr << result.error.message << "\n";
+----
+
+// vim:et
