@@ -8,6 +8,7 @@ package microformats
 import (
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -310,27 +311,150 @@ func (p *parser) backcompatIncludeRefs(node *html.Node) (refs []string, replace 
 	return refs, false
 }
 
-// backcompatIncludeNode includes referenced notes following the include
-// pattern.
+// includeContext tracks the state needed while expanding backcompat include
+// references into a private copy of the document being parsed.
+type includeContext struct {
+	// roots is the stack of microformat roots enclosing the node currently
+	// being expanded, innermost last.
+	roots []includeRoot
+
+	// path holds the original document nodes on the active expansion path:
+	// every ancestor of the current position, whether reached by normal
+	// descent or by following a reference.  It is consulted to skip
+	// reference back edges.
+	path map[*html.Node]bool
+}
+
+// includeRoot describes a microformat root enclosing the position currently
+// being expanded.
+type includeRoot struct {
+	types      []string
+	backcompat bool
+}
+
+func newIncludeContext() *includeContext {
+	return &includeContext{path: make(map[*html.Node]bool)}
+}
+
+// parent returns a microformat holding the types of the innermost root
+// enclosing the current position, or nil if there is none.
+func (c *includeContext) parent() *Microformat {
+	if len(c.roots) == 0 {
+		return nil
+	}
+	return &Microformat{Type: c.roots[len(c.roots)-1].types}
+}
+
+// backcompatActive reports whether the innermost root enclosing the current
+// position is a backwards-compatible (v1) root, meaning include references
+// at this position should be expanded.
+func (c *includeContext) backcompatActive() bool {
+	return len(c.roots) > 0 && c.roots[len(c.roots)-1].backcompat
+}
+
+// expandIncludes returns a copy of node's subtree with the backwards
+// compatible include pattern expanded: a.include and object.include
+// placeholders are replaced by the referenced element, while itemref and
+// headers references append the referenced element after the node's own
+// children, in token order.  Only same-page ID references (of the form
+// "#id") are resolved, always against the original document rooted at
+// p.root; copies produced by expansion never participate in ID lookups, and
+// the input tree is never modified.
 //
-// see backcompatIncludeRefs for information on refs and replace parameters.
-func (p *parser) backcompatIncludeNode(node *html.Node, refs []string, replace bool) *html.Node {
-	if len(refs) == 0 {
-		return node
+// References are expanded recursively while tracking the chain of original
+// document nodes along the active expansion path.  A reference to a node
+// already on that path is a back edge — following it would loop forever —
+// so that single edge is skipped while the referencing node's other content
+// and remaining references are processed normally.  This is deliberately
+// neither a depth limit nor a global "already expanded" set: a fragment
+// legitimately referenced from two sibling positions, listed twice in a
+// single itemref attribute, or reached again through a diamond of
+// references is expanded (and contributes its data) once per reference,
+// because by the time the next reference is followed, the previous
+// expansion has completed and the node is no longer on the path.
+func (p *parser) expandIncludes(node *html.Node, ctx *includeContext) *html.Node {
+	// template contents are not parsed, so copy them verbatim.
+	if isAtom(node, atom.Template) {
+		return cloneSubtree(node)
 	}
 
-	for _, ref := range refs {
-		if n := findNodeByID(p.root, ref); n != nil {
-			if node != n && !isAncestorNode(node, n) {
-				if replace {
-					return n
-				}
-				node.AppendChild(cloneNode(n))
-			}
+	// Mirror walk's root class detection so that references expand exactly
+	// when the innermost enclosing root is a v1 root.  The context in
+	// effect at each reference position is used, so a shared fragment
+	// expands independently under every root that references it.
+	if node.Type == html.ElementNode {
+		rootclasses, backcompat := rootClassesFor(getClasses(node), ctx.parent())
+		if len(rootclasses) > 0 {
+			slices.Sort(rootclasses)
+			ctx.roots = append(ctx.roots, includeRoot{types: rootclasses, backcompat: backcompat})
+			defer func() { ctx.roots = ctx.roots[:len(ctx.roots)-1] }()
 		}
 	}
 
-	return node
+	ctx.path[node] = true
+	defer delete(ctx.path, node)
+
+	var appendRefs []string
+	if node.Type == html.ElementNode && ctx.backcompatActive() {
+		refs, replace := p.backcompatIncludeRefs(node)
+		if replace {
+			for _, ref := range refs {
+				target := findNodeByID(p.root, ref)
+				if target == nil || ctx.path[target] {
+					// Unresolvable reference or back edge: skip
+					// just this edge and leave the placeholder
+					// to be copied as an ordinary element.
+					continue
+				}
+				// The referenced element replaces the placeholder
+				// outright, properties of its own included.
+				return p.expandIncludes(target, ctx)
+			}
+		} else {
+			appendRefs = refs
+		}
+	}
+
+	clone := cloneNodeShallow(node)
+	for c := node.FirstChild; c != nil; c = c.NextSibling {
+		clone.AppendChild(p.expandIncludes(c, ctx))
+	}
+	for _, ref := range appendRefs {
+		target := findNodeByID(p.root, ref)
+		if target == nil || ctx.path[target] {
+			// Unresolvable reference or back edge: skip just this
+			// token and keep appending any remaining references.
+			continue
+		}
+		clone.AppendChild(p.expandIncludes(target, ctx))
+	}
+	return clone
+}
+
+// cloneNodeShallow copies node, including its attribute list, but none of
+// its children or its links to parent and sibling nodes.
+func cloneNodeShallow(node *html.Node) *html.Node {
+	clone := &html.Node{
+		Type:      node.Type,
+		DataAtom:  node.DataAtom,
+		Data:      node.Data,
+		Namespace: node.Namespace,
+	}
+	if node.Attr != nil {
+		clone.Attr = make([]html.Attribute, len(node.Attr))
+		copy(clone.Attr, node.Attr)
+	}
+	return clone
+}
+
+// cloneSubtree returns a deep copy of node and its children, detached from
+// the original tree.
+func cloneSubtree(node *html.Node) *html.Node {
+	clone := cloneNodeShallow(node)
+	for c := node.FirstChild; c != nil; c = c.NextSibling {
+		clone.AppendChild(cloneSubtree(c))
+	}
+	return clone
 }
 
 // findNodeByID searches node and its children, returning the node with the
@@ -355,13 +479,4 @@ func isAncestorNode(child, parent *html.Node) bool {
 		}
 	}
 	return false
-}
-
-// cloneNode makes a copy of node, detaching any parent or sibling nodes.
-func cloneNode(node *html.Node) *html.Node {
-	clone := *node
-	clone.Parent = nil
-	clone.PrevSibling = nil
-	clone.NextSibling = nil
-	return &clone
 }

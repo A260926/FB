@@ -136,27 +136,6 @@ func Test_BackcompatIncludeRefs(t *testing.T) {
 	}
 }
 
-func Test_BackcompatIncludeNode(t *testing.T) {
-	n, _ := parseNode("<p></p>")
-
-	tests := []struct {
-		node    *html.Node
-		refs    []string
-		replace bool
-		want    *html.Node
-	}{
-		{n, []string{}, false, n},
-	}
-
-	for _, tt := range tests {
-		p := &parser{}
-		got := p.backcompatIncludeNode(tt.node, tt.refs, tt.replace)
-		if want := tt.want; !cmp.Equal(got, want) {
-			t.Errorf("backcompatIncludeNode(%v, %v, %v) returned %v, want %v", tt.node, tt.refs, tt.replace, got, want)
-		}
-	}
-}
-
 func Test_IsAncestorNode(t *testing.T) {
 	a1, _ := parseNode("<p><b></b></p>")
 	a2 := a1.FirstChild

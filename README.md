@@ -73,6 +73,27 @@ you can parse the microformats from indieweb.org that appear within the `#conten
 [html.Node]: https://pkg.go.dev/golang.org/x/net/html#Node
 [goquery package]: https://github.com/PuerkitoBio/goquery
 
+## Include pattern and parse stability
+
+Classic (v1) pages may pull shared fragments into a microformat with the
+[include pattern][] (`a.include`, `object.include`) or with
+`itemref`/`headers` references.  This parser expands those references into a
+private copy of the document, so calling Parse or ParseNode never modifies
+the supplied tree, and repeated parses of the same tree yield identical
+results.
+
+Reference cycles are terminated by skipping only the back edge: while
+following a chain of references, a reference to a node already on the active
+expansion path is ignored, but the rest of that node's normal content and
+its sibling references are processed normally.  This is different from
+legitimately referencing the same fragment more than once — two sibling
+positions referencing one fragment, a duplicated token in a single
+`itemref="x x"` attribute, or a diamond of references all cause the fragment
+to contribute its data once per reference, since each reference is expanded
+independently.
+
+[include pattern]: https://microformats.org/wiki/include-pattern
+
 ## Additional helper packages
 
 Use the [ptd package] to perform [Post Type Discovery].

@@ -137,8 +137,30 @@ func ParseNode(doc *html.Node, baseURL *url.URL) *Data {
 	}
 	p.baseFound = false
 	p.root = doc
-	p.walk(doc)
+	// Expand backcompat (v1) include references into a private copy of the
+	// document and parse that, so that parsing never modifies the caller's
+	// tree.  ID lookups during expansion are always made against the
+	// original document rooted at p.root.
+	p.walk(p.expandIncludes(doc, newIncludeContext()))
 	return p.curData
+}
+
+// rootClassesFor returns the microformat root classes for a node with the
+// given classes, along with whether they are backwards-compatible (v1)
+// roots.  parent identifies the enclosing microformat, if any, since some
+// root mappings are context-specific.
+func rootClassesFor(classes []string, parent *Microformat) (rootclasses []string, backcompat bool) {
+	for _, class := range classes {
+		if rootClassNames.MatchString(class) {
+			rootclasses = append(rootclasses, class)
+		}
+	}
+	if len(rootclasses) == 0 {
+		if rootclasses = backcompatRootClasses(classes, parent); len(rootclasses) > 0 {
+			backcompat = true
+		}
+	}
+	return rootclasses, backcompat
 }
 
 // expandAttrURLs expands relative URLs in attributes to be absolute URLs.
@@ -204,22 +226,9 @@ func (p *parser) walk(node *html.Node) {
 
 	var curItem *Microformat
 	var priorItem *Microformat
-	var rootclasses []string
 
 	classes := getClasses(node)
-	for _, class := range classes {
-		if rootClassNames.MatchString(class) {
-			rootclasses = append(rootclasses, class)
-		}
-	}
-
-	var backcompat bool
-	if len(rootclasses) == 0 {
-		rootclasses = backcompatRootClasses(classes, p.curItem)
-		if len(rootclasses) > 0 {
-			backcompat = true
-		}
-	}
+	rootclasses, backcompat := rootClassesFor(classes, p.curItem)
 
 	if len(rootclasses) > 0 {
 		sort.Strings(rootclasses)
@@ -240,13 +249,9 @@ func (p *parser) walk(node *html.Node) {
 		p.curItem = curItem
 	}
 
-	// handle backcompat include pattern
-	if p.curItem != nil && p.curItem.backcompat {
-		refs, replace := p.backcompatIncludeRefs(node)
-		if len(refs) != 0 {
-			node = p.backcompatIncludeNode(node, refs, replace)
-		}
-	}
+	// Backcompat include references (a.include, object.include, itemref,
+	// and headers) were already expanded into the tree by ParseNode before
+	// this walk, so they need no special handling here.
 
 	if !p.baseFound && isAtom(node, atom.Base) {
 		if href := getAttr(node, "href"); href != "" {
