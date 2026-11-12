@@ -9,6 +9,7 @@ pages:
 - ["index.md", "Home"]
 - ["overview.md", "User Guide", "Overview"]
 - ["settings.md", "User Guide", "Settings"]
+- ["replay.md", "User Guide", "Page state, replay and ownership"]
 - ["user_agents.md", "User Guide", "User Agents"]
 - ["debugging.md", "User Guide", "Debugging"]
 - ["api/packages/surf.md", "Packages", "surf"]

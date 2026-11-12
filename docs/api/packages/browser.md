@@ -846,3 +846,34 @@ type Submittable interface {
 ```
 
 Submittable represents an element that may be submitted, such as a form.
+
+## Navigation replay additions
+
+```go
+func (bow *Browser) SetReplayStorage(memoryLimit int64, dir string) error
+func (bow *Browser) Close() error
+```
+
+`SetReplayStorage` configures where fully encoded request bodies are kept so
+consumed requests can be re-sent by `Reload`. Bodies up to `memoryLimit`
+bytes are held in memory (the default is 1 MiB); larger bodies are migrated
+to a temporary file created in `dir`. A limit of zero stores every body on
+disk, a negative limit returns an error without changing the settings, and
+an empty `dir` uses the operating system's temporary directory. The limit
+applies to the complete encoded HTTP body of `Post`, `PostForm`,
+`PostMultipart` and `Form.Submit`.
+
+`Reload` re-sends the original navigation request that produced the current
+page, including its method, entry URL, `Content-Type`, applied request
+headers and body, using an independent reader for every replay. It replaces
+the current page record in place instead of adding a history entry, and
+cookies are recomputed by the cookie jar for each send. Replaying a POST
+re-executes its server-side side effects.
+
+`Close` releases resources owned by the browser, including replay temporary
+files referenced by the current page and the history. It is safe to call
+multiple times; afterwards navigation and `Reload` return an error and
+`Back` returns false. Tabs created with `NewTab` share page states and
+history: closing one tab releases only its ownership, and a backing file is
+removed once the last owning tab releases it. See the "Page state, replay
+and ownership" user guide for the full lifecycle rules.

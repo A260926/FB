@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httputil"
@@ -97,6 +96,15 @@ type Browsable interface {
 
 	// AddRequestHeader adds a header the browser sends with each request.
 	AddRequestHeader(name, value string)
+
+	// SetReplayStorage configures where request bodies are kept so requests
+	// can be re-sent by Reload after their original body has been consumed.
+	SetReplayStorage(memoryLimit int64, dir string) error
+
+	// Close releases resources owned by the browser, including temporary
+	// files backing replayable request bodies. It is safe to call multiple
+	// times.
+	Close() error
 
 	// Open requests the given URL using the GET method.
 	Open(url string) error
@@ -213,11 +221,17 @@ type Browser struct {
 	// refresh is a timer used to meta refresh pages.
 	refresh *time.Timer
 
-	// relativeUrl makes from <base> or page url
-	relativeUrl *url.URL
-
-	// body of the current page.
+	// body mirrors the decoded response bytes of the current page. The
+	// authoritative copy lives in state.Body; this field is kept in sync on
+	// every commit and Back so Download and legacy callers always observe the
+	// bytes of the currently restored page.
 	body []byte
+
+	// replay stores request bodies so consumed requests can be re-sent.
+	replay *jar.ReplayStorage
+
+	// closed is set once Close has been called.
+	closed bool
 }
 
 // buildClient instanciates the *http.Client used by the browser
@@ -266,12 +280,20 @@ func (bow *Browser) OpenBookmark(name string) error {
 }
 
 // Post requests the given URL using the POST method.
+//
+// When body implements io.Closer it is closed exactly once by the browser,
+// including when preparing or sending the request fails. The fully encoded
+// body is captured by the replay storage before the request is sent, so
+// Reload can re-send it even when body is a one-shot reader.
 func (bow *Browser) Post(u string, contentType string, body io.Reader) error {
 	ur, err := url.Parse(u)
 	if err != nil {
+		closeOnce(body)
 		return err
 	}
-	return bow.httpPOST(ur, bow.Url(), contentType, body)
+	err = bow.httpPOST(ur, bow.Url(), contentType, body)
+	closeOnce(body)
+	return err
 }
 
 // PostForm requests the given URL using the POST method with the given data.
@@ -280,53 +302,142 @@ func (bow *Browser) PostForm(u string, data url.Values) error {
 }
 
 // PostMultipart requests the given URL using the POST method with the given data using multipart/form-data format.
+//
+// The multipart body is produced as a stream and captured by the replay
+// storage as it is read: small bodies stay in memory and large attachments
+// spill into a temporary file without ever holding the whole encoded body in
+// a bytes.Buffer. Readers attached through Form.File/SetFile remain owned by
+// the caller; the browser never closes them.
 func (bow *Browser) PostMultipart(u string, fields url.Values, files FileSet) error {
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	for k, vs := range fields {
-		for _, v := range vs {
-			writer.WriteField(k, v)
-		}
-	}
-	for k, file := range files {
-		fw, err := writer.CreateFormFile(k, file.fileName)
-		if err != nil {
-			return err
-		}
-		if file.data != nil {
-			_, err = io.Copy(fw, file.data)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	err := writer.Close()
+	ur, err := url.Parse(u)
 	if err != nil {
 		return err
-
 	}
-	return bow.Post(u, writer.FormDataContentType(), body)
+
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+	contentType := writer.FormDataContentType()
+
+	// The goroutine streams fields and attachments into the pipe. The browser
+	// side drains the pipe while preparing the replayable body, so peak
+	// memory does not grow with the attachment size.
+	go func() {
+		var writeErr error
+		for k, vs := range fields {
+			for _, v := range vs {
+				if writeErr != nil {
+					break
+				}
+				writeErr = writer.WriteField(k, v)
+			}
+			if writeErr != nil {
+				break
+			}
+		}
+		if writeErr == nil {
+			for k, file := range files {
+				var fw io.Writer
+				fw, writeErr = writer.CreateFormFile(k, file.fileName)
+				if writeErr != nil {
+					break
+				}
+				if file.data != nil {
+					_, writeErr = io.Copy(fw, file.data)
+					if writeErr != nil {
+						break
+					}
+				}
+			}
+		}
+		if writeErr == nil {
+			writeErr = writer.Close()
+		}
+		// Closing the pipe with the error makes the preparation on the
+		// browser side fail with the original cause without sending anything.
+		pw.CloseWithError(writeErr)
+	}()
+
+	err = bow.httpPOST(ur, bow.Url(), contentType, pr)
+	// On the success path the pipe is already drained and closed; on
+	// failure this unblocks the writer goroutine so it cannot leak.
+	_ = pr.Close()
+	return err
 }
 
 // Back loads the previously requested page.
 //
-// Returns a boolean value indicating whether a previous page existed, and was
-// successfully loaded.
+// Back only restores pages from the local history: no request is made to the
+// origin server. A single completed page is enough to go back, and the empty
+// state of a freshly created browser is never exposed. It returns false when
+// there is no previous page to restore.
 func (bow *Browser) Back() bool {
-	if bow.history.Len() > 1 {
-		bow.state = bow.history.Pop()
-		return true
+	if bow.closed || bow.history == nil {
+		return false
 	}
-	return false
+	prev := bow.history.Pop()
+	if prev == nil {
+		return false
+	}
+	old := bow.state
+	bow.state = prev
+	bow.body = prev.Body
+	if old != nil {
+		old.ReleaseResources()
+	}
+	return true
 }
 
-// Reload duplicates the last successful request.
+// Reload re-sends the request that produced the current page.
+//
+// The original navigation request is replayed with its method, entry URL,
+// Content-Type, applied request headers and request body intact. Each replay
+// reads the stored body through a brand new reader, so Reload can be called
+// repeatedly and after Back. Redirects are handled by net/http again: a POST
+// that was originally answered with a 303 is re-sent as that same POST, not
+// as the final GET of the receipt page. Cookies are recomputed by the
+// cookie jar for this request; cookies appended to a previous send are not
+// treated as permanent headers.
+//
+// Reload replaces the current record in place and does not add another
+// history entry.
 func (bow *Browser) Reload() error {
-	if bow.state.Request != nil {
-		return bow.httpRequest(bow.state.Request)
+	if bow.closed {
+		return errors.New("Browser has been closed.")
 	}
-	return errors.NewPageNotLoaded("Cannot reload, the previous request failed.")
+	if bow.state == nil || bow.state.Request == nil {
+		return errors.NewPageNotLoaded("Cannot reload, the previous request failed.")
+	}
+
+	orig := bow.state.Request
+	req := orig.Clone(orig.Context())
+	// The cookie jar recomputes the Cookie header on every send; keeping the
+	// previously appended value would pin stale cookies to the request.
+	req.Header.Del("Cookie")
+	req.GetBody = nil
+
+	stored := bow.state.Replay
+	if stored != nil {
+		// The new state takes its own reference to the shared body. It is
+		// released again if anything fails before the page is committed.
+		stored.Retain()
+		reader, err := stored.NewReader()
+		if err != nil {
+			stored.Release()
+			return err
+		}
+		req.Body = reader
+		req.ContentLength = stored.Size()
+		// A 307/308 redirect may need to rewind the body; every rewind gets
+		// its own independent reader over the stored bytes.
+		req.GetBody = func() (io.ReadCloser, error) {
+			return stored.NewReader()
+		}
+	} else {
+		req.Body = nil
+		req.ContentLength = 0
+	}
+
+	return bow.sendPrepared(req, stored, true)
 }
 
 // Bookmark saves the page URL in the bookmarks with the given name.
@@ -522,6 +633,13 @@ func (bow *Browser) BookmarksJar() jar.BookmarksJar {
 
 // SetHistoryJar is used to set the history jar the browser uses.
 func (bow *Browser) SetHistoryJar(hj jar.History) {
+	if old, ok := bow.history.(*jar.MemoryHistory); ok && old != hj {
+		// Drop this browser's ownership of the previous jar and release its
+		// resources when it was the last owner.
+		if old.Detach() {
+			old.Clear()
+		}
+	}
 	bow.history = hj
 }
 
@@ -535,7 +653,6 @@ func (bow *Browser) SetHeadersJar(h http.Header) {
 	bow.headers = h
 }
 
-// SetTransport sets the http library transport mechanism for each request.
 // SetTimeout sets the timeout for requests.
 func (bow *Browser) SetTimeout(t time.Duration) {
 	if bow.client == nil {
@@ -562,6 +679,64 @@ func (bow *Browser) DelRequestHeader(name string) {
 	bow.headers.Del(name)
 }
 
+// SetReplayStorage configures where fully encoded request bodies are kept so
+// consumed requests can be re-sent by Reload. Bodies up to memoryLimit bytes
+// are held in memory; larger bodies are migrated to a temporary file created
+// in dir. A memoryLimit of 0 sends every body to disk directly. An empty dir
+// uses the operating system's temporary directory. A negative memoryLimit
+// returns an error and leaves the current settings untouched.
+func (bow *Browser) SetReplayStorage(memoryLimit int64, dir string) error {
+	if memoryLimit < 0 {
+		return errors.New("SetReplayStorage: memoryLimit must not be negative")
+	}
+	if dir != "" {
+		info, err := os.Stat(dir)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return errors.New("SetReplayStorage: %s is not a directory", dir)
+		}
+	}
+	bow.replay = jar.NewReplayStorage(memoryLimit, dir)
+	return nil
+}
+
+// Close releases the resources owned by the browser, notably the temporary
+// files backing replayable request bodies held by the current page and the
+// history. Calling Close more than once is harmless. After Close,
+// Open/Head/Post/PostForm/PostMultipart/Reload return an error and Back
+// returns false.
+//
+// When the browser was created with NewTab and shares its pages with other
+// tabs, Close only releases this tab's references: the other tabs keep
+// working and their replay files are removed once the last owner goes away.
+func (bow *Browser) Close() error {
+	if bow.closed {
+		return nil
+	}
+	bow.closed = true
+	if bow.refresh != nil {
+		bow.refresh.Stop()
+	}
+	if bow.state != nil {
+		bow.state.ReleaseResources()
+	}
+	if bow.history != nil {
+		// With the default MemoryHistory, drop only this tab's ownership.
+		// Entries other tabs are still using survive until the last tab
+		// closes or the states are otherwise removed.
+		if shared, ok := bow.history.(*jar.MemoryHistory); ok {
+			if shared.Detach() {
+				shared.Clear()
+			}
+		} else {
+			bow.history.Clear()
+		}
+	}
+	return nil
+}
+
 // ResolveUrl returns an absolute URL for a possibly relative URL.
 func (bow *Browser) ResolveUrl(u *url.URL) *url.URL {
 	return bow.RelativeUrl().ResolveReference(u)
@@ -577,33 +752,41 @@ func (bow *Browser) ResolveStringUrl(u string) (string, error) {
 	return pu.String(), nil
 }
 
-// RelativeUrl returns URL relative to which all the others work
+// RelativeUrl returns URL relative to which all the others work. It is the
+// page's own base URL, derived from its final document URL and <base> tag;
+// pages without a <base> tag never inherit the base of a previous page.
 func (bow *Browser) RelativeUrl() *url.URL {
-	if bow.relativeUrl == nil {
-		return bow.Url()
+	if bow.state != nil && bow.state.Base != nil {
+		return bow.state.Base
 	}
-
-	return bow.relativeUrl
+	return bow.Url()
 }
 
-// Download writes the contents of the document to the given writer.
+// Download writes the contents of the document to the given writer. The
+// bytes are the decoded response body captured when the page was loaded, so
+// after Back they belong to the restored page rather than the previous one.
 func (bow *Browser) Download(o io.Writer) (int64, error) {
-	buff := bytes.NewBuffer(bow.body)
-	return io.Copy(o, buff)
+	var body []byte
+	if bow.state != nil {
+		body = bow.state.Body
+	}
+	return io.Copy(o, bytes.NewReader(body))
 }
 
 // Url returns the page URL as a string.
 func (bow *Browser) Url() *url.URL {
-	if bow.state.Response == nil {
-		// there is a possibility that we issued a request, but for
-		// whatever reason the request failed.
-		if bow.state.Request != nil {
-			return bow.state.Request.URL
-		}
+	if bow.state == nil {
 		return nil
 	}
-
-	return bow.state.Response.Request.URL
+	if bow.state.Response != nil {
+		return bow.state.Response.Request.URL
+	}
+	// there is a possibility that we issued a request, but for
+	// whatever reason the request failed.
+	if bow.state.Request != nil {
+		return bow.state.Request.URL
+	}
+	return nil
 }
 
 // StatusCode returns the response status code.
@@ -637,10 +820,22 @@ func (bow *Browser) Find(expr string) *goquery.Selection {
 	return bow.state.Dom.Find(expr)
 }
 
+// NewTab creates a new Browser sharing the configuration, state and jars.
+//
+// The current page and every history entry retain their replay resources for
+// both tabs: closing one tab releases only its references, and the backing
+// temporary files are removed when the last owning tab releases them.
 func (bow *Browser) NewTab() (b *Browser) {
 	b = &Browser{}
 	*b = *bow
+	b.closed = false
 
+	if bow.state != nil {
+		bow.state.RetainResources()
+	}
+	if shared, ok := bow.history.(*jar.MemoryHistory); ok {
+		shared.Attach()
+	}
 	return b
 }
 
@@ -679,83 +874,208 @@ func copyHeaders(h http.Header) http.Header {
 	return h2
 }
 
+// replayStorage returns the configured replay storage, creating a default one
+// for browsers that were not initialized through surf.NewBrowser.
+func (bow *Browser) replayStorage() *jar.ReplayStorage {
+	if bow.replay == nil {
+		bow.replay = jar.NewReplayStorage(jar.DefaultReplayMemoryLimit, "")
+	}
+	return bow.replay
+}
+
 // httpGET makes an HTTP GET request for the given URL.
 // When via is not nil, and AttributeSendReferer is true, the Referer header will
 // be set to ref.
 func (bow *Browser) httpGET(u *url.URL, ref *url.URL) error {
-	req, err := bow.buildRequest("GET", u.String(), ref, nil)
+	req, replay, err := bow.prepareRequest("GET", u, ref, "", nil)
 	if err != nil {
 		return err
 	}
-	return bow.httpRequest(req)
+	return bow.sendPrepared(req, replay, false)
 }
 
 // httpHEAD makes an HTTP HEAD request for the given URL.
 // When via is not nil, and AttributeSendReferer is true, the Referer header will
 // be set to ref.
 func (bow *Browser) httpHEAD(u *url.URL, ref *url.URL) error {
-	req, err := bow.buildRequest("HEAD", u.String(), ref, nil)
+	req, replay, err := bow.prepareRequest("HEAD", u, ref, "", nil)
 	if err != nil {
 		return err
 	}
-	return bow.httpRequest(req)
+	return bow.sendPrepared(req, replay, false)
 }
 
 // httpPOST makes an HTTP POST request for the given URL.
 // When via is not nil, and AttributeSendReferer is true, the Referer header will
 // be set to ref.
 func (bow *Browser) httpPOST(u *url.URL, ref *url.URL, contentType string, body io.Reader) error {
-	req, err := bow.buildRequest("POST", u.String(), ref, body)
+	req, replay, err := bow.prepareRequest("POST", u, ref, contentType, body)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", contentType)
-
-	return bow.httpRequest(req)
+	return bow.sendPrepared(req, replay, false)
 }
 
-// send uses the given *http.Request to make an HTTP request.
-func (bow *Browser) httpRequest(req *http.Request) error {
+// prepareRequest captures the request body in the replay storage and builds
+// the request that will actually be sent. On success the returned replay
+// body carries one owner reference, transferred to the resulting page state
+// (or released on failure).
+func (bow *Browser) prepareRequest(method string, u *url.URL, ref *url.URL, contentType string, body io.Reader) (*http.Request, *jar.ReplayBody, error) {
+	if bow.closed {
+		return nil, nil, errors.New("Browser has been closed.")
+	}
+
+	replay, err := bow.replayStorage().Prepare(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("surf: preparing request body for %s %s: %w", method, u.String(), err)
+	}
+
+	var sendBody io.ReadCloser
+	if replay != nil {
+		reader, err := replay.NewReader()
+		if err != nil {
+			replay.Release()
+			return nil, nil, err
+		}
+		sendBody = reader
+	}
+
+	req, err := bow.buildRequest(method, u.String(), ref, sendBody)
+	if err != nil {
+		if sendBody != nil {
+			_ = sendBody.Close()
+		}
+		if replay != nil {
+			replay.Release()
+		}
+		return nil, nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	if replay != nil {
+		req.ContentLength = replay.Size()
+		// A 307/308 redirect may need to rewind the body; every rewind gets
+		// its own independent reader over the stored bytes.
+		req.GetBody = func() (io.ReadCloser, error) {
+			return replay.NewReader()
+		}
+	}
+	return req, replay, nil
+}
+
+// sendPrepared sends a fully prepared request and, on success, atomically
+// commits the resulting page state. replace reports whether the request
+// reloads the current page (history must not grow). Any failure before the
+// commit leaves the current page, its Download bytes, base and history
+// untouched and releases the replay reference passed in.
+func (bow *Browser) sendPrepared(req *http.Request, replay *jar.ReplayBody, replace bool) (err error) {
 	if bow.client == nil {
 		bow.client = bow.buildClient()
 	}
 	bow.preSend()
+
 	resp, err := bow.client.Do(req)
 	if err != nil {
-		return err
+		if replay != nil {
+			replay.Release()
+		}
+		return fmt.Errorf("surf: sending %s %s: %w", req.Method, req.URL.String(), err)
 	}
 	defer resp.Body.Close()
+	// The cookie jar appends the Cookie header for this send. It must not be
+	// pinned onto the stored request: every replay recomputes cookies from
+	// the jar against the request URL.
+	req.Header.Del("Cookie")
 
-	var reader io.Reader
+	reader, err := encodedBodyReader(resp)
+	if err != nil {
+		if replay != nil {
+			replay.Release()
+		}
+		return fmt.Errorf("surf: decoding response body for %s: %w", req.URL.String(), err)
+	}
+
+	page, err := io.ReadAll(reader)
+	if err != nil {
+		if replay != nil {
+			replay.Release()
+		}
+		return fmt.Errorf("surf: reading response body for %s: %w", req.URL.String(), err)
+	}
+
+	dom, err := goquery.NewDocumentFromReader(bytes.NewReader(page))
+	if err != nil {
+		if replay != nil {
+			replay.Release()
+		}
+		return fmt.Errorf("surf: parsing response body for %s: %w", req.URL.String(), err)
+	}
+
+	next := &jar.State{
+		Request:  req,
+		Response: resp,
+		Dom:      dom,
+		Body:     page,
+		Base:     pageBase(resp.Request.URL, dom),
+		Replay:   replay,
+	}
+	bow.commit(next, replace)
+	bow.postSend()
+	return nil
+}
+
+// commit installs next as the current page. For a reload the previous page is
+// replaced and the history is left untouched. Otherwise the previous
+// completed page moves into the history.
+func (bow *Browser) commit(next *jar.State, replace bool) {
+	old := bow.state
+	bow.state = next
+	bow.body = next.Body
+	if old == nil {
+		return
+	}
+	if replace || old.Response == nil {
+		// Reload drops the previous record; the empty initial state has
+		// never been part of the history.
+		old.ReleaseResources()
+		return
+	}
+	bow.history.Push(old)
+}
+
+// encodedBodyReader wraps the response body in the matching decompressor.
+func encodedBodyReader(resp *http.Response) (io.Reader, error) {
 	switch resp.Header.Get("Content-Encoding") {
 	case "gzip":
-		reader, err = gzip.NewReader(resp.Body)
-		if err != nil {
-			return err
-		}
+		return gzip.NewReader(resp.Body)
 	case "deflate":
-		reader = flate.NewReader(resp.Body)
-
+		return flate.NewReader(resp.Body), nil
 	default:
-		reader = resp.Body
+		return resp.Body, nil
 	}
+}
 
-	bow.body, err = ioutil.ReadAll(reader)
-	if err != nil {
-		return err
+// pageBase resolves the base URL of a page from its final document URL and
+// its <base> tag, if any. The computation never consults a previously loaded
+// page and is independent of the MetaRefreshHandling attribute.
+func pageBase(docURL *url.URL, dom *goquery.Document) *url.URL {
+	base := docURL
+	if sel := dom.Find("base[href]"); sel.Length() > 0 {
+		if href, ok := sel.First().Attr("href"); ok && href != "" {
+			if ref, err := url.Parse(href); err == nil {
+				base = docURL.ResolveReference(ref)
+			}
+		}
 	}
+	return base
+}
 
-	buff := bytes.NewBuffer(bow.body)
-	dom, err := goquery.NewDocumentFromReader(buff)
-	if err != nil {
-		return err
+// closeOnce closes body when it implements io.Closer.
+func closeOnce(body io.Reader) {
+	if closer, ok := body.(io.Closer); ok {
+		_ = closer.Close()
 	}
-
-	bow.history.Push(bow.state)
-	bow.state = jar.NewHistoryState(req, resp, dom)
-	bow.postSend()
-
-	return nil
 }
 
 // preSend sets browser state before sending a request.
@@ -777,19 +1097,8 @@ func (bow *Browser) postSend() {
 					bow.refresh = time.NewTimer(dur)
 					go func() {
 						<-bow.refresh.C
-						bow.Reload()
+						_ = bow.Reload()
 					}()
-				}
-			}
-		}
-
-		baseTag := bow.Find("base[href]")
-		if baseTag.Length() > 0 {
-			if href, exists := baseTag.Attr("href"); exists {
-				baseUrl, err := url.Parse(href)
-
-				if err == nil {
-					bow.relativeUrl = bow.ResolveUrl(baseUrl)
 				}
 			}
 		}
@@ -822,7 +1131,7 @@ func (bow *Browser) attrToResolvedUrl(name string, sel *goquery.Selection) (*url
 }
 
 // attributeOrDefault reads an attribute and returns it or the default value when it's empty.
-func (bow *Browser) attrOrDefault(name, def string, sel *goquery.Selection) string {
+func (bow *Browser) attrOrDefault(name string, def string, sel *goquery.Selection) string {
 	a, ok := sel.Attr(name)
 	if ok {
 		return a

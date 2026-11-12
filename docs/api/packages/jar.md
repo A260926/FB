@@ -263,3 +263,36 @@ State represents a point in time.
 func NewHistoryState(req *http.Request, resp *http.Response, dom *goquery.Document) *State
 ```
 NewHistoryState creates and returns a new *State type.
+
+## Replay resources and history ownership
+
+```go
+type ReplayBody struct { /* ... */ }
+type ReplayStorage struct { /* ... */ }
+
+func NewReplayStorage(memoryLimit int64, dir string) *ReplayStorage
+func (s *ReplayStorage) Prepare(src io.Reader) (*ReplayBody, error)
+func (rb *ReplayBody) NewReader() (io.ReadCloser, error)
+func (rb *ReplayBody) Retain()
+func (rb *ReplayBody) Release()
+```
+
+`ReplayStorage` captures fully encoded request bodies for replay. Bodies at
+or below the memory limit stay in memory; larger bodies spill into a
+temporary file in `dir` (an empty `dir` means the OS temporary directory).
+`ReplayBody` is reference counted: share it with `Retain` and drop every
+owner with `Release`; the last release removes any backing file.
+
+`State` gained a decoded response `Body []byte`, a per-page `Base *url.URL`
+and an optional `Replay *ReplayBody`, all belonging to the same completed
+navigation as `Request`, `Response` and `Dom`. Use
+`State.RetainResources`/`State.ReleaseResources` when sharing or dropping a
+state.
+
+The `History` interface is unchanged, but implementations own the states
+received through `Push`: a state removed by `Pop`, eviction, `Clear` or any
+other path must have `State.ReleaseResources` called once no other reference
+remains. `Pop` transfers ownership of the state and its resources to the
+caller. The default `MemoryHistory` honors this contract, including
+`SetMax(0)` as infinite history, and tracks owning browser tabs through
+`Attach`/`Detach` for browsers created with `NewTab`.

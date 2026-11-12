@@ -2,3 +2,5 @@
 surf.iml
 site
 build_docs.sh
+# Local toolchain caches and verification artifacts
+.build/
