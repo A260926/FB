@@ -39,6 +39,7 @@ sources = [
   'src/pitch/test-pitchspecacf.c',
   'src/pitch/test-pitchyin.c',
   'src/pitch/test-pitchyinfft.c',
+  'src/pitch/test-pitchtrack.c',
   'src/notes/test-notes.c',
   'src/tempo/test-beattracking.c',
   'src/tempo/test-tempo.c',

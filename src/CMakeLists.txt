@@ -117,6 +117,7 @@ target_sources (aubio PRIVATE
     "pitch/pitchfcomb.c"
     "pitch/pitchyinfft.c"
     "pitch/pitch.c"
+    "pitch/pitchtrack.c"
     # synth
     "synth/sampler.c"
     "synth/wavetable.c"

@@ -136,6 +136,7 @@ sources = [
     'pitch/pitchyin.c',
     'pitch/pitchyinfast.c',
     'pitch/pitchyinfft.c',
+    'pitch/pitchtrack.c',
     'notes/notes.c',
     'spectral/awhitening.c',
     'spectral/dct.c',
