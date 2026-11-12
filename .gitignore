@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: © 2014 Team CharLS
+# SPDX-License-Identifier: BSD-3-Clause
+
+.vscode/
+.vs/
+.idea
+build*/
+cmake-build-debug/
+TestResults/
+vcpkg_installed/
+*.opensdf
+*.sdf
+
+# Ignore files created by Visual Studio
+*.suo
+*.user
+*.ipch
+*.opendb
+*.db
+*.aps
+*.sqlite
+
+# Ignore Coverity build folder
+cov-int/

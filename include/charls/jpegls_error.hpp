@@ -1,0 +1,67 @@
+// SPDX-FileCopyrightText: © 2018 Team CharLS
+// SPDX-License-Identifier: BSD-3-Clause
+
+#pragma once
+
+#include "jpegls_error.h" // IWYU pragma: export
+#include "public_types.h" // IWYU pragma: export
+
+#ifndef CHARLS_BUILD_AS_CPP_MODULE
+#include <system_error> // IWYU pragma: export
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+CHARLS_API_IMPORT_EXPORT const std::error_category* CHARLS_API_CALLING_CONVENTION charls_get_jpegls_category();
+}
+#endif
+
+
+CHARLS_EXPORT
+namespace charls {
+
+[[nodiscard]]
+inline const std::error_category& jpegls_category() noexcept
+{
+    return *(charls_get_jpegls_category());
+}
+
+[[nodiscard]]
+inline std::error_code make_error_code(jpegls_errc error_value) noexcept
+{
+    return {static_cast<int>(error_value), jpegls_category()};
+}
+
+
+/// <summary>
+/// Exception that will be thrown when a called charls method cannot succeed and is allowed to throw.
+/// </summary>
+class [[nodiscard]] jpegls_error final : public std::system_error
+{
+public:
+    explicit jpegls_error(const jpegls_errc error_value) : system_error{error_value}
+    {
+    }
+};
+
+namespace impl {
+
+// Not inlined by design, as this code path is the exceptional case.
+// It will help to allow the compiler to inline other functions.
+[[noreturn]]
+inline CHARLS_NO_INLINE void throw_jpegls_error(const jpegls_errc error_value)
+{
+    throw jpegls_error(error_value);
+}
+
+} // namespace impl
+
+inline void check_jpegls_errc(const jpegls_errc error_value)
+{
+    if (error_value != jpegls_errc::success)
+    {
+        impl::throw_jpegls_error(error_value);
+    }
+}
+
+} // namespace charls

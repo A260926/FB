@@ -1,0 +1,932 @@
+{
+  "repo": "https://github.com/google/googletest",
+  "commit": "063de7e9578f82b369302001269680b4b1553359",
+  "license": "BSD-3-Clause",
+  "exported": "root CMakeLists.txt and LICENSE; complete googletest subtree; googlemock is not used",
+  "files": [
+    {
+      "path": "checks/vendor/googletest/CMakeLists.txt",
+      "source_path": "CMakeLists.txt",
+      "sha256": "e75c65d8fc992b3fbc0bdab9669944996166ca64dd4383e2f2eca2ecc345dbd9",
+      "upstream_blob": "793c8d3cd4ec83262150a1ebe208385c4c377830"
+    },
+    {
+      "path": "checks/vendor/googletest/LICENSE",
+      "source_path": "LICENSE",
+      "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138",
+      "upstream_blob": "1941a11f8ce94389160b458927a29ba217542818"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/CMakeLists.txt",
+      "source_path": "googletest/CMakeLists.txt",
+      "sha256": "7815c2a8b21eabcb0d90924ef45dfa800f5ecb98049228635dc5c3b926a6a3e7",
+      "upstream_blob": "64c0510cb4ea468b7dcc5e652ef5b87e8a3ebba6"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/README.md",
+      "source_path": "googletest/README.md",
+      "sha256": "1da1e47d7e41f80cee747cac67be1b09739fda7f6a859a164057405b54326c84",
+      "upstream_blob": "148598c6b685d76dafaf651fe2ee63ac7171a1be"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/cmake/Config.cmake.in",
+      "source_path": "googletest/cmake/Config.cmake.in",
+      "sha256": "fc19cf148c0fa1bc5e8829c6ba0200887082b0a39374b69d4837ebb90c306858",
+      "upstream_blob": "3f706612b24f9ad966f45fef722c00bd3ce9c024"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/cmake/gtest.pc.in",
+      "source_path": "googletest/cmake/gtest.pc.in",
+      "sha256": "8ca81f72a08ac32ff60f47ffa9ae745c7c3ed5cbc3b39c6e02b35254ab13c8fb",
+      "upstream_blob": "b4148fae42b1cd782dc1b6a5d1d7e1e3a8e4e665"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/cmake/gtest_main.pc.in",
+      "source_path": "googletest/cmake/gtest_main.pc.in",
+      "sha256": "9daee2aac5ed3908062d36738298f272a457e913aa6ce29deea34352ff1b6462",
+      "upstream_blob": "38c88c54d5386d960ec48d9f76664eb9798b4e7b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/cmake/internal_utils.cmake",
+      "source_path": "googletest/cmake/internal_utils.cmake",
+      "sha256": "cd259fb1d71d18b2bbe6dd3debdcd09e3287369fff3168ca61f4ddf48f118c18",
+      "upstream_blob": "10c55955b486778e2b33e65b14b534a6c9fb19d3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/cmake/libgtest.la.in",
+      "source_path": "googletest/cmake/libgtest.la.in",
+      "sha256": "c0c8c340bd113c0d2284c63c5b9243112bcfa2bc512af17fa1ae496b2999df27",
+      "upstream_blob": "840c83885f989a02a0ab3073a74e65bc04ddf3e1"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/docs/README.md",
+      "source_path": "googletest/docs/README.md",
+      "sha256": "b5841a39d3a80b39a13da379ab8c2cb4e91b5b3fbe1bc3092d0dd409cea511f1",
+      "upstream_blob": "1bc57b799cce933c034c31859594ca1b87689aef"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-assertion-result.h",
+      "source_path": "googletest/include/gtest/gtest-assertion-result.h",
+      "sha256": "c6264d766e880c30452da03c1cf783230f7152233612f13cebff6177f6527cec",
+      "upstream_blob": "a72ac939102e8e469033c0a2856efa4df1c79ae5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-death-test.h",
+      "source_path": "googletest/include/gtest/gtest-death-test.h",
+      "sha256": "d70139e593088f79c9f25ba528ce212fab3cdf9c350fb3cceaa91e1e94d6af00",
+      "upstream_blob": "afd7b3a4685a01b23f7baece151e6d306a57fb76"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-matchers.h",
+      "source_path": "googletest/include/gtest/gtest-matchers.h",
+      "sha256": "7116aca6c9c224d8015bf74866e21994231f972a1af3bfceb6dc88e13e48690f",
+      "upstream_blob": "b5950425cc69e652a23b69ef8d11356c6337e4d6"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-message.h",
+      "source_path": "googletest/include/gtest/gtest-message.h",
+      "sha256": "26f2e9ea9dc21b63eb78d4d3eed423ed00f28bdc6fccc735cff94da0e9c8c55f",
+      "upstream_blob": "065ed07ed596a7a13919b06d152f653962cf8124"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-param-test.h",
+      "source_path": "googletest/include/gtest/gtest-param-test.h",
+      "sha256": "7a246e017cb84010ae4bad5b6f789fb16941b4e46a130ffb8de9f328fa19ee78",
+      "upstream_blob": "9e023f96dc60f7e06d747321c5c66ef33aaf4d5e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-printers.h",
+      "source_path": "googletest/include/gtest/gtest-printers.h",
+      "sha256": "69428a5fa909fd7f8f3bfe1d4f1a8be9a260375bceab738b8813fa4c2f5c9ff4",
+      "upstream_blob": "315ce0a510161a2d21586fedff36e83cd4782adc"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-spi.h",
+      "source_path": "googletest/include/gtest/gtest-spi.h",
+      "sha256": "490f165098688c18d053a4ba57b2812bd97535b90af514f5a916116a230374ef",
+      "upstream_blob": "27c2d660e0d51da84c7e47c113e1af9818f8cbd5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-test-part.h",
+      "source_path": "googletest/include/gtest/gtest-test-part.h",
+      "sha256": "2ba7bcb638f82889a619d52a5e28d4f9dc0aefd718a590beabd35cce8c27550a",
+      "upstream_blob": "ce1e21945cf3999abb330b339fd71b4fff5dadde"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest-typed-test.h",
+      "source_path": "googletest/include/gtest/gtest-typed-test.h",
+      "sha256": "d5c7a2853a4f250cd172f7d4218298f6aa9aa2df219210231e4877cd91bc7790",
+      "upstream_blob": "8575a41076ed0fce12e5aab93033d5fe4e7b430a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest.h",
+      "source_path": "googletest/include/gtest/gtest.h",
+      "sha256": "c6f886e33c2e426d6f634112b12b0041aa0bad85b9f897be853b083c14aea169",
+      "upstream_blob": "089b10e9f7a972fe8891623104a676807555d438"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest_pred_impl.h",
+      "source_path": "googletest/include/gtest/gtest_pred_impl.h",
+      "sha256": "85e850e735a42ebb5f9a01a018708c1c0b9b7d83c94b14b7d5d29512c00b6ffd",
+      "upstream_blob": "47a24aa687af6ebfed8423bee7802192e73d97ac"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/gtest_prod.h",
+      "source_path": "googletest/include/gtest/gtest_prod.h",
+      "sha256": "3c6301ef533db8686e474dd5a0de4d98a31cbb630e2273f712472d1be25aa261",
+      "upstream_blob": "1f37dc31c347228e21f2474e1dbf0aed6b988189"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/custom/README.md",
+      "source_path": "googletest/include/gtest/internal/custom/README.md",
+      "sha256": "608ec5ac574a6e64e4fc2f4bce2cfc7ff753a04d6822d6ff96e43fff51c6ccc1",
+      "upstream_blob": "cb49e2c754c250ed975e371551267b938ebcdfa1"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/custom/gtest-port.h",
+      "source_path": "googletest/include/gtest/internal/custom/gtest-port.h",
+      "sha256": "5e06747c9e8b86e9d841fabd61c2f045b2bb1133716f127be4a963ced1c44e01",
+      "upstream_blob": "db02881c0c899a74f07985980afa2e6e98c68875"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/custom/gtest-printers.h",
+      "source_path": "googletest/include/gtest/internal/custom/gtest-printers.h",
+      "sha256": "b95afda2426e8c4f09c11d3296d522fb336b248c0da7e078388db4bb072c2166",
+      "upstream_blob": "b9495d83783bcde050f5fdc177036aa4880b3fd9"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/custom/gtest.h",
+      "source_path": "googletest/include/gtest/internal/custom/gtest.h",
+      "sha256": "21d20a1c64ea38c20c4b12337c261a1a18989d2a30710a83dfb5cd9a3bb3c55e",
+      "upstream_blob": "afaaf17ba28e3beb790a12638cffec8dba5698ea"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-death-test-internal.h",
+      "source_path": "googletest/include/gtest/internal/gtest-death-test-internal.h",
+      "sha256": "5a81ad35daf1049940c677b38c908945040cc25f07366b3ddf577ce72d8c44f1",
+      "upstream_blob": "f0f93e520b7b5df25790001656a498666239127b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-filepath.h",
+      "source_path": "googletest/include/gtest/internal/gtest-filepath.h",
+      "sha256": "584be91365316bf97fa7e3fd9f21f595919c48691f0c87071d2b7f739aaabcc0",
+      "upstream_blob": "4dc00ee7b31503affbb34d3c538af7a896099917"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-internal.h",
+      "source_path": "googletest/include/gtest/internal/gtest-internal.h",
+      "sha256": "57b904e1b1763a9ac5f381db3717a92e285e707adf093d0f17c5cfc9603a6f34",
+      "upstream_blob": "55e9966720bfbdce6b8411c70948b19c701fdd63"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-param-util.h",
+      "source_path": "googletest/include/gtest/internal/gtest-param-util.h",
+      "sha256": "869ec29efd36f14b75446b06de5bd58491da2b77575d092e67cab3583bb10e7a",
+      "upstream_blob": "716779346a012daeacda870ea998b14714dba6d2"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-port-arch.h",
+      "source_path": "googletest/include/gtest/internal/gtest-port-arch.h",
+      "sha256": "58ca63b3540d7752466cd34b6c87f9fb5605f5aa620fdabe0179e82f0c12e556",
+      "upstream_blob": "fbffc95b1a13f95c6add97709cb1b6e8da1b0516"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-port.h",
+      "source_path": "googletest/include/gtest/internal/gtest-port.h",
+      "sha256": "19d5e5bfcba9fb952e46352218d626f6e1778ed5f6186cc6770bcfc7d8a672d0",
+      "upstream_blob": "92e6591d2cecf0f06ba1993e2ce93022003f7737"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-string.h",
+      "source_path": "googletest/include/gtest/internal/gtest-string.h",
+      "sha256": "794b59f7afd2fbfb9fdfd133244903b4904e39d16d45253a85f1b89c196285ac",
+      "upstream_blob": "2363034fc0dbcb877ce8c96c9be8e3f8e185506c"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/include/gtest/internal/gtest-type-util.h",
+      "source_path": "googletest/include/gtest/internal/gtest-type-util.h",
+      "sha256": "94336b1703807db6d9d2b729b5a30cf53016fd236b14774af118467d27f94ad8",
+      "upstream_blob": "78da05316d6b0a1688a0992212527359a0e4e1ad"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/prime_tables.h",
+      "source_path": "googletest/samples/prime_tables.h",
+      "sha256": "e66c0ee36090584a006ad1cd3f64b2e755e204a8d19295b05c30284f9206c405",
+      "upstream_blob": "14c016adce1b08de3ee4ae569c174452fc893e06"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample1.cc",
+      "source_path": "googletest/samples/sample1.cc",
+      "sha256": "663ac4c10de9fd37b0352533506d5c114b2fa6e1431d63cad840bd627577cc9b",
+      "upstream_blob": "80b69f415c806c0923c831176ef066b350552aa3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample1.h",
+      "source_path": "googletest/samples/sample1.h",
+      "sha256": "14967e01473758779a4908a29578a1fb0696dfe2075f5e10ecd3454c32402e2a",
+      "upstream_blob": "ba392cfbd2668b6abeb09b19475c59a07e078916"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample10_unittest.cc",
+      "source_path": "googletest/samples/sample10_unittest.cc",
+      "sha256": "fc3b7eb729bb7c33e07d7826a34b396a6e4eda87e4bdde2b412a3a1fd5ce6d43",
+      "upstream_blob": "2107954932b6c487526a96f0d4ca9ceaa8d385d5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample1_unittest.cc",
+      "source_path": "googletest/samples/sample1_unittest.cc",
+      "sha256": "1a57023b773211d970f1d715eda7a68dd457252c3741288a02e5bb45c2b2c828",
+      "upstream_blob": "60f2770ca0e7a3983d87c04b6fe502390df5c551"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample2.cc",
+      "source_path": "googletest/samples/sample2.cc",
+      "sha256": "2d895439f245dfc502e9429b1bc666a41b7f5e1ba241bd7b089561dd7f5dc7f2",
+      "upstream_blob": "be7c4c9949f8ac975a25f303287994b4a5be5aef"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample2.h",
+      "source_path": "googletest/samples/sample2.h",
+      "sha256": "dc7708619ff5643fa3577a2551f2dead573c1c18069ce3b82d80a4c58aa3fb46",
+      "upstream_blob": "15a1ce7781a95fdd991c74c13cd934184aeab3b4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample2_unittest.cc",
+      "source_path": "googletest/samples/sample2_unittest.cc",
+      "sha256": "9b8cda9e3035419f39ad866fe7c2d03030cadf9faf30b63311af9b2c431ac0eb",
+      "upstream_blob": "b959a24d9a0233d5307c25741f48098d6275aeea"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample3-inl.h",
+      "source_path": "googletest/samples/sample3-inl.h",
+      "sha256": "4f857c01ad41b13f14e7cfdf06948bd3ef1a781db7e28fe906f3558533a65d8a",
+      "upstream_blob": "bc3ffb9c409348298c2ee3dc0ff58d8912f7019b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample3_unittest.cc",
+      "source_path": "googletest/samples/sample3_unittest.cc",
+      "sha256": "1f43a554d614e13854cf2d607607581a018c0a518a71a71ff09517af75a1e775",
+      "upstream_blob": "71609c6a09864bdf735de55f431290afda03e28d"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample4.cc",
+      "source_path": "googletest/samples/sample4.cc",
+      "sha256": "5fe120050730a5aa37d53cb486786053d19f70aceb7876812e3b76f5ba3151fd",
+      "upstream_blob": "489c89b0d34bbfaaac30761e871a0c2f8d7e4e65"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample4.h",
+      "source_path": "googletest/samples/sample4.h",
+      "sha256": "c63416b0f80627ab7ff8168dc0d9dbcbdeb4181dc71c6f304ca5883eb623c739",
+      "upstream_blob": "0c4ed92e738ba61ed6b5f28fd3b0cb4ca2c264b8"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample4_unittest.cc",
+      "source_path": "googletest/samples/sample4_unittest.cc",
+      "sha256": "eb85a42c3515c41c24b445a09789fad137aabe968ae31df48df71cc959ccfe76",
+      "upstream_blob": "fb9973fe666e5e9a3719b49214b71e650d5b71a5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample5_unittest.cc",
+      "source_path": "googletest/samples/sample5_unittest.cc",
+      "sha256": "af80c7b8255e5384c52e3688b7b6ae3459fbb50ee888ed7b4d9049d6ac25fbd4",
+      "upstream_blob": "cc8c0f012e96eb9edac6401451b2a9cfed27f0aa"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample6_unittest.cc",
+      "source_path": "googletest/samples/sample6_unittest.cc",
+      "sha256": "fb138a4949e11026a2898b3b3cfa33d863d1ea0de6c33e08fe4e1f7c8b846520",
+      "upstream_blob": "cf576f0a5354fb80367825858f4e7e618399af30"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample7_unittest.cc",
+      "source_path": "googletest/samples/sample7_unittest.cc",
+      "sha256": "44cebd81a92fa5bf914137014f6913aac95341307fd2e0fef0aa80d8be8b61f8",
+      "upstream_blob": "3ad22cab8d12414408d0cc936a07b68e398575dc"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample8_unittest.cc",
+      "source_path": "googletest/samples/sample8_unittest.cc",
+      "sha256": "20506c4a371e2cf11d341e1b61eb564a7a84fd358db03c955dfa96868163e9fa",
+      "upstream_blob": "4df81df0c0323e67a0cd1dfe16c0a92a839697f2"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/samples/sample9_unittest.cc",
+      "source_path": "googletest/samples/sample9_unittest.cc",
+      "sha256": "66e830e1cd61bbcc8117ebce7c631ed6c23411e167537a84fbbd6a527cea16e2",
+      "upstream_blob": "0a2f0970d927076975d37c186c0f41511180e821"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-all.cc",
+      "source_path": "googletest/src/gtest-all.cc",
+      "sha256": "972d3016860f9aa6452e078cf77406290fb7003b66fd6c0744a030bd1c323606",
+      "upstream_blob": "2a70ed88c7841a58f0bd54e6e8cc5c14f47dce48"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-assertion-result.cc",
+      "source_path": "googletest/src/gtest-assertion-result.cc",
+      "sha256": "dbd2235676dcc0ef6409108a4041e05442fc6895735a5561d71151e6a14296bb",
+      "upstream_blob": "39989216741a5c1f7593786afe8d87b51d53b01e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-death-test.cc",
+      "source_path": "googletest/src/gtest-death-test.cc",
+      "sha256": "2881240c49961c095505f3c044483a79ef1c32e413e19630af7508d67994f619",
+      "upstream_blob": "15472f1a7929cf5399e70bbc0822e90666cdc685"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-filepath.cc",
+      "source_path": "googletest/src/gtest-filepath.cc",
+      "sha256": "b3d0011edbb81f782b88aac6ea20d04b24050e5738b3b2240a22033f675cb71f",
+      "upstream_blob": "902d8c7f64b7c44d7bdfc2d6fa9420f5b796eac5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-internal-inl.h",
+      "source_path": "googletest/src/gtest-internal-inl.h",
+      "sha256": "78f0a388ae762649c892e517f3ca0fde01751bf44daf11ca9903d1773f618f58",
+      "upstream_blob": "4bebca1bc656d9d7d2afa9a13c989373d785aa49"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-matchers.cc",
+      "source_path": "googletest/src/gtest-matchers.cc",
+      "sha256": "09ea657c7bae257d42d5ed103a48570cfbf3068288db998b734838c1aa588de9",
+      "upstream_blob": "626019e2389f5c54130cfc7793995ce649c21d6a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-port.cc",
+      "source_path": "googletest/src/gtest-port.cc",
+      "sha256": "cd1ded969cc861946f5e8a7e33367e14dd3228cb29aa6f3ae68c1dff792b1ea1",
+      "upstream_blob": "433586f3b711ee3461520209e7411286e5a9b15d"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-printers.cc",
+      "source_path": "googletest/src/gtest-printers.cc",
+      "sha256": "12908a4f1fff494821c920135da5af524fa2c816d74dca25deed38c1f02ffef1",
+      "upstream_blob": "7c0ecc6ad1c9e975f94836fbe10027c60987e9c9"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-test-part.cc",
+      "source_path": "googletest/src/gtest-test-part.cc",
+      "sha256": "9acddbbe251f0516a92da1f55d8edd06c66c8fdeca382460d57340ad594f76f2",
+      "upstream_blob": "c7f993c8b4304d4270ac0dc11dbb2a5ca96555f4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest-typed-test.cc",
+      "source_path": "googletest/src/gtest-typed-test.cc",
+      "sha256": "b92e70b2d7ee3b86328162cbda269a28de4ce67f0e8d9beec5ec2c73a93ba006",
+      "upstream_blob": "b251c09deb80c704f9b34a8a951c15646be2e5ef"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest.cc",
+      "source_path": "googletest/src/gtest.cc",
+      "sha256": "2ab4f150bce21851e645f90ef759a1d01d8bcd964513f5fa9f393232f7fe0116",
+      "upstream_blob": "3c855468268f2211f8bca200d12500d608015b00"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/src/gtest_main.cc",
+      "source_path": "googletest/src/gtest_main.cc",
+      "sha256": "3836c1ce7c4829c44a30f368d888ae3bed218437d61d102c50c0db4afca33b3f",
+      "upstream_blob": "8141caf4ca0864f7135767d714a1dfe203f8be73"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/BUILD.bazel",
+      "source_path": "googletest/test/BUILD.bazel",
+      "sha256": "9153f8ffb5445112bdfcae6b0b49a8ebb4920ccb8725647caed81ed5059de477",
+      "upstream_blob": "7561d3c165a27fdc02727651fdd2948a10120932"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/custom/gmock_dynamic_cast_message_test.proto",
+      "source_path": "googletest/test/custom/gmock_dynamic_cast_message_test.proto",
+      "sha256": "84953451a05d39f572326dde31171950d4e8017d45d4a29b44eedb4bdcac4d2b",
+      "upstream_blob": "eacc459459339d97824129b521d48645e64f1220"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-break-on-failure-unittest.py",
+      "source_path": "googletest/test/googletest-break-on-failure-unittest.py",
+      "sha256": "f9c39f98f99c22e08b3a19ab87b27fce346bcec4986cbedc9bb1cd5b0ebb3d60",
+      "upstream_blob": "e314b5ccdbf6262687aa46ee82344e486bcee093"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-break-on-failure-unittest_.cc",
+      "source_path": "googletest/test/googletest-break-on-failure-unittest_.cc",
+      "sha256": "6fa8635e945a6b853a8c35e1977700df6b29038c84639753d8cc43b42a4687d9",
+      "upstream_blob": "337e34c33017a8d2928511358fa6a6c9859e7622"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-catch-exceptions-test.py",
+      "source_path": "googletest/test/googletest-catch-exceptions-test.py",
+      "sha256": "a3be4ae2749f768b974bb5f74f74fffd32a469efcac3b4262029e207d11aa31c",
+      "upstream_blob": "180e18de0f9bd7a16ef41637c27087cda374ca19"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-catch-exceptions-test_.cc",
+      "source_path": "googletest/test/googletest-catch-exceptions-test_.cc",
+      "sha256": "662671bf0fadc414e53c7aad8f67ed647a745ae6a03b2ff40514eb858aeeb318",
+      "upstream_blob": "3c8f4f4b790cf063897c9b9cd1b11806dedd8167"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-color-test.py",
+      "source_path": "googletest/test/googletest-color-test.py",
+      "sha256": "27a3800a9df930086c8d6f9d566107b042d04aa25e55ae179224574406308e30",
+      "upstream_blob": "76ca8e0c3bc64016a06b9d164ae2a1b8ebd3b9ea"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-color-test_.cc",
+      "source_path": "googletest/test/googletest-color-test_.cc",
+      "sha256": "3e30c3315c00b3713b724e30ed9e45caf6df2a4dc7820e063eae57451ad3368e",
+      "upstream_blob": "55657b7262b6ba8fd65b76cfe9d8b707304e64a8"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-death-test-test.cc",
+      "source_path": "googletest/test/googletest-death-test-test.cc",
+      "sha256": "fb1ea0f6d2e4618ea92e1f95483279abac5814cb551a3d435c25fcb6ef1bcc74",
+      "upstream_blob": "39987e61d517fa8869b98ac50d7aec12bd767b07"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-death-test_ex_test.cc",
+      "source_path": "googletest/test/googletest-death-test_ex_test.cc",
+      "sha256": "ad9a905f8f96e654f7e0a879d80d5b2d2c69db91b2d7f24c959c05d89ad9fe49",
+      "upstream_blob": "34d55013b665e6f531c5b0b2b3e885a888ca1c38"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-env-var-test.py",
+      "source_path": "googletest/test/googletest-env-var-test.py",
+      "sha256": "275be9f2288fadbc7cfee1c7c8ba2a491bdcb23971c1cd45da5349b42caa9b9a",
+      "upstream_blob": "24d8edbbff80b10ac778a53b25173f9f8b3ebf2e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-env-var-test_.cc",
+      "source_path": "googletest/test/googletest-env-var-test_.cc",
+      "sha256": "d9756472759a0ae9aef3885399571d8630205f46f4b112dcee8a990f6dc46c3c",
+      "upstream_blob": "365337508027e99689bda1206dfaa380df4e7ce4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-fail-if-no-test-linked-test-with-disabled-test_.cc",
+      "source_path": "googletest/test/googletest-fail-if-no-test-linked-test-with-disabled-test_.cc",
+      "sha256": "4e73ea7af401a86c9dd67effc04a343f3b2a4661315bdac5c9b7866710f784a8",
+      "upstream_blob": "56d269013b6d6016e9965eea548c9d1a466e5831"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-fail-if-no-test-linked-test-with-enabled-test_.cc",
+      "source_path": "googletest/test/googletest-fail-if-no-test-linked-test-with-enabled-test_.cc",
+      "sha256": "5deaa161d72f00872dde4e84d749e27bcb232966167c13177c3e4d0ab1737b3a",
+      "upstream_blob": "1ed2034335ae8ac1457cec2b7ed006fdec6af884"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-fail-if-no-test-linked-test.py",
+      "source_path": "googletest/test/googletest-fail-if-no-test-linked-test.py",
+      "sha256": "148d0ad9ed528b70b57bcc83627a1dd25e7333950087526d1f0ed69b723991a1",
+      "upstream_blob": "e62bfb294efc219c8a4b8f69d17ee44bfd4fd488"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-fail-if-no-test-selected-test.py",
+      "source_path": "googletest/test/googletest-fail-if-no-test-selected-test.py",
+      "sha256": "0868f56c64ca39184a3fb3bc31fb83aeddab8d61a85b67c5a1ec401e3d0e17d7",
+      "upstream_blob": "03a324cd2260814116f9f5f2ceeac9b529a26869"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-failfast-unittest.py",
+      "source_path": "googletest/test/googletest-failfast-unittest.py",
+      "sha256": "78814b70614536b3492905693c403c231ef6632d4bbc4bcc049aee721bc5526c",
+      "upstream_blob": "cdbce0c5d76279e11aaf5f3c82bac3e7d431f34e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-failfast-unittest_.cc",
+      "source_path": "googletest/test/googletest-failfast-unittest_.cc",
+      "sha256": "fd0c51773155bd540ffb3fac3f867eaf900a59d0b9792dc513f29e2588e8aa40",
+      "upstream_blob": "3bd05a8eb293259862fe7d137db70601ea1f63fd"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-filepath-test.cc",
+      "source_path": "googletest/test/googletest-filepath-test.cc",
+      "sha256": "7320135c3ed11f45a33d5b938142e0fc46a81d654a5c66b7018c472c39598645",
+      "upstream_blob": "3e9c79f037bed11bd4f2d20f5317b00ac6413c14"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-filter-unittest.py",
+      "source_path": "googletest/test/googletest-filter-unittest.py",
+      "sha256": "a05805073e4ad3d518fb4f30ddae0bdc7d19c8c9b3c44ebefb55669cc593374c",
+      "upstream_blob": "a44882a6da6791afe8290e6c01cfc1f413dfe591"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-filter-unittest_.cc",
+      "source_path": "googletest/test/googletest-filter-unittest_.cc",
+      "sha256": "f27852e15571a0a7e8761cb8e847cb45d1a0469f363178cd84e0d22e8955f54b",
+      "upstream_blob": "bc7aa59408371334fdbb7593dde95f2802cc1955"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-global-environment-unittest.py",
+      "source_path": "googletest/test/googletest-global-environment-unittest.py",
+      "sha256": "b333bcf17d116c7afbd8f142e61b4cef19ce0b0dd6c83b847ad5ff777c957b11",
+      "upstream_blob": "bd73a2e1d888e6778b7b60246b8e3315d60f31b4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-global-environment-unittest_.cc",
+      "source_path": "googletest/test/googletest-global-environment-unittest_.cc",
+      "sha256": "07467d18c2f121ca9770fbfcdf4003522abf11e662f712d54c07b835c17ebb89",
+      "upstream_blob": "f401b2fac25d17dd7fe5ab788b1174f6b9293c03"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-json-outfiles-test.py",
+      "source_path": "googletest/test/googletest-json-outfiles-test.py",
+      "sha256": "bd9b0c356c8580e82aa2599a781fc2af30600462c0d7975c19c4a52c668d0f67",
+      "upstream_blob": "5626004ed732d7878e4e7ad6ac3979552cf70e30"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-json-output-unittest.py",
+      "source_path": "googletest/test/googletest-json-output-unittest.py",
+      "sha256": "0250389061511fbca3da51a243c0a364366f1f763049bd1f53576e9fc53f803d",
+      "upstream_blob": "c75051c800fb6dd0844b68f23067ea1646dfe61c"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-list-tests-unittest.py",
+      "source_path": "googletest/test/googletest-list-tests-unittest.py",
+      "sha256": "656eb7e5e70dad3f4de320c20c866b0050f3160b9a13486c9363039cfa1bc43b",
+      "upstream_blob": "977e57f0877131c86a6815e86b47a1f78794393d"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-list-tests-unittest_.cc",
+      "source_path": "googletest/test/googletest-list-tests-unittest_.cc",
+      "sha256": "f683375bce246c1d44630cdd51f361ce6395bb77f386eaed0d97c6c5af2ff028",
+      "upstream_blob": "a1ea6cf4b19d07b4d6e0ce0bd114cf30a1ca3f08"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-listener-test.cc",
+      "source_path": "googletest/test/googletest-listener-test.cc",
+      "sha256": "52b35d326c585282661630c431e00e76461ab12d31ad8499cfe0e4d9937150a3",
+      "upstream_blob": "f7882a479e1ba540d2d16203e9d8e9bb4d44ae45"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-message-test.cc",
+      "source_path": "googletest/test/googletest-message-test.cc",
+      "sha256": "c64bef324fb5f5240804f3fb122126d88f5435c8ad9d058d8d08b3647f414a16",
+      "upstream_blob": "bf1f094c966aff0032a289a22970eec61f20dc5b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-options-test.cc",
+      "source_path": "googletest/test/googletest-options-test.cc",
+      "sha256": "b90aa14207b558de4f1ea09b7d949cebdd62725c3a9466bc07a4560c2d3d657b",
+      "upstream_blob": "91d06a5097552f88c22cb4e36975c19e70a9ed2a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-output-test-golden-lin.txt",
+      "source_path": "googletest/test/googletest-output-test-golden-lin.txt",
+      "sha256": "a3c3b5c1b51003fa2370f6e81fc3b9b6b52278bf634b7f3e1a65a0d282d049c4",
+      "upstream_blob": "57f7d1ad2a880a3404478615c5e0d7cedd1ff6ba"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-output-test.py",
+      "source_path": "googletest/test/googletest-output-test.py",
+      "sha256": "7956c65877624086b3ce1180d0dc58bd24d2413b9b687e5b00641022ec106028",
+      "upstream_blob": "26f25253ddfbb7bd9c0cea91c37278af580faf09"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-output-test_.cc",
+      "source_path": "googletest/test/googletest-output-test_.cc",
+      "sha256": "617d9805a77267d85d7d907092d2a31725bf9a4cddae312c5de47da0b737dbb5",
+      "upstream_blob": "175aa61cd29a961d472191c32d7dff93c273ccca"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-invalid-name1-test.py",
+      "source_path": "googletest/test/googletest-param-test-invalid-name1-test.py",
+      "sha256": "6ca6ef83ddb2a3e656a46181046e7f208e6f7c2d71dd72f47305036d97a4539b",
+      "upstream_blob": "4886e49e80f72755e59f290c161c1441e81c5332"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-invalid-name1-test_.cc",
+      "source_path": "googletest/test/googletest-param-test-invalid-name1-test_.cc",
+      "sha256": "9038e2ed7538539be4406ebe2b0c587dbb4d87826402de0c7a4c7b073c6b8f24",
+      "upstream_blob": "004733a12c5007da354da92474e17b17fefd842b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-invalid-name2-test.py",
+      "source_path": "googletest/test/googletest-param-test-invalid-name2-test.py",
+      "sha256": "6e10415b90dc5260dc468785340bfc935502e9ec8be28eb7c93e55dfc47231fe",
+      "upstream_blob": "bcd8ddf0eecef011e91292f187441d399da97a72"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-invalid-name2-test_.cc",
+      "source_path": "googletest/test/googletest-param-test-invalid-name2-test_.cc",
+      "sha256": "48e7bead30404dc5723d7d7175bb55d83f67f25154642208f04b1bd4624f1f2e",
+      "upstream_blob": "6d88a9ce393fc6f2229f7fb97a740f2603d2ca92"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-test.cc",
+      "source_path": "googletest/test/googletest-param-test-test.cc",
+      "sha256": "a2daba0680766095f16ed3161ca01b23eee703bb8858497abdad959564b1cda9",
+      "upstream_blob": "78a1a22abe3ba81694c4f3dcdf04e387dc755f3a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test-test.h",
+      "source_path": "googletest/test/googletest-param-test-test.h",
+      "sha256": "23c1266879efb4d5be27090016f5693a9cc66bd21252e4831f3bfcde4306f307",
+      "upstream_blob": "6d77e1049abc83906546e950be3f778474a440d3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-param-test2-test.cc",
+      "source_path": "googletest/test/googletest-param-test2-test.cc",
+      "sha256": "8897922b0f357ab63575a53c18aeef2dce903459263764c9fb079a057c2196d2",
+      "upstream_blob": "71727a674f099d11f26a1d00a4af6c6135fb3509"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-port-test.cc",
+      "source_path": "googletest/test/googletest-port-test.cc",
+      "sha256": "b46b418b8734c629cd8f4a799d3db744e6110f82ea916b2b258ffbc6a173c986",
+      "upstream_blob": "24fcd9d932d1f864600fb0468274511d8cfba472"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-printers-test.cc",
+      "source_path": "googletest/test/googletest-printers-test.cc",
+      "sha256": "b3ad484c0adb346d161bda120f2c7ae8b65d49a7ea3aec90f14e488309429fb8",
+      "upstream_blob": "c051ec709dc8a2515586ce8cd4773c9788fc9cce"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-setuptestsuite-test.py",
+      "source_path": "googletest/test/googletest-setuptestsuite-test.py",
+      "sha256": "ada1927131c16cc4a715e335ee931cbe389c9c162e2ee3386e5cf935776a102b",
+      "upstream_blob": "899531f327921b5f72d163e1dcede54e238f3234"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-setuptestsuite-test_.cc",
+      "source_path": "googletest/test/googletest-setuptestsuite-test_.cc",
+      "sha256": "ec85df1e74de9538a41efc88562b7842a795ec65f43fa4c13d21a748eaa9d7c7",
+      "upstream_blob": "f4c43ccb2fac8f39c8ee925722095332867a3d81"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-shuffle-test.py",
+      "source_path": "googletest/test/googletest-shuffle-test.py",
+      "sha256": "e1ef7c2cfe77fcb8e61b14c98d1bded060b50caea5ceda5efb3cda4067815398",
+      "upstream_blob": "61e3a15ec3d79efc1f4876b129bd4b808bf931cb"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-shuffle-test_.cc",
+      "source_path": "googletest/test/googletest-shuffle-test_.cc",
+      "sha256": "e2309b8938e1715e6363fdacfab017d762a4ffb9fb205ae9dff655b47e6d9eac",
+      "upstream_blob": "b570c48800d374f939289d3ca301d9a13ef80722"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-test-part-test.cc",
+      "source_path": "googletest/test/googletest-test-part-test.cc",
+      "sha256": "d8e907356dcbbc2b88ed94a698e150c3ed2fffd8b489c9729ebeb40ec31b612a",
+      "upstream_blob": "54bc2adb8375e56673f4c569ea176444db33d5c8"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-throw-on-failure-test.py",
+      "source_path": "googletest/test/googletest-throw-on-failure-test.py",
+      "sha256": "973d74c9cfe09b92b12670e9b923110e4fb6652f9c6caa82b11de52feac2c0d8",
+      "upstream_blob": "106b004423ecd62e8c785731f9ec97e21b9e5bf3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-throw-on-failure-test_.cc",
+      "source_path": "googletest/test/googletest-throw-on-failure-test_.cc",
+      "sha256": "84b7eda12fd3b7f084751ce39e66eb8449d75a70edb99923b36915d467d7abc6",
+      "upstream_blob": "3b81a5a1db667cd0acc50e2955fa5a199bfadbab"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-uninitialized-test.py",
+      "source_path": "googletest/test/googletest-uninitialized-test.py",
+      "sha256": "77b3f5d1a79965aa5fe848f003886a7515e89cd09dd8464ea7e453a25a740825",
+      "upstream_blob": "e5af7c8421bfaaeefc61a9f3d42159cea7ac9859"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/googletest-uninitialized-test_.cc",
+      "source_path": "googletest/test/googletest-uninitialized-test_.cc",
+      "sha256": "6472d016e4eb161b297c7a275a965cbcc7773246b0a6f9db085b66dc9efed5d2",
+      "upstream_blob": "88b61fcefd5e5eb81ff0f6783e18bb9ff2a53108"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest-typed-test2_test.cc",
+      "source_path": "googletest/test/gtest-typed-test2_test.cc",
+      "sha256": "00196db2a1ab4341c8a37d5da67bc9fd0f4ced0bf88c06879af06f8ed8b5a089",
+      "upstream_blob": "f2eae12058b747925668281aabda1aa8dbbdb80b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest-typed-test_test.cc",
+      "source_path": "googletest/test/gtest-typed-test_test.cc",
+      "sha256": "55c7deb4402920ade495e1e46941cbb04439c7ea472db74f6b9bfc4855d1e144",
+      "upstream_blob": "0cc8b21145da91e87120ccbe99a642e9809b0069"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest-typed-test_test.h",
+      "source_path": "googletest/test/gtest-typed-test_test.h",
+      "sha256": "57f80230edde9892bfd9539933a60df09c88d3a9b4dc3301d731e1fd21f7be20",
+      "upstream_blob": "f3ef0a5962970e18bbd096414271b746b6d525c4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest-unittest-api_test.cc",
+      "source_path": "googletest/test/gtest-unittest-api_test.cc",
+      "sha256": "47c96ae5d6d41d451085f0f8fcdfc9ea6132767f62f02073719714c98a353a3d",
+      "upstream_blob": "2ea692739ad4cf20ba7e93c2f390a1f23965042d"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_all_test.cc",
+      "source_path": "googletest/test/gtest_all_test.cc",
+      "sha256": "70e2f2c78d7a6470eb93d795b08860ed8cb8726356b3c70a151a3eb99f9206e2",
+      "upstream_blob": "615b29b706516b15ffb6d1ae515ae9a56600b815"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_assert_by_exception_test.cc",
+      "source_path": "googletest/test/gtest_assert_by_exception_test.cc",
+      "sha256": "cfa262b39f8506c00d26765db7301753d7e278014e4f49730145c6c711d0c753",
+      "upstream_blob": "f507eac475756e5dc44521bbe56b7f9568edfb95"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_dirs_test.cc",
+      "source_path": "googletest/test/gtest_dirs_test.cc",
+      "sha256": "bb00d2c44e9a8c66b478dea9758ce574716fac7727ad6c540a4087b286387e9b",
+      "upstream_blob": "1a5b63d3c28ff08c2dd8ae515bcfdc81aecc2e22"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_environment_test.cc",
+      "source_path": "googletest/test/gtest_environment_test.cc",
+      "sha256": "166a3a993c7ba32c82ec72efd12a5db28b85b5b1e363ef3821a42f6889ef81f6",
+      "upstream_blob": "03657c7d89f1879f629943d8d651cec351d8e642"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_help_test.py",
+      "source_path": "googletest/test/gtest_help_test.py",
+      "sha256": "15a69b3e54e82e552a7326c31edbed29d69e90c426ff86885577aa2a0c7c3301",
+      "upstream_blob": "977accfed05f86dff9375021f6d065e6d0d37f45"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_help_test_.cc",
+      "source_path": "googletest/test/gtest_help_test_.cc",
+      "sha256": "5676ca4380b139d91f8e0e63d88cc8ae930552b96ac1d3d610c7743d5f3e2689",
+      "upstream_blob": "18b5f3cddab56b8d294b2360571d7466d9fb7f71"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_json_test_utils.py",
+      "source_path": "googletest/test/gtest_json_test_utils.py",
+      "sha256": "638fa883626291e16e395d2c564753b4751ca39ab9a0c2d259e76eb074bb1658",
+      "upstream_blob": "694a7a60db8716f01a6eaf1fd6a1dcb1c2c2c73e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_list_output_unittest.py",
+      "source_path": "googletest/test/gtest_list_output_unittest.py",
+      "sha256": "2f21f4d5a3ff27f9d8de963f729ae50265c8b133662f16fb75a99eaf7ec62fe4",
+      "upstream_blob": "afd521d2fa34978ae666f28eb342af981bf0ada0"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_list_output_unittest_.cc",
+      "source_path": "googletest/test/gtest_list_output_unittest_.cc",
+      "sha256": "55d89c8dc18058950ffba1ea0263aaa2ccaa67557738f984412c8be9099fb07a",
+      "upstream_blob": "92b9d4f28eec03a5fea75396742ed6884826f0f5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_main_unittest.cc",
+      "source_path": "googletest/test/gtest_main_unittest.cc",
+      "sha256": "1eb66daf8d572afd5b3bae242106138462a80041d4bd5df7753ed30ee2d7860f",
+      "upstream_blob": "29cd5510a4b1b85216db5e08fc78636ed551155a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_no_test_unittest.cc",
+      "source_path": "googletest/test/gtest_no_test_unittest.cc",
+      "sha256": "b97c35d17695fe4eca95c905fd00f8acc325a291e9fd76bb551151037ebe1f75",
+      "upstream_blob": "d4f88dbfdfa68e6a0c40bb99fac6e4dbccff8f3b"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_pred_impl_unittest.cc",
+      "source_path": "googletest/test/gtest_pred_impl_unittest.cc",
+      "sha256": "e10307a78ef1ee5e21d5eb0a7e04e93c6ebd4f75dfbe43101408242e2bbb376f",
+      "upstream_blob": "033e2d9f6519489abd962dcbe37be40916698370"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_premature_exit_test.cc",
+      "source_path": "googletest/test/gtest_premature_exit_test.cc",
+      "sha256": "046f98ae4bbb94a74f4d395bceb9a5a9840657d56c6caaef31b2d1615fe796b4",
+      "upstream_blob": "1a0c5ea4f0d31ae34f8149eae3e739f601347a8c"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_prod_test.cc",
+      "source_path": "googletest/test/gtest_prod_test.cc",
+      "sha256": "7fd832ab39cf8253d15707bae177903e194a713a25e96dcecda19fb34b7d66fa",
+      "upstream_blob": "ede81a0d17a02c853ed2234ec88fe8277180a37e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_repeat_test.cc",
+      "source_path": "googletest/test/gtest_repeat_test.cc",
+      "sha256": "c403370d6e53032ae02500c53d27150849c44e76efb5e8271e95182597aa8f8c",
+      "upstream_blob": "55103d0e77f8cb8e207aa659f1a209ed5453efeb"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_skip_check_output_test.py",
+      "source_path": "googletest/test/gtest_skip_check_output_test.py",
+      "sha256": "9433aace586a15486efcf70627f3fbf6c2d0c720a0c66bb8eec1621e6c23dc69",
+      "upstream_blob": "b30a16504b5bec689d7e3c38f2c1e0e4c0425d5d"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_skip_environment_check_output_test.py",
+      "source_path": "googletest/test/gtest_skip_environment_check_output_test.py",
+      "sha256": "ecb5542c89620318b72a4fd067cae17751d3cdb742bb1b6d37a558bc3a4030e7",
+      "upstream_blob": "388a4e95f50f72a37dea451d1feeb6853d7b4a25"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_skip_in_environment_setup_test.cc",
+      "source_path": "googletest/test/gtest_skip_in_environment_setup_test.cc",
+      "sha256": "06e4bbe5dda9b0d45a1264628e1c73a3a205bf588127815cce7207fea38041ae",
+      "upstream_blob": "5f21c27dcdbd67721439d66168608c89a6aecad4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_skip_test.cc",
+      "source_path": "googletest/test/gtest_skip_test.cc",
+      "sha256": "7f5e45763e32efaa4e6ae0e1dad67149732a28c1ea81fbdd4477e6b57d4931d3",
+      "upstream_blob": "e1b8d655adae34648bc4cfbcf1a2fa29bc161642"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_sole_header_test.cc",
+      "source_path": "googletest/test/gtest_sole_header_test.cc",
+      "sha256": "dca2f6f55ac7643a65f168f96429cfdbd2ee8db917ca3d652e788271af24e8f6",
+      "upstream_blob": "e8e22a83c58ca6f9bfcb1f1c84b4c00daabc4759"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_stress_test.cc",
+      "source_path": "googletest/test/gtest_stress_test.cc",
+      "sha256": "26720613671ac522cba3300cc41f3846be259b6ca77864498bf560b92c5f3cfb",
+      "upstream_blob": "daebd4322600df85718e853f81f058530392e0cb"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_test_macro_stack_footprint_test.cc",
+      "source_path": "googletest/test/gtest_test_macro_stack_footprint_test.cc",
+      "sha256": "24fd73ca9ca9f6245adfc4fd24c8087f6b56b1d786547af5defe9a31df9f87f1",
+      "upstream_blob": "45f368b3a5e3ced287beacfb1ba70e95a8f0f0b3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_test_utils.py",
+      "source_path": "googletest/test/gtest_test_utils.py",
+      "sha256": "3e9d2b955b14b02aa8ca46f389e5c3c5fd87ac7e12346688d531881769461938",
+      "upstream_blob": "964fa9fa50d438c26d7737557c9184c2a80c90b3"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_testbridge_test.py",
+      "source_path": "googletest/test/gtest_testbridge_test.py",
+      "sha256": "40d524ac9fc1a9a6edc6290f8f9d19c7fabbe5163fa4d4c75dda2f7a35ee8940",
+      "upstream_blob": "0d58758b0b68a4027987656239fae12e755a0a27"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_testbridge_test_.cc",
+      "source_path": "googletest/test/gtest_testbridge_test_.cc",
+      "sha256": "a3e91df65fc564677a59e6a07db1518ed7f17a07d9045967601305167cfafb9e",
+      "upstream_blob": "c2c000dca50d07b065e3b24d2aa6738e6e9af98f"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_throw_on_failure_ex_test.cc",
+      "source_path": "googletest/test/gtest_throw_on_failure_ex_test.cc",
+      "sha256": "1f95e8638edec0c04c11c7cc58af713ceddf87f7cb12769db5ee52789039cbd5",
+      "upstream_blob": "25d7c797ed4c249da9e471c940178234ddaa1dd5"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_unittest.cc",
+      "source_path": "googletest/test/gtest_unittest.cc",
+      "sha256": "b7432cf258803e51c5bce3b4c890b7499a639e7a0d81e6f2708f2c242e2c6f21",
+      "upstream_blob": "d759f800eb9ea98560204b63eba4e9c499b1ef65"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_outfile1_test_.cc",
+      "source_path": "googletest/test/gtest_xml_outfile1_test_.cc",
+      "sha256": "83ac5bea33ccd68ea618e9784b9f5e92b45d4a586176c47939808298e29c1e21",
+      "upstream_blob": "19aa252a3010fd56eabe3768308a80d2dc6dbd5a"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_outfile2_test_.cc",
+      "source_path": "googletest/test/gtest_xml_outfile2_test_.cc",
+      "sha256": "bb251f744a972f83301e387fb454a275b3b13d5dc4cf6b1f63b4d295ffbe4dc8",
+      "upstream_blob": "4a76429c559c2b374fe0f85abd67cfd419124572"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_outfiles_test.py",
+      "source_path": "googletest/test/gtest_xml_outfiles_test.py",
+      "sha256": "e36f99dc5ef6c14ed7b2f0996cf42a976da63d954653e7b10df36282a1c5c0b4",
+      "upstream_blob": "d17cc0c9aee29bac9077725305199cea88bc7108"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_output_unittest.py",
+      "source_path": "googletest/test/gtest_xml_output_unittest.py",
+      "sha256": "1e07245c27ea7de3140287dc9319207d38c9c21873f42ffd88545eb6bcbf2659",
+      "upstream_blob": "87a7683a90c681e30e108648e516c268806db579"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_output_unittest_.cc",
+      "source_path": "googletest/test/gtest_xml_output_unittest_.cc",
+      "sha256": "376abefc5c311da4365e508b496cb5dbd66027eda79ff2df598d96c8b6d785cb",
+      "upstream_blob": "fe196b630b08283bb8f087771612b5a56f83473e"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/gtest_xml_test_utils.py",
+      "source_path": "googletest/test/gtest_xml_test_utils.py",
+      "sha256": "0bd9b28874cfb4bfd0f6697f40614160f462d7d4e365585c9eaf3f82d3678890",
+      "upstream_blob": "74e0f4a0823bf2fa91258ab9df4f2db862bd1b78"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/production.cc",
+      "source_path": "googletest/test/production.cc",
+      "sha256": "3b0f49f1f9b65e24abcaf0b6b551222460f8feca4806f35c5d77a720ea133d16",
+      "upstream_blob": "0f69f6dbd2e26a3a9bdf756b480737a4ef4218d4"
+    },
+    {
+      "path": "checks/vendor/googletest/googletest/test/production.h",
+      "source_path": "googletest/test/production.h",
+      "sha256": "e21b142901a4abb5e2be4736aabe85a7601040a345e84609aae7f708516c3aa3",
+      "upstream_blob": "4dec8d46e247490d6b1666d870c11144d3085048"
+    }
+  ]
+}

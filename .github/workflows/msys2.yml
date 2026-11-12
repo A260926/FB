@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: © 2023 Team CharLS
+# SPDX-License-Identifier: BSD-3-Clause
+
+name: MSYS2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake
+
+      - name: "Configure CharLS"
+        run: >-
+          cmake
+          -Bbuild
+          -DCHARLS_BUILD_ALL=On
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SHARED_LIBS=Off
+          -DCHARLS_PEDANTIC_WARNINGS=On
+          -DCHARLS_TREAT_WARNING_AS_ERROR=On
+
+      - name: "Build CharLS"
+        run: cmake --build build --parallel
+
+      - name: "Testing CharLS"
+        run: ctest --test-dir build -V

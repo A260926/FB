@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: © 2023 Team CharLS
+# SPDX-License-Identifier: BSD-3-Clause
+
+version: 2
+
+updates:
+- package-ecosystem: "github-actions"
+  directory: "/"
+  groups:
+    github-actions:
+      patterns: ["*"]
+  schedule:
+    interval: "weekly"
+  cooldown:
+    default-days: 7

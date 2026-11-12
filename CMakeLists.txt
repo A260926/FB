@@ -1,0 +1,310 @@
+# SPDX-FileCopyrightText: © 2009 Team CharLS
+# SPDX-License-Identifier: BSD-3-Clause
+
+cmake_minimum_required(VERSION 3.22...4.4)
+
+# Extract the version info from version.h
+file(READ "include/charls/version.h" version)
+string(REGEX MATCH "CHARLS_VERSION_MAJOR ([0-9]*)" _ ${version})
+set(version_major ${CMAKE_MATCH_1})
+string(REGEX MATCH "CHARLS_VERSION_MINOR ([0-9]*)" _ ${version})
+set(version_minor ${CMAKE_MATCH_1})
+string(REGEX MATCH "CHARLS_VERSION_PATCH ([0-9]*)" _ ${version})
+set(version_patch ${CMAKE_MATCH_1})
+message(STATUS "CharLS version: ${version_major}.${version_minor}.${version_patch}")
+
+project(charls VERSION ${version_major}.${version_minor}.${version_patch} LANGUAGES C CXX)
+
+# Determine if project is built as a sub-project (using add_subdirectory) or if it is the main project.
+set(MAIN_PROJECT OFF)
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  set(MAIN_PROJECT ON)
+  message(STATUS "Building as main project, CMake version: ${CMAKE_VERSION}")
+endif()
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(Hardening)
+
+if(EMSCRIPTEN)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(STATUS "Building for 64-bit WASM target")
+  else()
+    message(STATUS "Building for 32-bit WASM target")
+  endif()
+endif()
+
+# The basic options to control what will be built besides the library.
+option(CHARLS_BUILD_TESTS "Build test application" OFF)
+option(CHARLS_BUILD_AFL_FUZZ_TEST "Build AFL test fuzzer application" OFF)
+option(CHARLS_BUILD_LIB_FUZZER_FUZZ_TEST "Build LibFuzzer test fuzzer application" OFF)
+option(CHARLS_BUILD_CLI "Build command line interface application" OFF)
+option(CHARLS_BUILD_SAMPLES "Build sample applications" OFF)
+option(CHARLS_INSTALL "Generate the install target." ${MAIN_PROJECT})
+option(CHARLS_BUILD_ALL "Build all features" OFF)
+
+if(CHARLS_BUILD_ALL)
+    foreach(_opt CHARLS_BUILD_TESTS CHARLS_BUILD_AFL_FUZZ_TEST
+     CHARLS_BUILD_LIB_FUZZER_FUZZ_TEST CHARLS_BUILD_CLI CHARLS_BUILD_SAMPLES)
+        set(${_opt} ON CACHE BOOL "" FORCE)
+    endforeach()
+endif()
+
+# Provide BUILD_SHARED_LIBS as an option for GUI tools
+option(BUILD_SHARED_LIBS "Will control if charls lib is build as shared lib/DLL or static library")
+
+# Provide option to build CharLS with address sanitizer
+option(CHARLS_ENABLE_ASAN "Build with address sanitizer enabled." OFF)
+
+# Provide option to build CharLS with clang-tidy
+option(CHARLS_ENABLE_CLANG_TIDY "Enable clang-tidy static analysis." OFF)
+
+# These options are used by the CI pipeline to ensure new warnings are detected quickly.
+# Not enabled by default to ensure the CharLS package is end-user friendly.
+option(CHARLS_PEDANTIC_WARNINGS "Enable extra warnings and static analysis." OFF)
+option(CHARLS_TREAT_WARNING_AS_ERROR "Treat a warning as an error." OFF)
+
+# Provide option to build CharLS with native CPU optimizations
+option(CHARLS_ENABLE_NATIVE_OPTIMIZATION "Optimize binaries specifically for the host CPU architecture" OFF)
+
+# Provide option to build CharLS with C++ Standard Library hardening
+option(CHARLS_CPP_STANDARD_LIBRARY_HARDENING "Enable C++ Standard Library hardening features." OFF)
+
+# CharLS is written in portable c++:
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Configure the supported C++ compilers: gcc, clang and MSVC
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  set(PEDANTIC_CXX_COMPILE_FLAGS
+    -Wall
+    -Wextra
+    -pedantic
+    -pedantic-errors
+    -Wold-style-cast
+    -Wfloat-equal
+    -Wlogical-op
+    -Wundef
+    -Wredundant-decls
+    -Wshadow
+    -Wwrite-strings
+    -Wpointer-arith
+    -Wcast-qual
+    -Wformat=2
+    -Wmissing-include-dirs
+    -Wcast-align
+    -Wctor-dtor-privacy
+    -Wdisabled-optimization
+    -Winvalid-pch
+    -Woverloaded-virtual
+    -Wnon-virtual-dtor
+    -Wnoexcept
+    -Wdouble-promotion
+    -Wtrampolines
+    -Wzero-as-null-pointer-constant
+    -Wuseless-cast
+    -Wvector-operation-performance
+    -Wsized-deallocation
+    -Wattributes
+    -Wuseless-cast
+    -Wconversion
+  )
+  if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 6.0)
+      set(PEDANTIC_CXX_COMPILE_FLAGS ${PEDANTIC_CXX_COMPILE_FLAGS}
+        -Wshift-overflow=2
+        -Wnull-dereference
+        -Wduplicated-cond
+      )
+  endif()
+  if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0)
+      set(PEDANTIC_CXX_COMPILE_FLAGS ${PEDANTIC_CXX_COMPILE_FLAGS}
+        -Wcast-align=strict
+      )
+  endif()
+
+  set(WARNINGS_AS_ERRORS_FLAG_COMPILER -Werror)
+  set(WARNINGS_AS_ERRORS_FLAG_LINKER LINKER:--fatal-warnings)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(PEDANTIC_CXX_COMPILE_FLAGS
+      -Wall
+      -Wextra # (-W is synonym)
+      -Wnon-gcc
+      -Wpedantic
+      -Wcast-qual
+      -Wformat=2
+      -Wvla
+      -Warray-bounds-pointer-arithmetic
+      -Wassign-enum
+      -Wbad-function-cast
+      -Wconditional-uninitialized
+      -Widiomatic-parentheses
+      -Wimplicit-fallthrough
+      -Wloop-analysis
+      -Wpointer-arith
+      -Wshift-sign-overflow
+      -Wtautological-constant-in-range-compare
+      -Wunreachable-code-aggressive
+      -Wthread-safety
+      -Wthread-safety-beta
+      -Wcomma
+      -Wconversion
+      # -Weverything provides the option to discover useful Clang warnings.
+      # The list below ignores not useful Weverything warnings.
+      -Wno-weak-vtables                       # Ignore, linker will remove the couple of extra vtables.
+      -Wno-padded                             # Ignore, padding optimization is not needed.
+      -Wno-c++98-compat                       # Ignore, CharLS targets C++17, ignore C++98 compatibility.
+      -Wno-c++98-compat-pedantic              # Ignore, CharLS targets C++17, ignore C++98 compatibility.
+      -Wno-global-constructors                # Ignore, by design CharLS uses types created at startup.
+      -Wno-switch-enum                        # Ignore, cases are handled by default.
+      -Wno-sign-conversion                    # Ignore, would just introduce ugly static_asserts.
+      -Wno-exit-time-destructors              # Ignore, by design exit-time destructors are used.
+      -Wno-missing-braces                     # Ignore, False warning in clang 5.0, fixed in 6.0.
+  )
+
+  if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0.2)
+    set(PEDANTIC_CXX_COMPILE_FLAGS ${PEDANTIC_CXX_COMPILE_FLAGS}
+      -Wno-undefined-func-template            # Ignore, linker will complain if final template code is not available.
+    )
+  endif()
+  if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10.0)
+    set(PEDANTIC_CXX_COMPILE_FLAGS ${PEDANTIC_CXX_COMPILE_FLAGS}
+      -Walloca
+    )
+  endif()
+
+  set(WARNINGS_AS_ERRORS_FLAG_COMPILER -Werror)
+  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+    set(WARNINGS_AS_ERRORS_FLAG_LINKER LINKER:--fatal-warnings)
+  endif()
+
+  if(NOT APPLE)
+    set(LIB_FUZZER_SUPPORTED ON)
+  endif()
+endif()
+
+if(MSVC)
+  message(STATUS "MSVC architecture: ${MSVC_CXX_ARCHITECTURE_ID}")
+  set(PEDANTIC_CXX_COMPILE_FLAGS /W4)
+  set(WARNINGS_AS_ERRORS_FLAG_COMPILER /WX)
+  set(WARNINGS_AS_ERRORS_FLAG_LINKER /WX)
+
+  # Exception settings are not set for ARM(64) when building for Ninja
+  string(TOLOWER ${CMAKE_CXX_COMPILER} CXX_COMPILER_LOWER)
+  string(FIND ${CXX_COMPILER_LOWER} "arm" ARM_DETECTED)
+  if(${ARM_DETECTED} GREATER 0)
+    add_compile_options("/EHsc")
+  endif()
+
+  # Remove option /GR (/GR is added by default by CMake). /GR is already the default
+  # and this makes it possible to use /GR- without warnings.
+  string(REGEX REPLACE " /GR" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+  # All C and C++ source files are encoded in UTF-8 without signature (BOM), MSVC requires the utf-8 switch to read files correctly.
+  add_compile_options("/utf-8")
+
+  # /permissive-: Will configure the MSVC compiler to accept only standards conformance C++.
+  add_compile_options("/permissive-")
+
+  # Enable conformance options that are not enabled by permissive-.
+  # /Zc:__cplusplus: Will configure the MSVC compiler to define the correct value for the __cplusplus macro.
+  # /Zc:throwingNew: Will configure the MSVC compiler that only the standard throwing operator new is used.
+  # /Zc:preprocessor: Will enable the preprocessor conformance mode.
+  add_compile_options("/Zc:__cplusplus")
+  add_compile_options("/Zc:throwingNew")
+  add_compile_options("/Zc:preprocessor")
+
+  # /Zc:enumTypes: enable conformance for enum type deduction. (VS 2022 17.4. and later)
+  if(MSVC_VERSION GREATER_EQUAL 1934)
+    add_compile_options("/Zc:enumTypes")
+  endif()
+
+  # /Zc:templateScope = Check template parameter shadowing. (VS 2022 17.5 and later)
+  if(MSVC_VERSION GREATER_EQUAL 1935)
+    add_compile_options("/Zc:templateScope")
+  endif()
+
+  # /ZH:SHA_256: Will use SHA 256 for checksums between source code and debug symbols (more secure)
+  # Already default enabled in Visual Studio 2022 17.0 and later
+  if(MSVC_VERSION LESS 1930)
+    add_compile_options("/ZH:SHA_256")
+  endif()
+
+  # /guard:cf: Will enable Control Flow Guard, which provides addition compile time and runtime checks.
+  add_compile_options("/guard:cf")
+  add_link_options("/guard:cf")
+
+  # /CETCOMPAT: Mark executable image compatible with the Control-flow Enforcement Technology (CET) Shadow Stack.
+  # Marking an image CET compatible is only supported for x64 and x86 CPUs.
+  # Depending on the hardware, 11th generation Intel and AMD Zen3 and newer CPUs, shadow stacks are enabled at runtime.
+  if(${ARM_DETECTED} EQUAL -1)
+    add_link_options("/CETCOMPAT")
+  endif()
+
+  # Enable LibFuzzer support for MSVC
+  if(${ARM_DETECTED} EQUAL -1 AND MSVC_VERSION GREATER_EQUAL 1930)
+    set(LIB_FUZZER_SUPPORTED ON)
+  endif()
+
+endif()
+
+if(CHARLS_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(CLANG_TIDY_EXE)
+        message(STATUS "Clang-tidy enabled and found at: ${CLANG_TIDY_EXE}")
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    else()
+        message(WARNING "Clang-tidy enabled, but not found!")
+    endif()
+endif()
+
+if(CHARLS_TREAT_WARNING_AS_ERROR)
+  add_compile_options(${WARNINGS_AS_ERRORS_FLAG_COMPILER})
+  add_link_options(${WARNINGS_AS_ERRORS_FLAG_LINKER})
+endif()
+
+if(CHARLS_ENABLE_NATIVE_OPTIMIZATION)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+    
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        # Apply the optimization options globally or to specific targets
+        add_compile_options(-march=native -mtune=native)
+        message(STATUS "Host-native architecture optimizations enabled.")
+    else()
+        message(WARNING "-march=native is not supported by the current compiler.")
+    endif()
+endif()
+
+include(src/CMakeLists.txt)
+
+if(CHARLS_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(test)
+endif()
+
+# When enabled apply the pedantic warnings options and warnings as errors to globally.
+if(CHARLS_PEDANTIC_WARNINGS)
+  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${PEDANTIC_CXX_COMPILE_FLAGS}>")
+endif()
+
+if(CHARLS_BUILD_AFL_FUZZ_TEST)
+  add_subdirectory(fuzzing/afl)
+endif()
+
+if(CHARLS_BUILD_LIB_FUZZER_FUZZ_TEST AND LIB_FUZZER_SUPPORTED)
+  message(STATUS "LibFuzzer test applications are requested and supported and will be built")
+  add_subdirectory(fuzzing/libfuzzer-decoder)
+  add_subdirectory(fuzzing/libfuzzer-encoder)
+endif()
+
+if(CHARLS_BUILD_CLI)
+  add_subdirectory(cli)
+endif()
+
+if(CHARLS_BUILD_SAMPLES)
+  add_subdirectory(samples)
+endif()
+
+if(CHARLS_BUILD_TESTS)
+  include(checks/CMakeLists.txt)
+endif()
