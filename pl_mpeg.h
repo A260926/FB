@@ -178,6 +178,28 @@ typedef struct {
 } plm_packet_t;
 
 
+// Streaming fragment of a demuxed MPEG PS packet, as returned by
+// plm_demux_decode_chunk(). The fields mirror plm_packet_t: `type` is the PES
+// start code (e.g. PLM_DEMUX_PACKET_VIDEO_1), `pts` the presentation time
+// stamp in seconds (or PLM_PACKET_INVALID_TS) and `data`/`length` describe the
+// payload fragment. `first` is set only on the first fragment of a packet and
+// `last` only on the final one; both are set on the single record delivered for
+// a legal zero-length packet. Every fragment of a packet carries the same
+// parsed type and pts. The `data` pointer borrows the demuxer's input memory;
+// it is only valid until the next call to plm_demux_decode_chunk(), the next
+// plm_buffer_write()/load callback, a rewind or the destruction of the
+// demuxer/buffer. Copy the bytes if you need to keep them longer.
+
+typedef struct {
+	int type;
+	double pts;
+	uint8_t *data;
+	size_t length;
+	int first;
+	int last;
+} plm_packet_chunk_t;
+
+
 // Decoded Video Plane 
 // The byte length of the data is width * height. Note that different planes
 // have different sizes: the Luma plane (Y) is double the size of each of 
@@ -665,6 +687,21 @@ double plm_demux_get_duration(plm_demux_t *self, int type);
 // the next call to plm_demux_decode() or until the demuxer is destroyed.
 
 plm_packet_t *plm_demux_decode(plm_demux_t *self);
+
+
+// Decode and return the next available payload fragment without waiting for a
+// whole PES packet to arrive. This enables bounded input buffers: as soon as
+// the packet header and at least one payload byte are available, a fragment is
+// returned. Fragments of one packet are delivered in order; `first` is set only
+// on the first one and `last` only on the final one. A legal zero-length
+// packet yields one record with length 0 and first == last == 1. The returned
+// chunk (and its data pointer, which borrows the input memory) is owned by the
+// demuxer and stays valid only until the next call to this function, the next
+// buffer write/load callback, a rewind/seek or destruction; consume or copy it
+// before that. Returns NULL when no fragment can currently be produced. A
+// truncated packet at end of input never gets a forged `last`.
+
+plm_packet_chunk_t *plm_demux_decode_chunk(plm_demux_t *self);
 
 
 
@@ -1787,6 +1824,11 @@ static const int PLM_START_PACK = 0xBA;
 static const int PLM_START_END = 0xB9;
 static const int PLM_START_SYSTEM = 0xBB;
 
+// Largest MPEG-1 PES header we buffer while parsing it byte by byte in the
+// streaming chunk interface: start code (4) + length (2) + stuffing (32) +
+// P-STD (2) + PTS/DTS (10) + a safety margin.
+#define PLM_DEMUX_CHUNK_HEADER_MAX 64
+
 struct plm_demux_t {
 	plm_buffer_t *buffer;
 	int destroy_buffer_when_done;
@@ -1806,8 +1848,22 @@ struct plm_demux_t {
 	int num_video_streams;
 	plm_packet_t current_packet;
 	plm_packet_t next_packet;
+
+	// Streaming state for plm_demux_decode_chunk(). A header is parsed one
+	// byte at a time into chunk_header; chunk_stage tracks how many of those
+	// bytes are valid. Once the header is complete the payload length is known
+	// (chunk_payload_left) and fragments pointing straight into the buffer are
+	// handed out via chunk, without accumulating the whole packet.
+	plm_packet_chunk_t chunk;
+	uint8_t chunk_header[PLM_DEMUX_CHUNK_HEADER_MAX];
+	int chunk_stage;
+	int chunk_have_packet;
+	int chunk_started;
+	size_t chunk_payload_left;
 };
 
+
+void plm_demux_chunk_reset(plm_demux_t *self);
 
 void plm_demux_buffer_seek(plm_demux_t *self, size_t pos);
 double plm_demux_decode_time(plm_demux_t *self);
@@ -1946,6 +2002,7 @@ void plm_demux_rewind(plm_demux_t *self) {
 	self->current_packet.length = 0;
 	self->next_packet.length = 0;
 	self->start_code = -1;
+	plm_demux_chunk_reset(self);
 }
 
 int plm_demux_has_ended(plm_demux_t *self) {
@@ -1957,6 +2014,7 @@ void plm_demux_buffer_seek(plm_demux_t *self, size_t pos) {
 	self->current_packet.length = 0;
 	self->next_packet.length = 0;
 	self->start_code = -1;
+	plm_demux_chunk_reset(self);
 }
 
 double plm_demux_get_start_time(plm_demux_t *self, int type) {
@@ -2275,6 +2333,418 @@ plm_packet_t *plm_demux_get_packet(plm_demux_t *self) {
 
 	self->next_packet.length = 0;
 	return &self->current_packet;
+}
+
+
+// ----------------------------------------------------------------------------
+// Streaming chunk demuxer (plm_demux_decode_chunk)
+//
+// Unlike plm_demux_decode(), which only yields once a whole PES payload is
+// contiguous in the buffer, this parser advances one available byte at a time
+// and emits payload fragments as soon as a complete header plus at least one
+// payload byte is present. Header bytes are accumulated in the fixed-size
+// chunk_header array; payload is never copied, the fragment points straight
+// into the input buffer.
+
+int plm_demux_chunk_is_packet_type(int start_code) {
+	return (
+		start_code == PLM_DEMUX_PACKET_VIDEO_1 ||
+		start_code == PLM_DEMUX_PACKET_PRIVATE ||
+		(start_code >= PLM_DEMUX_PACKET_AUDIO_1 &&
+			start_code <= PLM_DEMUX_PACKET_AUDIO_4)
+	);
+}
+
+void plm_demux_chunk_reset(plm_demux_t *self) {
+	self->chunk_stage = 0;
+	self->chunk_have_packet = FALSE;
+	self->chunk_started = FALSE;
+	self->chunk_payload_left = 0;
+	self->chunk.type = 0;
+	self->chunk.pts = PLM_PACKET_INVALID_TS;
+	self->chunk.data = NULL;
+	self->chunk.length = 0;
+	self->chunk.first = 0;
+	self->chunk.last = 0;
+}
+
+// Read one byte at the given offset from the current buffer position without
+// consuming it. Returns FALSE if the byte is not currently available.
+int plm_demux_chunk_peek_byte(plm_demux_t *self, size_t offset, uint8_t *out) {
+	if (!plm_buffer_has(self->buffer, ((offset + 1) << 3))) {
+		return FALSE;
+	}
+	*out = self->buffer->bytes[(self->buffer->bit_index >> 3) + offset];
+	return TRUE;
+}
+
+// Consume n contiguous bytes that were already confirmed available.
+void plm_demux_chunk_consume(plm_demux_t *self, size_t n) {
+	self->buffer->bit_index += n << 3;
+}
+
+// Reconstruct a 33-bit MPEG PTS/DTS from the 5 timestamp bytes as laid out in
+// an MPEG-1 PES header. The first byte is the marker byte (its low bit, like
+// the low bits of the third and fifth byte, is a marker that must be 1).
+// Returns FALSE when any marker bit is illegal.
+int plm_demux_chunk_decode_time(const uint8_t *p, double *out) {
+	if ((p[0] & 0x01) != 1 || (p[2] & 0x01) != 1 || (p[4] & 0x01) != 1) {
+		return FALSE;
+	}
+	uint64_t clock =
+		((uint64_t)(p[0] & 0x0e) << 29) |
+		((uint64_t)p[1] << 22) |
+		((uint64_t)(p[2] & 0xfe) << 14) |
+		((uint64_t)p[3] << 7) |
+		((uint64_t)(p[4] & 0xfe) >> 1);
+	*out = (double)clock / 90000.0;
+	return TRUE;
+}
+
+// Parse a fully accumulated PES header (start code through the optional
+// timestamps) from chunk_header. On success records type and pts, writes the
+// payload length in bytes and returns TRUE. Returns FALSE when the declared
+// length is shorter than the header itself or a timestamp marker is illegal;
+// in that case the packet's payload must never be published.
+int plm_demux_chunk_parse_header(plm_demux_t *self, size_t *payload_length) {
+	const uint8_t *h = self->chunk_header;
+	int type = h[3];
+	size_t declared = ((size_t)h[4] << 8) | h[5];
+	size_t pos = 6;
+
+	size_t stuffing = 0;
+	while (pos < (size_t)self->chunk_stage && h[pos] == 0xff) {
+		stuffing++;
+		pos++;
+	}
+
+	// Optional P-STD field: leading bits 01 (0x40 mask).
+	int pstd = 0;
+	if (pos < (size_t)self->chunk_stage && (h[pos] & 0xc0) == 0x40) {
+		pstd = 2;
+		pos += 2;
+	}
+
+	// The marker byte carries the fixed '00' prefix in its top two bits and
+	// the PTS/DTS flags in the next two.
+	int pts_dts_marker = (h[pos] >> 4) & 0x03;
+	size_t header_end;
+	double pts = PLM_PACKET_INVALID_TS;
+
+	if (pts_dts_marker == 0x03) {
+		// Marker byte plus four more for the PTS, then five bytes for the DTS.
+		if (!plm_demux_chunk_decode_time(h + pos, &pts)) {
+			return FALSE;
+		}
+		double dts;
+		if (!plm_demux_chunk_decode_time(h + pos + 5, &dts)) {
+			return FALSE;
+		}
+		header_end = pos + 10;
+	}
+	else if (pts_dts_marker == 0x02) {
+		if (!plm_demux_chunk_decode_time(h + pos, &pts)) {
+			return FALSE;
+		}
+		header_end = pos + 5;
+	}
+	else if (pts_dts_marker == 0x00) {
+		header_end = pos + 1;
+	}
+	else {
+		return FALSE; // illegal PTS/DTS marker
+	}
+
+	// Every byte belonging to the header must fit within the declared length.
+	size_t header_bytes = stuffing + pstd + (header_end - pos);
+	if (declared < header_bytes) {
+		return FALSE;
+	}
+
+	self->chunk.type = type;
+	self->chunk.pts = pts;
+	*payload_length = declared - header_bytes;
+	return TRUE;
+}
+
+plm_packet_chunk_t *plm_demux_decode_chunk(plm_demux_t *self) {
+	if (!plm_demux_has_headers(self)) {
+		return NULL;
+	}
+
+	plm_buffer_t *buffer = self->buffer;
+
+	// Emit payload fragments of the packet currently being streamed.
+	if (self->chunk_have_packet) {
+		if (self->chunk_payload_left == 0) {
+			self->chunk_have_packet = FALSE;
+		}
+		else {
+			// Asking for one byte also services an installed load callback.
+			if (!plm_buffer_has(buffer, 8)) {
+				// No payload bytes right now; this is not treated as end of
+				// input and no `last` is ever fabricated.
+				return NULL;
+			}
+			size_t available = plm_buffer_get_remaining(buffer);
+			if (available > 0) {
+				size_t n = available < self->chunk_payload_left
+					? available
+					: self->chunk_payload_left;
+				int last = (n == self->chunk_payload_left);
+
+				self->chunk.data = buffer->bytes + (buffer->bit_index >> 3);
+				self->chunk.length = n;
+				self->chunk.first = self->chunk_started ? 0 : 1;
+				self->chunk.last = last;
+				self->chunk_started = TRUE;
+				plm_demux_chunk_consume(self, n);
+				self->chunk_payload_left -= n;
+				if (last) {
+					self->chunk_have_packet = FALSE;
+				}
+				return &self->chunk;
+			}
+			// No payload bytes right now; this is not treated as end of input.
+			return NULL;
+		}
+	}
+
+	// Locate the next start code, scanning only bytes currently in the buffer.
+	// A PES-looking sequence inside payload is never reached here because
+	// payload is consumed by length, not scanned.
+	while (TRUE) {
+		// Trigger an installed load callback before giving up for lack of data.
+		if (plm_buffer_get_remaining(buffer) < 4 &&
+			!plm_buffer_has(buffer, 32)) {
+			return NULL;
+		}
+		size_t remaining = plm_buffer_get_remaining(buffer);
+		if (remaining < 4) {
+			return NULL;
+		}
+
+		size_t base = buffer->bit_index >> 3;
+		size_t limit = buffer->length - 3;
+		size_t i = base;
+		int found = FALSE;
+		for (; i < limit; i++) {
+			if (
+				buffer->bytes[i] == 0x00 &&
+				buffer->bytes[i + 1] == 0x00 &&
+				buffer->bytes[i + 2] == 0x01
+			) {
+				found = TRUE;
+				break;
+			}
+		}
+		if (!found) {
+			// Keep the trailing 3 bytes: a start code may straddle the next
+			// write boundary.
+			size_t skip = (buffer->length > base + 3)
+				? buffer->length - base - 3
+				: 0;
+			if (skip) {
+				plm_demux_chunk_consume(self, skip);
+			}
+			return NULL;
+		}
+
+		plm_demux_chunk_consume(self, i - base);
+		uint8_t code;
+		if (!plm_demux_chunk_peek_byte(self, 3, &code)) {
+			return NULL;
+		}
+
+		if (!plm_demux_chunk_is_packet_type(code)) {
+			if (code < 0xBB) {
+				// Pack headers (0xBA), program end (0xB9) and other low
+				// start codes carry no PES length field. Just step over the
+				// start code and resync on the next one, mirroring
+				// plm_buffer_next_start_code(). Pack headers never embed a
+				// 00 00 01 sequence in their fixed body.
+				plm_demux_chunk_consume(self, 4);
+				continue;
+			}
+
+			// Unsupported length-prefixed packets (system header 0xBB, program
+			// stream map 0xBC, padding 0xBE, ...): skip by the declared PES
+			// length so a fake start code inside the body never leaks out.
+			uint8_t hi, lo;
+			if (!plm_demux_chunk_peek_byte(self, 4, &hi) ||
+				!plm_demux_chunk_peek_byte(self, 5, &lo)) {
+				return NULL; // length field not fully available yet
+			}
+			size_t packet_size = 6 + (((size_t)hi << 8) | lo);
+			if (!plm_buffer_has(buffer, packet_size << 3)) {
+				return NULL; // wait for the whole unsupported packet
+			}
+			plm_demux_chunk_consume(self, packet_size);
+			continue;
+		}
+
+		// Accumulate the header one available byte at a time into the fixed
+		// staging area; a partially available header returns NULL and the
+		// already seen bytes are never re-consumed.
+		size_t stage = 0;
+		uint8_t byte;
+
+		// Start code (4) and length field (2).
+		while (stage < 6) {
+			if (!plm_demux_chunk_peek_byte(self, stage, &byte)) {
+				self->chunk_stage = (int)stage;
+				return NULL;
+			}
+			self->chunk_header[stage++] = byte;
+		}
+		size_t declared = ((size_t)self->chunk_header[4] << 8) |
+			self->chunk_header[5];
+
+		// The declared length must leave room for at least the marker byte.
+		if (declared == 0) {
+			plm_demux_chunk_consume(self, 6);
+			continue;
+		}
+
+		// Stuffing (0xff run), at most 32 bytes per MPEG-1 PES.
+		size_t pos = 6;
+		while (pos - 6 < 32 && pos < 6 + declared) {
+			if (!plm_demux_chunk_peek_byte(self, pos, &byte)) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			self->chunk_header[pos] = byte;
+			if (byte != 0xff) {
+				break;
+			}
+			pos++;
+		}
+		if (pos >= 6 + declared) {
+			// The whole body is stuffing, there is no marker byte: malformed
+			// packet, never publish its payload.
+			if (!plm_buffer_has(buffer, (6 + declared) << 3)) {
+				return NULL;
+			}
+			plm_demux_chunk_consume(self, 6 + declared);
+			continue;
+		}
+		// If the 32-byte stuffing cap was hit, fetch the marker byte now.
+		if (byte == 0xff) {
+			if (!plm_demux_chunk_peek_byte(self, pos, &byte)) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			self->chunk_header[pos] = byte;
+		}
+
+		// Optional P-STD: leading bits 01.
+		if ((byte & 0xc0) == 0x40) {
+			if (pos + 1 >= 6 + declared) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			if (!plm_demux_chunk_peek_byte(self, pos + 1, &byte)) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			self->chunk_header[pos + 1] = byte;
+			pos += 2;
+			if (!plm_demux_chunk_peek_byte(self, pos, &byte)) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			self->chunk_header[pos] = byte;
+		}
+
+		int marker = (byte >> 4) & 0x03;
+		size_t needed;
+		if (marker == 0x03) {
+			needed = pos + 10;
+		}
+		else if (marker == 0x02) {
+			needed = pos + 5;
+		}
+		else if (marker == 0x00) {
+			needed = pos + 1;
+		}
+		else {
+			// Illegal PTS/DTS marker: the marker byte itself is present, so we
+			// can reject the packet deterministically and never publish it.
+			if (!plm_buffer_has(buffer, (6 + declared) << 3)) {
+				return NULL;
+			}
+			plm_demux_chunk_consume(self, 6 + declared);
+			continue;
+		}
+		if (needed > 6 + declared) {
+			// Declared length is shorter than the header it introduces.
+			if (!plm_buffer_has(buffer, (6 + declared) << 3)) {
+				return NULL;
+			}
+			plm_demux_chunk_consume(self, 6 + declared);
+			continue;
+		}
+
+		while (pos < needed) {
+			if (!plm_demux_chunk_peek_byte(self, pos, &byte)) {
+				self->chunk_stage = (int)pos;
+				return NULL;
+			}
+			self->chunk_header[pos] = byte;
+			pos++;
+		}
+		self->chunk_stage = (int)pos;
+
+		size_t payload_length;
+		if (!plm_demux_chunk_parse_header(self, &payload_length)) {
+			// Declared length shorter than the header, or bad timestamp
+			// marker: never publish this payload. Skip and resync.
+			if (!plm_buffer_has(buffer, (6 + declared) << 3)) {
+				return NULL;
+			}
+			plm_demux_chunk_consume(self, 6 + declared);
+			continue;
+		}
+
+		// Header fully parsed and validated; consume it and open the packet.
+		plm_demux_chunk_consume(self, (size_t)self->chunk_stage);
+		self->chunk_have_packet = TRUE;
+		self->chunk_started = FALSE;
+		self->chunk_payload_left = payload_length;
+		self->chunk.first = 0;
+		self->chunk.last = 0;
+		self->chunk.data = NULL;
+		self->chunk.length = 0;
+
+		if (payload_length == 0) {
+			// A legal zero-length packet is delivered exactly once.
+			self->chunk.length = 0;
+			self->chunk.first = 1;
+			self->chunk.last = 1;
+			self->chunk_have_packet = FALSE;
+			return &self->chunk;
+		}
+
+		// Deliver the first fragment immediately if a payload byte is present.
+		size_t available = plm_buffer_get_remaining(buffer);
+		if (available == 0) {
+			// first stays armed for the next call; nothing to return yet.
+			return NULL;
+		}
+		size_t n = available < payload_length ? available : payload_length;
+		int last = (n == payload_length);
+		self->chunk.data = buffer->bytes + (buffer->bit_index >> 3);
+		self->chunk.length = n;
+		self->chunk.first = 1;
+		self->chunk.last = last;
+		self->chunk_started = TRUE;
+		plm_demux_chunk_consume(self, n);
+		self->chunk_payload_left -= n;
+		if (last) {
+			self->chunk_have_packet = FALSE;
+		}
+		return &self->chunk;
+	}
 }
 
 
