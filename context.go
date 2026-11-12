@@ -54,11 +54,16 @@ func (b *Browser) Sleeper(sleeper func() utils.Sleeper) *Browser {
 }
 
 // Context returns a clone with the specified ctx for chained sub-operations.
+// The clone shares the acknowledged keyboard and mouse state of the original
+// page (including the state locks), but the input devices exposed by the clone
+// dispatch through the clone's own context. Cancelling the clone's context
+// therefore never cancels the original page.
 func (p *Page) Context(ctx context.Context) *Page {
 	p.helpersLock.Lock()
 	newObj := *p
 	p.helpersLock.Unlock()
 	newObj.ctx = ctx
+	newObj.bindInputDevices()
 	return &newObj
 }
 
@@ -90,6 +95,7 @@ func (p *Page) WithCancel() (*Page, func()) {
 func (p *Page) Sleeper(sleeper func() utils.Sleeper) *Page {
 	newObj := *p
 	newObj.sleeper = sleeper
+	newObj.bindInputDevices()
 	return &newObj
 }
 

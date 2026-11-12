@@ -109,6 +109,12 @@ func Example_disable_headless_to_debug() {
 // all the methods of the returned page will use the ctx if they have IO blocking operations.
 // [Page.Timeout] or [Page.WithCancel] is just a shortcut for Page.Context.
 // Of course, Browser or Element works the same way.
+//
+// Clones of the same page share the confirmed keyboard and mouse state, so a
+// key pressed on one clone is visible to the mouse and touch of every clone,
+// but each clone dispatches through its own context and cancelling one never
+// cancels the others. A failed or cancelled input dispatch does not change
+// this shared state, so later actions only observe acknowledged input.
 func Example_context_and_timeout() {
 	page := rod.New().MustConnect().MustPage("https://github.com")
 
@@ -424,8 +430,10 @@ func Example_direct_cdp() {
 	}
 
 	{
-		// Interact with the cdp JSON API directly
-		_, _ = page.Call(context.TODO(), "", "Page.setAdBlockingEnabled", map[string]bool{
+		// Interact with the cdp JSON API directly. The page's own context is
+		// always used, the context argument only satisfies the proto.Client
+		// interface.
+		_, _ = page.Call(page.GetContext(), "", "Page.setAdBlockingEnabled", map[string]bool{
 			"enabled": true,
 		})
 	}

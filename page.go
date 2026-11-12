@@ -64,6 +64,12 @@ type Page struct {
 	Keyboard *Keyboard
 	Touch    *Touch
 
+	// input is the acknowledged keyboard and mouse state shared by every clone
+	// of this page. Clones keep the pointer instead of copying the maps or
+	// locks, so they observe each other's confirmed input. Different pages and
+	// sessions have their own instance and never share input state.
+	input *inputState
+
 	element *Element // iframe only
 
 	jsCtxLock   *sync.Mutex
@@ -941,6 +947,7 @@ func (p *Page) ElementFromObject(obj *proto.RuntimeRemoteObject) (*Element, erro
 	if id != pid {
 		clone := *p
 		clone.jsCtxID = &id
+		clone.bindInputDevices()
 		p = &clone
 	}
 
@@ -1005,8 +1012,11 @@ func (p *Page) Release(obj *proto.RuntimeRemoteObject) error {
 }
 
 // Call implements the [proto.Client].
-func (p *Page) Call(ctx context.Context, sessionID, methodName string, params interface{}) (res []byte, err error) {
-	return p.browser.Call(ctx, sessionID, methodName, params)
+// The page's own context is used, so a [Page.Context], [Page.Timeout] or
+// [Page.WithCancel] clone routes its calls through that clone's context while
+// the original page keeps using its own.
+func (p *Page) Call(_ context.Context, sessionID, methodName string, params interface{}) (res []byte, err error) {
+	return p.browser.Call(p.ctx, sessionID, methodName, params)
 }
 
 // Event of the page.

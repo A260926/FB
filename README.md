@@ -17,6 +17,9 @@ customize or build up their own version of Rod, the high-level functions are jus
 - Auto-wait elements to be ready
 - Debugging friendly, auto input tracing, remote monitoring headless browser
 - Thread-safe for all operations
+- Keyboard and mouse state is only updated after a dispatch is acknowledged: failed or
+  cancelled dispatches never corrupt the modifiers, buttons or cursor position seen by the
+  next action, and page clones created by context/timeouts share that confirmed state
 - Automatically find or download [browser](lib/launcher)
 - High-level helpers like WaitStable, WaitRequestIdle, HijackRequests, WaitDownload, etc
 - Two-step WaitEvent design, never miss an event ([how it works](https://github.com/ysmood/goob))

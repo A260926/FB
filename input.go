@@ -10,30 +10,79 @@ import (
 	"github.com/ysmood/gson"
 )
 
-// Keyboard represents the keyboard on a page, it's always related the main frame.
-type Keyboard struct {
-	sync.Mutex
-
-	page *Page
-
-	// pressed keys must be released before it can be pressed again
+// inputState is shared by every [Page] clone of the same real page.
+// It only tracks the input state that has been acknowledged by a successful
+// CDP dispatch, so a rejected or timed out dispatch never changes what the
+// following actions observe. Page clones created with [Page.Context],
+// [Page.Timeout] or [Page.WithCancel] keep sharing the same instance, while
+// different pages or sessions never do.
+type inputState struct {
+	keyboardLock sync.Mutex
+	// pressed keys must be released before it can be pressed again.
+	// The left and right variants of a modifier (such as ShiftLeft and
+	// ShiftRight) are tracked separately, so releasing one never clears the
+	// modifier bit held down by the other.
 	pressed map[input.Key]struct{}
+
+	mouseLock sync.Mutex
+	id        string // mouse svg dom element id
+	pos       proto.Point
+	// the buttons is currently being pressed, reflects the press order
+	buttons []proto.InputMouseButton
 }
 
-func (p *Page) newKeyboard() *Page {
-	p.Keyboard = &Keyboard{page: p, pressed: map[input.Key]struct{}{}}
-	return p
+func newInputState() *inputState {
+	return &inputState{
+		pressed: map[input.Key]struct{}{},
+		id:      utils.RandString(8),
+	}
+}
+
+// Keyboard represents the keyboard on a page, it's always related the main frame.
+type Keyboard struct {
+	// page is the page clone the keyboard was obtained from. Input dispatched
+	// through it uses this page's context, not the context of the page that
+	// first created the shared input state.
+	page *Page
+
+	state *inputState
+}
+
+// bindInputDevices makes the page's Keyboard, Mouse and Touch dispatch through
+// the page itself. The shared input state (including its maps and locks) is
+// preserved, so clones created by [Page.Context] and friends keep observing
+// each other's acknowledged input while each one uses its own context.
+func (p *Page) bindInputDevices() {
+	p.Keyboard = &Keyboard{page: p, state: p.input}
+	p.Mouse = &Mouse{page: p, state: p.input}
+	p.Touch = &Touch{page: p}
 }
 
 func (k *Keyboard) getModifiers() int {
-	k.Lock()
-	defer k.Unlock()
+	k.state.keyboardLock.Lock()
+	defer k.state.keyboardLock.Unlock()
 	return k.modifiers()
 }
 
+// modifiers must be called with k.state.keyboardLock held.
 func (k *Keyboard) modifiers() int {
 	ms := 0
-	for key := range k.pressed {
+	for key := range k.state.pressed {
+		ms |= key.Modifier()
+	}
+	return ms
+}
+
+// modifiersWithout is like modifiers but pretends the release key is already
+// up, without touching the pressed set. Iterating the set instead of clearing
+// a bit keeps the other side of a paired modifier (such as ShiftRight while
+// releasing ShiftLeft). Must be called with k.state.keyboardLock held.
+func (k *Keyboard) modifiersWithout(release input.Key) int {
+	ms := 0
+	for key := range k.state.pressed {
+		if key == release {
+			continue
+		}
 		ms |= key.Modifier()
 	}
 	return ms
@@ -42,32 +91,58 @@ func (k *Keyboard) modifiers() int {
 // Press the key down.
 // To input characters that are not on the keyboard, such as Chinese or Japanese, you should
 // use method like [Page.InsertText].
+//
+// The local pressed set is updated only after the key event has been
+// acknowledged by the browser, so the outgoing modifiers already include the
+// key being pressed, and a failed dispatch leaves the previously confirmed
+// state untouched.
 func (k *Keyboard) Press(key input.Key) error {
 	defer k.page.tryTrace(TraceTypeInput, "press key: "+key.Info().Code)()
 	k.page.browser.trySlowMotion()
 
-	k.Lock()
-	defer k.Unlock()
+	k.state.keyboardLock.Lock()
+	defer k.state.keyboardLock.Unlock()
 
-	k.pressed[key] = struct{}{}
+	// the modifiers of the keyDown event include the key that is going to be
+	// pressed once the dispatch is acknowledged
+	modifiers := k.modifiers() | key.Modifier()
 
-	return key.Encode(proto.InputDispatchKeyEventTypeKeyDown, k.modifiers()).Call(k.page)
+	err := key.Encode(proto.InputDispatchKeyEventTypeKeyDown, modifiers).Call(k.page)
+	if err != nil {
+		return err
+	}
+
+	k.state.pressed[key] = struct{}{}
+	return nil
 }
 
 // Release the key.
+//
+// Releasing a key that is not held down sends nothing. The local pressed set
+// is updated only after the key event has been acknowledged by the browser:
+// the outgoing keyUp modifiers already exclude the released key (while keeping
+// any other held modifier), and a failed dispatch leaves the previously
+// confirmed set untouched.
 func (k *Keyboard) Release(key input.Key) error {
 	defer k.page.tryTrace(TraceTypeInput, "release key: "+key.Info().Code)()
 
-	k.Lock()
-	defer k.Unlock()
+	k.state.keyboardLock.Lock()
+	defer k.state.keyboardLock.Unlock()
 
-	if _, has := k.pressed[key]; !has {
+	if _, has := k.state.pressed[key]; !has {
 		return nil
 	}
 
-	delete(k.pressed, key)
+	// the modifiers of the keyUp event exclude the key that is going to be
+	// released; it is only removed from the set once the dispatch is
+	// acknowledged
+	err := key.Encode(proto.InputDispatchKeyEventTypeKeyUp, k.modifiersWithout(key)).Call(k.page)
+	if err != nil {
+		return err
+	}
 
-	return key.Encode(proto.InputDispatchKeyEventTypeKeyUp, k.modifiers()).Call(k.page)
+	delete(k.state.pressed, key)
+	return nil
 }
 
 // Type releases the key after the press.
@@ -138,7 +213,8 @@ func (ka *KeyActions) Type(keys ...input.Key) *KeyActions {
 	return ka
 }
 
-// Do the actions.
+// Do the actions. It stops at the first dispatch error and keeps the
+// successfully dispatched prefix, there is no rollback or replay.
 func (ka *KeyActions) Do() (err error) {
 	for _, a := range ka.balance() {
 		switch a.Type {
@@ -192,36 +268,30 @@ func (p *Page) InsertText(text string) error {
 
 // Mouse represents the mouse on a page, it's always related the main frame.
 type Mouse struct {
-	sync.Mutex
-
+	// page is the page clone the mouse was obtained from. Input dispatched
+	// through it uses this page's context, not the context of the page that
+	// first created the shared input state.
 	page *Page
 
-	id string // mouse svg dom element id
-
-	pos proto.Point
-
-	// the buttons is currently being pressed, reflects the press order
-	buttons []proto.InputMouseButton
-}
-
-func (p *Page) newMouse() *Page {
-	p.Mouse = &Mouse{page: p, id: utils.RandString(8)}
-	return p
+	state *inputState
 }
 
 // Position of current cursor.
 func (m *Mouse) Position() proto.Point {
-	m.Lock()
-	defer m.Unlock()
-	return m.pos
+	m.state.mouseLock.Lock()
+	defer m.state.mouseLock.Unlock()
+	return m.state.pos
 }
 
 // MoveTo the absolute position.
+//
+// The cursor position is updated only after the event has been acknowledged by
+// the browser, so a failed dispatch does not move the local state.
 func (m *Mouse) MoveTo(p proto.Point) error {
-	m.Lock()
-	defer m.Unlock()
+	m.state.mouseLock.Lock()
+	defer m.state.mouseLock.Unlock()
 
-	button, buttons := input.EncodeMouseButton(m.buttons)
+	button, buttons := input.EncodeMouseButton(m.state.buttons)
 
 	m.page.browser.trySlowMotion()
 
@@ -238,7 +308,7 @@ func (m *Mouse) MoveTo(p proto.Point) error {
 	}
 
 	// to make sure set only when call is successful
-	m.pos = p
+	m.state.pos = p
 
 	if m.page.browser.trace {
 		if !m.updateMouseTracer() {
@@ -251,7 +321,7 @@ func (m *Mouse) MoveTo(p proto.Point) error {
 }
 
 // MoveAlong the guide function.
-// Every time the guide function is called it should return the next mouse position, return true to stop.
+// Every time the guide function is called it should return the next position, return true to stop.
 // Read the source code of [Mouse.MoveLinear] as an example to use this method.
 func (m *Mouse) MoveAlong(guide func() (proto.Point, bool)) error {
 	for {
@@ -287,8 +357,8 @@ func (m *Mouse) MoveLinear(to proto.Point, steps int) error {
 
 // Scroll the relative offset with specified steps.
 func (m *Mouse) Scroll(offsetX, offsetY float64, steps int) error {
-	m.Lock()
-	defer m.Unlock()
+	m.state.mouseLock.Lock()
+	defer m.state.mouseLock.Unlock()
 
 	defer m.page.tryTrace(TraceTypeInput, fmt.Sprintf("scroll (%.2f, %.2f)", offsetX, offsetY))()
 	m.page.browser.trySlowMotion()
@@ -297,7 +367,7 @@ func (m *Mouse) Scroll(offsetX, offsetY float64, steps int) error {
 		steps = 1
 	}
 
-	button, buttons := input.EncodeMouseButton(m.buttons)
+	button, buttons := input.EncodeMouseButton(m.state.buttons)
 
 	stepX := offsetX / float64(steps)
 	stepY := offsetY / float64(steps)
@@ -310,8 +380,8 @@ func (m *Mouse) Scroll(offsetX, offsetY float64, steps int) error {
 			Modifiers: m.page.Keyboard.getModifiers(),
 			DeltaX:    stepX,
 			DeltaY:    stepY,
-			X:         m.pos.X,
-			Y:         m.pos.Y,
+			X:         m.state.pos.X,
+			Y:         m.state.pos.Y,
 		}.Call(m.page)
 		if err != nil {
 			return err
@@ -321,12 +391,13 @@ func (m *Mouse) Scroll(offsetX, offsetY float64, steps int) error {
 	return nil
 }
 
-// Down holds the button down.
+// Down holds the button down. The local button set is extended only after the
+// press has been acknowledged, so a failed dispatch leaves it unchanged.
 func (m *Mouse) Down(button proto.InputMouseButton, clickCount int) error {
-	m.Lock()
-	defer m.Unlock()
+	m.state.mouseLock.Lock()
+	defer m.state.mouseLock.Unlock()
 
-	toButtons := append(append([]proto.InputMouseButton{}, m.buttons...), button)
+	toButtons := append(append([]proto.InputMouseButton{}, m.state.buttons...), button)
 
 	_, buttons := input.EncodeMouseButton(toButtons)
 
@@ -336,23 +407,24 @@ func (m *Mouse) Down(button proto.InputMouseButton, clickCount int) error {
 		Buttons:    gson.Int(buttons),
 		ClickCount: clickCount,
 		Modifiers:  m.page.Keyboard.getModifiers(),
-		X:          m.pos.X,
-		Y:          m.pos.Y,
+		X:          m.state.pos.X,
+		Y:          m.state.pos.Y,
 	}.Call(m.page)
 	if err != nil {
 		return err
 	}
-	m.buttons = toButtons
+	m.state.buttons = toButtons
 	return nil
 }
 
-// Up releases the button.
+// Up releases the button. The local button set is trimmed only after the
+// release has been acknowledged, so a failed dispatch leaves it unchanged.
 func (m *Mouse) Up(button proto.InputMouseButton, clickCount int) error {
-	m.Lock()
-	defer m.Unlock()
+	m.state.mouseLock.Lock()
+	defer m.state.mouseLock.Unlock()
 
 	toButtons := []proto.InputMouseButton{}
-	for _, btn := range m.buttons {
+	for _, btn := range m.state.buttons {
 		if btn == button {
 			continue
 		}
@@ -367,13 +439,13 @@ func (m *Mouse) Up(button proto.InputMouseButton, clickCount int) error {
 		Buttons:    gson.Int(buttons),
 		ClickCount: clickCount,
 		Modifiers:  m.page.Keyboard.getModifiers(),
-		X:          m.pos.X,
-		Y:          m.pos.Y,
+		X:          m.state.pos.X,
+		Y:          m.state.pos.Y,
 	}.Call(m.page)
 	if err != nil {
 		return err
 	}
-	m.buttons = toButtons
+	m.state.buttons = toButtons
 	return nil
 }
 
@@ -393,11 +465,6 @@ func (m *Mouse) Click(button proto.InputMouseButton, clickCount int) error {
 // Touch events is stateless, we use the struct here only as a namespace to make the API style unified.
 type Touch struct {
 	page *Page
-}
-
-func (p *Page) newTouch() *Page {
-	p.Touch = &Touch{page: p}
-	return p
 }
 
 // Start a touch action.

@@ -174,6 +174,7 @@ func (ps Pages) MustFindByURL(regex string) *Page {
 func (p *Page) WithPanic(fail func(interface{})) *Page {
 	n := *p
 	n.e = genE(fail)
+	n.bindInputDevices()
 	return &n
 }
 

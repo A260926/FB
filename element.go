@@ -466,6 +466,7 @@ func (el *Element) Frame() (*Page, error) {
 	clone.jsCtxID = new(proto.RuntimeRemoteObjectID)
 	clone.element = el
 	clone.sleeper = el.sleeper
+	clone.bindInputDevices()
 
 	return &clone, nil
 }
@@ -720,8 +721,11 @@ func (el *Element) Remove() error {
 }
 
 // Call implements the [proto.Client].
-func (el *Element) Call(ctx context.Context, sessionID, methodName string, params interface{}) (res []byte, err error) {
-	return el.page.Call(ctx, sessionID, methodName, params)
+// It dispatches through the element's own context, so an
+// [Element.Context], [Element.Timeout] or [Element.WithCancel] clone controls
+// the context of its own calls without affecting the underlying page.
+func (el *Element) Call(_ context.Context, sessionID, methodName string, params interface{}) (res []byte, err error) {
+	return el.page.browser.Call(el.ctx, sessionID, methodName, params)
 }
 
 // Eval is a shortcut for [Element.Evaluate] with AwaitPromise, ByValue and AutoExp set to true.
