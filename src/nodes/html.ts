@@ -1,6 +1,7 @@
 import { is, selectAll, selectOne } from 'css-select';
 import { decodeHTML, decodeHTMLAttribute, encode } from 'entities';
 import arr_back from '../back';
+import { createComposedNavigator, selectAllComposed } from '../composed';
 import Matcher from '../matcher';
 import VoidTag from '../void-tag';
 import CommentNode from './comment';
@@ -80,6 +81,68 @@ function addToKBlockElement(...args: string[][]) {
 }
 
 addToKBlockElement(Htags, Dtags, Ftags, tableTags, htmlTags);
+
+interface ICurrentBlock extends Array<string> {
+	prependWhitespace?: boolean;
+}
+
+/**
+ * Structured text of `root` (block boundaries, entity decoding and whitespace
+ * normalization), traversing the children provided by `getChildren`. The
+ * physical view passes `node.childNodes`; the composed view passes the
+ * expanded children. Iterative, so that deeply nested trees do not overflow
+ * the call stack.
+ */
+function structuredTextFromView(root: HTMLElement, getChildren: (node: Node) => Node[]) {
+	let currentBlock = [] as ICurrentBlock;
+	const blocks = [currentBlock];
+	const stack: Array<{ node: Node; exit?: boolean }> = [{ node: root }];
+	while (stack.length > 0) {
+		const item = stack.pop() as { node: Node; exit?: boolean };
+		const node = item.node;
+		if (item.exit) {
+			// Block element end
+			if (currentBlock.length > 0) {
+				blocks.push((currentBlock = []));
+			}
+			continue;
+		}
+		if (node.nodeType === NodeType.ELEMENT_NODE) {
+			const children = getChildren(node);
+			if (kBlockElements.has((node as HTMLElement).rawTagName)) {
+				// Block element start
+				if (currentBlock.length > 0) {
+					blocks.push((currentBlock = []));
+				}
+				stack.push({ node, exit: true });
+			}
+			for (let i = children.length - 1; i >= 0; i--) {
+				stack.push({ node: children[i] });
+			}
+		} else if (node.nodeType === NodeType.TEXT_NODE) {
+			if ((node as TextNode).isWhitespace) {
+				// Whitespace node, postponed output (only meaningful between
+				// two pieces of text on the same line, never at the start of a block)
+				if (currentBlock.length > 0) {
+					currentBlock.prependWhitespace = true;
+				}
+			} else {
+				let text = (<TextNode>node).trimmedText;
+				if (currentBlock.prependWhitespace) {
+					text = ` ${text}`;
+					currentBlock.prependWhitespace = false;
+				}
+				currentBlock.push(text);
+			}
+		}
+	}
+	return blocks
+		.map((block) => {
+			return block.join('').replace(/\s{2,}/g, ' ').trim(); // Normalize each line's whitespace and trim it
+		})
+		.join('\n')
+		.replace(/\s+$/, ''); // trimRight;
+}
 
 class DOMTokenList {
 	private _set: Set<string>;
@@ -293,48 +356,19 @@ export default class HTMLElement extends Node {
 	 * @return {string} structured text
 	 */
 	public get structuredText() {
-		interface ICurrentBlock extends Array<string> {
-			prependWhitespace?: boolean;
-		}
-		let currentBlock = [] as ICurrentBlock;
-		const blocks = [currentBlock];
-		function dfs(node: Node) {
-			if (node.nodeType === NodeType.ELEMENT_NODE) {
-				if (kBlockElements.has((node as HTMLElement).rawTagName)) {
-					if (currentBlock.length > 0) {
-						blocks.push((currentBlock = []));
-					}
-					node.childNodes.forEach(dfs);
-					if (currentBlock.length > 0) {
-						blocks.push((currentBlock = []));
-					}
-				} else {
-					node.childNodes.forEach(dfs);
-				}
-			} else if (node.nodeType === NodeType.TEXT_NODE) {
-				if ((node as TextNode).isWhitespace) {
-					// Whitespace node, postponed output (only meaningful between
-					// two pieces of text on the same line, never at the start of a block)
-					if (currentBlock.length > 0) {
-						currentBlock.prependWhitespace = true;
-					}
-				} else {
-					let text = (<TextNode>node).trimmedText;
-					if (currentBlock.prependWhitespace) {
-						text = ` ${text}`;
-						currentBlock.prependWhitespace = false;
-					}
-					currentBlock.push(text);
-				}
-			}
-		}
-		dfs(this);
-		return blocks
-			.map((block) => {
-				return block.join('').replace(/\s{2,}/g, ' ').trim(); // Normalize each line's whitespace and trim it
-			})
-			.join('\n')
-			.replace(/\s+$/, ''); // trimRight;
+		return structuredTextFromView(this, (node) => node.childNodes);
+	}
+
+	/**
+	 * Get structured Text of the composed (declarative shadow DOM expanded)
+	 * view. Same block boundaries, entity decoding and whitespace handling as
+	 * {@link HTMLElement.structuredText}, but template fallback content and
+	 * unassigned light DOM are left out, and assigned light DOM appears at its
+	 * slot's position. Read-only; recomputed on every access.
+	 * @return {string} structured text
+	 */
+	public get structuredTextComposed() {
+		return structuredTextFromView(this, createComposedNavigator().getChildren);
 	}
 
 	public toString(): string {
@@ -514,6 +548,21 @@ export default class HTMLElement extends Node {
 			xmlMode: true,
 			adapter: Matcher,
 		});
+	}
+
+	/**
+	 * Query CSS selector against the composed (declarative shadow DOM
+	 * expanded) view of this element. Parent/child, ancestor, sibling and
+	 * positional relations all follow the expanded tree, in which `<slot>`
+	 * and `<template>` occupy no position; `:scope` still refers to this
+	 * element and, like {@link HTMLElement.querySelectorAll}, the element
+	 * itself is never returned. Matching elements are the very objects of the
+	 * physical tree; nothing is cloned or re-parented.
+	 * @param  {string}         selector Simplified CSS selector
+	 * @return {HTMLElement[]}  matching elements
+	 */
+	public querySelectorAllComposed(selector: string): HTMLElement[] {
+		return selectAllComposed(this as HTMLElement, selector);
 	}
 
 	/**

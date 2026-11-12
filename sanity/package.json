@@ -1,0 +1,18 @@
+{
+	"name": "node-html-parser-sanity",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Offline sanity checks for the composed (declarative shadow DOM) view of node-html-parser.",
+	"dependencies": {
+		"@test/test-target": "file:../test/assets/packages/wrapper",
+		"node-html-parser": "file:.."
+	},
+	"devDependencies": {
+		"css-select": "^5.1.0",
+		"entities": "^8.0.0",
+		"mocha": "^11.7.6",
+		"should": "^13.2.3",
+		"tsdown": "^0.22.3",
+		"typescript": "npm:@typescript/typescript6@^6.0.2"
+	}
+}
