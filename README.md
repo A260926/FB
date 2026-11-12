@@ -28,6 +28,25 @@ Note that you can compile with `make sanitize` to create an executable with debu
 
 The functionality is contained in Simplify.h. The function to call is *simplify_mesh(target_count)*. The code is kept pretty slim, so the main method has just around 400 lines of code.
 
+**Topology-preserving mode**
+
+The two library entry points accept an optional trailing topology mode (the command line and GUI programs do not use it and are unchanged):
+
+```cpp
+Simplify::simplify_mesh(target_count, agressiveness, verbose, Simplify::PreserveManifold);
+Simplify::simplify_mesh_lossless(verbose, Simplify::PreserveManifold);
+```
+
+The default `Simplify::Unrestricted` keeps the historical fast behaviour, so existing callers compile and run exactly as before.
+
+*Supported input (PreserveManifold only)*: a finite, non-degenerate, consistently oriented 2-manifold triangle surface. Multiple connected components and boundary loops are allowed, and unused vertices are tolerated. Input with out-of-range indices, degenerate or duplicated triangles, non-manifold edges, disconnected vertex fans or conflicting orientations is rejected with `std::invalid_argument` before any mesh data is touched; the public `vertices`/`triangles` arrays are left unchanged in that case. This pre-check runs only in PreserveManifold mode.
+
+*What is preserved*: every edge collapse is checked locally (in the star of the collapsed edge) before it is accepted, so the mesh stays a 2-manifold triangle surface of the same topological type. Connected components, boundary loops and handles are never merged or destroyed; no duplicate triangles and no edge-only or point-only fragments appear; boundary loops may lose vertices along the boundary but are never pinched together by interior chords, and unrelated boundary segments are never welded no matter how close they are in space.
+
+*Stop condition*: the simplification returns the reachable mesh once every remaining edge collapse would either violate the topology rules above or the geometric flip checks, even if the target triangle count has not been reached. For example a tetrahedron always keeps its 4 faces.
+
+*Scope*: the geometric normal-flip checks of the fast mode remain active, but detecting global self-intersections is out of scope for the topology-preserving mode.
+
 **Translations, Implementations and Live Demos**
 
  - [C++](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) (this page).

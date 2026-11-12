@@ -22,8 +22,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <stdexcept>
 #include <math.h>
 #include <float.h> //FLT_EPSILON, DBL_EPSILON
 
@@ -315,6 +318,15 @@ namespace Simplify
 		TEXCOORD = 4,
 		COLOR = 8
 	};
+	// Topology handling mode for simplify_mesh / simplify_mesh_lossless.
+	// Unrestricted (default) keeps the historical fast behaviour.
+	// PreserveManifold validates the input as a 2-manifold triangle
+	// surface and only accepts edge collapses that keep the mesh in
+	// the same topological class (see TopologyPreserve.h).
+	enum TopologyMode {
+		Unrestricted,
+		PreserveManifold
+	};
 	struct Triangle { int v[3];double err[4];int deleted,dirty,attr;vec3f n;vec3f uvs[3];int material; };
 	struct Vertex { vec3f p;int tstart,tcount;SymetricMatrix q;int border;};
 	struct Ref { int tid,tvertex; };
@@ -334,6 +346,12 @@ namespace Simplify
 	void update_mesh(int iteration);
 	void compact_mesh();
 	//
+	// Optional topology-preserving mode: validate_manifold_input()
+	// and class ManifoldGuard. Included here, inside namespace
+	// Simplify, on purpose (the header has no includes of its own).
+	//
+	#include "TopologyPreserve.h"
+	//
 	// Main simplification function
 	//
 	// target_count  : target nr. of triangles
@@ -342,13 +360,16 @@ namespace Simplify
 	//                 more iterations yield higher quality
 	//
 
-	void simplify_mesh(int target_count, double agressiveness=7, bool verbose=false)
+	void simplify_mesh(int target_count, double agressiveness=7, bool verbose=false, TopologyMode topology=Unrestricted)
 	{
 		// init
+		if(topology==PreserveManifold)
+			validate_manifold_input(); // throws before any mesh data is touched
 		loopi(0,triangles.size())
 		{
 			triangles[i].deleted=0;
 		}
+		ManifoldGuard topology_guard(topology==PreserveManifold);
 
 		// main iteration loop
 		int deleted_triangles=0;
@@ -364,6 +385,7 @@ namespace Simplify
 			if(iteration%5==0)
 			{
 				update_mesh(iteration);
+				if(topology_guard.active()) topology_guard.rebuild();
 			}
 
 			// clear dirty flag
@@ -397,6 +419,9 @@ namespace Simplify
 					int i1=t.v[(j+1)%3]; Vertex &v1 = vertices[i1];
 					// Border check
 					if(v0.border != v1.border)  continue;
+
+					// Topology check (PreserveManifold mode only)
+					if(topology_guard.active() && !topology_guard.collapse_legal(i0,i1)) continue;
 
 					// Compute vertex to collapse to
 					vec3f p;
@@ -434,6 +459,7 @@ namespace Simplify
 						v0.tstart=tstart;
 
 					v0.tcount=tcount;
+					if(topology_guard.active()) topology_guard.on_collapse(i0,i1);
 					break;
 				}
 				// done?
@@ -444,10 +470,13 @@ namespace Simplify
 		compact_mesh();
 	} //simplify_mesh()
 
-	void simplify_mesh_lossless(bool verbose=false)
+	void simplify_mesh_lossless(bool verbose=false, TopologyMode topology=Unrestricted)
 	{
 		// init
+		if(topology==PreserveManifold)
+			validate_manifold_input(); // throws before any mesh data is touched
 		loopi(0,triangles.size()) triangles[i].deleted=0;
+		ManifoldGuard topology_guard(topology==PreserveManifold);
 
 		// main iteration loop
 		int deleted_triangles=0;
@@ -459,6 +488,7 @@ namespace Simplify
 		{
 			// update mesh constantly
 			update_mesh(iteration);
+			if(topology_guard.active()) topology_guard.rebuild();
 			// clear dirty flag
 			loopi(0,triangles.size()) triangles[i].dirty=0;
 			//
@@ -487,6 +517,9 @@ namespace Simplify
 
 					// Border check
 					if(v0.border != v1.border)  continue;
+
+					// Topology check (PreserveManifold mode only)
+					if(topology_guard.active() && !topology_guard.collapse_legal(i0,i1)) continue;
 
 					// Compute vertex to collapse to
 					vec3f p;
@@ -525,6 +558,7 @@ namespace Simplify
 						v0.tstart=tstart;
 
 					v0.tcount=tcount;
+					if(topology_guard.active()) topology_guard.on_collapse(i0,i1);
 					break;
 				}
 			}
