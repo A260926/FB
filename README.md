@@ -94,6 +94,51 @@ func main() {
 
 See [examples folder](https://github.com/gocolly/colly/tree/master/_examples) for more detailed examples.
 
+## Redirects, response requests and Retry
+
+A redirect is not a new scrape: `OnRequest` describes the request the collector
+originally issued, while from `OnResponseHeaders` onwards (`OnResponse`,
+`OnHTML`, `OnXML`, `OnScraped`) `Response.Request` describes the request that
+actually produced the document — the last redirect hop. `Ctx`, `Depth` and `ID`
+continue to belong to the scrape, so they are unchanged by redirects.
+
+That means `Response.Request.URL` is the final document address, and relative
+links are resolved against it (`Request.AbsoluteURL`, `Request.Visit`,
+`Request.Post`, ...), including a relative `<base href>`.
+
+`Request.Retry()` resubmits the effective request seen in the callback. Following
+the HTTP semantics of the original hop:
+
+- `301`, `302` and `303` convert `POST` (and other non-`GET`/`HEAD` methods)
+  to `GET`; a retry therefore sends a body-less `GET`. `HEAD` stays `HEAD`.
+- `307` and `308` preserve the method and body; the body captured when the
+  request was sent is replayed byte for byte, including an explicitly empty
+  body. Consecutive retries keep working.
+- A non-seekable request body keeps returning `ErrRetryBodyUnseekable`.
+
+## Cached documents
+
+Cache entries are keyed by the URL passed to `Visit`, not by the final
+redirect target: the collector always asks the cache with the original `GET`
+address. An entry stores the response body, headers, status code and the
+effective document URL, so a cache hit exposes the same `Response.Request`
+URL and relative-link resolution as the live path, without re-requesting the
+entry or redirect URLs and without calling the redirect handler again.
+
+Cache replay belongs to the current call: it does not reuse the previous
+call's `Ctx`, `ID`, request headers or mutable request objects. Request
+headers, cookies and bodies are not stored in the cache. The stored response
+headers are reported through `OnResponseHeaders` as on the live path. Entries
+written by older versions only contain the status code, body and headers; they
+remain readable, and since they carry no final URL, the requested URL is used
+as the fallback (no redirect target is guessed and the network is not
+consulted).
+
+Aborting in `OnResponseHeaders` behaves the same on both paths: the callback
+receives `ErrAbortedAfterHeaders` through `OnError`, `OnResponse`, `OnHTML`
+and `OnScraped` are skipped, and the cached document stays available for a
+later read.
+
 ## Installation
 
 `go get github.com/gocolly/colly/v2`

@@ -153,11 +153,23 @@ func (r *Request) PostMultipart(URL string, requestData map[string][]byte) error
 	return r.collector.scrape(r.AbsoluteURL(URL), "POST", r.Depth+1, createMultipartReader(boundary, requestData), r.Ctx, hdr, true)
 }
 
-// Retry submits HTTP request again with the same parameters
+// Retry submits HTTP request again with the same parameters.
+//
+// The request retried is the effective request of the response, i.e. the final
+// request of a redirect chain: its URL and Method, with Ctx and Depth of the
+// scrape. For 301/302/303 method conversions the body is dropped and a
+// body-less GET (or HEAD) is sent; for 307/308 the body captured when the
+// request was sent is replayed byte-for-byte, including a zero-length body.
+// A non-seekable body still returns ErrRetryBodyUnseekable.
 func (r *Request) Retry() error {
 	r.Headers.Del("Cookie")
 	if _, ok := r.Body.(io.ReadSeeker); r.Body != nil && !ok {
 		return ErrRetryBodyUnseekable
+	}
+	if seeker, ok := r.Body.(io.ReadSeeker); ok && r.Body != nil {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return ErrRetryBodyUnseekable
+		}
 	}
 	return r.collector.scrape(r.URL.String(), r.Method, r.Depth, r.Body, r.Ctx, *r.Headers, false)
 }

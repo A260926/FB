@@ -42,6 +42,10 @@ type Response struct {
 	// Trace contains the HTTPTrace for the request. Will only be set by the
 	// collector if Collector.TraceHTTP is set to true.
 	Trace *HTTPTrace
+
+	// finalURL is the effective URL of the document (the last redirect target)
+	// reported by the HTTP backend. It is empty when unknown.
+	finalURL string
 }
 
 // Save writes response body to disk

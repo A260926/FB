@@ -669,6 +669,19 @@ func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, c
 			return err
 		}
 	}
+	// Capture the request body before the HTTP client reads it to EOF, so a
+	// Retry can resend the exact bytes (including an explicitly empty body).
+	// Non-seekable bodies keep the historical ErrRetryBodyUnseekable behavior.
+	var bodySnapshot []byte
+	hasBodySnapshot := false
+	if seeker, ok := requestData.(io.ReadSeeker); ok && requestData != nil {
+		bodySnapshot, err = io.ReadAll(seeker)
+		if err != nil {
+			return err
+		}
+		hasBodySnapshot = true
+		requestData = bytes.NewReader(bodySnapshot)
+	}
 
 	req, err := http.NewRequest(method, parsedURL.String(), requestData)
 	if err != nil {
@@ -690,13 +703,13 @@ func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, c
 	u = parsedURL.String()
 	c.wg.Add(1)
 	if c.Async {
-		go c.fetch(u, method, depth, requestData, ctx, hdr, req)
+		go c.fetch(u, method, depth, requestData, ctx, hdr, req, bodySnapshot, hasBodySnapshot)
 		return nil
 	}
-	return c.fetch(u, method, depth, requestData, ctx, hdr, req)
+	return c.fetch(u, method, depth, requestData, ctx, hdr, req, bodySnapshot, hasBodySnapshot)
 }
 
-func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
+func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request, bodySnapshot []byte, hasBodySnapshot bool) error {
 	defer c.wg.Done()
 	if ctx == nil {
 		ctx = NewContext()
@@ -708,9 +721,13 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 		Ctx:       ctx,
 		Depth:     depth,
 		Method:    method,
-		Body:      requestData,
 		collector: c,
 		ID:        c.requestCount.Add(1),
+	}
+	if hasBodySnapshot {
+		request.Body = bytes.NewReader(bodySnapshot)
+	} else {
+		request.Body = requestData
 	}
 
 	if req.Header.Get("Accept") == "" {
@@ -732,13 +749,28 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 		hTrace = &HTTPTrace{}
 		req = hTrace.WithTrace(req)
 	}
-	origURL := req.URL
-	checkResponseHeadersFunc := func(req *http.Request, statusCode int, headers http.Header) bool {
-		if req.URL != origURL {
-			request.URL = req.URL
-			request.Headers = &req.Header
+	// From OnResponseHeaders onwards the callbacks describe the request which
+	// actually produced the response — the last redirect hop — while Ctx,
+	// Depth and ID stay with this scrape. OnRequest keeps describing the
+	// initially issued request. A cache hit has no response headers event; the
+	// backend reports the stored document URL instead.
+	var finalRequest *Request
+	checkResponseHeadersFunc := func(req *http.Request, statusCode int, headers http.Header, finalURL string) bool {
+		finalRequest = c.finalizeRequest(request, req, finalURL, method, depth, ctx)
+		if finalRequest != request {
+			attachRetryBody(finalRequest, bodySnapshot, hasBodySnapshot, requestData, method)
 		}
-		c.handleOnResponseHeaders(&Response{Ctx: ctx, Request: request, StatusCode: statusCode, Headers: &headers})
+		c.handleOnResponseHeaders(&Response{
+			Ctx:        ctx,
+			Request:    finalRequest,
+			StatusCode: statusCode,
+			Headers:    &headers,
+		})
+		// The effective request is a distinct object on redirects (and on
+		// cache hits); Abort may have been called on either object.
+		if finalRequest.abort {
+			request.abort = true
+		}
 		return !request.abort
 	}
 	checkRequestHeadersFunc := func(req *http.Request) bool {
@@ -748,13 +780,33 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 	response, err := c.backend.Cache(req, c.MaxBodySize, checkRequestHeadersFunc, checkResponseHeadersFunc, c.CacheDir, c.CacheExpiration)
 	if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
 		request.ProxyURL = proxyURL
+		if finalRequest != nil && finalRequest != request {
+			finalRequest.ProxyURL = proxyURL
+		}
 	}
-	if err := c.handleOnError(response, err, request, ctx); err != nil {
+	errorRequest := request
+	if finalRequest != nil {
+		errorRequest = finalRequest
+	}
+	if err := c.handleOnError(response, err, errorRequest, ctx); err != nil {
 		return err
 	}
 	c.responseCount.Add(1)
+	if finalRequest == nil {
+		// No response headers event happened: on a cache hit the backend reports
+		// the final document URL. Rebuild the effective request from it; a legacy
+		// entry without one has already fallen back to the requested URL there.
+		// A failed transfer has no final URL and is described by this scrape's
+		// original request.
+		if response != nil && response.finalURL != "" {
+			finalRequest = c.finalRequestFromFinalURL(request, response.finalURL, method)
+		} else {
+			finalRequest = request
+		}
+	}
+	attachRetryBody(finalRequest, bodySnapshot, hasBodySnapshot, requestData, method)
 	response.Ctx = ctx
-	response.Request = request
+	response.Request = finalRequest
 	response.Trace = hTrace
 
 	err = response.fixCharset(c.DetectCharset, request.ResponseCharacterEncoding)
@@ -777,6 +829,124 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 	c.handleOnScraped(response)
 
 	return err
+}
+
+// finalizeRequest builds the *Request describing the request which produced
+// the response, starting from the request the scrape originally issued.
+//
+// When the client followed no redirect, the response request is a shallow fork
+// (or the same object) of the request this scrape issued and the original
+// Request object is kept, preserving the historical behaviour. Otherwise URL,
+// Method and Host come from the last redirect hop; the header map is a copy so
+// callbacks cannot mutate the HTTP client's request state. Ctx, Depth and ID
+// remain those of this scrape: a redirect is not a new visit. The Body is set
+// later from the scrape's body snapshot by attachRetryBody.
+func (c *Collector) finalizeRequest(original *Request, finalReq *http.Request, finalURL, method string, depth int, ctx *Context) *Request {
+	if finalReq == nil {
+		return c.finalRequestFromFinalURL(original, finalURL, method)
+	}
+	// net/http hands the transport a shallow fork of the request even when no
+	// redirect is followed (for deadlines, auth or header initialisation), so
+	// pointer identity is not a reliable signal. Redirect hops created by the
+	// client always carry a non-nil Response pointing at the previous hop, so
+	// that is what distinguishes a redirect from a fork. Additionally require
+	// the effective URL and method to match; when they do, keep the original
+	// Request object so the non-redirect path keeps its historical behaviour.
+	if finalReq.Response == nil &&
+		finalReq.Method == method &&
+		original.URL != nil && finalReq.URL != nil &&
+		finalReq.URL.String() == original.URL.String() {
+		return original
+	}
+	u := finalReq.URL
+	if u == nil {
+		u = original.URL
+	}
+	headers := cloneHeader(finalReq.Header)
+	final := &Request{
+		URL:       u,
+		Headers:   &headers,
+		Host:      finalReq.Host,
+		Ctx:       ctx,
+		Depth:     depth,
+		Method:    finalReq.Method,
+		collector: c,
+		ID:        original.ID,
+		ProxyURL:  original.ProxyURL,
+	}
+	if final.Method == "" {
+		final.Method = method
+	}
+	if final.Host == "" {
+		final.Host = u.Host
+	}
+	return final
+}
+
+// finalRequestFromFinalURL builds the effective request for a cache hit, where
+// no live *http.Request exists. Only the document URL is restored from the
+// cache; the method is the one of this call (GET for cached entries), and
+// headers, cookies, body and Ctx are those of the current invocation — never
+// the ones of the call that populated the cache.
+func (c *Collector) finalRequestFromFinalURL(original *Request, finalURL, method string) *Request {
+	u := original.URL
+	if finalURL != "" {
+		if parsed, err := url.Parse(finalURL); err == nil {
+			u = parsed
+		}
+	}
+	headers := cloneHeader(nil)
+	if original.Headers != nil {
+		headers = cloneHeader(*original.Headers)
+	}
+	host := u.Host
+	// A custom Host header set by this call still describes this call's
+	// request, even when replaying a cache entry written by another one.
+	if h := headers.Get("Host"); h != "" {
+		host = h
+	}
+	final := &Request{
+		URL:       u,
+		Headers:   &headers,
+		Host:      host,
+		Ctx:       original.Ctx,
+		Depth:     original.Depth,
+		Method:    method,
+		collector: c,
+		ID:        original.ID,
+		ProxyURL:  original.ProxyURL,
+	}
+	return final
+}
+
+// attachRetryBody makes the effective request retryable: a request whose
+// method carries a body gets a fresh reader over the snapshot taken before the
+// HTTP client consumed the original reader. When a redirect converted the
+// method to GET or HEAD (301/302/303), the body is dropped so Retry issues a
+// body-less request. Bodies captured for the original method (307/308) are
+// replayed byte for byte, a zero-length one included. Unseekable bodies keep
+// the original reader so Retry keeps returning ErrRetryBodyUnseekable.
+func attachRetryBody(req *Request, bodySnapshot []byte, hasBodySnapshot bool, requestData io.Reader, originalMethod string) {
+	if req.Method != originalMethod && (req.Method == "GET" || req.Method == "HEAD") {
+		req.Body = nil
+		return
+	}
+	if hasBodySnapshot {
+		req.Body = bytes.NewReader(bodySnapshot)
+		return
+	}
+	req.Body = requestData
+}
+
+func cloneHeader(h http.Header) http.Header {
+	if h == nil {
+		return http.Header{}
+	}
+	out := make(http.Header, len(h))
+	for k, v := range h {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
 }
 
 func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func() (io.ReadCloser, error), depth int, checkRevisit bool) error {

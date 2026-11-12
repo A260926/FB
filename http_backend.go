@@ -40,7 +40,7 @@ type httpBackend struct {
 	lock       *sync.RWMutex
 }
 
-type checkResponseHeadersFunc func(req *http.Request, statusCode int, header http.Header) bool
+type checkResponseHeadersFunc func(req *http.Request, statusCode int, header http.Header, finalURL string) bool
 type checkRequestHeadersFunc func(req *http.Request) bool
 
 // LimitRule provides connection restrictions for domains.
@@ -154,6 +154,25 @@ func (h *httpBackend) GetMatchingRule(domain string) *LimitRule {
 	return nil
 }
 
+// cacheEntry is the on-disk representation of a cached response.
+//
+// The field names of StatusCode, Body and Headers are kept identical to the
+// historical *Response gob encoding so that entries written before the
+// FinalURL field existed can still be decoded. Legacy entries simply have an
+// empty FinalURL; in that case only the requested URL is known and is used as
+// the final URL.
+//
+// Only data needed to replay the document is stored. Request headers, cookies,
+// request bodies and the *http.Request itself are deliberately not persisted:
+// every cache hit belongs to the current call and must not inherit state from
+// the call which populated the cache.
+type cacheEntry struct {
+	StatusCode int
+	Body       []byte
+	Headers    *http.Header
+	FinalURL   string
+}
+
 func (h *httpBackend) Cache(request *http.Request, bodySize int, checkRequestHeadersFunc checkRequestHeadersFunc, checkResponseHeadersFunc checkResponseHeadersFunc, cacheDir string, cacheExpiration time.Duration) (*Response, error) {
 	if cacheDir == "" || request.Method != "GET" || request.Header.Get("Cache-Control") == "no-cache" {
 		return h.Do(request, bodySize, checkRequestHeadersFunc, checkResponseHeadersFunc)
@@ -170,12 +189,32 @@ func (h *httpBackend) Cache(request *http.Request, bodySize int, checkRequestHea
 	}
 
 	if file, err := os.Open(filename); err == nil {
-		resp := new(Response)
-		err := gob.NewDecoder(file).Decode(resp)
+		entry := new(cacheEntry)
+		decodeErr := gob.NewDecoder(file).Decode(entry)
 		file.Close()
-		checkResponseHeadersFunc(request, resp.StatusCode, *resp.Headers)
-		if resp.StatusCode < 500 {
-			return resp, err
+		if decodeErr == nil {
+			if entry.Headers == nil {
+				entry.Headers = &http.Header{}
+			}
+			headers := *entry.Headers
+			statusCode := entry.StatusCode
+			finalURL := entry.FinalURL
+			if finalURL == "" {
+				// Legacy entry without a final URL: the only address known is
+				// the requested one. Never guess a redirect target.
+				finalURL = request.URL.String()
+			}
+			if !checkResponseHeadersFunc(nil, statusCode, headers, finalURL) {
+				return nil, ErrAbortedAfterHeaders
+			}
+			if statusCode < 500 {
+				return &Response{
+					StatusCode: statusCode,
+					Body:       entry.Body,
+					Headers:    &headers,
+					finalURL:   finalURL,
+				}, nil
+			}
 		}
 	}
 	resp, err := h.Do(request, bodySize, checkRequestHeadersFunc, checkResponseHeadersFunc)
@@ -191,7 +230,16 @@ func (h *httpBackend) Cache(request *http.Request, bodySize int, checkRequestHea
 	if err != nil {
 		return resp, err
 	}
-	if err := gob.NewEncoder(file).Encode(resp); err != nil {
+	entry := &cacheEntry{
+		StatusCode: resp.StatusCode,
+		Body:       resp.Body,
+		Headers:    resp.Headers,
+		FinalURL:   resp.finalURL,
+	}
+	if entry.FinalURL == "" {
+		entry.FinalURL = request.URL.String()
+	}
+	if err := gob.NewEncoder(file).Encode(entry); err != nil {
 		file.Close()
 		return resp, err
 	}
@@ -221,11 +269,8 @@ func (h *httpBackend) Do(request *http.Request, bodySize int, checkRequestHeader
 	}
 	defer res.Body.Close()
 
-	finalRequest := request
-	if res.Request != nil {
-		finalRequest = res.Request
-	}
-	if !checkResponseHeadersFunc(finalRequest, res.StatusCode, res.Header) {
+	finalRequest := finalHTTPRequest(request, res.Request)
+	if !checkResponseHeadersFunc(finalRequest, res.StatusCode, res.Header, finalRequest.URL.String()) {
 		// closing res.Body (see defer above) without reading it aborts
 		// the download
 		return nil, ErrAbortedAfterHeaders
@@ -263,11 +308,25 @@ func (h *httpBackend) Do(request *http.Request, bodySize int, checkRequestHeader
 	if err != nil {
 		return nil, err
 	}
-	return &Response{
+	resp := &Response{
 		StatusCode: res.StatusCode,
 		Body:       body,
 		Headers:    &res.Header,
-	}, nil
+		finalURL:   finalRequest.URL.String(),
+	}
+	return resp, nil
+}
+
+// finalHTTPRequest returns the request which actually produced the response.
+// net/http replaces the request on every redirect hop; res.Request points at
+// the last hop, so method, URL, host and headers there are the effective ones.
+// When the Response reports no request (e.g. a custom RoundTripper), the
+// request handed to Do is the best available description.
+func finalHTTPRequest(original, final *http.Request) *http.Request {
+	if final != nil {
+		return final
+	}
+	return original
 }
 
 func (h *httpBackend) Limit(rule *LimitRule) error {
