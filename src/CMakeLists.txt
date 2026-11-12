@@ -109,6 +109,7 @@ set(SIDX_RTREE_CPP
   "${SIDX_SRC_DIR}/rtree/Index.h"
   "${SIDX_SRC_DIR}/rtree/Leaf.cc"
   "${SIDX_SRC_DIR}/rtree/Leaf.h"
+  "${SIDX_SRC_DIR}/rtree/NearestNeighborJoin.cc"
   "${SIDX_SRC_DIR}/rtree/Node.cc"
   "${SIDX_SRC_DIR}/rtree/Node.h"
   "${SIDX_SRC_DIR}/rtree/PointerPoolNode.h"

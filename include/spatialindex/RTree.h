@@ -75,6 +75,20 @@ namespace SpatialIndex
 			uint32_t m_dataLength;
 		}; // Data
 
+		// Receives every ordered (left record, right record) pair produced by
+		// nearestNeighborJoin(). The IData references and any payload obtained
+		// from getData() are only valid for the duration of the visitPair()
+		// call; a visitor that needs to keep them must copy the identifiers,
+		// shapes and payload bytes itself. An exception thrown out of
+		// visitPair() propagates out of nearestNeighborJoin() unchanged, after
+		// all temporary objects of the join have been released.
+		class SIDX_DLL IJoinVisitor
+		{
+		public:
+			virtual void visitPair(const IData& left, const IData& right, double distance) = 0;
+			virtual ~IJoinVisitor() = default;
+		}; // IJoinVisitor
+
 		SIDX_DLL ISpatialIndex* returnRTree(IStorageManager& ind, Tools::PropertySet& in);
 		SIDX_DLL ISpatialIndex* createNewRTree(
 			IStorageManager& sm,
@@ -104,5 +118,27 @@ namespace SpatialIndex
 			id_type& indexIdentifier
 		);
 		SIDX_DLL ISpatialIndex* loadRTree(IStorageManager& in, id_type indexIdentifier);
+
+		// Batch nearest-neighbor join between two plain R-Trees. For every
+		// data entry in left, the k nearest data entries of right are
+		// reported to visitor, together with the minimum Euclidean distance
+		// between the two stored MBRs (zero when the MBRs intersect or
+		// touch). Ties at the k-th distance are all reported, so a left
+		// record may receive more than k partners; fewer are reported when
+		// right holds less than k records. The association is directed, so
+		// passing the same tree for both arguments pairs every record with
+		// itself as well. Both trees must have the same dimensionality and
+		// coordinate units. Throws Tools::IllegalArgumentException before any
+		// callback when an argument is not an RTree, when the
+		// dimensionalities differ or when k is zero. Neither tree is fully
+		// materialized: the traversal prunes node pairs on the lower-bound
+		// distance between their MBRs and keeps a separate pruning bound per
+		// left record.
+		SIDX_DLL void nearestNeighborJoin(
+			ISpatialIndex& left,
+			ISpatialIndex& right,
+			uint32_t k,
+			IJoinVisitor& visitor
+		);
 	}
 }

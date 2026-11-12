@@ -102,6 +102,14 @@ namespace SpatialIndex
 			void selfJoinQuery(id_type id1, id_type id2, const Region& r, IVisitor& vis);
 			void visitSubTree(NodePtr subTree, IVisitor& v);
 
+			// Shared nearest-neighbor join traversal. Implemented in
+			// NearestNeighborJoin.cc together with the per-left-record
+			// candidate bookkeeping. The entry point lives on RTree so that
+			// the internal Node layout of both trees can be read directly.
+			void nearestNeighborJoinImpl(RTree& right, uint32_t k, IJoinVisitor& visitor);
+
+			class NearestNeighborJoinEngine;
+
 			IStorageManager* m_pStorageManager;
 
 			id_type m_rootID, m_headerID;
@@ -189,6 +197,11 @@ namespace SpatialIndex
 			friend class Leaf;
 			friend class Index;
 			friend class BulkLoader;
+
+			// The library-level entry point declared in the public RTree.h
+			// validates its arguments and enters the shared join traversal.
+			friend void SpatialIndex::RTree::nearestNeighborJoin(
+				ISpatialIndex& left, ISpatialIndex& right, uint32_t k, IJoinVisitor& visitor);
 
 			friend std::ostream& operator<<(std::ostream& os, const RTree& t);
 		}; // RTree

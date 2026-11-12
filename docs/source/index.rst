@@ -9,6 +9,7 @@
    Github <https://github.com/libspatialindex/libspatialindex>
    community
    overview
+   rtree_nearest_join
 
 
 * `Class Documentation <./doxygen/index.html>`_
