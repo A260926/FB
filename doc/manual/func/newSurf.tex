@@ -1,0 +1,94 @@
+\subsection{Create a new surface object.}\label{sec:newSurf}
+\funclabel{newSurf}
+\begin{minipg1}
+Create and initialize a surface object instance. Note that the vertex input to a
+  rational surface is unstandard. Given the surface
+  $$
+{\bf s}(u,v) = {\sum_{i=1}^{n_1}\sum_{j=1}^{n_2} w_{i,j} {\bf p}_{i,j} 
+	    B_{i,k_1,{\bf u}}(u) B_{j,k_2,{\bf v}}(v)  \over
+             \sum_{i=1}^{n_1}\sum_{j=1}^{n_2} w_{i,j}
+	         B_{i,k_1,{\bf u}}(u) B_{j,k_2,{\bf v}}(v)},
+$$
+must the vertices be given as
+${w_{1,1}  {\bf p}_{1,1}, w_{1,1}, w_{1,2}  {\bf p}_{1,2}, w_{1,2},  \ldots,
+  w_{n_1,n_2}  {\bf p}_{n_1,n_2}, w_{n_1,n_2}}$ when invoking this function. Thus the vertices are multiplied with the
+associated weight.
+\end{minipg1} \\ \\
+SYNOPSIS\\
+        \>SISLSurf *newSurf(\begin{minipg3}
+        {\fov number}1, {\fov number}2, {\fov order}1, {\fov order}2, {\fov knot}1, {\fov knot}2, {\fov coef},\\ {\fov kind}, {\fov dim}, {\fov copy})
+                \end{minipg3}\\[0.3ex]
+                \>\>    int    \>       {\fov number}1;\\
+                \>\>    int    \>       {\fov number}2;\\
+                \>\>    int    \>       {\fov order}1;\\
+                \>\>    int    \>       {\fov order}2;\\
+                \>\>    double \>       {\fov knot1}[\,];\\
+                \>\>    double \>       {\fov knot2}[\,];\\
+                \>\>    double \>       {\fov coef}[\,];\\
+                \>\>    int    \>       {\fov kind};\\
+                \>\>    int    \>       {\fov dim};\\
+                \>\>    int    \>       {\fov copy};\\
+ARGUMENTS\\
+        \>Input Arguments:\\
+        \>\>    {\fov number}1  \> - \> \begin{minipg2}
+                        Number of vertices in the first parameter direction
+                        of new surface.
+                                \end{minipg2}\\[0.8ex]
+        \>\>    {\fov number}2  \> - \> \begin{minipg2}
+                        Number of vertices in the second parameter direction
+                        of new surface.
+                                \end{minipg2}\\[0.8ex]
+        \>\>    {\fov order1     } \> - \>\begin{minipg2}
+                        Order of surface in first parameter direction.
+                                \end{minipg2}\\
+        \>\>    {\fov order2     } \> - \> \begin{minipg2}
+                        Order of surface in second parameter direction.
+                                \end{minipg2}\\
+        \>\>    {\fov knot1    } \> - \> \begin{minipg2}
+                        Knot vector of surface in first parameter direction.
+                                \end{minipg2}\\
+        \>\>    {\fov knot2    } \> - \> \begin{minipg2}
+                        Knot vector of surface in second parameter direction.
+                                \end{minipg2}\\[0.8ex]
+        \>\>    {\fov coef }    \> - \> \begin{minipg2}
+Vertices of surface. These may either be the {\fov dim} dimensional non-rational vertices or the {\fov (dim+1)} dimensional rational vertices.
+                                \end{minipg2}\\[0.8ex]
+        \>\>    {\fov kind  } \> - \> Type of surface.\\
+        \>\>\>\>\>       $= 1$ :\> Polynomial B-spline surface.\\
+        \>\>\>\>\>       $= 2$ :\> Rational B-spline (nurbs) surface.\\
+        \>\>\>\>\>       $= 3$ :\> Polynomial Bezier surface.\\
+        \>\>\>\>\>       $= 4$ :\> Rational Bezier surface.\\
+        \>\>    {\fov dim   } \> - \> Dimension of the space in which the surface lies.\\
+        \>\>    {\fov copy  } \> - \> Flag \\
+        \>\>\>\>\>       $= 0$ :\> Set pointer to input arrays.\\
+        \>\>\>\>\>       $= 1$ :\> Copy input arrays.\\
+        \>\>\>\>\>       $= 2$ :\> Set pointer and remember to free arrays.\\
+        \>Output Arguments:\\
+        \>\>    {\fov newSurf} \> - \> \begin{minipg2}
+                                 Pointer to new surface. If it is impossible
+                                 to allocate space for the surface, newSurface
+                                 returns NULL.
+                                \end{minipg2}\\
+\newpagetabs
+EXAMPLE OF USE\\
+        \>      \{ \\
+        \>\>    SISLSurf\>      *{\fov surf} = NULL;\\
+        \>\>    int    \>       {\fov number1} = 5;\\
+        \>\>    int    \>       {\fov number2} = 4;\\
+        \>\>    int    \>       {\fov order1} = 4; /* Polynomial degree 3 */\\
+        \>\>    int    \>       {\fov order2} = 3; /* Polynomial degree 2 */\\
+        \>\>    double \>       {\fov knot1}[9];  \, /* Must be defined */ \\
+        \>\>    double \>       {\fov knot2}[7]; \, /* Must be defined */\\
+        \>\>    double \>       {\fov coef}[60];  \, /* Must be defined */\\ 
+        \>\>    int    \>       {\fov kind} = 1;\\
+        \>\>    int    \>       {\fov dim} = 3;\\
+        \>\>    int    \>       {\fov copy} = 1;\\
+        \>\> /* Knots and vertices must be defined prior to the function call. \\
+        \>\>    The vertices are given in a 1-dimensional array */ \\
+        \>\>    \ldots \\
+        \>\>{\fov surf} = newSurf(\begin{minipg4}
+          {\fov number}1, {\fov number}2, {\fov order}1, {\fov order}2, {\fov knot}1, {\fov knot}2,\\ {\fov coef}, {\fov kind}, {\fov dim}, {\fov copy});
+        \end{minipg4}\\
+        \>\>    \ldots \\
+        \>      \} \\
+\end{tabbing}
