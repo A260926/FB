@@ -1,0 +1,15 @@
+
+std packages are a special case of the internal package check.
+
+This test assumes that bytes.IndexByte refers to internal/bytealg.
+
+-- go.mod --
+module testdata
+go 1.12
+
+-- a/a.go --
+package a
+
+import "bytes"
+
+var _ = bytes.IndexByte(nil, 0) //@ inline(re"IndexByte", re`inaccessible package "internal/bytealg"`)

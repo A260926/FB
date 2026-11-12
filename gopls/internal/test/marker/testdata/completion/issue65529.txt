@@ -1,0 +1,90 @@
+This test checks that completion gives correct completion for
+identifiers in invalid code, ensuring the replacement range is correct.
+See https://github.com/golang/go/issues/65529.
+
+-- flags --
+-ignore_extra_diags
+
+-- go.mod --
+module mod.test
+
+go 1.21
+
+-- comma_lhs.go --
+package main
+
+func main() {
+	minimum, maximum := 0, 0
+	minimum, max //@acceptcompletion(re"max()", "maximum", comma_lhs)
+}
+
+-- @comma_lhs/comma_lhs.go --
+package main
+
+func main() {
+	minimum, maximum := 0, 0
+	minimum, maximum //@acceptcompletion(re"max()", "maximum", comma_lhs)
+}
+
+-- missing_comma.go --
+package main
+
+func main() {
+	value := 0
+	println("msg:" val) //@acceptcompletion(re"val()", "value", missing_comma)
+}
+
+-- @missing_comma/missing_comma.go --
+package main
+
+func main() {
+	value := 0
+	println("msg:" value) //@acceptcompletion(re"val()", "value", missing_comma)
+}
+
+-- unicode_field.go --
+package main
+
+type données struct {
+	résultat int
+}
+
+func main() {
+	d := données{}
+	println(, 0)
+	d.rés //@acceptcompletion(re"rés()", "résultat", unicode_field)
+}
+
+-- @unicode_field/unicode_field.go --
+package main
+
+type données struct {
+	résultat int
+}
+
+func main() {
+	d := données{}
+	println(, 0)
+	d.résultat //@acceptcompletion(re"rés()", "résultat", unicode_field)
+}
+
+-- qualified.go --
+package main
+
+import "math"
+
+func main() {
+	math.Sqrt(, 0)
+	math.Ab //@acceptcompletion(re"Ab()", "Abs", qualified)
+}
+
+-- @qualified/qualified.go --
+package main
+
+import "math"
+
+func main() {
+	math.Sqrt(, 0)
+	math.Abs(${1:}) //@acceptcompletion(re"Ab()", "Abs", qualified)
+}
+

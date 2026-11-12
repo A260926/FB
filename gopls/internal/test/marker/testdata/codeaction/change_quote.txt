@@ -1,0 +1,65 @@
+This test checks the behavior of the 'change quote' code action.
+
+-- flags --
+-ignore_extra_diags
+
+-- go.mod --
+module golang.org/lsptests/changequote
+
+go 1.18
+
+-- a.go --
+package changequote
+
+func foo() {
+	var s string
+	s = "hello" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a1)
+	s = `hello` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a2)
+	s = "hello\tworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a3)
+	s = `hello	world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a4)
+	s = "hello\nworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a5)
+	// add a comment  to avoid affect diff compute
+	s = `hello
+world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a6)
+	s = "hello\"world" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a7)
+	s = `hello"world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a8)
+	s = "hello\x1bworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", err=re"found 0 CodeActions")
+	s = "hello`world" //@codeaction(`"`, "refactor.rewrite.changeQuote", err=re"found 0 CodeActions")
+	s = "hello\x7fworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", err=re"found 0 CodeActions")
+	println(s)
+}
+
+-- @a1/a.go --
+@@ -5 +5 @@
+-	s = "hello" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a1)
++	s = `hello` //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a1)
+-- @a2/a.go --
+@@ -6 +6 @@
+-	s = `hello` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a2)
++	s = "hello" //@codeaction("`", "refactor.rewrite.changeQuote", edit=a2)
+-- @a3/a.go --
+@@ -7 +7 @@
+-	s = "hello\tworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a3)
++	s = `hello	world` //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a3)
+-- @a4/a.go --
+@@ -8 +8 @@
+-	s = `hello	world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a4)
++	s = "hello\tworld" //@codeaction("`", "refactor.rewrite.changeQuote", edit=a4)
+-- @a5/a.go --
+@@ -9 +9,2 @@
+-	s = "hello\nworld" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a5)
++	s = `hello
++world` //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a5)
+-- @a6/a.go --
+@@ -11,2 +11 @@
+-	s = `hello
+-world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a6)
++	s = "hello\nworld" //@codeaction("`", "refactor.rewrite.changeQuote", edit=a6)
+-- @a7/a.go --
+@@ -13 +13 @@
+-	s = "hello\"world" //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a7)
++	s = `hello"world` //@codeaction(`"`, "refactor.rewrite.changeQuote", edit=a7)
+-- @a8/a.go --
+@@ -14 +14 @@
+-	s = `hello"world` //@codeaction("`", "refactor.rewrite.changeQuote", edit=a8)
++	s = "hello\"world" //@codeaction("`", "refactor.rewrite.changeQuote", edit=a8)
