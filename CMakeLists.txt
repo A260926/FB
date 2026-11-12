@@ -315,6 +315,9 @@ if (PUGIXML_BUILD_TESTS)
   file(GLOB test-sources ${test-pattern})
   file(GLOB fuzz-sources ${fuzz-pattern})
   list(REMOVE_ITEM test-sources ${fuzz-sources})
+  # The serialization model driver has its own main() and is built separately
+  # by tests/run_serialize_model.sh; it must not join the unit test binary.
+  list(REMOVE_ITEM test-sources "${PROJECT_SOURCE_DIR}/tests/serialize_model_main.cpp")
 
   add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure)

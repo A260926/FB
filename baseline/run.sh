@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-build=$(mktemp -d)
+build="${TMPDIR:-${TMP:-/tmp}}/pugi_baseline.$$.$RANDOM"
+(umask 077 && mkdir "$build")
 trap 'rm -rf "$build"' EXIT
 for mode in narrow wide; do
   flags=(-DPUGIXML_MEMORY_OUTPUT_STACK=128)

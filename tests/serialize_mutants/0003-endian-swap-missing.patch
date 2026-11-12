@@ -1,0 +1,18 @@
+Subject: 输出端序交换失效 (output endianness swap no longer applied)
+Applies to: src/pugixml.cpp (pugixml 1.16)
+Apply only to a temporary source copy; never to the working tree.
+
+--- a/src/pugixml.cpp
++++ b/src/pugixml.cpp
+@@ -3698,8 +3698,9 @@
+
+ 		if (opt_swap)
+ 		{
+-			for (typename T::value_type i = dest; i != end; ++i)
+-				*i = endian_swap(*i);
++			// mutant: endian swap intentionally skipped; both byte orders become identical
++			(void)dest;
++			(void)end;
+ 		}
+
+ 		return static_cast<size_t>(end - dest) * sizeof(*dest);

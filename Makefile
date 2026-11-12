@@ -7,7 +7,7 @@ cxxstd=any
 
 BUILD=build/make-$(firstword $(CXX))-$(config)-$(defines)-$(cxxstd)
 
-SOURCES=src/pugixml.cpp $(filter-out tests/fuzz_%,$(wildcard tests/*.cpp))
+SOURCES=src/pugixml.cpp $(filter-out tests/fuzz_%,$(filter-out tests/serialize_model_main.cpp,$(wildcard tests/*.cpp)))
 EXECUTABLE=$(BUILD)/test
 
 VERSION=$(shell sed -n 's/.*version \(.*\).*/\1/p; /version/q' src/pugiconfig.hpp)

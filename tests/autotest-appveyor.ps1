@@ -9,7 +9,7 @@ function Invoke-CmdScript($scriptName)
 	}
 }
 
-$sources = @("src/pugixml.cpp") + (Get-ChildItem -Path "tests/*.cpp" -Exclude "fuzz_*.cpp")
+$sources = @("src/pugixml.cpp") + (Get-ChildItem -Path "tests/*.cpp" -Exclude "fuzz_*.cpp", "serialize_model_main.cpp")
 $failed = $FALSE
 
 foreach ($vs in @($args[0]))

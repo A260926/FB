@@ -1,0 +1,15 @@
+Subject: 转码分块未退回完整 UTF-8 字符边界 (chunk split not backed off to a complete UTF-8 character boundary)
+Applies to: src/pugixml.cpp (pugixml 1.16)
+Apply only to a temporary source copy; never to the working tree.
+
+--- a/src/pugixml.cpp
++++ b/src/pugixml.cpp
+@@ -3761,7 +3761,7 @@
+ 			uint8_t ch = static_cast<uint8_t>(data[length - i]);
+
+ 			// either a standalone character or a leading one
+-			if ((ch & 0xc0) != 0x80) return length - i;
++			if ((ch & 0xc0) != 0x80) return length;
+ 		}
+
+ 		// there are four non-leading characters at the end, sequence tail is broken so might as well process the whole chunk

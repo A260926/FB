@@ -1,0 +1,15 @@
+Subject: 补充平面转 UTF-16 时低代理项错误 (supplementary plane to UTF-16 uses the wrong low surrogate)
+Applies to: src/pugixml.cpp (pugixml 1.16)
+Apply only to a temporary source copy; never to the working tree.
+
+--- a/src/pugixml.cpp
++++ b/src/pugixml.cpp
+@@ -1626,7 +1626,7 @@
+ 			uint32_t lsh = (ch - 0x10000U) & 0x3ff;
+
+ 			result[0] = static_cast<uint16_t>(0xD800 + msh);
+-			result[1] = static_cast<uint16_t>(0xDC00 + lsh);
++			result[1] = static_cast<uint16_t>(0xDC00 + msh);
+
+ 			return result + 2;
+ 		}
