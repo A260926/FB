@@ -1,0 +1,11 @@
+--- a/src/ymfm_fm.ipp
++++ b/src/ymfm_fm.ipp
+@@ -569,7 +569,7 @@
+ 
+ 	// if attenuation if inverted due to SSG-EG, snap the inverted attenuation
+ 	// as the starting point
+-	if (RegisterType::EG_HAS_SSG && m_ssg_inverted)
++	if (false && RegisterType::EG_HAS_SSG && m_ssg_inverted)
+ 	{
+ 		m_env_attenuation = (0x200 - m_env_attenuation) & 0x3ff;
+ 		m_ssg_inverted = false;

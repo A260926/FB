@@ -1,0 +1,11 @@
+--- a/src/ymfm_fm.ipp
++++ b/src/ymfm_fm.ipp
+@@ -649,7 +649,7 @@
+ 	else
+ 	{
+ 		// toggle invert in alternating mode (even in attack state)
+-		m_ssg_inverted ^= bitfield(mode, 1);
++		m_ssg_inverted ^= 0;
+ 
+ 		// restart attack if in decay/sustain states
+ 		if (m_env_state == EG_DECAY || m_env_state == EG_SUSTAIN)

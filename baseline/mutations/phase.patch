@@ -1,0 +1,11 @@
+--- a/src/ymfm_fm.ipp
++++ b/src/ymfm_fm.ipp
+@@ -656,7 +656,7 @@
+ 			start_attack(true);
+ 
+ 		// phase is reset to 0 in modes 0/4
+-		if (bitfield(mode, 1) == 0)
++		if (bitfield(mode, 1) != 0)
+ 			m_phase = 0;
+ 	}
+ 
