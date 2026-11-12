@@ -25,11 +25,18 @@
 #include "AudioFFT.h"
 #include "Utilities.h"
 
+#include <cstdint>
 #include <vector>
 
 
 namespace fftconvolver
-{ 
+{
+
+namespace snapshot
+{
+  struct FFTSection;
+}
+
 
 /**
 * @class FFTConvolver
@@ -77,7 +84,36 @@ public:
   * @brief Resets the convolver and discards the set impulse response
   */
   void reset();
-  
+
+  /**
+  * @brief Exports the complete, self-contained convolver state
+  *
+  * The exported bytes contain the (trimmed) impulse response as well as all
+  * accumulated processing state, so the original instance can be destroyed
+  * and the original impulse response memory released before the state is
+  * imported again. Exporting does not process any audio: calling this twice
+  * without process() in between produces identical bytes.
+  *
+  * @param out Receives the state bytes (any previous content is replaced)
+  * @return true: Success - false: Failed
+  */
+  bool exportState(std::vector<uint8_t>& out) const;
+
+  /**
+  * @brief Restores a state previously written by exportState()
+  *
+  * Works on a freshly constructed convolver as well as on one that has
+  * already processed another signal. On any failure the convolver is left
+  * completely untouched, i.e. its current impulse response and sound remain
+  * valid. All length and value checks are performed before any state is
+  * replaced.
+  *
+  * @param data The state bytes
+  * @param size Number of state bytes
+  * @return true: Success - false: Incompatible or corrupt state
+  */
+  bool importState(const uint8_t* data, size_t size);
+
 private:
   size_t _blockSize;
   size_t _segSize;
@@ -93,6 +129,14 @@ private:
   size_t _current;
   SampleBuffer _inputBuffer;
   size_t _inputBufferFill;
+  std::vector<Sample> _ir; // Trimmed impulse response, kept for snapshots
+
+  // Snapshot support (implemented using the portable types in Snapshot.h)
+  void captureSection(snapshot::FFTSection& section) const;
+  static bool applySection(FFTConvolver& target, const snapshot::FFTSection& section);
+  void swapState(FFTConvolver& other);
+
+  friend class TwoStageFFTConvolver;
 
   // Prevent uncontrolled usage
   FFTConvolver(const FFTConvolver&);

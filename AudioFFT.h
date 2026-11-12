@@ -89,6 +89,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <utility>
 
 
 namespace audiofft
@@ -151,6 +152,18 @@ namespace audiofft
      * @return The size of the real/imaginary complex arrays
      */
     static size_t ComplexSize(size_t size);
+
+    /**
+     * @brief Exchanges the FFT implementation of two objects
+     *
+     * Swapping only moves ownership of the pre-allocated implementation;
+     * it performs no FFT setup work itself and therefore does not allocate
+     * beyond the moved smart pointer.
+     */
+    void swap(AudioFFT& other)
+    {
+      _impl.swap(other._impl);
+    }
 
   private:
     std::unique_ptr<detail::AudioFFTImpl> _impl;

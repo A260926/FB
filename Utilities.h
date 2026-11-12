@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <utility>
 
 
 namespace fftconvolver
@@ -241,6 +242,16 @@ public:
   {
     _re.copyFrom(other._re);
     _im.copyFrom(other._im);
+  }
+
+  // Exchanges the storage of two buffers without copying sample data and
+  // without any allocation (the individual SampleBuffer swaps only move
+  // pointers and sizes).
+  static void Swap(SplitComplex& a, SplitComplex& b)
+  {
+    SampleBuffer::Swap(a._re, b._re);
+    SampleBuffer::Swap(a._im, b._im);
+    std::swap(a._size, b._size);
   }
 
   Sample* re()

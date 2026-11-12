@@ -20,6 +20,7 @@
 // ==================================================================================
 
 #include "TwoStageFFTConvolver.h"
+#include "Snapshot.h"
 
 #include <algorithm>
 #include <cmath>
@@ -41,26 +42,27 @@ TwoStageFFTConvolver::TwoStageFFTConvolver() :
   _tailInput(),
   _tailInputFill(0),
   _precalculatedPos(0),
-  _backgroundProcessingInput()
+  _backgroundProcessingInput(),
+  _ir()
 {
 }
 
-  
+
 TwoStageFFTConvolver::~TwoStageFFTConvolver()
 {
   reset();
 }
 
-  
+
 void TwoStageFFTConvolver::reset()
 {
   _headBlockSize = 0;
-  _tailBlockSize = 0;  
+  _tailBlockSize = 0;
   _headConvolver.reset();
   _tailConvolver0.reset();
   _tailOutput0.clear();
   _tailPrecalculated0.clear();
-  _tailConvolver.reset();  
+  _tailConvolver.reset();
   _tailOutput.clear();
   _tailPrecalculated.clear();
   _tailInput.clear();
@@ -68,6 +70,7 @@ void TwoStageFFTConvolver::reset()
   _tailInputFill = 0;
   _precalculatedPos = 0;
   _backgroundProcessingInput.clear();
+  _ir.clear();
 }
 
   
@@ -100,7 +103,11 @@ bool TwoStageFFTConvolver::init(size_t headBlockSize,
   {
     return true;
   }
-  
+
+  // Keep a self-contained copy of the actually used (trimmed) impulse
+  // response so that snapshots do not depend on the caller's IR memory.
+  _ir.assign(ir, ir + irLen);
+
   _headBlockSize = NextPowerOf2(headBlockSize);
   _tailBlockSize = NextPowerOf2(tailBlockSize);
 
@@ -235,5 +242,266 @@ void TwoStageFFTConvolver::doBackgroundProcessing()
 {
   _tailConvolver.process(_backgroundProcessingInput.data(), _tailOutput.data(), _tailBlockSize);
 }
-    
+
+
+namespace
+{
+
+void CopyBufferToVector(std::vector<float>& dest, const SampleBuffer& src)
+{
+  const size_t len = src.size();
+  dest.resize(len);
+  if (len > 0)
+  {
+    ::memcpy(&dest[0], src.data(), len * sizeof(float));
+  }
+}
+
+void CopyVectorToBuffer(SampleBuffer& dest, const std::vector<float>& src)
+{
+  dest.resize(src.size());
+  if (!src.empty())
+  {
+    ::memcpy(dest.data(), &src[0], src.size() * sizeof(float));
+  }
+}
+
+} // End of anonymous namespace
+
+
+bool TwoStageFFTConvolver::exportState(std::vector<uint8_t>& out) const
+{
+  out.clear();
+
+  snapshot::TwoStageSection section;
+
+  if (!_ir.empty())
+  {
+    section.empty = false;
+    section.headBlockSize = static_cast<uint32_t>(_headBlockSize);
+    section.tailBlockSize = static_cast<uint32_t>(_tailBlockSize);
+    section.tailInputFill = static_cast<uint32_t>(_tailInputFill);
+    section.precalculatedPos = static_cast<uint32_t>(_precalculatedPos);
+    section.hasTail0 = (_tailPrecalculated0.size() > 0);
+    section.hasTail = (_tailPrecalculated.size() > 0);
+    section.ir = _ir;
+
+    CopyBufferToVector(section.tailOutput0, _tailOutput0);
+    CopyBufferToVector(section.tailPrecalculated0, _tailPrecalculated0);
+    CopyBufferToVector(section.tailOutput, _tailOutput);
+    CopyBufferToVector(section.tailPrecalculated, _tailPrecalculated);
+    CopyBufferToVector(section.tailInput, _tailInput);
+    CopyBufferToVector(section.backgroundProcessingInput, _backgroundProcessingInput);
+  }
+
+  // The nested convolver sections carry the frequency-domain histories and
+  // the per-stage impulse responses.
+  _headConvolver.captureSection(section.head);
+  if (section.hasTail0)
+  {
+    _tailConvolver0.captureSection(section.tail0);
+  }
+  if (section.hasTail)
+  {
+    _tailConvolver.captureSection(section.tail);
+  }
+
+  snapshot::Writer payload;
+  if (!snapshot::WriteTwoStageBody(payload, section) ||
+      !snapshot::WriteFFTSection(payload, snapshot::TAG_HEAD, section.head))
+  {
+    out.clear();
+    return false;
+  }
+  if (section.hasTail0 &&
+      !snapshot::WriteFFTSection(payload, snapshot::TAG_TAIL0, section.tail0))
+  {
+    out.clear();
+    return false;
+  }
+  if (section.hasTail &&
+      !snapshot::WriteFFTSection(payload, snapshot::TAG_TAIL, section.tail))
+  {
+    out.clear();
+    return false;
+  }
+
+  snapshot::Writer file;
+  if (!snapshot::WriteFileHeader(file, snapshot::MAGIC_TWO, snapshot::CLASS_TWO, payload))
+  {
+    out.clear();
+    return false;
+  }
+
+  out.swap(file.buffer());
+  return true;
+}
+
+
+bool TwoStageFFTConvolver::importState(const uint8_t* data, size_t size)
+{
+  if (data == 0 || size == 0)
+  {
+    return false;
+  }
+
+  snapshot::Reader file(data, size);
+  if (!snapshot::ReadFileHeader(file, snapshot::MAGIC_TWO, snapshot::CLASS_TWO))
+  {
+    return false;
+  }
+
+  snapshot::TwoStageSection section;
+  if (!snapshot::ReadTwoStageBody(file, section))
+  {
+    return false;
+  }
+
+  if (!snapshot::ReadFFTSection(file, snapshot::TAG_HEAD, section.head))
+  {
+    return false;
+  }
+
+  if (section.empty)
+  {
+    if (!file.fullyConsumed() || !section.head.empty)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    if (section.head.empty ||
+        section.head.blockSize != section.headBlockSize)
+    {
+      return false;
+    }
+
+    if (section.hasTail0)
+    {
+      if (!snapshot::ReadFFTSection(file, snapshot::TAG_TAIL0, section.tail0) ||
+          section.tail0.empty ||
+          section.tail0.blockSize != section.headBlockSize)
+      {
+        return false;
+      }
+    }
+    if (section.hasTail)
+    {
+      if (!snapshot::ReadFFTSection(file, snapshot::TAG_TAIL, section.tail) ||
+          section.tail.empty ||
+          section.tail.blockSize != section.tailBlockSize)
+      {
+        return false;
+      }
+    }
+    if (!file.fullyConsumed())
+    {
+      return false;
+    }
+
+    // The per-stage impulse responses stored in the nested sections must
+    // match the corresponding slices of the full impulse response.
+    const size_t irLen = section.ir.size();
+    const size_t tailBlock = section.tailBlockSize;
+
+    const size_t headIrLen = std::min(irLen, tailBlock);
+    if (section.head.ir.size() != headIrLen ||
+        ::memcmp(&section.head.ir[0], &section.ir[0], headIrLen * sizeof(float)) != 0)
+    {
+      return false;
+    }
+
+    if (section.hasTail0)
+    {
+      const size_t conv1IrLen = std::min(irLen - tailBlock, tailBlock);
+      if (section.tail0.ir.size() != conv1IrLen ||
+          ::memcmp(&section.tail0.ir[0], &section.ir[tailBlock],
+                   conv1IrLen * sizeof(float)) != 0)
+      {
+        return false;
+      }
+    }
+
+    if (section.hasTail)
+    {
+      const size_t tailIrLen = irLen - (2u * tailBlock);
+      if (section.tail.ir.size() != tailIrLen ||
+          ::memcmp(&section.tail.ir[0], &section.ir[2u * tailBlock],
+                   tailIrLen * sizeof(float)) != 0)
+      {
+        return false;
+      }
+    }
+  }
+
+  // Everything has been parsed and validated. Build the replacement state
+  // in a temporary object first, so that a failure here still leaves this
+  // instance untouched.
+  TwoStageFFTConvolver fresh;
+
+  if (!section.empty)
+  {
+    fresh._headBlockSize = section.headBlockSize;
+    fresh._tailBlockSize = section.tailBlockSize;
+    fresh._tailInputFill = section.tailInputFill;
+    fresh._precalculatedPos = section.precalculatedPos;
+    fresh._ir = section.ir;
+
+    if (!FFTConvolver::applySection(fresh._headConvolver, section.head))
+    {
+      return false;
+    }
+    if (section.hasTail0)
+    {
+      if (!FFTConvolver::applySection(fresh._tailConvolver0, section.tail0))
+      {
+        return false;
+      }
+      CopyVectorToBuffer(fresh._tailOutput0, section.tailOutput0);
+      CopyVectorToBuffer(fresh._tailPrecalculated0, section.tailPrecalculated0);
+    }
+    if (section.hasTail)
+    {
+      if (!FFTConvolver::applySection(fresh._tailConvolver, section.tail))
+      {
+        return false;
+      }
+      CopyVectorToBuffer(fresh._tailOutput, section.tailOutput);
+      CopyVectorToBuffer(fresh._tailPrecalculated, section.tailPrecalculated);
+      CopyVectorToBuffer(fresh._backgroundProcessingInput,
+                         section.backgroundProcessingInput);
+    }
+    if (section.hasTail0 || section.hasTail)
+    {
+      CopyVectorToBuffer(fresh._tailInput, section.tailInput);
+    }
+  }
+
+  swapState(fresh);
+  return true;
+}
+
+
+// Exchanges all internal resources with another instance. The SampleBuffer
+// and FFTConvolver swaps move pointers only, so no audio data is copied and
+// no additional buffers are allocated.
+void TwoStageFFTConvolver::swapState(TwoStageFFTConvolver& other)
+{
+  std::swap(_headBlockSize, other._headBlockSize);
+  std::swap(_tailBlockSize, other._tailBlockSize);
+  _headConvolver.swapState(other._headConvolver);
+  _tailConvolver0.swapState(other._tailConvolver0);
+  SampleBuffer::Swap(_tailOutput0, other._tailOutput0);
+  SampleBuffer::Swap(_tailPrecalculated0, other._tailPrecalculated0);
+  _tailConvolver.swapState(other._tailConvolver);
+  SampleBuffer::Swap(_tailOutput, other._tailOutput);
+  SampleBuffer::Swap(_tailPrecalculated, other._tailPrecalculated);
+  SampleBuffer::Swap(_tailInput, other._tailInput);
+  std::swap(_tailInputFill, other._tailInputFill);
+  std::swap(_precalculatedPos, other._precalculatedPos);
+  SampleBuffer::Swap(_backgroundProcessingInput, other._backgroundProcessingInput);
+  std::swap(_ir, other._ir);
+}
+
 } // End of namespace fftconvolver

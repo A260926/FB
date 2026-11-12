@@ -80,7 +80,34 @@ public:
   * @brief Resets the convolver and discards the set impulse response
   */
   void reset();
-  
+
+  /**
+  * @brief Exports the complete, self-contained convolver state
+  *
+  * The exported bytes contain the full impulse response and all head/tail
+  * processing state (including pre-calculated tail blocks), so the original
+  * instance and the impulse response memory can be released before import.
+  * Exporting does not process any audio.
+  *
+  * @param out Receives the state bytes (any previous content is replaced)
+  * @return true: Success - false: Failed
+  */
+  bool exportState(std::vector<uint8_t>& out) const;
+
+  /**
+  * @brief Restores a state previously written by exportState()
+  *
+  * Works on a freshly constructed convolver as well as on one that has
+  * already processed another signal. On any failure the convolver is left
+  * completely untouched. A state produced by FFTConvolver (or any other
+  * incompatible data) is rejected.
+  *
+  * @param data The state bytes
+  * @param size Number of state bytes
+  * @return true: Success - false: Incompatible or corrupt state
+  */
+  bool importState(const uint8_t* data, size_t size);
+
 protected:
   /**
   * @brief Method called by the convolver if work for background processing is available
@@ -118,6 +145,9 @@ private:
   size_t _tailInputFill;
   size_t _precalculatedPos;
   SampleBuffer _backgroundProcessingInput;
+  std::vector<Sample> _ir; // Full trimmed impulse response, kept for snapshots
+
+  void swapState(TwoStageFFTConvolver& other);
 
   // Prevent uncontrolled usage
   TwoStageFFTConvolver(const TwoStageFFTConvolver&);
