@@ -8,8 +8,8 @@ public class HgeomBaseline {
     check(m.vertices().count()==4 && m.edges().count()==8);
     check(m.faces().filter(f->f.status()==HFace.Status.INTERIOR).count()==1);
     HVertex old=m.vertices().findFirst().orElseThrow();
-    check(m.vertexZs().get(old)!=m.vertexZ(old));
-    System.out.println("HGEOM z bulk/scalar discrepancy reproduced PASS");
+    check(m.vertexZs().get(old)==m.vertexZ(old));
+    System.out.println("HGEOM z bulk/scalar consistency PASS");
     HEdge e=m.edges().filter(x->x.face().status()==HFace.Status.INTERIOR).findFirst().orElseThrow();
     double[] p=m.vertexXYZ(e.tail()), q=m.vertexXYZ(e.head());
     HVertex v=m.splitEdge(e,(p[0]+q[0])/2,(p[1]+q[1])/2,(p[2]+q[2])/2);

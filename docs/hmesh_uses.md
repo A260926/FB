@@ -147,3 +147,51 @@
       mesh.removeVertex(vertex);
    }
 ```
+
+#### 6. Extrude a region of adjacent faces out of a 3D mesh
+
+[RegionExtrusion](../src/hgeom/hmesh/operations/RegionExtrusion.java) moves a set of adjacent [HFace](../src/hgeom/hmesh/elements/HFace.java) together along one translation vector. The selected faces become the lifted top faces, the other faces stay in place and quadrilateral side faces connect the base rim to the lifted rim. The source mesh is not modified and the returned [HMesh3D](../src/hgeom/hmesh/elements/HMesh3D.java) is an independent, fully editable mesh.
+
+```Java
+   // A 3D mesh built from faces and 3D coordinates
+   HMesh3D mesh = new FaceSource(faces).toHMesh(new Coord3DSource(coords))
+      .orElseThrow(RuntimeException::new);
+
+   // The adjacent INTERIOR faces to lift
+   Set<HFace> selected = new HashSet<>();
+   mesh.faces()
+       .filter(face -> face.status() == HFace.Status.INTERIOR)
+       .forEach(selected::add);
+
+   // Lifts the region by one unit along the z axis
+   ExtrusionResult result = RegionExtrusion.extrude(mesh, selected, 0, 0, 1);
+   HMesh3D extruded = result.mesh();
+```
+
+The [ExtrusionResult](../src/hgeom/hmesh/operations/ExtrusionResult.java) exposes four read-only, identity based maps. They connect source elements to result elements without any coordinate lookup:
+
+```Java
+   // Each source INTERIOR face -> its in place copy or its lifted top face
+   Map<HFace, HFace> originalFaces = result.originalFaces();
+
+   // Source vertices still referenced in place -> their base copy
+   Map<HVertex, HVertex> baseVertices = result.baseVertices();
+
+   // Selected region vertices -> their translated lifted copy
+   Map<HVertex, HVertex> liftedVertices = result.liftedVertices();
+
+   // Oriented region border half-edges -> the generated side faces
+   Map<HEdge, HFace> sideFaces = result.sideFaces();
+```
+
+Side faces are generated only between a selected face and an unselected face, or between a selected face and the outer border of the mesh. Two selected faces never get a side face between them and the selected faces are never kept as bottom caps. [HFace.Status.BOUNDARY](../src/hgeom/hmesh/elements/HFace.java) faces model outer borders or holes, not physical caps: they are rebuilt from the open borders of the result, so a closed mesh stays closed, an open mesh keeps an open bottom and a ring selection keeps its inner hole open.
+
+A non empty selection requires a finite, non zero displacement that is not parallel to any region border edge. Foreign, discarded, BOUNDARY and UNKNOWN faces are rejected, as are selections whose faces form several disconnected fans at one vertex (butterfly vertices). The maps make it straightforward to transfer user data afterwards; the user data themselves are not copied automatically:
+
+```Java
+   HDData<HVertex> sourceWeights = ...;
+   HDData<HVertex> liftedWeights = extruded.createVertexDoubleData();
+
+   result.liftedVertices().forEach((sourceVertex, liftedVertex) ->
+       liftedWeights.set(liftedVertex, sourceWeights.get(sourceVertex)));
+```

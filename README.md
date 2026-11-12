@@ -19,6 +19,8 @@ Go [here](docs/hmesh_navigation.md) to learn how to navigate inside a [HMesh](sr
 
 Go [here](docs/hmesh_uses.md) for some examples of [HMesh](src/hgeom/hmesh/elements/HMesh.java) uses
 
+A 3D modeling operation that lifts a region of adjacent faces out of a [HMesh3D](src/hgeom/hmesh/elements/HMesh3D.java) while leaving the source mesh unchanged is provided by [RegionExtrusion](src/hgeom/hmesh/operations/RegionExtrusion.java). A runnable example is available [here](examples/hgeom/hmesh/examples/RegionExtrusionExample.java)
+
 ## Creation of a half-edge data structure in **HGeom**
 	
 There are two ways to create a half-edge data structure with **HGeom**: 

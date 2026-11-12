@@ -181,6 +181,21 @@ Several topological operations are provided by [HMesh](../src/hgeom/hmesh/elemen
    boolean success = mesh.removeVertex(vertex);
 ```
 
+### 3D modeling operation: region extrusion
+
+[RegionExtrusion](../src/hgeom/hmesh/operations/RegionExtrusion.java) is a higher level operation available on a [HMesh3D](../src/hgeom/hmesh/elements/HMesh3D.java). It lifts a region of adjacent INTERIOR faces along a single translation vector without modifying the source mesh:
+
+```Java
+   HMesh3D mesh = ...
+   Set<HFace> selected = ...
+
+   // Builds an independent extruded mesh and the source/result element maps
+   ExtrusionResult result = RegionExtrusion.extrude(mesh, selected, dx, dy, dz);
+   HMesh3D extruded = result.mesh();
+```
+
+The selected faces become the lifted top faces, the unselected faces stay in place and quadrilateral side faces are generated only on the border of the selected region. BOUNDARY faces are rebuilt from the open borders of the result, so a closed mesh stays closed while an open mesh keeps an open bottom. The [ExtrusionResult](../src/hgeom/hmesh/operations/ExtrusionResult.java) exposes the `originalFaces`, `baseVertices`, `liftedVertices` and `sideFaces` identity based maps. See [the use cases](hmesh_uses.md) for a full example.
+
 ### Data association with a [HMesh](../src/hgeom/hmesh/elements/HMesh.java)
 
 Faces, half-edges and vertices of a [HMesh](../src/hgeom/hmesh/elements/HMesh.java) can be associated with data. HMesh provides several methods to do that

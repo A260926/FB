@@ -51,7 +51,7 @@ final class HMesh3DImpl extends HMeshImpl implements HMesh3D {
 
 	@Override
 	public HDData<HVertex> vertexZs() {
-		return ys;
+		return zs;
 	}
 
 	@Override
