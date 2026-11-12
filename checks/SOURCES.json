@@ -19,7 +19,7 @@
     "version": "2.4.0",
     "origin": "tests/catch.hpp from tinynurbs commit above",
     "license": "BSL-1.0",
-    "license_path": "userfb/licenses/Catch-BSL-1.0.txt"
+    "license_path": "checks/licenses/Catch-BSL-1.0.txt"
   },
   "changes": [
     {
@@ -36,14 +36,14 @@
     }
   ],
   "added": [
-    "userfb/baseline.cpp",
-    "userfb/build.sh",
-    "userfb/run_baseline.sh",
-    "userfb/run_target.sh",
-    "userfb/SOURCES.json",
-    "userfb/UPSTREAM_FILES.json",
-    "userfb/licenses/Catch-BSL-1.0.txt",
-    "userfb/source-export.patch"
+    "checks/baseline.cpp",
+    "checks/build.sh",
+    "checks/run_baseline.sh",
+    "checks/run_target.sh",
+    "checks/SOURCES.json",
+    "checks/UPSTREAM_FILES.json",
+    "checks/licenses/Catch-BSL-1.0.txt",
+    "checks/source-export.patch"
   ],
-  "patch_path": "userfb/source-export.patch"
+  "patch_path": "checks/source-export.patch"
 }
