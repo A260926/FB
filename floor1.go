@@ -9,9 +9,6 @@ type floor1 struct {
 	rangebits          uint8
 	xList              []uint32
 	sort               []uint32
-
-	step2  []bool
-	finalY []uint32
 }
 
 type floor1Class struct {
@@ -61,19 +58,22 @@ func (f *floor1) ReadFrom(r *bitReader) error {
 	}
 	sort.Sort(f)
 
-	f.step2 = make([]bool, len(f.xList))
-	f.finalY = make([]uint32, len(f.xList))
 	return nil
 }
 
-func (f *floor1) Decode(r *bitReader, books []codebook, n uint32) interface{} {
+func (f *floor1) Decode(r *bitReader, books []codebook, n uint32, ws *floorWorkspace) bool {
 	if !r.ReadBool() {
-		return nil
+		return false
 	}
 
 	range_ := [4]uint32{256, 128, 86, 64}[f.multiplier-1]
-	y := make([]uint32, 0, len(f.xList))
-	y = append(y, r.Read32(ilog(int(range_)-1)), r.Read32(ilog(int(range_)-1)))
+	if cap(ws.y) < len(f.xList) {
+		ws.y = make([]uint32, len(f.xList))
+	}
+	y := ws.y[:len(f.xList)]
+	y[0] = r.Read32(ilog(int(range_) - 1))
+	y[1] = r.Read32(ilog(int(range_) - 1))
+	index := 2
 	for _, classIndex := range f.partitionClassList {
 		class := f.classes[classIndex]
 		cdim := class.dimension
@@ -87,27 +87,35 @@ func (f *floor1) Decode(r *bitReader, books []codebook, n uint32) interface{} {
 			book := class.subclassBooks[cval&csub]
 			cval >>= cbits
 			if book != 0xFF {
-				y = append(y, books[book].DecodeScalar(r))
+				y[index] = books[book].DecodeScalar(r)
 			} else {
-				y = append(y, 0)
+				y[index] = 0
 			}
+			index++
 		}
 	}
-	return y
+	return true
 }
 
-func (f *floor1) Apply(out []float32, data interface{}) {
-	y := data.([]uint32)
+func (f *floor1) Apply(out []float32, ws *floorWorkspace) {
+	y := ws.y[:len(f.xList)]
 	n := uint32(len(out))
 	range_ := [4]uint32{256, 128, 86, 64}[f.multiplier-1]
 
-	f.step2[0], f.step2[1] = true, true
-	f.finalY[0], f.finalY[1] = y[0], y[1]
+	if cap(ws.step2) < len(f.xList) {
+		ws.step2 = make([]bool, len(f.xList))
+		ws.finalY = make([]uint32, len(f.xList))
+	}
+	step2 := ws.step2[:len(f.xList)]
+	finalY := ws.finalY[:len(f.xList)]
+
+	step2[0], step2[1] = true, true
+	finalY[0], finalY[1] = y[0], y[1]
 
 	for i := 2; i < len(f.xList); i++ {
 		low := lowNeighbor(f.xList, i)
 		high := highNeighbor(f.xList, i)
-		predicted := renderPoint(f.xList[low], f.finalY[low], f.xList[high], f.finalY[high], f.xList[i])
+		predicted := renderPoint(f.xList[low], finalY[low], f.xList[high], finalY[high], f.xList[i])
 		val := y[i]
 
 		highRoom := range_ - predicted
@@ -120,36 +128,36 @@ func (f *floor1) Apply(out []float32, data interface{}) {
 		}
 
 		if val == 0 {
-			f.step2[i] = false
-			f.finalY[i] = predicted
+			step2[i] = false
+			finalY[i] = predicted
 		} else {
-			f.step2[low] = true
-			f.step2[high] = true
-			f.step2[i] = true
+			step2[low] = true
+			step2[high] = true
+			step2[i] = true
 			if val >= room {
 				if highRoom > lowRoom {
-					f.finalY[i] = val - lowRoom + predicted
+					finalY[i] = val - lowRoom + predicted
 				} else {
-					f.finalY[i] = predicted - val + highRoom - 1
+					finalY[i] = predicted - val + highRoom - 1
 				}
 			} else {
 				if val%2 == 1 {
-					f.finalY[i] = predicted - (val+1)/2
+					finalY[i] = predicted - (val+1)/2
 				} else {
-					f.finalY[i] = predicted + val/2
+					finalY[i] = predicted + val/2
 				}
 			}
 		}
 	}
 
 	var hx, lx uint32
-	ly := f.finalY[0] * uint32(f.multiplier)
+	ly := finalY[0] * uint32(f.multiplier)
 
 	var hy uint32
-	for j := 1; j < len(f.finalY); j++ {
+	for j := 1; j < len(finalY); j++ {
 		i := f.sort[j]
-		if f.step2[i] {
-			hy = f.finalY[i] * uint32(f.multiplier)
+		if step2[i] {
+			hy = finalY[i] * uint32(f.multiplier)
 			hx = f.xList[i]
 			renderLine(lx, ly, hx, hy, out)
 			lx = hx

@@ -2,12 +2,6 @@ package vorbis
 
 import "errors"
 
-type floorData struct {
-	floor     floor
-	data      interface{}
-	noResidue bool
-}
-
 func (d *Decoder) decodePacket(r *bitReader, out []float32) ([]float32, error) {
 	if r.ReadBool() {
 		return nil, errors.New("vorbis: decoding error")
@@ -33,9 +27,6 @@ func (d *Decoder) decodePacket(r *bitReader, out []float32) ([]float32, error) {
 	}
 
 	mapping := &d.mappings[mode.mapping]
-	if d.floorBuffer == nil {
-		d.floorBuffer = make([]floorData, d.channels)
-	}
 	for ch := range d.residueBuffer {
 		d.residueBuffer[ch] = d.residueBuffer[ch][:spectrumSize]
 		for i := range d.residueBuffer[ch] {
@@ -43,10 +34,10 @@ func (d *Decoder) decodePacket(r *bitReader, out []float32) ([]float32, error) {
 		}
 	}
 
-	d.decodeFloors(r, d.floorBuffer, mapping, spectrumSize)
-	d.decodeResidue(r, d.residueBuffer, mapping, d.floorBuffer, spectrumSize)
+	d.decodeFloors(r, mapping, spectrumSize)
+	d.decodeResidue(r, mapping, spectrumSize)
 	d.inverseCoupling(mapping, d.residueBuffer)
-	d.applyFloor(d.floorBuffer, d.residueBuffer)
+	d.applyFloor(mapping, d.residueBuffer)
 
 	// inverse MDCT
 	for ch := range d.rawBuffer {
@@ -128,32 +119,46 @@ func (d *Decoder) decodePacket(r *bitReader, out []float32) ([]float32, error) {
 	return out[:n*d.channels], nil
 }
 
-func (d *Decoder) decodeFloors(r *bitReader, floors []floorData, mapping *mapping, n uint32) {
-	for ch := range floors {
-		floor := d.floors[mapping.submaps[mapping.mux[ch]].floor]
-		data := floor.Decode(r, d.codebooks, n)
-		floors[ch] = floorData{floor, data, data == nil}
+func (d *Decoder) decodeFloors(r *bitReader, mapping *mapping, n uint32) {
+	for ch := 0; ch < d.channels; ch++ {
+		ws := &d.floorWorkspace[ch]
+		f := d.floors[mapping.submaps[mapping.mux[ch]].floor]
+		ws.active = f.Decode(r, d.codebooks, n, ws)
+		// Whether the residue participates is tracked separately from
+		// whether the floor is applied: coupling may still force the
+		// residue of a channel whose floor is absent.
+		ws.noResidue = !ws.active
 	}
 
 	for i := 0; i < int(mapping.couplingSteps); i++ {
-		if !floors[mapping.magnitude[i]].noResidue || !floors[mapping.angle[i]].noResidue {
-			floors[mapping.magnitude[i]].noResidue = false
-			floors[mapping.angle[i]].noResidue = false
+		magnitude := &d.floorWorkspace[mapping.magnitude[i]]
+		angle := &d.floorWorkspace[mapping.angle[i]]
+		if !magnitude.noResidue || !angle.noResidue {
+			magnitude.noResidue = false
+			angle.noResidue = false
 		}
 	}
 }
 
-func (d *Decoder) decodeResidue(r *bitReader, out [][]float32, mapping *mapping, floors []floorData, n uint32) {
+func (d *Decoder) decodeResidue(r *bitReader, mapping *mapping, n uint32) {
+	ws := &d.residueWorkspace
 	for i := range mapping.submaps {
-		doNotDecode := make([]bool, 0, len(out))
-		tmp := make([][]float32, 0, len(out))
-		for j := 0; j < d.channels; j++ {
-			if mapping.mux[j] == uint8(i) {
-				doNotDecode = append(doNotDecode, floors[j].noResidue)
-				tmp = append(tmp, out[j])
+		memberCount := 0
+		for ch := 0; ch < d.channels; ch++ {
+			if mapping.mux[ch] == uint8(i) {
+				ws.doNotDecode[memberCount] = d.floorWorkspace[ch].noResidue
+				ws.vectors[memberCount] = d.residueBuffer[ch]
+				memberCount++
 			}
 		}
-		d.residues[mapping.submaps[i].residue].Decode(r, doNotDecode, n, d.codebooks, tmp)
+		d.residues[mapping.submaps[i].residue].Decode(
+			r,
+			ws.doNotDecode[:memberCount],
+			n,
+			d.codebooks,
+			ws.vectors[:memberCount],
+			ws,
+		)
 	}
 }
 
@@ -166,13 +171,13 @@ func (d *Decoder) inverseCoupling(mapping *mapping, residueVectors [][]float32) 
 			a := angleVector[j]
 			if m > 0 {
 				if a > 0 {
-					m, a = m, m-a
+					a = m - a
 				} else {
 					a, m = m, m+a
 				}
 			} else {
 				if a > 0 {
-					m, a = m, m+a
+					a = m + a
 				} else {
 					a, m = m, m-a
 				}
@@ -183,11 +188,17 @@ func (d *Decoder) inverseCoupling(mapping *mapping, residueVectors [][]float32) 
 	}
 }
 
-func (d *Decoder) applyFloor(floors []floorData, residueVectors [][]float32) {
+func (d *Decoder) applyFloor(mapping *mapping, residueVectors [][]float32) {
 	for ch := range residueVectors {
-		if floors[ch].data != nil {
-			floors[ch].floor.Apply(residueVectors[ch], floors[ch].data)
+		ws := &d.floorWorkspace[ch]
+		if ws.active {
+			// The same floor object may be shared between channels; all
+			// per-channel state lives in the workspace.
+			f := d.floors[mapping.submaps[mapping.mux[ch]].floor]
+			f.Apply(residueVectors[ch], ws)
 		} else {
+			// A channel without a floor in this packet stays silent even
+			// if it took part in a type 2 residue.
 			for i := range residueVectors[ch] {
 				residueVectors[ch][i] = 0
 			}

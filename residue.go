@@ -46,8 +46,12 @@ func (x *residue) ReadFrom(r *bitReader) error {
 	return nil
 }
 
-func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []codebook, out [][]float32) {
+// Decode decodes one residue submap. doNotDecode and out describe only the
+// channels that belong to this submap, in ascending channel order; ws holds
+// reusable scratch space.
+func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []codebook, out [][]float32, ws *residueWorkspace) {
 	ch := uint32(len(doNotDecode))
+	combined := false
 	if x.residueType == 2 {
 		decode := false
 		for _, not := range doNotDecode {
@@ -59,6 +63,11 @@ func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []cod
 		if !decode {
 			return
 		}
+		// A type 2 residue interleaves all participating channels of this
+		// submap into one combined vector. It is read whenever at least one
+		// submap channel has an active floor, even if the first channel does
+		// not.
+		combined = true
 		n *= ch
 		ch = 1
 	}
@@ -77,14 +86,21 @@ func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []cod
 	if nToRead == 0 {
 		return
 	}
-	cs := (partitionsToRead + classWordsPerCodeword)
-	classifications := make([]uint32, ch*cs)
+	cs := partitionsToRead + classWordsPerCodeword
+	needed := int(ch * cs)
+	if cap(ws.classifications) < needed {
+		ws.classifications = make([]uint32, needed)
+	}
+	classifications := ws.classifications[:needed]
 	for pass := 0; pass < 8; pass++ {
 		partitionCount := uint32(0)
 		for partitionCount < partitionsToRead {
 			if pass == 0 {
 				for j := uint32(0); j < ch; j++ {
-					if !doNotDecode[j] {
+					// The combined vector of a type 2 residue is read in
+					// full once any channel takes part; doNotDecode only
+					// applies per channel to types 0 and 1.
+					if combined || !doNotDecode[j] {
 						temp := classbook.DecodeScalar(r)
 						for i := classWordsPerCodeword; i > 0; i-- {
 							classifications[j*cs+(i-1)+partitionCount] = temp % uint32(x.classifications)
@@ -95,7 +111,7 @@ func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []cod
 			}
 			for classword := uint32(0); classword < classWordsPerCodeword && partitionCount < partitionsToRead; classword++ {
 				for j := uint32(0); j < ch; j++ {
-					if !doNotDecode[j] {
+					if combined || !doNotDecode[j] {
 						vqclass := classifications[j*cs+partitionCount]
 						vqbook := x.books[vqclass][pass]
 						if vqbook != -1 {
@@ -121,11 +137,15 @@ func (x *residue) Decode(r *bitReader, doNotDecode []bool, n uint32, books []cod
 								}
 							case 2:
 								var i uint32
-								ch := uint32(len(out))
+								// The combined vector is interleaved over the
+								// channels that actually participate in this
+								// submap, which may be a subset of the
+								// decoder's channels.
+								submapChannels := uint32(len(out))
 								for i < x.partitionSize {
 									tmp := book.DecodeVector(r)
 									for k := range tmp {
-										out[(offset+i)%ch][(offset+i)/ch] += tmp[k]
+										out[(offset+i)%submapChannels][(offset+i)/submapChannels] += tmp[k]
 										i++
 									}
 								}

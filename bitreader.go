@@ -8,8 +8,13 @@ type bitReader struct {
 	eof      bool
 }
 
-func newBitReader(data []byte) *bitReader {
-	return &bitReader{data: data}
+// reset prepares an existing bitReader for a new packet without allocating.
+func (r *bitReader) reset(data []byte) {
+	r.data = data
+	r.position = 0
+	r.buf = 0
+	r.bitsLeft = 0
+	r.eof = false
 }
 
 func (r *bitReader) EOF() bool {

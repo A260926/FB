@@ -26,8 +26,14 @@ type Decoder struct {
 	windows       [2][]float32
 	lookup        [2]imdctLookup
 	residueBuffer [][]float32
-	floorBuffer   []floorData
 	rawBuffer     [][]float32
+
+	// Reusable per-packet workspaces. They are allocated once while reading
+	// the setup header (or lazily grown on first use) and reused for every
+	// following packet, so DecodeInto does not allocate on the heap.
+	floorWorkspace   []floorWorkspace
+	residueWorkspace residueWorkspace
+	reader           bitReader
 }
 
 // The Bitrate of a vorbis stream.
@@ -106,17 +112,25 @@ func (d *Decoder) HeadersRead() bool {
 }
 
 // Decode decodes a packet and returns the result as an interleaved float slice.
-// The number of samples decoded varies and can be zero, but will be at most BufferSize()
+// The number of samples decoded varies and can be zero, but will be at most BufferSize().
+// The returned slice is freshly allocated and owned by the caller, so it stays
+// valid across subsequent calls. Use DecodeInto instead to avoid allocations.
 func (d *Decoder) Decode(in []byte) ([]float32, error) {
 	if !d.HeadersRead() {
 		return nil, errors.New("vorbis: missing headers")
 	}
-	return d.decodePacket(newBitReader(in), nil)
+	d.reader.reset(in)
+	return d.decodePacket(&d.reader, nil)
 }
 
 // DecodeInto decodes a packet and stores the result in the given buffer.
 // The size of the buffer must be at least BufferSize().
 // The method will always return a slice of the buffer or nil.
+// After the decoder has been warmed up (three headers read and at least one
+// packet decoded), DecodeInto does not perform any heap allocations: all
+// scratch space is owned by the decoder and reused. The buffer is owned by
+// the caller; the decoder only keeps the returned slice's backing array for
+// the duration of the call.
 func (d *Decoder) DecodeInto(in []byte, buffer []float32) ([]float32, error) {
 	if !d.HeadersRead() {
 		return nil, errors.New("vorbis: missing headers")
@@ -124,7 +138,8 @@ func (d *Decoder) DecodeInto(in []byte, buffer []float32) ([]float32, error) {
 	if len(buffer) < d.BufferSize() {
 		return nil, errors.New("vorbis: buffer too short")
 	}
-	return d.decodePacket(newBitReader(in), buffer)
+	d.reader.reset(in)
+	return d.decodePacket(&d.reader, buffer)
 }
 
 // Clear must be called between decoding two non-consecutive packets.

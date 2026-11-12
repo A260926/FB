@@ -3,8 +3,13 @@ package vorbis
 import "errors"
 
 type floor interface {
-	Decode(*bitReader, []codebook, uint32) interface{}
-	Apply(out []float32, data interface{})
+	// Decode reads one channel's floor curve. It returns false if the floor
+	// (and therefore the residue) is unused for this channel. Scratch space
+	// owned by the decoder is passed in so that decoding a packet does not
+	// require any heap allocations.
+	Decode(r *bitReader, books []codebook, n uint32, ws *floorWorkspace) bool
+	// Apply multiplies the decoded floor curve onto the residue vector.
+	Apply(out []float32, ws *floorWorkspace)
 }
 
 type mapping struct {
@@ -25,8 +30,9 @@ type mode struct {
 }
 
 func (d *Decoder) readSetupHeader(header []byte) error {
-	r := newBitReader(header)
-
+	// Setup parsing is not on the per-packet hot path, so a local
+	// bitReader is fine here.
+	r := &bitReader{data: header}
 	// CODEBOOKS
 	d.codebooks = make([]codebook, r.Read16(8)+1)
 	for i := range d.codebooks {
@@ -145,4 +151,8 @@ func (d *Decoder) initLookup() {
 	for i := range d.rawBuffer {
 		d.rawBuffer[i] = make([]float32, d.blocksize[1])
 	}
+	// Per-channel floor state and the residue scratch slices live for the
+	// whole lifetime of the decoder; packets only reuse them.
+	d.floorWorkspace = make([]floorWorkspace, d.channels)
+	d.residueWorkspace.ensure(d.channels)
 }

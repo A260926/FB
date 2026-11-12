@@ -1,0 +1,73 @@
+{
+  "streams": [
+    {
+      "name": "sharedFloor",
+      "channels": 2,
+      "blocksize": [
+        64,
+        256
+      ],
+      "headers": [
+        "AXZvcmJpcwAAAAACRKwAAAAAAAAAAAAAAAAAAIYB",
+        "A3ZvcmJpcwAAAAAAAAAAAQ==",
+        "BXZvcmJpcwFCQ1YBAAIAAAAAQkNWAgACAAAAEAAAAAABAIBiIAAAAAQABAABFAQAAAAAAAABAD4AAACACAAAAAAAACAAAAAAABAAAAAAIA=="
+      ],
+      "packets": [
+        "REYWGRlVVVVV",
+        "EhkZqqpUVamqUlUF",
+        "iIxMVRU=",
+        "EhlZZGSoqqqqoqqqqoqqqqoqqqqqqg==",
+        "AA==",
+        "EhlZZGSoqqqqoqqqqoqqqqoqqqqqqg==",
+        "REZGVRU=",
+        "IjIyqqpUVamqUlUF"
+      ]
+    },
+    {
+      "name": "twoSubmaps",
+      "channels": 2,
+      "blocksize": [
+        64,
+        256
+      ],
+      "headers": [
+        "AXZvcmJpcwAAAAACRKwAAAAAAAAAAAAAAAAAAIYB",
+        "A3ZvcmJpcwAAAAAAAAAAAQ==",
+        "BXZvcmJpcwFCQ1YBAAIAAAAAQkNWAgACAAAAEAAAAAABAIBiIAAAEAAACBCxQgAYABAQABAABFAwCAAAAAAAAQD4AAAAACJAAAAAAAAEAOADAAAAiAAAAGAAAgAAACAgAAAAAAAAEA=="
+      ],
+      "packets": [
+        "UCIjU1Wlqgo=",
+        "UFBVBQ==",
+        "gMjIVFUB",
+        "UCIjo6pKVRU=",
+        "AA==",
+        "UCIjo6pKVRU=",
+        "UKiqAg==",
+        "gMjIqKoC"
+      ]
+    },
+    {
+      "name": "coupling",
+      "channels": 2,
+      "blocksize": [
+        64,
+        256
+      ],
+      "headers": [
+        "AXZvcmJpcwAAAAACRKwAAAAAAAAAAAAAAAAAAIYB",
+        "A3ZvcmJpcwAAAAAAAAAAAQ==",
+        "BXZvcmJpcwFCQ1YBAAIAAAAAQkNWAgACAAAAEAAAAAABAIBiIAAAEAQABAABFAwACAACKAgEAAAAAAACAHwAAAAAEQAAAAggAAAAAQAAAACAAAAAAAAB"
+      ],
+      "packets": [
+        "REYWGRlVVVVV",
+        "EhkZVFVVVVFVVVVFVVVVFVVVVVU=",
+        "iIyMqqqqKg==",
+        "EhlZZGSoqqqqoqqqqoqqqqoqqqqqqg==",
+        "AA==",
+        "EhlZZGSoqqqqoqqqqoqqqqoqqqqqqg==",
+        "REaGqqqqKg==",
+        "IjIyVFVVVVFVVVVFVVVVFVVVVVU="
+      ]
+    }
+  ]
+}
