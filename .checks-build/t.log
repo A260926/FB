@@ -1,0 +1,6 @@
+filter worst block energy diff so far: 2.046e-12
+CASE filter history_into_weak_and_silence CHECKS=415 PASS
+CASE filter dc_bias_matches_continuous CHECKS=199 PASS
+CASE filter pure_silence_and_dual_mono CHECKS=32 PASS
+GROUP filter CASES=3 PASS
+gating rate=44100 windows i=230 st=21 lra=14.068355 ref=14.068355

@@ -1,6 +1,7 @@
 /* See COPYING file for copyright and license details. */
 
 #include "ebur128.h"
+#include "ebur128_internal.h"
 
 #include <float.h>
 #include <limits.h>
@@ -113,8 +114,57 @@ static double relative_gate = -10.0;
 /* Those will be calculated when initializing the library */
 static double relative_gate_factor;
 static double minus_twenty_decibels;
+static double min_gating_energy;
 static double histogram_energies[1000];
 static double histogram_energy_boundaries[1001];
+
+void ebur128_priv_ensure_gating_constants(void) {
+  static int initialized = 0;
+  if (initialized) {
+    return;
+  }
+  relative_gate_factor = pow(10.0, relative_gate / 10.0);
+  minus_twenty_decibels = pow(10.0, -20.0 / 10.0);
+  min_gating_energy = pow(10.0, (-70.0 + 0.691) / 10.0);
+  histogram_energy_boundaries[0] = min_gating_energy;
+  for (int i = 0; i < 1000; ++i) {
+    histogram_energies[i] =
+        pow(10.0, ((double) i / 10.0 - 69.95 + 0.691) / 10.0);
+  }
+  for (int i = 1; i < 1001; ++i) {
+    histogram_energy_boundaries[i] =
+        pow(10.0, ((double) i / 10.0 - 70.0 + 0.691) / 10.0);
+  }
+  initialized = 1;
+}
+
+double ebur128_priv_energy_to_loudness(double energy) {
+  return 10 * (log(energy) / log(10.0)) - 0.691;
+}
+
+double ebur128_priv_relative_gate_factor(void) {
+  return relative_gate_factor;
+}
+
+double ebur128_priv_minus_twenty_decibels(void) {
+  return minus_twenty_decibels;
+}
+
+double ebur128_priv_min_gating_energy(void) {
+  return min_gating_energy;
+}
+
+double ebur128_priv_channel_weight(int channel) {
+  if (channel == EBUR128_Mp110 || channel == EBUR128_Mm110 ||
+      channel == EBUR128_Mp060 || channel == EBUR128_Mm060 ||
+      channel == EBUR128_Mp090 || channel == EBUR128_Mm090) {
+    return 1.41;
+  }
+  if (channel == EBUR128_DUAL_MONO) {
+    return 2.0;
+  }
+  return 1.0;
+}
 
 static interpolator*
 interp_create(unsigned int taps, unsigned int factor, unsigned int channels) {
@@ -248,53 +298,71 @@ interp_process(interpolator* interp, size_t frames, float* in, float* out) {
   return frames * interp->factor;
 }
 
-static int ebur128_init_filter(ebur128_state* st) {
-  int errcode = EBUR128_SUCCESS;
-  int i, j;
-
+/* Calculate the two BS.1770 K-weighting biquads for a sample rate: the
+ * pre-filter (shelving, pb/pa) and the high-pass filter (rb/ra).  The
+ * streaming link convolves them into the 5-tap b/a coefficients while the
+ * segment link keeps them as a numerically well-conditioned cascade. */
+void ebur128_priv_biquad_coeffs(unsigned long samplerate,
+                                double pb[3],
+                                double pa[3],
+                                double rb[3],
+                                double ra[3]) {
   double f0 = 1681.974450955533;
   double G = 3.999843853973347;
   double Q = 0.7071752369554196;
 
-  double K = tan(M_PI * f0 / (double) st->samplerate);
+  double K = tan(M_PI * f0 / (double) samplerate);
   double Vh = pow(10.0, G / 20.0);
   double Vb = pow(Vh, 0.4996667741545416);
-
-  double pb[3] = { 0.0, 0.0, 0.0 };
-  double pa[3] = { 1.0, 0.0, 0.0 };
-  double rb[3] = { 1.0, -2.0, 1.0 };
-  double ra[3] = { 1.0, 0.0, 0.0 };
 
   double a0 = 1.0 + K / Q + K * K;
   pb[0] = (Vh + Vb * K / Q + K * K) / a0;
   pb[1] = 2.0 * (K * K - Vh) / a0;
   pb[2] = (Vh - Vb * K / Q + K * K) / a0;
+  pa[0] = 1.0;
   pa[1] = 2.0 * (K * K - 1.0) / a0;
   pa[2] = (1.0 - K / Q + K * K) / a0;
 
-  /* fprintf(stderr, "%.14f %.14f %.14f %.14f %.14f\n",
-                     b1[0], b1[1], b1[2], a1[1], a1[2]); */
+  rb[0] = 1.0;
+  rb[1] = -2.0;
+  rb[2] = 1.0;
+  ra[0] = 1.0;
 
   f0 = 38.13547087602444;
   Q = 0.5003270373238773;
-  K = tan(M_PI * f0 / (double) st->samplerate);
+  K = tan(M_PI * f0 / (double) samplerate);
 
   ra[1] = 2.0 * (K * K - 1.0) / (1.0 + K / Q + K * K);
   ra[2] = (1.0 - K / Q + K * K) / (1.0 + K / Q + K * K);
+}
 
-  /* fprintf(stderr, "%.14f %.14f\n", a2[1], a2[2]); */
+/* Calculate the BS.1770 K-weighting filter coefficients for a sample rate.
+ * Shared by the streaming measurement and the segment summary code so both
+ * links never maintain divergent coefficient rules. */
+void ebur128_priv_filter_coeffs(unsigned long samplerate,
+                                double b[EBUR128_FILTER_STATE_SIZE],
+                                double a[EBUR128_FILTER_STATE_SIZE]) {
+  double pb[3], pa[3], rb[3], ra[3];
+  ebur128_priv_biquad_coeffs(samplerate, pb, pa, rb, ra);
 
-  st->d->b[0] = pb[0] * rb[0];
-  st->d->b[1] = pb[0] * rb[1] + pb[1] * rb[0];
-  st->d->b[2] = pb[0] * rb[2] + pb[1] * rb[1] + pb[2] * rb[0];
-  st->d->b[3] = pb[1] * rb[2] + pb[2] * rb[1];
-  st->d->b[4] = pb[2] * rb[2];
+  b[0] = pb[0] * rb[0];
+  b[1] = pb[0] * rb[1] + pb[1] * rb[0];
+  b[2] = pb[0] * rb[2] + pb[1] * rb[1] + pb[2] * rb[0];
+  b[3] = pb[1] * rb[2] + pb[2] * rb[1];
+  b[4] = pb[2] * rb[2];
 
-  st->d->a[0] = pa[0] * ra[0];
-  st->d->a[1] = pa[0] * ra[1] + pa[1] * ra[0];
-  st->d->a[2] = pa[0] * ra[2] + pa[1] * ra[1] + pa[2] * ra[0];
-  st->d->a[3] = pa[1] * ra[2] + pa[2] * ra[1];
-  st->d->a[4] = pa[2] * ra[2];
+  a[0] = pa[0] * ra[0];
+  a[1] = pa[0] * ra[1] + pa[1] * ra[0];
+  a[2] = pa[0] * ra[2] + pa[1] * ra[1] + pa[2] * ra[0];
+  a[3] = pa[1] * ra[2] + pa[2] * ra[1];
+  a[4] = pa[2] * ra[2];
+}
+
+static int ebur128_init_filter(ebur128_state* st) {
+  int errcode = EBUR128_SUCCESS;
+  int i, j;
+
+  ebur128_priv_filter_coeffs(st->samplerate, st->d->b, st->d->a);
 
   st->d->v = (filter_state*) malloc(st->channels * sizeof(filter_state));
   CHECK_ERROR(!st->d->v, EBUR128_ERROR_NOMEM, exit);
@@ -510,19 +578,7 @@ ebur128_init(unsigned int channels, unsigned long samplerate, int mode) {
   st->d->audio_data_index = 0;
 
   /* initialize static constants */
-  relative_gate_factor = pow(10.0, relative_gate / 10.0);
-  minus_twenty_decibels = pow(10.0, -20.0 / 10.0);
-  histogram_energy_boundaries[0] = pow(10.0, (-70.0 + 0.691) / 10.0);
-  if (st->d->use_histogram) {
-    for (i = 0; i < 1000; ++i) {
-      histogram_energies[i] =
-          pow(10.0, ((double) i / 10.0 - 69.95 + 0.691) / 10.0);
-    }
-    for (i = 1; i < 1001; ++i) {
-      histogram_energy_boundaries[i] =
-          pow(10.0, ((double) i / 10.0 - 70.0 + 0.691) / 10.0);
-    }
-  }
+  ebur128_priv_ensure_gating_constants();
 
   return st;
 
@@ -684,10 +740,6 @@ EBUR128_FILTER(int, INT_MIN, INT_MAX)
 EBUR128_FILTER(float, -1.0f, 1.0f)
 EBUR128_FILTER(double, -1.0, 1.0)
 
-static double ebur128_energy_to_loudness(double energy) {
-  return 10 * (log(energy) / log(10.0)) - 0.691;
-}
-
 static size_t find_histogram_index(double energy) {
   size_t index_min = 0;
   size_t index_max = 1000;
@@ -734,16 +786,7 @@ static int ebur128_calc_gating_block(ebur128_state* st,
                        st->d->audio_data[i * st->channels + c];
       }
     }
-    if (st->d->channel_map[c] == EBUR128_Mp110 ||
-        st->d->channel_map[c] == EBUR128_Mm110 ||
-        st->d->channel_map[c] == EBUR128_Mp060 ||
-        st->d->channel_map[c] == EBUR128_Mm060 ||
-        st->d->channel_map[c] == EBUR128_Mp090 ||
-        st->d->channel_map[c] == EBUR128_Mm090) {
-      channel_sum *= 1.41;
-    } else if (st->d->channel_map[c] == EBUR128_DUAL_MONO) {
-      channel_sum *= 2.0;
-    }
+    channel_sum *= ebur128_priv_channel_weight(st->d->channel_map[c]);
     sum += channel_sum;
   }
 
@@ -1144,7 +1187,7 @@ ebur128_gated_loudness(ebur128_state** sts, size_t size, double* out) {
     return EBUR128_SUCCESS;
   }
   gated_loudness /= (double) above_thresh_counter;
-  *out = ebur128_energy_to_loudness(gated_loudness);
+  *out = ebur128_priv_energy_to_loudness(gated_loudness);
   return EBUR128_SUCCESS;
 }
 
@@ -1167,7 +1210,7 @@ int ebur128_relative_threshold(ebur128_state* st, double* out) {
   relative_threshold /= (double) above_thresh_counter;
   relative_threshold *= relative_gate_factor;
 
-  *out = ebur128_energy_to_loudness(relative_threshold);
+  *out = ebur128_priv_energy_to_loudness(relative_threshold);
   return EBUR128_SUCCESS;
 }
 
@@ -1209,7 +1252,7 @@ int ebur128_loudness_momentary(ebur128_state* st, double* out) {
     return EBUR128_SUCCESS;
   }
 
-  *out = ebur128_energy_to_loudness(energy);
+  *out = ebur128_priv_energy_to_loudness(energy);
   return EBUR128_SUCCESS;
 }
 
@@ -1227,7 +1270,7 @@ int ebur128_loudness_shortterm(ebur128_state* st, double* out) {
     return EBUR128_SUCCESS;
   }
 
-  *out = ebur128_energy_to_loudness(energy);
+  *out = ebur128_priv_energy_to_loudness(energy);
   return EBUR128_SUCCESS;
 }
 
@@ -1253,7 +1296,7 @@ int ebur128_loudness_window(ebur128_state* st,
     return EBUR128_SUCCESS;
   }
 
-  *out = ebur128_energy_to_loudness(energy);
+  *out = ebur128_priv_energy_to_loudness(energy);
   return EBUR128_SUCCESS;
 }
 
@@ -1348,7 +1391,7 @@ int ebur128_loudness_range_multiple(ebur128_state** sts,
     }
     h_en = histogram_energies[j - 1];
 
-    *out = ebur128_energy_to_loudness(h_en) - ebur128_energy_to_loudness(l_en);
+    *out = ebur128_priv_energy_to_loudness(h_en) - ebur128_priv_energy_to_loudness(l_en);
     return EBUR128_SUCCESS;
   }
 
@@ -1399,7 +1442,7 @@ int ebur128_loudness_range_multiple(ebur128_state** sts,
     h_en = stl_relgated[(size_t) ((stl_relgated_size - 1) * 0.95 + 0.5)];
     l_en = stl_relgated[(size_t) ((stl_relgated_size - 1) * 0.1 + 0.5)];
     free(stl_vector);
-    *out = ebur128_energy_to_loudness(h_en) - ebur128_energy_to_loudness(l_en);
+    *out = ebur128_priv_energy_to_loudness(h_en) - ebur128_priv_energy_to_loudness(l_en);
   } else {
     free(stl_vector);
     *out = 0.0;

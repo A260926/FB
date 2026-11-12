@@ -1,0 +1,18 @@
+filter worst block energy diff so far: 2.046e-12
+CASE filter history_into_weak_and_silence CHECKS=415 PASS
+CASE filter dc_bias_matches_continuous CHECKS=199 PASS
+CASE filter pure_silence_and_dual_mono CHECKS=32 PASS
+GROUP filter CASES=3 PASS
+gating rate=44100 windows i=230 st=21 lra=14.068355 ref=14.068355
+gating rate=48000 windows i=230 st=21 lra=14.042492 ref=14.042492
+CASE gating cuts_cross_window_boundaries_surround CHECKS=997 PASS
+CASE gating below_gate_material_is_empty CHECKS=117 PASS
+CASE gating threshold_inclusion_direction CHECKS=13 PASS
+GROUP gating CASES=3 PASS
+CASE composition parenthesization_and_reuse CHECKS=498 PASS
+CASE composition empty_identity_and_released_inputs CHECKS=78 PASS
+CASE composition storage_ledger_and_cap CHECKS=25 PASS
+CASE composition no_sample_replay_after_creation CHECKS=10 PASS
+CASE composition argument_rejection CHECKS=29 PASS
+GROUP composition CASES=5 PASS
+SEGMENT_TARGET_COMPLETE CASES=11

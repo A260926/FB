@@ -2,6 +2,28 @@ cmake_minimum_required(VERSION 2.8.12)
 
 set(ENABLE_TESTS OFF CACHE BOOL "Build test binaries, needs libsndfile")
 set(ENABLE_FUZZER OFF CACHE BOOL "Build fuzzer binary")
+# The segment example and the segment summary unit test only need the C
+# standard library; the unit test interposes malloc and therefore compiles
+# the library sources directly instead of linking the shared library.
+set(ENABLE_SEGMENT_TESTS ON CACHE BOOL "Build segment summary example and unit test")
+
+if(ENABLE_SEGMENT_TESTS)
+  find_library(SEGMENT_MATH_LIBRARY m)
+  include_directories(${EBUR128_INCLUDE_DIR})
+  include_directories(SYSTEM ${EBUR128_INCLUDE_DIR}/queue)
+  include_directories(${CMAKE_SOURCE_DIR}/checks)
+
+  add_executable(segment-summary-example segment_summary_example)
+  target_link_libraries(segment-summary-example ebur128)
+
+  add_executable(segment-summary-test
+                 ${CMAKE_SOURCE_DIR}/checks/runner.c
+                 ${EBUR128_INCLUDE_DIR}/ebur128.c
+                 ${EBUR128_INCLUDE_DIR}/ebur128_segment.c)
+  if(SEGMENT_MATH_LIBRARY)
+    target_link_libraries(segment-summary-test ${SEGMENT_MATH_LIBRARY})
+  endif()
+endif()
 
 if(ENABLE_TESTS)
   find_package(PkgConfig REQUIRED)

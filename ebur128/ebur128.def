@@ -24,3 +24,9 @@ EXPORTS
 	ebur128_true_peak
 	ebur128_prev_true_peak
 	ebur128_relative_threshold
+	ebur128_segment_create
+	ebur128_segment_concat
+	ebur128_segment_destroy
+	ebur128_segment_storage_bytes
+	ebur128_segment_measure
+	ebur128_segment_block_energy
