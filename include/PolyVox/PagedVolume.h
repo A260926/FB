@@ -62,13 +62,18 @@ namespace PolyVox
 		class Chunk;
 		/// The Pager class is responsible for the loading and unloading of Chunks, and can be subclassed by the user.
 		class Pager;
+		/// The Sampler provides safe, cached voxel access and is defined below. It is
+		/// forward declared so that Chunk can grant it access to its internal buffer
+		/// and identity for cache revalidation.
+		class Sampler;
 
 		class Chunk
 		{
 			friend class PagedVolume;
+			friend class Sampler;
 
 		public:
-			Chunk(Vector3DInt32 v3dPosition, uint16_t uSideLength, Pager* pPager = nullptr);
+			Chunk(Vector3DInt32 v3dPosition, uint16_t uSideLength, Pager* pPager = nullptr, uint64_t uSerial = 0);
 			~Chunk();
 
 			VoxelType* getData(void) const;
@@ -107,6 +112,12 @@ namespace PolyVox
 
 			// Note: Do we really need to store this position here as well as in the block maps?
 			Vector3DInt32 m_v3dChunkSpacePosition;
+
+			// Unique, monotonically increasing identity assigned by the PagedVolume which
+			// owns this chunk. Two different chunk objects never share a serial, which lets
+			// a Sampler prove that the chunk it cached has not been freed and replaced by
+			// a new allocation at the same address.
+			uint64_t m_uSerial;
 		};
 
 		/**
@@ -141,6 +152,28 @@ namespace PolyVox
 #endif
 		{
 		public:
+			////////////////////////////////////////////////////////////////////////////////
+			/// The Sampler caches a pointer straight into the voxel data of a resident
+			/// chunk. That pointer is only valid for as long as the chunk stays resident:
+			/// chunks can be evicted by the LRU cache when other chunks are paged in,
+			/// and flushAll() destroys all of them.
+			///
+			/// To keep this cache safe the sampler remembers which slot of the volume's
+			/// chunk hash table holds its chunk, together with the chunk's unique serial
+			/// number. Every access performs a constant-time check that the slot still
+			/// contains the same live chunk before dereferencing the cached pointer.
+			/// If it does not (because of eviction, flush or slot reuse) the sampler
+			/// transparently re-resolves its chunk from the volume using its current
+			/// position, so callers never have to call setPosition() again. The first
+			/// access after such an invalidation pays for a chunk lookup; subsequent
+			/// accesses within the same chunk use the pointer again.
+			///
+			/// Samplers are copyable and assignable. A copy keeps the coordinates and
+			/// cache of the original, but all of that state is stored in the copy
+			/// itself, so moving or re-positioning one sampler never invalidates or
+			/// moves another sampler (including the one it was copied from).
+			////////////////////////////////////////////////////////////////////////////////
+
 			Sampler(PagedVolume<VoxelType>* volume);
 			~Sampler();
 
@@ -189,12 +222,37 @@ namespace PolyVox
 			inline VoxelType peekVoxel1px1py1pz(void) const;
 
 		private:
-			//Other current position information
-			VoxelType* mCurrentVoxel;
+			/// Returns true if mCurrentVoxel still points into the voxel data of the chunk
+			/// which currently occupies the slot recorded in m_pChunkSlot. This never
+			/// dereferences m_pCachedChunk unless the slot itself still refers to it, so
+			/// it is safe even after the chunk has been evicted or flushed.
+			bool isCurrentVoxelCacheValid(void) const;
 
-			uint16_t m_uXPosInChunk;
-			uint16_t m_uYPosInChunk;
-			uint16_t m_uZPosInChunk;
+			/// Recomputes mCurrentVoxel (and the position-within-chunk fields) for the
+			/// sampler's current volume position, looking the chunk up through the volume.
+			/// Used after eviction, flushing, or any other operation which may have
+			/// invalidated the cached pointer.
+			void refreshCurrentVoxel(void) const;
+
+			/// Ensures the cached voxel pointer is valid and returns it. A constant-time
+			/// check is performed; if it fails the chunk is resolved again transparently.
+			/// The returned pointer is only guaranteed until the next volume operation.
+			VoxelType* ensureCurrentVoxel(void) const;
+			// These are 'mutable' so that the pointer can be repaired from const methods
+			// (getVoxel() and the peek functions) without requiring callers to re-position.
+			mutable VoxelType* mCurrentVoxel;
+
+			// Identity of the chunk currently backing mCurrentVoxel. The slot is a stable
+			// address in the volume's chunk array; the serial proves the object living in
+			// that slot is still the exact chunk which was cached (a freed chunk could
+			// otherwise be replaced at the same address by a new one).
+			mutable std::unique_ptr<Chunk>* m_pChunkSlot;
+			mutable Chunk* m_pCachedChunk;
+			mutable uint64_t m_uCachedChunkSerial;
+
+			mutable uint16_t m_uXPosInChunk;
+			mutable uint16_t m_uYPosInChunk;
+			mutable uint16_t m_uZPosInChunk;
 
 			// This should ideally be const, but that prevent automatic generation of an assignment operator (https://goo.gl/Sn7KpZ).
 			// We could provide one manually, but it's currently unused so there is no real test for if it works. I'm putting
@@ -239,6 +297,18 @@ namespace PolyVox
 		bool canReuseLastAccessedChunk(int32_t iChunkX, int32_t iChunkY, int32_t iChunkZ) const;
 		Chunk* getChunk(int32_t uChunkX, int32_t uChunkY, int32_t uChunkZ) const;
 
+		/// Looks up an already-resident chunk without paging anything in or altering the
+		/// LRU timestamps. Returns the chunk's slot in m_arrayChunks (or nullptr) and
+		/// optionally the chunk pointer. Used by Sampler to safely revalidate a cached
+		/// data pointer.
+		std::unique_ptr<Chunk>* findChunkSlot(int32_t uChunkX, int32_t uChunkY, int32_t uChunkZ, Chunk** ppChunk) const;
+
+		/// Destroys the chunk occupying the given slot (paging dirty data out via its
+		/// destructor) and clears the slot. Also drops the volume's last-accessed cache
+		/// if it referred to that chunk. Constant-time, and does not touch any Sampler's
+		/// state: samplers detect the change via the slot's contents.
+		void evictChunk(uint32_t uIndex) const;
+
 		// Storing these properties individually has proved to be faster than keeping
 		// them in a Vector3DInt32 as it avoids constructions and comparison overheads.
 		// They are also at the start of the class in the hope that they will be pulled
@@ -249,6 +319,11 @@ namespace PolyVox
 		mutable Chunk* m_pLastAccessedChunk = nullptr;
 
 		mutable uint32_t m_uTimestamper = 0;
+
+		// Hands out a unique identity to every Chunk created by this volume. Used by
+		// Sampler to distinguish a live cached chunk from a freed one whose memory may
+		// have been reused. Not intended to be shared between threads (see class docs).
+		mutable uint64_t m_uNextChunkSerial = 0;
 
 		uint32_t m_uChunkCountLimit = 0;
 

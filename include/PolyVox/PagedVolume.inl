@@ -220,11 +220,46 @@ namespace PolyVox
 		// Clear this pointer as all chunks are about to be removed.
 		m_pLastAccessedChunk = nullptr;
 
-		// Erase all the most recently used chunks.
+		// Erase all the most recently used chunks. Destroying each chunk gives the Pager
+		// its pageOut() callback for dirty data. Samplers do not hold raw pointers into
+		// these buffers across calls: each Sampler caches the hash-table slot which
+		// currently holds its chunk, so clearing the slot is enough to make those
+		// samplers re-resolve their chunk on their next access (see PagedVolumeSampler.inl).
 		for (uint32_t uIndex = 0; uIndex < uChunkArraySize; uIndex++)
 		{
 			m_arrayChunks[uIndex] = nullptr;
 		}
+	}
+
+	////////////////////////////////////////////////////////////////////////////////
+	/// Destroys the chunk in the given slot (which triggers pageOut() for dirty data)
+	/// and clears the slot. The chunk may be deleted here even if a Sampler still has a
+	/// cached data pointer to it; samplers validate that pointer against their recorded
+	/// slot, which is now empty, before using it.
+	////////////////////////////////////////////////////////////////////////////////
+	template <typename VoxelType>
+	void PagedVolume<VoxelType>::evictChunk(uint32_t uIndex) const
+	{
+		if (uIndex >= uChunkArraySize)
+		{
+			return;
+		}
+
+		Chunk* pChunk = m_arrayChunks[uIndex].get();
+		if (!pChunk)
+		{
+			return;
+		}
+
+		// Keep the volume's fast path coherent: if it referred to this chunk then it
+		// must be forgotten. This is a pointer comparison (not a dereference) so it
+		// is safe before the chunk is destroyed.
+		if (m_pLastAccessedChunk == pChunk)
+		{
+			m_pLastAccessedChunk = nullptr;
+		}
+
+		m_arrayChunks[uIndex] = nullptr;
 	}
 
 	template <typename VoxelType>
@@ -234,6 +269,49 @@ namespace PolyVox
 			(iChunkY == m_v3dLastAccessedChunkY) &&
 			(iChunkZ == m_v3dLastAccessedChunkZ) &&
 			(m_pLastAccessedChunk));
+	}
+
+	////////////////////////////////////////////////////////////////////////////////
+	/// Returns the slot in m_arrayChunks which currently holds the chunk at the given
+	/// chunk-space position, or nullptr if that chunk is not resident. This is a pure
+	/// lookup: it never pages data in and never updates LRU timestamps. A Sampler can
+	/// therefore use it to verify that its cached chunk is still live without changing
+	/// the volume's residency, and without disturbing other samplers.
+	////////////////////////////////////////////////////////////////////////////////
+	template <typename VoxelType>
+	std::unique_ptr<typename PagedVolume<VoxelType>::Chunk>* PagedVolume<VoxelType>::findChunkSlot(int32_t uChunkX, int32_t uChunkY, int32_t uChunkZ, Chunk** ppChunk) const
+	{
+		static_assert(uChunkArraySize == 65536, "Chunk array size has changed, check if the hash calculation needs updating.");
+		const uint32_t uChunkXLowerBits = static_cast<uint32_t>(uChunkX & 0x1F);
+		const uint32_t uChunkYLowerBits = static_cast<uint32_t>(uChunkY & 0x1F);
+		const uint32_t uChunkZLowerBits = static_cast<uint32_t>(uChunkZ & 0x1F);
+		const uint32_t iPosisionHash = (((uChunkXLowerBits)) | ((uChunkYLowerBits) << 5) | ((uChunkZLowerBits) << 10) << 1);
+
+		uint32_t iIndex = iPosisionHash;
+		do
+		{
+			if (m_arrayChunks[iIndex])
+			{
+				Vector3DInt32& entryPos = m_arrayChunks[iIndex]->m_v3dChunkSpacePosition;
+				if (entryPos.getX() == uChunkX && entryPos.getY() == uChunkY && entryPos.getZ() == uChunkZ)
+				{
+					if (ppChunk)
+					{
+						*ppChunk = m_arrayChunks[iIndex].get();
+					}
+					return &m_arrayChunks[iIndex];
+				}
+			}
+
+			iIndex++;
+			iIndex %= uChunkArraySize;
+		} while (iIndex != iPosisionHash);
+
+		if (ppChunk)
+		{
+			*ppChunk = nullptr;
+		}
+		return nullptr;
 	}
 
 	template <typename VoxelType>
@@ -278,7 +356,7 @@ namespace PolyVox
 		{
 			// The chunk was not found so we will create a new one.
 			Vector3DInt32 v3dChunkPos(uChunkX, uChunkY, uChunkZ);
-			pChunk = new PagedVolume<VoxelType>::Chunk(v3dChunkPos, m_uChunkSideLength, m_pPager);
+			pChunk = new PagedVolume<VoxelType>::Chunk(v3dChunkPos, m_uChunkSideLength, m_pPager, ++m_uNextChunkSerial);
 			pChunk->m_uChunkLastAccessed = ++m_uTimestamper; // Important, as we may soon delete the oldest chunk
 
 			// Store the chunk at the appropriate place in out chunk array. Ideally this place is
@@ -324,10 +402,12 @@ namespace PolyVox
 				}
 			}
 
-			// Check if we have too many chunks, and delete the oldest if so.
+			// Check if we have too many chunks, and delete the oldest if so. Samplers which
+			// still point into that chunk will notice the emptied slot on their next access
+			// and re-resolve, rather than dereferencing freed memory.
 			if (uChunkCount > m_uChunkCountLimit)
 			{
-				m_arrayChunks[uOldestChunkIndex] = nullptr;
+				evictChunk(uOldestChunkIndex);
 			}
 		}
 

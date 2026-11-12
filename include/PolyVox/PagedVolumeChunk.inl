@@ -28,7 +28,7 @@
 namespace PolyVox
 {
 	template <typename VoxelType>
-	PagedVolume<VoxelType>::Chunk::Chunk(Vector3DInt32 v3dPosition, uint16_t uSideLength, Pager* pPager)
+	PagedVolume<VoxelType>::Chunk::Chunk(Vector3DInt32 v3dPosition, uint16_t uSideLength, Pager* pPager, uint64_t uSerial)
 		:m_uChunkLastAccessed(0)
 		, m_bDataModified(true)
 		, m_tData(0)
@@ -36,6 +36,7 @@ namespace PolyVox
 		, m_uSideLengthPower(0)
 		, m_pPager(pPager)
 		, m_v3dChunkSpacePosition(v3dPosition)
+		, m_uSerial(uSerial)
 	{
 		POLYVOX_ASSERT(m_pPager, "No valid pager supplied to chunk constructor.");
 		POLYVOX_ASSERT(uSideLength <= 256, "Chunk side length cannot be greater than 256.");

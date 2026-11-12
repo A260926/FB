@@ -48,7 +48,15 @@ namespace PolyVox
 
 	template <typename VoxelType>
 	PagedVolume<VoxelType>::Sampler::Sampler(PagedVolume<VoxelType>* volume)
-		:BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >(volume), m_uChunkSideLengthMinusOne(volume->m_uChunkSideLength - 1)
+		:BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >(volume)
+		, mCurrentVoxel(nullptr)
+		, m_pChunkSlot(nullptr)
+		, m_pCachedChunk(nullptr)
+		, m_uCachedChunkSerial(0)
+		, m_uXPosInChunk(0)
+		, m_uYPosInChunk(0)
+		, m_uZPosInChunk(0)
+		, m_uChunkSideLengthMinusOne(volume->m_uChunkSideLength - 1)
 	{
 	}
 
@@ -58,9 +66,77 @@ namespace PolyVox
 	}
 
 	template <typename VoxelType>
+	bool PagedVolume<VoxelType>::Sampler::isCurrentVoxelCacheValid(void) const
+	{
+		// The slot lives in the volume's fixed-size chunk array, so reading it is always
+		// safe (even after the chunk it used to hold has been destroyed). Comparing the
+		// slot contents against the cached pointer first means we never dereference a
+		// stale Chunk*: if the slot has been emptied or reused we simply report invalid.
+		return (m_pChunkSlot != nullptr) &&
+			(mCurrentVoxel != nullptr) &&
+			(m_pCachedChunk != nullptr) &&
+			(m_pChunkSlot->get() == m_pCachedChunk) &&
+			(m_pCachedChunk->m_uSerial == m_uCachedChunkSerial) &&
+			(m_pCachedChunk->m_tData != nullptr);
+	}
+
+	template <typename VoxelType>
+	void PagedVolume<VoxelType>::Sampler::refreshCurrentVoxel(void) const
+	{
+		const int32_t uXChunk = this->mXPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
+		const int32_t uYChunk = this->mYPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
+		const int32_t uZChunk = this->mZPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
+
+		// The bit mask works for negative coordinates too because the mask selects the
+		// low bits, which is exactly the offset within the chunk (two's complement).
+		m_uXPosInChunk = static_cast<uint16_t>(this->mXPosInVolume & this->mVolume->m_iChunkMask);
+		m_uYPosInChunk = static_cast<uint16_t>(this->mYPosInVolume & this->mVolume->m_iChunkMask);
+		m_uZPosInChunk = static_cast<uint16_t>(this->mZPosInVolume & this->mVolume->m_iChunkMask);
+
+		const uint32_t uVoxelIndexInChunk = morton256_x[m_uXPosInChunk] | morton256_y[m_uYPosInChunk] | morton256_z[m_uZPosInChunk];
+
+		// First try a pure lookup. If the chunk is already resident this costs one hash
+		// probe and leaves the LRU order untouched (which matters when several samplers
+		// are in use). Only if it has really gone do we ask the volume to page it back in.
+		Chunk* pChunk = nullptr;
+		std::unique_ptr<Chunk>* pSlot = this->mVolume->findChunkSlot(uXChunk, uYChunk, uZChunk, &pChunk);
+		if ((pSlot == nullptr) || (pChunk == nullptr))
+		{
+			pChunk = this->mVolume->getChunk(uXChunk, uYChunk, uZChunk);
+			// getChunk() inserts the chunk if needed, so a second pure lookup will find
+			// the slot we need for future constant-time revalidation.
+			pSlot = this->mVolume->findChunkSlot(uXChunk, uYChunk, uZChunk, &pChunk);
+		}
+
+		// getChunk() guarantees a live chunk here; the assert documents the invariant.
+		POLYVOX_ASSERT(pSlot && pChunk, "Sampler could not resolve its chunk.");
+
+		// Resolving a chunk counts as accessing it for LRU purposes. This mirrors the
+		// old behaviour of setPosition()/getChunk() and keeps chunks which are being
+		// sampled (including those just paged back in after an invalidation) hotter
+		// than untouched neighbours.
+		pChunk->m_uChunkLastAccessed = ++this->mVolume->m_uTimestamper;
+
+		m_pChunkSlot = pSlot;
+		m_pCachedChunk = pChunk;
+		m_uCachedChunkSerial = pChunk->m_uSerial;
+		mCurrentVoxel = pChunk->m_tData + uVoxelIndexInChunk;
+	}
+
+	template <typename VoxelType>
+	VoxelType* PagedVolume<VoxelType>::Sampler::ensureCurrentVoxel(void) const
+	{
+		if (!isCurrentVoxelCacheValid())
+		{
+			refreshCurrentVoxel();
+		}
+		return mCurrentVoxel;
+	}
+
+	template <typename VoxelType>
 	VoxelType PagedVolume<VoxelType>::Sampler::getVoxel(void) const
 	{
-		return *mCurrentVoxel;
+		return *ensureCurrentVoxel();
 	}
 
 	template <typename VoxelType>
@@ -75,21 +151,10 @@ namespace PolyVox
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::setPosition(xPos, yPos, zPos);
 
-		// Then we update the voxel pointer
-		const int32_t uXChunk = this->mXPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
-		const int32_t uYChunk = this->mYPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
-		const int32_t uZChunk = this->mZPosInVolume >> this->mVolume->m_uChunkSideLengthPower;
-
-		m_uXPosInChunk = static_cast<uint16_t>(this->mXPosInVolume - (uXChunk << this->mVolume->m_uChunkSideLengthPower));
-		m_uYPosInChunk = static_cast<uint16_t>(this->mYPosInVolume - (uYChunk << this->mVolume->m_uChunkSideLengthPower));
-		m_uZPosInChunk = static_cast<uint16_t>(this->mZPosInVolume - (uZChunk << this->mVolume->m_uChunkSideLengthPower));
-
-		uint32_t uVoxelIndexInChunk = morton256_x[m_uXPosInChunk] | morton256_y[m_uYPosInChunk] | morton256_z[m_uZPosInChunk];
-
-		auto pCurrentChunk = this->mVolume->canReuseLastAccessedChunk(uXChunk, uYChunk, uZChunk) ?
-			this->mVolume->m_pLastAccessedChunk : this->mVolume->getChunk(uXChunk, uYChunk, uZChunk);
-
-		mCurrentVoxel = pCurrentChunk->m_tData + uVoxelIndexInChunk;
+		// Resolve the chunk and voxel pointer for the new position. This also (re)records
+		// the identity of the chunk which backs the pointer so later accesses can be
+		// validated in constant time.
+		refreshCurrentVoxel();
 	}
 
 	template <typename VoxelType>
@@ -103,6 +168,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::movePositiveX(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::movePositiveX();
 
@@ -123,6 +194,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::movePositiveY(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::movePositiveY();
 
@@ -143,6 +220,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::movePositiveZ(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::movePositiveZ();
 
@@ -163,6 +246,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::moveNegativeX(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::moveNegativeX();
 
@@ -183,6 +272,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::moveNegativeY(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::moveNegativeY();
 
@@ -203,6 +298,12 @@ namespace PolyVox
 	template <typename VoxelType>
 	void PagedVolume<VoxelType>::Sampler::moveNegativeZ(void)
 	{
+		// A previous peek or another operation may have allowed the chunk holding
+		// the cached pointer to be evicted. Validate (and if necessary repair) it
+		// before applying the in-chunk pointer delta. This is constant-time in
+		// the common case that the chunk is still resident.
+		ensureCurrentVoxel();
+
 		// Base version updates position and validity flags.
 		BaseVolume<VoxelType>::template Sampler< PagedVolume<VoxelType> >::moveNegativeZ();
 
@@ -225,7 +326,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + NEG_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + NEG_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume - 1, this->mZPosInVolume - 1);
 	}
@@ -235,7 +336,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + NEG_Y_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + NEG_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume - 1, this->mZPosInVolume);
 	}
@@ -245,7 +346,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + NEG_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + NEG_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume - 1, this->mZPosInVolume + 1);
 	}
@@ -255,7 +356,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume, this->mZPosInVolume - 1);
 	}
@@ -265,7 +366,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume, this->mZPosInVolume);
 	}
@@ -275,7 +376,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume, this->mZPosInVolume + 1);
 	}
@@ -285,7 +386,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + POS_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + POS_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume + 1, this->mZPosInVolume - 1);
 	}
@@ -295,7 +396,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + POS_Y_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + POS_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume + 1, this->mZPosInVolume);
 	}
@@ -305,7 +406,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_X_DELTA + POS_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_X_DELTA + POS_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume - 1, this->mYPosInVolume + 1, this->mZPosInVolume + 1);
 	}
@@ -317,7 +418,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume - 1, this->mZPosInVolume - 1);
 	}
@@ -327,7 +428,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_Y_DELTA);
+			return *(ensureCurrentVoxel() + NEG_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume - 1, this->mZPosInVolume);
 	}
@@ -337,7 +438,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume - 1, this->mZPosInVolume + 1);
 	}
@@ -347,7 +448,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume, this->mZPosInVolume - 1);
 	}
@@ -355,7 +456,8 @@ namespace PolyVox
 	template <typename VoxelType>
 	VoxelType PagedVolume<VoxelType>::Sampler::peekVoxel0px0py0pz(void) const
 	{
-		return *mCurrentVoxel;
+		// Position (0,+0,+0) is always within the chunk.
+		return *ensureCurrentVoxel();
 	}
 
 	template <typename VoxelType>
@@ -363,7 +465,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume, this->mZPosInVolume + 1);
 	}
@@ -373,7 +475,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume + 1, this->mZPosInVolume - 1);
 	}
@@ -383,7 +485,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_Y_DELTA);
+			return *(ensureCurrentVoxel() + POS_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume + 1, this->mZPosInVolume);
 	}
@@ -393,7 +495,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume, this->mYPosInVolume + 1, this->mZPosInVolume + 1);
 	}
@@ -405,7 +507,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + NEG_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + NEG_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume - 1, this->mZPosInVolume - 1);
 	}
@@ -415,7 +517,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + NEG_Y_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + NEG_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume - 1, this->mZPosInVolume);
 	}
@@ -425,7 +527,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_NEG_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + NEG_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + NEG_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume - 1, this->mZPosInVolume + 1);
 	}
@@ -435,7 +537,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume, this->mZPosInVolume - 1);
 	}
@@ -445,7 +547,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume, this->mZPosInVolume);
 	}
@@ -455,7 +557,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume, this->mZPosInVolume + 1);
 	}
@@ -465,7 +567,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_NEG_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + POS_Y_DELTA + NEG_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + POS_Y_DELTA + NEG_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume + 1, this->mZPosInVolume - 1);
 	}
@@ -475,7 +577,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + POS_Y_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + POS_Y_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume + 1, this->mZPosInVolume);
 	}
@@ -485,7 +587,7 @@ namespace PolyVox
 	{
 		if (CAN_GO_POS_X(this->m_uXPosInChunk) && CAN_GO_POS_Y(this->m_uYPosInChunk) && CAN_GO_POS_Z(this->m_uZPosInChunk))
 		{
-			return *(mCurrentVoxel + POS_X_DELTA + POS_Y_DELTA + POS_Z_DELTA);
+			return *(ensureCurrentVoxel() + POS_X_DELTA + POS_Y_DELTA + POS_Z_DELTA);
 		}
 		return this->mVolume->getVoxel(this->mXPosInVolume + 1, this->mYPosInVolume + 1, this->mZPosInVolume + 1);
 	}
