@@ -24,6 +24,7 @@ set(SOURCE_FILES
      surfaceData.cpp
      surfaceFactory.cpp
      surfaceFactoryCache.cpp
+     surfaceFitter.cpp
      tessellation.cpp
      vertexDescriptor.cpp
 )
@@ -52,6 +53,7 @@ set(PUBLIC_HEADER_FILES
      surfaceFactory.h
      surfaceFactoryMeshAdapter.h
      surfaceFactoryCache.h
+     surfaceFitter.h
      tessellation.h
      vertexDescriptor.h
 )
