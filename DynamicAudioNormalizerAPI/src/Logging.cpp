@@ -54,6 +54,14 @@ DYNAUDNORM_NS::LoggingCallback *DYNAUDNORM_NS::setLoggingHandler(LoggingCallback
 	return oldValue;
 }
 
+bool DYNAUDNORM_NS::hasLoggingHandler(void)
+{
+	MY_CRITSEC_ENTER(g_mutex);
+	const bool result = (g_loggingCallback != NULL);
+	MY_CRITSEC_LEAVE(g_mutex);
+	return result;
+}
+
 void DYNAUDNORM_NS::postLogMessage(const int &logLevel, const char *const message, ...)
 {
 	MY_CRITSEC_ENTER(g_mutex);

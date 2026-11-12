@@ -36,6 +36,11 @@ namespace DYNAUDNORM_NS
 
 		double apply(const std::deque<double> &values);
 
+		//Read-only access to the pre-computed weights, used by the gain-history
+		//code to evaluate the filter over its fixed-size ring buffer (same
+		//weights and same summation order as apply()).
+		inline double weight(const uint32_t &index) const { return m_weights[index]; }
+
 	private:
 		const uint32_t m_filterSize;
 		double *m_weights;

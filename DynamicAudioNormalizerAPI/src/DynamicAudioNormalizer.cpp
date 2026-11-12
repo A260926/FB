@@ -33,10 +33,8 @@
 
 #include <cmath>
 #include <algorithm>
-#include <queue>
-#include <deque>
 #include <cassert>
-#include <stdexcept> 
+#include <stdexcept>
 #include <cfloat>
 #include <inttypes.h>
 
@@ -134,11 +132,172 @@ static inline double POW2(const double &value)
 #define BOOLIFY(X) ((X) ? "YES" : "NO")
 #define POW2(X) ((X)*(X))
 
-#define CLEAR_QUEUE(X) do \
-{ \
-	while(!(X).empty()) (X).pop(); \
-} \
-while(0)
+///////////////////////////////////////////////////////////////////////////////
+// Fixed-size gain history storage
+//
+// All of these buffers are allocated by initialize() and never grow at run
+// time. The capacities are derived from the channel count, the frame length
+// and the filter size only.
+///////////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+	//Simple fixed-capacity FIFO of doubles (stores the gain history windows)
+	struct DoubleRing
+	{
+		double *data;
+		uint32_t capacity;
+		uint32_t head;
+		uint32_t count;
+
+		void init(double *const mem, const uint32_t &cap)
+		{
+			data = mem;
+			capacity = cap;
+			head = count = 0U;
+		}
+
+		void clear(void)
+		{
+			head = count = 0U;
+		}
+
+		inline bool empty(void) const { return count == 0U; }
+		inline uint32_t size(void) const { return count; }
+		inline const double &at(const uint32_t &i) const { return data[(head + i) % capacity]; }
+		inline const double &front(void) const { return data[head]; }
+
+		inline void push_back(const double &value)
+		{
+			assert(count < capacity);
+			data[(head + count) % capacity] = value;
+			++count;
+		}
+
+		inline void pop_front(void)
+		{
+			assert(count > 0U);
+			head = (head + 1U) % capacity;
+			--count;
+		}
+	};
+
+	//Monotone deque used for the sliding-window minimum. Each element remembers
+	//its absolute position so that the outgoing element can be dropped in O(1).
+	struct MinSlidingWindow
+	{
+		double *values;
+		uint64_t *positions;
+		uint32_t capacity;
+		uint32_t head;
+		uint32_t count;
+
+		void init(double *const valMem, uint64_t *const posMem, const uint32_t &cap)
+		{
+			values = valMem;
+			positions = posMem;
+			capacity = cap;
+			head = count = 0U;
+		}
+
+		void clear(void)
+		{
+			head = count = 0U;
+		}
+
+		inline double backValue(void) const { return values[(head + count - 1U) % capacity]; }
+		inline double frontValue(void) const { return values[head]; }
+		inline uint64_t frontPosition(void) const { return positions[head]; }
+
+		inline void push_back(const uint64_t &pos, const double &value)
+		{
+			assert(count < capacity);
+			const uint32_t tail = (head + count) % capacity;
+			values[tail] = value;
+			positions[tail] = pos;
+			++count;
+		}
+
+		inline void pop_back(void)
+		{
+			assert(count > 0U);
+			--count;
+		}
+
+		inline void pop_front(void)
+		{
+			assert(count > 0U);
+			head = (head + 1U) % capacity;
+			--count;
+		}
+
+		inline void expireBefore(const uint64_t &minPosition)
+		{
+			while(count > 0U)
+			{
+				if(frontPosition() >= minPosition) break;
+				pop_front();
+			}
+		}
+	};
+
+	struct GainChannel
+	{
+		DoubleRing original;
+		DoubleRing minimum;
+		DoubleRing smoothed;
+		MinSlidingWindow minWindow;
+
+		uint64_t pushes; //total number of values ever inserted into "original"
+
+		//amplifyFrame() consumes "smoothed" values without regard to the output
+		//delay, so the ring must hold every value produced but not yet played
+		//out. The bound is (2 * filterSize - 1) plus the frames that can sit in
+		//the internal frame buffer; the extra headroom is a safety margin only.
+
+#ifdef DAN_TEST_INSTRUMENT
+		uint64_t advances;  //number of gain advances (original insertions)
+		uint64_t compares;  //number of actual gain-value comparisons (total)
+		uint64_t windowOps; //subset of the above spent on gain comparisons in the minimum stage
+#endif
+
+		void clear(void)
+		{
+			original.clear();
+			minimum.clear();
+			smoothed.clear();
+			minWindow.clear();
+			pushes = 0U;
+#ifdef DAN_TEST_INSTRUMENT
+			advances = compares = windowOps = 0U;
+#endif
+		}
+	};
+
+	struct LogChannel
+	{
+		DoubleRing original;
+		DoubleRing minimum;
+		DoubleRing smoothed;
+
+		void clear(void)
+		{
+			original.clear();
+			minimum.clear();
+			smoothed.clear();
+		}
+	};
+}
+
+#ifdef DAN_TEST_INSTRUMENT
+//Both counters are bumped exactly where a gain-value comparison is performed.
+//"compares" covers all of them, "windowOps" only those of the sliding minimum.
+#define COUNT_GAIN_COMPARE(STATE) do { ++(STATE).compares; } while(0)
+#define COUNT_WINDOW_COMPARE(STATE) do { ++(STATE).compares; ++(STATE).windowOps; } while(0)
+#else
+#define COUNT_GAIN_COMPARE(STATE) ((void)0)
+#define COUNT_WINDOW_COMPARE(STATE) ((void)0)
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // MDynamicAudioNormalizer_PrivateData
@@ -175,9 +334,12 @@ private:
 	const bool m_altBoundaryMode;
 
 	FILE *const m_logFile;
-	
+
 	bool m_initialized;
 	bool m_flushBuffer;
+
+	bool m_loggingCallbackSet;
+	bool m_loggingEnabled;
 
 	DYNAUDNORM_NS::FrameFIFO *m_buffSrc;
 	DYNAUDNORM_NS::FrameFIFO *m_buffOut;
@@ -190,13 +352,16 @@ private:
 
 	DYNAUDNORM_NS::FrameBuffer *m_frameBuffer;
 
-	std::deque<double> *m_gainHistory_original;
-	std::deque<double> *m_gainHistory_minimum;
-	std::deque<double> *m_gainHistory_smoothed;
+	GainChannel *m_gainHistory;
+	LogChannel *m_loggingData;
 
-	std::queue<double> *m_loggingData_original;
-	std::queue<double> *m_loggingData_minimum;
-	std::queue<double> *m_loggingData_smoothed;
+	//Backing memory for the fixed-size histories; allocated in initialize()
+	uint32_t m_smoothCapacity;
+	uint32_t m_minWindowCapacity;
+
+	double *m_gainBuffer;          // m_channels * (3 * filterSize + smoothedCapacity)
+	uint64_t *m_gainPositions;     // m_channels * minimumWindowCapacity
+	double *m_loggingBuffer;       // m_channels * (3 * logCapacity) (only if logging is enabled)
 
 	DYNAUDNORM_NS::GaussianFilter *m_gaussianFilter;
 
@@ -206,7 +371,18 @@ private:
 
 	double *m_fadeFactors[2];
 
-protected:
+#ifdef DAN_TEST_INSTRUMENT
+	//Test-only accessors: pure instrumentation, not part of the public interface.
+	friend bool dan_test_stats(const MDynamicAudioNormalizer_PrivateData *const, const uint32_t, uint64_t &, uint64_t &, uint64_t &);
+	friend bool dan_test_process(MDynamicAudioNormalizer_PrivateData *const, const double *const *const, double *const *const, const int64_t, int64_t &);
+	friend bool dan_test_processInplace(MDynamicAudioNormalizer_PrivateData *const, double *const *const, const int64_t, int64_t &);
+	friend bool dan_test_flush(MDynamicAudioNormalizer_PrivateData *const, double *const *const, const int64_t, int64_t &);
+	friend bool dan_test_reset(MDynamicAudioNormalizer_PrivateData *const);
+	friend void dan_test_destroy(MDynamicAudioNormalizer_PrivateData *const);
+#endif
+
+	//test-only instrumentation hooks (see the DAN_TEST_INSTRUMENT block below)
+	friend MDynamicAudioNormalizer_PrivateData *dan_test_create(const uint32_t, const uint32_t, const uint32_t, const uint32_t, const double, const double, const double, const double, const bool, const bool, const bool, FILE *const);
 	void analyzeFrame(DYNAUDNORM_NS::FrameData *const frame);
 	void amplifyFrame(DYNAUDNORM_NS::FrameData *const frame);
 	
@@ -215,13 +391,25 @@ protected:
 	double computeFrameRMS(const DYNAUDNORM_NS::FrameData *const frame, const uint32_t channel = UINT32_MAX);
 	double computeFrameStdDev(const DYNAUDNORM_NS::FrameData *const frame, const uint32_t channel = UINT32_MAX);
 	void updateGainHistory(const uint32_t &channel, const double &currentGainFactor);
+	void prefillGainHistory(const uint32_t &channel, const double &currentGainFactor);
 	void perfromDCCorrection(DYNAUDNORM_NS::FrameData *const frame, const bool &isFirstFrame);
 	void perfromCompression(DYNAUDNORM_NS::FrameData *const frame, const bool &isFirstFrame);
 	void writeLogFile(void);
 	void printParameters(void);
-	
+
 	static void precalculateFadeFactors(double *const fadeFactors[2], const uint32_t frameLen);
 	static double setupCompressThresh(const double &dThreshold);
+
+	inline bool gainHistoryEmpty(void) const { return m_gainHistory[0].original.empty(); }
+	inline bool loggingEnabled(void) const { return m_loggingEnabled; }
+	inline uint32_t minimumWindowCapacity(void) const { return m_filterSize + m_prefillLen + 1U; }
+	inline uint32_t smoothedCapacity(void) const { return (3U * m_filterSize) + 64U; }
+	inline uint32_t logCapacity(void) const
+	{
+		//The logging triplets must survive until the frame is amplified, i.e.
+		//the same delay applies as for the smoothed ring.
+		return (3U * m_filterSize) + 64U;
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -268,22 +456,26 @@ MDynamicAudioNormalizer_PrivateData::MDynamicAudioNormalizer_PrivateData(const u
 	m_initialized = false;
 	m_flushBuffer = false;
 
+	m_loggingCallbackSet = false;
+	m_loggingEnabled = false;
+
+	m_smoothCapacity = m_minWindowCapacity = 0U;
+
 	m_buffSrc = NULL;
 	m_buffOut = NULL;
-	
+
 	m_delayedSamples = 0;
 	m_sampleCounterClips = m_sampleCounterTotal = 0;
 
 	m_frameBuffer = NULL;
 	m_gaussianFilter = NULL;
 
-	m_gainHistory_original = NULL;
-	m_gainHistory_minimum  = NULL;
-	m_gainHistory_smoothed = NULL;
+	m_gainHistory = NULL;
+	m_loggingData = NULL;
 
-	m_loggingData_original = NULL;
-	m_loggingData_minimum  = NULL;
-	m_loggingData_smoothed = NULL;
+	m_gainBuffer = NULL;
+	m_gainPositions = NULL;
+	m_loggingBuffer = NULL;
 
 	m_prevAmplificationFactor = NULL;
 	m_dcCorrectionValue = NULL;
@@ -310,14 +502,12 @@ MDynamicAudioNormalizer_PrivateData::~MDynamicAudioNormalizer_PrivateData(void)
 
 	MY_DELETE(m_frameBuffer);
 	MY_DELETE(m_gaussianFilter);
-	
-	MY_DELETE_ARRAY(m_gainHistory_original);
-	MY_DELETE_ARRAY(m_gainHistory_minimum );
-	MY_DELETE_ARRAY(m_gainHistory_smoothed);
 
-	MY_DELETE_ARRAY(m_loggingData_original);
-	MY_DELETE_ARRAY(m_loggingData_minimum );
-	MY_DELETE_ARRAY(m_loggingData_smoothed);
+	MY_DELETE_ARRAY(m_gainHistory);
+	MY_DELETE_ARRAY(m_loggingData);
+	MY_DELETE_ARRAY(m_gainBuffer);
+	MY_DELETE_ARRAY(m_gainPositions);
+	MY_DELETE_ARRAY(m_loggingBuffer);
 
 	MY_DELETE_ARRAY(m_prevAmplificationFactor);
 	MY_DELETE_ARRAY(m_dcCorrectionValue);
@@ -377,13 +567,50 @@ bool MDynamicAudioNormalizer_PrivateData::initialize(void)
 
 	m_frameBuffer = new DYNAUDNORM_NS::FrameBuffer(m_channels, m_frameLen, m_filterSize + 1);
 
-	m_gainHistory_original = new std::deque<double>[m_channels];
-	m_gainHistory_minimum  = new std::deque<double>[m_channels];
-	m_gainHistory_smoothed = new std::deque<double>[m_channels];
+	//Allocate all run-time scratch space up-front. Sizes depend only on the
+	//channel count, the frame length and the filter size.
+	const uint32_t minWindowCapacity = minimumWindowCapacity();
+	m_smoothCapacity = smoothedCapacity();
+	m_minWindowCapacity = minWindowCapacity;
+	const uint32_t gainSlotsPerChannel = (3U * m_filterSize) + m_smoothCapacity;
 
-	m_loggingData_original = new std::queue<double>[m_channels];
-	m_loggingData_minimum  = new std::queue<double>[m_channels];
-	m_loggingData_smoothed = new std::queue<double>[m_channels];
+	m_gainHistory = new GainChannel[m_channels];
+	m_gainBuffer  = new double[m_channels * gainSlotsPerChannel];
+	m_gainPositions = new uint64_t[m_channels * minWindowCapacity];
+
+	memset(m_gainBuffer, 0, sizeof(double) * m_channels * gainSlotsPerChannel);
+	memset(m_gainPositions, 0, sizeof(uint64_t) * m_channels * minWindowCapacity);
+
+	for(uint32_t c = 0; c < m_channels; c++)
+	{
+		double *const base = &m_gainBuffer[c * gainSlotsPerChannel];
+		m_gainHistory[c].original.init(&base[0U], m_filterSize);
+		m_gainHistory[c].minimum .init(&base[m_filterSize], m_filterSize);
+		m_gainHistory[c].smoothed.init(&base[2U * m_filterSize], m_smoothCapacity);
+		m_gainHistory[c].minWindow.init(&base[3U * m_filterSize], &m_gainPositions[c * m_minWindowCapacity], m_minWindowCapacity);
+		m_gainHistory[c].clear();
+	}
+
+	//Logging queues are only set up if a log file or a user log callback exists.
+	m_loggingCallbackSet = DYNAUDNORM_NS::hasLoggingHandler();
+	m_loggingEnabled = (m_logFile != NULL) || m_loggingCallbackSet;
+
+	m_loggingData = new LogChannel[m_channels];
+	m_loggingBuffer = NULL;
+	if(m_loggingEnabled)
+	{
+		const uint32_t logSlotsPerChannel = 3U * logCapacity();
+		m_loggingBuffer = new double[m_channels * logSlotsPerChannel];
+		memset(m_loggingBuffer, 0, sizeof(double) * m_channels * logSlotsPerChannel);
+		for(uint32_t c = 0; c < m_channels; c++)
+		{
+			double *const base = &m_loggingBuffer[c * logSlotsPerChannel];
+			m_loggingData[c].original.init(&base[0U], logCapacity());
+			m_loggingData[c].minimum .init(&base[logCapacity()], logCapacity());
+			m_loggingData[c].smoothed.init(&base[2U * logCapacity()], logCapacity());
+			m_loggingData[c].clear();
+		}
+	}
 
 	const double sigma = (((double(m_filterSize) / 2.0) - 1.0) / 3.0) + (1.0 / 3.0);
 	m_gaussianFilter = new DYNAUDNORM_NS::GaussianFilter(m_filterSize, sigma);
@@ -406,8 +633,57 @@ bool MDynamicAudioNormalizer_PrivateData::initialize(void)
 
 	m_initialized = true;
 	reset();
+
 	return true;
 }
+
+#ifdef DAN_TEST_INSTRUMENT
+	//Test-only instance creation: exposes the internal state to checks without
+	//extending the public interface.
+	MDynamicAudioNormalizer_PrivateData *dan_test_create(const uint32_t channels, const uint32_t sampleRate, const uint32_t frameLenMsec, const uint32_t filterSize, const double peakValue, const double maxAmplification, const double targetRms, const double compressFactor, const bool channelsCoupled, const bool enableDCCorrection, const bool altBoundaryMode, FILE *const logFile)
+	{
+		MDynamicAudioNormalizer_PrivateData *const instance = new MDynamicAudioNormalizer_PrivateData(channels, sampleRate, frameLenMsec, filterSize, peakValue, maxAmplification, targetRms, compressFactor, channelsCoupled, enableDCCorrection, altBoundaryMode, logFile);
+		return instance->initialize() ? instance : NULL;
+	}
+
+	bool dan_test_stats(const MDynamicAudioNormalizer_PrivateData *const instance, const uint32_t channel, uint64_t &advances, uint64_t &compares, uint64_t &windowOps)
+	{
+		if((instance == NULL) || (channel >= instance->m_channels)) return false;
+		advances  = instance->m_gainHistory[channel].advances;
+		compares  = instance->m_gainHistory[channel].compares;
+		windowOps = instance->m_gainHistory[channel].windowOps;
+		return true;
+	}
+
+	bool dan_test_process(MDynamicAudioNormalizer_PrivateData *const instance, const double *const *const samplesIn, double *const *const samplesOut, const int64_t inputSize, int64_t &outputSize)
+	{
+		if(instance == NULL) return false;
+		return instance->process(samplesIn, samplesOut, inputSize, outputSize, false);
+	}
+
+	bool dan_test_processInplace(MDynamicAudioNormalizer_PrivateData *const instance, double *const *const samplesInOut, const int64_t inputSize, int64_t &outputSize)
+	{
+		if(instance == NULL) return false;
+		return instance->process(samplesInOut, samplesInOut, inputSize, outputSize, false);
+	}
+
+	bool dan_test_flush(MDynamicAudioNormalizer_PrivateData *const instance, double *const *const samplesOut, const int64_t bufferSize, int64_t &outputSize)
+	{
+		if(instance == NULL) return false;
+		return instance->flushBuffer(samplesOut, bufferSize, outputSize);
+	}
+
+	bool dan_test_reset(MDynamicAudioNormalizer_PrivateData *const instance)
+	{
+		if(instance == NULL) return false;
+		return instance->reset();
+	}
+
+	void dan_test_destroy(MDynamicAudioNormalizer_PrivateData *const instance)
+	{
+		delete instance;
+	}
+#endif
 
 bool MDynamicAudioNormalizer::reset(void)
 {
@@ -441,14 +717,8 @@ bool MDynamicAudioNormalizer_PrivateData::reset(void)
 
 	for(uint32_t c = 0; c < m_channels; c++)
 	{
-		m_gainHistory_original[c].clear();
-		m_gainHistory_minimum [c].clear();
-		m_gainHistory_smoothed[c].clear();
-
-		CLEAR_QUEUE(m_loggingData_original[c]);
-		CLEAR_QUEUE(m_loggingData_minimum [c]);
-		CLEAR_QUEUE(m_loggingData_smoothed[c]);
-
+		m_gainHistory[c].clear();
+		m_loggingData[c].clear();
 		m_dcCorrectionValue      [c] = 0.0;
 		m_prevAmplificationFactor[c] = 1.0;
 		m_compressThreshold      [c] = 0.0;
@@ -601,7 +871,7 @@ bool MDynamicAudioNormalizer_PrivateData::process(const double *const *const sam
 		}
 
 		//Amplify next output frame, if we have enough output
-		if((m_buffOut->samplesLeftPut() >= m_frameLen) && (m_frameBuffer->framesUsed() > 0) && (!m_gainHistory_smoothed[0].empty()))
+		if((m_buffOut->samplesLeftPut() >= m_frameLen) && (m_frameBuffer->framesUsed() > 0) && (!m_gainHistory[0].smoothed.empty()))
 		{
 			bStop = false;
 			
@@ -734,13 +1004,13 @@ void MDynamicAudioNormalizer_PrivateData::analyzeFrame(DYNAUDNORM_NS::FrameData 
 	//Perform DC Correction (optional)
 	if(m_enableDCCorrection)
 	{
-		perfromDCCorrection(frame, m_gainHistory_original[0].empty());
+		perfromDCCorrection(frame, gainHistoryEmpty());
 	}
 
 	//Perform compression (optional)
 	if(m_compressFactor > DBL_EPSILON)
 	{
-		perfromCompression(frame, m_gainHistory_original[0].empty());
+		perfromCompression(frame, gainHistoryEmpty());
 	}
 
 	//Find the frame's peak sample value
@@ -760,7 +1030,7 @@ void MDynamicAudioNormalizer_PrivateData::analyzeFrame(DYNAUDNORM_NS::FrameData 
 		}
 	}
 
-	//Write data to the log file
+	//Write data to the log file (no-op when neither a file nor a callback exists)
 	writeLogFile();
 }
 
@@ -768,15 +1038,15 @@ void MDynamicAudioNormalizer_PrivateData::amplifyFrame(DYNAUDNORM_NS::FrameData 
 {
 	for(uint32_t c = 0; c < m_channels; c++)
 	{
-		if(m_gainHistory_smoothed[c].empty())
+		if(m_gainHistory[c].smoothed.empty())
 		{
 			LOG1_WRN("There are no information available for the current frame!");
 			break;
 		}
 
 		double *const dataPtr = frame->data(c);
-		const double currAmplificationFactor = m_gainHistory_smoothed[c].front();
-		m_gainHistory_smoothed[c].pop_front();
+		const double currAmplificationFactor = m_gainHistory[c].smoothed.front();
+		m_gainHistory[c].smoothed.pop_front();
 
 		for(uint32_t i = 0; i < m_frameLen; i++)
 		{
@@ -892,51 +1162,124 @@ double MDynamicAudioNormalizer_PrivateData::computeFrameStdDev(const DYNAUDNORM_
 	return std::max(sqrt(variance), DBL_EPSILON);
 }
 
-void MDynamicAudioNormalizer_PrivateData::updateGainHistory(const uint32_t &channel, const double &currentGainFactor)
+void MDynamicAudioNormalizer_PrivateData::prefillGainHistory(const uint32_t &channel, const double &currentGainFactor)
 {
 	//Pre-fill the gain history
-	if(m_gainHistory_original[channel].empty() || m_gainHistory_minimum[channel].empty())
+	if(m_gainHistory[channel].original.empty() || m_gainHistory[channel].minimum.empty())
 	{
 		const double initial_value = m_altBoundaryMode ? currentGainFactor : 1.0;
 		m_prevAmplificationFactor[channel] = initial_value;
-		while(m_gainHistory_original[channel].size() < m_prefillLen)
+		while(m_gainHistory[channel].original.size() < m_prefillLen)
 		{
-			m_gainHistory_original[channel].push_back(initial_value);
+			m_gainHistory[channel].original.push_back(initial_value);
 		}
 	}
+}
+
+void MDynamicAudioNormalizer_PrivateData::updateGainHistory(const uint32_t &channel, const double &currentGainFactor)
+{
+	GainChannel &state = m_gainHistory[channel];
+	const uint32_t filterSize = m_filterSize;
+	const uint32_t prefillLen = m_prefillLen;
+
+	//Pre-fill the gain history
+	prefillGainHistory(channel, currentGainFactor);
 
 	//Insert current gain factor
-	m_gainHistory_original[channel].push_back(currentGainFactor);
-	m_loggingData_original[channel].push     (currentGainFactor);
+	const uint64_t pushPosition = state.pushes++;
+	//Absolute position: the pre-filled elements occupy the positions before the
+	//first real push. Keeping this offset lets the sliding window expire values
+	//purely by comparing positions.
+	const uint64_t absolutePosition = uint64_t(prefillLen) + pushPosition;
+	state.original.push_back(currentGainFactor);
+	if(m_loggingEnabled)
+	{
+		m_loggingData[channel].original.push_back(currentGainFactor);
+	}
+#ifdef DAN_TEST_INSTRUMENT
+	state.advances++;
+#endif
 
 	//Apply the minimum filter
-	while(m_gainHistory_original[channel].size() >= m_filterSize)
+	if(state.original.size() >= filterSize)
 	{
-		assert(m_gainHistory_original[channel].size() == m_filterSize);
-		if (m_gainHistory_minimum[channel].empty())
+		assert(state.original.size() == filterSize);
+		const uint64_t windowStart = absolutePosition - uint64_t(filterSize - 1U);
+
+		if(state.minimum.empty())
 		{
-			double initial_value = m_altBoundaryMode ? m_gainHistory_original[channel].front() : 1.0;
-			std::deque<double>::const_iterator input = m_gainHistory_original[channel].begin() + m_prefillLen;
-			while (m_gainHistory_minimum[channel].size() < m_prefillLen)
+			//First formation of the minimum history. In the legacy code the
+			//"minimum" exists neither before the original history has caught up
+			//with the pre-fill nor while it is still waiting for the first
+			//minimum window. The partial history scans the first window from
+			//the second post-prefill element onward.
+			if(state.pushes <= uint64_t(prefillLen))
 			{
-				initial_value = std::min(initial_value, *(++input));
-				m_gainHistory_minimum[channel].push_back(initial_value);
+				return;
+			}
+
+			double initial_value = m_altBoundaryMode ? state.original.front() : 1.0;
+			for(uint32_t i = prefillLen + 1U; i < filterSize; i++)
+			{
+				COUNT_WINDOW_COMPARE(state);
+				initial_value = std::min(initial_value, state.original.at(i));
+				state.minimum.push_back(initial_value);
+			}
+
+			//Prime the monotone deque with the first window, preserving the
+			//order in which the values appear in the original history.
+			state.minWindow.clear();
+			for(uint32_t i = 0U; i < filterSize; i++)
+			{
+				const double value = state.original.at(i);
+				while(state.minWindow.count > 0U)
+				{
+					COUNT_WINDOW_COMPARE(state);
+					if(state.minWindow.backValue() < value) break;
+					state.minWindow.pop_back();
+				}
+				state.minWindow.push_back(windowStart + uint64_t(i), value);
 			}
 		}
-		const double minimum = *std::min_element(m_gainHistory_original[channel].begin(), m_gainHistory_original[channel].end());
-		m_gainHistory_original[channel].pop_front();
-		m_gainHistory_minimum[channel].push_back(minimum);
-		m_loggingData_minimum[channel].push(minimum);
+		else
+		{
+			//Amortized O(1): drop candidates that have left the window, then
+			//insert the new value (equal or larger candidates can never be the
+			//minimum again because the new value expires later).
+			state.minWindow.expireBefore(windowStart);
+			while(state.minWindow.count > 0U)
+			{
+				COUNT_WINDOW_COMPARE(state);
+				if(state.minWindow.backValue() < currentGainFactor) break;
+				state.minWindow.pop_back();
+			}
+			state.minWindow.push_back(absolutePosition, currentGainFactor);
+		}
+
+		const double minimum = state.minWindow.frontValue();
+		state.original.pop_front();
+		state.minimum.push_back(minimum);
+		if(m_loggingEnabled)
+		{
+			m_loggingData[channel].minimum.push_back(minimum);
+		}
 	}
 
 	//Apply the Gaussian filter
-	while(m_gainHistory_minimum[channel].size() >= m_filterSize)
+	while(state.minimum.size() >= filterSize)
 	{
-		assert(m_gainHistory_minimum[channel].size() == m_filterSize);
-		const double smoothed = m_gaussianFilter->apply(m_gainHistory_minimum[channel]);
-		m_gainHistory_minimum[channel].pop_front();
-		m_gainHistory_smoothed[channel].push_back(smoothed);
-		m_loggingData_smoothed[channel].push(smoothed);
+		assert(state.minimum.size() == filterSize);
+		double smoothed = 0.0;
+		for(uint32_t w = 0U; w < filterSize; w++)
+		{
+			smoothed += state.minimum.at(w) * m_gaussianFilter->weight(w);
+		}
+		state.minimum.pop_front();
+		state.smoothed.push_back(smoothed);
+		if(m_loggingEnabled)
+		{
+			m_loggingData[channel].smoothed.push_back(smoothed);
+		}
 	}
 }
 
@@ -1012,10 +1355,15 @@ void MDynamicAudioNormalizer_PrivateData::perfromCompression(DYNAUDNORM_NS::Fram
 
 void MDynamicAudioNormalizer_PrivateData::writeLogFile(void)
 {
+	if(!m_loggingEnabled)
+	{
+		return; /*no log file and no callback -> nothing to record*/
+	}
+
 	bool bIsEmpty = false;
 	for (uint32_t c = 0; c < m_channels; c++)
 	{
-		bIsEmpty = bIsEmpty || m_loggingData_original[c].empty() || m_loggingData_minimum[c].empty() || m_loggingData_smoothed[c].empty();
+		bIsEmpty = bIsEmpty || m_loggingData[c].original.empty() || m_loggingData[c].minimum.empty() || m_loggingData[c].smoothed.empty();
 	}
 
 	while (!bIsEmpty)
@@ -1028,12 +1376,12 @@ void MDynamicAudioNormalizer_PrivateData::writeLogFile(void)
 				{
 					fprintf(m_logFile, "\t\t");
 				}
-				fprintf(m_logFile, "%.5f\t%.5f\t%.5f", m_loggingData_original[c].front(), m_loggingData_minimum[c].front(), m_loggingData_smoothed[c].front());
+				fprintf(m_logFile, "%.5f\t%.5f\t%.5f", m_loggingData[c].original.front(), m_loggingData[c].minimum.front(), m_loggingData[c].smoothed.front());
 			}
-			m_loggingData_original[c].pop();
-			m_loggingData_minimum[c].pop();
-			m_loggingData_smoothed[c].pop();
-			bIsEmpty = bIsEmpty || m_loggingData_original[c].empty() || m_loggingData_minimum[c].empty() || m_loggingData_smoothed[c].empty();
+			m_loggingData[c].original.pop_front();
+			m_loggingData[c].minimum.pop_front();
+			m_loggingData[c].smoothed.pop_front();
+			bIsEmpty = bIsEmpty || m_loggingData[c].original.empty() || m_loggingData[c].minimum.empty() || m_loggingData[c].smoothed.empty();
 		}
 		if (m_logFile && (ferror(m_logFile) == 0))
 		{

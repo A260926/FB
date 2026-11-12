@@ -27,6 +27,7 @@ namespace DYNAUDNORM_NS
 {
 	typedef void (LoggingCallback)(const int logLevel, const char *const message);
 	LoggingCallback *setLoggingHandler(LoggingCallback *const callback);
+	bool hasLoggingHandler(void);
 	void postLogMessage(const int &logLevel, const char *const message, ...);
 }
 
