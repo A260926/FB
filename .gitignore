@@ -1,3 +1,4 @@
 coverage.txt
+.build/
 vendor/*
 !vendor/modules.txt
