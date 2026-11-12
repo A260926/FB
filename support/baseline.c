@@ -14,8 +14,8 @@ int main(void) {
  memset(&info,0,sizeof info);f=sf_open("cue.wav",SFM_READ,&info);if(!f)return 5;
  if(sf_command(f,SFC_GET_CUE,&got,sizeof got)!=SF_TRUE)return 6;
  if(got.cue_count!=1||got.cue_points[0].indx!=7||got.cue_points[0].sample_offset!=1)return 7;
- if(got.cue_points[0].name[0]!=0)return 8;
+ if(strcmp(got.cue_points[0].name,"Intro")!=0)return 8;
  if(sf_readf_short(f,out,2)!=2||memcmp(in,out,sizeof in))return 9;
  if(sf_close(f))return 10;
- puts("SNDFILE_BASELINE frames=2 cue=7 label=missing PCM=exact");return 0;
+ puts("SNDFILE_BASELINE frames=2 cue=7 label=Intro PCM=exact");return 0;
 }

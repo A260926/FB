@@ -956,6 +956,7 @@ wavlike_subchunk_parse (SF_PRIVATE *psf, int chunk, uint32_t chunk_length)
 {	sf_count_t	current_pos ;
 	char		buffer [2048] ;
 	uint32_t 	chunk_size, bytesread = 0 ;
+	int			error = 0 ;
 
 	current_pos = psf_fseek (psf, 0, SEEK_CUR) ;
 
@@ -1041,34 +1042,53 @@ wavlike_subchunk_parse (SF_PRIVATE *psf, int chunk, uint32_t chunk_length)
 
 			case labl_MARKER :
 					{	int mark_id ;
+						uint32_t payload, keep ;
 
 						bytesread += psf_binheader_readf (psf, "44", &chunk_size, &mark_id) ;
-						chunk_size -= 4 ;
-						chunk_size += (chunk_size & 1) ;
-						if (chunk_size < 1 || chunk_size >= SIGNED_SIZEOF (buffer) || bytesread + chunk_size > chunk_length)
+
+						/* The payload is a 4 byte cue id followed by a NUL
+						** terminated label. A label which does not fit inside
+						** this LIST chunk is broken : abandon the rest of the
+						** LIST, but never pull bytes from outside the LIST to
+						** complete it.
+						*/
+						if (chunk_size < 4)
 						{	psf_log_printf (psf, "  *** %M : %u (too big)\n", chunk, chunk_size) ;
 							goto cleanup_subchunk_parse ;
 							} ;
 
-						bytesread += psf_binheader_readf (psf, "b", buffer, chunk_size) ;
-						buffer [chunk_size] = 0 ;
+						payload = chunk_size - 4 ;
+						chunk_size = payload + (payload & 1) ;
+						if (bytesread + chunk_size > chunk_length)
+						{	psf_log_printf (psf, "  *** %M : %u (too big)\n", chunk, chunk_size) ;
+							goto cleanup_subchunk_parse ;
+							} ;
+
+						if (payload == 0)
+							break ;	/* No label text, nothing to store. */
+
+						/* Keep only what fits in SF_CUE_POINT.name, but skip
+						** the complete payload plus padding so that parsing
+						** can continue with the next subchunk.
+						*/
+						keep = SF_MIN (payload, (uint32_t) (sizeof (((SF_CUE_POINT *) NULL)->name) - 1)) ;
+
+						if (keep > 0)
+							bytesread += psf_binheader_readf (psf, "b", buffer, keep) ;
+						buffer [keep] = 0 ;
+						if (chunk_size > keep)
+							bytesread += psf_binheader_readf (psf, "j", chunk_size - keep) ;
 
 						if (mark_id < 10) /* avoid swamping log buffer with labels */
 							psf_log_printf (psf, "    %M : %u : %s\n", chunk, mark_id, buffer) ;
 						else if (mark_id == 10)
 							psf_log_printf (psf, "    (Skipping)\n") ;
 
-						if (psf->cues)
- 						{	unsigned int i = 0 ;
-							SF_CUE_POINT *cue_points = psf_cues_points (psf->cues) ;
-
-							/* find id to store label */
-							while (i < psf->cues->cue_count && cue_points [i].indx != mark_id)
-								i++ ;
-
-							if (i < psf->cues->cue_count)
-								psf_strlcpy (cue_points [i].name, sizeof (cue_points [i].name), buffer) ;
-							} ;
+						/* The cue chunk may not have been seen yet, so the
+						** label is queued and matched by cue id later.
+						*/
+						if ((error = psf_cue_label_add (psf, mark_id, buffer)) != 0)
+							return error ;
 						} ;
 					break ;
 
@@ -1077,13 +1097,18 @@ wavlike_subchunk_parse (SF_PRIVATE *psf, int chunk, uint32_t chunk_length)
 			case note_MARKER :
 					bytesread += psf_binheader_readf (psf, "4", &chunk_size) ;
 					chunk_size += (chunk_size & 1) ;
-					if (chunk_size >= SIGNED_SIZEOF (buffer) || bytesread + chunk_size > chunk_length)
+					if (bytesread + chunk_size > chunk_length)
 					{	psf_log_printf (psf, "  *** %M : %u (too big)\n", chunk, chunk_size) ;
 						goto cleanup_subchunk_parse ;
 						} ;
 
+					/* These subchunks are not interpreted, but they are
+					** skipped over so that subchunks following them inside
+					** this LIST are still found.
+					*/
 					psf_log_printf (psf, "    %M : %u\n", chunk, chunk_size) ;
-					goto cleanup_subchunk_parse ;
+					bytesread += psf_binheader_readf (psf, "j", chunk_size) ;
+					break ;
 
 			default :
 					bytesread += psf_binheader_readf (psf, "4", &chunk_size) ;

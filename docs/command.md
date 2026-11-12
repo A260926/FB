@@ -1830,6 +1830,33 @@ sf_command (sndfile, SFC_SET_CUE, &cues, sizeof (cues)) ;
 `SF_TRUE` if the file header contains cue marker information for the file,
 `SF_FALSE` otherwise.
 
+## Cue point names
+
+The `name` field of `SF_CUE_POINT` holds an optional, NUL terminated label
+for a cue marker. The field is 256 bytes, so a name can be at most 255 bytes
+plus the terminating NUL. Names are stored byte for byte; no encoding
+conversion is performed.
+
+Whether a name is written to, and read back from, a file depends on the
+container format:
+
+* **WAV** (`SF_FORMAT_WAV` / `SF_FORMAT_WAVEX`, little endian RIFF): the
+  numeric cue fields are written to a `cue ` chunk and each non-empty name
+  is written to a `labl` subchunk of a `LIST`/`adtl` chunk. On reading,
+  labels are matched to cue points by their cue id, so the `LIST`/`adtl`
+  chunk may occur before or after the `cue ` chunk. A name longer than 255
+  bytes is truncated when read; if several labels use the same cue id, the
+  last one is used. Cue points whose names are empty produce no `labl`
+  subchunk, and labels whose id does not appear in the cue table are
+  ignored.
+* **AIFF** (`SF_FORMAT_AIFF`): cue markers are stored in the `MARK` chunk,
+  which carries the marker name directly, so names round-trip as well.
+* Other container formats do not store cue point names; the numeric cue
+  fields may still be available while `name` is returned empty.
+
+Cues, including their names, must be set with SFC_SET_CUE before the first
+audio frame is written; setting them after data has been written fails.
+
 ## SFC_RF64_AUTO_DOWNGRADE
 
 Enable auto downgrade from RF64 to WAV.

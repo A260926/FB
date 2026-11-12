@@ -141,6 +141,7 @@ static const EXT_SUBFORMAT MSGUID_SUBTYPE_PVOCEX =
 
 static int	wav_read_header		(SF_PRIVATE *psf, int *blockalign, int *framesperblock) ;
 static int	wav_write_header	(SF_PRIVATE *psf, int calc_length) ;
+static void	wav_write_cue_labels (SF_PRIVATE *psf) ;
 
 static int	wav_write_tailer (SF_PRIVATE *psf) ;
 static int	wav_command (SF_PRIVATE *psf, int command, void *data, int datasize) ;
@@ -664,6 +665,11 @@ wav_read_header	(SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 			} ;
 		} ; /* while (1) */
 
+	/* The whole header has been parsed : attach any labels collected from
+	** LIST/adtl chunks to their cue points.
+	*/
+	psf_cue_labels_apply (psf) ;
+
 	if (psf->dataoffset <= 0)
 		return SFE_WAV_NO_DATA ;
 
@@ -1140,6 +1146,54 @@ wavex_write_fmt_chunk (SF_PRIVATE *psf)
 } /* wavex_write_fmt_chunk */
 
 
+/* The length of a cue point name as stored in a 'labl' chunk : at most 255
+** bytes, taken verbatim (no encoding conversion).
+*/
+static uint32_t
+wav_cue_name_len (const char *name)
+{	uint32_t len = 0 ;
+
+	while (len < 255 && name [len] != 0)
+		len ++ ;
+
+	return len ;
+} /* wav_cue_name_len */
+
+static void
+wav_write_cue_labels (SF_PRIVATE *psf)
+{	SF_CUE_POINT *cue_points = psf_cues_points (psf->cues) ;
+	uint32_t k, list_size = 4 ;	/* The 'adtl' marker. */
+
+	/* Work out the LIST size first : for every non-empty name, a 'labl'
+	** subchunk holding the cue id and the NUL terminated name. Subchunk
+	** sizes do not include the pad byte which follows an odd sized payload.
+	*/
+	for (k = 0 ; k < psf->cues->cue_count ; k++)
+	{	uint32_t name_len = wav_cue_name_len (cue_points [k].name) ;
+
+		if (name_len > 0)
+			list_size += 8 + 4 + name_len + 1 + ((name_len + 1) & 1) ;
+		} ;
+
+	if (list_size == 4)
+		return ;	/* No names, no LIST/adtl chunk. */
+
+	psf_binheader_writef (psf, "em4m", BHWm (LIST_MARKER), BHW4 (list_size), BHWm (adtl_MARKER)) ;
+
+	for (k = 0 ; k < psf->cues->cue_count ; k++)
+	{	uint32_t name_len = wav_cue_name_len (cue_points [k].name) ;
+
+		if (name_len == 0)
+			continue ;
+
+		psf_binheader_writef (psf, "em44", BHWm (labl_MARKER), BHW4 (4 + name_len + 1), BHW4 (cue_points [k].indx)) ;
+		psf_binheader_writef (psf, "b", BHWv (cue_points [k].name), BHWz (name_len)) ;
+		/* NUL terminator, plus a pad byte if the payload is odd sized. */
+		psf_binheader_writef (psf, "z", BHWz (1 + ((name_len + 1) & 1))) ;
+		} ;
+} /* wav_write_cue_labels */
+
+
 static int
 wav_write_header (SF_PRIVATE *psf, int calc_length)
 {	sf_count_t	current ;
@@ -1221,6 +1275,9 @@ wav_write_header (SF_PRIVATE *psf, int calc_length)
 			psf_binheader_writef (psf, "e44m444", BHW4 (cue_points [k].indx), BHW4 (cue_points [k].position),
 						BHWm (cue_points [k].fcc_chunk), BHW4 (cue_points [k].chunk_start),
 						BHW4 (cue_points [k].block_start), BHW4 (cue_points [k].sample_offset)) ;
+
+		/* Named cue points get a LIST/adtl chunk with one 'labl' per name. */
+		wav_write_cue_labels (psf) ;
 		} ;
 
 	if (psf->instrument != NULL)

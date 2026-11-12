@@ -2994,6 +2994,7 @@ psf_close (SF_PRIVATE *psf)
 	free (psf->loop_info) ;
 	free (psf->instrument) ;
 	free (psf->cues) ;
+	psf_cue_labels_free (psf) ;
 	free (psf->channel_map) ;
 	free (psf->format_desc) ;
 	free (psf->strings.storage) ;

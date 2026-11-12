@@ -1404,6 +1404,59 @@ psf_get_cues (SF_PRIVATE * psf, void * data, size_t datasize)
 	return ;
 } /* psf_get_cues */
 
+int
+psf_cue_label_add (SF_PRIVATE *psf, int32_t id, const char *name)
+{	SF_CUE_LABEL *label, **tail ;
+
+	if ((label = calloc (1, sizeof (SF_CUE_LABEL))) == NULL)
+		return SFE_MALLOC_FAILED ;
+
+	label->id = id ;
+	psf_strlcpy (label->name, sizeof (label->name), name) ;
+
+	/* Append so that labels stay in file order : when several labels carry
+	** the same cue id, the last one wins.
+	*/
+	for (tail = &psf->pending_cue_labels ; *tail != NULL ; tail = &(*tail)->next)
+		;
+	*tail = label ;
+
+	return 0 ;
+} /* psf_cue_label_add */
+
+void
+psf_cue_labels_apply (SF_PRIVATE *psf)
+{	SF_CUE_LABEL *label ;
+
+	if (psf->cues != NULL)
+	{	SF_CUE_POINT *cue_points = psf_cues_points (psf->cues) ;
+
+		for (label = psf->pending_cue_labels ; label != NULL ; label = label->next)
+		{	uint32_t k ;
+
+			/* Labels attach to cue points by id, not by position. Ids which
+			** do not appear in the cue table are ignored.
+			*/
+			for (k = 0 ; k < psf->cues->cue_count ; k++)
+				if (cue_points [k].indx == label->id)
+				{	psf_strlcpy (cue_points [k].name, sizeof (cue_points [k].name), label->name) ;
+					break ;
+					} ;
+			} ;
+		} ;
+
+	psf_cue_labels_free (psf) ;
+} /* psf_cue_labels_apply */
+
+void
+psf_cue_labels_free (SF_PRIVATE *psf)
+{	while (psf->pending_cue_labels != NULL)
+	{	SF_CUE_LABEL *next = psf->pending_cue_labels->next ;
+		free (psf->pending_cue_labels) ;
+		psf->pending_cue_labels = next ;
+		} ;
+} /* psf_cue_labels_free */
+
 
 SF_INSTRUMENT *
 psf_instrument_alloc (void)

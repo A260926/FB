@@ -163,6 +163,7 @@ echo "----------------------------------------------------------------------"
 ./tests/string_test@EXEEXT@ wav
 ./tests/multi_file_test@EXEEXT@ wav
 ./tests/chunk_test@EXEEXT@ wav
+./tests/wav_cue_labels_test@EXEEXT@
 echo "----------------------------------------------------------------------"
 echo "  $sfversion passed tests on WAV files."
 echo "----------------------------------------------------------------------"

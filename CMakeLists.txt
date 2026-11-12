@@ -1046,6 +1046,17 @@ if (BUILD_TESTING)
 		)
 	add_test (command_test command_test all)
 
+	### wav_cue_labels_test
+
+	add_executable (wav_cue_labels_test tests/wav_cue_labels_test.c)
+	target_link_libraries (wav_cue_labels_test
+		PRIVATE
+			sndfile
+			test_utils
+			$<$<BOOL:${LIBM_REQUIRED}>:m>
+		)
+	add_test (wav_cue_labels wav_cue_labels_test)
+
 	### floating_point_test
 
 	add_executable (floating_point_test

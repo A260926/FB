@@ -282,6 +282,17 @@ typedef struct
 	unsigned	minor_version ;
 } ID3V2_HEADER_INFO ;
 
+/* A 'labl' label collected from a WAV LIST/adtl chunk while the header is
+** being parsed. Labels are matched against the cue table by cue id once
+** the whole header has been read, so a LIST/adtl chunk may appear before
+** or after the 'cue ' chunk.
+*/
+typedef struct sf_cue_label
+{	int32_t	id ;
+	char	name [256] ;
+	struct sf_cue_label *next ;
+} SF_CUE_LABEL ;
+
 
 void *psf_memdup (const void *src, size_t n) ;
 
@@ -399,6 +410,9 @@ typedef struct sf_private_tag
 
 	/* Cue Marker Info */
 	SF_CUES		*cues ;
+
+	/* Labels from LIST/adtl chunks, waiting to be matched with psf->cues. */
+	SF_CUE_LABEL	*pending_cue_labels ;
 
 	/* Loop Info */
 	SF_LOOP_INFO	*loop_info ;
@@ -972,6 +986,13 @@ void	*psf_memset (void *s, int c, sf_count_t n) ;
 SF_CUES * psf_cues_dup (const void * ptr, size_t datasize) ;
 SF_CUES * psf_cues_alloc (uint32_t cue_count) ;
 void psf_get_cues (SF_PRIVATE * psf, void * data, size_t datasize) ;
+
+/* Collect a 'labl' label while parsing, then match collected labels against
+** the cue table (by cue id) once the header has been fully parsed.
+*/
+int		psf_cue_label_add (SF_PRIVATE *psf, int32_t id, const char *name) ;
+void	psf_cue_labels_apply (SF_PRIVATE *psf) ;
+void	psf_cue_labels_free (SF_PRIVATE *psf) ;
 
 /* The cue array is allocated with room for the actual cue count (see
 ** psf_cues_alloc()), but the public SF_CUES type declares it with a fixed

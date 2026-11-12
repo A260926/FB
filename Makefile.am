@@ -215,6 +215,7 @@ TESTS = tests/pedantic-header-test.sh
 check_PROGRAMS += tests/sfversion tests/floating_point_test tests/write_read_test \
 	tests/lossy_comp_test tests/error_test tests/ulaw_test tests/alaw_test tests/dwvw_test \
 	tests/peak_chunk_test tests/command_test tests/stdio_test \
+	tests/wav_cue_labels_test \
 	tests/pcm_test tests/headerless_test tests/pipe_test tests/header_test tests/misc_test \
 	tests/raw_test tests/string_test tests/multi_file_test tests/chunk_test \
 	tests/scale_clip_test tests/win32_test tests/aiff_rw_test tests/virtual_io_test \
@@ -289,6 +290,9 @@ tests_aiff_rw_test_LDADD = src/libsndfile.la
 
 tests_command_test_SOURCES = tests/command_test.c tests/utils.c tests/utils.h
 tests_command_test_LDADD = src/libsndfile.la
+
+tests_wav_cue_labels_test_SOURCES = tests/wav_cue_labels_test.c
+tests_wav_cue_labels_test_LDADD = src/libsndfile.la
 
 tests_locale_test_SOURCES = tests/locale_test.c tests/utils.c tests/utils.h
 tests_locale_test_LDADD = src/libsndfile.la
