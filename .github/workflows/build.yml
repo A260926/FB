@@ -1,0 +1,77 @@
+name: build
+on: [ push, pull_request ]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ clang, gcc, gcc-11, gcc-12 ]
+    steps:
+      - name: Add repository
+        run: sudo apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
+      - name: Install packages
+        run: sudo apt install gettext autoconf-archive gcc-11 gcc-12
+      - uses: actions/checkout@v4
+      - name: Autoconf
+        run: autoreconf -i -f
+      - name: Configure
+        run: ./configure
+        env:
+          CC: ${{ matrix.compiler }}
+      - name: Make
+        run: make
+      - name: Run tests
+        run: make check
+      - name: Run test program
+        run: ./test2_libxls test/files/test2.xls
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ clang, gcc ]
+    steps:
+      - name: Install packages
+        run: brew install automake autoconf-archive libtool
+      - uses: actions/checkout@v4
+      - name: Autoconf
+        run: autoreconf -i -f
+      - name: Configure
+        run: ./configure
+        env:
+          CC: ${{ matrix.compiler }}
+      - name: Make
+        run: make
+      - name: Run tests
+        run: make check
+      - name: Run test program
+        run: ./test2_libxls test/files/test2.xls
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            autotools
+            autoconf-archive
+            base-devel
+            gcc
+            libiconv-devel
+      - uses: actions/checkout@v4
+      - name: Autoconf
+        run: autoreconf -i -f
+      - name: Configure
+        run: ./configure
+      - name: Make
+        run: make
+      - name: Test
+        run: make check
+      - name: Test 2
+        run: ./test2_libxls test/files/test2.xls
+      - name: Log
+        run: cat ./test-suite.log
