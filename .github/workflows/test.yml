@@ -1,0 +1,168 @@
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: [stable, oldstable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+
+      - name: Test
+        working-directory: v3
+        run: go test -v -cover -race -count=1 -shuffle=on ./...
+
+      - name: Build CLI
+        working-directory: v3/cmd/grab
+        run: go build -v .
+
+  vet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: go fmt
+        working-directory: v3
+        run: |
+          go fmt ./...
+          if ! git diff --exit-code; then
+            echo "::error::Some files are not formatted. Run 'go fmt ./...' and commit the result."
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: v3
+        run: go vet ./...
+
+      - name: staticcheck
+        working-directory: v3
+        # staticcheck reads the export data of the toolchain it runs under, so
+        # each release only understands the Go versions it shipped alongside.
+        # When a new Go release breaks this job, bump the pin to the first
+        # staticcheck that reads it, release candidate or not: 2026.2rc1 is the
+        # first to read Go 1.27.
+        run: go run honnef.co/go/tools/cmd/staticcheck@2026.2rc1 ./...
+
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build CLI
+        working-directory: v3/cmd/grab
+        run: go build -o "$RUNNER_TEMP/grab" .
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/www" "$RUNNER_TEMP/dl"
+          head -c 1048576 /dev/urandom > "$RUNNER_TEMP/www/payload.bin"
+          (cd "$RUNNER_TEMP/www" && python3 -m http.server 18080 &>/dev/null) &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 20); do
+            curl -sfo /dev/null http://127.0.0.1:18080/payload.bin && break
+            sleep 0.5
+          done
+
+          # a successful download exits 0 and matches the source byte for byte
+          cd "$RUNNER_TEMP/dl"
+          "$RUNNER_TEMP/grab" http://127.0.0.1:18080/payload.bin
+          cmp "$RUNNER_TEMP/www/payload.bin" "$RUNNER_TEMP/dl/payload.bin"
+
+          # a failed download is reported in the exit code
+          if "$RUNNER_TEMP/grab" http://127.0.0.1:18080/missing.bin; then
+            echo "expected a non-zero exit code for a missing file"
+            exit 1
+          fi
+
+  tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: go mod tidy is clean
+        working-directory: v3
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+  cross-compile:
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows, freebsd]
+        goarch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build
+        working-directory: v3
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build ./...
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: govulncheck
+        working-directory: v3
+        run: |
+          # govulncheck reports vulnerabilities in the standard library of the
+          # toolchain it scans with, and setup-go's "stable" alias trails a Go
+          # security release by days. Scan with the newest release so the job
+          # reports on our code, not on the runner's Go build. This edits go.mod
+          # in the checkout only; the toolchain line is never committed.
+          go get toolchain@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
