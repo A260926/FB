@@ -1,0 +1,101 @@
+[
+  {
+    "name": "bit-twiddle",
+    "version": "0.0.2",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/bit-twiddle.git"
+    },
+    "gitHead": "f0b4adc66dfb632473c57632e87d3a23f3dd2680",
+    "license": "MIT",
+    "package_json_sha256": "3af83e94555b054d62533b4d4c2a1f2d8c4e7c7fb4a8c1c1f64726691ccb308a"
+  },
+  {
+    "name": "cwise-compiler",
+    "version": "0.1.0",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/cwise-compiler.git"
+    },
+    "gitHead": "29e146315bd0a8c50bd44b9b6b5bf4b769bd7aec",
+    "license": "MIT",
+    "package_json_sha256": "b7e8eb09388b0b75bb4cf373b83295e4136e9b13729590f44113bf9cf3a390ee"
+  },
+  {
+    "name": "dup",
+    "version": "0.0.0",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/dup.git"
+    },
+    "gitHead": "66f747c219c492e9450d2d5b7bf8fb5c74d57dc2",
+    "license": "MIT",
+    "package_json_sha256": "cd2c58fcd92055276b77aa9731c5fcf66a0fcb35edb0bdbed86ebf1a5e1aec20"
+  },
+  {
+    "name": "greedy-mesher",
+    "version": "1.0.3",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/greedy-mesher.git"
+    },
+    "gitHead": "154f0e316690fccce1148d4622c9274bbeec4401",
+    "license": "MIT",
+    "package_json_sha256": "627c078e8aae84215e914e1a90ec566f0b6fa4957e82c2ed0756040144c49cc1"
+  },
+  {
+    "name": "iota-array",
+    "version": "1.0.0",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/iota-array.git"
+    },
+    "gitHead": "cce24a4f0e1a6a8d60faa4f597c600de13d46145",
+    "license": "MIT",
+    "package_json_sha256": "cbeeda7a6b5180e762177182032ddf80db17d135c696d9b8423c82d4ff16e803"
+  },
+  {
+    "name": "is-buffer",
+    "version": "1.1.6",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/feross/is-buffer.git"
+    },
+    "gitHead": null,
+    "license": "MIT",
+    "package_json_sha256": "c3f4ad9709465baf192e2ee4ae1a113addc1843e044eee520c71eb5fd3c9ec85"
+  },
+  {
+    "name": "ndarray",
+    "version": "1.0.19",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/ndarray.git"
+    },
+    "gitHead": "a85785ca7a7e12c3fc29671a4f7c214bebc4ddc7",
+    "license": "MIT",
+    "package_json_sha256": "6d19061808a0fa92197267a586b98f9d68136510d06a336600f48948890561e4"
+  },
+  {
+    "name": "typedarray-pool",
+    "version": "0.1.2",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/typedarray-pool.git"
+    },
+    "gitHead": "d7a8a448caf51042e6c371b11074aab6ebaf53ad",
+    "license": "MIT",
+    "package_json_sha256": "1dbdbae7e627212e2b13dff31f429dca482bb69f4ded538de5103e127d52bca7"
+  },
+  {
+    "name": "uniq",
+    "version": "0.0.2",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/mikolalysenko/uniq.git"
+    },
+    "gitHead": "e9828cfcb97e25a351f95b39fdf3c31876ff3985",
+    "license": "MIT",
+    "package_json_sha256": "f717d225fc569f497ba607ab22c50eb74aac6fefd445b7dbf4effa3d29ea5444"
+  }
+]

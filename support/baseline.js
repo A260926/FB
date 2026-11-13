@@ -1,0 +1,1 @@
+const assert=require('node:assert/strict'),mesh=require('../mesh'),nd=require('ndarray');const a=nd(new Uint16Array(125),[5,5,5]);a.set(2,2,2,32769);const m=mesh(a);assert(m instanceof Uint8Array&&m.length===288);console.log('AO_MESH bytes='+m.length+' vertices='+m.length/8);console.log('exactAO='+typeof mesh.exactAO);
