@@ -122,18 +122,74 @@ void gl_draw_point(GLVertex *p0)
  * Line Clipping
  */
 
-static void GLinterpolate(GLVertex *q, GLVertex *p0, GLVertex *p1, GLfloat t)
+static void GLinterpolate(GLVertex *q,
+                          GLVertex *p0,
+                          GLVertex *p1,
+                          GLfloat t,
+                          GLint interp_ec)
 {
     GLint i;
     q->pc.X = p0->pc.X + (p1->pc.X - p0->pc.X) * t;
     q->pc.Y = p0->pc.Y + (p1->pc.Y - p0->pc.Y) * t;
     q->pc.Z = p0->pc.Z + (p1->pc.Z - p0->pc.Z) * t;
     q->pc.W = p0->pc.W + (p1->pc.W - p0->pc.W) * t;
+    if (interp_ec) {
+        q->ec.X = p0->ec.X + (p1->ec.X - p0->ec.X) * t;
+        q->ec.Y = p0->ec.Y + (p1->ec.Y - p0->ec.Y) * t;
+        q->ec.Z = p0->ec.Z + (p1->ec.Z - p0->ec.Z) * t;
+        q->ec.W = p0->ec.W + (p1->ec.W - p0->ec.W) * t;
+        q->tex_coord.X =
+            p0->tex_coord.X + (p1->tex_coord.X - p0->tex_coord.X) * t;
+        q->tex_coord.Y =
+            p0->tex_coord.Y + (p1->tex_coord.Y - p0->tex_coord.Y) * t;
+        q->tex_coord.Z =
+            p0->tex_coord.Z + (p1->tex_coord.Z - p0->tex_coord.Z) * t;
+        q->tex_coord.W =
+            p0->tex_coord.W + (p1->tex_coord.W - p0->tex_coord.W) * t;
+    }
 #ifdef _OPENMP
 #pragma omp simd
 #endif
     for (i = 0; i < 3; i++)
         q->color.v[i] = p0->color.v[i] + (p1->color.v[i] - p0->color.v[i]) * t;
+}
+
+/* Clip a line segment in eye space against the enabled user planes.  On
+ * return, *t0 and *t1 bound the surviving part of [p1,p2]; returns 0 if nothing
+ * survives.  Boundary points are kept. */
+static GLint ClipUserLine(GLContext *c, GLVertex *p1, GLVertex *p2,
+                          GLfloat *t0, GLfloat *t1)
+{
+    GLint i;
+
+    *t0 = 0;
+    *t1 = 1;
+    for (i = 0; i < MAX_CLIP_PLANES; i++) {
+        GLdouble fa, fb, den;
+        if (!c->clip_plane_enabled[i])
+            continue;
+        fa = gl_clip_plane_value(c, i, &p1->ec);
+        fb = gl_clip_plane_value(c, i, &p2->ec);
+        den = fb - fa;
+        if (fa >= 0.0 && fb >= 0.0)
+            continue;
+        if (fa < 0.0 && fb < 0.0)
+            return 0;
+        if (den > 0.0) {
+            /* entering the half space at t = -fa/den */
+            GLfloat t = (GLfloat) (-fa / den);
+            if (t > *t0)
+                *t0 = t;
+        } else {
+            /* leaving the half space at t = -fa/den */
+            GLfloat t = (GLfloat) (-fa / den);
+            if (t < *t1)
+                *t1 = t;
+        }
+        if (*t0 > *t1)
+            return 0;
+    }
+    return 1;
 }
 
 /* Line Clipping algorithm from 'Computer Graphics', Principles and
@@ -166,9 +222,38 @@ void gl_draw_line(GLVertex *p1, GLVertex *p2)
     GLVertex q1, q2;
     GLint cc1, cc2;
 
+    /* user clip planes first (eye space), then the view volume */
+    if (gl_user_clip_code(c, &p1->ec) || gl_user_clip_code(c, &p2->ec)) {
+        GLfloat ut0, ut1;
+        GLVertex a = *p1, b = *p2;
+
+        if (!ClipUserLine(c, p1, p2, &ut0, &ut1))
+            return;
+
+        if (ut0 > 0.0f) {
+            GLinterpolate(&q1, &a, &b, ut0, 1);
+        } else {
+            q1 = a;
+        }
+        if (ut1 < 1.0f) {
+            GLinterpolate(&q2, &a, &b, ut1, 1);
+        } else {
+            q2 = b;
+        }
+        q1.clip_code = gl_clipcode(q1.pc.X, q1.pc.Y, q1.pc.Z, q1.pc.W);
+        q2.clip_code = gl_clipcode(q2.pc.X, q2.pc.Y, q2.pc.Z, q2.pc.W);
+        if (q1.clip_code == 0)
+            gl_transform_to_viewport_clip_c(c, &q1);
+        if (q2.clip_code == 0)
+            gl_transform_to_viewport_clip_c(c, &q2);
+        /* the intersection vertices lie exactly on the planes, so no
+         * further user plane test is required here */
+        p1 = &q1;
+        p2 = &q2;
+    }
+
     cc1 = p1->clip_code;
     cc2 = p2->clip_code;
-
     if ((cc1 | cc2) == 0) {
 #if TGL_HAS(ALT_RENDERMODES)
         if (c->render_mode == GL_SELECT) {
@@ -203,8 +288,10 @@ void gl_draw_line(GLVertex *p1, GLVertex *p2)
             ClipLine1(-dy + dw, y1 - w1, &tmin, &tmax) &&
             ClipLine1(dz + dw, -z1 - w1, &tmin, &tmax) &&
             ClipLine1(-dz + dw, z1 - w1, &tmin, &tmax)) {
-            GLinterpolate(&q1, p1, p2, tmin);
-            GLinterpolate(&q2, p1, p2, tmax);
+            GLinterpolate(&q1, p1, p2, tmin,
+                          c->lighting_enabled || gl_user_clip_active(c));
+            GLinterpolate(&q2, p1, p2, tmax,
+                          c->lighting_enabled || gl_user_clip_active(c));
             gl_transform_to_viewport_clip_c(c, &q1);
             gl_transform_to_viewport_clip_c(c, &q2);
 #if TGL_HAS(ALT_RENDERMODES)
@@ -230,7 +317,8 @@ static void updateTmp(GLContext *c,
                       GLVertex *q,
                       GLVertex *p0,
                       GLVertex *p1,
-                      GLfloat t)
+                      GLfloat t,
+                      GLint clip_bit)
 {
     {
         q->color.v[0] = p0->color.v[0] + (p1->color.v[0] - p0->color.v[0]) * t;
@@ -248,7 +336,21 @@ static void updateTmp(GLContext *c,
             p0->tex_coord.Y + (p1->tex_coord.Y - p0->tex_coord.Y) * t;
     }
 
-    q->clip_code = gl_clipcode(q->pc.X, q->pc.Y, q->pc.Z, q->pc.W);
+    /* eye coordinates are needed to keep clipping newly generated vertices
+     * against the remaining user planes */
+    if (c->lighting_enabled || gl_user_clip_active(c)) {
+        q->ec.X = p0->ec.X + (p1->ec.X - p0->ec.X) * t;
+        q->ec.Y = p0->ec.Y + (p1->ec.Y - p0->ec.Y) * t;
+        q->ec.Z = p0->ec.Z + (p1->ec.Z - p0->ec.Z) * t;
+        q->ec.W = p0->ec.W + (p1->ec.W - p0->ec.W) * t;
+    }
+
+    q->clip_code = gl_clipcode(q->pc.X, q->pc.Y, q->pc.Z, q->pc.W) |
+                   gl_user_clip_code(c, &q->ec);
+    /* the vertex was generated on the plane just processed, and the recursion
+     * only moves on to higher bits: rounding may put the new point a hair on
+     * the wrong side of any already handled plane, so do not re-test them */
+    q->clip_code &= ~((1 << (clip_bit + 1)) - 1);
     if (q->clip_code == 0)
         gl_transform_to_viewport_clip_c(c, q);
 }
@@ -259,12 +361,35 @@ static void gl_draw_triangle_clip(GLContext *c,
                                   GLVertex *p2,
                                   GLint clip_bit);
 
+/* Compute the intersection parameter of segment [a,b] against the clipping
+ * plane selected by clip_bit (0..5 = view volume, 6..11 = user planes).
+ * out_pc receives the projected coordinates of the intersection. */
+static GLfloat triangle_clip_proc(GLContext *c,
+                                  GLint clip_bit,
+                                  V4 *out_pc,
+                                  GLVertex *a,
+                                  GLVertex *b)
+{
+    if (clip_bit < 6)
+        return clip_proc[clip_bit](out_pc, &a->pc, &b->pc);
+    {
+        GLfloat t = gl_user_clip_plane_t(c, clip_bit - 6, &a->ec, &b->ec);
+        out_pc->X = a->pc.X + (b->pc.X - a->pc.X) * t;
+        out_pc->Y = a->pc.Y + (b->pc.Y - a->pc.Y) * t;
+        out_pc->Z = a->pc.Z + (b->pc.Z - a->pc.Z) * t;
+        out_pc->W = a->pc.W + (b->pc.W - a->pc.W) * t;
+        return t;
+    }
+}
+
 /* Internal helper that takes context - avoids redundant gl_get_context() in hot
- * paths */
+ * paths.  "generated" is non-zero for triangles produced by clipping; only
+ * those may be degenerate on screen yet still matter for wireframe output. */
 static void gl_draw_triangle_c(GLContext *c,
                                GLVertex *p0,
                                GLVertex *p1,
-                               GLVertex *p2)
+                               GLVertex *p2,
+                               GLint generated)
 {
     GLint co, cc[3], front;
 
@@ -281,8 +406,16 @@ static void gl_draw_triangle_c(GLContext *c,
             (GLfloat) (p1->zp.x - p0->zp.x) * (GLfloat) (p2->zp.y - p0->zp.y) -
             (GLfloat) (p2->zp.x - p0->zp.x) * (GLfloat) (p1->zp.y - p0->zp.y);
 
-        if (norm == 0)
+        if (norm == 0) {
+            /* A degenerate original triangle is discarded exactly as before.
+             * A degenerate piece produced by clipping can still carry the
+             * cut edge that wireframe mode must show. */
+            if (generated &&
+                (c->draw_triangle_front == gl_draw_triangle_line ||
+                 c->draw_triangle_back == gl_draw_triangle_line))
+                gl_draw_triangle_line(p0, p1, p2);
             return;
+        }
 
         front = norm < 0.0;
         front = front ^ c->current_front_face;
@@ -321,7 +454,7 @@ static void gl_draw_triangle_c(GLContext *c,
 /* Public entry point - fetches context once */
 void gl_draw_triangle(GLVertex *p0, GLVertex *p1, GLVertex *p2)
 {
-    gl_draw_triangle_c(gl_get_context(), p0, p1, p2);
+    gl_draw_triangle_c(gl_get_context(), p0, p1, p2, 0);
 }
 
 static void gl_draw_triangle_clip(GLContext *c,
@@ -340,7 +473,7 @@ static void gl_draw_triangle_clip(GLContext *c,
 
     co = cc[0] | cc[1] | cc[2];
     if (co == 0) {
-        gl_draw_triangle_c(c, p0, p1, p2);
+        gl_draw_triangle_c(c, p0, p1, p2, 1);
     } else {
         c_and = cc[0] & cc[1] & cc[2];
         /* the triangle is completely outside */
@@ -348,12 +481,12 @@ static void gl_draw_triangle_clip(GLContext *c,
             return;
 
         /* find the next direction to clip */
-        while (clip_bit < 6 && (co & (1 << clip_bit)) == 0) {
+        while (clip_bit < 6 + MAX_CLIP_PLANES && (co & (1 << clip_bit)) == 0) {
             clip_bit++;
         }
 
         /* this test can be true only in case of rounding errors */
-        if (clip_bit == 6) { /* The 2 bit and the 4 bit.*/
+        if (clip_bit == 6 + MAX_CLIP_PLANES) {
             return;
         }
 
@@ -379,11 +512,11 @@ static void gl_draw_triangle_clip(GLContext *c,
             {
                 GLVertex tmp1, tmp2;
                 GLfloat tt;
-                tt = clip_proc[clip_bit](&tmp1.pc, &q[0]->pc, &q[1]->pc);
-                updateTmp(c, &tmp1, q[0], q[1], tt);
+                tt = triangle_clip_proc(c, clip_bit, &tmp1.pc, q[0], q[1]);
+                updateTmp(c, &tmp1, q[0], q[1], tt, clip_bit);
 
-                tt = clip_proc[clip_bit](&tmp2.pc, &q[0]->pc, &q[2]->pc);
-                updateTmp(c, &tmp2, q[0], q[2], tt);
+                tt = triangle_clip_proc(c, clip_bit, &tmp2.pc, q[0], q[2]);
+                updateTmp(c, &tmp2, q[0], q[2], tt, clip_bit);
 
                 tmp1.edge_flag = q[0]->edge_flag;
                 edge_flag_tmp = q[2]->edge_flag;
@@ -414,11 +547,11 @@ static void gl_draw_triangle_clip(GLContext *c,
             {
                 GLVertex tmp1, tmp2;
                 GLfloat tt;
-                tt = clip_proc[clip_bit](&tmp1.pc, &q[0]->pc, &q[1]->pc);
-                updateTmp(c, &tmp1, q[0], q[1], tt);
+                tt = triangle_clip_proc(c, clip_bit, &tmp1.pc, q[0], q[1]);
+                updateTmp(c, &tmp1, q[0], q[1], tt, clip_bit);
 
-                tt = clip_proc[clip_bit](&tmp2.pc, &q[0]->pc, &q[2]->pc);
-                updateTmp(c, &tmp2, q[0], q[2], tt);
+                tt = triangle_clip_proc(c, clip_bit, &tmp2.pc, q[0], q[2]);
+                updateTmp(c, &tmp2, q[0], q[2], tt, clip_bit);
 
                 tmp1.edge_flag = 1;
                 tmp2.edge_flag = q[2]->edge_flag;

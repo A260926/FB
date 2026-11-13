@@ -775,6 +775,8 @@ extern char TGL_BUILDT_RshiftGLshort[1 - 2 * ((GLshort) 65280 >> 8 != -1)];
 
 #define glEnable TGL_ADD_PREFIX(glEnable)
 #define glDisable TGL_ADD_PREFIX(glDisable)
+#define glClipPlane TGL_ADD_PREFIX(glClipPlane)
+#define glGetClipPlane TGL_ADD_PREFIX(glGetClipPlane)
 #define glShadeModel TGL_ADD_PREFIX(glShadeModel)
 #define glCullFace TGL_ADD_PREFIX(glCullFace)
 #define glPolygonMode TGL_ADD_PREFIX(glPolygonMode)
@@ -802,6 +804,7 @@ extern char TGL_BUILDT_RshiftGLshort[1 - 2 * ((GLshort) 65280 >> 8 != -1)];
 #define glScalef TGL_ADD_PREFIX(glScalef)
 #define glViewport TGL_ADD_PREFIX(glViewport)
 #define glFrustum TGL_ADD_PREFIX(glFrustum)
+#define glOrtho TGL_ADD_PREFIX(glOrtho)
 #define glGenLists TGL_ADD_PREFIX(glGenLists)
 #define glIsList TGL_ADD_PREFIX(glIsList)
 #define glNewList TGL_ADD_PREFIX(glNewList)
@@ -925,6 +928,8 @@ extern char TGL_BUILDT_RshiftGLshort[1 - 2 * ((GLshort) 65280 >> 8 != -1)];
 
 void glEnable(GLint code);
 void glDisable(GLint code);
+void glClipPlane(GLenum plane, const GLdouble *equation);
+void glGetClipPlane(GLenum plane, GLdouble *equation);
 
 void glShadeModel(GLint mode);
 void glCullFace(GLint mode);
@@ -1021,6 +1026,12 @@ void glFrustum(GLdouble left,
                GLdouble top,
                GLdouble near,
                GLdouble far);
+void glOrtho(GLdouble left,
+             GLdouble right,
+             GLdouble bottom,
+             GLdouble top,
+             GLdouble near,
+             GLdouble far);
 
 /* lists */
 GLuint glGenLists(GLint range);
@@ -1177,7 +1188,6 @@ inline void glLineWidth(GLfloat) {}
 inline void glDepthFunc(GLint) {}
 
 inline void glTexEnvf(GLint, GLint, GLint) {}
-inline void glOrtho(GLfloat,GLfloat,GLfloat,GLfloat,GLfloat,GLfloat){}
 inline void glVertex2i(GLint,GLint) {}
 inline void glDepthMask(GLint) {}
 inline void glFogi(GLint, GLint) {}

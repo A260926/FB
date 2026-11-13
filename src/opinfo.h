@@ -9,6 +9,9 @@ ADD_OP(End, 0, "")
 
 ADD_OP(EnableDisable, 2, "%C %d")
 
+/* user clip planes: plane index plus four doubles packed in pairs */
+ADD_OP(ClipPlane, 9, "%C %d %d %d %d %d %d %d %d")
+
 ADD_OP(MatrixMode, 1, "%C")
 ADD_OP(LoadMatrix, 16, "")
 ADD_OP(LoadIdentity, 0, "")
@@ -21,6 +24,7 @@ ADD_OP(Scale, 3, "%f %f %f")
 
 ADD_OP(Viewport, 4, "%d %d %d %d")
 ADD_OP(Frustum, 6, "%f %f %f %f %f %f")
+ADD_OP(Ortho, 6, "%f %f %f %f %f %f")
 
 ADD_OP(Material, 6, "%C %C %f %f %f %f")
 ADD_OP(ColorMaterial, 2, "%C %C")

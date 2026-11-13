@@ -440,6 +440,26 @@ void glFrustum(GLdouble left,
     gl_add_op(p);
 }
 
+void glOrtho(GLdouble left,
+             GLdouble right,
+             GLdouble bottom,
+             GLdouble top,
+             GLdouble znear,
+             GLdouble zfar)
+{
+    GLParam p[7];
+#include "error_check_no_context.h"
+    p[0].op = OP_Ortho;
+    p[1].f = (GLfloat) left;
+    p[2].f = (GLfloat) right;
+    p[3].f = (GLfloat) bottom;
+    p[4].f = (GLfloat) top;
+    p[5].f = (GLfloat) znear;
+    p[6].f = (GLfloat) zfar;
+
+    gl_add_op(p);
+}
+
 /* lightening */
 
 void glMaterialfv(GLint mode, GLint type, GLfloat *v)

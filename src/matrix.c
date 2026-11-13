@@ -226,6 +226,36 @@ void glopTranslate(GLParam *p)
     gl_matrix_update();
 }
 
+void glopOrtho(GLParam *p)
+{
+    GLContext *c = gl_get_context();
+    M4 m;
+    GLfloat left = p[1].f;
+    GLfloat right = p[2].f;
+    GLfloat bottom = p[3].f;
+    GLfloat top = p[4].f;
+    GLfloat znear = p[5].f;
+    GLfloat zfar = p[6].f;
+    GLfloat tx, ty, tz;
+
+    gl_M4_Id(&m);
+
+    tx = -(right + left) / (right - left);
+    ty = -(top + bottom) / (top - bottom);
+    tz = -(zfar + znear) / (zfar - znear);
+
+    m.m[0][0] = 2.0f / (right - left);
+    m.m[1][1] = 2.0f / (top - bottom);
+    m.m[2][2] = -2.0f / (zfar - znear);
+    m.m[0][3] = tx;
+    m.m[1][3] = ty;
+    m.m[2][3] = tz;
+
+    gl_M4_MulLeft(c->matrix_stack_ptr[c->matrix_mode], &m);
+
+    gl_matrix_update();
+}
+
 void glopFrustum(GLParam *p)
 {
     GLContext *c = gl_get_context();

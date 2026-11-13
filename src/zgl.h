@@ -60,6 +60,7 @@ enum {
 #define MAX_NAME_STACK_DEPTH 16
 #define MAX_TEXTURE_LEVELS 1
 #define MAX_LIGHTS 16
+#define MAX_CLIP_PLANES 6
 
 #define VERTEX_ARRAY 0x0001
 #define COLOR_ARRAY 0x0002
@@ -227,6 +228,11 @@ typedef struct GLContext {
     GLfloat *feedback_ptr;
 #endif
 
+    /* user clipping planes (GL_CLIP_PLANE0 .. GL_CLIP_PLANE5) */
+    GLint clip_plane_enabled[MAX_CLIP_PLANES];
+    /* frozen eye-space coefficients: a*X+b*Y+c*Z+d*W >= 0 is kept */
+    GLdouble clip_plane_eye[MAX_CLIP_PLANES][4];
+
     GLint local_light_model;
     GLint lighting_enabled;
     GLint light_model_two_side;
@@ -373,8 +379,19 @@ extern GLint gl_clipcode(GLfloat x, GLfloat y, GLfloat z, GLfloat w1);
 #define CLIP_YMAX (1 << 3)
 #define CLIP_ZMIN (1 << 4)
 #define CLIP_ZMAX (1 << 5)
+/* user clip planes are encoded in clip-code bits 6..11
+ * (GL_CLIP_PLANE0..5) */
+#define CLIP_USER_BIT 6
+#define CLIP_USER_COUNT MAX_CLIP_PLANES
 
 extern GLfloat clampf(GLfloat a, GLfloat min, GLfloat max);
+
+/* clipplane.c */
+GLint gl_user_clip_active(GLContext *c);
+GLint gl_user_clip_code(GLContext *c, const V4 *ec);
+GLdouble gl_clip_plane_value(GLContext *c, GLint plane, const V4 *ec);
+GLfloat gl_user_clip_plane_t(GLContext *c, GLint plane, const V4 *a,
+                             const V4 *b);
 
 /* triangle */
 

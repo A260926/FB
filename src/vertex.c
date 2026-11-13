@@ -187,8 +187,10 @@ int gl_V3_Norm_Fast(V3 *a)
 
 static void gl_vertex_transform(GLContext *c, GLVertex *v)
 {
-    if (c->lighting_enabled) {
-        /* eye coordinates needed for lighting */
+    GLint user_clip = gl_user_clip_active(c);
+
+    if (c->lighting_enabled || user_clip) {
+        /* eye coordinates needed for lighting and/or user clipping */
         GLfloat *m = &c->matrix_stack_ptr[0]->m[0][0];
         v->ec.X =
             (v->coord.X * m[0] + v->coord.Y * m[1] + v->coord.Z * m[2] + m[3]);
@@ -199,26 +201,44 @@ static void gl_vertex_transform(GLContext *c, GLVertex *v)
         v->ec.W = (v->coord.X * m[12] + v->coord.Y * m[13] +
                    v->coord.Z * m[14] + m[15]);
 
-        /* projection coordinates */
-        m = &c->matrix_stack_ptr[1]->m[0][0];
-        v->pc.X =
-            (v->ec.X * m[0] + v->ec.Y * m[1] + v->ec.Z * m[2] + v->ec.W * m[3]);
-        v->pc.Y =
-            (v->ec.X * m[4] + v->ec.Y * m[5] + v->ec.Z * m[6] + v->ec.W * m[7]);
-        v->pc.Z = (v->ec.X * m[8] + v->ec.Y * m[9] + v->ec.Z * m[10] +
-                   v->ec.W * m[11]);
-        v->pc.W = (v->ec.X * m[12] + v->ec.Y * m[13] + v->ec.Z * m[14] +
-                   v->ec.W * m[15]);
+        if (c->lighting_enabled) {
+            /* projection coordinates */
+            m = &c->matrix_stack_ptr[1]->m[0][0];
+            v->pc.X = (v->ec.X * m[0] + v->ec.Y * m[1] + v->ec.Z * m[2] +
+                       v->ec.W * m[3]);
+            v->pc.Y = (v->ec.X * m[4] + v->ec.Y * m[5] + v->ec.Z * m[6] +
+                       v->ec.W * m[7]);
+            v->pc.Z = (v->ec.X * m[8] + v->ec.Y * m[9] + v->ec.Z * m[10] +
+                       v->ec.W * m[11]);
+            v->pc.W = (v->ec.X * m[12] + v->ec.Y * m[13] + v->ec.Z * m[14] +
+                       v->ec.W * m[15]);
 
-        m = &c->matrix_model_view_inv.m[0][0];
-        V4 *n = &c->current_normal;
+            m = &c->matrix_model_view_inv.m[0][0];
+            V4 *n = &c->current_normal;
 
-        v->normal.X = (n->X * m[0] + n->Y * m[1] + n->Z * m[2]);
-        v->normal.Y = (n->X * m[4] + n->Y * m[5] + n->Z * m[6]);
-        v->normal.Z = (n->X * m[8] + n->Y * m[9] + n->Z * m[10]);
+            v->normal.X = (n->X * m[0] + n->Y * m[1] + n->Z * m[2]);
+            v->normal.Y = (n->X * m[4] + n->Y * m[5] + n->Z * m[6]);
+            v->normal.Z = (n->X * m[8] + n->Y * m[9] + n->Z * m[10]);
 
-        if (c->normalize_enabled) {
-            gl_V3_Norm_Fast(&v->normal);
+            if (c->normalize_enabled) {
+                gl_V3_Norm_Fast(&v->normal);
+            }
+        } else {
+            /* no lighting: modelview+projection were pre-multiplied */
+            GLfloat *mp = &c->matrix_model_projection.m[0][0];
+
+            v->pc.X = (v->coord.X * mp[0] + v->coord.Y * mp[1] +
+                       v->coord.Z * mp[2] + mp[3]);
+            v->pc.Y = (v->coord.X * mp[4] + v->coord.Y * mp[5] +
+                       v->coord.Z * mp[6] + mp[7]);
+            v->pc.Z = (v->coord.X * mp[8] + v->coord.Y * mp[9] +
+                       v->coord.Z * mp[10] + mp[11]);
+            if (c->matrix_model_projection_no_w_transform) {
+                v->pc.W = mp[15];
+            } else {
+                v->pc.W = (v->coord.X * mp[12] + v->coord.Y * mp[13] +
+                           v->coord.Z * mp[14] + mp[15]);
+            }
         }
     } else {
         /* no eye coordinates needed, no normal */
@@ -239,7 +259,8 @@ static void gl_vertex_transform(GLContext *c, GLVertex *v)
         }
     }
 
-    v->clip_code = gl_clipcode(v->pc.X, v->pc.Y, v->pc.Z, v->pc.W);
+    v->clip_code = gl_clipcode(v->pc.X, v->pc.Y, v->pc.Z, v->pc.W) |
+                   gl_user_clip_code(c, &v->ec);
 }
 
 void glopVertex(GLParam *p)

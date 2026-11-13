@@ -314,16 +314,22 @@ void glGetIntegerv(GLint pname, GLint *params)
         else if (c->matrix_mode == 2)
             *params = GL_TEXTURE;
         break;
-    case GL_BLUE_BIAS:
-    case GL_RED_BIAS:
-    case GL_GREEN_BIAS:
-    case GL_ALPHA_BIAS:
     case GL_CLIP_PLANE0:
     case GL_CLIP_PLANE1:
     case GL_CLIP_PLANE2:
     case GL_CLIP_PLANE3:
     case GL_CLIP_PLANE4:
     case GL_CLIP_PLANE5:
+        *params =
+            c->clip_plane_enabled[pname - GL_CLIP_PLANE0];
+        break;
+    case GL_MAX_CLIP_PLANES:
+        *params = MAX_CLIP_PLANES;
+        break;
+    case GL_BLUE_BIAS:
+    case GL_RED_BIAS:
+    case GL_GREEN_BIAS:
+    case GL_ALPHA_BIAS:
     case GL_SCISSOR_TEST:
     case GL_UNPACK_SWAP_BYTES:
     case GL_UNPACK_SKIP_ROWS:

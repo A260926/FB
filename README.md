@@ -77,6 +77,7 @@ API Additions:
 * `glRectf`
 * `glPointSize`
 * `glPostProcess()` for multithreaded post-processing
+* User clipping planes (`glClipPlane`, `glGetClipPlane`, `GL_CLIP_PLANE0..5`)
 * Compile-time toggles for `GL_SELECT` and `GL_FEEDBACK`
 
 Code Quality:
@@ -159,6 +160,102 @@ Server-side buffers for clientside array data. Valid target: `GL_ARRAY_BUFFER`. 
 
 ### glPostProcess(GLuint (*postprocess)(GLint x, GLint y, GLuint pixel, GLushort z))
 Multithreaded post-processing. The callback receives screen coordinates (x, y), current pixel color (ARGB or 5R6G5B), and depth value (z). Returns the new pixel color. Note: take care to prevent race conditions when multithreading is enabled.
+
+## User Clipping Planes
+
+TinyGL supports the six standard OpenGL user clipping planes
+`GL_CLIP_PLANE0` .. `GL_CLIP_PLANE5`. They are useful for cut-away views and
+offline model previews; `examples/raw/clipdemo.c` renders a pipe cut open by
+two oblique planes and writes `clipdemo.ppm` (see
+`assets/clipdemo.ppm`).
+
+### Interface
+
+```c
+void glClipPlane(GLenum plane, const GLdouble *equation);
+void glGetClipPlane(GLenum plane, GLdouble *equation);
+```
+
+Planes are enabled and disabled with `glEnable` / `glDisable`:
+
+```c
+GLdouble eq[4] = {0.0, 0.0, 1.0, 0.0}; /* keep z >= 0 */
+glClipPlane(GL_CLIP_PLANE0, eq);
+glEnable(GL_CLIP_PLANE0);
+```
+
+State queries work through `glGetIntegerv`:
+
+* `GL_CLIP_PLANE0` .. `GL_CLIP_PLANE5` return the enabled state (0/1).
+* `GL_MAX_CLIP_PLANES` returns 6.
+* On a fresh context every plane is disabled and all four coefficients are
+  zero.
+
+### Coordinate convention
+
+The four coefficients describe a half space **in object coordinates**:
+
+```
+a*x + b*y + c*z + d >= 0
+```
+
+The boundary itself is kept (points with value 0 are inside).  For a
+`glVertex3f` vertex the object coordinate is `(x, y, z, 1)`; the object
+space w is always 1, so the `d` term behaves as the usual GL constant.
+
+The coefficients may be given in any positive scale: multiplying all four
+coefficients by a positive number does not change the clipped result.
+
+### When the plane is frozen
+
+`glClipPlane` is executed immediately: at that exact moment the
+coefficients are transformed from object space into eye space with the
+inverse transpose of the current `GL_MODELVIEW` matrix and stored.
+`glGetClipPlane` returns this stored **eye-space** equation.
+
+Consequences:
+
+* Changing `GL_MODELVIEW` afterwards moves the geometry but not the
+  already-defined plane.  Only a new `glClipPlane` call re-captures the
+  matrix.
+* `GL_PROJECTION` does not affect the plane coefficients; both ordinary
+  orthographic and perspective projections work.
+* Planes are supported for finite coefficients and an invertible
+  `GL_MODELVIEW`.
+* `glOrtho` is implemented alongside `glFrustum` so orthographic scenes can
+  use user clipping planes too.
+
+### What is clipped
+
+Points, independent line segments and all triangle-based primitives
+(`GL_TRIANGLES`, strips, fans, quads, polygons) are clipped against the
+intersection of all enabled planes, in the normal geometry/projection/
+raster pipeline.  Interpolated attributes (colour, texture coordinates,
+depth) are computed from the analytically clipped vertices, so no
+full-model draw followed by a pixel mask is involved.  The same clipping
+applies when lighting is disabled.
+
+In `GL_FILL` and `GL_LINE` modes the polygon generated at the cut is
+actually rasterized: wireframe views show the new cut edge, and no
+triangulation diagonal appears inside the clipped fan.
+
+### Display lists
+
+`glClipPlane` and `glEnable`/`glDisable(GL_CLIP_PLANE*)` are recorded in
+display lists.
+
+* `GL_COMPILE` only records; queries and drawing are unchanged until the
+  list is called.
+* On replay the commands execute in list order using the matrix current
+  at replay time, so a plane definition inside a list re-captures the
+  `GL_MODELVIEW` matrix in effect when the list is called.
+* `GL_COMPILE_AND_EXECUTE` executes immediately and records the same
+  commands, so calling the list again re-captures the matrix at the new
+  call time.
+* `glGetClipPlane` / `glGetIntegerv` always execute immediately and are
+  never recorded.
+
+Feedback and selection modes are not extended by this feature.
 
 ### Additional glGet Queries
 Query TinyGL configuration via `glGetIntegerv`:

@@ -36,7 +36,9 @@ static void gl_vertex_transform_raster(GLVertex *v)
                    v->coord.Z * m[14] + m[15]);
     }
 
-    v->clip_code = gl_clipcode(v->pc.X, v->pc.Y, v->pc.Z, v->pc.W);
+    v->clip_code =
+        gl_clipcode(v->pc.X, v->pc.Y, v->pc.Z, v->pc.W) |
+        gl_user_clip_code(c, &v->ec);
 }
 
 void glRasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)

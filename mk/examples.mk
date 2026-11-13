@@ -1,7 +1,7 @@
 # mk/examples.mk - Example build rules for TinyGL
 
 # Explicitly listed examples (add new examples here)
-RAW_EXAMPLES_ALL := gears
+RAW_EXAMPLES_ALL := gears clipdemo
 SDL_EXAMPLES_ALL := hello texture game model gears_sdl
 
 # Detect whether SDL2 is available

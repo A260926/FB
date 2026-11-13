@@ -233,6 +233,15 @@ void glInit(void *zbuffer1)
     c->lighting_enabled = 0;
     c->light_model_two_side = 0;
 
+    /* user clip planes: disabled, all coefficients zero */
+    for (GLint i = 0; i < MAX_CLIP_PLANES; i++) {
+        c->clip_plane_enabled[i] = 0;
+        c->clip_plane_eye[i][0] = 0;
+        c->clip_plane_eye[i][1] = 0;
+        c->clip_plane_eye[i][2] = 0;
+        c->clip_plane_eye[i][3] = 0;
+    }
+
     /* default materials */
     for (GLint i = 0; i < 2; i++) {
         GLMaterial *m = &c->materials[i];

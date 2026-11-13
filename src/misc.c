@@ -150,7 +150,9 @@ void glopEnableDisable(GLParam *p)
             c->offset_states &= ~TGL_OFFSET_LINE;
         break;
     default:
-        if (code >= GL_LIGHT0 && code < GL_LIGHT0 + MAX_LIGHTS) {
+        if (code >= GL_CLIP_PLANE0 && code < GL_CLIP_PLANE0 + MAX_CLIP_PLANES) {
+            c->clip_plane_enabled[code - GL_CLIP_PLANE0] = (v != 0);
+        } else if (code >= GL_LIGHT0 && code < GL_LIGHT0 + MAX_LIGHTS) {
             gl_enable_disable_light(code - GL_LIGHT0, v);
         } else {
             tgl_warning("glEnableDisable: 0x%X not supported.\n", code);
