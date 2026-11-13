@@ -1,0 +1,3 @@
+package main
+import("encoding/json";"fmt";"io";"os")
+func main(){if len(os.Args)<3{os.Exit(2)};f,e:=os.Open(os.Args[1]);if e!=nil{panic(e)};defer f.Close();want:=map[string]int{};for _,n:=range os.Args[2:]{want[n]=0};d:=json.NewDecoder(f);for{var v struct{Action,Test string};e=d.Decode(&v);if e==io.EOF{break};if e!=nil{panic(e)};if v.Action=="fail"||v.Action=="skip"{panic("failed or skipped test: "+v.Test)};if v.Action=="pass"{if _,ok:=want[v.Test];ok{want[v.Test]++}}};for n,c:=range want{if c!=1{panic(fmt.Sprintf("required test %s count %d",n,c))}};fmt.Println("REQUIRED_TESTS_PASSED",len(want))}
