@@ -12505,6 +12505,12 @@ typedef struct {
 	uint32_t scale_helper_id;
 } ufbxi_node_extra;
 
+// Per-cluster data that does not fit into the public `ufbx_skin_cluster` struct.
+typedef struct {
+	ufbx_skin_link_mode link_mode;
+	bool has_associate_model;
+} ufbxi_skin_cluster_extra;
+
 ufbxi_nodiscard ufbxi_noinline static int ufbxi_setup_geometry_transform_helper(ufbxi_context *uc, ufbx_node *node, uint64_t node_fbx_id)
 {
 	ufbx_vec3 geo_translation = ufbxi_find_vec3(&node->props, ufbxi_GeometricTranslation, 0.0f, 0.0f, 0.0f);
@@ -14028,6 +14034,37 @@ ufbxi_nodiscard ufbxi_noinline static int ufbxi_read_skin_cluster(ufbxi_context 
 {
 	ufbx_skin_cluster *cluster = ufbxi_push_element(uc, info, ufbx_skin_cluster, UFBX_ELEMENT_SKIN_CLUSTER);
 	ufbxi_check(cluster);
+
+	ufbxi_skin_cluster_extra *extra = ufbxi_push_element_extra(uc, cluster->element.element_id, ufbxi_skin_cluster_extra);
+	ufbxi_check(extra);
+	extra->link_mode = UFBX_SKIN_LINK_NORMALIZE;
+	extra->has_associate_model = false;
+
+	// The non-normalized skin link modes are selected using the "Mode" string
+	// property of the cluster: "Normalize"/"Average", "Total1" or "Additive".
+	ufbx_string mode = ufbx_find_string(&cluster->props, "Mode", ufbx_empty_string);
+	if (mode.length > 0) {
+		if (!strcmp(mode.data, "Normalize") || !strcmp(mode.data, "Average")) {
+			extra->link_mode = UFBX_SKIN_LINK_NORMALIZE;
+		} else if (!strcmp(mode.data, "Total1")) {
+			extra->link_mode = UFBX_SKIN_LINK_TOTAL_ONE;
+		} else if (!strcmp(mode.data, "Additive")) {
+			extra->link_mode = UFBX_SKIN_LINK_ADDITIVE;
+		} else {
+			ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" has unknown skin Mode \"%.*s\"",
+				(int)cluster->name.length, cluster->name.data, (int)mode.length, mode.data);
+			ufbxi_fail_msg("ufbx_skin_cluster Mode", "Unknown skin cluster Mode");
+		}
+	}
+
+	// "AssociateModel"/"TransformAssociateModel" subnodes use a different binding
+	// convention that the non-normalized link modes do not support.
+	ufbxi_for(ufbxi_node, child, node->children, node->num_children) {
+		if (!strcmp(child->name, "AssociateModel") || !strcmp(child->name, "TransformAssociateModel")) {
+			extra->has_associate_model = true;
+			break;
+		}
+	}
 
 	ufbxi_value_array *indices = ufbxi_find_array(node, ufbxi_Indexes, 'i');
 	ufbxi_value_array *weights = ufbxi_find_array(node, ufbxi_Weights, 'r');
@@ -21641,6 +21678,101 @@ ufbxi_nodiscard ufbxi_noinline static int ufbxi_push_anim(ufbxi_context *uc, ufb
 	return 1;
 }
 
+// Validate the non-normalized skin link modes and propagate the link mode parsed
+// from the cluster "Mode" properties into the public `link_mode` fields.
+// NORMALIZE skins keep their legacy behavior and are not subject to the new
+// restrictions, matching how files without a cluster "Mode" have always loaded.
+ufbxi_nodiscard ufbxi_noinline static int ufbxi_validate_skin_link_modes(ufbxi_context *uc)
+{
+	ufbxi_for_ptr_list(ufbx_skin_deformer, p_skin, uc->scene.skin_deformers) {
+		ufbx_skin_deformer *skin = *p_skin;
+
+		// Every cluster of a single skin must use the same link mode.
+		ufbx_skin_link_mode skin_mode = UFBX_SKIN_LINK_NORMALIZE;
+		bool first_cluster = true;
+
+		ufbxi_for_ptr_list(ufbx_skin_cluster, p_cluster, skin->clusters) {
+			ufbx_skin_cluster *cluster = *p_cluster;
+			ufbxi_skin_cluster_extra *extra = (ufbxi_skin_cluster_extra*)
+				ufbxi_get_element_extra(uc, cluster->element.element_id);
+			// Legacy (pre-6000) synthetic clusters never carry a "Mode" property.
+			ufbx_skin_link_mode cluster_mode = extra ? extra->link_mode : UFBX_SKIN_LINK_NORMALIZE;
+
+			cluster->link_mode = cluster_mode;
+
+			if (first_cluster) {
+				skin_mode = cluster_mode;
+				first_cluster = false;
+			} else if (cluster_mode != skin_mode) {
+				ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" mixes skin link modes",
+					(int)cluster->name.length, cluster->name.data);
+				ufbxi_fail_msg("ufbx_skin_cluster Mode", "Mixed skin link modes in a skin deformer");
+			}
+		}
+
+		skin->link_mode = skin_mode;
+		if (skin_mode == UFBX_SKIN_LINK_NORMALIZE) continue;
+
+		ufbxi_for_ptr_list(ufbx_skin_cluster, p_cluster, skin->clusters) {
+			ufbx_skin_cluster *cluster = *p_cluster;
+			ufbxi_skin_cluster_extra *extra = (ufbxi_skin_cluster_extra*)
+				ufbxi_get_element_extra(uc, cluster->element.element_id);
+			ufbxi_check(extra);
+
+			if (extra->has_associate_model) {
+				ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" uses AssociateModel",
+					(int)cluster->name.length, cluster->name.data);
+				ufbxi_fail_msg("ufbx_skin_cluster Mode", "AssociateModel is not supported for Total1/Additive skin link modes");
+			}
+			if (!cluster->bone_node) {
+				ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" has no valid bone node",
+					(int)cluster->name.length, cluster->name.data);
+				ufbxi_fail_msg("ufbx_skin_cluster Mode", "Total1/Additive skin link modes require a valid bone node for every cluster");
+			}
+			if (skin->skinning_method != UFBX_SKINNING_METHOD_LINEAR) {
+				ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" uses non-linear skinning method",
+					(int)cluster->name.length, cluster->name.data);
+				ufbxi_fail_msg("ufbx_skin_cluster Mode", "Only LINEAR skinning is supported for Total1/Additive skin link modes");
+			}
+
+			// Find the meshes this skin deformer is applied to and enforce the
+			// single instance / single skin / no geometry cache restrictions.
+			ufbx_connection_list conns = ufbxi_find_src_connections(&skin->element, NULL);
+			ufbxi_for_list(ufbx_connection, conn, conns) {
+				if (conn->dst_prop.length > 0) continue;
+
+				ufbx_mesh *mesh = NULL;
+				if (conn->dst->type == UFBX_ELEMENT_MESH) {
+					mesh = (ufbx_mesh*)conn->dst;
+				} else if (conn->dst->type == UFBX_ELEMENT_NODE) {
+					ufbx_node *node = (ufbx_node*)conn->dst;
+					if (node->geometry_transform_helper) node = node->geometry_transform_helper;
+					mesh = node->mesh;
+				}
+				if (!mesh) continue;
+
+				if (mesh->instances.count != 1) {
+					ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" mesh has %zu instances",
+						(int)cluster->name.length, cluster->name.data, mesh->instances.count);
+					ufbxi_fail_msg("ufbx_skin_cluster Mode", "Total1/Additive skin link modes require exactly one mesh instance");
+				}
+				if (mesh->skin_deformers.count > 1) {
+					ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" mesh uses multiple skin deformers",
+						(int)cluster->name.length, cluster->name.data);
+					ufbxi_fail_msg("ufbx_skin_cluster Mode", "Total1/Additive skin link modes support only a single skin deformer per mesh");
+				}
+				if (mesh->cache_deformers.count > 0) {
+					ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" mesh uses a geometry cache",
+						(int)cluster->name.length, cluster->name.data);
+					ufbxi_fail_msg("ufbx_skin_cluster Mode", "Geometry caches are not supported for Total1/Additive skin link modes");
+				}
+			}
+		}
+	}
+
+	return 1;
+}
+
 ufbxi_nodiscard ufbxi_noinline static int ufbxi_finalize_scene(ufbxi_context *uc)
 {
 	size_t num_elements = uc->num_elements;
@@ -21846,6 +21978,19 @@ ufbxi_nodiscard ufbxi_noinline static int ufbxi_finalize_scene(ufbxi_context *uc
 	ufbxi_for_ptr_list(ufbx_skin_deformer, p_skin, uc->scene.skin_deformers) {
 		ufbx_skin_deformer *skin = *p_skin;
 		ufbxi_check(ufbxi_fetch_dst_elements(uc, &skin->clusters, &skin->element, false, true, NULL, UFBX_ELEMENT_SKIN_CLUSTER));
+
+		// The non-normalized link modes require every cluster to resolve to a
+		// valid bone node, even if broken elements would normally be dropped.
+		ufbxi_for_ptr_list(ufbx_skin_cluster, p_cluster, skin->clusters) {
+			ufbx_skin_cluster *cluster = *p_cluster;
+			ufbxi_skin_cluster_extra *extra = (ufbxi_skin_cluster_extra*)
+				ufbxi_get_element_extra(uc, cluster->element.element_id);
+			if (extra && extra->link_mode != UFBX_SKIN_LINK_NORMALIZE && !cluster->bone_node) {
+				ufbxi_fmt_err_info(&uc->error, "cluster \"%.*s\" has no valid bone node",
+					(int)cluster->name.length, cluster->name.data);
+				ufbxi_fail_msg("ufbx_skin_cluster Mode", "Total1/Additive skin link modes require a valid bone node for every cluster");
+			}
+		}
 
 		// Remove clusters without a valid `bone`
 		if (!uc->opts.connect_broken_elements) {
@@ -22156,6 +22301,10 @@ ufbxi_nodiscard ufbxi_noinline static int ufbxi_finalize_scene(ufbxi_context *uc
 			}
 		}
 	}
+
+	// Validate and propagate the skin cluster link modes. This runs after the
+	// mesh/skin connection lists and mesh instances have been resolved above.
+	ufbxi_check(ufbxi_validate_skin_link_modes(uc));
 
 	ufbxi_for_ptr_list(ufbx_stereo_camera, p_stereo, uc->scene.stereo_cameras) {
 		ufbx_stereo_camera *stereo = *p_stereo;
@@ -31933,6 +32082,85 @@ ufbx_abi ufbxi_noinline ufbx_transform ufbx_matrix_to_transform(const ufbx_matri
 	return t;
 }
 
+// Resolve the fallback matrix `F`, using identity when no fallback is provided.
+static ufbxi_forceinline ufbx_matrix ufbxi_skin_fallback_matrix(const ufbx_matrix *fallback)
+{
+	return fallback ? *fallback : ufbx_identity_matrix;
+}
+
+// `(1-w) * I + w * m`
+static ufbx_matrix ufbxi_lerp_identity_matrix(const ufbx_matrix *m, ufbx_real w)
+{
+	ufbx_real iw = 1.0f - w;
+	ufbx_matrix r;
+	r.m00 = iw + w*m->m00; r.m10 =      w*m->m10; r.m20 =      w*m->m20;
+	r.m01 =      w*m->m01; r.m11 = iw + w*m->m11; r.m21 =      w*m->m21;
+	r.m02 =      w*m->m02; r.m12 =      w*m->m12; r.m22 = iw + w*m->m22;
+	r.m03 =      w*m->m03; r.m13 =      w*m->m13; r.m23 =      w*m->m23;
+	return r;
+}
+
+// UFBX_SKIN_LINK_TOTAL_ONE:
+// `sum(w_i * W_i) * p + (1 - sum(w_i)) * F * p`
+// The residual term is never truncated or renormalized.
+static ufbx_matrix ufbxi_skin_total_one_matrix(const ufbx_skin_deformer *skin,
+	const ufbx_skin_vertex *skin_vertex, const ufbx_matrix *fallback)
+{
+	ufbx_matrix F = ufbxi_skin_fallback_matrix(fallback);
+	ufbx_matrix mat = { 0.0f };
+	ufbx_real total_weight = 0.0f;
+
+	for (uint32_t i = 0; i < skin_vertex->num_weights; i++) {
+		ufbx_skin_weight weight = skin->weights.data[skin_vertex->weight_begin + i];
+		ufbx_skin_cluster *cluster = skin->clusters.data[weight.cluster_index];
+		if (!cluster->bone_node) continue;
+
+		total_weight += weight.weight;
+		ufbxi_add_weighted_mat(&mat, &cluster->geometry_to_world, weight.weight);
+	}
+
+	// Vertices without any effective influence end up with exactly `F`.
+	ufbxi_add_weighted_mat(&mat, &F, 1.0f - total_weight);
+	return mat;
+}
+
+// UFBX_SKIN_LINK_ADDITIVE:
+// Convert each influence to mesh space `C_i = inverse(F) * W_i`, blend it with
+// the identity as `A_i = (1-w_i)*I + w_i*C_i` and chain them in the OO cluster
+// connection order stored in `skin->clusters[]`, then return `F * A_n * ... * A_1`.
+static ufbx_matrix ufbxi_skin_additive_matrix(const ufbx_skin_deformer *skin,
+	const ufbx_skin_vertex *skin_vertex, const ufbx_matrix *fallback)
+{
+	ufbx_matrix F = ufbxi_skin_fallback_matrix(fallback);
+	ufbx_matrix inv_f = ufbx_matrix_invert(&F);
+	ufbx_matrix local = ufbx_identity_matrix;
+
+	for (uint32_t cluster_index = 0; cluster_index < skin->clusters.count; cluster_index++) {
+		ufbx_real weight = 0.0f;
+		bool found = false;
+		for (uint32_t i = 0; i < skin_vertex->num_weights; i++) {
+			ufbx_skin_weight sw = skin->weights.data[skin_vertex->weight_begin + i];
+			if (sw.cluster_index == cluster_index) {
+				weight = sw.weight;
+				found = true;
+				break;
+			}
+		}
+		// Only keep the clusters that actually influence this vertex, preserving
+		// their relative connection order.
+		if (!found) continue;
+
+		ufbx_skin_cluster *cluster = skin->clusters.data[cluster_index];
+		if (!cluster->bone_node) continue;
+
+		ufbx_matrix C = ufbx_matrix_mul(&inv_f, &cluster->geometry_to_world);
+		ufbx_matrix A = ufbxi_lerp_identity_matrix(&C, weight);
+		local = ufbx_matrix_mul(&A, &local);
+	}
+
+	return ufbx_matrix_mul(&F, &local);
+}
+
 ufbx_abi ufbxi_noinline ufbx_matrix ufbx_catch_get_skin_vertex_matrix(ufbx_panic *panic, const ufbx_skin_deformer *skin, size_t vertex, const ufbx_matrix *fallback)
 {
 	ufbx_assert(skin);
@@ -31940,6 +32168,12 @@ ufbx_abi ufbxi_noinline ufbx_matrix ufbx_catch_get_skin_vertex_matrix(ufbx_panic
 
 	if (!skin || vertex >= skin->vertices.count) return ufbx_identity_matrix;
 	ufbx_skin_vertex skin_vertex = skin->vertices.data[vertex];
+
+	if (skin->link_mode == UFBX_SKIN_LINK_TOTAL_ONE) {
+		return ufbxi_skin_total_one_matrix(skin, &skin_vertex, fallback);
+	} else if (skin->link_mode == UFBX_SKIN_LINK_ADDITIVE) {
+		return ufbxi_skin_additive_matrix(skin, &skin_vertex, fallback);
+	}
 
 	ufbx_matrix mat = { 0.0f };
 	ufbx_quat q0 = { 0.0f }, qe = { 0.0f };

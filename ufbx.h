@@ -1950,6 +1950,29 @@ typedef enum ufbx_skinning_method UFBX_ENUM_REPR {
 
 UFBX_ENUM_TYPE(ufbx_skinning_method, UFBX_SKINNING_METHOD, UFBX_SKINNING_METHOD_BLENDED_DQ_LINEAR);
 
+// How the per-cluster weights of a skin are interpreted when deforming vertices.
+// Read from the `Mode` property of the FBX `Cluster` objects.
+typedef enum ufbx_skin_link_mode UFBX_ENUM_REPR {
+
+	// Weights are normalized by their sum before blending the cluster matrices,
+	// ie. each vertex is transformed by `sum(w_i * W_i) / sum(w_i)`.
+	// Used when `Mode` is missing, `"Average"` or `"Normalize"`.
+	UFBX_SKIN_LINK_NORMALIZE = 0,
+
+	// "Total1": weights are not normalized and the missing weight fraction is
+	// applied to the mesh instance transform `F`,
+	// ie. `sum(w_i * W_i) * p + (1 - sum(w_i)) * F * p`.
+	UFBX_SKIN_LINK_TOTAL_ONE,
+
+	// "Additive": each influence is converted back to mesh space and applied as
+	// `(1-w_i)*I + w_i*C_i`, chained in the cluster connection order.
+	UFBX_SKIN_LINK_ADDITIVE,
+
+	UFBX_ENUM_FORCE_WIDTH(UFBX_SKIN_LINK)
+} ufbx_skin_link_mode;
+
+UFBX_ENUM_TYPE(ufbx_skin_link_mode, UFBX_SKIN_LINK, UFBX_SKIN_LINK_ADDITIVE);
+
 // Skin weight information for a single mesh vertex
 typedef struct ufbx_skin_vertex {
 
@@ -1989,6 +2012,10 @@ struct ufbx_skin_deformer {
 
 	ufbx_skinning_method skinning_method;
 
+	// How the cluster weights are interpreted when deforming vertices.
+	// All clusters of a single skin share the same link mode.
+	ufbx_skin_link_mode link_mode;
+
 	// Clusters (bones) in the skin
 	ufbx_skin_cluster_list clusters;
 
@@ -2020,6 +2047,9 @@ struct ufbx_skin_cluster {
 	// NOTE: Always valid if found from `ufbx_skin_deformer.clusters[]` unless
 	// `ufbx_load_opts.connect_broken_elements` is `true`.
 	ufbx_nullable ufbx_node *bone_node;
+
+	// Weight interpretation of this cluster, matches `ufbx_skin_deformer.link_mode`.
+	ufbx_skin_link_mode link_mode;
 
 	// Binding matrix from local mesh vertices to the bone
 	ufbx_matrix geometry_to_bone;
@@ -5597,6 +5627,8 @@ ufbx_abi ufbx_transform ufbx_matrix_to_transform(const ufbx_matrix *m);
 
 // Get a matrix representing the deformation for a single vertex.
 // Returns `fallback` if the vertex is not skinned.
+// For `UFBX_SKIN_LINK_TOTAL_ONE` and `UFBX_SKIN_LINK_ADDITIVE` `fallback` is the
+// mesh instance geometry-to-world matrix `F` (or the identity if `NULL`).
 ufbx_abi ufbx_matrix ufbx_catch_get_skin_vertex_matrix(ufbx_panic *panic, const ufbx_skin_deformer *skin, size_t vertex, const ufbx_matrix *fallback);
 ufbx_inline ufbx_matrix ufbx_get_skin_vertex_matrix(const ufbx_skin_deformer *skin, size_t vertex, const ufbx_matrix *fallback) {
 	return ufbx_catch_get_skin_vertex_matrix(NULL, skin, vertex, fallback);
