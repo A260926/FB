@@ -214,6 +214,8 @@ protected:
     //  Copy constructor exposed via the factory class:
     TopologyRefiner(TopologyRefiner const & source);
 
+    friend class CreaseSensitivityTable;
+
 public:
     //  Levels and Refinements available internally (avoids need for more friends)
     Vtr::internal::Level & getLevel(int l) { return *_levels[l]; }

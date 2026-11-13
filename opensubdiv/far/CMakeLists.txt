@@ -10,6 +10,7 @@
 set(SOURCE_FILES
     bilinearPatchBuilder.cpp
     catmarkPatchBuilder.cpp
+    creaseSensitivityTable.cpp
     error.cpp
     loopPatchBuilder.cpp
     patchBasis.cpp
@@ -38,6 +39,7 @@ set(PRIVATE_HEADER_FILES
 )
 
 set(PUBLIC_HEADER_FILES
+    creaseSensitivityTable.h
     error.h
     patchDescriptor.h
     patchParam.h
