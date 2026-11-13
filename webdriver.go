@@ -57,11 +57,23 @@ func NewWebDriver(url string, command []string, options ...Option) *WebDriver {
 // The HTTPClient Option will be ignored if passed to this function. New pages
 // will always use the *http.Client provided to their WebDriver, or
 // http.DefaultClient if none was provided.
+//
+// The W3C Option selects the wire protocol used for the new session. It may be
+// provided to NewWebDriver as a default or to NewPage to override the default.
+// The legacy JSON Wire Protocol is used when the Option is absent.
 func (w *WebDriver) NewPage(options ...Option) (*Page, error) {
 	newOptions := w.defaultOptions.Merge(options)
-	session, err := w.Open(newOptions.Capabilities())
+	var (
+		session *api.Session
+		err     error
+	)
+	if newOptions.IsW3C() {
+		session, err = w.OpenW3C(newOptions.Capabilities())
+	} else {
+		session, err = w.Open(newOptions.Capabilities())
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to WebDriver: %s", err)
+		return nil, fmt.Errorf("failed to connect to WebDriver: %w", err)
 	}
 
 	return newPage(session), nil

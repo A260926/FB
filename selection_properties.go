@@ -10,12 +10,12 @@ import (
 func (s *Selection) Text() (string, error) {
 	selectedElement, err := s.elements.GetExactlyOne()
 	if err != nil {
-		return "", fmt.Errorf("failed to select element from %s: %s", s, err)
+		return "", fmt.Errorf("failed to select element from %s: %w", s, err)
 	}
 
 	text, err := selectedElement.GetText()
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve text for %s: %s", s, err)
+		return "", fmt.Errorf("failed to retrieve text for %s: %w", s, err)
 	}
 	return text, nil
 }
@@ -24,17 +24,17 @@ func (s *Selection) Text() (string, error) {
 func (s *Selection) Active() (bool, error) {
 	selectedElement, err := s.elements.GetExactlyOne()
 	if err != nil {
-		return false, fmt.Errorf("failed to select element from %s: %s", s, err)
+		return false, fmt.Errorf("failed to select element from %s: %w", s, err)
 	}
 
 	activeElement, err := s.session.GetActiveElement()
 	if err != nil {
-		return false, fmt.Errorf("failed to retrieve active element: %s", err)
+		return false, fmt.Errorf("failed to retrieve active element: %w", err)
 	}
 
 	equal, err := selectedElement.IsEqualTo(activeElement)
 	if err != nil {
-		return false, fmt.Errorf("failed to compare selection to active element: %s", err)
+		return false, fmt.Errorf("failed to compare selection to active element: %w", err)
 	}
 
 	return equal, nil
@@ -45,12 +45,12 @@ type propertyMethod func(element element.Element, property string) (string, erro
 func (s *Selection) hasProperty(method propertyMethod, property, name string) (string, error) {
 	selectedElement, err := s.elements.GetExactlyOne()
 	if err != nil {
-		return "", fmt.Errorf("failed to select element from %s: %s", s, err)
+		return "", fmt.Errorf("failed to select element from %s: %w", s, err)
 	}
 
 	value, err := method(selectedElement, property)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve %s value for %s: %s", name, s, err)
+		return "", fmt.Errorf("failed to retrieve %s value for %s: %w", name, s, err)
 	}
 	return value, nil
 }
@@ -70,13 +70,13 @@ type stateMethod func(element element.Element) (bool, error)
 func (s *Selection) hasState(method stateMethod, name string) (bool, error) {
 	elements, err := s.elements.GetAtLeastOne()
 	if err != nil {
-		return false, fmt.Errorf("failed to select elements from %s: %s", s, err)
+		return false, fmt.Errorf("failed to select elements from %s: %w", s, err)
 	}
 
 	for _, selectedElement := range elements {
 		pass, err := method(selectedElement)
 		if err != nil {
-			return false, fmt.Errorf("failed to determine whether %s is %s: %s", s, name, err)
+			return false, fmt.Errorf("failed to determine whether %s is %s: %w", s, name, err)
 		}
 		if !pass {
 			return false, nil

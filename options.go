@@ -13,10 +13,23 @@ type config struct {
 	Debug               bool
 	HTTPClient          *http.Client
 	ChromeOptions       map[string]interface{}
+	w3c                 *bool
 }
 
 // An Option specifies configuration for a new WebDriver or Page.
 type Option func(*config)
+
+// W3C provides an Option for selecting the wire protocol dialect used by the
+// session backing a Page. Passing true requests the W3C WebDriver protocol;
+// passing false explicitly selects the legacy JSON Wire Protocol (the
+// default). The dialect is chosen when the session is created or joined and
+// never changes for that session.
+func W3C(enabled bool) Option {
+	return func(c *config) {
+		value := enabled
+		c.w3c = &value
+	}
+}
 
 // Browser provides an Option for specifying a browser.
 func Browser(name string) Option {
@@ -73,6 +86,12 @@ func (c config) Merge(options []Option) *config {
 		option(&c)
 	}
 	return &c
+}
+
+// IsW3C reports whether W3C mode was explicitly requested. It defaults to
+// false, which selects the legacy JSON Wire Protocol.
+func (c *config) IsW3C() bool {
+	return c.w3c != nil && *c.w3c
 }
 
 func (c *config) Capabilities() Capabilities {

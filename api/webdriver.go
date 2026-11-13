@@ -40,12 +40,29 @@ func (w *WebDriver) URL() string {
 }
 
 func (w *WebDriver) Open(desiredCapabilites map[string]interface{}) (*Session, error) {
+	return w.open(desiredCapabilites, false)
+}
+
+// OpenW3C opens a W3C WebDriver session using the driver service URL.
+func (w *WebDriver) OpenW3C(capabilities map[string]interface{}) (*Session, error) {
+	return w.open(capabilities, true)
+}
+
+func (w *WebDriver) open(capabilities map[string]interface{}, w3c bool) (*Session, error) {
 	url := w.service.URL()
 	if url == "" {
 		return nil, fmt.Errorf("service not started")
 	}
 
-	session, err := OpenWithClient(url, desiredCapabilites, w.HTTPClient)
+	var (
+		session *Session
+		err     error
+	)
+	if w3c {
+		session, err = OpenW3CWithClient(url, capabilities, w.HTTPClient)
+	} else {
+		session, err = OpenWithClient(url, capabilities, w.HTTPClient)
+	}
 	if err != nil {
 		return nil, err
 	}

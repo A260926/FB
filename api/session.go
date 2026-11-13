@@ -13,32 +13,87 @@ type Session struct {
 	Bus
 }
 
+// Bus is the low-level transport used by a Session. Its shape is fixed: a
+// Session's wire dialect is never inferred from Bus and a replacement Bus
+// implementation only ever needs to implement Send.
 type Bus interface {
 	Send(method, endpoint string, body, result interface{}) error
 }
 
+// ProtocolError describes an unsuccessful WebDriver protocol response.
+// It is an alias for the error type returned by the low-level bus, so errors
+// returned by Session methods may be extracted with errors.As.
+type ProtocolError = bus.ProtocolError
+
+// New creates a legacy JSON Wire Protocol Session for an existing session URL.
 func New(sessionURL string) *Session {
 	return NewWithClient(sessionURL, nil)
 }
 
+// NewWithClient creates a legacy JSON Wire Protocol Session for an existing
+// session URL.
 func NewWithClient(sessionURL string, client *http.Client) *Session {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	busClient := &bus.Client{sessionURL, client}
+	busClient := &bus.Client{SessionURL: sessionURL, HTTPClient: client}
 	return &Session{busClient}
 }
 
+// NewW3CWithClient creates a W3C WebDriver Session for an existing session URL.
+func NewW3CWithClient(sessionURL string, client *http.Client) *Session {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	busClient := &bus.Client{SessionURL: sessionURL, HTTPClient: client, W3C: true}
+	return &Session{busClient}
+}
+
+// Open opens a legacy JSON Wire Protocol session.
 func Open(url string, capabilities map[string]interface{}) (*Session, error) {
 	return OpenWithClient(url, capabilities, nil)
 }
 
+// OpenWithClient opens a legacy JSON Wire Protocol session using the provided
+// HTTP client.
 func OpenWithClient(url string, capabilities map[string]interface{}, client *http.Client) (*Session, error) {
 	busClient, err := bus.Connect(url, capabilities, client)
 	if err != nil {
 		return nil, err
 	}
 	return &Session{busClient}, nil
+}
+
+// OpenW3C opens a W3C WebDriver session.
+func OpenW3C(url string, capabilities map[string]interface{}) (*Session, error) {
+	return OpenW3CWithClient(url, capabilities, nil)
+}
+
+// OpenW3CWithClient opens a W3C WebDriver session using the provided HTTP
+// client. Capabilities are sent once as capabilities.alwaysMatch with an empty
+// firstMatch element. Legacy capability names (acceptSslCerts and
+// chromeOptions) are translated to their standard equivalents unless the
+// caller already supplied the standard key. The provided map is not modified.
+func OpenW3CWithClient(url string, capabilities map[string]interface{}, client *http.Client) (*Session, error) {
+	busClient, err := bus.ConnectW3C(url, capabilities, client)
+	if err != nil {
+		return nil, err
+	}
+	return &Session{busClient}, nil
+}
+
+// Dialect returns the wire protocol used by this Session. The dialect is
+// fixed for the lifetime of the session. Custom Bus implementations are
+// treated as legacy unless they also implement IsW3C() bool.
+func (s *Session) Dialect() Dialect {
+	if w3cBus, ok := s.Bus.(interface{ IsW3C() bool }); ok && w3cBus.IsW3C() {
+		return W3C
+	}
+	return JSONWire
+}
+
+func (s *Session) isW3C() bool {
+	return s.Dialect() == W3C
 }
 
 func (s *Session) Delete() error {
@@ -73,7 +128,11 @@ func (s *Session) GetElements(selector Selector) ([]*Element, error) {
 func (s *Session) GetActiveElement() (*Element, error) {
 	var result elementResult
 
-	if err := s.Send("POST", "element/active", nil, &result); err != nil {
+	if s.isW3C() {
+		if err := s.Send("GET", "element/active", nil, &result); err != nil {
+			return nil, err
+		}
+	} else if err := s.Send("POST", "element/active", nil, &result); err != nil {
 		return nil, err
 	}
 
@@ -82,7 +141,11 @@ func (s *Session) GetActiveElement() (*Element, error) {
 
 func (s *Session) GetWindow() (*Window, error) {
 	var windowID string
-	if err := s.Send("GET", "window_handle", nil, &windowID); err != nil {
+	endpoint := "window_handle"
+	if s.isW3C() {
+		endpoint = "window"
+	}
+	if err := s.Send("GET", endpoint, nil, &windowID); err != nil {
 		return nil, err
 	}
 	return &Window{windowID, s}, nil
@@ -90,7 +153,11 @@ func (s *Session) GetWindow() (*Window, error) {
 
 func (s *Session) GetWindows() ([]*Window, error) {
 	var windowsID []string
-	if err := s.Send("GET", "window_handles", nil, &windowsID); err != nil {
+	endpoint := "window_handles"
+	if s.isW3C() {
+		endpoint = "window/handles"
+	}
+	if err := s.Send("GET", endpoint, nil, &windowsID); err != nil {
 		return nil, err
 	}
 
@@ -104,6 +171,13 @@ func (s *Session) GetWindows() ([]*Window, error) {
 func (s *Session) SetWindow(window *Window) error {
 	if window == nil {
 		return errors.New("nil window is invalid")
+	}
+
+	if s.isW3C() {
+		request := struct {
+			Handle string `json:"handle"`
+		}{window.ID}
+		return s.Send("POST", "window", request, nil)
 	}
 
 	request := struct {
@@ -250,7 +324,12 @@ func (s *Session) Execute(body string, arguments []interface{}, result interface
 		Args   []interface{} `json:"args"`
 	}{body, arguments}
 
-	if err := s.Send("POST", "execute", request, result); err != nil {
+	endpoint := "execute"
+	if s.isW3C() {
+		endpoint = "execute/sync"
+	}
+
+	if err := s.Send("POST", endpoint, request, result); err != nil {
 		return err
 	}
 
@@ -271,7 +350,11 @@ func (s *Session) Refresh() error {
 
 func (s *Session) GetAlertText() (string, error) {
 	var text string
-	if err := s.Send("GET", "alert_text", nil, &text); err != nil {
+	endpoint := "alert_text"
+	if s.isW3C() {
+		endpoint = "alert/text"
+	}
+	if err := s.Send("GET", endpoint, nil, &text); err != nil {
 		return "", err
 	}
 	return text, nil
@@ -285,11 +368,19 @@ func (s *Session) SetAlertText(text string) error {
 }
 
 func (s *Session) AcceptAlert() error {
-	return s.Send("POST", "accept_alert", nil, nil)
+	endpoint := "accept_alert"
+	if s.isW3C() {
+		endpoint = "alert/accept"
+	}
+	return s.Send("POST", endpoint, nil, nil)
 }
 
 func (s *Session) DismissAlert() error {
-	return s.Send("POST", "dismiss_alert", nil, nil)
+	endpoint := "dismiss_alert"
+	if s.isW3C() {
+		endpoint = "alert/dismiss"
+	}
+	return s.Send("POST", endpoint, nil, nil)
 }
 
 func (s *Session) NewLogs(logType string) ([]Log, error) {
@@ -458,6 +549,12 @@ func (s *Session) DeleteSessionStorage() error {
 }
 
 func (s *Session) SetImplicitWait(timeout int) error {
+	if s.isW3C() {
+		request := struct {
+			MS int `json:"implicit"`
+		}{timeout}
+		return s.Send("POST", "timeouts", request, nil)
+	}
 	request := struct {
 		MS int `json:"ms"`
 	}{timeout}
@@ -465,6 +562,12 @@ func (s *Session) SetImplicitWait(timeout int) error {
 }
 
 func (s *Session) SetPageLoad(timeout int) error {
+	if s.isW3C() {
+		request := struct {
+			MS int `json:"pageLoad"`
+		}{timeout}
+		return s.Send("POST", "timeouts", request, nil)
+	}
 	request := struct {
 		MS   int    `json:"ms"`
 		Type string `json:"type"`
@@ -473,6 +576,12 @@ func (s *Session) SetPageLoad(timeout int) error {
 }
 
 func (s *Session) SetScriptTimeout(timeout int) error {
+	if s.isW3C() {
+		request := struct {
+			MS int `json:"script"`
+		}{timeout}
+		return s.Send("POST", "timeouts", request, nil)
+	}
 	request := struct {
 		MS int `json:"ms"`
 	}{timeout}

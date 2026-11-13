@@ -12,6 +12,13 @@ import (
 type Client struct {
 	SessionURL string
 	HTTPClient *http.Client
+	// W3C reports whether this session uses the W3C WebDriver protocol.
+	W3C bool
+}
+
+// IsW3C reports whether this client speaks the W3C WebDriver protocol.
+func (c *Client) IsW3C() bool {
+	return c.W3C
 }
 
 func (c *Client) Send(method, endpoint string, body interface{}, result interface{}) error {
@@ -21,16 +28,13 @@ func (c *Client) Send(method, endpoint string, body interface{}, result interfac
 	}
 
 	requestURL := strings.TrimSuffix(c.SessionURL+"/"+endpoint, "/")
-	responseBody, err := c.makeRequest(requestURL, method, requestBody)
+	responseBody, statusCode, err := c.makeRequest(requestURL, method, requestBody)
 	if err != nil {
 		return err
 	}
 
-	if result != nil {
-		bodyValue := struct{ Value interface{} }{result}
-		if err := json.Unmarshal(responseBody, &bodyValue); err != nil {
-			return fmt.Errorf("unexpected response: %s", responseBody)
-		}
+	if err := c.decodeResponse(statusCode, responseBody, result); err != nil {
+		return err
 	}
 
 	return nil
@@ -47,10 +51,10 @@ func bodyToJSON(body interface{}) ([]byte, error) {
 	return bodyJSON, nil
 }
 
-func (c *Client) makeRequest(url, method string, body []byte) ([]byte, error) {
+func (c *Client) makeRequest(url, method string, body []byte) ([]byte, int, error) {
 	request, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("invalid request: %s", err)
+		return nil, 0, fmt.Errorf("invalid request: %s", err)
 	}
 
 	if body != nil {
@@ -59,32 +63,61 @@ func (c *Client) makeRequest(url, method string, body []byte) ([]byte, error) {
 
 	response, err := c.HTTPClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %s", err)
+		return nil, 0, fmt.Errorf("request failed: %s", err)
 	}
 	defer response.Body.Close()
 
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return nil, response.StatusCode, err
 	}
 
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return nil, parseResponseError(responseBody)
+		return nil, response.StatusCode, responseError(response.StatusCode, responseBody, c.W3C)
 	}
 
-	return responseBody, nil
+	return responseBody, response.StatusCode, nil
 }
 
-func parseResponseError(body []byte) error {
-	var errBody struct{ Value struct{ Message string } }
-	if err := json.Unmarshal(body, &errBody); err != nil {
-		return fmt.Errorf("request unsuccessful: %s", body)
+// decodeResponse validates the protocol envelope and unmarshals value into
+// result. In the legacy dialect a non-zero status is a failure even when the
+// HTTP status is successful. In the W3C dialect a successful HTTP response is
+// always treated as success; a script result that happens to contain an
+// "error" field is therefore not mistaken for a protocol failure.
+func (c *Client) decodeResponse(httpStatus int, responseBody []byte, result interface{}) error {
+	if c.W3C {
+		if result == nil {
+			return nil
+		}
+		bodyValue := struct {
+			Value *json.RawMessage `json:"value"`
+		}{}
+		if err := json.Unmarshal(responseBody, &bodyValue); err != nil || bodyValue.Value == nil {
+			return &ProtocolError{
+				HTTPStatus: httpStatus,
+				Message:    fmt.Sprintf("invalid response: HTTP %d: %s", httpStatus, responseSummary(responseBody)),
+			}
+		}
+		if err := json.Unmarshal(*bodyValue.Value, result); err != nil {
+			return fmt.Errorf("unexpected response: %s", responseBody)
+		}
+		return nil
 	}
 
-	var errMessage struct{ ErrorMessage string }
-	if err := json.Unmarshal([]byte(errBody.Value.Message), &errMessage); err != nil {
-		return fmt.Errorf("request unsuccessful: %s", errBody.Value.Message)
+	var legacyEnvelope struct {
+		Status *int `json:"status"`
+	}
+	if err := json.Unmarshal(responseBody, &legacyEnvelope); err == nil &&
+		legacyEnvelope.Status != nil && *legacyEnvelope.Status != 0 {
+		return legacyStatusError(httpStatus, responseBody)
 	}
 
-	return fmt.Errorf("request unsuccessful: %s", errMessage.ErrorMessage)
+	if result != nil {
+		bodyValue := struct{ Value interface{} }{result}
+		if err := json.Unmarshal(responseBody, &bodyValue); err != nil {
+			return fmt.Errorf("unexpected response: %s", responseBody)
+		}
+	}
+
+	return nil
 }
