@@ -1,0 +1,188 @@
+---
+name: Build test
+'on':
+  push:
+    branches:
+      - main
+      - ci
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+
+# ensure that the workflow is only triggered once per PR,  subsequent pushes to the PR will cancel
+# and restart the workflow. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "alpine", "archlinux", "fedora", "ubuntu" ]
+        build: [ "make", "meson" ]
+
+    container:
+      image: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: ./scripts/install-deps.sh
+
+      - name: Build (Make)
+        if: matrix.build == 'make'
+        run: make
+
+      - name: Run check (Make)
+        if: matrix.build == 'make'
+        run: make check
+
+      - name: Setup (Meson)
+        if: matrix.build == 'meson'
+        run: meson setup -D python=enabled -D yaml=enabled build
+
+      - name: Build (Meson)
+        if: matrix.build == 'meson'
+        run: meson compile -C build
+
+      - name: Run check (Meson)
+        if: matrix.build == 'meson'
+        run: if ! meson test -C build; then cat build/meson-logs/testlog.txt; false; fi
+
+      - name: Check without the single-pass parent lookup (Meson)
+        if: matrix.build == 'meson'
+        run: |
+          meson setup -D c_args=-DFDT_PARENT_MAX_DEPTH=0 -D python=disabled build-depth0
+          meson compile -C build-depth0
+          if ! meson test -C build-depth0 libfdt; then cat build-depth0/meson-logs/testlog.txt; false; fi
+
+  build-macos:
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [ "make", "meson" ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          ./scripts/install-deps.sh
+
+      - name: Build (Make)
+        if: matrix.build == 'make'
+        run: |
+          make
+
+      - name: Setup (Meson)
+        if: matrix.build == 'meson'
+        run: meson setup -D python=enabled -D yaml=enabled -D tests=false build
+
+      - name: Build (Meson)
+        if: matrix.build == 'meson'
+        run: meson compile -C build
+
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { sys: mingw32, swig: false, yaml: false }
+          - { sys: mingw64, swig: true, yaml: true  }
+          - { sys: ucrt64,  swig: true, yaml: true  }
+          - { sys: clang64, swig: true, yaml: true  }
+    name: ${{ matrix.sys }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{matrix.sys}}
+        update: true
+        install: >-
+          git
+          flex
+          bison
+        pacboy: >-
+          toolchain:p
+          meson:p
+          ninja:p
+          ${{ matrix.yaml && 'libyaml:p' || '' }}
+          ${{ matrix.swig && 'swig:p python-setuptools-scm:p' || '' }}
+
+    - name: '🚧 Build'
+      run: |
+        meson setup -Dtools=true -Dtests=false build
+        meson compile -C build
+
+  build-freebsd:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [ "14.5", "15.1" ]
+        build: [ "make", "meson" ]
+
+    name: FreeBSD ${{ matrix.version }} ${{ matrix.build }} build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Start VM
+        uses: cross-platform-actions/action@v1
+        with:
+          operating_system: freebsd
+          version: ${{ matrix.version }}
+          shell: sh
+
+      - name: Install Dependencies
+        shell: cpa.sh {0}
+        run: sudo ./scripts/install-deps.sh
+
+      - name: Build (Make)
+        if: matrix.build == 'make'
+        shell: cpa.sh {0}
+        run: gmake
+
+      - name: Run check (Make)
+        if: matrix.build == 'make'
+        shell: cpa.sh {0}
+        run: gmake check
+
+      - name: Setup (Meson)
+        if: matrix.build == 'meson'
+        shell: cpa.sh {0}
+        run: meson setup -D python=enabled -D yaml=enabled build
+
+      - name: Build (Meson)
+        if: matrix.build == 'meson'
+        shell: cpa.sh {0}
+        run: meson compile -C build
+
+      - name: Run check (Meson)
+        if: matrix.build == 'meson'
+        shell: cpa.sh {0}
+        run: if ! meson test -C build; then cat build/meson-logs/testlog.txt; false; fi
