@@ -9,4 +9,6 @@ cmake --build .build --target baseline -j 2
 if [ "$mode" = target ]; then
  cmake --build .build --target target -j 2
  .build/target
+ cmake --build .build --target dq_example -j 2
+ .build/dq_example
 fi

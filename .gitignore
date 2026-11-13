@@ -1,3 +1,4 @@
 build/
 build-wasm/
+.build/
 .DS_Store

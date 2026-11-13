@@ -74,7 +74,42 @@ namespace geometry {
 // should only be used when input matrices have non uniform scaling or shearing.
 // The job does not owned the buffers (in/output) and will thus not delete them
 // during job's destruction.
+//
+// Two skinning algorithms are available, selected by the |mode| parameter:
+// - kLinear (default): the historical matrix palette (linear blend) skinning
+//   implementation. Existing callers get the exact same behavior as before.
+// - kDualQuaternion: dual quaternion skinning, with a per-vertex fallback to
+//   the linear blend implementation when one of the vertex influences cannot
+//   be represented by a rigid transformation (non-uniform scale, uniform scale,
+//   shear or reflection). See |mode| for more details.
 struct OZZ_GEOMETRY_DLL SkinningJob {
+  // Skinning algorithm used by Run().
+  enum SkinningMode {
+    // Matrix palette linear blend skinning. This is the default, and the mode
+    // historical callers use (they don't have to set it).
+    kLinear,
+
+    // Dual quaternion skinning. The per-vertex decision is made as follows:
+    // - If all the matrices actually referenced by strictly positive weights
+    //   are rigid (finite matrix, bottom row (0,0,0,1), unit length and
+    //   orthogonal linear columns, determinant +1, all within 1e-4), then the
+    //   vertex is transformed with a dual quaternion.
+    // - Otherwise the whole vertex (position, normal and tangent) is
+    //   transformed with the legacy linear blend formula. A non-rigid
+    //   influence with a zero weight does not trigger this fallback, though its
+    //   index still has to be valid.
+    // - If the blended real part length is lower than 1e-6, the vertex also
+    //   falls back to linear blend skinning.
+    // In addition to the span capacity checks performed by the linear mode,
+    // this mode validates all the data it reads before writing any output:
+    // indices must be in the palette, explicit and restored weights must be
+    // finite and in [0,1], and the sum of the explicit weights must not exceed
+    // 1. Run() returns false without modifying any output if one of these
+    // conditions isn't met.
+    // The dual quaternion path doesn't allocate memory.
+    kDualQuaternion,
+  };
+
   // Default constructor, initializes default values.
   SkinningJob();
 
@@ -85,6 +120,9 @@ struct OZZ_GEOMETRY_DLL SkinningJob {
   // - if tangents are provided but normals aren't.
   // - if no output is provided while an input is. For example, if input normals
   // are provided, then output normals must also.
+  // - in kDualQuaternion mode, if the per-vertex input data (indices, weights)
+  // is invalid, as described by |mode|. kLinear mode doesn't perform these
+  // data checks.
   bool Validate() const;
 
   // Runs job's skinning task.
@@ -96,6 +134,10 @@ struct OZZ_GEOMETRY_DLL SkinningJob {
   // Number of vertices to transform. All input and output arrays must store at
   // least this number of vertices.
   int vertex_count;
+
+  // Skinning algorithm used by Run(). Defaults to kLinear, preserving the
+  // historical behavior for callers that don't set it.
+  SkinningMode mode;
 
   // Maximum number of joints influencing each vertex. Must be greater than 0.
   // The number of influences drives how joint_indices and joint_weights are
