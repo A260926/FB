@@ -18,6 +18,56 @@ Check out the examples placed under [./examples](./examples/) directory.
 API is documented using [GoDoc](http://godoc.org/github.com/at-wat/ebml-go).
 EBML can be `Marshal`-ed and `Unmarshal`-ed between tagged struct and binary stream through `io.Reader` and `io.Writer`.
 
+### Decoding Matroska ContentEncodings
+
+Matroska tracks may compress each frame and/or the CodecPrivate data by
+declaring `ContentEncodings`. `NewSimpleBlockReader` returns the bytes as
+stored in the container by default. Pass `WithContentDecoding` to undo the
+declared compression before the data reaches the caller:
+
+```go
+f, err := os.Open("input.mkv")
+if err != nil {
+	log.Fatal(err)
+}
+defer f.Close()
+
+readers, err := mkvcore.NewSimpleBlockReader(
+	f,
+	// Maximum decoded size of a single frame and of CodecPrivate.
+	mkvcore.WithContentDecoding(16<<20, 1<<20),
+)
+if err != nil {
+	log.Fatal(err)
+}
+
+for _, r := range readers {
+	go func(r mkvcore.BlockReadCloserWithTrackEntry) {
+		entry := r.TrackEntry()
+		// entry.CodecPrivate is already decoded. entry.ContentEncodings is
+		// the source declaration; do not apply it again.
+		fmt.Printf("track %d codec %s\n", entry.TrackNumber, entry.CodecID)
+
+		for {
+			frame, keyframe, timestamp, err := r.Read()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				log.Printf("track %d: %v", entry.TrackNumber, err)
+				return
+			}
+			_, _, _ = frame, keyframe, timestamp
+		}
+	}(r)
+}
+```
+
+Supported are `ContentEncodingType` 0 (compression) with `ContentCompAlgo` 3
+(prepend `ContentCompSettings`) and `ContentCompAlgo` 0 (zlib). Encryption,
+bzlib, lzo and malformed declarations make `NewSimpleBlockReader` return an
+error at construction time.
+
 
 ## References
 

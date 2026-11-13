@@ -217,7 +217,37 @@ func (o BlockReaderOptionFn) ApplyToBlockReaderOptions(opts *BlockReaderOptions)
 // BlockReaderOptions stores options for BlockReader.
 type BlockReaderOptions struct {
 	BlockReadWriterOptions
-	unmarshalOpts []ebml.UnmarshalOption
+	unmarshalOpts   []ebml.UnmarshalOption
+	contentDecoding bool
+	maxFrameBytes   uint64
+	maxPrivateBytes uint64
+}
+
+// WithContentDecoding enables decoding of the Matroska ContentEncodings
+// (compression) declared by each track.
+//
+// maxFrameBytes and maxPrivateBytes bound the decoded size of a single frame
+// and of the CodecPrivate data, respectively. Both must be positive.
+//
+// When enabled, NewSimpleBlockReader returns the decoded frames and
+// TrackEntry().CodecPrivate is the decoded codec configuration. The
+// ContentEncodings declaration in the returned TrackEntry is kept as declared
+// in the source and must not be applied to the returned data again.
+//
+// Supported are ContentEncodingType 0 (compression) with ContentCompAlgo 3
+// (prepend ContentCompSettings) and ContentCompAlgo 0 (zlib). Other algorithms,
+// encryption and invalid declarations make NewSimpleBlockReader return an
+// error without starting the background reader.
+func WithContentDecoding(maxFrameBytes, maxPrivateBytes uint64) BlockReaderOptionFn {
+	return func(o *BlockReaderOptions) error {
+		if maxFrameBytes == 0 || maxPrivateBytes == 0 {
+			return ErrContentDecodingLimits
+		}
+		o.contentDecoding = true
+		o.maxFrameBytes = maxFrameBytes
+		o.maxPrivateBytes = maxPrivateBytes
+		return nil
+	}
 }
 
 // WithUnmarshalOptions passes ebml.UnmarshalOption to ebml.Unmarshal.

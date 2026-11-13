@@ -85,6 +85,17 @@ type TrackEntry struct {
 	Language           string
 	LanguageIETF       string
 	CodecID            string
-	CodecDecodeAll     uint8
-	SeekPreRoll        uint64
+	// CodecPrivate is the raw CodecPrivate element of the track.
+	// When the reader is created with WithContentDecoding, this is the
+	// CodecPrivate with all ContentEncoding steps whose
+	// ContentEncodingScope includes the codec private data (scope bit 2)
+	// undone. It stays nil if the track has no CodecPrivate element.
+	CodecPrivate []byte
+	// ContentEncodings is the ContentEncodings declaration exactly as stored
+	// in the source. When WithContentDecoding is enabled, the data returned by
+	// CodecPrivate and by Read is already decoded; the declaration must not be
+	// applied to that data a second time.
+	ContentEncodings ContentEncodings
+	CodecDecodeAll   uint8
+	SeekPreRoll      uint64
 }
