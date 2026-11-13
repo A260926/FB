@@ -1,0 +1,716 @@
+[
+    /* Test count: 71 */
+    /* 1 */
+    {
+        "url": "https://lexbor.com/docs",
+        "done": "https://lexbor.com/docs",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 2 */
+    {
+        "url": "https://lexbor.com/docs/",
+        "done": "https://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 3 */
+    {
+        "url": "https://lexbor.com/docs/html",
+        "done": "https://lexbor.com/docs/html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 4 */
+    {
+        "url": "https://lexbor.com\\docs\\html",
+        "done": "https://lexbor.com/docs/html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 5 */
+    {
+        "url": "https://lexbor.com/docs/./././html",
+        "done": "https://lexbor.com/docs/html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 6 */
+    {
+        "url": "https://lexbor.com/docs/.html",
+        "done": "https://lexbor.com/docs/.html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/.html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 7 */
+    {
+        "url": "https://lexbor.com/docs/.",
+        "done": "https://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 8 */
+    {
+        "url": "https://lexbor.com/docs/./",
+        "done": "https://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 9 */
+    {
+        "url": "my://lexbor.com/docs/.",
+        "done": "my://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 10 */
+    {
+        "url": "my://lexbor.com/docs/./",
+        "done": "my://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 11 */
+    {
+        "url": "html://lexbor.com/docs/..",
+        "done": "html://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 12 */
+    {
+        "url": "html://lexbor.com/docs/../",
+        "done": "html://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 13 */
+    {
+        "url": "my://lexbor.com/docs/../",
+        "done": "my://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 14 */
+    {
+        "url": "my://lexbor.com/docs/..",
+        "done": "my://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 15 */
+    {
+        "url": "html://lexbor.com/docs/..html",
+        "done": "html://lexbor.com/docs/..html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/..html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 16 */
+    {
+        "url": "html://lexbor.com/docs/../html",
+        "done": "html://lexbor.com/html",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/html",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 17 */
+    {
+        "url": "html://lexbor.com/docs/../html/../static",
+        "done": "html://lexbor.com/static",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/static",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 18 */
+    {
+        "url": "html://lexbor.com/docs/../html/../../static",
+        "done": "html://lexbor.com/static",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/static",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 19 */
+    {
+        "url": "html://lexbor.com/docs/html/../static/../../yes",
+        "done": "html://lexbor.com/yes",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/yes",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 20 */
+    {
+        "url": "html://lexbor.com/docs/../../../../",
+        "done": "html://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 21 */
+    {
+        "url": "html://lexbor.com/docs/../../../../",
+        "done": "html://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 22 */
+    {
+        "url": "html://lexbor.com/docs/%2e",
+        "done": "html://lexbor.com/docs/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/docs/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 23 */
+    {
+        "url": "html://lexbor.com/docs/%2e%2e",
+        "done": "html://lexbor.com/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 24 */
+    {
+        "url": "html://lexbor.com//////",
+        "done": "html://lexbor.com//////",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//////",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 25 */
+    {
+        "url": "html://lexbor.com///..//../",
+        "done": "html://lexbor.com//",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 26 */
+    {
+        "url": "html://lexbor.com/Ё/",
+        "done": "html://lexbor.com/%D0%81/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%D0%81/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 27 */
+    {
+        "url": "html://lexbor.com/%20",
+        "done": "html://lexbor.com/%20",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%20",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 28 */
+    {
+        "url": "html://lexbor.com/%2",
+        "done": "html://lexbor.com/%2",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%2",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 29 */
+    {
+        "url": "html://lexbor.com/%",
+        "done": "html://lexbor.com/%",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 30 */
+    {
+        "url": "html://lexbor.com/ /",
+        "done": "html://lexbor.com/%20/",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%20/",
+        "failed": false,
+        "encoding": "utf-8"
+    },
+    /* 31 */
+    {
+        "url": "html://lexbor.com//",
+        "done": "html://lexbor.com//",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//",
+        "path_length": 2,
+        "failed": false
+    },
+    /* 32 */
+    {
+        "url": "html://lexbor.com/abc?x",
+        "done": "html://lexbor.com/abc?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/abc",
+        "path_length": 1,
+        "query": "x",
+        "failed": false
+    },
+    /* 33 */
+    {
+        "url": "html://lexbor.com/abc#x",
+        "done": "html://lexbor.com/abc#x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/abc",
+        "path_length": 1,
+        "fragment": "x",
+        "failed": false
+    },
+    /* 34 */
+    {
+        "url": "html://lexbor.com/abc/?x",
+        "done": "html://lexbor.com/abc/?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/abc/",
+        "path_length": 2,
+        "query": "x",
+        "failed": false
+    },
+    /* 35 */
+    {
+        "url": "html://lexbor.com//?x",
+        "done": "html://lexbor.com//?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//",
+        "path_length": 2,
+        "query": "x",
+        "failed": false
+    },
+    /* 36 */
+    {
+        "url": "html://lexbor.com/?x",
+        "done": "html://lexbor.com/?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "query": "x",
+        "failed": false
+    },
+    /* 37 */
+    {
+        "url": "html://lexbor.com?x",
+        "done": "html://lexbor.com?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "",
+        "path_length": 0,
+        "query": "x",
+        "failed": false
+    },
+    /* 38 */
+    {
+        "url": "html://lexbor.com?x",
+        "done": "html://lexbor.com?x",
+        "scheme": "html",
+        "host": "lexbor.com",
+        "path": "",
+        "path_length": 0,
+        "query": "x",
+        "failed": false
+    },
+    /* 39 */
+    {
+        "url": "html://lexbor.com",
+        "done": "html://lexbor.com",
+        "scheme": "html",
+        "host": "lexbor.com",
+        "path": "",
+        "path_length": 0,
+        "failed": false
+    },
+    /* 40 */
+    {
+        "url": "http://lexbor.com",
+        "done": "http://lexbor.com/",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "failed": false
+    },
+    /* 41 */
+    {
+        "url": "http://lexbor.com/../",
+        "done": "http://lexbor.com/",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "failed": false
+    },
+    /* 42 */
+    {
+        "url": "http://lexbor.com/..",
+        "done": "http://lexbor.com/",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "failed": false
+    },
+    /* 43 */
+    {
+        "url": "html://lexbor.com/..",
+        "done": "html://lexbor.com/",
+        "scheme": "html",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "failed": false
+    },
+    /* 44 */
+    {
+        "url": "http://lexbor.com/../my/path/../oh",
+        "done": "http://lexbor.com/my/oh",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/my/oh",
+        "path_length": 2,
+        "failed": false
+    },
+    /* 45 */
+    {
+        "url": "http://lexbor.com/my/path",
+        "done": "http://lexbor.com/my/path",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/my/path",
+        "path_length": 2,
+        "failed": false
+    },
+    /* 46 */
+    {
+        "url": "http://lexbor.com/my/.x/path",
+        "done": "http://lexbor.com/my/.x/path",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/my/.x/path",
+        "path_length": 3,
+        "failed": false
+    },
+    /* 47 */
+    {
+        "url": "http://lexbor.com/my/.x",
+        "done": "http://lexbor.com/my/.x",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/my/.x",
+        "path_length": 2,
+        "failed": false
+    },
+    /* 48 */
+    {
+        "url": "http://lexbor.com/my/..",
+        "done": "http://lexbor.com/",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/",
+        "path_length": 1,
+        "failed": false
+    },
+    /* 49 */
+    {
+        "url": "http://lexbor.com/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/\"/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "done": "http://lexbor.com/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/%22/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/%22/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "path_length": 546,
+        "failed": false
+    },
+    /* 50 */
+    {
+        "url": "http://lexbor.com/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/\"/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "done": "http://lexbor.com/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/%22/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "scheme": "http",
+        "host": "lexbor.com",
+        "path": "/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/%22/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c/a/b/c",
+        "path_length": 2043,
+        "failed": false
+    },
+    /* 51 */
+    {
+        "url": "foo:abc  ?x",
+        "done": "foo:abc %20?x",
+        "scheme": "foo",
+        "host": "",
+        "path": "abc %20",
+        "query": "x",
+        "failed": false
+    },
+    /* 52 */
+    {
+        "url": "foo:abc  #x",
+        "done": "foo:abc %20#x",
+        "scheme": "foo",
+        "host": "",
+        "path": "abc %20",
+        "fragment": "x",
+        "failed": false
+    },
+    /* 53 */
+    {
+        "url": "https://lexbor.com/a/..?x",
+        "done": "https://lexbor.com/?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/",
+        "query": "x",
+        "failed": false
+    },
+    /* 54 */
+    {
+        "url": "https://lexbor.com/a/.#x",
+        "done": "https://lexbor.com/a/#x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/a/",
+        "fragment": "x",
+        "failed": false
+    },
+    /* 55 */
+    {
+        "url": "https://example.com/aaa/bbb/%2e%2e?query",
+        "done": "https://example.com/aaa/?query",
+        "scheme": "https",
+        "host": "example.com",
+        "path": "/aaa/",
+        "query": "query",
+        "failed": false
+    },
+    /* 56 */
+    {
+        "url": "https://lexbor.com/a/%2e#x",
+        "done": "https://lexbor.com/a/#x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/a/",
+        "fragment": "x",
+        "failed": false
+    },
+    /* 57 */
+    {
+        "url": "https://lexbor.com/\u00E9/a/..?x",
+        "done": "https://lexbor.com/%C3%A9/?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%C3%A9/",
+        "query": "x",
+        "failed": false
+    },
+    /* 58 */
+    {
+        "url": "https://lexbor.com/\u00E9/.#x",
+        "done": "https://lexbor.com/%C3%A9/#x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/%C3%A9/",
+        "fragment": "x",
+        "failed": false
+    },
+    /* 59 */
+    {
+        "url": "https://lexbor.com/a/b/../.?q#f",
+        "done": "https://lexbor.com/a/?q#f",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/a/",
+        "query": "q",
+        "fragment": "f",
+        "failed": false
+    },
+    /* 60 */
+    {
+        "url": "https://lexbor.com//./c",
+        "done": "https://lexbor.com//c",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//c",
+        "failed": false
+    },
+    /* 61 */
+    {
+        "url": "https://lexbor.com/a//./c",
+        "done": "https://lexbor.com/a//c",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/a//c",
+        "failed": false
+    },
+    /* 62 */
+    {
+        "url": "https://lexbor.com/.//\u00E9/../x",
+        "done": "https://lexbor.com//x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//x",
+        "failed": false
+    },
+    /* 63 */
+    {
+        "url": "https://lexbor.com//\u00E9",
+        "done": "https://lexbor.com//%C3%A9",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//%C3%A9",
+        "failed": false
+    },
+    /* 64 */
+    {
+        "url": "https://lexbor.com/\\./y",
+        "done": "https://lexbor.com//y",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//y",
+        "failed": false
+    },
+    /* 65 */
+    {
+        "url": "https://lexbor.com/a/b/../../../c/\u00E9/../../x",
+        "done": "https://lexbor.com/x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/x",
+        "failed": false
+    },
+    /* 66 */
+    {
+        "url": "https://lexbor.com/.\\\\path",
+        "done": "https://lexbor.com//path",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "//path",
+        "failed": false
+    },
+    /* 67 */
+    {
+        "url": "..?x",
+        "base": "https://lexbor.com/b/c/",
+        "done": "https://lexbor.com/b/?x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/b/",
+        "query": "x",
+        "failed": false
+    },
+    /* 68 */
+    {
+        "url": "..#f",
+        "base": "https://lexbor.com/b/c/d",
+        "done": "https://lexbor.com/b/#f",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/b/",
+        "fragment": "f",
+        "failed": false
+    },
+    /* 69 */
+    {
+        "url": "./x",
+        "base": "https://lexbor.com/b//",
+        "done": "https://lexbor.com/b//x",
+        "scheme": "https",
+        "host": "lexbor.com",
+        "path": "/b//x",
+        "failed": false
+    },
+    /* 70 */
+    {
+        "url": "file:///C:/..?x",
+        "done": "file:///C:/?x",
+        "scheme": "file",
+        "host": "",
+        "path": "/C:/",
+        "query": "x",
+        "failed": false
+    },
+    /* 71 */
+    {
+        "url": "/..",
+        "base": "file:///C:/a/b",
+        "done": "file:///C:/",
+        "scheme": "file",
+        "host": "",
+        "path": "/C:/",
+        "failed": false
+    }
+]
