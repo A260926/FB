@@ -283,6 +283,76 @@ Example of file decoding with seek capability:
     }
 ```
 
+## Push (streaming, non-seekable) API
+
+For sources that only deliver data in forward-only chunks (a live recording
+sharded over the network, a pipe, a socket) and can never seek back, include
+``minimp3_push.h`` and link ``minimp3_push.c``. The push decoder wraps the same
+Layer III core used by the other APIs; the whole-file, frame-by-frame and
+seekable interfaces are unchanged.
+
+```c
+#include "minimp3_push.h"
+
+mp3dec_push_t dec;
+mp3dec_push_init(&dec);
+
+for (;;)
+{
+    size_t bytes   = chunk_size;        /* available compressed bytes      */
+    size_t samples = PCM_CAP;           /* PCM scalar capacity             */
+    int eof = no_more_data_coming;      /* set on the final chunk          */
+    int rc = mp3dec_push_decode(&dec, chunk, &bytes, pcm, &samples, eof);
+
+    /* bytes   <- compressed bytes actually consumed (resend the rest)     */
+    /* samples <- interleaved PCM16 scalars actually written               */
+    feed_sink(pcm, samples);
+    if (rc != MP3D_PUSH_OK) break;      /* MP3D_PUSH_DONE or an error      */
+}
+mp3dec_push_close(&dec);
+```
+
+Byte and sample accounting:
+
+- On entry ``*bytes`` is the number of compressed bytes available and
+  ``*samples`` is the PCM scalar capacity. On return they are overwritten with
+  the bytes actually consumed and the scalars actually produced, so the caller
+  always knows exactly how far it advanced; consumed input is never decoded
+  twice. A call with either length 0 is legal.
+- When the output buffer cannot hold a whole frame the decoder keeps the
+  decoded frame internally and returns it on a later call; stereo output is
+  always delivered in complete left/right frames. Input and output progress in
+  the same call are both reported truthfully, so the caller can always make
+  forward progress.
+- ``eof`` declares that no compressed bytes will follow; afterwards zero-input
+  calls drain the remaining PCM. Return values:
+
+| Value | Constant | Meaning |
+| ----- | -------- | ------- |
+| 0 | ``MP3D_PUSH_OK`` | more input may be fed and/or more PCM drained |
+| 1 | ``MP3D_PUSH_DONE`` | stream finished and all PCM delivered; repeated drain calls keep returning DONE with both lengths 0 |
+| -1 | ``MP3D_PUSH_E_PARAM`` | invalid argument |
+| -2 | ``MP3D_PUSH_E_TRUNCATED`` | end of input with a partial audio frame or an unfinished tag; complete audio already delivered is not withdrawn |
+| -3 | ``MP3D_PUSH_E_UNSUPPORTED`` | free-format stream or a mid-stream sample-rate/channel/layer change |
+
+Supported format scope:
+
+- MPEG-1, MPEG-2 and MPEG-2.5 Layer III, ordinary (non-free-format) bitrates,
+  mono and stereo, with a constant sample rate and channel count for the whole
+  stream. Free-format and mid-stream sample-rate/channel changes are rejected.
+- A leading ID3v2.3/ID3v2.4 tag is skipped using its synchsafe length and
+  optional footer; the tag body is streamed through and never fully buffered.
+  A trailing ID3v1 (and APEv2) tag is skipped.
+- A first-frame Xing/Info tag, including LAME encoder delay and padding, is
+  honored with the same sample-domain trimming as ``mp3dec_load_buf``; the tag
+  frame itself is never decoded as audio. Without such a tag no head or tail
+  samples are removed. A complete, valid stream produces output identical,
+  sample by sample, to ``mp3dec_load_buf``.
+- The instance uses fixed-size storage only: a compressed staging buffer plus
+  the pending PCM ring. Combined memory stays well under 128KiB and does not
+  grow with recording length or ID3 tag body size, and no heap allocation is
+  performed.
+
 ## Bindings
 
  * https://github.com/tosone/minimp3 - go bindings
