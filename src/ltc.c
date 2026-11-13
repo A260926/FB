@@ -26,6 +26,7 @@
 #include "ltc.h"
 #include "decoder.h"
 #include "encoder.h"
+#include "encoder_core.h"
 
 #if (defined _MSC_VER && _MSC_VER < 1800) || (defined __AVR__)
 static double rint(double v) {
@@ -178,32 +179,7 @@ int ltc_encoder_reinit(LTCEncoder *e, double sample_rate, double fps, enum LTC_T
 	e->samples_per_clock_2 = e->samples_per_clock / 2.0;
 	e->sample_remainder = 0.5;
 
-	if (flags & LTC_BGF_DONT_TOUCH) {
-		e->f.col_frame = 0;
-		if (flags&LTC_TC_CLOCK) {
-			e->f.binary_group_flag_bit1 = 1;
-		} else {
-			e->f.binary_group_flag_bit1 = 0;
-		}
-		switch (standard) {
-			case LTC_TV_625_50: /* 25 fps mode */
-				e->f.biphase_mark_phase_correction = 0; // BGF0
-				e->f.binary_group_flag_bit0 = (flags&LTC_USE_DATE)?1:0; // BGF2
-				break;
-			default:
-				e->f.binary_group_flag_bit0 = 0;
-				e->f.binary_group_flag_bit2 = (flags&LTC_USE_DATE)?1:0;
-				break;
-		}
-	}
-	if ((flags&LTC_NO_PARITY) == 0) {
-		ltc_frame_set_parity(&e->f, standard);
-	}
-
-	if ((int)rint(fps * 100.0) == 2997)
-		e->f.dfbit = 1;
-	else
-		e->f.dfbit = 0;
+	libltc_encoder_init_frame(&e->f, fps, standard, flags);
 	return 0;
 }
 
@@ -219,14 +195,12 @@ double ltc_encoder_get_volume(LTCEncoder *e) {
 }
 
 int ltc_encoder_set_volume(LTCEncoder *e, double dBFS) {
-	if (dBFS > 0)
+	ltcsnd_sample_t lo, hi;
+	if (libltc_encoder_volume_levels(dBFS, &lo, &hi)) {
 		return -1;
-	double pp = rint(127.0 * pow(10, dBFS/20.0));
-	if (pp < 1 || pp > 127)
-		return -1;
-	ltcsnd_sample_t diff = ((ltcsnd_sample_t) pp)&0x7f;
-	e->enc_lo = SAMPLE_CENTER - diff;
-	e->enc_hi = SAMPLE_CENTER + diff;
+	}
+	e->enc_lo = lo;
+	e->enc_hi = hi;
 	return 0;
 }
 
@@ -248,7 +222,7 @@ void ltc_encoder_set_filter(LTCEncoder *e, double rise_time) {
 	if (rise_time <= 0)
 		e->filter_const = 0;
 	else
-		e->filter_const = 1.0 - exp( -1.0 / (e->sample_rate * rise_time / 2000000.0 / exp(1.0)) );
+		e->filter_const = libltc_encoder_filter_const(e->sample_rate, rise_time);
 }
 
 int ltc_encoder_set_buffersize(LTCEncoder *e, double sample_rate, double fps) {

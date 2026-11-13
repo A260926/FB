@@ -346,6 +346,12 @@ typedef struct LTCDecoder LTCDecoder;
 typedef struct LTCEncoder LTCEncoder;
 
 /**
+ * Opaque structure
+ * see: \ref ltc_stream_encoder_create, \ref ltc_stream_encoder_free
+ */
+typedef struct LTCStreamEncoder LTCStreamEncoder;
+
+/**
  * Convert binary LTCFrame into SMPTETimecode struct
  *
  * @param stime output
@@ -921,6 +927,110 @@ int ltc_frame_parse_bcg_flags(LTCFrame *frame, enum LTC_TV_STANDARD standard);
  * @return offset in samples
  */
 ltc_off_t ltc_frame_alignment(double samples_per_frame, enum LTC_TV_STANDARD standard);
+
+/**
+ * Allocate and initialize an allocation-free LTC stream encoder.
+ *
+ * Unlike \ref LTCEncoder, the stream encoder does not encode a whole
+ * frame into an internal PCM buffer. \ref ltc_stream_encoder_read
+ * generates only the samples that are asked for, so the encoder can be
+ * used directly from a fixed-size audio callback (1, 257, 1024, ...
+ * samples per call).
+ *
+ * The output is byte identical to an \ref LTCEncoder that was created
+ * with the same sample-rate, fps, TV standard, flags, volume and filter
+ * settings and whose frames are pulled with
+ * \ref ltc_encoder_encode_frame (or \ref ltc_encoder_encode_reversed_frame
+ * for direction -1), provided the start timecode, user-bits and the
+ * increment/decrement calls match.
+ *
+ * @param sample_rate audio sample rate, 32000 .. 192000.
+ * @param fps frame rate, one of 24, 25, 30 or 30000/1001 (29.97).
+ * @param standard the TV standard to use for Binary Group Flag bit
+ *   position and parity.
+ * @param flags binary combination of \ref LTC_BG_FLAGS.
+ * @param start the timecode of the first encoded frame. Must not be NULL.
+ * @param direction 1 for forward playback, -1 for reverse playback.
+ *   The direction is fixed for the lifetime of the encoder.
+ * @param volume_dbfs output level in dBFS, <= 0. -3.0 matches the
+ *   LTCEncoder default.
+ * @param rise_time signal rise-time in microseconds, 0 for a perfect
+ *   square wave, 40.0 is the LTC default.
+ * @return a new encoder handle or NULL if a parameter is invalid or
+ *   memory could not be allocated. Free with \ref ltc_stream_encoder_free.
+ */
+LTCStreamEncoder* ltc_stream_encoder_create(
+		double sample_rate, double fps, enum LTC_TV_STANDARD standard,
+		int flags, const SMPTETimecode *start, int direction,
+		double volume_dbfs, double rise_time);
+
+/**
+ * Release a stream encoder.
+ * @param e encoder handle, may be NULL.
+ */
+void ltc_stream_encoder_free(LTCStreamEncoder *e);
+
+/**
+ * Generate the next \p count PCM samples and advance the encoder.
+ *
+ * On success exactly \p count unsigned 8 bit mono samples are written
+ * to \p output. The encoder keeps its position between calls: any split
+ * of the stream, including splits inside a bit, half a bit or in the
+ * middle of a filtered edge, produces the same samples as one single
+ * read of the same total length.
+ *
+ * This function does not allocate or free heap memory and does not
+ * buffer a whole frame internally, so it is safe to call from a
+ * realtime audio callback.
+ *
+ * A \p count of 0 is allowed (also with \p output == NULL) and does not
+ * advance the encoder.
+ *
+ * @param e encoder handle.
+ * @param output destination for the samples.
+ * @param count number of samples to generate.
+ * @return 0 on success, -1 if \p e is NULL or \p output is NULL while
+ *   \p count is not zero.
+ */
+int ltc_stream_encoder_read(LTCStreamEncoder *e, ltcsnd_sample_t *output, size_t count);
+
+/**
+ * Set the user-bits of the next frame to be encoded.
+ *
+ * The data is a 32 bit unsigned integer written LSB first into the
+ * eight user fields, same as \ref ltc_encoder_set_user_bits.
+ *
+ * If no sample of the current frame has been emitted yet the change
+ * applies to the current frame, otherwise it is deferred to the
+ * following frame. The 80 bit word of a frame is therefore always
+ * coherent: a frame's first and second half always use the same
+ * user-bits.
+ *
+ * When the encoder was created with LTC_USE_DATE the user fields carry
+ * the date and this call is rejected.
+ *
+ * Unless LTC_NO_PARITY is set, the parity bit is recalculated so that
+ * the correction/flag bit mandated by the TV standard stays valid.
+ *
+ * @param e encoder handle.
+ * @param data the 32 bit user-bits value.
+ * @return 0 on success, -1 if \p e is NULL or LTC_USE_DATE is enabled.
+ *   In the latter case the frame is left untouched, so the date carried
+ *   by the user fields always remains intact.
+ */
+int ltc_stream_encoder_set_user_bits(LTCStreamEncoder *e, unsigned long data);
+
+/**
+ * Query the timecode that owns the next sample to be emitted.
+ *
+ * While samples of the current frame are still pending this returns the
+ * current frame. The timecode only advances to the next frame after the
+ * last sample of the current frame has been generated.
+ *
+ * @param e encoder handle.
+ * @param t receives the timecode.
+ */
+void ltc_stream_encoder_get_timecode(LTCStreamEncoder *e, SMPTETimecode *t);
 
 #ifdef __cplusplus
 }

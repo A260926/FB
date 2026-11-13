@@ -24,6 +24,7 @@
 #include <math.h>
 
 #include "encoder.h"
+#include "encoder_core.h"
 
 /**
  * add values to the output buffer
@@ -38,28 +39,20 @@ static int addvalues(LTCEncoder *e, int n) {
 		return 1;
 	}
 
-	ltcsnd_sample_t * const wave = &(e->buf[e->offset]);
-	const double tcf =  e->filter_const;
-	if (tcf > 0) {
-		/* low-pass-filter
-		 * LTC signal should have a rise time of 40 us +/- 10 us.
-		 *
-		 * rise-time means from <10% to >90% of the signal.
-		 * in each call to addvalues() we start at 50%, so
-		 * here we need half-of it. (0.000020 sec)
-		 *
-		 * e->cutoff = 1.0 -exp( -1.0 / (sample_rate * .000020 / exp(1.0)) );
-		 */
+	if (e->filter_const > 0) {
+		/* low-pass-filter, the exact recurrence is shared with the
+		 * stream encoder through libltc_filter_ramp_step() */
 		int i;
+		ltcsnd_sample_t * const wave = &(e->buf[e->offset]);
 		ltcsnd_sample_t val = SAMPLE_CENTER;
 		int m = (n+1)>>1;
 		for (i = 0 ; i < m ; i++) {
-			val = val + tcf * (tgtval - val);
+			val = libltc_filter_ramp_step(e->filter_const, val, tgtval);
 			wave[n-i-1] = wave[i] = val;
 		}
 	} else {
 		/* perfect square wave */
-		memset(wave, tgtval, n);
+		memset(&(e->buf[e->offset]), tgtval, n);
 	}
 
 	e->offset += n;
@@ -72,37 +65,21 @@ int encode_byte(LTCEncoder *e, int byte, double speed) {
 
 	int err = 0;
 	const unsigned char c = ((unsigned char*)&e->f)[byte];
-	unsigned char b = (speed < 0)?128:1; // bit
-	const double spc = e->samples_per_clock * fabs(speed);
-	const double sph = e->samples_per_clock_2 * fabs(speed);
+	const int direction = (speed < 0) ? -1 : 1;
+	int step;
 
-	do
-	{
-		int n;
-		if ((c & b) == 0) {
-			n = (int)(spc + e->sample_remainder);
-			e->sample_remainder = spc + e->sample_remainder - n;
+	for (step = 0; step < 8; step++) {
+		const int bit = (c & libltc_bmc_bit_mask(step, direction)) ? 1 : 0;
+		int length[2];
+		const int segs = libltc_bmc_segment_lengths(
+				e->samples_per_clock, e->samples_per_clock_2,
+				&e->sample_remainder, bit, speed, length);
+		int s;
+		for (s = 0; s < segs; s++) {
 			e->state = !e->state;
-			err |= addvalues(e, n);
-		} else {
-			n = (int)(sph + e->sample_remainder);
-			e->sample_remainder = sph + e->sample_remainder - n;
-			e->state = !e->state;
-			err |= addvalues(e, n);
-
-			n = (int)(sph + e->sample_remainder);
-			e->sample_remainder = sph + e->sample_remainder - n;
-			e->state = !e->state;
-			err |= addvalues(e, n);
+			err |= addvalues(e, length[s]);
 		}
-		/* this is based on the assumption that with every compiler
-		 * ((unsigned char) 128)<<1 == ((unsigned char 1)>>1) == 0
-		 */
-		if (speed < 0)
-			b >>= 1;
-		else
-			b <<= 1;
-	} while (b);
+	}
 
 	return err;
 }
