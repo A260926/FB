@@ -146,6 +146,13 @@ protected:
     virtual int seekBestOverlapPositionQuick(const SAMPLETYPE *refPos);
     int seekBestOverlapPosition(const SAMPLETYPE *refPos);
 
+    /// Full (non-quick) correlation scan over an explicitly limited candidate
+    /// range. 'refPos' points at the first candidate position and 'range' is
+    /// the number of candidate positions to evaluate. Used by the anchored
+    /// time-stretch mode where the search window must not reach across a
+    /// protected zone. Returns the offset of the best candidate, in [0, range).
+    int seekBestOverlapPositionLimited(const SAMPLETYPE *refPos, int range);
+
     virtual void overlapStereo(SAMPLETYPE *output, const SAMPLETYPE *input) const;
     virtual void overlapMono(SAMPLETYPE *output, const SAMPLETYPE *input) const;
     virtual void overlapMulti(SAMPLETYPE *output, const SAMPLETYPE *input) const;

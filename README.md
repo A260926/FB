@@ -205,6 +205,58 @@ The time-stretch routine has a 'quick' mode that substantially speeds up the alg
 
 * * *
 
+### 3.6 Anchored time-stretch with protected zones
+
+The ordinary tempo/pitch/rate controls apply one global ratio to a whole stream. Some material instead needs a *finite* mapping where specific events — drum hits, consonant attacks — must land at exact output positions. The anchored time-stretch mode provides this while guaranteeing that those events are never moved, duplicated, cross-faded or resampled by the WSOLA window search.
+
+The mode is disabled by default and the ordinary `tempo`, `pitch` and `rate` paths are unchanged. It is enabled with:
+
+```cpp
+struct TimeAnchor {
+    uint64_t inputFrame;
+    uint64_t outputFrame;
+};
+
+void SoundTouch::setTimeAnchors(const std::vector<TimeAnchor>& anchors,
+                                unsigned int protectFrames);
+```
+
+This mode currently supports only 48 kHz, floating-point samples, and 1 or 2 channels. Configure the usual window parameters first (`sequence = 40 ms`, `seek = 15 ms`, `overlap = 8 ms`, quick seek off) and set rate, pitch and tempo to 1 before calling `setTimeAnchors`.
+
+#### Coordinates
+
+A non-empty anchor list describes one finite run:
+
+* The first item must be `(0, 0)`.
+* The last item `(N, M)` declares that the run consumes exactly **N** input frames and produces exactly **M** output frames.
+* Both columns must be strictly increasing, and every coordinate must be at most 2^53.
+* Between two consecutive anchors the time map is a single affine (constant-ratio) segment; each segment is time-stretched with WSOLA at the original pitch.
+* The nominal analysis-window position follows that affine map. The correlation search only chooses the current splice position; its offset is never accumulated into the nominal clock, so seeking errors cannot drift across segments.
+
+#### Protected zones
+
+`protectFrames` (written **P**) must be in `[16, 256]`. The frames around every anchor are protected:
+
+* Head: input `[0, P)` maps to output `[0, P)`.
+* Tail: input `[N-P, N)` maps to output `[M-P, M)`.
+* Internal anchor `(s, t)`: input `[s-P, s+P)` maps to output `[t-P, t+P)`.
+
+Protected frames are copied through verbatim — original sample order, original gain, exactly once, with no cross-fade, no resampling and no second copy of an attack. The corresponding output samples match the input to within 2e-6.
+
+Adjacent protected zones must be separated by at least 8192 frames on **both** time axes, and each gap's output/input length ratio must lie in `[0.5, 2]`; otherwise `setTimeAnchors` throws `std::invalid_argument` and leaves the previous configuration untouched. The WSOLA windows next to a zone are shortened/re-organized so that an overlap tail always finishes before the zone begins and no analysis window reaches across a zone.
+
+Internal PCM storage is bounded (under 65536 frames when the caller feeds at most 4096 frames per call and reads promptly) regardless of `N`, `M` or the distance between anchors, and output starts flowing as soon as the first stretch window can be formed — the processor does not wait for a whole segment or the next anchor.
+
+#### Streaming and end-of-stream rules
+
+* Anchors may only be configured before streaming starts — i.e. after construction or `clear()`, before the first non-empty `putSamples`. While idle, a different valid list may be installed, or the mode disabled again by passing an empty list.
+* While the mode is enabled the audio configuration is fixed; changing sample rate, channels, tempo/pitch/rate or the window settings, or changing the anchors after streaming has started, throws `std::logic_error` without discarding any generated or pending audio.
+* Total input must not exceed N. A `putSamples` call that would overshoot is rejected before anything is written (`std::invalid_argument`). Zero-length input and empty reads do not advance the stream.
+* `flush()` before all N frames have arrived is rejected (`std::logic_error`) and leaves the state unchanged, so the remaining input can still be supplied. Once N frames have been fed, `flush()` drains the remaining stretch segments and the final protected zone; the total number of readable frames is then exactly M. Repeating `flush()` produces no further samples, and any non-empty input after the run has finished is rejected.
+* `clear()` discards all buffered audio and the anchor configuration while retaining the sample rate, channel count and the previously stored numeric tempo/pitch/rate values, so another run can be configured afterwards.
+
+The same input and anchors produce identical output for any input chunking and read-buffer sizes (e.g. 1/7/113-frame chunks versus 4096-frame chunks), to within 2e-5. See `examples/time_anchor.cpp` for a complete stereo example that writes a PCM16 WAV file.
+
 ## <a name="SoundStretch"></a>4\. SoundStretch audio processing utility
 
 SoundStretch audio processing utility

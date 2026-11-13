@@ -72,8 +72,11 @@
 #ifndef SoundTouch_H
 #define SoundTouch_H
 
+#include <vector>
+
 #include "FIFOSamplePipe.h"
 #include "STTypes.h"
+#include "TimeAnchor.h"
 
 namespace soundtouch
 {
@@ -150,6 +153,37 @@ private:
     /// Time-stretch class instance
     class TDStretch *pTDStretch;
 
+    /// Anchored time-stretch engine, used while the anchor mode is enabled.
+    class AnchorTDStretch *pAnchor;
+
+    /// Anchor mode enabled (a non-empty anchor list is currently active).
+    bool anchorMode;
+
+    /// Streaming has started: at least one non-empty putSamples call has been
+    /// accepted since construction or the last clear().
+    bool streamStarted;
+
+    /// The anchored run has been finished with flush() after all N input
+    /// frames were received.
+    bool anchorFinished;
+
+    /// Currently active anchor protection width in frames (0 when disabled).
+    uint anchorProtectFrames;
+
+    /// Numeric tempo/pitch/rate values saved when anchor mode is enabled and
+    /// restored by clear(), so enabling anchors never permanently overwrites
+    /// the caller's ordinary settings.
+    float savedVirtualRate;
+    float savedVirtualTempo;
+    float savedVirtualPitch;
+    bool haveSavedVirtual;
+
+    /// Validates the anchor list / protection width against the current audio
+    /// configuration. Throws std::invalid_argument without changing any state
+    /// if anything is invalid.
+    void validateTimeAnchors(const std::vector<TimeAnchor> &anchors,
+                             uint protectFrames) const;
+
     /// Virtual pitch parameter. Effective rate & tempo are calculated from these parameters.
     float virtualRate;
 
@@ -218,8 +252,41 @@ public:
     /// Sets the number of channels, 1 = mono, 2 = stereo
     void setChannels(uint numChannels);
 
+    /// Returns the configured sample rate (0 if not yet set).
+    uint sampleRate() const;
+
     /// Sets sample rate.
     void setSampleRate(uint srate);
+
+    /// Enables the anchored time-stretch mode with a finite, piecewise affine
+    /// time mapping.
+    ///
+    /// 'anchors' pairs input frame positions with exact output frame
+    /// positions. A non-empty list must:
+    ///   - start with (0, 0) and end with (N, M), where N is the total number
+    ///     of input frames and M the total number of output frames;
+    ///   - be strictly increasing in both columns;
+    ///   - keep every coordinate at or below 2^53;
+    ///   - keep at least 8192 frames of clearance, on both time axes, between
+    ///     neighbouring protected zones, with each output/input gap ratio in
+    ///     [0.5, 2].
+    /// 'protectFrames' (P) is in [16, 256]. The zones [0,P), [N-P,N) and
+    /// [s-P,s+P) around every internal anchor (and their output counterparts)
+    /// are copied through verbatim: original sample order and gain, exactly
+    /// once, no cross-fade or resampling. The gaps between them are stretched
+    /// with WSOLA while preserving the original pitch.
+    ///
+    /// An empty list disables the mode and restores the ordinary
+    /// tempo/pitch/rate pipeline.
+    ///
+    /// Anchors may only be configured before streaming starts (after
+    /// construction or clear(), before the first non-empty putSamples).
+    /// Invalid arguments throw std::invalid_argument and leave the previous
+    /// configuration untouched. In anchor mode the audio configuration is
+    /// fixed until clear(); changing it or the anchors after streaming started
+    /// throws std::logic_error without discarding any audio.
+    void setTimeAnchors(const std::vector<TimeAnchor> &anchors,
+                        uint protectFrames);
 
     /// Flushes the last samples from the processing pipeline to the output.
     /// Clears also the internal processing buffers.
@@ -240,8 +307,21 @@ public:
                                                     ///< contains data for both channels.
             );
 
+    /// Output samples from beginning of the sample buffer. In anchor mode the
+    /// samples come from the anchored engine; otherwise from the ordinary
+    /// tempo/pitch/rate pipeline.
+    virtual uint receiveSamples(SAMPLETYPE *outBuffer, uint maxSamples);
+
+    /// Returns number of ready output samples.
+    virtual uint numSamples() const;
+
+    /// Returns nonzero if there aren't any ready samples available.
+    virtual int isEmpty() const;
+
     /// Clears all the samples in the object's output and internal processing
-    /// buffers.
+    /// buffers. In anchor mode this also drops the anchor configuration while
+    /// keeping the sample rate, channel count and the numeric tempo/pitch/rate
+    /// settings, so another run can be configured afterwards.
     virtual void clear();
 
     /// Changes a setting controlling the processing system behaviour. See the

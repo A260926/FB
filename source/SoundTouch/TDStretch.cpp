@@ -259,8 +259,8 @@ int TDStretch::seekBestOverlapPosition(const SAMPLETYPE *refPos)
 
 
 // Overlaps samples in 'midBuffer' with the samples in 'pInputBuffer' at position
-// of 'ovlPos'.
-inline void TDStretch::overlap(SAMPLETYPE *pOutput, const SAMPLETYPE *pInput, uint ovlPos) const
+// of 'ovlPos'. Declared without 'inline' so the anchored engine can reuse it.
+void TDStretch::overlap(SAMPLETYPE *pOutput, const SAMPLETYPE *pInput, uint ovlPos) const
 {
 #ifndef USE_MULTICH_ALWAYS
     if (channels == 1)
@@ -386,7 +386,59 @@ int TDStretch::seekBestOverlapPositionQuick(const SAMPLETYPE *refPos)
 
 
 
-/// clear cross correlation routine state if necessary 
+// Seeks for the optimal overlap-mixing position over an explicitly limited
+// candidate range [0, range). Same full-scan correlation logic as
+// 'seekBestOverlapPositionFull', but the scan width is given by the caller
+// instead of 'seekLength'. This lets the anchored mode keep every candidate
+// analysis window away from the protected zones.
+int TDStretch::seekBestOverlapPositionLimited(const SAMPLETYPE *refPos, int range)
+{
+    int bestOffs;
+    double bestCorr, corr;
+    double norm;
+    int i;
+
+    if (range <= 1)
+    {
+        // nothing to choose from
+        clearCrossCorrState();
+        return 0;
+    }
+
+    bestCorr = FLT_MIN;
+    bestOffs = 0;
+
+    // Scans for the best correlation value by testing each possible position
+    // over the permitted range.
+    bestCorr = calcCrossCorr(refPos, pMidBuffer, norm);
+    for (i = 1; i < range; i ++)
+    {
+        // Calculates correlation value for the mixing position corresponding
+        // to 'i'. Now call "calcCrossCorrAccumulate" that is otherwise same as
+        // "calcCrossCorr", but saves time by reusing & updating previously stored
+        // "norm" value
+        corr = calcCrossCorrAccumulate(refPos + channels * i, pMidBuffer, norm);
+
+        // heuristic rule to slightly favour values close to mid of the range
+        double tmp = (double)(2 * i - range) / (double)range;
+        corr = ((corr + 0.1) * (1.0 - 0.25 * tmp * tmp));
+
+        // Checks for the highest correlation value
+        if (corr > bestCorr)
+        {
+            bestCorr = corr;
+            bestOffs = i;
+        }
+    }
+    // clear cross correlation routine state if necessary (is so e.g. in MMX routines).
+    clearCrossCorrState();
+
+    return bestOffs;
+}
+
+
+
+/// clear cross correlation routine state if necessary
 void TDStretch::clearCrossCorrState()
 {
     // default implementation is empty.
