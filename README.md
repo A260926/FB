@@ -48,6 +48,92 @@ Re-run this periodically to get up-to-date versions of these binaries.
 
 The API documentation is at https://godoc.org/github.com/tebeka/selenium. See [the example](https://github.com/tebeka/selenium/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/tebeka/selenium/blob/master/sauce_test.go), [selenium](https://github.com/tebeka/selenium/blob/master/selenium_test.go) and [service](https://github.com/tebeka/selenium/blob/master/service_test.go)) for better usage information.
 
+## Shadow DOM
+
+Elements inside an open [shadow root](https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot)
+cannot be found with the ordinary `FindElement` calls, and a shadow root is a
+distinct search context from the page. This package supports shadow roots
+through the W3C WebDriver endpoints directly - no JavaScript is injected, so
+it also works when script execution is disabled.
+
+The API consists of:
+
+- `GetShadowRoot(elem WebElement) (ShadowRoot, error)` - returns the open
+  shadow root attached to an element, using
+  `POST /session/{id}/element/{id}/shadow`.
+- `ShadowRoot.FindElement(by, value string) (WebElement, error)` and
+  `ShadowRoot.FindElements(by, value string) ([]WebElement, error)` - search
+  inside a root via `POST /session/{id}/shadow/{id}/element[s]`. They accept
+  `ByCSSSelector`, `ByID` and `ByName`; ID and name values are translated to
+  CSS selectors with every literal character escaped (quotes, backslashes,
+  spaces and non-ASCII text are matched literally).
+- `ResolveShadowPath(ctx, wd, steps, interval)` - walks a path of
+  `ShadowStep{By, Value, EnterShadow}` values, entering a shadow root after a
+  step when `EnterShadow` is true, and returns the element from the final
+  step.
+
+A shadow root reference and an element reference are different handles and
+cannot be interchanged. Elements returned from a root are ordinary
+`WebElement` values, so `SendKeys`, `GetAttribute` and another
+`GetShadowRoot` for nested components all keep working. Shadow roots require a
+W3C WebDriver session; a legacy JSON Wire Protocol session returns an error
+rather than attempting a script-based fallback.
+
+`ResolveShadowPath` handles components being rebuilt. If any step fails with
+"no such element", "no such shadow root", "detached shadow root" or "stale
+element reference", the whole path is re-resolved from the first step instead
+of reusing stale intermediate handles; other protocol errors are returned
+immediately. Retries share the deadline of the passed `context.Context` (no
+new traversal starts after cancellation), the remote implicit timeout is left
+untouched, and input actions are never replayed automatically.
+
+```go
+wd, err := selenium.NewRemote(selenium.Capabilities{"browserName": "chrome"}, "http://127.0.0.1:4444/wd/hub")
+if err != nil {
+    panic(err)
+}
+defer wd.Quit()
+
+// Drive the endpoints directly through two nested components.
+host, err := wd.FindElement(selenium.ByCSSSelector, "contact-card")
+if err != nil {
+    panic(err)
+}
+root, err := selenium.GetShadowRoot(host)
+if err != nil {
+    panic(err)
+}
+inner, err := root.FindElement(selenium.ByCSSSelector, "contact-form")
+if err != nil {
+    panic(err)
+}
+innerRoot, err := selenium.GetShadowRoot(inner)
+if err != nil {
+    panic(err)
+}
+field, err := innerRoot.FindElement(selenium.ByID, "email")
+if err != nil {
+    panic(err)
+}
+if err := field.SendKeys("ada@example.com"); err != nil {
+    panic(err)
+}
+
+// Or resolve the same path as a whole, re-walking it from the first step if
+// either component is rebuilt while the page settles.
+steps := []selenium.ShadowStep{
+    {By: selenium.ByCSSSelector, Value: "contact-card", EnterShadow: true},
+    {By: selenium.ByCSSSelector, Value: "contact-form", EnterShadow: true},
+    {By: selenium.ByID, Value: "email"},
+}
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+field, err = selenium.ResolveShadowPath(ctx, wd, steps, 50*time.Millisecond)
+if err != nil {
+    panic(err)
+}
+```
+
 ## Known Issues
 
 Any issues are usually because the underlying browser automation framework has a
