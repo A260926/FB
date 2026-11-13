@@ -1,0 +1,6 @@
+./parser.go
+./robotstxt.go
+./scanner.go
+./google_test.go
+./robotstxt_test.go
+./scanner_test.go

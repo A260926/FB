@@ -29,9 +29,19 @@ const (
 	lHost
 )
 
+// parser consumes tokens straight from a streamScanner. It never holds the
+// full token slice: at most one look-ahead token is buffered, plus the
+// already built groups and rules.
 type parser struct {
-	tokens []string
+	sc *streamScanner
+
+	// pos counts tokens already consumed and doubles as the token number
+	// reported in syntax errors, matching the historical slice-based parser.
 	pos    int
+	peeked bool
+	peek   string
+
+	stats *streamStats
 }
 
 type lineInfo struct {
@@ -42,8 +52,8 @@ type lineInfo struct {
 	vr *regexp.Regexp // Regexp value of the key
 }
 
-func newParser(tokens []string) *parser {
-	return &parser{tokens: tokens}
+func newParser(sc *streamScanner, stats *streamStats) *parser {
+	return &parser{sc: sc, stats: stats}
 }
 
 func parseGroupMap(groups map[string]*Group, agents []string, fun func(*Group)) {
@@ -58,17 +68,26 @@ func parseGroupMap(groups map[string]*Group, agents []string, fun func(*Group)) 
 	}
 }
 
-func (p *parser) parseAll() (groups map[string]*Group, host string, sitemaps []string, errs []error) {
+func (p *parser) parseAll() (groups map[string]*Group, host string, sitemaps []string, errs []error, readErr error) {
 	groups = make(map[string]*Group, 16)
 	agents := make([]string, 0, 4)
 	isEmptyGroup := true
 
-	// Reset internal fields, tokens are assigned at creation time, never change
+	// Reset internal state.
 	p.pos = 0
+	p.peeked = false
+	p.peek = ""
+	if p.stats != nil {
+		p.stats.setPending(0, 0)
+	}
 
 	for {
 		if li, err := p.parseLine(); err != nil {
 			if err == io.EOF {
+				// Proper end of input. A failure of the underlying Reader
+				// takes precedence over any syntax errors collected so far
+				// and over the partially built rules.
+				readErr = p.sc.err()
 				break
 			}
 			errs = append(errs, err)
@@ -235,7 +254,8 @@ func (p *parser) parseLine() (li *lineInfo, err error) {
 	case "crawl-delay", "crawldelay":
 		// From http://en.wikipedia.org/wiki/Robots_exclusion_standard#Nonstandard_extensions
 		// Several major crawlers support a Crawl-delay parameter, set to the
-		// number of seconds to wait between successive requests to the same server.
+		// number of seconds to wait between successive requests to the same
+		// server.
 		p.popToken()
 		if cd, e := strconv.ParseFloat(t2, 64); e != nil {
 			return nil, e
@@ -252,19 +272,38 @@ func (p *parser) parseLine() (li *lineInfo, err error) {
 }
 
 func (p *parser) popToken() (tok string, ok bool) {
-	tok, ok = p.peekToken()
+	if p.peeked {
+		tok = p.peek
+		p.peeked = false
+		p.peek = ""
+		p.pos++
+		if p.stats != nil {
+			p.stats.setPending(0, 0)
+		}
+		return tok, true
+	}
+
+	tok, ok = p.sc.nextToken()
 	if !ok {
-		return
+		return "", false
 	}
 	p.pos++
 	return tok, true
 }
 
 func (p *parser) peekToken() (tok string, ok bool) {
-	if p.pos >= len(p.tokens) {
-		return "", false
+	if !p.peeked {
+		tok, ok = p.sc.nextToken()
+		if !ok {
+			return "", false
+		}
+		p.peek = tok
+		p.peeked = true
+		if p.stats != nil {
+			p.stats.setPending(1, len(tok))
+		}
 	}
-	return p.tokens[p.pos], true
+	return p.peek, true
 }
 
 func isAsterisk(r rune) bool {

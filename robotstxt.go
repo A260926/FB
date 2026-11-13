@@ -9,7 +9,7 @@ package robotstxt
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -98,49 +98,119 @@ func FromStatusAndString(statusCode int, body string) (*RobotsData, error) {
 	return FromStatusAndBytes(statusCode, []byte(body))
 }
 
+// FromResponse parses robots data from an HTTP response. The response body
+// is consumed through the streaming parser for successful (2xx) responses;
+// bodies of 4xx/5xx and other unsupported statuses are still read to the
+// end (or until a read error) but neither parsed nor fully buffered.
+//
+// FromResponse never closes res.Body: ownership of the body stays with the
+// caller. A nil response yields (nil, nil). A body read failure is returned
+// unchanged, so errors.Is can recover the original error, and takes
+// precedence over any syntax error in the partially read body.
 func FromResponse(res *http.Response) (*RobotsData, error) {
 	if res == nil {
 		// Edge case, if res is nil, return nil data
 		return nil, nil
 	}
-	buf, e := ioutil.ReadAll(res.Body)
-	if e != nil {
+
+	switch {
+	case res.StatusCode >= 200 && res.StatusCode < 300:
+		return FromReader(res.Body)
+
+	// From https://developers.google.com/webmasters/control-crawl-index/docs/robots_txt
+	//
+	// Google treats all 4xx errors in the same way and assumes that no valid
+	// robots.txt file exists. It is assumed that there are no restrictions.
+	// This is a "full allow" for crawling. Note: this includes 401
+	// "Unauthorized" and 403 "Forbidden" HTTP result codes.
+	case res.StatusCode >= 400 && res.StatusCode < 500:
+		if e := drainReader(res.Body); e != nil {
+			return nil, e
+		}
+		return allowAll, nil
+
+	// From Google's spec:
+	// Server errors (5xx) are seen as temporary errors that result in a "full
+	// disallow" of crawling.
+	case res.StatusCode >= 500 && res.StatusCode < 600:
+		if e := drainReader(res.Body); e != nil {
+			return nil, e
+		}
+		return disallowAll, nil
+	}
+
+	// Unsupported status codes still require draining the body before the
+	// status error is reported, preserving the historical read-error
+	// precedence.
+	if e := drainReader(res.Body); e != nil {
 		return nil, e
 	}
-	return FromStatusAndBytes(res.StatusCode, buf)
+	return nil, errors.New("Unexpected status: " + strconv.Itoa(res.StatusCode))
+}
+
+// FromReader parses robots.txt data incrementally from r. Input is read and
+// tokenized as a stream: the whole body is never buffered, and working
+// memory grows only with the longest token, not with body size, comment
+// length or the number of tokens seen.
+//
+// FromReader does not close r. A nil reader returns ErrNilReader. A
+// non-EOF failure of r is returned unchanged (errors.Is can recover it)
+// and takes precedence over any syntax error; the bytes delivered together
+// with the failing Read are parsed first, but a truncated body can never be
+// accepted as a complete policy.
+func FromReader(r io.Reader) (*RobotsData, error) {
+	if r == nil {
+		return nil, ErrNilReader
+	}
+	return parseStream(r)
 }
 
 func FromBytes(body []byte) (r *RobotsData, err error) {
-	var errs []error
-
-	// special case (probably not worth optimization?)
-	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) == 0 {
-		return allowAll, nil
-	}
-
-	sc := newByteScanner("bytes", true)
-	//sc.Quiet = !print_errors
-	sc.feed(body, true)
-	tokens := sc.scanAll()
-
-	// special case worth optimization
-	if len(tokens) == 0 {
-		return allowAll, nil
-	}
-
-	r = &RobotsData{}
-	parser := newParser(tokens)
-	r.groups, r.Host, r.Sitemaps, errs = parser.parseAll()
-	if len(errs) > 0 {
-		return nil, newParseError(errs)
-	}
-
-	return r, nil
+	return parseStream(bytes.NewReader(body))
 }
 
 func FromString(body string) (r *RobotsData, err error) {
 	return FromBytes([]byte(body))
+}
+
+// parseStream is the shared streaming core used by FromReader, FromBytes
+// and FromString. It drives the scanner and parser without materializing
+// the token stream.
+func parseStream(r io.Reader) (*RobotsData, error) {
+	data, err, _ := parseStreamStats(r)
+	return data, err
+}
+
+// parseStreamStats is parseStream plus the scanner memory high-water marks,
+// used by the package tests to prove the streaming memory bounds.
+func parseStreamStats(r io.Reader) (*RobotsData, error, *streamStats) {
+	sc := newStreamScanner("bytes", true, r)
+	sc.begin()
+
+	p := newParser(sc, &sc.stats)
+	groups, host, sitemaps, errs, readErr := p.parseAll()
+
+	// A failure of the underlying Reader always wins: a truncated body must
+	// never be treated as a complete policy, even if valid tokens arrived in
+	// the same Read call.
+	if readErr != nil {
+		return nil, readErr, &sc.stats
+	}
+	if len(errs) > 0 {
+		return nil, newParseError(errs), &sc.stats
+	}
+
+	// No tokens at all (empty body, whitespace/comments only) means an
+	// unrestricted policy, matching the historical FromBytes shortcut.
+	if sc.emittedTokens() == 0 {
+		return allowAll, nil, &sc.stats
+	}
+
+	return &RobotsData{
+		Host:     host,
+		Sitemaps: sitemaps,
+		groups:   groups,
+	}, nil, &sc.stats
 }
 
 func (r *RobotsData) TestAgent(path, agent string) bool {
