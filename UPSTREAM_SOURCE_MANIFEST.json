@@ -1,0 +1,269 @@
+{
+  "upstream_repo": "https://github.com/trailofbits/pe-parse",
+  "upstream_commit": "7888f1f8de2f6bc302c291a5b4519fad926c0133",
+  "license": "MIT; exact upstream LICENSE retained",
+  "export": "Complete tracked archive; test-only corkami gitlink is not materialized or used. task_support is public author baseline support.",
+  "self_excluded": "This manifest does not hash itself.",
+  "files": [
+    {
+      "path": ".clang-format",
+      "sha256": "9b0d75bb257394bfd65ad0fa3441d3a12b2fc066f5980395bf7a8ce1ad066336",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "sha256": "d8e624d0027c0ce06d699a75fdc9569505c7c9fd5bab9e58458dc96279939998",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "61175eb6ab7916e8959129531c9d4d5240e7bd3f5c47cbb06a20ccb6db744f88",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "891de9dad328f5ac0ea9e5571549a62e2e952abbb2ef97d4d20ac34cbecf2953",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "1b98b666c66d59d76b4150e55172c011a90931e5944cc8202501feab231458c6",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": ".gitmodules",
+      "sha256": "a68d3f37d7aff4935b24d5d539cd03bf138015f3e59dfa0542f235aa4da9e5a5",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "cfd8527d588bd6075793ea842bc4e7c2bd7ad065963e75088d6ebf1a08524a1e",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "4739469e95854e57cfc75f39b3f8b5fc74defeae3f65e0fe8d6a974c0ec1f4ce",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "da665cb47ad817880e3e55a896b948803129bddd652b05d497d93ba04ea0b85e",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "Dockerfile",
+      "sha256": "43a1ce4a117b605202e3e07d8a5566621cfb8992e1e3964401b174dc1e823f36",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "5fb0c373b1b1077d3ae66fab21516a3c58dc2265e0480e526aaa8ff8da377dc6",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "MANIFEST.in",
+      "sha256": "db7f47c8860bf0851f2da6cf76f7d19a1d2ce1843fb1af2d96c14e2f465e21ef",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "README.md",
+      "sha256": "09e99ee7e49b2c4ebf2b493c983740b175f2dd00d51733619478d638cf44b9cb",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "VERSION",
+      "sha256": "7b3ff271f1373cfb97e9e53349794e1450f3794e4c0788c54a2060c7596da821",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "cmake/compilation_flags.cmake",
+      "sha256": "0ca403150d24b038d955bde8eae208b233e3ec8ab7899d1ae8da81da7718c406",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "cmake/modules/FindFilesystem.cmake",
+      "sha256": "adc099c937f8cb75a2e98c214dc8a5fc6658f3e974725f4a6c3c58237c8c2ec1",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "cmake/sanitizers.cmake",
+      "sha256": "79a6ad5c9183a52aeffbbf7bacb9599ff52bb321b8b0ed3893446045e7d114e8",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "dump-pe/CMakeLists.txt",
+      "sha256": "57defb285cc89516255f903c0d1bcc59795c2122b304c253a802207f2a1f5846",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "dump-pe/main.cpp",
+      "sha256": "433f9b6c3e85884ba6e61b3ad391730fa59b197a1bf3cccea4ef156a6bc0e714",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "dump-pe/vendor/argh.h",
+      "sha256": "f72238e6bc79b8be3b3335066c74ec8088d0eda41509009e631f6071865a3ec4",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "examples/CMakeLists.txt",
+      "sha256": "a1f2578d08017bdd6a7d016faccb679c331d8ab406c3e8f58cdb6b40ba873ef7",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "examples/peaddrconv/CMakeLists.txt",
+      "sha256": "781d7d6e93a0486e758909d7f3935f45d778cc84669b41d6e91aceead20d92da",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "examples/peaddrconv/README.md",
+      "sha256": "710c7b895cde8ebfa1e2b5b4dbf7074c1e7412f8fd9d48e0b304a925642e6fa4",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "examples/peaddrconv/main.cpp",
+      "sha256": "8eae57e86153a0f33fb436d9d43e187a0f984b6904b0d44632a84e25925cc62c",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "packages/archlinux/.gitignore",
+      "sha256": "888bd8110b81117128cca7673090eb22f936f76df8823b5c79242931da94c0eb",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "packages/archlinux/PKGBUILD",
+      "sha256": "190b7f4330ae0d9a2c19b6264bbfd137a0d5eb6abc665d5feec218f9e838ec40",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/CMakeLists.txt",
+      "sha256": "fcde01fbad8ff0c32eef1b5c57b289582e22e210503d8fa089adc083912d6eb2",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/cmake/pe-parse-config.cmake",
+      "sha256": "f9294e1343c9b532381b4ee6c8a19c6853be25f2bdb1a43443c16e17c13c3b73",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/include/pe-parse/nt-headers.h",
+      "sha256": "0460d283fda49c8eb332b3717e33585a89f1d4bedda47635263cdf5d32805473",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/include/pe-parse/parse.h",
+      "sha256": "f56b250fe738dff2b83a47d75b61f0fdb7ef3b9f2c53ff1378008b17d8661bc7",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/include/pe-parse/to_string.h",
+      "sha256": "a95e7510b465b62660139b06bb983cdfe28b94d5fa2a6e0af74a09fb95950e31",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/src/buffer.cpp",
+      "sha256": "cbf64ad21067ccb3a432dacf58c65dd882c1edb9c668cad03c282e1edd136f7a",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/src/parse.cpp",
+      "sha256": "0c7cef8e081d70cc95f4567fd262a223ff6ec63d6aa9ac8ef50ff6ca217717b1",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/src/unicode_codecvt.cpp",
+      "sha256": "223c6323b5c3c127d1056c1ebd940522bd105ae2f9fd5814603445920361de47",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pe-parser-library/src/unicode_winapi.cpp",
+      "sha256": "24b0493c72d50a141e7623866afb19bcb556855b6a30d2e779454ece6a2919bd",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pepy/README.md",
+      "sha256": "00a68bec45242cea51f254bc7eba65293261c36378d596fbed8a69afd8f75b43",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "pepy/pepy.cpp",
+      "sha256": "d78c25df53da54cf703bcdea441dd7825e90eed9f94512872a268064dc50c5a0",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "setup.py",
+      "sha256": "097650b17e595a3cfa1a6642c9af3868fc351b42cad928a0a0e55dfe961a1dfd",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "task_support/baseline.cpp",
+      "sha256": "1c7cae96aebd4339e376b37e801325ec8e694e5bce4c79aa3630a38db68667fa",
+      "origin": "public baseline support"
+    },
+    {
+      "path": "task_support/pe_fixture.h",
+      "sha256": "3be6985e58009051c97e891a93611edeea84920e0a460b105ba387ec8f3aa6dd",
+      "origin": "public baseline support"
+    },
+    {
+      "path": "task_support/run.sh",
+      "sha256": "7a70e818a713e27affa5cf825e38eb031bfee6739ff81c650d2093b8899dcf0d",
+      "origin": "public baseline support"
+    },
+    {
+      "path": "tests/CMakeLists.txt",
+      "sha256": "3e2171827eceb283b0b3cf9cc1f7f57ae5c3bf0003df671e80dd22b1ecf91f09",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/assets/example.exe",
+      "sha256": "5adeb4287fe2a339171309da75d88fe6f92a4c6404fe36bdd7659590b0e1ad09",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/assets/pr_153.exe",
+      "sha256": "ccf763e26b99a23ce753b6719ac9b307f1e012bce317d423b1d54188c9217c20",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/cmake/catch.cmake.in",
+      "sha256": "d6500271c7870f744dbd50ee1c7b4029928ffe52c0b9ed02488ca3bd3ffa053e",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/corkami_test.cpp",
+      "sha256": "d1148c2b73a77d7db024c3e3df3264a7ab139e3b99f91b84165275b3373d349b",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/filesystem_compat.h",
+      "sha256": "598cc2c5cd77c00c0697f58b2c49f0f518840cbf8038854e7539d208102625a0",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/pr_153_test.cpp",
+      "sha256": "15778798127bfe521ae12c44565ccd97cd4b8d1b96f47f61586a6c3f6439ac44",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/simple_test.cpp",
+      "sha256": "e3054aac18b975ee8d51572a5b9598c66df89ba47f10281edd0c35b85ccd3bc5",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/test_main.cpp",
+      "sha256": "1f52cba5589e565e5a1117f2a391542904ecf7a98dbca35a8d6bb44159a3bc18",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "tests/test_pepy.py",
+      "sha256": "441e10617e48d524d179c1108fbd1d735e3ed671a15bc083b6eb63eac3703293",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    },
+    {
+      "path": "util/release",
+      "sha256": "fed2ec0b4ca116eacdaabc90ac97b583e218712ebabd413065272bddb0ccfdae",
+      "origin": "upstream@7888f1f8de2f6bc302c291a5b4519fad926c0133"
+    }
+  ]
+}
