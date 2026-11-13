@@ -120,6 +120,52 @@ void      exif_data_load_data (ExifData *data, const unsigned char *d,
 void      exif_data_save_data (ExifData *data, unsigned char **d,
 			       unsigned int *ds);
 
+/*! Store raw EXIF data while keeping a loaded MakerNote block at its
+ * original position.
+ *
+ * This is the pinned counterpart of #exif_data_save_data. It is meant for
+ * MakerNotes from vendors libexif cannot interpret: such a block may contain
+ * internal addresses relative to the TIFF header, so moving it (as the
+ * regular writer does) can silently corrupt it. When the #ExifData was
+ * loaded from valid EXIF input and contains exactly one non-inline
+ * MakerNote, this function remembers the block's original TIFF-relative
+ * offset, its verbatim bytes and the source byte order. On save the block is
+ * copied byte for byte at that same offset, while every other directory,
+ * external value area and the thumbnail are rebuilt from the current
+ * #ExifData and packed into the free space before and after the fixed block.
+ *
+ * Only the relationship between the fixed block itself and the addresses
+ * inside it is preserved. Unknown references pointing to data outside the
+ * block are neither parsed nor relocated and are outside the supported
+ * scope.
+ *
+ * The save is refused (non-zero return) when the MakerNote entry has been
+ * modified, was removed and re-created, its original position cannot be
+ * proven, or the byte order was switched after loading. No vendor
+ * interpreter is used to rebuild the block, and unrecognized vendors are not
+ * excluded by a support list. Objects without a MakerNote are saved as a
+ * normal compact stream.
+ *
+ * Existing entries, their order, their references, unknown tags, thumbnail
+ * data and object options are left untouched. Scalar values still inline
+ * into their directory entry; both byte orders are supported.
+ *
+ * \param[in] data EXIF data
+ * \param[in] max_size maximum number of bytes the output may occupy,
+ *   including the six byte "Exif\\0\\0" marker; must be at least 14 and at
+ *   most 65533
+ * \param[out] out pointer to the allocated buffer on success, set to NULL on
+ *   failure; freed with the free function of the #ExifMem used by the
+ *   #ExifData
+ * \param[out] size number of bytes in the buffer on success, set to 0 on
+ *   failure
+ * \return 0 on success, non-zero on failure (no partial output is produced;
+ *   a failed save does not change the #ExifData, so changing the data or
+ *   relaxing \a max_size allows retrying)
+ */
+int       exif_data_save_data_pinned (ExifData *data, unsigned int max_size,
+				      unsigned char **out, unsigned int *size);
+
 void      exif_data_ref   (ExifData *data);
 void      exif_data_unref (ExifData *data);
 void      exif_data_free  (ExifData *data);

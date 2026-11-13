@@ -24,6 +24,7 @@
 
 #include <libexif/exif-content.h>
 #include <libexif/exif-system.h>
+#include "exif-data-pinned-priv.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -172,6 +173,11 @@ exif_content_remove_entry (ExifContent *c, ExifEntry *e)
 	ExifEntry **t, *temp;
 
 	if (!c || !c->priv || !e || (e->parent != c)) return;
+
+	/* Removing the MakerNote destroys the proof that its original block
+	 * position is still occupied. */
+	if (e->tag == EXIF_TAG_MAKER_NOTE && c->parent)
+		exif_data_pinned_invalidate (c->parent);
 
 	/* Search the entry */
 	for (i = 0; i < c->count; i++)

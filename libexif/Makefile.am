@@ -24,6 +24,8 @@ libexif_la_SOURCES =		\
 	exif-byte-order.c	\
 	exif-content.c		\
 	exif-data.c		\
+	exif-data-pinned.c	\
+	exif-data-pinned-priv.h	\
 	exif-entry.c		\
 	exif-format.c		\
 	exif-ifd.c		\

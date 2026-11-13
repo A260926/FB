@@ -47,6 +47,29 @@ contrib/examples/ directory.  Don't hesitate to contact
 us at <libexif-devel@lists.sourceforge.net> if you have any questions
 on how to use libexif.
 
+Saving data with an opaque MakerNote
+-------------------------------------
+
+exif_data_save_data() rebuilds the whole TIFF structure and therefore moves
+the MakerNote to wherever the new layout needs it. That is harmless for
+MakerNotes libexif can interpret, but an unrecognized vendor MakerNote may
+contain internal addresses relative to the TIFF header; moving the block
+invalidates them even when the EXIF_DATA_OPTION_DONT_CHANGE_MAKER_NOTE
+option preserves the block's bytes.
+
+For that case, exif_data_save_data_pinned(data, max_size, &buf, &size)
+saves the single non-inline MakerNote byte for byte at its original
+TIFF-relative offset. The remaining IFD directories, external value areas
+and the thumbnail are rebuilt from the current ExifData and packed into the
+free space before and after the fixed block; the output length is bounded
+by max_size (at most 65533, including the six byte "Exif\0\0" marker). The
+function returns 0 on success and a non-zero value with buf == NULL and
+size == 0 on failure, and never partially writes. The save is refused when
+the MakerNote was modified, removed and re-created, its original position
+cannot be proven, or the byte order was switched after loading. References
+inside an opaque MakerNote that point outside the block are not parsed or
+relocated and remain out of scope.
+
 To link to libexif into your own package, we recommend using the
 pkgconfig utility (cf. https://www.freedesktop.org/wiki/Software/pkg-config/ For
 your convenience, libexif both provides libexif-uninstalled.pc and

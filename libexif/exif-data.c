@@ -31,6 +31,7 @@
 #include <libexif/exif-log.h>
 #include <libexif/i18n.h>
 #include <libexif/exif-system.h>
+#include "exif-data-pinned-priv.h"
 
 /*#include <libexif/apple/exif-mnote-data-apple.h>*/
 #include <libexif/canon/exif-mnote-data-canon.h>
@@ -70,7 +71,120 @@ struct _ExifDataPrivate
 	ExifDataType data_type;
 
 	unsigned int ifd_used[EXIF_IFD_COUNT];
+
+	/* Proof of the original MakerNote position, or NULL. */
+	struct _ExifPinnedState *pinned;
 };
+
+/* Pin state backing exif_data_save_data_pinned(). A present, non-invalid
+ * record proves the exact original TIFF-relative position and bytes of the
+ * single MakerNote block the object was loaded from. */
+struct _ExifPinnedState
+{
+	PinnedNote note;
+	int present;
+	int invalid;
+};
+
+void
+exif_data_pinned_record (ExifData *data, ExifByteOrder order,
+			 unsigned int offset, const unsigned char *buf,
+			 unsigned int size)
+{
+	struct _ExifPinnedState *p;
+	unsigned char *copy;
+
+	if (!data || !data->priv || !buf || !size)
+		return;
+
+	if (!data->priv->pinned) {
+		p = exif_mem_alloc (data->priv->mem,
+				    sizeof (struct _ExifPinnedState));
+		if (!p)
+			return;
+		data->priv->pinned = p;
+	}
+	p = data->priv->pinned;
+
+	/* More than one MakerNote cannot be pinned unambiguously. */
+	if (p->present) {
+		p->invalid = 1;
+		return;
+	}
+
+	copy = exif_mem_alloc (data->priv->mem, size);
+	if (!copy) {
+		p->invalid = 1;
+		return;
+	}
+	memcpy (copy, buf, size);
+
+	p->note.data = copy;
+	p->note.size = size;
+	p->note.offset = offset;
+	p->note.order = order;
+	p->present = 1;
+	p->invalid = 0;
+}
+
+void
+exif_data_pinned_reset (ExifData *data)
+{
+	struct _ExifPinnedState *p;
+
+	if (!data || !data->priv || !data->priv->pinned)
+		return;
+	p = data->priv->pinned;
+	if (p->note.data) {
+		exif_mem_free (data->priv->mem, (void *) p->note.data);
+		p->note.data = NULL;
+	}
+	p->note.size = 0;
+	p->note.offset = 0;
+	p->present = 0;
+	p->invalid = 0;
+}
+
+void
+exif_data_pinned_invalidate (ExifData *data)
+{
+	if (!data || !data->priv || !data->priv->pinned)
+		return;
+	data->priv->pinned->invalid = 1;
+}
+
+int
+exif_data_pinned_get (ExifData *data, PinnedNote *out)
+{
+	struct _ExifPinnedState *p;
+
+	if (!data || !data->priv || !data->priv->pinned)
+		return 0;
+	p = data->priv->pinned;
+	if (!p->present)
+		return 0;
+	if (p->invalid)
+		return -1;
+	if (out)
+		*out = p->note;
+	return 1;
+}
+
+void
+exif_data_pinned_dispose (ExifData *data)
+{
+	struct _ExifPinnedState *p;
+
+	if (!data || !data->priv)
+		return;
+	p = data->priv->pinned;
+	if (!p)
+		return;
+	if (p->note.data)
+		exif_mem_free (data->priv->mem, (void *) p->note.data);
+	exif_mem_free (data->priv->mem, p);
+	data->priv->pinned = NULL;
+}
 
 static void *
 exif_data_alloc (ExifData *data, unsigned int i)
@@ -239,6 +353,10 @@ exif_data_load_data_entry (ExifData *data, ExifEntry *entry,
 					       entry->data[6]);
 		}
 		data->priv->offset_mnote = doff;
+		/* Preserve proof of the block's original TIFF-relative
+		 * position and verbatim bytes for the pinned writer. */
+		exif_data_pinned_record (data, data->priv->order, doff,
+					 d + doff, s);
 	}
 	return 1;
 }
@@ -881,6 +999,9 @@ exif_data_load_data (ExifData *data, const unsigned char *d_orig,
 	if (!data || !data->priv || !d || !ds)
 		return;
 
+	/* A fresh document replaces any pin recorded for a previous one. */
+	exif_data_pinned_reset (data);
+
 	exif_log (data->priv->log, EXIF_LOG_CODE_DEBUG, "ExifData",
 		  "Parsing %i byte(s) EXIF data...\n", ds);
 
@@ -1163,6 +1284,7 @@ exif_data_free (ExifData *data)
 			exif_mnote_data_unref (data->priv->md);
 			data->priv->md = NULL;
 		}
+		exif_data_pinned_dispose (data);
 		exif_mem_free (mem, data->priv);
 		exif_mem_free (mem, data);
 	}
@@ -1253,6 +1375,9 @@ exif_data_set_byte_order (ExifData *data, ExifByteOrder order)
 	d.new = order;
 	exif_data_foreach_content (data, content_set_byte_order, &d);
 	data->priv->order = order;
+	/* The recorded block carries the original byte order; a switch
+	 * invalidates any pin. */
+	exif_data_pinned_invalidate (data);
 	if (data->priv->md)
 		exif_mnote_data_set_byte_order (data->priv->md, order);
 }
@@ -1277,9 +1402,19 @@ ExifLog *exif_data_get_log (ExifData *);
 ExifLog *
 exif_data_get_log (ExifData *data)
 {
-	if (!data || !data->priv) 
+	if (!data || !data->priv)
 		return NULL;
 	return data->priv->log;
+}
+
+/* Used internally within libexif */
+ExifMem *exif_data_get_mem (ExifData *);
+ExifMem *
+exif_data_get_mem (ExifData *data)
+{
+	if (!data || !data->priv)
+		return NULL;
+	return data->priv->mem;
 }
 
 static const struct {

@@ -65,7 +65,8 @@ LDFLAGS= -zq -l=nt
 
 LIBOBJECTS = &
 	$(LIBEXIFDIR)\exif-byte-order.obj $(LIBEXIFDIR)\exif-content.obj &
-	$(LIBEXIFDIR)\exif-data.obj $(LIBEXIFDIR)\exif-entry.obj &
+	$(LIBEXIFDIR)\exif-data.obj $(LIBEXIFDIR)\exif-data-pinned.obj &
+	$(LIBEXIFDIR)\exif-entry.obj &
 	$(LIBEXIFDIR)\exif-format.obj $(LIBEXIFDIR)\exif-ifd.obj &
 	$(LIBEXIFDIR)\exif-loader.obj $(LIBEXIFDIR)\exif-log.obj &
 	$(LIBEXIFDIR)\exif-mem.obj &
@@ -101,7 +102,10 @@ $(LIBEXIFDIR)\exif-content.obj : .AUTODEPEND $(LIBEXIFDIR)\exif-content.c
 	$(CC) -c $(CFLAGS) $[*  
 
 $(LIBEXIFDIR)\exif-data.obj : .AUTODEPEND $(LIBEXIFDIR)\exif-data.c
-	$(CC) -c $(CFLAGS) $[*  
+	$(CC) -c $(CFLAGS) $[*
+
+$(LIBEXIFDIR)\exif-data-pinned.obj : .AUTODEPEND $(LIBEXIFDIR)\exif-data-pinned.c
+	$(CC) -c $(CFLAGS) $[*
 
 $(LIBEXIFDIR)\exif-entry.obj : .AUTODEPEND $(LIBEXIFDIR)\exif-entry.c
 	$(CC) -c $(CFLAGS) $[*  
