@@ -1,0 +1,14 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 final_color0;
+layout(location = 1) out mediump vec4 final_color1;
+layout(location = 2) out mediump vec4 final_color2;
+void main ()
+{
+  final_color0 = vec4(1.0, 0.0, 0.0, 1.0);
+  final_color1 = vec4(0.0, 1.0, 0.0, 1.0);
+  final_color2 = vec4(0.0, 0.0, 1.0, 1.0);
+}
+
+// stats: 0 alu 0 tex 0 flow

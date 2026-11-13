@@ -1,0 +1,23 @@
+uniform vec3 _TerrainTreeLightDirections[4];
+uniform float _TranslucencyViewDependency;
+void main ()
+{
+  float t0 = dot(gl_Normal, _TerrainTreeLightDirections[0]);
+  float t1 = dot(gl_Normal, _TerrainTreeLightDirections[1]);
+  vec3 t2 = vec3((false ? mix((-t1), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[1])), _TranslucencyViewDependency) : mix((-t0), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[0])), _TranslucencyViewDependency)), (true ? mix((-t1), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[1])), _TranslucencyViewDependency) : mix((-t0), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[0])), _TranslucencyViewDependency)), (false ? mix((-t1), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[1])), _TranslucencyViewDependency) : mix((-t0), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[0])), _TranslucencyViewDependency)));
+  float t3 = dot(gl_Normal, _TerrainTreeLightDirections[2]);
+  vec3 t4 = vec3((false ? mix((-t3), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[2])), _TranslucencyViewDependency) : t2.x), (false ? mix((-t3), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[2])), _TranslucencyViewDependency) : t2.y), (true ? mix((-t3), dot(gl_Vertex.xyz, (-_TerrainTreeLightDirections[2])), _TranslucencyViewDependency) : t2.z));
+  vec3 t5 = vec3((false ? (t3 * 0.6) : vec3((false ? (t1 * 0.6) : (t0 * 0.6)), (true ? (t1 * 0.6) : (t0 * 0.6)), (false ? (t1 * 0.6) : (t0 * 0.6))).x), (false ? (t3 * 0.6) : vec3((false ? (t1 * 0.6) : (t0 * 0.6)), (true ? (t1 * 0.6) : (t0 * 0.6)), (false ? (t1 * 0.6) : (t0 * 0.6))).y), (true ? (t3 * 0.6) : vec3((false ? (t1 * 0.6) : (t0 * 0.6)), (true ? (t1 * 0.6) : (t0 * 0.6)), (false ? (t1 * 0.6) : (t0 * 0.6))).z));
+  gl_Position = gl_Vertex;
+  gl_TexCoord[2] = vec4(t4, 0.0);
+  vec3 t6 = max(vec3(0.0), (0.4 + t5));
+  gl_TexCoord[3] = vec4(t6, 0.0);
+}
+
+// stats: 24 alu 0 tex 0 flow
+// inputs: 2
+//  #0: gl_Normal (high float) 3x1 [-1] loc 1
+//  #1: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 2 (total size: 0)
+//  #0: _TerrainTreeLightDirections (high float) 3x1 [4]
+//  #1: _TranslucencyViewDependency (high float) 1x1 [-1]

@@ -1,0 +1,38 @@
+uniform mat4 _Object2World;
+uniform vec4 _Scale;
+uniform float _SquashAmount;
+uniform vec4 _SquashPlaneNormal;
+uniform float _TimeX;
+uniform vec4 _Wind;
+uniform vec4 unity_LightShadowBias;
+void main ()
+{
+  vec3 t0 = (gl_Vertex.xyz * _Scale.xyz);
+  float t1 = (dot(_Object2World[3].xyz, vec3(1.0)) + gl_Color.x);
+  vec4 t2 = abs(((fract((-0.5 + (fract(((_TimeX + vec2(dot(t0, vec3((gl_Color.y + t1))), t1)).xxyy * vec4(1.975, 0.793, 0.375, 0.193))) * 2.0))) * 2.0) - 1.0));
+  vec4 t3 = ((t2 * t2) * (3.0 - (2.0 * t2)));
+  vec2 t4 = (t3.xz + t3.yw);
+  vec3 t5 = ((gl_Color.y * 0.1) * gl_Normal);
+  vec3 t6 = ((t0 + (((t4.xyx * vec3(t5.x, (gl_MultiTexCoord1.y * 0.3), t5.z)) + ((_Wind.xyz * t4.y) * gl_MultiTexCoord1.y)) * _Wind.w)) + (gl_MultiTexCoord1.x * _Wind.xyz));
+  vec3 t7 = mix((t6 + (dot(_SquashPlaneNormal.xyz, (vec3(0.0, _SquashPlaneNormal.w, 0.0) - t6)) * _SquashPlaneNormal.xyz)), t6, vec3(_SquashAmount));
+  vec4 t8 = (gl_ModelViewProjectionMatrix * vec4(t7, 1.0));
+  float t9 = (t8.z + unity_LightShadowBias.x);
+  float t10 = (-t8.w);
+  gl_Position = ((t9 < t10) ? vec4(t8.xy, t10, t8.w) : vec4(t8.xy, t9, t8.w));
+}
+
+// stats: 44 alu 0 tex 0 flow
+// inputs: 4
+//  #0: gl_MultiTexCoord1 (high float) 4x1 [-1] loc 7
+//  #1: gl_Color (high float) 4x1 [-1] loc 2
+//  #2: gl_Normal (high float) 3x1 [-1] loc 1
+//  #3: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 8 (total size: 0)
+//  #0: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #1: _Object2World (high float) 4x4 [-1]
+//  #2: _Scale (high float) 4x1 [-1]
+//  #3: _SquashAmount (high float) 1x1 [-1]
+//  #4: _SquashPlaneNormal (high float) 4x1 [-1]
+//  #5: _TimeX (high float) 1x1 [-1]
+//  #6: _Wind (high float) 4x1 [-1]
+//  #7: unity_LightShadowBias (high float) 4x1 [-1]

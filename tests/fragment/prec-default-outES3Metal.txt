@@ -1,0 +1,42 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct MyStruct {
+  float f;
+  short i;
+};
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  MyStruct s1;
+  float fh1;
+  float fh2;
+  half fm;
+  short il1;
+  short il2;
+  short im;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half t0 = half((((_mtl_u.fh1 + _mtl_u.fh2) + float(_mtl_u.fm)) + _mtl_u.s1.f));
+  int t1 = int((((_mtl_u.il1 + _mtl_u.il2) + _mtl_u.im) + _mtl_u.s1.i));
+  _mtl_o._fragData = half4(float4(float(t0), float(t1), ((0.5 < _mtl_i.gl_FragCoord.x) ? 0.9 : 0.1), 0.0));
+  return _mtl_o;
+}
+
+// stats: 9 alu 0 tex 0 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 7 (total size: 24)
+//  #0: s1 (high other) 0x0 [-1] loc 0
+//  #1: fh1 (high float) 1x1 [-1] loc 8
+//  #2: fh2 (high float) 1x1 [-1] loc 12
+//  #3: fm (medium float) 1x1 [-1] loc 16
+//  #4: il1 (medium int) 1x1 [-1] loc 18
+//  #5: il2 (medium int) 1x1 [-1] loc 20
+//  #6: im (medium int) 1x1 [-1] loc 22

@@ -1,0 +1,72 @@
+#version 320 es
+precision highp float;
+precision highp int;
+struct Node {
+  highp vec4 color;
+  highp float depth;
+  highp uint next;
+};
+layout(std430, binding = 1) buffer LinkedListSBO {
+  Node nodes[];
+};
+layout(location = 0) out highp vec4 outFragColor;
+layout(r32ui, binding = 0) uniform highp uimage2D headIndexImage;
+void main ()
+{
+  highp uint r0;
+  highp int r1;
+  highp int r2;
+  highp int r3;
+  highp int r4;
+  highp int r5;
+  highp vec4 r6;
+  highp vec4 fragments_color[128];
+  highp float fragments_depth[128];
+  highp uint fragments_next[128];
+  highp ivec2 t0 = ivec2(gl_FragCoord.xy);
+  r0 = imageLoad(headIndexImage, ivec4(t0, 0, 0).xy).x;
+  for (r4 = 0; ((int(r0) != -1) && (r4 < 128)); r4++) {
+    fragments_color[r4] = nodes[int(r0)].color;
+    fragments_depth[r4] = nodes[int(r0)].depth;
+    r0 = nodes[int(r0)].next;
+    fragments_next[r4] = r0;
+  }
+  for (r3 = 1; (uint(r3) < uint(r4)); r3++) {
+    highp vec4 t1 = fragments_color[r3];
+    highp float t2 = fragments_depth[r3];
+    highp uint t3 = fragments_next[r3];
+    r2 = r3;
+    while (true) {
+      r1 = (r2 - 1);
+      highp float t4 = fragments_depth[r1];
+      if ((!((r2 != 0) && (t4 < t2)))) {
+        break;
+      }
+      fragments_color[r2] = fragments_color[r1];
+      fragments_depth[r2] = t4;
+      fragments_next[r2] = fragments_next[r1];
+      r2 = r1;
+    }
+    fragments_color[r2] = t1;
+    fragments_depth[r2] = t2;
+    fragments_next[r2] = t3;
+  }
+  r6 = vec4(0.025, 0.025, 0.025, 1.0);
+  for (r5 = 0; (r5 < r4); r5++) {
+    highp vec4 t5 = fragments_color[r5];
+    r6 = mix(r6, t5, t5.wwww);
+  }
+  outFragColor = r6;
+}
+
+// stats: 16 alu 1 tex 8 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// buffer #0: LinkedListSBO storage layout std430 binding 1 (size: unknown)
+//  member #0: Node[] nodes offset 0 array runtime stride 32
+//  member #1: Node [] parent 0 offset 0
+//  member #2: vec4 color parent 1 offset 0
+//  member #3: float depth parent 1 offset 16
+//  member #4: uint next parent 1 offset 20
+// textures: 1
+//  #0: headIndexImage (high image2d) 0x0 [-1] loc 0 format r32ui component uint

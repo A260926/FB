@@ -1,0 +1,33 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 _glesVertex [[attribute(0)]];
+  float4 _glesMultiTexCoord0 [[attribute(1)]];
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  half2 xlv_TEXCOORD1;
+};
+struct xlatMtlShaderUniform {
+  float4 unity_LightShadowBias;
+  float4x4 glstate_matrix_mvp;
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 t0 = half4(_mtl_i._glesMultiTexCoord0);
+  float4 t1 = (_mtl_u.glstate_matrix_mvp * _mtl_i._glesVertex);
+  float t2 = (t1.z + saturate((_mtl_u.unity_LightShadowBias.x / t1.w)));
+  _mtl_o.gl_Position = float4(t1.xy, mix(t2, max(t2, (-t1.w)), _mtl_u.unity_LightShadowBias.y), t1.w);
+  _mtl_o.xlv_TEXCOORD1 = t0.xy;
+  return _mtl_o;
+}
+
+// stats: 13 alu 0 tex 0 flow
+// inputs: 2
+//  #0: _glesVertex (high float) 4x1 [-1] loc 0
+//  #1: _glesMultiTexCoord0 (high float) 4x1 [-1] loc 1
+// uniforms: 2 (total size: 80)
+//  #0: unity_LightShadowBias (high float) 4x1 [-1] loc 0
+//  #1: glstate_matrix_mvp (high float) 4x4 [-1] loc 16

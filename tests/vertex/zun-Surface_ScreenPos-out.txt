@@ -1,0 +1,29 @@
+uniform mat4 _LightMatrix0;
+uniform mat4 _Object2World;
+uniform vec4 _WorldSpaceLightPos0;
+uniform vec4 unity_Scale;
+varying vec4 xlv_FOG;
+void main ()
+{
+  vec4 t0 = (gl_ModelViewProjectionMatrix * gl_Vertex);
+  vec3 t1 = (gl_Normal * unity_Scale.w);
+  vec3 t2 = (mat3(_Object2World[0].xyz, _Object2World[1].xyz, _Object2World[2].xyz) * t1);
+  vec4 t3 = (_Object2World * gl_Vertex);
+  vec3 t4 = (_WorldSpaceLightPos0.xyz - t3.xyz);
+  gl_Position = t0;
+  xlv_FOG = vec4(t0.z, 0.0, 0.0, 0.0);
+  gl_TexCoord[0] = vec4(t2, 0.0);
+  gl_TexCoord[1] = vec4(t4, 0.0);
+  gl_TexCoord[2] = (_LightMatrix0 * t3);
+}
+
+// stats: 28 alu 0 tex 0 flow
+// inputs: 2
+//  #0: gl_Normal (high float) 3x1 [-1] loc 1
+//  #1: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 5 (total size: 0)
+//  #0: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #1: _LightMatrix0 (high float) 4x4 [-1]
+//  #2: _Object2World (high float) 4x4 [-1]
+//  #3: _WorldSpaceLightPos0 (high float) 4x1 [-1]
+//  #4: unity_Scale (high float) 4x1 [-1]

@@ -1,0 +1,15 @@
+#version 300 es
+#extension GL_EXT_shader_framebuffer_fetch : enable
+precision highp float;
+precision highp int;
+layout(location = 0) inout mediump vec4 _glesFragData[4];
+in mediump vec4 xlv_TEXCOORD0;
+void main ()
+{
+  mediump vec4 t0 = _glesFragData[0];
+  _glesFragData[0] = vec4(xlv_TEXCOORD0.xy, (t0.z * 2.0), t0.w);
+}
+
+// stats: 1 alu 0 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (medium float) 4x1 [-1]

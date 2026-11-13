@@ -1,0 +1,27 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _fragData;
+uniform mediump sampler2D _MainTex;
+in highp vec2 xlv_uv;
+void main ()
+{
+  highp float r0;
+  mediump vec3 r1;
+  mediump vec4 t0 = texture(_MainTex, xlv_uv);
+  if ((t0.x >= 0.0)) {
+    r1 = vec3(0.0);
+    for (r0 = 0.0; (r0 < xlv_uv.x); r0 += 1.0) {
+      r1 = (r1 + t0.xyz);
+    }
+  } else {
+    r1 = vec3(0.0);
+  }
+  _fragData = vec4(r1.x, r1.y, r1.z, 1.0);
+}
+
+// stats: 4 alu 1 tex 3 flow
+// inputs: 1
+//  #0: xlv_uv (high float) 2x1 [-1]
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1]

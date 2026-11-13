@@ -1,0 +1,49 @@
+#version 300 es
+precision highp float;
+precision highp int;
+out mediump vec4 _fragData;
+uniform mediump sampler2D _MainTex;
+uniform mediump float _NumPasses;
+uniform mediump vec4 _ContrastShift;
+uniform mediump vec4 _SaturationShift;
+uniform mediump vec4 _HueShift;
+uniform mediump vec4 _LuminosityShift;
+in mediump vec2 xlv_TEXCOORD0;
+void main ()
+{
+  mediump vec3 r0;
+  mediump vec4 r1;
+  r1 = texture(_MainTex, xlv_TEXCOORD0);
+  if ((0.0 < _NumPasses)) {
+    if ((0.0 != _NumPasses)) {
+      mediump float t0 = ((_ContrastShift.x * 3.0) + 12.0);
+      r0 = ((r1.xyz - 0.5) * pow((cos(t0) + 1.0), t0));
+      if ((1.0 != _NumPasses)) {
+        mediump float t1 = ((_SaturationShift.y * 3.0) + 12.0);
+        r0 = ((r0 - 0.5) * pow((cos(t1) + 1.0), t1));
+        if ((2.0 != _NumPasses)) {
+          mediump float t2 = ((_HueShift.z * 3.0) + 12.0);
+          mediump vec3 t3 = ((r0 - 0.5) * pow((cos(t2) + 1.0), t2));
+          mediump float t4 = ((_LuminosityShift.x * 3.0) + 12.0);
+          r0 = ((3.0 != _NumPasses) ? ((t3 - 0.5) * pow((cos(t4) + 1.0), t4)) : t3);
+        }
+      }
+    } else {
+      r0 = r1.xyz;
+    }
+    r1 = vec4(r0.x, r0.y, r0.z, r1.w);
+  }
+  _fragData = vec4(r1.x, r1.y, r1.z, 1.0);
+}
+
+// stats: 34 alu 1 tex 4 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (medium float) 2x1 [-1]
+// uniforms: 5 (total size: 0)
+//  #0: _NumPasses (medium float) 1x1 [-1]
+//  #1: _ContrastShift (medium float) 4x1 [-1]
+//  #2: _SaturationShift (medium float) 4x1 [-1]
+//  #3: _HueShift (medium float) 4x1 [-1]
+//  #4: _LuminosityShift (medium float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1]

@@ -1,0 +1,66 @@
+#version 310 es
+layout(local_size_x = 1) in;
+struct Entry {
+  highp mat2x3 value;
+};
+layout(std430, row_major) buffer Rows {
+  highp mat2x3 rectangular;
+  layout(column_major) highp mat3x2 native;
+  highp mat3x2 wide;
+  mediump mat3 reduced;
+  Entry entries[];
+} rows;
+layout(std140, row_major) buffer PaddedRows {
+  highp mat2x3 value;
+} paddedRows;
+layout(std140) buffer Columns {
+  highp mat2 small;
+  highp mat2x3 rectangular;
+  highp mat4 native;
+} columns;
+uniform mediump vec3 inputValue;
+void main ()
+{
+  highp uint t0 = (gl_GlobalInvocationID.x & 1u);
+  columns.small[int(t0)] = vec2(2.0, 3.0);
+  columns.small[int(t0)][int(t0)] = 4.0;
+  columns.rectangular[int(t0)].xz = vec2(5.0, 6.0);
+  columns.rectangular[int(t0)] = columns.rectangular[(1 - int(t0))].zyx;
+  columns.native[int(t0)] = vec4(28.0, 7.0, 3e+01, 8.0);
+  highp uint t1 = (gl_GlobalInvocationID.y % 3u);
+  columns.native[int(t0)][int(t1)] = 9.0;
+  rows.rectangular[int(t0)].yz = ((inputValue.zy + vec2(1e+01, 11.0)).yyx).yz;
+  rows.rectangular[int(t0)][int((t1 & 1u))] = 12.0;
+  rows.rectangular[int(t0)].xz = vec2(14.0, 13.0);
+  rows.rectangular[int(t0)][int(t1)] = 15.0;
+  paddedRows.value[int(t0)].yz = vec2(23.0, 22.0);
+  paddedRows.value[int(t0)][int(t1)] = 24.0;
+  rows.wide[int(t1)] = vec2(26.0, 27.0);
+  rows.native[int(t0)] = vec2(16.0, 17.0);
+  rows.native[int(t0)][int(t0)] = 18.0;
+  rows.reduced[int(t0)].xz = vec2(19.0, 2e+01);
+  highp int t2 = (int(t0) + 1);
+  highp uint t3 = (uint(t2) & 1u);
+  highp float t4 = float(uint(t2));
+  rows.entries[int(t0)].value[int(t3)].xz = vec3(vec2(t4), 21.0).xz;
+  rows.entries[t2].value[int(t3)][int(t1)] = (rows.entries[t2].value[int(t3)][int(t1)] + 1.0);
+}
+
+// stats: 9 alu 0 tex 0 flow
+// workgroup size: 1 1 1
+// uniforms: 1 (total size: 0)
+//  #0: inputValue (medium float) 3x1 [-1]
+// buffer #0: Columns storage instance columns layout std140 (size: 128)
+//  member #0: mat2 small offset 0 matrix-stride 16
+//  member #1: mat2x3 rectangular offset 32 matrix-stride 16
+//  member #2: mat4 native offset 64 matrix-stride 16
+// buffer #1: PaddedRows storage instance paddedRows layout std140 (size: 48)
+//  member #0: mat2x3 value offset 0 matrix-stride 16 row-major
+// buffer #2: Rows storage instance rows layout std430 (size: unknown)
+//  member #0: mat2x3 rectangular offset 0 matrix-stride 8 row-major
+//  member #1: mat3x2 native offset 24 matrix-stride 8
+//  member #2: mat3x2 wide offset 48 matrix-stride 16 row-major
+//  member #3: mat3 reduced offset 80 matrix-stride 16 row-major
+//  member #4: Entry[] entries offset 128 array runtime stride 24
+//  member #5: Entry [] parent 4 offset 128
+//  member #6: mat2x3 value parent 5 offset 128 matrix-stride 8 row-major

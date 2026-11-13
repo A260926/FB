@@ -1,0 +1,43 @@
+uniform sampler2D mainTex;
+varying vec2 uv;
+void main ()
+{
+  int r0;
+  int r1;
+  int r2;
+  int r3;
+  int r4;
+  int r5;
+  vec4 r6;
+  r6 = vec4(0.0);
+  for (r0 = 0; (r0 < 100); r0++) {
+    float t0 = (r6.x + texture2D(mainTex, (uv + float(r0))).x);
+    r6 = vec4(t0, r6.y, r6.z, r6.w);
+  }
+  for (r1 = 0; (100 >= r1); r1 += 3) {
+    float t1 = (r6.x + texture2D(mainTex, (uv + float(r1))).x);
+    r6 = vec4(t1, r6.y, r6.z, r6.w);
+  }
+  for (r2 = 100; (r2 >= 0); r2--) {
+    float t2 = (r6.x + texture2D(mainTex, (uv + float(r2))).x);
+    r6 = vec4(t2, r6.y, r6.z, r6.w);
+  }
+  int t3 = int((r6.x * 1e+01));
+  for (r3 = 3; (r3 < t3); r3++) {
+    float t4 = (r6.x + texture2D(mainTex, (uv + float(r3))).x);
+    r6 = vec4(t4, r6.y, r6.z, r6.w);
+  }
+  r5 = 2;
+  for (r4 = 1; ((r4 < 100) && (r5 < 50)); r4 += 2) {
+    float t5 = (r6.x + texture2D(mainTex, (uv + vec2(float(r4), float(r5)))).x);
+    r5 = (r5 + 3);
+    r6 = vec4(t5, r6.y, r6.z, r6.w);
+  }
+  gl_FragColor = r6;
+}
+
+// stats: 32 alu 5 tex 10 flow
+// inputs: 1
+//  #0: uv (high float) 2x1 [-1]
+// textures: 1
+//  #0: mainTex (high 2d) 0x0 [-1]

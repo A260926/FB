@@ -1,0 +1,64 @@
+#version 300 es
+uniform highp vec4 unity_LightColor[8];
+uniform highp vec4 unity_LightPosition[8];
+uniform highp vec4 unity_LightAtten[8];
+uniform highp vec4 unity_SpotDirection[8];
+uniform highp mat4 glstate_matrix_mvp;
+uniform highp mat4 glstate_matrix_modelview0;
+uniform highp mat4 glstate_matrix_invtrans_modelview0;
+uniform highp vec4 glstate_lightmodel_ambient;
+uniform highp vec4 _MainTex_ST;
+uniform highp vec4 _Color;
+uniform highp vec4 _ReflectColor;
+in highp vec4 in_POSITION0;
+in highp vec4 in_NORMAL0;
+in highp vec4 in_TEXCOORD0;
+out highp vec4 TEXCOORD0;
+out highp vec4 COLOR0;
+void main ()
+{
+  highp ivec4 r0;
+  highp vec4 r1;
+  highp vec4 r2;
+  highp vec4 t0 = (glstate_matrix_mvp * in_POSITION0);
+  TEXCOORD0.xy = (((in_TEXCOORD0.xy * _MainTex_ST.xy) + _MainTex_ST.zw).xyxx).xy;
+  highp vec3 t1 = (glstate_matrix_modelview0 * in_POSITION0).xyz;
+  highp vec3 t2 = (mat3(glstate_matrix_invtrans_modelview0) * vec3(in_NORMAL0.xyz));
+  highp vec3 t3 = normalize(t2);
+  r1 = vec4(t3, 0.0);
+  r2 = vec4(glstate_lightmodel_ambient.xyz, 0.0);
+  for (r0 = floatBitsToInt(vec4(t1, 0.0)); (r0.w < 4); r0 = ivec4(r0.x, r0.y, r0.z, (r0.w + 1))) {
+    highp int t4 = r0.w;
+    highp vec4 t5 = unity_LightPosition[t4];
+    highp vec3 t6 = (t5.xyz - (intBitsToFloat(r0.xyz) * t5.w));
+    highp float t7 = dot(t6, t6);
+    highp vec3 t8 = (inversesqrt(t7) * t6);
+    highp vec4 t9 = unity_LightAtten[t4];
+    highp float t10 = max(dot(r1.xyz, t8), 0.0);
+    highp float t11 = (((1.0 / ((t7 * t9.z) + 1.0)) * clamp(((max(dot(t8, unity_SpotDirection[t4].xyz), 0.0) - t9.x) * t9.y), 0.0, 1.0)) * t10);
+    highp vec3 t12 = ((unity_LightColor[t4].xyz * t11) + r2.xyz);
+    r1 = vec4(r1.x, r1.y, r1.z, t11);
+    r2 = vec4(t12, t10);
+  }
+  highp vec3 t13 = (r2.xyz * _Color.xyz);
+  COLOR0 = vec4(t13, (_Color.w * _ReflectColor.w));
+  gl_Position = t0;
+}
+
+// stats: 47 alu 0 tex 2 flow
+// inputs: 3
+//  #0: in_POSITION0 (high float) 4x1 [-1]
+//  #1: in_NORMAL0 (high float) 4x1 [-1]
+//  #2: in_TEXCOORD0 (high float) 4x1 [-1]
+// uniforms: 11 (total size: 0)
+//  #0: unity_LightColor (high float) 4x1 [8]
+//  #1: unity_LightPosition (high float) 4x1 [8]
+//  #2: unity_LightAtten (high float) 4x1 [8]
+//  #3: unity_SpotDirection (high float) 4x1 [8]
+//  #4: glstate_matrix_mvp (high float) 4x4 [-1]
+//  #5: glstate_matrix_modelview0 (high float) 4x4 [-1]
+//  #6: glstate_matrix_invtrans_modelview0 (high float) 4x4 [-1]
+//  #7: glstate_lightmodel_ambient (high float) 4x1 [-1]
+//  #8: _MainTex_ST (high float) 4x1 [-1]
+//  #9: _Color (high float) 4x1 [-1]
+//  #10: _ReflectColor (high float) 4x1 [-1]

@@ -1,0 +1,84 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Node_std430 {
+  float4 color;
+  float depth;
+  uint next;
+  char _pad0[8];
+};
+static_assert(sizeof(_xlat_Node_std430) == 32, "std430 size");
+struct _xlat_buf_LinkedListSBO_std430 {
+  _xlat_Node_std430 nodes[1];
+};
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  float4 outFragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_LinkedListSBO_std430& _xlat_blk_LinkedListSBO [[buffer(1)]]
+  , texture2d<uint, access::read_write> headIndexImage [[texture(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  uint r0 = 0;
+  int r1 = 0;
+  int r2 = 0;
+  int r3 = 0;
+  int r4 = 0;
+  int r5 = 0;
+  float4 r6 = 0;
+  float4 fragments_color[128];
+  float fragments_depth[128];
+  uint fragments_next[128];
+  int2 t0 = int2(_mtl_i.gl_FragCoord.xy);
+  r0 = headIndexImage.read(uint2(int4(t0, 0, 0).xy)).x;
+  for (r4 = 0; ((int(r0) != -1) && (r4 < 128)); r4++) {
+    fragments_color[r4] = float4(_xlat_blk_LinkedListSBO.nodes[int(r0)].color);
+    fragments_depth[r4] = float(_xlat_blk_LinkedListSBO.nodes[int(r0)].depth);
+    r0 = uint(_xlat_blk_LinkedListSBO.nodes[int(r0)].next);
+    fragments_next[r4] = r0;
+  }
+  for (r3 = 1; (uint(r3) < uint(r4)); r3++) {
+    float4 t1 = fragments_color[r3];
+    float t2 = fragments_depth[r3];
+    uint t3 = fragments_next[r3];
+    r2 = r3;
+    while (true) {
+      r1 = (r2 - 1);
+      float t4 = fragments_depth[r1];
+      if ((!((r2 != 0) && (t4 < t2)))) {
+        break;
+      }
+      fragments_color[r2] = fragments_color[r1];
+      fragments_depth[r2] = t4;
+      fragments_next[r2] = fragments_next[r1];
+      r2 = r1;
+    }
+    fragments_color[r2] = t1;
+    fragments_depth[r2] = t2;
+    fragments_next[r2] = t3;
+  }
+  r6 = float4(0.025, 0.025, 0.025, 1.0);
+  for (r5 = 0; (r5 < r4); r5++) {
+    float4 t5 = fragments_color[r5];
+    r6 = mix(r6, t5, t5.wwww);
+  }
+  _mtl_o.outFragColor = r6;
+  return _mtl_o;
+}
+
+// stats: 16 alu 1 tex 8 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// buffer #0: LinkedListSBO storage layout std430 binding 1 (size: unknown) metal 1
+//  member #0: Node[] nodes offset 0 array runtime stride 32
+//  member #1: Node [] parent 0 offset 0
+//  member #2: vec4 color parent 1 offset 0
+//  member #3: float depth parent 1 offset 16
+//  member #4: uint next parent 1 offset 20
+// textures: 1
+//  #0: headIndexImage (high image2d) 0x0 [-1] loc 0 format r32ui component uint

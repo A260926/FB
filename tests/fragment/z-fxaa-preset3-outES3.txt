@@ -1,0 +1,100 @@
+#version 300 es
+precision highp float;
+precision highp int;
+out mediump vec4 _fragData;
+uniform mediump sampler2D _MainTex;
+uniform mediump vec4 _MainTex_TexelSize;
+in mediump vec2 xlv_TEXCOORD0;
+void main ()
+{
+  bool r0;
+  bool r1;
+  highp int r2;
+  mediump vec2 r3;
+  mediump vec2 r4;
+  mediump float r5;
+  mediump float r6;
+  mediump float r7;
+  mediump vec3 r8;
+  mediump vec4 t0 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(0.0, -1.0) * _MainTex_TexelSize.xy)), 0.0);
+  mediump vec4 t1 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(-1.0, 0.0) * _MainTex_TexelSize.xy)), 0.0);
+  mediump vec4 t2 = textureLod(_MainTex, xlv_TEXCOORD0, 0.0);
+  mediump vec4 t3 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(1.0, 0.0) * _MainTex_TexelSize.xy)), 0.0);
+  mediump vec4 t4 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(0.0, 1.0) * _MainTex_TexelSize.xy)), 0.0);
+  mediump float t5 = ((t0.y * 1.9632108) + t0.x);
+  mediump float t6 = ((t1.y * 1.9632108) + t1.x);
+  mediump float t7 = ((t2.y * 1.9632108) + t2.x);
+  mediump float t8 = ((t3.y * 1.9632108) + t3.x);
+  mediump float t9 = ((t4.y * 1.9632108) + t4.x);
+  mediump float t10 = max(t7, max(max(t5, t6), max(t9, t8)));
+  mediump float t11 = (t10 - min(t7, min(min(t5, t6), min(t9, t8))));
+  if ((t11 < max(0.041666668, (t10 * 0.125)))) {
+    r8 = t2.xyz;
+  } else {
+    mediump float t12 = (abs((((((t5 + t6) + t8) + t9) * 0.25) - t7)) / t11);
+    mediump vec4 t13 = textureLod(_MainTex, (xlv_TEXCOORD0 - _MainTex_TexelSize.xy), 0.0);
+    mediump vec4 t14 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(1.0, -1.0) * _MainTex_TexelSize.xy)), 0.0);
+    mediump vec4 t15 = textureLod(_MainTex, (xlv_TEXCOORD0 + (vec2(-1.0, 1.0) * _MainTex_TexelSize.xy)), 0.0);
+    mediump vec4 t16 = textureLod(_MainTex, (xlv_TEXCOORD0 + _MainTex_TexelSize.xy), 0.0);
+    mediump vec3 t17 = (((((t0.xyz + t1.xyz) + t2.xyz) + t3.xyz) + t4.xyz) + (((t13.xyz + t14.xyz) + t15.xyz) + t16.xyz));
+    mediump float t18 = (0.5 * t5);
+    mediump float t19 = (0.25 * ((t13.y * 1.9632108) + t13.x));
+    mediump float t20 = (0.25 * ((t14.y * 1.9632108) + t14.x));
+    mediump float t21 = (0.5 * t6);
+    mediump float t22 = (0.5 * t8);
+    mediump float t23 = (0.5 * t9);
+    mediump float t24 = (0.25 * ((t15.y * 1.9632108) + t15.x));
+    mediump float t25 = (0.25 * ((t16.y * 1.9632108) + t16.x));
+    bool t26 = (((abs(((t19 - t21) + t24)) + abs(((t18 - t7) + t23))) + abs(((t20 - t22) + t25))) >= ((abs(((t19 - t18) + t20)) + abs(((t21 - t7) + t22))) + abs(((t24 - t23) + t25))));
+    mediump float t27 = (t26 ? _MainTex_TexelSize.y : _MainTex_TexelSize.x);
+    mediump float t28 = (t26 ? t5 : t6);
+    mediump float t29 = (t26 ? t9 : t8);
+    mediump float t30 = abs((t29 - t7));
+    mediump float t31 = abs((t28 - t7));
+    bool t32 = (t31 >= t30);
+    mediump float t33 = (t32 ? (-t27) : t27);
+    mediump float t34 = (t33 * 0.5);
+    mediump vec2 t35 = (t26 ? vec2(_MainTex_TexelSize.x, 0.0) : vec2(0.0, _MainTex_TexelSize.y));
+    mediump vec2 t36 = vec2((xlv_TEXCOORD0.x + (t26 ? 0.0 : t34)), (xlv_TEXCOORD0.y + (t26 ? t34 : 0.0)));
+    r3 = (t36 - t35);
+    r4 = (t36 + t35);
+    r7 = (0.5 * (t7 + (t32 ? t28 : t29)));
+    mediump float t37 = (max(t30, t31) * 0.25);
+    r1 = false;
+    r0 = false;
+    r6 = r7;
+    r5 = r7;
+    for (r2 = 0; (r2 < 16); r2++) {
+      if ((!r0)) {
+        mediump vec4 t38 = textureLod(_MainTex, r3, 0.0);
+        r6 = ((t38.y * 1.9632108) + t38.x);
+      }
+      if ((!r1)) {
+        mediump vec4 t39 = textureLod(_MainTex, r4, 0.0);
+        r5 = ((t39.y * 1.9632108) + t39.x);
+      }
+      r0 = (r0 || (abs((r6 - r7)) >= t37));
+      r1 = (r1 || (abs((r5 - r7)) >= t37));
+      if ((r0 && r1)) {
+        break;
+      }
+      r3 = (r0 ? r3 : (r3 - t35));
+      r4 = (r1 ? r4 : (r4 + t35));
+    }
+    mediump float t40 = (t26 ? (xlv_TEXCOORD0.x - r3.x) : (xlv_TEXCOORD0.y - r3.y));
+    mediump float t41 = (t26 ? (r4.x - xlv_TEXCOORD0.x) : (r4.y - xlv_TEXCOORD0.y));
+    mediump float t42 = ((0.5 + (min(t41, t40) * (-1.0 / (t41 + t40)))) * (((t7 < r7) == (((t40 < t41) ? r6 : r5) < r7)) ? 0.0 : t33));
+    mediump vec4 t43 = textureLod(_MainTex, vec2((xlv_TEXCOORD0.x + (t26 ? 0.0 : t42)), (xlv_TEXCOORD0.y + (t26 ? t42 : 0.0))), 0.0);
+    mediump float t44 = min(0.75, (max(0.0, (t12 - 0.25)) * 1.3333334));
+    r8 = ((((t17 * 0.11111111) * t44) + t43.xyz) - (t44 * t43.xyz));
+  }
+  _fragData = vec4(r8.x, r8.y, r8.z, 0.0);
+}
+
+// stats: 165 alu 12 tex 6 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (medium float) 2x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: _MainTex_TexelSize (medium float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1]

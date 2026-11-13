@@ -1,0 +1,117 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_BoundsBuffer_std430 {
+  uint2 bounds_buffer[1];
+};
+struct _xlat_RasterizeData_std430 {
+  float2 image_pos;
+  float2 pos_xy;
+  packed_float3 conic;
+  float pos_z;
+  float4 color;
+};
+static_assert(sizeof(_xlat_RasterizeData_std430) == 48, "std430 size");
+struct _xlat_buf_CulledBuffer_std430 {
+  _xlat_RasterizeData_std430 culled_buffer[1];
+};
+struct _xlat_buf_Params_std140 {
+  float heatmap_factor;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_buf_Params_std140) == 16, "std140 size");
+struct _xlat_buf_SortBuffer_std430 {
+  uint sort_buffer[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 16, 16, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_BoundsBuffer_std430& _xlat_blk_BoundsBuffer [[buffer(1)]]
+  , const device _xlat_buf_CulledBuffer_std430& _xlat_blk_CulledBuffer [[buffer(2)]]
+  , constant _xlat_buf_Params_std140& _xlat_blk_Params [[buffer(3)]]
+  , const device _xlat_buf_SortBuffer_std430& _xlat_blk_SortBuffer [[buffer(4)]]
+  , texture2d<float, access::write> rasterized_image [[texture(0)]]
+  , uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]]
+  , uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]])
+{
+  threadgroup float3 conic_tile[256];
+  threadgroup float4 color_tile[256];
+  threadgroup float2 image_pos_tile[256];
+  threadgroup uint shared_t;
+  int r0 = 0;
+  int r1 = 0;
+  float r2 = 0;
+  float3 r3 = 0;
+  int2 t0 = int2(rasterized_image.get_width(), rasterized_image.get_height());
+  uint2 t1 = (uint2((15 + t0)) >> uint(4u));
+  if ((!any((gl_WorkGroupID.xy >= t1) != bool2(false)))) {
+    int2 t2 = ((int2(gl_WorkGroupID.xy) << int(4u)) + int2(gl_LocalInvocationID.xy));
+    bool t3 = all((uint2(t2) < uint2(t0)) == bool2(true));
+    uint2 t4 = uint2(_xlat_blk_BoundsBuffer.bounds_buffer[((int(gl_WorkGroupID.y) * int(t1.x)) + int(gl_WorkGroupID.x))]);
+    int t5 = (int(t4.y) - int(t4.x));
+    bool t6 = (int(gl_LocalInvocationIndex) == 0);
+    if (t6) {
+      shared_t = 4294967295u;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    uint t7 = (uint((255 + t5)) >> uint(8u));
+    r2 = 1.0;
+    r3 = float3(0.0);
+    for (r1 = 0; ((uint(r1) < t7) && (255u < shared_t)); r1++) {
+      int t8 = (r1 << int(8u));
+      int t9 = (t5 - t8);
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+      uint t10 = min(256u, uint(t9));
+      if ((gl_LocalInvocationIndex < t10)) {
+        float2 t11 = float2(_xlat_blk_CulledBuffer.culled_buffer[int(uint(_xlat_blk_SortBuffer.sort_buffer[((int(t4.x) + t8) + int(gl_LocalInvocationIndex))]))].image_pos);
+        float4 t12 = float4(_xlat_blk_CulledBuffer.culled_buffer[int(uint(_xlat_blk_SortBuffer.sort_buffer[((int(t4.x) + t8) + int(gl_LocalInvocationIndex))]))].color);
+        conic_tile[int(gl_LocalInvocationIndex)] = float3(_xlat_blk_CulledBuffer.culled_buffer[int(uint(_xlat_blk_SortBuffer.sort_buffer[((int(t4.x) + t8) + int(gl_LocalInvocationIndex))]))].conic);
+        color_tile[int(gl_LocalInvocationIndex)] = t12;
+        image_pos_tile[int(gl_LocalInvocationIndex)] = t11;
+      }
+      if (t6) {
+        shared_t = 0u;
+      }
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+      if (t3) {
+        for (r0 = 0; ((uint(r0) < t10) && (0.003921569 < r2)); r0++) {
+          float3 t13 = conic_tile[r0];
+          float4 t14 = color_tile[r0];
+          float2 t15 = (image_pos_tile[r0] - float2(uint2(t2)));
+          float t16 = (t14.w * exp(((-(0.5 * (((t13.x * t15.x) * t15.x) + ((t13.z * t15.y) * t15.y)))) - ((t13.y * t15.x) * t15.y))));
+          r3 = (r3 + ((t14.xyz * t16) * r2));
+          r2 = (r2 * (1.0 - t16));
+        }
+        atomic_fetch_add_explicit((threadgroup atomic_uint*)&shared_t, uint((r2 * 255.0)), memory_order_relaxed);
+      }
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (t3) {
+      float3 t17 = (r3 + ((mix(float3(0.0, 0.0, 1.0), float3(1.0, 0.2, 0.2), float3((float(uint(t5)) * 0.0005))) * (1.0 - r2)) * float(_xlat_blk_Params.heatmap_factor)));
+      rasterized_image.write(float4(t17, 1.0), uint2(int4(t2, 0, 0).xy));
+    }
+  }
+}
+
+// stats: 60 alu 2 tex 10 flow
+// workgroup size: 16 16 1
+// buffer #0: BoundsBuffer storage layout std430 binding 2 (size: unknown) metal 1
+//  member #0: uvec2[] bounds_buffer offset 0 array runtime stride 8 readonly
+//  member #1: uvec2 [] parent 0 offset 0 readonly
+// buffer #1: CulledBuffer storage layout std430 binding 0 (size: unknown) metal 2
+//  member #0: RasterizeData[] culled_buffer offset 0 array runtime stride 48 readonly
+//  member #1: RasterizeData [] parent 0 offset 0 readonly
+//  member #2: vec2 image_pos parent 1 offset 0 readonly
+//  member #3: vec2 pos_xy parent 1 offset 8 readonly (unused)
+//  member #4: vec3 conic parent 1 offset 16 readonly
+//  member #5: float pos_z parent 1 offset 28 readonly (unused)
+//  member #6: vec4 color parent 1 offset 32 readonly
+// buffer #2: Params layout std140 binding 3 (size: 16) metal 3
+//  member #0: float heatmap_factor offset 0
+// buffer #3: SortBuffer storage layout std430 binding 1 (size: unknown) metal 4
+//  member #0: uint[] sort_buffer offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly
+// textures: 1
+//  #0: rasterized_image (high image2d) 0x0 [-1] loc 0 format rgba32f component float writeonly

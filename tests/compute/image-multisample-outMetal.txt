@@ -1,0 +1,24 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d_ms<uint, access::read> multisampleImage [[texture(0)]]
+  , texture2d_ms_array<uint, access::read> multisampleLayers [[texture(1)]]
+  , texture2d<uint, access::write> destination [[texture(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = gl_GlobalInvocationID.z;
+  int t1 = (int(multisampleImage.read(uint2(int4(uint4(gl_GlobalInvocationID.xy, 0u, 0u)).xy), uint(int(t0))).x) + int(multisampleLayers.read(uint2(int4(uint4(gl_GlobalInvocationID.xy, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.xy, 1u, 0u)).z), uint(int(t0))).x));
+  int4 t2 = int4(t1, int2(multisampleImage.get_width(), multisampleImage.get_height()).x, int3(multisampleLayers.get_width(), multisampleLayers.get_height(), multisampleLayers.get_array_size()).z, (int(multisampleImage.get_num_samples()) + int(multisampleLayers.get_num_samples())));
+  destination.write(uint4(t2), uint2(int4(uint4(gl_GlobalInvocationID.xy, 0u, 0u)).xy));
+}
+
+// stats: 2 alu 7 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 3
+//  #0: multisampleImage (high image2dms) 0x0 [-1] loc 0 format r32ui component uint readonly
+//  #1: multisampleLayers (high image2dmsarray) 0x0 [-1] loc 1 format r32ui component uint readonly
+//  #2: destination (high image2d) 0x0 [-1] loc 2 format r32ui component uint writeonly

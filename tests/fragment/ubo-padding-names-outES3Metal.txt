@@ -1,0 +1,46 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Entry_std140 {
+  float _buf_pad1;
+  char _pad0[12];
+  float4 color;
+  float _buf_pad2;
+  char _pad1[12];
+  float4 other;
+};
+static_assert(sizeof(_xlat_Entry_std140) == 64, "std140 size");
+struct _xlat_buf_Data_std140 {
+  float _buf_pad1;
+  char _pad0[12];
+  float4 color;
+  float _buf_pad2;
+  char _pad1[12];
+  _xlat_Entry_std140 entry;
+};
+static_assert(sizeof(_xlat_buf_Data_std140) == 112, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Data_std140& data [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  _mtl_o.color = (((float4(data.color) * float(data._buf_pad1)) + (float4(data.entry.color) * float(data.entry._buf_pad1))) + (float4(data.entry.other) * (float(data._buf_pad2) + float(data.entry._buf_pad2))));
+  return _mtl_o;
+}
+
+// stats: 6 alu 0 tex 0 flow
+// buffer #0: Data instance data layout std140 (size: 112) metal 1
+//  member #0: float _buf_pad1 offset 0
+//  member #1: vec4 color offset 16
+//  member #2: float _buf_pad2 offset 32
+//  member #3: Entry entry offset 48
+//  member #4: float _buf_pad1 parent 3 offset 48
+//  member #5: vec4 color parent 3 offset 64
+//  member #6: float _buf_pad2 parent 3 offset 80
+//  member #7: vec4 other parent 3 offset 96

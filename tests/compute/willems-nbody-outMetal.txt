@@ -1,0 +1,85 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Particle_std140 {
+  float4 pos;
+  float4 vel;
+};
+static_assert(sizeof(_xlat_Particle_std140) == 32, "std140 size");
+struct _xlat_buf_Pos_std140 {
+  _xlat_Particle_std140 particles[1];
+};
+struct _xlat_buf_UBO_std140 {
+  float deltaT;
+  int particleCount;
+  float gravity;
+  float power;
+  float soften;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_buf_UBO_std140) == 32, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 256, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Pos_std140& _xlat_blk_Pos [[buffer(1)]]
+  , constant _xlat_buf_UBO_std140& ubo [[buffer(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]]
+  , uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]])
+{
+  threadgroup float4 sharedData[256];
+  float4 r0 = 0;
+  int r1 = 0;
+  int r2 = 0;
+  float3 r3 = 0;
+  int t0 = int(ubo.particleCount);
+  bool t1 = (gl_GlobalInvocationID.x < uint(t0));
+  if (t1) {
+    r0 = float4(_xlat_blk_Pos.particles[int(gl_GlobalInvocationID.x)].pos);
+  } else {
+    r0 = float4(0.0);
+  }
+  r3 = float3(0.0);
+  for (r2 = 0; (uint(r2) < uint(t0)); r2 += 256) {
+    int t2 = (r2 + int(gl_LocalInvocationID.x));
+    if ((uint(t2) < uint(t0))) {
+      sharedData[int(gl_LocalInvocationID.x)] = float4(_xlat_blk_Pos.particles[t2].pos);
+    } else {
+      sharedData[int(gl_LocalInvocationID.x)] = float4(0.0);
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (t1) {
+      for (r1 = 0; (uint(r1) < 256u); r1++) {
+        float4 t3 = sharedData[r1];
+        float3 t4 = (t3.xyz - r0.xyz);
+        r3 = (r3 + (((float(ubo.gravity) * t4) * t3.w) / pow((dot(t4, t4) + float(ubo.soften)), float(ubo.power))));
+      }
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+  }
+  if (t1) {
+    uint t5 = gl_GlobalInvocationID.x;
+    float4 t6 = float4(_xlat_blk_Pos.particles[int(t5)].vel);
+    float t7 = float(ubo.deltaT);
+    float3 t8 = (t6.xyz + (t7 * r3));
+    float t9 = (t6.w + (0.1 * t7));
+    _xlat_blk_Pos.particles[int(t5)].vel = float4(t8, t9);
+    if ((1.0 < t9)) {
+      _xlat_blk_Pos.particles[int(t5)].vel[3] = float4((t9 - 1.0)).w;
+    }
+  }
+}
+
+// stats: 21 alu 0 tex 9 flow
+// workgroup size: 256 1 1
+// buffer #0: Pos storage layout std140 binding 0 (size: unknown) metal 1
+//  member #0: Particle[] particles offset 0 array runtime stride 32
+//  member #1: Particle [] parent 0 offset 0
+//  member #2: vec4 pos parent 1 offset 0
+//  member #3: vec4 vel parent 1 offset 16
+// buffer #1: UBO instance ubo layout std140 binding 1 (size: 32) metal 2
+//  member #0: float deltaT offset 0
+//  member #1: int particleCount offset 4
+//  member #2: float gravity offset 8
+//  member #3: float power offset 12
+//  member #4: float soften offset 16

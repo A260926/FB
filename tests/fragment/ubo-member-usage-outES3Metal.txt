@@ -1,0 +1,41 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Entry_std140 {
+  float4 color;
+  float unused;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_Entry_std140) == 32, "std140 size");
+struct _xlat_buf_Data_std140 {
+  int index;
+  float removed;
+  char _pad0[8];
+  _xlat_Entry_std140 entries[2];
+  float4 unused;
+};
+static_assert(sizeof(_xlat_buf_Data_std140) == 96, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Data_std140& data [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  _mtl_o.color = float4(data.entries[short(data.index)].color);
+  return _mtl_o;
+}
+
+// stats: 0 alu 0 tex 0 flow
+// buffer #0: Data instance data layout std140 (size: 96) metal 1
+//  member #0: int index offset 0
+//  member #1: float removed offset 4 (unused)
+//  member #2: Entry[2] entries offset 16 array 2 stride 32
+//  member #3: Entry [] parent 2 offset 16
+//  member #4: vec4 color parent 3 offset 16
+//  member #5: float unused parent 3 offset 32 (unused)
+//  member #6: vec4 unused offset 80 (unused)

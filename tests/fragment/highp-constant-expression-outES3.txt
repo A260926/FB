@@ -1,0 +1,14 @@
+#version 300 es
+precision highp float;
+precision highp int;
+in mediump vec2 coord;
+out highp vec4 color;
+void main ()
+{
+  mediump vec2 t0 = (coord + 2.0);
+  color = vec4(dot(vec2(171.0, 231.0), (coord + 1.0)), t0, 1.0);
+}
+
+// stats: 3 alu 0 tex 0 flow
+// inputs: 1
+//  #0: coord (medium float) 2x1 [-1]

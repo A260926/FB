@@ -1,0 +1,93 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+constexpr sampler _mtl_xl_shadow_sampler(address::clamp_to_edge, filter::linear, compare_func::less_equal);
+struct xlatMtlShaderInput {
+  float4 xlv_TEXCOORD0;
+  half3 xlv_TEXCOORD1;
+  half4 xlv_TEXCOORD2_2;
+  half4 xlv_TEXCOORD5;
+  half4 xlv_TEXCOORD6;
+  half4 xlv_COLOR;
+};
+struct xlatMtlShaderOutput {
+  half4 _xlat_varying0 [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  half4 _WorldSpaceLightPos0;
+  half4 unity_SHAr;
+  half4 unity_SHAg;
+  half4 unity_SHAb;
+  half4 _LightShadowData;
+  half4 unity_SpecCube0_HDR;
+  half4 unity_ColorSpaceDielectricSpec;
+  half4 _LightColor0;
+  half4 _Color;
+  half _Metallic;
+  half _Glossiness;
+  half _OcclusionStrength;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texturecube<half> unity_SpecCube0 [[texture(0)]], sampler _mtlsmp_unity_SpecCube0 [[sampler(0)]]
+  , texture2d<half> _MainTex [[texture(1)]], sampler _mtlsmp__MainTex [[sampler(1)]]
+  , texture2d<half> _OcclusionMap [[texture(2)]], sampler _mtlsmp__OcclusionMap [[sampler(2)]]
+  , depth2d<float> _ShadowMapTexture [[texture(3)]], sampler _mtlsmp__ShadowMapTexture [[sampler(3)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 FragData[1];
+  float2 t0 = _mtl_i.xlv_TEXCOORD0.xy;
+  half3 t1 = (_mtl_u._Color.xyz * _MainTex.sample(_mtlsmp__MainTex, t0).xyz);
+  half3 t2 = mix(_mtl_u.unity_ColorSpaceDielectricSpec.xyz, t1, half3(_mtl_u._Metallic));
+  half t3 = (_mtl_u.unity_ColorSpaceDielectricSpec.w - (_mtl_u._Metallic * _mtl_u.unity_ColorSpaceDielectricSpec.w));
+  half3 t4 = (t1 * t3);
+  half3 t5 = normalize(_mtl_i.xlv_TEXCOORD2_2.xyz);
+  half3 t6 = normalize(_mtl_i.xlv_TEXCOORD1);
+  half t7 = mix(_mtl_u._LightShadowData.x, half(1.0), half(_ShadowMapTexture.sample_compare(_mtl_xl_shadow_sampler, float2(_mtl_i.xlv_TEXCOORD6.xy), saturate(float(_mtl_i.xlv_TEXCOORD6.z)))));
+  half t8 = ((half(1.0) - _mtl_u._OcclusionStrength) + (_OcclusionMap.sample(_mtlsmp__OcclusionMap, t0).y * _mtl_u._OcclusionStrength));
+  half4 t9 = half4(t5, half(1.0));
+  half3 t10 = (half(1.055) * pow(max((_mtl_i.xlv_TEXCOORD5.xyz + half3(dot(_mtl_u.unity_SHAr, t9), dot(_mtl_u.unity_SHAg, t9), dot(_mtl_u.unity_SHAb, t9))), half3(0.0)), half3(0.4166667)));
+  half t11 = (half(1.0) - _mtl_u._Glossiness);
+  half4 t12 = unity_SpecCube0.sample(_mtlsmp_unity_SpecCube0, float3((t6 - ((half3(dot(t5, t6)) * half(2.0)) * t5))), level(float(((t11 * half(6.0)) * (half(1.7) - (half(0.7) * t11))))));
+  half3 t13 = (_mtl_u._WorldSpaceLightPos0.xyz - t6);
+  half3 t14 = (t13 * rsqrt(max(half(0.001), dot(t13, t13))));
+  half t15 = max(half(0.0), dot(_mtl_u._WorldSpaceLightPos0.xyz, t14));
+  half t16 = (t11 * t11);
+  half t17 = max(half(0.0001), t16);
+  half t18 = max(((half(2.0) / (t17 * t17)) - half(2.0)), half(0.0001));
+  half t19 = (half(1.0) - max(half(0.0), dot(t5, (-t6))));
+  half t20 = max(half(0.0001), (((t18 + half(1.0)) * pow(max(half(0.0), dot(t5, t14)), t18)) / (((half(8.0) * mix(t11, (t15 * t15), _mtl_u._Glossiness)) * t15) + half(0.0001))));
+  half3 t21 = ((((t4 + (sqrt(t20) * t2)) * (_mtl_u._LightColor0.xyz * t7)) * max(half(0.0), dot(t5, _mtl_u._WorldSpaceLightPos0.xyz))) + ((max((t10 - half(0.055)), half3(0.0)) * t8) * t4));
+  half3 t22 = (((half(1.0) - ((t16 * half(0.28)) * t11)) * (((_mtl_u.unity_SpecCube0_HDR.x * t12.w) * t12.xyz) * t8)) * mix(t2, half3(saturate((_mtl_u._Glossiness + (half(1.0) - t3)))), half3((((t19 * t19) * t19) * t19))));
+  half3 t23 = (t21 + t22);
+  half4 t24 = (half4(t23, half(1.0)) * _mtl_i.xlv_COLOR);
+  FragData[0] = half4(t24.xyz, half(1.0));
+  _mtl_o._xlat_varying0 = FragData[0];
+  return _mtl_o;
+}
+
+// stats: 90 alu 4 tex 0 flow
+// inputs: 6
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]
+//  #1: xlv_TEXCOORD1 (medium float) 3x1 [-1]
+//  #2: xlv_TEXCOORD2_2 (medium float) 4x1 [-1]
+//  #3: xlv_TEXCOORD5 (medium float) 4x1 [-1]
+//  #4: xlv_TEXCOORD6 (medium float) 4x1 [-1]
+//  #5: xlv_COLOR (medium float) 4x1 [-1]
+// uniforms: 12 (total size: 78)
+//  #0: _WorldSpaceLightPos0 (medium float) 4x1 [-1] loc 0
+//  #1: unity_SHAr (medium float) 4x1 [-1] loc 8
+//  #2: unity_SHAg (medium float) 4x1 [-1] loc 16
+//  #3: unity_SHAb (medium float) 4x1 [-1] loc 24
+//  #4: _LightShadowData (medium float) 4x1 [-1] loc 32
+//  #5: unity_SpecCube0_HDR (medium float) 4x1 [-1] loc 40
+//  #6: unity_ColorSpaceDielectricSpec (medium float) 4x1 [-1] loc 48
+//  #7: _LightColor0 (medium float) 4x1 [-1] loc 56
+//  #8: _Color (medium float) 4x1 [-1] loc 64
+//  #9: _Metallic (medium float) 1x1 [-1] loc 72
+//  #10: _Glossiness (medium float) 1x1 [-1] loc 74
+//  #11: _OcclusionStrength (medium float) 1x1 [-1] loc 76
+// textures: 4
+//  #0: unity_SpecCube0 (medium cube) 0x0 [-1] loc 0
+//  #1: _MainTex (medium 2d) 0x0 [-1] loc 1
+//  #2: _OcclusionMap (medium 2d) 0x0 [-1] loc 2
+//  #3: _ShadowMapTexture (medium 2dshadow) 0x0 [-1] loc 3

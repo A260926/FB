@@ -1,0 +1,70 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_BoundsBuffer_std430 {
+  uint2 bounds_buffer[1];
+};
+struct _xlat_buf_Histograms_std430 {
+  uint sort_buffer_size;
+  uint histogram[1];
+};
+struct _xlat_buf_SortBuffer_std430 {
+  uint sort_buffer[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 256, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_BoundsBuffer_std430& _xlat_blk_BoundsBuffer [[buffer(1)]]
+  , const device _xlat_buf_Histograms_std430& _xlat_blk_Histograms [[buffer(2)]]
+  , const device _xlat_buf_SortBuffer_std430& _xlat_blk_SortBuffer [[buffer(3)]]
+  , constant uint* _mtl_buffer_sizes [[buffer(4)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]])
+{
+  threadgroup uint tile_ids[257];
+  uint t0 = uint(_xlat_blk_Histograms.sort_buffer_size);
+  bool t1 = (gl_GlobalInvocationID.x < t0);
+  if (t1) {
+    if (((int(gl_LocalInvocationIndex) == 0) && (int(gl_GlobalInvocationID.x) != 0))) {
+      tile_ids[0] = (uint(_xlat_blk_SortBuffer.sort_buffer[(int(gl_GlobalInvocationID.x) - 1)]) >> uint(16u));
+    }
+    tile_ids[(int(gl_LocalInvocationIndex) + 1)] = (uint(_xlat_blk_SortBuffer.sort_buffer[int(gl_GlobalInvocationID.x)]) >> uint(16u));
+  }
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  if (t1) {
+    uint t2 = tile_ids[(int(gl_LocalInvocationIndex) + 1)];
+    int t3 = (max(int(_mtl_buffer_sizes[1]) - 0, 0) / 8);
+    if ((int(gl_GlobalInvocationID.x) == 0)) {
+      if ((t2 < uint(t3))) {
+        _xlat_blk_BoundsBuffer.bounds_buffer[int(t2)][0] = 0u;
+      }
+    } else {
+      uint t4 = tile_ids[int(gl_LocalInvocationIndex)];
+      if ((int(t4) != int(t2))) {
+        if ((t4 < uint(t3))) {
+          _xlat_blk_BoundsBuffer.bounds_buffer[int(t4)][1] = gl_GlobalInvocationID.xx.y;
+        }
+        if ((t2 < uint(t3))) {
+          _xlat_blk_BoundsBuffer.bounds_buffer[int(t2)][0] = gl_GlobalInvocationID.xx.x;
+        }
+      }
+    }
+    if ((((1 + int(gl_GlobalInvocationID.x)) == int(t0)) && (t2 < uint(t3)))) {
+      _xlat_blk_BoundsBuffer.bounds_buffer[int(t2)][1] = uint2(t0).y;
+    }
+  }
+}
+
+// stats: 18 alu 0 tex 9 flow
+// workgroup size: 256 1 1
+// buffer #0: BoundsBuffer storage layout std430 binding 2 (size: unknown) metal 1 metal-size-buffer 4
+//  member #0: uvec2[] bounds_buffer offset 0 array runtime stride 8 writeonly
+//  member #1: uvec2 [] parent 0 offset 0 writeonly
+// buffer #1: Histograms storage layout std430 binding 0 (size: unknown) metal 2
+//  member #0: uint sort_buffer_size offset 0 readonly
+//  member #1: uint[] histogram offset 4 array runtime stride 4 readonly (unused)
+//  member #2: uint [] parent 1 offset 4 readonly (unused)
+// buffer #2: SortBuffer storage layout std430 binding 1 (size: unknown) metal 3
+//  member #0: uint[] sort_buffer offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly

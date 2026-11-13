@@ -1,0 +1,25 @@
+uniform vec4 _Color;
+uniform sampler2D _LightBuffer;
+uniform sampler2D _MainTex;
+uniform float _Parallax;
+uniform sampler2D _ParallaxMap;
+uniform vec4 unity_Ambient;
+void main ()
+{
+  vec3 t0 = normalize(gl_TexCoord[1].xyz);
+  vec4 t1 = (texture2D(_MainTex, (gl_TexCoord[0].xy + (((texture2D(_ParallaxMap, gl_TexCoord[0].zw).w * _Parallax) - (_Parallax / 2.0)) * (t0.xy / (t0.z + 0.42))))) * _Color);
+  vec3 t2 = (t1.xyz * (unity_Ambient.xyz - log2(texture2DProj(_LightBuffer, vec3(gl_TexCoord[2].xy, gl_TexCoord[2].w))).xyz));
+  gl_FragData[0] = vec4(t2, t1.w);
+}
+
+// stats: 14 alu 3 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 3 (total size: 0)
+//  #0: _Color (high float) 4x1 [-1]
+//  #1: _Parallax (high float) 1x1 [-1]
+//  #2: unity_Ambient (high float) 4x1 [-1]
+// textures: 3
+//  #0: _LightBuffer (high 2d) 0x0 [-1]
+//  #1: _MainTex (high 2d) 0x0 [-1]
+//  #2: _ParallaxMap (high 2d) 0x0 [-1]

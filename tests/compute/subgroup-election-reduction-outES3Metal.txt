@@ -1,0 +1,36 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 230
+#error This shader requires Metal 2.3 or newer
+#endif
+struct _xlat_buf_Results_std430 {
+  uint4 values[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 64, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Results_std430& _xlat_blk_Results [[buffer(1)]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]])
+{
+  uint4 r0 = 0;
+  if ((int((gl_LocalInvocationIndex & 1u)) != 0)) {
+    uint t0 = simd_sum(1u);
+    uint t1 = simd_broadcast_first(gl_LocalInvocationIndex);
+    bool2 t2 = bool2(simd_broadcast_first(uint2(bool2((int(gl_LocalInvocationIndex) == 1), (16u < gl_LocalInvocationIndex)))));
+    bool t3 = simd_is_first();
+    int2 t4 = int2(t2);
+    r0 = (t3 ? uint4(t0, t1, uint2(t4)) : uint4(0u));
+  } else {
+    uint t5 = simd_sum(1u);
+    r0 = uint4(t5, 0u, 0u, 0u);
+  }
+  _xlat_blk_Results.values[int(gl_LocalInvocationIndex)] = r0;
+}
+
+// stats: 6 alu 0 tex 1 flow
+// workgroup size: 64 1 1
+// buffer #0: Results storage layout std430 binding 0 (size: unknown) metal 1
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0

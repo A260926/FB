@@ -1,0 +1,48 @@
+uniform vec4 _CameraPosition;
+uniform vec3 _CameraRight;
+uniform vec3 _CameraUp;
+uniform vec4 _MainTex_ST;
+uniform vec4 _WaveAndDistance;
+uniform vec4 _WavingTint;
+uniform vec4 unity_LightShadowBias;
+attribute vec4 TANGENT;
+void main ()
+{
+  vec3 t0 = (gl_Vertex.xyz - _CameraPosition.xyz);
+  vec2 t1 = ((_WaveAndDistance.w < dot(t0, t0)) ? vec2(0.0) : TANGENT.xy);
+  vec3 t2 = ((gl_Vertex.xyz + (t1.x * _CameraRight)) + (t1.y * _CameraUp));
+  vec4 t3 = (((t2.x * (vec4(0.012, 0.02, 0.06, 0.024) * _WaveAndDistance.y)) + (t2.z * (vec4(0.006, 0.02, 0.02, 0.05) * _WaveAndDistance.y))) + (_WaveAndDistance.x * vec4(1.2, 2.0, 1.6, 4.8)));
+  vec4 t4 = ((fract(t3) * 6.40885) - 3.14159);
+  vec4 t5 = (t4 * t4);
+  vec4 t6 = (t5 * t4);
+  vec4 t7 = (t6 * t5);
+  vec4 t8 = (((t4 + (t6 * -0.161616)) + (t7 * 0.0083333)) + ((t7 * -0.00019841) * t5));
+  vec4 t9 = (t8 * t8);
+  vec4 t10 = (t9 * t9);
+  vec4 t11 = (t10 * TANGENT.y);
+  vec2 t12 = (t2.xz - (vec2(dot(t11, vec4(0.024, 0.04, -0.12, 0.096)), dot(t11, vec4(0.006, 0.02, -0.02, 0.1))) * _WaveAndDistance.z));
+  vec3 t13 = ((gl_Color.xyz * 2.0) * mix(vec3(0.5), _WavingTint.xyz, vec3((dot(t10, vec4(0.6741998, 0.6741998, 0.26967993, 0.13483997)) * 0.7))));
+  vec2 t14 = ((gl_MultiTexCoord0.xy * _MainTex_ST.xy) + _MainTex_ST.zw);
+  vec4 t15 = (gl_ModelViewProjectionMatrix * vec4(t12.x, t2.y, t12.y, gl_Vertex.w));
+  float t16 = (t15.z + unity_LightShadowBias.x);
+  float t17 = (-t15.w);
+  gl_Position = ((t16 < t17) ? vec4(t15.xy, t17, t15.w) : vec4(t15.xy, t16, t15.w));
+  gl_TexCoord[1] = vec4(t14, 0.0, 0.0);
+  gl_FrontColor = vec4(t13, 1.0);
+}
+
+// stats: 53 alu 0 tex 0 flow
+// inputs: 4
+//  #0: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #1: gl_Color (high float) 4x1 [-1] loc 2
+//  #2: gl_Vertex (high float) 4x1 [-1] loc 0
+//  #3: TANGENT (high float) 4x1 [-1]
+// uniforms: 8 (total size: 0)
+//  #0: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #1: _CameraPosition (high float) 4x1 [-1]
+//  #2: _CameraRight (high float) 3x1 [-1]
+//  #3: _CameraUp (high float) 3x1 [-1]
+//  #4: _MainTex_ST (high float) 4x1 [-1]
+//  #5: _WaveAndDistance (high float) 4x1 [-1]
+//  #6: _WavingTint (high float) 4x1 [-1]
+//  #7: unity_LightShadowBias (high float) 4x1 [-1]

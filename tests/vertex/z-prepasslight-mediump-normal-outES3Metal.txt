@@ -1,0 +1,38 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 _inVertex [[attribute(0)]];
+  half3 _inNormal [[attribute(1)]];
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  float4 xlv_TEXCOORD0;
+  float3 xlv_TEXCOORD1;
+};
+struct xlatMtlShaderUniform {
+  float4 _ProjectionParams;
+  float4x4 glstate_matrix_modelview0;
+  float4x4 glstate_matrix_mvp;
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = float3(_mtl_i._inNormal);
+  float4 t1 = (_mtl_u.glstate_matrix_mvp * _mtl_i._inVertex);
+  float4 t2 = (t1 * 0.5);
+  float2 t3 = (float2(t2.x, (t2.y * _mtl_u._ProjectionParams.x)) + t2.w);
+  _mtl_o.gl_Position = t1;
+  _mtl_o.xlv_TEXCOORD0 = float4(t3, t1.zw);
+  _mtl_o.xlv_TEXCOORD1 = mix(((_mtl_u.glstate_matrix_modelview0 * _mtl_i._inVertex).xyz * float3(-1.0, -1.0, 1.0)), t0, float3(half3(half((t0.z != 0.0)))));
+  return _mtl_o;
+}
+
+// stats: 21 alu 0 tex 0 flow
+// inputs: 2
+//  #0: _inVertex (high float) 4x1 [-1] loc 0
+//  #1: _inNormal (medium float) 3x1 [-1] loc 1
+// uniforms: 3 (total size: 144)
+//  #0: _ProjectionParams (high float) 4x1 [-1] loc 0
+//  #1: glstate_matrix_modelview0 (high float) 4x4 [-1] loc 16
+//  #2: glstate_matrix_mvp (high float) 4x4 [-1] loc 80

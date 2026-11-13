@@ -1,0 +1,90 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float2 xlv_TEXCOORD0;
+  float2 xlv_TEXCOORD1;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float4 _Params;
+  float4 _ProjectionParams;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _CameraDepthNormalsTexture [[texture(0)]], sampler _mtlsmp__CameraDepthNormalsTexture [[sampler(0)]]
+  , texture2d<half> _RandomTexture [[texture(1)]], sampler _mtlsmp__RandomTexture [[sampler(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float4 t0 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, _mtl_i.xlv_TEXCOORD0));
+  float3 t1 = ((t0.xyz * float3(3.5554, 3.5554, 0.0)) + float3(-1.7777, -1.7777, 1.0));
+  float t2 = (2.0 / dot(t1, t1));
+  float2 t3 = (t2 * t1.xy);
+  float t4 = (dot(t0.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z);
+  float t5 = (_mtl_u._Params.x / t4);
+  half3 t6 = ((_RandomTexture.sample(_mtlsmp__RandomTexture, _mtl_i.xlv_TEXCOORD1).xyz * half(2.0)) - half(1.0));
+  half3 t7 = (half3(0.0130572, 0.587232, -0.119337) - ((half3(dot(t6, half3(0.0130572, 0.587232, -0.119337))) * half(2.0)) * t6));
+  float3 t8 = float3(t3, (t2 - 1.0));
+  float3 t9 = (t8 * 0.3);
+  half3 t10 = half3((t9 - float3(((dot(t8, float3(t7)) < 0.0) ? t7 : (-t7)))));
+  float4 t11 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t10.xy) * t5))));
+  half t12 = half(((t4 - (float(t10.z) * _mtl_u._Params.x)) - (dot(t11.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t13 = float(saturate(t12));
+  float t14 = ((_mtl_u._Params.y < t13) ? pow((1.0 - t13), _mtl_u._Params.z) : 0.0);
+  half3 t15 = (half3(0.323078, 0.0220727, -0.418873) - ((half3(dot(t6, half3(0.323078, 0.0220727, -0.418873))) * half(2.0)) * t6));
+  half3 t16 = half3((t9 - float3(((dot(t8, float3(t15)) < 0.0) ? t15 : (-t15)))));
+  float4 t17 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t16.xy) * t5))));
+  half t18 = half(((t4 - (float(t16.z) * _mtl_u._Params.x)) - (dot(t17.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t19 = float(saturate(t18));
+  float t20 = ((_mtl_u._Params.y < t19) ? (t14 + pow((1.0 - t19), _mtl_u._Params.z)) : t14);
+  half3 t21 = (half3(-0.310725, -0.191367, 0.0561369) - ((half3(dot(t6, half3(-0.310725, -0.191367, 0.0561369))) * half(2.0)) * t6));
+  half3 t22 = half3((t9 - float3(((dot(t8, float3(t21)) < 0.0) ? t21 : (-t21)))));
+  float4 t23 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t22.xy) * t5))));
+  half t24 = half(((t4 - (float(t22.z) * _mtl_u._Params.x)) - (dot(t23.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t25 = float(saturate(t24));
+  float t26 = ((_mtl_u._Params.y < t25) ? (t20 + pow((1.0 - t25), _mtl_u._Params.z)) : t20);
+  half3 t27 = (half3(-0.479646, 0.0939877, -0.580265) - ((half3(dot(t6, half3(-0.479646, 0.0939877, -0.580265))) * half(2.0)) * t6));
+  half3 t28 = half3((t9 - float3(((dot(t8, float3(t27)) < 0.0) ? t27 : (-t27)))));
+  float4 t29 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t28.xy) * t5))));
+  half t30 = half(((t4 - (float(t28.z) * _mtl_u._Params.x)) - (dot(t29.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t31 = float(saturate(t30));
+  float t32 = ((_mtl_u._Params.y < t31) ? (t26 + pow((1.0 - t31), _mtl_u._Params.z)) : t26);
+  half3 t33 = (half3(0.139999, -0.33577, 0.559679) - ((half3(dot(t6, half3(0.139999, -0.33577, 0.559679))) * half(2.0)) * t6));
+  half3 t34 = half3((t9 - float3(((dot(t8, float3(t33)) < 0.0) ? t33 : (-t33)))));
+  float4 t35 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t34.xy) * t5))));
+  half t36 = half(((t4 - (float(t34.z) * _mtl_u._Params.x)) - (dot(t35.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t37 = float(saturate(t36));
+  float t38 = ((_mtl_u._Params.y < t37) ? (t32 + pow((1.0 - t37), _mtl_u._Params.z)) : t32);
+  half3 t39 = (half3(-0.248458, 0.255532, 0.348944) - ((half3(dot(t6, half3(-0.248458, 0.255532, 0.348944))) * half(2.0)) * t6));
+  half3 t40 = half3((t9 - float3(((dot(t8, float3(t39)) < 0.0) ? t39 : (-t39)))));
+  float4 t41 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t40.xy) * t5))));
+  half t42 = half(((t4 - (float(t40.z) * _mtl_u._Params.x)) - (dot(t41.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t43 = float(saturate(t42));
+  float t44 = ((_mtl_u._Params.y < t43) ? (t38 + pow((1.0 - t43), _mtl_u._Params.z)) : t38);
+  half3 t45 = (half3(0.18719, -0.702764, -0.231748) - ((half3(dot(t6, half3(0.18719, -0.702764, -0.231748))) * half(2.0)) * t6));
+  half3 t46 = half3((t9 - float3(((dot(t8, float3(t45)) < 0.0) ? t45 : (-t45)))));
+  float4 t47 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t46.xy) * t5))));
+  half t48 = half(((t4 - (float(t46.z) * _mtl_u._Params.x)) - (dot(t47.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t49 = float(saturate(t48));
+  float t50 = ((_mtl_u._Params.y < t49) ? (t44 + pow((1.0 - t49), _mtl_u._Params.z)) : t44);
+  half3 t51 = (half3(0.884915, 0.284208, 0.368524) - ((half3(dot(t6, half3(0.884915, 0.284208, 0.368524))) * half(2.0)) * t6));
+  half3 t52 = half3((t9 - float3(((dot(t8, float3(t51)) < 0.0) ? t51 : (-t51)))));
+  float4 t53 = float4(_CameraDepthNormalsTexture.sample(_mtlsmp__CameraDepthNormalsTexture, (_mtl_i.xlv_TEXCOORD0 + (float2(t52.xy) * t5))));
+  half t54 = half(((t4 - (float(t52.z) * _mtl_u._Params.x)) - (dot(t53.zw, float2(1.0, 0.00392157)) * _mtl_u._ProjectionParams.z)));
+  float t55 = float(saturate(t54));
+  half t56 = half((1.0 - (((_mtl_u._Params.y < t55) ? (t50 + pow((1.0 - t55), _mtl_u._Params.z)) : t50) / 8.0)));
+  _mtl_o._fragData = half4(t56);
+  return _mtl_o;
+}
+
+// stats: 188 alu 10 tex 0 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD1 (high float) 2x1 [-1]
+// uniforms: 2 (total size: 32)
+//  #0: _Params (high float) 4x1 [-1] loc 0
+//  #1: _ProjectionParams (high float) 4x1 [-1] loc 16
+// textures: 2
+//  #0: _CameraDepthNormalsTexture (medium 2d) 0x0 [-1] loc 0
+//  #1: _RandomTexture (medium 2d) 0x0 [-1] loc 1

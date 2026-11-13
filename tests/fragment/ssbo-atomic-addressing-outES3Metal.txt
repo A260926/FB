@@ -1,0 +1,49 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Entry_std140 {
+  uint count;
+  char _pad0[12];
+  packed_uint3 values;
+  char _pad1[4];
+};
+static_assert(sizeof(_xlat_Entry_std140) == 32, "std140 size");
+struct _xlat_buf_Data_std140 {
+  uint header;
+  char _pad0[12];
+  _xlat_Entry_std140 entries[1];
+};
+template <typename P, typename T> inline T _xlat_atomic_comp_swap(P p, T compare, T value) { T expected = compare; atomic_compare_exchange_weak_explicit(p, &expected, value, memory_order_relaxed, memory_order_relaxed); return expected; }
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+  int component;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std140& data_0 [[buffer(1)]]
+  , device _xlat_buf_Data_std140& data_1 [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  device _xlat_buf_Data_std140* data[2] = { &data_0, &data_1 };
+  uint t0 = atomic_fetch_add_explicit((device atomic_uint*)&(*data[0]).entries[_mtl_u.index].count, 1u, memory_order_relaxed);
+  uint t1 = atomic_exchange_explicit(((device atomic_uint*)&(*data[1]).entries[_mtl_u.index].values + 1), 2u, memory_order_relaxed);
+  uint t2 = _xlat_atomic_comp_swap(((device atomic_uint*)&(*data[0]).entries[_mtl_u.index].values + _mtl_u.component), 3u, 4u);
+  atomic_fetch_or_explicit((device atomic_uint*)&(*data[1]).header, 8u, memory_order_relaxed);
+  _mtl_o.color = float4(float(t0), float(t1), float(t2), 1.0);
+  return _mtl_o;
+}
+
+// stats: 3 alu 0 tex 0 flow
+// uniforms: 2 (total size: 8)
+//  #0: index (high int) 1x1 [-1] loc 0
+//  #1: component (high int) 1x1 [-1] loc 4
+// buffer #0: Data storage instance data layout std140 array 2 (size: unknown) metal 1
+//  member #0: uint header offset 0
+//  member #1: Entry[] entries offset 16 array runtime stride 32
+//  member #2: Entry [] parent 1 offset 16
+//  member #3: uint count parent 2 offset 16
+//  member #4: uvec3 values parent 2 offset 32

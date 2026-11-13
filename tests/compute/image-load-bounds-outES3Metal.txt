@@ -1,0 +1,30 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Output_std430 {
+  float4 values[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(1)]]
+  , texture2d<uint, access::read> source2D [[texture(0)]]
+  , texture2d_array<int, access::read> sourceArray [[texture(1)]]
+  , texture3d<float, access::read> source3D [[texture(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  int t0 = (int(gl_GlobalInvocationID.x) - 1);
+  int4 t1 = sourceArray.read(uint2(int4(t0, 0, int3(sourceArray.get_width(), sourceArray.get_height(), sourceArray.get_array_size()).z, 0).xy), uint(int4(t0, 0, int3(sourceArray.get_width(), sourceArray.get_height(), sourceArray.get_array_size()).z, 0).z));
+  outputData.values[int(gl_GlobalInvocationID.x)] = ((float4(source2D.read(uint2(int4(t0, int2(source2D.get_width(), source2D.get_height()).y, 0, 0).xy))) + float4(t1)) + source3D.read(uint3(int4(t0, 0, int3(source3D.get_width(), source3D.get_height(), source3D.get_depth()).z, 0).xyz)));
+}
+
+// stats: 5 alu 6 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: Output storage instance outputData layout std430 (size: unknown) metal 1
+//  member #0: vec4[] values offset 0 array runtime stride 16
+//  member #1: vec4 [] parent 0 offset 0
+// textures: 3
+//  #0: source2D (high image2d) 0x0 [-1] loc 0 format r32ui component uint readonly
+//  #1: sourceArray (high image2darray) 0x0 [-1] loc 1 format r32i component int readonly
+//  #2: source3D (high image3d) 0x0 [-1] loc 2 format r32f component float readonly

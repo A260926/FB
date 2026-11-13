@@ -1,0 +1,83 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform highp vec3 iResolution;
+uniform highp float iTime;
+layout(location = 0) out highp vec4 fragColor;
+void main ()
+{
+  highp ivec2 r0;
+  highp float r1;
+  highp int r2;
+  highp vec3 r3;
+  highp vec2 t0 = (((2.0 * gl_FragCoord.xy) - iResolution.xy) / iResolution.y);
+  highp vec2 t1 = cos((vec2(2.0, 1.0) + (vec2(0.13, 0.11000001) * iTime)));
+  highp vec2 t2 = normalize(t1);
+  highp vec2 t3 = (t0 * 8.0);
+  highp vec2 t4 = vec2(t3.x, ((4.0 * t0.x) + (6.928203 * t0.y)));
+  highp ivec2 t5 = ivec2(floor(t4));
+  highp int t6 = (t5.x + t5.y);
+  highp int t7 = ((t6 < 0) ? (2 - int((uint((2 - t6)) % 3u))) : int((uint(t6) % 3u)));
+  highp ivec2 t8 = (t5 + t7);
+  highp vec2 t9 = fract(t4);
+  highp ivec2 t10 = ((t7 == 2) ? (t8 + ((t9.y < t9.x) ? ivec2(-1, -2) : ivec2(-2, -1))) : t8);
+  highp int t11 = (((t10.y << 1u) - t10.x) / 3);
+  highp vec2 t12 = cos(((0.11 * iTime) + vec2(0.0, 1.0)));
+  highp vec2 t13 = (vec2(9.0, 2.0) * t12);
+  highp vec2 t14 = (t3 - t13);
+  highp vec2 t15 = (t2 * 3e+01);
+  highp vec2 t16 = (t14 - (t15 * clamp((dot(t14, t15) / dot(t15, t15)), 0.0, 1.0)));
+  highp float t17 = (2.0 / iResolution.y);
+  highp float t18 = (4.0 * t17);
+  highp float t19 = (t17 * 8.0);
+  highp float t20 = clamp((((length(t16) - 0.030000001) + t18) / t19), 0.0, 1.0);
+  r3 = mix(vec3((0.3 + (0.2 * sin((float((15 * t10.x)) + cos(float((33 * t11)))))))), vec3(1.0, 1.0, 0.0), vec3((1.0 - (t20 * (t20 * (3.0 - (2.0 * t20)))))));
+  highp float t21 = (1.0 / t2.x);
+  bool t22 = (t21 < 0.0);
+  highp float t23 = ((t22 ? -1.0 : 1.0) - t13.x);
+  highp float t24 = (1.0 / dot(t2, vec2(0.5, 0.866025)));
+  bool t25 = (t24 < 0.0);
+  highp float t26 = ((t25 ? -1.0 : 1.0) - dot(t13, vec2(0.5, 0.866025)));
+  highp float t27 = (1.0 / dot(t2, vec2(-0.5, 0.866025)));
+  bool t28 = (t27 < 0.0);
+  highp float t29 = ((t28 ? -1.0 : 1.0) - dot(t13, vec2(-0.5, 0.866025)));
+  highp vec2 t30 = vec2(t13.x, ((4.5 * t12.x) + (1.7320508 * t12.y)));
+  highp ivec2 t31 = ivec2(floor(t30));
+  highp int t32 = (t31.x + t31.y);
+  highp int t33 = ((t32 < 0) ? (2 - int((uint((2 - t32)) % 3u))) : int((uint(t32) % 3u)));
+  highp ivec2 t34 = (t31 + t33);
+  highp vec2 t35 = fract(t30);
+  highp ivec2 t36 = ((t33 == 2) ? (t34 + ((t35.y < t35.x) ? ivec2(-1, -2) : ivec2(-2, -1))) : t34);
+  r0 = ivec2(t36.x, (((t36.y << 1u) - t36.x) / 3));
+  highp ivec2 t37 = (t22 ? ivec2(-2, 0) : ivec2(2, 0));
+  highp ivec2 t38 = (t25 ? ivec2(-1) : ivec2(1));
+  highp ivec2 t39 = (t28 ? ivec2(1, -1) : ivec2(-1, 1));
+  r1 = 0.0;
+  for (r2 = 0; (r2 < 32); r2++) {
+    highp float t40 = float(r0.y);
+    highp float t41 = float(r0.x);
+    highp vec2 t42 = (t3 - vec2(t41, (t40 * 1.7320508)));
+    highp float t43 = clamp((((length(t42) - 0.1) + t18) / t19), 0.0, 1.0);
+    highp vec2 t44 = (t3 - (t13 + (t2 * r1)));
+    highp float t45 = clamp((((length(t44) - 0.1) + t18) / t19), 0.0, 1.0);
+    r3 = mix(mix(((r0 == ivec2(t10.x, t11)) ? mix(r3, vec3(1.0, 0.0, 0.0), vec3(0.3)) : r3), vec3(1.0, 0.0, 0.0), vec3((1.0 - (t43 * (t43 * (3.0 - (2.0 * t43))))))), vec3(1.0, 1.0, 0.0), vec3((1.0 - (t45 * (t45 * (3.0 - (2.0 * t45)))))));
+    highp float t46 = (t21 * (t23 + t41));
+    highp float t47 = (t40 * 1.5);
+    highp float t48 = (t41 * 0.5);
+    highp float t49 = (t24 * ((t47 + t26) + t48));
+    highp float t50 = (t27 * ((t47 + t29) - t48));
+    bool t51 = (t49 < t50);
+    highp float t52 = (t51 ? t49 : t50);
+    bool t53 = (t46 < min(t49, t50));
+    r0 = (r0 + (t53 ? t37 : (t51 ? t38 : t39)));
+    r1 = (t53 ? t46 : t52);
+  }
+  fragColor = vec4(r3.x, r3.y, r3.z, 1.0);
+}
+
+// stats: 163 alu 0 tex 2 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 2 (total size: 0)
+//  #0: iResolution (high float) 3x1 [-1]
+//  #1: iTime (high float) 1x1 [-1]

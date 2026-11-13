@@ -1,0 +1,23 @@
+uniform vec4 _LightColor0;
+uniform sampler2D _LightTexture0;
+uniform sampler2D _LightTextureB0;
+uniform sampler2D _MainTex;
+void main ()
+{
+  if ((fract(((gl_TexCoord[1].y + (gl_TexCoord[1].z * 0.1)) * 5.0)) < 0.5)) {
+    discard;
+  }
+  float t0 = (mix(0.0, texture2D(_LightTexture0, ((gl_TexCoord[4].xy / gl_TexCoord[4].w) + 0.5)).w, float((0.0 < gl_TexCoord[4].z))) * texture2D(_LightTextureB0, vec2(dot(gl_TexCoord[4].xyz, gl_TexCoord[4].xyz))).w);
+  vec3 t1 = ((texture2D(_MainTex, gl_TexCoord[0].xy).xyz * _LightColor0.xyz) * ((max(0.0, dot(gl_TexCoord[2].xyz, normalize(gl_TexCoord[3].xyz))) * 2.0) * t0));
+  gl_FragData[0] = vec4(t1, 0.0);
+}
+
+// stats: 20 alu 4 tex 1 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 1 (total size: 0)
+//  #0: _LightColor0 (high float) 4x1 [-1]
+// textures: 3
+//  #0: _LightTexture0 (high 2d) 0x0 [-1]
+//  #1: _LightTextureB0 (high 2d) 0x0 [-1]
+//  #2: _MainTex (high 2d) 0x0 [-1]

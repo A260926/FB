@@ -1,0 +1,17 @@
+uniform vec4 _CenterRadius;
+uniform sampler2D _MainTex;
+uniform mat4 _RotationMatrix;
+void main ()
+{
+  vec2 t0 = (gl_TexCoord[0].xy / _CenterRadius.zw);
+  gl_FragData[0] = texture2D(_MainTex, (mix((_RotationMatrix * vec4(gl_TexCoord[0].xy, 0.0, 0.0)).xy, gl_TexCoord[0].xy, vec2(min(1.0, length(t0)))) + _CenterRadius.xy));
+}
+
+// stats: 9 alu 1 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 2 (total size: 0)
+//  #0: _CenterRadius (high float) 4x1 [-1]
+//  #1: _RotationMatrix (high float) 4x4 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

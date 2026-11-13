@@ -1,0 +1,16 @@
+uniform vec4 _Color;
+uniform sampler2D _MainTex;
+void main ()
+{
+  vec4 t0 = (((texture2D(_MainTex, gl_TexCoord[0].xy) + texture2D(_MainTex, gl_TexCoord[0].zw)) + texture2D(_MainTex, gl_TexCoord[1].xy)) + texture2D(_MainTex, gl_TexCoord[1].zw));
+  vec3 t1 = (t0.xyz * _Color.xyz);
+  gl_FragData[0] = (vec4(t1, t0.w) * _Color.w);
+}
+
+// stats: 5 alu 4 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 1 (total size: 0)
+//  #0: _Color (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

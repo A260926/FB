@@ -1,0 +1,93 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  float4 fragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float3 iResolution;
+  float iTime;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  int2 r0 = 0;
+  float r1 = 0;
+  int r2 = 0;
+  float3 r3 = 0;
+  float2 t0 = (((2.0 * _mtl_i.gl_FragCoord.xy) - _mtl_u.iResolution.xy) / _mtl_u.iResolution.y);
+  float2 t1 = cos((float2(2.0, 1.0) + (float2(0.13, 0.11000001) * _mtl_u.iTime)));
+  float2 t2 = normalize(t1);
+  float2 t3 = (t0 * 8.0);
+  float2 t4 = float2(t3.x, ((4.0 * t0.x) + (6.928203 * t0.y)));
+  int2 t5 = int2(floor(t4));
+  int t6 = (t5.x + t5.y);
+  int t7 = ((t6 < 0) ? (2 - int((uint((2 - t6)) % 3u))) : int((uint(t6) % 3u)));
+  int2 t8 = (t5 + t7);
+  float2 t9 = fract(t4);
+  int2 t10 = ((t7 == 2) ? (t8 + ((t9.y < t9.x) ? int2(-1, -2) : int2(-2, -1))) : t8);
+  int t11 = (((t10.y << int(1u)) - t10.x) / 3);
+  float2 t12 = cos(((0.11 * _mtl_u.iTime) + float2(0.0, 1.0)));
+  float2 t13 = (float2(9.0, 2.0) * t12);
+  float2 t14 = (t3 - t13);
+  float2 t15 = (t2 * 3e+01);
+  float2 t16 = (t14 - (t15 * saturate((dot(t14, t15) / dot(t15, t15)))));
+  float t17 = (2.0 / _mtl_u.iResolution.y);
+  float t18 = (4.0 * t17);
+  float t19 = (t17 * 8.0);
+  float t20 = saturate((((length(t16) - 0.030000001) + t18) / t19));
+  r3 = mix(float3((0.3 + (0.2 * sin((float((15 * t10.x)) + cos(float((33 * t11)))))))), float3(1.0, 1.0, 0.0), float3((1.0 - (t20 * (t20 * (3.0 - (2.0 * t20)))))));
+  float t21 = (1.0 / t2.x);
+  bool t22 = (t21 < 0.0);
+  float t23 = ((t22 ? -1.0 : 1.0) - t13.x);
+  float t24 = (1.0 / dot(t2, float2(0.5, 0.866025)));
+  bool t25 = (t24 < 0.0);
+  float t26 = ((t25 ? -1.0 : 1.0) - dot(t13, float2(0.5, 0.866025)));
+  float t27 = (1.0 / dot(t2, float2(-0.5, 0.866025)));
+  bool t28 = (t27 < 0.0);
+  float t29 = ((t28 ? -1.0 : 1.0) - dot(t13, float2(-0.5, 0.866025)));
+  float2 t30 = float2(t13.x, ((4.5 * t12.x) + (1.7320508 * t12.y)));
+  int2 t31 = int2(floor(t30));
+  int t32 = (t31.x + t31.y);
+  int t33 = ((t32 < 0) ? (2 - int((uint((2 - t32)) % 3u))) : int((uint(t32) % 3u)));
+  int2 t34 = (t31 + t33);
+  float2 t35 = fract(t30);
+  int2 t36 = ((t33 == 2) ? (t34 + ((t35.y < t35.x) ? int2(-1, -2) : int2(-2, -1))) : t34);
+  r0 = int2(t36.x, (((t36.y << int(1u)) - t36.x) / 3));
+  int2 t37 = (t22 ? int2(-2, 0) : int2(2, 0));
+  int2 t38 = (t25 ? int2(-1) : int2(1));
+  int2 t39 = (t28 ? int2(1, -1) : int2(-1, 1));
+  r1 = 0.0;
+  for (r2 = 0; (r2 < 32); r2++) {
+    float t40 = float(r0.y);
+    float t41 = float(r0.x);
+    float2 t42 = (t3 - float2(t41, (t40 * 1.7320508)));
+    float t43 = saturate((((length(t42) - 0.1) + t18) / t19));
+    float3 t44 = mix((all(r0 == int2(t10.x, t11)) ? mix(r3, float3(1.0, 0.0, 0.0), float3(0.3)) : r3), float3(1.0, 0.0, 0.0), float3((1.0 - (t43 * (t43 * (3.0 - (2.0 * t43)))))));
+    float2 t45 = (t3 - (t13 + (t2 * r1)));
+    float t46 = saturate((((length(t45) - 0.1) + t18) / t19));
+    r3 = mix(t44, float3(1.0, 1.0, 0.0), float3((1.0 - (t46 * (t46 * (3.0 - (2.0 * t46)))))));
+    float t47 = (t21 * (t23 + t41));
+    float t48 = (t40 * 1.5);
+    float t49 = (t41 * 0.5);
+    float t50 = (t24 * ((t48 + t26) + t49));
+    float t51 = (t27 * ((t48 + t29) - t49));
+    bool t52 = (t50 < t51);
+    float t53 = (t52 ? t50 : t51);
+    bool t54 = (t47 < min(t50, t51));
+    r0 = (r0 + (t54 ? t37 : (t52 ? t38 : t39)));
+    r1 = (t54 ? t47 : t53);
+  }
+  _mtl_o.fragColor = float4(r3.x, r3.y, r3.z, 1.0);
+  return _mtl_o;
+}
+
+// stats: 163 alu 0 tex 2 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 2 (total size: 20)
+//  #0: iResolution (high float) 3x1 [-1] loc 0
+//  #1: iTime (high float) 1x1 [-1] loc 16

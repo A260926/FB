@@ -1,0 +1,41 @@
+#version 300 es
+precision highp float;
+precision highp int;
+out mediump vec4 _fragData;
+uniform mediump sampler2D _BumpMap;
+uniform mediump vec4 _Color;
+uniform mediump vec4 _LightColor0;
+uniform mediump sampler2D _MainTex;
+uniform mediump float _Shininess;
+uniform mediump vec4 _SpecColor;
+in highp vec4 _uv0;
+in mediump vec3 _uv1;
+in mediump vec3 _uv2;
+in mediump vec3 _uv3;
+void main ()
+{
+  mediump vec4 t0 = _uv0;
+  mediump vec4 t1 = texture(_MainTex, t0.xy);
+  mediump vec3 t2 = (t1.xyz * _Color.xyz);
+  mediump vec2 t3 = ((texture(_BumpMap, t0.zw).wy * 2.0) - 1.0);
+  mediump vec3 t4 = (_uv2 + normalize(_uv1));
+  mediump vec3 t5 = vec3(t3, sqrt(((1.0 - (t3.x * t3.x)) - (t3.y * t3.y))));
+  mediump vec3 t6 = (((t2 * _LightColor0.xyz) * max(0.0, dot(t5, _uv2))) + ((_LightColor0.xyz * _SpecColor.xyz) * (pow(max(0.0, dot(t5, normalize(t4))), (_Shininess * 128.0)) * t1.w)));
+  mediump vec3 t7 = ((t6 * 2.0) + (t2 * _uv3));
+  _fragData = vec4(t7, (t1.w * _Color.w));
+}
+
+// stats: 30 alu 2 tex 0 flow
+// inputs: 4
+//  #0: _uv0 (high float) 4x1 [-1]
+//  #1: _uv1 (medium float) 3x1 [-1]
+//  #2: _uv2 (medium float) 3x1 [-1]
+//  #3: _uv3 (medium float) 3x1 [-1]
+// uniforms: 4 (total size: 0)
+//  #0: _Color (medium float) 4x1 [-1]
+//  #1: _LightColor0 (medium float) 4x1 [-1]
+//  #2: _Shininess (medium float) 1x1 [-1]
+//  #3: _SpecColor (medium float) 4x1 [-1]
+// textures: 2
+//  #0: _BumpMap (medium 2d) 0x0 [-1]
+//  #1: _MainTex (medium 2d) 0x0 [-1]

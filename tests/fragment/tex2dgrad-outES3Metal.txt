@@ -1,0 +1,31 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  half3 uv1;
+  float3 uv2;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> tex [[texture(0)]], sampler _mtlsmp_tex [[sampler(0)]]
+  , texturecube<half> cub [[texture(1)]], sampler _mtlsmp_cub [[sampler(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half2 t0 = _mtl_i.uv1.xy;
+  float2 t1 = _mtl_i.uv2.xy;
+  half4 t2 = ((tex.sample(_mtlsmp_tex, float2(t0), gradient2d(float2(dfdx(t0)), float2(dfdy(t0)))) + tex.sample(_mtlsmp_tex, t1, gradient2d(dfdx(t1), dfdy(t1)))) + tex.sample(_mtlsmp_tex, t1, gradient2d(float2(t0), float2(t0))));
+  _mtl_o._fragColor = (t2 + cub.sample(_mtlsmp_cub, _mtl_i.uv2, gradientcube(dfdx(_mtl_i.uv2), dfdy(_mtl_i.uv2))));
+  return _mtl_o;
+}
+
+// stats: 3 alu 4 tex 0 flow
+// inputs: 2
+//  #0: uv1 (medium float) 3x1 [-1]
+//  #1: uv2 (high float) 3x1 [-1]
+// textures: 2
+//  #0: tex (medium 2d) 0x0 [-1] loc 0
+//  #1: cub (medium cube) 0x0 [-1] loc 1

@@ -1,0 +1,74 @@
+#version 450
+layout(local_size_x = 256) in;
+struct Particle {
+  vec4 pos;
+  vec4 vel;
+};
+layout(std140, binding = 1) uniform UBO {
+  float deltaT;
+  int particleCount;
+  float gravity;
+  float power;
+  float soften;
+} ubo;
+layout(std140, binding = 0) buffer Pos {
+  Particle particles[];
+};
+shared vec4 sharedData[256];
+void main ()
+{
+  vec4 r0;
+  int r1;
+  int r2;
+  vec3 r3;
+  bool t0 = (gl_GlobalInvocationID.x < uint(ubo.particleCount));
+  if (t0) {
+    r0 = particles[int(gl_GlobalInvocationID.x)].pos;
+  } else {
+    r0 = vec4(0.0);
+  }
+  r3 = vec3(0.0);
+  for (r2 = 0; (uint(r2) < uint(ubo.particleCount)); r2 += 256) {
+    int t1 = (r2 + int(gl_LocalInvocationID.x));
+    if ((uint(t1) < uint(ubo.particleCount))) {
+      sharedData[int(gl_LocalInvocationID.x)] = particles[t1].pos;
+    } else {
+      sharedData[int(gl_LocalInvocationID.x)] = vec4(0.0);
+    }
+    memoryBarrierShared();
+    barrier();
+    if (t0) {
+      for (r1 = 0; (uint(r1) < 256u); r1++) {
+        vec4 t2 = sharedData[r1];
+        vec3 t3 = (t2.xyz - r0.xyz);
+        r3 = (r3 + (((ubo.gravity * t3) * t2.w) / pow((dot(t3, t3) + ubo.soften), ubo.power)));
+      }
+    }
+    memoryBarrierShared();
+    barrier();
+  }
+  if (t0) {
+    uint t4 = gl_GlobalInvocationID.x;
+    vec4 t5 = particles[int(t4)].vel;
+    vec3 t6 = (t5.xyz + (ubo.deltaT * r3));
+    float t7 = (t5.w + (0.1 * ubo.deltaT));
+    particles[int(t4)].vel = vec4(t6, t7);
+    if ((1.0 < t7)) {
+      particles[int(t4)].vel.w = vec4((t7 - 1.0)).w;
+    }
+  }
+}
+
+// stats: 21 alu 0 tex 9 flow
+// workgroup size: 256 1 1
+// buffer #0: Pos storage layout std140 binding 0 (size: unknown)
+//  member #0: Particle[] particles offset 0 array runtime stride 32
+//  member #1: Particle [] parent 0 offset 0
+//  member #2: vec4 pos parent 1 offset 0
+//  member #3: vec4 vel parent 1 offset 16
+// buffer #1: UBO instance ubo layout std140 binding 1 (size: 32)
+//  member #0: float deltaT offset 0
+//  member #1: int particleCount offset 4
+//  member #2: float gravity offset 8
+//  member #3: float power offset 12
+//  member #4: float soften offset 16

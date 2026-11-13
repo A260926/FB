@@ -1,0 +1,34 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Transform_std140 {
+  float4 matrix[4];
+  float unused;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_buf_Transform_std140) == 80, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Transform_std140& transforms_0 [[buffer(1)]]
+  , constant _xlat_buf_Transform_std140& transforms_1 [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  constant _xlat_buf_Transform_std140* transforms[2] = { &transforms_0, &transforms_1 };
+  float4 t0 = float4((*transforms[_mtl_u.index]).matrix[0]);
+  _mtl_o.gl_Position = (float4x4(float4((*transforms[1]).matrix[0]), float4((*transforms[1]).matrix[1]), float4((*transforms[1]).matrix[2]), float4((*transforms[1]).matrix[3])) * t0);
+  return _mtl_o;
+}
+
+// stats: 7 alu 0 tex 0 flow
+// uniforms: 1 (total size: 4)
+//  #0: index (high int) 1x1 [-1] loc 0
+// buffer #0: Transform instance transforms layout std140 binding 2 array 2 (size: 80) metal 1
+//  member #0: mat4 matrix offset 0 matrix-stride 16
+//  member #1: float unused offset 64 (unused)

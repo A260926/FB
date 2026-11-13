@@ -1,0 +1,59 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_ClusterRender_std430 {
+  uint data[1];
+};
+struct _xlat_buf_State_std140 {
+  float4 projection[4];
+  float inv_z_far;
+  uint screen_to_clusters_shift;
+  uint cluster_screen_width;
+  uint cluster_data_size;
+  uint cluster_depth_offset;
+  uint pad0;
+  uint pad1;
+  uint pad2;
+};
+static_assert(sizeof(_xlat_buf_State_std140) == 96, "std140 size");
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+  float depth_interp [[user(locn0)]];
+  uint element_index [[user(locn1)]] [[flat]];
+};
+struct xlatMtlShaderOutput {
+  float4 frag_color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_ClusterRender_std430& cluster_render [[buffer(1)]]
+  , constant _xlat_buf_State_std140& state [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  uint2 t0 = (uint2(_mtl_i.gl_FragCoord.xy) >> uint(uint(state.screen_to_clusters_shift)));
+  int t1 = ((int(t0.x) + (int(uint(state.cluster_screen_width)) * int(t0.y))) * int(uint(state.cluster_data_size)));
+  atomic_fetch_or_explicit((device atomic_uint*)&cluster_render.data[(t1 + int((_mtl_i.element_index >> uint(5u))))], uint((1 << int(_mtl_i.element_index))), memory_order_relaxed);
+  uint t2 = atomic_fetch_or_explicit((device atomic_uint*)&cluster_render.data[((t1 + int(uint(state.cluster_depth_offset))) + int(_mtl_i.element_index))], uint((1 << int(uint(clamp(floor(((_mtl_i.depth_interp * 32.0) * float(state.inv_z_far))), 0.0, 31.0))))), memory_order_relaxed);
+  _mtl_o.frag_color = float4(float(t2));
+  return _mtl_o;
+}
+
+// stats: 18 alu 0 tex 0 flow
+// inputs: 3
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+//  #1: depth_interp (high float) 1x1 [-1] loc 32
+//  #2: element_index (high int) 1x1 [-1] loc 33
+// buffer #0: ClusterRender storage instance cluster_render layout std430 binding 3 (size: unknown) metal 1
+//  member #0: uint[] data offset 0 array runtime stride 4
+//  member #1: uint [] parent 0 offset 0
+// buffer #1: State instance state layout std140 binding 1 (size: 96) metal 2
+//  member #0: mat4 projection offset 0 matrix-stride 16 (unused)
+//  member #1: float inv_z_far offset 64
+//  member #2: uint screen_to_clusters_shift offset 68
+//  member #3: uint cluster_screen_width offset 72
+//  member #4: uint cluster_data_size offset 76
+//  member #5: uint cluster_depth_offset offset 80
+//  member #6: uint pad0 offset 84 (unused)
+//  member #7: uint pad1 offset 88 (unused)
+//  member #8: uint pad2 offset 92 (unused)

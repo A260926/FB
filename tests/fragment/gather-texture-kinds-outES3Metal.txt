@@ -1,0 +1,34 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 coord;
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d_array<float> layers [[texture(0)]], sampler _mtlsmp_layers [[sampler(0)]]
+  , texturecube<float> cubeMap [[texture(1)]], sampler _mtlsmp_cubeMap [[sampler(1)]]
+  , texturecube_array<float> cubeLayers [[texture(2)]], sampler _mtlsmp_cubeLayers [[sampler(2)]]
+  , depth2d_array<float> shadowLayers [[texture(3)]], sampler _mtlsmp_shadowLayers [[sampler(3)]]
+  , texture2d<uint> labels [[texture(4)]], sampler _mtlsmp_labels [[sampler(4)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = _mtl_i.coord.xyz;
+  float4 t1 = ((layers.gather(_mtlsmp_layers, t0.xy, uint(rint(t0.z)), int2(1, -1), component::z) + cubeMap.gather(_mtlsmp_cubeMap, t0)) + cubeLayers.gather(_mtlsmp_cubeLayers, _mtl_i.coord.xyz, uint(rint(_mtl_i.coord.w)), component::w));
+  _mtl_o.color = ((t1 + shadowLayers.gather_compare(_mtlsmp_shadowLayers, t0.xy, uint(rint(t0.z)), _mtl_i.coord.w)) + float4(labels.gather(_mtlsmp_labels, _mtl_i.coord.xy, int2(0), component::y)));
+  return _mtl_o;
+}
+
+// stats: 5 alu 5 tex 0 flow
+// inputs: 1
+//  #0: coord (high float) 4x1 [-1]
+// textures: 5
+//  #0: layers (high 2darray) 0x0 [-1] loc 0
+//  #1: cubeMap (high cube) 0x0 [-1] loc 1
+//  #2: cubeLayers (high cube) 0x0 [-1] loc 2
+//  #3: shadowLayers (high 2dshadow) 0x0 [-1] loc 3
+//  #4: labels (high 2d) 0x0 [-1] loc 4

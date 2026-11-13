@@ -1,0 +1,33 @@
+attribute vec4 a_position;
+uniform int u_iter;
+uniform vec4 u_deltas[5];
+void main ()
+{
+  gl_Position = a_position;
+  if ((0 < u_iter)) {
+    vec4 t0 = (a_position + u_deltas[0]);
+    gl_Position = t0;
+    if ((1 < u_iter)) {
+      vec4 t1 = (t0 + u_deltas[1]);
+      gl_Position = t1;
+      if ((2 < u_iter)) {
+        vec4 t2 = (t1 + u_deltas[2]);
+        gl_Position = t2;
+        if ((3 < u_iter)) {
+          vec4 t3 = (t2 + u_deltas[3]);
+          gl_Position = t3;
+          if ((4 < u_iter)) {
+            gl_Position = (t3 + u_deltas[4]);
+          }
+        }
+      }
+    }
+  }
+}
+
+// stats: 10 alu 0 tex 5 flow
+// inputs: 1
+//  #0: a_position (high float) 4x1 [-1]
+// uniforms: 2 (total size: 0)
+//  #0: u_iter (high int) 1x1 [-1]
+//  #1: u_deltas (high float) 4x1 [5]

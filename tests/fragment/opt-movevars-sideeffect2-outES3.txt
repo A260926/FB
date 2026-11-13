@@ -1,0 +1,19 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _fragData;
+in mediump float xx;
+void main ()
+{
+  highp int r0;
+  mediump float r1;
+  r1 = 0.0;
+  for (r0 = ((0.5 < xx) ? 2 : 4); (r0 < 4); r0++) {
+    r1 = (r1 + xx);
+  }
+  _fragData = vec4(r1);
+}
+
+// stats: 5 alu 0 tex 2 flow
+// inputs: 1
+//  #0: xx (medium float) 1x1 [-1]

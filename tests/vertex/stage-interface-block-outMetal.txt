@@ -1,0 +1,64 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct Payload {
+  float2 value;
+};
+struct Extra {
+  float2 uv;
+  float2x2 basis;
+};
+struct Interpolant {
+  int f_objectID;
+};
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float2 _xlat_varying0;
+  int id [[user(locn14)]] [[flat]];
+  float4 unused [[user(locn12)]];
+  float2 _xlat_varying1 [[user(locn4)]] [[center_no_perspective]];
+  float2 _xlat_varying2 [[user(locn5)]];
+  float2 _xlat_varying3 [[user(locn6)]];
+  float2 _xlat_varying4 [[user(locn7)]] [[center_no_perspective]];
+  float2 _xlat_varying5 [[user(locn8)]];
+  float2 _xlat_varying6 [[user(locn9)]];
+  int _xlat_varying7 [[user(locn0)]] [[flat]];
+  float4 gl_Position [[position]];
+};
+struct xlatMtlShaderUniform {
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , uint gl_InstanceID [[instance_id]]
+  , uint gl_VertexID [[vertex_id]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  Payload payloadOut;
+  Extra extra[2];
+  Interpolant dataOut;
+  _mtl_o.gl_Position = float4(0.0, 0.0, 0.0, 1.0);
+  dataOut.f_objectID = int(gl_InstanceID);
+  extra[0].uv = float2(0.0);
+  extra[1].uv = float2(1.0);
+  extra[0].basis[0] = float2(1.0, 0.0);
+  extra[0].basis[1] = float2(0.0, 1.0);
+  extra[1].basis[0] = float2(2.0, 0.0);
+  extra[1].basis[1] = float2(0.0, 2.0);
+  _mtl_o.id = int(gl_VertexID);
+  float t0 = float(int(gl_VertexID));
+  payloadOut.value = float2(t0);
+  if ((int(gl_VertexID) != 0)) {
+    payloadOut.value = (float2(t0) + 1.0);
+  }
+  _mtl_o._xlat_varying0 = payloadOut.value;
+  _mtl_o._xlat_varying1 = extra[0].uv;
+  _mtl_o._xlat_varying2 = extra[0].basis[0];
+  _mtl_o._xlat_varying3 = extra[0].basis[1];
+  _mtl_o._xlat_varying4 = extra[1].uv;
+  _mtl_o._xlat_varying5 = extra[1].basis[0];
+  _mtl_o._xlat_varying6 = extra[1].basis[1];
+  _mtl_o._xlat_varying7 = dataOut.f_objectID;
+  return _mtl_o;
+}
+
+// stats: 3 alu 0 tex 1 flow

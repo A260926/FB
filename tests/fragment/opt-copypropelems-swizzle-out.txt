@@ -1,0 +1,13 @@
+varying vec2 uv;
+uniform sampler2D tex;
+void main ()
+{
+  vec4 t0 = texture2D(tex, uv);
+  gl_FragColor = vec4((-t0.y), t0.xzw);
+}
+
+// stats: 1 alu 1 tex 0 flow
+// inputs: 1
+//  #0: uv (high float) 2x1 [-1]
+// textures: 1
+//  #0: tex (high 2d) 0x0 [-1]

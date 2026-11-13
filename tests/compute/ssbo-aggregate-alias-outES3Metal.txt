@@ -1,0 +1,36 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Entry_std430 {
+  uint index;
+  char _pad0[12];
+  packed_float3 value;
+  float weights[3];
+  char _pad1[8];
+};
+static_assert(sizeof(_xlat_Entry_std430) == 48, "std430 size");
+struct _xlat_buf_Data_std430 {
+  _xlat_Entry_std430 entries[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 1, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std430& data [[buffer(1)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  data.entries[int(uint(data.entries[0].index))] = data.entries[(1 + int(gl_GlobalInvocationID.x))];
+  data.entries[0].weights[0] = float(data.entries[(2 + int(gl_GlobalInvocationID.x))].weights[0]);
+  data.entries[0].weights[1] = float(data.entries[(2 + int(gl_GlobalInvocationID.x))].weights[1]);
+  data.entries[0].weights[2] = float(data.entries[(2 + int(gl_GlobalInvocationID.x))].weights[2]);
+}
+
+// stats: 2 alu 0 tex 0 flow
+// workgroup size: 1 1 1
+// buffer #0: Data storage instance data layout std430 (size: unknown) metal 1
+//  member #0: Entry[] entries offset 0 array runtime stride 48
+//  member #1: Entry [] parent 0 offset 0
+//  member #2: uint index parent 1 offset 0
+//  member #3: vec3 value parent 1 offset 16
+//  member #4: float[3] weights parent 1 offset 28 array 3 stride 4
+//  member #5: float [] parent 4 offset 28

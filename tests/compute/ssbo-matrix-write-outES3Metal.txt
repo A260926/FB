@@ -1,0 +1,86 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_element_float2_16 { float2 value; char _pad[8]; };
+struct _xlat_element_packed_float3_16 { packed_float3 value; char _pad[4]; };
+struct _xlat_buf_Columns_std140 {
+  _xlat_element_float2_16 small[2];
+  _xlat_element_packed_float3_16 rectangular[2];
+  float4 native[4];
+};
+static_assert(sizeof(_xlat_buf_Columns_std140) == 128, "std140 size");
+struct _xlat_buf_PaddedRows_std140_row {
+  _xlat_element_float2_16 value[3];
+};
+static_assert(sizeof(_xlat_buf_PaddedRows_std140_row) == 48, "std140 size");
+struct _xlat_Entry_std430_row {
+  float2 value[3];
+};
+static_assert(sizeof(_xlat_Entry_std430_row) == 24, "std430 size");
+struct _xlat_buf_Rows_std430_row {
+  float2 rectangular[3];
+  float2 native[3];
+  _xlat_element_packed_float3_16 wide[2];
+  _xlat_element_packed_float3_16 reduced[3];
+  _xlat_Entry_std430_row entries[1];
+};
+struct xlatMtlShaderUniform {
+  half3 inputValue;
+};
+// threadsPerThreadgroup: 1, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Columns_std140& columns [[buffer(1)]]
+  , device _xlat_buf_PaddedRows_std140_row& paddedRows [[buffer(2)]]
+  , device _xlat_buf_Rows_std430_row& rows [[buffer(3)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = (gl_GlobalInvocationID.x & 1u);
+  columns.small[int(t0)].value = float2(2.0, 3.0);
+  columns.small[int(t0)].value[int(t0)] = 4.0;
+  columns.rectangular[int(t0)].value[0] = 5.0;
+  columns.rectangular[int(t0)].value[2] = 6.0;
+  columns.rectangular[int(t0)].value = float3(columns.rectangular[(1 - int(t0))].value).zyx;
+  columns.native[int(t0)] = float4(28.0, 7.0, 3e+01, 8.0);
+  uint t1 = (gl_GlobalInvocationID.y % 3u);
+  columns.native[int(t0)][int(t1)] = 9.0;
+  rows.rectangular[1][int(t0)] = float(((_mtl_u.inputValue.zy + half2(1e+01, 11.0)).yyx).y);
+  rows.rectangular[2][int(t0)] = float(((_mtl_u.inputValue.zy + half2(1e+01, 11.0)).yyx).z);
+  rows.rectangular[int((t1 & 1u))][int(t0)] = 12.0;
+  rows.rectangular[0][int(t0)] = 14.0;
+  rows.rectangular[2][int(t0)] = 13.0;
+  rows.rectangular[int(t1)][int(t0)] = 15.0;
+  paddedRows.value[1].value[int(t0)] = 23.0;
+  paddedRows.value[2].value[int(t0)] = 22.0;
+  paddedRows.value[int(t1)].value[int(t0)] = 24.0;
+  rows.wide[0].value[int(t1)] = 26.0;
+  rows.wide[1].value[int(t1)] = 27.0;
+  rows.native[int(t0)] = float2(16.0, 17.0);
+  rows.native[int(t0)][int(t0)] = 18.0;
+  rows.reduced[0].value[int(t0)] = 19.0;
+  rows.reduced[2].value[int(t0)] = 2e+01;
+  int t2 = (int(t0) + 1);
+  uint t3 = (uint(t2) & 1u);
+  float t4 = float(uint(t2));
+  rows.entries[int(t0)].value[0][int(t3)] = float3(float2(t4), 21.0).x;
+  rows.entries[int(t0)].value[2][int(t3)] = float3(float2(t4), 21.0).z;
+  rows.entries[t2].value[int(t1)][int(t3)] = (float(rows.entries[t2].value[int(t1)][int(t3)]) + 1.0);
+}
+
+// stats: 9 alu 0 tex 0 flow
+// workgroup size: 1 1 1
+// uniforms: 1 (total size: 8)
+//  #0: inputValue (medium float) 3x1 [-1] loc 0
+// buffer #0: Columns storage instance columns layout std140 (size: 128) metal 1
+//  member #0: mat2 small offset 0 matrix-stride 16
+//  member #1: mat2x3 rectangular offset 32 matrix-stride 16
+//  member #2: mat4 native offset 64 matrix-stride 16
+// buffer #1: PaddedRows storage instance paddedRows layout std140 (size: 48) metal 2
+//  member #0: mat2x3 value offset 0 matrix-stride 16 row-major
+// buffer #2: Rows storage instance rows layout std430 (size: unknown) metal 3
+//  member #0: mat2x3 rectangular offset 0 matrix-stride 8 row-major
+//  member #1: mat3x2 native offset 24 matrix-stride 8
+//  member #2: mat3x2 wide offset 48 matrix-stride 16 row-major
+//  member #3: mat3 reduced offset 80 matrix-stride 16 row-major
+//  member #4: Entry[] entries offset 128 array runtime stride 24
+//  member #5: Entry [] parent 4 offset 128
+//  member #6: mat2x3 value parent 5 offset 128 matrix-stride 8 row-major

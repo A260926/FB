@@ -1,0 +1,22 @@
+uniform vec4 _Color;
+uniform float _Cutoff;
+uniform vec4 _LightPositionRange;
+uniform sampler2D _MainTex;
+void main ()
+{
+  if (((texture2D(_MainTex, gl_TexCoord[1].xy) * _Color).w < _Cutoff)) {
+    discard;
+  }
+  vec4 t0 = fract(((length(gl_TexCoord[0].xyz) * vec4(1.0, 255.0, 65025.0, 1.60581e+08)) * _LightPositionRange.w));
+  gl_FragData[0] = (t0 - (t0.yzww * 0.00392157));
+}
+
+// stats: 9 alu 2 tex 1 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 3 (total size: 0)
+//  #0: _Color (high float) 4x1 [-1]
+//  #1: _Cutoff (high float) 1x1 [-1]
+//  #2: _LightPositionRange (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

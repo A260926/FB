@@ -1,0 +1,18 @@
+uniform float _Fresnel;
+uniform float _SpecIntensity;
+varying vec3 inN;
+varying vec3 inE;
+void main ()
+{
+  float t0 = (1.0 - clamp(min(1.0, dot(inN, inE)), 0.0, 1.0));
+  vec2 t1 = vec2((1.0 - _Fresnel), _Fresnel);
+  gl_FragColor = vec4(((0.05 + (0.95 * dot(vec2(dot(vec2(1.0, t0), t1), dot(vec2(t0, ((t0 * t0) * t0)), t1)), t1))) * _SpecIntensity));
+}
+
+// stats: 13 alu 0 tex 0 flow
+// inputs: 2
+//  #0: inN (high float) 3x1 [-1]
+//  #1: inE (high float) 3x1 [-1]
+// uniforms: 2 (total size: 0)
+//  #0: _Fresnel (high float) 1x1 [-1]
+//  #1: _SpecIntensity (high float) 1x1 [-1]

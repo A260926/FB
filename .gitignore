@@ -1,0 +1,26 @@
+# build folders
+/build/
+/build-*/
+/cmake-build-*/
+
+# node addon stuff
+node_modules/
+*.node
+npm-debug.log*
+
+# test diagnostics, Metal compilation
+test-output/
+runner-checks/
+Testing/
+metalTemp.metal
+metalTemp.air
+
+# bison reports from gen_sources.sh
+/src/glsl/glsl_parser.output
+/src/glsl/glcpp/glcpp-parse.output
+
+# Visual Studio spam
+.vs/
+
+# macOS Finder spam
+.DS_Store

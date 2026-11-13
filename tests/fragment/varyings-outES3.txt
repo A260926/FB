@@ -1,0 +1,10 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _fragData;
+void main ()
+{
+  _fragData = vec4(0.0);
+}
+
+// stats: 0 alu 0 tex 0 flow

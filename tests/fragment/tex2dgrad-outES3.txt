@@ -1,0 +1,22 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform mediump sampler2D tex;
+uniform mediump samplerCube cub;
+in mediump vec3 uv1;
+in highp vec3 uv2;
+out mediump vec4 _fragColor;
+void main ()
+{
+  mediump vec2 t0 = uv1.xy;
+  highp vec2 t1 = uv2.xy;
+  _fragColor = (((textureGrad(tex, t0, dFdx(t0), dFdy(t0)) + textureGrad(tex, t1, dFdx(t1), dFdy(t1))) + textureGrad(tex, t1, t0, t0)) + textureGrad(cub, uv2, dFdx(uv2), dFdy(uv2)));
+}
+
+// stats: 3 alu 4 tex 0 flow
+// inputs: 2
+//  #0: uv1 (medium float) 3x1 [-1]
+//  #1: uv2 (high float) 3x1 [-1]
+// textures: 2
+//  #0: tex (medium 2d) 0x0 [-1]
+//  #1: cub (medium cube) 0x0 [-1]

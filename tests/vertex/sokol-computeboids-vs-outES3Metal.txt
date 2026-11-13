@@ -1,0 +1,59 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_particle_std430 {
+  float2 pos;
+  float2 vel;
+};
+static_assert(sizeof(_xlat_particle_std430) == 16, "std430 size");
+struct _xlat_buf_vs_ssbo_std430 {
+  _xlat_particle_std430 prt[1];
+};
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  float4 color;
+};
+struct xlatMtlShaderUniform {
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_vs_ssbo_std430& _xlat_blk_vs_ssbo [[buffer(1)]]
+  , uint gl_VertexID [[vertex_id]]
+  , uint gl_InstanceID [[instance_id]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float2 verts[3];
+  verts[0] = float2(-0.01, -0.02);
+  verts[1] = float2(0.01, -0.02);
+  verts[2] = float2(0.0, 0.02);
+  float2 t0 = verts[int(gl_VertexID)];
+  float2 t1 = float2(_xlat_blk_vs_ssbo.prt[int(gl_InstanceID)].vel);
+  float t2 = abs(t1.y);
+  bool t3 = (0.0 >= t1.y);
+  float t4 = (t3 ? t1.x : t2);
+  float t5 = ((abs(t4) >= 1e+18) ? 0.25 : 1.0);
+  float t6 = (1.0 / (t4 * t5));
+  float t7 = ((t2 == abs(t1.x)) ? 1.0 : (abs(((t3 ? t2 : t1.x) * t5)) * abs(t6)));
+  bool t8 = (1.0 >= t7);
+  float t9 = (t8 ? t7 : (1.0 / t7));
+  float t10 = (t9 * t9);
+  float t11 = ((t9 * ((((((((((-0.0121323215 * t10) + 0.053681377) * t10) - 0.11735032) * t10) + 0.1938925) * t10) - 0.33267564) * t10) + 0.9999793)) + (t8 ? 0.0 : -1.5707964));
+  float t12 = (float((half(t3) * half(1.5707964))) + as_type<float>(((as_type<uint>(t11) & 2147483647u) | (as_type<uint>(t7) & 2147483648u))));
+  float t13 = ((min(t1.x, t6) < 0.0) ? (-t12) : t12);
+  float t14 = (-t13);
+  float t15 = cos(t14);
+  float t16 = sin(t14);
+  float t17 = ((t0.x * t15) - (t0.y * t16));
+  float2 t18 = (float2(t17, ((t0.x * t16) + (t0.y * t15))) + float2(_xlat_blk_vs_ssbo.prt[int(gl_InstanceID)].pos));
+  _mtl_o.gl_Position = float4(t18, 0.0, 1.0);
+  _mtl_o.color = float4(((1.0 - sin((1.0 - t13))) - t1.y), ((0.1 - t1.y) + (t17 * 1e+02)), (t1.x + cos((0.5 - t13))), 1.0);
+  return _mtl_o;
+}
+
+// stats: 63 alu 0 tex 0 flow
+// buffer #0: vs_ssbo storage layout std430 binding 0 (size: unknown) metal 1
+//  member #0: particle[] prt offset 0 array runtime stride 16 readonly
+//  member #1: particle [] parent 0 offset 0 readonly
+//  member #2: vec2 pos parent 1 offset 0 readonly
+//  member #3: vec2 vel parent 1 offset 8 readonly

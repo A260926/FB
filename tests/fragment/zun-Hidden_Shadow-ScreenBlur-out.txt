@@ -1,0 +1,32 @@
+uniform vec4 _BlurOffsets[8];
+uniform sampler2D _MainTex;
+uniform vec4 unity_ShadowBlurParams;
+void main ()
+{
+  vec4 t0 = texture2D(_MainTex, gl_TexCoord[0].xy);
+  float t1 = (t0.z + (t0.w / 255.0));
+  float t2 = clamp((unity_ShadowBlurParams.y / (1.0 - t1)), 0.0, 1.0);
+  vec4 t3 = vec4(gl_TexCoord[0].xy, 0.0, 0.0);
+  vec4 t4 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[0])).xy);
+  vec4 t5 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[1])).xy);
+  vec2 t6 = (((t0.xy * unity_ShadowBlurParams.x) + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t4.z + (t4.w / 255.0))))), 0.0, 1.0) * t4.xy)) + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t5.z + (t5.w / 255.0))))), 0.0, 1.0) * t5.xy));
+  vec4 t7 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[2])).xy);
+  vec4 t8 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[3])).xy);
+  vec2 t9 = ((t6 + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t7.z + (t7.w / 255.0))))), 0.0, 1.0) * t7.xy)) + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t8.z + (t8.w / 255.0))))), 0.0, 1.0) * t8.xy));
+  vec4 t10 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[4])).xy);
+  vec4 t11 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[5])).xy);
+  vec2 t12 = ((t9 + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t10.z + (t10.w / 255.0))))), 0.0, 1.0) * t10.xy)) + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t11.z + (t11.w / 255.0))))), 0.0, 1.0) * t11.xy));
+  vec4 t13 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[6])).xy);
+  vec4 t14 = texture2D(_MainTex, (t3 + (t2 * _BlurOffsets[7])).xy);
+  vec2 t15 = ((t12 + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t13.z + (t13.w / 255.0))))), 0.0, 1.0) * t13.xy)) + (clamp((unity_ShadowBlurParams.x - abs((t1 - (t14.z + (t14.w / 255.0))))), 0.0, 1.0) * t14.xy));
+  gl_FragData[0] = vec4((t15.x / t15.y));
+}
+
+// stats: 87 alu 9 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 2 (total size: 0)
+//  #0: _BlurOffsets (high float) 4x1 [8]
+//  #1: unity_ShadowBlurParams (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

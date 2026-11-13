@@ -1,0 +1,42 @@
+{
+  "name": "glsl-optimizer",
+  "version": "0.1.0",
+  "description": "GLSL optimizer",
+  "main": "build/Release/glslOptimizer.node",
+  "scripts": {
+    "install": "cmake-js compile",
+    "test": "node tests/tests.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aras-p/glsl-optimizer.git"
+  },
+  "keywords": [
+    "glsl",
+    "webgl",
+    "shader",
+    "optimize",
+    "optimizer",
+    "opengl",
+    "essl",
+    "es",
+    "opengles"
+  ],
+  "readmeFilename": "README.md",
+  "author": "Aras Pranckevičius",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 22"
+  },
+  "bugs": {
+    "url": "https://github.com/aras-p/glsl-optimizer/issues"
+  },
+  "homepage": "https://github.com/aras-p/glsl-optimizer",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "cmake-js": "^7.3.0",
+    "nan": "^2.30.0"
+  }
+}

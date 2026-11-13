@@ -1,0 +1,127 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform highp vec3 iResolution;
+uniform highp float iTime;
+layout(location = 0) out highp vec4 fragColor;
+void main ()
+{
+  highp float r0;
+  highp float r1;
+  highp vec3 r2;
+  highp vec2 t0 = (iResolution.xy / 2.0);
+  highp vec2 t1 = (gl_FragCoord.xy - t0);
+  highp float t2 = dot(t1, t1);
+  highp int t3 = int(t1.y);
+  highp int t4 = int(t1.x);
+  highp float t5 = sqrt(t2);
+  bool t6 = (t5 < 2.4e+02);
+  highp float t7 = clamp(((-99.5 + t5) / 2.0), 0.0, 1.0);
+  highp float t8 = clamp(((-98.5 + t5) / 2.0), 0.0, 1.0);
+  highp float t9 = clamp(((-164.5 + t5) / 2.0), 0.0, 1.0);
+  highp float t10 = clamp(((-163.5 + t5) / 2.0), 0.0, 1.0);
+  highp float t11 = (((1.0 - (t7 * (t7 * (3.0 - (2.0 * t7))))) - (1.0 - (t8 * (t8 * (3.0 - (2.0 * t8)))))) + ((1.0 - (t9 * (t9 * (3.0 - (2.0 * t9))))) - (1.0 - (t10 * (t10 * (3.0 - (2.0 * t10)))))));
+  highp float t12 = clamp(((-2.4e+02 + t5) / 2.0), 0.0, 1.0);
+  highp float t13 = clamp(((-238.0 + t5) / 2.0), 0.0, 1.0);
+  highp vec3 t14 = ((vec3(((t6 && ((t4 == t3) || (t4 == (-t3)))) ? 0.3 : 0.0)) + ((1.0 - (t12 * (t12 * (3.0 - (2.0 * t12))))) - (1.0 - (t13 * (t13 * (3.0 - (2.0 * t13))))))) + (t11 * vec3(0.74, 0.95, 1.0)));
+  highp vec2 t15 = (t1 * inversesqrt(t2));
+  highp float t16 = abs(t15.x);
+  bool t17 = (0.0 >= t15.x);
+  highp float t18 = (t17 ? t15.y : t16);
+  highp float t19 = ((abs(t18) >= 1e+18) ? 0.25 : 1.0);
+  highp float t20 = (1.0 / (t18 * t19));
+  highp float t21 = abs(t15.y);
+  highp float t22 = ((t16 == t21) ? 1.0 : (abs(((t17 ? t16 : t15.y) * t19)) * abs(t20)));
+  bool t23 = (1.0 >= t22);
+  highp float t24 = (t23 ? t22 : (1.0 / t22));
+  highp float t25 = (t24 * t24);
+  highp float t26 = ((t24 * ((((((((((-0.0121323215 * t25) + 0.053681377) * t25) - 0.11735032) * t25) + 0.1938925) * t25) - 0.33267564) * t25) + 0.9999793)) + (t23 ? 0.0 : -1.5707964));
+  highp float t27 = ((float(t17) * 1.5707964) + uintBitsToFloat(((floatBitsToUint(t26) & 2147483647u) | (floatBitsToUint(t22) & 2147483648u))));
+  highp float t28 = ((min(t15.y, t20) < 0.0) ? (-t27) : t27);
+  highp float t29 = (1.8e+02 * (t28 / 3.1415927));
+  highp float t30 = clamp(((abs((mod((t29 + 2.0), 45.0) - 2.0)) - 2.0) / 0.099999905), 0.0, 1.0);
+  highp float t31 = clamp(((-314.0 + t5) / 2.0), 0.0, 1.0);
+  highp float t32 = clamp(((-3.1e+02 + t5) / 2.0), 0.0, 1.0);
+  highp vec3 t33 = ((((t30 * vec3(0.74, 0.95, 1.0)) * (t30 * (3.0 - (2.0 * t30)))) * ((step(45.0, abs((mod(t29, 1.8e+02) - 9e+01))) * 0.5) + 0.5)) * ((1.0 - (t31 * (t31 * (3.0 - (2.0 * t31))))) - (1.0 - (t32 * (t32 * (3.0 - (2.0 * t32)))))));
+  highp float t34 = (315.0 + (3e+01 * sin(iTime)));
+  highp float t35 = (t1.x - t34);
+  highp float t36 = clamp(((t35 + 9.0) / 2.0), 0.0, 1.0);
+  highp float t37 = clamp(((t35 + 1.0) / 2.0), 0.0, 1.0);
+  highp float t38 = ((7.0 + t1.x) - t34);
+  highp float t39 = abs(t1.y);
+  highp float t40 = clamp(((t39 - t38) / (((9.0 + t1.x) - t34) - t38)), 0.0, 1.0);
+  highp float t41 = (t1.x + t34);
+  highp float t42 = clamp(((t41 + 1.0) / 2.0), 0.0, 1.0);
+  highp float t43 = clamp(((t41 - 7.0) / 2.0), 0.0, 1.0);
+  highp float t44 = ((7.0 - t1.x) - t34);
+  highp float t45 = clamp(((t39 - t44) / (((9.0 - t1.x) - t34) - t44)), 0.0, 1.0);
+  highp float t46 = (t1.y - t34);
+  highp float t47 = clamp(((t46 + 9.0) / 2.0), 0.0, 1.0);
+  highp float t48 = clamp(((t46 + 1.0) / 2.0), 0.0, 1.0);
+  highp float t49 = ((7.0 + t1.y) - t34);
+  highp float t50 = abs(t1.x);
+  highp float t51 = clamp(((t50 - t49) / (((9.0 + t1.y) - t34) - t49)), 0.0, 1.0);
+  highp float t52 = (t1.y + t34);
+  highp float t53 = clamp(((t52 + 1.0) / 2.0), 0.0, 1.0);
+  highp float t54 = clamp(((t52 - 7.0) / 2.0), 0.0, 1.0);
+  highp float t55 = ((7.0 - t1.y) - t34);
+  highp float t56 = clamp(((t50 - t55) / (((9.0 - t1.y) - t34) - t55)), 0.0, 1.0);
+  highp float t57 = ((((t36 * (t36 * (3.0 - (2.0 * t36)))) * (1.0 - (t37 * (t37 * (3.0 - (2.0 * t37)))))) * (1.0 - (t40 * (t40 * (3.0 - (2.0 * t40)))))) + (((t42 * (t42 * (3.0 - (2.0 * t42)))) * (1.0 - (t43 * (t43 * (3.0 - (2.0 * t43)))))) * (1.0 - (t45 * (t45 * (3.0 - (2.0 * t45)))))));
+  highp float t58 = ((t57 + (((t47 * (t47 * (3.0 - (2.0 * t47)))) * (1.0 - (t48 * (t48 * (3.0 - (2.0 * t48)))))) * (1.0 - (t51 * (t51 * (3.0 - (2.0 * t51))))))) + (((t53 * (t53 * (3.0 - (2.0 * t53)))) * (1.0 - (t54 * (t54 * (3.0 - (2.0 * t54)))))) * (1.0 - (t56 * (t56 * (3.0 - (2.0 * t56)))))));
+  highp vec3 t59 = ((t14 + t33) + (t58 * vec3(0.87, 0.98, 1.0)));
+  if (t6) {
+    highp float t60 = ((282.74335 * iTime) / 1.8e+02);
+    highp vec2 t61 = (2.4e+02 * vec2(cos(t60), (-sin(t60))));
+    highp vec2 t62 = (t1 - (t61 * clamp((dot(t1, t61) / dot(t61, t61)), 0.0, 1.0)));
+    highp float t63 = clamp((length(t62) / 2.0), 0.0, 1.0);
+    r0 = ((1.0 - (t63 * (t63 * (3.0 - (2.0 * t63))))) + (0.5 * clamp((1.0 - (mod((((1.8e+02 * t28) / 3.1415927) + (9e+01 * iTime)), 3.6e+02) / 9e+01)), 0.0, 1.0)));
+  } else {
+    r0 = 0.0;
+  }
+  highp float t64 = clamp(((-9.5 + t5) / 2.0), 0.0, 1.0);
+  highp float t65 = clamp(((-8.5 + t5) / 2.0), 0.0, 1.0);
+  highp vec3 t66 = ((t59 + (r0 * vec3(0.35, 0.76, 0.83))) + (((1.0 - (t64 * (t64 * (3.0 - (2.0 * t64))))) - (1.0 - (t65 * (t65 * (3.0 - (2.0 * t65)))))) * vec3(0.35, 0.76, 0.83)));
+  if (((0.5 + (0.2 * cos(iTime))) < t21)) {
+    highp float t67 = clamp(((-261.5 + t5) / 2.0), 0.0, 1.0);
+    highp float t68 = clamp(((-260.5 + t5) / 2.0), 0.0, 1.0);
+    r1 = ((1.0 - (t67 * (t67 * (3.0 - (2.0 * t67))))) - (1.0 - (t68 * (t68 * (3.0 - (2.0 * t68))))));
+  } else {
+    r1 = 0.0;
+  }
+  r2 = (t66 + (vec3(0.24499999, 0.532, 0.581) * r1));
+  if (t6) {
+    highp float t69 = (0.1 * iTime);
+    highp float t70 = (3.0 + t69);
+    highp float t71 = cos((0.1 * t70));
+    highp vec2 t72 = (gl_FragCoord.xy - (t0 + (1.3e+02 * vec2(((1.3 * cos(t70)) + t71), (sin(t70) + (1.4 * t71))))));
+    highp float t73 = clamp(((length(t72) - 2.0) / 2.0), 0.0, 1.0);
+    highp float t74 = ((-2.0 + sin(t69)) + (0.15 * iTime));
+    highp float t75 = cos((0.1 * t74));
+    highp vec2 t76 = (gl_FragCoord.xy - (t0 + (1.3e+02 * vec2(((0.9 * cos(t74)) - (1.1 * t75)), ((1.7 * sin(t74)) + (0.8 * t75))))));
+    highp float t77 = clamp(((length(t76) - 2.0) / 2.0), 0.0, 1.0);
+    highp float t78 = (sin((t69 + 7.0)) + (0.2 * iTime));
+    highp float t79 = cos((0.1 * t78));
+    highp vec2 t80 = (gl_FragCoord.xy - (t0 + (5e+01 * vec2(((1.54 * cos(t78)) + (1.7 * t79)), ((1.37 * sin(t78)) + (1.8 * t79))))));
+    highp float t81 = length(t80);
+    highp float t82 = clamp(((t81 - 4.0) / 2.0), 0.0, 1.0);
+    highp float t83 = (t81 - 1.0);
+    highp float t84 = ((t81 + 1.0) - t83);
+    highp float t85 = clamp(((7.0 - t81) / t84), 0.0, 1.0);
+    highp float t86 = clamp(((9.0 - t81) / t84), 0.0, 1.0);
+    highp float t87 = mod((87.0 * iTime), 8e+01);
+    highp float t88 = max(8.0, (-12.0 + t87));
+    highp float t89 = (8.0 + t87);
+    highp float t90 = clamp(((t81 - t88) / (t89 - t88)), 0.0, 1.0);
+    highp float t91 = clamp(((t89 - t83) / t84), 0.0, 1.0);
+    highp float t92 = ((((0.5 - (0.5 * cos((3e+01 * iTime)))) * (1.0 - (t82 * (t82 * (3.0 - (2.0 * t82)))))) + (1.0 - (t85 * (t85 * (3.0 - (2.0 * t85)))))) - (1.0 - (t86 * (t86 * (3.0 - (2.0 * t86))))));
+    r2 = (((r2 + (1.0 - (t73 * (t73 * (3.0 - (2.0 * t73)))))) + (1.0 - (t77 * (t77 * (3.0 - (2.0 * t77)))))) + (((t92 + (t90 * (t90 * (3.0 - (2.0 * t90))))) - (1.0 - (t91 * (t91 * (3.0 - (2.0 * t91)))))) * vec3(1.0, 0.38, 0.227)));
+  }
+  fragColor = vec4(r2.x, r2.y, r2.z, 1.0);
+}
+
+// stats: 492 alu 0 tex 3 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 2 (total size: 0)
+//  #0: iResolution (high float) 3x1 [-1]
+//  #1: iTime (high float) 1x1 [-1]

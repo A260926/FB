@@ -1,0 +1,137 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+template <typename T> inline T _xlat_mod(T x, T y) { return x - y * floor(x / y); }
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  float4 fragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float3 iResolution;
+  float iTime;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float r0 = 0;
+  float r1 = 0;
+  float3 r2 = 0;
+  float2 t0 = (_mtl_u.iResolution.xy / 2.0);
+  float2 t1 = (_mtl_i.gl_FragCoord.xy - t0);
+  float t2 = dot(t1, t1);
+  int t3 = int(t1.y);
+  int t4 = int(t1.x);
+  float t5 = sqrt(t2);
+  bool t6 = (t5 < 2.4e+02);
+  float t7 = saturate(((-99.5 + t5) / 2.0));
+  float t8 = saturate(((-98.5 + t5) / 2.0));
+  float t9 = saturate(((-164.5 + t5) / 2.0));
+  float t10 = saturate(((-163.5 + t5) / 2.0));
+  float t11 = (((1.0 - (t7 * (t7 * (3.0 - (2.0 * t7))))) - (1.0 - (t8 * (t8 * (3.0 - (2.0 * t8)))))) + ((1.0 - (t9 * (t9 * (3.0 - (2.0 * t9))))) - (1.0 - (t10 * (t10 * (3.0 - (2.0 * t10)))))));
+  float t12 = saturate(((-2.4e+02 + t5) / 2.0));
+  float t13 = saturate(((-238.0 + t5) / 2.0));
+  float3 t14 = ((float3(((t6 && ((t4 == t3) || (t4 == (-t3)))) ? 0.3 : 0.0)) + ((1.0 - (t12 * (t12 * (3.0 - (2.0 * t12))))) - (1.0 - (t13 * (t13 * (3.0 - (2.0 * t13))))))) + (t11 * float3(0.74, 0.95, 1.0)));
+  float2 t15 = (t1 * rsqrt(t2));
+  float t16 = abs(t15.x);
+  bool t17 = (0.0 >= t15.x);
+  float t18 = (t17 ? t15.y : t16);
+  float t19 = ((abs(t18) >= 1e+18) ? 0.25 : 1.0);
+  float t20 = (1.0 / (t18 * t19));
+  float t21 = abs(t15.y);
+  float t22 = ((t16 == t21) ? 1.0 : (abs(((t17 ? t16 : t15.y) * t19)) * abs(t20)));
+  bool t23 = (1.0 >= t22);
+  float t24 = (t23 ? t22 : (1.0 / t22));
+  float t25 = (t24 * t24);
+  float t26 = ((t24 * ((((((((((-0.0121323215 * t25) + 0.053681377) * t25) - 0.11735032) * t25) + 0.1938925) * t25) - 0.33267564) * t25) + 0.9999793)) + (t23 ? 0.0 : -1.5707964));
+  float t27 = (float((half(t17) * half(1.5707964))) + as_type<float>(((as_type<uint>(t26) & 2147483647u) | (as_type<uint>(t22) & 2147483648u))));
+  float t28 = ((min(t15.y, t20) < 0.0) ? (-t27) : t27);
+  float t29 = (1.8e+02 * (t28 / 3.1415927));
+  float t30 = saturate(((abs((_xlat_mod((t29 + 2.0), 45.0) - 2.0)) - 2.0) / 0.099999905));
+  float t31 = saturate(((-314.0 + t5) / 2.0));
+  float t32 = saturate(((-3.1e+02 + t5) / 2.0));
+  float3 t33 = (((t30 * float3(0.74, 0.95, 1.0)) * (t30 * (3.0 - (2.0 * t30)))) * float(((step(half(45.0), half(abs((_xlat_mod(t29, 1.8e+02) - 9e+01)))) * half(0.5)) + half(0.5))));
+  float t34 = (315.0 + (3e+01 * sin(_mtl_u.iTime)));
+  float t35 = (t1.x - t34);
+  float t36 = saturate(((t35 + 9.0) / 2.0));
+  float t37 = saturate(((t35 + 1.0) / 2.0));
+  float t38 = ((7.0 + t1.x) - t34);
+  float t39 = abs(t1.y);
+  float t40 = saturate(((t39 - t38) / (((9.0 + t1.x) - t34) - t38)));
+  float t41 = (t1.x + t34);
+  float t42 = saturate(((t41 + 1.0) / 2.0));
+  float t43 = saturate(((t41 - 7.0) / 2.0));
+  float t44 = ((7.0 - t1.x) - t34);
+  float t45 = saturate(((t39 - t44) / (((9.0 - t1.x) - t34) - t44)));
+  float t46 = (t1.y - t34);
+  float t47 = saturate(((t46 + 9.0) / 2.0));
+  float t48 = saturate(((t46 + 1.0) / 2.0));
+  float t49 = ((7.0 + t1.y) - t34);
+  float t50 = abs(t1.x);
+  float t51 = saturate(((t50 - t49) / (((9.0 + t1.y) - t34) - t49)));
+  float t52 = (t1.y + t34);
+  float t53 = saturate(((t52 + 1.0) / 2.0));
+  float t54 = saturate(((t52 - 7.0) / 2.0));
+  float t55 = ((7.0 - t1.y) - t34);
+  float t56 = saturate(((t50 - t55) / (((9.0 - t1.y) - t34) - t55)));
+  float t57 = ((((t36 * (t36 * (3.0 - (2.0 * t36)))) * (1.0 - (t37 * (t37 * (3.0 - (2.0 * t37)))))) * (1.0 - (t40 * (t40 * (3.0 - (2.0 * t40)))))) + (((t42 * (t42 * (3.0 - (2.0 * t42)))) * (1.0 - (t43 * (t43 * (3.0 - (2.0 * t43)))))) * (1.0 - (t45 * (t45 * (3.0 - (2.0 * t45)))))));
+  float t58 = ((t57 + (((t47 * (t47 * (3.0 - (2.0 * t47)))) * (1.0 - (t48 * (t48 * (3.0 - (2.0 * t48)))))) * (1.0 - (t51 * (t51 * (3.0 - (2.0 * t51))))))) + (((t53 * (t53 * (3.0 - (2.0 * t53)))) * (1.0 - (t54 * (t54 * (3.0 - (2.0 * t54)))))) * (1.0 - (t56 * (t56 * (3.0 - (2.0 * t56)))))));
+  float3 t59 = ((t14 + (t33 * ((1.0 - (t31 * (t31 * (3.0 - (2.0 * t31))))) - (1.0 - (t32 * (t32 * (3.0 - (2.0 * t32)))))))) + (t58 * float3(0.87, 0.98, 1.0)));
+  if (t6) {
+    float t60 = ((282.74335 * _mtl_u.iTime) / 1.8e+02);
+    float2 t61 = (2.4e+02 * float2(cos(t60), (-sin(t60))));
+    float2 t62 = (t1 - (t61 * saturate((dot(t1, t61) / dot(t61, t61)))));
+    float t63 = saturate((length(t62) / 2.0));
+    r0 = ((1.0 - (t63 * (t63 * (3.0 - (2.0 * t63))))) + (0.5 * saturate((1.0 - (_xlat_mod((((1.8e+02 * t28) / 3.1415927) + (9e+01 * _mtl_u.iTime)), 3.6e+02) / 9e+01)))));
+  } else {
+    r0 = 0.0;
+  }
+  float t64 = saturate(((-9.5 + t5) / 2.0));
+  float t65 = saturate(((-8.5 + t5) / 2.0));
+  float3 t66 = ((t59 + (r0 * float3(0.35, 0.76, 0.83))) + (((1.0 - (t64 * (t64 * (3.0 - (2.0 * t64))))) - (1.0 - (t65 * (t65 * (3.0 - (2.0 * t65)))))) * float3(0.35, 0.76, 0.83)));
+  if (((0.5 + (0.2 * cos(_mtl_u.iTime))) < t21)) {
+    float t67 = saturate(((-261.5 + t5) / 2.0));
+    float t68 = saturate(((-260.5 + t5) / 2.0));
+    r1 = ((1.0 - (t67 * (t67 * (3.0 - (2.0 * t67))))) - (1.0 - (t68 * (t68 * (3.0 - (2.0 * t68))))));
+  } else {
+    r1 = 0.0;
+  }
+  r2 = (t66 + (float3(0.24499999, 0.532, 0.581) * r1));
+  if (t6) {
+    float t69 = (0.1 * _mtl_u.iTime);
+    float t70 = (3.0 + t69);
+    float t71 = cos((0.1 * t70));
+    float2 t72 = (_mtl_i.gl_FragCoord.xy - (t0 + (1.3e+02 * float2(((1.3 * cos(t70)) + t71), (sin(t70) + (1.4 * t71))))));
+    float t73 = saturate(((length(t72) - 2.0) / 2.0));
+    float t74 = ((-2.0 + sin(t69)) + (0.15 * _mtl_u.iTime));
+    float t75 = cos((0.1 * t74));
+    float2 t76 = (_mtl_i.gl_FragCoord.xy - (t0 + (1.3e+02 * float2(((0.9 * cos(t74)) - (1.1 * t75)), ((1.7 * sin(t74)) + (0.8 * t75))))));
+    float t77 = saturate(((length(t76) - 2.0) / 2.0));
+    float t78 = (sin((t69 + 7.0)) + (0.2 * _mtl_u.iTime));
+    float t79 = cos((0.1 * t78));
+    float2 t80 = (_mtl_i.gl_FragCoord.xy - (t0 + (5e+01 * float2(((1.54 * cos(t78)) + (1.7 * t79)), ((1.37 * sin(t78)) + (1.8 * t79))))));
+    float t81 = length(t80);
+    float t82 = saturate(((t81 - 4.0) / 2.0));
+    float t83 = (t81 - 1.0);
+    float t84 = ((t81 + 1.0) - t83);
+    float t85 = saturate(((7.0 - t81) / t84));
+    float t86 = saturate(((9.0 - t81) / t84));
+    float t87 = _xlat_mod((87.0 * _mtl_u.iTime), 8e+01);
+    float t88 = max(8.0, (-12.0 + t87));
+    float t89 = (8.0 + t87);
+    float t90 = saturate(((t81 - t88) / (t89 - t88)));
+    float t91 = saturate(((t89 - t83) / t84));
+    float t92 = ((((0.5 - (0.5 * cos((3e+01 * _mtl_u.iTime)))) * (1.0 - (t82 * (t82 * (3.0 - (2.0 * t82)))))) + (1.0 - (t85 * (t85 * (3.0 - (2.0 * t85)))))) - (1.0 - (t86 * (t86 * (3.0 - (2.0 * t86))))));
+    r2 = (((r2 + (1.0 - (t73 * (t73 * (3.0 - (2.0 * t73)))))) + (1.0 - (t77 * (t77 * (3.0 - (2.0 * t77)))))) + (((t92 + (t90 * (t90 * (3.0 - (2.0 * t90))))) - (1.0 - (t91 * (t91 * (3.0 - (2.0 * t91)))))) * float3(1.0, 0.38, 0.227)));
+  }
+  _mtl_o.fragColor = float4(r2.x, r2.y, r2.z, 1.0);
+  return _mtl_o;
+}
+
+// stats: 492 alu 0 tex 3 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 2 (total size: 20)
+//  #0: iResolution (high float) 3x1 [-1] loc 0
+//  #1: iTime (high float) 1x1 [-1] loc 16

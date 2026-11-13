@@ -1,0 +1,49 @@
+#version 300 es
+in highp vec4 _glesVertex;
+in mediump vec3 _glesNormal;
+in highp vec4 _glesMultiTexCoord0;
+uniform mediump vec4 unity_LightColor[8];
+uniform highp vec4 unity_LightPosition[8];
+uniform mediump vec4 unity_LightAtten[8];
+uniform highp mat4 glstate_matrix_mvp;
+uniform highp mat4 glstate_matrix_modelview0;
+uniform highp mat4 glstate_matrix_invtrans_modelview0;
+uniform highp vec4 glstate_lightmodel_ambient;
+uniform mediump vec4 _Color;
+out mediump vec4 xlv_COLOR0;
+out highp vec2 xlv_TEXCOORD0;
+void main ()
+{
+  highp vec3 t0 = _glesNormal;
+  highp vec4 t1 = (glstate_matrix_modelview0 * vec4(_glesVertex.xyz, 1.0));
+  highp vec3 t2 = (mat3(glstate_matrix_invtrans_modelview0) * t0);
+  highp vec3 t3 = (unity_LightPosition[0].xyz - (t1.xyz * unity_LightPosition[0].w));
+  highp float t4 = dot(t3, t3);
+  highp vec3 t5 = (unity_LightPosition[1].xyz - (t1.xyz * unity_LightPosition[1].w));
+  highp float t6 = dot(t5, t5);
+  highp vec3 t7 = ((glstate_lightmodel_ambient.xyz + (unity_LightColor[0].xyz * (max(0.0, dot(t2, (t3 * inversesqrt(t4)))) * (1.0 / (1.0 + (t4 * unity_LightAtten[0].z)))))) + (unity_LightColor[1].xyz * (max(0.0, dot(t2, (t5 * inversesqrt(t6)))) * (1.0 / (1.0 + (t6 * unity_LightAtten[1].z))))));
+  highp vec3 t8 = (unity_LightPosition[2].xyz - (t1.xyz * unity_LightPosition[2].w));
+  highp float t9 = dot(t8, t8);
+  highp vec3 t10 = (unity_LightPosition[3].xyz - (t1.xyz * unity_LightPosition[3].w));
+  highp float t11 = dot(t10, t10);
+  highp vec3 t12 = ((t7 + (unity_LightColor[2].xyz * (max(0.0, dot(t2, (t8 * inversesqrt(t9)))) * (1.0 / (1.0 + (t9 * unity_LightAtten[2].z)))))) + (unity_LightColor[3].xyz * (max(0.0, dot(t2, (t10 * inversesqrt(t11)))) * (1.0 / (1.0 + (t11 * unity_LightAtten[3].z))))));
+  highp vec3 t13 = ((t12 * 2.0) * _Color.xyz);
+  gl_Position = (glstate_matrix_mvp * vec4(_glesVertex.xyz, 1.0));
+  xlv_COLOR0 = vec4(t13, 1.0);
+  xlv_TEXCOORD0 = _glesMultiTexCoord0.xy;
+}
+
+// stats: 71 alu 0 tex 0 flow
+// inputs: 3
+//  #0: _glesVertex (high float) 4x1 [-1]
+//  #1: _glesNormal (medium float) 3x1 [-1]
+//  #2: _glesMultiTexCoord0 (high float) 4x1 [-1]
+// uniforms: 8 (total size: 0)
+//  #0: unity_LightColor (medium float) 4x1 [8]
+//  #1: unity_LightPosition (high float) 4x1 [8]
+//  #2: unity_LightAtten (medium float) 4x1 [8]
+//  #3: glstate_matrix_mvp (high float) 4x4 [-1]
+//  #4: glstate_matrix_modelview0 (high float) 4x4 [-1]
+//  #5: glstate_matrix_invtrans_modelview0 (high float) 4x4 [-1]
+//  #6: glstate_lightmodel_ambient (high float) 4x1 [-1]
+//  #7: _Color (medium float) 4x1 [-1]
