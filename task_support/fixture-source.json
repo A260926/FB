@@ -1,0 +1,5 @@
+{
+  "source": "Generated synthetic testsrc2, preparation only; no FFmpeg dependency at runtime",
+  "command": "ffmpeg -f lavfi -i testsrc2=size=64x64:rate=25:duration=1 -c:v mpeg1video -g 9 -bf 2 -q:v 3 -an -f mpeg source.mpg",
+  "sha256": "f861b5651e82d21e871e6b6b3a411fa85d45369ea1a07dc6eabbcc5804fc2db6"
+}
