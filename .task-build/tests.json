@@ -1,0 +1,24 @@
+{"Time":"2026-11-14T05:32:30.617211+09:00","Action":"start","Package":"github.com/yapingcat/gomedia/go-mpeg2"}
+{"Time":"2026-11-14T05:32:30.862262+09:00","Action":"run","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRClock"}
+{"Time":"2026-11-14T05:32:30.862422+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRClock","Output":"=== RUN   TestCBRClock\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.862483+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRClock","Output":"    cbr_harness_test.go:5: checks=79\n"}
+{"Time":"2026-11-14T05:32:30.862507+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRClock","Output":"--- PASS: TestCBRClock (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.862524+09:00","Action":"pass","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRClock","Elapsed":0}
+{"Time":"2026-11-14T05:32:30.86254+09:00","Action":"run","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRTables"}
+{"Time":"2026-11-14T05:32:30.862548+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRTables","Output":"=== RUN   TestCBRTables\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.882266+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRTables","Output":"    cbr_harness_test.go:5: checks=43\n"}
+{"Time":"2026-11-14T05:32:30.882299+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRTables","Output":"--- PASS: TestCBRTables (0.02s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.882304+09:00","Action":"pass","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRTables","Elapsed":0.02}
+{"Time":"2026-11-14T05:32:30.882326+09:00","Action":"run","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRMedia"}
+{"Time":"2026-11-14T05:32:30.882329+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRMedia","Output":"=== RUN   TestCBRMedia\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.882785+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRMedia","Output":"    cbr_harness_test.go:5: checks=1385\n"}
+{"Time":"2026-11-14T05:32:30.882799+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRMedia","Output":"--- PASS: TestCBRMedia (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.882805+09:00","Action":"pass","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRMedia","Elapsed":0}
+{"Time":"2026-11-14T05:32:30.882809+09:00","Action":"run","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRCompatibility"}
+{"Time":"2026-11-14T05:32:30.882812+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRCompatibility","Output":"=== RUN   TestCBRCompatibility\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.883519+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRCompatibility","Output":"    cbr_harness_test.go:5: checks=39\n"}
+{"Time":"2026-11-14T05:32:30.883587+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRCompatibility","Output":"--- PASS: TestCBRCompatibility (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.88363+09:00","Action":"pass","Package":"github.com/yapingcat/gomedia/go-mpeg2","Test":"TestCBRCompatibility","Elapsed":0}
+{"Time":"2026-11-14T05:32:30.883715+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-11-14T05:32:30.884225+09:00","Action":"output","Package":"github.com/yapingcat/gomedia/go-mpeg2","Output":"ok  \tgithub.com/yapingcat/gomedia/go-mpeg2\t0.267s\n"}
+{"Time":"2026-11-14T05:32:30.88424+09:00","Action":"pass","Package":"github.com/yapingcat/gomedia/go-mpeg2","Elapsed":0.267}
