@@ -1,6 +1,7 @@
 {
   "feedVersion": "1.1",
   "feedType": "json",
+  "nextPage": "https://sample-json-feed.com/feed.json?next=500",
   "feedLink": "https://sample-json-feed.com/feed.json",
   "title": "title",
   "language": "en",

@@ -13,6 +13,7 @@
 - [Features](#features)
 - [Overview](#overview)
 - [Basic Usage](#basic-usage)
+- [Walking Paginated Feeds](#walking-paginated-feeds)
 - [Advanced Usage](#advanced-usage)
 - [Dependencies](#dependencies)
 - [License](#license)
@@ -149,6 +150,87 @@ fp := json.Parser{}
 jsonFeed, _ := fp.Parse(strings.NewReader(feedData))
 fmt.Println(jsonFeed.HomePageURL)
 ```
+
+## Walking Paginated Feeds
+
+Subscriptions present entries newest-first, with the older archive split into
+later pages. `Parse`, `ParseString` and `ParseURL` still fetch and parse a
+single document, but every translated `Feed` now carries a `NextPage` field
+with the address of the next page:
+
+- JSON Feed: the top-level `next_url`.
+- Atom: the `href` of the first feed-level `<link rel="next">`. A `rel="next"`
+  on an individual entry is not used.
+- RSS: empty, since RSS has no pagination declaration.
+
+`NextPage` comes from the `Translator`, so a custom translator can set or
+clear it and the paging logic always follows the translated value rather than
+reaching into the source feed. Values may be relative; they are resolved
+against the final URL of the response that returned them.
+
+### Parser.WalkURL
+
+`WalkURL` fetches a feed and follows its `NextPage` chain, emitting items one
+at a time through a callback. Pages are requested lazily — the next page is
+not fetched until the current page has been parsed, its items emitted, and
+its body closed. It uses the same format detection, translators and HTTP
+configuration as `ParseURLWithContext` (`UserAgent`, `Client`, `AuthConfig`,
+`MaxByteSize`, `HTTPError`); no conditional caching or automatic retry is
+applied.
+
+```go
+fp := gofeed.NewParser()
+
+// Full crawl: every page and every item, until the chain ends.
+report, err := fp.WalkURL(ctx, "https://example.com/feed.json", gofeed.WalkOptions{},
+    func(item *gofeed.Item) error {
+        fmt.Println(item.GUID, item.Title)
+        return nil
+    })
+// report.Pages, report.Items describe what was delivered.
+```
+
+### Incremental updates
+
+Pass `WalkOptions{Incremental: true, KnownIDs: ...}` to stop at content
+already collected. The walk ends at the first item whose non-empty GUID is in
+`KnownIDs`: that item and everything after it are not delivered, no further
+page is requested, and its GUID is returned as `WalkReport.StoppedAt`.
+
+```go
+known := map[string]struct{}{
+    "https://example.com/posts/42": {},
+}
+report, err := fp.WalkURL(ctx, "https://example.com/feed.json",
+    gofeed.WalkOptions{Incremental: true, KnownIDs: known},
+    func(item *gofeed.Item) error { return store(item) })
+fmt.Println("stopped at:", report.StoppedAt)
+```
+
+GUIDs are opaque strings: they are neither trimmed nor converted to URLs.
+Other rules worth knowing:
+
+- A non-empty GUID repeated within the same walk is skipped as a duplicate,
+  but it is not treated as the historical boundary. Items with empty GUIDs
+  are always delivered.
+- Full mode (`Incremental: false`) ignores `KnownIDs`. The map is never
+  modified, and the per-walk duplicate and cycle state is discarded when the
+  call returns — each call starts fresh.
+- A callback error is returned unchanged, with the counts accumulated so far;
+  `Items` counts only successful emits. Items already delivered belong to the
+  caller and are never mutated by later pages.
+- Relative next-page addresses resolve against the response's final
+  `Request.URL` (after redirects), never the feed's `self` or
+  `home_page_url`. Only `http`/`https` continuations are accepted.
+- For cycle detection, page identity drops the URL fragment but keeps the
+  query string and its parameter order. A chain returning to a page already
+  requested fails with `gofeed.ErrPaginationCycle` without requesting it
+  again; an alias that redirects back to a visited page is detected when the
+  response arrives, and that page is not parsed or delivered. Empty pages do
+  not stop the walk.
+- `Pages` counts only pages whose body was parsed successfully and closed;
+  a page that fails to fetch or parse increments nothing. Invalid start URLs,
+  a nil context or a nil callback fail before any request is made.
 
 ## Advanced Usage
 

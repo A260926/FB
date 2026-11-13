@@ -36,6 +36,14 @@ type Feed struct {
 	Items           []*Item                  `json:"items"`
 	FeedType        string                   `json:"feedType"`
 	FeedVersion     string                   `json:"feedVersion"`
+	// NextPage is the address of the next page of archive entries, taken from
+	// the translated feed: JSON Feed's next_url or the first feed-level Atom
+	// link with rel="next". It is empty for RSS and whenever the translator
+	// leaves it unset. The value is opaque and may be relative; Parser.WalkURL
+	// resolves it against the response's final URL. Custom translators may set
+	// or clear it, and WalkURL follows the translated value rather than the
+	// source feed's.
+	NextPage string `json:"nextPage,omitempty"`
 
 	// originalFeed holds the source *rss.Feed, *atom.Feed, or *json.Feed when
 	// the parser was configured with KeepOriginalFeed. It is unexported (and so

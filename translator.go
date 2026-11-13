@@ -574,6 +574,11 @@ func (t *DefaultAtomTranslator) Translate(feed interface{}) (*Feed, error) {
 	if l := firstLinkWithRel("self", atomFeed.Links); l != nil {
 		result.FeedLink = l.Href
 	}
+	// Only feed-level links can page the feed. A rel="next" on an individual
+	// entry points at that entry's continuation and must not be used here.
+	if l := firstLinkWithRel("next", atomFeed.Links); l != nil {
+		result.NextPage = l.Href
+	}
 	for _, l := range atomFeed.Links {
 		if l.Rel == "" || l.Rel == "alternate" || l.Rel == "self" {
 			result.Links = append(result.Links, l.Href)
@@ -727,6 +732,7 @@ func (t *DefaultJSONTranslator) Translate(feed interface{}) (*Feed, error) {
 		FeedLink:    jsonFeed.FeedURL,
 		Description: jsonFeed.Description,
 		Language:    jsonFeed.Language,
+		NextPage:    jsonFeed.NextURL,
 		FeedType:    "json",
 	}
 
@@ -770,7 +776,6 @@ func (t *DefaultJSONTranslator) Translate(feed interface{}) (*Feed, error) {
 	}
 
 	// TODO UserComment is missing in global Feed
-	// TODO NextURL is missing in global Feed
 	// TODO Favicon is missing in global Feed
 	// TODO Exipred is missing in global Feed
 	// TODO Hubs is not supported in json.Feed

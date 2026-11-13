@@ -145,57 +145,11 @@ func (f *Parser) ParseURL(feedURL string) (feed *Feed, err error) {
 // It will be automatically added to the header of the request
 // Request could be canceled or timeout via given context
 func (f *Parser) ParseURLWithContext(feedURL string, ctx context.Context) (feed *Feed, err error) {
-	client := f.httpClient()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	resp, err := f.doPageRequest(ctx, feedURL)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", f.UserAgent)
-
-	if f.AuthConfig != nil && f.AuthConfig.Username != "" && f.AuthConfig.Password != "" {
-		req.SetBasicAuth(f.AuthConfig.Username, f.AuthConfig.Password)
-	}
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp != nil {
-		defer func() {
-			if ce := resp.Body.Close(); ce != nil && err == nil {
-				err = ce
-			}
-		}()
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, HTTPError{
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-		}
-	}
-
-	if f.MaxByteSize <= 0 {
-		return f.Parse(resp.Body)
-	}
-	body := &limitedReader{r: resp.Body, left: f.MaxByteSize}
-	feed, err = f.Parse(body)
-	if body.err == ErrResponseTooLarge {
-		return nil, ErrResponseTooLarge
-	}
-	if err != nil {
-		return nil, err
-	}
-	// XML parsers stop at the root's closing tag. Check the remaining body
-	// through the same limit before returning success, including any error
-	// that a buffered parser has not observed yet.
-	if _, err = io.Copy(io.Discard, body); err != nil {
-		return nil, err
-	}
-	return feed, nil
+	return f.parsePageResponse(resp)
 }
 
 // limitedReader returns ErrResponseTooLarge once more than the configured
