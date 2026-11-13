@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="icon" href="data:,">
+  </head>
+  <body>
+    <script>
+      var count = parseInt(localStorage.getItem("counter") || 0);
+      localStorage.setItem('counter', count + 1);
+      document.write(`Visited ${count + 1} times`);
+
+      setTimeout(function() { location.reload() }, 1000)
+    </script>
+  </body>
+</html>

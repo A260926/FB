@@ -1,0 +1,31 @@
+module Ferrum
+  class Cookies
+    include Cookies::Collection
+
+    @client: Client
+    @context_id: String
+
+    def initialize: (Client client, String context_id) -> void
+
+    def each: () { (Cookies::Cookie) -> void } -> void
+            | () -> Enumerator[Cookies::Cookie, void]
+
+    def set: ((Cookies::Cookie | Hash[Symbol | String, untyped]) options) -> true
+
+    def remove: (name: String, ?domain: String?, ?url: String?, ?path: String?) -> true
+
+    def clear: () -> true
+
+    def store: (?String path) -> ::Integer
+
+    def load: (?String path) -> true
+
+    private
+
+    def write: (Hash[Symbol | String, untyped] cookie) -> Hash[String, untyped]
+
+    def default_domain: () -> String?
+
+    def sent_to?: (Cookies::Cookie cookie, URI::Generic uri) -> bool
+  end
+end

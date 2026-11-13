@@ -1,0 +1,73 @@
+---
+sidebar_position: 9
+---
+
+# Proxy
+
+You can set a proxy with a `:proxy` option:
+
+```ruby
+Ferrum::Browser.new(proxy: { host: "x.x.x.x", port: "8800", user: "user", password: "pa$$" })
+```
+
+`:bypass` can specify semi-colon-separated list of hosts for which proxy shouldn't be used:
+
+```ruby
+Ferrum::Browser.new(proxy: { host: "x.x.x.x", port: "8800", bypass: "*.google.com;*foo.com" })
+```
+
+In general passing a proxy option when instantiating a browser results in a browser running with proxy command line
+flags, so that it affects all pages and contexts. You can create a page in a new context which can use its own proxy
+settings:
+
+```ruby
+browser = Ferrum::Browser.new
+
+browser.create_page(proxy: { host: "x.x.x.x", port: 31337, user: "user", password: "password" }) do |page|
+  page.go_to("https://api.ipify.org?format=json")
+  page.body # => "x.x.x.x"
+end
+
+browser.create_page(proxy: { host: "y.y.y.y", port: 31337, user: "user", password: "password" }) do |page|
+  page.go_to("https://api.ipify.org?format=json")
+  page.body # => "y.y.y.y"
+end
+```
+
+## Intercepting requests behind a proxy
+
+A proxy with `:user` and `:password` is authorized through request interception, so Ferrum continues every request
+for you as long as nothing else subscribes to `on(:request)`. Once you subscribe, or set `network.blacklist` or
+`network.whitelist`, your code takes over and has to continue or abort every request:
+
+```ruby
+browser = Ferrum::Browser.new(proxy: { host: "x.x.x.x", port: "8800", user: "user", password: "pa$$" })
+browser.network.intercept
+browser.on(:request) do |request|
+  if request.resource_type == "Image"
+    request.abort
+  else
+    request.continue
+  end
+end
+browser.go_to("https://github.com/")
+```
+
+## Built-in proxy server
+
+Ferrum also ships a small forwarding proxy server, `Ferrum::Proxy`, which is handy
+for tests or when you need to rotate upstream proxies at runtime:
+
+```ruby
+require "ferrum/proxy"
+
+proxy = Ferrum::Proxy.start(host: "127.0.0.1", port: 0)
+browser = Ferrum::Browser.new(proxy: { host: proxy.host, port: proxy.port })
+```
+
+`Ferrum::Proxy` is built on top of [`webrick`](https://rubygems.org/gems/webrick),
+which is **not** a dependency of Ferrum. If you use it, add webrick to your Gemfile:
+
+```ruby
+gem "webrick"
+```

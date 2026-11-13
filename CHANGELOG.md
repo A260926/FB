@@ -1,0 +1,1285 @@
+## [Unreleased](https://github.com/rubycdp/ferrum/compare/v0.20.1...main) ##
+
+### Added
+- `cookies[name, domain:, path:]` picks one of the cookies sharing a name
+- `context.cookies` with every cookie in the context whatever its domain, `browser.cookies` is the default context's
+- `network.emulate(user_agent:, accept_language:, platform:, metadata:)` overrides what the page reports in the request
+  headers and in `navigator`, `platform` had no way to be set before, and `metadata` keeps the client hints Chrome
+  otherwise stops sending once the user agent is overridden
+- `go_to(url, on_timeout: :raise)` raises `NavigationTimeoutError`, a `TimeoutError` naming the requests still
+  pending, when the page doesn't load in time
+
+### Changed
+- `page.cookies` is the cookies the page sees, the ones sent to its URL and its frames' URLs, or `each(urls:)`. It
+  returned every cookie in the context, use `browser.cookies` or `browser.contexts[page.context_id].cookies` for that.
+  `set` and `remove` default to the page's host, `clear` keeps other domains, `store`/`load` are on the context only
+- `NoSuchPageError` is a `NoSuchTargetError` now, so rescuing `NoSuchTargetError` covers a target Chrome no longer
+  knows, like a closed page, as well as one Ferrum doesn't track
+- Every script runs the new way: keyword arguments are named parameters, promises and thenables are awaited, all
+  statements run and the last one's value is returned, and `Node#evaluate` returns nodes and dates, see
+  [upgrading](docs/13-javascript.md#upgrading-to-021) [#673]
+
+### Deprecated
+- `cookies.all`, will be removed in 0.22. Keyed by name, it kept one of the cookies sharing a name, use `to_a`, or
+  `map(&:name)` for the names
+- `current_url` and `current_title` on pages and frames, will be removed in 0.22. Use `url` and `title`, or
+  `frame.page.url` for the top window from a frame, `frame.url` is the frame's own
+- `:js_errors`, will be removed in 0.22. Uncaught exceptions are in `page.console` with `source: :exception`, use it or
+  `page.on(:console)` instead
+- `:pending_connection_errors` and `PendingConnectionsError`, will be removed in 0.22. Pass `on_timeout: :raise` to
+  `go_to` instead
+
+### Fixed
+- `AuthRequest#abort` raised `BrowserError` and left the page hanging, it cancels the auth challenge now
+- `InterceptedRequest#navigation_request?` and `AuthRequest#navigation_request?` always returned `nil`, they are true
+  for document requests now
+- `evaluate` raised `NoMethodError` when a node inside a `Map` or `Set` was also referenced elsewhere in the result
+- `headers.clear` kept sending the old headers until the next `add` or `set`, and kept the user agent and language they
+  set. Now it clears them in Chrome right away
+- `headers.add` and `headers.set` reset a user agent or language set with `network.emulate`, and made Chrome stop
+  sending client hints, even for headers like `X-Trace`. They touch the user agent and language only when given one
+- `pdf(path:)` returned `true` while `screenshot(path:)` and `mhtml(path:)` return the number of bytes written, now it
+  returns the byte count too
+- `mouse.scroll_by` and `scroll_to` animated on a page with `scroll-behavior: smooth` in a Chrome without
+  `--disable-smooth-scrolling`, so the position was mid-scroll when they returned. They scroll instantly now
+- `at_css`, `css`, `at_xpath` and `xpath` on a node inside an iframe raised `NodeNotFoundError`, now they search the
+  node's own frame
+- `Node#moving?` returned `true` for a node that wasn't moving and `false` for one that was. Its default delay is now
+  50ms instead of 10ms, which missed a slowly moving node, set it with `FERRUM_NODE_MOVING_CHECK`
+- `Node#click` and `#find_position` on a CSS-transformed node whose content quads can't be computed aimed by its
+  untransformed size and could miss it, now they aim at the center of its bounding rect. An SVG node raised
+  `JSON::GeneratorError` there [#695]
+
+### Removed
+- `#evaluate_async`, `#evaluate_func` and `#evaluate_on`, use `#evaluate` and `Node#evaluate`, and
+  `page.wait_for_navigation! { }` for `evaluate_on`'s `wait:` [#673]
+- `FERRUM_JS_API` [#673]
+- `Browser::Options::Base`, Chrome is the only browser, `Browser::Options::Chrome` has everything it had
+- `Ferrum::ServerError`, nothing raised it
+- `:browser_name`, it only switched between Chrome-named defaults and raised `NotImplementedError` for anything else, set
+  `:browser_path` to run Opera or Edge
+
+
+## [0.20.1](https://github.com/rubycdp/ferrum/compare/v0.20.0...v0.20.1) (October 29, 2026) ##
+
+### Added
+
+### Changed
+
+### Fixed
+- `set_viewport` and `resize` turned touch emulation off on every desktop viewport, which reset hover and pointer and
+  undid `--blink-settings` overrides. `mobile:` defaults to `nil` and leaves touch as is, `false` turns it off [#664]
+- A click or navigation timed out when the last loading iframe moved to another process, e.g. submitting a form that
+  opens an inline PDF in Chrome 145+, where the PDF viewer runs out of process [#672]
+
+### Removed
+
+
+## [0.20.0](https://github.com/rubycdp/ferrum/compare/v0.19.2...v0.20.0) (October 26, 2026) ##
+
+### Added
+- `node.click(wait: 0)` returns as soon as a left click is dispatched instead of waiting for a navigation it
+  starts to load, like `Mouse#click` already allows [#674]
+- `keyboard.hold(:shift) { }` holds modifiers for every keyboard and mouse event in the block, e.g. a shift+drag, and
+  releases them afterwards. `mouse.move` accepts `modifiers:` like `down` and `up` [#581]
+- `page.console` collects `console.*` calls, browser log entries and uncaught exceptions as `Console::Message`s,
+  `Enumerable` over the last 1000, and `page.on(:console)` yields new ones, also on workers. No more parsing the
+  `:logger` output to get them [cuprite#113]
+- `:logger` accepts a `Logger`: CDP messages and browser output go out at debug level, with `ferrum:protocol` or
+  `ferrum:browser` as program name
+- `FERRUM_LOG` picks what's logged: `*`, `-browser`, CDP method patterns like `Page.*` or `-Network.*`, `0` for nothing
+- Logger output written to a terminal is colored: arrows by kind, bold methods, dimmed times. Files, pipes and
+  `NO_COLOR` keep plain text, `FERRUM_LOG_COLOR=always|never` overrides it
+- `FERRUM_LOG_FORMAT=annotated` puts the command id and method in front of each CDP message and gives responses
+  their command's method and duration, `FERRUM_LOG_FORMAT=json` writes each CDP message as JSON alone
+- Ferrum keeps reading what Chrome writes after startup: it's logged on the `browser` channel, the last 100 lines are in
+  `browser.process.output`
+- `browser.add_extension` adds an extension for pages and iframes attached afterwards [#663]
+- `page.isolated_world(name)` and `frame.isolated_world(name)` evaluate JavaScript in a world hidden from the page
+- `Node#backend_node_id` and `Node#node_type`
+- `page.wait_for_navigation { }` and `wait_for_navigation! { }` wait for a navigation the block starts, e.g. a click
+  made from JavaScript [#679]
+
+### Changed
+- `evaluate` fetches the whole result in one CDP call instead of one per nested object, dates come back as ISO 8601
+  strings and a cyclic result is a `Hash`/`Array` with `CyclicObject` only where it refers back to itself, instead of
+  being replaced by `CyclicObject` entirely
+- Nodes returned by `evaluate`, `css` and the other finders no longer cost a `DOM.describeNode` call each,
+  `Node#description` is fetched on first use. `Node.new` takes the node as Chrome deep serializes it instead of
+  a target id and a description
+- The logger cuts any string value over 1024 characters in CDP messages, not just screenshots.
+  `FERRUM_LOG_VALUE_LENGTH` sets the length, `0` keeps them whole. `FERRUM_LOGGING_SCREENSHOTS` is gone
+- `ProcessTimeoutError` is raised as soon as Chrome exits instead of after `:process_timeout`
+- The logger no longer prints `[log] ...` lines for console calls, use `page.on(:console) { |message| puts message }`
+- `FERRUM_DEBUG` is deprecated in favor of `FERRUM_LOG=*`
+- `keyboard.down` and `keyboard.up` raise `ArgumentError` for a modifier such as `:shift` and point to `hold`. `down`
+  used to crash with `NoMethodError`, `up` sent an empty keyup event [#581]
+- Behind a proxy with `:user` and `:password`, Ferrum stops continuing intercepted requests once you subscribe to
+  `on(:request)`, like it already does without a proxy: your callbacks have to continue or abort every request, or it
+  stays paused until the page times out [#332]
+- `evaluate_on_new_document` is a `Page` method sending `Page.addScriptToEvaluateOnNewDocument` to that page, with
+  `world_name:` and `run_immediately:`. It returns the script id for `remove_script_on_new_document`. It used to add
+  an extension for every page built afterwards, use `browser.add_extension` for that [#663]
+- Extension files are read in `Browser.new`, a missing one raises `Errno::ENOENT` there instead of on first
+  navigation [#663]
+- Browser details (user agent, versions) come from `Browser.getVersion` over CDP for every browser, local or remote.
+  `/json/version` is only asked for the websocket url when `url:` is given, so `ws_url:` works against services
+  without an HTTP endpoint and a local launch makes no HTTP call
+- `NoWebSocketUrlError` names the HTTP status `/json/version` answered with, e.g. `401 Unauthorized` for a missing token or
+  `429 Too Many Requests` for a full remote browser service, and exposes it as `#status`
+
+### Fixed
+- `Node#property` and `Node#attribute` read any name, a quote in it no longer breaks the script, and `property`
+  returns a `Ferrum::Node` for a property holding one instead of `{}` [#673]
+- `evaluate`, `execute` and friends raise `JavaScriptError` when JS throws something other than an `Error`, e.g.
+  `throw "smth"`, instead of returning it. Returning an `Error` object no longer crashes with `NoMethodError`
+- `evaluate` keeps `null` and `undefined` in arrays and returns `NaN`, `Infinity`, `-0` and `BigInt` instead of `nil`,
+  and no longer crashes on objects with getters
+- `workers` skips detached workers, `target.worker` with no session raises `NoSuchTargetError` instead of a CDP error
+- `attach_target` reuses a target's session and returns the target, instead of opening one more that reruns extensions
+- Service workers registered by a page stayed attached and alive for the browser's lifetime, now Chrome can stop them
+- An out-of-process iframe kept its parent page's session when `Target.targetCreated` came before
+  `Target.attachedToTarget`, so commands sent through it reached the page [#663]
+- `:extensions` run before the document's own scripts in popups and out-of-process iframes too. Popups used to get
+  them only after loading, iframes not at all, and every page ran them once more on `about:blank` [#663]
+- Every CDP response was scanned for Base64 screenshots to hide from the logger, even with no `:logger` set
+- Headers can be added on a remote browser whose `/json/version` has no `User-Agent`, such as browserless v2, instead of
+  failing with `Invalid parameters` [rubycdp/cuprite#300]
+- A `Ferrum::Node` found before a navigation or reload kept its cached CDP node id, which Chrome reuses for the new
+  document, so `focus`, `click`, `scroll_into_view` and friends silently hit another element. Node ids are now dropped
+  on `DOM.documentUpdated` and such nodes raise `Ferrum::NodeNotFoundError` [#86]
+- Replacing an iframe's content with `frame.content=` or querying the whole page with `accessibility.query` broke every
+  node found before it with `Ferrum::NodeNotFoundError`, even though the nodes were still on the page. Their ids are
+  requested again now. A node used while the page is still loading a new document says so in its error [#650]
+- Behind a proxy with credentials, `request.abort` in `on(:request)` and `network.blacklist`/`whitelist` were ignored
+  because Ferrum's own proxy handler continued every request first. It now only continues requests nobody else handles [#332]
+- `mouse.click(modifiers:)` sent its `mousemove` without the modifiers [#581]
+- When Chrome can't compute an element's content quads, `node.click` falls back to its bounding rect, but it added the
+  page scroll offset and missed the element on a scrolled page. It clicks in viewport coordinates now
+- `Proxy#rotate` to an upstream proxy failed every HTTPS request with `ERR_TUNNEL_CONNECTION_FAILED`
+- On JRuby `browser.pages`, `windows(:last)` and `workers` came back in random order, so the window a page had just
+  opened wasn't the last one. Targets are kept in the order they were created now
+- On JRuby lines written to a `:logger` IO from several threads at once could get mixed up, they're written one by one now
+
+### Removed
+- `Browser::Process#default_user_agent`, `#browser_version`, `#protocol_version`, `#v8_version` and `#webkit_version`,
+  use `Browser#default_user_agent` and `Browser#version` instead
+- Ruby 3.1 support, Ferrum requires Ruby 3.2 or newer
+
+
+## [0.19.2](https://github.com/rubycdp/ferrum/compare/v0.19.1...v0.19.2) (October 26, 2026) ##
+
+### Added
+
+### Changed
+- Commands are written to the websocket by a writer thread. A command waiting behind a large one the browser is slow
+  to take fails after its own `timeout:` instead of the large one's, and the connection is closed only after the
+  browser takes no data for `protocol_timeout`, so a shorter pause no longer kills it [#676]
+
+### Fixed
+- On JRuby `Ferrum::Browser.new` hung forever in the websocket handshake: the nonblocking write from [#644] waits for
+  the lock JRuby holds while the reader thread is blocked reading the same socket. Writes are blocking again [#676]
+
+### Removed
+
+
+## [0.19.1](https://github.com/rubycdp/ferrum/compare/v0.19.0...v0.19.1) (October 16, 2026) ##
+
+### Added
+
+### Changed
+- `--disable-web-security` is no longer among the default Chrome flags, so pages keep the same-origin policy and an
+  untrusted page can't read local files with `<iframe src="file:///etc/passwd">`. `Frame#frame_element` returns `nil`
+  for a cross-origin frame now. Pass `browser_options: { "disable-web-security" => nil }` for the old behavior [#472]
+
+### Fixed
+- `Mouse#move` with a button held didn't send which button, so Chrome never started a drag. Native HTML5 drag and drop
+  now works with `down`, `move` and `up`, and `Input.dragIntercepted` fires when drags are intercepted [#635]
+- A paused request with a binary body, e.g. a `Blob` upload with `blacklist=`/`whitelist=` set, hung forever: Chrome
+  sends the body with lone UTF-16 surrogates that the `json` gem rejects, and the fallback that unescaped them broke
+  the message further, so `Fetch.requestPaused` was dropped and the request was never continued. Lone surrogates are
+  now replaced with U+FFFD, so broken text from the page reads as `�` instead of `???` [rubycdp/cuprite#308]
+- Passing a node resolved on the previous page to `evaluate`, e.g. when the page navigates while Cuprite searches
+  within an element, raised `Ferrum::BrowserError: Argument should belong to the same JavaScript world as target
+  object`. It's `Ferrum::NodeNotFoundError` now, so callers can treat the node as stale and find it again
+  [rubycdp/cuprite#233]
+
+### Removed
+
+
+## [0.19.0](https://github.com/rubycdp/ferrum/compare/v0.18.0...v0.19.0) (October 15, 2026) ##
+
+### Added
+- `Ferrum::Frame#wait_for_selector` (also reachable from `Page`/`Browser`), which waits for an element to show up
+  in the DOM. It retries `at_css`/`at_xpath` every `interval` until a match is found or time runs out, returning `nil`
+  on timeout [#82]
+- `Ferrum::Page#on(:response)`/`Ferrum::Worker#on(:response)`, a callback fired once a request's response has fully
+  loaded (on CDP's `Network.loadingFinished`, not `Network.responseReceived`, so `exchange.response.body` is always
+  available), yielding the request's `Network::Exchange`. Doesn't require `network.intercept` to be set up, and is
+  never fired for requests that fail to load [#294]
+- `#evaluate`/`#execute` take named arguments that become the script's parameters, `page.evaluate("a + b", a: 1,
+  b: 2)`, a function declaration as the script with positional arguments, `await`, and `timeout:` [#673]
+- `#evaluate_handle` returning a `Ferrum::RemoteObject`, and `Node#execute`/`Node#evaluate_handle` [#673]
+- `Ferrum::Browser#quit`/`Ferrum::Browser::Process#stop` accept `wait: false` to return immediately and run process
+  killing and user-data-directory cleanup on a background thread instead of blocking; the call returns the `Thread`
+  so callers can `#join` it if they need cleanup to have finished, e.g. before process exit or before reusing a
+  fixed port. Default (`wait: true`) keeps the previous synchronous behavior; `#restart` always waits.
+- `Ferrum::Page::Stream#close_stream`, a public method that releases a CDP `IO` stream handle (`IO.close`).
+- `Ferrum::Page#set_viewport`'s `mobile:` option now also enables touch emulation
+  (`Emulation.setTouchEmulationEnabled`), alongside the existing device metrics override, so it fully emulates a
+  mobile device's viewport and touch support together. [#94]
+
+### Changed
+- `Ferrum::TimeoutError` names the CDP command and session it was waiting on, and exposes them as `#command` and
+  `#session_id`. Waits that aren't for a command keep the old message [#470]
+- `Ferrum::Page::Stream#stream` now closes the CDP stream handle (`IO.close`) once it's been fully read, so streams
+  opened for `Ferrum::Browser#pdf` and `Ferrum::Page::Tracing#record` no longer keep their backing storage alive in
+  the browser; a failed `IO.close` is raised to the caller.
+- `#evaluate_async`, `#evaluate_func` and `#evaluate_on` are deprecated, and scripts whose result will change in
+  0.21 warn with a rewrite. 0.21 removes the old behavior, and `FERRUM_JS_API=new` runs the new one now, see
+  [upgrading](docs/13-javascript.md#upgrading-to-021) [#673]
+- `Ferrum::ScriptTimeoutError` inherits from `Ferrum::TimeoutError` [#673]
+
+### Fixed
+- An out-of-process iframe, e.g. Chrome's PDF viewer for an embedded PDF, appearing while a web worker was connected
+  raised `'Page.enable' wasn't found` in the event thread. Only pages and iframes are now searched for its parent [#640]
+- A browser that stopped reading its websocket froze the whole client: a large command blocked in a socket write
+  forever while holding the send lock. The write now gives up after the command's timeout and raises
+  `Ferrum::DeadBrowserError` [#644]
+- A browser context whose `Target.disposeBrowserContext` timed out stayed registered, so every later `#reset` asked
+  again and raised `Disposal of browser context ... is already pending` for the rest of the process. It's now
+  forgotten either way, and `#reset` disposes the remaining contexts before raising the first error [#641]
+- An error in the client or websocket thread was re-raised in the main thread wherever it happened to be, or took
+  the process down with it, since `Utils::Thread.spawn` defaulted to `abort_on_exception: true` and neither thread
+  rescued. Ferrum's threads no longer abort, they report to stderr and mark the connection dead [#470]
+- Commands in flight when the browser died waited out `:protocol_timeout` each before raising, so a dead browser
+  turned into a long parade of slow failures. They're released as soon as the socket closes, and a command sent
+  after that raises `Ferrum::DeadBrowserError` right away [#470]
+- A raising callback killed `Client::Subscriber`'s dispatch thread and with it every event for the rest of the
+  process: pages created later raised `NoSuchTargetError`, open ones lost their execution contexts. Callbacks are
+  now rescued one by one and reported to stderr [#470]
+- `create_page` raised `Failed to find browser context with id` against a browser that came up with its own startup
+  window (browserless). That window lives in the browser's implicit context, which Chrome below 145
+  won't address by id. Ferrum now detects it and exposes as `Ferrum::Context#implicit?`. It's never
+  disposed, so `#reset` won't clear such a browser. [#578] [#627]
+- `Browser.setDownloadBehavior` raised `Failed to find browser context for id` for a page in the browser's implicit
+  context, so connecting to a browser that came up with its own startup window and passing `:save_path` died on the
+  first page. `Ferrum::Target#context_id`, and with it `Ferrum::Page#context_id`, is now `nil` for that context,
+  which is how Chrome wants it addressed, by omitting `browserContextId` [#546]
+- Connecting to a remote browser with `:url` drops query string when probing `/json/version`, endpoint might answer
+  401 and Ferrum died with `undefined method 'host' for nil`. in case of parse issues `Ferrum::NoWebSocketUrlError` is raised.
+- Targets of a type `Ferrum::Contexts` doesn't track were left attached and paused by auto-attach for the lifetime
+  of the browser; Chrome opens two `browser_ui` ones per browser context. They're now resumed and detached from
+- `Ferrum::Browser::Process` registered two `ObjectSpace` finalizers on the same object, a directory remover and
+  a process killer. Ruby runs them FIFO so directory could have been deleted before process dead, and browser could
+  have restored its content on exit.
+- `Ferrum::Browser::Process::Killer.kill` waited on the browser's leader pid with a blocking, unbounded
+  `Process.wait` after escalating to `KILL`. That method is installed as an `ObjectSpace` finalizer, so it can run
+  while the interpreter is shutting down, where a blocking wait risks hanging the process instead of letting it
+  exit.
+- `--no-crashpad`, added to the default Chrome flags in 0.18.0 to stop `chrome_crashpad_handler` from spawning, is
+  not a Chromium switch at all, so Chrome silently ignored it and two handler processes kept starting per browser.
+  Removed. There is no replacement: the only switch that does stop them, `--disable-crashpad-for-testing`, is meant
+  for Chromium's own test harness and breaks a normally launched browser — child processes die at startup with
+  `Crashing due to FD ownership violation` and the network service crash-loops, while the browser process itself
+  survives and answers CDP, so every navigation returns `net::ERR_ABORTED` against an `about:blank` document.
+  Reap the handlers with an init in the container instead (`docker run --init`, `init: true`, or tini); Chrome's
+  crashpad behaviour is now documented under "The crashpad handler" in the customization docs [#610]
+- `#evaluate`/`#evaluate_on`/etc. resolved an object/array result by making two CDP round trips
+  (`Runtime.callFunctionOn` to check for a cyclic reference, then `Runtime.getProperties`) per nested
+  object or array, recursively — even though the cyclic check already walks the *entire* reachable
+  object graph from wherever it's invoked in a single round trip, making every check below the top one
+  provably redundant. An expression returning an array of 1,000 small objects (each with one nested
+  object, as in [#528]) therefore issued about 4,000 CDP round trips instead of 2,000, each one a
+  chance to trip the per-command timeout while the browser was still working through the backlog;
+  once the websocket happened to already be closed at that point, the timeout surfaced as
+  `Ferrum::DeadBrowserError` instead of `Ferrum::TimeoutError`. The cyclic check now runs once, at the
+  top level of the result, and that answer is reused for every nested object/array instead of
+  rechecking each one.
+- `Ferrum::Contexts#connect_worker`/`#detach_unless_manually_attached` only rescued `Ferrum::BrowserError`, not `Ferrum::TimeoutError`.
+  A worker's attach or service-worker detach that timed out (e.g. on a loaded CI runner) would escape unrescued
+  into `Client::Subscriber`'s dispatch thread and kill it, silently breaking further `Target.*` event delivery
+  for the rest of that browser's life, raising `Ferrum::NoSuchTargetError`
+- `Ferrum::Browser::Process` killed the browser's leader pid alone with `SIGUSR1`, a signal Chromium has no shutdown
+  handler for; it now sends `SIGTERM`, escalating to `SIGKILL`, to the whole process group, so renderer/GPU/zygote
+  child processes are no longer orphaned after `#quit`. A leader process that exited promptly on `TERM` used to
+  short-circuit escalation to `KILL` for the rest of its process group, so a child that ignored `TERM`
+  (e.g. a stuck renderer) was left running forever; termination now keeps polling the group until it's actually empty
+  or the timeout fires.
+- Removing the user data directory after `#quit` silently gave up on any error, potentially leaking the temp
+  directory forever with no indication; it now retries with exponential backoff on transient errors
+  (`Errno::ENOTEMPTY`/`EBUSY`/`EACCES`/`EPERM`, since Chrome can briefly hold file locks right after being killed)
+  and warns if it still can't be removed.
+- `:host` option is respected again when Ferrum spawns Chrome itself. Chrome dropped support for
+  `--remote-debugging-address` and always binds/logs `127.0.0.1`, so Ferrum now substitutes the requested
+  `:host` back into the address it uses to talk to Chrome (e.g. `Ferrum::Browser.new(host: "ferrum.localhost")`),
+  instead of always hitting `127.0.0.1` [#552]
+- `Ferrum::Frame::Runtime#call` no longer retries `Ferrum::NodeNotFoundError`/`Ferrum::NoExecutionContextError` when
+  evaluating on an existing node (`on:`, e.g. `#evaluate_on`/`#evaluate_func`). Chrome reporting that a resolved
+  node/object id is gone can't be fixed by retrying the same command, so the retry only added up to
+  `INTERMITTENT_ATTEMPTS * INTERMITTENT_SLEEP` of dead time per stale node before raising anyway; this showed up as
+  flaky/slow Capybara specs that queried collections of nodes shortly after the DOM replaced them, since Capybara's
+  own retry loop (which re-finds nodes) already handles this case correctly one layer up [#360]
+
+
+### Removed
+- The now no-op `--remote-debugging-address` Chrome flag, which Chrome has stopped honoring [#552]
+- Experimental Firefox support (`browser_name: :firefox`). Ferrum is Chrome/CDP only now
+
+
+## [0.18.0](https://github.com/rubycdp/ferrum/compare/v0.17.2...v0.18.0) (August 20, 2026) ##
+
+### Added
+- `Ferrum::Browser` option `:protocol_timeout` bounds individual internal CDP bookkeeping calls, e.g.
+  `Target.createTarget`, `Target.attachToTarget`. It's a separate setting from `:timeout`: its default (5s) happens
+  to match `:timeout`'s own default, but passing `timeout:` to `Browser.new` does not change it -- set
+  `:protocol_timeout` (or the `FERRUM_PROTOCOL_TIMEOUT` env var) explicitly for a different value.
+- `Ferrum::Page#pdf`/`#screenshot` accept a `timeout:` argument (default 60s) for the CDP call itself. Generating a
+  full-page screenshot or a large PDF is a known slow outlier among CDP commands.
+- `Ferrum::Frame#loader_id` provides a loader id when the frame navigates [#583]
+- `Ferrum::Frame#lifecycle_events` provides a list of frame's events like init, networkIdle, firstPaint, etc. [#583]
+- `Ferrum::Frame#idle?` whether frame was loaded [#583]
+- `page.accessibility` API and `Node#axnode` for reading the CDP accessibility tree
+- `--no-crashpad` is now included in the default Chrome flags, fully disabling the crashpad handler process [#610]
+- Support for dedicated/shared Workers and Service Workers [#391], [#388]:
+  - `Ferrum::Worker` -- a lightweight connection to a Worker's single execution context, with its own `#network`,
+    `#evaluate`/`#evaluate_async`/`#execute`, and `#on(:request)`/`#on(:auth)` for interception.
+  - Dedicated and shared workers spawned by a page are discovered and connected to automatically and are reachable
+    through `Browser#workers`/ `Context#workers`.
+  - Service workers are discovered too, through `Browser#service_workers`/`Context#service_workers`, but aren't
+    connected to by default. Attaching to one keeps it alive forever, so that's opt-in via `Context#attach_target`,
+    then `target.worker`.
+  - `Ferrum::Target#worker?`, `#shared_worker?`, `#service_worker?`, and `#parent_id` for telling targets apart.
+
+### Fixed
+- `Ferrum::Client` command id generation and `Ferrum::Client::WebSocket`'s driver interactions were not thread-safe, allowing concurrent commands to collide on the same id or corrupt the frame stream; both are now serialized under a mutex [#602]
+- `Ferrum::Network` built duplicate `Exchange` objects for the same request when `Network.requestWillBeSent` (regular event thread) and `Fetch.requestPaused` (priority interruption thread) raced to look up/create the exchange for a request id; the find-or-build is now atomic, fixing intermittently `nil` `Exchange#request` on blocked/intercepted requests
+- `Ferrum::Node#type` / `Ferrum::Keyboard` now trigger the select-all editing shortcut (`Ctrl`/`Cmd`+`A`) by naming the CDP `commands` field, so selecting and replacing text in inputs and contenteditables works.
+- `Ferrum::Network::InterceptedRequest#match?` no longer coerces string blacklist/whitelist patterns containing regexp metacharacters
+  (e.g. `?`, `.`) into regexps; string patterns are now compared literally instead. [#405], [#604]
+- `Ferrum::Network::AuthRequest#match?` and `Ferrum::Dialog#match?` received the same fix as [#604] above for consistency. String patterns
+  now compare literally: exact-match for requests/auth requests, substring-match for dialog messages. [#405]
+- `Target.targetCreated` handler for an iframe target reusing an already-connected target raised `NoMethodError` on `Ferrum::Browser#new(flatten: false)`, since it read `session_id` off the target's underlying `Ferrum::Client`, which doesn't expose it in that mode; it now reads `Target#session_id` directly. [#539]
+- `Ferrum::Node#select_file` now uses the stable `backendNodeId` instead. [#568], [#611]
+- Full-page screenshots no longer resize the window, preventing focus steal on macOS [#580]
+- DOM.enable is now has `includeWhitespace: "all"` to keep track of new line nodes, which previously were resolved to 0, and errored with NodeNotFoundError [#596]
+- `DOM.requestNode` call is moved to the node class and being done lazily, this reduces the number of intermediate node ids sent by backend to frontend [#596]
+- Fix `context` can be nilable in ensure Browser#create_page [#582]
+- `Ferrum::Page#idling?` no longer blocks on `loading="lazy"` iframes that Chrome never starts loading [#583]
+
+### Changed
+- `Ferrum::PendingConnectionsError` and `Ferrum::TimeoutError` were swallowed even though it happens when a traffic iterator results in an empty array. [#583]
+- `webrick` is no longer a runtime dependency. It is only required by `Ferrum::Proxy`, so add `gem "webrick"` to your Gemfile if you use it.
+- Logger output for `Runtime.consoleAPICalled` now includes the console API type and stack trace call frames, not just the argument values [#605]
+- `Ferrum::Browser` option `:pending_connection_errors` is set to false by default
+
+### Removed
+- `webrick` runtime dependency dropped from the gemspec. `Ferrum::Proxy` still needs it, so add `gem "webrick"` to your Gemfile if you use the proxy server.
+
+
+## [0.17.2](https://github.com/rubycdp/ferrum/compare/v0.17.1...v0.17.2) (March 23, 2026) ##
+
+### Added
+- `Ferrum::Network::Response#body!` returns body or throws error if implicable
+- `Ferrum::Browser#new(dockerize: true)` whether to add CLI flags to run a browser in a container, `false` by default
+- Initial support for RBS types [#565]
+
+### Changed
+- `Ferrum::Network::Response#body` returns body or nil in case of errors
+- Disable Chrome code sign clones [#555]
+- Ruby version required is >= 3.1 [#565]
+
+### Fixed
+- Proper handle wss urls, and fix session_id loss for undetermined order of CDP events [#559]
+- `browser.reset` tries to dispose default implicit context [#566], [#540]
+
+### Removed
+
+
+## [0.17.1](https://github.com/rubycdp/ferrum/compare/v0.17...0.17.1) (May 11, 2025) ##
+
+### Added
+
+### Changed
+
+### Fixed
+- Can't use single quotes in screenshot :selector [#465]
+- `remote_debug_url` for modern Chrome returns chrome-devtools-frontend.appspot.com absolute url
+
+### Removed
+
+
+## [0.17](https://github.com/rubycdp/ferrum/compare/v0.16...v0.17) - (May 10, 2025) ##
+
+### Added
+- `Ferrum::Network::Exchange#blob?` determines if the exchange is blob [#516]
+- `Ferrum::Network::Request#headers` are enhanced and supplemented with `Network.requestWillBeSentExtraInfo` [#506]
+- `Ferrum::Page#off` to unsubscribe from CDP events [#455]
+- `Ferrum::Mouse#scroll_by` to be able to scroll by, as alternative to `scroll_to` [#514]
+- `Ferrum::Network::Exchange#unknown` determines if the exchange is in an unknown state, meaning that browser might not return info about it [#426]
+- `Ferrum::Network::Exchange#loader_id` returns loader id [#426]
+- `Ferrum::Browser#debug` opens headless session in the browser devtools frontend [#519]
+- `Ferrum::Frame#parent` returns the parent frame if this frame is nested [#523]
+- `Ferrum::Frame#frame_element` returns the element in which the window is embedded [#524]
+- `Ferrum::Page#start_screencast` starts sending frames to record screencast [#494]
+- `Ferrum::Page#stop_screencast` stops sending frames [#494]
+- `Ferrum::Browser#new(incognito: false)` whether to create an incognito profile for the browser startup window, `true` by default.
+
+### Changed
+- `Ferrum::Network::Exchange#finished?` takes into account that exchange might be in an unknown state after loader changed(next `go_to` call) and considers
+  such as finished [#426]
+- `headless: "new"` mode is removed as it's now default in modern Chrome, just use `headless: true` instead [#518]
+
+### Fixed
+- Correctly set mouse events buttons property [#509]
+- Prevent 'Hash#[]=': can't add a new key into hash during iteration [#513]
+- `Ferrum::Network::Exchange#finished?` and `Ferrum::Network#wait_for_idle` take into account that request can be a blob [#496]
+- Safe call _body_ method (DOM) when page is empty and no html [#522]
+
+### Removed
+
+
+## [0.16](https://github.com/rubycdp/ferrum/compare/v0.15...v0.16) - (Dec 1, 2024) ##
+
+### Added
+- `Ferrum::Network#wait_for_idle!` raises an error if timeout reached.
+- `Ferrum::Browser#close` closes browser gracefully issuing a CDP command, doesn't clean up ruby resources.
+- `Ferrum::Node#remove` removes node from DOM tree.
+- `Ferrum::Node#exists?` check whether the node in ruby world still exists in the DOM tree.
+- `Ferrum::Cookies#store` stores all cookies of current page in a file.
+- `Ferrum::Cookies#load` Loads all cookies from the file and sets them for current page.
+- `Ferrum::Page#screenshot` supports webp image format.
+- `Ferrum::Page#activate` activates the target for the given page.
+
+### Changed
+- `Ferrum::Network#wait_for_idle` now returns true or false. Doesn't raise an error [BREAKING CHANGE].
+
+### Fixed
+- `:ws_url` option is now used without modifications WYSIWYG.
+- `Network.requestWillBeSent` callback didn't handle params in a type-safe way
+- `Page.frameStoppedLoading` callback shouldn't wait for document_node_id response
+- `JSON::NestingError` is raised when browser returns very deeply nested JSON and crashes the thread [#498]
+
+### Removed
+
+
+## [0.15](https://github.com/rubycdp/ferrum/compare/v0.14...v0.15) - (Feb 17, 2024)  ##
+
+### Added
+- `Ferrum::Page#disable_javascript` disables the JavaScript from the HTML source [#407]
+- `Ferrum::Page#set_viewport` emulates the viewport [#406]
+- `Ferrum::Downloads` [#416]
+  - `#files` information about downloaded files
+  - `#wait` wait for file download to be completed
+  - `#set_behavior` where and whether to store file
+- `Browser::Client#command` accepts :async parameter [#433]
+- `Ferrum::Browser` introduce `:flatten` mode with one connection and sessions [#434]
+- Support for ping requests [#417]
+- `Ferrum::Browser` introduce `:ws_url` option to set external websocket for a browser [#435]
+
+### Changed
+- `Ferrum::Page#screeshot` accepts :area option [#410]
+- Resizing page on creation is gone and moved to Cuprite [#427]
+- Min Ruby version is 2.7
+- Refactored internal API of `Ferrum::Browser`, `Ferrum::Page`, `Ferrum::Context`, `Ferrum::Contexts`, `Ferrum::Target`
+instead of passing browser and making cyclic dependency on the browser instance, we pass now a thin client [#431]
+- Bump `websocket-driver` to `~> 0.7` [#432]
+- Got rid of `Concurrent::Async` in `Ferrum::Browser::Subscriber` [#432]
+- `Ferrum::Page#set_window_bounds` is renamed to `Ferrum::Page#window_bounds=`
+- `Ferrum::Page` get right client from the Target and passes it down everywhere [#433]
+- `Ferrum::Network::InterceptedRequest` accepts `Ferrum::Browser::Client` instead of `Ferrum::Page` [#433]
+- `Ferrum::Browser::Client` -> `Ferrum::Client` [#433]
+
+### Fixed
+- Exceptions within `.on()` were swallowed by a thread pool of `Concurrent::Async` [#432]
+- `Ferrum::Context#add_target` puts wrong target to pendings sometimes [#433]
+- Leaking connection descriptors in tests and after browser quit [#433]
+- Check if network exchange exists before manipulating it [#442]
+
+### Removed
+
+
+## [0.14](https://github.com/rubycdp/ferrum/compare/v0.13...v0.14) - (Sep 14, 2023) ##
+
+### Added
+- `Ferrum::Page#device_pixel_ratio` returns the ratio of the resolution in physical pixels to the
+  resolution in CSS pixels for the current display device.
+- `Ferrum::Network#cache(disable: true | false)` whether or not to use cache for every request
+- `Ferrum::Network::Exchange#redirect?` determines if the exchange is a redirect
+- `Ferrum::Network::Exchange#xhr?` determines if the exchange is XHR
+- `Ferrum::Network::Request#xhr?` determines if the request is XHR
+- `Ferrum::Network::Response#loaded?` returns true if the response is fully loaded
+- `Ferrum::Network::Response#redirect?` returns true if the response is a redirect
+- `Ferrum::Node#in_viewport?` checks if the element in viewport (optional argument `scope` as `Ferrum::Node`)
+- `Ferrum::Node#scroll_into_view` - scrolls to element if needed (when it's not in the viewport)
+- `Ferrum::Cookies#each` - is now Enumerable and supports `each` method
+- `Ferrum::Cookies::Cookie`
+  - `#priority`
+  - `#sameparty?`
+  - `#source_scheme`
+  - `#source_port`
+  - `#to_s`
+  - `#to_h`
+- `Ferrum::Network::Request#to_h`
+- `Ferrum::Network::Response#to_h`
+
+### Changed
+
+### Fixed
+- `Ferrum::Network::Exchange#finished?` returns `true` only fully loaded responses
+- `Ferrum::Page#resize` set deviceScaleFactor as `0` by default [#330]
+- `Ferrum::Network#intercept` silently discards unknown resource_types [#313]
+- Truncated Chrome WS URL results in Ferrum::DeadBrowserError [#327]
+- Websocket connection remains indefinitely in :connecting state and causes TimeoutError [#329]
+- `Exchange#navigation_request?` Handle nil request [#339]
+- Raise `Ferrum::StatusError` for any top frame navigation error [#341]
+- `Ferrum::Network::Response#loaded?` for redirect response [#338]
+
+### Removed
+
+
+## [0.13](https://github.com/rubycdp/ferrum/compare/v0.12...v0.13) - (Nov 12, 2022) ##
+
+### Added
+- `Ferrum::Browser::VersionInfo`
+- `Ferrum::Browser`
+  - `#version` requests the browser's version information.
+  - `#create_page(proxy: { host: "x.x.x.x", port: "8800", user: "user", password: "pa$$" })`
+  proxy option, supports creating a page in a new context that uses proxy settings.
+- `Ferrum::Page#timeout = n` page supports its own timeout
+- `Ferrum::Frame#execution_id` returns execution context id and doesn't raises error
+- `Ferrum::Frame#execution_id!` returns execution context id and raises error when times out on borrowing
+
+### Changed
+
+### Fixed
+- `Ferrum::Keyboard`
+  - `#up, #down` accept only one key.
+- `Ferrum::Page#goto` fixed undefined method url for nil:NilClass when page times out and there are pending requests.
+- `Runtime.consoleAPICalled` didn't show log messages
+- `Ferrum::Page#subscribe_frame_detached` added to clean up old frames
+- `Ferrum::Proxy` was hanging at the exit due to issue in Webrick
+- `Ferrum::NoExecutionContextError` is raised sometimes when we block on `Ferrum::Page#frame_by`
+
+### Removed
+- `Ferrum::Browser#proxy_server`
+- `Ferrum::Browser.new(proxy: { server: true })` :server option.
+
+
+## [0.12](https://github.com/rubycdp/ferrum/compare/v0.11...v0.12) - (Sep 13, 2022) ##
+
+### Added
+- Alias `Ferrum::Frame#content=` to `Ferrum::Frame#set_content`
+- Alias `Ferrum::Node#propery` to `Ferrum::Node#[]`
+- Implement `Ferrum::Network#blacklist=` and `Ferrum::Network#whitelist=`
+- Alias `Ferrum::Network#blocklist=` to `Ferrum::Network#blacklist=`
+- Alias `Ferrum::Network#allowlist=` to `Ferrum::Network#whitelist=`
+- Alias `Ferrum::Page#go` to `Ferrum::Page#go_to`
+- `Ferrum::Browser#create_page` accepts now `new_context: true` which can create a page in incognito context, and yields
+a block with this page, after which the page is closed.
+- `Ferrum::Browser` supports new option `:proxy` https://github.com/rubycdp/ferrum#proxy
+- `Ferrum::Network::Response#params` attr_reader added
+- `Ferrum::Node`
+  - `#selected` checks selected options. Returns an array of `Ferrum::Node` that's selected.
+  - `#select` selects options by passed attribute, default: `:value`.
+  - `#computed_style` returns hash of computed styles
+- `Ferrum::JavaScriptError#stack_trace` attr_reader
+- Windows support
+- Show warning and accept dialog if no handler given
+- `Ferrum::Cookies#set` ability to set cookie using `Ferrum::Cookies::Cookie` object
+- `Ferrum::Network#emulate_network_conditions` activates emulation of network conditions
+- `Ferrum::Network#offline_mode` puts browser into offline mode
+- `Ferrum::Page#tracing` - instance of `Ferrum::Page::Tracing` for trace capabilities.
+- `Ferrum::Page::Tracing#record(&block)` start/stop tracing for steps provided in passed block
+
+### Changed
+- Use `Concurrent::MVar` as `execution_id` in `Ferrum::Frame`
+- Min Ruby version is 2.6 and 3.0 is supported
+- `Ferrum::Page#bypass_csp` accepts hash as argument `enabled: true` by default
+- `Ferrum::Context#has_target?` -> `Ferrum::Context#target?`
+- We now start looking for Chrome first instead of Chromium, the order for checking binaries has changed
+- Multiple methods are moved into `Utils`:
+  - `Ferrum.with_attempts` -> `Ferrum::Utils::Attempt.with_retry`
+  - `Ferrum.started` -> `Ferrum::Utils::ElapsedTime.start`
+  - `Ferrum.elapsed_time` -> `Ferrum::Utils::ElapsedTime.elapsed_time`
+  - `Ferrum.monotonic_time` -> `Ferrum::Utils::ElapsedTime.monotonic_time`
+  - `Ferrum.timeout?` -> `Ferrum::Utils::ElapsedTime.timeout?`
+  - `Ferrum.windows?` -> `Ferrum::Utils::Platform.windows?`
+  - `Ferrum.mac?` -> `Ferrum::Utils::Platform.mac?`
+  - `Ferrum.mri?` -> `Ferrum::Utils::Platform.mri?`
+
+### Fixed
+- `Ferrum::Node#selected`, `Ferrum::Node#select` to work in frame scope
+
+### Removed
+
+
+## [0.11](https://github.com/rubycdp/ferrum/compare/v0.10.2...v0.11) - (Mar 11, 2021) ##
+
+### Added
+- `Ferrum::CoordinatesNotFoundError`
+- `Ferrum::Node`
+  - `#wait_for_stop_moving` wait for any js or css movements to finish
+  - `#moving?` shows if node is moving
+  - `#focusable?` if node can have focus
+- `Ferrum::Page`
+  - `#playback_rate` shows the rate
+  - `#playback_rate=` control css animation speed
+  - `position` get window position
+  - `position=` set window position
+- `Ferrum::Browser#evaluate_on_new_document` evaluate js on every new document
+- `--no-startup-window` flag to Chrome by default
+
+### Changed
+- `Ferrum::NodeIsMovingError` -> `Ferrum::NodeMovingError`
+- `Ferrum::Node::MOVING_WAIT` -> `Ferrum::Node::MOVING_WAIT_DELAY`
+- `Ferrum::Node::MOVING_ATTEMPTS` -> `Ferrum::Node::MOVING_WAIT_ATTEMPTS`
+- `Concurrent::Hash` -> `Concurrent::Map` in contexts
+
+### Fixed
+- Typo `Ferrum::Page::Screenshot::PAPEP_FORMATS` -> `Ferrum::Page::Screenshot::PAPER_FORMATS`
+
+### Removed
+
+
+## [0.10.2](https://github.com/rubycdp/ferrum/compare/v0.10.1...v0.10.2) - (Feb 24, 2021) ##
+
+### Added
+
+### Changed
+
+### Fixed
+- Set `Ferrum::Page` `@event` when setting up main frame
+
+### Removed
+
+
+## [0.10.1](https://github.com/rubycdp/ferrum/compare/v0.10...v0.10.1) - (Feb 24, 2021) ##
+
+### Added
+
+### Changed
+
+### Fixed
+- Don't mutate options in `Ferrum::Frame::Runtime#call`
+
+### Removed
+
+
+## [0.10](https://github.com/rubycdp/ferrum/compare/v0.9...v0.10) - (Feb 23, 2021) ##
+
+### Added
+- Added alias `go_to` for `goto`
+- Introduce `Ferrum::Browser` option `:pending_connection_errors`
+- You can pass background to screenshot method `browser.screenshot(background_color: Ferrum::RGBA.new(0, 0, 0, 0.0))`
+- `Ferrum::StatusError#pendings` attr_reader added
+- `Ferrum::ProcessTimeoutError#output` attr_reader added
+- `Ferrum::Page#mhtml`
+
+### Changed
+- `Ferrum::Browser::Process::PROCESS_TIMEOUT` is 2 -> 10 by default
+- `Ferrum::Browser::Network#authorize` now accepts block
+- `Ferrum::Page#pdf` method now streams file with `transferMode: "ReturnAsStream"` mode good for large files
+
+### Fixed
+- `execution_id` in Runtime is called with retry
+- Main frame is set correct under some circumstances
+- `Network.loadingFailed` event is added to catch canceled requests
+- `detectCycle` for cyclic JS objects
+- Fall back to JS when finding element position with `get_content_quads`
+- Temporary user-data-dir is removed after `Ferrum::Browser::Process#stop`
+
+### Removed
+
+
+## [0.9](https://github.com/rubycdp/ferrum/compare/v0.8...v0.9) - (Jul 24, 2020) ##
+
+### Added
+- `Ferrum::NodeIsMovingError` to raise error when node is moving before clicking
+- `FERRUM_NODE_MOVING_WAIT` and `FERRUM_NODE_MOVING_ATTEMPTS` envs are added to wait until node stops moving with
+  at least `n` attempts
+- `Ferrum::Page#wait_for_reload` waits until page is reloaded
+- `:ignore_default_browser_options` option is added to `Ferrum::Browser` to exclude Ferrum's defaults
+- XVFB support
+- `Ferrum::Runtime::CyclicObject` is returned when JS object cannot be represented in Ruby
+- `FERRUM_LOGGING_SCREENSHOTS` env is added to skip showing Base64 screenshots in logger
+
+### Changed
+
+### Fixed
+- `Ferrum::Network::Request#respond` can accept content longer than 45 chars
+- `Ferrum::Browser::Subscriber` is thread safe
+
+### Removed
+
+
+## [0.8](https://github.com/rubycdp/ferrum/compare/v0.7...v0.8) - (Apr 7, 2020) ##
+
+### Added
+- `Ferrum::Frame` supports looking up nodes inside frame with methods:
+  - `#at_css`
+  - `#css`
+  - `#at_xpath`
+  - `#xpath`
+- `Ferrum::Page#set_content` can be used to set the content of the page
+- `:ws_max_receive_size` option is added to `Ferrum::Browser`
+- `Ferrum::ProcessTimeoutError` error instead of `RuntimeError`
+- `Ferrum::Page#stop` to stop loading page
+
+### Changed
+- Fix Ruby 2.7 warnings
+- `Ferrum::Node#click` accepts `offset: { :x, :y, :position (:top | :center)` and `:delay` options
+- Instantiate empty main frame in advance
+- `Ferrum::Mouse#move` supports steps as option `:steps`
+- Delegate`current_title` to page
+- `Ferrum::Browser::Cookies#set` supports `:httponly` and `:samesite` options
+
+### Fixed
+- `Ferrum::Frame#execution_id` should be set only once
+- `Ferrum::Page#doctype` can be nil
+- Add `:slowmoable` option to all methods with visual representation
+- `Ferrum::Page#screenshot` works for html tag set with 100% width and height
+
+### Removed
+- `.ruby-version` file from repository
+
+
+## [0.7](https://github.com/rubycdp/ferrum/compare/v0.6.2...v0.7) - (Jan 28, 2020) ##
+
+### Fixed
+- Fix issue when connection is refused and shows up as pending
+- Can set `Accept-Language` even if `User-Agent` is not provided
+
+### Added
+- `FERRUM_GOTO_WAIT` env is added with default value of 0.1
+- `Ferrum::Network::Response#type` shows type of the response
+- `Ferrum::Network`
+  - `#wait_for_idle` wait for network idle
+  - `idle?` shows if there are no connections
+  - `total_connections` shows total number of connections
+  - `finished_connections` shows a number of closed connections
+  - `pending_connections` shows a number of opened connections
+- `Ferrum::Network::Exchange`
+  - `#intercepted_request` attr accessor for intercepted request if any
+  - `#blank?` shows if request is absent
+  - `#finished?` returns true if request blocked or response is given
+  - `#pending?` shows if exchange is still waiting response
+- `Ferrum::Network::InterceptedRequest`
+  - `#status?` one of `responded|continued|aborted`
+- Initial support for Firefox
+- Dedicated queue for request interruptions
+- `Ferrum::Browser`
+  - accepts `:extensions` option with `:source` key which can have js text to be executed when page is opened
+  - `#bypass_csp` can now bypass csp headers when injecting scripts
+
+### Changed
+- `Ferrum::StatusError#pendings` now shows all pending connections when time is out
+- `Ferrum::Browser::Process#path` is delegated to `Command`
+
+### Fixed
+
+### Removed
+- Stop listening to `Page.domContentEventFired`, `Page.frameScheduledNavigation` and
+`Page.frameClearedScheduledNavigation` events
+
+
+## [0.6.2](https://github.com/rubycdp/ferrum/compare/v0.6.1...v0.6.2) - (Oct 30, 2019) ##
+
+### Added
+- `Ferrum::Target`:
+  - `#page=` attribute writer
+  - `#maybe_sleep_if_new_window` - sleep with `Ferrum::Target::NEW_WINDOW_WAIT` seconds by `Ferrum::Target#window?`
+  condition
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+## [0.6.1](https://github.com/rubycdp/ferrum/compare/v0.6...v0.6.1) - (Oct 30, 2019) ##
+
+### Added
+- `Ferrum::Frame#execution_id?` - boolean of equals passed argument `execution_id` and current `execution_id` from
+current class instance
+
+### Changed
+- `Ferrum::Page::Frames` - fix missing frame:
+  - `#frame_by` - optional argument `execution_id` removed with change subscriber to search by
+  `Ferrum::Frame#execution_id?`
+
+### Fixed
+
+### Removed
+
+
+## [0.6.0](https://github.com/rubycdp/ferrum/compare/v0.5...v0.6) - (Oct 29, 2019) ##
+
+### Added
+- description of `browser.add_script_tag/browser.add_style_tag` in README
+- `Ferrum::Target#attached?` - boolean of the check the exists of `Ferrum::Target#page`
+- `Ferrum::Page::Screenshot::DEFAULT_PDF_OPTIONS` - pdf settings constant
+- `Ferrum::Page::Screenshot::PAPER_FORMATS` - available formats constant
+- `Ferrum::Page::Frames` module implementation:
+  - `#main_frame` - attribute reader as new instance of `Ferrum::Frame` created by
+  `Runtime.executionContextCreated.context.auxData.frameId`
+  - `#frames` - results of delegated `#values` method into instance variable `frames`
+  - `#frame_by` - searching method by attributes: id, execution_id, name (optional)
+  - `#frames_subscribe` - apply listeners of 'Page/Network/Runtime' streams of the frame-related events
+- `Ferrum::Browser#add_script_tag` - delegation to `Ferrum::Page#add_script_tag`
+- `Ferrum::Browser#add_style_tag` - delegation to `Ferrum::Page#add_style_tag`
+- `Ferrum::Network::AuthRequest` class implementation:
+  - initializer accepts two arguments:
+  - `page` as first - instance of `Ferrum::Page`
+  - `params` as second - params from `on` subscriber "Fetch.authRequired"
+  - `#navigation_request?` - delegation to `isNavigationRequest` of passed to instance `params`
+  - `#auth_challenge?` - strict equal of `source` as argument with delegation to `authChallenge.source` of
+  passed to instance `params`
+  - `#match?` - boolean match of `regexp` as argument with `#url`
+  - `#continue` - fires the `command` `Fetch.continueWithAuth` on `Ferrum::Page` instance with passed `options`
+  as argument
+  - `#abort` - fires the `command` `Fetch.failRequest` on `Ferrum::Page` instance with errorReason: "BlockedByClient"
+  on current `requestId`
+  - `#url` - delegation to `request.url` of passed to instance `params`
+  - `#method` - delegation to `request.method` of passed to instance `params`
+  - `#headers` - delegation to `request.headers` of passed to instance `params`
+  - `#initial_priority` - delegation to `request.initialPriority` of passed to instance `params`
+  - `#referrer_policy` - delegation to `request.referrerPolicy` of passed to instance `params`
+  - `#inspect` - simple implementation of native `inspect` method with returns of the current internal state
+
+### Changed
+- `Ferrum::Page::Screenshot#screenshot` - handle `:full` option
+- `Ferrum::Page::Frame` into `Ferrum::Frame`:
+  - initializer accepts three arguments:
+  - `id` as first - value of `Page.frameAttached.frameId`
+  - `page` as second - instance of `Ferrum::Page`
+  - `parent_id` as third - with `nil` as default value
+  - `Ferrum::Page::Frame#name/Ferrum::Page::Frame#name=` - class attribute accessor
+  - `Ferrum::Page::Frame#state=` - attribute writer for `state` instance variable, can be
+  `started_loading | navigated | scheduled_navigation | cleared_scheduled_navigation | stopped_loading`
+  - `Ferrum::Page::Frame#main?` - boolean of the check the not existed parent_id instance variable
+  - `Ferrum::Page::Frame#execution_context_id` converted into `Ferrum::Frame#execution_id` with
+  use `execution_id` instance variable
+  - `Ferrum::Page::Frame#frame_url` into `Ferrum::Frame#url` - 'document.location.href' reference
+  - `Ferrum::Page::Frame#frame_title` into `Ferrum::Frame#title` - 'document.title' reference
+  - `Ferrum::Page::Frame#inspect` - simple implementation of native `inspect` method with returns of the current
+  internal state
+- `Ferrum::Page::DOM` into `Ferrum::Frame::DOM`:
+  - `Ferrum::Page::DOM#title` renamed into `Ferrum::Frame::DOM#current_title`
+  - `Ferrum::Frame::DOM#doctype` - serialized 'document.doctype' reference
+  - `Ferrum::Frame::DOM#css/Ferrum::Frame::DOM#at_css` - added `@page` references for command related methods
+- `Ferrum::Page::Runtime` into `Ferrum::Frame::Runtime`:
+  - `Ferrum::Frame::DOM#evaluate_on` - added `@page` references for command related methods
+  - `Ferrum::Frame::SCRIPT_SRC_TAG` - js implementation for: createElement <script>, fil in `src` with appendChild
+  into document.head
+  - `Ferrum::Frame::SCRIPT_TEXT_TAG` - js implementation for: createElement <script>, fil in `text` with appendChild
+  into document.head
+  - `Ferrum::Frame::STYLE_TAG` - js implementation for: createElement <style> with appendChild into document.head
+  - `Ferrum::Frame::LINK_TAG` - js implementation for: createElement <link>, fil in `href` with appendChild into
+  document.head
+  - `Ferrum::Frame::Runtime#add_script_tag` - fires `evaluate_async` with passed args: url, path, content,
+  type: "text/javascript"
+  - `Ferrum::Frame::Runtime#add_style_tag` - fires `evaluate_async` with passed args: url, path, content
+- `Ferrum::Network` - switch from deprecated `Network.continueInterceptedRequest` to `Fetch.continueRequest`
+- `Ferrum::Network::Exchange`:
+  - first argument `page` for initialize with fill `page` instance variable
+  - `#build_response` - fix arguments for `Network::Response.new`
+  - `#inspect` - simple implementation of native `inspect` method with returns of the current internal state
+- `Ferrum::Network::InterceptedRequest`:
+  - `#interception_id` into `#request_id` as `requestId` reference on passed `params`
+  - `#respond` - the `custom request fulfilment support` implementation by fires the `command` `Fetch.failRequest`
+  on `Ferrum::Page` instance with passed `options` as argument
+- `Ferrum::Network::Response`:
+  - first argument `page` for initialize with fill `page` instance variable
+  - `#body` - implementation of ability to get response body by fires the `command` `Network.getResponseBody`
+  on `Ferrum::Page` instance with on specific `requestId`
+  - `#main?` - boolean of equals `page.network.response` and current class instance
+  - `#==` - boolean of equals passed argument object.id and current `requestId` from `params` instance variable
+  - `#inspect` - simple implementation of native `inspect` method with returns of the current internal state
+- `Ferrum::Node`:
+  - replaced first argument `page` into `frame` / `page` instance variable initialized as `frame.page`
+  - `#frame_id` - delegation to `frameId` of passed to instance `description`
+  - `#frame` - instance of frame from `page` instance found by `#frame_id`
+- `Ferrum::Page::Event` - add frames implementation:
+  - `event/document_id` attribute readers
+  - `#subscribe` listeners replaced with `#frames_subscribe` from included `Ferrum::Page::Frames` instance
+  - `#resize` - evaluate JS: document.documentElement.scrollWidth, document.documentElement.scrollHeight for
+  fullscreen case
+
+### Fixed
+
+### Removed
+- `Ferrum::Page`
+  - `#frame_name`
+  - `#frame_url`, with delegated `Ferrum::Browser#frame_url`
+  - `#frame_title`, with delegated `Ferrum::Browser#frame_title`
+  - `#within_frame`, with delegated `Ferrum::Browser#within_frame`
+- `Ferrum::Page::Event`:
+  - include DOM, Runtime, Frame
+  - `waiting_frames` instance variable
+  - `frame_stack` instance variable
+
+
+## [0.5.0](https://github.com/rubycdp/ferrum/compare/v0.4...v0.5) - (Sep 27, 2019) ##
+
+### Added
+- description of `Thread safety` approach section in README
+- `Ferrum::NoSuchTargetError`
+- `Ferrum::Network::Request#url_fragment` - delegation to `urlFragment` of instance `request`
+- The removing of temporary directory on `Ferrum::Browser::Process#stop`: `Ferrum::Browser::Process.directory_remover`
+proc for remove entry with the passed path to the temporary directory as an argument
+- `Ferrum::Page#viewport_size` - evaluates JS: `innerWidth` and `innerHeight` values on `window` object
+- `Ferrum::Page#document_size` - evaluates JS: `offsetWidth` and `offsetHeight` values on `document.documentElement`
+object
+- `Ferrum::Browser#viewport_size` - delegation to `Ferrum::Page#viewport_size`
+- `Ferrum::Context` class implementation:
+  - initializer accepts three arguments:
+  - `browser` as first - instance of `Ferrum::Browser`
+  - `contexts` as second - instance of `Ferrum::Contexts`
+  - `id` as third - the value of browser command: `Target.createBrowserContext.browserContextId`
+  - includes `id` attribute reader - the passed argument: `id`
+  - includes `targets` attribute reader - the thread safe instance of hash
+  - includes `pendings` attribute reader - the thread safe instance of mutable variable
+  - includes `POSITION` constant - the freeze array of `first` `last` symbols
+  - `#default_target` - memoization of `#create_target` result
+  - `#create_target` - assigns `target.id` as fetch of `targetId` from `Target.createTarget` with assign `target`
+  from `targetInfo`
+  - `#page` - delegation to `default_target` of `Ferrum::Context`
+  - `#pages` - delegations to `page`'s taken from `Ferrum::Context#targets` as `values`
+  - `#windows` - delegations to `page`'s taken from `Ferrum::Context#targets` as `values` with `window?` truthy
+  condition takes `position` as first argument and optional second argument `size` with `1` as default value may raise
+  `ArgumentError` on the passed `position` which not included into `Ferrum::Context::POSITION` constant values
+  - `#create_page` - delegation to `target` with the `target` recreation by `Ferrum::Context#create_target`
+  - `#add_target` - creates new instance of `Ferrum::Target` with fill by `Ferrum::Target.window?` condition of:
+  `targets` instance variable on `id` or `pendings` instance variable as replace of `@value`
+  - `#update_target` - updates specific `target` in `targets` instance variable by `target_id` and `params` which are
+  passed as arguments
+  - `#delete_target` - deletes from `targets` instance variable by passed `target_id` as argument
+  - `#dispose` - disposes from `contexts` instance variable by passed `id` as attribute reader
+  - `#inspect` - simple implementation of native `inspect` method with returns of the current internal state
+- `Ferrum::Target` class implementation:
+  - initializer accepts two arguments:
+  - `browser` as first - instance of `Ferrum::Browser`
+  - `params` as second (optional) - instance of `Ferrum::Contexts`
+  - `#update` - attribute writer for `params` instance variable by passed `params` as one argument
+  - `#page` - new instance of `Ferrum::Page` created for specific `targetId`
+  - `#window?` - boolean of the check the exists of `Ferrum::Target#opener_id`
+  - `#id` - delegation to `targetId` of passed to instance `params`
+  - `#type` - delegation to `type` of passed to instance `params`
+  - `#title` - delegation to `title` of passed to instance `params`
+  - `#url` - delegation to `url` of passed to instance `params`
+  - `#opener_id` - delegation to `openerId` of passed to instance `params`
+  - `#context_id` - delegation to `browserContextId` of passed to instance `params`
+- `Ferrum::Contexts` class implementation: (subscriber on `Target.targetCreated`)
+  - initializer accepts `browser` as the one argument
+  - includes `contexts` attribute reader - the thread safe instance of hash
+  - `#default_context` - memoization of `#create` result
+  - `#find_by` - finding the last match in `contexts` instance variable by match of passed `target_id`
+  into `targets.keys` required `target_id: value` argument  returns `nil` on the not-matched case
+  - `#create` - assigns new instance of `Ferrum::Context` with fetched `browserContextId` from
+  `Target.createBrowserContext` into `contexts` instance variable returns the created instance of `Ferrum::Context`
+  - `#dispose` - removes specific `context` from `contexts` instance variable by passed `context_id` with fires
+  `Target.disposeBrowserContext` browser command returns `true` boolean on the success dispose
+  - `#reset` - nullify the `default_context` instance variable and fires the `dispose` method on each `context` in
+  `contexts` instance variable
+- `Ferrum::Browser#contexts` - reader of `Ferrum::Contexts` instance:
+- `Ferrum::Browser#default_context` - delegation to `Ferrum::Browser#contexts`
+- the delegation to `Ferrum::Browser#default_context`:
+  - `Ferrum::Browser#create_target`
+  - `Ferrum::Browser#create_page`
+  - `Ferrum::Browser#pages`
+  - `Ferrum::Browser#windows`
+
+### Changed
+- `Ferrum::NoSuchWindowError` into `NoSuchPageError`
+- `Ferrum::Page::NEW_WINDOW_WAIT` moved as unchanged to `Ferrum::Target`
+- `Ferrum::Browser#page` - the delegation from `Ferrum::Browser#targets` to `Ferrum::Browser#default_context`
+- `Ferrum::Browser#page` - from the instance of `Ferrum::Browser#targets` into delegation
+to `Ferrum::Browser#default_context`
+
+### Fixed
+
+### Removed
+- `Ferrum::EmptyTargetsError` the hack to handle `new window` which doesn't have events at all by
+`Ferrum::Page#session_id` with `Target.attachToTarget` and `Target.detachFromTarget` usage
+- `Ferrum::Page#close_connection` - the logic is moved to `Ferrum::Page#close` directly
+- the third argument (`new_window = false`) for `Ferrum::Page` initializer
+- `Ferrum::Targets` class with the delegations to `Ferrum::Targets` instance in `Ferrum::Browser` instance:
+  - `Ferrum::Browser#window_handle`
+  - `Ferrum::Browser#window_handles`
+  - `Ferrum::Browser#switch_to_window`
+  - `Ferrum::Browser#open_new_window`
+  - `Ferrum::Browser#close_window`
+  - `Ferrum::Browser#within_window`
+
+
+## [0.4.0](https://github.com/rubycdp/ferrum/compare/v0.3...v0.4) - (Sep 17, 2019) ##
+
+### Added
+- `Ferrum::Network` module - moved logic from `Ferrum::Page::Net` with addition changes
+- `Ferrum::Browser#network` - instance of `Ferrum::Network` from delegated `Ferrum::Page` instance
+- `Ferrum::Network#request` & `Ferrum::Network#response` - delegation to `Network::Exchange` instance
+- `Ferrum::Network#first_by` / `Ferrum::Network#last_by` - implemented searching by passed request_id in
+`Network::Exchange` instance
+- `Ferrum::Browser#traffic` delegation to `Ferrum::Network` of `Network::Exchange` instances
+- `Ferrum::Network::Exchange` - simple request/response constructor with monitoring
+  - `#build_request` - instance of `Network::Request` with passed params
+  - `#build_response` - instance of `Network::Response` with passed params
+  - `#build_error` - instance of `Network::Error` with passed params
+  - `#navigation_request?` - the request verification on document by passed frame_id
+  - `#blocked?` - boolean which becomes true when no the constructed response
+  - `#to_a` - returns array of constructed request/response/error instances
+- `Ferrum::Network::Request#type` - delegation to `type` of passed to instance params
+- `Ferrum::Network::Request#type?` - boolean compare with `type` of instance with passed type as argument
+- `Ferrum::Network::Request#frame_id` - delegation to `frameId` of passed to instance params
+- `Ferrum::Network::InterceptedRequest#abort` - fires `continue` method of instance with `errorReason` as `Aborted`
+- `Ferrum::Network::InterceptedRequest#inspect` - simple implementation of native `inspect` method with returns of the
+current internal state
+- `Ferrum::Page::Frame#frame_id` - reader to public available of `frameId` by `Ferrum::Page#frame_id`
+
+### Changed
+- description of `Network/Authorization/Interception` sections in README
+- `Ferrum::Browser#screenshot` & `Ferrum::Browser#pdf` methods are returns bin when no path is given
+- `Ferrum::Browser#status` delegated to `Ferrum::Network`
+- `Ferrum::Browser#authorize` delegated to `Ferrum::Network`
+- `Ferrum::Network` module into `class` approach for `InterceptedRequest/Request/Response/Error` classes
+- `Ferrum::Browser#intercept_request` into `Ferrum::Network#intercept`
+- `Ferrum::Browser#subscribe` into `Ferrum::Network#subscribe` with public available
+- `Ferrum::Browser#authorized_response` into `Ferrum::Network#authorized_response` with public available
+- `Ferrum::Browser#clear_memory_cache` & `Ferrum::Browser#clear_network_traffic` merged to `Ferrum::Network#clear`
+with addition of `traffic` clear by the argument as symbol type of `traffic/cache`
+- `Ferrum::Network::Request#time` - use `wallTime` params fir time detection
+- `body_size` attribute writer of `Ferrum::Network::Response` with reduce of size on headers_size
+to handle `encodedDataLength` when `Network.responseReceived` is not dispatched
+
+### Fixed
+
+### Removed
+- `Ferrum::Network::Response#redirect_url`
+- `Ferrum::Page::Net`
+- `Ferrum::Browser#abort_request`
+- `Ferrum::Browser#continue_request`
+- `Ferrum::Browser#response_headers`
+- `Ferrum::Browser#network_traffic`
+- `Ferrum::Network::InterceptedRequest#is_navigation_request=` (attribute writer)
+
+
+## [0.3.0](https://github.com/rubycdp/ferrum/compare/v0.2.1...v0.3) - (Sep 12, 2019) ##
+
+### Added
+- CI build by TravisCI for ruby versions: `2.3/2.4/2.5/2.6/jruby-9.2.8.0`
+- fix specs with support of MacOS time formats
+- `Ferrum::Mouse::CLICK_WAIT` as `FERRUM_CLICK_WAIT` `ENV-var` with `0.1` as default value
+- `Ferrum::Browser#authorize` option `:type` with valid values `:server` (by default), `:proxy`
+- Logo :tada:
+- `Ferrum::Node#inner_text` - evaluates JS: `this.innerText` on Node instance
+- `Ferrum::Page::Runtime::INTERMITTENT_ATTEMPTS` as `FERRUM_INTERMITTENT_ATTEMPTS` `ENV-var` with `6` as default value
+- `Ferrum::Page::Runtime::INTERMITTENT_SLEEP` as `FERRUM_INTERMITTENT_SLEEP` `ENV-var` with `0.1` as default value
+- `Ferrum::Page#on` getting the `name` as option with `:dialog/:request_intercepted` cases & `block` as last argument
+- `Ferrum::Browser#on` - delegated actions to `Ferrum::Page` instance
+- `Ferrum::Dialog` object to handle JavaScript Dialog's
+  - required `page, params` as init arguments
+  - `#accept` fires JS: `Page.handleJavaScriptDialog` as command on provided `Ferrum::Page` instance with options
+  which included `accept: true`
+  - `#dismiss` fires JS: `Page.handleJavaScriptDialog` as command on provided `Ferrum::Page` instance
+  with `accept: false`
+  - `#match?` compare message by passed regexp
+  - description of `Dialog` feature in README
+- `Ferrum::Page::Event` extend of `Concurrent::Event` with implementation of `reset/wait` fix
+  - implement `Ferrum::Page::Event#iteration` to reuse `synchronize` block on `@iteration` value of `Concurrent::Event`
+  - redefinition of `Concurrent::Event#reset` - increase `@iteration` outside of `if @set` block
+- `FERRUM_PROCESS_TIMEOUT` `ENV-var` as `Ferrum::Browser::Process::PROCESS_TIMEOUT` with `2` as default value
+- Elapsed time implementation:
+  - `Ferrum::Browser::Process::WAIT_KILLED` with `0.05`
+  - `Ferrum.monotonic_time` - delegation to `Concurrent` object
+  - `Ferrum.started` - class variable `@@started` as `monotonic_time`
+  - `Ferrum.elapsed_time` - a difference of `monotonic_time` as minuend and passed time as argument or `@@started`
+  as subtrahend
+  - `Ferrum.timeout?` - boolean compare passed values `(start, timeout)` by `elapsed_time`
+- JRuby support by replaces of `::Process::CLOCK_MONOTONIC` usages according to `Elapsed-time` implementation
+
+### Changed
+- fix globally changing of Thread behaviour on options `abort_on_exception/report_on_exception`
+- `Ferrum::Page::Input#find_position` into `Ferrum::Node#find_position`
+- `Ferrum::Browser#scroll_to` into `Ferrum::Mouse#scroll_to`
+- option `:timeout` into `:wait` for `Ferrum::Page#command` / `Ferrum::Mouse#click`
+- description of `Authorization` options in README
+- `Ferrum::Page::Net#intercept_request` block as last argument into `Ferrum::Page::Net#on(:request_intercepted)`
+with passed block
+- `Ferrum::Browser::TIMEOUT` into `Ferrum::Browser::DEFAULT_TIMEOUT` as `FERRUM_DEFAULT_TIMEOUT` `ENV-var` with `5`
+as default value
+- usage of `Concurrent::Event` into `Ferrum::Page::Event` as `@event` of `Ferrum::Page` instance
+- `Ferrum::Page::NEW_WINDOW_BUG_SLEEP` into `Ferrum::Page::NEW_WINDOW_WAIT` as `FERRUM_NEW_WINDOW_WAIT` `ENV-var`
+with `0.3` as default value
+
+### Fixed
+
+### Removed
+- `Ferrum::Page::Input`
+- `Ferrum::Browser#proxy_authorize` / `Ferrum::Page::Net#proxy_authorize`
+- `Ferrum::ModalNotFoundError`
+- `Ferrum::Page#reset_modals` with delegation to `Ferrum::Browser`
+- `Ferrum::Page#find_modal` with delegation to `Ferrum::Browser`
+- `Ferrum::Page#accept_prompt` with delegation to `Ferrum::Browser`
+- `Ferrum::Page#dismiss_confirm` with delegation to `Ferrum::Browser`
+- `Ferrum::Page#accept_confirm` with delegation to `Ferrum::Browser`
+- `Ferrum::Browser#on_request_intercepted`
+
+
+## [0.2.1](https://github.com/rubycdp/ferrum/compare/v0.2...v0.2.1) - (Sep 5, 2019) ##
+
+### Added
+- handle `EOFError/Errno::ECONNRESET/Errno::EPIPE` errors with rescue
+- description options of `Customization` in README
+
+### Changed
+- increased `Browser::Process::PROCESS_TIMEOUT` constant by 1
+- `Ferrum::Network::InterceptedRequest#match?` to handle cases for `Ruby 2.3` and less
+
+### Fixed
+
+### Removed
+
+
+## [0.2.0](https://github.com/rubycdp/ferrum/compare/v0.1.2...v0.2) - (Sep 3, 2019) ##
+
+### Added
+- snippet examples of the actions in README
+- `Ferrum::Node#focus` - fires the `command` `DOM.focus` on `Ferrum::Page` instance
+- `Ferrum::Node#blur` - evaluates JS: `this.blur()` on `Ferrum::Page` instance
+- `Ferrum::Node#click` - fires the native `click` on `Ferrum::Page` instance
+- usage of `FERRUM_INTERMITTENT_ATTEMPTS` `ENV-var` on the rescue of runtime intermittent error
+- implementation's of `Ferrum::Page::DOM#xpath` & `Ferrum::Page::DOM#at_xpath`
+- `Ferrum.with_attempts` - retry attempt with the sleep on the block passed as an argument
+- `Ferrum::NoExecutionContextError` - raises when there's no `context` available
+- `Ferrum::Node#attribute` - evaluates JS: `this.getAttribute` with passed `name`
+- `Ferrum::Mouse` - dedicated class of `mouse` actions: `click/down/up/move`
+- `Ferrum::Browser#mouse` - delegated actions to `Ferrum::Mouse` instance extracted from `Ferrum::Page::Input`
+- `Ferrum::Page::Input#find_position` - usage of `DOM.getContentQuads` to find position of node by `top/left`
+- `Ferrum::Keyboard` - dedicated class of `keyboard` actions: `down/up/type/modifiers`
+- `Ferrum::Browser#keyboard` - delegated actions to `Ferrum::Keyboard` instance extracted from `Ferrum::Page::Input`
+- `Ferrum::Headers` dedicated class of headers manager with `get/set/clear/add` actions which delegated to
+`Ferrum::Page` instance
+- `Ferrum::Cookies` dedicated class which includes logic from `Ferrum::Browser::API::Cookie` & `Ferrum::Cookie`
+with actions: `all/[]/set/remove/clear`
+- `Ferrum::Page#cookies` - delegated actions to `Ferrum::Cookies` instance
+- `Ferrum::Page::Screenshot` module with methods `screenshot/pdf` implemented by
+commands `Page.captureScreenshot/Page.printToPDF`
+- `Ferrum::Browser#screenshot` - delegated actions to `Page::Screenshot` module
+- `Ferrum::Network::InterceptedRequest`
+  - `auth_challenge?`
+  - `match?`
+  - `abort`
+  - `continue`
+  - `url`
+  - `method`
+  - `headers`
+  - `initial_priority`
+  - `referrer_policy`
+- `Ferrum::Browser#intercept_request` - method with delegated to `Ferrum::Page::Net` which sets pattern
+into `Network.setRequestInterception`
+- `Ferrum::Browser#on_request_intercepted` - method with delegated to `Ferrum::Page::Net` which applies passed block
+- `Ferrum::Browser#abort_request` - method with delegated to `Ferrum::Page::Net` which stops request
+by passed interception_id
+
+### Changed
+- `Ferrum::Page::Input#send_keys` into `Ferrum::Page::Input#type`
+- `Ferrum::DeadBrowser` into `Ferrum::DeadBrowserError`
+- `Ferrum::ModalNotFound` into `Ferrum::ModalNotFoundError`
+- `Ferrum::StatusFailError` into `Ferrum::StatusError`
+- `Ferrum::NodeError` into `Ferrum::NodeNotFoundError`
+- `Ferrum::Page#go_back` into `Ferrum::Page#back`
+- `Ferrum::Page#go_forward` into `Ferrum::Page#forward`
+- `Ferrum::Page::Dom#property` into `Ferrum::Page#property`
+- `Ferrum::Page::Dom#select_file` into `Ferrum::Page#select_file`
+- `Ferrum::Node::#click` getting the `mode` argument as option with `right/double/left` cases
+- `Ferrum::Page::Frame#switch_to_frame` into `Ferrum::Page::Frame#within_frame` with added case of `ArgumentError`
+
+### Fixed
+
+### Removed
+- `Ferrum::ObsoleteNode` error
+- `Ferrum::FrameNotFound` error
+- `Ferrum::Page::Input#set`
+  - `#set`
+  - `#select`
+  - `#type`
+  - `#generate_modifiers`
+- `Ferrum::Node`
+  - `#attributes`
+  - `#[]`
+  - `#select_option`
+  - `#unselect_option`
+  - `#visible?`
+  - `#checked?`
+  - `#selected?`
+  - `#disabled?`
+  - `#path`
+  - `#right_click`
+  - `#double_click`
+- `Ferrum::Browser::API` - `Header, Cookie, Screenshot, Intercept`
+- `Ferrum::Browser`
+  - `#set_overrides`
+  - `#url_whitelist`
+  - `#url_blacklist`
+
+
+## [0.1.2](https://github.com/rubycdp/ferrum/compare/v0.1.1...v0.1.2) - (Aug 27, 2019) ##
+
+### Added
+- catch of the intermittent errors inside of `evaluate's` methods
+- `Ferrum::Page::Runtime#evaluate_on` - fires `Runtime.callFunctionOn` command
+with `functionDeclaration` on `Ferrum::Page`
+
+### Changed
+
+### Fixed
+
+### Removed
+- `Ferrum::Page::Runtime#evaluate_in`
+
+
+## [0.1.1](https://github.com/rubycdp/ferrum/compare/v0.1.0...v0.1.1) - (Aug 26, 2019) ##
+
+### Added
+- stringify the `url` which passed to `Ferrum::Page#goto`
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+## [0.1.0](https://github.com/rubycdp/ferrum/compare/v0.1.0.alpha...v0.1.0) - (Aug 26, 2019) ##
+
+### Added
+- fires the `Ferrum::NodeError` on zero of `node_id`
+
+### Changed
+- basic description in README
+
+### Fixed
+
+### Removed
+
+
+## [0.1.0.alpha](https://github.com/rubycdp/ferrum/releases/tag/v0.1.0.alpha) - (Aug 2, 2019) ##
+
+### Added
+- Initial implementation
+  - `Ferrum`
+  - `Ferrum::Network` - simple requests/responses data store
+  - `Ferrum::Browser` - basic command interface
+  - `Ferrum::Cookie` - simple store of the cookie attributes
+  - `Ferrum::Node` - abstract level of DOM-node with basic methods
+  - `Ferrum::Page` - basic object of the command references, which included `DOM`, network and browser logic
+  - `Ferrum::Targets` - initialize of the `window` manager with a clean browser state
+  - classes of errors with a description of specific reason
+
+### Changed
+
+### Fixed
+
+### Removed

@@ -1,0 +1,161 @@
+# frozen_string_literal: true
+
+describe Ferrum::Client do
+  describe "#command" do
+    let(:larger_than_socket_buffers) { "'#{'x' * (16 * 1024 * 1024)}'.length" }
+
+    def messages
+      remote.client.instance_variable_get(:@ws).messages
+    end
+
+    def evaluate_in_background(page, expression, timeout:)
+      Thread.new do
+        page.command("Runtime.evaluate", expression: expression, timeout: timeout)
+      rescue Ferrum::Error => e
+        e
+      end
+    end
+
+    context "with a responsive browser" do
+      it "names the command that timed out" do
+        expect { page.command("Page.navigate", timeout: 0.5, url: base_url("/really_slow")) }
+          .to raise_error(Ferrum::TimeoutError, /a response to Page.navigate \(session .+\)/)
+      end
+
+      it "raises NoSuchTargetError for an unknown target" do
+        expect { page.command("Target.activateTarget", targetId: "missing") }
+          .to raise_error(Ferrum::NoSuchTargetError)
+      end
+    end
+
+    context "when the connection is dead" do
+      let(:remote) { Ferrum::Browser.new(base_url: base_url, timeout: 10, protocol_timeout: 10) }
+
+      after { remote.quit }
+
+      it "releases the commands in flight", :launch do
+        page = remote.create_page
+        Thread.new do
+          sleep(0.2)
+          messages.close
+        end
+        start = Ferrum::Utils::ElapsedTime.monotonic_time
+
+        expect { page.go_to("/really_slow") }.to raise_error(Ferrum::DeadBrowserError)
+        expect(Ferrum::Utils::ElapsedTime.elapsed_time(start)).to be < 5
+      end
+
+      it "fails the commands that follow without waiting", :launch do
+        page = remote.create_page
+        messages.close
+        start = Ferrum::Utils::ElapsedTime.monotonic_time
+
+        expect { page.go_to("/") }.to raise_error(Ferrum::DeadBrowserError)
+        expect(Ferrum::Utils::ElapsedTime.elapsed_time(start)).to be < 1
+      end
+
+      it "reports an unexpected reader error instead of raising in the main thread", :launch do
+        page = remote.create_page
+        driver = remote.client.instance_variable_get(:@ws).instance_variable_get(:@driver)
+        allow(driver).to receive(:parse).and_raise(Errno::ETIMEDOUT)
+
+        expect do
+          expect { page.go_to("/") }.to raise_error(Ferrum::DeadBrowserError)
+        end.to output(/websocket reader stopped, Errno::ETIMEDOUT/).to_stderr
+      end
+    end
+
+    context "when the browser stops reading", skip: Ferrum::Utils::Platform.windows? do
+      let(:remote) { Ferrum::Browser.new(base_url: base_url, timeout: 1, protocol_timeout: 1) }
+
+      after do
+        Process.kill("CONT", remote.process.pid)
+        remote.quit
+      end
+
+      it "closes the connection once the browser takes no data for protocol_timeout", :launch do
+        page = remote.create_page
+        Process.kill("STOP", remote.process.pid)
+
+        sender = evaluate_in_background(page, larger_than_socket_buffers, timeout: 3)
+
+        expect(sender.join(2)).to eq(sender), "the command was still blocked after 2s"
+        expect(sender.value).to be_a(Ferrum::DeadBrowserError)
+        expect(sender.value.message).to match(/accepted no data for 1s/)
+      end
+
+      it "fails the commands waiting to be sent behind it", :launch do
+        page = remote.create_page
+        Process.kill("STOP", remote.process.pid)
+
+        evaluate_in_background(page, larger_than_socket_buffers, timeout: 3)
+        sleep(0.2)
+        waiting = evaluate_in_background(page, "1 + 1", timeout: 3)
+
+        expect(waiting.join(2)).to eq(waiting), "the command was still blocked after 2s"
+        expect(waiting.value).to be_a(Ferrum::DeadBrowserError)
+      end
+    end
+
+    context "when the browser stops reading for less than protocol_timeout",
+            skip: Ferrum::Utils::Platform.windows? do
+      let(:remote) { Ferrum::Browser.new(base_url: base_url, protocol_timeout: 5) }
+
+      after do
+        Process.kill("CONT", remote.process.pid)
+        remote.quit
+      end
+
+      it "times out a command waiting to be sent and keeps the connection", :launch do
+        page = remote.create_page
+        Process.kill("STOP", remote.process.pid)
+
+        sender = evaluate_in_background(page, larger_than_socket_buffers, timeout: 10)
+        sleep(0.2)
+        waiting = evaluate_in_background(page, "1 + 1", timeout: 0.5)
+
+        expect(waiting.join(2)).to eq(waiting), "the command was still blocked after 2s"
+        expect(waiting.value).to be_a(Ferrum::TimeoutError)
+
+        Process.kill("CONT", remote.process.pid)
+        expect(sender.value.dig("result", "value")).to eq(16 * 1024 * 1024)
+        expect(page.evaluate("1 + 1")).to eq(2)
+      end
+    end
+  end
+
+  describe "#on" do
+    let(:remote) { Ferrum::Browser.new(base_url: base_url, timeout: 3, protocol_timeout: 3) }
+
+    after { remote.quit }
+
+    it "keeps dispatching events when a callback raises", :launch do
+      page = remote.create_page
+
+      expect do
+        remote.client.on("Target.targetCreated") { raise Ferrum::TimeoutError }
+
+        2.times { remote.create_page }
+        page.go_to("/")
+      end.to output(/Target.targetCreated callback raised Ferrum::TimeoutError/).to_stderr
+
+      expect(page.body).to include("Hello world!")
+    end
+  end
+
+  describe "#close" do
+    let(:remote) { Ferrum::Browser.new(base_url: base_url, timeout: 10, protocol_timeout: 10) }
+
+    after { remote.quit }
+
+    it "closes the socket when the browser dies before answering the close frame", :launch do
+      remote.create_page
+      socket = remote.client.instance_variable_get(:@ws).instance_variable_get(:@sock)
+      Process.kill("KILL", -remote.process.pid)
+
+      remote.quit
+
+      expect(socket).to be_closed
+    end
+  end
+end

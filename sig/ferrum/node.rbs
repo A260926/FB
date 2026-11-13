@@ -1,0 +1,118 @@
+module Ferrum
+  class Node
+    MOVING_WAIT_DELAY: ::Float
+    MOVING_CHECK_DELAY: ::Float
+
+    MOVING_WAIT_ATTEMPTS: ::Integer
+
+    @node_id: untyped
+    @document_version: ::Integer
+    @runtime: Frame::Runtime
+
+    attr_reader page: Page
+
+    attr_reader target_id: String
+
+    @backend_node_id: Integer
+    @node_type: Integer
+    @tag_name: String?
+    @frame_id: String?
+    @description: Hash[String, untyped]?
+
+    attr_reader backend_node_id: Integer
+
+    attr_reader node_type: Integer
+
+    def initialize: (Frame::Runtime frame, Hash[String, untyped] properties) -> void
+
+    def description: () -> Hash[String, untyped]
+
+    def tag_name: () -> String
+
+    def node?: () -> bool
+
+    attr_reader frame_id: String?
+
+    def frame: () -> Frame?
+
+    def focus: () -> self
+
+    def focusable?: () -> bool
+
+    def node_id: () -> Integer
+
+    def wait_for_stop_moving: (?delay: ::Numeric, ?attempts: ::Integer) -> ::Array[::Array[::Numeric]]
+
+    def moving?: (?delay: ::Numeric) -> bool
+
+    def blur: () -> self
+
+    def type: (*untyped keys) -> self
+
+    def click: (?mode: ::Symbol, ?keys: ::Array[::Symbol], ?offset: ::Hash[::Symbol, untyped], ?delay: ::Numeric, ?wait: ::Numeric) -> self
+
+    def hover: () -> bot
+
+    def scroll_into_view: () -> self
+
+    def in_viewport?: (?of: Node?) -> bool
+
+    def select_file: ((String | ::Array[String]) value) -> ::Hash[String, untyped]
+
+    def at_xpath: (String selector) -> Node?
+
+    def at_css: (String selector) -> Node?
+
+    def xpath: (String selector) -> ::Array[Node]
+
+    def css: (String selector) -> ::Array[Node]
+
+    def text: () -> String
+
+    def inner_text: () -> String
+
+    def value: () -> untyped
+
+    def property: (String name) -> untyped
+
+    alias [] property
+
+    def attribute: (String name) -> String?
+
+    def selected: () -> ::Array[Node]
+
+    def select: (*(String | ::Array[String]) values, ?by: ::Symbol) -> self
+
+    def evaluate: (untyped expression, *untyped positional, **untyped keywords) -> untyped
+
+    def evaluate_handle: (untyped expression, *untyped positional, **untyped keywords) -> untyped
+
+    def execute: (untyped expression, *untyped positional, **untyped keywords) -> true
+
+    def ==: (untyped other) -> bool
+
+    def inspect: () -> ::String
+
+    def find_position: (?x: ::Numeric?, ?y: ::Numeric?, ?position: ::Symbol) -> [::Numeric, ::Numeric]
+
+    def computed_style: () -> ::Hash[String, String]
+
+    def axnode: () -> Accessibility::AXNode?
+
+    def remove: () -> ::Hash[String, untyped]
+
+    def exists?: () -> bool
+
+    private
+
+    def bounding_rect_coordinates: () -> [Numeric, Numeric]
+
+    def content_quads: () -> untyped
+
+    def content_quads_with: (?delay: untyped) -> ::Array[untyped]
+
+    def get_position: (untyped points, untyped offset_x, untyped offset_y, untyped position) -> ::Array[untyped]
+
+    def to_points: (untyped quad) -> ::Array[{ x: untyped, y: untyped }]
+  end
+end

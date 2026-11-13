@@ -1,0 +1,31 @@
+---
+sidebar_position: 12
+---
+
+# Headers
+
+`page.headers`
+
+#### get : `Hash`
+
+Get all headers
+
+#### set(headers) : `Boolean`
+
+Set given headers. Eventually clear all headers and set given ones.
+
+* headers `Hash` key-value pairs for example `"User-Agent" => "Browser"`
+
+`User-Agent` and `Accept-Language` also change what `navigator` reports, through
+[network.emulate](https://github.com/rubycdp/ferrum#network). Other headers leave it alone, and `set` and `clear` bring
+back the browser's user agent or language once the header that changed it is gone.
+
+#### add(headers) : `Boolean`
+
+Adds given headers to already set ones.
+
+* headers `Hash` key-value pairs for example `"Referer" => "http://example.com"`
+
+#### clear : `Boolean`
+
+Clear all headers, and the user agent or language they set.

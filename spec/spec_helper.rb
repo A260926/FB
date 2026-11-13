@@ -1,0 +1,112 @@
+# frozen_string_literal: true
+
+require "bundler/setup"
+
+# Configure RBS test target before loading setup
+require "rbs/test/setup" if ENV["RBS_TEST_TARGET"]
+
+require "rspec"
+require "rspec/wait"
+require "pathname"
+
+PROJECT_ROOT = File.expand_path("..", __dir__)
+%w[/lib /spec].each { |p| $LOAD_PATH.unshift(p) }
+
+require "fileutils"
+require "shellwords"
+
+require "ferrum"
+require "support/server"
+require "support/global_helpers"
+
+# GA servers are slow it's better to increase
+ENV["FERRUM_NEW_WINDOW_WAIT"] ||= "0.8" if ENV["CI"]
+
+puts ""
+remote_url = ENV.fetch("FERRUM_URL", nil)
+if remote_url
+  puts "Remote browser at #{remote_url}"
+else
+  command = Ferrum::Browser::Command.build(Ferrum::Browser::Options.new, nil)
+  puts `#{Shellwords.escape(command.path)} --version`
+end
+puts ""
+
+RSpec.configure do |config|
+  # Specs tagged :launch start their own Chrome, so they can't run against a remote browser (FERRUM_URL).
+  config.filter_run_excluding :launch if remote_url
+  config.wait_timeout = 1
+  config.wait_delay = 0.2
+
+  ferrum_logger = nil
+  config.include_context "Global helpers"
+
+  config.before(:suite) do
+    @server = Ferrum::Server.boot
+  end
+
+  config.after(:suite) do
+    Ferrum::Server.server&.stop
+  end
+
+  config.before(:all) do
+    base_url = Ferrum::Server.server.base_url
+    options = { base_url: base_url }
+    options.merge!(url: ENV["FERRUM_URL"]) if ENV["FERRUM_URL"]
+    options.merge!(headless: false) if ENV["HEADLESS"] == "false"
+    options.merge!(slowmo: ENV["SLOWMO"].to_f) if ENV["SLOWMO"].to_f > 0
+
+    if ENV["CI"]
+      ferrum_logger = StringIO.new
+      options.merge!(logger: ferrum_logger)
+    end
+
+    @browser = Ferrum::Browser.new(**options)
+  end
+
+  config.after(:all) do
+    @browser&.quit
+  end
+
+  config.before(:each) do
+    server&.wait_for_pending_requests
+
+    if ENV["CI"]
+      ferrum_logger.truncate(0)
+      ferrum_logger.rewind
+    end
+  end
+
+  config.after(:each) do |example|
+    save_exception_artifacts(browser, example.metadata, ferrum_logger) if ENV.fetch("CI", nil) && example.exception
+
+    reset
+  end
+
+  def save_exception_artifacts(browser, meta, logger)
+    filename = File.basename(meta[:file_path])
+    line_number = meta[:line_number]
+    timestamp = Time.now.strftime("%Y-%m-%dT%H-%M-%S-%N")
+
+    save_exception_log(browser, filename, line_number, timestamp, logger)
+    save_exception_screenshot(browser, filename, line_number, timestamp)
+  end
+
+  def save_exception_screenshot(browser, filename, line_number, timestamp)
+    screenshot_name = "screenshot-#{filename}-#{line_number}-#{timestamp}.png"
+    screenshot_path = "/tmp/ferrum/#{screenshot_name}"
+    FileUtils.mkdir_p(File.dirname(screenshot_path))
+    browser.screenshot(path: screenshot_path, full: true)
+  rescue StandardError => e
+    puts "#{e.class}: #{e.message}"
+  end
+
+  def save_exception_log(_, filename, line_number, timestamp, logger)
+    log_name = "logfile-#{filename}-#{line_number}-#{timestamp}.txt"
+    log_path = "/tmp/ferrum/#{log_name}"
+    FileUtils.mkdir_p(File.dirname(log_path))
+    File.binwrite(log_path, logger.string)
+  rescue StandardError => e
+    puts "#{e.class}: #{e.message}"
+  end
+end

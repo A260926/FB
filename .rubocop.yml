@@ -1,0 +1,70 @@
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  SuggestExtensions: false
+
+Layout/FirstArrayElementIndentation:
+  EnforcedStyle: consistent
+
+Layout/LineLength:
+  Exclude:
+    - spec/**/*
+
+Naming/PredicateMethod:
+  Enabled: false
+
+Naming/MethodParameterName:
+  MinNameLength: 2
+  AllowedNames:
+    - x
+    - y
+
+Naming/FileName:
+  Exclude:
+    - 'gemfiles/*.gemfile'
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/ArgumentsForwarding:
+  UseAnonymousForwarding: false
+
+Style/MultilineBlockChain:
+  Exclude:
+    - spec/**/*
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*
+    - "*.gemspec"
+
+Metrics/ParameterLists:
+  Max: 6
+
+Metrics/AbcSize:
+  Max: 66
+
+Metrics/ClassLength:
+  Max: 300
+  Exclude:
+    - spec/**/*
+
+Metrics/CyclomaticComplexity:
+  Max: 14
+
+Metrics/MethodLength:
+  Max: 52
+
+Metrics/ModuleLength:
+  Exclude:
+    - spec/**/*
+  Max: 602
+
+Metrics/PerceivedComplexity:
+  Max: 14
+
+plugins:
+  - rubocop-rake

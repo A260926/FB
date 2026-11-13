@@ -1,0 +1,76 @@
+module Ferrum
+  class Browser
+    class Process
+      HTTP_SCHEMES: ::Hash[String, String]
+
+      WS_SCHEMES: ::Hash[String, String]
+
+      LOCAL_HOSTS: ::Array[String]
+
+      WS_URL: Regexp
+
+      attr_reader host: String?
+
+      attr_reader port: ::Integer?
+
+      attr_reader ws_url: Addressable::URI? | String?
+
+      attr_reader pid: ::Integer?
+
+      attr_reader command: Browser::Command?
+
+      attr_reader xvfb: Browser::Xvfb?
+
+      attr_reader output: Output
+
+      @pid: ::Integer?
+      @xvfb: Browser::Xvfb?
+      @user_data_dir: String?
+      @log: Log?
+      @output: Output
+      @process_timeout: ::Integer
+      @env: Hash[String, String]
+      @command: Browser::Command?
+      @ws_url: String?
+      @host: String?
+      @port: ::Integer?
+      @requested_host: String?
+
+      extend Forwardable
+
+      def self.start: (Browser::Options options) -> Browser::Process
+
+      def initialize: (Browser::Options options) -> void
+
+      def start: () -> void
+
+      def stop: (?wait: bool) -> Thread?
+
+      def restart: () -> void
+
+      def path: () -> String
+
+      private
+
+      def spawn_browser: (IO io) -> void
+
+      def sync_stop: () -> nil
+
+      def async_stop: () -> Thread
+
+      def remove_user_data_dir: () -> void
+
+      def parse_ws_url: () -> void
+
+      def ws_url=: (String? url) -> void
+
+      def rewrite_host: (String url) -> String
+
+      def fetch_ws_url: (Addressable::URI | String url) -> String
+
+      def json_version_url: (Addressable::URI | String url) -> Addressable::URI
+
+      def reachable_ws_url: (String? ws_url, Addressable::URI | String endpoint) -> String?
+    end
+  end
+end

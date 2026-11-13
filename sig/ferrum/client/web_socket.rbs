@@ -1,0 +1,61 @@
+module Ferrum
+  class Client
+    class WebSocket
+      WEBSOCKET_BUG_SLEEP: Float
+      DEFAULT_PORTS: Hash[String, Integer]
+      WRITE_CHUNK_SIZE: Integer
+
+      attr_reader url: (String | ::Addressable::URI)
+      attr_reader messages: ::Queue
+      attr_reader close_reason: String?
+
+      @url: String
+      @log: Log?
+      @sock: (::TCPSocket | ::OpenSSL::SSL::SSLSocket)
+      @driver: untyped
+      @messages: ::Queue
+      @thread: ::Thread
+      @writer: ::Thread
+      @outgoing: ::Queue
+      @mutex: ::Thread::Mutex
+      @write_timeout: ::Numeric?
+      @encoded: Array[String]
+      @close_reason: String?
+
+      def initialize: ((String | ::Addressable::URI) url, Integer? max_receive_size, Log? log, ?::Numeric? write_timeout) -> void
+
+      def on_open: (untyped event) -> void
+
+      def on_message: (untyped event) -> void
+
+      def on_close: (untyped event) -> void
+
+      def send_message: (Hash[Symbol, untyped] data, ?::Numeric? timeout) -> void
+
+      def write: (String data) -> void
+
+      def close: () -> void
+
+      def force_close: () -> void
+
+      private
+
+      def drive: (?::Float? deadline) { () -> void } -> void
+
+      def queue_encoded: (?::Float? deadline) -> void
+
+      def start_writer: () -> void
+
+      def write_frame: (String data) -> void
+
+      def abandon_stalled_write: () -> void
+
+      def start: () -> void
+
+      def safely_parse_json: (String data) -> Hash[String, untyped]?
+
+      def safely_parse_escaped_json: (String data) -> Hash[String, untyped]?
+    end
+  end
+end
+

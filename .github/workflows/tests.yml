@@ -1,0 +1,54 @@
+name: Tests
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  tests:
+    name: Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.2", "3.3", "3.4", "4.0", "jruby"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FERRUM_PROCESS_TIMEOUT: 25
+      FERRUM_DEFAULT_TIMEOUT: 15
+      FERRUM_CHROME_DOCKERIZE: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        if: startsWith(matrix.ruby, 'jruby')
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+
+      - name: Run tests
+        timeout-minutes: 15
+        run: |
+          mkdir -p /tmp/ferrum
+          bundle exec rake
+
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: artifacts-ruby-v${{ matrix.ruby }}
+          path: /tmp/ferrum/

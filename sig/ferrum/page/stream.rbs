@@ -1,0 +1,17 @@
+module Ferrum
+  class Page
+    module Stream
+      STREAM_CHUNK: untyped
+
+      def stream_to: (path: untyped, encoding: untyped, handle: untyped) -> untyped
+
+      def stream_to_file: (path: untyped, handle: untyped) -> ::Integer
+
+      def stream_to_memory: (encoding: untyped, handle: untyped) -> untyped
+
+      def stream: (output: untyped, handle: untyped) -> untyped
+
+      def close_stream: (handle: untyped) -> untyped
+    end
+  end
+end

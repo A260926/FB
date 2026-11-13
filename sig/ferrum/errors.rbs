@@ -1,0 +1,119 @@
+module Ferrum
+  class Error < StandardError
+  end
+
+  class NoSuchTargetError < Error
+  end
+
+  class NoSuchPageError < NoSuchTargetError
+  end
+
+  class NotImplementedError < Error
+  end
+
+  class BinaryNotFoundError < Error
+  end
+
+  class EmptyPathError < Error
+  end
+
+  class StatusError < Error
+    def initialize: (String url, ?String? message) -> void
+  end
+
+  %a{deprecated} class PendingConnectionsError < StatusError
+    attr_reader pendings: ::Array[String]
+
+    def initialize: (String url, ?::Array[String] pendings) -> void
+  end
+
+  class NavigationTimeoutError < TimeoutError
+    attr_reader url: String
+    attr_reader pendings: ::Array[String]
+
+    @url: String
+    @pendings: ::Array[String]
+
+    def initialize: (String url, ?::Array[String] pendings) -> void
+
+    def message: () -> String
+  end
+
+  class TimeoutError < Error
+    attr_reader command: String?
+    attr_reader session_id: String?
+
+    @command: String?
+    @session_id: String?
+
+    def initialize: (?String? command, ?session_id: String?) -> void
+
+    def message: () -> String
+
+    private
+
+    def awaited: () -> String
+  end
+
+  class ScriptTimeoutError < TimeoutError
+    def message: () -> "Timed out waiting for evaluated script to return a value"
+  end
+
+  class ProcessTimeoutError < Error
+    attr_reader output: String
+
+    def initialize: (::Numeric timeout, String output) -> void
+  end
+
+  class NoWebSocketUrlError < Error
+    attr_reader url: String
+    attr_reader status: String?
+
+    def initialize: (String url, ?String? status) -> void
+  end
+
+  class DeadBrowserError < Error
+    def initialize: (?::String message) -> void
+  end
+
+  class NodeMovingError < Error
+    def initialize: (Node node, Hash[String, ::Numeric] prev, Hash[String, ::Numeric] current) -> void
+
+    def message: () -> ::String
+  end
+
+  class CoordinatesNotFoundError < Error
+    def initialize: (?::String message) -> void
+  end
+
+  class BrowserError < Error
+    attr_reader response: Hash[String, untyped]
+
+    def initialize: (Hash[String, untyped] response) -> void
+
+    def code: () -> ::Integer?
+
+    def data: () -> untyped
+  end
+
+  class NodeNotFoundError < BrowserError
+  end
+
+  class NoExecutionContextError < BrowserError
+    def initialize: (?Hash[String, untyped]? response) -> void
+  end
+
+  class JavaScriptError < BrowserError
+    attr_reader class_name: String?
+
+    attr_reader message: String
+
+    attr_reader stack_trace: String?
+
+    def initialize: (Hash[String, untyped] response, ?String? stack_trace) -> void
+  end
+
+  class InvalidScreenshotFormatError < Error
+    def initialize: (String format) -> void
+  end
+end

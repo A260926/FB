@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Upload workflow</title>
+<input id="known" type="file" multiple>
+<button id="attach">Attach invoice</button><iframe src="/child"></iframe>
+<script>
+window.uploadEvents = [];
+document.querySelector('#known').addEventListener('input', e => uploadEvents.push(e.type));
+document.querySelector('#known').addEventListener('change', e => uploadEvents.push(e.type));
+document.querySelector('#attach').onclick = () => {
+  const input = document.createElement('input');
+  input.type = 'file'; input.hidden = true; input.multiple = true;
+  document.body.append(input);
+  input.onchange = async () => {
+    window.attachments = await Promise.all(Array.from(input.files, async f => ({name:f.name,text:await f.text()})));
+    document.querySelector('#attach').textContent = `${input.files.length} attached`;
+  };
+  input.click();
+};
+</script>

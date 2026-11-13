@@ -1,0 +1,270 @@
+# frozen_string_literal: true
+
+require "ferrum/frame/dom"
+require "ferrum/frame/runtime"
+require "ferrum/isolated_world"
+
+module Ferrum
+  #
+  # Represents a frame (the main document or a nested `iframe`) within a
+  # {Page}. Each frame has its own execution context for JavaScript and its
+  # own lifecycle state, tracked via {#state}. DOM search and JS evaluation
+  # methods are provided by the included {DOM} and {Runtime} modules.
+  #
+  class Frame
+    include DOM
+    include Runtime
+
+    STATE_VALUES = %i[
+      started_loading
+      navigated
+      stopped_loading
+      canceled
+    ].freeze
+
+    # The Frame's unique id.
+    #
+    # @return [String]
+    attr_accessor :id
+
+    # If frame was given a name it should be here.
+    #
+    # @return [String, nil]
+    attr_accessor :name
+
+    # The page the frame belongs to.
+    #
+    # @return [Page]
+    attr_reader :page
+
+    # Parent frame id if this one is nested in another one.
+    #
+    # @return [String, nil]
+    attr_reader :parent_id
+
+    # One of the states frame's in.
+    #
+    # @return [:started_loading, :navigated, :stopped_loading, :canceled, nil]
+    attr_reader :state
+
+    # Frame loader id.
+    #
+    # @return [String, nil]
+    attr_accessor :loader_id
+
+    # Frame's lifecycle events (navigation, load, paint, etc.).
+    #
+    # @return [Array<Hash{String => (String|Float)}>]
+    attr_reader :lifecycle_events
+
+    def initialize(id, page, parent_id = nil)
+      @id = id
+      @page = page
+      @parent_id = parent_id
+      @lifecycle_events = []
+      @execution_id = Concurrent::MVar.new
+      @isolated_worlds = Concurrent::Map.new
+    end
+
+    # Sets the frame's state, validating it's one of {STATE_VALUES}.
+    #
+    # @param [Symbol] value
+    #   One of `:started_loading`, `:navigated`, `:stopped_loading`,
+    #   `:canceled`.
+    #
+    # @return [Symbol]
+    #
+    # @raise [ArgumentError]
+    def state=(value)
+      raise ArgumentError unless STATE_VALUES.include?(value)
+
+      @state = value
+    end
+
+    #
+    # Returns current frame's `location.href`.
+    #
+    # @return [String]
+    #
+    # @example
+    #   browser.go_to("https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe")
+    #   frame = browser.frames[1]
+    #   frame.url # => https://interactive-examples.mdn.mozilla.net/pages/tabbed/iframe.html
+    #
+    def url
+      evaluate("document.location.href")
+    end
+
+    #
+    # Returns current frame's title.
+    #
+    # @return [String]
+    #
+    # @example
+    #   browser.go_to("https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe")
+    #   frame = browser.frames[1]
+    #   frame.title # => HTML Demo: <iframe>
+    #
+    def title
+      evaluate("document.title")
+    end
+
+    #
+    # If current frame is the main frame of the page (top of the tree).
+    #
+    # @return [Boolean]
+    #
+    # @example
+    #   browser.go_to("https://www.w3schools.com/tags/tag_frame.asp")
+    #   frame = browser.frame_by(id: "C09C4E4404314AAEAE85928EAC109A93")
+    #   frame.main? # => false
+    #
+    def main?
+      @parent_id.nil?
+    end
+
+    #
+    # Returns whether the frame has finished loading (+:stopped_loading+ state).
+    # Frames in +:canceled+ state (execution context torn down mid-navigation)
+    # are not considered idle.
+    #
+    # @return [Boolean]
+    #
+    # @example
+    #   browser.go_to("https://example.com")
+    #   browser.main_frame.idle? # => true
+    def idle?
+      state == :stopped_loading
+    end
+
+    #
+    # Returns the parent frame if this frame is nested in another one.
+    #
+    # @return [Frame, nil]
+    #
+    # @example
+    #   browser.go_to("https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe")
+    #   frame = browser.frames.last
+    #   frame.url # => "https://www.openstreetmap.org/export/embed.html?bbox=-0.004017949104309083%2C51.47612752641776%2C0.00030577182769775396%2C51.478569861898606&layer=mapnik"
+    #   frame.parent.main? # => false
+    #   frame.parent.parent.main? # => false
+    #   frame.parent.parent.parent.main? # => true
+    #
+    def parent
+      @page.frame_by(id: @parent_id) if @parent_id
+    end
+
+    #
+    # Sets a content of a given frame.
+    #
+    # @param [String] html
+    #
+    # @example
+    #   browser.go_to("https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe")
+    #   frame = browser.frames[1]
+    #   frame.body # <html lang="en"><head><style>body {transition: opacity ease-in 0.2s; }...
+    #   frame.content = "<html><head></head><body><p>lol</p></body></html>"
+    #   frame.body # => <html><head></head><body><p>lol</p></body></html>
+    #
+    def content=(html)
+      execute(<<~JS, html: html)
+        document.open();
+        document.write(html);
+        document.close();
+      JS
+      @page.document_node_id
+    end
+    alias set_content content=
+
+    #
+    # Execution context id which is used by JS, each frame has it's own
+    # context in which JS evaluates. Locks for a page timeout and raises
+    # an error if an execution id hasn't been set yet, if id is set
+    # returns immediately.
+    #
+    # @return [Integer]
+    #
+    # @raise [NoExecutionContextError]
+    #
+    def execution_id!
+      value = @execution_id.borrow(@page.timeout, &:itself)
+      raise NoExecutionContextError if value.instance_of?(Object)
+
+      value
+    end
+
+    #
+    # Execution context id which is used by JS, each frame has it's own
+    # context in which JS evaluates.
+    #
+    # @return [Integer, nil]
+    #
+    def execution_id
+      value = @execution_id.value
+      return if value.instance_of?(Object)
+
+      value
+    end
+
+    #
+    # Sets the execution context id, or clears it if +nil+ is given (e.g.
+    # when the context is torn down mid-navigation and hasn't been
+    # replaced yet).
+    #
+    # @param [Integer, nil] value
+    #
+    # @return [Integer, nil]
+    #
+    def execution_id=(value)
+      if value.nil?
+        @execution_id.try_take!
+      else
+        @execution_id.try_put!(value)
+      end
+    end
+
+    #
+    # Returns the frame's isolated world with the given name: its own
+    # JavaScript globals over the frame's DOM. Created on first use.
+    #
+    # @param [String] name
+    #
+    # @return [IsolatedWorld]
+    #
+    # @example
+    #   world = page.main_frame.isolated_world("ferrum")
+    #   world.execute("window.secret = 'top'")
+    #   world.evaluate("window.secret") # => "top"
+    #   page.evaluate("window.secret") # => nil
+    #
+    def isolated_world(name)
+      @isolated_worlds.compute_if_absent(name) { IsolatedWorld.new(self, name) }
+    end
+
+    #
+    # The frame's isolated worlds used so far, by {#isolated_world},
+    # {Page#evaluate_on_new_document} with `world_name:` or extensions.
+    #
+    # @return [Array<IsolatedWorld>]
+    #
+    def isolated_worlds
+      @isolated_worlds.values
+    end
+
+    #
+    # Debug representation of the frame, including its internal state.
+    #
+    # @return [String]
+    #
+    def inspect
+      "#<#{self.class} " \
+        "@id=#{@id.inspect} " \
+        "@parent_id=#{@parent_id.inspect} " \
+        "@name=#{@name.inspect} " \
+        "@loader_id=#{@loader_id.inspect} " \
+        "@lifecycle_events=#{@lifecycle_events.inspect} " \
+        "@state=#{@state.inspect} " \
+        "@execution_id=#{@execution_id.inspect}>"
+    end
+  end
+end
