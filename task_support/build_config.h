@@ -1,0 +1,5 @@
+#define PACKAGE "faac"
+#define PACKAGE_VERSION "2.2.0"
+#define MAX_CHANNELS 8
+#define FAAC_SBR_DECIMATION 1
+#define WORDS_BIGENDIAN 0

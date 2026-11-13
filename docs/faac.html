@@ -1,0 +1,227 @@
+<html>
+
+<head>
+<meta charset="utf-8">
+<title>
+FAAC - Freeware Advanced Audio Coder
+</title>
+</head>
+
+</body>
+
+<h3>
+<center>
+FAAC - Freeware Advanced Audio Coder
+</center>
+</h3>
+<br>
+
+<a name="toc">
+<h3>
+Contents
+</h3>
+<menu>
+<li><a href="#usage">Usage</a>
+<menu>
+<li><a href="#opts">options</a>
+</menu>
+<li><a href="#copyrights">Copyrights</a>
+<li><a href="#patents">Patents</a>
+<li><a href="#people">People</a>
+</menu>
+
+<br><br>
+<a name="usage">
+<h3>
+Usage
+</h3>
+<kbd>faac [options] &lt;infile&gt; &lt;outfile&gt;</kbd>
+<br><br>
+
+<a name="opts">
+<b>Options</b><br>
+<br>
+<b>Rate control.</b>
+-q holds a quality and lets the bitrate follow the material (VBR);
+-b holds an average over the file (ABR, the default at 128 kbps);
+-b --cbr holds it in every frame (CBR). --cap-rate bounds any single frame in
+any mode, so -q --cap-rate is capped VBR: constant quality, no frame above the
+cap. -q and -b are exclusive.
+<menu>
+<li>
+<kbd>-q &lt;quality&gt;</kbd>
+	Constant quality, 1..5000 (default: 100). Higher is better and costs
+	more bits. The bitrate follows the material, so one quality can take
+	twice the bits on one recording as on another, and it moves between
+	releases as the encoder is tuned. With --object-type auto a quality up
+	to 75 uses HE-AAC v1; from 76 it is AAC-LC at a much higher bitrate.
+	Use -b for a predictable size.
+<li>
+<kbd>-b &lt;bitrate&gt;</kbd>
+	Average bitrate in kbps, up to about 500 for stereo.
+<li>
+<kbd>--cbr</kbd>
+	Hold the -b bitrate in every frame. A bit reservoir keeps each frame
+	inside the decoder's input buffer and pads the ones that would leave it
+	to overflow, so the stream lands on its rate exactly. For constant-rate
+	channels and matched-bitrate comparisons; on a file or a packet network
+	the padding is bytes for nothing.
+<li>
+<kbd>--cap-rate &lt;bitrate&gt;</kbd>
+	Cap any single frame at the given kbps, for transports that drop an
+	oversized frame rather than splitting it, and for bounding VBR. Must be
+	at least the -b bitrate. Best effort: a frame cannot shrink below its
+	own side information.
+<li>
+<kbd>-c &lt;freq&gt;</kbd>
+	Cut the audio off above the given frequency. Left out, the encoder
+	chooses the cutoff from the bitrate, between 14 and 19 kHz on most
+	stereo settings; VBR codes up to 19 kHz. It is printed at the start of
+	the encode. Set it as high as half the sample rate to keep everything;
+	the bitrate rises with it. HE-AAC sets its own cutoff and ignores this.
+</menu>
+
+<b>Coding tools.</b>
+<menu>
+<li>
+<kbd>--object-type &lt;type&gt;</kbd>
+	<kbd>lc</kbd> (AAC-LC), <kbd>he-aac-v1</kbd> (AAC-LC plus Spectral
+	Band Replication) or <kbd>auto</kbd> (default), which picks HE-AAC v1
+	at low bitrates and qualities and AAC-LC above.
+<li>
+<kbd>--joint &lt;mode&gt;</kbd>
+	Joint stereo: 0 off, 1 Mid/Side, 2 Intensity Stereo, 3 both, chosen
+	per band (default).
+<li>
+<kbd>--no-pns</kbd>
+	Disable Perceptual Noise Substitution, which codes noise-like bands as
+	a noise level instead of spectral lines. On by default.
+<li>
+<kbd>--no-tns</kbd>
+	Disable Temporal Noise Shaping, which reduces pre-echo on transients.
+	On by default.
+</menu>
+
+<b>Input and output.</b>
+<menu>
+<li>
+<kbd>-o &lt;filename&gt;</kbd>
+	Output file. The format follows the extension: .m4a/.mp4/.m4b for
+	MP4 (the default), .aac/.adts for an ADTS stream.
+<li>
+<kbd>-a</kbd>
+	ADTS stream output.
+<li>
+<kbd>-r</kbd>
+	Raw AAC output without headers. Rarely what you want.
+<li>
+<kbd>-</kbd>
+	A hyphen in place of the input or output file reads from stdin or
+	writes to stdout, for piping.
+<li>
+<kbd>-v &lt;level&gt;</kbd>
+	Verbosity; -v0 is quiet.
+<li>
+<kbd>-P</kbd>
+	Raw PCM input instead of WAV. -R sets the sample rate (default 44100),
+	-B the sample size (8, 16, 24 or 32 bits, or float; default 16), -C the
+	channel count (default 2), -X swaps the byte order.
+<li>
+<kbd>-I &lt;C[,LFE]&gt;</kbd>
+	Positions of the centre and LFE channels in multichannel input
+	(default 3,4, as in 5.1 WAV).
+<li>
+<kbd>--ignorelength</kbd>
+	Ignore the length in the WAV header, for files over 4 GB.
+<li>
+<kbd>--overwrite</kbd>
+	Overwrite an existing output file.
+</menu>
+
+<b>MP4 tags.</b>
+<kbd>--artist</kbd>, <kbd>--album</kbd>, <kbd>--title</kbd>,
+<kbd>--composer</kbd>, <kbd>--genre</kbd>, <kbd>--track</kbd>,
+<kbd>--disc</kbd>, <kbd>--year</kbd>, <kbd>--comment</kbd>,
+<kbd>--compilation</kbd>, <kbd>--cover-art &lt;file&gt;</kbd> (GIF, JPEG or
+PNG), <kbd>--albumartist</kbd>, <kbd>--lang</kbd>, the <kbd>*sort</kbd>
+variants, and <kbd>--tag &lt;name,value&gt;</kbd> for any other iTunes tag.
+<br><br>
+
+<b>Advanced, for testing.</b>
+<kbd>--mpeg-vers 2|4</kbd> forces the MPEG version (default 4);
+<kbd>--shortctl 0|1|2</kbd> forces the block type (both, no short, no long).
+<br><br>
+<kbd>faac --long-help</kbd> prints all of these.
+<br><br><br>
+<a name="copyrights">
+<h3>
+Copyrights
+</h3>
+FAAC - Freeware Advanced Audio Coder
+<br>
+FAAC is free software, licensed under the GNU Lesser General Public
+License (LGPL), version 2.1 or later:
+<br>
+
+<pre>
+FAAC - Freeware Advanced Audio Coder
+Copyright &copy; 1999-2001, Menno Bakker
+Copyright &copy; 2002-2017, Krzysztof Nikiel
+Copyright &copy; 2004, Dan Villiom P. Christiansen
+Copyright &copy; 2005-2026, Fabian Greffrath
+Copyright &copy; 2026, Nils Schimmelmann
+
+This library is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either
+version 2.1 of the License, or (at your option) any later version.
+
+This library is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+</pre>
+
+<br>
+<a name="patents">
+<h3>
+Patents
+</h3>
+Please note that the use of this software may require the payment of
+patent royalties. You need to consider this issue before you start
+building derivative works. We are not warranting or indemnifying you in
+any way for patent royalities! YOU ARE SOLELY RESPONSIBLE FOR YOUR OWN
+ACTIONS!
+<br>
+
+
+<br><br><br>
+<a name="people">
+<h3>
+People
+</h3>
+
+<i>Currently maintained by</i> M. Bakker (menno)</a><br><br>
+
+<i>Other contributors:</i><br>
+Tony Lenox<br>
+RageOMatic<br>
+thebard<br>
+Ivan Dimkovic<br>
+Krzysztof Nikiel (knik)<br>
+Janne Hyv&auml;rinen (ca5e)<br>
+Stuart Espey (stux)<br>
+Andrew Voznytsa<br>
+M&aring;ns Rullg&aring;rd<br>
+Bill May<br>
+
+<br><br>
+
+<h6>
+<center><i>
+FAAC is free software, licensed under the GNU Lesser General Public License (LGPL), version 2.1 or later.
+<br></i></center>
+</h6>
+
+</body>
+</html>

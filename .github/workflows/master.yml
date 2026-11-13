@@ -1,0 +1,157 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "master" ]
+    tags-ignore: ['*']
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore: ['**.md']
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.config.shell }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: Linux GCC,
+              os: ubuntu-latest,
+              compiler: gcc,
+              shell: bash,
+            }
+          - {
+              name: Linux GCC (SBR Decimation),
+              os: ubuntu-latest,
+              compiler: gcc,
+              shell: bash,
+              options: -Dsbr-decimation=4,
+            }
+          - {
+              name: Linux GCC (32-bit),
+              os: ubuntu-latest,
+              compiler: gcc,
+              shell: bash,
+              packages: gcc-multilib,
+              options: -Dc_args=-m32 -Dc_link_args=-m32,
+            }
+          - {
+              name: macOS Clang,
+              os: macos-latest,
+              compiler: clang,
+              shell: bash,
+            }
+          - {
+              name: MSYS2 UCRT64,
+              os: windows-latest,
+              compiler: gcc,
+              shell: 'msys2 {0}',
+              msystem: ucrt64,
+              msys-env: mingw-w64-ucrt-x86_64,
+            }
+          - {
+              name: Windows MSVC,
+              os: windows-latest,
+              compiler: cl,
+              shell: pwsh,
+            }
+
+    steps:
+      - name: Deprecation Notice (Repository Moved)
+        shell: bash
+        run: |
+          echo "This project has moved to https://github.com/FreewareAdvancedAudio/faac"
+          exit 1
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ${{ matrix.config.packages }}
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          brew update || true
+          brew install \
+            meson
+
+      - name: Install dependencies (MSYS2)
+        if: matrix.config.shell == 'msys2 {0}'
+        uses: msys2/setup-msys2@v2.32.0
+        with:
+          msystem: ${{ matrix.config.msystem }}
+          update: false
+          install: >-
+            ${{ matrix.config.msys-env }}-meson
+            ${{ matrix.config.msys-env }}-gcc
+
+      - name: Install dependencies (MSVC)
+        if: matrix.config.compiler == 'cl'
+        run: |
+          pip install meson ninja
+
+      - name: Set up MSVC
+        if: matrix.config.compiler == 'cl'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - uses: actions/checkout@v7
+
+      - name: Build (MSYS2)
+        if: matrix.config.shell == 'msys2 {0}'
+        env:
+          CC: ${{ matrix.config.compiler }}
+        run: |
+          mkdir -p build temp
+          cd build
+          meson setup .. -Dprefix=$(realpath ../temp) ${{ matrix.config.options }}
+          meson install
+
+      - name: Build (General)
+        if: matrix.config.shell != 'msys2 {0}'
+        env:
+          CC: ${{ matrix.config.compiler }}
+        run: |
+          meson setup build -Dprefix="${{ github.workspace }}/temp" ${{ matrix.config.options }}
+          meson install -C build
+
+      - name: Upload artifacts (Windows)
+        uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows'
+        with:
+          name: faac-${{ github.sha }}-${{ matrix.config.name }}
+          path: temp/*
+
+  cppcheck:
+    name: Cppcheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deprecation Notice (Repository Moved)
+        shell: bash
+        run: |
+          echo "This project has moved to https://github.com/FreewareAdvancedAudio/faac"
+          exit 1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install cppcheck
+
+      - uses: actions/checkout@v7
+
+      - name: Run cppcheck
+        shell: bash
+        run: |
+          cppcheck --version
+          cppcheck --error-exitcode=1 -j4 -q --check-level=exhaustive -Iinclude/ libfaac/ frontend/
