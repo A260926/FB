@@ -1,0 +1,11 @@
+{
+    "items": [
+        {
+            "title": "Item Title",
+            "guid": {
+                "value": "http://example.org/entry/1"
+            }
+        }
+    ],
+    "version": "1.0"
+}
