@@ -1,5 +1,6 @@
 #include "glsl_optimizer.h"
 #include "nir_optimize.h"
+#include "nir_pack_varyings.h"
 #include "nir_printer.h"
 #include "buffer_layout.h"
 #include "image_formats.h"
@@ -752,11 +753,13 @@ calculate_stats(nir_shader* nir, int* math, int* tex, int* flow)
 
 // ---------------------------------------------------------------------------
 
-glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+// Parse one stage and run the shared lowering/optimization NIR pipeline, but
+// do not print or reflect it yet. Pair optimization packs the interface in
+// between. On failure the result keeps its log and false is returned.
+static bool
+compile_stage_nir(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options,
+                  glslopt_shader* result, parse_info* parsed)
 {
-   if (!ctx)
-      return NULL;
-   glslopt_shader* result = new glslopt_shader;
    gl_shader* shader = result->shader;
    switch (type) {
    case kGlslOptShaderVertex: shader->Stage = MESA_SHADER_VERTEX; break;
@@ -764,64 +767,74 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
    case kGlslOptShaderCompute: shader->Stage = MESA_SHADER_COMPUTE; break;
    default:
       result->infoLog = ralloc_asprintf(result->mem_ctx, "Unknown shader type %d", (int)type);
-      return result;
+      return false;
    }
    if (!shaderSource) {
       result->infoLog = "Shader source is null";
-      return result;
+      return false;
    }
    const bool metal = ctx->target == kGlslTargetMetal;
    shader->Source = ralloc_strdup(shader, shaderSource);
 
-   parse_info parsed;
    _mesa_glsl_compile_shader_glslopt(&ctx->mesa_ctx, shader, (options & kGlslOptionSkipPreprocessor) != 0,
-                                     capture_parse_state, &parsed);
+                                     capture_parse_state, parsed);
    result->infoLog = shader->InfoLog;
    if (shader->CompileStatus == COMPILE_FAILURE || !shader->nir)
-      return result;
-   glslopt_source_info& info = parsed.info;
+      return false;
+   glslopt_source_info& info = parsed->info;
    info.had_version = strstr(shaderSource, "#version") != nullptr;
 
    if (type == kGlslOptShaderCompute) {
       // (upstream checks this when linking)
-      if (!info.local_size_specified && !parsed.variable_local_size) {
+      if (!info.local_size_specified && !parsed->variable_local_size) {
          result->fail("error: compute shader must contain a fixed or a variable local group size\n");
-         return result;
+         return false;
       }
       if (!info.local_size_specified && metal) {
          result->fail("Metal compute output requires a fixed local group size.");
-         return result;
+         return false;
       }
       for (unsigned i = 0; i < 3; ++i)
          result->computeLocalSize[i] = info.local_size[i];
    }
    if (!metal && info.es && info.version < 300) {
       result->fail("OpenGL ES 2.0 output is no longer supported; use #version 300 es or newer.");
-      return result;
+      return false;
    }
-   if (parsed.has_subroutines) {
+   if (parsed->has_subroutines) {
       result->fail("Shader subroutines are not supported.");
-      return result;
+      return false;
    }
 
    nir_shader* nir = shader->nir;
    if (!nir_shader_get_entrypoint(nir)) {
       result->fail("Shader has no main function.");
-      return result;
+      return false;
    }
    if (nir_uses_double(nir)) {
       result->fail("Double-precision types are not supported.");
-      return result;
+      return false;
    }
    glslopt_lower_nir(nir);
    if (metal) {
       if (const char* error = validate_metal(nir)) {
          result->fail(error);
-         return result;
+         return false;
       }
    }
 
    glslopt_optimize_nir(nir);
+   return true;
+}
+
+// Print the (possibly repacked) optimized NIR and build reflection data.
+static void
+finish_stage(glslopt_ctx* ctx, glslopt_shader* result, const parse_info& parsed)
+{
+   nir_shader* nir = result->shader->nir;
+   const glslopt_source_info& info = parsed.info;
+   const bool metal = ctx->target == kGlslTargetMetal;
+
    // aggregate copies print as one assignment where the dialect can express them
    glslopt_combine_copies(nir, [&](nir_deref_instr* dst, nir_deref_instr* src) {
       nir_variable* dv = nir_deref_instr_get_variable(dst);
@@ -863,7 +876,72 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
    find_shader_buffers(result, nir, usage, metal);
    calculate_stats(nir, &result->statsMath, &result->statsTex, &result->statsFlow);
    result->status = true;
+}
+
+glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+{
+   if (!ctx)
+      return NULL;
+   glslopt_shader* result = new glslopt_shader;
+   parse_info parsed;
+   if (compile_stage_nir(ctx, type, shaderSource, options, result, &parsed))
+      finish_stage(ctx, result, parsed);
    return result;
+}
+
+// Pair optimization: OpenGL GLSL 330 core vertex/fragment pairs only.
+bool
+glslopt_optimize_pair(glslopt_ctx* ctx, const char* vertexSource, const char* fragmentSource, unsigned options,
+                      glslopt_shader** vertex, glslopt_shader** fragment)
+{
+   if (!vertex || !fragment) {
+      if (vertex) *vertex = nullptr;
+      if (fragment) *fragment = nullptr;
+      return false;
+   }
+   *vertex = nullptr;
+   *fragment = nullptr;
+   if (!ctx || !vertexSource || !fragmentSource)
+      return false;
+
+   glslopt_shader* vs = new glslopt_shader;
+   glslopt_shader* fs = new glslopt_shader;
+   *vertex = vs;
+   *fragment = fs;
+
+   parse_info vparsed, fparsed;
+   bool vok = compile_stage_nir(ctx, kGlslOptShaderVertex, vertexSource, options, vs, &vparsed);
+   bool fok = compile_stage_nir(ctx, kGlslOptShaderFragment, fragmentSource, options, fs, &fparsed);
+
+   auto fail_pair = [&](const char* reason) {
+      vs->status = false;
+      fs->status = false;
+      // A stage that failed to parse already carries its own compiler log;
+      // only replace the log of a stage that compiled on its own.
+      if (vok)
+         vs->infoLog = ralloc_asprintf(vs->mem_ctx, "Pair optimization failed: %s", reason);
+      if (fok)
+         fs->infoLog = ralloc_asprintf(fs->mem_ctx, "Pair optimization failed: %s", reason);
+      return false;
+   };
+
+   if (!vok || !fok)
+      return fail_pair("vertex or fragment stage failed to compile");
+
+   if (ctx->target != kGlslTargetOpenGL)
+      return fail_pair("pair optimization is only supported for the OpenGL target");
+   if (vparsed.info.es || fparsed.info.es || vparsed.info.version != 330 || fparsed.info.version != 330)
+      return fail_pair("pair optimization requires non-ES GLSL 330 core vertex and fragment shaders");
+
+   if (const char* error = glslopt_pack_varying_interface(vs->shader->nir, fs->shader->nir, vertexSource, fragmentSource))
+      return fail_pair(error);
+
+   finish_stage(ctx, vs, vparsed);
+   finish_stage(ctx, fs, fparsed);
+   const bool ok = vs->status && fs->status;
+   if (!ok)
+      return fail_pair("internal error while printing the optimized pair");
+   return true;
 }
 
 void glslopt_shader_delete(glslopt_shader* shader)

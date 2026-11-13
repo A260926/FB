@@ -77,6 +77,16 @@ void glslopt_cleanup (glslopt_ctx* ctx);
 void glslopt_set_max_unroll_iterations (glslopt_ctx* ctx, unsigned iterations);
 
 glslopt_shader* glslopt_optimize (glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options);
+
+// Optimize a vertex/fragment pair together and pack their varying interface.
+// OpenGL target, GLSL 330 core vertex/fragment shaders only. On return both
+// result objects always exist (free with glslopt_shader_delete); the return
+// value is true only when both stages compiled and the interfaces matched and
+// were packed. Any failure marks both results unsuccessful, with the reason in
+// their logs. NULL context, sources or output pointers return false and set the
+// writable output pointers to NULL.
+bool glslopt_optimize_pair (glslopt_ctx* ctx, const char* vertexSource, const char* fragmentSource,
+                            unsigned options, glslopt_shader** vertex, glslopt_shader** fragment);
 bool glslopt_get_status (glslopt_shader* shader);
 const char* glslopt_get_output (glslopt_shader* shader);
 const char* glslopt_get_log (glslopt_shader* shader);

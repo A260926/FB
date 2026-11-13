@@ -83,6 +83,37 @@ for (lots of shaders) {
 glslopt_cleanup (ctx);
 ```
 
+### Paired vertex/fragment varying packing
+
+When both stages are available, `glslopt_optimize_pair` optimizes them together
+and packs the fragment shader's user varyings into shared four-component
+variables, instead of leaving one interface variable per scalar/vector:
+
+```c
+glslopt_shader *vertex = NULL, *fragment = NULL;
+bool ok = glslopt_optimize_pair (ctx, vertexSource, fragmentSource, options,
+                                 &vertex, &fragment);
+```
+
+It supports the OpenGL target with non-ES `#version 330 core` vertex/fragment
+pairs only. Both result objects are always returned (free each with
+`glslopt_shader_delete`) and own their contents independently of the context;
+the return value is true only when both stages succeeded. Any compile or
+interface failure marks both results unsuccessful and records the reason
+(including the offending variable name) in their logs.
+
+Interface matching is driven by the varyings the optimized fragment shader
+still reads: fragment inputs are matched to vertex outputs by name, then by
+type and the `smooth`/`flat`/`noperspective`, `centroid`, `sample`, and
+`invariant` qualifiers (an unqualified varying means `smooth`). Scalars and
+vectors of the same base type and identical qualifiers are bin-packed, widest
+first (then by name), into the lowest free span of a slot; vectors are never
+split. Integers must be `flat`. Interface blocks, matrices, arrays, explicit
+locations and unsupported types fail explicitly. Vertex outputs the fragment
+does not read are removed from the interface, while their computations (and any
+side effects) remain. The single-shader `glslopt_optimize` API is unchanged and
+still optimizes each stage independently.
+
 
 Language Support
 ----------------
@@ -101,9 +132,10 @@ Language Support
 * Geometry and tessellation shaders are not supported.
 * Double precision types and shader subroutines are not supported.
 * Variable workgroup sizes (`GL_ARB_compute_variable_group_size`) are not supported.
-* Each shader stage is optimized independently. Optimizer retains vertex outputs
-  even if fragment shader never reads them, and it does not match or validate
-  varyings across stages.
+* Each single-shader call (`glslopt_optimize`) optimizes independently. It
+  retains vertex outputs even if the fragment shader never reads them and does
+  not match or validate varyings across stages. Use
+  `glslopt_optimize_pair` for cross-stage matching and varying packing.
 
 #### Metal notes
 

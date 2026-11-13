@@ -20,6 +20,7 @@ option(GLSLOPT_TEST_OPENGL "Build OpenGL validation into the test runner" OFF)
 add_library(glsl_optimizer STATIC
     src/glsl/glsl_optimizer.cpp
     src/glsl/nir_optimize.cpp
+    src/glsl/nir_pack_varyings.cpp
     src/glsl/nir_printer.cpp
     src/glsl/nir_print_glsl.cpp
     src/glsl/nir_print_metal.cpp

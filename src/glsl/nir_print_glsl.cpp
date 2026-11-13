@@ -441,12 +441,14 @@ private:
 
    std::string interp_qualifiers(unsigned interp, bool centroid, bool sample)
    {
+      // GLSL requires the interpolation keyword (if any) before the auxiliary
+      // centroid/sample qualifiers: "centroid smooth in" is illegal in 330.
       std::string q;
-      if (centroid) q += "centroid ";
-      if (sample) q += "sample ";
       if (interp == INTERP_MODE_FLAT) q += "flat ";
       else if (interp == INTERP_MODE_NOPERSPECTIVE) q += "noperspective ";
       else if (interp == INTERP_MODE_SMOOTH) q += "smooth ";
+      if (centroid) q += "centroid ";
+      if (sample) q += "sample ";
       return q;
    }
 
