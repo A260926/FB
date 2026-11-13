@@ -53,6 +53,19 @@ Word16 psyMainInit( PSY_KERNEL *hPsy,
                     Word16 tnsMask,
                     Word16 bandwidth);
 
+/*
+ * Reconfigure the psychoacoustic long/short configurations, TNS and the
+ * block-switching attack thresholds for a new bit rate. The MDCT delay
+ * buffers, window sequence, block-switching energy history, pre-echo
+ * thresholds and all other accumulated per-channel state are left untouched.
+ */
+Word16 psyMainLiveBitrate(PSY_KERNEL *hPsy,
+                          Word32 sampleRate,
+                          Word32 bitRate,
+                          Word16 channels,
+                          Word16 tnsMask,
+                          Word16 bandwidth);
+
 
 Word16 psyMain(Word16                   nChannels,   /*!< total number of channels */
                ELEMENT_INFO             *elemInfo,

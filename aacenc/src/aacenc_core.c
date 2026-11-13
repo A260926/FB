@@ -84,6 +84,9 @@ Word16  AacEncOpen(  AAC_ENCODER*      hAacEnc,        /* pointer to an encoder 
     /* use or not tns tool for long and short block */
 	 Word16 tnsMask=3;
 
+	 /* a full (re)open discards every queued live bit-rate request */
+	 hAacEnc->liveBitratePending = 0;
+
 	/* init encoder psychoacoustic */
     error = psyMainInit(&hAacEnc->psyKernel,
                         config.sampleRate,
@@ -135,6 +138,97 @@ Word16  AacEncOpen(  AAC_ENCODER*      hAacEnc,        /* pointer to an encoder 
 
 /********************************************************************************
 *
+* function name: AacEncSetLiveBitrate
+* description:  validate and queue a continuous bit-rate change. The value is
+*               only stored; the running core keeps its current configuration
+*               until the next complete frame is encoded.
+* returns:      0 if success, 1 if the bit rate is out of range
+*
+**********************************************************************************/
+Word16 AacEncSetLiveBitrate(AAC_ENCODER *hAacEnc,
+                            Word32       newBitrate)
+{
+  Word16 nChannels = hAacEnc->elInfo.nChannelsInEl;
+  Word32 sampleRate = hAacEnc->config.sampleRate;
+
+  /* same range checks as the initial configuration, but strict: no fixing */
+  if (newBitrate <= 0 ||
+      (newBitrate / nChannels < 4000) ||
+      (newBitrate / nChannels > 160000) ||
+      (newBitrate > sampleRate * 6 * nChannels)) {
+    return 1;
+  }
+
+  /* the latest legal request wins; earlier pending values are overwritten */
+  hAacEnc->liveBitratePending = newBitrate;
+
+  return 0;
+}
+
+/********************************************************************************
+*
+* function name: AacEncApplyLiveBitrate
+* description:  apply a queued bit-rate change in place. Recomputes bandwidth
+*               with the initialization-time rule, updates the psychoacoustic
+*               configuration, TNS, block switching, quantization budgets,
+*               reservoir capacity and threshold constants, while preserving
+*               the reservoir fill, padding phase and every measured history.
+*
+**********************************************************************************/
+void AacEncApplyLiveBitrate(AAC_ENCODER *hAacEnc)
+{
+  Word32 newBitrate;
+  Word16 tnsMask = 3;
+  Word16 nChannels, bandWidth;
+  Word32 sampleRate, bitratePerChannel, tmp;
+  int i;
+
+  newBitrate = hAacEnc->liveBitratePending;
+  if (newBitrate == 0)
+    return;
+
+  nChannels  = hAacEnc->elInfo.nChannelsInEl;
+  sampleRate = hAacEnc->config.sampleRate;
+
+  /* bandwidth selection, identical to the SetParam initialization path */
+  tmp = 441;
+  if (sampleRate % 8000 == 0)
+    tmp = 480;
+
+  bitratePerChannel = newBitrate / nChannels;
+  bitratePerChannel = bitratePerChannel * tmp / sampleRate;
+
+  for (i = 0; rates[i]; i++) {
+    if (rates[i] >= bitratePerChannel)
+      break;
+  }
+  bandWidth = BandwithCoefTab[i][hAacEnc->psyKernel.sampleRateIdx];
+
+  /* psychoacoustic long/short config, TNS and block switching parameters */
+  psyMainLiveBitrate(&hAacEnc->psyKernel,
+                     sampleRate,
+                     newBitrate,
+                     nChannels,
+                     tnsMask,
+                     bandWidth);
+
+  /* quantization budgets, reservoir capacity and threshold constants */
+  QCLiveBitrateUpdate(&hAacEnc->qcKernel,
+                      newBitrate,
+                      sampleRate,
+                      nChannels,
+                      hAacEnc->qcKernel.globStatBits);
+
+  /* publish the new configuration; sample rate and channels are unchanged */
+  hAacEnc->config.bitRate = newBitrate;
+  hAacEnc->config.bandWidth = bandWidth;
+  hAacEnc->bseInit.bitrate = newBitrate;
+
+  hAacEnc->liveBitratePending = 0;
+}
+
+/********************************************************************************
+*
 * function name: AacEncEncode
 * description:  encode pcm to aac data core function
 * returns:      0 if success
@@ -153,6 +247,11 @@ Word16 AacEncEncode(AAC_ENCODER *aacEnc,		/*!< an encoder handle */
   Word16 ancDataBytes, ancDataBytesLeft;
 
   ancDataBytes = ancDataBytesLeft = *numAncBytes;
+
+  /* a full 1024-sample frame is about to be encoded: apply any queued
+   * bit-rate change first, so the new budget drives this very frame while
+   * the accumulated audio history remains in use */
+  AacEncApplyLiveBitrate(aacEnc);
 
   /* init output aac data buffer and length */
   aacEnc->hBitStream = CreateBitBuffer(&aacEnc->bitStream, outBytes, *numOutBytes);

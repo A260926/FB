@@ -95,5 +95,10 @@ EXTRA_DIST = $(top_srcdir)/NOTICE \
              $(top_srcdir)/aacenc/SampleCode $(top_srcdir)/aacenc/doc \
              $(top_srcdir)/aacenc/*.txt $(top_srcdir)/common/*.mk \
              $(top_srcdir)/common/NOTICE \
-             $(top_srcdir)/common/MODULE_LICENSE_APACHE2
+             $(top_srcdir)/common/MODULE_LICENSE_APACHE2 \
+             $(top_srcdir)/tests/live_bitrate.c \
+             $(top_srcdir)/examples/live_bitrate_example.c \
+             $(top_srcdir)/devcheck/baseline.sh \
+             $(top_srcdir)/devcheck/target.sh \
+             $(top_srcdir)/devcheck/baseline_demo.c
 

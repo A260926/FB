@@ -61,4 +61,18 @@ Word16 AdjustBitrate(QC_STATE *hQC,
                      Word32 bitRate,
                      Word32 sampleRate);
 
+/*
+ * Reconfigure the quantization control for a new bit rate while encoding is
+ * running. Budgets, per-channel bit rate, maxBitFac, the byte-aligned
+ * reservoir capacity and the bitrate-dependent threshold constants are
+ * recomputed; the actual reservoir fill is retained (only clipped to the new
+ * capacity), and the padding phase plus all measured threshold history are
+ * kept. globStatBits is the fixed per-frame static bit overhead.
+ */
+void QCLiveBitrateUpdate(QC_STATE *hQC,
+                         Word32    bitRate,
+                         Word32    sampleRate,
+                         Word16    nChannels,
+                         Word16    globStatBits);
+
 #endif /* _QC_MAIN_H */

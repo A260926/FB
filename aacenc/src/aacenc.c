@@ -394,6 +394,27 @@ VO_U32 VO_API voAACEncSetParam(VO_HANDLE hCodec, VO_S32 uParamID, VO_PTR pData)
 		if(ret)
 			return VO_ERR_AUDIO_UNSFEATURE;
 		break;
+	case VO_PID_AAC_LIVE_BITRATE:
+	{
+		VO_S32 newBitrate;
+
+		/* strict validation: null pointer is an error, never corrected */
+		if(pData == NULL)
+			return VO_ERR_INVALID_ARG;
+
+		newBitrate = *(VO_S32 *)pData;
+
+		if(AacEncSetLiveBitrate(hAacEnc, (Word32) newBitrate))
+			return VO_ERR_INVALID_ARG;
+
+		/*
+		 * Setting the bit rate already in effect cancels a previously queued
+		 * change. With nothing queued this is simply a no-op.
+		 */
+		if(newBitrate == hAacEnc->config.bitRate)
+			hAacEnc->liveBitratePending = 0;
+		break;
+	}
 	case VO_PID_AUDIO_FORMAT:	/* init pcm channel and samplerate*/
 		AacInitDefaultConfig(&config);
 		if(pData == NULL)
@@ -477,9 +498,19 @@ VO_U32 VO_API voAACEncSetParam(VO_HANDLE hCodec, VO_S32 uParamID, VO_PTR pData)
 */
 VO_U32 VO_API voAACEncGetParam(VO_HANDLE hCodec, VO_S32 uParamID, VO_PTR pData)
 {
-        UNUSED(hCodec);
-        UNUSED(uParamID);
-        UNUSED(pData);
+	AAC_ENCODER* hAacEnc = (AAC_ENCODER*)hCodec;
+
+	switch(uParamID)
+	{
+	case VO_PID_AAC_LIVE_BITRATE:
+		if(NULL == hCodec || NULL == pData)
+			return VO_ERR_INVALID_ARG;
+		/* return the bit rate currently in effect, a queued value is not visible */
+		*(VO_S32 *)pData = (VO_S32)hAacEnc->config.bitRate;
+		return VO_ERR_NONE;
+	default:
+		break;
+	}
 
 	return VO_ERR_NONE;
 }

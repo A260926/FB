@@ -51,6 +51,18 @@ typedef  struct {
 /* AAC Param ID */
 #define VO_PID_AAC_Mdoule				0x42211000
 #define VO_PID_AAC_ENCPARAM				VO_PID_AAC_Mdoule | 0x0040  /*!< get/set AAC encoder parameter, the parameter is a pointer to AACENC_PARAM */
+/*!
+ * get/set the encoder bit rate without reopening the encoding core.
+ *
+ * The parameter is a pointer to VO_S32 holding the bit rate in bit/s.
+ * Sample rate and channel count stay unchanged. A set call only stores the
+ * request; it is applied to the next fully encoded 1024-sample frame, so the
+ * accumulated psychoacoustic and threshold-adaptation history is kept.
+ * Invalid values, null pointers and null handles return VO_ERR_INVALID_ARG
+ * instead of silently correcting the value. A get call returns the bit rate
+ * that is currently in effect.
+ */
+#define VO_PID_AAC_LIVE_BITRATE			VO_PID_AAC_Mdoule | 0x0041
 
 /* AAC decoder error ID */
 #define VO_ERR_AAC_Mdoule				0x82210000

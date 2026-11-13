@@ -5,3 +5,62 @@ Coding (AAC) audio codec. The library is based on a codec implementation
 by VisualOn as part of the Stagefright framework from the Google
 Android project.
 
+Live bit-rate reconfiguration
+------------------------------
+
+VO_PID_AAC_LIVE_BITRATE changes the encoder target bit rate on a
+continuous stream without reopening the encoding core. The sample rate
+and channel count stay unchanged and the accumulated psychoacoustic,
+block-switching, bit-reservoir and threshold-adaptation history is kept.
+
+The parameter is a pointer to VO_S32 holding a bit rate in bit/s:
+
+    VO_S32 bitrate = 96000;
+    hCodec->SetParam(hCodec, VO_PID_AAC_LIVE_BITRATE, &bitrate);
+
+A SetParam call only stores the request; it is applied to the next fully
+encoded 1024-sample frame. Feeding partial input never applies it and
+never discards the half frame held inside the encoder. GetParam returns
+the bit rate currently in effect:
+
+    VO_S32 current;
+    hCodec->GetParam(hCodec, VO_PID_AAC_LIVE_BITRATE, &current);
+
+Legal values are 4000..160000 bit/s per channel and at most
+sampleRate*6*nChannels in total. Out-of-range values, null handles and
+null pointers return VO_ERR_INVALID_ARG; the value is never silently
+corrected. The latest legal request wins; an illegal request does not
+overwrite a queued one. Setting the bit rate already in effect cancels a
+queued change (or is a no-op when nothing is queued).
+
+The legacy VO_PID_AAC_ENCPARAM entry point still works exactly as before
+and reinitializes the core, resetting its history.
+
+Building and testing without autotools
+--------------------------------------
+
+The development checks compile everything with the system C compiler and
+libc only:
+
+    sh devcheck/baseline.sh   # original library + legacy reset demo, 96 frames
+    sh devcheck/target.sh     # modified library + tests/live_bitrate.c + example
+
+The five test groups print AAC_LIVE_CASE <name> PASS for phase, history,
+reservoir, streaming and compatibility.
+
+Manual builds:
+
+    cc -std=c99 -D__unused= -Iaacenc/inc -Iaacenc/basic_op -Icommon/include \
+       common/cmnMemory.c aacenc/basic_op/*.c aacenc/src/*.c -c
+    ar rcs libvo-aacenc.a *.o
+
+    cc -std=c99 -D__unused= -Iaacenc/inc -Iaacenc/basic_op -Icommon/include \
+       tests/live_bitrate.c libvo-aacenc.a -o live_bitrate
+    cc -std=c99 -D__unused= -Iaacenc/inc -Iaacenc/basic_op -Icommon/include \
+       examples/live_bitrate_example.c libvo-aacenc.a -o live_bitrate_example
+
+The example writes a continuous ADTS file and switches the bit rate at
+frames 32 and 64:
+
+    ./live_bitrate_example output.aac
+

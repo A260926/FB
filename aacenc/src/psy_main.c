@@ -235,6 +235,67 @@ Word16 psyMainInit(PSY_KERNEL *hPsy,
 
 /*****************************************************************************
 *
+* function name: psyMainLiveBitrate
+* description:  apply a new bit rate to the psychoacoustic configurations
+*               without dropping any accumulated audio history.
+*
+*               Only bitrate/bandwidth dependent configuration is rebuilt:
+*               long and short psy configurations (active band, quiet
+*               thresholds, minSnr ...), TNS configuration and the block
+*               switching attack ratio. The MDCT delay buffers and overlap,
+*               window sequences, block switching energy history and pre
+*               echo thresholds all keep their current values.
+* returns:      an error code
+*
+*****************************************************************************/
+
+Word16 psyMainLiveBitrate(PSY_KERNEL *hPsy,
+                          Word32 sampleRate,
+                          Word32 bitRate,
+                          Word16 channels,
+                          Word16 tnsMask,
+                          Word16 bandwidth)
+{
+  Word16 ch, err;
+  Word32 channelBitRate = bitRate/channels;
+
+  err = InitPsyConfigurationLong(channelBitRate,
+                                 sampleRate,
+                                 bandwidth,
+                                 &(hPsy->psyConfLong));
+
+  if (!err) {
+      hPsy->sampleRateIdx = hPsy->psyConfLong.sampRateIdx;
+	  err = InitTnsConfigurationLong(bitRate, sampleRate, channels,
+	                                   &hPsy->psyConfLong.tnsConf, &hPsy->psyConfLong, tnsMask&2);
+  }
+
+  if (!err)
+    err = InitPsyConfigurationShort(channelBitRate,
+                                    sampleRate,
+                                    bandwidth,
+                                    &hPsy->psyConfShort);
+  if (!err) {
+    err = InitTnsConfigurationShort(bitRate, sampleRate, channels,
+                                    &hPsy->psyConfShort.tnsConf, &hPsy->psyConfShort, tnsMask&1);
+  }
+
+  /*
+   * InitBlockSwitching only changes invAttackRatio; the energy history,
+   * attack state and window sequence inside blockSwitchingControl survive.
+   * PreEchoControl state and mdctScalenm1 are deliberately not reinitialized.
+   */
+  if (!err)
+    for(ch=0;ch < channels;ch++){
+      InitBlockSwitching(&hPsy->psyData[ch].blockSwitchingControl,
+                         bitRate, channels);
+    }
+
+	return(err);
+}
+
+/*****************************************************************************
+*
 * function name: psyMain
 * description:  psychoacoustic main function
 * returns:      an error code

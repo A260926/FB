@@ -56,7 +56,12 @@ typedef struct {
 } ELEMENT_INFO;
 
 typedef struct {
-  Word32 paddingRest;
+  /*
+   * Fractional phase of the byte-padding distribution. The value is kept in
+   * a 64 bit word so that the full remainder (up to sampleRate) and the
+   * 128*bitRate product never overflow, e.g. at 44.1 kHz / 64 kbit/s.
+   */
+  Word64 paddingRest;
 } PADDING;
 
 

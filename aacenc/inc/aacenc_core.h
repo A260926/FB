@@ -63,6 +63,14 @@ typedef struct {
   HANDLE_BIT_BUF  hBitStream;
   int			  initOK;
 
+  /*
+   * Bit rate requested through VO_PID_AAC_LIVE_BITRATE, waiting to be
+   * applied before the next fully encoded 1024-sample frame. 0 means no
+   * request is pending. Never applied on partial input, so the accumulated
+   * MDCT overlap, window/block-switch history and threshold history survive.
+   */
+  Word32          liveBitratePending;
+
   short			*intbuf;
   short			*encbuf;
   short			*inbuf;
@@ -96,6 +104,22 @@ returns:     AACENC_OK if success
 
 Word16  AacEncOpen (AAC_ENCODER				*hAacEnc,       /* pointer to an encoder handle, initialized on return */
                     const  AACENC_CONFIG     config);        /* pre-initialized config struct */
+
+/*
+ * Schedule a continuous bit-rate change. The request is validated against
+ * the active sample rate/channel configuration and stored; it is applied in
+ * the next AacEncEncode call without resetting any audio history. Returns 0
+ * on success, non-zero for an out-of-range bit rate.
+ */
+Word16 AacEncSetLiveBitrate(AAC_ENCODER *hAacEnc,
+                            Word32       newBitrate);
+
+/*
+ * Apply a pending live bit-rate request immediately before the next complete
+ * frame is encoded. No-op when nothing is pending. Keeps the bit reservoir
+ * fill and all psychoacoustic/threshold history.
+ */
+void AacEncApplyLiveBitrate(AAC_ENCODER *hAacEnc);
 
 Word16 AacEncEncode(AAC_ENCODER		   *hAacEnc,
                     Word16             *timeSignal,

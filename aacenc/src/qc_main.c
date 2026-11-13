@@ -57,16 +57,21 @@ static Word16 calcMaxValueInSfb(Word16 sfbCnt,
 * function name: calcFrameLen
 * description: estimate the frame length according the bitrates
 *
+* All intermediate values are 64 bit: the 128*bitRate product and the
+* modulo remainder (which can be as large as sampleRate) must not be
+* narrowed to a Word16, e.g. at 44.1 kHz / 64 kbit/s the remainder 33500
+* would turn negative.
+*
 *****************************************************************************/
-static Word16 calcFrameLen(Word32 bitRate,
+static Word64 calcFrameLen(Word32 bitRate,
                            Word32 sampleRate,
                            FRAME_LEN_RESULT_MODE mode)
 {
 
-  Word32 result;
-  Word32 quot;
+  Word64 result;
+  Word64 quot;
 
-  result = (FRAME_LEN_LONG >> 3) * bitRate;
+  result = (Word64)(FRAME_LEN_LONG >> 3) * bitRate;
   quot = result / sampleRate;
 
 
@@ -86,13 +91,16 @@ static Word16 calcFrameLen(Word32 bitRate,
 *  description: Calculates if padding is needed for actual frame
 *  returns: paddingOn or not
 *
+*  paddingRest stays in the range 1..sampleRate across bit-rate changes; it
+*  is only updated here and never reset by a live bit-rate update.
+*
 *****************************************************************************/
-static Word16 framePadding(Word32 bitRate,
-                           Word32 sampleRate,
-                           Word32 *paddingRest)
+static Word16 framePadding(Word32  bitRate,
+                           Word32  sampleRate,
+                           Word64 *paddingRest)
 {
   Word16 paddingOn;
-  Word16 difference;
+  Word64 difference;
 
   paddingOn = 0;
 
@@ -553,10 +561,10 @@ Word16 AdjustBitrate(QC_STATE        *hQC,
                            sampleRate,
                            &hQC->padding.paddingRest);
 
-  /* frame length */
-  frameLen = paddingOn + calcFrameLen(bitRate,
-                                      sampleRate,
-                                      FRAME_LEN_BYTES_INT);
+  /* frame length; both terms fit Word16 for every legal configuration */
+  frameLen = (Word16) (paddingOn + calcFrameLen(bitRate,
+                                                sampleRate,
+                                                FRAME_LEN_BYTES_INT));
 
   frameLen = frameLen << 3;
   codeBitsLast = hQC->averageBitsTot - hQC->globStatBits;
@@ -575,4 +583,95 @@ Word16 AdjustBitrate(QC_STATE        *hQC,
   hQC->averageBitsTot = frameLen;
 
   return 0;
+}
+
+/*********************************************************************************
+*
+* function name: QCLiveBitrateUpdate
+* description:  move the quantizer to a new bit rate in the middle of a
+*               continuous stream without resetting any measured history.
+*
+*               The byte-aligned reservoir capacity is recomputed from the
+*               new average frame size; the actual fill level is preserved
+*               and only clipped to the new capacity. The padding phase,
+*               peLast/dynBitsLast/peCorrectionFactor and the observed
+*               peMin/peMax are all retained; only bitrate-dependent
+*               constants are recalculated.
+*
+**********************************************************************************/
+void QCLiveBitrateUpdate(QC_STATE *hQC,
+                         Word32    bitRate,
+                         Word32    sampleRate,
+                         Word16    nChannels,
+                         Word16    globStatBits)
+{
+  Word16 averageBits;
+  Word16 maxBits;
+  Word16 maxBitResBits;
+  Word16 oldBitResLevel;
+  Word32 chBitrate;
+
+  averageBits = (Word16) ((bitRate * FRAME_LEN_LONG) / sampleRate);
+
+  /*
+   * Per-element maximum and byte-aligned reservoir capacity, matching the
+   * InitElementBits rule. C = 8*floor((MAXBITS_COEF*nChannels -
+   * averageBits)/8).
+   */
+  maxBits = (Word16) (MAXBITS_COEF * nChannels);
+  maxBitResBits = maxBits - averageBits;
+  maxBitResBits = maxBitResBits - (maxBitResBits & 7);
+
+  hQC->maxBitsTot = maxBits;
+
+  /* keep the real fill, clipping only when it exceeds the new capacity */
+  oldBitResLevel = hQC->elementBits.bitResLevel;
+  if (oldBitResLevel > maxBitResBits)
+    oldBitResLevel = maxBitResBits;
+  if (oldBitResLevel < 0)
+    oldBitResLevel = 0;
+
+  hQC->elementBits.maxBits = maxBits;
+  hQC->elementBits.maxBitResBits = maxBitResBits;
+  hQC->elementBits.bitResLevel = oldBitResLevel;
+
+  /* per-channel bit rate */
+  if (nChannels == 2)
+    chBitrate = bitRate >> 1;
+  else
+    chBitrate = bitRate;
+  hQC->elementBits.chBitrate = chBitrate;
+
+  /* average budget including the fixed static overhead */
+  hQC->averageBitsTot = averageBits;
+  hQC->elementBits.averageBits = averageBits - globStatBits;
+  hQC->globStatBits = globStatBits;
+
+  hQC->maxBitFac = (Word16) ((100 * (MAXBITS_COEF-MINBITS_COEF) * nChannels) /
+                              (averageBits ? averageBits : 1));
+
+  /*
+   * Recompute only the bitrate-dependent threshold constants. AdjThrInit
+   * would reset peLast, dynBitsLast, peCorrectionFactor, peMin and peMax,
+   * so update peOffset and the avoid-hole parameters in place instead.
+   */
+  {
+    ATS_ELEMENT *atsElem = &hQC->adjThr.adjThrStateElem;
+
+    atsElem->peOffset = 0;
+    if (chBitrate < 32000) {
+      atsElem->peOffset = max(50, (100 - (Word16) ((100 * chBitrate) / 32000)));
+    }
+
+    if (chBitrate > 20000) {
+      atsElem->ahParam.modifyMinSnr = TRUE;
+      atsElem->ahParam.startSfbL = 15;
+      atsElem->ahParam.startSfbS = 3;
+    }
+    else {
+      atsElem->ahParam.modifyMinSnr = FALSE;
+      atsElem->ahParam.startSfbL = 0;
+      atsElem->ahParam.startSfbS = 0;
+    }
+  }
 }
