@@ -1,0 +1,23 @@
+{
+  "repo": "https://github.com/ultravideo/kvazaar",
+  "commit": "9cf31e73785fe796bd8d62a27315a82665eef8c7",
+  "license": "BSD-3-Clause",
+  "archive_sha256": "85ad1c89e11cf2227a28544416dc6aeb5c2e47b8d92084b4d33b5cf07b61b4e8",
+  "submodules": [
+    {
+      "path": "greatest",
+      "repo": "https://github.com/ultravideo/greatest",
+      "commit": "60e25ce7658ced49f03b52ac14c553cf6ea33de4",
+      "license": "ISC",
+      "license_path": "greatest/greatest.h:1-12",
+      "archive_sha256": "3914a24a613e2eefae0076d059d963ccfeea661ce9f249770ca61a78d4d326d7"
+    }
+  ],
+  "support": [
+    "devcheck/baseline.c",
+    "devcheck/baseline.sh",
+    "devcheck/build.sh",
+    "devcheck/target.sh"
+  ],
+  "changes_to_upstream": "devcheck support files plus tests/CMakeLists.txt exclusion of standalone roi_rate_control.c; private/support.patch records the one upstream edit"
+}
