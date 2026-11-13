@@ -1,0 +1,3 @@
+  reported workload: expanded 1888 -> 1206 (113 hits)
+  capacity pressure: 40 blocks, last-block expanded=6681 hits=13
+ADPCM_SEARCH_CACHE_OK cases=485

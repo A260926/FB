@@ -12,6 +12,7 @@
 #include <math.h>
 
 #include "adpcm-lib.h"
+#include "adpcm-search-cache.h"
 
 /* This module encodes and decodes ADPCM (DVI/IMA varient). It handles standard 4-bit
  * ADPCM data (where each code is a "nibble") and also the less-supported 2-bit, 3-bit,
@@ -85,11 +86,24 @@ struct adpcm_channel {
     int8_t index;                           // current index into step size table
 };
 
+/* The optional exact search cache is threaded through the recursive search
+ * below.  Even when the cache is disabled a valid state structure is always
+ * present so that the expanded-node statistics are always recorded.
+ */
+
+struct adpcm_search_state {
+    struct adpcm_search_cache *cache;
+    adpcm_search_stats *stats;
+};
+
 struct adpcm_context {
     struct adpcm_channel channels [2];
     int num_channels, sample_rate, config_flags;
     int16_t *dynamic_shaping_array, last_shaping_weight;
     int static_shaping_weight;
+    struct adpcm_search_cache *search_cache;    // optional exact search cache (NULL = disabled)
+    struct adpcm_search_state search;           // search state threaded through the recursion
+    adpcm_search_stats search_stats;
 };
 
 /* With the addition of 3-bit and 5-bit ADPCM formats and various alignment requirements,
@@ -152,6 +166,8 @@ void *adpcm_create_context (int num_channels, int sample_rate, int lookahead, in
     pcnxt->static_shaping_weight = 1024;
     pcnxt->num_channels = num_channels;
     pcnxt->sample_rate = sample_rate;
+    pcnxt->search.cache = NULL;
+    pcnxt->search.stats = &pcnxt->search_stats;
 
     // we set the indicies to invalid values so that we always recalculate them
     // on at least the first frame (and every frame if the depth is sufficient)
@@ -185,7 +201,52 @@ void adpcm_free_context (void *p)
 {
     struct adpcm_context *pcnxt = (struct adpcm_context *) p;
 
-    free (pcnxt);
+    if (pcnxt) {
+        adpcm_search_cache_destroy (pcnxt->search_cache);
+        free (pcnxt);
+    }
+}
+
+/* Enable or disable the optional exact search cache for this context.
+ * enabled must be 0 or 1; returns 1 on success and 0 on failure.  Switching
+ * does not disturb the audio history (predictor, step index or noise-shaping
+ * state); the table is allocated lazily on the first enable and then reused.
+ */
+
+int adpcm_set_search_cache (void *p, int enabled)
+{
+    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
+
+    if (!pcnxt || (enabled != 0 && enabled != 1))
+        return 0;
+
+    if (enabled && !pcnxt->search_cache) {
+        pcnxt->search_cache = adpcm_search_cache_create ();
+
+        if (!pcnxt->search_cache)
+            return 0;
+    }
+
+    pcnxt->search.cache = enabled ? pcnxt->search_cache : NULL;
+    return 1;
+}
+
+/* Report the search statistics accumulated for the most recent block encoding
+ * call (they are cleared at the start of every adpcm_encode_block_ex()).
+ * expanded counts recursion nodes that actually entered candidate evaluation;
+ * hits counts nodes served from the cache instead.  Querying has no effect on
+ * encoding.  Returns 1 on success, 0 on bad arguments.
+ */
+
+int adpcm_get_search_stats (void *p, adpcm_search_stats *out)
+{
+    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
+
+    if (!pcnxt || !out)
+        return 0;
+
+    *out = pcnxt->search_stats;
+    return 1;
 }
 
 /* Apply noise-shaping to the supplied sample value using the shaping_weight
@@ -212,6 +273,59 @@ static inline int32_t noise_shape (struct adpcm_channel *pchan, int32_t sample)
     return sample;
 }
 
+/* Build the cache identity from exactly the state that the min_error_nbit()
+ * routines read.  The lookahead depth tells us how many raw future samples
+ * this node will consume (psample [nch] onwards, one stride apart). */
+
+static int search_key_init (struct adpcm_search_key *key,
+    const struct adpcm_channel *pchan, int nch, int32_t csample,
+    const int16_t *psample, int flags, int bps)
+{
+    int depth = flags & LOOKAHEAD_DEPTH, i;
+
+    if (depth > ADPCM_SEARCH_MAX_DEPTH)
+        return 0;
+
+    memset (key, 0, sizeof (*key));
+    key->pcmdata = pchan->pcmdata;
+    key->error = pchan->error;
+    key->shaping_weight = pchan->shaping_weight;
+    key->index = pchan->index;
+    key->csample = csample;
+    key->nch = (uint8_t) nch;
+    key->bps = (uint8_t) bps;
+    key->flags = (int16_t) flags;
+
+    for (i = 0; i < depth; i++)
+        key->samples [i] = psample [(i + 1) * nch];
+
+    return 1;
+}
+
+static int search_cache_lookup (struct adpcm_search_state *search,
+    const struct adpcm_channel *pchan, int nch, int32_t csample,
+    const int16_t *psample, int flags, int bps, rms_error_t max_error, rms_error_t *value)
+{
+    struct adpcm_search_key key;
+
+    if (!search->cache || !search_key_init (&key, pchan, nch, csample, psample, flags, bps))
+        return 0;
+
+    return adpcm_search_cache_lookup (search->cache, &key, max_error, value);
+}
+
+static void search_cache_store (struct adpcm_search_state *search,
+    const struct adpcm_channel *pchan, int nch, int32_t csample,
+    const int16_t *psample, int flags, int bps, rms_error_t value, rms_error_t max_error)
+{
+    struct adpcm_search_key key;
+
+    if (!search->cache || !search_key_init (&key, pchan, nch, csample, psample, flags, bps))
+        return;
+
+    adpcm_search_cache_store (search->cache, &key, value, max_error);
+}
+
 /* These recursive functions are the core of the "lookahead" feature of the library.
  * They determine the best ADPCM code for the given audio (optionally returned in
  * *best_nibble) and also return the minimum RMS error that that code will generate
@@ -230,7 +344,7 @@ static inline int32_t noise_shape (struct adpcm_channel *pchan, int32_t sample)
  * Returns RMS total error for the specified depth
  */
 
-static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error, struct adpcm_search_state *search)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
@@ -238,6 +352,18 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
     uint16_t trial_delta = (step >> 3);
     int nibble, testnbl;
     rms_error_t min_error;
+
+    // The identity excludes max_error and best_nibble; a caller that wants the
+    // tie-broken nibble is always computed so that selection cannot change.
+    if (!best_nibble && search_cache_lookup (search, pchan, nch, csample, psample, flags, 4, max_error, &min_error)) {
+        search->stats->hits++;
+        return min_error;
+    }
+
+    search->stats->expanded++;
+
+    if (adpcm_search_observe_hook)
+        adpcm_search_observe_hook (4, flags, (uint64_t) max_error);
 
     // this odd-looking code always generates the nibble value with the least error,
     // regardless of step size (which was not true previously)
@@ -265,8 +391,10 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
     min_error = (rms_error_t) (chan.pcmdata - csample) * (chan.pcmdata - csample);
 
     // if we're at a leaf, or we're not at a leaf but have already exceeded the error limit, return
-    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error)
+    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 4, min_error, max_error);
         return min_error;
+    }
 
     // otherwise we execute that naively closest nibble and search deeper for improvement
 
@@ -280,14 +408,16 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
     else
         csample2 = psample [nch];
 
-    min_error += min_error_4bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error);
+    min_error += min_error_4bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error, search);
 
     // min_error is the error (from here to the leaf) for the naively closest nibble.
     // Unless we've been told not to try, we may be able to improve on that by choosing
     // an alternative (not closest) nibble.
 
-    if (flags & LOOKAHEAD_NO_BRANCHING)
+    if (flags & LOOKAHEAD_NO_BRANCHING) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 4, min_error, max_error);
         return min_error;
+    }
 
     for (testnbl = 0; testnbl <= 0xF; ++testnbl) {
         rms_error_t error, threshold;
@@ -329,7 +459,7 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
                 else
                     csample2 = psample [nch];
 
-                error += min_error_4bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error);
+                error += min_error_4bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error, search);
 
                 if (error < min_error) {
                     if (best_nibble) *best_nibble = testnbl;
@@ -339,16 +469,29 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
         }
     }
 
+    search_cache_store (search, pchan, nch, csample, psample, flags, 4, min_error, max_error);
     return min_error;
 }
 
-static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error, struct adpcm_search_state *search)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
     uint16_t step = step_table[chan.index];
     int nibble, testnbl;
     rms_error_t min_error;
+
+    // The identity excludes max_error and best_nibble; a caller that wants the
+    // tie-broken nibble is always computed so that selection cannot change.
+    if (!best_nibble && search_cache_lookup (search, pchan, nch, csample, psample, flags, 2, max_error, &min_error)) {
+        search->stats->hits++;
+        return min_error;
+    }
+
+    search->stats->expanded++;
+
+    if (adpcm_search_observe_hook)
+        adpcm_search_observe_hook (2, flags, (uint64_t) max_error);
 
     if (delta < 0) {
         if (-delta >= step) {
@@ -368,8 +511,10 @@ static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, i
     min_error = (rms_error_t) (chan.pcmdata - csample) * (chan.pcmdata - csample);
 
     // if we're at a leaf, or we're not at a leaf but have already exceeded the error limit, return
-    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error)
+    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 2, min_error, max_error);
         return min_error;
+    }
 
     // otherwise we execute that naively closest nibble and search deeper for improvement
 
@@ -383,14 +528,16 @@ static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, i
     else
         csample2 = psample [nch];
 
-    min_error += min_error_2bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error);
+    min_error += min_error_2bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error, search);
 
     // min_error is the error (from here to the leaf) for the naively closest nibble.
     // Unless we've been told not to try, we may be able to improve on that by choosing
     // an alternative (not closest) nibble.
 
-    if (flags & LOOKAHEAD_NO_BRANCHING)
+    if (flags & LOOKAHEAD_NO_BRANCHING) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 2, min_error, max_error);
         return min_error;
+    }
 
     for (testnbl = 0; testnbl <= 0x3; ++testnbl) {
         rms_error_t error, threshold;
@@ -421,7 +568,7 @@ static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, i
             else
                 csample2 = psample [nch];
 
-            error += min_error_2bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error);
+            error += min_error_2bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error, search);
 
             if (error < min_error) {
                 if (best_nibble) *best_nibble = testnbl;
@@ -430,10 +577,11 @@ static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, i
         }
     }
 
+    search_cache_store (search, pchan, nch, csample, psample, flags, 2, min_error, max_error);
     return min_error;
 }
 
-static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error, struct adpcm_search_state *search)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
@@ -441,6 +589,18 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
     uint16_t trial_delta = (step >> 2);
     int nibble, testnbl;
     rms_error_t min_error;
+
+    // The identity excludes max_error and best_nibble; a caller that wants the
+    // tie-broken nibble is always computed so that selection cannot change.
+    if (!best_nibble && search_cache_lookup (search, pchan, nch, csample, psample, flags, 3, max_error, &min_error)) {
+        search->stats->hits++;
+        return min_error;
+    }
+
+    search->stats->expanded++;
+
+    if (adpcm_search_observe_hook)
+        adpcm_search_observe_hook (3, flags, (uint64_t) max_error);
 
     if (delta < 0) {
         int mag = ((-delta << 1) + (step & 1)) / step;
@@ -464,8 +624,10 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
     min_error = (rms_error_t) (chan.pcmdata - csample) * (chan.pcmdata - csample);
 
     // if we're at a leaf, or we're not at a leaf but have already exceeded the error limit, return
-    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error)
+    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 3, min_error, max_error);
         return min_error;
+    }
 
     // otherwise we execute that naively closest nibble and search deeper for improvement
 
@@ -479,14 +641,16 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
     else
         csample2 = psample [nch];
 
-    min_error += min_error_3bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error);
+    min_error += min_error_3bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error, search);
 
     // min_error is the error (from here to the leaf) for the naively closest nibble.
     // Unless we've been told not to try, we may be able to improve on that by choosing
     // an alternative (not closest) nibble.
 
-    if (flags & LOOKAHEAD_NO_BRANCHING)
+    if (flags & LOOKAHEAD_NO_BRANCHING) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 3, min_error, max_error);
         return min_error;
+    }
 
     for (testnbl = 0; testnbl <= 0x7; ++testnbl) {
         rms_error_t error, threshold;
@@ -526,7 +690,7 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
                 else
                     csample2 = psample [nch];
 
-                error += min_error_3bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error);
+                error += min_error_3bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error, search);
 
                 if (error < min_error) {
                     if (best_nibble) *best_nibble = testnbl;
@@ -536,10 +700,11 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
         }
     }
 
+    search_cache_store (search, pchan, nch, csample, psample, flags, 3, min_error, max_error);
     return min_error;
 }
 
-static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error, struct adpcm_search_state *search)
 {
     static char comp_table [16] = { 0, 0, 0, 5, 0, 6, 4, 10, 0, 7, 6, 10, 4, 11, 11, 13 };
     int32_t delta = csample - pchan->pcmdata, csample2;
@@ -548,6 +713,18 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
     uint16_t trial_delta = (step >> 4);
     int nibble, testnbl;
     rms_error_t min_error;
+
+    // The identity excludes max_error and best_nibble; a caller that wants the
+    // tie-broken nibble is always computed so that selection cannot change.
+    if (!best_nibble && search_cache_lookup (search, pchan, nch, csample, psample, flags, 5, max_error, &min_error)) {
+        search->stats->hits++;
+        return min_error;
+    }
+
+    search->stats->expanded++;
+
+    if (adpcm_search_observe_hook)
+        adpcm_search_observe_hook (5, flags, (uint64_t) max_error);
 
     if (delta < 0) {
         int mag = ((-delta << 3) + comp_table [step & 0xf]) / step;
@@ -573,8 +750,10 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
     min_error = (rms_error_t) (chan.pcmdata - csample) * (chan.pcmdata - csample);
 
     // if we're at a leaf, or we're not at a leaf but have already exceeded the error limit, return
-    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error)
+    if (!(flags & LOOKAHEAD_DEPTH) || min_error >= max_error) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 5, min_error, max_error);
         return min_error;
+    }
 
     // otherwise we execute that naively closest nibble and search deeper for improvement
 
@@ -588,14 +767,16 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
     else
         csample2 = psample [nch];
 
-    min_error += min_error_5bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error);
+    min_error += min_error_5bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, max_error - min_error, search);
 
     // min_error is the error (from here to the leaf) for the naively closest nibble.
     // Unless we've been told not to try, we may be able to improve on that by choosing
     // an alternative (not closest) nibble.
 
-    if (flags & LOOKAHEAD_NO_BRANCHING)
+    if (flags & LOOKAHEAD_NO_BRANCHING) {
+        search_cache_store (search, pchan, nch, csample, psample, flags, 5, min_error, max_error);
         return min_error;
+    }
 
     for (testnbl = 0; testnbl <= 0x1F; ++testnbl) {
         rms_error_t error, threshold;
@@ -638,7 +819,7 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
                 else
                     csample2 = psample [nch];
 
-                error += min_error_5bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error);
+                error += min_error_5bit (&chan, nch, csample2, psample + nch, flags - 1, NULL, threshold - error, search);
 
                 if (error < min_error) {
                     if (best_nibble) *best_nibble = testnbl;
@@ -648,6 +829,7 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
         }
     }
 
+    search_cache_store (search, pchan, nch, csample, psample, flags, 5, min_error, max_error);
     return min_error;
 }
 
@@ -666,7 +848,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, int bps, cons
         flags = (flags & ~LOOKAHEAD_DEPTH) + num_samples - 1;
 
     if (bps == 2) {
-        min_error_2bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR);
+        min_error_2bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR, &pcnxt->search);
 
         if (nibble & 2)
             pchan->pcmdata -= step * (nibble & 1) + (step >> 1);
@@ -676,7 +858,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, int bps, cons
         pchan->index += (nibble & 1) * 3 - 1;
     }
     else if (bps == 3) {
-        min_error_3bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR);
+        min_error_3bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR, &pcnxt->search);
         trial_delta = (step >> 2);
         if (nibble & 1) trial_delta += (step >> 1);
         if (nibble & 2) trial_delta += step;
@@ -689,7 +871,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, int bps, cons
         pchan->index += index_table_3bit[nibble & 0x03];
     }
     else if (bps == 4) {
-        min_error_4bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR);
+        min_error_4bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR, &pcnxt->search);
         trial_delta = (step >> 3);
         if (nibble & 1) trial_delta += (step >> 2);
         if (nibble & 2) trial_delta += (step >> 1);
@@ -703,7 +885,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, int bps, cons
         pchan->index += index_table[nibble & 0x07];
     }
     else {  // bps == 5
-        min_error_5bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR);
+        min_error_5bit (pchan, pcnxt->num_channels, csample, psample, flags, &nibble, MAX_RMS_ERROR, &pcnxt->search);
         trial_delta = (step >> 4);
         if (nibble & 1) trial_delta += (step >> 3);
         if (nibble & 2) trial_delta += (step >> 2);
@@ -784,6 +966,7 @@ int adpcm_encode_block_ex (void *p, uint8_t *outbuf, size_t *outbufsize, const i
     int ch;
 
     *outbufsize = 0;
+    memset (&pcnxt->search_stats, 0, sizeof (pcnxt->search_stats));
 
     if (bps < 2 || bps > 5)
         return 0;
@@ -821,13 +1004,13 @@ int adpcm_encode_block_ex (void *p, uint8_t *outbuf, size_t *outbufsize, const i
                 chan.shaping_weight = 0;
 
                 if (bps == 2)
-                    error_per_index [tindex] = min_error_2bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR);
+                    error_per_index [tindex] = min_error_2bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR, &pcnxt->search);
                 else if (bps == 3)
-                    error_per_index [tindex] = min_error_3bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR);
+                    error_per_index [tindex] = min_error_3bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR, &pcnxt->search);
                 else if (bps == 5)
-                    error_per_index [tindex] = min_error_5bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR);
+                    error_per_index [tindex] = min_error_5bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR, &pcnxt->search);
                 else
-                    error_per_index [tindex] = min_error_4bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR);
+                    error_per_index [tindex] = min_error_4bit (&chan, pcnxt->num_channels, inbuf [ch], inbuf + ch, flags, NULL, MAX_RMS_ERROR, &pcnxt->search);
             }
 
             // we use a 3-wide average window because the min_error_nbit() results can be noisy

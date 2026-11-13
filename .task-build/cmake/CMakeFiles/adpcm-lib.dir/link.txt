@@ -1,0 +1,2 @@
+/usr/bin/ar qc libadpcm-lib.a "CMakeFiles/adpcm-lib.dir/adpcm-lib.c.o" "CMakeFiles/adpcm-lib.dir/adpcm-dns.c.o" "CMakeFiles/adpcm-lib.dir/adpcm-search-cache.c.o"
+/usr/bin/ranlib libadpcm-lib.a

@@ -12,7 +12,7 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 endif()
 
 # define as library
-add_library (adpcm-lib STATIC adpcm-lib.c adpcm-dns.c)
+add_library (adpcm-lib STATIC adpcm-lib.c adpcm-dns.c adpcm-search-cache.c)
 
 # build executable
 add_executable (adpcm-xq-exe adpcm-xq.c)

@@ -72,6 +72,78 @@ program because they are not representable in WAV files, and they cannot
 be decoded by the program either (for the same reason), however the library
 itself handles them. [The experimental branch is here.](https://github.com/dbry/adpcm-xq/commits/new-formats/)
 
+## Optional exact search cache
+
+Deep lookahead can reach the same prediction state over several branches. If
+that repeated work matters, the library offers an optional exact cache that is
+**off by default**:
+
+```c
+int adpcm_set_search_cache (void *ctx, int enabled);   /* enabled: 0 or 1 */
+int adpcm_get_search_stats (void *ctx, adpcm_search_stats *out);
+```
+
+`adpcm_set_search_cache()` returns 1 on success (including a redundant 0 or 1)
+and 0 for a NULL context or any other `enabled` value. It may be called between
+block encodes; switching does **not** clear the audio history (predictor, step
+index, noise-shaping error), so the next block continues exactly as before.
+
+Enabling the cache changes *only* how much work the search does. All emitted
+bytes, block sizes, and the encoding history carried to the next block are
+identical with the cache on or off, for lookahead depths 0 through 16, plain
+and `LOOKAHEAD_EXHAUSTIVE` searches, the internal `LOOKAHEAD_NO_BRANCHING`
+path, 2- through 5-bit codes, and disabled, static, or dynamic noise shaping.
+
+### What identifies a cache entry
+
+The key is the complete state that the recursive `min_error_*()` routines read:
+the predictor (`pcmdata` and step index), the noise-shaping state (`error` and
+`shaping_weight`), the current already-noise-shaped `csample`, the raw future
+samples this recursion depth actually consumes, the channel stride, the code
+width, and the full search flags (depth plus EXHAUSTIVE/NO_BRANCHING and the
+noise-shaping mode). Lookahead samples are part of the identity because they
+drive the recursion; `predictor` and `index` alone are not enough.
+
+### Exact values vs. pruned results
+
+`max_error` is **not** part of the identity. It is the caller's pruning limit,
+and an identical state can be revisited under a different limit. A search that
+stops because it met the limit is not guaranteed to hold the complete optimum,
+so such a result is never stored as reusable. Only results strictly below the
+limit are cached, and a lookup is served only when the stored exact value is
+still below the *current* limit; otherwise the node is recomputed. Ties are
+resolved exactly as before (the existing "strictly less than" comparison),
+because a node that must return its `best_nibble` is always computed rather
+than served from the cache. The recursion itself, and therefore the candidate
+ranges and visit order, is unchanged, so this is not a beam search and does not
+turn finite lookahead into whole-block optimization.
+
+### Statistics
+
+```c
+typedef struct adpcm_search_stats {
+    uint64_t expanded;   /* recursion nodes that ran candidate evaluation */
+    uint64_t hits;       /* recursion nodes served from the cache */
+} adpcm_search_stats;
+```
+
+Both counters are cleared at the start of every block encoding call
+(`adpcm_encode_block_ex()`), so they describe the most recent block. `expanded`
+is recorded whether the cache is on or off; `hits` is 0 when it is off.
+Querying the statistics never affects encoding.
+
+### Memory and isolation
+
+Each enabled instance allocates one fixed table of 32768 entries (72 bytes
+each, about 2.25 MiB), comfortably under the 4 MiB per-instance limit, and
+reuses it for every block, so working memory does not grow with the recording
+length. The table is allocated lazily on first enable; a context that never
+enables the cache allocates nothing. No allocation or deallocation occurs
+inside the recursion. Instances are fully independent and never share results.
+Hash collisions, table pressure, and overwrites only ever cause a recomputation,
+never an incorrect hit, because full keys are compared and no generation
+shortcut is used.
+
 ## Building
 
 To build the command-line tool (**ADPCM-XQ**) on Linux:

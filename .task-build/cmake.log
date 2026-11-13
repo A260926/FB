@@ -1,0 +1,29 @@
+CMake Warning (deprecated) at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- The C compiler identification is AppleClang 21.0.0.21000334
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Looking for pow in m
+-- Looking for pow in m - found
+-- Configuring done (0.4s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/solo/pro/UserFB/workspace/FS6180CAE0D494U6919/attempts/20261113T182051942882Z/repo/.task-build/cmake
+[ 16%] Building C object CMakeFiles/adpcm-lib.dir/adpcm-lib.c.o
+[ 33%] Building C object CMakeFiles/adpcm-lib.dir/adpcm-dns.c.o
+[ 50%] Building C object CMakeFiles/adpcm-lib.dir/adpcm-search-cache.c.o
+[ 66%] Linking C static library libadpcm-lib.a
+[ 66%] Built target adpcm-lib
+[ 83%] Building C object CMakeFiles/adpcm-xq-exe.dir/adpcm-xq.c.o
+[100%] Linking C executable adpcm-xq
+[100%] Built target adpcm-xq-exe
