@@ -1,0 +1,312 @@
+TAP version 13
+# Subtest: stream acquisition contract
+    # Subtest: html/plain-amp-lt: chunked callback contract
+    ok 1 - html/plain-amp-lt: chunked callback contract
+      ---
+      duration_ms: 3.806292
+      type: 'test'
+      ...
+    # Subtest: html/numeric-decimal: chunked callback contract
+    ok 2 - html/numeric-decimal: chunked callback contract
+      ---
+      duration_ms: 0.54925
+      type: 'test'
+      ...
+    # Subtest: html/numeric-hex: chunked callback contract
+    ok 3 - html/numeric-hex: chunked callback contract
+      ---
+      duration_ms: 0.717958
+      type: 'test'
+      ...
+    # Subtest: html/two-codepoint: chunked callback contract
+    ok 4 - html/two-codepoint: chunked callback contract
+      ---
+      duration_ms: 0.915417
+      type: 'test'
+      ...
+    # Subtest: html/semicolonless-text: chunked callback contract
+    ok 5 - html/semicolonless-text: chunked callback contract
+      ---
+      duration_ms: 0.933333
+      type: 'test'
+      ...
+    # Subtest: html/attr-legacy-blocked: chunked callback contract
+    ok 6 - html/attr-legacy-blocked: chunked callback contract
+      ---
+      duration_ms: 1.823083
+      type: 'test'
+      ...
+    # Subtest: html/attr-entities: chunked callback contract
+    ok 7 - html/attr-entities: chunked callback contract
+      ---
+      duration_ms: 1.353625
+      type: 'test'
+      ...
+    # Subtest: html/rcdata: chunked callback contract
+    ok 8 - html/rcdata: chunked callback contract
+      ---
+      duration_ms: 2.650042
+      type: 'test'
+      ...
+    # Subtest: html/raw: chunked callback contract
+    ok 9 - html/raw: chunked callback contract
+      ---
+      duration_ms: 1.361958
+      type: 'test'
+      ...
+    # Subtest: html/comments: chunked callback contract
+    ok 10 - html/comments: chunked callback contract
+      ---
+      duration_ms: 1.157875
+      type: 'test'
+      ...
+    # Subtest: html/nested: chunked callback contract
+    ok 11 - html/nested: chunked callback contract
+      ---
+      duration_ms: 1.6565
+      type: 'test'
+      ...
+    # Subtest: html/decode-off: chunked callback contract
+    ok 12 - html/decode-off: chunked callback contract
+      ---
+      duration_ms: 0.948375
+      type: 'test'
+      ...
+    # Subtest: xml/entities: chunked callback contract
+    ok 13 - xml/entities: chunked callback contract
+      ---
+      duration_ms: 1.658084
+      type: 'test'
+      ...
+    # Subtest: xml/decode-off: chunked callback contract
+    ok 14 - xml/decode-off: chunked callback contract
+      ---
+      duration_ms: 0.319167
+      type: 'test'
+      ...
+    # Subtest: html/adjacent-entities: chunked callback contract
+    ok 15 - html/adjacent-entities: chunked callback contract
+      ---
+      duration_ms: 0.517875
+      type: 'test'
+      ...
+    # Subtest: html/plain-amp-lt: DOM trees and ranges
+    ok 16 - html/plain-amp-lt: DOM trees and ranges
+      ---
+      duration_ms: 0.761708
+      type: 'test'
+      ...
+    # Subtest: html/numeric-decimal: DOM trees and ranges
+    ok 17 - html/numeric-decimal: DOM trees and ranges
+      ---
+      duration_ms: 0.088
+      type: 'test'
+      ...
+    # Subtest: html/numeric-hex: DOM trees and ranges
+    ok 18 - html/numeric-hex: DOM trees and ranges
+      ---
+      duration_ms: 0.0775
+      type: 'test'
+      ...
+    # Subtest: html/two-codepoint: DOM trees and ranges
+    ok 19 - html/two-codepoint: DOM trees and ranges
+      ---
+      duration_ms: 0.100167
+      type: 'test'
+      ...
+    # Subtest: html/semicolonless-text: DOM trees and ranges
+    ok 20 - html/semicolonless-text: DOM trees and ranges
+      ---
+      duration_ms: 0.070625
+      type: 'test'
+      ...
+    # Subtest: html/attr-legacy-blocked: DOM trees and ranges
+    ok 21 - html/attr-legacy-blocked: DOM trees and ranges
+      ---
+      duration_ms: 0.080167
+      type: 'test'
+      ...
+    # Subtest: html/attr-entities: DOM trees and ranges
+    ok 22 - html/attr-entities: DOM trees and ranges
+      ---
+      duration_ms: 0.068375
+      type: 'test'
+      ...
+    # Subtest: html/rcdata: DOM trees and ranges
+    ok 23 - html/rcdata: DOM trees and ranges
+      ---
+      duration_ms: 0.104
+      type: 'test'
+      ...
+    # Subtest: html/raw: DOM trees and ranges
+    ok 24 - html/raw: DOM trees and ranges
+      ---
+      duration_ms: 0.067375
+      type: 'test'
+      ...
+    # Subtest: html/comments: DOM trees and ranges
+    ok 25 - html/comments: DOM trees and ranges
+      ---
+      duration_ms: 0.08675
+      type: 'test'
+      ...
+    # Subtest: html/nested: DOM trees and ranges
+    ok 26 - html/nested: DOM trees and ranges
+      ---
+      duration_ms: 0.070625
+      type: 'test'
+      ...
+    # Subtest: html/decode-off: DOM trees and ranges
+    ok 27 - html/decode-off: DOM trees and ranges
+      ---
+      duration_ms: 0.047875
+      type: 'test'
+      ...
+    # Subtest: xml/entities: DOM trees and ranges
+    ok 28 - xml/entities: DOM trees and ranges
+      ---
+      duration_ms: 0.050291
+      type: 'test'
+      ...
+    # Subtest: xml/decode-off: DOM trees and ranges
+    ok 29 - xml/decode-off: DOM trees and ranges
+      ---
+      duration_ms: 0.035
+      type: 'test'
+      ...
+    # Subtest: html/adjacent-entities: DOM trees and ranges
+    ok 30 - html/adjacent-entities: DOM trees and ranges
+      ---
+      duration_ms: 0.042625
+      type: 'test'
+      ...
+    # Subtest: html/plain-amp-lt: pause, queued end, and resume
+    ok 31 - html/plain-amp-lt: pause, queued end, and resume
+      ---
+      duration_ms: 11.404209
+      type: 'test'
+      ...
+    # Subtest: html/numeric-decimal: pause, queued end, and resume
+    ok 32 - html/numeric-decimal: pause, queued end, and resume
+      ---
+      duration_ms: 9.924875
+      type: 'test'
+      ...
+    # Subtest: html/numeric-hex: pause, queued end, and resume
+    ok 33 - html/numeric-hex: pause, queued end, and resume
+      ---
+      duration_ms: 9.741708
+      type: 'test'
+      ...
+    # Subtest: html/two-codepoint: pause, queued end, and resume
+    ok 34 - html/two-codepoint: pause, queued end, and resume
+      ---
+      duration_ms: 8.5785
+      type: 'test'
+      ...
+    # Subtest: html/semicolonless-text: pause, queued end, and resume
+    ok 35 - html/semicolonless-text: pause, queued end, and resume
+      ---
+      duration_ms: 9.6305
+      type: 'test'
+      ...
+    # Subtest: html/attr-legacy-blocked: pause, queued end, and resume
+    ok 36 - html/attr-legacy-blocked: pause, queued end, and resume
+      ---
+      duration_ms: 9.676625
+      type: 'test'
+      ...
+    # Subtest: html/attr-entities: pause, queued end, and resume
+    ok 37 - html/attr-entities: pause, queued end, and resume
+      ---
+      duration_ms: 8.546625
+      type: 'test'
+      ...
+    # Subtest: html/rcdata: pause, queued end, and resume
+    ok 38 - html/rcdata: pause, queued end, and resume
+      ---
+      duration_ms: 9.66375
+      type: 'test'
+      ...
+    # Subtest: html/raw: pause, queued end, and resume
+    ok 39 - html/raw: pause, queued end, and resume
+      ---
+      duration_ms: 9.661375
+      type: 'test'
+      ...
+    # Subtest: html/comments: pause, queued end, and resume
+    ok 40 - html/comments: pause, queued end, and resume
+      ---
+      duration_ms: 9.774584
+      type: 'test'
+      ...
+    # Subtest: html/nested: pause, queued end, and resume
+    ok 41 - html/nested: pause, queued end, and resume
+      ---
+      duration_ms: 8.65075
+      type: 'test'
+      ...
+    # Subtest: html/decode-off: pause, queued end, and resume
+    ok 42 - html/decode-off: pause, queued end, and resume
+      ---
+      duration_ms: 9.653792
+      type: 'test'
+      ...
+    # Subtest: xml/entities: pause, queued end, and resume
+    ok 43 - xml/entities: pause, queued end, and resume
+      ---
+      duration_ms: 9.684625
+      type: 'test'
+      ...
+    # Subtest: xml/decode-off: pause, queued end, and resume
+    ok 44 - xml/decode-off: pause, queued end, and resume
+      ---
+      duration_ms: 9.688416
+      type: 'test'
+      ...
+# STREAM_MODEL_OK
+    # Subtest: html/adjacent-entities: pause, queued end, and resume
+    ok 45 - html/adjacent-entities: pause, queued end, and resume
+      ---
+      duration_ms: 9.617458
+      type: 'test'
+      ...
+    # Subtest: reset starts a new document at offset zero
+    ok 46 - reset starts a new document at offset zero
+      ---
+      duration_ms: 0.302292
+      type: 'test'
+      ...
+    # Subtest: queued end survives a pause and fires exactly once
+    ok 47 - queued end survives a pause and fires exactly once
+      ---
+      duration_ms: 0.163292
+      type: 'test'
+      ...
+    # Subtest: resume continues writing without a queued end
+    ok 48 - resume continues writing without a queued end
+      ---
+      duration_ms: 0.11375
+      type: 'test'
+      ...
+    # Subtest: pause before the first write still ends once on resume
+    ok 49 - pause before the first write still ends once on resume
+      ---
+      duration_ms: 0.07
+      type: 'test'
+      ...
+    1..49
+ok 1 - stream acquisition contract
+  ---
+  duration_ms: 168.849166
+  type: 'test'
+  ...
+1..1
+# tests 50
+# suites 0
+# pass 50
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 276.126667

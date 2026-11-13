@@ -1,0 +1,7 @@
+STREAM_MODEL_OK
+STREAM_MUTATION	attribute-legacy	patched=src/Tokenizer.ts	hits=1	assertion-failures=2	status=caught	examples=html/attr-legacy-blocked: chunked callback contract,html/attr-legacy-blocked: DOM trees and ranges
+STREAM_ATTRIBUTE_CAUGHT
+STREAM_MUTATION	text-end-range	patched=src/Parser.ts	hits=1	assertion-failures=18	status=caught	examples=html/plain-amp-lt: chunked callback contract,html/numeric-decimal: chunked callback contract,html/numeric-hex: chunked callback contract,html/two-codepoint: chunked callback contract,html/semicolonless-text: chunked callback contract,html/rcdata: chunked callback contract
+STREAM_RANGE_CAUGHT
+STREAM_MUTATION	resume-drops-end	patched=src/Parser.ts	hits=1	assertion-failures=17	status=caught	examples=html/plain-amp-lt: pause, queued end, and resume,html/numeric-decimal: pause, queued end, and resume,html/numeric-hex: pause, queued end, and resume,html/two-codepoint: pause, queued end, and resume,html/semicolonless-text: pause, queued end, and resume,html/attr-legacy-blocked: pause, queued end, and resume
+STREAM_END_CAUGHT
