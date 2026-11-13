@@ -559,6 +559,34 @@ void vterm_screen_callbacks_has_pushline4(VTermScreen *screen);
 void  vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermStateFallbacks *fallbacks, void *user);
 void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen);
 
+/* Enable or disable reflow of the screen contents when the size changes.
+ *
+ * With reflow enabled and at least two columns, a logical line is re-laid out
+ * in reading order rather than truncated cell by cell, so text that used to
+ * wrap on a narrow screen rejoins when the screen widens again.
+ *
+ * Double-width glyphs (and any combining marks carried in their leading cell)
+ * are always kept whole. When only one column is left on a row, that cell is
+ * left blank as display padding and the glyph starts the next row; a
+ * double-width glyph is never split so that a detached second half appears at
+ * the start of a row. The padding cell is marked internally as layout
+ * padding: it can be told apart from a real U+0020 written by the application,
+ * it is discarded when the line is laid out again, and it is not exported as
+ * text by vterm_screen_get_text()/vterm_screen_get_chars(). Real spaces and
+ * their attributes are ordinary content and survive repeated resizes.
+ *
+ * Explicit CRLF/newline line breaks remain hard breaks. Line continuation
+ * markers reflect the new physical breaks. The cursor tracks its logical
+ * position in the reflowed line, is never placed on the second half of a
+ * double-width glyph, and is left in the same place (including the deferred
+ * wrap state) that directly laying out the same logical content at the new
+ * width would produce.
+ *
+ * Screens with a single column and lines using DECDWL/DECDHL do not get the
+ * wide-glyph layout rules; they keep the previous cell-by-cell behaviour.
+ * Only logical lines that fit entirely on the screen are reflowed; scrolled
+ * off lines keep the existing scrollback callback behaviour.
+ */
 void vterm_screen_enable_reflow(VTermScreen *screen, bool reflow);
 
 // Back-compat alias for the brief time it was in 0.3-RC1

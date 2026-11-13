@@ -71,6 +71,11 @@ static VTermState *vterm_state_new(VTerm *vt)
 
   state->mouse_protocol = MOUSE_X10;
 
+  state->at_phantom = 0;
+  state->reflow_cursor_mapped = 0;
+  state->saved_valid = 0;
+  state->saved_bufidx = BUFIDX_PRIMARY;
+
   state->callbacks = NULL;
   state->cbdata    = NULL;
   state->callbacks_has_premove = false;
@@ -595,6 +600,9 @@ static void savecursor(VTermState *state, int save)
 {
   if(save) {
     state->saved.pos = state->pos;
+    state->saved_at_phantom = state->at_phantom;
+    state->saved_bufidx = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
+    state->saved_valid = 1;
     state->saved.mode.cursor_visible = state->mode.cursor_visible;
     state->saved.mode.cursor_blink   = state->mode.cursor_blink;
     state->saved.mode.cursor_shape   = state->mode.cursor_shape;
@@ -605,6 +613,7 @@ static void savecursor(VTermState *state, int save)
     VTermPos oldpos = state->pos;
 
     state->pos = state->saved.pos;
+    state->at_phantom = state->saved_at_phantom;
 
     settermprop_bool(state, VTERM_PROP_CURSORVISIBLE, state->saved.mode.cursor_visible);
     settermprop_bool(state, VTERM_PROP_CURSORBLINK,   state->saved.mode.cursor_blink);
@@ -612,7 +621,7 @@ static void savecursor(VTermState *state, int save)
 
     vterm_state_savepen(state, 0);
 
-    updatecursor(state, &oldpos, 1);
+    updatecursor(state, &oldpos, 0);
   }
 }
 
@@ -854,8 +863,17 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 1049:
-    settermprop_bool(state, VTERM_PROP_ALTSCREEN, val);
-    savecursor(state, val);
+    /* The cursor being saved/restored belongs to the buffer that is active
+     * before the switch, so save it first and restore in the matching order
+     * after the buffer has changed back. */
+    if(val) {
+      savecursor(state, 1);
+      settermprop_bool(state, VTERM_PROP_ALTSCREEN, 1);
+    }
+    else {
+      settermprop_bool(state, VTERM_PROP_ALTSCREEN, 0);
+      savecursor(state, 0);
+    }
     break;
 
   case 2004:
@@ -2017,6 +2035,10 @@ static int on_resize(int rows, int cols, void *user)
     .lineinfos = { [0] = state->lineinfos[0], [1] = state->lineinfos[1] },
   };
 
+  /* The screen layer can reflow the cursor exactly; if it does it tells us
+   * via this flag so we don't second-guess it below. */
+  state->reflow_cursor_mapped = 0;
+
   if(state->callbacks && state->callbacks->resize) {
     (*state->callbacks->resize)(rows, cols, &fields, state->cbdata);
     state->pos = fields.pos;
@@ -2052,10 +2074,25 @@ static int on_resize(int rows, int cols, void *user)
 
   state->lineinfo = state->lineinfos[state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY];
 
-  if(state->at_phantom && state->pos.col < cols-1) {
+  /* If the screen layer reflowed the cursor it has already left it in exactly
+   * the state a direct layout at the new width would produce, including the
+   * phantom flag. Expanding a phantom into the next column here would move it
+   * past where that layout puts it. */
+  if(!state->reflow_cursor_mapped && state->at_phantom && state->pos.col < cols-1) {
     state->at_phantom = 0;
     state->pos.col++;
   }
+
+  /* The saved cursor belongs to a different buffer's layout; when that buffer
+   * is restored its position is clamped, but not reflowed here. */
+  if(state->saved.pos.row >= rows)
+    state->saved.pos.row = rows - 1;
+  if(state->saved.pos.col >= cols)
+    state->saved.pos.col = cols - 1;
+  if(state->saved.pos.row < 0)
+    state->saved.pos.row = 0;
+  if(state->saved.pos.col < 0)
+    state->saved.pos.col = 0;
 
   if(state->pos.row < 0)
     state->pos.row = 0;
@@ -2066,7 +2103,10 @@ static int on_resize(int rows, int cols, void *user)
   if(state->pos.col >= cols)
     state->pos.col = cols - 1;
 
-  updatecursor(state, &oldpos, 1);
+  /* updatecursor() would normally cancel a phantom position. When the screen
+   * layer reflowed the cursor it already decided whether a direct layout at
+   * the new width leaves the cursor in the phantom column, so keep that. */
+  updatecursor(state, &oldpos, state->reflow_cursor_mapped ? 0 : 1);
 
   return 1;
 }
@@ -2158,6 +2198,9 @@ void vterm_state_reset(VTermState *state, int hard)
     state->pos.row = 0;
     state->pos.col = 0;
     state->at_phantom = 0;
+    state->saved_valid = 0;
+    state->saved_at_phantom = 0;
+    state->saved_bufidx = BUFIDX_PRIMARY;
 
     VTermRect rect = { 0, state->rows, 0, state->cols };
     erase(state, rect, 0);

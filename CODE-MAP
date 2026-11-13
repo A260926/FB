@@ -25,6 +25,10 @@ doc/
 doc/seqs.txt
  - documents the sequences recognised by the library
 
+doc/reflow.txt
+ - describes how screen contents are re-laid out when the size changes,
+   including the rules for double-width glyphs and reflow padding
+
 include/vterm.h
  - main include file
 

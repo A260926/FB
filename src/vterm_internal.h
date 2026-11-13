@@ -71,6 +71,15 @@ struct VTermState
 
   int at_phantom; /* True if we're on the "81st" phantom column to defer a wraparound */
 
+  /* Set by the screen layer during resize when it has already placed the
+   * cursor exactly where a direct layout at the new width would: the state
+   * layer must then not apply its own phantom adjustment. */
+  int reflow_cursor_mapped;
+
+  /* Which buffer the saved cursor position belongs to, so a resize can reflow
+   * it against that buffer's own content. */
+  int saved_bufidx;
+
   int scrollregion_top;
   int scrollregion_bottom; /* -1 means unbounded */
 #define SCROLLREGION_BOTTOM(state) ((state)->scrollregion_bottom > -1 ? (state)->scrollregion_bottom : (state)->rows)
@@ -147,6 +156,8 @@ struct VTermState
       unsigned int cursor_shape:2;
     } mode;
   } saved;
+  int saved_at_phantom;
+  int saved_valid;      /* a cursor save (DECSC / mode 1048) has happened */
 
   /* Temporary state for DECRQSS parsing */
   union {

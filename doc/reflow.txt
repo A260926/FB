@@ -1,0 +1,128 @@
+Reflow of screen contents
+=========================
+
+When reflow is enabled (vterm_screen_enable_reflow / the vterm_screen_set_reflow
+alias), a change of screen size re-lays out the logical lines still visible on
+the screen. The physical rows of the old screen are grouped into logical lines
+using the line continuation markers; the glyphs of each logical line are read
+in flow order and laid out again at the new width. When the screen widens
+again, text that had been wrapped rejoins, rather than being truncated by the
+old narrower width.
+
+This file describes the layout rules. The public API signatures are unchanged.
+
+
+Logical content
+---------------
+
+Reflow works from the cells themselves. It does not store a separate copy of
+the text or remember the width at which a line was previously displayed, so
+repeated resizes cannot accumulate hidden state.
+
+The glyphs of a logical line are collected in reading order:
+
+  * A double-width glyph is one unit of width 2. Its second physical cell
+    (marked internally with chars[0] == -1) is not content; it is not collected
+    separately and is regenerated when the line is laid out again.
+  * Combining characters live in the leading cell of the glyph they belong to
+    and move with it.
+  * A real space U+0020 written by the application is ordinary width-1 content.
+    It keeps its attributes (colours, background, bold, etc.).
+  * Display padding inserted by a previous reflow is marked on the cell with an
+    internal flag and is dropped when the line is collected. Real spaces never
+    carry this flag, so a real space is never confused with padding.
+
+Trailing erased cells on a row of a logical line are layout padding rather than
+content: width-1 text only wraps when a row is full, so the only way a
+non-final row of a logical line ends in erased cells is that a double-width
+glyph did not fit in the final position. Those cells are therefore not
+collected.
+
+
+Wide glyphs
+-----------
+
+With reflow enabled and at least two columns, a width-2 glyph and any combining
+characters in its leading cell are placed as a unit:
+
+  * If a double-width glyph would have only one column left on the current row,
+    that final column is left as display padding and the whole glyph starts on
+    the next row. The glyph is never split, and no detached second half is
+    produced at the start of a row.
+  * Consequently there is never a width-2 glyph in the last column with its
+    second half on the next row, and never a leading second half without its
+    base on the row above.
+
+In the motivating example, writing "ab<U+4E2D>cd" on an 8x6 screen and then
+resizing to 3 columns produces:
+
+    row 0:  a  b  <padding>
+    row 1:  <U+4E2D> <second half>  c
+    row 2:  d
+
+That is, "ab" plus one display blank, then the wide character with "c", then
+"d". The glyph reports width 2 and its combining marks stay in the leading
+cell.
+
+The padding blank is not new input: it is not exported by
+vterm_screen_get_text()/vterm_screen_get_chars(), it has no characters, and it
+carries the internal padding flag so the next layout drops it. Because it is
+distinguishable from real content, cycling the width 6 -> 3 -> 5 -> 6 repeatedly
+returns the same characters, real spaces and attributes; no spaces accumulate.
+
+
+Cursor
+------
+
+The cursor follows its logical position in the logical line:
+
+  * It is never placed on the second half of a double-width glyph; if the
+    logical offset falls inside a glyph it is placed on the glyph's leading cell.
+  * When a glyph is moved to the next row to avoid splitting it, the cursor
+    moves with the glyph's logical position, including onto the padding blank
+    that precedes it if that is where the logical offset falls.
+  * After a resize the cursor is left where directly laying out the same
+    logical content at the new width would leave it, including the deferred
+    wrap state ("phantom" column) after content fills a row exactly. A
+    subsequent character therefore writes, overwrites or wraps identically in
+    either case.
+
+The logical position of a saved cursor (DECSC / mode 1048 / mode 1049) is
+reflowed against the buffer it was saved from. The primary and alternate
+screens maintain their reflow information separately, so resizing while the
+alternate screen is active does not disturb the primary layout and restoring
+the primary after the switch returns its content and cursor correctly.
+
+
+Hard breaks, continuation and buffers
+-------------------------------------
+
+  * An explicit CR or LF remains a hard break. Reflow never joins the rows
+    before and after it.
+  * Continuation markers are set to reflect the new physical breaks after
+    reflow.
+  * vterm_screen_get_text()/vterm_screen_get_chars() keep their existing
+    physical-line interface. They report one physical row at a time, skip the
+    second half of a double-width glyph, and do not export padding blanks or
+    trailing erased cells. No separate "cleaned up" export is added.
+
+
+Scope and compatibility
+-----------------------
+
+  * A screen of one column does not get the wide-glyph layout rules; existing
+    single-column behaviour is kept.
+  * Lines using DECDWL or DECDHL double-width/double-height attributes keep
+    their previous cell-by-cell behaviour; no new layout convention is defined
+    for them.
+  * Only logical lines that fit entirely on the screen are reflowed. Lines that
+    have scrolled off keep the existing scrollback callback behaviour
+    (sb_pushline/sb_pushline4) and are not joined with on-screen lines.
+  * The existing scrollback callbacks and the truncation behaviour when reflow
+    is disabled are unchanged.
+
+Editing commands (erase, EL/ED/DECSEL/DECSED, insert/delete line, insert/delete
+character, reset) act on the cells as normal before any resize. When the width
+changes afterwards, reflow only recollects what is actually on the screen: text
+that was erased or overwritten does not reappear, and real spaces that are
+still present are not removed.
