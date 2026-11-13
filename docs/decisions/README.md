@@ -1,0 +1,40 @@
+# Decisions
+
+Every decision this project made is a file in this folder. A file is named by
+its date and a short title, as in `2026-10-03-use-dated-decision-files.md`. This
+table is the index.
+
+Each file opens with its status. "Decided" means the maintainer chose it. "Proposed"
+means somebody suggested it and the maintainer has not confirmed it. "Open" means nobody
+has chosen yet. A decision that changes an earlier one says so in its status,
+as "Amends 2021-04-29-wrap-errors-with-w.md". The earlier one says it back, as
+"Amended by <file>" when the change is partial, or "Superseded by <file>" when
+the new decision replaces it. Read the status before the decision.
+
+Refer to a decision by its file name, never by a number. A new decision is a
+new file with the date of the decision. Add its row here. `go test ./docs/`
+fails when a decision has no row or a row is wrong, and it prints the row to
+add.
+
+| Date | Decision | Status |
+| --- | --- | --- |
+| 2019-04-30 | [Run the tests under headless-shell as well as Chrome](2019-04-30-test-under-headless-shell.md) | Decided |
+| 2021-04-29 | [Wrap errors with %w](2021-04-29-wrap-errors-with-w.md) | Decided |
+| 2025-02-22 | [Use the experimental JSON v2 package](2025-02-22-use-json-v2.md) | Decided |
+| 2026-10-03 | [A visible window is an opt-in](2026-10-03-a-visible-window-is-an-opt-in.md) | Amended by 2026-10-11-remote-is-a-package-of-the-core-module.md |
+| 2026-10-03 | [Replace the Action interface with a generic and iterator API](2026-10-03-generic-iterator-api-instead-of-action.md) | Amended by 2026-11-04-export-the-ordered-event-listener.md |
+| 2026-10-03 | [Questions and ideas go to Discussions, and issues are for bugs](2026-10-03-questions-and-ideas-go-to-discussions.md) | Decided |
+| 2026-10-03 | [The README shows the gear logo and the Discord badge](2026-10-03-readme-shows-the-gear-logo-and-discord-badge.md) | Decided |
+| 2026-10-03 | [Stop relying on helpers that cdproto no longer generates](2026-10-03-stop-relying-on-removed-cdproto-helpers.md) | Decided |
+| 2026-10-03 | [The minimum Go version is 1.27](2026-10-03-the-minimum-go-version-is-1-27.md) | Superseded by 2026-10-06-support-go-1-25-and-later.md |
+| 2026-10-03 | [chromedp projects use dated decision files](2026-10-03-use-dated-decision-files.md) | Decided |
+| 2026-10-03 | [Use a pipe to the browser by default](2026-10-03-use-a-pipe-to-the-browser-by-default.md) | Amended by 2026-10-04-the-pipe-works-on-windows.md and 2026-10-11-remote-is-a-package-of-the-core-module.md |
+| 2026-10-04 | [Keep site isolation on](2026-10-04-keep-site-isolation-on.md) | Decided |
+| 2026-10-04 | [The core uses only the standard library](2026-10-04-the-core-uses-only-the-standard-library.md) | Amended by 2026-10-04-the-pipe-works-on-windows.md and 2026-10-11-remote-is-a-package-of-the-core-module.md |
+| 2026-10-04 | [The pipe works on Windows](2026-10-04-the-pipe-works-on-windows.md) | Amends 2026-10-03-use-a-pipe-to-the-browser-by-default.md and 2026-10-04-the-core-uses-only-the-standard-library.md |
+| 2026-10-06 | [Support Go 1.25 and later](2026-10-06-support-go-1-25-and-later.md) | Amends 2026-10-03-the-minimum-go-version-is-1-27.md. Amended by 2026-10-11-remote-is-a-package-of-the-core-module.md |
+| 2026-10-11 | [The remote package is part of the core module](2026-10-11-remote-is-a-package-of-the-core-module.md) | Amends 2026-10-04-the-core-uses-only-the-standard-library.md, 2026-10-03-use-a-pipe-to-the-browser-by-default.md, 2026-10-03-a-visible-window-is-an-opt-in.md and 2026-10-06-support-go-1-25-and-later.md |
+| 2026-11-04 | [Export the ordered event listener as Listen and ListenBrowser](2026-11-04-export-the-ordered-event-listener.md) | Amends 2026-10-03-generic-iterator-api-instead-of-action.md. Amended by 2026-11-05-listen-from-the-start-of-a-target.md |
+| 2026-11-05 | [Route the detach of a target after its messages](2026-11-05-route-the-detach-after-the-messages.md) | Decided |
+| 2026-11-05 | [Export the detach of a target as Detached](2026-11-05-export-the-detach-of-a-target.md) | Decided |
+| 2026-11-05 | [Listen to a target from its start with WithListener](2026-11-05-listen-from-the-start-of-a-target.md) | Amends 2026-11-04-export-the-ordered-event-listener.md |

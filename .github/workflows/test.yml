@@ -1,0 +1,114 @@
+on: [push, pull_request]
+name: Test
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      # Ubuntu tests Go 1.25, Go 1.26 and the newest stable release. Windows
+      # and macOS test the newest stable release only.
+      matrix:
+        include:
+          - {os: ubuntu-latest, go: "1.25", docker: false}
+          - {os: ubuntu-latest, go: "1.26", docker: false}
+          - {os: ubuntu-latest, go: stable, docker: true}
+          - {os: windows-latest, go: stable, docker: false}
+          - {os: macos-latest, go: stable, docker: false}
+    name: test (${{ matrix.os }}, ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    # The repository has two modules: the core in the root, with the package
+    # remote, and test. The go.mod of test requires a released core. The first
+    # step adds a replace directive at run time, so that test uses the core of
+    # this commit. Run every module with GOWORK=off, so that no workspace
+    # changes the result.
+    env:
+      GOWORK: "off"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Install Packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y build-essential
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Use the core of this commit in test
+        run: (cd test && go mod edit -replace github.com/chromedp/chromedp=../)
+      # The runner images have Google Chrome installed. The core module
+      # includes the package remote, so this step tests it too. The flag -p 1
+      # runs one package at a time, as the old separate steps did. The tests
+      # start many browsers, and two packages together make the timing tests
+      # fail on a slow runner.
+      - name: Test Chrome, core and remote
+        run: go test -p 1 -v ./...
+      # The next steps run even when an earlier step failed, so that one run
+      # shows every failure.
+      - name: Test Chrome, test
+        if: success() || failure()
+        run: go test -v ./...
+        working-directory: test
+      # The headless-shell image is a Linux container.
+      - name: Test headless-shell
+        if: matrix.docker && (success() || failure())
+        run: ./contrib/docker-test.sh
+
+  # These jobs test the two JSON layers of cdproto, in the package
+  # github.com/chromedp/cdproto/cdp/jsonv2. The default jobs above use the
+  # module go-json-experiment/json on Go 1.25 and 1.26, and the standard
+  # library on Go 1.27 and later.
+  json-layer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The standard library JSON package on Go 1.25, through the
+          # experiment jsonv2.
+          - name: go 1.25 with GOEXPERIMENT=jsonv2
+            go: "1.25"
+            experiment: jsonv2
+            tags: ""
+          # The go-json-experiment/json module on the newest Go release. The
+          # tag cdproto_jsoncompat selects the module, and nojsonv2 turns the
+          # experiment off.
+          - name: stable with the tag cdproto_jsoncompat
+            go: stable
+            experiment: nojsonv2
+            tags: cdproto_jsoncompat
+    name: json (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: "off"
+      GOEXPERIMENT: ${{ matrix.experiment }}
+      # An empty value makes go test ignore the flag.
+      GOFLAGS: ${{ matrix.tags != '' && format('-tags={0}', matrix.tags) || '' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Install Packages
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y build-essential
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Use the core of this commit in test
+        run: (cd test && go mod edit -replace github.com/chromedp/chromedp=../)
+      - name: Vet
+        run: go vet ./...
+      - name: Test Chrome, core and remote
+        run: go test -p 1 -v ./...
+      - name: Test Chrome, test
+        if: success() || failure()
+        run: go test -v ./...
+        working-directory: test

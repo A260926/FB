@@ -1,0 +1,214 @@
+package chromedp
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/runtime"
+)
+
+// dumpJS is a JavaScript snippet that dumps the passed element node in the
+// same text format as cdproto/cdp/Node.Dump.
+//
+// Use it to make sure that the DOM tree of chromedp equals what chrome itself
+// sees.
+//
+// Note: it is written to be "line-by-line equivalent" with the implementation
+// of Node.Dump.
+const dumpJS = `(function dump(n, prefix, indent, nodeIDs) {
+	if (n === null || typeof n !== 'object') {
+		return prefix + '<nil>';
+	}
+
+	var s = '';
+	if (typeof n.localName !== 'undefined') {
+		s = n.localName;
+	}
+	if (s === '' && typeof n.nodeName !== 'undefined') {
+		s = n.nodeName;
+	}
+
+	if (s === '') {
+		throw 'invalid node element';
+	}
+
+	if (typeof n.attributes !== 'undefined') {
+		for (var i = 0; i < n.attributes.length; i++) {
+			if (n.attributes[i].name.toLowerCase() === 'id') {
+				s += '#' + n.attributes[i].value;
+				break;
+			}
+		}
+	}
+
+	if (n.nodeType !== 1 && n.nodeType !== 3) {
+		s += ' <' + [
+			'Element',
+			'Attribute',
+			'Text',
+			'CDATA',
+			'EntityReference',
+			'Entity',
+			'ProcessingInstruction',
+			'Comment',
+			'Document',
+			'DocumentType',
+			'DocumentFragment',
+			'Notation'
+		][n.nodeType - 1] + '>';
+	}
+
+	if (n.nodeType === 3) {
+		var v = n.nodeValue;
+		if (v.length > 15) {
+			v = v.substring(0, 15) + '...';
+		}
+		s += ' ' + JSON.stringify(v);
+	}
+
+	if (n.nodeType === 1 && typeof n.attributes !== 'undefined' && n.attributes.length > 0) {
+		var attrs = '';
+		for (var i = 0; i <  n.attributes.length; i++) {
+			if (n.attributes[i].name.toLowerCase() === 'id') {
+				continue;
+			}
+			if (attrs !== '') {
+				attrs += ' ';
+			}
+			attrs += n.attributes[i].name + '=' + JSON.stringify(n.attributes[i].value);
+		}
+		if (attrs != '') {
+			s += ' [' + attrs + ']';
+		}
+	}
+
+	if (nodeIDs) {
+		throw 'cannot read element node ID from scripts';
+	}
+
+	if (typeof n.childNodes !== 'undefined' && n.childNodes.length > 0) {
+		for (var i = 0; i < n.childNodes.length; i++)	{
+			// skip empty #text nodes
+			if (n.childNodes[i].nodeType === 3 && n.childNodes[i].nodeValue.trim() === '') {
+				continue;
+			}
+
+			s += '\n' + dump(n.childNodes[i], prefix+indent, indent, nodeIDs);
+		}
+	}
+
+	return prefix + s;
+})(%s, %q, %q, %t);`
+
+const insertJS = `(function(n, typ, id, text) {
+	var el = document.createElement(typ);
+	el.id = id;
+	el.innerText = text;
+	%s;
+})(document.querySelector(%q), %q, %q, %q)`
+
+// test:
+// - insertBefore
+// - removeChild
+// - appendChild
+// - replaceChild
+// - prepend
+// - append
+// - insertAdjacentElement
+func TestNodeOp(t *testing.T) {
+	t.Parallel()
+
+	s := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		fmt.Fprintf(res, `<!doctype html>
+<html>
+  <head>
+    <title>empty test page</title>
+  </head>
+  <body>
+    <div id="div1">div1 content</div>
+  </body>
+<html>`)
+	}))
+	defer s.Close()
+
+	ctx, cancel := testAllocate(t, "")
+	defer cancel()
+
+	// get document root
+	var nodes []*Node
+	if err := Do(ctx,
+		Navigate(s.URL),
+		into(&nodes, Nodes(`//*`)),
+		into(&nodes, Nodes(JSPath(`document`))),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		q, expr string
+	}{
+		{`body`, `n.insertBefore(el, n.childNodes[0])`},
+		{`body`, `n.insertBefore(el, n.childNodes[1])`},
+		{`#div3`, `n.prepend(el)`},
+		{`#div2`, `n.append(el)`},
+		{`#div2`, `n.appendChild(el)`},
+		{`#div3`, `n.removeChild(n.childNodes[0])`},
+		{`#div2`, `n.insertAdjacentElement('afterend', el)`},
+		{`body`, `n.insertBefore(el, n.childNodes[0])`},
+		{`body`, `n.insertBefore(el, n.childNodes[1])`},
+		{`#div2`, `n.replaceChild(el, n.childNodes[1])`},
+	}
+
+	prev := nodes[0].Dump("", "  ", false)
+	for i, test := range tests {
+		// modify tree
+		if err := Do(ctx,
+			Func(func(ctx context.Context, t *Target) error {
+				id := strconv.Itoa(i + 2)
+				expr := fmt.Sprintf(insertJS, test.expr, test.q, `div`, `div`+id, `div`+id+` content`)
+				res, err := cdp.Call(ctx, t, runtime.Evaluate, runtime.EvaluateParams{Expression: expr})
+				if err != nil {
+					return err
+				}
+				if res.ExceptionDetails != nil {
+					return &ExceptionError{res.ExceptionDetails}
+				}
+				return nil
+			}),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// wait for the events to propagate: poll until the node tree matches
+		// the view of the browser. A fixed short sleep is not enough on a slow
+		// machine.
+		var tree, exp string
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+			tree = nodes[0].Dump("", "  ", false)
+			if err := Do(ctx,
+				into(&exp, EvaluateAsDevTools[string](fmt.Sprintf(dumpJS, `document`, "", "  ", false))),
+			); err != nil {
+				t.Fatal(err)
+			}
+			if (tree != prev && tree == exp) || time.Now().After(deadline) {
+				break
+			}
+		}
+		if prev == tree {
+			t.Fatalf("test %d expected tree to change (prev == tree)\n-- PREV:\n%s\n-- TREE:\n%s\n--\n", i, prev, tree)
+		}
+		if exp != tree {
+			t.Errorf("test %d expected tree and node tree do not match:\n-- EXPECTED:\n%s\n-- GOT:\n%s\n--\n", i, exp, tree)
+		}
+
+		prev = tree
+
+		// t.Logf("test %d:\n%s\n--\n", i, tree)
+	}
+}

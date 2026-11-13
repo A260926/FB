@@ -1,0 +1,638 @@
+package remote
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/chromedp/cdproto/cdp"
+	cdpruntime "github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/cdproto/target"
+	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/internal/chromedptest"
+)
+
+// websocketOpts returns the options of the exec allocator in the websocket
+// mode, followed by extra.
+func websocketOpts(extra ...chromedp.ExecAllocatorOption) []chromedp.ExecAllocatorOption {
+	opts := append([]chromedp.ExecAllocatorOption{}, chromedptest.AllocOpts...)
+	return append(append(opts, WebSocket), extra...)
+}
+
+// captureUserDataDir returns an option that stores the user data directory of
+// the browser in *dir, so that a test can check that the allocator removes it.
+// The option replaces the default func of ModifyCmdFunc, and it is only for
+// tests.
+func captureUserDataDir(dir *string) chromedp.ExecAllocatorOption {
+	return chromedp.ModifyCmdFunc(func(cmd *exec.Cmd) {
+		for _, arg := range cmd.Args {
+			if v, ok := strings.CutPrefix(arg, "--user-data-dir="); ok {
+				*dir = v
+			}
+		}
+	})
+}
+
+func TestDialTimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShortTimeoutError", func(t *testing.T) {
+		t.Parallel()
+		l, err := net.Listen("tcp", ":0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "ws://" + l.(*net.TCPListener).Addr().String()
+		defer l.Close()
+
+		allocCtx, cancel := NewAllocator(t.Context(), url, NoModifyURL, WithDialTimeout(time.Microsecond))
+		defer cancel()
+		ctx, cancel := chromedp.NewContext(allocCtx)
+		defer cancel()
+		err = chromedp.Do(ctx)
+		// The text depends on the system. Windows can report the deadline
+		// of the context and not the timeout of the network.
+		got := fmt.Sprintf("%v", err)
+		if !strings.Contains(got, "i/o timeout") && !strings.Contains(got, "deadline exceeded") {
+			t.Fatalf("got %q, want %q or %q", got, "i/o timeout", "deadline exceeded")
+		}
+	})
+	t.Run("NoTimeoutSuccess", func(t *testing.T) {
+		t.Parallel()
+		l, err := net.Listen("tcp", ":0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "ws://" + l.(*net.TCPListener).Addr().String()
+		defer l.Close()
+		go func() {
+			conn, err := l.Accept()
+			if err == nil {
+				conn.Close()
+			}
+		}()
+
+		allocCtx, cancel := NewAllocator(t.Context(), url, NoModifyURL, WithDialTimeout(0))
+		defer cancel()
+		ctx, cancel := chromedp.NewContext(allocCtx)
+		defer cancel()
+		err = chromedp.Do(ctx)
+		got := fmt.Sprintf("%v", err)
+		// Windows words a closed connection in its own way.
+		if !strings.Contains(got, "EOF") && !strings.Contains(got, "connection reset") &&
+			!strings.Contains(got, "connection was aborted") && !strings.Contains(got, "forcibly closed") {
+			t.Fatalf("got %q, want a closed connection", got)
+		}
+	})
+}
+
+// TestExecAllocatorWebSocket checks that the websocket mode works, and that the
+// flags for a debugging port or address select it. Only the websocket mode
+// prints the address line, so the output shows which transport the allocator
+// used.
+func TestExecAllocatorWebSocket(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts []chromedp.ExecAllocatorOption
+	}{
+		{name: "WebSocket option"},
+		{name: "remote-debugging-port flag", opts: []chromedp.ExecAllocatorOption{chromedp.Flag("remote-debugging-port", "0")}},
+		{name: "remote-debugging-address flag", opts: []chromedp.ExecAllocatorOption{chromedp.Flag("remote-debugging-address", "127.0.0.1")}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var dir string
+			buf := new(syncBuffer)
+			allocCtx, cancel := chromedp.NewExecAllocator(context.Background(),
+				websocketOpts(append(test.opts, chromedp.CombinedOutput(buf), captureUserDataDir(&dir))...)...)
+			defer cancel()
+			ctx, _ := chromedp.NewContext(allocCtx)
+
+			var got string
+			if err := chromedp.Do(ctx,
+				chromedp.Navigate(chromedptest.TestdataDir+"/form.html"),
+				chromedptest.Into(&got, chromedp.Text(chromedp.ID("foo"))),
+			); err != nil {
+				t.Fatal(err)
+			}
+			if want := "insert"; got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+			if err := chromedp.Cancel(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(buf.String(), "DevTools listening on") {
+				t.Fatal("the browser did not use the websocket")
+			}
+			if _, err := os.Lstat(dir); dir == "" || !os.IsNotExist(err) {
+				t.Fatalf("temporary user data dir %q not deleted", dir)
+			}
+		})
+	}
+}
+
+// syncBuffer is a bytes.Buffer that is safe to use from more than one
+// goroutine.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+// Write satisfies the io.Writer interface.
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// String returns the text that was written.
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestExitErrorAfterKill kills the browser process and checks that the next
+// call returns the exit error of the process. See the issue 408.
+func TestExitErrorAfterKill(t *testing.T) {
+	t.Parallel()
+
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), websocketOpts()...)
+	defer cancel()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	if err := chromedp.Do(ctx); err != nil {
+		t.Fatal(err)
+	}
+	b := chromedp.FromContext(ctx).Browser
+	if err := b.Process().Signal(os.Kill); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first call can race with the loss of the connection, so ask until
+	// the call fails. Every later call must fail in the same way.
+	for i := range 3 {
+		_, err := chromedp.Run(ctx, chromedp.Evaluate[int](`1 + 2`))
+		if err == nil {
+			t.Fatalf("call %d: want an error from a dead browser", i)
+		}
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			t.Fatalf("call %d: want an *exec.ExitError in %q", i, err)
+		}
+		if !strings.Contains(err.Error(), killedText) {
+			t.Fatalf("call %d: want %q in %q", i, killedText, err)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("call %d: want context.Canceled in %q", i, err)
+		}
+	}
+}
+
+// TestCombinedOutput checks that the websocket mode prints the address line in
+// the combined output, and that the output holds all messages of the page.
+func TestCombinedOutput(t *testing.T) {
+	t.Parallel()
+
+	buf := new(syncBuffer)
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(),
+		websocketOpts(chromedp.CombinedOutput(buf), chromedp.Flag("enable-logging", "stderr"))...)
+	defer cancel()
+
+	taskCtx, _ := chromedp.NewContext(allocCtx)
+	if err := chromedp.Do(taskCtx,
+		chromedp.Navigate(chromedptest.TestdataDir+"/consolespam.html"),
+	); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if !strings.Contains(buf.String(), "DevTools listening on") {
+		t.Fatal("the output has no websocket string")
+	}
+	// Recent chrome versions replace many "spam" messages with "spam 1",
+	// "spam 2", and so on. Search for the prefix only.
+	if want, got := 2000, strings.Count(buf.String(), `"spam`); want != got {
+		t.Fatalf("want %d spam console logs, got %d", want, got)
+	}
+}
+
+// TestEvaluateLargeResult makes the browser send one result of 30 MB on the
+// websocket. The websocket reads one frame, so a limit makes the test fail. The
+// core module has the same test for the pipe. See the issue 401.
+func TestEvaluateLargeResult(t *testing.T) {
+	t.Parallel()
+
+	const size = 30 << 20
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), websocketOpts()...)
+	defer cancel()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	got, err := chromedp.Run(ctx, chromedp.Evaluate[string](fmt.Sprintf(`"x".repeat(%d)`, size)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != size {
+		t.Fatalf("want %d bytes, got %d", size, len(got))
+	}
+	if got[0] != 'x' || got[size-1] != 'x' {
+		t.Fatal("the result has the wrong content")
+	}
+
+	// The same connection must still work after a large message.
+	if n, err := chromedp.Run(ctx, chromedp.Evaluate[int](`1 + 2`)); err != nil || n != 3 {
+		t.Fatalf("want 3, got %d and %v", n, err)
+	}
+}
+
+func TestLargeOutboundMessages(t *testing.T) {
+	t.Parallel()
+
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), websocketOpts()...)
+	defer cancel()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	// ~5MiB of JS to test a large message in one frame.
+	expr := fmt.Sprintf("//%s\n", strings.Repeat("x", 5<<20))
+	if _, err := chromedp.Run(ctx, chromedp.Evaluate[[]byte](expr)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestExecAllocatorDebugf makes sure that the protocol logger of the browser
+// receives the messages of the websocket. The connection gets the logger
+// through the method SetDebugf.
+func TestExecAllocatorDebugf(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var sent, received int
+	debugf := func(format string, _ ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasPrefix(format, "->"):
+			sent++
+		case strings.HasPrefix(format, "<-"):
+			received++
+		}
+	}
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), websocketOpts()...)
+	defer cancel()
+	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithDebugf(debugf))
+	defer cancel()
+	if _, err := chromedp.Run(ctx, chromedp.Evaluate[int](`1 + 2`)); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if sent == 0 || received == 0 {
+		t.Fatalf("the logger got %d sent and %d received messages", sent, received)
+	}
+}
+
+// startChrome starts a browser with a debugging port and returns its websocket
+// address. The cleanup of the test stops the browser.
+func startChrome(t *testing.T) string {
+	t.Helper()
+	wsURL, _ := startChromeProcess(t)
+	return wsURL
+}
+
+// startChromeProcess is like startChrome, and it also returns the process of
+// the browser.
+//
+// The test can kill the process, and then its child processes can still write
+// to the profile directory. So the helper makes the directory itself and
+// removes it again until it succeeds.
+func startChromeProcess(t *testing.T) (string, *os.Process) {
+	t.Helper()
+	dataDir, err := os.MkdirTemp("", "chromedp-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { removeAllRetry(dataDir) })
+	procCtx, procCancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(procCtx, chromedptest.ExecPath,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--headless",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--user-data-dir="+dataDir,
+		"--remote-debugging-port=0",
+		"about:blank",
+	)
+	// Kill is too abrupt: the child processes of Chrome can still write to
+	// the temporary directory after the test, and then the cleanup fails.
+	// Ask Chrome to exit, and kill it only if it does not.
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = 10 * time.Second
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		procCancel()
+		cmd.Wait()
+	})
+	wsURL, err := readWebSocketURL(stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return wsURL, cmd.Process
+}
+
+// TestAllocatorBrowserContext checks the browser contexts of a context that the
+// remote allocator makes. The first context creates a browser context, and the
+// others use it or create their own.
+func TestAllocatorBrowserContext(t *testing.T) {
+	t.Parallel()
+
+	wsURL := startChrome(t)
+	allocCtx, allocCancel := NewAllocator(context.Background(), wsURL)
+	defer allocCancel()
+	browserCtx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	if err := chromedp.Do(browserCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCtx, cancel := chromedp.NewContext(browserCtx, chromedp.WithNewBrowserContext())
+	defer cancel()
+	if err := chromedp.Do(rootCtx); err != nil {
+		t.Fatal(err)
+	}
+	rootID := chromedp.FromContext(rootCtx).BrowserContextID
+
+	browserContextOf := func(ctx context.Context) cdp.BrowserContextID {
+		t.Helper()
+		var id cdp.BrowserContextID
+		if err := chromedp.Do(ctx,
+			chromedp.Func(func(ctx context.Context, _ *chromedp.Target) error {
+				res, err := chromedp.Call(ctx, target.GetTargetInfo, target.GetTargetInfoParams{})
+				if err != nil {
+					return err
+				}
+				id = res.TargetInfo.BrowserContextID
+				return nil
+			}),
+		); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	listed := func(id cdp.BrowserContextID) bool {
+		t.Helper()
+		var ids []cdp.BrowserContextID
+		if err := chromedp.Do(browserCtx,
+			chromedp.Func(func(ctx context.Context, _ *chromedp.Target) error {
+				res, err := chromedp.CallBrowser(ctx, target.GetBrowserContexts, cdp.Empty{})
+				ids = res.BrowserContextIDs
+				return err
+			}),
+		); err != nil {
+			t.Fatal(err)
+		}
+		for _, other := range ids {
+			if other == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("WithExistingBrowserContext", func(t *testing.T) {
+		ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithExistingBrowserContext(rootID))
+		defer cancel()
+		if got := browserContextOf(ctx); got != rootID {
+			t.Fatalf("want root browser context %q, got %q", rootID, got)
+		}
+		cancel()
+		if !listed(rootID) {
+			t.Fatal("the browser context was disposed, want it kept")
+		}
+	})
+
+	t.Run("WithNewBrowserContext", func(t *testing.T) {
+		ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithNewBrowserContext())
+		defer cancel()
+		id := browserContextOf(ctx)
+		if want := chromedp.FromContext(ctx).BrowserContextID; id != want {
+			t.Fatalf("want browser context %q, got %q", want, id)
+		}
+		cancel()
+		if listed(id) {
+			t.Fatal("the browser context was kept, want it disposed")
+		}
+	})
+}
+
+// killedText is the text that the error of a killed process has. Windows has no
+// signals, and it ends the process with the exit status 1.
+var killedText = func() string {
+	if runtime.GOOS == "windows" {
+		return "exit status 1"
+	}
+	return "signal: killed"
+}()
+
+// TestCallAfterBrowserKilled checks that a direct call with a context that
+// never ends returns an error after the browser dies, and does not hang. See
+// the issue 1529.
+func TestCallAfterBrowserKilled(t *testing.T) {
+	t.Parallel()
+
+	wsURL, proc := startChromeProcess(t)
+	allocCtx, allocCancel := NewAllocator(context.Background(), wsURL)
+	defer allocCancel()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	if err := chromedp.Do(ctx, chromedp.Navigate("about:blank")); err != nil {
+		t.Fatal(err)
+	}
+	c := chromedp.FromContext(ctx)
+
+	if err := proc.Kill(); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := map[string]func() error{
+		"Target": func() error {
+			_, err := cdp.Call(context.Background(), c.Target, cdpruntime.Evaluate, cdpruntime.EvaluateParams{Expression: "1 + 2"})
+			return err
+		},
+		"Browser": func() error {
+			_, err := cdp.Call(context.Background(), c.Browser, target.GetTargets, target.GetTargetsParams{})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			// The call with a context that never ends must return. Ask until
+			// it fails, because the first call can race with the loss of the
+			// connection.
+			for i := range 3 {
+				done := make(chan error, 1)
+				go func() { done <- call() }()
+				select {
+				case err := <-done:
+					if err == nil {
+						t.Fatalf("call %d: want an error from a dead browser", i)
+					}
+					if !strings.Contains(err.Error(), "lost the connection to the browser") {
+						t.Fatalf("call %d: want a lost connection error, got %q", i, err)
+					}
+				case <-time.After(30 * time.Second):
+					t.Fatalf("call %d: the call hangs after the browser died", i)
+				}
+			}
+		})
+	}
+}
+
+// TestCallCancelStillCanceled checks that a call with a canceled context
+// still returns context.Canceled.
+func TestCallCancelStillCanceled(t *testing.T) {
+	t.Parallel()
+
+	wsURL := startChrome(t)
+	allocCtx, allocCancel := NewAllocator(context.Background(), wsURL)
+	defer allocCancel()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	if err := chromedp.Do(ctx, chromedp.Navigate("about:blank")); err != nil {
+		t.Fatal(err)
+	}
+	c := chromedp.FromContext(ctx)
+
+	callCtx, callCancel := context.WithCancel(context.Background())
+	callCancel()
+	_, err := cdp.Call(callCtx, c.Target, cdpruntime.Evaluate, cdpruntime.EvaluateParams{Expression: "1 + 2"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+}
+
+// TestDetachOnCancel checks that the cancellation of a context closes its tab
+// by default, and leaves the tab open with WithDetachOnCancel. See the issue
+// 1613.
+func TestDetachOnCancel(t *testing.T) {
+	t.Parallel()
+
+	wsURL := startChrome(t)
+	allocCtx, allocCancel := NewAllocator(context.Background(), wsURL)
+	defer allocCancel()
+	// The observer asks the browser which tabs exist.
+	observer, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	if err := chromedp.Do(observer); err != nil {
+		t.Fatal(err)
+	}
+	listed := func(id target.ID) bool {
+		t.Helper()
+		infos, err := chromedp.Targets(observer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, info := range infos {
+			if info.TargetID == id {
+				return true
+			}
+		}
+		return false
+	}
+	// waitGone polls until the tab is not listed, for up to 10 seconds. The
+	// browser closes the tab a short time after the cancellation, so a slow
+	// machine needs a wait with a condition and not a fixed one.
+	waitGone := func(id target.ID) bool {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if !listed(id) {
+				return true
+			}
+			if time.Now().After(deadline) {
+				return false
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	// newTab makes a tab with the options and returns its ID and the cancel
+	// func of its context.
+	newTab := func(opts ...chromedp.ContextOption) (target.ID, context.CancelFunc) {
+		t.Helper()
+		ctx, cancel := chromedp.NewContext(allocCtx, opts...)
+		if err := chromedp.Do(ctx, chromedp.Navigate("about:blank")); err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		return chromedp.FromContext(ctx).Target.TargetID, cancel
+	}
+
+	t.Run("default", func(t *testing.T) {
+		id, cancel := newTab()
+		if !listed(id) {
+			t.Fatal("the new tab is not listed")
+		}
+		cancel()
+		if !waitGone(id) {
+			t.Fatal("the tab is still listed after the cancellation, want it closed")
+		}
+	})
+
+	t.Run("WithDetachOnCancel", func(t *testing.T) {
+		id, cancel := newTab(chromedp.WithDetachOnCancel())
+		cancel()
+		if !listed(id) {
+			t.Fatal("the tab is gone after the cancellation, want it open")
+		}
+
+		// A new context can attach to the tab that stayed.
+		ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithTargetID(id))
+		defer cancel()
+		if err := chromedp.Do(ctx, chromedp.Navigate("about:blank")); err != nil {
+			t.Fatalf("attaching to the tab that stayed: %v", err)
+		}
+		// This context closes the tab, because it has no option.
+		cancel()
+		if !waitGone(id) {
+			t.Fatal("the tab is still listed after the cancellation of the second context")
+		}
+	})
+
+	t.Run("WithNewBrowserContext", func(t *testing.T) {
+		id, cancel := newTab(chromedp.WithNewBrowserContext(), chromedp.WithDetachOnCancel())
+		res, err := chromedp.CallBrowser(observer, target.GetTargetInfo, target.GetTargetInfoParams{TargetID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		contextID := res.TargetInfo.BrowserContextID
+		cancel()
+		if !listed(id) {
+			t.Fatal("the tab is gone after the cancellation, want it open")
+		}
+		// The context did not dispose of the BrowserContext, so the program
+		// must do it.
+		if _, err := chromedp.CallBrowser(observer, target.DisposeBrowserContext, target.DisposeBrowserContextParams{BrowserContextID: contextID}); err != nil {
+			t.Fatalf("the browser context is gone, want it kept: %v", err)
+		}
+	})
+}

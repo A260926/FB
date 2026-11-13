@@ -1,0 +1,261 @@
+package test
+
+import (
+	"bytes"
+	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"os"
+	"path"
+	"testing"
+
+	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/internal/chromedptest"
+	"github.com/orisano/pixelmatch"
+)
+
+func TestScreenshot(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		sel  string
+		want string
+	}{
+		{
+			name: "padding border",
+			sel:  "#padding-border",
+			want: "element-padding-border.png",
+		},
+		{
+			name: "larger than viewport",
+			sel:  "#larger-than-viewport",
+			want: "element-larger-than-viewport.png",
+		},
+		{
+			name: "outside viewport",
+			sel:  "#outside-viewport",
+			want: "element-scrolled-into-view.png",
+		},
+		{
+			name: "rotate element",
+			sel:  "#rotated",
+			want: "element-rotate.png",
+		},
+		{
+			name: "fractional dimensions",
+			sel:  "#fractional-dimensions",
+			want: "element-fractional.png",
+		},
+		{
+			name: "fractional offset",
+			sel:  "#fractional-offset",
+			want: "element-fractional-offset.png",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := chromedptest.Allocate(t, "screenshot.html")
+			defer cancel()
+
+			var buf []byte
+			if err := chromedp.Do(ctx,
+				chromedp.EmulateViewport(500, 500),
+				chromedp.EvaluateAsDevTools[chromedp.Void]("document.documentElement.scrollTo(20,  30)"),
+				chromedptest.Into(&buf, chromedp.Screenshot(chromedp.CSS(test.sel))),
+			); err != nil {
+				t.Fatal(err)
+			}
+			diff, err := matchPixel(buf, test.want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff != 0 {
+				t.Fatalf("screenshot does not match. diff: %v", diff)
+			}
+		})
+	}
+}
+
+func TestScreenshotScale(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		sel   string
+		scale float64
+		want  string
+	}{
+		{
+			name:  "padding border",
+			sel:   "#padding-border",
+			scale: 2,
+			want:  "element-padding-border@2x.png",
+		},
+		{
+			name:  "svg",
+			sel:   "#svg-circle",
+			scale: 3,
+			want:  "element-svg@3x.png",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := chromedptest.Allocate(t, "screenshot.html")
+			defer cancel()
+
+			var buf []byte
+			if err := chromedp.Do(ctx,
+				chromedptest.Into(&buf, chromedp.ScreenshotScale(chromedp.CSS(test.sel), test.scale)),
+			); err != nil {
+				t.Fatal(err)
+			}
+			diff, err := matchPixel(buf, test.want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff > 20 {
+				t.Fatalf("screenshot does not match. diff: %v", diff)
+			}
+		})
+	}
+}
+
+func TestScreenshotHighDPI(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := chromedptest.Allocate(t, "image.html")
+	defer cancel()
+
+	// Use a weird screen dimension with a 1.5 scale factor, so that cropping
+	// the screenshot must use floating point arithmetic. It must also keep the
+	// high DPI in mind. The dimensions must be large enough to show the
+	// element that we want, because we do not scroll to bring it into view.
+	if err := chromedp.Do(ctx, chromedp.EmulateViewport(905, 705, chromedp.EmulateScale(1.5))); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf []byte
+	if err := chromedp.Do(ctx, chromedptest.Into(&buf, chromedp.Screenshot(chromedp.ID("half-color")))); err != nil {
+		t.Fatal(err)
+	}
+
+	diff, err := matchPixel(buf, "half-color.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff != 0 {
+		t.Fatalf("screenshot does not match. diff: %v", diff)
+	}
+}
+
+func TestCaptureScreenshot(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := chromedptest.Allocate(t, "grid.html")
+	defer cancel()
+
+	var buf []byte
+	if err := chromedp.Do(ctx,
+		chromedp.EmulateViewport(500, 500),
+		chromedptest.Into(&buf, chromedp.CaptureScreenshot()),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	diff, err := matchPixel(buf, "sanity.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff != 0 {
+		t.Fatalf("screenshot does not match. diff: %v", diff)
+	}
+}
+
+func TestFullScreenshot(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		quality int
+		want    string
+	}{
+		{
+			name:    "quality 100",
+			quality: 100,
+			want:    "grid-fullpage.png",
+		},
+		{
+			name:    "quality 90",
+			quality: 90,
+			want:    "grid-fullpage-90.jpeg",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := chromedptest.Allocate(t, "grid.html")
+			defer cancel()
+
+			var buf []byte
+			if err := chromedp.Do(ctx,
+				chromedp.EmulateViewport(500, 500),
+				chromedp.EvaluateAsDevTools[chromedp.Void]("document.documentElement.scrollTo(20,  30)"),
+				chromedptest.Into(&buf, chromedp.FullScreenshot(test.quality)),
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			diff, err := matchPixel(buf, test.want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff != 0 {
+				t.Fatalf("screenshot does not match. diff: %v", diff)
+			}
+		})
+	}
+}
+
+func matchPixel(buf []byte, want string) (int, error) {
+	img1, format1, err := image.Decode(bytes.NewReader(buf))
+	if err != nil {
+		return 0, err
+	}
+
+	img2, format2, err := openImage(want)
+	if err != nil {
+		return 0, err
+	}
+
+	if format1 != format2 {
+		return 0, fmt.Errorf("image formats not matched: %s != %s", format1, format2)
+	}
+
+	return pixelmatch.MatchPixel(img1, img2, pixelmatch.Threshold(0.1))
+}
+
+func openImage(screenshot string) (image.Image, string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, "", err
+	}
+	p := path.Join(wd, "testdata", "screenshots", screenshot)
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+
+	img, format, err := image.Decode(f)
+	if err != nil {
+		return nil, "", fmt.Errorf("decode image: %w", err)
+	}
+	return img, format, nil
+}
