@@ -1,0 +1,12 @@
+package plan9obj
+import("bytes";"encoding/binary";"fmt";"testing")
+func TestBaseline(t *testing.T){
+ var b bytes.Buffer
+ for _,v:=range []uint32{Magic386,8,0,0,0,0x1020,0,3}{binary.Write(&b,binary.BigEndian,v)}
+ b.Write(make([]byte,8));b.Write([]byte{10,130,1})
+ f,e:=NewFile(bytes.NewReader(b.Bytes()));if e!=nil{t.Fatal(e)}
+ d,e:=f.Section("pcsz").Data();if e!=nil||!bytes.Equal(d,[]byte{10,130,1}){t.Fatal(d,e)}
+ fmt.Printf("PLAN9_RAW_LINE size=%d bytes=%x text=%d\n",len(d),d,f.Section("text").Size)
+ sy,e:=f.Symbols();if e!=nil||len(sy)!=0{t.Fatal(sy,e)}
+ fmt.Println("BASELINE_OK real_NewFile_Section_Symbols")
+}
