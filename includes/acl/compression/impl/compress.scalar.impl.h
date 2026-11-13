@@ -66,6 +66,11 @@ namespace acl
 		{
 			(void)out_stats;
 
+			// Protected keyframes only apply to transform track whole keyframe stripping.
+			// Scalar tracks must fail explicitly when a non-empty list is supplied.
+			if (settings.keyframe_stripping.num_protected_keyframes != 0)
+				return error_result("Protected keyframes are only supported with transform tracks");
+
 #if defined(ACL_USE_SJSON)
 			scope_profiler compression_time;
 #endif

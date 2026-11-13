@@ -192,6 +192,26 @@ namespace acl
 		bool strip_trivial = false;
 
 		//////////////////////////////////////////////////////////////////////////
+		// The list of keyframes that must never be removed by whole keyframe stripping.
+		// Indices are relative to the input track array samples, before loop optimization.
+		// The list must be strictly increasing with no duplicate entry, and every value
+		// must be smaller than the number of samples per input track.
+		// The caller owns the list and must keep it valid for the duration of the
+		// synchronous compress_track_list call. The pointer is only read during that call.
+		// When loop optimization removes the last sample because it repeats the first one,
+		// a protected index that points at that last sample maps to the retained frame 0.
+		// A protected keyframe only guarantees that its sample stays in the bit stream.
+		// The retained value still carries the normal quantization error.
+		// Defaults to 'nullptr'
+		const uint32_t* protected_keyframes = nullptr;
+
+		//////////////////////////////////////////////////////////////////////////
+		// The number of entries in the 'protected_keyframes' list.
+		// When this value is zero, the pointer is ignored and the behavior is unchanged.
+		// Defaults to '0'
+		uint32_t num_protected_keyframes = 0;
+
+		//////////////////////////////////////////////////////////////////////////
 		// Calculates a hash from the internal state to uniquely identify a configuration.
 		uint32_t get_hash() const;
 

@@ -47,6 +47,7 @@
 #include "acl/compression/impl/keyframe_stripping.h"
 #include "acl/compression/impl/normalize.transform.h"
 #include "acl/compression/impl/optimize_looping.transform.h"
+#include "acl/compression/impl/protected_keyframes.h"
 #include "acl/compression/impl/quantize.transform.h"
 #include "acl/compression/impl/segment.transform.h"
 #include "acl/compression/impl/topology_metadata.h"
@@ -141,6 +142,16 @@ namespace acl
 			compressed_tracks*& out_compressed_tracks, output_stats& out_stats)
 		{
 			error_result result = settings.is_valid();
+			if (result.any())
+				return result;
+
+			// Validate the protected keyframe list against the original input sample indices.
+			// This runs before any output allocation so that an invalid list never produces partial output.
+			const uint32_t num_input_samples = track_list.get_num_samples_per_track();
+			result = validate_protected_keyframes(
+				settings.keyframe_stripping.protected_keyframes,
+				settings.keyframe_stripping.num_protected_keyframes,
+				num_input_samples);
 			if (result.any())
 				return result;
 
@@ -253,6 +264,29 @@ namespace acl
 
 			// Wrap instead of clamp if we loop
 			optimize_looping(lossy_clip_context, additive_base_clip_context, settings, compression_stats);
+
+			// Copy the protected list into the clip context and remap it for loop optimization.
+			// The list was validated against the original input indices above, before any output
+			// allocation. When loop optimization removes the last repeating sample, a protected
+			// entry that points at it maps to the retained frame 0. The clip context owns this copy.
+			const uint32_t num_protected_keyframes = settings.keyframe_stripping.num_protected_keyframes;
+			if (num_protected_keyframes != 0)
+			{
+				const bool did_remove_last_sample =
+					lossy_clip_context.looping_policy == sample_looping_policy::wrap &&
+					lossy_clip_context.num_samples + 1 == num_input_samples;
+
+				uint32_t* mapped_protected_keyframes = allocate_type_array<uint32_t>(allocator, num_protected_keyframes);
+				remap_protected_keyframes_for_loop(
+					settings.keyframe_stripping.protected_keyframes,
+					num_protected_keyframes,
+					num_input_samples,
+					did_remove_last_sample,
+					mapped_protected_keyframes);
+
+				lossy_clip_context.protected_keyframes = mapped_protected_keyframes;
+				lossy_clip_context.num_protected_keyframes = num_protected_keyframes;
+			}
 
 			// Convert our rotations if we need to
 			convert_rotation_streams(allocator, lossy_clip_context, settings.rotation_format, compression_stats);

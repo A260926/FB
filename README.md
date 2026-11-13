@@ -73,6 +73,71 @@ You can install `nfrechette-acl` with [Conan](https://conan.io/center/recipes/nf
 *  [Matinee fight scene performance](./docs/fight_scene_performance.md)
 *  [Decompression performance](./docs/decompression_performance.md)
 
+## Protected keyframes for whole keyframe stripping
+
+Whole keyframe stripping can remove a sample and reconstruct it later by linear
+interpolation of its neighbors. Some moments must stay in the bit stream, for
+example a foot contact or a hand grab. The `compression_keyframe_stripping_settings`
+structure takes a protected keyframe list for this purpose.
+
+```cpp
+const uint32_t protected_keyframes[] = { 4, 12, 20 };
+
+acl::compression_settings settings = acl::get_default_compression_settings();
+settings.error_metric = &metric;
+settings.keyframe_stripping.proportion = 0.7F;
+settings.keyframe_stripping.protected_keyframes = protected_keyframes;
+settings.keyframe_stripping.num_protected_keyframes = 3;
+
+acl::compressed_tracks* compressed = nullptr;
+acl::output_stats stats;
+acl::error_result result = acl::compress_track_list(allocator, tracks, settings, compressed, stats);
+```
+
+A protected keyframe stays a retained sample endpoint for the greedy removal
+process. It can still act as an interpolation endpoint for other candidates, but
+the compressor never removes it. The compressed format and the decompressor do
+not change. The library stores no copy of the original animation, and it does not
+re-insert a key pose after decompression. See `examples/protected_contacts.cpp`
+for a complete program that writes the contact samples to a CSV file.
+
+### Protection is not quantization precision
+
+A protected keyframe only prevents whole keyframe removal. It does not raise the
+quantization precision of the retained value. The sample still uses the normal
+rotation, translation, and scale bit rates, so it keeps the ordinary quantization
+error. Use the track `precision` and the error metric to control value accuracy;
+use the protected list to control which samples survive whole keyframe stripping.
+
+### Index space
+
+The indices refer to the samples of the input track array, before compression and
+before loop optimization. The list must be strictly increasing, it must contain
+no duplicate entry, and every value must be smaller than the number of samples
+per input track. When loop optimization removes the last sample because it
+repeats the first sample, a protected index that points at the removed last
+sample maps to the retained frame 0. No other index shifts. When loop
+optimization does not remove a sample, no mapping happens. Two indices may map to
+the same retained frame, this is legal.
+
+### Borrowed memory lifetime
+
+The caller owns the `protected_keyframes` buffer. The compressor reads it only
+during the synchronous `compress_track_list` call, and it does not retain the
+pointer after the call returns. The buffer must stay valid for the duration of
+that call. A non-zero count with a null pointer fails with an error result. When
+the count is zero, the pointer is ignored and the behavior matches the legacy
+behavior, including the settings hash and the compressed bytes.
+
+### Database support limitation
+
+A non-empty protected list cannot be combined with `enable_database_support`.
+This revision does not extend the database tiering to account for protected
+samples, so that combination returns an error result and produces no output. An
+empty protected list does not add this restriction. Scalar tracks also reject a
+non-empty protected list because whole keyframe stripping applies to transform
+tracks only.
+
 ## External dependencies
 
 You don't need anything else to get started: everything is self contained.

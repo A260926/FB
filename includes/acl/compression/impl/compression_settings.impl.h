@@ -100,6 +100,15 @@ namespace acl
 		hash_value = hash_combine(hash_value, hash32(threshold));
 		hash_value = hash_combine(hash_value, hash32(strip_trivial));
 
+		// Hash the protected keyframe values, not the pointer address. Two lists with the
+		// same content at different addresses must produce the same hash. An empty list
+		// leaves the hash unchanged to preserve the legacy behavior.
+		if (num_protected_keyframes != 0 && protected_keyframes != nullptr)
+		{
+			for (uint32_t index = 0; index < num_protected_keyframes; ++index)
+				hash_value = hash_combine(hash_value, hash32(protected_keyframes[index]));
+		}
+
 		return hash_value;
 	}
 
@@ -110,6 +119,20 @@ namespace acl
 
 		if (!rtm::scalar_is_finite(threshold) || threshold < 0.0F)
 			return error_result("threshold must be positive definite");
+
+		if (num_protected_keyframes != 0)
+		{
+			if (protected_keyframes == nullptr)
+				return error_result("protected_keyframes cannot be NULL when num_protected_keyframes is not zero");
+
+			// The list must be strictly increasing with no duplicate entry. The per-clip range
+			// check needs the number of input samples, so it runs at the compression entry point.
+			for (uint32_t index = 1; index < num_protected_keyframes; ++index)
+			{
+				if (protected_keyframes[index] <= protected_keyframes[index - 1])
+					return error_result("protected_keyframes must be strictly increasing and contain no duplicate entries");
+			}
+		}
 
 		return error_result();
 	}
@@ -149,6 +172,9 @@ namespace acl
 
 		if (keyframe_stripping.is_enabled() && enable_database_support)
 			return error_result("Cannot enable keyframe stripping with database support");
+
+		if (keyframe_stripping.num_protected_keyframes != 0 && enable_database_support)
+			return error_result("Cannot use protected keyframes with database support");
 
 		return error_result();
 	}

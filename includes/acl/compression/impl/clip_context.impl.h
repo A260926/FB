@@ -303,6 +303,7 @@ namespace acl
 
 			deallocate_type_array(allocator, context.sorted_transforms_parent_first, context.num_bones);
 			deallocate_type_array(allocator, context.contributing_error, context.num_samples);
+			deallocate_type_array(allocator, context.protected_keyframes, context.num_protected_keyframes);
 		}
 	}
 

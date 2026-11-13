@@ -13,6 +13,7 @@
 *  Add the `-fast_math` option to `make.py` to compile the public headers with fast math, and a CI workflow that uses it
 *  Add native Linux `riscv64` builds to `make.py`, they use the scalar code path of RTM
 *  Fix `split_database_bulk_data` that gave a null pointer to `std::memcpy` when a quality tier is empty
+*  Add a protected keyframe list to the transform track keyframe stripping settings so selected samples stay retained as interpolation endpoints
 
 ## 2.1.0
 
