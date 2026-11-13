@@ -154,6 +154,21 @@ static vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb)
 #include "psy.h"
 #include "scales.h"
 
+/* Read-only coupling regression probes.  When VORBIS_COUPLING_TRACE is
+   defined at test build time, the synthesis mapping reports snapshots of
+   the spectral vectors at three fixed points: right after the residue is
+   decoded, right after inverse channel coupling, and right after the floor
+   curves are applied.  The hook receives a const block and only observes
+   data; it never touches the bitpacker, never changes PCM contents and so
+   cannot alter consumed bits.  Normal builds compile these calls away,
+   adding no callbacks, branches or allocations to the decoder. */
+#ifdef VORBIS_COUPLING_TRACE
+extern void vorbis_coupling_trace(int phase,const vorbis_block *vb);
+#define VORBIS_COUPLING_TRACE_HOOK(phase) vorbis_coupling_trace((phase),(vb))
+#else
+#define VORBIS_COUPLING_TRACE_HOOK(phase) ((void)0)
+#endif
+
 #if 0
 static long seq=0;
 static ogg_int64_t total=0;
@@ -750,6 +765,9 @@ static int mapping0_inverse(vorbis_block *vb,vorbis_info_mapping *l){
               pcmbundle,zerobundle,ch_in_bundle);
   }
 
+  /* trace point 1: residue decoded, before inverse coupling */
+  VORBIS_COUPLING_TRACE_HOOK(1);
+
   /* channel coupling */
   for(i=info->coupling_steps-1;i>=0;i--){
     float *pcmM=vb->pcm[info->coupling_mag[i]];
@@ -778,6 +796,9 @@ static int mapping0_inverse(vorbis_block *vb,vorbis_info_mapping *l){
     }
   }
 
+  /* trace point 2: inverse channel coupling applied, before floors */
+  VORBIS_COUPLING_TRACE_HOOK(2);
+
   /* compute and apply spectral envelope */
   for(i=0;i<vi->channels;i++){
     float *pcm=vb->pcm[i];
@@ -786,6 +807,9 @@ static int mapping0_inverse(vorbis_block *vb,vorbis_info_mapping *l){
       inverse2(vb,b->flr[info->floorsubmap[submap]],
                floormemo[i],pcm);
   }
+
+  /* trace point 3: floor envelopes applied, before the IMDCT */
+  VORBIS_COUPLING_TRACE_HOOK(3);
 
   /* transform the PCM data; takes PCM vector, vb; modifies PCM vector */
   /* only MDCT right now.... */
