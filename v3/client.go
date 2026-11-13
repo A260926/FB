@@ -103,7 +103,7 @@ func (c *Client) Do(req *Request) *Response {
 	// Run state-machine while caller is blocked to initialize the file transfer.
 	// Must never transition to the copyFile state - this happens next in another
 	// goroutine.
-	c.run(resp, c.statFileInfo)
+	c.run(resp, c.validateRequest)
 
 	// Run copyFile in a new goroutine. copyFile will no-op if the transfer is
 	// already complete or failed.
@@ -208,6 +208,16 @@ func (c *Client) run(resp *Response, f stateFunc) {
 		}
 		f = next
 	}
+}
+
+// validateRequest enforces Request policy that must fail before any network
+// request is sent or destination file opened.
+func (c *Client) validateRequest(resp *Response) (stateFunc, error) {
+	if resp.Request.MaxReconnects < 0 {
+		return nil, fmt.Errorf("grab: Request.MaxReconnects must be zero or greater, got %d",
+			resp.Request.MaxReconnects)
+	}
+	return c.statFileInfo, nil
 }
 
 // statFileInfo retrieves FileInfo for any local file matching
@@ -489,45 +499,93 @@ func (c *Client) openWriter(resp *Response) (stateFunc, error) {
 		resp.bufferSize = 32 * 1024
 	}
 	b := make([]byte, resp.bufferSize)
-	resp.transfer = newTransfer(
+	t := newTransfer(
 		resp.Request.Context(),
 		resp.Request.RateLimiter,
 		resp.writer,
 		resp.HTTPResponse.Body,
 		b)
 
+	// Record the representation before the first byte is copied so a mid-body
+	// interruption can be reconnected. When the response lacks a known length
+	// or strong ETag, repKnown stays false and interruptions keep the legacy
+	// behavior.
+	c.captureRepresentation(resp)
+
+	resp.transferMu.Lock()
+	resp.transfer = t
+	resp.transferMu.Unlock()
+
 	// next step is copyFile, but this will be called later in another goroutine
 	return nil, nil
 }
 
-// copy transfers content for a HTTP connection established via Client.do()
+// copy transfers content for a HTTP connection established via Client.do().
+//
+// When Request.MaxReconnects is enabled and the response body is interrupted
+// mid-transfer, copyFile reconnects in place rather than ending the Response.
+// A 206 continuation appends the missing suffix; a 200 restarts the download
+// from zero after re-running BeforeCopy. All other failures - including writer,
+// rate limiter, hook and context errors - end the transfer immediately.
 func (c *Client) copyFile(resp *Response) (stateFunc, error) {
 	if resp.IsComplete() {
 		return nil, nil
 	}
 
-	// run BeforeCopy hook
-	if f := resp.Request.BeforeCopy; f != nil {
-		if err := f(resp); err != nil {
-			return nil, err
+	// Run the BeforeCopy hook once for the initial copy and again after each
+	// accepted 200 restart. It is never re-run for a 206 continuation.
+	if !resp.beforeCopyDone {
+		if f := resp.Request.BeforeCopy; f != nil {
+			if err := f(resp); err != nil {
+				return nil, err
+			}
 		}
+		resp.beforeCopyDone = true
 	}
 
-	if resp.transfer == nil {
+	resp.transferMu.RLock()
+	t := resp.transfer
+	resp.transferMu.RUnlock()
+	if t == nil {
 		panic("grab: developer error: Response.transfer is nil")
 	}
 
 	// We waited to truncate the file in openWriter() to make sure
 	// the BeforeCopy didn't cancel the copy. If this was an existing
-	// file that is not going to be resumed, truncate the contents.
-	if t, ok := resp.writer.(truncater); ok && resp.fi != nil && !resp.DidResume {
-		t.Truncate(0)
+	// file that is not going to be resumed, truncate the contents. A 206
+	// continuation returns here without truncating again.
+	if !resp.truncated {
+		if tr, ok := resp.writer.(truncater); ok && resp.fi != nil && !resp.DidResume {
+			if err := tr.Truncate(0); err != nil {
+				return nil, err
+			}
+		}
+		resp.truncated = true
 	}
 
-	bytesCopied, err := resp.transfer.copy()
+	bytesCopied, err := t.copy()
+	if err == nil && resp.repKnown && c.written(resp) < resp.repTotal {
+		// The body ended cleanly before the advertised total length: with a
+		// known length this is a truncated read and is handled exactly like an
+		// interrupted one.
+		err = io.ErrUnexpectedEOF
+	}
 	if err != nil {
+		// Only a failure reading the response body may be reconnected. Errors
+		// from the writer, rate limiter, hooks or context are tagged or typed
+		// differently and end the transfer regardless of MaxReconnects.
+		if resp.repKnown && c.written(resp) < resp.repTotal &&
+			reconnectReadError(err, true) {
+			return c.reconnect(resp, err)
+		}
 		return nil, err
 	}
+
+	// A complete body must have produced the full representation.
+	if resp.repKnown && c.written(resp) != resp.repTotal {
+		return nil, io.ErrUnexpectedEOF
+	}
+
 	if err := closeWriter(resp); err != nil {
 		return nil, err
 	}

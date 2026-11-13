@@ -2,11 +2,24 @@ package grab
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
 
 	"github.com/cavaliergopher/grab/v3/pkg/bps"
+)
+
+// errTransferWrite marks an error that originated while writing to the
+// destination, and errTransferLimit an error returned by the rate limiter.
+// Wrapping them lets a reconnect decision tell these apart from errors reading
+// the response body, even when a writer or limiter happens to return the same
+// concrete error type as the source reader (e.g. io.ErrUnexpectedEOF or a
+// net.Error).
+var (
+	errTransferWrite = errors.New("grab: destination write failed")
+	errTransferLimit = errors.New("grab: rate limiter failed")
 )
 
 type transfer struct {
@@ -59,17 +72,17 @@ func (c *transfer) copy() (written int64, err error) {
 				atomic.StoreInt64(&c.n, written)
 			}
 			if ew != nil {
-				err = ew
+				err = fmt.Errorf("%w: %w", errTransferWrite, ew)
 				break
 			}
 			if nr != nw {
-				err = io.ErrShortWrite
+				err = fmt.Errorf("%w: %w", errTransferWrite, io.ErrShortWrite)
 				break
 			}
 			// wait for rate limiter
 			if c.lim != nil {
-				err = c.lim.WaitN(c.ctx, nr)
-				if err != nil {
+				if lerr := c.lim.WaitN(c.ctx, nr); lerr != nil {
+					err = fmt.Errorf("%w: %w", errTransferLimit, lerr)
 					return
 				}
 			}

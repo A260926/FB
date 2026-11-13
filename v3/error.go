@@ -29,6 +29,11 @@ var (
 	// ErrNotADirectory indicates that the given destination path exists but is
 	// not a directory.
 	ErrNotADirectory = errors.New("destination is not a directory")
+
+	// ErrBadReconnect indicates that a reconnect request could not be satisfied
+	// because the server's response was missing required metadata or
+	// inconsistent with the representation already being downloaded.
+	ErrBadReconnect = errors.New("bad reconnect response")
 )
 
 // StatusCodeError indicates that the server response had a status code that

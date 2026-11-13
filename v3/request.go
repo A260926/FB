@@ -51,6 +51,25 @@ type Request struct {
 	// completed in full, it will not be restarted.
 	NoResume bool
 
+	// MaxReconnects specifies how many times grab may reconnect within a single
+	// Client.Do call to continue a download whose response body was interrupted
+	// mid-transfer.
+	//
+	// A zero value preserves the default behavior: an interrupted body ends the
+	// transfer with the read error, leaving whatever was already written in
+	// place. A negative value is rejected before any request is sent or file
+	// opened.
+	//
+	// Reconnects are only available for bodyless GET requests transferred with
+	// the identity content encoding. The initial response must advertise a known
+	// total length and a strong ETag; otherwise an interrupted body ends the
+	// transfer with its original error. When the connection drops, grab resumes
+	// from the number of bytes actually written to the destination using
+	// Range/If-Range requests, without the caller having to issue another Do.
+	// Reconnect attempts do not re-run the HEAD request and do not retry in the
+	// background once the allowance is exhausted.
+	MaxReconnects int
+
 	// NoStore specifies that grab should not write to the local file system.
 	// Instead, the download will be stored in memory and accessible only via
 	// Response.Open or Response.Bytes.

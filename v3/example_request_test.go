@@ -50,3 +50,28 @@ func ExampleRequest_SetChecksum() {
 		panic(err)
 	}
 }
+
+// ExampleRequest_MaxReconnects shows how to transparently continue a download
+// whose response body is cut off mid-transfer. With MaxReconnects set, grab
+// re-issues Range GETs within the same Client.Do call, so the caller keeps the
+// single Response lifecycle instead of resuming a partial file by hand.
+func ExampleRequest_MaxReconnects() {
+	req, err := NewRequest(".", "http://example.com/large-file.bin")
+	if err != nil {
+		panic(err)
+	}
+
+	// Allow up to three reconnect attempts after an interrupted body. A zero
+	// value keeps the default behavior of failing with the read error, and a
+	// negative value is rejected before any request is sent.
+	req.MaxReconnects = 3
+
+	resp := DefaultClient.Do(req)
+	if err := resp.Err(); err != nil {
+		// When the allowance runs out, the bytes already written remain on
+		// disk and the last read error is returned.
+		panic(err)
+	}
+
+	fmt.Println("Download saved to", resp.Filename)
+}

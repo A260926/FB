@@ -17,6 +17,7 @@ rad features:
 
 * Monitor download progress concurrently
 * Auto-resume incomplete downloads
+* Reconnect interrupted downloads within a single request (`Request.MaxReconnects`)
 * Guess filename from content header or URL path
 * Safely cancel downloads using context.Context
 * Validate downloads using checksums
@@ -102,6 +103,31 @@ Loop:
 	// Download saved to ./gobook.pdf
 }
 ```
+
+## Reconnecting interrupted downloads
+
+If a connection drops while the response body is being read, grab normally
+stops with the read error and leaves the partially written file in place. Set
+`Request.MaxReconnects` to let grab reconnect inside the same `Client.Do` call
+and continue from the bytes already written, without the caller having to
+resume the partial file itself:
+
+```go
+req, _ := grab.NewRequest(".", "http://example.com/large-file.bin")
+req.MaxReconnects = 3
+resp := client.Do(req)
+```
+
+Reconnects are only offered for bodyless GET requests using the identity
+content encoding whose initial response has a known total length and a strong
+ETag. On interruption grab sends a `Range` and matching `If-Range` GET to the
+final URL that served the body. A `206` response is validated against the
+current representation and appended; a `200` response means the representation
+changed and restarts the download from zero after re-running `BeforeCopy`.
+Writer, rate limiter, hook and context errors end the transfer immediately,
+and when the allowance is exhausted the written prefix is kept and the last
+read error is returned. Zero keeps the default behavior and negative values
+fail before any request is sent.
 
 ## Design trade-offs
 

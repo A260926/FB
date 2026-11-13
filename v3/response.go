@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -83,10 +84,34 @@ type Response struct {
 
 	// transfer is responsible for copying data from the remote server to a local
 	// file, tracking progress and allowing for cancelation.
-	transfer *transfer
+	//
+	// transferMu guards transfer while a reconnect swaps in a fresh transfer
+	// for the current representation. Progress methods read it under the same
+	// lock so that no stale counters remain visible after a swap.
+	transfer   *transfer
+	transferMu sync.RWMutex
 
 	// bufferSize specifies the size in bytes of the transfer buffer.
 	bufferSize int
+
+	// reconnectsLeft counts the reconnect attempts still available within this
+	// Client.Do call. It is only consulted by the copy loop in the download
+	// goroutine.
+	reconnectsLeft int
+
+	// repTotal and repETag identify the representation currently being written
+	// and allow reconnect responses to be validated against it. repKnown
+	// reports whether reconnects are available for this transfer.
+	repKnown bool
+	repTotal int64
+	repETag  string
+
+	// beforeCopyDone ensures the BeforeCopy hook runs once for the initial
+	// copy and once more after each accepted 200 restart, but never for a 206
+	// continuation. truncated marks the one-time truncation of a destination
+	// that replaced rather than resumed a local file.
+	beforeCopyDone bool
+	truncated      bool
 
 	// Error contains any error that may have occurred during the file transfer.
 	// This should not be read until IsComplete returns true.
@@ -136,7 +161,17 @@ func (c *Response) Size() int64 {
 // the destination, including any bytes that were resumed from a previous
 // download.
 func (c *Response) BytesComplete() int64 {
+	c.transferMu.RLock()
+	defer c.transferMu.RUnlock()
 	return c.bytesResumed + c.transfer.N()
+}
+
+// progressSnapshot returns the byte count and BPS gauge of the active transfer
+// under a read lock, so a reconnect swap cannot expose a stale counter.
+func (c *Response) progressSnapshot() (n int64, bps float64) {
+	c.transferMu.RLock()
+	defer c.transferMu.RUnlock()
+	return c.transfer.N(), c.transfer.BPS()
 }
 
 // BytesPerSecond returns the number of bytes per second transferred using a
@@ -144,9 +179,11 @@ func (c *Response) BytesComplete() int64 {
 // complete, the average bytes/sec for the life of the download is returned.
 func (c *Response) BytesPerSecond() float64 {
 	if c.IsComplete() {
-		return float64(c.transfer.N()) / c.Duration().Seconds()
+		n, _ := c.progressSnapshot()
+		return float64(n) / c.Duration().Seconds()
 	}
-	return c.transfer.BPS()
+	_, bps := c.progressSnapshot()
+	return bps
 }
 
 // Progress returns the ratio of total bytes that have been downloaded. Multiply
@@ -179,7 +216,7 @@ func (c *Response) ETA() time.Time {
 		return c.End
 	}
 	bt := c.BytesComplete()
-	bps := c.transfer.BPS()
+	_, bps := c.progressSnapshot()
 	if bps == 0 {
 		return time.Time{}
 	}

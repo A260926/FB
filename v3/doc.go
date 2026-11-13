@@ -59,5 +59,26 @@ You can monitor the progress of downloads while they are transferring:
 			return
 		}
 	}
+
+# Reconnecting interrupted downloads
+
+By default a connection that drops while the response body is being read ends
+the transfer and leaves a partially written file. Set Request.MaxReconnects to
+have grab continue the same download inside one Client.Do call instead:
+
+	req.MaxReconnects = 3
+
+Reconnects apply only to bodyless GET requests transferred with the identity
+content encoding, and only when the initial response carries a known total
+length and a strong ETag. When the body is interrupted, grab sends
+"Range: bytes=k-" together with "If-Range" from the final URL that served the
+body, where k is the number of bytes already written, including any local
+prefix resumed at startup. A 206 response is validated byte-for-byte against
+the current representation before it is appended; a 200 response signals a
+changed representation and restarts the download from zero after re-running
+BeforeCopy. Writer, rate limiter, hook and context errors are never retried,
+and once the allowance is exhausted the written prefix is kept and the last
+read error is returned. A zero MaxReconnects preserves the original behavior;
+a negative value fails before any request is sent.
 */
 package grab
