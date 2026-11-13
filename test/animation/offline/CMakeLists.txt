@@ -7,6 +7,18 @@ target_copy_shared_libraries(test_animation_builder)
 set_target_properties(test_animation_builder PROPERTIES FOLDER "ozz/tests/animation_offline")
 add_test(NAME test_animation_builder COMMAND test_animation_builder)
 
+# Retargeting functional tests. They bring their own main and case
+# registration macros in task_support/check.h, so they do not use gtest.
+add_executable(test_raw_animation_retargeter
+  retarget_target.cpp)
+target_link_libraries(test_raw_animation_retargeter
+  ozz_animation_offline)
+target_include_directories(test_raw_animation_retargeter PRIVATE
+  ${PROJECT_SOURCE_DIR})
+target_copy_shared_libraries(test_raw_animation_retargeter)
+set_target_properties(test_raw_animation_retargeter PROPERTIES FOLDER "ozz/tests/animation_offline")
+add_test(NAME test_raw_animation_retargeter COMMAND test_raw_animation_retargeter)
+
 add_executable(test_animation_optimizer
   animation_optimizer_tests.cc)
 target_link_libraries(test_animation_optimizer

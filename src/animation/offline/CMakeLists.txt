@@ -4,6 +4,7 @@ add_library(ozz_animation_offline
   raw_animation.cc
   raw_animation_archive.cc
   raw_animation_utils.cc
+  raw_animation_retargeter.cc
   animation_builder.cc
   animation_optimizer.cc
   additive_animation_builder.cc
@@ -23,6 +24,7 @@ target_sources(ozz_animation_offline PUBLIC
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/export.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_animation.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_animation_utils.h
+    ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_animation_retargeter.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/animation_builder.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/animation_optimizer.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/additive_animation_builder.h
