@@ -1,0 +1,50 @@
+# github.com/alitto/pond v1.8.3
+## explicit; go 1.19
+github.com/alitto/pond
+# github.com/antlr4-go/antlr/v4 v4.13.0
+## explicit; go 1.20
+github.com/antlr4-go/antlr/v4
+# github.com/gobs/args v0.0.0-20210311043657-b8c0b223be93
+## explicit
+github.com/gobs/args
+# github.com/gobs/cmd v1.0.1
+## explicit; go 1.21.3
+github.com/gobs/cmd
+github.com/gobs/cmd/internal
+github.com/gobs/cmd/plugins/controlflow
+github.com/gobs/cmd/plugins/json
+# github.com/gobs/httpclient v0.0.0-20251203215645-6c30f8bfb6e7
+## explicit
+github.com/gobs/httpclient
+# github.com/gobs/jsonpath v1.0.0
+## explicit; go 1.21.3
+github.com/gobs/jsonpath
+github.com/gobs/jsonpath/parser
+# github.com/gobs/pretty v0.0.0-20180724170744-09732c25a95b
+## explicit
+github.com/gobs/pretty
+# github.com/gobs/simplejson v0.0.0-20181106204727-c70e6bd5e26b
+## explicit
+github.com/gobs/simplejson
+# github.com/gobs/sortedmap v1.0.0
+## explicit; go 1.18
+github.com/gobs/sortedmap
+# github.com/gorilla/websocket v1.5.3
+## explicit; go 1.12
+github.com/gorilla/websocket
+# github.com/mattn/go-runewidth v0.0.3
+## explicit
+github.com/mattn/go-runewidth
+# github.com/peterh/liner v1.2.2
+## explicit
+github.com/peterh/liner
+# golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
+## explicit; go 1.20
+golang.org/x/exp/constraints
+golang.org/x/exp/slices
+# golang.org/x/sync v0.1.0
+## explicit
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.1.0
+## explicit; go 1.17
+golang.org/x/sys/unix
