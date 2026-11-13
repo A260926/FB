@@ -60,7 +60,7 @@ static void* malloc_wrapper(void* unused, size_t size) { return malloc(size); }
 static void free_wrapper(void* unused, void* ptr) { free(ptr); }
 
 const GumboOptions kGumboDefaultOptions = {&malloc_wrapper, &free_wrapper, NULL,
-    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML};
+    8, false, -1, GUMBO_TAG_LAST, GUMBO_NAMESPACE_HTML, NULL};
 
 static const GumboStringPiece kDoctypeHtml = GUMBO_STRING("html");
 static const GumboStringPiece kPublicIdHtml4_0 =
@@ -359,7 +359,9 @@ typedef struct GumboInternalParserState {
   GumboNode* _head_element;
   GumboNode* _form_element;
 
-  // The element used as fragment context when parsing in fragment mode
+  // The element used as fragment context when parsing in fragment mode.
+  // Always parser-owned: in node-context mode it is a fresh replica of the
+  // borrowed host node, so parser_state_destroy can always free it safely.
   GumboNode* _fragment_ctx;
 
   // The flag for when the spec says "Reprocess the current token in..."
@@ -4007,54 +4009,148 @@ static bool handle_token(GumboParser* parser, GumboToken* token) {
   }
 }
 
-static void fragment_parser_init(GumboParser* parser, GumboTag fragment_ctx,
-    GumboNamespaceEnum fragment_namespace) {
-  GumboNode* root;
-  assert(fragment_ctx != GUMBO_TAG_LAST);
+// Builds a parser-owned replica of a borrowed host element so that the
+// fragment context can carry the host's real attributes without the new parse
+// ever mutating or freeing host-owned data.  Only the tag, namespace and
+// attributes matter for fragment context purposes; the host node's children
+// and source positions are deliberately not copied.  All copies go through
+// this parse's allocator.
+static GumboNode* create_fragment_context_from_host(
+    GumboParser* parser, const GumboNode* host_node) {
+  assert(host_node->type == GUMBO_NODE_ELEMENT ||
+         host_node->type == GUMBO_NODE_TEMPLATE);
+  GumboNode* node = create_node(parser, host_node->type);
+  GumboElement* element = &node->v.element;
+  const GumboElement* host_element = &host_node->v.element;
+  gumbo_vector_init(parser, 1, &element->children);
+  element->tag = host_element->tag;
+  element->tag_namespace = host_element->tag_namespace;
+  element->original_tag = kGumboEmptyString;
+  element->original_end_tag = kGumboEmptyString;
+  element->start_pos = kGumboEmptySourcePosition;
+  element->end_pos = kGumboEmptySourcePosition;
 
-  // 3
-  parser->_parser_state->_fragment_ctx = create_element(parser, fragment_ctx);
-  parser->_parser_state->_fragment_ctx->v.element.tag_namespace =
-      fragment_namespace;
+  const GumboVector* host_attributes = &host_element->attributes;
+  gumbo_vector_init(parser, host_attributes->length, &element->attributes);
+  for (unsigned int i = 0; i < host_attributes->length; ++i) {
+    const GumboAttribute* host_attr = host_attributes->data[i];
+    GumboAttribute* attr =
+        gumbo_parser_allocate(parser, sizeof(GumboAttribute));
+    *attr = *host_attr;
+    attr->name = gumbo_copy_stringz(parser, host_attr->name);
+    attr->value = gumbo_copy_stringz(parser, host_attr->value);
+    gumbo_vector_add(parser, attr, &element->attributes);
+  }
+  return node;
+}
 
-  // 4
-  if (fragment_namespace == GUMBO_NAMESPACE_HTML) {
-    // Non-HTML namespaces always start in the DATA state.
-    switch (fragment_ctx) {
-      case GUMBO_TAG_TITLE:
-      case GUMBO_TAG_TEXTAREA:
-        gumbo_tokenizer_set_state(parser, GUMBO_LEX_RCDATA);
-        break;
-
-      case GUMBO_TAG_STYLE:
-      case GUMBO_TAG_XMP:
-      case GUMBO_TAG_IFRAME:
-      case GUMBO_TAG_NOEMBED:
-      case GUMBO_TAG_NOFRAMES:
-        gumbo_tokenizer_set_state(parser, GUMBO_LEX_RAWTEXT);
-        break;
-
-      case GUMBO_TAG_SCRIPT:
-        gumbo_tokenizer_set_state(parser, GUMBO_LEX_SCRIPT);
-        break;
-
-      case GUMBO_TAG_NOSCRIPT:
-        /* scripting is disabled in Gumbo, so leave the tokenizer
-         * in the default data state */
-        break;
-
-      case GUMBO_TAG_PLAINTEXT:
-        gumbo_tokenizer_set_state(parser, GUMBO_LEX_PLAINTEXT);
-        break;
-
-      default:
-        /* default data state */
-        break;
+// Walks up the ancestor chain of a borrowed host context node and returns the
+// nearest HTML form element, or NULL if there is none.  The returned node is
+// host-owned and must never be inserted into the new parse's open-element stack
+// or freed by this parse.
+static GumboNode* find_host_form_pointer(const GumboNode* host_node) {
+  for (const GumboNode* node = host_node; node != NULL;
+       node = node->parent) {
+    if ((node->type == GUMBO_NODE_ELEMENT ||
+            node->type == GUMBO_NODE_TEMPLATE) &&
+        node_html_tag_is(node, GUMBO_TAG_FORM)) {
+      return (GumboNode*) node;
     }
   }
+  return NULL;
+}
+
+// Walks up to the document node owning a borrowed host context node and
+// returns its quirks mode.
+static GumboQuirksModeEnum find_host_quirks_mode(const GumboNode* host_node) {
+  const GumboNode* node = host_node;
+  while (node->parent != NULL) {
+    node = node->parent;
+  }
+  assert(node->type == GUMBO_NODE_DOCUMENT);
+  return node->v.document.doc_type_quirks_mode;
+}
+
+// Selects the initial tokenizer state for the fragment context, following the
+// fragment parsing algorithm.  Non-HTML namespaces always start in data state.
+static void set_fragment_tokenizer_state(
+    GumboParser* parser, GumboTag fragment_ctx,
+    GumboNamespaceEnum fragment_namespace) {
+  if (fragment_namespace != GUMBO_NAMESPACE_HTML) {
+    return;
+  }
+  switch (fragment_ctx) {
+    case GUMBO_TAG_TITLE:
+    case GUMBO_TAG_TEXTAREA:
+      gumbo_tokenizer_set_state(parser, GUMBO_LEX_RCDATA);
+      break;
+
+    case GUMBO_TAG_STYLE:
+    case GUMBO_TAG_XMP:
+    case GUMBO_TAG_IFRAME:
+    case GUMBO_TAG_NOEMBED:
+    case GUMBO_TAG_NOFRAMES:
+      gumbo_tokenizer_set_state(parser, GUMBO_LEX_RAWTEXT);
+      break;
+
+    case GUMBO_TAG_SCRIPT:
+      gumbo_tokenizer_set_state(parser, GUMBO_LEX_SCRIPT);
+      break;
+
+    case GUMBO_TAG_NOSCRIPT:
+      /* scripting is disabled in Gumbo, so leave the tokenizer
+       * in the default data state */
+      break;
+
+    case GUMBO_TAG_PLAINTEXT:
+      gumbo_tokenizer_set_state(parser, GUMBO_LEX_PLAINTEXT);
+      break;
+
+    default:
+      /* default data state */
+      break;
+  }
+}
+
+static void fragment_parser_init(GumboParser* parser) {
+  const GumboOptions* options = parser->_options;
+  const GumboNode* host_node = options->fragment_context_node;
+  GumboTag fragment_ctx;
+  GumboNamespaceEnum fragment_namespace;
+
+  if (host_node != NULL) {
+    assert(host_node->type == GUMBO_NODE_ELEMENT ||
+           host_node->type == GUMBO_NODE_TEMPLATE);
+    // The real host node supplies tag, namespace and attributes; only the
+    // replica ever enters parser state.
+    parser->_parser_state->_fragment_ctx =
+        create_fragment_context_from_host(parser, host_node);
+    fragment_ctx = host_node->v.element.tag;
+    fragment_namespace = host_node->v.element.tag_namespace;
+
+    // Borrowed form pointer: host state only, never pushed onto the stack of
+    // open elements.
+    parser->_parser_state->_form_element = find_host_form_pointer(host_node);
+
+    // The host document's quirks mode is reused as-is; any doctype in the
+    // fragment must not re-infer it.
+    parser->_output->document->v.document.doc_type_quirks_mode =
+        find_host_quirks_mode(host_node);
+  } else {
+    assert(options->fragment_context != GUMBO_TAG_LAST);
+    fragment_ctx = options->fragment_context;
+    fragment_namespace = options->fragment_namespace;
+    parser->_parser_state->_fragment_ctx =
+        create_element(parser, fragment_ctx);
+    parser->_parser_state->_fragment_ctx->v.element.tag_namespace =
+        fragment_namespace;
+  }
+
+  // 4
+  set_fragment_tokenizer_state(parser, fragment_ctx, fragment_namespace);
 
   // 5. 6. 7.
-  root = insert_element_of_tag_type(
+  GumboNode* root = insert_element_of_tag_type(
       parser, GUMBO_TAG_HTML, GUMBO_INSERTION_IMPLIED);
   parser->_output->root = root;
 
@@ -4080,9 +4176,9 @@ GumboOutput* gumbo_parse_with_options(
   gumbo_tokenizer_state_init(&parser, buffer, length);
   parser_state_init(&parser);
 
-  if (options->fragment_context != GUMBO_TAG_LAST) {
-    fragment_parser_init(
-        &parser, options->fragment_context, options->fragment_namespace);
+  if (options->fragment_context != GUMBO_TAG_LAST ||
+      options->fragment_context_node != NULL) {
+    fragment_parser_init(&parser);
   }
 
   GumboParserState* state = parser._parser_state;

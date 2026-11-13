@@ -616,6 +616,36 @@ typedef struct GumboInternalOptions {
    * Default: GUMBO_NAMESPACE_HTML
    */
   GumboNamespaceEnum fragment_namespace;
+
+  /**
+   * An optional real GumboNode (an element or template) taken from a still
+   * alive host parse output, to be used as the fragment context instead of the
+   * tag/namespace pair above.
+   *
+   * When non-NULL, the tag, namespace, and attributes of this node take
+   * precedence over fragment_context and fragment_namespace.  In particular,
+   * attributes such as the encoding attribute of an MathML annotation-xml
+   * element participate in the foreign-content (HTML integration point)
+   * determination.  The node is borrowed for the duration of the call: it is
+   * never inserted into the new parse tree, never modified, and neither it nor
+   * any string it points to is freed when the new output is destroyed.  The
+   * caller must keep both the node and the host output (and its original input
+   * buffer) alive for the duration of this call.  Only nodes produced by Gumbo
+   * itself are supported; hand-built or mutated trees need not work.
+   *
+   * In addition, this causes the fragment parse to pick up:
+   *  - the nearest HTML form element on the node's ancestor chain, used to
+   *    initialize the parser's form pointer without being pushed onto the
+   *    stack of open elements;
+   *  - the quirks mode of the host document containing the node, applied to
+   *    the new tree and its output document without re-inferring it from any
+   *    doctype in the fragment.
+   *
+   * When NULL, the integer fragment_context/fragment_namespace parameters
+   * drive fragment parsing exactly as before.
+   * Default: NULL
+   */
+  const GumboNode* fragment_context_node;
 } GumboOptions;
 
 /** Default options struct; use this with gumbo_parse_with_options. */
