@@ -1,0 +1,12 @@
+#define HAVE_ASSERT_H 1
+#define HAVE_STDINT_H 1
+#define HAVE_STDLIB_H 1
+#define HAVE_STRING_H 1
+#define HAVE_MEMORY_H 1
+#define STDC_HEADERS 1
+#define PACKAGE "libtwolame"
+#define PACKAGE_URL "http://www.twolame.org/"
+#define PACKAGE_VERSION "0.4.0-offline"
+#define PACKAGE_BUGREPORT "offline"
+#define SIZEOF_FLOAT 4
+#define SIZEOF_SHORT 2
