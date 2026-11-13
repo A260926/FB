@@ -1,0 +1,10 @@
+{
+  "feedType": "rss",
+  "feedVersion": "1.0",
+  "items": [
+    {
+      "title": "Item Title",
+      "guid": "http://example.org/entry/1"
+    }
+  ]
+}
