@@ -1,0 +1,27 @@
+package org.jsoup.internal;
+
+/**
+ jsoup constants used between packages. Do not use as they may change without warning. Users will not be able to see
+ this package when modules are enabled.
+ */
+public final class SharedConstants {
+    public static final String UserDataKey = "/jsoup.userdata";
+    public static final String RangeSpansKey = "/jsoup.spans";
+    public static final String XmlnsAttr = "jsoup.xmlns-";
+
+    public static final int DefaultBufferSize = 8 * 1024;
+
+    public static final String[] FormSubmitTags = {
+        "input", "keygen", "object", "select", "textarea"
+    };
+
+    public static final String DummyUri = "https://dummy.example/"; // used as a base URI if none provided, to allow abs url resolution to preserve relative links
+
+    public static final String QueryMode = "jsoup.queryMode"; // preview Web query scope, case, and attribute matching; default flips in 1.25.1, removed in 1.26.1
+
+    public static final String UseHttpClient = "jsoup.useHttpClient";
+
+    public static final String UseRe2j = "jsoup.useRe2j"; // enables use of the re2j regular expression engine when true and it's on the classpath
+
+    private SharedConstants() {}
+}

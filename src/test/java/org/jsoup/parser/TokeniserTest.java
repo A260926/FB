@@ -1,0 +1,294 @@
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.nodes.*;
+import org.jsoup.select.Elements;
+import org.junit.jupiter.api.Test;
+
+import java.io.StringReader;
+import java.nio.charset.Charset;
+import java.util.Arrays;
+
+import static org.jsoup.parser.CharacterReader.BufferSize;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class TokeniserTest {
+    @Test void accumulatesWhitespaceReferencesBeforeText() {
+        String input = " &#32;&Tab;&amp;X";
+        HtmlTreeBuilder tree = new HtmlTreeBuilder();
+        tree.initialiseParse(new StringReader(input), "", Parser.htmlParser());
+        try {
+            Token whitespace = tree.tokeniser.readWhitespace();
+            assertEquals("  \t", whitespace.asCharacter().getData());
+            assertEquals(0, whitespace.startPos());
+            assertEquals(input.indexOf("&amp;"), whitespace.endPos());
+            whitespace.reset();
+
+            Token text = tree.tokeniser.readWhitespace();
+            assertEquals("&X", text.asCharacter().getData());
+            assertEquals(input.indexOf("&amp;"), text.startPos());
+            assertEquals(input.length(), text.endPos());
+            text.reset();
+            assertTrue(tree.tokeniser.read().isEOF());
+        } finally {
+            tree.closeParse();
+        }
+    }
+
+    @Test void whitespaceReferencePeekCrossesBufferBoundary() {
+        String spaces = StringUtil.padding(BufferSize - 2, BufferSize - 2);
+        String input = spaces + "&#32;&amp;X";
+        HtmlTreeBuilder tree = new HtmlTreeBuilder();
+        tree.initialiseParse(new StringReader(input), "", Parser.htmlParser());
+        try {
+            Token whitespace = tree.tokeniser.readWhitespace();
+            assertEquals(spaces + " ", whitespace.asCharacter().getData());
+            assertEquals(input.indexOf("&amp;"), whitespace.endPos());
+            whitespace.reset();
+
+            Token text = tree.tokeniser.readWhitespace();
+            assertEquals("&X", text.asCharacter().getData());
+            assertEquals(input.indexOf("&amp;"), text.startPos());
+            text.reset();
+        } finally {
+            tree.closeParse();
+        }
+    }
+
+    @Test void whitespaceReferencePeekDoesNotDuplicateErrors() {
+        for (String ref : new String[]{"&bogus;", "&notit;", "&#x80;", "&#;"}) {
+            Parser normal = Parser.htmlParser();
+            normal.setTrackErrors(10);
+            normal.parseInput("<!doctype html><body>" + ref + "X", "");
+            long expected = normal.getErrors().stream()
+                .filter(error -> error.getErrorMessage().startsWith("Invalid character reference"))
+                .count();
+            assertTrue(expected > 0, ref);
+
+            Parser parser = Parser.htmlParser();
+            parser.setTrackErrors(10);
+            parser.parseInput("<!doctype html><head> " + ref + "X", "");
+            long errors = parser.getErrors().stream()
+                .filter(error -> error.getErrorMessage().startsWith("Invalid character reference"))
+                .count();
+            assertEquals(expected, errors, ref);
+        }
+    }
+
+    @Test
+    public void bufferUpInAttributeVal() {
+        // https://github.com/jhy/jsoup/issues/967
+
+        // check each double, singlem, unquoted impls
+        String[] quotes = {"\"", "'", ""};
+        for (String quote : quotes) {
+            String preamble = "<img src=" + quote;
+            String tail = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+            StringBuilder sb = new StringBuilder(preamble);
+
+            final int charsToFillBuffer = BufferSize - preamble.length();
+            for (int i = 0; i < charsToFillBuffer; i++) {
+                sb.append('a');
+            }
+
+            sb.append('X'); // First character to cross character buffer boundary
+            sb.append(tail).append(quote).append(">\n");
+
+            String html = sb.toString();
+            Document doc = Jsoup.parse(html);
+            String src = doc.select("img").attr("src");
+
+            assertTrue(src.contains("X"), "Handles for quote " + quote);
+            assertTrue(src.contains(tail));
+        }
+    }
+
+    @Test public void handleSuperLargeTagNames() {
+        // unlikely, but valid. so who knows.
+
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("LargeTagName");
+        } while (sb.length() < BufferSize);
+        String tag = sb.toString();
+        String html = "<" + tag + ">One</" + tag + ">";
+
+        Document doc = Parser.htmlParser().settings(ParseSettings.preserveCase).parseInput(html, "");
+        Elements els = doc.select(tag);
+        assertEquals(1, els.size());
+        Element el = els.first();
+        assertNotNull(el);
+        assertEquals("One", el.text());
+        assertEquals(tag, el.tagName());
+    }
+
+    @Test public void handleSuperLargeAttributeName() {
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("LargAttributeName");
+        } while (sb.length() < BufferSize);
+        String attrName = sb.toString();
+        String html = "<p " + attrName + "=foo>One</p>";
+
+        Document doc = Jsoup.parse(html);
+        Elements els = doc.getElementsByAttribute(attrName);
+        assertEquals(1, els.size());
+        Element el = els.first();
+        assertNotNull(el);
+        assertEquals("One", el.text());
+        Attribute attribute = el.attributes().asList().get(0);
+        assertEquals(attrName.toLowerCase(), attribute.getKey());
+        assertEquals("foo", attribute.getValue());
+    }
+
+    @Test public void handleLargeText() {
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("A Large Amount of Text");
+        } while (sb.length() < BufferSize);
+        String text = sb.toString();
+        String html = "<p>" + text + "</p>";
+
+        Document doc = Jsoup.parse(html);
+        Elements els = doc.select("p");
+        assertEquals(1, els.size());
+        Element el = els.first();
+
+        assertNotNull(el);
+        assertEquals(text, el.text());
+    }
+
+    @Test public void handleLargeComment() {
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("Quite a comment ");
+        } while (sb.length() < BufferSize);
+        String comment = sb.toString();
+        String html = "<p><!-- " + comment + " --></p>";
+
+        Document doc = Jsoup.parse(html);
+        Elements els = doc.select("p");
+        assertEquals(1, els.size());
+        Element el = els.first();
+
+        assertNotNull(el);
+        Comment child = (Comment) el.childNode(0);
+        assertEquals(" " + comment + " ", child.getData());
+    }
+
+    @Test public void handleLargeCdata() {
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("Quite a lot of CDATA <><><><>");
+        } while (sb.length() < BufferSize);
+        String cdata = sb.toString();
+        String xml = "<p><![CDATA[" + cdata + "]]></p>";
+
+        Document doc = Jsoup.parse(xml, "", Parser.xmlParser());
+        Element el = doc.expectFirst("p");
+        CDataNode child = assertInstanceOf(CDataNode.class, el.childNode(0));
+        assertEquals(cdata, el.text());
+        assertEquals(cdata, child.getWholeText());
+    }
+
+    @Test public void handleLargeTitle() {
+        StringBuilder sb = new StringBuilder(BufferSize);
+        do {
+            sb.append("Quite a long title");
+        } while (sb.length() < BufferSize);
+        String title = sb.toString();
+        String html = "<title>" + title + "</title>";
+
+        Document doc = Jsoup.parse(html);
+        Elements els = doc.select("title");
+        assertEquals(1, els.size());
+        Element el = els.first();
+
+        assertNotNull(el);
+        TextNode child = (TextNode) el.childNode(0);
+        assertEquals(title, el.text());
+        assertEquals(title, child.getWholeText());
+        assertEquals(title, doc.title());
+    }
+
+    @Test public void cp1252Entities() {
+        assertEquals("\u20ac", Jsoup.parse("&#0128;").text());
+        assertEquals("\u201a", Jsoup.parse("&#0130;").text());
+        assertEquals("\u20ac", Jsoup.parse("&#x80;").text());
+    }
+
+    @Test public void cp1252EntitiesProduceError() {
+        Parser parser = new Parser(new HtmlTreeBuilder());
+        parser.setTrackErrors(10);
+        assertEquals("\u20ac", parser.parseInput("<html><body>&#0128;</body></html>", "").text());
+        assertEquals(1, parser.getErrors().size());
+    }
+
+    @Test public void cp1252SubstitutionTable() {
+        for (int i = 0; i < Tokeniser.win1252Extensions.length; i++) {
+            String s = new String(new byte[]{ (byte) (i + Tokeniser.win1252ExtensionsStart) }, Charset.forName("Windows-1252"));
+            assertEquals(1, s.length());
+
+            // some of these characters are illegal
+            if (s.charAt(0) == '\ufffd') { continue; }
+
+            assertEquals(s.charAt(0), Tokeniser.win1252Extensions[i], "At: " + i);
+        }
+    }
+
+    @Test public void canParseVeryLongBogusComment() {
+        StringBuilder commentData = new StringBuilder(BufferSize);
+        do {
+            commentData.append("blah blah blah blah ");
+        } while (commentData.length() < BufferSize);
+        String expectedCommentData = commentData.toString();
+        String testMarkup = "<html><body><!" + expectedCommentData + "></body></html>";
+        Parser parser = new Parser(new HtmlTreeBuilder());
+
+        Document doc = parser.parseInput(testMarkup, "");
+
+        Node commentNode = doc.body().childNode(0);
+        assertTrue(commentNode instanceof Comment, "Expected comment node");
+        assertEquals(expectedCommentData, ((Comment)commentNode).getData());
+    }
+
+    @Test public void canParseCdataEndingAtEdgeOfBuffer() {
+        String cdataStart = "<![CDATA[";
+        String cdataEnd = "]]>";
+        int bufLen = BufferSize - cdataStart.length() - 1;    // also breaks with -2, but not with -3 or 0
+        char[] cdataContentsArray = new char[bufLen];
+        Arrays.fill(cdataContentsArray, 'x');
+        String cdataContents = new String(cdataContentsArray);
+        String testMarkup = cdataStart + cdataContents + cdataEnd;
+        Parser parser = Parser.xmlParser();
+
+        Document doc = parser.parseInput(testMarkup, "");
+
+        CDataNode cdataNode = assertInstanceOf(CDataNode.class, doc.childNode(0));
+        assertEquals(cdataContents, cdataNode.text());
+    }
+
+    @Test void tokenDataToString() {
+        TokenData data = new TokenData();
+        assertEquals("", data.toString());
+        data.set("abc");
+        assertEquals("abc", data.toString());
+        data.append("def");
+        assertEquals("abcdef", data.toString());
+    }
+
+    @Test void tokenDataValueLifecycle() {
+        TokenData data = new TokenData();
+        data.set("abc");
+        data.append("def");
+        assertEquals("abcdef", data.value());
+        assertEquals("abcdef", data.value());
+
+        data.append('g');
+        assertEquals("abcdefg", data.value());
+
+        data.reset();
+        assertEquals("", data.value());
+    }
+}

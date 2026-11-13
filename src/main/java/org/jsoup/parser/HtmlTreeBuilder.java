@@ -1,0 +1,1328 @@
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.internal.Normalizer;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.CDataNode;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.NodeInternals;
+import org.jsoup.nodes.ProcessingInstruction;
+import org.jsoup.nodes.TextNode;
+import org.jspecify.annotations.Nullable;
+
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+import static org.jsoup.internal.StringUtil.inSorted;
+import static org.jsoup.parser.HtmlTreeBuilderState.Constants.Headings;
+import static org.jsoup.parser.HtmlTreeBuilderState.Constants.InTableFoster;
+import static org.jsoup.parser.HtmlTreeBuilderState.ForeignContent;
+import static org.jsoup.parser.Parser.*;
+
+/**
+ * HTML Tree Builder; creates a DOM from Tokens.
+ */
+public class HtmlTreeBuilder extends TreeBuilder {
+    static final String[] TagMathMlTextIntegration = new String[]{"mi", "mn", "mo", "ms", "mtext"};
+    static final String[] TagSvgHtmlIntegration = new String[]{"desc", "foreignObject", "title"};
+    static final String[] TagFormListed = {
+        "button", "fieldset", "input", "keygen", "object", "output", "select", "textarea"
+    };
+
+    private HtmlTreeBuilderState state; // the current state
+    private HtmlTreeBuilderState originalState; // original / marked state
+
+    private boolean baseUriSetFromDoc;
+    private @Nullable Element headElement; // the current head element
+    private @Nullable FormElement formElement; // the current form element
+    private @Nullable Element contextElement; // context copy and fragment output container; not on the stack
+    private @Nullable Element fragmentRoot; // internal stack root; contextElement receives fragment nodes
+    ArrayList<@Nullable Element> formattingElements; // active formatting elements and null scope markers
+    private ArrayList<HtmlTreeBuilderState> tmplInsertMode; // stack of Template Insertion modes
+    private @Nullable NoscriptState noscriptState; // active noscript island state
+    private List<Token.Character> pendingTableCharacters; // chars in table to be shifted out
+    private Token.EndTag emptyEnd; // reused empty end tag
+
+    private boolean framesetOk; // if ok to go into frameset
+    private boolean fosterInserts; // if next inserts should be fostered
+    private boolean fragmentParsing; // if parsing a fragment of html
+
+    @Override ParseSettings defaultSettings() {
+        return ParseSettings.htmlDefault;
+    }
+
+    @Override
+    HtmlTreeBuilder newInstance() {
+        return new HtmlTreeBuilder();
+    }
+
+    @Override
+    protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+        super.initialiseParse(input, baseUri, parser);
+
+        // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+        state = HtmlTreeBuilderState.Initial;
+        originalState = null;
+        baseUriSetFromDoc = false;
+        headElement = null;
+        formElement = null;
+        contextElement = null;
+        fragmentRoot = null;
+        formattingElements = new ArrayList<>();
+        tmplInsertMode = new ArrayList<>();
+        noscriptState = null;
+        pendingTableCharacters = new ArrayList<>();
+        emptyEnd = new Token.EndTag(this);
+        framesetOk = true;
+        fosterInserts = false;
+        fragmentParsing = false;
+    }
+
+    @Override void initialiseParseFragment(@Nullable Element context) {
+        // context may be null
+        state = HtmlTreeBuilderState.Initial;
+        fragmentParsing = true;
+
+        if (context != null) {
+            final String contextName = context.normalName();
+            contextElement = new Element(context.tag(), baseUri);
+            contextElement.attributes().addAll(context.attributes());
+            if (context.ownerDocument() != null) // quirks setup:
+                doc.quirksMode(context.ownerDocument().quirksMode());
+
+            // initialise the tokeniser state
+            Tag contextTag = contextElement.tag();
+            boolean htmlContext = NamespaceHtml.equals(contextTag.namespace());
+            TokeniserState contextState = contextTag.textState(); // style, xmp, title, textarea, etc; or custom
+            if (contextState == null) contextState = TokeniserState.Data;
+
+            switch (contextName) {
+                case "script":
+                    if (htmlContext) {
+                        contextState = TokeniserState.ScriptData;
+                    } else if (NamespaceSvg.equals(contextTag.namespace())) {
+                        // svg script enters script data during document parsing, but fragments start in data so markup creates svg children
+                        contextState = TokeniserState.Data;
+                    }
+                    break;
+                case "plaintext":
+                    if (htmlContext) contextState = TokeniserState.PLAINTEXT;
+                    break;
+                case "template":
+                    if (htmlContext) {
+                        contextState = TokeniserState.Data;
+                        pushTemplateMode(HtmlTreeBuilderState.InTemplate);
+                    }
+                    break;
+            }
+            tokeniser.transition(contextState);
+            fragmentRoot = new Element(tagFor("html", "html", NamespaceHtml, settings), baseUri);
+            doc.appendChild(contextElement);
+            push(fragmentRoot);
+            resetInsertionMode();
+
+            // setup form element to nearest form on context (up ancestor chain). ensures form controls are associated
+            // with form correctly
+            Element formSearch = context;
+            while (formSearch != null) {
+                if (formSearch instanceof FormElement) {
+                    formElement = (FormElement) formSearch;
+                    break;
+                }
+                formSearch = formSearch.parent();
+            }
+
+            if (htmlContext && contextName.equals("noscript")) enterNoscript(fragmentRoot);
+        }
+    }
+
+    @Override List<Node> completeParseFragment() {
+        return (contextElement != null ? contextElement : doc).childNodes();
+    }
+
+    /**
+     Reads a token, separating leading whitespace in insertion modes that handle it separately.
+     */
+    @Override
+    Token readToken() {
+        // the spec processes Data characters individually; return leading whitespace first
+        // so that the current insertion mode handles it, before following text takes another route
+        if (noscriptState == null && useCurrentOrForeignInsert(tokeniser.charPending)) {
+            switch (state) {
+                case Initial:
+                case BeforeHtml:
+                case BeforeHead:
+                case InHead:
+                case AfterHead:
+                case InColumnGroup:
+                case AfterBody:
+                case AfterAfterBody:
+                case AfterAfterFrameset:
+                    return tokeniser.readWhitespace();
+            }
+        }
+        return tokeniser.read();
+    }
+
+    @Override
+    protected boolean process(Token token) {
+        if (noscriptState != null && state != HtmlTreeBuilderState.Text)
+            return processNoscriptToken(token);
+        HtmlTreeBuilderState dispatch = useCurrentOrForeignInsert(token) ? this.state : ForeignContent;
+        return dispatch.process(token, this);
+    }
+
+    /**
+     Handles tokens in a noscript island as plain contained markup. This diverges from the spec intentionally so that
+     content is available in the DOM and round-trip serializable, but errant content won't change the parser's context
+     (e.g. an `a` won't kick out of InHead).
+     */
+    private boolean processNoscriptToken(Token token) {
+        switch (token.type) {
+            case StartTag:
+                return insertNoscriptStartTag(token.asStartTag());
+            case EndTag:
+                return closeNoscriptEndTag(token.asEndTag());
+            case Comment:
+                insertCommentNode(token.asComment());
+                return true;
+            case Character:
+                Token.Character character = token.asCharacter();
+                insertCharacterNode(character);
+                if (!StringUtil.isBlank(character.getData()))
+                    framesetOk(false);
+                return true;
+            case Doctype:
+                error(state);
+                return false;
+            case EOF:
+                error(state);
+                endNoscript();
+                return process(token);
+            default:
+                Validate.wtf("Unexpected state: " + token.type); // XmlDecl only in XmlTreeBuilder
+                return false;
+        }
+    }
+
+    /**
+     Inserts a start tag inside a noscript island as plain markup.
+     */
+    private boolean insertNoscriptStartTag(Token.StartTag start) {
+        TokeniserState textState = tagFor(start).textState();
+        Element el = insertElementFor(start);
+        if (textState != null) { // plaintext is intentionally not TagSet-driven and remains plain fallback markup.
+            if (start.isSelfClosing()) {
+                if (currentElement() == el)
+                    pop();
+            } else {
+                tokeniser.transition(textState);
+                markInsertionMode();
+                transition(HtmlTreeBuilderState.Text);
+            }
+        }
+
+        framesetOk(false);
+        return true;
+    }
+
+    /**
+     Closes an island element if it matches above the current noscript boundary.
+     */
+    private boolean closeNoscriptEndTag(Token.EndTag end) {
+        String name = end.normalName();
+        NoscriptState island = Validate.expectNotNull(noscriptState, "Bug: noscript end tag processed with no island state");
+        if (name.equals("noscript") && island.boundary != fragmentRoot) {
+            endNoscript();
+            return true;
+        }
+        if (!inNoscriptScope(name)) {
+            error(state);
+            return false;
+        }
+        if (!currentElementIs(name))
+            error(state);
+        popStackToClose(name);
+        return true;
+    }
+
+    boolean useCurrentOrForeignInsert(Token token) {
+        // https://html.spec.whatwg.org/multipage/parsing.html#tree-construction
+        // If the stack of open elements is empty
+        if (stack.isEmpty())
+            return true;
+        final Element el = adjustedCurrentElement();
+        final String ns = el.tag().namespace();
+
+        // If the adjusted current node is an element in the HTML namespace
+        if (NamespaceHtml.equals(ns))
+            return true;
+
+        // If the adjusted current node is a MathML text integration point and the token is a start tag whose tag name is neither "mglyph" nor "malignmark"
+        // If the adjusted current node is a MathML text integration point and the token is a character token
+        if (isMathmlTextIntegration(el)) {
+            if (token.isStartTag()
+                    && !"mglyph".equals(token.asStartTag().normalName)
+                    && !"malignmark".equals(token.asStartTag().normalName))
+                    return true;
+            if (token.isCharacter())
+                    return true;
+        }
+        // If the adjusted current node is a MathML annotation-xml element and the token is a start tag whose tag name is "svg"
+        if (Parser.NamespaceMathml.equals(ns)
+            && el.nameIs("annotation-xml")
+            && token.isStartTag()
+            && "svg".equals(token.asStartTag().normalName))
+            return true;
+
+        // If the adjusted current node is an HTML integration point and the token is a start tag
+        // If the adjusted current node is an HTML integration point and the token is a character token
+        if (isHtmlIntegration(el)
+            && (token.isStartTag() || token.isCharacter()))
+            return true;
+
+        // If the token is an end-of-file token
+        return token.isEOF();
+    }
+
+    static boolean isMathmlTextIntegration(Element el) {
+        /*
+        A node is a MathML text integration point if it is one of the following elements:
+        A MathML mi element
+        A MathML mo element
+        A MathML mn element
+        A MathML ms element
+        A MathML mtext element
+         */
+        return (Parser.NamespaceMathml.equals(el.tag().namespace())
+            && StringUtil.inSorted(el.normalName(), TagMathMlTextIntegration));
+    }
+
+    /** Tests if an element is in the HTML namespace. */
+    static boolean isHtmlEl(Element el) {
+        return NamespaceHtml.equals(el.tag().namespace());
+    }
+
+    /** Tests if an HTML element has the supplied normal name. */
+    static boolean isHtmlEl(Element el, String normalName) {
+        return isHtmlEl(el) && el.normalName().equals(normalName);
+    }
+
+    /** Tests if an HTML element has one of the supplied sorted normal names. */
+    static boolean isHtmlEl(Element el, String[] normalNames) {
+        return isHtmlEl(el) && inSorted(el.normalName(), normalNames);
+    }
+
+    static boolean isHtmlIntegration(Element el) {
+        /*
+        A node is an HTML integration point if it is one of the following elements:
+        A MathML annotation-xml element whose start tag token had an attribute with the name "encoding" whose value was an ASCII case-insensitive match for the string "text/html"
+        A MathML annotation-xml element whose start tag token had an attribute with the name "encoding" whose value was an ASCII case-insensitive match for the string "application/xhtml+xml"
+        An SVG foreignObject element
+        An SVG desc element
+        An SVG title element
+         */
+        if (Parser.NamespaceMathml.equals(el.tag().namespace())
+            && el.nameIs("annotation-xml")) {
+            String encoding = Normalizer.asciiLowerCase(el.attr("encoding"));
+            if (encoding.equals("text/html") || encoding.equals("application/xhtml+xml"))
+                return true;
+        }
+        // note using .tagName for case-sensitive hit here of foreignObject
+        return Parser.NamespaceSvg.equals(el.tag().namespace()) && StringUtil.in(el.tagName(), TagSvgHtmlIntegration);
+    }
+
+    boolean process(Token token, HtmlTreeBuilderState state) {
+        return state.process(token, this);
+    }
+
+    void transition(HtmlTreeBuilderState state) {
+        this.state = state;
+    }
+
+    HtmlTreeBuilderState state() {
+        return state;
+    }
+
+    void markInsertionMode() {
+        originalState = state;
+    }
+
+    HtmlTreeBuilderState originalState() {
+        return originalState;
+    }
+
+    void framesetOk(boolean framesetOk) {
+        this.framesetOk = framesetOk;
+    }
+
+    boolean framesetOk() {
+        return framesetOk;
+    }
+
+    Document getDocument() {
+        return doc;
+    }
+
+    String getBaseUri() {
+        return baseUri;
+    }
+
+    void maybeSetBaseUri(Element base) {
+        if (baseUriSetFromDoc) // only listen to the first <base href> in parse
+            return;
+
+        String href = base.absUrl("href");
+        if (href.length() != 0) { // ignore <base target> etc
+            baseUri = href;
+            baseUriSetFromDoc = true;
+            doc.setBaseUri(href); // set on the doc so doc.createElement(Tag) will get updated base, and to update all descendants
+        }
+    }
+
+    boolean isFragmentParsing() {
+        return fragmentParsing;
+    }
+
+    /** Tests whether this fragment was created with the named HTML context element. */
+    boolean fragmentContextIs(String normalName) {
+        return fragmentParsing && contextElement != null && isHtmlEl(contextElement, normalName);
+    }
+
+    /** Tests whether the parser is inside a template or using a template fragment context. */
+    boolean isParsingTemplateContents() {
+        return onStack("template") || fragmentContextIs("template");
+    }
+
+    void error(HtmlTreeBuilderState state) {
+        if (parser.getErrors().canAddError())
+            parser.getErrors().add(new ParseError(reader, "Unexpected %s token [%s] when in state [%s]",
+                currentToken.tokenType(), currentToken, state));
+    }
+
+    /** Creates an element after normalizing its attributes for the selected namespace. */
+    Element createElementFor(Token.StartTag startTag, String namespace) {
+        // normalize before deduping so differently cased names resolve to one attribute
+        Attributes attributes = startTag.attributes;
+        boolean isHtml = NamespaceHtml.equals(namespace);
+        if (attributes != null && !attributes.isEmpty()) {
+            if (isHtml)
+                settings.normalizeAttributes(attributes);
+            else if (!settings.preserveAttributeCase())
+                ForeignNames.normalizeAttributes(attributes, namespace);
+            int dupes = attributes.deduplicate(settings);
+            if (dupes > 0)
+                error("Dropped duplicate attribute(s) in tag [%s]", startTag.normalName);
+            startTag.finaliseAttributeRanges(settings);
+        }
+
+        Tag tag = tagFor(startTag.name(), startTag.normalName, namespace, isHtml ? settings : ParseSettings.preserveCase);
+        if (isHtml && tag.normalName().equals("form"))
+            return new FormElement(tag, null, attributes);
+        return new Element(tag, null, attributes);
+    }
+
+    /** Inserts an HTML element for the given tag */
+    Element insertElementFor(final Token.StartTag startTag) {
+        Element el = createElementFor(startTag, NamespaceHtml);
+        doInsertElement(el);
+
+        // handle self-closing tags. when the spec expects an empty (void) tag, will directly hit insertEmpty, so won't generate this fake end tag.
+        if (startTag.isSelfClosing()) {
+            Tag tag = el.tag();
+            tag.setSeenSelfClose(); // can infer output if in xml syntax
+            if (tag.isEmpty()) {
+                // treated as empty below; nothing further
+            } else if (tag.isKnownTag() && tag.isSelfClosing()) {
+                // ok, allow it. effectively a pop, but fiddles with the state. handles empty style, title etc which would otherwise leave us in data state
+                tokeniser.transition(TokeniserState.Data); // handles <script />, otherwise needs breakout steps from script data
+                tokeniser.emit(emptyEnd.reset().name(el.tagName()));  // ensure we get out of whatever state we are in. emitted for yielded processing
+            } else {
+                // error it, and leave the inserted element on
+                tokeniser.error("Tag [%s] cannot be self-closing; not a void tag", tag.normalName());
+            }
+        }
+
+        if (el.tag().isEmpty()) {
+            pop(); // custom void tags behave like built-in voids (no children, not left on the stack); known empty go via insertEmpty
+        }
+
+        return el;
+    }
+
+    /** Inserts a foreign element with its configured SVG or MathML name adjustments. */
+    Element insertForeignElementFor(final Token.StartTag startTag, String namespace) {
+        if (!settings.preserveTagCase())
+            startTag.name(ForeignNames.tagName(startTag.name(), namespace));
+        Element el = createElementFor(startTag, namespace);
+        doInsertElement(el);
+
+        if (startTag.isSelfClosing()) { // foreign els are OK to self-close
+            el.tag().setSeenSelfClose(); // remember this is self-closing for output
+            pop();
+        }
+
+        return el;
+    }
+
+    Element insertEmptyElementFor(Token.StartTag startTag) {
+        Element el = createElementFor(startTag, NamespaceHtml);
+        doInsertElement(el);
+        pop();
+        return el;
+    }
+
+    /** Inserts a form and leaves the form pointer unset while parsing template contents. */
+    FormElement insertFormElement(Token.StartTag startTag, boolean onStack) {
+        FormElement el = (FormElement) createElementFor(startTag, NamespaceHtml);
+        if (!isParsingTemplateContents()) setFormElement(el);
+
+        doInsertElement(el);
+        if (!onStack) pop();
+        return el;
+    }
+
+    /** Inserts the Element onto the stack. All element inserts must run through this method. Performs any general
+     tests on the Element before insertion.
+     * @param el the Element to insert and make the current element
+     */
+    private void doInsertElement(Element el) {
+        enforceStackDepthLimit();
+
+        if (formElement != null && isHtmlEl(el, TagFormListed))
+            formElement.addElement(el); // connect form controls to their form element
+
+        // in HTML, the xmlns attribute if set must match what the parser set the tag's namespace to
+        if (parser.getErrors().canAddError() && el.hasAttr("xmlns") && !el.attr("xmlns").equals(el.tag().namespace()))
+            error("Invalid xmlns attribute [%s] on tag [%s]", el.attr("xmlns"), el.tagName());
+
+        insertNode(el, currentElOrDoc());
+        push(el);
+    }
+
+    /** Inserts a node into the target, applying foster parenting when required. */
+    void insertNode(Node node, Element target) {
+        if (fosterInserts && isHtmlEl(target, InTableFoster))
+            insertInFosterParent(node);
+        else
+            insertionTarget(target).appendChild(node);
+    }
+
+    /** Inserts a node at the foster parenting location. */
+    void insertInFosterParent(Node node) {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element el = stack.get(pos);
+            if (isHtmlEl(el, "template")) {
+                el.appendChild(node); // template contents are stored on the element
+                return;
+            }
+            if (isHtmlEl(el, "table")) {
+                Element parent = el.parent();
+                if (parent != null)
+                    el.before(node);
+                else
+                    insertionTarget(stack.get(pos - 1)).appendChild(node);
+                return;
+            }
+        }
+        // https://html.spec.whatwg.org/multipage/parsing.html#appropriate-place-for-inserting-a-node
+        // fragment case: insert into the first element on the stack (the html element)
+        insertionTarget(stack.get(0)).appendChild(node);
+    }
+
+    /** Moves a node for adoption agency recovery to its adjusted insertion location. */
+    void insertAdopted(Node node, Element target) {
+        if (fosterInserts && isHtmlEl(target, InTableFoster)) {
+            for (int pos = stack.size() - 1; pos >= 0; pos--) {
+                Element el = stack.get(pos);
+                if (isHtmlEl(el, "template")) {
+                    insertAdopted(node, el, null); // template contents are stored on the element
+                    return;
+                }
+                if (isHtmlEl(el, "table")) {
+                    Element parent = el.parent();
+                    if (parent != null)
+                        insertAdopted(node, parent, el);
+                    else
+                        insertAdopted(node, insertionTarget(stack.get(pos - 1)), null);
+                    return;
+                }
+            }
+            target = stack.get(0);
+        }
+        insertAdopted(node, insertionTarget(target), null);
+    }
+
+    /**
+     Moves a node to a resolved parent and position, subject to the DOM insertion validity rules.
+     @param node the node to remove and reinsert
+     @param parent the element to insert the node into
+     @param before a child of {@code parent} to insert the node before, or {@code null} to append the node
+     */
+    static void insertAdopted(Node node, Element parent, @Nullable Node before) {
+        // https://html.spec.whatwg.org/multipage/parsing.html#adoption-agency-algorithm
+        // 4.15: If lastNode's parent is non-null, then remove lastNode.
+        if (node.parent() != null) node.remove();
+        // 4.16: Insert lastNode into target before refNode only if pre-insert validity holds.
+        if (node.parent() != null || (before != null && before.parent() != parent)) return;
+        if (parent instanceof Document && parent.childrenSize() != 0) return;
+        for (Node ancestor = parent; ancestor != null; ancestor = ancestor.parent()) {
+            if (ancestor == node) return;
+        }
+        if (before == null)
+            parent.appendChild(node);
+        else
+            before.before(node);
+    }
+
+    /** Inserts a comment into the current element, or the document when there is none. */
+    void insertCommentNode(Token.Comment token) {
+        insertCommentNode(token, currentElOrDoc());
+    }
+
+    /** Inserts a comment into the supplied target. */
+    void insertCommentNode(Token.Comment token, Element target) {
+        Node node;
+        if (token.isPI()) {
+            Token.PI piToken = token.asPI();
+            ProcessingInstruction instruction = new ProcessingInstruction(piToken.target(), token.getData());
+            NodeInternals.sourceDataStart(instruction, piToken.dataStartPos);
+            node = instruction;
+        } else {
+            node = new Comment(token.getData());
+        }
+        insertionTarget(target).appendChild(node);
+        onNodeInserted(node);
+    }
+
+    /** Inserts the provided character token into the current element, or the document when there is none. */
+    void insertCharacterNode(Token.Character characterToken) {
+        insertCharacterNode(characterToken, false);
+    }
+
+    /**
+     Inserts the provided character token into the current element, or the document when there is none.
+     The tokenizer will have already raised precise character errors.
+
+     @param characterToken the character token to insert
+     @param replace if true, replaces any null chars in the data with the replacement char (U+FFFD). If false, removes
+     null chars.
+     */
+    void insertCharacterNode(Token.Character characterToken, boolean replace) {
+        characterToken.normalizeNulls(replace);
+        if (characterToken.getData().isEmpty()) return;
+        Element target = currentElOrDoc();
+        Node node = createCharacterNode(characterToken, insertionTarget(target));
+        insertNode(node, target);
+        onNodeInserted(node);
+    }
+
+    /** Inserts the provided character token into the provided element. */
+    void insertCharacterToElement(Token.Character characterToken, Element el) {
+        Element target = insertionTarget(el);
+        Node node = createCharacterNode(characterToken, target);
+        target.appendChild(node); // insert at the requested element, without foster parenting
+        onNodeInserted(node);
+    }
+
+    /** Creates the text or data node represented by a character token. */
+    private Node createCharacterNode(Token.Character characterToken, Element target) {
+        final String data = characterToken.getData();
+
+        if (characterToken.isCData())
+            return new CDataNode(data);
+        else if (target.tag().is(Tag.Data))
+            return new DataNode(data);
+        else
+            return new TextNode(data);
+    }
+
+    ArrayList<Element> getStack() {
+        return stack;
+    }
+
+    /** Gets the insertion target for fragment content. */
+    private Element insertionTarget(Element target) {
+        // the html root is only used by the tree builder; content belongs in the context copy
+        return target == fragmentRoot && contextElement != null ? contextElement : target;
+    }
+
+    /** Notifies listeners that a node was inserted. */
+    @Override void onNodeInserted(Node node) {
+        // listeners observe the fragment's context copy, not its parser-only html root
+        super.onNodeInserted(node == fragmentRoot && contextElement != null ? contextElement : node);
+    }
+
+    /** Notifies listeners that a node was closed. */
+    @Override void onNodeClosed(Node node) {
+        super.onNodeClosed(node == fragmentRoot && contextElement != null ? contextElement : node);
+    }
+
+    /** Tests whether an element is open. */
+    @Override boolean isOpen(Element element) {
+        // the context copy remains open for streaming while its parser root is open
+        return super.isOpen(element == contextElement && fragmentRoot != null ? fragmentRoot : element);
+    }
+
+    /** Copies the open elements. */
+    @Override void copyOpenElementsTo(Collection<? super Element> elements) {
+        // streaming tracks the context copy in place of the parser-only root
+        for (Element element : stack)
+            elements.add(insertionTarget(element));
+    }
+
+    boolean onStack(Element el) {
+        return stack.contains(el);
+    }
+
+    /** Checks if there is an HTML element with the given name on the stack. */
+    boolean onStack(String elName) {
+        return getFromStack(elName) != null;
+    }
+
+    /** Gets the adjusted current element for foreign-content dispatch. */
+    private Element adjustedCurrentElement() {
+        // fragment parsing uses the context at the parser root
+        return fragmentParsing && stack.size() == 1 && contextElement != null ? contextElement : currentElement();
+    }
+
+    /** Gets the namespace used to process the current token. */
+    @Override String currentElNs() {
+        return adjustedCurrentElement().tag().namespace();
+    }
+
+    /** Gets the nearest (lowest) HTML element with the given name from the stack. */
+    @Nullable
+    Element getFromStack(String elName) {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element next = stack.get(pos);
+            if (isHtmlEl(next, elName)) {
+                return next;
+            }
+        }
+        return null;
+    }
+
+    boolean removeFromStack(Element el) {
+        for (int pos = stack.size() -1; pos >= 0; pos--) {
+            Element next = stack.get(pos);
+            if (next == el) {
+                stack.remove(pos);
+                onNodeClosed(el);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    void onStackPrunedForDepth(Element element) {
+        // handle other effects of popping to keep state correct
+        if (element == headElement) headElement = null;
+        if (element == formElement) setFormElement(null);
+        removeFromActiveFormattingElements(element);
+        if (element.nameIs("template")) {
+            clearFormattingElementsToLastMarker();
+            if (templateModeSize() > 0)
+                popTemplateMode();
+            resetInsertionMode();
+        } else if (noscriptState != null && element == noscriptState.boundary) {
+            restoreNoscriptState();
+        }
+    }
+
+    /** Pops the stack until the given HTML element is removed. */
+    @Nullable
+    Element popStackToClose(String elName) {
+        for (int pos = stack.size() -1; pos >= 0; pos--) {
+            Element el = pop();
+            if (isHtmlEl(el, elName)) {
+                return el;
+            }
+        }
+        return null;
+    }
+
+    /** Pops the stack until an element with the supplied name is removed, irrespective of namespace. */
+    @Nullable
+    Element popStackToCloseAnyNamespace(String elName) {
+        for (int pos = stack.size() -1; pos >= 0; pos--) {
+            Element el = pop();
+            if (el.nameIs(elName)) {
+                return el;
+            }
+        }
+        return null;
+    }
+
+    /** Pops the stack until one of the given HTML elements is removed. */
+    void popStackToClose(String... elNames) { // elnames is sorted, comes from Constants
+        for (int pos = stack.size() -1; pos >= 0; pos--) {
+            Element el = pop();
+            if (isHtmlEl(el, elNames)) {
+                break;
+            }
+        }
+    }
+
+    void clearStackToTableContext() {
+        clearStackToContext("table", "template");
+    }
+
+    void clearStackToTableBodyContext() {
+        clearStackToContext("tbody", "tfoot", "thead", "template");
+    }
+
+    void clearStackToTableRowContext() {
+        clearStackToContext("tr", "template");
+    }
+
+    /** Removes elements from the stack until one of the supplied HTML elements is removed. */
+    private void clearStackToContext(String... nodeNames) {
+        for (int pos = stack.size() -1; pos >= 0; pos--) {
+            Element next = stack.get(pos);
+            if (isHtmlEl(next) &&
+                (StringUtil.in(next.normalName(), nodeNames) || next.nameIs("html")))
+                break;
+            else
+                pop();
+        }
+    }
+
+    /**
+     Gets the Element immediately above the supplied element on the stack. Which due to adoption, may not necessarily be
+     its parent.
+
+     @param el
+     @return the Element immediately above the supplied element, or null if there is no such element.
+     */
+    @Nullable Element aboveOnStack(Element el) {
+        if (!onStack(el)) return null;
+        for (int pos = stack.size() -1; pos > 0; pos--) {
+            Element next = stack.get(pos);
+            if (next == el) {
+                return stack.get(pos-1);
+            }
+        }
+        return null;
+    }
+
+    /** Inserts an element immediately after an existing stack entry. */
+    void insertOnStackAfter(Element after, Element in) {
+        int i = stack.lastIndexOf(after);
+        if (i == -1) {
+            error("Unable to place <%s> after <%s> while recovering misnested formatting", in.tagName(), after.tagName());
+            stack.add(in);
+        } else {
+            stack.add(i + 1, in);
+        }
+    }
+
+    /** Replaces an existing element without changing any scope markers. */
+    private static void replaceInQueue(ArrayList<@Nullable Element> queue, Element out, Element in) {
+        int i = queue.lastIndexOf(out);
+        Validate.isTrue(i != -1);
+        queue.set(i, in);
+    }
+
+    /** Reset the insertion mode by searching up the stack for an appropriate insertion mode. */
+    boolean resetInsertionMode() {
+        // https://html.spec.whatwg.org/multipage/parsing.html#the-insertion-mode
+        final HtmlTreeBuilderState origState = this.state;
+
+        if (stack.size() == 0) { // nothing left of stack, just get to body
+            transition(HtmlTreeBuilderState.InBody);
+        }
+
+        LOOP: for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            boolean last = pos == 0;
+            Element node = last && fragmentParsing ? contextElement : stack.get(pos);
+            String name = node != null && isHtmlEl(node) ? node.normalName() : "";
+
+            switch (name) {
+                case "td":
+                case "th":
+                    if (!last) {
+                        transition(HtmlTreeBuilderState.InCell);
+                        break LOOP;
+                    }
+                    break;
+                case "tr":
+                    transition(HtmlTreeBuilderState.InRow);
+                    break LOOP;
+                case "tbody":
+                case "thead":
+                case "tfoot":
+                    transition(HtmlTreeBuilderState.InTableBody);
+                    break LOOP;
+                case "caption":
+                    transition(HtmlTreeBuilderState.InCaption);
+                    break LOOP;
+                case "colgroup":
+                    transition(HtmlTreeBuilderState.InColumnGroup);
+                    break LOOP;
+                case "table":
+                    transition(HtmlTreeBuilderState.InTable);
+                    break LOOP;
+                case "template":
+                    HtmlTreeBuilderState tmplState = currentTemplateMode();
+                    Validate.notNull(tmplState, "Bug: no template insertion mode on stack!");
+                    transition(tmplState);
+                    break LOOP;
+                case "head":
+                    if (!last) {
+                        transition(HtmlTreeBuilderState.InHead);
+                        break LOOP;
+                    }
+                    break;
+                case "body":
+                    transition(HtmlTreeBuilderState.InBody);
+                    break LOOP;
+                case "frameset":
+                    transition(HtmlTreeBuilderState.InFrameset);
+                    break LOOP;
+                case "html":
+                    transition(headElement == null ? HtmlTreeBuilderState.BeforeHead : HtmlTreeBuilderState.AfterHead);
+                    break LOOP;
+            }
+            if (last) {
+                transition(HtmlTreeBuilderState.InBody);
+                break;
+            }
+        }
+        return state != origState;
+    }
+
+    /** Places the body back onto the stack and moves to InBody, for cases in AfterBody / AfterAfterBody when more content comes */
+    void resetBody() {
+        if (!onStack("body")) {
+            stack.add(doc.body()); // not onNodeInserted, as already seen
+        }
+        transition(HtmlTreeBuilderState.InBody);
+    }
+
+    /**
+     Test if the target element is in the requested scope.
+     */
+    private boolean inSpecificScope(String targetName, int boundaryOptions) {
+        // https://html.spec.whatwg.org/multipage/parsing.html#has-an-element-in-the-specific-scope
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element el = stack.get(pos);
+            Tag tag = el.tag();
+            if (isHtmlEl(el) && el.normalName().equals(targetName))
+                return true;
+            if (tag.hasParserOption(boundaryOptions))
+                return false;
+        }
+        return false;
+    }
+
+    /**
+     Test if any heading element is in scope.
+     */
+    boolean hasHeadingInScope() {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element el = stack.get(pos);
+            Tag tag = el.tag();
+            if (isHtmlEl(el, Headings))
+                return true;
+            if (tag.hasParserOption(HtmlTagOptions.Scope))
+                return false;
+        }
+        return false;
+    }
+
+    boolean inScope(String targetName) {
+        return inSpecificScope(targetName, HtmlTagOptions.Scope);
+    }
+
+    /** Tests whether this element is on the stack before a scope boundary. */
+    boolean inScope(Element target) {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element el = stack.get(pos);
+            if (el == target) return true;
+            if (el.tag().hasParserOption(HtmlTagOptions.Scope)) return false;
+        }
+        return false;
+    }
+
+    boolean inListItemScope(String targetName) {
+        return inSpecificScope(targetName, HtmlTagOptions.Scope | HtmlTagOptions.ListScope);
+    }
+
+    boolean inButtonScope(String targetName) {
+        return inSpecificScope(targetName, HtmlTagOptions.Scope | HtmlTagOptions.ButtonScope);
+    }
+
+    boolean inTableScope(String targetName) {
+        return inSpecificScope(targetName, HtmlTagOptions.TableScope);
+    }
+
+    /** Tests if there is some element on the stack that is not in the provided set. */
+    boolean onStackNot(String[] allowedTags) {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            final String elName = stack.get(pos).normalName();
+            if (!inSorted(elName, allowedTags))
+                return true;
+        }
+        return false;
+    }
+
+    void setHeadElement(Element headElement) {
+        this.headElement = headElement;
+    }
+
+    Element getHeadElement() {
+        return headElement;
+    }
+
+    /** Processes a token using the in body insertion mode with foster parenting enabled. */
+    void processWithFosterInserts(Token token) {
+        boolean previous = fosterInserts;
+        fosterInserts = true;
+        process(token, HtmlTreeBuilderState.InBody);
+        fosterInserts = previous;
+    }
+
+    @Nullable FormElement getFormElement() {
+        return formElement;
+    }
+
+    void setFormElement(@Nullable FormElement formElement) {
+        this.formElement = formElement;
+    }
+
+    private static final class NoscriptState {
+        final Element boundary;
+        final @Nullable FormElement savedFormElement;
+
+        /**
+         Captures parser state isolated by the active noscript island.
+        */
+        NoscriptState(Element boundary, @Nullable FormElement formElement) {
+            this.boundary = boundary;
+            this.savedFormElement = formElement;
+        }
+    }
+
+    /** Starts a noscript island, preserving parser-global state for restoration on close. */
+    void startNoscript(Token.StartTag startTag) {
+        Element boundary = insertElementFor(startTag);
+        enterNoscript(boundary);
+    }
+
+    /** Enters a noscript island around the provided boundary element. */
+    private void enterNoscript(Element boundary) {
+        noscriptState = new NoscriptState(boundary, formElement);
+        // Fallback form elements should not leak through the parser form pointer.
+        setFormElement(null);
+    }
+
+    /** Tests if the named element is above the current noscript boundary. */
+    private boolean inNoscriptScope(String name) {
+        NoscriptState state = noscriptState;
+        if (state == null)
+            return false;
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            Element el = stack.get(pos);
+            if (el == state.boundary)
+                return false;
+            if (el.nameIs(name))
+                return true;
+        }
+        return false;
+    }
+
+    /** Closes the active noscript subtree and restores isolated parser state. */
+    private void endNoscript() {
+        NoscriptState state = Validate.expectNotNull(noscriptState, "Bug: noscript fallback closed with no island state");
+        int boundary = noscriptBoundaryIndex(state);
+        if (boundary == -1) {
+            error(this.state);
+            restoreNoscriptState();
+            return;
+        }
+        if (stack.get(stack.size() - 1) != state.boundary)
+            error(this.state);
+        while (stack.size() > boundary)
+            pop();
+        restoreNoscriptState();
+    }
+
+    /** Finds the active noscript boundary on the stack by identity. */
+    private int noscriptBoundaryIndex(NoscriptState state) {
+        for (int pos = stack.size() - 1; pos >= 0; pos--) {
+            if (stack.get(pos) == state.boundary)
+                return pos;
+        }
+        return -1;
+    }
+
+    /** Restores parser-global state from the active noscript island. */
+    private void restoreNoscriptState() {
+        NoscriptState state = Validate.expectNotNull(noscriptState, "Bug: no noscript island state to restore");
+        noscriptState = null;
+        setFormElement(state.savedFormElement);
+    }
+
+    void resetPendingTableCharacters() {
+        pendingTableCharacters.clear();
+    }
+
+    List<Token.Character> getPendingTableCharacters() {
+        return pendingTableCharacters;
+    }
+
+    void addPendingTableCharacters(Token.Character c) {
+        // make a copy of the token to maintain its state (as Tokens are otherwise reset)
+        Token.Character copy = new Token.Character(c);
+        pendingTableCharacters.add(copy);
+    }
+
+    /**
+     13.2.6.3 Closing elements that have implied end tags
+     When the steps below require the UA to generate implied end tags, then, while the current node is a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, or an rtc element, the UA must pop the current node off the stack of open elements.
+
+     If a step requires the UA to generate implied end tags but lists an element to exclude from the process, then the UA must perform the above steps as if that element was not in the above list.
+
+     When the steps below require the UA to generate all implied end tags thoroughly, then, while the current node is a caption element, a colgroup element, a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, an rtc element, a tbody element, a td element, a tfoot element, a th element, a thead element, or a tr element, the UA must pop the current node off the stack of open elements.
+
+     @param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+     process, then the UA must perform the above steps as if that element was not in the above list.
+     */
+    void generateImpliedEndTags(String excludeTag) {
+        while (hasCurrentElement() && currentElement().tag().hasParserOption(HtmlTagOptions.ImpliedEnd)) {
+            if (excludeTag != null && currentElementIs(excludeTag))
+                break;
+            pop();
+        }
+    }
+
+    void generateImpliedEndTags() {
+        generateImpliedEndTags(false);
+    }
+
+    /**
+     Pops HTML elements off the stack according to the implied end tag rules
+     @param thorough if we are thorough (includes table elements etc) or not
+     */
+    void generateImpliedEndTags(boolean thorough) {
+        final int option = thorough ? HtmlTagOptions.ThoroughImpliedEnd : HtmlTagOptions.ImpliedEnd;
+        while (true) {
+            if (!hasCurrentElement()) break;
+            Tag tag = currentElement().tag();
+            if (!tag.hasParserOption(option))
+                break;
+            pop();
+        }
+    }
+
+    void closeElement(String name) {
+        generateImpliedEndTags(name);
+        if (!currentElementIs(name)) error(state());
+        popStackToClose(name);
+    }
+
+    static boolean isSpecial(Element el) {
+        return el.tag().hasParserOption(HtmlTagOptions.Special);
+    }
+
+    /** Returns the last entry, or null for a scope marker or an empty list. */
+    @Nullable Element lastFormattingElement() {
+        return formattingElements.size() > 0 ? formattingElements.get(formattingElements.size()-1) : null;
+    }
+
+    /** Removes the last entry, returning null for a scope marker or an empty list. */
+    @Nullable Element removeLastFormattingElement() {
+        int size = formattingElements.size();
+        if (size > 0)
+            return formattingElements.remove(size-1);
+        else
+            return null;
+    }
+
+    // active formatting elements
+    void pushActiveFormattingElements(Element in) {
+        checkActiveFormattingElements(in);
+        addFormattingElement(formattingElements.size(), in);
+    }
+
+    /** Inserts a formatting element or null scope marker, dropping the oldest entry if over the limit. */
+    private void addFormattingElement(int pos, @Nullable Element element) {
+        formattingElements.add(pos, element);
+        if (formattingElements.size() > MaxFormattingElements)
+            formattingElements.remove(0);
+    }
+
+    /** Replaces a formatting entry at its original position or after a moved bookmark. */
+    void replaceFormattingElement(Element out, Element in, Element bookmark) {
+        int pos = formattingElements.indexOf(bookmark);
+        if (pos == -1) {
+            error("Unable to restore formatting order for <%s>", out.tagName());
+            removeFromActiveFormattingElements(out);
+            addFormattingElement(formattingElements.size(), in);
+        } else if (bookmark == out) {
+            formattingElements.set(pos, in);
+        } else {
+            removeFromActiveFormattingElements(out);
+            addFormattingElement(formattingElements.indexOf(bookmark) + 1, in);
+        }
+    }
+
+    void checkActiveFormattingElements(Element in){
+        int numSeen = 0;
+        final int size = formattingElements.size() -1;
+        int ceil = size - MaxUsedFormattingElements; if (ceil <0) ceil = 0;
+
+        for (int pos = size; pos >= ceil; pos--) {
+            Element el = formattingElements.get(pos);
+            if (el == null) // marker
+                break;
+
+            if (isSameFormattingElement(in, el))
+                numSeen++;
+
+            if (numSeen == 3) {
+                formattingElements.remove(pos);
+                break;
+            }
+        }
+    }
+
+    private static boolean isSameFormattingElement(Element a, Element b) {
+        // same if: same namespace, tag, and attributes. Element.equals only checks tag, might in future check children
+        return a.normalName().equals(b.normalName()) &&
+                // a.namespace().equals(b.namespace()) &&
+                a.attributes().equals(b.attributes());
+        // todo: namespaces
+    }
+
+    void reconstructFormattingElements() {
+        Element last = lastFormattingElement();
+        if (last == null || onStack(last))
+            return;
+
+        Element entry = last;
+        int size = formattingElements.size();
+        int ceil = size - MaxUsedFormattingElements; if (ceil <0) ceil = 0;
+        int pos = size - 1;
+        boolean skip = false;
+        while (true) {
+            if (pos == ceil) { // step 4. if none before, skip to 8
+                skip = true;
+                break;
+            }
+            entry = formattingElements.get(--pos); // step 5. one earlier than entry
+            if (entry == null || onStack(entry)) // step 6 - neither marker nor on stack
+                break; // jump to 8, else continue back to 4
+        }
+        while(true) {
+            if (!skip) // step 7: on later than entry
+                entry = formattingElements.get(++pos);
+            entry = Validate.expectNotNull(entry); // should not occur, as we break at last element
+
+            // 8. create new element from element, 9 insert into current node, onto stack
+            skip = false; // can only skip increment from 4.
+            Element newEl = recreateElement(entry);
+            doInsertElement(newEl);
+
+            // 10. replace entry with new entry
+            formattingElements.set(pos, newEl);
+
+            // 11
+            if (pos == size-1) // if not last entry in list, jump to 7
+                break;
+        }
+    }
+
+    /** Copies an element's originating source ranges, ready to track a new close. */
+    Element recreateElement(Element source) {
+        Element element = new Element(source.tag(), null, source.attributes().clone());
+        NodeInternals.clearEndSourceRange(element);
+        return element;
+    }
+
+    static final int MaxFormattingElements = 512; // includes markers, which also consume recovery history
+    static final int MaxUsedFormattingElements = 12; // limit how many elements get recreated
+
+    void clearFormattingElementsToLastMarker() {
+        while (!formattingElements.isEmpty()) {
+            Element el = removeLastFormattingElement();
+            if (el == null)
+                break;
+        }
+    }
+
+    void removeFromActiveFormattingElements(Element el) {
+        for (int pos = formattingElements.size() -1; pos >= 0; pos--) {
+            Element next = formattingElements.get(pos);
+            if (next == el) {
+                formattingElements.remove(pos);
+                break;
+            }
+        }
+    }
+
+    boolean isInActiveFormattingElements(Element el) {
+        return formattingElements.contains(el);
+    }
+
+    @Nullable
+    Element getActiveFormattingElement(String nodeName) {
+        for (int pos = formattingElements.size() -1; pos >= 0; pos--) {
+            Element next = formattingElements.get(pos);
+            if (next == null) // scope marker
+                break;
+            else if (next.nameIs(nodeName))
+                return next;
+        }
+        return null;
+    }
+
+    void replaceActiveFormattingElement(Element out, Element in) {
+        replaceInQueue(formattingElements, out, in);
+    }
+
+    void insertMarkerToFormattingElements() {
+        addFormattingElement(formattingElements.size(), null);
+    }
+
+    // Template Insertion Mode stack
+    void pushTemplateMode(HtmlTreeBuilderState state) {
+        tmplInsertMode.add(state);
+    }
+
+    @Nullable HtmlTreeBuilderState popTemplateMode() {
+        if (tmplInsertMode.size() > 0) {
+            return tmplInsertMode.remove(tmplInsertMode.size() -1);
+        } else {
+            return null;
+        }
+    }
+
+    int templateModeSize() {
+        return tmplInsertMode.size();
+    }
+
+    @Nullable HtmlTreeBuilderState currentTemplateMode() {
+        return (tmplInsertMode.size() > 0) ? tmplInsertMode.get(tmplInsertMode.size() -1)  : null;
+    }
+
+    @Override
+    public String toString() {
+        return "TreeBuilder{" +
+                "currentToken=" + currentToken +
+                ", state=" + state +
+                ", currentElement=" + (hasCurrentElement() ? currentElement() : "none") +
+                '}';
+    }
+
+}

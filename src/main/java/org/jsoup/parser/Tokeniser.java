@@ -1,0 +1,454 @@
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Entities;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Arrays;
+
+import static org.jsoup.internal.Normalizer.asciiLowerCase;
+
+/**
+ * Readers the input stream into tokens.
+ */
+final class Tokeniser {
+    static final char replacementChar = '\uFFFD'; // replaces null character
+    private static final char[] notCharRefCharsSorted = new char[]{'\t', '\n', '\r', '\f', ' ', '<', '&'};
+
+    // Some illegal character escapes are parsed by browsers as windows-1252 instead. See issue #1034
+    // https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state
+    static final int win1252ExtensionsStart = 0x80;
+    static final int[] win1252Extensions = new int[] {
+            // we could build this manually, but Windows-1252 is not a standard java charset so that could break on
+            // some platforms - this table is verified with a test
+            0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+            0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+            0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+            0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+    };
+
+    static {
+        Arrays.sort(notCharRefCharsSorted);
+    }
+
+    private final CharacterReader reader; // html input
+    private final ParseErrorList errors; // errors found while tokenising
+    private final TreeBuilder treeBuilder; // current tree state for contextual tokenisation
+
+    private TokeniserState state = TokeniserState.Data; // current tokenisation state
+    @Nullable private Token emitPending = null; // queued token; buffered characters may return first
+    boolean attributeFragment; // parsing attributes without a surrounding tag
+    final TokenData dataBuffer = new TokenData(); // buffers data looking for </script>
+
+    final Document.OutputSettings.Syntax syntax; // html or xml syntax; affects processing of xml declarations vs as bogus comments
+    final Token.StartTag startPending;
+    final Token.EndTag endPending;
+    Token.Tag tagPending; // tag we are building up: start or end pending
+    final Token.Character charPending = new Token.Character();
+    final Token.Doctype doctypePending = new Token.Doctype(); // doctype building up
+    final Token.Comment commentPending = new Token.Comment(); // comment building up
+    final Token.PI piPending = new Token.PI(); // processing instruction building up
+    final Token.XmlDecl xmlDeclPending; // xml decl building up
+    @Nullable private String lastStartTag; // the last start tag emitted, to test appropriate end tag
+
+    private int markupStartPos, charStartPos = 0; // reader pos at the start of markup / characters. markup updated on state transition, char on token emit.
+
+    Tokeniser(TreeBuilder treeBuilder) {
+        this.treeBuilder = treeBuilder;
+        syntax = treeBuilder instanceof XmlTreeBuilder ? Document.OutputSettings.Syntax.xml : Document.OutputSettings.Syntax.html;
+        tagPending = startPending  = new Token.StartTag(treeBuilder);
+        endPending = new Token.EndTag(treeBuilder);
+        xmlDeclPending = new Token.XmlDecl(treeBuilder);
+        this.reader = treeBuilder.reader;
+        this.errors = treeBuilder.parser.getErrors();
+    }
+
+    /** Returns the next token for tree construction. */
+    Token read() {
+        while (emitPending == null) {
+            state.read(this, reader);
+        }
+
+        Token token = emitPending;
+        // markup or EOF waits behind buffered text; DataWhitespace queues charPending itself
+        // to return leading whitespace before reading the following text
+        if (token != charPending && charPending.data.hasData()) return charPending;
+
+        emitPending = null;
+        return token;
+    }
+
+    /** Reads the next token, separating leading whitespace when in the Data state. */
+    Token readWhitespace() {
+        // The HTML Standard emits Data characters individually, so an insertion mode can handle
+        // whitespace before later text changes the mode. DataWhitespace preserves that boundary
+        // while batching characters.
+        if (state == TokeniserState.Data && emitPending == null)
+            transition(TokeniserState.DataWhitespace);
+        return read();
+    }
+
+    /** Ignores the first newline after a pre, listing, or textarea start tag, if present. */
+    void ignoreLeadingLf() {
+        // input CR and CRLF represent LF here; a reference must decode to LF, not CR
+        if (reader.matches('\r') || reader.matches('\n')) {
+            if (reader.consume() == '\r') reader.matchConsume("\n");
+        } else if (reader.matches('&')) {
+            int[] ref = peekCharacterReference();
+            if (ref == null || ref.length != 1 || ref[0] != '\n') return;
+            reader.advance();
+            consumeCharacterReference(null, false, false); // report any reference error once
+        } else return;
+        charStartPos = reader.pos();
+    }
+
+    /** Peeks at a character reference beginning at the current ampersand. */
+    private int @Nullable [] peekCharacterReference() {
+        reader.mark();
+        try {
+            reader.advance(); // skip '&' for the reference parser
+            return consumeCharacterReference(null, false, true);
+        } finally {
+            reader.rewindToMark();
+        }
+    }
+
+    /** Tests whether the reference at the current '&' decodes to HTML whitespace without consuming it. */
+    boolean isWhitespaceReference() {
+        int[] ref = peekCharacterReference();
+        if (ref == null) return false; // literal '&'
+        for (int cp : ref) {
+            if (!StringUtil.isWhitespace(cp)) return false;
+        }
+        return true;
+    }
+
+    /** Marks the buffered characters as the next token to return. */
+    void emitCharacters() {
+        emitPending = charPending;
+        // the next token starts where the buffered whitespace ended
+        charStartPos = charPending.endPos();
+    }
+
+    void emit(Token token) {
+        Validate.isTrue(emitPending == null);
+
+        emitPending = token;
+        token.startPos(markupStartPos);
+        token.endPos(reader.pos());
+        charStartPos = reader.pos(); // update char start when we complete a token emit
+
+        if (token.type == Token.TokenType.StartTag) {
+            Token.StartTag startTag = (Token.StartTag) token;
+            lastStartTag = startTag.normalName();
+        } else if (token.type == Token.TokenType.EndTag) {
+            Token.EndTag endTag = (Token.EndTag) token;
+            if (endTag.hasAttributes())
+                error("Attributes incorrectly present on end tag [/%s]", endTag.normalName());
+        }
+    }
+
+    /** Buffers text for the next character token. */
+    void emit(final String str) {
+        if (str.isEmpty()) return;
+        // gather adjacent text and references in one character token until a state queues the next token
+        // todo move "<" to '<'...
+        // bulk literal runs stop at null; decoded references are handled separately
+        charPending.data.append(str);
+        charPending.startPos(charStartPos);
+        charPending.endPos(reader.pos());
+    }
+
+    /** Buffers a character for the next character token. */
+    void emit(char c) {
+        charPending.data.append(c);
+        if (c == TokeniserState.nullChar) charPending.hasNull = true;
+        charPending.startPos(charStartPos);
+        charPending.endPos(reader.pos());
+    }
+
+    /** Buffers a decoded character reference. */
+    void emit(int[] codepoints) {
+        if (codepoints[0] == 0) charPending.hasNull = true; // only numeric references can produce null
+        emit(new String(codepoints, 0, codepoints.length));
+    }
+
+    void transition(TokeniserState newState) {
+        // track markup position on state transitions
+        if (newState == TokeniserState.TagOpen)
+            markupStartPos = reader.pos();
+
+        this.state = newState;
+    }
+
+    void advanceTransition(TokeniserState newState) {
+        transition(newState);
+        reader.advance();
+    }
+
+    final private int[] codepointHolder = new int[1]; // holder to not have to keep creating arrays
+    final private int[] multipointHolder = new int[2];
+
+    /**
+     * Parses a character reference after its leading {@code &} has been consumed.
+     * @param additionalAllowedCharacter a character that prevents a reference when it follows {@code &}, or null for none
+     * @param inAttribute whether to apply attribute value rules for named references without a semicolon
+     * @param peek whether the caller has marked {@code &} for lookahead; suppresses errors and leaves the mark for the caller to rewind
+     * @return one or two decoded code points, or null if no reference matched; the array is reused by later calls
+     */
+    int @Nullable [] consumeCharacterReference(@Nullable Character additionalAllowedCharacter, boolean inAttribute, boolean peek) {
+        if (reader.isEmpty())
+            return null;
+        if (additionalAllowedCharacter != null && additionalAllowedCharacter == reader.current())
+            return null;
+        if (reader.matchesAnySorted(notCharRefCharsSorted))
+            return null;
+
+        final int[] codeRef = codepointHolder;
+        if (!peek) reader.mark(); // the probe is already marked at '&'
+        if (reader.matchConsume("#")) { // numbered
+            boolean isHexMode = reader.matchConsumeIgnoreCase("X");
+            String numRef = isHexMode ? reader.consumeHexSequence() : reader.consumeDigitSequence();
+            if (numRef.isEmpty()) { // didn't match anything
+                characterReferenceError(!peek, "numeric reference with no numerals");
+                rewindReference(peek);
+                return null;
+            }
+
+            if (!peek) reader.unmark();
+            if (!reader.matchConsume(";"))
+                characterReferenceError(!peek, "missing semicolon on [&#%s]", numRef); // missing semi
+            int charval = -1;
+            try {
+                int base = isHexMode ? 16 : 10;
+                charval = Integer.valueOf(numRef, base);
+            } catch (NumberFormatException ignored) {
+                // skip
+            }
+            // todo: check for extra illegal unicode points as parse errors - described https://html.spec.whatwg.org/multipage/syntax.html#character-references and in Infra
+            // The numeric character reference forms described above are allowed to reference any code point excluding U+000D CR, noncharacters, and controls other than ASCII whitespace.
+            if (charval == -1 || charval > 0x10FFFF || (charval == 0 && syntax == Document.OutputSettings.Syntax.html)) {
+                characterReferenceError(!peek, "character [%s] outside of valid range", charval);
+                codeRef[0] = replacementChar;
+            } else {
+                // fix illegal unicode characters to match browser behavior
+                if (charval >= win1252ExtensionsStart && charval < win1252ExtensionsStart + win1252Extensions.length) {
+                    characterReferenceError(!peek, "character [%s] is not a valid unicode code point", charval);
+                    charval = win1252Extensions[charval - win1252ExtensionsStart];
+                }
+
+                // todo: implement number replacement table
+                // todo: check for extra illegal unicode points as parse errors
+                codeRef[0] = charval;
+            }
+            return codeRef;
+        } else { // named
+            // get as many letters as possible, and look for matching entities.
+            String nameRef = reader.consumeLetterThenDigitSequence();
+            boolean looksLegit = reader.matches(';');
+            // found if a base named entity without a ;, or an extended entity with the ;.
+            boolean found = (Entities.isBaseNamedEntity(nameRef) || (Entities.isNamedEntity(nameRef) && looksLegit));
+
+            if (!found) {
+                rewindReference(peek);
+                if (looksLegit) // named with semicolon
+                    characterReferenceError(!peek, "invalid named reference [%s]", nameRef);
+                if (inAttribute) return null;
+                // check if there's a base prefix match; consume and use that if so
+                String prefix = Entities.findPrefix(nameRef);
+                if (prefix.isEmpty()) return null;
+                reader.matchConsume(prefix);
+                nameRef = prefix;
+            }
+            if (inAttribute && (reader.matchesAsciiAlpha() || reader.matchesDigit() || reader.matches('='))) {
+                // in attributes, don't consume semicolonless references followed by ASCII alphanumeric or equals
+                rewindReference(peek);
+                return null;
+            }
+
+            if (!peek) reader.unmark();
+            if (!reader.matchConsume(";"))
+                characterReferenceError(!peek, "missing semicolon on [&%s]", nameRef); // missing semi
+            int numChars = Entities.codepointsForName(nameRef, multipointHolder);
+            if (numChars == 1) {
+                codeRef[0] = multipointHolder[0];
+                return codeRef;
+            } else if (numChars ==2) {
+                return multipointHolder;
+            } else {
+                Validate.fail("Unexpected characters returned for " + nameRef);
+                return multipointHolder;
+            }
+        }
+    }
+
+    /** Rewinds a failed reference, retaining the probe's mark when needed. */
+    private void rewindReference(boolean peek) {
+        reader.rewindToMark();
+        if (peek) {
+            reader.mark();
+            reader.advance(); // resume after '&', leaving its position marked for the probe
+        }
+    }
+
+    Token.Tag createTagPending(boolean start) {
+        tagPending = start ? startPending.reset() : endPending.reset();
+        return tagPending;
+    }
+
+    Token.XmlDecl createXmlDeclPending(boolean isDeclaration) {
+        Token.XmlDecl decl = xmlDeclPending.reset();
+        decl.isDeclaration = isDeclaration;
+        tagPending = decl;
+        return decl;
+    }
+
+    void emitTagPending() {
+        if (attributeFragment) {
+            if (state != TokeniserState.BeforeAttributeValue) // that state already reported the missing value
+                error("Unexpected tag closer in attribute input");
+            emit(new Token.EOF());
+        } else {
+            tagPending.finaliseTag();
+            emit(tagPending);
+        }
+    }
+
+    void createCommentPending() {
+        commentPending.reset();
+    }
+
+    void emitCommentPending() {
+        emit(commentPending);
+    }
+
+    void createBogusCommentPending() {
+        commentPending.reset();
+        commentPending.bogus = true;
+    }
+
+    /** Creates a reusable processing instruction token. */
+    Token.PI createPiPending() {
+        return piPending.reset();
+    }
+
+    /** Emits the completed processing instruction token. */
+    void emitPiPending() {
+        emit(piPending);
+    }
+
+    void createDoctypePending() {
+        doctypePending.reset();
+    }
+
+    void emitDoctypePending() {
+        emit(doctypePending);
+    }
+
+    void createTempBuffer() {
+        dataBuffer.reset();
+    }
+
+    /** Test if CDATA sections are allowed at the adjusted current node. */
+    boolean isCdataAllowed() {
+        return syntax == Document.OutputSettings.Syntax.xml
+            || (treeBuilder.hasCurrentElement() && !Parser.NamespaceHtml.equals(treeBuilder.currentElNs()));
+    }
+
+    /** Closes an opted-in RCDATA element and resumes at markup when no closing sequence remains in the buffered input. */
+    boolean recoverRcData() {
+        if (lastStartTag == null || !treeBuilder.currentElement().tag().is(Tag.RcDataRecover)
+            || !reader.readFully() || !reader.matchesAsciiAlpha()) return false;
+
+        if (reader.containsIgnoreCase("</" + lastStartTag)) return false;
+
+        tagPending = createTagPending(false).name(lastStartTag);
+        emitTagPending();
+        int start = reader.pos() - 1; // the '<' was consumed before entering RcdataLessthanSign
+        tagPending.startPos(start);
+        tagPending.endPos(start); // the synthetic close has no source text
+        transition(TokeniserState.TagOpen);
+        markupStartPos = start;
+        return true;
+    }
+
+    /** Test if the pending end tag matches the last emitted start tag. */
+    boolean isAppropriateEndTagToken() {
+        return lastStartTag != null && tagPending.normalName().equals(lastStartTag);
+    }
+
+    /** Test if appending the character would keep the pending end tag a prefix of the expected name. */
+    boolean isAppropriateEndTagPrefix(char next) {
+        if (lastStartTag == null) return false;
+
+        String candidate = tagPending.normalName();
+        int length = candidate.length();
+        return length < lastStartTag.length()
+            && lastStartTag.startsWith(candidate)
+            && lastStartTag.charAt(length) == asciiLowerCase(next);
+    }
+
+    void error(TokeniserState state) {
+        if (errors.canAddError())
+            errors.add(new ParseError(reader, "Unexpected character '%s' in input state [%s]", reader.current(), state));
+    }
+
+    void eofError(TokeniserState state) {
+        if (isAttributeFragmentEnd(state)) return;
+        if (errors.canAddError())
+            errors.add(new ParseError(reader, "Unexpectedly reached end of file (EOF) in input state [%s]", state));
+    }
+
+    /** Tests whether EOF completes an attribute fragment in this state. */
+    private boolean isAttributeFragmentEnd(TokeniserState state) {
+        if (!attributeFragment) return false;
+        return state == TokeniserState.BeforeAttributeName ||
+            state == TokeniserState.AttributeName ||
+            state == TokeniserState.AfterAttributeName ||
+            state == TokeniserState.AttributeValue_unquoted ||
+            state == TokeniserState.AfterAttributeValue_quoted;
+    }
+
+    /** Records a reference error when requested. */
+    private void characterReferenceError(boolean reportError, String message, Object... args) {
+        if (reportError && errors.canAddError())
+            errors.add(new ParseError(reader, String.format("Invalid character reference: " + message, args)));
+    }
+
+    void error(String errorMsg) {
+        if (errors.canAddError())
+            errors.add(new ParseError(reader, errorMsg));
+    }
+
+    void error(String errorMsg, Object... args) {
+        if (errors.canAddError())
+            errors.add(new ParseError(reader, errorMsg, args));
+    }
+
+    /**
+     * Utility method to consume reader and unescape entities found within.
+     * @param inAttribute if the text to be unescaped is in an attribute
+     * @return unescaped string from reader
+     */
+    String unescapeEntities(boolean inAttribute) {
+        StringBuilder builder = StringUtil.borrowBuilder();
+        while (!reader.isEmpty()) {
+            builder.append(reader.consumeTo('&'));
+            if (reader.matches('&')) {
+                reader.consume();
+                int[] c = consumeCharacterReference(null, inAttribute, false);
+                if (c == null || c.length==0)
+                    builder.append('&');
+                else {
+                    builder.appendCodePoint(c[0]);
+                    if (c.length == 2)
+                        builder.appendCodePoint(c[1]);
+                }
+
+            }
+        }
+        return StringUtil.releaseBuilder(builder);
+    }
+}
