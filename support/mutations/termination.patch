@@ -1,0 +1,13 @@
+diff --git a/bdshemu/bdshemu_x86.c b/bdshemu/bdshemu_x86.c
+index 330f24b..5a6607c 100644
+--- a/bdshemu/bdshemu_x86.c
++++ b/bdshemu/bdshemu_x86.c
+@@ -2884,7 +2884,7 @@ check_far_branch:
+                     dst.Value.Qwords[0]--;
+                     SET_OP(Context, 2, &dst);
+ 
+-                    if (Context->Arch.X86.Instruction.HasRepRepzXrelease && !GET_FLAG(Context, NDR_RFLAG_ZF))
++                    if (Context->Arch.X86.Instruction.HasRepRepzXrelease && GET_FLAG(Context, NDR_RFLAG_ZF))
+                     {
+                         break;
+                     }

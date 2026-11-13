@@ -1,0 +1,31 @@
+diff --git a/bdshemu/bdshemu_x86.c b/bdshemu/bdshemu_x86.c
+index 330f24b..7ff3c40 100644
+--- a/bdshemu/bdshemu_x86.c
++++ b/bdshemu/bdshemu_x86.c
+@@ -2685,7 +2685,7 @@ ShemuX86Emulate(
+         case ND_INS_LOOPZ:
+             // rCX is decremented first. Note that the size depends on address size.
+             GET_OP(Context, 1, &dst);
+-            dst.Value.Qwords[0]--;
++            dst.Value.Qwords[0] -= 2;
+             SET_OP(Context, 1, &dst);
+ 
+             // Initial condition evaluation.
+@@ -2840,7 +2840,7 @@ check_far_branch:
+                 if (Context->Arch.X86.Instruction.IsRepeated)
+                 {
+                     // Decrement RCX.
+-                    dst.Value.Qwords[0]--;
++                    dst.Value.Qwords[0] -= 2;
+                     SET_OP(Context, 2, &dst);
+                 }
+                 else
+@@ -2881,7 +2881,7 @@ check_far_branch:
+                     // Read RCX again & decrement it.
+                     nd_memzero(&dst, sizeof(dst));
+                     GET_OP(Context, 2, &dst);
+-                    dst.Value.Qwords[0]--;
++                    dst.Value.Qwords[0] -= 2;
+                     SET_OP(Context, 2, &dst);
+ 
+                     if (Context->Arch.X86.Instruction.HasRepRepzXrelease && !GET_FLAG(Context, NDR_RFLAG_ZF))

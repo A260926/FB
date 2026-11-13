@@ -1,0 +1,22 @@
+diff --git a/bdshemu/bdshemu_x86.c b/bdshemu/bdshemu_x86.c
+index 330f24b..4595e68 100644
+--- a/bdshemu/bdshemu_x86.c
++++ b/bdshemu/bdshemu_x86.c
+@@ -1262,7 +1262,7 @@ ShemuX86GetOperandValue(
+         {
+             ND_UINT64 regval = ShemuX86GetGprValue(Context, op->Info.Memory.Base, op->Info.Memory.BaseSize, ND_FALSE);
+ 
+-            regval = GET_FLAG(Context, NDR_RFLAG_DF) ? regval - op->Size : regval + op->Size;
++            regval = regval + op->Size;
+ 
+             ShemuX86SetGprValue(Context, op->Info.Memory.Base, op->Info.Memory.BaseSize, regval, ND_FALSE);
+         }
+@@ -1507,7 +1507,7 @@ ShemuX86SetOperandValue(
+         {
+             ND_UINT64 regval = ShemuX86GetGprValue(Context, op->Info.Memory.Base, op->Info.Memory.BaseSize, ND_FALSE);
+ 
+-            regval = GET_FLAG(Context, NDR_RFLAG_DF) ? regval - op->Size : regval + op->Size;
++            regval = regval + op->Size;
+ 
+             ShemuX86SetGprValue(Context, op->Info.Memory.Base, op->Info.Memory.BaseSize, regval, ND_FALSE);
+         }

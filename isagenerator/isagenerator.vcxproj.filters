@@ -1,0 +1,157 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="data">
+      <UniqueIdentifier>{8eaf791a-1023-446d-b655-528b2e53c283}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="data\table 3dnow">
+      <UniqueIdentifier>{bd1ad80f-3298-4629-b5f8-82534060f84d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="data\table legacy">
+      <UniqueIdentifier>{889c4ba1-29f0-474b-a5f6-4e927dbb45c6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="data\table xop">
+      <UniqueIdentifier>{6e4531e2-861d-4a6e-955b-384333e3e3e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="data\table vex">
+      <UniqueIdentifier>{50d53c2f-9192-4b67-955a-56dc137a364b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="data\table evex">
+      <UniqueIdentifier>{b2f84880-170b-4fb3-b8c0-408dc88f9598}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\isg_x86">
+      <UniqueIdentifier>{cd07669b-b56c-410f-961f-7473a286881a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="instructions\cpuid.dat">
+      <Filter>data</Filter>
+    </None>
+    <None Include="generate_tables.py">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="instructions\table_legacy_0.dat">
+      <Filter>data\table legacy</Filter>
+    </None>
+    <None Include="instructions\table_legacy_1.dat">
+      <Filter>data\table legacy</Filter>
+    </None>
+    <None Include="instructions\table_legacy_2.dat">
+      <Filter>data\table legacy</Filter>
+    </None>
+    <None Include="instructions\table_legacy_3.dat">
+      <Filter>data\table legacy</Filter>
+    </None>
+    <None Include="instructions\table_legacy_fpu.dat">
+      <Filter>data\table legacy</Filter>
+    </None>
+    <None Include="instructions\table_3dnow.dat">
+      <Filter>data\table 3dnow</Filter>
+    </None>
+    <None Include="instructions\table_xop.dat">
+      <Filter>data\table xop</Filter>
+    </None>
+    <None Include="instructions\table_vex_1.dat">
+      <Filter>data\table vex</Filter>
+    </None>
+    <None Include="instructions\table_vex_2.dat">
+      <Filter>data\table vex</Filter>
+    </None>
+    <None Include="instructions\table_vex_3.dat">
+      <Filter>data\table vex</Filter>
+    </None>
+    <None Include="instructions\table_evex_1.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_evex_2.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_evex_3.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_evex_5.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_evex_6.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_evex_4.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_vex_7.dat">
+      <Filter>data\table vex</Filter>
+    </None>
+    <None Include="instructions\table_evex_7.dat">
+      <Filter>data\table evex</Filter>
+    </None>
+    <None Include="instructions\table_vex_5.dat">
+      <Filter>data\table vex</Filter>
+    </None>
+    <None Include="isg_x86\__init__.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\attributes.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\common.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\cpu_modes.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\cpuid.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\decorators.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\disasmlib.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\evex_mode.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\evex_tuple.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\exception_type.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\flags_access.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\fpu_access.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\instrux.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\instrux_grouper.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\operand.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\operand_access.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\prefix_map.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+    <None Include="isg_x86\simd_exceptions.py">
+      <Filter>Source Files\isg_x86</Filter>
+    </None>
+  </ItemGroup>
+</Project>

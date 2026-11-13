@@ -1,0 +1,94 @@
+# Handling Security Issues Discovered in the bddisasm Related Projects
+
+bddisasm contains several complex projects (x86/x64 disassembler, instruction emulator) 
+and complexity can lead to potential bugs. In this regard, we advise
+researchers to follow responsible disclosure and notify us before publicly 
+disclosing any security issue, to give us the opportunity to fix it.
+
+bdshemu does not target architectural completeness or fingerprinting resistence, 
+and it intentionally omits numerous instructions and aspects of machine state.
+Any resulting state divergence or ability to identify the emulated environment 
+is therefore an expected limitation of the threat model, and will not be 
+treated as a security vulnerability.
+
+The Python and Rust bindings are no longer maintained. Issues and bug reports 
+related to them will not be addressed.
+
+## How to Report a Security Issue
+
+Identified security issues must be properly described, and steps of reproduction
+must be provided. Proof of concepts are strongly encouraged, but not strictly
+required, as long as the reproduction steps are clear, and we are able to 
+reproduce the issue. Please make sure to include the following:
+
+* Brief description of the problem
+* Steps of reproduction
+* Core dumps, memory dumps and any other useful information that can be used to triage and fix the issue
+* Impact
+
+## Where to Report a Security Issue
+
+Our security email address is `hvmi-security@bitdefender.com`. Please use the
+following PGP key to encrypt your e-mail, and make sure to include your public 
+key, in case we need to contact you for more info:
+
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+sg+9UdCtGroj//Ro
+=e9Li
+-----END PGP PUBLIC KEY BLOCK-----
+```
+
+## Rewarding the Security Researchers
+
+While there are no bounties offered for issues discovered in this project, 
+we do credit all the security researchers who contribute to making the 
+project safer.
