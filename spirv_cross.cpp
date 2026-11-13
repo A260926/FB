@@ -2417,6 +2417,861 @@ SmallVector<BufferRange> Compiler::get_active_buffer_ranges(VariableID id) const
 	return ranges;
 }
 
+namespace
+{
+// One concrete placement of a complete logical object of a given pointee type inside the
+// queried buffer. Access chain navigation is performed relative to these origins, which keeps
+// padding implicit until the point where an actual load/store needs the exact scalar bytes.
+struct ByteOrigin
+{
+	size_t offset = 0;
+	uint32_t type_id = 0;
+	uint32_t matrix_stride = 0;
+	bool row_major = false;
+};
+
+struct RawByteAccess
+{
+	size_t offset = 0;
+	size_t size = 0;
+	bool read = false;
+	bool write = false;
+};
+
+struct PointerDefinition
+{
+	Op op = OpNop;
+	SmallVector<uint32_t> args;
+};
+
+bool is_atomic_memory_op(Op op)
+{
+	switch (op)
+	{
+	case OpAtomicLoad:
+	case OpAtomicStore:
+	case OpAtomicExchange:
+	case OpAtomicCompareExchange:
+	case OpAtomicCompareExchangeWeak:
+	case OpAtomicIIncrement:
+	case OpAtomicIDecrement:
+	case OpAtomicIAdd:
+	case OpAtomicISub:
+	case OpAtomicSMin:
+	case OpAtomicUMin:
+	case OpAtomicSMax:
+	case OpAtomicUMax:
+	case OpAtomicAnd:
+	case OpAtomicOr:
+	case OpAtomicXor:
+	case OpAtomicFAddEXT:
+	case OpAtomicFMinEXT:
+	case OpAtomicFMaxEXT:
+	case OpAtomicFlagTestAndSet:
+	case OpAtomicFlagClear:
+		return true;
+
+	default:
+		return false;
+	}
+}
+} // namespace
+
+struct Compiler::BufferByteAccessHandler
+{
+	BufferByteAccessHandler(const Compiler &compiler_, VariableID id_)
+	    : compiler(const_cast<Compiler &>(compiler_)), target_id(id_)
+	{
+	}
+
+	Compiler &compiler;
+	uint32_t target_id;
+	uint32_t root_type_id = 0;
+
+	std::unordered_set<uint32_t> reachable_blocks;
+	std::unordered_set<uint32_t> reachable_functions;
+	std::unordered_map<uint32_t, SmallVector<uint32_t>> call_edges;
+	std::unordered_map<uint32_t, SmallVector<std::pair<uint32_t, uint32_t>>> phi_incoming;
+	std::unordered_map<uint32_t, PointerDefinition> pointer_defs;
+
+	// One parameter binding frame per active function invocation.
+	SmallVector<std::unordered_map<uint32_t, SmallVector<ByteOrigin>>, 8> parameter_frames;
+	SmallVector<RawByteAccess> raw_accesses;
+	// Guards against pointer cycles (e.g. a loop-carried pointer Phi), so resolution always reaches
+	// a fixed point instead of unrolling the loop.
+	SmallVector<uint32_t> resolve_in_progress;
+
+	[[noreturn]] void fail(const char *msg) const
+	{
+		SPIRV_CROSS_THROW(msg);
+	}
+
+	const SPIRType &type_of(uint32_t id) const
+	{
+		return compiler.get<SPIRType>(id);
+	}
+
+	// Walks the CFG from the current entry point and records every reachable block and function,
+	// together with the call graph. Uncalled functions and blocks which cannot be reached from the
+	// entry point are deliberately excluded.
+	void mark_reachable()
+	{
+		SmallVector<uint32_t> worklist;
+		uint32_t entry = compiler.ir.default_entry_point;
+		if (!compiler.maybe_get<SPIRFunction>(entry))
+			fail("Current entry point does not exist.");
+
+		worklist.push_back(entry);
+		reachable_functions.insert(entry);
+
+		while (!worklist.empty())
+		{
+			uint32_t function_id = worklist.back();
+			worklist.pop_back();
+
+			auto &function = compiler.get<SPIRFunction>(function_id);
+			CFG cfg(compiler, function);
+			for (auto block_id : function.blocks)
+			{
+				if (!cfg.is_reachable(block_id))
+					continue;
+
+				reachable_blocks.insert(block_id);
+				auto &block = compiler.get<SPIRBlock>(block_id);
+
+				for (auto &instr : block.ops)
+				{
+					auto args = compiler.stream(instr);
+					auto op = static_cast<Op>(instr.op);
+					if (op == OpFunctionCall && instr.length >= 3)
+					{
+						uint32_t callee = args[2];
+						call_edges[function_id].push_back(callee);
+						if (reachable_functions.insert(callee).second)
+							worklist.push_back(callee);
+					}
+				}
+			}
+		}
+	}
+
+	// Rejects direct or indirect recursion among reachable functions. Recursive pointer parameters
+	// cannot be bound to a finite set of concrete arguments, so recursion uses the error channel
+	// instead of returning a partial result.
+	void reject_recursion()
+	{
+		std::unordered_map<uint32_t, int> color;
+		SmallVector<uint32_t> stack;
+
+		for (auto root : reachable_functions)
+		{
+			if (color[root] != 0)
+				continue;
+
+			stack.push_back(root);
+			while (!stack.empty())
+			{
+				uint32_t node = stack.back();
+				if (color[node] == 0)
+				{
+					color[node] = 1;
+					auto itr = call_edges.find(node);
+					if (itr != call_edges.end())
+					{
+						for (auto child : itr->second)
+						{
+							if (!reachable_functions.count(child))
+								continue;
+							if (color[child] == 1)
+								fail("Recursive function calls are not supported by get_buffer_byte_accesses().");
+							if (color[child] == 0)
+								stack.push_back(child);
+						}
+					}
+				}
+				else
+				{
+					color[node] = 2;
+					stack.pop_back();
+				}
+			}
+		}
+	}
+
+	void build_pointer_definitions()
+	{
+		for (auto function_id : reachable_functions)
+		{
+			auto &function = compiler.get<SPIRFunction>(function_id);
+			for (auto block_id : function.blocks)
+			{
+				if (!reachable_blocks.count(block_id))
+					continue;
+
+				auto &block = compiler.get<SPIRBlock>(block_id);
+				for (auto &phi : block.phi_variables)
+					phi_incoming[phi.function_variable].push_back({ phi.local_variable, phi.parent });
+
+				for (auto &instr : block.ops)
+				{
+					auto args = compiler.stream(instr);
+					auto op = static_cast<Op>(instr.op);
+					if (op == OpPhi)
+						continue;
+
+					uint32_t result_type = 0, result_id = 0;
+					if (!Compiler::instruction_to_result_type(result_type, result_id, op, args, instr.length))
+						continue;
+
+					const auto *ptr_type = compiler.maybe_get<SPIRType>(result_type);
+					if (!ptr_type || !ptr_type->pointer)
+						continue;
+
+					PointerDefinition def;
+					def.op = op;
+					def.args.insert(def.args.end(), args, args + instr.length);
+					pointer_defs[result_id] = std::move(def);
+				}
+			}
+		}
+	}
+
+	bool is_constant_index(uint32_t id, uint32_t &value) const
+	{
+		auto *constant = compiler.maybe_get<SPIRConstant>(id);
+		if (!constant || constant->specialization)
+			return false;
+		value = constant->scalar();
+		return true;
+	}
+
+	uint32_t array_stride_of(uint32_t type_id) const
+	{
+		auto *meta = compiler.ir.find_meta(type_id);
+		if (!meta || !meta->decoration.decoration_flags.get(DecorationArrayStride))
+			fail("Array type in buffer block does not have an ArrayStride decoration.");
+		return meta->decoration.array_stride;
+	}
+
+	const SPIRType peel_arrays(const SPIRType &type) const
+	{
+		const SPIRType *current = &type;
+		while (!current->array.empty())
+			current = &compiler.get<SPIRType>(current->parent_type);
+		return *current;
+	}
+
+	void matrix_layout_of_member(const SPIRType &struct_type, uint32_t index, uint32_t &stride,
+	                             bool &row_major) const
+	{
+		stride = compiler.type_struct_member_matrix_stride(struct_type, index);
+		row_major = compiler.has_member_decoration(struct_type.self, index, DecorationRowMajor);
+	}
+
+	// Finite length of an array type. Runtime arrays have no finite set of legal elements, so any
+	// runtime indexing of the queried resource is an explicit error.
+	uint32_t finite_array_length(const SPIRType &type) const
+	{
+		if (type.op == OpTypeRuntimeArray)
+			fail("Runtime arrays are not supported by get_buffer_byte_accesses().");
+
+		if (type.array_size_literal.back())
+		{
+			uint32_t length = type.array.back();
+			if (length == 0)
+				fail("Runtime arrays are not supported by get_buffer_byte_accesses().");
+			return length;
+		}
+
+		return compiler.evaluate_constant_u32(type.array.back());
+	}
+
+	void add_origin(SmallVector<ByteOrigin> &out, const ByteOrigin &origin) const
+	{
+		for (auto &existing : out)
+		{
+			if (existing.offset == origin.offset && existing.type_id == origin.type_id)
+				return;
+		}
+		out.push_back(origin);
+	}
+
+	// Resolves the concrete buffer placements of any supported pointer SSA value.
+	// An empty result means the pointer is unrelated to the queried resource.
+	SmallVector<ByteOrigin> resolve_origins(uint32_t id)
+	{
+		// A cycle can only come from loop-carried pointer Phi nodes. Stopping the recursion at the
+		// back edge is the finite-state treatment of the loop: the non-cyclic incoming values still
+		// reach a fixed point and loop iterations are never counted.
+		for (auto active : resolve_in_progress)
+		{
+			if (active == id)
+				return {};
+		}
+		resolve_in_progress.push_back(id);
+		auto result = resolve_origins_unchecked(id);
+		resolve_in_progress.pop_back();
+		return result;
+	}
+
+	SmallVector<ByteOrigin> resolve_origins_unchecked(uint32_t id)
+	{
+		SmallVector<ByteOrigin> out;
+
+		if (id == target_id)
+		{
+			out.push_back({ 0, root_type_id, 0, false });
+			return out;
+		}
+
+		if (auto *variable = compiler.maybe_get<SPIRVariable>(id))
+		{
+			if (variable->phi_variable)
+			{
+				auto itr = phi_incoming.find(id);
+				if (itr != phi_incoming.end())
+				{
+					for (auto &incoming : itr->second)
+					{
+						// Incoming values from unreachable predecessors do not contribute.
+						if (!reachable_blocks.count(incoming.second))
+							continue;
+						for (auto &origin : resolve_origins(incoming.first))
+							add_origin(out, origin);
+					}
+				}
+				return out;
+			}
+
+			// Pointer function parameter, bound by the currently active call site.
+			if (!parameter_frames.empty())
+			{
+				auto &frame = parameter_frames.back();
+				auto itr = frame.find(id);
+				if (itr != frame.end())
+					return itr->second;
+			}
+
+			// A bare pointer variable which is neither a Phi nor a bound parameter is unrelated to
+			// the query: Function-storage locals cannot alias a Uniform/StorageBuffer block, and any
+			// Uniform/StorageBuffer global here is a different variable. Supported pointer-producing
+			// instructions are tracked separately in pointer_defs, so a reachable exotic pointer
+			// built from this resource still reaches the explicit error path instead of being dropped.
+			return out;
+		}
+
+		auto def_itr = pointer_defs.find(id);
+		if (def_itr == pointer_defs.end())
+			return out;
+
+		auto &def = def_itr->second;
+		switch (def.op)
+		{
+		case OpAccessChain:
+		case OpInBoundsAccessChain:
+		{
+			if (def.args.size() < 3)
+				return out;
+
+			auto base_origins = resolve_origins(def.args[2]);
+			if (base_origins.empty())
+				return out;
+
+			// A physical storage pointer derived from this resource is out of scope.
+			auto &result_ptr_type = type_of(def.args[0]);
+			if (result_ptr_type.storage == StorageClassPhysicalStorageBuffer)
+				fail("Physical storage buffer pointers are not supported by get_buffer_byte_accesses().");
+
+			SmallVector<uint32_t> indices(def.args.begin() + 3, def.args.end());
+			return navigate_access_chain(base_origins, indices);
+		}
+
+		case OpCopyObject:
+			if (def.args.size() >= 3)
+				return resolve_origins(def.args[2]);
+			return out;
+
+		case OpSelect:
+			// The condition is a runtime value, so merge both pointer operands.
+			if (def.args.size() >= 5)
+			{
+				for (auto &origin : resolve_origins(def.args[3]))
+					add_origin(out, origin);
+				for (auto &origin : resolve_origins(def.args[4]))
+					add_origin(out, origin);
+			}
+			return out;
+
+		default:
+		{
+			// An unsupported pointer-producing instruction is only an error if it actually carries
+			// a pointer into the queried resource. Skip the result type and result ID at indices 0/1.
+			for (uint32_t operand_pos = 2; operand_pos < uint32_t(def.args.size()); operand_pos++)
+			{
+				if (!resolve_origins(def.args[operand_pos]).empty())
+					fail("Unsupported pointer operation in get_buffer_byte_accesses().");
+			}
+			return out;
+		}
+		}
+	}
+
+	SmallVector<ByteOrigin> navigate_access_chain(const SmallVector<ByteOrigin> &base,
+	                                              const SmallVector<uint32_t> &indices)
+	{
+		SmallVector<ByteOrigin> current = base;
+
+		for (uint32_t index_pos = 0; index_pos < indices.size();)
+		{
+			uint32_t index_id = indices[index_pos];
+			SmallVector<ByteOrigin> next;
+
+			for (const auto &origin : current)
+			{
+				auto &type = type_of(origin.type_id);
+
+				// Arrays take precedence: an array-of-struct keeps basetype == Struct while still
+				// carrying array dimensions, and the pending index addresses the array element.
+				if (!type.array.empty())
+				{
+					if (type.op == OpTypeRuntimeArray)
+						fail("Runtime arrays are not supported by get_buffer_byte_accesses().");
+
+					uint32_t stride = array_stride_of(origin.type_id);
+					uint32_t element_type_id = type.parent_type;
+					uint32_t constant_index = 0;
+
+					if (is_constant_index(index_id, constant_index))
+					{
+						ByteOrigin child = origin;
+						child.offset += size_t(constant_index) * stride;
+						child.type_id = element_type_id;
+						add_origin(next, child);
+					}
+					else
+					{
+						// Runtime index: take the union of every legal element.
+						uint32_t length = finite_array_length(type);
+						for (uint32_t k = 0; k < length; k++)
+						{
+							ByteOrigin child = origin;
+							child.offset += size_t(k) * stride;
+							child.type_id = element_type_id;
+							add_origin(next, child);
+						}
+					}
+					index_pos++;
+				}
+				else if (type.basetype == SPIRType::Struct)
+				{
+					// Struct member indices are always literal constants in valid SPIR-V.
+					uint32_t member = 0;
+					if (!is_constant_index(index_id, member))
+						fail("Non-constant struct member index in access chain.");
+					if (member >= type.member_types.size())
+						fail("Struct member index out of range.");
+
+					ByteOrigin child = origin;
+					child.offset += compiler.type_struct_member_offset(type, member);
+					child.type_id = type.member_types[member];
+
+					auto peeled = peel_arrays(type_of(child.type_id));
+					if (compiler.is_matrix(peeled))
+						matrix_layout_of_member(type, member, child.matrix_stride, child.row_major);
+
+					add_origin(next, child);
+					index_pos++;
+				}
+				else if (compiler.is_matrix(type))
+				{
+					uint32_t columns = type.columns;
+					uint32_t rows = type.vecsize;
+					uint32_t scalar_size = type.width / 8;
+					uint32_t stride = origin.matrix_stride;
+					if (stride == 0)
+						fail("Matrix in buffer block does not have a MatrixStride decoration.");
+
+					uint32_t vector_type_id = type.parent_type;
+					uint32_t scalar_type_id = type_of(vector_type_id).parent_type;
+
+					// A following component index addresses one scalar inside the addressed column.
+					bool has_component = index_pos + 1 < indices.size();
+					uint32_t component_id = has_component ? indices[index_pos + 1] : 0;
+
+					SmallVector<uint32_t> column_indices;
+					uint32_t constant_column = 0;
+					if (is_constant_index(index_id, constant_column))
+						column_indices.push_back(constant_column);
+					else
+						for (uint32_t c = 0; c < columns; c++)
+							column_indices.push_back(c);
+
+					if (origin.row_major)
+					{
+						// Logical columns of a row-major matrix are physically stridden scalars.
+						for (auto column : column_indices)
+						{
+							if (has_component)
+							{
+								uint32_t constant_component = 0;
+								SmallVector<uint32_t> component_indices;
+								if (is_constant_index(component_id, constant_component))
+									component_indices.push_back(constant_component);
+								else
+									for (uint32_t r = 0; r < rows; r++)
+										component_indices.push_back(r);
+
+								for (auto row : component_indices)
+								{
+									ByteOrigin child = origin;
+									child.offset += size_t(row) * stride + size_t(column) * scalar_size;
+									child.type_id = scalar_type_id;
+									add_origin(next, child);
+								}
+							}
+							else
+							{
+								for (uint32_t row = 0; row < rows; row++)
+								{
+									ByteOrigin child = origin;
+									child.offset += size_t(row) * stride + size_t(column) * scalar_size;
+									child.type_id = scalar_type_id;
+									add_origin(next, child);
+								}
+							}
+						}
+					}
+					else
+					{
+						// Column-major: each column is a contiguous vector at column * matrix stride.
+						if (has_component)
+						{
+							uint32_t constant_component = 0;
+							SmallVector<uint32_t> component_indices;
+							if (is_constant_index(component_id, constant_component))
+								component_indices.push_back(constant_component);
+							else
+								for (uint32_t r = 0; r < rows; r++)
+									component_indices.push_back(r);
+
+							for (auto column : column_indices)
+							{
+								for (auto row : component_indices)
+								{
+									ByteOrigin child = origin;
+									child.offset += size_t(column) * stride + size_t(row) * scalar_size;
+									child.type_id = scalar_type_id;
+									add_origin(next, child);
+								}
+							}
+						}
+						else
+						{
+							for (auto column : column_indices)
+							{
+								ByteOrigin child = origin;
+								child.offset += size_t(column) * stride;
+								child.type_id = vector_type_id;
+								add_origin(next, child);
+							}
+						}
+					}
+
+					index_pos += has_component ? 2 : 1;
+				}
+				else if (compiler.is_vector(type))
+				{
+					uint32_t scalar_size = type.width / 8;
+					uint32_t scalar_type_id = type.parent_type;
+					uint32_t constant_component = 0;
+
+					if (is_constant_index(index_id, constant_component))
+					{
+						ByteOrigin child = origin;
+						child.offset += size_t(constant_component) * scalar_size;
+						child.type_id = scalar_type_id;
+						add_origin(next, child);
+					}
+					else
+					{
+						// Runtime vector index: union all legal components. No padding is included.
+						for (uint32_t component = 0; component < type.vecsize; component++)
+						{
+							ByteOrigin child = origin;
+							child.offset += size_t(component) * scalar_size;
+							child.type_id = scalar_type_id;
+							add_origin(next, child);
+						}
+					}
+					index_pos++;
+				}
+				else
+				{
+					fail("Unsupported type traversal in access chain.");
+				}
+			}
+
+			current = std::move(next);
+		}
+
+		return current;
+	}
+
+	// Emits the real scalar bytes of a complete logical object at base_offset.
+	// Padding between elements is never emitted.
+	void emit_object(const SPIRType &type, uint32_t type_id, size_t base_offset, uint32_t matrix_stride,
+	                 bool row_major, bool read, bool write)
+	{
+		// Arrays take precedence over structs: an array-of-struct keeps the Struct base type while
+		// carrying array dimensions, and its elements must be walked by ArrayStride first.
+		if (!type.array.empty())
+		{
+			uint32_t stride = array_stride_of(type_id);
+			uint32_t length = finite_array_length(type);
+			auto &element_type = type_of(type.parent_type);
+			for (uint32_t k = 0; k < length; k++)
+			{
+				emit_object(element_type, type.parent_type, base_offset + size_t(k) * stride, matrix_stride,
+				            row_major, read, write);
+			}
+		}
+		else if (type.basetype == SPIRType::Struct)
+		{
+			for (uint32_t i = 0; i < uint32_t(type.member_types.size()); i++)
+			{
+				uint32_t member_type_id = type.member_types[i];
+				auto &member_type = type_of(member_type_id);
+				size_t member_offset = base_offset + compiler.type_struct_member_offset(type, i);
+
+				uint32_t child_stride = matrix_stride;
+				bool child_row_major = row_major;
+				auto peeled = peel_arrays(member_type);
+				if (compiler.is_matrix(peeled))
+					matrix_layout_of_member(type, i, child_stride, child_row_major);
+
+				emit_object(member_type, member_type_id, member_offset, child_stride, child_row_major, read,
+				            write);
+			}
+		}
+		else if (compiler.is_matrix(type))
+		{
+			uint32_t scalar_size = type.width / 8;
+			uint32_t stride = matrix_stride;
+			if (stride == 0)
+				fail("Matrix in buffer block does not have a MatrixStride decoration.");
+
+			if (row_major)
+			{
+				// Each physical row is a contiguous run of columns.
+				for (uint32_t row = 0; row < type.vecsize; row++)
+					raw_accesses.push_back({ base_offset + size_t(row) * stride, size_t(type.columns) * scalar_size,
+					                         read, write });
+			}
+			else
+			{
+				// Each physical column is a contiguous run of rows.
+				for (uint32_t column = 0; column < type.columns; column++)
+					raw_accesses.push_back({ base_offset + size_t(column) * stride,
+					                         size_t(type.vecsize) * scalar_size, read, write });
+			}
+		}
+		else if (compiler.is_vector(type))
+		{
+			raw_accesses.push_back(
+			    { base_offset, size_t(type.vecsize) * (type.width / 8), read, write });
+		}
+		else
+		{
+			raw_accesses.push_back({ base_offset, type.width / 8, read, write });
+		}
+	}
+
+	void record_access(uint32_t pointer_id, bool read, bool write)
+	{
+		auto origins = resolve_origins(pointer_id);
+		for (auto &origin : origins)
+		{
+			auto &pointee = type_of(origin.type_id);
+			emit_object(pointee, origin.type_id, origin.offset, origin.matrix_stride, origin.row_major, read,
+			            write);
+		}
+	}
+
+	void analyze_function(uint32_t function_id,
+	                      std::unordered_map<uint32_t, SmallVector<ByteOrigin>> frame)
+	{
+		auto &function = compiler.get<SPIRFunction>(function_id);
+		parameter_frames.push_back(std::move(frame));
+
+		for (auto block_id : function.blocks)
+		{
+			if (!reachable_blocks.count(block_id))
+				continue;
+
+			auto &block = compiler.get<SPIRBlock>(block_id);
+			for (auto &instr : block.ops)
+			{
+				auto args = compiler.stream(instr);
+				auto op = static_cast<Op>(instr.op);
+
+				switch (op)
+				{
+				case OpLoad:
+					if (instr.length >= 3)
+						record_access(args[2], true, false);
+					break;
+
+				case OpStore:
+					if (instr.length >= 2)
+						record_access(args[0], false, true);
+					break;
+
+				case OpCopyMemory:
+					// Operands are target pointer then source pointer (optional memory operands follow).
+					if (instr.length >= 2)
+					{
+						record_access(args[1], true, false);
+						record_access(args[0], false, true);
+					}
+					break;
+
+				case OpCopyMemorySized:
+					if (instr.length >= 3 &&
+					    (!resolve_origins(args[0]).empty() || !resolve_origins(args[1]).empty()))
+					{
+						fail("OpCopyMemorySized is not supported by get_buffer_byte_accesses().");
+					}
+					break;
+
+				case OpPtrAccessChain:
+					if (instr.length >= 4 && !resolve_origins(args[2]).empty())
+						fail("Pointer arithmetic is not supported by get_buffer_byte_accesses().");
+					break;
+
+				case OpFunctionCall:
+				{
+					if (instr.length < 3)
+						break;
+
+					uint32_t callee = args[2];
+					if (!reachable_functions.count(callee))
+						break;
+
+					auto &callee_function = compiler.get<SPIRFunction>(callee);
+					std::unordered_map<uint32_t, SmallVector<ByteOrigin>> callee_frame;
+					uint32_t argument_count = instr.length - 3;
+					for (uint32_t i = 0; i < argument_count && i < uint32_t(callee_function.arguments.size()); i++)
+					{
+						auto origins = resolve_origins(args[3 + i]);
+						if (!origins.empty())
+							callee_frame[callee_function.arguments[i].id] = std::move(origins);
+					}
+
+					analyze_function(callee, std::move(callee_frame));
+					break;
+				}
+
+				default:
+					if (is_atomic_memory_op(op))
+					{
+						for (uint32_t i = 0; i < instr.length; i++)
+						{
+							if (!resolve_origins(args[i]).empty())
+								fail("Atomic operations are not supported by get_buffer_byte_accesses().");
+						}
+					}
+					break;
+				}
+			}
+		}
+
+		parameter_frames.pop_back();
+	}
+
+	SmallVector<BufferByteAccess> finalize() const
+	{
+		// Collect all interval boundaries so overlapping read/write accesses can be split into
+		// read-only, read-write and write-only atoms.
+		SmallVector<size_t> boundaries;
+		for (auto &access : raw_accesses)
+		{
+			boundaries.push_back(access.offset);
+			boundaries.push_back(access.offset + access.size);
+		}
+		std::sort(boundaries.begin(), boundaries.end());
+		boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+
+		SmallVector<BufferByteAccess> atoms;
+		for (uint32_t i = 0; i + 1 < boundaries.size(); i++)
+		{
+			size_t lo = boundaries[i];
+			size_t hi = boundaries[i + 1];
+			bool read = false, write = false;
+			for (auto &access : raw_accesses)
+			{
+				if (access.offset <= lo && hi <= access.offset + access.size)
+				{
+					read = read || access.read;
+					write = write || access.write;
+				}
+			}
+
+			if (read || write)
+				atoms.push_back({ lo, hi - lo, read, write });
+		}
+
+		// Merge only adjacent atoms with identical access flags.
+		SmallVector<BufferByteAccess> merged;
+		for (auto &atom : atoms)
+		{
+			if (!merged.empty() && merged.back().offset + merged.back().size == atom.offset &&
+			    merged.back().read == atom.read && merged.back().write == atom.write)
+			{
+				merged.back().size += atom.size;
+			}
+			else
+			{
+				merged.push_back(atom);
+			}
+		}
+
+		return merged;
+	}
+
+	SmallVector<BufferByteAccess> run()
+	{
+		auto &variable = compiler.get<SPIRVariable>(target_id);
+		if (variable.storage != StorageClassUniform && variable.storage != StorageClassStorageBuffer)
+			fail("get_buffer_byte_accesses() only supports Uniform or StorageBuffer variables.");
+
+		auto &pointer_type = type_of(variable.basetype);
+		if (!pointer_type.pointer)
+			fail("Resource variable does not have a pointer type.");
+		root_type_id = pointer_type.parent_type;
+
+		auto &root_type = type_of(root_type_id);
+		if (root_type.basetype != SPIRType::Struct ||
+		    (!compiler.has_decoration(root_type_id, DecorationBlock) &&
+		     !compiler.has_decoration(root_type_id, DecorationBufferBlock)))
+		{
+			fail("get_buffer_byte_accesses() requires a block-decorated struct resource.");
+		}
+
+		mark_reachable();
+		reject_recursion();
+		build_pointer_definitions();
+		std::unordered_map<uint32_t, SmallVector<ByteOrigin>> entry_frame;
+		analyze_function(compiler.ir.default_entry_point, std::move(entry_frame));
+		return finalize();
+	}
+};
+
+SmallVector<BufferByteAccess> Compiler::get_buffer_byte_accesses(VariableID id) const
+{
+	BufferByteAccessHandler handler(*this, id);
+	return handler.run();
+}
+
 bool Compiler::types_are_logically_equivalent(const SPIRType &a, const SPIRType &b) const
 {
 	if (a.basetype != b.basetype)

@@ -167,6 +167,17 @@ struct BufferRange
 	size_t range;
 };
 
+// A single, non-overlapping byte range which is accessed by the current entry point.
+// The byte ranges are sorted by offset, never overlap and always have a non-zero size.
+// Adjacent ranges are only merged if their read and write flags match exactly.
+struct BufferByteAccess
+{
+	size_t offset = 0;
+	size_t size = 0;
+	bool read = false;
+	bool write = false;
+};
+
 enum BufferPackingStandard
 {
 	BufferPackingStd140,
@@ -297,6 +308,23 @@ public:
 	// This can be used for Buffer (UBO), BufferBlock/StorageBuffer (SSBO) and PushConstant blocks.
 	// ID is the Resource::id obtained from get_shader_resources().
 	SmallVector<BufferRange> get_active_buffer_ranges(VariableID id) const;
+
+	// Returns the exact byte ranges of a Uniform or StorageBuffer block which are actually
+	// read or written by the current entry point. Unlike get_active_buffer_ranges(), the analysis
+	// follows access chains down to individual scalar bytes instead of reporting whole top-level
+	// members, and tracks whether each byte is read, written or both.
+	//
+	// Only concrete OpLoad, OpStore and OpCopyMemory accesses against ordinary logical pointers
+	// are considered. Constructing a pointer without dereferencing it does not count as an access.
+	// Helper function pointer parameters are bound to the concrete arguments of each call site,
+	// unreachable blocks and uncalled functions are ignored, and control flow is merged rather
+	// than unrolled, so loops never multiply access counts.
+	//
+	// Throws CompilerError if the reachable code touching this resource uses an unsupported
+	// pointer feature (runtime arrays, pointer arithmetic, atomics, physical storage pointers,
+	// unsupported pointer operations or recursion). Unsupported operations on unrelated resources
+	// do not affect the query.
+	SmallVector<BufferByteAccess> get_buffer_byte_accesses(VariableID id) const;
 
 	// Returns the effective size of a buffer block.
 	size_t get_declared_struct_size(const SPIRType &struct_type) const;
@@ -901,6 +929,8 @@ protected:
 
 		std::unordered_set<uint32_t> seen;
 	};
+
+	struct BufferByteAccessHandler;
 
 	struct InterfaceVariableAccessHandler : OpcodeHandler
 	{
