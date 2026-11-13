@@ -3,3 +3,6 @@
 ._.DS_Store
 **/.DS_Store
 **/._.DS_Store
+
+# Generated build output for support/run.sh
+.task-build/
