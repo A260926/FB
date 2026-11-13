@@ -4,6 +4,7 @@
 #include "bitstream.h"
 #include "huffman.h"
 #include "l3bitstream.h"
+#include "l3window.h"
 #include "layer3.h"
 #include "reservoir.h"
 #include "tables.h"
@@ -20,8 +21,14 @@
 static void calc_scfsi(shine_psy_xmin_t *l3_xmin, int ch, int gr,
                        shine_global_config *config);
 static int part2_length(int gr, int ch, shine_global_config *config);
+static int part2_length_short(gr_info *cod_info);
 static int bin_search_StepSize(int desired_rate, int ix[GRANULE_SIZE],
                                gr_info *cod_info, shine_global_config *config);
+static int bin_search_StepSize_short(int desired_rate,
+                                     int ix_natural[GRANULE_SIZE],
+                                     int ix_stream[GRANULE_SIZE],
+                                     gr_info *cod_info,
+                                     shine_global_config *config);
 static int count_bit(int ix[GRANULE_SIZE], unsigned int start, unsigned int end,
                      unsigned int table);
 static int bigv_bitcount(int ix[GRANULE_SIZE], gr_info *gi);
@@ -29,12 +36,17 @@ static int new_choose_table(int ix[GRANULE_SIZE], unsigned int begin,
                             unsigned int end);
 static void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info);
 static void subdivide(gr_info *cod_info, shine_global_config *config);
+static void subdivide_short(gr_info *cod_info, shine_global_config *config);
 static int count1_bitcount(int ix[GRANULE_SIZE], gr_info *cod_info);
 static void calc_runlen(int ix[GRANULE_SIZE], gr_info *cod_info);
 static void calc_xmin(shine_psy_ratio_t *ratio, gr_info *cod_info,
                       shine_psy_xmin_t *l3_xmin, int gr, int ch);
 static int quantize(int ix[GRANULE_SIZE], int stepsize,
                     shine_global_config *config);
+static int shine_inner_loop_short(int ix_natural[GRANULE_SIZE],
+                                  int ix_stream[GRANULE_SIZE], int max_bits,
+                                  gr_info *cod_info, int gr, int ch,
+                                  shine_global_config *config);
 
 /*
  * shine_inner_loop:
@@ -103,6 +115,9 @@ void shine_iteration_loop(shine_global_config *config) {
 
   for (ch = config->wave.channels; ch--;) {
     for (gr = 0; gr < config->mpeg.granules_per_frame; gr++) {
+      int block_type = config->block_mode ? config->frame_blocks[gr][ch]
+                                          : SHINE_BLOCK_NORMAL;
+
       /* setup pointers */
       ix = config->l3_enc[ch][gr];
       config->l3loop.xr = config->mdct_freq[ch][gr];
@@ -123,7 +138,10 @@ void shine_iteration_loop(shine_global_config *config) {
 
       calc_xmin(&config->ratio, cod_info, &l3_xmin, gr, ch);
 
-      if (config->mpeg.version == MPEG_I)
+      /* SCFSI only applies to ordinary long blocks; switched granules
+       * (start/short/stop) always transmit their own scale factors. */
+      if (config->mpeg.version == MPEG_I &&
+          block_type == SHINE_BLOCK_NORMAL)
         calc_scfsi(&l3_xmin, ch, gr, config);
 
       /* calculation of number of available bit( per granule ) */
@@ -151,11 +169,41 @@ void shine_iteration_loop(shine_global_config *config) {
       cod_info->preflag = 0;
       cod_info->scalefac_scale = 0;
       cod_info->count1table_select = 0;
+      cod_info->block_type = block_type;
+      cod_info->mixed_block_flag = 0;
+      for (i = 0; i < SHINE_SHORT_WINDOWS; i++)
+        cod_info->subblock_gain[i] = 0;
 
       /* all spectral values zero ? */
-      if (config->l3loop.xrmax)
-        cod_info->part2_3_length =
-            shine_outer_loop(max_bits, &l3_xmin, ix, gr, ch, config);
+      if (config->l3loop.xrmax) {
+        if (block_type == SHINE_BLOCK_SHORT) {
+          int *ix_natural = config->l3_enc_natural[ch][gr];
+          int huff_bits, bits;
+
+          /* Quantization runs in natural (window-major) coordinates so the
+           * signs, energies and Huffman regions describe the real short
+           * spectrum; only the quantized symbols get permuted into
+           * bitstream order. */
+          cod_info->quantizerStepSize = bin_search_StepSize_short(
+              max_bits, ix_natural, ix, cod_info, config);
+
+          cod_info->part2_length = part2_length_short(cod_info);
+          huff_bits = max_bits - cod_info->part2_length;
+
+          bits = shine_inner_loop_short(ix_natural, ix, huff_bits, cod_info,
+                                        gr, ch, config);
+          cod_info->part2_3_length = cod_info->part2_length + bits;
+        } else {
+          cod_info->part2_3_length =
+              shine_outer_loop(max_bits, &l3_xmin, ix, gr, ch, config);
+        }
+      } else if (block_type == SHINE_BLOCK_SHORT) {
+        /* Zero spectrum: still publish a consistent permuted symbol set. */
+        memset(config->l3_enc_natural[ch][gr], 0,
+               sizeof(config->l3_enc_natural[ch][gr]));
+        memset(ix, 0, GRANULE_SIZE * sizeof(int));
+        subdivide_short(cod_info, config);
+      }
 
       shine_ResvAdjust(cod_info, config);
       cod_info->global_gain = cod_info->quantizerStepSize + 210;
@@ -498,6 +546,25 @@ int count1_bitcount(int ix[GRANULE_SIZE], gr_info *cod_info) {
  * tables.
  */
 void subdivide(gr_info *cod_info, shine_global_config *config) {
+  if (cod_info->block_type == SHINE_BLOCK_SHORT) {
+    subdivide_short(cod_info, config);
+    return;
+  }
+  if (config->block_mode &&
+      (cod_info->block_type == SHINE_BLOCK_START ||
+       cod_info->block_type == SHINE_BLOCK_STOP) &&
+      cod_info->mixed_block_flag == 0) {
+    /* Switched long blocks have no region count fields: their two Huffman
+     * regions are implicit at long scalefactor bands 8 and 12. */
+    const int *long_bands =
+        &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
+    cod_info->region0_count = 0;
+    cod_info->region1_count = 0;
+    cod_info->address1 = long_bands[8];
+    cod_info->address2 = long_bands[12];
+    cod_info->address3 = cod_info->big_values << 1;
+    return;
+  }
   static const struct {
     unsigned region0_count;
     unsigned region1_count;
@@ -573,6 +640,21 @@ void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info) {
   cod_info->table_select[0] = 0;
   cod_info->table_select[1] = 0;
   cod_info->table_select[2] = 0;
+
+  /* A switched long block (start/stop, mixed disabled) transmits no
+   * table_select[0], so its implicit region 0 (long bands 0..7) is never
+   * Huffman coded and decodes to zero. Only the two switched tables are
+   * selected. */
+  if (cod_info->block_type == SHINE_BLOCK_START ||
+      cod_info->block_type == SHINE_BLOCK_STOP) {
+    if (cod_info->address2 > cod_info->address1)
+      cod_info->table_select[1] =
+          new_choose_table(ix, cod_info->address1, cod_info->address2);
+    if (cod_info->big_values << 1 > cod_info->address2)
+      cod_info->table_select[2] =
+          new_choose_table(ix, cod_info->address2, cod_info->big_values << 1);
+    return;
+  }
 
   {
     if (cod_info->address1 > 0)
@@ -789,6 +871,122 @@ int bin_search_StepSize(int desired_rate, int ix[GRANULE_SIZE],
       subdivide(cod_info, config);         /* bigvalues sfb division */
       bigv_tab_select(ix, cod_info);       /* codebook selection */
       bit += bigv_bitcount(ix, cod_info);  /* bit count */
+    }
+
+    if (bit < desired_rate)
+      count = half;
+    else {
+      next += half;
+      count -= half;
+    }
+  } while (count > 1);
+
+  return next;
+}
+
+/* ===================================================================
+ * Short-block (block_type 2) encoding path
+ *
+ * Quantization runs on the natural short spectrum (192 positions for each
+ * of the three windows) held in l3_enc_natural, so magnitudes, signs and
+ * energies describe the real MDCT output. The quantized symbols are then
+ * permuted into MPEG bitstream order (l3_enc) for the run-length and
+ * Huffman machinery. Scale factors stay zero and slen1/slen2 stay zero, so
+ * part2 only carries the three 3-bit subblock gains.
+ * =================================================================== */
+
+/* part2 for a pure short block. The three subblock gains live in the side
+ * information record, not in main data; with zero scale factors and
+ * slen1 = slen2 = 0 the main-data part2 occupies no bits. */
+static int part2_length_short(gr_info *cod_info) {
+  (void)cod_info;
+  return 0;
+}
+
+/*
+ * subdivide_short:
+ * ----------------
+ * Implicit Huffman region boundaries for a pure short block. The region
+ * count fields are absent from a switched side info record: a decoder uses
+ * region1Start = 0 and region2Start = 3 * short_band[8] (ISO 11172-3,
+ * mixed_block_flag = 0). The generic Huffman machinery then addresses the
+ * low region through table_select[1] and the tail through
+ * table_select[2]; table_select[0] stays unused.
+ */
+void subdivide_short(gr_info *cod_info, shine_global_config *config) {
+  const int *offsets =
+      shine_short_band_offsets(config->mpeg.samplerate_index);
+
+  cod_info->region0_count = 0;
+  cod_info->region1_count = 0;
+  cod_info->address1 = 0;
+  cod_info->address2 = 3 * offsets[8];
+  cod_info->address3 = cod_info->big_values << 1;
+}
+
+/* Reorder freshly quantized natural symbols into bitstream order. */
+static void reorder_quantized(shine_global_config *config, int gr, int ch) {
+  shine_short_reorder(config->l3_enc_natural[ch][gr],
+                      config->l3_enc[ch][gr],
+                      config->mpeg.samplerate_index);
+}
+
+/*
+ * shine_inner_loop_short:
+ * -----------------------
+ * Same convergence logic as shine_inner_loop, but quantization targets the
+ * natural short spectrum and every bit estimate uses the reordered symbols.
+ */
+int shine_inner_loop_short(int ix_natural[GRANULE_SIZE],
+                           int ix_stream[GRANULE_SIZE], int max_bits,
+                           gr_info *cod_info, int gr, int ch,
+                           shine_global_config *config) {
+  int bits, c1bits, bvbits;
+
+  if (max_bits < 0)
+    cod_info->quantizerStepSize--;
+  do {
+    while (quantize(ix_natural, ++cod_info->quantizerStepSize, config) > 8192)
+      ;
+
+    reorder_quantized(config, gr, ch);
+
+    calc_runlen(ix_stream, cod_info);
+    bits = c1bits = count1_bitcount(ix_stream, cod_info);
+    subdivide_short(cod_info, config);
+    bigv_tab_select(ix_stream, cod_info);
+    bits += bvbits = bigv_bitcount(ix_stream, cod_info);
+  } while (bits > max_bits);
+  return bits;
+}
+
+/*
+ * bin_search_StepSize_short:
+ * --------------------------
+ * Short-block counterpart of bin_search_StepSize.
+ */
+int bin_search_StepSize_short(int desired_rate,
+                              int ix_natural[GRANULE_SIZE],
+                              int ix_stream[GRANULE_SIZE], gr_info *cod_info,
+                              shine_global_config *config) {
+  int bit, next, count;
+
+  next = -120;
+  count = 120;
+
+  do {
+    int half = count / 2;
+
+    if (quantize(ix_natural, next + half, config) > 8192)
+      bit = 100000; /* fail */
+    else {
+      shine_short_reorder(ix_natural, ix_stream,
+                          config->mpeg.samplerate_index);
+      calc_runlen(ix_stream, cod_info);
+      bit = count1_bitcount(ix_stream, cod_info);
+      subdivide_short(cod_info, config);
+      bigv_tab_select(ix_stream, cod_info);
+      bit += bigv_bitcount(ix_stream, cod_info);
     }
 
     if (bit < desired_rate)

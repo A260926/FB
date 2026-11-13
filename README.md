@@ -39,6 +39,59 @@ write(written, data);
 shine_close(s);
 ```
 
+### Explicit long/short window switching
+
+Two extra entries let an external editor decide the MPEG-1 Layer III window
+type (`normal`, `start`, `short`, `stop`) per granule and per channel,
+instead of always encoding ordinary long blocks:
+
+```c
+#include <shine/layer3.h>
+
+/* ... same shine_config_t setup as above ... */
+shine_t s = shine_initialise(&config);
+int written;
+
+/* One frame = 2 granules * channels entries, granule first then channel.
+ * Values are SHINE_BLOCK_NORMAL/START/SHORT/STOP (0/1/2/3). */
+int16_t planar[2][1152];
+int16_t *channels[2] = { planar[0], planar[1] };
+
+/* Frame 1: both channels go normal -> start.
+ * Frame 2: left runs start -> short, right stays normal -> start. */
+const uint8_t frame1[4] = {
+  SHINE_BLOCK_NORMAL, SHINE_BLOCK_NORMAL,   /* granule 0: left, right */
+  SHINE_BLOCK_START,  SHINE_BLOCK_START     /* granule 1: left, right */
+};
+const uint8_t frame2[4] = {
+  SHINE_BLOCK_SHORT,  SHINE_BLOCK_START,    /* granule 0: left, right */
+  SHINE_BLOCK_SHORT,  SHINE_BLOCK_NORMAL    /* granule 1: left, right */
+};
+
+unsigned char *out;
+out = shine_encode_buffer_blocks(s, channels, frame1, 4, &written);
+if (out == NULL && written == -1) {
+  /* the whole frame was rejected before any PCM was touched */
+}
+out = shine_encode_buffer_blocks(s, channels, frame2, 4, &written);
+
+/* shine_encode_buffer_interleaved_blocks() is the interleaved counterpart. */
+```
+
+The block sequence is validated per channel and continues across frames;
+each channel starts in `normal` and must follow
+`normal -> normal|start`, `start -> short`, `short -> short|stop`,
+`stop -> normal|start`. The two channels may follow independent sequences.
+
+These entries only support MPEG-1 at 32, 44.1 or 48 kHz, mono (`MONO`) or
+plain stereo (`STEREO`), with the existing legal CBR bitrates. A bad block
+count, an unknown block type, an illegal transition or an unsupported
+configuration rejects the complete frame (returning `NULL` with `*written`
+set to `-1`) before any PCM analysis, so a later valid call behaves as if
+the failed call never happened. Passing all-`normal` blocks produces output
+that is byte-for-byte identical to the legacy entries. No extra frames are
+buffered and no silence is inserted to complete a window switch.
+
 How fast is it?
 ---------------
 

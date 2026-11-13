@@ -7,6 +7,9 @@
 
 #include <math.h>
 
+/* Internal test-only observation switch (never installed). */
+#include "l3obs.h"
+
 #define GRANULE_SIZE 576
 
 #include "bitstream.h"
@@ -59,6 +62,12 @@
 #define MAX_GRANULES 2
 #endif
 
+/* Short block geometry: three short windows, six coefficients each. */
+#ifndef SHINE_SHORT_WINDOWS
+#define SHINE_SHORT_WINDOWS 3
+#endif
+#define SHINE_SHORT_BANDS 13
+
 typedef struct {
   int channels;
   int samplerate;
@@ -102,6 +111,11 @@ typedef struct {
 
 typedef struct {
   int32_t cos_l[18][36];
+  /* Start/stop transition windows folded into the 36-point long MDCT, and
+   * the three 12-point short-window MDCT coefficients. */
+  int32_t cos_start[18][36];
+  int32_t cos_stop[18][36];
+  int32_t cos_s[6][12];
 } mdct_t;
 
 typedef struct {
@@ -130,6 +144,11 @@ typedef struct {
   unsigned address3;
   int quantizerStepSize;
   unsigned slen[4];
+  /* Window switching (MPEG-1 block types 0..3). Only maintained on the
+   * explicit block encoding path. */
+  unsigned block_type;
+  unsigned mixed_block_flag;
+  int subblock_gain[SHINE_SHORT_WINDOWS];
 } gr_info;
 
 typedef struct {
@@ -175,6 +194,27 @@ typedef struct shine_global_flags {
   l3loop_t l3loop;
   mdct_t mdct;
   subband_t subband;
+  /* Explicit window switching state.
+   * block_state: last committed block type per channel (starts at NORMAL).
+   * frame_blocks: block plan accepted for the frame being encoded.
+   * block_mode: 0 for the legacy long-only entries, 1 for the block entries.
+   * l3_enc_natural: short-block quantized spectra in natural coordinates,
+   * kept separately so the bitstream-ordered l3_enc only holds reordered
+   * data. */
+  int block_state[MAX_CHANNELS];
+  int frame_blocks[MAX_GRANULES][MAX_CHANNELS];
+  int block_mode;
+  int l3_enc_natural[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+#ifdef SHINE_TASK_OBSERVATIONS
+  /* Read-only test observation points: the 36 subband samples feeding each
+   * MDCT and the coefficients produced before aliasing reduction. They
+   * exist only when the test build defines SHINE_TASK_OBSERVATIONS. */
+  int32_t obs_mdct_in[MAX_CHANNELS][MAX_GRANULES][SBLIMIT][36];
+  int32_t obs_mdct_pre_alias[MAX_CHANNELS][MAX_GRANULES][SBLIMIT][18];
+  int obs_block_type[MAX_CHANNELS][MAX_GRANULES];
+  int obs_valid;
+  int obs_aliasing_applied[MAX_CHANNELS][MAX_GRANULES];
+#endif
 } shine_global_config;
 
 #endif

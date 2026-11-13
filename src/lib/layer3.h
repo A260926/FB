@@ -135,6 +135,51 @@ unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
 unsigned char *shine_encode_buffer_interleaved(shine_t s, int16_t *data,
                                                int *written);
 
+/* Block types for the explicit window-switching encoding entries below.
+ * The numeric values are the MPEG-1 Layer III block_type values. */
+enum shine_block_types {
+  SHINE_BLOCK_NORMAL = 0,
+  SHINE_BLOCK_START = 1,
+  SHINE_BLOCK_SHORT = 2,
+  SHINE_BLOCK_STOP = 3
+};
+
+/* Encode audio data with an explicit per-granule, per-channel window type.
+ *
+ * `block_types` holds exactly `2 * channels` entries for one MPEG-1 frame
+ * (two granules), ordered granule first, channel second: entry
+ * `granule * channels + channel`. Each value is one of the
+ * `shine_block_types` above.
+ *
+ * Only MPEG-1 at 32, 44.1 or 48 kHz, mono (MONO) or plain stereo (STEREO)
+ * is supported. The bitrate remains one of the existing legal CBR values.
+ *
+ * Per channel the sequence starts in NORMAL and must follow
+ *   normal -> normal | start
+ *   start  -> short
+ *   short  -> short | stop
+ *   stop   -> normal | start
+ * across frame boundaries; the two channels may follow different sequences.
+ *
+ * A bad count, an unknown block type, an illegal transition or an
+ * unsupported configuration makes the whole frame fail before any PCM is
+ * analysed: the function returns NULL and sets `*written` to -1 without
+ * altering encoder state, so a later valid call behaves as if the failed
+ * call had never happened.
+ *
+ * Output pointer lifetime and frame delivery conventions are identical to
+ * `shine_encode_buffer`: no frames are buffered, no silence is inserted and
+ * no extra bit reservoir is used to realise the window switch. */
+unsigned char *shine_encode_buffer_blocks(shine_t s, int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written);
+
+/* Interleaved counterpart of `shine_encode_buffer_blocks`, with the same
+ * block type vector, validation and error semantics. */
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_t s, int16_t *data, const uint8_t *block_types,
+    int block_type_count, int *written);
+
 /* Flush all data currently in the encoding buffer. Should be used before
  * closing the encoder, to make all encoded data has been written. */
 unsigned char *shine_flush(shine_t s, int *written);

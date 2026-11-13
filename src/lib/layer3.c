@@ -5,7 +5,9 @@
 #include "l3bitstream.h"
 #include "l3loop.h"
 #include "l3mdct.h"
+#include "l3obs.h"
 #include "l3subband.h"
+#include "l3window.h"
 #include "tables.h"
 #include "types.h"
 
@@ -179,6 +181,9 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
 
 unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
                                    int *written) {
+  /* The legacy entry always encodes long blocks; block_mode also keeps the
+   * MDCT on the original code path so output is unchanged. */
+  config->block_mode = 0;
   config->buffer[0] = data[0];
   if (config->wave.channels == 2)
     config->buffer[1] = data[1];
@@ -188,11 +193,68 @@ unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
 
 unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
                                                int16_t *data, int *written) {
+  config->block_mode = 0;
   config->buffer[0] = data;
   if (config->wave.channels == 2)
     config->buffer[1] = data + 1;
 
   return shine_encode_buffer_internal(config, written, config->wave.channels);
+}
+
+/* Shared tail of the two block-switching entries: the whole frame has
+ * already been validated before this point, so every state change here is
+ * part of an accepted frame. */
+static unsigned char *shine_encode_blocks_internal(
+    shine_global_config *config, int *written, int stride,
+    const uint8_t *block_types) {
+  unsigned char *out;
+
+  shine_blocks_begin_frame(config, block_types);
+  config->block_mode = 1;
+
+  out = shine_encode_buffer_internal(config, written, stride);
+
+  shine_blocks_commit_frame(config);
+  config->block_mode = 0;
+  return out;
+}
+
+unsigned char *shine_encode_buffer_blocks(shine_global_config *config,
+                                          int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written) {
+  /* Reject the complete frame before touching any PCM, leaving every state
+   * (window state machine, subband history, bit cache) untouched. */
+  if (!shine_blocks_validate(config, block_types, block_type_count)) {
+    *written = -1;
+    return NULL;
+  }
+
+  config->buffer[0] = data[0];
+  if (config->wave.channels == 2)
+    config->buffer[1] = data[1];
+
+  return shine_encode_blocks_internal(config, written, 1, block_types);
+}
+
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_global_config *config, int16_t *data,
+    const uint8_t *block_types, int block_type_count, int *written) {
+  if (!shine_blocks_validate(config, block_types, block_type_count)) {
+    *written = -1;
+    return NULL;
+  }
+
+  config->buffer[0] = data;
+  if (config->wave.channels == 2)
+    config->buffer[1] = data + 1;
+
+  return shine_encode_blocks_internal(config, written,
+                                      config->wave.channels, block_types);
+}
+
+const shine_global_config *shine_test_observations(shine_global_config *s) {
+  return s;
 }
 
 unsigned char *shine_flush(shine_global_config *config, int *written) {

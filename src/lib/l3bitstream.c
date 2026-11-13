@@ -5,6 +5,7 @@
 #include "huffman.h"
 #include "l3loop.h"
 #include "l3mdct.h"
+#include "l3window.h"
 #include "layer3.h"
 #include "tables.h"
 #include "types.h"
@@ -36,9 +37,22 @@ void shine_format_bitstream(shine_global_config *config) {
     for (gr = 0; gr < config->mpeg.granules_per_frame; gr++) {
       int *pi = &config->l3_enc[ch][gr][0];
       int32_t *pr = &config->mdct_freq[ch][gr][0];
-      for (i = 0; i < GRANULE_SIZE; i++) {
-        if ((pr[i] < 0) && (pi[i] > 0))
-          pi[i] *= -1;
+
+      if (config->block_mode &&
+          config->frame_blocks[gr][ch] == SHINE_BLOCK_SHORT) {
+        /* Symbols live in natural coordinates until the sign is fixed,
+         * only then take the bitstream permutation. Pairing the reordered
+         * l3_enc with mdct_freq index-by-index would attach signs to the
+         * wrong frequency lines. */
+        int *natural = config->l3_enc_natural[ch][gr];
+        for (i = 0; i < GRANULE_SIZE; i++)
+          if ((pr[i] < 0) && (natural[i] > 0))
+            natural[i] *= -1;
+        shine_short_reorder(natural, pi, config->mpeg.samplerate_index);
+      } else {
+        for (i = 0; i < GRANULE_SIZE; i++)
+          if ((pr[i] < 0) && (pi[i] > 0))
+            pi[i] *= -1;
       }
     }
 
@@ -57,18 +71,29 @@ static void encodeMainData(shine_global_config *config) {
       unsigned slen2 = shine_slen2_tab[gi->scalefac_compress];
       int *ix = &config->l3_enc[ch][gr][0];
 
-      if (gr == 0 || si.scfsi[ch][0] == 0)
-        for (sfb = 0; sfb < 6; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][1] == 0)
-        for (sfb = 6; sfb < 11; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][2] == 0)
-        for (sfb = 11; sfb < 16; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
-      if (gr == 0 || si.scfsi[ch][3] == 0)
-        for (sfb = 16; sfb < 21; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
+      if (gi->block_type == SHINE_BLOCK_SHORT &&
+          gi->mixed_block_flag == 0) {
+        /* Short block main-data part2 is empty: subblock gains are part of
+         * the side information record, and the zero scale factors occupy
+         * no bits with slen1 = slen2 = 0. */
+      } else {
+        if (gr == 0 || si.scfsi[ch][0] == 0)
+          for (sfb = 0; sfb < 6; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][1] == 0)
+          for (sfb = 6; sfb < 11; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][2] == 0)
+          for (sfb = 11; sfb < 16; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+        if (gr == 0 || si.scfsi[ch][3] == 0)
+          for (sfb = 16; sfb < 21; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+      }
 
       Huffmancodebits(config, ix, gi);
     }
@@ -116,6 +141,9 @@ static void encodeSideInfo(shine_global_config *config) {
   for (gr = 0; gr < config->mpeg.granules_per_frame; gr++)
     for (ch = 0; ch < config->wave.channels; ch++) {
       gr_info *gi = &(si.gr[gr].ch[ch].tt);
+      int switched = config->block_mode &&
+                     (gi->block_type != SHINE_BLOCK_NORMAL ||
+                      gi->mixed_block_flag != 0);
 
       shine_putbits(&config->bs, gi->part2_3_length, 12);
       shine_putbits(&config->bs, gi->big_values, 9);
@@ -124,13 +152,28 @@ static void encodeSideInfo(shine_global_config *config) {
         shine_putbits(&config->bs, gi->scalefac_compress, 4);
       else
         shine_putbits(&config->bs, gi->scalefac_compress, 9);
-      shine_putbits(&config->bs, 0, 1);
 
-      for (region = 0; region < 3; region++)
-        shine_putbits(&config->bs, gi->table_select[region], 5);
+      /* window_switching_flag: zero for every legacy long block so the
+       * bitstream stays byte-identical to the original encoder. */
+      shine_putbits(&config->bs, switched, 1);
 
-      shine_putbits(&config->bs, gi->region0_count, 4);
-      shine_putbits(&config->bs, gi->region1_count, 3);
+      if (switched) {
+        int window;
+
+        shine_putbits(&config->bs, gi->block_type, 2);
+        shine_putbits(&config->bs, gi->mixed_block_flag, 1);
+        /* Only two Huffman tables are present in a switched record. */
+        shine_putbits(&config->bs, gi->table_select[1], 5);
+        shine_putbits(&config->bs, gi->table_select[2], 5);
+        for (window = 0; window < SHINE_SHORT_WINDOWS; window++)
+          shine_putbits(&config->bs, gi->subblock_gain[window], 3);
+      } else {
+        for (region = 0; region < 3; region++)
+          shine_putbits(&config->bs, gi->table_select[region], 5);
+
+        shine_putbits(&config->bs, gi->region0_count, 4);
+        shine_putbits(&config->bs, gi->region1_count, 3);
+      }
 
       if (config->mpeg.version == MPEG_I)
         shine_putbits(&config->bs, gi->preflag, 1);
@@ -156,10 +199,23 @@ static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi) {
   /* 1: Write the bigvalues */
   bigvalues = gi->big_values << 1;
 
-  scalefac_index = gi->region0_count + 1;
-  region1Start = scalefac[scalefac_index];
-  scalefac_index += gi->region1_count + 1;
-  region2Start = scalefac[scalefac_index];
+  if (config->block_mode && gi->block_type != SHINE_BLOCK_NORMAL) {
+    /* Switched records have no explicit region counts, so the two active
+     * Huffman regions are fixed by the block type (mixed blocks disabled). */
+    if (gi->block_type == SHINE_BLOCK_SHORT) {
+      region1Start = 0;
+      region2Start =
+          3 * shine_short_band_offsets(config->mpeg.samplerate_index)[8];
+    } else {
+      region1Start = scalefac[8];
+      region2Start = scalefac[12];
+    }
+  } else {
+    scalefac_index = gi->region0_count + 1;
+    region1Start = scalefac[scalefac_index];
+    scalefac_index += gi->region1_count + 1;
+    region2Start = scalefac[scalefac_index];
+  }
 
   for (i = 0; i < bigvalues; i += 2) {
     /* get table pointer */

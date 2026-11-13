@@ -10,8 +10,8 @@ CFLAGS = @CFLAGS@ -funroll-loops -fno-exceptions -Wall -O2 -fsigned-char
 lib_LTLIBRARIES      = libshine.la
 libshine_la_SOURCES  = src/lib/bitstream.c src/lib/huffman.c \
                        src/lib/l3bitstream.c src/lib/l3loop.c src/lib/l3mdct.c \
-                       src/lib/l3subband.c src/lib/layer3.c src/lib/reservoir.c \
-                       src/lib/tables.c
+                       src/lib/l3subband.c src/lib/l3window.c src/lib/layer3.c \
+                       src/lib/reservoir.c src/lib/tables.c
 
 libshine_la_LDFLAGS  = -lm -no-undefined -version-info 3:1:0 -export-symbols libshine.sym
 libshine_ladir       = ${prefix}/include/shine

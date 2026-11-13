@@ -1,6 +1,8 @@
 shine_close
 shine_encode_buffer
 shine_encode_buffer_interleaved
+shine_encode_buffer_blocks
+shine_encode_buffer_interleaved_blocks
 shine_find_bitrate_index
 shine_find_samplerate_index
 shine_mpeg_version
