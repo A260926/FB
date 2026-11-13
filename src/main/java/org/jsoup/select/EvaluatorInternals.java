@@ -43,6 +43,20 @@ public final class EvaluatorInternals {
     }
 
     /**
+     Builds the same Element predicate that {@link #stream} applies to each candidate, including the Web-mode root
+     exclusion and document context, for callers that drive candidate delivery themselves (e.g. stable streaming).
+     */
+    public static Predicate<Element> elementMatchPredicate(Evaluator evaluator, Element root) {
+        evaluator.reset();
+        Predicate<Element> predicate = documentPredicate(evaluator, root, evaluator.asPredicate(root));
+        if (evaluator.web) {
+            Predicate<Element> webPredicate = predicate;
+            predicate = element -> element != root && webPredicate.test(element);
+        }
+        return predicate;
+    }
+
+    /**
      Matches ID values exactly for {@link Element#getElementById(String)}, even in quirks mode.
      */
     public static Evaluator byId(String id) {

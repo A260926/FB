@@ -290,6 +290,8 @@ public class QueryParser implements AutoCloseable {
             case "has":
                 return has();
             case "is":
+            case "where":
+                // jsoup does not compute selector specificity, so :where() matches identically to :is()
                 return is();
             case "contains":
                 return contains(false);

@@ -1,14 +1,17 @@
 package org.jsoup.parser;
 
 import org.jsoup.Connection;
+import org.jsoup.Jsoup;
 import org.jsoup.helper.Validate;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.select.Evaluator;
 import org.jsoup.select.EvaluatorInternals;
+import org.jsoup.select.NodeTraversor;
 import org.jsoup.select.NodeVisitor;
 import org.jsoup.select.Selector;
+import org.jsoup.select.StreamStability;
 import org.jspecify.annotations.Nullable;
 
 import java.io.Closeable;
@@ -16,14 +19,21 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import java.io.UncheckedIOException;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -51,15 +61,19 @@ import java.util.stream.StreamSupport;
  <a href="https://jsoup.org/cookbook/input/streamparser-dom-sax">StreamParser cookbook.</a></p>
  <p>
  Selectors that depend on knowing all siblings (e.g. {@code :last-child}, {@code :last-of-type}, {@code :nth-last-child},
- {@code :only-child} and their negations) cannot be correctly evaluated while streaming, because the parser does not know
- if a later sibling will appear. For those cases, run {@link #complete()} first to finish the parse (which is effectively
- the same as using {@code Jsoup.parse(...)} unless you have already removed nodes during streaming).
+ {@code :only-child} and their negations) cannot be correctly evaluated by the transient {@link #selectNext(String)}
+ while streaming, because the parser does not know if a later sibling will appear. Two options handle them:
+ {@link #selectNextStable(String)} retains candidates until each parent group closes and emits only finalized matches,
+ or run {@link #complete()} first to finish the parse (which is effectively the same as using
+ {@code Jsoup.parse(...)} unless you have already removed nodes during streaming).
  </p>
  @since 1.18.1 */
 public class StreamParser implements Closeable {
     final private Parser parser;
     final TreeBuilder treeBuilder;
     final private ElementIterator it = new ElementIterator();
+    final private StableSelection stable = new StableSelection();
+    private boolean legacyConsumed = false; // true once an iterator/stream/transient select API has been used
     @Nullable private Document document;
     private boolean stopped = true;
 
@@ -71,7 +85,16 @@ public class StreamParser implements Closeable {
     public StreamParser(Parser parser) {
         this.parser = parser;
         treeBuilder = parser.getTreeBuilder().newInstance();
-        treeBuilder.nodeListener(it);
+        treeBuilder.nodeListener(new NodeVisitor() {
+            @Override public void head(Node node, int depth) {
+                it.head(node, depth);
+                stable.head(node, depth);
+            }
+            @Override public void tail(Node node, int depth) {
+                it.tail(node, depth);
+                stable.tail(node, depth);
+            }
+        });
     }
 
     /**
@@ -83,6 +106,8 @@ public class StreamParser implements Closeable {
     public StreamParser parse(Reader input, String baseUri) {
         close(); // probably a no-op, but ensures any previous reader is closed
         it.reset();
+        stable.reset();
+        legacyConsumed = false;
         treeBuilder.initialiseParse(input, baseUri, parser); // reader is not read, so no chance of IO error
         document = treeBuilder.doc;
         return this;
@@ -136,6 +161,7 @@ public class StreamParser implements Closeable {
      @throws UncheckedIOException if the underlying Reader excepts during a read (in stream consuming methods)
      */
     public Stream<Element> stream() {
+        guardLegacyConsumer("stream()");
         return StreamSupport.stream(
             Spliterators.spliteratorUnknownSize(
                 it, Spliterator.DISTINCT | Spliterator.NONNULL | Spliterator.ORDERED),
@@ -152,8 +178,17 @@ public class StreamParser implements Closeable {
      @return a stream of Element objects
      */
     public Iterator<Element> iterator() {
+        guardLegacyConsumer("iterator()");
         //noinspection ReturnOfInnerClass
         return it;
+    }
+
+    /** Blocks the legacy streaming entry points once a stable query owns this parse. */
+    private void guardLegacyConsumer(String operation) {
+        if (stable.isActive())
+            throw new IllegalStateException(
+                "Cannot use " + operation + " while a selectNextStable() query is active on this StreamParser.");
+        legacyConsumed = true;
     }
 
     /**
@@ -218,6 +253,7 @@ public class StreamParser implements Closeable {
      @see #selectFirst(Evaluator)
      */
     public @Nullable Element selectFirst(String query) throws IOException {
+        guardLegacyConsumer("selectFirst(String)");
         return selectFirst(Selector.evaluatorOf(query));
     }
 
@@ -248,6 +284,7 @@ public class StreamParser implements Closeable {
      @see Selector#evaluatorOf(String css)
      */
     public @Nullable Element selectFirst(Evaluator eval) throws IOException {
+        guardLegacyConsumer("selectFirst(Evaluator)");
         final Document doc = document();
 
         // a ready match can be returned without advancing the iterator
@@ -281,6 +318,7 @@ public class StreamParser implements Closeable {
      @see #selectNext(Evaluator)
      */
     public @Nullable Element selectNext(String query) throws IOException {
+        guardLegacyConsumer("selectNext(String)");
         return selectNext(Selector.evaluatorOf(query));
     }
 
@@ -311,6 +349,7 @@ public class StreamParser implements Closeable {
      @see Selector#evaluatorOf(String css)
      */
     public @Nullable Element selectNext(Evaluator eval) throws IOException {
+        guardLegacyConsumer("selectNext(Evaluator)");
         try {
             final Document doc = document(); // validates the parse was initialized, keeps stack trace out of stream
             return EvaluatorInternals.stream(eval, doc, stream())
@@ -318,6 +357,65 @@ public class StreamParser implements Closeable {
                 .orElse(null);
         } catch (UncheckedIOException e) {
             // Reader threw an IO exception emitted via Iterator's next()
+            throw e.getCause();
+        }
+    }
+
+    /**
+     Finds the next Element that matches the provided query, but only returns matches whose result is final.
+     <p>Unlike {@link #selectNext(String)}, a candidate that merely matches the provisional tree is not emitted yet:
+     position-dependent pseudo-classes such as {@code :nth-last-child}, {@code :nth-last-of-type}, {@code :only-child}
+     and {@code :last-child} can change verdict as more siblings arrive. The candidate is retained and re-evaluated when
+     its parent's child set closes (the real tree-builder close notification), so every emitted Element has exactly the
+     match result it would have after a full {@link Jsoup#parse parse} of the same input. A match is therefore never
+     withdrawn, and a temporarily non-matching candidate is never discarded.</p>
+     <p>For selectors whose dependencies are confined to the candidate and its sibling set &mdash; tag, id, class,
+     attribute and ordinary positional conditions, the {@code nth-last-*}, {@code only-*} pseudo-classes, plus nested
+     {@code :is()}, {@code :where()} and {@code :not()} and comma groups without relationship combinators &mdash; each
+     parent group is resolved as soon as that parent closes, so the first list can be delivered while the second list is
+     still unread. Selectors whose Evaluator genuinely depends on nodes that may appear later in the document (for
+     example {@code :has()} on an ancestor, or descendant/sibling combinators) conservatively wait until the input is
+     fully parsed; they still return the same results as a complete parse, just less eagerly.</p>
+     <p>Within one {@link #parse parse}, the query is fixed: repeat calls keep consuming the same candidate stream, and
+     each Element is delivered at most once, in the parser's child-before-parent completion order. Switching to a
+     different query, or mixing this method with {@link #selectNext}, {@link #selectFirst}, {@link #iterator()} or
+     {@link #stream()}, throws {@link IllegalStateException} without reading further input. {@link #complete()} may be
+     called to finish the input, after which further calls with the same stable query deliver any remaining matches.
+     {@link #stop()} / {@link #close()} do not treat still-open parent groups as a completed document.</p>
+     @param query the {@link org.jsoup.select.Selector} query, held constant for the rest of this parse
+     @return the next stable matching {@link Element}, or {@code null} if the input is exhausted with no further match
+     @throws IOException if an I/O error occurs; the original cause is preserved
+     @throws IllegalStateException if the query changes, or a legacy streaming consumer is used on the same parse
+     @since 1.24.2
+     */
+    public @Nullable Element selectNextStable(String query) throws IOException {
+        return selectNextStable(Selector.evaluatorOf(query), query);
+    }
+
+    /**
+     Stable variant of {@link #selectNextStable(String)} accepting a pre-compiled {@link Evaluator}. The query is
+     still fixed for the parse: a later call (string or evaluator overload) with a different query throws
+     {@link IllegalStateException}.
+     @param eval the {@link org.jsoup.select.Selector} evaluator, held constant for the rest of this parse
+     @return the next stable matching {@link Element}, or {@code null} if the input is exhausted with no further match
+     @throws IOException if an I/O error occurs; the original cause is preserved
+     @throws IllegalStateException if the query changes, or a legacy streaming consumer is used on the same parse
+     @see #selectNextStable(String)
+     @since 1.24.2
+     */
+    public @Nullable Element selectNextStable(Evaluator eval) throws IOException {
+        return selectNextStable(eval, eval.toString());
+    }
+
+    private @Nullable Element selectNextStable(Evaluator eval, String queryKey) throws IOException {
+        if (legacyConsumed)
+            throw new IllegalStateException(
+                "Cannot start selectNextStable() after selectNext(), selectFirst(), iterator() or stream() was used.");
+        stable.bind(eval, queryKey);
+        try {
+            return stable.nextMatch();
+        } catch (UncheckedIOException e) {
+            // preserve the checked I/O contract and the original cause from the backing Reader
             throw e.getCause();
         }
     }
@@ -445,6 +543,153 @@ public class StreamParser implements Closeable {
                 Element lastChild = tail.lastElementChild(); // won't get a nextsib, so emit that:
                 if (lastChild != null) queueForEmission(lastChild);
                 if (tail == treeBuilder.doc) deferredEls.clear(); // completed document makes stale recovery state irrelevant
+            }
+        }
+    }
+
+    /**
+     Holds the state of a {@link #selectNextStable} query: retained candidates, finalized matches, and the fixed
+     evaluator. It listens to the same tree-builder close notifications as the element iterator, so retention is tied
+     to real element closes rather than token text.
+     */
+    final class StableSelection implements NodeVisitor {
+        private @Nullable String queryKey;
+        private @Nullable Predicate<Element> predicate;
+        private boolean frontierSafe; // verdicts are fixed once each sibling set closes
+        private boolean active;      // a stable query owns this parse
+        private boolean eofReached;
+
+        // finalized matches waiting to be handed back, in element completion order (children before parents)
+        private final Queue<Element> ready = new LinkedList<>();
+        // every Element whose stable verdict has already been settled, so it is evaluated and enqueued at most once
+        private final Set<Element> settled = Collections.newSetFromMap(new IdentityHashMap<>());
+        // frontier mode: candidates retained until their DOM parent's child set is complete
+        private final Map<Element, Deque<Element>> pendingByParent = new IdentityHashMap<>();
+
+        void reset() {
+            queryKey = null;
+            predicate = null;
+            frontierSafe = false;
+            active = false;
+            eofReached = false;
+            ready.clear();
+            settled.clear();
+            pendingByParent.clear();
+        }
+
+        boolean isActive() {
+            return active;
+        }
+
+        /** Fixes the query for this parse, or verifies a repeat call uses the same one. */
+        void bind(Evaluator eval, String key) {
+            Validate.notNull(eval);
+            if (!active) {
+                Document doc = document(); // validates that parse() ran
+                eval.reset(); // a reused compiled Evaluator must not carry memoized matches from an earlier parse
+                queryKey = key;
+                frontierSafe = StreamStability.settlesAtParentFrontier(eval);
+                predicate = EvaluatorInternals.elementMatchPredicate(eval, doc);
+                active = true;
+                if (treeBuilder.isComplete())
+                    drainCompletedTree(); // bound after complete(): no further close events will arrive
+            } else if (!key.equals(queryKey)) {
+                throw new IllegalStateException(
+                    "selectNextStable() is bound to query '" + queryKey + "' for this parse; cannot switch to '"
+                        + key + "'.");
+            }
+        }
+
+        /** Advances the parse until a finalized match is available or the input can no longer be read. */
+        @Nullable Element nextMatch() throws IOException {
+            if (!ready.isEmpty()) return ready.remove();
+            try {
+                while (ready.isEmpty() && !stopped && !treeBuilder.isComplete()) {
+                    treeBuilder.stepParser(); // close notifications settle candidates into the ready queue
+                }
+                if (treeBuilder.isComplete())
+                    treeBuilder.closeParse(); // natural EOF releases the reader, as runParser() would
+            } catch (UncheckedIOException e) {
+                throw e.getCause();
+            }
+            return ready.peek() == null ? null : ready.remove();
+        }
+
+        @Override public void head(Node node, int depth) {
+            // candidates are only considered once their element closes
+        }
+
+        @Override public void tail(Node node, int depth) {
+            if (!active || !(node instanceof Element)) return;
+            Element element = (Element) node;
+
+            if (element == treeBuilder.doc) {
+                settleAtEof();
+                return;
+            }
+            if (!frontierSafe)
+                return; // relationship-dependent queries are resolved wholesale from the completed tree at EOF
+
+            // this element's child set is now complete, so finalize the candidates retained underneath it
+            settleParent(element);
+
+            Element parent = element.parent();
+            if (parent == null) {
+                // a detached element can gain no further siblings without DOM edits (unsupported while consuming),
+                // so its verdict is already final
+                Predicate<Element> match = predicate;
+                if (match != null && settled.add(element) && match.test(element))
+                    ready.add(element);
+                return;
+            }
+            pendingByParent.computeIfAbsent(parent, p -> new ArrayDeque<>()).add(element);
+            if (!treeBuilder.isOpen(parent))
+                settleParent(parent); // the parent's real close notification makes this sibling set final
+        }
+
+        /** Finalizes a parent group now that the parent's child set can no longer change. */
+        private void settleParent(Element parent) {
+            Deque<Element> siblings = pendingByParent.remove(parent);
+            if (siblings == null) return;
+            Predicate<Element> match = predicate;
+            for (Element element : siblings) {
+                // every candidate is marked settled (match or not), so the EOF walk neither re-evaluates nor duplicates it
+                if (settled.add(element) && match != null && match.test(element))
+                    ready.add(element); // children are settled before their parent can enter the queue
+            }
+        }
+
+        /** EOF makes every retained candidate and the document root decidable. */
+        private void settleAtEof() {
+            if (eofReached) return;
+            eofReached = true;
+            Predicate<Element> match = predicate;
+            if (match == null) return;
+
+            // any element still retained (implicit EOF closes, or a conservative query) is covered by the
+            // completion-order walk; settled makes already-finalized matches stay exactly-once
+            pendingByParent.clear();
+            collectCompletedMatches(match); // the document root is the walk's final tail (Web mode excludes it)
+        }
+
+        /** Used when the stable query starts on an already fully parsed document. */
+        private void drainCompletedTree() {
+            settleAtEof();
+        }
+
+        /** Walks the completed document in child-before-parent order, enqueuing each not-yet-settled match once. */
+        private void collectCompletedMatches(Predicate<Element> match) {
+            Deque<Element> completion = new ArrayDeque<>();
+            NodeTraversor.traverse(new NodeVisitor() {
+                @Override public void head(Node node, int depth) { }
+                @Override public void tail(Node node, int depth) {
+                    if (node instanceof Element) completion.add((Element) node);
+                }
+            }, treeBuilder.doc);
+            while (!completion.isEmpty()) {
+                Element element = completion.remove();
+                if (settled.add(element) && match.test(element))
+                    ready.add(element);
             }
         }
     }

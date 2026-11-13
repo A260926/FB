@@ -3,6 +3,7 @@
 ## 1.24.2 (Pending)
 
 ### Improvements
+* Added `StreamParser.selectNextStable(String query)`, which streams only finalized selector matches. Candidates that could still change verdict (e.g. for `:nth-last-child`, `:only-child`) are retained until their parent group closes on the real tree-builder close notification, so each result equals a full parse and is delivered without reading to document EOF. Selectors whose Evaluator depends on not-yet-parsed nodes (such as `:has()` on an ancestor, or descendant/sibling combinators) conservatively wait until EOF. The query is fixed for the parse and cannot be mixed with the other streaming consumers.
 * Added the opt-in `Tag.RcDataRecover` option to recover content after missing `title` or `textarea` end tags. [#2640](https://github.com/jhy/jsoup/issues/2640)
 
 ### Bug Fixes
