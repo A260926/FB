@@ -32,6 +32,8 @@ common_src = [
     'huff2.h',
     'huffdata.c',
     'huffdata.h',
+    'pce.c',
+    'pce.h',
     'quantize.c',
     'quantize.h',
     'ratecontrol.c',

@@ -78,6 +78,7 @@ int  faacEncGetVersion(char **id, char **copyright);
 int  faacEncGetDecoderSpecificInfo(faacEncHandle hEncoder, unsigned char **ppBuffer,
                                    unsigned long *pSizeOfDecoderSpecificInfo);
 faacEncHandle faacEncOpen(unsigned long sampleRate, unsigned int numChannels,
+                          int customLayout,
                           unsigned long *inputSamples, unsigned long *maxOutputBytes);
 int  faacEncEncode(faacEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
                    unsigned char *outputBuffer, unsigned int bufferSize);

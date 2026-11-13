@@ -135,6 +135,41 @@ enum faac_stream_format {
     FAAC_STREAM_MAX  = 0x7fffffff
 };
 
+/*
+ * Soundfield region an element belongs to, matching the front/side/back/LFE
+ * grouping of an AAC Program Config Element (PCE). FAAC_PCE_REGION_MAX pins
+ * the enum to 32 bits for a stable ABI under -fshort-enums, like every other
+ * public enum.
+ */
+enum faac_pce_region {
+    FAAC_PCE_REGION_FRONT = 0,
+    FAAC_PCE_REGION_SIDE  = 1,
+    FAAC_PCE_REGION_BACK  = 2,
+    FAAC_PCE_REGION_LFE   = 3,
+    FAAC_PCE_REGION_MAX   = 0x7fffffff
+};
+
+/*
+ * One explicit AAC element (SCE, CPE or LFE) of a custom channel layout.
+ *
+ * region selects the PCE group and is_cpe whether the element is a Channel
+ * Pair Element (two slots) or a Single Channel Element / LFE (one slot).
+ * channels[] names the logical channel slots the element codes; slots are the
+ * indices produced by channel_map, i.e. the same 0..num_channels-1 space the
+ * encoder works in after that reordering (channel_map itself is unchanged and
+ * still remaps the interleaved PCM input into these slots).
+ *
+ * For an SCE/LFE, channels[0] holds the slot and channels[1] must be
+ * UINT32_MAX. For a CPE the two slots must differ; they need not be adjacent.
+ * An LFE region element cannot be a CPE.
+ */
+typedef struct faac_pce_element {
+    enum faac_pce_region region;
+    bool                 is_cpe;
+    uint8_t              reserved[3]; /* explicit pad; must remain 0 */
+    uint32_t             channels[2]; /* logical slots; UINT32_MAX = unused */
+} faac_pce_element;
+
 /* How bit_rate is held. ABR: an average, frames bounded only by the 6144
  * bits/ch ceiling. CBR: a bit reservoir bounds every frame to the decoder
  * buffer, stuffs frames that would overflow it, and declares the fill. */
@@ -212,6 +247,19 @@ typedef struct faac_params {
     uint32_t                max_bit_rate;  /* whole-stream peak bits/sec; 0 = unlimited */
 
     enum faac_rate_control  rate_control;  /* see enum; AUTO = ABR if bit_rate, else VBR */
+
+    /* Explicit element layout (PCE-driven mode). NULL/count 0 selects the
+     * legacy, channel-count-derived layout and bitstream (including its fixed
+     * channelConfiguration); nothing else changes for such callers.
+     *
+     * A non-empty list declares every AAC element and the logical slots (the
+     * post-channel_map slot space) it codes. open() validates and copies it, so
+     * the caller may free or overwrite the list afterwards. In this mode the
+     * stream is MPEG-4 AAC-LC only: channelConfiguration is written 0, the ASC
+     * carries a full PCE, and every raw_data_block starts with an in-band PCE.
+     * See docs/libfaac.html for the ordering and validation rules. */
+    const faac_pce_element *pce_elements;
+    uint32_t                pce_element_count;
 } faac_params;
 
 /* Upper bound on faac_params.max_bit_rate: far above any real stream rate, and

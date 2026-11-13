@@ -26,6 +26,7 @@ Contents
   <li><a href="#api-funcref">Function reference</a>
   <li><a href="#api-rate">Rate control modes</a>
   <li><a href="#api-peak">Capping the peak frame size</a>
+  <li><a href="#api-pce">Explicit element layouts (PCE)</a>
  </menu>
  <li><a href="#porting">Porting from the legacy faacEnc* API</a>
 </menu>
@@ -184,6 +185,127 @@ scalefactors, so a small enough cap is still exceeded on a few percent of frames
 (measured on transient-heavy stereo, the cap holds everywhere at and above
 roughly 64 kbit/s and starts to slip around 48). Callers that must guarantee the
 packet fits should check <i>bytes_written</i> and drop the frame themselves.
+
+<a name="api-pce">
+<h5>Explicit element layouts (PCE)</h5>
+Without further information the encoder derives the AAC element structure from
+the channel count alone: one leading SCE, as many adjacent CPEs as fit, and a
+trailing odd channel as an SCE or (with <i>use_lfe</i>) an LFE. That table only
+covers 1..6 and 8 channels &mdash; seven channels are rejected &mdash; and
+<i>channel_map</i> only reorders PCM, it cannot say which logical channels form
+a pair or which element group (front/side/back/LFE) a channel belongs to.
+<br><br>
+The two appended <i>faac_params</i> fields, <i>pce_elements</i> and
+<i>pce_element_count</i>, declare the element layout explicitly. An empty list
+(NULL pointer and zero count, the only state an older caller's struct can
+express) selects the legacy, count-derived layout and bitstream exactly as
+before. A non-empty list switches the handle to PCE-driven mode.
+<br><br>
+Each <i>faac_pce_element</i> names one element:
+<pre>
+typedef enum {
+    FAAC_PCE_REGION_FRONT = 0,
+    FAAC_PCE_REGION_SIDE  = 1,
+    FAAC_PCE_REGION_BACK  = 2,
+    FAAC_PCE_REGION_LFE   = 3,
+    FAAC_PCE_REGION_MAX   = 0x7fffffff   /* width sentinel, never a real region */
+} faac_pce_region;
+
+typedef struct {
+    faac_pce_region region;
+    bool            is_cpe;
+    uint8_t         reserved[3];          /* must be zero */
+    uint32_t        channels[2];          /* logical slots; UINT32_MAX = unused */
+} faac_pce_element;
+</pre>
+<b>Slots.</b> <i>channels[]</i> index the <b>post-<i>channel_map</i></b> logical
+slot space: <i>channel_map</i> still remaps the interleaved input PCM into
+slots 0..num_channels-1 first, and the plan then groups those slots. Its index
+units and identity default are unchanged. For an SCE or LFE,
+<i>channels[0]</i> is the slot and <i>channels[1]</i> must be
+<i>UINT32_MAX</i>; for a CPE the two slots must differ and need not be
+adjacent. An LFE element cannot be a CPE.
+<br><br>
+<b>Validation at open().</b> All <i>num_channels</i> slots (1..8) must be used
+exactly once; duplicate or missing slots, out-of-range slots, an invalid
+region, a paired LFE, more than one LFE, a NULL list with a non-zero count, or
+the absence of any front element make <i>faac_encoder_open()</i> fail with
+<i>FAAC_ERR_INVALID_ARGUMENT</i> and leave the out handle NULL. Seven channels
+are legal only with a complete plan; the legacy count gate is otherwise
+unchanged. PCE-driven mode is only defined for an explicit MPEG-4 AAC-LC
+stream &mdash; <i>FAAC_OBJ_AUTO</i>, HE-AAC and MPEG-2 return
+<i>FAAC_ERR_UNSUPPORTED</i>. The list is copied into the handle during open, so
+the caller may free or overwrite it immediately afterwards.
+<br><br>
+<b>Plan order and tags.</b> The encoder groups elements by region in the fixed
+order front, side, back, LFE, preserving the declaration order inside each
+group, and that grouped order is the emission order. SCEs, CPEs and the LFE
+are then numbered independently from 0 over the final order; the PCE carries
+the per-region is_cpe flags and these tags, and the real SCE/CPE/LFE headers in
+each frame use the same type and tag.
+<br><br>
+<b>The plan drives the actual coding.</b> It is not merely used to print a PCE:
+the declared pairs are the CPEs the joint-stereo tool (common window, M/S and
+intensity stereo) operates on, short/long block switching and short-window
+grouping are decided per element rather than forced across all channels, and
+the declared LFE slot gets the reduced LFE bandwidth and long-window
+treatment. Unpaired slots are independent SCEs.
+<br><br>
+<b>Where the PCE appears.</b>
+<menu>
+ <li><b>AudioSpecificConfig.</b> <i>channelConfiguration</i> is written 0, the
+  GASpecificConfig follows, then a complete program_config_element. The PCE in
+  the ASC has <b>no</b> 3-bit element ID: that ID only prefixes an element
+  inside a raw_data_block, so the ASC PCE is generated separately
+  (<i>object_type</i> = LC profile, sample-rate index = the actual core rate).
+  Associated data, valid CCs, the three mixdown-present flags and the comment
+  length are all zero, followed by byte alignment.
+ <li><b>ADTS.</b> The header's channelConfiguration is also 0; the layout lives
+  in-band.
+ <li><b>Every raw_data_block.</b> Each output frame, including the frames
+  produced while flushing, starts with an in-band PCE (the ID_PCE prefix plus
+  the same fields), byte-aligned, before the real SCE/CPE/LFE elements whose
+  types and tags match it. The PCE's bits are part of the written frame and
+  therefore count toward its real length, the rate controller and the
+  max_output_bytes bound &mdash; frames are never shortened by dropping
+  channels or omitting the PCE, and the ADTS frame-length field always matches
+  the bytes actually written.
+</menu>
+<b>Compatibility boundary.</b> <i>faac_params</i> still grows only by
+appending fields. <i>faac_params_init()</i> keeps accepting a caller-sized
+struct down to the original baseline prefix; a struct that small is treated as
+having no layout and never has the appended fields read past its declared
+<i>struct_size</i>. The default 1/2/6/8-channel configurations keep their exact
+two-byte ASC and fixed channelConfiguration. Two handles opened with different
+plans (or a custom and a default handle) keep independent plans, element tags
+and per-frame state and may be driven interleaved.
+<br><br>
+<b>Example (C).</b> A seven-channel front/side/back layout with a non-adjacent
+front pair and an LFE that is not the last slot:
+<pre>
+faac_params p;
+faac_params_init(&amp;p, sizeof p);
+p.sample_rate  = 48000;
+p.num_channels = 7;
+p.object_type  = FAAC_OBJ_LOW;        /* MPEG-4 AAC-LC is required */
+p.mpeg_version = FAAC_MPEG4;
+p.input_format = FAAC_INPUT_16BIT;
+p.output_format = FAAC_STREAM_ADTS;
+
+const faac_pce_element elems[] = {
+    { .region = FAAC_PCE_REGION_FRONT, .is_cpe = false, .channels = { 0, UINT32_MAX } }, /* SCE slot 0 */
+    { .region = FAAC_PCE_REGION_FRONT, .is_cpe = true,  .channels = { 1, 5 } },          /* CPE slots 1,5 */
+    { .region = FAAC_PCE_REGION_SIDE,  .is_cpe = true,  .channels = { 2, 6 } },          /* CPE slots 2,6 */
+    { .region = FAAC_PCE_REGION_BACK,  .is_cpe = false, .channels = { 3, UINT32_MAX } }, /* SCE slot 3 */
+    { .region = FAAC_PCE_REGION_BACK,  .is_cpe = false, .channels = { 4, UINT32_MAX } }, /* SCE slot 4 */
+};
+p.pce_elements = elems;
+p.pce_element_count = sizeof(elems) / sizeof(elems[0]);
+
+faac_encoder *enc = NULL;
+if (faac_encoder_open(&amp;p, &amp;enc) != FAAC_OK) { /* handle the error */ }
+/* elems may be freed here; the encoder owns its copy. */
+</pre>
 
 <a name="porting">
 <h4>Porting from the legacy faacEnc* API</h4>

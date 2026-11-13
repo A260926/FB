@@ -77,6 +77,12 @@ typedef struct faacEncStruct {
     int numElements;
     bool isLfeChannel[MAX_CHANNELS]; /* per-channel LFE lookup, derived from elements[] whenever it changes */
 
+    /* Explicit PCE-driven layout. customPce is false for legacy,
+     * channel-count-derived layouts; when true pcePlan owns the element
+     * ordering and every raw_data_block/ASC carries the matching PCE. */
+    bool customPce;
+    PcePlan pcePlan;
+
     /* Psychoacoustics data */
     PsyInfo psyInfo[MAX_CHANNELS];
     GlobalPsyInfo gpsyInfo;
@@ -113,6 +119,31 @@ typedef struct faacEncStruct {
     int *peakSnap[MAX_CHANNELS];
 
     RateControl rc;
+
+    /* Read-only observation of emitted frames, for tests and diagnostics. All
+     * bit offsets are relative to the frame's first bit (so they include the
+     * 56-bit ADTS header in ADTS output). BuildFrame fills the transient obs*
+     * fields on every write (the peak-limiter retry loop rewrites them); once
+     * a frame is actually produced faacEncEncode commits them into the ring,
+     * one entry per output frame. The encoder never reads these back; they do
+     * not affect coding decisions. */
+    int obsPceStart;                     /* in-band PCE start bit, custom mode */
+    int obsPceLen;                       /* in-band PCE length, bits */
+    int obsElemStart[MAX_CHANNELS];      /* each element's ID field start */
+    int obsElemLen[MAX_CHANNELS];        /* each element's total length */
+    int obsEndBit;                       /* ID_END position */
+
+#define OBS_RING 48
+    struct {
+        int valid;
+        int pceStart, pceLen, endBit;
+        int nElems;
+        int elemStart[MAX_CHANNELS];
+        int elemLen[MAX_CHANNELS];
+        int elemType[MAX_CHANNELS];
+        int elemTag[MAX_CHANNELS];
+    } obsRing[OBS_RING];
+    unsigned int obsRingCount;          /* produced frames committed */
 } faacEncStruct;
 
 /* Configuration worker behind faac_encoder_open(): validates the config,

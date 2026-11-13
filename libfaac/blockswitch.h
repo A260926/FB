@@ -54,6 +54,12 @@ void PsyBufferUpdate (GlobalPsyInfo * gpsyInfo, PsyInfo * psyInfo,
 		float * restrict p_lookahead2);
 void BlockSwitch (CoderInfo *coderInfo, PsyInfo *psyInfo,
 		unsigned int numChannels);
+/* Explicit-plan variant: NULL elements reproduces BlockSwitch(); otherwise the
+ * short/long decision is taken independently per element over its member
+ * slots. elements use the AACElement layout from channels.h. */
+void BlockSwitchElements (CoderInfo *coderInfo, PsyInfo *psyInfo,
+		unsigned int numChannels,
+		const AACElement *elements, int numElements);
 
 #ifdef __cplusplus
 }

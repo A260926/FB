@@ -16,6 +16,7 @@
 #include "channels.h"
 #include "huff2.h"
 #include "frame.h"
+#include "pce.h"
 #include "sbr.h"
 #include <string.h>
 #include <stdio.h>
@@ -221,7 +222,10 @@ int WriteElement(BitStream *bs, AACElement *elem, CoderInfo *coder)
 
 static int WriteADTSHeader(struct faacEncStruct *hEncoder, BitStream *bs)
 {
-    int channelConfig = GetChannelConfig((int)hEncoder->numChannels);
+    /* A custom PCE plan means channelConfiguration 0: the layout travels in
+     * the in-band PCE, not the header's 3-bit fixed table. */
+    int channelConfig = hEncoder->customPce ? 0
+                        : GetChannelConfig((int)hEncoder->numChannels);
     PutBit(bs, 0xFFF,                        LEN_ADTS_SYNC);
     PutBit(bs, hEncoder->config.mpegVersion, LEN_ADTS_ID);
     PutBit(bs, 0,                            LEN_ADTS_LAYER);
@@ -264,11 +268,25 @@ static int BuildFrame(struct faacEncStruct *hEncoder, CoderInfo *coder, AACEleme
 {
     int bits = 0;
     if (hEncoder->config.outputFormat == 1) bits += WriteADTSHeader(hEncoder, bs);
+    /* Custom layout: every raw_data_block, including flush tail frames, opens
+     * with an in-band PCE so the element types/tags that follow are self
+     * describing. It is byte-aligned, so the element stream starts on a byte. */
+    if (hEncoder->customPce) {
+        unsigned int pceStart = bs->currentBit;
+        unsigned int pceBits = PceWrite(bs, &hEncoder->pcePlan, hEncoder->sampleRateIdx, 1);
+        hEncoder->obsPceStart = (int)pceStart;
+        hEncoder->obsPceLen = (int)pceBits;
+        bits += (int)pceBits;
+    }
     /* SBR follows each SCE/CPE in a fill element; rate control charges only
      * the core, so its total is kept aside. */
     int sbrBits = 0;
     for (int i = 0; i < nElems; i++) {
-        bits += WriteElement(bs, &elems[i], coder);
+        unsigned int elemStart = bs->currentBit;
+        int elemBits = WriteElement(bs, &elems[i], coder);
+        hEncoder->obsElemStart[i] = (int)elemStart;
+        hEncoder->obsElemLen[i] = elemBits;
+        bits += elemBits;
         sbrBits += SbrContextGetBits(hEncoder->sbrContext, bs,
                                      &elems[i], (int)hEncoder->config.aacObjectType);
     }
@@ -291,10 +309,12 @@ static int BuildFrame(struct faacEncStruct *hEncoder, CoderInfo *coder, AACEleme
     }
     bits += (f - WriteAACFillBits(bs, f));
 
+    hEncoder->obsEndBit = (int)bs->currentBit;   /* ID_END field position */
     PutBit(bs, ID_END, LEN_SE_ID);
     bits += LEN_SE_ID;
     int pad = (8 - (bits & 7)) & 7;
     for (int i = 0; i < pad; i++) PutBit(bs, 0, 1);
+
     return bits + pad;
 }
 
@@ -306,7 +326,8 @@ static void PatchADTSHeader(struct faacEncStruct *hEncoder, BitStream *bs, int f
 {
     if (hEncoder->config.outputFormat == 1 && bs->data) {
         int fullness = 0x7FF;
-        int channelConfig = GetChannelConfig((int)hEncoder->numChannels);
+        int channelConfig = hEncoder->customPce ? 0
+                            : GetChannelConfig((int)hEncoder->numChannels);
         if (hEncoder->rc.resMean)
             fullness = RateControlReservoirAfter(&hEncoder->rc, (frameBytes - ADTS_HEADER_SIZE) * 8) >> 5;
         bs->data[0] = 0xFF;

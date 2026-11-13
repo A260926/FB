@@ -203,38 +203,94 @@ void PsyBufferUpdate(GlobalPsyInfo * gpsyInfo, PsyInfo * psyInfo,
 
 void BlockSwitch(CoderInfo * coderInfo, PsyInfo * psyInfo, unsigned int numChannels)
 {
+  BlockSwitchElements(coderInfo, psyInfo, numChannels, NULL, 0);
+}
+
+/* Element-aware variant. With a NULL element list the decision spans every
+   channel, the legacy behavior. With an explicit plan, each element's member
+   slots settle on one block type independently: a CPE keeps common-window
+   eligibility (AACstereo still requires identical block_type/groups), while
+   transient decisions no longer leak across unrelated elements, and separate
+   SCEs no longer force short blocks on each other. */
+void BlockSwitchElements(CoderInfo * coderInfo, PsyInfo * psyInfo,
+                         unsigned int numChannels,
+                         const AACElement *elements, int numElements)
+{
   unsigned int channel;
   int desire = ONLY_LONG_WINDOW;
 
-  /* Use the same block type for all channels
-     If there is 1 channel that wants a short block,
-     use a short block on all channels.
-   */
-  for (channel = 0; channel < numChannels; channel++)
-  {
-    if (psyInfo[channel].block_type == ONLY_SHORT_WINDOW)
-      desire = ONLY_SHORT_WINDOW;
+  if (!elements || numElements <= 0) {
+    /* Use the same block type for all channels
+       If there is 1 channel that wants a short block,
+       use a short block on all channels.
+     */
+    for (channel = 0; channel < numChannels; channel++)
+    {
+      if (psyInfo[channel].block_type == ONLY_SHORT_WINDOW)
+        desire = ONLY_SHORT_WINDOW;
+    }
+
+    for (channel = 0; channel < numChannels; channel++)
+    {
+      int lasttype = coderInfo[channel].block_type;
+
+      if (desire == ONLY_SHORT_WINDOW
+          || coderInfo[channel].desired_block_type == ONLY_SHORT_WINDOW)
+      {
+        if (lasttype == ONLY_LONG_WINDOW || lasttype == SHORT_LONG_WINDOW)
+          coderInfo[channel].block_type = LONG_SHORT_WINDOW;
+        else
+          coderInfo[channel].block_type = ONLY_SHORT_WINDOW;
+      }
+      else
+      {
+        if (lasttype == ONLY_SHORT_WINDOW || lasttype == LONG_SHORT_WINDOW)
+          coderInfo[channel].block_type = SHORT_LONG_WINDOW;
+        else
+          coderInfo[channel].block_type = ONLY_LONG_WINDOW;
+      }
+      coderInfo[channel].desired_block_type = desire;
+    }
+    return;
   }
 
-  for (channel = 0; channel < numChannels; channel++)
+  for (int e = 0; e < numElements; e++)
   {
-    int lasttype = coderInfo[channel].block_type;
+    const AACElement *el = &elements[e];
+    int members[2];
+    int nmember = (el->type == ID_CPE) ? 2 : 1;
+    int m;
 
-    if (desire == ONLY_SHORT_WINDOW
-	|| coderInfo[channel].desired_block_type == ONLY_SHORT_WINDOW)
+    members[0] = el->channels[0];
+    if (nmember == 2)
+      members[1] = el->channels[1];
+
+    desire = ONLY_LONG_WINDOW;
+    for (m = 0; m < nmember; m++)
+      if (psyInfo[members[m]].block_type == ONLY_SHORT_WINDOW)
+        desire = ONLY_SHORT_WINDOW;
+
+    for (m = 0; m < nmember; m++)
     {
-      if (lasttype == ONLY_LONG_WINDOW || lasttype == SHORT_LONG_WINDOW)
-	coderInfo[channel].block_type = LONG_SHORT_WINDOW;
+      channel = (unsigned int)members[m];
+      int lasttype = coderInfo[channel].block_type;
+
+      if (desire == ONLY_SHORT_WINDOW
+          || coderInfo[channel].desired_block_type == ONLY_SHORT_WINDOW)
+      {
+        if (lasttype == ONLY_LONG_WINDOW || lasttype == SHORT_LONG_WINDOW)
+          coderInfo[channel].block_type = LONG_SHORT_WINDOW;
+        else
+          coderInfo[channel].block_type = ONLY_SHORT_WINDOW;
+      }
       else
-	coderInfo[channel].block_type = ONLY_SHORT_WINDOW;
+      {
+        if (lasttype == ONLY_SHORT_WINDOW || lasttype == LONG_SHORT_WINDOW)
+          coderInfo[channel].block_type = SHORT_LONG_WINDOW;
+        else
+          coderInfo[channel].block_type = ONLY_LONG_WINDOW;
+      }
+      coderInfo[channel].desired_block_type = desire;
     }
-    else
-    {
-      if (lasttype == ONLY_SHORT_WINDOW || lasttype == LONG_SHORT_WINDOW)
-	coderInfo[channel].block_type = SHORT_LONG_WINDOW;
-      else
-	coderInfo[channel].block_type = ONLY_LONG_WINDOW;
-    }
-    coderInfo[channel].desired_block_type = desire;
   }
 }

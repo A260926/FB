@@ -98,7 +98,30 @@ typedef struct {
     int channels[2];
     bool common_window;
     MSInfo msInfo;
+    /* PCE soundfield region (mirrors faac_pce_region); only meaningful on a
+     * handle running an explicit PCE plan. Legacy layouts leave it FRONT. */
+    uint8_t region;
 } AACElement;
+
+/*
+ * Resolved explicit element plan (PCE-driven mode). Built once at open() from
+ * the caller's faac_pce_element list and copied into the handle; the encoder
+ * then derives elements[], every in-stream PCE and the ASC from this one copy.
+ *
+ * element_order[] holds indices into elems[] sorted by region (front, side,
+ * back, LFE), declaration order kept within each region. elems[].tag is the
+ * per-type (SCE/CPE, then LFE) numbering over that final order.
+ */
+#define PCE_MAX_ELEMENTS MAX_CHANNELS
+
+typedef struct {
+    int num_elements;
+    int num_sce;
+    int num_cpe;
+    int num_lfe;
+    AACElement elems[PCE_MAX_ELEMENTS];
+    int element_order[PCE_MAX_ELEMENTS];
+} PcePlan;
 
 /**
  * Maps channel count to ISO/IEC 14496-3 Table 1.19 channelConfiguration value.

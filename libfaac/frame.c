@@ -30,6 +30,7 @@
 #include "stereo.h"
 #include "sbr.h"
 #include "ratecontrol.h"
+#include "pce.h"
 #include "atomic.h"
 
 /* HE-AAC auto-mode thresholds; tuned via ViSQOL on a 49-clip corpus. */
@@ -120,6 +121,22 @@ static void RefreshLfeMap(faacEncStruct *hEncoder)
     }
 }
 
+/* Install the explicit plan as the working element list, in final (region
+ * grouped, declaration-ordered, per-type tagged) order. The plan is owned by
+ * the handle, so this survives the caller freeing its own list. Per-frame
+ * state (common_window, msInfo) is reset every frame by AACstereo, so copying
+ * the plan's zeroed defaults here is enough. */
+static void InstallPcePlan(faacEncStruct *hEncoder)
+{
+    const PcePlan *plan = &hEncoder->pcePlan;
+
+    memset(hEncoder->elements, 0, sizeof(hEncoder->elements));
+    for (int i = 0; i < plan->num_elements; i++)
+        hEncoder->elements[i] = plan->elems[plan->element_order[i]];
+    hEncoder->numElements = plan->num_elements;
+    RefreshLfeMap(hEncoder);
+}
+
 int faacEncGetVersion( char **faac_id_string,
 			      				char **faac_copyright_string)
 {
@@ -147,6 +164,35 @@ int faacEncGetDecoderSpecificInfo(faacEncHandle hpEncoder,unsigned char** ppBuff
 
     if (hEncoder->config.aacObjectType == HE_V1 && hEncoder->sbrContext) {
         return SbrContextGetASC(hEncoder->sbrContext, hEncoder->sampleRateIdx, hEncoder->numChannels, ppBuffer, pSizeOfDecoderSpecificInfo);
+    }
+
+    /* Explicit PCE layout: channelConfiguration 0, then the GASpecificConfig,
+     * then a full program_config_element. The ASC PCE carries no raw_data_block
+     * 3-bit ID, so it is written through PceWrite(withId=0) rather than copied
+     * from an in-band frame. */
+    if (hEncoder->customPce) {
+        unsigned int pceBits = PceSizeBits(&hEncoder->pcePlan, 0);
+        unsigned int ascBits = 5u + 4u + 4u      /* object type, sr index, chCfg=0 */
+                             + 1u + 1u + 1u      /* GASpecificConfig: frameLengthFlag,
+                                                  * dependsOnCoreCoder, extensionFlag */
+                             + pceBits;
+        unsigned long ascBytes = (ascBits + 7u) / 8u;
+
+        *ppBuffer = (unsigned char *)malloc((size_t)ascBytes);
+        if (*ppBuffer == NULL)
+            return -3;
+
+        BitStream bs;
+        InitBitStream(&bs, *ppBuffer, (uint32_t)ascBytes);
+        PutBit(&bs, hEncoder->config.aacObjectType, 5);
+        PutBit(&bs, hEncoder->sampleRateIdx, 4);
+        PutBit(&bs, 0, 4);                       /* channelConfiguration = 0 */
+        PutBit(&bs, 0, 1);                       /* frameLengthFlag: 1024 */
+        PutBit(&bs, 0, 1);                       /* dependsOnCoreCoder */
+        PutBit(&bs, 0, 1);                       /* extensionFlag */
+        PceWrite(&bs, &hEncoder->pcePlan, hEncoder->sampleRateIdx, 0);
+        *pSizeOfDecoderSpecificInfo = ascBytes;
+        return 0;
     }
 
     *pSizeOfDecoderSpecificInfo = 2;
@@ -427,8 +473,13 @@ int faacEncApplyConfig(faacEncStruct* hEncoder,
 	for( i = 0; i < MAX_CHANNELS; i++ )
 		hEncoder->config.channel_map[i] = config->channel_map[i];
 
-    InitElements(hEncoder->elements, &hEncoder->numElements, (int)hEncoder->numChannels, hEncoder->config.useLfe);
-    RefreshLfeMap(hEncoder);
+    if (hEncoder->customPce)
+        /* The facade validated and stored the plan before this call. */
+        InstallPcePlan(hEncoder);
+    else {
+        InitElements(hEncoder->elements, &hEncoder->numElements, (int)hEncoder->numChannels, hEncoder->config.useLfe);
+        RefreshLfeMap(hEncoder);
+    }
 
     RateControlReset(&hEncoder->rc, hEncoder->numChannels, hEncoder->config.bitRate,
                      hEncoder->sampleRate, hEncoder->config.rateControl == RATE_CBR);
@@ -453,6 +504,7 @@ static void InitSharedTables(void)
 
 faacEncHandle faacEncOpen(unsigned long sampleRate,
                                   unsigned int numChannels,
+                                  int customLayout,
                                   unsigned long *inputSamples,
                                   unsigned long *maxOutputBytes)
 {
@@ -465,7 +517,11 @@ faacEncHandle faacEncOpen(unsigned long sampleRate,
     unsigned int channel;
     faacEncStruct* hEncoder;
 
-    if (GetChannelConfig((int)numChannels) == 0)
+    /* A custom PCE plan carries its own channel configuration, so the fixed
+     * 1..6/8 table gate (which rejects 7 channels) does not apply. */
+    if (!customLayout && GetChannelConfig((int)numChannels) == 0)
+	return NULL;
+    if (numChannels < 1 || numChannels > MAX_CHANNELS)
 	return NULL;
 
     *inputSamples = FRAME_LEN*numChannels;
@@ -476,6 +532,7 @@ faacEncHandle faacEncOpen(unsigned long sampleRate,
     SetMemory(hEncoder, 0, sizeof(faacEncStruct));
 
     hEncoder->numChannels = numChannels;
+    hEncoder->customPce = customLayout ? true : false;
     hEncoder->sampleRate = sampleRate;
     hEncoder->sampleRateIdx = GetSRIndex(sampleRate);
 
@@ -504,9 +561,12 @@ faacEncHandle faacEncOpen(unsigned long sampleRate,
         }
     }
 
-    /* Initialize coder functions */
-    InitElements(hEncoder->elements, &hEncoder->numElements, (int)hEncoder->numChannels, (bool)hEncoder->config.useLfe);
-    RefreshLfeMap(hEncoder);
+    /* Initialize coder functions. A custom handle leaves the element list
+     * empty until faacEncApplyConfig installs its validated PCE plan. */
+    if (!hEncoder->customPce) {
+        InitElements(hEncoder->elements, &hEncoder->numElements, (int)hEncoder->numChannels, (bool)hEncoder->config.useLfe);
+        RefreshLfeMap(hEncoder);
+    }
 
 	PsyInit(&hEncoder->gpsyInfo, hEncoder->psyInfo, hEncoder->numChannels,
         hEncoder->sampleRate, hEncoder->config.aacObjectType == HE_V1);
@@ -674,6 +734,28 @@ int faacEncClose(faacEncHandle hpEncoder)
     return 0;
 }
 
+/* Snapshot the just-produced frame's layout into the observation ring. The
+ * retry loop rebuilds the transient obs* fields on every size probe; only the
+ * frame the loop settles on is committed, so ring entries match real output. */
+static void commit_observation(faacEncStruct *hEncoder)
+{
+    unsigned int slot = hEncoder->obsRingCount % OBS_RING;
+    int e;
+
+    hEncoder->obsRing[slot].valid = 1;
+    hEncoder->obsRing[slot].pceStart = hEncoder->obsPceStart;
+    hEncoder->obsRing[slot].pceLen = hEncoder->obsPceLen;
+    hEncoder->obsRing[slot].endBit = hEncoder->obsEndBit;
+    hEncoder->obsRing[slot].nElems = hEncoder->numElements;
+    for (e = 0; e < hEncoder->numElements; e++) {
+        hEncoder->obsRing[slot].elemStart[e] = hEncoder->obsElemStart[e];
+        hEncoder->obsRing[slot].elemLen[e] = hEncoder->obsElemLen[e];
+        hEncoder->obsRing[slot].elemType[e] = hEncoder->elements[e].type;
+        hEncoder->obsRing[slot].elemTag[e] = hEncoder->elements[e].tag;
+    }
+    hEncoder->obsRingCount++;
+}
+
 /* HE-AAC per-frame front end: take one assembled full-rate frame from the FIFO
  * front (realPerCh real samples/ch, the rest silence-padded), run SBR analysis
  * on it, then 2:1 downsample to produce the AAC-LC core signal. The FIFO is not
@@ -831,7 +913,13 @@ int faacEncEncode(faacEncHandle hpEncoder,
     /* Psychoacoustics */
     PsyCalculate(hEncoder->psyInfo, hEncoder->isLfeChannel, numChannels);
 
-    BlockSwitch(coderInfo, hEncoder->psyInfo, numChannels);
+    /* A custom plan takes block decisions per element instead of forcing one
+     * block type across every channel. */
+    if (hEncoder->customPce)
+        BlockSwitchElements(coderInfo, hEncoder->psyInfo, numChannels,
+                            hEncoder->elements, hEncoder->numElements);
+    else
+        BlockSwitch(coderInfo, hEncoder->psyInfo, numChannels);
 
 #ifdef FAAC_STATS
     g_faacStats.totalFrames++;
@@ -981,7 +1069,11 @@ int faacEncEncode(faacEncHandle hpEncoder,
     int resBound = 0;
 #endif
 
-    /* ISO/IEC 14496-3 standard frame limit: 6144 bits per channel */
+    /* ISO/IEC 14496-3 standard frame limit: 6144 bits per channel. The cap
+     * bounds the whole raw_data_block; in custom mode payloadBits below also
+     * contains the in-band PCE, so its occupancy is charged against the same
+     * budget and merely tightens what the coded elements may spend -- no
+     * channel is dropped and the PCE is never skipped. */
     peakBits = (unsigned long long)numChannels * AAC_MAX_BITS_PER_CH;
 
     /* If output format is ADTS (outputFormat == 1), respect the 13-bit ADTS
@@ -1098,6 +1190,8 @@ int faacEncEncode(faacEncHandle hpEncoder,
     if (hEncoder->config.bitRate)
         hEncoder->aacquantCfg.quality = RateControlUpdate(&hEncoder->rc, payloadBits,
                                                           hEncoder->aacquantCfg.quality, maxqual);
+
+    commit_observation(hEncoder);
 
     return frameBytes;
 }

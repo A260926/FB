@@ -29,6 +29,7 @@
 #include <faac.h>
 #include "frame.h"
 #include "bitstream.h"
+#include "pce.h"
 #include "sbr.h"
 #include "resample.h"
 #include "util.h"
@@ -39,6 +40,15 @@ _Static_assert(sizeof(enum faac_status)        == 4, "faac_status must be 32-bit
 _Static_assert(sizeof(enum faac_object_type)   == 4, "faac_object_type must be 32-bit");
 _Static_assert(sizeof(enum faac_mpeg_version)  == 4, "faac_mpeg_version must be 32-bit");
 _Static_assert(sizeof(enum faac_rate_control)  == 4, "faac_rate_control must be 32-bit");
+_Static_assert(sizeof(enum faac_pce_region)    == 4, "faac_pce_region must be 32-bit");
+/* Pin the appended public structs: faac_pce_element is a 4-byte region, a
+ * 1-byte bool, three pad bytes and two 32-bit slots, and the two PCE fields
+ * land consecutively at the tail of faac_params. */
+_Static_assert(sizeof(faac_pce_element) == 16, "faac_pce_element ABI drift");
+_Static_assert(offsetof(faac_pce_element, channels) == 8, "faac_pce_element layout drift");
+_Static_assert(offsetof(faac_params, pce_element_count)
+               == offsetof(faac_params, pce_elements) + sizeof(void *),
+               "pce fields must be appended consecutively");
 _Static_assert((int)FAAC_RC_AUTO == RATE_AUTO && (int)FAAC_RC_VBR == RATE_VBR
             && (int)FAAC_RC_ABR == RATE_ABR && (int)FAAC_RC_CBR == RATE_CBR, "rate control drift");
 _Static_assert(sizeof(enum faac_joint_mode)    == 4, "faac_joint_mode must be 32-bit");
@@ -70,6 +80,27 @@ _Static_assert((int)FAAC_INPUT_NULL  == INPUT_NULL  && (int)FAAC_INPUT_16BIT == 
     ((uint32_t)(offsetof(faac_library_info, sbr_decimation) + sizeof(uint32_t)))
 #define ENCODER_INFO_BASELINE_SIZE \
     ((uint32_t)(offsetof(faac_encoder_info, max_bit_rate) + sizeof(uint32_t)))
+
+/* Size of the first faac_params layout that carries the PCE fields. A struct
+ * smaller than this predates the feature and is treated as having no layout;
+ * the appended fields are never read past the caller's declared struct_size. */
+#define PARAMS_PCE_FIELDS_SIZE \
+    ((uint32_t)(offsetof(faac_params, pce_element_count) + sizeof(uint32_t)))
+
+/* Whether p's struct_size covers both appended PCE fields. */
+static int params_have_pce_fields(const faac_params *p)
+{
+    return p->struct_size >= PARAMS_PCE_FIELDS_SIZE;
+}
+
+/* Whether p requests the explicit PCE layout: a non-empty element list.
+ * A NULL pointer paired with a non-zero count is a caller error the caller
+ * (open) must reject; this helper only recognizes a well-formed request. */
+static int params_request_custom_pce(const faac_params *p)
+{
+    return params_have_pce_fields(p)
+           && p->pce_element_count != 0 && p->pce_elements != NULL;
+}
 
 /* faac_encoder* and faacEncHandle are the same underlying object. */
 static inline faacEncStruct *unwrap(faac_encoder *enc) { return (faacEncStruct *)enc; }
@@ -175,8 +206,26 @@ static faac_status validate_params(const faac_params *p)
     }
     if (p->sample_rate == 0)
         return FAAC_ERR_INVALID_ARGUMENT;
-    if (GetChannelConfig((int)p->num_channels) == 0)
+
+    /* A NULL list with a non-zero count is malformed regardless of mode. */
+    if (params_have_pce_fields(p) && p->pce_element_count != 0
+        && p->pce_elements == NULL)
         return FAAC_ERR_INVALID_ARGUMENT;
+
+    if (params_request_custom_pce(p)) {
+        /* The explicit layout is only defined for an MPEG-4 AAC-LC stream:
+         * AUTO might resolve to HE-AAC, and MPEG-2 has neither ASC nor this
+         * PCE mechanism. */
+        if (p->mpeg_version != FAAC_MPEG4 || p->object_type != FAAC_OBJ_LOW)
+            return FAAC_ERR_UNSUPPORTED;
+        if (p->num_channels < 1 || p->num_channels > MAX_CHANNELS)
+            return FAAC_ERR_INVALID_ARGUMENT;
+        /* The plan itself (slots, regions, pairing) is validated at open. */
+    } else if (GetChannelConfig((int)p->num_channels) == 0) {
+        /* Legacy gate unchanged: seven channels stay rejected without a
+         * complete custom plan. */
+        return FAAC_ERR_INVALID_ARGUMENT;
+    }
     if (p->channel_map) {
         uint32_t i;
         if (p->channel_map_count < p->num_channels)
@@ -239,10 +288,23 @@ FAACAPI faac_status faac_encoder_open(const faac_params *p, faac_encoder **out)
     if (st != FAAC_OK)
         return st;
 
-    h = (faacEncStruct *)faacEncOpen(p->sample_rate, p->num_channels,
+    int custom = params_request_custom_pce(p);
+
+    h = (faacEncStruct *)faacEncOpen(p->sample_rate, p->num_channels, custom,
                                      &inSamples, &maxOut);
     if (!h)
         return FAAC_ERR_NO_MEMORY;
+
+    if (custom) {
+        /* Validate and copy the plan into the handle before the core derives
+         * its element list. From here the caller may free or overwrite its own
+         * list; the encoder only touches this copy. */
+        if (!PcePlanBuild(&h->pcePlan, p->pce_elements,
+                          p->pce_element_count, p->num_channels)) {
+            faacEncClose((faacEncHandle)h);
+            return FAAC_ERR_INVALID_ARGUMENT;
+        }
+    }
 
     /* Translate params onto the handle's own configuration and run it through
      * the shared core validation/derivation in faacEncApplyConfig. */
