@@ -67,6 +67,55 @@ Support codec and container parsers:
 - MP4 Atoms parser ([doc](https://godoc.org/github.com/nareix/joy4/format/mp4/mp4io))
 - FLV AMF0 object parser ([doc](https://godoc.org/github.com/nareix/joy4/format/flv/flvio))
 
+# Offline MP4 rechunk (fast start)
+
+`mp4.Rechunk` rewrites a finished, non-fragmented, self-contained MP4 (plain
+avc1/mp4a tracks) into a layout that is cheaper to read over limited seeking:
+the `moov` box is moved to the front, the media is written as a single `mdat`,
+and samples are re-grouped into multi-sample chunks interleaved by each
+chunk's first sample decode timestamp. Compressed sample bytes and the
+`stsd`/`stsz`/`stts`/`ctts`/`stss` tables are preserved as-is: nothing is
+decoded and no packet is re-muxed or time re-quantized.
+
+```go
+package main
+
+import (
+	"log"
+	"os"
+	"time"
+
+	"github.com/nareix/joy4/format/mp4"
+)
+
+func main() {
+	in, err := os.Open("input.mp4")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer in.Close()
+
+	out, err := os.Create("output.mp4")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Group each track's samples into chunks whose accumulated decode
+	// duration is at most one second, then write moov-first output.
+	if err := mp4.Rechunk(in, out, time.Second); err != nil {
+		out.Close()
+		// A validation error leaves out completely unwritten.
+		log.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+A runnable command lives in
+[examples/mp4_rechunk](examples/mp4_rechunk/main.go).
+
 # Requirements
 
 Go version >= 1.6
