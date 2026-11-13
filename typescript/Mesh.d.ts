@@ -1,6 +1,7 @@
 import { Renderable } from './Renderable';
 import { Skeleton } from './Skeleton';
 import { Matrix4 } from './math/Matrix4';
+import { BoundingBox } from './math/BoundingBox';
 import { IRenderableOption } from './Renderable';
 
 export interface IMeshOption extends IRenderableOption {
@@ -17,6 +18,21 @@ export class Mesh extends Renderable {
     skeleton: Skeleton;
 
     offsetMatrix: Matrix4;
+
+    isSkinnedMesh(): boolean;
+
+    /**
+     * World positions of every vertex after the current skinning,
+     * three components per vertex in vertex order. Recomputed on each call,
+     * the shared geometry is not modified.
+     */
+    getSkinnedWorldPositions(): Float32Array;
+
+    /**
+     * World space bounding box enclosing the current skinned vertices.
+     * Recomputed on each call.
+     */
+    getSkinnedWorldBoundingBox(): BoundingBox;
 
     clone(): Mesh;
 

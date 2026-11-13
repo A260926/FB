@@ -270,7 +270,9 @@ var Skeleton = Base.extend(function () {
 
     getSubSkinMatrices: function (meshId, joints) {
         var subArray = this._subSkinMatricesArray[meshId];
-        if (!subArray) {
+        // Reallocate when the palette grows, shrinks or is seen the first time.
+        // Content is always rewritten below, so a reordered palette is reflected too.
+        if (!subArray || subArray.length !== joints.length * 16) {
             subArray
                 = this._subSkinMatricesArray[meshId]
                 = new Float32Array(joints.length * 16);

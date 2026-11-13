@@ -6,6 +6,7 @@ import Matrix4 from '../math/Matrix4';
 import Renderable from '../Renderable';
 import glenum from '../core/glenum';
 import vec3 from '../glmatrix/vec3';
+import {computeSkinnedWorld} from '../skinning';
 
 /**
  * @constructor clay.picking.RayPicking
@@ -93,6 +94,7 @@ var RayPicking = Base.extend(/** @lends clay.picking.RayPicking# */{
         var v3 = new Vector3();
         var ray = new Ray();
         var worldInverse = new Matrix4();
+        var offsetInverse = new Matrix4();
 
         return function (renderable, out) {
 
@@ -107,13 +109,34 @@ var RayPicking = Base.extend(/** @lends clay.picking.RayPicking# */{
 
             var geometry = renderable.geometry;
 
-            var bbox = isSkinnedMesh ? renderable.skeleton.boundingBox : geometry.boundingBox;
+            var hasCustomPick = !!geometry.pick;
+            var hasCustomRayPick = !!geometry.pickByRay;
+
+            // For a skinned mesh on the default triangle path the wide phase and
+            // the triangle tests share the same per-instance deformed bounds and
+            // world points. The shared geometry is never written to. Meshes with
+            // user-defined picking keep the original skeleton-box wide phase and
+            // skip the CPU skinning altogether.
+            var skinnedData = null;
+            var bbox;
+            if (isSkinnedMesh) {
+                if (hasCustomPick || hasCustomRayPick) {
+                    bbox = renderable.skeleton.boundingBox;
+                }
+                else {
+                    skinnedData = computeSkinnedWorld(renderable);
+                    bbox = skinnedData.boundingBox;
+                }
+            }
+            else {
+                bbox = geometry.boundingBox;
+            }
 
             if (bbox && !ray.intersectBoundingBox(bbox)) {
                 return;
             }
             // Use user defined picking algorithm
-            if (geometry.pick) {
+            if (hasCustomPick) {
                 geometry.pick(
                     this._ndc.x, this._ndc.y,
                     this.renderer,
@@ -123,7 +146,7 @@ var RayPicking = Base.extend(/** @lends clay.picking.RayPicking# */{
                 return;
             }
             // Use user defined ray picking algorithm
-            else if (geometry.pickByRay) {
+            else if (hasCustomRayPick) {
                 geometry.pickByRay(ray, renderable, out);
                 return;
             }
@@ -134,59 +157,32 @@ var RayPicking = Base.extend(/** @lends clay.picking.RayPicking# */{
             var point;
             var indices = geometry.indices;
             var positionAttr = geometry.attributes.position;
-            var weightAttr = geometry.attributes.weight;
-            var jointAttr = geometry.attributes.joint;
-            var skinMatricesArray;
-            var skinMatrices = [];
             // Check if valid.
             if (!positionAttr || !positionAttr.value || !indices) {
                 return;
             }
-            if (isSkinnedMesh) {
-                skinMatricesArray = renderable.skeleton.getSubSkinMatrices(renderable.__uid__, renderable.joints);
-                for (var i = 0; i < renderable.joints.length; i++) {
-                    skinMatrices[i] = skinMatrices[i] || [];
-                    for (var k = 0; k < 16; k++) {
-                        skinMatrices[i][k] = skinMatricesArray[i * 16 + k];
-                    }
-                }
-                var pos = [];
-                var weight = [];
-                var joint = [];
-                var skinnedPos = [];
-                var tmp = [];
-                var skinnedPositionAttr = geometry.attributes.skinnedPosition;
-                if (!skinnedPositionAttr || !skinnedPositionAttr.value) {
-                    geometry.createAttribute('skinnedPosition', 'f', 3);
-                    skinnedPositionAttr = geometry.attributes.skinnedPosition;
-                    skinnedPositionAttr.init(geometry.vertexCount);
-                }
-                for (var i = 0; i < geometry.vertexCount; i++) {
-                    positionAttr.get(i, pos);
-                    weightAttr.get(i, weight);
-                    jointAttr.get(i, joint);
-                    weight[3] = 1 - weight[0] - weight[1] - weight[2];
-                    vec3.set(skinnedPos, 0, 0, 0);
-                    for (var k = 0; k < 4; k++) {
-                        if (joint[k] >= 0 && weight[k] > 1e-4) {
-                            vec3.transformMat4(tmp, pos, skinMatrices[joint[k]]);
-                            vec3.scaleAndAdd(skinnedPos, skinnedPos, tmp, weight[k]);
-                        }
-                    }
-                    skinnedPositionAttr.set(i, skinnedPos);
-                }
-            }
+
+            var skinnedPositions = isSkinnedMesh ? skinnedData.positions : null;
 
             for (var i = 0; i < indices.length; i += 3) {
                 var i1 = indices[i];
                 var i2 = indices[i + 1];
                 var i3 = indices[i + 2];
-                var finalPosAttr = isSkinnedMesh
-                    ? geometry.attributes.skinnedPosition
-                    : positionAttr;
-                finalPosAttr.get(i1, v1.array);
-                finalPosAttr.get(i2, v2.array);
-                finalPosAttr.get(i3, v3.array);
+
+                if (isSkinnedMesh) {
+                    var b1 = i1 * 3;
+                    var b2 = i2 * 3;
+                    var b3 = i3 * 3;
+                    vec3.set(v1.array, skinnedPositions[b1], skinnedPositions[b1 + 1], skinnedPositions[b1 + 2]);
+                    vec3.set(v2.array, skinnedPositions[b2], skinnedPositions[b2 + 1], skinnedPositions[b2 + 2]);
+                    vec3.set(v3.array, skinnedPositions[b3], skinnedPositions[b3 + 1], skinnedPositions[b3 + 2]);
+                    v1._dirty = v2._dirty = v3._dirty = true;
+                }
+                else {
+                    positionAttr.get(i1, v1.array);
+                    positionAttr.get(i2, v2.array);
+                    positionAttr.get(i3, v3.array);
+                }
 
                 if (cullBack) {
                     point = ray.intersectTriangle(v1, v2, v3, renderable.culling);
@@ -200,8 +196,14 @@ var RayPicking = Base.extend(/** @lends clay.picking.RayPicking# */{
                         Vector3.transformMat4(pointW, point, renderable.worldTransform);
                     }
                     else {
-                        // TODO point maybe not right.
+                        // The triangle is already in skinned world space.
                         Vector3.copy(pointW, point);
+                        // The reported point is the deformed intersection before
+                        // the instance offset, pointWorld keeps the offset applied.
+                        if (renderable.offsetMatrix) {
+                            Matrix4.invert(offsetInverse, renderable.offsetMatrix);
+                            Vector3.transformMat4(point, point, offsetInverse);
+                        }
                     }
                     out.push(new RayPicking.Intersection(
                         point, pointW, renderable, [i1, i2, i3], i / 3,

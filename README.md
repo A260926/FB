@@ -128,6 +128,50 @@ const material = new Material({
 renderer.renderPass([ { geometry, material } ]);
 ```
 
+## CPU skinned world positions
+
+For a skinned `Mesh` (one with a `skeleton` and a non-empty `joints` palette)
+you can read back the current deformed vertices on the CPU, in world space.
+This is the same deformation the draw path uses — the local joint palette
+(bone world matrix × inverse bind matrix), the `weight`/`joint` attributes and
+the per-instance `offsetMatrix` — so CPU frustum culling and ray picking agree
+with what is rendered.
+
++ `mesh.getSkinnedWorldPositions()` returns a fresh `Float32Array` of world
+  positions, three components per vertex in vertex order.
++ `mesh.getSkinnedWorldBoundingBox()` returns a new `BoundingBox` enclosing
+  those points.
+
+Both are recomputed on every call from the current `geometry`, `skeleton`,
+`joints` and `offsetMatrix`; they never advance the animation. After you update
+the node matrices and call `skeleton.update()`, changing the palette, the
+offset or swapping the geometry is reflected on the next call immediately. The
+shared geometry (its `position`, `boundingBox` and any `skinnedPosition`
+attribute) is never written, so several meshes sharing one geometry keep
+independent results.
+
+The weighting follows the builtin shader: the first weight/joint term is always
+applied, the other three only when their weight is strictly greater than
+`1e-4`, and the fourth weight is `1 - w0 - w1 - w2`. The homogeneous positions
+are weighted before the `offsetMatrix` is applied and before the perspective
+divide; the mesh's own `worldTransform` is not applied to skinned vertices.
+
+```js
+// After scene.update() (node matrices) and skeleton.update().
+const positions = mesh.getSkinnedWorldPositions(); // Float32Array, xyz per vertex
+const box = mesh.getSkinnedWorldBoundingBox();     // clay.BoundingBox in world space
+
+// Scene.updateRenderList and RayPicking now use these per-instance bounds and
+// points automatically, so each skinned instance is culled and picked where it
+// is actually drawn.
+const hit = new clay.picking.RayPicking({scene, camera, renderer}).pick(x, y);
+// hit.target, hit.triangleIndex, hit.pointWorld (offset applied) and
+// hit.point (deformed point before the offset), hit.distance from the ray origin.
+```
+
+A complete runnable Node example (no browser or GPU) lives in
+[`example/skinned-world-cpu.mjs`](./example/skinned-world-cpu.mjs).
+
 
 <!--
 ## Current Features

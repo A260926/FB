@@ -335,7 +335,14 @@ var Scene = Node.extend(function () {
             // PENDING
             var geoBBox = object.boundingBox;
             if (!geoBBox) {
-                if (object.skeleton && object.skeleton.boundingBox) {
+                // A regular skinned mesh is culled with its own current deformed
+                // bounds, not with the shared skeleton box or the undeformed
+                // geometry box. Instanced meshes keep their own bounding box path.
+                if (object.isSkinnedMesh && object.isSkinnedMesh()
+                    && !(object.isInstancedMesh && object.isInstancedMesh())) {
+                    geoBBox = object.getSkinnedWorldBoundingBox();
+                }
+                else if (object.skeleton && object.skeleton.boundingBox) {
                     geoBBox = object.skeleton.boundingBox;
                 }
                 else {

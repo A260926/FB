@@ -1,5 +1,6 @@
 import Renderable from './Renderable';
 import glenum from './core/glenum';
+import {computeSkinnedWorldPositions, computeSkinnedWorldBoundingBox} from './skinning';
 
 /**
  * @constructor clay.Mesh
@@ -33,6 +34,29 @@ var Mesh = Renderable.extend(/** @lends clay.Mesh# */ {
 
     isSkinnedMesh: function () {
         return !!(this.skeleton && this.joints && this.joints.length > 0);
+    },
+
+    /**
+     * Get the world positions of every vertex after the current skinning.
+     * Positions are taken from the current geometry, skeleton palette, local
+     * joints and offsetMatrix, recomputed on every call. The shared geometry is
+     * never modified, so meshes sharing one geometry keep independent results.
+     *
+     * @return {Float32Array} positions in vertex order, three components each
+     */
+    getSkinnedWorldPositions: function () {
+        return computeSkinnedWorldPositions(this);
+    },
+
+    /**
+     * Get the world space bounding box enclosing the current skinned vertices.
+     * It is recomputed on every call from the current geometry, skeleton,
+     * joints and offsetMatrix.
+     *
+     * @return {clay.BoundingBox}
+     */
+    getSkinnedWorldBoundingBox: function () {
+        return computeSkinnedWorldBoundingBox(this);
     },
 
     clone: function () {
