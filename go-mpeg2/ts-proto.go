@@ -515,6 +515,9 @@ type StreamPair struct {
     StreamType     uint8  //8 uimsbf
     Elementary_PID uint16 //13 uimsbf
     ES_Info_Length uint16 //12 uimsbf
+    //raw descriptor bytes (tag/length/body ...), written right after ES_Info_Length.
+    //nil/empty keeps the legacy zero-length ES_info encoding.
+    Descriptors []byte
 }
 
 type Pmt struct {
@@ -595,8 +598,8 @@ func (pmt *Pmt) Encode(bsw *codec.BitStreamWriter) {
         bsw.PutUint8(0x00, 3)
         bsw.PutUint16(stream.Elementary_PID, 13)
         bsw.PutUint8(0x00, 4)
-        //TODO ES_info
-        bsw.PutUint8(0 /*ES_info_length*/, 12)
+        bsw.PutUint16(uint16(len(stream.Descriptors)) /*ES_info_length*/, 12)
+        bsw.PutBytes(stream.Descriptors)
     }
     length := bsw.DistanceFromMarkDot()
     pmt.Section_length = uint16(length)/8 + 4

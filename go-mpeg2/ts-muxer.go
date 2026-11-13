@@ -1,15 +1,17 @@
 package mpeg2
 
 import (
+	"bytes"
 	"errors"
 
 	"github.com/yapingcat/gomedia/go-codec"
 )
 
 type pes_stream struct {
-    pid        uint16
-    cc         uint8
-    streamtype TS_STREAM_TYPE
+    pid         uint16
+    cc          uint8
+    streamtype  TS_STREAM_TYPE
+    descriptors []byte //raw ES_info descriptors, only used in explicit program mode
 }
 
 func NewPESStream(pid uint16, cid TS_STREAM_TYPE) *pes_stream {
@@ -60,6 +62,12 @@ type TSMuxer struct {
     pmt_pid    uint16
     pat_period uint64
     OnPacket   func(pkg []byte)
+
+    //explicit program mode, entered by the first successful ConfigureProgram.
+    //cannot be mixed with AddStream.
+    explicit   bool
+    pmtPending bool             //a new program table waits to be published before the next PES
+    pidCC      map[uint16]uint8 //continuity counters of media pids, kept across program updates
 }
 
 func NewTSMuxer() *TSMuxer {
@@ -69,10 +77,16 @@ func NewTSMuxer() *TSMuxer {
         pmt_pid:    0x200,
         pat_period: 0,
         OnPacket:   nil,
+        explicit:   false,
+        pmtPending: false,
+        pidCC:      make(map[uint16]uint8),
     }
 }
 
 func (mux *TSMuxer) AddStream(cid TS_STREAM_TYPE) uint16 {
+    if mux.explicit {
+        panic("mpeg2: cannot call AddStream after ConfigureProgram")
+    }
     if mux.pat == nil {
         mux.pat = NewTablePat()
     }
@@ -90,8 +104,140 @@ func (mux *TSMuxer) AddStream(cid TS_STREAM_TYPE) uint16 {
     return sid
 }
 
+// ProgramStream describes one elementary stream of the program in explicit mode.
+type ProgramStream struct {
+    PID         uint16         //elementary PID, 0x0020..0x1FFE, must not be the PMT PID(0x0200)
+    Type        TS_STREAM_TYPE //AAC/MPEG1/MPEG2 audio, H264 or H265
+    Descriptors []byte         //raw ES_info descriptors, a sequence of tag/length/body items, may be empty
+}
+
+// pmtSectionLength returns the section_length value of the PMT section
+// describing streams, i.e. the byte count right after the section_length
+// field up to and including the CRC.
+func pmtSectionLength(streams []ProgramStream) int {
+    length := 9 + 4 //fixed fields after section_length + CRC_32
+    for _, s := range streams {
+        length += 5 + len(s.Descriptors)
+    }
+    return length
+}
+
+func checkDescriptors(desc []byte) error {
+    for len(desc) > 0 {
+        if len(desc) < 2 {
+            return errors.New("mpeg2: truncated descriptor")
+        }
+        body := int(desc[1])
+        if 2+body > len(desc) {
+            return errors.New("mpeg2: descriptor length exceeds remaining data")
+        }
+        if 2+body > 255 {
+            return errors.New("mpeg2: single descriptor exceeds 255 bytes")
+        }
+        desc = desc[2+body:]
+    }
+    return nil
+}
+
+// ConfigureProgram replaces the whole program configuration in one call.
+// The program number stays 1 and the PMT PID stays 0x0200.
+//
+// The first successful call switches the muxer into explicit program mode,
+// which cannot be mixed with AddStream. On any error the current
+// configuration is left untouched and no byte is emitted.
+//
+// ConfigureProgram itself emits nothing. The first published PMT has
+// version 0; afterwards every change of stream order, PID, type,
+// descriptors or PCR PID bumps the version by one (mod 32), while an
+// identical configuration keeps both the version and the publish schedule.
+// The next valid Write after a change outputs PAT and the complete new PMT
+// before its PES, even if the periodic table interval has not elapsed.
+func (mux *TSMuxer) ConfigureProgram(streams []ProgramStream, pcrPID uint16) error {
+    if !mux.explicit && mux.pat != nil && len(mux.pat.pmts) > 0 {
+        return errors.New("mpeg2: cannot mix ConfigureProgram with AddStream")
+    }
+    if len(streams) == 0 {
+        return errors.New("mpeg2: empty program stream list")
+    }
+    seen := make(map[uint16]bool, len(streams))
+    pcrFound := false
+    for _, s := range streams {
+        switch s.Type {
+        case TS_STREAM_AAC, TS_STREAM_AUDIO_MPEG1, TS_STREAM_AUDIO_MPEG2, TS_STREAM_H264, TS_STREAM_H265:
+        default:
+            return errors.New("mpeg2: unsupported stream type")
+        }
+        if s.PID < 0x20 || s.PID > 0x1FFE || s.PID == mux.pmt_pid {
+            return errors.New("mpeg2: stream pid out of range")
+        }
+        if seen[s.PID] {
+            return errors.New("mpeg2: duplicated stream pid")
+        }
+        seen[s.PID] = true
+        if s.PID == pcrPID {
+            pcrFound = true
+        }
+        if err := checkDescriptors(s.Descriptors); err != nil {
+            return err
+        }
+    }
+    if !pcrFound {
+        return errors.New("mpeg2: pcr pid not in stream list")
+    }
+    if pmtSectionLength(streams) > 1021 {
+        return errors.New("mpeg2: pmt section_length exceeds 1021")
+    }
+
+    if mux.pat == nil {
+        mux.pat = NewTablePat()
+    }
+    if len(mux.pat.pmts) == 0 {
+        tmppmt := NewTablePmt()
+        tmppmt.pid = mux.pmt_pid
+        tmppmt.pm = 1
+        mux.pat.pmts = append(mux.pat.pmts, tmppmt)
+    }
+    pmt := mux.pat.pmts[0]
+
+    if mux.explicit && programEquals(pmt, streams, pcrPID) {
+        return nil //identical configuration changes nothing
+    }
+
+    newstreams := make([]*pes_stream, 0, len(streams))
+    for _, s := range streams {
+        newstreams = append(newstreams, &pes_stream{
+            pid:         s.PID,
+            cc:          mux.pidCC[s.PID], //resume counting where this pid stopped
+            streamtype:  s.Type,
+            descriptors: append([]byte(nil), s.Descriptors...),
+        })
+    }
+    pmt.streams = newstreams
+    pmt.pcr_pid = pcrPID
+    if mux.explicit {
+        pmt.version_number = (pmt.version_number + 1) % 32
+    } else {
+        mux.explicit = true //first published PMT keeps version 0
+    }
+    mux.pmtPending = true
+    return nil
+}
+
+func programEquals(pmt *table_pmt, streams []ProgramStream, pcrPID uint16) bool {
+    if pmt.pcr_pid != pcrPID || len(pmt.streams) != len(streams) {
+        return false
+    }
+    for i, s := range streams {
+        cur := pmt.streams[i]
+        if cur.pid != s.PID || cur.streamtype != s.Type || !bytes.Equal(cur.descriptors, s.Descriptors) {
+            return false
+        }
+    }
+    return true
+}
+
 /// Muxer audio/video stream data
-/// pid: stream id by AddStream
+/// pid: stream id by AddStream, or a PID of the current ConfigureProgram list
 /// pts: audio/video stream timestamp in ms
 /// dts: audio/video stream timestamp in ms
 func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error {
@@ -109,7 +255,9 @@ func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error
     if whichpmt == nil || whichstream == nil {
         return errors.New("not Found pid stream")
     }
-    if whichpmt.pcr_pid == 0 || (findPESIDByStreamType(whichstream.streamtype) == PES_STREAM_VIDEO && whichpmt.pcr_pid != pid) {
+    if !mux.explicit &&
+        (whichpmt.pcr_pid == 0 || (findPESIDByStreamType(whichstream.streamtype) == PES_STREAM_VIDEO && whichpmt.pcr_pid != pid)) {
+        //in explicit mode the PMT PCR PID comes from ConfigureProgram only
         whichpmt.pcr_pid = pid
     }
 
@@ -139,7 +287,8 @@ func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error
         })
     }
 
-    if mux.pat_period == 0 || mux.pat_period+400 < dts {
+    if mux.pmtPending || mux.pat_period == 0 || mux.pat_period+400 < dts {
+        mux.pmtPending = false
         mux.pat_period = dts
         if mux.pat_period == 0 {
             mux.pat_period = 1 //avoid write pat twice
@@ -164,7 +313,8 @@ func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error
                 var sp StreamPair
                 sp.StreamType = uint8(stream.streamtype)
                 sp.Elementary_PID = stream.pid
-                sp.ES_Info_Length = 0
+                sp.ES_Info_Length = uint16(len(stream.descriptors))
+                sp.Descriptors = stream.descriptors
                 tmppmt.Streams = append(tmppmt.Streams, sp)
             }
             mux.writePmt(tmppmt, pmt)
@@ -180,6 +330,7 @@ func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error
     }
 
     mux.writePES(whichstream, whichpmt, data, pts*90, dts*90, flag, withaud)
+    mux.pidCC[whichstream.pid] = whichstream.cc //keep the counter for later program updates
     return nil
 }
 
@@ -201,19 +352,46 @@ func (mux *TSMuxer) writePat(pat *Pat) {
 }
 
 func (mux *TSMuxer) writePmt(pmt *Pmt, t_pmt *table_pmt) {
-    var tshdr TSPacket
-    tshdr.Payload_unit_start_indicator = 1
-    tshdr.PID = t_pmt.pid
-    tshdr.Adaptation_field_control = 0x01
-    tshdr.Continuity_counter = t_pmt.cc
-    t_pmt.cc = (t_pmt.cc + 1) % 16
-    bsw := codec.NewBitStreamWriter(TS_PAKCET_SIZE)
-    tshdr.EncodeHeader(bsw)
-    bsw.PutByte(0x00) //pointer
-    pmt.Encode(bsw)
-    bsw.FillRemainData(0xff)
-    if mux.OnPacket != nil {
-        mux.OnPacket(bsw.Bits())
+    //a PMT is one section; it may span several TS packets when it
+    //no longer fits into a single 188-byte packet.
+    secw := codec.NewBitStreamWriter(3 + 1021)
+    pmt.Encode(secw)
+    section := secw.Bits()
+
+    offset := 0
+    first := true
+    for {
+        var tshdr TSPacket
+        if first {
+            tshdr.Payload_unit_start_indicator = 1
+        }
+        tshdr.PID = t_pmt.pid
+        tshdr.Adaptation_field_control = 0x01
+        tshdr.Continuity_counter = t_pmt.cc
+        t_pmt.cc = (t_pmt.cc + 1) % 16
+        bsw := codec.NewBitStreamWriter(TS_PAKCET_SIZE)
+        tshdr.EncodeHeader(bsw)
+        capacity := TS_PAKCET_SIZE - 4
+        if first {
+            bsw.PutByte(0x00) //pointer
+            capacity--
+        }
+        n := len(section) - offset
+        if n > capacity {
+            n = capacity
+        }
+        bsw.PutBytes(section[offset : offset+n])
+        offset += n
+        if offset >= len(section) {
+            bsw.FillRemainData(0xff) //stuffing only behind the section end
+        }
+        if mux.OnPacket != nil {
+            mux.OnPacket(bsw.Bits())
+        }
+        if offset >= len(section) {
+            break
+        }
+        first = false
     }
 }
 
