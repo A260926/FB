@@ -1,0 +1,344 @@
+// Copyright 2022 Google LLC. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package testonly
+
+import (
+	"fmt"
+	"math/bits"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/transparency-dev/merkle"
+	"github.com/transparency-dev/merkle/rfc6962"
+)
+
+// The reference Merkle tree hashing and proof algorithms in this file directly
+// implement the definitions from RFC 6962 [1]. We use this implementation only
+// for testing correctness of other more flexible and performant algorithms,
+// such as the in-memory Tree type and compact ranges.
+//
+// [1] https://datatracker.ietf.org/doc/html/rfc6962#section-2
+
+// refRootHash returns the root hash of a Merkle tree with the given entries.
+// This is a reference implementation for cross-checking.
+func refRootHash(entries [][]byte, hasher merkle.LogHasher) []byte {
+	if len(entries) == 0 {
+		return hasher.EmptyRoot()
+	}
+	if len(entries) == 1 {
+		return hasher.HashLeaf(entries[0])
+	}
+	split := downToPowerOfTwo(uint64(len(entries)))
+	return hasher.HashChildren(
+		refRootHash(entries[:split], hasher),
+		refRootHash(entries[split:], hasher))
+}
+
+// refInclusionProof returns the inclusion proof for the given leaf index in a
+// Merkle tree with the given entries. This is a reference implementation for
+// cross-checking.
+func refInclusionProof(entries [][]byte, index uint64, hasher merkle.LogHasher) [][]byte {
+	size := uint64(len(entries))
+	if size == 1 || index >= size {
+		return nil
+	}
+	split := downToPowerOfTwo(size)
+	if index < split {
+		return append(
+			refInclusionProof(entries[:split], index, hasher),
+			refRootHash(entries[split:], hasher))
+	}
+	return append(
+		refInclusionProof(entries[split:], index-split, hasher),
+		refRootHash(entries[:split], hasher))
+}
+
+// refConsistencyProof returns the consistency proof for the two tree sizes, in
+// a Merkle tree with the given entries. This is a reference implementation for
+// cross-checking.
+func refConsistencyProof(entries [][]byte, size2, size1 uint64, hasher merkle.LogHasher, haveRoot1 bool) [][]byte {
+	if size1 == 0 || size1 > size2 {
+		return nil
+	}
+	// Consistency proof for two equal sizes is empty.
+	if size1 == size2 {
+		// Record the hash of this subtree if it's not the root for which the proof
+		// was originally requested (which happens when size1 is a power of 2).
+		if !haveRoot1 {
+			return [][]byte{refRootHash(entries[:size1], hasher)}
+		}
+		return nil
+	}
+
+	// At this point: 0 < size1 < size2.
+	split := downToPowerOfTwo(size2)
+	if size1 <= split {
+		// Root of size1 is in the left subtree of size2. Prove that the left
+		// subtrees are consistent, and record the hash of the right subtree (only
+		// present in size2).
+		return append(
+			refConsistencyProof(entries[:split], split, size1, hasher, haveRoot1),
+			refRootHash(entries[split:], hasher))
+	}
+
+	// Root of size1 is at the same level as size2 root. Prove that the right
+	// subtrees are consistent. The right subtree doesn't contain the root of
+	// size1, so set haveRoot1 = false. Record the hash of the left subtree
+	// (equal in both trees).
+	return append(
+		refConsistencyProof(entries[split:], size2-split, size1-split, hasher, false),
+		refRootHash(entries[:split], hasher))
+}
+
+// refSubtreeConsistencyProof returns the subtree consistency proof for the
+// subtree [start, end) in a Merkle tree with the given entries and size.
+// This is a reference implementation based on the recursive algorithm from
+// the RFC to be used for cross-checking only.
+func refSubtreeConsistencyProof(start, end uint64, entries [][]byte, known bool, hasher merkle.LogHasher) [][]byte {
+	size := uint64(len(entries))
+	// Invalid inputs
+	if start > end {
+		return nil
+	}
+	if end > size {
+		return nil
+	}
+	// start == end is a valid input, and the proof is always empty
+	if start == end {
+		return nil
+	}
+	// Consistency proof between a tree and itself is empty.
+	if start == 0 && end == size {
+		// Record the hash of this subtree if it's not the root for which the proof
+		// was originally requested (which happens when [start, end) is a full subtree).
+		if !known {
+			return [][]byte{refRootHash(entries[:size], hasher)}
+		}
+		return nil
+	}
+
+	// At this point: end < size.
+	split := downToPowerOfTwo(size)
+	switch {
+	// The subtree is on the left of split. Prove that the subtree is consistent
+	// with the subtree on the left of split, and record the root of the right
+	// subtree.
+	case end <= split:
+		return append(
+			refSubtreeConsistencyProof(start, end, entries[:split], known, hasher),
+			refRootHash(entries[split:], hasher))
+	// The subtree is on the right of split. Prove that the subtree is consistent
+	// with the subtree on the right of split, and record the root of the left
+	// subtree.
+	case split <= start:
+		return append(
+			refSubtreeConsistencyProof(start-split, end-split, entries[split:], known, hasher),
+			refRootHash(entries[:split], hasher))
+	// Otherwise, split is between start and end.
+	// This means that start is 0.
+	// Prove that the subtree is consistent with the subtree on right of split,
+	// and record the root of the left subtree.
+	//
+	// Proof that start is 0:
+	//   With C = bitCeil(len([start, end))):
+	//     - By definition, end - start <= C.
+	//     - Since the subtree is valid, start is a multiple of C (start = k * C).
+	//     - In this case, start < split < end <= start + C and
+	//       so k * C < split < (k+1) * C
+	//     - Since split and C are both powers of 2:
+	//       - If split < C, then if k >= 1, split < C <= start, contradicting
+	//         start < split.
+	//       - If split >= C, split must be a multiple of C, but no multiple of
+	//         C lies strictly between k * C and (k + 1) * C.
+	//     - Thus, k must be 0, meaning start is 0.
+	default:
+		return append(
+			refSubtreeConsistencyProof(0, end-split, entries[split:], false, hasher),
+			refRootHash(entries[:split], hasher))
+	}
+}
+
+// downToPowerOfTwo returns the largest power of two smaller than x.
+func downToPowerOfTwo(x uint64) uint64 {
+	if x < 2 {
+		panic("downToPowerOfTwo requires value >= 2")
+	}
+	return uint64(1) << (bits.Len64(x-1) - 1)
+}
+
+func TestDownToPowerOfTwo(t *testing.T) {
+	for _, inOut := range [][2]uint64{
+		{2, 1}, {7, 4}, {8, 4}, {63, 32}, {28937, 16384},
+	} {
+		if got, want := downToPowerOfTwo(inOut[0]), inOut[1]; got != want {
+			t.Errorf("downToPowerOfTwo(%d): got %d, want %d", inOut[0], got, want)
+		}
+	}
+}
+
+func TestRefInclusionProof(t *testing.T) {
+	for _, tc := range []struct {
+		index uint64
+		size  uint64
+		want  [][]byte
+	}{
+		{index: 0, size: 1, want: nil},
+		{index: 0, size: 2, want: [][]byte{
+			hd("96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"),
+		}},
+		{index: 1, size: 2, want: [][]byte{
+			hd("6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"),
+		}},
+		{index: 2, size: 3, want: [][]byte{
+			hd("fac54203e7cc696cf0dfcb42c92a1d9dbaf70ad9e621f4bd8d98662f00e3c125"),
+		}},
+		{index: 1, size: 5, want: [][]byte{
+			hd("6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"),
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b"),
+		}},
+		{index: 0, size: 8, want: [][]byte{
+			hd("96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"),
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4"),
+		}},
+		{index: 5, size: 8, want: [][]byte{
+			hd("bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b"),
+			hd("ca854ea128ed050b41b35ffc1b87b8eb2bde461e9e3b5596ece6b9d5975a0ae0"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+	} {
+		t.Run(fmt.Sprintf("%d:%d", tc.index, tc.size), func(t *testing.T) {
+			entries := LeafInputs()
+			got := refInclusionProof(entries[:tc.size], tc.index, rfc6962.DefaultHasher)
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("refInclusionProof: diff (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRefConsistencyProof(t *testing.T) {
+	for _, tc := range []struct {
+		size1 uint64
+		size2 uint64
+		want  [][]byte
+	}{
+		{size1: 1, size2: 1, want: nil},
+		{size1: 1, size2: 8, want: [][]byte{
+			hd("96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"),
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4"),
+		}},
+		{size1: 2, size2: 5, want: [][]byte{
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b"),
+		}},
+		{size1: 6, size2: 8, want: [][]byte{
+			hd("0ebc5d3437fbe2db158b9f126a1d118e308181031d0a949f8dededebc558ef6a"),
+			hd("ca854ea128ed050b41b35ffc1b87b8eb2bde461e9e3b5596ece6b9d5975a0ae0"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+	} {
+		t.Run(fmt.Sprintf("%d:%d", tc.size1, tc.size2), func(t *testing.T) {
+			entries := LeafInputs()
+			got := refConsistencyProof(entries[:tc.size2], tc.size2, tc.size1, rfc6962.DefaultHasher, true)
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("refConsistencyProof: diff (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRefSubtreeConsistencyProof(t *testing.T) {
+	entries := LeafInputs()
+	hasher := rfc6962.DefaultHasher
+	fullRoot8 := refRootHash(entries[:8], hasher)
+
+	for _, tc := range []struct {
+		start uint64
+		end   uint64
+		size  uint64
+		known bool
+		want  [][]byte
+	}{
+		// Empty subtrees (start == end) always return nil (empty proof).
+		{start: 0, end: 0, size: 8, known: true, want: nil},
+		{start: 4, end: 4, size: 8, known: true, want: nil},
+		{start: 8, end: 8, size: 8, known: true, want: nil},
+		// Invalid ranges return nil.
+		{start: 5, end: 3, size: 8, known: true, want: nil},
+		{start: 0, end: 10, size: 8, known: true, want: nil},
+		// Full tree [0, 8) in size 8.
+		{start: 0, end: 8, size: 8, known: true, want: nil},
+		{start: 0, end: 8, size: 8, known: false, want: [][]byte{fullRoot8}},
+		// Left half [0, 4) in size 8 requires the root of the right half [4, 8).
+		{start: 0, end: 4, size: 8, known: true, want: [][]byte{
+			hd("6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4"),
+		}},
+		// Prefix subtree consistency cases matching TestRefConsistencyProof (start=0):
+		{start: 0, end: 1, size: 1, known: true, want: nil},
+		{start: 0, end: 1, size: 8, known: true, want: [][]byte{
+			hd("96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"),
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4"),
+		}},
+		{start: 0, end: 2, size: 5, known: true, want: [][]byte{
+			hd("5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e"),
+			hd("bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b"),
+		}},
+		{start: 0, end: 6, size: 8, known: true, want: [][]byte{
+			hd("0ebc5d3437fbe2db158b9f126a1d118e308181031d0a949f8dededebc558ef6a"),
+			hd("ca854ea128ed050b41b35ffc1b87b8eb2bde461e9e3b5596ece6b9d5975a0ae0"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+		// Non-zero starting subtrees:
+		// Right half [4, 8) in size 8 requires the root of the left half [0, 4).
+		{start: 4, end: 8, size: 8, known: true, want: [][]byte{
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+		// Subtree of size 1 not starting at 0 ([4, 5) in size 8):
+		{start: 4, end: 5, size: 8, known: true, want: [][]byte{
+			hd("4271a26be0d8a84f0bd54c8c302e7cb3a3b5d1fa6780a40bcce2873477dab658"),
+			hd("ca854ea128ed050b41b35ffc1b87b8eb2bde461e9e3b5596ece6b9d5975a0ae0"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+		// Subtree ending at size not starting at 0 ([6, 8) in size 8):
+		{start: 6, end: 8, size: 8, known: true, want: [][]byte{
+			hd("0ebc5d3437fbe2db158b9f126a1d118e308181031d0a949f8dededebc558ef6a"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+		// Perfect subtree not starting at 0, not ending at size ([2, 4) in size 8):
+		{start: 2, end: 4, size: 8, known: true, want: [][]byte{
+			hd("fac54203e7cc696cf0dfcb42c92a1d9dbaf70ad9e621f4bd8d98662f00e3c125"),
+			hd("6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4"),
+		}},
+		// Imperfect subtree not starting at 0, not ending at size ([4, 7) in size 8):
+		{start: 4, end: 7, size: 8, known: true, want: [][]byte{
+			hd("b08693ec2e721597130641e8211e7eedccb4c26413963eee6c1e2ed16ffb1a5f"),
+			hd("46f6ffadd3d06a09ff3c5860d2755c8b9819db7df44251788c7d8e3180de8eb1"),
+			hd("0ebc5d3437fbe2db158b9f126a1d118e308181031d0a949f8dededebc558ef6a"),
+			hd("d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"),
+		}},
+	} {
+		t.Run(fmt.Sprintf("start:%d end:%d size:%d known:%t", tc.start, tc.end, tc.size, tc.known), func(t *testing.T) {
+			got := refSubtreeConsistencyProof(tc.start, tc.end, entries[:tc.size], tc.known, hasher)
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("refSubtreeConsistencyProof: diff (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
