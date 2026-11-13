@@ -26,8 +26,48 @@ It doesn't use your graphics card, only your CPU. So it's slow and unsuitable fo
 - wireframe rendering
 - built-in shapes (plane, sphere, cube, cylinder, cone)
 - anti-aliasing (via supersampling)
+- analytic, sample-free anti-aliasing for orthographic vertex-color previews
 - voxel rendering
 - parallel processing
+
+### Analytic anti-aliasing
+
+The normal rasterizer resolves each pixel at its center, so two thin,
+overlapping triangles that share a pixel can make the silhouette jump whole
+pixels. `Context` also offers an exact analytic path for opaque, double-sided,
+vertex-colored models under an affine (e.g. orthographic) transform:
+
+- `BeginAnalytic()` snapshots the current color and depth buffers as the base
+  image. Every base pixel is treated as one square of constant color and depth
+  and must be fully opaque with depth in `[0,1]` or `math.MaxFloat64`.
+- `DrawAnalyticTriangles(triangles, matrix)` stages batches. Only each
+  triangle's `Position` and `Color` and the finite affine matrix are used; the
+  shader, culling, blending and depth bias settings are ignored. Coordinates
+  are clipped to the `-1..1` NDC cube and projected through the existing
+  `Screen` mapping.
+- `ResolveAnalytic()` publishes the result and returns the caller-owned
+  float colors; `CancelAnalytic()` discards the staged geometry. Buffers are
+  only changed at resolve time.
+
+The path never raises the resolution and never uses sample points. Each pixel
+square is split into its exact visible regions: polygon boundaries and
+depth-equality lines form a planar arrangement, and the face with the smallest
+window-z (later submission wins ties; the base loses ties) is integrated over
+each region. Contact along edges or points contributes no area, and the
+regions plus the remaining base tile the pixel exactly.
+
+There are three distinct outputs:
+
+1. **Float colors** — the `[]Color` returned by `ResolveAnalytic`, holding the
+   area-integrated, affine vertex colors (alpha 1) before quantization. The
+   slice is independent of the context.
+2. **Display colors** — the same values written to `ColorBuffer` after
+   `Color.NRGBA` clamping and 8-bit truncation. No gamma transform is applied.
+3. **Depth** — `DepthBuffer` stores the winner at the pixel *center* only; it
+   is not an area average and pixels whose center no new face covers keep the
+   base depth.
+
+See `examples/analytic` for a side-by-side comparison with center sampling.
 
 ### Performance
 

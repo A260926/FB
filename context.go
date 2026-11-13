@@ -55,6 +55,7 @@ type Context struct {
 	DepthBias    float64
 	screenMatrix Matrix
 	locks        []sync.Mutex
+	analytic     *analyticPass
 }
 
 func NewContext(width, height int) *Context {
