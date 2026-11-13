@@ -1,0 +1,257 @@
+/*
+---------------------------------------------------------------------------
+Open Asset Import Library (assimp)
+---------------------------------------------------------------------------
+
+Copyright (c) 2006-2026, assimp team
+
+All rights reserved.
+
+Redistribution and use of this software in source and binary forms,
+with or without modification, are permitted provided that the following
+conditions are met:
+
+* Redistributions of source code must retain the above
+copyright notice, this list of conditions and the
+following disclaimer.
+
+* Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the
+following disclaimer in the documentation and/or other
+materials provided with the distribution.
+
+* Neither the name of the assimp team, nor the names of its
+contributors may be used to endorse or promote products
+derived from this software without specific prior
+written permission of the assimp team.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+---------------------------------------------------------------------------
+*/
+#include "AbstractImportExportBase.h"
+#include "Common/assbin_chunks.h"
+#include "UnitTestPCH.h"
+#include <assimp/postprocess.h>
+#include <assimp/texture.h>
+#include <assimp/Exporter.hpp>
+#include <assimp/Importer.hpp>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+using namespace Assimp;
+
+#ifndef ASSIMP_BUILD_NO_EXPORT
+
+namespace {
+
+uint32_t ReadUint32LE(const std::vector<uint8_t> &blob, size_t offset) {
+    return static_cast<uint32_t>(blob[offset + 0]) |
+            (static_cast<uint32_t>(blob[offset + 1]) << 8u) |
+            (static_cast<uint32_t>(blob[offset + 2]) << 16u) |
+            (static_cast<uint32_t>(blob[offset + 3]) << 24u);
+}
+
+void WriteUint32LE(std::vector<uint8_t> &blob, size_t offset, uint32_t value) {
+    blob[offset + 0] = static_cast<uint8_t>(value & 0xffu);
+    blob[offset + 1] = static_cast<uint8_t>((value >> 8u) & 0xffu);
+    blob[offset + 2] = static_cast<uint8_t>((value >> 16u) & 0xffu);
+    blob[offset + 3] = static_cast<uint8_t>((value >> 24u) & 0xffu);
+}
+
+// Export the shared spider.obj fixture to an assbin blob and hand back a mutable
+// copy the corruption tests can poke at. Returns an empty vector on failure so
+// callers can assert on it.
+std::vector<uint8_t> ExportSpiderToAssbinBytes() {
+    Importer importer;
+    const aiScene *scene = importer.ReadFile(ASSIMP_TEST_MODELS_DIR "/OBJ/spider.obj", aiProcess_ValidateDataStructure);
+    if (scene == nullptr) {
+        return {};
+    }
+
+    Exporter exporter;
+    const aiExportDataBlob *blob = exporter.ExportToBlob(scene, "assbin");
+    if (blob == nullptr || blob->data == nullptr || blob->size == 0) {
+        return {};
+    }
+
+    const auto *blobBytes = static_cast<const uint8_t *>(blob->data);
+    return std::vector<uint8_t>(blobBytes, blobBytes + blob->size);
+}
+
+} // namespace
+
+class utAssbinImportExport : public AbstractImportExportBase {
+public:
+    bool importerTest() override {
+        Importer importer;
+        const aiScene *scene = importer.ReadFile(ASSIMP_TEST_MODELS_DIR "/OBJ/spider.obj", aiProcess_ValidateDataStructure);
+
+        Exporter exporter;
+        EXPECT_EQ(aiReturn_SUCCESS, exporter.Export(scene, "assbin", ASSIMP_TEST_MODELS_DIR "/OBJ/spider_out.assbin"));
+        const aiScene *newScene = importer.ReadFile(ASSIMP_TEST_MODELS_DIR "/OBJ/spider_out.assbin", aiProcess_ValidateDataStructure);
+
+        return newScene != nullptr;
+    }
+};
+
+TEST_F(utAssbinImportExport, import3ExportAssbinDFromFileTest) {
+    EXPECT_TRUE(importerTest());
+}
+
+TEST_F(utAssbinImportExport, rejectOverflowingEmbeddedTextureDimensions) {
+    std::vector<uint8_t> blob;
+
+    auto appendZeros = [&blob](size_t count) {
+        blob.insert(blob.end(), count, 0);
+    };
+
+    auto appendUint16LE = [&blob](uint16_t value) {
+        blob.push_back(static_cast<uint8_t>(value & 0xffu));
+        blob.push_back(static_cast<uint8_t>((value >> 8u) & 0xffu));
+    };
+
+    auto appendUint32LE = [&blob](uint32_t value) {
+        blob.push_back(static_cast<uint8_t>(value & 0xffu));
+        blob.push_back(static_cast<uint8_t>((value >> 8u) & 0xffu));
+        blob.push_back(static_cast<uint8_t>((value >> 16u) & 0xffu));
+        blob.push_back(static_cast<uint8_t>((value >> 24u) & 0xffu));
+    };
+
+    const char magic[] = "ASSIMP.binary-dump.";
+    blob.insert(blob.end(), magic, magic + sizeof(magic) - 1u);
+    appendZeros(44u - (sizeof(magic) - 1u));
+    appendUint32LE(ASSBIN_VERSION_MAJOR);
+    appendUint32LE(ASSBIN_VERSION_MINOR);
+    appendUint32LE(0);
+    appendUint32LE(0);
+    appendUint16LE(0);
+    appendUint16LE(0);
+    appendZeros(256u + 128u + 64u);
+    ASSERT_EQ(static_cast<size_t>(ASSBIN_HEADER_LENGTH), blob.size());
+
+    appendUint32LE(ASSBIN_CHUNK_AISCENE);
+    appendUint32LE(0);
+    appendUint32LE(0); // scene flags
+    appendUint32LE(0); // meshes
+    appendUint32LE(0); // materials
+    appendUint32LE(0); // animations
+    appendUint32LE(1); // textures
+    appendUint32LE(0); // lights
+    appendUint32LE(0); // cameras
+
+    appendUint32LE(ASSBIN_CHUNK_AINODE);
+    appendUint32LE(0);
+    appendUint32LE(0); // empty node name
+    appendZeros(sizeof(ai_real) * 16u);
+    appendUint32LE(0); // children
+    appendUint32LE(0); // meshes
+    appendUint32LE(0); // metadata
+
+    appendUint32LE(ASSBIN_CHUNK_AITEXTURE);
+    appendUint32LE(0);
+    appendUint32LE(UINT32_MAX);
+    appendUint32LE(UINT32_MAX);
+    appendZeros(HINTMAXTEXTURELEN - 1u);
+
+    Importer importer;
+    const aiScene *scene = importer.ReadFileFromMemory(blob.data(), blob.size(), 0, "assbin");
+    EXPECT_EQ(nullptr, scene);
+    EXPECT_NE(std::string::npos,
+            std::string(importer.GetErrorString())
+                    .find("Texture dimensions too large"));
+}
+
+TEST_F(utAssbinImportExport, rejectOversizedNodeNameLengthInAssbin) {
+    std::vector<uint8_t> corruptedBlob = ExportSpiderToAssbinBytes();
+    ASSERT_GT(corruptedBlob.size(), static_cast<size_t>(ASSBIN_HEADER_LENGTH));
+
+    ASSERT_GE(corruptedBlob.size(), static_cast<size_t>(ASSBIN_HEADER_LENGTH) + sizeof(uint32_t) * 2u);
+    ASSERT_EQ(static_cast<uint32_t>(ASSBIN_CHUNK_AISCENE), ReadUint32LE(corruptedBlob, ASSBIN_HEADER_LENGTH));
+
+    const uint32_t sceneChunkSize = ReadUint32LE(corruptedBlob, ASSBIN_HEADER_LENGTH + sizeof(uint32_t));
+    const size_t sceneChunkDataOffset = static_cast<size_t>(ASSBIN_HEADER_LENGTH) + sizeof(uint32_t) * 2u;
+    const size_t sceneChunkEnd = sceneChunkDataOffset + static_cast<size_t>(sceneChunkSize);
+    ASSERT_LE(sceneChunkEnd, corruptedBlob.size());
+
+    size_t nodeChunkOffset = corruptedBlob.size();
+    for (size_t offset = sceneChunkDataOffset; offset + sizeof(uint32_t) * 3u <= sceneChunkEnd; ++offset) {
+        if (ReadUint32LE(corruptedBlob, offset) != static_cast<uint32_t>(ASSBIN_CHUNK_AINODE)) {
+            continue;
+        }
+
+        const uint32_t chunkSize = ReadUint32LE(corruptedBlob, offset + sizeof(uint32_t));
+        const size_t chunkEnd = offset + sizeof(uint32_t) * 2u + static_cast<size_t>(chunkSize);
+        if (chunkEnd > sceneChunkEnd) {
+            continue;
+        }
+
+        const size_t lengthOffset = offset + sizeof(uint32_t) * 2u;
+        const uint32_t originalLength = ReadUint32LE(corruptedBlob, lengthOffset);
+        if (lengthOffset + sizeof(uint32_t) + static_cast<size_t>(originalLength) > chunkEnd) {
+            continue;
+        }
+
+        nodeChunkOffset = offset;
+        break;
+    }
+
+    ASSERT_NE(corruptedBlob.size(), nodeChunkOffset);
+
+    // Corrupt aiString length to exceed AI_MAXLEN to simulate malformed input.
+    const size_t stringLengthOffset = nodeChunkOffset + sizeof(uint32_t) * 2u;
+    WriteUint32LE(corruptedBlob, stringLengthOffset, static_cast<uint32_t>(AI_MAXLEN));
+
+    Importer corruptedImporter;
+    const aiScene *corruptedScene = corruptedImporter.ReadFileFromMemory(corruptedBlob.data(), corruptedBlob.size(), 0, "assbin");
+    EXPECT_EQ(nullptr, corruptedScene);
+    EXPECT_NE(std::string::npos,
+            std::string(corruptedImporter.GetErrorString())
+                    .find("String length too large"));
+}
+
+TEST_F(utAssbinImportExport, rejectOversizedMaterialPropertyCountInAssbin) {
+    std::vector<uint8_t> corruptedBlob = ExportSpiderToAssbinBytes();
+    ASSERT_GT(corruptedBlob.size(), static_cast<size_t>(ASSBIN_HEADER_LENGTH));
+
+    // Locate a material chunk that is directly followed by its first property chunk.
+    size_t materialChunkOffset = corruptedBlob.size();
+    for (size_t offset = ASSBIN_HEADER_LENGTH; offset + sizeof(uint32_t) * 4u <= corruptedBlob.size(); ++offset) {
+        if (ReadUint32LE(corruptedBlob, offset) != static_cast<uint32_t>(ASSBIN_CHUNK_AIMATERIAL)) {
+            continue;
+        }
+
+        if (ReadUint32LE(corruptedBlob, offset + sizeof(uint32_t) * 3u) != static_cast<uint32_t>(ASSBIN_CHUNK_AIMATERIALPROPERTY)) {
+            continue;
+        }
+
+        materialChunkOffset = offset;
+        break;
+    }
+
+    ASSERT_NE(corruptedBlob.size(), materialChunkOffset);
+
+    // Announce more properties than the file provides and break the first property
+    // chunk, so the reader gives up before it has filled a single array slot.
+    WriteUint32LE(corruptedBlob, materialChunkOffset + sizeof(uint32_t) * 2u, 64u);
+    WriteUint32LE(corruptedBlob, materialChunkOffset + sizeof(uint32_t) * 3u, 0u);
+
+    Importer corruptedImporter;
+    const aiScene *corruptedScene = corruptedImporter.ReadFileFromMemory(corruptedBlob.data(), corruptedBlob.size(), 0, "assbin");
+    EXPECT_EQ(nullptr, corruptedScene);
+    EXPECT_NE(std::string::npos,
+            std::string(corruptedImporter.GetErrorString())
+                    .find("Magic chunk identifiers are wrong"));
+}
+
+#endif // #ifndef ASSIMP_BUILD_NO_EXPORT
