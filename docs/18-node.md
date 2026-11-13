@@ -184,6 +184,9 @@ Sets files on a file input.
 page.at_css("input[type=file]").select_file("/path/to/file.png")
 ```
 
+When the input is created on click and has no stable selector, capture the native chooser with
+[`page.capture_file_chooser`](23-file-choosers.md) instead of finding the node.
+
 #### at_xpath(selector) : `Node` | `nil`
 #### at_css(selector) : `Node` | `nil`
 #### xpath(selector) : `Array<Node>`

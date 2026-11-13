@@ -1,6 +1,9 @@
 ## [Unreleased](https://github.com/rubycdp/ferrum/compare/v0.20.1...main) ##
 
 ### Added
+- `page.capture_file_chooser { ... }` intercepts the native chooser opened inside the block and returns a
+  `Ferrum::FileChooser` for the input the browser opened it for, covering inputs created on click that have no
+  stable selector; `chooser.accept(paths)` uploads through the same `DOM.setFileInputFiles` call as `select_file`
 - `cookies[name, domain:, path:]` picks one of the cookies sharing a name
 - `context.cookies` with every cookie in the context whatever its domain, `browser.cookies` is the default context's
 - `network.emulate(user_agent:, accept_language:, platform:, metadata:)` overrides what the page reports in the request

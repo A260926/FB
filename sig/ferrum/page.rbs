@@ -10,6 +10,7 @@ module Ferrum
     include Frames
     include Stream
     include Interceptable
+    include FileChooserCapture
 
     attr_accessor referrer: String?
     attr_reader context_id: String?
@@ -44,6 +45,7 @@ module Ferrum
     @downloads: Downloads
     @referrer: String?
     @document_version: ::Integer
+    @file_chooser_mutex: ::Thread::Mutex
 
     def initialize: ((Client | SessionClient) client, context_id: String?, target_id: String, ?proxy: { host: String, port: ::Integer, user: String?, password: String? }?) -> void
 

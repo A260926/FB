@@ -1,18 +1,38 @@
 <!doctype html><meta charset="utf-8"><title>Upload workflow</title>
 <input id="known" type="file" multiple>
-<button id="attach">Attach invoice</button><iframe src="/child"></iframe>
+<button id="attach">Attach invoice</button>
+<button id="single-attach">Attach single</button>
+<iframe src="/child"></iframe>
+<iframe src="/sibling"></iframe>
 <script>
 window.uploadEvents = [];
+window.chooserEvents = [];
+window.attachments = [];
+window.lastInput = null;
 document.querySelector('#known').addEventListener('input', e => uploadEvents.push(e.type));
 document.querySelector('#known').addEventListener('change', e => uploadEvents.push(e.type));
-document.querySelector('#attach').onclick = () => {
-  const input = document.createElement('input');
-  input.type = 'file'; input.hidden = true; input.multiple = true;
-  document.body.append(input);
+function trackInput(input) {
+  window.lastInput = input;
+  input.addEventListener('input', e => window.chooserEvents.push({type: e.type, trusted: e.isTrusted}));
+  input.addEventListener('change', e => {
+    window.chooserEvents.push({type: e.type, trusted: e.isTrusted});
+  });
   input.onchange = async () => {
-    window.attachments = await Promise.all(Array.from(input.files, async f => ({name:f.name,text:await f.text()})));
+    window.attachments = await Promise.all(Array.from(input.files, async f => ({name: f.name, text: await f.text()})));
     document.querySelector('#attach').textContent = `${input.files.length} attached`;
   };
+  return input;
+}
+document.querySelector('#attach').onclick = () => {
+  const input = trackInput(document.createElement('input'));
+  input.type = 'file'; input.hidden = true; input.multiple = true; input.accept = '.txt';
+  document.body.append(input);
+  input.click();
+};
+document.querySelector('#single-attach').onclick = () => {
+  const input = trackInput(document.createElement('input'));
+  input.type = 'file'; input.hidden = true;
+  document.body.append(input);
   input.click();
 };
 </script>

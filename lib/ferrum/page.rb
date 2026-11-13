@@ -19,6 +19,7 @@ require "ferrum/page/animation"
 require "ferrum/page/tracing"
 require "ferrum/page/stream"
 require "ferrum/page/cookies"
+require "ferrum/page/file_chooser"
 
 module Ferrum
   #
@@ -46,6 +47,7 @@ module Ferrum
     include Frames
     include Stream
     include Interceptable
+    include FileChooserCapture
 
     attr_accessor :referrer
     attr_reader :context_id, :target_id, :event, :tracing
@@ -111,6 +113,7 @@ module Ferrum
       @main_frame = Frame.new(nil, self)
       @event = Utils::Event.new.tap(&:set)
       @document_version = 0
+      @file_chooser_mutex = Mutex.new
       self.proxy = proxy
 
       @mouse = Mouse.new(self)

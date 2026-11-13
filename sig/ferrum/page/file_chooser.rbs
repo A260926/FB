@@ -1,0 +1,11 @@
+module Ferrum
+  class Page
+    module FileChooserCapture
+      def capture_file_chooser: (?frame: Frame, ?timeout: Numeric) { () -> void } -> FileChooser
+
+      private
+
+      def cleanup_file_chooser_capture: (Integer subscription) -> void
+    end
+  end
+end

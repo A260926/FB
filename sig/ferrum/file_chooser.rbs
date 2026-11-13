@@ -1,0 +1,28 @@
+module Ferrum
+  class FileChooser
+    @page: Page
+    @frame_id: String
+    @backend_node_id: Integer
+    @multiple: bool
+    @loader_id: String?
+    @used: bool
+    @mutex: ::Thread::Mutex
+    @stale_node_error: NodeNotFoundError?
+
+    attr_reader frame_id: String
+
+    attr_reader backend_node_id: Integer
+
+    def initialize: (Page page, Frame frame, Hash[String, untyped] params, loader_id: String?) -> void
+
+    def multiple?: () -> bool
+
+    def accept: (String | ::Array[String] paths) -> self
+
+    private
+
+    def validate_paths: (String | ::Array[String] paths) -> ::Array[String]
+
+    def ensure_still_current!: () -> void
+  end
+end
