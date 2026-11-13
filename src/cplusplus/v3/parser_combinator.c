@@ -1,0 +1,78 @@
+// SPDX-FileCopyrightText: 2025 Siddharth Mishra <admin@brightprogrammer.in>
+// SPDX-FileCopyrightText: 2025-2026 RizinOrg <info@rizin.re>
+// SPDX-FileCopyrightText: 2025-2026 Billow <billow.fun@gmail.com>
+// SPDX-License-Identifier: LGPL-3.0-only
+
+#include "parser_combinator.h"
+
+#include "macros.h"
+
+bool match_many1(
+	DemParser *p,
+	DemResult *r,
+	DemRule rule,
+	const char *sep,
+	const char stop) {
+	const char *saved_pos = p->cur;
+	if (!match_many(p, r, rule, sep, stop)) {
+		p->cur = saved_pos;
+		return false;
+	}
+	if (!r->output || VecF(NodeRef, len)(&r->output->children) == 0) {
+		p->cur = saved_pos;
+		r->output = NULL;
+		return false;
+	}
+	return true;
+}
+
+bool match_many(
+	DemParser *p,
+	DemResult *r,
+	DemRule rule,
+	const char *sep,
+	const char stop) {
+	if (!rule || !r || !p) {
+		if (r) {
+			r->error = DEM_ERR_INVALID_SYNTAX;
+		}
+		return false;
+	}
+
+	// Allocate output node with tag=many
+	DemNode *many_node = DemNode_new(p->context);
+	if (!many_node) {
+		r->error = DEM_ERR_OUT_OF_MEMORY;
+		return false;
+	}
+	many_node->tag = CP_DEM_TYPE_KIND_MANY;
+	many_node->val.buf = p->cur;
+
+	many_node->many_ty.sep = sep ? sep : ""; // Use provided separator or default to empty
+
+	while (stop != '\0' ? !READ(stop) : true) {
+		DemResult child_result = { 0 };
+		const char *saved_pos = p->cur;
+		if (rule(p, &child_result)) {
+			// Check if the rule advanced the pointer
+			if (p->cur == saved_pos) {
+				// Rule succeeded but didn't advance - must clean up output
+				break;
+			}
+			if (child_result.output) {
+				VecNodeRef_append(&many_node->children, (NodeRef *)&child_result.output);
+			}
+		} else {
+			// Restore position on failure
+			p->cur = saved_pos;
+			break;
+		}
+	}
+
+	many_node->val.len = p->cur - many_node->val.buf;
+
+	/* we always match, even if nothing matches */
+	r->output = many_node;
+	r->error = DEM_ERR_OK;
+	return true;
+}
