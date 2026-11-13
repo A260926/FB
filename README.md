@@ -33,6 +33,7 @@ To install a previous version, you have to `git clone https://github.com/Puerkit
 
 ## Changelog
 
+*    **2026-11-14** : Add `Crawler.RunSources(map[string][]string)`, a joint multi-source crawl that reports, per source name, the normalized URLs of the visited pages attributable to that source (late-joining sources and redirect edges included). See the RunSources section below.
 *    **2021-05-19** : Use Go modules for dependencies. Tag v1.1.0.
 *    **2019-07-22** : Use pre-compiled matchers for goquery (thanks @mikefaraponov). Tag v1.0.1.
 *    **2016-11-20** : Fix log message so that it prints enqueued URLs (thanks @oherych). Tag as v1.0.0.
@@ -136,6 +137,18 @@ The Crawler type controls the whole execution. It spawns worker goroutines and m
 *    **NewCrawlerWithOptions(*Options)** : Creates a crawler with a pre-initialized `*Options` instance.
 
 The one and only public function is `Run(seeds interface{}) error` which take a seeds argument (the base URLs used to start crawling) that can be expressed a number of different ways. It ends when there are no more URLs waiting to be visited, or when the `Options.MaxVisit` number is reached. It returns an error, which is `ErrMaxVisits` if this setting is what caused the crawling to stop.
+
+### RunSources
+
+`Run` has a sibling entry point, `RunSources(seeds map[string][]string) (map[string][]string, error)`, which crawls several named sources (e.g. columns or sections of a site) jointly in a *single* crawl and reports which visited pages belong to which source. The `seeds` argument maps a source name to its seed URLs, and the result maps each source name to the sorted, duplicate-free list of normalized URLs that were successfully visited (i.e. triggered `Visit`) and are attributable to that source. Sources with no attributable page still get an entry, holding an empty list.
+
+*    **One joint crawl** : this is not one `Run` per source stitched together. A normalized URL is physically scheduled at most once, and still goes through the usual host worker, robots.txt, HEAD/GET and `Visit`/`Visited` flow. `MaxVisits` keeps counting actually visited pages.
+*    **Attribution flows along real discovery edges** : a page is attributable to a source if it is reachable from that source's seeds through links that were actually harvested, or redirections that were actually followed, along edges allowed by the crawling policies (absolute, http(s) and same-host rules - an external link looping back is not a valid path). The `Filter` decision only gates the physical fetch: when an already-known URL is discovered again (e.g. `Filter` rejects re-enqueueing it because `isVisited` is `true`), the new edge still propagates its sources.
+*    **Late-joining sources** : a source that discovers an already-known URL inherits its whole subtree, whether that subtree is still in flight or was fully crawled already - without any re-fetch or extra `Visit` call. Cycles and diamonds in the link graph do not cause infinite propagation.
+*    **Redirections** : the edge that counts is the one from the page that actually triggers the redirect to the redirect target (not the preserved `SourceURL`). The redirect source itself never triggers `Visit`, so it is never reported, but its sources flow to the target and beyond.
+*    **Only successful visits are reported** : robots.txt, failed fetches, non-2xx responses, pages dropped after a HEAD request, filtered-out URLs and redirect sources are excluded.
+*    **Hooks** : the seeds are used exactly as provided - `Start` is *not* called to rewrite them (unlike `Run`). Every other hook behaves as in `Run`, and `End` is notified exactly once when the crawl ends.
+*    **Validation and errors** : source names must be non-empty and every seed must be an absolute http(s) URL, otherwise an error is returned before any request is made. An empty seeds map returns an empty result immediately. If the crawl stops early, the returned error follows `Run`'s semantics (`ErrMaxVisits`, `ErrInterrupted`) and the map holds the partial results gathered so far. Each `Run`/`RunSources` starts from a fresh source state and never mutates previously returned maps.
 
 <a name="types" />
 The various types that can be used to pass the seeds are the following (the same types apply for the empty interfaces in `Extender.Start(interface{}) interface{}`, `Extender.Visit(*URLContext, *http.Response, *goquery.Document) (interface{}, bool)` and in `Extender.Visited(*URLContext, interface{})`, as well as the type of the `EnqueueChan` field):

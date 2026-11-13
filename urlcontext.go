@@ -30,6 +30,13 @@ type URLContext struct {
 	normalizedURL       *url.URL
 	sourceURL           *url.URL
 	normalizedSourceURL *url.URL
+
+	// redirectFrom is the normalized URL of the page that actually triggered
+	// the redirection to this URL, if this context was created by a redirect.
+	// Unlike sourceURL - which cloneForRedirect intentionally preserves from
+	// the original context - it always points at the immediate redirect
+	// source, so the real redirect edge is not lost.
+	redirectFrom *url.URL
 }
 
 // URL returns the URL.
@@ -87,6 +94,16 @@ func (uc *URLContext) cloneForRedirect(dst *url.URL, normFlags purell.Normalizat
 	rawDst := &url.URL{}
 	*rawDst = *dst
 	purell.NormalizeURL(dst, normFlags)
+
+	// Remember the page that actually triggered this redirection, so that
+	// the redirect edge is available even though sourceURL keeps pointing
+	// at the original source.
+	var redirFrom *url.URL
+	if uc.normalizedURL != nil {
+		redirFrom = &url.URL{}
+		*redirFrom = *uc.normalizedURL
+	}
+
 	return &URLContext{
 		HeadBeforeGet:       uc.HeadBeforeGet,
 		State:               uc.State,
@@ -94,6 +111,7 @@ func (uc *URLContext) cloneForRedirect(dst *url.URL, normFlags purell.Normalizat
 		normalizedURL:       dst,
 		sourceURL:           src,
 		normalizedSourceURL: normalizedSrc,
+		redirectFrom:        redirFrom,
 	}
 }
 
@@ -127,12 +145,12 @@ func (uc *URLContext) getRobotsURLCtx() (*URLContext, error) {
 		return nil, err
 	}
 	return &URLContext{
-		false, // Never request HEAD before GET for robots.txt
-		nil,   // Always nil state
-		robURL,
-		robURL,       // Normalized is same as raw
-		uc.sourceURL, // Source and normalized source is same as for current context
-		uc.normalizedSourceURL,
+		HeadBeforeGet:       false, // Never request HEAD before GET for robots.txt
+		State:               nil,   // Always nil state
+		url:                 robURL,
+		normalizedURL:       robURL, // Normalized is same as raw
+		sourceURL:           uc.sourceURL,
+		normalizedSourceURL: uc.normalizedSourceURL,
 	}, nil
 }
 
@@ -238,11 +256,11 @@ func (c *Crawler) urlToURLContext(u, src *url.URL) *URLContext {
 	}
 
 	return &URLContext{
-		c.Options.HeadBeforeGet,
-		nil,
-		&rawU,
-		u,
-		rawSrc,
-		src,
+		HeadBeforeGet:       c.Options.HeadBeforeGet,
+		State:               nil,
+		url:                 &rawU,
+		normalizedURL:       u,
+		sourceURL:           rawSrc,
+		normalizedSourceURL: src,
 	}
 }

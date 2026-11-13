@@ -35,6 +35,10 @@ type Crawler struct {
 	visited map[string]struct{}
 	hosts   map[string]struct{}
 	workers map[string]*worker
+
+	// srcTracker tracks source attribution during a RunSources crawl. It is
+	// nil during a plain Run, in which case no source bookkeeping happens.
+	srcTracker *sourceTracker
 }
 
 // NewCrawlerWithOptions returns a Crawler initialized with the
@@ -97,6 +101,11 @@ func (c *Crawler) init(ctxs []*URLContext) {
 	// Initialize the visits fields
 	c.visited = make(map[string]struct{}, l)
 	c.pushPopRefCount, c.visits = 0, 0
+
+	// Reset the source tracking state: a plain Run does no source
+	// bookkeeping, and a RunSources crawl installs a fresh tracker after
+	// init, so every run starts from an empty source state.
+	c.srcTracker = nil
 
 	// Create the workers map and the push channel (the channel used by workers
 	// to communicate back to the crawler)
@@ -212,6 +221,10 @@ func (c *Crawler) enqueueUrls(ctxs []*URLContext) (cnt int) {
 		if enqueue = c.Options.Extender.Filter(ctx, isVisited); !enqueue {
 			// Filter said NOT to use this url, so continue with next
 			c.logFunc(LogIgnored, "ignore on filter policy: %s", ctx.normalizedURL)
+			// Even though the URL is not (re-)enqueued - e.g. Filter rejects
+			// an already-visited URL - the new discovery edge still
+			// propagates its sources to this URL.
+			c.propagateSources(ctx)
 			continue
 		}
 
@@ -230,6 +243,10 @@ func (c *Crawler) enqueueUrls(ctxs []*URLContext) (cnt int) {
 
 		} else {
 			// All is good, visit this URL (robots.txt verification is done by worker)
+
+			// Record the discovery edge for source attribution before
+			// physically scheduling the URL.
+			c.propagateSources(ctx)
 
 			// Possible caveat: if the normalization changes the host, it is possible
 			// that the robots.txt fetched for this host would differ from the one for
@@ -272,6 +289,38 @@ func (c *Crawler) enqueueUrls(ctxs []*URLContext) (cnt int) {
 	return
 }
 
+// propagateSources records the discovery edge that led to this context and
+// propagates source attributions along it. It is a no-op unless the crawler
+// is running a RunSources crawl. The edge only counts if the URL complies
+// with the hard crawling policies (absolute, http(s) and same-host), exactly
+// like a URL that would be physically enqueued; the Filter decision,
+// however, never prevents propagation.
+func (c *Crawler) propagateSources(ctx *URLContext) {
+	t := c.srcTracker
+	if t == nil {
+		return
+	}
+	if !ctx.normalizedURL.IsAbs() || !strings.HasPrefix(ctx.normalizedURL.Scheme, "http") {
+		return
+	}
+	if c.Options.SameHostOnly && !c.isSameHost(ctx) {
+		return
+	}
+	// The parent of the edge is the page that actually led to this URL: the
+	// redirecting page for a redirect (cloneForRedirect preserves the
+	// original sourceURL, so it cannot be relied upon to find the real
+	// edge), otherwise the source URL. Seeds and externally enqueued URLs
+	// have no parent edge.
+	parent := ctx.redirectFrom
+	if parent == nil {
+		parent = ctx.normalizedSourceURL
+	}
+	if parent == nil {
+		return
+	}
+	t.addEdge(parent.String(), ctx.normalizedURL.String())
+}
+
 // This is the main loop of the crawler, waiting for responses from the workers
 // and processing these responses.
 func (c *Crawler) collectUrls() error {
@@ -301,6 +350,11 @@ func (c *Crawler) collectUrls() error {
 			// Received a response, check if it contains URLs to enqueue
 			if res.visited {
 				c.visits++
+				if c.srcTracker != nil && res.ctx != nil {
+					// This URL triggered a successful Visit, record it for
+					// source attribution.
+					c.srcTracker.markVisited(res.ctx.normalizedURL.String())
+				}
 				if c.Options.MaxVisits > 0 && c.visits >= c.Options.MaxVisits {
 					// Limit reached, request workers to stop
 					c.logFunc(LogInfo, "sending STOP signals...")
