@@ -82,3 +82,11 @@ CMakeSettings.json
 #
 
 .vscode/
+
+#
+# Decorrelation certification test artifacts
+#
+
+.task-dtobj/
+.task-dt-*/
+.task-mutate.*/

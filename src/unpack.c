@@ -18,6 +18,10 @@
 
 #include "wavpack_local.h"
 
+#ifdef DECORR_TEST_OBSERVE
+#include "decorr_observe.h"
+#endif
+
 #ifdef OPT_ASM_X86
     #define DECORR_STEREO_PASS_CONT unpack_decorr_stereo_pass_cont_x86
     #define DECORR_STEREO_PASS_CONT_AVAILABLE unpack_cpu_has_feature_x86(CPU_FEATURE_MMX)
@@ -121,10 +125,18 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
         if (i != sample_count)
             goto get_word_eof;
 
+#ifdef DECORR_TEST_OBSERVE
+        dt_obs_residuals (wps, buffer, sample_count, 1);
+#endif
+
 #ifdef DECORR_MONO_PASS_CONT
         if (sample_count < 16)
-            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
+            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++) {
                 decorr_mono_pass (dpp, buffer, sample_count);
+#ifdef DECORR_TEST_OBSERVE
+                dt_obs_pass (wps, dpp);
+#endif
+            }
         else
             for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++) {
                 int pre_samples = (dpp->term > MAX_TERM) ? 2 : dpp->term;
@@ -133,10 +145,17 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
 
                 DECORR_MONO_PASS_CONT (dpp, buffer + pre_samples, sample_count - pre_samples,
                     ((flags & MAG_MASK) >> MAG_LSB) > 15);
+#ifdef DECORR_TEST_OBSERVE
+                dt_obs_pass (wps, dpp);
+#endif
             }
 #else
-        for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
+        for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++) {
             decorr_mono_pass (dpp, buffer, sample_count);
+#ifdef DECORR_TEST_OBSERVE
+            dt_obs_pass (wps, dpp);
+#endif
+        }
 #endif
 
 #ifndef LOSSY_MUTE
@@ -178,10 +197,18 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
         if (i != sample_count)
             goto get_word_eof;
 
+#ifdef DECORR_TEST_OBSERVE
+        dt_obs_residuals (wps, buffer, sample_count, 0);
+#endif
+
 #ifdef DECORR_STEREO_PASS_CONT
         if (sample_count < 16 || !DECORR_STEREO_PASS_CONT_AVAILABLE) {
-            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
+            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++) {
                 decorr_stereo_pass (dpp, buffer, sample_count);
+#ifdef DECORR_TEST_OBSERVE
+                dt_obs_pass (wps, dpp);
+#endif
+            }
 
             m = sample_count & (MAX_TERM - 1);
         }
@@ -193,10 +220,17 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
 
                 DECORR_STEREO_PASS_CONT (dpp, buffer + pre_samples * 2, sample_count - pre_samples,
                     ((flags & MAG_MASK) >> MAG_LSB) >= 16);
+#ifdef DECORR_TEST_OBSERVE
+                dt_obs_pass (wps, dpp);
+#endif
             }
 #else
-        for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
+        for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++) {
             decorr_stereo_pass (dpp, buffer, sample_count);
+#ifdef DECORR_TEST_OBSERVE
+            dt_obs_pass (wps, dpp);
+#endif
+        }
 
         m = sample_count & (MAX_TERM - 1);
 #endif
@@ -478,6 +512,9 @@ get_word_eof:
                     dpp->samples_B [k] = temp_B [m];
                     m = (m + 1) & (MAX_TERM - 1);
                 }
+#ifdef DECORR_TEST_OBSERVE
+                dt_obs_norm (wps, dpp);
+#endif
             }
 
     fixup_samples (wps, buffer, i);
