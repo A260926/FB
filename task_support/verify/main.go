@@ -1,0 +1,3 @@
+package main
+import("encoding/json";"fmt";"io";"os";"strings")
+func main(){if len(os.Args)<3{panic("usage: verify log tests...")};f,e:=os.Open(os.Args[1]);if e!=nil{panic(e)};defer f.Close();want:=map[string]bool{};children:=map[string]int{};for _,n:=range os.Args[2:]{want[n]=false};d:=json.NewDecoder(f);for{var v struct{Action,Test string};e=d.Decode(&v);if e==io.EOF{break};if e!=nil{panic(e)};if v.Action=="fail"||v.Action=="skip"{panic("failed/skipped "+v.Test)};if v.Action=="pass"{if _,ok:=want[v.Test];ok{want[v.Test]=true};for n:=range want{if strings.HasPrefix(v.Test,n+"/"){children[n]++}}}};for n,ok:=range want{if !ok||children[n]<2{panic("missing pass or fewer than 2 executed subtests: "+n)};fmt.Printf("%s: pass (%d subtests)\n",n,children[n])}}
