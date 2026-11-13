@@ -57,7 +57,7 @@ func JoinPage(url string, options ...Option) *Page {
 }
 
 func newPage(session *api.Session) *Page {
-	return &Page{selectable{session, nil}, nil}
+	return &Page{selectable{session: session}, nil}
 }
 
 // String returns a string representation of the Page. Currently: "page"

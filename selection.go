@@ -5,7 +5,6 @@ import (
 
 	"github.com/sclevine/agouti/api"
 	"github.com/sclevine/agouti/internal/element"
-	"github.com/sclevine/agouti/internal/target"
 )
 
 // Selection instances refer to a selection of elements.
@@ -32,20 +31,17 @@ type elementRepository interface {
 	GetExactlyOne() (element.Element, error)
 }
 
-func newSelection(session apiSession, selectors target.Selectors) *Selection {
+func newSelection(session apiSession, plan queryPlan) *Selection {
 	return &Selection{
-		selectable{session, selectors},
-		&element.Repository{
-			Client:    session,
-			Selectors: selectors,
-		},
+		selectable{session, plan},
+		newPlanRepository(session, plan),
 	}
 }
 
 // String returns a string representation of the selection, ex.
 //    selection 'CSS: .some-class | XPath: //table [3] | Link "click me" [single]'
 func (s *Selection) String() string {
-	return fmt.Sprintf("selection '%s'", s.selectors)
+	return fmt.Sprintf("selection '%s'", s.plan)
 }
 
 // Elements returns a []*api.Element that can be used to send direct commands
@@ -100,6 +96,13 @@ func (s *Selection) EqualsElement(other interface{}) (bool, error) {
 	}
 
 	return equal, nil
+}
+
+// At finds an element at the provided index within its immediate context.
+// When the last part of the selection is a Query, the index applies to the
+// complete Query expression per parent context.
+func (s *Selection) At(index int) *Selection {
+	return newSelection(s.session, s.plan.withAt(index))
 }
 
 // MouseToElement moves the mouse over exactly one element in the selection.

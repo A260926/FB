@@ -11,8 +11,8 @@ type Selectors interface {
 }
 
 type selectable struct {
-	session   apiSession
-	selectors target.Selectors
+	session apiSession
+	plan    queryPlan
 }
 
 type apiSession interface {
@@ -67,127 +67,134 @@ type apiSession interface {
 
 // Find finds exactly one element by CSS selector.
 func (s *selectable) Find(selector string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.CSS, selector).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.CSS, selector).withSingle())
 }
 
 // FindByXPath finds exactly one element by XPath selector.
 func (s *selectable) FindByXPath(selector string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.XPath, selector).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.XPath, selector).withSingle())
 }
 
 // FindByLink finds exactly one anchor element by its text content.
 func (s *selectable) FindByLink(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Link, text).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.Link, text).withSingle())
 }
 
 // FindByLabel finds exactly one element by associated label text.
 func (s *selectable) FindByLabel(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Label, text).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.Label, text).withSingle())
 }
 
 // FindByButton finds exactly one button element with the provided text.
 // Supports <button>, <input type="button">, and <input type="submit">.
 func (s *selectable) FindByButton(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Button, text).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.Button, text).withSingle())
 }
 
 // FindByName finds exactly element with the provided name attribute.
 func (s *selectable) FindByName(name string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Name, name).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.Name, name).withSingle())
 }
 
 // FindByClass finds exactly one element with a given CSS class.
 func (s *selectable) FindByClass(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Class, text).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.Class, text).withSingle())
 }
 
 // FindByID finds exactly one element that has the given ID.
 func (s *selectable) FindByID(id string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.ID, id).Single())
+	return newSelection(s.session, s.plan.appendSelector(target.ID, id).withSingle())
 }
 
 // First finds the first element by CSS selector.
 func (s *selectable) First(selector string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.CSS, selector).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.CSS, selector).withAt(0))
 }
 
 // FirstByXPath finds the first element by XPath selector.
 func (s *selectable) FirstByXPath(selector string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.XPath, selector).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.XPath, selector).withAt(0))
 }
 
 // FirstByLink finds the first anchor element by its text content.
 func (s *selectable) FirstByLink(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Link, text).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Link, text).withAt(0))
 }
 
 // FirstByLabel finds the first element by associated label text.
 func (s *selectable) FirstByLabel(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Label, text).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Label, text).withAt(0))
 }
 
 // FirstByButton finds the first button element with the provided text.
 // Supports <button>, <input type="button">, and <input type="submit">.
 func (s *selectable) FirstByButton(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Button, text).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Button, text).withAt(0))
 }
 
 // FirstByName finds the first element with the provided name attribute.
 func (s *selectable) FirstByName(name string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Name, name).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Name, name).withAt(0))
 }
 
 // FirstByClass finds the first element with a given CSS class.
 func (s *selectable) FirstByClass(text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Class, text).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Class, text).withAt(0))
 }
 
 // All finds zero or more elements by CSS selector.
 func (s *selectable) All(selector string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.CSS, selector))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.CSS, selector))
 }
 
 // AllByXPath finds zero or more elements by XPath selector.
 func (s *selectable) AllByXPath(selector string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.XPath, selector))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.XPath, selector))
 }
 
 // AllByLink finds zero or more anchor elements by their text content.
 func (s *selectable) AllByLink(text string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.Link, text))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.Link, text))
 }
 
 // AllByLabel finds zero or more elements by associated label text.
 func (s *selectable) AllByLabel(text string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.Label, text))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.Label, text))
 }
 
 // AllByButton finds zero or more button elements with the provided text.
 // Supports <button>, <input type="button">, and <input type="submit">.
 func (s *selectable) AllByButton(text string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.Button, text))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.Button, text))
 }
 
 // AllByName finds zero or more elements with the provided name attribute.
 func (s *selectable) AllByName(name string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.Name, name))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.Name, name))
 }
 
 // AllByClass finds zero or more elements with a given CSS class.
 func (s *selectable) AllByClass(text string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.Class, text))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.Class, text))
 }
 
 // AllByID finds zero or more elements with a given ID.
 func (s *selectable) AllByID(text string) *MultiSelection {
-	return newMultiSelection(s.session, s.selectors.Append(target.ID, text))
+	return newMultiSelection(s.session, s.plan.appendSelector(target.ID, text))
 }
 
 // FirstByClass finds the first element with a given CSS class.
 func (s *selectable) FindForAppium(selectorType string, text string) *Selection {
-	return newSelection(s.session, s.selectors.Append(target.Class, text).At(0))
+	return newSelection(s.session, s.plan.appendSelector(target.Class, text).withAt(0))
 }
 
 func (s *selectable) Selectors() Selectors {
-	return s.selectors
+	return s.plan.flatSelectors()
+}
+
+// Query applies a relational Query expression to the current selection context.
+// The Query is evaluated with element-scoped WebDriver commands and never
+// executes JavaScript or retrieves page HTML.
+func (s *selectable) Query(q Query) *Selection {
+	return newSelection(s.session, s.plan.appendQuery(q))
 }
