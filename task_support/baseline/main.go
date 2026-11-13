@@ -1,0 +1,5 @@
+package main
+import("fmt";"io";"net/http";"strings";"sync/atomic";"time";c "github.com/gocolly/colly/v2")
+type transport struct{started chan string;release chan struct{};active atomic.Int64;max atomic.Int64}
+func(t *transport)RoundTrip(r *http.Request)(*http.Response,error){n:=t.active.Add(1);for{m:=t.max.Load();if n<=m||t.max.CompareAndSwap(m,n){break}};t.started<-r.URL.Path;<-t.release;t.active.Add(-1);return &http.Response{StatusCode:200,Header:make(http.Header),Body:io.NopCloser(strings.NewReader("ok")),Request:r},nil}
+func main(){t:=&transport{started:make(chan string,2),release:make(chan struct{})};x:=c.NewCollector(c.Async(true),c.IgnoreRobotsTxt());x.SetClient(&http.Client{Transport:t});if e:=x.Limits([]*c.LimitRule{{DomainGlob:"*",Parallelism:2},{DomainGlob:"a.test",Parallelism:1}});e!=nil{panic(e)};if e:=x.Visit("http://a.test/1");e!=nil{panic(e)};if e:=x.Visit("http://a.test/2");e!=nil{panic(e)};for i:=0;i<2;i++{select{case <-t.started:case <-time.After(time.Second):panic("second request not started")}};close(t.release);x.Wait();if t.max.Load()!=2{panic("not first match")};fmt.Println("REAL_DOWNLOADS=2\nFIRST_MATCH_PEAK=2\nSECOND_RULE_CAPACITY=1")}
