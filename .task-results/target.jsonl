@@ -1,0 +1,112 @@
+{"Time":"2026-11-14T07:33:10.150993+09:00","Action":"start","Package":"command-line-arguments"}
+{"Time":"2026-11-14T07:33:10.235716+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry"}
+{"Time":"2026-11-14T07:33:10.235912+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry","Output":"=== RUN   TestFullPageGeometry\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.235945+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/wide_and_tall"}
+{"Time":"2026-11-14T07:33:10.23595+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/wide_and_tall","Output":"=== RUN   TestFullPageGeometry/wide_and_tall\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.2388+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/wide_and_tall","Output":"--- PASS: TestFullPageGeometry/wide_and_tall (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.238848+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/wide_and_tall","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.2389+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/bottom_right_clamp_dpr2"}
+{"Time":"2026-11-14T07:33:10.238922+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/bottom_right_clamp_dpr2","Output":"=== RUN   TestFullPageGeometry/bottom_right_clamp_dpr2\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.24045+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/bottom_right_clamp_dpr2","Output":"--- PASS: TestFullPageGeometry/bottom_right_clamp_dpr2 (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.240495+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/bottom_right_clamp_dpr2","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.240526+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_25_non_divisible"}
+{"Time":"2026-11-14T07:33:10.240537+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_25_non_divisible","Output":"=== RUN   TestFullPageGeometry/dpr_1_25_non_divisible\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.24226+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_25_non_divisible","Output":"--- PASS: TestFullPageGeometry/dpr_1_25_non_divisible (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.24229+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_25_non_divisible","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.242302+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_5_non_divisible"}
+{"Time":"2026-11-14T07:33:10.24231+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_5_non_divisible","Output":"=== RUN   TestFullPageGeometry/dpr_1_5_non_divisible\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.243881+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_5_non_divisible","Output":"--- PASS: TestFullPageGeometry/dpr_1_5_non_divisible (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.243906+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/dpr_1_5_non_divisible","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.243917+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/width_only"}
+{"Time":"2026-11-14T07:33:10.243925+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/width_only","Output":"=== RUN   TestFullPageGeometry/width_only\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.244637+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/width_only","Output":"--- PASS: TestFullPageGeometry/width_only (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.244657+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/width_only","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.244681+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/height_only"}
+{"Time":"2026-11-14T07:33:10.244689+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/height_only","Output":"=== RUN   TestFullPageGeometry/height_only\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.245437+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/height_only","Output":"--- PASS: TestFullPageGeometry/height_only (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.24545+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/height_only","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.245486+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/content_smaller_than_viewport"}
+{"Time":"2026-11-14T07:33:10.245517+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/content_smaller_than_viewport","Output":"=== RUN   TestFullPageGeometry/content_smaller_than_viewport\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.245875+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/content_smaller_than_viewport","Output":"--- PASS: TestFullPageGeometry/content_smaller_than_viewport (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.245901+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/content_smaller_than_viewport","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.245943+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/quantized_scroll_and_gap_compensation"}
+{"Time":"2026-11-14T07:33:10.24599+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/quantized_scroll_and_gap_compensation","Output":"=== RUN   TestFullPageGeometry/quantized_scroll_and_gap_compensation\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.252104+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/quantized_scroll_and_gap_compensation","Output":"--- PASS: TestFullPageGeometry/quantized_scroll_and_gap_compensation (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.252141+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/quantized_scroll_and_gap_compensation","Elapsed":0.01}
+{"Time":"2026-11-14T07:33:10.25216+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageGeometry/unreachable_request_positions"}
+{"Time":"2026-11-14T07:33:10.252168+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/unreachable_request_positions","Output":"=== RUN   TestFullPageGeometry/unreachable_request_positions\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.25357+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry/unreachable_request_positions","Output":"--- PASS: TestFullPageGeometry/unreachable_request_positions (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253613+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry/unreachable_request_positions","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.25364+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageGeometry","Output":"--- PASS: TestFullPageGeometry (0.02s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253655+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageGeometry","Elapsed":0.02}
+{"Time":"2026-11-14T07:33:10.253677+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure"}
+{"Time":"2026-11-14T07:33:10.253687+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure","Output":"=== RUN   TestFullPageFailure\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253694+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/invalid_options"}
+{"Time":"2026-11-14T07:33:10.253709+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/invalid_options","Output":"=== RUN   TestFullPageFailure/invalid_options\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253714+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/invalid_options","Output":"--- PASS: TestFullPageFailure/invalid_options (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253717+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/invalid_options","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.253721+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/max_pixels_rejected_before_scroll"}
+{"Time":"2026-11-14T07:33:10.253724+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/max_pixels_rejected_before_scroll","Output":"=== RUN   TestFullPageFailure/max_pixels_rejected_before_scroll\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253732+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/max_pixels_rejected_before_scroll","Output":"--- PASS: TestFullPageFailure/max_pixels_rejected_before_scroll (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253735+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/max_pixels_rejected_before_scroll","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.253742+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/oversized_viewport_rejected_before_scroll"}
+{"Time":"2026-11-14T07:33:10.253775+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/oversized_viewport_rejected_before_scroll","Output":"=== RUN   TestFullPageFailure/oversized_viewport_rejected_before_scroll\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253791+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/oversized_viewport_rejected_before_scroll","Output":"--- PASS: TestFullPageFailure/oversized_viewport_rejected_before_scroll (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253795+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/oversized_viewport_rejected_before_scroll","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.2538+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/non_finite_metrics"}
+{"Time":"2026-11-14T07:33:10.253805+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/non_finite_metrics","Output":"=== RUN   TestFullPageFailure/non_finite_metrics\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253961+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/non_finite_metrics","Output":"--- PASS: TestFullPageFailure/non_finite_metrics (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.253983+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/non_finite_metrics","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.253989+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/max_tiles_exceeded"}
+{"Time":"2026-11-14T07:33:10.253992+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/max_tiles_exceeded","Output":"=== RUN   TestFullPageFailure/max_tiles_exceeded\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254367+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/max_tiles_exceeded","Output":"--- PASS: TestFullPageFailure/max_tiles_exceeded (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254392+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/max_tiles_exceeded","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.254399+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/failed_calls_count_towards_max_tiles"}
+{"Time":"2026-11-14T07:33:10.254409+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/failed_calls_count_towards_max_tiles","Output":"=== RUN   TestFullPageFailure/failed_calls_count_towards_max_tiles\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254522+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/failed_calls_count_towards_max_tiles","Output":"--- PASS: TestFullPageFailure/failed_calls_count_towards_max_tiles (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254536+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/failed_calls_count_towards_max_tiles","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.254544+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/bad_png"}
+{"Time":"2026-11-14T07:33:10.254555+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/bad_png","Output":"=== RUN   TestFullPageFailure/bad_png\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254646+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/bad_png","Output":"--- PASS: TestFullPageFailure/bad_png (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254658+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/bad_png","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.254669+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/wrong_png_size_not_scaled"}
+{"Time":"2026-11-14T07:33:10.254677+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/wrong_png_size_not_scaled","Output":"=== RUN   TestFullPageFailure/wrong_png_size_not_scaled\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254808+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/wrong_png_size_not_scaled","Output":"--- PASS: TestFullPageFailure/wrong_png_size_not_scaled (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.254826+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/wrong_png_size_not_scaled","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.254834+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/layout_change"}
+{"Time":"2026-11-14T07:33:10.25484+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/layout_change","Output":"=== RUN   TestFullPageFailure/layout_change\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.25492+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/layout_change","Output":"--- PASS: TestFullPageFailure/layout_change (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.25495+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/layout_change","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.254968+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/dpr_change"}
+{"Time":"2026-11-14T07:33:10.25522+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/dpr_change","Output":"=== RUN   TestFullPageFailure/dpr_change\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.255227+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/dpr_change","Output":"--- PASS: TestFullPageFailure/dpr_change (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.255233+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/dpr_change","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.255236+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/persistent_no_progress"}
+{"Time":"2026-11-14T07:33:10.25524+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/persistent_no_progress","Output":"=== RUN   TestFullPageFailure/persistent_no_progress\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.26102+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/persistent_no_progress","Output":"--- PASS: TestFullPageFailure/persistent_no_progress (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261066+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/persistent_no_progress","Elapsed":0.01}
+{"Time":"2026-11-14T07:33:10.261078+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/screenshot_failure_and_restore_failure"}
+{"Time":"2026-11-14T07:33:10.261086+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/screenshot_failure_and_restore_failure","Output":"=== RUN   TestFullPageFailure/screenshot_failure_and_restore_failure\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261107+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/screenshot_failure_and_restore_failure","Output":"--- PASS: TestFullPageFailure/screenshot_failure_and_restore_failure (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261116+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/screenshot_failure_and_restore_failure","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.26112+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageFailure/successful_capture_but_restore_mismatch"}
+{"Time":"2026-11-14T07:33:10.261123+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/successful_capture_but_restore_mismatch","Output":"=== RUN   TestFullPageFailure/successful_capture_but_restore_mismatch\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261821+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure/successful_capture_but_restore_mismatch","Output":"--- PASS: TestFullPageFailure/successful_capture_but_restore_mismatch (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.26184+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure/successful_capture_but_restore_mismatch","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.26185+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageFailure","Output":"--- PASS: TestFullPageFailure (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261867+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageFailure","Elapsed":0.01}
+{"Time":"2026-11-14T07:33:10.261876+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageDialects"}
+{"Time":"2026-11-14T07:33:10.261884+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects","Output":"=== RUN   TestFullPageDialects\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.261892+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageDialects/json_wire"}
+{"Time":"2026-11-14T07:33:10.261899+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects/json_wire","Output":"=== RUN   TestFullPageDialects/json_wire\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.265817+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects/json_wire","Output":"--- PASS: TestFullPageDialects/json_wire (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.26585+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageDialects/json_wire","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.26586+09:00","Action":"run","Package":"command-line-arguments","Test":"TestFullPageDialects/w3c"}
+{"Time":"2026-11-14T07:33:10.265875+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects/w3c","Output":"=== RUN   TestFullPageDialects/w3c\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.269936+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects/w3c","Output":"--- PASS: TestFullPageDialects/w3c (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.270071+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageDialects/w3c","Elapsed":0}
+{"Time":"2026-11-14T07:33:10.270128+09:00","Action":"output","Package":"command-line-arguments","Test":"TestFullPageDialects","Output":"--- PASS: TestFullPageDialects (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.270155+09:00","Action":"pass","Package":"command-line-arguments","Test":"TestFullPageDialects","Elapsed":0.01}
+{"Time":"2026-11-14T07:33:10.270161+09:00","Action":"output","Package":"command-line-arguments","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-11-14T07:33:10.271246+09:00","Action":"output","Package":"command-line-arguments","Output":"ok  \tcommand-line-arguments\t0.120s\n"}
+{"Time":"2026-11-14T07:33:10.271275+09:00","Action":"pass","Package":"command-line-arguments","Elapsed":0.12}

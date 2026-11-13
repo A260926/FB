@@ -48,6 +48,95 @@ Re-run this periodically to get up-to-date versions of these binaries.
 
 The API documentation is at https://godoc.org/github.com/tebeka/selenium. See [the example](https://github.com/tebeka/selenium/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/tebeka/selenium/blob/master/sauce_test.go), [selenium](https://github.com/tebeka/selenium/blob/master/selenium_test.go) and [service](https://github.com/tebeka/selenium/blob/master/service_test.go)) for better usage information.
 
+## Full-page screenshots
+
+`WebDriver.FullPageScreenshot` captures the whole top-level document as one
+PNG. This is useful for wide backend reports and other pages that are larger
+than the browser viewport, including pages that are much wider than they are
+tall:
+
+```go
+import (
+	"os"
+
+	"github.com/tebeka/selenium"
+)
+
+wd, err := selenium.NewRemote(
+	selenium.Capabilities{"browserName": "chrome"},
+	"http://127.0.0.1:4444/wd/hub",
+)
+if err != nil {
+	panic(err)
+}
+defer wd.Quit()
+
+// Load the report. Layout and viewport size must stay static during capture.
+if err := wd.Get("https://intranet.example.com/reports/quarterly"); err != nil {
+	panic(err)
+}
+
+// MaxPixels bounds the output image (and any single decoded tile); MaxTiles
+// bounds the number of Screenshot protocol calls. Both must be positive.
+pngBytes, err := wd.FullPageScreenshot(selenium.FullPageScreenshotOptions{
+	MaxPixels: 64 * 1024 * 1024,
+	MaxTiles:  256,
+})
+if err != nil {
+	panic(err)
+}
+
+if err := os.WriteFile("report.png", pngBytes, 0o644); err != nil {
+	panic(err)
+}
+```
+
+### Quantization rules
+
+All sizes and scroll positions are read from the page in CSS coordinates or as
+ratios: document size `W`/`H`, viewport `Vw`/`Vh`, scroll position `x`/`y`, and
+device pixel ratio `r`. Every output pixel boundary uses
+
+```
+Q(t) = floor(t*r + 0.5)
+```
+
+so the output canvas is `Q(W) x Q(H)` and every viewport screenshot must be
+exactly `Q(Vw) x Q(Vh)`. A tile taken at the actual (not requested) scroll
+position `(x, y)` is placed with origin `(Q(x), Q(y))`; its local pixel
+`(u, v)` maps to canvas pixel `(originX+u, originY+v)`. Only the part that
+falls inside both the tile and the canvas is copied. Pixels covered by more
+than one tile belong to the first tile that covered them; overlaps are never
+blended. The same rule applies to the last row, the last column, and pages
+smaller than one viewport, so tail and overlap sizes are never rounded
+separately. `r` values of 1, 1.25, 1.5 and 2 are supported.
+
+Tiles are requested in row-major order. The browser may clamp a requested
+scroll position at the right or bottom edge, and its actual position is read
+back before the screenshot is used. If a tile cannot cover the next uncovered
+pixel (for example because of clamping or pixel quantization), later requests
+are adjusted to fill the gap; if full coverage still cannot be achieved within
+`MaxTiles`, the call fails instead of looping or returning a partial image.
+
+### Applicability
+
+This API handles only an ordinary top-level document in the current window and
+does not enter iframes. During the capture the page content and layout must be
+static: no fixed or sticky elements, no animations, scroll snapping or smooth
+scrolling, no browser zoom animation, and no mobile `visualViewport` handling.
+Document size, viewport size and device pixel ratio are verified before every
+screenshot; if they change, the call is aborted rather than stitching two
+different layouts together.
+
+The original viewport and document are not switched, and page styles and the
+viewport are not changed permanently. If scrolling has started, the original
+actual scroll position is restored and verified before returning. A restore
+failure is returned as an error (preserving the original error as well when
+there is one), and a partially captured image is never returned. Options or
+initial size validation failures happen before any scroll, so nothing is
+restored in that case. The API does not retry navigation or replay failed
+commands.
+
 ## Known Issues
 
 Any issues are usually because the underlying browser automation framework has a

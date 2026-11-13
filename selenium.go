@@ -396,6 +396,11 @@ type WebDriver interface {
 	KeyUp(keys string) error
 	// Screenshot takes a screenshot of the browser window.
 	Screenshot() ([]byte, error)
+	// FullPageScreenshot captures the entire top-level document as a single
+	// PNG by scrolling the page and stitching viewport screenshots. See
+	// FullPageScreenshotOptions and the remote implementation for the
+	// supported page assumptions and quantization rules.
+	FullPageScreenshot(options FullPageScreenshotOptions) ([]byte, error)
 	// Log fetches the logs. Log types must be previously configured in the
 	// capabilities.
 	//
