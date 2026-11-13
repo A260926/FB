@@ -1,0 +1,157 @@
+Numerical regression tests for the FreeType gray rasterizer cell cache
+=====================================================================
+
+`target.cpp` (built by `run.sh target`) regression-tests the band replay
+behaviour of the stand-alone smooth rasterizer (`src/smooth/ftgrays.c`,
+`STANDALONE_`).  Nothing here loads a font or needs a graphical front end:
+the support build compiles the *same* unchanged `ftgrays.c` twice, once
+with the default 16 KiB render pool (`ft_grays_raster`) and once with a
+2 KiB pool (`ft_grays_raster_small`), and the test renders raw `FT_Outline`
+data (26.6 coordinates, hand-written points/tags/contours) through those
+two exported `FT_Raster_Funcs` objects.
+
+The purpose is to protect the cell cache while it is being reworked: when
+the pool is too small and the rasterizer bisects a row range into more
+horizontal bands, the same outline must still cover exactly the same
+pixels, with no missing first band row, no missing curve segment and no
+lost winding information.
+
+The three groups are registered with `CASE` and use `CHECK` for every
+assertion; `runner.cpp` supplies `main`, `verify.awk` rejects an incomplete
+run, and `run.sh` additionally rebuilds two isolated semantic mutations
+(`drop_band`, which shifts each band's `min_ey` by one, and `lose_parity`,
+which ignores `FT_OUTLINE_EVEN_ODD_FILL`) and requires the same tests to
+reject them by pixel content.
+
+Reference error bounds
+----------------------
+
+The expected values come from `reference_render()` in `target.cpp`.  It
+is independent of FreeType's own decomposition, flattening, winding and
+coverage code:
+
+* The outline is decomposed from the raw tags into line / quadratic /
+  cubic segments in double precision, including the implicit starts
+  (first point a conic control with the last point on-curve, or both end
+  points conic, where the start is their midpoint).
+* Curves are flattened adaptively with an explicit geometric bound:
+  quadratic while the control lies within `2 * 5e-4 px` of the chord,
+  cubic while both controls lie within `5e-4 px` of the chord (the
+  flattened curve then stays well within that distance of the chords).
+* For each scanline the x extent of the filled set is integrated exactly
+  in y.  The row is cut into slabs at every vertex height, at every y
+  where an edge crosses a pixel column boundary, and at every edge/edge
+  crossing, so the crossing order is constant inside a slab; there each
+  crossing moves linearly in y and the covered length of a pixel is
+  linear in y, which makes the trapezoid rule exact.
+* Winding (non-zero) and parity (even-odd) are evaluated from the ordered
+  crossings, so nested, reversed and touching subcontours are handled
+  topologically; unsigned absolute areas are never summed, which would
+  be wrong for inner rings and touching subcontours.
+
+The geometric bound is `5e-4 px`.  The `curves` group contains a
+reference self-check: it re-flattens a curved fixture at a 100x tighter
+bound (`5e-6 px`) and requires the two reference images to agree to within
+0.5 gray level everywhere.  Measured over all shipped curve fixtures the
+disagreement is at most 0.12 gray level, so the reference's own error is
+far below half a gray level.  The slab integral was also cross-checked
+against an independent 64x64 sub-pixel sampling of the same flattened
+polygons; on the shipped fixtures the two agree to within the sampling
+error (typically 0.1-0.2 gray level).
+
+Tolerances applied by the tests:
+
+* straight edges: 1 gray level per pixel;
+* fixtures containing curves: 4 gray levels per pixel.
+
+The per-pixel tolerance is chosen per pixel: pixels within 1.5 px of
+a curve are allowed the curve tolerance; all others get the straight
+tolerance.
+
+Note that the two-pool comparison alone is *not* the test.  Both pools
+compile the same code, so they can miss a fill-rule bug together.  The
+comparison against the independent reference is what makes the assertions
+meaningful; the pool comparison only pins down the banding behaviour.
+
+Fixtures
+--------
+
+`bands`: a scene that genuinely exceeds both cell pools.
+
+* 26 narrow (about 1.2 px wide) vertical strips span most of the 96-row
+  height.  Each strip is two live cell columns in every row, and the
+  strips together are far more cells than the small pool can hold.
+* a tall continuous contour with gentle cubic S sides, and 12 tall
+  low-curvature conic lenses, add cells without adding self-intersections.
+* The same outline is rendered at identity, with an integer translation,
+  with a negative fractional translation, and under even-odd filling.
+
+Band scheduling is measured, not assumed: for this 96-row canvas the
+default pool re-bisects 10 times and the small pool 75 times (instrumented
+only temporarily; `ftgrays.c` is not modified).  Strip ends sit on
+initial band edges and on bisection heights, and the lenses' y extrema
+straddle the small-pool band edges (2, 4, 5, 6, 10, 12, 24, 48) on both
+sides of the bisection heights, so a dropped or shifted band shows up as
+a missing strip end or a cut lens apex.  The straight strips are also
+checked against an independent per-pixel rectangle-intersection area
+(`want = (hi - lo) * 255`) rather than only against the reference
+rasterizer.
+
+`curves`: quadratic, cubic and conic contours that cross bands and
+contain in-band y extrema and inflections; implicit quadratic starts
+(both end points conic, and first point conic / last point on-curve);
+same-direction and reversed inner rings; and touching-but-not-overlapping
+subcontours.  Every case runs under non-zero and even-odd.  A separate
+set of integral, axis-aligned rectangles is emitted twice and checked
+exactly: filled under non-zero, cancelled under even-odd.  The remaining
+fixtures are simple non-self-intersecting outlines with at least 2 px
+between inner and outer boundaries.
+
+Note on curve fixtures: the shipped production rasterizer flattens Beziers
+with a fixed deviation criterion (the conic is split until its control
+deviates by at most a quarter pixel, the cubic until both control
+expressions are within half a pixel), so strongly curved shapes
+legitimately deviate from the reference by more than 4 gray levels.  The
+curve fixtures are therefore deliberately low-curvature (measured against
+the reference at 0.7-3.0 gray levels across the six fixtures), which is
+the tightest form of the 4-gray bound that the rasterizer can meet without
+changing its algorithm.  This is a real property of the renderer, not a
+relaxed test: no tolerance here is wide enough to hide a missing row,
+because a missing row moves whole pixels by up to 255 gray levels.
+
+`layouts`: the same outlines are rendered both into an `FT_Bitmap` and
+through the `DIRECT` gray_spans callback.  The callback's coordinates are
+interpreted in a bottom-up pixel space and the spans are reassembled into
+one image that must equal the bitmap; a callback may deliver several
+spans at once and the code handles that.  DIRECT is exercised with non-zero
+clip boxes, with a clip box whose origin is negative (the rectangle
+crossing both axes produces genuinely negative span x and y), and with
+left/right-clipped and empty clips.  Bitmaps are tested with positive and
+negative pitch plus per-row padding and guard sentinels; only the
+`width x rows` valid area is compared, and padding never counts toward
+area.  After each render the outline and its points/tags/contours are
+checked to be byte-identical to a snapshot.  Outlines and pools are
+interleaved, an empty DIRECT call is issued between renders, and every
+render is repeated and compared to the first, so no span or coverage
+data may carry over between calls.
+
+Not covered
+-----------
+
+* cubic control points as the very first outline point (invalid for
+  `FT_Outline_Decompose`, so the fixtures start with an on-curve or a
+  conic point);
+* strongly curved Beziers whose error against the reference exceeds the
+  straight per-pixel tolerance without an algorithmic change (see above);
+* self-intersecting outlines and overlapping contours whose edges cross
+  within a single sub-pixel; the reference evaluates topology from the
+  crossing order, but the shipped fixtures deliberately keep the inner
+  and outer boundaries at least 2 px apart, and even-odd area on
+  overlapping sub-pixel boundaries is not asserted;
+* monochrome (`FT_RASTER_FLAG_AA` off) rendering, which the smooth
+  rasterizer rejects;
+* drop-out handling, hinting, colour, and any glyph/format loading;
+* the `FT_RASTER_FLAG_CLIP` double meaning outside `DIRECT` (the
+  rasterizer ignores it and clips by the bitmap size);
+* performance, threading and render-pool reuse across raster objects
+  (stand-alone mode uses a static raster object).
