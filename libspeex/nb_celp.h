@@ -112,6 +112,8 @@ typedef struct EncState {
 
    int    complexity;            /**< Complexity setting (0-10 from least complex to most complex) */
    spx_int32_t sampling_rate;
+   spx_int32_t frame_bits;       /**< Public per-frame bit budget (0 = mode disabled) */
+   spx_int32_t frame_budget;     /**< Internal per-frame budget pushed by a parent (-1 = inactive) */
    int    plc_tuning;
    int    encode_submode;
    const SpeexSubmode * const *submodes; /**< Sub-mode data */

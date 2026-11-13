@@ -90,6 +90,8 @@ typedef struct SBEncState {
    int    submodeSelect;
    int    complexity;
    spx_int32_t sampling_rate;
+   spx_int32_t frame_bits;         /**< Public per-frame bit budget (0 = mode disabled) */
+   spx_int32_t frame_budget;       /**< Internal per-frame budget pushed by a parent (-1 = inactive) */
 
 } SBEncState;
 

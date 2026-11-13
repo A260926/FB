@@ -384,6 +384,63 @@ EXPORT int speex_mode_query(const SpeexMode *mode, int request, void *ptr)
    return mode->query(mode->mode, request, ptr);
 }
 
+int nb_budget_pick_mode(int desired_mode, int budget_bits,
+      const SpeexSubmode * const *submodes, int nb_submodes)
+{
+   int m, best=-1;
+   int desired_cost;
+   int best_cost=-1;
+
+   /* An empty desired mode (DTX/comfort noise) is always preserved: we never
+      invent silence just to make a budget fit. */
+   if (desired_mode <= 0 || desired_mode >= nb_submodes || submodes[desired_mode] == NULL)
+      return 0;
+
+   desired_cost = submodes[desired_mode]->bits_per_frame;
+
+   /* Low-frequency-first: the low band gets the whole remaining budget. Pick
+      the non-empty mode with the largest real bit cost that fits both the
+      desired mode's cost and the budget. The submode number is NOT used as a
+      proxy for the cost (mode 8 is cheaper than mode 2 in narrowband), and
+      ties are broken by the smaller mode number. */
+   for (m=1;m<nb_submodes;m++)
+   {
+      int cost;
+      if (submodes[m] == NULL)
+         continue;
+      cost = submodes[m]->bits_per_frame;
+      if (cost > desired_cost || cost > budget_bits)
+         continue;
+      if (cost > best_cost)
+      {
+         best_cost = cost;
+         best = m;
+      }
+   }
+
+   return best < 0 ? 0 : best;
+}
+
+int sb_budget_pick_mode(int desired_mode, int budget_bits,
+      const SpeexSubmode * const *submodes, int nb_submodes)
+{
+   int m;
+
+   if (desired_mode <= 0)
+      return 0;
+   if (desired_mode >= nb_submodes)
+      desired_mode = nb_submodes-1;
+
+   /* Highest high-band mode within the requested range that still fits. If
+      nothing fits, a legal empty high band (mode 0) is emitted. */
+   for (m=desired_mode;m>=1;m--)
+   {
+      if (submodes[m] != NULL && submodes[m]->bits_per_frame <= budget_bits)
+         return m;
+   }
+   return 0;
+}
+
 #ifdef FIXED_DEBUG
 long long spx_mips=0;
 #endif

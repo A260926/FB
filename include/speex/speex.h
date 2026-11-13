@@ -160,6 +160,15 @@ extern "C" {
     how much damage we cause if we remove the frame */
 #define SPEEX_GET_ACTIVITY 47
 
+/** Set the per-frame bit budget used by the low-frequency-first frame budget
+    allocation mode (0 disables the mode). Valid positive values depend on the
+    mode: narrowband 43..4096, wideband 47..4096, ultra-wideband 51..4096.
+    Requires VBR or ABR and sub-mode encoding to be enabled. */
+#define SPEEX_SET_VBR_FRAME_BITS 48
+/** Get the per-frame bit budget used by the frame budget allocation mode
+    (0 means the mode is disabled) */
+#define SPEEX_GET_VBR_FRAME_BITS 49
+
 
 /* Preserving compatibility:*/
 /** Equivalent to SPEEX_SET_ENH */

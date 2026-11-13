@@ -62,6 +62,23 @@
 /** Used internally*/
 #define SPEEX_GET_STACK   106
 
+/** Used internally: per-frame bit budget pushed down to a sub-encoder.
+    -1 means "no budget" (restores the historical behaviour). This is
+    deliberately distinct from the public SPEEX_SET_VBR_FRAME_BITS setting so
+    that a budget assigned by a parent encoder for one frame can never leak
+    into the next frame or into the public configuration. */
+#define SPEEX_SET_FRAME_BUDGET 108
+/** Used internally: query the per-frame bit budget currently active. */
+#define SPEEX_GET_FRAME_BUDGET 109
+
+/* Frame budget allocation constants. These are part of the internal build and
+   describe the legal positive ranges and the smallest frame that can still
+   carry one non-empty low-band mode plus the empty high-band headers. */
+#define SPEEX_FRAME_BUDGET_MAX      4096
+#define SPEEX_FRAME_BUDGET_MIN_NB   43
+#define SPEEX_FRAME_BUDGET_MIN_WB   47
+#define SPEEX_FRAME_BUDGET_MIN_UWB  51
+#define SPEEX_FRAME_BUDGET_HIGH_HDR 4
 
 /** Quantizes LSPs */
 typedef void (*lsp_quant_func)(spx_lsp_t *, spx_lsp_t *, int, SpeexBits *);
@@ -111,6 +128,22 @@ typedef struct SpeexSubmode {
 
    int               bits_per_frame; /**< Number of bits per frame after encoding*/
 } SpeexSubmode;
+
+/** Pick the narrowband mode to use under a bit budget. \a desired_mode is the
+    mode selected by the ordinary VBR/VAD/DTX rules. Returns the non-empty mode
+    with the largest real bit cost that does not exceed both the desired mode's
+    cost and \a budget_bits (smallest mode number on ties). A desired empty
+    mode is always preserved; mode 0 is never invented to satisfy a budget. */
+int nb_budget_pick_mode(int desired_mode, int budget_bits,
+      const SpeexSubmode * const *submodes, int nb_submodes);
+
+/** Pick the high-band mode to use under a bit budget. \a desired_mode is the
+    mode selected by the ordinary relative-quality/energy-ratio threshold
+    rules. Returns the highest mode within that demand (<= desired_mode) whose
+    real bit cost fits in \a budget_bits, or 0 (a legal empty high band) when
+    nothing fits. */
+int sb_budget_pick_mode(int desired_mode, int budget_bits,
+      const SpeexSubmode * const *submodes, int nb_submodes);
 
 /** Struct defining the encoding/decoding mode*/
 typedef struct SpeexNBMode {
