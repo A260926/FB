@@ -168,7 +168,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
       else
       #endif
       #if MI_GUARDED
-      if (block->next == MI_BLOCK_TAG_GUARDED) {
+      if (mi_block_tag_is_guarded(block->next)) {
         _mi_page_block_unguard(page, block, p);
         *was_guarded = true;
       }
@@ -642,6 +642,16 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* page, const void* p, const mi_block_t* block) mi_attr_noexcept {
   // const mi_block_t* block = _mi_page_ptr_unalign(page, p);
   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+  #if MI_GUARDED
+  if (is_guarded && mi_block_tag_is_guarded_front(block)) {
+    // the user region begins right after the leading tag page and guard page (`block + 2*psize`)
+    // and runs to the end of the block (there is no trailing guard page); the user pointer is
+    // always at or beyond that start, so subtract its actual offset.
+    const size_t off = (size_t)((uint8_t*)p - (uint8_t*)block);
+    mi_assert_internal(off >= 2 * _mi_os_page_size() && off <= mi_page_block_size(page));
+    return (off <= mi_page_block_size(page) ? mi_page_block_size(page) - off : 0);
+  }
+  #endif
   const size_t size = mi_page_usable_size_of(page, block, is_guarded);
   mi_assert_internal((void*)p >= (void*)block);
   const size_t adjust = (uint8_t*)p - (uint8_t*)block;
@@ -767,8 +777,7 @@ static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_
 // Return the exact usable size of a block.
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
   if mi_unlikely(is_guarded) {
-    const size_t bsize = mi_page_block_size(page);
-    return (bsize - _mi_os_page_size());
+    return mi_guarded_usable_size(mi_page_block_size(page), block);  // excludes the guard page based on the block's own direction
   }
   else {
     size_t bsize;
@@ -801,12 +810,11 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
 }
 #else
 static inline size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
-  MI_UNUSED(block);
   if mi_unlikely(is_guarded) {
-    const size_t bsize = mi_page_block_size(page);
-    return (bsize - _mi_os_page_size());
+    return mi_guarded_usable_size(mi_page_block_size(page), block);  // excludes the guard page based on the block's own direction
   }
   else {
+    MI_UNUSED(block);
     return mi_page_usable_block_size(page);
   }
 }
@@ -846,8 +854,7 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
 
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size) {
   if mi_unlikely(is_guarded) {
-    const size_t bsize = mi_page_block_size(page);
-    *usable_size = (bsize - _mi_os_page_size());
+    *usable_size = mi_guarded_usable_size(mi_page_block_size(page), block);  // block's own direction decides which page is excluded
     return true;
   }
   else {

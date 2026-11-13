@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/heap/process.h"
 #include "mimalloc/profile/sample-guarded.h"
 
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
@@ -29,7 +30,27 @@ mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t mi
   theap->guarded_size_max = (min > max ? min : max);
 }
 
+// Set the direction of the guard page for guarded objects sampled on this theap after this call.
+// Invalid directions are reported through the regular error channel and leave the direction unchanged.
+// Without MI_GUARDED the call still links but the setting is safely ignored.
+mi_decl_export void mi_theap_guarded_set_direction(mi_theap_t* theap, mi_guard_direction_t direction) {
+  if (direction != MI_GUARD_AFTER && direction != MI_GUARD_BEFORE) {
+    _mi_error_message(EINVAL, "invalid guarded direction (%d); keeping the current guard direction\n", (int)direction);
+    return;
+  }
+  #if MI_GUARDED
+  if (theap == NULL || _mi_is_empty_theap(theap)) {
+    // the static empty theap is read-only; a real theap is initialized before any guarded allocation.
+    return;
+  }
+  theap->guarded_guard_before = (direction == MI_GUARD_BEFORE);
+  #else
+  MI_UNUSED(theap);
+  #endif
+}
+
 void _mi_theap_guarded_init(mi_theap_t* theap) {
+  theap->guarded_guard_before = false;  // default: guard page after the object
   #if MI_GUARDED
   mi_theap_guarded_set_sample_rate(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
@@ -42,11 +63,12 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
   #endif
 }
 
+#if MI_GUARDED
 
 // We always allocate a guarded allocation at an offset (`mi_page_has_interior_pointers` will be true).
 // We then set the first word of the block to `0` for regular offset aligned allocations (in `alloc/alloc-aligned.c`)
-// and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
-static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
+// and the first word to a guarded tag for guarded allocations to have a correct `mi_usable_size`
+static void* mi_block_ptr_set_guarded_after(mi_block_t* block, size_t obj_size, size_t* usable_size) {
   // todo: we can still make padding work by moving it out of the guard page area
   mi_page_t* const page = mi_ptr_page(block);
   if mi_unlikely(page==NULL) return NULL;  // should not happen, but avoids gcc -Wstringop-overflow warnings
@@ -93,7 +115,61 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
   return p;
 }
 
-// Allocate a block with a guard page behind it.
+// Front guard layout inside one os-page-aligned block of `block_size` bytes:
+//
+//   [ accessible tag page ][ inaccessible guard page ][ accessible user bytes ... ]
+//   ^block                 ^block+psize               ^p == block+2*psize
+//
+// The allocator tag lives at `block->next` in the accessible leading page, so the first user
+// byte at `p` carries no tag and the information needed to locate the block and remove the guard
+// stays safely readable. `p` is directly adjacent to the guard page so `p[-1]` faults.
+static void* mi_block_ptr_set_guarded_before(mi_block_t* block, size_t obj_size, size_t* usable_size) {
+  mi_page_t* const page = mi_ptr_page(block);
+  if mi_unlikely(page==NULL) return NULL;  // should not happen
+  block = (mi_block_t*)mi_ptr_rederive(mi_page_start(page), block);
+  const size_t os_page_size = _mi_os_page_size();
+  const size_t block_size = mi_page_block_size(page);
+
+  // the block must be os-page aligned (ensured by the page allocator for page-sized blocks) and
+  // leave a full tag page, a guard page and room for the object.
+  mi_assert_internal(mi_is_aligned(block, os_page_size));
+  mi_assert_internal(block_size >= obj_size + 2 * os_page_size);
+  if mi_unlikely(!mi_is_aligned(block, os_page_size) || block_size < obj_size + 2 * os_page_size) {
+    _mi_error_message(ENOMEM, "unable to place a front guard page for an object of size %zu\n", obj_size);
+    mi_free(block);
+    return NULL;
+  }
+
+  uint8_t* const guard_page = (uint8_t*)mi_page_vmem_ptr(page, (uint8_t*)block + os_page_size);
+  mi_assert_internal(mi_is_aligned(guard_page, os_page_size));
+
+  // a front guard cannot be established on pinned memory; fail rather than hand out an unprotected object
+  if mi_unlikely(page->memid.is_pinned || !mi_is_aligned(guard_page, os_page_size)) {
+    _mi_error_message(ENOMEM, "unable to set a guard page in front of an object due to pinned memory (large OS pages?) (object %p of size %zu)\n", block, block_size);
+    mi_free(block);
+    return NULL;
+  }
+
+  if mi_unlikely(!_mi_os_guard(guard_page, os_page_size, true /* committed */)) {
+    _mi_error_message(ENOMEM, "failed to set a guard page in front of an object (object %p of size %zu)\n", block, block_size);
+    mi_free(block);
+    return NULL;
+  }
+
+  // protection established: only now record the tag and interior layout
+  mi_page_set_has_interior_pointers(page, true);
+  block->next = MI_BLOCK_TAG_GUARDED_FRONT;  // tag in the readable leading page
+
+  uint8_t* const p = (uint8_t*)block + 2 * os_page_size;  // directly after the guard page, os-page aligned
+  const size_t usable = mi_guarded_usable_size(block_size, block);
+  mi_assert_internal(usable >= obj_size);
+  if (usable_size != NULL) { *usable_size = usable; mi_assert_internal(mi_usable_size(p)==usable); }
+  mi_track_align(block, p, (size_t)(p - (uint8_t*)block), obj_size);
+  mi_track_mem_defined(block, sizeof(mi_block_t));
+  return p;
+}
+
+// Allocate a block with a guard page behind (or in front of) it.
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   // allocate multiple of page size ending in a guard page
@@ -104,14 +180,34 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   }
   const size_t os_page_size = _mi_os_page_size();
   const size_t obj_size = (mi_option_is_enabled(mi_option_unsafe_guarded_precise) ? size : mi_align_up(size, MI_MAX_ALIGN_SIZE));
-  const size_t bsize    = mi_align_up(mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
-  const size_t req_size = mi_align_up(bsize + os_page_size, os_page_size);
+  const bool guard_before = theap->guarded_guard_before;
+
+  size_t req_size;
+  if (guard_before) {
+    // [tag page][guard page][user pages]; guard against overflow when rounding and adding the pages
+    const size_t user_pages = mi_align_up(obj_size, os_page_size);
+    if mi_unlikely(user_pages > MI_MAX_ALLOC_SIZE - 2 * os_page_size) {
+      _mi_error_message(EOVERFLOW, "(guarded) allocation request is too large (%zu bytes)\n", size);
+      return NULL;
+    }
+    req_size = user_pages + 2 * os_page_size;  // all os-page multiples, so blocks stay os-page aligned
+  }
+  else {
+    const size_t bsize    = mi_align_up(mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
+    if mi_unlikely(bsize > MI_MAX_ALLOC_SIZE - os_page_size) {
+      _mi_error_message(EOVERFLOW, "(guarded) allocation request is too large (%zu bytes)\n", size);
+      return NULL;
+    }
+    req_size = mi_align_up(bsize + os_page_size, os_page_size);
+  }
+
   // const size_t threshold = mi_theap_disable_profiler(theap);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap, req_size, false /* don't zero */, ppage);
   // mi_theap_enable_profiler(theap,threshold);
   if (block==NULL) return NULL;
   size_t usable_size = 0;
-  void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
+  void* const p = (guard_before ? mi_block_ptr_set_guarded_before(block, obj_size, &usable_size)
+                                : mi_block_ptr_set_guarded_after(block, obj_size, &usable_size));
   if (p == NULL) return NULL;
   if (zero) {
     mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
@@ -143,20 +239,27 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 
 
 // Remove guard page when building with MI_GUARDED
-#if MI_GUARDED
 void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   // if (!mi_block_ptr_is_guarded(block,p)) return;
   MI_UNUSED_RELEASE(p);
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
   mi_assert_internal(mi_page_has_interior_pointers(page));
   mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));
-  mi_assert_internal(block->next == MI_BLOCK_TAG_GUARDED);
+  mi_assert_internal(mi_block_tag_is_guarded(block->next));
 
   const size_t bsize = mi_page_block_size(page);
   const size_t psize = _mi_os_page_size();
-  mi_assert_internal(bsize > psize);
-  if (page->memid.is_pinned) return;  // no guard page was set (see `mi_block_ptr_set_guarded`)
-  void* gpage = mi_page_vmem_ptr(page, (uint8_t*)block + bsize - psize);
+  if (page->memid.is_pinned) return;  // no guard page was set (see the guarded setters)
+  void* gpage;
+  if (mi_block_tag_is_guarded_front(block)) {
+    // front layout: guard page sits between the readable tag page and the user pointer
+    mi_assert_internal(bsize > 2 * psize);
+    gpage = mi_page_vmem_ptr(page, (uint8_t*)block + psize);
+  }
+  else {
+    mi_assert_internal(bsize > psize);
+    gpage = mi_page_vmem_ptr(page, (uint8_t*)block + bsize - psize);
+  }
   mi_assert_internal(mi_is_aligned(gpage, psize));
   _mi_os_unguard(gpage, psize, true /* committed */);
 }
@@ -168,7 +271,9 @@ void _mi_page_unguard_all(mi_page_t* page) {
   const size_t psize = mi_page_committed(page);
   _mi_os_unguard(start, psize, true /* committed */);  // unguard all at once as we cannot know which blocks are guarded
 }
+
 #else
+
 void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(p);
 }

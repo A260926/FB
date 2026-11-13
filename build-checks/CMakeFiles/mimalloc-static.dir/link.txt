@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmimalloc.a "CMakeFiles/mimalloc-static.dir/src/static.c.o"
+/usr/bin/ranlib libmimalloc.a

@@ -418,6 +418,21 @@ mi_decl_nodiscard mi_decl_export                  void* mi_theap_rezalloc(mi_the
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed);
 mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max);
 
+// Direction of the sampled guard page relative to a guarded object.
+// `MI_GUARD_AFTER` (the default) places the inaccessible OS page right after the object (catching overflows),
+// while `MI_GUARD_BEFORE` places it right in front of the object (catching underflows like `p[-1]`).
+typedef enum mi_guard_direction_e {
+  MI_GUARD_AFTER  = 0,    // guard page directly after the object (default)
+  MI_GUARD_BEFORE = 1     // guard page directly before the object
+} mi_guard_direction_t;
+
+// Set the guard page direction used for guarded objects sampled by this theap after this call.
+// Newly created theaps default to `MI_GUARD_AFTER`. The setting does not affect the sample countdown,
+// size bounds, or random sequence, nor already live objects (which keep their own recorded direction).
+// Only available in builds with `MI_GUARDED` enabled; otherwise the call still links but is ignored.
+// An invalid direction is reported through the error channel (EINVAL) and the current direction is kept.
+mi_decl_export void mi_theap_guarded_set_direction(mi_theap_t* theap, mi_guard_direction_t direction);
+
 // very experimental
 typedef bool (mi_cdecl mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
 mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,

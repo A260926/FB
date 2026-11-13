@@ -507,6 +507,40 @@ many system calls. Therefore, there are various environment variables (and optio
   aligned allocations to be un-aligned so use with care.
 -->
 
+### Guard page direction
+
+By default a sampled guard page is placed directly _after_ an object (to catch buffer overflows). The direction can be
+selected per thread-local heap so the same sampler can also catch _underflows_ (accesses before the object, like `p[-1]`):
+
+```c
+mi_theap_t* theap = mi_theap_get_default();
+mi_theap_guarded_set_sample_rate(theap, 1, 1);  // guard every eligible object
+mi_theap_guarded_set_direction(theap, MI_GUARD_BEFORE);
+```
+
+- `MI_GUARD_AFTER` (the default) keeps the historical behavior: an inaccessible OS page right after the object.
+- `MI_GUARD_BEFORE` places an inaccessible OS page right in front of the object, so the first user byte is adjacent to
+  the guard and both reads and writes of `p[-1]` raise `SIGSEGV`/`SIGBUS`.
+
+The setting only affects guarded objects sampled on that theap afterwards. It does not change the sample countdown, the
+size bounds, or the random sequence, and already live objects keep their own recorded direction. Both orientations can
+be live at the same time in a heap (or page); freeing an object always removes the guard page recorded on that object,
+independent of the freeing thread's current configuration. An invalid enum value is reported through the regular error
+channel (`EINVAL`) and leaves the direction unchanged. The call links in builds without `MI_GUARDED` but is then ignored.
+
+Limitations:
+
+- Guarded objects are laid out with whole OS pages, so a front-guarded user pointer is OS-page aligned and each guarded
+  object consumes at least two extra OS pages (an accessible page holding the allocator tag, and the guard page itself).
+  `mi_usable_size` never counts the guard page.
+- The `mi_malloc_aligned` / `mi_malloc_aligned_at` entry points keep their address, content and usable-size contract,
+  but their returned pointer is not required to sit directly against the front guard page; the underlying front-guarded
+  block is still located and released correctly.
+- Only regular system page mappings are used (the pinned/huge-page arenas are not extended). If a front guard cannot be
+  established, the allocation is reported and fails rather than returning writable memory claimed to be protected.
+- On `realloc`, an in-place resize keeps the old direction; a relocation chooses the direction currently configured on
+  the receiving thread heap. `rezalloc` keeps its usual extension-zeroing rule.
+
 # Overriding Standard Malloc
 
 Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
