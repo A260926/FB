@@ -1,0 +1,398 @@
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+# Release builds
+  build_release_macos:
+    name: Release build (macOS universal, static Qt 6.5.0)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get Qt
+        uses: actions/checkout@v6
+        with:
+          repository: LongSoft/qt-6-static-universal-macos
+          path: qt
+          lfs: true
+      - name: Unpack Qt
+        shell: bash
+        working-directory: qt
+        run: sudo 7z x qt-6.5.0-static-universal-macos.7z -o/opt
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake -DCMAKE_PREFIX_PATH="/opt/qt-6.5.0-static-universal-macos" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Signed archive everything
+        if: github.repository_owner == 'LongSoft'
+        working-directory: ${{runner.workspace}}/build
+        env:
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MAC_ACCOUNT_NAME: ${{ secrets.MAC_ACCOUNT_NAME }}
+          MAC_ACCOUNT_PASSWORD: ${{ secrets.MAC_ACCOUNT_PASSWORD }}
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          codesign -fs - UEFIExtract/UEFIExtract
+          codesign -fs - UEFIFind/UEFIFind
+          zip -qryj ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIExtract/UEFIExtract
+          zip -qryj ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIFind/UEFIFind
+          brew install create-dmg || exit 1
+          curl -OL "https://github.com/acidanthera/ocbuild/raw/master/codesign/appsign.sh" || exit 1
+          chmod a+x appsign.sh || exit 1
+          "$(pwd)/appsign.sh" ./UEFITool/UEFITool.app ../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_universal_mac.dmg
+      - name: Archive everything
+        if: github.repository_owner != 'LongSoft'
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          codesign -fs - UEFIExtract/UEFIExtract
+          codesign -fs - UEFIFind/UEFIFind
+          zip -qryj ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIExtract/UEFIExtract
+          zip -qryj ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIFind/UEFIFind
+          cd UEFITool
+          codesign -fs - --deep UEFITool.app
+          zip -qry ../../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFITool.app
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: macOS builds
+          path: dist/*
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_linux:
+    name: Release build (Linux x64, shared Qt 6)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get Qt
+        run: | 
+          sudo apt update
+          sudo apt-get install -qq zip cmake libgl1-mesa-dev qt6-base-dev
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          zip -qryj ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFIExtract/uefiextract
+          zip -qryj ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFIFind/uefifind
+          zip -qryj ../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFITool/uefitool
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Linux builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_freebsd:
+    name: Release build (FreeBSD x64, shared Qt 6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup VM
+        id: test
+        uses: cross-platform-actions/action@v1.6.0
+        with:
+          operating_system: freebsd
+          version: '14.5'
+      - name: Build
+        shell: cpa.sh {0}
+        run: |
+            sh << 'EOF'
+            set -e
+            sudo pkg install -y zip cmake qt6-base
+            mkdir dist
+            mkdir build
+            cd build
+            cmake ..
+            cmake --build . --config Release
+            UEFITOOL_VER=$(cat ../version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+            zip -qryj ../dist/UEFIExtract_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFIExtract/uefiextract
+            zip -qryj ../dist/UEFIFind_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFIFind/uefifind
+            zip -qryj ../dist/UEFITool_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFITool/uefitool
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: FreeBSD builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_windows_32:
+    name: Release build (Win32, static Qt 5.6.3)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6 
+      - name: Get Qt 5.6.3
+        uses: actions/checkout@v6
+        with:
+          repository: LongSoft/qt-5.6.3-static-x86-msvc2017
+          path: qt5
+          lfs: true
+      - name: Unpack Qt 5.6.3
+        shell: bash
+        working-directory: qt5
+        run: 7z x qt-5.6.3-static-x86-msvc2017.7z -o../..
+      - name: Install v141_xp Toolset
+        shell: powershell
+        run: |
+          Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
+          $InstallPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+          $WorkLoads = '--add Microsoft.VisualStudio.Component.WinXP'
+          $Arguments = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$InstallPath`"", $WorkLoads, '--quiet', '--norestart', '--nocache')
+          $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -eq 0) {
+              Write-Host "components have been successfully added"
+          } else {
+              Write-Host "components were not installed"
+          }
+      - name: Create dist directory
+        shell: bash
+        run: mkdir dist
+      - name: Create UEFIExtract build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFIExtract
+      - name: Configure UEFIExtract
+        shell: bash
+        working-directory: ${{runner.workspace}}/build/UEFIExtract
+        run: cmake -G "Visual Studio 17 2022" -A Win32 -T "v141_xp" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" ../../UEFITool/UEFIExtract/
+      - name: Build UEFIExtract
+        working-directory: ${{runner.workspace}}/build/UEFIExtract
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Archive UEFIExtract
+        working-directory: ${{runner.workspace}}/build/UEFIExtract/Release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_win32.zip UEFIExtract.exe
+      - name: Create UEFIFind build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFIFind
+      - name: Configure UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind
+        shell: bash
+        run: cmake -G "Visual Studio 17 2022" -A Win32 -T "v141_xp" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" ../../UEFITool/UEFIFind/
+      - name: Build UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Archive UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind/Release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_win32.zip UEFIFind.exe
+      - name: Create UEFITool build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFITool
+      - name: Configure UEFITool
+        shell: bash
+        working-directory: ${{runner.workspace}}/build/UEFITool
+        run: ../../qt-5.6.3-static-x86-msvc2017/bin/qmake.exe -tp vc ../../UEFITool/UEFITool/
+      - name: Build UEFITool
+        working-directory: ${{runner.workspace}}/build/UEFITool
+        shell: cmd
+        run: |
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
+            msbuild -t:Rebuild -p:PlatformToolset=v141_xp;Configuration=Release
+      - name: Archive UEFITool
+        working-directory: ${{runner.workspace}}/build/UEFITool/release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_win32.zip UEFITool.exe
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Windows 32-bit builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_windows_64:
+    name: Release build (Win64, static Qt 6.5.0)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6 
+      - name: Get Qt 6.5.0
+        uses: actions/checkout@v6
+        with:
+          repository: LongSoft/qt-6-static-x64-msvc2022
+          path: qt6
+          lfs: true
+      - name: Unpack Qt 6.5.0
+        shell: bash
+        working-directory: qt6
+        run: 7z x qt-6.5.0-static-x64-msvc2022.7z -o../..
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        shell: cmd
+        run: cmake -DCMAKE_PREFIX_PATH="D:\a\UEFITool\qt-6.5.0-static-x64-msvc2022" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" -A x64 ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_win64.zip ./UEFIExtract/Release/UEFIExtract.exe
+          7z a ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_win64.zip ./UEFIFind/Release/UEFIFind.exe
+          7z a ../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_win64.zip ./UEFITool/Release/UEFITool.exe
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Windows 64-bit builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+# Build Tests
+  build_test_linux_meson:
+    name: Meson build system test (shared Qt 5)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get Deps
+        run: | 
+          sudo apt update
+          sudo apt-get install -qq cmake meson zlib1g-dev qtbase5-dev
+      - name: Configure build
+        run: mkdir build-meson && meson ./build-meson
+      - name: Build everything
+        run: ninja -C build-meson
+
+  build_test_windows_mingw:
+    name: MinGW compiler test (shared Qt 6.5.0)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          version: '6.5.0'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+      - name: Build everything
+        run: |
+          cmake -G "MinGW Makefiles" -B build .
+          cmake --build build --parallel
+
+  build_test_linux_fuzzer:
+    name: Fuzzer build test (Clang, Linux x64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: CC=/usr/bin/clang CXX=/usr/bin/clang++ cmake ../UEFITool/fuzzing
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build .
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          zip -qryj ../dist/ffsparser_fuzzer_NE_${UEFITOOL_VER}_x64_linux.zip ./ffsparser_fuzzer
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Fuzzer
+          path: ${{runner.workspace}}/dist/*.zip
+
+# Static Analysis
+# Coverity is currently broken, stub it out for now
+#  build_analyze_linux_coverity:
+#    env:
+#      PROJECT_TYPE: TOOL
+#      JOB_TYPE: COVERITY
+#    if: github.repository_owner == 'LongSoft' && github.event_name != 'pull_request'
+#    name: Coverity Static Analysis (shared Qt 6.5.0)
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v6
+#      - name: Install Qt
+#        uses: jurplel/install-qt-action@v3
+#        with:
+#          version: '6.5.0'
+#          host: 'linux'
+#          target: 'desktop'
+#      - name: Create build directory
+#        run: cmake -E make_directory ${{runner.workspace}}/build
+#      - name: Configure everything
+#        working-directory: ${{runner.workspace}}/build
+#        run: cmake ../UEFITool
+#      - name: Run Coverity
+#        working-directory: ${{runner.workspace}}/build
+#        run: |
+#          src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap-linux.sh) && eval "$src" || exit 1
+#        env:
+#          COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+#          COVERITY_SCAN_EMAIL: ${{ secrets.COVERITY_SCAN_EMAIL }}
+#          COVERITY_BUILD_COMMAND: cmake --build .
