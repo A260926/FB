@@ -83,6 +83,35 @@ JS! Hooray!
 That's it?!
 ```
 
+### Script contents follow the HTML tokenizer's script-data states
+
+For `<script>` in HTML content, the tokenizer implements the HTML "script
+data" state family. In particular, `<!--` switches to escaped script data and
+`<script` inside it switches to double-escaped script data, so a closing
+`</script>` there only returns to escaped mode instead of ending the element:
+
+```js
+const parser = new htmlparser2.Parser({
+    onopentag(name, attributes) {
+        console.log("<", name, attributes.id ?? "");
+    },
+    ontext(text) {
+        // Script text arrives in one or more pieces.
+        console.log("text:", text);
+    },
+});
+
+parser.end(
+    '<script><!--<script></script><p id="ghost">x</p>--></script>' +
+        '<p id="real">ok</p>',
+);
+```
+
+The `p#ghost` markup never becomes an element — it remains part of the
+script's text — and only `p#real` is opened. This also holds when the input is
+written in chunks; the script-data state lives on the tokenizer instance and is
+carried across `write()` calls.
+
 ### Parser events
 
 All callbacks are optional. The handler object you pass to `Parser` may implement any subset of these:

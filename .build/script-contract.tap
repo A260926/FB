@@ -1,0 +1,164 @@
+TAP version 13
+# Subtest: script data
+    # Subtest: keeps ghost markup inside double-escaped script text
+    ok 1 - keeps ghost markup inside double-escaped script text
+      ---
+      duration_ms: 1.429667
+      type: 'test'
+      ...
+    # Subtest: closes single-escaped script data at the real end tag
+    ok 2 - closes single-escaped script data at the real end tag
+      ---
+      duration_ms: 0.15325
+      type: 'test'
+      ...
+    # Subtest: treats only script plus a valid delimiter as the end tag
+    ok 3 - treats only script plus a valid delimiter as the end tag
+      ---
+      duration_ms: 0.112166
+      type: 'test'
+      ...
+    # Subtest: does not enter double-escaped on near words in escaped data
+    ok 4 - does not enter double-escaped on near words in escaped data
+      ---
+      duration_ms: 0.36025
+      type: 'test'
+      ...
+    # Subtest: matches the script keyword case-insensitively
+    ok 5 - matches the script keyword case-insensitively
+      ---
+      duration_ms: 0.341959
+      type: 'test'
+      ...
+    # Subtest: leaves double-escaped mode on --> and closes next
+    ok 6 - leaves double-escaped mode on --> and closes next
+      ---
+      duration_ms: 0.378459
+      type: 'test'
+      ...
+    # Subtest: leaves escaped mode on --> and closes next
+    ok 7 - leaves escaped mode on --> and closes next
+      ---
+      duration_ms: 0.325834
+      type: 'test'
+      ...
+    # Subtest: delivers unfinished script text once at EOF
+    ok 8 - delivers unfinished script text once at EOF
+      ---
+      duration_ms: 0.146125
+      type: 'test'
+      ...
+    # Subtest: delivers escaped script text at EOF after a surrogate pair
+    ok 9 - delivers escaped script text at EOF after a surrogate pair
+      ---
+      duration_ms: 0.106208
+      type: 'test'
+      ...
+    1..9
+ok 1 - script data
+  ---
+  duration_ms: 5.488958
+  type: 'suite'
+  ...
+# Subtest: script data across write boundaries
+    # Subtest: keeps state for every single cut: double-escaped with a ghost paragraph
+    ok 1 - keeps state for every single cut: double-escaped with a ghost paragraph
+      ---
+      duration_ms: 1.989042
+      type: 'test'
+      ...
+    # Subtest: keeps state for every single cut: temp word and close tag near misses
+    ok 2 - keeps state for every single cut: temp word and close tag near misses
+      ---
+      duration_ms: 0.71775
+      type: 'test'
+      ...
+    # Subtest: keeps state for every single cut: surrogate pair inside double-escaped text
+    ok 3 - keeps state for every single cut: surrogate pair inside double-escaped text
+      ---
+      duration_ms: 0.738
+      type: 'test'
+      ...
+    # Subtest: cuts inside the temp word, the end tag, and a surrogate pair
+    ok 4 - cuts inside the temp word, the end tag, and a surrogate pair
+      ---
+      duration_ms: 0.119167
+      type: 'test'
+      ...
+    # Subtest: produces the same ranges when written one code unit at a time
+    ok 5 - produces the same ranges when written one code unit at a time
+      ---
+      duration_ms: 0.086
+      type: 'test'
+      ...
+    1..5
+ok 2 - script data across write boundaries
+  ---
+  duration_ms: 4.064875
+  type: 'suite'
+  ...
+# Subtest: script data pause and reset
+    # Subtest: advances script state and end notification once after resume
+    ok 1 - advances script state and end notification once after resume
+      ---
+      duration_ms: 0.677167
+      type: 'test'
+      ...
+    # Subtest: stops processing after end while paused, then resumes once
+    ok 2 - stops processing after end while paused, then resumes once
+      ---
+      duration_ms: 0.203375
+      type: 'test'
+      ...
+    # Subtest: does not carry an unfinished escaped state across reset
+    ok 3 - does not carry an unfinished escaped state across reset
+      ---
+      duration_ms: 0.305583
+      type: 'test'
+      ...
+    1..3
+ok 3 - script data pause and reset
+  ---
+  duration_ms: 1.329459
+  type: 'suite'
+  ...
+# Subtest: non-script special tags keep their behavior
+    # Subtest: treats style as RAWTEXT
+    ok 1 - treats style as RAWTEXT
+      ---
+      duration_ms: 0.462833
+      type: 'test'
+      ...
+    # Subtest: treats title and textarea as RCDATA
+    ok 2 - treats title and textarea as RCDATA
+      ---
+      duration_ms: 0.358
+      type: 'test'
+      ...
+    # Subtest: keeps plaintext running to EOF
+    ok 3 - keeps plaintext running to EOF
+      ---
+      duration_ms: 0.096209
+      type: 'test'
+      ...
+    # Subtest: keeps XML mode treating script like an ordinary element
+    ok 4 - keeps XML mode treating script like an ordinary element
+      ---
+      duration_ms: 0.183125
+      type: 'test'
+      ...
+    1..4
+ok 4 - non-script special tags keep their behavior
+  ---
+  duration_ms: 1.259958
+  type: 'suite'
+  ...
+1..4
+# tests 21
+# suites 4
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 150.935833

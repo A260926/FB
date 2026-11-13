@@ -76,8 +76,34 @@ const enum State {
     InSpecialTag,
     InPlainText,
 
+    /*
+     * Script data (`<script>` in HTML content). This is the family of states
+     * described by the HTML tokenizer's "script data" section.
+     */
+    InScriptData,
+    ScriptDataLessThan,
+    ScriptDataEndTagOpen,
+    ScriptDataEndTagName,
+    ScriptDataEscapeStart,
+    ScriptDataEscapeStartDash,
+    ScriptDataEscaped,
+    ScriptDataEscapedDash,
+    ScriptDataEscapedDashDash,
+    ScriptDataEscapedLessThan,
+    ScriptDataEscapedEndTagOpen,
+    ScriptDataEscapedEndTagName,
+    ScriptDataDoubleEscapeStart,
+    ScriptDataDoubleEscaped,
+    ScriptDataDoubleEscapedDash,
+    ScriptDataDoubleEscapedDashDash,
+    ScriptDataDoubleEscapedLessThan,
+    ScriptDataDoubleEscapeEnd,
+
     InEntity,
 }
+
+/** Name of the tag whose contents use the script-data states. */
+const ScriptName = "script";
 
 function isWhitespace(c: number): boolean {
     return (
@@ -208,6 +234,21 @@ export default class Tokenizer {
 
     private currentSequence: Uint8Array = Sequences.Empty;
     private sequenceIndex = 0;
+    /**
+     * Absolute index of the `<` that started a potential `</script` end tag in
+     * script data. `-1` when no such candidate is pending.
+     *
+     * This is an absolute stream position, so it stays valid when `write()`
+     * replaces the input buffer.
+     */
+    private scriptEndTagStart = -1;
+    /** Number of characters of the `script` end-tag name matched so far. */
+    private scriptEndTagIndex = 0;
+    /**
+     * Temporary word collected in the script-data double-escape states.
+     * Stored as a string so it survives `write()` buffer replacement.
+     */
+    private scriptTempBuffer = "";
     /** Indicates whether the end of the input has been handled. */
     private finished = false;
     /** Indicates whether the tokenizer has been paused. */
@@ -256,6 +297,19 @@ export default class Tokenizer {
         if (this.currentSequence === Sequences.Plaintext) {
             this.currentSequence = Sequences.Empty;
             this.state = State.InPlainText;
+        } else if (
+            this.currentSequence === Sequences.ScriptEnd &&
+            !this.xmlMode &&
+            !this.cbs.isInForeignContext?.()
+        ) {
+            /*
+             * `<script>` in HTML content uses the script-data state family.
+             * XML mode and foreign content keep the generic raw-text handling.
+             */
+            this.state = State.InScriptData;
+            this.scriptEndTagStart = -1;
+            this.scriptEndTagIndex = 0;
+            this.scriptTempBuffer = "";
         } else if (this.isSpecial) {
             this.state = State.InSpecialTag;
             this.sequenceIndex = 0;
@@ -509,6 +563,366 @@ export default class Tokenizer {
         } else {
             // If we see a `<`, set the sequence index to 1; useful for eg. `<</script>`.
             this.sequenceIndex = Number(c === CharCodes.Lt);
+        }
+    }
+
+    /**
+     * Absolute index up to which pending script text can be emitted without
+     * cutting through a potential end tag.
+     *
+     * Script text is emitted lazily from `sectionStart`. While a `</script`
+     * candidate is being matched (or a lone `<` is awaited) part of the
+     * pending text may still turn into markup, so it must not be reported yet.
+     * Returning `-1` signals that the current state is not a script-data one.
+     * @returns Exclusive end of the safely-emittable text.
+     */
+    private scriptTextSafeEnd(): number {
+        switch (this.state) {
+            case State.ScriptDataLessThan:
+            case State.ScriptDataEscapedLessThan: {
+                // The `<` that may begin an end tag is at the previous index.
+                return this.index - 1;
+            }
+            case State.ScriptDataEndTagOpen:
+            case State.ScriptDataEndTagName:
+            case State.ScriptDataEscapedEndTagOpen:
+            case State.ScriptDataEscapedEndTagName: {
+                return this.scriptEndTagStart >= 0
+                    ? this.scriptEndTagStart
+                    : this.index;
+            }
+            case State.InScriptData:
+            case State.ScriptDataEscapeStart:
+            case State.ScriptDataEscapeStartDash:
+            case State.ScriptDataEscaped:
+            case State.ScriptDataEscapedDash:
+            case State.ScriptDataEscapedDashDash:
+            case State.ScriptDataDoubleEscapeStart:
+            case State.ScriptDataDoubleEscaped:
+            case State.ScriptDataDoubleEscapedDash:
+            case State.ScriptDataDoubleEscapedDashDash:
+            case State.ScriptDataDoubleEscapedLessThan:
+            case State.ScriptDataDoubleEscapeEnd: {
+                return this.index;
+            }
+            default: {
+                return -1;
+            }
+        }
+    }
+
+    /**
+     * Emit the pending script text up to `endIndex`, if any.
+     * @param endIndex Exclusive end of the text to emit.
+     */
+    private emitScriptText(endIndex: number): void {
+        if (this.sectionStart < endIndex) {
+            this.cbs.ontext(this.sectionStart, endIndex);
+        }
+    }
+
+    /**
+     * Handle the character that confirms a real `</script` end tag:
+     * emit the remaining raw text, then treat the name like any closing tag.
+     * @param c The delimiter that follows the end-tag name.
+     */
+    private closeScriptTag(c: number): void {
+        const endOfText = this.scriptEndTagStart;
+        this.emitScriptText(endOfText);
+
+        this.scriptEndTagStart = -1;
+        this.scriptEndTagIndex = 0;
+        this.scriptTempBuffer = "";
+        this.isSpecial = false;
+        this.currentSequence = Sequences.Empty;
+        this.sequenceIndex = 0;
+
+        // Skip over `</`; the name starts here.
+        this.sectionStart = endOfText + 2;
+        this.stateInClosingTagName(c);
+    }
+
+    /**
+     * Append an ASCII letter to the temporary word used by the double-escape
+     * states. The buffer is capped: anything longer than `script` can never
+     * match, and capping keeps memory bounded on hostile input.
+     * @param c Current character code point.
+     */
+    private pushScriptTempBuffer(c: number): void {
+        if (this.scriptTempBuffer.length <= ScriptName.length) {
+            this.scriptTempBuffer += String.fromCharCode(c | 0x20);
+        }
+    }
+
+    /**
+     * Whether the collected temporary word is the script tag name.
+     * @returns `true` for a case-insensitive `script`.
+     */
+    private isScriptTempBuffer(): boolean {
+        return this.scriptTempBuffer === ScriptName;
+    }
+
+    private stateInScriptData(c: number): void {
+        if (c !== CharCodes.Lt && !this.fastForwardTo(CharCodes.Lt)) {
+            return;
+        }
+
+        this.scriptEndTagStart = this.index;
+        this.state = State.ScriptDataLessThan;
+    }
+
+    private stateScriptDataLessThan(c: number): void {
+        if (c === CharCodes.Slash) {
+            this.state = State.ScriptDataEndTagOpen;
+        } else if (c === CharCodes.ExclamationMark) {
+            this.scriptEndTagStart = -1;
+            this.state = State.ScriptDataEscapeStart;
+        } else {
+            this.scriptEndTagStart = -1;
+            this.state = State.InScriptData;
+            this.stateInScriptData(c);
+        }
+    }
+
+    private stateScriptDataEndTagOpen(c: number): void {
+        if (isASCIIAlpha(c)) {
+            this.scriptEndTagIndex = 0;
+            this.state = State.ScriptDataEndTagName;
+            this.stateScriptDataEndTagName(c);
+        } else {
+            this.scriptEndTagStart = -1;
+            this.state = State.InScriptData;
+            this.stateInScriptData(c);
+        }
+    }
+
+    /**
+     * Match the name of a potential `</script` end tag.
+     *
+     * Only the exact name `script` (ASCII case-insensitive) followed by ASCII
+     * whitespace, `/` or `>` closes the tag. Anything else is plain text.
+     * @param c Current character code point.
+     * @param isEscaped Whether the tag is being matched in escaped script data.
+     */
+    private handleScriptEndTagName(c: number, isEscaped: boolean): void {
+        if (isASCIIAlpha(c)) {
+            if (this.scriptEndTagIndex >= 0) {
+                if (
+                    this.scriptEndTagIndex < ScriptName.length &&
+                    (c | 0x20) === ScriptName.charCodeAt(this.scriptEndTagIndex)
+                ) {
+                    this.scriptEndTagIndex++;
+                } else {
+                    this.scriptEndTagIndex = -1;
+                }
+            }
+            return;
+        }
+
+        if (
+            isEndOfTagSection(c) &&
+            this.scriptEndTagIndex === ScriptName.length
+        ) {
+            this.closeScriptTag(c);
+            return;
+        }
+
+        // Not an appropriate end tag: the pending characters are just text.
+        this.scriptEndTagStart = -1;
+        this.scriptEndTagIndex = 0;
+        this.state = isEscaped ? State.ScriptDataEscaped : State.InScriptData;
+        if (isEscaped) {
+            this.stateScriptDataEscaped(c);
+        } else {
+            this.stateInScriptData(c);
+        }
+    }
+
+    private stateScriptDataEndTagName(c: number): void {
+        this.handleScriptEndTagName(c, false);
+    }
+
+    private stateScriptDataEscapeStart(c: number): void {
+        if (c === CharCodes.Dash) {
+            this.state = State.ScriptDataEscapeStartDash;
+        } else {
+            this.state = State.InScriptData;
+            this.stateInScriptData(c);
+        }
+    }
+
+    private stateScriptDataEscapeStartDash(c: number): void {
+        if (c === CharCodes.Dash) {
+            this.state = State.ScriptDataEscapedDashDash;
+        } else {
+            this.state = State.InScriptData;
+            this.stateInScriptData(c);
+        }
+    }
+
+    private stateScriptDataEscaped(c: number): void {
+        if (c === CharCodes.Dash) {
+            this.state = State.ScriptDataEscapedDash;
+        } else if (c === CharCodes.Lt) {
+            this.state = State.ScriptDataEscapedLessThan;
+        }
+    }
+
+    private stateScriptDataEscapedDash(c: number): void {
+        switch (c) {
+            case CharCodes.Dash: {
+                this.state = State.ScriptDataEscapedDashDash;
+                break;
+            }
+            case CharCodes.Lt: {
+                this.state = State.ScriptDataEscapedLessThan;
+                break;
+            }
+            case CharCodes.Gt: {
+                this.state = State.InScriptData;
+                break;
+            }
+            default: {
+                this.state = State.ScriptDataEscaped;
+            }
+        }
+    }
+
+    private stateScriptDataEscapedDashDash(c: number): void {
+        switch (c) {
+            case CharCodes.Dash: {
+                // Stay in the dash-dash state.
+                break;
+            }
+            case CharCodes.Lt: {
+                this.state = State.ScriptDataEscapedLessThan;
+                break;
+            }
+            case CharCodes.Gt: {
+                this.state = State.InScriptData;
+                break;
+            }
+            default: {
+                this.state = State.ScriptDataEscaped;
+            }
+        }
+    }
+
+    private stateScriptDataEscapedLessThan(c: number): void {
+        if (c === CharCodes.Slash) {
+            this.scriptEndTagStart = this.index - 1;
+            this.state = State.ScriptDataEscapedEndTagOpen;
+        } else if (isASCIIAlpha(c)) {
+            this.scriptTempBuffer = "";
+            this.state = State.ScriptDataDoubleEscapeStart;
+            this.stateScriptDataDoubleEscapeStart(c);
+        } else {
+            this.state = State.ScriptDataEscaped;
+            this.stateScriptDataEscaped(c);
+        }
+    }
+
+    private stateScriptDataEscapedEndTagOpen(c: number): void {
+        if (isASCIIAlpha(c)) {
+            this.scriptEndTagIndex = 0;
+            this.state = State.ScriptDataEscapedEndTagName;
+            this.stateScriptDataEscapedEndTagName(c);
+        } else {
+            this.scriptEndTagStart = -1;
+            this.state = State.ScriptDataEscaped;
+            this.stateScriptDataEscaped(c);
+        }
+    }
+
+    private stateScriptDataEscapedEndTagName(c: number): void {
+        this.handleScriptEndTagName(c, true);
+    }
+
+    private stateScriptDataDoubleEscapeStart(c: number): void {
+        if (isEndOfTagSection(c)) {
+            this.state = this.isScriptTempBuffer()
+                ? State.ScriptDataDoubleEscaped
+                : State.ScriptDataEscaped;
+            this.scriptTempBuffer = "";
+        } else if (isASCIIAlpha(c)) {
+            this.pushScriptTempBuffer(c);
+        } else {
+            this.scriptTempBuffer = "";
+            this.state = State.ScriptDataEscaped;
+            this.stateScriptDataEscaped(c);
+        }
+    }
+
+    private stateScriptDataDoubleEscaped(c: number): void {
+        if (c === CharCodes.Dash) {
+            this.state = State.ScriptDataDoubleEscapedDash;
+        } else if (c === CharCodes.Lt) {
+            this.state = State.ScriptDataDoubleEscapedLessThan;
+        }
+    }
+
+    private stateScriptDataDoubleEscapedDash(c: number): void {
+        switch (c) {
+            case CharCodes.Dash: {
+                this.state = State.ScriptDataDoubleEscapedDashDash;
+                break;
+            }
+            case CharCodes.Lt: {
+                this.state = State.ScriptDataDoubleEscapedLessThan;
+                break;
+            }
+            case CharCodes.Gt: {
+                this.state = State.InScriptData;
+                break;
+            }
+            default: {
+                this.state = State.ScriptDataDoubleEscaped;
+            }
+        }
+    }
+
+    private stateScriptDataDoubleEscapedDashDash(c: number): void {
+        switch (c) {
+            case CharCodes.Dash: {
+                // Stay in the dash-dash state.
+                break;
+            }
+            case CharCodes.Lt: {
+                this.state = State.ScriptDataDoubleEscapedLessThan;
+                break;
+            }
+            case CharCodes.Gt: {
+                this.state = State.InScriptData;
+                break;
+            }
+            default: {
+                this.state = State.ScriptDataDoubleEscaped;
+            }
+        }
+    }
+
+    private stateScriptDataDoubleEscapedLessThan(c: number): void {
+        if (c === CharCodes.Slash) {
+            this.scriptTempBuffer = "";
+            this.state = State.ScriptDataDoubleEscapeEnd;
+        } else {
+            this.state = State.ScriptDataDoubleEscaped;
+            this.stateScriptDataDoubleEscaped(c);
+        }
+    }
+
+    private stateScriptDataDoubleEscapeEnd(c: number): void {
+        if (isEndOfTagSection(c)) {
+            this.state = this.isScriptTempBuffer()
+                ? State.ScriptDataEscaped
+                : State.ScriptDataDoubleEscaped;
+            this.scriptTempBuffer = "";
+        } else if (isASCIIAlpha(c)) {
+            this.pushScriptTempBuffer(c);
+        } else {
+            this.scriptTempBuffer = "";
+            this.state = State.ScriptDataDoubleEscaped;
+            this.stateScriptDataDoubleEscaped(c);
         }
     }
 
@@ -879,6 +1293,17 @@ export default class Tokenizer {
             ) {
                 this.cbs.onattribdata(this.sectionStart, this.index);
                 this.sectionStart = this.index;
+            } else {
+                /*
+                 * Script data can be handed out incrementally, but a pending
+                 * `<` or `</script` candidate must stay in the buffer until it
+                 * is either confirmed or rejected.
+                 */
+                const safeEnd = this.scriptTextSafeEnd();
+                if (safeEnd > this.sectionStart) {
+                    this.cbs.ontext(this.sectionStart, safeEnd);
+                    this.sectionStart = safeEnd;
+                }
             }
         }
     }
@@ -911,6 +1336,78 @@ export default class Tokenizer {
                 }
                 case State.InSpecialTag: {
                     this.stateInSpecialTag(c);
+                    break;
+                }
+                case State.InScriptData: {
+                    this.stateInScriptData(c);
+                    break;
+                }
+                case State.ScriptDataLessThan: {
+                    this.stateScriptDataLessThan(c);
+                    break;
+                }
+                case State.ScriptDataEndTagOpen: {
+                    this.stateScriptDataEndTagOpen(c);
+                    break;
+                }
+                case State.ScriptDataEndTagName: {
+                    this.stateScriptDataEndTagName(c);
+                    break;
+                }
+                case State.ScriptDataEscapeStart: {
+                    this.stateScriptDataEscapeStart(c);
+                    break;
+                }
+                case State.ScriptDataEscapeStartDash: {
+                    this.stateScriptDataEscapeStartDash(c);
+                    break;
+                }
+                case State.ScriptDataEscaped: {
+                    this.stateScriptDataEscaped(c);
+                    break;
+                }
+                case State.ScriptDataEscapedDash: {
+                    this.stateScriptDataEscapedDash(c);
+                    break;
+                }
+                case State.ScriptDataEscapedDashDash: {
+                    this.stateScriptDataEscapedDashDash(c);
+                    break;
+                }
+                case State.ScriptDataEscapedLessThan: {
+                    this.stateScriptDataEscapedLessThan(c);
+                    break;
+                }
+                case State.ScriptDataEscapedEndTagOpen: {
+                    this.stateScriptDataEscapedEndTagOpen(c);
+                    break;
+                }
+                case State.ScriptDataEscapedEndTagName: {
+                    this.stateScriptDataEscapedEndTagName(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscapeStart: {
+                    this.stateScriptDataDoubleEscapeStart(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscaped: {
+                    this.stateScriptDataDoubleEscaped(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscapedDash: {
+                    this.stateScriptDataDoubleEscapedDash(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscapedDashDash: {
+                    this.stateScriptDataDoubleEscapedDashDash(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscapedLessThan: {
+                    this.stateScriptDataDoubleEscapedLessThan(c);
+                    break;
+                }
+                case State.ScriptDataDoubleEscapeEnd: {
+                    this.stateScriptDataDoubleEscapeEnd(c);
                     break;
                 }
                 case State.CDATASequence: {
@@ -1089,13 +1586,27 @@ export default class Tokenizer {
         }
     }
 
+    private handleTrailingScriptData(): boolean {
+        if (this.scriptTextSafeEnd() === -1) {
+            return false;
+        }
+
+        /*
+         * At EOF every pending character is script text — including a partial
+         * `</script` that never got a valid delimiter. Deliver it exactly once.
+         */
+        this.emitScriptText(this.buffer.length + this.offset);
+        return true;
+    }
+
     /** Handle any trailing data. */
     private handleTrailingData() {
         const endIndex = this.buffer.length + this.offset;
 
         if (
             this.handleTrailingCommentLikeData(endIndex) ||
-            this.handleTrailingMarkupDeclaration(endIndex)
+            this.handleTrailingMarkupDeclaration(endIndex) ||
+            this.handleTrailingScriptData()
         ) {
             return;
         }
@@ -1159,6 +1670,9 @@ export default class Tokenizer {
         this.isSpecial = false;
         this.currentSequence = Sequences.Empty;
         this.sequenceIndex = 0;
+        this.scriptEndTagStart = -1;
+        this.scriptEndTagIndex = 0;
+        this.scriptTempBuffer = "";
         this.running = true;
         this.finished = false;
         this.offset = 0;

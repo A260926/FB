@@ -56,6 +56,17 @@ export default defineConfig([
             "n/no-unsupported-features/node-builtins": 0,
         },
     },
+    {
+        // `task_support/` holds standalone `node:test` harness scripts. The
+        // directory name is fixed by the task layout, and the runner detects
+        // the Node version at runtime.
+        files: ["task_support/**/*.mjs"],
+
+        rules: {
+            "unicorn/filename-case": 0,
+            "n/no-unsupported-features/node-builtins": 0,
+        },
+    },
     // Retain the conventional fixture directory while checking other names.
     {
         files: ["src/__fixtures__/**"],

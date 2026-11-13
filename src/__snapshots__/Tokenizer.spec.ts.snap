@@ -494,6 +494,143 @@ exports[`Tokenizer > should handle entities > for trailing legacy entity 1`] = `
 ]
 `;
 
+exports[`Tokenizer > should handle the script data states > for a closing tag that leaves escaped mode 1`] = `
+[
+  [
+    "onopentagname",
+    1,
+    7,
+  ],
+  [
+    "onopentagend",
+    7,
+  ],
+  [
+    "ontext",
+    8,
+    12,
+  ],
+  [
+    "onclosetag",
+    14,
+    20,
+  ],
+  [
+    "onend",
+  ],
+]
+`;
+
+exports[`Tokenizer > should handle the script data states > for an unfinished script at EOF 1`] = `
+[
+  [
+    "onopentagname",
+    1,
+    7,
+  ],
+  [
+    "onopentagend",
+    7,
+  ],
+  [
+    "ontext",
+    8,
+    29,
+  ],
+  [
+    "onend",
+  ],
+]
+`;
+
+exports[`Tokenizer > should handle the script data states > for approximate script words 1`] = `
+[
+  [
+    "onopentagname",
+    1,
+    7,
+  ],
+  [
+    "onopentagend",
+    7,
+  ],
+  [
+    "ontext",
+    8,
+    31,
+  ],
+  [
+    "onclosetag",
+    33,
+    39,
+  ],
+  [
+    "onend",
+  ],
+]
+`;
+
+exports[`Tokenizer > should handle the script data states > for double-escaped markup 1`] = `
+[
+  [
+    "onopentagname",
+    1,
+    7,
+  ],
+  [
+    "onopentagend",
+    7,
+  ],
+  [
+    "ontext",
+    8,
+    51,
+  ],
+  [
+    "onclosetag",
+    53,
+    59,
+  ],
+  [
+    "onopentagname",
+    61,
+    62,
+  ],
+  [
+    "onattribname",
+    63,
+    65,
+  ],
+  [
+    "onattribdata",
+    67,
+    71,
+  ],
+  [
+    "onattribend",
+    3,
+    72,
+  ],
+  [
+    "onopentagend",
+    72,
+  ],
+  [
+    "ontext",
+    73,
+    75,
+  ],
+  [
+    "onclosetag",
+    77,
+    78,
+  ],
+  [
+    "onend",
+  ],
+]
+`;
+
 exports[`Tokenizer > should ignore empty closing tags 1`] = `
 [
   [

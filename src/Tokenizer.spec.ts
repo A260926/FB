@@ -297,4 +297,64 @@ describe("Tokenizer", () => {
 
         expect(log).toMatchSnapshot();
     });
+
+    describe("should handle the script data states", () => {
+        it("for double-escaped markup", () => {
+            expect(
+                tokenize(
+                    '<script><!--<script></script><p id="ghost">x</p>--></script><p id="real">ok</p>',
+                ),
+            ).toMatchSnapshot();
+        });
+
+        it("for a closing tag that leaves escaped mode", () => {
+            expect(tokenize("<script><!--</script>")).toMatchSnapshot();
+        });
+
+        it("for approximate script words", () => {
+            expect(
+                tokenize("<script>a</scriptx>b</script->c</SCRIPT >"),
+            ).toMatchSnapshot();
+        });
+
+        it("for an unfinished script at EOF", () => {
+            expect(tokenize("<script><!--<script>x</script")).toMatchSnapshot();
+        });
+
+        it("across every write boundary", () => {
+            const html =
+                '<script><!--<script></script><p id="ghost">x</p>--></script><p id="real">ok</p>';
+            const whole = tokenize(html);
+
+            /*
+             * Text and attribute data may be split into more callbacks, so
+             * compare the covered source ranges by concatenation instead of
+             * raw event lists.
+             */
+            const textOf = (events: unknown[][]) =>
+                events
+                    .filter(([name]) => name === "ontext")
+                    .map(([, start, end]) => html.slice(start as number, end as number))
+                    .join("");
+            const TAG_EVENTS = new Set([
+                "onopentagname",
+                "onopentagend",
+                "onclosetag",
+                "onend",
+            ]);
+            const structureOf = (events: unknown[][]) =>
+                events.filter(([name]) => TAG_EVENTS.has(name as string));
+
+            for (let cut = 1; cut < html.length; cut++) {
+                const split = tokenize((tokenizer) => {
+                    tokenizer.write(html.slice(0, cut));
+                    tokenizer.write(html.slice(cut));
+                    tokenizer.end();
+                });
+
+                expect(textOf(split)).toBe(textOf(whole));
+                expect(structureOf(split)).toStrictEqual(structureOf(whole));
+            }
+        });
+    });
 });

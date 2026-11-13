@@ -473,4 +473,146 @@ describe("API", () => {
         );
         p.end();
     });
+
+    it("should keep markup inside double-escaped script text", () => {
+        const html =
+            '<script><!--<script></script><p id="ghost">x</p>--></script><p id="real">ok</p>';
+        const opened: string[] = [];
+        const closed: Array<[string, boolean]> = [];
+        let text = "";
+        let ends = 0;
+
+        new Parser({
+            onopentag(name, attribs) {
+                opened.push(Object.hasOwn(attribs, "id") ? attribs["id"] : name);
+            },
+            onclosetag(name, isImplied) {
+                closed.push([name, isImplied]);
+            },
+            ontext(data) {
+                text += data;
+            },
+            onend() {
+                ends++;
+            },
+        }).end(html);
+
+        /*
+         * The inner `</script>` only leaves double-escaped mode. The ghost
+         * paragraph stays text; only the real paragraph becomes an element.
+         */
+        expect(opened).toStrictEqual(["script", "real"]);
+        expect(closed).toStrictEqual([
+            ["script", false],
+            ["p", false],
+        ]);
+        expect(text).toBe('<!--<script></script><p id="ghost">x</p>-->ok');
+        expect(ends).toBe(1);
+    });
+
+    it("should close escaped script data at a valid end tag", () => {
+        const html = '<script><!--</script><p id="real">ok</p>';
+        const opened: string[] = [];
+        let text = "";
+
+        new Parser({
+            onopentag(name, attribs) {
+                opened.push(Object.hasOwn(attribs, "id") ? attribs["id"] : name);
+            },
+            ontext(data) {
+                text += data;
+            },
+        }).end(html);
+
+        expect(opened).toStrictEqual(["script", "real"]);
+        expect(text).toBe("<!--ok");
+    });
+
+    it("should match script end tags case-insensitively with valid delimiters", () => {
+        const html =
+            '<script>a</scriptx>b</script->c</SCRIPT ><p id="real">ok</p>';
+        let text = "";
+
+        new Parser({
+            ontext(data) {
+                text += data;
+            },
+        }).end(html);
+
+        // `</scriptx>` and `</script->` are text; `</SCRIPT >` closes the tag.
+        expect(text).toBe("a</scriptx>b</script->cok");
+    });
+
+    it("should keep script-data state across writes", () => {
+        const html =
+            '<script><!--<script></script><p id="ghost">x</p>--></script><p id="real">ok</p>';
+        const opened: string[] = [];
+        let text = "";
+
+        const parser = new Parser({
+            onopentag(name, attribs) {
+                opened.push(Object.hasOwn(attribs, "id") ? attribs["id"] : name);
+            },
+            ontext(data) {
+                text += data;
+            },
+        });
+
+        /*
+         * Split inside the double-escaped section, the temporary word and the
+         * surrogate-free text all at once.
+         */
+        for (const chunk of [html.slice(0, 17), html.slice(17, 33), html.slice(33)]) {
+            parser.write(chunk);
+        }
+        parser.end();
+
+        expect(opened).toStrictEqual(["script", "real"]);
+        expect(text).toBe('<!--<script></script><p id="ghost">x</p>-->ok');
+    });
+
+    it("should deliver unfinished script text at EOF", () => {
+        const text: string[] = [];
+        let closes = 0;
+
+        new Parser({
+            ontext(data) {
+                text.push(data);
+            },
+            onclosetag() {
+                closes++;
+            },
+        }).end("<script><!--<script>x</script");
+
+        expect(text.join("")).toBe("<!--<script>x</script");
+        // A single implied close for the still-open script element.
+        expect(closes).toBe(1);
+    });
+
+    it("should not carry script-data state across reset", () => {
+        const opened: string[] = [];
+        const texts: string[] = [];
+
+        const parser = new Parser({
+            onopentag(name) {
+                opened.push(name);
+            },
+            ontext(data) {
+                texts.push(data);
+            },
+            onreset() {
+                // Discard everything emitted for the first document.
+                opened.length = 0;
+                texts.length = 0;
+            },
+        });
+
+        parser.write("<script><!--<script>");
+        parser.reset();
+        parser.write('<p id="real">ok</p>');
+        parser.end();
+
+        expect(opened).toStrictEqual(["p"]);
+        expect(texts.join("")).toBe("ok");
+    });
 });
