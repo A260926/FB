@@ -1,0 +1,287 @@
+{
+  "repo": "https://github.com/oneam/h264bsd",
+  "commit": "42bcb5d753ad86d84903354bf3c68423c28adb7b",
+  "license": "Apache-2.0 and MIT; original LICENSE.md and all source notices preserved",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "source_path": "LICENSE.md",
+      "sha256": "3623d919f767dc8596eafd3aa1f0234ec9c761f216700a848ed3f8601e484632"
+    },
+    {
+      "path": "basetype.h",
+      "source_path": "src/basetype.h",
+      "sha256": "3de2816298687bbc5dc76d86d3566e83e2e74cbca8df45ac8d5838db13f7469d"
+    },
+    {
+      "path": "h264bsd_byte_stream.c",
+      "source_path": "src/h264bsd_byte_stream.c",
+      "sha256": "d00ef4ff3a8eb8c380a5423bb54464abfd3e9f8e0f3afc89609746d75e1dbbfe"
+    },
+    {
+      "path": "h264bsd_byte_stream.h",
+      "source_path": "src/h264bsd_byte_stream.h",
+      "sha256": "3955c8b058d78ce390b93ae883e4386095b8419cf6437eed1bb59bbbd8513ec5"
+    },
+    {
+      "path": "h264bsd_cavlc.c",
+      "source_path": "src/h264bsd_cavlc.c",
+      "sha256": "9e9a27616f24e18da5f21c95a176c4ce428338e9752602ae8805391f9ed02221"
+    },
+    {
+      "path": "h264bsd_cavlc.h",
+      "source_path": "src/h264bsd_cavlc.h",
+      "sha256": "bba912911c1922bd96cc5542b0bc03465f4161bdc6451bfd04e12e9a04c5b967"
+    },
+    {
+      "path": "h264bsd_cfg.h",
+      "source_path": "src/h264bsd_cfg.h",
+      "sha256": "4c883938459870000506e2376c26d03c87bfc57c338f02b0022f4ee5a0737f77"
+    },
+    {
+      "path": "h264bsd_conceal.c",
+      "source_path": "src/h264bsd_conceal.c",
+      "sha256": "f6005d3c67dae8e56875d615abde608c82d02745b8a5d0336b823508eddff6a3"
+    },
+    {
+      "path": "h264bsd_conceal.h",
+      "source_path": "src/h264bsd_conceal.h",
+      "sha256": "527078a319dfe37ed8d880b0d8b514a4b408212c5f02733efead6a5847148017"
+    },
+    {
+      "path": "h264bsd_container.h",
+      "source_path": "src/h264bsd_container.h",
+      "sha256": "ece09b42e78e48d7fb55ea4e6b0dd2089515e36a51337d316e3091118bcb92b6"
+    },
+    {
+      "path": "h264bsd_deblocking.c",
+      "source_path": "src/h264bsd_deblocking.c",
+      "sha256": "f63fe1c76de3a00ccb6ab4e8391aa54940e6834d343d433cd6d961a80914ca31"
+    },
+    {
+      "path": "h264bsd_deblocking.h",
+      "source_path": "src/h264bsd_deblocking.h",
+      "sha256": "e71cb3399f79bb9ffd29b094900506f76017e3c8b5d60ce22764893cce492383"
+    },
+    {
+      "path": "h264bsd_decoder.c",
+      "source_path": "src/h264bsd_decoder.c",
+      "sha256": "7ca7e2ac6060ec938a707841d91b230af923df281fc1af50e021903c1157e0d6"
+    },
+    {
+      "path": "h264bsd_decoder.h",
+      "source_path": "src/h264bsd_decoder.h",
+      "sha256": "e1e360c2aac008b1a0ba7a728c07c916bcef28e777f9bd4e8f6d005d86025932"
+    },
+    {
+      "path": "h264bsd_dpb.c",
+      "source_path": "src/h264bsd_dpb.c",
+      "sha256": "89fb010a473233848ec8617d3d8b7422a70bac51facb09a17fd2d7845dfa560c"
+    },
+    {
+      "path": "h264bsd_dpb.h",
+      "source_path": "src/h264bsd_dpb.h",
+      "sha256": "e952f5b367fbe47f50669fc132aea07a7725fbe718f5f8fa35e6069987088cdf"
+    },
+    {
+      "path": "h264bsd_image.c",
+      "source_path": "src/h264bsd_image.c",
+      "sha256": "2200280766fd183bf389a5a4c91516ee2eb126ea16b9a83220cc650ab651c100"
+    },
+    {
+      "path": "h264bsd_image.h",
+      "source_path": "src/h264bsd_image.h",
+      "sha256": "1b7600d82320c18c867ecbde6f2c78ace8f70265833572f297ff30cd1eca9d0f"
+    },
+    {
+      "path": "h264bsd_inter_prediction.c",
+      "source_path": "src/h264bsd_inter_prediction.c",
+      "sha256": "8e3ecf931e57bc1bb896fcdd844519acdc2f616381a7e624ad2b22d30e9f0eef"
+    },
+    {
+      "path": "h264bsd_inter_prediction.h",
+      "source_path": "src/h264bsd_inter_prediction.h",
+      "sha256": "fae4c7d772c0f814de63c7abf6adba364af7182a9db94699a016d0022c1c2dc5"
+    },
+    {
+      "path": "h264bsd_intra_prediction.c",
+      "source_path": "src/h264bsd_intra_prediction.c",
+      "sha256": "9efe098fd684b3e790a74f7757dcb9d8890483f16c9b6a0c3387e2a46161a9a6"
+    },
+    {
+      "path": "h264bsd_intra_prediction.h",
+      "source_path": "src/h264bsd_intra_prediction.h",
+      "sha256": "ec770fecd93a408fb7c4caaac26644485978211a8c8c14f443f3377806b984eb"
+    },
+    {
+      "path": "h264bsd_macroblock_layer.c",
+      "source_path": "src/h264bsd_macroblock_layer.c",
+      "sha256": "e4607c19ab1456ef9cdb2d4279fa2bb77eb5506c31dc8e8724a570feaeeedd01"
+    },
+    {
+      "path": "h264bsd_macroblock_layer.h",
+      "source_path": "src/h264bsd_macroblock_layer.h",
+      "sha256": "57c2a61570b57b6bd8348b2e420ae59dc918ff82adb5cfbf30ff9c0e5780350d"
+    },
+    {
+      "path": "h264bsd_nal_unit.c",
+      "source_path": "src/h264bsd_nal_unit.c",
+      "sha256": "1ba6d15ca472b05b9e38a152545c834639c5a2f2e264a0497f246d4e1b6a7454"
+    },
+    {
+      "path": "h264bsd_nal_unit.h",
+      "source_path": "src/h264bsd_nal_unit.h",
+      "sha256": "245dc45d02b8ffc4ce0400a0fb5b7e27ec76217e10a8a5cac449146b847b4b80"
+    },
+    {
+      "path": "h264bsd_neighbour.c",
+      "source_path": "src/h264bsd_neighbour.c",
+      "sha256": "96feacb617503dc941128606f0718f3756a00cacef77e910209413b1c31b29cc"
+    },
+    {
+      "path": "h264bsd_neighbour.h",
+      "source_path": "src/h264bsd_neighbour.h",
+      "sha256": "4fa2cdadb1bd7048fea42da014c6facef308340d36eb88c82d9f8f0a33820e20"
+    },
+    {
+      "path": "h264bsd_pic_order_cnt.c",
+      "source_path": "src/h264bsd_pic_order_cnt.c",
+      "sha256": "1b4e30e5da115552de489f77d1be0c79d8ba9f72f9b77c4969818dd4e3822ea2"
+    },
+    {
+      "path": "h264bsd_pic_order_cnt.h",
+      "source_path": "src/h264bsd_pic_order_cnt.h",
+      "sha256": "1a0af40a9ab9c2d314ea85c5bb54fff22fb14f84223dfb41b788b66923cf1bda"
+    },
+    {
+      "path": "h264bsd_pic_param_set.c",
+      "source_path": "src/h264bsd_pic_param_set.c",
+      "sha256": "5e0dd7527527f4cd2c6acf4d36125c6931d5eea4f8246a8870d29366462a4e60"
+    },
+    {
+      "path": "h264bsd_pic_param_set.h",
+      "source_path": "src/h264bsd_pic_param_set.h",
+      "sha256": "5da1d6674ba58301567c2f13d61bf6a55d23a2d9215785818791c2c86910762f"
+    },
+    {
+      "path": "h264bsd_reconstruct.c",
+      "source_path": "src/h264bsd_reconstruct.c",
+      "sha256": "d1017cc93d8bdc9f921249c0f659a87d0e810b448945cdb8fe357c90a7f33e5e"
+    },
+    {
+      "path": "h264bsd_reconstruct.h",
+      "source_path": "src/h264bsd_reconstruct.h",
+      "sha256": "9c32f39974c8e391445077b4a246b01a75002fb7b70e87b2815af8805d8c6b4e"
+    },
+    {
+      "path": "h264bsd_sei.c",
+      "source_path": "src/h264bsd_sei.c",
+      "sha256": "76c11d4c1f6eda2f4b8f89060831f48da1f13092f0df3835f7c0186a60ed0d51"
+    },
+    {
+      "path": "h264bsd_sei.h",
+      "source_path": "src/h264bsd_sei.h",
+      "sha256": "1bdf74c94b193d83e8b6e34f3f14aa4217b4610e88dc12fbb610098a7ff404e2"
+    },
+    {
+      "path": "h264bsd_seq_param_set.c",
+      "source_path": "src/h264bsd_seq_param_set.c",
+      "sha256": "3f35222d80e2b3cb619fb54315e015a7e2e7f03efb63a7b2482084d72991b11b"
+    },
+    {
+      "path": "h264bsd_seq_param_set.h",
+      "source_path": "src/h264bsd_seq_param_set.h",
+      "sha256": "ab6f5e0b3334e42aa6ecc7eb714c7021fa3d32cff390b082c6962b9dca233240"
+    },
+    {
+      "path": "h264bsd_slice_data.c",
+      "source_path": "src/h264bsd_slice_data.c",
+      "sha256": "eb74edd234153c76c318b6dec96fb897327e9fd2532811913f1d7a489e842a88"
+    },
+    {
+      "path": "h264bsd_slice_data.h",
+      "source_path": "src/h264bsd_slice_data.h",
+      "sha256": "605dc405c2bec0f0aa639a2b46515b6622eb1df328d4076ee021cd3364d62779"
+    },
+    {
+      "path": "h264bsd_slice_group_map.c",
+      "source_path": "src/h264bsd_slice_group_map.c",
+      "sha256": "3fd346d52744e2960c26bf6dd594bc1bc1c56e6e7ab9d1f9ced9e7b78040b3d5"
+    },
+    {
+      "path": "h264bsd_slice_group_map.h",
+      "source_path": "src/h264bsd_slice_group_map.h",
+      "sha256": "cbeaad261a071fbed1edd25380ee922c638d81f05f6f3a411cb7d6ce9643020a"
+    },
+    {
+      "path": "h264bsd_slice_header.c",
+      "source_path": "src/h264bsd_slice_header.c",
+      "sha256": "e65612d4eed1da7c4eed5577514eb23c5902ebf7fbee26cf1520bd348f97fac6"
+    },
+    {
+      "path": "h264bsd_slice_header.h",
+      "source_path": "src/h264bsd_slice_header.h",
+      "sha256": "d180ee0b56c66491fa67fe4b25fe052bd626af718488154a16fcafd59f28fa6a"
+    },
+    {
+      "path": "h264bsd_storage.c",
+      "source_path": "src/h264bsd_storage.c",
+      "sha256": "785ffde79189a04ce6bd6d77c1e94c8547c44a20867d8085eedbda9c41067a96"
+    },
+    {
+      "path": "h264bsd_storage.h",
+      "source_path": "src/h264bsd_storage.h",
+      "sha256": "86c281b7f16e955155b75a6dc26efb0bedbb73d4142824a237e661232cf92918"
+    },
+    {
+      "path": "h264bsd_stream.c",
+      "source_path": "src/h264bsd_stream.c",
+      "sha256": "45c508699650daadb8ac23bbdb157c52e1e7d630ca4dd8b0fb8a5d8698acc07a"
+    },
+    {
+      "path": "h264bsd_stream.h",
+      "source_path": "src/h264bsd_stream.h",
+      "sha256": "20c87aac0198bb958199835ae3d81f4cb8ee92b3d25b6882a6593a5490246012"
+    },
+    {
+      "path": "h264bsd_transform.c",
+      "source_path": "src/h264bsd_transform.c",
+      "sha256": "fdb4c45166ee5d3d3f8107b538bb1b23ed8cfde079d872e054015afc24b27650"
+    },
+    {
+      "path": "h264bsd_transform.h",
+      "source_path": "src/h264bsd_transform.h",
+      "sha256": "7c6b1a4a01a040d2200894caca82fe2709b35743655648449192d9e77747a967"
+    },
+    {
+      "path": "h264bsd_util.c",
+      "source_path": "src/h264bsd_util.c",
+      "sha256": "578a80cee954b2ebf03a315034051986455ebe25633671284e1e2a32f0950878"
+    },
+    {
+      "path": "h264bsd_util.h",
+      "source_path": "src/h264bsd_util.h",
+      "sha256": "052bf15536ffa5981ae24d64a0ef09dd3c7aaeaad5d1a1c98378e1e0c0b82bcf"
+    },
+    {
+      "path": "h264bsd_vlc.c",
+      "source_path": "src/h264bsd_vlc.c",
+      "sha256": "c25456a416f29de4182b5e73398ccbb99963dd43989a2656a6afc6bb1a35e07c"
+    },
+    {
+      "path": "h264bsd_vlc.h",
+      "source_path": "src/h264bsd_vlc.h",
+      "sha256": "b5bf9f846d7942eeff51ef64b389688389a7387553a9bbf1c8bc78e275b5f1d0"
+    },
+    {
+      "path": "h264bsd_vui.c",
+      "source_path": "src/h264bsd_vui.c",
+      "sha256": "d867c73533868bb5d803564cd6d13056e637bf8ee8e59157c8f7ce9a95d2368e"
+    },
+    {
+      "path": "h264bsd_vui.h",
+      "source_path": "src/h264bsd_vui.h",
+      "sha256": "9cb0324d966ecd0a04e5aca1e8765c24229a432620489abf882087da31cb0177"
+    }
+  ]
+}
