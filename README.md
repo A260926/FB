@@ -18,6 +18,7 @@ Go, Java, Javascript, Lua, Octave, PHP, Python, R, and Ruby are provided.
   * [Pre-built Binaries](#pre-built-binaries)
   * [Compiling From Source](#compiling-from-source)
 - [Getting Started](#getting-started)
+- [Knot Removal and Simplification](#knot-removal-and-simplification)
 - [Documentation](#documentation)
 - [Publications](#publications)
 - [Theoretical Backgrounds](#theoretical-backgrounds)
@@ -40,6 +41,8 @@ MIT License - see the LICENSE file in the source distribution.
 - Reparametrization by arc length
   - Mapping length <--> knot
 - Knot insertion (refinement)
+- Knot removal and simplification
+  - (reduction of control points on the same parameter axis)
 - Sub-spline extraction
 - Bézier curve decomposition
   - (also known as subdivision)
@@ -152,6 +155,73 @@ plt.show()
 Result:
 
 ![Getting Started](res/getting_started.png)
+
+### Knot Removal and Simplification
+
+Interactive modeling repeatedly inserts knots, so an edited curve ends up
+with many more control points than its geometry needs. The C module
+[tinyspline_reduce.h](src/tinyspline_reduce.h) collapses those redundant
+interior knots while keeping the same parameter axis. It exposes two
+entry points, both returning a `tsError`:
+
+- `ts_bspline_remove_knot` removes up to `count` copies of one interior
+  knot.
+- `ts_bspline_simplify` removes interior knots, smallest value first,
+  until nothing further fits the tolerance.
+
+Only interior knots are ever deleted. Knot values are never moved and no
+new sampling knots are introduced; the degree, dimension, parameter
+domain, parameterization and both endpoint positions stay unchanged.
+Each accepted removal deletes exactly one control point.
+
+#### Tolerance and the error bound
+
+The `tolerance` argument is the maximum accepted Euclidean distance
+between the input curve and the result **at the same parameter value**.
+It must lie in `[1e-9, 1e-2]`. This is a geometric, same-parameter
+tolerance — not a knot-vector epsilon and not a control-point threshold.
+
+Every result carries an `error_bound`, a *certified* upper bound on the
+deviation over the whole parameter domain. To compute it, the original
+and the candidate are brought onto the common Bézier decomposition of
+the original knot vector. On each non-empty knot interval the difference
+curve is written in Bernstein form; by the convex hull property the
+maximum norm of its Bernstein control vectors bounds the deviation on
+that segment, and the maximum over all segments (including the one-sided
+limits at discontinuities) is the domain-wide bound. A bound that is too
+loose is tightened by subdividing the difference curve; a fixed-density
+point sample is never used as the certificate. The reported bound never
+exceeds the tolerance, and every accepted removal is checked against the
+curve the caller passed in, so the budget cannot be consumed one small
+step at a time. Round-off handling is documented in detail in
+`tinyspline_reduce.h`; for exactly reversible material with coordinate
+magnitudes below ten, the bound is below `1e-10` in the default double
+precision build.
+
+A removal that cannot be reconstructed within the tolerance is a normal
+rejection, not an error: the call still returns `TS_SUCCESS`, `removed`
+may be smaller than requested (including zero), and the output holds the
+curve with the removals that were accepted.
+
+#### Discontinuity (fracture) barriers
+
+An interior knot whose multiplicity equals the order (degree + 1) splits
+the curve into two independently defined pieces. Such a knot is a
+**fracture barrier**: it is never removed, even when the two pieces
+happen to be geometrically close. Knots with lower multiplicity (for
+example a C0 join of a cubic curve, where the interior multiplicity is
+the degree) may still be removed if the certified deviation stays within
+the tolerance.
+
+#### Memory ownership
+
+On success the output spline owns its memory independently of the input
+and must eventually be released with `ts_bspline_free`. The input and
+output may point to the same object; in that case the operation is built
+in working storage and the original is replaced only after full success.
+On error none of the output parameters (`out`, `removed`,
+`error_bound`) are modified. A complete, runnable example is available at
+[examples/c/reduce.c](examples/c/reduce.c).
 
 ### Documentation
 

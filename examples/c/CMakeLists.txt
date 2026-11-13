@@ -6,6 +6,11 @@ add_executable(json_export_c json_export.c)
 target_link_libraries(json_export_c PRIVATE tinyspline)
 set_target_properties(json_export_c PROPERTIES FOLDER "examples/c")
 
+add_executable(reduce_c reduce.c)
+target_link_libraries(reduce_c PRIVATE tinyspline m)
+set_target_properties(reduce_c PROPERTIES FOLDER "examples/c")
+set_target_properties(reduce_c PROPERTIES C_STANDARD 99)
+
 # ##############################################################################
 # GLUT's API supports only floats.
 # ##############################################################################
