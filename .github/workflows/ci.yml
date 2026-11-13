@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    name: Format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+      - name: Run clang-format style check for C/C++ programs.
+        uses: jidicula/clang-format-action@6cd220de46c89139a0365edae93eee8eb30ca8fe # ratchet:jidicula/clang-format-action@v4.16.0
+        with:
+          clang-format-version: '16'
+          check-path: 'src'
+
+  cppcheck:
+    runs-on: ubuntu-latest
+    name: cppcheck
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        name: checkout repo
+      - name: Setup Dependencies
+        run: |
+          sudo apt-get update -y -qq
+          sudo apt-get install cppcheck
+      - name: cppcheck
+        run: |
+          cppcheck --std=c89 \
+            --enable=all \
+            --inline-suppr \
+            --inconclusive \
+            --suppress=variableScope \
+            --suppress=normalCheckLevelMaxBranches \
+            --disable=missingInclude \
+            --quiet \
+            --error-exitcode=1 \
+            --template='{file}:{line} {id} {severity} {message}' \
+            .
+
+  clang-static:
+    runs-on: ubuntu-latest
+    name: clang static check
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        name: checkout repo
+      - name: make analyze
+        run: |
+          ./autogen.sh
+          ./configure
+          make -C src analyze
+
+  build-linux:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        platform: [x32, x64]
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+      - name: Setup Dependencies
+        run: |
+          sudo apt-get update -y -qq
+          sudo apt-get install valgrind
+      - name: build
+        run: |
+          ./autogen.sh
+          ./configure
+          make
+      - name: check version sync
+        run: make check-version-sync
+      - name: test
+        run: make -e check
+
+      - name: clean
+        run: make clean
+
+      # configure bakes CFLAGS into the Makefile, so pass it on the command
+      # line; an env var alone is ignored by make.
+      - name: build pedantic
+        run: make CFLAGS="$CFLAGS"
+        env:
+          CFLAGS: '-Wall -Wextra -Werror -pedantic -ansi -g -O1'
+      - name: test valgrind
+        run: make -e check
+        env:
+          VALGRIND: 'valgrind --gen-suppressions=no --leak-check=full --show-leak-kinds=all --read-var-info=yes --error-exitcode=1 --track-origins=yes --suppressions=/home/runner/work/libinjection/libinjection/src/alpine.supp'
+
+  build-macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-15, macos-26]
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+
+      - name: Cache brew deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          # Paths to cache:
+          # /usr/local/Homebrew - installation folder of Homebrew
+          # /usr/local/Cellar - installation folder of Homebrew formulae
+          # /usr/local/Frameworks, /usr/local/bin, /usr/local/opt - contain (links to) binaries installed by Homebrew formulae
+          path: |
+            /usr/local/Homebrew
+            /usr/local/Cellar
+            /usr/local/Frameworks
+            /usr/local/bin
+            /usr/local/opt
+          key: macos-build-cache-${{ hashFiles('./scripts/builder_setup.sh') }}
+      - name: build
+        run: |
+          brew install automake autoconf libtool
+          ./autogen.sh
+          ./configure
+          make
+      - name: test
+        run: make -e check
+      - name: clean
+        run: make clean
+      # configure bakes CFLAGS into the Makefile, so pass it on the command
+      # line; an env var alone is ignored by make.
+      - name: build pedantic
+        run: make all CFLAGS="$CFLAGS"
+        env:
+          CFLAGS: '-Wall -Wextra -Werror -pedantic -ansi -g -O1'
