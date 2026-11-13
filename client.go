@@ -432,6 +432,15 @@ type Client struct {
 	// PrepareRetry can prepare the request for retry operation, for example re-sign it
 	PrepareRetry PrepareRetry
 
+	// OriginGate optionally coordinates per-origin pauses learned from
+	// Retry-After headers. When set, every request waits for any outstanding
+	// pause of its origin (including redirect hops and retries) before
+	// reaching the underlying transport, and Retry-After hints from 429/503
+	// responses are shared with every other request using the same gate. A
+	// single gate may be shared by multiple Clients concurrently. A nil gate
+	// leaves retry and logging behavior unchanged.
+	OriginGate *OriginGate
+
 	loggerInit sync.Once
 	clientInit sync.Once
 }
@@ -670,6 +679,17 @@ func (c *Client) Do(req *Request) (*http.Response, error) {
 		}
 	})
 
+	// A gate is enforced through a per-call transport wrapper so that the
+	// caller's http.Client, its Transport and its redirect/cookie/timeout
+	// settings remain unmodified. With no gate, the configured client is used
+	// directly and behavior is unchanged.
+	httpClient := c.HTTPClient
+	if c.OriginGate != nil {
+		shallow := *httpClient
+		shallow.Transport = c.gateTransport()
+		httpClient = &shallow
+	}
+
 	logger := c.logger()
 
 	if logger != nil {
@@ -716,7 +736,7 @@ func (c *Client) Do(req *Request) (*http.Response, error) {
 		}
 
 		// Attempt the request
-		resp, doErr = c.HTTPClient.Do(req.Request)
+		resp, doErr = httpClient.Do(req.Request)
 
 		// Check if we should continue with retries.
 		shouldRetry, checkErr = c.CheckRetry(req.Context(), resp, doErr)
