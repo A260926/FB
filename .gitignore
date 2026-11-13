@@ -20,3 +20,4 @@ dmalloc_t
 dmalloc_toc.html
 settings.h
 version.h
+build-checks/

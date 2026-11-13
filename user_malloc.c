@@ -1453,6 +1453,33 @@ int	dmalloc_verify_pnt(const char *file, const int line, const char *func,
 }
 
 /*
+ * int dmalloc_set_func_check_policy
+ *
+ * Set the policy used by the memcpy, memmove, strncpy, and strncat
+ * wrappers when an argument problem is detected.
+ *
+ * Returns the previous policy on success or -1 if the policy value is
+ * invalid, in which case the policy is left unchanged.
+ *
+ * ARGUMENTS:
+ *
+ * policy -> New policy: DMALLOC_FUNC_REPORT or DMALLOC_FUNC_REJECT.
+ */
+int	dmalloc_set_func_check_policy(const int policy)
+{
+  int	old_policy;
+
+  if (policy != DMALLOC_FUNC_REPORT && policy != DMALLOC_FUNC_REJECT) {
+    return -1;
+  }
+
+  old_policy = _dmalloc_func_check_policy;
+  _dmalloc_func_check_policy = policy;
+
+  return old_policy;
+}
+
+/*
  * unsigned int dmalloc_debug
  *
  * Set the global debug functionality flags.  You can also use

@@ -30,6 +30,20 @@
 #define MALLOC_VERIFY_NOERROR	DMALLOC_VERIFY_NOERROR
 
 /*
+ * Policies for the function argument checking wrappers.  See
+ * dmalloc_set_func_check_policy().
+ *
+ * DMALLOC_FUNC_REPORT is the historical behavior: a problem is
+ * reported and the wrapped libc function is still called.
+ *
+ * DMALLOC_FUNC_REJECT is a strict mode for local debugging: a copy
+ * between tracked heap objects that would touch memory outside of the
+ * user area is refused before any access occurs.
+ */
+#define DMALLOC_FUNC_REPORT	0		/* report then call libc */
+#define DMALLOC_FUNC_REJECT	1		/* reject before any access */
+
+/*
  * Dmalloc function IDs for the dmalloc_track_t callback function.
  */
 #define DMALLOC_FUNC_MALLOC	10	/* malloc function called */

@@ -1051,6 +1051,48 @@ destination string has enough space to store the number of bytes specified.
 <p>For all of the arguments checked, if the pointer is not in the heap then it is ignored since dmalloc does not know
 anything about it.
 </p>
+<a name="Strict-Function-Checking"></a>
+<h4 class="subsection">3.3.1 Strict Function Checking</h4>
+<a name="index-strict-function-checking"></a>
+<a name="index-dmalloc_005fset_005ffunc_005fcheck_005fpolicy"></a>
+<a name="index-DMALLOC_005fFUNC_005fREJECT"></a>
+<a name="index-DMALLOC_005fFUNC_005fREPORT"></a>
+
+<p>The historical behavior above reports a bad argument and then still calls the real library function, so the bytes may
+already have been copied by the time the problem is logged.  For local debugging it is also possible to reject a
+dangerous copy before it accesses any memory.  This strict mode is selected with
+<code>dmalloc_set_func_check_policy()</code>:
+</p>
+<table><tr><td>&nbsp;</td><td><pre class="example">int dmalloc_set_func_check_policy(int policy);
+</pre></td></tr></table>
+
+<p>Pass <code>DMALLOC_FUNC_REPORT</code> (the default, which keeps the historical report-then-call behavior) or
+<code>DMALLOC_FUNC_REJECT</code> (strict).  The function returns the previous policy, or <code>-1</code> if <code>policy</code> is not
+one of the two values, in which case the policy is left unchanged.  The policy only affects <code>memcpy</code>,
+<code>memmove</code>, <code>strncpy</code>, <code>strncat</code>, and their public macros; the other string wrappers are unchanged.  It
+does not require the <code>check-funcs</code> token to be enabled.  Set the policy before allocations begin; changing it
+concurrently from another thread is not supported.
+</p>
+<p>In strict mode a failed call returns <code>NULL</code> before any access is made and sets <code>dmalloc_errno</code> to one of:
+</p>
+<ul>
+<li> <code>DMALLOC_ERROR_FUNC_BAD_OBJECT</code> &ndash; a pointer is not a live tracked user area.
+</li><li> <code>DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS</code> &ndash; a range does not fit inside the requested user size.
+</li><li> <code>DMALLOC_ERROR_FUNC_NO_NULL</code> &ndash; a string is not null terminated inside its user area.
+</li><li> <code>DMALLOC_ERROR_FUNC_OVERLAP</code> &ndash; the ranges actually read and written overlap.
+</li></ul>
+
+<p>The file and line-number diagnostics are still written to the log.  On failure the source, the destination, the
+fence-post areas, and the allocation records are left completely unchanged, and a zero length copy returns the
+destination without looking up or touching either pointer.
+</p>
+<p><em>Strict mode only accepts pointers into dmalloc&rsquo;s active, tracked user areas.</em>  This is the central limitation:
+a pointer to a global, stack, static, or otherwise externally allocated object is never read and is rejected as
+<code>DMALLOC_ERROR_FUNC_BAD_OBJECT</code>.  Internal pointers are allowed, but the usable range is always the size requested
+from <code>malloc</code> and friends &ndash; never the rounded-out block space, the picket-fence area, or a freed region.  The
+check is purely address based (there is no attempt to read first and recover from a fault), so the caller must keep the
+objects alive for the duration of the operation.
+</p>
 
 <hr size="6">
 <a name="Dumping-Core"></a>
@@ -1448,6 +1490,22 @@ transactions or events which are leaking memory.  See section <a href="#Debuggin
 </dd></dl>
 
 
+<a name="index-dmalloc_005fset_005ffunc_005fcheck_005fpolicy-function"></a>
+<a name="index-strict-function-checking-1"></a>
+
+<dl>
+<dt><a name="index-dmalloc_005fset_005ffunc_005fcheck_005fpolicy"></a><u>Function:</u> int <b>dmalloc_set_func_check_policy</b><i> ( const int <var>policy</var> )</i></dt>
+<dd>
+<p>Set the policy used by the <code>memcpy</code>, <code>memmove</code>, <code>strncpy</code>, and <code>strncat</code> function-checking
+wrappers.  Pass <code>DMALLOC_FUNC_REPORT</code> (the default) to keep the historical behavior of reporting a bad argument
+and then calling libc, or <code>DMALLOC_FUNC_REJECT</code> to reject a dangerous copy before any memory is accessed.
+See section <a href="#Argument-Checking">3.3 Checking of Function Arguments</a>.
+</p>
+<p>Returns the previous policy, or <code>-1</code> if <var>policy</var> is invalid, in which case the policy is unchanged.
+</p>
+</dd></dl>
+
+
 <a name="index-dmalloc_005fget_005fstats-function"></a>
 <a name="index-get-heap-statistics"></a>
 <a name="index-heap-statistics-function"></a>
@@ -1822,6 +1880,52 @@ source is highly recommended, it is good to set pointers to NULL (0L) after you 
 is freed with the &ldquo;dmalloc-free&rdquo; byte (hex 0xdf, octal 0337, decimal 223).  If the program writes into this space,
 then the library will detect the write and trigger this error.  This could indicate that the program is using a pointer
 after it has been freed.
+</p>
+
+<a name="index-80_002c-error-code"></a>
+<a name="index-error-code-80"></a>
+<a name="index-pointer-is-not-a-live-user-area"></a>
+<a name="index-ERROR_005fFUNC_005fBAD_005fOBJECT"></a>
+
+</dd>
+<dt> <code>80 (ERROR_FUNC_BAD_OBJECT) pointer is not a live user area</code></dt>
+<dd><p>Strict function checking (see section <a href="#Argument-Checking">3.3 Checking of Function Arguments</a>) was given a pointer which is not inside an active, tracked user
+area.  This includes NULL, pointers into the fence-post, administrative, or rounded-out block space, freed allocations,
+and pointers to objects that dmalloc does not track such as globals or stack variables.  The pointer is never read.
+</p>
+
+<a name="index-81_002c-error-code"></a>
+<a name="index-error-code-81"></a>
+<a name="index-range-exceeds-the-user-allocation"></a>
+<a name="index-ERROR_005fFUNC_005fOUT_005fOF_005fBOUNDS"></a>
+
+</dd>
+<dt> <code>81 (ERROR_FUNC_OUT_OF_BOUNDS) range exceeds the user allocation</code></dt>
+<dd><p>Strict function checking determined that the number of bytes the operation would access does not fit inside the size
+that was requested for the tracked allocation.  The rounded-out block space and the picket-fence area are not counted
+as capacity.
+</p>
+
+<a name="index-82_002c-error-code"></a>
+<a name="index-error-code-82"></a>
+<a name="index-string-is-not-null-terminated"></a>
+<a name="index-ERROR_005fFUNC_005fNO_005fNULL"></a>
+
+</dd>
+<dt> <code>82 (ERROR_FUNC_NO_NULL) string is not null terminated</code></dt>
+<dd><p>Strict function checking did not find a terminating NUL anywhere inside the live user area, for example for a
+<code>strncat</code> destination that has no terminator.
+</p>
+
+<a name="index-83_002c-error-code"></a>
+<a name="index-error-code-83"></a>
+<a name="index-source-and-destination-ranges-overlap"></a>
+<a name="index-ERROR_005fFUNC_005fOVERLAP"></a>
+
+</dd>
+<dt> <code>83 (ERROR_FUNC_OVERLAP) source and destination ranges overlap</code></dt>
+<dd><p>Strict function checking found that the bytes actually read and the bytes actually written by <code>memcpy</code>,
+<code>strncpy</code>, or <code>strncat</code> overlap.  <code>memmove</code> is allowed to move overlapping ranges.
 </p>
 
 <a name="index-70_002c-error-code"></a>

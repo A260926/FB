@@ -805,6 +805,49 @@ destination string has enough space to store the number of bytes specified.
 For all of the arguments checked, if the pointer is not in the heap then it is ignored since dmalloc does not know
 anything about it.
 
+@cindex strict function checking
+@cindex dmalloc_set_func_check_policy
+@cindex DMALLOC_FUNC_REJECT
+@cindex DMALLOC_FUNC_REPORT
+
+@subsection Strict Function Checking
+
+The historical behavior above reports a bad argument and then still calls the real library function, so the bytes may
+already have been copied by the time the problem is logged.  For local debugging it is also possible to reject a
+dangerous copy before it accesses any memory.  This strict mode is selected with
+@code{dmalloc_set_func_check_policy()}:
+
+@example
+int dmalloc_set_func_check_policy(int policy);
+@end example
+
+Pass @code{DMALLOC_FUNC_REPORT} (the default, which keeps the historical report-then-call behavior) or
+@code{DMALLOC_FUNC_REJECT} (strict).  The function returns the previous policy, or @code{-1} if @code{policy} is not
+one of the two values, in which case the policy is left unchanged.  The policy only affects @code{memcpy},
+@code{memmove}, @code{strncpy}, @code{strncat}, and their public macros; the other string wrappers are unchanged.  It
+does not require the @code{check-funcs} token to be enabled.  Set the policy before allocations begin; changing it
+concurrently from another thread is not supported.
+
+In strict mode a failed call returns @code{NULL} before any access is made and sets @code{dmalloc_errno} to one of:
+
+@itemize @bullet
+@item @code{DMALLOC_ERROR_FUNC_BAD_OBJECT} -- a pointer is not a live tracked user area.
+@item @code{DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS} -- a range does not fit inside the requested user size.
+@item @code{DMALLOC_ERROR_FUNC_NO_NULL} -- a string is not null terminated inside its user area.
+@item @code{DMALLOC_ERROR_FUNC_OVERLAP} -- the ranges actually read and written overlap.
+@end itemize
+
+The file and line-number diagnostics are still written to the log.  On failure the source, the destination, the
+fence-post areas, and the allocation records are left completely unchanged, and a zero length copy returns the
+destination without looking up or touching either pointer.
+
+@emph{Strict mode only accepts pointers into dmalloc's active, tracked user areas.}  This is the central limitation:
+a pointer to a global, stack, static, or otherwise externally allocated object is never read and is rejected as
+@code{DMALLOC_ERROR_FUNC_BAD_OBJECT}.  Internal pointers are allowed, but the usable range is always the size requested
+from @code{malloc} and friends -- never the rounded-out block space, the picket-fence area, or a freed region.  The
+check is purely address based (there is no attempt to read first and recover from a fault), so the caller must keep the
+objects alive for the duration of the operation.
+
 @c --------------------------------
 
 @node Dumping Core, Extensions, Argument Checking, Programming
@@ -1176,6 +1219,22 @@ Write a message into the dmalloc logfile using printf-like arguments.
 
 @c --------------------------------
 
+@cindex dmalloc_set_func_check_policy function
+@cindex strict function checking
+
+@deftypefun int dmalloc_set_func_check_policy ( const int @var{policy} )
+
+Set the policy used by the @code{memcpy}, @code{memmove}, @code{strncpy}, and @code{strncat} function-checking
+wrappers.  Pass @code{DMALLOC_FUNC_REPORT} (the default) to keep the historical behavior of reporting a bad argument
+and then calling libc, or @code{DMALLOC_FUNC_REJECT} to reject a dangerous copy before any memory is accessed.
+@xref{Argument Checking}.
+
+Returns the previous policy, or @code{-1} if @var{policy} is invalid, in which case the policy is unchanged.
+
+@end deftypefun
+
+@c --------------------------------
+
 @cindex dmalloc_get_stats function
 @cindex get heap statistics
 @cindex heap statistics function
@@ -1534,6 +1593,52 @@ If either the @code{free-blank} or @code{check-blank} tokens are enabled then th
 is freed with the ``dmalloc-free'' byte (hex 0xdf, octal 0337, decimal 223).  If the program writes into this space,
 then the library will detect the write and trigger this error.  This could indicate that the program is using a pointer
 after it has been freed.
+
+@c --------------------------------
+
+@cindex 80, error code
+@cindex error code 80
+@cindex pointer is not a live user area
+@cindex ERROR_FUNC_BAD_OBJECT
+
+@item 80 (ERROR_FUNC_BAD_OBJECT) pointer is not a live user area
+Strict function checking (see @ref{Argument Checking}) was given a pointer which is not inside an active, tracked user
+area.  This includes NULL, pointers into the fence-post, administrative, or rounded-out block space, freed allocations,
+and pointers to objects that dmalloc does not track such as globals or stack variables.  The pointer is never read.
+
+@c --------------------------------
+
+@cindex 81, error code
+@cindex error code 81
+@cindex range exceeds the user allocation
+@cindex ERROR_FUNC_OUT_OF_BOUNDS
+
+@item 81 (ERROR_FUNC_OUT_OF_BOUNDS) range exceeds the user allocation
+Strict function checking determined that the number of bytes the operation would access does not fit inside the size
+that was requested for the tracked allocation.  The rounded-out block space and the picket-fence area are not counted
+as capacity.
+
+@c --------------------------------
+
+@cindex 82, error code
+@cindex error code 82
+@cindex string is not null terminated
+@cindex ERROR_FUNC_NO_NULL
+
+@item 82 (ERROR_FUNC_NO_NULL) string is not null terminated
+Strict function checking did not find a terminating NUL anywhere inside the live user area, for example for a
+@code{strncat} destination that has no terminator.
+
+@c --------------------------------
+
+@cindex 83, error code
+@cindex error code 83
+@cindex source and destination ranges overlap
+@cindex ERROR_FUNC_OVERLAP
+
+@item 83 (ERROR_FUNC_OVERLAP) source and destination ranges overlap
+Strict function checking found that the bytes actually read and the bytes actually written by @code{memcpy},
+@code{strncpy}, or @code{strncat} overlap.  @code{memmove} is allowed to move overlapping ranges.
 
 @c --------------------------------
 

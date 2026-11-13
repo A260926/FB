@@ -64,6 +64,12 @@
 /* 62-66 unused */
 #define DMALLOC_ERROR_FREE_OVERWRITTEN	67	/* free space overwritten */
 
+/* strict function checking errors */
+#define DMALLOC_ERROR_FUNC_BAD_OBJECT	80	/* pointer is not a live user area */
+#define DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS 81	/* range exceeds the user area */
+#define DMALLOC_ERROR_FUNC_NO_NULL	82	/* string is not terminated */
+#define DMALLOC_ERROR_FUNC_OVERLAP	83	/* source and destination overlap */
+
 /* administrative errors */
 #define DMALLOC_ERROR_ADMIN_LIST	70	/* list pnt out of bounds */
 /* 71 unused */
@@ -112,6 +118,12 @@ __attribute__ ((unused))
   { DMALLOC_ERROR_NOT_ON_BLOCK,		"pointer is not on block boundary" },
   { DMALLOC_ERROR_ALREADY_FREE,		"tried to free previously freed pointer" },
   { DMALLOC_ERROR_FREE_OVERWRITTEN,	"free space has been overwritten" },
+
+  /* strict function checking errors */
+  { DMALLOC_ERROR_FUNC_BAD_OBJECT,	"pointer is not a live user area" },
+  { DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS,	"range exceeds the user allocation" },
+  { DMALLOC_ERROR_FUNC_NO_NULL,		"string is not null terminated" },
+  { DMALLOC_ERROR_FUNC_OVERLAP,		"source and destination ranges overlap" },
   
   /* administrative errors */
   { DMALLOC_ERROR_ADMIN_LIST,		"dmalloc bad admin structure list" },

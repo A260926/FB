@@ -43,8 +43,107 @@
 #include "chunk.h"
 #include "debug_tok.h"
 #include "error.h"
+#include "error_val.h"
 #include "dmalloc_loc.h"
 #include "arg_check.h"
+
+/*
+ * Strict mode helpers.  DMALLOC_FUNC_REJECT is implemented entirely on
+ * top of the allocation records: a pointer is resolved to the live
+ * user area which contains it before any byte is read from it, and no
+ * unknown pointer is ever dereferenced.
+ */
+
+/*
+ * Number of bytes between base and pnt.  Callers must only use this
+ * after _dmalloc_chunk_user_area() has shown that pnt is at or after
+ * base.
+ */
+static	DMALLOC_SIZE	strict_offset(const void *base, const void *pnt)
+{
+  return (DMALLOC_SIZE)((PNT_ARITH_TYPE)pnt - (PNT_ARITH_TYPE)base);
+}
+
+/*
+ * Return 1 if the two byte ranges overlap else 0.  Both lengths have
+ * already been checked against their user areas so the ends cannot
+ * wrap around the address type.
+ */
+static	int	strict_overlap(const void *a, DMALLOC_SIZE a_len,
+			       const void *b, DMALLOC_SIZE b_len)
+{
+  PNT_ARITH_TYPE	a_start = (PNT_ARITH_TYPE)a;
+  PNT_ARITH_TYPE	b_start = (PNT_ARITH_TYPE)b;
+  PNT_ARITH_TYPE	a_end = a_start + (PNT_ARITH_TYPE)a_len;
+  PNT_ARITH_TYPE	b_end = b_start + (PNT_ARITH_TYPE)b_len;
+
+  return (a_start < b_end && b_start < a_end);
+}
+
+/*
+ * Scan a live user area for a terminator, reading at most max_len
+ * bytes.  On success read_len is set to the number of bytes the
+ * caller needs: through the terminator when one was found, otherwise
+ * max_len.  Returns 0 if the area does not cover max_len bytes without
+ * a terminator.  Every byte read lies inside the tracked user area.
+ */
+static	int	strict_scan(const char *str, DMALLOC_SIZE max_len,
+			    const void *base, PNT_ARITH_TYPE size,
+			    DMALLOC_SIZE *read_len_p, int *have_null_p)
+{
+  PNT_ARITH_TYPE	avail, scan_max;
+  DMALLOC_SIZE		i;
+
+  avail = size - (PNT_ARITH_TYPE)strict_offset(base, str);
+  scan_max = ((PNT_ARITH_TYPE)max_len < avail)
+    ? (PNT_ARITH_TYPE)max_len : avail;
+
+  for (i = 0; i < scan_max; i++) {
+    if (str[i] == '\0') {
+      *read_len_p = i + 1;
+      *have_null_p = 1;
+      return 1;
+    }
+  }
+
+  *have_null_p = 0;
+  *read_len_p = scan_max;
+
+  /* not enough readable bytes and no terminator: reject */
+  return (avail >= (PNT_ARITH_TYPE)max_len);
+}
+
+/*
+ * Find a terminator inside a live user area starting at str.  Returns
+ * 1 and the offset of the terminator, or 0 when no terminator exists
+ * in the area.  Every byte read lies inside the tracked user area.
+ */
+static	int	strict_find_null(const char *str, const void *base,
+				 PNT_ARITH_TYPE size, PNT_ARITH_TYPE *offset_p)
+{
+  PNT_ARITH_TYPE	avail;
+  DMALLOC_SIZE		i;
+
+  avail = size - (PNT_ARITH_TYPE)strict_offset(base, str);
+  for (i = 0; (PNT_ARITH_TYPE)i < avail; i++) {
+    if (str[i] == '\0') {
+      *offset_p = i;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+/*
+ * Reject a strict-mode operation and set the distinguishable error.
+ */
+static	void	strict_reject(const char *file, const int line,
+			     const char *func, const void *pnt,
+			     const int error, const char *reason)
+{
+  _dmalloc_chunk_func_error(file, line, func, pnt, error, reason);
+}
 
 /*
  * Dummy function for checking strlen's arguments.
@@ -248,6 +347,34 @@ int	_dmalloc_memcmp(const char *file, const int line,
 void	*_dmalloc_memcpy(const char *file, const int line,
 			 void *to, const void *from, const DMALLOC_SIZE len)
 {
+  if (_dmalloc_func_check_policy == DMALLOC_FUNC_REJECT) {
+    /*
+     * A zero length copy never touches either pointer, so do not even
+     * resolve them.
+     */
+    if (len == 0) {
+      return to;
+    }
+
+    /* both complete ranges must fit inside their user areas */
+    if ((! _dmalloc_chunk_user_area(file, line, "memcpy", to, len,
+				    NULL, NULL))
+	|| (! _dmalloc_chunk_user_area(file, line, "memcpy", from, len,
+				       NULL, NULL))) {
+      return NULL;
+    }
+
+    /* memcpy may not be used on overlapping ranges, unlike memmove */
+    if (strict_overlap(to, len, from, len)) {
+      strict_reject(file, line, "memcpy", to,
+		    DMALLOC_ERROR_FUNC_OVERLAP,
+		    "source and destination ranges overlap");
+      return NULL;
+    }
+
+    return (void *)memcpy(to, from, len);
+  }
+
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_FUNCS)) {
     if ((! dmalloc_verify_pnt(file, line, "memcpy", to,
 			      0 /* not exact */, len))
@@ -255,7 +382,7 @@ void	*_dmalloc_memcpy(const char *file, const int line,
 				 0 /* not exact */, len))) {
       dmalloc_message("bad pointer argument found in memcpy");
     }
-    
+
 #if HAVE_MEMMOVE
     /*
      * If memmove exists, dump out a warning if memcpy is being used
@@ -279,6 +406,26 @@ void	*_dmalloc_memcpy(const char *file, const int line,
 void	*_dmalloc_memmove(const char *file, const int line,
 			  void *to, const void *from, const DMALLOC_SIZE len)
 {
+  if (_dmalloc_func_check_policy == DMALLOC_FUNC_REJECT) {
+    /* a zero length move never touches either pointer */
+    if (len == 0) {
+      return to;
+    }
+
+    /*
+     * Both complete ranges must fit.  Overlapping ranges are allowed:
+     * that is the whole point of memmove.
+     */
+    if ((! _dmalloc_chunk_user_area(file, line, "memmove", to, len,
+				    NULL, NULL))
+	|| (! _dmalloc_chunk_user_area(file, line, "memmove", from, len,
+				       NULL, NULL))) {
+      return NULL;
+    }
+
+    return (void *)memmove(to, from, len);
+  }
+
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_FUNCS)) {
     if ((! dmalloc_verify_pnt(file, line, "memmove", to,
 			      0 /* not exact */, len))
@@ -497,10 +644,83 @@ int	_dmalloc_strncasecmp(const char *file, const int line,
 char	*_dmalloc_strncat(const char *file, const int line,
 			  char *to, const char *from, const DMALLOC_SIZE len)
 {
+  if (_dmalloc_func_check_policy == DMALLOC_FUNC_REJECT) {
+    const void	*to_base, *from_base;
+    PNT_ARITH_TYPE to_size, from_size, to_avail, dst_len;
+    DMALLOC_SIZE read_len, append_len, remaining;
+    int		have_null;
+
+    if (! _dmalloc_chunk_user_area(file, line, "strncat", to, 0,
+				   &to_base, &to_size)) {
+      return NULL;
+    }
+    to_avail = to_size - (PNT_ARITH_TYPE)((PNT_ARITH_TYPE)to
+					  - (PNT_ARITH_TYPE)to_base);
+
+    /* the destination must already be terminated inside its area */
+    if (! strict_find_null(to, to_base, to_size, &dst_len)) {
+      strict_reject(file, line, "strncat", to, DMALLOC_ERROR_FUNC_NO_NULL,
+		    "destination string is not null terminated");
+      return NULL;
+    }
+
+    /* no source lookup and no source terminator check when len is 0 */
+    if (len == 0) {
+      return to;
+    }
+
+    if (! _dmalloc_chunk_user_area(file, line, "strncat", from, 0,
+				   &from_base, &from_size)) {
+      return NULL;
+    }
+
+    /* read at most len non-null source characters */
+    if (! strict_scan(from, len, from_base, from_size,
+		      &read_len, &have_null)) {
+      strict_reject(file, line, "strncat", from,
+		    DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS,
+		    "source range exceeds the user allocation");
+      return NULL;
+    }
+
+    /*
+     * The source copy stops at a terminator when one was seen, so the
+     * appended length excludes that byte.  Otherwise it is the full
+     * len characters.
+     */
+    append_len = have_null ? (read_len - 1) : len;
+
+    /* the destination needs the append bytes plus the final \0 */
+    if (dst_len >= to_avail) {
+      strict_reject(file, line, "strncat", to,
+		    DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS,
+		    "destination range exceeds the user allocation");
+      return NULL;
+    }
+    remaining = to_avail - dst_len;
+    if (append_len > remaining - 1) {
+      strict_reject(file, line, "strncat", to,
+		    DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS,
+		    "destination range exceeds the user allocation");
+      return NULL;
+    }
+
+    /* the actual source read and destination write must not overlap */
+    if (strict_overlap(from, read_len, (const char *)to + dst_len,
+		       append_len + 1)) {
+      strict_reject(file, line, "strncat", to,
+		    DMALLOC_ERROR_FUNC_OVERLAP,
+		    "source and destination ranges overlap");
+      return NULL;
+    }
+
+    return (char *)strncat(to, from, len);
+  }
+
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_FUNCS)) {
     const char	*from_p;
     int		min_size;
-    
+
     /* so we have to figure out the max length of the buffers directly here */
     for (from_p = from; from_p < from + len; from_p++) {
       if (*from_p == '\0') {
@@ -509,7 +729,7 @@ char	*_dmalloc_strncat(const char *file, const int line,
       }
     }
     min_size = from_p - from;
-    
+
     /* either len or nullc */
     if ((! dmalloc_verify_pnt(file, line, "strncat", to,
 			      0 /* not exact */,
@@ -564,10 +784,55 @@ int	_dmalloc_strncmp(const char *file, const int line,
 char	*_dmalloc_strncpy(const char *file, const int line,
 			  char *to, const char *from, const DMALLOC_SIZE len)
 {
+  if (_dmalloc_func_check_policy == DMALLOC_FUNC_REJECT) {
+    const void	*to_base, *from_base;
+    PNT_ARITH_TYPE to_size, from_size;
+    DMALLOC_SIZE read_len;
+    int		have_null;
+
+    /* a zero length copy never reads the source */
+    if (len == 0) {
+      return to;
+    }
+
+    /*
+     * strncpy always writes len bytes into the destination, including
+     * any zero padding, so the whole destination range is required.
+     */
+    if (! _dmalloc_chunk_user_area(file, line, "strncpy", to, len,
+				   &to_base, &to_size)) {
+      return NULL;
+    }
+
+    if (! _dmalloc_chunk_user_area(file, line, "strncpy", from, 0,
+				   &from_base, &from_size)) {
+      return NULL;
+    }
+
+    /* the source only needs to cover through its terminator or len */
+    if (! strict_scan(from, len, from_base, from_size,
+		      &read_len, &have_null)) {
+      strict_reject(file, line, "strncpy", from,
+		    DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS,
+		    "source range exceeds the user allocation");
+      return NULL;
+    }
+
+    /* the bytes actually read must not overlap the bytes written */
+    if (strict_overlap(from, read_len, to, len)) {
+      strict_reject(file, line, "strncpy", to,
+		    DMALLOC_ERROR_FUNC_OVERLAP,
+		    "source and destination ranges overlap");
+      return NULL;
+    }
+
+    return (char *)strncpy(to, from, len);
+  }
+
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_FUNCS)) {
     const char	*from_p;
     int		min_size;
-    
+
     /* so we have to figure out the max length of the buffers directly here */
     for (from_p = from; from_p < from + len; from_p++) {
       if (*from_p == '\0') {
@@ -576,7 +841,7 @@ char	*_dmalloc_strncpy(const char *file, const int line,
       }
     }
     min_size = from_p - from;
-    
+
     /* len or until nullc */
     if ((! dmalloc_verify_pnt(file, line, "strncpy", to,
 			      0 /* not exact */, min_size))

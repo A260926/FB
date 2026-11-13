@@ -1,6 +1,15 @@
 Version 5.6.5 (12/28/2020):
 	* Fixed the installdocs target... Again.  Thanks to matthewluckie.
 
+Unreleased:
+	* Added dmalloc_set_func_check_policy() with DMALLOC_FUNC_REPORT and
+	  DMALLOC_FUNC_REJECT.  The strict REJECT policy makes memcpy,
+	  memmove, strncpy, and strncat refuse a dangerous copy into or out
+	  of a tracked heap user area before any access occurs, returning
+	  NULL and setting a category-specific dmalloc_errno.  The default
+	  REPORT policy keeps the historical report-then-call behavior.
+	* Added checks/strict_contract.c contract test for the strict mode.
+
 Version 5.6.4 (12/24/2020):
 	* Fixed shared libary creation.  Thanks to @ffontaine and Alex Suykov.
 	* Fixed one more pointer arithmetic issue.  Thanks to aitap.

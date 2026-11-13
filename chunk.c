@@ -93,6 +93,9 @@ unsigned long		_dmalloc_memory_limit = 0;
 /* total number of bytes that the heap has allocated */
 unsigned long		_dmalloc_alloc_total = 0;
 
+/* policy used by the function checking wrappers */
+int			_dmalloc_func_check_policy = DMALLOC_FUNC_REPORT;
+
 /*
  * local variables
  */
@@ -1915,6 +1918,165 @@ int	_dmalloc_chunk_read_info(const void *user_pnt, const char *where,
   SET_POINTER(valloc_bp, BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_VALLOC));
   SET_POINTER(fence_bp, BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_FENCE));
   
+  return 1;
+}
+
+/*
+ * void _dmalloc_chunk_func_error
+ *
+ * Set dmalloc_errno and emit the file/line diagnostics for a strict
+ * function checking failure which was detected after the pointers had
+ * already been resolved (missing terminator, overlap, and so on).
+ *
+ * ARGUMENTS:
+ *
+ * file -> File-name or return-address of the caller.
+ *
+ * line -> Line-number of the caller.
+ *
+ * func -> Function string which is checking the pointer.
+ *
+ * pnt -> Pointer associated with the failure or NULL.
+ *
+ * error -> DMALLOC_ERROR_* value to store in dmalloc_errno.
+ *
+ * reason -> Reason string written to the log.
+ */
+void	_dmalloc_chunk_func_error(const char *file, const int line,
+				  const char *func, const void *pnt,
+				  const int error, const char *reason)
+{
+  dmalloc_errno = error;
+  log_error_info(file, line, pnt, NULL, reason, func);
+}
+
+/*
+ * int _dmalloc_chunk_user_area
+ *
+ * Resolve a pointer to the live user area of the tracked allocation
+ * which contains it.  Only pointers inside the active user space are
+ * accepted: the bottom fence, the rounded-out block space, the top
+ * fence, and freed allocations are all outside of the user capacity.
+ * No byte of the checked pointer is ever read here; the lookup is
+ * purely address based.
+ *
+ * Returns 1 on success or 0 on failure.
+ *
+ * ARGUMENTS:
+ *
+ * file -> File-name or return-address of the caller.
+ *
+ * line -> Line-number of the caller.
+ *
+ * func -> Function string which is checking the pointer.
+ *
+ * pnt -> Pointer we are resolving.
+ *
+ * len -> Number of bytes which the caller will access at this
+ * pointer.  Set to 0 to resolve the pointer without a range.
+ *
+ * base_p <- Pointer to a pointer which, if not NULL, will be set to
+ * the start of the user area.
+ *
+ * size_p <- Pointer to a PNT_ARITH_TYPE which, if not NULL, will be
+ * set to the requested user size of the allocation.
+ */
+int	_dmalloc_chunk_user_area(const char *file, const int line,
+				 const char *func, const void *pnt,
+				 const PNT_ARITH_TYPE len,
+				 const void **base_p,
+				 PNT_ARITH_TYPE *size_p)
+{
+  skip_alloc_t		*slot_p;
+  pnt_info_t		pnt_info;
+  const char		*user_start;
+  PNT_ARITH_TYPE	offset, capacity, user_size;
+
+  if (pnt == NULL) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, NULL,
+		   "pointer is not a live tracked user area", func);
+    return 0;
+  }
+
+  /* this only compares addresses, it does not touch the pointer */
+  slot_p = find_address(pnt, 0 /* used list */, 0 /* not exact pointer */,
+			skip_update);
+  if (slot_p == NULL) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, NULL,
+		   "pointer is not a live tracked user area", func);
+    return 0;
+  }
+
+  /* freed, external, and administrative slots are not user areas */
+  if (! BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_USER)
+      || BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_FREE)
+      || BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_EXTERN)
+      || BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_ADMIN)) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, NULL,
+		   "pointer is not a live tracked user area", func);
+    return 0;
+  }
+
+  get_pnt_info(slot_p, &pnt_info);
+  user_start = (const char *)pnt_info.pi_user_start;
+  user_size = slot_p->sa_user_size;
+
+  /*
+   * Sanity check the allocation record before trusting its size.  The
+   * capacity is the size the user requested, never the rounded-out
+   * block space and never the fence-post area, so the end of the user
+   * area must not run past the top of the usable space (which excludes
+   * the top fence when fences are enabled).
+   */
+  if ((PNT_ARITH_TYPE)user_start < (PNT_ARITH_TYPE)pnt_info.pi_alloc_start
+      || (PNT_ARITH_TYPE)user_start > (PNT_ARITH_TYPE)pnt_info.pi_upper_bounds
+      || user_size
+	 > (PNT_ARITH_TYPE)pnt_info.pi_upper_bounds
+	 - (PNT_ARITH_TYPE)user_start) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, slot_p,
+		   "invalid allocation record", func);
+    return 0;
+  }
+
+  if ((PNT_ARITH_TYPE)pnt < (PNT_ARITH_TYPE)user_start) {
+    /* bottom fence or administrative space */
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, slot_p,
+		   "pointer is not inside the user allocation", func);
+    return 0;
+  }
+
+  offset = (PNT_ARITH_TYPE)pnt - (PNT_ARITH_TYPE)user_start;
+  capacity = user_size;
+
+  /*
+   * A pointer beyond the end of the user area (including the top
+   * fence and any rounded-out block space) is not a pointer into the
+   * object at all.  Only a pointer at or before the end can carry a
+   * range error.
+   */
+  if (offset > capacity) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_BAD_OBJECT;
+    log_error_info(file, line, pnt, slot_p,
+		   "pointer is not inside the user allocation", func);
+    return 0;
+  }
+
+  /* never let a size_t wrap around when comparing the range */
+  if (len > capacity - offset) {
+    dmalloc_errno = DMALLOC_ERROR_FUNC_OUT_OF_BOUNDS;
+    log_error_info(file, line, pnt, slot_p,
+		   "range exceeds the user allocation", func);
+    return 0;
+  }
+
+  SET_POINTER(base_p, user_start);
+  SET_POINTER(size_p, user_size);
+
   return 1;
 }
 

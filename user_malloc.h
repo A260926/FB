@@ -419,6 +419,35 @@ int	dmalloc_verify_pnt(const char *file, const int line, const char *func,
 			   const int min_size);
 
 /*
+ * int dmalloc_set_func_check_policy
+ *
+ * Set the policy used by the memcpy, memmove, strncpy, and strncat
+ * wrappers when an argument problem is detected.  DMALLOC_FUNC_REPORT
+ * (the default) reports the problem and then calls libc, preserving
+ * the historical behavior.  DMALLOC_FUNC_REJECT refuses the operation
+ * before any memory is accessed, returning NULL.
+ *
+ * The strict policy only understands pointers that are active user
+ * areas in the dmalloc heap.  Internal pointers are supported but the
+ * reported capacity is the requested size, never the rounded
+ * allocation or the fence-post area.  Pointers that dmalloc does not
+ * track are never read; they are rejected outright.  The policy is not
+ * independent of the check-funcs token: DMALLOC_FUNC_REJECT works
+ * whether or not check-funcs is enabled.  The policy is meant to be
+ * set before allocations start and does not support concurrent
+ * changes.
+ *
+ * Returns the previous policy on success or -1 if the policy value is
+ * invalid, in which case the policy is left unchanged.
+ *
+ * ARGUMENTS:
+ *
+ * policy -> New policy: DMALLOC_FUNC_REPORT or DMALLOC_FUNC_REJECT.
+ */
+extern
+int	dmalloc_set_func_check_policy(const int policy);
+
+/*
  * unsigned int dmalloc_debug
  *
  * Set the global debug functionality flags.  You can also use
