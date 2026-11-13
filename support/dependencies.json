@@ -1,0 +1,10 @@
+[
+  {
+    "name": "GLM",
+    "version": "0.9.9.8",
+    "repo": "https://github.com/g-truc/glm",
+    "commit": "bf71a834948186f4097caa076cd2663c69a10e1e",
+    "export": "third_party/glm",
+    "license": "MIT or Happy Bunny; original copying.txt preserved"
+  }
+]
