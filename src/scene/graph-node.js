@@ -23,6 +23,44 @@ const matrix = new Mat4();
 const target = new Vec3();
 const up = new Vec3();
 
+const LOCAL_MATRIX_AFFINE_EPSILON = 1e-6;
+
+/**
+ * Validates a matrix for use as a local transform: it must be a finite, invertible affine
+ * transformation. Shear and reflection are allowed.
+ *
+ * @param {Mat4} matrix - The matrix to validate.
+ * @throws {TypeError} If the value is not a Mat4.
+ * @throws {RangeError} If the matrix is not finite, not affine or not invertible.
+ */
+function validateLocalMatrix(matrix) {
+    if (!(matrix instanceof Mat4)) {
+        throw new TypeError('GraphNode#setLocalMatrix expects a Mat4.');
+    }
+
+    const d = matrix.data;
+    for (let i = 0; i < 16; i++) {
+        if (!Number.isFinite(d[i])) {
+            throw new RangeError('GraphNode#setLocalMatrix expects a finite matrix.');
+        }
+    }
+
+    if (Math.abs(d[3]) > LOCAL_MATRIX_AFFINE_EPSILON ||
+        Math.abs(d[7]) > LOCAL_MATRIX_AFFINE_EPSILON ||
+        Math.abs(d[11]) > LOCAL_MATRIX_AFFINE_EPSILON ||
+        Math.abs(d[15] - 1) > LOCAL_MATRIX_AFFINE_EPSILON) {
+        throw new RangeError('GraphNode#setLocalMatrix expects an affine matrix.');
+    }
+
+    const det = d[0] * (d[5] * d[10] - d[6] * d[9]) -
+                d[4] * (d[1] * d[10] - d[2] * d[9]) +
+                d[8] * (d[1] * d[6] - d[2] * d[5]);
+
+    if (!Number.isFinite(det) || det === 0) {
+        throw new RangeError('GraphNode#setLocalMatrix expects an invertible matrix.');
+    }
+}
+
 /**
  * Helper function that handles signature overloading to receive a test function.
  *
@@ -169,6 +207,14 @@ class GraphNode extends EventHandler {
 
     /** @private */
     localTransform = new Mat4();
+
+    /**
+     * When true, {@link localTransform} is the authoritative local transform and the node is in
+     * local matrix mode. The TRS fields are then stale and cannot be used to edit the node.
+     *
+     * @private
+     */
+    _localMatrixMode = false;
 
     /** @private */
     _dirtyLocal = false;
@@ -538,6 +584,7 @@ class GraphNode extends EventHandler {
         clone.eulerAngles.copy(this.eulerAngles);
 
         clone.localTransform.copy(this.localTransform);
+        clone._localMatrixMode = this._localMatrixMode;
         clone._dirtyLocal = this._dirtyLocal;
 
         clone.worldTransform.copy(this.worldTransform);
@@ -827,6 +874,7 @@ class GraphNode extends EventHandler {
      * this.entity.setEulerAngles(angles);
      */
     getEulerAngles() {
+        this._assertTRSMode('getEulerAngles');
         this.getWorldTransform().getEulerAngles(this.eulerAngles);
         return this.eulerAngles;
     }
@@ -839,12 +887,14 @@ class GraphNode extends EventHandler {
      * set the local space rotation of the graph node, use {@link setLocalEulerAngles}.
      *
      * @returns {Readonly<Vec3>} The local space rotation of the graph node as Euler angles in XYZ order.
+     * @throws {RangeError} If the node is in local matrix mode and therefore has no TRS representation.
      * @example
      * const angles = this.entity.getLocalEulerAngles();
      * angles.y = 180;
      * this.entity.setLocalEulerAngles(angles);
      */
     getLocalEulerAngles() {
+        this._assertTRSMode('getLocalEulerAngles');
         this.localRotation.getEulerAngles(this.localEulerAngles);
         return this.localEulerAngles;
     }
@@ -855,12 +905,14 @@ class GraphNode extends EventHandler {
      * position, use {@link setLocalPosition}.
      *
      * @returns {Readonly<Vec3>} The local space position of the graph node.
+     * @throws {RangeError} If the node is in local matrix mode and therefore has no TRS representation.
      * @example
      * const position = this.entity.getLocalPosition().clone();
      * position.x += 1; // move the entity 1 unit along x.
      * this.entity.setLocalPosition(position);
      */
     getLocalPosition() {
+        this._assertTRSMode('getLocalPosition');
         return this.localPosition;
     }
 
@@ -870,10 +922,12 @@ class GraphNode extends EventHandler {
      * rotation, use {@link setLocalRotation}.
      *
      * @returns {Readonly<Quat>} The local space rotation of the graph node as a quaternion.
+     * @throws {RangeError} If the node is in local matrix mode and therefore has no TRS representation.
      * @example
      * const rotation = this.entity.getLocalRotation();
      */
     getLocalRotation() {
+        this._assertTRSMode('getLocalRotation');
         return this.localRotation;
     }
 
@@ -883,13 +937,135 @@ class GraphNode extends EventHandler {
      * use {@link setLocalScale}.
      *
      * @returns {Readonly<Vec3>} The local space scale of the graph node.
+     * @throws {RangeError} If the node is in local matrix mode and therefore has no TRS representation.
      * @example
      * const scale = this.entity.getLocalScale().clone();
      * scale.x = 100;
      * this.entity.setLocalScale(scale);
      */
     getLocalScale() {
+        this._assertTRSMode('getLocalScale');
         return this.localScale;
+    }
+
+    /**
+     * Reports whether this node uses a local matrix as its authoritative local transform. A node
+     * enters this mode by calling {@link setLocalMatrix} and leaves it by calling
+     * {@link setLocalTRS}. Nodes that never called {@link setLocalMatrix} report false.
+     *
+     * @type {boolean}
+     * @readonly
+     */
+    get isLocalMatrix() {
+        return this._localMatrixMode;
+    }
+
+    /**
+     * Sets the local transform of the node from a matrix. This is the way to express local
+     * transforms which cannot be represented as a translation, rotation and scale, such as those
+     * containing shear or a combination of rotation and non-uniform scale.
+     *
+     * The matrix is copied. It must be finite, affine and invertible; shear and reflection are
+     * supported. While the node is in local matrix mode, TRS based local accessors, world
+     * rotation accessors and transform editing methods throw a `RangeError`, while
+     * {@link getLocalTransform}, {@link getWorldTransform}, {@link getPosition}, {@link right},
+     * {@link up}, {@link forward}, {@link normalMatrix} and {@link worldScaleSign} all use the
+     * matrix. Use {@link setLocalTRS} to return the node to TRS mode.
+     *
+     * @param {Mat4} matrix - The local transformation matrix. It is copied, not referenced.
+     * @returns {void}
+     * @throws {TypeError} If `matrix` is not a {@link Mat4}.
+     * @throws {RangeError} If the matrix is not finite, not affine, or not invertible.
+     * @example
+     * // Apply a local matrix containing shear, then move the node in world space
+     * const shear = new Mat4().set([1, 0, 0, 0, 0.5, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+     * node.setLocalMatrix(shear);
+     * node.translate(0, 1, 0);
+     */
+    setLocalMatrix(matrix) {
+        validateLocalMatrix(matrix);
+
+        this.localTransform.copy(matrix);
+        this._localMatrixMode = true;
+
+        // The matrix is now authoritative, so there is no pending TRS composition.
+        this._dirtyLocal = false;
+        this._dirtifyLocalMatrix();
+    }
+
+    /**
+     * Marks this node and its descendants' world transforms as dirty after the local matrix
+     * changed, and unfreezes the chain from this node to the root. Unlike {@link _dirtifyWorld},
+     * this also handles a node which is already dirty, so the derived caches
+     * (`_normalMatrix`, `_worldScaleSign` and `_aabbVer`) are always invalidated and frozen
+     * ancestors are always brought back into the next hierarchy sync.
+     *
+     * @private
+     */
+    _dirtifyLocalMatrix() {
+        this._unfreezeParentToRoot();
+
+        this._dirtyWorld = true;
+        this._dirtyNormal = true;
+        this._worldScaleSign = 0;
+        this._aabbVer++;
+        this._frozen = false;
+
+        const children = this._children;
+        for (let i = 0; i < children.length; i++) {
+            children[i]._dirtifyWorldInternal();
+        }
+    }
+
+    /**
+     * Sets the local transform of the node from a complete translation, rotation and scale, and
+     * returns the node to TRS mode if it was in local matrix mode.
+     *
+     * All three components must be supplied because a partial update cannot represent the matrix
+     * a node in local matrix mode may hold. Use {@link setLocalMatrix} to set an arbitrary local
+     * matrix.
+     *
+     * @param {Vec3} position - The local space position.
+     * @param {Quat} rotation - The local space rotation.
+     * @param {Vec3} scale - The local space scale.
+     * @returns {void}
+     * @throws {TypeError} If any argument is not a {@link Vec3} or {@link Quat} as appropriate.
+     * @example
+     * node.setLocalTRS(new Vec3(0, 1, 0), new Quat().setFromEulerAngles(0, 45, 0), Vec3.ONE);
+     */
+    setLocalTRS(position, rotation, scale) {
+        if (!(position instanceof Vec3)) {
+            throw new TypeError('GraphNode#setLocalTRS expects a Vec3 position.');
+        }
+        if (!(rotation instanceof Quat)) {
+            throw new TypeError('GraphNode#setLocalTRS expects a Quat rotation.');
+        }
+        if (!(scale instanceof Vec3)) {
+            throw new TypeError('GraphNode#setLocalTRS expects a Vec3 scale.');
+        }
+
+        this.localPosition.copy(position);
+        this.localRotation.copy(rotation);
+        this.localScale.copy(scale);
+
+        this._localMatrixMode = false;
+
+        // Always recompose the matrix on the next sync: the previous matrix may have been set
+        // directly and the node may already be marked dirty.
+        this._dirtyLocal = true;
+        this._dirtifyLocalMatrix();
+    }
+
+    /**
+     * Throws if the node is in local matrix mode.
+     *
+     * @param {string} method - The name of the method requiring TRS mode.
+     * @private
+     */
+    _assertTRSMode(method) {
+        if (this._localMatrixMode) {
+            throw new RangeError(`GraphNode#${method} is not available in local matrix mode. Use GraphNode#setLocalTRS to provide a complete TRS first.`);
+        }
     }
 
     /**
@@ -902,7 +1078,9 @@ class GraphNode extends EventHandler {
      */
     getLocalTransform() {
         if (this._dirtyLocal) {
-            this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            if (!this._localMatrixMode) {
+                this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            }
             this._dirtyLocal = false;
         }
         return this.localTransform;
@@ -934,6 +1112,7 @@ class GraphNode extends EventHandler {
      * const rotation = this.entity.getRotation();
      */
     getRotation() {
+        this._assertTRSMode('getRotation');
         this.rotation.setFromMat4(this.getWorldTransform());
         return this.rotation;
     }
@@ -1049,6 +1228,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Rotation around local space z-axis in degrees.
      */
     setLocalEulerAngles(x, y, z) {
+        this._assertTRSMode('setLocalEulerAngles');
         this.localRotation.setFromEulerAngles(x, y, z);
 
         if (!this._dirtyLocal) {
@@ -1083,6 +1263,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Z-coordinate of local space position.
      */
     setLocalPosition(x, y, z) {
+        this._assertTRSMode('setLocalPosition');
         if (x instanceof Vec3) {
             this.localPosition.copy(x);
         } else {
@@ -1123,6 +1304,7 @@ class GraphNode extends EventHandler {
      * @param {number} [w] - W-component of local space quaternion rotation.
      */
     setLocalRotation(x, y, z, w) {
+        this._assertTRSMode('setLocalRotation');
         if (x instanceof Quat) {
             this.localRotation.copy(x);
         } else {
@@ -1161,6 +1343,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Z-coordinate of local space scale.
      */
     setLocalScale(x, y, z) {
+        this._assertTRSMode('setLocalScale');
         if (x instanceof Vec3) {
             this.localScale.copy(x);
         } else {
@@ -1258,6 +1441,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Z-coordinate of world space position.
      */
     setPosition(x, y, z) {
+        this._assertTRSMode('setPosition');
         if (x instanceof Vec3) {
             position.copy(x);
         } else {
@@ -1305,6 +1489,7 @@ class GraphNode extends EventHandler {
      * @param {number} [w] - W-component of world space quaternion rotation.
      */
     setRotation(x, y, z, w) {
+        this._assertTRSMode('setRotation');
         if (x instanceof Quat) {
             rotation.copy(x);
         } else {
@@ -1336,6 +1521,7 @@ class GraphNode extends EventHandler {
      * this.entity.setPositionAndRotation(position, rotation);
      */
     setPositionAndRotation(position, rotation) {
+        this._assertTRSMode('setPositionAndRotation');
         if (this._parent === null) {
             this.localPosition.copy(position);
             this.localRotation.copy(rotation);
@@ -1380,6 +1566,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Rotation around world space z-axis in degrees.
      */
     setEulerAngles(x, y, z) {
+        this._assertTRSMode('setEulerAngles');
         this.localRotation.setFromEulerAngles(x, y, z);
 
         if (this._parent !== null) {
@@ -1574,7 +1761,9 @@ class GraphNode extends EventHandler {
 
     _sync() {
         if (this._dirtyLocal) {
-            this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            if (!this._localMatrixMode) {
+                this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            }
 
             this._dirtyLocal = false;
         }
@@ -1584,6 +1773,10 @@ class GraphNode extends EventHandler {
                 this.worldTransform.copy(this.localTransform);
             } else {
                 if (this.scaleCompensation) {
+                    if (this._localMatrixMode) {
+                        throw new RangeError('GraphNode#scaleCompensation is not supported together with local matrix mode.');
+                    }
+
                     let parentWorldScale;
                     const parent = this._parent;
 
@@ -1706,6 +1899,7 @@ class GraphNode extends EventHandler {
      * @param {number} [uz] - Z-component of the up vector for the look at transform. Defaults to 0.
      */
     lookAt(x, y, z, ux = 0, uy = 1, uz = 0) {
+        this._assertTRSMode('lookAt');
         if (x instanceof Vec3) {
             target.copy(x);
 
@@ -1753,6 +1947,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Z-coordinate of world space translation.
      */
     translate(x, y, z) {
+        this._assertTRSMode('translate');
         if (x instanceof Vec3) {
             position.copy(x);
         } else {
@@ -1790,6 +1985,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Z-coordinate of local space translation.
      */
     translateLocal(x, y, z) {
+        this._assertTRSMode('translateLocal');
         if (x instanceof Vec3) {
             position.copy(x);
         } else {
@@ -1833,6 +2029,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Rotation around world space z-axis in degrees.
      */
     rotate(x, y, z) {
+        this._assertTRSMode('rotate');
         rotation.setFromEulerAngles(x, y, z);
 
         if (this._parent === null) {
@@ -1880,6 +2077,7 @@ class GraphNode extends EventHandler {
      * @param {number} [z] - Rotation around local space z-axis in degrees.
      */
     rotateLocal(x, y, z) {
+        this._assertTRSMode('rotateLocal');
         rotation.setFromEulerAngles(x, y, z);
 
         this.localRotation.mul(rotation);

@@ -2194,6 +2194,7 @@ class ElementComponent extends Component {
      * @private
      */
     _setPosition(x, y, z) {
+        this._assertTRSMode('setPosition');
         if (!this.element.screen) {
             Entity.prototype.setPosition.call(this, x, y, z);
             return;
@@ -2223,6 +2224,7 @@ class ElementComponent extends Component {
      * @private
      */
     _setLocalPosition(x, y, z) {
+        this._assertTRSMode('setLocalPosition');
         if (x instanceof Vec3) {
             this.localPosition.copy(x);
         } else {
@@ -2283,7 +2285,11 @@ class ElementComponent extends Component {
         }
 
         if (this._dirtyLocal) {
-            this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            // A node in local matrix mode owns its matrix; recomposing it from TRS would discard
+            // shear and other transforms which TRS cannot represent.
+            if (!this._localMatrixMode) {
+                this.localTransform.setTRS(this.localPosition, this.localRotation, this.localScale);
+            }
 
             // update margin
             const p = this.localPosition;

@@ -156,6 +156,7 @@ export { RenderView } from './scene/render-view.js';
 export { WorldClusters } from './scene/lighting/world-clusters.js';
 export { ForwardRenderer } from './scene/renderer/forward-renderer.js';
 export { GraphNode } from './scene/graph-node.js';
+export { flattenStaticHierarchy } from './scene/flatten-static-hierarchy.js';
 export { Layer } from './scene/layer.js';
 export { LayerComposition } from './scene/composition/layer-composition.js';
 export { Light } from './scene/light.js';
