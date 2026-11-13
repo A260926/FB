@@ -1,0 +1,184 @@
+{
+  "upstream_repo": "https://github.com/mackron/dr_libs",
+  "upstream_commit": "f12e197fd462e4c22873fbd70d11b1d2f2c1dc3c",
+  "license": "MIT-0 OR Unlicense (per-header dual license)",
+  "main_tree_is_complete": true,
+  "tracked_file_count": 27,
+  "submodule_note": "No gitlinks. Tracked .gitmodules is the empty Git blob and is retained verbatim.",
+  "files": [
+    {
+      "path": ".github/FUNDING.yml",
+      "sha256": "95aeb70e27eb46d9a0bd127244446ebc2bca68fb14feff8faf322d4b09c30d30",
+      "origin": "upstream",
+      "upstream_path": ".github/FUNDING.yml"
+    },
+    {
+      "path": ".github/SECURITY.md",
+      "sha256": "a48ec94e12541df86b4e1a5732bd81477b205ec2ae2d43ce47be34b5f90dd0fa",
+      "origin": "upstream",
+      "upstream_path": ".github/SECURITY.md"
+    },
+    {
+      "path": ".github/actions/audiovectors/action.yml",
+      "sha256": "214778c5daa358b33a31ac8fab7c63aff5802fe2cc34b31b3673a0431977e13b",
+      "origin": "upstream",
+      "upstream_path": ".github/actions/audiovectors/action.yml"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "32d070683451ce16edf225c28dbc5051e04ff9f345be52b78fd8f605367d4806",
+      "origin": "upstream",
+      "upstream_path": ".github/workflows/ci.yml"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "22fd6863b99737c333d13af58c374fa7f2c891776546ef6c7873a6dab72dedd4",
+      "origin": "upstream",
+      "upstream_path": ".gitignore"
+    },
+    {
+      "path": ".gitmodules",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "origin": "upstream",
+      "upstream_path": ".gitmodules"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "3c16d558de99c0dff35680e2701ecb047dd4ffcf02108a97d08afc7773095239",
+      "origin": "upstream",
+      "upstream_path": "CMakeLists.txt"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "1935bfc5c5352c91502b10a04aba7a941923b6f456a29571e2d4e85f5469f97c",
+      "origin": "upstream",
+      "upstream_path": "CONTRIBUTING.md"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "dd1c647e6f767f8ff4b2dfae0fed314726600a01e0cf1ef556afddd5fa96ff15",
+      "origin": "upstream",
+      "upstream_path": "LICENSE"
+    },
+    {
+      "path": "README.md",
+      "sha256": "a9871b7ee951b4a83552b220c794936ca667d3185c0f40d11b516d542e27e538",
+      "origin": "upstream",
+      "upstream_path": "README.md"
+    },
+    {
+      "path": "dr_flac.h",
+      "sha256": "3f010d3142a5b9df80a0bd8b325de54317468b1aff85abb257c86dbfefe9bd2a",
+      "origin": "upstream",
+      "upstream_path": "dr_flac.h"
+    },
+    {
+      "path": "dr_mp3.h",
+      "sha256": "7a6cc38b0afdb55cfc9eec991d9169d67beb8fd910be2995121510cdaa99c356",
+      "origin": "upstream",
+      "upstream_path": "dr_mp3.h"
+    },
+    {
+      "path": "dr_wav.h",
+      "sha256": "7c9660d75361ad6175e6217c63a1075c9512445c06bc951197fc479179f76b39",
+      "origin": "upstream",
+      "upstream_path": "dr_wav.h"
+    },
+    {
+      "path": "external/fs/fs.c",
+      "sha256": "0e978966673530354fa776f0febf01b2e1cd19218ccba0b5a441efbf082cbb6a",
+      "origin": "upstream",
+      "upstream_path": "external/fs/fs.c"
+    },
+    {
+      "path": "external/fs/fs.h",
+      "sha256": "40b4c811e9a98707139e77929bdbeae427e18cf3ae9793b036e5af8f38e0b7bc",
+      "origin": "upstream",
+      "upstream_path": "external/fs/fs.h"
+    },
+    {
+      "path": "task_support/baseline.c",
+      "sha256": "f19c026ee02a4923eeeb45d741ea318a0d58c836543dd4900b2d3f4e398b5313",
+      "origin": "author-public-baseline",
+      "upstream_path": null
+    },
+    {
+      "path": "task_support/baseline.sh",
+      "sha256": "6e64bbfe96f556b38958b2a4be3049486f640afd286b7d35b658087601f6fb2b",
+      "origin": "author-public-baseline",
+      "upstream_path": null
+    },
+    {
+      "path": "tests/README.md",
+      "sha256": "a1b4e70abcd4daa1439b0fcfcad7359db46f10444423eb69bc136667c93a3ebd",
+      "origin": "upstream",
+      "upstream_path": "tests/README.md"
+    },
+    {
+      "path": "tests/compilation/dr_flac.c",
+      "sha256": "c37d69547b923ad3b2b1b730b206e7360389d304fc89b0066eecb132369fd440",
+      "origin": "upstream",
+      "upstream_path": "tests/compilation/dr_flac.c"
+    },
+    {
+      "path": "tests/compilation/dr_mp3.c",
+      "sha256": "aa8bf6023fe7cb93af8d51f1dc2db8769b2993692e6f12c727ff39be1bf80424",
+      "origin": "upstream",
+      "upstream_path": "tests/compilation/dr_mp3.c"
+    },
+    {
+      "path": "tests/compilation/dr_wav.c",
+      "sha256": "c73c0b5aa04569afed93fc72ae017703baebaf40c467d71de4dd0a50c6dd943a",
+      "origin": "upstream",
+      "upstream_path": "tests/compilation/dr_wav.c"
+    },
+    {
+      "path": "tests/dr_libs_test.c",
+      "sha256": "1e30133f8f8d239ee27fa0e291c7073a7c52684a27710803f43362a473fb4524",
+      "origin": "upstream",
+      "upstream_path": "tests/dr_libs_test.c"
+    },
+    {
+      "path": "tests/dr_libs_test_flac.c",
+      "sha256": "87d2fa00d2e490dbcb243069c977adf0d6650dd149037648fc999986e4440eaf",
+      "origin": "upstream",
+      "upstream_path": "tests/dr_libs_test_flac.c"
+    },
+    {
+      "path": "tests/dr_libs_test_mp3.c",
+      "sha256": "20f896421ad61fe559c4c9487852b621e74a47559986329742fb66ba46e9991c",
+      "origin": "upstream",
+      "upstream_path": "tests/dr_libs_test_mp3.c"
+    },
+    {
+      "path": "tests/dr_libs_test_wav.c",
+      "sha256": "4ff3fdfc80c46e7fbc28ad72c6f0208e1a1f9640304532f210b4c09fc0111ec4",
+      "origin": "upstream",
+      "upstream_path": "tests/dr_libs_test_wav.c"
+    },
+    {
+      "path": "tests/exceptions.txt",
+      "sha256": "4a427f8a2c3608a1c6b9a6fd9403ef1810a4f522d7e3dcfae8af739065c273d9",
+      "origin": "upstream",
+      "upstream_path": "tests/exceptions.txt"
+    },
+    {
+      "path": "tests/fuzzing/dr_flac_fuzzer.cc",
+      "sha256": "3f82d07fddc937dc2ff067a84dce6b2d32597b38a62c5995452d2dd0c20950b2",
+      "origin": "upstream",
+      "upstream_path": "tests/fuzzing/dr_flac_fuzzer.cc"
+    },
+    {
+      "path": "tests/fuzzing/dr_mp3_fuzzer.cc",
+      "sha256": "14608c7d3dd427138750f0eff7e083c31135ee20c8f1d04a6fa555bbcaee1a70",
+      "origin": "upstream",
+      "upstream_path": "tests/fuzzing/dr_mp3_fuzzer.cc"
+    },
+    {
+      "path": "tests/fuzzing/dr_wav_fuzzer.cc",
+      "sha256": "0ad488343ba6941e0908dec2a05f2b57232e6b65484c13aef10c978ef5d1fd7a",
+      "origin": "upstream",
+      "upstream_path": "tests/fuzzing/dr_wav_fuzzer.cc"
+    }
+  ]
+}

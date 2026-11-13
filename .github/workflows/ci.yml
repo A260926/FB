@@ -1,0 +1,145 @@
+---
+name: Build and Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audiovectors:
+    name: Resolve audiovectors revision
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.resolve.outputs.revision }}
+    steps:
+      - name: Resolve latest revision
+        id: resolve
+        shell: bash
+        run: |
+          revision=$(git ls-remote https://github.com/mackron/audiovectors.git HEAD | cut -f1)
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Failed to resolve the audiovectors revision." >&2
+            exit 1
+          fi
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "audiovectors revision: $revision"
+          echo "audiovectors revision: $revision" >> "$GITHUB_STEP_SUMMARY"
+
+  linux:
+    name: Linux (${{ matrix.compiler }}, ${{ matrix.config.name }}, NO_SIMD=${{ matrix.no_simd }})
+    runs-on: ubuntu-latest
+    needs: audiovectors
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        no_simd: ["OFF", "ON"]
+        config:
+          - name: "Force C++"
+            cmake_args: "-DDR_LIBS_FORCE_CXX=ON"
+          - name: "Force C89"
+            cmake_args: "-DDR_LIBS_FORCE_C89=ON"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang pkg-config libsndfile1-dev libflac-dev libogg-dev libmpg123-dev
+
+      - name: Setup compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure CMake
+        run: >-
+          cmake -B build
+          -DDR_LIBS_BUILD_TESTS=ON
+          -DDR_LIBS_WARNINGS_AS_ERRORS=ON
+          -DDR_LIBS_NO_SIMD=${{ matrix.no_simd }}
+          ${{ matrix.config.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Prepare audiovectors
+        if: matrix.compiler == 'gcc' && matrix.config.name == 'Force C89'
+        uses: ./.github/actions/audiovectors
+        with:
+          revision: ${{ needs.audiovectors.outputs.revision }}
+
+      - name: Run decoding and seeking tests
+        if: matrix.compiler == 'gcc' && matrix.config.name == 'Force C89'
+        run: ./build/dr_libs_test --exceptions tests/exceptions.txt
+
+  windows:
+    name: Windows (MSVC, ${{ matrix.config.name }}, NO_SIMD=${{ matrix.no_simd }})
+    runs-on: windows-latest
+    needs: audiovectors
+    strategy:
+      fail-fast: false
+      matrix:
+        no_simd: ["OFF", "ON"]
+        config:
+          - name: "C"
+            cmake_args: "-DDR_LIBS_FORCE_CXX=OFF"
+          - name: "Force C++"
+            cmake_args: "-DDR_LIBS_FORCE_CXX=ON"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency sources
+        shell: bash
+        run: |
+          download_dependency() {
+            local name="$1"
+            local url="$2"
+            local archive="$RUNNER_TEMP/${url##*/}"
+
+            curl --fail --location --retry 3 "$url" --output "$archive"
+
+            mkdir -p "external/$name"
+            # Use Git Bash's GNU tar, not Windows tar, for Unicode filenames.
+            /usr/bin/tar --force-local -xf "$archive" -C "external/$name" --strip-components=1
+          }
+
+          download_dependency ogg "https://github.com/xiph/ogg/releases/download/v1.3.6/libogg-1.3.6.tar.xz"
+          download_dependency flac "https://github.com/xiph/flac/releases/download/1.5.0/flac-1.5.0.tar.xz"
+          download_dependency libsndfile "https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz"
+          download_dependency mpg123 "https://downloads.sourceforge.net/project/mpg123/mpg123/1.33.3/mpg123-1.33.3.tar.bz2"
+
+      - name: Configure CMake
+        run: >-
+          cmake -B build -A x64
+          -DDR_LIBS_BUILD_TESTS=ON
+          -DDR_LIBS_WARNINGS_AS_ERRORS=ON
+          -DDR_LIBS_USE_BUNDLED_DEPENDENCIES=ON
+          -DDR_LIBS_NO_SIMD=${{ matrix.no_simd }}
+          ${{ matrix.config.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Prepare audiovectors
+        if: matrix.config.name == 'C'
+        uses: ./.github/actions/audiovectors
+        with:
+          revision: ${{ needs.audiovectors.outputs.revision }}
+
+      - name: Run decoding and seeking tests
+        if: matrix.config.name == 'C'
+        run: ./build/Release/dr_libs_test.exe --exceptions tests/exceptions.txt

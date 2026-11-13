@@ -1,0 +1,12 @@
+.vscode
+/build
+/docs
+/tickets
+/scratch
+/external/audiovectors
+/external/flac
+/external/ogg
+/external/libsndfile
+/external/mpg123
+/tests/wav/archive
+/tests/exceptions-private.txt

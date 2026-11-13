@@ -1,0 +1,82 @@
+# File; Flags
+#
+# Paths are relative to `<audiovectors>/vectors`. Flags are separated by spaces.
+#
+# Blank lines and lines whose first non-whitespace character is # are ignored.
+#
+# Flags:
+#   FAIL_OPEN      - The file should fail at opening.
+#   FAIL_DECODE    - The file should open successfully, but fail at the decoding stage.
+#   FAIL_SEEK      - Decoding must pass, but the seeking stage should fail.
+#   SKIP_REFERENCE - Skip the external decoder comparison. Other checks follow the selected failure policy.
+#   UNSUPPORTED    - The file is explicitly not supported by dr_libs and will be ignored. In practice is the same as IGNORE, but is a bit clearer as to why it's being ignored.
+#   IGNORE         - The file is a non-audio file and should be ignored.
+#
+# IGNORE and UNSUPPORTED skip both stages without a log message. FAIL_DECODE requires a successful
+# dr_libs open, then a failure in decoding or validation. FAIL_DECODE still runs basic seeking,
+# but skips seek comparisons because no complete decoded reference is available. FAIL_SEEK runs
+# normal decoding and basic seeking, then handles a seeking-stage failure like FAIL_DECODE handles
+# a decoding-stage failure. Expected failures are quiet; a successful stage reports an unexpected
+# pass. The file must still open successfully.
+
+# WAV
+wav/github/mackron/dr_libs/292/intoverflow_poc.wav;     FAIL_OPEN
+wav/github/mackron/dr_libs/292/msadpcm_oob_poc.wav;     FAIL_DECODE
+wav/github/mackron/dr_libs/299/notification.wav;        FAIL_OPEN
+wav/github/mackron/dr_libs/302/poc_302_bext.wav;        FAIL_DECODE
+wav/github/mackron/dr_libs/305/crash_assertion.wav;     FAIL_OPEN
+wav/github/mackron/dr_libs/305/crash_heap_overflow.wav; FAIL_OPEN
+
+# libsndfile ignores the partial compressed block and reports zero frames.
+wav/misc/msadpcm_partial_mono.wav; SKIP_REFERENCE
+
+# GSM is not currently supported by dr_wav.
+wav/mmsp.ece.mcgill.ca/addf8-GSM-GW.wav; UNSUPPORTED
+
+# DSP Group's True Speech, format tag 0x0022.
+wav/mmsp.ece.mcgill.ca/truspech.wav; UNSUPPORTED
+
+# Voxware RT24 Speech, format tag 0x181C.
+wav/mmsp.ece.mcgill.ca/voxware.wav; UNSUPPORTED
+
+
+# AIFF
+aiff/github/mackron/dr_libs/350/clusterfuzz-testcase-minimized-dr_wav_fuzzer-5327316486782976.aifc; FAIL_OPEN
+
+
+# FLAC
+flac/github/mackron/dr_libs/140/FLAC-negative-quantization-sample.flac; FAIL_DECODE
+flac/github/mackron/dr_libs/298/minimized_oom.flac;                     FAIL_OPEN
+flac/github/mackron/dr_libs/310/poc.flac;                               FAIL_DECODE
+flac/github/mackron/dr_libs/336/poc.flac;                               FAIL_DECODE
+flac/github/mackron/dr_libs/351/min_repro.flac;                         FAIL_DECODE
+flac/github/mackron/miniaudio/1193/seek_division_by_zero.flac;          FAIL_DECODE
+
+# Audio decodes, but the understated maximum block size gives incorrect fixed-block seek positions.
+flac/github/ietf-wg-cellar/flac-test-files/faulty/01 - wrong max blocksize.flac; FAIL_SEEK
+
+# Some badly formed FLAC files are not supported by dr_flac.
+flac/github/ietf-wg-cellar/flac-test-files/faulty/08 - blocksize 65536.flac; UNSUPPORTED
+
+# dr_flac does not support dynamically changing sample rate or channels within the same stream.
+flac/github/ietf-wg-cellar/flac-test-files/uncommon/02 - increasing number of channels.flac; UNSUPPORTED
+flac/github/ietf-wg-cellar/flac-test-files/uncommon/03 - decreasing number of channels.flac; UNSUPPORTED
+flac/github/ietf-wg-cellar/flac-test-files/faulty/04 - wrong number of channels.flac;        UNSUPPORTED
+
+# These work with drflac_open_relaxed(), but that function is not used in our automated test yet. Marking these as unsupported for now, but will be removed once the test is updated.
+flac/github/ietf-wg-cellar/flac-test-files/uncommon/10 - file starting at frame header.flac;                           UNSUPPORTED
+flac/github/ietf-wg-cellar/flac-test-files/uncommon/11 - file starting with unparsable data.flac;                      UNSUPPORTED
+flac/github/ietf-wg-cellar/flac-test-files/faulty/06 - missing streaminfo metadata block.flac;                         UNSUPPORTED
+flac/github/ietf-wg-cellar/flac-test-files/faulty/07 - other metadata blocks preceding streaminfo metadata block.flac; UNSUPPORTED
+
+# Ignore some non-audio supporting files.
+flac/github/ietf-wg-cellar/flac-test-files/subset/playlist.html; IGNORE
+flac/github/ietf-wg-cellar/flac-test-files/subset/playlist.m3u;  IGNORE
+
+
+# MP3
+mp3/github/mackron/dr_libs/354/dr_mp3_header-count-reservoir.mp3; SKIP_REFERENCE FAIL_SEEK
+mp3/github/mackron/dr_libs/354/dr_mp3_header-count-layer1.mp3;    SKIP_REFERENCE
+mp3/github/mackron/dr_libs/355/dr_mp3_xing-start-offset.mp3;      SKIP_REFERENCE
+mp3/github/mackron/dr_libs/356/truncated_xing.mp3;                FAIL_OPEN
+mp3/unknown/crash.mp3;                                            FAIL_OPEN
