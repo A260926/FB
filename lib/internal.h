@@ -26,4 +26,21 @@
 
 char* safer_name_suffix(char const*);
 
+/*
+** Allocation hooks.  These exist so the regression suite can observe or
+** fail each allocation made while reading a GNU extension chain.  They
+** only replace the allocator; they do not influence any parse decision.
+** Passing NULL restores the default (malloc/free).
+*/
+typedef void *(*libtar_malloc_func_t)(size_t);
+typedef void (*libtar_free_func_t)(void *);
+
+void libtar_set_alloc_hooks(libtar_malloc_func_t malloc_func,
+			    libtar_free_func_t free_func);
+
+/* allocation helpers honoring the hooks; used for every buffer owned by
+   the GNU extension reader so the hooks observe all of them */
+void *tar_gnu_alloc(size_t len);
+void tar_gnu_free(void *ptr);
+
 #endif

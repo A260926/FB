@@ -51,6 +51,10 @@ tar_init(TAR **t, const char *pathname, tartype_t *type,
 
 	(*t)->pathname = pathname;
 	(*t)->options = options;
+	(*t)->gnu_limit_bytes = TAR_GNU_DEFAULT_MAX_BYTES;
+	(*t)->gnu_limit_headers = TAR_GNU_DEFAULT_MAX_HEADERS;
+	(*t)->gnu_read_error = 0;
+	(*t)->gnu_read_error_errno = 0;
 	(*t)->type = (type ? type : &default_type);
 	(*t)->oflags = oflags;
 
@@ -129,6 +133,10 @@ tar_close(TAR *t)
 					: (libtar_freefunc_t)tar_dev_free));
 	if (t->th_pathname != NULL)
 		free(t->th_pathname);
+	if (t->th_buf.gnu_longname != NULL)
+		tar_gnu_free(t->th_buf.gnu_longname);
+	if (t->th_buf.gnu_longlink != NULL)
+		tar_gnu_free(t->th_buf.gnu_longlink);
 	free(t);
 
 	return i;

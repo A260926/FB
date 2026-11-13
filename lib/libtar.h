@@ -36,6 +36,10 @@ extern "C"
 #define GNU_LONGNAME_TYPE	'L'
 #define GNU_LONGLINK_TYPE	'K'
 
+/* default GNU extension budget per logical record */
+#define TAR_GNU_DEFAULT_MAX_BYTES	(1024U * 1024U)
+#define TAR_GNU_DEFAULT_MAX_HEADERS	64U
+
 /* our version of the tar header structure */
 struct tar_header
 {
@@ -89,6 +93,18 @@ typedef struct
 
 	/* introduced in libtar 1.2.21 */
 	char *th_pathname;
+
+	/*
+	** GNU long-name extension limits.  Both are configured with
+	** tar_set_gnu_extension_limits() and apply to one logical record
+	** (the extension headers plus the ordinary header they decorate).
+	*/
+	size_t gnu_limit_bytes;
+	size_t gnu_limit_headers;
+
+	/* sticky read error; once set, only tar_close() is permitted */
+	int gnu_read_error;
+	int gnu_read_error_errno;
 }
 TAR;
 
@@ -120,6 +136,24 @@ int tar_fd(TAR *t);
 
 /* close tarfile handle */
 int tar_close(TAR *t);
+
+/*
+** Configure GNU long-name extension limits for a handle created by
+** tar_open() or tar_fdopen().  "bytes" bounds the sum of all declared
+** extension payload lengths within one logical record (including
+** extension payloads that a later extension supersedes); "headers"
+** bounds the number of extension headers in that record.  Both must be
+** positive.  The limits may only be changed between two calls to
+** th_read().  Returns 0 on success, or -1 with errno == EINVAL for an
+** invalid limit or errno == EINVAL if the handle is in a read-error
+** state.  Defaults are 1 MiB of declared payload and 64 extension
+** headers per logical record.
+**
+** Names produced by GNU extensions remain valid until the next call to
+** th_read() on the same handle (or until tar_close()).  After a read
+** failure only tar_close() may be called on the handle.
+*/
+int tar_set_gnu_extension_limits(TAR *t, size_t bytes, size_t headers);
 
 
 /***** append.c ************************************************************/

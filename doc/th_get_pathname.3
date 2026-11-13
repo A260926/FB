@@ -59,5 +59,12 @@ The \fBTH_ISLONGNAME\fP() and \fBTH_ISLONGLINK\fP() macros evaluate
 whether or not the GNU extensions are used by the current tar header
 associated with the \fITAR\fP handle \fIt\fP.  This is only relevant
 if the \fBTAR_GNU\fP option was used when \fItar_open\fP() was called.
+
+For a name supplied by a GNU long-name or long-link extension,
+\fBth_get_pathname\fP() and \fBth_get_linkname\fP() return a pointer to
+memory owned by the handle.  That pointer is valid until the next
+\fBth_read\fP() call on the handle or until \fBtar_close\fP().  A caller
+that needs the name for longer must copy it.
 .SH SEE ALSO
+.BR th_read (3),
 .BR tar_open (3)

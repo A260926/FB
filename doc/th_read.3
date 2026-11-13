@@ -10,25 +10,67 @@ th_read, th_write \- read and write a file header block from a tar archive
 .SH VERSION
 This man page documents version 1.2 of \fBlibtar\fP.
 .SH DESCRIPTION
-The \fBth_read\fP() function reads the next block from the tar archive
-associated with the \fITAR\fP handle \fIt\fP.  It then sets the
+The \fBth_read\fP() function reads the next logical record from the tar
+archive associated with the \fITAR\fP handle \fIt\fP.  It then sets the
 current tar header associated with \fIt\fP to the contents of the block
 read.
+
+A logical record consists of zero or more GNU \fBL\fP (long name) and
+\fBK\fP (long link) extension records, in either order, each followed by
+its complete payload blocks, and finally one ordinary header.  When the
+same extension type occurs more than once before an ordinary header, the
+last one wins.  Extension names apply only to the immediately following
+ordinary header and are discarded at the start of the next
+\fBth_read\fP() call.  A logical record is reported only once the ordinary
+header has been read completely and validated; an extension chain that is
+followed by end-of-archive, a zero block or a truncated header is an
+error.
+
+The declared length of an extension payload is taken from its 12-byte
+size field.  Only octal digits, optionally surrounded by spaces or NULs,
+are accepted; a value that cannot be represented is rejected.  The
+payload must contain either no NUL byte or a single NUL as its last
+declared byte.  A NUL occurring earlier, or a zero declared length, is an
+error.  Block padding past the declared length is not part of the name.
+
+By default a single logical record may carry at most 1 MiB of declared
+extension payload and 64 extension headers.  Use
+\fBtar_set_gnu_extension_limits\fP() to change these bounds.  Exceeding a
+bound fails before the offending payload is read.
 
 The \fBth_write\fP() function writes the contents of the current
 tar header associated with \fIt\fP to the tar archive associated
 with \fIt\fP.
+.SH "ENTRY VIEW LIFETIME"
+The names reported for one logical record, including strings returned by
+\fBth_get_pathname\fP() and \fBth_get_linkname\fP() for GNU extensions,
+belong to the handle and are valid only until the next \fBth_read\fP()
+call or \fBtar_close\fP().  The next \fBth_read\fP() invalidates the
+previous view before it reads any block, even if it then fails.
 .SH RETURN VALUE
 On successful completion, \fBth_read\fP() and \fBth_write\fP() will
 return 0.  On failure, they will return \-1 and set \fIerrno\fP to an
 appropriate value.
 
 On \fIEOF\fP, \fBth_read\fP() will return 1.
+
+After a failed \fBth_read\fP() the handle is in a read-error state: only
+\fBtar_close\fP() may be called, and this includes a repeated
+\fBth_read\fP(), which returns the original error without contacting the
+reader.
 .SH ERRORS
 \fBth_read\fP() and \fBth_write\fP() will fail if:
 .IP \fBEINVAL\fP
-Less than \fBT_BLOCKSIZE\fP blocks were read or written.
+Less than \fBT_BLOCKSIZE\fP blocks were read or written, a GNU extension
+chain was malformed or dangling, or an extension size field was invalid.
+.IP \fBE2BIG\fP
+A GNU extension chain exceeded its configured byte or header limit.
+.IP \fBENOMEM\fP
+An extension name could not be allocated.
 .PP
+If the reader function returns \-1, \fBth_read\fP() fails with the
+\fIerrno\fP it set.
 .SH SEE ALSO
+.BR tar_set_gnu_extension_limits (3),
 .BR tar_block_read (3),
 .BR tar_block_write (3)

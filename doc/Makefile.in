@@ -29,7 +29,8 @@ MKDIR		= @MKDIR@
 
 TAR_OPEN_SO		= tar_fdopen \
 			  tar_fd \
-			  tar_close
+			  tar_close \
+			  tar_set_gnu_extension_limits
 TAR_APPEND_FILE_SO	= tar_append_eof \
 			  tar_append_regfile
 TAR_BLOCK_READ_SO	= tar_block_write
@@ -118,6 +119,7 @@ install: all
 	for i in ${TAR_BLOCK_READ_SO}; do \
 		echo ".so man3/tar_block_read.3" > ${DESTDIR}${mandir}/man3/$${i}.3; \
 	done
+	${INSTALL_DATA} ${srcdir}/tar_set_gnu_extension_limits.3 ${DESTDIR}${mandir}/man3
 	${INSTALL_DATA} ${srcdir}/th_read.3 ${DESTDIR}${mandir}/man3
 	for i in ${TH_READ_SO}; do \
 		echo ".so man3/th_read.3" > ${DESTDIR}${mandir}/man3/$${i}.3; \

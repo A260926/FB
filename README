@@ -46,6 +46,31 @@ Encap Archive:
    http://www.encap.org/
 
 
+Reading GNU Extensions
+----------------------
+
+th_read() treats zero or more GNU L/K extension headers plus their payload
+blocks and the following ordinary header as one logical record.  The
+extensions may appear in any order; a repeated type is superseded by the
+later one.  Extension names live in the handle and are released at the
+next th_read() or at tar_close().
+
+Limits on a single record are configurable:
+
+   int tar_set_gnu_extension_limits(TAR *t, size_t bytes, size_t headers);
+
+Both values must be positive.  New handles allow 1 MiB of declared
+extension payload and 64 extension headers per record; exceeding either
+bound fails with errno == E2BIG before the offending payload is read.
+The 12-byte GNU extension size field is decoded strictly (octal digits
+with optional space/NUL padding; base-256, signs and 8/9 are rejected).
+
+After a read failure a handle may only be closed; th_read() repeats the
+original error without calling the reader.  See examples/gnu_extension_read.c
+for a short program that reads a name and closes the handle without
+extracting anything.
+
+
 zlib Support
 ------------
 
