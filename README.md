@@ -32,6 +32,55 @@ Design
 The SDK is designed to be cross-platform. The code is very portable; it can be compiled with any sufficiently modern C++ compiler. The implementation does not rely on any external library. All the code necessary to compile the SDK and tools is included in the standard distribution. The standard distribution contains makefiles for unix-like operating systems, including Linux and Android, project files for Microsoft Visual Studio, and an XCode project for MacOS X and iOS. There is also support for building the library with the SCons build system.
 
 
+Non re-encoding track montage (CreateMontage)
+---------------------------------------------
+
+`AP4_Track::CreateMontage` assembles a new video track from a clip list
+without re-encoding any sample. Each `AP4_Track::EditRange` is a half-open
+`[begin, end)` interval expressed in the track's movie timescale. Ranges are
+played back in the order supplied: they may be reversed, overlap or repeat.
+Samples needed to decode each cut (rollback to the previous sync sample and
+the in-between decode chain) are copied with their original payload
+references, while the parts outside the requested windows are hidden by the
+output edit list. Leading empty edits remain blank and occupy no sample.
+
+```cpp
+#include "Ap4.h"
+
+// input is a plain, non-fragmented, unencrypted MP4 video file
+AP4_File input(*input_stream);
+AP4_Track* source = input.GetMovie()->GetTrack(AP4_Track::TYPE_VIDEO);
+
+// clip list in movie timescale ticks: play [300,500), then [800,900)
+AP4_Array<AP4_Track::EditRange> ranges;
+AP4_Track::EditRange range;
+range.begin = 300; range.end = 500; ranges.Append(range);
+range.begin = 800; range.end = 900; ranges.Append(range);
+
+// on success the caller owns 'montage'; the source track is never modified
+AP4_Track* montage = NULL;
+AP4_Result result = source->CreateMontage(ranges, montage);
+if (AP4_FAILED(result)) {
+    // AP4_ERROR_INVALID_PARAMETERS: empty/bad range or non-integer media tick
+    // AP4_ERROR_NOT_SUPPORTED:  dwell, variable rate, multi media edit,
+    //                           negative cts offset, fragmented/encrypted track
+    return result;
+}
+
+// montage->GetDuration() is exactly the sum of all range durations
+AP4_Movie* movie = new AP4_Movie(source->GetMovieTimeScale());
+movie->AddTrack(montage);
+AP4_File output(movie);
+AP4_FileWriter::Write(output, *output_stream); // the result can be re-parsed
+```
+
+Cut points must fall on integer media timescale ticks; when the movie and
+media timescales differ, a range endpoint that cannot be converted exactly
+fails with `AP4_ERROR_INVALID_PARAMETERS` instead of being rounded. When the
+resulting durations exceed 32 bits the output edit list, `tkhd` and `mdhd`
+atoms are automatically written as version 1.
+
+
 License
 -------
 

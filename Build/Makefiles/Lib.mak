@@ -45,6 +45,7 @@ CORE_SOURCES = 								\
     Ap4IsmaCryp.cpp                         \
     Ap4MdhdAtom.cpp                         \
     Ap4MoovAtom.cpp                         \
+    Ap4Montage.cpp                          \
     Ap4Movie.cpp                            \
     Ap4MvhdAtom.cpp                         \
     Ap4NmhdAtom.cpp                         \

@@ -74,6 +74,15 @@ class AP4_Track {
         TYPE_SUBTITLES = 8
     } Type;
 
+    /**
+     * A half-open interval [begin, end) on the movie (track) timeline,
+     * expressed in the track's movie timescale ticks.
+     */
+    struct EditRange {
+        AP4_UI64 begin;
+        AP4_UI64 end;
+    };
+
     // methods
     AP4_Track(Type             type,
               AP4_SampleTable* sample_table,     // ownership is transfered to the AP4_Track object
@@ -105,6 +114,26 @@ class AP4_Track {
      * write it out
      */
     AP4_Track* Clone(AP4_Result* result = NULL);
+
+    /**
+     * Build a new track that plays back the given ranges of this track,
+     * concatenated in the order supplied by the caller (ranges may be
+     * reversed, overlapping or repeated), without re-encoding any sample.
+     *
+     * All range endpoints are expressed in the movie (track) timescale.
+     * Each range is interpreted on this track's edit list timeline: empty
+     * (media_time == -1) portions remain blank in the output, while media
+     * portions keep every sample needed to decode them (including rollback
+     * samples before the cut point and samples between display-order
+     * pictures), hidden by the output edit list.
+     *
+     * On success, the returned track (owned by the caller) has a track
+     * duration equal to the sum of all (end-begin) durations and can be
+     * written with AP4_FileWriter and re-parsed. On failure, *output is set
+     * to NULL and this track is left untouched.
+     */
+    AP4_Result CreateMontage(const AP4_Array<EditRange>& ranges,
+                            AP4_Track*&                  output);
 
     AP4_UI32     GetFlags() const;
     AP4_Result   SetFlags(AP4_UI32 flags);
