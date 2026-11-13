@@ -1,0 +1,31 @@
+{
+  "source": "Original deterministic RGB pattern; generate_raw.c, CC0-1.0. Not downloaded media.",
+  "raw_sha256": "ed96be48b52441c39843537376890e58575f1ba0fd5cba645fa2cacceeff8ae6",
+  "encoder_version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "generation": {
+    "raw": "cc -std=c99 generate_raw.c -o generate_raw && ./generate_raw > pattern.rgb",
+    "common": "ffmpeg -y -v error -f rawvideo -pixel_format rgb24 -video_size 48x32 -framerate 25 -i pattern.rgb -an -c:v mpeg1video -g 9 -q:v 4 -sc_threshold 1000000000 -f mpeg1video",
+    "open.m1v": "common + -bf 2; append 00 00 01 b7 and 256 zero bytes",
+    "ip.m1v": "common + -bf 0; append 00 00 01 b7 and 256 zero bytes",
+    "closed.m1v": "common + -frames:v 36 -bf 2 -flags +cgop; no append"
+  },
+  "files": {
+    "closed.m1v": {
+      "bytes": 12486,
+      "sha256": "2b6e370556c6314715b59bdd1197b8e252c0e8c9eccd29e16fd1835b1010b0e6"
+    },
+    "generate_raw.c": {
+      "bytes": 370,
+      "sha256": "42831e8118bf0bd5093d97c4b59def3be4e152a762d8afe034b2020abd8390b9"
+    },
+    "ip.m1v": {
+      "bytes": 11887,
+      "sha256": "7a787d882cbad49940d5d9ee45c81c8c6e6c6762f796dcb8c75e82d5f3ac0ba8"
+    },
+    "open.m1v": {
+      "bytes": 13707,
+      "sha256": "bb69a63b36bbe7f44508a9adde4e48fff52fc38fe7169358be795ae09c78180a"
+    }
+  },
+  "runtime": "No encoder required. Fixed files are decoded by included upstream C source. Tests must not invoke encoder."
+}

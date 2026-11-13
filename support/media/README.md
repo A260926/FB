@@ -1,0 +1,1 @@
+素材由随附 generate_raw.c 的原创确定性 RGB 图案离线编码，不来自网络或第三方作品。生成器和生成素材按 CC0-1.0 提供。完整 FFmpeg 版本、命令及文件 SHA256 见 provenance.json；重新编码仅为素材来源说明，正常构建/运行只读已提供的 .m1v。open/ip 的 sequence_end 和零填充不增加 picture。closed 素材终止于 I，open/ip 终止于 P，避免把上游末尾编码B的旧EOF行为混入本次起点。
