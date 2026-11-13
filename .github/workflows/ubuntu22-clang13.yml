@@ -1,0 +1,35 @@
+name: Ubuntu 22.04 CI (CLANG 13)
+
+# Rarely broken by pull requests: runs on master only. Use 'Run workflow'
+# in the Actions tab to test a branch.
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+# A new push to a pull request cancels its previous run. Other runs (pushes to
+# master, schedules) get a group of their own and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu-build:
+    if: >-
+      ! contains(toJSON(github.event.commits.*.message), '[skip ci]') &&
+      ! contains(toJSON(github.event.commits.*.message), '[skip github]')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        with:
+          path: dependencies/.cache
+          key: ${{ hashFiles('dependencies/CMakeLists.txt') }}
+      - name: Use cmake
+        run: |
+          mkdir build &&
+          cd build &&
+          CXX=clang++-13 cmake -DSIMDJSON_DEVELOPER_MODE=ON ..  &&
+          cmake --build .   &&
+          ctest --output-on-failure -LE explicitonly -j

@@ -1,0 +1,29 @@
+# Rarely broken by pull requests: runs on master only. Use 'Run workflow'
+# in the Actions tab to test a branch.
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+# A new push to a pull request cancels its previous run. Other runs (pushes to
+# master, schedules) get a group of their own and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
+      - name: Verify
+        run: emcc -v
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Configure
+        run: emcmake cmake -B build
+      - name: Build # We build but do not test
+        run: cmake --build build
