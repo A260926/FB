@@ -1,0 +1,3 @@
+此目录只有已有行为见证和无目标答案的 C++17 测试驱动。baseline 编译现有生产库、运行带孔曲面片，并以极薄的宏适配执行 upstream unittest/main.cpp 与 TriangleTest.cpp 的原始函数体；所有断言保留，Boost 文件路径替换为 std::filesystem，不调用 Boost、OpenGL、包管理器或网络。BOOST_CHECK_MESSAGE 的附加文本不参与条件判定，失败仍显示原始源文件行号和条件。这里没有实现动态约束编辑。
+
+未来新增 tests/constraint_edit.cpp，包含 contract.hpp，以 UNIT_CASE(geometry, name)、UNIT_CASE(ownership, name)、UNIT_CASE(session, name) 注册；不定义 main，不主动打印 BEGIN/CASE/GROUP/TARGET_COMPLETE。三个组每组至少两个不同名用例，每个用例至少一次实际 UNIT_CHECK 内容断言。run.sh target 直接编译该文件。固定 driver 在函数返回后才打印 CASE；verify.awk 在进程外校验 BEGIN/CASE 配对、全局唯一名称、逐组真实计数、断言和唯一末尾汇总。原始 stdout/stderr/退出码保存在 .build/，编译失败、提前退出、skip/零断言均不可当成功。
