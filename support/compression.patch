@@ -1,0 +1,11 @@
+--- a/libfaad/tns.c
++++ b/libfaad/tns.c
+@@ -196,7 +196,7 @@
+ {
+     uint8_t i, m;
+     real_t tmp2[TNS_MAX_ORDER+1], b[TNS_MAX_ORDER+1];
+-    uint8_t table_index = 2 * (coef_compress != 0) + (coef_res_bits != 3);
++    uint8_t table_index = (coef_res_bits != 3);
+     real_t* tns_coef = all_tns_coefs[table_index];
+     uint8_t exp = 0;
+ 
