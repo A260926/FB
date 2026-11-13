@@ -33,6 +33,49 @@ Currently there is an OpenGL back-end for NanoVG: [nanovg_gl.h](/src/nanovg_gl.h
 
 *NOTE:* The render target you're rendering to must have stencil buffer.
 
+## CPU (off-screen) back-end
+
+For builds without a window or GPU (for example headless preview generation on a build machine) [nanovg_cpu.h](/src/nanovg_cpu.h) provides a pure C99 software rasterizer. It plugs in through the same `NVGparams` interface as the GL back-end, links against no window system or GPU libraries, and renders the exact same tessellated geometry — scenes are not translated into another drawing API.
+
+The destination is a buffer you own and lend to the context. It uses a top-left origin, premultiplied `RGBA8`, and a row stride of at least `4 * width`; the back-end never writes padding bytes or memory outside the target. The logical size passed to `nvgBeginFrame()` multiplied by the device pixel ratio must match the target dimensions (the caller guarantees this). Coordinates, paints and scissors arriving in the callbacks are already in physical pixels, so the DPR is never applied a second time in the back-end.
+
+```C
+#include "nanovg_cpu.h"
+
+int width = 320, height = 240, stride = width * 4;
+unsigned char* rgba = malloc((size_t)stride * height);
+memset(rgba, 0, (size_t)stride * height);
+
+NVGcontext* vg = nvgCreateCPU(rgba, width, height, stride); // NULL on bad args
+nvgBeginFrame(vg, width, height, 1.0f);
+// ... ordinary NanoVG calls, identical to the GL back-end ...
+nvgEndFrame(vg);   // results are published to rgba only here
+nvgDeleteCPU(vg);  // does not free the borrowed buffer
+```
+
+### Edge and coverage rules
+
+The back-end sets `edgeAntiAlias = 0` and consumes the geometry NanoVG already expanded, evaluating coverage on a regular **4×4 sub-pixel grid** whose centers lie inside each physical pixel. A pixel's coverage is the fraction of the 16 centers covered by the geometry.
+
+- **Fills** use the **non-zero winding rule over all sub-paths together**. Concave shapes, holes, multiple contours and self-intersecting paths are handled by signed edge crossings rather than by treating each triangle fan as an independent solid face.
+- **Strokes** render the per-path triangle strips. Within one `renderStroke`, overlapping joins and self-intersections form a **coverage union**: a sub-pixel is painted at most once, so overlaps never darken. Separate `nvgStroke()` calls still blend in call order. When the stroke width is below one pixel the alpha scaling already applied by the core is reused, not applied again.
+- **Triangle lists** (`renderTriangles`, used for glyphs) are processed in vertex order with **half-open shared edges**, so the diagonal shared by the two triangles of a glyph quad is never covered twice. UVs are barycentric-interpolated per sub-pixel.
+- **Scissors** are tested as hard rectangles in their own (inverse-transformed) space; there is no GL-style fringe smoothing.
+- Colors follow the GL fragment shader: the box-distance gradient, premultiplied inner/outer colors, and texture tint. RGBA textures support both straight alpha and `NVG_IMAGE_PREMULTIPLIED`; alpha textures become four-channel coverage. Sampling is nearest or texel-center bilinear, with `REPEATX/Y`, `FLIPY` and arbitrary (non-power-of-two) sizes. `NVG_IMAGE_GENERATE_MIPMAPS` is accepted but **ignored** — mipmapping is not implemented.
+- All `NVGcompositeOperationState` blend factors are supported, with RGB and alpha evaluated separately; channels are clamped to `[0,1]` and rounded to bytes only when a frame ends.
+
+### Frames, cancellation and textures
+
+The borrowed target keeps its previous bytes while a frame is being recorded. `nvgEndFrame()` evaluates every recorded draw and publishes the result in order; `nvgCancelFrame()` discards the frame's draws without touching the target, and the next frame starts from its latest content. Image data is copied on creation (`NULL` data means an all-zero texture); rectangle updates and deletes never alter draws already recorded, and no back-end reference outlives the core's reused vertex buffers. Two CPU contexts keep fully independent frame and texture state.
+
+A complete C program that renders a scene and writes a binary PPM image lives in [example/ppm_cpu.c](/example/ppm_cpu.c); build and run it with:
+
+```
+cc -std=c99 -O1 -Isrc example/ppm_cpu.c src/nanovg.c src/nanovg_cpu.c -lm -o ppm_cpu
+./ppm_cpu preview.ppm
+```
+
+
 ## Drawing shapes with NanoVG
 
 Drawing a simple shape using NanoVG consists of four steps: 1) begin a new shape, 2) define the path to draw, 3) set fill or stroke, 4) and finally fill or stroke the path.
