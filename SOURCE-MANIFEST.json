@@ -1,0 +1,3228 @@
+{
+  "upstream_repo": "https://github.com/go-shiori/go-readability",
+  "upstream_commit": "5db1dc9836f0dda58b8112d3a93141b25eeeb454",
+  "dependencies": [
+    {
+      "prefix": "vendor/github.com/andybalholm/cascadia/",
+      "source": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip",
+      "version": "v1.3.3",
+      "license_files": [
+        "vendor/github.com/andybalholm/cascadia/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/araddon/dateparse/",
+      "source": "https://proxy.golang.org/github.com/araddon/dateparse/@v/v0.0.0-20210429162001-6b43995a97de.zip",
+      "version": "v0.0.0-20210429162001-6b43995a97de",
+      "license_files": [
+        "vendor/github.com/araddon/dateparse/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/davecgh/go-spew/",
+      "source": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip",
+      "version": "v1.1.1",
+      "license_files": [
+        "vendor/github.com/davecgh/go-spew/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/go-shiori/dom/",
+      "source": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip",
+      "version": "v0.0.0-20230515143342-73569d674e1c",
+      "license_files": [
+        "vendor/github.com/go-shiori/dom/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/gogs/chardet/",
+      "source": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip",
+      "version": "v0.0.0-20211120154057-b7413eaefb8f",
+      "license_files": [
+        "vendor/github.com/gogs/chardet/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/inconshreveable/mousetrap/",
+      "source": "https://proxy.golang.org/github.com/inconshreveable/mousetrap/@v/v1.1.0.zip",
+      "version": "v1.1.0",
+      "license_files": [
+        "vendor/github.com/inconshreveable/mousetrap/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/pmezard/go-difflib/",
+      "source": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.0.zip",
+      "version": "v1.0.0",
+      "license_files": [
+        "vendor/github.com/pmezard/go-difflib/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/sergi/go-diff/",
+      "source": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip",
+      "version": "v1.1.0",
+      "license_files": [
+        "vendor/github.com/sergi/go-diff/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/spf13/cobra/",
+      "source": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip",
+      "version": "v1.8.1",
+      "license_files": [
+        "vendor/github.com/spf13/cobra/LICENSE.txt"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/spf13/pflag/",
+      "source": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip",
+      "version": "v1.0.6",
+      "license_files": [
+        "vendor/github.com/spf13/pflag/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/github.com/stretchr/testify/",
+      "source": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip",
+      "version": "v1.7.0",
+      "license_files": [
+        "vendor/github.com/stretchr/testify/LICENSE"
+      ]
+    },
+    {
+      "prefix": "vendor/golang.org/x/net/",
+      "source": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip",
+      "version": "v0.35.0",
+      "license_files": [
+        "vendor/golang.org/x/net/LICENSE",
+        "vendor/golang.org/x/net/PATENTS"
+      ]
+    },
+    {
+      "prefix": "vendor/golang.org/x/text/",
+      "source": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip",
+      "version": "v0.22.0",
+      "license_files": [
+        "vendor/golang.org/x/text/LICENSE",
+        "vendor/golang.org/x/text/PATENTS"
+      ]
+    },
+    {
+      "prefix": "vendor/gopkg.in/yaml.v3/",
+      "source": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip",
+      "version": "v3.0.1",
+      "license_files": [
+        "vendor/gopkg.in/yaml.v3/LICENSE",
+        "vendor/gopkg.in/yaml.v3/NOTICE"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "07c6c0ab12b248fe832de13af1f9f8d1d8571e064a7af7ae96ced965e659209a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:.gitattributes"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "sha256": "6e3ee1ce1ba26ed00e8aeaf4bc88e9497f495d0c2f614c7c5142640bd4126749",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:.github/dependabot.yml"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "a6e0d9ff058e11a13fb19bbcddd87a0ead2a3feda20d3e886350552f432265b2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:.github/workflows/ci.yml"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "246ec5c36af837285b5785e3bebc425929c14f996f765846673fe3f7c15dbbf7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:.gitignore"
+    },
+    {
+      "path": ".travis.yml",
+      "sha256": "164807dea6812dbe572da66b7964faf1263244510c46a2bc658112d62e46a381",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:.travis.yml"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "d6dc6e3f1d3793e428ad2ddfb16cdf9cf2c3f4e23084e73e8ac37d7899183311",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:LICENSE"
+    },
+    {
+      "path": "Makefile",
+      "sha256": "da03639b4aa8cd449a1bfd32dc76ca63e174e832d8a0c6aee1bfd874efe3003e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:Makefile"
+    },
+    {
+      "path": "README.md",
+      "sha256": "750da7aa8cbf127660962d209acb718f1470eae62001f8679a30a8f3db380d1b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:README.md"
+    },
+    {
+      "path": "cmd/go-readability/main.go",
+      "sha256": "c23b898300ebff82326953c7c87f067bafa99bb7e9392802da2327f1f7bc76a7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:cmd/go-readability/main.go"
+    },
+    {
+      "path": "examples/main.go",
+      "sha256": "9c678f9948e4d4bd94024cb79d685cb4bd428c9a94ce81e004a70a96142ad74f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:examples/main.go"
+    },
+    {
+      "path": "go.mod",
+      "sha256": "fa30c7a2d4dace17e60edc7b8205c6662d464aec8acef4130ee330b6e5427ab2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:go.mod"
+    },
+    {
+      "path": "go.sum",
+      "sha256": "5b54b7efa6f0d95a096aae325a25012200e7c3c0cc3cb028d1dd47c65f8837d2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:go.sum"
+    },
+    {
+      "path": "internal/re2go/base.go",
+      "sha256": "e68d0c28b487e32c113b1ad933cac5db6ec8bbfaa937637d83b7b63d541936ab",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/base.go"
+    },
+    {
+      "path": "internal/re2go/base.re",
+      "sha256": "f1f9646afe19f3a952a75df87b5cc041c3f87b89837d47bb9775b0bdb5191ef6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/base.re"
+    },
+    {
+      "path": "internal/re2go/check-byline.go",
+      "sha256": "a83e4f8552d36fd3b7088183d2370fefd376d9b5cc4d1315a6569b74eff23609",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/check-byline.go"
+    },
+    {
+      "path": "internal/re2go/check-byline.re",
+      "sha256": "7d5b6509dd63a8586f3079423bca75f133c177c0f6cd724ab00e554b847938db",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/check-byline.re"
+    },
+    {
+      "path": "internal/re2go/class-weight.go",
+      "sha256": "a4dd2ef10e45c3f88db15c920b65195edfcde4f78cf3efdda9ff0d5ef3925abc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/class-weight.go"
+    },
+    {
+      "path": "internal/re2go/class-weight.re",
+      "sha256": "a052b6fe9c5ca97146d9e96042ce26ab0cb21e2119f93f0c4838e26c7d8de6c6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/class-weight.re"
+    },
+    {
+      "path": "internal/re2go/grab-article.go",
+      "sha256": "3e7f5ff64dea0172ebf3eca0de6318bed40ebe1f2988fc66350e8cf6ddbd38c7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/grab-article.go"
+    },
+    {
+      "path": "internal/re2go/grab-article.re",
+      "sha256": "b896d39ea7176580b3af7fc2162fa7e17315839104a9316772d2e79d50810ca6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/grab-article.re"
+    },
+    {
+      "path": "internal/re2go/normalize.go",
+      "sha256": "e5bcccd45bcf5d2a9ef534b9746b230f5fea0d3fb1770085009b1ee32a90922e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/normalize.go"
+    },
+    {
+      "path": "internal/re2go/normalize.re",
+      "sha256": "f0e82ebcc0031d9d4a1ba767d83e1da6103a143f24c00a571bc1d00576b3b4b3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/normalize.re"
+    },
+    {
+      "path": "internal/re2go/re2go_test.go",
+      "sha256": "dc3cd7da0421865debffff9a4c5f12f75be6d2a60ff723b94bf6a8264d6c09bf",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:internal/re2go/re2go_test.go"
+    },
+    {
+      "path": "parser-check.go",
+      "sha256": "4036817be65d502d3fe90940f844cedcad6b45c3d1f548c4775e70e8d65a338a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:parser-check.go"
+    },
+    {
+      "path": "parser-parse.go",
+      "sha256": "b621cceeb0d085ebdbefcac25d677f9bc29ff4bba0e85ea87cbc925eee1249ff",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:parser-parse.go"
+    },
+    {
+      "path": "parser.go",
+      "sha256": "defd93798969253df112bf58f7cff388c6d045392346ea9cb9fb84be3f6d1501",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:parser.go"
+    },
+    {
+      "path": "parser_test.go",
+      "sha256": "df18cb7dde9b3c8bef40a1c9665373cf20650c364f57c01a8c7b5c7a66a1ce93",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:parser_test.go"
+    },
+    {
+      "path": "readability.go",
+      "sha256": "3238e8312a5610bdedd02e6a21e3c4df2cdb5fcc6a2776cc6732eb00429bbeb4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:readability.go"
+    },
+    {
+      "path": "scripts/generate-test.go",
+      "sha256": "1df3121bb782a16eeac50458f79a276349385fbeabcec5d8a21f3ccbb5909cc0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:scripts/generate-test.go"
+    },
+    {
+      "path": "task_support/baseline.go",
+      "sha256": "0186ca660b46f844597c273b12f47469b1c4cf1a95c2ac2e68799ee2d77e3844",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/env.sh",
+      "sha256": "1bcb36603890f4149c8039ccc69dd41956c68ae0326dd2fbff185b5f97b26686",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/target.sh",
+      "sha256": "3799a9167187d4ff5f029f6de8aed20cb95dc8b03af28c143a6ccebc472660b3",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "test-pages/001/expected-metadata.json",
+      "sha256": "443ae7fe30b2c869924765e1fdac98edb8d9fc2ec21aaa2ee6ac15edd6351921",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/001/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/001/expected.html",
+      "sha256": "4153c01ec86e266c907699fc09604c19a30553a13aae7b9f95d881c1c8bf88e6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/001/expected.html"
+    },
+    {
+      "path": "test-pages/001/source.html",
+      "sha256": "f6a1c98f318c67d423676a8cb0895c78198cf56f9c493e25beaf6f413f598799",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/001/source.html"
+    },
+    {
+      "path": "test-pages/002/expected-metadata.json",
+      "sha256": "3e44aec3c5c7967037401e4f043b28b88f86867a699a41828db40543f97c4329",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/002/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/002/expected.html",
+      "sha256": "2aa1045f63af2728d43316bd32e5823104c1c09547e69ffb0125963d241054ed",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/002/expected.html"
+    },
+    {
+      "path": "test-pages/002/source.html",
+      "sha256": "5593c6b7ec396fbb0b5053b29e6f1dab850dc62e007250cd0f1dac4b8bee5d21",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/002/source.html"
+    },
+    {
+      "path": "test-pages/003-metadata-preferred/expected-metadata.json",
+      "sha256": "b538894aabab31b2fc07c4ee0e12b32a4e69ce4a48049552ea3e2978c340210e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/003-metadata-preferred/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/003-metadata-preferred/expected.html",
+      "sha256": "4b34e4bee741cb76d545cb3fd843a7a8b5961d43ab7adcb0174b318e9ed73cd2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/003-metadata-preferred/expected.html"
+    },
+    {
+      "path": "test-pages/003-metadata-preferred/source.html",
+      "sha256": "81e8b8ff46de540626bd23ce9395241764aaf2118d31fc47fa43826579812ce4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/003-metadata-preferred/source.html"
+    },
+    {
+      "path": "test-pages/004-metadata-space-separated-properties/expected-metadata.json",
+      "sha256": "fe9a3a07cfc133380b1279aada67c60dc4eb52c97836d7bb6c872740e7a24eb1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/004-metadata-space-separated-properties/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/004-metadata-space-separated-properties/expected.html",
+      "sha256": "4b34e4bee741cb76d545cb3fd843a7a8b5961d43ab7adcb0174b318e9ed73cd2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/004-metadata-space-separated-properties/expected.html"
+    },
+    {
+      "path": "test-pages/004-metadata-space-separated-properties/source.html",
+      "sha256": "57d00e87a1f1b4f35c8353a0f9a198dce792ae38bc467ac90bf22f748b38dd0d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/004-metadata-space-separated-properties/source.html"
+    },
+    {
+      "path": "test-pages/aclu/expected-metadata.json",
+      "sha256": "b0c43e9478ad4c969e4acba0c6493b939880184779f7ff3f9985c6d87bafd133",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aclu/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/aclu/expected.html",
+      "sha256": "defaa77ccd9cd2367537163673c4f20bed24a085343532061ee3ed8012e89aa6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aclu/expected.html"
+    },
+    {
+      "path": "test-pages/aclu/source.html",
+      "sha256": "c0158d5f30deb75da3ebb6f8ed45948b967575b9e85fe87da64e0a047d851aa2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aclu/source.html"
+    },
+    {
+      "path": "test-pages/aktualne/expected-metadata.json",
+      "sha256": "fd5581edff7f1820309c6107b16099422bce3e95da1442199b2749578057ab91",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aktualne/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/aktualne/expected.html",
+      "sha256": "1b52d423f2b3d9db94190b079b8ec294d85ac3c44e13fd899eb5f2213b0902cc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aktualne/expected.html"
+    },
+    {
+      "path": "test-pages/aktualne/source.html",
+      "sha256": "889c9049f08aa28538716bb342e9298c0d81bb783894433bc04d2960d012655d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/aktualne/source.html"
+    },
+    {
+      "path": "test-pages/archive-of-our-own/expected-metadata.json",
+      "sha256": "e64087e22dc260c97ce4e38f9ba3a9e1f2b1a511538d438827dc55e6479b6fa2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/archive-of-our-own/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/archive-of-our-own/expected.html",
+      "sha256": "03f8bfe5d238d0a5981d2bf7fe8bc43a3b3b2a12e4bef328d81f72ab3c3d9207",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/archive-of-our-own/expected.html"
+    },
+    {
+      "path": "test-pages/archive-of-our-own/source.html",
+      "sha256": "478d0a664b304b972960f9cd56cc2405e0be077143dee9475e235800aa79ab68",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/archive-of-our-own/source.html"
+    },
+    {
+      "path": "test-pages/ars-1/expected-metadata.json",
+      "sha256": "7a39eae243b4589f25804d13fe0092852ed77472fe3fd22d38989797558df44e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ars-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/ars-1/expected.html",
+      "sha256": "3d8cee13bb8851fb5941d505a7565e2a03c13f6425bd357ded948a86f08eaa66",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ars-1/expected.html"
+    },
+    {
+      "path": "test-pages/ars-1/source.html",
+      "sha256": "69fe78634727dafa313f490fade17aa229bb2c9df34d3df7b60da22189216f13",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ars-1/source.html"
+    },
+    {
+      "path": "test-pages/base-url/expected-metadata.json",
+      "sha256": "97b0ff69f74386560fad9dbc539a81cac2c333c9f457a6c842d3ebd0895c65a7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/base-url/expected.html",
+      "sha256": "ccb176c53ac9c21e5d5d0e7eb3cf1ccac58c2abe87fb1b4966db3babcd634251",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url/expected.html"
+    },
+    {
+      "path": "test-pages/base-url/source.html",
+      "sha256": "416400698aecc72f236d178d51138693391bd86a10ff63f75fb185c6b020dcbb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url/source.html"
+    },
+    {
+      "path": "test-pages/base-url-base-element/expected-metadata.json",
+      "sha256": "616fdebfb342b5d1c8f6b83f33606ded6959019f0cc57cda7880522fe5389485",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/base-url-base-element/expected.html",
+      "sha256": "ccb176c53ac9c21e5d5d0e7eb3cf1ccac58c2abe87fb1b4966db3babcd634251",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element/expected.html"
+    },
+    {
+      "path": "test-pages/base-url-base-element/source.html",
+      "sha256": "5124554add820e3e0ebc316f5cf6e63b1f359bb6eddd66bcbfeed50ffa04cfa6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element/source.html"
+    },
+    {
+      "path": "test-pages/base-url-base-element-relative/expected-metadata.json",
+      "sha256": "786002f2d3cfc738a3fdf9c22caffe833166e6a969388e67d9e0a02cfa328e23",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element-relative/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/base-url-base-element-relative/expected.html",
+      "sha256": "ccb176c53ac9c21e5d5d0e7eb3cf1ccac58c2abe87fb1b4966db3babcd634251",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element-relative/expected.html"
+    },
+    {
+      "path": "test-pages/base-url-base-element-relative/source.html",
+      "sha256": "4d906b3cd74a20fc8cf44767fb060ffe44f3570f7f0376408270d998715c5467",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/base-url-base-element-relative/source.html"
+    },
+    {
+      "path": "test-pages/basic-tags-cleaning/expected-metadata.json",
+      "sha256": "798a302d1ecaf03d2481dec9ea354296ca22141832536d4ff11386fd014cadb3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/basic-tags-cleaning/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/basic-tags-cleaning/expected.html",
+      "sha256": "9a0f63f0d05916cbe15dca97e4a8c4b2650018247d3f6b59b60c54b733a98d2f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/basic-tags-cleaning/expected.html"
+    },
+    {
+      "path": "test-pages/basic-tags-cleaning/source.html",
+      "sha256": "427e98f1484606415c2f694c5038f0ad5695b875f4f5b261ce5bc9ce945f2790",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/basic-tags-cleaning/source.html"
+    },
+    {
+      "path": "test-pages/bbc-1/expected-metadata.json",
+      "sha256": "de6c957e94e5ebd8ed5c73179ab5f41d1c05eca82a05a5f666f90c5a2a63ad7e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bbc-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/bbc-1/expected.html",
+      "sha256": "6fff6059eff56439d06f36633e5d8787da711d426384a3017ecb617d807b3acc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bbc-1/expected.html"
+    },
+    {
+      "path": "test-pages/bbc-1/source.html",
+      "sha256": "b5ca9d50b6ede3fc7e95c988475fc4dbc693331ce4b4faca5b8a2696f13a7917",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bbc-1/source.html"
+    },
+    {
+      "path": "test-pages/blogger/expected-metadata.json",
+      "sha256": "7d4bf90ee6d8111716ee4bb807e4a5a091714a653a58cec419bf9b3fccdd82b7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/blogger/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/blogger/expected.html",
+      "sha256": "16053f2fe141fdcb0d9988b3bc06793f2a896b1acb4beef804317552107da2ff",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/blogger/expected.html"
+    },
+    {
+      "path": "test-pages/blogger/source.html",
+      "sha256": "76e6c64721d583c082bfb306e65d723770e58b4cb82b66c7c83f5e16eceb97cc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/blogger/source.html"
+    },
+    {
+      "path": "test-pages/breitbart/expected-metadata.json",
+      "sha256": "9ba18b7b0549cbef6f477f2dd3c6f8014788394ee0bc7805f76239941d214abd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/breitbart/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/breitbart/expected.html",
+      "sha256": "6a5ad8fc26ddf22dde920e8624350fa9184d90659a96a8ea4d3d1818543401d1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/breitbart/expected.html"
+    },
+    {
+      "path": "test-pages/breitbart/source.html",
+      "sha256": "0a16112680d06aaf8a617fd7faf69ff909b7c6a519a065bb3dcd4743102baffd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/breitbart/source.html"
+    },
+    {
+      "path": "test-pages/bug-1255978/expected-metadata.json",
+      "sha256": "a9ba5c012eba768705036150573c2491805369a9ea9250ad46410f702c24e4d5",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bug-1255978/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/bug-1255978/expected.html",
+      "sha256": "f960c6405fa322530d431c21735c8c22d4d781023af60ac943fadcc3ec1d269b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bug-1255978/expected.html"
+    },
+    {
+      "path": "test-pages/bug-1255978/source.html",
+      "sha256": "4b25eebd270e2c181a9aa482dae0fb82f46f9adbdcdb3e02906bc43a3b39b068",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/bug-1255978/source.html"
+    },
+    {
+      "path": "test-pages/buzzfeed-1/expected-metadata.json",
+      "sha256": "89387b937531ef9724558d8bfad1088bf6443b74250d64ce093b2468c2a728bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/buzzfeed-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/buzzfeed-1/expected.html",
+      "sha256": "bfee89f75a4c6a64944106400cb9b8105d4f0603d77cb9d168154e75c028fa1d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/buzzfeed-1/expected.html"
+    },
+    {
+      "path": "test-pages/buzzfeed-1/source.html",
+      "sha256": "1983b5b9c2ad462c3541e91742156ca2ff4e65f3b2f8e354bcdcf65191160544",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/buzzfeed-1/source.html"
+    },
+    {
+      "path": "test-pages/citylab-1/expected-metadata.json",
+      "sha256": "98fa193ab084694d307fe730b85fb59139dad7768f26f06d0f67c8ed2612c4a3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/citylab-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/citylab-1/expected.html",
+      "sha256": "c0ecc77dce7527d2f39fa5c67161d55073791534ee84ac2fc2c30a9361131898",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/citylab-1/expected.html"
+    },
+    {
+      "path": "test-pages/citylab-1/source.html",
+      "sha256": "6309e28399299fb30f90acc00bedd91bcc3f22cfea918a49310241b312edb406",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/citylab-1/source.html"
+    },
+    {
+      "path": "test-pages/clean-links/expected-metadata.json",
+      "sha256": "7aef7c6833f456b7df314c664ddd10ae01ff82a7b50b3e1bdf6fca3702916a14",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/clean-links/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/clean-links/expected.html",
+      "sha256": "29509470a446eda6e43534818fe9bbd29ca92ea0d23703b0c84ee26ad17bb1f5",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/clean-links/expected.html"
+    },
+    {
+      "path": "test-pages/clean-links/source.html",
+      "sha256": "966bbb3c27df91695f54a8078104080f355173f4464e084c59f667049300e828",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/clean-links/source.html"
+    },
+    {
+      "path": "test-pages/cnet/expected-metadata.json",
+      "sha256": "67ff416d41c463307ad26e69a41165836d945b42d6a516fc2795cb5f1980c1fb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/cnet/expected.html",
+      "sha256": "868ab06ded0d528bb35dbbf7f589ea73eba3bceb99924ec7dba3e25b00366071",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet/expected.html"
+    },
+    {
+      "path": "test-pages/cnet/source.html",
+      "sha256": "3b0318a4bbd3327834e75dd3844a84778290a9129d96c1670bfd765a42e0be66",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet/source.html"
+    },
+    {
+      "path": "test-pages/cnet-svg-classes/expected-metadata.json",
+      "sha256": "28f0aa668f5434e40124f8e982f60e4ef18d6271a6348c815f05f77c074964c2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet-svg-classes/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/cnet-svg-classes/expected.html",
+      "sha256": "23d5315da92d5b8c785097561a666d9f64f260480b21b80b57551a65ab6434fb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet-svg-classes/expected.html"
+    },
+    {
+      "path": "test-pages/cnet-svg-classes/source.html",
+      "sha256": "38e782a40f881f94b49e467f2cbf445ad2d13cbbf5069e8bbd3004dc6183e7fb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnet-svg-classes/source.html"
+    },
+    {
+      "path": "test-pages/cnn/expected-metadata.json",
+      "sha256": "3e9a53de12a968d9376d2973ef84af3d9af3ef9d5612d3cabfaa13bd59e0b96c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnn/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/cnn/expected.html",
+      "sha256": "87b7f6935f024c8790ce81d087d138be39954e3e4f76c1abab4378587d7fea9a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnn/expected.html"
+    },
+    {
+      "path": "test-pages/cnn/source.html",
+      "sha256": "8c7640176eb567232d2b7f5ba9f7b3b76b46a61d2ee48338ca64680bdff1f983",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/cnn/source.html"
+    },
+    {
+      "path": "test-pages/comment-inside-script-parsing/expected-metadata.json",
+      "sha256": "e8e7670b98a3279e9ccc09cac1c11b1cdc67ba4af1dca2bb3e6b3a9e693733ab",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/comment-inside-script-parsing/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/comment-inside-script-parsing/expected.html",
+      "sha256": "a8913daf5e07ec951b7d5fc9c6bcb1db99c0b68743982eaeee33f0eb99be3a5e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/comment-inside-script-parsing/expected.html"
+    },
+    {
+      "path": "test-pages/comment-inside-script-parsing/source.html",
+      "sha256": "a3e09b3955e6a33580408041f6c96f26beb9ca85fcbd527daa83e8191dfe7175",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/comment-inside-script-parsing/source.html"
+    },
+    {
+      "path": "test-pages/daringfireball-1/expected-metadata.json",
+      "sha256": "84efb72b05da625703aedbcca4eabb0eb03a482f196ce6fe352df2d184571a49",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/daringfireball-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/daringfireball-1/expected.html",
+      "sha256": "aa8fd9c6b2c91de68767ee589b6946b83468854e407106c70d2d49f7d0ea98ba",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/daringfireball-1/expected.html"
+    },
+    {
+      "path": "test-pages/daringfireball-1/source.html",
+      "sha256": "c21b617e6a320580ea71b47bb7751e3cd6e8985c7d21f91cfb9662ca31aa7d21",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/daringfireball-1/source.html"
+    },
+    {
+      "path": "test-pages/data-url-image/expected-metadata.json",
+      "sha256": "9cec9cae63bd88a96f6a3f90495eb90d4c15d42445af99848fd688612a3fe968",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/data-url-image/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/data-url-image/expected.html",
+      "sha256": "9560cbbecd06ec67c4bcfa2c2c9b77fe5adb8f6841e7d0293f5a9bfa68e951dd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/data-url-image/expected.html"
+    },
+    {
+      "path": "test-pages/data-url-image/source.html",
+      "sha256": "5f2f5d51e020c3a6dfc5158342143b9fa0c0d035476bb9db28a61db61e7634b6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/data-url-image/source.html"
+    },
+    {
+      "path": "test-pages/dev418/expected-metadata.json",
+      "sha256": "504d87566fc5e22b00b352b97f6f2c11df8f4e9361a69cdc7db88eb84b36ceda",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dev418/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/dev418/expected.html",
+      "sha256": "925b1a6f486f3848e351f57d12e9aa0b674ee1011e55522af88fff4b177c7aa8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dev418/expected.html"
+    },
+    {
+      "path": "test-pages/dev418/source.html",
+      "sha256": "3887aefffeb2bd4a64e852fe00f3e216e1ce39abc56de8995e5d1e96b794e26e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dev418/source.html"
+    },
+    {
+      "path": "test-pages/dropbox-blog/expected-metadata.json",
+      "sha256": "c50d058457580919d7dbafbb1a439c474d5e5f34e9e9fd592884c3c012c6979a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dropbox-blog/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/dropbox-blog/expected.html",
+      "sha256": "8bb75c515624b97e4dbc9b15a581af9a81061470ea6fd613f7c5c6d0f73c2af9",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dropbox-blog/expected.html"
+    },
+    {
+      "path": "test-pages/dropbox-blog/source.html",
+      "sha256": "64012a265b3e1e6722be2bf0d39dca554f5b3d8c9fe811f7be004e25124e5ea6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/dropbox-blog/source.html"
+    },
+    {
+      "path": "test-pages/ebb-org/expected-metadata.json",
+      "sha256": "d9de15badb3e4ed35b4f2973c9dfb4b16d93db4c103fae0a0ba03afaac97111c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ebb-org/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/ebb-org/expected.html",
+      "sha256": "45564e82b46c10d4ce3b6e97f61926e07f9588880f869af5dca6c65ecdb6fcbc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ebb-org/expected.html"
+    },
+    {
+      "path": "test-pages/ebb-org/source.html",
+      "sha256": "84663f525d24addb33baf085736ead5b598c20e5f840d4e0afaadb2306bbb34b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ebb-org/source.html"
+    },
+    {
+      "path": "test-pages/ehow-1/expected-metadata.json",
+      "sha256": "a1733302a8ecdad57c1e52b9c69d3f68c4b9e8523e67e16e196c8d5e5f947056",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/ehow-1/expected.html",
+      "sha256": "b7f6560e2bad7bc10c9dec9d4d9b56fd2b8ce4962674b5aac4fcad5f3f0385e6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-1/expected.html"
+    },
+    {
+      "path": "test-pages/ehow-1/source.html",
+      "sha256": "8fde9b2cb6fa34601518425d1ab67fb8ab5a53513cd75067fd44a3ab1153aa87",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-1/source.html"
+    },
+    {
+      "path": "test-pages/ehow-2/expected-metadata.json",
+      "sha256": "c702c32e98c2dda721c70b3aa8747b86101323b6c7ea88f7238c15450ff4c9ff",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/ehow-2/expected.html",
+      "sha256": "5c6c025788aebfd67485e1463b90669952353485be6183e7a9b0ba9a60b8d987",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-2/expected.html"
+    },
+    {
+      "path": "test-pages/ehow-2/source.html",
+      "sha256": "b0096a4a9a6ce9b71beaa235ac1a889ec7d9850ac8d9c9c1a69c2f838cf96287",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ehow-2/source.html"
+    },
+    {
+      "path": "test-pages/embedded-videos/expected-metadata.json",
+      "sha256": "4564fd5c8187346c92eba9d9776089ee69908f09aca8a73b493a06b31719abb8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/embedded-videos/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/embedded-videos/expected.html",
+      "sha256": "b3b784f434dfd1b3e2eb6ce70c097c569032cfb7358b5739bc60cef116e3de86",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/embedded-videos/expected.html"
+    },
+    {
+      "path": "test-pages/embedded-videos/source.html",
+      "sha256": "ade9a0e2e36cec13994090308afde5d7b34479bf0d37e47eb29ace2af4fb6cf4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/embedded-videos/source.html"
+    },
+    {
+      "path": "test-pages/engadget/expected-metadata.json",
+      "sha256": "75416b8d369344f84b3a6b4cf5d4fdbfe5bed19c1aefae61c25d1887221ce993",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/engadget/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/engadget/expected.html",
+      "sha256": "b7ccbed91fd775acd089576fba595d1121095c226a5df35d1cec20290dd7ec9e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/engadget/expected.html"
+    },
+    {
+      "path": "test-pages/engadget/source.html",
+      "sha256": "5055dc4ea7a7d8ca80c4946e5448900e93c08cba5708f35991b67667ce1f47d6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/engadget/source.html"
+    },
+    {
+      "path": "test-pages/firefox-nightly-blog/expected-metadata.json",
+      "sha256": "7ed51286e0068bf1f4f809557714275634e29de2dbafd3989e35a79a5657c4cc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/firefox-nightly-blog/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/firefox-nightly-blog/expected.html",
+      "sha256": "7f33e0fb9a9324faec89be91b827a695be766c360d38380d525a286e42638308",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/firefox-nightly-blog/expected.html"
+    },
+    {
+      "path": "test-pages/firefox-nightly-blog/source.html",
+      "sha256": "40511e22125f8a58247cfd8824fcbb2d8ee380ab4604c9639697a30377ba48cf",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/firefox-nightly-blog/source.html"
+    },
+    {
+      "path": "test-pages/folha/expected-metadata.json",
+      "sha256": "260000508162e070c40652858f2b47ee4c5c6c1af68c34f8f519e53a69e1e6de",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/folha/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/folha/expected.html",
+      "sha256": "84d205f2d5e359cf2f5abe4d7d60f9b70aa173e07f8fd11aef53ae2f8d6d44b9",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/folha/expected.html"
+    },
+    {
+      "path": "test-pages/folha/source.html",
+      "sha256": "bb68dad644252e6574626f95c05ed89f51222c1f3f1839ed098f0542cc476154",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/folha/source.html"
+    },
+    {
+      "path": "test-pages/gmw/expected-metadata.json",
+      "sha256": "d678ea69628000f5e72c4835c8ce284bdb2bdf20a112db6b082a8998b28612ce",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/gmw/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/gmw/expected.html",
+      "sha256": "f69f28972c16f41bbbe41c7671c71bd91ab940c4525fb220c2bb145d56e10acc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/gmw/expected.html"
+    },
+    {
+      "path": "test-pages/gmw/source.html",
+      "sha256": "9dae2c47570271a0a532ccc4880b10b5ec837b67239a287455a6b9e19e00b3b7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/gmw/source.html"
+    },
+    {
+      "path": "test-pages/google-sre-book-1/expected-metadata.json",
+      "sha256": "58dcaff6ce4d980096fd0ac72b180a67e15cebd2f95c14f7d96a3f5656208336",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/google-sre-book-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/google-sre-book-1/expected.html",
+      "sha256": "b9e177941b0805b34409389fd83cabb717df22220802e09a2c77504a9fae32ff",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/google-sre-book-1/expected.html"
+    },
+    {
+      "path": "test-pages/google-sre-book-1/source.html",
+      "sha256": "8e265718877a06f32d1524b4d1118fb16bbb8bc549cf830f04d44294de7c3e65",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/google-sre-book-1/source.html"
+    },
+    {
+      "path": "test-pages/guardian-1/expected-metadata.json",
+      "sha256": "ac4fac2c6c690f9f6a2919fc11280e0fb91c3e684e60ef150b269f0b2bb43573",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/guardian-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/guardian-1/expected.html",
+      "sha256": "0a7793270b8df0fe92b85670f104ccda6a02d09c53a0da47a7aa4a4986da591c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/guardian-1/expected.html"
+    },
+    {
+      "path": "test-pages/guardian-1/source.html",
+      "sha256": "48dd41ccd7f07c550b884e7e40213da141952f450ccb8d8ffe01250b75cf889d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/guardian-1/source.html"
+    },
+    {
+      "path": "test-pages/heise/expected-metadata.json",
+      "sha256": "ec502b28393682f8406988fa9706717dcf7ffc56ba34cae8d5ebadeb413238ca",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/heise/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/heise/expected.html",
+      "sha256": "a18bfa86d3d8a73e56d1a90e6d8fe1475b5f4a1c3c3bf0fc4a878c2d01d57a9c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/heise/expected.html"
+    },
+    {
+      "path": "test-pages/heise/source.html",
+      "sha256": "766652616a159e463936564c262546b243ad761dae221bc39a3b9b610e2952e6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/heise/source.html"
+    },
+    {
+      "path": "test-pages/herald-sun-1/expected-metadata.json",
+      "sha256": "22f9bcde536293e5be9999ab827e1958c15f605cc4da2a56cd32202bc0d1f86c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/herald-sun-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/herald-sun-1/expected.html",
+      "sha256": "eb6fcf6aff8516847e6529e9561c4f428c5db55c300a2a30c40d097ecbc48933",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/herald-sun-1/expected.html"
+    },
+    {
+      "path": "test-pages/herald-sun-1/source.html",
+      "sha256": "5d6a12bce90c32af0c3a4160c64df34cd01087e150ab9796f42efbb714dfd650",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/herald-sun-1/source.html"
+    },
+    {
+      "path": "test-pages/hidden-nodes/expected-metadata.json",
+      "sha256": "d723e3e3393a490e264eb5b421ce64afd61b15931464a1abd247c641109af094",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hidden-nodes/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/hidden-nodes/expected.html",
+      "sha256": "9cd96d418eccc1d6ae51878ed146d618e4ffaa1efe8f626a78717618b232da74",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hidden-nodes/expected.html"
+    },
+    {
+      "path": "test-pages/hidden-nodes/source.html",
+      "sha256": "12ba1e78b315acd726cb7b1aceb4c32aa2aba9ba133e824275147a9fe63ff67a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hidden-nodes/source.html"
+    },
+    {
+      "path": "test-pages/hukumusume/expected-metadata.json",
+      "sha256": "7563a0db2bfc4267f79079eb96621f53cb427c70fc6ddbc494edc3d6aabcce97",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hukumusume/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/hukumusume/expected.html",
+      "sha256": "82ec5a2005287624449be5616db6a3486d431f2e7d60d8fff3952e90e613ed8c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hukumusume/expected.html"
+    },
+    {
+      "path": "test-pages/hukumusume/source.html",
+      "sha256": "9f317b5f9f9a2fa1ee53b34e170c239f532a0fcd3af945eb401c1b3308bce896",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/hukumusume/source.html"
+    },
+    {
+      "path": "test-pages/iab-1/expected-metadata.json",
+      "sha256": "305a23fc1479c482f7ea8c7f9dce12bb33a5e07a4d02f5f4bae495b66eaf4024",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/iab-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/iab-1/expected.html",
+      "sha256": "365a190945218db9b1f981320e89c659d21077eca37d2c4abf7d342494477cef",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/iab-1/expected.html"
+    },
+    {
+      "path": "test-pages/iab-1/source.html",
+      "sha256": "d79314e49d5261881a5a40974bdbda8b4423f89378087d899346e616af97fd22",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/iab-1/source.html"
+    },
+    {
+      "path": "test-pages/ietf-1/expected-metadata.json",
+      "sha256": "53bace568b8d554cb4694ff0dd4788f3c7f9c01d4e1ce950130c297b8a6506ce",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ietf-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/ietf-1/expected.html",
+      "sha256": "884421a313506ca55868902d7951a62e4a3bb058d1a50a199c9a7a0c7bc0dd2c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ietf-1/expected.html"
+    },
+    {
+      "path": "test-pages/ietf-1/source.html",
+      "sha256": "8276ffcf6165ef788d89a5c0b2c6eb777c581b7f608e31a633989ed41e83dad0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/ietf-1/source.html"
+    },
+    {
+      "path": "test-pages/js-link-replacement/expected-metadata.json",
+      "sha256": "acc74770af3d3d3706f1fd1df1d14a40f78f7942581e82b6e2ef3b8d0502b749",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/js-link-replacement/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/js-link-replacement/expected.html",
+      "sha256": "f36513c5b1ab6c03f40aa64b5c791b67cf7b274f2e6dcec05df11f21ee0eda1f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/js-link-replacement/expected.html"
+    },
+    {
+      "path": "test-pages/js-link-replacement/source.html",
+      "sha256": "e6f0b278fe00f54a98f42e5bbd2e659c6dd79dbd61649ad05f8069256d40de35",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/js-link-replacement/source.html"
+    },
+    {
+      "path": "test-pages/keep-images/expected-metadata.json",
+      "sha256": "f4f90a6ff18a48113be32e48b2e6076ada9dbc51dd80a32af51484366136eef6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-images/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/keep-images/expected.html",
+      "sha256": "b909dab821c34ae7771be180e4cd6eb86d9b353e5a4c80a21955084ec41f0b70",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-images/expected.html"
+    },
+    {
+      "path": "test-pages/keep-images/source.html",
+      "sha256": "9c1c4d477033633c9f766c50558f2d1578b1a8c00f5cb1824e43b1123012bd9c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-images/source.html"
+    },
+    {
+      "path": "test-pages/keep-tabular-data/expected-metadata.json",
+      "sha256": "64c436ed173508b1cb29ce552f600ab20b7a0a381e30d6720cc6bddc16ad61e3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-tabular-data/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/keep-tabular-data/expected.html",
+      "sha256": "15ee11136c9b03cf1e157441034425e7bc934f451f36cce0735f9669cfbfe88d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-tabular-data/expected.html"
+    },
+    {
+      "path": "test-pages/keep-tabular-data/source.html",
+      "sha256": "2a63f726ecc7c5f60314f0e3e8dff4a281fb2c93a8b611875701077ce1c6c794",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/keep-tabular-data/source.html"
+    },
+    {
+      "path": "test-pages/la-nacion/expected-metadata.json",
+      "sha256": "d9f29143cf364b122312118f6d97df4dde36e1a87b154489cb9088665c3fdc6d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/la-nacion/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/la-nacion/expected.html",
+      "sha256": "b6b3a4e09aae64b4d7cc70bea9106c1faa8b23f1340b15c7a9700b5d7b34e2e4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/la-nacion/expected.html"
+    },
+    {
+      "path": "test-pages/la-nacion/source.html",
+      "sha256": "255abd8003ac9f70e7de7a26a9d75d7f58f82d2a3c4a2d3169e9c6bfe3868bb3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/la-nacion/source.html"
+    },
+    {
+      "path": "test-pages/lazy-image-1/expected-metadata.json",
+      "sha256": "6928b2a426517728f57d2906f57875005ba6bc737b0b2d3e0242e176956e56db",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lazy-image-1/expected.html",
+      "sha256": "2a98be6756d095b97aafcdcdad050eb35aeed7bcff7c3760c52e09c22613e0d8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-1/expected.html"
+    },
+    {
+      "path": "test-pages/lazy-image-1/source.html",
+      "sha256": "f4abb5497d4703fc43a44cf9b838a7dcf0e546fbcb3ef13a1aadcbb415d4c979",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-1/source.html"
+    },
+    {
+      "path": "test-pages/lazy-image-2/expected-metadata.json",
+      "sha256": "f59255d0e7eb627ba31f07634e4e62228014f6a8922f4138f01be412b8f20504",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lazy-image-2/expected.html",
+      "sha256": "9a7ec48872282f2dc973e77b2bd6be670daf11698187914c5ccabd64c9048afc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-2/expected.html"
+    },
+    {
+      "path": "test-pages/lazy-image-2/source.html",
+      "sha256": "1818fb18849ed6d2255224006ba33e0352c8caf7cba4e08ca791b614e2f47047",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-2/source.html"
+    },
+    {
+      "path": "test-pages/lazy-image-3/expected-metadata.json",
+      "sha256": "611fab5a74f0af108586c9aee7cf689d3e50a69df8909157b73b92bdb507fc5e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lazy-image-3/expected.html",
+      "sha256": "f18f307b90d4741bee579dbfaa6c137fabc9a3ffe10844c0cb422872d4374256",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-3/expected.html"
+    },
+    {
+      "path": "test-pages/lazy-image-3/source.html",
+      "sha256": "e2816ce1a5cc505cdc0b702b0113283e5d528584d91c006f4eb84c55d5f9fd31",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lazy-image-3/source.html"
+    },
+    {
+      "path": "test-pages/lemonde-1/expected-metadata.json",
+      "sha256": "fb1cefaa87fb03bc9701310b1fa45cb609c86e9f0188965de5cf60270dfcd3fd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lemonde-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lemonde-1/expected.html",
+      "sha256": "5e7fed4efb5588928507301dc2532566cbc92e06cb3c2e64158a12118985cfb0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lemonde-1/expected.html"
+    },
+    {
+      "path": "test-pages/lemonde-1/source.html",
+      "sha256": "9d0cc46bc4f24f0645d993cbb29014615cc3d60aafd2f5ecd2220a9383e8f993",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lemonde-1/source.html"
+    },
+    {
+      "path": "test-pages/liberation-1/expected-metadata.json",
+      "sha256": "028925663d64435c9a6dcd5839d346c8f1acb940ba71c42b859e834308a9bc9c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/liberation-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/liberation-1/expected.html",
+      "sha256": "517c289f13ef1a064b2482ad65425769c7e0b1369528c1dbcf0869f518a1c20b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/liberation-1/expected.html"
+    },
+    {
+      "path": "test-pages/liberation-1/source.html",
+      "sha256": "40927617d059a5f9a79364bbfc0d2e815a0986191404a05a16a7af7e428c2731",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/liberation-1/source.html"
+    },
+    {
+      "path": "test-pages/lifehacker-post-comment-load/expected-metadata.json",
+      "sha256": "5dfea08109debd882dcbbf532db9ce71b667587cc889f1848bf2175fbccce3cd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-post-comment-load/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lifehacker-post-comment-load/expected.html",
+      "sha256": "29feff86be510aa42905190efc50f54832c149c815e0bb4fcb8354151f2d781e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-post-comment-load/expected.html"
+    },
+    {
+      "path": "test-pages/lifehacker-post-comment-load/source.html",
+      "sha256": "66fa931d408b553f235022046e25371cd85f1bec0421a27e521275f996308d54",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-post-comment-load/source.html"
+    },
+    {
+      "path": "test-pages/lifehacker-working/expected-metadata.json",
+      "sha256": "5dfea08109debd882dcbbf532db9ce71b667587cc889f1848bf2175fbccce3cd",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-working/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lifehacker-working/expected.html",
+      "sha256": "29feff86be510aa42905190efc50f54832c149c815e0bb4fcb8354151f2d781e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-working/expected.html"
+    },
+    {
+      "path": "test-pages/lifehacker-working/source.html",
+      "sha256": "abdebf5c6222a012a46ceca056dc9c97c1acde01ca6de8c29ca25f534674f38a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lifehacker-working/source.html"
+    },
+    {
+      "path": "test-pages/links-in-tables/expected-metadata.json",
+      "sha256": "154032d364018df896a67741a4d70f6c937bfea2588450aa4237c706943fec12",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/links-in-tables/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/links-in-tables/expected.html",
+      "sha256": "e54a435b55a8666c1e72646e67717dabb7c29b82aadd2d77f9fd4deb4b91d48d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/links-in-tables/expected.html"
+    },
+    {
+      "path": "test-pages/links-in-tables/source.html",
+      "sha256": "e694812c99eb935b1bc2114669544aec9a261818fa22b65b46a46f2c806ffeab",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/links-in-tables/source.html"
+    },
+    {
+      "path": "test-pages/lwn-1/expected-metadata.json",
+      "sha256": "0914d1010399d822d21b8e18b566ef935463cb289cd5383495f70ce4e6d6f269",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lwn-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/lwn-1/expected.html",
+      "sha256": "0bdc92551c7109d944a6d0d2ae8948bc243c919c1d5394e40c92cc811e10e174",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lwn-1/expected.html"
+    },
+    {
+      "path": "test-pages/lwn-1/source.html",
+      "sha256": "d1c03893435a55e130dd0689282a178dbb166feabd99894435580f3a3ddd7197",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/lwn-1/source.html"
+    },
+    {
+      "path": "test-pages/medicalnewstoday/expected-metadata.json",
+      "sha256": "0187bf37f8cfa34cfa002b2c982021433357366439166cad5da1ae0bd8a529ae",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medicalnewstoday/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/medicalnewstoday/expected.html",
+      "sha256": "7376a7f604aa5494fc8a0d41d12096ce6ebdf2938968b83dff3621c2d25110f6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medicalnewstoday/expected.html"
+    },
+    {
+      "path": "test-pages/medicalnewstoday/source.html",
+      "sha256": "6d2da8dabacaab99f5b5bbdf3721197d2d40bf606879db6156cd06f88e8ba928",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medicalnewstoday/source.html"
+    },
+    {
+      "path": "test-pages/medium-1/expected-metadata.json",
+      "sha256": "cd78b7482be3873d835151a797174b413992a7e7d3d2e4fbe705faeff2dc9e2c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/medium-1/expected.html",
+      "sha256": "aef2aff11a2cd12e1756be82b6aae9ef5f9069334f89d7a728ee0366023c8c84",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-1/expected.html"
+    },
+    {
+      "path": "test-pages/medium-1/source.html",
+      "sha256": "1195a8b06bc4a126c8b7b6843144b68053f6a717b5938d9e88b2f375810c21ed",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-1/source.html"
+    },
+    {
+      "path": "test-pages/medium-2/expected-metadata.json",
+      "sha256": "bece33ba80cf6ec4ae4f0ce10f6757e2ca469370d52725ffda9ef94dfda5e655",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/medium-2/expected.html",
+      "sha256": "f6150f3d4a7448a46c7dbef9e3db63dd911352c034458f355e1997423a547a55",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-2/expected.html"
+    },
+    {
+      "path": "test-pages/medium-2/source.html",
+      "sha256": "52a381d960bf5a50949c18cfacec65ba0259d64d3dd1c28367824aca9893be96",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-2/source.html"
+    },
+    {
+      "path": "test-pages/medium-3/expected-metadata.json",
+      "sha256": "5f4469f90f74256f678e9d8159a7aec40c5f551818f57d997a9d51b1b595f991",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/medium-3/expected.html",
+      "sha256": "0463187d725b6bfc3d390605a317cd305556f40c9189d90385c7b7fcae848263",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-3/expected.html"
+    },
+    {
+      "path": "test-pages/medium-3/source.html",
+      "sha256": "f4726d93435e42c8f76d37351fe6489862300aedcaa2c571fed1831ebd5cfe19",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/medium-3/source.html"
+    },
+    {
+      "path": "test-pages/mercurial/expected-metadata.json",
+      "sha256": "c667f047d21c407a45326cdf84552602b9a30773c9b956ab705af80b42f371ef",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mercurial/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/mercurial/expected.html",
+      "sha256": "89240524b18ab626ae1c1ebc54d19171e73971ecb908e89c6ec16efa355e5486",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mercurial/expected.html"
+    },
+    {
+      "path": "test-pages/mercurial/source.html",
+      "sha256": "1a2238115e4af262f4aaa43fc5e49504c290a8b4ef2a776b6d7a8014b4082fb7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mercurial/source.html"
+    },
+    {
+      "path": "test-pages/metadata-content-missing/expected-metadata.json",
+      "sha256": "02b49c45612d96bbc2b4551e32c7cb4225226a0f8b4ea5a203e51634770a3d92",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/metadata-content-missing/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/metadata-content-missing/expected.html",
+      "sha256": "4b34e4bee741cb76d545cb3fd843a7a8b5961d43ab7adcb0174b318e9ed73cd2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/metadata-content-missing/expected.html"
+    },
+    {
+      "path": "test-pages/metadata-content-missing/source.html",
+      "sha256": "89145e633d26f762350ee0b786207452c70b81f7d3d7b3ae24ef912901d3c2c7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/metadata-content-missing/source.html"
+    },
+    {
+      "path": "test-pages/missing-paragraphs/expected-metadata.json",
+      "sha256": "0d07a0ed9d1825f5ddf4efd8c3933c6fa8e042134ce3fcf28359f801761ed693",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/missing-paragraphs/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/missing-paragraphs/expected.html",
+      "sha256": "4507946c2ad50ea20210d5bff818df2523a134b9b8d4e8d4bdec7d49f64729ad",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/missing-paragraphs/expected.html"
+    },
+    {
+      "path": "test-pages/missing-paragraphs/source.html",
+      "sha256": "41140e70d0ec95d1657a9a61b421e97625699ac3ab4f949206a663dacc511b68",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/missing-paragraphs/source.html"
+    },
+    {
+      "path": "test-pages/mozilla-1/expected-metadata.json",
+      "sha256": "5e4cb4f93541bad7a2671e2c5ecc21be5d57e0e3b17b2d9a663aabd2d06c1a51",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/mozilla-1/expected.html",
+      "sha256": "15bcdf1e667918c1473770750bf7f0d05678a97cf3414b3c86953239bdc0d73f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-1/expected.html"
+    },
+    {
+      "path": "test-pages/mozilla-1/source.html",
+      "sha256": "49171015a6f3313e006ff59ebc60971abe57bd6babc5b2ea1a5364f8abe0dbec",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-1/source.html"
+    },
+    {
+      "path": "test-pages/mozilla-2/expected-metadata.json",
+      "sha256": "65a9f301720526bf7ca62661b94f6688f71c51d4f936fa5765a57646f8b059f0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/mozilla-2/expected.html",
+      "sha256": "9c5c3c4c359e8c95fbb1dcaa0827808f1f4b6e6ddf714f96f21d7ba15eac5188",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-2/expected.html"
+    },
+    {
+      "path": "test-pages/mozilla-2/source.html",
+      "sha256": "39059455717bccde554b8b22244a8cef6a8531d65ee89612776b5174d694fdf8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/mozilla-2/source.html"
+    },
+    {
+      "path": "test-pages/msn/expected-metadata.json",
+      "sha256": "a6bf80ecd0211131a4589790fdfc81485bb9d5144771d953f2f00d264dce628a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/msn/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/msn/expected.html",
+      "sha256": "6ef9ec9e61682a8e919b7635cd97eb98f47835419c727e2db38896cbde56d72c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/msn/expected.html"
+    },
+    {
+      "path": "test-pages/msn/source.html",
+      "sha256": "2018a42861987072b91fdabd8778d2c5367b72b1e1889792fe5dc2db950d21ef",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/msn/source.html"
+    },
+    {
+      "path": "test-pages/nodes.html",
+      "sha256": "94667abe094b54ce93e5c4bf3671fab4f8ca9bbc3f226b9917138a6a420c676a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nodes.html"
+    },
+    {
+      "path": "test-pages/normalize-spaces/expected-metadata.json",
+      "sha256": "cf8bae2b7b5ee9cb3062713f35c89ced6be4ea66d0cb3e2fecd2a0ab9a903190",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/normalize-spaces/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/normalize-spaces/expected.html",
+      "sha256": "60d1f7efa5702a758b4d3b6ba785a3332bf12b3dd0ccc109ad1a61005db357ea",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/normalize-spaces/expected.html"
+    },
+    {
+      "path": "test-pages/normalize-spaces/source.html",
+      "sha256": "640299a69c583104ef3d37c44493f895398b09d28c48ff487061fa01017bfc8a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/normalize-spaces/source.html"
+    },
+    {
+      "path": "test-pages/nytimes-1/expected-metadata.json",
+      "sha256": "65a8f1c8797b28fda0e37a3916363ab1d0b9a7084584036fafb075afe096118c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/nytimes-1/expected.html",
+      "sha256": "01ef8a0b04fc8f052d1110ebf2b5d00e776a6f593085e64b44b9639e22ec3ed2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-1/expected.html"
+    },
+    {
+      "path": "test-pages/nytimes-1/source.html",
+      "sha256": "fbcc8e24179ea73a8c3768ea51396f60b38c883601391734ec85c38d58554825",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-1/source.html"
+    },
+    {
+      "path": "test-pages/nytimes-2/expected-metadata.json",
+      "sha256": "39ba03d09333628b6f702953be5d8e861c3124a6395724cd6d352f38d7664ea8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/nytimes-2/expected.html",
+      "sha256": "82e457d9399da80d110ebfcf2a1d8d6c6cf627b2791547c59700d0ab187d581b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-2/expected.html"
+    },
+    {
+      "path": "test-pages/nytimes-2/source.html",
+      "sha256": "c366d50c892fdf2f186650e7df41396b0f8f0dd0e91092101f68cf854e51b4df",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-2/source.html"
+    },
+    {
+      "path": "test-pages/nytimes-3/expected-metadata.json",
+      "sha256": "a6b5471901f488d194839292746e1da394e397119b4e1a95aa5ab3db50167f12",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/nytimes-3/expected.html",
+      "sha256": "9df0132664413beb1f7e07936d5bf891004bc821c5d95379f638cd8de3509e6c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-3/expected.html"
+    },
+    {
+      "path": "test-pages/nytimes-3/source.html",
+      "sha256": "139132ee488886b14fb8d85044947768727929e990054c9be8c688b0f6c4bebf",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-3/source.html"
+    },
+    {
+      "path": "test-pages/nytimes-4/expected-metadata.json",
+      "sha256": "24b938270fdce5c2ed62a540f0acc3bb3970e95dc03dc9053dd3d3fccede8ef8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-4/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/nytimes-4/expected.html",
+      "sha256": "123f3a9e2e73121894e2561a210dd3511b0f37fb6c7c4fc651ea7c500f575a4a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-4/expected.html"
+    },
+    {
+      "path": "test-pages/nytimes-4/source.html",
+      "sha256": "a14721bdc64eb917b4099d666a0ea6b8b218997cac06cbf008b3df25f2ffeb4e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-4/source.html"
+    },
+    {
+      "path": "test-pages/nytimes-5/expected-metadata.json",
+      "sha256": "3881cae8bab48064af95d85f259e927294a1dc67586b4e255d6210f25e0ac5b3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-5/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/nytimes-5/expected.html",
+      "sha256": "44fb387b75dedc816dc2ecb480b634bf54ee0fd0053c1d531b50d48b1d0be1bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-5/expected.html"
+    },
+    {
+      "path": "test-pages/nytimes-5/source.html",
+      "sha256": "027edb25cd35ce46f0ce8c11fdf645d1843054f89bd59fc5d228cacb14a788f6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/nytimes-5/source.html"
+    },
+    {
+      "path": "test-pages/pixnet/expected-metadata.json",
+      "sha256": "1fc6282e745a7b1951d4cbc39098a57b52474f999aafa94c0dcb50df656a331b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/pixnet/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/pixnet/expected.html",
+      "sha256": "f5f4f3c0dcd3e7464acc05c13d6d7a7544f1dd929a149d285b82b59c9bcada26",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/pixnet/expected.html"
+    },
+    {
+      "path": "test-pages/pixnet/source.html",
+      "sha256": "cbd38d76508cb428f294ce5389b5dd687e24899535ea84a4155b504e84e20c47",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/pixnet/source.html"
+    },
+    {
+      "path": "test-pages/qq/expected-metadata.json",
+      "sha256": "e954683838f151b80d320c410fe3b0e73589529ae87a28c6e4be9f4ee8ffc512",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/qq/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/qq/expected.html",
+      "sha256": "98a9fae870700374bb27feada74aaf12ab5b4ad103a7fae9635aba3924e18629",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/qq/expected.html"
+    },
+    {
+      "path": "test-pages/qq/source.html",
+      "sha256": "9b58c32629b910507d16dafe0cb7c81d06337aede2da1b07d3b0aec756f392a6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/qq/source.html"
+    },
+    {
+      "path": "test-pages/quanta-1/expected-metadata.json",
+      "sha256": "0566b5d7ba9e52d457d3407890a2f985730fc37bb8101c36667a2c66b576caf6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/quanta-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/quanta-1/expected.html",
+      "sha256": "a440d930512ed32992bef804467d0c14be400c6ab1fd6f72dbca3780ffbfc5af",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/quanta-1/expected.html"
+    },
+    {
+      "path": "test-pages/quanta-1/source.html",
+      "sha256": "b62f8673090e005392bd1888c57ba4f26de04ad8e155d5878c948e5acf8e15a8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/quanta-1/source.html"
+    },
+    {
+      "path": "test-pages/remove-aria-hidden/expected-metadata.json",
+      "sha256": "a20926bb30b6c9c16ef5cbe3c2cc4fe647842f84a5808578375571f0f920a1b1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-aria-hidden/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/remove-aria-hidden/expected.html",
+      "sha256": "70abfb9e89ce13e162f84554f28ae243cb6abfc25627053450625b01b7b11443",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-aria-hidden/expected.html"
+    },
+    {
+      "path": "test-pages/remove-aria-hidden/source.html",
+      "sha256": "ef58db26ad89de57ef1dea7b81f22e20e4a8859128897c93ada64eb35407eedc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-aria-hidden/source.html"
+    },
+    {
+      "path": "test-pages/remove-extra-brs/expected-metadata.json",
+      "sha256": "953cc8bc1aef13ec2b331eb4fa629abdff10b55170deaba3609a091c8af677ef",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-brs/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/remove-extra-brs/expected.html",
+      "sha256": "341ef9b4f0456dff9bbeb2b4e056fd2d22de5027bcef46dfb2c0198bbad98293",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-brs/expected.html"
+    },
+    {
+      "path": "test-pages/remove-extra-brs/source.html",
+      "sha256": "4010fa7c63d397625f6a4b32c8565f43a4837e75c0e854afd32951d4a7e71d7e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-brs/source.html"
+    },
+    {
+      "path": "test-pages/remove-extra-paragraphs/expected-metadata.json",
+      "sha256": "3cdeb7fc14ef115a2a708b2a8cb0b40220747be3cd93c999665495bf2cf8b534",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-paragraphs/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/remove-extra-paragraphs/expected.html",
+      "sha256": "c870d7f2decd9252546b5c0f3488d5ddec188195cf9cd4f54ad51b8e6e3bf19c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-paragraphs/expected.html"
+    },
+    {
+      "path": "test-pages/remove-extra-paragraphs/source.html",
+      "sha256": "a468f05e42b5e51a5658ea7ce142bc8123334d4cf5c0b78b0b00093ec0509a77",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-extra-paragraphs/source.html"
+    },
+    {
+      "path": "test-pages/remove-script-tags/expected-metadata.json",
+      "sha256": "1494b56a3b87b74e929b6c7ead8dad89f805c65bc072a0914e27b8af76baeec7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-script-tags/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/remove-script-tags/expected.html",
+      "sha256": "344502db5df4560c1db26a492082e3e360e0e73c94746e811e17c9deff40290e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-script-tags/expected.html"
+    },
+    {
+      "path": "test-pages/remove-script-tags/source.html",
+      "sha256": "18c4148f2a0c426b0446aff1c2538d41abd6a2ac16ed5ff727ced06d4a940d2c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/remove-script-tags/source.html"
+    },
+    {
+      "path": "test-pages/reordering-paragraphs/expected-metadata.json",
+      "sha256": "02a46cfbfed73caa85c14911308949f2def19ae2aa376a7d9a8b26b723b507fb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/reordering-paragraphs/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/reordering-paragraphs/expected.html",
+      "sha256": "ab9d149d85a164e0c331df4bf8c21b88a36a253b36d67632c26a26de5cd68b02",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/reordering-paragraphs/expected.html"
+    },
+    {
+      "path": "test-pages/reordering-paragraphs/source.html",
+      "sha256": "b20d3f15a30c981efe336bf931ef4c58327188d544bf98bca6104edbc7f8de88",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/reordering-paragraphs/source.html"
+    },
+    {
+      "path": "test-pages/replace-brs/expected-metadata.json",
+      "sha256": "cb982101f6a072d200f8d5a2ce3cca0d353ed9a65f365532032023ea7463515c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-brs/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/replace-brs/expected.html",
+      "sha256": "3866270cc74d8261cc5074cd9c2f57a3f70aefe8e02d2a319397a37b20305038",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-brs/expected.html"
+    },
+    {
+      "path": "test-pages/replace-brs/source.html",
+      "sha256": "c1aa787ae2d9db358ab1925dedf53c72479841a82113058f6ed09470d702a62b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-brs/source.html"
+    },
+    {
+      "path": "test-pages/replace-font-tags/expected-metadata.json",
+      "sha256": "f1dac31047ad9de11bfa6257ca60aa611974eda4ac95b3da2aba0e6bbeb5d5d7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-font-tags/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/replace-font-tags/expected.html",
+      "sha256": "94cd7703cc5ea24a4479201e83a74ba4850d1de9e8614ed4d28e9acb3eb5b67b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-font-tags/expected.html"
+    },
+    {
+      "path": "test-pages/replace-font-tags/source.html",
+      "sha256": "89934d9db31957994dd8e48369ce628309b46cf6c640727098a4a7a8d400947b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/replace-font-tags/source.html"
+    },
+    {
+      "path": "test-pages/rtl-1/expected-metadata.json",
+      "sha256": "a83a106c483605aff063f88042c431e6046dede596362ba3813f636a446e38bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/rtl-1/expected.html",
+      "sha256": "e6ba905235c1fe44ea43daff440b8ebbba6676974226463f5591605f87e90f75",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-1/expected.html"
+    },
+    {
+      "path": "test-pages/rtl-1/source.html",
+      "sha256": "a919900db0ed468fabf5de717c959921c785fb8ac34a62178f65b17e72c6a78b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-1/source.html"
+    },
+    {
+      "path": "test-pages/rtl-2/expected-metadata.json",
+      "sha256": "a83a106c483605aff063f88042c431e6046dede596362ba3813f636a446e38bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/rtl-2/expected.html",
+      "sha256": "e6ba905235c1fe44ea43daff440b8ebbba6676974226463f5591605f87e90f75",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-2/expected.html"
+    },
+    {
+      "path": "test-pages/rtl-2/source.html",
+      "sha256": "19fe8ac0691b94fe99fb2421221b051faf3f026cc4d1cf91c278ae1318988c80",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-2/source.html"
+    },
+    {
+      "path": "test-pages/rtl-3/expected-metadata.json",
+      "sha256": "a83a106c483605aff063f88042c431e6046dede596362ba3813f636a446e38bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/rtl-3/expected.html",
+      "sha256": "5521b616729a9dfaa8b30d3356876660807e37875468242202719f391918ee32",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-3/expected.html"
+    },
+    {
+      "path": "test-pages/rtl-3/source.html",
+      "sha256": "992cdae86c7c356f72038eb28db7f6264de2c66c8faeba4fb701a052e4ea7116",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-3/source.html"
+    },
+    {
+      "path": "test-pages/rtl-4/expected-metadata.json",
+      "sha256": "a83a106c483605aff063f88042c431e6046dede596362ba3813f636a446e38bc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-4/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/rtl-4/expected.html",
+      "sha256": "266c50d4127b7dd96df986f74eaa61b01776268692601a5da3f13eeb49916bf6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-4/expected.html"
+    },
+    {
+      "path": "test-pages/rtl-4/source.html",
+      "sha256": "77e98fa63405c76ea2f7c44c21b6c9b23e1cf41960432696f863688b0a123160",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/rtl-4/source.html"
+    },
+    {
+      "path": "test-pages/salon-1/expected-metadata.json",
+      "sha256": "3299aa79f143ae6b593cdd45fb39af7dc2ccd7dfaf8bdf0e44491e55890dd755",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/salon-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/salon-1/expected.html",
+      "sha256": "0b361c469375e97f32b47ac2f35f7a0fc4b5db40588dc957e47389d03cf90283",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/salon-1/expected.html"
+    },
+    {
+      "path": "test-pages/salon-1/source.html",
+      "sha256": "20817a930d0c796992162057a6dd488e8a94180fed74d38559c52213fd0445de",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/salon-1/source.html"
+    },
+    {
+      "path": "test-pages/seattletimes-1/expected-metadata.json",
+      "sha256": "79dc1826f9e4e1f5074ff2f09fc6259b0a606ea878e7c78a90974a5a12b2bd45",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/seattletimes-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/seattletimes-1/expected.html",
+      "sha256": "09d03ef05421e5b45a08337ca948f9f212a3fdf8916ce8acd985e2d489ce5ae8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/seattletimes-1/expected.html"
+    },
+    {
+      "path": "test-pages/seattletimes-1/source.html",
+      "sha256": "d854adc85f6fc66c70817ad33c4c71c63c5c992b1a384256f8d7ab44bbc08938",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/seattletimes-1/source.html"
+    },
+    {
+      "path": "test-pages/simplyfound-1/expected-metadata.json",
+      "sha256": "efe55b681474fbe65dd49e83e65517700b3eccea7223da39fc8ac2af772677de",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/simplyfound-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/simplyfound-1/expected.html",
+      "sha256": "3f2de3d5d06caecf47b679aa236a6a7ff0d8207ad23e0cab82c2d9d88d903b77",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/simplyfound-1/expected.html"
+    },
+    {
+      "path": "test-pages/simplyfound-1/source.html",
+      "sha256": "123bdcc0fa4d5581a5d8249f2c63b8c2918f436dd6515556adcbf6b13fc6b860",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/simplyfound-1/source.html"
+    },
+    {
+      "path": "test-pages/social-buttons/expected-metadata.json",
+      "sha256": "a3f10b95a96de430661dcf23315ad7be8e99e80bb60081f4d0036be6a8cfc236",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/social-buttons/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/social-buttons/expected.html",
+      "sha256": "f2ba4ae3cceded4a094f0ad708b0f7f1e321f21eddd39056000e48b82fb207f9",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/social-buttons/expected.html"
+    },
+    {
+      "path": "test-pages/social-buttons/source.html",
+      "sha256": "7fa8b3f17a32bba1ab3703b5d6cc06ad04d664d25e2a9ad964b90ab4d0474036",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/social-buttons/source.html"
+    },
+    {
+      "path": "test-pages/style-tags-removal/expected-metadata.json",
+      "sha256": "da282b1c98b4ecc1b9829311985792d8c378e86f561fd03514704aaedb8d39b8",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/style-tags-removal/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/style-tags-removal/expected.html",
+      "sha256": "a09097639e930c0ef13dd1b500d259e7d7e5ff7ba4c0a02e4b59f89cfd1d0151",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/style-tags-removal/expected.html"
+    },
+    {
+      "path": "test-pages/style-tags-removal/source.html",
+      "sha256": "80ef5d20f8c9e2bf71562eb1b61ddcd27895869dceca7d4d73202b8f0058a5fb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/style-tags-removal/source.html"
+    },
+    {
+      "path": "test-pages/svg-parsing/expected-metadata.json",
+      "sha256": "3fdbf2bbbbc6e79857f6c4f03ed4f1f3fb0c2780d969dd51326c35e0cc892ce4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/svg-parsing/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/svg-parsing/expected.html",
+      "sha256": "d1b1046d1122fa4a57fe004793a11264da3c65945899a72b371c32474383aae4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/svg-parsing/expected.html"
+    },
+    {
+      "path": "test-pages/svg-parsing/source.html",
+      "sha256": "c90ec5542ef16081aee47f487883765b03c57ed0d072471d74c003992663e07c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/svg-parsing/source.html"
+    },
+    {
+      "path": "test-pages/table-style-attributes/expected-metadata.json",
+      "sha256": "afd0b06ab6c4c5a5a60b6768ead1694e874a91bd2c63308b6c3531c578d88cac",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/table-style-attributes/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/table-style-attributes/expected.html",
+      "sha256": "6d547bb00337e643b1eb8222ef44d20f1d2a30e4d2db995c2c31081f3d241027",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/table-style-attributes/expected.html"
+    },
+    {
+      "path": "test-pages/table-style-attributes/source.html",
+      "sha256": "0472ea79f6e35549f1e51dce5996a1dba3abedc0196ae562c952cd9c373da9cf",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/table-style-attributes/source.html"
+    },
+    {
+      "path": "test-pages/telegraph/expected-metadata.json",
+      "sha256": "a84e3a38dd98d5adc11b043b7bb8bfc989e2305c5eb7ff85172a7663eeaad9f3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/telegraph/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/telegraph/expected.html",
+      "sha256": "461b3fbfd8412e194327f2931bfaa1d2d0433dfb46ae5f8d4c8dbb32ab266fe2",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/telegraph/expected.html"
+    },
+    {
+      "path": "test-pages/telegraph/source.html",
+      "sha256": "faced9efec016c59231823a0784a52768a253b3efc100d58a6117825b05646ed",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/telegraph/source.html"
+    },
+    {
+      "path": "test-pages/theverge/expected-metadata.json",
+      "sha256": "113b793845b37896375ca7dc8cee64b9d10ba15429bdd917dd34a03fa021819a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/theverge/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/theverge/expected.html",
+      "sha256": "05093903c776c5a54c254f3357d74435708072f8f70bfee550e22c0f44db461c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/theverge/expected.html"
+    },
+    {
+      "path": "test-pages/theverge/source.html",
+      "sha256": "fb91667612f2b6cf8a05b3949ae96ea0b21b3ee33634da9db803c2d6a777e649",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/theverge/source.html"
+    },
+    {
+      "path": "test-pages/title-and-h1-discrepancy/expected-metadata.json",
+      "sha256": "740ec07c48882a2773e8db1f79c832a69d6c897ba28621dfd722007b8daccade",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/title-and-h1-discrepancy/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/title-and-h1-discrepancy/expected.html",
+      "sha256": "cfa493a2a8b814affea4698145951c1860f330a9f4b28fc9fe9894110af69403",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/title-and-h1-discrepancy/expected.html"
+    },
+    {
+      "path": "test-pages/title-and-h1-discrepancy/source.html",
+      "sha256": "1296c8c088b1e0a95809a78c831947484426629446a35f9de1bd5c221aeb31f1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/title-and-h1-discrepancy/source.html"
+    },
+    {
+      "path": "test-pages/tmz-1/expected-metadata.json",
+      "sha256": "b6f28cbb8dc31b8239dd48f478c7cfd9757715a529d7145e4501adcb7e03abf1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tmz-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/tmz-1/expected.html",
+      "sha256": "74feefa60276fc03032b477c1873e35e593ae0a9555a13b820f640e2ed83d8e7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tmz-1/expected.html"
+    },
+    {
+      "path": "test-pages/tmz-1/source.html",
+      "sha256": "26e953a225a4bf99b1c8cdc5ea26f3cb9bfef7016cab68982e6d88db0f64565f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tmz-1/source.html"
+    },
+    {
+      "path": "test-pages/toc-missing/expected-metadata.json",
+      "sha256": "654ba70d5172ce1209ab3cdaab80890925bb61e5263b68e943b77d5b8042e39b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/toc-missing/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/toc-missing/expected.html",
+      "sha256": "d569b56bde8fa9400b0dbbded3329ce82df766a315a018359fe8d9e673ad20ff",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/toc-missing/expected.html"
+    },
+    {
+      "path": "test-pages/toc-missing/source.html",
+      "sha256": "3e9f0ad0939f8062d680f6f0d2467bb8e71f1b25edd856965acd8a7e9c7a7608",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/toc-missing/source.html"
+    },
+    {
+      "path": "test-pages/topicseed-1/expected-metadata.json",
+      "sha256": "9125481189baced68691a5e3c632d53a658be6e5ca4857d20de128f856f8b04a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/topicseed-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/topicseed-1/expected.html",
+      "sha256": "511cc922d8f347e20e5f4cf52865ebbdb7b4744b639a589142be0a18eae2bb9c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/topicseed-1/expected.html"
+    },
+    {
+      "path": "test-pages/topicseed-1/source.html",
+      "sha256": "b52e60a429a187f4c3e6f20f3dbac8a0ff73f17a810f29b66b7596ecc8c49189",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/topicseed-1/source.html"
+    },
+    {
+      "path": "test-pages/tumblr/expected-metadata.json",
+      "sha256": "f8656ab743f2d6d4ab4e2eb6b5f9fddf1e83de695c508405b9981247e184d350",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tumblr/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/tumblr/expected.html",
+      "sha256": "5fbfc677a713aabc6a017de2a95c2126e2f7eee700bd0a3d8d145203ae17edc1",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tumblr/expected.html"
+    },
+    {
+      "path": "test-pages/tumblr/source.html",
+      "sha256": "30d6f8f0dda314a158edb8e47316bb503c3a9ca5da378596a6d3736603dd9887",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/tumblr/source.html"
+    },
+    {
+      "path": "test-pages/v8-blog/expected-metadata.json",
+      "sha256": "a7525a06779af17859d35ba33dfd40e63c7bd813c5e62ac21feb8056fbd59f72",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/v8-blog/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/v8-blog/expected.html",
+      "sha256": "130fb564f09b666741862ef417e247e55909688d9ca03ea947ed01bfdb2f59bb",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/v8-blog/expected.html"
+    },
+    {
+      "path": "test-pages/v8-blog/source.html",
+      "sha256": "b630ea40054bb7263831e96be18e193d7054d7943ce522750115199940ab87d4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/v8-blog/source.html"
+    },
+    {
+      "path": "test-pages/videos-1/expected-metadata.json",
+      "sha256": "d3da2c31887609e7868569db996af3d1e737f0e527de58a5379fe7a72120ed81",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/videos-1/expected.html",
+      "sha256": "284bb1e253990563e003e34873324e823b93256ab937f3ee79f7c7659fb8b6b7",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-1/expected.html"
+    },
+    {
+      "path": "test-pages/videos-1/source.html",
+      "sha256": "70a9c18dd3017c10d63eaaad47eed317cea619864ad24b3fad91509caca6391d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-1/source.html"
+    },
+    {
+      "path": "test-pages/videos-2/expected-metadata.json",
+      "sha256": "2579ace285e873bc963b49e2d0d6be054dba929c9fb2ac8410305a8f3138629c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/videos-2/expected.html",
+      "sha256": "c78daf71266d5fa3df61b859d4de4834a796caeb8f66b9f9e28ac25f9f474565",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-2/expected.html"
+    },
+    {
+      "path": "test-pages/videos-2/source.html",
+      "sha256": "7dd3a8e220aa3dfadb7cc479c5852acd2f1f44a8aac28141c500f609a151d07b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/videos-2/source.html"
+    },
+    {
+      "path": "test-pages/visibility-hidden/expected-metadata.json",
+      "sha256": "afe426ff2a4787058f99c779bafac38b2f9533508bd7dab998bde8d7fc43de23",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/visibility-hidden/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/visibility-hidden/expected.html",
+      "sha256": "9a1138a1b2a24bfcae44a0d109a794a3d112a72516ef542d56642e499991e757",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/visibility-hidden/expected.html"
+    },
+    {
+      "path": "test-pages/visibility-hidden/source.html",
+      "sha256": "c033dcb5b1d27bf2a8e918f03db913ad2f08d6246614d451ce749d30bc64bfc3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/visibility-hidden/source.html"
+    },
+    {
+      "path": "test-pages/wapo-1/expected-metadata.json",
+      "sha256": "b9edf21a09adf26fc145f12a299f7f718c77611b83fb45635d16d113dfc58e76",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wapo-1/expected.html",
+      "sha256": "70d5890238fc29534b7c17171e2a4fe01d9e75fd83849dda7f95c8ed97578b79",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-1/expected.html"
+    },
+    {
+      "path": "test-pages/wapo-1/source.html",
+      "sha256": "24b0b8bc2e30aef2888ecc20d54e68867b2e18fb0deb8918340b028673524b31",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-1/source.html"
+    },
+    {
+      "path": "test-pages/wapo-2/expected-metadata.json",
+      "sha256": "5e9f3ae246ddd9c67eaa7a7bc574ff2d099d91fc7650375d4d4d4aebdb6f4b13",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wapo-2/expected.html",
+      "sha256": "2c855590964aef02d820a6d01288a3045079fc9b087e250d3806f7c4ac4cf960",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-2/expected.html"
+    },
+    {
+      "path": "test-pages/wapo-2/source.html",
+      "sha256": "e209e747222b004227f33ba4f6706299476adcd61576f07e0df32e7df1f1a8b9",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wapo-2/source.html"
+    },
+    {
+      "path": "test-pages/webmd-1/expected-metadata.json",
+      "sha256": "0df0fca6a0a95fb3d177817b52b68550d1a9bdce193824b5e4631d86eb91613b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/webmd-1/expected.html",
+      "sha256": "823fa85bf4e984adf8e691b4caf8252d79f8015f1e8db0a522f619a2eae87021",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-1/expected.html"
+    },
+    {
+      "path": "test-pages/webmd-1/source.html",
+      "sha256": "974507e889655d5d5b2368671b413cd2dd5f46bc2efeb4b77deb74988bc8ff46",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-1/source.html"
+    },
+    {
+      "path": "test-pages/webmd-2/expected-metadata.json",
+      "sha256": "393f9cfb3b7436474dff758bf59d21a5a7c6f839ac10f8e3e318d016941adfb0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/webmd-2/expected.html",
+      "sha256": "877833252fc0e6b10a722a87fc0fcc6bd1d2d1cc1c9ccd5dcd8fb86d70979a8e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-2/expected.html"
+    },
+    {
+      "path": "test-pages/webmd-2/source.html",
+      "sha256": "15843cafbea4e3e83353319b8ceb89fff971ef66a1255af62d49b4cd523f96d4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/webmd-2/source.html"
+    },
+    {
+      "path": "test-pages/wikia/expected-metadata.json",
+      "sha256": "dce83e3184bcb8b8abe3fd312bd19fe3b9c0d3fbb11f6fb5c5f78f17fadd0f65",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikia/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wikia/expected.html",
+      "sha256": "e0db869a75ed74ccf75409fb2321ad655b3c81a4fab90fcea04c3657df1fbfb0",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikia/expected.html"
+    },
+    {
+      "path": "test-pages/wikia/source.html",
+      "sha256": "b0e52788b4b181162474dccfe7f27a50bb140670c59b0c818bf88956e34fec05",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikia/source.html"
+    },
+    {
+      "path": "test-pages/wikipedia/expected-metadata.json",
+      "sha256": "f710fff55101b46b065b774b1dacf758b1cfd55ff4cda10037e20f4464e9c015",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wikipedia/expected.html",
+      "sha256": "7e36d86b1ccfb9929573e9dc6e21ec710b4ce81c360c4033946582c3d51a46f5",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia/expected.html"
+    },
+    {
+      "path": "test-pages/wikipedia/source.html",
+      "sha256": "7104f5945907560ed185063f6e469b1150b462eceb14be092b84f8b11368cf8c",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia/source.html"
+    },
+    {
+      "path": "test-pages/wikipedia-2/expected-metadata.json",
+      "sha256": "d9b9837bbf4d2e0bdaa73ad539f5388fb2ed93a71fb271d8d6a2eb6446cad564",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wikipedia-2/expected.html",
+      "sha256": "5862209742b8afeaef12d4bfa92d31dbe9e4a5a4d4974f5bcc89a900e97af528",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-2/expected.html"
+    },
+    {
+      "path": "test-pages/wikipedia-2/source.html",
+      "sha256": "2d49814707297841baa04e1332e19a9dc2aeb7a622c6f078960f27c37ed81f66",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-2/source.html"
+    },
+    {
+      "path": "test-pages/wikipedia-3/expected-metadata.json",
+      "sha256": "ac6c1e5cb4bf0e29a2606eed543e220754c0ce41d200216b334a9be5efddcf7e",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wikipedia-3/expected.html",
+      "sha256": "4bcbb40ee6788766d0bb560449984a262af0b83c3d0f302e69c3d77e39b3bc4f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-3/expected.html"
+    },
+    {
+      "path": "test-pages/wikipedia-3/source.html",
+      "sha256": "86e539a9e71edd2eedfdc8724d804f76e4a321dc85924943258fdae27ccd3b77",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wikipedia-3/source.html"
+    },
+    {
+      "path": "test-pages/wordpress/expected-metadata.json",
+      "sha256": "fdb90dd179e413b220bc949b5504f1ef1bb60e9d3066303444855b3d3ad95b3f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wordpress/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/wordpress/expected.html",
+      "sha256": "950a2306af05130d4fb2d3c2e4113dd4d26c3c6c5d58f3eeb1dc49dbf25ee999",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wordpress/expected.html"
+    },
+    {
+      "path": "test-pages/wordpress/source.html",
+      "sha256": "157d8ec67187d55d7b975d1edfbed4eaf4fcc7d1b8c15d7ef6e20287caaea69d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/wordpress/source.html"
+    },
+    {
+      "path": "test-pages/yahoo-1/expected-metadata.json",
+      "sha256": "f6b70718ba9b5232f1926c57fbb63cfc883a5ea7b5b436500582eaa258b5780b",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-1/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/yahoo-1/expected.html",
+      "sha256": "11f295b830b38247b3db9f27d5231e02b852c910f67dc6246a2091300c1cd52a",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-1/expected.html"
+    },
+    {
+      "path": "test-pages/yahoo-1/source.html",
+      "sha256": "233a5f1985522dd33595b2bdc824a34a668738581cd04f3a63deecbb5bea0684",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-1/source.html"
+    },
+    {
+      "path": "test-pages/yahoo-2/expected-metadata.json",
+      "sha256": "cb94646443542ad426aba1afac5d58a331c13442eda7ed92ac2a7def41f0bb4d",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-2/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/yahoo-2/expected.html",
+      "sha256": "02c6e954f15058ad3b2937f49aea2a75e05386a1bc9c8c7c35a4f71493b60664",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-2/expected.html"
+    },
+    {
+      "path": "test-pages/yahoo-2/source.html",
+      "sha256": "be191e298103589b56ea0def65dc87f003d31ac109ec57c232ca050d0e442a40",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-2/source.html"
+    },
+    {
+      "path": "test-pages/yahoo-3/expected-metadata.json",
+      "sha256": "cb4a976aa10c51c9f84064c83e2adb3705d2b99c2fd5fa848f54db2db8574cd6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-3/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/yahoo-3/expected.html",
+      "sha256": "c6d7258ae55f9c507f10cb8f8fb81fe088de13dad1a41170966d77b0895534e6",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-3/expected.html"
+    },
+    {
+      "path": "test-pages/yahoo-3/source.html",
+      "sha256": "615fce58d486ee7ed6f218acfe106a2c994dded82cbc5eaf8f16d96215c800db",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-3/source.html"
+    },
+    {
+      "path": "test-pages/yahoo-4/expected-metadata.json",
+      "sha256": "a81be2e24ff1aa86159a1b6b8e1a67cd53d4bdf1a88bd1d29f71b6da3885698f",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-4/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/yahoo-4/expected.html",
+      "sha256": "5e023aa0a87a72c4a78fa848510632f06c6ab37f619b7074afe7c5ffdf5977d3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-4/expected.html"
+    },
+    {
+      "path": "test-pages/yahoo-4/source.html",
+      "sha256": "e2a752c73e992430270b52a4298ddec16294889eae4c90f2ec90dee7af5dccc4",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/yahoo-4/source.html"
+    },
+    {
+      "path": "test-pages/youth/expected-metadata.json",
+      "sha256": "f73771178227c14a9093757fc16bab1ee06a5dfaa2a974a8b0f11faeff3dc860",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/youth/expected-metadata.json"
+    },
+    {
+      "path": "test-pages/youth/expected.html",
+      "sha256": "44b8affbc85dd7397e3ff7a009d685504bcd1b71e4c16020d9c011315b0b4bb3",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/youth/expected.html"
+    },
+    {
+      "path": "test-pages/youth/source.html",
+      "sha256": "899e43896a02cea7e55dcc4e6109eba63ac0c965eabeeb6936ed02aeb3fde295",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:test-pages/youth/source.html"
+    },
+    {
+      "path": "utils.go",
+      "sha256": "1a70ec30f7123632aac127c38fa4da9c30e15cf0e9f72400a12b1dfd411108cc",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:utils.go"
+    },
+    {
+      "path": "utils_test.go",
+      "sha256": "377c52c7d2638e6595b1be662f315a8b4aa2853a55e334b62045b45374d41227",
+      "origin": "https://github.com/go-shiori/go-readability@5db1dc9836f0dda58b8112d3a93141b25eeeb454:utils_test.go"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/.travis.yml",
+      "sha256": "22444a105ffb4a1758d4db8f8c29afd04f914b0e638543b822b41ec33c74bc2b",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:.travis.yml"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/LICENSE",
+      "sha256": "04a8e475337d6b9959a8c47956bf713dd3362d3aadf839e74b376afb07487167",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/README.md",
+      "sha256": "3e9564569c31c6c73c804a1495916a45757328f48362d142021e3c9c7c7804c6",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/parser.go",
+      "sha256": "cb8f28547b232a9b9f9d39cb6a12826bf84921a5d091f7c9aab32cf06e5380f7",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:parser.go"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/pseudo_classes.go",
+      "sha256": "0eb5d4ddbd68ba7b9143c440773fba74ad7a5b709273457403955cce54a38f58",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:pseudo_classes.go"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/selector.go",
+      "sha256": "9be3feac068de59dfa265aa95a6cc0eb13211a80be44894b10987c857c329b33",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:selector.go"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/serialize.go",
+      "sha256": "76b908fb1530306fab679d77a7899749f3122db63c0c2e2f6a47bf5a8f190850",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:serialize.go"
+    },
+    {
+      "path": "vendor/github.com/andybalholm/cascadia/specificity.go",
+      "sha256": "c6733e1e5278db3dcf2fa17afa82c03dd2264fc751e797e46668d9ccc27ad791",
+      "origin": "https://proxy.golang.org/github.com/andybalholm/cascadia/@v/v1.3.3.zip:specificity.go"
+    },
+    {
+      "path": "vendor/github.com/araddon/dateparse/.travis.yml",
+      "sha256": "db4df70d55a9960a7110744a3e1299b34a70e2413959b49dcaac7a5cac50a182",
+      "origin": "https://proxy.golang.org/github.com/araddon/dateparse/@v/v0.0.0-20210429162001-6b43995a97de.zip:.travis.yml"
+    },
+    {
+      "path": "vendor/github.com/araddon/dateparse/LICENSE",
+      "sha256": "1056fa7893b03227b2a64c09d559a9360265dd6575c5d7797c3f59dfe5368fb3",
+      "origin": "https://proxy.golang.org/github.com/araddon/dateparse/@v/v0.0.0-20210429162001-6b43995a97de.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/araddon/dateparse/README.md",
+      "sha256": "a015df675c1991a6111c4073b13dfc03cb0002c5f3b1e252d43bd27a97908552",
+      "origin": "https://proxy.golang.org/github.com/araddon/dateparse/@v/v0.0.0-20210429162001-6b43995a97de.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/araddon/dateparse/parseany.go",
+      "sha256": "61f1a6eca2822d79511a665277923491d8ace943ac1a22a2b84fd1923ac7c3c3",
+      "origin": "https://proxy.golang.org/github.com/araddon/dateparse/@v/v0.0.0-20210429162001-6b43995a97de.zip:parseany.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/LICENSE",
+      "sha256": "1b93a317849ee09d3d7e4f1d20c2b78ddb230b4becb12d7c224c927b9d470251",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/bypass.go",
+      "sha256": "2703ee123fee0581e5d142d4e493cb83869a60bc2faa43502c2b5c448d5906f1",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/bypass.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/bypasssafe.go",
+      "sha256": "e031e1d2ecf569146b2e6680247f1214bff6096dd8b74fcaae42267bf43bf377",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/bypasssafe.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/common.go",
+      "sha256": "722fed0447e461ce618e13f6f984908dcae8e28558df2b62c7a94ebe58aad950",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/common.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/config.go",
+      "sha256": "13338e0275c2acda68b73a755fe09677e9b878d090e01d700b1162e19bb1e66f",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/config.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/doc.go",
+      "sha256": "b28885f61e7032d7996e1d4152a0fd3b508a23d7d14c1428400d7524081854e0",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/doc.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/dump.go",
+      "sha256": "6d4be861a2b95e7cf5ee1be0258423e099643ca4702c6887040d696456c72d53",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/dump.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/format.go",
+      "sha256": "f2bb8777293f2600e1201ce81edc32647d5b33af97592fc01f1125b74f799cbd",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/format.go"
+    },
+    {
+      "path": "vendor/github.com/davecgh/go-spew/spew/spew.go",
+      "sha256": "abb3ec05a83d6a4a9e82e57b860af6a0014eb89bc40f9d234b83cbf69cb132dc",
+      "origin": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip:spew/spew.go"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/.gitignore",
+      "sha256": "684f6cd7f0cbef2e7a848d07f013692e8d4fb2e2c43fd8f436caa361fcc6164b",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:.gitignore"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/.travis.yml",
+      "sha256": "50a2e71a2b8b9b6ab3926e8c76db17021ba1ddeeb789e8a005fde2d3c614e874",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:.travis.yml"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/LICENSE",
+      "sha256": "eda05bafdea921ce34e502fbd2c3d5c508b7601b8b592e2a0bd48eaa451ca632",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/README.md",
+      "sha256": "b419f434ce5b3389ecf59162ec10121970325eaff07d74b1eecdf3f7cfbedd88",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/dom.go",
+      "sha256": "6889054757c571001edf3cca936a77b4831224e14a02210aea2d6bbd8b92401f",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:dom.go"
+    },
+    {
+      "path": "vendor/github.com/go-shiori/dom/parser.go",
+      "sha256": "e78593b0f7612b6ef305ad0b52231a274a747e4f7a6222ac2e1e2e58a492565d",
+      "origin": "https://proxy.golang.org/github.com/go-shiori/dom/@v/v0.0.0-20230515143342-73569d674e1c.zip:parser.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/2022.go",
+      "sha256": "ad80f67dd1726f58255a7fd74933f458451901c5577448eed42462acf00860a0",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:2022.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/AUTHORS",
+      "sha256": "84cdcfe64ada4bd64553b4ca6709bdcd0d626102bc628d76bff97d597f03a0a3",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:AUTHORS"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/LICENSE",
+      "sha256": "44699611628b82dec802229cd039c401b6df44808eeb5dc873698255a0642d04",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/README.md",
+      "sha256": "5c9c306181ab93f0ea356bb344ab430344125a04bde34379f78a4803d75d79c0",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/detector.go",
+      "sha256": "36f98afc3766c95bc90133bdd3dd9faaebf9282c4b4c38a4a13e23682e68721e",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:detector.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/icu-license.html",
+      "sha256": "b82a5901d92c842c78feb7ffc757706967a23fd5e7658d30ea92abb169207867",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:icu-license.html"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/multi_byte.go",
+      "sha256": "9c345476a54c4b5439021fc06fe8cdb3dd306dcdd73171c6a7c12a7af2cfac9c",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:multi_byte.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/recognizer.go",
+      "sha256": "87f3b18d354c077edb60288d7de674c0d7b7a131db2196cc6368696193055af1",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:recognizer.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/single_byte.go",
+      "sha256": "a13425d7f2d9f1b9f63e71af86794170cfcf9730686677c142eed520f41bcfb3",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:single_byte.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/unicode.go",
+      "sha256": "251a89225dc9f472d3ba7dc68585d10e8509d1a45588e04322ca7ed6d082b253",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:unicode.go"
+    },
+    {
+      "path": "vendor/github.com/gogs/chardet/utf8.go",
+      "sha256": "c19d934c7eec274d9e13fd6be4519680f00e5bacb39630a8437f6f1c4da9ea93",
+      "origin": "https://proxy.golang.org/github.com/gogs/chardet/@v/v0.0.0-20211120154057-b7413eaefb8f.zip:utf8.go"
+    },
+    {
+      "path": "vendor/github.com/inconshreveable/mousetrap/LICENSE",
+      "sha256": "4819582701f150b28a563a6cd8ed0bf5a754e3c67b90ad38d78ba4131bf77795",
+      "origin": "https://proxy.golang.org/github.com/inconshreveable/mousetrap/@v/v1.1.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/inconshreveable/mousetrap/README.md",
+      "sha256": "8d4e595f94232de4857e024a201eaeffdd506abd3c5fb524fec3f6df5323e02e",
+      "origin": "https://proxy.golang.org/github.com/inconshreveable/mousetrap/@v/v1.1.0.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/inconshreveable/mousetrap/trap_others.go",
+      "sha256": "cba967ba100c0172490e841d9814d567970cab561a163e3699ec55bbaf9c4a28",
+      "origin": "https://proxy.golang.org/github.com/inconshreveable/mousetrap/@v/v1.1.0.zip:trap_others.go"
+    },
+    {
+      "path": "vendor/github.com/inconshreveable/mousetrap/trap_windows.go",
+      "sha256": "6b60cce33aa420bdf04ec27d36f5bd85a877450da460102d66bb16507229b5f1",
+      "origin": "https://proxy.golang.org/github.com/inconshreveable/mousetrap/@v/v1.1.0.zip:trap_windows.go"
+    },
+    {
+      "path": "vendor/github.com/pmezard/go-difflib/LICENSE",
+      "sha256": "2eb550be6801c1ea434feba53bf6d12e7c71c90253e0a9de4a4f46cf88b56477",
+      "origin": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/pmezard/go-difflib/difflib/difflib.go",
+      "sha256": "8a3e1b4596a360a9b6e34c1152b56a8a8887f7ab666479f6556980e43147718b",
+      "origin": "https://proxy.golang.org/github.com/pmezard/go-difflib/@v/v1.0.0.zip:difflib/difflib.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/AUTHORS",
+      "sha256": "23fd498d6fff0efbb09530b234fae2b6e87dc654a4226c1aebf889471bc808f0",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:AUTHORS"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/CONTRIBUTORS",
+      "sha256": "d97a375edfc9be2b526c3d414606138003692e931447aceb1ed390e1fbab5eb6",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:CONTRIBUTORS"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/LICENSE",
+      "sha256": "27d7f7a027a2ba48083cc7912e5146629de65718ddac8ce006c08eb411508b52",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/diff.go",
+      "sha256": "8639df4bfe6132c91455ea07c72fe4e0aed7db185ad63d989f93c06415dd0e5f",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/diff.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/diffmatchpatch.go",
+      "sha256": "29ef08769017266a950012c49130325ab81ef80b400c1dd4fb5b7515703a65eb",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/diffmatchpatch.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/match.go",
+      "sha256": "48296401f60c1f10caba93cfeeae9c164539cb7afaa0b434e010e61f5728c059",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/match.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/mathutil.go",
+      "sha256": "232172e12e9abd0718fb0f3346a8f8849db0ecdd15cb873f91b6c2f7f5b453d3",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/mathutil.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/operation_string.go",
+      "sha256": "04806dd6b051379c86927815c23083f6d9089d23afcf3ebd8c486cff435de5b2",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/operation_string.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/patch.go",
+      "sha256": "bfad7655c6e2058147d8f2dc8cbab9964041e21b8a41a0cc63aec3d3649a13d8",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/patch.go"
+    },
+    {
+      "path": "vendor/github.com/sergi/go-diff/diffmatchpatch/stringutil.go",
+      "sha256": "209cb46bd0b7d56885e63349c38de5b223d7aad5093cefdb2d30414ecad593f3",
+      "origin": "https://proxy.golang.org/github.com/sergi/go-diff/@v/v1.1.0.zip:diffmatchpatch/stringutil.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/.gitignore",
+      "sha256": "b425af3b2f46b3a3ea6b788d28be4530e7e43631bf04aac0cfb892558337ef7d",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:.gitignore"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/.golangci.yml",
+      "sha256": "48affa94de2dc4bcf4b0ce157e9a0d432400b65a325f90902e1f78fbe0a38a75",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:.golangci.yml"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/.mailmap",
+      "sha256": "3084da8c33b52bd8dc4df0119017a58f8ecfc40a48ddd4dafaf8d2f193c9b208",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:.mailmap"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/CONDUCT.md",
+      "sha256": "c8813f7b99072f1ef3b35eecb3d93433915dadee94f9b38444ce272761e90b77",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:CONDUCT.md"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/CONTRIBUTING.md",
+      "sha256": "abbfd11d2d1b8b5cecc04f16dcf38095dd4066e3cfb9da80427aa54f33bd05b6",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:CONTRIBUTING.md"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/LICENSE.txt",
+      "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:LICENSE.txt"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/MAINTAINERS",
+      "sha256": "d629616b4602372b3ad0355c94f1f5670bda0fe644afb1a13e933cdc8fdfe5ca",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:MAINTAINERS"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/Makefile",
+      "sha256": "9130893c28f3e2381962d089e65ff4054c67d86d577c6b91df97839ffbc5bedc",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:Makefile"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/README.md",
+      "sha256": "27a487914e1913835ee9723f81d17419b95887d52bb2e5b254e6431eb38742ea",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/active_help.go",
+      "sha256": "15ad39fd144539eb7c19cb10f30bf43173d71730eb47c9bee0135b8264973b52",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:active_help.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/args.go",
+      "sha256": "db24bf6cce3df231100f6b79387e8b4f96b994b438a05d653b0c0a869f605660",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:args.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/bash_completions.go",
+      "sha256": "7370190d5344eec0325b2fd2dd7a0f39ca2acc5881f818adb5124b16ee7ac507",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:bash_completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/bash_completionsV2.go",
+      "sha256": "47f0c477221974f9e39c0da7e1bf0e9651f8553857be82fb9aed241803065737",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:bash_completionsV2.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/cobra.go",
+      "sha256": "2fea17b6e9671d2aeb4792aef6180de30bb2ca263d5551a9c54a096a95deac84",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:cobra.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/command.go",
+      "sha256": "fadba96dd9ad4c96e9202b96aad7248b587b4dda705c69da8a5938fdee750aec",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:command.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/command_notwin.go",
+      "sha256": "505a8334864917e8439b3012e8e47d880643793bf5741bc048884a85037a8ac2",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:command_notwin.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/command_win.go",
+      "sha256": "a9f85ba76b54df4b2589546562b325c7b1225388d5b177214d4b193516556390",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:command_win.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/completions.go",
+      "sha256": "095e851a924ee5e47352c00cc57aabd821c41733d8be06dd2434386731379b12",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/fish_completions.go",
+      "sha256": "86ee8a7c124ab4034290ec156f32ac0c051038fd560bb8d3c95214bdaf2e858a",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:fish_completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/flag_groups.go",
+      "sha256": "3b0572e1fc2fc6e8ef62319b4294cdda86259fb0b1afebc18b03fa643e431251",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:flag_groups.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/powershell_completions.go",
+      "sha256": "e1ca94c330fe80b4b774b79d1900fa02a96aaf2e9d78913b4ebcab2512cebcba",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:powershell_completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/shell_completions.go",
+      "sha256": "38244d5514d8de4c7bd1e03890992a9ee73885af53aab4294d8bed2d76f8938d",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:shell_completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/cobra/zsh_completions.go",
+      "sha256": "a80998389020b259308582d539cb3ae0979f83b55e8ffa68b20c46b015feae24",
+      "origin": "https://proxy.golang.org/github.com/spf13/cobra/@v/v1.8.1.zip:zsh_completions.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/.editorconfig",
+      "sha256": "39ecc7be962e331e0b7dce8a8a580b0aeb86ee7d9d3efbeffe98e011f39a3e11",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:.editorconfig"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/.gitignore",
+      "sha256": "133d80c9f9f684527d519477093b36b41936b091fe55011c1e701a9277864e36",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:.gitignore"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/.golangci.yaml",
+      "sha256": "a665aa204452e68b4b05cdfa79b092ec13c50234b5abd377a2f56a7c1cc36dd5",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:.golangci.yaml"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/.travis.yml",
+      "sha256": "0e2f2e616b85f320505c47c7aab9bcd17716b27ba63fbb67eaf37dda47ff2a71",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:.travis.yml"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/LICENSE",
+      "sha256": "b8514c577c1c4b46cee454d5a882b15fa411e72c5bd7f801f241591789fce61a",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/README.md",
+      "sha256": "2df7c809cb1b667f4f9a9f03593192589c686b4fd461db07e0f6a592f0114e11",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:README.md"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/bool.go",
+      "sha256": "52807d740167c62c8dfd2cc5ab16ff2ae3834d5f0e78573b190aaa89b960ac16",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:bool.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/bool_slice.go",
+      "sha256": "9d9af9b120b9612c36f8abb873b99ae139cc69f7dd715abbbfa04a3667ab8610",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:bool_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/bytes.go",
+      "sha256": "c8a7425a360c495dbf73f37aa464a3a83abe73a7b2722d9b03a691bc771c602f",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:bytes.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/count.go",
+      "sha256": "08d321edda17741bc4847d67aa644260643e8bbee78dc50e805ffe4304d78edb",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:count.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/duration.go",
+      "sha256": "b353bb670bfa34680053f6f4b94c3816cd73b1ba9bd3dad2830742c0cbaef739",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:duration.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/duration_slice.go",
+      "sha256": "d45aa8b814199baa9cdb29f0fec2c7c31607d93cebb0df0d5428d66b1b158185",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:duration_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/flag.go",
+      "sha256": "833764e1d34c01f1fe6f2c59cb356128990b237d335808a2de8f37a3926ab1e4",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:flag.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/float32.go",
+      "sha256": "3395e08a3d91bd3e64151f94d0366d31a5dd8ea2f30135d0d9b6a4fef116e940",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:float32.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/float32_slice.go",
+      "sha256": "aec2d01aeac6b1035901d89e7b418ed21f4ca89a58c30b3a7e8b183cfd138fef",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:float32_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/float64.go",
+      "sha256": "00b854d2dac8fd8570d6b2d08f0888ca906f7e2fd2a6fc2710793861f3dae4ba",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:float64.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/float64_slice.go",
+      "sha256": "0fe130703f3f3affdbcff7ddadb6e5490557e5af7aaeaac2340a29c60c45cb54",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:float64_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/golangflag.go",
+      "sha256": "3e36aadb1efe7ae7a34e84e67270512d0012116bbab682a828b53f72283eeae2",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:golangflag.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int.go",
+      "sha256": "bc8552cf1b4898e64df1079cb814ab75c9c0b5d207e5857adfa701c01e410d72",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int16.go",
+      "sha256": "2c0a80d9ef6ab26517235dd1315edf7fb2bb446a59825adabf542e6680ff7782",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int16.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int32.go",
+      "sha256": "0a8085aa00c9fa388c7335064f47212759e106fac24bc330455452127f1468b3",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int32.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int32_slice.go",
+      "sha256": "804f751c996ce5ec0d4f2a9692d24eea57270f324314d52ab564f6739bb25cb1",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int32_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int64.go",
+      "sha256": "90de0c1e1355f8b29192506519bd66258a76da06d0f1d9c55f8ae909cc3d321a",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int64.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int64_slice.go",
+      "sha256": "7cc5b40ad7803e2fb2960e94fbd98d08f783fbc89ecbe7ce7af74e0c8d52e021",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int64_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int8.go",
+      "sha256": "9d297f20e4ec513e9a37fbba31dd2e21e3ba5ccc305894cfa382892ce0c66a1b",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int8.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/int_slice.go",
+      "sha256": "eb8434b8f00f6510d2699c5f2f5127a3b68533d936fa7c67258fbfec6d06baca",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:int_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/ip.go",
+      "sha256": "97e628f931799ba42c4417378ddf5dc16f99cc378453e7d58d99fe5572fff4c5",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:ip.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/ip_slice.go",
+      "sha256": "0dda4cb4ea616f2b3e6f983a85d09a26914745108f4f34d85d1f3eb041ff3ca9",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:ip_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/ipmask.go",
+      "sha256": "839fe1d7759cfd72a0233ae5ce2e50336186e54ddde4726e0058ab9f42bb44ce",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:ipmask.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/ipnet.go",
+      "sha256": "aa7d5258317c189fc2c1f75c10cc70eb05d9b2f7bc4a75518dd6b7216c2e845b",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:ipnet.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/ipnet_slice.go",
+      "sha256": "2054c21f3c0ba10b689148e0e332dcb17748f4be5ab8eb44675d407388ff8c0a",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:ipnet_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string.go",
+      "sha256": "4c4cf397b10094f40a91f347bf5f68915055855becf309e8273ec6121ed4f14f",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string_array.go",
+      "sha256": "748584e999ef77eede86f40b609799f00904e300369790bc95f224d42c245faf",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string_array.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string_slice.go",
+      "sha256": "cce11f111048bb11d14aebb7cd7f49910308e55f30640d0f389ec71d9afe3ae8",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string_slice.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string_to_int.go",
+      "sha256": "d971157d3fccf57c14e11bf88f6754f47eb646baed73836371fafdd39112fa6c",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string_to_int.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string_to_int64.go",
+      "sha256": "8276bf7cdc6ec815fbf63f56746907cc08e4dbb04e98d9a40561afa47ad02655",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string_to_int64.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/string_to_string.go",
+      "sha256": "b1db4f5f73f2e28d3387daf030a664f1be287925d14238301ce7bf4d3b53e30f",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:string_to_string.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint.go",
+      "sha256": "254c340c62f0ae52cfa130e431d555bd33794af5881fff73bb23fedb0c955402",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint16.go",
+      "sha256": "47b0c2c7dfba0019761f3deb526c1daa54412f453fb5c6c86ad38a2a2edf50a8",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint16.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint32.go",
+      "sha256": "8f953a348782d6bc951ce0c1baa4e58184b9af2ef5a5e9d71e1fefcf8680b9c2",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint32.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint64.go",
+      "sha256": "9e6365b8a523ed4eba3b3129bc5a45fdcd8cd32e0180a4b96c917003211cf5c8",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint64.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint8.go",
+      "sha256": "1e3a62c41633d887dbd68e159fe1b6df1befab874c6cbc40f188f0bf8a11ea81",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint8.go"
+    },
+    {
+      "path": "vendor/github.com/spf13/pflag/uint_slice.go",
+      "sha256": "2a10169ec305e15b0286eb770696a5b39b3c18c1e836d0615af4aaf09385310a",
+      "origin": "https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.6.zip:uint_slice.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/LICENSE",
+      "sha256": "f8e536c1c7b695810427095dc85f5f80d44ff7c10535e8a9486cf393e2599189",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_compare.go",
+      "sha256": "6384babb20b94bf35e74fc82ea86ee08b28850712b4786156b071011047d7b64",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_compare.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_format.go",
+      "sha256": "0837a5dfa2e698728b915ad330f5abb381bd8f4c3176bb69154392ea7f948f43",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_format.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_format.go.tmpl",
+      "sha256": "80fce224d7df2f3caa52626ceccf79bd45d1f0eb34f94a48d070d0807ded192e",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_format.go.tmpl"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_forward.go",
+      "sha256": "390c99f465aaa9b5973e37779f09e968733263a30e6cfdac930bd4517618022c",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_forward.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_forward.go.tmpl",
+      "sha256": "2654f4ce9a794c6766f939a5b0084856d18b91e6af9f7a8c19e8c6bd7d37422a",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_forward.go.tmpl"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertion_order.go",
+      "sha256": "9387b2eec9832fc3fec45b71fca43f50323184e2778431fd907f75b16b1fc102",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertion_order.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/assertions.go",
+      "sha256": "1f5ec0298228ae727711d03ee5bff2ddf5353f3f033460b56ffd0f578ce8a32b",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/assertions.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/doc.go",
+      "sha256": "9fa6d4bc639fcd536e9d937729480c68c46a6e69ba6d6c74c1418f7dcdfca265",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/doc.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/errors.go",
+      "sha256": "c64312fb0f855b8ea991766bbbe6ad62464c9cf763fefda8a28f2b17db967436",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/errors.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/forward_assertions.go",
+      "sha256": "f171cf6c9c97917b0b2ae267395a6e8150fc05e1d4d201e1435c6344eaf52976",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/forward_assertions.go"
+    },
+    {
+      "path": "vendor/github.com/stretchr/testify/assert/http_assertions.go",
+      "sha256": "deeb1b88f5f426ae04eda915cd8cb90027cc48fdcc52ac185f302c3a61ecc18c",
+      "origin": "https://proxy.golang.org/github.com/stretchr/testify/@v/v1.7.0.zip:assert/http_assertions.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/golang.org/x/net/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:PATENTS"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/atom/atom.go",
+      "sha256": "86490b2027af4443dacfe96c313a6c632c03ea1acdf85f7f61c4fdde32bc2f3d",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/atom/atom.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/atom/table.go",
+      "sha256": "643f9913d15beb98d2794f5a9f6b60691350d3525040d9cf6e4c6b8edd1ac547",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/atom/table.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/charset/charset.go",
+      "sha256": "7810cb77bad4b115611626e3d0415126419133c5d6bb9c7424b45d721a7afdc3",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/charset/charset.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/const.go",
+      "sha256": "44c814afac4b0206a4f2af92607f93a72b93919ec2c3884d372edcdc24507584",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/const.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/doc.go",
+      "sha256": "e5d486a3b703d17efdf30cc9b3af6649b262c89e74cd4de285e0f079797b3c6f",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/doc.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/doctype.go",
+      "sha256": "b629b17ed04bcab8d832d8caaee00f458c180fd31b6838e318a439a4bf87fffe",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/doctype.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/entity.go",
+      "sha256": "eca9e6cac4ddb939ddce98f64e9c2f16031accaead07f1bbce2f37991cd618bd",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/entity.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/escape.go",
+      "sha256": "85d7c118044e2c84c5ca2bfd568a27e83cd1cef7f2aea8e961bb4c4200bd964d",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/escape.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/foreign.go",
+      "sha256": "555e32d7c9e8a625923ea453527c76fe66a6a22423d52fb0de58becaf051b4f3",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/foreign.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/iter.go",
+      "sha256": "c96474f939981633125536f73bb29b1422cccf08a4a111e3afac97245f525404",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/iter.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/node.go",
+      "sha256": "e78a1648c9efd731af8f0ac7344dbb8778e5f90522fea375234d3949721e681d",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/node.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/parse.go",
+      "sha256": "67c57ec50b838976247ff9c939ad40528476be7e10c44d3f89b65615256c2485",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/parse.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/render.go",
+      "sha256": "4b483d3c0629a7231e3bb54daca1f4441072bf792c6391f9eff29c59060a8a24",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/render.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/token.go",
+      "sha256": "e0167fa69083f5c525f217f15aba048c722d3eaffdc6ab561bfcdbaa8419d1b8",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip:html/token.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/golang.org/x/text/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:PATENTS"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/charmap/charmap.go",
+      "sha256": "8f2418e924ccf719fcef0ec4ca1895657c1b98dcb7df4bfeba204970ebd98b33",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/charmap/charmap.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/charmap/tables.go",
+      "sha256": "63a3da1a54945679073726ca71567cc7402eba352005c983866c8c0ae6b55afd",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/charmap/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/encoding.go",
+      "sha256": "7a66d04774bf136fc1e655e0746eee54237e33ce21802d7e286c87b6e1307172",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/encoding.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/htmlindex/htmlindex.go",
+      "sha256": "f7de101bd433f74cc2d32a92d224c36cf04225b48323c4d66ab79805a59fb6c0",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/htmlindex/htmlindex.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/htmlindex/map.go",
+      "sha256": "8094e6c1a15cc74160ecd3ed326d38fdc55af9e7b1caef53f5370e31f1e94cd5",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/htmlindex/map.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/htmlindex/tables.go",
+      "sha256": "a2dac8908943c9b7e53aa9058086544626baaf0099839dc1dd43dfba422be076",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/htmlindex/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/internal/identifier/identifier.go",
+      "sha256": "50c99f12c73517c9314d04fb7807e7fdc57e75436306d3b38036fb17bc0c41ca",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/internal/identifier/identifier.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/internal/identifier/mib.go",
+      "sha256": "7dac7c2f13c9a8f31f6f8228e71ea0ae6f470f3099a2ba8cebc4a1fbc876385a",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/internal/identifier/mib.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/internal/internal.go",
+      "sha256": "d49433c5ac6f01c29013957898b7fd9d899832d2c7d09cc137ff52a4270aff87",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/internal/internal.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/japanese/all.go",
+      "sha256": "5728aaadf3e9b98632c5cbbedc60e29ec14779bc8f020bae135c97b1548e3944",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/japanese/all.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/japanese/eucjp.go",
+      "sha256": "cec3f6c93f702cbe3d618c634e57bcaee6dfd2aabdf2c3bcca08edf000ef6f8f",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/japanese/eucjp.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/japanese/iso2022jp.go",
+      "sha256": "8384af40d97b16d492f5530132fc22b343082b7765249cf0e55f0d74def415c8",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/japanese/iso2022jp.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/japanese/shiftjis.go",
+      "sha256": "a4bb369e3211b23678843b00c7ee1b47c56e99f67fd64ccb13f1613ad1be18b4",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/japanese/shiftjis.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/japanese/tables.go",
+      "sha256": "433f4e0e9e0f2f435e0796dc6f464950f950e139c3671b75baedfc224253b66e",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/japanese/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/korean/euckr.go",
+      "sha256": "a89b364d8c3dd4827daf41e75e34a9413ca9dc185e0aa4a7143d4ce2e775af93",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/korean/euckr.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/korean/tables.go",
+      "sha256": "03f3a8ecd8b970db684aedba376a5c762399799d358ae4dd6dacdb5031ce9bbf",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/korean/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/simplifiedchinese/all.go",
+      "sha256": "98b67e8457b51b3b94fb0a1276c3aa006ce4bebe91f4911787d44bf964ae7898",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/simplifiedchinese/all.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/simplifiedchinese/gbk.go",
+      "sha256": "e4efe75b7af3e78280dcc27662aa951fc5c524919df77932b3951710791a54c4",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/simplifiedchinese/gbk.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/simplifiedchinese/hzgb2312.go",
+      "sha256": "1345ee89bae60494d965a2757b6d1c5f4f2da1aefc7e70e25c17fd77f22dd68b",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/simplifiedchinese/hzgb2312.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/simplifiedchinese/tables.go",
+      "sha256": "c9ba772952593013705397e20afe0a25e87eb534a36c3c8aec93923557f7d663",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/simplifiedchinese/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/traditionalchinese/big5.go",
+      "sha256": "e6578adfb8afbc753a2394a841caf15cf43c9a11838257767b7e236ca88c77d1",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/traditionalchinese/big5.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/traditionalchinese/tables.go",
+      "sha256": "6ad4f34a2e4dca8614b9c17aab10999f9b1a727cdf08feb477662b116064bd0c",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/traditionalchinese/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/unicode/override.go",
+      "sha256": "56800213c1d96ac93e091ac0bdf084caf259fac616fcea62b49c5f5ecff24b8f",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/unicode/override.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/encoding/unicode/unicode.go",
+      "sha256": "9c761f4b9a471db13c7b4cf571cfd380eb9d6a6a1bf7a3177885db6fd8d003fb",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:encoding/unicode/unicode.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/common.go",
+      "sha256": "68089abad3eed7b2559bb97510355e900a6ef2e1fac7ff89364bda9c50a2acba",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/common.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact/compact.go",
+      "sha256": "e154aa511d328fd47a9c9fc1115d9c92be2d385e885ae65c5e348ec1d5844ead",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact/compact.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact/language.go",
+      "sha256": "1d49845ec8c93b000391718e3127c0979c054186570805fce27f7fe167ad2c5d",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact/language.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact/parents.go",
+      "sha256": "57dc7b46cb5b6df81ed5764b338e1b463c183e3561427307c9d25fa876d9bdc7",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact/parents.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact/tables.go",
+      "sha256": "99415fb6642ebd291f825497d32e70ae32da8569815d8f4ef587664c6c5ce7d5",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact/tags.go",
+      "sha256": "e6f98b11ee9c2d5d4d51a5d810d4ea2eff0872a8d11b962979744899e020e12c",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact/tags.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compact.go",
+      "sha256": "2d121c703729c5fbd5f3f13fd568af142ca8fde0f01a07e1874df22dbaadde98",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compact.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/compose.go",
+      "sha256": "7657b95eac8448d5d2273c048d316dde3ac0e49ac058487a69b2b990ebc7f8ef",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/compose.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/coverage.go",
+      "sha256": "8c8238012deb1b3c42820c755343db1bc326dc5cbddfcc24f97abbb7e0c6cee1",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/coverage.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/language.go",
+      "sha256": "19a0ccf7635fd3dbad3766d953996df5d1c24a367e44c49200ab6ec3023fc871",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/language.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/lookup.go",
+      "sha256": "8f0ac8780f89d5c2b29b98fd599269b445d7bb612a7948c9e97d425424b5ea38",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/lookup.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/match.go",
+      "sha256": "711e9c548516929762f0636a69788ba6eed6ed10bfb47634f3b5d5a1f26a1547",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/match.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/parse.go",
+      "sha256": "0c884b51bb83d3633a51f16e90c7dbaf45c301a449e366df591eda11a3000972",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/parse.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/tables.go",
+      "sha256": "876a73fb8b8fffd239efa592ffdf903c25757b4d17b715fc80d7aee8db2b985e",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/language/tags.go",
+      "sha256": "21041c1c1982b12db6f523a4feb58746dac3e2c71e8dcf9f76ac5807cd809099",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/language/tags.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/tag/tag.go",
+      "sha256": "97a27a6bfdd26d872e07d051fc27e622e1cd764943350e8bfa9cf0e2e13cc474",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/tag/tag.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/internal/utf8internal/utf8internal.go",
+      "sha256": "a2aa5c3b12a72996fcedd945dd7d1955f2e5ef76bde6f5277238d2b2d6506390",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:internal/utf8internal/utf8internal.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/coverage.go",
+      "sha256": "d12716948854471a3536a04dc48736b0db0318ea6df61db236bc4ee0fe725375",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/coverage.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/doc.go",
+      "sha256": "4b97559b103832f3c5f22e80f2df0dd7394a469d945f79afad1654eb179fa63b",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/doc.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/language.go",
+      "sha256": "3f2032f0367d83fb14772384d47119d27c2c427b277aa0a02913db59abe32bb0",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/language.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/match.go",
+      "sha256": "b8a6b973391cba46899d079173cf0b1d3064f28bb79a11c3fdc65c089cbe23d3",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/match.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/parse.go",
+      "sha256": "c100309e93f15f7d36fcde02b598c146f4a4b011b6ba29676b9592d0753d71f5",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/parse.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/tables.go",
+      "sha256": "cb3c6aa474902c2728c47bcdebd5fcac0c6aa0f7e29934e984d46434c98ce716",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/tables.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/language/tags.go",
+      "sha256": "247c5ce419821c135a2751029c078cc6e1472c9896dd581d67a277449e54d968",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:language/tags.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/runes/cond.go",
+      "sha256": "a97ca46dc0d82c3f04b17efdb26244f9f779ef1cabcdd5875b17fa51dc24640e",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:runes/cond.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/runes/runes.go",
+      "sha256": "30879876f51d507e1cce28de3aa6c63966d101f92df42e6e0be18fec9dd7592f",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:runes/runes.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/transform/transform.go",
+      "sha256": "7716301e210f42b764ec78f4adffb05075f1d5103446a40b8a38043f5a7abd88",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:transform/transform.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/composition.go",
+      "sha256": "3d1be52960f2693926472819b747646e7d2371d2bb5f53097cf9d46c913052df",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/composition.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/forminfo.go",
+      "sha256": "b8d7e1fd095038fee9db7ea058bea492c55d642de2178475569ee763eebe25d7",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/forminfo.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/input.go",
+      "sha256": "965b431790bb139543d71a9c497920ef7d9a15af417456a2bbd0cdb629330e8d",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/input.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/iter.go",
+      "sha256": "16a40d326f9b37c5430a18894f718007728ce8324afb08d8c0a17ce7289714b0",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/iter.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/normalize.go",
+      "sha256": "b9e7aeff51e6cb036ff4e8c6255410e7068c112e329a137d333e639f63c4a8ab",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/normalize.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/readwriter.go",
+      "sha256": "d600d1f6cff2536dbb49a0f6bb8c06f6fc05f2754dad2dc05f1d44f9e8e48a35",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/readwriter.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables10.0.0.go",
+      "sha256": "ed995d92759262b7a75ce1eb05dccdbe32edd4c02d831df79372000edc6fb446",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables10.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables11.0.0.go",
+      "sha256": "6dc6e8633bca4b2cca76eca486ffe719f023fd0189238475c51df54fba994a06",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables11.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables12.0.0.go",
+      "sha256": "4569659ddd6489bfaf44c68fe7107b4dc1d7fcb871cde87c9cae5d2df8374ffc",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables12.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables13.0.0.go",
+      "sha256": "37740aa89edd65916230decb83a3bcc5ee32e1d87287f3abe2adf92c3648eeed",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables13.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables15.0.0.go",
+      "sha256": "61f78dd80390fdfff02b4e49aea4feac75dde7919b9a5d9c63042ab3e2dc1d6e",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables15.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/tables9.0.0.go",
+      "sha256": "42f5946044610a9990f6ea6e272e63f72efaafaa0f685d604a46d3cae9ea4490",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/tables9.0.0.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/transform.go",
+      "sha256": "6f8014595643e2acae76d47ed6abe8ace969a0c9070dbfa5a89c86bebcec812d",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/transform.go"
+    },
+    {
+      "path": "vendor/golang.org/x/text/unicode/norm/trie.go",
+      "sha256": "d87793d558251ee8824954f0b7bc5564803e4c9d59a8c4eebb4c3c5cfbd19492",
+      "origin": "https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip:unicode/norm/trie.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/LICENSE",
+      "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:LICENSE"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/NOTICE",
+      "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:NOTICE"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/README.md",
+      "sha256": "f9e5f315e32751d29512482b3ba6417b5a0b3808e9ace434286096072b428fab",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:README.md"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/apic.go",
+      "sha256": "53051cabd9cd9e98d49dea201a11475a11e6cc436b32a54e7d46bebdce88cdc3",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:apic.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/decode.go",
+      "sha256": "a66a783addb0f9cdb45f9e87deb0e51c2aca6bf81e46d4e822136993ba81505d",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:decode.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/emitterc.go",
+      "sha256": "5ce8fbd8a664831adb58c1c82280fd3568d14fab38868142a765d1eb1e05d3a3",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:emitterc.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/encode.go",
+      "sha256": "be13ba7293fb7a39157b58e304de89d81c46c0332b97bbc4152273515b61ee86",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:encode.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/parserc.go",
+      "sha256": "4ca0ff93c79c32592106e3c44a7a6dedd41f6d55d88809aaa3b28fd675b0aa82",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:parserc.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/readerc.go",
+      "sha256": "7693311b8e90eebf81d8468cb5a312725491002c5c6061c49a5488435069c7a3",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:readerc.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/resolve.go",
+      "sha256": "69b6069012fef0a518e379222007f6ea7622cb1c235a35b1355bb5641ab16d26",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:resolve.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/scannerc.go",
+      "sha256": "730400aff4d8033ea29e472fe29f63aa9d78068dc3a2f719385dc2a612ccf884",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:scannerc.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/sorter.go",
+      "sha256": "111f911a8095798fda2a7c708e20a931d2c228e637ff82de3ff44794d2d0ae92",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:sorter.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/writerc.go",
+      "sha256": "ebf6b56361527f081803c4067263ea97f44637ce2cc329168fb17e4e193fc40d",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:writerc.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/yaml.go",
+      "sha256": "447f1c34c1851298028e561e8aaefde8c9c3ebcc2f965ff81f9a603f2d9e4fc5",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:yaml.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/yamlh.go",
+      "sha256": "013b8e96cde431fcacb828c6ea5de97d02f659ac02f42bb2310b7ad173897ff5",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:yamlh.go"
+    },
+    {
+      "path": "vendor/gopkg.in/yaml.v3/yamlprivateh.go",
+      "sha256": "5e29848cb6ddbfe90bea82fd2c26e507de666833a1ff45dfd545a4bf5bb6254d",
+      "origin": "https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip:yamlprivateh.go"
+    },
+    {
+      "path": "vendor/modules.txt",
+      "sha256": "8718ec99576466d8231286b9c2c8203ad921b9d6dc979d846ccaeaf1eba6ccc3",
+      "origin": "author public baseline support"
+    }
+  ]
+}
