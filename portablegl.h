@@ -3336,10 +3336,12 @@ enum
 #endif
 #endif
 
-// One chunk of primitive records. Bit 31 of a vertex index is the clip arena.
-// Provoke shares a word with the front bit and three edge bits, so it has 28.
+// One chunk of primitive records. Bit 31 of a vertex index is the clip arena,
+// bit 30 is the geometry-stage output arena. Provoke shares a word with the
+// front bit and three edge bits, so it has 28.
 #define PGL_VERT_ARENA     (1u << 31)
-#define PGL_INDEX_MASK     0x7FFFFFFFu
+#define PGL_VERT_GEOM      (1u << 30)
+#define PGL_INDEX_MASK     0x3FFFFFFFu
 #define PGL_PROVOKE_BITS   28u
 #define PGL_PROVOKE_MASK   ((1u << PGL_PROVOKE_BITS) - 1u)
 #define PGL_FRONT_BIT      (1u << 28)
@@ -3379,6 +3381,34 @@ typedef char pgl_tri_size_ok[(sizeof(pgl_tri) == 16) ? 1 : -1];
 typedef char pgl_line_size_ok[(sizeof(pgl_line) == 12) ? 1 : -1];
 
 #define GL_MAX_VERTEX_OUTPUT_COMPONENTS (4*GL_MAX_VERTEX_ATTRIBS)
+
+// Per-callback geometry output limit (see pglSetGeometryShader).
+#define PGL_GEOMETRY_MAX_VERTICES 256
+
+// One vertex handed to a geometry callback, and the one it emits.  position is
+// clip space.  varying[0..program vs_output_size) is valid.
+typedef struct pglGeometryVertex
+{
+	vec4 position;
+	GLfloat varying[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+} pglGeometryVertex;
+
+// One complete input primitive, already in primitive (not draw mode) form.
+// vertices[0..count) are in the order the pipeline assembled them.
+typedef struct pglGeometryInput
+{
+	GLenum mode;          // GL_POINTS, GL_LINES, or GL_TRIANGLES
+	GLsizei count;        // 1, 2, or 3
+	GLuint primitive_id;  // from 0 per sub-draw per instance
+	GLint instance_id;
+	GLuint base_instance;
+	pglGeometryVertex vertices[3];
+} pglGeometryInput;
+
+// Opaque output collector, valid only inside the callback it was passed to.
+typedef struct pglGeometryEmitter pglGeometryEmitter;
+
+typedef void (*pgl_geometry_func)(const pglGeometryInput* input, pglGeometryEmitter* emitter, void* uniforms);
 
 // Mostly arbitrarily chosen, some match my AMD/Mesa output, some not really used
 #define GL_MAX_DRAW_BUFFERS 4
@@ -3463,6 +3493,13 @@ typedef struct glProgram
 	GLboolean fragdepth_or_discard;
 
 	GLboolean deleted;
+
+	// Optional geometry callback stage, configured with pglSetGeometryShader.
+	// All four are zeroed for new programs (no stage).
+	pgl_geometry_func geometry_shader;
+	GLenum geometry_input;
+	GLenum geometry_output;
+	GLsizei geometry_max_vertices;
 
 } glProgram;
 
@@ -4159,6 +4196,26 @@ typedef struct glContext
 	u8* prim_buf;
 	pgl_clip_arena clip_arena;
 
+	// Geometry stage.  One callback's output is buffered here: at most
+	// PGL_GEOMETRY_MAX_VERTICES (256) vertices, with strip boundaries.
+	// It is consumed right after the callback returns, never per draw.
+	struct {
+		// Emitted vertices. Only clip_space is filled in by Emit; clip_code
+		// and screen_space are derived when the output is consumed.
+		glVertex verts[PGL_GEOMETRY_MAX_VERTICES];
+		float varyings[PGL_GEOMETRY_MAX_VERTICES][GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+		GLboolean strip_end[PGL_GEOMETRY_MAX_VERTICES];
+		int count;
+		int strip_len;
+		GLboolean overflow;
+		GLboolean invoking;
+	} geometry_stage;
+
+	// Flat interpolation source row: geometry output reads the provoking
+	// emitted vertex here, everything else uses vs_output.output_buf.
+	GLfloat* flat_base;
+	GLsizei flat_stride;
+
 	// Bits 0..2: polygon-mode edges v0-v1, v1-v2, v2-v0. One triangle call.
 	int assemble_edges;
 } glContext;
@@ -4459,6 +4516,14 @@ PGLDEF void glUseProgram(GLuint program);
 // functions glUniform*() and glProgramUniform*()
 PGLDEF void pglSetUniform(void* uniform);
 PGLDEF void pglSetProgramUniform(GLuint program, void* uniform);
+
+// Optional geometry callback stage, stored on the program.  input is one of
+// GL_POINTS/GL_LINES/GL_TRIANGLES, output one of GL_POINTS/GL_LINE_STRIP/
+// GL_TRIANGLE_STRIP, max_vertices 1..256.  A NULL shader disables the stage
+// and ignores the other arguments (program is still validated).
+PGLDEF GLboolean pglSetGeometryShader(GLuint program, GLenum input, GLenum output, GLsizei max_vertices, pgl_geometry_func shader);
+PGLDEF GLboolean pglEmitGeometryVertex(pglGeometryEmitter* emitter, const pglGeometryVertex* vertex);
+PGLDEF void pglEndGeometryPrimitive(pglGeometryEmitter* emitter);
 
 
 
@@ -7469,6 +7534,14 @@ static const char* pgl_err_strs[] =
 
 static glContext* c;
 
+struct pglGeometryEmitter
+{
+	GLsizei max_vertices;
+	int count;
+	int strip_len;
+	GLboolean overflow;
+};
+
 static vec4 blend_pixel(vec4 src, vec4 dst, int buf);
 static int fragment_processing(int x, int y, float z);
 static void draw_pixel(vec4 cf, int x, int y, float z, int do_frag_processing);
@@ -7489,6 +7562,8 @@ static void draw_triangle_fill(glVertex* v0, glVertex* v1,  glVertex* v2, unsign
 
 static void pgl_assemble_lines(GLenum mode, GLsizei count);
 static void pgl_assemble_tris(GLenum mode, GLsizei count);
+static int pgl_geom_input_family(GLenum draw_mode, GLenum input);
+static void pgl_run_geometry(GLenum mode, GLsizei count, GLsizei instance_id, GLuint base_instance);
 static void pgl_update_clip_rect(void);
 
 // This is the prototype for either implementation; only one is defined based on
@@ -7842,6 +7917,11 @@ static void run_pipeline(GLenum mode, const GLvoid* indices, GLsizei count, GLsi
 
 	vertex_stage(indices, count, instance, base_instance, use_elements);
 
+	if (c->programs.a[c->cur_program].geometry_shader) {
+		pgl_run_geometry(mode, count, instance, base_instance);
+		return;
+	}
+
 	//fragment portion
 	if (mode == GL_POINTS) {
 		// clip only z and let partial points (size > 1)
@@ -7901,10 +7981,18 @@ static int depthtest(u32 zval, u32 zbufval)
 }
 
 
+// Flat attributes come from the provoking vertex, which is a vertex-indexed
+// row.  Normal draws index vs_output.output_buf with vs_output.size stride;
+// geometry output indexes the emitted varying rows in the geometry stage.
+static const float* pgl_flat_row(unsigned int provoke)
+{
+	const float* base = c->flat_base;
+	GLsizei stride = c->flat_stride;
+	return base + (size_t)provoke * (size_t)stride;
+}
+
 static void setup_fs_input(float t, float* v1_out, float* v2_out, float wa, float wb, unsigned int provoke)
 {
-	float* vs_output = &c->vs_output.output_buf[0];
-
 	float inv_wa = 1.0f/wa;
 	float inv_wb = 1.0f/wb;
 
@@ -7915,7 +8003,7 @@ static void setup_fs_input(float t, float* v1_out, float* v2_out, float wa, floa
 		} else if (c->vs_output.interpolation[i] == PGL_NOPERSPECTIVE) {
 			c->fs_input[i] = v1_out[i] + t*(v2_out[i] - v1_out[i]);
 		} else {
-			c->fs_input[i] = vs_output[provoke*c->vs_output.size + i];
+			c->fs_input[i] = pgl_flat_row(provoke)[i];
 		}
 	}
 
@@ -7991,16 +8079,24 @@ static glVertex* pgl_vert(u32 id)
 	u32 idx = id & PGL_INDEX_MASK;
 	if (id & PGL_VERT_ARENA)
 		return &c->clip_arena.verts[idx];
+	if (id & PGL_VERT_GEOM)
+		return &c->geometry_stage.verts[idx];
 	return &c->glverts.a[idx];
 }
 
 static u32 pgl_vert_id(glVertex* v)
 {
 	glVertex* arena = c->clip_arena.verts;
+	glVertex* geom = c->geometry_stage.verts;
 	if (v >= arena && v < arena + c->clip_arena.count) {
 		int slot = (int)(v - arena);
 		PGL_ASSERT(slot >= 0 && slot <= PGL_INDEX_MASK);
 		return PGL_VERT_ARENA | (u32)slot;
+	}
+	if (v >= geom && v < geom + c->geometry_stage.count) {
+		int slot = (int)(v - geom);
+		PGL_ASSERT(slot >= 0 && slot <= PGL_INDEX_MASK);
+		return PGL_VERT_GEOM | (u32)slot;
 	}
 	PGL_ASSERT(v >= c->glverts.a);
 	PGL_ASSERT((u32)(v - c->glverts.a) <= PGL_INDEX_MASK);
@@ -8079,14 +8175,13 @@ static void pgl_line_slots(GLenum mode, GLsizei count, GLsizei k, GLsizei* i0, G
 }
 
 // t == 0 is p1, the first endpoint. t == 1 is p1 + (p2 - p1), not p2.
-static u32 pgl_line_endpoint(glVertex* v0, glVertex* v1, vec4 p1, vec4 d, float t, GLsizei i0)
+// i0 is either a glverts index or a geometry-stage index (PGL_VERT_GEOM).
+static u32 pgl_line_endpoint(glVertex* v0, glVertex* v1, vec4 p1, vec4 d, float t, u32 i0)
 {
 	glVertex* q;
 	int i, slot;
-	if (t == 0.0f) {
-		PGL_ASSERT(((u32)i0 & PGL_VERT_ARENA) == 0);
-		return (u32)i0;
-	}
+	if (t == 0.0f)
+		return i0;
 	q = pgl_arena_alloc(2);
 	q->clip_space = add_v4s(p1, scale_v4(d, t));
 	for (i = 0; i < c->vs_output.size; ++i)
@@ -8098,20 +8193,17 @@ static u32 pgl_line_endpoint(glVertex* v0, glVertex* v1, vec4 p1, vec4 d, float 
 	return PGL_VERT_ARENA | (u32)slot;
 }
 
-static int pgl_emit_line(GLenum mode, GLsizei count, GLsizei k, pgl_line* rec)
+// Shared by the draw-mode assembler and the geometry output path. id0/id1
+// are vertex ids in either glverts (PGL_VERT_GEOM clear) or the geometry
+// stage.  Fully in front of the guard band fast-paths; otherwise clips.
+static int pgl_emit_line_verts(glVertex* v0, glVertex* v1, u32 id0, u32 id1,
+                               unsigned provoke, pgl_line* rec)
 {
-	GLsizei i0, i1;
-	unsigned provoke;
-	glVertex* v0;
-	glVertex* v1;
 	int cc0, cc1;
 	vec4 p1, p2, d;
 	float tmin, tmax;
 	u32 e0, e1;
 
-	pgl_line_slots(mode, count, k, &i0, &i1, &provoke);
-	v0 = &c->glverts.a[i0];
-	v1 = &c->glverts.a[i1];
 	cc0 = v0->clip_code;
 	cc1 = v1->clip_code;
 	p1 = v0->clip_space;
@@ -8121,8 +8213,8 @@ static int pgl_emit_line(GLenum mode, GLsizei count, GLsizei k, pgl_line* rec)
 		return 0;
 
 	if (((cc0 | cc1) & CLIP_PLANES_MASK) == 0 && p1.w > 0.0f && p2.w > 0.0f) {
-		rec->v[0] = (u32)i0;
-		rec->v[1] = (u32)i1;
+		rec->v[0] = id0;
+		rec->v[1] = id1;
 		rec->meta = provoke;
 		return 1;
 	}
@@ -8146,8 +8238,8 @@ static int pgl_emit_line(GLenum mode, GLsizei count, GLsizei k, pgl_line* rec)
 
 	c->clip_arena.prim_base = c->clip_arena.count;
 	pgl_arena_reserve(2);
-	e0 = pgl_line_endpoint(v0, v1, p1, d, tmin, i0);
-	e1 = pgl_line_endpoint(v0, v1, p1, d, tmax, i0);
+	e0 = pgl_line_endpoint(v0, v1, p1, d, tmin, id0);
+	e1 = pgl_line_endpoint(v0, v1, p1, d, tmax, id0);
 	if (pgl_vert(e0)->clip_space.w <= 0.0f || pgl_vert(e1)->clip_space.w <= 0.0f)
 		return 0;
 
@@ -8155,6 +8247,15 @@ static int pgl_emit_line(GLenum mode, GLsizei count, GLsizei k, pgl_line* rec)
 	rec->v[1] = e1;
 	rec->meta = provoke;
 	return 1;
+}
+
+static int pgl_emit_line(GLenum mode, GLsizei count, GLsizei k, pgl_line* rec)
+{
+	GLsizei i0, i1;
+	unsigned provoke;
+	pgl_line_slots(mode, count, k, &i0, &i1, &provoke);
+	return pgl_emit_line_verts(&c->glverts.a[i0], &c->glverts.a[i1],
+	                           (u32)i0, (u32)i1, provoke, rec);
 }
 
 static void pgl_raster_lines(pgl_line* lines, int n)
@@ -8268,18 +8369,15 @@ static int pgl_tri_class(glVertex* v0, glVertex* v1, glVertex* v2)
 }
 
 static int pgl_emit_tri_fast(glVertex* v0, glVertex* v1, glVertex* v2,
-                             GLsizei i0, GLsizei i1, GLsizei i2,
+                             u32 i0, u32 i1, u32 i2,
                              unsigned provoke, pgl_tri* rec)
 {
 	int front = is_front_facing(v0, v1, v2);
 	if (pgl_face_culled(front))
 		return 0;
-	PGL_ASSERT(((u32)i0 & PGL_VERT_ARENA) == 0);
-	PGL_ASSERT(((u32)i1 & PGL_VERT_ARENA) == 0);
-	PGL_ASSERT(((u32)i2 & PGL_VERT_ARENA) == 0);
-	rec->v[0] = (u32)i0;
-	rec->v[1] = (u32)i1;
-	rec->v[2] = (u32)i2;
+	rec->v[0] = i0;
+	rec->v[1] = i1;
+	rec->v[2] = i2;
 	rec->meta = provoke | PGL_EDGE_V0 | PGL_EDGE_V1 | PGL_EDGE_V2;
 	if (front)
 		rec->meta |= PGL_FRONT_BIT;
@@ -8408,6 +8506,276 @@ static void pgl_assemble_tris(GLenum mode, GLsizei count)
 		c->clip_arena.count = 0;
 	}
 }
+
+
+/*
+ * Optional geometry callback stage.  Runs after the vertex shader on each
+ * complete input primitive and before clipping/culling.  Output is appended
+ * to the normal primitive records and rasterized by the normal pipeline.
+ */
+
+// Input family a program's geometry stage accepts.
+static int pgl_geom_input_family(GLenum draw_mode, GLenum input)
+{
+	if (input == GL_POINTS)
+		return draw_mode == GL_POINTS;
+	if (input == GL_LINES)
+		return draw_mode == GL_LINES || draw_mode == GL_LINE_STRIP || draw_mode == GL_LINE_LOOP;
+	if (input == GL_TRIANGLES)
+		return draw_mode == GL_TRIANGLES || draw_mode == GL_TRIANGLE_STRIP || draw_mode == GL_TRIANGLE_FAN;
+	return 0;
+}
+
+static int pgl_geom_prim_count(GLenum mode, GLsizei count)
+{
+	if (mode == GL_POINTS)
+		return count;
+	if (mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP)
+		return pgl_line_prim_count(mode, count);
+	return pgl_tri_prim_count(mode, count);
+}
+
+static void pgl_geom_input_vertex(pglGeometryVertex* dst, const glVertex* src)
+{
+	dst->position = src->clip_space;
+	memcpy(dst->varying, src->vs_out, c->vs_output.size * sizeof(float));
+}
+
+// One input primitive -> one geometry callback.  The callback may emit at
+// most prog->geometry_max_vertices vertices; the output is dropped if it
+// overflows or if the emitter saw GL_INVALID_OPERATION.
+static void pgl_geom_stage_primitive(GLenum mode, GLsizei count, GLsizei prim,
+                                     GLuint primitive_id, GLsizei instance_id,
+                                     GLuint base_instance)
+{
+	GLsizei i0, i1, i2;
+	pglGeometryInput input;
+	pglGeometryEmitter emitter;
+	GLboolean failed_overflow;
+	GLint i;
+
+	memset(&input, 0, sizeof(input));
+	i0 = i1 = i2 = -1;
+	if (mode == GL_POINTS) {
+		i0 = prim;
+		input.mode = GL_POINTS;
+		input.count = 1;
+	} else if (mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP) {
+		unsigned provoke;
+		pgl_line_slots(mode, count, prim, &i0, &i1, &provoke);
+		input.mode = GL_LINES;
+		input.count = 2;
+	} else {
+		unsigned provoke;
+		pgl_tri_slots(mode, prim, &i0, &i1, &i2, &provoke);
+		input.mode = GL_TRIANGLES;
+		input.count = 3;
+	}
+	input.primitive_id = primitive_id;
+	input.instance_id = instance_id;
+	input.base_instance = base_instance;
+
+	pgl_geom_input_vertex(&input.vertices[0], &c->glverts.a[i0]);
+	if (i1 >= 0)
+		pgl_geom_input_vertex(&input.vertices[1], &c->glverts.a[i1]);
+	if (i2 >= 0)
+		pgl_geom_input_vertex(&input.vertices[2], &c->glverts.a[i2]);
+
+	c->geometry_stage.count = 0;
+	c->geometry_stage.strip_len = 0;
+	c->geometry_stage.overflow = GL_FALSE;
+	c->geometry_stage.invoking = GL_TRUE;
+
+	emitter.max_vertices = c->programs.a[c->cur_program].geometry_max_vertices;
+	emitter.overflow = GL_FALSE;
+
+	c->programs.a[c->cur_program].geometry_shader(&input, &emitter, c->programs.a[c->cur_program].uniform);
+
+	// Implicit End: close the strip still open when the callback returns.
+	if (c->geometry_stage.strip_len > 0) {
+		c->geometry_stage.strip_end[c->geometry_stage.count - 1] = GL_TRUE;
+		c->geometry_stage.strip_len = 0;
+	}
+	c->geometry_stage.invoking = GL_FALSE;
+	failed_overflow = emitter.overflow;
+
+	for (i = 0; i < c->geometry_stage.count; ++i)
+		c->geometry_stage.verts[i].vs_out = c->geometry_stage.varyings[i];
+
+	if (!failed_overflow && c->geometry_stage.count) {
+		glProgram* prog = &c->programs.a[c->cur_program];
+		GLenum out = prog->geometry_output;
+		int start = 0;
+		glVertex* gv = c->geometry_stage.verts;
+		int ng = c->geometry_stage.count;
+
+		// Flat attributes read the emitted vertex rows, in the strip's
+		// original emission order.
+		c->flat_base = &c->geometry_stage.varyings[0][0];
+		c->flat_stride = GL_MAX_VERTEX_OUTPUT_COMPONENTS;
+		c->clip_arena.count = 0;
+
+		if (out != GL_POINTS) {
+			// Project all emitted vertices before any strip is staged.
+			for (i = 0; i < ng; ++i) {
+				if (gv[i].clip_space.w > 0.0f)
+					gv[i].screen_space = mult_m4_v4(c->vp_mat, gv[i].clip_space);
+			}
+		}
+
+		if (out == GL_POINTS) {
+			for (i = 0; i < c->geometry_stage.count; ++i) {
+				glVertex* v = &c->geometry_stage.verts[i];
+				// Points only clip z upstream; a w <= 0 point has no screen
+				// position to rasterize.
+				if (v->clip_space.w <= 0.0f || (v->clip_code & CLIPZ_MASK))
+					continue;
+				v->screen_space = mult_m4_v4(c->vp_mat, v->clip_space);
+				draw_point(v, 0.0f);
+			}
+		} else {
+			pgl_tri* tris = (pgl_tri*)c->prim_buf;
+			pgl_line* lines = (pgl_line*)c->prim_buf;
+			int line_cap = (int)((PGL_CHUNK_PRIMS * sizeof(pgl_tri)) / sizeof(pgl_line));
+			int n_out = 0;
+			int v;
+
+			for (v = 0; v < c->geometry_stage.count; ++v) {
+				if (!c->geometry_stage.strip_end[v])
+					continue;
+
+				if (out == GL_LINE_STRIP) {
+					GLsizei k, len = v + 1 - start;
+					for (k = 0; k + 1 < len; ++k) {
+						GLsizei a = start + k, b = start + k + 1;
+						unsigned provoke_id;
+						glVertex* va = &c->geometry_stage.verts[a];
+						glVertex* vb = &c->geometry_stage.verts[b];
+						provoke_id = (c->provoking_vert == GL_LAST_VERTEX_CONVENTION) ? (unsigned)b : (unsigned)a;
+						if (n_out == line_cap) {
+							pgl_raster_lines(lines, n_out);
+							n_out = 0;
+							c->clip_arena.count = 0;
+						}
+						n_out += pgl_emit_line_verts(va, vb,
+						   PGL_VERT_GEOM | (u32)a, PGL_VERT_GEOM | (u32)b,
+						   provoke_id, &lines[n_out]);
+					}
+				} else { // GL_TRIANGLE_STRIP
+					GLsizei k, len = v + 1 - start;
+					for (k = 0; k + 2 < len; ++k) {
+						GLsizei a, b, c2;
+						unsigned provoke_id;
+						glVertex* va;
+						glVertex* vb;
+						glVertex* vc;
+						int kind;
+						if ((k & 1) == 0) {
+							a = start + k;
+							b = start + k + 1;
+						} else {
+							a = start + k + 1;
+							b = start + k;
+						}
+						c2 = start + k + 2;
+						provoke_id = (c->provoking_vert == GL_LAST_VERTEX_CONVENTION) ? (unsigned)c2 : (unsigned)(start + k);
+						va = &c->geometry_stage.verts[a];
+						vb = &c->geometry_stage.verts[b];
+						vc = &c->geometry_stage.verts[c2];
+						kind = pgl_tri_class(va, vb, vc);
+						if (kind < 0)
+							continue;
+						if (kind == 0) {
+							if (PGL_CHUNK_PRIMS - n_out < PGL_MAX_CLIP_TRIS) {
+								pgl_raster_tris(tris, n_out);
+								n_out = 0;
+								c->clip_arena.count = 0;
+							}
+							pgl_clip_tri(va, vb, vc, provoke_id, tris, &n_out);
+							continue;
+						}
+						if (n_out == PGL_CHUNK_PRIMS) {
+							pgl_raster_tris(tris, n_out);
+							n_out = 0;
+							c->clip_arena.count = 0;
+						}
+						n_out += pgl_emit_tri_fast(va, vb, vc,
+						   PGL_VERT_GEOM | (u32)a, PGL_VERT_GEOM | (u32)b,
+						   PGL_VERT_GEOM | (u32)c2, provoke_id, &tris[n_out]);
+					}
+				}
+				start = v + 1;
+			}
+
+			if (out == GL_LINE_STRIP)
+				pgl_raster_lines(lines, n_out);
+			else
+				pgl_raster_tris(tris, n_out);
+			c->clip_arena.count = 0;
+		}
+
+		c->flat_base = c->vs_output.output_buf;
+		c->flat_stride = c->vs_output.size;
+	}
+
+	c->geometry_stage.count = 0;
+	c->geometry_stage.strip_len = 0;
+	c->geometry_stage.overflow = GL_FALSE;
+}
+
+static void pgl_run_geometry(GLenum mode, GLsizei count, GLsizei instance_id, GLuint base_instance)
+{
+	int nprims = pgl_geom_prim_count(mode, count);
+	GLsizei prim;
+	for (prim = 0; prim < nprims; ++prim)
+		pgl_geom_stage_primitive(mode, count, prim, (GLuint)prim, instance_id, base_instance);
+}
+
+
+// Public emitter API.  Only valid while a geometry callback is running.
+
+PGLDEF GLboolean pglEmitGeometryVertex(pglGeometryEmitter* emitter, const pglGeometryVertex* vertex)
+{
+	PGL_ASSERT(emitter && vertex);
+	PGL_ASSERT(c->geometry_stage.invoking);
+
+	if (emitter->overflow)
+		return GL_FALSE;
+
+	// Limit counts every emitted vertex of the callback, across strips.
+	if (c->geometry_stage.count >= emitter->max_vertices) {
+		emitter->overflow = GL_TRUE;
+		c->geometry_stage.overflow = GL_TRUE;
+		PGL_SET_ERR(GL_INVALID_OPERATION);
+		return GL_FALSE;
+	}
+
+	{
+		int slot = c->geometry_stage.count++;
+		glVertex* v = &c->geometry_stage.verts[slot];
+		v->clip_space = vertex->position;
+		v->vs_out = c->geometry_stage.varyings[slot];
+		memcpy(v->vs_out, vertex->varying, c->vs_output.size * sizeof(float));
+		v->clip_code = gl_clipcode(vertex->position);
+		memset(&v->screen_space, 0, sizeof(v->screen_space));
+		c->geometry_stage.strip_end[slot] = GL_FALSE;
+		++c->geometry_stage.strip_len;
+	}
+	return GL_TRUE;
+}
+
+PGLDEF void pglEndGeometryPrimitive(pglGeometryEmitter* emitter)
+{
+	PGL_ASSERT(emitter);
+	PGL_ASSERT(c->geometry_stage.invoking);
+
+	if (!emitter->overflow && c->geometry_stage.strip_len > 0) {
+		c->geometry_stage.strip_end[c->geometry_stage.count - 1] = GL_TRUE;
+		c->geometry_stage.strip_len = 0;
+	}
+}
+
+
 
 #ifndef PGL_BETTER_THICK_LINES
 static void draw_thick_line(vec3 hp1, vec3 hp2, float w1, float w2, float* v1_out, float* v2_out, unsigned int provoke, float poly_offset)
@@ -9565,7 +9933,6 @@ static void draw_triangle_fill(glVertex* v0, glVertex* v1, glVertex* v2, unsigne
 	float alpha, beta, gamma, tmp, tmp2, z;
 	float fs_input[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
 	float perspective[GL_MAX_VERTEX_OUTPUT_COMPONENTS*3];
-	float* vs_output = &c->vs_output.output_buf[0];
 
 	for (int i=0; i<c->vs_output.size; ++i) {
 		perspective[i] = v0->vs_out[i]/p0.w;
@@ -9625,7 +9992,7 @@ static void draw_triangle_fill(glVertex* v0, glVertex* v1, glVertex* v2, unsigne
 						} else if (c->vs_output.interpolation[i] == PGL_NOPERSPECTIVE) {
 							fs_input[i] = alpha * v0->vs_out[i] + beta * v1->vs_out[i] + gamma * v2->vs_out[i];
 						} else { // == PGL_FLAT
-							fs_input[i] = vs_output[provoke*c->vs_output.size + i];
+							fs_input[i] = pgl_flat_row(provoke)[i];
 						}
 					}
 
@@ -12238,7 +12605,7 @@ PGLDEF GLboolean init_glContext(glContext* context, pix_t** back, GLsizei w, GLs
 
 	// program 0 is supposed to be undefined but not invalid so I'll
 	// just make it default, no transform, just draws things red
-	glProgram tmp_prog = { default_vs, default_fs, NULL, 0, {0}, GL_FALSE, GL_FALSE };
+	glProgram tmp_prog = { default_vs, default_fs, NULL, 0, {0}, GL_FALSE, GL_FALSE, NULL, 0, 0, 0 };
 	cvec_push_glProgram(&c->programs, tmp_prog);
 	glUseProgram(0);
 
@@ -13991,6 +14358,17 @@ PGLDEF void glVertexAttribDivisor(GLuint index, GLuint divisor)
 
 
 //TODO(rswinkle): Why is first, an index, a GLint and not GLuint or GLsizei?
+
+// A configured geometry stage must match the draw's primitive family.  Checked
+// before any vertex/geometry callback or color/depth write, per non-empty draw.
+static GLboolean pgl_geometry_family_ok(GLenum mode)
+{
+	glProgram* prog = &c->programs.a[c->cur_program];
+	if (!prog->geometry_shader)
+		return GL_TRUE;
+	return pgl_geom_input_family(mode, prog->geometry_input) ? GL_TRUE : GL_FALSE;
+}
+
 PGLDEF void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
@@ -14000,15 +14378,27 @@ PGLDEF void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 	if (!count)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	run_pipeline(mode, (GLvoid*)(GLintptr)first, count, 0, 0, GL_FALSE);
 }
 
 PGLDEF void glMultiDrawArrays(GLenum mode, const GLint* first, const GLsizei* count, GLsizei drawcount)
 {
+	GLsizei i;
+	GLboolean any = GL_FALSE;
+
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
 	PGL_ERR(drawcount < 0, GL_INVALID_VALUE);
 
-	for (GLsizei i=0; i<drawcount; i++) {
+	for (i=0; i<drawcount; i++)
+		if (count[i]) any = GL_TRUE;
+	if (!any)
+		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
+	for (i=0; i<drawcount; i++) {
 		if (!count[i]) continue;
 		run_pipeline(mode, (GLvoid*)(GLintptr)first[i], count[i], 0, 0, GL_FALSE);
 	}
@@ -14026,19 +14416,31 @@ PGLDEF void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid
 	if (!count)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	run_pipeline(mode, indices, count, 0, 0, type);
 }
 
 // TODO fix
 PGLDEF void glMultiDrawElements(GLenum mode, const GLsizei* count, GLenum type, const GLvoid* const* indices, GLsizei drawcount)
 {
+	GLsizei i;
+	GLboolean any = GL_FALSE;
+
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
 	PGL_ERR(drawcount < 0, GL_INVALID_VALUE);
 
 	// TODO error not in the spec but says type must be one of these ... strange
 	PGL_ERR((type != GL_UNSIGNED_BYTE && type != GL_UNSIGNED_SHORT && type != GL_UNSIGNED_INT), GL_INVALID_ENUM);
 
-	for (GLsizei i=0; i<drawcount; i++) {
+	for (i=0; i<drawcount; i++)
+		if (count[i]) any = GL_TRUE;
+	if (!any)
+		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
+	for (i=0; i<drawcount; i++) {
 		if (!count[i]) continue;
 		run_pipeline(mode, indices[i], count[i], 0, 0, type);
 	}
@@ -14052,6 +14454,8 @@ PGLDEF void glDrawArraysInstanced(GLenum mode, GLint first, GLsizei count, GLsiz
 	if (!count || !instancecount)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, (GLvoid*)(GLintptr)first, count, instance, 0, GL_FALSE);
 	}
@@ -14064,6 +14468,8 @@ PGLDEF void glDrawArraysInstancedBaseInstance(GLenum mode, GLint first, GLsizei 
 
 	if (!count || !instancecount)
 		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
 
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, (GLvoid*)(GLintptr)first, count, instance, baseinstance, GL_FALSE);
@@ -14082,6 +14488,8 @@ PGLDEF void glDrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, con
 	if (!count || !instancecount)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, indices, count, instance, 0, type);
 	}
@@ -14097,6 +14505,8 @@ PGLDEF void glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLen
 
 	if (!count || !instancecount)
 		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
 
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, indices, count, instance, baseinstance, GL_TRUE);
@@ -14680,6 +15090,41 @@ PGLDEF void glProvokingVertex(GLenum provokeMode)
 }
 
 
+// Optional geometry callback stage.  Stored per program; new and recycled
+// programs start without one (pglCreateProgram zeroes it).  Program 0 is
+// configurable like any other.
+PGLDEF GLboolean pglSetGeometryShader(GLuint program, GLenum input, GLenum output, GLsizei max_vertices, pgl_geometry_func shader)
+{
+	PGL_ERR_RET_VAL(program >= c->programs.size || c->programs.a[program].deleted,
+	                GL_INVALID_OPERATION, GL_FALSE);
+
+	// NULL cancels the stage; only the program is checked then.
+	if (!shader) {
+		glProgram* prog = &c->programs.a[program];
+		prog->geometry_shader = NULL;
+		prog->geometry_input = 0;
+		prog->geometry_output = 0;
+		prog->geometry_max_vertices = 0;
+		return GL_TRUE;
+	}
+
+	PGL_ERR_RET_VAL((input != GL_POINTS && input != GL_LINES && input != GL_TRIANGLES),
+	                GL_INVALID_ENUM, GL_FALSE);
+	PGL_ERR_RET_VAL((output != GL_POINTS && output != GL_LINE_STRIP && output != GL_TRIANGLE_STRIP),
+	                GL_INVALID_ENUM, GL_FALSE);
+	PGL_ERR_RET_VAL((max_vertices < 1 || max_vertices > PGL_GEOMETRY_MAX_VERTICES),
+	                GL_INVALID_VALUE, GL_FALSE);
+
+	// Only write after every check passed, so a failed call keeps the old config.
+	c->programs.a[program].geometry_shader = shader;
+	c->programs.a[program].geometry_input = input;
+	c->programs.a[program].geometry_output = output;
+	c->programs.a[program].geometry_max_vertices = max_vertices;
+
+	return GL_TRUE;
+}
+
+
 // Shader functions
 PGLDEF GLuint pglCreateProgram(vert_func vertex_shader, frag_func fragment_shader, GLsizei n, GLenum* interpolation, GLboolean fragdepth_or_discard)
 {
@@ -14689,7 +15134,7 @@ PGLDEF GLuint pglCreateProgram(vert_func vertex_shader, frag_func fragment_shade
 
 	PGL_ERR_RET_VAL((n < 0 || n > GL_MAX_VERTEX_OUTPUT_COMPONENTS), GL_INVALID_VALUE, 0);
 
-	glProgram tmp = {vertex_shader, fragment_shader, NULL, n, {0}, fragdepth_or_discard, GL_FALSE };
+	glProgram tmp = {vertex_shader, fragment_shader, NULL, n, {0}, fragdepth_or_discard, GL_FALSE, NULL, 0, 0, 0 };
 	for (int i=0; i<n; ++i) {
 		tmp.interpolation[i] = interpolation[i];
 	}
@@ -14732,7 +15177,14 @@ PGLDEF void glUseProgram(GLuint program)
 	c->vs_output.interpolation = c->programs.a[program].interpolation;
 	c->fragdepth_or_discard = c->programs.a[program].fragdepth_or_discard;
 
+	c->flat_base = c->vs_output.output_buf;
+	c->flat_stride = c->vs_output.size;
+
 	c->cur_program = program;
+
+	// If glUseProgram switched to a program with no geometry stage, make sure
+	// no stale geometry flat source remains.
+	c->geometry_stage.invoking = GL_FALSE;
 }
 
 PGLDEF void pglSetUniform(void* uniform)
@@ -17286,6 +17738,8 @@ PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation)
 	//they've created a bunch of programs.  Unlikely they'd be changing a shader
 	//before creating all their shaders but whatever.
 	c->vs_output.interpolation = c->programs.a[c->cur_program].interpolation;
+	c->flat_base = c->vs_output.output_buf;
+	c->flat_stride = c->vs_output.size;
 }
 
 static void pgl_texture_srgb(GLuint texture, GLboolean srgb, const char* api)
@@ -17324,7 +17778,7 @@ PGLDEF GLuint pglCreateFragProgram(frag_func fragment_shader, GLboolean fragdept
 	// is the closest analog
 	PGL_ERR_RET_VAL((!fragment_shader), GL_INVALID_OPERATION, 0);
 
-	glProgram tmp = {default_vs, fragment_shader, NULL, 0, {0}, fragdepth_or_discard, GL_FALSE };
+	glProgram tmp = {default_vs, fragment_shader, NULL, 0, {0}, fragdepth_or_discard, GL_FALSE, NULL, 0, 0, 0 };
 
 	for (int i=1; i<c->programs.size; ++i) {
 		if (c->programs.a[i].deleted && (GLuint)i != c->cur_program) {

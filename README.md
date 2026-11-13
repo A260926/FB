@@ -292,6 +292,74 @@ PGL will print all errors to `stdout` and you can set your own message handler w
 So what version of OpenGL is PortableGL?  _Shrug_, it's still mostly 3.x but I will add things outside of
 3.x as long as it makes sense to me and is in line with the goals and priorities of the project.
 
+Geometry Callback Stage
+=======================
+
+PortableGL has no GLSL geometry shader, but programs can opt into a plain C callback stage that sits in the
+same place: after the vertex shader, before clipping and backface culling.  Its output goes straight back
+into the existing clipper, interpolator and fragment pipeline, so materials, depth, blending, stencil and
+`discard` keep working unchanged.  Programs that never configure a callback behave exactly as before.
+
+```c
+typedef struct pglGeometryVertex {
+    vec4    position;
+    GLfloat varying[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+} pglGeometryVertex;
+
+typedef struct pglGeometryInput {
+    GLenum           mode;          // GL_POINTS, GL_LINES or GL_TRIANGLES
+    GLsizei          count;         // 1, 2 or 3
+    GLuint           primitive_id;  // from 0 per sub-draw per instance
+    GLint            instance_id;
+    GLuint           base_instance;
+    pglGeometryVertex vertices[3];
+} pglGeometryInput;
+
+typedef struct pglGeometryEmitter pglGeometryEmitter;   // opaque
+
+typedef void (*pgl_geometry_func)(const pglGeometryInput*, pglGeometryEmitter*, void* uniforms);
+
+GLboolean pglSetGeometryShader(GLuint program, GLenum input, GLenum output,
+                               GLsizei max_vertices, pgl_geometry_func shader);
+GLboolean pglEmitGeometryVertex(pglGeometryEmitter*, const pglGeometryVertex*);
+void      pglEndGeometryPrimitive(pglGeometryEmitter*);
+```
+
+`pglSetGeometryShader` stores the stage on `program` (program 0 included).  `input` is the primitive family
+the callbacks accept (`GL_POINTS`, `GL_LINES`, `GL_TRIANGLES`), `output` is what they may emit
+(`GL_POINTS`, `GL_LINE_STRIP`, `GL_TRIANGLE_STRIP`) and `max_vertices` is the per-callback emission limit,
+1..256.  Passing a `NULL` shader removes the stage and only validates `program`.  Bad enums set
+`GL_INVALID_ENUM`, a bad limit sets `GL_INVALID_VALUE`, and an out-of-range or deleted program sets
+`GL_INVALID_OPERATION`; failed calls keep the previous configuration.  New and recycled programs start
+without a stage.
+
+A draw's mode family has to match `input`.  A mismatch sets `GL_INVALID_OPERATION` and ends the draw before
+any vertex or geometry callback runs or any color/depth is written.  Otherwise every *complete* input
+primitive — including degenerate or off-screen ones — invokes the callback exactly once.  Lists, strips, fans
+and line loops are pre-assembled with the existing ordering rules, including triangle-strip parity; an
+incomplete tail is dropped.  Repeated indices still cost one vertex-shader call per index; the callback sees
+the resulting primitives, never a re-run of the vertex stage.  `mode`/`count` describe one independent
+primitive, and `position` is raw clip space while `varying[0..vs_output_size)` holds that vertex's outputs.
+`primitive_id` restarts at 0 for each sub-draw and instance, and is not reset by clipping, empty output or
+internal chunking.  `instance_id`/`base_instance` mean the same as in the vertex stage.  The trailing
+`void*` passed to the callback is the program's existing `pglSetUniform` pointer.
+
+Inside the callback, `pglEmitGeometryVertex` copies the position and valid varyings immediately, so the caller
+may reuse or mutate its temporary afterwards.  `pglEndGeometryPrimitive` closes the current output strip;
+returning from the callback implicitly does the same, and strips from different Ends, input primitives or
+draws are never joined.  For `GL_POINTS` output each Emit is one point.  For `GL_LINE_STRIP` a strip needs at
+least two vertices to produce a line; for `GL_TRIANGLE_STRIP` at least three, with the usual winding parity.
+`glProvokingVertex`'s first/last rule applies to each output strip's original emission order.  Flat varyings
+are read from that emitted vertex — never from the input primitive's varyings, and never from a vertex
+created by clipping.
+
+The limit counts every emitted vertex of one callback, across all strips.  The Emit that would exceed it
+returns `GL_FALSE` and sets `GL_INVALID_OPERATION`, and every later Emit in that callback also returns
+`GL_FALSE`.  All output from that input primitive is discarded, including strips already ended, with no color,
+depth, stencil or fragment-callback side effects; the callback runs only once and other primitives and later
+draws proceed normally.  Culling looks only at the generated geometry, and a program's stage, buffers and
+error state are per-context.  `examples/geometry_ribbon.c` shows a complete line-to-ribbon use.
+
 References
 ==========
 

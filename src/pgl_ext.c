@@ -33,6 +33,8 @@ PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation)
 	//they've created a bunch of programs.  Unlikely they'd be changing a shader
 	//before creating all their shaders but whatever.
 	c->vs_output.interpolation = c->programs.a[c->cur_program].interpolation;
+	c->flat_base = c->vs_output.output_buf;
+	c->flat_stride = c->vs_output.size;
 }
 
 static void pgl_texture_srgb(GLuint texture, GLboolean srgb, const char* api)
@@ -71,7 +73,7 @@ PGLDEF GLuint pglCreateFragProgram(frag_func fragment_shader, GLboolean fragdept
 	// is the closest analog
 	PGL_ERR_RET_VAL((!fragment_shader), GL_INVALID_OPERATION, 0);
 
-	glProgram tmp = {default_vs, fragment_shader, NULL, 0, {0}, fragdepth_or_discard, GL_FALSE };
+	glProgram tmp = {default_vs, fragment_shader, NULL, 0, {0}, fragdepth_or_discard, GL_FALSE, NULL, 0, 0, 0 };
 
 	for (int i=1; i<c->programs.size; ++i) {
 		if (c->programs.a[i].deleted && (GLuint)i != c->cur_program) {

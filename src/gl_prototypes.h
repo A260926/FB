@@ -177,4 +177,12 @@ PGLDEF void glUseProgram(GLuint program);
 PGLDEF void pglSetUniform(void* uniform);
 PGLDEF void pglSetProgramUniform(GLuint program, void* uniform);
 
+// Optional geometry callback stage, stored on the program.  input is one of
+// GL_POINTS/GL_LINES/GL_TRIANGLES, output one of GL_POINTS/GL_LINE_STRIP/
+// GL_TRIANGLE_STRIP, max_vertices 1..256.  A NULL shader disables the stage
+// and ignores the other arguments (program is still validated).
+PGLDEF GLboolean pglSetGeometryShader(GLuint program, GLenum input, GLenum output, GLsizei max_vertices, pgl_geometry_func shader);
+PGLDEF GLboolean pglEmitGeometryVertex(pglGeometryEmitter* emitter, const pglGeometryVertex* vertex);
+PGLDEF void pglEndGeometryPrimitive(pglGeometryEmitter* emitter);
+
 

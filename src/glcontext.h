@@ -180,6 +180,26 @@ typedef struct glContext
 	u8* prim_buf;
 	pgl_clip_arena clip_arena;
 
+	// Geometry stage.  One callback's output is buffered here: at most
+	// PGL_GEOMETRY_MAX_VERTICES (256) vertices, with strip boundaries.
+	// It is consumed right after the callback returns, never per draw.
+	struct {
+		// Emitted vertices. Only clip_space is filled in by Emit; clip_code
+		// and screen_space are derived when the output is consumed.
+		glVertex verts[PGL_GEOMETRY_MAX_VERTICES];
+		float varyings[PGL_GEOMETRY_MAX_VERTICES][GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+		GLboolean strip_end[PGL_GEOMETRY_MAX_VERTICES];
+		int count;
+		int strip_len;
+		GLboolean overflow;
+		GLboolean invoking;
+	} geometry_stage;
+
+	// Flat interpolation source row: geometry output reads the provoking
+	// emitted vertex here, everything else uses vs_output.output_buf.
+	GLfloat* flat_base;
+	GLsizei flat_stride;
+
 	// Bits 0..2: polygon-mode edges v0-v1, v1-v2, v2-v0. One triangle call.
 	int assemble_edges;
 } glContext;

@@ -298,7 +298,7 @@ PGLDEF GLboolean init_glContext(glContext* context, pix_t** back, GLsizei w, GLs
 
 	// program 0 is supposed to be undefined but not invalid so I'll
 	// just make it default, no transform, just draws things red
-	glProgram tmp_prog = { default_vs, default_fs, NULL, 0, {0}, GL_FALSE, GL_FALSE };
+	glProgram tmp_prog = { default_vs, default_fs, NULL, 0, {0}, GL_FALSE, GL_FALSE, NULL, 0, 0, 0 };
 	cvec_push_glProgram(&c->programs, tmp_prog);
 	glUseProgram(0);
 
@@ -2051,6 +2051,17 @@ PGLDEF void glVertexAttribDivisor(GLuint index, GLuint divisor)
 
 
 //TODO(rswinkle): Why is first, an index, a GLint and not GLuint or GLsizei?
+
+// A configured geometry stage must match the draw's primitive family.  Checked
+// before any vertex/geometry callback or color/depth write, per non-empty draw.
+static GLboolean pgl_geometry_family_ok(GLenum mode)
+{
+	glProgram* prog = &c->programs.a[c->cur_program];
+	if (!prog->geometry_shader)
+		return GL_TRUE;
+	return pgl_geom_input_family(mode, prog->geometry_input) ? GL_TRUE : GL_FALSE;
+}
+
 PGLDEF void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
@@ -2060,15 +2071,27 @@ PGLDEF void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 	if (!count)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	run_pipeline(mode, (GLvoid*)(GLintptr)first, count, 0, 0, GL_FALSE);
 }
 
 PGLDEF void glMultiDrawArrays(GLenum mode, const GLint* first, const GLsizei* count, GLsizei drawcount)
 {
+	GLsizei i;
+	GLboolean any = GL_FALSE;
+
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
 	PGL_ERR(drawcount < 0, GL_INVALID_VALUE);
 
-	for (GLsizei i=0; i<drawcount; i++) {
+	for (i=0; i<drawcount; i++)
+		if (count[i]) any = GL_TRUE;
+	if (!any)
+		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
+	for (i=0; i<drawcount; i++) {
 		if (!count[i]) continue;
 		run_pipeline(mode, (GLvoid*)(GLintptr)first[i], count[i], 0, 0, GL_FALSE);
 	}
@@ -2086,19 +2109,31 @@ PGLDEF void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid
 	if (!count)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	run_pipeline(mode, indices, count, 0, 0, type);
 }
 
 // TODO fix
 PGLDEF void glMultiDrawElements(GLenum mode, const GLsizei* count, GLenum type, const GLvoid* const* indices, GLsizei drawcount)
 {
+	GLsizei i;
+	GLboolean any = GL_FALSE;
+
 	PGL_ERR((mode < GL_POINTS || mode > GL_TRIANGLE_FAN), GL_INVALID_ENUM);
 	PGL_ERR(drawcount < 0, GL_INVALID_VALUE);
 
 	// TODO error not in the spec but says type must be one of these ... strange
 	PGL_ERR((type != GL_UNSIGNED_BYTE && type != GL_UNSIGNED_SHORT && type != GL_UNSIGNED_INT), GL_INVALID_ENUM);
 
-	for (GLsizei i=0; i<drawcount; i++) {
+	for (i=0; i<drawcount; i++)
+		if (count[i]) any = GL_TRUE;
+	if (!any)
+		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
+	for (i=0; i<drawcount; i++) {
 		if (!count[i]) continue;
 		run_pipeline(mode, indices[i], count[i], 0, 0, type);
 	}
@@ -2112,6 +2147,8 @@ PGLDEF void glDrawArraysInstanced(GLenum mode, GLint first, GLsizei count, GLsiz
 	if (!count || !instancecount)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, (GLvoid*)(GLintptr)first, count, instance, 0, GL_FALSE);
 	}
@@ -2124,6 +2161,8 @@ PGLDEF void glDrawArraysInstancedBaseInstance(GLenum mode, GLint first, GLsizei 
 
 	if (!count || !instancecount)
 		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
 
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, (GLvoid*)(GLintptr)first, count, instance, baseinstance, GL_FALSE);
@@ -2142,6 +2181,8 @@ PGLDEF void glDrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, con
 	if (!count || !instancecount)
 		return;
 
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
+
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, indices, count, instance, 0, type);
 	}
@@ -2157,6 +2198,8 @@ PGLDEF void glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLen
 
 	if (!count || !instancecount)
 		return;
+
+	PGL_ERR(!pgl_geometry_family_ok(mode), GL_INVALID_OPERATION);
 
 	for (GLsizei instance = 0; instance < instancecount; ++instance) {
 		run_pipeline(mode, indices, count, instance, baseinstance, GL_TRUE);
@@ -2740,6 +2783,41 @@ PGLDEF void glProvokingVertex(GLenum provokeMode)
 }
 
 
+// Optional geometry callback stage.  Stored per program; new and recycled
+// programs start without one (pglCreateProgram zeroes it).  Program 0 is
+// configurable like any other.
+PGLDEF GLboolean pglSetGeometryShader(GLuint program, GLenum input, GLenum output, GLsizei max_vertices, pgl_geometry_func shader)
+{
+	PGL_ERR_RET_VAL(program >= c->programs.size || c->programs.a[program].deleted,
+	                GL_INVALID_OPERATION, GL_FALSE);
+
+	// NULL cancels the stage; only the program is checked then.
+	if (!shader) {
+		glProgram* prog = &c->programs.a[program];
+		prog->geometry_shader = NULL;
+		prog->geometry_input = 0;
+		prog->geometry_output = 0;
+		prog->geometry_max_vertices = 0;
+		return GL_TRUE;
+	}
+
+	PGL_ERR_RET_VAL((input != GL_POINTS && input != GL_LINES && input != GL_TRIANGLES),
+	                GL_INVALID_ENUM, GL_FALSE);
+	PGL_ERR_RET_VAL((output != GL_POINTS && output != GL_LINE_STRIP && output != GL_TRIANGLE_STRIP),
+	                GL_INVALID_ENUM, GL_FALSE);
+	PGL_ERR_RET_VAL((max_vertices < 1 || max_vertices > PGL_GEOMETRY_MAX_VERTICES),
+	                GL_INVALID_VALUE, GL_FALSE);
+
+	// Only write after every check passed, so a failed call keeps the old config.
+	c->programs.a[program].geometry_shader = shader;
+	c->programs.a[program].geometry_input = input;
+	c->programs.a[program].geometry_output = output;
+	c->programs.a[program].geometry_max_vertices = max_vertices;
+
+	return GL_TRUE;
+}
+
+
 // Shader functions
 PGLDEF GLuint pglCreateProgram(vert_func vertex_shader, frag_func fragment_shader, GLsizei n, GLenum* interpolation, GLboolean fragdepth_or_discard)
 {
@@ -2749,7 +2827,7 @@ PGLDEF GLuint pglCreateProgram(vert_func vertex_shader, frag_func fragment_shade
 
 	PGL_ERR_RET_VAL((n < 0 || n > GL_MAX_VERTEX_OUTPUT_COMPONENTS), GL_INVALID_VALUE, 0);
 
-	glProgram tmp = {vertex_shader, fragment_shader, NULL, n, {0}, fragdepth_or_discard, GL_FALSE };
+	glProgram tmp = {vertex_shader, fragment_shader, NULL, n, {0}, fragdepth_or_discard, GL_FALSE, NULL, 0, 0, 0 };
 	for (int i=0; i<n; ++i) {
 		tmp.interpolation[i] = interpolation[i];
 	}
@@ -2792,7 +2870,14 @@ PGLDEF void glUseProgram(GLuint program)
 	c->vs_output.interpolation = c->programs.a[program].interpolation;
 	c->fragdepth_or_discard = c->programs.a[program].fragdepth_or_discard;
 
+	c->flat_base = c->vs_output.output_buf;
+	c->flat_stride = c->vs_output.size;
+
 	c->cur_program = program;
+
+	// If glUseProgram switched to a program with no geometry stage, make sure
+	// no stale geometry flat source remains.
+	c->geometry_stage.invoking = GL_FALSE;
 }
 
 PGLDEF void pglSetUniform(void* uniform)

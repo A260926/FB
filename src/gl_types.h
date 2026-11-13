@@ -588,10 +588,12 @@ enum
 #endif
 #endif
 
-// One chunk of primitive records. Bit 31 of a vertex index is the clip arena.
-// Provoke shares a word with the front bit and three edge bits, so it has 28.
+// One chunk of primitive records. Bit 31 of a vertex index is the clip arena,
+// bit 30 is the geometry-stage output arena. Provoke shares a word with the
+// front bit and three edge bits, so it has 28.
 #define PGL_VERT_ARENA     (1u << 31)
-#define PGL_INDEX_MASK     0x7FFFFFFFu
+#define PGL_VERT_GEOM      (1u << 30)
+#define PGL_INDEX_MASK     0x3FFFFFFFu
 #define PGL_PROVOKE_BITS   28u
 #define PGL_PROVOKE_MASK   ((1u << PGL_PROVOKE_BITS) - 1u)
 #define PGL_FRONT_BIT      (1u << 28)
@@ -631,6 +633,34 @@ typedef char pgl_tri_size_ok[(sizeof(pgl_tri) == 16) ? 1 : -1];
 typedef char pgl_line_size_ok[(sizeof(pgl_line) == 12) ? 1 : -1];
 
 #define GL_MAX_VERTEX_OUTPUT_COMPONENTS (4*GL_MAX_VERTEX_ATTRIBS)
+
+// Per-callback geometry output limit (see pglSetGeometryShader).
+#define PGL_GEOMETRY_MAX_VERTICES 256
+
+// One vertex handed to a geometry callback, and the one it emits.  position is
+// clip space.  varying[0..program vs_output_size) is valid.
+typedef struct pglGeometryVertex
+{
+	vec4 position;
+	GLfloat varying[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+} pglGeometryVertex;
+
+// One complete input primitive, already in primitive (not draw mode) form.
+// vertices[0..count) are in the order the pipeline assembled them.
+typedef struct pglGeometryInput
+{
+	GLenum mode;          // GL_POINTS, GL_LINES, or GL_TRIANGLES
+	GLsizei count;        // 1, 2, or 3
+	GLuint primitive_id;  // from 0 per sub-draw per instance
+	GLint instance_id;
+	GLuint base_instance;
+	pglGeometryVertex vertices[3];
+} pglGeometryInput;
+
+// Opaque output collector, valid only inside the callback it was passed to.
+typedef struct pglGeometryEmitter pglGeometryEmitter;
+
+typedef void (*pgl_geometry_func)(const pglGeometryInput* input, pglGeometryEmitter* emitter, void* uniforms);
 
 // Mostly arbitrarily chosen, some match my AMD/Mesa output, some not really used
 #define GL_MAX_DRAW_BUFFERS 4
@@ -715,6 +745,13 @@ typedef struct glProgram
 	GLboolean fragdepth_or_discard;
 
 	GLboolean deleted;
+
+	// Optional geometry callback stage, configured with pglSetGeometryShader.
+	// All four are zeroed for new programs (no stage).
+	pgl_geometry_func geometry_shader;
+	GLenum geometry_input;
+	GLenum geometry_output;
+	GLsizei geometry_max_vertices;
 
 } glProgram;
 
