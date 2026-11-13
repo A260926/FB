@@ -11,6 +11,7 @@ set(OPENTIMELINEIO_HEADER_FILES
     composition.h
     deserialization.h
     algo/editAlgorithm.h
+    algo/timelineEditAlgorithm.h
     effect.h
     errorStatus.h
     export.h
@@ -49,6 +50,7 @@ add_library(opentimelineio ${OTIO_SHARED_OR_STATIC_LIB}
     composition.cpp
     deserialization.cpp
     algo/editAlgorithm.cpp
+    algo/timelineEditAlgorithm.cpp
     effect.cpp
     errorStatus.cpp
     externalReference.cpp

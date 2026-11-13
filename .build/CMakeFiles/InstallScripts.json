@@ -1,0 +1,15 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/deps/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/deps/Imath/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/deps/Imath/config/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/deps/Imath/src/Imath/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/deps/minizip-ng/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/opentime/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/src/opentimelineio/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS550794A3D1DAU6636/attempts/20261113T164521116498Z/repo/.build/support/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -6,3 +6,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ripple_delete_test.cpp")
   target_link_libraries(regression PRIVATE opentimelineio)
   target_include_directories(regression PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_BINARY_DIR}/src")
 endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../examples/ripple_delete.cpp")
+  add_executable(ripple_delete_example
+    "${CMAKE_CURRENT_SOURCE_DIR}/../examples/ripple_delete.cpp")
+  target_link_libraries(ripple_delete_example PRIVATE opentimelineio)
+  target_include_directories(ripple_delete_example PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${PROJECT_BINARY_DIR}/src")
+endif()

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libopentime.a CMakeFiles/opentime.dir/errorStatus.cpp.o CMakeFiles/opentime.dir/rationalTime.cpp.o
+/usr/bin/ranlib libopentime.a
