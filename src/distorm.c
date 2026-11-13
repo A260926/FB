@@ -11,6 +11,7 @@ This library is licensed under the BSD license. See the file COPYING.
 
 
 #include "../include/distorm.h"
+#include "../include/prefix_trace.h"
 #include "config.h"
 #include "decoder.h"
 #include "x86defs.h"
@@ -40,7 +41,37 @@ This library is licensed under the BSD license. See the file COPYING.
 		return DECRES_INPUTERR;
 	}
 
-	return decode_internal(ci, FALSE, result, maxInstructions, usedInstructionsCount);
+	return decode_internal(ci, FALSE, result, NULL, maxInstructions, usedInstructionsCount);
+}
+
+/*
+ * Prefix-tracing variant of distorm_decompose. The validation, feature
+ * handling, advancement and result codes are identical, while a parallel
+ * _PrefixTraceInfo side-band is filled in lock-step with result[].
+ */
+#ifdef SUPPORT_64BIT_OFFSET
+	_DLLEXPORT_ _DecodeResult distorm_decompose_prefix_trace64(_CodeInfo* ci, _DInst result[], _PrefixTraceInfo trace[], unsigned int maxInstructions, unsigned int* usedInstructionsCount)
+#else
+	_DLLEXPORT_ _DecodeResult distorm_decompose_prefix_trace32(_CodeInfo* ci, _DInst result[], _PrefixTraceInfo trace[], unsigned int maxInstructions, unsigned int* usedInstructionsCount)
+#endif
+{
+	if (usedInstructionsCount == NULL) {
+		return DECRES_SUCCESS;
+	}
+
+	if ((ci == NULL) ||
+		(ci->codeLen < 0) ||
+		((unsigned)ci->dt > (unsigned)Decode64Bits) ||
+		(ci->code == NULL) ||
+		(result == NULL) ||
+		(trace == NULL) ||
+		(maxInstructions == 0) ||
+		((ci->features & (DF_MAXIMUM_ADDR16 | DF_MAXIMUM_ADDR32)) == (DF_MAXIMUM_ADDR16 | DF_MAXIMUM_ADDR32)))
+	{
+		return DECRES_INPUTERR;
+	}
+
+	return decode_internal(ci, FALSE, result, trace, maxInstructions, usedInstructionsCount);
 }
 
 #ifndef DISTORM_LIGHT
@@ -397,7 +428,7 @@ skipOperands:
 	else if (dt == Decode32Bits) ci.addrMask = 0xffffffff;
 	else ci.addrMask = (_OffsetType)-1;
 
-	res = decode_internal(&ci, TRUE, (_DInst*)result, maxInstructions, usedInstructionsCount);
+	res = decode_internal(&ci, TRUE, (_DInst*)result, NULL, maxInstructions, usedInstructionsCount);
 	instsCount = *usedInstructionsCount;
 	for (i = 0; i < instsCount; i++) {
 		/* distorm_format is optimized and can work with same input/output buffer in-place. */

@@ -5,7 +5,7 @@
 DISTORM_MODE ?= DISTORM_DYNAMIC
 TARGET	= libdistorm3.dylib
 PYTHON_BUILD_DIR = ../../Python/macosx-x86
-COBJS	= ../../src/mnemonics.o ../../src/textdefs.o ../../src/prefix.o ../../src/operands.o ../../src/insts.o ../../src/instructions.o ../../src/distorm.o ../../src/decoder.o
+COBJS	= ../../src/mnemonics.o ../../src/textdefs.o ../../src/prefix.o ../../src/prefix_trace.o ../../src/operands.o ../../src/insts.o ../../src/instructions.o ../../src/distorm.o ../../src/decoder.o
 CC	= gcc
 CFLAGS	= -arch x86_64 -O2 -Wall -fPIC -DSUPPORT_64BIT_OFFSET -D${DISTORM_MODE}
 ifeq ($(DISTORM_FAT), 1)

@@ -3,7 +3,7 @@
 #
 
 TARGET_BASE	= libdistorm3.so
-COBJS	= ../../src/mnemonics.o ../../src/textdefs.o ../../src/prefix.o ../../src/operands.o ../../src/insts.o ../../src/instructions.o ../../src/distorm.o ../../src/decoder.o
+COBJS	= ../../src/mnemonics.o ../../src/textdefs.o ../../src/prefix.o ../../src/prefix_trace.o ../../src/operands.o ../../src/insts.o ../../src/instructions.o ../../src/distorm.o ../../src/decoder.o
 CC	= gcc
 CFLAGS	+= -fPIC -O2 -Wall -DSUPPORT_64BIT_OFFSET -DDISTORM_STATIC -std=c99
 LDFLAGS	+= -shared

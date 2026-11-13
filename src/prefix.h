@@ -14,6 +14,8 @@ This library is licensed under the BSD license. See the file COPYING.
 
 #include "config.h"
 #include "decoder.h"
+#include "x86defs.h"
+#include "../include/prefix_trace.h"
 
 
 /* Specifies the type of the extension prefix, such as: REX, 2 bytes VEX, 3 bytes VEX. */
@@ -44,6 +46,17 @@ typedef struct {
 	/* The fields B/X/R/W/L of REX and VEX are stored together in this byte. */
 	unsigned int vrex;
 	const uint8_t* vexPos;
+
+	/*
+	 * Prefix tracing state. When traceEnabled is false (the plain decompose
+	 * entry), every prefix_trace_* helper is a no-op, so the production decode
+	 * keeps its original behavior and cost.
+	 * The records are built live during the prefix scan, opcode selection and
+	 * operand processing of the current instruction; _PrefixState is zeroed
+	 * between instructions, so records can never leak to the next instruction.
+	 */
+	int traceEnabled;
+	_PrefixTraceInfo trace;
 } _PrefixState;
 
 /*
@@ -75,5 +88,22 @@ void prefixes_ignore_all(_PrefixState* ps);
 uint16_t prefixes_set_unused_mask(_PrefixState* ps);
 void prefixes_decode(_CodeInfo* ci, _PrefixState* ps);
 void prefixes_use_segment(_iflags defaultSeg, _PrefixState* ps, _DecodeType dt, _DInst* di);
+
+/*
+ * Internal prefix tracing entry points, implemented in prefix_trace.c.
+ * They are called from the live scan / opcode selection / operand processing
+ * paths and are no-ops unless ps->traceEnabled is set by the trace entry.
+ */
+void prefix_trace_scan_legacy(_PrefixState* ps, unsigned int index, unsigned char byte, _PrefixIndexer pi);
+void prefix_trace_scan_vex(_PrefixState* ps, unsigned int index, const unsigned char* vexStart, unsigned int len);
+void prefix_trace_vex_selected(_PrefixState* ps, unsigned int pp);
+void prefix_trace_rex_invalid_position(_PrefixState* ps);
+void prefix_trace_segment_mode_ignored(_PrefixState* ps);
+void prefix_trace_opsize_rexw(_PrefixState* ps);
+void prefix_trace_ignore_all(_PrefixState* ps);
+void prefix_trace_lea_ignore_segment(_PrefixState* ps);
+void prefix_trace_mandatory(_PrefixState* ps, _iflags selector);
+void prefix_trace_segment_used(_PrefixState* ps);
+void prefix_trace_finalize(_PrefixState* ps);
 
 #endif /* PREFIX_H */

@@ -216,11 +216,13 @@
     <ClCompile Include="..\..\src\mnemonics.c" />
     <ClCompile Include="..\..\src\operands.c" />
     <ClCompile Include="..\..\src\prefix.c" />
+    <ClCompile Include="..\..\src\prefix_trace.c" />
     <ClCompile Include="..\..\src\textdefs.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\config.h" />
     <ClInclude Include="..\..\include\distorm.h" />
+    <ClInclude Include="..\..\include\prefix_trace.h" />
     <ClInclude Include="..\..\src\decoder.h" />
     <ClInclude Include="..\..\src\instructions.h" />
     <ClInclude Include="..\..\src\insts.h" />

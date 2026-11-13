@@ -13,9 +13,15 @@ This library is licensed under the BSD license. See the file COPYING.
 #define DECODER_H
 
 #include "config.h"
+#include "../include/prefix_trace.h"
 
 typedef unsigned int _iflags;
 
-_DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[], unsigned int maxResultCount, unsigned int* usedInstructionsCount);
+/*
+ * traceOut is NULL for the plain decompose entry and points at the
+ * caller-allocated side-band array (same capacity as result) for the prefix
+ * trace entry.
+ */
+_DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[], _PrefixTraceInfo traceOut[], unsigned int maxResultCount, unsigned int* usedInstructionsCount);
 
 #endif /* DECODER_H */

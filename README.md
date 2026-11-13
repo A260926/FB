@@ -15,3 +15,7 @@ Installing diStorm3 -
 'python -m pip install distorm3'
 
 RTFM, the wiki has plenty of info.
+
+Prefix tracing
+-
+Besides the unused-prefix bitmask, `distorm_decompose_prefix_trace()` (see `include/prefix_trace.h`) explains, per prefix byte in stream order, the role it played and, when it had no effect, the reason (same-group override, REX too far from the opcode, REX.W over 0x66, mode-ignored, or unused by the instruction). A VEX prefix is one 2/3-byte record whose `pp` field reports the implied virtual mandatory selector without inventing bytes. A runnable C example and the result-structure reference live in `examples/prefix_trace/`.

@@ -120,6 +120,8 @@ static _DecodeResult decode_inst(_CodeInfo* ci, _PrefixState* ps, const uint8_t*
 			(!ps->isOpSizeMandatory)) {
 			ps->decodedPrefixes &= ~INST_PRE_OP_SIZE;
 			prefixes_ignore(ps, PFXIDX_OP_SIZE);
+			/* Explain that a valid REX.W neutralized the ordinary 0x66. */
+			prefix_trace_opsize_rexw(ps);
 		}
 
 		effAdrSz = decode_get_effective_addr_size(ci->dt, ps->decodedPrefixes);
@@ -430,7 +432,7 @@ _Undecodable: /* If the instruction couldn't be decoded for some reason, fail. *
  *                  This is in order to save memory allocation for conversion between the new and the old structures.
  *                  It really means we can do the conversion in-place now.
  */
-_DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[], unsigned int maxResultCount, unsigned int* usedInstructionsCount)
+_DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[], _PrefixTraceInfo traceOut[], unsigned int maxResultCount, unsigned int* usedInstructionsCount)
 {
 	_CodeInfo ci = *_ci; /* A working copy, we don't touch user's _ci except OUT params. */
 	_PrefixState ps;
@@ -444,6 +446,12 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 	/* Current working decoded instruction in results. */
 	_DInst* pdi = (_DInst*)&result[0]; /* There's always a room for at least one slot, checked earlier. */
 	_DInst* maxResultAddr;
+	/*
+	 * Parallel side-band cursor. NULL for the plain decompose/text entries;
+	 * otherwise it advances in lock-step with pdi, so trace index i always
+	 * matches result index i.
+	 */
+	_PrefixTraceInfo* ptrace = traceOut;
 
 	unsigned int features = ci.features;
 
@@ -484,6 +492,8 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 		codeOffset = ci.codeOffset;
 
 		if (ps.count) memset(&ps, 0, sizeof(ps));
+		/* Enable live prefix tracing only for the trace entry point. */
+		ps.traceEnabled = (traceOut != NULL);
 
 		/**** INSTRUCTION DECODING NEXT: ****/
 
@@ -498,6 +508,17 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 		ci.codeOffset += pdi->size;
 
 		if (ret == DECRES_SUCCESS) {
+
+			/*
+			 * Turn the accumulated production decisions into final roles/reasons
+			 * and publish the side-band in the current (aligned) trace slot.
+			 * Filtered instructions below never advance the cursors, so this slot
+			 * is simply overwritten by the next kept instruction.
+			 */
+			if (ptrace != NULL) {
+				prefix_trace_finalize(&ps);
+				*ptrace = ps.trace;
+			}
 
 			if (features & (DF_SINGLE_BYTE_STEP | DF_RETURN_FC_ONLY | DF_STOP_ON_PRIVILEGED | DF_STOP_ON_FLOW_CONTROL)) {
 
@@ -516,6 +537,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 				/* Check whether we need to stop on any feature. */
 				if ((features & DF_STOP_ON_PRIVILEGED) && (FLAG_GET_PRIVILEGED(pdi->flags))) {
 					pdi = (_DInst*)((char*)pdi + diStructSize);
+					if (ptrace != NULL) ptrace++;
 					break; /* ret = DECRES_SUCCESS; */
 				}
 
@@ -530,6 +552,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 						((features & DF_STOP_ON_CMOV) && (mfc == FC_CMOV)) ||
 						((features & DF_STOP_ON_HLT) && (mfc == FC_HLT)))) {
 						pdi = (_DInst*)((char*)pdi + diStructSize);
+						if (ptrace != NULL) ptrace++;
 						break; /* ret = DECRES_SUCCESS; */
 					}
 				}
@@ -537,6 +560,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 
 			/* Allocate at least one more entry to use, for the next instruction. */
 			pdi = (_DInst*)((char*)pdi + diStructSize);
+			if (ptrace != NULL) ptrace++;
 		}
 		else { /* ret == DECRES_INPUTERR */
 
@@ -548,6 +572,15 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 				pdi->size = 1;
 				pdi->addr = codeOffset & ci.addrMask;
 				pdi = (_DInst*)((char*)pdi + diStructSize);
+				/*
+				 * A failure byte carries no prefix records: publish an empty
+				 * side-band slot so the next valid instruction can't inherit
+				 * the failed instruction's scanned prefixes.
+				 */
+				if (ptrace != NULL) {
+					memset(ptrace, 0, sizeof(_PrefixTraceInfo));
+					ptrace++;
+				}
 
 				/* If an instruction wasn't decoded then stop on undecodeable if set. */
 				if (features & DF_STOP_ON_UNDECODEABLE) {

@@ -134,6 +134,8 @@ static _InstInfo* inst_lookup_prefixed(_InstNode in, _PrefixState* ps)
 	int checkOpSize = FALSE;
 	int index = 0;
 	_InstInfo* ii = NULL;
+	/* Remembers which legacy byte (if any) is consumed as a mandatory selector. */
+	_iflags mandatorySelector = 0;
 
 	/* Check prefixes of current decoded instruction (None, 0x66, 0xf3, 0xf2). */
 	switch (ps->decodedPrefixes & (INST_PRE_OP_SIZE | INST_PRE_REPS))
@@ -148,16 +150,19 @@ static _InstInfo* inst_lookup_prefixed(_InstNode in, _PrefixState* ps)
 			/* Mark that we used it as a mandatory prefix. */
 			ps->isOpSizeMandatory = TRUE;
 			ps->decodedPrefixes &= ~INST_PRE_OP_SIZE;
+			mandatorySelector = INST_PRE_OP_SIZE;
 		break;
 		case INST_PRE_REP:
 			/* 0xf3, index = 2. */
 			index = 2;
 			ps->decodedPrefixes &= ~INST_PRE_REP;
+			mandatorySelector = INST_PRE_REP;
 		break;
 		case INST_PRE_REPNZ:
 			/* 0xf2, index = 3. */
 			index = 3;
 			ps->decodedPrefixes &= ~INST_PRE_REPNZ;
+			mandatorySelector = INST_PRE_REPNZ;
 		break;
 		default:
 			/*
@@ -175,10 +180,12 @@ static _InstInfo* inst_lookup_prefixed(_InstNode in, _PrefixState* ps)
 			if (ps->decodedPrefixes & INST_PRE_REPNZ) {
 				index = 3;
 				ps->decodedPrefixes &= ~INST_PRE_REPNZ;
+				mandatorySelector = INST_PRE_REPNZ;
 			}
 			else if (ps->decodedPrefixes & INST_PRE_REP) {
 				index = 2;
 				ps->decodedPrefixes &= ~INST_PRE_REP;
+				mandatorySelector = INST_PRE_REP;
 			}
 			/* Mark to verify the operand-size prefix of the fetched instruction below. */
 			checkOpSize = TRUE;
@@ -194,7 +201,15 @@ static _InstInfo* inst_lookup_prefixed(_InstNode in, _PrefixState* ps)
 	}
 
 	/* If there was a prefix, but the instruction wasn't found. Try to fall back to use the normal instruction. */
-	if (ii == NULL) ii = inst_get_info(in, 0);
+	if (ii == NULL) {
+		ii = inst_get_info(in, 0);
+		/* The fallback instruction is the non-prefixed one: the byte was not a selector. */
+		mandatorySelector = 0;
+	}
+
+	/* Record the live opcode-selection decision (no-op unless tracing). */
+	if (mandatorySelector != 0) prefix_trace_mandatory(ps, mandatorySelector);
+
 	return ii;
 }
 
@@ -246,6 +261,9 @@ static _InstInfo* inst_vex_lookup(_CodeInfo* ci, _PrefixState* ps)
 		ps->vexV = v = (~vex2 >> 3) & 0xf;
 		pp = vex2 & 3;
 	}
+
+	/* Record the implied virtual mandatory selector (pp) on the VEX record. */
+	prefix_trace_vex_selected(ps, pp);
 
 	/* start can be either 1 (0x0f), 2 (0x0f, 0x038) or 3 (0x0f, 0x3a), otherwise it's illegal. */
 	switch (start)
@@ -361,6 +379,8 @@ _InstInfo* inst_lookup(_CodeInfo* ci, _PrefixState* ps, int* isPrefixed)
 
 		/* Ignore all prefixes, since they are useless and operate on the WAIT instruction itself. */
 		prefixes_ignore_all(ps);
+		/* Mark every scanned prefix as unused by the instruction on the trace. */
+		prefix_trace_ignore_all(ps);
 
 		/* Move to next code byte as a new whole instruction. */
 		ci->code += 1;
@@ -403,6 +423,8 @@ _InstInfo* inst_lookup(_CodeInfo* ci, _PrefixState* ps, int* isPrefixed)
 				ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 				/* Update unused mask for ignoring segment prefix. */
 				prefixes_ignore(ps, PFXIDX_SEG);
+				/* LEA never uses a segment override, explain it on the trace. */
+				prefix_trace_lea_ignore_segment(ps);
 			}
 			else if (tmpIndex0 == INST_ARPL_INDEX) {
 					/*
