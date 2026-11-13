@@ -1,0 +1,75 @@
+{
+  "repo": "cesanta/mongoose",
+  "commit": "6bb40e6ec96f95bfd36a816b430ea2726fac9d05",
+  "license": "GPL-2.0-only",
+  "archive_sha256": "46653f3bb8965ad2ec5ad78e34b858c64fb1f0f789576c21b8e24a869b3aa6fc",
+  "original_source_sha256": {
+    "mongoose.c": "6fe98fabc6ffa917862eaa34210ceff7d93badedff076dd45fb3c78b1c915c2c",
+    "mongoose.h": "8163329e6d06a140f9c0fa6d1a1f3ce382f18b5d2c5d963a7954bb8343cfc2b1",
+    "LICENSE": "7e2bc5dabbc27b431a530540161ba860906f12109d4b84b1e4bc8879f1afc3bc"
+  },
+  "scope": "Fixed source and support only; no target implementation.",
+  "excluded_private_key_fixtures": [
+    {
+      "path": "tutorials/http/http-restful-server/server.pem",
+      "sha256": "965c67aafa012cbb56856010de42bfd4e52d00b049c02605f342ff77ebbaf95e"
+    },
+    {
+      "path": "tutorials/http/http-restful-server/main.c",
+      "sha256": "0eed82125edf597b20b44c22eb1971820ba26fb4321643efd49d984226938e37"
+    },
+    {
+      "path": "tutorials/tcp/tcp/certs/ss_server.pem",
+      "sha256": "b1af6974d291d5c06512b9887207248d45050f2976351ef2dd69565c3937a5c6"
+    },
+    {
+      "path": "tutorials/tcp/tcp/certs/ss_client.pem",
+      "sha256": "7e201f3f5ec471fb4306467ef2516b627f77758448b1afbf19e05cb3bd936160"
+    },
+    {
+      "path": "examples/wifi-router-dashboard/net.c",
+      "sha256": "4b07587976c80eb786798f791d0a39d387d8afd67d7161b9afd4f5fb41b8a536"
+    },
+    {
+      "path": "examples/zephyr/websocket-server/src/certs.h",
+      "sha256": "d8ac9088e56ace176d974cbd27c59f4421b70e19c5b11926b64f42eb28daba5d"
+    },
+    {
+      "path": "examples/zephyr/http-server/src/certs.h",
+      "sha256": "d8ac9088e56ace176d974cbd27c59f4421b70e19c5b11926b64f42eb28daba5d"
+    },
+    {
+      "path": "examples/zephyr/mqtt-aws-client/src/certs.h",
+      "sha256": "d4c09f955aa7d175972b931b0a2cc8353850f15bde817208cf890f2698b0e5b2"
+    },
+    {
+      "path": "examples/device-dashboard/certs/server_key.pem",
+      "sha256": "0248d4f65ea0d5530af1f496f1ecfa455ded2a8eac1abcb726bcdb49d2fcbd71"
+    },
+    {
+      "path": "test/certs/server.key",
+      "sha256": "0a159db51efe51615f1f09effa5c04bfe1673bec2fd3287bebbd5d293d2057a0"
+    },
+    {
+      "path": "test/certs/ca.key",
+      "sha256": "9974f4a12457193d066834992ad4367335422ce742d496171b7c94c33de7645f"
+    },
+    {
+      "path": "test/certs/client.key",
+      "sha256": "a9b0875f7d59b8770aca3ca919a5321e916c85226c5caa05bcaf884ff82e2d23"
+    },
+    {
+      "path": "test/data/ss_server.pem",
+      "sha256": "b1af6974d291d5c06512b9887207248d45050f2976351ef2dd69565c3937a5c6"
+    },
+    {
+      "path": "test/data/ss_client.pem",
+      "sha256": "7e201f3f5ec471fb4306467ef2516b627f77758448b1afbf19e05cb3bd936160"
+    },
+    {
+      "path": "reference-projects/windows-macos-linux/web-ui-dashboard/certs/server_key.pem",
+      "sha256": "0248d4f65ea0d5530af1f496f1ecfa455ded2a8eac1abcb726bcdb49d2fcbd71"
+    }
+  ],
+  "runtime_tree": "Fixed upstream tracked source plus support, excluding private-key fixtures and local build outputs"
+}
