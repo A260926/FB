@@ -103,14 +103,24 @@ var (
 	// ErrorNoResponse is returned if a method was expecting a response but got nil instead
 	ErrorNoResponse = errors.New("no response")
 	// ErrorClose is returned if a method is called after the connection has been close
-	ErrorClose = errors.New("closed")
-
+	ErrorClose         = errors.New("closed")
 	MaxReadBufferSize  = 0          // default gorilla/websocket buffer size
 	MaxWriteBufferSize = 100 * 1024 // this should be large enough to send large scripts
 )
 
 // NavigationResponse defines the type for ProcessNavigation `response`
 type NavigationResponse string
+
+// ProtocolError mirrors the "error" object of a DevTools protocol reply.
+type ProtocolError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// Error implements the error interface.
+func (err *ProtocolError) Error() string {
+	return fmt.Sprintf("protocol error %d: %s", err.Code, err.Message)
+}
 
 // ErrorReason defines what error should be generated to abort a request in ContinueInterceptedRequest
 type ErrorReason string
@@ -314,11 +324,11 @@ type RemoteDebugger struct {
 	sync.Mutex           // Mutex for thread safety
 	closed     chan bool // Channel to signal connection closure
 
-	requests  chan Params                  // Channel for outgoing requests
-	responses map[int]chan json.RawMessage // Map of request IDs to response channels
-	callbacks map[string]EventCallback     // Map of event names to callback functions
-	domains   map[string]bool              // Map of enabled protocol domains
-	events    chan wsMessage               // Channel for incoming events
+	requests  chan Params              // Channel for outgoing requests
+	responses map[int]chan wsMessage   // Map of request IDs to response channels
+	callbacks map[string]EventCallback // Map of event names to callback functions
+	domains   map[string]bool          // Map of enabled protocol domains
+	events    chan wsMessage           // Channel for incoming events
 }
 
 // Connect to the remote debugger and return `RemoteDebugger` object.
@@ -343,7 +353,7 @@ func Connect(port string, verbose bool, options ...ConnectOption) (*RemoteDebugg
 	remote := &RemoteDebugger{
 		http:      client,
 		requests:  make(chan Params),
-		responses: map[int]chan json.RawMessage{},
+		responses: map[int]chan wsMessage{},
 		callbacks: map[string]EventCallback{},
 		domains:   map[string]bool{},
 		events:    make(chan wsMessage, 256),
@@ -472,12 +482,15 @@ func (remote *RemoteDebugger) Verbose(v bool) {
 type wsMessage struct {
 	ID     int             `json:"id"`
 	Result json.RawMessage `json:"result"`
+	Error  *ProtocolError  `json:"error"`
 
 	Method string          `json:"Method"`
 	Params json.RawMessage `json:"Params"`
 }
 
 // SendRequest sends a request and returns the reply as a a map.
+// A protocol-level error (the "error" field of the reply) is returned as
+// *ProtocolError.
 func (remote *RemoteDebugger) SendRequest(method string, params Params) (map[string]interface{}, error) {
 	rawReply, err := remote.sendRawReplyRequest(method, params)
 	if err != nil || rawReply == nil {
@@ -487,6 +500,8 @@ func (remote *RemoteDebugger) SendRequest(method string, params Params) (map[str
 }
 
 // sendRawReplyRequest sends a request and returns the reply bytes.
+// A protocol-level error (the "error" field of the reply) is returned as
+// *ProtocolError.
 func (remote *RemoteDebugger) sendRawReplyRequest(method string, params Params) ([]byte, error) {
 	remote.Lock()
 	if remote.ws == nil {
@@ -494,7 +509,7 @@ func (remote *RemoteDebugger) sendRawReplyRequest(method string, params Params) 
 		return nil, ErrorClose
 	}
 
-	responseChan := make(chan json.RawMessage, 1)
+	responseChan := make(chan wsMessage, 1)
 	reqID := remote.reqID
 	remote.responses[reqID] = responseChan
 	remote.reqID++
@@ -513,7 +528,11 @@ func (remote *RemoteDebugger) sendRawReplyRequest(method string, params Params) 
 	delete(remote.responses, reqID)
 	remote.Unlock()
 
-	return reply, nil
+	if reply.Error != nil {
+		return nil, reply.Error
+	}
+
+	return reply.Result, nil
 }
 
 func (remote *RemoteDebugger) sendMessages() {
@@ -608,7 +627,7 @@ loop:
 				remote.Unlock()
 
 				if ch != nil {
-					ch <- message.Result
+					ch <- message
 				}
 			}
 		}
