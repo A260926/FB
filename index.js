@@ -9,6 +9,7 @@ var streamHelper = require('./lib/stream')
 var isUrl = require('./lib/util').isUrl
 var Crawler = require('x-ray-crawler')
 var resolve = require('./lib/resolve')
+var settle = require('./lib/settle')
 var root = require('./lib/util').root
 var params = require('./lib/params')
 var debug = require('debug')('x-ray')
@@ -69,20 +70,20 @@ function Xray (options) {
         })
       } else if (scope && ~scope.indexOf('@')) {
         debug('resolving to a url: %s', scope)
-        var url = resolve(source, false, scope, filters)
+        settleResolve(source, false, scope, filters, function (url) {
+          // ensure that a@href is a URL
+          if (!isUrl(url)) {
+            debug('%s is not a url. Skipping!', url)
+            return walkHTML(load(''), next)
+          }
 
-        // ensure that a@href is a URL
-        if (!isUrl(url)) {
-          debug('%s is not a url. Skipping!', url)
-          return walkHTML(load(''), next)
-        }
-
-        debug('resolved "%s" to a %s', scope, url)
-        request(url, function (err, html) {
-          if (err) return next(err)
-          var $ = load(html, url)
-          walkHTML($, next)
-        })
+          debug('resolved "%s" to a %s', scope, url)
+          request(url, function (err, html) {
+            if (err) return next(err)
+            var $ = load(html, url)
+            walkHTML($, next)
+          })
+        }, next)
       } else if (source) {
         var $ = load(source)
         walkHTML($, next)
@@ -115,32 +116,33 @@ function Xray (options) {
             return fn(null, pages)
           }
 
-          var url = resolve($, false, paginate, filters)
-          debug('paginate(%j) => %j', paginate, url)
+          return settleResolve($, false, paginate, filters, function (url) {
+            debug('paginate(%j) => %j', paginate, url)
 
-          if (!isUrl(url)) {
-            debug('%j is not a url, finishing up', url)
-            stream(obj, true)
-            return fn(null, pages)
-          }
+            if (!isUrl(url)) {
+              debug('%j is not a url, finishing up', url)
+              stream(obj, true)
+              return fn(null, pages)
+            }
 
-          if (state.abort && state.abort(obj, url)) {
-            debug('abort check passed, ending')
-            stream(obj, true)
-            return fn(null, pages)
-          }
+            if (state.abort && state.abort(obj, url)) {
+              debug('abort check passed, ending')
+              stream(obj, true)
+              return fn(null, pages)
+            }
 
-          stream(obj)
+            stream(obj)
 
-          // debug
-          debug('paginating %j', url)
-          isFinite(limit) && debug('%s page(s) left to crawl', limit)
+            // debug
+            debug('paginating %j', url)
+            isFinite(limit) && debug('%s page(s) left to crawl', limit)
 
-          request(url, function (err, html) {
-            if (err) return next(err)
-            var $ = load(html, url)
-            walkHTML($, next)
-          })
+            request(url, function (err, html) {
+              if (err) return next(err)
+              var $ = load(html, url)
+              walkHTML($, next)
+            })
+          }, fn)
         } else {
           stream(obj, true)
           fn(null, obj)
@@ -218,12 +220,38 @@ function load (html, url) {
   return $
 }
 
+/**
+ * Resolve `selector` and continue with the settled
+ * value. Synchronous resolutions reach `onValue`
+ * synchronously, promises and thenables are awaited
+ * first, and both synchronous throws and rejections
+ * reach `onError` with the original error.
+ *
+ * @param {Cheerio} $
+ * @param {String|Boolean} scope
+ * @param {String|Array} selector
+ * @param {Object} filters
+ * @param {Function} onValue
+ * @param {Function} onError
+ */
+
+function settleResolve ($, scope, selector, filters, onValue, onError) {
+  var value
+  try {
+    value = resolve($, scope, selector, filters)
+  } catch (err) {
+    return onError(err)
+  }
+  settle(value, onValue, onError)
+}
+
 function WalkHTML (xray, selector, scope, filters) {
   return function walkHTML ($, fn) {
     walk(selector, function (v, k, next) {
       if (typeof v === 'string') {
-        var value = resolve($, root(scope), v, filters)
-        return next(null, value)
+        return settleResolve($, root(scope), v, filters, function (value) {
+          next(null, value)
+        }, next)
       } else if (typeof v === 'function') {
         return v($, function (err, obj) {
           if (err) return next(err)
@@ -231,7 +259,9 @@ function WalkHTML (xray, selector, scope, filters) {
         })
       } else if (isArray(v)) {
         if (typeof v[0] === 'string') {
-          return next(null, resolve($, root(scope), v, filters))
+          return settleResolve($, root(scope), v, filters, function (value) {
+            next(null, value)
+          }, next)
         } else if (typeof v[0] === 'object') {
           var $scope = $.find ? $.find(scope) : $(scope)
           var pending = $scope.length

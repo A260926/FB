@@ -286,6 +286,35 @@ x('http://mat.io', {
 })
 ```
 
+Filters may also be asynchronous. Return a promise or a thenable from a filter and the next filter in the chain receives the settled value. Synchronous filters keep running synchronously, and fields, rows and array elements still resolve in parallel.
+
+```js
+var Xray = require('x-ray')
+var x = Xray({
+  filters: {
+    lookup: function(value) {
+      // asynchronously map a value, e.g. from a local store
+      return Promise.resolve(map[value] || value)
+    },
+    trim: function(value) {
+      return typeof value === 'string' ? value.trim() : value
+    }
+  }
+})
+
+x('http://mat.io', {
+  title: 'title | lookup | trim'
+})(function(err, obj) {
+  /*
+  {
+    title: 'mat.io'
+  }
+*/
+})
+```
+
+Asynchronous filters work anywhere a selector is used, including `paginate` and `a@href` detail selectors — x-ray waits for the settled URL before requesting the next page. If a filter throws, rejects, or its `then` getter throws, the output ends once with that error and no further pages are requested.
+
 ## Examples
 
 - [selector](/examples/selector/index.js): simple string selector
@@ -293,6 +322,7 @@ x('http://mat.io', {
 - [arrays](/examples/arrays/index.js): selects an array
 - [collections of collections](/examples/collection-of-collections/index.js): selects an array of objects
 - [array of arrays](/examples/array-of-arrays/index.js): selects an array of arrays
+- [async filters](/examples/async-filters/index.js): filters returning promises or thenables
 
 ## In the Wild
 
