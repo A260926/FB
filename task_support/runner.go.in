@@ -1,0 +1,13 @@
+package analysis
+import("testing";"fmt")
+type TaskCase struct{Name string; Run func(*testing.T)}
+var taskAssertionCount int
+func TaskCheck(t *testing.T, ok bool, msg string){t.Helper();taskAssertionCount++;if !ok{t.Fatal(msg)}}
+func TestTaskCases(t *testing.T){
+ for _,name:=range []string{"multivalue","loop","conditional","deadcode"}{
+  found:=false
+  for _,c:=range TaskCases{if c.Name==name{found=true;t.Run(name,func(t *testing.T){before:=taskAssertionCount;t.Cleanup(func(){if t.Skipped()||before==taskAssertionCount{t.Errorf("case skipped or no assertions")}});c.Run(t)})}}
+  if !found{t.Fatalf("missing case %s",name)}
+ }
+ fmt.Printf("TARGET_OK assertions=%d\n",taskAssertionCount)
+}
