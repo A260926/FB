@@ -25,7 +25,6 @@ const (
 	pduSizeRequested = 480
 	isoTCP           = 102 //default isotcp port
 	isoHSize         = 7   // TPKT+COTP Header Size
-	minPduSize       = 16
 	// Client Connection Type
 	connectionTypePG    = 1 // Connect to the PLC as a PG
 	connectionTypeOP    = 2 // Connect to the PLC as an OP
@@ -33,6 +32,17 @@ const (
 	// S7 PDU header behind TPKT and COTP
 	s7ProtocolID   = 0x32 // First byte of every S7 PDU
 	s7PDURefOffset = 11   // PDU reference, 2 bytes big endian, echoed by the PLC
+	// COTP (ISO 8073) TPDU types and flags
+	cotpDataTPDU    = 0xF0 // DT Data
+	cotpConfirmTPDU = 0xD0 // CC Connection Confirm
+	cotpEOT         = 0x80 // End of TSDU: last DT fragment of a telegram
+	cotpSizeParam   = 0xC0 // TPDU-size parameter of the connection confirm
+	// The TPDU size offered in the connection request and used when the
+	// confirm names none. It covers the whole COTP TPDU, the 3 byte DT
+	// header included, but not the 4 byte TPKT header.
+	cotpDefaultTPDUSize = 1024
+	cotpMinTPDUExponent = 7  // 128 bytes
+	cotpMaxTPDUExponent = 10 // 1024 bytes, the offer of the connection request
 )
 
 // TCPClientHandler implements Packager and Transporter interface.
@@ -105,7 +115,15 @@ type tcpTransporter struct {
 	ConnectionType                int
 	LastPDUType                   byte
 
+	// PDULength is the S7 layer negotiation result: the number of S7
+	// protocol bytes one PDU may carry.
 	PDULength int
+	// tpduSize is the COTP TPDU size negotiated during ISO connect. It
+	// bounds every DT fragment on the wire and is independent of the S7
+	// PDULength. Zero means the 1024 bytes offered in the connection
+	// request. It belongs to one connection and is never carried over
+	// to the next.
+	tpduSize int
 }
 
 func (mb *tcpTransporter) setConnectionParameters(address string, localTSAP uint16, remoteTSAP uint16) {
@@ -129,7 +147,9 @@ func (mb *tcpTransporter) Send(request []byte) (response []byte, err error) {
 	// Set timer to close when idle
 	mb.lastActivity = time.Now()
 	mb.startCloseTimer()
-	// Set write and read timeout
+	// One deadline covers the whole exchange: every fragment of the
+	// request and of the response shares the timeout of this Send, it is
+	// not renewed when a fragment arrives.
 	var timeout time.Time
 	if mb.Timeout > 0 {
 		timeout = mb.lastActivity.Add(mb.Timeout)
@@ -141,23 +161,26 @@ func (mb *tcpTransporter) Send(request []byte) (response []byte, err error) {
 	if err = mb.conn.SetDeadline(timeout); err != nil {
 		return
 	}
-	// Send data
+	// Send data, split into as many DT fragments as the negotiated COTP
+	// TPDU size requires
 	mb.logf("s7: sending % x", request)
-	if _, err = mb.conn.Write(request); err != nil {
-		return
+	if err = mb.sendFragments(request); err != nil {
+		return nil, err
 	}
-	data := make([]byte, tcpMaxLength)
 	for {
-		var length int
-		if length, err = mb.receive(data); err != nil {
+		if response, err = mb.receiveTSDU(); err != nil {
+			// The telegram boundaries on the wire can no longer be told
+			// apart, so this connection is done; the caller has to
+			// connect again explicitly.
+			mb.close()
 			return nil, err
 		}
-		response = data[0:length]
 		mb.logf("s7: received % x\n", response)
 		// A reply carrying another PDU reference answers an earlier request,
 		// typically one that timed out. Taking it for the answer to this
 		// request would hand the caller foreign data, so drop it and keep
-		// waiting for the matching reply until the deadline expires.
+		// waiting for the matching reply until the deadline expires. Only
+		// complete TSDUs reach this check, never a fragment of one.
 		if !pduReferenceMismatch(request, response) {
 			return response, nil
 		}
@@ -165,40 +188,140 @@ func (mb *tcpTransporter) Send(request []byte) (response []byte, err error) {
 	}
 }
 
-// receive reads one ISO-on-TCP telegram (TPKT, COTP and S7 payload) into data
-// and returns its length. Telegrams consisting of a bare COTP header are skipped.
-func (mb *tcpTransporter) receive(data []byte) (length int, err error) {
-	done := false
-	for !done && err == nil {
-		// Get TPKT (4 bytes)
-		if _, err = io.ReadFull(mb.conn, data[:4]); err != nil {
-			log.Printf("%T %+v", err, err)
-			return
+// sendFragments writes request to the wire. The S7 bytes behind the 7 byte
+// TPKT/COTP shell of a DT telegram are split into as many TPDUs as the
+// negotiated TPDU size needs. Every fragment gets its own TPKT header with
+// the length of that fragment, the COTP header is 02 F0 and only the last
+// fragment sets the EOT flag; a payload that fits exactly gets no empty
+// tail fragment. The request buffer is not modified.
+func (mb *tcpTransporter) sendFragments(request []byte) error {
+	// Anything but a DT telegram with a payload (the connection request,
+	// say) always fits one TPDU and goes out unchanged.
+	if len(request) <= isoHSize || request[4] != 2 || request[5] != cotpDataTPDU {
+		return mb.writeFull(request)
+	}
+	payload := request[isoHSize:]
+	maxData := mb.tpduSizeLimit() - 3 // the 3 byte DT header is part of the TPDU
+	for offset := 0; offset < len(payload); {
+		chunk := len(payload) - offset
+		if chunk > maxData {
+			chunk = maxData
 		}
-		// Read length, ignore transaction & protocol id (4 bytes)
-		length = int(binary.BigEndian.Uint16(data[2:]))
-		if length == isoHSize {
-			_, err = io.ReadFull(mb.conn, data[4:7])
-			if err != nil { // Skip remaining 3 bytes and Done is still false
-				return
-			}
-		} else {
-			if length > pduSizeRequested+isoHSize || length < minPduSize {
-				err = fmt.Errorf("s7: invalid pdu")
-				return
-			}
-			done = true
+		offset += chunk
+		frame := make([]byte, isoHSize+chunk)
+		frame[0] = 3
+		binary.BigEndian.PutUint16(frame[2:], uint16(len(frame)))
+		frame[4], frame[5] = 2, cotpDataTPDU
+		if offset == len(payload) {
+			frame[6] = cotpEOT // only the last fragment ends the TSDU
+		}
+		copy(frame[isoHSize:], payload[offset-chunk:offset])
+		if err := mb.writeFull(frame); err != nil {
+			return err
 		}
 	}
-	// Skip remaining 3 COTP bytes
-	_, err = io.ReadFull(mb.conn, data[4:7])
-	if err != nil {
-		return
+	return nil
+}
+
+// writeFull writes all of frame, however the underlying connection shortens
+// the writes. A write that fails or makes no progress is an error.
+func (mb *tcpTransporter) writeFull(frame []byte) error {
+	for len(frame) > 0 {
+		n, err := mb.conn.Write(frame)
+		if err != nil {
+			return err
+		}
+		if n <= 0 {
+			return fmt.Errorf("s7: connection write of %d bytes made no progress", len(frame))
+		}
+		frame = frame[n:]
 	}
-	mb.LastPDUType = data[5] // Stores PDU Type, we need it
-	// Receives the S7 Payload
-	_, err = io.ReadFull(mb.conn, data[7:length])
-	return
+	return nil
+}
+
+// receiveTSDU reads DT fragments and joins their user data until the EOT
+// flag ends the TSDU. What returns is one telegram for the S7 layer: the
+// whole payload behind a single TPKT/COTP header 02 F0 80 whose length
+// field holds the logical total. Standalone empty DT telegrams are
+// keepalives and are skipped. Every protocol violation is an error; the
+// caller closes the connection because the telegram boundaries can no
+// longer be determined.
+func (mb *tcpTransporter) receiveTSDU() ([]byte, error) {
+	// The S7 layer accepts as many reassembled payload bytes as the
+	// negotiated PDU length, or the requested 480 before the negotiation.
+	limit := mb.PDULength
+	if limit <= 0 {
+		limit = pduSizeRequested
+	}
+	var payload []byte
+	for {
+		tpdu, err := mb.readTPKT()
+		if err != nil {
+			return nil, err
+		}
+		if tpdu[0] != 2 || tpdu[1] != cotpDataTPDU {
+			return nil, fmt.Errorf("s7: unexpected COTP TPDU % x, want DT", tpdu)
+		}
+		if size := len(tpdu); size > mb.tpduSizeLimit() {
+			return nil, fmt.Errorf("s7: TPDU of %d bytes exceeds the negotiated %d", size, mb.tpduSizeLimit())
+		}
+		fragment, eot := tpdu[3:], tpdu[2]&cotpEOT != 0
+		if len(fragment) == 0 {
+			if len(payload) == 0 {
+				continue // standalone empty DT: a keepalive, skip it
+			}
+			if !eot {
+				return nil, fmt.Errorf("s7: empty DT fragment without EOT makes no progress")
+			}
+			break // an empty EOT fragment ends the TSDU
+		}
+		payload = append(payload, fragment...)
+		if len(payload) > limit {
+			return nil, fmt.Errorf("s7: reassembled S7 PDU of %d bytes exceeds the limit of %d", len(payload), limit)
+		}
+		if eot {
+			break
+		}
+	}
+	telegram := make([]byte, isoHSize+len(payload))
+	telegram[0] = 3
+	binary.BigEndian.PutUint16(telegram[2:], uint16(len(telegram)))
+	telegram[4], telegram[5], telegram[6] = 2, cotpDataTPDU, cotpEOT
+	copy(telegram[isoHSize:], payload)
+	return telegram, nil
+}
+
+// readTPKT reads one TPKT frame from the wire and returns the COTP TPDU it
+// carries. The whole declared frame is consumed, however many TCP reads it
+// takes, so the next read starts exactly at the next frame.
+func (mb *tcpTransporter) readTPKT() ([]byte, error) {
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(mb.conn, header); err != nil {
+		return nil, err
+	}
+	if header[0] != 3 {
+		return nil, fmt.Errorf("s7: invalid TPKT version %d", header[0])
+	}
+	length := int(binary.BigEndian.Uint16(header[2:]))
+	if length < isoHSize || length > tcpMaxLength {
+		return nil, fmt.Errorf("s7: invalid TPKT length %d", length)
+	}
+	tpdu := make([]byte, length-4)
+	if _, err := io.ReadFull(mb.conn, tpdu); err != nil {
+		return nil, err
+	}
+	mb.LastPDUType = tpdu[1] // Stores PDU Type, we need it
+	return tpdu, nil
+}
+
+// tpduSizeLimit is the COTP TPDU size negotiated for this connection, or
+// the 1024 bytes offered in the connection request when no negotiation
+// happened (yet). It bounds one TPDU on the wire, DT header included.
+func (mb *tcpTransporter) tpduSizeLimit() int {
+	if mb.tpduSize <= 0 {
+		return cotpDefaultTPDUSize
+	}
+	return mb.tpduSize
 }
 
 // Connect establishes a new connection to the address in Address.
@@ -219,9 +342,7 @@ func (mb *tcpTransporter) ConnectContext(ctx context.Context) error {
 	//second stage: ISOTCP (ISO 8073) Connection
 	err = mb.isoConnect()
 	if err != nil {
-		if mb.conn != nil {
-			_ = mb.conn.Close()
-		}
+		mb.Close()
 		return err
 	}
 	// Third stage : S7 protocol data unit negotiation
@@ -253,16 +374,91 @@ func (mb *tcpTransporter) isoConnect() error {
 	msg[20] = mb.remoteTSAPHigh
 	msg[21] = mb.remoteTSAPLow
 
-	// Sends the connection request telegram
-	response, err := mb.Send(msg)
-	if size := len(response); size == 22 {
-		if mb.LastPDUType != byte(0xD0) { // 0xD0 = CC Connection confirm
-			err = fmt.Errorf("errIsoConnect")
-		}
-	} else {
-		err = fmt.Errorf(ErrorText(errIsoInvalidPDU))
+	mb.mu.Lock()
+	defer mb.mu.Unlock()
+	// The TPDU size belongs to one connection: start from the default so
+	// a smaller limit of a previous connection is never inherited,
+	// whatever the confirm below negotiates and whether it parses.
+	mb.tpduSize = cotpDefaultTPDUSize
+	if mb.conn == nil {
+		return fmt.Errorf("Connection to address %s is null", mb.Address)
 	}
-	return err
+	if mb.Timeout > 0 {
+		if err := mb.conn.SetDeadline(time.Now().Add(mb.Timeout)); err != nil {
+			return err
+		}
+	}
+	// Sends the connection request telegram
+	mb.logf("s7: sending % x", msg)
+	if err := mb.writeFull(msg); err != nil {
+		return err
+	}
+	tpdu, err := mb.readTPKT()
+	if err != nil {
+		return err
+	}
+	mb.logf("s7: received % x\n", tpdu)
+	// The confirm echoes the source reference of the request as its
+	// destination reference.
+	tpduSize, err := parseConnectionConfirm(tpdu, binary.BigEndian.Uint16(msg[8:]))
+	if err != nil {
+		return err
+	}
+	mb.tpduSize = tpduSize
+	return nil
+}
+
+// parseConnectionConfirm parses the TPDU of a COTP class 0 Connection
+// Confirm: the fixed part and the TLV parameters behind it, in whatever
+// order they come. wantDstRef is the source reference of the connection
+// request, which the confirm has to echo as its destination reference.
+// Unknown parameters are skipped. The result is the negotiated TPDU size:
+// the C0 parameter, or the 1024 bytes of the request when it is absent.
+// Malformed, truncated or repeated TPDU-size parameters fail the connect.
+func parseConnectionConfirm(tpdu []byte, wantDstRef uint16) (int, error) {
+	if len(tpdu) < 7 {
+		return 0, fmt.Errorf("%s: connection confirm of %d bytes", ErrorText(errIsoInvalidPDU), len(tpdu))
+	}
+	if li := int(tpdu[0]); li != len(tpdu)-1 {
+		return 0, fmt.Errorf("%s: length indicator %d, TPDU holds %d bytes", ErrorText(errIsoInvalidPDU), li, len(tpdu)-1)
+	}
+	if tpdu[1] != cotpConfirmTPDU {
+		return 0, fmt.Errorf("%s: COTP TPDU 0x%02x is not a connection confirm", ErrorText(errIsoConnect), tpdu[1])
+	}
+	if dstRef := binary.BigEndian.Uint16(tpdu[2:]); dstRef != wantDstRef {
+		return 0, fmt.Errorf("%s: destination reference 0x%04x, want 0x%04x", ErrorText(errIsoConnect), dstRef, wantDstRef)
+	}
+	if tpdu[6]&0xF0 != 0 {
+		return 0, fmt.Errorf("%s: transport class %d, want class 0", ErrorText(errIsoConnect), tpdu[6]>>4)
+	}
+	tpduSize := cotpDefaultTPDUSize
+	seenSize := false
+	params := tpdu[7:]
+	for len(params) > 0 {
+		if len(params) < 2 {
+			return 0, fmt.Errorf("%s: truncated parameter % x", ErrorText(errIsoInvalidPDU), params)
+		}
+		code, length := params[0], int(params[1])
+		if len(params) < 2+length {
+			return 0, fmt.Errorf("%s: parameter 0x%02x truncated", ErrorText(errIsoInvalidPDU), code)
+		}
+		if code == cotpSizeParam {
+			if seenSize {
+				return 0, fmt.Errorf("%s: repeated TPDU-size parameter", ErrorText(errIsoInvalidPDU))
+			}
+			seenSize = true
+			if length != 1 {
+				return 0, fmt.Errorf("%s: TPDU-size parameter of %d bytes", ErrorText(errIsoInvalidPDU), length)
+			}
+			exponent := int(params[2])
+			if exponent < cotpMinTPDUExponent || exponent > cotpMaxTPDUExponent {
+				return 0, fmt.Errorf("%s: TPDU-size exponent %d", ErrorText(errIsoInvalidPDU), exponent)
+			}
+			tpduSize = 1 << uint(exponent)
+		}
+		params = params[2+length:]
+	}
+	return tpduSize, nil
 }
 func (mb *tcpTransporter) negotiatePduLength() error {
 	// Set PDU Size Requested //lth
@@ -327,6 +523,8 @@ func (mb *tcpTransporter) logf(format string, v ...interface{}) {
 
 // closeLocked closes current connection. Caller must hold the mutex before calling this method.
 func (mb *tcpTransporter) close() (err error) {
+	// The negotiated TPDU size dies with its connection.
+	mb.tpduSize = 0
 	if mb.conn != nil {
 		err = mb.conn.Close()
 		mb.conn = nil

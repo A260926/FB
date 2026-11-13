@@ -36,7 +36,7 @@ func TestTCPTransporter(t *testing.T) {
 		Timeout:     200 * time.Second,
 		IdleTimeout: 100 * time.Millisecond,
 	}
-	req := []byte{0, 1, 0, 17, 0, 2, 1, 2, 0, 1, 0, 17, 0, 2, 1, 2, 2} //lengh 17, > MinPduSize
+	req := []byte{3, 0, 0, 17, 2, 240, 128, 2, 1, 2, 0, 1, 0, 17, 0, 2, 2} // TPKT+DT, 10 payload bytes
 
 	client.tcpConnect(context.Background()) //assume tcp connect to test locally
 	rsp, err := client.Send(req)
