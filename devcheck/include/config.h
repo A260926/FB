@@ -1,0 +1,10 @@
+#define FLOATING_POINT 1
+#define USE_ALLOCA 1
+#define HAVE_ALLOCA_H 1
+#define HAVE_STDINT_H 1
+#define EXPORT
+#define SPEEX_MAJOR_VERSION 1
+#define SPEEX_MINOR_VERSION 2
+#define SPEEX_MICRO_VERSION 1
+#define SPEEX_EXTRA_VERSION ""
+#define SPEEX_VERSION "1.2.1-offline"
