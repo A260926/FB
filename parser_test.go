@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -174,9 +172,9 @@ func TestParser_ParseURL_Success(t *testing.T) {
 		t.Run(test.file, func(t *testing.T) {
 			data := testutil.ReadFile(t, "testdata/parser/universal/"+test.file)
 			fp := gofeed.NewParser()
-			server, client := mockServerResponse(t, 200, string(data), 0)
+			feedURL, client := mockServerResponse(t, 200, string(data), 0)
 			fp.Client = client
-			feed, err := fp.ParseURL(server.URL)
+			feed, err := fp.ParseURL(feedURL)
 			if test.hasError {
 				assert.Error(t, err)
 				assert.Nil(t, feed)
@@ -191,21 +189,21 @@ func TestParser_ParseURL_Success(t *testing.T) {
 }
 
 func TestParser_ParseURLWithContext(t *testing.T) {
-	server, client := mockServerResponse(t, 404, "", 1*time.Minute)
+	feedURL, client := mockServerResponse(t, 404, "", 1*time.Minute)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	fp := gofeed.NewParser()
 	fp.Client = client
-	_, err := fp.ParseURLWithContext(server.URL, ctx)
+	_, err := fp.ParseURLWithContext(feedURL, ctx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestParser_ParseURL_Failure(t *testing.T) {
-	server, client := mockServerResponse(t, 404, "", 0)
+	feedURL, client := mockServerResponse(t, 404, "", 0)
 	fp := gofeed.NewParser()
 	fp.Client = client
-	feed, err := fp.ParseURL(server.URL)
+	feed, err := fp.ParseURL(feedURL)
 
 	assert.NotNil(t, err)
 	assert.IsType(t, gofeed.HTTPError{}, err)
@@ -213,7 +211,7 @@ func TestParser_ParseURL_Failure(t *testing.T) {
 }
 
 func TestParser_ParseURLWithContextAndBasicAuth(t *testing.T) {
-	server, client := mockServerResponse(t, 404, "", 1*time.Minute)
+	feedURL, client := mockServerResponse(t, 404, "", 1*time.Minute)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	fp := gofeed.NewParser()
@@ -222,7 +220,7 @@ func TestParser_ParseURLWithContextAndBasicAuth(t *testing.T) {
 		Password: "bar",
 	}
 	fp.Client = client
-	_, err := fp.ParseURLWithContext(server.URL, ctx)
+	_, err := fp.ParseURLWithContext(feedURL, ctx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
@@ -247,9 +245,9 @@ func TestParser_Concurrent(t *testing.T) {
 
 // Test Helpers
 
-func mockServerResponse(t *testing.T, code int, body string, delay time.Duration) (*httptest.Server, *http.Client) {
+func mockServerResponse(t *testing.T, code int, body string, delay time.Duration) (string, *http.Client) {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := testutil.NewMemoryServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -261,19 +259,9 @@ func mockServerResponse(t *testing.T, code int, body string, delay time.Duration
 		w.WriteHeader(code)
 		io.WriteString(w, body)
 	}))
-
-	transport := &http.Transport{
-		Proxy: func(req *http.Request) (*url.URL, error) {
-			return url.Parse(server.URL)
-		},
-	}
-
-	client := &http.Client{Transport: transport}
-	t.Cleanup(func() {
-		transport.CloseIdleConnections()
-		server.Close()
-	})
-	return server, client
+	// The client's transport always dials the in-memory listener, so any
+	// requested host reaches this server.
+	return srv.URL("feed.test", "/"), srv.Client
 }
 
 // Examples
@@ -350,18 +338,19 @@ func TestParserConcurrentParseString(t *testing.T) {
 
 // TestParserConcurrentParseURL exercises the httpClient() lazy init the same way.
 func TestParserConcurrentParseURL(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := testutil.NewMemoryServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, concurrencyFeed)
 	}))
-	defer srv.Close()
+	feedURL := srv.URL("feed.test", "/")
 
 	p := gofeed.NewParser()
+	p.Client = srv.Client
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := p.ParseURL(srv.URL); err != nil {
+			if _, err := p.ParseURL(feedURL); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -371,25 +360,26 @@ func TestParserConcurrentParseURL(t *testing.T) {
 
 func TestParseURLMaxByteSize(t *testing.T) {
 	big := `<rss version="2.0"><channel><title>` + strings.Repeat("x", 200000) + `</title></channel></rss>`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := testutil.NewMemoryServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, big)
 	}))
-	defer srv.Close()
+	feedURL := srv.URL("feed.test", "/")
 
 	p := gofeed.NewParser()
+	p.Client = srv.Client
 
 	p.MaxByteSize = 1000
-	if _, err := p.ParseURL(srv.URL); !errors.Is(err, gofeed.ErrResponseTooLarge) {
+	if _, err := p.ParseURL(feedURL); !errors.Is(err, gofeed.ErrResponseTooLarge) {
 		t.Errorf("small limit: got %v, want ErrResponseTooLarge", err)
 	}
 
 	p.MaxByteSize = 10_000_000
-	if _, err := p.ParseURL(srv.URL); err != nil {
+	if _, err := p.ParseURL(feedURL); err != nil {
 		t.Errorf("large limit: unexpected error %v", err)
 	}
 
 	p.MaxByteSize = 0 // unlimited
-	if _, err := p.ParseURL(srv.URL); err != nil {
+	if _, err := p.ParseURL(feedURL); err != nil {
 		t.Errorf("unlimited: unexpected error %v", err)
 	}
 }
@@ -397,16 +387,18 @@ func TestParseURLMaxByteSize(t *testing.T) {
 // Confirms request-context cancellation works, which the default ParseURL
 // timeout relies on.
 func TestParseURLContextTimeout(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := testutil.NewMemoryServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 	}))
-	defer srv.Close()
+	feedURL := srv.URL("feed.test", "/")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
-	if _, err := gofeed.NewParser().ParseURLWithContext(srv.URL, ctx); err == nil {
+	p := gofeed.NewParser()
+	p.Client = srv.Client
+	if _, err := p.ParseURLWithContext(feedURL, ctx); err == nil {
 		t.Fatal("expected a timeout error")
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {

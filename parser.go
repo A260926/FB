@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/mmcdole/gofeed/atom"
+	"github.com/mmcdole/gofeed/internal/shared"
 	"github.com/mmcdole/gofeed/json"
 	"github.com/mmcdole/gofeed/rss"
 )
@@ -58,9 +60,16 @@ type Parser struct {
 	// accessible via Feed.OriginalFeed(). Off by default: keeping it holds a
 	// second copy of the feed in memory for the lifetime of the result.
 	KeepOriginalFeed bool
-	rp               *rss.Parser
-	ap               *atom.Parser
-	jp               *json.Parser
+	// UseResponseURL uses the URL of the response that actually delivered the
+	// document as the feed's initial xml:base for RSS and Atom, so relative
+	// links and xml:base declarations resolve against the post-redirect
+	// address. It uses resp.Request.URL, falling back to the request URL when
+	// a custom Client returns a response without a Request. Content-Location
+	// is ignored. Off by default. JSON feeds are unaffected.
+	UseResponseURL bool
+	rp             *rss.Parser
+	ap             *atom.Parser
+	jp             *json.Parser
 }
 
 // Auth is a structure allowing to
@@ -107,6 +116,30 @@ const detectionPeekSize = 4096
 // content is then parsed incrementally from the reader. JSON feeds are read
 // fully into memory, as JSON decoding needs the complete document.
 func (f *Parser) Parse(feed io.Reader) (*Feed, error) {
+	return f.parseWithBase(feed, nil)
+}
+
+// ParseWithBase parses an already-downloaded RSS or Atom feed, using base as
+// the document's initial xml:base. It gives relative links and xml:base
+// declarations the same context ParseURL has when UseResponseURL is enabled.
+// base must be an absolute HTTP(S) URL with a host; an empty, relative or
+// invalid base is rejected before feed is read. A fragment is ignored.
+//
+// JSON feeds still parse, but no relative address conversion is applied.
+//
+// Unlike UseResponseURL, this does not make Parse or ParseString resolve
+// addresses: the base applies to this call only.
+func (f *Parser) ParseWithBase(feed io.Reader, base string) (*Feed, error) {
+	u, err := shared.ParseBaseURL(base)
+	if err != nil {
+		return nil, err
+	}
+	return f.parseWithBase(feed, u)
+}
+
+// parseWithBase detects the feed type and parses it, passing base to the RSS
+// and Atom parsers as the document URL. base is nil for ordinary Parse.
+func (f *Parser) parseWithBase(feed io.Reader, base *url.URL) (*Feed, error) {
 	// Peek at the start of the stream to detect the feed type, without
 	// consuming it: the format parser below reads from the beginning. A
 	// reader error here surfaces as itself rather than as a failed type
@@ -119,9 +152,9 @@ func (f *Parser) Parse(feed io.Reader) (*Feed, error) {
 
 	switch DetectFeedType(bytes.NewReader(prefix)) {
 	case FeedTypeAtom:
-		return f.parseAtomFeed(br)
+		return f.parseAtomFeed(br, base)
 	case FeedTypeRSS:
-		return f.parseRSSFeed(br)
+		return f.parseRSSFeed(br, base)
 	case FeedTypeJSON:
 		return f.parseJSONFeed(br)
 	}
@@ -179,10 +212,10 @@ func (f *Parser) ParseURLWithContext(feedURL string, ctx context.Context) (feed 
 	}
 
 	if f.MaxByteSize <= 0 {
-		return f.Parse(resp.Body)
+		return f.parseWithBase(resp.Body, f.responseBase(resp, req))
 	}
 	body := &limitedReader{r: resp.Body, left: f.MaxByteSize}
-	feed, err = f.Parse(body)
+	feed, err = f.parseWithBase(body, f.responseBase(resp, req))
 	if body.err == ErrResponseTooLarge {
 		return nil, ErrResponseTooLarge
 	}
@@ -196,6 +229,32 @@ func (f *Parser) ParseURLWithContext(feedURL string, ctx context.Context) (feed 
 		return nil, err
 	}
 	return feed, nil
+}
+
+// responseBase returns the document URL to use as the initial xml:base when
+// UseResponseURL is enabled. It is the URL of the request that produced the
+// response, which after redirects is the address the document was actually
+// fetched from. A custom Client may return a response with no Request; then
+// the request this call sent is the best available answer. Content-Location
+// is deliberately ignored.
+func (f *Parser) responseBase(resp *http.Response, req *http.Request) *url.URL {
+	if !f.UseResponseURL {
+		return nil
+	}
+	u := req.URL
+	if resp.Request != nil && resp.Request.URL != nil {
+		u = resp.Request.URL
+	}
+	if u == nil {
+		return nil
+	}
+	// A base that can't act as a document address contributes nothing; fall
+	// back to the historical behavior of leaving relative values alone.
+	validated, err := shared.ParseBaseURL(u.String())
+	if err != nil {
+		return nil
+	}
+	return validated
 }
 
 // limitedReader returns ErrResponseTooLarge once more than the configured
@@ -235,8 +294,16 @@ func (f *Parser) ParseString(feed string) (*Feed, error) {
 	return f.Parse(strings.NewReader(feed))
 }
 
-func (f *Parser) parseAtomFeed(feed io.Reader) (*Feed, error) {
-	af, err := f.ap.Parse(feed)
+func (f *Parser) parseAtomFeed(feed io.Reader, base *url.URL) (*Feed, error) {
+	var (
+		af  *atom.Feed
+		err error
+	)
+	if base == nil {
+		af, err = f.ap.Parse(feed)
+	} else {
+		af, err = f.ap.ParseWithBase(feed, base.String())
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -245,8 +312,14 @@ func (f *Parser) parseAtomFeed(feed io.Reader) (*Feed, error) {
 	return result, err
 }
 
-func (f *Parser) parseRSSFeed(feed io.Reader) (*Feed, error) {
-	rf, err := f.rp.Parse(feed)
+func (f *Parser) parseRSSFeed(feed io.Reader, base *url.URL) (*Feed, error) {
+	var rf *rss.Feed
+	var err error
+	if base == nil {
+		rf, err = f.rp.Parse(feed)
+	} else {
+		rf, err = f.rp.ParseWithBase(feed, base.String())
+	}
 	if err != nil {
 		return nil, err
 	}

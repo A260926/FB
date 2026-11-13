@@ -37,7 +37,7 @@ func BenchmarkParseExtensionFragmentedText(b *testing.B) {
 
 // parserOn returns a NewXMLParser positioned on the first StartTag with the
 // given local name.
-func parserOn(t *testing.T, doc, name string) *xpp.Parser {
+func parserOn(t *testing.T, doc, name string) *XMLParser {
 	t.Helper()
 	p := NewXMLParser(strings.NewReader(doc))
 	for {

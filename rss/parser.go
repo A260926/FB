@@ -3,6 +3,7 @@ package rss
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,8 +28,30 @@ type Parser struct{}
 
 // Parse parses an xml feed into an rss.Feed
 func (rp *Parser) Parse(feed io.Reader) (*Feed, error) {
+	return rp.parse(feed, nil)
+}
+
+// ParseWithBase parses an xml feed into an rss.Feed, using base as the
+// document's initial xml:base. It is for feeds that have already been
+// downloaded: base must be an absolute HTTP(S) URL with a host. An empty,
+// relative or invalid base is rejected before feed is read. The fragment, if
+// any, is ignored.
+//
+// The base is combined with xml:base declarations in the document using the
+// usual rules: a relative declaration resolves against the current scope, an
+// absolute declaration replaces it, and leaving the subtree restores the
+// parent scope.
+func (rp *Parser) ParseWithBase(feed io.Reader, base string) (*Feed, error) {
+	u, err := shared.ParseBaseURL(base)
+	if err != nil {
+		return nil, err
+	}
+	return rp.parse(feed, u)
+}
+
+func (rp *Parser) parse(feed io.Reader, base *url.URL) (*Feed, error) {
 	feed = shared.NewControlCharFilterReader(feed)
-	p := shared.NewXMLParser(feed)
+	p := shared.NewXMLParserWithBase(feed, base)
 
 	_, err := shared.FindRoot(p)
 	if err != nil {
@@ -38,7 +61,7 @@ func (rp *Parser) Parse(feed io.Reader) (*Feed, error) {
 	return rp.parseRoot(p)
 }
 
-func (rp *Parser) parseRoot(p *xpp.Parser) (*Feed, error) {
+func (rp *Parser) parseRoot(p *shared.XMLParser) (*Feed, error) {
 	rssErr := p.Expect(xpp.StartTag, "rss")
 	rdfErr := p.Expect(xpp.StartTag, "rdf")
 	if rssErr != nil && rdfErr != nil {
@@ -117,7 +140,7 @@ func (rp *Parser) parseRoot(p *xpp.Parser) (*Feed, error) {
 	return channel, nil
 }
 
-func (rp *Parser) parseChannel(p *xpp.Parser, native []string) (rss *Feed, err error) {
+func (rp *Parser) parseChannel(p *shared.XMLParser, native []string) (rss *Feed, err error) {
 	if err = p.Expect(xpp.StartTag, "channel"); err != nil {
 		return nil, err
 	}
@@ -237,7 +260,7 @@ func (rp *Parser) parseChannel(p *xpp.Parser, native []string) (rss *Feed, err e
 	return rss, nil
 }
 
-func (rp *Parser) parseItem(p *xpp.Parser, native []string) (item *Item, err error) {
+func (rp *Parser) parseItem(p *shared.XMLParser, native []string) (item *Item, err error) {
 	if err = p.Expect(xpp.StartTag, "item"); err != nil {
 		return nil, err
 	}
@@ -348,7 +371,7 @@ func (rp *Parser) parseItem(p *xpp.Parser, native []string) (item *Item, err err
 
 // parseItemCustom stores an unrecognized item child in the Custom map,
 // keyed by its original-case name. Duplicate names keep the last value.
-func (rp *Parser) parseItemCustom(p *xpp.Parser, item *Item) error {
+func (rp *Parser) parseItemCustom(p *shared.XMLParser, item *Item) error {
 	key := p.Name()
 	result, err := shared.ParseText(p)
 	if err != nil {
@@ -361,7 +384,7 @@ func (rp *Parser) parseItemCustom(p *xpp.Parser, item *Item) error {
 	return nil
 }
 
-func (rp *Parser) parseLink(p *xpp.Parser) (url string, err error) {
+func (rp *Parser) parseLink(p *shared.XMLParser) (url string, err error) {
 	base := p.BaseURL()
 	href := p.Attribute("href")
 	url, err = shared.ParseText(p)
@@ -375,7 +398,7 @@ func (rp *Parser) parseLink(p *xpp.Parser) (url string, err error) {
 	return url, err
 }
 
-func (rp *Parser) parseSource(p *xpp.Parser) (source *Source, err error) {
+func (rp *Parser) parseSource(p *shared.XMLParser) (source *Source, err error) {
 	if err = p.Expect(xpp.StartTag, "source"); err != nil {
 		return nil, err
 	}
@@ -395,7 +418,7 @@ func (rp *Parser) parseSource(p *xpp.Parser) (source *Source, err error) {
 	return source, nil
 }
 
-func (rp *Parser) parseEnclosure(p *xpp.Parser) (enclosure *Enclosure, err error) {
+func (rp *Parser) parseEnclosure(p *shared.XMLParser) (enclosure *Enclosure, err error) {
 	if err = p.Expect(xpp.StartTag, "enclosure"); err != nil {
 		return nil, err
 	}
@@ -418,7 +441,7 @@ func (rp *Parser) parseEnclosure(p *xpp.Parser) (enclosure *Enclosure, err error
 	return enclosure, nil
 }
 
-func (rp *Parser) parseImage(p *xpp.Parser) (image *Image, err error) {
+func (rp *Parser) parseImage(p *shared.XMLParser) (image *Image, err error) {
 	if err = p.Expect(xpp.StartTag, "image"); err != nil {
 		return nil, err
 	}
@@ -456,7 +479,7 @@ func (rp *Parser) parseImage(p *xpp.Parser) (image *Image, err error) {
 	return image, nil
 }
 
-func (rp *Parser) parseGUID(p *xpp.Parser) (guid *GUID, err error) {
+func (rp *Parser) parseGUID(p *shared.XMLParser) (guid *GUID, err error) {
 	if err = p.Expect(xpp.StartTag, "guid"); err != nil {
 		return nil, err
 	}
@@ -488,7 +511,7 @@ func (rp *Parser) parseGUID(p *xpp.Parser) (guid *GUID, err error) {
 	return guid, nil
 }
 
-func (rp *Parser) parseCategory(p *xpp.Parser) (cat *Category, err error) {
+func (rp *Parser) parseCategory(p *shared.XMLParser) (cat *Category, err error) {
 	if err = p.Expect(xpp.StartTag, "category"); err != nil {
 		return nil, err
 	}
@@ -509,7 +532,7 @@ func (rp *Parser) parseCategory(p *xpp.Parser) (cat *Category, err error) {
 	return cat, nil
 }
 
-func (rp *Parser) parseTextInput(p *xpp.Parser) (*TextInput, error) {
+func (rp *Parser) parseTextInput(p *shared.XMLParser) (*TextInput, error) {
 	if err := p.Expect(xpp.StartTag, "textinput"); err != nil {
 		return nil, err
 	}
@@ -543,7 +566,7 @@ func (rp *Parser) parseTextInput(p *xpp.Parser) (*TextInput, error) {
 	return ti, nil
 }
 
-func (rp *Parser) parseSkipHours(p *xpp.Parser) ([]string, error) {
+func (rp *Parser) parseSkipHours(p *shared.XMLParser) ([]string, error) {
 	if err := p.Expect(xpp.StartTag, "skiphours"); err != nil {
 		return nil, err
 	}
@@ -571,7 +594,7 @@ func (rp *Parser) parseSkipHours(p *xpp.Parser) ([]string, error) {
 	return hours, nil
 }
 
-func (rp *Parser) parseSkipDays(p *xpp.Parser) ([]string, error) {
+func (rp *Parser) parseSkipDays(p *shared.XMLParser) ([]string, error) {
 	if err := p.Expect(xpp.StartTag, "skipdays"); err != nil {
 		return nil, err
 	}
@@ -599,7 +622,7 @@ func (rp *Parser) parseSkipDays(p *xpp.Parser) ([]string, error) {
 	return days, nil
 }
 
-func (rp *Parser) parseCloud(p *xpp.Parser) (*Cloud, error) {
+func (rp *Parser) parseCloud(p *shared.XMLParser) (*Cloud, error) {
 	if err := p.Expect(xpp.StartTag, "cloud"); err != nil {
 		return nil, err
 	}
@@ -625,7 +648,7 @@ func (rp *Parser) parseCloud(p *xpp.Parser) (*Cloud, error) {
 	return cloud, nil
 }
 
-func (rp *Parser) parseVersion(p *xpp.Parser) (ver string) {
+func (rp *Parser) parseVersion(p *shared.XMLParser) (ver string) {
 	name := strings.ToLower(p.Name())
 	if name == "rss" {
 		ver = p.Attribute("version")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,8 +39,30 @@ type Parser struct{}
 
 // Parse parses an xml feed into an atom.Feed
 func (ap *Parser) Parse(feed io.Reader) (*Feed, error) {
+	return ap.parse(feed, nil)
+}
+
+// ParseWithBase parses an xml feed into an atom.Feed, using base as the
+// document's initial xml:base. It is for feeds that have already been
+// downloaded: base must be an absolute HTTP(S) URL with a host. An empty,
+// relative or invalid base is rejected before feed is read. The fragment, if
+// any, is ignored.
+//
+// The base is combined with xml:base declarations in the document using the
+// usual rules: a relative declaration resolves against the current scope, an
+// absolute declaration replaces it, and leaving the subtree restores the
+// parent scope.
+func (ap *Parser) ParseWithBase(feed io.Reader, base string) (*Feed, error) {
+	u, err := shared.ParseBaseURL(base)
+	if err != nil {
+		return nil, err
+	}
+	return ap.parse(feed, u)
+}
+
+func (ap *Parser) parse(feed io.Reader, base *url.URL) (*Feed, error) {
 	feed = shared.NewControlCharFilterReader(feed)
-	p := shared.NewXMLParser(feed)
+	p := shared.NewXMLParserWithBase(feed, base)
 
 	_, err := shared.FindRoot(p)
 	if err != nil {
@@ -49,7 +72,7 @@ func (ap *Parser) Parse(feed io.Reader) (*Feed, error) {
 	return ap.parseRoot(p)
 }
 
-func (ap *Parser) parseRoot(p *xpp.Parser) (*Feed, error) {
+func (ap *Parser) parseRoot(p *shared.XMLParser) (*Feed, error) {
 	if err := p.Expect(xpp.StartTag, "feed"); err != nil {
 		return nil, err
 	}
@@ -162,7 +185,7 @@ func parseDateUTC(text string) *time.Time {
 	return nil
 }
 
-func (ap *Parser) parseEntry(p *xpp.Parser) (*Entry, error) {
+func (ap *Parser) parseEntry(p *shared.XMLParser) (*Entry, error) {
 	if err := p.Expect(xpp.StartTag, "entry"); err != nil {
 		return nil, err
 	}
@@ -258,7 +281,7 @@ func (ap *Parser) parseEntry(p *xpp.Parser) (*Entry, error) {
 	return entry, nil
 }
 
-func (ap *Parser) parseSource(p *xpp.Parser) (*Source, error) {
+func (ap *Parser) parseSource(p *shared.XMLParser) (*Source, error) {
 	if err := p.Expect(xpp.StartTag, "source"); err != nil {
 		return nil, err
 	}
@@ -353,7 +376,7 @@ func (ap *Parser) parseSource(p *xpp.Parser) (*Source, error) {
 	return source, nil
 }
 
-func (ap *Parser) parseContent(p *xpp.Parser) (*Content, error) {
+func (ap *Parser) parseContent(p *shared.XMLParser) (*Content, error) {
 	c := &Content{}
 	c.Type = p.Attribute("type")
 	c.Src = p.Attribute("src")
@@ -367,7 +390,7 @@ func (ap *Parser) parseContent(p *xpp.Parser) (*Content, error) {
 	return c, nil
 }
 
-func (ap *Parser) parsePerson(name string, p *xpp.Parser) (*Person, error) {
+func (ap *Parser) parsePerson(name string, p *shared.XMLParser) (*Person, error) {
 	if err := p.Expect(xpp.StartTag, name); err != nil {
 		return nil, err
 	}
@@ -399,7 +422,7 @@ func (ap *Parser) parsePerson(name string, p *xpp.Parser) (*Person, error) {
 	return person, nil
 }
 
-func (ap *Parser) parseLink(p *xpp.Parser) (*Link, error) {
+func (ap *Parser) parseLink(p *shared.XMLParser) (*Link, error) {
 	if err := p.Expect(xpp.StartTag, "link"); err != nil {
 		return nil, err
 	}
@@ -425,7 +448,7 @@ func (ap *Parser) parseLink(p *xpp.Parser) (*Link, error) {
 	return l, nil
 }
 
-func (ap *Parser) parseCategory(p *xpp.Parser) (*Category, error) {
+func (ap *Parser) parseCategory(p *shared.XMLParser) (*Category, error) {
 	if err := p.Expect(xpp.StartTag, "category"); err != nil {
 		return nil, err
 	}
@@ -445,7 +468,7 @@ func (ap *Parser) parseCategory(p *xpp.Parser) (*Category, error) {
 	return c, nil
 }
 
-func (ap *Parser) parseGenerator(p *xpp.Parser) (*Generator, error) {
+func (ap *Parser) parseGenerator(p *shared.XMLParser) (*Generator, error) {
 
 	if err := p.Expect(xpp.StartTag, "generator"); err != nil {
 		return nil, err
@@ -478,7 +501,7 @@ func (ap *Parser) parseGenerator(p *xpp.Parser) (*Generator, error) {
 	return g, nil
 }
 
-func (ap *Parser) parseAtomText(p *xpp.Parser) (string, error) {
+func (ap *Parser) parseAtomText(p *shared.XMLParser) (string, error) {
 
 	var text struct {
 		Type     string `xml:"type,attr"`
@@ -558,11 +581,11 @@ func isBinaryMediaType(t string) bool {
 	return false
 }
 
-func (ap *Parser) parseLanguage(p *xpp.Parser) string {
+func (ap *Parser) parseLanguage(p *shared.XMLParser) string {
 	return p.Attribute("lang")
 }
 
-func (ap *Parser) parseVersion(p *xpp.Parser) string {
+func (ap *Parser) parseVersion(p *shared.XMLParser) string {
 	ver := p.Attribute("version")
 	if ver != "" {
 		return ver

@@ -1,0 +1,12 @@
+./charsetconv.go
+./dateparser.go
+./extparser.go
+./loop.go
+./parseutils.go
+./xmlbase.go
+./xmlsanitizer.go
+./dateparser_test.go
+./extparser_test.go
+./parseutils_test.go
+./xmlbase_test.go
+./xmlsanitizer_test.go

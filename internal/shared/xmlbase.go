@@ -51,7 +51,7 @@ const xmlWhitespace = " \t\r\n"
 // NextTag is similar to goxpp's NextTag method except it wont throw an error
 // if the next immediate token isnt a Start/EndTag.  Instead, it will continue
 // to consume tokens until it hits a Start/EndTag or EndDocument.
-func NextTag(p *xpp.Parser) (event xpp.EventType, err error) {
+func NextTag(p *XMLParser) (event xpp.EventType, err error) {
 	for {
 		event, err = p.Next()
 		if err != nil {
@@ -86,7 +86,7 @@ func NextTag(p *xpp.Parser) (event xpp.EventType, err error) {
 // resolveAttrs trims surrounding XML whitespace from URI attributes and, when
 // an xml:base is in scope, resolves them against it. Without a base the
 // trimmed value is kept as written, never normalized by url.Parse.
-func resolveAttrs(p *xpp.Parser) error {
+func resolveAttrs(p *XMLParser) error {
 	base := p.BaseURL()
 	attrs := p.Attrs()
 	for i, attr := range attrs {

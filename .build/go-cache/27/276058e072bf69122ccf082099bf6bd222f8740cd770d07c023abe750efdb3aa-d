@@ -1,0 +1,6 @@
+./detector_test.go
+./feed_test.go
+./parser_limit_test.go
+./parser_test.go
+./retrieval_base_test.go
+./translator_test.go

@@ -94,6 +94,26 @@ feed, _ := fp.Parse(file)
 fmt.Println(feed.Title)
 ```
 
+#### From an io.Reader with a Known Source URL
+
+When the feed has already been downloaded, pass the address it came from to
+`ParseWithBase`. Relative links and `xml:base` declarations then resolve
+against that address, exactly as they do for `ParseURL` with
+`UseResponseURL` enabled. The base must be an absolute HTTP(S) URL with a
+host; the call returns an error before reading anything otherwise.
+
+```go
+fp := gofeed.NewParser()
+feed, _ := fp.ParseWithBase(file, "https://example.com/feeds/2026/current.xml")
+// A document declaring xml:base="../shared/" with an entry that declares
+// xml:base="items/" and links to "one" yields
+// https://example.com/feeds/shared/items/one.
+fmt.Println(feed.Items[0].Link)
+```
+
+`rss.Parser` and `atom.Parser` offer the same `ParseWithBase` method for their
+native types.
+
 #### From a URL with a 60s Timeout
 
 ```go
@@ -112,6 +132,23 @@ fp.UserAgent = "MyCustomAgent 1.0"
 feed, _ := fp.ParseURL("http://feeds.twit.tv/twit.xml")
 fmt.Println(feed.Title)
 ```
+
+#### Resolving Relative Links Against the Response URL
+
+Set `UseResponseURL` to use the address that actually served the document — the
+post-redirect address, not the requested one — as the initial base for RSS and
+Atom. Relative item links, `xml:base` declarations and links inside HTML
+content then come back absolute. It is off by default.
+
+```go
+fp := gofeed.NewParser()
+fp.UseResponseURL = true
+feed, _ := fp.ParseURL("https://example.com/entry") // redirects to /feeds/2026/current.xml
+fmt.Println(feed.Items[0].Link) // https://example.com/feeds/shared/items/one
+```
+
+`Parse`, `ParseString` and JSON feeds are unaffected. `Content-Location` is
+ignored.
 
 ### Feed Specific Parsers
 

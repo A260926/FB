@@ -1,0 +1,4 @@
+./coerce.go
+./feed.go
+./parser.go
+./coerce_test.go

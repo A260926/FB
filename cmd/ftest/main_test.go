@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mmcdole/gofeed/internal/testutil"
 )
 
 func TestRun(t *testing.T) {
@@ -87,12 +88,17 @@ func TestRunErrors(t *testing.T) {
 }
 
 func TestRunURL(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := testutil.NewMemoryServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `<rss version="2.0"><channel><title>Remote</title></channel></rss>`)
 	}))
-	defer server.Close()
+	// fetchURL uses the package default client; route it to the in-memory
+	// server so no port is needed.
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client.Transport
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+
 	var out bytes.Buffer
-	if err := run([]string{server.URL}, &out); err != nil {
+	if err := run([]string{server.URL("feed.test", "/")}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"Remote"`) {

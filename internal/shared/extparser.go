@@ -18,7 +18,7 @@ const (
 
 // InNamespace reports whether the current element's resolved namespace is
 // one of namespaces.
-func InNamespace(p *xpp.Parser, namespaces ...string) bool {
+func InNamespace(p *XMLParser, namespaces ...string) bool {
 	space := strings.TrimSpace(p.Space())
 	for _, namespace := range namespaces {
 		if space == namespace {
@@ -30,7 +30,7 @@ func InNamespace(p *xpp.Parser, namespaces ...string) bool {
 
 // IsExtension reports whether the current element is outside the native
 // namespaces supplied by the format parser.
-func IsExtension(p *xpp.Parser, nativeNamespaces ...string) bool {
+func IsExtension(p *XMLParser, nativeNamespaces ...string) bool {
 	return !InNamespace(p, nativeNamespaces...)
 }
 
@@ -44,7 +44,7 @@ func IsCanonicalNamespace(space string) bool {
 // ParseExtension parses the current element of the
 // XMLPullParser as an extension element and updates
 // the extension map
-func ParseExtension(fe ext.Extensions, p *xpp.Parser) (ext.Extensions, error) {
+func ParseExtension(fe ext.Extensions, p *XMLParser) (ext.Extensions, error) {
 	prefix := PrefixForNamespace(p.Space(), p)
 
 	result, err := parseExtensionElement(p)
@@ -65,7 +65,7 @@ func ParseExtension(fe ext.Extensions, p *xpp.Parser) (ext.Extensions, error) {
 	return fe, nil
 }
 
-func parseExtensionElement(p *xpp.Parser) (e ext.Extension, err error) {
+func parseExtensionElement(p *XMLParser) (e ext.Extension, err error) {
 	if err = p.Expect(xpp.StartTag, "*"); err != nil {
 		return e, err
 	}
@@ -116,7 +116,7 @@ func parseExtensionElement(p *xpp.Parser) (e ext.Extension, err error) {
 	return e, nil
 }
 
-func PrefixForNamespace(space string, p *xpp.Parser) string {
+func PrefixForNamespace(space string, p *XMLParser) string {
 	// Namespace URI comparisons ignore surrounding whitespace in declarations.
 	space = strings.TrimSpace(space)
 
