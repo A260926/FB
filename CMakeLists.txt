@@ -135,6 +135,7 @@ endif()
 ## sources
 set(SOURCES_ENGINE
     cs.c
+    cfg.c
     Mapping.c
     MCInst.c
     MCInstrDesc.c
@@ -158,9 +159,10 @@ set(HEADERS_ENGINE
 )
 
 set(HEADERS_COMMON
+    include/capstone/capstone.h
+    include/capstone/cfg.h
     include/capstone/arm64.h
     include/capstone/arm.h
-    include/capstone/capstone.h
     include/capstone/evm.h
     include/capstone/wasm.h
     include/capstone/mips.h
@@ -847,6 +849,12 @@ if(CAPSTONE_BUILD_CSTEST)
     if(CAPSTONE_INSTALL)
         install(TARGETS cstest EXPORT capstone-targets DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
+endif()
+
+option(CAPSTONE_BUILD_CFG_EXAMPLE "Build the cs_cfg_recover_x86_64() client example" ON)
+if(CAPSTONE_BUILD_CFG_EXAMPLE)
+    add_executable(capstone_cfg_example examples/cfg_example.c)
+    target_link_libraries(capstone_cfg_example PRIVATE capstone)
 endif()
 
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_SOURCE_DIR}/CPackConfig.cmake")
