@@ -35,6 +35,65 @@ Additional Algorithms:
 |***NURBS Surface***  | Surface AABB and OBB BoundingBox</br>Surface Curvature and Normal</br>Surface Approximate Area</br> Surface Triangulation |
 |***NURBS Volume***  | Volume Degree Elevation</br>Volume Knot Insertion/Refinement</br>Volume Point Inversion</br>Volume Split</br>Extract Surface From Volume</br>Extract IsoCurve From Volume</br>Volume Swap and Reverse|
 
+## Joining Two NURBS Surfaces Along U
+`NurbsSurface::JoinAlongU` welds the max-U edge of one clamped tensor-product
+NURBS surface to the min-U edge of another and returns a single real
+`LN_NurbsSurface` with its own rectangular homogeneous control net and both
+knot vectors — no sampling, fitting, triangulation, or evaluator closures.
+
+```C++
+#include "NurbsSurface.h"
+using namespace LNLib;
+
+LN_NurbsSurface joined;
+// left max-U edge meets right min-U edge; both parameter rectangles are
+// normalized internally to [0,1]^2. reverseRightV flips the right patch in V.
+bool ok = NurbsSurface::JoinAlongU(left, right, /*reverseRightV=*/false,
+                                   /*tolerance=*/1e-10, joined);
+if (ok)
+{
+    // joined lives on [0,2] x [0,1]:
+    //   0 <= u <= 1 -> left patch,  1 <= u <= 2 -> right patch
+    XYZ p = NurbsSurface::GetPointOnSurface(joined, UV(1.3, 0.5));
+}
+```
+
+The seam only has to describe the same Euclidean curve (C0); the two
+homogeneous boundary representations may use different rational weight
+functions. Each whole homogeneous surface is multiplied by the other side's
+seam weight function, so the in-plane geometry is preserved exactly even when
+the seam weight ratio is non-constant. Multiplying every homogeneous control
+point of either input by a positive constant does not change the result.
+
+- The returned U degree is the maximum of the two input U degrees; the seam
+  knot `u = 1` has multiplicity exactly that degree and the two patches share
+  one seam control row.
+- The returned V degree is the **sum** of the two original V degrees, stored
+  as continuous piecewise-Bernstein tensor products; every common internal V
+  knot (the exact union of both normalized internal knot sets) gets that full
+  multiplicity. Close but distinct knots are never snapped together.
+
+### `false` vs. exceptions
+- **Returns `false`** when the inputs are structurally valid but the two seams
+  do not agree, coefficient by coefficient, within `tolerance`
+  (`abs(a-b) <= tolerance * max(1, abs(a), abs(b))`, checked on every
+  homogeneous component in the common Bernstein basis — not just at endpoints
+  or sample points). In this case `result` is left unchanged.
+- **Throws `std::invalid_argument`** for malformed input: degrees outside
+  1..5, non-finite coordinates or knots, non-positive/non-finite weights,
+  unclamped knot vectors, internal knot multiplicity above the axis degree,
+  rectangular/length mismatches, or a non-positive/non-finite `tolerance`.
+  On a throw `result` is likewise left unchanged.
+
+The offline example `examples/join_surface.cpp` joins two non-planar rational
+patches with a non-constant seam weight function and writes a cross-seam OBJ
+mesh. Build and run the offline harness with:
+
+```bash
+bash support/run.sh baseline   # original library checks
+bash support/run.sh target     # join contract tests (basis/rational/ownership) + example
+```
+
 ## Visualization
 <img src="assets/curve.png" width=500 height=400>
 

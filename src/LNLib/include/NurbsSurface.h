@@ -25,6 +25,28 @@ namespace LNLib
 
 		static void Check(const LN_NurbsSurface& surface);
 
+		/// <summary>
+		/// Join two clamped tensor-product NURBS surfaces along the U direction.
+		/// The max-U edge of "left" is welded to the min-U edge of "right".
+		///
+		/// Both input parameter rectangles are normalized to [0,1]^2; when
+		/// reverseRightV is true the right surface is reversed along V first.
+		/// The result lives on [0,2]x[0,1], with the two patches sharing a single
+		/// seam control row, and is a plain LN_NurbsSurface with its own
+		/// rectangular homogeneous control net and both knot vectors.
+		///
+		/// The seam only has to describe the same Euclidean curve (C0); the two
+		/// homogeneous boundary representations may use different rational
+		/// weight functions. They are reconciled by multiplying each whole
+		/// homogeneous surface with the other side's seam weight function.
+		///
+		/// Illegal input (bad dimensions, non-finite data, non-positive weights,
+		/// unclamped knots, wrong multiplicity, invalid tolerance) throws
+		/// std::invalid_argument. A legal pair whose seams do not agree returns
+		/// false; in both failure cases "result" is left untouched.
+		/// </summary>
+		static bool JoinAlongU(const LN_NurbsSurface& left, const LN_NurbsSurface& right, bool reverseRightV, double tolerance, LN_NurbsSurface& result);
+
 		static LN_NurbsCurve GetIsoCurve(const LN_NurbsSurface& surface, double fixedParam, bool isUDirection);
 
 		/// <summary>
