@@ -1,0 +1,52 @@
+# Autotools cruft
+*.o
+*.lo
+*.la
+*.exe
+*.pc
+.auto
+.libs
+.deps
+.dirstamp
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache
+config.h.in
+config.h
+config.log
+config.status
+configure
+libtool
+stamp-*
+*-stamp
+m4/libtool.m4
+m4/ltoptions.m4
+m4/ltsugar.m4
+m4/ltversion.m4
+m4/lt~obsolete.m4
+# Visual Studio cruft
+msvc/.vs
+msvc/*.suo
+msvc/*.sdf
+msvc/*.opensdf
+msvc/Debug
+msvc/Release
+*.vcxproj.user
+# Our binaries
+src/zzuf
+src/zzat
+test/zzero
+test/zznop
+test/zzone
+test/bug-div0
+test/bug-memory
+test/bug-mmap
+test/bug-overflow
+# Test suite temporary files
+test/*.log
+test/*.trs
+# Generated manpages
+doc/zzat.1
+doc/zzuf.1
+doc/libzzuf.3
