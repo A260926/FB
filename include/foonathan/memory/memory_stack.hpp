@@ -14,6 +14,7 @@
 #include <type_traits>
 
 #include "detail/assert.hpp"
+#include "detail/asan.hpp"
 #include "detail/memory_stack.hpp"
 #include "config.hpp"
 #include "error.hpp"
@@ -111,9 +112,21 @@ namespace foonathan
             /// \note Due to debug fence sizes, the actual amount of usable memory can vary.
             /// However, this is impossible to compute without knowing the exact allocation pattern before,
             /// so this is just a rough estimate.
+            /// \note When `FOONATHAN_MEMORY_ASAN` is enabled, the estimate also covers the
+            /// redzone and shadow-granule rounding overhead, so the capacity reported by
+            /// \ref capacity_left() can be larger while fewer user bytes fit.
             static constexpr std::size_t min_block_size(std::size_t byte_size) noexcept
             {
+#if FOONATHAN_MEMORY_ASAN
+                // in ASan mode an allocation can need up to granularity - 1 bytes of
+                // rounding plus a redzone of one granule; the capacity estimate is
+                // deliberately generous
+                return detail::saturating_add(
+                    detail::memory_block_stack::implementation_offset(),
+                    detail::saturating_add(byte_size, 2u * detail::asan_granularity));
+#else
                 return detail::memory_block_stack::implementation_offset() + byte_size;
+#endif
             }
 
             /// \effects Creates it with a given initial block size and and other constructor arguments for the \concept{concept_blockallocator,BlockAllocator}.
@@ -121,9 +134,16 @@ namespace foonathan
             /// \requires \c block_size must be at least \c min_block_size(1).
             template <typename... Args>
             explicit memory_stack(std::size_t block_size, Args&&... args)
-            : arena_(block_size, detail::forward<Args>(args)...),
+            : arena_(block_size_with_asan(block_size), detail::forward<Args>(args)...),
               stack_(arena_.allocate_block().memory)
             {
+#if FOONATHAN_MEMORY_ASAN
+                arena_.set_asan_managed(true);
+                // start on a granule boundary; the leading partial granule stays
+                // inaccessible but is never handed out
+                stack_ = detail::fixed_memory_stack(asan_align_up(stack_.top()));
+                asan_poison_current_block();
+#endif
             }
 
             /// \effects Allocates a memory block of given size and alignment.
@@ -137,6 +157,9 @@ namespace foonathan
             /// \requires \c size and \c alignment must be valid.
             void* allocate(std::size_t size, std::size_t alignment)
             {
+#if FOONATHAN_MEMORY_ASAN
+                return asan_allocate(size, alignment);
+#else
                 auto fence  = detail::debug_fence_size;
                 auto offset = detail::align_offset(stack_.top() + fence, alignment);
 
@@ -155,6 +178,7 @@ namespace foonathan
                 }
 
                 return stack_.allocate_unchecked(size, offset);
+#endif
             }
 
             /// \effects Allocates a memory block of given size and alignment,
@@ -164,7 +188,11 @@ namespace foonathan
             /// or `nullptr` if there wasn't enough memory available.
             void* try_allocate(std::size_t size, std::size_t alignment) noexcept
             {
+#if FOONATHAN_MEMORY_ASAN
+                return asan_try_allocate(size, alignment);
+#else
                 return stack_.allocate(block_end(), size, alignment);
+#endif
             }
 
             /// The marker type that is used for unwinding.
@@ -197,27 +225,61 @@ namespace foonathan
 
                 if (std::size_t to_deallocate = (arena_.size() - 1) - m.index) // different index
                 {
+#if FOONATHAN_MEMORY_ASAN
+                    // all blocks above the marker are dead in their entirety;
+                    // poison them before they are put into the cache so that stale
+                    // pointers into cached blocks are still caught by ASan
+                    for (std::size_t i = 0; i != to_deallocate; ++i)
+                    {
+                        auto block = arena_.current_block();
+                        if (asan_block_ok(static_cast<char*>(block.memory)))
+                            detail::asan_poison_aligned(
+                                block.memory,
+                                asan_block_usable(static_cast<char*>(block.memory), block.size));
+                        arena_.deallocate_block();
+                    }
+#else
                     arena_.deallocate_block();
                     for (std::size_t i = 1; i != to_deallocate; ++i)
                         arena_.deallocate_block();
+#endif
 
                     detail::debug_check_pointer(
                         [&]
                         {
                             auto cur = arena_.current_block();
+#if FOONATHAN_MEMORY_ASAN
+                            return m.end
+                                   == static_cast<char*>(cur.memory)
+                                          + asan_block_usable(static_cast<char*>(cur.memory),
+                                                              cur.size);
+#else
                             return m.end == static_cast<char*>(cur.memory) + cur.size;
+#endif
                         },
                         info(), m.top);
 
+#if FOONATHAN_MEMORY_ASAN
+                    // mark memory from new top to end of the block as freed;
+                    // the arena header in front of the block stays accessible
+                    asan_poison_dead(m.top, const_cast<char*>(m.end));
+                    stack_ = detail::fixed_memory_stack(m.top);
+#else
                     // mark memory from new top to end of the block as freed
                     detail::debug_fill_free(m.top, std::size_t(m.end - m.top), 0);
                     stack_ = detail::fixed_memory_stack(m.top);
+#endif
                 }
                 else // same index
                 {
                     detail::debug_check_pointer([&] { return stack_.top() >= m.top; }, info(),
                                                 m.top);
+#if FOONATHAN_MEMORY_ASAN
+                    asan_poison_dead(m.top, stack_.top());
+                    stack_.set_top(m.top);
+#else
                     stack_.unwind(m.top);
+#endif
                 }
             }
 
@@ -234,7 +296,20 @@ namespace foonathan
             /// before the cache or \concept{concept_blockallocator,BlockAllocator} needs to be used.
             std::size_t capacity_left() const noexcept
             {
-                return std::size_t(block_end() - stack_.top());
+                auto top = stack_.top();
+                if (!top)
+                    return 0u;
+#if FOONATHAN_MEMORY_ASAN
+                // only the usable, granule aligned part of the block can be used
+                auto misalignment =
+                    std::size_t(reinterpret_cast<std::uintptr_t>(top) % detail::asan_granularity);
+                auto remaining = std::size_t(block_end() - top);
+                if (misalignment >= remaining)
+                    return 0u;
+                return (remaining - misalignment) & ~(detail::asan_granularity - 1u);
+#else
+                return std::size_t(block_end() - top);
+#endif
             }
 
             /// \returns The size of the next memory block after the current block is exhausted and the arena grows.
@@ -259,11 +334,200 @@ namespace foonathan
                 return {FOONATHAN_MEMORY_LOG_PREFIX "::memory_stack", this};
             }
 
+#if FOONATHAN_MEMORY_ASAN
+            // asks the block allocator for a block whose user region is a whole number
+            // of shadow granules, so poison/unpoison never crosses the allocation
+            static std::size_t block_size_with_asan(std::size_t block_size) noexcept
+            {
+                std::size_t rounded;
+                if (!detail::checked_add(block_size, detail::asan_granularity - 1u, rounded))
+                    return block_size;
+                return rounded & ~(detail::asan_granularity - 1u);
+            }
+#else
+            static constexpr std::size_t block_size_with_asan(std::size_t block_size) noexcept
+            {
+                return block_size;
+            }
+#endif
+
             const char* block_end() const noexcept
             {
                 auto block = arena_.current_block();
+#if FOONATHAN_MEMORY_ASAN
+                // only whole shadow granules are managed: the end is rounded down
+                // to an absolute granule boundary
+                auto end = reinterpret_cast<std::uintptr_t>(block.memory) + block.size;
+                end &= ~static_cast<std::uintptr_t>(detail::asan_granularity - 1u);
+                return reinterpret_cast<const char*>(end);
+#else
                 return static_cast<const char*>(block.memory) + block.size;
+#endif
             }
+
+#if FOONATHAN_MEMORY_ASAN
+            // Aligns a stack top (an absolute address) up to the next shadow granule
+            // boundary, so all allocations start on a granule boundary independently
+            // of the block's alignment.
+            static char* asan_align_up(char* top) noexcept
+            {
+                auto value = reinterpret_cast<std::uintptr_t>(top);
+                value      = (value + (detail::asan_granularity - 1u))
+                        & ~static_cast<std::uintptr_t>(detail::asan_granularity - 1u);
+                return reinterpret_cast<char*>(value);
+            }
+
+            // The ASan mode uses a different sub-allocation layout.
+            // A block is split into shadow-granule aligned pieces: every non-zero
+            // allocation gets at least `alignment` (and at least the 8 byte shadow
+            // granularity), is rounded up to a granule boundary and is followed by a
+            // redzone of at least 8 bytes. Only the requested bytes of the allocation
+            // are unpoisoned. Since a following piece always starts on the next granule
+            // boundary, the last (partial) granule of an object can never be partly
+            // shared with the next object: the trailing bytes belong to the redzone.
+            static constexpr std::size_t asan_redzone_size = detail::asan_granularity;
+
+            // A block's user region only needs to be poisoned if the block starts on a
+            // granule boundary; its end is truncated to whole granules. Block
+            // allocations from the default allocators are granule aligned, but the
+            // check keeps the invariant safe for custom block allocators.
+            static bool asan_block_ok(const char* begin) noexcept
+            {
+                return reinterpret_cast<std::uintptr_t>(begin) % detail::asan_granularity == 0u;
+            }
+
+            // number of bytes of the block that lie on whole granules
+            static std::size_t asan_block_usable(const char* begin, std::size_t size) noexcept
+            {
+                auto start = reinterpret_cast<std::uintptr_t>(begin);
+                auto end   = start + size;
+                end &= ~static_cast<std::uintptr_t>(detail::asan_granularity - 1u);
+                return end > start ? std::size_t(end - start) : 0u;
+            }
+
+            // poisons the whole usable user region of the current block; the arena
+            // management header lives in front of block.memory and is left untouched
+            void asan_poison_current_block() noexcept
+            {
+                auto block = arena_.current_block();
+                if (asan_block_ok(static_cast<char*>(block.memory)))
+                    detail::asan_poison_aligned(block.memory,
+                                                asan_block_usable(static_cast<char*>(block.memory),
+                                                                  block.size));
+            }
+
+            // calculates the layout of one allocation inside [top, end),
+            // returns false if it does not fit or the arithmetic would overflow
+            static bool asan_layout(char* top, const char* end, std::size_t size,
+                                    std::size_t alignment, char*& memory,
+                                    std::size_t& needed) noexcept
+            {
+                // the allocation starts on a granule boundary so that its accessible
+                // bytes never share a granule with the preceding alignment gap
+                auto align = alignment < detail::asan_granularity ? detail::asan_granularity
+                                                                   : alignment;
+                if (!detail::is_valid_alignment(align))
+                    return false;
+
+                auto misalignment = std::size_t(reinterpret_cast<std::uintptr_t>(top) % align);
+                auto offset       = misalignment != 0u ? align - misalignment : 0u;
+                if (offset > std::size_t(end - top))
+                    return false;
+
+                // round the allocation up to a granule boundary, then add the redzone;
+                // a zero-sized allocation still consumes a redzone so that repeated
+                // zero-sized allocations do not all alias the same granule
+                std::size_t end_of_object, padded;
+                if (!detail::checked_add(offset, size, end_of_object)
+                    || !detail::checked_add(end_of_object, detail::asan_granularity - 1u,  // NOLINT
+                                            padded)
+                    || !detail::checked_add(padded & ~(detail::asan_granularity - 1u),  // NOLINT
+                                            asan_redzone_size, needed))
+                    return false;
+
+                memory = top + offset;
+                return true;
+            }
+
+            // switches the stack to a block and makes all of it inaccessible
+            void asan_begin_block(char* begin) noexcept
+            {
+                stack_ = detail::fixed_memory_stack(asan_align_up(begin));
+                asan_poison_current_block();
+            }
+
+            void* asan_allocate(std::size_t size, std::size_t alignment)
+            {
+                auto top = stack_.top();
+                if (top)
+                {
+                    char*       memory;
+                    std::size_t needed;
+                    if (asan_layout(top, block_end(), size, alignment, memory, needed)
+                        && needed <= std::size_t(block_end() - top))
+                    {
+                        detail::asan_unpoison(memory, size);
+                        detail::debug_fill(memory, size, debug_magic::new_memory);
+                        stack_.set_top(top + needed);
+                        return memory;
+                    }
+                }
+
+                // need to grow
+                auto block = arena_.allocate_block();
+                auto begin = asan_align_up(static_cast<char*>(block.memory));
+
+                // poison the new block, then hand out the first allocation from it
+                asan_begin_block(begin);
+
+                char*       memory;
+                std::size_t needed;
+                if (!asan_layout(begin, block_end(), size, alignment, memory, needed))
+                    FOONATHAN_THROW(bad_allocation_size(info(), size, block.size));
+
+                detail::check_allocation_size<bad_allocation_size>(
+                    needed, std::size_t(block_end() - begin), info());
+
+                detail::asan_unpoison(memory, size);
+                detail::debug_fill(memory, size, debug_magic::new_memory);
+                stack_.set_top(begin + needed);
+                return memory;
+            }
+
+            void* asan_try_allocate(std::size_t size, std::size_t alignment) noexcept
+            {
+                auto top = stack_.top();
+                if (!top)
+                    return nullptr;
+
+                char*       memory;
+                std::size_t needed;
+                if (!asan_layout(top, block_end(), size, alignment, memory, needed)
+                    || needed > std::size_t(block_end() - top))
+                    return nullptr;
+
+                detail::asan_unpoison(memory, size);
+                detail::debug_fill(memory, size, debug_magic::new_memory);
+                stack_.set_top(top + needed);
+                return memory;
+            }
+
+            // poisons [begin, end) again; begin is a stack top and end is a block end or
+            // a stack top, both granule aligned
+            void asan_poison_dead(char* begin, char* end) noexcept
+            {
+                auto size = std::size_t(end - begin);
+                if (size == 0u)
+                    return;
+
+                // the region must be made accessible for the debug fill;
+                // it is poisoned in its entirety afterwards, the fill only writes
+                // within the region and the redzone stays poisoned
+                detail::asan_unpoison(begin, size);
+                detail::debug_fill(begin, size, debug_magic::freed_memory);
+                detail::asan_poison_aligned(begin, size);
+            }
+#endif // FOONATHAN_MEMORY_ASAN
 
             memory_arena<allocator_type> arena_;
             detail::fixed_memory_stack   stack_;
@@ -400,7 +664,16 @@ namespace foonathan
             static void* allocate_array(allocator_type& state, std::size_t count, std::size_t size,
                                         std::size_t alignment)
             {
+#if FOONATHAN_MEMORY_ASAN
+                // the ASan layout arithmetic must not overflow on the total byte count
+                std::size_t total;
+                if (!detail::checked_mul(count, size, total))
+                    FOONATHAN_THROW(bad_array_size(state.info(), count * size,
+                                                   max_array_size(state)));
+                return allocate_node(state, total, alignment);
+#else
                 return allocate_node(state, count * size, alignment);
+#endif
             }
 
             /// @{
@@ -459,7 +732,14 @@ namespace foonathan
             static void* try_allocate_array(allocator_type& state, std::size_t count,
                                             std::size_t size, std::size_t alignment) noexcept
             {
+#if FOONATHAN_MEMORY_ASAN
+                std::size_t total;
+                if (!detail::checked_mul(count, size, total))
+                    return nullptr;
+                return state.try_allocate(total, alignment);
+#else
                 return state.try_allocate(count * size, alignment);
+#endif
             }
 
             /// @{

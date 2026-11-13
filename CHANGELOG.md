@@ -1,5 +1,9 @@
 # Upcoming Changes
 
+Improvements:
+
+* Add the `FOONATHAN_MEMORY_ASAN` option (default `OFF`), which makes `memory_stack` track the lifetime of its sub-allocations with AddressSanitizer: each allocation only exposes its requested bytes with a poisoned redzone, and `unwind()`, `shrink_to_fit()` and destruction poison returned memory. Both the library and its users must be built with AddressSanitizer when it is enabled.
+
 # 0.7-4
 
 CMake Improvements:

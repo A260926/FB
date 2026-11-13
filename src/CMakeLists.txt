@@ -6,6 +6,7 @@
 set(header_path ${FOONATHAN_MEMORY_SOURCE_DIR}/include/foonathan/memory)
 set(detail_header
         ${header_path}/detail/align.hpp
+        ${header_path}/detail/asan.hpp
         ${header_path}/detail/assert.hpp
         ${header_path}/detail/container_node_sizes.hpp
         ${header_path}/detail/debug_helpers.hpp
@@ -75,6 +76,37 @@ set(src
 # configure config file
 configure_file("config.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/config_impl.hpp")
 
+# AddressSanitizer support for memory_stack requires the compiler to provide the
+# sanitizer runtime and the interface header; check that before building
+if(FOONATHAN_MEMORY_ASAN)
+    include(CheckCXXSourceCompiles)
+    if(MSVC)
+        set(_foonathan_memory_asan_flag "/fsanitize=address")
+    else()
+        set(_foonathan_memory_asan_flag "-fsanitize=address")
+    endif()
+    set(CMAKE_REQUIRED_FLAGS "${_foonathan_memory_asan_flag}")
+    set(CMAKE_REQUIRED_LINK_OPTIONS "${_foonathan_memory_asan_flag}")
+    check_cxx_source_compiles(
+        "#include <sanitizer/asan_interface.h>
+         int main()
+         {
+             char c = 0;
+             __asan_poison_memory_region(&c, 1);
+             return 0;
+         }"
+        FOONATHAN_MEMORY_ASAN_AVAILABLE)
+    unset(CMAKE_REQUIRED_FLAGS)
+    unset(CMAKE_REQUIRED_LINK_OPTIONS)
+    if(NOT FOONATHAN_MEMORY_ASAN_AVAILABLE)
+        message(FATAL_ERROR
+                "FOONATHAN_MEMORY_ASAN is enabled, but the compiler cannot build an "
+                "AddressSanitizer program (${_foonathan_memory_asan_flag} and "
+                "<sanitizer/asan_interface.h> are required), and the library and its users "
+                "must both be compiled with AddressSanitizer")
+    endif()
+endif()
+
 # generate container_node_sizes.hpp if necessary
 if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/container_node_sizes_impl.hpp)
     get_container_node_sizes(${CMAKE_CURRENT_BINARY_DIR}/container_node_sizes_impl.hpp)
@@ -109,6 +141,18 @@ endif()
 set_target_properties(foonathan_memory PROPERTIES
                                        OUTPUT_NAME "foonathan_memory-$CACHE{FOONATHAN_MEMORY_VERSION}"
                                        POSITION_INDEPENDENT_CODE ON)
+
+if(FOONATHAN_MEMORY_ASAN)
+    # Both the library and every user of the public headers must be compiled and
+    # linked with AddressSanitizer: the header implementations call the sanitizer
+    # interface and would fail to link otherwise. Propagate the flags publicly.
+    target_compile_options(foonathan_memory PUBLIC ${_foonathan_memory_asan_flag})
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.13.0")
+        target_link_options(foonathan_memory PUBLIC ${_foonathan_memory_asan_flag})
+    else()
+        target_link_libraries(foonathan_memory PUBLIC ${_foonathan_memory_asan_flag})
+    endif()
+endif()
 
 if(NEED_LIBRARY_FOR_CXX_ATOMIC)
     target_link_libraries(foonathan_memory PRIVATE -latomic)

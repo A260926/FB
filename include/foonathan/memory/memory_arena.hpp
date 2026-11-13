@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "detail/debug_helpers.hpp"
+#include "detail/asan.hpp"
 #include "detail/assert.hpp"
 #include "detail/utility.hpp"
 #include "allocator_traits.hpp"
@@ -201,13 +202,16 @@ namespace foonathan
                 }
 
                 template <class BlockAllocator>
-                void do_deallocate_block(BlockAllocator&, detail::memory_block_stack& used) noexcept
+                void do_deallocate_block(BlockAllocator&, detail::memory_block_stack& used,
+                                         bool) noexcept
                 {
+                    // in ASan mode the block stays poisoned while in the cache,
+                    // only returning it to the allocator restores access
                     cached_.steal_top(used);
                 }
 
                 template <class BlockAllocator>
-                void do_shrink_to_fit(BlockAllocator& alloc) noexcept
+                void do_shrink_to_fit(BlockAllocator& alloc, bool asan_poisoned) noexcept
                 {
                     detail::memory_block_stack to_dealloc;
                     // pop from cache and push to temporary stack
@@ -216,7 +220,12 @@ namespace foonathan
                         to_dealloc.steal_top(cached_);
                     // now dealloc everything
                     while (!to_dealloc.empty())
-                        alloc.deallocate_block(to_dealloc.pop());
+                    {
+                        auto block = to_dealloc.pop();
+                        if (asan_poisoned)
+                            detail::asan_unpoison(block.memory, block.size);
+                        alloc.deallocate_block(block);
+                    }
                 }
 
             private:
@@ -249,13 +258,16 @@ namespace foonathan
 
                 template <class BlockAllocator>
                 void do_deallocate_block(BlockAllocator&             alloc,
-                                         detail::memory_block_stack& used) noexcept
+                                         detail::memory_block_stack& used, bool asan_poisoned) noexcept
                 {
-                    alloc.deallocate_block(used.pop());
+                    auto block = used.pop();
+                    if (asan_poisoned)
+                        detail::asan_unpoison(block.memory, block.size);
+                    alloc.deallocate_block(block);
                 }
 
                 template <class BlockAllocator>
-                void do_shrink_to_fit(BlockAllocator&) noexcept
+                void do_shrink_to_fit(BlockAllocator&, bool) noexcept
                 {
                 }
             };
@@ -310,7 +322,12 @@ namespace foonathan
                 shrink_to_fit();
                 // now deallocate everything
                 while (!used_.empty())
-                    allocator_type::deallocate_block(used_.pop());
+                {
+                    auto block = used_.pop();
+                    if (is_asan_managed())
+                        detail::asan_unpoison(block.memory, block.size);
+                    allocator_type::deallocate_block(block);
+                }
             }
 
             /// @{
@@ -323,6 +340,9 @@ namespace foonathan
               cache(detail::move(other)),
               used_(detail::move(other.used_))
             {
+#if FOONATHAN_MEMORY_ASAN
+                asan_managed_ = other.asan_managed_;
+#endif
             }
 
             memory_arena& operator=(memory_arena&& other) noexcept
@@ -340,7 +360,34 @@ namespace foonathan
                 detail::adl_swap(static_cast<allocator_type&>(a), static_cast<allocator_type&>(b));
                 detail::adl_swap(static_cast<cache&>(a), static_cast<cache&>(b));
                 detail::adl_swap(a.used_, b.used_);
+#if FOONATHAN_MEMORY_ASAN
+                detail::adl_swap(a.asan_managed_, b.asan_managed_);
+#endif
             }
+
+            /// @{
+            /// \effects Enables or disables AddressSanitizer management of the block
+            /// memory, see \ref memory_stack.
+            /// \note This is a no-op unless `FOONATHAN_MEMORY_ASAN` is enabled.
+            void set_asan_managed(bool managed) noexcept
+            {
+#if FOONATHAN_MEMORY_ASAN
+                asan_managed_ = managed;
+#else
+                (void)managed;
+#endif
+            }
+
+            /// \returns Whether the block memory is managed by an ASan aware owner.
+            bool is_asan_managed() const noexcept
+            {
+#if FOONATHAN_MEMORY_ASAN
+                return asan_managed_;
+#else
+                return false;
+#endif
+            }
+            /// @}
 
             /// \effects Allocates a new memory block.
             /// It first uses a cache of previously deallocated blocks, if caching is enabled,
@@ -353,7 +400,16 @@ namespace foonathan
                     used_.push(allocator_type::allocate_block());
 
                 auto block = used_.top();
-                detail::debug_fill_internal(block.memory, block.size, false);
+                if (is_asan_managed())
+                {
+                    // the block may be poisoned by its previous user and stays poisoned;
+                    // the owner re-establishes the exact accessibility of its regions.
+                    // The management header in front of block.memory was never poisoned.
+                }
+                else
+                {
+                    detail::debug_fill_internal(block.memory, block.size, false);
+                }
                 return block;
             }
 
@@ -371,8 +427,16 @@ namespace foonathan
             void deallocate_block() noexcept
             {
                 auto block = used_.top();
-                detail::debug_fill_internal(block.memory, block.size, true);
-                this->do_deallocate_block(get_allocator(), used_);
+                if (is_asan_managed())
+                {
+                    // the user region is already poisoned by its owner and must stay
+                    // poisoned while the block is in the cache; the header is accessible
+                }
+                else
+                {
+                    detail::debug_fill_internal(block.memory, block.size, true);
+                }
+                this->do_deallocate_block(get_allocator(), used_, is_asan_managed());
             }
 
             /// \returns If `ptr` is in memory owned by the arena.
@@ -386,7 +450,7 @@ namespace foonathan
             /// Does nothing if caching is disabled.
             void shrink_to_fit() noexcept
             {
-                this->do_shrink_to_fit(get_allocator());
+                this->do_shrink_to_fit(get_allocator(), is_asan_managed());
             }
 
             /// \returns The capacity of the arena, i.e. how many blocks are used and cached.
@@ -429,6 +493,14 @@ namespace foonathan
 
         private:
             detail::memory_block_stack used_;
+#if FOONATHAN_MEMORY_ASAN
+            // whether the block memory is managed by an AddressSanitizer aware owner
+            // (memory_stack); disabled by default, so memory_pool and the other users
+            // of the arena keep the original behavior.
+            // The member only exists when the feature is enabled, so the layout and
+            // behavior of the library are unchanged otherwise.
+            bool asan_managed_ = false;
+#endif
         };
 
 #if FOONATHAN_MEMORY_EXTERN_TEMPLATE

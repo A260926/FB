@@ -58,6 +58,8 @@ endif()
 # other options
 option(FOONATHAN_MEMORY_CHECK_ALLOCATION_SIZE
         "whether or not the size of the allocation will be checked" ON)
+option(FOONATHAN_MEMORY_ASAN
+        "whether or not memory_stack sub-allocations are tracked by AddressSanitizer" OFF)
 set(FOONATHAN_MEMORY_DEFAULT_ALLOCATOR heap_allocator CACHE STRING
     "the default implementation allocator for higher-level ones")
 option(FOONATHAN_MEMORY_EXTERN_TEMPLATE

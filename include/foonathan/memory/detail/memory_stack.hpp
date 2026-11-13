@@ -109,6 +109,12 @@ namespace foonathan
                     return cur_;
                 }
 
+                // sets the current top without touching the memory in between
+                void set_top(char* top) noexcept
+                {
+                    cur_ = top;
+                }
+
             private:
                 char* cur_;
             };
