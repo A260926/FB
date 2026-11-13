@@ -74,4 +74,7 @@ src/pcre2.h
 src/pcre2_chartables.c
 src/stamp-h1
 
+# Task property-test build directory
+.task-build/
+
 # End
