@@ -1,0 +1,3 @@
+const fs=require('node:fs');const events=fs.readFileSync(process.argv[2],'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+const groups=["TestSessionCorrelation", "TestSessionRetransmit", "TestSessionRetirement"];
+for(const group of groups){const e=events.filter(x=>x.Test===group);if(!e.some(x=>x.Action==='run')||!e.some(x=>x.Action==='pass')||e.some(x=>x.Action==='skip'||x.Action==='fail'))throw Error('missing/failed group '+group);const children=events.filter(x=>x.Test?.startsWith(group+'/'));if(!children.some(x=>x.Action==='pass')||children.some(x=>x.Action==='skip'||x.Action==='fail'))throw Error('no actual passing cases '+group);console.log('GROUP_PASS '+group)}
