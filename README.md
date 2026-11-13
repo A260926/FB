@@ -39,7 +39,70 @@ You can compare results in motion using ffplay/mpv players on vectors/out_ref.26
 
 ## Usage
 
-TBD
+```c
+#include "minih264e.h"
+
+H264E_create_param_t cp;
+memset(&cp, 0, sizeof(cp));
+cp.width = 64;
+cp.height = 64;
+cp.gop = 30;
+cp.const_input_flag = 1;
+cp.vbv_size_bytes = 8192;
+cp.num_layers = 1;
+cp.max_threads = 1;
+
+/* Optional: embed constant frame-rate timing and NAL HRD signaling.
+ * Leave hrd_bitrate_bps at 0 for the legacy stream (no VUI, no SEI).
+ * When enabled, the SPS gets timing_info plus one NAL HRD CPB, and each
+ * IDR is preceded by a buffering_period SEI and every picture by a
+ * pic_timing SEI, so the recorder needs no separate per-frame timing file.
+ * Rate control is unchanged: qp_min/qp_max and desired_frame_bytes still
+ * drive quantization and the existing VBV logic. */
+cp.hrd_bitrate_bps = 64000;       /* 0 disables HRD signaling entirely */
+cp.hrd_num_units_in_tick = 1001;  /* one frame = two ticks ... */
+cp.hrd_time_scale = 60000;        /* ... => 60000 / (2 * 1001) ~= 29.97 fps */
+
+int sizeof_persist, sizeof_scratch;
+if (H264E_sizeof(&cp, &sizeof_persist, &sizeof_scratch) != H264E_STATUS_SUCCESS)
+    return 1;                      /* invalid HRD combination -> BAD_PARAMETER */
+
+H264E_persist_t *enc = malloc(sizeof_persist);
+H264E_scratch_t *scratch = malloc(sizeof_scratch);
+if (H264E_init(enc, &cp) != H264E_STATUS_SUCCESS)
+    return 1;
+
+unsigned char *yuv = malloc(64 * 64 * 3 / 2);
+H264E_io_yuv_t in = {
+    { yuv, yuv + 64 * 64, yuv + 64 * 64 * 5 / 4 },
+    { 64, 32, 32 }
+};
+
+H264E_run_param_t rp;
+memset(&rp, 0, sizeof(rp));
+rp.qp_min = rp.qp_max = 30;
+rp.desired_frame_bytes = 1000;     /* still supplied and honored */
+
+for (;;)
+{
+    /* fill yuv with one I420 picture ... */
+    unsigned char *out;
+    int out_size;
+    if (H264E_encode(enc, scratch, &rp, &in, &out, &out_size) != H264E_STATUS_SUCCESS)
+        break;
+    /* out is Annex-B: SPS/PPS, optional SEI, then slice NAL units */
+}
+```
+
+HRD constraints (all rejected up front by `H264E_sizeof`/`H264E_init` with
+`H264E_STATUS_BAD_PARAMETER`): when `hrd_bitrate_bps` is non-zero,
+`hrd_num_units_in_tick` and `hrd_time_scale` must be non-zero,
+`vbv_size_bytes` must be positive, `num_layers` must be 1 (no SVC) and
+`max_threads` must not exceed 1. Bitrate and CPB size are encoded with the
+smallest scale that represents them exactly (bases 64 and 16 bits); values
+that cannot be represented are rejected rather than rounded. The signaling
+describes constant frame-rate, no-reorder coding only; it does not by itself
+guarantee any target size.
 
 ## SVC
 
