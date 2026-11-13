@@ -123,6 +123,13 @@ type Collector struct {
 	// MaxRequests limit the number of requests done by the instance.
 	// Set it to 0 for infinite requests (default).
 	MaxRequests uint32
+	// successfulVisits makes the Collector record requests as visited only
+	// after they have been processed successfully. It is enabled with the
+	// SuccessfulVisits option.
+	successfulVisits bool
+	// visitTracker coordinates in-flight request identities between a
+	// Collector and its clones when successfulVisits is enabled.
+	visitTracker *successfulVisitTracker
 
 	store                    storage.Storage
 	debugger                 debug.Debugger
@@ -216,6 +223,7 @@ type key int
 const (
 	ProxyURLKey key = iota
 	CheckRevisitKey
+	visitClaimKey
 )
 
 // The prefix for environment variables of Colly settings
@@ -408,6 +416,31 @@ func AllowURLRevisit() CollectorOption {
 	}
 }
 
+// SuccessfulVisits makes the Collector record a request as visited only
+// after it has been fully processed successfully: the response body has
+// been read, charset conversion and HTML/XML handling have finished, and
+// all OnScraped callbacks have returned.
+//
+// Failed requests (network errors, HTTP errors, parsing errors, or aborts
+// before the body was processed) leave no visited record, so they can be
+// retried with an ordinary Visit. Redirects are treated as a single
+// scraping chain: every URL on the chain is recorded only when the chain
+// finishes successfully.
+//
+// While a request is being processed its identity is reserved, so
+// concurrent submissions of the same identity - from the same Collector
+// or from its clones - fail immediately with AlreadyVisitedError instead
+// of waiting or sharing the response. HasVisited and HasPosted only
+// report committed records, not in-flight requests.
+//
+// The default behavior, recording a request as visited before it is
+// sent, is unchanged when this option is not used.
+func SuccessfulVisits() CollectorOption {
+	return func(c *Collector) {
+		c.successfulVisits = true
+	}
+}
+
 // MaxBodySize sets the limit of the retrieved response body in bytes.
 func MaxBodySize(sizeInBytes int) CollectorOption {
 	return func(c *Collector) {
@@ -516,6 +549,7 @@ func (c *Collector) Init() {
 	c.ID = atomic.AddUint32(&collectorCounter, 1)
 	c.TraceHTTP = false
 	c.Context = context.Background()
+	c.visitTracker = newSuccessfulVisitTracker()
 }
 
 // Appengine will replace the Collector's backend http.Client
@@ -683,34 +717,40 @@ func (c *Collector) scrape(u, method string, depth int, requestData io.Reader, c
 	// note: once 1.13 is minimum supported Go version,
 	// replace this with http.NewRequestWithContext
 	req = req.WithContext(context.WithValue(c.Context, CheckRevisitKey, checkRevisit))
+	var claim *visitClaim
+	if c.successfulVisits && !c.AllowURLRevisit {
+		claim = c.visitTracker.newClaim()
+		req = req.WithContext(context.WithValue(req.Context(), visitClaimKey, claim))
+	}
 
-	if err := c.requestCheck(parsedURL, method, req.GetBody, depth, checkRevisit); err != nil {
+	if err := c.requestCheck(parsedURL, method, req.GetBody, depth, checkRevisit, claim); err != nil {
 		return err
 	}
 	u = parsedURL.String()
 	c.wg.Add(1)
 	if c.Async {
-		go c.fetch(u, method, depth, requestData, ctx, hdr, req)
+		go c.fetch(u, method, depth, requestData, ctx, hdr, req, claim)
 		return nil
 	}
-	return c.fetch(u, method, depth, requestData, ctx, hdr, req)
+	return c.fetch(u, method, depth, requestData, ctx, hdr, req, claim)
 }
 
-func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request) error {
+func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ctx *Context, hdr http.Header, req *http.Request, claim *visitClaim) error {
 	defer c.wg.Done()
 	if ctx == nil {
 		ctx = NewContext()
 	}
 	request := &Request{
-		URL:       req.URL,
-		Headers:   &req.Header,
-		Host:      req.Host,
-		Ctx:       ctx,
-		Depth:     depth,
-		Method:    method,
-		Body:      requestData,
-		collector: c,
-		ID:        c.requestCount.Add(1),
+		URL:        req.URL,
+		Headers:    &req.Header,
+		Host:       req.Host,
+		Ctx:        ctx,
+		Depth:      depth,
+		Method:     method,
+		Body:       requestData,
+		collector:  c,
+		ID:         c.requestCount.Add(1),
+		visitClaim: claim,
 	}
 
 	if req.Header.Get("Accept") == "" {
@@ -720,6 +760,7 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 	c.handleOnRequest(request)
 
 	if request.abort {
+		c.releaseVisitClaim(request)
 		return nil
 	}
 
@@ -749,7 +790,14 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 	if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
 		request.ProxyURL = proxyURL
 	}
+	if err != nil || (!c.ParseHTTPErrorResponse && response.StatusCode >= 300) {
+		// Release the reserved identities before OnError runs so callbacks
+		// can immediately retry the request. Accepted HTTP error responses
+		// (ParseHTTPErrorResponse) keep their reservation to be committed.
+		c.releaseVisitClaim(request)
+	}
 	if err := c.handleOnError(response, err, request, ctx); err != nil {
+		c.releaseVisitClaim(request)
 		return err
 	}
 	c.responseCount.Add(1)
@@ -759,6 +807,7 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 
 	err = response.fixCharset(c.DetectCharset, request.ResponseCharacterEncoding)
 	if err != nil {
+		c.releaseVisitClaim(request)
 		return err
 	}
 
@@ -766,20 +815,78 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 
 	err = c.handleOnHTML(response)
 	if err != nil {
+		c.releaseVisitClaim(request)
 		c.handleOnError(response, err, request, ctx)
 	}
 
-	err = c.handleOnXML(response)
-	if err != nil {
-		c.handleOnError(response, err, request, ctx)
+	if xmlErr := c.handleOnXML(response); xmlErr != nil {
+		c.releaseVisitClaim(request)
+		c.handleOnError(response, xmlErr, request, ctx)
+		if err == nil {
+			err = xmlErr
+		}
 	}
 
 	c.handleOnScraped(response)
 
+	// Identities are committed only after OnScraped has finished. A failed
+	// commit is reported as the scraping error. A scraping error keeps its
+	// own value and has already dropped the reservations.
+	if err == nil {
+		err = c.commitVisitClaim(request)
+	} else {
+		c.releaseVisitClaim(request)
+	}
+
 	return err
 }
 
-func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func() (io.ReadCloser, error), depth int, checkRevisit bool) error {
+// releaseVisitClaim drops every identity reserved by the request if it was
+// not committed. It is safe to call more than once.
+func (c *Collector) releaseVisitClaim(request *Request) {
+	if request.visitClaim != nil {
+		c.visitTracker.release(request.visitClaim)
+	}
+}
+
+// commitVisitClaim records every identity reserved by a successfully
+// processed request and then releases them. A storage failure drops the
+// local reservations so the request can be attempted again.
+func (c *Collector) commitVisitClaim(request *Request) error {
+	claim := request.visitClaim
+	if claim == nil {
+		return nil
+	}
+	if c.visitTracker.isReleased(claim) {
+		return nil
+	}
+	// Always release afterwards: on success Retry must be able to reclaim the
+	// identity, on failure the request must be retryable.
+	err := c.commitClaim(claim)
+	c.visitTracker.release(claim)
+	return err
+}
+
+// commitClaim writes the identities of claim to the storage. Identities
+// already recorded do not cause an error and are left untouched, so a Retry
+// after a successful visit cannot fail because of an earlier commit.
+func (c *Collector) commitClaim(claim *visitClaim) error {
+	for _, uHash := range c.visitTracker.hashes(claim) {
+		visited, err := c.store.IsVisited(uHash)
+		if err != nil {
+			return err
+		}
+		if visited {
+			continue
+		}
+		if err := c.store.Visited(uHash); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func() (io.ReadCloser, error), depth int, checkRevisit bool, claim *visitClaim) error {
 	u := parsedURL.String()
 	if c.MaxDepth > 0 && c.MaxDepth < depth {
 		return ErrMaxDepth
@@ -803,16 +910,10 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 			return nil
 		}
 
-		var body io.ReadCloser
-		if getBody != nil {
-			var err error
-			body, err = getBody()
-			if err != nil {
-				return err
-			}
-			defer body.Close()
+		uHash, err := requestIdentity(u, getBody)
+		if err != nil {
+			return err
 		}
-		uHash := requestHash(u, body)
 		visited, err := c.store.IsVisited(uHash)
 		if err != nil {
 			return err
@@ -820,11 +921,46 @@ func (c *Collector) requestCheck(parsedURL *url.URL, method string, getBody func
 		if visited {
 			return &AlreadyVisitedError{parsedURL}
 		}
+		if claim != nil {
+			if !c.visitTracker.reserve(claim, uHash) {
+				return &AlreadyVisitedError{parsedURL}
+			}
+			return nil
+		}
 		return c.store.Visited(uHash)
+	}
+	if claim != nil && !c.AllowURLRevisit {
+		// Retries bypass committed records but must not overtake another
+		// in-flight scrape of the same identity. Without a reproducible body
+		// there is no identity to coordinate, mirroring the revisit handling
+		// above.
+		if method == "GET" || getBody != nil {
+			uHash, err := requestIdentity(u, getBody)
+			if err != nil {
+				return err
+			}
+			if !c.visitTracker.reserve(claim, uHash) {
+				return &AlreadyVisitedError{parsedURL}
+			}
+		}
 	}
 	return nil
 }
 
+// requestIdentity returns the storage identity of a request. getBody, when
+// available, produces a fresh copy of the request body.
+func requestIdentity(u string, getBody func() (io.ReadCloser, error)) (uint64, error) {
+	var body io.ReadCloser
+	if getBody != nil {
+		var err error
+		body, err = getBody()
+		if err != nil {
+			return 0, err
+		}
+		defer body.Close()
+	}
+	return requestHash(u, body), nil
+}
 func (c *Collector) checkFilters(URL, domain string) error {
 	if len(c.DisallowedURLFilters) > 0 {
 		if isMatchingFilter(c.DisallowedURLFilters, []byte(URL)) {
@@ -1458,6 +1594,8 @@ func (c *Collector) Clone() *Collector {
 		Headers:                c.Headers,
 		TraceHTTP:              c.TraceHTTP,
 		Context:                c.Context,
+		successfulVisits:       c.successfulVisits,
+		visitTracker:           c.visitTracker,
 		store:                  c.store,
 		backend:                c.backend,
 		debugger:               c.debugger,
@@ -1520,9 +1658,16 @@ func (c *Collector) checkRedirectFunc() func(req *http.Request, via []*http.Requ
 					return &AlreadyVisitedError{req.URL}
 				}
 			}
-			err = c.store.Visited(uHash)
-			if err != nil {
-				return err
+			claim, _ := req.Context().Value(visitClaimKey).(*visitClaim)
+			if claim != nil {
+				if !c.visitTracker.reserve(claim, uHash) {
+					return &AlreadyVisitedError{req.URL}
+				}
+			} else {
+				err = c.store.Visited(uHash)
+				if err != nil {
+					return err
+				}
 			}
 		}
 

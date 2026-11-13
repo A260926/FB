@@ -50,6 +50,9 @@ type Request struct {
 	baseURL   *url.URL
 	// ProxyURL is the proxy address that handles the request
 	ProxyURL string
+	// visitClaim holds the in-flight identities reserved for this request
+	// when SuccessfulVisits is enabled.
+	visitClaim *visitClaim
 }
 
 type serializableRequest struct {

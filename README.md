@@ -94,6 +94,32 @@ func main() {
 
 See [examples folder](https://github.com/gocolly/colly/tree/master/_examples) for more detailed examples.
 
+### Recording only successful visits
+
+By default Colly records a URL as visited before the request is sent, so a
+failed request (an HTTP 503, a network error, an aborted response, ...) still
+blocks a later `Visit` with `AlreadyVisitedError`. The optional
+`SuccessfulVisits` option changes that: an identity is recorded only after the
+whole scraping chain — including redirects — has been read and processed by
+the `OnHTML`/`OnXML`/`OnScraped` callbacks.
+
+```go
+c := colly.NewCollector(colly.SuccessfulVisits())
+
+c.OnError(func(r *colly.Response, err error) {
+	// Failed requests are not recorded, so an ordinary Visit can retry them.
+	_ = c.Visit(r.Request.URL.String())
+})
+
+c.Visit("http://go-colly.org/")
+```
+
+While a request is in flight its identity is reserved: concurrent submissions
+of the same identity through the Collector or its `Clone`s return
+`AlreadyVisitedError` immediately instead of waiting. `HasVisited` and
+`HasPosted` only report committed records. `AllowURLRevisit` still bypasses
+all revisit tracking.
+
 ## Installation
 
 `go get github.com/gocolly/colly/v2`
