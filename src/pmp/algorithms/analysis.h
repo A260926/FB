@@ -1,0 +1,45 @@
+// Copyright 2026 the Polygon Mesh Processing Library developers.
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include "pmp/surface_mesh.h"
+#include <iostream>
+
+namespace pmp {
+
+//! \addtogroup algorithms
+//! @{
+
+//! Report with basic mesh information.
+struct MeshAnalysis
+{
+    int n_vertices = 0;
+    int n_edges = 0;
+    int n_faces = 0;
+    bool has_boundary = false;
+    bool is_manifold = true;
+    bool is_triangle_mesh = false;
+    bool is_quad_mesh = false;
+    int n_components = 0;
+    int n_isolated_vertices = 0;
+    int n_degenerate_faces = 0;
+    int n_duplicate_vertices = 0;
+};
+
+//! Output operator for MeshAnalysis.
+std::ostream& operator<<(std::ostream& os, const MeshAnalysis& report);
+
+//! Analyze mesh and return report with basic stats.
+MeshAnalysis analyze(const SurfaceMesh& mesh);
+
+//! Find duplicate vertices in a mesh with a given tolerance.
+//! \return A vector of pairs of duplicate vertices.
+//! \details Uses grid-based spatial hashing for duplicate vertex detection.
+//! \cite teschner_2003_optimized
+std::vector<std::pair<Vertex, Vertex>> find_duplicate_vertices(
+    const SurfaceMesh& mesh, Scalar eps);
+
+//! @}
+
+} // namespace pmp
