@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+bash task_support/env.sh go build ./...
