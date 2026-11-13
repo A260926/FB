@@ -67,3 +67,58 @@ https://phoboslab.org/files/bjork-all-is-full-of-love.mpg
 - the pts (presentation time stamp) for packets in the MPEG-PS container is
 ignored. This may cause sync issues with some files.
 - bugs, probably.
+
+
+## Reading the original PES presentation time stamps
+
+The decoder normally synthesizes a frame clock from the frame rate
+(`frame->time`). If you need the presentation time stamp that was actually
+stored in the MPEG-PS PES layer — for example to sync against another source —
+enable PTS pass-through before decoding starts. Each decoded frame then
+exposes `has_pts` and `pts90k`, where `pts90k` is the original, 33 bit
+unwrapped time stamp in 90kHz ticks. Only the first picture of a PES packet
+carries the packet's PTS; the other frames report `has_pts == 0`. B-frame PTS
+values are intentionally not made monotonic.
+
+```c
+#include <stdio.h>
+#define PL_MPEG_IMPLEMENTATION
+#include "pl_mpeg.h"
+
+int main(void) {
+	plm_t *plm = plm_create_with_filename("some-file.mpg");
+	if (!plm) {
+		return 1;
+	}
+	plm_set_audio_enabled(plm, 0);
+
+	// Must be enabled before the first decode/seek call.
+	if (!plm_set_video_pts_enabled(plm, 1)) {
+		// Decoding had already started; the configuration was not changed.
+	}
+
+	plm_frame_t *frame;
+	while ((frame = plm_decode_video(plm))) {
+		if (frame->has_pts) {
+			printf("frame t=%.3f  pts=%lld (90kHz)  %.3fs\n",
+				frame->time,
+				(long long)frame->pts90k,
+				frame->pts90k / 90000.0);
+		}
+		else {
+			printf("frame t=%.3f  (no PES PTS)\n", frame->time);
+		}
+	}
+
+	plm_destroy(plm);
+	return 0;
+}
+```
+
+The same fields are populated on frames delivered through the
+`plm_set_video_decode_callback()` callback, and the feature works identically
+for file, memory and custom-buffer inputs. When left disabled (the default),
+`has_pts` and `pts90k` are always zero and all other behavior is unchanged.
+The lower level `plm_video_*` elementary-stream decoder has no PES layer, so
+those frames never carry a PTS either.
+
