@@ -118,6 +118,14 @@ type Parser struct {
 	// AllowedVideoRegex is a regular expression that matches video URLs that should be
 	// allowed to be included in the article content. If undefined, it will use default filter.
 	AllowedVideoRegex *regexp.Regexp
+	// DeduplicateContent removes duplicated article bodies carried by
+	// pages that ship several device-specific versions of the same
+	// content. When enabled, each grabArticle attempt drops repeated
+	// runs of at least three identical <p>/<pre> units (repointing
+	// in-page fragment links where possible) before candidate weights
+	// are accumulated, so removed copies never influence the scoring.
+	// Default: false, which leaves every parsed page unchanged.
+	DeduplicateContent bool
 
 	doc             *html.Node
 	documentURI     *nurl.URL
@@ -899,6 +907,14 @@ func (ps *Parser) grabArticle() *html.Node {
 				}
 			}
 			node = ps.getNextNode(node, false)
+		}
+
+		// Remove duplicated device-specific article bodies before any
+		// paragraph starts accumulating candidate weight. Each attempt
+		// runs on its own clone, so the removals here cannot pollute
+		// later attempts with relaxed flags.
+		if ps.DeduplicateContent {
+			ps.deduplicateContentUnits(doc)
 		}
 
 		// Loop through all paragraphs, and assign a score to them based

@@ -1,0 +1,10 @@
+./content-dedup.go
+./parser-check.go
+./parser-parse.go
+./parser.go
+./readability.go
+./utils.go
+./content_dedup_test.go
+./dedup_debug_test.go
+./parser_test.go
+./utils_test.go

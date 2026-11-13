@@ -13,6 +13,7 @@ This package is based from [Readability.js] by [Mozilla] and written line by lin
 - [Status](#status)
 - [Installation](#installation)
 - [Example](#example)
+- [Deduplicating device-specific article copies](#deduplicating-device-specific-article-copies)
 - [Command Line Usage](#command-line-usage)
 - [Licenses](#licenses)
 
@@ -139,6 +140,60 @@ func main() {
 }
 
 ```
+
+## Deduplicating device-specific article copies
+
+Some downloaded pages contain two full article bodies aimed at different
+devices: the surrounding markup (`div`, `section`, `article`, `main`
+shells) differs, but the same paragraphs and links appear in both. By
+default go-readability treats them as separate content, so the exported
+article keeps every paragraph twice.
+
+Set `Parser.DeduplicateContent` to `true` to collapse such copies:
+
+```go
+parser := readability.NewParser()
+parser.DeduplicateContent = true
+
+article, err := parser.Parse(input, pageURL)
+```
+
+How it works:
+
+- A deduplication unit is a `<p>` or `<pre>` element; once entered, its
+  descendants are not collected separately. `div`, `section`, `article`
+  and `main` are transparent shells. Any other block-level structure,
+  non-empty text outside those shells, or standalone media separates
+  units, so consecutive runs never cross it.
+- A unit fingerprint is its tag, its text (`<p>` whitespace is folded
+  with `strings.Fields`, `<pre>` keeps its raw text) and, in document
+  order, its `a[href]` and `img[src,alt]` resources. URLs are resolved
+  with the same page-address rules as the rest of the parser. Other
+  attributes and inline wrappers such as `<span>` do not affect
+  identity; paragraphs with different link targets or images are always
+  kept separately. There is no fuzzy matching: hashes are used for
+  lookup and the full fingerprint is compared before a match is accepted.
+- Only runs of **at least three** consecutive identical units count as a
+  device copy, so an occasional repeated quote is not removed. For each
+  later run the longest non-overlapping earlier run wins, and on equal
+  length the earliest earlier run wins; only the later units are deleted,
+  never content unique to their ancestors.
+- In-page `#fragment` links are handled first. A fragment is
+  percent-decoded once (`+` stays literal). A link pointing at the unique
+  id of a deleted unit is repointed to the unique non-empty id of the
+  matching kept unit. If the mapping is not unambiguous (missing or
+  duplicated id, or the link reaches an id inside the deleted subtree),
+  the whole candidate run is kept instead of being split into a shorter
+  run. Other addresses are never modified.
+
+Deduplication runs on each `grabArticle` attempt's own document clone,
+right after node preprocessing and before paragraphs accumulate
+candidate weight, so deleted copies never influence the scoring and the
+relaxed-flag retries stay independent. Both `Parse` and `ParseDocument`
+honor the switch; `ParseDocument` never mutates the document you pass in.
+The default is `false`, and with it existing parsing results are
+unchanged. A runnable example lives in
+`examples/deduplicate-content/main.go`.
 
 ## Command Line Usage
 

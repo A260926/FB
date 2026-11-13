@@ -1,0 +1,43 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestContentDedupRuns
+=== RUN   TestContentDedupRuns/different_shells_collapse_through_both_entries
+=== RUN   TestContentDedupRuns/removed_copies_stop_contributing_candidate_weight
+=== RUN   TestContentDedupRuns/longest_non-overlapping_run_wins
+=== RUN   TestContentDedupRuns/three_identical_runs_keep_only_the_earliest
+=== RUN   TestContentDedupRuns/separators_stop_runs
+=== RUN   TestContentDedupRuns/different_resources_keep_both_copies
+=== RUN   TestContentDedupRuns/short_repeats,_span_wrappers_and_pre_text_behave_per_spec
+=== RUN   TestContentDedupRuns/fingerprint_selection_picks_longest_then_earliest
+--- PASS: TestContentDedupRuns (0.02s)
+    --- PASS: TestContentDedupRuns/different_shells_collapse_through_both_entries (0.00s)
+    --- PASS: TestContentDedupRuns/removed_copies_stop_contributing_candidate_weight (0.00s)
+    --- PASS: TestContentDedupRuns/longest_non-overlapping_run_wins (0.00s)
+    --- PASS: TestContentDedupRuns/three_identical_runs_keep_only_the_earliest (0.00s)
+    --- PASS: TestContentDedupRuns/separators_stop_runs (0.00s)
+    --- PASS: TestContentDedupRuns/different_resources_keep_both_copies (0.01s)
+    --- PASS: TestContentDedupRuns/short_repeats,_span_wrappers_and_pre_text_behave_per_spec (0.00s)
+    --- PASS: TestContentDedupRuns/fingerprint_selection_picks_longest_then_earliest (0.00s)
+=== RUN   TestContentDedupAnchors
+=== RUN   TestContentDedupAnchors/fragment_links_are_repointed_to_the_kept_unique_id
+=== RUN   TestContentDedupAnchors/plus_signs_in_fragments_stay_literal
+=== RUN   TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run
+=== RUN   TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/no_front_id
+=== RUN   TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/duplicate_target_id
+=== RUN   TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/descendant_id
+=== RUN   TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/decoded_plus_duplicated
+--- PASS: TestContentDedupAnchors (0.01s)
+    --- PASS: TestContentDedupAnchors/fragment_links_are_repointed_to_the_kept_unique_id (0.00s)
+    --- PASS: TestContentDedupAnchors/plus_signs_in_fragments_stay_literal (0.00s)
+    --- PASS: TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run (0.01s)
+        --- PASS: TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/no_front_id (0.00s)
+        --- PASS: TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/duplicate_target_id (0.00s)
+        --- PASS: TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/descendant_id (0.00s)
+        --- PASS: TestContentDedupAnchors/references_without_a_clear_mapping_protect_the_whole_run/decoded_plus_duplicated (0.00s)
+=== RUN   TestContentDedupAttempts
+=== RUN   TestContentDedupAttempts/each_relaxed_attempt_dedups_its_own_clone
+=== RUN   TestContentDedupAttempts/parser_reuse_carries_no_fingerprints_or_anchor_maps
+--- PASS: TestContentDedupAttempts (0.02s)
+    --- PASS: TestContentDedupAttempts/each_relaxed_attempt_dedups_its_own_clone (0.01s)
+    --- PASS: TestContentDedupAttempts/parser_reuse_carries_no_fingerprints_or_anchor_maps (0.01s)
+PASS
+ok  	github.com/go-shiori/go-readability	0.322s
