@@ -1,3 +1,17 @@
+Unreleased
+==========
+
+**Changes**
+
+* Added the `CanonicalizeExclusive` function and `ExclusiveOptions` type,
+  which serialize an element subtree using the Exclusive XML
+  Canonicalization Version 1.0 method. It emits only the namespace
+  declarations visibly used by the subtree (plus any prefixes named in the
+  `InclusivePrefixes` list), sorts namespace declarations and attributes by
+  the canonical rules, renders CDATA as ordinary text, and writes canonical
+  UTF-8 with full end tags independently of `WriteSettings`. The existing
+  `WriteTo` function and its canonical flags are unchanged.
+
 Release 1.8.1
 =============
 

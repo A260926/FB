@@ -195,6 +195,42 @@ Note that this example uses the `FindElementsPathSeq` function, which takes as
 an argument a pre-compiled path object. Use precompiled paths when you plan to
 search with the same path more than once.
 
+### Exclusive XML canonicalization
+
+`CanonicalizeExclusive` writes an element subtree in the Exclusive XML
+Canonicalization Version 1.0 form. This is useful for XML digital
+signatures, where the same fragment must serialize identically even after it
+is removed from one document and inserted into another. Only the namespace
+declarations visibly used by the subtree are emitted; bindings inherited from
+ancestors that the subtree does not use are excluded.
+
+```go
+doc := etree.NewDocument()
+if err := doc.ReadFromString(`<n0:pdu xmlns:n0="http://a.example">` +
+    `<n1:elem1 xmlns:n1="http://b.example">content</n1:elem1>` +
+    `</n0:pdu>`); err != nil {
+    panic(err)
+}
+
+elem := doc.Root().ChildElements()[0]
+var buf bytes.Buffer
+_, err := etree.CanonicalizeExclusive(&buf, elem, etree.ExclusiveOptions{})
+if err != nil {
+    panic(err)
+}
+fmt.Println(buf.String())
+```
+
+Output:
+```xml
+<n1:elem1 xmlns:n1="http://b.example">content</n1:elem1>
+```
+
+Pass `InclusivePrefixes` to force specific prefixes (use `#default` for the
+default namespace) to be declared wherever they are in effect, and set
+`WithComments` to include comments. The existing `WriteTo` function and its
+canonical flags are unaffected.
+
 ### Other features
 
 These are just a few examples of the things the etree package can do. See the
