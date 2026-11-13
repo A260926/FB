@@ -73,6 +73,89 @@ intent is to use the library in a pure C environment which does not have the C++
 a dependency, it might be a good idea to statically the C++ standard library. That can be done by
 adding the flag `-DBVH_STATIC_LINK_STDLIB_C_API=ON` to the CMake command line.
 
+## Spatial SAH builder for triangles
+
+Long, oblique triangles inflate the leaf boxes of an object-split BVH, so rays that miss the
+surface still pay for many triangle tests. `bvh/v2/spatial_sah_builder.h` provides a triangle-only
+spatial SAH builder that is allowed to split in *space*: one input triangle can be covered by
+several tighter spatial references.
+
+```cpp
+using Node = bvh::v2::Node<float, 3>;
+using Tri  = bvh::v2::Tri<float, 3>;
+
+bvh::v2::SpatialSahBuilder<Node, 16>::Config config;
+config.max_extra_references = 64; // shared, tree-wide budget
+auto result = bvh::v2::SpatialSahBuilder<Node, 16>::build(triangles, config);
+// result.bvh, result.reference_bounds, result.reference_cells,
+// result.spatial_split_count
+```
+
+### Reference slots versus original face numbers
+
+The builder never creates new drawable triangles and never modifies the input. The original
+triangles keep their material, UVs and face number; the input array is read through a
+`std::span<const Tri<Scalar, 3>>` and is left untouched.
+
+- A **reference slot** is one entry in the built tree. `bvh.prim_ids[i]` stores the index of the
+  original triangle that slot refers to. Because a triangle can be split spatially, the same
+  original index may appear in several slots, so the number of reference slots can be larger than
+  the number of input triangles.
+- The **original face number** is the value stored in `bvh.prim_ids`, i.e. an index into the
+  caller's triangle array. Traversal still reports this original index; it never reports a slot or
+  a synthetic fragment id.
+- `reference_bounds[i]` and `reference_cells[i]` are both laid out in reference-slot order, so
+  slot `i` aligns with `bvh.prim_ids[i]`. `reference_bounds` is the tight (conservatively padded)
+  bounds of the clipped fragment, while `reference_cells` is the closed cumulative clipping region
+  obtained by intersecting all ancestor half-spaces. At the root, a cell is just the original
+  triangle box.
+
+Two query layouts work with the resulting `Bvh`, exactly as with the other builders:
+
+1. Indirect: inside a leaf read `triangles[bvh.prim_ids[slot]]`.
+2. Pre-permuted: build a `std::vector<PrecomputedTri>` of length equal to the number of reference
+   slots, placing `triangles[bvh.prim_ids[slot]]` at `slot`, then index it directly.
+
+Nearest-hit queries keep the original face number, distance and barycentric coordinates. Ray
+directions are not normalized, the finite `[tmin, tmax]` window is respected, and any-hit shadow
+queries keep their existing meaning. The same original triangle may be tested more than once; no
+mailboxing or ordered multi-hit is performed. A tree built this way round-trips through the
+existing `serialize`/`deserialize` interface and remains queryable afterwards; no extra cache
+format is introduced.
+
+### Reference budget
+
+`Config` reuses the `sah`, `min_leaf_size` and `max_leaf_size` parameters of the other top-down
+SAH builders and adds `max_extra_references` (default `0`). It caps how many references the whole
+tree may add on top of the input triangle count.
+
+- The budget is shared by the entire tree. Candidate splits are only *evaluated* and never consume
+  budget; the extra references of a spatial split are deducted only when that split is committed.
+- When the budget is exhausted, construction continues with object partitions. No primitive is
+  dropped and the build never returns a partial tree.
+- A value of `0` disables spatial splits entirely, leaving a pure object-split BVH with one
+  reference per input triangle.
+- Each build keeps its own budget state, so repeated calls are independent and deterministic.
+
+At every node the builder considers object splits (binned on the current reference-box centers),
+spatial splits (`BinCount - 1` equally spaced internal planes per axis, clipping the current
+fragment polygons) and the option of not splitting. Spatial candidates are billed by their
+duplicated reference counts, and ties are resolved in favor of the non-duplicating object split.
+If no split is worthwhile and the node is within `max_leaf_size` it becomes a leaf; otherwise a
+progress-making object partition is used.
+
+### Scope and limitations
+
+- Only three-dimensional `Node<float, 3>` and `Node<double, 3>` are supported.
+- Re-splitting clips the current fragment polygon; it does not restart from the whole triangle, so
+  bounds tighten on every axis rather than merely clamping an old AABB to the split plane.
+- Fragment bounds are expanded by at most `32 * epsilon * max(1, max |input coordinate|)` on each
+  side for conservative ray coverage. Vertices or edges lying on a split plane and zero-thickness
+  face boxes remain covered, and adjacent fragments together still cover the original triangle.
+- The existing refit routine, reinsertion optimizer and `DefaultBuilder` are not wired to this new
+  algorithm. The `BinnedSahBuilder`, `SweepSahBuilder` and `DefaultBuilder` are unchanged.
+
+
 ## Usage
 
 The library contains several examples that are kept up-to-date with the API:
