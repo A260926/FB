@@ -1,0 +1,11 @@
+const {spawnSync}=require('node:child_process');
+const fs=require('node:fs');
+const required=["TestReconnectContinuation", "TestReconnectRestart", "TestReconnectFailures"];
+const file="v3/reconnect_target_test.go";
+if(!fs.existsSync(file)||!fs.readFileSync(file,'utf8').trim())throw Error('missing target tests '+file);
+const r=spawnSync('sh',['task_support/go.sh','test','-mod=vendor','-count=1','-json',".",'-run','^('+required.join('|')+')$'],{encoding:'utf8',maxBuffer:32*1024*1024});
+process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');
+if(r.error||r.status!==0)process.exit(r.status||1);
+const events=(r.stdout||'').trim().split('\n').filter(Boolean).map(x=>JSON.parse(x));
+for(const n of required)if(!events.some(e=>e.Test===n&&e.Action==='pass'))throw Error('test not passed: '+n);
+if(events.some(e=>e.Action==='skip'))throw Error('skipped test');
