@@ -1,0 +1,1253 @@
+{
+  "upstream_repo": "https://github.com/simplecrawler/simplecrawler",
+  "upstream_commit": "7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff",
+  "dependencies": [
+    {
+      "prefix": "task_support/vendor/async/",
+      "source": "https://registry.npmjs.org/async/-/async-3.1.0.tgz",
+      "version": "3.1.0",
+      "archive_sha256": "9dee8115818d41b784b48276212a38d3561d73ae1396086809b868e21ca7cbf1",
+      "license": "MIT"
+    },
+    {
+      "prefix": "task_support/vendor/iconv-lite/",
+      "source": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz",
+      "version": "0.5.0",
+      "archive_sha256": "a6d9847fcf08ebb5370ce5a23a3621cb56a3ba667e77edb1850d54d901b649b2",
+      "license": "MIT"
+    },
+    {
+      "prefix": "task_support/vendor/robots-parser/",
+      "source": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz",
+      "version": "2.1.1",
+      "archive_sha256": "31a882c67dc25ba8ede710c0bf13b9a7170a4f302620106911bba8f5c221d0cf",
+      "license": "MIT"
+    },
+    {
+      "prefix": "task_support/vendor/safer-buffer/",
+      "source": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
+      "version": "2.1.2",
+      "archive_sha256": "78812f65ae3b98071ce1c9bacbe0666f4220d0b2753c2a11530eb27df440a3b3",
+      "license": "MIT"
+    },
+    {
+      "prefix": "task_support/vendor/urijs/",
+      "source": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz",
+      "version": "1.19.1",
+      "archive_sha256": "fba4061e7f28c1505d11ced40ce8780ebba7bf2bf4bf5ca55afbe60bb5f9940f",
+      "license": "MIT"
+    }
+  ],
+  "files": [
+    {
+      "path": ".editorconfig",
+      "sha256": "034aedcc76fff87d0110066bf8927d8c435524d90517b060188c95690ee2fcad",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.editorconfig"
+    },
+    {
+      "path": ".eslintignore",
+      "sha256": "c33358195f6bc1e48a3f2ba4eaad487c7f404ccc40df6ada4c7c14957e1de69a",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.eslintignore"
+    },
+    {
+      "path": ".eslintrc",
+      "sha256": "562db6be074921788d5eeff57811651fe19c1bf09602939f690b33adc7c2d8d7",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.eslintrc"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE.md",
+      "sha256": "7b2b5e3268f30932f4057c876de82677e1dd4a26ece7a6d89c13154b8ba0e245",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.github/ISSUE_TEMPLATE.md"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "sha256": "472139cbc60cddb61b3003d8eb37949a3d2e25aa223becf3a92d370f954cd798",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.github/PULL_REQUEST_TEMPLATE.md"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "e7a3819247a65407325aa4cb534687f2b9835e99352b389999eefb2073e167f5",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.gitignore"
+    },
+    {
+      "path": ".travis.yml",
+      "sha256": "b36c2fb459f3877cbcae09af07775ae7068d07005bdfc2c32df5444e91c5fc16",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:.travis.yml"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "92b7af3b728fe1571ad34e78490cc9069a83af2682107538da67251590a9202c",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:CONTRIBUTING.md"
+    },
+    {
+      "path": "LICENCE",
+      "sha256": "1ba3650bbd7a87e6a0a8d0f7d1b28d239659dc4e4caef974fa44d44ddb3718a5",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:LICENCE"
+    },
+    {
+      "path": "README.md",
+      "sha256": "2bf927b00de8402d895e3e59143b2d20e6e12bbec6c4714126cdd7d02b696033",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:README.md"
+    },
+    {
+      "path": "appveyor.yml",
+      "sha256": "73c7f2f4cdf470af660c14b51b304ed77eb6c586135cb25b93c5951c3cef3cfe",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:appveyor.yml"
+    },
+    {
+      "path": "example/phantom-example/README.md",
+      "sha256": "4c7b83dc39bd1e3d79bb7541d7aec48624bb59c46d3d543292db9be7c4b79173",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/phantom-example/README.md"
+    },
+    {
+      "path": "example/phantom-example/index.js",
+      "sha256": "1aba32dcd36feec2029dec2ccf46e46824abf70c74fcdcbdb46352b0694c2755",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/phantom-example/index.js"
+    },
+    {
+      "path": "example/phantom-example/package.json",
+      "sha256": "f99e84072cd93c025e52468a367b8567ab1e3f6b75c9ffed087ee312f660c70b",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/phantom-example/package.json"
+    },
+    {
+      "path": "example/savetodisk.js",
+      "sha256": "d51c6a6eae1ecba6bff45496fc3f2d4b0b61502e27fabdd4917dbb195ffcbbd9",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/savetodisk.js"
+    },
+    {
+      "path": "example/socks-example.js",
+      "sha256": "23a5ead84ffadb49c329f8c4255ce69d01d01e383d1ff3193c983292497abe08",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/socks-example.js"
+    },
+    {
+      "path": "example/testcrawler.js",
+      "sha256": "4c202ee131c381bf057ef49cb1403e757315abb2ca457b22018f88dce4d1a2a7",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:example/testcrawler.js"
+    },
+    {
+      "path": "greenkeeper.json",
+      "sha256": "54fbc51696e17c6eee82c26893500fc27c1bfe3662085faf4c762eaad32c1feb",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:greenkeeper.json"
+    },
+    {
+      "path": "jsdoc2md/README.hbs",
+      "sha256": "0f3f40115e2363f98ab86e4afacc2099e39cf2d33683554607925f6bdd08226d",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:jsdoc2md/README.hbs"
+    },
+    {
+      "path": "jsdoc2md/heading-indent.hbs",
+      "sha256": "f8af03007537d24ab9103a4644455ee87a31cfdcf49ef0e6b63536245af6b2b8",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:jsdoc2md/heading-indent.hbs"
+    },
+    {
+      "path": "jsdoc2md/link.hbs",
+      "sha256": "8c21abeb00669817c67e3e7097b313fd93ed65cafc315409a4a76eaa1867cefa",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:jsdoc2md/link.hbs"
+    },
+    {
+      "path": "jsdoc2md/scope.hbs",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:jsdoc2md/scope.hbs"
+    },
+    {
+      "path": "lib/cache-backend-fs.js",
+      "sha256": "f28145856e2d416fea0004291044ac68a4849561555451aca583455d3ce55bf8",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/cache-backend-fs.js"
+    },
+    {
+      "path": "lib/cache.js",
+      "sha256": "799279034ab73938851b7936c52b2016d1635aaac8c68f5661d00976362a33f2",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/cache.js"
+    },
+    {
+      "path": "lib/cli.js",
+      "sha256": "7c242c92905569b4e1ab1b25bf0ddb219b60082122163339c8b904287c217f56",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/cli.js"
+    },
+    {
+      "path": "lib/cookies.js",
+      "sha256": "74681b7239caf4ea8b1ebd757232fe6ab26950a4ee76eca09b54d04924243ccd",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/cookies.js"
+    },
+    {
+      "path": "lib/crawler.js",
+      "sha256": "a906bd5468a43d281710e150538e439f4de1f08c023df8537018822f2c5a7326",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/crawler.js"
+    },
+    {
+      "path": "lib/index.js",
+      "sha256": "dadc9cb4e2bc8d3d851f590329faedd3a94251dfb9317002d2a771f541feb5b6",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/index.js"
+    },
+    {
+      "path": "lib/queue.js",
+      "sha256": "b6ec9e85cb982afda1301872b61e60052dd40612301d92dbb1a5581215ea3a06",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:lib/queue.js"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "526be08a9c8262d1378f6d029444fe6de444e73e852708dc0cde9f7432e3ce2e",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:package-lock.json"
+    },
+    {
+      "path": "package.json",
+      "sha256": "458c991f6a985ab68b4133a0a56cb5ee9134f2e34f13dffae25c27b3a5dcc97b",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:package.json"
+    },
+    {
+      "path": "task_support/baseline.cjs",
+      "sha256": "469fb2d184bd957ec5df8b595a802b689834f7017c9910224e85402c67d02f6a",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/install.sh",
+      "sha256": "eab2e98084ef00aa33a8fedf1d8464d745b2d3da93153c9b94e83f3e5164f083",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/run-target.cjs",
+      "sha256": "51aff34264e8d12c0c18c80b16ab39228219a84ae0b48a25180da524ad7bf51c",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/vendor/async/CHANGELOG.md",
+      "sha256": "44831f61aca5557853278cef67b0a21c4e44ab9004475b7f02255bd01850f6fd",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:CHANGELOG.md"
+    },
+    {
+      "path": "task_support/vendor/async/LICENSE",
+      "sha256": "d9fed24f132985934fca621c4dc1dfb53e03377a24d0568d424383d7eaa9c0ac",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:LICENSE"
+    },
+    {
+      "path": "task_support/vendor/async/README.md",
+      "sha256": "0fffed69c7fd042c73ca3fae9e556ff260877ba59f94fb9196873ffabe0484a6",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:README.md"
+    },
+    {
+      "path": "task_support/vendor/async/all.js",
+      "sha256": "6d2dd95cf2564f06e600d1fd13335a17e9e334e8c511e28468ed0c0d63c82c9c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:all.js"
+    },
+    {
+      "path": "task_support/vendor/async/allLimit.js",
+      "sha256": "c784ae87fce5130542b1da68a2ad426eba441745bdfb6b016ce1a3e50816aa97",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:allLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/allSeries.js",
+      "sha256": "5a28827764d0031cccdb8182b281ef859c84ce99148eb82584c9530f57563094",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:allSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/any.js",
+      "sha256": "59581b010fe59744bcf3b946278e68b970367c2744e6903c7d40975ea8027c1c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:any.js"
+    },
+    {
+      "path": "task_support/vendor/async/anyLimit.js",
+      "sha256": "e1bdb96e6e2e9b9daabc90802abb2342a87a7160695385f2bf05e4db0dfc199c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:anyLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/anySeries.js",
+      "sha256": "d35674b8eaccea2191cb01b2097e97d391c065e17990703f68b474fba7e12ca9",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:anySeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/apply.js",
+      "sha256": "9fca0a979e47617bc3b46cd3d2ac0b8a6544d8e1c3e56cb9806c90b08af5638a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:apply.js"
+    },
+    {
+      "path": "task_support/vendor/async/applyEach.js",
+      "sha256": "b1017912b52e7c45a72f74dc66080d64dae1e5db70e67a58126970d50af547b2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:applyEach.js"
+    },
+    {
+      "path": "task_support/vendor/async/applyEachSeries.js",
+      "sha256": "5f366c2e7740dc6bf370b4f815da30a40da912dca5a6dcdb23adcb6f55728121",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:applyEachSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/asyncify.js",
+      "sha256": "0e9a76e70389c5f4e5519501e6fc32b37eae396ad1b43218de0b8fcc8ef2a11e",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:asyncify.js"
+    },
+    {
+      "path": "task_support/vendor/async/auto.js",
+      "sha256": "ad3644493aef9c0e9defe267fdf0fa1d276207be318239140700196f386b0edf",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:auto.js"
+    },
+    {
+      "path": "task_support/vendor/async/autoInject.js",
+      "sha256": "50b87dc9d6dbf0bdbc862ba9954ff9c23714ec60d399c72fb16bd9af1c886ea5",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:autoInject.js"
+    },
+    {
+      "path": "task_support/vendor/async/bower.json",
+      "sha256": "a3e2209912611b3f28ada407deac23712a8c3702ca53b1ee0569a613d4c6f227",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:bower.json"
+    },
+    {
+      "path": "task_support/vendor/async/cargo.js",
+      "sha256": "d00a90b341f9916a303c6115956aa87f42718aae7530b354e68a05a203d1efa1",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:cargo.js"
+    },
+    {
+      "path": "task_support/vendor/async/cargoQueue.js",
+      "sha256": "c33c47910232e782de5a0e770fafc526bb8a64c719ae63a1350ff01fdffb8416",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:cargoQueue.js"
+    },
+    {
+      "path": "task_support/vendor/async/compose.js",
+      "sha256": "0620a325ae38f0eeaf28c0ec789863e793973d89e71c70759aec771de5436865",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:compose.js"
+    },
+    {
+      "path": "task_support/vendor/async/concat.js",
+      "sha256": "1a7b324932415ffc2aeb924614770fcad34001fcbcb001799541f341a837509a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:concat.js"
+    },
+    {
+      "path": "task_support/vendor/async/concatLimit.js",
+      "sha256": "98e8561d1a673c5aa6d20554fe32fbe24d26b64d0b2c16d8fa95a551ce4ce0a7",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:concatLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/concatSeries.js",
+      "sha256": "c9a8e7b082e39b6ddde7e55fb0fea31b6ffea06865b41274c91c6b4fc0ea835a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:concatSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/constant.js",
+      "sha256": "59eed81fc49553b74df3eebe0fb4e305f23aa8bcbab82d6cae4bfe8944d95c23",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:constant.js"
+    },
+    {
+      "path": "task_support/vendor/async/detect.js",
+      "sha256": "cb3ade3a9419202cb83c05349efe9f7f11971af82301329351481edc189eecd5",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:detect.js"
+    },
+    {
+      "path": "task_support/vendor/async/detectLimit.js",
+      "sha256": "d83c87ada35421edc836f29bb8b1a7e24b0afe8616acc56768905cf8247345e0",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:detectLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/detectSeries.js",
+      "sha256": "84feff3a2abf0f517610b41dfd70d0d52cb40b5abb9d9af3c304d871ab92ac19",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:detectSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/dir.js",
+      "sha256": "70f62a0036eea5be661b557cf49647796619b08b1c62faebee19ef5577fb1a3d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:dir.js"
+    },
+    {
+      "path": "task_support/vendor/async/dist/async.js",
+      "sha256": "aac0e17a88c546325d1563770e1d3e38797bac22db1fb896e64de535232ebee8",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:dist/async.js"
+    },
+    {
+      "path": "task_support/vendor/async/dist/async.min.js",
+      "sha256": "3dd77d05ec1c121bfd7231821c46341ea93a1668fa8b3346af0d7f9a8eb5cd12",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:dist/async.min.js"
+    },
+    {
+      "path": "task_support/vendor/async/dist/async.mjs",
+      "sha256": "a3499bb2d1a18d3f8e547ded9c91f6b49dd1f148c363ebafd1f9598cefc69877",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:dist/async.mjs"
+    },
+    {
+      "path": "task_support/vendor/async/doDuring.js",
+      "sha256": "4106e11bf3fc94bc0689e5b603ec79438836f434a0537fde171089fac0efef33",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:doDuring.js"
+    },
+    {
+      "path": "task_support/vendor/async/doUntil.js",
+      "sha256": "24071ec96794ef28417ba4e893757f901e454e4e3aaea1dd1427244ddb14b728",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:doUntil.js"
+    },
+    {
+      "path": "task_support/vendor/async/doWhilst.js",
+      "sha256": "4106e11bf3fc94bc0689e5b603ec79438836f434a0537fde171089fac0efef33",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:doWhilst.js"
+    },
+    {
+      "path": "task_support/vendor/async/during.js",
+      "sha256": "3f76fcf5611273a0f8b438e1f1f4357a6471eed5bb204aaf0ae9da3ccc50e810",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:during.js"
+    },
+    {
+      "path": "task_support/vendor/async/each.js",
+      "sha256": "7375d47b0ae6eb7e2157f54a1b32696717feb3184ad34c98c74f844798c8fcd2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:each.js"
+    },
+    {
+      "path": "task_support/vendor/async/eachLimit.js",
+      "sha256": "46229a53bf6585adfb450746f2ca40b624d2e1cd969e24e5aff0fb1b413c0020",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:eachLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/eachOf.js",
+      "sha256": "109371cf6e940a419c727b6f25de33686c85134dec3e4fcf602f5bf1eb7289e0",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:eachOf.js"
+    },
+    {
+      "path": "task_support/vendor/async/eachOfLimit.js",
+      "sha256": "b7497ef875c9d38976367781a992143e41ef7f8a20cb4af21f1eef60bb80557f",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:eachOfLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/eachOfSeries.js",
+      "sha256": "cd23c23fbf6d912929b84dfb4839f06027c92d7e0ca5119c1cd0c24a71de964c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:eachOfSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/eachSeries.js",
+      "sha256": "52109b526d9c09f1d68b1a78c1c36de6fbc4ff2a466bc7e86d70315544c80193",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:eachSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/ensureAsync.js",
+      "sha256": "ee8de88c43f83c4643a3d0da8c0b2e7394d7bbda83491699da97c193a853889c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:ensureAsync.js"
+    },
+    {
+      "path": "task_support/vendor/async/every.js",
+      "sha256": "6d2dd95cf2564f06e600d1fd13335a17e9e334e8c511e28468ed0c0d63c82c9c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:every.js"
+    },
+    {
+      "path": "task_support/vendor/async/everyLimit.js",
+      "sha256": "c784ae87fce5130542b1da68a2ad426eba441745bdfb6b016ce1a3e50816aa97",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:everyLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/everySeries.js",
+      "sha256": "5a28827764d0031cccdb8182b281ef859c84ce99148eb82584c9530f57563094",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:everySeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/filter.js",
+      "sha256": "9641d495e779c6cfeb96e883eec65bf2a81f287e921334d48e7af7406f6d87af",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:filter.js"
+    },
+    {
+      "path": "task_support/vendor/async/filterLimit.js",
+      "sha256": "8ccf8ea820d8d75cb99d8c8865f7e380146a11cd85d1af4dc2c08a371743dbe2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:filterLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/filterSeries.js",
+      "sha256": "56e577b9f44f85d937e04c3f487f78aa8f8fb9292020f160bd371aab7f0743ce",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:filterSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/find.js",
+      "sha256": "cb3ade3a9419202cb83c05349efe9f7f11971af82301329351481edc189eecd5",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:find.js"
+    },
+    {
+      "path": "task_support/vendor/async/findLimit.js",
+      "sha256": "d83c87ada35421edc836f29bb8b1a7e24b0afe8616acc56768905cf8247345e0",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:findLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/findSeries.js",
+      "sha256": "84feff3a2abf0f517610b41dfd70d0d52cb40b5abb9d9af3c304d871ab92ac19",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:findSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/flatMap.js",
+      "sha256": "1a7b324932415ffc2aeb924614770fcad34001fcbcb001799541f341a837509a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:flatMap.js"
+    },
+    {
+      "path": "task_support/vendor/async/flatMapLimit.js",
+      "sha256": "98e8561d1a673c5aa6d20554fe32fbe24d26b64d0b2c16d8fa95a551ce4ce0a7",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:flatMapLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/flatMapSeries.js",
+      "sha256": "c9a8e7b082e39b6ddde7e55fb0fea31b6ffea06865b41274c91c6b4fc0ea835a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:flatMapSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/foldl.js",
+      "sha256": "5a26fe36736fa39fcfc1792cf5c7255a31f7acdf26c6de26d2fd7f293a7a4d79",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:foldl.js"
+    },
+    {
+      "path": "task_support/vendor/async/foldr.js",
+      "sha256": "3fdfc5dc05d7073cacc0b6c37fb31748e912f8818fc5d005de7a3b3554cadb79",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:foldr.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEach.js",
+      "sha256": "7375d47b0ae6eb7e2157f54a1b32696717feb3184ad34c98c74f844798c8fcd2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEach.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEachLimit.js",
+      "sha256": "46229a53bf6585adfb450746f2ca40b624d2e1cd969e24e5aff0fb1b413c0020",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEachLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEachOf.js",
+      "sha256": "109371cf6e940a419c727b6f25de33686c85134dec3e4fcf602f5bf1eb7289e0",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEachOf.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEachOfLimit.js",
+      "sha256": "b7497ef875c9d38976367781a992143e41ef7f8a20cb4af21f1eef60bb80557f",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEachOfLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEachOfSeries.js",
+      "sha256": "cd23c23fbf6d912929b84dfb4839f06027c92d7e0ca5119c1cd0c24a71de964c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEachOfSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/forEachSeries.js",
+      "sha256": "52109b526d9c09f1d68b1a78c1c36de6fbc4ff2a466bc7e86d70315544c80193",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forEachSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/forever.js",
+      "sha256": "e8db0a83bda78a999f370286a144917cd585989a84fcd9572359e164ba3c2a36",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:forever.js"
+    },
+    {
+      "path": "task_support/vendor/async/groupBy.js",
+      "sha256": "24ad304d82bc792b3f72a30b4e1ec33eb10be2d25e34f524a346cb2716ac288f",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:groupBy.js"
+    },
+    {
+      "path": "task_support/vendor/async/groupByLimit.js",
+      "sha256": "9376d8aca801f15256317f7442460c691d408d47ffc28c39dcea518c2b31dce9",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:groupByLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/groupBySeries.js",
+      "sha256": "a5c307d0493898cff77b0fd85a028550f52cc01a2df7b3d7df2c2302824c5443",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:groupBySeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/index.js",
+      "sha256": "3e62be9fd9d927184d612533c326d82f006722ccc28ce4cfbfa629b1dc5b1fbd",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:index.js"
+    },
+    {
+      "path": "task_support/vendor/async/inject.js",
+      "sha256": "5a26fe36736fa39fcfc1792cf5c7255a31f7acdf26c6de26d2fd7f293a7a4d79",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:inject.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/DoublyLinkedList.js",
+      "sha256": "38597e7029ec508317cc91dc4583cce456f96bfb92c9cfa593252ba3a2154bf7",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/DoublyLinkedList.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/Heap.js",
+      "sha256": "3e21e8de39801f7369c89b8c4d99255276adf3ca09bb028a80731ac6a8bb1203",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/Heap.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/applyEach.js",
+      "sha256": "9a0e08cc8219ca3ece5d8849b49145fd26fbb9ce9b5c690d7e6ee2ab5d45782d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/applyEach.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/asyncEachOfLimit.js",
+      "sha256": "27642f60483884458527909906bcd652661328a03b056346394728374cae2808",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/asyncEachOfLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/awaitify.js",
+      "sha256": "d2ddeeb00b4b2f85161bd3c27703efb0a309fb1c05c34f5a34490bccfb3d417c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/awaitify.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/breakLoop.js",
+      "sha256": "1aa9019cf4baa38c40f342ccfc56f7ec541ce559b3a4993b2e883b8e0807d92d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/breakLoop.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/consoleFunc.js",
+      "sha256": "345910932a1a969dc329ea0ae82760a1ec5921755f4ec946e7a4040fe2d2a098",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/consoleFunc.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/createTester.js",
+      "sha256": "129d5df4c2c1e447300c5fa1e3b88de2bc75ed1a065553521a9cf2313635f4b6",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/createTester.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/eachOfLimit.js",
+      "sha256": "59d5e1413d06dc85ea065038208c9c5a595876a44ac983174e30b7b6b47989dc",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/eachOfLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/filter.js",
+      "sha256": "9d4b12aa1bf178fdeee4255388a813e5197db498886c499c5225677e96c5c125",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/filter.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/getIterator.js",
+      "sha256": "bb62bea263496f5bc9f4029cec72d0994b8c3b8f83c871f2429645b122de4727",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/getIterator.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/initialParams.js",
+      "sha256": "60687e2a5933821608e9de78e866e8fc3d7f7ccf7a4c3695f876a0020ea16cb8",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/initialParams.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/isArrayLike.js",
+      "sha256": "dc6e98569ae22504e45224c23d95c61dfdbeff392d675c5784aa4593f9e421c6",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/isArrayLike.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/iterator.js",
+      "sha256": "6e4b6e7526f4b0b894cd57d54c7291ad5474a0c64871cb3c99648df67297140e",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/iterator.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/map.js",
+      "sha256": "c05b3aa1fc2ce07a932be95e7a01489d8bd6992adc5ce16f07ce5cb200ebea0c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/map.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/once.js",
+      "sha256": "4b24b9fde8c157d00bd0e10447c0e40438c0faa4bd50d256f6ae91681932d4a2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/once.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/onlyOnce.js",
+      "sha256": "3c5f37e7531c5ab6f22a8ae5a4d9e7c3d146a34828d0f5166265f294edd339ca",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/onlyOnce.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/parallel.js",
+      "sha256": "e76e4fcd9109e60023b751b847e42f030dbce3487de8324912e35b62b1490dc5",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/parallel.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/promiseCallback.js",
+      "sha256": "76444d81f4bc877e2f71a0f7212406cec3f39f9a4095b5666bca3eaf3e2dfe27",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/promiseCallback.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/queue.js",
+      "sha256": "4dadd0bc7744de7774fbdffbb4305b6f237a721ea4fb2ffc57c2201c1c677460",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/queue.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/range.js",
+      "sha256": "81be49d9d5e89b30dc8302c06626ee52c57abd624e39ad2352d11b6cb20a5411",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/range.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/reject.js",
+      "sha256": "029367a4925537eee7367647c1aa935f0f78d17ec952b026f0bf5405569e62a8",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/reject.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/setImmediate.js",
+      "sha256": "8456affd53ebec1522247c71d9d195d008885fbb8f63b7e29d81ae218587647b",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/setImmediate.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/withoutIndex.js",
+      "sha256": "6b04735c3c5225955030cb80e86c374c350bc6766bf77296c2f4ae5f72628ec2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/withoutIndex.js"
+    },
+    {
+      "path": "task_support/vendor/async/internal/wrapAsync.js",
+      "sha256": "ddee56bdb1aa14a12cd25e2d270769465321cbea4143982096acdb50a31ac24a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:internal/wrapAsync.js"
+    },
+    {
+      "path": "task_support/vendor/async/log.js",
+      "sha256": "2a2da4905bfccd569f745a675950a0f8fff2efd919a23f9126870b81788e8b3a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:log.js"
+    },
+    {
+      "path": "task_support/vendor/async/map.js",
+      "sha256": "c71db61e6e2678644fca5f7c2760b9ced5581b178b411a62538b915b89c6ba0d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:map.js"
+    },
+    {
+      "path": "task_support/vendor/async/mapLimit.js",
+      "sha256": "b5fbe9de09b7b101e6c940a178cd9e10a069382bac21d5cf007aae45a1236179",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:mapLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/mapSeries.js",
+      "sha256": "c566cbfc25fc523a9f67156207702100d70229841c52730c2e4af48e9a2cc709",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:mapSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/mapValues.js",
+      "sha256": "7cd9bc945a6ba0ed2e36a839a43f88bad1fee5e8574c60af5d9c0cc491f50b60",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:mapValues.js"
+    },
+    {
+      "path": "task_support/vendor/async/mapValuesLimit.js",
+      "sha256": "d9f48571182090737f0c9c7953e47b4e20ebabdb03b728d2b9ca5ff958361798",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:mapValuesLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/mapValuesSeries.js",
+      "sha256": "7dad50028b5cb2a68473ce923a1da8824488907eb6646e05580402d242a26cc9",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:mapValuesSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/memoize.js",
+      "sha256": "a0704b37eb20bd2108dd7a7e80765057bf3b8f77ea462da58050df88ce4cfbef",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:memoize.js"
+    },
+    {
+      "path": "task_support/vendor/async/nextTick.js",
+      "sha256": "512c05dc71deab49e947d01859c5a0ebfef43123db5fae9d5b94c1cd75c6173e",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:nextTick.js"
+    },
+    {
+      "path": "task_support/vendor/async/package.json",
+      "sha256": "f72d8b9fc86215721f17e39f188434d97b3e309ce12866feaa4373fa45cf9a7d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:package.json"
+    },
+    {
+      "path": "task_support/vendor/async/parallel.js",
+      "sha256": "e449bafe3c137043529eedf0e066946e3c0d7077ad27bbe1ad08132499c26eff",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:parallel.js"
+    },
+    {
+      "path": "task_support/vendor/async/parallelLimit.js",
+      "sha256": "d4342fd6420b06ef8cfa154afda7d07b6256ca1187eaa035d2c557b3abc0190f",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:parallelLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/priorityQueue.js",
+      "sha256": "956f2272f854dc1640e6ae2ebaae0699c25376a2d585504955608b47c8169c5a",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:priorityQueue.js"
+    },
+    {
+      "path": "task_support/vendor/async/queue.js",
+      "sha256": "4ae0d9cae5cc7b6e9b5cadb043c47d1ad7ef4ea7c6736b0b11f65ff483f385e6",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:queue.js"
+    },
+    {
+      "path": "task_support/vendor/async/race.js",
+      "sha256": "00426619bf375f9a847f7c49279404716e513ec88a23bf3827bf704121707f5f",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:race.js"
+    },
+    {
+      "path": "task_support/vendor/async/reduce.js",
+      "sha256": "5a26fe36736fa39fcfc1792cf5c7255a31f7acdf26c6de26d2fd7f293a7a4d79",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:reduce.js"
+    },
+    {
+      "path": "task_support/vendor/async/reduceRight.js",
+      "sha256": "3fdfc5dc05d7073cacc0b6c37fb31748e912f8818fc5d005de7a3b3554cadb79",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:reduceRight.js"
+    },
+    {
+      "path": "task_support/vendor/async/reflect.js",
+      "sha256": "4006c4410af0c37b1da125cd8e0b3c4c846c1635e678899af2a45fd524f2f091",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:reflect.js"
+    },
+    {
+      "path": "task_support/vendor/async/reflectAll.js",
+      "sha256": "74d496fa95ae9620d6849925683a61da48fc2dc55ba5941e0f3287ff81981d3c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:reflectAll.js"
+    },
+    {
+      "path": "task_support/vendor/async/reject.js",
+      "sha256": "9a64ccd4b07cec62fce014dd96031931db7329b0f9f1f3d7fd93615928fb2dac",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:reject.js"
+    },
+    {
+      "path": "task_support/vendor/async/rejectLimit.js",
+      "sha256": "068ccdd112ab944e2933094bf81b627dc8ce865ef259da1aa164e0cee11d95f0",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:rejectLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/rejectSeries.js",
+      "sha256": "5aeef4311699318c3f1fb24e255d6321c11c7cd75f852d2d768ce6b6ddfcb9c7",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:rejectSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/retry.js",
+      "sha256": "dace227f6383191a76d22ba23386967cb6a938926c6c58fe4aab01dc9623e945",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:retry.js"
+    },
+    {
+      "path": "task_support/vendor/async/retryable.js",
+      "sha256": "07e22dbccb4cce6e12f88705e02f16d2d6176c647cd18de6433496d2afaa0a8d",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:retryable.js"
+    },
+    {
+      "path": "task_support/vendor/async/select.js",
+      "sha256": "9641d495e779c6cfeb96e883eec65bf2a81f287e921334d48e7af7406f6d87af",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:select.js"
+    },
+    {
+      "path": "task_support/vendor/async/selectLimit.js",
+      "sha256": "8ccf8ea820d8d75cb99d8c8865f7e380146a11cd85d1af4dc2c08a371743dbe2",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:selectLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/selectSeries.js",
+      "sha256": "56e577b9f44f85d937e04c3f487f78aa8f8fb9292020f160bd371aab7f0743ce",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:selectSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/seq.js",
+      "sha256": "980dbc75f0c13b1222a4a99ae19507baf2fbf640a458e86e3e4e7e6428598185",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:seq.js"
+    },
+    {
+      "path": "task_support/vendor/async/series.js",
+      "sha256": "d0cd4a421de1de126ea6ab9356191a06f4519d1c09bc2c40320027517b5f4b7c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:series.js"
+    },
+    {
+      "path": "task_support/vendor/async/setImmediate.js",
+      "sha256": "4c88b948a0424b515b8898f2de771cd46724aff451333ef6bb3cf010ae654e13",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:setImmediate.js"
+    },
+    {
+      "path": "task_support/vendor/async/some.js",
+      "sha256": "59581b010fe59744bcf3b946278e68b970367c2744e6903c7d40975ea8027c1c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:some.js"
+    },
+    {
+      "path": "task_support/vendor/async/someLimit.js",
+      "sha256": "e1bdb96e6e2e9b9daabc90802abb2342a87a7160695385f2bf05e4db0dfc199c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:someLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/someSeries.js",
+      "sha256": "d35674b8eaccea2191cb01b2097e97d391c065e17990703f68b474fba7e12ca9",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:someSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/sortBy.js",
+      "sha256": "8e21bb2357c5a7431f6b1f07efe80298ba2eb57903e9f9560ae2f5b0b9599600",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:sortBy.js"
+    },
+    {
+      "path": "task_support/vendor/async/timeout.js",
+      "sha256": "5a2d095d0b8de6f9e91517279d9e3057b8bea7ac7f76e8f49ee047e4c8cff676",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:timeout.js"
+    },
+    {
+      "path": "task_support/vendor/async/times.js",
+      "sha256": "2043e779631c64e1b840d2c2d5ebf5cab8efb374e4dfad87490934f01a0dc976",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:times.js"
+    },
+    {
+      "path": "task_support/vendor/async/timesLimit.js",
+      "sha256": "56818a677dc7565ec745353515e643655a82650bdfc482c31ef8d5191f39a684",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:timesLimit.js"
+    },
+    {
+      "path": "task_support/vendor/async/timesSeries.js",
+      "sha256": "687b0f626150da6c91485c6c2b89d1996c2303427458bfb00562cf5b78d9b6a1",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:timesSeries.js"
+    },
+    {
+      "path": "task_support/vendor/async/transform.js",
+      "sha256": "9bff8b8ba8d22140b7568e0dc767368a07f5763a631ba7eb2e76f9f20e28dc29",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:transform.js"
+    },
+    {
+      "path": "task_support/vendor/async/tryEach.js",
+      "sha256": "c9167b9d03a037d242f74556620db90784d3884005729e42b6361ade94c7f6ff",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:tryEach.js"
+    },
+    {
+      "path": "task_support/vendor/async/unmemoize.js",
+      "sha256": "b0d4ca88585fec00d6b456c63a01b30c5a191d47fcf8b3864aa3d97a2c372d2c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:unmemoize.js"
+    },
+    {
+      "path": "task_support/vendor/async/until.js",
+      "sha256": "d0d5e3a52d4e64514c42be796db60956e83d377cd7e2dcea14cdff01b7b6691c",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:until.js"
+    },
+    {
+      "path": "task_support/vendor/async/waterfall.js",
+      "sha256": "6e3ee7791cefd30d7eb3dd9d32ceea81a3c83df4d762e5471de4d6f0d09256eb",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:waterfall.js"
+    },
+    {
+      "path": "task_support/vendor/async/whilst.js",
+      "sha256": "3f76fcf5611273a0f8b438e1f1f4357a6471eed5bb204aaf0ae9da3ccc50e810",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:whilst.js"
+    },
+    {
+      "path": "task_support/vendor/async/wrapSync.js",
+      "sha256": "0e9a76e70389c5f4e5519501e6fc32b37eae396ad1b43218de0b8fcc8ef2a11e",
+      "origin": "https://registry.npmjs.org/async/-/async-3.1.0.tgz:wrapSync.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/Changelog.md",
+      "sha256": "93f2aa61b43939e9026ae7862220b22dc99478f6dc43b59dd5fdaa891d7b8ca9",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:Changelog.md"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/LICENSE",
+      "sha256": "ac779f7314c74f232ef847ea86e714abe25cf6eeb5cc97b69451b74e2af6492d",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:LICENSE"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/README.md",
+      "sha256": "b6be2312fef018efce76f52781636eb944936cd8a9debe9cac7a37383371b4c0",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:README.md"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/dbcs-codec.js",
+      "sha256": "d39bc17f93fc56af631b00e36542488923378cce5ad9e7db48252ce7a1e7b1ed",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/dbcs-codec.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/dbcs-data.js",
+      "sha256": "e213f77e926605c30649ea48bcea851d1ec063bb17fa4c2ab6d3b64853b481ac",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/dbcs-data.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/index.js",
+      "sha256": "ee406729fdea34f4c77eea5afad5025ea374bc41089fafb6fa0f7336e1216713",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/index.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/internal.js",
+      "sha256": "39d9dd0568708a23c5999fcd6c417ec64f35ecbecd37205f91c7c6b59d14d773",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/internal.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/sbcs-codec.js",
+      "sha256": "fb511c4c70a6cb0e2a06d03e67ca88dca9f4da6266b909c7338e453d2ecc9fdb",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/sbcs-codec.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/sbcs-data-generated.js",
+      "sha256": "2cf44b3f70c61c9cdd59fda7ec085bc3180809638f208c7239688ccb90a48866",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/sbcs-data-generated.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/sbcs-data.js",
+      "sha256": "3116c986bff5d0b3a0d9ee1700d97ac466965a7b30d353300d408b41622604c2",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/sbcs-data.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/big5-added.json",
+      "sha256": "db94db5e5d3ab696ddb0025685cfa85da1864839a4a26aab2f8f86f6b8382288",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/big5-added.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/cp936.json",
+      "sha256": "8225bb693efd380279ed7280b8f8419fd069c5f018d20d5946bf187ad92c0cf7",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/cp936.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/cp949.json",
+      "sha256": "77a56ea83d0d94d1dc620042ad3c897f0e40814bb05c0085d3aeed0018e8a3e8",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/cp949.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/cp950.json",
+      "sha256": "99e2114dc4b39092617967c763f9eaeb4d8e70551afc5884baa3fb92827f3420",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/cp950.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/eucjp.json",
+      "sha256": "7c4fe279000f7e99fc7cd59afb1da21725dcebdc1babd9e3b883253a77abb042",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/eucjp.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/gb18030-ranges.json",
+      "sha256": "5a3cc11e38f05a0908442acbf1c921d0b73f2a304fb6a9e4484e26eb1ca07d76",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/gb18030-ranges.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/gbk-added.json",
+      "sha256": "7e6e8c23d37d5819481909e4d972fbf0f35e120dda3498dd3a0cd6b5e4932fe6",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/gbk-added.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/tables/shiftjis.json",
+      "sha256": "02b0b120f697c48133e8b547e8dc594bc5b9f1c1799b50c2c5ff917298548558",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/tables/shiftjis.json"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/utf16.js",
+      "sha256": "baf708be438edf0fef70a3e34619c6be94cd53d963acb9b2542419d5fc3bb8c8",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/utf16.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/utf32.js",
+      "sha256": "949d7208aa322bf2c0ca04df5c0ba951330cbf655ca5fba7122b981fb6e470d1",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/utf32.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/encodings/utf7.js",
+      "sha256": "c814ad268d19265ccafc9f7bba2e8dfcdd2afdea62698bb24b7284b3f2ea18a0",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:encodings/utf7.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/lib/bom-handling.js",
+      "sha256": "c230d25d8e7fbb50960c634b636b71327c409e9a77e67fe9446b566bdcea362d",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:lib/bom-handling.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/lib/extend-node.js",
+      "sha256": "7b86aebd7175d940c50f60eac1981490962855d9723bf971981ddd703ba6af43",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:lib/extend-node.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/lib/index.d.ts",
+      "sha256": "73aaee6a7a9cf41fb2c67158f4bc218f9da27545ea55648b2c10ca2a9600ae15",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:lib/index.d.ts"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/lib/index.js",
+      "sha256": "77d20e2fd5bcd9e324fb6cfdb909cd06fdaf6a91769adffcf4d7c4c066cce4c3",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:lib/index.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/lib/streams.js",
+      "sha256": "25a423eaf41f8dc6bc40cb28189a24e2d63b990ed72c824940bed55d0264ea6d",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:lib/streams.js"
+    },
+    {
+      "path": "task_support/vendor/iconv-lite/package.json",
+      "sha256": "f465afc033f88dfbd82acc01ad1091c6874f606b1d1eb726b330b94c4ab440c8",
+      "origin": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.5.0.tgz:package.json"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/Robots.js",
+      "sha256": "9b763d8a29c9f2cab4f8100b2e291e80413cb44a1fd1700436cbd483921590a1",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:Robots.js"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/index.js",
+      "sha256": "cb31526fb985dbdd9a2c5e98162c4bf81c25cf81ac2f087362884b6ea76e2eaa",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:index.js"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/license.md",
+      "sha256": "d81ffd6a25349cad4126b365f6dbcc2cdc06496de4d020c76e47058a1ee32a7a",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:license.md"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/package.json",
+      "sha256": "aa65bb08b266d86abc6a764f24d364549906e2c3bab7ad291d72007432d7d2cc",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:package.json"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/readme.md",
+      "sha256": "8a8e6bac13a28512909b05ff9c6623f9fefd69219eebde0f47bd4f0637924e2c",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:readme.md"
+    },
+    {
+      "path": "task_support/vendor/robots-parser/test/Robots.js",
+      "sha256": "a5f1abc8fd2d8dfa41f5a859db27c2a3bf20c1f96449da5bd17b976fa851135a",
+      "origin": "https://registry.npmjs.org/robots-parser/-/robots-parser-2.1.1.tgz:test/Robots.js"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/LICENSE",
+      "sha256": "4bc935e71be198c67ddf3c2b5fddb195f6edc182bfc155a96a6db61b44b494b9",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:LICENSE"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/Porting-Buffer.md",
+      "sha256": "134523d05b39e177135c2a2070a426eb319657dfc77589e38ef7cf13cd50e730",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:Porting-Buffer.md"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/Readme.md",
+      "sha256": "d4331b7c5af9c02161150daf9451ee6bc7a73ece3ec0312603fae09f46a817d8",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:Readme.md"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/dangerous.js",
+      "sha256": "1dc2900bcc8ffc375af0d2fc99a03ecad2dcbb85d278fbf26982e87707bea53f",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:dangerous.js"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/package.json",
+      "sha256": "4247a3a63c45a6a7ced1557fe4dd9d2a163af4915d594b95e5867b69a53edb52",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:package.json"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/safer.js",
+      "sha256": "37f9716144105051ab302f6a0c30a52ff5de7269b9e1173ac22be798fc11ccad",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:safer.js"
+    },
+    {
+      "path": "task_support/vendor/safer-buffer/tests.js",
+      "sha256": "511906fdf6a233c84a9216065d1701dbfd84f380fbd495ae1cf5a002370b9885",
+      "origin": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz:tests.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/CHANGELOG.md",
+      "sha256": "59e3efe2db040496a2ef28ce90fc76deb3eca4ef58497bc6df3119bb5448c673",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:CHANGELOG.md"
+    },
+    {
+      "path": "task_support/vendor/urijs/LICENSE.txt",
+      "sha256": "b5b3bf9d3cf72a31b84dac19028c818e980ac91c2f0384cbe210fd31b9585a5e",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:LICENSE.txt"
+    },
+    {
+      "path": "task_support/vendor/urijs/README.md",
+      "sha256": "8ddfbf62bb1cd6770e4c41070925c432c7cc4d3e5184ca796b2d33fec471b746",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:README.md"
+    },
+    {
+      "path": "task_support/vendor/urijs/package.json",
+      "sha256": "6a5148dcdfee6a1e0de3fb3a443a832f94dfffa5bda543073e70f192e8c1cc14",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:package.json"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/IPv6.js",
+      "sha256": "2f07400bd18c0493e959d5e170a014f8e13aa6b777e4fc29394dd84147c7f535",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/IPv6.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/SecondLevelDomains.js",
+      "sha256": "e310a271688ee73cea3b0a4db8cef49a500083076f162f5e7769ed0263a60498",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/SecondLevelDomains.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/URI.fragmentQuery.js",
+      "sha256": "e92df8c3a3639a7f5402d6d03f94a1fa941790c964daac39d3aaf7e8b536a005",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/URI.fragmentQuery.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/URI.fragmentURI.js",
+      "sha256": "f0079763dd56616e122a0eb43b202d394f3e19075c49f67336b6f127428bbefb",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/URI.fragmentURI.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/URI.js",
+      "sha256": "26daa116ab398140a97efc09abecf615b2255cacc5e2ee3d71a8e90058db839e",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/URI.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/URI.min.js",
+      "sha256": "0f7b4af517ff7d5a817fa60333c43d34235fffaf85d8d38a9d84971dc97491e5",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/URI.min.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/URITemplate.js",
+      "sha256": "800fd2ddccd56696f5526e13e7c37ea06185a2fe1778900e34f0b80cbf7418b8",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/URITemplate.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/jquery.URI.js",
+      "sha256": "f4a20a03c28ba49262889cb8748199aa7a25f95931e60667edf0098d5828983e",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/jquery.URI.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/jquery.URI.min.js",
+      "sha256": "9f30690f000bff7cbc7b2741d37891335b0a40af8fb42399b6a65ba878bb5649",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/jquery.URI.min.js"
+    },
+    {
+      "path": "task_support/vendor/urijs/src/punycode.js",
+      "sha256": "caddaf383e6f0940e0ab8302cb9455a1daa9de7e86c0e0ae90aa85c0c9cf7dbf",
+      "origin": "https://registry.npmjs.org/urijs/-/urijs-1.19.1.tgz:src/punycode.js"
+    },
+    {
+      "path": "test/conditions.js",
+      "sha256": "c74a03d425de45974d6cf385b690156882c31392c58df5cd72c11d34c89162d1",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/conditions.js"
+    },
+    {
+      "path": "test/cookies.js",
+      "sha256": "7bba679a611b38770c0cf696810041d9323e672f1d2a389a6d3690c56c3a4ca0",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/cookies.js"
+    },
+    {
+      "path": "test/depth.js",
+      "sha256": "15878cedba671787e1d060d09e9a62e7ff1155c677363e49513025f0ed2de33a",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/depth.js"
+    },
+    {
+      "path": "test/discovery.js",
+      "sha256": "7c9b26105ce63697955e3b152404028f239a86d35147b0ce6040c34ccaf289aa",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/discovery.js"
+    },
+    {
+      "path": "test/fixtures/encoded.html",
+      "sha256": "562b57600aede2dc92f120bc7ddcb8ab6d524d0b86cc3dad9724bfb56691fb14",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/fixtures/encoded.html"
+    },
+    {
+      "path": "test/fixtures/inline-encoding.html",
+      "sha256": "3e767cfb0c47cd74295301a29f5ee55d130d2b065762b7e56a8a03d596fc84c4",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/fixtures/inline-encoding.html"
+    },
+    {
+      "path": "test/fixtures/old-inline-encoding.html",
+      "sha256": "4f635347404a07024ca09561258a8d6e8d3f1daaec20bb2f23408f7a5a870dd7",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/fixtures/old-inline-encoding.html"
+    },
+    {
+      "path": "test/fixtures/queue.json",
+      "sha256": "8832a66887df6afcf874e3f1f5f881c03a03a57215a452465d14cb8f9ba40ea1",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/fixtures/queue.json"
+    },
+    {
+      "path": "test/fixtures/robots.txt",
+      "sha256": "fd85cecb46720bd0969147368655b1a0fe0c952c7d5b382079aa512d481aa084",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/fixtures/robots.txt"
+    },
+    {
+      "path": "test/init.js",
+      "sha256": "f573f5336462d7ede42650ca4a4e85b42411e0c8ffe59fde88b2f17bfd34c6d3",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/init.js"
+    },
+    {
+      "path": "test/lib/routes.js",
+      "sha256": "087091789ce48b519edce222f324694f557b85ed56d13256e12f4ad345a55db0",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/lib/routes.js"
+    },
+    {
+      "path": "test/lib/testserver.js",
+      "sha256": "250ec78b3ab3e2cede590107897b1f525668283716e032432c63d927a6722f5f",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/lib/testserver.js"
+    },
+    {
+      "path": "test/notmodified.js",
+      "sha256": "b3b71a03f70394f72627f7006cbb6d0336dd13137ebb02af1b4c13d25c11f34f",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/notmodified.js"
+    },
+    {
+      "path": "test/queue.js",
+      "sha256": "fd8bf0cd71d2d13e01ba2042cf4ab9a5b928ef4870b3164e14c18d5d315b9184",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/queue.js"
+    },
+    {
+      "path": "test/reliability.js",
+      "sha256": "cef5f9d07666240568cfd6bbd245d85ab63310e16b4293be6b750fead8f92761",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/reliability.js"
+    },
+    {
+      "path": "test/resourcevalidity.js",
+      "sha256": "c849b6cd7a232a4388e8a293ab13471f5e9da45350db0158a519c2889fe68442",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/resourcevalidity.js"
+    },
+    {
+      "path": "test/testcrawl.js",
+      "sha256": "1a3eedc56a0e06c6cb7dfe4bf5971b4ca5e61f803380b2064e63c7af28688b6a",
+      "origin": "https://github.com/simplecrawler/simplecrawler@7395d2111f1ddb62ab6478cabc540ceb0e1dc9ff:test/testcrawl.js"
+    }
+  ]
+}
