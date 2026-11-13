@@ -13,6 +13,7 @@ import (
 	"path"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/PuerkitoBio/purell"
 	"github.com/andybalholm/cascadia"
 	"github.com/temoto/robotstxt"
 	"golang.org/x/net/html"
@@ -83,7 +84,11 @@ func (w *worker) run() {
 				if ctx.IsRobotsURL() {
 					w.requestRobotsTxt(ctx)
 				} else if w.isAllowedPerRobotsPolicies(ctx.url) {
-					w.requestURL(ctx, ctx.HeadBeforeGet)
+					if ctx.IsSitemapURL() {
+						w.requestSitemap(ctx)
+					} else {
+						w.requestURL(ctx, ctx.HeadBeforeGet)
+					}
 				} else {
 					// Must still notify Crawler that this URL was processed, although not visited
 					w.opts.Extender.Disallowed(ctx)
@@ -160,6 +165,7 @@ func (w *worker) requestRobotsTxt(ctx *URLContext) {
 func (w *worker) getRobotsTxtGroup(ctx *URLContext, b []byte, res *http.Response) (g *robotstxt.Group) {
 	var data *robotstxt.RobotsData
 	var e error
+	var base *url.URL
 
 	if res != nil {
 		var buf bytes.Buffer
@@ -170,8 +176,16 @@ func (w *worker) getRobotsTxtGroup(ctx *URLContext, b []byte, res *http.Response
 		res.Body = ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
 		// Error or not, the robots.txt has been fetched, so notify
 		w.opts.Extender.FetchedRobots(ctx, res)
+		// Sitemap declarations are resolved against the URL of the actual
+		// robots.txt response, falling back to the requested URL.
+		base = ctx.url
+		if res.Request != nil && res.Request.URL != nil {
+			base = res.Request.URL
+		}
 	} else {
 		data, e = robotstxt.FromBytes(b)
+		// Cached robots.txt content is resolved against the robots.txt URL itself
+		base = ctx.url
 	}
 
 	// If robots data cannot be parsed, will return nil, which will allow access by default.
@@ -182,8 +196,133 @@ func (w *worker) getRobotsTxtGroup(ctx *URLContext, b []byte, res *http.Response
 		w.logFunc(LogError, "ERROR parsing robots.txt for host %s: %s", w.host, e)
 	} else {
 		g = data.FindGroup(w.opts.RobotUserAgent)
+		if w.opts.DiscoverSitemaps {
+			w.discoverSitemaps(ctx, data.Sitemaps, base)
+		}
 	}
 	return g
+}
+
+// Discover the sitemap URLs declared in a robots.txt file and enqueue them as
+// sitemap control requests. The declarations are resolved against the given
+// base URL, and only absolute http(s) URLs are kept.
+func (w *worker) discoverSitemaps(ctx *URLContext, declared []string, base *url.URL) {
+	if len(declared) == 0 {
+		return
+	}
+	var ctxs []*URLContext
+	for _, decl := range declared {
+		u, err := base.Parse(strings.TrimSpace(decl))
+		if err != nil {
+			w.logFunc(LogIgnored, "ignore on unparsable robots.txt sitemap %s: %s", decl, err)
+			continue
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			w.logFunc(LogIgnored, "ignore on robots.txt sitemap scheme policy: %s", u)
+			continue
+		}
+		ctxs = append(ctxs, w.newDiscoveredURLContext(u, ctx.url, true))
+	}
+	if len(ctxs) > 0 {
+		w.enqueue <- ctxs
+	}
+}
+
+// Process a sitemap control request: fetch the document and harvest the URLs
+// it references - child sitemaps for an index, regular pages for a URL set.
+// The response is not visited (it is not an HTML page) and does not count
+// towards MaxVisits, but it is accounted for in the crawler's pending count.
+func (w *worker) requestSitemap(ctx *URLContext) {
+	if res, ok := w.fetchURL(ctx, w.opts.UserAgent, false); ok {
+		var harvested []*URLContext
+
+		// Close the body on function end
+		defer res.Body.Close()
+
+		// Any 2xx status code is good to go
+		if res.StatusCode >= 200 && res.StatusCode < 300 {
+			if ctxs, e := w.parseSitemap(ctx, res); e != nil {
+				// A faulty sitemap is reported once, and none of its URLs
+				// is enqueued
+				w.opts.Extender.Error(newCrawlError(ctx, e, CekParseSitemap))
+				w.logFunc(LogError, "ERROR parsing sitemap %s: %s", ctx.url, e)
+			} else {
+				harvested = ctxs
+			}
+		} else {
+			// Error based on status code received
+			w.opts.Extender.Error(newCrawlErrorMessage(ctx, res.Status, CekHttpStatusCode))
+			w.logFunc(LogError, "ERROR status code for %s: %s", ctx.url, res.Status)
+		}
+		w.sendResponse(ctx, false, harvested, false)
+	}
+}
+
+// Parse a sitemap response and build the URL contexts of the URLs it
+// references, resolved against the URL of the actual response.
+func (w *worker) parseSitemap(ctx *URLContext, res *http.Response) ([]*URLContext, error) {
+	body, e := readSitemapBody(res.Body)
+	if e != nil {
+		return nil, e
+	}
+	isIndex, locs, e := parseSitemapDocument(body)
+	if e != nil {
+		return nil, e
+	}
+
+	// The loc values are resolved against the URL of the actual sitemap
+	// response, falling back to the requested URL.
+	base := ctx.url
+	if res.Request != nil && res.Request.URL != nil {
+		base = res.Request.URL
+	}
+
+	var ctxs []*URLContext
+	for _, loc := range locs {
+		u, err := base.Parse(loc)
+		if err != nil {
+			w.logFunc(LogIgnored, "ignore on unparsable sitemap loc %s: %s", loc, err)
+			continue
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			w.logFunc(LogIgnored, "ignore on sitemap loc scheme policy: %s", u)
+			continue
+		}
+		// An index references other sitemaps, a URL set references regular pages
+		ctxs = append(ctxs, w.newDiscoveredURLContext(u, ctx.url, isIndex))
+	}
+	return ctxs, nil
+}
+
+// Build an URL context for an URL discovered in a robots.txt file or a
+// sitemap document, applying the URL normalization flags. The source URL is
+// left untouched. Sitemap control requests are always fetched with a GET.
+func (w *worker) newDiscoveredURLContext(u, src *url.URL, isSitemap bool) *URLContext {
+	var rawSrc, normSrc *url.URL
+
+	rawU := *u
+	purell.NormalizeURL(u, w.opts.URLNormalizationFlags)
+	if src != nil {
+		rawSrc = &url.URL{}
+		*rawSrc = *src
+		normSrc = &url.URL{}
+		*normSrc = *src
+		purell.NormalizeURL(normSrc, w.opts.URLNormalizationFlags)
+	}
+
+	headBeforeGet := w.opts.HeadBeforeGet
+	if isSitemap {
+		// Never request HEAD before GET for a sitemap control request
+		headBeforeGet = false
+	}
+	return &URLContext{
+		HeadBeforeGet:       headBeforeGet,
+		url:                 &rawU,
+		normalizedURL:       u,
+		sourceURL:           rawSrc,
+		normalizedSourceURL: normSrc,
+		isSitemap:           isSitemap,
+	}
 }
 
 // Set the crawl delay between this request and the next.

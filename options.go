@@ -66,6 +66,17 @@ type Options struct {
 	// GET should be issued.
 	HeadBeforeGet bool
 
+	// DiscoverSitemaps asks the crawler to fetch the sitemap URLs
+	// declared in the robots.txt file of each crawled host, and to
+	// process those documents (sitemap indexes and URL sets) as
+	// control requests: sitemap indexes enqueue their child sitemaps,
+	// URL sets enqueue their pages as regular URLs to visit. Sitemap
+	// requests go through the same per-host worker, robots.txt policy
+	// and crawl delay as any other request, but they do not trigger
+	// the Filter, Visit and Visited hooks and do not count towards
+	// MaxVisits. Defaults to false.
+	DiscoverSitemaps bool
+
 	// URLNormalizationFlags controls the normalization of URLs.
 	// See the purell package for details.
 	URLNormalizationFlags purell.NormalizationFlags
@@ -92,6 +103,7 @@ func NewOptions(ext Extender) *Options {
 		DefaultCrawlDelay,
 		DefaultIdleTTL,
 		true,
+		false,
 		false,
 		DefaultNormalizationFlags,
 		LogError,

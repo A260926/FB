@@ -1,0 +1,11 @@
+{
+	"github.com/PuerkitoBio/gocrawl_test": {
+		"tests": [
+			{
+				"posn": "/Users/solo/pro/UserFB/workspace/FS1135D04A1B68U6602/attempts/20261113T164038780612Z/repo/examples_test.go:35:1",
+				"end": "/Users/solo/pro/UserFB/workspace/FS1135D04A1B68U6602/attempts/20261113T164038780612Z/repo/examples_test.go:35:1",
+				"message": "ExampleCrawl refers to unknown identifier: Crawl"
+			}
+		]
+	}
+}

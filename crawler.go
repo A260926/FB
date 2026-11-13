@@ -33,8 +33,12 @@ type Crawler struct {
 	// keep lookups in maps, O(1) access time vs O(n) for slice. The empty struct value
 	// is of no use, but this is the smallest type possible - it uses no memory at all.
 	visited map[string]struct{}
-	hosts   map[string]struct{}
-	workers map[string]*worker
+	// sitemap control requests are deduplicated separately from visited pages:
+	// the same normalized URL may be requested once as a sitemap and once as
+	// a page, each identity being fetched at most once.
+	sitemaps map[string]struct{}
+	hosts    map[string]struct{}
+	workers  map[string]*worker
 }
 
 // NewCrawlerWithOptions returns a Crawler initialized with the
@@ -96,6 +100,7 @@ func (c *Crawler) init(ctxs []*URLContext) {
 
 	// Initialize the visits fields
 	c.visited = make(map[string]struct{}, l)
+	c.sitemaps = make(map[string]struct{}, l)
 	c.pushPopRefCount, c.visits = 0, 0
 
 	// Create the workers map and the push channel (the channel used by workers
@@ -205,14 +210,28 @@ func (c *Crawler) enqueueUrls(ctxs []*URLContext) (cnt int) {
 		if ctx.IsRobotsURL() {
 			continue
 		}
-		// Check if it has been visited before, using the normalized URL
-		_, isVisited = c.visited[ctx.normalizedURL.String()]
 
-		// Filter the URL
-		if enqueue = c.Options.Extender.Filter(ctx, isVisited); !enqueue {
-			// Filter said NOT to use this url, so continue with next
-			c.logFunc(LogIgnored, "ignore on filter policy: %s", ctx.normalizedURL)
-			continue
+		isSitemap := ctx.IsSitemapURL()
+		if isSitemap {
+			// Sitemap control requests are not subject to the Filter hook,
+			// they are deduplicated on their own identity, so that a URL
+			// already visited as a page (or vice-versa) is still fetched
+			// once in its sitemap identity.
+			if _, ok := c.sitemaps[ctx.normalizedURL.String()]; ok {
+				c.logFunc(LogIgnored, "ignore on sitemap already discovered policy: %s", ctx.normalizedURL)
+				continue
+			}
+			enqueue = true
+		} else {
+			// Check if it has been visited before, using the normalized URL
+			_, isVisited = c.visited[ctx.normalizedURL.String()]
+
+			// Filter the URL
+			if enqueue = c.Options.Extender.Filter(ctx, isVisited); !enqueue {
+				// Filter said NOT to use this url, so continue with next
+				c.logFunc(LogIgnored, "ignore on filter policy: %s", ctx.normalizedURL)
+				continue
+			}
 		}
 
 		// Even if filter said to use the URL, it still MUST be absolute, http(s)-prefixed,
@@ -263,7 +282,10 @@ func (c *Crawler) enqueueUrls(ctxs []*URLContext) (cnt int) {
 			// Once it is stacked, it WILL be visited eventually, so add it to the visited slice
 			// (unless denied by robots.txt, but this is out of our hands, for all we
 			// care, it is visited).
-			if !isVisited {
+			if isSitemap {
+				// The sitemap identity has its own deduplication map
+				c.sitemaps[ctx.normalizedURL.String()] = struct{}{}
+			} else if !isVisited {
 				// The visited map works with the normalized URL
 				c.visited[ctx.normalizedURL.String()] = struct{}{}
 			}

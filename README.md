@@ -33,6 +33,7 @@ To install a previous version, you have to `git clone https://github.com/Puerkit
 
 ## Changelog
 
+*    **2026-11-14** : Add `Options.DiscoverSitemaps` to fetch and process the sitemaps declared in robots.txt files (sitemap indexes and URL sets), and the `URLContext.IsSitemapURL()` method to identify those control requests.
 *    **2021-05-19** : Use Go modules for dependencies. Tag v1.1.0.
 *    **2019-07-22** : Use pre-compiled matchers for goquery (thanks @mikefaraponov). Tag v1.0.1.
 *    **2016-11-20** : Fix log message so that it prints enqueued URLs (thanks @oherych). Tag as v1.0.0.
@@ -176,6 +177,8 @@ The `Options` type provides the hooks and customizations offered by gocrawl. All
 
 *    **HeadBeforeGet** : Asks the crawler to issue a HEAD request (and a subsequent `RequestGet()` extender method call) before making the eventual GET request. This is set to `false` by default. See also the `URLContext` structure explained below.
 
+*    **DiscoverSitemaps** : Asks the crawler to fetch the sitemaps declared in each host's robots.txt file (the `Sitemap:` lines) and to process them. Sitemap indexes enqueue their child sitemaps, URL sets enqueue their pages as regular URLs to visit. Sitemaps are fetched as *control requests*: they go through the same per-host worker, robots.txt policy and crawl delay as any other request, but they bypass `Filter`, never trigger `Visit`/`Visited`, and do not count towards `MaxVisits`. They are deduplicated independently from pages, so the same URL may be fetched once as a sitemap and once as a page, and sitemap loops are downloaded only once. Declared URLs are resolved against the actual robots.txt response URL (or the robots.txt URL itself when served from the `RequestRobots` cache), and `loc` values against the actual sitemap response URL; only `http`/`https` URLs are kept, normalized with `URLNormalizationFlags`. Documents must be `sitemapindex` or `urlset` files in the standard sitemap namespace (or in no namespace at all - `loc` elements in extension namespaces are ignored), at most 8 MiB once decompressed (gzip is detected by its magic bytes, regardless of response headers), with at most 10000 `loc` entries. A faulty document (bad XML, wrong root, gzip error, over a limit) is reported once via `Error` and none of its URLs is enqueued. Defaults to `false`.
+
 *    **URLNormalizationFlags** : The flags to apply when normalizing the URL using the [purell][] library. The URLs are normalized before being enqueued and passed around to the `Extender` methods in the `URLContext` structure. Defaults to the most aggressive normalization allowed by purell, `purell.FlagsAllGreedy`.
 
 *    **LogFlags** : The level of verbosity for logging. Defaults to errors only (`LogError`). Can be a set of flags (i.e. `LogError | LogTrace`).
@@ -205,6 +208,7 @@ The remaining extension functions are all called in the context of a given URL, 
 * `SourceURL() *url.URL` : The getter method that returns the source URL in non-normalized form. Can be `nil` for seeds or URLs enqueued via the `EnqueueChan`.
 * `NormalizedSourceURL() *url.URL` : The getter method that returns the source URL in normalized form. Can be `nil` for seeds or URLs enqueued via the `EnqueueChan`.
 * `IsRobotsURL() bool` : Indicates if the current URL is a robots.txt URL.
+* `IsSitemapURL() bool` : Indicates if the current URL is a sitemap control request, discovered from a robots.txt `Sitemap:` declaration or a sitemap index (only enqueued when `DiscoverSitemaps` is set).
 
 With this out of the way, here are the other `Extender` functions:
 

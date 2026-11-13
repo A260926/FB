@@ -32,6 +32,7 @@ const (
 	CekParseURL
 	CekProcessLinks
 	CekParseRedirectURL
+	CekParseSitemap
 )
 
 var (
@@ -44,6 +45,7 @@ var (
 		CekParseURL:         "ParseURL",
 		CekProcessLinks:     "ProcessLinks",
 		CekParseRedirectURL: "ParseRedirectURL",
+		CekParseSitemap:     "ParseSitemap",
 	}
 )
 

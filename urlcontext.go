@@ -30,6 +30,7 @@ type URLContext struct {
 	normalizedURL       *url.URL
 	sourceURL           *url.URL
 	normalizedSourceURL *url.URL
+	isSitemap           bool
 }
 
 // URL returns the URL.
@@ -58,6 +59,14 @@ func (uc *URLContext) NormalizedSourceURL() *url.URL {
 // IsRobotsURL indicates if the URL is a robots.txt URL.
 func (uc *URLContext) IsRobotsURL() bool {
 	return isRobotsURL(uc.normalizedURL)
+}
+
+// IsSitemapURL indicates if the URL is a sitemap control request,
+// discovered from a robots.txt Sitemap declaration or from a sitemap
+// index. Such URLs are only enqueued when Options.DiscoverSitemaps
+// is set.
+func (uc *URLContext) IsSitemapURL() bool {
+	return uc.isSitemap
 }
 
 // cloneForRedirect returns a new URLContext with the given
@@ -94,6 +103,7 @@ func (uc *URLContext) cloneForRedirect(dst *url.URL, normFlags purell.Normalizat
 		normalizedURL:       dst,
 		sourceURL:           src,
 		normalizedSourceURL: normalizedSrc,
+		isSitemap:           uc.isSitemap,
 	}
 }
 
@@ -127,12 +137,12 @@ func (uc *URLContext) getRobotsURLCtx() (*URLContext, error) {
 		return nil, err
 	}
 	return &URLContext{
-		false, // Never request HEAD before GET for robots.txt
-		nil,   // Always nil state
-		robURL,
-		robURL,       // Normalized is same as raw
-		uc.sourceURL, // Source and normalized source is same as for current context
-		uc.normalizedSourceURL,
+		HeadBeforeGet:       false, // Never request HEAD before GET for robots.txt
+		State:               nil,   // Always nil state
+		url:                 robURL,
+		normalizedURL:       robURL, // Normalized is same as raw
+		sourceURL:           uc.sourceURL,
+		normalizedSourceURL: uc.normalizedSourceURL, // Source and normalized source is same as for current context
 	}, nil
 }
 
@@ -165,6 +175,11 @@ func (c *Crawler) toURLContexts(raw interface{}, src *url.URL) []*URLContext {
 	switch v := raw.(type) {
 	case *URLContext:
 		res = []*URLContext{v}
+
+	case []*URLContext:
+		// Already-built contexts, as produced internally (e.g. sitemap
+		// control requests and the URLs they discovered)
+		res = v
 
 	case string:
 		// Convert a single string URL to an URLContext
@@ -238,11 +253,11 @@ func (c *Crawler) urlToURLContext(u, src *url.URL) *URLContext {
 	}
 
 	return &URLContext{
-		c.Options.HeadBeforeGet,
-		nil,
-		&rawU,
-		u,
-		rawSrc,
-		src,
+		HeadBeforeGet:       c.Options.HeadBeforeGet,
+		State:               nil,
+		url:                 &rawU,
+		normalizedURL:       u,
+		sourceURL:           rawSrc,
+		normalizedSourceURL: src,
 	}
 }
