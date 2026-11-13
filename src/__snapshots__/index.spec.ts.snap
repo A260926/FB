@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Index > createDocumentStream 1`] = `
+Document {
+  "children": [
+    &This is text,
+    <!-- and comments -->,
+    <tags />,
+  ],
+  "endIndex": null,
+  "next": null,
+  "parent": null,
+  "prev": null,
+  "startIndex": null,
+  "type": "root",
+}
+`;
+
+exports[`Index > parseDocument 1`] = `
+Document {
+  "children": [
+    <a
+      foo=""
+    >
+      <b>
+        <c>
+          <!--?foo-->
+          Yay!
+        </c>
+      </b>
+    </a>,
+  ],
+  "endIndex": null,
+  "next": null,
+  "parent": null,
+  "prev": null,
+  "startIndex": null,
+  "type": "root",
+}
+`;
+
+exports[`Index > parseDocument in foreign content 1`] = `
+Document {
+  "children": [
+    <svg>
+      a&lt;b
+    </svg>,
+  ],
+  "endIndex": null,
+  "next": null,
+  "parent": null,
+  "prev": null,
+  "startIndex": null,
+  "type": "root",
+}
+`;
