@@ -47,6 +47,11 @@ func (c *Console) ExpectEOF() (string, error) {
 // expecting input yet, it will be blocked. Sends are queued up in tty's
 // internal buffer so that the next Expect will read the remaining bytes (i.e.
 // rest of prompt) as well as its conditions.
+//
+// Conditions built only from the built-in matchers (String, Regexp,
+// RegexpPattern, All, Error, EOF, PTSClosed and Then wrappers) are compiled
+// into an ExpectPlan and matched incrementally; custom Matcher implementations
+// keep their original per-rune Match call order and count.
 func (c *Console) Expect(opts ...ExpectOpt) (string, error) {
 	var options ExpectOpts
 	for _, opt := range opts {
@@ -55,6 +60,17 @@ func (c *Console) Expect(opts ...ExpectOpt) (string, error) {
 		}
 	}
 
+	if plan, err := compileExpectOptions(&options); err == nil {
+		out, _, err := c.ExpectPlan(plan)
+		return out, err
+	}
+
+	return c.expectLegacy(&options)
+}
+
+// expectLegacy retains the original match-per-rune behavior for option sets
+// containing custom Matchers that cannot be compiled into an ExpectPlan.
+func (c *Console) expectLegacy(options *ExpectOpts) (string, error) {
 	buf := new(bytes.Buffer)
 	writer := io.MultiWriter(append(c.opts.Stdouts, buf)...)
 	runeWriter := bufio.NewWriterSize(writer, utf8.UTFMax)
