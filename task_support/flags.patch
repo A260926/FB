@@ -1,0 +1,11 @@
+--- a/sljit_src/sljitSerialize.c
++++ b/sljit_src/sljitSerialize.c
+@@ -370,7 +370,7 @@
+ 	compiler->size = serialized_compiler->size;
+ 
+ #if (defined SLJIT_HAS_STATUS_FLAGS_STATE && SLJIT_HAS_STATUS_FLAGS_STATE)
+-	compiler->status_flags_state = serialized_compiler->status_flags_state;
++	compiler->status_flags_state = 0;
+ #endif /* SLJIT_HAS_STATUS_FLAGS_STATE */
+ 
+ #if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) \
