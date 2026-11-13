@@ -263,9 +263,6 @@ Loop:
 		case pconn := <-c.freeConnCh:
 			if pconn.broken {
 				c.debug("#%d was ready (broken)", pconn.idx)
-				c.mu.Lock()
-				c.numConnsPerHost[pconn.host]--
-				c.mu.Unlock()
 				c.removeConn(pconn)
 			} else {
 				c.debug("#%d was ready", pconn.idx)
@@ -320,9 +317,6 @@ Loop:
 
 		if pconn.broken {
 			c.debug("waited and got #%d (broken)", pconn.idx)
-			c.mu.Lock()
-			c.numConnsPerHost[pconn.host]--
-			c.mu.Unlock()
 			c.removeConn(pconn)
 		} else {
 			c.debug("waited and got #%d", pconn.idx)
@@ -332,9 +326,16 @@ Loop:
 	}
 }
 
+// removeConn takes a pooled connection out of every bookkeeping structure
+// (registry and per-host open-connection counters) and closes it. It is the
+// single place where pooled connections cease to exist, so the counters stay
+// consistent with reality whether the connection broke or Client.Close ran.
 func (c *Client) removeConn(pconn *persistentConn) {
 	c.mu.Lock()
 	delete(c.allCons, pconn.idx)
+	if n := c.numConnsPerHost[pconn.host]; n > 0 {
+		c.numConnsPerHost[pconn.host] = n - 1
+	}
 	c.mu.Unlock()
 	pconn.close()
 }

@@ -212,7 +212,7 @@ func (c *Client) controlStringList(f string, args ...interface{}) ([]string, err
 
 	cmd := fmt.Sprintf(f, args...)
 
-	code, msg, err := pconn.sendCommand(cmd)
+	code, msg, err := pconn.sendCommand("%s", cmd)
 
 	if !positiveCompletionReply(code) {
 		pconn.debug("unexpected response to %s: %d-%s", cmd, code, msg)
@@ -237,13 +237,20 @@ func (c *Client) dataStringList(f string, args ...interface{}) ([]string, error)
 
 	cmd := fmt.Sprintf(f, args...)
 
-	err = pconn.sendCommandExpected(replyGroupPreliminaryReply, cmd)
+	// Before the 125/150 boundary a rejection only wastes the locally prepared
+	// data resources; release them and keep the control connection in the pool.
+	err = pconn.sendCommandExpected(replyGroupPreliminaryReply, "%s", cmd)
 	if err != nil {
+		pconn.releasePrepared()
 		return nil, err
 	}
 
 	dc, err := dcGetter()
 	if err != nil {
+		// Active-mode accept failure (or another getter error) happens after
+		// the server accepted the command, so the control reply stream is no
+		// longer trustworthy.
+		pconn.broken = true
 		return nil, err
 	}
 
@@ -265,6 +272,9 @@ func (c *Client) dataStringList(f string, args ...interface{}) ([]string, error)
 			err:       fmt.Errorf("error reading %s data: %s", cmd, err),
 			temporary: true,
 		}
+		// A truncated data stream means the final control reply cannot be
+		// matched up with this command with confidence.
+		pconn.broken = true
 	}
 
 	err = dc.Close()
@@ -279,6 +289,7 @@ func (c *Client) dataStringList(f string, args ...interface{}) ([]string, error)
 
 	if !positiveCompletionReply(code) {
 		pconn.debug("unexpected result: %d-%s", code, msg)
+		pconn.broken = true
 		return nil, ftpError{code: code, msg: msg}
 	}
 

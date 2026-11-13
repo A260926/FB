@@ -173,14 +173,23 @@ func (c *Client) transferFromOffset(path string, dest io.Writer, src io.Reader, 
 		panic("this shouldn't happen")
 	}
 
+	// The transfer command has not been accepted yet. A rejection (e.g. 550)
+	// leaves the control connection reusable: release the locally prepared
+	// data resources without reading a 226 that will never come or sending
+	// ABOR, and let the normal returnConn path recycle the control connection.
 	err = pconn.sendCommandExpected(replyGroupPreliminaryReply, "%s %s", cmd, path)
 	if err != nil {
+		pconn.releasePrepared()
 		return 0, err
 	}
 
 	dc, err := connGetter()
 	if err != nil {
+		// Past the 125/150 boundary: the server may still be driving the data
+		// connection and a late completion reply, so the control connection's
+		// reply stream can no longer be trusted to stay in sync.
 		pconn.debug("error getting data connection: %s", err)
+		pconn.broken = true
 		return 0, err
 	}
 
@@ -212,11 +221,25 @@ func (c *Client) transferFromOffset(path string, dest io.Writer, src io.Reader, 
 	}
 
 	if !positiveCompletionReply(code) {
+		// The reply boundary cannot be guessed at after a non-completion final
+		// reply, so this control connection must not be reused.
 		pconn.debug("unexpected response after %s: %d (%s)", cmd, code, msg)
+		pconn.broken = true
 		return n, ftpError{code: code, msg: msg}
 	}
 
 	return n, nil
+}
+
+// releasePrepared closes data-connection resources prepared by
+// prepareDataConn when the associated transfer command never reached the
+// 125/150 accepted stage. The control connection itself is untouched.
+func (pconn *persistentConn) releasePrepared() {
+	if pconn.prepared == nil {
+		return
+	}
+	pconn.prepared.release()
+	pconn.prepared = nil
 }
 
 // Fetch SIZE of file. Returns error only on underlying connection error.

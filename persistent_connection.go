@@ -25,6 +25,16 @@ type RawConn interface {
 	// what port to connect to), then send a control command to tell the server to initiate
 	// a connection, then finally you invoke the getter function to get the actual
 	// net.Conn.
+	//
+	// The prepared passive socket or active-mode listener is owned by the connection
+	// until one of two things happens:
+	//   - the transfer command is rejected (no 125/150 reply): invoke Close on this
+	//     RawConn only if you are done with it; the built-in transfer paths instead
+	//     release just the prepared resources and keep using the control connection;
+	//   - the getter is invoked after a 125/150 reply: ownership of the data
+	//     connection transfers to the caller, who must close it.
+	// If the getter is never called and the RawConn is closed, the prepared
+	// resources are released automatically.
 	PrepareDataConn() (func() (net.Conn, error), error)
 
 	// Read a pending response from the server. This is necessary after completing a
@@ -42,6 +52,10 @@ type persistentConn struct {
 
 	// data socket (tracked so we can close it on client.Close())
 	dataConn net.Conn
+
+	// resources prepared by an in-flight PrepareDataConn call whose getter
+	// has not been invoked yet (passive socket or active-mode listener)
+	prepared *preparedDataConn
 
 	// control socket read/write helpers
 	reader *textproto.Reader
@@ -93,6 +107,13 @@ func (pconn *persistentConn) setControlConn(conn net.Conn) {
 
 func (pconn *persistentConn) close() error {
 	pconn.debug("closing")
+
+	// A prepared-but-never-claimed data connection must not outlive the
+	// control connection it belongs to.
+	if pconn.prepared != nil {
+		pconn.prepared.release()
+		pconn.prepared = nil
+	}
 
 	if pconn.dataConn != nil {
 		// ignore "already closed" error since typically the user of dataConn will
@@ -376,42 +397,62 @@ func (c *dataConn) Write(buf []byte) (int, error) {
 	return c.Conn.Write(buf)
 }
 
+// preparedDataConn owns the local resources created while preparing a data
+// connection (a dialed passive socket, or an active-mode listener). A lease
+// lives through one of two paths:
+//
+//   - the transfer command is rejected (e.g. 550) before a 125/150 reply:
+//     release() closes the prepared socket/listener, while the control
+//     connection stays usable and goes back to the pool;
+//   - the transfer command is accepted (125/150) and the getter is invoked:
+//     the data connection is handed off to the transfer logic, which becomes
+//     responsible for closing it.
+//
+// release() is idempotent so cleanup cannot close a later transfer's
+// connection, and no goroutine is kept blocked on Accept while a lease waits.
+type preparedDataConn struct {
+	active   bool
+	listener *net.TCPListener
+	passive  net.Conn
+	timeout  time.Duration
+	tlsConf  *tls.Config
+
+	claimed bool
+	closed  bool
+}
+
+// release closes every resource the lease still owns. It is safe to call
+// after the getter has handed a connection to transfer logic, in which case
+// it does nothing, and safe to call more than once.
+func (lease *preparedDataConn) release() {
+	if lease.closed {
+		return
+	}
+	lease.closed = true
+
+	if lease.active && lease.listener != nil {
+		lease.listener.Close()
+	}
+	// In passive mode the dialed socket is only owned by the lease until the
+	// getter claims it.
+	if !lease.active && !lease.claimed && lease.passive != nil {
+		lease.passive.Close()
+	}
+}
+
 func (pconn *persistentConn) prepareDataConn() (func() (net.Conn, error), error) {
+	lease := &preparedDataConn{
+		active:  pconn.config.ActiveTransfers,
+		timeout: pconn.config.Timeout,
+		tlsConf: pconn.config.TLSConfig,
+	}
+
 	if pconn.config.ActiveTransfers {
 		listener, err := pconn.listenActive()
 		if err != nil {
 			return nil, err
 		}
-
-		return func() (net.Conn, error) {
-			defer func() {
-				if err := listener.Close(); err != nil {
-					pconn.debug("error closing data connection listener: %s", err)
-				}
-			}()
-
-			listener.SetDeadline(time.Now().Add(pconn.config.Timeout))
-			dc, netErr := listener.Accept()
-
-			if netErr != nil {
-				var isTemporary bool
-				if ne, ok := netErr.(net.Error); ok {
-					isTemporary = ne.Temporary()
-				}
-				return nil, ftpError{err: netErr, temporary: isTemporary}
-			}
-
-			if pconn.config.TLSConfig != nil {
-				dc = tls.Server(dc, pconn.config.TLSConfig)
-				pconn.debug("upgraded active connection to TLS")
-			}
-
-			pconn.dataConn = &dataConn{
-				Conn:    dc,
-				Timeout: pconn.config.Timeout,
-			}
-			return pconn.dataConn, nil
-		}, nil
+		lease.listener = listener
 	} else {
 		host, err := pconn.requestPassive()
 		if err != nil {
@@ -428,20 +469,62 @@ func (pconn *persistentConn) prepareDataConn() (func() (net.Conn, error), error)
 			}
 			return nil, ftpError{err: netErr, temporary: isTemporary}
 		}
+		lease.passive = dc
+	}
 
-		if pconn.config.TLSConfig != nil {
-			pconn.debug("upgrading data connection to TLS")
-			dc = tls.Client(dc, pconn.config.TLSConfig)
+	pconn.prepared = lease
+
+	getter := func() (net.Conn, error) {
+		if lease.closed {
+			return nil, ftpError{err: fmt.Errorf("data connection was released before it was claimed")}
+		}
+		lease.claimed = true
+		// the lease no longer owns anything once the getter runs
+		pconn.prepared = nil
+
+		var dc net.Conn
+		if lease.active {
+			// Accept only happens here, after the server accepted the transfer
+			// command with a 125/150 reply, so no goroutine is left blocked on
+			// Accept while the command is still in flight.
+			lease.listener.SetDeadline(time.Now().Add(lease.timeout))
+			accepted, netErr := lease.listener.Accept()
+
+			// the listener has served its purpose either way
+			lease.listener.Close()
+			lease.listener = nil
+
+			if netErr != nil {
+				var isTemporary bool
+				if ne, ok := netErr.(net.Error); ok {
+					isTemporary = ne.Temporary()
+				}
+				return nil, ftpError{err: netErr, temporary: isTemporary}
+			}
+			dc = accepted
+
+			if lease.tlsConf != nil {
+				dc = tls.Server(dc, lease.tlsConf)
+				pconn.debug("upgraded active connection to TLS")
+			}
+		} else {
+			dc = lease.passive
+
+			if lease.tlsConf != nil {
+				pconn.debug("upgrading data connection to TLS")
+				dc = tls.Client(dc, lease.tlsConf)
+			}
 		}
 
-		return func() (net.Conn, error) {
-			pconn.dataConn = &dataConn{
-				Conn:    dc,
-				Timeout: pconn.config.Timeout,
-			}
-			return pconn.dataConn, nil
-		}, nil
+		handed := &dataConn{
+			Conn:    dc,
+			Timeout: lease.timeout,
+		}
+		pconn.dataConn = handed
+		return handed, nil
 	}
+
+	return getter, nil
 }
 
 func (pconn *persistentConn) listenActive() (*net.TCPListener, error) {
@@ -471,6 +554,16 @@ func (pconn *persistentConn) listenActive() (*net.TCPListener, error) {
 		return nil, ftpError{err: fmt.Errorf("error listening on %s for active transfer: %s", listenAddr, err)}
 	}
 	pconn.debug("listening on %s for active connection", listener.Addr().String())
+
+	// Preparation failures (a bad PORT/EPRT reply, address parsing) happen
+	// before any transfer command is accepted, so the listener must be closed
+	// here rather than leaked until the whole connection goes away.
+	listenerHandedOff := false
+	defer func() {
+		if !listenerHandedOff {
+			listener.Close()
+		}
+	}()
 
 	listenHost, listenPortStr, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
@@ -502,6 +595,7 @@ func (pconn *persistentConn) listenActive() (*net.TCPListener, error) {
 		}
 	}
 
+	listenerHandedOff = true
 	return listener, nil
 }
 
