@@ -164,6 +164,68 @@ def Render(p, phi, height, horizon, scale_height, distance, screen_width, screen
 Render( Point(0, 0), 0, 50, 120, 120, 300, 800, 600 )
 ```
 
+## Perspective ray-casting mode
+
+The classic engine above is a 2.5D column renderer: it can only sweep vertical
+screen columns and "looking up/down" just shifts the horizon. `terrain-renderer.js`
+adds a second, fully 3D perspective mode with real pitch, yaw and roll. The old
+renderer is kept unchanged for comparison and is still the default in
+`VoxelSpace.html` (switch with the **Mode** control).
+
+### Column terrain convention
+
+The height field is a field of solid columns, not a smooth surface:
+
+* Every integer XY cell `(cx, cy)` is one column filling the box
+  `[cx, cx+1) × [cy, cy+1) × (−∞, altitude]`.
+* `map.width` and `map.height` may be any positive integers. Cells are stored
+  row-major at `altitude[x + width*y]` / `color[x + width*y]` and plain numeric
+  arrays are fine — no image files are required.
+* Columns repeat **periodically** in both X and Y, including for negative
+  coordinates: a cell is addressed with a floor modulo,
+  `index = mod(cx, width) + width * mod(cy, height)`.
+* Heights are never interpolated; a column keeps one constant altitude. Only
+  column tops and the vertical walls created by an altitude difference between
+  neighbours are surfaces. A grid line between two equal-height columns is not
+  a surface.
+* The colour of a hit is the `color` value of the column that owns the surface.
+
+### Camera convention
+
+`renderPerspective(map, camera, width, height)` takes a camera with
+`position`, `yaw`, `pitch`, `roll`, `fovY`, `near`, `far` and `background`
+(angles in radians). World **Z points up**. With every angle zero the forward
+vector is `(0, −1, 0)` and the right vector is `(1, 0, 0)`:
+
+1. **yaw** rotates around world Z,
+2. **pitch** then rotates around the resulting right vector,
+3. **roll** finally rotates around the forward vector,
+
+each using the right-hand rule with positive angles. Rays pass through pixel
+centres, are shaped by the vertical field of view `fovY`, and are normalized to
+unit vectors. The call returns `{color: Uint32Array, depth: Float64Array}`;
+`depth` is the world distance to the first intersection and is `Infinity` for
+background pixels.
+
+### Ray traversal
+
+`traceTerrain(map, origin, direction, near, far)` walks one ray using a DDA
+that advances only on XY grid-line crossing events and on the current column's
+top plane — never on a fixed step size. `near`/`far` are world distances along
+the ray and the search interval is closed. If the origin (or the `near` point)
+is inside a column, the first boundary that *leaves* the solid is returned
+rather than `near` itself. Coincident events at one distance follow the face
+priority **Z, then X, then Y**, and every normal points out of the solid
+column. Zero direction components, simultaneous X/Y crossings, rays riding a
+grid line and exact top-edge hits all terminate deterministically. It returns
+`{distance, position, normal, cell}` where `cell` is the modulo-wrapped
+`[x, y]`, or `null` when nothing is hit.
+
+The module works both as a browser `<script>` (global `TerrainRenderer`) and as
+a CommonJS module. Tests live in `test/perspective.js` and validate whole
+frames against a slow, independent per-column slab/interval reference;
+`examples/generate-perspective-ppm.js` writes a rolled, pillar-occluded PPM.
+
 ## Links
 
 [Web Project demo][project demo] page

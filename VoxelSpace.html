@@ -80,6 +80,22 @@
 <label for="distancerange">Distance</label>
 <input id="distancerange" type="range" min="100" max="2000" step="1" onchange="camera.distance = this.value">
 
+<span id="perspectivecontrols">
+|
+<label for="modeselect">Mode</label>
+<select id="modeselect" onchange="SetMode(this.value)">
+<option value="classic">Classic column renderer</option>
+<option value="perspective">Perspective ray caster</option>
+</select>
+<label for="pitchrange">Pitch</label>
+<input id="pitchrange" type="range" min="-1.5708" max="1.5708" step="0.01" value="-0.35" onchange="perspectiveCamera.pitch = parseFloat(this.value); Draw();">
+<label for="rollrange">Roll</label>
+<input id="rollrange" type="range" min="-1.5708" max="1.5708" step="0.01" value="0" onchange="perspectiveCamera.roll = parseFloat(this.value); Draw();">
+<label for="yawrange">Yaw</label>
+<input id="yawrange" type="range" min="-3.1416" max="3.1416" step="0.01" value="0" onchange="perspectiveCamera.yaw = parseFloat(this.value); Draw();">
+<button type="button" onclick="RebuildPerspectiveMap(); Draw();">New terrain</button>
+</span>
+
 <a href="https://github.com/s-macke/VoxelSpace">Github project page</a>
 
 </div>
@@ -88,6 +104,7 @@
     Your browser does not support the canvas element.
 </canvas>
 
+<script src="terrain-renderer.js"></script>
 <script>
 "use strict";
 
@@ -417,6 +434,103 @@ function Render()
 
 
 // ---------------------------------------------
+// Perspective ray-casting mode (new)
+//
+// A second, fully 3D view built on terrain-renderer.js. It keeps the classic
+// column renderer untouched and only takes over the frame loop when selected.
+// The terrain is a procedurally generated stepped height field of solid
+// columns; width and height need not be powers of two.
+
+var renderMode = "classic";
+
+var perspectiveMap =
+{
+    width: 64,
+    height: 48,
+    altitude: new Array(64 * 48),
+    color: new Uint32Array(64 * 48)
+};
+
+var perspectiveCamera =
+{
+    position: [32, 40, 24],
+    yaw: 0,
+    pitch: -0.35,
+    roll: 0,
+    fovY: Math.PI / 2,
+    near: 0.1,
+    far: 120,
+    background: 0xff203040
+};
+
+// Deterministic stepped terrain: wide stair bands plus a few tall pillars so
+// occlusion and vertical walls are easy to see. Numeric arrays only.
+function RebuildPerspectiveMap()
+{
+    var w = perspectiveMap.width;
+    var h = perspectiveMap.height;
+    var altitude = new Array(w * h);
+    var color = new Uint32Array(w * h);
+
+    for (var y = 0; y < h; y++)
+    {
+        for (var x = 0; x < w; x++)
+        {
+            var i = x + w * y;
+            // Stair steps grow toward the back, with a cross step.
+            var level = Math.floor(y / 6) + Math.floor(x / 12);
+            altitude[i] = level;
+
+            var shade = 60 + level * 18;
+            var r = Math.min(255, shade);
+            var g = Math.min(255, shade + 40);
+            var b = Math.min(255, shade + 20);
+            color[i] = 0xff000000 | (r << 16) | (g << 8) | b;
+        }
+    }
+
+    // A handful of isolated tall columns to test wall and top occlusion.
+    var pillars = [[12, 14], [40, 20], [28, 34], [50, 10], [8, 40]];
+    for (var p = 0; p < pillars.length; p++)
+    {
+        var px = pillars[p][0], py = pillars[p][1];
+        var pi = px + w * py;
+        altitude[pi] += 12;
+        color[pi] = 0xffffd040;
+    }
+
+    perspectiveMap.altitude = altitude;
+    perspectiveMap.color = color;
+}
+
+function SetMode(mode)
+{
+    renderMode = mode;
+    if (mode === "perspective")
+    {
+        // The procedural terrain is small (map.width x map.height); put the
+        // shared fly camera inside it so the first perspective frame is not
+        // empty sky beyond the far plane.
+        camera.x = perspectiveMap.width * 0.5;
+        camera.y = perspectiveMap.height * 0.15;
+        camera.height = 24;
+    }
+    Draw();
+}
+
+function RenderPerspective()
+{
+    var w = screendata.canvas.width;
+    var hgt = screendata.canvas.height;
+
+    // Reuse the existing fly controls for position; the sliders set attitude.
+    perspectiveCamera.position = [camera.x, camera.y, camera.height];
+    var frame = TerrainRenderer.renderPerspective(perspectiveMap, perspectiveCamera, w, hgt);
+    screendata.buf32.set(frame.color);
+}
+
+
+// ---------------------------------------------
 // Draw the next frame
 
 function Draw()
@@ -424,7 +538,14 @@ function Draw()
     updaterunning = true;
     UpdateCamera();
     DrawBackground();
-    Render();
+    if (renderMode === "perspective")
+    {
+        RenderPerspective();
+    }
+    else
+    {
+        Render();
+    }
     Flip();
     frames++;
 
@@ -519,6 +640,7 @@ function Init()
 
     LoadMap("C1W;D1");
     OnResizeWindow();
+    RebuildPerspectiveMap();
 
     // set event handlers for keyboard, mouse, touchscreen and window resize
     var canvas = document.getElementById("fullscreenCanvas");
