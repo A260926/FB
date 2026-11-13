@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-const file='userfb/frame-geometry.test.mjs';
+const file='harness/frame-geometry.test.mjs';
 const titles=['global geometry and pixels','clipped pointer and offset','ancestor stability and abort','frame replacement and scroll'];
 assert(existsSync(file),`Create ${file} with the four documented node:test cases first`);
 function run(cmd,args,capture=false){
