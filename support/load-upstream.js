@@ -1,0 +1,1 @@
+const fs=require('node:fs'),vm=require('node:vm'); module.exports=()=>{const html=fs.readFileSync('VoxelSpace.html','utf8');const scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];const code=scripts.at(-1)[1].replace(/\nInit\(\);\s*$/,'');const ctx=vm.createContext({console});vm.runInContext(code,ctx);return ctx;};
