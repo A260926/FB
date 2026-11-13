@@ -189,19 +189,54 @@ func (s *Session) RequestRaw(method, urlStr, contentType string, b []byte, bucke
 	if bucketID == "" {
 		bucketID = strings.SplitN(urlStr, "?", 2)[0]
 	}
-	return s.RequestWithLockedBucket(method, urlStr, contentType, b, s.Ratelimiter.LockBucket(bucketID), sequence, options...)
+
+	req, err := s.newRequest(method, urlStr, contentType, b)
+	if err != nil {
+		return
+	}
+
+	// Request options are applied exactly once per logical call, before the
+	// first rate limit wait, so that e.g. WithContext and WithClient also
+	// govern bucket admission. Retries reuse the resulting configuration.
+	cfg := newRequestConfig(s, req)
+	for _, opt := range options {
+		opt(cfg)
+	}
+
+	bucket, err := s.Ratelimiter.LockBucketContext(cfg.Request.Context(), bucketID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.requestWithLockedBucket(cfg, bucket, sequence)
 }
 
 // RequestWithLockedBucket makes a request using a bucket that's already been locked
 func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b []byte, bucket *Bucket, sequence int, options ...RequestOption) (response []byte, err error) {
+	req, err := s.newRequest(method, urlStr, contentType, b)
+	if err != nil {
+		bucket.Release(nil)
+		return
+	}
+
+	cfg := newRequestConfig(s, req)
+	for _, opt := range options {
+		opt(cfg)
+	}
+
+	return s.requestWithLockedBucket(cfg, bucket, sequence)
+}
+
+// newRequest builds the HTTP request for a single API call, including the
+// standard headers. Request options are applied to it separately.
+func (s *Session) newRequest(method, urlStr, contentType string, b []byte) (req *http.Request, err error) {
 	if s.Debug {
 		log.Printf("API REQUEST %8s :: %s\n", method, urlStr)
 		log.Printf("API REQUEST  PAYLOAD :: [%s]\n", string(b))
 	}
 
-	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(b))
+	req, err = http.NewRequest(method, urlStr, bytes.NewBuffer(b))
 	if err != nil {
-		bucket.Release(nil)
 		return
 	}
 
@@ -220,11 +255,24 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 	// TODO: Make a configurable static variable.
 	req.Header.Set("User-Agent", s.UserAgent)
 
-	cfg := newRequestConfig(s, req)
-	for _, opt := range options {
-		opt(cfg)
+	return
+}
+
+// requestWithLockedBucket sends cfg.Request using a bucket that's already
+// been locked and handles retries. Retries reuse the same request
+// configuration, context and body, and re-admit the bucket through the
+// rate limiter before each attempt.
+func (s *Session) requestWithLockedBucket(cfg *RequestConfig, bucket *Bucket, sequence int) (response []byte, err error) {
+	req := cfg.Request
+
+	// The request body is consumed by every attempt, so restore it from
+	// GetBody to make sure retries send the exact same payload.
+	if req.GetBody != nil {
+		if req.Body, err = req.GetBody(); err != nil {
+			bucket.Release(nil)
+			return
+		}
 	}
-	req = cfg.Request
 
 	if s.Debug {
 		for k, v := range req.Header {
@@ -277,8 +325,12 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		// Retry sending request if possible
 		if sequence < cfg.MaxRestRetries {
 
-			s.log(LogInformational, "%s Failed (%s), Retrying...", urlStr, resp.Status)
-			response, err = s.RequestWithLockedBucket(method, urlStr, contentType, b, s.Ratelimiter.LockBucketObject(bucket), sequence+1, options...)
+			s.log(LogInformational, "%s Failed (%s), Retrying...", req.URL, resp.Status)
+			bucket, err = s.Ratelimiter.LockBucketObjectContext(req.Context(), bucket)
+			if err != nil {
+				return nil, err
+			}
+			response, err = s.requestWithLockedBucket(cfg, bucket, sequence+1)
 		} else {
 			err = fmt.Errorf("Exceeded Max retries HTTP %s, %s", resp.Status, response)
 		}
@@ -291,16 +343,26 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		}
 
 		if cfg.ShouldRetryOnRateLimit {
-			s.log(LogInformational, "Rate Limiting %s, retry in %v", urlStr, rl.RetryAfter)
-			s.handleEvent(rateLimitEventType, &RateLimit{TooManyRequests: &rl, URL: urlStr})
+			s.log(LogInformational, "Rate Limiting %s, retry in %v", req.URL, rl.RetryAfter)
+			s.handleEvent(rateLimitEventType, &RateLimit{TooManyRequests: &rl, URL: req.URL.String()})
 
-			time.Sleep(rl.RetryAfter)
-			// we can make the above smarter
-			// this method can cause longer delays than required
+			// Wait before retrying, but give up as soon as the request
+			// context is done instead of firing another attempt.
+			timer := time.NewTimer(rl.RetryAfter)
+			select {
+			case <-timer.C:
+			case <-req.Context().Done():
+				timer.Stop()
+				return nil, req.Context().Err()
+			}
 
-			response, err = s.RequestWithLockedBucket(method, urlStr, contentType, b, s.Ratelimiter.LockBucketObject(bucket), sequence, options...)
+			bucket, err = s.Ratelimiter.LockBucketObjectContext(req.Context(), bucket)
+			if err != nil {
+				return nil, err
+			}
+			response, err = s.requestWithLockedBucket(cfg, bucket, sequence)
 		} else {
-			err = &RateLimitError{&RateLimit{TooManyRequests: &rl, URL: urlStr}}
+			err = &RateLimitError{&RateLimit{TooManyRequests: &rl, URL: req.URL.String()}}
 		}
 	case http.StatusUnauthorized:
 		if strings.Index(s.Token, "Bot ") != 0 {

@@ -1,0 +1,57 @@
+{"Time":"2026-11-14T04:29:08.347403+09:00","Action":"start","Package":"github.com/bwmarrin/discordgo"}
+{"Time":"2026-11-14T04:29:08.626389+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Output":"Init is being called.\n"}
+{"Time":"2026-11-14T04:29:08.627206+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext"}
+{"Time":"2026-11-14T04:29:08.627233+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext","Output":"=== RUN   TestRateWaitContext\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.627268+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForHolder"}
+{"Time":"2026-11-14T04:29:08.627323+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForHolder","Output":"=== RUN   TestRateWaitContext/CancelWhileWaitingForHolder\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.627355+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForHolder","Output":"--- PASS: TestRateWaitContext/CancelWhileWaitingForHolder (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.627402+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForHolder","Elapsed":0}
+{"Time":"2026-11-14T04:29:08.627479+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForReset"}
+{"Time":"2026-11-14T04:29:08.627487+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForReset","Output":"=== RUN   TestRateWaitContext/CancelWhileWaitingForReset\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.627512+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForReset","Output":"--- PASS: TestRateWaitContext/CancelWhileWaitingForReset (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.627543+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/CancelWhileWaitingForReset","Elapsed":0}
+{"Time":"2026-11-14T04:29:08.627549+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/DeadlineExceededWhileWaiting"}
+{"Time":"2026-11-14T04:29:08.627552+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/DeadlineExceededWhileWaiting","Output":"=== RUN   TestRateWaitContext/DeadlineExceededWhileWaiting\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.648841+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/DeadlineExceededWhileWaiting","Output":"--- PASS: TestRateWaitContext/DeadlineExceededWhileWaiting (0.02s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.648873+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/DeadlineExceededWhileWaiting","Elapsed":0.02}
+{"Time":"2026-11-14T04:29:08.648889+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/RequestDeadlineBeatsBucketReset"}
+{"Time":"2026-11-14T04:29:08.648893+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/RequestDeadlineBeatsBucketReset","Output":"=== RUN   TestRateWaitContext/RequestDeadlineBeatsBucketReset\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.670967+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/RequestDeadlineBeatsBucketReset","Output":"--- PASS: TestRateWaitContext/RequestDeadlineBeatsBucketReset (0.02s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.671008+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext/RequestDeadlineBeatsBucketReset","Elapsed":0.02}
+{"Time":"2026-11-14T04:29:08.671043+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext","Output":"--- PASS: TestRateWaitContext (0.04s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.671071+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateWaitContext","Elapsed":0.04}
+{"Time":"2026-11-14T04:29:08.671075+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck"}
+{"Time":"2026-11-14T04:29:08.671079+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck","Output":"=== RUN   TestRateGlobalRecheck\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:08.671105+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset"}
+{"Time":"2026-11-14T04:29:08.67112+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset","Output":"=== RUN   TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:09.073105+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset","Output":"--- PASS: TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset (0.40s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:09.073206+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalDeadlineExtendsBeyondLocalReset","Elapsed":0.4}
+{"Time":"2026-11-14T04:29:09.073313+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalExtendedDuringWait"}
+{"Time":"2026-11-14T04:29:09.073361+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalExtendedDuringWait","Output":"=== RUN   TestRateGlobalRecheck/GlobalExtendedDuringWait\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:09.674128+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalExtendedDuringWait","Output":"--- PASS: TestRateGlobalRecheck/GlobalExtendedDuringWait (0.60s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:09.674185+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/GlobalExtendedDuringWait","Elapsed":0.6}
+{"Time":"2026-11-14T04:29:09.674201+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit"}
+{"Time":"2026-11-14T04:29:09.67421+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit","Output":"=== RUN   TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.17549+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit","Output":"--- PASS: TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit (0.50s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.175534+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck/LocalCancelKeepsGlobalLimit","Elapsed":0.5}
+{"Time":"2026-11-14T04:29:10.175549+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck","Output":"--- PASS: TestRateGlobalRecheck (1.50s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.175581+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateGlobalRecheck","Elapsed":1.5}
+{"Time":"2026-11-14T04:29:10.175599+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext"}
+{"Time":"2026-11-14T04:29:10.175615+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext","Output":"=== RUN   TestRateRetryContext\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.175626+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelDuringRateLimitRetryWait"}
+{"Time":"2026-11-14T04:29:10.175655+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelDuringRateLimitRetryWait","Output":"=== RUN   TestRateRetryContext/CancelDuringRateLimitRetryWait\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.175977+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelDuringRateLimitRetryWait","Output":"--- PASS: TestRateRetryContext/CancelDuringRateLimitRetryWait (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.175986+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelDuringRateLimitRetryWait","Elapsed":0}
+{"Time":"2026-11-14T04:29:10.175993+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/RetryReusesRequestAndOptionsOnce"}
+{"Time":"2026-11-14T04:29:10.175997+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/RetryReusesRequestAndOptionsOnce","Output":"=== RUN   TestRateRetryContext/RetryReusesRequestAndOptionsOnce\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.228192+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/RetryReusesRequestAndOptionsOnce","Output":"--- PASS: TestRateRetryContext/RetryReusesRequestAndOptionsOnce (0.05s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.22824+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/RetryReusesRequestAndOptionsOnce","Elapsed":0.05}
+{"Time":"2026-11-14T04:29:10.228255+09:00","Action":"run","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelStopsServerErrorRetry"}
+{"Time":"2026-11-14T04:29:10.228264+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelStopsServerErrorRetry","Output":"=== RUN   TestRateRetryContext/CancelStopsServerErrorRetry\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.228277+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelStopsServerErrorRetry","Output":"--- PASS: TestRateRetryContext/CancelStopsServerErrorRetry (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.228287+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext/CancelStopsServerErrorRetry","Elapsed":0}
+{"Time":"2026-11-14T04:29:10.2283+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext","Output":"--- PASS: TestRateRetryContext (0.05s)\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.228309+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Test":"TestRateRetryContext","Elapsed":0.05}
+{"Time":"2026-11-14T04:29:10.228316+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-11-14T04:29:10.229005+09:00","Action":"output","Package":"github.com/bwmarrin/discordgo","Output":"ok  \tgithub.com/bwmarrin/discordgo\t1.881s\n"}
+{"Time":"2026-11-14T04:29:10.229027+09:00","Action":"pass","Package":"github.com/bwmarrin/discordgo","Elapsed":1.8820000000000001}

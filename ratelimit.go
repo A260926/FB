@@ -1,6 +1,7 @@
 package discordgo
 
 import (
+	"context"
 	"math"
 	"net/http"
 	"strconv"
@@ -71,19 +72,25 @@ func (r *RateLimiter) GetBucket(key string) *Bucket {
 
 // GetWaitTime returns the duration you should wait for a Bucket
 func (r *RateLimiter) GetWaitTime(b *Bucket, minRemaining int) time.Duration {
+	now := time.Now()
+	var wait time.Duration
+
 	// If we ran out of calls and the reset time is still ahead of us
 	// then we need to take it easy and relax a little
-	if b.Remaining < minRemaining && b.reset.After(time.Now()) {
-		return b.reset.Sub(time.Now())
+	if b.Remaining < minRemaining && b.reset.After(now) {
+		wait = b.reset.Sub(now)
 	}
 
-	// Check for global ratelimits
-	sleepTo := time.Unix(0, atomic.LoadInt64(r.global))
-	if now := time.Now(); now.Before(sleepTo) {
-		return sleepTo.Sub(now)
+	// Check for global ratelimits. A request may only go out once both the
+	// bucket and the global limit have expired, so the latest deadline
+	// that is still in effect wins.
+	if sleepTo := time.Unix(0, atomic.LoadInt64(r.global)); now.Before(sleepTo) {
+		if globalWait := sleepTo.Sub(now); globalWait > wait {
+			wait = globalWait
+		}
 	}
 
-	return 0
+	return wait
 }
 
 // LockBucket Locks until a request can be made
@@ -95,12 +102,57 @@ func (r *RateLimiter) LockBucket(bucketID string) *Bucket {
 func (r *RateLimiter) LockBucketObject(b *Bucket) *Bucket {
 	b.Lock()
 
-	if wait := r.GetWaitTime(b, 1); wait > 0 {
-		time.Sleep(wait)
+	// The wait time is re-evaluated after every sleep so that a limit
+	// extended while we waited (e.g. a global ratelimit) is still honored
+	// before the remaining count is consumed.
+	for {
+		if wait := r.GetWaitTime(b, 1); wait > 0 {
+			time.Sleep(wait)
+		} else {
+			break
+		}
 	}
 
 	b.Remaining--
 	return b
+}
+
+// LockBucketContext Locks until a request can be made or ctx is done.
+// On success the returned bucket is locked and must be released by the
+// caller with Release. On failure it returns nil and the context error;
+// no remaining count is consumed and no lock is held.
+func (r *RateLimiter) LockBucketContext(ctx context.Context, bucketID string) (*Bucket, error) {
+	return r.LockBucketObjectContext(ctx, r.GetBucket(bucketID))
+}
+
+// LockBucketObjectContext Locks an already resolved bucket until a request
+// can be made or ctx is done. See LockBucketContext for the contract.
+func (r *RateLimiter) LockBucketObjectContext(ctx context.Context, b *Bucket) (*Bucket, error) {
+	if err := b.lockContext(ctx); err != nil {
+		return nil, err
+	}
+
+	// Same admission rules as LockBucketObject: the wait time is
+	// re-evaluated after every wake-up, before the remaining count is
+	// consumed, so a limit extended while we waited is still honored.
+	for {
+		wait := r.GetWaitTime(b, 1)
+		if wait <= 0 {
+			break
+		}
+
+		timer := time.NewTimer(wait)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			b.Unlock()
+			return nil, ctx.Err()
+		}
+	}
+
+	b.Remaining--
+	return b, nil
 }
 
 // Bucket represents a ratelimit bucket, each bucket gets ratelimited individually (-global ratelimits)
@@ -115,6 +167,59 @@ type Bucket struct {
 	lastReset       time.Time
 	customRateLimit *customRateLimit
 	Userdata        interface{}
+
+	// sem holds a single token while the bucket is unlocked. It backs the
+	// Lock/Unlock methods so that acquisition can also be cancelled through
+	// lockContext without stranding a goroutine inside Mutex.Lock.
+	sem chan struct{}
+}
+
+// semChan returns the channel backing the bucket lock, creating it on first
+// use so that a zero-value Bucket stays usable. The embedded Mutex is only
+// used to guard this lazy initialization.
+func (b *Bucket) semChan() chan struct{} {
+	b.Mutex.Lock()
+	defer b.Mutex.Unlock()
+	if b.sem == nil {
+		b.sem = make(chan struct{}, 1)
+		b.sem <- struct{}{}
+	}
+	return b.sem
+}
+
+// Lock blocks until the bucket lock is acquired. It shares the same mutual
+// exclusion as Unlock, Release and the RateLimiter locking helpers.
+func (b *Bucket) Lock() {
+	<-b.semChan()
+}
+
+// Unlock releases the bucket lock.
+func (b *Bucket) Unlock() {
+	select {
+	case b.semChan() <- struct{}{}:
+	default:
+		panic("sync: Unlock of unlocked Bucket")
+	}
+}
+
+// lockContext blocks until the bucket lock is acquired or ctx is done.
+// A failed acquisition never touches the lock state.
+func (b *Bucket) lockContext(ctx context.Context) error {
+	sem := b.semChan()
+
+	// Fast path: take the lock at once if it is free.
+	select {
+	case <-sem:
+		return nil
+	default:
+	}
+
+	select {
+	case <-sem:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Release unlocks the bucket and reads the headers to update the buckets ratelimit info

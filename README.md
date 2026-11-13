@@ -54,6 +54,44 @@ discord, err := discordgo.New("Bot " + "authentication token")
 
 See Documentation and Examples below for more detailed information.
 
+### Context-aware requests and rate limiting
+
+All REST methods accept request options, and `WithContext` attaches a
+context that is honored end to end: while waiting for rate limit admission,
+while waiting out a 429 retry, and for the HTTP request itself. Cancelling
+the context aborts the call promptly instead of waiting out the limiter.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
+
+err := discord.ChannelMessageDelete(channelID, messageID, discordgo.WithContext(ctx))
+if errors.Is(err, context.DeadlineExceeded) {
+    // The deadline was hit before or during the request.
+}
+```
+
+The rate limiter can also be locked directly with a context, using the
+bucket ID of the endpoint you want to call:
+
+```go
+bucket, err := discord.Ratelimiter.LockBucketContext(ctx, bucketID)
+if err != nil {
+    // ctx was cancelled or its deadline exceeded. No lock is held and
+    // no remaining count was consumed, so there is nothing to release.
+    return err
+}
+// A successfully locked bucket must always be returned with Release.
+// Pass the response headers (or nil) so the rate limit info stays
+// up to date.
+defer bucket.Release(nil)
+```
+
+`LockBucketObjectContext` offers the same behaviour for an already resolved
+`*Bucket`. Both share the same lock as the plain `LockBucket`,
+`LockBucketObject`, `Bucket.Lock`/`Unlock` and `Release`, so context-aware
+and regular calls can be mixed freely.
+
 
 ## Documentation
 
