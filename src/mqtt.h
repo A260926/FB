@@ -112,3 +112,13 @@ void mg_mqtt_pong(struct mg_connection *);
 void mg_mqtt_disconnect(struct mg_connection *, const struct mg_mqtt_opts *);
 size_t mg_mqtt_next_prop(struct mg_mqtt_message *, struct mg_mqtt_prop *,
                          size_t ofs);
+// MQTT5 property decoding with explicit boundary reporting.
+// `*offset` is relative to the start of the property section; pass 0 first.
+// Returns 1 on a decoded property (updating `*prop` and `*offset`), 0 when
+// the offset is exactly at the end of the property section, and -1 on an
+// invalid section description, an out-of-range offset, an unknown property
+// id, or an incomplete property. On 0 and -1 `*prop` and `*offset` are
+// unchanged. Returned value strings are borrowed views into msg->dgram.buf
+// and remain valid only while that buffer is alive and unmodified.
+int mg_mqtt_prop_next(const struct mg_mqtt_message *msg,
+                      struct mg_mqtt_prop *prop, size_t *offset);

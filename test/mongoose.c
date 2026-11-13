@@ -4271,58 +4271,100 @@ static void mg_send_mqtt_properties(struct mg_connection *c,
   }
 }
 
-size_t mg_mqtt_next_prop(struct mg_mqtt_message *msg, struct mg_mqtt_prop *prop,
-                         size_t ofs) {
-  uint8_t *i = (uint8_t *) msg->dgram.buf + msg->props_start + ofs;
-  uint8_t *end = (uint8_t *) msg->dgram.buf + msg->dgram.len;
-  size_t new_pos = ofs, len;
-  prop->id = i[0];
+// Decode one MQTT5 property from the property section described by `msg`.
+// `*offset` is a byte offset relative to the first property byte; pass 0 to
+// start. Returns 1 and advances `*offset` on success, 0 when `*offset` is
+// exactly at the end of the property section, and -1 on an invalid section
+// description, an offset outside the section, an unknown property id, or a
+// property that does not fit completely inside the section. On 0 or -1 the
+// property and the offset are left untouched. String and binary values are
+// borrowed views into `msg->dgram.buf` and stay valid only while that buffer
+// is alive and unchanged.
+int mg_mqtt_prop_next(const struct mg_mqtt_message *msg,
+                      struct mg_mqtt_prop *prop, size_t *offset) {
+  struct mg_mqtt_prop p;
+  const uint8_t *buf;
+  size_t base, ofs, avail, pos, len, vlen;
+  int type;
 
-  if (ofs >= msg->dgram.len || ofs >= msg->props_start + msg->props_size)
-    return 0;
-  i++, new_pos++;
+  if (msg == NULL || prop == NULL || offset == NULL) return -1;
+  if (msg->dgram.buf == NULL && msg->dgram.len != 0) return -1;
+  base = msg->props_start;
+  if (base > msg->dgram.len) return -1;
+  if (msg->props_size > msg->dgram.len - base) return -1;
+  ofs = *offset;
+  if (ofs > msg->props_size) return -1;
+  if (ofs == msg->props_size) return 0;  // exactly at the end of the section
 
-  switch (mqtt_prop_type_by_id(prop->id)) {
-    case MQTT_PROP_TYPE_STRING_PAIR:
-      prop->key.len = (uint16_t) ((((uint16_t) i[0]) << 8) | i[1]);
-      prop->key.buf = (char *) i + 2;
-      i += 2 + prop->key.len;
-      prop->val.len = (uint16_t) ((((uint16_t) i[0]) << 8) | i[1]);
-      prop->val.buf = (char *) i + 2;
-      new_pos += 2 * sizeof(uint16_t) + prop->val.len + prop->key.len;
-      break;
+  buf = (const uint8_t *) msg->dgram.buf + base + ofs;
+  avail = msg->props_size - ofs;
+  memset(&p, 0, sizeof(p));
+  p.id = buf[0];
+  type = mqtt_prop_type_by_id(p.id);
+  if (type < 0) return -1;  // unknown property id
+  pos = 1;
+
+  switch (type) {
     case MQTT_PROP_TYPE_BYTE:
-      prop->iv = (uint8_t) i[0];
-      new_pos++;
+      if (avail - pos < 1) return -1;
+      p.iv = (uint32_t) buf[pos];
+      pos += 1;
       break;
     case MQTT_PROP_TYPE_SHORT:
-      prop->iv = (uint16_t) ((((uint16_t) i[0]) << 8) | i[1]);
-      new_pos += sizeof(uint16_t);
+      if (avail - pos < 2) return -1;
+      p.iv = ((uint32_t) buf[pos] << 8) | (uint32_t) buf[pos + 1];
+      pos += 2;
       break;
     case MQTT_PROP_TYPE_INT:
-      prop->iv = ((uint32_t) i[0] << 24) | ((uint32_t) i[1] << 16) |
-                 ((uint32_t) i[2] << 8) | i[3];
-      new_pos += sizeof(uint32_t);
+      if (avail - pos < 4) return -1;
+      p.iv = ((uint32_t) buf[pos] << 24) | ((uint32_t) buf[pos + 1] << 16) |
+             ((uint32_t) buf[pos + 2] << 8) | (uint32_t) buf[pos + 3];
+      pos += 4;
       break;
+    case MQTT_PROP_TYPE_VARIABLE_INT: {
+      size_t value = 0;
+      // decode_varint signals an unterminated or overlong value with 0.
+      vlen = decode_varint(buf + pos, avail - pos, &value);
+      if (vlen == 0) return -1;
+      p.iv = (uint32_t) value;  // the field is uint32_t, never size_t
+      pos += vlen;
+      break;
+    }
     case MQTT_PROP_TYPE_STRING:
-      prop->val.len = (uint16_t) ((((uint16_t) i[0]) << 8) | i[1]);
-      prop->val.buf = (char *) i + 2;
-      new_pos += 2 + prop->val.len;
-      break;
     case MQTT_PROP_TYPE_BINARY_DATA:
-      prop->val.len = (uint16_t) ((((uint16_t) i[0]) << 8) | i[1]);
-      prop->val.buf = (char *) i + 2;
-      new_pos += 2 + prop->val.len;
+      if (avail - pos < 2) return -1;
+      len = ((size_t) buf[pos] << 8) | (size_t) buf[pos + 1];
+      if (len > avail - pos - 2) return -1;
+      p.val.buf = (char *) (buf + pos + 2);
+      p.val.len = len;
+      pos += 2 + len;
       break;
-    case MQTT_PROP_TYPE_VARIABLE_INT:
-      len = decode_varint(i, (size_t) (end - i), (size_t *) &prop->iv);
-      new_pos = (!len) ? 0 : new_pos + len;
+    case MQTT_PROP_TYPE_STRING_PAIR:
+      if (avail - pos < 2) return -1;
+      len = ((size_t) buf[pos] << 8) | (size_t) buf[pos + 1];
+      if (len > avail - pos - 2) return -1;
+      p.key.buf = (char *) (buf + pos + 2);
+      p.key.len = len;
+      pos += 2 + len;
+      if (avail - pos < 2) return -1;
+      len = ((size_t) buf[pos] << 8) | (size_t) buf[pos + 1];
+      if (len > avail - pos - 2) return -1;
+      p.val.buf = (char *) (buf + pos + 2);
+      p.val.len = len;
+      pos += 2 + len;
       break;
     default:
-      new_pos = 0;
+      return -1;
   }
 
-  return new_pos;
+  *offset = ofs + pos;  // pos <= props_size - ofs, so this cannot overflow
+  *prop = p;            // commit only once the whole property was validated
+  return 1;
+}
+
+size_t mg_mqtt_next_prop(struct mg_mqtt_message *msg, struct mg_mqtt_prop *prop,
+                         size_t ofs) {
+  return mg_mqtt_prop_next(msg, prop, &ofs) == 1 ? ofs : 0;
 }
 
 void mg_mqtt_login(struct mg_connection *c, const struct mg_mqtt_opts *opts) {
@@ -4437,6 +4479,7 @@ int mg_mqtt_parse(const uint8_t *buf, size_t len, uint8_t version,
                   struct mg_mqtt_message *m) {
   uint8_t lc = 0, *p, *end;
   uint32_t n = 0, len_len = 0;
+  size_t base;
 
   memset(m, 0, sizeof(*m));
   m->dgram.buf = (char *) buf;
@@ -4453,13 +4496,16 @@ int mg_mqtt_parse(const uint8_t *buf, size_t len, uint8_t version,
     if (!(lc & 0x80)) break;
     if (len_len >= 4) return MQTT_MALFORMED;
   }
-  end = p + n;
-  if ((lc & 0x80) || (end > buf + len)) return MQTT_INCOMPLETE;
+  // The packet must be fully collected: compare sizes, never build end first.
+  if ((lc & 0x80) || (size_t) n > len - (size_t) (p - buf))
+    return MQTT_INCOMPLETE;
+  end = p + n;  // end <= buf + len
   m->dgram.len = (size_t) (end - buf);
+  base = (size_t) (p - buf);
 
   switch (m->cmd) {
     case MQTT_CMD_CONNACK:
-      if (end - p < 2) return MQTT_MALFORMED;
+      if (m->dgram.len - base < 2) return MQTT_MALFORMED;
       m->ack = p[1];
       break;
     case MQTT_CMD_PUBACK:
@@ -4470,32 +4516,46 @@ int mg_mqtt_parse(const uint8_t *buf, size_t len, uint8_t version,
     case MQTT_CMD_SUBACK:
     case MQTT_CMD_UNSUBSCRIBE:
     case MQTT_CMD_UNSUBACK:
-      if (p + 2 > end) return MQTT_MALFORMED;
+      if (m->dgram.len - base < 2) return MQTT_MALFORMED;
       m->id = (uint16_t) ((((uint16_t) p[0]) << 8) | p[1]);
       p += 2;
       break;
     case MQTT_CMD_PUBLISH: {
-      if (p + 2 > end) return MQTT_MALFORMED;
-      m->topic.len = (uint16_t) ((((uint16_t) p[0]) << 8) | p[1]);
-      m->topic.buf = (char *) p + 2;
-      p += 2 + m->topic.len;
-      if (p > end) return MQTT_MALFORMED;
+      size_t pos = base, plen = 0, nlen;
+      if (m->dgram.len - pos < 2) return MQTT_MALFORMED;
+      m->topic.len = (uint16_t) ((((uint16_t) buf[pos]) << 8) | buf[pos + 1]);
+      m->topic.buf = (char *) buf + pos + 2;
+      pos += 2;
+      if ((size_t) m->topic.len > m->dgram.len - pos)
+        return MQTT_MALFORMED;
+      pos += m->topic.len;
       if (m->qos > 0) {
-        if (p + 2 > end) return MQTT_MALFORMED;
-        m->id = (uint16_t) ((((uint16_t) p[0]) << 8) | p[1]);
-        p += 2;
+        if (m->dgram.len - pos < 2) return MQTT_MALFORMED;
+        m->id = (uint16_t) ((((uint16_t) buf[pos]) << 8) | buf[pos + 1]);
+        pos += 2;
       }
-      if (p > end) return MQTT_MALFORMED;
-      if (version == 5 && p + 2 < end) {
-        len_len =
-            (uint32_t) decode_varint(p, (size_t) (end - p), &m->props_size);
-        if (!len_len) return MQTT_MALFORMED;
-        m->props_start = (size_t) (p + len_len - buf);
-        p += len_len + m->props_size;
+      if (version == 5) {
+        // A complete MQTT5 PUBLISH always carries a property length field,
+        // even when it is zero and even when the payload is empty.
+        nlen = decode_varint(buf + pos, m->dgram.len - pos, &plen);
+        if (nlen == 0) return MQTT_MALFORMED;
+        m->props_start = pos + nlen;
+        m->props_size = plen;
+        if (plen > m->dgram.len - m->props_start) return MQTT_MALFORMED;
+        {
+          // Every property must be fully contained in the property section;
+          // bytes from the payload or from a following packet never count.
+          struct mg_mqtt_prop prop;
+          size_t pofs = 0;
+          int rc;
+          while ((rc = mg_mqtt_prop_next(m, &prop, &pofs)) == 1) {
+          }
+          if (rc < 0) return MQTT_MALFORMED;
+        }
+        pos = m->props_start + m->props_size;
       }
-      if (p > end) return MQTT_MALFORMED;
-      m->data.buf = (char *) p;
-      m->data.len = (size_t) (end - p);
+      m->data.buf = (char *) buf + pos;
+      m->data.len = m->dgram.len - pos;
       break;
     }
     default:
