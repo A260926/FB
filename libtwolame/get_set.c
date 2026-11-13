@@ -441,6 +441,25 @@ int twolame_get_DAB(twolame_options * glopts)
     return (glopts->do_dab);
 }
 
+/* Enable/disable the library-managed DAB ScF-CRC streaming mode.  Only 0 and 1
+   are accepted and the setting is frozen once twolame_init_params() has
+   succeeded.  An invalid call returns -1 and leaves the current setting
+   unchanged. */
+int twolame_set_DAB_streaming(twolame_options * glopts, int enabled)
+{
+    if (enabled != 0 && enabled != 1)
+        return (-1);
+    if (glopts->twolame_init)
+        return (-1);
+    glopts->do_dab_streaming = (unsigned int) enabled;
+    return (0);
+}
+
+int twolame_get_DAB_streaming(twolame_options * glopts)
+{
+    return (glopts->do_dab_streaming ? 1 : 0);
+}
+
 int twolame_set_DAB_xpad_length(twolame_options * glopts, int length)
 {
     if (length < 0)

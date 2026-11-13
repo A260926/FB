@@ -871,6 +871,33 @@ TL_API int twolame_set_DAB(twolame_options * glopts, int dab);
 TL_API int twolame_get_DAB(twolame_options * glopts);
 
 
+/** Enable/Disable library-managed DAB ScF-CRC streaming.
+ *
+ *  When enabled, the ScF-CRC calculated for each encoded frame is written
+ *  into the previous frame automatically, so the caller may feed PCM in
+ *  arbitrary chunk sizes and receive complete, already-patched MP2 frames.
+ *  The library holds back one encoded frame, so the first frame of output
+ *  appears only after a second frame has been encoded (or at flush time).
+ *
+ *  Must be called before twolame_init_params(); default is disabled.
+ *  Only 0 and 1 are accepted.  Returns 0 on success, -1 on an invalid
+ *  argument or if parameters have already been initialised.
+ *
+ *  \param glopts          pointer to twolame options
+ *  \param enabled         0 (disabled) or 1 (enabled)
+ *  \return                0 if successful, -1 otherwise
+ */
+TL_API int twolame_set_DAB_streaming(twolame_options * glopts, int enabled);
+
+
+/** Get the state of library-managed DAB ScF-CRC streaming.
+ *
+ *  \param glopts          pointer to twolame options
+ *  \return                the state of DAB streaming (0 or 1)
+ */
+TL_API int twolame_get_DAB_streaming(twolame_options * glopts);
+
+
 /** Set the number of bytes to reserve for DAB XPAD data.
  *
  *  Default: 0

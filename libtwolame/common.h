@@ -304,6 +304,15 @@ struct twolame_options_struct {
     unsigned int dab_crc[4];    // DAB CRC bytes are inserted here. User must insert them in frame
     unsigned int dab_xpad_len;  // Number of bytes in the XPAD
 
+    // Library-managed DAB ScF-CRC streaming. When enabled the library holds at
+    // most one encoded frame (whose ScF-CRC is still to be patched in) plus the
+    // usual partial PCM frame buffer.
+    unsigned int do_dab_streaming;      // Automatically patch ScF-CRC of previous frame [FALSE]
+    unsigned int dab_stream_finished;   // Flush has completed the stream [FALSE]
+    unsigned int dab_stream_have_frame; // A complete frame is held for patching [FALSE]
+    int dab_stream_frame_len;           // Length in bytes of the held frame
+    unsigned char dab_stream_frame[4096];   // Held MP2 frame
+
     // Processing Options
     int verbosity;              // Verbosity of output 0(never output a thing) [2] 100(output
     // everything)

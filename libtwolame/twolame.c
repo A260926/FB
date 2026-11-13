@@ -123,6 +123,57 @@ twolame_options *twolame_init(void)
 
 
 
+/*
+  Validate the extra restrictions imposed by the library-managed DAB
+  ScF-CRC streaming mode.  Returns 0 when the configuration is acceptable,
+  -1 otherwise.  Never silently changes the requested configuration.
+*/
+static int dab_stream_check_params(twolame_options * glopts)
+{
+    if (!glopts->do_dab_streaming)
+        return 0;
+
+    if (!glopts->do_dab) {
+        fprintf(stderr, "twolame_init_params(): DAB streaming requires DAB to be enabled.\n");
+        return -1;
+    }
+    if (glopts->dab_crc_len != 2 && glopts->dab_crc_len != 4) {
+        fprintf(stderr, "twolame_init_params(): DAB streaming requires a 2 or 4 byte CRC.\n");
+        return -1;
+    }
+    if (glopts->dab_xpad_len != 0) {
+        fprintf(stderr, "twolame_init_params(): DAB streaming requires zero XPAD length.\n");
+        return -1;
+    }
+    if (glopts->vbr || glopts->freeformat || glopts->do_energy_levels) {
+        fprintf(stderr,
+                "twolame_init_params(): DAB streaming requires CBR without freeformat or energy levels.\n");
+        return -1;
+    }
+    if (glopts->num_ancillary_bits < 0
+            || (glopts->num_ancillary_bits % 8) != 0
+            || glopts->num_ancillary_bits < (int) (8 * (glopts->dab_crc_len + 2))) {
+        fprintf(stderr,
+                "twolame_init_params(): DAB streaming needs whole ancillary bytes for CRC plus F-PAD.\n");
+        return -1;
+    }
+    if (glopts->mode != TWOLAME_MONO && glopts->mode != TWOLAME_STEREO) {
+        fprintf(stderr, "twolame_init_params(): DAB streaming supports mono or stereo mode only.\n");
+        return -1;
+    }
+    if (glopts->samplerate_in != glopts->samplerate_out) {
+        fprintf(stderr, "twolame_init_params(): DAB streaming requires equal input and output rates.\n");
+        return -1;
+    }
+    if (glopts->num_channels_in != ((glopts->mode == TWOLAME_MONO) ? 1 : 2)) {
+        fprintf(stderr,
+                "twolame_init_params(): DAB streaming requires channels matching the mode.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 // Returns 0 if successful
 // Returns -1 if unsuccessful
 static int init_header_info(twolame_options * glopts)
@@ -312,6 +363,13 @@ int twolame_init_params(twolame_options * glopts)
         }
     }
 
+    /* Validate the extra constraints of the library-managed DAB streaming mode.
+       This is done after the automatic defaults have been resolved, but before
+       anything is written into the encoder state, so that a rejected call
+       leaves the requested configuration untouched. */
+    if (dab_stream_check_params(glopts) < 0)
+        return -1;
+
     /* Can't do DAB and energylevel extensions at the same time Because both of them think they're
        the only ones inserting information into the ancillary section of the frame */
     if (glopts->do_dab && glopts->do_energy_levels) {
@@ -480,7 +538,165 @@ static void scale_and_mix_samples(twolame_options * glopts)
 }
 
 /*
-    Encode a single frame of audio from 1152 samples
+  Library-managed DAB ScF-CRC streaming helpers.
+
+  The library keeps exactly one encoded frame back: whenever a new frame has
+  been encoded (and therefore its ScF-CRC is known) the CRC is written into
+  the held frame, which is then handed to the caller.  The new frame becomes
+  the held frame.  The first frame of a stream is held without any CRC being
+  written; its own CRC is used to patch frame zero when frame one appears.
+*/
+
+#define DAB_STREAM_MAX_FRAME 4096
+
+static int encode_frame(twolame_options * glopts, bit_stream * bs);
+
+/* Write the most recently computed ScF-CRC bytes into the held frame.
+   dab_crc[0] goes at frame_len-3 and the remaining bytes run downwards,
+   leaving the two trailing F-PAD bytes untouched. */
+static void dab_stream_apply_crc(twolame_options * glopts, unsigned char *frame, int frame_len)
+{
+    unsigned char *p = &frame[frame_len - 3];
+    unsigned int i;
+
+    for (i = 0; i < glopts->dab_crc_len; i++)
+        *p-- = (unsigned char) glopts->dab_crc[i];
+}
+
+/* Zero the ScF-CRC field of the final frame (which has no successor). */
+static void dab_stream_zero_crc(twolame_options * glopts, unsigned char *frame, int frame_len)
+{
+    unsigned char *p = &frame[frame_len - 3];
+    unsigned int i;
+
+    for (i = 0; i < glopts->dab_crc_len; i++)
+        *p-- = 0;
+}
+
+/* Encode one frame into a private, zeroed buffer. */
+static int dab_stream_encode_frame(twolame_options * glopts, unsigned char *dst)
+{
+    bit_stream *bs;
+    int bytes;
+
+    memset(dst, 0, DAB_STREAM_MAX_FRAME);
+    bs = twolame_buffer_init(dst, DAB_STREAM_MAX_FRAME);
+    if (bs == NULL)
+        return -1;
+    bytes = encode_frame(glopts, bs);
+    twolame_buffer_deinit(&bs);
+    return bytes;
+}
+
+/* Patch and emit the previously held frame (if any), then hold the new frame.
+   Returns 0 on success, -1 if the caller-supplied output is too small. */
+static int dab_stream_push_frame(twolame_options * glopts,
+                                 const unsigned char *frame, int frame_len,
+                                 unsigned char *out, int out_cap, int *written)
+{
+    if (frame_len > (int) sizeof(glopts->dab_stream_frame))
+        return -1;
+    if (glopts->dab_stream_have_frame) {
+        int prev_len = glopts->dab_stream_frame_len;
+
+        if (*written + prev_len > out_cap)
+            return -1;
+        dab_stream_apply_crc(glopts, glopts->dab_stream_frame, prev_len);
+        memcpy(out + *written, glopts->dab_stream_frame, (size_t) prev_len);
+        *written += prev_len;
+    }
+    memcpy(glopts->dab_stream_frame, frame, (size_t) frame_len);
+    glopts->dab_stream_frame_len = frame_len;
+    glopts->dab_stream_have_frame = TRUE;
+    return 0;
+}
+
+/* Common tail of the two short-int encode entry points in streaming mode. */
+static int dab_stream_feed(twolame_options * glopts,
+                           const short int leftpcm[],
+                           const short int rightpcm[],
+                           int num_samples, unsigned char *mp2buffer, int mp2buffer_size)
+{
+    unsigned char tmp[DAB_STREAM_MAX_FRAME];
+    int written = 0;
+    int i;
+
+    while (num_samples) {
+        int samples_to_copy = TWOLAME_SAMPLES_PER_FRAME - glopts->samples_in_buffer;
+        if (num_samples < samples_to_copy)
+            samples_to_copy = num_samples;
+
+        for (i = 0; i < samples_to_copy; i++) {
+            glopts->buffer[0][glopts->samples_in_buffer + i] = leftpcm[i];
+            if (glopts->num_channels_in == 2)
+                glopts->buffer[1][glopts->samples_in_buffer + i] = rightpcm[i];
+        }
+        leftpcm += samples_to_copy;
+        if (glopts->num_channels_in == 2)
+            rightpcm += samples_to_copy;
+
+        glopts->samples_in_buffer += samples_to_copy;
+        num_samples -= samples_to_copy;
+
+        if (glopts->samples_in_buffer >= TWOLAME_SAMPLES_PER_FRAME) {
+            int bytes = dab_stream_encode_frame(glopts, tmp);
+
+            if (bytes <= 0)
+                return -1;
+            if (dab_stream_push_frame(glopts, tmp, bytes, mp2buffer, mp2buffer_size,
+                                      &written) < 0)
+                return -1;
+            glopts->samples_in_buffer -= TWOLAME_SAMPLES_PER_FRAME;
+        }
+    }
+
+    return written;
+}
+
+/* Interleaved variant of dab_stream_feed. */
+static int dab_stream_feed_interleaved(twolame_options * glopts,
+                                       const short int pcm[],
+                                       int num_samples, unsigned char *mp2buffer,
+                                       int mp2buffer_size)
+{
+    unsigned char tmp[DAB_STREAM_MAX_FRAME];
+    int written = 0;
+    int i;
+
+    while (num_samples) {
+        int samples_to_copy = TWOLAME_SAMPLES_PER_FRAME - glopts->samples_in_buffer;
+        if (num_samples < samples_to_copy)
+            samples_to_copy = num_samples;
+
+        if (glopts->num_channels_in == 2)
+            for (i = 0; i < samples_to_copy; i++) {
+                glopts->buffer[0][glopts->samples_in_buffer + i] = *pcm++;
+                glopts->buffer[1][glopts->samples_in_buffer + i] = *pcm++;
+            }
+        else
+            for (i = 0; i < samples_to_copy; i++)
+                glopts->buffer[0][glopts->samples_in_buffer + i] = *pcm++;
+
+        glopts->samples_in_buffer += samples_to_copy;
+        num_samples -= samples_to_copy;
+
+        if (glopts->samples_in_buffer >= TWOLAME_SAMPLES_PER_FRAME) {
+            int bytes = dab_stream_encode_frame(glopts, tmp);
+
+            if (bytes <= 0)
+                return -1;
+            if (dab_stream_push_frame(glopts, tmp, bytes, mp2buffer, mp2buffer_size,
+                                      &written) < 0)
+                return -1;
+            glopts->samples_in_buffer -= TWOLAME_SAMPLES_PER_FRAME;
+        }
+    }
+
+    return written;
+}
+
+/*
+  Encode a single frame of audio from 1152 samples
     Audio samples are taken from glopts->buffer
     Encoded bit stream is placed in to parameter bs
     (not intended for use outside the library)
@@ -683,6 +899,18 @@ int twolame_encode_buffer(twolame_options * glopts,
     bit_stream *mybs;
     int i;
 
+    if (glopts->do_dab_streaming) {
+        if (glopts->dab_stream_finished) {
+            if (num_samples == 0)
+                return 0;
+            return -1;
+        }
+        if (num_samples == 0)
+            return 0;
+        return dab_stream_feed(glopts, leftpcm, rightpcm, num_samples,
+                               mp2buffer, mp2buffer_size);
+    }
+
     if (num_samples == 0)
         return 0;
 
@@ -743,6 +971,18 @@ int twolame_encode_buffer_interleaved(twolame_options * glopts,
     int mp2_size = 0;
     bit_stream *mybs;
     int i;
+
+    if (glopts->do_dab_streaming) {
+        if (glopts->dab_stream_finished) {
+            if (num_samples == 0)
+                return 0;
+            return -1;
+        }
+        if (num_samples == 0)
+            return 0;
+        return dab_stream_feed_interleaved(glopts, pcm, num_samples,
+                                           mp2buffer, mp2buffer_size);
+    }
 
     if (num_samples == 0)
         return 0;
@@ -832,6 +1072,9 @@ int twolame_encode_buffer_float32(twolame_options * glopts,
     int mp2_size = 0;
     bit_stream *mybs;
 
+    if (glopts->do_dab_streaming)
+        return -1;
+
     if (num_samples == 0)
         return 0;
 
@@ -891,6 +1134,9 @@ int twolame_encode_buffer_float32_interleaved(twolame_options * glopts,
     int mp2_size = 0;
     bit_stream *mybs;
 
+    if (glopts->do_dab_streaming)
+        return -1;
+
     if (num_samples == 0)
         return 0;
 
@@ -948,6 +1194,45 @@ int twolame_encode_flush(twolame_options * glopts, unsigned char *mp2buffer, int
     bit_stream *mybs = NULL;
     int mp2_size = 0;
     int i;
+
+    if (glopts->do_dab_streaming) {
+        if (glopts->dab_stream_finished)
+            return 0;
+
+        /* If a partial PCM frame is pending, zero-pad it and encode it as a
+           real final frame.  Its ScF-CRC patches the previously held frame. */
+        if (glopts->samples_in_buffer > 0) {
+            unsigned char tmp[DAB_STREAM_MAX_FRAME];
+            int bytes;
+
+            for (i = glopts->samples_in_buffer; i < TWOLAME_SAMPLES_PER_FRAME; i++)
+                glopts->buffer[0][i] = glopts->buffer[1][i] = 0;
+
+            bytes = dab_stream_encode_frame(glopts, tmp);
+            glopts->samples_in_buffer = 0;
+            if (bytes <= 0)
+                return -1;
+            if (dab_stream_push_frame(glopts, tmp, bytes, mp2buffer, mp2buffer_size,
+                                      &mp2_size) < 0)
+                return -1;
+        }
+
+        /* Emit the last held frame.  It has no successor, so its ScF-CRC
+           field stays zero. */
+        if (glopts->dab_stream_have_frame) {
+            int len = glopts->dab_stream_frame_len;
+
+            if (mp2_size + len > mp2buffer_size)
+                return -1;
+            dab_stream_zero_crc(glopts, glopts->dab_stream_frame, len);
+            memcpy(mp2buffer + mp2_size, glopts->dab_stream_frame, (size_t) len);
+            mp2_size += len;
+            glopts->dab_stream_have_frame = FALSE;
+        }
+
+        glopts->dab_stream_finished = TRUE;
+        return mp2_size;
+    }
 
     if (glopts->samples_in_buffer == 0) {
         // No samples left over
