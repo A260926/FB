@@ -1,0 +1,19 @@
+
+typedef struct dvec3
+{
+	double x;
+	double y;
+	double z;
+} dvec3;
+
+RSW_INLINE void fprint_dv3(FILE* f, dvec3 v, const char* append)
+{
+	fprintf(f, "(%f, %f, %f)%s", v.x, v.y, v.z, append);
+}
+
+RSW_INLINE int fread_dv3(FILE* f, dvec3* v)
+{
+	int tmp = fscanf(f, " (%lf, %lf, %lf)", &v->x, &v->y, &v->z);
+	return (tmp == 3);
+}
+
