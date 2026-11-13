@@ -18,6 +18,7 @@ list(APPEND GLOBAL_CXXFLAGS ${DEFAULT_CXX_FLAGS})
 option(BUILD_SHARED_LIBS "Build Shared Libraries" ON)
 option(BUILD_COMMAND_LINE_TOOLS "Build Command Line Tools" ON)
 option(PEPARSE_LIBRARY_WARNINGS "Log pe-parse library warnings to stderr" OFF)
+option(PEPARSE_ENABLE_EXAMPLES "Build the bundled example programs" ON)
 
 
 if (MSVC)
@@ -32,6 +33,10 @@ add_subdirectory(pe-parser-library)
 
 if (BUILD_COMMAND_LINE_TOOLS)
   add_subdirectory(dump-pe)
+endif ()
+
+if (PEPARSE_ENABLE_EXAMPLES)
+  add_subdirectory(examples)
 endif ()
 
 # `peparse_format` target.

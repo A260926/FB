@@ -9,8 +9,11 @@ cmake -S . -B "$build/lib" -DBUILD_SHARED_LIBS=OFF -DBUILD_COMMAND_LINE_TOOLS=OF
 cmake --build "$build/lib" -j2 > "$build/compile.log"
 c++ -std=c++11 -Ipe-parser-library/include support/baseline.cpp "$build/lib/pe-parser-library/libpe-parse.a" -o "$build/baseline"
 if [[ "$mode" == target ]]; then
-cc -std=c99 -I. -c support/main.c -o "$build/main.o"
-c++ -std=c++11 -I. -Ipe-parser-library/include regress_tests/regression.cpp "$build/main.o" "$build/lib/pe-parser-library/libpe-parse.a" -o "$build/target"
+# Use -iquote rather than -I for the repo root. On case-insensitive filesystems
+# (macOS) "-I." makes libc++'s own "#include <version>" resolve to the repo's
+# "VERSION" file, which is not a header. -iquote still finds "support/check.h".
+cc -std=c99 -iquote . -c support/main.c -o "$build/main.o"
+c++ -std=c++11 -iquote . -Ipe-parser-library/include regress_tests/regression.cpp "$build/main.o" "$build/lib/pe-parser-library/libpe-parse.a" -o "$build/target"
   out="$build/target.stdout"
   "$build/target" > "$out"
   cat "$out"
