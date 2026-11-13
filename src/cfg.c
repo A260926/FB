@@ -177,6 +177,7 @@ int kvz_config_init(kvz_config *cfg)
   cfg->zero_coeff_rdo = true;
 
   cfg->rc_algorithm = KVZ_NO_RC;
+  cfg->roi_rc = false;
   cfg->intra_bit_allocation = false;
   cfg->clip_neighbour = true;
 
@@ -1418,6 +1419,9 @@ int kvz_config_parse(kvz_config *cfg, const char *name, const char *value)
     }
     cfg->rc_algorithm = rc_algorithm;
   }
+  else if OPT("roi-rc") {
+    cfg->roi_rc = (int8_t)atobool(value);
+  }
   else if OPT("intra-bits") {
     cfg->intra_bit_allocation = atobool(value);
   }
@@ -1797,6 +1801,17 @@ int kvz_config_validate(const kvz_config *const cfg)
   if(cfg->target_bitrate == 0 && cfg->rc_algorithm != KVZ_NO_RC) {
     fprintf(stderr, "Rate control algorithm set but bitrate not set.\n");
     error = 1;
+  }
+
+  if (cfg->roi_rc) {
+    if (cfg->target_bitrate <= 0) {
+      fprintf(stderr, "Input error: roi-rc requires a positive --bitrate.\n");
+      error = 1;
+    }
+    if (cfg->rc_algorithm != KVZ_LAMBDA) {
+      fprintf(stderr, "Input error: roi-rc requires --rc-algorithm=lambda; OBA keeps its own ROI path.\n");
+      error = 1;
+    }
   }
 
   if (cfg->enable_cross_component_prediction && cfg->chroma_format != KVZ_CSP_444) {

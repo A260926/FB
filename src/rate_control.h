@@ -83,4 +83,30 @@ void kvz_set_ctu_qp_lambda(encoder_state_t * const state, vector2d_t pos);
 void kvz_update_after_picture(encoder_state_t * const state);
 void kvz_estimate_pic_lambda(encoder_state_t * const state);
 
+/**
+ * \brief Build the per-frame ROI-aware spatial bit budget.
+ *
+ * Must be called once per frame, on the main encoder state and after the
+ * frame-level target bits have been set, before any CTU of the frame is
+ * coded. When no usable non-zero ROI map is present the frame is left on the
+ * classic rate control path and no budget is stored.
+ */
+void kvz_roi_rc_prepare_picture(encoder_state_t * const state);
+
+/**
+ * \brief Pure numeric core of the ROI spatial budget solver.
+ *
+ * Solves the per-CTU target t_i = clamp(c*b_i*2^(-d_i/6), B*p_i/(4P),
+ * 4*B*p_i/P) with a single non-negative c so that the targets sum to B.
+ * Exposed for internal tests; targets_out is only written on success.
+ *
+ * \return 1 on success, 0 on invalid input or an all-zero ROI map
+ */
+int kvz_roi_rc_solve_targets(int num_ctus,
+                             const double *pixels,
+                             const double *base_weights,
+                             const int8_t *roi_delta,
+                             double B,
+                             double *targets_out);
+
 #endif // RATE_CONTROL_H_

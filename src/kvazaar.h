@@ -461,6 +461,17 @@ typedef struct kvz_config
   /** \brief used rc scheme, 0 for QP */
   int8_t rc_algorithm;
 
+  /**
+   * \brief ROI-aware rate control.
+   *
+   * When enabled together with a positive bitrate and the lambda rate
+   * control algorithm, ROI delta QP maps do not bias the per-CTU QP
+   * directly. Instead they redistribute the frame bit budget across CTUs
+   * before the existing alpha/beta lambda model is trained with the real
+   * coding results. Requires target_bitrate > 0 and rc-algorithm=lambda.
+   */
+  int8_t roi_rc;
+
   /** \brief whether to use hadamard based bit allocation for intra frames or not */
   uint8_t intra_bit_allocation;
 

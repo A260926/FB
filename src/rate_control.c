@@ -1079,13 +1079,282 @@ static double lcu_allocate_bits(encoder_state_t * const state,
   return MAX(1, lcu_target_bits);
 }
 
+/**
+ * \brief Solve the ROI-aware spatial bit budget from plain arrays.
+ *
+ * Pure numeric core of the ROI rate control. Given the active pixel count
+ * p_i, the classic spatial weight b_i (before any minimum is applied) and
+ * the ROI delta d_i of every CTU, it computes
+ *
+ *   t_i = clamp(c * b_i * r_i, B*p_i/(4P), 4*B*p_i/P),  r_i = 2^(-d_i/6)
+ *
+ * with a single non-negative c chosen so that sum(t_i) = B. All arithmetic
+ * is double precision: no per-CTU rounding and no forced one-bit floor.
+ *
+ * \param num_ctus      number of CTUs
+ * \param pixels        p_i, active pixels of every CTU
+ * \param base_weights  b_i, classic spatial weights before the minimum
+ * \param roi_delta     d_i, ROI delta already mapped to every CTU
+ * \param B             frame target bits
+ * \param targets_out   receives t_i, untouched on failure
+ * \return 1 on success, 0 when the frame must keep the normal path
+ *         (bad B, degenerate geometry or an all-zero ROI map)
+ */
+int kvz_roi_rc_solve_targets(int num_ctus,
+                             const double *pixels,
+                             const double *base_weights,
+                             const int8_t *roi_delta,
+                             double B,
+                             double *targets_out)
+{
+  if (num_ctus <= 0 || !pixels || !base_weights || !roi_delta || !targets_out) {
+    return 0;
+  }
+  if (!(B > 0.0) || !isfinite(B)) {
+    // Never derive NaN budgets from a bad target; caller keeps the normal
+    // rate control path.
+    return 0;
+  }
+
+  double P = 0.0;
+  int all_zero_roi = 1;
+  for (int i = 0; i < num_ctus; ++i) {
+    P += pixels[i];
+    if (roi_delta[i] != 0) all_zero_roi = 0;
+  }
+  if (!(P > 0.0) || all_zero_roi) return 0;
+
+  double *b  = malloc((size_t)num_ctus * sizeof(double));
+  double *w  = malloc((size_t)num_ctus * sizeof(double));
+  double *lo = malloc((size_t)num_ctus * sizeof(double));
+  double *hi = malloc((size_t)num_ctus * sizeof(double));
+  if (!b || !w || !lo || !hi) {
+    free(b); free(w); free(lo); free(hi);
+    return 0;
+  }
+
+  // Lift every weight to at least 1e-12 of its area share, including
+  // individual zero weights, then renormalize so the problem stays solvable.
+  double b_sum = 0.0;
+  for (int i = 0; i < num_ctus; ++i) {
+    b[i] = MAX(base_weights[i], 1e-12 * pixels[i] / P);
+    b_sum += b[i];
+  }
+  if (!(b_sum > 0.0) || !isfinite(b_sum)) {
+    free(b); free(w); free(lo); free(hi);
+    return 0;
+  }
+  for (int i = 0; i < num_ctus; ++i) {
+    b[i] /= b_sum;
+    w[i]  = b[i] * pow(2.0, -(double)roi_delta[i] / 6.0);
+    lo[i] = B * pixels[i] / (4.0 * P);
+    hi[i] = 4.0 * B * pixels[i] / P;
+  }
+
+  // F(c) = sum clamp(c*w_i, lo_i, hi_i). Monotone, F(0) = B/4 and
+  // F(infinity) = 4B, hence c >= 0 with F(c) = B always exists, even when
+  // several CTUs saturate on the same limit simultaneously.
+  double c_low  = 0.0;
+  double c_high = 1.0;
+  for (int guard = 0; guard < 2000; ++guard) {
+    double f = 0.0;
+    for (int i = 0; i < num_ctus; ++i) {
+      f += CLIP(lo[i], hi[i], c_high * w[i]);
+    }
+    if (f >= B) break;
+    c_high *= 2.0;
+  }
+
+  for (int iter = 0; iter < 200; ++iter) {
+    const double c_mid = 0.5 * (c_low + c_high);
+    double f = 0.0;
+    for (int i = 0; i < num_ctus; ++i) {
+      f += CLIP(lo[i], hi[i], c_mid * w[i]);
+    }
+    if (fabs(f - B) <= 1e-8 * B) {
+      c_low = c_high = c_mid;
+      break;
+    }
+    if (f < B) c_low = c_mid;
+    else       c_high = c_mid;
+  }
+
+  const double c = 0.5 * (c_low + c_high);
+  double total = 0.0;
+  for (int i = 0; i < num_ctus; ++i) {
+    const double t_i = CLIP(lo[i], hi[i], c * w[i]);
+    if (!isfinite(t_i)) {
+      free(b); free(w); free(lo); free(hi);
+      return 0;
+    }
+    targets_out[i] = t_i;
+    total += t_i;
+  }
+
+  free(b); free(w); free(lo); free(hi);
+
+  return fabs(total - B) <= 1e-8 * MAX(B, 1.0);
+}
+
+/**
+ * \brief Solve the ROI-aware spatial bit budget for one frame.
+ *
+ * Thin adapter around kvz_roi_rc_solve_targets that takes the spatial
+ * weights, geometry and ROI map from the encoder state.
+ *
+ * \return 1 when a budget was produced and stored, 0 when the frame must
+ *         stay on the classic rate control path.
+ */
+static int roi_rc_solve_budget(encoder_state_t * const state)
+{
+  const encoder_control_t * const encoder = state->encoder_control;
+  const kvz_picture * const source = state->tile->frame->source;
+
+  const int ctu_columns = encoder->in.width_in_lcu;
+  const int ctu_rows    = encoder->in.height_in_lcu;
+  const int num_ctus    = ctu_columns * ctu_rows;
+  if (num_ctus <= 0) return 0;
+
+  // The frame target B is the target produced by the classic frame-level
+  // rate control allocation.
+  const double B = state->frame->cur_pic_target_bits;
+
+  const int roi_w = source->roi.width;
+  const int roi_h = source->roi.height;
+  if (roi_w <= 0 || roi_h <= 0) return 0;
+
+  // Spatial weights b_i, taken before the classic one-bit minimum is
+  // applied. The first frame is uniform; later frames reuse the normalized
+  // complexity weights the lambda rate control already maintains, and an
+  // all-zero weight set falls back to pixel area proportions.
+  double weight_sum = 0.0;
+  if (state->frame->num > 0) {
+    for (int i = 0; i < num_ctus; ++i) {
+      weight_sum += state->frame->lcu_stats[i].weight;
+    }
+  }
+
+  double *pixels   = malloc((size_t)num_ctus * sizeof(double));
+  double *base_b   = malloc((size_t)num_ctus * sizeof(double));
+  int8_t *delta    = malloc((size_t)num_ctus * sizeof(int8_t));
+  double *targets  = malloc((size_t)num_ctus * sizeof(double));
+  if (!pixels || !base_b || !delta || !targets) {
+    free(pixels); free(base_b); free(delta); free(targets);
+    return 0;
+  }
+
+  double P = 0.0;
+  for (int i = 0; i < num_ctus; ++i) {
+    pixels[i] = (double)state->frame->lcu_stats[i].pixels;
+    P += pixels[i];
+  }
+
+  for (int y = 0; y < ctu_rows; ++y) {
+    // Same floor-based mapping as the classic ROI path; tile offsets do
+    // not apply because the main state works in global CTU coordinates.
+    const int roi_y = y * roi_h / ctu_rows;
+    for (int x = 0; x < ctu_columns; ++x) {
+      const int i = x + y * ctu_columns;
+      const int roi_x = x * roi_w / ctu_columns;
+      delta[i] = source->roi.roi_array[roi_x + roi_y * roi_w];
+
+      if (state->frame->num == 0) {
+        base_b[i] = 1.0 / (double)num_ctus;
+      } else if (!(weight_sum > 0.0)) {
+        base_b[i] = P > 0.0 ? pixels[i] / P : 1.0 / (double)num_ctus;
+      } else {
+        base_b[i] = state->frame->lcu_stats[i].weight / weight_sum;
+      }
+    }
+  }
+
+  const int ok = kvz_roi_rc_solve_targets(num_ctus, pixels, base_b, delta,
+                                          B, targets);
+  if (ok) {
+    for (int i = 0; i < num_ctus; ++i) {
+      state->frame->lcu_stats[i].roi_target_bits = targets[i];
+    }
+  }
+
+  free(pixels); free(base_b); free(delta); free(targets);
+  return ok;
+}
+
+void kvz_roi_rc_prepare_picture(encoder_state_t * const state)
+{
+  const encoder_control_t * const ctrl = state->encoder_control;
+  const int num_ctus = ctrl->in.width_in_lcu * ctrl->in.height_in_lcu;
+
+  // The budget is frame state. Every frame starts from a clean slate so a
+  // stale budget from an earlier frame can never be mistaken for the current
+  // one, regardless of WPP, tiles or OWF reusing the encoder state.
+  for (int i = 0; i < num_ctus; ++i) {
+    state->frame->lcu_stats[i].roi_target_bits = 0.0;
+  }
+  state->frame->roi_rc_active = 0;
+
+  if (!ctrl->cfg.roi_rc || ctrl->cfg.target_bitrate <= 0) return;
+
+  const kvz_picture * const source = state->tile->frame->source;
+  if (!source || !source->roi.roi_array ||
+      source->roi.width <= 0 || source->roi.height <= 0) {
+    return;
+  }
+
+  // An all-zero map (or a present but empty map) must behave exactly like a
+  // frame without ROI: do not skip the model just because an array exists.
+  const int map_size = source->roi.width * source->roi.height;
+  int nonzero = 0;
+  for (int i = 0; i < map_size; ++i) {
+    if (source->roi.roi_array[i] != 0) {
+      nonzero = 1;
+      break;
+    }
+  }
+  if (!nonzero) return;
+
+  state->frame->roi_rc_active = (uint8_t)roi_rc_solve_budget(state);
+}
+
 void kvz_set_lcu_lambda_and_qp(encoder_state_t * const state,
                                vector2d_t pos)
 {
   const encoder_control_t * const ctrl = state->encoder_control;
   lcu_stats_t *lcu = kvz_get_lcu_stats(state, pos.x, pos.y);
 
-  if (state->tile->frame->source->roi.roi_array) {
+  if (state->frame->roi_rc_active) {
+    // ROI-aware rate control: the per-CTU target comes from the spatial
+    // budget solved once for the frame, while the alpha/beta model and its
+    // training on real coding results are unchanged.
+    const uint32_t pixels    = MIN(LCU_WIDTH, state->tile->frame->width  - LCU_WIDTH * pos.x) *
+                               MIN(LCU_WIDTH, state->tile->frame->height - LCU_WIDTH * pos.y);
+
+    if (state->frame->num > ctrl->cfg.owf) {
+      update_parameters(lcu->bits,
+                        pixels,
+                        lcu->lambda,
+                        &lcu->rc_alpha,
+                        &lcu->rc_beta);
+    } else {
+      lcu->rc_alpha = state->frame->rc_alpha;
+      lcu->rc_beta  = state->frame->rc_beta;
+    }
+
+    // Keep the double-precision plan: no per-CTU rounding and no forced
+    // one-bit minimum. The plan is a target, not a cap on the real bits.
+    const double target_bits = lcu->roi_target_bits;
+    const double target_bpp  = target_bits / (double)pixels;
+
+    // Only the model and the global legal ranges constrain lambda. The
+    // narrow previous-CTU / frame-lambda windows are deliberately skipped so
+    // that genuine spatial differences survive into QP.
+    double lambda = clip_lambda(lcu->rc_alpha * pow(target_bpp, lcu->rc_beta));
+
+    state->lambda      = lambda;
+    state->lambda_sqrt = sqrt(lambda);
+    state->qp          = lambda_to_qp(lambda);
+  }
+  else if (state->tile->frame->source->roi.roi_array && !ctrl->cfg.roi_rc) {
     vector2d_t lcu_vec = {
       pos.x + state->tile->lcu_offset_x,
       pos.y + state->tile->lcu_offset_y
@@ -1168,5 +1437,13 @@ void kvz_set_lcu_lambda_and_qp(encoder_state_t * const state,
 
     lcu->adjust_lambda = state->lambda;
     lcu->adjust_qp = state->qp;
+  }
+
+  if (state->frame->roi_rc_active) {
+    // The values handed to next frame's update_parameters must be the ones
+    // actually used by search, quantization and syntax writing, including
+    // any VAQ adjustment above.
+    lcu->lambda = state->lambda;
+    lcu->qp     = state->qp;
   }
 }

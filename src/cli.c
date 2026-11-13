@@ -158,6 +158,8 @@ static const struct option long_options[] = {
   { "no-zero-coeff-rdo",        no_argument, NULL, 0 },
   { "intra-qp-offset",    required_argument, NULL, 0 },
   { "rc-algorithm",       required_argument, NULL, 0 },
+  { "roi-rc",                   no_argument, NULL, 0 },
+  { "no-roi-rc",                no_argument, NULL, 0 },
   { "intra-bits",               no_argument, NULL, 0 },
   { "no-intra-bits",            no_argument, NULL, 0 },
   { "clip-neighbour",           no_argument, NULL, 0 },
@@ -507,6 +509,11 @@ void print_help(void)
     "                                   - lambda: rate control from:\n"
     "                                     DOI: 10.1109/TIP.2014.2336550 \n"
     "                                   - oba: DOI: 10.1109/TCSVT.2016.2589878\n"
+    "      --(no-)roi-rc        : Let the ROI map redistribute the frame bit\n"
+    "                               budget across CTUs and keep training the\n"
+    "                               lambda model on real results, instead of\n"
+    "                               adding the ROI delta directly to QP.\n"
+    "                               Requires --bitrate and rc-algorithm=lambda.\n"
     "      --(no-)intra-bits      : Use Hadamard cost based allocation for intra\n"
     "                               frames. Default on for gop 8 and off for lp-gop\n"
     "      --(no-)clip-neighbour  : On oba based rate control whether to clip \n"

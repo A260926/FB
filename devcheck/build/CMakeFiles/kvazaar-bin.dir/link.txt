@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/kvazaar-bin.dir/src/encmain.c.o" "CMakeFiles/kvazaar-bin.dir/src/cli.c.o" "CMakeFiles/kvazaar-bin.dir/src/yuv_io.c.o" -o /Users/solo/pro/UserFB/workspace/FSEBF9DE11A867U6620/attempts/20261113T164320480425Z/repo/src/kvazaar  libkvazaar.a -lm

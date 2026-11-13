@@ -1682,6 +1682,12 @@ static void encoder_state_init_new_frame(encoder_state_t * const state, kvz_pict
     case KVZ_NO_RC:
     case KVZ_LAMBDA:
       kvz_set_picture_lambda_and_qp(state);
+      // Build the ROI-aware spatial budget once for the frame, before any
+      // CTU is coded. The main state owns the frame structure shared by the
+      // tile, WPP and OWF child states, so the budget is never solved twice.
+      if (state->type == ENCODER_STATE_TYPE_MAIN) {
+        kvz_roi_rc_prepare_picture(state);
+      }
       break;
     case KVZ_OBA:
       kvz_estimate_pic_lambda(state);

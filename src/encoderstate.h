@@ -89,6 +89,10 @@ typedef struct lcu_stats_t {
   int8_t qp;
   int8_t adjust_qp;
   uint8_t skipped;
+
+  //! \brief Per-CTU target bits from the ROI rate control budget of the
+  //!        current frame (zero when ROI rate control is not active).
+  double roi_target_bits;
 } lcu_stats_t;
 
 
@@ -192,6 +196,15 @@ typedef struct encoder_state_config_frame_t {
 
   double *c_para;
   double *k_para;
+
+  /**
+   * \brief Whether the ROI-aware spatial budget of this frame is active.
+   *
+   * Set once per frame on the main encoder state before any CTU is coded.
+   * Tile, WPP and OWF child states share the frame structure, so the budget
+   * is solved exactly once and never recomputed concurrently.
+   */
+  uint8_t roi_rc_active;
 } encoder_state_config_frame_t;
 
 typedef struct encoder_state_config_tile_t {
