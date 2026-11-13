@@ -219,6 +219,7 @@ IF(ENABLE_TEST)
     test_ustar_filenames.c
     test_warn_missing_hardlink_target.c
     test_write_disk.c
+    test_write_disk_anchored.c
     test_write_disk_appledouble.c
     test_write_disk_failures.c
     test_write_disk_fixup.c
@@ -309,7 +310,7 @@ IF(ENABLE_TEST)
   ADD_EXECUTABLE(libarchive_test ${libarchive_test_SOURCES})
   TARGET_LINK_LIBRARIES(libarchive_test archive_static ${ADDITIONAL_LIBS})
   SET_PROPERTY(TARGET libarchive_test PROPERTY COMPILE_DEFINITIONS
-    LIBARCHIVE_STATIC LIST_H)
+    LIBARCHIVE_STATIC LIST_H ARCHIVE_WRITE_DISK_TEST_HOOKS)
 
   #
   # Generate list.h by grepping DEFINE_TEST() lines out of the C sources.

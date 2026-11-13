@@ -145,6 +145,7 @@
 #include "archive_endian.h"
 #include "archive_entry.h"
 #include "archive_private.h"
+#include "archive_random_private.h"
 #include "archive_write_disk_private.h"
 
 #ifndef O_BINARY
@@ -168,6 +169,42 @@
 #define AT_FDCWD -100
 #endif
 
+/*
+ * The directory-anchored ("root fd") extraction mode needs a complete
+ * set of POSIX *at() interfaces, plus a way to set timestamps through an
+ * already-open descriptor (deferred directory fixups never re-resolve a
+ * name).  If the platform lacks any of these we refuse to enable the
+ * mode instead of silently falling back to process-relative path
+ * resolution.
+ */
+#if defined(HAVE_OPENAT) && defined(HAVE_FSTATAT) && \
+    defined(HAVE_MKDIRAT) && defined(HAVE_UNLINKAT) && \
+    defined(HAVE_RENAMEAT) && defined(HAVE_SYMLINKAT) && \
+    defined(HAVE_LINKAT) && defined(HAVE_FCHMOD) && \
+    defined(O_NOFOLLOW) && (O_NOFOLLOW != 0) && \
+    (defined(HAVE_FUTIMENS) && defined(HAVE_UTIMENSAT)) && \
+    defined(AT_REMOVEDIR) && defined(AT_SYMLINK_NOFOLLOW)
+#define	ANCHORED_DISK_EXTRACTION 1
+#elif defined(HAVE_OPENAT) && defined(HAVE_FSTATAT) && \
+    defined(HAVE_MKDIRAT) && defined(HAVE_UNLINKAT) && \
+    defined(HAVE_RENAMEAT) && defined(HAVE_SYMLINKAT) && \
+    defined(HAVE_LINKAT) && defined(HAVE_FCHMOD) && \
+    defined(O_NOFOLLOW) && (O_NOFOLLOW != 0) && \
+    defined(HAVE_UTIMES) && defined(HAVE_FUTIMES) && \
+    defined(AT_REMOVEDIR) && defined(AT_SYMLINK_NOFOLLOW)
+#define	ANCHORED_DISK_EXTRACTION 1
+#endif
+
+#ifndef AT_REMOVEDIR
+#define AT_REMOVEDIR 0x200
+#endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW 0x200
+#endif
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+
 struct fixup_entry {
 	struct fixup_entry	*next;
 	struct archive_acl	 acl;
@@ -185,6 +222,7 @@ struct fixup_entry {
 	size_t			 mac_metadata_size;
 	void			*mac_metadata;
 	int			 fixup; /* bitmask of what needs fixing */
+	int			 dirfd; /* anchored mode: bound dir object */
 	char			*name;
 };
 
@@ -273,6 +311,25 @@ struct archive_write_disk {
 	int64_t			 filesize;
 	/* Dir we were in before this restore; only for deep paths. */
 	int			 restore_pwd;
+
+	/*
+	 * Directory-anchored extraction state.  When anchored is set, all
+	 * path resolution is performed relative to root_fd using openat()
+	 * and friends; the process' current directory is never consulted.
+	 */
+	int			 anchored;	/* root_fd is valid */
+	int			 root_locked;	/* a header has been seen */
+	int			 root_fd;	/* owned, close-on-exec */
+	int			 parent_fd;	/* owned parent dir of entry */
+	struct archive_string	 _parent_data;	/* parent path in root */
+	struct archive_string	 _leaf_data;	/* leaf name in parent_fd */
+	char			*leaf;
+	struct archive_string	 _atmp_data;	/* private temp name */
+	char			*atmp_leaf;
+	int			 entry_dirfd;	/* owned dir object for fixups */
+	void			 (*test_hook)(struct archive *, int, const char *,
+			    void *);
+	void			*test_hook_data;
 	/* Mode we should use for this entry; affected by _PERM and umask. */
 	mode_t			 mode;
 	/* UID/GID to use in restoring this entry. */
@@ -358,6 +415,25 @@ struct archive_write_disk {
 static int	la_opendirat(int, const char *);
 static int	la_mktemp(struct archive_write_disk *);
 static int	la_verify_filetype(mode_t, __LA_MODE_T);
+static struct fixup_entry *new_fixup(struct archive_write_disk *,
+		    const char *);
+#ifdef ANCHORED_DISK_EXTRACTION
+static int	anchored_dup_cloexec(int);
+static int	anchored_canon_path(struct archive_write_disk *,
+		    const char *, struct archive_string *);
+static int	anchored_validate_path(struct archive_write_disk *);
+static int	anchored_walk(struct archive_write_disk *, int, const char *,
+		    int, int *);
+static int	anchored_add_dir_fixup(struct archive_write_disk *, int,
+		    const char *, mode_t, int);
+static int	anchored_restore_entry(struct archive_write_disk *);
+static int	anchored_finish_metadata(struct archive_write_disk *);
+static int	anchored_apply_fixup(struct archive_write_disk *,
+		    struct fixup_entry *);
+static void	anchored_close_parent(struct archive_write_disk *);
+static void	anchored_abort_temp(struct archive_write_disk *);
+static void	anchored_cleanup_entry(struct archive_write_disk *);
+#endif
 static void	fsobj_error(int *, struct archive_string *, int, const char *,
 		    const char *);
 static int	check_symlinks_fsobj(char *, int *, struct archive_string *,
@@ -497,6 +573,1131 @@ la_verify_filetype(mode_t mode, __LA_MODE_T filetype) {
 	return (ret);
 }
 
+#ifdef ANCHORED_DISK_EXTRACTION
+/*
+ * Directory-anchored extraction.
+ *
+ * The caller hands us a descriptor for a directory.  Every subsequent
+ * operation is resolved through that object with the POSIX *at calls.
+ * We never consult the process' current directory, never use /proc or
+ * /dev/fd, and never take a process-wide lock.
+ *
+ * A path from the archive is split into components; each component is
+ * opened with openat(parent, name, O_NOFOLLOW | O_DIRECTORY) starting
+ * from the retained root object.  Because we carry the object forward
+ * (not a string), renaming an ancestor or swapping it for a symlink
+ * after we opened it cannot redirect later operations.  Creates,
+ * renames, unlinks and metadata changes all use the retained parent or
+ * object descriptor.
+ */
+
+static int
+anchored_dup_cloexec(int fd)
+{
+	int nfd;
+
+#ifdef F_DUPFD_CLOEXEC
+	nfd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+	if (nfd >= 0)
+		return (nfd);
+#endif
+	nfd = dup(fd);
+	if (nfd >= 0) {
+		if (fcntl(nfd, F_SETFD, FD_CLOEXEC) == -1) {
+			int oerrno = errno;
+			close(nfd);
+			errno = oerrno;
+			return (-1);
+		}
+	}
+	return (nfd);
+}
+
+/*
+ * Canonicalize an archive path relative to the root.  Absolute paths,
+ * empty paths and any '..' component are rejected.  A path consisting
+ * only of '.' elements canonicalizes to ".", which only a directory
+ * entry may name (it denotes the root directory object itself).
+ */
+static int
+anchored_canon_path(struct archive_write_disk *a, const char *in,
+    struct archive_string *out)
+{
+	const char *src;
+
+	archive_string_empty(out);
+	if (in == NULL || in[0] == '\0') {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Invalid empty pathname in anchored mode");
+		return (ARCHIVE_FAILED);
+	}
+	if (in[0] == '/') {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Absolute path not allowed in anchored mode: %s", in);
+		return (ARCHIVE_FAILED);
+	}
+
+	src = in;
+	while (*src != '\0') {
+		const char *start;
+		size_t len;
+
+		while (*src == '/')
+			++src;
+		if (*src == '\0')
+			break;
+		start = src;
+		while (*src != '\0' && *src != '/')
+			++src;
+		len = (size_t)(src - start);
+		if (len == 1 && start[0] == '.')
+			continue;
+		if (len == 2 && start[0] == '.' && start[1] == '.') {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Path contains '..' which is not allowed in "
+			    "anchored mode: %s", in);
+			return (ARCHIVE_FAILED);
+		}
+		if (out->length > 0)
+			archive_strappend_char(out, '/');
+		archive_strncat(out, start, len);
+	}
+	if (out->length == 0)
+		archive_strcpy(out, ".");
+	return (ARCHIVE_OK);
+}
+
+static int
+anchored_validate_path(struct archive_write_disk *a)
+{
+	struct archive_string canon;
+	int r;
+
+	archive_string_init(&canon);
+	r = anchored_canon_path(a, a->name, &canon);
+	if (r == ARCHIVE_OK)
+		memcpy(a->name, canon.s, canon.length + 1);
+	archive_string_free(&canon);
+	return (r);
+}
+
+/*
+ * Open the directory named by dirpath, relative to basefd.  dirpath must
+ * already be canonical.  "" and "." denote basefd itself.  When create
+ * is set, missing components are created; a component created with a
+ * mode narrower than its final mode gets a fixup bound to the object we
+ * opened, never to a name.
+ */
+static int
+anchored_walk(struct archive_write_disk *a, int basefd, const char *dirpath,
+    int create, int *fd_out)
+{
+	struct archive_string path;
+	const char *src;
+	int cur, r = ARCHIVE_OK;
+
+	*fd_out = -1;
+	archive_string_init(&path);
+
+	cur = anchored_dup_cloexec(basefd);
+	if (cur < 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't duplicate the extraction root handle");
+		archive_string_free(&path);
+		return (ARCHIVE_FATAL);
+	}
+	if (dirpath[0] == '\0' || strcmp(dirpath, ".") == 0) {
+		*fd_out = cur;
+		archive_string_free(&path);
+		return (ARCHIVE_OK);
+	}
+
+	src = dirpath;
+	while (*src != '\0') {
+		const char *start, *comp;
+		size_t len;
+		int fd2;
+
+		while (*src == '/')
+			++src;
+		if (*src == '\0')
+			break;
+		start = src;
+		while (*src != '\0' && *src != '/')
+			++src;
+		len = (size_t)(src - start);
+
+		if (path.length > 0)
+			archive_strappend_char(&path, '/');
+		archive_strncat(&path, start, len);
+		/* Recompute: archive_string may have reallocated. */
+		comp = path.s + path.length - len;
+
+		fd2 = openat(cur, comp,
+		    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_BINARY);
+		if (fd2 < 0 && errno == ENOENT && create) {
+			mode_t final_mode, mode;
+
+			final_mode = DEFAULT_DIR_MODE & ~a->user_umask;
+			mode = (final_mode | MINIMUM_DIR_MODE)
+			    & MAXIMUM_DIR_MODE;
+			if (mkdirat(cur, comp, mode) == 0) {
+				fd2 = openat(cur, comp,
+				    O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+				    | O_CLOEXEC | O_BINARY);
+				if (fd2 >= 0 && mode != final_mode) {
+					int dupfd = anchored_dup_cloexec(fd2);
+
+					if (dupfd < 0
+					    || anchored_add_dir_fixup(a, dupfd,
+					    path.s, final_mode,
+					    TODO_MODE_BASE) != ARCHIVE_OK)
+						r = ARCHIVE_FATAL;
+				}
+			} else if (errno == EEXIST) {
+				/*
+				 * Something appeared at this name.  Re-open
+				 * it through this same parent object; if it
+				 * is not a directory (e.g. a symlink planted
+				 * in the meantime) this open fails and the
+				 * whole entry fails rather than following it.
+				 */
+				fd2 = openat(cur, comp,
+				    O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+				    | O_CLOEXEC | O_BINARY);
+			}
+		}
+		if (fd2 < 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't open a directory component of '%s' "
+			    "relative to the extraction root (symlinks are "
+			    "not followed)", a->name);
+			close(cur);
+			archive_string_free(&path);
+			return (r == ARCHIVE_FATAL ? r : ARCHIVE_FAILED);
+		}
+		close(cur);
+		cur = fd2;
+		if (r == ARCHIVE_FATAL) {
+			close(cur);
+			archive_string_free(&path);
+			return (r);
+		}
+	}
+
+	*fd_out = cur;
+	archive_string_free(&path);
+	return (r);
+}
+
+/*
+ * Bind a fixup to a directory object.  The descriptor is owned by the
+ * fixup and is used (or closed) when the fixup list is processed.
+ */
+static int
+anchored_add_dir_fixup(struct archive_write_disk *a, int dirfd,
+    const char *name, mode_t mode, int bits)
+{
+	struct fixup_entry *fe;
+
+	fe = new_fixup(a, name);
+	if (fe == NULL) {
+		close(dirfd);
+		return (ARCHIVE_FATAL);
+	}
+	fe->filetype = AE_IFDIR;
+	fe->dirfd = dirfd;
+	fe->mode = mode;
+	fe->fixup |= bits;
+	return (ARCHIVE_OK);
+}
+
+static void
+anchored_close_parent(struct archive_write_disk *a)
+{
+	if (a->parent_fd >= 0) {
+		close(a->parent_fd);
+		a->parent_fd = -1;
+	}
+	a->leaf = NULL;
+	archive_string_empty(&a->_leaf_data);
+	archive_string_empty(&a->_parent_data);
+}
+
+static void
+anchored_abort_temp(struct archive_write_disk *a)
+{
+	if (a->atmp_leaf != NULL && a->parent_fd >= 0)
+		unlinkat(a->parent_fd, a->atmp_leaf, 0);
+	a->atmp_leaf = NULL;
+	archive_string_empty(&a->_atmp_data);
+}
+
+#ifdef ARCHIVE_WRITE_DISK_TEST_HOOKS
+/*
+ * Install a deterministic test hook.  Only compiled into test builds;
+ * production builds do not expose this symbol.
+ */
+int
+archive_write_disk_set_test_hook(struct archive *_a,
+    void (*hook)(struct archive *, int, const char *, void *), void *data)
+{
+	struct archive_write_disk *a = (struct archive_write_disk *)_a;
+
+	archive_check_magic(&a->archive, ARCHIVE_WRITE_DISK_MAGIC,
+	    ARCHIVE_STATE_ANY | ARCHIVE_STATE_FATAL,
+	    "archive_write_disk_set_test_hook");
+	a->test_hook = hook;
+	a->test_hook_data = data;
+	return (ARCHIVE_OK);
+}
+#endif
+
+/*
+ * Release any private temporary item and drop the per-entry parent
+ * handle.  Called on every finish/failure path and when freeing.
+ */
+static void
+anchored_cleanup_entry(struct archive_write_disk *a)
+{
+	anchored_abort_temp(a);
+	anchored_close_parent(a);
+	if (a->entry_dirfd >= 0) {
+		close(a->entry_dirfd);
+		a->entry_dirfd = -1;
+	}
+}
+
+/*
+ * Create a private temporary item in the destination parent.  kind: 0 =
+ * regular file (returns an open fd), 1 = symlink pointing at linktarget
+ * (returns 0), 2 = reserve nothing (hardlink; caller uses linkat with a
+ * fresh name).  The name is never visible under the final name until the
+ * caller commits it with renameat() in this same directory.
+ */
+static int
+anchored_mktemp(struct archive_write_disk *a, int kind, mode_t mode,
+    const char *linktarget)
+{
+	static const char hex[] = "0123456789abcdef";
+	unsigned char rnd[8];
+	int i;
+
+	for (i = 0; i < 16; ++i) {
+		size_t j;
+		int fd;
+
+		if (archive_random(rnd, sizeof(rnd)) != ARCHIVE_OK) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Can't generate a temporary name");
+			return (-1);
+		}
+		archive_strcpy(&a->_atmp_data, "libarchive-tmp-");
+		for (j = 0; j < sizeof(rnd); ++j) {
+			archive_strappend_char(&a->_atmp_data,
+			    hex[rnd[j] & 0xf]);
+			archive_strappend_char(&a->_atmp_data,
+			    hex[(rnd[j] >> 4) & 0xf]);
+		}
+		if (kind == 1) {
+			if (symlinkat(linktarget, a->parent_fd,
+			    a->_atmp_data.s) == 0) {
+				a->atmp_leaf = a->_atmp_data.s;
+				return (0);
+			}
+		} else if (kind == 0) {
+			fd = openat(a->parent_fd, a->_atmp_data.s,
+			    O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW
+			    | O_CLOEXEC | O_BINARY, mode);
+			if (fd >= 0) {
+				a->atmp_leaf = a->_atmp_data.s;
+				return (fd);
+			}
+		} else {
+			/*
+			 * Hardlink: let the caller's linkat() claim the name
+			 * atomically.  Ensure it does not already exist so a
+			 * linkat() failure means "ours, and it failed".
+			 */
+			struct stat st;
+
+			if (fstatat(a->parent_fd, a->_atmp_data.s, &st,
+			    AT_SYMLINK_NOFOLLOW) != 0 && errno == ENOENT) {
+				a->atmp_leaf = a->_atmp_data.s;
+				return (0);
+			}
+			errno = EEXIST;
+		}
+		if (errno != EEXIST)
+			break;
+	}
+	archive_set_error(&a->archive, errno,
+	    "Can't create a temporary item in the destination directory");
+	return (-1);
+}
+
+/*
+ * Inspect the destination leaf inside the already-opened parent, without
+ * following a symlink.  Returns 0 if present (fills st), 1 if absent,
+ * -1 on error.
+ */
+static int
+anchored_leaf_stat(struct archive_write_disk *a, struct stat *st)
+{
+	if (fstatat(a->parent_fd, a->leaf, st, AT_SYMLINK_NOFOLLOW) == 0)
+		return (0);
+	if (errno == ENOENT)
+		return (1);
+	archive_set_error(&a->archive, errno,
+	    "Can't inspect '%s' in the destination directory", a->name);
+	return (-1);
+}
+
+static int
+anchored_remove_leaf(struct archive_write_disk *a)
+{
+	struct stat st;
+	int r;
+
+	r = anchored_leaf_stat(a, &st);
+	if (r < 0)
+		return (ARCHIVE_FAILED);
+	if (r == 1)
+		return (ARCHIVE_OK);
+	if (S_ISDIR(st.st_mode)) {
+		if (unlinkat(a->parent_fd, a->leaf, AT_REMOVEDIR) != 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't remove existing directory '%s'", a->name);
+			return (ARCHIVE_FAILED);
+		}
+	} else if (unlinkat(a->parent_fd, a->leaf, 0) != 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't remove existing object '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	a->pst = NULL;
+	return (ARCHIVE_OK);
+}
+
+/*
+ * Return value used by anchored_prepare_replace() to mean "the existing
+ * object must be left untouched" (NO_OVERWRITE / NO_OVERWRITE_NEWER).
+ * It is deliberately not ARCHIVE_OK.
+ */
+#define	ANCHORED_KEEP_EXISTING	1
+
+/*
+ * Validate an existing destination object before replacement.
+ * Returns ARCHIVE_OK to proceed, ANCHORED_KEEP_EXISTING when the existing
+ * object must be left untouched, or ARCHIVE_FAILED.  A symlink at the
+ * final name is always refused, even when the incoming entry is itself a
+ * symlink.
+ */
+static int
+anchored_prepare_replace(struct archive_write_disk *a, const char *what)
+{
+	struct stat st;
+	int r;
+
+	r = anchored_leaf_stat(a, &st);
+	if (r < 0)
+		return (ARCHIVE_FAILED);
+	if (r == 1)
+		return (ARCHIVE_OK);
+	if (S_ISLNK(st.st_mode)) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Refusing to replace existing symlink '%s' with %s in "
+		    "anchored mode", a->name, what);
+		return (ARCHIVE_FAILED);
+	}
+	if (a->flags & ARCHIVE_EXTRACT_NO_OVERWRITE) {
+		archive_entry_unset_size(a->entry);
+		a->todo = 0;
+		a->deferred = 0;
+		return (ANCHORED_KEEP_EXISTING);
+	}
+	if ((a->flags & ARCHIVE_EXTRACT_NO_OVERWRITE_NEWER)
+	    && !S_ISDIR(st.st_mode) && !older(&st, a->entry)) {
+		archive_entry_unset_size(a->entry);
+		a->todo = 0;
+		a->deferred = 0;
+		return (ANCHORED_KEEP_EXISTING);
+	}
+	if (a->skip_file_set &&
+	    st.st_dev == (dev_t)a->skip_file_dev &&
+	    st.st_ino == (ino_t)a->skip_file_ino) {
+		archive_set_error(&a->archive, 0,
+		    "Refusing to overwrite archive");
+		return (ARCHIVE_FAILED);
+	}
+	return (ARCHIVE_OK);
+}
+
+static int
+anchored_create_regular(struct archive_write_disk *a)
+{
+	struct stat st;
+	mode_t mode;
+	int fd, r;
+
+	if (a->leaf == NULL) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Regular file entry may not name the extraction root: %s",
+		    a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	mode = a->mode & 0777 & ~a->user_umask;
+	if (a->user_uid != 0 &&
+	    (a->todo & (TODO_HFS_COMPRESSION | TODO_XATTR)))
+		mode |= 0200;
+
+	if (a->flags & ARCHIVE_EXTRACT_SAFE_WRITES) {
+		/* Temporary creation and commit both live in parent_fd. */
+		r = anchored_prepare_replace(a, "a file");
+		if (r == ANCHORED_KEEP_EXISTING)
+			return (ARCHIVE_OK);
+		if (r != ARCHIVE_OK)
+			return (r);
+		fd = anchored_mktemp(a, 0, mode, NULL);
+		if (fd < 0)
+			return (ARCHIVE_FAILED);
+		a->fd = fd;
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+
+	fd = openat(a->parent_fd, a->leaf,
+	    O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC | O_BINARY,
+	    mode);
+	if (fd >= 0) {
+		a->fd = fd;
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+	if (errno != EEXIST && errno != EISDIR) {
+		archive_set_error(&a->archive, errno, "Can't create '%s'",
+		    a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	r = anchored_prepare_replace(a, "a file");
+	if (r == ANCHORED_KEEP_EXISTING)
+		return (ARCHIVE_OK);
+	if (r != ARCHIVE_OK)
+		return (r);
+
+	r = anchored_leaf_stat(a, &st);
+	if (r < 0)
+		return (ARCHIVE_FAILED);
+	if (r == 1) {
+		fd = openat(a->parent_fd, a->leaf,
+		    O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC
+		    | O_BINARY, mode);
+		if (fd < 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't create '%s'", a->name);
+			return (ARCHIVE_FAILED);
+		}
+		a->fd = fd;
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+
+	if (S_ISDIR(st.st_mode) || !S_ISREG(st.st_mode) ||
+	    (a->flags & ARCHIVE_EXTRACT_UNLINK)) {
+		if (anchored_remove_leaf(a) != ARCHIVE_OK)
+			return (ARCHIVE_FAILED);
+		fd = openat(a->parent_fd, a->leaf,
+		    O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC
+		    | O_BINARY, mode);
+		if (fd < 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't create '%s'", a->name);
+			return (ARCHIVE_FAILED);
+		}
+		a->fd = fd;
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+
+	/*
+	 * Overwrite an existing regular object in place.  O_NONBLOCK keeps
+	 * a concurrent swap to a FIFO from wedging us; we stat the opened
+	 * descriptor and refuse anything that is not a regular file before
+	 * writing through it.
+	 */
+	fd = openat(a->parent_fd, a->leaf,
+	    O_WRONLY | O_TRUNC | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+	    | O_BINARY);
+	if (fd < 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't open existing file '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+		close(fd);
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Refusing to overwrite non-regular '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	a->fd = fd;
+	a->pst = NULL;
+	return (ARCHIVE_OK);
+}
+
+static int
+anchored_create_symlink(struct archive_write_disk *a)
+{
+	const char *target;
+	struct stat st;
+	int r;
+
+	target = archive_entry_symlink(a->entry);
+	if (target == NULL || target[0] == '\0') {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Missing symlink target for '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	if (a->leaf == NULL) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Symlink entry may not name the extraction root: %s",
+		    a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	/* Refuse to step on an existing symlink regardless of entry type. */
+	r = anchored_leaf_stat(a, &st);
+	if (r < 0)
+		return (ARCHIVE_FAILED);
+	if (r == 0 && S_ISLNK(st.st_mode)) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Refusing to replace existing symlink '%s' in anchored "
+		    "mode", a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	if (a->flags & ARCHIVE_EXTRACT_SAFE_WRITES) {
+		r = anchored_prepare_replace(a, "a symlink");
+		if (r == ANCHORED_KEEP_EXISTING)
+			return (ARCHIVE_OK);
+		if (r != ARCHIVE_OK)
+			return (r);
+		if (anchored_mktemp(a, 1, 0, target) != 0)
+			return (ARCHIVE_FAILED);
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+
+	if (symlinkat(target, a->parent_fd, a->leaf) == 0) {
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+	if (errno != EEXIST) {
+		archive_set_error(&a->archive, errno,
+		    "Can't create symlink '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	r = anchored_prepare_replace(a, "a symlink");
+	if (r == ANCHORED_KEEP_EXISTING)
+		return (ARCHIVE_OK);
+	if (r != ARCHIVE_OK)
+		return (r);
+	if (anchored_remove_leaf(a) != ARCHIVE_OK)
+		return (ARCHIVE_FAILED);
+	if (symlinkat(target, a->parent_fd, a->leaf) != 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't create symlink '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	a->pst = NULL;
+	return (ARCHIVE_OK);
+}
+
+static int
+anchored_create_dir(struct archive_write_disk *a)
+{
+	struct stat st;
+	mode_t final_mode, mode;
+	int fd, r;
+
+	if (a->leaf == NULL) {
+		/*
+		 * "." denotes the root directory object itself.  Bind any
+		 * deferred fixups to a duplicate of the root handle.
+		 */
+		fd = anchored_dup_cloexec(a->root_fd);
+		if (fd < 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't duplicate the extraction root handle");
+			return (ARCHIVE_FAILED);
+		}
+		a->entry_dirfd = fd;
+		if (a->flags & ARCHIVE_EXTRACT_PERM)
+			a->deferred |= TODO_MODE_BASE;
+		if (a->flags & ARCHIVE_EXTRACT_TIME)
+			a->deferred |= TODO_TIMES;
+		a->todo &= ~(TODO_MODE | TODO_TIMES);
+		return (ARCHIVE_OK);
+	}
+
+	final_mode = a->mode & 07777;
+	mode = (final_mode & 0777 & ~a->user_umask) | MINIMUM_DIR_MODE;
+	mode &= MAXIMUM_DIR_MODE;
+
+	fd = openat(a->parent_fd, a->leaf,
+	    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_BINARY);
+	if (fd >= 0) {
+		/* Existing directory object; never traversed a symlink. */
+		if (a->flags & ARCHIVE_EXTRACT_NO_OVERWRITE) {
+			a->todo = 0;
+			a->deferred = 0;
+			close(fd);
+			archive_entry_unset_size(a->entry);
+			return (ARCHIVE_OK);
+		}
+		a->entry_dirfd = fd;
+		/*
+		 * Match the non-anchored writer: only reset an existing
+		 * directory's mode when ARCHIVE_EXTRACT_PERM was requested.
+		 */
+		if (a->flags & ARCHIVE_EXTRACT_PERM)
+			a->deferred |= TODO_MODE_BASE;
+		if (a->flags & ARCHIVE_EXTRACT_TIME)
+			a->deferred |= TODO_TIMES;
+		a->todo &= ~(TODO_MODE | TODO_TIMES);
+		a->pst = NULL;
+		return (ARCHIVE_OK);
+	}
+	if (errno != ENOENT && errno != ENOTDIR) {
+		/* ELOOP means a symlink is in the way; never follow it. */
+		archive_set_error(&a->archive, errno,
+		    "Can't open directory '%s' in anchored mode (a symlink "
+		    "or non-directory is in the way)", a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	r = anchored_leaf_stat(a, &st);
+	if (r == 0) {
+		if (S_ISLNK(st.st_mode)) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Refusing to use existing symlink '%s' as a "
+			    "directory in anchored mode", a->name);
+			return (ARCHIVE_FAILED);
+		}
+		r = anchored_prepare_replace(a, "a directory");
+		if (r == ANCHORED_KEEP_EXISTING)
+			return (ARCHIVE_OK);
+		if (r != ARCHIVE_OK)
+			return (r);
+		if (anchored_remove_leaf(a) != ARCHIVE_OK)
+			return (ARCHIVE_FAILED);
+	} else if (r < 0) {
+		return (ARCHIVE_FAILED);
+	}
+
+	if (mkdirat(a->parent_fd, a->leaf, mode) != 0) {
+		if (errno == EEXIST)
+			return (anchored_create_dir(a));
+		archive_set_error(&a->archive, errno,
+		    "Can't create directory '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	fd = openat(a->parent_fd, a->leaf,
+	    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_BINARY);
+	if (fd < 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't open newly-created directory '%s'", a->name);
+		return (ARCHIVE_FAILED);
+	}
+	a->entry_dirfd = fd;
+	a->deferred |= TODO_MODE_BASE;
+	if (a->flags & ARCHIVE_EXTRACT_TIME)
+		a->deferred |= TODO_TIMES;
+	a->todo &= ~(TODO_MODE | TODO_TIMES);
+	a->pst = NULL;
+	return (ARCHIVE_OK);
+}
+
+/*
+ * Create a hardlink strictly inside the root.
+ *
+ * The source parent is walked with O_NOFOLLOW, the source is opened and
+ * verified to be a regular file, and a private temporary link is created
+ * in the destination parent.  That link object is opened and compared
+ * (device, inode, type) with the source object we validated.  Only then
+ * is the final name published with renameat(); on mismatch we remove the
+ * temporary and fail.  No content or metadata is touched before
+ * publication.
+ */
+static int
+anchored_hardlink(struct archive_write_disk *a, const char *linkname)
+{
+	struct archive_string canon, srcparent_path;
+	const char *srcleaf;
+	const char *slash;
+	struct stat sst, tst;
+	int srcparent = -1, srcfd = -1, tfd = -1;
+	int r, result = ARCHIVE_FAILED;
+
+	archive_string_init(&canon);
+	archive_string_init(&srcparent_path);
+
+	if (a->leaf == NULL) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Hardlink entry may not name the extraction root: %s",
+		    a->name);
+		goto out;
+	}
+
+	r = anchored_canon_path(a, linkname, &canon);
+	if (r != ARCHIVE_OK) {
+		result = r;
+		goto out;
+	}
+	if (strcmp(canon.s, a->name) == 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Skipping hardlink pointing to itself: %s", a->name);
+		result = ARCHIVE_WARN;
+		goto out;
+	}
+
+	slash = strrchr(canon.s, '/');
+	if (slash == NULL) {
+		archive_strcpy(&srcparent_path, ".");
+		srcleaf = canon.s;
+	} else {
+		archive_strncat(&srcparent_path, canon.s,
+		    (size_t)(slash - canon.s));
+		srcleaf = slash + 1;
+	}
+
+	r = anchored_walk(a, a->root_fd, srcparent_path.s, 0, &srcparent);
+	if (r != ARCHIVE_OK) {
+		result = r;
+		goto out;
+	}
+	srcfd = openat(srcparent, srcleaf,
+	    O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_BINARY | O_NONBLOCK);
+	if (srcfd < 0) {
+		archive_set_error(&a->archive, errno,
+		    "Hard-link target '%s' does not exist or is not "
+		    "accessible within the root", linkname);
+		goto out;
+	}
+	if (fstat(srcfd, &sst) != 0 || !S_ISREG(sst.st_mode)) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Hard-link target '%s' is not a regular file within the "
+		    "root", linkname);
+		goto out;
+	}
+
+#ifdef ARCHIVE_WRITE_DISK_TEST_HOOKS
+	if (a->test_hook != NULL)
+		a->test_hook(&a->archive, 0, canon.s, a->test_hook_data);
+#endif
+
+	/* The destination leaf must be replaceable and not a symlink. */
+	r = anchored_leaf_stat(a, &tst);
+	if (r < 0)
+		goto out;
+	if (r == 0) {
+		if (S_ISLNK(tst.st_mode)) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Refusing to replace existing symlink '%s' in "
+			    "anchored mode", a->name);
+			goto out;
+		}
+		if (a->flags & ARCHIVE_EXTRACT_NO_OVERWRITE) {
+			a->todo = 0;
+			a->deferred = 0;
+			archive_entry_unset_size(a->entry);
+			result = ARCHIVE_OK;
+			goto out;
+		}
+		if (a->skip_file_set &&
+		    tst.st_dev == (dev_t)a->skip_file_dev &&
+		    tst.st_ino == (ino_t)a->skip_file_ino) {
+			archive_set_error(&a->archive, 0,
+			    "Refusing to overwrite archive");
+			goto out;
+		}
+	}
+
+	/*
+	 * Create a private temporary link.  linkat() does not follow a
+	 * symlink at the final name; we re-verify the link object below
+	 * regardless.  A name collision (EEXIST) means somebody else owns
+	 * that name, so pick a new one rather than unlinking it.
+	 */
+	{
+		int tries;
+
+		for (tries = 0; tries < 16; ++tries) {
+			if (anchored_mktemp(a, 2, 0, NULL) != 0)
+				goto out;
+			if (linkat(srcparent, srcleaf, a->parent_fd,
+			    a->atmp_leaf, 0) == 0)
+				break;
+			if (errno != EEXIST) {
+				a->atmp_leaf = NULL;
+				archive_string_empty(&a->_atmp_data);
+				archive_set_error(&a->archive, errno,
+				    "Can't create a temporary hardlink for '%s'",
+				    a->name);
+				goto out;
+			}
+			a->atmp_leaf = NULL;
+			archive_string_empty(&a->_atmp_data);
+		}
+		if (a->atmp_leaf == NULL) {
+			archive_set_error(&a->archive, errno,
+			    "Can't create a temporary hardlink for '%s'",
+			    a->name);
+			goto out;
+		}
+	}
+	/*
+	 * Open the link object we just created.  Use O_RDWR only when the
+	 * entry carries data that must be written through it; otherwise a
+	 * read-only handle is enough for the identity check.
+	 */
+	tfd = openat(a->parent_fd, a->atmp_leaf,
+	    (a->filesize > 0 ? O_RDWR : O_RDONLY) | O_NOFOLLOW | O_CLOEXEC
+	    | O_BINARY | O_NONBLOCK);
+	if (tfd < 0 || fstat(tfd, &tst) != 0 || !S_ISREG(tst.st_mode) ||
+	    tst.st_dev != sst.st_dev || tst.st_ino != sst.st_ino) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Hard-link source '%s' changed while it was being "
+		    "validated; refusing to publish it", linkname);
+		goto out;
+	}
+
+#ifdef ARCHIVE_WRITE_DISK_TEST_HOOKS
+	if (a->test_hook != NULL)
+		a->test_hook(&a->archive, 1, a->name, a->test_hook_data);
+#endif
+
+	/* Publish: rename the verified temporary onto the final name. */
+	r = anchored_leaf_stat(a, &tst);
+	if (r < 0)
+		goto out;
+	if (r == 0) {
+		if (S_ISLNK(tst.st_mode)) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Refusing to replace existing symlink '%s' in "
+			    "anchored mode", a->name);
+			goto out;
+		}
+		if (anchored_remove_leaf(a) != ARCHIVE_OK)
+			goto out;
+	}
+	if (renameat(a->parent_fd, a->atmp_leaf,
+	    a->parent_fd, a->leaf) != 0) {
+		archive_set_error(&a->archive, errno,
+		    "Can't publish hardlink '%s'", a->name);
+		goto out;
+	}
+	a->atmp_leaf = NULL;
+	archive_string_empty(&a->_atmp_data);
+
+	/*
+	 * Only now may metadata be applied.  If the entry carries data,
+	 * keep the verified link object open for writing; otherwise the
+	 * source already owns the metadata and we leave it alone.
+	 *
+	 * A hardlink entry carrying data replaces the linked object's
+	 * contents.  Truncation is deliberately delayed until here: it must
+	 * not happen before the link object has been verified and
+	 * published.
+	 */
+	if (a->filesize > 0) {
+#if HAVE_FTRUNCATE
+		if (ftruncate(tfd, 0) != 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't truncate hardlink '%s'", a->name);
+			goto out;
+		}
+#endif
+		a->fd = tfd;
+		tfd = -1;
+	} else {
+		a->todo = 0;
+		a->deferred = 0;
+	}
+	a->pst = NULL;
+	result = ARCHIVE_OK;
+
+out:
+	if (tfd >= 0)
+		close(tfd);
+	if (srcfd >= 0)
+		close(srcfd);
+	if (srcparent >= 0)
+		close(srcparent);
+	if (result != ARCHIVE_OK)
+		anchored_abort_temp(a);
+	archive_string_free(&canon);
+	archive_string_free(&srcparent_path);
+	return (result);
+}
+
+/*
+ * Create the object for the current header.  On failure no partial
+ * object remains under the final name and any private temporary is
+ * removed.
+ */
+static int
+anchored_restore_entry(struct archive_write_disk *a)
+{
+	const char *hardlink;
+	__LA_MODE_T filetype;
+	char *slash;
+	int r;
+
+	hardlink = archive_entry_hardlink(a->entry);
+	filetype = archive_entry_filetype(a->entry);
+
+	/* Refuse special nodes outright: no partial object is produced. */
+	if (hardlink == NULL && filetype != 0 && filetype != AE_IFREG &&
+	    filetype != AE_IFDIR && filetype != AE_IFLNK) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Special file type is not supported in anchored mode: %s",
+		    a->name);
+		return (ARCHIVE_FAILED);
+	}
+
+	a->leaf = NULL;
+	archive_string_empty(&a->_leaf_data);
+	archive_string_empty(&a->_parent_data);
+	if (strcmp(a->name, ".") == 0) {
+		archive_strcpy(&a->_parent_data, ".");
+	} else {
+		slash = strrchr(a->name, '/');
+		if (slash == NULL) {
+			archive_strcpy(&a->_parent_data, ".");
+			archive_strcpy(&a->_leaf_data, a->name);
+		} else {
+			archive_strncat(&a->_parent_data, a->name,
+			    (size_t)(slash - a->name));
+			archive_strcpy(&a->_leaf_data, slash + 1);
+		}
+		a->leaf = a->_leaf_data.s;
+	}
+
+	if (a->leaf != NULL) {
+		int pf = -1;
+
+		r = anchored_walk(a, a->root_fd, a->_parent_data.s,
+		    (a->flags & ARCHIVE_EXTRACT_NO_AUTODIR) == 0, &pf);
+		if (r != ARCHIVE_OK)
+			return (r);
+		a->parent_fd = pf;
+	}
+
+	if (hardlink != NULL)
+		r = anchored_hardlink(a, hardlink);
+	else if (filetype == AE_IFLNK)
+		r = anchored_create_symlink(a);
+	else if (filetype == AE_IFDIR)
+		r = anchored_create_dir(a);
+	else
+		r = anchored_create_regular(a);
+
+	if (r < ARCHIVE_WARN) {
+		anchored_cleanup_entry(a);
+	}
+	return (r);
+}
+
+/*
+ * Apply immediate metadata using the opened file object.  No name-based
+ * operation is used here; the caller has verified the entry type.
+ */
+static int
+anchored_finish_metadata(struct archive_write_disk *a)
+{
+	int ret = ARCHIVE_OK, r2;
+	__LA_MODE_T ft = archive_entry_filetype(a->entry);
+
+	if (a->todo & (TODO_OWNER | TODO_SUID | TODO_SGID))
+		a->uid = archive_write_disk_uid(&a->archive,
+		    archive_entry_uname(a->entry),
+		    archive_entry_uid(a->entry));
+	if (a->todo & (TODO_OWNER | TODO_SGID | TODO_SUID))
+		a->gid = archive_write_disk_gid(&a->archive,
+		    archive_entry_gname(a->entry),
+		    archive_entry_gid(a->entry));
+
+	if (a->todo & TODO_OWNER) {
+		r2 = set_ownership(a);
+		if (r2 < ret)
+			ret = r2;
+	}
+
+	if (ft == AE_IFLNK) {
+		/*
+		 * There is no portable *at() interface for setting a
+		 * symlink's own mode or timestamps through an object
+		 * handle: lchmod() and (at least in principle) a
+		 * parent+name operation would re-resolve the final
+		 * component.  Symlink modes are not meaningful on the
+		 * supported platforms, so skip both rather than perform a
+		 * name-based metadata operation.
+		 */
+		a->todo &= ~(TODO_MODE | TODO_TIMES);
+		return (ret);
+	}
+
+	if (a->todo & TODO_MODE) {
+		r2 = set_mode(a, a->mode);
+		if (r2 < ret)
+			ret = r2;
+	}
+	if (a->todo & TODO_TIMES) {
+		r2 = set_times_from_entry(a);
+		if (r2 < ret)
+			ret = r2;
+	}
+	return (ret);
+}
+
+/*
+ * Apply one deferred directory fixup.  The directory object recorded at
+ * creation time is used; the name in the archive is never resolved
+ * again, so renames, replacement by symlinks, or the caller closing its
+ * original descriptor cannot redirect mode/mtime restoration.
+ */
+static int
+anchored_apply_fixup(struct archive_write_disk *a, struct fixup_entry *p)
+{
+	int fd = p->dirfd;
+	int r = ARCHIVE_OK, r2;
+
+	if (fd < 0)
+		return (ARCHIVE_OK);
+	if (p->fixup & TODO_TIMES) {
+		r2 = set_times(a, fd, p->mode, NULL,
+		    p->atime, p->atime_nanos,
+		    p->birthtime, p->birthtime_nanos,
+		    p->mtime, p->mtime_nanos,
+		    p->ctime, p->ctime_nanos);
+		if (r2 < r)
+			r = r2;
+	}
+	if (p->fixup & TODO_MODE_BASE) {
+		if (fchmod(fd, p->mode & 07777) != 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't restore directory permissions to 0%o",
+			    (int)(p->mode & 07777));
+			if (r > ARCHIVE_WARN)
+				r = ARCHIVE_WARN;
+		}
+	}
+	return (r);
+}
+#endif /* ANCHORED_DISK_EXTRACTION */
+
 static int
 lazy_stat(struct archive_write_disk *a)
 {
@@ -510,6 +1711,18 @@ lazy_stat(struct archive_write_disk *a)
 		return (ARCHIVE_OK);
 	}
 #endif
+	if (a->anchored) {
+		/*
+		 * Never fall back to a name-based lookup in anchored mode:
+		 * a re-resolved name may refer to a different object than
+		 * the one we created.  Callers that need stat data provide
+		 * it through object handles instead.
+		 */
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "No cached object information available for '%s'",
+		    a->name);
+		return (ARCHIVE_WARN);
+	}
 	/*
 	 * XXX At this point, symlinks should not be hit, otherwise
 	 * XXX a race occurred.  Do we want to check explicitly for that?
@@ -560,6 +1773,117 @@ archive_write_disk_set_options(struct archive *_a, int flags)
 
 
 /*
+ * Anchor this writer to a directory descriptor.
+ *
+ * The descriptor is validated (it must be a directory), then duplicated
+ * into a private close-on-exec descriptor owned by the writer.  On
+ * success the caller may close its own descriptor.  Passing -1 restores
+ * the default, process-relative behaviour, but only before the first
+ * header has been written.  On failure the previous configuration is
+ * left untouched.
+ */
+int
+archive_write_disk_set_root_fd(struct archive *_a, int fd)
+{
+	struct archive_write_disk *a = (struct archive_write_disk *)_a;
+
+	archive_check_magic(&a->archive, ARCHIVE_WRITE_DISK_MAGIC,
+	    ARCHIVE_STATE_ANY | ARCHIVE_STATE_FATAL,
+	    "archive_write_disk_set_root_fd");
+
+	if (fd == -1) {
+		if (a->root_locked) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Cannot clear the extraction root after a "
+			    "header has been written");
+			return (ARCHIVE_FAILED);
+		}
+		/*
+		 * Restore the default mode.  This is only reachable before
+		 * the first header, so no entry state can be outstanding.
+		 */
+		if (a->anchored) {
+			anchored_cleanup_entry(a);
+			close(a->root_fd);
+			a->root_fd = -1;
+			a->anchored = 0;
+		}
+		return (ARCHIVE_OK);
+	}
+	if (fd < 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Invalid directory descriptor %d", fd);
+		return (ARCHIVE_FAILED);
+	}
+	if (a->root_locked) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Cannot change the extraction root after a header has "
+		    "been written");
+		return (ARCHIVE_FAILED);
+	}
+
+#ifdef ANCHORED_DISK_EXTRACTION
+	{
+		struct stat st, nst;
+		int nfd;
+
+		/*
+		 * Validate the caller's descriptor; do not disturb a
+		 * previously-valid configuration on failure.
+		 */
+		if (fstat(fd, &st) != 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't examine descriptor %d", fd);
+			return (ARCHIVE_FAILED);
+		}
+		if (!S_ISDIR(st.st_mode)) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Descriptor %d is not a directory", fd);
+			return (ARCHIVE_FAILED);
+		}
+		nfd = anchored_dup_cloexec(fd);
+		if (nfd < 0) {
+			archive_set_error(&a->archive, errno,
+			    "Can't duplicate directory descriptor %d", fd);
+			return (ARCHIVE_FAILED);
+		}
+		/*
+		 * Re-verify through our private descriptor.  This closes the
+		 * window where the caller closes and reuses the original
+		 * descriptor between fstat() and dup().
+		 */
+		if (fstat(nfd, &nst) != 0 || !S_ISDIR(nst.st_mode) ||
+		    nst.st_dev != st.st_dev || nst.st_ino != st.st_ino) {
+			close(nfd);
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Directory descriptor %d changed while it was "
+			    "being adopted", fd);
+			return (ARCHIVE_FAILED);
+		}
+		if (a->anchored) {
+			/*
+			 * Replacing a previously-installed root before any
+			 * header: release any per-entry state still bound to
+			 * the old root before swapping handles.
+			 */
+			anchored_cleanup_entry(a);
+			if (a->root_fd >= 0)
+				close(a->root_fd);
+		}
+		a->root_fd = nfd;
+		a->anchored = 1;
+		return (ARCHIVE_OK);
+	}
+#else
+	archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+	    "Directory-anchored extraction is not supported on this "
+	    "platform (required POSIX *at() interfaces are unavailable)");
+	return (ARCHIVE_FAILED);
+#endif
+}
+
+
+/*
  * Extract this entry to disk.
  *
  * TODO: Validate hardlinks.  According to the standards, we're
@@ -592,6 +1916,7 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	a->pst = NULL;
 	a->current_fixup = NULL;
 	a->deferred = 0;
+	a->entry_dirfd = -1;
 	if (a->entry) {
 		archive_entry_free(a->entry);
 		a->entry = NULL;
@@ -601,6 +1926,12 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	a->fd_offset = 0;
 	a->offset = 0;
 	a->restore_pwd = -1;
+	a->parent_fd = -1;
+	a->leaf = NULL;
+	a->atmp_leaf = NULL;
+	archive_string_empty(&a->_parent_data);
+	archive_string_empty(&a->_leaf_data);
+	archive_string_empty(&a->_atmp_data);
 	a->uid = a->user_uid;
 	a->mode = archive_entry_mode(a->entry);
 	if (archive_entry_size_is_set(a->entry))
@@ -610,6 +1941,10 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	archive_strcpy(&(a->_name_data), archive_entry_pathname(a->entry));
 	a->name = a->_name_data.s;
 	archive_clear_error(&a->archive);
+
+	/* Once the first header is accepted, the root is frozen. */
+	if (a->archive.state & ARCHIVE_STATE_HEADER)
+		a->root_locked = 1;
 
 	/*
 	 * Clean up the requested path.  This is necessary for correct
@@ -737,7 +2072,7 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 			a->todo |= TODO_MAC_METADATA;
 	}
 #if defined(__APPLE__) && defined(UF_COMPRESSED) && defined(HAVE_ZLIB_H)
-	if ((a->flags & ARCHIVE_EXTRACT_NO_HFS_COMPRESSION) == 0) {
+	if (!a->anchored && (a->flags & ARCHIVE_EXTRACT_NO_HFS_COMPRESSION) == 0) {
 		unsigned long set, clear;
 		archive_entry_fflags(a->entry, &set, &clear);
 		if ((set & ~clear) & UF_COMPRESSED) {
@@ -745,12 +2080,13 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 			a->decmpfs_block_count = (unsigned)-1;
 		}
 	}
-	if ((a->flags & ARCHIVE_EXTRACT_HFS_COMPRESSION_FORCED) != 0 &&
+	if (!a->anchored &&
+	    (a->flags & ARCHIVE_EXTRACT_HFS_COMPRESSION_FORCED) != 0 &&
 	    (a->mode & AE_IFMT) == AE_IFREG && a->filesize > 0) {
 		a->todo |= TODO_HFS_COMPRESSION;
 		a->decmpfs_block_count = (unsigned)-1;
 	}
-	{
+	if (!a->anchored) {
 		const char *p;
 
 		/* Check if the current file name is a type of the
@@ -786,24 +2122,49 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	}
 	if (a->flags & ARCHIVE_EXTRACT_FFLAGS)
 		a->todo |= TODO_FFLAGS;
-	if (a->flags & ARCHIVE_EXTRACT_SECURE_SYMLINKS) {
-		ret = check_symlinks(a);
+
+	if (a->anchored) {
+#ifdef ANCHORED_DISK_EXTRACTION
+		/*
+		 * Options this mode does not implement must be refused
+		 * before the entry is created, not silently ignored.
+		 */
+		if (a->flags & (ARCHIVE_EXTRACT_ACL | ARCHIVE_EXTRACT_XATTR |
+		    ARCHIVE_EXTRACT_MAC_METADATA | ARCHIVE_EXTRACT_OWNER |
+		    ARCHIVE_EXTRACT_FFLAGS)) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Anchored extraction does not support ACL, xattr, "
+			    "mac metadata, ownership or fflags restoration");
+			return (ARCHIVE_FAILED);
+		}
+		ret = anchored_validate_path(a);
 		if (ret != ARCHIVE_OK)
 			return (ret);
-	}
-#if defined(HAVE_FCHDIR) && defined(PATH_MAX)
-	/* If path exceeds PATH_MAX, shorten the path. */
-	edit_deep_directories(a);
+		ret = anchored_restore_entry(a);
+#else
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Anchored extraction is not supported on this platform");
+		return (ARCHIVE_FAILED);
 #endif
-
-	ret = restore_entry(a);
+	} else {
+		if (a->flags & ARCHIVE_EXTRACT_SECURE_SYMLINKS) {
+			ret = check_symlinks(a);
+			if (ret != ARCHIVE_OK)
+				return (ret);
+		}
+#if defined(HAVE_FCHDIR) && defined(PATH_MAX)
+		/* If path exceeds PATH_MAX, shorten the path. */
+		edit_deep_directories(a);
+#endif
+		ret = restore_entry(a);
+	}
 
 #if defined(__APPLE__) && defined(UF_COMPRESSED) && defined(HAVE_ZLIB_H)
 	/*
 	 * Check if the filesystem the file is restoring on supports
 	 * HFS+ Compression. If not, cancel HFS+ Compression.
 	 */
-	if (a->todo | TODO_HFS_COMPRESSION) {
+	if (!a->anchored && (a->todo | TODO_HFS_COMPRESSION)) {
 		/*
 		 * NOTE: UF_COMPRESSED is ignored even if the filesystem
 		 * supports HFS+ Compression because the file should
@@ -846,7 +2207,66 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 	 * because it is relative to the base dir and the edited path
 	 * might be relative to some intermediate dir as a result of the
 	 * deep restore logic.
+	 *
+	 * In anchored mode there is no name-based fixup: the record is
+	 * bound to the directory object we opened when creating the entry,
+	 * so nothing at close time re-resolves a path.
 	 */
+	if (a->anchored) {
+		/*
+		 * Build one fixup record for this entry and bind the
+		 * directory object we opened while creating it.  Nothing
+		 * here stores a path for later resolution.
+		 */
+		if (a->deferred != 0 || a->entry_dirfd >= 0) {
+			if ((a->deferred & TODO_MODE) != 0)
+				a->deferred |= TODO_MODE_BASE;
+			fe = current_fixup(a, archive_entry_pathname(entry));
+			if (fe == NULL)
+				return (ARCHIVE_FATAL);
+			fe->filetype = archive_entry_filetype(entry);
+			fe->mode = a->mode;
+			if (a->deferred & TODO_MODE_BASE)
+				fe->fixup |= TODO_MODE_BASE;
+			if ((a->deferred & TODO_TIMES)
+			    && (archive_entry_mtime_is_set(entry)
+				|| archive_entry_atime_is_set(entry))) {
+				fe->fixup |= TODO_TIMES;
+				if (archive_entry_atime_is_set(entry)) {
+					fe->atime =
+					    archive_entry_atime(entry);
+					fe->atime_nanos =
+					    archive_entry_atime_nsec(entry);
+				} else {
+					fe->atime = a->start_time;
+					fe->atime_nanos = 0;
+				}
+				if (archive_entry_mtime_is_set(entry)) {
+					fe->mtime =
+					    archive_entry_mtime(entry);
+					fe->mtime_nanos =
+					    archive_entry_mtime_nsec(entry);
+				} else {
+					fe->mtime = a->start_time;
+					fe->mtime_nanos = 0;
+				}
+				if (archive_entry_birthtime_is_set(entry)) {
+					fe->birthtime =
+					    archive_entry_birthtime(entry);
+					fe->birthtime_nanos =
+					    archive_entry_birthtime_nsec(entry);
+				} else {
+					fe->birthtime = fe->mtime;
+					fe->birthtime_nanos =
+					    fe->mtime_nanos;
+				}
+			}
+			if (a->entry_dirfd >= 0) {
+				fe->dirfd = a->entry_dirfd;
+				a->entry_dirfd = -1;
+			}
+		}
+	} else {
 	if (a->deferred & TODO_MODE) {
 		fe = current_fixup(a, archive_entry_pathname(entry));
 		if (fe == NULL)
@@ -928,6 +2348,7 @@ _archive_write_disk_header(struct archive *_a, struct archive_entry *entry)
 		fe->fixup |= TODO_FFLAGS;
 		/* TODO: Complete this.. defer fflags from below. */
 	}
+	} /* !a->anchored */
 
 	/* We've created the object and are ready to pour data into it. */
 	if (ret >= ARCHIVE_WARN)
@@ -1778,6 +3199,17 @@ _archive_write_disk_finish_entry(struct archive *_a)
 
 	/* Restore metadata. */
 
+	if (a->anchored) {
+		/*
+		 * Everything here uses the opened file object; nothing is
+		 * resolved by name.
+		 */
+		int r2 = anchored_finish_metadata(a);
+		if (r2 < ret)
+			ret = r2;
+		goto finish_metadata;
+	}
+
 	/*
 	 * This is specific to Mac OS X.
 	 * If the current file is an AppleDouble file, it should be
@@ -1902,6 +3334,39 @@ _archive_write_disk_finish_entry(struct archive *_a)
 	}
 
 finish_metadata:
+	if (a->anchored) {
+		/* Commit any SAFE_WRITES temporary in the destination parent. */
+		if (a->fd >= 0) {
+			close(a->fd);
+			a->fd = -1;
+		}
+		if (a->atmp_leaf != NULL) {
+			if (a->parent_fd < 0) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Lost destination directory handle while "
+				    "committing a temporary file");
+				ret = ARCHIVE_FAILED;
+				a->atmp_leaf = NULL;
+				archive_string_empty(&a->_atmp_data);
+			} else if (renameat(a->parent_fd, a->atmp_leaf,
+			    a->parent_fd, a->leaf) != 0) {
+				archive_set_error(&a->archive, errno,
+				    "Failed to rename temporary file");
+				ret = ARCHIVE_FAILED;
+				anchored_abort_temp(a);
+			} else {
+				a->atmp_leaf = NULL;
+				archive_string_empty(&a->_atmp_data);
+			}
+		}
+		anchored_cleanup_entry(a);
+		archive_entry_free(a->entry);
+		a->entry = NULL;
+		a->archive.state = ARCHIVE_STATE_HEADER;
+		return (ret);
+	}
+
 	/* If there's an fd, we can close it now. */
 	if (a->fd >= 0) {
 		close(a->fd);
@@ -1999,6 +3464,10 @@ archive_write_disk_new(void)
 	a->archive.state = ARCHIVE_STATE_HEADER;
 	a->archive.vtable = &archive_write_disk_vtable;
 	a->start_time = time(NULL);
+	a->fd = -1;
+	a->root_fd = -1;
+	a->parent_fd = -1;
+	a->entry_dirfd = -1;
 	/* Query and restore the umask. */
 	umask(a->user_umask = umask(0));
 #ifdef HAVE_GETEUID
@@ -2524,6 +3993,43 @@ _archive_write_disk_close(struct archive *_a)
 		fd = -1;
 		a->pst = NULL; /* Mark stat cache as out-of-date. */
 
+		if (a->anchored) {
+#ifdef ANCHORED_DISK_EXTRACTION
+			/*
+			 * The fixup carries the directory object it was
+			 * created for.  Apply metadata through that object;
+			 * never re-resolve a name.
+			 */
+			next = p->next;
+			if (p->dirfd >= 0 && p->fixup != 0) {
+				int r2 = anchored_apply_fixup(a, p);
+				if (r2 < ret)
+					ret = r2;
+			} else if (p->fixup != 0) {
+				/*
+				 * A deferred record with no bound object must
+				 * never fall back to a name lookup.
+				 */
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Deferred metadata for '%s' has no bound "
+				    "directory object", p->name);
+				if (ret > ARCHIVE_WARN)
+					ret = ARCHIVE_WARN;
+			}
+			if (p->dirfd >= 0)
+				close(p->dirfd);
+			archive_acl_clear(&p->acl);
+			free(p->mac_metadata);
+			free(p->name);
+			free(p);
+			p = next;
+			continue;
+#else
+			goto skip_fixup_entry;
+#endif
+		}
+
 		/* We must strip trailing slashes from the path to avoid
 		   dereferencing symbolic links to directories */
 		c = p->name;
@@ -2633,6 +4139,8 @@ skip_fixup_entry:
 		free(p->name);
 		if (fd >= 0)
 			close(fd);
+		if (p->dirfd >= 0)
+			close(p->dirfd);
 		free(p);
 		p = next;
 	}
@@ -2654,6 +4162,19 @@ _archive_write_disk_free(struct archive *_a)
 	archive_write_disk_set_group_lookup(&a->archive, NULL, NULL, NULL);
 	archive_write_disk_set_user_lookup(&a->archive, NULL, NULL, NULL);
 	archive_entry_free(a->entry);
+	a->entry = NULL;
+	if (a->root_fd >= 0) {
+		close(a->root_fd);
+		a->root_fd = -1;
+	}
+	if (a->entry_dirfd >= 0) {
+		close(a->entry_dirfd);
+		a->entry_dirfd = -1;
+	}
+	a->parent_fd = -1;
+	archive_string_free(&a->_parent_data);
+	archive_string_free(&a->_leaf_data);
+	archive_string_free(&a->_atmp_data);
 	archive_string_free(&a->_name_data);
 	archive_string_free(&a->_tmpname_data);
 	archive_string_free(&a->archive.error_string);
@@ -2768,6 +4289,7 @@ new_fixup(struct archive_write_disk *a, const char *pathname)
 	a->fixup_list = fe;
 	fe->fixup = 0;
 	fe->filetype = 0;
+	fe->dirfd = -1;
 	fe->name = strdup(pathname);
 	return (fe);
 }
@@ -3787,8 +5309,12 @@ set_mode(struct archive_write_disk *a, int mode)
 		 * permissions on symlinks probably ignores
 		 * permissions on symlinks, so a failure here has no
 		 * impact.
+		 *
+		 * In anchored mode lchmod() is unavailable: it is
+		 * name-based and there is no *at() equivalent.  Symlink
+		 * modes are not meaningful there, so skip it entirely.
 		 */
-		if (lchmod(a->name, mode) != 0) {
+		if (!a->anchored && lchmod(a->name, mode) != 0) {
 			switch (errno) {
 			case ENOTSUP:
 			case ENOSYS:
@@ -4741,8 +6267,11 @@ archive_write_disk_set_acls(struct archive *a, int fd, const char *name,
 }
 #endif
 
-/*
- * Close the file descriptor if one is open.
+/**
+ * Close the file descriptor if one is open.  In anchored mode this is
+ * only called on error paths, so it also discards the entry's private
+ * temporary item and drops the retained parent handle; the destination
+ * directory itself is never touched beyond removing our own temporary.
  */
 static void close_file_descriptor(struct archive_write_disk* a)
 {
@@ -4750,6 +6279,8 @@ static void close_file_descriptor(struct archive_write_disk* a)
 		close(a->fd);
 		a->fd = -1;
 	}
+	if (a->anchored)
+		anchored_cleanup_entry(a);
 }
 
 

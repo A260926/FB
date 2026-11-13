@@ -821,6 +821,27 @@ archive_write_disk_set_options(struct archive *_a, int flags)
 
 
 /*
+ * Directory-anchored extraction relies on POSIX directory descriptors
+ * and the *at() family of calls; it is unavailable on Windows.  Report
+ * that explicitly rather than silently degrading to path-based access.
+ */
+int
+archive_write_disk_set_root_fd(struct archive *_a, int fd)
+{
+	struct archive_write_disk *a = (struct archive_write_disk *)_a;
+
+	archive_check_magic(&a->archive, ARCHIVE_WRITE_DISK_MAGIC,
+	    ARCHIVE_STATE_ANY | ARCHIVE_STATE_FATAL,
+	    "archive_write_disk_set_root_fd");
+	(void)fd;
+	archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+	    "Directory-anchored extraction is not supported on this "
+	    "platform");
+	return (ARCHIVE_FAILED);
+}
+
+
+/*
  * Extract this entry to disk.
  *
  * TODO: Validate hardlinks.  According to the standards, we're

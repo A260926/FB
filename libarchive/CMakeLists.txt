@@ -258,8 +258,15 @@ ENDIF(BUILD_SHARED_LIBS)
 ADD_LIBRARY(archive_static STATIC ${libarchive_SOURCES} ${include_HEADERS})
 TARGET_INCLUDE_DIRECTORIES(archive_static PUBLIC .)
 TARGET_LINK_LIBRARIES(archive_static ${ADDITIONAL_LIBS})
-SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
-  LIBARCHIVE_STATIC)
+IF(ENABLE_TEST)
+  # Deterministic race hooks for the directory-anchored writer are only
+  # compiled into the static library used by the test suite.
+  SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
+    "LIBARCHIVE_STATIC;ARCHIVE_WRITE_DISK_TEST_HOOKS")
+ELSE(ENABLE_TEST)
+  SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
+    LIBARCHIVE_STATIC)
+ENDIF(ENABLE_TEST)
 # On Posix systems, libarchive.so and libarchive.a can co-exist.
 IF(NOT WIN32 OR CYGWIN OR NOT BUILD_SHARED_LIBS)
   SET_TARGET_PROPERTIES(archive_static PROPERTIES OUTPUT_NAME archive)

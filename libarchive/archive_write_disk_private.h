@@ -40,4 +40,15 @@ struct archive_write_disk;
 int archive_write_disk_set_acls(struct archive *, int, const char *,
     struct archive_acl *, __LA_MODE_T);
 
+#ifdef ARCHIVE_WRITE_DISK_TEST_HOOKS
+/*
+ * Deterministic test hooks for the directory-anchored writer.  Only
+ * built into the library for the test suite.  op 0 fires after a
+ * hardlink source has been verified; op 1 fires immediately before a
+ * hardlink's final name is published.
+ */
+int archive_write_disk_set_test_hook(struct archive *,
+    void (*)(struct archive *, int, const char *, void *), void *);
+#endif
+
 #endif

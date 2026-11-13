@@ -22,12 +22,13 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd January 19, 2020
+.Dd November 14, 2026
 .Dt ARCHIVE_WRITE_DISK 3
 .Os
 .Sh NAME
 .Nm archive_write_disk_new ,
 .Nm archive_write_disk_set_options ,
+.Nm archive_write_disk_set_root_fd ,
 .Nm archive_write_disk_set_skip_file ,
 .Nm archive_write_disk_set_group_lookup ,
 .Nm archive_write_disk_set_standard_lookup ,
@@ -41,6 +42,8 @@ Streaming Archive Library (libarchive, -larchive)
 .Fn archive_write_disk_new "void"
 .Ft int
 .Fn archive_write_disk_set_options "struct archive *" "int flags"
+.Ft int
+.Fn archive_write_disk_set_root_fd "struct archive *" "int fd"
 .Ft int
 .Fn archive_write_disk_set_skip_file "struct archive *" "dev_t" "ino_t"
 .Ft int
@@ -83,6 +86,54 @@ interface used to write objects to a streaming archive.
 Allocates and initializes a
 .Tn struct archive
 object suitable for writing objects to disk.
+.It Fn archive_write_disk_set_root_fd
+Anchor all subsequent extraction to the directory referred to by
+.Fa fd ,
+which must be a directory.
+The writer validates the descriptor, then duplicates it into a private
+close-on-exec descriptor that it owns; after a successful call the
+caller may close its own descriptor.
+Every archive pathname is then interpreted relative to that directory.
+Absolute paths, empty paths and any path containing a
+.Pa ..
+component are rejected, and hardlink targets obey the same rules.
+Intermediate components are opened one at a time with
+.Xr openat 2
+and
+.Dv O_NOFOLLOW | O_DIRECTORY ,
+and creates, unlinks, renames and metadata changes are all performed
+through descriptors that have already been obtained.
+Consequently, renaming an ancestor, replacing it with a symbolic link,
+or closing the caller's descriptor cannot redirect later operations.
+Hardlinks are only accepted for regular files that resolve inside the
+root: the source object is opened and verified, a private temporary link
+is created in the destination's parent, the link object is compared with
+the verified source by device, inode and type, and only then is the final
+name published with
+.Xr renameat 2 .
+.Tn ARCHIVE_EXTRACT_SAFE_WRITES
+temporaries are likewise created and committed in the destination
+parent.
+Device nodes, FIFOs and sockets are refused.
+ACL, extended attribute, ownership and file flag restoration are not
+supported in this mode; requesting them causes the entry to fail before
+it is created.
+Deferred directory modes and timestamps are applied through the
+directory descriptor that was opened when the entry was created, so a
+later rename or replacement cannot make them hit a different object.
+.Pp
+Passing
+.Fa -1
+restores the default process-relative behaviour and is only permitted
+before the first header has been written; after that, and for any
+invalid descriptor, the call fails with
+.Cm ARCHIVE_FAILED
+and leaves the existing configuration unchanged.
+If the platform lacks the required POSIX
+.Xr openat 2
+family, the call fails with
+.Cm ARCHIVE_FAILED
+rather than falling back to path-based access.
 .It Fn archive_write_disk_set_skip_file
 Records the device and inode numbers of a file that should not be
 overwritten.
@@ -254,6 +305,20 @@ returns a pointer to a newly-allocated
 .Tn struct archive
 object.
 .Pp
+.Fn archive_write_disk_set_root_fd
+returns
+.Cm ARCHIVE_OK
+on success.
+It returns
+.Cm ARCHIVE_FAILED
+if the descriptor is not a directory, if the root is already frozen by
+an earlier header, or if the platform does not provide the required
+POSIX
+.Xr openat 2
+interfaces.
+In every failure case the previously configured root, if any, is left
+intact.
+.Pp
 .Fn archive_write_data
 returns a count of the number of bytes actually written,
 or
@@ -309,6 +374,17 @@ or before calling
 you may confuse the permission-setting logic with
 the result that directory permissions are restored
 incorrectly.
+This paragraph does not apply after a successful
+.Fn archive_write_disk_set_root_fd :
+that mode never consults or changes the process' current directory,
+and deferred metadata is bound to the directory object that was opened.
+.Pp
+In the directory-anchored mode, the authorization boundary follows the
+directory object that was passed in.
+The caller is responsible for not moving already-opened subdirectories
+outside the tree it authorized.
+An inode that already had a hardlink alias outside the tree before
+extraction is not isolated from that alias.
 .Pp
 The library attempts to create objects with filenames longer than
 .Cm PATH_MAX

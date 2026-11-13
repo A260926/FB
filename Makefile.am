@@ -27,6 +27,9 @@ DISTCHECK_CONFIGURE_FLAGS = --enable-bsdtar --enable-bsdcpio
 AM_CFLAGS=$(DEV_CFLAGS)
 PLATFORMCPPFLAGS = @PLATFORMCPPFLAGS@
 AM_CPPFLAGS=$(PLATFORMCPPFLAGS)
+# Deterministic race hooks for the directory-anchored writer are only
+# compiled into test builds (these are static archives/test binaries).
+TEST_HOOK_CPPFLAGS = -DARCHIVE_WRITE_DISK_TEST_HOOKS
 
 #
 # What to include in the distribution
@@ -575,6 +578,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_ustar_filename_encoding.c \
 	libarchive/test/test_warn_missing_hardlink_target.c \
 	libarchive/test/test_write_disk.c \
+	libarchive/test/test_write_disk_anchored.c \
 	libarchive/test/test_write_disk_appledouble.c \
 	libarchive/test/test_write_disk_failures.c \
 	libarchive/test/test_write_disk_fixup.c \
@@ -663,7 +667,7 @@ libarchive_test_CPPFLAGS= \
 	-I$(top_srcdir)/libarchive/test \
 	-I$(top_srcdir)/test_utils \
 	-I$(top_builddir)/libarchive/test \
-	-DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
+	-DLIBARCHIVE_STATIC $(TEST_HOOK_CPPFLAGS) $(PLATFORMCPPFLAGS)
 
 libarchive_test_LDADD= $(LTLIBICONV)
 

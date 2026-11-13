@@ -886,6 +886,9 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the `mkdir' function. */
 #cmakedefine HAVE_MKDIR 1
 
+/* Define to 1 if you have the `mkdirat' function. */
+#cmakedefine HAVE_MKDIRAT 1
+
 /* Define to 1 if you have the `mkfifo' function. */
 #cmakedefine HAVE_MKFIFO 1
 
@@ -972,6 +975,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the <readpassphrase.h> header file. */
 #cmakedefine HAVE_READPASSPHRASE_H 1
+
+/* Define to 1 if you have the `renameat' function. */
+#cmakedefine HAVE_RENAMEAT 1
 
 /* Define to 1 if you have the <regex.h> header file. */
 #cmakedefine HAVE_REGEX_H 1
@@ -1093,6 +1099,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the `symlink' function. */
 #cmakedefine HAVE_SYMLINK 1
+
+/* Define to 1 if you have the `symlinkat' function. */
+#cmakedefine HAVE_SYMLINKAT 1
 
 /* Define to 1 if you have the `sysconf' function. */
 #cmakedefine HAVE_SYSCONF 1

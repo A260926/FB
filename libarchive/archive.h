@@ -918,6 +918,15 @@ __LA_DECL int archive_write_set_passphrase_callback(struct archive *,
  * to pull entries out of an archive and create them on disk.
  */
 __LA_DECL struct archive	*archive_write_disk_new(void);
+/* Anchor all subsequent extraction to a directory file descriptor.
+ * fd >= 0: verify it is a directory and take a private, close-on-exec
+ *          duplicate; the caller may close its own descriptor on success.
+ * fd == -1: restore the default (process-relative) mode.  This is only
+ *          allowed before the first header has been written.
+ * Returns ARCHIVE_OK, ARCHIVE_FAILED if the root is already locked or
+ * the descriptor is not a directory, or an error if the platform does
+ * not support the required POSIX *at() interfaces. */
+__LA_DECL int archive_write_disk_set_root_fd(struct archive *, int fd);
 /* This file will not be overwritten. */
 __LA_DECL int archive_write_disk_set_skip_file(struct archive *,
     la_int64_t, la_int64_t);
