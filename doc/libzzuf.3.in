@@ -130,6 +130,75 @@ monitor all standard IO streams functions. On other systems, such as Linux,
 each function is reimplemented on a case by case basis. One important
 unimplemented function is \fBfscanf\fR(), because of its complexity. Missing
 functions will be added upon user request.
+.SH "OPEN IDENTITIES AND DUPLICATED DESCRIPTORS"
+.PP
+Every successful \fBopen\fR() of a watched regular file creates a new
+.IR "open identity" .
+The identity owns the fuzzing seed and ratio, the active flag used by
+\fBZZUF_LIST\fR, the shared file position and the cached 1024-byte mutation
+chunks. Two independent \fBopen\fR() calls never share an identity, even when
+they open the same path twice; with auto-increment each identity still
+receives the next seed in opening order.
+.PP
+\fBdup\fR() and \fBdup2\fR() do not create identities. The new descriptor
+refers to the source descriptor's identity through a reference count, so all
+aliases share the seed, ratio, active flag and file position, and the alias
+consumes neither a new auto-increment seed nor a new file selection index.
+\fBlseek\fR() through any alias moves the shared position visible to every
+other alias; \fBpread\fR() mutates the bytes at its explicit offset without
+changing that position, so the next \fBread\fR() resumes where the stream was.
+Closing one alias leaves the others untouched; the identity and its cached
+state are released only when the last descriptor referring to it is closed,
+and reusing the freed descriptor number in a later \fBopen\fR() starts a fresh
+identity. A failed \fBdup2\fR() changes nothing. On success, a watched target
+first loses its old identity before the source identity is attached; when the
+source is not watched, the target loses any previous monitoring instead of
+keeping a stale seed.
+.PP
+As a consequence, any interleaving of \fBread\fR(), \fBreadv\fR(),
+\fBpread\fR() and \fBlseek\fR() on the aliases of one identity produces the
+same bytes as mutating the whole file once, by absolute file position, with
+that identity's seed and ratio and then slicing the result. The xor/set/unset
+modes, byte protection and refusal rules are unaffected.
+.PP
+C example, using only POSIX interfaces:
+.PP
+.nf
+.RS
+#include <fcntl.h>
+#include <unistd.h>
+
+int main(void)
+{
+    char buf[64];
+    int fd  = open("input", O_RDONLY);
+    int dfd = dup(fd);                /* same seed, ratio and position */
+
+    if (read(fd, buf, 16) != 16)      /* both aliases now sit at 16 */
+        return 1;
+    if (pread(dfd, buf, 32, 128) != 32) /* offset 128, position stays 16 */
+        return 1;
+    if (lseek(dfd, 0, SEEK_SET) == -1)  /* shared position back to 0 */
+        return 1;
+
+    close(fd);                        /* dfd keeps the identity alive */
+    if (read(dfd, buf, 64) != 64)
+        return 1;
+    close(dfd);                       /* last close releases the identity */
+    return 0;
+}
+.RE
+.fi
+.PP
+Build and run it from Bash as an ordinary program:
+.PP
+.RS
+cc example.c -o example
+zzuf -s 41 -r 0.05 ./example
+.RE
+.PP
+The same program can be run with the preloaded library directly, using
+\fBLD_PRELOAD\fR on Linux or \fBDYLD_INSERT_LIBRARIES\fR on Mac OS X.
 .SH SEE ALSO
 .PP
 \fBzzuf(1)\fR, \fBld.so(8)\fR

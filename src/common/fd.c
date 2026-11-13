@@ -12,7 +12,24 @@
  */
 
 /*
- *  libzzuf.c: preloaded wrapper library
+ *  fd.c: file descriptor bookkeeping
+ *
+ *  Ownership model
+ *  ---------------
+ *  A "open identity" (struct zz_identity) is the state created by one
+ *  open(): the fuzz context (seed, ratio, enable flag), the shared file
+ *  position and the chunk cache. Every descriptor produced by dup() or
+ *  dup2() is merely another name for the same identity: the descriptors
+ *  share the identity through a reference count, so aliases inherit the
+ *  seed, ratio, active state and file position, consume neither a new
+ *  auto-increment seed nor a new file selection index, and closing one
+ *  alias leaves the others untouched. The identity is released only when
+ *  its last descriptor goes away; reusing the freed descriptor number in
+ *  a later open() creates a brand new identity.
+ *
+ *  The fds[] array only maps descriptor numbers to identity indices. It
+ *  may be reallocated when the table grows, but identities are always
+ *  referenced by index, so the move cannot leave dangling references.
  */
 
 #include "config.h"
@@ -57,24 +74,33 @@ static int has_include = 0, has_exclude = 0;
 static int64_t *list = NULL;
 static int64_t static_list[512];
 
-/* File descriptor stuff. When program is launched, we use the static array of
- * 32 structures, which ought to be enough for most programs. If it happens
- * not to be the case, ie. if the process opens more than 32 file descriptors
- * at the same time, a bigger array is malloc()ed and replaces the static one.
+/* When the program starts we use static arrays of 32 entries, which is
+ * enough for most programs. If more descriptors are needed at the same
+ * time, bigger arrays are malloc()ed and replace the static ones.
+ *
+ * files[] holds the open identities (indexed by identity id); fds[] maps
+ * descriptor numbers to identity ids, or -1 when the descriptor is not
+ * watched. Identity ids remain valid across realloc() because fds[] only
+ * stores indices, never pointers into files[].
  */
 #define STATIC_FILES 32
-static struct files
+
+static struct zz_identity
 {
     int managed, locked, active, already_fuzzed;
     int64_t pos, already_pos;
+    /* Number of watched descriptors currently referring to this
+     * identity; the identity is released when it drops to zero. */
+    int refcount;
     /* Public stuff */
     fuzz_context_t fuzz;
 }
 *files, static_files[STATIC_FILES];
+
 static int *fds, static_fds[STATIC_FILES];
 static int maxfd, nfiles;
 
-/* Spinlock. This variable protects the fds variable. */
+/* Spinlock. This variable protects the fds and files arrays. */
 static zzuf_mutex_t fds_mutex = 0;
 
 /* Create lock. This lock variable is used to disable file descriptor
@@ -179,13 +205,17 @@ void _zz_fd_init(void)
 
 void _zz_fd_fini(void)
 {
-    for (int i = 0; i < maxfd; ++i)
+    for (int i = 0; i < nfiles; ++i)
     {
-        if (!files[fds[i]].managed)
+        if (!files[i].managed)
             continue;
 
         /* XXX: What are we supposed to do? If filedescriptors weren't
          * closed properly, there's a leak, but it's not our problem. */
+#if defined HAVE_FGETLN
+        if (files[i].fuzz.tmp)
+            free(files[i].fuzz.tmp);
+#endif
     }
 
 #if defined HAVE_REGEX_H
@@ -196,7 +226,7 @@ void _zz_fd_fini(void)
 #endif
 
     if (files != static_files)
-       free(files);
+        free(files);
     if (fds != static_fds)
         free(fds);
     if (list != static_list)
@@ -233,6 +263,73 @@ int _zz_mustwatchw(wchar_t const *file)
     return 1; /* default */
 }
 
+/* Grow fds[] until descriptor fd fits in. fds_mutex must be held. */
+static void grow_fds(int fd)
+{
+    while (fd >= maxfd)
+    {
+        if (fds == static_fds)
+        {
+            fds = malloc(2 * maxfd * sizeof(*fds));
+            memcpy(fds, static_fds, maxfd * sizeof(*fds));
+        }
+        else
+            fds = realloc(fds, 2 * maxfd * sizeof(*fds));
+        for (int i = maxfd; i < maxfd * 2; ++i)
+            fds[i] = -1;
+        maxfd *= 2;
+    }
+}
+
+/* Find an unused identity slot, growing files[] if none is available.
+ * fds_mutex must be held. */
+static int alloc_identity(void)
+{
+    int i;
+
+    for (i = 0; i < nfiles; ++i)
+        if (files[i].managed == 0)
+            break;
+
+    if (i == nfiles)
+    {
+        /* Copy only the nfiles entries the static array actually holds;
+         * growing first and memcpy()ing the new size would read one
+         * element past static_files. */
+        if (files == static_files)
+        {
+            files = malloc((nfiles + 1) * sizeof(*files));
+            memcpy(files, static_files, nfiles * sizeof(*files));
+        }
+        else
+            files = realloc(files, (nfiles + 1) * sizeof(*files));
+        nfiles++;
+    }
+
+    return i;
+}
+
+/* Drop one reference to an identity and free it when the last alias
+ * goes away. fds_mutex must be held. */
+static void release_identity(int i)
+{
+    if (i < 0 || !files[i].managed)
+        return;
+
+    --files[i].refcount;
+    if (files[i].refcount > 0)
+        return;
+
+#if defined HAVE_FGETLN
+    if (files[i].fuzz.tmp)
+    {
+        free(files[i].fuzz.tmp);
+        files[i].fuzz.tmp = NULL;
+    }
+#endif
+    files[i].managed = 0;
+}
+
 int _zz_iswatched(int fd)
 {
     int ret = 0;
@@ -263,41 +360,18 @@ void _zz_register(int fd)
 #endif
 
     /* If filedescriptor is outside our bounds */
-    while (fd >= maxfd)
-    {
-        if (fds == static_fds)
-        {
-            fds = malloc(2 * maxfd * sizeof(*fds));
-            memcpy(fds, static_fds, maxfd * sizeof(*fds));
-        }
-        else
-            fds = realloc(fds, 2 * maxfd * sizeof(*fds));
-        for (i = maxfd; i < maxfd * 2; ++i)
-            fds[i] = -1;
-        maxfd *= 2;
-    }
+    grow_fds(fd);
 
-    /* Find an empty slot */
-    for (i = 0; i < nfiles; ++i)
-        if (files[i].managed == 0)
-            break;
-
-    /* No slot found, allocate memory */
-    if (i == nfiles)
-    {
-        nfiles++;
-        if (files == static_files)
-        {
-            files = malloc(nfiles * sizeof(*files));
-            memcpy(files, static_files, nfiles * sizeof(*files));
-        }
-        else
-            files = realloc(files, nfiles * sizeof(*files));
-    }
+    /* Create a brand new open identity: independent opens never share,
+     * even when they open the same path twice. */
+    i = alloc_identity();
 
     files[i].managed = 1;
     files[i].locked = 0;
+    files[i].refcount = 1;
     files[i].pos = 0;
+    files[i].already_pos = 0;
+    files[i].already_fuzzed = 0;
     files[i].fuzz.seed = seed;
     files[i].fuzz.ratio = zzuf_get_ratio();
     files[i].fuzz.cur = -1;
@@ -325,18 +399,56 @@ early_exit:
     zzuf_mutex_unlock(&fds_mutex);
 }
 
+/* Bind newfd to the same open identity as oldfd, as dup()/dup2() do.
+ * Returns 0 on success and -1 if oldfd is not watched. The call never
+ * consumes an auto-increment seed or a file selection index. fds_mutex
+ * must be held by the caller. */
+static int alias_fd_locked(int oldfd, int newfd)
+{
+    if (oldfd < 0 || oldfd >= maxfd || fds[oldfd] == -1)
+        return -1;
+
+    if (newfd < 0 || newfd > 65535)
+        return -1;
+
+    if (newfd == oldfd)
+        return 0;
+
+    grow_fds(newfd);
+
+    /* A successful dup2() closes the target first; drop whatever
+     * identity it was referring to before installing the new one. */
+    if (fds[newfd] != -1)
+    {
+        release_identity(fds[newfd]);
+        fds[newfd] = -1;
+    }
+
+    int i = fds[oldfd];
+    fds[newfd] = i;
+    ++files[i].refcount;
+
+    return 0;
+}
+
+int _zz_alias(int oldfd, int newfd)
+{
+    int ret;
+
+    zzuf_mutex_lock(&fds_mutex);
+    ret = alias_fd_locked(oldfd, newfd);
+    zzuf_mutex_unlock(&fds_mutex);
+
+    return ret;
+}
+
 void _zz_unregister(int fd)
 {
     zzuf_mutex_lock(&fds_mutex);
 
     if (fd >= 0 && fd < maxfd && fds[fd] != -1)
     {
-        files[fds[fd]].managed = 0;
-#if defined HAVE_FGETLN
-        if (files[fds[fd]].fuzz.tmp)
-            free(files[fds[fd]].fuzz.tmp);
-#endif
-
+        release_identity(fds[fd]);
         fds[fd] = -1;
     }
 
@@ -347,7 +459,7 @@ void _zz_lockfd(int fd)
 {
     zzuf_mutex_lock(&fds_mutex);
 
-    if (fd >= -1 && fd < maxfd && fds[fd] != -1)
+    if (fd >= -1 && fd < maxfd && (fd == -1 || fds[fd] != -1))
     {
         if (fd == -1)
             ++create_lock;
@@ -362,7 +474,7 @@ void _zz_unlock(int fd)
 {
     zzuf_mutex_lock(&fds_mutex);
 
-    if (fd >= -1 && fd < maxfd && fds[fd] != -1)
+    if (fd >= -1 && fd < maxfd && (fd == -1 || fds[fd] != -1))
     {
         if (fd == -1)
             --create_lock;
@@ -378,7 +490,7 @@ int _zz_islocked(int fd)
     int ret = 0;
     zzuf_mutex_lock(&fds_mutex);
 
-    if (fd >= -1 && fd < maxfd && fds[fd] != -1)
+    if (fd >= -1 && fd < maxfd && (fd == -1 || fds[fd] != -1))
     {
         if (fd == -1)
             ret = create_lock;
@@ -448,16 +560,18 @@ void _zz_setfuzzed(int fd, int count)
 
     if (fd >= 0 && fd < maxfd && fds[fd] != -1)
     {
+        int i = fds[fd];
+
         /* FIXME: what if we just slightly advanced? */
-        if (files[fds[fd]].pos != files[fds[fd]].already_pos
-            || count > files[fds[fd]].already_fuzzed)
+        if (files[i].pos != files[i].already_pos
+            || count > files[i].already_fuzzed)
         {
 #if defined LIBZZUF
             debug2("setfuzzed(%i, %i)", fd, count);
 #endif
 
-            files[fds[fd]].already_pos = files[fds[fd]].pos;
-            files[fds[fd]].already_fuzzed = count;
+            files[i].already_pos = files[i].pos;
+            files[i].already_fuzzed = count;
         }
     }
 
@@ -471,12 +585,14 @@ int _zz_getfuzzed(int fd)
 
     if (fd >= 0 && fd < maxfd && fds[fd] != -1)
     {
-        if (files[fds[fd]].pos >= files[fds[fd]].already_pos
-             && files[fds[fd]].pos < files[fds[fd]].already_pos
-                                      + files[fds[fd]].already_fuzzed)
-            ret = (int)(files[fds[fd]].already_fuzzed
-                      + files[fds[fd]].already_pos
-                      - files[fds[fd]].pos);
+        int i = fds[fd];
+
+        if (files[i].pos >= files[i].already_pos
+             && files[i].pos < files[i].already_pos
+                                      + files[i].already_fuzzed)
+            ret = (int)(files[i].already_fuzzed
+                      + files[i].already_pos
+                      - files[i].pos);
     }
 
     zzuf_mutex_unlock(&fds_mutex);
@@ -499,3 +615,14 @@ fuzz_context_t *_zz_getfuzz(int fd)
     return ret;
 }
 
+uint32_t _zz_identity_seed(int fd)
+{
+    uint32_t ret = 0;
+    zzuf_mutex_lock(&fds_mutex);
+
+    if (fd >= 0 && fd < maxfd && fds[fd] != -1)
+        ret = files[fds[fd]].fuzz.seed;
+
+    zzuf_mutex_unlock(&fds_mutex);
+    return ret;
+}

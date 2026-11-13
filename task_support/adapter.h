@@ -20,6 +20,14 @@ static void setup(void) {
  _zz_fd_init(); zzuf_set_seed(41); zzuf_set_ratio(0.05,0.05);
  g_libzzuf_ready=1;
 }
+/* Open a brand new, independent watched identity with an explicit seed.
+ * Used by tests to build expected output from a sequential reference
+ * read rather than from cached file contents. */
+static int sequential_reference_open(char const *path, uint32_t s) {
+ zzuf_set_seed((int32_t)s);
+ return zz_test_open(path, O_RDONLY);
+}
+static int fixture(char *path) __attribute__((unused));
 static int fixture(char *path) {
  int fd=mkstemp(path); if(fd<0)return -1;
  unsigned char bytes[4096];for(int i=0;i<4096;i++)bytes[i]=(unsigned char)(i*13+7);

@@ -231,14 +231,17 @@ int NEW(dup)(int oldfd)
     LOADSYM(dup);
 
     int ret = ORIG(dup)(oldfd);
-    if (!g_libzzuf_ready || _zz_islocked(-1) || !_zz_iswatched(oldfd)
-         || !_zz_isactive(oldfd))
+    if (!g_libzzuf_ready || _zz_islocked(-1))
         return ret;
 
     if (ret >= 0)
     {
-        debug("%s(%i) = %i", __func__, oldfd, ret);
-        _zz_register(ret);
+        /* The new descriptor is an alias of the old one's open identity:
+         * it inherits its seed, ratio, active state and file position
+         * without consuming a new auto-increment seed. If oldfd was not
+         * watched, the result must stay unwatched too. */
+        if (_zz_alias(oldfd, ret) == 0)
+            debug("%s(%i) = %i", __func__, oldfd, ret);
     }
 
     return ret;
@@ -252,20 +255,26 @@ int NEW(dup2)(int oldfd, int newfd)
     LOADSYM(dup2);
 
     int ret = ORIG(dup2)(oldfd, newfd);
-    if (!g_libzzuf_ready || _zz_islocked(-1) || !_zz_iswatched(oldfd)
-         || !_zz_isactive(oldfd))
+    if (!g_libzzuf_ready || _zz_islocked(-1) || ret < 0)
         return ret;
 
-    if (ret >= 0)
+    /* The kernel call succeeded, so any file previously open on newfd
+     * has been closed. Mirror that on our descriptor table first, then
+     * bind newfd to oldfd's open identity when oldfd is watched. If
+     * oldfd is not watched, newfd's former monitoring is simply dropped
+     * so that no stale seed survives the overwrite. A failed dup2()
+     * above leaves every state untouched. */
+    if (oldfd == newfd)
     {
-        /* We must close newfd if it was open, but only if oldfd != newfd
-         * and if dup2() suceeded. */
-        if (oldfd != newfd && _zz_iswatched(newfd) && _zz_isactive(newfd))
-            _zz_unregister(newfd);
-
-        debug("%s(%i, %i) = %i", __func__, oldfd, newfd, ret);
-        _zz_register(ret);
+        if (_zz_iswatched(oldfd))
+            debug("%s(%i, %i) = %i", __func__, oldfd, newfd, ret);
+        return ret;
     }
+
+    if (_zz_alias(oldfd, newfd) == 0)
+        debug("%s(%i, %i) = %i", __func__, oldfd, newfd, ret);
+    else if (_zz_iswatched(newfd))
+        _zz_unregister(newfd);
 
     return ret;
 }

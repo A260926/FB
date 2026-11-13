@@ -1,6 +1,7 @@
 
 EXTRA_DIST = $(TESTS) \
              functions.inc \
+             dup_contract.c \
              file-00 \
              file-ff \
              file-random \
@@ -22,7 +23,8 @@ TESTS = check-zzuf-A-autoinc \
         check-overflow \
         check-div0 \
         check-utils \
-        check-mmap
+        check-mmap \
+        check-dup.sh
 
 echo-sources: ; echo $(SOURCES)
 

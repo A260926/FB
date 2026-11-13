@@ -36,6 +36,12 @@ extern int _zz_mustwatchw(wchar_t const *);
 extern int _zz_iswatched(int);
 extern void _zz_register(int);
 extern void _zz_unregister(int);
+/* Make newfd an alias of oldfd's open identity (dup/dup2 semantics).
+ * Returns 0 on success, -1 if oldfd is not watched. Never consumes a new
+ * auto-increment seed or file selection index. */
+extern int _zz_alias(int oldfd, int newfd);
+/* Seed of the open identity referred to by fd, 0 if fd is not watched. */
+extern uint32_t _zz_identity_seed(int);
 extern void _zz_lockfd(int);
 extern void _zz_unlock(int);
 extern int _zz_islocked(int);

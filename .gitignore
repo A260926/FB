@@ -46,6 +46,9 @@ test/bug-overflow
 # Test suite temporary files
 test/*.log
 test/*.trs
+# Local task_support / manual build artifacts
+.baseline/
+.objcheck/
 # Generated manpages
 doc/zzat.1
 doc/zzuf.1
