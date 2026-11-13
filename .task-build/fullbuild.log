@@ -1,0 +1,8 @@
+/bin/sh: python: command not found
+make[2]: *** [tests/CMakeFiles/create_tests_source] Error 127
+make[1]: *** [tests/CMakeFiles/create_tests_source.dir/all] Error 2
+make[1]: *** Waiting for unfinished jobs....
+[  1%] Building C object examples/CMakeFiles/progutils.dir/utils.c.o
+[ 38%] Built target aubio
+[ 38%] Built target progutils
+make: *** [all] Error 2

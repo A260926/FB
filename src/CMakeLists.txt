@@ -90,6 +90,7 @@ target_sources (aubio PRIVATE
     "spectral/dct_ooura.c"
     "spectral/statistics.c"
     "spectral/tss.c"
+    "spectral/hpss.c"
     "spectral/dct_fftw.c"
     "spectral/specdesc.c"
     "spectral/awhitening.c"

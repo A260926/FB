@@ -12,6 +12,12 @@ progs = {
     'aubioonset': ['aubioonset.c'] + deps,
 }
 
+# aubiohpss is self-contained and does not need the shared example helpers
+executable('aubiohpss', 'aubiohpss.c',
+        c_args : c_args,
+        include_directories : '../src',
+        link_with : aubio)
+
 if compiler.has_header('getopt.h')
   c_args += ['-DHAVE_GETOPT_H']
 endif

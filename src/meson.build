@@ -153,6 +153,7 @@ sources = [
     'spectral/specdesc.c',
     'spectral/statistics.c',
     'spectral/tss.c',
+    'spectral/hpss.c',
     'synth/sampler.c',
     'synth/wavetable.c',
     'tempo/beattracking.c',

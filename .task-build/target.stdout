@@ -1,0 +1,55 @@
+BEGIN medians
+CASE medians time median: duplicates, equal values leaving, ring eviction
+CASE medians time median: tail shrink with even truncated windows
+CASE medians frequency median: clipped DC/Nyquist neighbourhoods
+CASE medians frequency median: clipped DC/Nyquist neighbourhoods
+CASE medians frequency median: clipped DC/Nyquist neighbourhoods
+CASE medians soft masks: formula, both-zero half, strict complement
+DONE medians cases=6 checks=303
+BEGIN stems
+CASE stems stems: streaming schedule, tail drain and transform accounting
+CASE stems stems: production PCM matches naive DFT/IDFT reference
+CASE stems stems: exact timeline length and perfect sum reconstruction
+CASE stems stems: streaming schedule, tail drain and transform accounting
+CASE stems stems: production PCM matches naive DFT/IDFT reference
+CASE stems stems: exact timeline length and perfect sum reconstruction
+CASE stems stems: streaming schedule, tail drain and transform accounting
+CASE stems stems: production PCM matches naive DFT/IDFT reference
+CASE stems stems: exact timeline length and perfect sum reconstruction
+CASE stems stems: streaming schedule, tail drain and transform accounting
+CASE stems stems: production PCM matches naive DFT/IDFT reference
+CASE stems stems: exact timeline length and perfect sum reconstruction
+CASE stems stems: stereo probe keeps channel identity and shared masks
+CASE stems stems: steady bin-aligned tones are overwhelmingly harmonic
+CASE stems stems: sparse clicks are localized in the percussive stem
+CASE stems stems: the harmonic stem carries the tonal content, not a 50/50 split
+DONE stems cases=16 checks=188
+BEGIN stream
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: do/finish schedule, latency and bounded median updates
+CASE stream stream: counters expose bounded insert/remove updates
+CASE stream stream: trimmed timeline rebuilds the input sample by sample
+CASE stream stream: construction rejects every invalid parameter set
+CASE stream stream: size errors do not touch history or outputs
+CASE stream stream: finish size error returns 2 without sealing
+CASE stream stream: do after a real finish is rejected, then reset restores
+CASE stream stream: finish with no input hop still yields tr+3 zero blocks
+DONE stream cases=26 checks=1520
+HPSS_ALL_DONE groups=3

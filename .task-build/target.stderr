@@ -1,0 +1,7 @@
+AUBIO ERROR: hpss: N must be a power of two not smaller than 64, got 32
+AUBIO ERROR: hpss: N must be a power of two not smaller than 64, got 100
+AUBIO ERROR: hpss: H must equal N/4 (16), got 8
+AUBIO ERROR: hpss: channels must be 1 or 2, got 3
+AUBIO ERROR: hpss: radii must lie in [1, 31], got time 0 freq 1
+AUBIO ERROR: hpss: radii must lie in [1, 31], got time 32 freq 1
+AUBIO ERROR: hpss: radii must lie in [1, 31], got time 1 freq 32

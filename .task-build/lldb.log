@@ -1,0 +1,5 @@
+lldb: error: couldn't create cache file '/var/folders/p2/zw2ndsdj6mz28tl3pxkctzy80000gn/T/xcrun_db-5tjvan0J' (errno=Operation not permitted)
+(lldb) target create ".task-build/contract_dbg"
+Current executable set to '/Users/solo/pro/UserFB/workspace/FS01296F7CDE35U5420/attempts/20261113T065642161919Z/repo/.task-build/contract_dbg' (arm64).
+(lldb) run
+error: process exited with status -1 (attach failed ((os/kern) invalid address))
