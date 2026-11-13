@@ -1,0 +1,220 @@
+export type GlobalOnlyOptions = {
+    /**
+     * Global Only option.
+     * @default 10
+     * @description The maximum number of requests that can be sent simultaneously.
+     * @example If the value is 10, the crawler will send at most 10 requests at the same time.
+     * Note: The maxConnections(> 1) will be valid only if the global ratelimit is set to be 0.
+     */
+    maxConnections: number;
+    /**
+     * Global Only option.
+     * @default 10
+     * @description The number of levels of priority. Can be only assigned at the beginning.
+     */
+    priorityLevels: number;
+    /**
+     * Global Only option.
+     * @default 0
+     * @description The default priority of the tasks. Can be only assigned at the beginning.
+     * @example 1000 means 1000 milliseconds delay between after the first request.
+     */
+    rateLimit: number;
+    /**
+     * Global Only option.
+     * @default false
+     * @description If true, the crawler will skip duplicate tasks.
+     * @example If the task is already in the queue, the crawler will not add it again.
+     */
+    skipDuplicates: boolean;
+    /**
+     * Global Only option.
+     * @default false
+     * @description If true, the crawler will dynamically reallocate the tasks within the queue blocked due to header blocking to other queues.
+     */
+    homogeneous: boolean;
+    /**
+     * Global Only option.
+     * @default undefined
+     * @description If passed, the crawler will rotate the user agent for each request. The "userAgents" option must be an array if activated.
+     */
+    userAgents?: string | string[];
+    /**
+     * Global Only option.
+     * @default false
+     * @description If true, the crawler will mute all warning and error messages. The request error will be still thrown.
+     */
+    silence?: boolean;
+    /**
+     * @deprecated Please use "maxConnections" instead.
+     */
+    maxConnection: number;
+    /**
+     * @deprecated Please use "rateLimit" instead.
+     */
+    limiter?: number;
+};
+
+export type RequestOptions = {
+    forceUTF8?: boolean;
+    /**
+     * crawlerOption
+     * @default true
+     * @description If true, the crawler will use the cheerio library to parse the HTML content.
+     * @see cheerio.load()
+     * @example If inject successfully, the response object will have "$" property, which is a function to use jQuery.
+     */
+    jQuery?: boolean;
+    /**
+     * @deprecated
+     * @description Please use "jQuery" instead.
+     */
+    jquery?: boolean;
+    /**
+     * @deprecated
+     * @description Please use "jQuery" instead.
+     */
+    JQuery?: boolean;
+    /**
+     * @deprecated
+     * @description Please use "encoding" instead.
+     */
+    incomingEncoding?: string | null;
+    /**
+     * @default "utf8"
+     * @description The encoding of the response body.
+     */
+    encoding?: string | null;
+    /**
+     * @default 0
+     * @description rateLimiter ID
+     */
+    rateLimiterId?: number;
+    /**
+     * @default 2
+     * @description The retry count of the request.
+     */
+    retries?: number;
+    /**
+     * @default 3000
+     * @description The interval between retries in milliseconds.
+     */
+    retryInterval?: number;
+    /**
+     * @default 20000
+     * @description The global timeout of the request in milliseconds.
+     */
+    timeout?: number;
+    priority?: number;
+    seenreq?: any;
+
+    method?: string;
+    skipEventRequest?: boolean;
+    html?: boolean;
+    proxies?: string[];
+    proxy?: string;
+    http2?: boolean;
+    /**
+     * @description Forwarded to Node's socket connection (`net`/`tls`). Controls the "Happy Eyeballs"
+     * algorithm that races IPv6 and IPv4 when a host is dual-stack.
+     * @default true (Node default)
+     * @example Set to false on networks with broken or slow IPv6 to connect over a single family
+     * and avoid spurious `ETIMEDOUT` errors.
+     * Note: Node applies this as a process-wide default, so it affects all in-flight requests.
+     */
+    autoSelectFamily?: boolean;
+    /**
+     * @description Forwarded to Node's socket connection (`net`/`tls`). The per-address timeout (ms)
+     * the "Happy Eyeballs" algorithm waits before trying the next address.
+     * @default 250 (Node default)
+     * @example Raise this (e.g. 5000) when connecting to high-latency dual-stack hosts whose TCP/TLS
+     * handshake can't finish within 250ms, which otherwise aborts with `ETIMEDOUT` before the working
+     * address responds.
+     * Note: Node applies this as a process-wide default, so it affects all in-flight requests.
+     */
+    autoSelectFamilyAttemptTimeout?: number;
+    body?: string | Record<string, unknown>;
+    headers?: Record<string, unknown>;
+    agent?: any;
+    /**
+     * @deprecated Please do not set 'logger' anymore.
+     */
+    logger?: any;
+    /**
+     * @deprecated Please do not set 'debug' anymore.
+     */
+    debug?: any;
+    /**
+     * @deprecated Please do not set 'time' anymore.
+     */
+    time?: any;
+    /**
+     * @deprecated Please use "url" instead.
+     */
+    uri?: string | ((urlFn: (url: string) => void) => void);
+    url?: string | ((urlFn: (url: string) => void) => void);
+
+    /**
+     * @deprecated Please use "searchParams" instead.
+     */
+    qs?: Record<string, unknown>;
+    searchParams?: Record<string, unknown>;
+
+    /**
+     * @deprecated Please use "rejectUnauthorized" instead.
+     */
+    strictSSL?: boolean;
+    /**
+     * @description If false, the crawler will ignore SSL certificate errors.
+     * @default true
+     */
+    rejectUnauthorized?: boolean;
+
+    /**
+     * @deprecated Please use "decompress" instead.
+     */
+    gzip?: boolean;
+    decompress?: boolean;
+
+    /**
+     * @deprecated Please use "cookieJar" instead.
+     * @see tough-cookie https://github.com/sindresorhus/got/blob/main/documentation/migration-guides/request.md
+     */
+    jar?: object;
+    cookieJar?: object;
+
+    /**
+     * @default false
+     * 
+     * If true, the crawler will parse the response body as JSON.
+     * This will set 'jQuery' to false.
+     */
+    isJson?: boolean;
+
+    referer?: string;
+        /**
+     * @deprecated
+     * @description Please use "userParams" instead.
+     */
+    gene?: string | Record<string, unknown>;
+    userParams?: unknown;
+    /**
+     * @deprecated Please use "parseJson" instead.
+     */
+    jsonReviver?: (text: string) => unknown;
+    parseJson?: (text: string) => unknown;
+
+    /**
+     * @deprecated Please use "stringifyJson" instead.
+     */
+    jsonReplacer?: (object: unknown) => string;
+    stringifyJson?: (object: unknown) => string;
+
+    preRequest?: (options: RequestOptions, done?: (error?: Error | null) => void) => void;
+    release?: () => void;
+    callback?: (error: unknown, response: CrawlerResponse, done?: unknown) => void;
+};
+
+export type RequestConfig = string | RequestOptions | RequestOptions[];
+export type CrawlerOptions = Partial<GlobalOnlyOptions> & RequestOptions;
+export type CrawlerResponse = any;

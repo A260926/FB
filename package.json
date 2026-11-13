@@ -1,0 +1,92 @@
+{
+    "name": "crawler",
+    "version": "2.1.1",
+    "description": "Crawler is a ready-to-use web spider that works with proxies, asynchrony, rate limit, configurable request pools, jQuery, and HTTP/2 support.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/bda-research/node-crawler.git"
+    },
+    "exports": {
+        ".": {
+            "require": "./dist/index.cjs",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsup src/index.ts --format cjs,esm --clean",
+        "prepublishOnly": "npm run build",
+        "test": "NODE_ENV=test ava",
+        "cover": "NODE_ENV=test c8 ava"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "publishConfig": {
+        "registry": "https://registry.npmjs.org/"
+    },
+    "type": "module",
+    "keywords": [
+        "javascript",
+        "crawler",
+        "spider",
+        "scraper",
+        "scraping",
+        "jquery",
+        "nodejs",
+        "http",
+        "https",
+        "http2",
+        "got",
+        "request",
+        "url",
+        "network",
+        "gzip"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "cheerio": "^1.2.0",
+        "got": "^15.0.5",
+        "hpagent": "^1.2.0",
+        "http2-wrapper": "^2.2.1",
+        "iconv-lite": "^0.7.2",
+        "seenreq": "^3.0.0",
+        "tslog": "^4.10.2"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^24.0.0",
+        "ava": "^8.0.1",
+        "c8": "^11.0.0",
+        "eslint": "^10.4.1",
+        "globals": "^17.6.0",
+        "nock": "^14.0.15",
+        "sinon": "^22.0.0",
+        "tough-cookie": "^6.0.1",
+        "tsup": "^8.5.1",
+        "tsx": "^4.22.4",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.60.1"
+    },
+    "overrides": {
+        "esbuild": "^0.28.1"
+    },
+    "ava": {
+        "files": [
+            "test/*.js",
+            "!test/*test.js"
+        ],
+        "timeout": "20s",
+        "extensions": [
+            "js"
+        ],
+        "verbose": true
+    },
+    "c8": {
+        "reporter": [
+            "lcov",
+            "html",
+            "text"
+        ],
+        "clean": true
+    }
+}

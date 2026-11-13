@@ -1,0 +1,9 @@
+.vscode
+.idea
+coverage
+
+dist
+node_modules
+archive
+
+.npmrc
