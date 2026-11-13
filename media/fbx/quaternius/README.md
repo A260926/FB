@@ -1,0 +1,1 @@
+Files and data in this repository were downloaded from [Quaternius Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html), released under CC0 licence. Their author, Paul Laulhe, granted ozz-animation the right to redistribute all data of the standard free package under ozz-animation project license.
