@@ -1,0 +1,10 @@
+#include "spirv_glsl.hpp"
+#include <cstdio>
+#include <cstring>
+#include <vector>
+static std::vector<uint32_t> module(){std::vector<uint32_t>w={0x07230203,0x00010300,0,40,0};auto op=[&](spv::Op x,std::initializer_list<uint32_t>a){w.push_back(((uint32_t)a.size()+1)<<16|x);w.insert(w.end(),a);};
+ op(spv::OpCapability,{spv::CapabilityShader});op(spv::OpMemoryModel,{spv::AddressingModelLogical,spv::MemoryModelGLSL450});op(spv::OpEntryPoint,{spv::ExecutionModelGLCompute,10,0x6e69616d,0,20});op(spv::OpExecutionMode,{10,spv::ExecutionModeLocalSize,1,1,1});
+ op(spv::OpName,{7,0x00667562});op(spv::OpMemberName,{5,0,0x756c6176,0x00007365});op(spv::OpDecorate,{4,spv::DecorationArrayStride,4});op(spv::OpDecorate,{5,spv::DecorationBlock});op(spv::OpMemberDecorate,{5,0,spv::DecorationOffset,0});op(spv::OpDecorate,{7,spv::DecorationDescriptorSet,0});op(spv::OpDecorate,{7,spv::DecorationBinding,0});op(spv::OpDecorate,{20,spv::DecorationBuiltIn,spv::BuiltInGlobalInvocationId});
+ op(spv::OpTypeVoid,{1});op(spv::OpTypeFunction,{2,1});op(spv::OpTypeInt,{3,32,0});op(spv::OpTypeFloat,{9,32});op(spv::OpTypeRuntimeArray,{4,9});op(spv::OpTypeStruct,{5,4});op(spv::OpTypePointer,{6,spv::StorageClassStorageBuffer,5});op(spv::OpVariable,{6,7,spv::StorageClassStorageBuffer});op(spv::OpTypePointer,{8,spv::StorageClassStorageBuffer,9});op(spv::OpConstant,{3,12,0});op(spv::OpTypeVector,{18,3,3});op(spv::OpTypePointer,{19,spv::StorageClassInput,18});op(spv::OpVariable,{19,20,spv::StorageClassInput});
+ op(spv::OpFunction,{1,10,0,2});op(spv::OpLabel,{11});op(spv::OpLoad,{18,21,20});op(spv::OpCompositeExtract,{3,22,21,0});op(spv::OpAccessChain,{8,15,7,12,22});op(spv::OpLoad,{9,16,15});op(spv::OpAccessChain,{8,17,7,12,12});op(spv::OpStore,{17,16});op(spv::OpReturn,{});op(spv::OpFunctionEnd,{});return w;}
+int main(){spirv_cross::CompilerGLSL c(module());auto o=c.get_common_options();o.version=430;o.es=false;c.set_common_options(o);auto s=c.compile();puts(s.c_str());if(s.find("gl_GlobalInvocationID.x")==std::string::npos||s.find("values[")==std::string::npos)return 1;puts("BASELINE_UNGUARDED_SSBO_OK");}
