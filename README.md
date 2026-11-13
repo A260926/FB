@@ -119,6 +119,67 @@ Default: `true`
 
 Set to `true` to remux audio and video into a single MP4 segment.
 
+##### inbandMetadata
+
+Type: `boolean`
+
+Default: `false`
+
+Set to `true` to carry complete ID3v2.4 tags found in an MPEG-2 transport
+stream inside version 1 `emsg` boxes, as described by the
+[AOM ID3 in emsg spec](https://aomediacodec.github.io/id3-emsg/). The
+option only applies to transport stream input with `remux` enabled
+(the default); raw AAC input or `remux: false` are rejected through the
+`error` event and no media `data` is emitted.
+
+Each emitted `emsg` uses a 90 000 timescale, the scheme id uri
+`https://aomedia.org/emsg/ID3`, an empty value, an `event_duration` of
+`0xffffffff` and the unmodified ID3 tag bytes as the message data. The
+`emsg` boxes for a segment are written immediately before its first
+`moof`, and the initialization segment gains an `aid3` compatible brand
+in its `ftyp` box. Tags whose presentation time falls outside a segment
+wait for a later segment; `reset()` and `setBaseMediaDecodeTime()`
+discard buffered fragments and unsent tags.
+
+```js
+var transmuxer = new muxjs.mp4.Transmuxer({ inbandMetadata: true });
+
+transmuxer.on('data', function(segment) {
+  // segment.data starts with zero or more emsg boxes followed by the
+  // usual moof/mdat boxes. The trun data offsets are unchanged.
+  var offset = 0;
+
+  while (offset < segment.data.byteLength) {
+    var size = (segment.data[offset] << 24) |
+      (segment.data[offset + 1] << 16) |
+      (segment.data[offset + 2] << 8) |
+      segment.data[offset + 3];
+    var type = String.fromCharCode.apply(null,
+      segment.data.subarray(offset + 4, offset + 8));
+
+    if (type === 'emsg') {
+      // the box payload is a version 1 emsg whose message_data holds
+      // the complete original ID3 tag
+    }
+    offset += size;
+  }
+
+  sourceBuffer.appendBuffer(segment.data);
+});
+
+transmuxer.on('error', function(err) {
+  // inbandMetadata only supports remuxed MPEG-2 TS input
+  console.error(err.message);
+});
+
+transmuxer.push(transportStreamSegment);
+transmuxer.flush();
+```
+
+When the option is omitted or `false`, transmuxer output bytes, the
+`metadata`/`id3Frame` events and lenient ID3 parsing behave exactly as
+before.
+
 #### CaptionParser
 
 `muxjs.mp4.CaptionParser`
