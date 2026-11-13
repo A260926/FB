@@ -9,6 +9,7 @@ For breaking API changes see [this document](https://github.com/jrouwe/JoltPhysi
 * The Samples application now runs on iOS and Android. Touch input is mapped to mouse and keyboard input, see `Build/README.md`.
 * Added support for 64-bit ObjectLayer. This e.g. allows for more groups in case you're using `ObjectLayerPairFilterMask`.
 * `EstimateCollisionResponse` now takes surface velocities into account.
+* Added an offline arc length based animation retimer `RetimingByJointArcLength` in `Jolt/Skeleton/ArcLengthRetimer.h`. It retimes a `SkeletalAnimation` so that a point attached to a chosen joint travels equal model space arc length between the output keys and applies the same time mapping to every joint, including branches not affecting the measured point.
 
 ### Bug fixes
 

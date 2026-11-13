@@ -135,6 +135,54 @@ If you want to run on Platform Blue you'll need to provide your own build enviro
 
 For build instructions go to the [Build](Build/README.md) section. When upgrading from an older version of the library go to the [Release Notes](Docs/ReleaseNotes.md) or [API Changes](Docs/APIChanges.md) sections.
 
+## Arc length animation retiming
+
+When a weapon swing is played back at a constant frame rate, a point on the hand still accelerates and decelerates along its path. `RetimingByJointArcLength` in `Jolt/Skeleton/ArcLengthRetimer.h` is an offline tool that rearranges the keys of a `SkeletalAnimation` so that a point attached to one joint travels equal model space arc length between consecutive output keys. The same time mapping is applied to every joint, so the whole character stays coordinated; it does not straighten the path and it is not limited to root translation.
+
+```cpp
+#include <Jolt/Skeleton/ArcLengthRetimer.h>
+
+ArcLengthSettings settings;
+settings.mJointIndex       = hand_joint_index;   // joint whose point is measured
+settings.mLocalPoint       = Vec3(0.1f, 0.0f, 0.0f); // point in that joint's local space
+settings.mSampleCount      = 17;                 // output keys
+settings.mOutputDuration   = 1.5f;               // seconds; keys at i * duration / (count - 1)
+settings.mLengthTolerance  = 1e-4;               // model space length units
+settings.mMaxEvaluations   = 200000;             // pose evaluation budget
+
+ArcLengthResult result;
+if (!RetimingByJointArcLength(*source_animation, rest_pose, settings, result))
+{
+    // Invalid input or the evaluation budget was exhausted before the
+    // tolerance could be met. result is left untouched.
+    return;
+}
+
+Ref<SkeletalAnimation> retimed = result.mAnimation; // non looping, one track per joint
+// result.mSourceTimes[i] is the time used in the source clip for output key i,
+// result.mTotalLength is the total arc length of the measured curve.
+```
+
+The measured curve is the model space path of `mLocalPoint`, computed through the full ancestor chain from rest pose local states with the library's linear translation and shortest arc SLERP rules. The `SkeletonPose` root offset is not part of the curve. Even when the source clip is looping it is evaluated on the closed interval `[0, D]`, so the last key is the real end pose rather than a wrapped first key, and the produced animation is non looping. Joints without a track keep their rest pose local state.
+
+### Stationary segments
+
+If the measured point holds still for a while, its arc length does not change during that interval. The retimer takes the *rightmost* solution of `L(t) = q * L(D)`, i.e. it jumps to the end of every fully stationary range instead of getting stuck at its beginning. With a clip that moves for 0.3 s, pauses until 0.6 s and then moves again, the key asking for half the total length is placed at `t = 0.6`:
+
+```cpp
+// Source: root translates 0 -> 1 on [0, 0.3], holds until 0.6, then 1 -> 2.
+// The half-length output key lands on the end of the pause.
+JPH_ASSERT(abs(result.mSourceTimes[sample_count / 2] - 0.6f) < 1e-5f);
+```
+
+If the entire curve has zero length, the mapping degenerates to uniform time, `sourceTimes[i] = q * D`.
+
+### Error units and where the guarantee holds
+
+* `mLengthTolerance` and `mTotalLength` are expressed in the same model space length units as `mLocalPoint` (for example meters); they are not angles or seconds. Both the total curve length and the accumulated length at every internal output key are guaranteed within this tolerance of their target.
+* Equal arc length spacing is guaranteed **at the output keys only**. Between two output keys the retimed clip is still played back with the library's ordinary linear/SLERP interpolation, so instantaneous speed inside an interval is not required to be perfectly constant.
+* The tool never substitutes chord lengths between output vertices for the real curve length: it integrates the curve with adaptive Richardson refinement and counts every pose evaluation against `mMaxEvaluations`. If the budget cannot pay for the requested accuracy, the function returns `false` rather than returning a result that merely claims to meet the tolerance.
+
 ## Performance
 
 If you're interested in how Jolt scales with multiple CPUs and compares to other physics engines, take a look at [this document](https://jrouwe.nl/jolt/JoltPhysicsMulticoreScaling.pdf).
