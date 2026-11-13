@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+### Changed
+- `Backup` no longer holds the maintenance lock for its whole duration. It captures an immutable segment manifest
+  (segment id, sequence id and exact byte length) in a short critical section and then streams the segments without
+  holding `db.mu` or `maintenanceMu`, so a slow backup destination no longer blocks `Put`, `Delete` or `Compact`.
+### Added
+- Backup segment retention: segments captured by an in-progress backup stay available until the backup finishes even
+  when compaction retires them and reuses their physical segment ids. The last backup reference closes and removes the
+  retired segment and its metadata. Multiple concurrent backups hold independent references.
+
 ## [0.10.2] - 2023-12-10
 ### Fixed
 - Fix an edge case causing recovery to fail.

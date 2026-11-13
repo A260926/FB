@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 )
 
 type recordType int
@@ -25,6 +26,64 @@ type segment struct {
 	sequenceID uint64 // Logical monotonically increasing segment identifier.
 	name       string
 	meta       *segmentMeta
+
+	// Retention by in-progress backups. A segment stays on disk, with its file
+	// handle open, until both the datalog drops it (compaction) and every
+	// backup that captured it releases it. Guarded by the datalog mutex.
+	retired  bool
+	refcount int
+}
+
+// retain marks the segment as needed by an in-progress backup.
+// The datalog mutex must be held.
+func (seg *segment) retain() {
+	seg.refcount++
+}
+
+// release drops a single backup reference. When the segment is already
+// retired by the datalog and this was the last reference, it is closed and
+// removed from the file system. The first cleanup error is returned.
+// The datalog mutex must be held.
+func (dl *datalog) release(seg *segment) error {
+	if seg.refcount > 0 {
+		seg.refcount--
+	}
+	if seg.refcount > 0 || !seg.retired {
+		return nil
+	}
+	return dl.purgeSegment(seg)
+}
+
+// retire detaches the segment from the datalog. It is either purged
+// immediately or, while backups still hold references, kept on disk until
+// the last reference is released. The datalog mutex must be held.
+func (dl *datalog) retire(seg *segment) error {
+	dl.segments[seg.id] = nil
+	seg.retired = true
+	if seg.refcount > 0 {
+		return nil
+	}
+	return dl.purgeSegment(seg)
+}
+
+// purgeSegment closes the segment and removes its data and metadata files.
+// The datalog mutex must be held.
+func (dl *datalog) purgeSegment(seg *segment) error {
+	var firstErr error
+	if err := seg.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+
+	metaName := seg.name + metaExt
+	if err := dl.opts.FileSystem.Remove(metaName); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		firstErr = err
+	}
+
+	if err := dl.opts.FileSystem.Remove(seg.name); err != nil && !os.IsNotExist(err) && firstErr == nil {
+		firstErr = err
+	}
+
+	return firstErr
 }
 
 func segmentName(id uint16, sequenceID uint64) string {

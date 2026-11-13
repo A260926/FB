@@ -181,6 +181,54 @@ The compaction thread finds segment's live records (not deleted or overwritten) 
 It writes live records to a new segment file and updates the corresponding slots in the index file.
 After the compaction is successfully finished, the compacted segment files are removed.
 
+## Backup
+
+A backup is a consistent copy of the database as it existed at one point in time, written to a separate directory as
+recoverable data segments followed by a lock file marker. The destination contains no index; opening it replays the
+segments and rebuilds the index, so a backup never ships an index that could have changed after the backup boundary.
+
+### Capture boundary
+
+`Backup` starts with a short critical section. Under the database and datalog locks it builds an immutable manifest
+listing every segment that exists at that moment. Each manifest entry records the segment identity - the physical
+segment id and the monotonic sequence id - together with the segment name and its exact byte length, and acquires one
+retention reference on the segment. No file data is read or copied while a lock is held.
+
+After the manifest is captured, all I/O runs lock-free: segment files are opened, streamed through a fixed-size
+buffer with `ReadAt`, and closed one at a time. A slow destination therefore does not block `Put`, `Delete` or
+`Compact`, and a backup never holds more than one extra source handle and one destination handle at a time.
+
+The captured byte length is what makes the snapshot consistent. A segment that is still active (not full) keeps
+growing as new records are appended, but the backup copies only the bytes present at the boundary. Records appended
+afterwards, and keys inserted, overwritten or deleted afterwards, are not part of the backup.
+
+### Segment retention and reclamation
+
+Compaction retires segments: it detaches them from the current dataset, closes them and deletes their files, and the
+freed physical segment id is quickly reused by a new segment. A backup that captured a segment must still be able to
+read the old generation, while compaction must not be prevented from evicting that segment from the live dataset.
+
+Every segment carries a backup reference count and a `retired` flag, both guarded by the datalog mutex.
+
+- Capturing a manifest increments the reference count of every segment on it, including active segments.
+- Compaction marks a segment `retired` and removes it from the live segment table immediately. If references remain,
+  the file and its metadata stay on disk and the handle stays open; otherwise the segment is purged right away.
+- When a backup finishes (successfully or with an error) it releases its references. The last release of a retired
+  segment closes it and removes its data and metadata files. Retired segments never linger in the normal compaction
+  list.
+
+Two backups with different destinations can overlap and capture different boundaries. Each holds its own references,
+so one backup finishing or failing never releases a file another backup still needs; only the last reference triggers
+the cleanup.
+
+The sequence id keeps generations apart. A retained segment and a new segment reusing the same physical id coexist on
+disk under different file names (`id-sequenceID.psg`); the manifest opens the captured name, so a backup can never
+read the new generation through a recycled id.
+
+Retirement does not rely on platform "unlink while open" behavior, on opening every source file up front, or on
+copying records into memory or a shadow directory: retention is an explicit reference count, only one source file is
+open per backup at a time, and the only in-memory state is the manifest plus the fixed copy buffer.
+
 ## Recovery
 
 In the event of a crash caused by a power loss or an operating system failure, Pogreb discards the index and replays the

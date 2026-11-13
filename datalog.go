@@ -3,11 +3,11 @@ package pogreb
 import (
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/akrylysov/pogreb/internal/errors"
 )
@@ -22,6 +22,12 @@ type datalog struct {
 	curSeg        *segment
 	segments      [maxSegments]*segment
 	maxSequenceID uint64
+
+	// mu serializes segment lifecycle changes: segment swaps, compaction
+	// retirement and backup segment retention. It is never held while
+	// segment data is being read or copied, so a slow backup doesn't block
+	// writes or compaction.
+	mu sync.Mutex
 }
 
 func openDatalog(opts *Options) (*datalog, error) {
@@ -142,25 +148,62 @@ func (dl *datalog) swapSegment() error {
 	return nil
 }
 
+// removeSegment detaches a compacted segment from the datalog.
+// If in-progress backups still need the segment, its files and handle are
+// retained until the last backup releases it; otherwise it is purged now.
 func (dl *datalog) removeSegment(seg *segment) error {
-	dl.segments[seg.id] = nil
+	dl.mu.Lock()
+	defer dl.mu.Unlock()
+	return dl.retire(seg)
+}
 
-	if err := seg.Close(); err != nil {
-		return err
+// capturedSegment is an immutable snapshot of a single segment taken at the
+// backup boundary. The segment identity (physical id plus sequence id) is
+// encoded in name and in the retained segment, while size limits the copy
+// for active segments: only the bytes that existed when the backup started
+// are copied, so records appended afterwards are not part of the backup.
+type capturedSegment struct {
+	seg  *segment
+	name string
+	size int64
+}
+
+// captureSegments takes an immutable backup boundary: the segments existing
+// at this moment, each with its exact byte length, plus a retention
+// reference keeping every segment (including active ones) alive and at a
+// stable size for the duration of the backup.
+func (dl *datalog) captureSegments() []*capturedSegment {
+	dl.mu.Lock()
+	defer dl.mu.Unlock()
+
+	segs := dl.segmentsBySequenceID()
+	captured := make([]*capturedSegment, 0, len(segs))
+	for _, seg := range segs {
+		seg.retain()
+		captured = append(captured, &capturedSegment{
+			seg:  seg,
+			name: seg.name,
+			size: seg.size,
+		})
 	}
+	return captured
+}
 
-	// Remove segment meta from FS.
-	metaName := seg.name + segmentExt
-	if err := dl.opts.FileSystem.Remove(metaName); err != nil && !os.IsNotExist(err) {
-		return err
+// releaseSegments drops the retention references acquired by captureSegments.
+// Segments already retired by compaction are purged when the last reference
+// goes away. The first cleanup error is returned; every reference is
+// released regardless of errors.
+func (dl *datalog) releaseSegments(captured []*capturedSegment) error {
+	dl.mu.Lock()
+	defer dl.mu.Unlock()
+
+	var firstErr error
+	for _, c := range captured {
+		if err := dl.release(c.seg); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-
-	// Remove segment from FS.
-	if err := dl.opts.FileSystem.Remove(seg.name); err != nil {
-		return err
-	}
-
-	return nil
+	return firstErr
 }
 
 func (dl *datalog) readKeyValue(sl slot) ([]byte, []byte, error) {
