@@ -71,6 +71,13 @@ public:
 
            Vector3f getDefaultEmission( const Vector3f& backDirection )   const;
 
+           /**
+            * Read-only access to the triangle storage, for objects bound to
+            * this scene (e.g. PathGuide). Triangle pointers stay valid for
+            * the lifetime of the Scene.
+            */
+           const std::vector<Triangle>& getTriangles()                    const;
+
 
 /// constants ------------------------------------------------------------------
    static  int32 TRIANGLES_MAX();

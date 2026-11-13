@@ -72,6 +72,24 @@ Random::Random()
 }
 
 
+Random::Random
+(
+   const int32u seed
+)
+{
+   // minimum seeds for the four tausworthe components
+   static const int32u SEED_MINS[4] = { 2, 8, 16, 128 };
+
+   // spread the seed over the four state words with an LCG
+   int32u s = seed;
+   for( int i = 0;  i < 4;  ++i )
+   {
+      s = (s * 1664525u) + 1013904223u;
+      z_m[i] = (s >= SEED_MINS[i]) ? s : (SEED + static_cast<int32u>(i));
+   }
+}
+
+
 
 
 /// queries --------------------------------------------------------------------

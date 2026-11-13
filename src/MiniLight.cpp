@@ -15,6 +15,7 @@
 #include <string>
 #include <stdexcept>
 #include <cstdlib>
+#include <memory>
 
 #include "Primitives.hpp"
 
@@ -22,6 +23,7 @@
 #include "Image.hpp"
 #include "Scene.hpp"
 #include "Camera.hpp"
+#include "PathGuide.hpp"
 
 
 
@@ -54,7 +56,10 @@ const char HELP_MESSAGE[] =
 "MiniLight is a minimal global illumination renderer.\n"
 "\n"
 "usage:\n"
-"  minilight modelFilePathName\n"
+"  minilight modelFilePathName [--guide]\n"
+"\n"
+"--guide enables the optional per-round path guiding mode: incident light\n"
+"learned during rendering guides the sampling of continuation paths.\n"
 "\n"
 "The model text file format is:\n"
 "  #MiniLight\n"
@@ -138,6 +143,10 @@ int main
       {
          std::cout << BANNER_MESSAGE;
 
+         // check for optional path guiding flag
+         const bool isGuided = (argc > 2) &&
+            (std::string(argv[2]) == "--guide");
+
          // make random generator
          hxa7241_general::Random random;
 
@@ -172,6 +181,16 @@ int main
 
          modelFile.close();
 
+         // create the path guide if guided mode was requested: owned here,
+         // bound to the scene, and kept across all frame iterations
+         std::unique_ptr<hxa7241_minilight::PathGuide> guideStorage;
+         hxa7241_minilight::PathGuide* pGuide = 0;
+         if( isGuided )
+         {
+            guideStorage.reset( new hxa7241_minilight::PathGuide( scene ) );
+            pGuide = guideStorage.get();
+         }
+
          // setup ctrl-c/interruption/sigint handler
          ::signal( SIGINT, sigintHandler );
 
@@ -182,7 +201,7 @@ int main
             (std::cout << "\riteration: " << frameNo).flush();
 
             // render a frame
-            camera.getFrame( scene, random, image );
+            camera.getFrame( scene, random, image, pGuide );
 
             // save image at twice error-halving rate, and at start and end
             if( ((frameNo & (frameNo - 1)) == 0) | (iterations == frameNo) )

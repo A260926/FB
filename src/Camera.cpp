@@ -14,6 +14,7 @@
 #include "Random.hpp"
 #include "RayTracer.hpp"
 #include "Image.hpp"
+#include "PathGuide.hpp"
 
 #include "Camera.hpp"
 
@@ -84,10 +85,17 @@ void Camera::getFrame
 (
    const Scene&  scene,
    const Random& random,
-   Image&        image_o
+   Image&        image_o,
+   PathGuide*    pGuide
 ) const
 {
-   const RayTracer rayTracer( scene );
+   // open the guiding round: the distribution is now frozen for this frame
+   if( 0 != pGuide )
+   {
+      pGuide->beginPass();
+   }
+
+   const RayTracer rayTracer( scene, pGuide );
 
    const real64 width  = static_cast<real64>(image_o.getWidth());
    const real64 height = static_cast<real64>(image_o.getHeight());
@@ -123,6 +131,12 @@ void Camera::getFrame
          image_o.addToPixel( static_cast<int32>(x), static_cast<int32>(y),
             radiance );
       }
+   }
+
+   // close the guiding round: publish this frame's training
+   if( 0 != pGuide )
+   {
+      pGuide->finishPass();
    }
 }
 

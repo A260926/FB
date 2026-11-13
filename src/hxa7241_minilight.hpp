@@ -30,6 +30,7 @@ namespace hxa7241_minilight
    class SurfacePoint;
    class RayTracer;
    class Camera;
+   class PathGuide;
 }
 
 

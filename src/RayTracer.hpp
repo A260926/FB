@@ -26,16 +26,24 @@ namespace hxa7241_minilight
  * advances from the eye into the scene with one sampling of emitters at each
  * node.<br/><br/>
  *
+ * When a PathGuide is supplied (not owned), continuation directions are
+ * sampled from its learned mixture distribution, continuation-hit emission
+ * is combined with emitter sampling by the balance heuristic, and traced
+ * continuation rays train the guide. Without a guide, the original
+ * cosine-sampling behaviour (and its random consumption) is kept exactly.
+ *
  * Constant.
  *
  * @invariants
  * * pScene_m points to a Scene (is not 0)
+ * * pGuide_m is 0 or points to a PathGuide owned by the caller
  */
 class RayTracer
 {
 /// standard object services ---------------------------------------------------
 public:
-   explicit RayTracer( const Scene& );
+   explicit RayTracer( const Scene&,
+                       PathGuide*   pGuide = 0 );
 
 // use defaults
 //         ~RayTracer();
@@ -58,11 +66,22 @@ protected:
            Vector3f sampleEmitters( const Vector3f&     rayDirection,
                                     const SurfacePoint& surfacePoint,
                                     const Random&       random )          const;
+           Vector3f sampleEmittersGuided( const Vector3f&     rayDirection,
+                                          const SurfacePoint& surfacePoint,
+                                          const Triangle&     triangle,
+                                          const Random&       random )     const;
+           Vector3f getGuidedRadiance( const Vector3f& rayOrigin,
+                                       const Vector3f& rayDirection,
+                                       const Random&   random,
+                                       const void*     lastHit,
+                                       real64          inPdf,
+                                       Vector3f&       trainRadiance_o )  const;
 
 
 /// fields ---------------------------------------------------------------------
 private:
    const Scene* pScene_m;
+   PathGuide*   pGuide_m;
 };
 
 

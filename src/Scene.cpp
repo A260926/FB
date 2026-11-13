@@ -133,6 +133,12 @@ Vector3f Scene::getDefaultEmission
 }
 
 
+const std::vector<Triangle>& Scene::getTriangles() const
+{
+   return triangles_m;
+}
+
+
 
 
 /// constants ------------------------------------------------------------------

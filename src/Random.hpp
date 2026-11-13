@@ -40,6 +40,13 @@ public:
              */
             Random();
 
+            /**
+             * Create Random object with an explicit seed. The default
+             * constructor's sequence is unchanged; explicit seeds give
+             * independent, reproducible streams.
+             */
+   explicit Random( int32u seed );
+
 // use defaults
 //         ~Random();
 //          Random( const Random& );

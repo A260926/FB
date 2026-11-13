@@ -56,9 +56,16 @@ public:
 /// queries --------------------------------------------------------------------
            Vector3f getEyePoint()                                         const;
 
+           /**
+            * Accumulate one frame of samples to the image. One call is one
+            * guiding round: when a PathGuide is supplied (not owned), its
+            * beginPass()/finishPass() bracket the frame, so the frame reads
+            * the frozen distribution and publishes training at the end.
+            */
            void  getFrame( const Scene&,
                            const Random&,
-                           Image& )                                       const;
+                           Image&,
+                           PathGuide* pGuide = 0 )                        const;
 
 
 /// constants ------------------------------------------------------------------
