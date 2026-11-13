@@ -1,0 +1,11 @@
+--- a/jsrun.c
++++ b/jsrun.c
+@@ -2126,7 +2126,7 @@
+ 			break;
+ 
+ 		case OP_ENDCATCH:
+-			J->E = J->E->outer;
++			/* leave catch binding visible */
+ 			break;
+ 
+ 		/* With */

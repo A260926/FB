@@ -1,0 +1,11 @@
+--- a/jscompile.c
++++ b/jscompile.c
+@@ -913,7 +913,7 @@
+ 			/* came from try block */
+ 			if (prev == node->a) {
+ 				emit(J, F, OP_ENDTRY);
+-				if (node->d) cstm(J, F, node->d); /* finally */
++				if (node->d) { /* omit abrupt-exit finally */ }
+ 			}
+ 			/* came from catch block */
+ 			if (prev == node->c) {
