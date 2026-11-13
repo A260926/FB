@@ -17,6 +17,7 @@ libsonic.so.0 libsonic0 #MINVER#
  sonicSetPitch@Base 0.1.10
  sonicSetQuality@Base 0.1.10
  sonicSetSpeed@Base 0.1.10
+ sonicSetSpeedTrack@Base 0.1.10
  sonicSetVolume@Base 0.1.10
  sonicWriteFloatToStream@Base 0.1.10
  sonicWriteShortToStream@Base 0.1.10

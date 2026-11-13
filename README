@@ -43,3 +43,79 @@ Eloquence TTS engine.  The upgrade is in both the C and Java versions.
 
 Author: Bill Cox
 email: waywardgeek@gmail.com
+
+Speed tracks
+------------
+
+`sonicSetSpeedTrack` applies a time-varying, pitch-preserving speed curve to a
+stream.  A track is an array of `SonicSpeedPoint` values:
+
+    typedef struct SonicSpeedPoint {
+      uint64_t inputFrame;
+      float speed;
+    } SonicSpeedPoint;
+
+`inputFrame` is a position in the original (source) PCM, measured in frames
+(samples per channel, so stereo positions count frames, not interleaved
+samples).  It does not depend on how the caller chunks writes.  `speed` is the
+time-compression factor at that position: 1.0 is normal, 2.0 is twice as fast,
+0.5 is half speed.  The speed is interpolated linearly between points, and the
+last point's speed is held for the remainder of the stream.  For example, to
+rush through a long pause and then ease back to normal speech:
+
+    SonicSpeedPoint points[3] = {
+      {0,        2.0f},   /* rush through the pause */
+      {24000,    2.0f},   /* pause ends at source frame 24000 */
+      {36000,    1.0f},   /* ease back to normal by frame 36000 */
+    };
+    sonicSetSpeedTrack(stream, points, 3);
+
+Coordinates are source frames of an unsigned 64-bit position, but the format
+limits positions to 2^53 so they can be represented exactly as a double.  The
+first point must be at frame 0, positions must increase strictly, and every
+speed must be finite and in [0.5, 2.0].
+
+Setting restrictions:
+
+* A track may only be set on a new stream that has not yet been given any
+  non-empty input (`sonicWriteShortToStream` with a non-zero count, etc.).
+  The call returns 1 on success and 0 if the track is rejected.  When it
+  returns 0 the previous configuration is left untouched.
+* Track mode currently supports pitch == rate == 1, quality == 1, and 16 kHz
+  or 48 kHz with 1 or 2 channels of 16-bit PCM.
+* While a track is active, `sonicSetSampleRate`, `sonicSetNumChannels`,
+  `sonicSetPitch`, `sonicSetRate` and the regular `sonicSetSpeed` are ignored:
+  the existing values are kept.  `sonicSetVolume` still takes effect.
+* An empty track (`count == 0`, or a NULL points array) clears the mode and
+  restores the regular behavior, after which all of the above setters work
+  again.  Passing count == 0 is allowed regardless of the format limits.
+* The library keeps its own copy of the points; the caller's array may be
+  freed right after the call.
+
+Behavior:
+
+* The speed change is pitch-preserving (a 220 Hz tone stays at 220 Hz), and a
+  node in the middle of an analysis window is handled continuously: pitch
+  period history is not reset, no silence is inserted at node boundaries, and
+  the output is not built by generating each segment separately and splicing
+  them together.  A single write may cross several nodes.
+* Segment duration follows the continuous speed curve: it is the integral of
+  the inverse speed over the source frames, and it does not grow with the
+  recording length.  The output may be read while writing is still in
+  progress; the PCM buffered by the stream does not grow with the total
+  recording length if reads are prompt.
+* Trailing padding is used only to flush audio that has already been generated
+  and is never counted as source coordinates.  The produced length is within
+  two `maxRequired` frames of the duration integral (measured at the flush
+  target), and padding only makes up the small shortfall left by the final
+  partial analysis window; it never adds length in proportion to the recording.
+* A track of all 1.0 speeds reproduces the input samples exactly.
+* After `sonicFlushStream` the stream is reusable as usual; the next segment
+  starts again at source frame 0 with the same track.  To use a different
+  track (or change any of the restricted settings) for the next segment,
+  clear the track with `sonicSetSpeedTrack(stream, NULL, 0)` first.
+
+Tests: `tests/speed_track_test.c` exercises the API, including the independent
+duration integral and steady-state frequency checks.  Run it (together with the
+existing tests) with `bash task_support/target.sh` on a build that links
+`sonic.c`.

@@ -232,7 +232,37 @@ struct sonicStreamStruct {
   int sampleRate;
   int prevPeriod;
   int prevMinDiff;
+  /* Speed track state.  When numSpeedPoints > 0 a track is active and the
+     regular speed/PICOLA timing machinery below is bypassed in favor of
+     processSpeedTrack.  Track positions and the duration integral are in
+     source frames (samples per channel). */
+  SonicSpeedPoint* speedTrack;
+  int numSpeedPoints;
+  int hasNonEmptyInput;
+  /* Track mode bookkeeping, all in frames.  trackAbsSrc is the absolute source
+     frame corresponding to inputBuffer[0]; trackRealEnd is one past the last
+     real (non-padding) source frame of the current segment; trackOutput is the
+     number of output frames produced by the track in this segment.  These are
+     exact integers stored as doubles and are maintained across writes, so
+     processing does not depend on how the caller chunks its input. */
+  double trackAbsSrc;
+  double trackRealEnd;
+  double trackOutput;
+  double trackTarget;
+  /* Output frames from the current track segment that the caller has already
+     read, and unread frames left in the output buffer by an earlier segment.
+     Reads drain the carry first, so remaining reads are attributed to the
+     current segment.  This is what lets the flush target only adjust the
+     part of the output that can still change. */
+  int trackEmitted;
+  int trackCarry;
 };
+
+/* Forward declarations for the speed track implementation below. */
+static int changeSpeedTrack(sonicStream stream);
+static void resetSpeedTrackPosition(sonicStream stream);
+static double trackSegmentTarget(sonicStream stream);
+static double trackDuration(sonicStream stream, double a, double b);
 
 /* Attach user data to the stream. */
 void sonicSetUserData(sonicStream stream, void* userData) {
@@ -278,16 +308,22 @@ static void scaleSamples(short* samples, int numSamples, float volume) {
 /* Get the speed of the stream. */
 float sonicGetSpeed(sonicStream stream) { return stream->speed; }
 
-/* Set the speed of the stream. */
+/* Set the speed of the stream.  Ignored while a speed track is active. */
 void sonicSetSpeed(sonicStream stream, float speed) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   stream->speed = CLAMP(speed, SONIC_MIN_SPEED, SONIC_MAX_SPEED);
 }
 
 /* Get the pitch of the stream. */
 float sonicGetPitch(sonicStream stream) { return stream->pitch; }
 
-/* Set the pitch of the stream. */
+/* Set the pitch of the stream.  Ignored while a speed track is active. */
 void sonicSetPitch(sonicStream stream, float pitch) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   stream->pitch = CLAMP(pitch, SONIC_MIN_PITCH_SETTING, SONIC_MAX_PITCH_SETTING);
 }
 
@@ -297,6 +333,9 @@ float sonicGetRate(sonicStream stream) { return stream->rate; }
 /* Set the playback rate of the stream. This scales pitch and speed at the same
    time. */
 void sonicSetRate(sonicStream stream, float rate) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   stream->rate = CLAMP(rate, SONIC_MIN_RATE, SONIC_MAX_RATE);
 
   stream->oldRatePosition = 0;
@@ -316,6 +355,9 @@ int sonicGetQuality(sonicStream stream) { return stream->quality; }
 /* Set the "quality".  Default 0 is virtually as good as 1, but very much
    faster. */
 void sonicSetQuality(sonicStream stream, int quality) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   stream->quality = quality != 0? 1 : 0;
 }
 
@@ -350,6 +392,9 @@ void sonicDestroyStream(sonicStream stream) {
     sonicDestroySpectrogram(stream->spectrogram);
   }
 #endif /* SONIC_SPECTROGRAM */
+  if (stream->speedTrack != NULL) {
+    sonicFree(stream->speedTrack);
+  }
   freeStreamBuffers(stream);
   sonicFree(stream);
 }
@@ -444,6 +489,9 @@ int sonicGetSampleRate(sonicStream stream) { return stream->sampleRate; }
 /* Set the sample rate of the stream.  This will cause samples buffered in the
    stream to be lost. */
 void sonicSetSampleRate(sonicStream stream, int sampleRate) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   sampleRate = CLAMP(sampleRate, SONIC_MIN_SAMPLE_RATE, SONIC_MAX_SAMPLE_RATE);
   freeStreamBuffers(stream);
   allocateStreamBuffers(stream, sampleRate, stream->numChannels);
@@ -455,6 +503,9 @@ int sonicGetNumChannels(sonicStream stream) { return stream->numChannels; }
 /* Set the num channels of the stream.  This will cause samples buffered in the
    stream to be lost. */
 void sonicSetNumChannels(sonicStream stream, int numChannels) {
+  if (stream->numSpeedPoints > 0) {
+    return;
+  }
   numChannels = CLAMP(numChannels, SONIC_MIN_CHANNELS, SONIC_MAX_CHANNELS);
   freeStreamBuffers(stream);
   allocateStreamBuffers(stream, stream->sampleRate, numChannels);
@@ -499,6 +550,9 @@ static void updateNumInputSamples(sonicStream stream, int numSamples) {
   float speed = stream->speed / stream->pitch;
 
   stream->numInputSamples += numSamples;
+  /* In track mode this is the absolute end of the real (non-padding) source
+     frames of the current segment. */
+  stream->trackRealEnd += numSamples;
   stream->inputPlayTime += numSamples * stream->samplePeriod / speed;
 }
 
@@ -598,6 +652,17 @@ static int copyToOutput(sonicStream stream, short* samples, int numSamples) {
   return 1;
 }
 
+/* Attribute the frames a caller has just read either to the carry left by an
+   earlier track segment or to the current segment. */
+static void trackCountRead(sonicStream stream, int numSamples) {
+  if (stream->trackCarry > 0) {
+    int c = numSamples < stream->trackCarry ? numSamples : stream->trackCarry;
+    stream->trackCarry -= c;
+    numSamples -= c;
+  }
+  stream->trackEmitted += numSamples;
+}
+
 /* Read data out of the stream.  Sometimes no data will be available, and zero
    is returned, which is not an error condition. */
 int sonicReadFloatFromStream(sonicStream stream, float* samples,
@@ -625,6 +690,9 @@ int sonicReadFloatFromStream(sonicStream stream, float* samples,
             remainingSamples * sizeof(short) * stream->numChannels);
   }
   stream->numOutputSamples = remainingSamples;
+  if (stream->numSpeedPoints > 0) {
+    trackCountRead(stream, numSamples);
+  }
   return numSamples;
 }
 
@@ -650,6 +718,9 @@ int sonicReadShortFromStream(sonicStream stream, short* samples,
             remainingSamples * sizeof(short) * stream->numChannels);
   }
   stream->numOutputSamples = remainingSamples;
+  if (stream->numSpeedPoints > 0) {
+    trackCountRead(stream, numSamples);
+  }
   return numSamples;
 }
 
@@ -680,6 +751,9 @@ int sonicReadUnsignedCharFromStream(sonicStream stream, unsigned char* samples,
             remainingSamples * sizeof(short) * stream->numChannels);
   }
   stream->numOutputSamples = remainingSamples;
+  if (stream->numSpeedPoints > 0) {
+    trackCountRead(stream, numSamples);
+  }
   return numSamples;
 }
 
@@ -688,33 +762,98 @@ int sonicReadUnsignedCharFromStream(sonicStream stream, unsigned char* samples,
    of words could introduce distortion. */
 int sonicFlushStream(sonicStream stream) {
   int maxRequired = stream->maxRequired;
-  int remainingSamples = stream->numInputSamples;
-  float speed = stream->speed / stream->pitch;
-  float rate = stream->rate * stream->pitch;
-  int expectedOutputSamples =
-      stream->numOutputSamples +
-      (int)((remainingSamples / speed + stream->numPitchSamples) / rate + 0.5f);
 
-  /* Add enough silence to flush both input and pitch buffers. */
-  if (!enlargeInputBufferIfNeeded(stream, remainingSamples + 2 * maxRequired)) {
-    return 0;
+  if (stream->numSpeedPoints > 0) {
+    /* Track mode: drain the real input, then append silence so the final
+       partial pitch period can be emitted.  The silence only flushes audio
+       that already exists; it is never part of the source duration.  Frames
+       already handed to the caller are fixed; only the unread remainder is
+       trimmed or padded to the segment length.  The stream then restarts at
+       source frame 0 with the same track, just like the regular stream reuses
+       its configuration. */
+    int target, remaining;
+
+    /* Drain everything that is safe to process without lookahead, keeping the
+       trailing real frames buffered. */
+    if (!changeSpeedTrack(stream)) {
+      return 0;
+    }
+    remaining = stream->numInputSamples;
+    /* Append silence after the remaining real frames so the final partial pitch
+       period and its overlap-add tail can be emitted.  trackRealEnd was already
+       advanced when the real frames were written, so the padding never moves
+       the source end and is never integrated into the duration. */
+    if (!enlargeInputBufferIfNeeded(stream, remaining + 2 * maxRequired)) {
+      return 0;
+    }
+    memset(stream->inputBuffer + remaining * stream->numChannels, 0,
+           2 * maxRequired * sizeof(short) * stream->numChannels);
+    stream->numInputSamples = remaining + 2 * maxRequired;
+    if (!changeSpeedTrack(stream)) {
+      return 0;
+    }
+    /* Frames already handed to the caller are fixed; only the unread remainder
+       is trimmed or padded to reach the duration integral of the real source
+       frames. */
+    target = (int)(trackSegmentTarget(stream) + 0.5) - (int)stream->trackEmitted;
+
+    if (target < 0) {
+      target = 0;
+    }
+    if (stream->numOutputSamples > target) {
+      stream->numOutputSamples = target;
+    } else if (stream->numOutputSamples < target) {
+      if (!enlargeOutputBufferIfNeeded(stream, target -
+                                                  stream->numOutputSamples)) {
+        return 0;
+      }
+      memset(stream->outputBuffer +
+                 stream->numOutputSamples * stream->numChannels,
+             0, (target - stream->numOutputSamples) * sizeof(short) *
+                    stream->numChannels);
+      stream->numOutputSamples = target;
+    }
+    stream->numInputSamples = 0;
+    stream->inputPlayTime = 0.0f;
+    stream->timeError = 0.0f;
+    stream->numPitchSamples = 0;
+    resetSpeedTrackPosition(stream);
+    /* Everything still buffered now belongs to the finished segment; later
+       reads must not count against the next segment. */
+    stream->trackCarry = stream->numOutputSamples;
+    return 1;
   }
-  memset(stream->inputBuffer + remainingSamples * stream->numChannels, 0,
-         2 * maxRequired * sizeof(short) * stream->numChannels);
-  stream->numInputSamples += 2 * maxRequired;
-  if (!sonicWriteShortToStream(stream, NULL, 0)) {
-    return 0;
+  {
+    int remainingSamples = stream->numInputSamples;
+    float speed = stream->speed / stream->pitch;
+    float rate = stream->rate * stream->pitch;
+    int expectedOutputSamples =
+        stream->numOutputSamples +
+        (int)((remainingSamples / speed + stream->numPitchSamples) / rate +
+              0.5f);
+
+    /* Add enough silence to flush both input and pitch buffers. */
+    if (!enlargeInputBufferIfNeeded(stream, remainingSamples +
+                                               2 * maxRequired)) {
+      return 0;
+    }
+    memset(stream->inputBuffer + remainingSamples * stream->numChannels, 0,
+           2 * maxRequired * sizeof(short) * stream->numChannels);
+    stream->numInputSamples += 2 * maxRequired;
+    if (!sonicWriteShortToStream(stream, NULL, 0)) {
+      return 0;
+    }
+    /* Throw away any extra samples we generated due to the silence we added */
+    if (stream->numOutputSamples > expectedOutputSamples) {
+      stream->numOutputSamples = expectedOutputSamples;
+    }
+    /* Empty input and pitch buffers */
+    stream->numInputSamples = 0;
+    stream->inputPlayTime = 0.0f;
+    stream->timeError = 0.0f;
+    stream->numPitchSamples = 0;
+    return 1;
   }
-  /* Throw away any extra samples we generated due to the silence we added */
-  if (stream->numOutputSamples > expectedOutputSamples) {
-    stream->numOutputSamples = expectedOutputSamples;
-  }
-  /* Empty input and pitch buffers */
-  stream->numInputSamples = 0;
-  stream->inputPlayTime = 0.0f;
-  stream->timeError = 0.0f;
-  stream->numPitchSamples = 0;
-  return 1;
 }
 
 /* Return the number of samples in the output buffer */
@@ -1064,8 +1203,454 @@ static int insertPitchPeriod(sonicStream stream, short* samples, float speed,
   return newSamples;
 }
 
-/* PICOLA copies input to output until the total output samples == consumed
-   input samples * speed. */
+/* Return 1 if a speed track may be applied to this stream's current format.
+   Track mode currently supports pitch == rate == 1, quality 1, and 16 kHz or
+   48 kHz mono/stereo short PCM. */
+static int speedTrackFormatSupported(sonicStream stream) {
+  if (stream->pitch != 1.0f || stream->rate != 1.0f || stream->quality != 1) {
+    return 0;
+  }
+  if (stream->sampleRate != 16000 && stream->sampleRate != 48000) {
+    return 0;
+  }
+  if (stream->numChannels != 1 && stream->numChannels != 2) {
+    return 0;
+  }
+  return 1;
+}
+
+/* Return 1 if the stream has not yet been given any non-empty input (or any
+   output).  A non-empty speed track may only be set at that point. */
+static int speedTrackSettable(sonicStream stream) {
+  return !stream->hasNonEmptyInput && stream->numInputSamples == 0 &&
+         stream->numOutputSamples == 0;
+}
+
+/* Source position of a track node, as a double.  Positions up to 2^53 are
+   exactly representable. */
+static double speedPointFrame(const SonicSpeedPoint* point) {
+  return (double)point->inputFrame;
+}
+
+/* Index of the last node at or before frame.  The first node is always at
+   frame 0, so this is well defined for frame >= 0. */
+static int findSpeedPointFloor(sonicStream stream, double frame) {
+  int count = stream->numSpeedPoints;
+  int lo, hi, mid, i;
+
+  if (count <= 8) {
+    for (i = count - 1; i > 0; i--) {
+      if (speedPointFrame(&stream->speedTrack[i]) <= frame) {
+        return i;
+      }
+    }
+    return 0;
+  }
+  lo = 0;
+  hi = count - 1;
+  while (lo < hi) {
+    mid = lo + (hi - lo + 1) / 2;
+    if (speedPointFrame(&stream->speedTrack[mid]) <= frame) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+/* Speed (input frames consumed per output frame) at source frame. */
+static double speedAtFrame(sonicStream stream, double frame) {
+  int i = findSpeedPointFloor(stream, frame);
+  double x0, x1, s0, s1;
+
+  if (i >= stream->numSpeedPoints - 1) {
+    /* At or after the last point the final speed is held. */
+    return stream->speedTrack[i].speed;
+  }
+  x0 = speedPointFrame(&stream->speedTrack[i]);
+  x1 = speedPointFrame(&stream->speedTrack[i + 1]);
+  s0 = stream->speedTrack[i].speed;
+  s1 = stream->speedTrack[i + 1].speed;
+  if (frame <= x0) {
+    return s0;
+  }
+  if (frame >= x1) {
+    return s1;
+  }
+  return s0 + (s1 - s0) * ((frame - x0) / (x1 - x0));
+}
+
+/* Duration of the source interval [a, b) under the continuous speed track,
+   i.e. the integral of 1/speed.  Since speed is piecewise linear in the frame
+   coordinate, the integral is computed exactly, splitting at the nodes.  This
+   is both the true target duration and the reference the tests compare with. */
+static double trackDuration(sonicStream stream, double a, double b) {
+  double total = 0.0;
+  int i;
+
+  if (b <= a) {
+    return 0.0;
+  }
+  for (i = 0; i < stream->numSpeedPoints - 1 && a < b; i++) {
+    double x0 = speedPointFrame(&stream->speedTrack[i]);
+    double x1 = speedPointFrame(&stream->speedTrack[i + 1]);
+    double s0 = stream->speedTrack[i].speed;
+    double s1 = stream->speedTrack[i + 1].speed;
+    double slope, segLo, segHi, la, lb, integral;
+
+    if (x1 <= x0) {
+      continue;
+    }
+    segLo = a > x0 ? a : x0;
+    segHi = b < x1 ? b : x1;
+    if (segHi <= segLo) {
+      continue;
+    }
+    /* s(x) = s0 + slope * (x - x0) within this segment; a valid track keeps
+       the speed positive throughout. */
+    slope = (s1 - s0) / (x1 - x0);
+    la = s0 + slope * (segLo - x0);
+    lb = s0 + slope * (segHi - x0);
+    if (la < 1e-9) la = 1e-9;
+    if (lb < 1e-9) lb = 1e-9;
+    if (slope != 0.0) {
+      integral = (log(lb) - log(la)) / slope;
+    } else {
+      integral = (segHi - segLo) / la;
+    }
+    total += integral;
+    a = segHi;
+  }
+  if (a < b) {
+    /* After the last point the final speed is held. */
+    double s = stream->speedTrack[stream->numSpeedPoints - 1].speed;
+    total += (b - a) / (s > 1e-9 ? s : 1e-9);
+  }
+  return total;
+}
+
+/* Add the duration integral of [start, end) to the target, but never past the
+   end of the real source frames of this segment: flush padding is lookahead
+   and flushing material only, never source coordinates. */
+static void advanceTrackTarget(sonicStream stream, double start, double end) {
+  if (end > stream->trackRealEnd) {
+    end = stream->trackRealEnd;
+  }
+  if (end > start) {
+    stream->trackTarget += trackDuration(stream, start, end);
+  }
+}
+
+/* End of the interval starting at frame over which the track stays exactly at
+   unit speed.  Unit-speed stretches are passed through unchanged; the copy can
+   run all the way to the first frame where the track stops being exactly 1.0.
+   A linear segment that starts at 1.0 and ends elsewhere leaves unity
+   immediately after its first frame, so at most one frame is copied from such
+   a segment here. */
+static double unityEndFrame(sonicStream stream, double frame, double limit) {
+  double x = frame;
+  int count = stream->numSpeedPoints;
+
+  for (;;) {
+    int j = findSpeedPointFloor(stream, x);
+    double x1, s1;
+
+    if (j >= count - 1) {
+      return limit;
+    }
+    x1 = speedPointFrame(&stream->speedTrack[j + 1]);
+    s1 = stream->speedTrack[j + 1].speed;
+    if (fabs(s1 - 1.0) > 1e-9) {
+      double end = x + 1.0;
+      return end < limit ? end : limit;
+    }
+    if (x1 > limit) {
+      x1 = limit;
+    }
+    if (x1 <= x) {
+      return limit;
+    }
+    if (x1 >= limit) {
+      return limit;
+    }
+    /* The whole segment [x, x1) is at unit speed; continue across the node. */
+    x = x1;
+  }
+}
+
+/* Earliest frame in (frame, limit] at which the speed crosses to the other
+   side of 1.0.  Within a node interval the speed is linear, so this is exact.
+   Used to keep the error-correction search monotonic.  Returns limit when there
+   is no crossing before it. */
+static double speedSideChangeFrame(sonicStream stream, double frame,
+                                   double limit, int aboveOne) {
+  double x = frame;
+  int count = stream->numSpeedPoints;
+
+  while (x < limit) {
+    /* Determine the value at x and the next node. */
+    int j = findSpeedPointFloor(stream, x);
+    double x0, x1, s0, s1, end, sx;
+
+    if (j >= count - 1) {
+      return limit;
+    }
+    x0 = speedPointFrame(&stream->speedTrack[j]);
+    x1 = speedPointFrame(&stream->speedTrack[j + 1]);
+    s0 = stream->speedTrack[j].speed;
+    s1 = stream->speedTrack[j + 1].speed;
+    end = x1 < limit ? x1 : limit;
+    sx = speedAtFrame(stream, x);
+    if (aboveOne ? (sx <= 1.0) : (sx >= 1.0)) {
+      return x;
+    }
+    /* Does the linear segment cross 1.0 before `end`? */
+    if ((s0 > 1.0 && s1 < 1.0) || (s0 < 1.0 && s1 > 1.0)) {
+      double cross = x0 + (1.0 - s0) * (x1 - x0) / (s1 - s0);
+      if (cross > x && cross < end) {
+        return cross;
+      }
+    }
+    /* Overall endpoint sides differ before `end`? */
+    if ((aboveOne && s1 <= 1.0) || (!aboveOne && s1 >= 1.0)) {
+      if (end > x) {
+        return end;
+      }
+    }
+    x = end;
+  }
+  return limit;
+}
+
+/* Largest n in [0, maxN] such that the accumulated duration error after copying n
+   unmodified frames, E(n) = E0 + n - duration(frame, frame+n), is still on the
+   "keep copying" side of zero.  For speed > 1 the error grows with n, so it is
+   monotone increasing; for speed < 1 it is monotone decreasing.  The sign of
+   1-speed does not change over [frame, frame+maxN] because the search is
+   bounded by speedSideChangeFrame. */
+static int copyRunLength(sonicStream stream, double frame, double e0, int maxN,
+                         int speedAboveOne) {
+  int lo = 0, hi = maxN, mid;
+
+  while (lo < hi) {
+    mid = lo + (hi - lo + 1) / 2;
+    {
+      double e = e0 + mid - trackDuration(stream, frame, frame + mid);
+      int ok = speedAboveOne ? (e <= 0.0) : (e >= 0.0);
+      if (ok) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+  }
+  return lo;
+}
+
+/* Consume pitch periods while the buffered input allows.  Processing is driven
+   by the absolute source position, so the sequence of pitch operations -- and
+   therefore the sample-exact output -- does not depend on how the caller
+   chunks its writes.  Flush padding is only lookahead; real frames are never
+   processed past trackRealEnd and padding is never integrated into the
+   target.
+
+   The continuous track is evaluated at each pitch period and a period is
+   inserted or removed at that local speed.  The produced duration is compared
+   with the exact duration integral of the source consumed so far; the signed
+   error is removed by copying unmodified samples, which is PICOLA's time-error
+   correction.  The copy run stops at the exact frame where the error crosses
+   zero, so a run split by buffer availability produces the same output.  Period
+   history and overlap-add state are never reset at a node, and no part of the
+   output is generated independently and spliced. */
+static int changeSpeedTrack(sonicStream stream) {
+  int numSamples = stream->numInputSamples;
+  int position = 0;
+  int numChannels = stream->numChannels;
+  int maxRequired = stream->maxRequired;
+  int period, newSamples, n, maxN;
+  short* samples;
+
+  /* A pitch period of the real source must still fit.  Flush padding is only
+     lookahead, so this also guarantees the lookahead reads stay in bounds. */
+  while (position + maxRequired <= numSamples &&
+         stream->trackAbsSrc < stream->trackRealEnd) {
+    double frame = stream->trackAbsSrc;
+    double speed = speedAtFrame(stream, frame);
+    double err = stream->trackOutput - stream->trackTarget;
+    int avail = numSamples - position;
+
+    samples = stream->inputBuffer + position * numChannels;
+    if (speed >= 1.0 - 1e-9 && speed <= 1.0 + 1e-9) {
+      /* Unit speed: pass the source through untouched. */
+      n = (int)(unityEndFrame(stream, frame, stream->trackRealEnd) - frame);
+      if (n < 1) {
+        n = 1;
+      }
+      if (n > avail) {
+        n = avail;
+      }
+      if (frame + n > stream->trackRealEnd) {
+        n = (int)(stream->trackRealEnd - frame);
+      }
+      if (n < 1) {
+        break;
+      }
+      if (!copyToOutput(stream, samples, n)) {
+        return 0;
+      }
+      position += n;
+      stream->trackAbsSrc += n;
+      advanceTrackTarget(stream, frame, frame + n);
+      stream->trackOutput += n;
+      continue;
+    }
+    if ((speed > 1.0 && err <= 0.0) || (speed < 1.0 && err >= 0.0)) {
+      /* Copy unmodified input to zero out the duration error.  The run ends
+         exactly where the error crosses zero; if that is past the available
+         data the run is simply resumed on the next call. */
+      double limit = stream->trackRealEnd;
+      double side = speedSideChangeFrame(stream, frame, limit, speed > 1.0);
+      if (side < limit) {
+        limit = side;
+      }
+      maxN = (int)(limit - frame);
+      if (maxN > avail) {
+        maxN = avail;
+      }
+      if (maxN > 0) {
+        n = copyRunLength(stream, frame, err, maxN, speed > 1.0);
+        if (n < 1) {
+          n = 1;
+        }
+        if (!copyToOutput(stream, samples, n)) {
+          return 0;
+        }
+        position += n;
+        stream->trackAbsSrc += n;
+        advanceTrackTarget(stream, frame, frame + n);
+        stream->trackOutput += n;
+        continue;
+      }
+    }
+    period = findPitchPeriod(stream, samples, 1);
+    if (period < 1) {
+      period = 1;
+    }
+    if (period > stream->maxPeriod) {
+      period = stream->maxPeriod;
+    }
+    if (speed > 1.0) {
+      /* Skip part of a pitch period: source consumed is period + newSamples,
+         output produced is newSamples. */
+      newSamples = skipPitchPeriod(stream, samples, (float)speed, period);
+      if (newSamples == 0) {
+        return 0;
+      }
+      /* Near unity speed the analytic skip length can exceed the buffer.
+         Skipping less is fine: the duration error it leaves behind is removed
+         by the copy run. */
+      if (newSamples > numSamples - position - period) {
+        newSamples = numSamples - position - period;
+      }
+      position += period + newSamples;
+      stream->trackAbsSrc += period + newSamples;
+      advanceTrackTarget(stream, frame, frame + period + newSamples);
+      stream->trackOutput += newSamples;
+    } else {
+      /* Insert a pitch period: source consumed is newSamples, output produced
+         is period + newSamples. */
+      newSamples = insertPitchPeriod(stream, samples, (float)speed, period);
+      if (newSamples == 0) {
+        return 0;
+      }
+      position += newSamples;
+      stream->trackAbsSrc += newSamples;
+      advanceTrackTarget(stream, frame, frame + newSamples);
+      stream->trackOutput += period + newSamples;
+    }
+  }
+  removeInputSamples(stream, position);
+  return 1;
+}
+
+/* Reset per-segment track bookkeeping.  The track configuration itself is kept;
+   the next segment starts again at source frame 0. */
+static void resetSpeedTrackPosition(sonicStream stream) {
+  stream->trackAbsSrc = 0.0;
+  stream->trackRealEnd = (double)stream->numInputSamples;
+  stream->trackOutput = 0.0;
+  stream->trackTarget = 0.0;
+  stream->trackEmitted = 0;
+  stream->prevPeriod = 0;
+  stream->prevMinDiff = 0;
+}
+
+/* Duration target for the real source frames of this segment, per the
+   continuous track.  trackOutput vs. this value is compared by the tests. */
+static double trackSegmentTarget(sonicStream stream) {
+  return trackDuration(stream, 0.0, stream->trackRealEnd);
+}
+
+/* Set a speed track.  See sonic.h for the restrictions. */
+int sonicSetSpeedTrack(sonicStream stream, const SonicSpeedPoint* points,
+                       int count) {
+  SonicSpeedPoint* copy = NULL;
+  int i;
+
+  if (count < 0) {
+    return 0;
+  }
+  if (count > 0 && points == NULL) {
+    return 0;
+  }
+  /* A non-empty track may only be set before any non-empty input has been
+     written.  An empty track only clears the mode, so it is always allowed. */
+  if (count > 0 && !speedTrackSettable(stream)) {
+    return 0;
+  }
+  if (count > 0) {
+    if (!speedTrackFormatSupported(stream)) {
+      return 0;
+    }
+    if (points[0].inputFrame != 0) {
+      return 0;
+    }
+    for (i = 0; i < count; i++) {
+      /* Comparing with a NaN speed fails both bounds and rejects it. */
+      if (!(points[i].speed >= SONIC_SPEED_TRACK_MIN &&
+            points[i].speed <= SONIC_SPEED_TRACK_MAX)) {
+        return 0;
+      }
+      if (points[i].inputFrame > SONIC_MAX_SPEED_POINT_FRAME) {
+        return 0;
+      }
+      if (i > 0 && points[i].inputFrame <= points[i - 1].inputFrame) {
+        return 0;
+      }
+    }
+    copy = (SonicSpeedPoint*)sonicCalloc(count, sizeof(SonicSpeedPoint));
+    if (copy == NULL) {
+      return 0;
+    }
+    memcpy(copy, points, count * sizeof(SonicSpeedPoint));
+  }
+  /* An empty track only clears the mode, so it is accepted regardless of the
+     current format settings; a non-empty track requires them.  Both may only
+     be set on a stream that has not yet received non-empty input. */
+  if (stream->speedTrack != NULL) {
+    sonicFree(stream->speedTrack);
+  }
+  stream->speedTrack = copy;
+  stream->numSpeedPoints = count;
+  stream->trackCarry = 0;
+  resetSpeedTrackPosition(stream);
+  stream->inputPlayTime = 0.0f;
+  stream->timeError = 0.0f;
+  stream->numPitchSamples = 0;
+  return 1;
+}
+
 static int copyUnmodifiedSamples(sonicStream stream, short* samples,
                                  float speed, int position, int* newSamples) {
   int availableSamples = stream->numInputSamples - position;
@@ -1153,18 +1738,26 @@ static int processStreamInput(sonicStream stream) {
   if (stream->numInputSamples == 0) {
     return 1;
   }
-  localSpeed =
-      stream->numInputSamples * stream->samplePeriod / stream->inputPlayTime;
-  if (localSpeed > 1.00001 || localSpeed < 0.99999) {
-    changeSpeed(stream, localSpeed);
-  } else {
-    if (!copyInputToOutput(stream, stream->numInputSamples)) {
+  if (stream->numSpeedPoints > 0) {
+    /* Track mode: pitch, rate and quality are fixed at their defaults, so there
+       is no resampling to do. */
+    if (!changeSpeedTrack(stream)) {
       return 0;
     }
-  }
-  if (rate != 1.0f) {
-    if (!adjustRate(stream, rate, originalNumOutputSamples)) {
-      return 0;
+  } else {
+    localSpeed =
+        stream->numInputSamples * stream->samplePeriod / stream->inputPlayTime;
+    if (localSpeed > 1.00001 || localSpeed < 0.99999) {
+      changeSpeed(stream, localSpeed);
+    } else {
+      if (!copyInputToOutput(stream, stream->numInputSamples)) {
+        return 0;
+      }
+    }
+    if (rate != 1.0f) {
+      if (!adjustRate(stream, rate, originalNumOutputSamples)) {
+        return 0;
+      }
     }
   }
   if (stream->volume != 1.0f) {
@@ -1181,6 +1774,12 @@ static int processStreamInput(sonicStream stream) {
 /* Write floating point data to the input buffer and process it. */
 int sonicWriteFloatToStream(sonicStream stream, const float* samples,
                             int numSamples) {
+  if (numSamples < 0) {
+    return 0;
+  }
+  if (numSamples > 0) {
+    stream->hasNonEmptyInput = 1;
+  }
   if (!addFloatSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }
@@ -1191,6 +1790,12 @@ int sonicWriteFloatToStream(sonicStream stream, const float* samples,
    conversion for you. */
 int sonicWriteShortToStream(sonicStream stream, const short* samples,
                             int numSamples) {
+  if (numSamples < 0) {
+    return 0;
+  }
+  if (numSamples > 0) {
+    stream->hasNonEmptyInput = 1;
+  }
   if (!addShortSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }
@@ -1202,6 +1807,12 @@ int sonicWriteShortToStream(sonicStream stream, const short* samples,
 int sonicWriteUnsignedCharToStream(sonicStream stream,
                                    const unsigned char* samples,
                                    int numSamples) {
+  if (numSamples < 0) {
+    return 0;
+  }
+  if (numSamples > 0) {
+    stream->hasNonEmptyInput = 1;
+  }
   if (!addUnsignedCharSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }

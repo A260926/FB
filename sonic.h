@@ -58,6 +58,8 @@ similar to high speed factors is used.
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 #ifdef SONIC_INTERNAL
 /* The following #define's are used to change the names of the routines defined
  * here so that a new library (i.e. speedy) can reuse these names, and then call
@@ -100,6 +102,7 @@ extern "C" {
 #define sonicSetNumChannels sonicIntSetNumChannels
 #define sonicChangeFloatSpeed sonicIntChangeFloatSpeed
 #define sonicChangeShortSpeed sonicIntChangeShortSpeed
+#define sonicSetSpeedTrack sonicIntSetSpeedTrack
 #define sonicEnableNonlinearSpeedup sonicIntEnableNonlinearSpeedup
 #define sonicSetDurationFeedbackStrength sonicIntSetDurationFeedbackStrength
 #define sonicComputeSpectrogram sonicIntComputeSpectrogram
@@ -130,6 +133,24 @@ extern "C" {
 #define SONIC_MAX_SAMPLE_RATE 500000
 #define SONIC_MIN_CHANNELS 1
 #define SONIC_MAX_CHANNELS 32
+
+/* Speed tracks use positions in input (source PCM) frames.  The largest
+   supported position is 2^53, so that it can be represented exactly as a
+   double. */
+#define SONIC_MAX_SPEED_POINT_FRAME ((uint64_t)1 << 53)
+
+/* The supported speed range for track points. */
+#define SONIC_SPEED_TRACK_MIN 0.5f
+#define SONIC_SPEED_TRACK_MAX 2.0f
+
+/* A single point in a speed track.  inputFrame is the position in the source
+   PCM stream, measured in frames (samples per channel), and speed is the
+   time-compression factor at that position.  Between points the speed is
+   linearly interpolated, and after the last point the last speed is held. */
+typedef struct SonicSpeedPoint {
+  uint64_t inputFrame;
+  float speed;
+} SonicSpeedPoint;
 
 /* These are used to down-sample some inputs to improve speed */
 #define SONIC_AMDF_FREQ 4000
@@ -182,6 +203,25 @@ int sonicSamplesAvailable(sonicStream stream);
 float sonicGetSpeed(sonicStream stream);
 /* Set the speed of the stream. */
 void sonicSetSpeed(sonicStream stream, float speed);
+/* Set a speed track for the stream.  positions are measured in source PCM
+   frames: the first point must be at frame 0, positions must increase
+   strictly, and no position may exceed SONIC_MAX_SPEED_POINT_FRAME.  Speeds
+   must be finite and in the range [0.5, 2.0].  The speed between points is
+   interpolated linearly, and the last speed is held after the final point.
+
+   A non-empty track may only be set on a new stream that has not yet been
+   given any non-empty input.  Returns 1 on success, or 0 if the track was
+   rejected, in which case the previous configuration is left untouched.
+   Passing count == 0 (or a NULL points array) clears the track and restores
+   the regular speed mode; clearing is always allowed.
+
+   While a track is active the stream must use pitch == rate == 1, quality ==
+   1, and either 16000 or 48000 Hz with 1 or 2 channels.  While it is active,
+   sonicSetSampleRate, sonicSetNumChannels, sonicSetPitch, sonicSetRate and
+   sonicSetSpeed are ignored (the existing values are kept).  Volume changes
+   still take effect.  The library keeps its own copy of the points. */
+int sonicSetSpeedTrack(sonicStream stream, const SonicSpeedPoint* points,
+                       int count);
 /* Get the pitch of the stream. */
 float sonicGetPitch(sonicStream stream);
 /* Set the pitch of the stream. */
