@@ -23,7 +23,7 @@ public:
    EShLanguage getLanguage() const { return language; }
    TInfoSink& getInfoSink() { return infoSink; }
 
-   void TransformAST (TIntermNode* root);
+   bool TransformAST (TIntermNode* root, unsigned options);
    void ProduceGLSL (TIntermNode* root, ETargetVersion version, unsigned options);
    bool IsASTTransformed() const { return m_ASTTransformed; }
    bool IsGlslProduced() const { return m_GlslProduced; }

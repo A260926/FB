@@ -8,7 +8,10 @@
 #include "glslOutput.h"
 #include "typeSamplers.h"
 #include "propagateMutable.h"
+#include "lowerDynamicSamplers.h"
 #include "hlslLinker.h"
+
+#include "../../include/hlsl2glsl.h"
 
 HlslCrossCompiler::HlslCrossCompiler(EShLanguage l)
 :	language(l)
@@ -33,11 +36,18 @@ HlslCrossCompiler::~HlslCrossCompiler()
 }
 
 
-void HlslCrossCompiler::TransformAST (TIntermNode *root)
+bool HlslCrossCompiler::TransformAST (TIntermNode *root, unsigned options)
 {
 	m_ASTTransformed = true;
 	PropagateSamplerTypes (root, infoSink);
 	PropagateMutableUniforms (root, infoSink);
+
+	if (options & ETranslateOpLowerDynamicSamplers)
+	{
+		if (!LowerDynamicSamplers(root, infoSink))
+			return false;
+	}
+	return true;
 }
 
 void HlslCrossCompiler::ProduceGLSL (TIntermNode *root, ETargetVersion version, unsigned options)

@@ -208,6 +208,14 @@ enum TTranslateOptions
 	//  instead of outputting e.g. "xlat_attrib_TEXCOORD0" for "appdata_t.texcoord : TEXCOORD0"
 	//  we will output "appdata_t_texcoord"
 	ETranslateOpPropogateOriginalAttribNames = (1<<4),
+
+	// Lower dynamic indexing of global fixed-length sampler2D arrays into per-call
+	// helper functions that sample every element with constant indices and select
+	// the result.  Only direct sampler arguments of tex2D, tex2Dbias, tex2Dlod and
+	// the four-argument tex2D (gradient) are accepted; any other use of a
+	// dynamically indexed sampler is a compile error.  When the flag is off the
+	// AST and emitted code are untouched.
+	ETranslateOpLowerDynamicSamplers = (1<<5),
 };
 
 

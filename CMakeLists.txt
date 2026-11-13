@@ -35,6 +35,8 @@ set(GLSL_CODE_GEN_FILES
   hlslang/GLSLCodeGen/hlslLinker.h
   hlslang/GLSLCodeGen/hlslSupportLib.cpp
   hlslang/GLSLCodeGen/hlslSupportLib.h
+  hlslang/GLSLCodeGen/lowerDynamicSamplers.cpp
+  hlslang/GLSLCodeGen/lowerDynamicSamplers.h
   hlslang/GLSLCodeGen/propagateMutable.cpp
   hlslang/GLSLCodeGen/propagateMutable.h
   hlslang/GLSLCodeGen/typeSamplers.cpp

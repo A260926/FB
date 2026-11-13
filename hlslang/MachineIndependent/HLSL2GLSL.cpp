@@ -350,8 +350,10 @@ int C_DECL Hlsl2Glsl_Parse(
 		if (options & ETranslateOpIntermediate)
 			ir_output_tree(parseContext.treeRoot, parseContext.infoSink);
 
-		compiler->TransformAST (parseContext.treeRoot);
-		compiler->ProduceGLSL (parseContext.treeRoot, targetVersion, options);
+		if (compiler->TransformAST (parseContext.treeRoot, options))
+			compiler->ProduceGLSL (parseContext.treeRoot, targetVersion, options);
+		else
+			success = false;
    }
    else if (!success)
    {

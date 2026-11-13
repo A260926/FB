@@ -257,6 +257,9 @@ class TIntermSelection;
 class TIntermOperator;
 class TIntermTyped;
 class TIntermSymbol;
+class TIntermUnary;
+class TIntermLoop;
+class TIntermBranch;
 class TInfoSink;
 class TIntermDeclaration;
 
@@ -279,12 +282,15 @@ public:
 
 	virtual TIntermTyped*     getAsTyped() { return 0; }
 	virtual TIntermOperator*  getAsOperatorNode() { return 0; }
+	virtual TIntermUnary*     getAsUnaryNode() { return 0; }
 	virtual TIntermConstant*     getAsConstant() { return 0; }
 	virtual TIntermAggregate* getAsAggregate() { return 0; }
 	virtual TIntermBinary*    getAsBinaryNode() { return 0; }
 	virtual TIntermSelection* getAsSelectionNode() { return 0; }
 	virtual TIntermSymbol*    getAsSymbolNode() { return 0; }
 	virtual TIntermDeclaration* getAsDeclaration() { return 0; }
+	virtual TIntermLoop*      getAsLoopNode() { return 0; }
+	virtual TIntermBranch*    getAsBranchNode() { return 0; }
 	virtual ~TIntermNode() { }
 
 protected:
@@ -360,6 +366,12 @@ public:
 	TIntermTyped* getCondition() { return cond; }
 	TIntermTyped* getExpression() { return expr; }
 	TIntermNode*  getBody() { return body; }
+
+	void setCondition(TIntermTyped* c) { cond = c; }
+	void setExpression(TIntermTyped* e) { expr = e; }
+	void setBody(TIntermNode* b) { body = b; }
+
+	virtual TIntermLoop* getAsLoopNode() { return this; }
 	
 protected:
 	TLoopType	type;
@@ -383,6 +395,9 @@ public:
 
 	TOperator getFlowOp() { return flowOp; }
 	TIntermTyped* getExpression() { return expression; }
+	void setExpression(TIntermTyped* e) { expression = e; }
+
+	virtual TIntermBranch* getAsBranchNode() { return this; }
 protected:
 	TOperator flowOp;
 	TIntermTyped* expression;  // non-zero except for "return exp;" statements
@@ -588,6 +603,11 @@ public:
 	void setOperand(TIntermTyped* o) { operand = o; }
 	TIntermTyped* getOperand() { return operand; }
 
+	virtual TIntermUnary* getAsUnaryNode()
+	{
+		return this;
+	}
+
 	virtual bool promote(TParseContext& ctx);
 	
 private:
@@ -653,6 +673,9 @@ public:
 	TIntermNode* getCondition() const { return condition; }
 	TIntermNode* getTrueBlock() const { return trueBlock; }
 	TIntermNode* getFalseBlock() const { return falseBlock; }
+	void setCondition(TIntermTyped* c) { condition = c; }
+	void setTrueBlock(TIntermNode* b) { trueBlock = b; }
+	void setFalseBlock(TIntermNode* b) { falseBlock = b; }
 	TIntermSelection* getAsSelectionNode() { return this; }
 
 	bool promoteTernary(TInfoSink&);
