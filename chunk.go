@@ -20,6 +20,10 @@ type Chunk struct {
 	Size int
 	R    io.Reader
 	Pos  int
+
+	// rawSize is the size as declared in the file, before the odd-size
+	// padding adjustment applied to Size.
+	rawSize int
 }
 
 // Done makes sure the entire chunk was read.

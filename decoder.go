@@ -57,6 +57,31 @@ type Decoder struct {
 	// read the file information to setup the audio clip
 	// find the beginning of the SSND chunk and set the clip reader to it.
 	rewindBytes int64
+
+	// ima4 (Apple IMA ADPCM) state. Only constant-size packet/group state is
+	// kept; Go: no full-file cache and no per-packet checkpoints.
+	ima4            bool
+	ima4Chans       int
+	ima4Groups      int64 // COMM.NumSampleFrames, i.e. compressed packet groups
+	ima4TotalFrames int64
+	ima4PCMBytes    int64 // uncompressed byte count, for PCMLen
+	ima4DataBytes   int64 // compressed byte count implied by the groups
+	ima4MetaErr     error
+
+	ima4Ready         bool
+	ima4SetupErr      error
+	ima4PCMStart      int64 // absolute offset of the first packet group
+	ima4ChunkEnd      int64 // absolute offset just past the SSND chunk data
+	ima4HaveChunkEnd  bool
+	ima4AvailBytes    int64 // bytes from the first group to the SSND end
+	ima4Remaining     int64 // bytes left before the declared sound data ends
+	ima4GroupsDecoded int64
+
+	ima4Cur       []int // one decoded group, frame-interleaved
+	ima4CurPos    int
+	ima4State     [2]ima4ChannelState
+	ima4HaveState [2]bool
+	ima4DecodeErr error
 }
 
 // NewDecoder creates a new reader reading the given reader and pushing audio data to the given channel.
@@ -73,25 +98,47 @@ func (d *Decoder) SampleBitDepth() int32 {
 	return int32(d.BitDepth)
 }
 
-// PCMLen returns the total number of bytes in the PCM data chunk
+// PCMLen returns the total number of bytes in the PCM data chunk.
+// For ima4 encoded files this is the uncompressed byte count, computed from
+// the packet groups declared in the COMM chunk.
 func (d *Decoder) PCMLen() int64 {
 	if d == nil {
 		return 0
+	}
+	d.ReadInfo()
+	if d.ima4 {
+		return d.ima4PCMBytes
 	}
 	return int64(d.PCMSize)
 }
 
 // Err returns the first non-EOF error that was encountered by the Decoder.
 func (d *Decoder) Err() error {
-	if d.err == io.EOF {
-		return nil
+	if d.err != nil {
+		if d.err == io.EOF {
+			return nil
+		}
+		return d.err
 	}
-	return d.err
+	if d.ima4DecodeErr != nil {
+		return d.ima4DecodeErr
+	}
+	if d.ima4SetupErr != nil {
+		return d.ima4SetupErr
+	}
+	if d.ima4MetaErr != nil {
+		return d.ima4MetaErr
+	}
+	return nil
 }
 
 // EOF returns positively if the underlying reader reached the end of file.
 func (d *Decoder) EOF() bool {
 	if d == nil || d.err == io.EOF {
+		return true
+	}
+	if d.ima4 && d.ima4Ready && d.ima4GroupsDecoded >= d.ima4Groups && d.ima4CurPos >= len(d.ima4Cur) {
+		// All declared packet groups have been consumed.
 		return true
 	}
 	return false
@@ -130,6 +177,7 @@ func (d *Decoder) NextChunk() (*Chunk, error) {
 	)
 
 	id, size, d.err = d.iDnSize()
+	rawSize := int(size)
 	if size%2 != 0 {
 		// realign, the encoder lied about the size of the chunk header :(
 		size++
@@ -142,9 +190,10 @@ func (d *Decoder) NextChunk() (*Chunk, error) {
 	}
 
 	c := &Chunk{
-		ID:   id,
-		Size: int(size),
-		R:    io.LimitReader(d.r, int64(size)),
+		ID:      id,
+		Size:    int(size),
+		R:       io.LimitReader(d.r, int64(size)),
+		rawSize: rawSize,
 	}
 
 	return c, d.err
@@ -183,6 +232,15 @@ func (d *Decoder) Duration() (time.Duration, error) {
 	if err := d.Err(); err != nil {
 		return 0, err
 	}
+	if d.ima4 {
+		if d.ima4MetaErr != nil {
+			return 0, d.ima4MetaErr
+		}
+		if d.SampleRate <= 0 {
+			return 0, fmt.Errorf("invalid sample rate %d", d.SampleRate)
+		}
+		return time.Duration(float64(d.ima4TotalFrames) / float64(d.SampleRate) * float64(time.Second)), nil
+	}
 	duration := time.Duration(float64(d.NumSampleFrames) / float64(d.SampleRate) * float64(time.Second))
 	return duration, nil
 }
@@ -201,6 +259,15 @@ func (d *Decoder) Tempo() float64 {
 
 // Drain parses the remaining chunks
 func (d *Decoder) Drain() error {
+	d.ReadInfo()
+	if d.ima4 {
+		// Locate SSND (if not already done) and skip to the end of the
+		// compressed sound data. Chunk headers must never be read from
+		// inside the compressed packets.
+		if err := d.skipIMA4ToChunkEnd(); err != nil {
+			return err
+		}
+	}
 	var chunk *Chunk
 	for d.err == nil {
 		chunk, d.err = d.NextChunk()
@@ -218,6 +285,42 @@ func (d *Decoder) Drain() error {
 		}
 	}
 	return d.err
+}
+
+// skipIMA4ToChunkEnd abandons the remaining compressed data and positions
+// the decoder just after the SSND chunk (including its odd-size padding).
+func (d *Decoder) skipIMA4ToChunkEnd() error {
+	if !d.ima4HaveChunkEnd {
+		// SSND was never located (e.g. only metadata was queried). Find it
+		// now without reading any compressed bytes: FwdToPCM parses the
+		// chunk headers and seeks to the first packet group.
+		if !d.ima4Ready {
+			if d.ima4SetupErr != nil {
+				return d.ima4SetupErr
+			}
+			if err := d.FwdToPCM(); err != nil {
+				return err
+			}
+			if d.ima4SetupErr != nil {
+				return d.ima4SetupErr
+			}
+		}
+	}
+	if d.ima4HaveChunkEnd {
+		if _, err := d.r.Seek(d.ima4ChunkEnd, io.SeekStart); err != nil {
+			return err
+		}
+	} else {
+		// The SSND chunk was never located; nothing to skip.
+		return nil
+	}
+	d.ima4Cur = nil
+	d.ima4CurPos = 0
+	d.ima4GroupsDecoded = d.ima4Groups
+	d.ima4Remaining = 0
+	d.ima4DecodeErr = nil
+	d.err = nil
+	return nil
 }
 
 // FwdToPCM forwards the underlying reader until the start of the PCM chunk.
@@ -245,15 +348,58 @@ func (d *Decoder) FwdToPCM() error {
 			//  16     (n)bytes  Comment
 			//  16+(n) (s)bytes  <Sample data>
 
+			// NextChunk consumed the 8-byte ID/size header, so the
+			// underlying reader is now at the first byte of the chunk
+			// data (the offset field).
+			var chunkDataStart int64
+			if d.ima4 {
+				var posErr error
+				chunkDataStart, posErr = d.r.Seek(0, io.SeekCurrent)
+				if posErr != nil {
+					d.err = posErr
+					return d.err
+				}
+			}
+			rawChunkSize := chunk.rawSize
+			if rawChunkSize <= 0 {
+				rawChunkSize = chunk.Size
+			}
+
 			var offset uint32
 			if d.err = chunk.ReadBE(&offset); d.err != nil {
 				d.err = fmt.Errorf("PCM offset failed to parse - %s", d.err)
 				return d.err
 			}
 
-			if d.err = chunk.ReadBE(&d.PCMSize); d.err != nil {
-				d.err = fmt.Errorf("PCMSize failed to parse - %s", d.err)
+			var blockSize uint32
+			if d.err = chunk.ReadBE(&blockSize); d.err != nil {
+				d.err = fmt.Errorf("SSND block size failed to parse - %s", d.err)
 				return d.err
+			}
+			// Preserve the existing PCMSize semantics for uncompressed
+			// data: it ends up as the block size field minus the offset.
+			d.PCMSize = blockSize
+			if d.ima4 {
+				// For ima4 PCMSize isn't meaningful; the uncompressed
+				// length comes from the packet groups in COMM.
+				d.PCMSize = 0
+				d.ima4SetupErr = d.setupIMA4PCM(chunkDataStart, offset, int64(rawChunkSize))
+				if d.ima4SetupErr != nil {
+					d.err = d.ima4SetupErr
+					return d.err
+				}
+				if _, err := d.r.Seek(d.ima4PCMStart, io.SeekStart); err != nil {
+					d.ima4SetupErr = err
+					d.err = err
+					return d.err
+				}
+				d.pcmDataAccessed = true
+				d.ima4Ready = true
+				d.ima4Remaining = d.ima4DataBytes
+				if d.ima4Remaining > d.ima4AvailBytes {
+					d.ima4Remaining = d.ima4AvailBytes
+				}
+				return nil
 			}
 			if offset > 0 {
 				d.PCMSize -= offset
@@ -293,6 +439,28 @@ func (d *Decoder) Reset() {
 	d.EncodingName = ""
 	d.err = nil
 	d.pcmDataAccessed = false
+	d.PCMSize = 0
+	d.PCMChunk = nil
+	d.ima4 = false
+	d.ima4Chans = 0
+	d.ima4Groups = 0
+	d.ima4TotalFrames = 0
+	d.ima4PCMBytes = 0
+	d.ima4DataBytes = 0
+	d.ima4MetaErr = nil
+	d.ima4Ready = false
+	d.ima4SetupErr = nil
+	d.ima4PCMStart = 0
+	d.ima4ChunkEnd = 0
+	d.ima4HaveChunkEnd = false
+	d.ima4AvailBytes = 0
+	d.ima4Remaining = 0
+	d.ima4GroupsDecoded = 0
+	d.ima4Cur = nil
+	d.ima4CurPos = 0
+	d.ima4State = [2]ima4ChannelState{}
+	d.ima4HaveState = [2]bool{}
+	d.ima4DecodeErr = nil
 	d.r.Seek(0, 0)
 }
 
@@ -304,7 +472,42 @@ func (d *Decoder) Seek(offset int64, whence int) (int64, error) {
 // Rewind allows the decoder to be rewound to the beginning of the PCM data.
 // This is useful if you want to keep on decoding the same file in a loop.
 func (d *Decoder) Rewind() error {
+	if d.ima4 {
+		// Keep the container information and re-establish the ima4 state
+		// from the first packet group.
+		if err := d.rewindIMA4(); err != nil {
+			return err
+		}
+		d.pcmDataAccessed = true
+		return nil
+	}
 	d.Reset()
+	return nil
+}
+
+// rewindIMA4 returns the sequential ima4 reader to the first packet group
+// without re-parsing the container headers.
+func (d *Decoder) rewindIMA4() error {
+	d.err = nil
+	if d.ima4MetaErr != nil {
+		return d.ima4MetaErr
+	}
+	if d.ima4SetupErr != nil {
+		return d.ima4SetupErr
+	}
+	if !d.ima4Ready {
+		if err := d.FwdToPCM(); err != nil {
+			return err
+		}
+		if d.ima4SetupErr != nil {
+			return d.ima4SetupErr
+		}
+	}
+	if _, err := d.r.Seek(d.ima4PCMStart, io.SeekStart); err != nil {
+		return err
+	}
+	d.resetIMA4Stream()
+	d.pcmDataAccessed = true
 	return nil
 }
 
@@ -312,6 +515,10 @@ func (d *Decoder) Rewind() error {
 // audio container. The entire PCM data is held in memory.
 // Consider using Buffer() instead.
 func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
+	d.ReadInfo()
+	if d.ima4 {
+		return d.ima4FullPCMBuffer()
+	}
 	if !d.WasPCMAccessed() {
 		err := d.FwdToPCM()
 		if err != nil {
@@ -393,6 +600,10 @@ func (d *Decoder) FullPCMBuffer() (*audio.IntBuffer, error) {
 func (d *Decoder) PCMBuffer(buf *audio.IntBuffer) (n int, err error) {
 	if buf == nil {
 		return 0, nil
+	}
+	d.ReadInfo()
+	if d.ima4 {
+		return d.ima4PCMBuffer(buf)
 	}
 
 	if !d.WasPCMAccessed() {
@@ -666,6 +877,10 @@ func (d *Decoder) parseCommChunk(size uint32) error {
 	}
 	if read < int(size) {
 		io.CopyN(ioutil.Discard, src, int64(int(size)-read))
+	}
+
+	if d.Form == aifcID && d.Encoding == encIma4 {
+		d.prepareIMA4Info()
 	}
 
 	return d.err
