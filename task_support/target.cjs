@@ -1,0 +1,10 @@
+const {spawnSync}=require('node:child_process');
+const fs=require('node:fs');
+const file="sources_target_test.go";
+if(!fs.existsSync(file)||!fs.readFileSync(file,'utf8').trim()) throw Error('missing target tests: '+file);
+const r=spawnSync('sh',['task_support/go.sh','test','-mod=vendor','-count=1','-json',".",'-run',"^(TestSourcesLateJoin|TestSourcesRedirect|TestSourcesIsolation)$"],{encoding:'utf8',maxBuffer:16*1024*1024});
+process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');
+if(r.error||r.status!==0)process.exit(r.status||1);
+const events=(r.stdout||'').trim().split('\n').map(x=>JSON.parse(x));
+for(const n of ["TestSourcesLateJoin", "TestSourcesRedirect", "TestSourcesIsolation"])if(!events.some(e=>e.Test===n&&e.Action==='pass'))throw Error('required test did not pass: '+n);
+if(events.some(e=>e.Action==='skip'))throw Error('skipped tests');
