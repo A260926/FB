@@ -74,7 +74,15 @@ func (p *ProtoCommands) InitialPreCondition(state State) bool {
 }
 
 // Prop creates a gopter.Prop from Commands
+//
+// If commands also implements RegenerativeCommands the dependency-regenerating
+// shrink mode is enabled: shrunk sequences are repaired by regenerating the
+// commands that no longer fit the rebuilt model instead of dropping the whole
+// candidate. Plain Commands keep the original generation and shrinking.
 func Prop(commands Commands) gopter.Prop {
+	if regenerative, ok := commands.(RegenerativeCommands); ok {
+		return propRegenerative(regenerative)
+	}
 	return prop.ForAll(func(actions *actions) *gopter.PropResult {
 		systemUnderTest := commands.NewSystemUnderTest(actions.initialStateProvider())
 		defer commands.DestroySystemUnderTest(systemUnderTest)
