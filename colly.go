@@ -1403,6 +1403,32 @@ func (c *Collector) Limits(rules []*LimitRule) error {
 	return c.backend.Limits(rules)
 }
 
+// UseAllMatchingLimits switches the collector from the default
+// first-matching-rule admission to all-matching admission. It must be
+// called before scraping starts; rules are still registered via Limit /
+// Limits.
+//
+// In the default mode only the first registered rule matching
+// request.URL.Host is applied. With all-matching admission every matching
+// rule applies to the download at the same time: a request must hold one
+// slot in each matching rule before it reaches the HTTP transport. For
+// example a "*" rule with Parallelism 3 and an "a.test" rule with
+// Parallelism 1 allow at most three concurrent downloads in total, of
+// which at most one targets a.test, regardless of rule order. Requests
+// without a matching rule are sent as usual.
+//
+// The setting lives on the shared HTTP backend, so collectors created with
+// Clone share the mode and any LimitRule shared between collectors keeps
+// a single capacity that both modes honor. Waiting for admission never
+// occupies partial slots and responds to the request's context: if the
+// context is cancelled while waiting, a context error is returned, the
+// transport is never called and no slot is reserved. Each rule keeps its
+// slot until its own Delay / RandomDelay elapses after the download has
+// been handled, so rules with different delays release independently.
+func (c *Collector) UseAllMatchingLimits() {
+	c.backend.useAllMatchingLimits.Store(true)
+}
+
 // SetRedirectHandler instructs the Collector to allow multiple downloads of the same URL
 func (c *Collector) SetRedirectHandler(f func(req *http.Request, via []*http.Request) error) {
 	c.redirectHandler = f

@@ -1,0 +1,2 @@
+# Local Go toolchain caches used by task_support/env.sh
+/.build/

@@ -94,6 +94,52 @@ func main() {
 
 See [examples folder](https://github.com/gocolly/colly/tree/master/_examples) for more detailed examples.
 
+## Rate limiting
+
+Rules registered with `Collector.Limit` / `Collector.Limits` restrict the
+number of concurrent downloads (`Parallelism`) and the delay between
+downloads of matching domains (`Delay`, `RandomDelay`).
+
+By default only the **first** registered rule matching the request host is
+applied. Call `Collector.UseAllMatchingLimits()` before scraping starts to
+switch to all-matching admission, where a download must hold a slot in
+**every** rule matching the original request URL host before it reaches the
+HTTP transport. With a `"*"` rule of `Parallelism: 3` and an `"a.test"`
+rule of `Parallelism: 1`, at most three downloads run at once and at most
+one of them targets `a.test`, no matter how the rules are ordered. Requests
+without a matching rule are sent as usual.
+
+```go
+c := colly.NewCollector(colly.Async(true))
+c.UseAllMatchingLimits()
+c.Limits([]*colly.LimitRule{
+    {DomainGlob: "*", Parallelism: 3},
+    {DomainGlob: "a.test", Parallelism: 1},
+})
+```
+
+Rules still registered through `Limit` / `Limits`; the mode cannot be
+toggled or changed while a crawl is running. A `*LimitRule` may be shared
+between collectors (including ones running in different modes): its
+`Parallelism` is a single real capacity shared by all of them, and the mode
+itself lives on the shared HTTP backend, so a collector obtained from
+`Clone` keeps the same mode. Registering the same rule pointer twice on one
+collector counts once; two separately allocated rules with identical
+configuration each apply.
+
+While waiting for admission a request holds no partial slot, so a request
+blocked on a site-specific rule cannot consume a slot of a wider rule, and
+overlapping rule sets registered in different orders cannot deadlock. If
+the request's context is cancelled while waiting, a context error is
+returned, the transport is never called and no slot needs releasing.
+
+After a download finishes (including transport failures, body read errors
+and request/response header aborts), each acquired rule keeps its slot for
+its own `Delay` plus a random value in `[0, RandomDelay)` and then releases
+it independently: a rule with a short delay is not held back by a sibling
+rule's longer delay. Cache hits do not acquire network slots, and redirects
+keep using the rules selected for the original download.
+
 ## Installation
 
 `go get github.com/gocolly/colly/v2`
