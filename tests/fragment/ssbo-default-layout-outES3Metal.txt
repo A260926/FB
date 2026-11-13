@@ -1,0 +1,73 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_DefaultData_std430 {
+  float values[3];
+  char _pad0[4];
+  float2 pairs[2];
+};
+static_assert(sizeof(_xlat_buf_DefaultData_std430) == 32, "std430 size");
+struct _xlat_element_float_16 { float value; char _pad[12]; };
+struct _xlat_buf_ExplicitData_std140 {
+  _xlat_element_float_16 values[2];
+};
+static_assert(sizeof(_xlat_buf_ExplicitData_std140) == 32, "std140 size");
+struct _xlat_Pair_std430 {
+  float x;
+  float y;
+};
+static_assert(sizeof(_xlat_Pair_std430) == 8, "std430 size");
+struct _xlat_buf_PackedData_std430 {
+  _xlat_Pair_std430 pairs[2];
+  float2 matrix[2];
+};
+static_assert(sizeof(_xlat_buf_PackedData_std430) == 32, "std430 size");
+struct _xlat_buf_SharedData_std430 {
+  float2 sharedValues[2];
+};
+static_assert(sizeof(_xlat_buf_SharedData_std430) == 16, "std430 size");
+struct _xlat_buf_UniformData_std140 {
+  _xlat_element_float_16 values[2];
+};
+static_assert(sizeof(_xlat_buf_UniformData_std140) == 32, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_DefaultData_std430& source [[buffer(1)]]
+  , const device _xlat_buf_ExplicitData_std140& explicitSource [[buffer(2)]]
+  , const device _xlat_buf_PackedData_std430& packedSource [[buffer(3)]]
+  , const device _xlat_buf_SharedData_std430& _xlat_blk_SharedData [[buffer(4)]]
+  , constant _xlat_buf_UniformData_std140& uniforms [[buffer(5)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float2 t0 = (((float2(packedSource.matrix[0]) * float(packedSource.pairs[1].x)) + (float2(source.pairs[1]) + float2(_xlat_blk_SharedData.sharedValues[1]))) + (float2(packedSource.matrix[1]) * float(packedSource.pairs[1].y)));
+  _mtl_o.color = float4(t0, (float(source.values[2]) + float(explicitSource.values[1].value)), float(uniforms.values[1].value));
+  return _mtl_o;
+}
+
+// stats: 6 alu 0 tex 0 flow
+// buffer #0: DefaultData storage instance source layout shared (size: 32) metal 1
+//  member #0: float[3] values offset 0 array 3 stride 4 readonly
+//  member #1: float [] parent 0 offset 0 readonly
+//  member #2: vec2[2] pairs offset 16 array 2 stride 8 readonly
+//  member #3: vec2 [] parent 2 offset 16 readonly
+// buffer #1: ExplicitData storage instance explicitSource layout std140 (size: 32) metal 2
+//  member #0: float[2] values offset 0 array 2 stride 16 readonly
+//  member #1: float [] parent 0 offset 0 readonly
+// buffer #2: PackedData storage instance packedSource layout packed (size: 32) metal 3
+//  member #0: Pair[2] pairs offset 0 array 2 stride 8 readonly
+//  member #1: Pair [] parent 0 offset 0 readonly
+//  member #2: float x parent 1 offset 0 readonly
+//  member #3: float y parent 1 offset 4 readonly
+//  member #4: mat2 matrix offset 16 matrix-stride 8 readonly
+// buffer #3: SharedData storage layout shared (size: 16) metal 4
+//  member #0: vec2[2] sharedValues offset 0 array 2 stride 8 readonly
+//  member #1: vec2 [] parent 0 offset 0 readonly
+// buffer #4: UniformData instance uniforms layout shared (size: 32) metal 5
+//  member #0: float[2] values offset 0 array 2 stride 16
+//  member #1: float [] parent 0 offset 0

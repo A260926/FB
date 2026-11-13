@@ -1,0 +1,22 @@
+uniform vec4 _GrainOffsetScale;
+uniform vec4 _ScratchOffsetScale;
+void main ()
+{
+  vec4 t0 = (gl_TextureMatrix[0] * vec4(gl_MultiTexCoord0.xy, 0.0, 0.0));
+  vec2 t1 = ((gl_MultiTexCoord0.xy * _GrainOffsetScale.zw) + _GrainOffsetScale.xy);
+  vec2 t2 = ((gl_MultiTexCoord0.xy * _ScratchOffsetScale.zw) + _ScratchOffsetScale.xy);
+  gl_Position = (gl_ModelViewProjectionMatrix * gl_Vertex);
+  gl_TexCoord[0] = vec4(t0.xy, 0.0, 0.0);
+  gl_TexCoord[1] = vec4(t1, 0.0, 0.0);
+  gl_TexCoord[2] = vec4(t2, 0.0, 0.0);
+}
+
+// stats: 14 alu 0 tex 0 flow
+// inputs: 2
+//  #0: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #1: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 4 (total size: 0)
+//  #0: gl_TextureMatrix (high float) 4x4 [16]
+//  #1: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #2: _GrainOffsetScale (high float) 4x1 [-1]
+//  #3: _ScratchOffsetScale (high float) 4x1 [-1]

@@ -1,0 +1,19 @@
+#version 140
+uniform vec2 p;
+in vec4 position;
+out vec4 col;
+flat out ivec4 colint;
+void main ()
+{
+  gl_Position = (vec4(p, 0.0, 0.0) + position);
+  colint = ivec4(gl_VertexID, 0, (gl_InstanceID << 2u), gl_VertexID);
+  float t0 = (position.w * 1.442695);
+  float t1 = roundEven(position.y);
+  col = vec4(trunc(position.x), vec2(t1), (0.5 * (exp2(t0) + exp2((-t0)))));
+}
+
+// stats: 10 alu 0 tex 0 flow
+// inputs: 1
+//  #0: position (high float) 4x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: p (high float) 2x1 [-1]

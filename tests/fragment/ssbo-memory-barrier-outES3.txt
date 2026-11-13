@@ -1,0 +1,30 @@
+#version 310 es
+precision highp float;
+precision highp int;
+layout(std430) buffer Data {
+  highp uint value;
+  highp uint count;
+} data;
+uniform bool update;
+out highp vec4 color;
+void main ()
+{
+  highp uint t0 = data.value;
+  data.value = 7u;
+  memoryBarrier();
+  highp uint t1 = data.value;
+  if (update) {
+    atomicAdd(data.count, 1u);
+    memoryBarrier();
+    data.value = data.count;
+  }
+  memoryBarrier();
+  color = vec4(float(t0), float(t1), float(data.value), 1.0);
+}
+
+// stats: 3 alu 0 tex 1 flow
+// uniforms: 1 (total size: 0)
+//  #0: update (high bool) 1x1 [-1]
+// buffer #0: Data storage instance data layout std430 (size: 8)
+//  member #0: uint value offset 0
+//  member #1: uint count offset 4

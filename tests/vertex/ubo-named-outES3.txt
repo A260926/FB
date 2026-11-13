@@ -1,0 +1,47 @@
+#version 310 es
+struct Light {
+  highp vec3 direction;
+  highp float intensity;
+};
+layout(std140, row_major, binding = 3) uniform Scene {
+  highp float unused;
+  mediump mat2x3 transform;
+  layout(column_major) highp mat3x2 other;
+  Light lights[2];
+  mediump float weights[3];
+  bool enabled;
+  highp uint flags;
+  mediump int count;
+} scene;
+uniform highp int index;
+void main ()
+{
+  highp float r0;
+  highp vec3 t0 = (scene.transform * vec2(scene.weights[index], 1.0));
+  highp vec3 t1 = (t0 + (scene.lights[index].direction * scene.lights[1].intensity));
+  highp vec2 t2 = (t1.xy + (scene.other * vec3(1.0, 1.0, 1.0)));
+  highp vec3 t3 = (vec3(t2, t1.z) * float(scene.count));
+  if (scene.enabled) {
+    r0 = float(scene.flags);
+  } else {
+    r0 = 0.0;
+  }
+  gl_Position = vec4(t3, r0);
+}
+
+// stats: 10 alu 0 tex 1 flow
+// uniforms: 1 (total size: 0)
+//  #0: index (high int) 1x1 [-1]
+// buffer #0: Scene instance scene layout std140 binding 3 (size: 208)
+//  member #0: float unused offset 0 (unused)
+//  member #1: mat2x3 transform offset 16 matrix-stride 16 row-major
+//  member #2: mat3x2 other offset 64 matrix-stride 16
+//  member #3: Light[2] lights offset 112 array 2 stride 16
+//  member #4: Light [] parent 3 offset 112
+//  member #5: vec3 direction parent 4 offset 112
+//  member #6: float intensity parent 4 offset 124
+//  member #7: float[3] weights offset 144 array 3 stride 16
+//  member #8: float [] parent 7 offset 144
+//  member #9: bool enabled offset 192
+//  member #10: uint flags offset 196
+//  member #11: int count offset 200

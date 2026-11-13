@@ -1,0 +1,151 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Globals_std140 {
+  float4 unity_ColorSpaceGrey;
+  float4 _MainTex_ST;
+};
+static_assert(sizeof(_xlat_buf_Globals_std140) == 32, "std140 size");
+struct _xlat_buf_UnityLighting_std140 {
+  float4 _WorldSpaceLightPos0;
+  float4 _LightPositionRange;
+  float4 unity_4LightPosX0;
+  float4 unity_4LightPosY0;
+  float4 unity_4LightPosZ0;
+  float4 unity_4LightAtten0;
+  float4 unity_LightColor[8];
+  float4 unity_LightPosition[8];
+  float4 unity_LightAtten[8];
+  float4 unity_SpotDirection[8];
+  float4 unity_SHAr;
+  float4 unity_SHAg;
+  float4 unity_SHAb;
+  float4 unity_SHBr;
+  float4 unity_SHBg;
+  float4 unity_SHBb;
+  float4 unity_SHC;
+};
+static_assert(sizeof(_xlat_buf_UnityLighting_std140) == 720, "std140 size");
+struct _xlat_buf_UnityPerDraw_std140 {
+  float4 glstate_matrix_mvp[4];
+  float4 glstate_matrix_modelview0[4];
+  float4 glstate_matrix_invtrans_modelview0[4];
+  float4 _Object2World[4];
+  float4 _World2Object[4];
+  float4 unity_Scale;
+  float4 unity_LODFade;
+};
+static_assert(sizeof(_xlat_buf_UnityPerDraw_std140) == 352, "std140 size");
+struct _xlat_buf_UnityPerFrame_std140 {
+  float4 glstate_matrix_projection[4];
+  float4 glstate_lightmodel_ambient;
+  float4 unity_MatrixV[4];
+  float4 unity_MatrixVP[4];
+  float4 unity_AmbientSky;
+  float4 unity_AmbientGround;
+};
+static_assert(sizeof(_xlat_buf_UnityPerFrame_std140) == 240, "std140 size");
+struct xlatMtlShaderInput {
+  float4 dcl_Input0_POSITION0 [[attribute(0)]];
+  float4 dcl_Input1_NORMAL0 [[attribute(1)]];
+  float4 dcl_Input2_TEXCOORD0 [[attribute(2)]];
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  float4 VtxGeoOutput1_TEXCOORD0;
+  float4 VtxGeoOutput2_COLOR0;
+};
+struct xlatMtlShaderUniform {
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Globals_std140& _xlat_blk_Globals [[buffer(1)]]
+  , constant _xlat_buf_UnityLighting_std140& _xlat_blk_UnityLighting [[buffer(2)]]
+  , constant _xlat_buf_UnityPerDraw_std140& _xlat_blk_UnityPerDraw [[buffer(3)]]
+  , constant _xlat_buf_UnityPerFrame_std140& _xlat_blk_UnityPerFrame [[buffer(4)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  int4 r0 = 0;
+  float4 r1 = 0;
+  float4 r2 = 0;
+  float4 t0 = (float3x4(float4(_xlat_blk_UnityPerDraw.glstate_matrix_mvp[0]), float4(_xlat_blk_UnityPerDraw.glstate_matrix_mvp[1]), float4(_xlat_blk_UnityPerDraw.glstate_matrix_mvp[2])) * _mtl_i.dcl_Input0_POSITION0.xyz);
+  float4 t1 = ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_mvp[3]) * _mtl_i.dcl_Input0_POSITION0.w) + t0);
+  float4 t2 = float4(_xlat_blk_Globals._MainTex_ST);
+  _mtl_o.VtxGeoOutput1_TEXCOORD0.xy = (((_mtl_i.dcl_Input2_TEXCOORD0.xyxx * t2.xyxx) + t2.zwzz).xyxx).xy;
+  float4 t3 = ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_modelview0[0]).xyzx * _mtl_i.dcl_Input0_POSITION0.x) + (_mtl_i.dcl_Input0_POSITION0.y * float4(_xlat_blk_UnityPerDraw.glstate_matrix_modelview0[1]).xyzx).xyzx);
+  float4 t4 = ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_modelview0[3]).xyzx * _mtl_i.dcl_Input0_POSITION0.w) + ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_modelview0[2]).xyzx * _mtl_i.dcl_Input0_POSITION0.z) + t3.xyzx).xyzx);
+  float4 t5 = ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_invtrans_modelview0[0]).xyzx * _mtl_i.dcl_Input1_NORMAL0.x) + (_mtl_i.dcl_Input1_NORMAL0.y * float4(_xlat_blk_UnityPerDraw.glstate_matrix_invtrans_modelview0[1]).xyzx).xyzx);
+  float4 t6 = ((float4(_xlat_blk_UnityPerDraw.glstate_matrix_invtrans_modelview0[2]).xyzx * _mtl_i.dcl_Input1_NORMAL0.z) + t5.xyzx);
+  float4 t7 = (rsqrt(dot(t6.xyz, t6.xyz)) * t6.xyzx);
+  float4 t8 = float4(_xlat_blk_UnityPerFrame.glstate_lightmodel_ambient);
+  r1 = float4(t7.xyz, 0.0);
+  r2 = float4(t8.xyz, 0.0);
+  for (r0 = int4(int3(0), 0); (r0.w < 4); r0 = int4(r0.x, r0.y, r0.z, (r0.w + 1))) {
+    int t9 = r0.w;
+    float4 t10 = float4(_xlat_blk_UnityLighting.unity_LightPosition[t9]);
+    float4 t11 = (t10.xyzx - (t4.xyzx * t10.w));
+    float t12 = dot(t11.xyz, t11.xyz);
+    float4 t13 = (1.0 / float4(((t12 * float4(_xlat_blk_UnityLighting.unity_LightAtten[t9]).z) + 1.0)));
+    float t14 = (max(dot(r1.xyz, (rsqrt(t12) * t11.xyzx).xyz), 0.0) * t13.w);
+    float4 t15 = ((float4(_xlat_blk_UnityLighting.unity_LightColor[t9]).xyzx * t14) + r2.xyzx);
+    r1 = float4(r1.x, r1.y, r1.z, t14);
+    r2 = float4(t15.xyz, t13.w);
+  }
+  float4 t16 = (r2.xyzx * 2.0);
+  _mtl_o.VtxGeoOutput2_COLOR0 = float4(t16.xyz, 1.0);
+  _mtl_o.gl_Position = t1;
+  return _mtl_o;
+}
+
+// stats: 40 alu 0 tex 2 flow
+// inputs: 3
+//  #0: dcl_Input0_POSITION0 (high float) 4x1 [-1] loc 0
+//  #1: dcl_Input1_NORMAL0 (high float) 4x1 [-1] loc 1
+//  #2: dcl_Input2_TEXCOORD0 (high float) 4x1 [-1] loc 2
+// buffer #0: Globals layout shared (size: 32) metal 1
+//  member #0: vec4 unity_ColorSpaceGrey offset 0 (unused)
+//  member #1: vec4 _MainTex_ST offset 16
+// buffer #1: UnityLighting layout shared (size: 720) metal 2
+//  member #0: vec4 _WorldSpaceLightPos0 offset 0 (unused)
+//  member #1: vec4 _LightPositionRange offset 16 (unused)
+//  member #2: vec4 unity_4LightPosX0 offset 32 (unused)
+//  member #3: vec4 unity_4LightPosY0 offset 48 (unused)
+//  member #4: vec4 unity_4LightPosZ0 offset 64 (unused)
+//  member #5: vec4 unity_4LightAtten0 offset 80 (unused)
+//  member #6: vec4[8] unity_LightColor offset 96 array 8 stride 16
+//  member #7: vec4 [] parent 6 offset 96
+//  member #8: vec4[8] unity_LightPosition offset 224 array 8 stride 16
+//  member #9: vec4 [] parent 8 offset 224
+//  member #10: vec4[8] unity_LightAtten offset 352 array 8 stride 16
+//  member #11: vec4 [] parent 10 offset 352
+//  member #12: vec4[8] unity_SpotDirection offset 480 array 8 stride 16 (unused)
+//  member #13: vec4 [] parent 12 offset 480 (unused)
+//  member #14: vec4 unity_SHAr offset 608 (unused)
+//  member #15: vec4 unity_SHAg offset 624 (unused)
+//  member #16: vec4 unity_SHAb offset 640 (unused)
+//  member #17: vec4 unity_SHBr offset 656 (unused)
+//  member #18: vec4 unity_SHBg offset 672 (unused)
+//  member #19: vec4 unity_SHBb offset 688 (unused)
+//  member #20: vec4 unity_SHC offset 704 (unused)
+// buffer #2: UnityPerDraw layout shared (size: 352) metal 3
+//  member #0: vec4[4] glstate_matrix_mvp offset 0 array 4 stride 16
+//  member #1: vec4 [] parent 0 offset 0
+//  member #2: vec4[4] glstate_matrix_modelview0 offset 64 array 4 stride 16
+//  member #3: vec4 [] parent 2 offset 64
+//  member #4: vec4[4] glstate_matrix_invtrans_modelview0 offset 128 array 4 stride 16
+//  member #5: vec4 [] parent 4 offset 128
+//  member #6: vec4[4] _Object2World offset 192 array 4 stride 16 (unused)
+//  member #7: vec4 [] parent 6 offset 192 (unused)
+//  member #8: vec4[4] _World2Object offset 256 array 4 stride 16 (unused)
+//  member #9: vec4 [] parent 8 offset 256 (unused)
+//  member #10: vec4 unity_Scale offset 320 (unused)
+//  member #11: vec4 unity_LODFade offset 336 (unused)
+// buffer #3: UnityPerFrame layout shared (size: 240) metal 4
+//  member #0: vec4[4] glstate_matrix_projection offset 0 array 4 stride 16 (unused)
+//  member #1: vec4 [] parent 0 offset 0 (unused)
+//  member #2: vec4 glstate_lightmodel_ambient offset 64
+//  member #3: vec4[4] unity_MatrixV offset 80 array 4 stride 16 (unused)
+//  member #4: vec4 [] parent 3 offset 80 (unused)
+//  member #5: vec4[4] unity_MatrixVP offset 144 array 4 stride 16 (unused)
+//  member #6: vec4 [] parent 5 offset 144 (unused)
+//  member #7: vec4 unity_AmbientSky offset 208 (unused)
+//  member #8: vec4 unity_AmbientGround offset 224 (unused)

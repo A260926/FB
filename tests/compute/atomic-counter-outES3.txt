@@ -1,0 +1,45 @@
+#version 310 es
+layout(local_size_x = 1) in;
+layout(std430) buffer Results {
+  highp uint values[];
+} results;
+layout(std140) uniform Config {
+  highp uint limit;
+} config;
+layout(binding = 0, offset = 8) uniform atomic_uint first;
+layout(binding = 0, offset = 12) uniform atomic_uint counters[3];
+layout(binding = 3, offset = 20) uniform atomic_uint other;
+layout(binding = 3, offset = 32) uniform atomic_uint grid[2][3];
+void main ()
+{
+  highp uint t0 = atomicCounter(first);
+  highp uint t1 = (gl_GlobalInvocationID.x % 3u);
+  highp uint t2 = atomicCounterIncrement(counters[int(t1)]);
+  highp uint t3 = (uint((int(t1) + 1)) % 3u);
+  highp uint t4 = atomicCounterDecrement(counters[int(t3)]);
+  highp uint t5 = atomicCounterIncrement(other);
+  highp uint t6 = atomicCounter(grid[int((gl_GlobalInvocationID.x & 1u))][int(t3)]);
+  highp int t7 = ((((int(t0) + int(t2)) + int(t4)) + int(t5)) + int(t6));
+  atomicCounterIncrement(first);
+  atomicCounterDecrement(other);
+  if ((gl_GlobalInvocationID.x < min(uint(results.values.length()), config.limit))) {
+    results.values[int(gl_GlobalInvocationID.x)] = uint(t7);
+  }
+}
+
+// stats: 10 alu 0 tex 1 flow
+// workgroup size: 1 1 1
+// buffer #0: Config instance config layout std140 (size: 16)
+//  member #0: uint limit offset 0
+// buffer #1: Results storage instance results layout std430 (size: unknown)
+//  member #0: uint[] values offset 0 array runtime stride 4
+//  member #1: uint [] parent 0 offset 0
+// buffer #2: atomic_counters_0 atomic-counter layout atomic-counter binding 0 (size: 24)
+//  member #0: atomic_uint first offset 8
+//  member #1: atomic_uint[3] counters offset 12 array 3 stride 4
+//  member #2: atomic_uint [] parent 1 offset 12
+// buffer #3: atomic_counters_3 atomic-counter layout atomic-counter binding 3 (size: 56)
+//  member #0: atomic_uint other offset 20
+//  member #1: atomic_uint[2][3] grid offset 32 array 2 stride 12
+//  member #2: atomic_uint[3] [] parent 1 offset 32 array 3 stride 4
+//  member #3: atomic_uint [] parent 2 offset 32

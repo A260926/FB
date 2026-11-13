@@ -1,0 +1,203 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Particle_std140 {
+  packed_float3 vPosition;
+  float _padding_particle_0;
+  packed_float3 vVelocity;
+  float fLife;
+};
+static_assert(sizeof(_xlat_Particle_std140) == 32, "std140 size");
+struct _xlat_buf_SsboParticlesInput_std140 {
+  _xlat_Particle_std140 aParticlesIn[1];
+};
+struct _xlat_buf_SsboParticlesOut_std140 {
+  _xlat_Particle_std140 aParticlesOut[1];
+};
+struct _xlat_Emitter_std140 {
+  float4 mTransformation[4];
+  float fHeight;
+  float fRadius;
+  char _pad0[8];
+};
+static_assert(sizeof(_xlat_Emitter_std140) == 80, "std140 size");
+struct _xlat_buf_UboData_std140 {
+  _xlat_Emitter_std140 emitter;
+  packed_float3 gravity;
+  float dt;
+  float fTotalTime;
+  float dragCoeffLinear;
+  float dragCoeffQuadratic;
+  float inwardForceCoeff;
+  float inwardForceRadius;
+  float bounciness;
+  float minLifespan;
+  float maxLifespan;
+};
+static_assert(sizeof(_xlat_buf_UboData_std140) == 128, "std140 size");
+struct _xlat_buf_UboSpheres_std140 {
+  float4 aSpheres[8];
+};
+static_assert(sizeof(_xlat_buf_UboSpheres_std140) == 128, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 64, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_SsboParticlesInput_std140& _xlat_blk_SsboParticlesInput [[buffer(1)]]
+  , device _xlat_buf_SsboParticlesOut_std140& _xlat_blk_SsboParticlesOut [[buffer(2)]]
+  , constant _xlat_buf_UboData_std140& _xlat_blk_UboData [[buffer(3)]]
+  , constant _xlat_buf_UboSpheres_std140& _xlat_blk_UboSpheres [[buffer(4)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  float3 r0 = 0;
+  float3 r1 = 0;
+  float3 r2 = 0;
+  float3 r3 = 0;
+  half3 r4 = 0;
+  half r5 = 0;
+  int t0 = (int((float(_xlat_blk_UboData.fTotalTime) * 13579846.0)) + ((int(gl_GlobalInvocationID.x) * 145) + 1450000));
+  uint t1 = gl_GlobalInvocationID.x;
+  float3 t2 = float3(_xlat_blk_SsboParticlesInput.aParticlesIn[int(t1)].vPosition);
+  half t3 = half(_xlat_blk_SsboParticlesInput.aParticlesIn[int(t1)]._padding_particle_0);
+  half3 t4 = half3(_xlat_blk_SsboParticlesInput.aParticlesIn[int(t1)].vVelocity);
+  float t5 = float(_xlat_blk_UboData.dt);
+  r5 = half((float(half(_xlat_blk_SsboParticlesInput.aParticlesIn[int(t1)].fLife)) - (t5 * 0.1)));
+  if ((r5 < half(0.0))) {
+    int t6 = abs(((1103515245 * abs(t0)) + 12345));
+    int t7 = abs(((1103515245 * t6) + 12345));
+    float t8 = ((float(t7) / 2.1474836e+09) * float(half(_xlat_blk_UboData.emitter.fRadius)));
+    half4 t9 = half4(float4(t8, ((float(t6) / 2.1474836e+09) * float(half(_xlat_blk_UboData.emitter.fHeight))), t8, 1.0));
+    float4 t10 = (float3x4(float4(_xlat_blk_UboData.emitter.mTransformation[0]), float4(_xlat_blk_UboData.emitter.mTransformation[1]), float4(_xlat_blk_UboData.emitter.mTransformation[2])) * float3(t9.xyz));
+    half4 t11 = half4((t10 + (float4(_xlat_blk_UboData.emitter.mTransformation[3]) * float(t9.w))));
+    r5 = half(mix(float(_xlat_blk_UboData.minLifespan), float(_xlat_blk_UboData.maxLifespan), (float(abs(((1103515245 * t7) + 12345))) / 2.1474836e+09)));
+    r4 = ((t11.xyz * half3(7.0, 15.0, 7.0)) + half3(0.0, 15.0, 0.0));
+    r3 = float3(0.0);
+  } else {
+    float3 t12 = float3(t4);
+    r0 = float3(_xlat_blk_UboData.gravity);
+    float t13 = float(_xlat_blk_UboData.inwardForceCoeff);
+    half t14 = half((((t2.x * t2.x) + (t2.z * t2.z)) * t13));
+    if (((half(0.001) < t14) && (t13 != 0.0))) {
+      float3 t15 = float3((-t2.x), 0.0, (-t2.z));
+      r0 = (r0 + (max(((float(t14) - float(_xlat_blk_UboData.inwardForceRadius)) + float(r5)), 0.0) * (t15 * rsqrt(dot(t15.xz, t15.xz)))));
+    }
+    float t16 = float(_xlat_blk_UboData.dragCoeffLinear);
+    float t17 = float(_xlat_blk_UboData.dragCoeffQuadratic);
+    half t18 = half(length(t12));
+    r1 = ((((min(abs(t16), abs(t17)) != 0.0) ? (r0 + ((t12 / float(t18)) * (float(t18) * ((-t16) - (t17 * float(t18)))))) : r0) * t5) + t12);
+    r2 = ((r1 * t5) + t2);
+    float4 t19 = float4(_xlat_blk_UboSpheres.aSpheres[0]);
+    float3 t20 = (r2 - t19.xyz);
+    float t21 = dot(t20, t20);
+    if ((t21 < (t19.w * t19.w))) {
+      float3 t22 = (t20 * rsqrt(t21));
+      r2 = ((t22 * t19.w) + t19.xyz);
+      r1 = ((r1 - ((float3(dot(t22, r1)) * 2.0) * t22)) * float(_xlat_blk_UboData.bounciness));
+    } else {
+      float4 t23 = float4(_xlat_blk_UboSpheres.aSpheres[1]);
+      float3 t24 = (r2 - t23.xyz);
+      float t25 = dot(t24, t24);
+      if ((t25 < (t23.w * t23.w))) {
+        float3 t26 = (t24 * rsqrt(t25));
+        r2 = ((t26 * t23.w) + t23.xyz);
+        r1 = ((r1 - ((float3(dot(t26, r1)) * 2.0) * t26)) * float(_xlat_blk_UboData.bounciness));
+      } else {
+        float4 t27 = float4(_xlat_blk_UboSpheres.aSpheres[2]);
+        float3 t28 = (r2 - t27.xyz);
+        float t29 = dot(t28, t28);
+        if ((t29 < (t27.w * t27.w))) {
+          float3 t30 = (t28 * rsqrt(t29));
+          r2 = ((t30 * t27.w) + t27.xyz);
+          r1 = ((r1 - ((float3(dot(t30, r1)) * 2.0) * t30)) * float(_xlat_blk_UboData.bounciness));
+        } else {
+          float4 t31 = float4(_xlat_blk_UboSpheres.aSpheres[3]);
+          float3 t32 = (r2 - t31.xyz);
+          float t33 = dot(t32, t32);
+          if ((t33 < (t31.w * t31.w))) {
+            float3 t34 = (t32 * rsqrt(t33));
+            r2 = ((t34 * t31.w) + t31.xyz);
+            r1 = ((r1 - ((float3(dot(t34, r1)) * 2.0) * t34)) * float(_xlat_blk_UboData.bounciness));
+          } else {
+            float4 t35 = float4(_xlat_blk_UboSpheres.aSpheres[4]);
+            float3 t36 = (r2 - t35.xyz);
+            float t37 = dot(t36, t36);
+            if ((t37 < (t35.w * t35.w))) {
+              float3 t38 = (t36 * rsqrt(t37));
+              r2 = ((t38 * t35.w) + t35.xyz);
+              r1 = ((r1 - ((float3(dot(t38, r1)) * 2.0) * t38)) * float(_xlat_blk_UboData.bounciness));
+            } else {
+              float4 t39 = float4(_xlat_blk_UboSpheres.aSpheres[5]);
+              float3 t40 = (r2 - t39.xyz);
+              float t41 = dot(t40, t40);
+              if ((t41 < (t39.w * t39.w))) {
+                float3 t42 = (t40 * rsqrt(t41));
+                r2 = ((t42 * t39.w) + t39.xyz);
+                r1 = ((r1 - ((float3(dot(t42, r1)) * 2.0) * t42)) * float(_xlat_blk_UboData.bounciness));
+              } else {
+                float4 t43 = float4(_xlat_blk_UboSpheres.aSpheres[6]);
+                float3 t44 = (r2 - t43.xyz);
+                float t45 = dot(t44, t44);
+                if ((t45 < (t43.w * t43.w))) {
+                  float3 t46 = (t44 * rsqrt(t45));
+                  r2 = ((t46 * t43.w) + t43.xyz);
+                  r1 = ((r1 - ((float3(dot(t46, r1)) * 2.0) * t46)) * float(_xlat_blk_UboData.bounciness));
+                } else {
+                  float4 t47 = float4(_xlat_blk_UboSpheres.aSpheres[7]);
+                  float3 t48 = (r2 - t47.xyz);
+                  float t49 = dot(t48, t48);
+                  if ((t49 < (t47.w * t47.w))) {
+                    float3 t50 = (t48 * rsqrt(t49));
+                    r2 = ((t50 * t47.w) + t47.xyz);
+                    r1 = ((r1 - ((float3(dot(t50, r1)) * 2.0) * t50)) * float(_xlat_blk_UboData.bounciness));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    bool t51 = (r2.y < 0.0);
+    r3 = (t51 ? float3(r2.x, (-r2.y), r2.z) : r2);
+    r4 = half3((t51 ? (r1 * float3(0.4, -0.3, 0.4)) : r1));
+  }
+  _xlat_blk_SsboParticlesOut.aParticlesOut[int(t1)].vPosition = r3;
+  _xlat_blk_SsboParticlesOut.aParticlesOut[int(t1)]._padding_particle_0 = float(t3);
+  _xlat_blk_SsboParticlesOut.aParticlesOut[int(t1)].vVelocity = float3(r4);
+  _xlat_blk_SsboParticlesOut.aParticlesOut[int(t1)].fLife = float(r5);
+}
+
+// stats: 180 alu 0 tex 10 flow
+// workgroup size: 64 1 1
+// buffer #0: SsboParticlesInput storage layout std140 binding 3 (size: unknown) metal 1
+//  member #0: Particle[] aParticlesIn offset 0 array runtime stride 32 readonly
+//  member #1: Particle [] parent 0 offset 0 readonly
+//  member #2: vec3 vPosition parent 1 offset 0 readonly
+//  member #3: float _padding_particle_0 parent 1 offset 12 readonly
+//  member #4: vec3 vVelocity parent 1 offset 16 readonly
+//  member #5: float fLife parent 1 offset 28 readonly
+// buffer #1: SsboParticlesOut storage layout std140 binding 4 (size: unknown) metal 2
+//  member #0: Particle[] aParticlesOut offset 0 array runtime stride 32 writeonly
+//  member #1: Particle [] parent 0 offset 0 writeonly
+//  member #2: vec3 vPosition parent 1 offset 0 writeonly
+//  member #3: float _padding_particle_0 parent 1 offset 12 writeonly
+//  member #4: vec3 vVelocity parent 1 offset 16 writeonly
+//  member #5: float fLife parent 1 offset 28 writeonly
+// buffer #2: UboData layout std140 binding 2 (size: 128) metal 3
+//  member #0: Emitter emitter offset 0
+//  member #1: mat4 mTransformation parent 0 offset 0 matrix-stride 16
+//  member #2: float fHeight parent 0 offset 64
+//  member #3: float fRadius parent 0 offset 68
+//  member #4: vec3 gravity offset 80
+//  member #5: float dt offset 92
+//  member #6: float fTotalTime offset 96
+//  member #7: float dragCoeffLinear offset 100
+//  member #8: float dragCoeffQuadratic offset 104
+//  member #9: float inwardForceCoeff offset 108
+//  member #10: float inwardForceRadius offset 112
+//  member #11: float bounciness offset 116
+//  member #12: float minLifespan offset 120
+//  member #13: float maxLifespan offset 124
+// buffer #3: UboSpheres layout std140 binding 1 (size: 128) metal 4
+//  member #0: vec4[8] aSpheres offset 0 array 8 stride 16
+//  member #1: vec4 [] parent 0 offset 0

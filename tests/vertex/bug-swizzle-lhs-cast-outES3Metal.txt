@@ -1,0 +1,37 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 _glesVertex [[attribute(0)]];
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  float3 xlv_TEXCOORD2;
+};
+struct xlatMtlShaderUniform {
+  float3 _WorldSpaceCameraPos;
+  float4x4 glstate_matrix_mvp;
+  float4x4 _World2Object;
+  float3 _TerrainTreeLightDirections[4];
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = ((_mtl_u._World2Object * float4(_mtl_u._WorldSpaceCameraPos, 1.0)).xyz - _mtl_i._glesVertex.xyz);
+  float3 t1 = normalize(t0);
+  half t2 = half(saturate(dot(t1, (-_mtl_u._TerrainTreeLightDirections[0]))));
+  half t3 = half(saturate(dot(t1, (-_mtl_u._TerrainTreeLightDirections[1]))));
+  half t4 = half(saturate(dot(t1, (-_mtl_u._TerrainTreeLightDirections[2]))));
+  _mtl_o.gl_Position = (_mtl_u.glstate_matrix_mvp * _mtl_i._glesVertex);
+  _mtl_o.xlv_TEXCOORD2 = float3((half(2.0) * select(select(half3(t2), half3(t3), bool3(false, true, false)), half3(t4), bool3(false, false, true))));
+  return _mtl_o;
+}
+
+// stats: 29 alu 0 tex 0 flow
+// inputs: 1
+//  #0: _glesVertex (high float) 4x1 [-1] loc 0
+// uniforms: 4 (total size: 208)
+//  #0: _WorldSpaceCameraPos (high float) 3x1 [-1] loc 0
+//  #1: glstate_matrix_mvp (high float) 4x4 [-1] loc 16
+//  #2: _World2Object (high float) 4x4 [-1] loc 80
+//  #3: _TerrainTreeLightDirections (high float) 3x1 [4] loc 144

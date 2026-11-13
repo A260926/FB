@@ -1,0 +1,17 @@
+#version 310 es
+layout(local_size_x = 8) in;
+layout(r32ui, binding = 0) uniform highp uimage2D counters;
+layout(rgba32i, binding = 1) readonly uniform highp iimage2DArray layers;
+layout(rgba16i, binding = 2) writeonly uniform highp iimage3D volume;
+void main ()
+{
+  imageStore(counters, ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy), uvec4((ivec4(imageLoad(counters, ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy))) + (1 + int(gl_GlobalInvocationID.x)))));
+  imageStore(volume, ivec3(uvec4(gl_GlobalInvocationID.xy, uint((imageSize(volume).z - 1)), 0u).xyz), imageLoad(layers, ivec3(uvec4(gl_GlobalInvocationID.xy, uint((imageSize(layers).z - 1)), 0u).xyz)));
+}
+
+// stats: 4 alu 6 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 3
+//  #0: counters (high image2d) 0x0 [-1] loc 0 format r32ui component uint
+//  #1: layers (high image2darray) 0x0 [-1] loc 1 format rgba32i component int readonly
+//  #2: volume (high image3d) 0x0 [-1] loc 2 format rgba16i component int writeonly

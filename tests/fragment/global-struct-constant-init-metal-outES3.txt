@@ -1,0 +1,80 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform mediump vec4 _WorldSpaceLightPos0;
+uniform mediump vec4 unity_SHAr;
+uniform mediump vec4 unity_SHAg;
+uniform mediump vec4 unity_SHAb;
+uniform mediump vec4 _LightShadowData;
+uniform mediump samplerCube unity_SpecCube0;
+uniform mediump vec4 unity_SpecCube0_HDR;
+uniform mediump vec4 unity_ColorSpaceDielectricSpec;
+uniform mediump vec4 _LightColor0;
+uniform mediump vec4 _Color;
+uniform mediump sampler2D _MainTex;
+uniform mediump float _Metallic;
+uniform mediump float _Glossiness;
+uniform mediump sampler2D _OcclusionMap;
+uniform mediump float _OcclusionStrength;
+uniform mediump sampler2DShadow _ShadowMapTexture;
+in highp vec4 xlv_TEXCOORD0;
+in mediump vec3 xlv_TEXCOORD1;
+in mediump vec4 xlv_TEXCOORD2_2;
+in mediump vec4 xlv_TEXCOORD5;
+in mediump vec4 xlv_TEXCOORD6;
+in mediump vec4 xlv_COLOR;
+out mediump vec4 FragData[1];
+void main ()
+{
+  highp vec2 t0 = xlv_TEXCOORD0.xy;
+  mediump vec3 t1 = (_Color.xyz * texture(_MainTex, t0).xyz);
+  mediump vec3 t2 = mix(unity_ColorSpaceDielectricSpec.xyz, t1, vec3(_Metallic));
+  mediump float t3 = (unity_ColorSpaceDielectricSpec.w - (_Metallic * unity_ColorSpaceDielectricSpec.w));
+  mediump vec3 t4 = (t1 * t3);
+  mediump vec3 t5 = normalize(xlv_TEXCOORD2_2.xyz);
+  mediump vec3 t6 = normalize(xlv_TEXCOORD1);
+  mediump float t7 = ((1.0 - _OcclusionStrength) + (texture(_OcclusionMap, t0).y * _OcclusionStrength));
+  mediump vec4 t8 = vec4(t5, 1.0);
+  mediump vec3 t9 = max(((1.055 * pow(max((xlv_TEXCOORD5.xyz + vec3(dot(unity_SHAr, t8), dot(unity_SHAg, t8), dot(unity_SHAb, t8))), vec3(0.0)), vec3(0.4166667))) - 0.055), vec3(0.0));
+  mediump float t10 = (1.0 - _Glossiness);
+  mediump vec4 t11 = textureLod(unity_SpecCube0, (t6 - ((vec3(dot(t5, t6)) * 2.0) * t5)), ((t10 * 6.0) * (1.7 - (0.7 * t10))));
+  mediump vec3 t12 = (_WorldSpaceLightPos0.xyz - t6);
+  mediump vec3 t13 = (t12 * inversesqrt(max(0.001, dot(t12, t12))));
+  mediump float t14 = max(0.0, dot(_WorldSpaceLightPos0.xyz, t13));
+  mediump float t15 = (t10 * t10);
+  mediump float t16 = max(0.0001, t15);
+  mediump float t17 = max(((2.0 / (t16 * t16)) - 2.0), 0.0001);
+  mediump float t18 = (1.0 - max(0.0, dot(t5, (-t6))));
+  mediump vec3 t19 = ((t4 + (sqrt(max(0.0001, (((t17 + 1.0) * pow(max(0.0, dot(t5, t13)), t17)) / (((8.0 * mix(t10, (t14 * t14), _Glossiness)) * t14) + 0.0001)))) * t2)) * (_LightColor0.xyz * mix(_LightShadowData.x, 1.0, texture(_ShadowMapTexture, vec3(xlv_TEXCOORD6.xy, xlv_TEXCOORD6.z)))));
+  mediump vec3 t20 = (((1.0 - ((t15 * 0.28) * t10)) * (((unity_SpecCube0_HDR.x * t11.w) * t11.xyz) * t7)) * mix(t2, vec3(clamp((_Glossiness + (1.0 - t3)), 0.0, 1.0)), vec3((((t18 * t18) * t18) * t18))));
+  mediump vec3 t21 = (((t19 * max(0.0, dot(t5, _WorldSpaceLightPos0.xyz))) + ((t9 * t7) * t4)) + t20);
+  mediump vec4 t22 = (vec4(t21, 1.0) * xlv_COLOR);
+  FragData[0] = vec4(t22.xyz, 1.0);
+}
+
+// stats: 90 alu 4 tex 0 flow
+// inputs: 6
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]
+//  #1: xlv_TEXCOORD1 (medium float) 3x1 [-1]
+//  #2: xlv_TEXCOORD2_2 (medium float) 4x1 [-1]
+//  #3: xlv_TEXCOORD5 (medium float) 4x1 [-1]
+//  #4: xlv_TEXCOORD6 (medium float) 4x1 [-1]
+//  #5: xlv_COLOR (medium float) 4x1 [-1]
+// uniforms: 12 (total size: 0)
+//  #0: _WorldSpaceLightPos0 (medium float) 4x1 [-1]
+//  #1: unity_SHAr (medium float) 4x1 [-1]
+//  #2: unity_SHAg (medium float) 4x1 [-1]
+//  #3: unity_SHAb (medium float) 4x1 [-1]
+//  #4: _LightShadowData (medium float) 4x1 [-1]
+//  #5: unity_SpecCube0_HDR (medium float) 4x1 [-1]
+//  #6: unity_ColorSpaceDielectricSpec (medium float) 4x1 [-1]
+//  #7: _LightColor0 (medium float) 4x1 [-1]
+//  #8: _Color (medium float) 4x1 [-1]
+//  #9: _Metallic (medium float) 1x1 [-1]
+//  #10: _Glossiness (medium float) 1x1 [-1]
+//  #11: _OcclusionStrength (medium float) 1x1 [-1]
+// textures: 4
+//  #0: unity_SpecCube0 (medium cube) 0x0 [-1]
+//  #1: _MainTex (medium 2d) 0x0 [-1]
+//  #2: _OcclusionMap (medium 2d) 0x0 [-1]
+//  #3: _ShadowMapTexture (medium 2dshadow) 0x0 [-1]

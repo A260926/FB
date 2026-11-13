@@ -1,0 +1,40 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Data_std430 {
+  uint value;
+  uint results[4];
+};
+static_assert(sizeof(_xlat_buf_Data_std430) == 20, "std430 size");
+template <typename P, typename T> inline T _xlat_atomic_comp_swap(P p, T compare, T value) { T expected = compare; atomic_compare_exchange_weak_explicit(p, &expected, value, memory_order_relaxed, memory_order_relaxed); return expected; }
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  bool update;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std430& _xlat_blk_Data [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  _xlat_blk_Data.value = 7u;
+  atomic_fetch_add_explicit((device atomic_uint*)&_xlat_blk_Data.value, 1u, memory_order_relaxed);
+  uint t0 = uint(_xlat_blk_Data.value);
+  if (_mtl_u.update) {
+    atomic_exchange_explicit((device atomic_uint*)&_xlat_blk_Data.results[0], 5u, memory_order_relaxed);
+    _xlat_atomic_comp_swap((device atomic_uint*)&_xlat_blk_Data.results[1], 5u, 6u);
+    _xlat_blk_Data.results[2] = uint(_xlat_blk_Data.value);
+  }
+  _mtl_o.color = float4(7.0, float(t0), float(uint(_xlat_blk_Data.value)), 1.0);
+  return _mtl_o;
+}
+
+// stats: 2 alu 0 tex 1 flow
+// uniforms: 1 (total size: 1)
+//  #0: update (high bool) 1x1 [-1] loc 0
+// buffer #0: Data storage layout std430 (size: 20) metal 1
+//  member #0: uint value offset 0
+//  member #1: uint[4] results offset 4 array 4 stride 4
+//  member #2: uint [] parent 1 offset 4

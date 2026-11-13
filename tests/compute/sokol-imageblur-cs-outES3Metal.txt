@@ -1,0 +1,93 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_cs_params_std140 {
+  int filter_dim;
+  int block_dim;
+  int flip;
+  char _pad0[4];
+};
+static_assert(sizeof(_xlat_buf_cs_params_std140) == 16, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 32, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_cs_params_std140& _xlat_blk_cs_params [[buffer(1)]]
+  , texture2d<float> cs_inp_tex [[texture(0)]], sampler _mtlsmp_cs_inp_tex [[sampler(0)]]
+  , texture2d<float, access::write> cs_outp_tex [[texture(1)]]
+  , uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]
+  , uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]])
+{
+  threadgroup float3 tile[4][128];
+  int r0 = 0;
+  float3 r1 = 0;
+  int r2 = 0;
+  int r3 = 0;
+  int t0 = int(_xlat_blk_cs_params.filter_dim);
+  int2 t1 = int2(cs_inp_tex.get_width(uint(0)), cs_inp_tex.get_height(uint(0)));
+  uint t2 = (uint((t0 - 1)) >> uint(1u));
+  float2 t3 = (((float2(gl_WorkGroupID.xy) * float2(float(int(_xlat_blk_cs_params.block_dim)), 4.0)) - float2(float(t2), 0.0)) + (float2(gl_LocalInvocationID.xy) * float2(4.0, 1.0)));
+  bool t4 = (int(_xlat_blk_cs_params.flip) != 0);
+  float2 t5 = float2(t1);
+  int t6 = (int(gl_LocalInvocationID.x) << int(2u));
+  tile[0][t6] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t3.yx : t3) + 0.25) / t5), level(0.0)).xyz;
+  float2 t7 = (t3 + float2(1.0, 0.0));
+  int t8 = (t6 + 1);
+  tile[0][t8] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t7.yx : t7) + 0.25) / t5), level(0.0)).xyz;
+  float2 t9 = (t3 + float2(2.0, 0.0));
+  int t10 = (t6 + 2);
+  tile[0][t10] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t9.yx : t9) + 0.25) / t5), level(0.0)).xyz;
+  float2 t11 = (t3 + float2(3.0, 0.0));
+  int t12 = (t6 + 3);
+  tile[0][t12] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t11.yx : t11) + 0.25) / t5), level(0.0)).xyz;
+  float2 t13 = (t3 + float2(0.0, 1.0));
+  tile[1][t6] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t13.yx : t13) + 0.25) / t5), level(0.0)).xyz;
+  float2 t14 = (t3 + 1.0);
+  tile[1][t8] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t14.yx : t14) + 0.25) / t5), level(0.0)).xyz;
+  float2 t15 = (t3 + float2(2.0, 1.0));
+  tile[1][t10] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t15.yx : t15) + 0.25) / t5), level(0.0)).xyz;
+  float2 t16 = (t3 + float2(3.0, 1.0));
+  tile[1][t12] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t16.yx : t16) + 0.25) / t5), level(0.0)).xyz;
+  float2 t17 = (t3 + float2(0.0, 2.0));
+  tile[2][t6] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t17.yx : t17) + 0.25) / t5), level(0.0)).xyz;
+  float2 t18 = (t3 + float2(1.0, 2.0));
+  tile[2][t8] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t18.yx : t18) + 0.25) / t5), level(0.0)).xyz;
+  float2 t19 = (t3 + 2.0);
+  tile[2][t10] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t19.yx : t19) + 0.25) / t5), level(0.0)).xyz;
+  float2 t20 = (t3 + float2(3.0, 2.0));
+  tile[2][t12] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t20.yx : t20) + 0.25) / t5), level(0.0)).xyz;
+  float2 t21 = (t3 + float2(0.0, 3.0));
+  tile[3][t6] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t21.yx : t21) + 0.25) / t5), level(0.0)).xyz;
+  float2 t22 = (t3 + float2(1.0, 3.0));
+  tile[3][t8] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t22.yx : t22) + 0.25) / t5), level(0.0)).xyz;
+  float2 t23 = (t3 + float2(2.0, 3.0));
+  tile[3][t10] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t23.yx : t23) + 0.25) / t5), level(0.0)).xyz;
+  float2 t24 = (t3 + 3.0);
+  tile[3][t12] = cs_inp_tex.sample(_mtlsmp_cs_inp_tex, (((t4 ? t24.yx : t24) + 0.25) / t5), level(0.0)).xyz;
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  int2 t25 = int2(t3);
+  for (r3 = 0; (r3 < 4); r3++) {
+    for (r2 = 0; (r2 < 4); r2++) {
+      int2 t26 = (t25 + int2(r2, r3));
+      int2 t27 = (t4 ? t26.yx : t26);
+      int t28 = (t6 + r2);
+      if ((((t28 >= int(t2)) && (t28 < (128 - int(t2)))) && all((t27 < t1) == bool2(true)))) {
+        r1 = float3(0.0);
+        for (r0 = 0; (r0 < t0); r0++) {
+          r1 = (r1 + ((1.0 / float(t0)) * tile[r3][((t28 + r0) - int(t2))]));
+        }
+        cs_outp_tex.write(float4(r1.x, r1.y, r1.z, 1.0), uint2(int4(t27, 0, 0).xy));
+      }
+    }
+  }
+}
+
+// stats: 102 alu 18 tex 7 flow
+// workgroup size: 32 1 1
+// buffer #0: cs_params layout std140 binding 0 (size: 16) metal 1
+//  member #0: int filter_dim offset 0
+//  member #1: int block_dim offset 4
+//  member #2: int flip offset 8
+// textures: 2
+//  #0: cs_inp_tex (high 2d) 0x0 [-1] loc 0
+//  #1: cs_outp_tex (high image2d) 0x0 [-1] loc 1 format rgba8 component float writeonly

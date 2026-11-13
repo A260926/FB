@@ -1,0 +1,55 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float2 xlv_TEXCOORD0;
+  float3 xlv_TEXCOORD1;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float4 _LightShadowData;
+  float4 _LightSplitsFar;
+  float4 _LightSplitsNear;
+  float4x4 _View2Shadow;
+  float4x4 _View2Shadow1;
+  float4x4 _View2Shadow2;
+  float4x4 _View2Shadow3;
+  float4 _ZBufferParams;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _CameraDepthTexture [[texture(0)]], sampler _mtlsmp__CameraDepthTexture [[sampler(0)]]
+  , texture2d<half> _ShadowMapTexture [[texture(1)]], sampler _mtlsmp__ShadowMapTexture [[sampler(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float t0 = float(_CameraDepthTexture.sample(_mtlsmp__CameraDepthTexture, _mtl_i.xlv_TEXCOORD0).x);
+  float t1 = (1.0 / ((_mtl_u._ZBufferParams.x * t0) + _mtl_u._ZBufferParams.y));
+  float3 t2 = (_mtl_i.xlv_TEXCOORD1 * t1);
+  float4 t3 = float4(step(half4(_mtl_u._LightSplitsNear), half4(t2.zzzz)));
+  float4 t4 = float4(half4((t2.z < _mtl_u._LightSplitsFar)));
+  float4 t5 = (t3 * t4);
+  float3 t6 = (float4x3((_mtl_u._View2Shadow * float4(t2, 1.0)).xyz, (_mtl_u._View2Shadow1 * float4(t2, 1.0)).xyz, (_mtl_u._View2Shadow2 * float4(t2, 1.0)).xyz, (_mtl_u._View2Shadow3 * float4(t2, 1.0)).xyz) * t5);
+  half t7 = half(((float(_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, t6.xy).x) < t6.z) ? _mtl_u._LightShadowData.x : 1.0));
+  float4 t8 = float4(half4(t7));
+  float2 t9 = fract((float2(1.0, 255.0) * (1.0 - t1)));
+  _mtl_o._fragData = half4(float4(t8.x, 1.0, (t9.x - (t9.y * 0.00392157)), t9.y));
+  return _mtl_o;
+}
+
+// stats: 47 alu 2 tex 0 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD1 (high float) 3x1 [-1]
+// uniforms: 8 (total size: 320)
+//  #0: _LightShadowData (high float) 4x1 [-1] loc 0
+//  #1: _LightSplitsFar (high float) 4x1 [-1] loc 16
+//  #2: _LightSplitsNear (high float) 4x1 [-1] loc 32
+//  #3: _View2Shadow (high float) 4x4 [-1] loc 48
+//  #4: _View2Shadow1 (high float) 4x4 [-1] loc 112
+//  #5: _View2Shadow2 (high float) 4x4 [-1] loc 176
+//  #6: _View2Shadow3 (high float) 4x4 [-1] loc 240
+//  #7: _ZBufferParams (high float) 4x1 [-1] loc 304
+// textures: 2
+//  #0: _CameraDepthTexture (medium 2d) 0x0 [-1] loc 0
+//  #1: _ShadowMapTexture (medium 2d) 0x0 [-1] loc 1

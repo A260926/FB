@@ -1,0 +1,26 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 400
+#error This shader requires Metal 4.0 or newer
+#endif
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, slice, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint face, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, face, slice, &expected, vec<T, 4>(value)); return expected.x; }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texturecube<uint, access::read_write> counters [[texture(0)]]
+  , texturecube_array<uint, access::read_write> layers [[texture(1)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = counters.atomic_fetch_add(uint2(int4(uint4(gl_GlobalInvocationID.xy, 4u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.xy, 4u, 0u)).z), uint4(1u)).x;
+  _xlat_image_comp_swap(layers, uint2(int4(uint4(gl_GlobalInvocationID.xy, 10u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.xy, 10u, 0u)).z) % 6u, uint(int4(uint4(gl_GlobalInvocationID.xy, 10u, 0u)).z) / 6u, t0, 0u);
+}
+
+// stats: 0 alu 2 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 2
+//  #0: counters (high imagecube) 0x0 [-1] loc 0 format r32ui component uint
+//  #1: layers (high imagecubearray) 0x0 [-1] loc 1 format r32ui component uint

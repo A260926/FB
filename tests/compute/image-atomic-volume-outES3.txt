@@ -1,0 +1,24 @@
+#version 320 es
+layout(local_size_x = 8) in;
+layout(std430) buffer Results {
+  highp uvec4 values[];
+} results;
+layout(r32ui) coherent uniform highp uimage3D volume;
+void main ()
+{
+  highp uint t0 = imageAtomicAdd(volume, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xyz), 1u);
+  highp uint t1 = imageAtomicCompSwap(volume, ivec4((1 + int(gl_GlobalInvocationID.x)), 0, 0, 0).xyz, 0u, uint((2 + int(gl_GlobalInvocationID.x))));
+  highp uint t2 = gl_GlobalInvocationID.x;
+  highp uint t3 = imageAtomicCompSwap(volume, ivec4(-1, 0, 0, 0).xyz, 0u, t2);
+  highp ivec3 t4 = imageSize(volume);
+  highp uint t5 = imageAtomicCompSwap(volume, ivec4(t4, 0).xyz, 0u, t2);
+  results.values[int(t2)] = uvec4(t0, t1, t3, t5);
+}
+
+// stats: 2 alu 5 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: Results storage instance results layout std430 (size: unknown)
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0
+// textures: 1
+//  #0: volume (high image3d) 0x0 [-1] format r32ui component uint

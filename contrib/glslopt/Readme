@@ -1,0 +1,5 @@
+This sample command-line program reads a GLSL shader and writes optimized GLSL.
+Enable it with -DGLSLOPT_BUILD_TOOLS=ON when configuring the root CMake project.
+Run glslopt without arguments for usage information.
+
+Originally contributed by Jim Tilander, Santa Monica 2010.

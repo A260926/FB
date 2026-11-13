@@ -1,0 +1,38 @@
+#extension GL_ARB_shader_texture_lod : enable
+uniform sampler2D _MainTex;
+uniform vec4 _MainTex_TexelSize;
+varying vec2 xlv_TEXCOORD0;
+varying vec4 xlv_TEXCOORD1;
+void main ()
+{
+  vec4 r0;
+  vec4 t0 = texture2DLod(_MainTex, xlv_TEXCOORD1.xy, 0.0);
+  vec4 t1 = texture2DLod(_MainTex, xlv_TEXCOORD1.xw, 0.0);
+  vec4 t2 = texture2DLod(_MainTex, xlv_TEXCOORD1.zw, 0.0);
+  r0 = texture2DLod(_MainTex, xlv_TEXCOORD0, 0.0);
+  float t3 = (texture2DLod(_MainTex, xlv_TEXCOORD1.zy, 0.0).y + 0.00260417);
+  float t4 = max(max(t3, t2.y), max(t0.y, t1.y));
+  float t5 = min(min(t3, t2.y), min(t0.y, t1.y));
+  float t6 = (t1.y - t3);
+  float t7 = (t2.y - t0.y);
+  if (((max(t4, r0.y) - min(t5, r0.y)) >= max(0.05, (t4 * 0.125)))) {
+    vec2 t8 = vec2((t6 + t7), (t6 - t7));
+    vec2 t9 = normalize(t8);
+    vec2 t10 = (t9 * (_MainTex_TexelSize.xyxy * vec4(-0.5, -0.5, 0.5, 0.5)).zw);
+    vec2 t11 = (clamp((t9 / (min(abs(t9.x), abs(t9.y)) * 8.0)), -2.0, 2.0) * (_MainTex_TexelSize.xyxy * vec4(-2.0, -2.0, 2.0, 2.0)).zw);
+    vec4 t12 = (texture2DLod(_MainTex, (xlv_TEXCOORD0 - t10), 0.0) + texture2DLod(_MainTex, (xlv_TEXCOORD0 + t10), 0.0));
+    vec4 t13 = (0.25 * ((texture2DLod(_MainTex, (xlv_TEXCOORD0 - t11), 0.0) + texture2DLod(_MainTex, (xlv_TEXCOORD0 + t11), 0.0)) + t12));
+    vec3 t14 = (t12.xyz * 0.5);
+    r0 = (((t13.y < t5) || (t4 < t13.y)) ? vec4(t14, t13.w) : t13);
+  }
+  gl_FragData[0] = r0;
+}
+
+// stats: 44 alu 9 tex 1 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD1 (high float) 4x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: _MainTex_TexelSize (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

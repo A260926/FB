@@ -1,0 +1,34 @@
+uniform vec4 _TreeBillboardCameraFront;
+uniform vec4 _TreeBillboardCameraPos;
+uniform vec3 _TreeBillboardCameraRight;
+uniform vec4 _TreeBillboardCameraUp;
+uniform vec4 _TreeBillboardDistances;
+varying vec4 xlv_FOG;
+void main ()
+{
+  vec3 t0 = (gl_Vertex.xyz - _TreeBillboardCameraPos.xyz);
+  vec2 t1 = ((_TreeBillboardDistances.x < dot(t0, t0)) ? vec2(0.0) : gl_MultiTexCoord1.xy);
+  float t2 = mix(t1.y, gl_MultiTexCoord0.y, _TreeBillboardCameraPos.w);
+  float t3 = abs(t2);
+  vec3 t4 = mix(((((_TreeBillboardCameraUp.xyz * 2.0) * max(0.0, t2)) - (vec3(0.0, 1.0, 0.0) * t3)) - ((_TreeBillboardCameraUp.xyz * t3) * _TreeBillboardCameraFront.w)), (_TreeBillboardCameraUp.xyz * t2), _TreeBillboardCameraUp.www);
+  vec3 t5 = ((gl_Vertex.xyz + (_TreeBillboardCameraRight * t1.x)) + t4);
+  vec4 t6 = (gl_ModelViewProjectionMatrix * vec4(t5, gl_Vertex.w));
+  gl_Position = t6;
+  xlv_FOG = vec4(t6.z, 0.0, 0.0, 0.0);
+  gl_FrontColor = gl_Color;
+  gl_TexCoord[0] = vec4(gl_MultiTexCoord0.x, float((0.0 < gl_MultiTexCoord0.y)), 0.0, 0.0);
+}
+
+// stats: 28 alu 0 tex 0 flow
+// inputs: 4
+//  #0: gl_MultiTexCoord1 (high float) 4x1 [-1] loc 7
+//  #1: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #2: gl_Color (high float) 4x1 [-1] loc 2
+//  #3: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 6 (total size: 0)
+//  #0: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #1: _TreeBillboardCameraFront (high float) 4x1 [-1]
+//  #2: _TreeBillboardCameraPos (high float) 4x1 [-1]
+//  #3: _TreeBillboardCameraRight (high float) 3x1 [-1]
+//  #4: _TreeBillboardCameraUp (high float) 4x1 [-1]
+//  #5: _TreeBillboardDistances (high float) 4x1 [-1]

@@ -1,0 +1,55 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _glesFragData[4];
+uniform highp vec4 _ZBufferParams;
+uniform highp vec4 _LightPos;
+uniform highp mat4 _FrustumRays;
+uniform highp vec4 _CameraPosLocal;
+uniform highp vec4 _CoordTexDim;
+uniform highp vec4 _ScreenTexDim;
+uniform mediump sampler2D _CameraDepthTexture;
+in highp vec2 xlv_TEXCOORD0;
+void main ()
+{
+  mediump float t0 = (xlv_TEXCOORD0.y - (0.5 / _CoordTexDim.y));
+  highp float t1 = clamp(t0, 0.0, 1.0);
+  mediump float t2 = ((xlv_TEXCOORD0.x - (0.5 / _CoordTexDim.x)) * (_CoordTexDim.x / (_CoordTexDim.x - 1.0)));
+  highp float t3 = clamp(t2, 0.0, 1.0);
+  highp float t4 = (t1 * 4.0);
+  highp float t5 = ((fract(t4) * 2.0) - 1.0);
+  highp float t6 = (-t5);
+  mediump vec4 t7 = vec4(equal(ivec4(int(clamp(floor(t4), 0.0, 3.0))), ivec4(0, 1, 2, 3)));
+  highp vec2 t8 = ((mix(_LightPos.xy, (-vec2(dot(vec4(t6, -1.0, t5, 1.0), t7), dot(vec4(-1.0, t5, 1.0, t6), t7))), vec2(t3)) * 0.5) + 0.5);
+  highp float t9 = texture(_CameraDepthTexture, ((floor((t8 * _ScreenTexDim.xy)) + 0.5) * _ScreenTexDim.zw)).x;
+  mediump vec4 t10 = _FrustumRays[0];
+  mediump vec4 t11 = _FrustumRays[1];
+  mediump vec4 t12 = _FrustumRays[2];
+  highp vec3 t13 = mix(mix(vec3(t10.x, t11.x, t12.x), vec3(t10.y, t11.y, t12.y), t8.xxx), mix(vec3(t10.w, t11.w, t12.w), vec3(t10.z, t11.z, t12.z), t8.xxx), t8.yyy);
+  highp float t14 = length(t13);
+  highp vec3 t15 = (1.0 / (t13 / t14));
+  highp vec3 t16 = (t15 * (-0.5 - _CameraPosLocal.xyz));
+  highp vec3 t17 = (t15 * (0.5 - _CameraPosLocal.xyz));
+  highp vec3 t18 = min(t17, t16);
+  highp vec3 t19 = max(t17, t16);
+  highp vec2 t20 = max(t18.xx, t18.yz);
+  highp float t21 = max(t20.x, t20.y);
+  highp vec2 t22 = min(t19.xx, t19.yz);
+  highp float t23 = min(t22.x, t22.y);
+  highp float t24 = (1.0 / ((_ZBufferParams.x * t9) + _ZBufferParams.y));
+  _glesFragData[0] = vec4(t8, 0.0, 0.0);
+  _glesFragData[1] = (((max(t21, 0.0) >= t23) || (t24 < (t21 / t14))) ? (-vec4(t24)) : min(vec4(t24), vec4((t23 / t14))));
+}
+
+// stats: 58 alu 1 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+// uniforms: 6 (total size: 0)
+//  #0: _ZBufferParams (high float) 4x1 [-1]
+//  #1: _LightPos (high float) 4x1 [-1]
+//  #2: _FrustumRays (high float) 4x4 [-1]
+//  #3: _CameraPosLocal (high float) 4x1 [-1]
+//  #4: _CoordTexDim (high float) 4x1 [-1]
+//  #5: _ScreenTexDim (high float) 4x1 [-1]
+// textures: 1
+//  #0: _CameraDepthTexture (medium 2d) 0x0 [-1]

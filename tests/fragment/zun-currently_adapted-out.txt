@@ -1,0 +1,23 @@
+uniform vec4 _AdaptParams;
+uniform sampler2D _CurTex;
+uniform sampler2D _MainTex;
+void main ()
+{
+  vec2 t0 = gl_TexCoord[0].xy;
+  vec4 t1 = texture2D(_MainTex, t0);
+  vec2 t2 = ((texture2D(_CurTex, t0).xy - t1.xy) * _AdaptParams.x);
+  vec2 t3 = (t1.xy + vec2((sign(t2.x) * max(0.00392157, abs(t2.x))), (sign(t2.y) * max(0.00392157, abs(t2.y)))));
+  float t4 = max(t3.x, _AdaptParams.z);
+  float t5 = min(t3.y, _AdaptParams.y);
+  float t6 = ((t4 + 0.01) - t5);
+  gl_FragData[0] = vec4(t4, t5, t6, (t5 / t6));
+}
+
+// stats: 16 alu 2 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 1 (total size: 0)
+//  #0: _AdaptParams (high float) 4x1 [-1]
+// textures: 2
+//  #0: _CurTex (high 2d) 0x0 [-1]
+//  #1: _MainTex (high 2d) 0x0 [-1]

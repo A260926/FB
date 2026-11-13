@@ -1,0 +1,48 @@
+#version 310 es
+precision highp float;
+precision highp int;
+struct Pair {
+  highp float x;
+  highp float y;
+};
+layout(std140, binding = 4) buffer Output {
+  writeonly highp float values[2];
+  writeonly highp vec4 result;
+};
+layout(std430, row_major, binding = 2) buffer Input {
+  readonly Pair pairs[2];
+  readonly highp mat2 matrices[2];
+  layout(column_major) readonly highp mat2x3 transform;
+  readonly highp vec3 direction;
+  readonly highp float weight;
+} source;
+uniform highp int index;
+out highp vec4 color;
+void main ()
+{
+  highp float t0 = source.pairs[index].x;
+  highp float t1 = source.pairs[index].y;
+  highp vec2 t2 = (source.matrices[index] * vec2(t0, t1));
+  values[index] = t2.x;
+  highp vec3 t3 = (((source.transform[0] * t2.x) + source.direction) + (source.transform[1] * t2.y));
+  result = vec4(t3, source.weight);
+  color = vec4(t2, t0, t1);
+}
+
+// stats: 7 alu 0 tex 0 flow
+// uniforms: 1 (total size: 0)
+//  #0: index (high int) 1x1 [-1]
+// buffer #0: Input storage instance source layout std430 binding 2 (size: 96)
+//  member #0: Pair[2] pairs offset 0 array 2 stride 8 readonly
+//  member #1: Pair [] parent 0 offset 0 readonly
+//  member #2: float x parent 1 offset 0 readonly
+//  member #3: float y parent 1 offset 4 readonly
+//  member #4: mat2[2] matrices offset 16 array 2 stride 16 readonly
+//  member #5: mat2 [] parent 4 offset 16 matrix-stride 8 row-major readonly
+//  member #6: mat2x3 transform offset 48 matrix-stride 16 readonly
+//  member #7: vec3 direction offset 80 readonly
+//  member #8: float weight offset 92 readonly
+// buffer #1: Output storage layout std140 binding 4 (size: 48)
+//  member #0: float[2] values offset 0 array 2 stride 16 writeonly
+//  member #1: float [] parent 0 offset 0 writeonly
+//  member #2: vec4 result offset 32 writeonly

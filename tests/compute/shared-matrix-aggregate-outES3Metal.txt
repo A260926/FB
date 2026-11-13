@@ -1,0 +1,58 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct Tile {
+  half2x3 transforms[2];
+};
+struct Entry {
+  Tile tile;
+  uint tag;
+};
+struct _xlat_element_packed_float3_16 { packed_float3 value; char _pad[4]; };
+struct _xlat_Tile_std430 {
+  _xlat_element_packed_float3_16 transforms[2][2];
+};
+static_assert(sizeof(_xlat_Tile_std430) == 64, "std430 size");
+struct _xlat_Entry_std430 {
+  _xlat_Tile_std430 tile;
+  uint tag;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_Entry_std430) == 80, "std430 size");
+struct _xlat_buf_Output_std430 {
+  _xlat_Entry_std430 values[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(1)]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  threadgroup Entry entries[8];
+  float t0 = float(gl_LocalInvocationIndex);
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[0][0] = half3(float3(t0, 0.0, 0.0));
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[0][1] = half3(float3(0.0, t0, 0.0));
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[1][0] = half3(2.0, 0.0, 0.0);
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[1][1] = half3(0.0, 2.0, 0.0);
+  entries[int(gl_LocalInvocationIndex)].tag = gl_LocalInvocationIndex;
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[1][int((gl_LocalInvocationIndex & 1u))].xz = half2(4.0, 3.0);
+  entries[int(gl_LocalInvocationIndex)].tile.transforms[0][0][int((gl_LocalInvocationIndex % 3u))] = half(5.0);
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  outputData.values[int(gl_GlobalInvocationID.x)].tile.transforms[0][0].value = float3(entries[int((uint((int(gl_LocalInvocationIndex) + 1)) & 7u))].tile.transforms[0][0]);
+  outputData.values[int(gl_GlobalInvocationID.x)].tile.transforms[0][1].value = float3(entries[int((uint((int(gl_LocalInvocationIndex) + 1)) & 7u))].tile.transforms[0][1]);
+  outputData.values[int(gl_GlobalInvocationID.x)].tile.transforms[1][0].value = float3(entries[int((uint((int(gl_LocalInvocationIndex) + 1)) & 7u))].tile.transforms[1][0]);
+  outputData.values[int(gl_GlobalInvocationID.x)].tile.transforms[1][1].value = float3(entries[int((uint((int(gl_LocalInvocationIndex) + 1)) & 7u))].tile.transforms[1][1]);
+  outputData.values[int(gl_GlobalInvocationID.x)].tag = entries[int((uint((int(gl_LocalInvocationIndex) + 1)) & 7u))].tag;
+}
+
+// stats: 5 alu 0 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: Output storage instance outputData layout std430 (size: unknown) metal 1
+//  member #0: Entry[] values offset 0 array runtime stride 80
+//  member #1: Entry [] parent 0 offset 0
+//  member #2: Tile tile parent 1 offset 0
+//  member #3: mat2x3[2] transforms parent 2 offset 0 array 2 stride 32
+//  member #4: mat2x3 [] parent 3 offset 0 matrix-stride 16
+//  member #5: uint tag parent 1 offset 64

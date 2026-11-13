@@ -1,0 +1,45 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 320
+#error This shader requires Metal 3.2 or newer
+#endif
+struct _xlat_buf_Input_std430 {
+  uint values[1];
+};
+struct _xlat_buf_Output_std430 {
+  uint count;
+  uint values[1];
+};
+template <typename P, typename T> inline T _xlat_atomic_comp_swap(P p, T compare, T value) { T expected = compare; atomic_compare_exchange_weak_explicit(p, &expected, value, memory_order_relaxed, memory_order_relaxed); return expected; }
+struct xlatMtlShaderUniform {
+  uint limit;
+};
+// threadsPerThreadgroup: 32, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_Input_std430& inputData [[buffer(1)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(2)]]
+  , constant uint* _mtl_buffer_sizes [[buffer(3)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  if ((gl_GlobalInvocationID.x < min(_mtl_u.limit, uint((max(int(_mtl_buffer_sizes[1]) - 0, 0) / 4))))) {
+    uint t0 = gl_GlobalInvocationID.x;
+    uint t1 = uint(inputData.values[int(t0)]);
+    outputData.values[int(t0)] = t1;
+    atomic_thread_fence(mem_flags::mem_device, memory_order_seq_cst, thread_scope_device);
+    atomic_fetch_add_explicit((device atomic_uint*)&outputData.count, 1u, memory_order_relaxed);
+    _xlat_atomic_comp_swap((device atomic_uint*)&outputData.values[int(t0)], t1, uint((int(t1) + 1)));
+  }
+}
+
+// stats: 3 alu 0 tex 1 flow
+// workgroup size: 32 1 1
+// uniforms: 1 (total size: 4)
+//  #0: limit (high int) 1x1 [-1] loc 0
+// buffer #0: Input storage instance inputData layout std430 (size: unknown) metal 1 metal-size-buffer 3
+//  member #0: uint[] values offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly
+// buffer #1: Output storage instance outputData layout std430 (size: unknown) metal 2
+//  member #0: uint count offset 0
+//  member #1: uint[] values offset 4 array runtime stride 4
+//  member #2: uint [] parent 1 offset 4

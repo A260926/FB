@@ -1,0 +1,96 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_particle_std430 {
+  float2 pos;
+  float2 vel;
+};
+static_assert(sizeof(_xlat_particle_std430) == 16, "std430 size");
+struct _xlat_buf_cs_ssbo_in_std430 {
+  _xlat_particle_std430 prt_in[1];
+};
+struct _xlat_buf_cs_ssbo_out_std430 {
+  _xlat_particle_std430 prt_out[1];
+};
+struct _xlat_buf_sim_params_std140 {
+  float dt;
+  float rule1_distance;
+  float rule2_distance;
+  float rule3_distance;
+  float rule1_scale;
+  float rule2_scale;
+  float rule3_scale;
+  int num_particles;
+};
+static_assert(sizeof(_xlat_buf_sim_params_std140) == 32, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 64, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_cs_ssbo_in_std430& _xlat_blk_cs_ssbo_in [[buffer(1)]]
+  , device _xlat_buf_cs_ssbo_out_std430& _xlat_blk_cs_ssbo_out [[buffer(2)]]
+  , constant _xlat_buf_sim_params_std140& _xlat_blk_sim_params [[buffer(3)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  int r0 = 0;
+  int r1 = 0;
+  float2 r2 = 0;
+  int r3 = 0;
+  float2 r4 = 0;
+  float2 r5 = 0;
+  int t0 = int(_xlat_blk_sim_params.num_particles);
+  if ((gl_GlobalInvocationID.x < uint(t0))) {
+    uint t1 = gl_GlobalInvocationID.x;
+    float2 t2 = float2(_xlat_blk_cs_ssbo_in.prt_in[int(t1)].pos);
+    float2 t3 = float2(_xlat_blk_cs_ssbo_in.prt_in[int(t1)].vel);
+    r3 = 0;
+    r1 = 0;
+    r5 = float2(0.0);
+    r4 = float2(0.0);
+    r2 = float2(0.0);
+    for (r0 = 0; (r0 < t0); r0++) {
+      if ((r0 != int(gl_GlobalInvocationID.x))) {
+        float2 t4 = float2(_xlat_blk_cs_ssbo_in.prt_in[r0].pos);
+        float2 t5 = (t4 - t2);
+        float t6 = length(t5);
+        bool t7 = (t6 < float(_xlat_blk_sim_params.rule1_distance));
+        r2 = (t7 ? (r2 + t4) : r2);
+        r1 = (r1 + int(t7));
+        r5 = ((t6 < float(_xlat_blk_sim_params.rule2_distance)) ? (r5 - t5) : r5);
+        bool t8 = (t6 < float(_xlat_blk_sim_params.rule3_distance));
+        r4 = (t8 ? (r4 + float2(_xlat_blk_cs_ssbo_in.prt_in[r0].vel)) : r4);
+        r3 = (r3 + int(t8));
+      }
+    }
+    float2 t9 = (((((0 < r1) ? ((r2 / float(r1)) - t2) : r2) * float(_xlat_blk_sim_params.rule1_scale)) + (r5 * float(_xlat_blk_sim_params.rule2_scale))) + (((0 < r3) ? (r4 / float(r3)) : r4) * float(_xlat_blk_sim_params.rule3_scale)));
+    float2 t10 = (t3 + t9);
+    float t11 = dot(t10, t10);
+    float2 t12 = ((t10 * rsqrt(t11)) * clamp(sqrt(t11), 0.0, 0.1));
+    float2 t13 = (t2 + (t12 * float(_xlat_blk_sim_params.dt)));
+    float2 t14 = ((t13.x < -1.0) ? float2(1.0, t13.y) : ((1.0 < t13.x) ? float2(-1.0, t13.y) : t13));
+    _xlat_blk_cs_ssbo_out.prt_out[int(t1)].pos = ((t14.y < -1.0) ? float2(t14.x, 1.0) : ((1.0 < t14.y) ? float2(t14.x, -1.0) : t14));
+    _xlat_blk_cs_ssbo_out.prt_out[int(t1)].vel = t12;
+  }
+}
+
+// stats: 52 alu 0 tex 4 flow
+// workgroup size: 64 1 1
+// buffer #0: cs_ssbo_in storage layout std430 binding 0 (size: unknown) metal 1
+//  member #0: particle[] prt_in offset 0 array runtime stride 16 readonly
+//  member #1: particle [] parent 0 offset 0 readonly
+//  member #2: vec2 pos parent 1 offset 0 readonly
+//  member #3: vec2 vel parent 1 offset 8 readonly
+// buffer #1: cs_ssbo_out storage layout std430 binding 1 (size: unknown) metal 2
+//  member #0: particle[] prt_out offset 0 array runtime stride 16
+//  member #1: particle [] parent 0 offset 0
+//  member #2: vec2 pos parent 1 offset 0
+//  member #3: vec2 vel parent 1 offset 8
+// buffer #2: sim_params layout std140 binding 0 (size: 32) metal 3
+//  member #0: float dt offset 0
+//  member #1: float rule1_distance offset 4
+//  member #2: float rule2_distance offset 8
+//  member #3: float rule3_distance offset 12
+//  member #4: float rule1_scale offset 16
+//  member #5: float rule2_scale offset 20
+//  member #6: float rule3_scale offset 24
+//  member #7: int num_particles offset 28

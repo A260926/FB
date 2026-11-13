@@ -1,0 +1,30 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  half4 uv;
+};
+struct xlatMtlShaderOutput {
+  half4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> tex [[texture(0)]], sampler _mtlsmp_tex [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half2 t0 = _mtl_i.uv.xy;
+  half t1 = _mtl_i.uv.z;
+  half t2 = _mtl_i.uv.w;
+  half4 t3 = (((tex.sample(_mtlsmp_tex, float2(t0)) + tex.sample(_mtlsmp_tex, (float2(t0) / float(t1)))) + tex.sample(_mtlsmp_tex, (float2(t0) / float(t2)))) + tex.sample(_mtlsmp_tex, float2(t0), bias(float(t2))));
+  half4 t4 = (((t3 + tex.sample(_mtlsmp_tex, (float2(t0) / float(t1)), bias(float(t2)))) + tex.sample(_mtlsmp_tex, (float2(t0) / float(t2)), bias(float(t1)))) + tex.read(uint2(short2(_mtl_i.uv.xy)), uint(0)));
+  float2 t5 = float2(int2(tex.get_width(uint(0)), tex.get_height(uint(0))));
+  _mtl_o.color = half4((float4(t4) + float4(t5, 0.0, 0.0)));
+  return _mtl_o;
+}
+
+// stats: 9 alu 8 tex 0 flow
+// inputs: 1
+//  #0: uv (medium float) 4x1 [-1]
+// textures: 1
+//  #0: tex (medium other) 0x0 [-1] loc 0

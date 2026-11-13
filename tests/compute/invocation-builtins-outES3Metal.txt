@@ -1,0 +1,30 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Data_std430 {
+  uint4 values[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 4, 2, 3
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std430& data [[buffer(1)]]
+  , uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]
+  , uint3 gl_NumWorkGroups [[threadgroups_per_grid]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]]
+  , uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]])
+{
+  int t0 = (((int(gl_WorkGroupID.x) + (int(gl_NumWorkGroups.x) * (int(gl_WorkGroupID.y) + (int(gl_NumWorkGroups.y) * int(gl_WorkGroupID.z))))) * 24) + int(gl_LocalInvocationIndex));
+  int t1 = (t0 << int(2u));
+  data.values[t1] = uint4(gl_GlobalInvocationID, gl_LocalInvocationIndex);
+  data.values[(t1 + 1)] = uint4(gl_LocalInvocationID, 4u);
+  data.values[(t1 + 2)] = uint4(gl_WorkGroupID, 2u);
+  data.values[(t1 + 3)] = uint4(gl_NumWorkGroups, 3u);
+}
+
+// stats: 10 alu 0 tex 0 flow
+// workgroup size: 4 2 3
+// buffer #0: Data storage instance data layout std430 (size: unknown) metal 1
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0

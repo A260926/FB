@@ -1,0 +1,43 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Entry_std140 {
+  float4 color;
+  float unused;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_Entry_std140) == 32, "std140 size");
+struct _xlat_buf_Data_std140 {
+  _xlat_Entry_std140 entries[3][2];
+  int2 indices;
+  char _pad0[8];
+  float4 unused;
+};
+static_assert(sizeof(_xlat_buf_Data_std140) == 224, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Data_std140& _xlat_blk_Data [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  short2 t0 = short2(_xlat_blk_Data.indices);
+  short t1 = t0.x;
+  short t2 = t0.y;
+  _mtl_o.color = (float4(_xlat_blk_Data.entries[t1][t2].color) + float4(_xlat_blk_Data.entries[t2][t1].color));
+  return _mtl_o;
+}
+
+// stats: 1 alu 0 tex 0 flow
+// buffer #0: Data layout std140 (size: 224) metal 1
+//  member #0: Entry[2][3] entries offset 0 array 2 stride 96
+//  member #1: Entry[3] [] parent 0 offset 0 array 3 stride 32
+//  member #2: Entry [] parent 1 offset 0
+//  member #3: vec4 color parent 2 offset 0
+//  member #4: float unused parent 2 offset 16 (unused)
+//  member #5: ivec2 indices offset 192
+//  member #6: vec4 unused offset 208 (unused)

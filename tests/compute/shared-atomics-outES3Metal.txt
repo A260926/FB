@@ -1,0 +1,41 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Output_std430 {
+  uint4 values[1];
+};
+template <typename P, typename T> inline T _xlat_atomic_comp_swap(P p, T compare, T value) { T expected = compare; atomic_compare_exchange_weak_explicit(p, &expected, value, memory_order_relaxed, memory_order_relaxed); return expected; }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(1)]]
+  , uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]]
+  , uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  threadgroup uint count;
+  threadgroup int4 values;
+  bool t0 = (int(gl_LocalInvocationIndex) == 0);
+  if (t0) {
+    count = 0u;
+    values = int4(0);
+  }
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  uint t1 = atomic_fetch_add_explicit((threadgroup atomic_uint*)&count, 1u, memory_order_relaxed);
+  int t2 = _xlat_atomic_comp_swap(((threadgroup atomic_int*)&values + int((gl_LocalInvocationIndex & 1u))), 0, (int(gl_LocalInvocationIndex) + 1));
+  atomic_fetch_min_explicit(((threadgroup atomic_int*)&values + 2), (-int(gl_LocalInvocationIndex)), memory_order_relaxed);
+  atomic_fetch_max_explicit(((threadgroup atomic_int*)&values + 3), int(gl_LocalInvocationIndex), memory_order_relaxed);
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  if (t0) {
+    int4 t3 = values;
+    outputData.values[int(gl_WorkGroupID.x)] = uint4(count, uint2(t3.zw), t1);
+  }
+  _xlat_atomic_comp_swap(((device atomic_uint*)&outputData.values[(8 + int(gl_GlobalInvocationID.x))] + 0), 0u, uint(t2));
+}
+
+// stats: 5 alu 0 tex 2 flow
+// workgroup size: 8 1 1
+// buffer #0: Output storage instance outputData layout std430 (size: unknown) metal 1
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0

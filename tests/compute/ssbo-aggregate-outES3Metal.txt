@@ -1,0 +1,187 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Child_std140_row {
+  packed_float3 position;
+  float weight;
+  uint enabled;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_Child_std140_row) == 32, "std140 size");
+struct _xlat_element_float2_16 { float2 value; char _pad[8]; };
+struct _xlat_Entry_std140_row {
+  _xlat_Child_std140_row children[2];
+  _xlat_element_float2_16 weights[3];
+  _xlat_element_float2_16 transform[3];
+};
+static_assert(sizeof(_xlat_Entry_std140_row) == 160, "std140 size");
+struct _xlat_buf_Input_std140_row {
+  _xlat_Entry_std140_row entry;
+  _xlat_Entry_std140_row entries[2];
+  _xlat_element_float2_16 weights[3][2];
+};
+static_assert(sizeof(_xlat_buf_Input_std140_row) == 576, "std140 size");
+struct _xlat_Child_std430 {
+  packed_float3 position;
+  float weight;
+  uint enabled;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_Child_std430) == 32, "std430 size");
+struct _xlat_element_packed_float3_16 { packed_float3 value; char _pad[4]; };
+struct _xlat_Entry_std430 {
+  _xlat_Child_std430 children[2];
+  float2 weights[3];
+  char _pad0[8];
+  _xlat_element_packed_float3_16 transform[2];
+};
+static_assert(sizeof(_xlat_Entry_std430) == 128, "std430 size");
+struct _xlat_buf_Output_std430 {
+  _xlat_Entry_std430 entries[4];
+  _xlat_Entry_std430 pair[2];
+  float2 weights[3][2];
+  _xlat_element_packed_float3_16 transform[2];
+};
+static_assert(sizeof(_xlat_buf_Output_std430) == 848, "std430 size");
+struct _xlat_buf_RowOutput_std140_row {
+  _xlat_Entry_std140_row entry;
+};
+static_assert(sizeof(_xlat_buf_RowOutput_std140_row) == 160, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 4, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Input_std140_row& sourceData [[buffer(1)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(2)]]
+  , device _xlat_buf_RowOutput_std140_row& rowData [[buffer(3)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  float3 t0 = float3(sourceData.entry.children[0].position);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[0].position = t0;
+  float3 t1 = float3(sourceData.entry.children[1].position);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[1].position = t1;
+  float t2 = float(sourceData.entry.children[0].weight);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[0].weight = t2;
+  float t3 = float(sourceData.entry.children[1].weight);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[1].weight = t3;
+  bool t4 = bool(sourceData.entry.children[0].enabled);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[0].enabled = uint(t4);
+  bool t5 = bool(sourceData.entry.children[1].enabled);
+  outputData.entries[int(gl_GlobalInvocationID.x)].children[1].enabled = uint(t5);
+  half2 t6 = half2(sourceData.entry.weights[0].value);
+  outputData.entries[int(gl_GlobalInvocationID.x)].weights[0] = float2(t6);
+  half2 t7 = half2(sourceData.entry.weights[1].value);
+  outputData.entries[int(gl_GlobalInvocationID.x)].weights[1] = float2(t7);
+  half2 t8 = half2(sourceData.entry.weights[2].value);
+  outputData.entries[int(gl_GlobalInvocationID.x)].weights[2] = float2(t8);
+  float3 t9 = float3(float3(sourceData.entry.transform[0].value[0], sourceData.entry.transform[1].value[0], sourceData.entry.transform[2].value[0]));
+  outputData.entries[int(gl_GlobalInvocationID.x)].transform[0].value = t9;
+  float3 t10 = float3(float3(sourceData.entry.transform[0].value[1], sourceData.entry.transform[1].value[1], sourceData.entry.transform[2].value[1]));
+  outputData.entries[int(gl_GlobalInvocationID.x)].transform[1].value = t10;
+  outputData.weights[0][0] = float2(sourceData.weights[0][0].value);
+  outputData.weights[0][1] = float2(sourceData.weights[0][1].value);
+  outputData.weights[0][2] = float2(sourceData.weights[0][2].value);
+  outputData.weights[1][0] = float2(sourceData.weights[1][0].value);
+  outputData.weights[1][1] = float2(sourceData.weights[1][1].value);
+  outputData.weights[1][2] = float2(sourceData.weights[1][2].value);
+  outputData.pair[0].children[0].position = float3(sourceData.entries[0].children[0].position);
+  outputData.pair[0].children[1].position = float3(sourceData.entries[0].children[1].position);
+  outputData.pair[1].children[0].position = float3(sourceData.entries[1].children[0].position);
+  outputData.pair[1].children[1].position = float3(sourceData.entries[1].children[1].position);
+  outputData.pair[0].children[0].weight = float(sourceData.entries[0].children[0].weight);
+  outputData.pair[0].children[1].weight = float(sourceData.entries[0].children[1].weight);
+  outputData.pair[1].children[0].weight = float(sourceData.entries[1].children[0].weight);
+  outputData.pair[1].children[1].weight = float(sourceData.entries[1].children[1].weight);
+  outputData.pair[0].children[0].enabled = uint(bool(sourceData.entries[0].children[0].enabled));
+  outputData.pair[0].children[1].enabled = uint(bool(sourceData.entries[0].children[1].enabled));
+  outputData.pair[1].children[0].enabled = uint(bool(sourceData.entries[1].children[0].enabled));
+  outputData.pair[1].children[1].enabled = uint(bool(sourceData.entries[1].children[1].enabled));
+  outputData.pair[0].weights[0] = float2(half2(sourceData.entries[0].weights[0].value));
+  outputData.pair[0].weights[1] = float2(half2(sourceData.entries[0].weights[1].value));
+  outputData.pair[0].weights[2] = float2(half2(sourceData.entries[0].weights[2].value));
+  outputData.pair[1].weights[0] = float2(half2(sourceData.entries[1].weights[0].value));
+  outputData.pair[1].weights[1] = float2(half2(sourceData.entries[1].weights[1].value));
+  outputData.pair[1].weights[2] = float2(half2(sourceData.entries[1].weights[2].value));
+  outputData.pair[0].transform[0].value = float3(float3(sourceData.entries[0].transform[0].value[0], sourceData.entries[0].transform[1].value[0], sourceData.entries[0].transform[2].value[0]));
+  outputData.pair[0].transform[1].value = float3(float3(sourceData.entries[0].transform[0].value[1], sourceData.entries[0].transform[1].value[1], sourceData.entries[0].transform[2].value[1]));
+  outputData.pair[1].transform[0].value = float3(float3(sourceData.entries[1].transform[0].value[0], sourceData.entries[1].transform[1].value[0], sourceData.entries[1].transform[2].value[0]));
+  outputData.pair[1].transform[1].value = float3(float3(sourceData.entries[1].transform[0].value[1], sourceData.entries[1].transform[1].value[1], sourceData.entries[1].transform[2].value[1]));
+  outputData.transform[0].value = t9;
+  outputData.transform[1].value = t10;
+  rowData.entry.children[0].position = t0;
+  rowData.entry.children[1].position = t1;
+  rowData.entry.children[0].weight = t2;
+  rowData.entry.children[1].weight = t3;
+  rowData.entry.children[0].enabled = uint(t4);
+  rowData.entry.children[1].enabled = uint(t5);
+  rowData.entry.weights[0].value = float2(t6);
+  rowData.entry.weights[1].value = float2(t7);
+  rowData.entry.weights[2].value = float2(t8);
+  rowData.entry.transform[0].value[0] = t9.x;
+  rowData.entry.transform[1].value[0] = t9.y;
+  rowData.entry.transform[2].value[0] = t9.z;
+  rowData.entry.transform[0].value[1] = t10.x;
+  rowData.entry.transform[1].value[1] = t10.y;
+  rowData.entry.transform[2].value[1] = t10.z;
+}
+
+// stats: 0 alu 0 tex 0 flow
+// workgroup size: 4 1 1
+// buffer #0: Input instance sourceData layout std140 (size: 576) metal 1
+//  member #0: Entry entry offset 0
+//  member #1: Child[2] children parent 0 offset 0 array 2 stride 32
+//  member #2: Child [] parent 1 offset 0
+//  member #3: vec3 position parent 2 offset 0
+//  member #4: float weight parent 2 offset 12
+//  member #5: bool enabled parent 2 offset 16
+//  member #6: vec2[3] weights parent 0 offset 64 array 3 stride 16
+//  member #7: vec2 [] parent 6 offset 64
+//  member #8: mat2x3 transform parent 0 offset 112 matrix-stride 16 row-major
+//  member #9: Entry[2] entries offset 160 array 2 stride 160
+//  member #10: Entry [] parent 9 offset 160
+//  member #11: Child[2] children parent 10 offset 160 array 2 stride 32
+//  member #12: Child [] parent 11 offset 160
+//  member #13: vec3 position parent 12 offset 160
+//  member #14: float weight parent 12 offset 172
+//  member #15: bool enabled parent 12 offset 176
+//  member #16: vec2[3] weights parent 10 offset 224 array 3 stride 16
+//  member #17: vec2 [] parent 16 offset 224
+//  member #18: mat2x3 transform parent 10 offset 272 matrix-stride 16 row-major
+//  member #19: vec2[2][3] weights offset 480 array 2 stride 48
+//  member #20: vec2[3] [] parent 19 offset 480 array 3 stride 16
+//  member #21: vec2 [] parent 20 offset 480
+// buffer #1: Output storage instance outputData layout std430 (size: 848) metal 2
+//  member #0: Entry[4] entries offset 0 array 4 stride 128
+//  member #1: Entry [] parent 0 offset 0
+//  member #2: Child[2] children parent 1 offset 0 array 2 stride 32
+//  member #3: Child [] parent 2 offset 0
+//  member #4: vec3 position parent 3 offset 0
+//  member #5: float weight parent 3 offset 12
+//  member #6: bool enabled parent 3 offset 16
+//  member #7: vec2[3] weights parent 1 offset 64 array 3 stride 8
+//  member #8: vec2 [] parent 7 offset 64
+//  member #9: mat2x3 transform parent 1 offset 96 matrix-stride 16
+//  member #10: Entry[2] pair offset 512 array 2 stride 128
+//  member #11: Entry [] parent 10 offset 512
+//  member #12: Child[2] children parent 11 offset 512 array 2 stride 32
+//  member #13: Child [] parent 12 offset 512
+//  member #14: vec3 position parent 13 offset 512
+//  member #15: float weight parent 13 offset 524
+//  member #16: bool enabled parent 13 offset 528
+//  member #17: vec2[3] weights parent 11 offset 576 array 3 stride 8
+//  member #18: vec2 [] parent 17 offset 576
+//  member #19: mat2x3 transform parent 11 offset 608 matrix-stride 16
+//  member #20: vec2[2][3] weights offset 768 array 2 stride 24
+//  member #21: vec2[3] [] parent 20 offset 768 array 3 stride 8
+//  member #22: vec2 [] parent 21 offset 768
+//  member #23: mat2x3 transform offset 816 matrix-stride 16
+// buffer #2: RowOutput storage instance rowData layout std140 (size: 160) metal 3
+//  member #0: Entry entry offset 0
+//  member #1: Child[2] children parent 0 offset 0 array 2 stride 32
+//  member #2: Child [] parent 1 offset 0
+//  member #3: vec3 position parent 2 offset 0
+//  member #4: float weight parent 2 offset 12
+//  member #5: bool enabled parent 2 offset 16
+//  member #6: vec2[3] weights parent 0 offset 64 array 3 stride 16
+//  member #7: vec2 [] parent 6 offset 64
+//  member #8: mat2x3 transform parent 0 offset 112 matrix-stride 16 row-major

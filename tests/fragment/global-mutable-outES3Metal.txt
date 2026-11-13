@@ -1,0 +1,40 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 var_uv;
+};
+struct xlatMtlShaderOutput {
+  half4 out_data [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float uni1;
+  half4 uni4;
+  half _AtmosphereThickness;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> tex1 [[texture(0)]], sampler _mtlsmp_tex1 [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 t0 = half4(_mtl_i.var_uv.xyxx);
+  float3 t1 = float3(tex1.sample(_mtlsmp_tex1, float2(t0.xy)).xyz);
+  half4 t2 = half4((float3(half3(_mtl_u.uni4.x, half(0.0), half(0.0))) + t1).xyzx);
+  half4 t3 = half4(float4((float(t2.z) + _mtl_u.uni1)));
+  half4 t4 = half4(float4((_mtl_u.uni1 + 2.0)));
+  half t5 = pow(_mtl_u._AtmosphereThickness, half(2.5));
+  float t6 = float((half(0.049999997) * t5));
+  float t7 = float((half(0.031416) * t5));
+  half4 t8 = half4(float4((float(t2.x) + pow(t6, t7))));
+  _mtl_o.out_data = ((0.5 < _mtl_i.var_uv.x) ? half4(t8.x, t2.y, t3.z, t4.w) : half4(t2.xy, t3.z, t4.w));
+  return _mtl_o;
+}
+
+// stats: 10 alu 1 tex 0 flow
+// inputs: 1
+//  #0: var_uv (high float) 4x1 [-1]
+// uniforms: 3 (total size: 18)
+//  #0: uni1 (high float) 1x1 [-1] loc 0
+//  #1: uni4 (medium float) 4x1 [-1] loc 8
+//  #2: _AtmosphereThickness (medium float) 1x1 [-1] loc 16
+// textures: 1
+//  #0: tex1 (medium 2d) 0x0 [-1] loc 0

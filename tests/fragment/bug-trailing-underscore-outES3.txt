@@ -1,0 +1,25 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform mediump int count_;
+in mediump vec2 uv_;
+out mediump vec4 color_;
+void main ()
+{
+  highp int r0;
+  mediump float r1;
+  mediump float r2;
+  r1 = uv_.y;
+  r2 = uv_.x;
+  for (r0 = 0; (r0 < count_); r0++) {
+    r2 = (r2 + r1);
+    r1 = (r1 * uv_.x);
+  }
+  color_ = vec4(r2, r1, 0.0, 1.0);
+}
+
+// stats: 4 alu 0 tex 2 flow
+// inputs: 1
+//  #0: uv_ (medium float) 2x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: count_ (medium int) 1x1 [-1]

@@ -1,0 +1,47 @@
+#version 320 es
+layout(local_size_x = 8) in;
+layout(std430) buffer SignedResults {
+  highp ivec4 values[];
+} signedResults;
+layout(std430) buffer UnsignedResults {
+  highp uvec4 values[];
+} unsignedResults;
+layout(r32ui, binding = 0) uniform highp uimage2D counters;
+layout(r32i, binding = 1) uniform highp iimage2DArray layers;
+void main ()
+{
+  highp uint t0 = imageAtomicAdd(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 1u);
+  highp uint t1 = imageAtomicMin(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 2u);
+  highp uint t2 = imageAtomicMax(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 3u);
+  highp uint t3 = imageAtomicAnd(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 4u);
+  highp uint t4 = imageAtomicOr(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 5u);
+  highp uint t5 = imageAtomicXor(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 6u);
+  highp uint t6 = imageAtomicExchange(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 7u);
+  highp uint t7 = imageAtomicCompSwap(counters, ivec2(uvec4(gl_GlobalInvocationID.x, 0u, 0u, 0u).xy), 8u, 9u);
+  highp int t8 = (int(gl_GlobalInvocationID.x) << 1u);
+  unsignedResults.values[t8] = uvec4(t0, t1, t2, t3);
+  highp int t9 = (t8 + 1);
+  unsignedResults.values[t9] = uvec4(t4, t5, t6, t7);
+  highp int t10 = imageAtomicAdd(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 1);
+  highp int t11 = imageAtomicMin(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), -3);
+  highp int t12 = imageAtomicMax(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 3);
+  highp int t13 = imageAtomicAnd(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), -1);
+  highp int t14 = imageAtomicOr(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 5);
+  highp int t15 = imageAtomicXor(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 6);
+  highp int t16 = imageAtomicExchange(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 7);
+  highp int t17 = imageAtomicCompSwap(layers, ivec3(uvec4(gl_GlobalInvocationID.x, 0u, 1u, 0u).xyz), 8, 9);
+  signedResults.values[t8] = ivec4(t10, t11, t12, t13);
+  signedResults.values[t9] = ivec4(t14, t15, t16, t17);
+}
+
+// stats: 2 alu 16 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: SignedResults storage instance signedResults layout std430 (size: unknown)
+//  member #0: ivec4[] values offset 0 array runtime stride 16
+//  member #1: ivec4 [] parent 0 offset 0
+// buffer #1: UnsignedResults storage instance unsignedResults layout std430 (size: unknown)
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0
+// textures: 2
+//  #0: counters (high image2d) 0x0 [-1] loc 0 format r32ui component uint
+//  #1: layers (high image2darray) 0x0 [-1] loc 1 format r32i component int

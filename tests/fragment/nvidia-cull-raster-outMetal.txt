@@ -1,0 +1,32 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct Interpolant {
+  int f_objectID;
+};
+struct _xlat_buf_visibleBuffer_std430 {
+  int visibles[1];
+};
+struct xlatMtlShaderInput {
+  int _xlat_varying0 [[user(locn0)]] [[flat]];
+};
+struct xlatMtlShaderOutput {
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_visibleBuffer_std430& _xlat_blk_visibleBuffer [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  Interpolant IN;
+  IN.f_objectID = _mtl_i._xlat_varying0;
+  _xlat_blk_visibleBuffer.visibles[IN.f_objectID] = 1;
+  return _mtl_o;
+}
+
+// stats: 0 alu 0 tex 0 flow
+// inputs: 1
+//  #0: IN (high other) 0x0 [-1] loc 0
+// buffer #0: visibleBuffer storage layout std430 binding 0 (size: unknown) metal 1
+//  member #0: int[] visibles offset 0 array runtime stride 4
+//  member #1: int [] parent 0 offset 0

@@ -1,0 +1,27 @@
+uniform sampler2D _BumpMap;
+uniform vec4 _Color;
+uniform float _Cutoff;
+uniform vec4 _LightColor0;
+uniform sampler2D _MainTex;
+void main ()
+{
+  vec4 t0 = (texture2D(_MainTex, gl_TexCoord[0].xy) * _Color);
+  vec2 t1 = ((texture2D(_BumpMap, gl_TexCoord[0].zw).wy * 2.0) - 1.0);
+  float t2 = ((1.0 - (t1.x * t1.x)) - (t1.y * t1.y));
+  if ((t0.w < _Cutoff)) {
+    discard;
+  }
+  vec3 t3 = ((t0.xyz * _LightColor0.xyz) * (2.0 * max(0.0, dot(vec3(t1, sqrt(t2)), gl_TexCoord[1].xyz))));
+  gl_FragData[0] = vec4(t3, t0.w);
+}
+
+// stats: 13 alu 3 tex 1 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 3 (total size: 0)
+//  #0: _Color (high float) 4x1 [-1]
+//  #1: _Cutoff (high float) 1x1 [-1]
+//  #2: _LightColor0 (high float) 4x1 [-1]
+// textures: 2
+//  #0: _BumpMap (high 2d) 0x0 [-1]
+//  #1: _MainTex (high 2d) 0x0 [-1]

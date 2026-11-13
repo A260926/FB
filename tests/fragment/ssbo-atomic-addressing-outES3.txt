@@ -1,0 +1,33 @@
+#version 310 es
+precision highp float;
+precision highp int;
+struct Entry {
+  highp uint count;
+  highp uvec3 values;
+};
+layout(std140) buffer Data {
+  highp uint header;
+  Entry entries[];
+} data[2];
+uniform highp int index;
+uniform highp int component;
+out highp vec4 color;
+void main ()
+{
+  highp uint t0 = atomicAdd(data[0].entries[index].count, 1u);
+  highp uint t1 = atomicExchange(data[1].entries[index].values[1], 2u);
+  highp uint t2 = atomicCompSwap(data[0].entries[index].values[component], 3u, 4u);
+  atomicOr(data[1].header, 8u);
+  color = vec4(float(t0), float(t1), float(t2), 1.0);
+}
+
+// stats: 3 alu 0 tex 0 flow
+// uniforms: 2 (total size: 0)
+//  #0: index (high int) 1x1 [-1]
+//  #1: component (high int) 1x1 [-1]
+// buffer #0: Data storage instance data layout std140 array 2 (size: unknown)
+//  member #0: uint header offset 0
+//  member #1: Entry[] entries offset 16 array runtime stride 32
+//  member #2: Entry [] parent 1 offset 16
+//  member #3: uint count parent 2 offset 16
+//  member #4: uvec3 values parent 2 offset 32

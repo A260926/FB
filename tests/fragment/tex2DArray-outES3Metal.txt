@@ -1,0 +1,32 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 uv;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d_array<half> myarr [[texture(0)]], sampler _mtlsmp_myarr [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = _mtl_i.uv.xyz;
+  half3 t1 = half3(t0);
+  float4 t2 = float4(myarr.sample(_mtlsmp_myarr, float3(t1).xy, uint(rint(float3(t1).z))));
+  half3 t3 = half3(_mtl_i.uv.xyw);
+  float4 t4 = float4(myarr.sample(_mtlsmp_myarr, float3(t3).xy, uint(rint(float3(t3).z))));
+  half4 t5 = half4(float4(_mtl_i.uv.xyz, 1.5));
+  float4 t6 = float4(myarr.sample(_mtlsmp_myarr, float3(t5.xyz).xy, uint(rint(float3(t5.xyz).z)), bias(float(t5.w))));
+  float4 t7 = float4(myarr.sample(_mtlsmp_myarr, t0.xy, uint(rint(t0.z)), level(2.5)));
+  _mtl_o._fragData = half4((((t2 + t4) + t6) + t7));
+  return _mtl_o;
+}
+
+// stats: 3 alu 4 tex 0 flow
+// inputs: 1
+//  #0: uv (high float) 4x1 [-1]
+// textures: 1
+//  #0: myarr (medium 2darray) 0x0 [-1] loc 0

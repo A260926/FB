@@ -1,0 +1,49 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+template <typename T> inline T _xlat_mod(T x, T y) { return x - y * floor(x / y); }
+struct xlatMtlShaderInput {
+  float4 xlv_TEXCOORD0;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half t0 = half(_mtl_i.xlv_TEXCOORD0.x);
+  half t1 = (t0 / half(2.0));
+  half t2 = (fract(abs(t1)) * half(2.0));
+  half2 t3 = half2(_mtl_i.xlv_TEXCOORD0.xy);
+  half2 t4 = (t3 / half(2.0));
+  half2 t5 = (fract(abs(t4)) * half(2.0));
+  half2 t6 = (half2(((t1 >= half(0.0)) ? t2 : (-t2)), half(0.0)) + half2(((t4.x >= half(0.0)) ? t5.x : (-t5.x)), ((t4.y >= half(0.0)) ? t5.y : (-t5.y))));
+  half3 t7 = half3(_mtl_i.xlv_TEXCOORD0.xyz);
+  half3 t8 = (t7 / half(2.0));
+  half3 t9 = (fract(abs(t8)) * half(2.0));
+  half3 t10 = (half3(t6, half(0.0)) + half3(((t8.x >= half(0.0)) ? t9.x : (-t9.x)), ((t8.y >= half(0.0)) ? t9.y : (-t9.y)), ((t8.z >= half(0.0)) ? t9.z : (-t9.z))));
+  half4 t11 = half4(_mtl_i.xlv_TEXCOORD0);
+  half4 t12 = (t11 / half(2.0));
+  half4 t13 = (fract(abs(t12)) * half(2.0));
+  half4 t14 = half4(((t12.x >= half(0.0)) ? t13.x : (-t13.x)), ((t12.y >= half(0.0)) ? t13.y : (-t13.y)), ((t12.z >= half(0.0)) ? t13.z : (-t13.z)), ((t12.w >= half(0.0)) ? t13.w : (-t13.w)));
+  half4 t15 = (half4(t10, half(0.0)) + t14);
+  half2 t16 = (half2((t15.x + (t0 - trunc(t0))), t15.y) + (t3 - trunc(t3)));
+  half3 t17 = (half3(t16, t15.z) + (t7 - trunc(t7)));
+  half4 t18 = trunc(t11);
+  half4 t19 = (half4(t17, t15.w) + (t11 - t18));
+  half4 t20 = half4(float4((float(t19.x) + _xlat_mod(_mtl_i.xlv_TEXCOORD0.x, float(t18.x)))));
+  half4 t21 = half4((float2(half2(t20.x, t19.y)) + _xlat_mod(_mtl_i.xlv_TEXCOORD0.xy, float2(t18.xy))).xyxx);
+  half4 t22 = half4((float3(half3(t21.xy, t19.z)) + _xlat_mod(_mtl_i.xlv_TEXCOORD0.xyz, float3(t18.xyz))).xyzx);
+  float t23 = (1.0 / _mtl_i.xlv_TEXCOORD0.x);
+  half4 t24 = half4(float4((float(t22.x) + t23)));
+  half4 t25 = half4(float4((float(t24.x) + max(0.0, t23))));
+  half4 t26 = half4(float4((float(t25.x) + max(_mtl_i.xlv_TEXCOORD0.x, float(t22.z)))));
+  _mtl_o._fragData = half4(t26.x, ((t22.y + (half(1.0) / t22.z)) + max(half(0.0), (half(1.0) / t19.w))), t22.z, t19.w);
+  return _mtl_o;
+}
+
+// stats: 78 alu 0 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]

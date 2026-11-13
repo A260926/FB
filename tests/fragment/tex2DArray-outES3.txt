@@ -1,0 +1,24 @@
+#version 300 es
+precision highp float;
+precision highp int;
+out mediump vec4 _fragData;
+uniform mediump sampler2DArray myarr;
+in highp vec4 uv;
+void main ()
+{
+  highp vec3 t0 = uv.xyz;
+  mediump vec3 t1 = t0;
+  highp vec4 t2 = texture(myarr, t1);
+  mediump vec3 t3 = uv.xyw;
+  highp vec4 t4 = texture(myarr, t3);
+  mediump vec4 t5 = vec4(uv.xyz, 1.5);
+  highp vec4 t6 = texture(myarr, t5.xyz, t5.w);
+  highp vec4 t7 = textureLod(myarr, t0, 2.5);
+  _fragData = (((t2 + t4) + t6) + t7);
+}
+
+// stats: 3 alu 4 tex 0 flow
+// inputs: 1
+//  #0: uv (high float) 4x1 [-1]
+// textures: 1
+//  #0: myarr (medium 2darray) 0x0 [-1]

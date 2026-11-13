@@ -1,0 +1,13 @@
+#version 300 es
+precision highp float;
+precision highp int;
+out mediump vec4 _fragData;
+uniform mediump mat4x3 nonSqMat;
+void main ()
+{
+  _fragData = vec4((1.2 + nonSqMat[0].x), 6.0, 4.0, -1.0);
+}
+
+// stats: 1 alu 0 tex 0 flow
+// uniforms: 1 (total size: 0)
+//  #0: nonSqMat (medium float) 3x4 [-1]

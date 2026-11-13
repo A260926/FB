@@ -1,0 +1,176 @@
+#version 310 es
+layout(local_size_x = 64) in;
+struct Emitter {
+  highp mat4 mTransformation;
+  mediump float fHeight;
+  mediump float fRadius;
+};
+struct Particle {
+  highp vec3 vPosition;
+  mediump float _padding_particle_0;
+  mediump vec3 vVelocity;
+  mediump float fLife;
+};
+layout(std140, binding = 2) uniform UboData {
+  Emitter emitter;
+  highp vec3 gravity;
+  highp float dt;
+  highp float fTotalTime;
+  highp float dragCoeffLinear;
+  highp float dragCoeffQuadratic;
+  highp float inwardForceCoeff;
+  highp float inwardForceRadius;
+  highp float bounciness;
+  highp float minLifespan;
+  highp float maxLifespan;
+};
+layout(std140, binding = 1) uniform UboSpheres {
+  highp vec4 aSpheres[8];
+};
+layout(std140, binding = 4) buffer SsboParticlesOut {
+  writeonly Particle aParticlesOut[];
+};
+layout(std140, binding = 3) buffer SsboParticlesInput {
+  readonly Particle aParticlesIn[];
+};
+void main ()
+{
+  highp vec3 r0;
+  highp vec3 r1;
+  highp vec3 r2;
+  highp vec3 r3;
+  mediump vec3 r4;
+  mediump float r5;
+  highp int t0 = (int((fTotalTime * 13579846.0)) + ((int(gl_GlobalInvocationID.x) * 145) + 1450000));
+  highp uint t1 = gl_GlobalInvocationID.x;
+  highp vec3 t2 = aParticlesIn[int(t1)].vPosition;
+  mediump float t3 = aParticlesIn[int(t1)]._padding_particle_0;
+  mediump vec3 t4 = aParticlesIn[int(t1)].vVelocity;
+  r5 = (aParticlesIn[int(t1)].fLife - (dt * 0.1));
+  if ((r5 < 0.0)) {
+    highp int t5 = abs(((1103515245 * abs(t0)) + 12345));
+    highp int t6 = abs(((1103515245 * t5) + 12345));
+    highp float t7 = ((float(t6) / 2.1474836e+09) * emitter.fRadius);
+    mediump vec4 t8 = vec4(t7, ((float(t5) / 2.1474836e+09) * emitter.fHeight), t7, 1.0);
+    mediump vec4 t9 = (emitter.mTransformation * t8);
+    r5 = mix(minLifespan, maxLifespan, (float(abs(((1103515245 * t6) + 12345))) / 2.1474836e+09));
+    r4 = ((t9.xyz * vec3(7.0, 15.0, 7.0)) + vec3(0.0, 15.0, 0.0));
+    r3 = vec3(0.0);
+  } else {
+    highp vec3 t10 = t4;
+    r0 = gravity;
+    mediump float t11 = (((t2.x * t2.x) + (t2.z * t2.z)) * inwardForceCoeff);
+    if (((0.001 < t11) && (inwardForceCoeff != 0.0))) {
+      highp vec3 t12 = vec3((-t2.x), 0.0, (-t2.z));
+      r0 = (r0 + (max(((t11 - inwardForceRadius) + r5), 0.0) * (t12 * inversesqrt(dot(t12.xz, t12.xz)))));
+    }
+    mediump float t13 = length(t10);
+    r1 = ((((min(abs(dragCoeffLinear), abs(dragCoeffQuadratic)) != 0.0) ? (r0 + ((t10 / t13) * (t13 * ((-dragCoeffLinear) - (dragCoeffQuadratic * t13))))) : r0) * dt) + t10);
+    r2 = ((r1 * dt) + t2);
+    highp vec3 t14 = (r2 - aSpheres[0].xyz);
+    highp float t15 = dot(t14, t14);
+    if ((t15 < (aSpheres[0].w * aSpheres[0].w))) {
+      highp vec3 t16 = (t14 * inversesqrt(t15));
+      r2 = ((t16 * aSpheres[0].w) + aSpheres[0].xyz);
+      r1 = ((r1 - ((vec3(dot(t16, r1)) * 2.0) * t16)) * bounciness);
+    } else {
+      highp vec3 t17 = (r2 - aSpheres[1].xyz);
+      highp float t18 = dot(t17, t17);
+      if ((t18 < (aSpheres[1].w * aSpheres[1].w))) {
+        highp vec3 t19 = (t17 * inversesqrt(t18));
+        r2 = ((t19 * aSpheres[1].w) + aSpheres[1].xyz);
+        r1 = ((r1 - ((vec3(dot(t19, r1)) * 2.0) * t19)) * bounciness);
+      } else {
+        highp vec3 t20 = (r2 - aSpheres[2].xyz);
+        highp float t21 = dot(t20, t20);
+        if ((t21 < (aSpheres[2].w * aSpheres[2].w))) {
+          highp vec3 t22 = (t20 * inversesqrt(t21));
+          r2 = ((t22 * aSpheres[2].w) + aSpheres[2].xyz);
+          r1 = ((r1 - ((vec3(dot(t22, r1)) * 2.0) * t22)) * bounciness);
+        } else {
+          highp vec3 t23 = (r2 - aSpheres[3].xyz);
+          highp float t24 = dot(t23, t23);
+          if ((t24 < (aSpheres[3].w * aSpheres[3].w))) {
+            highp vec3 t25 = (t23 * inversesqrt(t24));
+            r2 = ((t25 * aSpheres[3].w) + aSpheres[3].xyz);
+            r1 = ((r1 - ((vec3(dot(t25, r1)) * 2.0) * t25)) * bounciness);
+          } else {
+            highp vec3 t26 = (r2 - aSpheres[4].xyz);
+            highp float t27 = dot(t26, t26);
+            if ((t27 < (aSpheres[4].w * aSpheres[4].w))) {
+              highp vec3 t28 = (t26 * inversesqrt(t27));
+              r2 = ((t28 * aSpheres[4].w) + aSpheres[4].xyz);
+              r1 = ((r1 - ((vec3(dot(t28, r1)) * 2.0) * t28)) * bounciness);
+            } else {
+              highp vec3 t29 = (r2 - aSpheres[5].xyz);
+              highp float t30 = dot(t29, t29);
+              if ((t30 < (aSpheres[5].w * aSpheres[5].w))) {
+                highp vec3 t31 = (t29 * inversesqrt(t30));
+                r2 = ((t31 * aSpheres[5].w) + aSpheres[5].xyz);
+                r1 = ((r1 - ((vec3(dot(t31, r1)) * 2.0) * t31)) * bounciness);
+              } else {
+                highp vec3 t32 = (r2 - aSpheres[6].xyz);
+                highp float t33 = dot(t32, t32);
+                if ((t33 < (aSpheres[6].w * aSpheres[6].w))) {
+                  highp vec3 t34 = (t32 * inversesqrt(t33));
+                  r2 = ((t34 * aSpheres[6].w) + aSpheres[6].xyz);
+                  r1 = ((r1 - ((vec3(dot(t34, r1)) * 2.0) * t34)) * bounciness);
+                } else {
+                  highp vec3 t35 = (r2 - aSpheres[7].xyz);
+                  highp float t36 = dot(t35, t35);
+                  if ((t36 < (aSpheres[7].w * aSpheres[7].w))) {
+                    highp vec3 t37 = (t35 * inversesqrt(t36));
+                    r2 = ((t37 * aSpheres[7].w) + aSpheres[7].xyz);
+                    r1 = ((r1 - ((vec3(dot(t37, r1)) * 2.0) * t37)) * bounciness);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    bool t38 = (r2.y < 0.0);
+    r3 = (t38 ? vec3(r2.x, (-r2.y), r2.z) : r2);
+    r4 = (t38 ? (r1 * vec3(0.4, -0.3, 0.4)) : r1);
+  }
+  aParticlesOut[int(t1)].vPosition = r3;
+  aParticlesOut[int(t1)]._padding_particle_0 = t3;
+  aParticlesOut[int(t1)].vVelocity = r4;
+  aParticlesOut[int(t1)].fLife = r5;
+}
+
+// stats: 180 alu 0 tex 10 flow
+// workgroup size: 64 1 1
+// buffer #0: SsboParticlesInput storage layout std140 binding 3 (size: unknown)
+//  member #0: Particle[] aParticlesIn offset 0 array runtime stride 32 readonly
+//  member #1: Particle [] parent 0 offset 0 readonly
+//  member #2: vec3 vPosition parent 1 offset 0 readonly
+//  member #3: float _padding_particle_0 parent 1 offset 12 readonly
+//  member #4: vec3 vVelocity parent 1 offset 16 readonly
+//  member #5: float fLife parent 1 offset 28 readonly
+// buffer #1: SsboParticlesOut storage layout std140 binding 4 (size: unknown)
+//  member #0: Particle[] aParticlesOut offset 0 array runtime stride 32 writeonly
+//  member #1: Particle [] parent 0 offset 0 writeonly
+//  member #2: vec3 vPosition parent 1 offset 0 writeonly
+//  member #3: float _padding_particle_0 parent 1 offset 12 writeonly
+//  member #4: vec3 vVelocity parent 1 offset 16 writeonly
+//  member #5: float fLife parent 1 offset 28 writeonly
+// buffer #2: UboData layout std140 binding 2 (size: 128)
+//  member #0: Emitter emitter offset 0
+//  member #1: mat4 mTransformation parent 0 offset 0 matrix-stride 16
+//  member #2: float fHeight parent 0 offset 64
+//  member #3: float fRadius parent 0 offset 68
+//  member #4: vec3 gravity offset 80
+//  member #5: float dt offset 92
+//  member #6: float fTotalTime offset 96
+//  member #7: float dragCoeffLinear offset 100
+//  member #8: float dragCoeffQuadratic offset 104
+//  member #9: float inwardForceCoeff offset 108
+//  member #10: float inwardForceRadius offset 112
+//  member #11: float bounciness offset 116
+//  member #12: float minLifespan offset 120
+//  member #13: float maxLifespan offset 124
+// buffer #3: UboSpheres layout std140 binding 1 (size: 128)
+//  member #0: vec4[8] aSpheres offset 0 array 8 stride 16
+//  member #1: vec4 [] parent 0 offset 0

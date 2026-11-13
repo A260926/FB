@@ -1,0 +1,36 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _glesFragData[4];
+uniform highp vec4 _WorldSpaceLightPos0;
+uniform mediump vec4 _LightColor0;
+uniform mediump sampler2D _LightTexture0;
+uniform mediump mat4 _LightMatrix0;
+uniform mediump sampler2D _LightTextureB0;
+uniform mediump sampler2D _MainTex;
+in highp vec2 xlv_TEXCOORD0;
+in mediump vec3 xlv_TEXCOORD1;
+in highp vec3 xlv_TEXCOORD2;
+void main ()
+{
+  highp vec3 t0 = (_WorldSpaceLightPos0.xyz - xlv_TEXCOORD2);
+  mediump vec4 t1 = (_LightMatrix0 * vec4(xlv_TEXCOORD2, 1.0));
+  mediump vec3 t2 = normalize(t0);
+  mediump float t3 = ((max(0.0, dot(xlv_TEXCOORD1, t2)) * 2.0) * (mix(0.0, texture(_LightTexture0, ((t1.xy / t1.w) + 0.5)).w, (0.0 < t1.z)) * texture(_LightTextureB0, vec2(dot(t1.xyz, t1.xyz))).w));
+  mediump vec3 t4 = ((texture(_MainTex, xlv_TEXCOORD0).xyz * _LightColor0.xyz) * t3);
+  _glesFragData[0] = vec4(t4, 0.0);
+}
+
+// stats: 22 alu 3 tex 0 flow
+// inputs: 3
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD1 (medium float) 3x1 [-1]
+//  #2: xlv_TEXCOORD2 (high float) 3x1 [-1]
+// uniforms: 3 (total size: 0)
+//  #0: _WorldSpaceLightPos0 (high float) 4x1 [-1]
+//  #1: _LightColor0 (medium float) 4x1 [-1]
+//  #2: _LightMatrix0 (medium float) 4x4 [-1]
+// textures: 3
+//  #0: _LightTexture0 (medium 2d) 0x0 [-1]
+//  #1: _LightTextureB0 (medium 2d) 0x0 [-1]
+//  #2: _MainTex (medium 2d) 0x0 [-1]

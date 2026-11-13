@@ -1,0 +1,30 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+constexpr sampler _mtl_xl_shadow_sampler(address::clamp_to_edge, filter::linear, compare_func::less_equal);
+struct xlatMtlShaderInput {
+  float4 uvHi;
+  half4 uvMed;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , depth2d<float> shadowmap [[texture(0)]], sampler _mtlsmp_shadowmap [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half3 t0 = half3(_mtl_i.uvHi.xyz);
+  half4 t1 = half4(_mtl_i.uvHi);
+  half t2 = (half(shadowmap.sample_compare(_mtl_xl_shadow_sampler, float2(t0.xy), saturate(float(t0.z)))) + half(shadowmap.sample_compare(_mtl_xl_shadow_sampler, (float2(t1.xy) / float(t1.w)), saturate((float(t1.z) / float(t1.w))))));
+  _mtl_o._fragColor = half4((t2 + half(shadowmap.sample_compare(_mtl_xl_shadow_sampler, float2(_mtl_i.uvMed.xy), saturate(float(_mtl_i.uvMed.z))))), half3(t2));
+  return _mtl_o;
+}
+
+// stats: 2 alu 3 tex 0 flow
+// inputs: 2
+//  #0: uvHi (high float) 4x1 [-1]
+//  #1: uvMed (medium float) 4x1 [-1]
+// textures: 1
+//  #0: shadowmap (medium 2dshadow) 0x0 [-1] loc 0

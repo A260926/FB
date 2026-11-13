@@ -1,0 +1,11 @@
+#version 450
+uniform int value;
+out vec4 color;
+void main ()
+{
+  color = vec4(float(value), 8.0, 8.0, 8.0);
+}
+
+// stats: 1 alu 0 tex 0 flow
+// uniforms: 1 (total size: 0)
+//  #0: value (high int) 1x1 [-1]

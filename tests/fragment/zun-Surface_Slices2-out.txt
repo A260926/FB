@@ -1,0 +1,23 @@
+uniform sampler2D _LightBuffer;
+uniform sampler2D _MainTex;
+uniform sampler2D unity_Lightmap;
+uniform sampler2D unity_LightmapInd;
+void main ()
+{
+  if ((fract(((gl_TexCoord[1].y + (gl_TexCoord[1].z * 0.1)) * 5.0)) < 0.5)) {
+    discard;
+  }
+  vec2 t0 = gl_TexCoord[3].xy;
+  vec3 t1 = ((mix(texture2D(unity_LightmapInd, t0).xyz, texture2D(unity_Lightmap, t0).xyz, vec3(clamp(gl_TexCoord[3].z, 0.0, 1.0))) * 2.0) - log2(texture2DProj(_LightBuffer, vec3(gl_TexCoord[2].xy, gl_TexCoord[2].w))).xyz);
+  vec3 t2 = (texture2D(_MainTex, gl_TexCoord[0].xy).xyz * t1);
+  gl_FragData[0] = vec4(t2, 0.0);
+}
+
+// stats: 11 alu 5 tex 1 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// textures: 4
+//  #0: _LightBuffer (high 2d) 0x0 [-1]
+//  #1: _MainTex (high 2d) 0x0 [-1]
+//  #2: unity_Lightmap (high 2d) 0x0 [-1]
+//  #3: unity_LightmapInd (high 2d) 0x0 [-1]

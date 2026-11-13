@@ -1,0 +1,133 @@
+#extension GL_ARB_shader_texture_lod : enable
+uniform sampler2D _MainTex;
+uniform vec4 _MainTex_TexelSize;
+varying vec2 xlv_TEXCOORD0;
+void main ()
+{
+  vec2 r0;
+  vec2 r1;
+  float r2;
+  float r3;
+  vec3 r4;
+  vec4 t0 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(0.0, -1.0) * _MainTex_TexelSize.xy)), 0.0);
+  vec4 t1 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(-1.0, 0.0) * _MainTex_TexelSize.xy)), 0.0);
+  vec4 t2 = texture2DLod(_MainTex, xlv_TEXCOORD0, 0.0);
+  vec4 t3 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(1.0, 0.0) * _MainTex_TexelSize.xy)), 0.0);
+  vec4 t4 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(0.0, 1.0) * _MainTex_TexelSize.xy)), 0.0);
+  float t5 = ((t0.y * 1.96321) + t0.x);
+  float t6 = ((t1.y * 1.96321) + t1.x);
+  float t7 = ((t2.y * 1.96321) + t2.x);
+  float t8 = ((t3.y * 1.96321) + t3.x);
+  float t9 = ((t4.y * 1.96321) + t4.x);
+  float t10 = max(t7, max(max(t5, t6), max(t9, t8)));
+  float t11 = (t10 - min(t7, min(min(t5, t6), min(t9, t8))));
+  if ((t11 < max(0.0625, (t10 * 0.125)))) {
+    r4 = t2.xyz;
+  } else {
+    float t12 = (abs((((((t5 + t6) + t8) + t9) * 0.25) - t7)) / t11);
+    vec4 t13 = texture2DLod(_MainTex, (xlv_TEXCOORD0 - _MainTex_TexelSize.xy), 0.0);
+    vec4 t14 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(1.0, -1.0) * _MainTex_TexelSize.xy)), 0.0);
+    vec4 t15 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + (vec2(-1.0, 1.0) * _MainTex_TexelSize.xy)), 0.0);
+    vec4 t16 = texture2DLod(_MainTex, (xlv_TEXCOORD0 + _MainTex_TexelSize.xy), 0.0);
+    vec3 t17 = (((((t0.xyz + t1.xyz) + t2.xyz) + t3.xyz) + t4.xyz) + (((t13.xyz + t14.xyz) + t15.xyz) + t16.xyz));
+    float t18 = (0.5 * t5);
+    float t19 = (0.25 * ((t13.y * 1.96321) + t13.x));
+    float t20 = (0.25 * ((t14.y * 1.96321) + t14.x));
+    float t21 = (0.5 * t6);
+    float t22 = (0.5 * t8);
+    float t23 = (0.5 * t9);
+    float t24 = (0.25 * ((t15.y * 1.96321) + t15.x));
+    float t25 = (0.25 * ((t16.y * 1.96321) + t16.x));
+    bool t26 = (((abs(((t19 - t21) + t24)) + abs(((t18 - t7) + t23))) + abs(((t20 - t22) + t25))) >= ((abs(((t19 - t18) + t20)) + abs(((t21 - t7) + t22))) + abs(((t24 - t23) + t25))));
+    float t27 = (t26 ? _MainTex_TexelSize.y : _MainTex_TexelSize.x);
+    float t28 = (t26 ? t5 : t6);
+    float t29 = (t26 ? t9 : t8);
+    float t30 = abs((t29 - t7));
+    float t31 = abs((t28 - t7));
+    bool t32 = (t31 >= t30);
+    float t33 = (t32 ? (-t27) : t27);
+    float t34 = (t33 * 0.5);
+    vec2 t35 = (t26 ? vec2(_MainTex_TexelSize.x, 0.0) : vec2(0.0, _MainTex_TexelSize.y));
+    vec2 t36 = vec2((xlv_TEXCOORD0.x + (t26 ? 0.0 : t34)), (xlv_TEXCOORD0.y + (t26 ? t34 : 0.0)));
+    r0 = (t36 + (t35 * -2.0));
+    r1 = (t36 + (t35 * 2.0));
+    vec2 t37 = (t35 * 3.0);
+    vec4 t38 = texture2DGradARB(_MainTex, r0, t37, t37);
+    r3 = ((t38.y * 1.96321) + t38.x);
+    vec4 t39 = texture2DGradARB(_MainTex, r1, t37, t37);
+    r2 = ((t39.y * 1.96321) + t39.x);
+    float t40 = (0.5 * (t7 + (t32 ? t28 : t29)));
+    float t41 = abs((r2 - t40));
+    float t42 = (max(t30, t31) * 0.25);
+    bool t43 = (t41 >= t42);
+    float t44 = abs((r3 - t40));
+    bool t45 = (t44 >= t42);
+    if ((!(t45 && t43))) {
+      vec2 t46 = (r0 - t37);
+      r0 = (t45 ? r0 : t46);
+      vec2 t47 = (r1 + t37);
+      r1 = (t43 ? r1 : t47);
+      if ((!t45)) {
+        vec4 t48 = texture2DGradARB(_MainTex, t46, t37, t37);
+        r3 = ((t48.y * 1.96321) + t48.x);
+      }
+      if ((!t43)) {
+        vec4 t49 = texture2DGradARB(_MainTex, t47, t37, t37);
+        r2 = ((t49.y * 1.96321) + t49.x);
+      }
+      float t50 = max(abs((r3 - t40)), t44);
+      float t51 = max(abs((r2 - t40)), t41);
+      bool t52 = (t51 >= t42);
+      bool t53 = (t50 >= t42);
+      if ((!(t53 && t52))) {
+        vec2 t54 = (r0 - t37);
+        r0 = (t53 ? r0 : t54);
+        vec2 t55 = (r1 + t37);
+        r1 = (t52 ? r1 : t55);
+        if ((!t53)) {
+          vec4 t56 = texture2DGradARB(_MainTex, t54, t37, t37);
+          r3 = ((t56.y * 1.96321) + t56.x);
+        }
+        if ((!t52)) {
+          vec4 t57 = texture2DGradARB(_MainTex, t55, t37, t37);
+          r2 = ((t57.y * 1.96321) + t57.x);
+        }
+        float t58 = max(abs((r3 - t40)), t50);
+        float t59 = max(abs((r2 - t40)), t51);
+        bool t60 = (t59 >= t42);
+        bool t61 = (t58 >= t42);
+        if ((!(t61 && t60))) {
+          vec2 t62 = (r0 - t37);
+          vec2 t63 = (t61 ? r0 : t62);
+          vec2 t64 = (r1 + t37);
+          vec2 t65 = (t60 ? r1 : t64);
+          if ((!t61)) {
+            vec4 t66 = texture2DGradARB(_MainTex, t62, t37, t37);
+            r3 = ((t66.y * 1.96321) + t66.x);
+          }
+          if ((!t60)) {
+            vec4 t67 = texture2DGradARB(_MainTex, t64, t37, t37);
+            r2 = ((t67.y * 1.96321) + t67.x);
+          }
+          r1 = ((max(abs((r2 - t40)), t59) >= t42) ? t65 : (t65 + t37));
+          r0 = ((max(abs((r3 - t40)), t58) >= t42) ? t63 : (t63 - t37));
+        }
+      }
+    }
+    float t68 = (t26 ? (xlv_TEXCOORD0.x - r0.x) : (xlv_TEXCOORD0.y - r0.y));
+    float t69 = (t26 ? (r1.x - xlv_TEXCOORD0.x) : (r1.y - xlv_TEXCOORD0.y));
+    float t70 = ((0.5 + (min(t69, t68) * (-1.0 / (t69 + t68)))) * (((t7 < t40) == (((t68 < t69) ? r3 : r2) < t40)) ? 0.0 : t33));
+    vec4 t71 = texture2DLod(_MainTex, vec2((xlv_TEXCOORD0.x + (t26 ? 0.0 : t70)), (xlv_TEXCOORD0.y + (t26 ? t70 : 0.0))), 0.0);
+    float t72 = min(0.75, (max(0.0, (t12 - 0.25)) * 1.33333));
+    r4 = ((((t17 * 0.111111) * t72) + t71.xyz) - (t72 * t71.xyz));
+  }
+  gl_FragData[0] = vec4(r4.x, r4.y, r4.z, 0.0);
+}
+
+// stats: 221 alu 18 tex 10 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: _MainTex_TexelSize (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

@@ -1,0 +1,115 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  half4 xlv_TEXCOORD0;
+  half4 xlv_TEXCOORD1;
+  half3 xlv_TEXCOORD2;
+  half4 xlv_TEXCOORD3;
+  half3 xlv_TEXCOORD4;
+  half4 xlv_TEXCOORD5;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  half3 _WorldSpaceCameraPos;
+  half _DetailNormalMapScale;
+  half _BumpScale;
+  half _Exposure;
+  half4 _Color;
+  half _SelfIllumScale;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _MainTex [[texture(0)]], sampler _mtlsmp__MainTex [[sampler(0)]]
+  , texture2d<half> _DetailAlbedoMap [[texture(1)]], sampler _mtlsmp__DetailAlbedoMap [[sampler(1)]]
+  , texture2d<half> _AlphaMap [[texture(2)]], sampler _mtlsmp__AlphaMap [[sampler(2)]]
+  , texture2d<half> _Occlusion [[texture(3)]], sampler _mtlsmp__Occlusion [[sampler(3)]]
+  , texture2d<half> _DetailNormalMap [[texture(4)]], sampler _mtlsmp__DetailNormalMap [[sampler(4)]]
+  , texture2d<half> _BumpMap [[texture(5)]], sampler _mtlsmp__BumpMap [[sampler(5)]]
+  , texture2d<half> _SpecGlossMap [[texture(6)]], sampler _mtlsmp__SpecGlossMap [[sampler(6)]]
+  , texture2d<half> _ShadowMapTexture [[texture(7)]], sampler _mtlsmp__ShadowMapTexture [[sampler(7)]]
+  , texturecube<half> _SpecCube [[texture(8)]], sampler _mtlsmp__SpecCube [[sampler(8)]]
+  , texture2d<half> unity_Lightmap [[texture(9)]], sampler _mtlsmp_unity_Lightmap [[sampler(9)]]
+  , texture2d<half> unity_LightmapInd [[texture(10)]], sampler _mtlsmp_unity_LightmapInd [[sampler(10)]]
+  , texture2d<half> _SelfIllum [[texture(11)]], sampler _mtlsmp__SelfIllum [[sampler(11)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half3 t0 = (((_mtl_i.xlv_TEXCOORD2.yzx * _mtl_i.xlv_TEXCOORD3.zxy) - (_mtl_i.xlv_TEXCOORD2.zxy * _mtl_i.xlv_TEXCOORD3.yzx)) * _mtl_i.xlv_TEXCOORD3.w);
+  half2 t1 = _mtl_i.xlv_TEXCOORD0.xy;
+  half2 t2 = (((_BumpMap.sample(_mtlsmp__BumpMap, float2(t1)).wy * half(2.0)) - half(1.0)) * _mtl_u._BumpScale);
+  half2 t3 = _mtl_i.xlv_TEXCOORD0.zw;
+  half2 t4 = (((_DetailNormalMap.sample(_mtlsmp__DetailNormalMap, float2(t3)).wy * half(2.0)) - half(1.0)) * _mtl_u._DetailNormalMapScale);
+  half2 t5 = (t2 + t4);
+  half3 t6 = half3(t5, (sqrt((half(1.0) - saturate(dot(t2, t2)))) * sqrt((half(1.0) - saturate(dot(t4, t4))))));
+  half3 t7 = normalize(t6);
+  half3 t8 = half3(_mtl_i.xlv_TEXCOORD3.x, t0.x, _mtl_i.xlv_TEXCOORD2.x);
+  half3 t9 = half3(_mtl_i.xlv_TEXCOORD3.y, t0.y, _mtl_i.xlv_TEXCOORD2.y);
+  half3 t10 = half3(_mtl_i.xlv_TEXCOORD3.z, t0.z, _mtl_i.xlv_TEXCOORD2.z);
+  half3 t11 = (_mtl_i.xlv_TEXCOORD1.xyz - _mtl_u._WorldSpaceCameraPos);
+  half3 t12 = normalize(t11);
+  half4 t13 = _SpecGlossMap.sample(_mtlsmp__SpecGlossMap, float2(t1));
+  half t14 = dot(t13.xyz, half3(0.299, 0.587, 0.114));
+  half3 t15 = half3(dot(t7, t8), dot(t7, t9), dot(t7, t10));
+  half t16 = (half(1.0) - t13.w);
+  half4 t17 = _SpecCube.sample(_mtlsmp__SpecCube, float3((t12 - ((half3(dot(t15, t12)) * half(2.0)) * t15))), level(float((t16 * half(5.0)))));
+  half t18 = (t17.w * t17.w);
+  half3 t19 = (((t17.xyz * dot(half2(0.7532, 0.2468), half2(t18, (t17.w * t18)))) * _mtl_u._Exposure) * _Occlusion.sample(_mtlsmp__Occlusion, float2(t1)).x);
+  half2 t20 = _mtl_i.xlv_TEXCOORD4.xy;
+  half4 t21 = unity_Lightmap.sample(_mtlsmp_unity_Lightmap, float2(t20));
+  half4 t22 = unity_LightmapInd.sample(_mtlsmp_unity_LightmapInd, float2(t20));
+  half3 t23 = ((half(8.0) * t22.w) * t22.xyz);
+  half3 t24 = (half3x3(half3(0.816497, 0.0, 0.57735), half3(-0.408248, 0.707107, 0.57735), half3(-0.408248, -0.707107, 0.57735)) * t23);
+  half3 t25 = normalize(t24);
+  half3 t26 = half3(dot(t25, t8), dot(t25, t9), dot(t25, t10));
+  half3 t27 = normalize(t26);
+  half3 t28 = min(((_mtl_u._Color.xyz * _MainTex.sample(_mtlsmp__MainTex, float2(t1)).xyz) * (half(2.0) * _DetailAlbedoMap.sample(_mtlsmp__DetailAlbedoMap, float2(t3)).xyz)), (half3(1.0) - t14));
+  half3 t29 = (_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, (float2(_mtl_i.xlv_TEXCOORD5.xy) / float(_mtl_i.xlv_TEXCOORD5.w))).x * (((half(8.0) * t21.w) * t21.xyz) * dot(saturate((half3x3(half3(0.816497, -0.408248, -0.408248), half3(0.0, 0.707107, -0.707107), half3(0.57735)) * t7)), t23)));
+  half3 t30 = (t27 - t12);
+  half3 t31 = normalize(t30);
+  half3 t32 = (-t12);
+  half t33 = max(half(0.0), dot(t32, t31));
+  half t34 = max(half(0.0), dot(t15, t31));
+  half t35 = (half(2.0) * t34);
+  half t36 = max(half(0.0), dot(t15, t32));
+  half t37 = (t33 + half(1e-05));
+  half t38 = max(half(0.0), dot(t15, t27));
+  half t39 = (t16 * t16);
+  half t40 = (half(1.0) / ((t39 * t39) + half(1e-05)));
+  half t41 = max(half(0.0), dot(t27, t31));
+  half t42 = (half(-0.5) + (((t41 * half(2.0)) * t41) * t16));
+  half t43 = ((mix(t14, half(1.0), pow(abs((half(1.0) - t33)), half(5.0))) * min(half(1.0), min(((t35 * t36) / t37), ((t35 * t38) / t37)))) * max(half(0.0), (pow(t34, (t40 - half(2.0))) * ((half(-1.0) + t40) / half(6.28318)))));
+  half3 t44 = ((t28 * ((((half(1.0) + (t42 * pow((half(1.00001) - t38), half(5.0)))) * (half(1.0) + (t42 * pow((half(1.00001) - t36), half(5.0))))) * t38) * t29)) + (t13.xyz * (t19 + (t29 * max(half(0.0), (t43 / ((half(4.0) * t36) + half(1e-05))))))));
+  half3 t45 = ((t44 + ((((half(1.0) - t14) * t13.w) * pow(abs((half(1.0) - t36)), half(5.0))) * t19)) + (_SelfIllum.sample(_mtlsmp__SelfIllum, float2(t1)).xyz * _mtl_u._SelfIllumScale));
+  _mtl_o._fragData = half4(t45, (_AlphaMap.sample(_mtlsmp__AlphaMap, float2(t1)).w * _mtl_u._Color.w));
+  return _mtl_o;
+}
+
+// stats: 147 alu 12 tex 0 flow
+// inputs: 6
+//  #0: xlv_TEXCOORD0 (medium float) 4x1 [-1]
+//  #1: xlv_TEXCOORD1 (medium float) 4x1 [-1]
+//  #2: xlv_TEXCOORD2 (medium float) 3x1 [-1]
+//  #3: xlv_TEXCOORD3 (medium float) 4x1 [-1]
+//  #4: xlv_TEXCOORD4 (medium float) 3x1 [-1]
+//  #5: xlv_TEXCOORD5 (medium float) 4x1 [-1]
+// uniforms: 6 (total size: 26)
+//  #0: _WorldSpaceCameraPos (medium float) 3x1 [-1] loc 0
+//  #1: _DetailNormalMapScale (medium float) 1x1 [-1] loc 8
+//  #2: _BumpScale (medium float) 1x1 [-1] loc 10
+//  #3: _Exposure (medium float) 1x1 [-1] loc 12
+//  #4: _Color (medium float) 4x1 [-1] loc 16
+//  #5: _SelfIllumScale (medium float) 1x1 [-1] loc 24
+// textures: 12
+//  #0: _MainTex (medium 2d) 0x0 [-1] loc 0
+//  #1: _DetailAlbedoMap (medium 2d) 0x0 [-1] loc 1
+//  #2: _AlphaMap (medium 2d) 0x0 [-1] loc 2
+//  #3: _Occlusion (medium 2d) 0x0 [-1] loc 3
+//  #4: _DetailNormalMap (medium 2d) 0x0 [-1] loc 4
+//  #5: _BumpMap (medium 2d) 0x0 [-1] loc 5
+//  #6: _SpecGlossMap (medium 2d) 0x0 [-1] loc 6
+//  #7: _ShadowMapTexture (medium 2d) 0x0 [-1] loc 7
+//  #8: _SpecCube (medium cube) 0x0 [-1] loc 8
+//  #9: unity_Lightmap (medium 2d) 0x0 [-1] loc 9
+//  #10: unity_LightmapInd (medium 2d) 0x0 [-1] loc 10
+//  #11: _SelfIllum (medium 2d) 0x0 [-1] loc 11

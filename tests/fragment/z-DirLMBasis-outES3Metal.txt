@@ -1,0 +1,43 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float2 xlv_TEXCOORD0;
+  float4 xlv_TEXCOORD4;
+};
+struct xlatMtlShaderOutput {
+  half4 _xlat_varying0 [[color(0)]];
+  half4 _xlat_varying1 [[color(1)]];
+  half4 _xlat_varying2 [[color(2)]];
+  half4 _xlat_varying3 [[color(3)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> unity_Lightmap [[texture(0)]], sampler _mtlsmp_unity_Lightmap [[sampler(0)]]
+  , texture2d<half> unity_LightmapInd [[texture(1)]], sampler _mtlsmp_unity_LightmapInd [[sampler(1)]]
+  , texture2d<half> _MainTex [[texture(2)]], sampler _mtlsmp__MainTex [[sampler(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 _glesFragData[4];
+  half4 t0 = _MainTex.sample(_mtlsmp__MainTex, _mtl_i.xlv_TEXCOORD0);
+  float2 t1 = _mtl_i.xlv_TEXCOORD4.xy;
+  half3 t2 = ((t0.xyz * half(2.0)) - half(1.0));
+  half t3 = dot(saturate((half3x3(half3(0.8164966, -0.4082483, -0.4082483), half3(0.0, 0.7071068, -0.7071068), half3(0.5773503)) * t2)), (half(2.0) * unity_LightmapInd.sample(_mtlsmp_unity_LightmapInd, t1).xyz));
+  half3 t4 = (t0.xyz * ((half(2.0) * unity_Lightmap.sample(_mtlsmp_unity_Lightmap, t1).xyz) * t3));
+  _glesFragData[0] = half4(t4, half(1.0));
+  _mtl_o._xlat_varying0 = _glesFragData[0];
+  _mtl_o._xlat_varying1 = _glesFragData[1];
+  _mtl_o._xlat_varying2 = _glesFragData[2];
+  _mtl_o._xlat_varying3 = _glesFragData[3];
+  return _mtl_o;
+}
+
+// stats: 12 alu 3 tex 0 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD4 (high float) 4x1 [-1]
+// textures: 3
+//  #0: unity_Lightmap (medium 2d) 0x0 [-1] loc 0
+//  #1: unity_LightmapInd (medium 2d) 0x0 [-1] loc 1
+//  #2: _MainTex (medium 2d) 0x0 [-1] loc 2

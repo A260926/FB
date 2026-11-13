@@ -1,0 +1,20 @@
+#version 310 es
+precision highp float;
+precision highp int;
+layout(packed) buffer Data {
+  highp vec2 values[];
+} data;
+uniform highp int index;
+out highp vec4 color;
+void main ()
+{
+  data.values[index].x = 2.0;
+  color = vec4(2.0, data.values[index].y, 0.0, 1.0);
+}
+
+// stats: 0 alu 0 tex 0 flow
+// uniforms: 1 (total size: 0)
+//  #0: index (high int) 1x1 [-1]
+// buffer #0: Data storage instance data layout packed (size: unknown)
+//  member #0: vec2[] values array runtime
+//  member #1: vec2 [] parent 0

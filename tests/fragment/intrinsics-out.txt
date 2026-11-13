@@ -1,0 +1,22 @@
+varying vec4 xlv_TEXCOORD0;
+void main ()
+{
+  float t0 = (xlv_TEXCOORD0.x / 2.0);
+  float t1 = (fract(abs(t0)) * 2.0);
+  vec2 t2 = (xlv_TEXCOORD0.xy / 2.0);
+  vec2 t3 = (fract(abs(t2)) * 2.0);
+  vec2 t4 = (vec2(((t0 >= 0.0) ? t1 : (-t1)), 0.0) + vec2(((t2.x >= 0.0) ? t3.x : (-t3.x)), ((t2.y >= 0.0) ? t3.y : (-t3.y))));
+  vec3 t5 = (xlv_TEXCOORD0.xyz / 2.0);
+  vec3 t6 = (fract(abs(t5)) * 2.0);
+  vec3 t7 = (vec3(t4, 0.0) + vec3(((t5.x >= 0.0) ? t6.x : (-t6.x)), ((t5.y >= 0.0) ? t6.y : (-t6.y)), ((t5.z >= 0.0) ? t6.z : (-t6.z))));
+  vec4 t8 = (xlv_TEXCOORD0 / 2.0);
+  vec4 t9 = (fract(abs(t8)) * 2.0);
+  vec4 t10 = (vec4(t7, 0.0) + vec4(((t8.x >= 0.0) ? t9.x : (-t9.x)), ((t8.y >= 0.0) ? t9.y : (-t9.y)), ((t8.z >= 0.0) ? t9.z : (-t9.z)), ((t8.w >= 0.0) ? t9.w : (-t9.w))));
+  vec2 t11 = (vec2((t10.x + (xlv_TEXCOORD0.x - (sign(xlv_TEXCOORD0.x) * floor(abs(xlv_TEXCOORD0.x))))), t10.y) + (xlv_TEXCOORD0.xy - (sign(xlv_TEXCOORD0.xy) * floor(abs(xlv_TEXCOORD0.xy)))));
+  vec3 t12 = (vec3(t11, t10.z) + (xlv_TEXCOORD0.xyz - (sign(xlv_TEXCOORD0.xyz) * floor(abs(xlv_TEXCOORD0.xyz)))));
+  gl_FragData[0] = (vec4(t12, t10.w) + (xlv_TEXCOORD0 - (sign(xlv_TEXCOORD0) * floor(abs(xlv_TEXCOORD0)))));
+}
+
+// stats: 61 alu 0 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]

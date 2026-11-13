@@ -1,0 +1,185 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_ClusterBuffer_std430 {
+  uint data[1];
+};
+struct _xlat_LightData_std430 {
+  packed_float3 position;
+  float inv_radius;
+  packed_float3 direction;
+  float size;
+  packed_float3 color;
+  float attenuation;
+  packed_float3 area_width;
+  float cone_attenuation;
+  packed_float3 area_height;
+  float cone_angle;
+  float specular_amount;
+  float shadow_opacity;
+  float pad[2];
+  float4 atlas_rect;
+  float4 shadow_matrix[4];
+  float shadow_bias;
+  float shadow_normal_bias;
+  float transmittance_bias;
+  float soft_shadow_size;
+  float soft_shadow_scale;
+  uint mask;
+  float volumetric_fog_energy;
+  uint bake_mode;
+  float4 projector_rect;
+};
+static_assert(sizeof(_xlat_LightData_std430) == 224, "std430 size");
+struct _xlat_buf_OmniLights_std430 {
+  _xlat_LightData_std430 data[1];
+};
+struct _xlat_buf_Scene_std140 {
+  float z_far;
+  uint cluster_shift;
+  uint cluster_width;
+  uint max_cluster_element_count_div_32;
+  uint layer_mask;
+  float roughness;
+  float metallic;
+  float specular;
+};
+static_assert(sizeof(_xlat_buf_Scene_std140) == 32, "std140 size");
+template <typename T> inline T _xlat_findMSBu(T x) { return select(T(31) - T(clz(x)), T(-1), x == T(0)); }
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+  float3 view_position [[user(locn0)]];
+  float3 normal_interp [[user(locn1)]];
+  float2 uv [[user(locn2)]];
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_ClusterBuffer_std430& cluster_buffer [[buffer(1)]]
+  , const device _xlat_buf_OmniLights_std430& omni_lights [[buffer(2)]]
+  , constant _xlat_buf_Scene_std140& scene [[buffer(3)]]
+  , texture2d<half> albedo_texture [[texture(0)]], sampler _mtlsmp_albedo_texture [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 r0 = 0;
+  float3 r1 = 0;
+  uint r2 = 0;
+  int r3 = 0;
+  float3 r4 = 0;
+  float4 t0 = float4(albedo_texture.sample(_mtlsmp_albedo_texture, _mtl_i.uv));
+  float3 t1 = normalize(_mtl_i.normal_interp);
+  float3 t2 = (-_mtl_i.view_position);
+  float3 t3 = (_mtl_i.view_position * rsqrt(dot(t2, t2)));
+  float t4 = float(scene.specular);
+  float t5 = float(scene.metallic);
+  float3 t6 = mix(float3(((0.16 * t4) * t4)), t0.xyz, float3(t5));
+  uint2 t7 = (uint2(_mtl_i.gl_FragCoord.xy) >> uint(uint(scene.cluster_shift)));
+  uint t8 = uint(scene.max_cluster_element_count_div_32);
+  int t9 = (((int(uint(scene.cluster_width)) * int(t7.y)) + int(t7.x)) * (int(t8) + 32));
+  uint t10 = uint(cluster_buffer.data[((t9 + int(t8)) + int(uint(clamp((((-_mtl_i.view_position.z) / float(scene.z_far)) * 32.0), 0.0, 31.0))))]);
+  uint t11 = (t10 >> uint(16u));
+  int t12 = ((int(t11) == 0) ? 0 : (int((uint((int(t11) - 1)) >> uint(5u))) + 1));
+  float3 t13 = (-t3);
+  uint t14 = (t10 & 65535u);
+  r4 = float3(0.0);
+  for (r3 = int((t14 >> uint(5u))); (uint(r3) < uint(t12)); r3++) {
+    int t15 = (r3 << int(5u));
+    int t16 = min(max((int(t14) - t15), 0), 31);
+    int t17 = min((int(t11) - int(t14)), (32 - t16));
+    r2 = (uint(cluster_buffer.data[(t9 + r3)]) & ((31u < uint(t17)) ? 4294967295u : (uint((-1 << int(uint(t16)))) & uint((((1 << int(uint(t17))) - 1) << int(uint(t16)))))));
+    while ((int(r2) != 0)) {
+      int t18 = int(_xlat_findMSBu(r2));
+      r2 = (r2 & uint((~(1 << int(uint(t18))))));
+      int t19 = (t15 + t18);
+      if ((int((uint(omni_lights.data[t19].mask) & uint(scene.layer_mask))) != 0)) {
+        float3 t20 = (float3(omni_lights.data[t19].position) - _mtl_i.view_position);
+        float t21 = dot(t20, t20);
+        float t22 = sqrt(t21);
+        float t23 = (t22 * float(omni_lights.data[t19].inv_radius));
+        float t24 = (t23 * t23);
+        float t25 = saturate((1.0 - (t24 * t24)));
+        float t26 = ((t25 * t25) * pow(max(t22, 0.0001), (-float(omni_lights.data[t19].attenuation))));
+        if ((6.1035156e-05 < t26)) {
+          float3 t27 = (t20 * rsqrt(t21));
+          float t28 = dot(t1, t13);
+          float t29 = max(dot(t1, t27), 0.0);
+          float3 t30 = (((1.0 - t5) * t0.xyz) * (t29 * 0.31830987));
+          float t31 = float(scene.roughness);
+          if ((0.0 < t31)) {
+            float3 t32 = (t27 - t3);
+            float3 t33 = normalize(t32);
+            float t34 = (t31 * t31);
+            float t35 = saturate(dot(t1, t33));
+            float t36 = (t35 * t34);
+            float t37 = (t34 / ((1.0 - (t35 * t35)) + (t36 * t36)));
+            float t38 = max(t28, 0.0001);
+            float t39 = (1.0 - saturate(dot(t27, t33)));
+            float t40 = (t39 * t39);
+            float3 t41 = (((t29 * min(((t37 * 0.31830987) * t37), 65504.0)) * mix(t6, float3(min(max(dot(t6, float3(16.5)), t5), 1.0)), float3(((t40 * t40) * t39)))) * min((0.5 / mix(((2.0 * t29) * t38), (t29 + t38), t34)), 65504.0));
+            r0 = (t41 * float(omni_lights.data[t19].specular_amount));
+          } else {
+            r0 = float3(0.0);
+          }
+          r1 = (((t30 + r0) * float3(omni_lights.data[t19].color)) * t26);
+        } else {
+          r1 = float3(0.0);
+        }
+        r4 = (r4 + r1);
+      }
+    }
+  }
+  _mtl_o.color = float4(r4.x, r4.y, r4.z, t0.w);
+  return _mtl_o;
+}
+
+// stats: 124 alu 1 tex 7 flow
+// inputs: 4
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+//  #1: view_position (high float) 3x1 [-1] loc 32
+//  #2: normal_interp (high float) 3x1 [-1] loc 33
+//  #3: uv (high float) 2x1 [-1] loc 34
+// buffer #0: ClusterBuffer storage instance cluster_buffer layout std430 binding 9 (size: unknown) metal 1
+//  member #0: uint[] data offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly
+// buffer #1: OmniLights storage instance omni_lights layout std430 binding 3 (size: unknown) metal 2
+//  member #0: LightData[] data offset 0 array runtime stride 224 readonly
+//  member #1: LightData [] parent 0 offset 0 readonly
+//  member #2: vec3 position parent 1 offset 0 readonly
+//  member #3: float inv_radius parent 1 offset 12 readonly
+//  member #4: vec3 direction parent 1 offset 16 readonly (unused)
+//  member #5: float size parent 1 offset 28 readonly (unused)
+//  member #6: vec3 color parent 1 offset 32 readonly
+//  member #7: float attenuation parent 1 offset 44 readonly
+//  member #8: vec3 area_width parent 1 offset 48 readonly (unused)
+//  member #9: float cone_attenuation parent 1 offset 60 readonly (unused)
+//  member #10: vec3 area_height parent 1 offset 64 readonly (unused)
+//  member #11: float cone_angle parent 1 offset 76 readonly (unused)
+//  member #12: float specular_amount parent 1 offset 80 readonly
+//  member #13: float shadow_opacity parent 1 offset 84 readonly (unused)
+//  member #14: float[2] pad parent 1 offset 88 array 2 stride 4 readonly (unused)
+//  member #15: float [] parent 14 offset 88 readonly (unused)
+//  member #16: vec4 atlas_rect parent 1 offset 96 readonly (unused)
+//  member #17: mat4 shadow_matrix parent 1 offset 112 matrix-stride 16 readonly (unused)
+//  member #18: float shadow_bias parent 1 offset 176 readonly (unused)
+//  member #19: float shadow_normal_bias parent 1 offset 180 readonly (unused)
+//  member #20: float transmittance_bias parent 1 offset 184 readonly (unused)
+//  member #21: float soft_shadow_size parent 1 offset 188 readonly (unused)
+//  member #22: float soft_shadow_scale parent 1 offset 192 readonly (unused)
+//  member #23: uint mask parent 1 offset 196 readonly
+//  member #24: float volumetric_fog_energy parent 1 offset 200 readonly (unused)
+//  member #25: uint bake_mode parent 1 offset 204 readonly (unused)
+//  member #26: vec4 projector_rect parent 1 offset 208 readonly (unused)
+// buffer #2: Scene instance scene layout std140 binding 0 (size: 32) metal 3
+//  member #0: float z_far offset 0
+//  member #1: uint cluster_shift offset 4
+//  member #2: uint cluster_width offset 8
+//  member #3: uint max_cluster_element_count_div_32 offset 12
+//  member #4: uint layer_mask offset 16
+//  member #5: float roughness offset 20
+//  member #6: float metallic offset 24
+//  member #7: float specular offset 28
+// textures: 1
+//  #0: albedo_texture (medium 2d) 0x0 [-1] loc 0

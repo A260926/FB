@@ -1,0 +1,16 @@
+uniform sampler2D maintex;
+uniform float factor;
+varying vec2 uv;
+void main ()
+{
+  vec4 t0 = texture2D(maintex, uv);
+  gl_FragColor = vec4(max(0.123, t0.x), max(0.123, t0.y), min(t0.z, factor), min(t0.w, factor));
+}
+
+// stats: 4 alu 1 tex 0 flow
+// inputs: 1
+//  #0: uv (high float) 2x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: factor (high float) 1x1 [-1]
+// textures: 1
+//  #0: maintex (high 2d) 0x0 [-1]

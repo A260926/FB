@@ -1,0 +1,54 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Input_std430 {
+  packed_float3 value;
+  uint enabled;
+};
+static_assert(sizeof(_xlat_buf_Input_std430) == 16, "std430 size");
+struct _xlat_buf_Output_std430 {
+  packed_float3 value;
+  char _pad0[4];
+  packed_uint3 flags;
+  char _pad1[4];
+  int2 indices;
+  float2 values[3][2];
+  char _pad2[8];
+};
+static_assert(sizeof(_xlat_buf_Output_std430) == 96, "std430 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_Input_std430& source_0 [[buffer(1)]]
+  , const device _xlat_buf_Input_std430& source_1 [[buffer(2)]]
+  , device _xlat_buf_Output_std430& dest [[buffer(3)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  const device _xlat_buf_Input_std430* source[2] = { &source_0, &source_1 };
+  dest.value[0] = float(half3((*source[0]).value).yxy.x);
+  dest.value[1] = float(half3((*source[0]).value).yxy.y);
+  dest.value[2] = float(half3((*source[1]).value).zzz.z);
+  dest.flags = uint3(bool3(bool((*source[1]).enabled), true, false));
+  int2 t0 = int2(dest.indices);
+  dest.values[t0.x][t0.y] = float2(half3(dest.value).xy);
+  half3 t1 = half3(dest.value);
+  _mtl_o.color = float4(half4(t1, half(bool3(dest.flags).x)));
+  return _mtl_o;
+}
+
+// stats: 1 alu 0 tex 0 flow
+// buffer #0: Input storage instance source layout std430 binding 1 array 2 (size: 16) metal 1
+//  member #0: vec3 value offset 0 readonly
+//  member #1: bool enabled offset 12 readonly
+// buffer #1: Output storage instance dest layout std430 binding 3 (size: 96) metal 3
+//  member #0: vec3 value offset 0
+//  member #1: bvec3 flags offset 16
+//  member #2: ivec2 indices offset 32
+//  member #3: vec2[2][3] values offset 40 array 2 stride 24
+//  member #4: vec2[3] [] parent 3 offset 40 array 3 stride 8
+//  member #5: vec2 [] parent 4 offset 40

@@ -1,0 +1,17 @@
+#version 140
+uniform vec2 p;
+in vec4 position;
+in vec4 icol;
+out vec4 col;
+void main ()
+{
+  col = icol;
+  gl_Position = (vec4(p, 0.0, 0.0) + position);
+}
+
+// stats: 1 alu 0 tex 0 flow
+// inputs: 2
+//  #0: position (high float) 4x1 [-1]
+//  #1: icol (high float) 4x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: p (high float) 2x1 [-1]
