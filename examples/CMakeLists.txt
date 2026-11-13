@@ -80,6 +80,10 @@ else()
     target_link_libraries(mconvert pmp)
   endif()
 
+  # headless UV optimization example, no viewer / OpenGL dependency
+  add_executable(uv_optimization uv_optimization.cpp)
+  target_link_libraries(uv_optimization pmp)
+
   if(OpenGL_FOUND AND PMP_BUILD_VIEWERS)
     add_executable(mview mview.cpp)
     target_link_libraries(mview pmp_viewers)

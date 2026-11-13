@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/external/predicates/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

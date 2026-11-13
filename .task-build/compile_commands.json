@@ -1,0 +1,350 @@
+[
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/predicates.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/predicates.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/predicates.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/predicates.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/surface_mesh.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/surface_mesh.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/surface_mesh.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/surface_mesh.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/analysis.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/analysis.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/analysis.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/analysis.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/curvature.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/curvature.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/curvature.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/curvature.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/decimation.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/decimation.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/decimation.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/decimation.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/differential_geometry.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/differential_geometry.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/differential_geometry.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/differential_geometry.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/distance_point_triangle.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/distance_point_triangle.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/distance_point_triangle.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/distance_point_triangle.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/fairing.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/fairing.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/fairing.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/fairing.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/features.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/features.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/features.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/features.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/geodesics.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/geodesics.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/geodesics.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/geodesics.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/hole_filling.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/hole_filling.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/hole_filling.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/hole_filling.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/laplace.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/laplace.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/laplace.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/laplace.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/normals.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/normals.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/normals.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/normals.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/numerics.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/numerics.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/numerics.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/numerics.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/parameterization.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/parameterization.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/parameterization.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/parameterization.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/remeshing.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/remeshing.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/remeshing.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/remeshing.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/shapes.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/shapes.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/shapes.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/shapes.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/smoothing.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/smoothing.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/smoothing.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/smoothing.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/subdivision.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/subdivision.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/subdivision.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/subdivision.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/triangulation.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/triangulation.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/triangulation.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/triangulation.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/utilities.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/utilities.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/utilities.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/utilities.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/algorithms/uv_optimization.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/uv_optimization.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/algorithms/uv_optimization.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/algorithms/uv_optimization.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/io.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/io.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/io.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/io.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/read_obj.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_obj.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_obj.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/read_obj.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/read_off.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_off.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_off.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/read_off.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/read_pmp.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_pmp.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_pmp.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/read_pmp.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/read_stl.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_stl.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/read_stl.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/read_stl.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/write_obj.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_obj.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_obj.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/write_obj.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/write_off.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_off.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_off.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/write_off.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/write_pmp.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_pmp.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_pmp.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/write_pmp.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/src/pmp",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/pmp.dir/io/write_stl.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_stl.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/io/write_stl.cpp",
+  "output": "src/pmp/CMakeFiles/pmp.dir/io/write_stl.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/googletest.dir/__/external/googletest-1.18.0/googletest/src/gtest-all.cc.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/src/gtest-all.cc",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/src/gtest-all.cc",
+  "output": "tests/CMakeFiles/googletest.dir/__/external/googletest-1.18.0/googletest/src/gtest-all.cc.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -o CMakeFiles/googletest.dir/__/external/googletest-1.18.0/googletest/src/gtest_main.cc.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/src/gtest_main.cc",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/src/gtest_main.cc",
+  "output": "tests/CMakeFiles/googletest.dir/__/external/googletest-1.18.0/googletest/src/gtest_main.cc.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/analysis_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/analysis_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/analysis_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/analysis_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/curvature_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/curvature_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/curvature_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/curvature_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/decimation_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/decimation_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/decimation_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/decimation_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/differential_geometry_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/differential_geometry_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/differential_geometry_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/differential_geometry_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/distance_point_triangle_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/distance_point_triangle_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/distance_point_triangle_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/distance_point_triangle_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/eigen_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/eigen_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/eigen_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/eigen_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/fairing_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/fairing_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/fairing_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/fairing_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/features_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/features_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/features_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/features_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/geodesics_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/geodesics_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/geodesics_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/geodesics_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/helpers.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/helpers.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/helpers.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/helpers.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/hole_filling_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/hole_filling_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/hole_filling_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/hole_filling_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/io_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/io_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/io_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/io_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/iterator_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/iterator_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/iterator_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/iterator_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/laplace_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/laplace_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/laplace_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/laplace_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/normals_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/normals_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/normals_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/normals_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/numerics_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/numerics_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/numerics_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/numerics_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/parameterization_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/parameterization_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/parameterization_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/parameterization_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/remeshing_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/remeshing_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/remeshing_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/remeshing_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/shapes_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/shapes_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/shapes_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/shapes_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/smoothing_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/smoothing_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/smoothing_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/smoothing_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/subdivision_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/subdivision_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/subdivision_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/subdivision_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/surface_mesh_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/surface_mesh_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/surface_mesh_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/surface_mesh_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/triangulation_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/triangulation_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/triangulation_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/triangulation_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/utilities_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/utilities_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/utilities_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/utilities_test.cpp.o"
+},
+{
+  "directory": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests",
+  "command": "/usr/bin/c++  -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/googletest-1.18.0/googletest/include -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/external/eigen-5.0.1 -I/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/src/pmp/.. -DPMP_SCALAR_TYPE_64 -pedantic -Wall -Wextra -Wshadow --system-header-prefix=Eigen -O3 -DNDEBUG -std=gnu++20 -Wno-character-conversion -o CMakeFiles/gtest_runner.dir/uv_optimization_test.cpp.o -c /Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/uv_optimization_test.cpp",
+  "file": "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/tests/uv_optimization_test.cpp",
+  "output": "tests/CMakeFiles/gtest_runner.dir/uv_optimization_test.cpp.o"
+}
+]

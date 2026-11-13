@@ -1,0 +1,5 @@
+if(EXISTS "/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests/gtest_runner_e3b0c442_tests.cmake")
+  include("/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests/gtest_runner_e3b0c442_tests.cmake")
+else()
+  add_test(gtest_runner_NOT_BUILT gtest_runner_NOT_BUILT)
+endif()

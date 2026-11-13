@@ -1,0 +1,20 @@
+include("/opt/homebrew/share/cmake/Modules/GoogleTestAddTests.cmake")
+gtest_discover_tests_impl(
+  TEST_TARGET [==[gtest_runner]==]
+  TEST_EXECUTABLE [==[/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests/gtest_runner]==]
+  TEST_EXECUTOR [==[]==]
+  TEST_WORKING_DIR [==[/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests]==]
+  TEST_EXTRA_ARGS [==[]==]
+  TEST_PROPERTIES [==[]==]
+  TEST_PREFIX [==[]==]
+  TEST_SUFFIX [==[]==]
+  TEST_FILTER [==[]==]
+  NO_PRETTY_TYPES [==[FALSE]==]
+  NO_PRETTY_VALUES [==[FALSE]==]
+  TEST_LIST [==[gtest_runner_TESTS]==]
+  CTEST_FILE [==[/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests/gtest_runner_e3b0c442_tests.cmake]==]
+  TEST_DISCOVERY_TIMEOUT [==[5]==]
+  TEST_DISCOVERY_EXTRA_ARGS [==[]==]
+  TEST_XML_OUTPUT_DIR [==[]==]
+  TEST_JSON_OUTPUT_DIR [==[/Users/solo/pro/UserFB/workspace/FSA2EFEF66323EU6612/attempts/20261113T164209694037Z/repo/.task-build/tests]==]
+)

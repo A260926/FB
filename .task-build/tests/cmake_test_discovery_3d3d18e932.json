@@ -1,0 +1,880 @@
+{
+  "tests": 146,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "AnalysisTest",
+      "tests": 21,
+      "testsuite": [
+        {
+          "name": "analyze_stats",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 13
+        },
+        {
+          "name": "analyze_triangle_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 22
+        },
+        {
+          "name": "analyze_quad_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 29
+        },
+        {
+          "name": "analyze_polygon_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 36
+        },
+        {
+          "name": "analyze_boundary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 44
+        },
+        {
+          "name": "analyze_manifoldness",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 51
+        },
+        {
+          "name": "analyze_components",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 58
+        },
+        {
+          "name": "analyze_isolated_vertices",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 66
+        },
+        {
+          "name": "analyze_zero_area_face",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 75
+        },
+        {
+          "name": "analyze_short_edge_triangle",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 86
+        },
+        {
+          "name": "analyze_short_edge_quad",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 97
+        },
+        {
+          "name": "analyze_duplicate_vertices_empty_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 109
+        },
+        {
+          "name": "analyze_duplicate_vertices",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 116
+        },
+        {
+          "name": "analyze_duplicate_vertices_outside_tolerance",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 128
+        },
+        {
+          "name": "find_duplicate_vertices_empty_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 140
+        },
+        {
+          "name": "find_duplicate_vertices_no_duplicates",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 149
+        },
+        {
+          "name": "find_duplicate_vertices_single_pair",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 162
+        },
+        {
+          "name": "find_duplicate_vertices_multiple_pairs",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 177
+        },
+        {
+          "name": "find_duplicate_vertices_neighboring_cells",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 196
+        },
+        {
+          "name": "find_duplicate_vertices_outside_tolerance",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 211
+        },
+        {
+          "name": "find_duplicate_vertices_negative_coordinates",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/analysis_test.cpp",
+          "line": 228
+        }
+      ]
+    },
+    {
+      "name": "CurvatureTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "curvature",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/curvature_test.cpp",
+          "line": 19
+        },
+        {
+          "name": "curvature_to_texture_coordinates",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/curvature_test.cpp",
+          "line": 59
+        }
+      ]
+    },
+    {
+      "name": "DecimationTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "simplification",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/decimation_test.cpp",
+          "line": 16
+        },
+        {
+          "name": "simplification_with_features",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/decimation_test.cpp",
+          "line": 24
+        },
+        {
+          "name": "simplification_texture_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/decimation_test.cpp",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "name": "DifferentialGeometryTest",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "area_points",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 45
+        },
+        {
+          "name": "area_face",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 53
+        },
+        {
+          "name": "area_vertex",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 60
+        },
+        {
+          "name": "laplace",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 67
+        },
+        {
+          "name": "area_surface",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 74
+        },
+        {
+          "name": "volume",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 80
+        },
+        {
+          "name": "centroid",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/differential_geometry_test.cpp",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "name": "DistancePointTriangleTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "distance_point_degenerate_triangle",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/distance_point_triangle_test.cpp",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "name": "EigenTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "construct_from_eigen",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/eigen_test.cpp",
+          "line": 13
+        },
+        {
+          "name": "assignment_from_eigen",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/eigen_test.cpp",
+          "line": 45
+        },
+        {
+          "name": "cast_to_eigen",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/eigen_test.cpp",
+          "line": 81
+        }
+      ]
+    },
+    {
+      "name": "FairingTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "fairing",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/fairing_test.cpp",
+          "line": 13
+        },
+        {
+          "name": "fairing_selected",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/fairing_test.cpp",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "name": "FeaturesTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "detect_angle",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/features_test.cpp",
+          "line": 12
+        },
+        {
+          "name": "detect_boundary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/features_test.cpp",
+          "line": 19
+        },
+        {
+          "name": "clear",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/features_test.cpp",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "name": "GeodesicsTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "geodesic",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/geodesics_test.cpp",
+          "line": 12
+        },
+        {
+          "name": "geodesic_symmetry",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/geodesics_test.cpp",
+          "line": 34
+        },
+        {
+          "name": "geodesic_maxnum",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/geodesics_test.cpp",
+          "line": 69
+        }
+      ]
+    },
+    {
+      "name": "HoleFillingTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "open_cone",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/hole_filling_test.cpp",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "name": "IOTest",
+      "tests": 9,
+      "testsuite": [
+        {
+          "name": "obj_io",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 16
+        },
+        {
+          "name": "off_io",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 31
+        },
+        {
+          "name": "pmp_io",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 73
+        },
+        {
+          "name": "read_stl_ascii",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 89
+        },
+        {
+          "name": "read_stl_binary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 96
+        },
+        {
+          "name": "write_stl_binary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 104
+        },
+        {
+          "name": "write_stl_no_normals",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 125
+        },
+        {
+          "name": "write_stl_with_normals",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 132
+        },
+        {
+          "name": "write_stl_no_triangles",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/io_test.cpp",
+          "line": 141
+        }
+      ]
+    },
+    {
+      "name": "VertexIteratorTest",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "default_constructible",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 15
+        },
+        {
+          "name": "copy_constructible",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 21
+        },
+        {
+          "name": "assignable",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 28
+        },
+        {
+          "name": "insert",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "name": "VertexCirculatorTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "std_distance",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 44
+        },
+        {
+          "name": "post_increment",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 53
+        },
+        {
+          "name": "post_decrement",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/iterator_test.cpp",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "name": "LaplaceTest",
+      "tests": 8,
+      "testsuite": [
+        {
+          "name": "matrix_dimensions",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 160
+        },
+        {
+          "name": "divgrad",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 169
+        },
+        {
+          "name": "constant_gradients",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 178
+        },
+        {
+          "name": "linear_precision",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 188
+        },
+        {
+          "name": "mass_matrix",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 198
+        },
+        {
+          "name": "degenerate_triangles",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 207
+        },
+        {
+          "name": "mass_matrix_on_triangles",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 219
+        },
+        {
+          "name": "mass_matrix_on_quads",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/laplace_test.cpp",
+          "line": 225
+        }
+      ]
+    },
+    {
+      "name": "NormalsTest",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "vertex_normals",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/normals_test.cpp",
+          "line": 14
+        },
+        {
+          "name": "face_normals",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/normals_test.cpp",
+          "line": 23
+        },
+        {
+          "name": "corner_normal",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/normals_test.cpp",
+          "line": 32
+        },
+        {
+          "name": "polygonal_face_normal",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/normals_test.cpp",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "name": "NumericsTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "matrices_to_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/numerics_test.cpp",
+          "line": 11
+        },
+        {
+          "name": "mesh_to_matrices",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/numerics_test.cpp",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "name": "ParameterizationTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "parameterization",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/parameterization_test.cpp",
+          "line": 11
+        },
+        {
+          "name": "lscm",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/parameterization_test.cpp",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "name": "RemeshingTest",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "adaptive_remeshing_with_features",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/remeshing_test.cpp",
+          "line": 17
+        },
+        {
+          "name": "adaptive_remeshing_with_boundary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/remeshing_test.cpp",
+          "line": 29
+        },
+        {
+          "name": "adaptive_remeshing_with_selection",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/remeshing_test.cpp",
+          "line": 40
+        },
+        {
+          "name": "uniform_remeshing",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/remeshing_test.cpp",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "name": "ShapesTest",
+      "tests": 14,
+      "testsuite": [
+        {
+          "name": "tetrahedron",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 23
+        },
+        {
+          "name": "octahedron",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 33
+        },
+        {
+          "name": "hexahedron",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 43
+        },
+        {
+          "name": "icosahedron",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 53
+        },
+        {
+          "name": "dodecahedron",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 63
+        },
+        {
+          "name": "icosphere",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 74
+        },
+        {
+          "name": "quad_sphere",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 84
+        },
+        {
+          "name": "uv_sphere",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 94
+        },
+        {
+          "name": "plane_minimal",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 105
+        },
+        {
+          "name": "plane_planar",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 114
+        },
+        {
+          "name": "plane_default",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 123
+        },
+        {
+          "name": "cone",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 131
+        },
+        {
+          "name": "cylinder",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 139
+        },
+        {
+          "name": "torus",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/shapes_test.cpp",
+          "line": 147
+        }
+      ]
+    },
+    {
+      "name": "SmoothingTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "implicit_smoothing",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/smoothing_test.cpp",
+          "line": 12
+        },
+        {
+          "name": "implicit_smoothing_with_rescale",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/smoothing_test.cpp",
+          "line": 21
+        },
+        {
+          "name": "explicit_smoothing",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/smoothing_test.cpp",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "name": "SubdivisionTest",
+      "tests": 9,
+      "testsuite": [
+        {
+          "name": "loop_subdivision",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 13
+        },
+        {
+          "name": "loop_with_features",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 20
+        },
+        {
+          "name": "loop_with_boundary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 28
+        },
+        {
+          "name": "catmull_clark_subdivision",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 35
+        },
+        {
+          "name": "catmull_clark_with_features",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 42
+        },
+        {
+          "name": "catmull_clark_with_boundary",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 50
+        },
+        {
+          "name": "quad_tri_on_quads",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 57
+        },
+        {
+          "name": "quad_tri_on_triangles",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 64
+        },
+        {
+          "name": "quad_tri_on_mixed",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/subdivision_test.cpp",
+          "line": 71
+        }
+      ]
+    },
+    {
+      "name": "SurfaceMeshTest",
+      "tests": 30,
+      "testsuite": [
+        {
+          "name": "emptyMesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 11
+        },
+        {
+          "name": "insert_remove_single_vertex",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 18
+        },
+        {
+          "name": "insert_remove_single_triangle",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 27
+        },
+        {
+          "name": "insert_remove_single_quad",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 40
+        },
+        {
+          "name": "insert_remove_single_polygonal_face",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 53
+        },
+        {
+          "name": "delete_center_vertex",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 72
+        },
+        {
+          "name": "delete_center_edge",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 84
+        },
+        {
+          "name": "copy",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 100
+        },
+        {
+          "name": "assignment",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 109
+        },
+        {
+          "name": "vertex_properties",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 119
+        },
+        {
+          "name": "halfedge_properties",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 139
+        },
+        {
+          "name": "edge_properties",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 157
+        },
+        {
+          "name": "face_properties",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 175
+        },
+        {
+          "name": "vertex_iterators",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 192
+        },
+        {
+          "name": "edge_iterators",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 203
+        },
+        {
+          "name": "halfedge_iterators",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 214
+        },
+        {
+          "name": "face_iterators",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 225
+        },
+        {
+          "name": "is_triangle_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 236
+        },
+        {
+          "name": "is_quad_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 242
+        },
+        {
+          "name": "poly_mesh",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 248
+        },
+        {
+          "name": "vertex_valence",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 260
+        },
+        {
+          "name": "face_valence",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 267
+        },
+        {
+          "name": "collapse",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 274
+        },
+        {
+          "name": "edge_removal_ok",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 285
+        },
+        {
+          "name": "edge_removal_not_ok",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 292
+        },
+        {
+          "name": "remove_edge",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 299
+        },
+        {
+          "name": "face_split",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 307
+        },
+        {
+          "name": "edge_split",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 316
+        },
+        {
+          "name": "edge_flip",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 328
+        },
+        {
+          "name": "is_manifold",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/surface_mesh_test.cpp",
+          "line": 344
+        }
+      ]
+    },
+    {
+      "name": "TriangulationTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "triangulate",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/triangulation_test.cpp",
+          "line": 11
+        },
+        {
+          "name": "min_area",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/triangulation_test.cpp",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "name": "UtilitiesTest",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "flip_faces",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 25
+        },
+        {
+          "name": "min_face_area",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 36
+        },
+        {
+          "name": "edge_length",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 42
+        },
+        {
+          "name": "mean_edge_length",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 50
+        },
+        {
+          "name": "min_edge_length",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 57
+        },
+        {
+          "name": "connected_components",
+          "file": "\/Users\/solo\/pro\/UserFB\/workspace\/FSA2EFEF66323EU6612\/attempts\/20261113T164209694037Z\/repo\/tests\/utilities_test.cpp",
+          "line": 64
+        }
+      ]
+    }
+  ]
+}
