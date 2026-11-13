@@ -120,6 +120,36 @@ typedef struct NSVGcachedPaint {
 	unsigned int colors[256];
 } NSVGcachedPaint;
 
+// Fixed-point horizontal span used for geometric clipping.
+typedef struct NSVGspan {
+	int x0, x1;
+} NSVGspan;
+
+// Dynamic span buffer.
+typedef struct NSVGspanBuf {
+	NSVGspan* v;
+	int n, cap;
+} NSVGspanBuf;
+
+// One independently filled clip-path child region.
+typedef struct NSVGclipRun {
+	int start, count;			// Edge range in r->edges.
+	char fillRule;
+} NSVGclipRun;
+
+// Union of a clip level's children.
+typedef struct NSVGclipLevel {
+	int firstRun, runCount;
+} NSVGclipLevel;
+
+// Dynamic per-paint clip scratch: child runs and one entry per clip level.
+typedef struct NSVGclipRuns {
+	NSVGclipRun* runs;
+	int nruns, cruns;
+	NSVGclipLevel* levels;
+	int nlevels, clevels;
+} NSVGclipRuns;
+
 struct NSVGrasterizer
 {
 	float px, py;
@@ -148,6 +178,13 @@ struct NSVGrasterizer
 
 	unsigned char* bitmap;
 	int width, height, stride;
+
+	// Scratch for geometric clip-path rasterization.
+	int* crossX;
+	char* crossD;
+	int ccrossings;
+	unsigned char* clipCover;	// Per-row per-pixel clip coverage.
+	int cclip;
 };
 
 NSVGrasterizer* nsvgCreateRasterizer(void)
@@ -183,6 +220,9 @@ void nsvgDeleteRasterizer(NSVGrasterizer* r)
 	if (r->points) free(r->points);
 	if (r->points2) free(r->points2);
 	if (r->scanline) free(r->scanline);
+	if (r->crossX) free(r->crossX);
+	if (r->crossD) free(r->crossD);
+	if (r->clipCover) free(r->clipCover);
 
 	free(r);
 }
@@ -957,6 +997,254 @@ static void nsvg__fillActiveEdges(unsigned char* scanline, int len, NSVGactiveEd
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Geometric clip-path coverage.
+//
+// Clip-path children are geometric regions, not translucent images.  Every
+// vertical subsample is computed exactly: intersect the paint region with the
+// union of each clip level's children.  A shared fractional edge used as both
+// fill and clip boundary therefore keeps its original antialiasing weight.
+
+static int nsvg__reserveSpans(NSVGspanBuf* b, int n)
+{
+	if (n > b->cap) {
+		int cap = b->cap ? b->cap : 64;
+		NSVGspan* v;
+		while (cap < n) cap *= 2;
+		v = (NSVGspan*)realloc(b->v, sizeof(NSVGspan) * cap);
+		if (v == NULL) return 0;
+		b->v = v;
+		b->cap = cap;
+	}
+	return 1;
+}
+
+static int nsvg__reserveCrossings(NSVGrasterizer* r, int n)
+{
+	if (n > r->ccrossings) {
+		int cap = r->ccrossings ? r->ccrossings : 64;
+		int* xs;
+		char* ds;
+		while (cap < n) cap *= 2;
+		xs = (int*)realloc(r->crossX, sizeof(int) * cap);
+		if (xs == NULL) return 0;
+		r->crossX = xs;
+		ds = (char*)realloc(r->crossD, sizeof(char) * cap);
+		if (ds == NULL) return 0;
+		r->crossD = ds;
+		r->ccrossings = cap;
+	}
+	return 1;
+}
+
+// Fixed-point x where an edge crosses fixed-point y.
+static int nsvg__edgeXAtFixed(const NSVGedge* e, int yfix)
+{
+	double y = (double)yfix / (double)NSVG__FIX;
+	double x = (double)e->x0 + ((double)e->x1 - (double)e->x0) *
+		(y - (double)e->y0) / ((double)e->y1 - (double)e->y0);
+	return (int)nsvg__roundf((float)(x * (double)NSVG__FIX));
+}
+
+// Collect crossings at a fixed-point scanline into sorted x/direction arrays.
+// Edges use the same [y0, y1) half-open test as the regular rasterizer.
+static int nsvg__collectCrossings(NSVGrasterizer* r, int edgeStart, int edgeCount, int yfix)
+{
+	int i, n = 0;
+	if (!nsvg__reserveCrossings(r, edgeCount)) return -1;
+	for (i = 0; i < edgeCount; i++) {
+		const NSVGedge* e = &r->edges[edgeStart + i];
+		double y = (double)yfix / (double)NSVG__FIX;
+		if (y < (double)e->y0 || y >= (double)e->y1)
+			continue;
+		r->crossX[n] = nsvg__edgeXAtFixed(e, yfix);
+		r->crossD[n] = (char)e->dir;
+		n++;
+	}
+	for (i = 1; i < n; i++) {
+		int x = r->crossX[i];
+		char d = r->crossD[i];
+		int j = i - 1;
+		while (j >= 0 && r->crossX[j] > x) {
+			r->crossX[j+1] = r->crossX[j];
+			r->crossD[j+1] = r->crossD[j];
+			j--;
+		}
+		r->crossX[j+1] = x;
+		r->crossD[j+1] = d;
+	}
+	return n;
+}
+
+// Convert sorted crossings into disjoint covered spans for one fill rule.
+static int nsvg__crossingsToSpans(NSVGrasterizer* r, int n, char fillRule, NSVGspanBuf* out)
+{
+	int i, count = 0;
+	int have = 0, x0 = 0, wind = 0;
+	if (!nsvg__reserveSpans(out, n)) return 0;
+	for (i = 0; i < n; i++) {
+		int x = r->crossX[i];
+		if (fillRule == NSVG_FILLRULE_NONZERO) {
+			wind += r->crossD[i];
+			if (wind == 0 && have) {
+				if (x > x0) {
+					out->v[count].x0 = x0;
+					out->v[count].x1 = x;
+					count++;
+				}
+				have = 0;
+			} else if (!have && wind != 0) {
+				x0 = x;
+				have = 1;
+			}
+		} else {
+			if (!have) {
+				x0 = x; have = 1;
+			} else {
+				if (x > x0) {
+					out->v[count].x0 = x0;
+					out->v[count].x1 = x;
+					count++;
+				}
+				have = 0;
+			}
+		}
+	}
+	out->n = count;
+	return 1;
+}
+
+// Union of two sorted, disjoint span lists into out.
+static int nsvg__spanUnion(const NSVGspanBuf* a, const NSVGspanBuf* b, NSVGspanBuf* out)
+{
+	int i = 0, j = 0, n = 0;
+	if (out == a || out == b) return 0;
+	if (!nsvg__reserveSpans(out, a->n + b->n)) return 0;
+	while (i < a->n || j < b->n) {
+		NSVGspan sp;
+		if (j >= b->n || (i < a->n && a->v[i].x0 <= b->v[j].x0)) sp = a->v[i++];
+		else sp = b->v[j++];
+		if (n > 0 && sp.x0 <= out->v[n-1].x1) {
+			if (sp.x1 > out->v[n-1].x1) out->v[n-1].x1 = sp.x1;
+		} else {
+			out->v[n++] = sp;
+		}
+	}
+	out->n = n;
+	return 1;
+}
+
+// Intersection of two sorted, disjoint span lists into out.
+static int nsvg__spanIntersect(const NSVGspanBuf* a, const NSVGspanBuf* b, NSVGspanBuf* out)
+{
+	int i = 0, j = 0, n = 0;
+	if (out == a || out == b) return 0;
+	if (!nsvg__reserveSpans(out, a->n + b->n)) return 0;
+	while (i < a->n && j < b->n) {
+		int x0 = a->v[i].x0 > b->v[j].x0 ? a->v[i].x0 : b->v[j].x0;
+		int x1 = a->v[i].x1 < b->v[j].x1 ? a->v[i].x1 : b->v[j].x1;
+		if (x0 < x1) {
+			if (n > 0 && x0 <= out->v[n-1].x1) {
+				if (x1 > out->v[n-1].x1) out->v[n-1].x1 = x1;
+			} else {
+				out->v[n].x0 = x0;
+				out->v[n].x1 = x1;
+				n++;
+			}
+		}
+		if (a->v[i].x1 <= b->v[j].x1) i++;
+		else j++;
+	}
+	out->n = n;
+	return 1;
+}
+
+// Add spans to the per-pixel coverage accumulator (0..255 units).
+static void nsvg__accumulateSpans(unsigned char* acc, int len, const NSVGspanBuf* spans, int weight)
+{
+	int z;
+	for (z = 0; z < spans->n; z++) {
+		int a = spans->v[z].x0, b = spans->v[z].x1;
+		int i = a >> NSVG__FIXSHIFT;
+		int j = b >> NSVG__FIXSHIFT;
+		if (a >= b) continue;
+		if (i == j) {
+			if (i >= 0 && i < len)
+				acc[i] = (unsigned char)(acc[i] + (((b - a) * weight) >> NSVG__FIXSHIFT));
+		} else {
+			if (i >= 0 && i < len)
+				acc[i] = (unsigned char)(acc[i] + (((NSVG__FIX - (a & NSVG__FIXMASK)) * weight) >> NSVG__FIXSHIFT));
+			for (++i; i < j; ++i)
+				if (i >= 0 && i < len)
+					acc[i] = (unsigned char)(acc[i] + weight);
+			if (j >= 0 && j < len)
+				acc[j] = (unsigned char)(acc[j] + (((b & NSVG__FIXMASK) * weight) >> NSVG__FIXSHIFT));
+		}
+	}
+}
+
+// Exact coverage for one vertical subsample, in fixed-point spans.
+static int nsvg__clipSpansForSubsample(NSVGrasterizer* r, int scany, int paintStart, int paintCount,
+									   char fillRule, const NSVGclipRun* runs, int runCount,
+									   const NSVGclipLevel* levels, int levelCount,
+									   NSVGspanBuf* out)
+{
+	NSVGspanBuf cur, spare, one, unionBuf, dst;
+	int i, k, ok = 0;
+
+	(void)runCount;
+	out->n = 0;
+	if (paintCount <= 0) return 1;
+	cur.v = NULL; cur.n = cur.cap = 0;
+	spare.v = NULL; spare.n = spare.cap = 0;
+	one.v = NULL; one.n = one.cap = 0;
+	unionBuf.v = NULL; unionBuf.n = unionBuf.cap = 0;
+
+	{
+		int n = nsvg__collectCrossings(r, paintStart, paintCount, scany);
+		if (n < 0) goto done;
+		if (!nsvg__crossingsToSpans(r, n, fillRule, &cur)) goto done;
+	}
+
+	for (i = 0; i < levelCount && cur.n > 0; i++) {
+		const NSVGclipLevel* lv = &levels[i];
+		unionBuf.n = 0;
+		for (k = 0; k < lv->runCount; k++) {
+			const NSVGclipRun* run = &runs[lv->firstRun + k];
+			int n = nsvg__collectCrossings(r, run->start, run->count, scany);
+			if (n < 0) goto done;
+			if (!nsvg__crossingsToSpans(r, n, run->fillRule, &one)) goto done;
+			if (unionBuf.n == 0) {
+				NSVGspanBuf t = unionBuf; unionBuf = one; one = t;
+			} else {
+				if (!nsvg__spanUnion(&unionBuf, &one, &spare)) goto done;
+				{
+					NSVGspanBuf t = unionBuf; unionBuf = spare; spare = t;
+				}
+			}
+		}
+		dst.v = NULL; dst.n = dst.cap = 0;
+		if (!nsvg__spanIntersect(&cur, &unionBuf, &dst)) goto done;
+		free(unionBuf.v);
+		unionBuf.v = NULL; unionBuf.n = unionBuf.cap = 0;
+		free(spare.v);
+		spare = cur;
+		cur = dst;
+	}
+
+	out->v = cur.v; out->n = cur.n; out->cap = cur.cap;
+	cur.v = NULL;
+	ok = 1;
+
+done:
+	free(cur.v);
+	free(spare.v);
+	free(one.v);
+	free(unionBuf.v);
+	if (!ok) out->n = 0;
+	return ok;
+}
+
 static float nsvg__clampf(float a, float mn, float mx) {
 	if (isnan(a))
 		return mn;
@@ -1209,6 +1497,59 @@ static void nsvg__rasterizeSortedEdges(NSVGrasterizer *r, float tx, float ty, fl
 
 }
 
+// Exact clip-path rasterization for one fill/stroke paint operation.
+static int nsvg__rasterizeClipped(NSVGrasterizer* r, float tx, float ty, float scale,
+								  NSVGcachedPaint* cache, char fillRule, int paintEdgeCount,
+								  const NSVGclipRun* runs, int runCount,
+								  const NSVGclipLevel* levels, int levelCount)
+{
+	unsigned char* cover;
+	NSVGspanBuf spans;
+	int y, i;
+	int maxWeight = 255 / NSVG__SUBSAMPLES;
+	int width = r->width;
+
+	(void)runCount;
+	if (r->cclip < width) {
+		int cap = r->cclip ? r->cclip : 64;
+		unsigned char* c;
+		while (cap < width) cap *= 2;
+		c = (unsigned char*)realloc(r->clipCover, (size_t)cap);
+		if (c == NULL) return 0;
+		r->clipCover = c;
+		r->cclip = cap;
+	}
+	cover = r->clipCover;
+	spans.v = NULL; spans.n = spans.cap = 0;
+
+	for (y = 0; y < r->height; y++) {
+		int xmin = width, xmax = -1;
+		memset(cover, 0, width);
+		for (i = 0; i < NSVG__SUBSAMPLES; ++i) {
+			int scany = (int)(((float)(y*NSVG__SUBSAMPLES + i) + 0.5f) * NSVG__FIX);
+			int x0, x1;
+			if (!nsvg__clipSpansForSubsample(r, scany, 0, paintEdgeCount, fillRule,
+											 runs, runCount, levels, levelCount, &spans)) {
+				free(spans.v);
+				return 0;
+			}
+			if (!spans.n) continue;
+			nsvg__accumulateSpans(cover, width, &spans, maxWeight);
+			x0 = spans.v[0].x0 >> NSVG__FIXSHIFT;
+			x1 = (spans.v[spans.n-1].x1 + NSVG__FIX - 1) >> NSVG__FIXSHIFT;
+			if (x0 < 0) x0 = 0;
+			if (x1 > width) x1 = width;
+			if (x0 < xmin) xmin = x0;
+			if (x1 > xmax) xmax = x1;
+			spans.n = 0;
+		}
+		if (xmax > xmin)
+			nsvg__scanlineSolid(&r->bitmap[y * r->stride] + xmin*4, xmax-xmin, &cover[xmin], xmin, y, tx, ty, scale, cache);
+	}
+	free(spans.v);
+	return 1;
+}
+
 static void nsvg__unpremultiplyAlpha(unsigned char* image, int w, int h, int stride)
 {
 	int x,y;
@@ -1372,6 +1713,96 @@ static void dumpEdges(NSVGrasterizer* r, const char* name)
 }
 */
 
+// Append clip child geometry to r->edges (after paint edges) and record the
+// per-child edge ranges and per-level unions.
+static int nsvg__clipRunsReserve(NSVGclipRuns* cl, int runs, int levels)
+{
+	if (runs > cl->cruns) {
+		int cap = cl->cruns ? cl->cruns : 8;
+		NSVGclipRun* v;
+		while (cap < runs) cap *= 2;
+		v = (NSVGclipRun*)realloc(cl->runs, sizeof(NSVGclipRun) * cap);
+		if (v == NULL) return 0;
+		cl->runs = v;
+		cl->cruns = cap;
+	}
+	if (levels > cl->clevels) {
+		int cap = cl->clevels ? cl->clevels : 8;
+		NSVGclipLevel* v;
+		while (cap < levels) cap *= 2;
+		v = (NSVGclipLevel*)realloc(cl->levels, sizeof(NSVGclipLevel) * cap);
+		if (v == NULL) return 0;
+		cl->levels = v;
+		cl->clevels = cap;
+	}
+	return 1;
+}
+
+static void nsvg__clipRunsFree(NSVGclipRuns* cl)
+{
+	free(cl->runs);
+	free(cl->levels);
+	cl->runs = NULL;
+	cl->levels = NULL;
+	cl->nruns = cl->cruns = 0;
+	cl->nlevels = cl->clevels = 0;
+}
+
+// Append clip child geometry to r->edges (after paint edges) and record the
+// per-child edge ranges and per-level unions.
+static int nsvg__appendClipEdges(NSVGrasterizer* r, NSVGclip* clip, float scale,
+								 NSVGclipRuns* cl)
+{
+	cl->nruns = 0;
+	cl->nlevels = 0;
+	for (; clip != NULL; clip = clip->next) {
+		NSVGclipChild* child;
+		int firstRun = cl->nruns;
+		for (child = clip->children; child != NULL; child = child->next) {
+			NSVGpath* path;
+			int start;
+			if (!nsvg__clipRunsReserve(cl, cl->nruns + 1, cl->nlevels + 1))
+				return 0;
+			start = r->nedges;
+			for (path = child->paths; path != NULL; path = path->next) {
+				int i, j;
+				r->npoints = 0;
+				nsvg__addPathPoint(r, path->pts[0]*scale, path->pts[1]*scale, 0);
+				for (i = 0; i < path->npts-1; i += 3) {
+					float* p = &path->pts[i*2];
+					nsvg__flattenCubicBez(r, p[0]*scale,p[1]*scale, p[2]*scale,p[3]*scale,
+										  p[4]*scale,p[5]*scale, p[6]*scale,p[7]*scale, 0, 0);
+				}
+				nsvg__addPathPoint(r, path->pts[0]*scale, path->pts[1]*scale, 0);
+				for (i = 0, j = r->npoints-1; i < r->npoints; j = i++)
+					nsvg__addEdge(r, r->points[j].x, r->points[j].y, r->points[i].x, r->points[i].y);
+			}
+			cl->runs[cl->nruns].start = start;
+			cl->runs[cl->nruns].count = r->nedges - start;
+			cl->runs[cl->nruns].fillRule = child->fillRule;
+			cl->nruns++;
+		}
+		cl->levels[cl->nlevels].firstRun = firstRun;
+		cl->levels[cl->nlevels].runCount = cl->nruns - firstRun;
+		if (cl->levels[cl->nlevels].runCount == 0)
+			return 0;	/* empty definition: draw nothing */
+		cl->nlevels++;
+	}
+	return 1;
+}
+
+static void nsvg__translateEdgeRange(NSVGrasterizer* r, int start, float tx, float ty)
+{
+	int i;
+	for (i = start; i < r->nedges; i++) {
+		NSVGedge* e = &r->edges[i];
+		e->x0 = tx + e->x0;
+		e->y0 = (ty + e->y0) * NSVG__SUBSAMPLES;
+		e->x1 = tx + e->x1;
+		e->y1 = (ty + e->y1) * NSVG__SUBSAMPLES;
+	}
+}
+
 void nsvgRasterize(NSVGrasterizer* r,
 				   NSVGimage* image, float tx, float ty, float scale,
 				   unsigned char* dst, int w, int h, int stride)
@@ -1379,6 +1810,7 @@ void nsvgRasterize(NSVGrasterizer* r,
 	NSVGshape *shape = NULL;
 	NSVGedge *e = NULL;
 	NSVGcachedPaint cache;
+	NSVGclipRuns clipRuns;
 	int i;
     int j;
     unsigned char paintOrder;
@@ -1387,24 +1819,35 @@ void nsvgRasterize(NSVGrasterizer* r,
 	r->width = w;
 	r->height = h;
 	r->stride = stride;
+	memset(&clipRuns, 0, sizeof(clipRuns));
 
 	if (w > r->cscanline) {
 		r->cscanline = w;
 		r->scanline = (unsigned char*)realloc(r->scanline, w);
-		if (r->scanline == NULL) return;
+		if (r->scanline == NULL) {
+			r->bitmap = NULL; r->width = 0; r->height = 0; r->stride = 0;
+			return;
+		}
 	}
 
 	for (i = 0; i < h; i++)
 		memset(&dst[i*stride], 0, w*4);
 
 	for (shape = image->shapes; shape != NULL; shape = shape->next) {
+		int hasClip;
+
 		if (!(shape->flags & NSVG_FLAGS_VISIBLE))
 			continue;
+		if (shape->clipInvalid)
+			continue;
+		hasClip = shape->clip != NULL;
 
         for (j = 0; j < 3; j++) {
             paintOrder = (shape->paintOrder >> (2 * j)) & 0x03;
 
             if (paintOrder == NSVG_PAINT_FILL && shape->fill.type != NSVG_PAINT_NONE) {
+                int paintEdges;
+
                 nsvg__resetPool(r);
                 r->freelist = NULL;
                 r->nedges = 0;
@@ -1419,24 +1862,33 @@ void nsvgRasterize(NSVGrasterizer* r,
                     e->x1 = tx + e->x1;
                     e->y1 = (ty + e->y1) * NSVG__SUBSAMPLES;
                 }
+                paintEdges = r->nedges;
 
                 // Rasterize edges
                 if (r->nedges != 0)
                     qsort(r->edges, r->nedges, sizeof(NSVGedge), nsvg__cmpEdge);
 
-                // now, traverse the scanlines and find the intersections on each scanline, use non-zero rule
                 nsvg__initPaint(&cache, &shape->fill, shape->opacity);
 
-                nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, shape->fillRule);
+                if (hasClip) {
+                    if (nsvg__appendClipEdges(r, shape->clip, scale, &clipRuns)) {
+                        nsvg__translateEdgeRange(r, paintEdges, tx, ty);
+                        nsvg__rasterizeClipped(r, tx, ty, scale, &cache, shape->fillRule, paintEdges,
+                                               clipRuns.runs, clipRuns.nruns,
+                                               clipRuns.levels, clipRuns.nlevels);
+                    }
+                } else {
+                    nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, shape->fillRule);
+                }
             }
             if (paintOrder == NSVG_PAINT_STROKE && shape->stroke.type != NSVG_PAINT_NONE && (shape->strokeWidth * scale) > 0.01f) {
+                int paintEdges;
+
                 nsvg__resetPool(r);
                 r->freelist = NULL;
                 r->nedges = 0;
 
                 nsvg__flattenShapeStroke(r, shape, scale);
-
-    //			dumpEdges(r, "edge.svg");
 
                 // Scale and translate edges
                 for (i = 0; i < r->nedges; i++) {
@@ -1446,18 +1898,29 @@ void nsvgRasterize(NSVGrasterizer* r,
                     e->x1 = tx + e->x1;
                     e->y1 = (ty + e->y1) * NSVG__SUBSAMPLES;
                 }
+                paintEdges = r->nedges;
 
                 // Rasterize edges
                 if (r->nedges != 0)
                     qsort(r->edges, r->nedges, sizeof(NSVGedge), nsvg__cmpEdge);
 
-                // now, traverse the scanlines and find the intersections on each scanline, use non-zero rule
                 nsvg__initPaint(&cache, &shape->stroke, shape->opacity);
 
-                nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, NSVG_FILLRULE_NONZERO);
+                if (hasClip) {
+                    if (nsvg__appendClipEdges(r, shape->clip, scale, &clipRuns)) {
+                        nsvg__translateEdgeRange(r, paintEdges, tx, ty);
+                        nsvg__rasterizeClipped(r, tx, ty, scale, &cache, NSVG_FILLRULE_NONZERO, paintEdges,
+                                               clipRuns.runs, clipRuns.nruns,
+                                               clipRuns.levels, clipRuns.nlevels);
+                    }
+                } else {
+                    nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, NSVG_FILLRULE_NONZERO);
+                }
             }
         }
 	}
+
+	nsvg__clipRunsFree(&clipRuns);
 
 	nsvg__unpremultiplyAlpha(dst, w, h, stride);
 

@@ -29,3 +29,5 @@ example/_*
 
 ## xcode specific
 *xcuserdata*
+.output/
+.build/

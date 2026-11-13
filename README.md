@@ -110,3 +110,32 @@ $ ./example
 # License
 
 The library is licensed under [zlib license](LICENSE.txt)
+
+## Clip paths
+
+The parser and rasterizer support geometric SVG clip paths on the
+`nsvgParse`/`nsvgParseFromFile` -> `nsvgRasterize` path:
+
+- `clipPath` definitions with a unique `id` under `<defs>`, referenced from
+  shapes or groups with `clip-path="url(#id)"` (attribute or inline `style`).
+  Definitions may appear after their references.
+- Direct clipPath children: `path`, `rect`, `circle`, `ellipse` and `polygon`,
+  each with an optional `transform`.  `clipPathUnits` defaults to
+  `userSpaceOnUse` and also accepts `objectBoundingBox`; the clipPath element
+  itself may carry a `transform`.
+- `clip-rule` (`nonzero`, the default, or `evenodd`) is inherited like the
+  usual presentation attribute and applies per child.  Each child's region is
+  the union of its own subpaths; all children are unioned together, so
+  oppositely wound children never punch holes in each other.
+- Clip regions intersect with both fill and stroke geometry, and nest across
+  groups; `clip-path` is not inherited, and `clip-path="none"` on a child does
+  not remove an ancestor's clip.
+- Coverage is geometric and sub-pixel exact: a boundary shared between fill
+  and clip keeps its original antialiasing, and shape/clip intersections at
+  fractional coordinates produce true intersections rather than whole-pixel
+  tests.
+
+Not supported: `use`, `text`, references to other clip paths, external
+resources, CSS selectors, masks and filters.  Empty definitions, missing
+references, zero-size objectBoundingBoxes and non-invertible clipPath
+transforms make only the referencing element invisible.
