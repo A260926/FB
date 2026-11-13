@@ -28,9 +28,9 @@ import (
 )
 
 // PublicSuffixList provides the public suffix of a domain. For example:
-//      - the public suffix of "example.com" is "com",
-//      - the public suffix of "foo1.foo2.foo3.co.uk" is "co.uk", and
-//      - the public suffix of "bar.pvt.k12.ma.us" is "pvt.k12.ma.us".
+//   - the public suffix of "example.com" is "com",
+//   - the public suffix of "foo1.foo2.foo3.co.uk" is "co.uk", and
+//   - the public suffix of "bar.pvt.k12.ma.us" is "pvt.k12.ma.us".
 //
 // Implementations of PublicSuffixList must be safe for concurrent use by
 // multiple goroutines.
@@ -84,9 +84,16 @@ type Jar struct {
 	// mu locks the remaining fields.
 	mu sync.Mutex
 
-	// entries is a set of entries, keyed by their eTLD+1 and subkeyed by
-	// their name/domain/path.
+	// entries is a set of unpartitioned entries, keyed by their eTLD+1
+	// and subkeyed by their name/domain/path.
 	entries map[string]map[string]entry
+
+	// partitioned is a set of partitioned entries, keyed by partition
+	// identity (see partitionKeyFor) and subkeyed by name/domain/path.
+	// Keeping this separate from entries is what allows an unpartitioned
+	// cookie and a partitioned cookie with the same domain/path/name to
+	// coexist.
+	partitioned map[string]map[string]entry
 }
 
 var noOptions Options
@@ -103,7 +110,8 @@ func New(o *Options) (*Jar, error) {
 // newAtTime is like New but takes the current time as a parameter.
 func newAtTime(o *Options, now time.Time) (*Jar, error) {
 	jar := &Jar{
-		entries: make(map[string]map[string]entry),
+		entries:     make(map[string]map[string]entry),
+		partitioned: make(map[string]map[string]entry),
 	}
 	if o == nil {
 		o = &noOptions
@@ -161,6 +169,19 @@ type entry struct {
 	// when storing/loading cookies) we can still get the correct
 	// jar keys.
 	CanonicalHost string
+
+	// Partitioned reports whether the cookie lives in a partitioned
+	// (top-level-site isolated) cookie space. It is omitted from JSON
+	// when false so that files written by older versions are unchanged
+	// in shape and still compatible.
+	Partitioned bool `json:",omitempty"`
+
+	// PartitionKey holds the canonical identity of the top-level site
+	// that this cookie is partitioned under, for example
+	// "https://example.com". It is empty for ordinary, unpartitioned
+	// cookies. It is only meaningful when Partitioned is true; the two
+	// fields must always agree.
+	PartitionKey string `json:",omitempty"`
 }
 
 // id returns the domain;path;name triple of e as an id.
@@ -217,8 +238,45 @@ func (s byCanonicalHost) Less(i, j int) bool {
 	if e0.CanonicalHost != e1.CanonicalHost {
 		return e0.CanonicalHost < e1.CanonicalHost
 	}
+	if e0.PartitionKey != e1.PartitionKey {
+		return e0.PartitionKey < e1.PartitionKey
+	}
 	return s.byPathLength.Less(i, j)
 }
+
+// byRequestOrder sorts cookies that are about to be sent to a request.
+// It follows byPathLength, but when two entries are completely tied
+// (same path length, creation time, name and value), an unpartitioned
+// entry comes before a partitioned one. The remaining fields make the
+// order fully deterministic.
+type byRequestOrder []entry
+
+func (s byRequestOrder) Len() int { return len(s) }
+
+func (s byRequestOrder) Less(i, j int) bool {
+	e0, e1 := &s[i], &s[j]
+	if len(e0.Path) != len(e1.Path) {
+		return len(e0.Path) > len(e1.Path)
+	}
+	if !e0.Creation.Equal(e1.Creation) {
+		return e0.Creation.Before(e1.Creation)
+	}
+	if e0.Partitioned != e1.Partitioned {
+		return !e0.Partitioned
+	}
+	if e0.Name != e1.Name {
+		return e0.Name < e1.Name
+	}
+	if e0.Domain != e1.Domain {
+		return e0.Domain < e1.Domain
+	}
+	if e0.Value != e1.Value {
+		return e0.Value < e1.Value
+	}
+	return e0.PartitionKey < e1.PartitionKey
+}
+
+func (s byRequestOrder) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 // byPathLength is a []entry sort.Interface that sorts according to RFC 6265
 // section 5.4 point 2: by longest path and then by earliest creation time.
@@ -258,7 +316,7 @@ func (j *Jar) cookies(u *url.URL, now time.Time) (cookies []*http.Cookie) {
 		return cookies
 	}
 	host, err := canonicalHost(u.Host)
-	if err != nil {
+	if err != nil || host == "" {
 		return cookies
 	}
 	key := jarKey(host, j.psList)
@@ -306,10 +364,94 @@ func (j *Jar) cookies(u *url.URL, now time.Time) (cookies []*http.Cookie) {
 	return cookies
 }
 
+// CookiesWithPartition returns the cookies that should be sent in a request
+// to u when the request is embedded in a page whose top-level site is
+// topLevel. It combines the ordinary (unpartitioned) cookie space with the
+// cookie space partitioned under topLevel; cookies stored under any other
+// top-level site are not visible.
+//
+// The partition identity of topLevel is its lower-case http/https scheme and
+// the registrable domain of its canonical host (IP addresses and hosts with
+// no registrable parent use the full host name). Ports, paths, queries and
+// fragments are ignored. Different schemes are different partitions.
+//
+// It returns an error if topLevel is nil, has no host, or does not use the
+// http or https scheme. Those checks happen before any access time is
+// recorded or cookie is written. If u itself is not an http/https URL with
+// a valid host, an empty result is returned, matching Cookies.
+func (j *Jar) CookiesWithPartition(u, topLevel *url.URL) ([]*http.Cookie, error) {
+	return j.cookiesWithPartition(u, topLevel, time.Now())
+}
+
+// cookiesWithPartition is like CookiesWithPartition but takes the current
+// time as a parameter.
+func (j *Jar) cookiesWithPartition(u, topLevel *url.URL, now time.Time) ([]*http.Cookie, error) {
+	pk, err := j.partitionKeyFor(topLevel)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, nil
+	}
+	host, err := canonicalHost(u.Host)
+	if err != nil {
+		return nil, nil
+	}
+	if host == "" {
+		return nil, nil
+	}
+	key := jarKey(host, j.psList)
+	https := u.Scheme == "https"
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	var selected []entry
+	collect := func(submap map[string]entry) {
+		for id, e := range submap {
+			if !e.Expires.After(now) {
+				// Save some space by deleting the value when the cookie
+				// expires. We can't delete the cookie itself because then
+				// we wouldn't know that the cookie had expired when
+				// we merge with another cookie jar.
+				if e.Value != "" {
+					e.Value = ""
+					submap[id] = e
+				}
+				continue
+			}
+			if !e.shouldSend(https, host, path) {
+				continue
+			}
+			e.LastAccess = now
+			submap[id] = e
+			selected = append(selected, e)
+		}
+	}
+	collect(j.entries[key])
+	collect(j.partitioned[pk])
+
+	sort.Sort(byRequestOrder(selected))
+	cookies := make([]*http.Cookie, len(selected))
+	for i, e := range selected {
+		// Return fresh values so that callers cannot mutate the jar
+		// through the returned cookies.
+		cookies[i] = &http.Cookie{Name: e.Name, Value: e.Value}
+	}
+	return cookies, nil
+}
+
 // AllCookies returns all cookies in the jar. The returned cookies will
 // have Domain, Expires, HttpOnly, Name, Secure, Path, and Value filled
 // out. Expired cookies will not be returned. This function does not
 // modify the cookie jar.
+//
+// AllCookies only reports the unpartitioned cookie space; partitioned
+// cookies are intentionally omitted.
 func (j *Jar) AllCookies() (cookies []*http.Cookie) {
 	return j.allCookies(time.Now())
 }
@@ -364,13 +506,35 @@ func (j *Jar) RemoveCookie(c *http.Cookie) {
 
 // merge merges all the given entries into j. More recently changed
 // cookies take precedence over older ones.
+//
+// A partitioned entry belongs to the partition recorded in its
+// PartitionKey; an entry without a partition key stays ordinary. The
+// two spaces never share an identity, so an unpartitioned cookie cannot
+// overwrite or resurrect a partitioned one (or vice versa).
 func (j *Jar) merge(entries []entry) {
 	for _, e := range entries {
 		if e.CanonicalHost == "" {
 			continue
 		}
-		key := jarKey(e.CanonicalHost, j.psList)
 		id := e.id()
+		if e.Partitioned {
+			// A partitioned entry must carry a well-formed key.
+			// load rejects malformed ones, so this is a defensive
+			// check for entries merged by other code.
+			if e.PartitionKey == "" {
+				continue
+			}
+			submap := j.partitioned[e.PartitionKey]
+			if submap == nil {
+				j.partitioned[e.PartitionKey] = map[string]entry{id: e}
+				continue
+			}
+			if oldEntry, ok := submap[id]; !ok || e.Updated.After(oldEntry.Updated) {
+				submap[id] = e
+			}
+			continue
+		}
+		key := jarKey(e.CanonicalHost, j.psList)
 		submap := j.entries[key]
 		if submap == nil {
 			j.entries[key] = map[string]entry{
@@ -391,19 +555,24 @@ var expiryRemovalDuration = 24 * time.Hour
 // that we can actually expect there to be no external copies of it that
 // might resurrect the dead cookie.
 func (j *Jar) deleteExpired(now time.Time) {
-	for tld, submap := range j.entries {
-		for id, e := range submap {
-			if !e.Expires.After(now) && !e.Updated.Add(expiryRemovalDuration).After(now) {
-				delete(submap, id)
+	prune := func(space map[string]map[string]entry) {
+		for key, submap := range space {
+			for id, e := range submap {
+				if !e.Expires.After(now) && !e.Updated.Add(expiryRemovalDuration).After(now) {
+					delete(submap, id)
+				}
+			}
+			if len(submap) == 0 {
+				delete(space, key)
 			}
 		}
-		if len(submap) == 0 {
-			delete(j.entries, tld)
-		}
 	}
+	prune(j.entries)
+	prune(j.partitioned)
 }
 
 // RemoveAllHost removes any cookies from the jar that were set for the given host.
+// It covers both the unpartitioned and every partitioned cookie space.
 func (j *Jar) RemoveAllHost(host string) {
 	host, err := canonicalHost(host)
 	if err != nil {
@@ -415,26 +584,32 @@ func (j *Jar) RemoveAllHost(host string) {
 	defer j.mu.Unlock()
 
 	expired := time.Now().Add(-1 * time.Second)
-	submap := j.entries[key]
-	for id, e := range submap {
-		if e.CanonicalHost == host {
-			// Save some space by deleting the value when the cookie
-			// expires. We can't delete the cookie itself because then
-			// we wouldn't know that the cookie had expired when
-			// we merge with another cookie jar.
-			e.Value = ""
-			e.Expires = expired
-			submap[id] = e
+	remove := func(submap map[string]entry) {
+		for id, e := range submap {
+			if e.CanonicalHost == host {
+				// Save some space by deleting the value when the cookie
+				// expires. We can't delete the cookie itself because then
+				// we wouldn't know that the cookie had expired when
+				// we merge with another cookie jar.
+				e.Value = ""
+				e.Expires = expired
+				submap[id] = e
+			}
 		}
+	}
+	remove(j.entries[key])
+	for _, submap := range j.partitioned {
+		remove(submap)
 	}
 }
 
-// RemoveAll removes all the cookies from the jar.
+// RemoveAll removes all the cookies from the jar, both unpartitioned and
+// partitioned.
 func (j *Jar) RemoveAll() {
 	expired := time.Now().Add(-1 * time.Second)
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	for _, submap := range j.entries {
+	remove := func(submap map[string]entry) {
 		for id, e := range submap {
 			// Save some space by deleting the value when the cookie
 			// expires. We can't delete the cookie itself because then
@@ -444,6 +619,12 @@ func (j *Jar) RemoveAll() {
 			e.Expires = expired
 			submap[id] = e
 		}
+	}
+	for _, submap := range j.entries {
+		remove(submap)
+	}
+	for _, submap := range j.partitioned {
+		remove(submap)
 	}
 }
 
@@ -455,17 +636,58 @@ func (j *Jar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 }
 
 // setCookies is like SetCookies but takes the current time as parameter.
+//
+// Cookies carrying the Partitioned attribute are ignored here: there is no
+// top-level site context, so they cannot be accepted, and they must not be
+// silently downgraded to ordinary cookies.
 func (j *Jar) setCookies(u *url.URL, cookies []*http.Cookie, now time.Time) {
+	j.setCookiesInSpace(u, cookies, now, "", false)
+}
+
+// SetCookiesWithPartition sets cookies on behalf of u, treating topLevel as
+// the top-level site that the request belongs to.
+//
+// Cookies with Partitioned set are stored in the cookie space identified by
+// topLevel. A partitioned cookie is ignored unless it is Secure and u uses
+// HTTPS; it is never downgraded to an ordinary cookie. Ordinary cookies are
+// stored, as before, in the unpartitioned space.
+//
+// The topLevel partition key is the lower-case http/https scheme plus the
+// registrable domain of the canonical host (IP addresses and hosts with no
+// registrable parent use the full host name); the port, path, query and
+// fragment are ignored. An error is returned if topLevel is nil, has no
+// host, or is not http/https. That validation happens before any cookie is
+// written and before any access time is updated.
+func (j *Jar) SetCookiesWithPartition(u, topLevel *url.URL, cookies []*http.Cookie) error {
+	return j.setCookiesWithPartition(u, topLevel, cookies, time.Now())
+}
+
+// setCookiesWithPartition is like SetCookiesWithPartition but takes the
+// current time as a parameter.
+func (j *Jar) setCookiesWithPartition(u, topLevel *url.URL, cookies []*http.Cookie, now time.Time) error {
+	pk, err := j.partitionKeyFor(topLevel)
+	if err != nil {
+		return err
+	}
+	j.setCookiesInSpace(u, cookies, now, pk, true)
+	return nil
+}
+
+// setCookiesInSpace stores cookies in either the unpartitioned space
+// (partitionKey == "") or the given partition. If partitioned is false,
+// cookies carrying Partitioned are ignored.
+func (j *Jar) setCookiesInSpace(u *url.URL, cookies []*http.Cookie, now time.Time, partitionKey string, partitioned bool) {
 	if len(cookies) == 0 {
 		return
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if u == nil || (u.Scheme != "http" && u.Scheme != "https") {
 		// TODO is this really correct? It might be nice to send
 		// cookies to websocket connections, for example.
 		return
 	}
+	https := u.Scheme == "https"
 	host, err := canonicalHost(u.Host)
-	if err != nil {
+	if err != nil || host == "" {
 		return
 	}
 	key := jarKey(host, j.psList)
@@ -474,17 +696,53 @@ func (j *Jar) setCookies(u *url.URL, cookies []*http.Cookie, now time.Time) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	submap := j.entries[key]
+	// Ordinary cookies always go to the unpartitioned space; partitioned
+	// ones (only when a top-level context was supplied) go to their own
+	// space keyed by the partition identity.
 	for _, cookie := range cookies {
+		isPartitioned := false
+		if cookie.Partitioned {
+			if !partitioned {
+				// No top-level context: never treat a partitioned
+				// cookie as an ordinary one.
+				continue
+			}
+			if !cookie.Secure || !https {
+				// Partitioned cookies must be Secure and received
+				// over HTTPS; ignore them rather than downgrade.
+				continue
+			}
+			isPartitioned = true
+		}
 		e, err := j.newEntry(cookie, now, defPath, host)
 		if err != nil {
 			continue
 		}
+		// newEntry returns early for tombstone (MaxAge < 0) and
+		// already-expired cookies, leaving Secure unset. Copy it again
+		// for partitioned items so that a persisted partitioned
+		// tombstone still carries the Secure flag its partition
+		// identity requires.
+		if isPartitioned {
+			e.Secure = cookie.Secure
+		}
 		e.CanonicalHost = host
+		var space map[string]map[string]entry
+		var spaceKey string
+		if isPartitioned {
+			space = j.partitioned
+			spaceKey = partitionKey
+			e.Partitioned = true
+			e.PartitionKey = partitionKey
+		} else {
+			space = j.entries
+			spaceKey = key
+		}
+		submap := space[spaceKey]
 		id := e.id()
 		if submap == nil {
 			submap = make(map[string]entry)
-			j.entries[key] = submap
+			space[spaceKey] = submap
 		}
 		if old, ok := submap[id]; ok {
 			e.Creation = old.Creation
@@ -495,6 +753,104 @@ func (j *Jar) setCookies(u *url.URL, cookies []*http.Cookie, now time.Time) {
 		e.LastAccess = now
 		submap[id] = e
 	}
+}
+
+// partitionKeyFor returns the partition identity for the given top-level
+// site URL. It errors if topLevel is nil, lacks a host or is not HTTP(S).
+func (j *Jar) partitionKeyFor(topLevel *url.URL) (string, error) {
+	if topLevel == nil {
+		return "", errNoTopLevel
+	}
+	return j.partitionKey(topLevel.Scheme, topLevel.Host)
+}
+
+// canonicalPartitionHost canonicalizes a host for partition identity
+// purposes. It accepts a bare host, a host with a port, or a bracketed
+// IPv6 literal with or without a port, and always returns a bare
+// canonical host with no port. Ports are ignored so that the same
+// top-level host on different ports shares one partition. It reports
+// false for hosts that canonicalize to nothing.
+func canonicalPartitionHost(host string) (string, bool) {
+	canonical, err := canonicalHost(host)
+	if err != nil || canonical == "" {
+		return "", false
+	}
+	// url.Host keeps the brackets around IPv6 literals that carry no
+	// port, whereas canonicalHost strips them together with a port.
+	// Normalize both forms to the bare address.
+	if strings.HasPrefix(canonical, "[") && strings.HasSuffix(canonical, "]") {
+		canonical = canonical[1 : len(canonical)-1]
+	}
+	if canonical == "" || strings.ContainsAny(canonical, "/?#@[]") {
+		return "", false
+	}
+	return canonical, true
+}
+
+// partitionKey computes the partition identity from a scheme and host.
+// The scheme must be http or https (case-insensitively). The registrable
+// domain is derived from the canonical host with the jar's public suffix
+// list; IP addresses and hosts without a registrable parent use the full
+// host name. The result is the lower-case scheme plus that domain,
+// e.g. "https://example.com".
+func (j *Jar) partitionKey(scheme, host string) (string, error) {
+	scheme = strings.ToLower(scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", errBadTopLevelScheme
+	}
+	canonical, ok := canonicalPartitionHost(host)
+	if !ok {
+		return "", errNoTopLevelHost
+	}
+	return scheme + "://" + jarKey(canonical, j.psList), nil
+}
+
+// validatePartitionKey reports whether key has the canonical form
+// produced by partitionKey: a lower-case http/https scheme, "://", and
+// the canonical registrable domain (or full host name when there is no
+// registrable domain) with no port, path, query or fragment.
+func (j *Jar) validatePartitionKey(key string) error {
+	sep := strings.Index(key, "://")
+	if sep < 0 {
+		return errors.New("cookiejar: malformed cookie partition key")
+	}
+	scheme, host := key[:sep], key[sep+3:]
+	if scheme != "http" && scheme != "https" {
+		return errors.New("cookiejar: malformed cookie partition key scheme")
+	}
+	canonical, ok := canonicalPartitionHost(host)
+	if !ok {
+		return errors.New("cookiejar: malformed cookie partition host")
+	}
+	if canonical != host {
+		return errors.New("cookiejar: non-canonical cookie partition host")
+	}
+	if jarKey(canonical, j.psList) != canonical {
+		return errors.New("cookiejar: cookie partition key is not a registrable domain")
+	}
+	return nil
+}
+
+// validateStoredEntry checks the partition identity of an entry loaded
+// from persistent storage. Entries from older files have no partition
+// fields at all and are treated as ordinary cookies. A partitioned entry
+// must be secure and carry a well-formed partition key; a key without
+// the partition flag is contradictory. Any violation invalidates the
+// whole load rather than allowing a partial merge.
+func (j *Jar) validateStoredEntry(e *entry) error {
+	if e.Partitioned {
+		if !e.Secure {
+			return errors.New("cookiejar: partitioned cookie is not secure")
+		}
+		if e.PartitionKey == "" {
+			return errors.New("cookiejar: partitioned cookie has no partition key")
+		}
+		return j.validatePartitionKey(e.PartitionKey)
+	}
+	if e.PartitionKey != "" {
+		return errors.New("cookiejar: partition key without partitioned flag")
+	}
+	return nil
 }
 
 // canonicalHost strips port from host if present and returns the canonicalized
@@ -625,6 +981,10 @@ var (
 	errIllegalDomain   = errors.New("cookiejar: illegal cookie domain attribute")
 	errMalformedDomain = errors.New("cookiejar: malformed cookie domain attribute")
 	errNoHostname      = errors.New("cookiejar: no host name available (IP only)")
+
+	errNoTopLevel        = errors.New("cookiejar: nil top-level site URL")
+	errNoTopLevelHost    = errors.New("cookiejar: top-level site URL has no host")
+	errBadTopLevelScheme = errors.New("cookiejar: top-level site URL is not http or https")
 )
 
 // endOfTime is the time when session (non-persistent) cookies expire.
@@ -695,8 +1055,8 @@ func (j *Jar) domainAndType(host, domain string) (string, bool, error) {
 // DefaultCookieFile returns the default cookie file to use
 // for persisting cookie data.
 // The following names will be used in decending order of preference:
-//	- the value of the $GOCOOKIES environment variable.
-//	- $HOME/.go-cookies
+//   - the value of the $GOCOOKIES environment variable.
+//   - $HOME/.go-cookies
 func DefaultCookieFile() string {
 	if f := os.Getenv("GOCOOKIES"); f != "" {
 		return f

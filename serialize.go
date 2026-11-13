@@ -116,6 +116,14 @@ func (j *Jar) mergeFrom(r io.Reader) error {
 		log.Printf("warning: discarding cookies in invalid format (error: %v)", err)
 		return nil
 	}
+	for i := range entries {
+		if err := j.validateStoredEntry(&entries[i]); err != nil {
+			// Do not merge any of the entries: a malformed partition
+			// identity makes the whole load invalid, so that we never
+			// end up with a partially merged jar.
+			return errgo.Notef(err, "invalid entry %d", i)
+		}
+	}
 	j.merge(entries)
 	return nil
 }
@@ -131,17 +139,23 @@ func (j *Jar) writeTo(w io.Writer) error {
 	return nil
 }
 
-// allPersistentEntries returns all the entries in the jar, sorted by primarly by canonical host
-// name and secondarily by path length.
+// allPersistentEntries returns all the persistent entries in the jar,
+// from both the unpartitioned and partitioned spaces, sorted primarily
+// by canonical host name, then by partition key and finally by path
+// length.
 func (j *Jar) allPersistentEntries() []entry {
 	var entries []entry
-	for _, submap := range j.entries {
-		for _, e := range submap {
-			if e.Persistent {
-				entries = append(entries, e)
+	appendFrom := func(space map[string]map[string]entry) {
+		for _, submap := range space {
+			for _, e := range submap {
+				if e.Persistent {
+					entries = append(entries, e)
+				}
 			}
 		}
 	}
+	appendFrom(j.entries)
+	appendFrom(j.partitioned)
 	sort.Sort(byCanonicalHost{entries})
 	return entries
 }
