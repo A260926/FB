@@ -13,9 +13,10 @@
    [OPTIONAL] #define TSF_MALLOC, TSF_REALLOC, and TSF_FREE to avoid stdlib.h
    [OPTIONAL] #define TSF_MEMCPY, TSF_MEMSET to avoid string.h
    [OPTIONAL] #define TSF_POW, TSF_POWF, TSF_EXPF, TSF_LOG, TSF_TAN, TSF_LOG10, TSF_SQRT to avoid math.h
+   [OPTIONAL] #define TSF_SIN, TSF_FLOOR, TSF_CEIL to avoid math.h (used by the chorus effect)
 
    NOT YET IMPLEMENTED
-     - Support for ChorusEffectsSend and ReverbEffectsSend generators
+     - Support for ReverbEffectsSend generators
      - Better low-pass filter without lowering performance too much
      - Support for modulators
 
@@ -157,6 +158,26 @@ TSFDEF void tsf_set_output(tsf* f, enum TSFOutputMode outputmode, int samplerate
 //   global_gain: the desired volume where 1.0 is 100%
 TSFDEF void tsf_set_volume(tsf* f, float global_gain);
 
+// Configure the built-in chorus effect fed by the ChorusEffectsSend generator.
+// The effect is disabled by default; while disabled rendering is identical to
+// a build without chorus support and no heap allocations are made.
+//   center_delay_ms: base delay D in milliseconds (the modulated delays are
+//                    D +/- modulation_depth_ms)
+//   modulation_depth_ms: modulation amplitude A in milliseconds
+//   modulation_rate_hz: LFO frequency in Hertz, starts at phase 0
+//   feedback: cross feedback factor in [-0.9, 0.9]
+//   wet_gain: wet signal gain in [0, 2]; a value of 0 disables the effect and
+//             clears its history
+// Returns 1 on success, 0 if the parameters are invalid (in which case the
+// previous configuration and history are left untouched). Constraints: all
+// parameters must be finite, center_delay_ms - modulation_depth_ms must cover
+// at least one output sample, center_delay_ms + modulation_depth_ms must not
+// exceed 100ms, rate in [0, 10], feedback in [-0.9, 0.9], wet_gain in [0, 2].
+// A successful reconfiguration clears the effect history. The output sample
+// rate cannot be changed while the chorus is enabled; call tsf_set_chorus with
+// wet_gain 0 before calling tsf_set_output with another sample rate.
+TSFDEF int tsf_set_chorus(tsf* f, float center_delay_ms, float modulation_depth_ms, float modulation_rate_hz, float feedback, float wet_gain);
+
 // Set the maximum number of voices to play simultaneously
 // Depending on the soundfond, one note can cause many new voices to be started,
 // so don't keep this number too low or otherwise sounds may not play.
@@ -274,6 +295,12 @@ TSFDEF float tsf_channel_get_tuning(tsf* f, int channel);
 // Grace release time for quick voice off (avoid clicking noise)
 #define TSF_FASTRELEASETIME 0.01f
 
+// Maximum number of chorus send samples accumulated in one render pass; larger
+// render requests are processed in chunks so no allocation is needed while rendering.
+#ifndef TSF_CHORUS_SENDBLOCK
+#define TSF_CHORUS_SENDBLOCK 512
+#endif
+
 #if !defined(TSF_MALLOC) || !defined(TSF_FREE) || !defined(TSF_REALLOC)
 #  include <stdlib.h>
 #  define TSF_MALLOC  malloc
@@ -287,7 +314,7 @@ TSFDEF float tsf_channel_get_tuning(tsf* f, int channel);
 #  define TSF_MEMSET  memset
 #endif
 
-#if !defined(TSF_POW) || !defined(TSF_POWF) || !defined(TSF_EXPF) || !defined(TSF_LOG) || !defined(TSF_TAN) || !defined(TSF_LOG10) || !defined(TSF_SQRT)
+#if !defined(TSF_POW) || !defined(TSF_POWF) || !defined(TSF_EXPF) || !defined(TSF_LOG) || !defined(TSF_TAN) || !defined(TSF_LOG10) || !defined(TSF_SQRT) || !defined(TSF_SIN)
 #  include <math.h>
 #  if !defined(__cplusplus) && !defined(NAN) && !defined(powf) && !defined(expf) && !defined(sqrtf)
 #    define powf (float)pow // deal with old math.h
@@ -301,6 +328,18 @@ TSFDEF float tsf_channel_get_tuning(tsf* f, int channel);
 #  define TSF_TAN     tan
 #  define TSF_LOG10   log10
 #  define TSF_SQRTF   sqrtf
+#endif
+
+#ifndef TSF_SIN
+#  define TSF_SIN     sin
+#endif
+
+#ifndef TSF_FLOOR
+#  define TSF_FLOOR   floor
+#endif
+
+#ifndef TSF_CEIL
+#  define TSF_CEIL    ceil
 #endif
 
 #ifndef TSF_NO_STDIO
@@ -327,6 +366,22 @@ typedef char tsf_char20[20];
 
 #define TSF_FourCCEquals(value1, value2) (value1[0] == value2[0] && value1[1] == value2[1] && value1[2] == value2[2] && value1[3] == value2[3])
 
+struct tsf_chorus
+{
+	// Two independent ring buffers (left and right), always zero-initialized.
+	float* bufferL;
+	float* bufferR;
+	int bufferSize;
+	int writePos;
+	double phase;
+	float delayFrames;   // center delay D in output frames
+	float depthFrames;   // modulation depth A in output frames
+	float rateHz;
+	float feedback;
+	float wetGain;
+	TSF_BOOL enabled;
+};
+
 struct tsf
 {
 	struct tsf_preset* presets;
@@ -343,6 +398,9 @@ struct tsf
 	float outSampleRate;
 	float globalGainDB;
 	int* refCount;
+
+	struct tsf_chorus chorus;
+	float* chorusSendScratch; // per-instance block scratch, allocated in tsf_set_chorus
 };
 
 #ifndef TSF_NO_STDIO
@@ -430,7 +488,7 @@ struct tsf_region
 	unsigned char lokey, hikey, lovel, hivel;
 	unsigned int group, offset, end, loop_start, loop_end;
 	int transpose, tune, pitch_keycenter, pitch_keytrack;
-	float attenuation, pan;
+	float attenuation, pan, chorusSend;
 	struct tsf_envelope ampenv, modenv;
 	int initialFilterQ, initialFilterFc;
 	int modEnvToPitch, modEnvToFilterFc, modLfoToFilterFc, modLfoToVolume;
@@ -455,6 +513,7 @@ struct tsf_voice
 	double pitchInputTimecents, pitchOutputFactor;
 	double sourceSamplePosition;
 	float  noteGainDB, panFactorLeft, panFactorRight;
+	float  chorusSendFactor; // clamped (instrument + preset) ChorusEffectsSend / 1000
 	unsigned int playIndex, loopStart, loopEnd;
 	struct tsf_voice_envelope ampenv, modenv;
 	struct tsf_voice_lowpass lowpass;
@@ -567,7 +626,7 @@ static void tsf_region_operator(struct tsf_region* region, tsf_u16 genOper, unio
 		{ GEN_UINT_ADD15                   , _TSFREGIONOFFSET(unsigned int, end                  ) }, //12 EndAddrsCoarseOffset
 		{ GEN_INT   | GEN_INT_LIMIT960     , _TSFREGIONOFFSET(         int, modLfoToVolume       ) }, //13 ModLfoToVolume
 		{ 0                                , (0                                                  ) }, //   Unused
-		{ 0                                , (0                                                  ) }, //15 ChorusEffectsSend (unsupported)
+		{ GEN_FLOAT | GEN_FLOAT_MAX1000    , _TSFREGIONOFFSET(       float, chorusSend           ) }, //15 ChorusEffectsSend
 		{ 0                                , (0                                                  ) }, //16 ReverbEffectsSend (unsupported)
 		{ GEN_FLOAT | GEN_FLOAT_LIMITPAN   , _TSFREGIONOFFSET(       float, pan                  ) }, //17 Pan
 		{ 0                                , (0                                                  ) }, //   Unused
@@ -1217,12 +1276,13 @@ static void tsf_voice_calcpitchratio(struct tsf_voice* v, float pitchShift, floa
 	v->pitchOutputFactor = v->region->sample_rate / (tsf_timecents2Secsd(v->region->pitch_keycenter * 100.0) * outSampleRate);
 }
 
-static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, int numSamples)
+static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outL, float* outR, float* outSend, int numSamples)
 {
 	struct tsf_region* region = v->region;
 	float* input = f->fontSamples;
-	float* outL = outputBuffer;
-	float* outR = (f->outputmode == TSF_STEREO_UNWEAVED ? outL + numSamples : TSF_NULL);
+	// A null right pointer means "use the interleaved/mono layout of outL"; only
+	// the unweaved layout needs a separate right channel, which then follows left.
+	if (!outR && f->outputmode == TSF_STEREO_UNWEAVED) outR = outL + numSamples;
 
 	// Cache some values, to give them at least some chance of ending up in registers.
 	TSF_BOOL updateModEnv = (region->modEnvToPitch || region->modEnvToFilterFc);
@@ -1297,6 +1357,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
+					// Chorus send taps the mono signal after interpolation/filter/envelope/gain, before panning.
+					if (outSend) *outSend++ += val * gainMono * v->chorusSendFactor;
 					*outL++ += val * gainLeft;
 					*outL++ += val * gainRight;
 
@@ -1318,6 +1380,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
+					// Chorus send taps the mono signal after interpolation/filter/envelope/gain, before panning.
+					if (outSend) *outSend++ += val * gainMono * v->chorusSendFactor;
 					*outL++ += val * gainLeft;
 					*outR++ += val * gainRight;
 
@@ -1338,6 +1402,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
+					// Chorus send taps the mono signal; dry output keeps its full gain and is not attenuated by the send.
+					if (outSend) *outSend++ += val * gainMono * v->chorusSendFactor;
 					*outL++ += val * gainMono;
 
 					// Next sample.
@@ -1356,6 +1422,160 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 
 	v->sourceSamplePosition = tmpSourceSamplePosition;
 	if (tmpLowpass.active || dynamicLowpass) v->lowpass = tmpLowpass;
+}
+
+// Portable finiteness check (works without math.h when all TSF_* math macros are provided).
+static TSF_BOOL tsf_isfinitef(float x) { return (x == x) && (x * 0.0f == 0.0f); }
+
+static void tsf_chorus_clear(tsf* f)
+{
+	struct tsf_chorus* c = &f->chorus;
+	if (c->bufferL) TSF_MEMSET(c->bufferL, 0, c->bufferSize * sizeof(float));
+	if (c->bufferR) TSF_MEMSET(c->bufferR, 0, c->bufferSize * sizeof(float));
+	c->writePos = 0;
+	c->phase = 0.0;
+}
+
+static void tsf_chorus_teardown(tsf* f)
+{
+	struct tsf_chorus* c = &f->chorus;
+	TSF_FREE(c->bufferL); c->bufferL = TSF_NULL;
+	TSF_FREE(c->bufferR); c->bufferR = TSF_NULL;
+	TSF_FREE(f->chorusSendScratch); f->chorusSendScratch = TSF_NULL;
+	c->bufferSize = 0;
+	c->writePos = 0;
+	c->phase = 0.0;
+	c->enabled = TSF_FALSE;
+}
+
+TSFDEF int tsf_set_chorus(tsf* f, float center_delay_ms, float modulation_depth_ms, float modulation_rate_hz, float feedback, float wet_gain)
+{
+	struct tsf_chorus* c;
+	float delayFrames, depthFrames;
+	int bufferSize;
+	float *newBufferL, *newBufferR, *newScratch;
+
+	if (!f) return 0;
+	if (!tsf_isfinitef(center_delay_ms) || !tsf_isfinitef(modulation_depth_ms) ||
+		!tsf_isfinitef(modulation_rate_hz) || !tsf_isfinitef(feedback) || !tsf_isfinitef(wet_gain))
+		return 0;
+	if (modulation_rate_hz < 0.0f || modulation_rate_hz > 10.0f) return 0;
+	if (feedback < -0.9f || feedback > 0.9f) return 0;
+	if (wet_gain < 0.0f || wet_gain > 2.0f) return 0;
+	if (center_delay_ms < 0.0f || modulation_depth_ms < 0.0f) return 0;
+
+	// A wet gain of zero disables the effect and clears its history.
+	if (wet_gain == 0.0f)
+	{
+		tsf_chorus_teardown(f);
+		c = &f->chorus;
+		c->delayFrames = center_delay_ms * 0.001f * f->outSampleRate;
+		c->depthFrames = modulation_depth_ms * 0.001f * f->outSampleRate;
+		c->rateHz = modulation_rate_hz;
+		c->feedback = feedback;
+		c->wetGain = 0.0f;
+		return 1;
+	}
+
+	delayFrames = center_delay_ms * 0.001f * f->outSampleRate;
+	depthFrames = modulation_depth_ms * 0.001f * f->outSampleRate;
+	// D-A must cover at least one frame, D+A must not exceed 100ms at the current sample rate.
+	if (delayFrames - depthFrames < 1.0f) return 0;
+	if (delayFrames + depthFrames > 0.1f * f->outSampleRate) return 0;
+
+	// Allocate first so a failed allocation leaves the previous configuration and history intact.
+	bufferSize = (int)TSF_CEIL(delayFrames + depthFrames) + 1;
+	newBufferL = (float*)TSF_MALLOC(bufferSize * sizeof(float));
+	newBufferR = (float*)TSF_MALLOC(bufferSize * sizeof(float));
+	newScratch = (float*)TSF_MALLOC(TSF_CHORUS_SENDBLOCK * sizeof(float));
+	if (!newBufferL || !newBufferR || !newScratch)
+	{
+		TSF_FREE(newBufferL); TSF_FREE(newBufferR); TSF_FREE(newScratch);
+		return 0;
+	}
+	TSF_MEMSET(newBufferL, 0, bufferSize * sizeof(float));
+	TSF_MEMSET(newBufferR, 0, bufferSize * sizeof(float));
+
+	// Commit: replace any old history (a successful reconfiguration starts from zero).
+	TSF_FREE(f->chorus.bufferL);
+	TSF_FREE(f->chorus.bufferR);
+	TSF_FREE(f->chorusSendScratch);
+	c = &f->chorus;
+	c->bufferL = newBufferL;
+	c->bufferR = newBufferR;
+	f->chorusSendScratch = newScratch;
+	c->bufferSize = bufferSize;
+	c->writePos = 0;
+	c->phase = 0.0;
+	c->delayFrames = delayFrames;
+	c->depthFrames = depthFrames;
+	c->rateHz = modulation_rate_hz;
+	c->feedback = feedback;
+	c->wetGain = wet_gain;
+	c->enabled = TSF_TRUE;
+	return 1;
+}
+
+// Linear interpolation read of a ring buffer at a (possibly fractional) position relative to writePos.
+static float tsf_chorus_read(const float* buffer, int bufferSize, int writePos, double delay)
+{
+	double index = (double)writePos - delay;
+	long i0 = (long)TSF_FLOOR(index);
+	double frac = index - (double)i0;
+	int p0 = (int)(i0 % bufferSize), p1;
+	if (p0 < 0) p0 += bufferSize;
+	p1 = p0 + 1;
+	if (p1 == bufferSize) p1 = 0;
+	return (float)(buffer[p0] * (1.0 - frac) + buffer[p1] * frac);
+}
+
+// Advance the whole-instance chorus exactly once over a block of summed send samples.
+// Read-before-write: yL/yR are interpolated at n-delay before the current slot is overwritten.
+// outL/outR point at this block's output positions (for interleaved output outR
+// is ignored and outL holds the L/R sample pairs; for mono outR is ignored).
+static void tsf_render_chorus(tsf* f, const float* send, float* outL, float* outR, int blockSamples)
+{
+	struct tsf_chorus* c = &f->chorus;
+	float* bufferL = c->bufferL, *bufferR = c->bufferR;
+	int bufferSize = c->bufferSize, writePos = c->writePos, n;
+	double phase = c->phase;
+	double phaseInc = 2.0 * TSF_PI * (double)c->rateHz / (double)f->outSampleRate;
+	double delayCenter = c->delayFrames, depth = c->depthFrames;
+	float feedback = c->feedback, wetGain = c->wetGain;
+	TSF_BOOL mono = (f->outputmode == TSF_MONO);
+	TSF_BOOL interleaved = (f->outputmode == TSF_STEREO_INTERLEAVED);
+
+	for (n = 0; n < blockSamples; n++)
+	{
+		double modulation = TSF_SIN(phase) * depth;
+		double delayL = delayCenter + modulation;
+		double delayR = delayCenter - modulation;
+		float yL = tsf_chorus_read(bufferL, bufferSize, writePos, delayL);
+		float yR = tsf_chorus_read(bufferR, bufferSize, writePos, delayR);
+		float input = send[n];
+
+		// Cross feedback: each channel's write uses the other channel's delayed read.
+		bufferL[writePos] = input + feedback * yR;
+		bufferR[writePos] = input + feedback * yL;
+
+		if (mono)
+			outL[n] += wetGain * 0.5f * (yL + yR);
+		else if (interleaved)
+		{
+			outL[n * 2]     += wetGain * yL;
+			outL[n * 2 + 1] += wetGain * yR;
+		}
+		else
+		{
+			outL[n] += wetGain * yL;
+			outR[n] += wetGain * yR;
+		}
+
+		if (++writePos == bufferSize) writePos = 0;
+		phase += phaseInc;
+	}
+	c->writePos = writePos;
+	c->phase = phase;
 }
 
 TSFDEF tsf* tsf_load(struct tsf_stream* stream)
@@ -1472,6 +1692,28 @@ TSFDEF tsf* tsf_copy(tsf* f)
 	res->voiceNum = 0;
 	res->channels = TSF_NULL;
 	(*res->refCount)++;
+
+	// The copy keeps the chorus parameters but gets its own zeroed history and
+	// scratch buffers; effect state is never shared between instances.
+	res->chorus.bufferL = res->chorus.bufferR = TSF_NULL;
+	res->chorus.writePos = 0;
+	res->chorus.phase = 0.0;
+	res->chorusSendScratch = TSF_NULL;
+	if (f->chorus.enabled)
+	{
+		res->chorus.bufferL = (float*)TSF_MALLOC(f->chorus.bufferSize * sizeof(float));
+		res->chorus.bufferR = (float*)TSF_MALLOC(f->chorus.bufferSize * sizeof(float));
+		res->chorusSendScratch = (float*)TSF_MALLOC(TSF_CHORUS_SENDBLOCK * sizeof(float));
+		if (!res->chorus.bufferL || !res->chorus.bufferR || !res->chorusSendScratch)
+		{
+			TSF_FREE(res->chorus.bufferL); TSF_FREE(res->chorus.bufferR); TSF_FREE(res->chorusSendScratch);
+			TSF_FREE(res);
+			(*f->refCount)--;
+			return TSF_NULL;
+		}
+		TSF_MEMSET(res->chorus.bufferL, 0, f->chorus.bufferSize * sizeof(float));
+		TSF_MEMSET(res->chorus.bufferR, 0, f->chorus.bufferSize * sizeof(float));
+	}
 	return res;
 }
 
@@ -1488,6 +1730,9 @@ TSFDEF void tsf_close(tsf* f)
 	}
 	TSF_FREE(f->channels);
 	TSF_FREE(f->voices);
+	TSF_FREE(f->chorus.bufferL);
+	TSF_FREE(f->chorus.bufferR);
+	TSF_FREE(f->chorusSendScratch);
 	TSF_FREE(f);
 }
 
@@ -1498,6 +1743,9 @@ TSFDEF void tsf_reset(tsf* f)
 		if (v->playingPreset != -1 && (v->ampenv.segment < TSF_SEGMENT_RELEASE || v->ampenv.parameters.release))
 			tsf_voice_endquick(f, v);
 	if (f->channels) { TSF_FREE(f->channels); f->channels = TSF_NULL; }
+
+	// Clear the chorus history and LFO phase but keep the effect configuration.
+	tsf_chorus_clear(f);
 }
 
 TSFDEF int tsf_get_presetindex(const tsf* f, int bank, int preset_number)
@@ -1528,7 +1776,10 @@ TSFDEF const char* tsf_bank_get_presetname(const tsf* f, int bank, int preset_nu
 TSFDEF void tsf_set_output(tsf* f, enum TSFOutputMode outputmode, int samplerate, float global_gain_db)
 {
 	f->outputmode = outputmode;
-	f->outSampleRate = (float)(samplerate >= 1 ? samplerate : 44100.0f);
+	// The chorus delay buffers are sized for the rate they were configured at;
+	// disable the effect (tsf_set_chorus with wet_gain 0) before switching rates.
+	if (!f->chorus.enabled)
+		f->outSampleRate = (float)(samplerate >= 1 ? samplerate : 44100.0f);
 	f->globalGainDB = global_gain_db;
 }
 
@@ -1617,6 +1868,10 @@ TSFDEF int tsf_note_on(tsf* f, int preset_index, int key, float vel)
 		voice->playIndex = voicePlayIndex;
 		voice->heldSustain = 0;
 		voice->noteGainDB = f->globalGainDB - region->attenuation - tsf_gainToDecibels(1.0f / vel);
+
+		// ChorusEffectsSend already merged instrument/preset global+local contributions
+		// (local overrides its layer's global, then the two layers are added and clamped 0..1000).
+		voice->chorusSendFactor = region->chorusSend * 0.001f;
 
 		if (f->channels)
 		{
@@ -1738,10 +1993,46 @@ TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing
 TSFDEF void tsf_render_float(tsf* f, float* buffer, int samples, int flag_mixing)
 {
 	struct tsf_voice *v = f->voices, *vEnd = v + f->voiceNum;
-	if (!flag_mixing) TSF_MEMSET(buffer, 0, (f->outputmode == TSF_MONO ? 1 : 2) * sizeof(float) * samples);
-	for (; v != vEnd; v++)
-		if (v->playingPreset != -1)
-			tsf_voice_render(f, v, buffer, samples);
+	int channels = (f->outputmode == TSF_MONO ? 1 : 2);
+	if (!flag_mixing) TSF_MEMSET(buffer, 0, channels * sizeof(float) * samples);
+
+	if (!f->chorus.enabled)
+	{
+		for (; v != vEnd; v++)
+			if (v->playingPreset != -1)
+				tsf_voice_render(f, v, buffer, TSF_NULL, TSF_NULL, samples);
+		return;
+	}
+
+	// Chorus path: all voices add their pre-pan mono send into one bus per block,
+	// then the single instance-wide effect is advanced exactly once. With no
+	// active voices the effect still runs on zero input so tails keep decaying.
+	{
+		float* const base = buffer;
+		const int total = samples;
+		int done = 0;
+		while (samples > 0)
+		{
+			int block = (samples > TSF_CHORUS_SENDBLOCK ? TSF_CHORUS_SENDBLOCK : samples);
+			float* send = f->chorusSendScratch;
+			float* blockL, *blockR = TSF_NULL;
+			if (f->outputmode == TSF_STEREO_UNWEAVED)
+			{
+				// Left half first then right half, each one float per frame.
+				blockL = base + done;
+				blockR = base + total + done;
+			}
+			else
+				blockL = base + done * channels; // interleaved uses two floats per frame, mono one
+			TSF_MEMSET(send, 0, block * sizeof(float));
+			for (v = f->voices; v != vEnd; v++)
+				if (v->playingPreset != -1)
+					tsf_voice_render(f, v, blockL, blockR, send, block);
+			tsf_render_chorus(f, send, blockL, blockR, block);
+			done += block;
+			samples -= block;
+		}
+	}
 }
 
 static void tsf_channel_setup_voice(tsf* f, struct tsf_voice* v)
