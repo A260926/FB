@@ -1000,6 +1000,466 @@ static void blend_transformed_bilinear_tiled_argb(plutovg_surface_t* surface, pl
     }
 }
 
+/*
+ * Mesh paint rendering.
+ *
+ * A tensor-product cubic Bézier patch is defined over the parameter square
+ * [0, 1] x [0, 1]. For a device position p we need the parameter (u, v) with
+ * S(u, v) = p. The patch is assumed injective with a non-zero Jacobian, so
+ * Newton's method converges to the unique solution from a starting point near
+ * the correct parameter. Once the parameter is known the colors are
+ * interpolated bilinearly from the four premultiplied corner colors.
+ *
+ * Coverage is decided per device pixel by sampling a regular 8x8 grid of
+ * subpixel centers. The colors found at all covered subpixels are averaged.
+ * When a sample position is covered by more than one patch, the last patch in
+ * the input array wins.
+ */
+
+#define MESH_SUBPIXELS 8
+#define MESH_SUBPIXEL_COUNT (MESH_SUBPIXELS * MESH_SUBPIXELS)
+#define MESH_SUBPIXEL_SCALE (1.0 / MESH_SUBPIXELS)
+#define MESH_SEED_GRID 9
+#define MESH_SEED_NODES (MESH_SEED_GRID * MESH_SEED_GRID)
+#define MESH_MAX_NEWTON_ITERATIONS 64
+#define MESH_RESIDUAL_TOLERANCE 1e-9
+#define MESH_PARAMETER_EPSILON 1e-9
+
+typedef struct {
+    /* Power-basis coefficients of the patch position. */
+    double x[4][4];
+    double y[4][4];
+    /* Bilinear coefficients of each premultiplied color channel. */
+    double color[4][4];
+    double min_x, min_y, max_x, max_y;
+    /*
+     * True when the position map reduces to an affine map. Such patches are
+     * inverted with a single 2x2 solve instead of Newton iteration.
+     */
+    bool affine;
+    double origin_x, origin_y;   /* Value at (u, v) = (0, 0). */
+    double linear_u_x, linear_u_y; /* Coefficient of u. */
+    double linear_v_x, linear_v_y; /* Coefficient of v. */
+    double inverse_det;          /* 1 / determinant of the linear part. */
+    /*
+     * Seeds for the parameter search. These are an implementation detail of
+     * the inversion, not part of the interpolation.
+     */
+    float seed_x[MESH_SEED_NODES];
+    float seed_y[MESH_SEED_NODES];
+    float seed_u[MESH_SEED_NODES];
+    float seed_v[MESH_SEED_NODES];
+} mesh_patch_data_t;
+
+/* Power-basis coefficients of the cubic Bernstein basis functions. */
+static const double mesh_bernstein_to_power[4][4] = {
+    { 1.0, -3.0,  3.0, -1.0 },
+    { 0.0,  3.0, -6.0,  3.0 },
+    { 0.0,  0.0,  3.0, -3.0 },
+    { 0.0,  0.0,  0.0,  1.0 }
+};
+
+/*
+ * Evaluates the patch and its two partial derivatives using a separable
+ * Horner scheme. For each v coefficient the polynomial in u is evaluated
+ * first, which keeps the inner loop short and numerically stable.
+ */
+static void mesh_eval(const mesh_patch_data_t* patch, double u, double v,
+    double* x, double* y, double* dxdu, double* dydu, double* dxdv, double* dydv)
+{
+    double row_x[4], row_y[4];
+    double drow_x[4], drow_y[4];
+    for(int b = 0; b < 4; ++b) {
+        double px = patch->x[3][b];
+        double py = patch->y[3][b];
+        double dpx = 0.0, dpy = 0.0;
+        for(int a = 2; a >= 0; --a) {
+            dpx = dpx * u + px;
+            dpy = dpy * u + py;
+            px = px * u + patch->x[a][b];
+            py = py * u + patch->y[a][b];
+        }
+
+        row_x[b] = px;
+        row_y[b] = py;
+        drow_x[b] = dpx;
+        drow_y[b] = dpy;
+    }
+
+    double sx = row_x[3], sy = row_y[3];
+    double sux = drow_x[3], suy = drow_y[3];
+    double svx = 0.0, svy = 0.0;
+    for(int b = 2; b >= 0; --b) {
+        svx = svx * v + sx;
+        svy = svy * v + sy;
+        sx = sx * v + row_x[b];
+        sy = sy * v + row_y[b];
+        sux = sux * v + drow_x[b];
+        suy = suy * v + drow_y[b];
+    }
+
+    *x = sx; *y = sy;
+    *dxdu = sux; *dydu = suy;
+    *dxdv = svx; *dydv = svy;
+}
+
+static void mesh_eval_color(const mesh_patch_data_t* patch, double u, double v, double color[4])
+{
+    for(int channel = 0; channel < 4; ++channel) {
+        const double* c = patch->color[channel];
+        double value = c[0] + c[1] * u + c[2] * v + c[3] * u * v;
+        color[channel] = plutovg_clamp(value, 0.0, 1.0);
+    }
+}
+
+static void mesh_prepare_patch(mesh_patch_data_t* data, const plutovg_mesh_patch_t* patch, const plutovg_matrix_t* matrix)
+{
+    /* Transform the control points into device space. */
+    double points[16][2];
+    for(int k = 0; k < 16; ++k) {
+        double x = patch->points[k].x;
+        double y = patch->points[k].y;
+        points[k][0] = (double)matrix->a * x + (double)matrix->c * y + matrix->e;
+        points[k][1] = (double)matrix->b * x + (double)matrix->d * y + matrix->f;
+    }
+
+    for(int a = 0; a < 4; ++a) {
+        for(int b = 0; b < 4; ++b) {
+            double cx = 0.0, cy = 0.0;
+            for(int i = 0; i < 4; ++i) {
+                for(int j = 0; j < 4; ++j) {
+                    double weight = mesh_bernstein_to_power[i][a] * mesh_bernstein_to_power[j][b];
+                    const double* point = points[4 * j + i];
+                    cx += weight * point[0];
+                    cy += weight * point[1];
+                }
+            }
+
+            data->x[a][b] = cx;
+            data->y[a][b] = cy;
+        }
+    }
+
+    double min_x = points[0][0], max_x = points[0][0];
+    double min_y = points[0][1], max_y = points[0][1];
+    for(int k = 1; k < 16; ++k) {
+        min_x = plutovg_min(min_x, points[k][0]);
+        max_x = plutovg_max(max_x, points[k][0]);
+        min_y = plutovg_min(min_y, points[k][1]);
+        max_y = plutovg_max(max_y, points[k][1]);
+    }
+
+    data->min_x = min_x;
+    data->min_y = min_y;
+    data->max_x = max_x;
+    data->max_y = max_y;
+
+    /*
+     * Detect a patch whose position map is affine: all u^a v^b terms with
+     * a > 1, b > 1, or both non-zero must vanish. Such patches can be
+     * inverted directly, which is both faster and more accurate than
+     * iterating. The tolerance is relative to the coordinate magnitude so
+     * that float rounding in an otherwise flat control net still qualifies.
+     */
+    double scale = 1.0;
+    for(int k = 0; k < 16; ++k) {
+        scale = plutovg_max(scale, fabs(points[k][0]));
+        scale = plutovg_max(scale, fabs(points[k][1]));
+    }
+
+    /*
+     * The control points are stored as float, so an exactly affine control
+     * net still produces tiny higher-order coefficients. Use a tolerance
+     * just above float rounding relative to the coordinate magnitude.
+     */
+    const double affine_tolerance = 1e-6 * scale;
+    bool affine = true;
+    for(int a = 0; a < 4 && affine; ++a) {
+        for(int b = 0; b < 4; ++b) {
+            if(a == 0 && b == 0)
+                continue;
+            if(a > 1 || b > 1 || (a > 0 && b > 0)) {
+                if(fabs(data->x[a][b]) > affine_tolerance || fabs(data->y[a][b]) > affine_tolerance) {
+                    affine = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    data->affine = affine;
+    data->origin_x = data->x[0][0];
+    data->origin_y = data->y[0][0];
+    data->linear_u_x = data->x[1][0];
+    data->linear_u_y = data->y[1][0];
+    data->linear_v_x = data->x[0][1];
+    data->linear_v_y = data->y[0][1];
+    double det = data->linear_u_x * data->linear_v_y - data->linear_u_y * data->linear_v_x;
+    data->inverse_det = det != 0.0 ? 1.0 / det : 0.0;
+
+    /*
+     * Colors are premultiplied before interpolation. The corners are ordered
+     * as (0, 0), (1, 0), (1, 1), (0, 1); the result is stored as the bilinear
+     * coefficients in u and v.
+     */
+    double premultiplied[4][4];
+    for(int k = 0; k < 4; ++k) {
+        const plutovg_color_t* color = patch->colors + k;
+        premultiplied[k][0] = (double)color->r * color->a;
+        premultiplied[k][1] = (double)color->g * color->a;
+        premultiplied[k][2] = (double)color->b * color->a;
+        premultiplied[k][3] = color->a;
+    }
+
+    for(int channel = 0; channel < 4; ++channel) {
+        double c00 = premultiplied[0][channel];
+        double c10 = premultiplied[1][channel];
+        double c11 = premultiplied[2][channel];
+        double c01 = premultiplied[3][channel];
+        data->color[channel][0] = c00;
+        data->color[channel][1] = c10 - c00;
+        data->color[channel][2] = c01 - c00;
+        data->color[channel][3] = c11 - c10 - c01 + c00;
+    }
+
+    /*
+     * A regular grid of sampled device positions gives the starting point for
+     * Newton's method. This makes the inversion robust for strongly bent
+     * patches; it does not affect the interpolated color.
+     */
+    for(int j = 0; j < MESH_SEED_GRID; ++j) {
+        for(int i = 0; i < MESH_SEED_GRID; ++i) {
+            int index = j * MESH_SEED_GRID + i;
+            double u = (double)i / (MESH_SEED_GRID - 1);
+            double v = (double)j / (MESH_SEED_GRID - 1);
+            double x, y, dxdu, dydu, dxdv, dydv;
+            mesh_eval(data, u, v, &x, &y, &dxdu, &dydu, &dxdv, &dydv);
+            data->seed_x[index] = (float)x;
+            data->seed_y[index] = (float)y;
+            data->seed_u[index] = (float)u;
+            data->seed_v[index] = (float)v;
+        }
+    }
+}
+
+static void mesh_find_seed(const mesh_patch_data_t* patch, double x, double y, double* u, double* v)
+{
+    int index = 0;
+    double best = DBL_MAX;
+    for(int i = 0; i < MESH_SEED_NODES; ++i) {
+        double dx = patch->seed_x[i] - x;
+        double dy = patch->seed_y[i] - y;
+        double distance = dx * dx + dy * dy;
+        if(distance < best) {
+            best = distance;
+            index = i;
+        }
+    }
+
+    *u = patch->seed_u[index];
+    *v = patch->seed_v[index];
+}
+
+/*
+ * Inverts the patch at the device position (x, y). Returns true when the
+ * position lies inside the parameter square. On return (u, v) holds the
+ * approximate parameter, which is also useful as the seed for a nearby query.
+ */
+static bool mesh_invert(const mesh_patch_data_t* patch, double x, double y, double* u, double* v)
+{
+    if(patch->affine) {
+        if(patch->inverse_det == 0.0)
+            return false;
+        double rx = x - patch->origin_x;
+        double ry = y - patch->origin_y;
+        double su = (rx * patch->linear_v_y - ry * patch->linear_v_x) * patch->inverse_det;
+        double sv = (patch->linear_u_x * ry - patch->linear_u_y * rx) * patch->inverse_det;
+        *u = su;
+        *v = sv;
+    } else {
+        bool converged = false;
+        for(int iteration = 0; iteration < MESH_MAX_NEWTON_ITERATIONS; ++iteration) {
+            double px, py, dxdu, dydu, dxdv, dydv;
+            mesh_eval(patch, *u, *v, &px, &py, &dxdu, &dydu, &dxdv, &dydv);
+            double rx = px - x;
+            double ry = py - y;
+            double det = dxdu * dydv - dydu * dxdv;
+            if(!isfinite(det) || fabs(det) < 1e-18)
+                return false;
+
+            double du = (rx * dydv - ry * dxdv) / det;
+            double dv = (dxdu * ry - dydu * rx) / det;
+            *u -= du;
+            *v -= dv;
+            if(!isfinite(*u) || !isfinite(*v) || *u < -4.0 || *u > 5.0 || *v < -4.0 || *v > 5.0)
+                return false;
+
+            if(fabs(rx) <= MESH_RESIDUAL_TOLERANCE && fabs(ry) <= MESH_RESIDUAL_TOLERANCE
+                && fabs(du) <= 1e-9 && fabs(dv) <= 1e-9) {
+                converged = true;
+                break;
+            }
+        }
+
+        if(!converged) {
+            double px, py, dxdu, dydu, dxdv, dydv;
+            mesh_eval(patch, *u, *v, &px, &py, &dxdu, &dydu, &dxdv, &dydv);
+            if(fabs(px - x) > 1e-6 || fabs(py - y) > 1e-6)
+                return false;
+        }
+    }
+
+    return *u >= -MESH_PARAMETER_EPSILON && *u <= 1.0 + MESH_PARAMETER_EPSILON
+        && *v >= -MESH_PARAMETER_EPSILON && *v <= 1.0 + MESH_PARAMETER_EPSILON;
+}
+
+static uint32_t mesh_sample_pixel(const mesh_patch_data_t* patches, int count, int px, int py, float opacity, double* seed_u, double* seed_v)
+{
+    /*
+     * Each subpixel is painted by at most one patch: patches are visited from
+     * last to first and already covered subpixels are skipped, so the last
+     * patch in the array wins where several patches overlap. `covered` is a
+     * bitmask over the 8x8 subpixel grid.
+     */
+    uint64_t covered = 0;
+    double red = 0.0, green = 0.0, blue = 0.0, alpha = 0.0;
+
+    const double pixel_x = px;
+    const double pixel_y = py;
+    for(int index = count - 1; index >= 0 && covered != ~(uint64_t)0; --index) {
+        const mesh_patch_data_t* patch = patches + index;
+        if(pixel_x + 1.0 < patch->min_x || pixel_x > patch->max_x
+            || pixel_y + 1.0 < patch->min_y || pixel_y > patch->max_y) {
+            continue;
+        }
+
+        double u = 0.5, v = 0.5;
+        if(!patch->affine) {
+            /* Reuse the parameter found for the previous pixel when possible. */
+            if(seed_u[index] >= 0.0) {
+                u = seed_u[index];
+                v = seed_v[index];
+            } else {
+                mesh_find_seed(patch, pixel_x + 0.5, pixel_y + 0.5, &u, &v);
+            }
+        }
+
+        for(int j = 0; j < MESH_SUBPIXELS; ++j) {
+            for(int i = 0; i < MESH_SUBPIXELS; ++i) {
+                int sample = j * MESH_SUBPIXELS + i;
+                uint64_t bit = (uint64_t)1 << sample;
+                if(covered & bit)
+                    continue;
+
+                double x = pixel_x + ((double)i + 0.5) * MESH_SUBPIXEL_SCALE;
+                double y = pixel_y + ((double)j + 0.5) * MESH_SUBPIXEL_SCALE;
+                double su = u, sv = v;
+                bool found = mesh_invert(patch, x, y, &su, &sv);
+                if(!found && !patch->affine) {
+                    /* Retry from the nearest pre-sampled parameter. */
+                    double tu, tv;
+                    mesh_find_seed(patch, x, y, &tu, &tv);
+                    su = tu; sv = tv;
+                    found = mesh_invert(patch, x, y, &su, &sv);
+                }
+
+                if(found) {
+                    double color[4];
+                    mesh_eval_color(patch, plutovg_clamp(su, 0.0, 1.0), plutovg_clamp(sv, 0.0, 1.0), color);
+                    red += color[0];
+                    green += color[1];
+                    blue += color[2];
+                    alpha += color[3];
+                    covered |= bit;
+                    /* A successful inverse is a good seed for the neighbour. */
+                    u = su;
+                    v = sv;
+                    seed_u[index] = su;
+                    seed_v[index] = sv;
+                }
+            }
+        }
+    }
+
+    red = red * opacity / MESH_SUBPIXEL_COUNT;
+    green = green * opacity / MESH_SUBPIXEL_COUNT;
+    blue = blue * opacity / MESH_SUBPIXEL_COUNT;
+    alpha = alpha * opacity / MESH_SUBPIXEL_COUNT;
+
+    uint32_t a = (uint32_t)lround(plutovg_clamp(alpha, 0.0, 1.0) * 255.0);
+    uint32_t r = (uint32_t)lround(plutovg_clamp(red, 0.0, 1.0) * 255.0);
+    uint32_t g = (uint32_t)lround(plutovg_clamp(green, 0.0, 1.0) * 255.0);
+    uint32_t b = (uint32_t)lround(plutovg_clamp(blue, 0.0, 1.0) * 255.0);
+    if(r > a) r = a;
+    if(g > a) g = a;
+    if(b > a) b = a;
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+static void blend_mesh(plutovg_surface_t* surface, plutovg_operator_t op, const plutovg_mesh_paint_t* mesh, const plutovg_matrix_t* matrix, float opacity, const plutovg_span_buffer_t* span_buffer)
+{
+    composition_function_t func = composition_table[op];
+    uint32_t buffer[BUFFER_SIZE];
+    int count = mesh->count;
+    mesh_patch_data_t* patches = malloc((size_t)count * sizeof(mesh_patch_data_t));
+    double* seed_u = malloc((size_t)count * sizeof(double));
+    double* seed_v = malloc((size_t)count * sizeof(double));
+    if(patches == NULL || seed_u == NULL || seed_v == NULL) {
+        free(patches);
+        free(seed_u);
+        free(seed_v);
+        return;
+    }
+
+    for(int i = 0; i < count; ++i) {
+        mesh_prepare_patch(patches + i, mesh->patches + i, matrix);
+        seed_u[i] = -1.0;
+        seed_v[i] = -1.0;
+    }
+
+    int spans_count = span_buffer->spans.size;
+    const plutovg_span_t* spans = span_buffer->spans.data;
+    while(spans_count--) {
+        int x = spans->x;
+        int length = spans->len;
+        const int y = spans->y;
+        while(length) {
+            int l = plutovg_min(length, BUFFER_SIZE);
+            for(int i = 0; i < l; ++i) {
+                buffer[i] = mesh_sample_pixel(patches, count, x + i, y, opacity, seed_u, seed_v);
+            }
+
+            uint32_t* target = (uint32_t*)(surface->data + y * surface->stride) + x;
+            func(target, l, buffer, spans->coverage);
+            x += l;
+            length -= l;
+        }
+
+        ++spans;
+    }
+
+    free(seed_v);
+    free(seed_u);
+    free(patches);
+}
+
+static void plutovg_blend_mesh(plutovg_canvas_t* canvas, const plutovg_mesh_paint_t* mesh, const plutovg_span_buffer_t* span_buffer)
+{
+    if(mesh->count <= 0)
+        return;
+    plutovg_state_t* state = canvas->state;
+    /*
+     * Control points are mapped by the paint matrix first and then by the
+     * canvas matrix. plutovg_matrix_multiply(dst, left, right) produces
+     * right(left(p)), so the paint matrix is passed first.
+     */
+    plutovg_matrix_t matrix;
+    plutovg_matrix_multiply(&matrix, &mesh->matrix, &state->matrix);
+    double det = (double)matrix.a * matrix.d - (double)matrix.b * matrix.c;
+    if(!isfinite(det) || det == 0.0)
+        return;
+    blend_mesh(canvas->surface, state->op, mesh, &matrix, state->opacity, span_buffer);
+}
 static void plutovg_blend_color(plutovg_canvas_t* canvas, const plutovg_color_t* color, const plutovg_span_buffer_t* span_buffer)
 {
     plutovg_state_t* state = canvas->state;
@@ -1137,8 +1597,11 @@ void plutovg_blend(plutovg_canvas_t* canvas, const plutovg_span_buffer_t* span_b
     } else if(paint->type == PLUTOVG_PAINT_TYPE_GRADIENT) {
         plutovg_gradient_paint_t* gradient = (plutovg_gradient_paint_t*)(paint);
         plutovg_blend_gradient(canvas, gradient, span_buffer);
-    } else {
+    } else if(paint->type == PLUTOVG_PAINT_TYPE_TEXTURE) {
         plutovg_texture_paint_t* texture = (plutovg_texture_paint_t*)(paint);
         plutovg_blend_texture(canvas, texture, span_buffer);
+    } else {
+        plutovg_mesh_paint_t* mesh = (plutovg_mesh_paint_t*)(paint);
+        plutovg_blend_mesh(canvas, mesh, span_buffer);
     }
 }

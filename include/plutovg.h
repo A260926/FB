@@ -1420,6 +1420,56 @@ PLUTOVG_API plutovg_paint_t* plutovg_paint_create_radial_gradient(float cx, floa
 PLUTOVG_API plutovg_paint_t* plutovg_paint_create_texture(plutovg_surface_t* surface, plutovg_texture_type_t type, float opacity, const plutovg_matrix_t* matrix);
 
 /**
+ * @brief Represents a single tensor-product cubic Bézier mesh patch.
+ *
+ * `points[4 * j + i]` is the control point associated with the Bernstein
+ * basis function `B_i^3(u) * B_j^3(v)`, where `i` and `j` range from 0 to 3
+ * and both `u` and `v` lie in the range [0, 1]. The patch surface is
+ * evaluated as:
+ *
+ *     S(u, v) = sum_{j=0}^{3} sum_{i=0}^{3}
+ *                   points[4 * j + i] * B_i^3(u) * B_j^3(v)
+ *
+ * The four colors are the corner colors of the patch, ordered as
+ * (u = 0, v = 0), (u = 1, v = 0), (u = 1, v = 1), (u = 0, v = 1). Their
+ * premultiplied channels are interpolated bilinearly in the parameter
+ * domain, so the colors along a shared patch edge match when the bounding
+ * corner colors match.
+ */
+typedef struct plutovg_mesh_patch {
+    plutovg_point_t points[16]; ///< The patch control points, laid out as points[4 * j + i].
+    plutovg_color_t colors[4];  ///< The patch corner colors.
+} plutovg_mesh_patch_t;
+
+/**
+ * @brief Creates a paint from an array of tensor-product cubic Bézier mesh patches.
+ *
+ * The patches are evaluated in device space: each control point is first
+ * transformed by `matrix` and then by the current canvas matrix. If `matrix`
+ * is `NULL`, the identity matrix is used. A point is painted when its device
+ * position lies inside one or more patches; where several patches cover a
+ * position, the last patch in the array determines its color. Positions
+ * outside every patch are transparent.
+ *
+ * Colors are premultiplied by their own alpha before interpolation, and a
+ * pixel's paint value is the average of the patch colors at the 8x8 regular
+ * subpixel centers inside that pixel. The result is then composited using the
+ * ordinary path coverage, clipping, opacity and operator rules.
+ *
+ * The caller is responsible for ensuring that every patch is injective with a
+ * non-zero Jacobian; folded patches are not detected. The patch control points
+ * and the optional matrix must be finite, and the matrix must be invertible.
+ * The input arrays are copied, so the caller may modify or release them after
+ * this function returns.
+ *
+ * @param patches An array of patch descriptions.
+ * @param count The number of patches. Must be greater than zero.
+ * @param matrix An optional transformation matrix applied before the canvas matrix.
+ * @return A pointer to the created `plutovg_paint_t` object, or `NULL` on invalid input.
+ */
+PLUTOVG_API plutovg_paint_t* plutovg_paint_create_mesh(const plutovg_mesh_patch_t* patches, int count, const plutovg_matrix_t* matrix);
+
+/**
  * @brief Increments the reference count of a paint object.
  *
  * @param paint A pointer to the `plutovg_paint_t` object.

@@ -60,7 +60,8 @@ struct plutovg_path {
 typedef enum {
     PLUTOVG_PAINT_TYPE_COLOR,
     PLUTOVG_PAINT_TYPE_GRADIENT,
-    PLUTOVG_PAINT_TYPE_TEXTURE
+    PLUTOVG_PAINT_TYPE_TEXTURE,
+    PLUTOVG_PAINT_TYPE_MESH
 } plutovg_paint_type_t;
 
 struct plutovg_paint {
@@ -95,6 +96,13 @@ typedef struct {
     plutovg_matrix_t matrix;
     plutovg_surface_t* surface;
 } plutovg_texture_paint_t;
+
+typedef struct {
+    plutovg_paint_t base;
+    plutovg_matrix_t matrix;
+    int count;
+    plutovg_mesh_patch_t* patches;
+} plutovg_mesh_paint_t;
 
 typedef struct {
     int x;

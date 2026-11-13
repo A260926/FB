@@ -385,6 +385,8 @@ int plutovg_color_parse(plutovg_color_t* color, const char* data, int length)
 static void* plutovg_paint_create(plutovg_paint_type_t type, size_t size)
 {
     plutovg_paint_t* paint = malloc(size);
+    if(paint == NULL)
+        return NULL;
     plutovg_init_reference(paint);
     paint->type = type;
     return paint;
@@ -413,6 +415,8 @@ plutovg_paint_t* plutovg_paint_create_color(const plutovg_color_t* color)
 static plutovg_gradient_paint_t* plutovg_gradient_create(plutovg_gradient_type_t type, plutovg_spread_method_t spread, const plutovg_gradient_stop_t* stops, int nstops, const plutovg_matrix_t* matrix)
 {
     plutovg_gradient_paint_t* gradient = plutovg_paint_create(PLUTOVG_PAINT_TYPE_GRADIENT, sizeof(plutovg_gradient_paint_t) + nstops * sizeof(plutovg_gradient_stop_t));
+    if(gradient == NULL)
+        return NULL;
     gradient->type = type;
     gradient->spread = spread;
     gradient->matrix = matrix ? *matrix : PLUTOVG_IDENTITY_MATRIX;
@@ -436,6 +440,8 @@ static plutovg_gradient_paint_t* plutovg_gradient_create(plutovg_gradient_type_t
 plutovg_paint_t* plutovg_paint_create_linear_gradient(float x1, float y1, float x2, float y2, plutovg_spread_method_t spread, const plutovg_gradient_stop_t* stops, int nstops, const plutovg_matrix_t* matrix)
 {
     plutovg_gradient_paint_t* gradient = plutovg_gradient_create(PLUTOVG_GRADIENT_TYPE_LINEAR, spread, stops, nstops, matrix);
+    if(gradient == NULL)
+        return NULL;
     gradient->values[0] = x1;
     gradient->values[1] = y1;
     gradient->values[2] = x2;
@@ -446,6 +452,8 @@ plutovg_paint_t* plutovg_paint_create_linear_gradient(float x1, float y1, float 
 plutovg_paint_t* plutovg_paint_create_radial_gradient(float cx, float cy, float cr, float fx, float fy, float fr, plutovg_spread_method_t spread, const plutovg_gradient_stop_t* stops, int nstops, const plutovg_matrix_t* matrix)
 {
     plutovg_gradient_paint_t* gradient = plutovg_gradient_create(PLUTOVG_GRADIENT_TYPE_RADIAL, spread, stops, nstops, matrix);
+    if(gradient == NULL)
+        return NULL;
     gradient->values[0] = cx;
     gradient->values[1] = cy;
     gradient->values[2] = cr;
@@ -458,11 +466,80 @@ plutovg_paint_t* plutovg_paint_create_radial_gradient(float cx, float cy, float 
 plutovg_paint_t* plutovg_paint_create_texture(plutovg_surface_t* surface, plutovg_texture_type_t type, float opacity, const plutovg_matrix_t* matrix)
 {
     plutovg_texture_paint_t* texture = plutovg_paint_create(PLUTOVG_PAINT_TYPE_TEXTURE, sizeof(plutovg_texture_paint_t));
+    if(texture == NULL)
+        return NULL;
     texture->type = type;
     texture->opacity = plutovg_clamp(opacity, 0.f, 1.f);
     texture->matrix = matrix ? *matrix : PLUTOVG_IDENTITY_MATRIX;
     texture->surface = plutovg_surface_reference(surface);
     return &texture->base;
+}
+
+static inline bool plutovg_is_finite(float value)
+{
+    return isfinite(value);
+}
+
+static bool plutovg_mesh_patch_is_valid(const plutovg_mesh_patch_t* patch)
+{
+    for(int i = 0; i < 16; ++i) {
+        if(!plutovg_is_finite(patch->points[i].x) || !plutovg_is_finite(patch->points[i].y))
+            return false;
+    }
+
+    for(int i = 0; i < 4; ++i) {
+        if(!plutovg_is_finite(patch->colors[i].r) || !plutovg_is_finite(patch->colors[i].g)
+            || !plutovg_is_finite(patch->colors[i].b) || !plutovg_is_finite(patch->colors[i].a))
+            return false;
+    }
+
+    return true;
+}
+
+plutovg_paint_t* plutovg_paint_create_mesh(const plutovg_mesh_patch_t* patches, int count, const plutovg_matrix_t* matrix)
+{
+    if(patches == NULL || count <= 0)
+        return NULL;
+    if((size_t)count > (SIZE_MAX - sizeof(plutovg_mesh_paint_t)) / sizeof(plutovg_mesh_patch_t))
+        return NULL;
+
+    plutovg_matrix_t canvas_matrix = matrix ? *matrix : PLUTOVG_IDENTITY_MATRIX;
+    plutovg_matrix_t inverse;
+    if(!plutovg_is_finite(canvas_matrix.a) || !plutovg_is_finite(canvas_matrix.b)
+        || !plutovg_is_finite(canvas_matrix.c) || !plutovg_is_finite(canvas_matrix.d)
+        || !plutovg_is_finite(canvas_matrix.e) || !plutovg_is_finite(canvas_matrix.f)
+        || !plutovg_matrix_invert(&canvas_matrix, &inverse)) {
+        return NULL;
+    }
+
+    for(int i = 0; i < count; ++i) {
+        if(!plutovg_mesh_patch_is_valid(patches + i))
+            return NULL;
+    }
+
+    plutovg_mesh_paint_t* mesh = plutovg_paint_create(PLUTOVG_PAINT_TYPE_MESH, sizeof(plutovg_mesh_paint_t) + count * sizeof(plutovg_mesh_patch_t));
+    if(mesh == NULL)
+        return NULL;
+    mesh->matrix = canvas_matrix;
+    mesh->count = count;
+    mesh->patches = (plutovg_mesh_patch_t*)(mesh + 1);
+    for(int i = 0; i < count; ++i) {
+        plutovg_mesh_patch_t* dst = mesh->patches + i;
+        const plutovg_mesh_patch_t* src = patches + i;
+        for(int k = 0; k < 16; ++k) {
+            dst->points[k].x = src->points[k].x;
+            dst->points[k].y = src->points[k].y;
+        }
+
+        for(int k = 0; k < 4; ++k) {
+            dst->colors[k].r = plutovg_clamp(src->colors[k].r, 0.f, 1.f);
+            dst->colors[k].g = plutovg_clamp(src->colors[k].g, 0.f, 1.f);
+            dst->colors[k].b = plutovg_clamp(src->colors[k].b, 0.f, 1.f);
+            dst->colors[k].a = plutovg_clamp(src->colors[k].a, 0.f, 1.f);
+        }
+    }
+
+    return &mesh->base;
 }
 
 plutovg_paint_t* plutovg_paint_reference(plutovg_paint_t* paint)
@@ -479,6 +556,7 @@ void plutovg_paint_destroy(plutovg_paint_t* paint)
             plutovg_surface_destroy(texture->surface);
         }
 
+        /* Mesh paint data is stored inline after the paint object. */
         free(paint);
     }
 }
