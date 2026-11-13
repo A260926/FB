@@ -59,3 +59,26 @@ func main() {
 	}
 }
 ```
+
+Reading dynamic imports
+-----------------------
+
+64-bit ELF files of either endianness can also be examined with
+`ReadDynamicImports(f *ELF64File)`, which recovers the imported (undefined)
+dynamic symbols along with their version requirements using only the program
+headers. This works even for images that have no section table: it reads the
+`PT_DYNAMIC` segment up to `DT_NULL`, resolves the virtual addresses carried
+by tags such as `DT_SYMTAB`, `DT_STRTAB`, `DT_HASH`, `DT_GNU_HASH`,
+`DT_VERSYM`, and `DT_VERNEED` through the file-backed portions of `PT_LOAD`
+segments, and never executes or loads the image.
+
+The number of dynamic symbols comes from `DT_HASH`'s `nchain` or from walking
+the `DT_GNU_HASH` buckets and chains; when both are present they must agree,
+and images with neither are unsupported. Each returned `DynamicImport` keeps
+the original symbol table index, name, binding, type, raw version value,
+version index with the hidden bit removed, required version name, and
+dependency file name. Only undefined symbols with non-empty names are
+included, and duplicate names are preserved. Images without `DT_VERSYM`
+report a raw version and version index of 1 with empty version and dependency
+names. Malformed images (unterminated strings, broken version chains,
+conflicting address mappings, and so on) produce errors rather than guesses.
