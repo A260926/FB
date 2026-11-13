@@ -66,6 +66,15 @@ struct hook_info {
     theft_hook_shrink_pre_cb *shrink_pre;
     theft_hook_shrink_post_cb *shrink_post;
     theft_hook_shrink_trial_post_cb *shrink_trial_post;
+    theft_hook_joint_shrink_post_cb *joint_shrink_post;
+    void *env;
+};
+
+/* Joint (coordinated) shrinking configuration, copied from
+ * theft_run_config.joint. */
+struct joint_info {
+    theft_joint_shrink_cb *shrink;
+    theft_joint_rank_cb *rank;
     void *env;
 };
 
@@ -134,6 +143,7 @@ struct theft {
     struct seed_info seeds;
     struct fork_info fork;
     struct hook_info hooks;
+    struct joint_info joint;
     struct counter_info counters;
     struct trial_info trial;
     struct worker_info workers[1];

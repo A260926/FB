@@ -57,6 +57,76 @@ instance, and therefore lead to the property function having the same
 result.
 
 
+## Joint (coordinated) shrinking
+
+Per-argument shrinking changes one argument at a time, so it can get
+stuck when the failure depends on a correlation between several
+independently generated arguments. For example, with a property that
+only fails when `a == b && a >= 3`, starting from `(8, 8)` no single
+change preserves the failure: shrinking either argument alone makes
+the property pass. Joint shrinking lets a single step replace several
+arguments at once.
+
+It is configured with the optional `joint` field of
+`struct theft_run_config`, which contains a `shrink` callback, a `rank`
+callback, and an opaque `env`. Both callbacks must be provided; setting
+exactly one is reported as `THEFT_RUN_ERROR_BAD_ARGS` before any inputs
+are generated, and joint shrinking requires at least two property
+arguments. With both left NULL, the run behaves exactly as before. The
+per-argument `prop2`..`prop7` functions and each argument's own
+`struct theft_type_info` are unchanged.
+
+The `shrink` callback receives a read-only view of the complete current
+argument group, the arity, a tactic number, the env, and an output
+array that theft initializes to all NULL. Leaving a slot NULL keeps the
+current instance; writing a pointer replaces that slot with a freshly
+allocated instance. On `THEFT_SHRINK_OK` at least two slots must be
+replaced, the new instances must not alias each other or any current
+argument, and the callback must not modify the instances it receives.
+The other result codes have their usual meaning: `DEAD_END` moves to
+the next tactic, `NO_MORE_TACTICS` ends the joint round, and `ERROR`
+halts the run.
+
+Joint shrinking is only attempted after the ordinary per-argument
+process reaches a local stall. Each round tries tactics starting at 0.
+The `rank` callback measures the complexity of the complete group: a
+candidate only reaches the property if its rank is strictly lower than
+the current group's rank. Candidates that do not decrease the rank are
+freed without a property call, and tactic exploration continues. When a
+candidate is a duplicate of a group already tried (when the Bloom
+filter is in use), or the property passes or skips, the whole old group
+is retained and only the new instances are freed. A still-failing
+candidate is accepted: only the replaced old instances are freed, the
+replacement instances become the current arguments, and shrinking
+returns to the ordinary per-argument pass. Joint tactics then restart
+from 0 on the new group; remaining tactics from the old group are not
+reused. Like ordinary shrinking, this does not promise a global
+minimum.
+
+Ownership summary:
+
+- Rejected candidates (non-decreasing rank, duplicate, PASS, SKIP,
+  observer halt or error) release only the instances the `shrink`
+  callback produced.
+- Accepted (FAIL) candidates release only the replaced old instances.
+- Slots left NULL are never freed or rebuilt by joint shrinking.
+- Joint shrinking must not replace an autoshrink-managed slot. Doing
+  so is a controlled run error, and the candidate's new instances are
+  cleaned up. Unreplaced autoshrink arguments keep their bit pool and
+  their ordinary shrinking capabilities.
+
+The optional `hooks.joint_shrink_post` observation hook runs after
+every real property call made with a complete joint candidate, with
+the candidate, tactic, and actual result. It sees a borrowed view and
+must not retain the pointers. It can continue, halt shrinking, or raise
+an error. On halt, a FAIL candidate becomes the final counter-example,
+while a PASS/SKIP candidate is reverted and the previous
+counter-example is retained. The shrink, successful-shrink, and
+failed-shrink counters move once per group-level attempt, not once per
+replaced slot. The existing per-argument shrink hooks are only used by
+the single-argument process and always receive real argument indices.
+
+
 ## Auto-shrinking
 
 As of version 0.3.0, theft has experimental support for auto-shrinking.

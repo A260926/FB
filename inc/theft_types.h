@@ -152,6 +152,66 @@ typedef enum theft_shrink_res
 theft_shrink_cb(struct theft *t, const void *instance,
     uint32_t tactic, void *env, void **output);
 
+
+/********************
+ * Joint shrinking *
+ ********************/
+
+/* Joint (coordinated) shrinking.
+ *
+ * The per-argument shrink callbacks above only simplify one argument at
+ * a time, so they can get stuck at a local minimum where a failure
+ * depends on correlations between several independently generated
+ * arguments. A joint shrink callback proposes replacements for several
+ * argument slots at once, based on a read-only view of the complete
+ * current argument group. It does not replace the per-argument type
+ * info (prop2..prop7 and each argument's own `struct theft_type_info`
+ * remain in use); joint shrinking is attempted only after the ordinary
+ * per-argument process reaches a local stall. */
+
+/* Attempt a coordinated simplification of the complete argument group.
+ *
+ * ARGS is a read-only view of the current ARITY arguments, TACTIC is
+ * the joint tactic number (starting at 0 for each new argument group),
+ * and ENV is `theft_run_config.joint.env`.
+ *
+ * OUTPUT is an array of ARITY slots that is initialized to all NULL
+ * before the call. Leave a slot NULL to keep the current instance in
+ * that slot; write a freshly allocated instance of that slot's type to
+ * replace it. At least two slots must be replaced on
+ * THEFT_SHRINK_OK. Every replacement instance must be independently
+ * allocated: replacement instances must not alias each other or any of
+ * the current arguments, and callbacks must not modify the instances
+ * received through ARGS.
+ *
+ * Return values:
+ *     THEFT_SHRINK_OK: OUTPUT contains replacement instances;
+ *     THEFT_SHRINK_DEAD_END: this tactic cannot simplify the group,
+ *         theft will try the next tactic;
+ *     THEFT_SHRINK_NO_MORE_TACTICS: there are no further joint tactics
+ *         for this argument group;
+ *     THEFT_SHRINK_ERROR: halt the run with an error.
+ *
+ * Ownership: theft takes ownership of every instance written to OUTPUT.
+ * Rejected candidates (the rank does not decrease, the group is a
+ * duplicate, the property passes/skips, or an observer halts) have
+ * their replacement instances freed exactly once; accepted candidates
+ * keep the replacement instances, and the replaced old instances are
+ * freed exactly once. Slots left NULL are never freed or rebuilt by
+ * joint shrinking. Replacement of autoshrink-managed slots is not
+ * allowed and is reported as a run error. */
+typedef enum theft_shrink_res
+theft_joint_shrink_cb(struct theft *t, const void **args, uint8_t arity,
+    uint32_t tactic, void *env, void **output);
+
+/* Rank the complete argument group, i.e. return a caller-defined
+ * measure of its complexity. A joint candidate is only evaluated if
+ * its rank is strictly less than the rank of the current group.
+ * ARGS is a read-only borrowed view; the callback must not modify or
+ * retain it. */
+typedef uint64_t
+theft_joint_rank_cb(const void **args, uint8_t arity, void *env);
+
 /* Print INSTANCE to output stream F.
  * Used for displaying counter-examples. Can be NULL. */
 typedef void
@@ -443,6 +503,41 @@ typedef enum theft_hook_shrink_trial_post_res
 theft_hook_shrink_trial_post_cb(const struct theft_hook_shrink_trial_post_info *info,
     void *env);
 
+/* Post-joint-shrinking observation hook: called after an actual
+ * property call with a complete joint-shrink candidate (the candidate
+ * has already been fully assembled, so ARGS contains only complete
+ * argument groups -- never a mix of old and new instances).
+ *
+ * ARGS is a borrowed view of the complete candidate; the hook must not
+ * free it, modify the instances, or save their pointers.
+ *
+ * Return CONTINUE to keep shrinking, HALT to stop shrinking, or ERROR
+ * to halt the run with an error. On HALT, a FAIL candidate becomes the
+ * final counter-example, while a PASS/SKIP candidate is reverted and
+ * the previous counter-example is retained. */
+enum theft_hook_joint_shrink_post_res {
+    THEFT_HOOK_JOINT_SHRINK_POST_ERROR,
+    THEFT_HOOK_JOINT_SHRINK_POST_CONTINUE,
+    THEFT_HOOK_JOINT_SHRINK_POST_HALT,
+};
+struct theft_hook_joint_shrink_post_info {
+    const char *prop_name;
+    size_t total_trials;
+    size_t trial_id;
+    theft_seed run_seed;
+    theft_seed trial_seed;
+    uint8_t arity;
+    size_t shrink_count;
+    size_t successful_shrinks;
+    size_t failed_shrinks;
+    void **args;
+    uint32_t tactic;
+    enum theft_trial_res result;
+};
+typedef enum theft_hook_joint_shrink_post_res
+theft_hook_joint_shrink_post_cb(
+    const struct theft_hook_joint_shrink_post_info *info, void *env);
+
 
 /*****************
  * Configuration *
@@ -471,6 +566,42 @@ theft_hook_shrink_trial_post_cb(const struct theft_hook_shrink_trial_post_info *
 
 /* A property can have at most this many arguments. */
 #define THEFT_MAX_ARITY 7
+
+/* Optional joint (coordinated) shrinking configuration.
+ *
+ * Joint shrinking lets a single shrink step replace several arguments
+ * at once, which is necessary when a failure only persists when
+ * correlated inputs change together. It complements, rather than
+ * replaces, the per-argument shrinking driven by each type_info:
+ * joint tactics are only attempted after the ordinary per-argument
+ * shrinking reaches a local stall, and every accepted joint candidate
+ * is followed by another full per-argument shrinking pass.
+ *
+ * Both `shrink` and `rank` must be provided: setting exactly one of
+ * them is reported as THEFT_RUN_ERROR_BAD_ARGS before any inputs are
+ * generated. If both are NULL, the whole struct is ignored and the
+ * run behaves exactly as before. When enabled, the property must take
+ * at least two arguments.
+ *
+ * Ownership rules:
+ *  - The `shrink` callback receives a read-only view of the current
+ *    arguments and an output array initialized to all NULL. NULL slots
+ *    keep the current object; non-NULL slots must point to freshly
+ *    allocated instances that alias neither each other nor any current
+ *    argument. At least two slots must be replaced.
+ *  - Rejected joint candidates (non-decreasing rank, duplicate group,
+ *    PASS/SKIP result, observer halt, or later error) only free the new
+ *    instances the callback produced. Accepted (FAIL) candidates free
+ *    only the replaced old instances. Unreplaced slots are never freed
+ *    or rebuilt.
+ *  - Autoshrink-managed slots may not be replaced by the joint
+ *    callback; doing so is a controlled run error, and the candidate's
+ *    new instances are cleaned up. */
+struct theft_joint_config {
+    theft_joint_shrink_cb *shrink;
+    theft_joint_rank_cb *rank;
+    void *env;
+};
 
 /* For worker processes that were sent a timeout signal,
  * how long should they be given to terminate and exit
@@ -545,10 +676,19 @@ struct theft_run_config {
         theft_hook_shrink_pre_cb *shrink_pre;
         theft_hook_shrink_post_cb *shrink_post;
         theft_hook_shrink_trial_post_cb *shrink_trial_post;
+        /* Observation hook for joint shrinking. This is separate from
+         * the per-argument shrink hooks above: those are only invoked
+         * by the ordinary single-argument process and always carry a
+         * real arg_index. Joint shrinking never reports through them. */
+        theft_hook_joint_shrink_post_cb *joint_shrink_post;
         /* Environment pointer. This is completely opaque to theft
          * itself, but will be passed to all callbacks. */
         void *env;
     } hooks;
+
+    /* Optional joint (coordinated) shrinking. See
+     * `struct theft_joint_config` for ownership and validation rules. */
+    struct theft_joint_config joint;
 };
 
 #endif

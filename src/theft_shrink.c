@@ -4,12 +4,18 @@
 #include "theft_call.h"
 #include "theft_trial.h"
 #include "theft_autoshrink.h"
+#include "theft_joint_shrink.h"
 #include <assert.h>
 
 #define LOG_SHRINK 0
 
 /* Attempt to simplify all arguments, breadth first. Continue as long as
- * progress is made, i.e., until a local minimum is reached. */
+ * progress is made, i.e., until a local minimum is reached.
+ *
+ * When joint shrinking is configured, it is only consulted after the
+ * ordinary per-argument sweep stalls. Accepting a joint candidate
+ * restarts the whole process (per-argument pass first, then joint
+ * tactics from 0 again) on the new argument group. */
 bool
 theft_shrink(struct theft *t) {
     bool progress = false;
@@ -42,6 +48,25 @@ theft_shrink(struct theft *t) {
                     LOG(1 - LOG_SHRINK, "%s %u: ERROR\n", __func__, arg_i);
                     return false;
                 }
+            }
+        }
+
+        /* The per-argument process has stalled: try coordinated
+         * shrinking across the complete argument group. */
+        if (!progress && theft_joint_shrink_enabled(t)) {
+            enum joint_round_res jres = theft_joint_shrink_round(t);
+            switch (jres) {
+            case JOINT_ROUND_ACCEPTED:
+                /* Restart per-argument shrinking and joint tactics on
+                 * the new group. */
+                progress = true;
+                break;
+            case JOINT_ROUND_DONE:
+                break;
+            case JOINT_ROUND_HALT:
+                return true;
+            case JOINT_ROUND_ERROR:
+                return false;
             }
         }
     } while (progress);

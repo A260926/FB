@@ -31,6 +31,7 @@ OBJS= 		${BUILD}/theft.o \
 		${BUILD}/theft_bloom.o \
 		${BUILD}/theft_call.o \
 		${BUILD}/theft_hash.o \
+		${BUILD}/theft_joint_shrink.o \
 		${BUILD}/theft_random.o \
 		${BUILD}/theft_rng.o \
 		${BUILD}/theft_run.o \

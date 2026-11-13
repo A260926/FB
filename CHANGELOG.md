@@ -1,5 +1,37 @@
 # theft Changes By Release
 
+## Unreleased
+
+### API Changes
+
+Added optional joint (coordinated) shrinking via the new `joint` field
+in `struct theft_run_config`, containing `shrink`, `rank`, and `env`
+callbacks. It shrinks several arguments in one step after the ordinary
+per-argument shrinking stalls, which is needed when a failure only
+persists while correlated inputs change together. Both callbacks must
+be set together (otherwise `theft_run` returns
+`THEFT_RUN_ERROR_BAD_ARGS` before generating any input), and joint
+shrinking requires at least two arguments. Leaving both NULL preserves
+the previous behavior; the per-argument `prop2`..`prop7` functions and
+each argument's own `struct theft_type_info` are unchanged.
+
+Added the `hooks.joint_shrink_post` observation hook, invoked after a
+real property call with a complete joint candidate. It can continue,
+halt shrinking, or report an error; on halt a FAIL candidate becomes
+the final counter-example while a PASS/SKIP candidate is reverted to
+the previous counter-example.
+
+### Other Improvements
+
+Joint candidates are only evaluated when the caller-supplied rank
+strictly decreases, deduplication uses the fully assembled argument
+group, and shrink/success/failure counters move once per group-level
+attempt rather than per replaced slot. Autoshrink-managed slots cannot
+be replaced by the joint callback; violations are reported as
+controlled run errors with the candidate cleaned up. See
+`doc/shrinking.md` for ownership and stopping semantics.
+
+
 ## v0.4.5 - 2019-02-11
 
 ### API Changes

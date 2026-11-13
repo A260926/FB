@@ -40,6 +40,26 @@ theft_run_init(const struct theft_run_config *cfg, struct theft **output) {
         goto cleanup;
     }
 
+    /* Joint shrinking is opt-in. Both callbacks must be provided
+     * together, and the property must have at least two arguments to
+     * coordinate. This is checked before any inputs are generated. */
+    const bool joint_shrink_set = cfg->joint.shrink != NULL;
+    const bool joint_rank_set = cfg->joint.rank != NULL;
+    if (joint_shrink_set != joint_rank_set) {
+        res = THEFT_RUN_INIT_ERROR_BAD_ARGS;
+        goto cleanup;
+    }
+    if (joint_shrink_set && arity < 2) {
+        res = THEFT_RUN_INIT_ERROR_BAD_ARGS;
+        goto cleanup;
+    }
+    struct joint_info joint = {
+        .shrink = cfg->joint.shrink,
+        .rank = cfg->joint.rank,
+        .env = cfg->joint.env,
+    };
+    memcpy(&t->joint, &joint, sizeof(joint));
+
     struct seed_info seeds = {
         .run_seed = cfg->seed ? cfg->seed : DEFAULT_THEFT_SEED,
         .always_seed_count = (cfg->always_seeds == NULL
@@ -89,6 +109,7 @@ theft_run_init(const struct theft_run_config *cfg, struct theft **output) {
         .shrink_pre = cfg->hooks.shrink_pre,
         .shrink_post = cfg->hooks.shrink_post,
         .shrink_trial_post = cfg->hooks.shrink_trial_post,
+        .joint_shrink_post = cfg->hooks.joint_shrink_post,
         .env = cfg->hooks.env,
     };
     memcpy(&t->hooks, &hooks, sizeof(hooks));
