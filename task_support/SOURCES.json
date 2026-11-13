@@ -1,0 +1,214 @@
+{
+  "upstream": {
+    "repo": "https://github.com/temoto/robotstxt",
+    "commit": "cadd395bcc35aaa85a924321f9c7b2d5aa66112c",
+    "license": "MIT"
+  },
+  "unchanged_upstream_files": [
+    {
+      "path": ".github/dependabot.yaml",
+      "sha256": "214d940291cfd9b997df6bc72802aac3ddcbb4895843195a94453f97215075ca"
+    },
+    {
+      "path": ".github/workflows/codeql.yml",
+      "sha256": "9087c4fda5b4cf64fcc8531d02de1f64d400d6621a54cdfb048cc9946973af26"
+    },
+    {
+      "path": ".github/workflows/test.yaml",
+      "sha256": "dbd81cb50533a80d6cd9c98fac1a5b61ce6dfadd906c696448ae03858a986683"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "03e87b71866efb5b18095edaca9dc4bf9043cec28d46bdc4d6ccc31900cfb5c7"
+    },
+    {
+      "path": ".golangci.yml",
+      "sha256": "a8fddff28942bab554c06d5bce4a899a9cf9fe4ba1549004765b9cc447f926d8"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "67f34fb9648270650e457f42e6f617d3dc8dd1828f9d20f9f6bb77c1bc02dee2"
+    },
+    {
+      "path": "README.rst",
+      "sha256": "7ba6a65e53bd25684324f47433d0194a2eed1ba79fa18bd61e5a7abb1ded9de6"
+    },
+    {
+      "path": "_gofuzz/corpus/disallow-all",
+      "sha256": "80517762f7e2df7b162daa0d534dd8268045d7dd85ea6ae3f58760c240f82c81"
+    },
+    {
+      "path": "_gofuzz/corpus/google-delays",
+      "sha256": "c8fd8b569ad113ba0835c7e062c2dd33f4aeadd261a7346ce539bcd0422cb497"
+    },
+    {
+      "path": "_gofuzz/corpus/google-matching",
+      "sha256": "d0e0c1508f5b2e270fdd5092d28366e3e44ea9551d9ede0950961a1284a95acb"
+    },
+    {
+      "path": "_gofuzz/corpus/google-order",
+      "sha256": "e7558b33e7bc0fdc5b7d8d73c3d948e8a811c46e412e00e415c8647493c3275d"
+    },
+    {
+      "path": "_gofuzz/corpus/google-precedence",
+      "sha256": "f8da59f6bce48234298c835b928bfd755776a920c52925aa57d6701433c61c9d"
+    },
+    {
+      "path": "_gofuzz/corpus/google-sitemaps",
+      "sha256": "4bd7c018d796eb73c87512e9faf5bc497c355409062a2b971e7216b124499991"
+    },
+    {
+      "path": "_gofuzz/corpus/google-wildcards",
+      "sha256": "67e79684535b6d919ae5119d377cdef1dfbeff2aa313c3632b02ba741f0fbdd6"
+    },
+    {
+      "path": "_gofuzz/corpus/grouping",
+      "sha256": "33e5b7c10ee80a0d476e5f925f75822fc6c4846c947290e0c697bef71c979ecd"
+    },
+    {
+      "path": "_gofuzz/corpus/host-unicode",
+      "sha256": "c024bd094cd0e2c77e6fe2b205cc26aa089e61c8dc805d8095abeae216886ecc"
+    },
+    {
+      "path": "_gofuzz/corpus/html",
+      "sha256": "f247e9b1fe381f4077b8e0cad1e6c8087c521c89001f6196620c75c64316c7e3"
+    },
+    {
+      "path": "_gofuzz/corpus/parse-error-001",
+      "sha256": "bc7781406ff4c9e43183dbf9644a5d586c79cef291abe1f59fb77933abc9c186"
+    },
+    {
+      "path": "_gofuzz/corpus/parse-error-002",
+      "sha256": "70fc95bfb219a6caba74d13923095a3fe229efa17765667a9513c77034f06c50"
+    },
+    {
+      "path": "_gofuzz/corpus/parse-error-003",
+      "sha256": "b3dab8a883233fc2ca995f5ec2a57c5d2557d61a41701573ef2f07e117761e5e"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-bom",
+      "sha256": "32813af219cf0a004193e8fe759d9f9608758049192bd318f5ab43fe368a7163"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-comment1",
+      "sha256": "44bf850f2f154ed4f226e97ad2a5417ad6915570838fda9231e38a7eb6831a94"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-comment2",
+      "sha256": "6ec2d16079d83fe5cc12de94741e0b2f30f0a058facd30c7fd5e0620a3c6882e"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-d9d9",
+      "sha256": "8574611d8bf8cd6fa6c47bdf8a887eeb9b606be56bf1310e96d606353ad3b754"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-foo",
+      "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+    },
+    {
+      "path": "_gofuzz/corpus/scanner-u2010",
+      "sha256": "dc094b7f52c5d89e323fa4c25d5d8eeff9e7aa419e152afb27ba79c8adc2bb60"
+    },
+    {
+      "path": "_gofuzz/corpus/wild-001",
+      "sha256": "7cbdf5563d68eb8b2bd9b7b4336a39888ec8a0a0e27431b11b62f555447a5147"
+    },
+    {
+      "path": "_gofuzz/corpus/wild-002",
+      "sha256": "b7e37d5f57cb2afbcd1e744a2ca115a26b1fe8a9b0d22e955ee3f51b69435c9a"
+    },
+    {
+      "path": "_gofuzz/corpus/wild-003",
+      "sha256": "99cf22565b3457b3da2aff2bbb7a658da108b193d875b6104899e2142a666960"
+    },
+    {
+      "path": "codecov.yml",
+      "sha256": "91b6f01e733aeb337ab1653e1eb43b3a52e7b2bac7379ef8115e3fe5ed318907"
+    },
+    {
+      "path": "fuzz.go",
+      "sha256": "ca375d3e15c2ed06b77b6645b5dd395711f668aa37a846b434464ee4ee19fafa"
+    },
+    {
+      "path": "go.mod",
+      "sha256": "170985f56796577787e72d08a15c26b559134b2c3057fde3d99a1c88c8a69ea7"
+    },
+    {
+      "path": "go.sum",
+      "sha256": "11efe9e2e67375b98d3198a84b3f6cd7936618843209f2a5e498a4d81d4c7169"
+    },
+    {
+      "path": "google_test.go",
+      "sha256": "204e3c064c80bb6692ffd154c4355c0f0c4be91b8731096d03ca471b4c847151"
+    },
+    {
+      "path": "parser.go",
+      "sha256": "8304b7a0906f1dfacdfce7e0f6b1b839d99079b11effe0e63da70558986a9d33"
+    },
+    {
+      "path": "robots.txt-check/main.go",
+      "sha256": "09f0166593bd96b374b66c42bde5c524587e9f9a05591800a0a4a2cdfec23bfe"
+    },
+    {
+      "path": "robotstxt.go",
+      "sha256": "fcdc0b241c77a47a0041167eabf1c9c64bb30ef5b0819f0011c90aefab57e3fa"
+    },
+    {
+      "path": "robotstxt_test.go",
+      "sha256": "71d5031dc5d4c6017a19d3c54cb31623fa0dfd68bf8923200113f11877de0fc0"
+    },
+    {
+      "path": "scanner.go",
+      "sha256": "df40810e79bccccc205bcf79201f66254c57cee89b870687dda81ca13cf6f9a3"
+    },
+    {
+      "path": "scanner_test.go",
+      "sha256": "e5a8752e4ef65980de13550c848d65bb5ea26fe9572fb82a0f34c42b8e0bc30e"
+    },
+    {
+      "path": "script/bench",
+      "sha256": "a310f8de3b1d53f5b387e52919f78ead24b7f9c20964b960dfd94e0e9220b40b"
+    },
+    {
+      "path": "script/clean",
+      "sha256": "5b50867ab8ee1c674eaa8db6caa89f0ffa7f7a3436052cd01ada938211578b77"
+    },
+    {
+      "path": "script/fuzz",
+      "sha256": "2885f430f80a5d46de3c418c6fd925a65a587eb13823e75e44bdc74c1fb8eca9"
+    }
+  ],
+  "dependencies": [
+    {
+      "module": "github.com/davecgh/go-spew",
+      "version": "v1.1.0",
+      "licenses": [
+        {
+          "path": "vendor/github.com/davecgh/go-spew/LICENSE",
+          "sha256": "6a6ae99c69879233ddb1095938f7f3ea651fd91d82d46988fb0be6489c7a1bb6"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pmezard/go-difflib",
+      "version": "v1.0.0",
+      "licenses": [
+        {
+          "path": "vendor/github.com/pmezard/go-difflib/LICENSE",
+          "sha256": "2eb550be6801c1ea434feba53bf6d12e7c71c90253e0a9de4a4f46cf88b56477"
+        }
+      ]
+    },
+    {
+      "module": "github.com/stretchr/testify",
+      "version": "v1.3.0",
+      "licenses": [
+        {
+          "path": "vendor/github.com/stretchr/testify/LICENSE",
+          "sha256": "dad2b0b2cc2dbdbf95ad5d800ef7588956e74dc2479014829d42be295125c25d"
+        }
+      ]
+    }
+  ],
+  "notes": "完整源码树加task_support与Go官方vendor产物；未实现目标功能；.git未随附。go.sum保留模块完整性哈希。无.gitmodules。"
+}

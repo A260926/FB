@@ -1,0 +1,82 @@
+name: test
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "55 1 */14 * *" # every two weeks, time chosen by RNG
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  clean:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012/5
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: lint=0 script/clean
+
+  bench:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012/5
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: script/bench
+
+  lint:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012/5
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.5.0
+
+  test:
+    name: "test with Go ${{ matrix.go }}"
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012/5
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { go: "1.22" }
+          - { go: "1.24" }
+          - { go: "1.26" }
+          - { go: "^1", coverage: true }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go test -race
+        if: ${{ ! matrix.coverage }}
+      - run: go test -race -covermode=atomic -coverprofile=coverage.txt
+        if: matrix.coverage
+      - uses: codecov/codecov-action@v5
+        if: matrix.coverage
+
+  vuln:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012/5
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kmulvey/govulncheck-action@main
