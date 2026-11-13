@@ -534,6 +534,53 @@ func Example_hijack_requests() {
 	// Output: done
 }
 
+// Shows how to handle HTTP authentication together with url/resource-type
+// request routes inside a single HijackRouter. Both features share one
+// Fetch.enable configuration, so enabling auth never drops the request
+// patterns and vice versa.
+func Example_hijack_auth() {
+	browser := rod.New().MustConnect()
+	defer browser.MustClose()
+
+	router := browser.HijackRequests()
+	defer router.MustStop()
+
+	// Normal request interception, matched by url and resource type.
+	router.MustAdd("*.js", func(ctx *rod.Hijack) {
+		ctx.ContinueRequest(&proto.FetchContinueRequest{})
+	})
+
+	// Every Fetch.authRequired event is delivered here independently, even
+	// several challenges carrying the same request id. Returning credentials
+	// answers Fetch.continueWithAuth with ProvideCredentials; returning nil
+	// answers CancelAuth so the browser never shows a login dialog. The second
+	// argument receives the original error if the answer cannot be sent. A nil
+	// error callback is replaced with a no-op.
+	err := router.SetAuthHandler(func(e *proto.FetchAuthRequired) *proto.FetchAuthChallengeResponse {
+		if e.AuthChallenge != nil && e.AuthChallenge.Realm == "private" {
+			return &proto.FetchAuthChallengeResponse{
+				Response: proto.FetchAuthChallengeResponseResponseProvideCredentials,
+				Username: "user",
+				Password: "pass",
+			}
+		}
+
+		return nil
+	}, func(err error) {
+		fmt.Printf("auth answer failed: %v\n", err)
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Passing nil removes the auth feature while keeping all request routes.
+	// _ = router.SetAuthHandler(nil, nil)
+
+	go router.Run()
+
+	_ = browser.MustPage("http://example.com/protected").MustWaitLoad()
+}
+
 // Shows how to share a remote object reference between two Eval.
 func Example_eval_reuse_remote_object() {
 	page := rod.New().MustConnect().MustPage()
