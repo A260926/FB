@@ -282,6 +282,7 @@ add_library (sndfile
 	src/interleave.c
 	src/strings.c
 	src/dither.c
+	src/tpdf_shaped.c
 	src/cart.c
 	src/broadcast.c
 	src/audio_detect.c
@@ -746,6 +747,15 @@ if (BUILD_EXAMPLES)
 	add_executable (sndfilehandle examples/sndfilehandle.cc)
 	target_link_libraries (sndfilehandle PUBLIC sndfile)
 
+# dither_shaped_example
+
+	add_executable (dither_shaped_example examples/dither_shaped_example.c)
+	target_link_libraries (dither_shaped_example
+		PRIVATE
+			sndfile
+			$<$<BOOL:${LIBM_REQUIRED}>:m>
+		)
+
 	set (SNDFILE_EXAMPLE_TARGETS
 		sndfile-to-text
 		sndfile-loopify
@@ -754,6 +764,7 @@ if (BUILD_EXAMPLES)
 		list_formats
 		generate
 		sndfilehandle
+		dither_shaped_example
 		)
 
 	set_target_properties(${SNDFILE_EXAMPLE_TARGETS} PROPERTIES FOLDER Examples)

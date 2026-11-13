@@ -179,12 +179,18 @@ enum
 
 	SFC_SET_RAW_START_OFFSET		= 0x1090,
 
-	/* Commands reserved for dithering, which is not implemented. */
+	/* Commands for dithering. */
 	SFC_SET_DITHER_ON_WRITE			= 0x10A0,
 	SFC_SET_DITHER_ON_READ			= 0x10A1,
 
 	SFC_GET_DITHER_INFO_COUNT		= 0x10A2,
 	SFC_GET_DITHER_INFO				= 0x10A3,
+
+	/* Set the uint64_t seed used by SFD_TPDF_SHAPED. Data must point to a
+	** uint64_t and datasize must equal sizeof (uint64_t). Only valid on a
+	** SFM_WRITE file before the first audio sample has been written.
+	*/
+	SFC_SET_DITHER_SEED				= 0x10A4,
 
 	SFC_GET_EMBED_FILE_INFO			= 0x10B0,
 
@@ -407,7 +413,6 @@ typedef struct
 
 /*
 ** Enums and typedefs for adding dither on read and write.
-** Reserved for future implementation.
 */
 
 enum
@@ -416,7 +421,14 @@ enum
 
 	SFD_NO_DITHER		= 500,
 	SFD_WHITE			= 501,
-	SFD_TRIANGULAR_PDF	= 502
+	SFD_TRIANGULAR_PDF	= 502,
+
+	/*
+	** Triangular probability density function dither with first order
+	** error feedback. Only implemented for SFM_WRITE of PCM_16 and
+	** PCM_24 files fed from normalized float or double input.
+	*/
+	SFD_TPDF_SHAPED		= 503
 } ;
 
 typedef struct

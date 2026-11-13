@@ -26,6 +26,7 @@
 #include	"sndfile.h"
 #include	"sfendian.h"
 #include	"common.h"
+#include	"tpdf_shaped.h"
 
 #if HAVE_UNISTD_H
 #include <unistd.h>
@@ -37,8 +38,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
-
-#define		SNDFILE_MAGICK	0x1234C0DE
 
 #ifdef __APPLE__
 	/*
@@ -294,6 +293,14 @@ ErrorStruct SndfileErrors [] =
 	{	SFE_AVR_BAD_REZ_SIGN	, "Error : Bad rez/sign combination." },
 
 	{	SFE_MPC_NO_MARKER		, "Error : No marker in MPC2K file." },
+
+	{	SFE_TPDF_BAD_FORMAT		, "Error : SFD_TPDF_SHAPED only supports SFM_WRITE of PCM_16 or PCM_24 files." },
+	{	SFE_TPDF_BAD_LEVEL		, "Error : SFD_TPDF_SHAPED only accepts a dither level of 1.0." },
+	{	SFE_TPDF_NO_NORMALIZE	, "Error : SFD_TPDF_SHAPED requires normalized float and double input." },
+	{	SFE_TPDF_NOT_WRITABLE	, "Error : shaped dither can only be enabled on a file opened SFM_WRITE." },
+	{	SFE_TPDF_AFTER_WRITE	, "Error : shaped dither configuration is only allowed before the first audio sample is written." },
+	{	SFE_TPDF_BAD_SEED		, "Error : SFC_SET_DITHER_SEED needs a uint64_t with datasize == sizeof (uint64_t)." },
+	{	SFE_TPDF_SEEK			, "Error : seek is not supported while shaped dither is active." },
 
 	{	SFE_MAX_ERROR			, "Maximum error number." },
 	{	SFE_MAX_ERROR + 1		, NULL }
@@ -1061,6 +1068,8 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 
 	switch (command)
 	{	case SFC_SET_NORM_FLOAT :
+			if (tpdf_is_active (psf) && (datasize ? SF_TRUE : SF_FALSE) != psf->norm_float)
+				return (psf->error = SFE_TPDF_NO_NORMALIZE) ;
 			old_value = psf->norm_float ;
 			psf->norm_float = (datasize) ? SF_TRUE : SF_FALSE ;
 			return old_value ;
@@ -1072,6 +1081,8 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 			break ;
 
 		case SFC_SET_NORM_DOUBLE :
+			if (tpdf_is_active (psf) && (datasize ? SF_TRUE : SF_FALSE) != psf->norm_double)
+				return (psf->error = SFE_TPDF_NO_NORMALIZE) ;
 			old_value = psf->norm_double ;
 			psf->norm_double = (datasize) ? SF_TRUE : SF_FALSE ;
 			return old_value ;
@@ -1213,17 +1224,60 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 		case SFC_SET_DITHER_ON_WRITE :
 			if (data == NULL || datasize != SIGNED_SIZEOF (SF_DITHER_INFO))
 				return (psf->error = SFE_BAD_COMMAND_PARAM) ;
-			memcpy (&psf->write_dither, data, sizeof (psf->write_dither)) ;
-			if (psf->file.mode == SFM_WRITE || psf->file.mode == SFM_RDWR)
-				dither_init (psf, SFM_WRITE) ;
+			{	SF_DITHER_INFO	info ;
+
+				memcpy (&info, data, sizeof (info)) ;
+
+				if ((info.type & SFD_TYPEMASK) == SFD_TPDF_SHAPED)
+				{	int error = tpdf_activate (psf, &info) ;
+
+					if (error != 0)
+						return (psf->error = error) ;
+
+					memcpy (&psf->write_dither, &info, sizeof (psf->write_dither)) ;
+					break ;
+					} ;
+
+				/* Only SFD_NO_DITHER may follow an SFD_TPDF_SHAPED session;
+				** the legacy dither cannot share its storage. */
+				if (tpdf_owns (psf) && (info.type & SFD_TYPEMASK) != SFD_NO_DITHER)
+					return (psf->error = SFE_TPDF_BAD_FORMAT) ;
+
+				if (tpdf_owns (psf))
+				{	tpdf_deactivate (psf) ;
+					memcpy (&psf->write_dither, &info, sizeof (psf->write_dither)) ;
+					break ;
+					} ;
+
+				memcpy (&psf->write_dither, &info, sizeof (psf->write_dither)) ;
+				if (psf->file.mode == SFM_WRITE || psf->file.mode == SFM_RDWR)
+					dither_init (psf, SFM_WRITE) ;
+				} ;
 			break ;
 
 		case SFC_SET_DITHER_ON_READ :
 			if (data == NULL || datasize != SIGNED_SIZEOF (SF_DITHER_INFO))
 				return (psf->error = SFE_BAD_COMMAND_PARAM) ;
-			memcpy (&psf->read_dither, data, sizeof (psf->read_dither)) ;
-			if (psf->file.mode == SFM_READ || psf->file.mode == SFM_RDWR)
-				dither_init (psf, SFM_READ) ;
+			{	SF_DITHER_INFO	info ;
+
+				memcpy (&info, data, sizeof (info)) ;
+				memcpy (&psf->read_dither, &info, sizeof (psf->read_dither)) ;
+
+				/* The read interface keeps its original behaviour. The legacy
+				** dither_init is only skipped when an SFD_TPDF_SHAPED session
+				** owns psf->dither, since its TPDF_DATA storage is not a
+				** DITHER_DATA; shaped dither never wraps the read callbacks. */
+				if (! tpdf_owns (psf) && (psf->file.mode == SFM_READ || psf->file.mode == SFM_RDWR))
+					dither_init (psf, SFM_READ) ;
+				} ;
+			break ;
+
+		case SFC_SET_DITHER_SEED :
+			{	int error = tpdf_set_seed (psf, data, datasize) ;
+
+				if (error != 0)
+					return (psf->error = error) ;
+				} ;
 			break ;
 
 		case SFC_FILE_TRUNCATE :
@@ -1509,6 +1563,14 @@ sf_seek	(SNDFILE *sndfile, sf_count_t offset, int whence)
 	sf_count_t	seek_from_start = 0, retval ;
 
 	VALIDATE_SNDFILE_AND_ASSIGN_PSF (sndfile, psf, 1) ;
+
+	/* An active SFD_TPDF_SHAPED session is a strictly sequential writer:
+	** the feedback error and PRNG streams cannot be repositioned. Reject
+	** the seek without touching any state. */
+	if (tpdf_is_active (psf))
+	{	psf->error = SFE_TPDF_SEEK ;
+		return PSF_SEEK_ERROR ;
+		} ;
 
 	if (! psf->sf.seekable)
 	{	psf->error = SFE_NOT_SEEKABLE ;

@@ -79,7 +79,7 @@ noinst_LTLIBRARIES = src/libcommon.la
 src_libcommon_la_CFLAGS = $(EXTERNAL_XIPH_CFLAGS) $(MPEG_CFLAGS)
 src_libcommon_la_SOURCES = src/common.c src/file_io.c src/command.c src/pcm.c src/ulaw.c src/alaw.c \
 	src/float32.c src/double64.c src/ima_adpcm.c src/ms_adpcm.c src/gsm610.c src/dwvw.c src/vox_adpcm.c \
-	src/interleave.c src/strings.c src/dither.c src/cart.c src/broadcast.c src/audio_detect.c \
+	src/interleave.c src/strings.c src/dither.c src/tpdf_shaped.c src/cart.c src/broadcast.c src/audio_detect.c \
 	src/ima_oki_adpcm.c src/ima_oki_adpcm.h src/alac.c src/chunk.c src/chanmap.c \
 	src/windows.c src/id3.c src/id3.h src/nms_adpcm.c src/mpeg_decode.c src/mpeg_l3_encode.c src/mpeg.h $(WIN_VERSION_FILE)
 
@@ -175,7 +175,7 @@ endif
 #############
 
 check_PROGRAMS += examples/make_sine examples/sfprocess examples/list_formats examples/generate examples/sndfilehandle \
-	examples/sndfile-to-text examples/sndfile-loopify
+	examples/sndfile-to-text examples/sndfile-loopify examples/dither_shaped_example
 
 examples_sndfile_to_text_SOURCES = examples/sndfile-to-text.c
 examples_sndfile_to_text_LDADD = src/libsndfile.la
@@ -197,6 +197,9 @@ examples_generate_LDADD = src/libsndfile.la
 
 examples_sndfilehandle_SOURCES = examples/sndfilehandle.cc
 examples_sndfilehandle_LDADD = src/libsndfile.la
+
+examples_dither_shaped_example_SOURCES = examples/dither_shaped_example.c
+examples_dither_shaped_example_LDADD = src/libsndfile.la
 
 ##########
 # tests/ #

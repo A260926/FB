@@ -94,6 +94,9 @@
 
 #define		SF_MAX_CHANNELS		1024
 
+/* Guard value written into SF_PRIVATE.Magick when a handle is initialized. */
+#define		SNDFILE_MAGICK		0x1234C0DE
+
 /*
 *	Macros for splitting the format file of SF_INFO into container type,
 **	codec type and endian-ness.
@@ -443,6 +446,10 @@ typedef struct sf_private_tag
 	SF_DITHER_INFO	write_dither ;
 	SF_DITHER_INFO	read_dither ;
 
+	/* Seed handling for SFD_TPDF_SHAPED (see src/tpdf_shaped.c). */
+	uint64_t		tpdf_seed ;
+	int				tpdf_seed_set ;
+
 	int				norm_double ;
 	int				norm_float ;
 
@@ -718,6 +725,14 @@ enum
 	SFE_MPC_NO_MARKER,
 
 	SFE_MPEG_BAD_SAMPLERATE,
+
+	SFE_TPDF_BAD_FORMAT,
+	SFE_TPDF_BAD_LEVEL,
+	SFE_TPDF_NO_NORMALIZE,
+	SFE_TPDF_NOT_WRITABLE,
+	SFE_TPDF_AFTER_WRITE,
+	SFE_TPDF_BAD_SEED,
+	SFE_TPDF_SEEK,
 
 	SFE_MAX_ERROR			/* This must be last in list. */
 } ;
