@@ -1,0 +1,48 @@
+name: Alpha
+
+# comment /alpha on a PR to publish an alpha of its branch through the Release workflow
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  alpha:
+    name: Alpha
+    runs-on: ubuntu-latest
+    if: github.repository == 'playcanvas/engine' && github.event.issue.pull_request && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/alpha')
+    permissions:
+      actions: write
+      pull-requests: write
+    steps:
+      - name: Dispatch release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          USER: ${{ github.event.comment.user.login }}
+          COMMENT: ${{ github.event.comment.id }}
+        run: |
+          react() { gh api -X POST "repos/$GH_REPO/issues/comments/$COMMENT/reactions" -f content="$1" > /dev/null; }
+
+          # the release publishes to npm with the app token, so only repo admins may trigger it
+          perm=$(gh api "repos/$GH_REPO/collaborators/$USER/permission" --jq .permission)
+          if [[ "$perm" != "admin" ]]; then
+            react -1
+            echo "::error::$USER needs admin access to run /alpha"
+            exit 1
+          fi
+
+          # fork branches can't be dispatched, and their code shouldn't be published from this repo
+          read -r branch cross < <(gh pr view "$PR" --json headRefName,isCrossRepository --jq '"\(.headRefName) \(.isCrossRepository)"')
+          if [[ "$cross" == "true" ]]; then
+            react -1
+            echo "::error::/alpha only works for PRs from branches in $GH_REPO"
+            exit 1
+          fi
+
+          gh workflow run release.yml --ref "$branch" -f type=alpha
+          react rocket

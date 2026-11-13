@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { GraphNode } from '../src/scene/graph-node.js';
+import { Vec3 } from '../src/core/math/vec3.js';
+import { BoundingBox } from '../src/core/shape/bounding-box.js';
+const root=new GraphNode('root'),child=new GraphNode('child');root.addChild(child);
+root.setLocalScale(2,1,1);child.setLocalEulerAngles(0,0,45);child.setLocalPosition(1,0,0);
+const world=child.getWorldTransform();const p=world.transformPoint(new Vec3(1,0,0));
+assert.ok(Math.abs(p.x-(2+Math.SQRT2))<1e-5&&Math.abs(p.y-Math.SQRT1_2)<1e-5);
+const box=new BoundingBox(new Vec3(),new Vec3(1,1,1));const out=new BoundingBox();out.setFromTransformedAabb(box,world);
+assert.ok(Math.abs(out.center.x-2)<1e-6&&Math.abs(out.halfExtents.x-2*Math.SQRT2)<1e-5);
+const normal=child.normalMatrix;assert.ok(Number.isFinite(normal.data[0]));
+root.setLocalPosition(3,0,0);assert.ok(Math.abs(child.getWorldTransform().data[12]-5)<1e-6);
+console.log('PLAYCANVAS_BASELINE world_x='+child.getPosition().x+' bbox_half_x='+out.halfExtents.x.toFixed(6)+' normal00='+normal.data[0].toFixed(6));

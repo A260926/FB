@@ -1,0 +1,192 @@
+import { EventHandler } from '../../core/event-handler.js';
+
+import { TouchEvent } from './touch-event.js';
+
+/**
+ * Manages touch input by handling and dispatching touch events. Extends {@link EventHandler}
+ * to fire `touchstart`, `touchend`, `touchmove`, and `touchcancel` events (see {@link TouchEvent}).
+ *
+ * Detects and processes touch interactions with the attached DOM element, allowing applications
+ * to respond to common touch gestures. The TouchDevice instance must be attached to a DOM element
+ * before it can detect touch events.
+ *
+ * Your application's TouchDevice instance is managed and accessible via {@link AppBase#touch}.
+ *
+ * @category Input Devices
+ */
+class TouchDevice extends EventHandler {
+    /**
+     * Fired when a touch starts. The handler is passed a {@link TouchEvent}.
+     *
+     * @event
+     * @example
+     * app.touch.on('touchstart', (e) => {
+     *     console.log(`Touch started at position: ${e.x}, ${e.y}`);
+     * });
+     */
+    static EVENT_TOUCHSTART = 'touchstart';
+
+    /**
+     * Fired when a touch ends. The handler is passed a {@link TouchEvent}.
+     *
+     * @event
+     * @example
+     * app.touch.on('touchend', (e) => {
+     *     console.log(`Touch ended at position: ${e.x}, ${e.y}`);
+     * });
+     */
+    static EVENT_TOUCHEND = 'touchend';
+
+    /**
+     * Fired when a touch moves. The handler is passed a {@link TouchEvent}.
+     *
+     * @event
+     * @example
+     * app.touch.on('touchmove', (e) => {
+     *     console.log(`Touch moved to position: ${e.x}, ${e.y}`);
+     * });
+     */
+    static EVENT_TOUCHMOVE = 'touchmove';
+
+    /**
+     * Fired when a touch is interrupted in some way. The exact reasons for canceling a touch can
+     * vary from device to device. For example, a modal alert pops up during the interaction; the
+     * touch point leaves the document area, or there are more touch points than the device
+     * supports, in which case the earliest touch point is canceled. The handler is passed a
+     * {@link TouchEvent}.
+     *
+     * @event
+     * @example
+     * app.touch.on('touchcancel', (e) => {
+     *     console.log(`Touch canceled at position: ${e.x}, ${e.y}`);
+     * });
+     */
+    static EVENT_TOUCHCANCEL = 'touchcancel';
+
+    /**
+     * @type {Element|null}
+     * @private
+     */
+    _element = null;
+
+    /**
+     * @type {(e: globalThis.TouchEvent) => void}
+     * @private
+     */
+    _startHandler;
+
+    /**
+     * @type {(e: globalThis.TouchEvent) => void}
+     * @private
+     */
+    _endHandler;
+
+    /**
+     * @type {(e: globalThis.TouchEvent) => void}
+     * @private
+     */
+    _moveHandler;
+
+    /**
+     * @type {(e: globalThis.TouchEvent) => void}
+     * @private
+     */
+    _cancelHandler;
+
+    /**
+     * The element's inline `touch-action` before this device set it, restored on detach.
+     *
+     * @type {string}
+     * @private
+     */
+    _prevTouchAction = '';
+
+    /**
+     * Create a new touch device and attach it to an element.
+     *
+     * @param {Element} element - The element to attach listen for events on.
+     */
+    constructor(element) {
+        super();
+
+        this._startHandler = this._handleTouchStart.bind(this);
+        this._endHandler = this._handleTouchEnd.bind(this);
+        this._moveHandler = this._handleTouchMove.bind(this);
+        this._cancelHandler = this._handleTouchCancel.bind(this);
+
+        this.attach(element);
+    }
+
+    /**
+     * Attach a device to an element in the DOM. If the device is already attached to an element
+     * this method will detach it first.
+     *
+     * The device sets the element's `touch-action` style to `none`, so the browser does not scroll
+     * or zoom the page while a touch on the element is in progress. The previous value is restored
+     * by {@link TouchDevice#detach}.
+     *
+     * @param {Element} element - The element to attach to.
+     */
+    attach(element) {
+        if (this._element) {
+            this.detach();
+        }
+
+        this._element = element;
+
+        // Without this, the browser can claim a drag as a page scroll before the first touchmove
+        // reaches the engine. That touchmove is then not cancelable, and the browser cancels the
+        // touch, so the application stops receiving it.
+        const style = /** @type {HTMLElement} */ (element).style;
+        if (style) {
+            this._prevTouchAction = style.touchAction;
+            style.touchAction = 'none';
+        }
+
+        this._element.addEventListener('touchstart', this._startHandler, false);
+        this._element.addEventListener('touchend', this._endHandler, false);
+        this._element.addEventListener('touchmove', this._moveHandler, false);
+        this._element.addEventListener('touchcancel', this._cancelHandler, false);
+    }
+
+    /**
+     * Detach a device from the element it is attached to.
+     */
+    detach() {
+        if (this._element) {
+            this._element.removeEventListener('touchstart', this._startHandler, false);
+            this._element.removeEventListener('touchend', this._endHandler, false);
+            this._element.removeEventListener('touchmove', this._moveHandler, false);
+            this._element.removeEventListener('touchcancel', this._cancelHandler, false);
+
+            const style = /** @type {HTMLElement} */ (this._element).style;
+            if (style) {
+                style.touchAction = this._prevTouchAction;
+            }
+        }
+        this._element = null;
+    }
+
+    _handleTouchStart(e) {
+        this.fire('touchstart', new TouchEvent(this, e));
+    }
+
+    _handleTouchEnd(e) {
+        this.fire('touchend', new TouchEvent(this, e));
+    }
+
+    _handleTouchMove(e) {
+        // Stop the browser from scrolling or zooming during the drag. Once the browser has started
+        // a scroll the event is not cancelable, and calling preventDefault only logs a warning.
+        if (e.cancelable) {
+            e.preventDefault();
+        }
+        this.fire('touchmove', new TouchEvent(this, e));
+    }
+
+    _handleTouchCancel(e) {
+        this.fire('touchcancel', new TouchEvent(this, e));
+    }
+}
+
+export { TouchDevice };
