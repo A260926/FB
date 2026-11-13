@@ -1,1 +1,3 @@
 micromod-c/micromod.c
+micromod-c/micromod_core.c
+micromod-c/micromod_player.c
