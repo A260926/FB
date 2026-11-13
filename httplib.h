@@ -1520,6 +1520,13 @@ private:
 struct Response;
 using ResponseHandler = std::function<bool(const Response &response)>;
 
+// Called once for every complete interim (1xx, except a 101 Switching
+// Protocols which is final) response head, in wire order. The Response passed
+// in carries only that head: its status line, version and header fields, with
+// no body. Interim headers never become part of the final response.
+using InformationalResponseHandler =
+    std::function<void(const Response &response)>;
+
 struct FormData {
   std::string name;
   std::string content;
@@ -1843,6 +1850,9 @@ struct Request {
   // for client
   std::vector<std::string> accept_content_types;
   ResponseHandler response_handler;
+  // Optional callback for interim (1xx other than 101) response heads. When
+  // unset, interim responses are skipped as before.
+  InformationalResponseHandler informational_response_handler;
   ContentReceiverWithProgress content_receiver;
   DownloadProgress download_progress;
   UploadProgress upload_progress;
@@ -2923,7 +2933,9 @@ public:
                            const Params &params = {},
                            const Headers &headers = {},
                            const std::string &body = {},
-                           const std::string &content_type = {});
+                           const std::string &content_type = {},
+                           InformationalResponseHandler
+                               informational_response_handler = nullptr);
 
   bool send(Request &req, Response &res, Error &error);
   Result send(const Request &req);
@@ -3356,7 +3368,9 @@ public:
                                        const Params &params = {},
                                        const Headers &headers = {},
                                        const std::string &body = {},
-                                       const std::string &content_type = {});
+                                       const std::string &content_type = {},
+                                       InformationalResponseHandler
+                                           informational_response_handler = nullptr);
 
   bool send(Request &req, Response &res, Error &error);
   Result send(const Request &req);
@@ -15781,8 +15795,13 @@ inline bool ClientImpl::read_response_line(Stream &strm, const Request &req,
 
   // Skip interim (1xx) responses along with their header fields, except a 100
   // Continue the caller handles itself for Expect: 100-continue. 101 ends
-  // HTTP on the connection, so it is final. A server sending them without end
-  // would hold the client, so there may be only so many.
+  // HTTP on the connection, so it is final and is never reported here. A
+  // server sending them without end would hold the client, so there may be
+  // only so many. When an informational_response_handler is installed, each
+  // complete interim head (status line plus its header fields, no body) is
+  // delivered to it in wire order instead of being silently discarded. The
+  // interim headers stay out of `res`, so they can never reach the final
+  // response.
   size_t interim_count = 0;
   while (100 <= res.status && res.status < 200 &&
          res.status != StatusCode::SwitchingProtocol_101 &&
@@ -15792,6 +15811,16 @@ inline bool ClientImpl::read_response_line(Stream &strm, const Request &req,
     }
     Headers interim_headers;
     if (!detail::read_headers(strm, interim_headers)) { return false; }
+
+    if (req.informational_response_handler) {
+      Response interim;
+      interim.version = res.version;
+      interim.status = res.status;
+      interim.reason = res.reason;
+      interim.headers = std::move(interim_headers);
+      req.informational_response_handler(interim);
+    }
+
     if (!line_reader.getline()) { return false; } // next response line
 
     if (!detail::parse_status_line(line_reader.ptr(), res.version, res.status,
@@ -15979,7 +16008,9 @@ inline ClientImpl::StreamHandle
 ClientImpl::open_stream(const std::string &method, const std::string &path,
                         const Params &params, const Headers &headers,
                         const std::string &body,
-                        const std::string &content_type) {
+                        const std::string &content_type,
+                        InformationalResponseHandler
+                            informational_response_handler) {
   // Encode the target exactly like the buffered send path does, so that the
   // same `path` produces the same request line through either API.
   auto raw_query_path =
@@ -15990,6 +16021,8 @@ ClientImpl::open_stream(const std::string &method, const std::string &path,
   req.path = detail::encode_request_target(raw_query_path, path_encode_);
   req.headers = headers;
   req.body = body;
+  req.informational_response_handler =
+      std::move(informational_response_handler);
 
   prepare_default_headers(req, true, content_type);
 
@@ -17129,6 +17162,19 @@ inline bool ClientImpl::process_request(Stream &strm, Request &req,
   // Handle Expect: 100-continue response
   if (expect_100_continue) {
     if (res.status == StatusCode::Continue_100) {
+      // read_response_line() leaves a 100 Continue for this path to handle,
+      // so report its head here, once, before the body goes out. Notifying
+      // changes nothing about the wire exchange: the body is still sent a
+      // single time below, and these headers are cleared before the final
+      // response head is read.
+      if (req.informational_response_handler) {
+        Response interim;
+        interim.version = res.version;
+        interim.status = res.status;
+        interim.reason = res.reason;
+        interim.headers = res.headers;
+        req.informational_response_handler(interim);
+      }
       // Server accepted, send the body
       if (!write_request_body(strm, req, error)) { return false; }
 
@@ -18884,8 +18930,11 @@ inline Result Client::Options(const std::string &path, const Headers &headers) {
 inline ClientImpl::StreamHandle
 Client::open_stream(const std::string &method, const std::string &path,
                     const Params &params, const Headers &headers,
-                    const std::string &body, const std::string &content_type) {
-  return cli_->open_stream(method, path, params, headers, body, content_type);
+                    const std::string &body, const std::string &content_type,
+                    InformationalResponseHandler
+                        informational_response_handler) {
+  return cli_->open_stream(method, path, params, headers, body, content_type,
+                           std::move(informational_response_handler));
 }
 
 inline bool Client::send(Request &req, Response &res, Error &error) {

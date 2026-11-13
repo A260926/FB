@@ -1773,6 +1773,74 @@ Unlike a content receiver, the Stream API is bounded by the client's `set_payloa
 
 See [README-stream.md](README-stream.md) for more details.
 
+## Informational (1xx) Responses
+
+An interim response such as `103 Early Hints` carries headers before the
+final response. Set `Request::informational_response_handler` to observe each
+complete interim head (a `101 Switching Protocols` stays a final response).
+The callback receives a `Response` that contains only that head — status,
+version and headers, with no body — and interim headers never become part of
+the final response. When the handler is not set, interim responses are skipped
+as before.
+
+```c++
+#include <httplib.h>
+
+httplib::Request req;
+req.method = "GET";
+req.path = "/catalog";
+req.informational_response_handler = [](const httplib::Response &interim) {
+  if (interim.status == httplib::StatusCode::EarlyHints_103) {
+    auto link = interim.get_header_value("Link");
+    // React to the early hint while the main document is still being produced.
+  }
+};
+
+httplib::Client cli("http://localhost:8080");
+httplib::Response res;
+httplib::Error err;
+if (cli.send(req, res, err)) {
+  // `res` holds only the final response; the interim Link header is not here.
+}
+```
+
+The same callback works on the streaming API through the last argument of
+`Client::open_stream(...)`, and a `100 Continue` triggered by
+`Expect: 100-continue` is reported once without changing when the body is
+sent.
+
+## Linked Collection
+
+Some collection APIs announce related JSON documents with
+`Link: <...>; rel=preload; as=fetch` entries inside `103 Early Hints`.
+`collect_linked` issues the primary `GET` and fetches those resources on
+independent connections as soon as the hints arrive — before the primary
+response body is read — bounded by a concurrency limit. Links in the final
+response participate too; each canonical same-origin URL is requested once, in
+first-discovery order. Only `http` URLs without userinfo are supported, and
+`concurrency` must be greater than zero.
+
+```c++
+#include <linked_collection.h>
+
+// Up to 4 associated requests run concurrently, on their own connections.
+auto collection = httplib::collect_linked("http://localhost:8080/catalog", 4);
+
+// The primary response, even if some associated fetches fail.
+std::cout << collection.primary.status << ' ' << collection.primary.body << '\n';
+
+for (const auto &resource : collection.resources) {
+  if (resource.error == httplib::Error::Success) {
+    std::cout << resource.url << " -> " << resource.status << ' '
+              << resource.body << '\n';
+  } else {
+    // Transport/protocol failure, a redirect loop, or a cross-origin redirect.
+    std::cout << resource.url << " failed: "
+              << httplib::to_string(resource.error) << '\n';
+  }
+}
+```
+
 ## SSE Client
 
 ```cpp
