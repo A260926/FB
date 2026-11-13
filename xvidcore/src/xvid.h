@@ -26,6 +26,8 @@
 #ifndef _XVID_H_
 #define _XVID_H_
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -560,6 +562,39 @@ typedef struct {
 								   *          This is not a problem as long as vbv_peakrate > vbv_size + vbv_maxrate which
 								   *          guarantees that vbv_peakrate won't be exceeded. */
 }xvid_plugin_2pass2_t;
+
+/* ------- v1.4.x -------
+ *
+ * Read-only inspection of the second pass plan (optional). Pass a pointer to
+ * this structure as param1 with opt == XVID_PLG_2PASS2_QUERY, after the plugin
+ * was created. It reports the time schedule and the plan curve the plugin
+ * computed, which is useful for diagnostics and tests.
+ *
+ * scaled_length and desired_length, when non-NULL, must point to arrays of at
+ * least num_frames ints; they are filled with the planned frame sizes and the
+ * per-frame allocations chosen so far (0 for frames not yet encoded).
+ */
+#define XVID_PLG_2PASS2_QUERY 0x1001
+
+typedef struct {
+	int version;
+
+	int vfr;                 /* [out] 1 if a variable framerate schedule was used */
+	int num_frames;          /* [out] number of frames in the plan */
+	int fbase;               /* [out] time base of the schedule (fixed or variable) */
+	int64_t total_fincr;     /* [out] sum of frame durations (variable framerate only) */
+
+	uint64_t target_bytes;   /* [out] target size after container overhead */
+
+	int vbv_checked;         /* [out] 1 if a VBV check was performed */
+	int vbv_pre_status;      /* [out] check result before scaling */
+	int vbv_post_status;     /* [out] check result after scaling, if scaling ran */
+	int vbv_scaled;          /* [out] 1 if the curve was rescaled for VBV */
+	int num_scenes;          /* [out] number of scenes seen by the VBV scaler */
+
+	int *scaled_length;      /* [in,opt] per-frame planned sizes (plan curve) */
+	int *desired_length;     /* [in,opt] per-frame allocation so far */
+} xvid_plugin_2pass2_query_t;
 
 
 typedef struct{

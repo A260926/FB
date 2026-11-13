@@ -42,9 +42,38 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
 
 #include "../xvid.h"
 #include "../image/image.h"
+
+/*****************************************************************************
+ * Variable framerate statistics file format
+ *
+ * A first pass run with a zero fincr writes the following extension right
+ * after the usual file header:
+ *
+ *   # XVID_TIMING_V1 <fbase>
+ *   # XVID_DURATION <frame_num> <fincr>
+ *   <historical 7 or 8 column statistics line>
+ *   ...
+ *
+ * There is exactly one duration line before each statistics line, frame_num
+ * starts at zero and increments by one. Fixed framerate first pass files do
+ * not contain either extension, so they remain readable exactly as before.
+ ****************************************************************************/
+
+#define TIMING_HEADER_PREFIX "# XVID_TIMING_V1"
+#define DURATION_HEADER_PREFIX "# XVID_DURATION"
+
+/* VBV compliancy status bits, shared by the fixed and variable framerate
+ * checks and reported by the query entry point. */
+#define VBV_COMPLIANT 0
+#define VBV_UNDERFLOW 1  /* video buffer runs empty */
+#define VBV_OVERFLOW  2  /* doesn't exist for VBR encoding */
+#define VBV_PEAKRATE  4  /* peak bitrate (within 1s) violated */
 
 /*****************************************************************************
  * Some default settings
@@ -86,6 +115,8 @@ typedef struct {
 	int desired_length;     /* desired length; calculated during encoding */
 	int error;
 
+	int fincr;      /* frame duration in rc->fbase units; 0 for fixed framerate */
+
 	int zone_mode;   /* XVID_ZONE_xxx */
 	double weight;
 } twopass_stat_t;
@@ -98,6 +129,28 @@ typedef struct
 	/*----------------------------------
 	 * constant statistical data
 	 *--------------------------------*/
+
+	/* Variable framerate schedule. When the stats file carries the
+	 * XVID_TIMING_V1 schedule, every frame has its own duration (in units of
+	 * vfr_fbase) and the total duration is the sum of those durations.
+	 * has_timing tells the file provided a schedule (and thus it was
+	 * validated), while vfr tells the current second pass must use it (the
+	 * encoder was created with fincr==0). When vfr is 0 the historical fixed
+	 * framerate arithmetic is used. */
+	int has_timing;
+	int vfr;
+	int vfr_fbase;
+	int64_t vfr_total_fincr;
+
+	/* Per-frame durations parsed from the timing schedule (num_frames
+	 * entries), consumed while loading the statistics lines. */
+	int *timing_durations;
+
+	/* Cumulative frame start times in vfr_fbase units. vfr_cum[i] is the
+	 * start of frame i and vfr_cum[num_frames] the end of the sequence. Only
+	 * allocated when vfr is set. A single int64 cannot overflow because
+	 * vfr_total_fincr was checked during parsing. */
+	int64_t *vfr_cum;
 
 	/* Number of frames of the sequence */
 	int num_frames;
@@ -219,8 +272,18 @@ typedef struct
 	 *--------------------------------*/
 	double desired_total;
 	double real_total;
-	
+
 	int scaled_frames;
+
+	/*----------------------------------
+	 * Variable framerate inspection
+	 *--------------------------------*/
+	/* VBV outcome kept for the read-only query entry point. */
+	int vbv_checked;
+	int vbv_pre_status;
+	int vbv_post_status;
+	int vbv_scaled;
+	int num_scenes;
 } rc_2pass2_t;
 
 
@@ -232,6 +295,20 @@ static int rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t ** handle);
 static int rc_2pass2_before(rc_2pass2_t * rc, xvid_plg_data_t * data);
 static int rc_2pass2_after(rc_2pass2_t * rc, xvid_plg_data_t * data);
 static int rc_2pass2_destroy(rc_2pass2_t * rc, xvid_plg_destroy_t * destroy);
+static int rc_2pass2_query(rc_2pass2_t * rc, xvid_plugin_2pass2_query_t * query);
+
+/* Release every allocation owned by a partially or fully built context. */
+static void
+rc_2pass2_free(rc_2pass2_t * rc)
+{
+	if (rc == NULL)
+		return;
+	free(rc->keyframe_locations);
+	free(rc->stats);
+	free(rc->vfr_cum);
+	free(rc->timing_durations);
+	free(rc);
+}
 
 /*****************************************************************************
  * Plugin definition
@@ -256,6 +333,10 @@ xvid_plugin_2pass2(void * handle, int opt, void * param1, void * param2)
 
 	case XVID_PLG_AFTER :
 		return rc_2pass2_after((rc_2pass2_t*)handle, (xvid_plg_data_t*)param1);
+
+	case XVID_PLG_2PASS2_QUERY :
+		return rc_2pass2_query((rc_2pass2_t*)handle,
+							   (xvid_plugin_2pass2_query_t*)param1);
 	}
 
 	return XVID_ERR_FAIL;
@@ -268,12 +349,18 @@ xvid_plugin_2pass2(void * handle, int opt, void * param1, void * param2)
 /* First a few local helping function prototypes */
 static  int statsfile_count_frames(rc_2pass2_t * rc, char * filename);
 static  int statsfile_load(rc_2pass2_t *rc, char * filename);
+static  int statsfile_parse_timing(FILE * f, int num_frames, int *dur, int64_t *total,
+								   int *out_fbase, char *errmsg, int errmsg_len);
 static void zone_process(rc_2pass2_t *rc, const xvid_plg_create_t * create);
 static void first_pass_stats_prepare_data(rc_2pass2_t * rc);
 static void first_pass_scale_curve_internal(rc_2pass2_t *rc);
 static void scaled_curve_apply_advanced_parameters(rc_2pass2_t * rc);
 static  int check_curve_for_vbv_compliancy(rc_2pass2_t * rc, const float fps);
 static  int scale_curve_for_vbv_compliancy(rc_2pass2_t * rc, const float fps);
+static  int vfr_check_curve_for_vbv_compliancy(rc_2pass2_t * rc);
+static  int vfr_scale_curve_for_vbv_compliancy(rc_2pass2_t * rc);
+static  int vfr_build_cum(rc_2pass2_t * rc);
+static  int vfr_target_bytes(int bitrate, int64_t total_fincr, int fbase, uint64_t * out);
 #if 0
 static void stats_print(rc_2pass2_t * rc);
 #endif
@@ -291,6 +378,7 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 	rc = malloc(sizeof(rc_2pass2_t));
 	if (rc == NULL)
 		return XVID_ERR_MEMORY;
+	memset(rc, 0, sizeof(rc_2pass2_t));
 
 	/* v1.0.x */
 	rc->param.version = param->version;
@@ -348,17 +436,29 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 	rc->min_quant = 1;
 	rc->scaled_frames = 0;
 
+	rc->has_timing = 0;
+	rc->vfr = 0;
+	rc->vfr_fbase = 0;
+	rc->vfr_total_fincr = 0;
+	rc->vfr_cum = NULL;
+	rc->timing_durations = NULL;
+	rc->vbv_checked = 0;
+	rc->vbv_pre_status = VBV_COMPLIANT;
+	rc->vbv_post_status = VBV_COMPLIANT;
+	rc->vbv_scaled = 0;
+
 	/* Count frames (and intra frames) in the stats file, store the result into
-	 * the rc structure */
+	 * the rc structure. This also discovers whether the file carries a
+	 * variable framerate timing schedule. */
 	if (statsfile_count_frames(rc, param->filename) == -1) {
 		DPRINTF(XVID_DEBUG_RC,"[xvid rc] -- ERROR: fopen %s failed\n", param->filename);
-		free(rc);
+		rc_2pass2_free(rc);
 		return(XVID_ERR_FAIL);
 	}
 
 	/* Allocate the stats' memory */
 	if ((rc->stats = malloc(rc->num_frames * sizeof(twopass_stat_t))) == NULL) {
-		free(rc);
+		rc_2pass2_free(rc);
 		return(XVID_ERR_MEMORY);
 	}
 
@@ -366,25 +466,104 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 	 * PS: see comment in pre_process0 for the +1 location requirement */
 	rc->keyframe_locations = malloc((rc->num_keyframes + 1) * sizeof(int));
 	if (rc->keyframe_locations == NULL) {
-		free(rc->stats);
-		free(rc);
+		rc_2pass2_free(rc);
 		return(XVID_ERR_MEMORY);
+	}
+
+	/* Variable framerate: the first pass may have stored a complete timing
+	 * schedule. When it did, load and validate it now - at creation time -
+	 * and never infer durations from an average frame rate. */
+	if (rc->has_timing) {
+		FILE *tf;
+		char errmsg[128];
+		int64_t total = 0;
+		int timing_fbase = 0;
+
+		rc->timing_durations = malloc(rc->num_frames * sizeof(int));
+		if (rc->timing_durations == NULL) {
+			rc_2pass2_free(rc);
+			return(XVID_ERR_MEMORY);
+		}
+
+		tf = fopen(param->filename, "rb");
+		if (tf == NULL) {
+			rc_2pass2_free(rc);
+			return(XVID_ERR_FAIL);
+		}
+		errmsg[0] = '\0';
+		if (statsfile_parse_timing(tf, rc->num_frames, rc->timing_durations,
+								   &total, &timing_fbase, errmsg, sizeof(errmsg)) != 0) {
+			DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- ERROR: invalid timing schedule in %s: %s\n",
+					param->filename, errmsg);
+			fclose(tf);
+			rc_2pass2_free(rc);
+			return(XVID_ERR_FAIL);
+		}
+		fclose(tf);
+
+		/* A variable framerate second pass is identified by the encoder
+		 * being created with fincr==0. A fixed framerate caller must not
+		 * silently consume a timed file, and a timed file must match the
+		 * time base the encoder is using. */
+		if (create->fincr == 0) {
+			if (create->fbase != timing_fbase) {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- ERROR: timing time base %d != encoder fbase %d\n",
+						timing_fbase, create->fbase);
+				rc_2pass2_free(rc);
+				return(XVID_ERR_FAIL);
+			}
+			rc->vfr = 1;
+			rc->vfr_fbase = timing_fbase;
+			rc->vfr_total_fincr = total;
+		} else {
+			/* The file has a schedule but the caller asked for fixed
+			 * framerate. Refuse rather than ignoring real timing data. */
+			DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- ERROR: timed stats file used with fixed framerate\n");
+			rc_2pass2_free(rc);
+			return(XVID_ERR_FAIL);
+		}
+	} else if (create->fincr == 0) {
+		/* Variable framerate was requested but the file has no timing
+		 * schedule. Guessing one from an average frame rate is not allowed. */
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- ERROR: variable framerate requires a timed stats file\n");
+		rc_2pass2_free(rc);
+		return(XVID_ERR_FAIL);
 	}
 
 	/* Load the first pass stats */
 	if (statsfile_load(rc, param->filename) == -1) {
 		DPRINTF(XVID_DEBUG_RC,"[xvid rc] -- ERROR: fopen %s failed\n", param->filename);
-		free(rc->keyframe_locations);
-		free(rc->stats);
-		free(rc);
+		rc_2pass2_free(rc);
 		return XVID_ERR_FAIL;
 	}
 
-	/* Compute the target filesize */
-	if (rc->param.bitrate<0) {
+	/* Compute the target filesize.
+	 *
+	 * Variable framerate: the target is bitrate * total_duration / 8 with
+	 * total_duration = sum(fincr)/fbase. Even a sequence shorter than one
+	 * second uses its real duration. The multiplication is done in 64 bits
+	 * so legal totals above 32 bits cannot wrap.
+	 *
+	 * Fixed framerate keeps the historical arithmetic, including the "less
+	 * than one second is treated as one second" rule. */
+	if (rc->param.bitrate < 0) {
 		/* if negative, bitrate equals the target (in kbytes) */
 		rc->target = ((uint64_t)(-rc->param.bitrate)) * 1024;
-	} else if (rc->num_frames  < create->fbase/create->fincr) {
+	} else if (rc->vfr) {
+		uint64_t vfr_target;
+
+		/* Exact target: bitrate * total_duration / 8, total_duration being
+		 * sum(fincr)/fbase. This uses the real duration even when the
+		 * sequence is shorter than a second, and refuses targets that would
+		 * need more than 64 bits. */
+		if (vfr_target_bytes(rc->param.bitrate, rc->vfr_total_fincr,
+							 rc->vfr_fbase, &vfr_target) != 0) {
+			DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- ERROR: target size overflow\n");
+			rc_2pass2_free(rc);
+			return(XVID_ERR_FAIL);
+		}
+		rc->target = vfr_target;
+	} else if (create->fincr > 0 && rc->num_frames  < create->fbase/create->fincr) {
 		/* Source sequence is less than 1s long, we do as if it was 1s long */
 		rc->target = rc->param.bitrate / 8;
 	} else {
@@ -395,9 +574,15 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 			((uint64_t)create->fbase * 8);
 	}
 
-	DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Frame rate: %d/%d (%ffps)\n",
-			create->fbase, create->fincr,
-			(double)create->fbase/(double)create->fincr);
+	if (rc->vfr) {
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Variable frame rate, time base: %d, total duration: %lld units (%.3fs)\n",
+				rc->vfr_fbase, rc->vfr_total_fincr,
+				(double)rc->vfr_total_fincr/(double)rc->vfr_fbase);
+	} else {
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Frame rate: %d/%d (%ffps)\n",
+				create->fbase, create->fincr,
+				(double)create->fbase/(double)create->fincr);
+	}
 	DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Number of frames: %d\n", rc->num_frames);
 	if(rc->param.bitrate>=0)
 		DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Target bitrate: %ld\n", rc->param.bitrate);
@@ -408,6 +593,16 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 	DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- Container Frame overhead: %d\n", rc->param.container_frame_overhead);
 	if(rc->param.container_frame_overhead)
 		DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- New target filesize after container compensation: %lld\n", rc->target);
+
+	/* Variable framerate: build the cumulative time table now, from the
+	 * schedule read at creation time. Everything below (curve scaling, VBV,
+	 * peak rate) works on this table. */
+	if (rc->vfr) {
+		if (vfr_build_cum(rc) != 0) {
+			rc_2pass2_free(rc);
+			return(XVID_ERR_MEMORY);
+		}
+	}
 
 	/* When bitrate is not given it means it has been scaled by an external
 	 * application */
@@ -467,19 +662,48 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 
 	/* vbv_size==0 switches VBV check off */
 	if (rc->param.vbv_size > 0)  {
-		const float fps = (float) ((double)create->fbase/(double)create->fincr);
-		int status = check_curve_for_vbv_compliancy(rc, fps);
+		int status;
 
-		if (status) {
-			DPRINTF(XVID_DEBUG_RC, "[xvid rc] Underflow detected - Scaling Curve for compliancy.\n");
-		}
+		rc->vbv_checked = 1;
+		if (rc->vfr) {
+			/* The variable framerate model works on the cumulative schedule
+			 * rather than an average fps. */
+			status = vfr_check_curve_for_vbv_compliancy(rc);
+			rc->vbv_pre_status = status;
 
-		status = scale_curve_for_vbv_compliancy(rc, fps);
+			if (status) {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] Underflow detected - Scaling Curve for compliancy.\n");
+			}
 
-		if (status == 0) {
-			DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling done.\n");
+			status = vfr_scale_curve_for_vbv_compliancy(rc);
+			rc->vbv_scaled = 1;
+			rc->vbv_post_status = vfr_check_curve_for_vbv_compliancy(rc);
+
+			if (status == 0) {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling done.\n");
+			} else {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling impossible.\n");
+				rc->vbv_post_status = status;
+			}
 		} else {
-			DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling impossible.\n");
+			const float fps = (float) ((double)create->fbase/(double)create->fincr);
+			status = check_curve_for_vbv_compliancy(rc, fps);
+			rc->vbv_pre_status = status;
+
+			if (status) {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] Underflow detected - Scaling Curve for compliancy.\n");
+			}
+
+			status = scale_curve_for_vbv_compliancy(rc, fps);
+			rc->vbv_scaled = 1;
+			rc->vbv_post_status = check_curve_for_vbv_compliancy(rc, fps);
+
+			if (status == 0) {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling done.\n");
+			} else {
+				DPRINTF(XVID_DEBUG_RC, "[xvid rc] VBV compliant curve scaling impossible.\n");
+				rc->vbv_post_status = status;
+			}
 		}
 	}
 	*handle = rc;
@@ -492,6 +716,9 @@ rc_2pass2_create(xvid_plg_create_t * create, rc_2pass2_t **handle)
 static int
 rc_2pass2_destroy(rc_2pass2_t * rc, xvid_plg_destroy_t * destroy)
 {
+	if (rc == NULL)
+		return 0;
+
 	DPRINTF(XVID_DEBUG_RC, "[xvid rc] -- target_total:%lld desired_total:%.2f (%.2f%%) actual_total:%.2f (%.2f%%)\n",
 			rc->target,
 			rc->desired_total,
@@ -499,10 +726,45 @@ rc_2pass2_destroy(rc_2pass2_t * rc, xvid_plg_destroy_t * destroy)
 			rc->real_total,
 			100*rc->real_total/(double)rc->target);
 
-	free(rc->keyframe_locations);
-	free(rc->stats);
-	free(rc);
+	rc_2pass2_free(rc);
 	return(0);
+}
+
+/*----------------------------------------------------------------------------
+ * Read-only inspection of the computed plan (optional public entry point)
+ *--------------------------------------------------------------------------*/
+
+static int
+rc_2pass2_query(rc_2pass2_t * rc, xvid_plugin_2pass2_query_t * query)
+{
+	int i;
+
+	if (rc == NULL || query == NULL)
+		return XVID_ERR_FAIL;
+	if (XVID_VERSION_MAJOR(query->version) != 1)
+		return XVID_ERR_VERSION;
+
+	query->vfr = rc->vfr;
+	query->num_frames = rc->num_frames;
+	query->fbase = rc->vfr ? rc->vfr_fbase : 0;
+	query->total_fincr = rc->vfr ? rc->vfr_total_fincr : 0;
+	query->target_bytes = rc->target;
+
+	query->vbv_checked = rc->vbv_checked;
+	query->vbv_pre_status = rc->vbv_pre_status;
+	query->vbv_post_status = rc->vbv_post_status;
+	query->vbv_scaled = rc->vbv_scaled;
+	query->num_scenes = rc->num_scenes;
+
+	if (query->scaled_length) {
+		for (i = 0; i < rc->num_frames; i++)
+			query->scaled_length[i] = rc->stats[i].scaled_length;
+	}
+	if (query->desired_length) {
+		for (i = 0; i < rc->num_frames; i++)
+			query->desired_length[i] = rc->stats[i].desired_length;
+	}
+	return 0;
 }
 
 /*----------------------------------------------------------------------------
@@ -520,19 +782,30 @@ rc_2pass2_before(rc_2pass2_t * rc, xvid_plg_data_t * data)
 	/* This function is quite long but easy to understand. In order to simplify
 	 * the code path (a bit), we treat 3 cases that can return immediatly. */
 
-	/* First case: Another plugin has already set a quantizer */
-	if (data->quant > 0)
-		return(0);
-
-	/* Second case: insufficent stats data
-	 * We can't guess much what we should do, let core decide all alone */
+	/* Insufficient stats data: we can't guess much what we should do, let the
+	 * core decide all alone. */
 	if (data->frame_num >= rc->num_frames) {
 		DPRINTF(XVID_DEBUG_RC,"[xvid rc] -- stats file too short (now processing frame %d)",
 			data->frame_num);
 		return(0);
 	}
 
-	/* Third case: We are in a Quant zone
+	/* Variable framerate: the duration the encoder was handed must match the
+	 * duration recorded for this frame in the first pass schedule. This is
+	 * checked before anything else, including quant zones and another
+	 * plugin having already chosen a quantizer. */
+	if (rc->vfr && data->fincr != s->fincr) {
+		DPRINTF(XVID_DEBUG_RC,
+			"[xvid rc] -- ERROR: frame %d duration %d != first pass duration %d\n",
+			data->frame_num, data->fincr, s->fincr);
+		return(XVID_ERR_FAIL);
+	}
+
+	/* First case: Another plugin has already set a quantizer */
+	if (data->quant > 0)
+		return(0);
+
+	/* Second case: We are in a Quant zone
 	 * Quant zones must just ensure we use the same settings as first pass
 	 * So set the quantizer and the type */
 	if (s->zone_mode == XVID_ZONE_QUANT) {
@@ -891,6 +1164,179 @@ static char *skipspaces(char *string);
 static int iscomment(char *string);
 static char *readline(FILE *f);
 
+/* Returns non-zero when line starts with prefix (after leading spaces) */
+static int
+hasprefix(const char *line, const char *prefix)
+{
+	return strncmp(line, prefix, strlen(prefix)) == 0;
+}
+
+/* Parse the variable framerate schedule. dur[] is filled with the fincr of
+ * every statistics line, in file order, and *out_fbase with the schedule time
+ * base (0 when the file has no timing header). The schedule must be complete
+ * and unambiguous: one strictly ordered frame_num per statistics line, all
+ * durations positive and fitting an int, and a total that fits the second
+ * pass arithmetic without overflow.
+ *
+ * Returns 0 on success, -1 on any malformed/ambiguous schedule.
+ * On success *total receives sum(dur). */
+static int
+statsfile_parse_timing(FILE * f, int num_frames, int *dur, int64_t *total,
+					   int *out_fbase, char *errmsg, int errmsg_len)
+{
+	char *line;
+	int processed = 0;
+	int have_duration = 0;
+	int64_t sum = 0;
+	int have_timing = 0;
+	int64_t timing_fbase = 0;
+
+	*out_fbase = 0;
+
+	/* Rewind to the beginning of the file */
+	fseek(f, 0, SEEK_SET);
+
+	while ((line = readline(f)) != NULL) {
+		char *ptr = skipspaces(line);
+
+		if (iscomment(ptr) || *ptr == '\0') {
+			if (hasprefix(ptr, TIMING_HEADER_PREFIX)) {
+				char *p = ptr + strlen(TIMING_HEADER_PREFIX);
+				char *endp;
+				long v;
+
+				/* Exactly one timing header, and it must precede any
+				 * duration or statistics. */
+				if (have_timing || processed != 0 || have_duration) {
+					snprintf(errmsg, errmsg_len, "duplicate timing header");
+					free(line);
+					return -1;
+				}
+				while (*p == ' ' || *p == '\t') p++;
+				errno = 0;
+				v = strtol(p, &endp, 10);
+				if (errno || endp == p || v < 1 || v > 65535) {
+					snprintf(errmsg, errmsg_len, "invalid timing time base");
+					free(line);
+					return -1;
+				}
+				while (*endp == ' ' || *endp == '\t') endp++;
+				if (*endp != '\0') {
+					snprintf(errmsg, errmsg_len, "invalid timing header");
+					free(line);
+					return -1;
+				}
+				have_timing = 1;
+				timing_fbase = v;
+
+			} else if (hasprefix(ptr, DURATION_HEADER_PREFIX)) {
+				char *p = ptr + strlen(DURATION_HEADER_PREFIX);
+				long fnum, fincr;
+				char *endp;
+
+				if (!have_timing) {
+					snprintf(errmsg, errmsg_len, "duration without timing header");
+					free(line);
+					return -1;
+				}
+				/* Two durations for the same statistics line, a duration
+				 * after the last statistics line, or a duration before the
+				 * previous statistics line was consumed are all ambiguous. */
+				if (have_duration || processed >= num_frames || dur == NULL) {
+					snprintf(errmsg, errmsg_len, "duplicate or extra duration for frame %d", processed);
+					free(line);
+					return -1;
+				}
+				errno = 0;
+				fnum = strtol(p, &endp, 10);
+				if (errno || endp == p || fnum != processed) {
+					snprintf(errmsg, errmsg_len, "duration frame number mismatch at %d", processed);
+					free(line);
+					return -1;
+				}
+				p = endp;
+				errno = 0;
+				fincr = strtol(p, &endp, 10);
+				/* A duration only has to be a positive int; the time base
+				 * itself is the value limited to 1..65535. Larger values are
+				 * legal long holds as long as the total below does not
+				 * overflow. */
+				if (errno || endp == p || fincr < 1 || fincr > INT_MAX) {
+					snprintf(errmsg, errmsg_len, "invalid duration for frame %d", processed);
+					free(line);
+					return -1;
+				}
+				while (*endp == ' ' || *endp == '\t') endp++;
+				if (*endp != '\0') {
+					snprintf(errmsg, errmsg_len, "invalid duration line for frame %d", processed);
+					free(line);
+					return -1;
+				}
+
+				/* The accumulated duration must stay far enough below
+				 * INT64_MAX that the downstream multiplications (target size,
+				 * VBV arithmetic) remain exact and cannot wrap. */
+				if (sum > ((int64_t)1 << 55) - (int64_t)fincr) {
+					snprintf(errmsg, errmsg_len, "duration total overflow");
+					free(line);
+					return -1;
+				}
+				sum += fincr;
+				dur[processed] = (int)fincr;
+				have_duration = 1;
+			}
+			free(line);
+			continue;
+		}
+
+		/* A statistics line. With a timing schedule it must be preceded by
+		 * exactly one duration; without one, a stray duration was already
+		 * rejected above. */
+		if (have_timing && !have_duration) {
+			snprintf(errmsg, errmsg_len, "missing duration for frame %d", processed);
+			free(line);
+			return -1;
+		}
+		if (processed >= num_frames) {
+			snprintf(errmsg, errmsg_len, "unexpected extra statistics");
+			free(line);
+			return -1;
+		}
+
+		/* Validate the same 7/8 column layout statsfile_load accepts so the
+		 * two passes agree on what a statistics line is. */
+		{
+			char type;
+			int fields;
+			int d0, d1, d2, d3, d4, d5, d6;
+			fields = sscanf(ptr, "%c %d %d %d %d %d %d %d",
+							&type, &d0, &d1, &d2, &d3, &d4, &d5, &d6);
+			if (fields != 7 && fields != 8) {
+				snprintf(errmsg, errmsg_len, "invalid statistics line");
+				free(line);
+				return -1;
+			}
+		}
+
+		processed++;
+		have_duration = 0;
+		free(line);
+	}
+
+	if (have_duration) {
+		snprintf(errmsg, errmsg_len, "duration without statistics");
+		return -1;
+	}
+	if (have_timing && processed != num_frames) {
+		snprintf(errmsg, errmsg_len, "incomplete frame schedule");
+		return -1;
+	}
+
+	*out_fbase = (int)timing_fbase;
+	*total = sum;
+	return 0;
+}
+
 /* This function counts the number of frame entries in the stats file
  * It also counts the number of I Frames */
 static int
@@ -920,6 +1366,10 @@ statsfile_count_frames(rc_2pass2_t * rc, char * filename)
 
 		/* Skip coment lines or empty lines */
 		if(iscomment(ptr) || *ptr == '\0') {
+			/* Remember whether the file carries a variable framerate
+			 * schedule; the actual contents are validated later. */
+			if (hasprefix(ptr, TIMING_HEADER_PREFIX))
+				rc->has_timing = 1;
 			free(line);
 			continue;
 		}
@@ -1038,6 +1488,11 @@ statsfile_load(rc_2pass2_t *rc, char * filename)
 			continue;
 		}
 
+		/* Preserve the variable framerate duration, if any. These were
+		 * matched to the statistics lines by statsfile_parse_timing(). */
+		s->fincr = (rc->vfr && rc->timing_durations != NULL)
+				 ? rc->timing_durations[processed_entries] : 0;
+
 		/* Ok it seems it's been processed correctly */
 		processed_entries++;
 	}
@@ -1048,12 +1503,73 @@ statsfile_load(rc_2pass2_t *rc, char * filename)
 	return(0);
 }
 
+/* ---------------------------------------------------------------------------
+ * Variable framerate time model
+ *
+ * Frame i occupies the half open interval [T(i), T(i+1)) measured in seconds
+ * from the start of the sequence. T is built from the per-frame durations in
+ * the schedule, so a long hold is one wide interval and never a run of
+ * duplicated frames.
+ * ------------------------------------------------------------------------- */
+
+/* Build the cumulative start times from the per-frame durations. The parser
+ * already made sure every duration is positive and that the sum fits. */
+static int
+vfr_build_cum(rc_2pass2_t * rc)
+{
+	int i;
+	int64_t acc = 0;
+
+	rc->vfr_cum = malloc((rc->num_frames + 1) * sizeof(int64_t));
+	if (rc->vfr_cum == NULL)
+		return -1;
+
+	for (i = 0; i < rc->num_frames; i++) {
+		rc->vfr_cum[i] = acc;
+		acc += rc->stats[i].fincr;
+	}
+	rc->vfr_cum[rc->num_frames] = acc;
+	rc->vfr_total_fincr = acc;
+	return 0;
+}
+
+/* Exact bitrate * duration / (8 * fbase), with overflow detection.
+ * Returns 0 on success, -1 when the product does not fit in 64 bits. */
+static int
+vfr_target_bytes(int bitrate, int64_t total_fincr, int fbase, uint64_t * out)
+{
+#if defined(__SIZEOF_INT128__)
+	__int128 num = (__int128)bitrate * (__int128)total_fincr;
+	__int128 den = (__int128)fbase * 8;
+	__int128 q;
+
+	if (num < 0 || den <= 0)
+		return -1;
+	q = num / den;
+	if (q > (__int128)~(uint64_t)0)
+		return -1;
+	*out = (uint64_t)q;
+	return 0;
+#else
+	int64_t a = (int64_t)bitrate;
+	int64_t b = total_fincr;
+	int64_t den = (int64_t)fbase * 8;
+
+	if (a < 0 || b < 0 || den <= 0)
+		return -1;
+	/* Detect a*b overflow without a wider type. */
+	if (a != 0 && b > LLONG_MAX / a)
+		return -1;
+	*out = (uint64_t)((a * b) / den);
+	return 0;
+#endif
+}
+
 /* pre-process the statistics data
  * - for each type, count, tot_length, min_length, max_length
  * - set keyframes_locations, tot_prescaled */
 static void
-first_pass_stats_prepare_data(rc_2pass2_t * rc)
-{
+first_pass_stats_prepare_data(rc_2pass2_t * rc){
 	int i,j;
 
 	/* *rc fields initialization
@@ -1567,6 +2083,7 @@ scale_curve_for_vbv_compliancy(rc_2pass2_t * rc, const float fps)
 			num_scenes++;
 		}
 	}
+	rc->num_scenes = num_scenes;
 
 	scenefactor = (float*)malloc(num_scenes*sizeof(float));
 	scenestart = (int*)malloc(num_scenes*sizeof(int));
@@ -1729,6 +2246,291 @@ scale_curve_for_vbv_compliancy(rc_2pass2_t * rc, const float fps)
 	free(scenefactor);
 	free(scenestart);
 	free(scenelength);
+	return(0);
+}
+
+
+/*****************************************************************************
+ * Variable framerate VBV compliancy check and scale
+ *
+ * These are the same criteria and the same curve treatment as above, but the
+ * frame clock is the schedule read from the stats file instead of an average
+ * fps. Frame i spans [T(i), T(i+1)); one second is fbase time units, so a
+ * long hold is a single wide interval rather than many fixed framerate slots
+ * and the peak window follows real end times instead of a rounded frame
+ * count.
+ *****************************************************************************/
+
+static int
+vfr_check_curve_for_vbv_compliancy(rc_2pass2_t * rc)
+{
+	const double vbv_size = (double)rc->param.vbv_size / 8.0;
+	double vbvfill = (double)rc->param.vbv_initial / 8.0;
+	const double maxrate = (double)rc->param.vbv_maxrate;
+	const double peakrate = (double)rc->param.vbv_peakrate;
+	const int64_t fbase = rc->vfr_fbase;
+	int64_t *pref;
+	int i, lo;
+	double vbvmin;
+	int status = VBV_COMPLIANT;
+
+	if (rc->num_frames <= 0 || rc->vfr_cum == NULL)
+		return VBV_COMPLIANT;
+
+	/* Prefix sums of the planned frame sizes, so the peak window can be
+	 * summed in constant time per frame. */
+	pref = malloc((rc->num_frames + 1) * sizeof(int64_t));
+	if (pref == NULL)
+		return VBV_UNDERFLOW; /* cannot verify -> let the scaler retry */
+	pref[0] = 0;
+	for (i = 0; i < rc->num_frames; i++)
+		pref[i+1] = pref[i] + rc->stats[i].scaled_length;
+
+	vbvmin = 1e9;
+	lo = 0;
+	for (i = 0; i < rc->num_frames; i++) {
+		int64_t dur = rc->vfr_cum[i+1] - rc->vfr_cum[i];
+
+		/* Peak bitrate over the real one second window ending at this
+		 * frame's end. A frame ending exactly one second before is not part
+		 * of the window: (T_end-1, T_end]. */
+		if (peakrate > 0.0) {
+			int64_t window_sum;
+			while (lo <= i &&
+				   rc->vfr_cum[lo+1] <= rc->vfr_cum[i+1] - fbase)
+				lo++;
+			window_sum = pref[i+1] - pref[lo];
+			if (8.0 * (double)window_sum > peakrate) {
+				free(pref);
+				return VBV_PEAKRATE;
+			}
+		}
+
+		/* Refill for this frame's real duration before spending it, cap the
+		 * buffer, then subtract the frame demand. Negative means underflow. */
+		vbvfill += maxrate * (double)dur / (8.0 * (double)fbase);
+		if (vbvfill > vbv_size)
+			vbvfill = vbv_size;
+		vbvfill -= (double)rc->stats[i].scaled_length;
+
+		if (vbvfill < 0) {
+			status = VBV_UNDERFLOW;
+			break;
+		}
+		if (vbvfill < vbvmin)
+			vbvmin = vbvfill;
+	}
+
+	free(pref);
+
+	DPRINTF(XVID_DEBUG_RC, "[xvid rc] Minimum buffer fill: %f bytes\n", vbvmin);
+	return status;
+}
+
+
+static int
+vfr_scale_curve_for_vbv_compliancy(rc_2pass2_t * rc)
+{
+	/* Same Westerink et al. redistribution as the fixed framerate version,
+	 * with R(k,n) expressed as the bytes that actually enter the buffer
+	 * between the start of frame k and the end of frame n. The 0.9 safety
+	 * factor and the 10% low water mark are retained. */
+
+	const double vbv_size = (double)rc->param.vbv_size / 8.0;
+	const double vbv_initial = (double)rc->param.vbv_initial / 8.0;
+	const double maxrate = 0.9 * (double)rc->param.vbv_maxrate / 8.0;
+	const double vbv_low = 0.10 * vbv_size;
+	const int64_t fbase = rc->vfr_fbase;
+
+	int i,k,l,n,violation = 0;
+	float *scenefactor;
+	int *scenestart;
+	int *scenelength;
+	int num_scenes = 0;
+	int last_scene = -1;
+
+	if (rc->num_frames <= 0 || rc->vfr_cum == NULL)
+		return -1;
+
+	/* First determine how many scenes there are, using real elapsed time:
+	 * a scene boundary is an I-frame at least one second after the previous
+	 * scene start. */
+	for (i=0; i<rc->num_frames; i++) {
+		if (rc->stats[i].type == XVID_TYPE_IVOP) {
+			if (last_scene < 0 ||
+				rc->vfr_cum[i] - rc->vfr_cum[last_scene] > fbase) {
+				last_scene = i;
+				num_scenes++;
+			}
+		}
+	}
+	if (num_scenes == 0)
+		return -1;
+	rc->num_scenes = num_scenes;
+
+	scenefactor = (float*)malloc(num_scenes*sizeof(float));
+	scenestart = (int*)malloc(num_scenes*sizeof(int));
+	scenelength = (int*)malloc(num_scenes*sizeof(int));
+
+	if ((!scenefactor) || (!scenestart) || (!scenelength) ) {
+		free(scenefactor);
+		free(scenestart);
+		free(scenelength);
+		return(-1);
+	}
+
+	/* count again and save the length/position */
+	num_scenes = 0;
+	last_scene = -1;
+	for (i=0; i<rc->num_frames; i++) {
+		if (rc->stats[i].type == XVID_TYPE_IVOP) {
+			if (last_scene < 0 ||
+				rc->vfr_cum[i] - rc->vfr_cum[last_scene] > fbase) {
+				if (num_scenes>0) {
+					scenelength[num_scenes-1]=i-last_scene;
+				}
+				scenestart[num_scenes]=i;
+				num_scenes++;
+				last_scene = i;
+			}
+		}
+	}
+	scenelength[num_scenes-1]=i-last_scene;
+
+	/* Bytes entering the buffer from the start of relative frame k to the
+	 * end of relative frame n (n may be -1, meaning "nothing yet"). */
+#define R(k,n) (maxrate * ((double)(rc->vfr_cum[start+(n)+1] - rc->vfr_cum[start+(k)]) / (double)fbase))
+	for (l=0; l<num_scenes;l++) {
+		const int start = scenestart[l];
+		const int length = scenelength[l];
+		twopass_stat_t * frames = &rc->stats[start];
+
+		double S0n,Skn;
+		double f,minf = 99999.0;
+
+		S0n=0.;
+		for (n=0;n<=length-1;n++) {
+			S0n += frames[n].scaled_length;
+
+			k = 0;
+			Skn = S0n;
+			if (Skn > 0.0) {
+				f = (R(k,n-1) + (vbv_initial - vbv_low)) / Skn;
+				if (f < minf)
+					minf = f;
+			}
+
+			for (k=1;k<=n;k++) {
+				Skn -= frames[k].scaled_length;
+
+				if (Skn > 0.0) {
+					f = (R(k,n-1) + (vbv_size - vbv_low)) / Skn;
+					if (f < minf)
+						minf = f;
+				}
+			}
+		}
+
+		/* special case: at the end, fill buffer up to vbv_initial again */
+		n=length;
+		k=0;
+		Skn = S0n;
+		if (Skn > 0.0) {
+			f = R(k,n-1)/Skn;
+			if (f < minf)
+				minf = f;
+		}
+
+		for (k=1;k<=n-1;k++) {
+			Skn -= frames[k].scaled_length;
+
+			if (Skn > 0.0) {
+				f = (R(k,n-1) + (vbv_initial - vbv_low)) / Skn;
+				if (f < minf)
+					minf = f;
+			}
+		}
+
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] Scene %d (Frames %d-%d): VBVfactor %f\n",
+			   	l, start, start+length-1 , minf);
+
+		scenefactor[l] = minf;
+	}
+#undef R
+
+	/* distribute bits from the violating scenes to the others */
+	do {
+		double S_red = 0.0;
+		double S_elig = 0.0;
+		double f_red;
+		int l;
+
+		for (l=0;l<num_scenes;l++) {
+			const int start = scenestart[l];
+			const int length = scenelength[l];
+			twopass_stat_t * frames = &rc->stats[start];
+
+			if (scenefactor[l] == 1.)
+				continue;
+
+			if (scenefactor[l] > 1.) {
+				for (n= 0; n < length; n++)
+					S_elig += frames[n].scaled_length;
+			} else {
+				for (n= 0; n < length; n++) {
+					double newbytes = (double)frames[n].scaled_length * scenefactor[l];
+					S_red += (double)frames[n].scaled_length - newbytes;
+					frames[n].scaled_length =(int)newbytes;
+				}
+				scenefactor[l] = 1.f;
+			}
+		}
+
+		if (S_red < 1.0)
+			break;
+
+		if (S_elig < 1.0) {
+			DPRINTF(XVID_DEBUG_RC, "[xvid rc] Everything underflowing.\n");
+			free(scenefactor);
+			free(scenestart);
+			free(scenelength);
+			return(-2);
+		}
+
+		f_red = (1.0 + S_red/S_elig);
+
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] Moving %.0f kB to avoid buffer underflow, correction factor: %.5f\n",
+			   	S_red/1024.0, f_red);
+
+		violation=0;
+		for (l=0; l<num_scenes; l++) {
+			const int start = scenestart[l];
+			const int length = scenelength[l];
+			twopass_stat_t * frames = &rc->stats[start];
+
+			if (scenefactor[l] == 1.)
+				continue;
+
+			for (n= 0; n < length; n++) {
+				frames[n].scaled_length = (int)(frames[n].scaled_length * f_red + 0.5);
+			}
+
+			scenefactor[l] = (float)(scenefactor[l] / f_red);
+			if (scenefactor[l] < 1.f)
+				violation=1;
+		}
+
+	} while (violation);
+
+	free(scenefactor);
+	free(scenestart);
+	free(scenelength);
+
+	/* Re-check the scaled plan curve with the same time model. */
+	if (vfr_check_curve_for_vbv_compliancy(rc) != VBV_COMPLIANT) {
+		DPRINTF(XVID_DEBUG_RC, "[xvid rc] Scaled curve still violates VBV under the real time model.\n");
+	}
+
 	return(0);
 }
 

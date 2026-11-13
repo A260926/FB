@@ -171,11 +171,40 @@ enc_create(xvid_enc_create_t * create)
 	pEnc->mbParam.edged_width = 16 * pEnc->mbParam.mb_width + 2 * EDGE_SIZE;
 	pEnc->mbParam.edged_height = 16 * pEnc->mbParam.mb_height + 2 * EDGE_SIZE;
 
-	/* framerate */
-	pEnc->mbParam.fincr = MAX(create->fincr, 0);
-	pEnc->mbParam.fbase = create->fincr <= 0 ? 25 : create->fbase;
-	if (pEnc->mbParam.fincr>0)
+	/* framerate
+	 *
+	 * A zero fincr selects variable framerate mode. In that mode the caller
+	 * supplied fbase is the time base for each frame's fincr (the frame
+	 * duration expressed in that time base), so it must be used verbatim and
+	 * must not be replaced by a default framerate.
+	 */
+	if (create->fincr < 0) {
+		xvid_free(pEnc);
+		return XVID_ERR_FAIL;
+	}
+
+	if (create->fincr == 0) {
+		if (create->fbase < 1 || create->fbase > 65535) {
+			xvid_free(pEnc);
+			return XVID_ERR_FAIL;
+		}
+		/* Variable framerate is currently only supported for the simple
+		 * (single threaded, no frame reordering, no dropping) encoding path.
+		 * Refuse unsupported combinations instead of silently producing
+		 * inconsistent timestamps or stats. */
+		if (create->num_threads > 1 ||
+			create->max_bframes > 0 ||
+			create->frame_drop_ratio > 0) {
+			xvid_free(pEnc);
+			return XVID_ERR_FAIL;
+		}
+		pEnc->mbParam.fincr = 0;
+		pEnc->mbParam.fbase = (uint32_t)create->fbase;
+	} else {
+		pEnc->mbParam.fincr = create->fincr;
+		pEnc->mbParam.fbase = create->fbase;
 		simplify_time((int*)&pEnc->mbParam.fincr, (int*)&pEnc->mbParam.fbase);
+	}
 
 	/* zones */
 	if(create->num_zones > 0) {
@@ -263,8 +292,19 @@ enc_create(xvid_enc_create_t * create)
 	/* frame drop ratio */
 	pEnc->mbParam.frame_drop_ratio = MAX(create->frame_drop_ratio, 0);
 
-	/* max keyframe interval */
-	pEnc->mbParam.iMaxKeyInterval = create->max_key_interval <= 0 ? (10 * (int)pEnc->mbParam.fbase) / (int)pEnc->mbParam.fincr : create->max_key_interval;
+	/* max keyframe interval
+	 *
+	 * With a fixed framerate the interval is a number of frames equal to ten
+	 * seconds. Variable framerate has no single frame duration at create time,
+	 * so use ten seconds worth of a 25fps stream (the historical default) as
+	 * the frame count. Explicit intervals are always taken verbatim. */
+	if (create->max_key_interval > 0) {
+		pEnc->mbParam.iMaxKeyInterval = create->max_key_interval;
+	} else if (pEnc->mbParam.fincr > 0) {
+		pEnc->mbParam.iMaxKeyInterval = (10 * (int)pEnc->mbParam.fbase) / (int)pEnc->mbParam.fincr;
+	} else {
+		pEnc->mbParam.iMaxKeyInterval = 250;
+	}
 
 	/* allocate working frame-image memory */
 
@@ -745,11 +785,12 @@ enc_destroy(Encoder * pEnc)
   call the plugins
   */
 
-static void call_plugins(Encoder * pEnc, FRAMEINFO * frame, IMAGE * original,
+static int call_plugins(Encoder * pEnc, FRAMEINFO * frame, IMAGE * original,
 						 int opt, int * type, int * quant, xvid_enc_stats_t * stats)
 {
 	unsigned int i, j, k;
 	xvid_plg_data_t data;
+	int fatal = 0;
 
 	/* set data struct */
 
@@ -895,11 +936,19 @@ static void call_plugins(Encoder * pEnc, FRAMEINFO * frame, IMAGE * original,
 		emms();
 		if (pEnc->plugins[i].func) {
 			if (pEnc->plugins[i].func(pEnc->plugins[i].param, opt, &data, NULL) < 0) {
+				/* A failing BEFORE plugin could not provide a usable
+				 * quantizer/type; remember it so the caller can abort instead
+				 * of encoding a frame against a broken plan. */
+				if (opt == XVID_PLG_BEFORE)
+					fatal = 1;
 				continue;
 			}
 		}
 	}
 	emms();
+
+	if (fatal)
+		return XVID_ERR_FAIL;
 
 	/* copy modified values back into frame*/
 	if (opt == XVID_PLG_BEFORE) {
@@ -944,6 +993,7 @@ static void call_plugins(Encoder * pEnc, FRAMEINFO * frame, IMAGE * original,
 	}
 
 
+	return 0;
 }
 
 
@@ -958,7 +1008,7 @@ static __inline void inc_frame_num(Encoder * pEnc)
 
 static __inline void dec_frame_num(Encoder * pEnc)
 {
-	pEnc->mbParam.m_stamp -= pEnc->mbParam.fincr;
+	pEnc->mbParam.m_stamp -= pEnc->current->fincr;
 	pEnc->m_framenum--;	/* debug ticker */
 }
 
@@ -993,17 +1043,30 @@ MBSetDquant(MACROBLOCK * pMB, int x, int y, MBParam * mbParam)
 
 
 static __inline void
-set_timecodes(FRAMEINFO* pCur,FRAMEINFO *pRef, int32_t time_base)
-{
+set_timecodes(FRAMEINFO* pCur,FRAMEINFO *pRef, int64_t time_base)
+{	/* VOP timestamps are expressed as a modulo time base (seconds, written as
+	 * one 1 bit per unit) plus a time increment in the VOL's time base. Both
+	 * are relative to the previous non-B reference frame, so compute them from
+	 * 64 bit stamps: with variable framerate the accumulated duration can
+	 * exceed 32 bits, and a cast to int32 would wrap it. The current stamp is
+	 * always >= the reference stamp in display order. */
+	int64_t cur = pCur->stamp;
+	int64_t ref = pRef->stamp;
+	int64_t secs = cur / time_base;
+	int64_t ref_secs = ref / time_base;
 
-	pCur->ticks = (int32_t)pCur->stamp % time_base;
-	pCur->seconds =  ((int32_t)pCur->stamp / time_base)	- ((int32_t)pRef->stamp / time_base) ;
+	if (secs < ref_secs)
+		secs = ref_secs;
+
+	pCur->seconds = (uint32_t)(secs - ref_secs);
+	pCur->ticks = (uint32_t)(cur - secs * time_base);
 
 #if 0 	/* HEAVY DEBUG OUTPUT */
 	fprintf(stderr,"WriteVop:   %d - %d \n",
-			((int32_t)pCur->stamp / time_base), ((int32_t)pRef->stamp / time_base));
+			(int)(cur / time_base), (int)(ref / time_base));
 	fprintf(stderr,"set_timecodes: VOP %1d   stamp=%lld ref_stamp=%lld  base=%d\n",
-			pCur->coding_type, pCur->stamp, pRef->stamp, time_base);
+			pCur->coding_type, (long long)pCur->stamp, (long long)pRef->stamp,
+			(int)time_base);
 	fprintf(stderr,"set_timecodes: VOP %1d   seconds=%d   ticks=%d   (ref-sec=%d  ref-tick=%d)\n",
 			pCur->coding_type, pCur->seconds, pCur->ticks, pRef->seconds, pRef->ticks);
 #endif
@@ -1077,6 +1140,13 @@ enc_encode(Encoder * pEnc,
 	if (xFrame->input.csp != XVID_CSP_NULL)
 	{
 		QUEUEINFO * q = &pEnc->queue[pEnc->queue_tail];
+
+		/* Variable framerate: every input frame must carry a positive
+		 * duration in the encoder's time base. Silently treating a missing
+		 * duration as a fixed one would corrupt the timestamps and the rate
+		 * control schedule, so reject it. */
+		if (pEnc->mbParam.fincr == 0 && xFrame->fincr < 1)
+			return XVID_ERR_FAIL;
 
 		start_timer();
 		if (image_input
@@ -1271,7 +1341,15 @@ repeat:
 	type = frame->type;
 	pEnc->current->quant = frame->quant;
 
-	call_plugins(pEnc, pEnc->current, NULL, XVID_PLG_BEFORE, &type, (int*)&pEnc->current->quant, stats);
+	/* A BEFORE plugin rejecting the frame (for instance a two pass controller
+	 * whose schedule does not match the frame's duration) aborts the encode
+	 * with an error instead of producing a frame against a broken plan. */
+	if (call_plugins(pEnc, pEnc->current, NULL, XVID_PLG_BEFORE, &type,
+					 (int*)&pEnc->current->quant, stats) < 0) {
+		emms();
+		stop_global_timer();
+		return XVID_ERR_FAIL;
+	}
 
 	if (type > 0){ 	/* XVID_TYPE_?VOP */
 		type = type2coding(type);	/* convert XVID_TYPE_?VOP to bitstream coding type */

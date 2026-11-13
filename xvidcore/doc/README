@@ -18,4 +18,116 @@ is highly recommended for Mac OS X target.
 
 http://www.tortall.net/projects/yasm/
 
+VARIABLE FRAMERATE ENCODING
+===========================
+
+The two pass rate controller can follow the real duration of every frame
+instead of a single constant frame rate. This is useful for material that
+mixes normal motion with long static holds.
+
+Encoder parameters
+------------------
+
+Set `xvid_enc_create_t.fincr` to zero to select variable framerate mode. In
+that mode `fbase` must be in [1..65535] and is the shared time base: the
+duration of every input frame is `fincr/fbase` seconds, where the per-frame
+fincr is passed in `xvid_enc_frame_t.fincr`. Every input frame must carry a
+positive fincr; the encoder rejects frames without one. Do not duplicate a
+frame to emulate a hold, give that one frame its long duration instead.
+
+The variable framerate path currently supports the simple encoding mode
+only: one thread, `max_bframes` equal to zero and `frame_drop_ratio` equal
+to zero. Other combinations are rejected at creation time. Fixed framerate
+encoding and the existing B frame usage keep their historical behaviour.
+
+Timestamp handling
+------------------
+
+VOP timestamps are cumulative: frame i starts at the sum of the durations of
+frames 0..i-1 expressed in the fbase time base. The cumulative arithmetic is
+64 bit, so legal schedules longer than 32 bits are handled.
+
+First pass statistics file
+--------------------------
+
+When the first pass runs with `fincr == 0`, the statistics file starts with
+a timing header:
+
+    # XVID_TIMING_V1 <fbase>
+
+and every statistics line is preceded by one duration line:
+
+    # XVID_DURATION <frame_num> <fincr>
+
+`frame_num` starts at zero and increments by one for every statistics line.
+The seven historical columns (and the optional eighth `scaled_length`
+column) keep their meaning. Fixed framerate first pass files do not contain
+either extension, so existing files remain readable exactly as before.
+
+Second pass
+-----------
+
+The complete timing schedule is read and validated when the plugin is
+created, never inferred from an average frame rate:
+
+- A timed file used with a variable framerate second pass (`fincr == 0`)
+  must use the same time base as the encoder.
+- A timed file used with a fixed framerate second pass is rejected, and a
+  variable framerate second pass rejects a file without a timing header.
+- Every statistics line must have exactly one duration, with consecutive
+  frame numbers, positive durations and a total that cannot overflow the
+  subsequent arithmetic. Missing, duplicated, zero, negative, out of range
+  or mismatched schedules make creation fail.
+- At encode time each frame's fincr must match the duration recorded for
+  that frame; otherwise the encode aborts with an error.
+
+For a positive bitrate the byte target is
+
+    floor(bitrate * sum(fincr) / (8 * fbase))
+
+using the real total duration even when it is shorter than one second,
+followed by the historical `container_frame_overhead` subtraction. A
+negative bitrate still means a target file size in KiB.
+
+VBV and curve scaling
+---------------------
+
+Frame i occupies the half open interval [T(i), T(i+1)) with T accumulated
+from zero in seconds. Before consuming a frame's bytes the buffer is
+refilled with `vbv_maxrate * duration / 8` bytes, capped at `vbv_size`, and
+then charged the planned frame demand; a negative fill is an underflow.
+
+The peak rate is checked at each frame end over the complete frames whose
+end time falls in `(T_end - 1, T_end]`; a frame ending exactly one second
+before is not part of the window. The scene minimum interval and the
+R(k,n) term in the scaler use the same elapsed-time model, so the
+historical one second scene interval stays one second and R is the bytes
+that actually enter the buffer over that span. The 0.9 safety factor and
+the 10% low water mark are retained, and the scaled plan is re-checked with
+the same time model.
+
+Only the two pass *plan* is constrained this way; the actual encode keeps
+the existing quantizer error feedback.
+
+Introspection
+-------------
+
+`xvid_plugin_2pass2` accepts `XVID_PLG_2PASS2_QUERY` with a
+`xvid_plugin_2pass2_query_t` after creation. It reports the time model, the
+exact target and the VBV outcome, and optionally fills the planned per-frame
+sizes. It is read-only and intended for diagnostics and tests.
+
+Examples and checks
+-------------------
+
+`xvidcore/examples/xvid_vfr_2pass.c` builds a short clip that alternates
+moving frames with long holds, runs both passes and saves the first pass
+file and the elementary stream.
+
+`tests/vfr_2pass.c` covers the timing, budget, VBV and compatibility cases.
+It can be built with a C compiler against the library; `sh devcheck/baseline.sh`
+checks the unchanged fixed framerate two-pass path and
+`sh devcheck/target.sh` builds and runs the variable framerate test and
+example.
+
 Last edited: $Date: 2010-11-16 14:42:07 $

@@ -46,7 +46,15 @@ typedef struct
 {
 	FILE * stat_file;
 
-    double fq_error;
+	double fq_error;
+
+	/* Variable framerate support. When the encoder is created with fincr==0
+	 * each frame carries its own duration in the create->fbase time base. The
+	 * stats file then records the complete timing schedule so that the second
+	 * pass does not have to guess it from an average frame rate. */
+	int vfr;
+	int fbase;
+	int frames_written;
 } rc_2pass1_t;
 
 
@@ -55,11 +63,18 @@ static int rc_2pass1_create(xvid_plg_create_t * create, rc_2pass1_t ** handle)
 {
     xvid_plugin_2pass1_t * param = (xvid_plugin_2pass1_t *)create->param;
 	rc_2pass1_t * rc;
+	int vfr;
 
     /* check filename */
     if ((param->filename == NULL) ||
 		(param->filename != NULL && param->filename[0] == '\0'))
         return XVID_ERR_FAIL;
+
+	/* A zero fincr selects variable framerate, in which case fbase is the time
+	 * base shared by every per-frame fincr. */
+	vfr = (create->fincr == 0);
+	if (vfr && (create->fbase < 1 || create->fbase > 65535))
+		return XVID_ERR_FAIL;
 
     /* allocate context struct */
 	if((rc = malloc(sizeof(rc_2pass1_t))) == NULL)
@@ -67,6 +82,9 @@ static int rc_2pass1_create(xvid_plg_create_t * create, rc_2pass1_t ** handle)
 
     /* Initialize safe defaults for 2pass 1 */
     rc->stat_file = NULL;
+	rc->vfr = vfr;
+	rc->fbase = create->fbase;
+	rc->frames_written = 0;
 
 	/* Open the 1st pass file */
 	if((rc->stat_file = fopen(param->filename, "w+b")) == NULL)
@@ -107,6 +125,13 @@ static int rc_2pass1_create(xvid_plg_create_t * create, rc_2pass1_t ** handle)
 			XVID_VERSION_MINOR(XVID_VERSION),
 			XVID_VERSION_PATCH(XVID_VERSION));
 	fprintf(rc->stat_file, "# Please do not modify this file\n\n");
+
+	/* Variable framerate files advertise their time base and carry a
+	 * per-frame duration line before every statistics line. Fixed framerate
+	 * files keep the historical format byte for byte, so existing tools (and
+	 * the fixed framerate second pass) can still read them. */
+	if (rc->vfr)
+		fprintf(rc->stat_file, "# XVID_TIMING_V1 %d\n", rc->fbase);
 
     rc->fq_error = 0;
 
@@ -208,6 +233,18 @@ static int rc_2pass1_after(rc_2pass1_t * rc, xvid_plg_data_t * data)
 		return(XVID_ERR_FAIL);
 	}
 
+	/* Variable framerate: record the duration of this frame in the file's
+	 * time base. The duration is not scaled to a fixed framerate and no
+	 * frame is ever duplicated to emulate one. A non-positive duration
+	 * cannot describe a frame, so refuse to write a schedule the second pass
+	 * would have to reject anyway. */
+	if (rc->vfr) {
+		if (data->fincr <= 0)
+			return(XVID_ERR_FAIL);
+		fprintf(rc->stat_file, "# XVID_DURATION %d %d\n",
+				rc->frames_written, data->fincr);
+	}
+
 	/* write the resulting statistics */
 
 	fprintf(rc->stat_file, "%c %d %d %d %d %d %d\n",
@@ -218,6 +255,8 @@ static int rc_2pass1_after(rc_2pass1_t * rc, xvid_plg_data_t * data)
 			stats->ublks,
 			stats->length,
 			stats->hlength);
+
+	rc->frames_written++;
 
 	return(0);
 }
