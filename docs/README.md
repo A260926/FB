@@ -7,6 +7,9 @@ repository.
 Contents:
 - The [compact ranges](compact_ranges.md) doc describes the structure from the
 `compact` package, and how it can be used.
+- The [proof updating](proof_updating.md) doc describes how an old inclusion
+proof is converted to a new tree size using a consistency proof, and why proof
+digests are identified by leaf intervals rather than node IDs.
 - The [images](images/) directory contains the images referenced from the docs.
 Some images have the corresponding source files, e.g. `compact_ranges.graffle`
 is the OmniGraffle document for the images in `compact_ranges.md`.
