@@ -167,6 +167,12 @@ typedef enum {
  * FLAC audio that is being decoded uses the maximum settings, i.e. the largest
  * bit depth and block size. See fx_flac_init() regarding parameters.
  *
+ * Note that the per-channel sample buffers are 64 bits wide so that 32-bit
+ * FLAC streams (including their 33-bit side channels) can be decoded without
+ * any intermediate truncation. The size returned by this function reflects
+ * those buffers and must be queried at runtime; it is not a compile-time
+ * constant.
+ *
  * @return zero if the given parameters are out of range, the number of bytes
  * required to hold the FLAC decoder structure otherwise.
  */
@@ -210,21 +216,21 @@ FX_EXPORT fx_flac_t *fx_flac_init(void *mem, uint16_t max_block_size,
 /**
  * Returns a new fx_flac instance that is sufficient to decode FLAC streams in
  * the FLAC Subset format with DAT parameters, i.e. up to 48 kHz, and two
- * channels. This will allocate about 40 kiB of memory.
+ * channels. This will allocate about 73 kiB of memory.
  */
 #define FX_FLAC_ALLOC_SUBSET_FORMAT_DAT() \
 	FX_FLAC_ALLOC(FLAC_SUBSET_MAX_BLOCK_SIZE_48KHZ, 2U)
 
 /**
  * Returns a new fx_flac instance that is sufficient to decode FLAC streams in
- * the FLAC Subset format. This will allocate about 1.5 MiB of memory.
+ * the FLAC Subset format. This will allocate about 1 MiB of memory.
  */
 #define FX_FLAC_ALLOC_SUBSET_FORMAT_ANY() \
 	FX_FLAC_ALLOC(FLAC_SUBSET_MAX_BLOCK_SIZE, FLAC_MAX_CHANNEL_COUNT)
 
 /**
  * Returns a new fx_flac instance that is sufficient to decode any valid FLAC
- * stream. Note that this will allocate between 2-3 MiB of memory.
+ * stream. Note that this will allocate about 4 MiB of memory.
  */
 #define FX_FLAC_ALLOC_DEFAULT() \
 	FX_FLAC_ALLOC(FLAC_MAX_BLOCK_SIZE, FLAC_MAX_CHANNEL_COUNT)
@@ -276,8 +282,11 @@ FX_EXPORT int64_t fx_flac_get_streaminfo(const fx_flac_t *inst,
  * @param out is a pointer at a memory region that will accept the decoded
  * interleaved audio data. Samples are decoded as 32-bit signed integer; the
  * minimum and maximum value will depend on the original bit depth of the audio
- * stored in the bitstream. If this is NULL, the decoder will silently discard
- * the output.
+ * stored in the bitstream. For bit depths below 32 bits, the samples are
+ * shifted to the left so that they always occupy the full 32-bit signed
+ * integer range; 32-bit FLAC streams (bit depth code 7 in the frame header or
+ * inherited from STREAMINFO) are passed through exactly. If this is NULL, the
+ * decoder will silently discard the output.
  * @param out_len is a pointer at an integer containing the number of available
  * signed 32-bit integers at the memory address pointed at by out. After the
  * function returns, this value will contain the number of samples that were

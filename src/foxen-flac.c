@@ -544,10 +544,10 @@ typedef enum {
 	SS_16BIT = 4,
 	SS_20BIT = 5,
 	SS_24BIT = 6,
-	SS_RESERVED_2 = 7
+	SS_32BIT = 7
 } fx_flac_sample_size_t;
 
-static const int8_t fx_flac_sample_sizes_[] = {0, 8, 12, -1, 16, 20, 24, -1};
+static const int8_t fx_flac_sample_sizes_[] = {0, 8, 12, -1, 16, 20, 24, 32};
 
 typedef enum {
 	SFT_CONSTANT,
@@ -713,7 +713,8 @@ typedef enum {
 	FLAC_SUBFRAME_RICE_VERBATIM = 512,
 	FLAC_SUBFRAME_RICE_FINALIZE = 513,
 	FLAC_SUBFRAME_VERBATIM = 514,
-	FLAC_SUBFRAME_FINALIZE = 515
+	FLAC_SUBFRAME_FINALIZE = 515,
+	FLAC_SUBFRAME_CRC = 516
 } fx_flac_private_state_t;
 
 /******************************************************************************
@@ -770,9 +771,12 @@ struct fx_flac {
 	uint16_t partition_sample;
 
 	/**
-	 * Current rice partition unary quotient counter.
+	 * Current rice partition unary quotient counter. Must be able to hold
+	 * quotients of up to 2^32 - 2 (the largest legal residual magnitude
+	 * mapped onto the unary/binary Rice representation); the counter
+	 * saturates at UINT32_MAX so that corrupted streams cannot wrap it.
 	 */
-	uint16_t rice_unary_counter;
+	uint32_t rice_unary_counter;
 
 	/**
 	 * Current channel. This is reset at frame boundaries.
@@ -822,9 +826,12 @@ struct fx_flac {
 	int32_t *qbuf;
 
 	/**
-	 * Structure holding the temporary/output buffers for each channel.
+	 * Structure holding the temporary/output buffers for each channel. The
+	 * buffers are 64-bit wide so that they can hold the 33-bit side channel
+	 * of 32-bit stereo streams and so that intermediate results of the LPC
+	 * reconstruction are not truncated to 32 bits.
 	 */
-	int32_t *blkbuf[FLAC_MAX_CHANNEL_COUNT];
+	int64_t *blkbuf[FLAC_MAX_CHANNEL_COUNT];
 };
 
 /******************************************************************************
@@ -893,63 +900,81 @@ static bool _fx_flac_decode_channel_count(
  * Decoding functions                                                         *
  ******************************************************************************/
 
-static inline void _fx_flac_post_process_left_side(int32_t *blk1, int32_t *blk2,
+/**
+ * Sign-extends the given value x, which is stored in the b least significant
+ * bits, to a signed 64-bit integer. The bit depth b must be in the range
+ * 1 <= b <= 64; b == 0 is allowed as a special case (used by the escape-code
+ * residual path) and always yields zero.
+ */
+static inline int64_t _fx_flac_sign_extend_(uint64_t x, uint8_t b) {
+	return (b == 0U) ? 0
+	                 : (int64_t)(x ^ (1ULL << (b - 1U))) - (int64_t)(1ULL << (b - 1U));
+}
+
+/**
+ * Arithmetic (sign-extending, floor) right shift of a signed 64-bit integer.
+ * This is equivalent to x >> s for non-negative x and to -((-(x + 1)) >> s) - 1
+ * for negative x, avoiding any reliance on implementation-defined behaviour
+ * of the shift operator for negative operands. The shift amount s must be
+ * smaller than 64.
+ */
+static inline int64_t _fx_flac_shift_right_(int64_t x, uint8_t s) {
+	return (x >= 0) ? (x >> s) : (-((-(x + 1)) >> s) - 1);
+}
+
+static inline void _fx_flac_post_process_left_side(int64_t *blk1, int64_t *blk2,
                                                    uint32_t blk_size) {
-	blk1 = (int32_t *)FX_ASSUME_ALIGNED(blk1);
-	blk2 = (int32_t *)FX_ASSUME_ALIGNED(blk2);
+	blk1 = (int64_t *)FX_ASSUME_ALIGNED(blk1);
+	blk2 = (int64_t *)FX_ASSUME_ALIGNED(blk2);
 	for (uint32_t i = 0U; i < blk_size; i++) {
 		blk2[i] = blk1[i] - blk2[i];
 	}
 }
 
-static inline void _fx_flac_post_process_right_side(int32_t *blk1,
-                                                    int32_t *blk2,
+static inline void _fx_flac_post_process_right_side(int64_t *blk1,
+                                                    int64_t *blk2,
                                                     uint32_t blk_size) {
-	blk1 = (int32_t *)FX_ASSUME_ALIGNED(blk1);
-	blk2 = (int32_t *)FX_ASSUME_ALIGNED(blk2);
+	blk1 = (int64_t *)FX_ASSUME_ALIGNED(blk1);
+	blk2 = (int64_t *)FX_ASSUME_ALIGNED(blk2);
 	for (uint32_t i = 0U; i < blk_size; i++) {
 		blk1[i] = blk1[i] + blk2[i];
 	}
 }
 
-static inline void _fx_flac_post_process_mid_side(int32_t *blk1, int32_t *blk2,
+static inline void _fx_flac_post_process_mid_side(int64_t *blk1, int64_t *blk2,
                                                   uint32_t blk_size) {
-	blk1 = (int32_t *)FX_ASSUME_ALIGNED(blk1);
-	blk2 = (int32_t *)FX_ASSUME_ALIGNED(blk2);
+	blk1 = (int64_t *)FX_ASSUME_ALIGNED(blk1);
+	blk2 = (int64_t *)FX_ASSUME_ALIGNED(blk2);
 	for (uint32_t i = 0U; i < blk_size; i++) {
-		/* Code libflac from stream_decoder.c */
-		int32_t mid = blk1[i];
-		int32_t side = blk2[i];
-		mid = ((uint32_t)mid) << 1;
-		mid |= (side & 1); /* Round correctly */
-		blk1[i] = (mid + side) >> 1;
-		blk2[i] = (mid - side) >> 1;
+		/* Code libflac from stream_decoder.c, extended to 64 bits so that
+		   33-bit side channels of 32-bit streams are decoded exactly. */
+		int64_t mid = blk1[i];
+		int64_t side = blk2[i];
+		mid = mid * 2 + (side & 1); /* Round correctly */
+		blk1[i] = _fx_flac_shift_right_(mid + side, 1U);
+		blk2[i] = _fx_flac_shift_right_(mid - side, 1U);
 	}
 }
 
-static inline void _fx_flac_restore_lpc_signal(int32_t *blk, uint32_t blk_size,
+static inline void _fx_flac_restore_lpc_signal(int64_t *blk, uint32_t blk_size,
                                                int32_t *lpc_coeffs,
                                                uint8_t lpc_order,
-                                               int8_t lpc_shift) {
-	blk = (int32_t *)FX_ASSUME_ALIGNED(blk);
+                                               uint8_t lpc_shift) {
+	blk = (int64_t *)FX_ASSUME_ALIGNED(blk);
 	lpc_coeffs = (int32_t *)FX_ASSUME_ALIGNED(lpc_coeffs);
 
 	for (uint32_t i = lpc_order; i < blk_size; i++) {
 		int64_t accu = 0;
 		for (uint8_t j = 0; j < lpc_order; j++) {
-			accu += (int64_t)lpc_coeffs[j] * (int64_t)blk[i - j - 1];
+			accu += (int64_t)lpc_coeffs[j] * blk[i - j - 1];
 		}
-		blk[i] = blk[i] + (accu >> lpc_shift);
+		blk[i] = blk[i] + _fx_flac_shift_right_(accu, lpc_shift);
 	}
 }
 
 /******************************************************************************
  * Stream utility functions and macros                                        *
  ******************************************************************************/
-
-/* http://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend */
-#define SIGN_EXTEND(x, b) \
-	(int64_t)((x) ^ (1LU << ((b)-1U))) - (int64_t)(1LU << ((b)-1U))
 
 #define ENSURE_BITS(n)                                 \
 	if (!fx_bitstream_can_read(&inst->bitstream, n)) { \
@@ -1430,7 +1455,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 	int64_t tmp_; /* Used by the READ_BITS macro */
 	fx_flac_frame_header_t *fh = inst->frame_header;
 	fx_flac_subframe_header_t *sfh = inst->subframe_header;
-	int32_t *blk = inst->blkbuf[inst->chan_cur % FLAC_MAX_CHANNEL_COUNT];
+	int64_t *blk = inst->blkbuf[inst->chan_cur % FLAC_MAX_CHANNEL_COUNT];
 	const uint32_t blk_n = fh->block_size;
 
 	/* Figure out the number of bits to read for sample. This depends on the
@@ -1442,8 +1467,9 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 		bps++;
 	}
 
-	/* Discard frames with invalid bits per sample values */
-	if (bps == 0U || bps > 32U) {
+	/* Discard frames with invalid bits per sample values. Note that side
+	   channels of 32-bit streams are 33 bits wide. */
+	if (bps == 0U || bps > 33U) {
 		return _fx_flac_handle_err(inst);
 	}
 
@@ -1494,7 +1520,12 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			/* Read the "wasted_bits" flag */
 			sfh->wasted_bits = READ_BITS_FAST_CRC(1U);
 			if (sfh->wasted_bits) {
-				for (uint8_t i = 1U; i <= 30U; i++) {
+				/* Unary coded number of wasted bits; must terminate before
+				   the number of wasted bits reaches the sample size (at most
+				   32 bits). The sentinel value zero indicates that no
+				   terminating one-bit was found. */
+				sfh->wasted_bits = 0U;
+				for (uint8_t i = 1U; i <= 31U; i++) {
 					const uint8_t bit = READ_BITS_FAST_CRC(1U);
 					if (bit == 1U) {
 						sfh->wasted_bits = i;
@@ -1516,7 +1547,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			/* Read a single sample value and spread it over the entire block
 			   buffer for this subframe. */
 			blk[0U] = READ_BITS_CRC(bps);
-			blk[0U] = SIGN_EXTEND(blk[0U], bps);
+			blk[0U] = _fx_flac_sign_extend_(blk[0U], bps);
 			for (uint16_t i = 1U; i < blk_n; i++) {
 				blk[i] = blk[0U];
 			}
@@ -1530,7 +1561,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			const uint32_t n = (sfh->type == SFT_VERBATIM) ? blk_n : sfh->order;
 			while (inst->blk_cur < n) {
 				blk[inst->blk_cur] = READ_BITS_CRC(bps);
-				blk[inst->blk_cur] = SIGN_EXTEND(blk[inst->blk_cur], bps);
+				blk[inst->blk_cur] = _fx_flac_sign_extend_(blk[inst->blk_cur], bps);
 				inst->blk_cur++;
 			}
 			inst->priv_state =
@@ -1546,7 +1577,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 				return _fx_flac_handle_err(inst);
 			}
 			sfh->lpc_prec = prec + 1U;
-			sfh->lpc_shift = SIGN_EXTEND(shift, 5U);
+			sfh->lpc_shift = (int8_t)_fx_flac_sign_extend_(shift, 5U);
 			if (sfh->lpc_shift < 0) {
 				return _fx_flac_handle_err(inst);
 			}
@@ -1559,7 +1590,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			while (inst->coef_cur < sfh->order) {
 				uint32_t coef = READ_BITS_CRC(sfh->lpc_prec);
 				sfh->lpc_coeffs[inst->coef_cur] =
-				    SIGN_EXTEND(coef, sfh->lpc_prec);
+				    (int32_t)_fx_flac_sign_extend_(coef, sfh->lpc_prec);
 				inst->coef_cur++;
 			}
 			inst->priv_state = FLAC_SUBFRAME_LPC_RESIDUAL;
@@ -1622,7 +1653,11 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 						if (bit) {
 							break;
 						}
-						inst->rice_unary_counter++;
+						/* Saturate the counter at UINT32_MAX; the residual
+						   range check below will reject the sample. */
+						if (inst->rice_unary_counter != UINT32_MAX) {
+							inst->rice_unary_counter++;
+						}
 					}
 				}
 
@@ -1635,14 +1670,22 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 				if (sfh->rice_parameter > 0U) {
 					r = READ_BITS_CRC(sfh->rice_parameter);
 				}
-				const uint16_t q = inst->rice_unary_counter;
-				const uint32_t val = (q << sfh->rice_parameter) | r;
+				const uint32_t q = inst->rice_unary_counter;
+				const uint64_t val = ((uint64_t)q << sfh->rice_parameter) | r;
+
+				/* RFC 9639 limits the residual to the range
+				   -2147483647 to 2147483647, which corresponds to coded
+				   values up to 2^32 - 2. Reject the frame if the limit is
+				   exceeded. */
+				if (val > 0xFFFFFFFEULL) {
+					return _fx_flac_handle_err(inst);
+				}
 
 				/* Last bit determines sign */
-				if (val & 1) {
-					blk[inst->blk_cur] = -((int32_t)(val >> 1)) - 1;
+				if (val & 1U) {
+					blk[inst->blk_cur] = -((int64_t)(val >> 1U)) - 1;
 				} else {
-					blk[inst->blk_cur] = (int32_t)(val >> 1);
+					blk[inst->blk_cur] = (int64_t)(val >> 1U);
 				}
 
 				/* Read the next sample */
@@ -1655,10 +1698,15 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			break;
 		case FLAC_SUBFRAME_RICE_VERBATIM: {
 			/* Samples are encoded in verbatim in this partition */
-			const uint8_t bps = sfh->rice_parameter;
+			const uint8_t res_bps = sfh->rice_parameter;
 			while (inst->partition_sample > 0U) {
-				blk[inst->blk_cur] = (bps == 0) ? 0U : READ_BITS_CRC(bps);
-				blk[inst->blk_cur] = SIGN_EXTEND(blk[inst->blk_cur], bps);
+				if (res_bps == 0U) {
+					blk[inst->blk_cur] = 0;
+				} else {
+					blk[inst->blk_cur] = READ_BITS_CRC(res_bps);
+					blk[inst->blk_cur] =
+					    _fx_flac_sign_extend_(blk[inst->blk_cur], res_bps);
+				}
 				inst->blk_cur++;
 				inst->partition_sample--;
 			}
@@ -1682,7 +1730,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			if (sfh->wasted_bits) {
 				uint8_t shift = sfh->wasted_bits;
 				for (uint16_t i = 0U; i < blk_n; i++) {
-					blk[i] = blk[i] * (1 << shift);
+					blk[i] = blk[i] * ((int64_t)1 << shift);
 				}
 			}
 
@@ -1693,6 +1741,15 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 				break;
 			}
 
+			/* All subframes are decoded. The CRC16 check and the output
+			   post-processing are done in a separate state so that this
+			   state is only entered once per frame (the CRC16 read may
+			   need more input data and would otherwise be retried with
+			   the side effects above already applied). */
+			inst->priv_state = FLAC_SUBFRAME_CRC;
+			break;
+		}
+		case FLAC_SUBFRAME_CRC: {
 			/* Synchronise with the underlying byte stream */
 			SYNC_BYTESTREAM_CRC();
 
@@ -1707,7 +1764,7 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 #endif
 
 			/* Post process side-stereo */
-			int32_t *c1 = inst->blkbuf[0], *c2 = inst->blkbuf[1];
+			int64_t *c1 = inst->blkbuf[0], *c2 = inst->blkbuf[1];
 			switch (fh->channel_assignment) {
 				case LEFT_SIDE_STEREO:
 					_fx_flac_post_process_left_side(c1, c2, blk_n);
@@ -1723,13 +1780,14 @@ static bool _fx_flac_process_in_frame(fx_flac_t *inst) {
 			}
 
 			/* Shift the output such that the resulting int32 stream can be
-			   played back. */
+			   played back. For 32-bit audio no shift is applied and the
+			   samples are passed through unchanged. */
 			uint8_t shift = 32U - fh->sample_size;
 			if (shift) {
 				for (uint8_t c = 0U; c < fh->channel_count; c++) {
-					int32_t *blk = inst->blkbuf[c];
+					int64_t *blk = inst->blkbuf[c];
 					for (uint16_t i = 0U; i < blk_n; i++) {
-						blk[i] = blk[i] * (1 << shift);
+						blk[i] = blk[i] * ((int64_t)1 << shift);
 					}
 				}
 			}
@@ -1765,8 +1823,11 @@ static bool _fx_flac_process_decoded_frame(fx_flac_t *inst, int32_t *out,
 	/* Interlace the decoded samples in the output array */
 	uint32_t tar = 0U; /* Number of samples written. */
 	while (tar < n_smpls_rem) {
-		/* Write to the output buffer */
-		out[tar] = inst->blkbuf[inst->chan_cur][inst->blk_cur];
+		/* Write to the output buffer. The internal 64-bit wide block buffers
+		   always contain values that fit into 32 bits at this point (any
+		   residual value exceeding the 32-bit range was rejected while
+		   decoding the frame). */
+		out[tar] = (int32_t)inst->blkbuf[inst->chan_cur][inst->blk_cur];
 
 		/* Advance the read and write cursors */
 		inst->chan_cur++;
@@ -1807,9 +1868,10 @@ uint32_t fx_flac_size(uint32_t max_block_size, uint8_t max_channels) {
 	          fx_mem_update_size(&size, sizeof(int32_t) * 32U);
 
 	/* Calculate the size of the structures depending on the given parameters.
-	 */
+	   The per-channel block buffers are 64-bit wide to accommodate 33-bit
+	   side channels of 32-bit streams. */
 	for (uint8_t i = 0; i < max_channels; i++) {
-		ok = ok && fx_mem_update_size(&size, sizeof(int32_t) * max_block_size);
+		ok = ok && fx_mem_update_size(&size, sizeof(int64_t) * max_block_size);
 	}
 	return ok ? size : 0;
 }
@@ -1850,7 +1912,7 @@ fx_flac_t *fx_flac_init(void *mem, uint16_t max_block_size,
 		}
 		for (uint8_t i = 0; i < max_channels; i++) {
 			inst->blkbuf[i] =
-			    (int32_t *)fx_mem_align(&mem, sizeof(int32_t) * max_block_size);
+			    (int64_t *)fx_mem_align(&mem, sizeof(int64_t) * max_block_size);
 		}
 
 		/* Reset the instance, i.e. zero most/all fields. */

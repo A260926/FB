@@ -8,9 +8,10 @@ decoder written in C99. It does not depend on any C library function,
 including memory allocations. It provides a simple, state-machine based
 interface that allows you to decode a FLAC stream from a sequence of arbitrarily
 sized byte buffers. Depending on maximum number of channels and the maximum
-block size, `libfoxenflac` requires between 40 kiB (FLAC Subset format,
-stereo, up to 48000 kHz) and 2 MiB of memory (all standard-conformant FLAC
-files).
+block size, `libfoxenflac` requires between 73 kiB (FLAC Subset format,
+stereo, up to 48000 kHz) and 4 MiB of memory (all standard-conformant FLAC
+files, including 32-bit streams). Query the exact size at runtime with
+`fx_flac_size()`; it is not a compile-time constant.
 
 This library is perfect for environments without runtime library, such as
 embedded devices or Web Assembly (WASM).
@@ -23,7 +24,7 @@ embedded devices or Web Assembly (WASM).
   individual samples.
 * Compiles to 8.8 kiB of **WebAssembly** (4.5 kiB compressed). However, no
   JavaScript binding is provided at the moment.
-* Supports **all FLAC features**.
+* Supports **all FLAC features**, including **32-bit audio** (RFC 9639).
 * Quite thoroughly tested, considerable **test coverage**.
 * Roboust **resynchronisation** on corrupted files.
 * Implements all **CRC checks**.
@@ -94,6 +95,34 @@ int main() {
 ```
 
 See `examples/flac_decoder.c` for a complete example.
+
+## Bit depths and output alignment
+
+`libfoxenflac` decodes all FLAC bit depths from 4 to 32 bits per sample,
+including the 32-bit format introduced by
+[RFC 9639](https://www.rfc-editor.org/rfc/rfc9639.html). A 32-bit stream may
+declare its bit depth either in the `STREAMINFO` block (with the frame
+header inheriting it) or directly in the frame header using the formerly
+reserved sample-size code 7. All channel assignments (independent, left-side,
+right-side and mid-side stereo) are supported; side channels of 32-bit
+streams are decoded at their full 33-bit width, and the prediction
+accumulator and channel decorrelation run in 64 bits so that no intermediate
+result is truncated to 32 bits.
+
+Decoded samples are always delivered as `int32_t`:
+
+* **32-bit streams** are passed through exactly, bit for bit.
+* **Streams with a lower bit depth** are shifted to the left so that they
+  occupy the full 32-bit signed integer range (e.g. a 16-bit sample `v`
+  becomes `v << 16`). Use `fx_flac_get_streaminfo(inst, FLAC_KEY_SAMPLE_SIZE)`
+  to query the bit depth and shift right to the desired output depth.
+
+Note that the per-channel sample buffers are 64 bits wide to accommodate
+33-bit side channels, so `fx_flac_size()` returns larger values than it did
+before 32-bit support was added. Always allocate the decoder instance using
+the size reported by `fx_flac_size()` (the `FX_FLAC_ALLOC*` macros do this
+for you); the decoder never allocates memory on its own and never writes
+outside the provided region.
 
 ## Using libfoxenflac in your own project
 
