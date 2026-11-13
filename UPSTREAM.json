@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/DragonBones/DragonBonesCPP",
+  "commit": "f696143045e07b7c4c4590bdd95534e9e8074b37",
+  "scope": [
+    "DragonBones (complete runtime)",
+    "3rdParty/rapidjson (complete bundled headers)",
+    "LICENSE",
+    "SFML/src/dragonBones/SFMLSlot.cpp (reference only)"
+  ],
+  "excluded": "Engine adapter applications, demo art and stale .gitmodules are not runtime dependencies; source tree has zero gitlinks. No production runtime files were removed.",
+  "gitmodules_original": "[submodule \"engines/cocos2d-x-3.x\"]\n\tpath = engines/cocos2d-x-3.x\n\turl = https://github.com/cocos2d/cocos2d-x.git\n\tbranch = cocos2d-x-3.0\n[submodule \"engines/cocos2d-x-2.x\"]\n\tpath = engines/cocos2d-x-2.x\n\turl = https://github.com/cocos2d/cocos2d-x.git\n\tbranch = cocos2d-x-2.2.3\n"
+}
