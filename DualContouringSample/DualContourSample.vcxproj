@@ -85,6 +85,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="density.cpp" />
+    <ClCompile Include="editable_octree.cpp" />
     <ClCompile Include="glsl_program.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mesh.cpp" />
@@ -94,6 +95,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="density.h" />
+    <ClInclude Include="editable_octree.h" />
     <ClInclude Include="glsl_program.h" />
     <ClInclude Include="mesh.h" />
     <ClInclude Include="octree.h" />

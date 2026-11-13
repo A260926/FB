@@ -97,6 +97,7 @@ public:
 // ----------------------------------------------------------------------------
 
 OctreeNode* BuildOctree(const ivec3& min, const int size, const float threshold);
+OctreeNode* SimplifyOctree(OctreeNode* node, float threshold);
 void DestroyOctree(OctreeNode* node);
 void GenerateMeshFromOctree(OctreeNode* node, VertexBuffer& vertexBuffer, IndexBuffer& indexBuffer);
 
