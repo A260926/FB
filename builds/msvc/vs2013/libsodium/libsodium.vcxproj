@@ -77,6 +77,7 @@
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_generichash\blake2b\ref\generichash_blake2b.c" />
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_generichash\blake2b\ref\blake2b-ref.c" />
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_kx\crypto_kx.c" />
+    <ClCompile Include="..\..\..\..\src\libsodium\crypto_hpke\crypto_hpke.c" />
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_sign\crypto_sign.c" />
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_sign\ed25519\sign_ed25519.c" />
     <ClCompile Include="..\..\..\..\src\libsodium\crypto_sign\ed25519\ref10\obsolete.c" />
@@ -218,6 +219,7 @@
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_onetimeauth_poly1305.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_scalarmult_ristretto255.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_kx.h" />
+    <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_hpke.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_hash.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_sign.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_kdf.h" />
@@ -265,6 +267,7 @@
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_generichash_blake2b.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\crypto_sign_edwards25519sha512batch.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\private\ed25519_ref10.h" />
+    <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\private\hpke_testonly.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\private\softaes.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\private\ed25519_ref10_fe_25_5.h" />
     <ClInclude Include="..\..\..\..\src\libsodium\include\sodium\private\ed25519_ref10_fe_51.h" />

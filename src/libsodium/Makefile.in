@@ -306,6 +306,7 @@ am__libsodium_la_SOURCES_DIST =  \
 	crypto_hash/sha256/cp/hash_sha256_cp.c \
 	crypto_hash/sha512/hash_sha512.c \
 	crypto_hash/sha512/cp/hash_sha512_cp.c \
+	crypto_hpke/crypto_hpke.c \
 	crypto_kdf/blake2b/kdf_blake2b.c crypto_kdf/crypto_kdf.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha256.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha512.c crypto_kx/crypto_kx.c \
@@ -358,6 +359,7 @@ am__libsodium_la_SOURCES_DIST =  \
 	include/sodium/private/chacha20_ietf_ext.h \
 	include/sodium/private/common.h \
 	include/sodium/private/ed25519_ref10.h \
+	include/sodium/private/hpke_testonly.h \
 	include/sodium/private/implementations.h \
 	include/sodium/private/mutex.h \
 	include/sodium/private/sse2_64_32.h \
@@ -473,6 +475,7 @@ am_libsodium_la_OBJECTS =  \
 	crypto_hash/sha256/cp/libsodium_la-hash_sha256_cp.lo \
 	crypto_hash/sha512/libsodium_la-hash_sha512.lo \
 	crypto_hash/sha512/cp/libsodium_la-hash_sha512_cp.lo \
+	crypto_hpke/libsodium_la-crypto_hpke.lo \
 	crypto_kdf/blake2b/libsodium_la-kdf_blake2b.lo \
 	crypto_kdf/libsodium_la-crypto_kdf.lo \
 	crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha256.lo \
@@ -612,6 +615,7 @@ am__depfiles_remade = crypto_aead/aegis128l/$(DEPDIR)/libaesni_la-aegis128l_aesn
 	crypto_hash/sha256/cp/$(DEPDIR)/libsodium_la-hash_sha256_cp.Plo \
 	crypto_hash/sha512/$(DEPDIR)/libsodium_la-hash_sha512.Plo \
 	crypto_hash/sha512/cp/$(DEPDIR)/libsodium_la-hash_sha512_cp.Plo \
+	crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Plo \
 	crypto_kdf/$(DEPDIR)/libsodium_la-crypto_kdf.Plo \
 	crypto_kdf/blake2b/$(DEPDIR)/libsodium_la-kdf_blake2b.Plo \
 	crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha256.Plo \
@@ -1008,6 +1012,7 @@ libsodium_la_SOURCES = crypto_aead/aegis128l/aead_aegis128l.c \
 	crypto_hash/sha256/cp/hash_sha256_cp.c \
 	crypto_hash/sha512/hash_sha512.c \
 	crypto_hash/sha512/cp/hash_sha512_cp.c \
+	crypto_hpke/crypto_hpke.c \
 	crypto_kdf/blake2b/kdf_blake2b.c crypto_kdf/crypto_kdf.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha256.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha512.c crypto_kx/crypto_kx.c \
@@ -1060,6 +1065,7 @@ libsodium_la_SOURCES = crypto_aead/aegis128l/aead_aegis128l.c \
 	include/sodium/private/chacha20_ietf_ext.h \
 	include/sodium/private/common.h \
 	include/sodium/private/ed25519_ref10.h \
+	include/sodium/private/hpke_testonly.h \
 	include/sodium/private/implementations.h \
 	include/sodium/private/mutex.h \
 	include/sodium/private/sse2_64_32.h \
@@ -1616,6 +1622,14 @@ crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha256.lo:  \
 crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha512.lo:  \
 	crypto_kdf/hkdf/$(am__dirstamp) \
 	crypto_kdf/hkdf/$(DEPDIR)/$(am__dirstamp)
+crypto_hpke/$(am__dirstamp):
+	@$(MKDIR_P) crypto_hpke
+	@: > crypto_hpke/$(am__dirstamp)
+crypto_hpke/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) crypto_hpke/$(DEPDIR)
+	@: > crypto_hpke/$(DEPDIR)/$(am__dirstamp)
+crypto_hpke/libsodium_la-crypto_hpke.lo: crypto_hpke/$(am__dirstamp) \
+	crypto_hpke/$(DEPDIR)/$(am__dirstamp)
 crypto_kx/$(am__dirstamp):
 	@$(MKDIR_P) crypto_kx
 	@: > crypto_kx/$(am__dirstamp)
@@ -2166,6 +2180,8 @@ mostlyclean-compile:
 	-rm -f crypto_kdf/blake2b/*.lo
 	-rm -f crypto_kdf/hkdf/*.$(OBJEXT)
 	-rm -f crypto_kdf/hkdf/*.lo
+	-rm -f crypto_hpke/*.$(OBJEXT)
+	-rm -f crypto_hpke/*.lo
 	-rm -f crypto_kx/*.$(OBJEXT)
 	-rm -f crypto_kx/*.lo
 	-rm -f crypto_onetimeauth/*.$(OBJEXT)
@@ -2308,6 +2324,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_kdf/blake2b/$(DEPDIR)/libsodium_la-kdf_blake2b.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha256.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha512.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_kx/$(DEPDIR)/libsodium_la-crypto_kx.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_onetimeauth/$(DEPDIR)/libsodium_la-crypto_onetimeauth.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@crypto_onetimeauth/poly1305/$(DEPDIR)/libsodium_la-onetimeauth_poly1305.Plo@am__quote@ # am--include-marker
@@ -2778,6 +2795,13 @@ crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha512.lo: crypto_kdf/hkdf/kdf_hkdf_sha512
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='crypto_kdf/hkdf/kdf_hkdf_sha512.c' object='crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha512.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsodium_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha512.lo `test -f 'crypto_kdf/hkdf/kdf_hkdf_sha512.c' || echo '$(srcdir)/'`crypto_kdf/hkdf/kdf_hkdf_sha512.c
+
+crypto_hpke/libsodium_la-crypto_hpke.lo: crypto_hpke/crypto_hpke.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsodium_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT crypto_hpke/libsodium_la-crypto_hpke.lo -MD -MP -MF crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Tpo -c -o crypto_hpke/libsodium_la-crypto_hpke.lo `test -f 'crypto_hpke/crypto_hpke.c' || echo '$(srcdir)/'`crypto_hpke/crypto_hpke.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Tpo crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='crypto_hpke/crypto_hpke.c' object='crypto_hpke/libsodium_la-crypto_hpke.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsodium_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o crypto_hpke/libsodium_la-crypto_hpke.lo `test -f 'crypto_hpke/crypto_hpke.c' || echo '$(srcdir)/'`crypto_hpke/crypto_hpke.c
 
 crypto_kx/libsodium_la-crypto_kx.lo: crypto_kx/crypto_kx.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsodium_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT crypto_kx/libsodium_la-crypto_kx.lo -MD -MP -MF crypto_kx/$(DEPDIR)/libsodium_la-crypto_kx.Tpo -c -o crypto_kx/libsodium_la-crypto_kx.lo `test -f 'crypto_kx/crypto_kx.c' || echo '$(srcdir)/'`crypto_kx/crypto_kx.c
@@ -3320,6 +3344,7 @@ clean-libtool:
 	-rm -rf crypto_kdf/.libs crypto_kdf/_libs
 	-rm -rf crypto_kdf/blake2b/.libs crypto_kdf/blake2b/_libs
 	-rm -rf crypto_kdf/hkdf/.libs crypto_kdf/hkdf/_libs
+	-rm -rf crypto_hpke/.libs crypto_hpke/_libs
 	-rm -rf crypto_kx/.libs crypto_kx/_libs
 	-rm -rf crypto_onetimeauth/.libs crypto_onetimeauth/_libs
 	-rm -rf crypto_onetimeauth/poly1305/.libs crypto_onetimeauth/poly1305/_libs
@@ -3642,6 +3667,8 @@ distclean-generic:
 	-rm -f crypto_kdf/blake2b/$(am__dirstamp)
 	-rm -f crypto_kdf/hkdf/$(DEPDIR)/$(am__dirstamp)
 	-rm -f crypto_kdf/hkdf/$(am__dirstamp)
+	-rm -f crypto_hpke/$(DEPDIR)/$(am__dirstamp)
+	-rm -f crypto_hpke/$(am__dirstamp)
 	-rm -f crypto_kx/$(DEPDIR)/$(am__dirstamp)
 	-rm -f crypto_kx/$(am__dirstamp)
 	-rm -f crypto_onetimeauth/$(DEPDIR)/$(am__dirstamp)
@@ -3790,6 +3817,7 @@ distclean: distclean-recursive
 	-rm -f crypto_kdf/blake2b/$(DEPDIR)/libsodium_la-kdf_blake2b.Plo
 	-rm -f crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha256.Plo
 	-rm -f crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha512.Plo
+	-rm -f crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Plo
 	-rm -f crypto_kx/$(DEPDIR)/libsodium_la-crypto_kx.Plo
 	-rm -f crypto_onetimeauth/$(DEPDIR)/libsodium_la-crypto_onetimeauth.Plo
 	-rm -f crypto_onetimeauth/poly1305/$(DEPDIR)/libsodium_la-onetimeauth_poly1305.Plo
@@ -3956,6 +3984,7 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f crypto_kdf/blake2b/$(DEPDIR)/libsodium_la-kdf_blake2b.Plo
 	-rm -f crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha256.Plo
 	-rm -f crypto_kdf/hkdf/$(DEPDIR)/libsodium_la-kdf_hkdf_sha512.Plo
+	-rm -f crypto_hpke/$(DEPDIR)/libsodium_la-crypto_hpke.Plo
 	-rm -f crypto_kx/$(DEPDIR)/libsodium_la-crypto_kx.Plo
 	-rm -f crypto_onetimeauth/$(DEPDIR)/libsodium_la-crypto_onetimeauth.Plo
 	-rm -f crypto_onetimeauth/poly1305/$(DEPDIR)/libsodium_la-onetimeauth_poly1305.Plo
