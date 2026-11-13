@@ -42,29 +42,37 @@ func (c *BaseClient) Unsubscribe(ctx context.Context, subs ...string) error {
 }
 
 func unsubscribeImpl(ctx context.Context, c *BaseClient, subs ...string) error {
+	op := newOutboundOp(outboundUnsubscribe, QoS0)
+	return unsubscribeOp(ctx, c, op, subs)
+}
+
+func unsubscribeOp(ctx context.Context, c *BaseClient, op *outboundOp, subs []string) error {
 	c.muConnecting.RLock()
 	defer c.muConnecting.RUnlock()
 
-	id := c.newID()
+	if op.isDone() {
+		// A late UNSUBACK completed this operation while the previous
+		// attempt was giving up.
+		return nil
+	}
 
-	sig, err := c.signaller()
-	if err != nil {
+	if err := op.acquire(c); err != nil {
 		return err
 	}
-	chUnsubAck := make(chan *pktUnsubAck, 1)
-	sig.mu.Lock()
-	if sig.chUnsubAck == nil {
-		sig.chUnsubAck = make(map[uint16]chan *pktUnsubAck, 1)
+	if op.isDone() {
+		return nil
 	}
-	sig.chUnsubAck[id] = chUnsubAck
-	sig.mu.Unlock()
+	id := op.currentID()
 
 	retryUnsubscribe := func(ctx context.Context, cli *BaseClient) error {
-		return unsubscribeImpl(ctx, cli, subs...)
+		return unsubscribeOp(ctx, cli, op, subs)
 	}
 
 	pkt := (&pktUnsubscribe{ID: id, Topics: subs}).Pack()
 	if err := c.write(pkt); err != nil {
+		// A partially written packet has an unknown boundary; the transport
+		// cannot be reused.
+		op.abortTransport()
 		return wrapErrorWithRetry(err, retryUnsubscribe, "sending UNSUBSCRIBE")
 	}
 	select {
@@ -72,7 +80,7 @@ func unsubscribeImpl(ctx context.Context, c *BaseClient, subs ...string) error {
 		return wrapErrorWithRetry(ErrClosedTransport, retryUnsubscribe, "waiting UNSUBACK")
 	case <-ctx.Done():
 		return wrapErrorWithRetry(ctx.Err(), retryUnsubscribe, "waiting UNSUBACK")
-	case <-chUnsubAck:
+	case <-op.unsubAckChannel():
 	}
 	return nil
 }

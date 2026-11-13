@@ -28,10 +28,14 @@ func (c *BaseClient) initID() {
 	atomic.StoreUint32(&c.idLast, uint32(rand.Int31n(0xFFFE))+1)
 }
 
+// newID returns the next candidate identifier of the transport. It only
+// advances the sequence; ownership is tracked by the outbound lease registry.
+// 0 is reserved for "auto" and is never returned.
 func (c *BaseClient) newID() uint16 {
-	id := uint16(atomic.AddUint32(&c.idLast, 1))
-	if id == 0 {
-		return c.newID()
+	for {
+		id := uint16(atomic.AddUint32(&c.idLast, 1))
+		if id != 0 {
+			return id
+		}
 	}
-	return id
 }

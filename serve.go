@@ -43,7 +43,26 @@ func readPacket(r io.Reader) (packetType, byte, []byte, error) {
 }
 
 func (c *BaseClient) serve() error {
-	r := c.Transport
+	c.mu.Lock()
+	sig := c.sig
+	c.mu.Unlock()
+	return c.serveGeneration(sig, c.Transport)
+}
+
+// serveGeneration runs the receive loop of one transport generation. The
+// generation's signaller and transport are passed explicitly so that a late
+// cleanup of an old receive loop can never touch the resources of a newer
+// connection.
+func (c *BaseClient) serveGeneration(sig *signaller, transport io.ReadWriteCloser) error {
+	r := transport
+	if sig == nil {
+		// Used before Connect; there is no outbound namespace to manage.
+		sig = &signaller{}
+	}
+	// Leases of this transport generation are only discarded when the
+	// receive loop terminates.
+	defer cleanupOutbound(sig)
+
 	subBuffer := make(map[uint16]*Message)
 	for {
 		pktType, pktFlag, contents, err := readPacket(r)
@@ -60,7 +79,7 @@ func (c *BaseClient) serve() error {
 				return err
 			}
 			select {
-			case c.sig.ConnAck() <- connAck:
+			case sig.ConnAck() <- connAck:
 			default:
 			}
 		case packetPublish:
@@ -100,23 +119,13 @@ func (c *BaseClient) serve() error {
 			if err != nil {
 				return err
 			}
-			if ch, ok := c.sig.PubAck(pubAck.ID); ok {
-				select {
-				case ch <- pubAck:
-				default:
-				}
-			}
+			sig.settlePubAck(pubAck)
 		case packetPubRec:
 			pubRec, err := (&pktPubRec{}).Parse(pktFlag, contents)
 			if err != nil {
 				return err
 			}
-			if ch, ok := c.sig.PubRec(pubRec.ID); ok {
-				select {
-				case ch <- pubRec:
-				default:
-				}
-			}
+			sig.settlePubRec(pubRec)
 		case packetPubRel:
 			pubRel, err := (&pktPubRel{}).Parse(pktFlag, contents)
 			if err != nil {
@@ -142,41 +151,26 @@ func (c *BaseClient) serve() error {
 			if err != nil {
 				return err
 			}
-			if ch, ok := c.sig.PubComp(pubComp.ID); ok {
-				select {
-				case ch <- pubComp:
-				default:
-				}
-			}
+			sig.settlePubComp(pubComp)
 		case packetSubAck:
 			subAck, err := (&pktSubAck{}).Parse(pktFlag, contents)
 			if err != nil {
 				return err
 			}
-			if ch, ok := c.sig.SubAck(subAck.ID); ok {
-				select {
-				case ch <- subAck:
-				default:
-				}
-			}
+			sig.settleSubAck(subAck)
 		case packetUnsubAck:
 			unsubAck, err := (&pktUnsubAck{}).Parse(pktFlag, contents)
 			if err != nil {
 				return err
 			}
-			if ch, ok := c.sig.UnsubAck(unsubAck.ID); ok {
-				select {
-				case ch <- unsubAck:
-				default:
-				}
-			}
+			sig.settleUnsubAck(unsubAck)
 		case packetPingResp:
 			pingResp, err := (&pktPingResp{}).Parse(pktFlag, contents)
 			if err != nil {
 				return err
 			}
 			select {
-			case c.sig.PingResp() <- pingResp:
+			case sig.PingResp() <- pingResp:
 			default:
 			}
 		default:

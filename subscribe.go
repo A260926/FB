@@ -66,30 +66,40 @@ func (c *BaseClient) Subscribe(ctx context.Context, subs ...Subscription) ([]Sub
 }
 
 func subscribeImpl(ctx context.Context, c *BaseClient, subs ...Subscription) ([]Subscription, error) {
+	op := newOutboundOp(outboundSubscribe, QoS0)
+	return subscribeOp(ctx, c, op, subs)
+}
+
+func subscribeOp(ctx context.Context, c *BaseClient, op *outboundOp, subs []Subscription) ([]Subscription, error) {
 	c.muConnecting.RLock()
 	defer c.muConnecting.RUnlock()
 
-	id := c.newID()
+	if op.isDone() {
+		// A late SUBACK completed this operation while the previous attempt
+		// was giving up.
+		return subs, nil
+	}
 
-	sig, err := c.signaller()
-	if err != nil {
+	if err := op.acquire(c); err != nil {
 		return nil, err
 	}
-	chSubAck := make(chan *pktSubAck, 1)
-	sig.mu.Lock()
-	if sig.chSubAck == nil {
-		sig.chSubAck = make(map[uint16]chan *pktSubAck, 1)
+	if op.isDone() {
+		return subs, nil
 	}
-	sig.chSubAck[id] = chSubAck
-	sig.mu.Unlock()
+	id := op.currentID()
 
 	retrySubscribe := func(ctx context.Context, cli *BaseClient) error {
-		_, err := subscribeImpl(ctx, cli, subs...)
+		// The subscription result of an already written SUBSCRIBE is
+		// delivered to the original caller through the reused wait channel.
+		_, err := subscribeOp(ctx, cli, op, subs)
 		return err
 	}
 
 	pkt := (&pktSubscribe{ID: id, Subscriptions: subs}).Pack()
 	if err := c.write(pkt); err != nil {
+		// A partially written packet has an unknown boundary; the transport
+		// cannot be reused.
+		op.abortTransport()
 		return nil, wrapErrorWithRetry(err, retrySubscribe, "sending SUBSCRIBE")
 	}
 	select {
@@ -97,7 +107,7 @@ func subscribeImpl(ctx context.Context, c *BaseClient, subs ...Subscription) ([]
 		return nil, wrapErrorWithRetry(ErrClosedTransport, retrySubscribe, "waiting SUBACK")
 	case <-ctx.Done():
 		return nil, wrapErrorWithRetry(ctx.Err(), retrySubscribe, "waiting SUBACK")
-	case subAck := <-chSubAck:
+	case subAck := <-op.subAckChannel():
 		if len(subAck.Codes) != len(subs) {
 			c.Transport.Close()
 			return nil, wrapErrorf(ErrInvalidSubAck, "subscribing %d topics: %d topics in SUBACK", len(subs), len(subAck.Codes))

@@ -123,12 +123,12 @@ func (c *BaseClient) signaller() (*signaller, error) {
 type signaller struct {
 	chConnAck  chan *pktConnAck
 	chPingResp chan *pktPingResp
-	chPubAck   map[uint16]chan *pktPubAck
-	chPubRec   map[uint16]chan *pktPubRec
-	chPubComp  map[uint16]chan *pktPubComp
-	chSubAck   map[uint16]chan *pktSubAck
-	chUnsubAck map[uint16]chan *pktUnsubAck
-	mu         sync.RWMutex
+
+	// used is the outbound packet identifier namespace of one transport
+	// generation. Identifier 0 is never registered.
+	used map[uint16]*outboundOp
+
+	mu sync.RWMutex
 }
 
 func (s *signaller) ConnAck() chan *pktConnAck {
@@ -143,58 +143,137 @@ func (s *signaller) PingResp() chan *pktPingResp {
 
 	return s.chPingResp
 }
-func (s *signaller) PubAck(id uint16) (chan *pktPubAck, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if s.chPubAck == nil {
-		return nil, false
+// settlePubAck finalizes a PUBACK. The identifier is released only after the
+// acknowledgement has been matched to the operation that still owns it.
+func (s *signaller) settlePubAck(p *pktPubAck) {
+	s.mu.Lock()
+	o := s.used[p.ID]
+	var ch chan *pktPubAck
+	if o != nil {
+		o.mu.Lock()
+		if o.kind == outboundPublish && o.phase == phasePubAck && o.chPubAck != nil {
+			ch = o.chPubAck
+			o.phase = phaseDone
+			o.released = true
+			o.done = true
+			o.reg = nil
+			delete(s.used, p.ID)
+		}
+		o.mu.Unlock()
 	}
-	defer delete(s.chPubAck, id)
-	ch, ok := s.chPubAck[id]
-	return ch, ok
+	s.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- p:
+		default:
+		}
+	}
 }
-func (s *signaller) PubRec(id uint16) (chan *pktPubRec, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if s.chPubRec == nil {
-		return nil, false
+// settlePubRec advances a QoS2 publish to the PUBREL/PUBCOMP phase. Ownership
+// of the identifier is deliberately kept until PUBCOMP.
+func (s *signaller) settlePubRec(p *pktPubRec) {
+	s.mu.Lock()
+	o := s.used[p.ID]
+	var ch chan *pktPubRec
+	if o != nil {
+		o.mu.Lock()
+		if o.kind == outboundPublish && o.phase == phasePubRec && o.chPubRec != nil {
+			ch = o.chPubRec
+			o.phase = phasePubComp
+			o.pubRel = true
+		}
+		o.mu.Unlock()
 	}
-	defer delete(s.chPubRec, id)
-	ch, ok := s.chPubRec[id]
-	return ch, ok
+	s.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- p:
+		default:
+		}
+	}
 }
-func (s *signaller) PubComp(id uint16) (chan *pktPubComp, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if s.chPubComp == nil {
-		return nil, false
+// settlePubComp finalizes a QoS2 publish.
+func (s *signaller) settlePubComp(p *pktPubComp) {
+	s.mu.Lock()
+	o := s.used[p.ID]
+	var ch chan *pktPubComp
+	if o != nil {
+		o.mu.Lock()
+		if o.kind == outboundPublish && o.phase == phasePubComp && o.chPubComp != nil {
+			ch = o.chPubComp
+			o.phase = phaseDone
+			o.released = true
+			o.done = true
+			o.reg = nil
+			delete(s.used, p.ID)
+		}
+		o.mu.Unlock()
 	}
-	defer delete(s.chPubComp, id)
-	ch, ok := s.chPubComp[id]
-	return ch, ok
+	s.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- p:
+		default:
+		}
+	}
 }
-func (s *signaller) SubAck(id uint16) (chan *pktSubAck, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if s.chSubAck == nil {
-		return nil, false
+// settleSubAck finalizes a SUBSCRIBE.
+func (s *signaller) settleSubAck(p *pktSubAck) {
+	s.mu.Lock()
+	o := s.used[p.ID]
+	var ch chan *pktSubAck
+	if o != nil {
+		o.mu.Lock()
+		if o.kind == outboundSubscribe && o.phase == phaseSubAck && o.chSubAck != nil {
+			ch = o.chSubAck
+			o.phase = phaseDone
+			o.released = true
+			o.done = true
+			o.reg = nil
+			delete(s.used, p.ID)
+		}
+		o.mu.Unlock()
 	}
-	defer delete(s.chSubAck, id)
-	ch, ok := s.chSubAck[id]
-	return ch, ok
+	s.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- p:
+		default:
+		}
+	}
 }
-func (s *signaller) UnsubAck(id uint16) (chan *pktUnsubAck, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	if s.chUnsubAck == nil {
-		return nil, false
+// settleUnsubAck finalizes an UNSUBSCRIBE.
+func (s *signaller) settleUnsubAck(p *pktUnsubAck) {
+	s.mu.Lock()
+	o := s.used[p.ID]
+	var ch chan *pktUnsubAck
+	if o != nil {
+		o.mu.Lock()
+		if o.kind == outboundUnsubscribe && o.phase == phaseUnsubAck && o.chUnsubAck != nil {
+			ch = o.chUnsubAck
+			o.phase = phaseDone
+			o.released = true
+			o.done = true
+			o.reg = nil
+			delete(s.used, p.ID)
+		}
+		o.mu.Unlock()
 	}
-	defer delete(s.chUnsubAck, id)
-	ch, ok := s.chUnsubAck[id]
-	return ch, ok
+	s.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- p:
+		default:
+		}
+	}
 }

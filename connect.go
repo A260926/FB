@@ -96,8 +96,8 @@ func (p *pktConnect) Pack() []byte {
 }
 
 func (c *BaseClient) init() {
-	c.sig = &signaller{}
 	c.mu.Lock()
+	c.sig = &signaller{}
 	c.connClosed = make(chan struct{})
 	c.mu.Unlock()
 	c.initID()
@@ -117,24 +117,41 @@ func (c *BaseClient) Connect(ctx context.Context, clientID string, opts ...Conne
 	c.muConnecting.Lock()
 	defer c.muConnecting.Unlock()
 
+	// Capture this connection generation. A later Connect installs a new
+	// signaller and transport; the receive loop below must keep operating on
+	// this one so that its late exit cannot disturb the newer generation.
+	c.mu.Lock()
+	sig := c.sig
+	connClosed := c.connClosed
+	transport := c.Transport
+	c.mu.Unlock()
+
 	go func() {
-		err := c.serve()
-		if errConn := c.Close(); errConn != nil && err == nil {
+		err := c.serveGeneration(sig, transport)
+		if errConn := transport.Close(); errConn != nil && err == nil {
 			err = errConn
 		}
 		c.mu.Lock()
 		if c.connState != StateDisconnected {
 			c.SetErrorOnce(err)
 		}
-		c.mu.Unlock()
-		c.connStateUpdate(StateClosed)
-		close(c.connClosed)
+		if c.sig == sig {
+			// Only the currently installed generation may update the
+			// connection state of the client.
+			c.mu.Unlock()
+			c.connStateUpdate(StateClosed)
+		} else {
+			c.mu.Unlock()
+		}
+		// Close only this generation's channel; a newer Connect owns a new
+		// channel and must not be signalled closed by this late exit.
+		close(connClosed)
 	}()
 
 	chConnAck := make(chan *pktConnAck, 1)
-	c.mu.Lock()
-	c.sig.chConnAck = chConnAck
-	c.mu.Unlock()
+	sig.mu.Lock()
+	sig.chConnAck = chConnAck
+	sig.mu.Unlock()
 
 	pkt := (&pktConnect{
 		ProtocolLevel: o.ProtocolLevel,
