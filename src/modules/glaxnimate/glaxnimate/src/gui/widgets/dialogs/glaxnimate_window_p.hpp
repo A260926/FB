@@ -1,0 +1,378 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#ifndef GLAXNIMATEWINDOW_P_H
+#define GLAXNIMATEWINDOW_P_H
+
+#include <QToolButton>
+#include <QMessageBox>
+#include <QPointer>
+#include <QNetworkAccessManager>
+
+#include <KActionCategory>
+#include <KAutoSaveFile>
+
+#include "QtColorWidgets/color_delegate.hpp"
+#include "QtColorWidgets/color_palette_model.hpp"
+
+#include "glaxnimate_window.hpp"
+
+#include "glaxnimate/model/document.hpp"
+#include "glaxnimate/command/structure_commands.hpp"
+
+#include "graphics/document_scene.hpp"
+#include "item_models/document_node_model.hpp"
+#include "item_models/property_model_single.hpp"
+#include "item_models/comp_filter_model.hpp"
+#include "item_models/asset_proxy_model.hpp"
+
+#include "style/dock_widget_style.hpp"
+#include "style/property_delegate.hpp"
+
+#include "plugin/plugin.hpp"
+#include "plugin/script_engine.hpp"
+#include "plugin/action.hpp"
+
+#include "item_models/log_model.hpp"
+#include "glaxnimate_settings.hpp"
+
+#include "glaxnimate/utils/pseudo_mutex.hpp"
+#include "widgets/docks/aligndock.h"
+#include "widgets/docks/assetsdock.h"
+#include "widgets/docks/colorsdock.h"
+#include "widgets/docks/layersdock.h"
+#include "widgets/docks/logsdock.h"
+#include "widgets/docks/properties_dock.hpp"
+#include "widgets/docks/script_console.hpp"
+#include "widgets/docks/strokedock.h"
+#include "widgets/docks/timelinedock.h"
+#include "widgets/docks/timesliderdock.h"
+#include "widgets/docks/gradientsdock.h"
+#include "widgets/docks/swatchesdock.h"
+#include "widgets/docks/snippetsdock.h"
+#include "widgets/docks/undodock.h"
+#include "widgets/docks/tooloptionsdock.h"
+#include "widgets/docks/dock_grid.hpp"
+
+#include "widgets/window_message_widget.hpp"
+#include "widgets/tab_bar/composition_tab_bar.hpp"
+#include "widgets/canvas.hpp"
+#include "widgets/render_widget.hpp"
+
+
+
+using namespace glaxnimate::gui;
+using namespace glaxnimate;
+
+namespace glaxnimate::model {
+class PreCompLayer;
+} // namespace glaxnimate::model
+
+namespace glaxnimate::gui {
+    namespace tools {
+    class Tool;
+    } // namespace tools
+
+
+    class IoStatusDialog;
+    class AboutEnvironmentDialog;
+    class ViewTransformWidget;
+    class FlowLayout;
+    class ShapeStylePreviewWidget;
+} // namespace glaxnimate::gui
+
+class QLocalSocket;
+class QDataStream;
+class QSharedMemory;
+class KRecentFilesAction;
+
+template <typename T>
+struct QObjectDeleteLater : public std::default_delete<T>
+{
+    void operator()(T *p)
+    {
+        p->deleteLater();
+    }
+};
+
+template <typename T, class... Args>
+std::unique_ptr<T, QObjectDeleteLater<T>> qobject_make_unique(Args&&... args)
+{
+    return std::unique_ptr<T, QObjectDeleteLater<T>>(
+        new T(std::forward<Args>(args)...), QObjectDeleteLater<T>());
+}
+
+class GlaxnimateWindow::Private
+{
+public:
+    struct CompState
+    {
+        CompState(model::VisualNode* single)
+        : selection(1, single), current(single)
+        {}
+
+        CompState() : current(nullptr) {}
+
+        std::vector<model::VisualNode*> selection;
+        model::VisualNode* current;
+    };
+
+    enum class AlignPosition
+    {
+        Begin   = 0x01,
+        Center  = 0x02,
+        End     = 0x04,
+    };
+
+    enum class AlignDirection
+    {
+        Horizontal = 0x10,
+        Vertical   = 0x20,
+    };
+
+    enum class LayoutPreset
+    {
+        Unknown,
+        Custom,
+        Auto,
+        Wide,
+        Medium,
+        Compact,
+        Mobile
+    };
+
+    Canvas *canvas;
+    RenderWidget render_widget;
+
+    CompositionTabBar *tab_bar;
+    WindowMessageWidget *message_widget;
+    SnappingGrid grid;
+
+    ColorsDock *colors_dock;
+    StrokeDock *stroke_dock;
+    LayersDock *layers_dock;
+    PropertiesDock *properties_dock;
+    TimelineDock *timeline_dock;
+    AssetsDock *assets_dock;
+    ScriptConsoleDock *scriptconsole_dock;
+    LogsDock *logs_dock;
+    AlignDock *align_dock;
+    TimeSliderDock *time_slider_dock;
+    GradientsDock *gradients_dock;
+    SwatchesDock *swatches_dock;
+    SnippetsDock *snippets_dock;
+    UndoDock *undo_dock;
+    ToolOptionsDock *tool_options_dock;
+    QDockWidget *tools_dock;
+    DockGrid* grid_dock;
+
+    KRecentFilesAction *m_recentFilesAction;
+
+    QList<QAction*> new_comp_actions;
+    QList<QAction*> plugin_actions;
+    KActionCategory* plugin_category;
+
+    std::unique_ptr<model::Document> current_document;
+
+    item_models::PropertyModelSingle property_model;
+    item_models::DocumentNodeModel document_node_model;
+    item_models::AssetProxyModel asset_model;
+    graphics::DocumentScene scene;
+    model::Composition* comp = nullptr;
+
+    GlaxnimateWindow* parent = nullptr;
+
+    io::Options export_options;
+    bool current_document_has_file = false;
+
+    QPointer<model::BrushStyle> main_brush;
+    QPointer<model::BrushStyle> secondary_brush;
+
+    tools::Tool* active_tool = nullptr;
+    std::map<QString, std::vector<QWidget*>> tool_widgets;
+    std::map<QString, std::vector<QAction*>> tool_actions;
+
+    std::vector<CompState> comp_selections;
+
+    QLabel* label_mouse_pos = nullptr;
+    QLabel* label_recording = nullptr;
+    QWidget* widget_recording = nullptr;
+    ShapeStylePreviewWidget* widget_current_style = nullptr;
+
+    utils::PseudoMutex update_selection;
+    model::DocumentNode* current_node = nullptr;
+
+    QNetworkAccessManager http;
+
+    KAutoSaveFile autosave_file;
+
+    // "set and forget" kinda variables
+    int autosave_timer = 0;
+    int autosave_timer_mins = 0;
+    utils::PseudoMutex autosave_load;
+    style::PropertyDelegate property_delegate;
+    style::DockWidgetStyle dock_style;
+    ViewTransformWidget* view_trans_widget;
+    bool started = false;
+    IoStatusDialog* dialog_import_status;
+    IoStatusDialog* dialog_export_status;
+    AboutEnvironmentDialog* about_env_dialog;
+    FlowLayout* dock_tools_layout;
+    LogModel log_model;
+    color_widgets::ColorPaletteModel palette_model;
+
+    // Stuff for IPC with Shotcut
+    std::unique_ptr<QLocalSocket, QObjectDeleteLater<QLocalSocket>> ipc_socket;
+    std::unique_ptr<QDataStream> ipc_stream;
+    std::unique_ptr<QSharedMemory> ipc_memory;
+
+    // document
+    void do_setup_document();
+    void setup_document_new(const QString& filename);
+    bool setup_document_open(const io::Options& options);
+    bool setup_document_open(QIODevice* file, const io::Options& options, bool is_file);
+    void setup_document_ptr(std::unique_ptr<model::Document> doc);
+    void refresh_title();
+    bool close_document();
+    bool save_document(bool force_dialog, bool export_opts);
+    void document_open();
+    void document_open_from_filename(const QString& filename, const QVariantMap& settings = {});
+    void document_open_from_url(const QUrl& url);
+    io::Options options_from_filename(const QString& filename, const QVariantMap& settings = {});
+    void drop_document(const QString& filename, bool as_comp);
+    void document_reload();
+    void preview_glaxnimate();
+    void preview_lottie(const QString& renderer);
+    void preview_svg();
+    void preview_rive();
+    void preview(io::ImportExport& exporter, const QVariantMap& options);
+    void save_frame();
+    void validate_tgs();
+    void validate_discord();
+    void autosave_timer_load_settings();
+    void autosave_timer_start(int mins = -1);
+    void autosave(bool force);
+    void load_backup(KAutoSaveFile* file, bool io_options_from_current);
+    QString drop_event_data(QDropEvent* ev);
+    void import_image();
+    void import_file();
+    void import_file(const QString& name, const QVariantMap& settings);
+    void import_file(const io::Options& options);
+    void import_file(QIODevice* file, const io::Options& options);
+    void load_pending();
+    void load_remote_document(const QUrl& url, io::Options options, bool open);
+    void check_autosaves();
+    void show_stale_autosave_list(const QList<KAutoSaveFile*>& stale);
+    void push_recent_file(const QUrl& url);
+
+    // ui
+    void setupUi(bool restore_state, bool debug, GlaxnimateWindow* parent);
+    void view_fit();
+    void show_warning(const QString& title, const QString& message, log::Severity icon = log::Warning);
+    void help_about_env();
+    void copyDebugInfo();
+    void shutdown();
+    void switch_tool(tools::Tool* tool);
+    void switch_tool_action(QAction* action);
+    void status_message(const QString& msg, int duration=5000);
+    QVariant choose_option(const QString& label, const QVariantMap& options, const QString& title) const;
+    void set_color_def(model::BrushStyle* sty, bool secondary);
+    QStringList get_open_image_files(const QString& title, const QString& dir, QString* out_dir = nullptr, bool multiple = false);
+    void set_brush_reference(model::BrushStyle* sty, bool secondary);
+    void trace_dialog(model::DocumentNode* object);
+    void mouse_moved(const QPointF& pos);
+    template<class T> void add_modifier_menu_action(KActionCategory *collection);
+    void show_startup_dialog();
+    void drop_file(const QString& file);
+    void insert_emoji();
+    void style_change_event();
+    void import_from_lottiefiles();
+    void trigger_plugin_action(plugin::ActionService* act);
+
+    QAction* add_action(KActionCategory *collection, const QString &id, const QString &text, const QString &iconName = {}, const QString &toolTip = {}, const QKeySequence &shortcut = {});
+
+    void setup_file_actions();
+    void setup_edit_actions();
+    tools::Tool *setup_tools_actions();
+    void setup_view_actions();
+    void setup_path_actions();
+    void setup_object_actions();
+    void setup_playback_actions();
+    void connect_playback_actions();
+    void setup_document_actions();
+    void setup_layers_actions();
+    void action_add_keyframe();
+    void action_add_keyframe_for(model::Object *object, model::AnimatableBase* animatable);
+    void action_keyframe_transition(model::KeyframeTransition::Descriptive new_trans);
+
+    void init_plugins();
+    void init_tools_ui();
+    void init_item_views();
+    void init_status_bar();
+    void init_docks();
+    void init_menus();
+    void init_debug();
+    void init_tools(tools::Tool* to_activate);
+    void init_restore_state();
+    void init_template_menu();
+
+    void layout_auto();
+    void layout_wide();
+    void layout_medium();
+    void layout_compact();
+    void layout_custom();
+    void layout_update();
+    void layout_mobile();
+
+    // IPC
+    void ipc_connect(const QString& name);
+
+    // Model
+    model::Composition* current_composition();
+    model::VisualNode* current_document_node();
+    void set_current_document_node(model::VisualNode* node);
+    std::vector<model::VisualNode*> cleaned_selection();
+    void duplicate_selection();
+    void move_current(command::ReorderCommand::SpecialPosition pos);
+    void group_shapes();
+    void ungroup_shapes();
+    void move_to();
+    void cleanup_document();
+    void to_path();
+    void align(AlignDirection direction, AlignPosition position, bool outside);
+    QPointF align_point(const QRectF& rect, AlignDirection direction, AlignPosition position);
+    void dropped(const QMimeData* data);
+
+    void switch_composition(model::Composition* comp, int i);
+    void setup_composition(model::Composition* comp, int index = -1);
+    void add_composition();
+    void on_remove_precomp(int index);
+
+    void layer_new_layer();
+    void layer_new_fill();
+    void layer_new_stroke();
+    void layer_new_group();
+    void layer_delete();
+    void layer_duplicate();
+    void layer_new_comp_action(QAction* act);
+
+    void text_put_on_path();
+    void text_remove_from_path();
+
+    // Selection
+    void scene_selection_changed(const std::vector<model::VisualNode*>& selected, const std::vector<model::VisualNode*>& deselected);
+    void timeline_current_node_changed(model::VisualNode* node);
+    /**
+     * \brief makes \p node the current object in all views
+     */
+    void set_current_object(model::DocumentNode* node);
+    /**
+     * \brief Forwards the selection to all models
+     */
+    void selection_changed(const std::vector<model::VisualNode*>& selected, const std::vector<model::VisualNode*>& deselected);
+};
+
+#endif // GLAXNIMATEWINDOW_P_H

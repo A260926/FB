@@ -1,0 +1,174 @@
+[
+    {
+        "name" : "Twemoji",
+        "template": {
+            "type": "github",
+            "org": "jdecked",
+            "repo": "twemoji",
+            "branch": "main"
+        },
+        "license": "CC BY-SA 4.0",
+        "slug_format": "low-",
+        "download": {
+            "paths": [
+                {
+                    "path": "assets/svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "assets/72x72/",
+                    "format": "png",
+                    "size": 72
+                }
+            ]
+        }
+    },
+    {
+        "name" : "Noto Emoji",
+        "template": {
+            "type": "github",
+            "org": "googlefonts",
+            "repo": "noto-emoji",
+            "branch": "main"
+        },
+        "license": "Apache 2.0",
+        "slug_format": "low_",
+        "slug_prefix": "emoji_u",
+        "download": {
+            "paths": [
+                {
+                    "path": "svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "png/32/",
+                    "format": "png",
+                    "size": 32
+                },
+                {
+                    "path": "png/72/",
+                    "format": "png",
+                    "size": 72
+                },
+                {
+                    "path": "png/128/",
+                    "format": "png",
+                    "size": 128
+                },
+                {
+                    "path": "png/512/",
+                    "format": "png",
+                    "size": 512
+                }
+            ]
+        }
+    },
+    {
+        "name" : "EmojiTwo",
+        "template": {
+            "type": "github",
+            "org": "EmojiTwo",
+            "repo": "emojitwo",
+            "branch": "master"
+        },
+        "license": "CC BY 4.0",
+        "slug_format": "low-",
+        "download": {
+            "paths": [
+                {
+                    "path": "svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "png/",
+                    "format": "png",
+                    "size": 72
+                }
+            ]
+        }
+    },
+    {
+        "name" : "OpenMoji",
+        "template": {
+            "type": "github",
+            "org": "hfg-gmuend",
+            "repo": "openmoji",
+            "branch": "master"
+        },
+        "license": "CC BY-SA 4.0",
+        "slug_format": "HIGH-",
+        "download": {
+            "paths": [
+                {
+                    "path": "color/svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "color/618x618/",
+                    "format": "png",
+                    "size": 618
+                },
+                {
+                    "path": "color/72x72/",
+                    "format": "png",
+                    "size": 72
+                }
+            ]
+        }
+    },
+    {
+        "name" : "EmojiOne Legacy",
+        "template": {
+            "type": "github",
+            "org": "joypixels",
+            "repo": "emojione-legacy",
+            "branch": "master"
+        },
+        "license": "CC BY-SA 4.0",
+        "slug_format": "HIGH-",
+        "download": {
+            "paths": [
+                {
+                    "path": "svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "png/",
+                    "format": "png",
+                    "size": 72
+                }
+            ]
+        }
+    },
+    {
+        "name" : "Noto Emoji Blob",
+        "template": {
+            "type": "github",
+            "org": "googlefonts",
+            "repo": "noto-emoji",
+            "tag": "v2017-05-18-cook-color-fix"
+        },
+        "license": "Apache 2.0",
+        "slug_format": "low_",
+        "slug_prefix": "emoji_u",
+        "download": {
+            "paths": [
+                {
+                    "path": "svg/",
+                    "format": "svg",
+                    "size": "scalable"
+                },
+                {
+                    "path": "png/128/",
+                    "format": "png",
+                    "size": 128
+                }
+            ]
+        }
+    }
+]

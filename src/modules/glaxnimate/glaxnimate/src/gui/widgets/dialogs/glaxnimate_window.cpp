@@ -1,0 +1,611 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "glaxnimate_window.hpp"
+#include "glaxnimate/command/clipboard.hpp"
+#include "glaxnimate_window_p.hpp"
+
+#include <QDesktopServices>
+#include <QCloseEvent>
+#include <QDragEnterEvent>
+#include <QLocalSocket>
+#include <QDataStream>
+#include <QSharedMemory>
+#include <QMenu>
+
+#include "glaxnimate/app_info.hpp"
+#include "settings/clipboard_settings.hpp"
+#include "export_image_sequence_dialog.hpp"
+#include "glaxnimate/model/shapes/composable/precomp_layer.hpp"
+#include "widgets/timeline/timeline_widget.hpp"
+#include "glaxnimate_app.hpp"
+
+
+GlaxnimateWindow::GlaxnimateWindow(bool restore_state, bool debug, QWidget *parent, Qt::WindowFlags flags)
+    : KXmlGuiWindow(parent, flags), d(std::make_unique<Private>())
+{
+    d->setupUi(restore_state, debug, this);
+    d->setup_document_new(i18n("New Animation"));
+    d->autosave_timer_start();
+}
+
+GlaxnimateWindow::~GlaxnimateWindow() = default;
+
+void GlaxnimateWindow::document_new()
+{
+    d->setup_document_new(i18n("New Animation"));
+}
+
+void GlaxnimateWindow::document_save()
+{
+    if ( d->save_document(false, false) )
+        d->status_message(i18n("File saved"));
+    else
+        d->status_message(i18n("Could not save file"), 0);
+}
+
+void GlaxnimateWindow::document_save_as()
+{
+    if ( d->save_document(true, false) )
+        d->status_message(i18n("File saved"));
+    else
+        d->status_message(i18n("Could not save file"), 0);
+}
+
+void GlaxnimateWindow::document_export()
+{
+    if ( d->save_document(false, true) )
+        d->status_message(i18n("File exported"));
+    else
+        d->status_message(i18n("Could not export file"), 0);
+}
+
+void GlaxnimateWindow::document_export_as()
+{
+    if ( d->save_document(true, true) )
+        d->status_message(i18n("File exported"));
+    else
+        d->status_message(i18n("Could not export file"), 0);
+}
+
+void GlaxnimateWindow::document_export_sequence()
+{
+    ExportImageSequenceDialog(d->comp, d->export_options.path, this).exec();
+}
+
+void GlaxnimateWindow::document_open_dialog()
+{
+    d->document_open();
+}
+
+void GlaxnimateWindow::document_treeview_current_changed(model::VisualNode* index)
+{
+    d->set_current_object(index);
+}
+
+
+void GlaxnimateWindow::layer_new_menu()
+{
+    d->layer_new_layer();
+}
+
+void GlaxnimateWindow::refresh_title()
+{
+    d->refresh_title();
+}
+
+void GlaxnimateWindow::layer_delete()
+{
+    d->layer_delete();
+}
+
+void GlaxnimateWindow::layer_duplicate()
+{
+    d->layer_duplicate();
+}
+
+
+void GlaxnimateWindow::view_fit()
+{
+    d->view_fit();
+}
+
+void GlaxnimateWindow::showEvent(QShowEvent * event)
+{
+    KXmlGuiWindow::showEvent(event);
+    if ( !d->started )
+    {
+        d->started = true;
+        d->view_fit();
+    }
+}
+
+void GlaxnimateWindow::closeEvent ( QCloseEvent* event )
+{
+    if ( !d->close_document() )
+    {
+        event->ignore();
+    }
+    else
+    {
+        d->shutdown();
+        KXmlGuiWindow::closeEvent(event);
+        event->accept();
+        qApp->quit();
+    }
+}
+
+void GlaxnimateWindow::document_open_recent(const QUrl &url)
+{
+    d->document_open_from_url(url);
+}
+
+void GlaxnimateWindow::help_about_env()
+{
+    d->help_about_env();
+}
+
+void GlaxnimateWindow::document_open(const QString& filename)
+{
+    d->document_open_from_filename(filename);
+}
+
+void GlaxnimateWindow::document_open_settings(const QString& filename, const QVariantMap& settings)
+{
+    d->document_open_from_filename(filename, settings);
+}
+
+void GlaxnimateWindow::document_reload()
+{
+    d->document_reload();
+}
+
+model::Document * GlaxnimateWindow::document() const
+{
+    return d->current_document.get();
+}
+
+void GlaxnimateWindow::warning ( const QString& message, const QString& title ) const
+{
+    d->show_warning(title.isEmpty() ? i18n("Warning") : title, message);
+}
+
+void GlaxnimateWindow::status ( const QString& message ) const
+{
+    d->status_message(message);
+}
+
+QVariant GlaxnimateWindow::choose_option(const QString& label, const QVariantMap& options, const QString& title) const
+{
+    return d->choose_option(label, options, title);
+}
+
+void GlaxnimateWindow::document_treeview_selection_changed(const std::vector<model::VisualNode*>& selected, const std::vector<model::VisualNode*>& deselected)
+{
+    d->selection_changed(selected, deselected);
+}
+
+void GlaxnimateWindow::scene_selection_changed(const std::vector<model::VisualNode*>& selected, const std::vector<model::VisualNode*>& deselected)
+{
+    d->scene_selection_changed(selected, deselected);
+}
+
+void GlaxnimateWindow::tool_triggered(bool checked)
+{
+    if ( checked )
+        d->switch_tool_action(static_cast<QAction*>(sender()));
+}
+
+void GlaxnimateWindow::help_manual()
+{
+    QDesktopServices::openUrl(AppInfo::instance().url_docs());
+}
+
+model::Composition * GlaxnimateWindow::current_composition() const
+{
+    return d->current_composition();
+}
+
+model::VisualNode * GlaxnimateWindow::current_document_node() const
+{
+    return d->current_document_node();
+}
+
+QColor GlaxnimateWindow::current_color() const
+{
+    return d->colors_dock->current_color();
+}
+
+QColor GlaxnimateWindow::secondary_color() const
+{
+    return d->colors_dock->secondary_color();
+}
+
+void GlaxnimateWindow::set_current_color(const QColor& c)
+{
+    d->colors_dock->set_current_color(c);
+}
+
+void GlaxnimateWindow::set_secondary_color(const QColor& c)
+{
+    d->stroke_dock->set_color(c);
+}
+
+model::Object * GlaxnimateWindow::current_shape_container_script()
+{
+    auto prop = current_shape_container();
+    return prop ? prop->object() : nullptr;
+}
+
+void GlaxnimateWindow::set_current_document_node(model::VisualNode* node)
+{
+    d->set_current_document_node(node);
+}
+
+QPen GlaxnimateWindow::current_pen_style() const
+{
+    return d->stroke_dock->pen_style();
+}
+
+QList<QUrl> GlaxnimateWindow::recent_files() const
+{
+    return d->m_recentFilesAction->urls();
+}
+
+std::vector<model::VisualNode*> GlaxnimateWindow::cleaned_selection() const
+{
+    return d->cleaned_selection();
+}
+
+void GlaxnimateWindow::copy() const
+{
+    auto timeline = d->timeline_dock->timelineWidget()->timeline();
+    if ( timeline->has_soft_focus() && timeline->has_keyframe_selected() )
+        d->timeline_dock->timelineWidget()->copy_keyframes();
+    else
+        SelectionManager::copy();
+}
+
+void GlaxnimateWindow::paste()
+{
+    const QMimeData* data = GlaxnimateApp::instance()->get_clipboard_data();
+    if ( command::has_keyframe_data(data) )
+        d->timeline_dock->timelineWidget()->paste_keyframes();
+    else
+        SelectionManager::paste();
+}
+
+void GlaxnimateWindow::cut()
+{
+    SelectionManager::cut();
+}
+
+void GlaxnimateWindow::delete_selected()
+{
+    auto timeline = d->timeline_dock->timelineWidget()->timeline();
+    if ( timeline->has_soft_focus() && timeline->has_keyframe_selected() )
+    {
+        auto selected = timeline->selected_keyframes();
+        auto cmd = new QUndoCommand(i18np("Delete keyframe", "Delete keyframes", selected.size()));
+        for ( const auto& sel : selected )
+            sel.property->command_remove_keyframe(sel.time, cmd);
+        d->current_document->push_command(cmd);
+        return;
+    }
+    SelectionManager::delete_selected();
+}
+
+void GlaxnimateWindow::duplicate_selection() const
+{
+    d->duplicate_selection();
+}
+
+void GlaxnimateWindow::copyDebugInfo()
+{
+    d->copyDebugInfo();
+}
+
+void GlaxnimateWindow::layer_top()
+{
+    d->move_current(command::ReorderCommand::MoveTop);
+}
+
+void GlaxnimateWindow::layer_raise()
+{
+    d->move_current(command::ReorderCommand::MoveUp);
+}
+
+void GlaxnimateWindow::layer_lower()
+{
+    d->move_current(command::ReorderCommand::MoveDown);
+}
+
+void GlaxnimateWindow::layer_bottom()
+{
+    d->move_current(command::ReorderCommand::MoveBottom);
+}
+
+item_models::DocumentNodeModel * GlaxnimateWindow::model() const
+{
+    return &d->document_node_model;
+}
+
+void GlaxnimateWindow::group_shapes()
+{
+    d->group_shapes();
+}
+
+void GlaxnimateWindow::ungroup_shapes()
+{
+    d->ungroup_shapes();
+}
+
+void GlaxnimateWindow::move_to()
+{
+    d->move_to();
+}
+
+void GlaxnimateWindow::validate_tgs()
+{
+    d->validate_tgs();
+}
+
+qreal GlaxnimateWindow::current_zoom() const
+{
+    return d->canvas->get_zoom_factor();
+}
+
+void GlaxnimateWindow::timerEvent(QTimerEvent*)
+{
+    d->autosave(false);
+}
+
+void GlaxnimateWindow::dragEnterEvent(QDragEnterEvent* event)
+{
+    if ( !d->drop_event_data(event).isEmpty() )
+        event->acceptProposedAction();
+}
+
+void GlaxnimateWindow::dragLeaveEvent(QDragLeaveEvent* event)
+{
+    event->accept();
+}
+
+void GlaxnimateWindow::dragMoveEvent(QDragMoveEvent* event)
+{
+    if ( !d->drop_event_data(event).isEmpty() )
+        event->acceptProposedAction();
+}
+
+void GlaxnimateWindow::dropEvent(QDropEvent* event)
+{
+    auto str = d->drop_event_data(event);
+    if ( !str.isEmpty() )
+    {
+        d->drop_file(str);
+    }
+}
+
+void GlaxnimateWindow::switch_tool(tools::Tool* tool)
+{
+    d->switch_tool(tool);
+}
+
+QString GlaxnimateWindow::get_open_image_file(const QString& title, const QString& dir) const
+{
+    return d->get_open_image_files(title, dir)[0];
+}
+
+model::BrushStyle * GlaxnimateWindow::linked_brush_style ( bool secondary ) const
+{
+    if ( secondary )
+        return d->secondary_brush;
+    return d->main_brush;
+}
+
+PluginUiDialog * GlaxnimateWindow::create_dialog(const QString& ui_file) const
+{
+    return d->scriptconsole_dock->create_dialog(ui_file);
+}
+
+void GlaxnimateWindow::trace_dialog(model::DocumentNode* object)
+{
+    return d->trace_dialog(object);
+}
+
+void GlaxnimateWindow::set_current_composition(model::Composition* comp)
+{
+    d->tab_bar->set_current_composition(comp);
+}
+
+QMenu * GlaxnimateWindow::create_layer_menu() const
+{
+    return findChild<QMenu *>("new_layer_menu");
+}
+
+void GlaxnimateWindow::select(const std::vector<model::VisualNode*>& nodes)
+{
+    d->scene.user_select(nodes, graphics::DocumentScene::Replace);
+}
+
+void GlaxnimateWindow::switch_composition(model::Composition* comp, int index)
+{
+    d->switch_composition(comp, index);
+}
+
+void GlaxnimateWindow::ipc_connect(const QString &name)
+{
+    d->ipc_connect(name);
+}
+
+void GlaxnimateWindow::ipc_signal_connections(bool enable)
+{
+    if (enable) {
+        connect(document(), &model::Document::current_time_changed, this, &GlaxnimateWindow::ipc_write_time);
+        connect(&d->render_widget, &RenderWidget::request_background, this, &GlaxnimateWindow::ipc_draw_background);
+    } else {
+        d->render_widget.clear_background();
+        disconnect(document(), &model::Document::current_time_changed, this, &GlaxnimateWindow::ipc_write_time);
+        disconnect(&d->render_widget, &RenderWidget::request_background, this, &GlaxnimateWindow::ipc_draw_background);
+    }
+}
+
+void GlaxnimateWindow::ipc_error(QLocalSocket::LocalSocketError socketError)
+{
+    auto name = d->ipc_socket? d->ipc_socket->serverName() : "???";
+    switch (socketError) {
+    case QLocalSocket::ServerNotFoundError:
+        log::Log("ipc").stream(log::Warning) << "IPC server not found:" << name;
+        break;
+    case QLocalSocket::ConnectionRefusedError:
+        log::Log("ipc").stream(log::Warning) << "IPC server refused connection:" << name;
+        break;
+    case QLocalSocket::PeerClosedError:
+        log::Log("ipc").stream(log::Info) << "IPC server closed the connection:" << name;
+        d->ipc_socket.reset();
+        d->ipc_memory.reset();
+        break;
+    default:
+        log::Log("ipc").stream(log::Warning) << "IPC error:" << d->ipc_socket->errorString();
+    }
+}
+
+void GlaxnimateWindow::ipc_read()
+{
+    while (d->ipc_stream && !d->ipc_stream->atEnd()) {
+        QString message;
+        *d->ipc_stream >> message;
+
+        // Here is the receive/read side of the IPC protocol - a few commands:
+
+        if (message == "hello") {
+            // handshake
+            *d->ipc_stream << QString("version 1");
+            d->ipc_socket->flush();
+            ipc_signal_connections(true);
+            ipc_write_time(document()->current_time());
+        } else if (message == "redraw") {
+            d->canvas->viewport()->update();
+        } else if (message == "clear") {
+            // The server sends this when video should no longer be in the background.
+            ipc_signal_connections(false);
+        } else if (message.startsWith("open ")) {
+            // open a different document than command line option
+            document_open(message.mid(5));
+            ipc_signal_connections(true);
+            ipc_write_time(document()->current_time());
+        } else if (message == "bye") {
+            d->ipc_socket->disconnectFromServer();
+        } else {
+            log::Log("ipc").stream(log::Info) << "IPC server sent unknown command:" << message;
+        }
+    }
+}
+
+void GlaxnimateWindow::ipc_write_time(model::FrameTime t)
+{
+    // Here is the send/write side of the IPC protocol: binary time updates
+
+    if (d->ipc_stream && d->ipc_socket && d->ipc_socket->isOpen() && d->ipc_stream->atEnd()) {
+        if (d->ipc_stream->status() != QDataStream::Ok) {
+            d->ipc_stream->resetStatus();
+        }
+        *d->ipc_stream << t;
+        d->ipc_socket->flush();
+    }
+}
+
+void GlaxnimateWindow::ipc_draw_background()
+{
+    // This is the shared memory portion of the IPC: a single QImage
+    if (d->ipc_memory && d->ipc_memory->attach(QSharedMemory::ReadOnly)) {
+        d->ipc_memory->lock();
+
+        uchar *from = (uchar *) d->ipc_memory->data();
+        // Get the width of the image and move the pointer forward
+        qint32 image_width = *reinterpret_cast<qint32 *>(from);
+        from += sizeof(image_width);
+
+        // Get the height of the image and move the pointer forward
+        qint32 image_height = *reinterpret_cast<qint32 *>(from);
+        from += sizeof(image_height);
+
+        // Get the image format of the image and move the pointer forward
+        qint32 image_format = *reinterpret_cast<qint32 *>(from);
+        from += sizeof(image_format);
+
+        // Get the bytes per line of the image and move the pointer forward
+        qint32 bytes_per_line = *reinterpret_cast<qint32 *>(from);
+        from += sizeof(bytes_per_line);
+
+        // Generate an image using the raw data and move the pointer forward
+        QImage image = QImage(from, image_width, image_height, bytes_per_line, QImage::Format(image_format)).copy();
+
+        d->ipc_memory->unlock();
+        d->ipc_memory->detach();
+
+        qreal image_aspect = qreal(image.width()) / image.height();
+        qreal document_aspect = qreal(d->comp->width.get()) / d->comp->height.get();
+        qreal width, height;
+        QRectF draw_rect;
+        if (image_aspect >= document_aspect) {
+            height = d->comp->height.get();
+            width = image_aspect * height;
+            draw_rect = {(d->comp->width.get() - width) / 2.0, 0.0, width, height};
+        } else {
+            width = d->comp->width.get();
+            height = width / image_aspect;
+            draw_rect = {0.0, (d->comp->height.get() - height) / 2.0, width, height};
+        }
+
+        d->render_widget.set_background(std::move(image), draw_rect);
+    }
+}
+
+void GlaxnimateWindow::show_startup_dialog()
+{
+    d->show_startup_dialog();
+}
+
+std::vector<io::mime::MimeSerializer*> GlaxnimateWindow::supported_mimes() const
+{
+    std::vector<io::mime::MimeSerializer*> mimes;
+    for ( const auto& mime : settings::ClipboardSettings::mime_types() )
+    {
+        if ( mime.enabled )
+            mimes.push_back(mime.serializer);
+    }
+    return mimes;
+}
+
+void GlaxnimateWindow::set_selection(const std::vector<model::VisualNode*>& selected)
+{
+    d->scene.user_select(selected, graphics::DocumentScene::Replace);
+}
+
+void GlaxnimateWindow::update_selection(const std::vector<model::VisualNode*>& selected, const std::vector<model::VisualNode*>& deselected)
+{
+    return d->selection_changed(selected, deselected);
+}
+
+void GlaxnimateWindow::check_autosaves()
+{
+    d->check_autosaves();
+}
+void GlaxnimateWindow::update_selection_after_precompose(
+    const std::vector<model::VisualNode*>& objects,
+    model::Composition* source_comp,
+    model::PreCompLayer* precomp_layer
+)
+{
+    auto new_comp = precomp_layer->composition.get();
+    int new_comp_index = d->current_document->assets()->compositions->values.index_of(new_comp);
+    d->comp_selections[new_comp_index].current = objects[0];
+    d->comp_selections[new_comp_index].selection = objects;
+    switch_composition(new_comp, new_comp_index);
+    int old_comp_index = d->current_document->assets()->compositions->values.index_of(source_comp);
+    d->comp_selections[old_comp_index] = precomp_layer;
+}

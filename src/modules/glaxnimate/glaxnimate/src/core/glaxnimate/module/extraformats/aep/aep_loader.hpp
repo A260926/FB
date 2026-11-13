@@ -1,0 +1,54 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+#pragma once
+
+#include "glaxnimate/module/extraformats/aep/ae_project.hpp"
+#include "glaxnimate/model/document.hpp"
+#include "glaxnimate/module/extraformats/aep/aep_format.hpp"
+#include "glaxnimate/model/assets/assets.hpp"
+
+namespace glaxnimate::io::aep {
+
+class AepLoader
+{
+public:
+    AepLoader(model::Document* document, const Project& project, QDir asset_path, ImportExport* io)
+    : document(document), project(project), asset_path(asset_path), io(io)
+    {}
+
+    void load_project();
+
+private:
+    struct CompData;
+    struct LayerData;
+    struct ColorInfo
+    {
+        model::NamedColor* asset;
+        const Solid* solid;
+    };
+
+    void load_comp(const Composition& comp);
+    void load_asset(const FolderItem* item);
+    void load_layer(LayerData& layer, CompData& data);
+    void asset_layer(model::Layer* layer, const Layer& ae_layer, CompData& data);
+    void shape_layer(model::Layer* layer, const Layer& ae_layer, CompData& data);
+    void text_layer(model::Layer* layer, const Layer& ae_layer, CompData& data);
+
+    void warning(const QString& msg);
+    void info(const QString& msg);
+    model::Composition* get_comp(Id id);
+
+    model::Document* document;
+    const Project& project;
+    QDir asset_path;
+    ImportExport* io;
+    std::unordered_map<Id, ColorInfo> colors;
+    std::unordered_map<Id, model::Composition*> comps;
+    std::unordered_map<Id, model::Bitmap*> images;
+    std::unordered_map<Id, QPointF> asset_size;
+};
+
+} // namespace glaxnimate::io::aep

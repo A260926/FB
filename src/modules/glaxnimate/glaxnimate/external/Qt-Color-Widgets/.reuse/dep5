@@ -1,0 +1,26 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: QtColorWidgets
+Upstream-Contact: Mattia Basaglia <dev@dragon.best>
+Source: https://mattbas.gitlab.io/Qt-Color-Widgets/
+
+# Sample paragraph, commented out:
+#
+# Files: src/*
+# Copyright: $YEAR $NAME <$CONTACT>
+# License: ...
+
+Files: README.md resources/QtColorWidgets/*.png gallery/*.png gallery/README.md
+Copyright: 2013-2023 Mattia Basaglia <dev@dragon.best>
+License: CC-BY-SA-4.0
+
+Files: QtColorWidgets.pc.in .gitignore .gitlab-ci.yml resources/QtColorWidgets/color_widgets.qrc color_widgets.pri color_widgets.pro LICENSE-EXCEPTION
+Copyright: none
+License: CC0-1.0
+
+Files: cmake/modules/*
+Copyright: 2013-2023 Mattia Basaglia <dev@dragon.best>
+License: BSD-2-Clause
+
+Files: color_widgets_designer_plugin/new_plugin
+Copyright: 2013-2023 Mattia Basaglia <dev@dragon.best>
+License: LGPL-3.0-or-later

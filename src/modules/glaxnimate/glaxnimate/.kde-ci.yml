@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: none
+# SPDX-License-Identifier: CC0-1.0
+
+Options:
+  cmake-options: '-DINSTALL_TRANSLATIONS=OFF'
+require-passing-tests-on: [ 'Linux', 'FreeBSD', 'Windows', 'Android']
+
+Dependencies:
+- 'on': ['Linux/Qt6', 'FreeBSD/Qt6', 'Windows/Qt6', 'Android/Qt6', 'macOS/Qt6']
+  'require':
+    'frameworks/extra-cmake-modules': '@latest-kf6'
+    'frameworks/kcoreaddons' : '@latest-kf6'
+    'frameworks/kconfigwidgets' : '@latest-kf6'
+    'frameworks/karchive' : '@latest-kf6'
+    'frameworks/kxmlgui' : '@latest-kf6'
+    'frameworks/kcompletion' : '@latest-kf6'
+- 'on': ['Linux/Qt6', 'FreeBSD/Qt6', 'Windows/Qt6', 'macOS/Qt6']
+  'require':
+    'frameworks/kcrash' : '@latest-kf6'
+

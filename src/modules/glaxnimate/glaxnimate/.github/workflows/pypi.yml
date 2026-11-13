@@ -1,0 +1,106 @@
+name: PyPI Release
+on:
+    push:
+        tags:
+            - '*'
+        branches:
+            - pypi
+    workflow_dispatch:
+jobs:
+    macos:
+        if: false
+        runs-on: macOS-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v2
+              with:
+                submodules: recursive
+            - name: Notify Gitlab Start
+              env:
+                GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+              run: |
+                pip3 install requests twine
+                ./deploy/gitlab_commit_status.py running
+            - name: Install Deps
+              run: |
+                brew install coreutils ed findutils gawk gnu-sed gnu-tar grep make
+                export PATH="$(echo /usr/local/opt/*/libexec/gnubin | tr ' ' :):$PATH"
+                pip3 install twine
+                ./deploy/mac_build.sh deps
+            - name: Build Python
+              if: ${{ contains(github.ref, '/tags/') }}
+              run: |
+                export PATH="$(echo /usr/local/opt/*/libexec/gnubin | tr ' ' :):$PATH"
+                ./deploy/mac_build.sh configure ""
+                ./deploy/mac_build.sh pypi
+            - name: Build Python
+              if: ${{ !contains(github.ref, '/tags/') }}
+              run: |
+                export PATH="$(echo /usr/local/opt/*/libexec/gnubin | tr ' ' :):$PATH"
+                ./deploy/mac_build.sh configure "$(./deploy/pypi_version_tail.sh)"
+                ./deploy/mac_build.sh pypi
+            - name: Upload Pypi
+              env:
+                TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+                TWINE_USERNAME: __token__
+              run: |
+                cd build
+                make glaxnimate_python_upload
+            - name: Notify Gitlab Finish
+              if: ${{ always() }}
+              env:
+                GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+                RESULT: ${{ job.status }}
+              run: |
+                ./deploy/gitlab_commit_status.py $RESULT
+    windows:
+        if: false
+        runs-on: windows-latest
+        defaults:
+            run:
+                shell: msys2 {0}
+        steps:
+            - name: Setup msys2
+              uses: msys2/setup-msys2@v2
+              with:
+                path-type: strict
+                update: true
+            - name: Checkout
+              uses: actions/checkout@v2
+              with:
+                submodules: recursive
+            - name: Notify Gitlab Start
+              env:
+                GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+              run: |
+                pacman --noconfirm -S mingw-w64-x86_64-python-pip
+                pip install requests
+                ./deploy/gitlab_commit_status.py running
+            - name: Install Deps
+              run: |
+                ./deploy/win_build.sh deps
+            - name: Build Python
+              if: ${{ contains(github.ref, '/tags/') }}
+              run: |
+                ./deploy/win_build.sh configure ""
+                ./deploy/win_build.sh pypi
+            - name: Build Python
+              if: ${{ !contains(github.ref, '/tags/') }}
+              run: |
+                ./deploy/win_build.sh configure "$(./deploy/pypi_version_tail.sh)"
+                ./deploy/win_build.sh pypi
+            - name: Upload Pypi
+              env:
+                TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+                TWINE_USERNAME: __token__
+              run: |
+                cd build
+                mingw32-make.exe glaxnimate_python_upload
+            - name: Notify Gitlab Finish
+              if: ${{ always() }}
+              env:
+                GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+                RESULT: ${{ job.status }}
+              run: |
+                ./deploy/gitlab_commit_status.py $RESULT
+

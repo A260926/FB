@@ -1,0 +1,129 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+#include "glaxnimate/io/base.hpp"
+#include "glaxnimate/model/assets/assets.hpp"
+
+QString glaxnimate::io::ImportExport::name_filter(io::ImportExport::Direction direction) const
+{
+    QString ext_str;
+    for ( const QString& ext : extensions(direction) )
+    {
+        ext_str += "*." + ext + " ";
+    }
+
+    if ( ext_str.isEmpty() )
+        return {};
+
+    ext_str.resize(ext_str.size() - 1);
+    //: Open/Save file dialog file filter eg: "Text files (.txt)"
+    return i18n("%1 (%2)", name(), ext_str);
+}
+
+
+QByteArray glaxnimate::io::ImportExport::save(model::Composition* comp, const QVariantMap& setting_values, const QString& filename)
+{
+    QByteArray data;
+    QBuffer file(&data);
+    file.open(QIODevice::WriteOnly);
+
+    QVariantMap clean_setting_values = setting_values;
+
+    if ( auto settings = save_settings(comp) )
+    {
+        for ( const auto& setting : *settings )
+            clean_setting_values[setting.slug] = setting.get_variant(clean_setting_values);
+    }
+
+    if ( !save(file, filename, comp, clean_setting_values) )
+        return {};
+
+    return data;
+}
+
+bool glaxnimate::io::ImportExport::save ( QIODevice& file, const QString& filename, model::Document* document, const QVariantMap& setting_values )
+{
+    if ( document->assets()->compositions->values.empty() )
+        return false;
+    return save(file, filename, document->assets()->compositions->values[0], setting_values);
+}
+
+bool glaxnimate::io::ImportExport::open(QIODevice& file, const QString& filename,
+                    model::Document* document, const QVariantMap& setting_values)
+{
+    if ( !file.isOpen() && auto_open() )
+        if ( !file.open(QIODevice::ReadOnly) )
+            return false;
+
+    bool ok = on_open(file, filename, document, setting_values);
+    Q_EMIT completed(ok);
+    return ok;
+}
+
+bool glaxnimate::io::ImportExport::save(QIODevice& file, const QString& filename,
+                    model::Composition* comp, const QVariantMap& setting_values)
+{
+    if ( !file.isOpen() && auto_open() )
+        if ( !file.open(QIODevice::WriteOnly) )
+            return false;
+
+    bool ok = on_save(file, filename, comp, setting_values);
+    Q_EMIT completed(ok);
+    return ok;
+}
+
+
+bool glaxnimate::io::ImportExport::save_static(QIODevice &file, const QString &filename, model::Composition *comp, model::FrameTime time, const QVariantMap &setting_values)
+{
+
+    if ( !file.isOpen() && auto_open() )
+        if ( !file.open(QIODevice::WriteOnly) )
+            return false;
+
+    bool ok = on_save_static(file, filename, comp, time, setting_values);
+    Q_EMIT completed(ok);
+    return ok;
+}
+
+QByteArray glaxnimate::io::ImportExport::save_static(model::Composition *comp, double time, const QVariantMap &setting_values, const QString &filename)
+{
+    QByteArray data;
+    QBuffer file(&data);
+    file.open(QIODevice::WriteOnly);
+
+    QVariantMap clean_setting_values = setting_values;
+
+    if ( auto settings = save_settings(comp) )
+    {
+        for ( const auto& setting : *settings )
+            clean_setting_values[setting.slug] = setting.get_variant(clean_setting_values);
+    }
+
+    if ( !save_static(file, filename, comp, time, clean_setting_values) )
+        return {};
+
+    return data;
+
+}
+
+bool glaxnimate::io::ImportExport::load(model::Document* document, const QByteArray& data,
+                            const QVariantMap& setting_values, const QString& filename)
+{
+    if ( !document )
+        return false;
+
+    QBuffer file(const_cast<QByteArray*>(&data));
+    file.open(QIODevice::ReadOnly);
+
+    QVariantMap clean_setting_values = setting_values;
+
+    if ( auto settings = open_settings() )
+    {
+        for ( const auto& setting : *settings )
+            clean_setting_values[setting.slug] = setting.get_variant(clean_setting_values);
+    }
+
+    return open(file, filename, document, clean_setting_values);
+}

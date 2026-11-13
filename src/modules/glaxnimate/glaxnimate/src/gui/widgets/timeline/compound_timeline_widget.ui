@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<ui version="4.0">
+ <class>glaxnimate::gui::CompoundTimelineWidget</class>
+ <widget class="QWidget" name="glaxnimate::gui::CompoundTimelineWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>718</width>
+    <height>229</height>
+   </rect>
+  </property>
+  <property name="contextMenuPolicy">
+   <enum>Qt::ContextMenuPolicy::CustomContextMenu</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="glaxnimate::gui::CompositionTabBar" name="tab_bar" native="true">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="frame">
+     <property name="frameShape">
+      <enum>QFrame::Shape::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Shadow::Sunken</enum>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_4">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QSplitter" name="splitter">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="childrenCollapsible">
+         <bool>false</bool>
+        </property>
+        <widget class="glaxnimate::gui::TimelineTreeview" name="properties">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>400</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::Shape::NoFrame</enum>
+         </property>
+         <property name="verticalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+         </property>
+         <property name="horizontalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+         </property>
+         <property name="dragEnabled">
+          <bool>true</bool>
+         </property>
+         <property name="dragDropMode">
+          <enum>QAbstractItemView::DragDropMode::InternalMove</enum>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+         <property name="selectionMode">
+          <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
+         </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+         </property>
+         <property name="rootIsDecorated">
+          <bool>true</bool>
+         </property>
+         <property name="uniformRowHeights">
+          <bool>true</bool>
+         </property>
+         <property name="animated">
+          <bool>false</bool>
+         </property>
+         <attribute name="headerMinimumSectionSize">
+          <number>32</number>
+         </attribute>
+         <attribute name="headerDefaultSectionSize">
+          <number>32</number>
+         </attribute>
+        </widget>
+        <widget class="QWidget" name="horizontalWidget" native="true">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>8</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="glaxnimate::gui::TimelineWidget" name="timeline">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::Shape::NoFrame</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+      <item>
+       <widget class="QScrollBar" name="scrollbar">
+        <property name="pageStep">
+         <number>1</number>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Orientation::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+  <action name="action_add_keyframe">
+   <property name="text">
+    <string>Add Keyframe</string>
+   </property>
+  </action>
+  <action name="action_remove_all_keyframes">
+   <property name="text">
+    <string>&amp;Clear Animations</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>glaxnimate::gui::TimelineWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>widgets/timeline/timeline_widget.hpp</header>
+   <slots>
+    <signal>scrolled(int)</signal>
+   </slots>
+  </customwidget>
+  <customwidget>
+   <class>glaxnimate::gui::CompositionTabBar</class>
+   <extends>QWidget</extends>
+   <header>widgets/tab_bar/composition_tab_bar.hpp</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>glaxnimate::gui::TimelineTreeview</class>
+   <extends>QTreeView</extends>
+   <header>widgets/timeline/timeline_treeview.hpp</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>properties</sender>
+   <signal>expanded(QModelIndex)</signal>
+   <receiver>glaxnimate::gui::CompoundTimelineWidget</receiver>
+   <slot>expand_index(QModelIndex)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>173</x>
+     <y>192</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>419</x>
+     <y>488</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>properties</sender>
+   <signal>collapsed(QModelIndex)</signal>
+   <receiver>glaxnimate::gui::CompoundTimelineWidget</receiver>
+   <slot>collapse_index(QModelIndex)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>91</x>
+     <y>226</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>110</x>
+     <y>368</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>properties</sender>
+   <signal>clicked(QModelIndex)</signal>
+   <receiver>glaxnimate::gui::CompoundTimelineWidget</receiver>
+   <slot>click_index(QModelIndex)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>208</x>
+     <y>137</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>253</x>
+     <y>355</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>timeline</sender>
+   <signal>scrolled(int)</signal>
+   <receiver>scrollbar</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>544</x>
+     <y>116</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>712</x>
+     <y>105</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>select_index(QModelIndex)</slot>
+  <slot>custom_context_menu(QPoint)</slot>
+  <slot>expand_index(QModelIndex)</slot>
+  <slot>collapse_index(QModelIndex)</slot>
+  <slot>click_index(QModelIndex)</slot>
+ </slots>
+</ui>

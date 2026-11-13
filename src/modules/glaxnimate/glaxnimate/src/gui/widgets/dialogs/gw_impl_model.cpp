@@ -1,0 +1,715 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "glaxnimate_window_p.hpp"
+
+#include <QClipboard>
+#include <QImageReader>
+#include <QFileDialog>
+#include <QMimeData>
+#include <QMimeType>
+#include <QMimeDatabase>
+
+#include "glaxnimate_settings.hpp"
+
+#include "glaxnimate/command/shape_commands.hpp"
+#include "glaxnimate/command/structure_commands.hpp"
+#include "glaxnimate/command/undo_macro_guard.hpp"
+
+#include "glaxnimate/model/shapes/composable/image.hpp"
+#include "glaxnimate/model/shapes/composable/group.hpp"
+#include "glaxnimate/model/shapes/composable/precomp_layer.hpp"
+#include "glaxnimate/model/shapes/shapes/path.hpp"
+#include "glaxnimate/model/shapes/shapes/text.hpp"
+
+#include "settings/clipboard_settings.hpp"
+#include "widgets/dialogs/shape_parent_dialog.hpp"
+
+#include "item_models/drag_data.hpp"
+
+model::Composition* GlaxnimateWindow::Private::current_composition()
+{
+    return comp;
+}
+
+model::VisualNode* GlaxnimateWindow::Private::current_document_node()
+{
+    if ( auto dn = layers_dock->layer_view()->current_node() )
+        return dn;
+    return comp;
+}
+
+void GlaxnimateWindow::Private::layer_new_layer()
+{
+    auto layer = std::make_unique<model::Layer>(current_document.get());
+    layer->animation->last_frame.set(comp->animation->last_frame.get());
+    QPointF pos = comp->rect().center();
+    layer->transform.get()->anchor_point.set(pos);
+    layer->transform.get()->position.set(pos);
+    parent->layer_new_impl(std::move(layer));
+}
+
+void GlaxnimateWindow::Private::layer_new_fill()
+{
+    auto layer = std::make_unique<model::Fill>(current_document.get());
+    layer->color.set(colors_dock->current_color());
+    parent->layer_new_impl(std::move(layer));
+}
+
+void GlaxnimateWindow::Private::layer_new_stroke()
+{
+    auto layer = std::make_unique<model::Stroke>(current_document.get());
+    layer->set_pen_style(stroke_dock->pen_style());
+    parent->layer_new_impl(std::move(layer));
+}
+
+void GlaxnimateWindow::Private::layer_new_group()
+{
+    auto layer = std::make_unique<model::Group>(current_document.get());
+    QPointF pos = comp->rect().center();
+    layer->transform.get()->anchor_point.set(pos);
+    layer->transform.get()->position.set(pos);
+    parent->layer_new_impl(std::move(layer));
+}
+
+void GlaxnimateWindow::Private::layer_delete()
+{
+    auto current = parent->current_shape();
+    if ( !current )
+        return;
+    parent->delete_shapes_impl(i18n("Delete %1", current->object_name()), {current});
+}
+
+void GlaxnimateWindow::Private::layer_duplicate()
+{
+    auto current = parent->current_shape();
+    if ( !current )
+        return;
+
+    auto cmd = command::duplicate_shape(current);
+    current->push_command(cmd);
+    set_current_document_node(cmd->object());
+}
+
+std::vector<model::VisualNode*> GlaxnimateWindow::Private::cleaned_selection()
+{
+    return scene.cleaned_selection();
+}
+
+
+void GlaxnimateWindow::Private::duplicate_selection()
+{
+    auto selection = cleaned_selection();
+
+    if ( !selection.empty() )
+    {
+        std::vector<model::VisualNode*> duplicated;
+        duplicated.reserve(selection.size());
+
+        for ( const auto& node : selection )
+        {
+            if ( auto shape = node->cast<model::ShapeElement>() )
+            {
+                auto cmd = command::duplicate_shape(shape);
+                current_document->push_command(cmd);
+                duplicated.push_back(cmd->object());
+            }
+        }
+
+        scene.user_select(duplicated, graphics::DocumentScene::Replace);
+    }
+}
+
+
+void GlaxnimateWindow::Private::move_current(command::ReorderCommand::SpecialPosition pos)
+{
+    auto current = parent->current_shape();
+    if ( !current )
+        return;
+    auto cmd = std::make_unique<command::ReorderCommand>(current, pos);
+    if ( !cmd->has_action() )
+        return;
+    current->push_command(cmd.release());
+}
+
+void GlaxnimateWindow::Private::group_shapes()
+{
+    auto data = command::GroupShapes::collect_shapes(cleaned_selection());
+    if ( data.parent )
+        current_document->push_command(
+            new command::GroupShapes(data)
+        );
+}
+
+void GlaxnimateWindow::Private::ungroup_shapes()
+{
+    model::Group* group = qobject_cast<model::Group*>(current_document_node());
+
+    if ( !group )
+    {
+        auto sp = parent->current_shape_container();
+        if ( !sp )
+            return;
+        group = qobject_cast<model::Group*>(sp->object());
+    }
+
+    if ( group )
+        current_document->push_command(new command::UngroupShapes(group));
+}
+
+
+void GlaxnimateWindow::Private::move_to()
+{
+    auto sel = cleaned_selection();
+    std::vector<model::ShapeElement*> shapes;
+    shapes.reserve(sel.size());
+    for ( const auto& node : sel )
+    {
+        if ( auto shape = qobject_cast<model::ShapeElement*>(node) )
+            shapes.push_back(shape);
+    }
+
+    if ( shapes.empty() )
+        return;
+
+
+    if ( auto parent = ShapeParentDialog(&document_node_model, this->parent).get_shape_parent() )
+    {
+        command::UndoMacroGuard macro(i18n("Move Shapes"), current_document.get());
+        for ( auto shape : shapes )
+            if ( shape->owner() != parent )
+                shape->push_command(new command::MoveShape(shape, shape->owner(), parent, parent->size()));
+    }
+}
+
+QStringList GlaxnimateWindow::Private::get_open_image_files(const QString& title, const QString& dir, QString* out_dir, bool multiple)
+{
+    QFileDialog dialog(parent, title, dir);
+    QStringList filters;
+    QStringList all_ext;
+
+    QMimeDatabase db;
+    for ( const auto& baf : QImageReader::supportedMimeTypes() )
+    {
+        QMimeType mime(db.mimeTypeForName(baf));
+        if ( mime.isValid() )
+        {
+            const QString patterns = mime.globPatterns().join(QLatin1Char(' '));
+            all_ext += patterns;
+            filters.push_back(mime.comment() + QLatin1String(" (") + patterns + QLatin1Char(')'));
+        }
+    }
+    filters.push_front(i18n("All Supported files (%1)", all_ext.join(' ')));
+    dialog.setNameFilters(filters);
+
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    dialog.setOption(QFileDialog::DontUseNativeDialog, !GlaxnimateSettings::use_native_io_dialog());
+
+    if ( multiple )
+        dialog.setFileMode(QFileDialog::ExistingFiles);
+    else
+        dialog.setFileMode(QFileDialog::ExistingFile);
+
+    if ( dialog.exec() == QDialog::Rejected )
+        return {};
+
+    if ( out_dir )
+        *out_dir = dialog.directory().path();
+
+    return dialog.selectedFiles();
+}
+
+
+void GlaxnimateWindow::Private::import_image()
+{
+    QString path = GlaxnimateSettings::import_path();
+    if ( path.isEmpty() )
+        path = current_document->io_options().path.absolutePath();
+
+    QStringList image_files = get_open_image_files(i18n("Import Image"), path, &path, true);
+    if ( image_files.isEmpty() )
+        return;
+
+    GlaxnimateSettings::setImport_path(path);
+
+    /// \todo dialog asking whether to embed
+    command::UndoMacroGuard macro(i18n("Import Image"), current_document.get());
+
+    model::Image* select = nullptr;
+
+    for ( const auto& image_file : image_files )
+    {
+        auto bitmap = std::make_unique<model::Bitmap>(current_document.get());
+        bitmap->filename.set(image_file);
+        if ( bitmap->pixmap().isNull() )
+        {
+            show_warning(i18n("Import Image"), i18n("Could not import image"));
+            continue;
+        }
+
+        auto defs = current_document->assets();
+        auto bmp_ptr = bitmap.get();
+        current_document->push_command(new command::AddObject(&defs->images->values, std::move(bitmap), defs->images->values.size()));
+
+        auto image = std::make_unique<model::Image>(current_document.get());
+        image->image.set(bmp_ptr);
+        QPointF p(bmp_ptr->pixmap().width() / 2.0, bmp_ptr->pixmap().height() / 2.0);
+        image->transform->anchor_point.set(p);
+        image->transform->position.set(p);
+        auto comp = current_composition();
+        select = image.get();
+        image->name.set(QFileInfo(image_file).baseName());
+        current_document->push_command(new command::AddShape(&comp->shapes, std::move(image), comp->shapes.size()));
+    }
+
+    if ( select )
+        set_current_document_node(select);
+}
+
+template<class T>
+static void remove_assets(T& prop, int& count)
+{
+    for ( int i = 0; i < prop.size();  )
+    {
+        if ( prop[i]->remove_if_unused(true) )
+            count++;
+        else
+            i++;
+    }
+}
+
+void GlaxnimateWindow::Private::cleanup_document()
+{
+    command::UndoMacroGuard guard(i18n("Cleanup Document"), current_document.get());
+    int count = 0;
+
+    remove_assets(current_document->assets()->gradients->values, count);
+    remove_assets(current_document->assets()->gradient_colors->values, count);
+    remove_assets(current_document->assets()->colors->values, count);
+    remove_assets(current_document->assets()->images->values, count);
+
+    status_message(i18n("Removed %1 assets", count), 0);
+}
+
+void GlaxnimateWindow::Private::to_path()
+{
+    std::vector<model::ShapeElement*> shapes;
+
+    for ( auto selected : scene.cleaned_selection() )
+    {
+        if ( selected->docnode_locked_recursive() )
+            continue;
+
+        if ( auto shape = selected->cast<model::ShapeElement>() )
+        {
+            if ( !shape->cast<model::Styler>() )
+                shapes.push_back(shape);
+        }
+    }
+
+    command::convert_to_path(shapes);
+}
+
+void GlaxnimateWindow::Private::switch_composition(model::Composition* new_comp, int i)
+{
+    if ( i != tab_bar->currentIndex() )
+    {
+        QSignalBlocker g(tab_bar);
+        tab_bar->setCurrentIndex(i);
+    }
+
+    model::FrameTime time = 0;
+
+    if ( comp )
+    {
+        int old_i = current_document->assets()->compositions->values.index_of(static_cast<model::Composition*>(comp));
+        comp_selections[old_i].selection = scene.selection();
+        if ( layers_dock->layer_view()->currentIndex().isValid() )
+            comp_selections[old_i].current = layers_dock->layer_view()->current_node();
+        else
+            comp_selections[old_i].current = comp;
+
+        time = current_document->current_time();
+        QObject::disconnect(comp->animation.get(), &model::AnimationContainer::first_frame_changed, timeline_dock->playControls(), nullptr);
+        QObject::disconnect(comp, &model::Composition::fps_changed, timeline_dock->playControls(), &FrameControlsWidget::set_fps);
+    }
+
+    comp = new_comp;
+
+    timeline_dock->playControls()->set_range(comp->animation->first_frame.get(), comp->animation->last_frame.get());
+    timeline_dock->playControls()->set_fps(comp->fps.get());
+    timeline_dock->playControls()->set_frame(time);
+    time_slider_dock->playControls()->set_range(comp->animation->first_frame.get(), comp->animation->last_frame.get());
+    time_slider_dock->playControls()->set_fps(comp->fps.get());
+    time_slider_dock->playControls()->set_frame(time);
+
+    QObject::connect(comp->animation.get(), &model::AnimationContainer::first_frame_changed, timeline_dock->playControls(), [this](float frame){timeline_dock->playControls()->set_min(frame);});
+    QObject::connect(comp->animation.get(), &model::AnimationContainer::last_frame_changed, timeline_dock->playControls(), [this](float frame){timeline_dock->playControls()->set_max(frame);});
+    QObject::connect(comp, &model::Composition::fps_changed, timeline_dock->playControls(), &FrameControlsWidget::set_fps);
+
+    auto possible = current_document->comp_graph().possible_descendants(comp, current_document.get());
+    std::set<model::Composition*> comps(possible.begin(), possible.end());
+    for ( QAction* action : new_comp_actions )
+        action->setEnabled(comps.count(action->data().value<model::Composition*>()));
+
+    layers_dock->layer_view()->set_composition(comp);
+    timeline_dock->timelineWidget()->set_composition(comp);
+    scene.set_composition(comp);
+    render_widget.set_composition(comp);
+    scene.user_select(comp_selections[i].selection, graphics::DocumentScene::Replace);
+    auto current = comp_selections[i].current;
+    layers_dock->layer_view()->set_current_node(current);
+
+    canvas->viewport()->update();
+}
+
+void GlaxnimateWindow::Private::setup_composition(model::Composition* comp, int index)
+{
+    CompState state;
+    if ( !comp->shapes.empty() )
+        state = comp->shapes[0];
+    else
+        state = comp;
+
+    if ( index == -1 )
+        index = comp_selections.size();
+
+    comp_selections.insert(comp_selections.begin() + index, std::move(state));
+
+    QAction* action = nullptr;
+
+
+    action = new QAction(comp->instance_icon(), comp->object_name(), comp);
+    if ( new_comp_actions.empty() || index >= new_comp_actions.size() )
+        new_comp_actions.append(action);
+    else
+        new_comp_actions.insert(index-1, action);
+
+    action->setData(QVariant::fromValue(comp));
+    connect(action, &QAction::triggered, parent, [this, action](bool){layer_new_comp_action(action);});
+
+    connect(comp, &model::DocumentNode::name_changed, action, [comp, action](){
+        action->setText(comp->object_name());
+    });
+    connect(comp, &model::VisualNode::docnode_group_color_changed, action, [comp, action](){
+        action->setIcon(comp->instance_icon());
+    });
+
+    parent->unplugActionList( "new_comp_actionlist" );
+    parent->plugActionList( "new_comp_actionlist", new_comp_actions );
+}
+
+void GlaxnimateWindow::Private::add_composition()
+{
+    auto old_comp = this->comp;
+    std::unique_ptr<model::Composition> comp = std::make_unique<model::Composition>(current_document.get());
+
+    auto lay = std::make_unique<model::Layer>(current_document.get());
+    current_document->set_best_name(lay.get());
+    lay->animation->first_frame.set(old_comp->animation->first_frame.get());
+    lay->animation->last_frame.set(old_comp->animation->last_frame.get());
+
+    comp->animation->first_frame.set(old_comp->animation->first_frame.get());
+    comp->animation->last_frame.set(old_comp->animation->last_frame.get());
+    comp->fps.set(old_comp->fps.get());
+    comp->width.set(old_comp->width.get());
+    comp->height.set(old_comp->height.get());
+
+    QPointF center(comp->width.get() / 2, comp->height.get() / 2);
+    lay->transform->anchor_point.set(center);
+    lay->transform->position.set(center);
+    comp->shapes.insert(std::move(lay));
+
+    current_document->set_best_name(comp.get());
+    current_document->push_command(new command::AddObject(&current_document->assets()->compositions->values, std::move(comp)));
+    tab_bar->setCurrentIndex(tab_bar->count()-1);
+}
+
+
+void GlaxnimateWindow::Private::on_remove_precomp(int index)
+{
+    model::Composition* precomp = current_document->assets()->compositions->values[index];
+
+    if ( precomp == comp )
+    {
+        auto& comps = current_document->assets()->compositions->values;
+        if ( comps.empty() )
+            add_composition();
+
+        switch_composition(comps[qMax(comps.size(), index)], 0);
+    }
+
+    delete new_comp_actions[index];
+    new_comp_actions.erase(new_comp_actions.begin() + index);
+    comp_selections.erase(comp_selections.begin()+index);
+}
+
+void GlaxnimateWindow::Private::layer_new_comp_action(QAction* action)
+{
+    parent->layer_new_comp(action->data().value<model::Composition*>());
+}
+
+
+QPointF GlaxnimateWindow::Private::align_point(const QRectF& rect, AlignDirection direction, AlignPosition position)
+{
+    qreal x;
+    qreal y;
+
+    if ( direction == AlignDirection::Horizontal )
+    {
+        switch ( position )
+        {
+            case AlignPosition::Begin:  x = rect.left(); break;
+            case AlignPosition::Center: x = rect.center().x(); break;
+            case AlignPosition::End:    x = rect.right(); break;
+        }
+        y = rect.center().y();
+    }
+    else
+    {
+        switch ( position )
+        {
+            case AlignPosition::Begin:  y = rect.top(); break;
+            case AlignPosition::Center: y = rect.center().y(); break;
+            case AlignPosition::End:    y = rect.bottom(); break;
+        }
+        x = rect.center().x();
+    }
+
+    return {x, y};
+}
+
+namespace {
+
+struct AlignData
+{
+    model::VisualNode* node;
+    QTransform transform;
+    QPointF bounds_point;
+};
+
+} // namespace
+
+void GlaxnimateWindow::Private::align(AlignDirection direction, AlignPosition position, bool outside)
+{
+    std::vector<model::VisualNode*> selection = cleaned_selection();
+
+    if ( selection.empty() )
+        return;
+
+    QRectF bounds;
+
+    std::vector<AlignData> data;
+    data.reserve(selection.size());
+
+    auto bound_pos = position;
+    if ( outside )
+    {
+        if ( bound_pos == AlignPosition::Begin )
+            bound_pos = AlignPosition::End;
+        else
+            bound_pos = AlignPosition::Begin;
+    }
+
+    for ( const auto& item : selection )
+    {
+        auto t = item->time();
+        QRectF local_bounds(item->local_bounding_rect(t));
+        if ( !local_bounds.isValid() )
+            continue;
+
+        QTransform transform = item->transform_matrix(t);
+        auto transformed_bounds = transform.map(local_bounds).boundingRect();
+        data.push_back({item, transform.inverted(), align_point(transformed_bounds, direction, bound_pos)});
+
+        if ( !bounds.isValid() )
+            bounds = transformed_bounds;
+        else
+            bounds |= transformed_bounds;
+    }
+
+    QPointF reference;
+
+    if ( parent->actionCollection()->action(QStringLiteral("align_to_canvas_group"))->isChecked() )
+    {
+        reference = align_point(bounds, direction, position);
+    }
+    else if ( parent->actionCollection()->action(QStringLiteral("align_to_canvas"))->isChecked() )
+    {
+        reference = align_point(comp->rect(), direction, position);
+    }
+    else if ( parent->actionCollection()->action(QStringLiteral("align_to_canvas_group"))->isChecked() )
+    {
+        reference = align_point(comp->rect(), direction, position);
+        QPointF bounds_point = align_point(bounds, direction, bound_pos);
+        for ( auto& item : data )
+            item.bounds_point = bounds_point;
+    }
+
+    command::UndoMacroGuard guard(i18n("Align Selection"), current_document.get());
+
+    for ( const auto& item : data )
+    {
+        QPointF target_point = reference;
+        if ( direction == AlignDirection::Horizontal )
+            target_point.setY(item.bounds_point.y());
+        else
+            target_point.setX(item.bounds_point.x());
+
+        QPointF delta = item.transform.map(target_point) - item.transform.map(item.bounds_point);
+
+        if ( auto path = item.node->cast<model::Path>() )
+        {
+            auto bezier = path->shape.get();
+            for ( auto& point : bezier )
+                point.translate(delta);
+            path->shape.set_undoable(QVariant::fromValue(bezier));
+        }
+        else if ( item.node->has("transform") )
+        {
+            auto m = item.node->local_transform_matrix(item.node->time());
+            auto a = m.map(item.transform.map(target_point));
+            auto b = m.map(item.transform.map(item.bounds_point));
+            delta = a - b;
+
+            auto trans = item.node->get("transform").value<model::Transform*>();
+            auto point = trans->position.get() + delta;
+            trans->position.set_undoable(point);
+        }
+        else if ( item.node->has("position") )
+        {
+            auto point = item.node->get("position").toPointF() + delta;
+            item.node->get_property("position")->set_undoable(point);
+        }
+    }
+}
+
+void GlaxnimateWindow::Private::dropped(const QMimeData* data)
+{
+    if ( data->hasFormat("application/x.glaxnimate-asset-uuid") )
+    {
+        command::UndoMacroGuard guard(i18n("Drop"), current_document.get(), false);
+
+        item_models::DragDecoder<> decoder(data->data("application/x.glaxnimate-asset-uuid"), current_document.get());
+
+        std::vector<model::VisualNode*> selection;
+
+        auto cont = parent->current_shape_container();
+        int position = cont->size();
+
+        for ( auto asset : decoder )
+        {
+            std::unique_ptr<model::ShapeElement> element;
+
+            if ( auto precomp = asset->cast<model::Composition>() )
+            {
+                auto layer = std::make_unique<model::PreCompLayer>(current_document.get());
+                layer->composition.set(precomp);
+                layer->size.set(precomp->size());
+                element = std::move(layer);
+            }
+            else if ( auto bmp = asset->cast<model::Bitmap>() )
+            {
+                auto image = std::make_unique<model::Image>(current_document.get());
+                image->image.set(bmp);
+                element = std::move(image);
+            }
+
+            if ( element )
+            {
+                selection.push_back(element.get());
+                element->name.set(asset->name.get());
+                guard.start();
+                current_document->push_command(new command::AddShape(cont, std::move(element), position));
+            }
+        }
+
+        if ( !selection.empty() )
+            scene.user_select(selection, graphics::DocumentScene::Replace);
+    }
+
+}
+
+static bool get_text(model::Group* group, std::vector<model::TextShape*>& shapes)
+{
+    bool found = false;
+
+    for ( const auto& node : group->shapes )
+    {
+        auto mo = node->metaObject();
+
+        if ( mo->inherits(&model::TextShape::staticMetaObject) )
+        {
+            shapes.push_back(static_cast<model::TextShape*>(node.get()));
+            found = true;
+        }
+        else if ( mo->inherits(&model::Group::staticMetaObject) )
+        {
+            found = get_text(static_cast<model::Group*>(node.get()), shapes) && found;
+        }
+    }
+
+    return found;
+}
+
+void GlaxnimateWindow::Private::text_put_on_path()
+{
+    std::vector<model::TextShape*> shapes;
+    model::ShapeElement* path = nullptr;
+
+    for ( const auto& node : scene.selection() )
+    {
+        auto mo = node->metaObject();
+
+        if ( mo->inherits(&model::TextShape::staticMetaObject) )
+        {
+            shapes.push_back(static_cast<model::TextShape*>(node));
+        }
+        else if ( mo->inherits(&model::Group::staticMetaObject) )
+        {
+            if ( !get_text(static_cast<model::Group*>(node), shapes) )
+                path = static_cast<model::ShapeElement*>(node);
+        }
+        else if (
+            mo->inherits(&model::ShapeElement::staticMetaObject) &&
+            !mo->inherits(&model::Image::staticMetaObject) &&
+            !mo->inherits(&model::PreCompLayer::staticMetaObject) &&
+            !mo->inherits(&model::Styler::staticMetaObject)
+        )
+        {
+            path = static_cast<model::ShapeElement*>(node);
+        }
+    }
+
+    if ( shapes.empty() || !path )
+        return;
+
+    command::UndoMacroGuard guard(i18n("Put text on path"), current_document.get());
+    for ( auto shape : shapes )
+        shape->path.set_undoable(QVariant::fromValue(path));
+}
+
+void GlaxnimateWindow::Private::text_remove_from_path()
+{
+    std::vector<model::TextShape*> shapes;
+
+    for ( const auto& node : scene.selection() )
+    {
+        auto mo = node->metaObject();
+
+        if ( mo->inherits(&model::TextShape::staticMetaObject) )
+            shapes.push_back(static_cast<model::TextShape*>(node));
+        else if ( mo->inherits(&model::Group::staticMetaObject) )
+            get_text(static_cast<model::Group*>(node), shapes);
+    }
+
+    if ( shapes.empty() )
+        return;
+
+    command::UndoMacroGuard guard(i18n("Remove text from path"), current_document.get());
+    for ( auto shape : shapes )
+        shape->path.set_undoable({});
+}

@@ -1,0 +1,172 @@
+set(CMAKE_AUTOMOC ON)
+
+function(add_qt_test)
+  set(options "")
+  set(oneValueArgs TEST_NAME)
+  set(multiValueArgs LINK_LIBRARIES INCLUDE_DIRS SOURCE_FILES)
+  cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  set(_testname test_${arg_TEST_NAME})
+
+  add_executable(${_testname} ${_testname}/${_testname}.cpp ${arg_SOURCE_FILES})
+
+  target_compile_options(${_testname} PRIVATE ${MLT_COMPILE_OPTIONS})
+
+  target_link_libraries(${_testname} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Core
+    Qt${QT_MAJOR_VERSION}::Test
+    mlt
+    mlt++
+    ${arg_LINK_LIBRARIES}
+  )
+  if(MSVC)
+    target_link_libraries(${_testname} PRIVATE PThreads4W::PThreads4W)
+  endif()
+
+  target_include_directories(${_testname} PRIVATE ${arg_INCLUDE_DIRS})
+  add_test(NAME "QtTest:${arg_TEST_NAME}" COMMAND ${_testname})
+
+  if(NOT WIN32)
+    set_tests_properties("QtTest:${arg_TEST_NAME}" PROPERTIES ENVIRONMENT "LANG=en_US")
+  endif()
+
+endfunction()
+
+add_qt_test(TEST_NAME animation)
+add_qt_test(TEST_NAME audio)
+add_qt_test(TEST_NAME audioconvert)
+add_qt_test(TEST_NAME events)
+add_qt_test(TEST_NAME filter)
+add_qt_test(TEST_NAME frame)
+add_qt_test(TEST_NAME image)
+add_qt_test(TEST_NAME multitrack)
+add_qt_test(TEST_NAME playlist)
+add_qt_test(TEST_NAME producer)
+add_qt_test(TEST_NAME properties)
+add_qt_test(TEST_NAME repository)
+add_qt_test(TEST_NAME service)
+add_qt_test(TEST_NAME tractor)
+add_qt_test(TEST_NAME xml)
+add_qt_test(
+  TEST_NAME dissolve
+  INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/modules/avformat"
+  SOURCE_FILES "${CMAKE_SOURCE_DIR}/src/modules/avformat/conceal.c"
+)
+add_qt_test(
+  TEST_NAME subtitles
+  INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/modules/plus/subtitles"
+  SOURCE_FILES "${CMAKE_SOURCE_DIR}/src/modules/plus/subtitles/subtitles.cpp"
+)
+
+if(MOD_AVFORMAT)
+  add_qt_test(TEST_NAME mod_avformat)
+endif()
+
+if(MOD_VORBIS)
+  add_qt_test(TEST_NAME vorbis)
+endif()
+
+if(MOD_PLUS)
+  add_qt_test(TEST_NAME wsola)
+endif()
+
+if(MOD_QT6)
+  add_qt_test(
+    TEST_NAME mod_qt_gps
+    SOURCE_FILES
+      "${CMAKE_SOURCE_DIR}/src/modules/qt/gps_parser.h"
+      "${CMAKE_SOURCE_DIR}/src/modules/qt/gps_parser.cpp"
+  )
+endif()
+
+
+if(MOD_QT6 AND BUILD_TESTS_WITH_QT6)
+  add_qt_test(
+    TEST_NAME richtextgradient
+    LINK_LIBRARIES Qt6::Gui Qt6::Widgets Qt6::Xml
+  )
+  add_qt_test(
+    TEST_NAME richtextshadow
+    LINK_LIBRARIES Qt6::Gui Qt6::Widgets Qt6::Xml
+  )
+  set_property(
+    TEST "QtTest:richtextgradient" "QtTest:richtextshadow"
+    APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+endif()
+
+if(Kwalify_FOUND)
+  file(GLOB YML_FILES "${CMAKE_SOURCE_DIR}/src/modules/*/*.yml")
+  foreach(YML_FILE ${YML_FILES})
+    get_filename_component(FILE_NAME ${YML_FILE} NAME)
+    file(RELATIVE_PATH KWALIFY_TEST_NAME "${CMAKE_SOURCE_DIR}/src/modules" ${YML_FILE})
+    if(NOT FILE_NAME MATCHES "resolution_scale.yml")
+      add_test(NAME "kwalify:${KWALIFY_TEST_NAME}" COMMAND ${Kwalify_EXECUTABLE} -f "${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml" ${YML_FILE})
+    endif()
+  endforeach()
+
+  add_test(
+    NAME "kwalify:runtime:filters"
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DMLT_EXECUTABLE=$<TARGET_FILE:melt>
+      -DKWALIFY_EXECUTABLE=${Kwalify_EXECUTABLE}
+      -DMETASCHEMA_FILE=${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml
+      -DLIST_QUERY=filters
+      -DQUERY_PREFIX=filter=
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/kwalify_runtime_query.cmake
+  )
+  set_tests_properties("kwalify:runtime:filters" PROPERTIES TIMEOUT 300)
+
+  add_test(
+    NAME "kwalify:runtime:transitions"
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DMLT_EXECUTABLE=$<TARGET_FILE:melt>
+      -DKWALIFY_EXECUTABLE=${Kwalify_EXECUTABLE}
+      -DMETASCHEMA_FILE=${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml
+      -DLIST_QUERY=transitions
+      -DQUERY_PREFIX=transition=
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/kwalify_runtime_query.cmake
+  )
+  set_tests_properties("kwalify:runtime:transitions" PROPERTIES TIMEOUT 300)
+
+  add_test(
+    NAME "kwalify:runtime:producers"
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DMLT_EXECUTABLE=$<TARGET_FILE:melt>
+      -DKWALIFY_EXECUTABLE=${Kwalify_EXECUTABLE}
+      -DMETASCHEMA_FILE=${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml
+      -DLIST_QUERY=producers
+      -DQUERY_PREFIX=producer=
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/kwalify_runtime_query.cmake
+  )
+  set_tests_properties("kwalify:runtime:producers" PROPERTIES TIMEOUT 300)
+
+  add_test(
+    NAME "kwalify:runtime:links"
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DMLT_EXECUTABLE=$<TARGET_FILE:melt>
+      -DKWALIFY_EXECUTABLE=${Kwalify_EXECUTABLE}
+      -DMETASCHEMA_FILE=${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml
+      -DLIST_QUERY=links
+      -DQUERY_PREFIX=link=
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/kwalify_runtime_query.cmake
+  )
+  set_tests_properties("kwalify:runtime:links" PROPERTIES TIMEOUT 300)
+
+  add_test(
+    NAME "kwalify:runtime:consumers"
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DMLT_EXECUTABLE=$<TARGET_FILE:melt>
+      -DKWALIFY_EXECUTABLE=${Kwalify_EXECUTABLE}
+      -DMETASCHEMA_FILE=${CMAKE_SOURCE_DIR}/src/framework/metaschema.yaml
+      -DLIST_QUERY=consumers
+      -DQUERY_PREFIX=consumer=
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/kwalify_runtime_query.cmake
+  )
+  set_tests_properties("kwalify:runtime:consumers" PROPERTIES TIMEOUT 300)
+endif()

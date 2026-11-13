@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2019-2023 Mattia Basaglia <dev@dragon.best>
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<ui version="4.0">
+ <class>dock_swatches</class>
+ <widget class="QDockWidget" name="dock_swatches">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowIcon">
+   <iconset theme="paint-swatch"/>
+  </property>
+  <property name="windowTitle">
+   <string>Swatch</string>
+  </property>
+  <widget class="QWidget" name="dockWidgetContents">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="glaxnimate::gui::DocumentSwatchWidget" name="document_swatch_widget" native="true"/>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>glaxnimate::gui::DocumentSwatchWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/shape_style/document_swatch_widget.hpp</header>
+   <container>1</container>
+   <slots>
+    <signal>needs_new_color()</signal>
+   </slots>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,74 @@
+default:
+    image: ubuntu:latest
+    before_script:
+        - apt-get update -qq
+        - apt-get install -y -qq doxygen fonts-freefont-ttf graphviz python3-pip make python3-opencv libagg-dev fonts-ubuntu zip git m4 curl
+        - pip3 install -r requirements.txt
+
+variables:
+    DEBIAN_FRONTEND: noninteractive
+
+stages:
+    - test
+    - build
+
+pages:
+    stage: build
+    script:
+        - git clone https://github.com/twitter/twemoji.git
+        - make -B docs -j 4
+        - mv docs/html public
+    after_script:
+        - mv htmlcov public/coverage
+    artifacts:
+        paths:
+            - public
+    only:
+        - master
+    dependencies:
+        - test
+
+test:
+    stage: test
+    script:
+        - ./test.sh
+    artifacts:
+        paths:
+            - htmlcov/
+        when: always
+
+build:
+    stage: build
+    script:
+        - make
+    artifacts:
+        paths:
+            - dist/*
+    dependencies:
+        - test
+    except:
+        - tags
+
+build_tags:
+    stage: build
+    script:
+        - curl https://raw.githubusercontent.com/inetprocess/gitlab-release/master/gitlab-release >gitlab-release
+        - make VERSION=${CI_COMMIT_REF_NAME#v}
+        - pip3 install requests twine
+        - python3 gitlab-release -m "`sed -n -f devtools/latest_changes.sed CHANGELOG.md`" dist/*
+        - make upload VERSION=${CI_COMMIT_REF_NAME#v}
+    artifacts:
+        paths:
+            - dist/*
+    dependencies:
+        - test
+    only:
+        - tags
+
+lint:
+    stage: test
+    script:
+        - flake8 lib/lottie
+
+# https://gitlab.com/mattia.basaglia/tgs/-/ci/lint
+

@@ -1,0 +1,314 @@
+# SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+# SPDX-License-Identifier: BSD-2-Clause
+
+set(SOURCES
+
+glaxnimate_app.cpp
+
+emoji/emoji_data.cpp
+emoji/emoji_dialog.cpp
+emoji/emoji_set.cpp
+
+graphics/handle.cpp
+graphics/document_node_graphics_item.cpp
+graphics/document_scene.cpp
+graphics/transform_graphics_item.cpp
+graphics/create_items.cpp
+graphics/bezier_item.cpp
+graphics/gradient_editor.cpp
+graphics/snapping_grid.cpp
+
+item_models/document_node_model.cpp
+item_models/property_model_base.cpp
+item_models/property_model_single.cpp
+item_models/property_model_full.cpp
+item_models/gradient_list_model.cpp
+item_models/document_model_base.cpp
+item_models/comp_filter_model.cpp
+item_models/log_model.cpp
+
+settings/clipboard_settings.cpp
+settings/icon_settings.cpp
+settings/document_templates.cpp
+settings/api_credentials.cpp
+
+style/property_delegate.cpp
+style/dock_widget_style.cpp
+style/scroll_area_event_filter.cpp
+
+tools/base.cpp
+tools/freehand.cpp
+tools/select_tool.cpp
+tools/ellipse_tool.cpp
+tools/rectangle_tool.cpp
+tools/draw_tool.cpp
+tools/edit_tool.cpp
+tools/star_tool.cpp
+tools/text_tool.cpp
+tools/draw_tool_base.cpp
+
+widgets/dialogs/io_status_dialog.cpp
+widgets/dialogs/selection_manager.cpp
+widgets/dialogs/shape_parent_dialog.cpp
+widgets/dialogs/resize_dialog.cpp
+widgets/dialogs/timing_dialog.cpp
+widgets/dialogs/plugin_ui_dialog.cpp
+widgets/dialogs/document_metadata_dialog.cpp
+widgets/dialogs/trace_dialog.cpp
+widgets/dialogs/clipboard_inspector.cpp
+widgets/dialogs/color_quantization_dialog.cpp
+widgets/dialogs/export_image_sequence_dialog.cpp
+widgets/dialogs/select_shape_dialog.cpp
+widgets/dialogs/follow_path_dialog.cpp
+widgets/dialogs/stalefiles_dialog.cpp
+
+widgets/docks/layer_view.cpp
+widgets/docks/dock_grid.cpp
+widgets/docks/dock_grid.ui
+
+widgets/lottiefiles/lottiefiles_search_dialog.cpp
+widgets/lottiefiles/search_result.cpp
+widgets/lottiefiles/graphql.cpp
+
+widgets/timeline/keyframe_transition_widget.cpp
+widgets/timeline/keyframe_editor_widget.cpp
+widgets/timeline/frame_controls_widget.cpp
+widgets/timeline/timeline_widget.cpp
+widgets/timeline/compound_timeline_widget.cpp
+widgets/timeline/timeline_items.cpp
+widgets/timeline/timeline_treeview.cpp
+widgets/timeline/value_drag_event_filter.cpp
+
+widgets/tools/shape_tool_widget.cpp
+widgets/tools/star_tool_widget.cpp
+widgets/tools/color_picker_widget.cpp
+widgets/tools/fill_tool_widget.cpp
+widgets/tools/text_tool_widget.cpp
+
+widgets/canvas.cpp
+widgets/view_transform_widget.cpp
+widgets/flow_layout.cpp
+widgets/spin2d.cpp
+widgets/numeric_spinbox.cpp
+widgets/enum_combo.cpp
+widgets/window_message_widget.cpp
+widgets/tab_bar/tab_bar_close_button.cpp
+widgets/tab_bar/clickable_tab_bar.cpp
+widgets/tab_bar/composition_tab_bar.cpp
+
+widgets/settings/plugin_settings_widget.cpp
+widgets/settings/plugin_settings_widget.ui
+
+widgets/settings/settings_dialog.cpp
+
+widgets/shape_style/color_selector.cpp
+widgets/shape_style/stroke_style_widget.cpp
+widgets/shape_style/fill_style_widget.cpp
+widgets/shape_style/document_swatch_widget.cpp
+widgets/shape_style/gradient_list_widget.cpp
+
+widgets/font/font_model.cpp
+widgets/font/font_delegate.cpp
+widgets/font/font_preview_widget.cpp
+widgets/font/font_style_dialog.cpp
+widgets/font/font_style_widget.cpp
+widgets/font/google_fonts_model.cpp
+widgets/font/google_fonts_widget.cpp
+widgets/font/font_size_widget.cpp
+widgets/font/external_font_widget.cpp
+widgets/font/font_loader.cpp
+
+widgets/menus/animated_property_menu.cpp
+widgets/menus/node_menu.cpp
+
+widgets/render_widget.cpp
+)
+
+set(SOURCES_UIS
+    widgets/dialogs/io_status_dialog.ui
+    widgets/dialogs/shape_parent_dialog.ui
+    widgets/dialogs/resize_dialog.ui
+    widgets/dialogs/timing_dialog.ui
+    widgets/dialogs/document_metadata_dialog.ui
+    widgets/dialogs/trace_dialog.ui
+    widgets/dialogs/color_quantization_dialog.ui
+    widgets/dialogs/export_image_sequence_dialog.ui
+    widgets/dialogs/select_shape_dialog.ui
+    widgets/dialogs/follow_path_dialog.ui
+    widgets/dialogs/stalefiles_dialog.ui
+
+    widgets/lottiefiles/lottiefiles_search_dialog.ui
+
+    widgets/timeline/keyframe_editor_widget.ui
+    widgets/timeline/frame_controls_widget.ui
+    widgets/timeline/compound_timeline_widget.ui
+
+    widgets/tools/shape_tool_widget.ui
+    widgets/tools/color_picker_widget.ui
+    widgets/tools/fill_tool_widget.ui
+
+    widgets/view_transform_widget.ui
+
+    widgets/settings/plugin_settings_widget.ui
+
+
+    widgets/shape_style/color_selector.ui
+    widgets/shape_style/stroke_style_widget.ui
+    widgets/shape_style/document_swatch_widget.ui
+    widgets/shape_style/gradient_list_widget.ui
+
+    widgets/font/font_preview_widget.ui
+    widgets/font/font_style_dialog.ui
+    widgets/font/font_style_widget.ui
+    widgets/font/google_fonts_widget.ui
+    widgets/font/font_size_widget.ui
+    widgets/font/external_font_widget.ui
+)
+
+if ( NOT MOBILE_UI )
+    list(APPEND SOURCES
+        main.cpp
+        cli.cpp
+        ../cli_utils/cli.cpp
+
+        emoji/emoji_set_dialog.cpp
+
+        tools/color_picker.cpp
+        tools/fill_tool.cpp
+
+        widgets/dialogs/about_env_dialog.cpp
+        widgets/dialogs/glaxnimate_window.cpp
+        widgets/dialogs/startup_dialog.cpp
+
+        widgets/dialogs/gw_impl_document.cpp
+        widgets/dialogs/gw_impl_model.cpp
+        widgets/dialogs/gw_impl_ui.cpp
+        widgets/dialogs/gw_impl_debug.cpp
+        widgets/dialogs/gw_impl_selection.cpp
+
+        widgets/docks/aligndock.cpp
+        widgets/docks/assetsdock.cpp
+        widgets/docks/colorsdock.cpp
+        widgets/docks/strokedock.cpp
+        widgets/docks/layersdock.cpp
+        widgets/docks/properties_dock.cpp
+        widgets/docks/timelinedock.cpp
+        widgets/docks/logsdock.cpp
+        widgets/docks/timesliderdock.cpp
+        widgets/docks/gradientsdock.cpp
+        widgets/docks/swatchesdock.cpp
+        widgets/docks/snippetsdock.cpp
+        widgets/docks/undodock.cpp
+        widgets/docks/tooloptionsdock.cpp
+    )
+
+    list(APPEND SOURCES_UIS
+        emoji/emoji_set_dialog.ui
+
+        widgets/dialogs/about_env_dialog.ui
+        widgets/dialogs/startup_dialog.ui
+
+        widgets/docks/assets.ui
+        widgets/docks/colors.ui
+        widgets/docks/stroke.ui
+        widgets/docks/layers.ui
+        widgets/docks/properties_dock.ui
+        widgets/docks/timeline.ui
+        widgets/docks/script_console.ui
+        widgets/docks/logs.ui
+        widgets/docks/time_slider.ui
+        widgets/docks/gradients.ui
+        widgets/docks/swatches.ui
+        widgets/docks/snippets.ui
+        widgets/docks/undo.ui
+        widgets/docks/tooloptions.ui
+    )
+endif()
+
+
+if ( GLAXNIMATE_PYTHON_ENABLED )
+    list(APPEND SOURCES
+        gui_python/gui_python.cpp
+        gui_python/python_engine.cpp
+        widgets/docks/script_console.cpp
+        widgets/docks/snippet_list_widget.cpp
+    )
+
+    list(APPEND SOURCES_UIS
+        widgets/docks/script_console.ui
+        widgets/docks/snippet_list_widget.ui
+    )
+endif()
+
+configure_file(resources/glaxnimate.in.qrc resources/glaxnimate.qrc)
+
+if(COMMAND qt_add_resources)
+    qt_add_resources(SOURCES ${CMAKE_CURRENT_BINARY_DIR}/resources/glaxnimate.qrc)
+endif()
+
+set(API_KEY_GOOGLE_FONTS "$ENV{API_KEY_GOOGLE_FONTS}" CACHE STRING "API key for Google Fonts")
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/settings/api_keys.in.hpp
+    ${CMAKE_CURRENT_BINARY_DIR}/api_keys.hpp
+)
+
+ki18n_wrap_ui(SOURCES_UIS ${SOURCES_UIS})
+
+kconfig_add_kcfg_files(SOURCES GENERATE_MOC glaxnimate_settings.kcfgc)
+install(FILES glaxnimate_settings.kcfg DESTINATION ${KDE_INSTALL_KCFGDIR})
+
+include_directories(${CMAKE_SOURCE_DIR}/src/core)
+add_library(GlaxnimateGui OBJECT ${SOURCES} ${SOURCES_UIS})
+add_library(Glaxnimate::Gui ALIAS GlaxnimateGui)
+kde_target_enable_exceptions(GlaxnimateGui PUBLIC)
+target_link_libraries(
+    GlaxnimateGui PUBLIC
+    QtColorWidgets
+    Glaxnimate::Core
+    Glaxnimate::Plugin
+    Glaxnimate::Trace
+    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt${QT_MAJOR_VERSION}::UiTools
+    Qt${QT_MAJOR_VERSION}::Concurrent
+    Qt${QT_MAJOR_VERSION}::Network
+    Qt${QT_MAJOR_VERSION}::Svg
+    KF${KF_MAJOR}::I18n
+    KF${KF_MAJOR}::WidgetsAddons
+    KF${KF_MAJOR}::XmlGui
+    KF${KF_MAJOR}::Completion
+    KF${KF_MAJOR}::IconThemes
+    KF${KF_MAJOR}::ConfigCore
+    KF${KF_MAJOR}::Archive
+)
+
+if(TARGET KF6::BreezeIcons)
+    target_link_libraries(GlaxnimateGui PUBLIC
+            KF6::BreezeIcons
+    )
+    target_compile_definitions(GlaxnimateGui PRIVATE WITH_BREEZEICONS_LIB)
+endif ()
+
+if ( NOT ANDROID )
+    target_link_libraries(
+        GlaxnimateGui PUBLIC
+        KF${KF_MAJOR}::Crash
+    )
+endif()
+
+if ( GLAXNIMATE_PYTHON_ENABLED )
+    target_link_libraries(
+        GlaxnimateGui PUBLIC
+        GlaxnimatePythonEmbed
+    )
+endif()
+
+set(MODULE_DEFS)
+foreach(MODULE ${GLAXNIMATE_MODULES})
+    string(TOUPPER ${MODULE} MODULE_UPPER)
+    # target_link_libraries(GlaxnimateGui PUBLIC Glaxnimate${MODULE})
+    list(APPEND MODULE_DEFS "GLAXNIMATE_${MODULE_UPPER}_ENABLED")
+endforeach()
+
+set_source_files_properties(main.cpp PROPERTIES
+    COMPILE_DEFINITIONS "${MODULE_DEFS}"
+)

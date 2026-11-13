@@ -1,0 +1,23 @@
+# Tracing
+# pypotrace>=0.2 the pypotrace is bugged, install it separately
+# scipy
+
+# Raster support
+pillow
+cairosvg
+
+# Tex/Font
+fonttools
+grapheme
+
+# Video exporters
+opencv-python
+numpy
+
+# GUI scripts
+PyQt5
+QScintilla
+
+# Testing
+coverage
+flake8

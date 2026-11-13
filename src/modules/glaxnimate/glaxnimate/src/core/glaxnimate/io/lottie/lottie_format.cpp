@@ -1,0 +1,61 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "glaxnimate/io/lottie/lottie_format.hpp"
+
+#include "glaxnimate/io/lottie/lottie_importer.hpp"
+#include "glaxnimate/io/lottie/lottie_exporter.hpp"
+
+bool glaxnimate::io::lottie::LottieFormat::on_save(QIODevice& file, const QString&,
+                                                   model::Composition* comp, const QVariantMap& setting_values)
+{
+    file.write(cbor_write_json(to_json(comp, setting_values["strip"].toBool(), false, setting_values), !setting_values["pretty"].toBool()));
+    return true;
+}
+
+QCborMap glaxnimate::io::lottie::LottieFormat::to_json(model::Composition* comp, bool strip, bool strip_raster, const QVariantMap& settings)
+{
+    detail::LottieExporterState exp(this, comp, strip, strip_raster, settings);
+    return exp.to_json();
+}
+
+bool glaxnimate::io::lottie::LottieFormat::load_json(const QByteArray& data, model::Document* document)
+{
+    QJsonDocument jdoc;
+
+    try {
+        jdoc = QJsonDocument::fromJson(data);
+    } catch ( const QJsonParseError& err ) {
+        Q_EMIT error(i18n("Could not parse JSON: %1", err.errorString()));
+        return false;
+    }
+
+    if ( !jdoc.isObject() )
+    {
+        Q_EMIT error(i18n("No JSON object found"));
+        return false;
+    }
+
+    QJsonObject top_level = jdoc.object();
+
+    detail::LottieImporterState imp{document, this};
+    imp.load(top_level);
+    return true;
+}
+
+bool glaxnimate::io::lottie::LottieFormat::on_open(QIODevice& file, const QString&, model::Document* document, const QVariantMap&)
+{
+    return load_json(file.readAll(), document);
+}
+
+std::unique_ptr<glaxnimate::settings::SettingsGroup> glaxnimate::io::lottie::LottieFormat::save_settings(model::Composition*) const
+{
+    return std::make_unique<glaxnimate::settings::SettingsGroup>(glaxnimate::settings::SettingList{
+        glaxnimate::settings::Setting("pretty", i18n("Pretty"), i18n("Pretty print the JSON"), false),
+        glaxnimate::settings::Setting("strip", i18n("Strip"), i18n("Strip unused properties"), false),
+        glaxnimate::settings::Setting("auto_embed", i18n("Embed Images"), i18n("Automatically embed non-embedded images"), false),
+    });
+}

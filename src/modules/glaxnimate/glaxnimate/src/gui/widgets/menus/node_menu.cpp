@@ -1,0 +1,597 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "node_menu.hpp"
+
+#include <QDesktopServices>
+#include <QInputDialog>
+#include <QActionGroup>
+
+#include <KLocalizedString>
+
+#include "glaxnimate/model/shapes/composable/group.hpp"
+#include "glaxnimate/model/shapes/composable/image.hpp"
+#include "glaxnimate/model/shapes/composable/precomp_layer.hpp"
+#include "glaxnimate/model/shapes/style/fill.hpp"
+#include "glaxnimate/model/shapes/style/stroke.hpp"
+#include "glaxnimate/model/shapes/shapes/text.hpp"
+#include "glaxnimate/model/shapes/modifiers/repeater.hpp"
+#include "glaxnimate/model/shapes/modifiers/trim.hpp"
+#include "glaxnimate/model/shapes/modifiers/inflate_deflate.hpp"
+#include "glaxnimate/model/shapes/modifiers/round_corners.hpp"
+#include "glaxnimate/model/shapes/modifiers/offset_path.hpp"
+#include "glaxnimate/model/shapes/modifiers/zig_zag.hpp"
+
+#include "glaxnimate/model/assets/assets.hpp"
+
+#include "glaxnimate/command/structure_commands.hpp"
+#include "glaxnimate/command/animation_commands.hpp"
+#include "glaxnimate/command/property_commands.hpp"
+#include "glaxnimate/command/shape_commands.hpp"
+#include "glaxnimate/command/undo_macro_guard.hpp"
+#include "glaxnimate/command/clipboard.hpp"
+
+#include "widgets/enum_combo.hpp"
+#include "widgets/dialogs/shape_parent_dialog.hpp"
+#include "glaxnimate_app.hpp"
+
+#ifndef MOBILE_UI
+#   include "widgets/dialogs/glaxnimate_window.hpp"
+glaxnimate::gui::GlaxnimateWindow* to_window(glaxnimate::gui::SelectionManager* sel)
+{
+    return static_cast<glaxnimate::gui::GlaxnimateWindow*>(sel);
+}
+#endif
+
+using namespace glaxnimate::gui;
+using namespace glaxnimate;
+
+namespace {
+
+class ResetTransform
+{
+public:
+    void operator()() const
+    {
+        doc->push_command(new command::SetMultipleAnimated(
+            i18n("Reset Transform"),
+            true,
+            {
+                &trans->position,
+                &trans->scale,
+                &trans->rotation
+            },
+            trans->anchor_point.get(),
+            QVector2D(1, 1),
+            0
+        ));
+    }
+
+    model::Document* doc;
+    model::Transform* trans;
+};
+
+QAction* action_for_node(model::DocumentNode* node, model::DocumentNode* selected, QMenu* parent, QActionGroup* group)
+{
+    QAction* act = new QAction(parent);
+    if ( node )
+    {
+        act->setIcon(node->instance_icon());
+        act->setText(node->object_name());
+    }
+    else
+    {
+        act->setIcon(QIcon::fromTheme("edit-none"));
+        act->setText(i18n("None"));
+    }
+
+    act->setActionGroup(group);
+    act->setCheckable(true);
+    act->setChecked(node == selected);
+    act->setData(QVariant::fromValue(node));
+    parent->addAction(act);
+    return act;
+}
+
+void move_action(
+    QMenu* menu,
+    model::ShapeElement* node,
+    command::ReorderCommand::SpecialPosition pos
+)
+{
+    QIcon icon;
+    QString label;
+
+    switch ( pos )
+    {
+        case command::ReorderCommand::MoveTop:
+            icon = QIcon::fromTheme("layer-top");
+            label = i18n("Move to Top");
+            break;
+        case command::ReorderCommand::MoveUp:
+            icon = QIcon::fromTheme("layer-raise");
+            label = i18n("Raise");
+            break;
+        case command::ReorderCommand::MoveDown:
+            icon = QIcon::fromTheme("layer-lower");
+            label = i18n("Lower");
+            break;
+        case command::ReorderCommand::MoveBottom:
+            icon = QIcon::fromTheme("layer-bottom");
+            label = i18n("Move to Bottom");
+            break;
+    }
+
+    QAction* act = menu->addAction(icon, label, menu, [node, pos]{
+        node->push_command(new command::ReorderCommand(node, pos));
+    });
+
+    int position = pos;
+    if ( !command::ReorderCommand::resolve_position(node, position) )
+        act->setEnabled(false);
+}
+
+QMenu* menu_ref_property(const QIcon& icon, const QString& text, QWidget* parent, model::ReferencePropertyBase* prop)
+{
+    QMenu* menu = new QMenu(text, parent);
+    menu->setIcon(icon);
+    QActionGroup* group = new QActionGroup(parent);
+    auto value = prop->value().value<model::DocumentNode*>();
+    for ( auto other_lay : prop->valid_options() )
+        action_for_node(other_lay, value, menu, group);
+
+    QObject::connect(menu, &QMenu::triggered, parent, [prop](QAction* act){
+        prop->object()->push_command(
+            new command::SetPropertyValue(
+                prop,
+                prop->value(),
+                act->data(),
+                true
+            )
+        );
+    });
+
+    return menu;
+}
+
+template<class ToType>
+void convert_group_callback(int, ToType*){}
+
+template<class Callback, class ToType>
+void convert_group_callback(const Callback& callback, ToType* layer)
+{
+    callback(layer);
+}
+
+template<class ToType> void convert_group_apply_settings(ToType*, model::Group*){}
+
+template<>
+void convert_group_apply_settings<model::Layer>(model::Layer* layer, model::Group* from)
+{
+    auto comp = from->owner_composition();
+    layer->animation->first_frame.set(comp->animation->first_frame.get());
+    layer->animation->last_frame.set(comp->animation->last_frame.get());
+}
+
+template<class ToType, class Callback = int>
+class ConvertGroupType
+{
+public:
+    ConvertGroupType(model::Group* from, Callback callback = {})
+        : from(from), owner(static_cast<model::ShapeListProperty*>(from->docnode_parent()->get_property("shapes"))),
+        callback(std::move(callback))
+    {}
+
+    void operator()() const
+    {
+        convert();
+    }
+
+    void convert() const
+    {
+        auto to = new ToType(from->document());
+        std::unique_ptr<model::ShapeElement> uto(to);
+
+        for ( auto prop : to->properties() )
+        {
+            if ( prop != &to->uuid && prop != &to->shapes )
+            {
+                if ( auto src = from->get_property(prop->name()) )
+                    prop->assign_from(src);
+            }
+        }
+
+        if ( !from->is_instance<model::Layer>() )
+            convert_group_apply_settings(to, from);
+
+        command::UndoMacroGuard guard(i18n("Convert %1 to %2", from->name.get(), to->type_name_human()), from->document());
+        from->push_command(new command::AddObject(owner, std::move(uto), owner->index_of(from)));
+        std::vector<model::ShapeElement*> shapes;
+        shapes.reserve(from->shapes.size());
+        for ( const auto& shape : from->shapes )
+            shapes.push_back(shape.get());
+        for ( std::size_t i = 0; i < shapes.size(); i++ )
+            from->push_command(new command::MoveObject(shapes[i], &from->shapes, &to->shapes, i));
+        from->push_command(new command::RemoveObject<model::ShapeElement>(from, owner));
+        convert_group_callback(callback, to);
+    }
+
+private:
+    model::Group* from;
+    model::ShapeListProperty* owner;
+    Callback callback;
+};
+
+void togglable_action(QMenu* menu, model::Property<bool>* prop, const QString& icon, const QString& label)
+{
+    auto action = menu->addAction(QIcon::fromTheme(icon), label, menu, [prop](bool value){
+        prop->set_undoable(value);
+    });
+    action->setCheckable(true);
+    action->setChecked(prop->get());
+}
+
+template<class T>
+void add_child_action(QMenu* menu, model::Group* group)
+{
+    menu->addAction(T::static_tree_icon(), T::static_type_name_human(), [group]{
+        auto object = std::make_unique<T>(group->document());
+        group->document()->set_best_name(object.get());
+        group->push_command(new command::AddObject<model::ShapeElement>(&group->shapes, std::move(object), 0));
+    });
+}
+
+template<class ValueT>
+void add_enum_actions(QMenu* menu, model::Property<ValueT>* prop)
+{
+    auto meta_enum = QMetaEnum::fromType<ValueT>();
+    auto group = new QActionGroup(menu);
+    group->setExclusive(true);
+
+    for ( int i = 0; i < meta_enum.keyCount(); i++ )
+    {
+        int ivalue = meta_enum.value(i);
+        ValueT evalue = ValueT(ivalue);
+        auto data = EnumCombo::data_for(meta_enum, ivalue);
+
+        QAction* action = menu->addAction(data.second, data.first);
+        action->setCheckable(true);
+        action->setChecked(evalue == prop->get());
+        QObject::connect(action, &QAction::triggered, prop->object(), [prop, evalue]{
+            prop->set_undoable(QVariant::fromValue(evalue));
+        });
+        group->addAction(action);
+    }
+
+}
+
+template<class ValueT, class Callback>
+QAction* add_enum_action(QMenu* parent, ValueT value, ValueT current, const Callback& callback)
+{
+    auto meta = QMetaEnum::fromType<ValueT>();
+    auto data = EnumCombo::data_for(meta, value);
+    QAction* action = parent->addAction(data.second, data.first);
+    action->setCheckable(true);
+    action->setChecked(value == current);
+    QObject::connect(action, &QAction::triggered, parent, callback);
+    return action;
+}
+
+void actions_transform(QMenu* menu, model::Transform* tf, model::ShapeElement* bbshape)
+{
+    menu->addAction(QIcon::fromTheme("transform-move"), i18n("Reset Transform"), menu,
+        ResetTransform{tf->document(), tf}
+    );
+
+    if ( bbshape )
+    {
+        menu->addAction(QIcon::fromTheme("snap-bounding-box-center"), i18n("Anchor Point to Center"), menu, [tf, bbshape]{
+            auto center = bbshape->local_bounding_rect(bbshape->time()).center();
+
+            auto t = tf->time();
+            QPointF p1 = tf->transform_matrix(t).map(QPointF(0, 0));
+            QPointF p2 = tf->transform_matrix_with_anchor(t, center).map(QPointF(0, 0));
+            QPointF pos = tf->position.get() - p2 + p1;
+
+            tf->document()->push_command(new command::SetMultipleAnimated(
+                i18n("Anchor Point to Center"),
+                true,
+                {
+                    &tf->position,
+                    &tf->anchor_point
+                },
+                pos,
+                center,
+                0
+            ));
+        });
+    }
+    /// \todo better icon
+    auto ao = menu->addAction(QIcon::fromTheme("path-reverse"), i18n("Auto Orient"), menu, [tf](bool check) {
+        tf->auto_orient.set_undoable(check);
+    });
+    ao->setCheckable(true);
+    ao->setChecked(tf->auto_orient.get());
+}
+
+void actions_composable(QMenu* menu, model::Composable* group)
+{
+    auto menu_tf = menu->addMenu(QIcon::fromTheme("node-transform"), i18n("Transform"));
+    actions_transform(menu_tf, group->transform.get(), group);
+    auto menu_blend = menu->addMenu(QIcon::fromTheme("edit-opacity"), i18n("Blend Mode"));
+    add_enum_actions(menu_blend, &group->blend_mode);
+}
+
+void actions_group(QMenu* menu, SelectionManager* window, model::Group* group)
+{
+    QMenu* menu_add = new QMenu(i18n("Add"), menu);
+    menu_add->setIcon(QIcon::fromTheme("list-add"));
+    menu->addAction(menu_add->menuAction());
+    add_child_action<model::Fill>(menu_add, group);
+    add_child_action<model::Stroke>(menu_add, group);
+    menu_add->addSeparator();
+    add_child_action<model::Trim>(menu_add, group);
+    add_child_action<model::Repeater>(menu_add, group);
+    add_child_action<model::InflateDeflate>(menu_add, group);
+    add_child_action<model::RoundCorners>(menu_add, group);
+    add_child_action<model::OffsetPath>(menu_add, group);
+    add_child_action<model::ZigZag>(menu_add, group);
+
+    menu->addSeparator();
+
+    actions_composable(menu, group);
+
+    model::Layer* lay = qobject_cast<model::Layer*>(group);
+    if ( lay )
+    {
+        menu->addAction(QIcon::fromTheme("timeline-use-zone-on"), i18n("Span All Frames"), menu, [lay]{
+            command::UndoMacroGuard guard(i18n("Span All Frames"), lay->document());
+            lay->animation->first_frame.set_undoable(
+                lay->owner_composition()->animation->first_frame.get()
+            );
+            lay->animation->last_frame.set_undoable(
+                lay->owner_composition()->animation->last_frame.get()
+            );
+        });
+
+        menu->addSeparator();
+        menu->addAction(menu_ref_property(QIcon::fromTheme("go-parent-folder"), i18n("Parent"), menu, &lay->parent)->menuAction());
+        menu->addAction(QIcon::fromTheme("object-group"), i18n("Convert to Group"), menu, ConvertGroupType<model::Group>(lay));
+        menu->addAction(QIcon::fromTheme("component"), i18n("Precompose"), menu, [window, lay]{
+            window->precompose(lay);
+        });
+
+        auto mask_menu = menu->addMenu(QIcon::fromTheme("mask-alpha"), i18n("Mask"));
+        auto act_inverted = mask_menu->addAction(QIcon::fromTheme("mask-invert"), i18n("Inverted"));
+        act_inverted->setCheckable(true);
+        act_inverted->setChecked(lay->mask->inverted.get());
+        QObject::connect(act_inverted, &QAction::triggered, lay, [lay](bool inverted){
+            lay->mask->inverted.set_undoable(inverted);
+        });
+
+        mask_menu->addSeparator();
+        add_enum_actions(mask_menu, &lay->mask->mask);
+    }
+    else
+    {
+        menu->addSeparator();
+
+        menu->addAction(QIcon::fromTheme("folder"), i18n("Convert to Layer"), menu, ConvertGroupType<model::Layer>(group));
+    }
+
+    menu->addAction(QIcon::fromTheme("object-to-path"), i18n("Convert to Path"), menu, [group]{ command::convert_to_path({group});});
+}
+
+void actions_bitmap(QMenu* menu, SelectionManager* window, model::Bitmap* bmp, model::Image* shape)
+{
+    menu->addAction(QIcon::fromTheme("mail-attachment-symbolic"), i18n("Embed"), menu, [bmp]{
+            bmp->embed(true);
+    })->setEnabled(bmp && !bmp->embedded());
+
+    menu->addAction(QIcon::fromTheme("editimage"), i18n("Open with External Application"), menu, [bmp, window]{
+        if ( !QDesktopServices::openUrl(bmp->to_url()) )
+        {
+#ifndef MOBILE_UI
+            to_window(window)->warning(i18n("Could not find suitable application, check your system settings."));
+#endif
+        }
+    })->setEnabled(bmp);
+
+
+#ifndef MOBILE_UI
+    menu->addAction(QIcon::fromTheme("document-open"), i18n("From File..."), menu, [bmp, window, shape]{
+        QString filename = to_window(window)->get_open_image_file(i18n("Update Image"), bmp ? bmp->file_info().absolutePath() : "");
+        if ( filename.isEmpty() )
+            return;
+
+        command::UndoMacroGuard macro(i18n("Update Image"), window->document());
+        if ( bmp )
+        {
+            bmp->data.set_undoable(QByteArray());
+            bmp->filename.set_undoable(filename);
+        }
+        else if ( shape )
+        {
+            auto img = window->document()->assets()->add_image_file(filename, false);
+            if ( img )
+                shape->image.set_undoable(QVariant::fromValue(img));
+        }
+    });
+#endif
+}
+
+void actions_image(QMenu* menu, SelectionManager* window, model::Image* image)
+{
+    actions_composable(menu, image);
+
+    menu->addSeparator();
+
+    menu->addAction(menu_ref_property(QIcon::fromTheme("folder-pictures"), i18n("Image"), menu, &image->image)->menuAction());
+
+    actions_bitmap(menu, window, image->image.get(), image);
+
+#ifndef MOBILE_UI
+    menu->addAction(QIcon::fromTheme("bitmap-trace"), i18n("Trace Bitmap..."), menu, [image, window]{
+        to_window(window)->trace_dialog(image);
+    });
+#endif
+}
+
+void actions_precomp(QMenu* menu, SelectionManager*, model::PreCompLayer* lay)
+{
+    actions_composable(menu, lay);
+
+    menu->addAction(QIcon::fromTheme("edit-rename"), i18n("Rename from Composition"), menu, [lay]{
+        if ( lay->composition.get() )
+            lay->name.set_undoable(lay->composition->object_name());
+    });
+    menu->addAction(QIcon::fromTheme("archive-extract"), i18n("Decompose"), menu, [lay]{
+        command::UndoMacroGuard guard(i18n("Decompose"), lay->document());
+
+        auto comp = lay->composition.get();
+
+        if ( comp )
+        {
+            int index = lay->owner()->index_of(lay);
+            for ( const auto& child : comp->shapes )
+            {
+                std::unique_ptr<model::ShapeElement> clone(static_cast<model::ShapeElement*>(child->clone().release()));
+                clone->refresh_uuid();
+                lay->push_command(new command::AddShape(lay->owner(), std::move(clone), ++index));
+            }
+        }
+
+        lay->push_command(new command::RemoveShape(lay, lay->owner()));
+
+        if ( comp && comp->users().empty() )
+            lay->push_command(new command::RemoveObject(comp, &lay->document()->assets()->compositions->values));
+    });
+}
+
+void actions_text(QMenu* menu, model::TextShape* text)
+{
+    menu->addAction(QIcon::fromTheme("text-remove-from-path"), i18n("Remove from Path"), text, [text]{
+        text->path.set_undoable(QVariant());
+    })->setEnabled(text->path.get());
+}
+
+
+void time_stretch_dialog(model::Object* object, QWidget* parent)
+{
+    QInputDialog dialog(parent);
+    dialog.setInputMode(QInputDialog::DoubleInput);
+    dialog.setDoubleMinimum(0.001);
+    dialog.setDoubleMaximum(999);
+    dialog.setDoubleValue(1);
+    dialog.setDoubleDecimals(3);
+    dialog.setWindowTitle(i18n("Stretch time"));
+    dialog.setLabelText(i18n("Speed Multiplier"));
+    if ( dialog.exec() )
+        object->push_command(new command::StretchTimeCommand(object, 1/dialog.doubleValue()));
+}
+
+} // namespace
+
+
+
+NodeMenu::NodeMenu(model::Object* node, SelectionManager* window, QWidget* parent, model::Object* context_object)
+    : QMenu(node->object_name(), parent)
+{
+    setIcon(node->tree_icon());
+    addSection(node->tree_icon(), node->object_name());
+
+    if ( auto visual = qobject_cast<model::VisualNode*>(node) )
+    {
+        togglable_action(this, &visual->visible, "view-visible", i18nc("@option:check", "Visible"));
+        togglable_action(this, &visual->locked, "object-locked", i18nc("@option:check", "Locked"));
+        addSeparator();
+
+        if ( auto shape = qobject_cast<model::ShapeElement*>(node) )
+        {
+            this->addAction(QIcon::fromTheme("edit-cut"), i18nc("@action:inmenu", "Cut"), this, [shape, window]{
+                GlaxnimateApp::instance()->set_clipboard_data(command::copy_helper(
+                    {shape},
+                    window->supported_mimes()
+                ));
+                shape->push_command(new command::RemoveShape(shape, shape->owner(), nullptr, i18n("Cut")));
+            });
+            this->addAction(QIcon::fromTheme("edit-copy"), i18nc("@action:inmenu", "Copy"), this, [visual, window]{
+                GlaxnimateApp::instance()->set_clipboard_data(command::copy_helper(
+                    {visual},
+                    window->supported_mimes()
+                ));
+            });
+
+            this->addAction(QIcon::fromTheme("edit-delete-remove"), i18nc("@action:inmenu", "Delete"), this, [shape]{
+                shape->push_command(new command::RemoveShape(shape, shape->owner()));
+            });
+
+            this->addAction(QIcon::fromTheme("edit-duplicate"), i18nc("@action:inmenu", "Duplicate"), this, [shape, window]{
+                auto cmd = command::duplicate_shape(shape);
+                shape->push_command(cmd);
+                window->set_current_document_node(cmd->object());
+            });
+
+            auto menu_move = addMenu(QIcon::fromTheme("selection-move-to-layer-above"), i18nc("@action:inmenu", "Move"));
+
+            move_action(menu_move, shape, command::ReorderCommand::MoveTop);
+            move_action(menu_move, shape, command::ReorderCommand::MoveUp);
+            move_action(menu_move, shape, command::ReorderCommand::MoveDown);
+            move_action(menu_move, shape, command::ReorderCommand::MoveBottom);
+
+            menu_move->addAction(QIcon::fromTheme("selection-move-to-layer-above"), i18nc("@action:inmenu", "Move to..."), this, [shape, window, parent]{
+                if ( auto shape_parent = ShapeParentDialog(window->model(), parent).get_shape_parent() )
+                {
+                    if ( shape->owner() != shape_parent )
+                        shape->push_command(new command::MoveShape(shape, shape->owner(), shape_parent, shape_parent->size()));
+                }
+            });
+
+            addSeparator();
+
+            if ( auto group = qobject_cast<model::Group*>(shape) )
+            {
+                actions_group(this, window, group);
+            }
+            else if ( auto image = qobject_cast<model::Image*>(shape) )
+            {
+                actions_image(this, window, image);
+            }
+            else if ( auto lay = qobject_cast<model::PreCompLayer*>(shape) )
+            {
+                actions_precomp(this, window, lay);
+            }
+            else
+            {
+                if ( auto text = shape->cast<model::TextShape>() )
+                    actions_text(this, text);
+
+                addSeparator();
+                addAction(QIcon::fromTheme("object-to-path"), i18nc("@action:inmenu", "Convert to Path"), this, [shape]{ command::convert_to_path({shape});});
+            }
+        }
+        else if ( qobject_cast<model::Composition*>(node) )
+        {
+#ifndef MOBILE_UI
+            addAction(
+                to_window(window)->create_layer_menu()->menuAction()
+            );
+#endif
+        }
+    }
+    else if ( auto image = qobject_cast<model::Bitmap*>(node) )
+    {
+        actions_bitmap(this, window, image, nullptr);
+    }
+    else if ( auto tf = qobject_cast<model::Transform*>(node) )
+    {
+        actions_transform(this, tf, qobject_cast<model::ShapeElement*>(context_object));
+    }
+
+
+    addSeparator();
+    addAction(QIcon::fromTheme("speedometer"), i18nc("@action:inmenu", "Change speed"), this, [node, parent]{ time_stretch_dialog(node, parent); });
+}

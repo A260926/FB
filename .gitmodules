@@ -1,0 +1,4 @@
+[submodule "src/modules/glaxnimate/glaxnimate"]
+	path = src/modules/glaxnimate/glaxnimate
+	url = https://github.com/KDE/glaxnimate
+	ignore = dirty

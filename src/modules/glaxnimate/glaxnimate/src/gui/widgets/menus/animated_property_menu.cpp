@@ -1,0 +1,256 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "animated_property_menu.hpp"
+
+#include <QClipboard>
+#include <QMimeData>
+#include <QGuiApplication>
+
+#include "glaxnimate/command/clipboard.hpp"
+#include "glaxnimate/model/animation/meta_animatable.hpp"
+#include "widgets/dialogs/follow_path_dialog.hpp"
+#include "widgets/dialogs/selection_manager.hpp"
+
+using namespace glaxnimate::gui;
+
+class glaxnimate::gui::AnimatedPropertyMenu::Private
+{
+public:
+    Private(AnimatedPropertyMenu* parent)
+    {
+        parent->setIcon(QIcon::fromTheme("label"));
+        action_title = parent->addSeparator();
+
+        parent->addAction(&action_kf_paste);
+        action_kf_paste.setIcon(QIcon::fromTheme("edit-paste"));
+        connect(&action_kf_paste, &QAction::triggered, parent, &AnimatedPropertyMenu::paste_keyframe);
+
+        parent->addAction(&action_add_keyframe);
+        action_add_keyframe.setIcon(QIcon::fromTheme("keyframe-add"));
+        connect(&action_add_keyframe, &QAction::triggered, parent, &AnimatedPropertyMenu::add_keyframe);
+
+        parent->addAction(&action_remove_keyframe);
+        action_remove_keyframe.setIcon(QIcon::fromTheme("keyframe-remove"));
+        connect(&action_remove_keyframe, &QAction::triggered, parent, &AnimatedPropertyMenu::remove_keyframe);
+
+        action_remove_all_keyframes.setIcon(QIcon::fromTheme("edit-clear-all"));
+        connect(&action_remove_all_keyframes, &QAction::triggered, parent, &AnimatedPropertyMenu::remove_all_keyframes);
+        parent->addAction(&action_remove_all_keyframes);
+
+        parent->addSeparator();
+
+        action_kf_loop.setIcon(QIcon::fromTheme("media-repeat-all"));
+        connect(&action_kf_loop, &QAction::triggered, parent, &AnimatedPropertyMenu::loop_keyframes);
+        parent->addAction(&action_kf_loop);
+
+        action_property_loop.setIcon(QIcon::fromTheme(QStringLiteral("media-repeat-all")));
+        action_property_loop.setText(i18n("Repeat until composition ends"));
+        connect(&action_property_loop, &QAction::triggered, parent, &AnimatedPropertyMenu::loop_property);
+        parent->addAction(&action_property_loop);
+
+        action_follow_path.setIcon(QIcon::fromTheme("draw-bezier-curves"));
+        connect(&action_follow_path, &QAction::triggered, parent, &AnimatedPropertyMenu::follow_path);
+        parent->addAction(&action_follow_path);
+        action_follow_path.setVisible(false);
+
+        action_remove_all_keyframes.setText(i18n("Clear Animations"));
+        action_kf_paste.setText(i18n("Paste Keyframe"));
+        action_kf_loop.setText(i18n("Perfect Loop"));
+        action_follow_path.setText(i18n("Follow Path..."));
+        action_add_keyframe.setText(i18n("Add Keyframe"));
+        action_remove_keyframe.setText(i18n("Remove Keyframe"));
+    }
+
+    model::Composition* comp()
+    {
+        if ( auto shape = object->cast<model::ShapeElement>() )
+            return shape->owner_composition();
+
+        return window->current_composition();
+    }
+
+    model::AnimatableBase* property = nullptr;
+    model::Object* object = nullptr;
+    QAction* action_title;
+    QAction action_kf_loop;
+    QAction action_kf_paste;
+    QAction action_follow_path;
+    QAction action_add_keyframe;
+    QAction action_remove_keyframe;
+    QAction action_remove_all_keyframes;
+    QAction action_property_loop;
+    SelectionManager* window = nullptr;
+    model::PropertyTraits::Type property_type = model::PropertyTraits::Unknown;
+};
+
+glaxnimate::gui::AnimatedPropertyMenu::AnimatedPropertyMenu(QWidget* parent)
+    : QMenu(parent), d(std::make_unique<Private>(this))
+{
+}
+
+glaxnimate::gui::AnimatedPropertyMenu::~AnimatedPropertyMenu() = default;
+
+void glaxnimate::gui::AnimatedPropertyMenu::paste_keyframe()
+{
+    if ( !d->property )
+        return;
+
+    const QMimeData* data = QGuiApplication::clipboard()->mimeData();
+    auto cmd = command::keyframes_paste_command(data, d->property, d->property_type, d->object->time());
+    if ( cmd )
+        d->object->push_command(cmd);
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::loop_keyframes()
+{
+    if ( !d->property || d->property->keyframe_count() < 1 )
+        return;
+
+    d->object->push_command(d->property->command_add_smooth_keyframe(
+        d->comp()->animation->last_frame.get(),
+        d->property->first_keyframe()->value()
+    ));
+}
+
+void AnimatedPropertyMenu::loop_property()
+{
+    if ( !d->property || d->property->keyframe_count() < 2 )
+        return;
+
+    model::FrameTime cumulative = d->property->last_keyframe()->time();
+    model::FrameTime duration = cumulative - d->property->first_keyframe()->time();
+    model::FrameTime target = d->window->current_composition()->animation->last_frame.get();
+    if ( duration <= 0 || cumulative >= target )
+        return;
+
+
+    auto cmd = new QUndoCommand(i18n("Loop %1", d->property->visual_name()));
+    while ( cumulative < target )
+    {
+        for ( const auto& kf : d->property->keyframe_range() )
+        {
+            auto time = kf.time() + cumulative;
+            d->property->command_add_smooth_keyframe(time, kf.value(), true, cmd);
+            if ( kf.transition().special() != model::KeyframeTransition::Special::NoValue )
+                d->property->command_set_transition(time, kf.transition(), cmd);
+        }
+        cumulative += duration;
+    }
+
+    d->object->push_command(cmd);
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::follow_path()
+{
+    if ( d->property && d->property_type == model::PropertyTraits::Point )
+    {
+        auto prop = static_cast<model::AnimatedProperty<QPointF>*>(d->property);
+        FollowPathDialog(prop, d->comp(), d->window->model(), parentWidget()).exec();
+    }
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::remove_all_keyframes()
+{
+    if ( !d->property )
+        return;
+
+    d->object->push_command(d->property->command_clear_keyframes());
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::set_controller(glaxnimate::gui::SelectionManager* window)
+{
+    d->window = window;
+}
+
+glaxnimate::model::Object *AnimatedPropertyMenu::object() const
+{
+    return d->object;
+}
+
+glaxnimate::model::PropertyTraits::Type AnimatedPropertyMenu::property_type() const
+{
+    return d->property_type;
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::set_property(model::AnimatedPropertyBase* property)
+{
+    d->property = property;
+    if ( property )
+    {
+        d->object = property->object();
+        d->property_type = property->traits().type;
+        setTitle(property->name());
+        d->action_title->setText(property->name());
+        d->action_follow_path.setVisible(property->traits().type == model::PropertyTraits::Point);
+        refresh_actions();
+    }
+}
+
+void AnimatedPropertyMenu::set_object_group(model::Object *object)
+{
+    d->object = object;
+    d->property = nullptr;
+    if ( object )
+    {
+        d->property = &object->grouped_animations();
+        d->property_type = model::PropertyTraits::Unknown;
+        setTitle(object->object_name());
+        d->action_title->setText(object->object_name());
+        d->action_follow_path.setVisible(false);
+        refresh_actions();
+    }
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::refresh_actions()
+{
+    if ( d->property )
+    {
+        bool has_kf = d->property->has_keyframe(d->object->time());
+        d->action_remove_keyframe.setEnabled(has_kf);
+        d->action_remove_all_keyframes.setEnabled(d->property->keyframe_count() > 0);
+        d->action_kf_loop.setEnabled(d->property->keyframe_count() > 0);
+        d->action_kf_paste.setEnabled(can_paste());
+
+        d->action_property_loop.setEnabled(
+            d->property->keyframe_count() > 1 &&
+            d->property->last_keyframe()->time() < d->window->current_composition()->animation->last_frame.get()
+        );
+    }
+}
+
+
+glaxnimate::model::AnimatableBase * glaxnimate::gui::AnimatedPropertyMenu::property() const
+{
+    return d->property;
+}
+
+bool glaxnimate::gui::AnimatedPropertyMenu::can_paste() const
+{
+    if ( !d->property )
+        return false;
+    const QMimeData* data = QGuiApplication::clipboard()->mimeData();
+    return command::keyframes_mime_data_has_type(data, d->property_type);
+}
+
+
+void glaxnimate::gui::AnimatedPropertyMenu::add_keyframe()
+{
+    if ( d->property )
+        d->object->push_command(
+            d->property->command_add_smooth_keyframe(d->object->time(), d->property->static_value())
+        );
+}
+
+void glaxnimate::gui::AnimatedPropertyMenu::remove_keyframe()
+{
+    if ( d->property )
+        d->object->push_command(
+            d->property->command_remove_keyframe(d->object->time())
+        );
+}
+
+

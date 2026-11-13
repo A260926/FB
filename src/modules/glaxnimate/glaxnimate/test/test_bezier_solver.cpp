@@ -1,0 +1,541 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include <QTest>
+
+#include <vector>
+#include "glaxnimate/math/bezier/solver.hpp"
+
+using namespace glaxnimate;
+
+class TestCase: public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+#if 0
+    void test_order()
+    {
+        math::BezierSolver<QVector2D> bs{
+            QVector2D{1, 2},
+            QVector2D{3, 4}
+        };
+        QCOMPARE(bs.order(), 1);
+
+        bs = math::BezierSolver<QVector2D> {
+            QVector2D{1, 2},
+            QVector2D{3, 4},
+            QVector2D{5, 6}
+        };
+        QCOMPARE(bs.order(), 2);
+
+        bs = math::BezierSolver<QVector2D> {
+            QVector2D{1, 2},
+            QVector2D{3, 4},
+            QVector2D{5, 6},
+            QVector2D{7, 8}
+        };
+        QCOMPARE(bs.order(), 3);
+    }
+
+    void test_solve_linear()
+    {
+        math::BezierSolver<QVector2D> bs{
+            QVector2D{20, 100},
+            QVector2D{40, 0}
+        };
+
+        QCOMPARE(bs.solve(0.0), QVector2D(20, 100));
+        QCOMPARE(bs.solve(.25), QVector2D(25, 75));
+        QCOMPARE(bs.solve(.50), QVector2D(30, 50));
+        QCOMPARE(bs.solve(.75), QVector2D(35, 25));
+        QCOMPARE(bs.solve(1.0), QVector2D(40, 0));
+    }
+
+    void test_solve_quadratic()
+    {
+        QVector2D a{20, 100};
+        QVector2D b{35, 50};
+        QVector2D c{40, 0};
+
+        math::BezierSolver<QVector2D> bs{a, b, c};
+
+        auto explicit_solve = [a,b,c](double t) {
+            auto p1 = math::lerp(a, b, t);
+            auto p2 = math::lerp(b, c, t);
+            return math::lerp(p1, p2, t);
+        };
+
+        QCOMPARE(bs.solve(0.0), a);
+        QCOMPARE(bs.solve(.25), explicit_solve(0.25));
+        QCOMPARE(bs.solve(.50), explicit_solve(0.50));
+        QCOMPARE(bs.solve(.75), explicit_solve(0.75));
+        QCOMPARE(bs.solve(1.0), c);
+    }
+#endif
+
+#define FUZZY_COMPARE(a, b) QCOMPARE(a.x(), b.x()); QCOMPARE(a.y(), b.y());
+
+    void test_solve_cubic()
+    {
+        QVector2D a{20, 100};
+        QVector2D b{35, 50};
+        QVector2D c{50, -20};
+        QVector2D d{40, 0};
+
+        math::bezier::CubicBezierSolver<QVector2D> bs{a, b, c, d};
+
+        auto explicit_solve = [a,b,c,d](double t) {
+            auto p1 = math::lerp(a, b, t);
+            auto p2 = math::lerp(b, c, t);
+            auto p3 = math::lerp(c, d, t);
+            auto q1 = math::lerp(p1, p2, t);
+            auto q2 = math::lerp(p2, p3, t);
+            return math::lerp(q1, q2, t);
+        };
+
+        FUZZY_COMPARE(bs.solve(0.0), a);
+        FUZZY_COMPARE(bs.solve(.25), explicit_solve(0.25));
+        FUZZY_COMPARE(bs.solve(.50), explicit_solve(0.50));
+        FUZZY_COMPARE(bs.solve(.75), explicit_solve(0.75));
+        FUZZY_COMPARE(bs.solve(1.0), d);
+    }
+
+#if 0
+    void test_angle_linear()
+    {
+        math::scalar_type<QVector2D> angle = 1;
+        QVector2D a{20, 30};
+        QVector2D b = a + math::from_polar(10, angle);
+
+        math::BezierSolver<QVector2D> bs{a, b};
+        QCOMPARE(bs.tangent_angle(0.00), angle);
+        QCOMPARE(bs.tangent_angle(0.25), angle);
+        QCOMPARE(bs.tangent_angle(0.50), angle);
+        QCOMPARE(bs.tangent_angle(0.75), angle);
+        QCOMPARE(bs.tangent_angle(1.00), angle);
+
+        b = a + math::from_polar(10, 2 * M_PI -1);
+        angle = - 1;
+
+        bs = math::BezierSolver<QVector2D>{a, b};
+        QCOMPARE(bs.tangent_angle(0.00), angle);
+        QCOMPARE(bs.tangent_angle(0.25), angle);
+        QCOMPARE(bs.tangent_angle(0.50), angle);
+        QCOMPARE(bs.tangent_angle(0.75), angle);
+        QCOMPARE(bs.tangent_angle(1.00), angle);
+    }
+
+    void test_angle_quadratic()
+    {
+        QVector2D sp{20, 30};
+        QVector2D h{30, 40};
+        QVector2D ep{40, 30};
+
+        math::BezierSolver<QVector2D> bs{sp, h, ep};
+        QCOMPARE(bs.tangent_angle(0.00), M_PI/4);
+        QVERIFY(bs.tangent_angle(0.1) > 0);
+        QCOMPARE(bs.tangent_angle(0.50), 0);
+        QVERIFY(bs.tangent_angle(0.9) < 0);
+        QCOMPARE(bs.tangent_angle(1.00), -M_PI/4);
+    }
+#endif
+
+    void test_angle_cubic()
+    {
+        QPointF sp{20, 30};
+        QPointF h1{20, 40};
+        QPointF h2{40, 20};
+        QPointF ep{40, 30};
+
+        math::bezier::CubicBezierSolver<QPointF> bs{sp, h1, h2, ep};
+        QCOMPARE(bs.tangent_angle(0.00), M_PI/2);
+        QVERIFY(bs.tangent_angle(0.1) > 0);
+        QVERIFY(bs.tangent_angle(0.50) < 0);
+        QVERIFY(bs.tangent_angle(0.9) > 0);
+        QCOMPARE(bs.tangent_angle(1.00), M_PI/2);
+    }
+
+#if 0
+    void test_solve_step()
+    {
+        QVector2D a{20, 30};
+        QVector2D b{15, 40};
+        QVector2D c{30, 10};
+        QVector2D d{40, 15};
+
+        math::BezierSolver<QVector2D> bs{a, b, c, d};
+        double fac = 0.33;
+        auto quad = bs.solve_step(fac);
+        QCOMPARE(quad.size(), 3);
+        auto q0 = math::lerp(a, b, fac);
+        FUZZY_COMPARE(quad[0], q0);
+        auto q1 = math::lerp(b, c, fac);
+        FUZZY_COMPARE(quad[1], q1);
+        auto q2 = math::lerp(c, d, fac);
+        FUZZY_COMPARE(quad[2], q2);
+
+        bs = math::BezierSolver<QVector2D>{q0, q1, q2};
+        auto lin = bs.solve_step(fac);
+        QCOMPARE(lin.size(), 2);
+        auto l0 = math::lerp(q0, q1, fac);
+        auto l1 = math::lerp(q1, q2, fac);
+        FUZZY_COMPARE(lin[0], l0);
+        FUZZY_COMPARE(lin[1], l1);
+
+        bs = math::BezierSolver<QVector2D>{l0, l1};
+        auto res = bs.solve_step(fac);
+        QCOMPARE(res.size(), 1);
+        FUZZY_COMPARE(res[0], math::lerp(l0, l1, fac));
+        FUZZY_COMPARE(res[0], (math::BezierSolver<QVector2D>{a, b, c, d}.solve(fac)));
+    }
+#endif
+
+    void test_split_cubic()
+    {
+        QVector2D sp{20, 30};
+        QVector2D ep{80, 30};
+        QVector2D h1 = sp + QVector2D{10, 20};
+        QVector2D h2 = ep + QVector2D{-10, 20};
+        double mid_x = 50;
+
+        math::bezier::CubicBezierSolver<QVector2D> bs{sp, h1, h2, ep};
+        auto split = bs.split(0.5);
+
+        // First split
+        // Begins with the starting point
+        QCOMPARE(split.first[0], sp);
+        // First tangent pointing up and right
+        QVERIFY(split.first[1].x() > sp.x());
+        QVERIFY(split.first[1].x() < mid_x);
+        QVERIFY(split.first[1].y() > sp.y());
+        // End point should be in the middle of the original
+        QCOMPARE(split.first[3].x(), mid_x);
+        QVERIFY(split.first[3].y() > sp.y());
+        // Second tangent points straight out of the mid point
+        QVERIFY(split.first[2].x() > split.first[1].x());
+        QVERIFY(split.first[2].x() < split.first[3].x());
+        QCOMPARE(split.first[2].y(), split.first[3].y());
+
+        // Second Split
+        // Starts where the other left off
+        QCOMPARE(split.second[0], split.first[3]);
+        // First tangent points straight out of the mid point
+        QVERIFY(split.second[1].x() > split.second[0].x());
+        QVERIFY(split.second[1].x() < split.second[2].x());
+        QCOMPARE(split.second[1].y(), split.second[0].y());
+        // Ends with the original end point
+        QCOMPARE(split.second[3], ep);
+        // Second tangent points down
+        QVERIFY(split.second[2].x() < ep.x());
+        QVERIFY(split.second[2].x() > mid_x);
+        QVERIFY(split.second[2].y() > ep.y());
+    }
+
+#if 0
+    void test_split_quadratic()
+    {
+        QVector2D sp{20, 30};
+        QVector2D ep{80, 30};
+        double mid_x = 50;
+        QVector2D h{mid_x, 50};
+
+        math::BezierSolver<QVector2D> bs{sp, h, ep};
+        auto split = bs.split_cubic(0.5);
+
+        // First split
+        // Begins with the starting point
+        QCOMPARE(split.first[0], sp);
+        QCOMPARE(split.first[1], sp);
+        // End point should be in the middle of the original
+        QCOMPARE(split.first[3].x(), mid_x);
+        QVERIFY(split.first[3].y() > sp.y());
+        // Second tangent points straight out of the mid point
+        QVERIFY(split.first[2].x() > split.first[1].x());
+        QVERIFY(split.first[2].x() < split.first[3].x());
+        QCOMPARE(split.first[2].y(), split.first[3].y());
+
+        // Second Split
+        // Starts where the other left off
+        QCOMPARE(split.second[0], split.first[3]);
+        // First tangent points straight out of the mid point
+        QVERIFY(split.second[1].x() > split.second[0].x());
+        QVERIFY(split.second[1].x() < split.second[2].x());
+        QCOMPARE(split.second[1].y(), split.second[0].y());
+        // Ends with the original end point
+        QCOMPARE(split.second[3], ep);
+        QCOMPARE(split.second[2], ep);
+    }
+
+
+    void test_split_linear()
+    {
+        QVector2D sp{20, 30};
+        QVector2D ep{80, 130};
+        auto midp = (sp+ep)/2;
+
+        math::BezierSolver<QVector2D> bs{sp, ep};
+        auto split = bs.split_cubic(0.5);
+
+        // First split
+        // Begins with the starting point
+        QCOMPARE(split.first[0], sp);
+        QCOMPARE(split.first[1], sp);
+        // End point should be in the middle of the original
+        QCOMPARE(split.first[3], midp);
+        QCOMPARE(split.first[2], midp);
+        // Second Split
+        // Starts where the other left off
+        QCOMPARE(split.second[0], midp);
+        QCOMPARE(split.second[1], midp);
+        // Ends with the original end point
+        QCOMPARE(split.second[3], ep);
+        QCOMPARE(split.second[2], ep);
+    }
+#endif
+
+    void benchmark_solve()
+    {
+        using VecT = QVector2D;
+        VecT a{20, 30};
+        VecT b{15, 40};
+        VecT c{30, 10};
+        VecT d{40, 15};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        QBENCHMARK{
+            for ( double t = 0; t <= 1; t += 0.01 )
+                bs.solve(t);
+        }
+        // Without cubic optimization
+        //      0.17 msecs per iteration (total: 91, iterations: 512)
+        // With the optimization
+        //      0.017 msecs per iteration (total: 71, iterations: 4096)
+        // 1 order of magnitude difference
+    }
+
+    void benchmark_solve_qvec()
+    {
+        using VecT = QVector2D;
+        VecT a{20, 30};
+        VecT b{15, 40};
+        VecT c{30, 10};
+        VecT d{40, 15};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        QBENCHMARK{
+            for ( double t = 0; t <= 1; t += 0.01 )
+                bs.solve(t);
+        }
+        // Slightly faster but calculating tangents loses significant precision
+        //      0.013 msecs per iteration (total: 57, iterations: 4096)
+    }
+
+    void benchmark_solve_qpointf()
+    {
+        using VecT = QPointF;
+        VecT a{20, 30};
+        VecT b{15, 40};
+        VecT c{30, 10};
+        VecT d{40, 15};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        QBENCHMARK{
+            for ( double t = 0; t <= 1; t += 0.01 )
+                bs.solve(t);
+        }
+        // Slightly faster but calculating tangents loses significant precision
+        //      0.013 msecs per iteration (total: 57, iterations: 4096)
+    }
+#if 0
+    void benchmark_solve_quadratic()
+    {
+        using VecT = QVector2D;
+        VecT a{20, 30};
+        VecT b{15, 40};
+        VecT c{30, 10};
+        math::BezierSolver<VecT> bs{a, b, c};
+        QBENCHMARK{
+            for ( double t = 0; t <= 1; t += 0.01 )
+                bs.solve(t);
+        }
+        // Without optimization
+        //     0.12 msecs per iteration (total: 65, iterations: 512)
+        // With the optimization
+        //     0.013 msecs per iteration (total: 57, iterations: 4096)
+    }
+#endif
+
+    void test_box_line_simple()
+    {
+        using VecT = QPointF;
+        VecT a{20, 30};
+        VecT d{130, 250};
+        math::bezier::CubicBezierSolver<VecT> bs{a, a, d, d};
+        auto bbox = bs.bounds();
+        QCOMPARE(bbox.first, a);
+        QCOMPARE(bbox.second, d);
+    }
+
+    void test_box_line_mix()
+    {
+        using VecT = QPointF;
+        VecT a{130, 30};
+        VecT d{20, 250};
+        math::bezier::CubicBezierSolver<VecT> bs{a, a, d, d};
+        auto bbox = bs.bounds();
+        QCOMPARE(bbox.first, VecT(20, 30));
+        QCOMPARE(bbox.second, VecT(130, 250));
+    }
+
+    void test_box_simple()
+    {
+        using VecT = QPointF;
+        VecT a{20, 30};
+        VecT b{20, 200};
+        VecT c{130, 100};
+        VecT d{130, 250};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto bbox = bs.bounds();
+        QCOMPARE(bbox.first, a);
+        QCOMPARE(bbox.second, d);
+    }
+
+    void test_box_simple_transposed()
+    {
+        using VecT = QPointF;
+        VecT a{30, 20};
+        VecT b{200, 20};
+        VecT c{100, 130};
+        VecT d{250, 130};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto bbox = bs.bounds();
+        QCOMPARE(bbox.first, a);
+        QCOMPARE(bbox.second, d);
+    }
+
+    void test_box()
+    {
+        using VecT = QPointF;
+        VecT a{30, 20};
+        VecT b{-40, 160};
+        VecT c{330, 370};
+        VecT d{250, 130};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto bbox = bs.bounds();
+        FUZZY_COMPARE(bbox.first, VecT(21.1349479424, 20));
+        FUZZY_COMPARE(bbox.second, VecT(261.392510712, 239.272612647));
+    }
+
+    void test_extrema_ends()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{10, 20};
+        VecT c{80, 90};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        QCOMPARE(minmax.first, 0.);
+        QCOMPARE(minmax.second, 1.);
+    }
+
+    void test_extrema_start_mid()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{0, 0};
+        VecT c{50, 200};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        QCOMPARE(minmax.first, 0.);
+        QCOMPARE(minmax.second, 0.8);
+    }
+
+    void test_extrema_end_mid()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{50, -100};
+        VecT c{100, 100};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        QCOMPARE(minmax.first, 0.2);
+        QCOMPARE(minmax.second, 1.);
+    }
+
+    void test_extrema_mid()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{50, -100};
+        VecT c{50, 200};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        QVERIFY(minmax.first < 0.5);
+        QVERIFY(minmax.first > 0);
+        QVERIFY(minmax.second < 1.);
+        QVERIFY(minmax.second > 0.5);
+    }
+
+    void test_extrema_mid_swap()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{00, 300};
+        VecT c{00, -200};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        QVERIFY(minmax.first < 0.5);
+        QVERIFY(minmax.first > 0);
+        QVERIFY(minmax.second < 1.);
+        QVERIFY(minmax.second > 0.5);
+    }
+
+    void test_extrema_mid_values_100()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{100, -100};
+        VecT c{0, 200};
+        VecT d{100, 100};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        float t = 0.146446609407;
+        QCOMPARE(float(minmax.first), t);
+        QCOMPARE(float(minmax.second), 1-t);
+        float x = 32.3223;
+        float y = 20.7107;
+        QCOMPARE(float(bs.solve_component(minmax.first, 0)), x);
+        QCOMPARE(float(bs.solve_component(minmax.first, 1)), -y);
+        QCOMPARE(float(bs.solve_component(minmax.second, 0)), 100-x);
+        QCOMPARE(float(bs.solve_component(minmax.second, 1)), 100+y);
+    }
+
+    void test_extrema_mid_values_1()
+    {
+        using VecT = QPointF;
+        VecT a{0, 0};
+        VecT b{1, -1};
+        VecT c{0, 2};
+        VecT d{1, 1};
+        math::bezier::CubicBezierSolver<VecT> bs{a, b, c, d};
+        auto minmax = bs.extrema(1);
+        float t = 0.146446609407;
+        QCOMPARE(float(minmax.first), t);
+        QCOMPARE(float(minmax.second), 1-t);
+        float x = 0.323223;
+        float y = 0.207107;
+        QCOMPARE(float(bs.solve_component(minmax.first, 0)), x);
+        QCOMPARE(float(bs.solve_component(minmax.first, 1)), -y);
+        QCOMPARE(float(bs.solve_component(minmax.second, 0)), 1-x);
+        QCOMPARE(float(bs.solve_component(minmax.second, 1)), 1+y);
+    }
+};
+
+QTEST_GUILESS_MAIN(TestCase)
+#include "test_bezier_solver.moc"

@@ -1,0 +1,76 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "clipboard_settings.hpp"
+
+#include <QWidget>
+#include <QCheckBox>
+#include <QVBoxLayout>
+#include <QSpacerItem>
+
+#include "glaxnimate_app.hpp"
+#include "glaxnimate/io/io_registry.hpp"
+
+using namespace glaxnimate::gui;
+using namespace glaxnimate;
+
+static std::vector<gui::settings::ClipboardSettings::MimeSettings>& mutable_mime_types()
+{
+    static std::vector<gui::settings::ClipboardSettings::MimeSettings> settings {
+        {io::IoRegistry::instance().serializer_from_slug("glaxnimate"), true, QIcon(GlaxnimateApp::instance()->data_file("images/logo.svg"))},
+        {io::IoRegistry::instance().serializer_from_slug("svg"),        true, QIcon::fromTheme("image-svg+xml")},
+        {io::IoRegistry::instance().serializer_from_slug("raster"),     true, QIcon::fromTheme("image-png")},
+        {io::IoRegistry::instance().serializer_from_slug("json"),       false, QIcon::fromTheme("application-json")},
+    };
+    return settings;
+}
+
+const std::vector<gui::settings::ClipboardSettings::MimeSettings>& gui::settings::ClipboardSettings::mime_types()
+{
+    return mutable_mime_types();
+}
+
+void gui::settings::ClipboardSettings::load(KConfig & settings)
+{
+    auto group = settings.group(slug());
+    for ( auto& set : mutable_mime_types() )
+        if ( set.serializer->slug() != "glaxnimate" )
+            set.enabled = group.readEntry(set.serializer->slug(), set.enabled);
+}
+
+void gui::settings::ClipboardSettings::save(KConfig & settings)
+{
+    auto group = settings.group(slug());
+    for ( auto& set : mutable_mime_types() )
+        if ( set.serializer->slug() != "glaxnimate" )
+            group.writeEntry(set.serializer->slug(), set.enabled);
+}
+
+QWidget * gui::settings::ClipboardSettings::make_widget(QWidget* parent)
+{
+    QWidget* wid = new QWidget(parent);
+    QVBoxLayout* lay = new QVBoxLayout(wid);
+    wid->setLayout(lay);
+
+    for ( auto& mt : mutable_mime_types() )
+    {
+        QCheckBox* check = new QCheckBox(mt.serializer->name(), parent);
+        check->setCheckable(true);
+        check->setChecked(mt.enabled);
+        check->setIcon(mt.icon);
+        if ( mt.serializer->slug() == "glaxnimate" )
+            check->setEnabled(false);
+        else
+            QObject::connect(check, &QCheckBox::clicked, [&mt](bool b){ mt.enabled = b; });
+        lay->addWidget(check);
+    }
+
+    lay->insertStretch(-1);
+
+    return wid;
+}
+
+

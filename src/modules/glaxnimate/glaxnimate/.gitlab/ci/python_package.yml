@@ -1,0 +1,76 @@
+include:
+    - project: sysadmin/ci-utilities
+      file: 
+         - /gitlab-templates/blocks/ci-linux-base.yml
+
+python_build_wheel:
+    stage: build
+    extends: .suse_tumbleweed_qt6stable
+    variables:
+        KDECI_CC_CACHE: /mnt/$KDECI_PLATFORM_PATH/caches/
+        KDECI_CACHE_PATH: /mnt/$KDECI_PLATFORM_PATH/artifacts/
+        KDECI_GITLAB_SERVER: https://invent.kde.org/
+        KDECI_PACKAGE_PROJECT: teams/ci-artifacts/$KDECI_PLATFORM_PATH
+    before_script:
+        - python3 --version
+        - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
+        - git clone https://invent.kde.org/sysadmin/ci-notary-service.git
+        - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
+        - git config --global --add safe.directory $CI_PROJECT_DIR
+        - python3 -u ci-utilities/run-ci-build.py --project $CI_PROJECT_NAME --branch $CI_COMMIT_REF_NAME --platform Linux/Qt6/Shared --only-setup-environment
+    script:
+        - cd _build
+        - python3 -m venv .venv
+        - source .venv/bin/activate
+        #- PYTHONPATH=${CMAKE_BINARY_DIR}/bin/python/build/lib
+        - |
+            if [ -z "$CI_COMMIT_TAG" ] ; then
+                version="$(../deploy/pypi_version_tail.sh)"; else version="git.`date +%Y%m%d%H%M%S`.$CI_COMMIT_BRANCH.$CI_COMMIT_SHORT_SHA";
+            fi
+        - cmake -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR/_install -DVERSION_SUFFIX=$version -DBUILD_WITH_QT6=ON -GNinja ..
+        #- pip install -r src/python/build-requirements.txt
+        - ninja glaxnimate_python_depends_install
+        - ls bin/plugin/python/build/lib
+        - ninja glaxnimate_python
+        - ninja glaxnimate_python_wheel
+    artifacts:
+        paths:
+            - _build/bin/plugin/python/build/lib/
+            - _build/bin/plugin/python/dist/*.whl
+
+pypi_deploy_gitlab:
+    stage: deploy
+    extends: .suse_tumbleweed_qt6stable
+    needs:
+        - job: python_build_wheel
+          artifacts: true
+    before_script:
+    script:
+        - TWINE_PASSWORD=$CI_JOB_TOKEN TWINE_USERNAME=gitlab-ci-token python3 -m twine upload _build/bin/plugin/python/dist/*.whl --repository-url $CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/pypi --verbose
+    rules:
+        # allow to run the job only on master branch
+        - if: $CI_COMMIT_REF_NAME == "master"
+          when: manual
+          # we don't want the manual job to block the pipeline
+          allow_failure: true
+        - when: never
+
+pypi_deploy_pypiorg:
+    stage: deploy
+    extends: .suse_tumbleweed_qt6stable
+    needs:
+        - job: python_build_wheel
+          artifacts: true
+    before_script:
+        - python3 --version
+        - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
+        - git clone https://invent.kde.org/sysadmin/ci-notary-service.git
+    script:
+        - python3 -u ci-notary-service/publishonpypi.py --config ci-utilities/signing/publishonpypi.ini --repository pypi _build/bin/plugin/python/dist
+    rules:
+        # allow to run the job only on mainline branches of mainline repositories
+        - if: $KDECI_SECURE_SERVICES_KEY
+          when: manual
+          # we don't want the manual job to block the pipeline
+          allow_failure: true
+        - when: never

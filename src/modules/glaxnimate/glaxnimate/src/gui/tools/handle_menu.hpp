@@ -1,0 +1,44 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include <QMenu>
+#include <QGraphicsItem>
+
+#include "graphics/item_data.hpp"
+#include "glaxnimate/model/animation/animatable.hpp"
+#include "glaxnimate/model/document.hpp"
+#include "glaxnimate/command/animation_commands.hpp"
+#include "widgets/menus/animated_property_menu.hpp"
+
+
+namespace glaxnimate::gui::tools {
+
+inline void add_property_menu_actions(QMenu* menu, QGraphicsItem* item, SelectionManager* window)
+{
+    bool started = false;
+    for ( const auto& propvariant : item->data(graphics::AssociatedProperty).toList() )
+    {
+        auto prop = propvariant.value<model::AnimatedPropertyBase*>();
+        if ( !prop )
+            continue;
+
+        if ( !started )
+        {
+            menu->addSection(i18n("Properties"));
+            started = true;
+        }
+
+        AnimatedPropertyMenu* sub = new AnimatedPropertyMenu(menu);
+        sub->set_property(prop);
+        sub->set_controller(window);
+        menu->addAction(sub->menuAction());
+
+    }
+}
+
+} // namespace glaxnimate::gui::tools

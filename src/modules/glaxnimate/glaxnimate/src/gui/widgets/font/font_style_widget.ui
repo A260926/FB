@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+SPDX-FileCopyrightText: 2019-2023 Mattia Basaglia <dev@dragon.best>
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+<ui version="4.0">
+ <class>glaxnimate::gui::font::FontStyleWidget</class>
+ <widget class="QWidget" name="glaxnimate::gui::font::FontStyleWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>704</width>
+    <height>480</height>
+   </rect>
+  </property>
+  <layout class="QGridLayout" name="gridLayout" columnstretch="20,5,5">
+   <item row="0" column="0">
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>Font</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Font Style</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="2">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Size</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLineEdit" name="edit_family"/>
+   </item>
+   <item row="1" column="1" rowspan="2">
+    <layout class="QVBoxLayout" name="verticalLayout">
+     <item>
+      <widget class="QListView" name="view_style"/>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="groupBox">
+       <property name="title">
+        <string>Filters</string>
+       </property>
+       <layout class="QFormLayout" name="formLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_4">
+          <property name="text">
+           <string>Writing System</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="combo_system">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label_5">
+          <property name="text">
+           <string>Monospace</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QCheckBox" name="check_monospace">
+          <property name="text">
+           <string notr="true"/>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_6">
+          <property name="text">
+           <string>Proportional</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QCheckBox" name="check_proportional">
+          <property name="text">
+           <string notr="true"/>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item row="1" column="2" rowspan="2">
+    <widget class="glaxnimate::gui::font::FontSizeWidget" name="size_widget" native="true">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QTableView" name="view_family">
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
+     <property name="showGrid">
+      <bool>false</bool>
+     </property>
+     <attribute name="horizontalHeaderVisible">
+      <bool>false</bool>
+     </attribute>
+     <attribute name="verticalHeaderVisible">
+      <bool>false</bool>
+     </attribute>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>glaxnimate::gui::font::FontSizeWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/font/font_size_widget.hpp</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>edit_family</tabstop>
+  <tabstop>view_family</tabstop>
+  <tabstop>view_style</tabstop>
+  <tabstop>combo_system</tabstop>
+  <tabstop>check_monospace</tabstop>
+  <tabstop>check_proportional</tabstop>
+ </tabstops>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>edit_family</sender>
+   <signal>textEdited(QString)</signal>
+   <receiver>glaxnimate::gui::font::FontStyleWidget</receiver>
+   <slot>family_edited(QString)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>159</x>
+     <y>41</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>0</x>
+     <y>45</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>combo_system</sender>
+   <signal>activated(int)</signal>
+   <receiver>glaxnimate::gui::font::FontStyleWidget</receiver>
+   <slot>system_changed(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>576</x>
+     <y>412</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>703</x>
+     <y>479</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>check_monospace</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>glaxnimate::gui::font::FontStyleWidget</receiver>
+   <slot>filter_flags_changed()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>508</x>
+     <y>438</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>595</x>
+     <y>479</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>check_proportional</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>glaxnimate::gui::font::FontStyleWidget</receiver>
+   <slot>filter_flags_changed()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>508</x>
+     <y>464</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>567</x>
+     <y>479</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>view_family</sender>
+   <signal>clicked(QModelIndex)</signal>
+   <receiver>glaxnimate::gui::font::FontStyleWidget</receiver>
+   <slot>family_clicked(QModelIndex)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>145</x>
+     <y>169</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>605</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>family_edited(QString)</slot>
+  <slot>family_selected(QModelIndex)</slot>
+  <slot>style_selected(QModelIndex)</slot>
+  <slot>size_edited(double)</slot>
+  <slot>size_selected(QModelIndex)</slot>
+  <slot>filter_flags_changed()</slot>
+  <slot>system_changed(int)</slot>
+  <slot>family_clicked(QModelIndex)</slot>
+ </slots>
+</ui>

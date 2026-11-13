@@ -1,0 +1,298 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include "glaxnimate/command/base.hpp"
+#include "glaxnimate/model/animation/animatable.hpp"
+#include "glaxnimate/model/document.hpp"
+#include "glaxnimate/model/object.hpp"
+
+namespace glaxnimate::command {
+
+class SetKeyframe : public MergeableCommand<Id::SetKeyframe, SetKeyframe>
+{
+public:
+    SetKeyframe(
+        model::AnimatedPropertyBase* prop,
+        model::FrameTime time,
+        const QVariant& value,
+        bool commit,
+        QUndoCommand* parent
+    );
+
+    static QString command_name(model::AnimatableBase* prop, model::FrameTime time);
+
+    void undo() override;
+
+    void redo() override;
+
+    bool merge_with(const SetKeyframe& other);
+
+private:
+    model::AnimatedPropertyBase* prop;
+    model::FrameTime time;
+    QVariant before;
+    QVariant after;
+    bool had_before;
+    bool calculated = false;
+    model::KeyframeTransition trans_before;
+    model::KeyframeTransition left;
+    model::KeyframeTransition right;
+    bool adjust_transition = false;
+};
+
+class RemoveKeyframeTime : public QUndoCommand
+{
+public:
+    RemoveKeyframeTime(
+        model::AnimatedPropertyBase* prop,
+        model::FrameTime time,
+        QUndoCommand* parent
+    );
+
+    static QString command_name(model::AnimatableBase* prop, model::FrameTime time);
+
+    void undo() override;
+
+    void redo() override;
+
+private:
+    model::AnimatedPropertyBase* prop;
+    model::FrameTime time;
+    QVariant before;
+    model::KeyframeTransition prev_transition_before;
+    model::KeyframeTransition prev_transition_after;
+    model::KeyframeTransition transition_before;
+};
+
+class RemoveAllKeyframes : public QUndoCommand
+{
+public:
+    RemoveAllKeyframes(model::AnimatedPropertyBase* prop, QVariant value, QUndoCommand* parent);
+
+    static QString command_name(model::AnimatableBase* prop);
+
+    void undo() override;
+
+    void redo() override;
+
+private:
+    struct Keframe
+    {
+        model::FrameTime time;
+        QVariant value;
+        model::KeyframeTransition transition;
+    };
+    model::AnimatedPropertyBase* prop;
+    std::vector<Keframe> keyframes;
+    QVariant before;
+    QVariant after;
+};
+
+
+/**
+ * \brief Command that sets multiple animated properties at once,
+ * setting keyframes based on the document record_to_keyframe
+ */
+class SetMultipleAnimated : public MergeableCommand<Id::SetMultipleAnimated, SetMultipleAnimated>
+{
+public:
+    SetMultipleAnimated(model::AnimatedPropertyBase* prop, QVariant after, bool commit);
+
+    template<class... Args>
+    SetMultipleAnimated(
+        const QString& name,
+        bool commit,
+        const std::vector<model::AnimatedPropertyBase*>& props,
+        Args... vals
+    ) : SetMultipleAnimated(
+            name,
+            std::vector<model::AnimatedPropertyBase*>(props.begin(), props.end()),
+            {}, {QVariant::fromValue(vals)...}, commit,
+            props.empty() ?  0 : props[0]->time(),
+            props.empty() ? false : props[0]->object()->document()->record_to_keyframe()
+    )
+    {}
+
+    /**
+     * \pre props.size() == after.size() && (props.size() == before.size() || before.empty())
+     *
+     * If before.empty() it will be populated by the properties
+     */
+    SetMultipleAnimated(
+        const QString& name,
+        const std::vector<model::AnimatedPropertyBase*>& props,
+        const QVariantList& before,
+        const QVariantList& after,
+        bool commit,
+        model::FrameTime time,
+        bool record_to_keyframe
+    );
+
+    SetMultipleAnimated(const QString& name, bool commit);
+
+    void push_property(model::AnimatedPropertyBase* prop, const QVariant& after);
+    void push_property_not_animated(model::BaseProperty* prop, const QVariant& after);
+
+    void undo() override;
+
+    void redo() override;
+
+    bool merge_with(const SetMultipleAnimated& other);
+
+    const std::vector<model::AnimatedPropertyBase*>& properties() const { return props; }
+
+    bool empty() const;
+
+private:
+    static QString auto_name(model::AnimatedPropertyBase* prop);
+
+    std::vector<model::AnimatedPropertyBase*> props;
+    QVariantList before;
+    QVariantList after;
+    std::vector<int> keyframe_before;
+    bool keyframe_after_global;
+    std::vector<int> keyframe_after;
+    model::FrameTime time;
+    std::vector<bool> add_0;
+    std::vector<model::BaseProperty*> props_not_animated;
+};
+
+
+class SetKeyframeTransition: public QUndoCommand
+{
+public:
+    SetKeyframeTransition(
+        model::AnimatedPropertyBase* prop,
+        model::FrameTime time,
+        const model::KeyframeTransition& transition,
+        QUndoCommand* parent
+    );
+
+
+    void undo() override;
+    void redo() override;
+
+    static model::KeyframeTransition transition_side(
+        model::AnimatedPropertyBase* prop,
+        model::FrameTime time,
+        model::KeyframeTransition::Descriptive desc,
+        const QPointF& point,
+        bool before_transition
+    );
+
+private:
+    model::AnimatedPropertyBase* prop;
+    model::FrameTime time;
+    model::KeyframeTransition undo_value;
+    model::KeyframeTransition redo_value;
+};
+
+class MoveKeyframe : public QUndoCommand
+{
+public:
+    MoveKeyframe(
+        model::AnimatedPropertyBase* prop,
+        model::FrameTime time_before,
+        model::FrameTime time_after,
+        QUndoCommand* parent
+    );
+
+    void undo() override;
+
+    void redo() override;
+
+private:
+    model::AnimatedPropertyBase* prop;
+    model::FrameTime time_before;
+    model::FrameTime time_after;
+
+};
+
+class StretchTimeCommand: public QUndoCommand
+{
+public:
+    /**
+     * \pre multiplier > 0
+     */
+    StretchTimeCommand(model::Object* target, qreal multiplier)
+        : QUndoCommand(i18n("Stretch Time")),
+          target(target),
+          multiplier(multiplier)
+    {}
+
+    void undo() override
+    {
+        target->stretch_time(1/multiplier);
+        target->set_time(target->document()->current_time());
+    }
+
+    void redo() override
+    {
+        target->stretch_time(multiplier);
+        target->set_time(target->document()->current_time());
+    }
+
+private:
+    model::Object* target;
+    qreal multiplier;
+};
+
+/**
+ * \brief Command that sets the path of an animated position
+ */
+class SetPositionBezier : public MergeableCommand<Id::SetMultipleAnimated, SetPositionBezier>
+{
+public:
+    SetPositionBezier(model::detail::AnimatedPropertyPosition* prop, math::bezier::Bezier after, bool commit, const QString& name = "");
+    SetPositionBezier(model::detail::AnimatedPropertyPosition* prop, math::bezier::Bezier before, math::bezier::Bezier after, bool commit, const QString& name = "");
+
+    void undo() override;
+
+    void redo() override;
+
+    bool merge_with(const SetPositionBezier& other);
+
+private:
+    model::detail::AnimatedPropertyPosition* property;
+    math::bezier::Bezier before;
+    math::bezier::Bezier after;
+};
+
+
+/**
+ * \brief Undo command whose children are done and undone in custom order
+ */
+class ReorderedUndoCommand : public QUndoCommand
+{
+public:
+    using QUndoCommand::QUndoCommand;
+
+    void add_command(std::unique_ptr<QUndoCommand> cmd, int order_redo, int order_undo)
+    {
+        undo_map[order_undo] = cmd.get();
+        redo_map[order_redo] = std::move(cmd);
+    }
+
+    void undo() override
+    {
+        for ( const auto& p : undo_map )
+            p.second->undo();
+    }
+
+    void redo() override
+    {
+        for ( const auto& p : redo_map )
+            p.second->redo();
+    }
+
+private:
+    std::map<int, std::unique_ptr<QUndoCommand>> redo_map;
+    std::map<int, QUndoCommand*> undo_map;
+};
+
+} // namespace glaxnimate::command

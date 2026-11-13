@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# Simple example of using Glaxnimate as a plain renderer
+
+cmake_minimum_required (VERSION 3.16 FATAL_ERROR)
+
+project(GlaxnimateLibExample LANGUAGES CXX)
+
+# C++
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_BUILD_TYPE "Debug")
+
+# Glaxnimate lib minimal options
+add_subdirectory(../src/core  ${CMAKE_CURRENT_BINARY_DIR}/lib)
+
+# Defining the target
+
+add_executable(lib_example main.cpp)
+target_link_libraries(lib_example Glaxnimate::Core)

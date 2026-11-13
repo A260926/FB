@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+SPDX-FileCopyrightText: 2019-2023 Mattia Basaglia <dev@dragon.best>
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+<ui version="4.0">
+ <class>glaxnimate::android::MainWindow</class>
+ <widget class="QMainWindow" name="glaxnimate::android::MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>718</width>
+    <height>881</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Glaxnimate</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <item row="1" column="3" rowspan="2">
+     <widget class="glaxnimate::gui::StrokeStyleWidget" name="stroke_style_widget" native="true"/>
+    </item>
+    <item row="1" column="4" rowspan="2">
+     <widget class="glaxnimate::gui::FillStyleWidget" name="fill_style_widget" native="true"/>
+    </item>
+    <item row="1" column="2" rowspan="2">
+     <widget class="QScrollArea" name="property_widget">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::Shape::NoFrame</enum>
+      </property>
+      <property name="verticalScrollBarPolicy">
+       <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <widget class="QWidget" name="property_widgets_inner">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>144</width>
+         <height>295</height>
+        </rect>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>6</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <layout class="QVBoxLayout" name="property_widget_layout">
+          <item>
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QWidget" name="time_container" native="true">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <layout class="QVBoxLayout" name="time_container_layout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="glaxnimate::gui::FrameControlsWidget" name="play_controls" native="true"/>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="0" column="0" rowspan="2">
+     <widget class="QWidget" name="widget_tools_container_side" native="true"/>
+    </item>
+    <item row="3" column="0" colspan="5">
+     <widget class="QWidget" name="widget_tools_container_bottom" native="true">
+      <layout class="QVBoxLayout" name="layout_tools_container">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QWidget" name="widget_actions" native="true"/>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="0" column="1" colspan="4">
+     <widget class="QWidget" name="widget_edit_actions" native="true"/>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>glaxnimate::gui::FrameControlsWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/timeline/frame_controls_widget.hpp</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>glaxnimate::gui::FillStyleWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/shape_style/fill_style_widget.hpp</header>
+   <container>1</container>
+   <slots>
+    <signal>secondary_color_changed(QColor)</signal>
+    <slot>set_secondary_color(QColor)</slot>
+   </slots>
+  </customwidget>
+  <customwidget>
+   <class>glaxnimate::gui::StrokeStyleWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/shape_style/stroke_style_widget.hpp</header>
+   <container>1</container>
+   <slots>
+    <signal>color_changed(QColor)</signal>
+    <slot>set_color(QColor)</slot>
+   </slots>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

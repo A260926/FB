@@ -1,0 +1,32 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include <QAbstractItemView>
+
+namespace glaxnimate::gui {
+
+class ValueDragEventFilter : public QObject
+{
+    Q_OBJECT
+
+public:
+    ValueDragEventFilter(QAbstractItemView* view, int column);
+    ~ValueDragEventFilter();
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+Q_SIGNALS:
+    void clicked(const QModelIndex& index);
+
+private:
+    class Private;
+    std::unique_ptr<Private> d;
+};
+
+} // namespace glaxnimate::gui

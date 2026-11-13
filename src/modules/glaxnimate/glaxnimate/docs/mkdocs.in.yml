@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2019-2023 Mattia Basaglia <dev@dragon.best>
+# SPDX-License-Identifier: CC-BY-SA-4.0
+site_name: Glaxnimate
+site_description: Glaxnimate is a simple and fast vector graphics animation program.
+copyright: Copyright (C) 2019-2023
+extra:
+    version: ${PROJECT_VERSION}
+    name: ${PROJECT_NAME}
+theme:
+    name: cinder
+    custom_dir: theme
+    highlightjs: false
+repo_url: ${DOCS_REPO_URL}
+edit_uri: -/edit/master/docs/docs
+use_directory_urls: true
+site_url: ${DOCS_SITE_URL}
+markdown_extensions:
+    - fontawesome_markdown
+    - md_extensions
+extra_css:
+    - /style/style.css
+plugins:
+    - mkdocs-simple-hooks:
+        hooks:
+            on_env: "mkdocs_plugin:on_env"
+nav:
+    - "Start": index.md
+    - "Scripting Reference": contributing/scripting/python_reference.md
+    - "File Format": json_reference.md
+    - "Homepage": https://glaxnimate.org

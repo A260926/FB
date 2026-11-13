@@ -1,0 +1,55 @@
+/*
+ * SPDX-FileCopyrightText: 2019-2026 Mattia Basaglia <dev@dragon.best>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include "base.hpp"
+
+#include "glaxnimate/model/shapes/style/fill.hpp"
+#include "glaxnimate/model/shapes/composable/group.hpp"
+#include "glaxnimate/model/shapes/style/stroke.hpp"
+#include "glaxnimate/command/shape_commands.hpp"
+
+#include "widgets/tools/shape_tool_widget.hpp"
+#include "glaxnimate/command/undo_macro_guard.hpp"
+
+
+namespace glaxnimate::gui::tools {
+
+class DrawToolBase : public Tool
+{
+public:
+    QCursor cursor() override { return Qt::CrossCursor; }
+
+protected:
+    ToolWidgetBase* on_create_widget() override
+    {
+        return new ShapeToolWidget();
+    }
+
+    void draw_shape(const PaintEvent& event, const QPainterPath& path);
+
+    void create_shape(const QString& command_name, const Event& event,
+                      std::unique_ptr<model::ShapeElement> shape);
+
+    ShapeToolWidget* widget()
+    {
+        return static_cast<ShapeToolWidget*>(get_settings_widget());
+    }
+
+
+    void shape_style_change_event(const glaxnimate::gui::tools::Event & event) override;
+
+private:
+
+    model::ShapeListProperty* get_container(glaxnimate::gui::SelectionManager* window)
+    {
+        return window->current_shape_container();
+    }
+
+};
+
+} // namespace glaxnimate::gui::tools
