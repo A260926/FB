@@ -1,0 +1,65 @@
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+project(LNLibary)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "" FORCE)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMakePredefinedTargets")
+
+# Multi-config generators (Visual Studio, Ninja Multi-Config) get a per-config
+# layout (build/<Config>/); single-config generators (Makefiles, Ninja) get a
+# fixed bin/lib layout. Test with CMAKE_GENERATOR, not CMAKE_CONFIGURATION_TYPES,
+# since the latter is force-set as a CACHE variable above and would not be empty
+# on single-config generators.
+if(CMAKE_GENERATOR MATCHES "Visual Studio|Ninja Multi-Config")
+    foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/$<CONFIG>)
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/$<CONFIG>)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/$<CONFIG>)
+    endforeach()
+else()
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+endif()
+
+macro(SUBDIRLIST result curdir)
+    file(GLOB_RECURSE children LIST_DIRECTORIES true RELATIVE ${curdir} ${curdir}/*)
+    set(dirlist "")
+    foreach(child ${children})
+        if(IS_DIRECTORY ${curdir}/${child})
+            list(APPEND dirlist ${child})
+        endif()
+    endforeach()
+
+    set(${result} ${dirlist})
+endmacro(SUBDIRLIST)
+
+add_subdirectory(src/LNLib)
+set_target_properties(LNLib PROPERTIES FOLDER "Kernel")
+
+option(ENABLE_UNIT_TESTS "Enable unit tests" ON)
+if(ENABLE_UNIT_TESTS)
+    set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Tests)
+    add_subdirectory(tests)
+    set_target_properties(Tests PROPERTIES FOLDER "Kernel")
+endif()
+
+option(ENABLE_PYTHON_API "Enable Python API" OFF)
+if(ENABLE_PYTHON_API)
+    add_subdirectory(python)
+    set_target_properties(PyLNLib PROPERTIES FOLDER "LNLibAPI/PythonAPI")
+endif()
+
+option(ENABLE_DOTNET_API "Enable .NET API" OFF)
+if(ENABLE_DOTNET_API)
+    add_subdirectory(dotnet/CAPI)
+    set_target_properties(LNLibCApi PROPERTIES FOLDER "LNLibAPI/CAPI")
+    add_subdirectory(dotnet/PInvoke)
+    set_target_properties(LNLibSharp PROPERTIES FOLDER "LNLibAPI/DotNetAPI")
+    add_subdirectory(dotnet/DotNetTest)
+    set_target_properties(DotNetTests PROPERTIES FOLDER "LNLibAPI/DotNetAPI")
+endif()
+
