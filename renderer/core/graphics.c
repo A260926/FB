@@ -56,7 +56,7 @@ void framebuffer_clear_depth(framebuffer_t *framebuffer, float depth) {
 
 /* program management */
 
-#define MAX_VARYINGS 10
+#define MAX_VARYINGS 12
 
 struct program {
     vertex_shader_t *vertex_shader;
@@ -75,6 +75,9 @@ struct program {
     vec4_t out_coords[MAX_VARYINGS];
     void *in_varyings[MAX_VARYINGS];
     void *out_varyings[MAX_VARYINGS];
+    /* user-defined homogeneous clip plane */
+    vec4_t clip_plane;
+    int clip_plane_enabled;
 };
 
 program_t *program_create(
@@ -96,6 +99,7 @@ program_t *program_create(
     program->sizeof_uniforms = sizeof_uniforms;
     program->double_sided = double_sided;
     program->enable_blend = enable_blend;
+    program->clip_plane_enabled = 0;
 
     for (i = 0; i < 3; i++) {
         program->shader_attribs[i] = malloc(sizeof_attribs);
@@ -136,6 +140,16 @@ void *program_get_attribs(program_t *program, int nth_vertex) {
 
 void *program_get_uniforms(program_t *program) {
     return program->shader_uniforms;
+}
+
+void program_set_clip_plane(program_t *program, const vec4_t *plane) {
+    if (plane != NULL) {
+        program->clip_plane = *plane;
+        program->clip_plane_enabled = 1;
+    } else {
+        program->clip_plane_enabled = 0;
+        program->clip_plane = vec4_new(0, 0, 0, 0);
+    }
 }
 
 /* graphics pipeline */
@@ -270,18 +284,78 @@ static int clip_against_plane(
         }                                                                   \
     } while (0)
 
+static float plane_distance(vec4_t plane, vec4_t coord) {
+    return plane.x * coord.x + plane.y * coord.y +
+           plane.z * coord.z + plane.w * coord.w;
+}
+
+/*
+ * clip against a user-defined homogeneous plane.
+ * a point is kept while dot(plane, clip_position) >= 0. like the frustum
+ * clipping, the interpolation happens in clip space so the new vertices
+ * keep perspective-correct varyings.
+ */
+static int clip_against_user_plane(
+        vec4_t plane, int in_num_vertices, int varying_num_floats,
+        vec4_t in_coords[MAX_VARYINGS], void *in_varyings[MAX_VARYINGS],
+        vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS]) {
+    int out_num_vertices = 0;
+    int i, j;
+
+    assert(in_num_vertices >= 3 && in_num_vertices <= MAX_VARYINGS);
+    for (i = 0; i < in_num_vertices; i++) {
+        int prev_index = (i - 1 + in_num_vertices) % in_num_vertices;
+        int curr_index = i;
+        vec4_t prev_coord = in_coords[prev_index];
+        vec4_t curr_coord = in_coords[curr_index];
+        float *prev_varyings = (float*)in_varyings[prev_index];
+        float *curr_varyings = (float*)in_varyings[curr_index];
+        float prev_distance = plane_distance(plane, prev_coord);
+        float curr_distance = plane_distance(plane, curr_coord);
+        int prev_inside = prev_distance >= 0;
+        int curr_inside = curr_distance >= 0;
+
+        if (prev_inside != curr_inside) {
+            vec4_t *dest_coord = &out_coords[out_num_vertices];
+            float *dest_varyings = (float*)out_varyings[out_num_vertices];
+            float ratio = prev_distance / (prev_distance - curr_distance);
+
+            *dest_coord = vec4_lerp(prev_coord, curr_coord, ratio);
+            for (j = 0; j < varying_num_floats; j++) {
+                dest_varyings[j] = float_lerp(prev_varyings[j],
+                                              curr_varyings[j],
+                                              ratio);
+            }
+            out_num_vertices += 1;
+        }
+
+        if (curr_inside) {
+            vec4_t *dest_coord = &out_coords[out_num_vertices];
+            float *dest_varyings = (float*)out_varyings[out_num_vertices];
+            int sizeof_varyings = varying_num_floats * sizeof(float);
+
+            *dest_coord = curr_coord;
+            memcpy(dest_varyings, curr_varyings, sizeof_varyings);
+            out_num_vertices += 1;
+        }
+    }
+    assert(out_num_vertices <= MAX_VARYINGS);
+    return out_num_vertices;
+}
+
 static int is_vertex_visible(vec4_t v) {
     return fabs(v.x) <= v.w && fabs(v.y) <= v.w && fabs(v.z) <= v.w;
 }
 
 static int clip_triangle(
-        int sizeof_varyings,
+        program_t *program,
         vec4_t in_coords[MAX_VARYINGS], void *in_varyings[MAX_VARYINGS],
         vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS]) {
+    int sizeof_varyings = program->sizeof_varyings;
     int v0_visible = is_vertex_visible(in_coords[0]);
     int v1_visible = is_vertex_visible(in_coords[1]);
     int v2_visible = is_vertex_visible(in_coords[2]);
-    if (v0_visible && v1_visible && v2_visible) {
+    if (v0_visible && v1_visible && v2_visible && !program->clip_plane_enabled) {
         out_coords[0] = in_coords[0];
         out_coords[1] = in_coords[1];
         out_coords[2] = in_coords[2];
@@ -299,6 +373,22 @@ static int clip_triangle(
         CLIP_IN2OUT(NEGATIVE_Y);
         CLIP_OUT2IN(POSITIVE_Z);
         CLIP_IN2OUT(NEGATIVE_Z);
+        if (program->clip_plane_enabled) {
+            /* frustum clipping leaves the polygon in out_*; move it
+             * through the user plane back into in_*, then restore out_*
+             * so the caller sees the final polygon in its usual place */
+            int i;
+            num_vertices = clip_against_user_plane(
+                program->clip_plane, num_vertices, varying_num_floats,
+                out_coords, out_varyings, in_coords, in_varyings);
+            if (num_vertices < 3) {
+                return 0;
+            }
+            for (i = 0; i < num_vertices; i++) {
+                out_coords[i] = in_coords[i];
+                memcpy(out_varyings[i], in_varyings[i], sizeof_varyings);
+            }
+        }
         return num_vertices;
     }
 }
@@ -534,7 +624,7 @@ void graphics_draw_triangle(framebuffer_t *framebuffer, program_t *program) {
     }
 
     /* triangle clipping */
-    num_vertices = clip_triangle(program->sizeof_varyings,
+    num_vertices = clip_triangle(program,
                                  program->in_coords, program->in_varyings,
                                  program->out_coords, program->out_varyings);
 

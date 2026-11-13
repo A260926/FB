@@ -29,6 +29,15 @@ void program_release(program_t *program);
 void *program_get_attribs(program_t *program, int nth_vertex);
 void *program_get_uniforms(program_t *program);
 
+/*
+ * user-defined clipping plane in homogeneous clip space.
+ * when enabled, a vertex is kept while dot(plane, clip_position) >= 0.
+ * pass NULL to disable it. the plane is copied, so the caller's vector
+ * can be reused afterwards. this works alongside the standard frustum
+ * clipping, and clipped varyings stay perspective-correct.
+ */
+void program_set_clip_plane(program_t *program, const vec4_t *plane);
+
 /* graphics pipeline */
 void graphics_draw_triangle(framebuffer_t *framebuffer, program_t *program);
 

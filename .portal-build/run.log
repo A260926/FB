@@ -1,0 +1,49 @@
+OLD_SCENE_DRAW kind=0 covered=128 center-depth=0.562500 rgb=255,0,0
+OLD_SCENE_DRAW kind=1 covered=128 center-depth=0.562500 rgb=176,24,24
+OLD_SCENE_DRAW kind=2 covered=128 center-depth=0.562500 rgb=179,0,0
+OLD_ALPHA_CUTOFF depth-untouched=1024
+RENDERER_BASELINE_COMPLETE materials=3 cutoff=1 upstream=test_draw_scene
+CASE_START view-mapping virtual-camera-mapping
+CASE_PASS view-mapping virtual-camera-mapping checks=8
+CASE_START view-mapping rotated-door-asymmetric-frustum
+CASE_PASS view-mapping rotated-door-asymmetric-frustum checks=9
+CASE_START view-mapping backface-invisible
+CASE_PASS view-mapping backface-invisible checks=3
+GROUP_PASS view-mapping cases=3 checks=20
+CASE_START clip-and-occlusion exit-plane-clipping
+CASE_PASS clip-and-occlusion exit-plane-clipping checks=3
+CASE_START clip-and-occlusion crossing-triangle-clip
+CASE_PASS clip-and-occlusion crossing-triangle-clip checks=4
+CASE_START clip-and-occlusion near-occlusion
+CASE_PASS clip-and-occlusion near-occlusion checks=4
+CASE_START clip-and-occlusion behind-door-loses
+CASE_PASS clip-and-occlusion behind-door-loses checks=2
+CASE_START clip-and-occlusion door-crosses-screen-edge
+CASE_PASS clip-and-occlusion door-crosses-screen-edge checks=4
+CASE_START clip-and-occlusion alpha-cutoff
+CASE_PASS clip-and-occlusion alpha-cutoff checks=7
+CASE_START clip-and-occlusion overlapping-door-order
+CASE_PASS clip-and-occlusion overlapping-door-order checks=4
+GROUP_PASS clip-and-occlusion cases=7 checks=28
+CASE_START recursion-and-state recursion-depth-limits
+CASE_PASS recursion-and-state recursion-depth-limits checks=14
+CASE_START recursion-and-state cycle-termination
+CASE_PASS recursion-and-state cycle-termination checks=13
+CASE_START recursion-and-state sibling-isolation
+CASE_PASS recursion-and-state sibling-isolation checks=5
+CASE_START recursion-and-state all-materials-used
+CASE_PASS recursion-and-state all-materials-used checks=4
+CASE_START recursion-and-state state-restore-old-path
+CASE_PASS recursion-and-state state-restore-old-path checks=7
+CASE_START recursion-and-state invalid-arguments
+CASE_PASS recursion-and-state invalid-arguments checks=28
+CASE_START recursion-and-state reuse-frames-scenes
+CASE_PASS recursion-and-state reuse-frames-scenes checks=7
+CASE_START recursion-and-state zero-portals
+CASE_PASS recursion-and-state zero-portals checks=2
+GROUP_PASS recursion-and-state cases=8 checks=80
+PORTAL_TARGET_COMPLETE groups=3 cases=18 checks=128
+wrote .portal-build/images/depth0.ppm
+wrote .portal-build/images/depth1.ppm
+wrote .portal-build/images/depth2.ppm
+PORTAL_DEMO_COMPLETE images=3
