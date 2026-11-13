@@ -30,6 +30,7 @@
 #include "nvramparser.h"
 #include "meparser.h"
 #include "fitparser.h"
+#include "depex.h"
 
 #include "digest/sha1.h"
 #include "digest/sha2.h"
@@ -3498,20 +3499,20 @@ USTATUS FfsParser::parseDepexSectionBody(const UModelIndex & index)
     // Sanity check
     if (!index.isValid())
         return U_INVALID_PARAMETER;
-    
+
     UByteArray body = model->body(index);
-    UString parsed;
-    
+
     // Check data to be present
     if (body.size() < 2) { // 2 is a minimal sane value, i.e TRUE + END
         msg(usprintf("%s: DEPEX section too short", __FUNCTION__), index);
         return U_DEPEX_PARSE_FAILED;
     }
-    
+
     const EFI_GUID * guid;
     const UINT8* current = (const UINT8*)body.constData();
-    
-    // Special cases of first opcode
+
+    // Special cases of first opcode. BEFORE/AFTER ordering dependencies are
+    // not part of the strict boolean decoder and keep their historical text.
     switch (*current) {
         case EFI_DEP_BEFORE:
             if (body.size() != 2 * EFI_DEP_OPCODE_SIZE + sizeof(EFI_GUID)) {
@@ -3519,7 +3520,8 @@ USTATUS FfsParser::parseDepexSectionBody(const UModelIndex & index)
                 return U_SUCCESS;
             }
             guid = (const EFI_GUID*)(current + EFI_DEP_OPCODE_SIZE);
-            parsed += UString("\nBEFORE ") + guidToUString(readUnaligned(guid));
+            // Keep the historical text exactly, including the missing prefix.
+            model->addInfo(index, UString("\nBEFORE ") + guidToUString(readUnaligned(guid)));
             current += EFI_DEP_OPCODE_SIZE + sizeof(EFI_GUID);
             if (*current != EFI_DEP_END){
                 msg(usprintf("%s: DEPEX section ends with non-END opcode", __FUNCTION__), index);
@@ -3533,7 +3535,8 @@ USTATUS FfsParser::parseDepexSectionBody(const UModelIndex & index)
                 return U_SUCCESS;
             }
             guid = (const EFI_GUID*)(current + EFI_DEP_OPCODE_SIZE);
-            parsed += UString("\nAFTER ") + guidToUString(readUnaligned(guid));
+            // Keep the historical text exactly, including the missing prefix.
+            model->addInfo(index, UString("\nAFTER ") + guidToUString(readUnaligned(guid)));
             current += EFI_DEP_OPCODE_SIZE + sizeof(EFI_GUID);
             if (*current != EFI_DEP_END) {
                 msg(usprintf("%s: DEPEX section ends with non-END opcode", __FUNCTION__), index);
@@ -3541,81 +3544,21 @@ USTATUS FfsParser::parseDepexSectionBody(const UModelIndex & index)
             }
             // No further parsing required
             return U_SUCCESS;
-        case EFI_DEP_SOR:
-            if (body.size() <= 2 * EFI_DEP_OPCODE_SIZE) {
-                msg(usprintf("%s: DEPEX section too short for a section starting with SOR opcode", __FUNCTION__), index);
-                return U_SUCCESS;
-            }
-            parsed += UString("\nSOR");
-            current += EFI_DEP_OPCODE_SIZE;
-            break;
     }
-    
-    // Parse the rest of depex
-    while (current - (const UINT8*)body.constData() < body.size()) {
-        switch (*current) {
-            case EFI_DEP_BEFORE: {
-                msg(usprintf("%s: misplaced BEFORE opcode", __FUNCTION__), index);
-                return U_SUCCESS;
-            }
-            case EFI_DEP_AFTER: {
-                msg(usprintf("%s: misplaced AFTER opcode", __FUNCTION__), index);
-                return U_SUCCESS;
-            }
-            case EFI_DEP_SOR: {
-                msg(usprintf("%s: misplaced SOR opcode", __FUNCTION__), index);
-                return U_SUCCESS;
-            }
-            case EFI_DEP_PUSH:
-                // Check that the rest of depex has correct size
-                if ((UINT32)body.size() - (UINT32)(current - (const UINT8*)body.constData()) <= EFI_DEP_OPCODE_SIZE + sizeof(EFI_GUID)) {
-                    parsed.clear();
-                    msg(usprintf("%s: the rest of DEPEX section too short for PUSH opcode", __FUNCTION__), index);
-                    return U_SUCCESS;
-                }
-                guid = (const EFI_GUID*)(current + EFI_DEP_OPCODE_SIZE);
-                parsed += UString("\nPUSH ") + guidToUString(readUnaligned(guid));
-                current += EFI_DEP_OPCODE_SIZE + sizeof(EFI_GUID);
-                break;
-            case EFI_DEP_AND:
-                parsed += UString("\nAND");
-                current += EFI_DEP_OPCODE_SIZE;
-                break;
-            case EFI_DEP_OR:
-                parsed += UString("\nOR");
-                current += EFI_DEP_OPCODE_SIZE;
-                break;
-            case EFI_DEP_NOT:
-                parsed += UString("\nNOT");
-                current += EFI_DEP_OPCODE_SIZE;
-                break;
-            case EFI_DEP_TRUE:
-                parsed += UString("\nTRUE");
-                current += EFI_DEP_OPCODE_SIZE;
-                break;
-            case EFI_DEP_FALSE:
-                parsed += UString("\nFALSE");
-                current += EFI_DEP_OPCODE_SIZE;
-                break;
-            case EFI_DEP_END:
-                parsed += UString("\nEND");
-                current += EFI_DEP_OPCODE_SIZE;
-                // Check that END is the last opcode
-                if (current - (const UINT8*)body.constData() < body.size()) {
-                    parsed.clear();
-                    msg(usprintf("%s: DEPEX section ends with non-END opcode", __FUNCTION__), index);
-                }
-                break;
-            default:
-                msg(usprintf("%s: unknown opcode %02Xh", __FUNCTION__, *current), index);
-                // No further parsing required
-                return U_SUCCESS;
-        }
+
+    // Every other dependency stream goes through the single strict decoder
+    // shared with the offline dispatch analyzer; no second opcode consumer.
+    Depex::DecodedDepex decoded;
+    Depex::DecodeError error;
+    if (!Depex::decode(body, decoded, error)) {
+        msg(usprintf("%s: ", __FUNCTION__) + error.message
+            + usprintf(" at DEPEX body offset %u", error.offset), index);
+        return U_SUCCESS;
     }
-    
-    // Add info
-    model->addInfo(index, UString("\nParsed expression:") + parsed);
-    
+
+    // Add info, keeping the historical one-opcode-per-line text order
+    model->addInfo(index, UString("\nParsed expression:") + Depex::renderText(decoded));
+
     return U_SUCCESS;
 }
 

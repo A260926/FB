@@ -26,6 +26,7 @@ SET(PROJECT_SOURCES
  ../common/nvramparser.cpp
  ../common/meparser.cpp
  ../common/ffsparser.cpp
+ ../common/depex.cpp
  ../common/amd_microcode.cpp
  ../common/fitparser.cpp
  ../common/peimage.cpp
