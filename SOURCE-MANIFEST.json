@@ -1,0 +1,554 @@
+{
+  "upstream_repo": "https://github.com/andybalholm/cascadia",
+  "upstream_commit": "dde0a32a85c32b71237794bacd53f56d2b25d918",
+  "dependencies": [
+    {
+      "prefix": "vendor/golang.org/x/net/",
+      "source": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip",
+      "version": "v0.55.0",
+      "license": "BSD-3-Clause"
+    }
+  ],
+  "files": [
+    {
+      "path": ".travis.yml",
+      "sha256": "22444a105ffb4a1758d4db8f8c29afd04f914b0e638543b822b41ec33c74bc2b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:.travis.yml"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "04a8e475337d6b9959a8c47956bf713dd3362d3aadf839e74b376afb07487167",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:LICENSE"
+    },
+    {
+      "path": "README.md",
+      "sha256": "3e9564569c31c6c73c804a1495916a45757328f48362d142021e3c9c7c7804c6",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:README.md"
+    },
+    {
+      "path": "attribute_roundtrip_test.go",
+      "sha256": "4d35749494846f1396f4fe160e9475805951fa8c72a7645225368e2e0d247073",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:attribute_roundtrip_test.go"
+    },
+    {
+      "path": "benchmark_test.go",
+      "sha256": "ac0fcf9b19c477934948b3e7835ea8ad7a63950d6ddd9fbe4c166d643f278199",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:benchmark_test.go"
+    },
+    {
+      "path": "fuzz/corpus/test0",
+      "sha256": "d80c9bf910f144738ef983724bc04bd6bd3f17c5c83ed57bedee1b1b9278e811",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test0"
+    },
+    {
+      "path": "fuzz/corpus/test1",
+      "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test1"
+    },
+    {
+      "path": "fuzz/corpus/test10",
+      "sha256": "4a251a13e57e9400a899fc4d045c594fe28b5ee516f4901cdc64ed540ef0018e",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test10"
+    },
+    {
+      "path": "fuzz/corpus/test11",
+      "sha256": "7ac7c0771606b1ce4e82051dbe39e90201a2e1b5021b4f8815b849b40bc9dd93",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test11"
+    },
+    {
+      "path": "fuzz/corpus/test12",
+      "sha256": "d00149f00fbd1bb9371f8f88236074b77b7428f643eb29b74272d2d44df7a9d6",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test12"
+    },
+    {
+      "path": "fuzz/corpus/test13",
+      "sha256": "55b674a87f003586ccb5ad4d5d8229b56467a0dd77d47881b6d1f05f0faee7ad",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test13"
+    },
+    {
+      "path": "fuzz/corpus/test14",
+      "sha256": "9d9f9926e106166566f518829741dd480cc39d1a9754d19c6c623a3b3f2fb192",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test14"
+    },
+    {
+      "path": "fuzz/corpus/test15",
+      "sha256": "158ff9acffa8231d7e3338a62d5b0e4ffd7b2f3533731a73c469df443bcd1ca9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test15"
+    },
+    {
+      "path": "fuzz/corpus/test16",
+      "sha256": "24b6908cf40d9ea429ff4323c6827bccaec8c907ebefd4136288fe640c4782fe",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test16"
+    },
+    {
+      "path": "fuzz/corpus/test17",
+      "sha256": "9642a5f2f7a321f415712ec20d0d0b56b42f6f6bdb7c9c2f3e4f8836011d52f9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test17"
+    },
+    {
+      "path": "fuzz/corpus/test18",
+      "sha256": "84b83f809df0ce4116e5e5181aad61184f3dd5cb0994451881c2ec09cd9c010f",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test18"
+    },
+    {
+      "path": "fuzz/corpus/test19",
+      "sha256": "df94d318c8d3053b27688cf0ad986a2583a2e8dfbc988699f9ae61a34a2eb12f",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test19"
+    },
+    {
+      "path": "fuzz/corpus/test2",
+      "sha256": "5bcadc2b60be87d52f213e0411b5438ec19d998e911f858379329cc52efa1d41",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test2"
+    },
+    {
+      "path": "fuzz/corpus/test20",
+      "sha256": "c6b4064f195acfbd67b5e6524b3fda6ca917a5637a8ee9caad79236fac37a94b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test20"
+    },
+    {
+      "path": "fuzz/corpus/test21",
+      "sha256": "2d000ce7dc13b3b5c8bc414f47623796a868dd884f649b0a52993ed4dd415864",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test21"
+    },
+    {
+      "path": "fuzz/corpus/test22",
+      "sha256": "33a3fea5928a7dc8711a5c35ed594430fb5a56ebaa5d06a8d4175617036ea3dd",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test22"
+    },
+    {
+      "path": "fuzz/corpus/test23",
+      "sha256": "839f52444e5e92aaa5bfe7d172c0d8238b11ef976fdb2cf5c8e7a1f72267af14",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test23"
+    },
+    {
+      "path": "fuzz/corpus/test24",
+      "sha256": "676c152ae5521887df29807be12c7cdb40e729be17468c7e7943d70463a4bfa9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test24"
+    },
+    {
+      "path": "fuzz/corpus/test25",
+      "sha256": "8f35fe3eb8cd57bb1de38037583a63629783cce4151fddd4d590b53014c4d32b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test25"
+    },
+    {
+      "path": "fuzz/corpus/test26",
+      "sha256": "86ea642f8a28dc2d2f23518069f99eacc364ddef4e8f79f8bb643b2ad3e2a93f",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test26"
+    },
+    {
+      "path": "fuzz/corpus/test27",
+      "sha256": "eb8081c0b88541bac5c1b8b5fb57204d5525dff99b6783b9cce9ce7b8173bb91",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test27"
+    },
+    {
+      "path": "fuzz/corpus/test28",
+      "sha256": "ee30757fa0d88aae2f0b0578f9c2dc65f7b63053d2d477509039f871c598f190",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test28"
+    },
+    {
+      "path": "fuzz/corpus/test29",
+      "sha256": "9dfa42ba18c2848d9dee3cf5eb404cc728f0f167e347d75656f8af3024918f7e",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test29"
+    },
+    {
+      "path": "fuzz/corpus/test3",
+      "sha256": "f39f9fe37cd5aa2799487996c24f1f3d21151bc1a30ff38a86e545f3037d501d",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test3"
+    },
+    {
+      "path": "fuzz/corpus/test30",
+      "sha256": "20a5f20ca6b5ec77db95a6cc0228ccc4ef402805092250087b20bc900d4c72da",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test30"
+    },
+    {
+      "path": "fuzz/corpus/test31",
+      "sha256": "279c6000758d7d6b8f7d41545360bdd50aab5108ab11b0e8a06b668e9ce4656b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test31"
+    },
+    {
+      "path": "fuzz/corpus/test32",
+      "sha256": "5f55321aed9fb08c4260e86224eb15be3cc83fcf7c760bbc8e5edbdaecff5b92",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test32"
+    },
+    {
+      "path": "fuzz/corpus/test33",
+      "sha256": "30954a8c0b22f762af03d6ad8ad9165d1b9455d35253c4b368562ca042a262b4",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test33"
+    },
+    {
+      "path": "fuzz/corpus/test34",
+      "sha256": "789abbb18a14abb13e98468a47e4d80ba42c59cc8f82121686a117da2a082430",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test34"
+    },
+    {
+      "path": "fuzz/corpus/test35",
+      "sha256": "8a53c7b7d98af1cc21b1c5f8df5879815e0a8e6bbb90e3128d965511a6f9bac2",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test35"
+    },
+    {
+      "path": "fuzz/corpus/test36",
+      "sha256": "dadf0b886191d7ca8ef5efdbce38459f00eddc50a2c9a158eadf4e32d31bf840",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test36"
+    },
+    {
+      "path": "fuzz/corpus/test37",
+      "sha256": "6a19802008e86d919215915ebddf95992f6ff9dbb5e1916db2eb7175cf24f2c9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test37"
+    },
+    {
+      "path": "fuzz/corpus/test38",
+      "sha256": "078cd700cafce5e7d6e5f94aadc7615dafa0ee59ec1e5fa8e37488eeaa270a2c",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test38"
+    },
+    {
+      "path": "fuzz/corpus/test39",
+      "sha256": "c19386c2f95deae930416c93feb257f4326d0759bbb98ce180cfa9645a8b1142",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test39"
+    },
+    {
+      "path": "fuzz/corpus/test4",
+      "sha256": "97b06eb1b8932cb8349280fe65da6feebe776e1893a56e4c73a5348a2c84d9f0",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test4"
+    },
+    {
+      "path": "fuzz/corpus/test40",
+      "sha256": "a1c6810ed785f72e1b7d8385a08f422186df460ed6e66a5326ff9b0862ef0a86",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test40"
+    },
+    {
+      "path": "fuzz/corpus/test41",
+      "sha256": "2095f0fdb1dc38ee6b845c66c1ac8b76239b169e53af4f811df50a24e33d48b8",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test41"
+    },
+    {
+      "path": "fuzz/corpus/test42",
+      "sha256": "6d00bb3ddb2f5777d56e141ac8d8d40f0051c77d4d9817cff736ec10a5b8dbd3",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test42"
+    },
+    {
+      "path": "fuzz/corpus/test43",
+      "sha256": "f7fcb9a6ff8cfafa22703954145fa3cd034f6b75ffc60912f6420ff59f4e3ef2",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test43"
+    },
+    {
+      "path": "fuzz/corpus/test44",
+      "sha256": "4708f22e177de7751899522ecd5f1d597efdffc5be87548d1c63d692a4337bac",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test44"
+    },
+    {
+      "path": "fuzz/corpus/test45",
+      "sha256": "3cc6a8ef4df426c39c030b21452949a699b614b0293a4fb3f95aa6fccc89c32b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test45"
+    },
+    {
+      "path": "fuzz/corpus/test46",
+      "sha256": "9ca17d12c66661ed4c3a2bf019178b6d1e039ed50e912c499bf60e179df53387",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test46"
+    },
+    {
+      "path": "fuzz/corpus/test47",
+      "sha256": "e1fafea76bc041bc0d2af653778a7224587857a936d0c40f39ca03cc679cdf67",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test47"
+    },
+    {
+      "path": "fuzz/corpus/test48",
+      "sha256": "556c6b8d400b6c27268953692cf4ef6f3d514f3b4027627789d705ad704839b9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test48"
+    },
+    {
+      "path": "fuzz/corpus/test49",
+      "sha256": "6668642fbcc47d6486ac421c680877975347011108dc195cfb73b8463edfa1be",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test49"
+    },
+    {
+      "path": "fuzz/corpus/test5",
+      "sha256": "5f08197fa754951704075a3da3b0294e4f1a71583524774feb6a62522cd27b33",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test5"
+    },
+    {
+      "path": "fuzz/corpus/test50",
+      "sha256": "75b0d6b877cd2f9c2aebc3a3c2ddfdd3a4706932bdc88d76e27c878727d21e7d",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test50"
+    },
+    {
+      "path": "fuzz/corpus/test51",
+      "sha256": "ab578e92da038ce943032d4485276be1ec69d268b79ffcca47e0e470b687c045",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test51"
+    },
+    {
+      "path": "fuzz/corpus/test52",
+      "sha256": "89b141526642e1da669f2f9c5026ebb8a541a31fdd35ccd770d9872186d95cb5",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test52"
+    },
+    {
+      "path": "fuzz/corpus/test53",
+      "sha256": "cddebaca8a4186b89241230118b8fda668c2c45e113b16897a2d44e229614284",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test53"
+    },
+    {
+      "path": "fuzz/corpus/test54",
+      "sha256": "01aa6908833694f7c771fb40e146422264758f170073f43fedc6b10601042c67",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test54"
+    },
+    {
+      "path": "fuzz/corpus/test55",
+      "sha256": "9ddc38d0eec4751b6a8d391702bb361895f4decad75a367841dc25b29af62d29",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test55"
+    },
+    {
+      "path": "fuzz/corpus/test56",
+      "sha256": "a499d090f6dfb23751cc1d333d35fbaf0ad2e3c4d6f5681ddb722c5e5e2c6cfd",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test56"
+    },
+    {
+      "path": "fuzz/corpus/test57",
+      "sha256": "bdb4f4640486f0d08c6c17a20c3dcfb36205b92b69aa7bcc5e620868e89dcfc3",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test57"
+    },
+    {
+      "path": "fuzz/corpus/test58",
+      "sha256": "6e1db03cd79b076d18c65df0279ca18a3e9c22545d36527469b6c11960bb6ed8",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test58"
+    },
+    {
+      "path": "fuzz/corpus/test59",
+      "sha256": "2b2c74decd817085a555bf48f7228c3e4511de9bd320a890bf1dc4e5a3538f63",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test59"
+    },
+    {
+      "path": "fuzz/corpus/test6",
+      "sha256": "5465439845b7e47557426103ce7e5c73d570c1f4af9a0e3f751dcaf3cddc762b",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test6"
+    },
+    {
+      "path": "fuzz/corpus/test60",
+      "sha256": "46a5ec07c94fdd1c4b2f2699071f53fa0e00ed4e7c7ffd08e5dd17993b63c070",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test60"
+    },
+    {
+      "path": "fuzz/corpus/test61",
+      "sha256": "7df9c465c3ea226cdbb8e565a0cc68af05d4916d6dabcbccf567d895ce5f8aa9",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test61"
+    },
+    {
+      "path": "fuzz/corpus/test7",
+      "sha256": "581d6526355e5dc1c4c805c79df2b5fb8e853043a4f2ea0c6cd6dd819ce52fea",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test7"
+    },
+    {
+      "path": "fuzz/corpus/test8",
+      "sha256": "53f9098d26e4f08f9d0f8a92f6139937d284be847622dda3297db6bd118e4363",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test8"
+    },
+    {
+      "path": "fuzz/corpus/test9",
+      "sha256": "0186e552109412982206906cc987af24b78c418cef1a569af0d4f66eccff9403",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/corpus/test9"
+    },
+    {
+      "path": "fuzz/fuzz.go",
+      "sha256": "0f57350d1509f9ed7f66e4cf622f12a05ab3bce6c4f431c4a666336a14ec1ef3",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:fuzz/fuzz.go"
+    },
+    {
+      "path": "go.mod",
+      "sha256": "74e794bc81bdf7dcc57ed9039a2b51c3fba2c4967139d23a495012fdd3039640",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:go.mod"
+    },
+    {
+      "path": "go.sum",
+      "sha256": "a17c49999317533d5d0e67df115cfb8b503c33002c06ff0126507712b9b0706a",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:go.sum"
+    },
+    {
+      "path": "is_test.go",
+      "sha256": "58145939853fb1905326dccfe2b9cd98238a471c6e06f7b88a43827729dac08a",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:is_test.go"
+    },
+    {
+      "path": "lang_test.go",
+      "sha256": "9dcce1401ad3c5892fe261ba07098b288e08502446f8fb426155098b497d627d",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:lang_test.go"
+    },
+    {
+      "path": "nth_of_test.go",
+      "sha256": "3f26e2aa347dcb98a2ef73aff2a6724e2cc985f2a5742ef7c5c7828d7d6cfa33",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:nth_of_test.go"
+    },
+    {
+      "path": "null_escape_test.go",
+      "sha256": "7f5a543d72bc7d9e1d5a694ab52941996285d9e21c29d86d1aabfdd2e0c45d57",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:null_escape_test.go"
+    },
+    {
+      "path": "parser.go",
+      "sha256": "ea8913a13822e6c238be9e9f11bc416e045ea480c2cded65c5f3100b506b588e",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:parser.go"
+    },
+    {
+      "path": "parser_test.go",
+      "sha256": "42375090752d6199cd846179c039cc72c75e280266cce3c92261277818589396",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:parser_test.go"
+    },
+    {
+      "path": "pseudo_classes.go",
+      "sha256": "68c5eda6ecc470a4efb2bb39405d2f54624e4874b909b7de9b0fdf4a1baf4197",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:pseudo_classes.go"
+    },
+    {
+      "path": "selector.go",
+      "sha256": "f03f17816493de73b8f21e4a953ec1439cacc2794a2f52a3948f138ce0c05388",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:selector.go"
+    },
+    {
+      "path": "selector_test.go",
+      "sha256": "c9766def1f7552b08213d32c0e0290a002cefebcf97cbb519700ee41f2e0216e",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:selector_test.go"
+    },
+    {
+      "path": "serialize.go",
+      "sha256": "d5b2834f1dc421a1ca4c404c45ae27156c5446916b06d3b18945d7b79afc3e85",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:serialize.go"
+    },
+    {
+      "path": "serialize_test.go",
+      "sha256": "165fe762f6dd3c0c7973749d7ce1aa940b09dad6e7744b3f3d7bfc2772b51181",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:serialize_test.go"
+    },
+    {
+      "path": "specificity.go",
+      "sha256": "c6733e1e5278db3dcf2fa17afa82c03dd2264fc751e797e46668d9ccc27ad791",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:specificity.go"
+    },
+    {
+      "path": "specificity_test.go",
+      "sha256": "c8188c6d83d3dc27443b076b20478b1b30af0470f52fff2903a86afa50717d5f",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:specificity_test.go"
+    },
+    {
+      "path": "task_support/baseline.go",
+      "sha256": "23b76d9be7214011b59ec9688ed01ebf62ff3bcb8388be117e42d8c4c5011450",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/env.sh",
+      "sha256": "1bcb36603890f4149c8039ccc69dd41956c68ae0326dd2fbff185b5f97b26686",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "task_support/target.sh",
+      "sha256": "047522fff6b4119c1a0b18f60c5af607e0f5031498651ec6e54bfe545495b50f",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "test_resources/content.xhtml",
+      "sha256": "709fd45e144bca592b0b2acab6861659595372d42faf886ae44a5fabcbd220e1",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:test_resources/content.xhtml"
+    },
+    {
+      "path": "test_resources/invalid_selectors.json",
+      "sha256": "9341c785c4c65ecdef44ba4092f0c1a6dae87bef7807d0bbae814eecd3998ea3",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:test_resources/invalid_selectors.json"
+    },
+    {
+      "path": "test_resources/shakespeare.html",
+      "sha256": "488f55ff15d01ccad359d75b77692cda9090c0dba13b23a540388d901b32c181",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:test_resources/shakespeare.html"
+    },
+    {
+      "path": "test_resources/valid_selectors.json",
+      "sha256": "eb3a80047740aaf89bcaa77b1563bae1c2e18570d9b86b0f2741ac00b91d1ac4",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:test_resources/valid_selectors.json"
+    },
+    {
+      "path": "vendor/golang.org/x/net/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:LICENSE"
+    },
+    {
+      "path": "vendor/golang.org/x/net/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:PATENTS"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/atom/atom.go",
+      "sha256": "86490b2027af4443dacfe96c313a6c632c03ea1acdf85f7f61c4fdde32bc2f3d",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/atom/atom.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/atom/table.go",
+      "sha256": "d7c4d0795fbc8dbec36504efcae14330b08e9a4bd8041e946f4b48ee45797e1d",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/atom/table.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/const.go",
+      "sha256": "44c814afac4b0206a4f2af92607f93a72b93919ec2c3884d372edcdc24507584",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/const.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/doc.go",
+      "sha256": "e5d486a3b703d17efdf30cc9b3af6649b262c89e74cd4de285e0f079797b3c6f",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/doc.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/doctype.go",
+      "sha256": "b629b17ed04bcab8d832d8caaee00f458c180fd31b6838e318a439a4bf87fffe",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/doctype.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/entity.go",
+      "sha256": "eca9e6cac4ddb939ddce98f64e9c2f16031accaead07f1bbce2f37991cd618bd",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/entity.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/escape.go",
+      "sha256": "2a16f2a9c639c44721cedfc634081f5835ddca15a07e52ca404973607d08cbde",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/escape.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/foreign.go",
+      "sha256": "555e32d7c9e8a625923ea453527c76fe66a6a22423d52fb0de58becaf051b4f3",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/foreign.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/iter.go",
+      "sha256": "54299c163639df83f3dd22ff31643b6b6cedbedb0c388b1f53020146a10d7504",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/iter.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/node.go",
+      "sha256": "3acf739c450f61abd0fc45ccb19e4ddde2982b798791037a6a03c78603b6176f",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/node.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/nodetype_string.go",
+      "sha256": "747f99ad7577bc2e790097bf591b7e66c1856a496a5a2e515a40324659e0266c",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/nodetype_string.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/parse.go",
+      "sha256": "07f21eab8256a6894d6d77e94e4dd32b4fb345edc7cf7a88b271be0ba8124ca8",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/parse.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/render.go",
+      "sha256": "c53cd811db01490a88a3932ad97e0d0622fa87a8533662fb9810bc06814c4af8",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/render.go"
+    },
+    {
+      "path": "vendor/golang.org/x/net/html/token.go",
+      "sha256": "735d98bc7361ca38b582394211aed4b8c89727388c9da877b5b0d654ff822308",
+      "origin": "https://proxy.golang.org/golang.org/x/net/@v/v0.55.0.zip:html/token.go"
+    },
+    {
+      "path": "vendor/modules.txt",
+      "sha256": "185736ddf95104541b0aa008d8044b76b77077abefd21622d2894c647c532631",
+      "origin": "author public baseline support"
+    },
+    {
+      "path": "w3_test.go",
+      "sha256": "fe1078107c6a57d4a24cd8b19e50e9f2afb854563446eb2d57206eafde778f27",
+      "origin": "https://github.com/andybalholm/cascadia@dde0a32a85c32b71237794bacd53f56d2b25d918:w3_test.go"
+    }
+  ]
+}
