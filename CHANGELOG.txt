@@ -1,3 +1,12 @@
+[unreleased]
++ add spvm/workgroup.h: offline compute workgroup executor
+  - one invocation state per LocalSize work-item, x-fastest ordering
+  - LocalInvocationId/LocalInvocationIndex/WorkgroupId/GlobalInvocationId builtins
+  - Workgroup storage shared and zero initialized across invocations (alias correct)
+  - OpControlBarrier rendezvous per dynamic round, static site and call stack
+  - diagnostics with invocation, instruction and round
++ add checks/check-workgroup.sh with C word SPIR-V fixtures
+
 [v1.2]
 + implement: OpTypeRuntimeArray, OpShiftRightLogical, OpShiftRightArithmetic & OpShiftLeftLogical
 + add spvm_image::user_data

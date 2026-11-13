@@ -95,6 +95,135 @@ free(spv);
 spvm_context_deinitialize(ctx);
 ```
 
+## Workgroup execution for compute shaders
+
+`spvm_state` runs one invocation.  For offline debugging of shaders that use
+shared memory and `barrier()`, `spvm/workgroup.h` adds an executor that runs
+a whole compute workgroup in lock-step:
+
+```c
+#include <spvm/workgroup.h>
+
+spvm_word workgroup_id[3] = { 0, 0, 0 };
+spvm_workgroup_error error;
+spvm_workgroup_t wg = spvm_workgroup_create(prog, workgroup_id, &error);
+if (!wg)
+	fprintf(stderr, "%s\n", error.message);
+
+/* Option A: run everything. */
+if (spvm_workgroup_run(wg, &error) != SPVM_WORKGROUP_RESULT_FINISHED)
+	fprintf(stderr, "%s\n", error.message);
+
+/* Option B: drive individual invocations yourself, one instruction at a
+ * time, in any order.  Waiting and finished invocations are no-ops. */
+unsigned count = spvm_workgroup_get_invocation_count(wg);
+unsigned finished = 0;
+while (finished < count) {
+	for (unsigned i = 0; i < count; i++) {
+		spvm_state_t state = spvm_workgroup_get_state(wg, i);
+		int was_live = state->code_current != NULL;
+		if (spvm_workgroup_step(wg, i, &error) == SPVM_WORKGROUP_STEP_ERROR) {
+			fprintf(stderr, "%s\n", error.message);
+			finished = count; /* bail out */
+			break;
+		}
+		if (was_live && state->code_current == NULL)
+			finished++;
+	}
+}
+
+/* Read per-invocation outputs; the names are the shader's global names. */
+spvm_state_t first = spvm_workgroup_get_state(wg, 0);
+spvm_result_t out = spvm_state_get_result_with_value(first, "out_value");
+printf("%u\n", out->members[0].value.u);
+
+spvm_workgroup_delete(wg);
+```
+
+The three-dimensional local size is read from the module's numeric
+`OpExecutionMode LocalSize`.  Invocations are created in x-fastest order and
+their `LocalInvocationId`, `LocalInvocationIndex`, `WorkgroupId` and
+`GlobalInvocationId` builtins are filled in from the caller supplied
+workgroup coordinates.
+
+Each invocation has its own `Private`, `Function`, `Input` and `Output`
+storage and its own call stack.  `Workgroup` storage is allocated once for
+the group, zero initialized, and shared: the invocation states point at the
+same `spvm_member` tree, so a write made through `OpAccessChain`,
+`OpCopyMemory` or a `Workgroup` pointer parameter of a called helper is
+visible to every other invocation.  This is alias-correct: writing a nested
+struct or array member through an access chain updates the one shared
+storage, and no top-level variable copying is involved.  `Workgroup` memory
+is freed exactly once when the workgroup is destroyed, so member aliases are
+never double freed.
+
+### Supported barriers
+
+```spir-v
+%scope = OpConstant %uint 2                  ; Workgroup
+%sem   = OpConstant %uint 264                ; AcquireRelease|WorkgroupMemory
+         OpControlBarrier %scope %scope %sem
+```
+
+An invocation that reaches a supported `OpControlBarrier` stops *before the
+instruction following the barrier*.  Its `spvm_state_get_state()` position is
+the next instruction; `spvm_workgroup_step()` on a waiting invocation does
+not execute anything and reports `SPVM_WORKGROUP_STEP_WAITING` (the
+instruction count does not change).  The last arrival releases the whole
+group and returns `SPVM_WORKGROUP_STEP_RELEASED`; all released invocations
+then continue after the barrier.
+
+A rendezvous succeeds only when every invocation has arrived in the same
+dynamic round, at the same static barrier instruction, through the same
+sequence of call-stack return addresses.  Rounds are counted per
+invocation, so a barrier executed twice in a loop rendezvouses twice, and
+the same helper barrier called from two different call sites is not merged
+into one meeting.  Mismatches, and a finished invocation while another is
+waiting, produce a diagnostic with the invocation number, instruction
+position (word offset) and round:
+
+```c
+typedef struct spvm_workgroup_error {
+	spvm_workgroup_error_code code;
+	spvm_word invocation;
+	spvm_word instruction; /* word offset */
+	spvm_word round;
+	spvm_word barrier;     /* word offset of the barrier */
+	char message[256];
+} spvm_workgroup_error;
+```
+
+Hosts may step invocations forwards, backwards or interleaved; a valid race
+free program produces the same per-invocation results in every order.
+`spvm_workgroup_run()` uses the same stepping rules as
+`spvm_workgroup_step()`, interleaving invocations one instruction at a time,
+so it does not cheat by running each invocation to completion independently.
+
+Multiple workgroups can be created from one `spvm_program` and advanced
+interleaved.  Shared storage and builtins live in the workgroup, not in the
+program's global callbacks or `user_data`, so one group can be deleted
+without invalidating another.
+
+### Limits
+
+* exactly one `GLCompute` entry point with a numeric `LocalSize`;
+* no runtime arrays, images, samplers, derivative instructions, atomics or
+  recursive calls (rejected at creation with a clear error);
+* barriers must use Workgroup execution and memory scope with
+  `AcquireRelease|WorkgroupMemory` semantics, and the scope/semantics
+  operands must be constant ids;
+* programs are assumed to reach a barrier or return within a finite amount of
+  work; arbitrary infinite loops are not detected.
+
+The existing single-state API and the `control_barrier` /
+`allocate_workgroup_memory` / `write_workgroup_memory` callbacks keep working
+unchanged.
+
+Run the workgroup checks (needs only a C99 compiler and libm) with:
+```
+sh checks/check-workgroup.sh
+```
+
 ## How to link
 If you are using CMake add these lines to your `CMakeLists.txt` file:
 ```
