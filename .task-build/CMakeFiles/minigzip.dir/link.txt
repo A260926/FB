@@ -1,0 +1,1 @@
+/usr/bin/cc -Dfdopen=fdopen -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/minigzip.dir/test/minigzip.c.o -o minigzip  -Wl,-rpath,/Users/solo/pro/UserFB/workspace/FSEE8DDE0A0D46U6648/attempts/20261113T164713780201Z/repo/.task-build libz.1.2.12.dylib

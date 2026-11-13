@@ -1,0 +1,2 @@
+FAULT_SIM first case: program 0
+FAIL task_support/task_harness.c:320: task_buf_equal(&got, &b->expect)
