@@ -24,9 +24,11 @@ SOFTWARE.
 
 #pragma once
 
-/** @file */ 
+/** @file */
 
 #include <cstddef>
+#include <cstdint>
+#include <stdexcept>
 
 namespace swr {
 
@@ -68,6 +70,20 @@ public:
 	/// Draw a list of triangles.
 	/** Triangles  with indices == -1 will be ignored. */
 	virtual void drawTriangleList(const RasterizerVertex *vertices, const int *indices, size_t indexCount) const = 0;
+
+	/// Begin a group of clipped fans that all belong to one input triangle.
+	/** primitiveIndex is the zero based index of the original input triangle.
+	  The default implementation does nothing, so existing rasterizers keep
+	  working without having to support quad shaders. */
+	virtual void beginQuadPrimitive(uint64_t /*primitiveIndex*/) const {}
+
+	/// End a group of clipped fans belonging to one input triangle.
+	/** The default implementation does nothing. */
+	virtual void endQuadPrimitive() const {}
+
+	/// Whether a quad pixel shader is currently installed.
+	/** The default returns false so existing rasterizers keep the scalar path. */
+	virtual bool quadShaderEnabled() const { return false; }
 };
 
 } // end namespace swr

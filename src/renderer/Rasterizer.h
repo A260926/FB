@@ -24,9 +24,14 @@ SOFTWARE.
 
 #pragma once
 
-/** @file */ 
+/** @file */
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "IRasterizer.h"
 #include "EdgeEquation.h"
@@ -35,6 +40,7 @@ SOFTWARE.
 #include "PixelData.h"
 #include "EdgeData.h"
 #include "PixelShaderBase.h"
+#include "PixelQuad.h"
 
 namespace swr {
 
@@ -62,10 +68,29 @@ private:
 	void (Rasterizer::*m_lineFunc)(const RasterizerVertex &v0, const RasterizerVertex &v1) const;
 	void (Rasterizer::*m_pointFunc)(const RasterizerVertex &v) const;
 
+	// Quad shader state.
+	bool m_quadMode;                         ///< True while a quad pixel shader is installed.
+	void (*m_quadFlushFunc)(const PixelQuad &); ///< Invokes the shader's drawQuad.
+	mutable uint64_t m_quadPrimitiveIndex;   ///< Index of the current original input triangle.
+	mutable bool m_quadGroupOpen;            ///< Between beginQuadPrimitive and endQuadPrimitive.
+
+	// Accumulated quads for the original input triangle currently processed.
+	struct QuadKey {
+		int x; ///< Even integer origin x of the quad.
+		int y; ///< Even integer origin y of the quad.
+		bool operator==(const QuadKey &o) const { return x == o.x && y == o.y; }
+	};
+	mutable std::vector<QuadKey> m_quadKeys;
+	mutable std::vector<PixelQuad> m_quads;
+
 public:
 	/// Constructor.
 	Rasterizer()
 	{
+		m_quadMode = false;
+		m_quadFlushFunc = nullptr;
+		m_quadPrimitiveIndex = 0;
+		m_quadGroupOpen = false;
 		setRasterMode(RasterMode::Span);
 		setScissorRect(0, 0, 0, 0);
 		setPixelShader<NullPixelShader>();
@@ -85,14 +110,30 @@ public:
 		m_maxX = x + width;
 		m_maxY = y + height;
 	}
-	
+
 	/// Set the pixel shader.
 	template <class PixelShader>
 	void setPixelShader()
 	{
+		m_quadMode = false;
 		m_triangleFunc = &Rasterizer::drawTriangleModeTemplate<PixelShader>;
 		m_lineFunc = &Rasterizer::drawLineTemplate<PixelShader>;
-		m_pointFunc = &Rasterizer::drawPointTemplate<PixelShader>;	
+		m_pointFunc = &Rasterizer::drawPointTemplate<PixelShader>;
+	}
+
+	/// Set a quad pixel shader.
+	/** The shader only needs to implement the static constants and
+	  drawQuad(const PixelQuad&); drawPixel is not required. While installed,
+	  points and lines throw std::logic_error and only triangles are drawn.
+	  Call setPixelShader to return to the scalar behaviour. */
+	template <class QuadShader>
+	void setQuadPixelShader()
+	{
+		m_quadMode = true;
+		m_quadFlushFunc = &Rasterizer::quadFlush<QuadShader>;
+		m_triangleFunc = &Rasterizer::drawQuadTriangleDispatch<QuadShader>;
+		m_lineFunc = &Rasterizer::drawQuadUnsupportedLine;
+		m_pointFunc = &Rasterizer::drawQuadUnsupportedPoint;
 	}
 
 	/// Draw a single point.
@@ -133,17 +174,228 @@ public:
 
 	void drawTriangleList(const RasterizerVertex *vertices, const int *indices, size_t indexCount) const
 	{
+		if (!m_quadMode)
+		{
+			for (size_t i = 0; i + 3 <= indexCount; i += 3) {
+				if (indices[i] == -1)
+					continue;
+				drawTriangle(vertices[indices[i]], vertices[indices[i + 1]], vertices[indices[i + 2]]);
+			}
+			return;
+		}
+
+		// Quad mode. When driven by the VertexProcessor a primitive group is
+		// already open, so fans simply accumulate. For a direct drawTriangleList
+		// each input triple is its own primitive, numbered from zero.
 		for (size_t i = 0; i + 3 <= indexCount; i += 3) {
 			if (indices[i] == -1)
 				continue;
+
+			bool bracket = !m_quadGroupOpen;
+			if (bracket)
+				beginQuadPrimitive((uint64_t)(i / 3));
+
 			drawTriangle(vertices[indices[i]], vertices[indices[i + 1]], vertices[indices[i + 2]]);
+
+			if (bracket)
+				endQuadPrimitive();
 		}
+	}
+
+	/// Begin accumulating the clipped fans of one original input triangle.
+	void beginQuadPrimitive(uint64_t primitiveIndex) const override
+	{
+		if (!m_quadMode)
+			return;
+		m_quadPrimitiveIndex = primitiveIndex;
+		m_quadGroupOpen = true;
+		m_quadKeys.clear();
+		m_quads.clear();
+	}
+
+	/// Flush the accumulated quads of one original input triangle.
+	void endQuadPrimitive() const override
+	{
+		if (!m_quadMode)
+			return;
+		for (const PixelQuad &q : m_quads)
+			flushQuad(q);
+		m_quadKeys.clear();
+		m_quads.clear();
+		m_quadGroupOpen = false;
+	}
+
+	/// Whether a quad pixel shader is currently installed.
+	bool quadShaderEnabled() const override
+	{
+		return m_quadMode;
+	}
+
+private:
+	void drawQuadUnsupportedPoint(const RasterizerVertex &) const
+	{
+		throw std::logic_error("quad pixel shaders only support triangles");
+	}
+
+	void drawQuadUnsupportedLine(const RasterizerVertex &, const RasterizerVertex &) const
+	{
+		throw std::logic_error("quad pixel shaders only support triangles");
 	}
 
 private:
 	bool scissorTest(float x, float y) const
 	{
 		return (x >= m_minX && x < m_maxX && y >= m_minY && y < m_maxY);
+	}
+
+	// Round toward negative infinity to the nearest even integer.
+	// Negative coordinates therefore align towards the negative direction.
+	static int alignEvenDown(int v)
+	{
+		int r = v % 2;
+		if (r < 0)
+			r += 2;
+		return v - r;
+	}
+
+	// Emit the quads of one clipped triangle fan, accumulating them into the
+	// open primitive group so that several fans of the same input triangle are
+	// merged into a single callback per quad.
+	template <class QuadShader>
+	void drawQuadTriangleTemplate(const RasterizerVertex &v0, const RasterizerVertex &v1, const RasterizerVertex &v2) const
+	{
+		// Compute triangle equations.
+		TriangleEquations eqn(v0, v1, v2, QuadShader::AVarCount, QuadShader::PVarCount);
+
+		// Check if triangle is backfacing.
+		if (eqn.area2 <= 0)
+			return;
+
+		// Screen bounding box of this fan, expressed in integer pixel coords.
+		// The scan is limited to this box, not the whole viewport.
+		int pxMinX = (int)std::floor(std::min(std::min(v0.x, v1.x), v2.x));
+		int pxMaxX = (int)std::floor(std::max(std::max(v0.x, v1.x), v2.x));
+		int pxMinY = (int)std::floor(std::min(std::min(v0.y, v1.y), v2.y));
+		int pxMaxY = (int)std::floor(std::max(std::max(v0.y, v1.y), v2.y));
+
+		int qMinX = alignEvenDown(pxMinX);
+		int qMaxX = alignEvenDown(pxMaxX);
+		int qMinY = alignEvenDown(pxMinY);
+		int qMaxY = alignEvenDown(pxMaxY);
+
+		for (int qy = qMinY; qy <= qMaxY; qy += 2)
+		{
+			for (int qx = qMinX; qx <= qMaxX; qx += 2)
+			{
+				unsigned coverage = 0;
+
+				// Lane offsets: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
+				static const int dx[4] = { 0, 1, 0, 1 };
+				static const int dy[4] = { 0, 0, 1, 1 };
+
+				float invwLane[4];
+
+				for (int lane = 0; lane < 4; ++lane)
+				{
+					float cx = (float)(qx + dx[lane]) + 0.5f;
+					float cy = (float)(qy + dy[lane]) + 0.5f;
+
+					bool inside = eqn.e0.test(cx, cy) && eqn.e1.test(cx, cy) && eqn.e2.test(cx, cy);
+					if (inside && scissorTest(cx, cy))
+						coverage |= (1u << lane);
+
+					invwLane[lane] = eqn.invw.evaluate(cx, cy);
+				}
+
+				if (coverage == 0)
+					continue;
+
+				// A zero (or non finite) perspective denominator at any lane is
+				// a domain error rather than silently feeding float to integer.
+				for (int lane = 0; lane < 4; ++lane)
+				{
+					if (invwLane[lane] == 0.0f || !std::isfinite(invwLane[lane]))
+						throw std::domain_error("quad interpolation has a zero or invalid w denominator");
+				}
+
+				QuadKey key{ qx, qy };
+				PixelQuad *slot = nullptr;
+				for (size_t k = 0; k < m_quadKeys.size(); ++k)
+				{
+					if (m_quadKeys[k] == key)
+					{
+						slot = &m_quads[k];
+						break;
+					}
+				}
+
+				if (slot)
+				{
+					// Same original triangle plane: union the coverage, keep the
+					// already extrapolated lane interpolation.
+					slot->coverageMask |= coverage;
+					continue;
+				}
+
+				PixelQuad quad;
+				quad.coverageMask = coverage;
+				quad.primitiveIndex = m_quadPrimitiveIndex;
+
+				for (int lane = 0; lane < 4; ++lane)
+				{
+					float cx = (float)(qx + dx[lane]) + 0.5f;
+					float cy = (float)(qy + dy[lane]) + 0.5f;
+
+					PixelData &p = quad.lanes[lane];
+					p.x = qx + dx[lane];
+					p.y = qy + dy[lane];
+					p.init(eqn, cx, cy, QuadShader::AVarCount, QuadShader::PVarCount,
+						QuadShader::InterpolateZ, QuadShader::InterpolateW);
+
+					// Every lane, helpers included, carries depth and w
+					// extrapolated from the original triangle plane.
+					p.z = eqn.z.evaluate(cx, cy);
+					p.invw = invwLane[lane];
+					p.w = 1.0f / invwLane[lane];
+
+					// The equations object is local to this fan and must not
+					// outlive the traversal, so drop the borrowed pointer.
+					p.equations = nullptr;
+				}
+
+				m_quadKeys.push_back(key);
+				m_quads.push_back(quad);
+			}
+		}
+	}
+
+	// Triangle entry point while a quad shader is installed.
+	template <class QuadShader>
+	void drawQuadTriangleDispatch(const RasterizerVertex &v0, const RasterizerVertex &v1, const RasterizerVertex &v2) const
+	{
+		if (m_quadGroupOpen)
+		{
+			// One fan of the original input triangle currently being accumulated.
+			drawQuadTriangleTemplate<QuadShader>(v0, v1, v2);
+		}
+		else
+		{
+			// Direct drawTriangle: a single primitive with index 0.
+			beginQuadPrimitive(0);
+			drawQuadTriangleTemplate<QuadShader>(v0, v1, v2);
+			endQuadPrimitive();
+		}
+	}
+
+	void flushQuad(const PixelQuad &quad) const
+	{
+		m_quadFlushFunc(quad);
+	}
+
+	template <class QuadShader>
+	static void quadFlush(const PixelQuad &quad)
+	{
+		QuadShader::drawQuad(quad);
 	}
 
 	template <class PixelShader>

@@ -112,7 +112,7 @@ private:
 	void clipTriangles() const;
 
 	void clipPrimitives(DrawMode mode) const;
-	void processPrimitives(DrawMode mode) const;
+	void processPrimitives(DrawMode mode, uint64_t basePrimitiveIndex) const;
 	int primitiveCount(DrawMode mode) const;
 
 	void drawPrimitives(DrawMode mode) const;
@@ -149,6 +149,11 @@ private:
 	mutable std::vector<int> m_indicesOut;
 	mutable std::vector<int> m_clipMask;
 	mutable std::vector<bool> m_alreadyProcessed;
+	// One entry per output triangle triple: global index of the input
+	// triangle it was derived from.
+	mutable std::vector<uint64_t> m_triangleOwner;
+	// Global index of the first input triangle in the current batch.
+	mutable uint64_t m_quadBaseIndex;
 };
 
 } // end namespace swr

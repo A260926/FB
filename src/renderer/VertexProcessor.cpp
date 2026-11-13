@@ -24,6 +24,8 @@ SOFTWARE.
 
 #include "VertexProcessor.h"
 
+#include <set>
+
 namespace swr {
 
 VertexProcessor::VertexProcessor(IRasterizer *rasterizer)
@@ -83,40 +85,52 @@ void VertexProcessor::drawElements(DrawMode mode, size_t count, int *indices) co
 	// TODO: Max 1024 primitives per batch.
 	VertexCache vCache;
 
+	// Index of the next input primitive. Counted from zero and never reset at
+	// the 1024 primitive batch boundary; clipped or culled primitives keep their
+	// number as well.
+	const int vertsPerPrimitive = (mode == DrawMode::Triangle) ? 3 : (mode == DrawMode::Line) ? 2 : 1;
+	uint64_t primitiveIndex = 0;
+
 	for (size_t i = 0; i < count; i++)
 	{
 		int index = indices[i];
 		int outputIndex = vCache.lookup(index);
-		
+
 		if (outputIndex != -1)
 		{
 			m_indicesOut.push_back(outputIndex);
 		}
 		else
 		{
-			VertexShaderInput vIn;    
+			VertexShaderInput vIn;
 			initVertexInput(vIn, index);
 
 			int outputIndex = (int)m_verticesOut.size();
 			m_indicesOut.push_back(outputIndex);
 			m_verticesOut.resize(m_verticesOut.size() + 1);
 			VertexShaderOutput &vOut = m_verticesOut.back();
-			
+
 			processVertex(vIn, &vOut);
 
 			vCache.set(index, outputIndex);
 		}
 
+		if ((i + 1) % (size_t)vertsPerPrimitive != 0)
+			continue;
+
+		++primitiveIndex;
+
 		if (primitiveCount(mode) >= 1024)
 		{
-			processPrimitives(mode);
+			// The buffered primitives are the last primitiveCount primitives.
+			processPrimitives(mode, primitiveIndex - (uint64_t)primitiveCount(mode));
 			m_verticesOut.clear();
 			m_indicesOut.clear();
 			vCache.clear();
 		}
 	}
 
-	processPrimitives(mode);
+	processPrimitives(mode, primitiveIndex - (uint64_t)primitiveCount(mode));
 }
 
 int VertexProcessor::clipMask(VertexShaderOutput &v) const
@@ -223,12 +237,17 @@ void VertexProcessor::clipTriangles() const
 		m_clipMask[i] = clipMask(m_verticesOut[i]);
 
 	size_t n = m_indicesOut.size();
+	m_triangleOwner.clear();
+	m_triangleOwner.reserve(n / 3);
 
 	for (size_t i = 0; i < n; i += 3)
 	{
 		int i0 = m_indicesOut[i];
 		int i1 = m_indicesOut[i + 1];
 		int i2 = m_indicesOut[i + 2];
+
+		// Global index of the input triangle this triple belongs to.
+		uint64_t owner = m_quadBaseIndex + (uint64_t)(i / 3);
 
 		int clipMask = m_clipMask[i0] | m_clipMask[i1] | m_clipMask[i2];
 
@@ -246,6 +265,7 @@ void VertexProcessor::clipTriangles() const
 			m_indicesOut[i] = -1;
 			m_indicesOut[i + 1] = -1;
 			m_indicesOut[i + 2] = -1;
+			m_triangleOwner.push_back(owner);
 			continue;
 		}
 
@@ -254,10 +274,12 @@ void VertexProcessor::clipTriangles() const
 		m_indicesOut[i] = indices[0];
 		m_indicesOut[i + 1] = indices[1];
 		m_indicesOut[i + 2] = indices[2];
+		m_triangleOwner.push_back(owner);
 		for (size_t idx = 3; idx < indices.size(); ++idx) {
 			m_indicesOut.push_back(indices[0]);
 			m_indicesOut.push_back(indices[idx - 1]);
 			m_indicesOut.push_back(indices[idx]);
+			m_triangleOwner.push_back(owner);
 		}
 	}
 }
@@ -278,8 +300,9 @@ void VertexProcessor::clipPrimitives(DrawMode mode) const
 	}
 }
 
-void VertexProcessor::processPrimitives(DrawMode mode) const
+void VertexProcessor::processPrimitives(DrawMode mode, uint64_t basePrimitiveIndex) const
 {
+	m_quadBaseIndex = basePrimitiveIndex;
 	clipPrimitives(mode);
 	transformVertices();
 	drawPrimitives(mode);
@@ -304,9 +327,41 @@ void VertexProcessor::drawPrimitives(DrawMode mode) const
 	switch (mode)
 	{
 		case DrawMode::Triangle:
+		{
 			cullTriangles();
-			m_rasterizer->drawTriangleList(&m_verticesOut[0], &m_indicesOut[0], m_indicesOut.size());
+
+			if (!m_rasterizer->quadShaderEnabled())
+			{
+				m_rasterizer->drawTriangleList(&m_verticesOut[0], &m_indicesOut[0], m_indicesOut.size());
+				break;
+			}
+
+			// Quad mode: group every output fan under its original input
+			// triangle so each quad is reported at most once per primitive.
+			// Clipping appends extra fans at the tail of the index buffer, so
+			// the triples of one primitive are not necessarily contiguous; an
+			// explicit per-owner grouping is required.
+			std::set<uint64_t> owners;
+			for (size_t t = 0; t < m_triangleOwner.size(); ++t)
+				owners.insert(m_triangleOwner[t]);
+
+			for (uint64_t owner : owners)
+			{
+				m_rasterizer->beginQuadPrimitive(owner);
+				for (size_t i = 0; i + 3 <= m_indicesOut.size(); i += 3)
+				{
+					if (m_triangleOwner[i / 3] != owner)
+						continue;
+					if (m_indicesOut[i] != -1)
+					{
+						m_rasterizer->drawTriangleList(
+							&m_verticesOut[0], &m_indicesOut[i], 3);
+					}
+				}
+				m_rasterizer->endQuadPrimitive();
+			}
 			break;
+		}
 		case DrawMode::Line:
 			m_rasterizer->drawLineList(&m_verticesOut[0], &m_indicesOut[0], m_indicesOut.size());
 			break;

@@ -11,6 +11,7 @@ set(SOURCE_FILES
 	LineClipper.h
 	ParameterEquation.h
 	PixelData.h
+	PixelQuad.h
 	PixelShaderBase.h
 	PolyClipper.cpp
 	PolyClipper.h
