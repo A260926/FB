@@ -1,0 +1,15 @@
+language: go
+go:
+  - 1.9.x
+  - master
+
+install:
+  - go get -t -v ./...
+
+script:
+  - go test -v -race ./...
+
+matrix:
+  allow_failures:
+    - go: master
+  fast_finish: true
