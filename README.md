@@ -165,6 +165,29 @@ bool hit = bvh.IntersectSphere( pos, r ); // sphere/BVH collision detection
 * **Opacity micro maps.** `SetOpacityMicroMaps( mapData, N )` attaches an N×N opacity map per triangle, as proposed [by Gruen et al.](https://dl.acm.org/doi/10.1145/3406180) in 2020. The SIMD leaf tests apply it directly.
 * **Triangle intersection.** Default is Möller & Trumbore ([1997](https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf)); Baldwin & Weber ([2016](https://jcgt.org/published/0005/03/03/paper.pdf)) is used for the precomputed leaf formats; `WATERTIGHT_TRITEST` switches to 'watertight' intersection based on the [2013 paper](https://jcgt.org/published/0002/01/05/paper.pdf) by Woop et al., at a small additional cost.
 
+## Ordered, pausable hit queries
+
+Nearest-hit `Intersect` returns only the closest triangle. Offline work such as front-to-back alpha compositing of translucent surfaces needs every hit along a ray, one at a time, with the option to stop early. `tiny_bvh_ordered.h` adds a pausable query for that without disturbing `Intersect`, `IsOccluded`, the builders or the SIMD layouts:
+
+```cpp
+#include "tiny_bvh_ordered.h"
+
+tinybvh::OrderedHitQuery query( bvh, ray, tmin );   // double: OrderedHitQueryEx / RayEx / BVH_Double
+tinybvh::OrderedHit hit;                            // t, u, v, prim, inst
+while (query.Next( hit ))                           // one triangle hit per call
+{
+    // composite hit; break and let the query be destroyed to stop early
+}
+```
+
+* **Interval and ordering.** The query returns every double-sided triangle hit in `[tmin, ray.hit.t)`, sorted lexicographically by `(t, inst, prim)`. The upper bound is the `ray.hit.t` captured at construction. Hits at exactly the same `t` are never merged with an epsilon: distinct primitives and distinct instances are all delivered, tie-broken by identity. `Next` returns `false` once finished and keeps returning `false` without overwriting its argument. Zero-area triangles do not hit.
+* **Identities.** For a plain BLAS, `inst` is always 0 and `prim` is the original triangle index (indexed geometry included). For a TLAS, `inst` is the index into the instance array and `prim` is the triangle inside that instance's BLAS. A primitive that spatial splits (`BuildHQ`) place in several leaves is tested and delivered at most once per instance, while two instances sharing a BLAS each keep their own hits. Local intersection still reports the world-ray parameter `t`.
+* **Supported scope.** Binary `LAYOUT_BVH` trees from `Build` / `BuildQuick` / `BuildHQ` / `BuildSIMD`, as a BLAS or as a single-level TLAS over such BLAS, in both single and double precision. Vertex data may be contiguous or read through a strided slice with an index array. Ray masks follow the existing bitwise instance rule. GPU and wide-node layouts, voxels, custom primitives, nested TLAS, opacity micro maps and motion instances are out of scope.
+* **Memory and work model.** The query streams directly through the existing nodes: a per-query heap of pending TLAS/BLAS node regions (ordered by box-entry distance) plus standard-library containers for per-instance state, candidate hits and split-primitive deduplication. Nothing is pre-scanned, no table sized to the scene is cleared, and the full hit list is never collected before it is returned. All pending state is local to the query, which mutates neither the ray, the tree, the instances nor any shared cache; independent queries may interleave or run concurrently on a read-only scene. An unbuilt/empty BVH is simply an empty query.
+* **Statistics.** `GetStats()` returns cumulative `uint64_t` counters: `nodeVisits` (TLAS/BLAS nodes actually expanded), `triangleTests` (per-instance original triangle tests), `instanceEntries` (mask-passing instances entered) and `emittedHits`. Each TLAS node, each `(inst, BLAS node)` and each `(inst, prim)` is processed at most once, so stopping after the first few hits stays cheap.
+* **Example.** `examples/ordered_layers.cpp` renders an intersecting translucent scene (including coincident faces) to a 32x32 PPM using front-to-back compositing, stopping when transmittance drops below 1%.
+
+
 # TLAS, instancing and custom geometry
 
 TinyBVH supports construction of a _Top-Level Acceleration Structure_: a BVH over _Bottom-Level Acceleration Structures_, where each BLAS is a BVH with a 4x4 transform. Different layouts can be combined under a single TLAS, and a BLAS can appear multiple times with different transforms:

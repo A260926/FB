@@ -40,6 +40,8 @@ add_executable(tiny_bvh_double_test tests/tiny_bvh_double_test.cpp)
 add_executable(tiny_bvh_tlas_state_test tests/tiny_bvh_tlas_state_test.cpp)
 add_executable(tiny_bvh_axis_ray_test tests/tiny_bvh_axis_ray_test.cpp)
 add_executable(tiny_bvh_simd_reference_test tests/tiny_bvh_simd_reference_test.cpp)
+add_executable(tiny_bvh_ordered_test task_support/driver.cpp tests/tiny_bvh_ordered_test.cpp)
+add_executable(ordered_layers examples/ordered_layers.cpp)
 
 # target_include_directories(tiny_bvh_speedtest PRIVATE ${CMAKE_CURRENT_LIST_DIR}/external/OpenCL/inc;external/madmann91;external/embree/include)
 target_include_directories(tiny_bvh_minimal PRIVATE ${CMAKE_CURRENT_LIST_DIR})
@@ -48,6 +50,8 @@ target_include_directories(tiny_bvh_double_test PRIVATE ${CMAKE_CURRENT_LIST_DIR
 target_include_directories(tiny_bvh_tlas_state_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(tiny_bvh_axis_ray_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(tiny_bvh_simd_reference_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(tiny_bvh_ordered_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(ordered_layers PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
 if (NOT MSVC)
 	# Produce debug symbols and set optimization level
@@ -181,3 +185,13 @@ add_test(NAME "tests/tiny_bvh_double_test" COMMAND tiny_bvh_double_test)
 add_test(NAME "tests/tiny_bvh_tlas_state_test" COMMAND tiny_bvh_tlas_state_test)
 add_test(NAME "tests/tiny_bvh_axis_ray_test" COMMAND tiny_bvh_axis_ray_test)
 add_test(NAME "tests/tiny_bvh_simd_reference_test" COMMAND tiny_bvh_simd_reference_test)
+
+# The ordered render test reads the PPM produced by the ordered_layers example.
+# cmake -E env keeps this compatible with the project's CMake 3.20 floor.
+set(ORDERED_LAYERS_PPM "${CMAKE_CURRENT_BINARY_DIR}/ordered_layers.ppm")
+add_test(NAME ordered_layers_image COMMAND ordered_layers "${ORDERED_LAYERS_PPM}")
+set_tests_properties(ordered_layers_image PROPERTIES FIXTURES_SETUP ORDERED_LAYERS_IMAGE)
+add_test(NAME "tests/tiny_bvh_ordered_test"
+	COMMAND ${CMAKE_COMMAND} -E env "ORDERED_LAYERS_PPM=${ORDERED_LAYERS_PPM}"
+	$<TARGET_FILE:tiny_bvh_ordered_test>)
+set_tests_properties("tests/tiny_bvh_ordered_test" PROPERTIES FIXTURES_REQUIRED ORDERED_LAYERS_IMAGE)
