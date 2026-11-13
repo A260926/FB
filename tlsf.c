@@ -1262,3 +1262,445 @@ void* tlsf_realloc(tlsf_t tlsf, void* ptr, size_t size)
 
 	return p;
 }
+
+/*
+** Read-only, bounded heap audit. See tlsf.h for the contract.
+**
+** Every value taken from the image is validated against the caller
+** supplied ranges before it is dereferenced, and all offset arithmetic
+** is done on values already bounded by those ranges, so corrupted
+** metadata cannot make the audit read outside the ranges, wrap an
+** offset, or walk a list forever. The image is only ever read; the
+** workspace is the only memory written.
+*/
+
+/* Usable bytes of a pool mapping, mirroring tlsf_add_pool. */
+static size_t audit_pool_bytes(const tlsf_audit_pool_t* pool)
+{
+	return align_down(pool->size - tlsf_pool_overhead(), ALIGN_SIZE);
+}
+
+static int audit_pool_valid(const tlsf_audit_pool_t* pool)
+{
+	if (!pool->start)
+	{
+		return 0;
+	}
+	if ((tlsf_cast(tlsfptr_t, pool->start) % ALIGN_SIZE) != 0)
+	{
+		return 0;
+	}
+	if (pool->size < tlsf_pool_overhead() + block_size_min)
+	{
+		return 0;
+	}
+	/* size >= tlsf_pool_overhead() here, so this cannot underflow. */
+	if (audit_pool_bytes(pool) > block_size_max)
+	{
+		return 0;
+	}
+	return 1;
+}
+
+/* Words in one of a pool's two block-presence bitmaps. Bit i of the
+** bitmap marks a free block whose size field sits at offset i*ALIGN_SIZE
+** from the pool start. */
+static size_t audit_bitmap_words(size_t pool_bytes)
+{
+	const size_t bits = pool_bytes / ALIGN_SIZE + 1;
+	const size_t per_word = sizeof(size_t) * CHAR_BIT;
+	return (bits + per_word - 1) / per_word;
+}
+
+size_t tlsf_audit_workspace_size(const tlsf_audit_pool_t* pools, size_t pool_count)
+{
+	size_t total = 0;
+	size_t i;
+
+	if (pool_count && !pools)
+	{
+		return 0;
+	}
+	for (i = 0; i < pool_count; ++i)
+	{
+		size_t bytes;
+		if (!audit_pool_valid(&pools[i]))
+		{
+			return 0;
+		}
+		bytes = 2 * audit_bitmap_words(audit_pool_bytes(&pools[i])) * sizeof(size_t);
+		if (total > tlsf_cast(size_t, -1) - bytes)
+		{
+			return 0;
+		}
+		total += bytes;
+	}
+	if (total)
+	{
+		/* Slack so the workspace pointer may have any alignment. */
+		if (total > tlsf_cast(size_t, -1) - (sizeof(size_t) - 1))
+		{
+			return 0;
+		}
+		total += sizeof(size_t) - 1;
+	}
+	return total;
+}
+
+/* Locate pool index's bitmap (0: physically free, 1: seen on a list). */
+static size_t* audit_bitmap(size_t* workspace, const tlsf_audit_pool_t* pools,
+	size_t index, int which)
+{
+	size_t offset = 0;
+	size_t j;
+	for (j = 0; j < index; ++j)
+	{
+		offset += 2 * audit_bitmap_words(audit_pool_bytes(&pools[j]));
+	}
+	return workspace + offset
+		+ tlsf_cast(size_t, which) * audit_bitmap_words(audit_pool_bytes(&pools[index]));
+}
+
+static void audit_bit_set(size_t* bitmap, size_t bit)
+{
+	const size_t per_word = sizeof(size_t) * CHAR_BIT;
+	bitmap[bit / per_word] |= tlsf_cast(size_t, 1) << (bit % per_word);
+}
+
+static int audit_bit_get(const size_t* bitmap, size_t bit)
+{
+	const size_t per_word = sizeof(size_t) * CHAR_BIT;
+	return tlsf_cast(int, (bitmap[bit / per_word] >> (bit % per_word)) & 1);
+}
+
+static int audit_fail(tlsf_audit_info_t* info, int code, size_t pool, size_t offset)
+{
+	info->code = code;
+	info->pool = pool;
+	info->offset = offset;
+	return 1;
+}
+
+/* If node is the header address of a free block confirmed by the
+** physical scan, return 1 and report that pool and the offset of the
+** block's size field within it. The node pointer itself is only ever
+** compared, never dereferenced. */
+static int audit_locate(const tlsf_audit_pool_t* pools, size_t pool_count,
+	size_t* workspace, const block_header_t* node, size_t* pool_index, size_t* node_off)
+{
+	const size_t addr = tlsf_cast(size_t, node);
+	size_t i;
+	for (i = 0; i < pool_count; ++i)
+	{
+		const size_t base = tlsf_cast(size_t, pools[i].start);
+		const size_t pool_bytes = audit_pool_bytes(&pools[i]);
+		size_t off;
+		/* base is aligned and nonzero, but never subtract unchecked. */
+		if (base < block_header_overhead || addr < base - block_header_overhead)
+		{
+			continue;
+		}
+		/* Offset of the would-be size field; cannot overflow because
+		** addr >= base - block_header_overhead. */
+		off = addr - (base - block_header_overhead);
+		if (off > pool_bytes || (off & (ALIGN_SIZE - 1)) != 0)
+		{
+			continue;
+		}
+		if (!audit_bit_get(audit_bitmap(workspace, pools, i, 0), off / ALIGN_SIZE))
+		{
+			continue;
+		}
+		*pool_index = i;
+		*node_off = off;
+		return 1;
+	}
+	return 0;
+}
+
+/* Physical block coverage of one pool. Walks blocks by their own sizes
+** only as far as the sizes have been validated, and stops at the first
+** untrustworthy boundary instead of reading past it. */
+static int audit_scan_pool(const tlsf_audit_pool_t* pools, size_t index,
+	size_t* workspace, size_t* free_count, tlsf_audit_info_t* info)
+{
+	const tlsf_audit_pool_t* pool = &pools[index];
+	const char* base = tlsf_cast(const char*, pool->start);
+	const size_t pool_bytes = audit_pool_bytes(pool);
+	size_t* present = audit_bitmap(workspace, pools, index, 0);
+	size_t off = 0;		/* offset of the current block's size field */
+	size_t prev_off = 0;	/* offset of the previous block's size field */
+	int prev_free = 0;	/* convention: the pool's predecessor is used */
+
+	for (;;)
+	{
+		size_t raw, size;
+		int is_free, prev_free_bit;
+
+		/* Loop invariant: off <= pool_bytes + block_header_overhead, so
+		** the size field at off lies inside the mapping. The first
+		** block's prev_phys_block sits in front of the pool and is
+		** never read (see the prev_free handling below). */
+		raw = *tlsf_cast(const size_t*, tlsf_cast(const void*, base + off));
+		size = raw & ~(block_header_free_bit | block_header_prev_free_bit);
+		is_free = tlsf_cast(int, raw & block_header_free_bit);
+		prev_free_bit = tlsf_cast(int, raw & block_header_prev_free_bit);
+
+		if ((prev_free_bit != 0) != (prev_free != 0))
+		{
+			return audit_fail(info, TLSF_AUDIT_PREV_FREE, index, off);
+		}
+		if (size == 0)
+		{
+			/* The zero-size sentinel must sit exactly at the end of the
+			** usable bytes and must be marked used. */
+			if (off != pool_bytes + block_header_overhead || is_free)
+			{
+				return audit_fail(info, TLSF_AUDIT_SENTINEL, index, off);
+			}
+			break;
+		}
+		/* off <= pool_bytes is checked first, so pool_bytes - off cannot
+		** underflow; size <= block_size_max is checked before size is
+		** ever added to an offset, so the advance below cannot wrap. */
+		if (off > pool_bytes
+			|| size < block_size_min || size > block_size_max
+			|| (size & (ALIGN_SIZE - 1)) != 0
+			|| size > pool_bytes - off)
+		{
+			return audit_fail(info, TLSF_AUDIT_SIZE, index, off);
+		}
+		if (is_free)
+		{
+			if (prev_free)
+			{
+				return audit_fail(info, TLSF_AUDIT_UNMERGED, index, off);
+			}
+			audit_bit_set(present, off / ALIGN_SIZE);
+			++*free_count;
+		}
+		if (prev_free)
+		{
+			/* The previous block is free, so this block's prev_phys_block
+			** field is live and must point back at it. off > 0 here: the
+			** first block has a used predecessor by convention, which the
+			** flag check above has already enforced, so the field in
+			** front of the pool is never read. */
+			const block_header_t* back = *tlsf_cast(block_header_t* const*,
+				tlsf_cast(const void*, base + off - block_header_overhead));
+			const block_header_t* want = tlsf_cast(const block_header_t*,
+				tlsf_cast(const void*, base + prev_off - block_header_overhead));
+			if (back != want)
+			{
+				return audit_fail(info, TLSF_AUDIT_PREV_PHYS, index,
+					off - block_header_overhead);
+			}
+		}
+		prev_free = is_free;
+		prev_off = off;
+		off += size + block_header_overhead;
+	}
+	return 0;
+}
+
+/* Bitmaps and free lists of the control structure, buckets in index
+** order. List pointers are validated by audit_locate before they are
+** dereferenced; the shared null block terminates a list only by exact
+** address, never by pointing anywhere else into the control range. */
+static int audit_control(const void* control, const tlsf_audit_pool_t* pools,
+	size_t pool_count, size_t* workspace, size_t total_free,
+	tlsf_audit_info_t* info)
+{
+	const control_t* ct = tlsf_cast(const control_t*, control);
+	const block_header_t* null_node = &ct->block_null;
+	int fl, sl;
+	size_t i;
+
+	/* Bits beyond the first-level index range must be clear. */
+	if (ct->fl_bitmap >> FL_INDEX_COUNT)
+	{
+		return audit_fail(info, TLSF_AUDIT_BITMAP, TLSF_AUDIT_CONTROL,
+			offsetof(control_t, fl_bitmap));
+	}
+
+	for (fl = 0; fl < FL_INDEX_COUNT; ++fl)
+	{
+		const unsigned int fl_bit = ct->fl_bitmap & (1U << fl);
+		if (!fl_bit && ct->sl_bitmap[fl])
+		{
+			return audit_fail(info, TLSF_AUDIT_BITMAP, TLSF_AUDIT_CONTROL,
+				offsetof(control_t, sl_bitmap)
+				+ tlsf_cast(size_t, fl) * sizeof(unsigned int));
+		}
+		for (sl = 0; sl < SL_INDEX_COUNT; ++sl)
+		{
+			const unsigned int sl_bit = ct->sl_bitmap[fl] & (1U << sl);
+			const block_header_t* head = ct->blocks[fl][sl];
+			const size_t head_off = offsetof(control_t, blocks)
+				+ (tlsf_cast(size_t, fl) * SL_INDEX_COUNT + tlsf_cast(size_t, sl))
+				* sizeof(block_header_t*);
+
+			if ((!sl_bit && head != null_node) || (sl_bit && head == null_node))
+			{
+				return audit_fail(info, TLSF_AUDIT_BITMAP, TLSF_AUDIT_CONTROL, head_off);
+			}
+			if (!sl_bit)
+			{
+				continue;
+			}
+
+			{
+				const block_header_t* prev = null_node;
+				const block_header_t* node = head;
+				/* Where the pointer to node was read from, for reporting. */
+				size_t src_pool = TLSF_AUDIT_CONTROL;
+				size_t src_off = head_off;
+				size_t steps = 0;
+
+				while (node != null_node)
+				{
+					size_t pi = 0, off = 0;
+					int fli = 0, sli = 0;
+
+					if (!audit_locate(pools, pool_count, workspace, node, &pi, &off))
+					{
+						return audit_fail(info, TLSF_AUDIT_LIST_TARGET, src_pool, src_off);
+					}
+					if (audit_bit_get(audit_bitmap(workspace, pools, pi, 1), off / ALIGN_SIZE))
+					{
+						/* Already seen: a duplicate, which is also how a
+						** cycle manifests. */
+						return audit_fail(info, TLSF_AUDIT_LIST_DUP, pi, off);
+					}
+					audit_bit_set(audit_bitmap(workspace, pools, pi, 1), off / ALIGN_SIZE);
+
+					/* node is a confirmed free block, so its size and link
+					** fields lie inside its pool and are safe to read. */
+					if (node->prev_free != prev)
+					{
+						return audit_fail(info, TLSF_AUDIT_LIST_LINK, pi,
+							off + offsetof(block_header_t, prev_free)
+							- offsetof(block_header_t, size));
+					}
+					mapping_insert(block_size(node), &fli, &sli);
+					if (fli != fl || sli != sl)
+					{
+						return audit_fail(info, TLSF_AUDIT_LIST_BUCKET, pi, off);
+					}
+					prev = node;
+					src_pool = pi;
+					src_off = off + offsetof(block_header_t, next_free)
+						- offsetof(block_header_t, size);
+					node = node->next_free;
+					++steps;
+					if (steps > total_free)
+					{
+						/* Unreachable backstop (the duplicate check fires
+						** first), kept so the walk is bounded by
+						** construction. */
+						return audit_fail(info, TLSF_AUDIT_LIST_DUP, pi, off);
+					}
+				}
+			}
+		}
+	}
+
+	/* Every physically free block must have appeared on exactly one list. */
+	for (i = 0; i < pool_count; ++i)
+	{
+		const size_t words = audit_bitmap_words(audit_pool_bytes(&pools[i]));
+		const size_t* present = audit_bitmap(workspace, pools, i, 0);
+		const size_t* listed = audit_bitmap(workspace, pools, i, 1);
+		size_t w;
+		for (w = 0; w < words; ++w)
+		{
+			size_t missing = present[w] & ~listed[w];
+			if (missing)
+			{
+				size_t bit = w * sizeof(size_t) * CHAR_BIT;
+				while (!(missing & 1))
+				{
+					missing >>= 1;
+					++bit;
+				}
+				return audit_fail(info, TLSF_AUDIT_LIST_MISSING, i, bit * ALIGN_SIZE);
+			}
+		}
+	}
+	return 0;
+}
+
+int tlsf_audit(const void* control, size_t control_size,
+	const tlsf_audit_pool_t* pools, size_t pool_count,
+	void* workspace, size_t workspace_size,
+	tlsf_audit_info_t* info)
+{
+	tlsf_audit_info_t dummy;
+	size_t required;
+	size_t* ws = 0;
+	size_t total_free = 0;
+	size_t i;
+
+	if (!info)
+	{
+		info = &dummy;
+	}
+
+	/* Descriptor validation: starts, lengths and counts. */
+	if (!control
+		|| (tlsf_cast(tlsfptr_t, control) % ALIGN_SIZE) != 0
+		|| control_size < sizeof(control_t)
+		|| (pool_count && !pools))
+	{
+		return TLSF_AUDIT_BAD_PARAM;
+	}
+	for (i = 0; i < pool_count; ++i)
+	{
+		if (!audit_pool_valid(&pools[i]))
+		{
+			return TLSF_AUDIT_BAD_PARAM;
+		}
+	}
+
+	required = tlsf_audit_workspace_size(pools, pool_count);
+	if (pool_count && !required)
+	{
+		/* Only reachable if the size computation overflowed. */
+		return TLSF_AUDIT_BAD_PARAM;
+	}
+	if (workspace_size < required || (required && !workspace))
+	{
+		return TLSF_AUDIT_NO_SPACE;
+	}
+
+	if (required)
+	{
+		ws = tlsf_cast(size_t*, align_ptr(workspace, sizeof(size_t)));
+		for (i = 0; i < pool_count; ++i)
+		{
+			const size_t words = audit_bitmap_words(audit_pool_bytes(&pools[i]));
+			memset(audit_bitmap(ws, pools, i, 0), 0, words * sizeof(size_t));
+			memset(audit_bitmap(ws, pools, i, 1), 0, words * sizeof(size_t));
+		}
+	}
+
+	/* Physical coverage, in the caller's pool order. */
+	for (i = 0; i < pool_count; ++i)
+	{
+		if (audit_scan_pool(pools, i, ws, &total_free, info))
+		{
+			return TLSF_AUDIT_CORRUPT;
+		}
+	}
+
+	/* Bitmaps and free lists, buckets in index order. */
+	if (audit_control(control, pools, pool_count, ws, total_free, info))
+	{
+		return TLSF_AUDIT_CORRUPT;
+	}
+
+	info->code = TLSF_AUDIT_CODE_NONE;
+	info->pool = 0;
+	info->offset = 0;
+	return TLSF_AUDIT_OK;
+}
