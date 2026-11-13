@@ -1,0 +1,11 @@
+--- a/lib/mapping0.c
++++ b/lib/mapping0.c
+@@ -762,7 +762,7 @@
+       if(mag>0)
+         if(ang>0){
+           pcmM[j]=mag;
+-          pcmA[j]=mag-ang;
++          pcmA[j]=mag+ang;
+         }else{
+           pcmA[j]=mag;
+           pcmM[j]=mag+ang;
