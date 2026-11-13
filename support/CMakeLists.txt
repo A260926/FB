@@ -1,0 +1,8 @@
+add_executable(baseline baseline.cpp)
+target_link_libraries(baseline PRIVATE opentimelineio)
+target_include_directories(baseline PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_BINARY_DIR}/src")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ripple_delete_test.cpp")
+  add_executable(regression ripple_delete_test.cpp)
+  target_link_libraries(regression PRIVATE opentimelineio)
+  target_include_directories(regression PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_BINARY_DIR}/src")
+endif()

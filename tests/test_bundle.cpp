@@ -1,0 +1,875 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Contributors to the OpenTimelineIO project
+
+#include "utils.h"
+
+#include <opentimelineio/bundle.h>
+#include <opentimelineio/clip.h>
+#include <opentimelineio/externalReference.h>
+#include <opentimelineio/generatorReference.h>
+#include <opentimelineio/imageSequenceReference.h>
+#include <opentimelineio/marker.h>
+#include <opentimelineio/missingReference.h>
+#include <opentimelineio/stringUtils.h>
+#include <opentimelineio/timeline.h>
+#include <opentimelineio/track.h>
+
+#include <mz.h>
+#include <mz_os.h>
+#include <mz_strm.h>
+#include <mz_zip.h>
+#include <mz_zip_rw.h>
+
+#include <fstream>
+#include <sstream>
+
+using namespace OTIO_NS;
+using namespace OTIO_NS::bundle;
+
+// A non-ASCII name as escaped bytes:
+std::string const utf8_name =
+    "\xc3\xa9\xe6\x97\xa5\xe6\x9c\xac\xf0\x9f\x8e\xac"; // é日本🎬
+
+// Utility for creating a simple timeline
+SerializableObject::Retainer<Timeline> create_simple_timeline()
+{
+    SerializableObject::Retainer<Timeline> tl(new Timeline);
+
+    SerializableObject::Retainer<Track> tr = new Track(
+        "video",
+        TimeRange(0, 48, 24),
+        Track::Kind::video);
+    tl->tracks()->append_child(tr);
+
+    SerializableObject::Retainer<Clip> cl = new Clip(
+        "video clip 1",
+        nullptr,
+        TimeRange(0, 24, 24));
+    tr->append_child(cl);
+
+    cl = new Clip(
+        "video clip 2",
+        nullptr,
+        TimeRange(0, 24, 24));
+    tr->append_child(cl);
+
+    tr = new Track(
+        "audio",
+        TimeRange(0, 48, 24),
+        Track::Kind::audio);
+    tl->tracks()->append_child(tr);
+
+    cl = new Clip(
+        "audio clip 1",
+        nullptr,
+        TimeRange(0, 24, 48));
+    tr->append_child(cl);
+
+    return tl;
+}
+
+// Utility to find a clip by name
+Clip* find_clip_by_name(Timeline* timeline, std::string const& name)
+{
+    for (auto clip : timeline->find_clips())
+    {
+        if (name == clip->name())
+        {
+            return clip;
+        }
+    }
+    return nullptr;
+}
+
+// Utility for creating an empty file
+void create_file(std::filesystem::path const& path)
+{
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream fs(path);
+}
+
+// Utility for creating empty files for each media reference
+void create_refs(Timeline* timeline, std::filesystem::path const& path)
+{
+    for (auto const& clip : timeline->find_clips())
+    {
+        for (auto const& ref : clip->media_references())
+        {
+            if (auto ext = dynamic_cast<ExternalReference*>(ref.second))
+            {
+                if (auto const file = file_from_url(ext->target_url()))
+                {
+                    auto const file_path = from_utf8(*file);
+                    create_file(file_path.is_relative() ?
+                        path / file_path :
+                        file_path);
+                }
+            }
+            else if (auto seq = dynamic_cast<ImageSequenceReference*>(ref.second))
+            {
+                auto const base = file_from_url(seq->target_url_base());
+                for (int frame = seq->start_frame();
+                    frame <= seq->end_frame();
+                    frame += seq->frame_step())
+                {
+                    if (auto const file = file_from_url(seq->target_url_for_image_number(frame)))
+                    {
+                        auto const file_path = from_utf8(*file);
+                        create_file(file_path.is_relative() ?
+                            path / file_path :
+                            file_path);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Utility to compare media reference filenames between timeline
+void compare_filenames(Timeline* a, Timeline* b)
+{
+    const auto a_clips = a->find_clips();
+    const auto b_clips = b->find_clips();
+    assertEqual(a_clips.size(), b_clips.size());
+    for (size_t i = 0; i < a_clips.size(); ++i)
+    {
+        auto a_refs = a_clips[i]->media_references();
+        auto b_refs = b_clips[i]->media_references();
+        assertEqual(a_refs.size(), b_refs.size());
+        for (auto a = a_refs.begin(), b = b_refs.begin();
+            a != a_refs.end() && b != b_refs.end();
+            ++a, ++b)
+        {
+            auto a_ext = dynamic_cast<ExternalReference*>(a->second);
+            auto b_ext = dynamic_cast<ExternalReference*>(b->second);
+            if (a_ext && b_ext)
+            {
+                auto const a_file = file_from_url(a_ext->target_url());
+                auto const b_file = file_from_url(b_ext->target_url());
+                if (a_file && b_file)
+                {
+                    assertEqual(
+                        from_utf8(*a_file).filename(),
+                        from_utf8(*b_file).filename());
+                }
+            }
+            auto a_seq = dynamic_cast<ImageSequenceReference*>(a->second);
+            auto b_seq = dynamic_cast<ImageSequenceReference*>(b->second);
+            if (a_seq && b_seq)
+            {
+                assertEqual(a_seq->name_prefix(), b_seq->name_prefix());
+                assertEqual(a_seq->name_suffix(), b_seq->name_suffix());
+            }
+        }
+    }
+}
+
+// Overwrite a 32-bit field in the central directory header of a ZIP entry,
+// for example to forge its CRC (offset 16) or uncompressed size (offset 24).
+// The header starts with a signature and the file name is at offset 46.
+void forge_zip_field(
+    std::string const& path,
+    std::string const& entry_name,
+    size_t             field_offset,
+    uint32_t           value)
+{
+    std::string bytes;
+    {
+        std::ifstream in(from_utf8(path), std::ios::binary);
+        bytes.assign(
+            std::istreambuf_iterator<char>(in),
+            std::istreambuf_iterator<char>());
+    }
+    std::string const signature("PK\x01\x02", 4);
+    size_t const name_offset = 46;
+    auto const header =
+        bytes.find(entry_name, bytes.find(signature)) - name_offset;
+    assertEqual(bytes.substr(header, signature.size()), signature);
+    for (size_t i = 0; i < 4; ++i)
+        bytes[header + field_offset + i] = static_cast<char>(value >> (i * 8));
+    std::ofstream out(from_utf8(path), std::ios::binary);
+    out << bytes;
+}
+
+// Minimal ZIP writer used only for constructing malicious archives in
+// test_otioz_zip_slip. The bundle library has its own ZIP writer; this
+// helper exists because the test needs to write entries with names the
+// real writer would reject ("../.ssh", "/etc/passwd").
+class ZipWriter
+{
+public:
+    ZipWriter(std::string const& path) :
+        _path(path)
+    {
+        _writer = mz_zip_writer_create();
+        mz_zip_writer_open_file(_writer, path.c_str(), 0, 0);
+    }
+
+    ~ZipWriter()
+    {
+        mz_zip_writer_close(_writer);
+        mz_zip_writer_delete(&_writer);
+    }
+
+    ZipWriter(ZipWriter const&) = delete;
+    ZipWriter& operator=(ZipWriter const&) = delete;
+
+    void add_text(std::string const& name, std::string const& text)
+    {
+        mz_zip_file file_info = {};
+        file_info.filename = name.c_str();
+        file_info.modified_date = time(nullptr);
+        file_info.version_madeby = MZ_VERSION_MADEBY;
+        file_info.compression_method = MZ_COMPRESS_METHOD_DEFLATE;
+        file_info.flag = MZ_ZIP_FLAG_UTF8;
+        mz_zip_writer_add_buffer(
+            _writer,
+            const_cast<char*>(text.data()),
+            static_cast<int32_t>(text.size()),
+            &file_info);
+    }
+
+    // Add a symbolic link, as written on a Unix system.
+    void add_symlink(std::string const& name, std::string const& target)
+    {
+        mz_zip_file file_info = {};
+        file_info.filename = name.c_str();
+        file_info.modified_date = time(nullptr);
+        file_info.version_madeby =
+            (MZ_HOST_SYSTEM_UNIX << 8) | MZ_VERSION_MADEBY_ZIP_VERSION;
+        file_info.external_fa = 0120777u << 16;
+        file_info.compression_method = MZ_COMPRESS_METHOD_STORE;
+        file_info.flag = MZ_ZIP_FLAG_UTF8;
+        mz_zip_writer_add_buffer(
+            _writer,
+            const_cast<char*>(target.data()),
+            static_cast<int32_t>(target.size()),
+            &file_info);
+    }
+
+private:
+    std::string _path;
+    void* _writer = nullptr;
+};
+
+int
+main(int argc, char** argv)
+{
+    Tests tests;
+
+    tests.add_test("test_file_from_url", [] {
+        std::map<std::string, std::string> const urls =
+        {
+            {
+                // windows encoded url
+                "file://host/S%3a/path/file.ext",
+                "S:/path/file.ext"
+            },
+            {
+                // windows drive url
+                "file://S:/path/file.ext",
+                "S:/path/file.ext"
+            },
+            {
+                // windows encoded_unc url
+                "file://unc/path/sub%20dir/file.ext",
+                "//unc/path/sub dir/file.ext"
+            },
+            {
+                // windows unc url
+                "file://unc/path/sub dir/file.ext",
+                "//unc/path/sub dir/file.ext"
+            },
+            {
+                // posix localhost url
+                "file://localhost/path/sub dir/file.ext",
+                "/path/sub dir/file.ext"
+            },
+            {
+                // posix encoded url
+                "file:///path/sub%20dir/file.ext",
+                "/path/sub dir/file.ext"
+            },
+            {
+                // posix url
+                "file:///path/sub dir/file.ext",
+                "/path/sub dir/file.ext"
+            },
+            {
+                // '%' that is not an escape
+                "file:///path/100%.mov",
+                "/path/100%.mov"
+            },
+            {
+                // '%' without hex digits
+                "file:///path/%zz.mov",
+                "/path/%zz.mov"
+            },
+        };
+        for (auto i : urls)
+        {
+            std::string const file = file_from_url(i.first).value();
+            assertEqual(file, i.second);
+        }
+    });
+
+    tests.add_test("test_otioz_round_trip", [] {
+        TempDir temp;
+
+        // Create a timeline and media references
+        auto tl = create_simple_timeline();
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference("video1_" + utf8_name + ".mov"));
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new ImageSequenceReference(
+                "",
+                "render.",
+                ".exr",
+                0, 1, 24, 0,
+                ImageSequenceReference::MissingFramePolicy::error,
+                TimeRange(0, 24, 24)));
+        find_clip_by_name(tl, "audio clip 1")->set_media_references(
+            {
+                { "wav", new ExternalReference("audio.wav") },
+                { "absolute_path", new ExternalReference(to_utf8(temp.path() / "audio.mp3")) },
+                { "sub_dir", new ExternalReference("sub_dir/audio.ogg") }
+            },
+            "wav");
+        create_refs(tl, temp.path());
+
+        // Dry run
+        std::string const otioz_path =
+            to_utf8(temp.path() / from_utf8(
+                "round_trip_" + utf8_name + ".otioz"));
+        WriteOptions write_options;
+        write_options.relative_media_base_dir = to_utf8(temp.path());
+        OTIO_NS::ErrorStatus error;
+        auto const size = dry_run(tl, write_options, &error);
+        assertTrue(size.has_value());
+        assertTrue(*size > 0);
+
+        // Write the otioz
+        assertTrue(write_otioz(tl, otioz_path, write_options, &error));
+        
+        // Read the otioz and compare with the original
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            ReadOptions(),
+            &error));
+        assertNotNull(result);
+        compare_filenames(tl, result);
+
+        // Read the otioz and extract the contents
+        ReadOptions read_options;
+        auto const extract_path = temp.path() / "extract";
+        read_options.extract_path = to_utf8(extract_path);
+        result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            read_options,
+            &error));
+        assertNotNull(result);
+        auto const media_path = extract_path / media_dir;
+        assertTrue(std::filesystem::exists(
+            media_path / from_utf8("video1_" + utf8_name + ".mov")));
+        for (int i = 0; i < 24; ++i)
+        {
+            std::stringstream ss;
+            ss << "render." << i << ".exr";
+            assertTrue(std::filesystem::exists(media_path / ss.str()));
+        }
+        assertTrue(std::filesystem::exists(media_path / "audio.wav"));
+        assertTrue(std::filesystem::exists(media_path / "audio.mp3"));
+        assertTrue(std::filesystem::exists(media_path / "audio.ogg"));
+    });
+
+    tests.add_test("test_otiod_round_trip", [] {
+        TempDir temp;
+
+        // Create a timeline and media references
+        auto tl = create_simple_timeline();
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference("video1_" + utf8_name + ".mov"));
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new ImageSequenceReference(
+                "",
+                "render.",
+                ".exr",
+                0, 1, 24, 0,
+                ImageSequenceReference::MissingFramePolicy::error,
+                TimeRange(0, 24, 24)));
+        find_clip_by_name(tl, "audio clip 1")->set_media_references(
+            {
+                { "wav", new ExternalReference("audio.wav") },
+                { "absolute_path", new ExternalReference(to_utf8(temp.path() / "audio.mp3")) },
+                { "sub_dir", new ExternalReference("sub_dir/audio.ogg") }
+            },
+            "wav");
+        create_refs(tl, temp.path());
+        
+        // Write the otiod
+        std::string const otiod_path =
+            to_utf8(temp.path() / from_utf8(
+                "round_trip_" + utf8_name + ".otiod"));
+        WriteOptions write_options;
+        write_options.relative_media_base_dir = to_utf8(temp.path());
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otiod(tl, otiod_path, write_options, &error));
+        
+        // Read the otiod and compare with the original
+        ReadOptions read_options;
+        read_options.absolute_media_reference_paths = true;
+        auto result = dynamic_cast<Timeline*>(read_otiod(
+            otiod_path,
+            read_options,
+            &error));
+        assertNotNull(result);
+        compare_filenames(tl, result);
+
+        // Check that the paths are absolute
+        auto cl = find_clip_by_name(result, "video clip 1");
+        auto file = file_from_url(dynamic_cast<ExternalReference*>(
+            cl->media_reference())->target_url());
+        assertTrue(file.has_value());
+        assertTrue(from_utf8(*file).is_absolute());
+        assertTrue(std::filesystem::exists(from_utf8(*file)));
+        cl = find_clip_by_name(result, "video clip 2");
+        file = file_from_url(dynamic_cast<ImageSequenceReference*>(
+            cl->media_reference())->target_url_for_image_number(0));
+        assertTrue(file.has_value());
+        assertTrue(from_utf8(*file).is_absolute());
+        assertTrue(std::filesystem::exists(from_utf8(*file)));
+    });
+
+    tests.add_test("test_otioz_media_policy", [] {
+
+        // Create a timeline with file and non-file references
+        auto tl = create_simple_timeline();
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference("video1.mov"));
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new GeneratorReference(
+                "gradient",
+                "gradient",
+                TimeRange(0, 24, 24),
+                {},
+                {
+                    { "meta", "data" }
+                }));
+        
+        // error_if_not_file
+        {
+            TempDir temp;
+            create_refs(tl, temp.path());
+
+            std::string const otioz_path =
+                to_utf8(temp.path() / "error_if_not_file.otioz");
+            WriteOptions write_options;
+            write_options.relative_media_base_dir = to_utf8(temp.path());
+            write_options.policy = MediaReferencePolicy::error_if_not_file;
+            OTIO_NS::ErrorStatus error;
+            assertFalse(dry_run(tl, write_options, &error).has_value());
+            assertFalse(write_otioz(tl, otioz_path, write_options, &error));
+        }
+
+        // missing_if_not_file
+        {
+            TempDir temp;
+            create_refs(tl, temp.path());
+
+            std::string const otioz_path =
+                to_utf8(temp.path() / "missing_if_not_file.otioz");
+            WriteOptions write_options;
+            write_options.relative_media_base_dir = to_utf8(temp.path());
+            write_options.policy = MediaReferencePolicy::missing_if_not_file;
+            OTIO_NS::ErrorStatus error;
+            assertTrue(dry_run(tl, write_options, &error).has_value());
+            assertTrue(write_otioz(tl, otioz_path, write_options, &error));
+            
+            auto result = dynamic_cast<Timeline*>(read_otioz(
+                otioz_path,
+                ReadOptions(),
+                &error));
+            assertNotNull(result);
+            assertNotNull(dynamic_cast<MissingReference*>(
+                find_clip_by_name(result, "video clip 2")->media_reference()));
+        }
+        
+        // all_missing
+        {
+            TempDir temp;
+            create_refs(tl, temp.path());
+
+            std::string const otioz_path =
+                to_utf8(temp.path() / "all_missing.otioz");
+            WriteOptions write_options;
+            write_options.relative_media_base_dir = to_utf8(temp.path());
+            write_options.policy = MediaReferencePolicy::all_missing;
+            OTIO_NS::ErrorStatus error;
+            assertTrue(dry_run(tl, write_options, &error).has_value());
+            assertTrue(write_otioz(tl, otioz_path, write_options, &error));
+            
+            auto result = dynamic_cast<Timeline*>(read_otioz(
+                otioz_path,
+                ReadOptions(),
+                &error));
+            assertNotNull(result);
+            assertNotNull(dynamic_cast<MissingReference*>(
+                find_clip_by_name(result, "video clip 1")->media_reference()));
+            assertNotNull(dynamic_cast<MissingReference*>(
+                find_clip_by_name(result, "video clip 2")->media_reference()));
+        }
+    });
+
+    tests.add_test("test_otioz_empty", [] {
+        TempDir temp;
+        SerializableObject::Retainer<Timeline> tl(new Timeline);
+
+        auto const otioz_path = to_utf8(temp.path() / "empty.otioz");
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otioz(tl, otioz_path, WriteOptions(), &error));
+
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path, ReadOptions(), &error));
+        assertNotNull(result);
+        assertEqual(result->find_clips().size(), 0);
+    });
+
+    tests.add_test("test_otiod_empty", [] {
+        TempDir temp;
+        SerializableObject::Retainer<Timeline> tl(new Timeline);
+
+        auto const otiod_path = to_utf8(temp.path() / "empty.otiod");
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otiod(tl, otiod_path, WriteOptions(), &error));
+
+        auto result = dynamic_cast<Timeline*>(read_otiod(
+            otiod_path, ReadOptions(), &error));
+        assertNotNull(result);
+        assertEqual(result->find_clips().size(), 0);
+    });
+
+    tests.add_test("test_otiod_no_version_file", [] {
+        // The python adapter did not write version files for .otiod bundles.
+        TempDir temp;
+        SerializableObject::Retainer<Timeline> tl(new Timeline);
+
+        auto const otiod_path = to_utf8(temp.path() / "no_version.otiod");
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otiod(tl, otiod_path, WriteOptions(), &error));
+
+        auto const version_path =
+            from_utf8(otiod_path) / bundle::version_file;
+        assertTrue(std::filesystem::is_regular_file(version_path));
+        std::filesystem::remove(version_path);
+
+        auto result = dynamic_cast<Timeline*>(read_otiod(
+            otiod_path, ReadOptions(), &error));
+        assertNotNull(result);
+        assertFalse(is_error(error));
+    });
+
+    tests.add_test("test_downgrade_error", [] {
+        // A downgrade that is not possible is an error, whether or not an
+        // error status is given.
+        TempDir temp;
+        SerializableObject::Retainer<Timeline> tl(new Timeline);
+        tl->tracks()->markers().push_back(new Marker("marker"));
+        WriteOptions options;
+        options.target_schema_versions = schema_version_map{ { "Marker", 1 } };
+
+        auto const otioz_path = to_utf8(temp.path() / "downgrade.otioz");
+        auto const otiod_path = to_utf8(temp.path() / "downgrade.otiod");
+        assertFalse(dry_run(tl, options).has_value());
+        assertFalse(write_otioz(tl, otioz_path, options));
+        assertFalse(write_otiod(tl, otiod_path, options));
+        assertFalse(std::filesystem::exists(from_utf8(otioz_path)));
+        assertFalse(std::filesystem::exists(from_utf8(otiod_path)));
+
+        OTIO_NS::ErrorStatus error;
+        assertFalse(write_otioz(tl, otioz_path, options, &error));
+        assertTrue(is_error(error));
+    });
+
+    tests.add_test("test_otioz_error", [] {
+        TempDir temp;
+
+        // Create a timeline
+        auto tl = create_simple_timeline();
+
+        // Write the otioz
+        std::string otioz_path =
+            to_utf8(temp.path() / "error.otioz");
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otioz(tl, otioz_path, WriteOptions(), &error));
+
+        // Write the otioz (error on overwrite)
+        assertFalse(write_otioz(tl, otioz_path, WriteOptions(), &error));
+        std::filesystem::remove(from_utf8(otioz_path));
+
+        // Write and read the otioz (error on a directory without access,
+        // where the platform enforces it)
+        auto const locked = temp.path() / "locked";
+        std::filesystem::create_directory(locked);
+        std::filesystem::permissions(locked, std::filesystem::perms::none);
+        std::error_code ec;
+        std::filesystem::exists(locked / "error.otioz", ec);
+        if (ec)
+        {
+            std::string const locked_path = to_utf8(locked / "error.otioz");
+            error = OTIO_NS::ErrorStatus();
+            assertFalse(write_otioz(tl, locked_path, WriteOptions(), &error));
+            assertTrue(is_error(error));
+            error = OTIO_NS::ErrorStatus();
+            assertFalse(read_otioz(locked_path, ReadOptions(), &error));
+            assertTrue(is_error(error));
+        }
+        std::filesystem::permissions(locked, std::filesystem::perms::owner_all);
+
+        // Write the otioz (error on missing media)
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference("video.mov"));
+        assertFalse(write_otioz(tl, otioz_path, WriteOptions(), &error));
+        std::filesystem::remove(from_utf8(otioz_path));
+
+        // Write the otioz (error on overwrite media)
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new ExternalReference("sub_dir/video.mov"));
+        create_refs(tl, temp.path());
+        assertFalse(write_otioz(tl, otioz_path, WriteOptions(), &error));
+        std::filesystem::remove(from_utf8(otioz_path));
+
+        // Write the otioz (error on input path)
+        otioz_path = to_utf8(temp.path() / "subdir" / "error.otioz");
+        assertFalse(write_otioz(tl, otioz_path, WriteOptions(), &error));
+        std::filesystem::remove(from_utf8(otioz_path));
+    });
+
+    tests.add_test("test_otiod_error", [] {
+        TempDir temp;
+
+        // Create a timeline
+        auto tl = create_simple_timeline();
+
+        // Write the otiod
+        std::string otiod_path =
+            to_utf8(temp.path() / "error.otiod");
+        OTIO_NS::ErrorStatus error;
+        assertTrue(write_otiod(tl, otiod_path, WriteOptions(), &error));
+
+        // Write the otiod (error on overwrite)
+        assertFalse(write_otiod(tl, otiod_path, WriteOptions(), &error));
+        std::filesystem::remove_all(from_utf8(otiod_path));
+
+        // Write and read the otiod (error on a directory without access,
+        // where the platform enforces it)
+        auto const locked = temp.path() / "locked";
+        std::filesystem::create_directory(locked);
+        std::filesystem::permissions(locked, std::filesystem::perms::none);
+        std::error_code ec;
+        std::filesystem::exists(locked / "error.otiod", ec);
+        if (ec)
+        {
+            std::string const locked_path = to_utf8(locked / "error.otiod");
+            error = OTIO_NS::ErrorStatus();
+            assertFalse(write_otiod(tl, locked_path, WriteOptions(), &error));
+            assertTrue(is_error(error));
+            error = OTIO_NS::ErrorStatus();
+            assertFalse(read_otiod(locked_path, ReadOptions(), &error));
+            assertTrue(is_error(error));
+        }
+        std::filesystem::permissions(locked, std::filesystem::perms::owner_all);
+
+        // Write the otiod (missing media)
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference("video.mov"));
+        assertFalse(write_otiod(tl, otiod_path, WriteOptions(), &error));
+        std::filesystem::remove_all(from_utf8(otiod_path));
+
+        // Write the otiod (error on overwrite media)
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new ExternalReference("sub_dir/video.mov"));
+        create_refs(tl, temp.path());
+        assertFalse(write_otiod(tl, otiod_path, WriteOptions(), &error));
+        std::filesystem::remove_all(from_utf8(otiod_path));
+
+        // Write the otiod (error on input path)
+        otiod_path = to_utf8(temp.path() / "subdir" / "error.otiod");
+        assertFalse(write_otiod(tl, otiod_path, WriteOptions(), &error));
+        std::filesystem::remove_all(from_utf8(otiod_path));
+    });
+
+    tests.add_test("test_otioz_zip64", [] {
+        TempDir temp;
+
+        // Create a timeline and media references
+        //
+        // To test 64-bit ZIP functionality:
+        // * Resize multiple media files > 4GB
+        // * Set the number of sequence images > max 16-bit value
+        // * Note that these tests need ~24GB disk space
+        auto tl = create_simple_timeline();
+        std::string const large_file = "video1.mov";
+        find_clip_by_name(tl, "video clip 1")->set_media_reference(
+            new ExternalReference(large_file));
+        find_clip_by_name(tl, "video clip 2")->set_media_reference(
+            new ImageSequenceReference(
+                "",
+                "render.",
+                ".exr",
+                0, 1, 24, 0,
+                ImageSequenceReference::MissingFramePolicy::error,
+                TimeRange(0, std::numeric_limits<uint16_t>::max() + 1, 24)));
+        std::string const large_file_2 = "audio.wav";
+        find_clip_by_name(tl, "audio clip 1")->set_media_reference(
+            new ExternalReference(large_file_2));
+        create_refs(tl, temp.path());
+
+        // Resize media files > 4GB
+        const std::uintmax_t gigabyte = 1024 * 1024 * 1024;
+        std::uintmax_t const large_file_size = 4 * gigabyte;
+        std::filesystem::resize_file(temp.path() / large_file, large_file_size);
+        std::filesystem::resize_file(temp.path() / large_file_2, large_file_size);
+
+        // Dry run
+        std::string const otioz_path = to_utf8(temp.path() / "zip64.otioz");
+        WriteOptions write_options;
+        write_options.relative_media_base_dir = to_utf8(temp.path());
+        OTIO_NS::ErrorStatus error;
+        auto const dry_run_size = dry_run(tl, write_options, &error);
+        assertTrue(dry_run_size.has_value());
+        assertTrue(*dry_run_size > large_file_size * 2);
+
+        // Write the otioz
+        assertTrue(write_otioz(tl, otioz_path, write_options, &error));
+        assertTrue(std::filesystem::file_size(from_utf8(otioz_path)) >= *dry_run_size);
+
+        // Read the otioz and extract the contents
+        ReadOptions read_options;
+        auto const extract_path = temp.path() / "extract";
+        read_options.extract_path = to_utf8(extract_path);
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            read_options,
+            &error));
+        assertNotNull(result);
+        assertEqual(
+            std::filesystem::file_size(extract_path / "media" / large_file),
+            large_file_size);
+        assertEqual(
+            std::filesystem::file_size(extract_path / "media" / large_file_2),
+            large_file_size);
+    });
+
+    tests.add_test("test_otioz_forged_timeline_size", [] {
+        TempDir temp;
+
+        // Write an otioz file, then forge the recorded size of the timeline
+        // to be almost 2GB. Reading should only use as much memory as the
+        // actual timeline.
+        auto tl = create_simple_timeline();
+        OTIO_NS::ErrorStatus error;
+        auto const json = tl->to_json_string(&error);
+        std::string const otioz_path = to_utf8(temp.path() / "forged.otioz");
+        {
+            ZipWriter zip(otioz_path);
+            zip.add_text(bundle::timeline_file, json);
+        }
+        forge_zip_field(otioz_path, bundle::timeline_file, 24, 0x7ffffff0);
+        SerializableObject::Retainer<SerializableObject> result(
+            read_otioz(otioz_path, ReadOptions(), &error));
+        assertFalse(is_error(error));
+        assertNotNull(dynamic_cast<Timeline*>(result.value));
+
+        // Forge the CRC, which should be an error
+        forge_zip_field(otioz_path, bundle::timeline_file, 16, 0);
+        error = OTIO_NS::ErrorStatus();
+        assertEqual(read_otioz(otioz_path, ReadOptions(), &error), nullptr);
+        assertTrue(is_error(error));
+    });
+
+    tests.add_test("test_otioz_zip_slip_relative", [] {
+        TempDir temp;
+
+        // Write an otioz file with a malicious entry ("zip slip")
+        std::string const otioz_path = to_utf8(temp.path() / "zip_slip.otioz");
+        {
+            ZipWriter zip(otioz_path);
+            zip.add_text(bundle::version_file, bundle::version);
+            zip.add_text(bundle::timeline_file, "{}");
+            zip.add_text("../relative", "");
+        }
+
+        // Read the otioz
+        ReadOptions read_options;
+        auto const extract_path = temp.path() / "extract";
+        read_options.extract_path = to_utf8(extract_path);
+        OTIO_NS::ErrorStatus error;
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            read_options,
+            &error));
+        assertEqual(result, nullptr);
+        assertTrue(is_error(error));
+        assertFalse(std::filesystem::exists(temp.path() / "relative"));
+    });
+
+    tests.add_test("test_otioz_zip_slip_absolute", [] {
+        TempDir temp;
+
+        // Write an otioz file with a malicious entry ("zip slip")
+        std::string const otioz_path = to_utf8(temp.path() / "zip_slip.otioz");
+        {
+            ZipWriter zip(otioz_path);
+            zip.add_text(bundle::version_file, bundle::version);
+            zip.add_text(bundle::timeline_file, "{}");
+            zip.add_text(to_utf8(temp.path() / "absolute"), "");
+        }
+
+        // Read the otioz
+        ReadOptions read_options;
+        auto const extract_path = temp.path() / "extract";
+        read_options.extract_path = to_utf8(extract_path);
+        OTIO_NS::ErrorStatus error;
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            read_options,
+            &error));
+        assertEqual(result, nullptr);
+        assertTrue(is_error(error));
+        assertFalse(std::filesystem::exists(temp.path() / "absolute"));
+    });
+
+    tests.add_test("test_otioz_symlink", [] {
+        TempDir temp;
+
+        // Write an otioz file with a symbolic link to a file outside of
+        // the extract path
+        auto const outside_path = temp.path() / "outside.txt";
+        std::ofstream(outside_path) << "outside";
+        std::string const otioz_path = to_utf8(temp.path() / "symlink.otioz");
+        {
+            ZipWriter zip(otioz_path);
+            zip.add_text(bundle::version_file, bundle::version);
+            SerializableObject::Retainer<Timeline> tl(new Timeline);
+            zip.add_text(bundle::timeline_file, tl->to_json_string());
+            zip.add_symlink("media/link", to_utf8(outside_path));
+        }
+
+        // Read the otioz
+        ReadOptions read_options;
+        auto const extract_path = temp.path() / "extract";
+        read_options.extract_path = to_utf8(extract_path);
+        OTIO_NS::ErrorStatus error;
+        auto result = dynamic_cast<Timeline*>(read_otioz(
+            otioz_path,
+            read_options,
+            &error));
+        assertEqual(result, nullptr);
+        assertTrue(is_error(error));
+        std::error_code ec;
+        assertFalse(std::filesystem::is_symlink(extract_path / "media" / "link", ec));
+    });
+
+    tests.run(argc, argv);
+    return 0;
+}
