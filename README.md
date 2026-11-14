@@ -41,3 +41,36 @@ MojoShader, and moved over to a new repo for those that need it:
 
 https://github.com/icculus/mojoshader_assembler
 
+## Predicated SM3 instructions (glsl120 profile)
+
+The `glsl120` profile translates destination-predicated Shader Model 3.0
+instructions from legacy vertex and pixel shaders, so old assembly materials
+keep working through `MOJOSHADER_parse()`. A predicate register (`p0`) is a
+four-component boolean vector: without a swizzle each destination channel is
+gated by its matching predicate component, a replicate swizzle (e.g.
+`p0.x`) broadcasts one component to every channel, and `!` negates each
+component. The static write mask and the predicate together decide the final
+write; every channel that is masked off or predicate-closed keeps its
+previous value.
+
+Supported predicated opcodes, only in their originally legal stages, are:
+
+- Vertex and pixel: `MOV`, `ADD`, `SUB`, `MUL`, `MAD`, `MIN`, `MAX`, `DP3`,
+  `DP4`, `SETP`, and `TEXLDL`.
+- Pixel only: `CMP` and `TEXLDD`.
+
+Predicated texture fetch currently supports 2D samplers only. The whole
+candidate result (including a texture sample) is evaluated once into a
+block-local temporary and then committed per channel, so a texture is never
+sampled more than once and source/destination register aliasing is evaluated
+against the pre-instruction state. All other predicated instructions,
+including control flow, are rejected explicitly rather than having their
+predicate ignored. Non-predicated shaders, the other profiles, and the
+reflection APIs are unchanged. Output stays within GLSL 1.20 (no
+boolean-vector `mix`, which requires a later version).
+
+The CPU-only checks live in `checks/`: `sh checks/baseline.sh` runs the
+original non-predicated baseline, and `sh checks/check-predication.sh` builds
+and runs the predicated translation tests plus an independent register/texture
+execution model. No GPU, Python, or extra libraries are required.
+

@@ -444,15 +444,27 @@ void buffer_patch(Buffer *buffer, const size_t start,
 #define FXLC_ID 0x434C5846  // 0x434C5846 == 'FXLC'
 
 // we need to reference these by explicit value occasionally...
+#define OPCODE_MOV 1
+#define OPCODE_ADD 2
+#define OPCODE_SUB 3
+#define OPCODE_MAD 4
+#define OPCODE_MUL 5
 #define OPCODE_RCP 6
 #define OPCODE_RSQ 7
+#define OPCODE_DP3 8
+#define OPCODE_DP4 9
+#define OPCODE_MIN 10
+#define OPCODE_MAX 11
 #define OPCODE_RET 28
 #define OPCODE_IF 40
 #define OPCODE_IFC 41
 #define OPCODE_BREAK 44
 #define OPCODE_BREAKC 45
 #define OPCODE_TEXLD 66
+#define OPCODE_CMP 88
+#define OPCODE_TEXLDD 93
 #define OPCODE_SETP 94
+#define OPCODE_TEXLDL 95
 
 // TEXLD becomes a different instruction with these instruction controls.
 #define CONTROL_TEXLD  0

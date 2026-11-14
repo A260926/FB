@@ -1,0 +1,12 @@
+PLAIN errors=0
+#version 120
+attribute vec4 vs_v0;
+#define vs_o0 gl_Position
+
+void main()
+{
+	vs_o0 = vs_v0;
+}
+
+
+BASELINE_GLSL_VERTEX_OK

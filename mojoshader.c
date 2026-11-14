@@ -226,6 +226,7 @@ static inline void adjust_token_position(Context *ctx, const int incr)
 #define PROFILE_EMITTER_BYTECODE(op) emit_BYTECODE_##op,
 PREDECLARE_PROFILE(BYTECODE)
 #endif
+#define PROFILE_PREDICATION_BYTECODE NULL
 
 #if !SUPPORT_PROFILE_D3D
 #define PROFILE_EMITTER_D3D(op)
@@ -235,6 +236,7 @@ PREDECLARE_PROFILE(BYTECODE)
 #define PROFILE_EMITTER_D3D(op) emit_D3D_##op,
 PREDECLARE_PROFILE(D3D)
 #endif
+#define PROFILE_PREDICATION_D3D NULL
 
 #if !SUPPORT_PROFILE_HLSL
 #define PROFILE_EMITTER_HLSL(op)
@@ -244,14 +246,18 @@ PREDECLARE_PROFILE(D3D)
 #define PROFILE_EMITTER_HLSL(op) emit_HLSL_##op,
 PREDECLARE_PROFILE(HLSL)
 #endif
+#define PROFILE_PREDICATION_HLSL NULL
 
 #if !SUPPORT_PROFILE_GLSL
 #define PROFILE_EMITTER_GLSL(op)
+#define PROFILE_PREDICATION_GLSL NULL
 #else
 #undef AT_LEAST_ONE_PROFILE
 #define AT_LEAST_ONE_PROFILE 1
 #define PROFILE_EMITTER_GLSL(op) emit_GLSL_##op,
+#define PROFILE_PREDICATION_GLSL validate_GLSL_predication
 PREDECLARE_PROFILE(GLSL)
+void validate_GLSL_predication(Context *ctx, uint32 opcode);
 #endif
 
 #if !SUPPORT_PROFILE_METAL
@@ -262,6 +268,7 @@ PREDECLARE_PROFILE(GLSL)
 #define PROFILE_EMITTER_METAL(op) emit_METAL_##op,
 PREDECLARE_PROFILE(METAL)
 #endif
+#define PROFILE_PREDICATION_METAL NULL
 
 #if !SUPPORT_PROFILE_ARB1
 #define PROFILE_EMITTER_ARB1(op)
@@ -271,6 +278,7 @@ PREDECLARE_PROFILE(METAL)
 #define PROFILE_EMITTER_ARB1(op) emit_ARB1_##op,
 PREDECLARE_PROFILE(ARB1)
 #endif
+#define PROFILE_PREDICATION_ARB1 NULL
 
 #if !SUPPORT_PROFILE_SPIRV
 #define PROFILE_EMITTER_SPIRV(op)
@@ -280,6 +288,7 @@ PREDECLARE_PROFILE(ARB1)
 #define PROFILE_EMITTER_SPIRV(op) emit_SPIRV_##op,
 PREDECLARE_PROFILE(SPIRV)
 #endif
+#define PROFILE_PREDICATION_SPIRV NULL
 
 #if !AT_LEAST_ONE_PROFILE
 #error No profiles are supported. Fix your build.
@@ -299,6 +308,7 @@ PREDECLARE_PROFILE(SPIRV)
     emit_##prof##_finalize, \
     get_##prof##_varname, \
     get_##prof##_const_array_varname, \
+    PROFILE_PREDICATION_##prof, \
 },
 
 static const Profile profiles[] =
@@ -2099,6 +2109,12 @@ static int parse_instruction_token(Context *ctx)
 
     if (instruction->state != NULL)
         instruction->state(ctx);
+
+    // Give the profile a chance to reject predicated instructions it can't
+    //  translate before the emitter runs (and control flow can't quietly
+    //  ignore a predicate that this profile doesn't understand).
+    if (predicated && ctx->profile->validate_predication != NULL)
+        ctx->profile->validate_predication(ctx, opcode);
 
     ctx->instruction_count += instruction->slots;
 

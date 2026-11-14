@@ -116,6 +116,235 @@ const char *get_GLSL_srcarg_varname(Context *ctx, const size_t idx,
 } // get_GLSL_srcarg_varname
 
 
+// Predicated destination support (Shader Model 3.0, glsl120 profile only).
+//
+// A predicate register is a four-component boolean vector. Without a swizzle,
+//  each destination channel is gated by the matching predicate component.
+//  A replicate swizzle applies one component to every destination channel,
+//  and the "!" modifier negates each component. The static destination write
+//  mask decides which channels may change at all; masked-off (and
+//  predicate-off) channels keep their previous value.
+//
+// We evaluate the whole candidate result once into a block-local temporary,
+//  and only then commit channels through per-component "if" guards. Reading
+//  every source before writing anything keeps source/destination aliasing
+//  correct, and guarantees a texture is sampled exactly once. Temporary names
+//  come from a monotonic counter so repeated translations emit identical code.
+
+// Defined further down; needed by the per-channel predicated CMP builder.
+const char *make_GLSL_srcarg_string(Context *ctx, const size_t idx,
+                                    const int writemask, char *buf,
+                                    const size_t buflen);
+
+// The opcodes that may carry a destination predicate. Everything else is
+//  rejected explicitly, so control-flow instructions can't silently ignore it.
+static int glsl_predicate_opcode_allowed(const uint32 opcode)
+{
+    switch (opcode)
+    {
+        case OPCODE_MOV:
+        case OPCODE_ADD:
+        case OPCODE_SUB:
+        case OPCODE_MUL:
+        case OPCODE_MAD:
+        case OPCODE_MIN:
+        case OPCODE_MAX:
+        case OPCODE_DP3:
+        case OPCODE_DP4:
+        case OPCODE_CMP:
+        case OPCODE_SETP:
+        case OPCODE_TEXLDL:
+        case OPCODE_TEXLDD:
+            return 1;
+        default:
+            return 0;
+    } // switch
+} // glsl_predicate_opcode_allowed
+
+
+// Shared entry point, invoked once per predicated instruction before its
+//  GLSL emitter runs. Leaves the context in a failed state for anything we
+//  don't translate.
+void validate_GLSL_predication(Context *ctx, const uint32 opcode)
+{
+    if (!support_glsl120(ctx))
+    {
+        fail(ctx, "predicated destinations require the glsl120 profile");
+        return;
+    } // if
+
+    if (!shader_version_atleast(ctx, 3, 0))
+    {
+        fail(ctx, "predicated destinations require Shader Model 3.0");
+        return;
+    } // if
+
+    if (!glsl_predicate_opcode_allowed(opcode))
+    {
+        failf(ctx, "predicated destination unsupported for opcode %u",
+              (uint) opcode);
+        return;
+    } // if
+
+    // Predicated texture fetch is limited to 2D samplers for now. Both
+    //  TEXLDL and TEXLDD pass the sampler in source argument 1.
+    if ((opcode == OPCODE_TEXLDL) || (opcode == OPCODE_TEXLDD))
+    {
+        const SourceArgInfo *samp = &ctx->source_args[1];
+        const RegisterList *sreg = reglist_find(&ctx->samplers,
+                                                 REG_TYPE_SAMPLER,
+                                                 samp->regnum);
+        if (sreg == NULL)
+        {
+            fail(ctx, "predicated texture fetch using undeclared sampler");
+            return;
+        } // if
+        if ((TextureType) sreg->index != TEXTURE_TYPE_2D)
+        {
+            fail(ctx, "predicated texture fetch only supports 2D samplers");
+            return;
+        } // if
+    } // if
+} // validate_GLSL_predication
+
+
+// Build the boolean expression that gates destination channel (channel).
+static void make_GLSL_predicate_condition(Context *ctx, const int channel,
+                                          char *buf, const size_t buflen)
+{
+    const SourceArgInfo *pred = &ctx->predicate_arg;
+    char name[64];
+    get_GLSL_varname_in_buf(ctx, pred->regtype, pred->regnum,
+                            name, sizeof (name));
+
+    // The parser only permits no-swizzle or a replicate swizzle here.
+    const int component = no_swizzle(pred->swizzle) ? channel
+                                                    : pred->swizzle_x;
+    const char *negate = (pred->src_mod == SRCMOD_NOT) ? "!" : "";
+    snprintf(buf, buflen, "%s%s.%c", negate, name, swizzle_channels[component]);
+} // make_GLSL_predicate_condition
+
+
+// Emit a predicated write for an already-evaluated candidate expression.
+//  (rhs) is exactly the expression the non-predicated emitter would put on the
+//  right hand side, so it is already compacted to the write-mask size: a
+//  scalar when one channel is enabled, otherwise a vecN/bvecN whose components
+//  line up with the enabled destination channels in order. We snapshot it into
+//  one block-local temporary (so the texture/op is evaluated exactly once and
+//  sources are read before any destination write), then commit each enabled
+//  channel through its own predicate guard. Masked-off and predicate-off
+//  channels are never assigned and keep their previous value.
+//  (is_bool) selects the SETP predicate-register types; saturation only
+//  applies to floating-point results.
+static void emit_GLSL_predicated_result(Context *ctx, const char *rhs,
+                                        const int is_bool)
+{
+    const DestArgInfo *dst = &ctx->dest_arg;
+    const int count = vecsize_from_writemask(dst->writemask);
+    if (count == 0)
+        return;  // nothing enabled: whole instruction is a no-op.
+
+    char type[8];
+    if (count == 1)
+        snprintf(type, sizeof (type), "%s", is_bool ? "bool" : "float");
+    else
+        snprintf(type, sizeof (type), "%s%d", is_bool ? "bvec" : "vec", count);
+
+    char temp[32];
+    const int id = ctx->glsl_predicate_temp_count++;
+    snprintf(temp, sizeof (temp), "ms_pred_%d", id);
+
+    char dstname[64];
+    get_GLSL_destarg_varname(ctx, dstname, sizeof (dstname));
+
+    const int saturate = (!is_bool) && (dst->result_mod & MOD_SATURATE);
+
+    output_line(ctx, "{");
+    ctx->indent++;
+    output_line(ctx, "%s %s = %s;", type, temp, rhs);
+
+    int compact = 0;
+    int channel;
+    for (channel = 0; channel < 4; channel++)
+    {
+        if (!(dst->writemask & (1 << channel)))
+            continue;
+
+        char cond[80];
+        make_GLSL_predicate_condition(ctx, channel, cond, sizeof (cond));
+
+        char value[160];
+        if (count == 1)
+            snprintf(value, sizeof (value), "%s", temp);
+        else
+            snprintf(value, sizeof (value), "%s.%c", temp,
+                     swizzle_channels[compact]);
+
+        if (saturate)
+        {
+            output_line(ctx, "if (%s) { %s.%c = clamp(%s, 0.0, 1.0); }",
+                        cond, dstname, swizzle_channels[channel], value);
+        } // if
+        else
+        {
+            output_line(ctx, "if (%s) { %s.%c = %s; }",
+                        cond, dstname, swizzle_channels[channel], value);
+        } // else
+
+        compact++;
+    } // for
+
+    ctx->indent--;
+    output_line(ctx, "}");
+} // emit_GLSL_predicated_result
+
+
+// Predicated CMP: dst.c = (src0.c >= 0.0) ? src1.c : src2.c, evaluated per
+//  enabled channel into one temporary, then committed through the guards.
+static void emit_GLSL_predicated_cmp(Context *ctx)
+{
+    const DestArgInfo *dst = &ctx->dest_arg;
+    const int count = vecsize_from_writemask(dst->writemask);
+    if (count == 0)
+        return;
+
+    // Four scalar ternaries, each built from <=64-char argument strings.
+    char rhs[1024];
+    rhs[0] = '\0';
+
+    if (count > 1)
+    {
+        char open[8];
+        snprintf(open, sizeof (open), "vec%d(", count);
+        strcat(rhs, open);
+    } // if
+
+    int first = 1;
+    int channel;
+    for (channel = 0; channel < 4; channel++)
+    {
+        if (!(dst->writemask & (1 << channel)))
+            continue;
+
+        char src0[64], src1[64], src2[64];
+        make_GLSL_srcarg_string(ctx, 0, (1 << channel), src0, sizeof (src0));
+        make_GLSL_srcarg_string(ctx, 1, (1 << channel), src1, sizeof (src1));
+        make_GLSL_srcarg_string(ctx, 2, (1 << channel), src2, sizeof (src2));
+
+        char piece[256];
+        snprintf(piece, sizeof (piece), "%s((%s >= 0.0) ? %s : %s)",
+                 first ? "" : ", ", src0, src1, src2);
+        strcat(rhs, piece);
+        first = 0;
+    } // for
+
+    if (count > 1)
+        strcat(rhs, ")");
+
+    emit_GLSL_predicated_result(ctx, rhs, 0);
+} // emit_GLSL_predicated_cmp
+
+
 const char *make_GLSL_destarg_assign(Context *, char *, const size_t,
                                      const char *, ...) ISPRINTF(4,5);
 
@@ -154,9 +383,13 @@ const char *make_GLSL_destarg_assign(Context *ctx, char *buf,
     // CENTROID only allowed in DCL opcodes, which shouldn't come through here.
     assert((arg->result_mod & MOD_CENTROID) == 0);
 
+    // Predicated destinations are handled by the individual emitters (which
+    //  evaluate into a temporary and commit through per-component guards).
+    //  Anything still predicated when it reaches here was already rejected by
+    //  validate_GLSL_predication(), so stay quiet rather than emit a broken
+    //  assignment on top of that error.
     if (ctx->predicated)
     {
-        fail(ctx, "predicated destinations unsupported");  // !!! FIXME
         *buf = '\0';
         return buf;
     } // if
@@ -1233,6 +1466,11 @@ void emit_GLSL_NOP(Context *ctx)
 void emit_GLSL_MOV(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
+    if (ctx->predicated)
+    {
+        emit_GLSL_predicated_result(ctx, src0, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", src0);
     output_line(ctx, "%s", code);
@@ -1242,6 +1480,13 @@ void emit_GLSL_ADD(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+    if (ctx->predicated)
+    {
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "%s + %s", src0, src1);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s + %s", src0, src1);
     output_line(ctx, "%s", code);
@@ -1251,6 +1496,13 @@ void emit_GLSL_SUB(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+    if (ctx->predicated)
+    {
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "%s - %s", src0, src1);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s - %s", src0, src1);
     output_line(ctx, "%s", code);
@@ -1261,6 +1513,13 @@ void emit_GLSL_MAD(Context *ctx)
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
     char src2[64]; make_GLSL_srcarg_string_masked(ctx, 2, src2, sizeof (src2));
+    if (ctx->predicated)
+    {
+        char rhs[256];
+        snprintf(rhs, sizeof (rhs), "(%s * %s) + %s", src0, src1, src2);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "(%s * %s) + %s", src0, src1, src2);
     output_line(ctx, "%s", code);
@@ -1270,6 +1529,13 @@ void emit_GLSL_MUL(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+    if (ctx->predicated)
+    {
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "%s * %s", src0, src1);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s * %s", src0, src1);
     output_line(ctx, "%s", code);
@@ -1314,6 +1580,18 @@ void emit_GLSL_dotprod(Context *ctx, const char *src0, const char *src1,
         castright = ")";
     } // if
 
+    if (ctx->predicated)
+    {
+        // The dot product is one scalar value broadcast into every enabled
+        //  channel; wrapping it in the same vecN the normal path uses keeps
+        //  the temporary layout identical to the write mask.
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "%sdot(%s, %s)%s%s",
+                 castleft, src0, src1, extra, castright);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
+
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "%sdot(%s, %s)%s%s",
                              castleft, src0, src1, extra, castright);
@@ -1338,6 +1616,13 @@ void emit_GLSL_MIN(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+    if (ctx->predicated)
+    {
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "min(%s, %s)", src0, src1);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "min(%s, %s)", src0, src1);
     output_line(ctx, "%s", code);
@@ -1347,6 +1632,13 @@ void emit_GLSL_MAX(Context *ctx)
 {
     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+    if (ctx->predicated)
+    {
+        char rhs[160];
+        snprintf(rhs, sizeof (rhs), "max(%s, %s)", src0, src1);
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
     char code[128];
     make_GLSL_destarg_assign(ctx, code, sizeof (code), "max(%s, %s)", src0, src1);
     output_line(ctx, "%s", code);
@@ -2329,6 +2621,11 @@ EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDEPTH) // !!! FIXME
 
 void emit_GLSL_CMP(Context *ctx)
 {
+    if (ctx->predicated)
+    {
+        emit_GLSL_predicated_cmp(ctx);
+        return;
+    } // if
     emit_GLSL_comparison_operations(ctx, ">= 0.0");
 } // emit_GLSL_CMP
 
@@ -2406,12 +2703,23 @@ void emit_GLSL_TEXLDD(Context *ctx)
     make_GLSL_swizzle_string(swiz_str, sizeof (swiz_str),
                              samp_arg->swizzle, ctx->dest_arg.writemask);
 
-    char code[128];
-    make_GLSL_destarg_assign(ctx, code, sizeof (code),
-                             "%sGrad(%s, %s, %s, %s)%s", funcname,
-                             src1, src0, src2, src3, swiz_str);
+    // One texture call, possibly swizzled down to the write-mask size. The
+    //  predicated path stores that single result in a temporary and commits
+    //  channels one at a time, so the texture is never re-sampled per channel.
+    char rhs[320];
+    snprintf(rhs, sizeof (rhs), "%sGrad(%s, %s, %s, %s)%s", funcname,
+             src1, src0, src2, src3, swiz_str);
 
     prepend_glsl_texlod_extensions(ctx);
+
+    if (ctx->predicated)
+    {
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
+
+    char code[128];
+    make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", rhs);
     output_line(ctx, "%s", code);
 } // emit_GLSL_TEXLDD
 
@@ -2426,12 +2734,28 @@ void emit_GLSL_SETP(Context *ctx)
     if (vecsize == 1)
     {
         const char *comp = get_GLSL_comparison_string_scalar(ctx);
+        if (ctx->predicated)
+        {
+            char rhs[160];
+            snprintf(rhs, sizeof (rhs), "(%s %s %s)", src0, comp, src1);
+            emit_GLSL_predicated_result(ctx, rhs, 1);
+            return;
+        } // if
         make_GLSL_destarg_assign(ctx, code, sizeof (code),
                                  "(%s %s %s)", src0, comp, src1);
     } // if
     else
     {
         const char *comp = get_GLSL_comparison_string_vector(ctx);
+        if (ctx->predicated)
+        {
+            char rhs[160];
+            snprintf(rhs, sizeof (rhs), "%s(%s, %s)", comp, src0, src1);
+            // Predicate register components outside the write mask are left
+            //  untouched by the per-channel commit.
+            emit_GLSL_predicated_result(ctx, rhs, 1);
+            return;
+        } // if
         make_GLSL_destarg_assign(ctx, code, sizeof (code),
                                  "%s(%s, %s)", comp, src0, src1);
     } // else
@@ -2480,11 +2804,21 @@ void emit_GLSL_TEXLDL(Context *ctx)
     make_GLSL_swizzle_string(swiz_str, sizeof (swiz_str),
                              samp_arg->swizzle, ctx->dest_arg.writemask);
 
-    char code[128];
-    make_GLSL_destarg_assign(ctx, code, sizeof(code),
-        pattern, src1, src0, src0, swiz_str);
+    // One texture call (with its LOD and sampler swizzle); the predicated
+    //  path snapshots it and commits per channel without re-sampling.
+    char rhs[320];
+    snprintf(rhs, sizeof (rhs), pattern, src1, src0, src0, swiz_str);
 
     prepend_glsl_texlod_extensions(ctx);
+
+    if (ctx->predicated)
+    {
+        emit_GLSL_predicated_result(ctx, rhs, 0);
+        return;
+    } // if
+
+    char code[128];
+    make_GLSL_destarg_assign(ctx, code, sizeof(code), "%s", rhs);
     output_line(ctx, "%s", code);
 } // emit_GLSL_TEXLDL
 

@@ -1,0 +1,22 @@
+PREDICATED errors=0
+#version 120
+vec4 vs_r0;
+bvec4 vs_p0;
+attribute vec4 vs_v0;
+#define vs_o0 gl_Position
+
+void main()
+{
+	vs_r0 = vs_v0;
+	vs_p0 = greaterThanEqual(vs_v0, vs_v0);
+	{
+		vec4 ms_pred_0 = vs_v0;
+		if (vs_p0.x) { vs_r0.x = ms_pred_0.x; }
+		if (vs_p0.y) { vs_r0.y = ms_pred_0.y; }
+		if (vs_p0.z) { vs_r0.z = ms_pred_0.z; }
+		if (vs_p0.w) { vs_r0.w = ms_pred_0.w; }
+	}
+	vs_o0 = vs_r0;
+}
+
+

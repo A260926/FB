@@ -171,6 +171,7 @@ typedef struct Context
     int glsl_generated_lit_helper;
     int glsl_generated_texlod_setup;
     int glsl_generated_texm3x3spec_helper;
+    int glsl_predicate_temp_count;  // stable names for predicated-write temps.
     int arb1_wrote_position;
     // !!! FIXME: move these into SUPPORT_PROFILE sections.
 
@@ -319,6 +320,10 @@ typedef struct Profile
     emit_finalize finalize_emitter;
     varname_function get_varname;
     const_array_varname_function get_const_array_varname;
+    // Optional check run on every predicated instruction, before the emitter.
+    //  Profiles that handle predication elsewhere (or don't support it and
+    //  fail inside their own emitters) leave this NULL.
+    void (*validate_predication)(Context *ctx, uint32 opcode);
 } Profile;
 
 // Common utilities...
