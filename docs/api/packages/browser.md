@@ -718,6 +718,19 @@ func (f *Form) Method() string
 ```
 Method returns the form method, eg "GET" or "POST".
 
+#### func (*Form) Rebase
+
+```go
+func (f *Form) Rebase(expr string) error
+```
+Rebase re-snapshots the form from the current document of the browser the form
+belongs to, without sending any request or reloading the page. The form in the
+current document matching expr must be unique. Only names explicitly edited
+through the form methods are migrated onto the fresh snapshot; unedited names,
+including hidden tokens, and the new buttons, action, method, enctype and
+select options come from the fresh form. The operation is atomic: a conflict
+leaves the form and the current document untouched.
+
 #### func (*Form) Set
 
 ```go
@@ -838,6 +851,7 @@ type Submittable interface {
 	Set(name, value string) error
 	File(name string, fileName string, data io.Reader) error
 	SetFile(name string, fileName string, data io.Reader)
+	Rebase(expr string) error
 	Click(button string) error
 	ClickByValue(name, value string) error
 	Submit() error

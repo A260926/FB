@@ -65,6 +65,12 @@ type Submittable interface {
 	// It will add the field to the form if necessary
 	SetFile(name string, fileName string, data io.Reader)
 
+	// Rebase re-snapshots the form from the current document of the browser
+	// the form belongs to, migrating the user's recorded editing intent onto
+	// the fresh snapshot. It performs no network requests and does not reload
+	// the page. See (*Form).Rebase for the full semantics.
+	Rebase(expr string) error
+
 	Click(button string) error
 	ClickByValue(name, value string) error
 	Submit() error
@@ -82,6 +88,14 @@ type Form struct {
 	checkboxs url.Values
 	selects   selects
 	files     FileSet
+
+	// edited records the names the user explicitly touched through the mutating
+	// form methods. Fields and files not present here are still owned by the
+	// page snapshot, so a Rebase may replace their values with new defaults.
+	edited map[string]bool
+	// editedFiles records file field names set through File/SetFile. File
+	// editing intent is tracked separately because files are not held in fields.
+	editedFiles map[string]bool
 }
 
 // NewForm creates and returns a *Form type.
@@ -90,15 +104,17 @@ func NewForm(bow Browsable, s *goquery.Selection) *Form {
 	method, action := formAttributes(bow, s)
 
 	return &Form{
-		bow:       bow,
-		selection: s,
-		method:    method,
-		action:    action,
-		fields:    fields,
-		buttons:   buttons,
-		checkboxs: checkboxs,
-		selects:   selects,
-		files:     files,
+		bow:         bow,
+		selection:   s,
+		method:      method,
+		action:      action,
+		fields:      fields,
+		buttons:     buttons,
+		checkboxs:   checkboxs,
+		selects:     selects,
+		files:       files,
+		edited:      make(map[string]bool),
+		editedFiles: make(map[string]bool),
 	}
 }
 
@@ -118,6 +134,7 @@ func (f *Form) Action() string {
 func (f *Form) Input(name, value string) error {
 	if _, ok := f.fields[name]; ok {
 		f.fields.Set(name, value)
+		f.edited[name] = true
 		return nil
 	}
 	return errors.NewElementNotFound("No input found with name '%s'.", name)
@@ -129,6 +146,7 @@ func (f *Form) File(name string, fileName string, data io.Reader) error {
 
 	if _, ok := f.files[name]; ok {
 		f.files[name] = &File{fileName: fileName, data: data}
+		f.editedFiles[name] = true
 		return nil
 	}
 	return errors.NewElementNotFound(
@@ -139,6 +157,7 @@ func (f *Form) File(name string, fileName string, data io.Reader) error {
 // It will add the field to the form if necessary
 func (f *Form) SetFile(name string, fileName string, data io.Reader) {
 	f.files[name] = &File{fileName: fileName, data: data}
+	f.editedFiles[name] = true
 }
 
 // Set will set the value of a form field if it exists,
@@ -146,6 +165,7 @@ func (f *Form) SetFile(name string, fileName string, data io.Reader) {
 func (f *Form) Set(name, value string) error {
 	if _, ok := f.fields[name]; !ok {
 		f.fields.Add(name, value)
+		f.edited[name] = true
 		return nil
 	}
 	return f.Input(name, value)
@@ -160,6 +180,7 @@ func (f *Form) Get(name string) []string {
 func (f *Form) Check(name string) error {
 	if _, ok := f.checkboxs[name]; ok {
 		f.fields.Set(name, f.checkboxs.Get(name))
+		f.edited[name] = true
 		return nil
 	}
 	return errors.NewElementNotFound("No checkbox found with name '%s'.", name)
@@ -169,6 +190,7 @@ func (f *Form) Check(name string) error {
 func (f *Form) UnCheck(name string) error {
 	if _, ok := f.checkboxs[name]; ok {
 		f.fields.Del(name)
+		f.edited[name] = true
 		return nil
 	}
 	return errors.NewElementNotFound("No checkbox found with name '%s'.", name)
@@ -186,6 +208,7 @@ func (f *Form) IsChecked(name string) (bool, error) {
 // Remove will remove the form field if it exists.
 func (f *Form) Remove(name string) {
 	f.fields.Del(name)
+	f.edited[name] = true
 }
 
 // Value returns the current value of a form element whose name matches.  If name is not
@@ -215,11 +238,14 @@ func (f *Form) RemoveValue(name, val string) error {
 	} else {
 		f.fields[name] = save
 	}
+	f.edited[name] = true
 	return nil
 }
 
 // SelectByOptionLabel sets the current value of a select form element acording to the
 // options label.  If the element is a select multiple, multiple options may be selected.
+// Every label is validated before the element is touched, so a failed call leaves the
+// form and its editing record unchanged.
 func (f *Form) SelectByOptionLabel(name string, optionLabel ...string) error {
 	s, ok := f.selects[name]
 	if !ok {
@@ -228,18 +254,26 @@ func (f *Form) SelectByOptionLabel(name string, optionLabel ...string) error {
 	if len(optionLabel) > 1 && !s.multiple {
 		return errors.NewElementNotFound("The select element with name '%s' is not a select miltiple.", name)
 	}
-	f.fields.Del(name)
-	for _, l := range optionLabel {
-		if _, ok := s.labels[l]; !ok {
+	values := make([]string, len(optionLabel))
+	for i, l := range optionLabel {
+		v, ok := s.labels[l]
+		if !ok {
 			return errors.NewElementNotFound("The select element with name %q does not have an option with label %q", name, l)
 		}
-		f.fields.Add(name, s.labels.Get(l))
+		values[i] = v[0]
 	}
+	f.fields.Del(name)
+	for _, v := range values {
+		f.fields.Add(name, v)
+	}
+	f.edited[name] = true
 	return nil
 }
 
 // SelectByOptionValue sets the current value of a select form element acording to the
 // options value.  If the element is a select multiple, multiple options may be selected.
+// Every value is validated before the element is touched, so a failed call leaves the
+// form and its editing record unchanged.
 func (f *Form) SelectByOptionValue(name string, optionValue ...string) error {
 	s, ok := f.selects[name]
 	if !ok {
@@ -248,13 +282,16 @@ func (f *Form) SelectByOptionValue(name string, optionValue ...string) error {
 	if len(optionValue) > 1 && !s.multiple {
 		return errors.NewElementNotFound("The select element with name '%s' is not a select miltiple.", name)
 	}
-	f.fields.Del(name)
 	for _, v := range optionValue {
 		if _, ok := s.values[v]; !ok {
 			return errors.NewElementNotFound("The select element with name %q does not have an option with value %q", name, v)
 		}
+	}
+	f.fields.Del(name)
+	for _, v := range optionValue {
 		f.fields.Add(name, v)
 	}
+	f.edited[name] = true
 	return nil
 }
 
