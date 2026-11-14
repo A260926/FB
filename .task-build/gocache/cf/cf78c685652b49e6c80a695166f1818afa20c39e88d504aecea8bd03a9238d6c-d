@@ -1,0 +1,13 @@
+./client.go
+./client_auth.go
+./clipboard.go
+./color.go
+./encoding.go
+./pixel_format.go
+./pointer.go
+./server_messages.go
+./client_auth_test.go
+./client_test.go
+./clipboard_flow_test.go
+./debug_test.go
+./desktop_baseline_test.go

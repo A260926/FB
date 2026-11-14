@@ -173,7 +173,7 @@ func (*ServerCutTextMessage) Type() uint8 {
 
 func (*ServerCutTextMessage) Read(c *ClientConn, r io.Reader) (ServerMessage, error) {
 	// Read off the padding
-	var padding [1]byte
+	var padding [3]byte
 	if _, err := io.ReadFull(r, padding[:]); err != nil {
 		return nil, err
 	}
@@ -183,10 +183,28 @@ func (*ServerCutTextMessage) Read(c *ClientConn, r io.Reader) (ServerMessage, er
 		return nil, err
 	}
 
+	// A negative length marks an extended clipboard message.
+	if int32(textLength) < 0 {
+		if !c.config.ExtendedClipboard {
+			return nil, fmt.Errorf("vnc: received extended clipboard message with ExtendedClipboard disabled")
+		}
+
+		return c.readExtendedClipboard(int32(textLength), r)
+	}
+
+	if textLength > maxClipboardPayload {
+		return nil, fmt.Errorf("vnc: cut text length %d exceeds the %d byte limit", textLength, maxClipboardPayload)
+	}
+
 	textBytes := make([]uint8, textLength)
-	if err := binary.Read(r, binary.BigEndian, &textBytes); err != nil {
+	if _, err := io.ReadFull(r, textBytes); err != nil {
 		return nil, err
 	}
 
-	return &ServerCutTextMessage{string(textBytes)}, nil
+	// Legacy cut text from the server means the peer owns the clipboard.
+	c.clipMu.Lock()
+	c.clipOwnText = false
+	c.clipMu.Unlock()
+
+	return &ServerCutTextMessage{latin1ToString(textBytes)}, nil
 }

@@ -1,0 +1,16 @@
+{
+	"github.com/mitchellh/go-vnc": {
+		"testinggoroutine": [
+			{
+				"posn": "/Users/solo/pro/UserFB/workspace/FSB468C73EAF30U9372/attempts/20261114T045005874374Z/repo/client_test.go:19:4",
+				"end": "/Users/solo/pro/UserFB/workspace/FSB468C73EAF30U9372/attempts/20261114T045005874374Z/repo/client_test.go:19:45",
+				"message": "call to (*testing.T).Fatalf from a non-test goroutine"
+			},
+			{
+				"posn": "/Users/solo/pro/UserFB/workspace/FSB468C73EAF30U9372/attempts/20261114T045005874374Z/repo/client_test.go:25:4",
+				"end": "/Users/solo/pro/UserFB/workspace/FSB468C73EAF30U9372/attempts/20261114T045005874374Z/repo/client_test.go:25:37",
+				"message": "call to (*testing.T).Fatal from a non-test goroutine"
+			}
+		]
+	}
+}
