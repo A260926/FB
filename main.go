@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	// we copy the go src directly, then change every include to github.com/mandiant/GoReSym/<whatever>
 	// this is required since we're using internal files. Our modifications are directly inside the copied source
 	"github.com/mandiant/GoReSym/buildid"
 	"github.com/mandiant/GoReSym/buildinfo"
+	"github.com/mandiant/GoReSym/debug/gosym"
 	"github.com/mandiant/GoReSym/objfile"
 	"github.com/mandiant/GoReSym/runtime/debug"
 )
@@ -51,6 +53,15 @@ type FuncMetadata struct {
 	FullName    string
 }
 
+// PCFrameResult is one entry of an -pc query. On success Frames holds the
+// inline chain (innermost callee first, physical function last) and Error is
+// empty. On failure Frames is an empty slice and Error explains the reason.
+type PCFrameResult struct {
+	PC     uint64
+	Frames []gosym.InlineFrame
+	Error  string `json:",omitempty"`
+}
+
 type ExtractMetadata struct {
 	Version       string
 	BuildId       string
@@ -65,6 +76,7 @@ type ExtractMetadata struct {
 	UserFunctions []FuncMetadata
 	StdFunctions  []FuncMetadata
 	Strings       []objfile.StringEntry
+	PCFrames      []PCFrameResult `json:",omitempty"`
 }
 
 func main_impl_tmpfile(fileBytes []byte, printStdPkgs bool, printFilePaths bool, printTypes bool, noPrintFunctions bool, manualTypeAddress int, versionOverride string, printStrings bool) (metadata ExtractMetadata, err error) {
@@ -86,6 +98,10 @@ func main_impl_tmpfile(fileBytes []byte, printStdPkgs bool, printFilePaths bool,
 }
 
 func main_impl(fileName string, printStdPkgs bool, printFilePaths bool, printTypes bool, noPrintFunctions bool, manualTypeAddress int, versionOverride string, printStrings bool) (metadata ExtractMetadata, err error) {
+	return main_implWithPCs(fileName, printStdPkgs, printFilePaths, printTypes, noPrintFunctions, manualTypeAddress, versionOverride, printStrings, nil)
+}
+
+func main_implWithPCs(fileName string, printStdPkgs bool, printFilePaths bool, printTypes bool, noPrintFunctions bool, manualTypeAddress int, versionOverride string, printStrings bool, queryPCs []uint64) (metadata ExtractMetadata, err error) {
 	extractMetadata := ExtractMetadata{}
 
 	file, err := objfile.Open(fileName)
@@ -319,6 +335,20 @@ restartParseWithRealTextBase:
 		}
 	}
 
+	// Inline-chain queries run against the final pclntab/moduledata
+	// candidates and are independent of the function listing, so they still
+	// execute under -nofuncs. One bad address never affects the others.
+	for _, pc := range queryPCs {
+		result := PCFrameResult{PC: pc, Frames: []gosym.InlineFrame{}}
+		frames, frameErr := file.InlineFrames(finalTab.ParsedPclntab, moduleData, pc)
+		if frameErr != nil {
+			result.Error = frameErr.Error()
+		} else {
+			result.Frames = frames
+		}
+		extractMetadata.PCFrames = append(extractMetadata.PCFrames, result)
+	}
+
 	return extractMetadata, nil
 }
 
@@ -433,6 +463,27 @@ func TextToJson(key string, text string) string {
 	return fmt.Sprintf("{\"%s\": \"%s\"}", key, text)
 }
 
+// pcList is a repeatable -pc flag. Values use Go integer syntax (decimal,
+// 0x hex, 0o octal, 0b binary) and are kept in command-line order.
+type pcList []uint64
+
+func (p *pcList) String() string {
+	parts := make([]string, 0, len(*p))
+	for _, v := range *p {
+		parts = append(parts, fmt.Sprintf("0x%x", v))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (p *pcList) Set(value string) error {
+	v, err := strconv.ParseUint(value, 0, 64)
+	if err != nil {
+		return fmt.Errorf("invalid -pc address %q: %w", value, err)
+	}
+	*p = append(*p, v)
+	return nil
+}
+
 var Version = "dev-local-build"
 
 func main() {
@@ -451,6 +502,8 @@ func main() {
 	versionOverride := flag.String("v", "", "Override the automated version detection, ex: 1.17. If this is wrong, parsing may fail or produce nonsense")
 	humanView := flag.Bool("human", false, "Human view, print information flat rather than json, some information is omitted for clarity")
 	printStrings := flag.Bool("strings", false, "Extract embedded Go strings from binary")
+	var queryPCs pcList
+	flag.Var(&queryPCs, "pc", "Recover the inline call chain at an instruction address (Go integer syntax, repeatable). Pass an instruction PC, not a return address.")
 	flag.Parse()
 
 	if *about {
@@ -469,7 +522,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	metadata, err := main_impl(flag.Arg(0), *printStdPkgs, *printFilePaths, *printTypes, *noPrintFunctions, *typeAddress, *versionOverride, *printStrings)
+	metadata, err := main_implWithPCs(flag.Arg(0), *printStdPkgs, *printFilePaths, *printTypes, *noPrintFunctions, *typeAddress, *versionOverride, *printStrings, []uint64(queryPCs))
 	if err != nil {
 		fmt.Println(TextToJson("error", fmt.Sprintf("Failed to parse file: %s", err)))
 		os.Exit(1)

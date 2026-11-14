@@ -16,6 +16,8 @@ test/weirdbins/
 GoReSym
 Dockerfile.test
 .idea
+# Task harness build/cache output (task_support/run.sh)
+.task-build/
 # Dependency directories (remove the comment below to include it)
 # vendor/
 

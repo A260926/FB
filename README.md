@@ -78,7 +78,48 @@ Here are all the available flags:
 * `-m <virtual address>` ("manual", optional) flag will dump the `RTYPE` structure recursively at the given virtual address
 * `-v <version string>` ("version", optional) flag will override automated version detection and use the provided version. This is needed for some stripped binaries. Type parsing will fail if the version is not accurate.
 * `-human` (optional) flag will print a flat text listing instead of JSON. Especially useful when printing structure and interface types.
+* `-pc <address>` (optional, repeatable) flag recovers the full inlined call chain at an instruction address. Addresses use Go integer syntax (e.g. `0x4a7f20`, decimal, `0o...`, `0b...`). Results appear in the `PCFrames` array in request order, including repeats; a bad address yields an `Error` entry without affecting the other addresses or the function lists. It works alongside `-nofuncs`.
 * `-about` (optional) flag with print out license information
+
+## Recovering inlined call chains with `-pc`
+
+A stripped Go binary only names the out-of-line (physical) function; the
+functions the compiler inlined into its machine code are hidden. Pass the
+address of an actual instruction to `-pc` and GoReSym walks the pclntab
+inline tree to recover every layer, ordered from the innermost inlined callee
+out to the physical function.
+
+Pass an **instruction address, not a return address**. A return address
+points one byte past the `call`; Go's line tables are keyed on the call
+instruction itself, so normalize a return address (subtract one on the
+architectures in scope) before using `-pc`. GoReSym does not adjust the value
+for you.
+
+```
+GoReSym.exe -pc 0x4a7f20 -pc 0x4a7f40 /path/to/input.exe
+```
+
+```json
+"PCFrames": [
+    {
+        "PC": 4882208,
+        "Frames": [
+            { "Name": "main.leaf",   "File": ".../main.go", "Line": 8,  "StartLine": 6,  "PC": 4882199, "Inlined": true },
+            { "Name": "main.middle", "File": ".../main.go", "Line": 14, "StartLine": 13, "PC": 4882187, "Inlined": true },
+            { "Name": "main.root",   "File": ".../main.go", "Line": 19, "StartLine": 18, "PC": 4882208, "Inlined": false }
+        ]
+    }
+]
+```
+
+Inline recovery is read-only analysis: the target is never executed and no
+DWARF, native symbol table, external `addr2line`, or runtime linkname is
+required. The supported scope is Go 1.20 through 1.26, little-endian 64-bit
+ELF, PE and Mach-O ordinary single-text images. A function with no inline
+information returns its single physical frame; an address outside any known
+function, or a malformed record on the queried chain, returns an error rather
+than a truncated chain.
+
   
 To import this information into IDA Pro you can run the script found in [https://github.com/mandiant/GoReSym/blob/master/IDAPython/goresym_rename.py](IDAPython/goresym_rename.py). It will read a json file produced by GoReSym and set symbols/labels in IDA.
     

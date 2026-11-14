@@ -16,27 +16,28 @@ const (
 	FieldTypes                        // 3
 	FieldEtypes                       // 4
 	FieldTextsectmap                  // 5
-	FieldTypelinks                    // 6
-	FieldItablinks                    // 7
-	FieldPkgPath                      // 8 (for Interface)
-	FieldMethods                      // 9 (for Interface)
+	FieldGoFunc                       // 6 moduledata.gofunc, base VA for FUNCDATA offsets (Go 1.20+ layouts)
+	FieldTypelinks                    // 7
+	FieldItablinks                    // 8
+	FieldPkgPath                      // 9 (for Interface)
+	FieldMethods                      // 10 (for Interface)
 	// Rtype fields (Go reflection types)
-	FieldSize       // 10
-	FieldPtrdata    // 11
-	FieldHash       // 12
-	FieldUnused     // 13
-	FieldAlign      // 14
-	FieldFieldAlign // 15
-	FieldKind       // 16
-	FieldStr        // 17
-	FieldTflag      // 18
+	FieldSize       // 11
+	FieldPtrdata    // 12
+	FieldHash       // 13
+	FieldUnused     // 14
+	FieldAlign      // 15
+	FieldFieldAlign // 16
+	FieldKind       // 17
+	FieldStr        // 18
+	FieldTflag      // 19
 	// Textsect fields
-	FieldVaddr    // 19
-	FieldEnd      // 20
-	FieldBaseaddr // 21
+	FieldVaddr    // 20
+	FieldEnd      // 21
+	FieldBaseaddr // 22
 	// FuncTab fields
-	FieldEntryoffset // 22
-	FieldFuncoffset  // 23
+	FieldEntryoffset // 23
+	FieldFuncoffset  // 24
 )
 
 // String representation for debugging/logging
@@ -54,6 +55,8 @@ func (f FieldName) String() string {
 		return "Etypes"
 	case FieldTextsectmap:
 		return "Textsectmap"
+	case FieldGoFunc:
+		return "GoFunc"
 	case FieldTypelinks:
 		return "Typelinks"
 	case FieldItablinks:
@@ -287,6 +290,7 @@ var moduleDataLayouts = map[string]*ModuleDataLayout{
 			{Name: FieldText, Offset64: 176, Offset32: 88, Type: FieldTypePvoid},
 			{Name: FieldTypes, Offset64: 296, Offset32: 148, Type: FieldTypePvoid},
 			{Name: FieldEtypes, Offset64: 304, Offset32: 152, Type: FieldTypePvoid},
+			{Name: FieldGoFunc, Offset64: 320, Offset32: 160, Type: FieldTypePvoid},
 			{Name: FieldTextsectmap, Offset64: 336, Offset32: 168, Type: FieldTypeSlice},
 			{Name: FieldTypelinks, Offset64: 360, Offset32: 180, Type: FieldTypeSlice},
 			{Name: FieldItablinks, Offset64: 384, Offset32: 192, Type: FieldTypeSlice},
@@ -300,6 +304,7 @@ var moduleDataLayouts = map[string]*ModuleDataLayout{
 			{Name: FieldText, Offset64: 176, Offset32: 88, Type: FieldTypePvoid},
 			{Name: FieldTypes, Offset64: 296, Offset32: 148, Type: FieldTypePvoid},
 			{Name: FieldEtypes, Offset64: 304, Offset32: 152, Type: FieldTypePvoid},
+			{Name: FieldGoFunc, Offset64: 320, Offset32: 160, Type: FieldTypePvoid},
 			{Name: FieldTextsectmap, Offset64: 328, Offset32: 164, Type: FieldTypeSlice},
 			{Name: FieldTypelinks, Offset64: 352, Offset32: 176, Type: FieldTypeSlice},
 			{Name: FieldItablinks, Offset64: 376, Offset32: 188, Type: FieldTypeSlice},
@@ -313,6 +318,7 @@ var moduleDataLayouts = map[string]*ModuleDataLayout{
 			{Name: FieldText, Offset64: 176, Offset32: 88, Type: FieldTypePvoid},
 			{Name: FieldTypes, Offset64: 296, Offset32: 148, Type: FieldTypePvoid},
 			{Name: FieldEtypes, Offset64: 304, Offset32: 152, Type: FieldTypePvoid},
+			{Name: FieldGoFunc, Offset64: 320, Offset32: 160, Type: FieldTypePvoid},
 			{Name: FieldTextsectmap, Offset64: 328, Offset32: 164, Type: FieldTypeSlice},
 			{Name: FieldTypelinks, Offset64: 352, Offset32: 176, Type: FieldTypeSlice},
 			{Name: FieldItablinks, Offset64: 376, Offset32: 188, Type: FieldTypeSlice},
@@ -443,6 +449,7 @@ type ModuleDataIntermediate struct {
 	Text        uint64
 	Types       uint64
 	Etypes      uint64
+	GoFunc      uint64
 	Textsectmap GoSlice64
 	Typelinks   GoSlice64
 	Itablinks   GoSlice64
@@ -493,6 +500,8 @@ func parseModuleDataGeneric(rawData []byte, runtimeVersion string, layoutVersion
 			md.Types = readPointer(rawData, offset, is64bit, littleendian)
 		case FieldEtypes:
 			md.Etypes = readPointer(rawData, offset, is64bit, littleendian)
+		case FieldGoFunc:
+			md.GoFunc = readPointer(rawData, offset, is64bit, littleendian)
 		case FieldTextsectmap:
 			data, len := readSlice(rawData, offset, is64bit, littleendian)
 			md.Textsectmap = GoSlice64{Data: pvoid64(data), Len: len}
@@ -580,6 +589,7 @@ func (e *Entry) validateAndConvertModuleData(
 		TextVA:    md.Text,
 		Types:     md.Types,
 		ETypes:    md.Etypes,
+		GoFunc:    md.GoFunc,
 		Typelinks: md.Typelinks,
 		ITablinks: md.Itablinks,
 	}

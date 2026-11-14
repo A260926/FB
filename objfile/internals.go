@@ -155,6 +155,7 @@ type ModuleData struct {
 	TextVA    uint64    // adjusted (ex: CGO) .text base that pclntab offsets are relative to
 	Types     uint64    // points to type information
 	ETypes    uint64    // points to end of type information
+	GoFunc    uint64    `json:"-"` // moduledata.gofunc VA; base for FUNCDATA offsets, zero on layouts that predate the field
 	Typelinks GoSlice64 // points to metadata about offsets into types for structures and other types
 	ITablinks GoSlice64 // points to metadata about offsets into types for interfaces
 
