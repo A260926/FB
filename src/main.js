@@ -41,6 +41,8 @@ export { ShadowMapPass } from './render/passes/ShadowMapPass.js';
 
 export { PropertyMap } from './render/PropertyMap.js';
 export { GPUMemoryInfo } from './render/GPUMemoryInfo.js';
+export { PortalRenderCollector } from './render/PortalRenderCollector.js';
+export { RenderCollector } from './render/RenderCollector.js';
 export { RenderInfo } from './render/RenderInfo.js';
 export { RenderQueue } from './render/RenderQueue.js';
 export { RenderQueueLayer } from './render/RenderQueueLayer.js';

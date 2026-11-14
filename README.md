@@ -138,6 +138,74 @@ requestAnimationFrame(loop);
 * [t3d-dynamic-sky](https://github.com/uinosoft/t3d-dynamic-sky) - Dynamic sky addon for t3d.
 * [t3d-gaussian-splatting](https://github.com/uinosoft/t3d-gaussian-splatting) - A t3d-based implementation of 3D Gaussian Splatting.
 
+## Portal Room Collection
+
+Objects behind walls still enter the render queue because the camera frustum
+sees through them. `PortalRenderCollector` extends `RenderCollector` with
+room/portal visibility: replace `scene.collector`, declare the room subtrees
+and the directed door polygons, and the existing
+`Scene#updateRenderStates` / `Scene#updateRenderQueue` flow is reused
+unchanged. Cameras without an assigned room keep ordinary collection.
+
+Minimal setup with two rooms and one door:
+
+````javascript
+import {
+	Scene, Camera, Object3D, Mesh, BoxGeometry, BasicMaterial,
+	Vector3, PortalRenderCollector
+} from 't3d.module.js';
+
+const scene = new Scene();
+scene.collector = new PortalRenderCollector();
+
+// Two non-nested room subtrees.
+const roomA = new Object3D();
+const roomB = new Object3D();
+scene.add(roomA);
+scene.add(roomB);
+scene.collector.addRoom(roomA);
+scene.collector.addRoom(roomB);
+
+// Door node. The rectangle is given in the node's local space; its winding
+// normal (+Z here) must face the source room.
+const door = new Object3D();
+door.position.set(0, 0, -4);
+scene.add(door);
+const vertices = [
+	new Vector3(-1, -1.5, 0),
+	new Vector3(1, -1.5, 0),
+	new Vector3(1, 1.5, 0),
+	new Vector3(-1, 1.5, 0)
+];
+const handle = scene.collector.addPortal(roomA, roomB, door, vertices);
+
+// A mesh behind the wall is only collected through the door.
+const material = new BasicMaterial();
+const behindWall = new Mesh(new BoxGeometry(1, 1, 1), material);
+behindWall.position.set(0, 0, -6);
+roomB.add(behindWall);
+
+const camera = new Camera();
+camera.setPerspective(Math.PI / 3, 1, 1, 100);
+camera.position.set(0, 0, -0.5);
+scene.add(camera);
+scene.collector.setCameraRoom(camera, roomA);
+
+// Update matrices first; the door polygon is read with its latest worldMatrix.
+scene.updateMatrix();
+scene.updateRenderStates(camera);
+const queue = scene.updateRenderQueue(camera); // behindWall is portal-culled
+
+// scene.collector.removePortal(handle); // remove the door edge
+// scene.collector.removeRoom(roomB);     // also removes its portal edges
+// scene.collector.setCameraRoom(camera, null); // back to ordinary collection
+````
+
+Portal edges are directed: a bidirectional door needs a second registration
+with reversed rooms and reversed polygon winding. Only perspective cameras
+are supported; per-collection statistics are exposed as
+`scene.collector.portal_clips` and `scene.collector.sphere_tests`.
+
 ## Tools
 
 * [t3d-model-viewer](https://uinosoft.github.io/t3d-model-viewer/) - A Model Viewer based on t3d.js and t3d-effect-composer.
