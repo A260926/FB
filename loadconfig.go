@@ -17,7 +17,6 @@ package pe
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"reflect"
 )
 
@@ -551,6 +550,13 @@ type ImageSwitchableBranchDynamicRelocation struct {
 type DVRT struct {
 	ImageDynamicRelocationTable `json:"image_dynamic_relocation_table"`
 	Entries                     []RelocEntry `json:"entries"`
+
+	// ARM64XFixups preserves every symbol-6 fixup in file order, including
+	// repeated fixups against the same target. Each record carries its source
+	// file offset, target RVA, type, width and either the replacement value or
+	// the signed delta, so the link between the native and the compatible
+	// layout stays visible from a native parse.
+	ARM64XFixups []ARM64XFixupRecord `json:"arm64x_fixups,omitempty"`
 }
 
 type Enclave struct {
@@ -840,8 +846,13 @@ func (pe *File) parseLoadConfigDirectory(rva, size uint32) error {
 	// Retrieve compiled hybrid PE metadata if there are any.
 	pe.LoadConfig.CHPE = pe.getHybridPE()
 
-	// Retrieve dynamic value relocation table if there are any.
-	pe.LoadConfig.DVRT = pe.getDynamicValueRelocTable()
+	// Retrieve dynamic value relocation table if there are any. In ARM64X
+	// alternate mode the table was already parsed from the native metadata
+	// while building the corrected view; fixup metadata is never rewritten, so
+	// keep that result rather than parse the same bytes a second time.
+	if !(pe.arm64xActive && pe.LoadConfig.DVRT != nil) {
+		pe.LoadConfig.DVRT = pe.getDynamicValueRelocTable()
+	}
 
 	// Retrieve enclave configuration if there are any.
 	pe.LoadConfig.Enclave = pe.getEnclaveConfiguration()
@@ -1226,170 +1237,32 @@ func (pe *File) getHybridPE() *HybridPE {
 
 func (pe *File) getDynamicValueRelocTable() *DVRT {
 
-	var structSize uint32
-	var imgDynRelocSize uint32
-	var retpolineType uint8
-	dvrt := DVRT{}
-	imgDynRelocTable := ImageDynamicRelocationTable{}
-
 	v := reflect.ValueOf(pe.LoadConfig.Struct)
-	DynamicValueRelocTableOffset := v.Field(34).Uint()
-	DynamicValueRelocTableSection := v.Field(35).Uint()
-	if DynamicValueRelocTableOffset == 0 || DynamicValueRelocTableSection == 0 {
+
+	// Field indices 34/35 are DynamicValueRelocTableOffset and
+	// DynamicValueRelocTableSection in both the PE32 and PE32+ load config
+	// structures.
+	dynamicValueRelocTableOffset := v.Field(34).Uint()
+	dynamicValueRelocTableSection := uint16(v.Field(35).Uint())
+	if dynamicValueRelocTableOffset == 0 || dynamicValueRelocTableSection == 0 {
 		return nil
 	}
 
-	section := pe.getSectionByName(".reloc")
-	if section == nil {
-		return nil
-	}
-
-	// Get the dynamic value relocation table header.
-	rva := section.VirtualAddress + uint32(DynamicValueRelocTableOffset)
-	offset := pe.GetOffsetFromRva(rva)
-	structSize = uint32(binary.Size(imgDynRelocTable))
-	err := pe.structUnpack(&imgDynRelocTable, offset, structSize)
+	// The table location is defined solely by the one-based section number and
+	// the offset inside that section; the section name is irrelevant.
+	tableOffset, err := pe.dvrtTableOffset(
+		dynamicValueRelocTableSection, uint32(dynamicValueRelocTableOffset))
 	if err != nil {
+		pe.logger.Debugf("dynamic value relocation table lookup failed: %v", err)
 		return nil
 	}
 
-	dvrt.ImageDynamicRelocationTable = imgDynRelocTable
-	offset += structSize
-
-	// Get dynamic relocation entries according to version.
-	switch imgDynRelocTable.Version {
-	case 1:
-		relocTableIt := uint32(0)
-		baseBlockSize := uint32(0)
-
-		// Iterate over our dynamic reloc table entries.
-		for relocTableIt < imgDynRelocTable.Size {
-
-			relocEntry := RelocEntry{}
-
-			// Each block starts with the header.
-			if pe.Is32 {
-				imgDynReloc := ImageDynamicRelocation32{}
-				imgDynRelocSize = uint32(binary.Size(imgDynReloc))
-				err = pe.structUnpack(&imgDynReloc, offset, imgDynRelocSize)
-				if err != nil {
-					return nil
-				}
-				relocEntry.ImageDynamicRelocation = imgDynReloc
-				baseBlockSize = imgDynReloc.BaseRelocSize
-				retpolineType = uint8(imgDynReloc.Symbol)
-			} else {
-				imgDynReloc := ImageDynamicRelocation64{}
-				imgDynRelocSize = uint32(binary.Size(imgDynReloc))
-				err = pe.structUnpack(&imgDynReloc, offset, imgDynRelocSize)
-				if err != nil {
-					return nil
-				}
-				relocEntry.ImageDynamicRelocation = imgDynReloc
-				baseBlockSize = imgDynReloc.BaseRelocSize
-				retpolineType = uint8(imgDynReloc.Symbol)
-			}
-			offset += imgDynRelocSize
-			relocTableIt += imgDynRelocSize
-
-			// Then, for each page, there is a block that starts with a relocation entry:
-			blockIt := uint32(0)
-			for blockIt <= baseBlockSize-imgDynRelocSize {
-				relocBlock := RelocBlock{}
-
-				baseReloc := ImageBaseRelocation{}
-				structSize = uint32(binary.Size(baseReloc))
-				err = pe.structUnpack(&baseReloc, offset, structSize)
-				if err != nil {
-					return nil
-				}
-
-				relocBlock.ImgBaseReloc = baseReloc
-				offset += structSize
-
-				// After that there are entries for all of the places which need
-				// to be overwritten by the retpoline jump. The structure used
-				// for those entries depends on the type (symbol) that was used
-				// above. There are three types of retpoline so far. Entry for
-				//each of them will contain pageRelativeOffset. The kernel uses
-				// that entry to apply the proper replacement under
-				// virtualAddress + pageRelativeOffset address.
-				branchIt := uint32(0)
-				switch retpolineType {
-				case 3:
-					for branchIt < (baseReloc.SizeOfBlock-structSize)/4 {
-						imgImpCtrlTransDynReloc := ImageImportControlTransferDynamicRelocation{}
-
-						dword, err := pe.ReadUint32(offset)
-						if err != nil {
-							return nil
-						}
-
-						imgImpCtrlTransDynReloc.PageRelativeOffset = uint16(dword) & 0xfff
-						imgImpCtrlTransDynReloc.IndirectCall = uint16(dword) & 0x1000 >> 12
-						imgImpCtrlTransDynReloc.IATIndex = dword & 0xFFFFE000 >> 13
-
-						offset += 4
-						branchIt += 1
-						relocBlock.TypeOffsets = append(relocBlock.TypeOffsets, imgImpCtrlTransDynReloc)
-					}
-				case 4:
-					for branchIt < (baseReloc.SizeOfBlock-structSize)/2 {
-						imgIndirCtrlTransDynReloc := ImageIndirectControlTransferDynamicRelocation{}
-
-						word, err := pe.ReadUint16(offset)
-						if err != nil {
-							return nil
-						}
-						imgIndirCtrlTransDynReloc.PageRelativeOffset = word & 0xfff
-						imgIndirCtrlTransDynReloc.IndirectCall = uint8(word & 0x1000 >> 12)
-						imgIndirCtrlTransDynReloc.RexWPrefix = uint8(word & 0x2000 >> 13)
-						imgIndirCtrlTransDynReloc.CfgCheck = uint8(word & 0x4000 >> 14)
-						imgIndirCtrlTransDynReloc.Reserved = uint8(word & 0x8000 >> 15)
-
-						branchIt += 1
-						offset += 2
-
-						// Padding might be added at the end of the block.
-						if (ImageIndirectControlTransferDynamicRelocation{}) == imgIndirCtrlTransDynReloc {
-							continue
-						}
-						relocBlock.TypeOffsets = append(relocBlock.TypeOffsets, imgIndirCtrlTransDynReloc)
-					}
-				case 5:
-					for branchIt < (baseReloc.SizeOfBlock-structSize)/2 {
-						imgSwitchBranchDynReloc := ImageSwitchableBranchDynamicRelocation{}
-
-						word, err := pe.ReadUint16(offset)
-						if err != nil {
-							return nil
-						}
-						imgSwitchBranchDynReloc.PageRelativeOffset = word & 0xfff
-						imgSwitchBranchDynReloc.RegisterNumber = word & 0xf000 >> 12
-
-						offset += 2
-						branchIt += 1
-
-						// Padding might be added at the end of the block.
-						if (ImageSwitchableBranchDynamicRelocation{}) == imgSwitchBranchDynReloc {
-							continue
-						}
-						relocBlock.TypeOffsets = append(relocBlock.TypeOffsets, imgSwitchBranchDynReloc)
-					}
-				}
-
-				blockIt += baseReloc.SizeOfBlock
-				relocEntry.RelocBlocks = append(relocEntry.RelocBlocks, relocBlock)
-			}
-
-			dvrt.Entries = append(dvrt.Entries, relocEntry)
-			relocTableIt += baseBlockSize
-		}
-	case 2:
-		fmt.Print("Got version 2 !")
+	dvrt, err := pe.parseDVRTAt(tableOffset)
+	if err != nil {
+		pe.logger.Debugf("dynamic value relocation table parsing failed: %v", err)
+		return nil
 	}
-
-	return &dvrt
+	return dvrt
 }
 
 func (pe *File) getEnclaveConfiguration() *Enclave {

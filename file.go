@@ -37,6 +37,11 @@ type File struct {
 	Anomalies    []string                    `json:"anomalies,omitempty"`
 	Header       []byte
 	data         mmap.MMap
+	// rawData always references the unmodified input bytes. When the
+	// ARM64XAlternate option is enabled, data is swapped to a private,
+	// corrected copy while rawData keeps pointing at the original image.
+	rawData      mmap.MMap
+	arm64xActive bool
 	FileInfo
 	size          uint32
 	OverlayOffset int64
@@ -115,6 +120,15 @@ type Options struct {
 
 	// OmitCLRMetadata determines if CLR metadata parsing is skipped, by default (false).
 	OmitCLRMetadata bool
+
+	// ARM64XAlternate selects the x64-compatible hybrid view of an ARM64X
+	// image instead of its native ARM64 view. When enabled, the dynamic value
+	// relocation table's symbol-6 fixups are applied to a private, in-memory
+	// copy of the input before data directories are parsed, so NtHeader,
+	// Export, GetData and the RVA helpers all reflect the alternate layout.
+	// The original bytes are never modified and nothing is written to disk;
+	// images without symbol-6 records simply keep their native view.
+	ARM64XAlternate bool
 }
 
 // New instantiates a file instance with options given a file name.
@@ -160,6 +174,7 @@ func NewFile(f *os.File, opts *Options) (*File, error) {
 	}
 
 	file.data = data
+	file.rawData = data
 	file.size = uint32(len(file.data))
 	file.f = f
 	return &file, nil
@@ -192,6 +207,7 @@ func NewBytes(data []byte, opts *Options) (*File, error) {
 	}
 
 	file.data = data
+	file.rawData = data
 	file.size = uint32(len(file.data))
 	return &file, nil
 }
@@ -207,6 +223,15 @@ func (pe *File) Close() error {
 
 // Close memory mapped file
 func (pe *File) Unmap() error {
+	// Only the original mapping can be unmapped. When the ARM64X alternate
+	// view is active, data is a private byte slice rather than a mapping.
+	if pe.arm64xActive {
+		pe.data = nil
+		if pe.rawData != nil {
+			return pe.rawData.Unmap()
+		}
+		return nil
+	}
 	if pe.data != nil {
 		return pe.data.Unmap()
 	}
@@ -221,6 +246,11 @@ func (pe *File) Parse() error {
 	if len(pe.data) < TinyPESize {
 		return ErrInvalidPESize
 	}
+
+	// Parse must be repeatable: drop every result of a previous run, including
+	// any private ARM64X alternate-view buffer, before starting over. The
+	// original input slice backing rawData is never touched.
+	pe.resetForParse()
 
 	// Parse the DOS header.
 	err := pe.ParseDOSHeader()
@@ -252,6 +282,14 @@ func (pe *File) Parse() error {
 		return err
 	}
 
+	// Build the ARM64X compatible (hybrid) view before any data directory is
+	// parsed so the corrected headers drive the rest of the normal flow.
+	if pe.opts.ARM64XAlternate {
+		if err := pe.applyARM64XAlternateView(); err != nil {
+			return err
+		}
+	}
+
 	// In fast mode, do not parse data directories.
 	if pe.opts.Fast {
 		return nil
@@ -259,6 +297,43 @@ func (pe *File) Parse() error {
 
 	// Parse the Data Directory entries.
 	return pe.ParseDataDirectories()
+}
+
+// resetForParse returns the file to the state right after construction so
+// Parse can be called repeatedly. In alternate-view mode the active data is a
+// private copy that must be discarded in favor of the original raw input;
+// replaying the symbol-6 DELTA fixups on an already-corrected buffer would
+// otherwise accumulate them a second time.
+func (pe *File) resetForParse() {
+	if pe.arm64xActive {
+		pe.data = pe.rawData
+		pe.arm64xActive = false
+	}
+
+	pe.DOSHeader = ImageDOSHeader{}
+	pe.RichHeader = RichHeader{}
+	pe.NtHeader = ImageNtHeader{}
+	pe.COFF = COFF{}
+	pe.Sections = nil
+	pe.Imports = nil
+	pe.Export = Export{}
+	pe.Debugs = nil
+	pe.Relocations = nil
+	pe.Resources = ResourceDirectory{}
+	pe.TLS = TLSDirectory{}
+	pe.LoadConfig = LoadConfig{}
+	pe.Exceptions = nil
+	pe.Certificates = CertificateSection{}
+	pe.DelayImports = nil
+	pe.BoundImports = nil
+	pe.GlobalPtr = 0
+	pe.CLR = CLRData{}
+	pe.IAT = nil
+	pe.Anomalies = nil
+	pe.Header = nil
+	pe.FileInfo = FileInfo{}
+	pe.OverlayOffset = 0
+	pe.size = uint32(len(pe.data))
 }
 
 // String stringify the data directory entry.

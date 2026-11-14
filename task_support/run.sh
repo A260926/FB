@@ -2,13 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mode=${1:-baseline}
-task_cache=$(mktemp -d)
+task_cache=$(mktemp -d "${TMPDIR:-/tmp}/pe-task.XXXXXX")
 trap 'rm -rf "$task_cache"' EXIT
 export GOMODCACHE="$task_cache/mod" GOCACHE="$task_cache/build" GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=vendor
 mkdir -p "$GOMODCACHE" "$GOCACHE"
 if [[ $mode == target ]]; then
   test -s arm64x_test.go
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/pe-test.XXXXXX")
   trap 'rm -f "$output_log"; rm -rf "$task_cache"' EXIT
   set +e
   go test -count=1 -v -run '^TestARM64X(Records|Views|Reparse|Errors)$' . >"$output_log" 2>&1
