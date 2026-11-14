@@ -340,6 +340,23 @@ namespace aabb
          */
         std::vector<unsigned int> query(const AABB&);
 
+        //! Query the tree to find candidate interactions for an AABB,
+        //! also reporting the number of tree nodes visited.
+        /*! This is a compatible statistics entry point: it behaves exactly
+            like query(const AABB&) but additionally counts how many real
+            tree nodes are visited during the traversal.
+
+            \param aabb
+                The AABB.
+
+            \param nodeVisits
+                Set to the number of tree nodes visited by the query.
+
+            \return particles
+                A vector of particle indices.
+         */
+        std::vector<unsigned int> query(const AABB&, unsigned long long& nodeVisits);
+
         //! Get a particle AABB.
         /*! \param particle
                 The particle index.
@@ -495,6 +512,23 @@ namespace aabb
                 Whether a periodic shift has been applied.
          */
         bool minimumImage(std::vector<double>&, std::vector<double>&);
+
+        //! Query the tree, optionally counting visited nodes.
+        /*! \param particle
+                The particle index (self is excluded from the results).
+
+            \param aabb
+                The AABB to query with.
+
+            \param nodeVisits
+                If not null, incremented once for each real tree node
+                visited during the traversal.
+
+            \return particles
+                A vector of particle indices.
+         */
+        std::vector<unsigned int> queryCounted(unsigned int, const AABB&,
+                                               unsigned long long* nodeVisits);
     };
 }
 

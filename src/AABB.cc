@@ -605,6 +605,13 @@ namespace aabb
 
     std::vector<unsigned int> Tree::query(unsigned int particle, const AABB& aabb)
     {
+        // Test overlap of particle AABB against all other particles.
+        return queryCounted(particle, aabb, NULL);
+    }
+
+    std::vector<unsigned int> Tree::queryCounted(unsigned int particle, const AABB& aabb,
+                                                 unsigned long long* nodeVisits)
+    {
         std::vector<unsigned int> stack;
         stack.reserve(256);
         stack.push_back(root);
@@ -620,6 +627,9 @@ namespace aabb
             AABB nodeAABB = nodes[node].aabb;
 
             if (node == NULL_NODE) continue;
+
+            // Count the visit to this tree node.
+            if (nodeVisits != NULL) (*nodeVisits)++;
 
             if (isPeriodic)
             {
@@ -674,6 +684,20 @@ namespace aabb
 
         // Test overlap of AABB against all particles.
         return query(std::numeric_limits<unsigned int>::max(), aabb);
+    }
+
+    std::vector<unsigned int> Tree::query(const AABB& aabb, unsigned long long& nodeVisits)
+    {
+        nodeVisits = 0;
+
+        // Make sure the tree isn't empty.
+        if (particleMap.size() == 0)
+        {
+            return std::vector<unsigned int>();
+        }
+
+        // Test overlap of AABB against all particles, counting visited nodes.
+        return queryCounted(std::numeric_limits<unsigned int>::max(), aabb, &nodeVisits);
     }
 
     const AABB& Tree::getAABB(unsigned int particle)

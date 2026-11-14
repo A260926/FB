@@ -313,6 +313,67 @@ aabb::AABB aabb(lowerBound, upperBound);
 std::vector<unsigned int> particles = tree.query(aabb);
 ```
 
+A compatible statistics entry point is available when the amount of
+broad-phase work matters:
+
+```cpp
+// As above, but also count the tree nodes visited by the query.
+unsigned long long nodeVisits = 0;
+std::vector<unsigned int> particles = tree.query(aabb, nodeVisits);
+```
+
+### LightScene
+`LightScene` (in `src/LightScene.h`) keeps track of which local light
+sources influence which drawable objects, frame after frame, without
+rescanning the whole scene every frame. It uses two dynamic AABB trees as
+a broad phase (one for the objects, one for the lights) and stores the
+tight geometry itself: an object is a unique ID plus a tight world AABB
+and a mask, a light is an ID in its own namespace plus a world-space
+sphere (centre and positive radius) and a mask. A light influences an
+object exactly when `(lightMask & objectMask) != 0` and the sphere
+intersects the object's tight AABB, where touching counts. IDs of both
+kinds must be smaller than `UINT32_MAX`, and a mask of zero is legal.
+
+Edits are staged and then published once per frame with `commit()`, which
+reports exactly which (light, object) pairs appeared and disappeared:
+
+```cpp
+#include <aabb/LightScene.h>
+
+// Create a scene (3D, default broad-phase skin thickness).
+aabb::LightScene scene;
+
+// Stage the initial state: IDs live in separate namespaces per kind.
+scene.addLight(7, {0.0, 0.0, 0.0}, 5.0, 0x1);             // id, centre, radius, mask
+scene.addObject(42, {1.0, -1.0, -1.0}, {2.0, 1.0, 1.0}, 0x1); // id, lower, upper, mask
+
+// Publish the frame: added == {(7, 42)}, removed == {}.
+aabb::LightScene::CommitResult frame = scene.commit();
+
+// Later frames only pay for what actually changed: edits are staged
+// and collapse to their final state before the next commit.
+scene.updateObject(42, {10.0, -1.0, -1.0}, {11.0, 1.0, 1.0}, 0x1);
+frame = scene.commit(); // removed == {(7, 42)}, added == {}
+
+// Lights can be moved, re-masked and removed the same way.
+scene.updateLight(7, {10.5, 0.0, 0.0}, 5.0, 0x1);
+frame = scene.commit(); // added == {(7, 42)}
+scene.removeLight(7);
+frame = scene.commit(); // removed == {(7, 42)}
+
+// The committed pair set can be read at any time; staged edits are not
+// visible until the next commit, and reading never recomputes anything.
+const std::set<aabb::LightScene::Pair>& current = scene.pairs();
+
+// Each commit also reports how much real work it did: broad-phase tree
+// node visits, exact sphere/box tests, and old-relation enumerations.
+// frame.stats.treeNodeVisits, frame.stats.pairTests, frame.stats.adjacencyVisits
+```
+
+Invalid inputs (wrong dimensionality, non-finite values, inverted boxes,
+non-positive radii, duplicate live IDs, unknown IDs) throw
+`std::invalid_argument` and leave the staged state untouched.
+
 ## Tests
 The AABB tree is self-testing if the library is compiled in development mode, i.e.
 
