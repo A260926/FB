@@ -280,6 +280,27 @@ int twolame_get_VBR(twolame_options * glopts)
     return (glopts->vbr);
 }
 
+
+int twolame_set_RD_optimization(twolame_options * glopts, int rd)
+{
+    if (glopts == NULL)
+        return (-1);
+    if (rd != 0 && rd != 1)
+        return (-1);
+    /* The optimization mode is locked once the encoder is initialised */
+    if (glopts->twolame_init)
+        return (-1);
+    glopts->rd_optimization = rd;
+    return (0);
+}
+
+int twolame_get_RD_optimization(twolame_options * glopts)
+{
+    if (glopts == NULL)
+        return (-1);
+    return (glopts->rd_optimization);
+}
+
 int twolame_set_VBR_level(twolame_options * glopts, float level)
 {
     // Limit is -50 to 50, but useful range is -10 to 10

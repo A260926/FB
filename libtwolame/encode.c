@@ -1305,3 +1305,57 @@ int twolame_a_bit_allocation(twolame_options * glopts, FLOAT SMR[2][SBLIMIT],
 
 
 // vim:ts=4:sw=4:nowrap:
+
+/*
+ * Internal accessors for the quantization tables above.
+ * The rate-distortion solver (rd_allocation.c) and its tests use these
+ * so that there is a single copy of each standard table.
+ */
+int twolame_rd_nbal_for(twolame_options * glopts, int sb)
+{
+    return nbal[line[glopts->tablenum][sb]];
+}
+
+int twolame_rd_max_alloc_for(twolame_options * glopts, int sb)
+{
+    return (1 << nbal[line[glopts->tablenum][sb]]) - 1;
+}
+
+int twolame_rd_step_index_for(twolame_options * glopts, int sb, int ba)
+{
+    return step_index[line[glopts->tablenum][sb]][ba];
+}
+
+int twolame_rd_steps(int step_index_value)
+{
+    return steps[step_index_value];
+}
+
+int twolame_rd_group(int step_index_value)
+{
+    return group[step_index_value];
+}
+
+int twolame_rd_bits(int step_index_value)
+{
+    return bits[step_index_value];
+}
+
+FLOAT twolame_rd_scalefactor(int scale_index)
+{
+    return scalefactor[scale_index];
+}
+
+/* Fixed per-frame syntax bits for the RD mode: header, optional CRC,
+   and the allocation (nbal) field of every active unit. */
+int twolame_rd_fixed_overhead(twolame_options * glopts)
+{
+    int nch = glopts->num_channels_out;
+    int sblimit = glopts->sblimit;
+    int sb;
+    int bits = 32 + (glopts->error_protection ? 16 : 0);
+
+    for (sb = 0; sb < sblimit; sb++)
+        bits += nch * nbal[line[glopts->tablenum][sb]];
+    return bits;
+}

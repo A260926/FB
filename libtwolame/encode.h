@@ -24,6 +24,8 @@
 #ifndef TWOLAME_ENCODE_H
 #define TWOLAME_ENCODE_H
 
+#include "bitbuffer.h"
+
 int twolame_encode_init(twolame_options * glopts);
 
 void twolame_scalefactor_calc(FLOAT sb_sample[][3][SCALE_BLOCK][SBLIMIT],
@@ -81,6 +83,39 @@ int twolame_vbr_bit_allocation(twolame_options * glopts, FLOAT SMR[2][SBLIMIT],
 
 int twolame_a_bit_allocation(twolame_options * glopts, FLOAT SMR[2][SBLIMIT],
                              unsigned int scfsi[2][SBLIMIT], unsigned int bit_alloc[2][SBLIMIT], int *adb);
+
+
+/*******************************************************
+   Rate-Distortion Optimization
+******************************************************/
+
+/* Exact intra-frame joint selection of bit allocation levels and
+   SCFSI scalefactor sharing under a fixed bit budget. */
+int twolame_rd_bit_allocation(twolame_options * glopts, int *adb);
+
+/* Write the sample codewords chosen by the RD solver. Mirrors the
+   framing of twolame_write_samples() using the solver's own codes. */
+void twolame_rd_write_samples(twolame_options * glopts, bit_stream * bs);
+
+/* Internal accessors for the quantization tables defined in encode.c */
+int twolame_rd_nbal_for(twolame_options * glopts, int sb);
+int twolame_rd_max_alloc_for(twolame_options * glopts, int sb);
+int twolame_rd_step_index_for(twolame_options * glopts, int sb, int ba);
+int twolame_rd_steps(int step_index_value);
+int twolame_rd_group(int step_index_value);
+int twolame_rd_bits(int step_index_value);
+FLOAT twolame_rd_scalefactor(int scale_index);
+int twolame_rd_fixed_overhead(twolame_options * glopts);
+
+/* Read-only observation points, only built for the target tests.
+   They do not exist in the normal ABI. */
+#ifdef TWOLAME_RD_TESTING
+sb_sample_t *twolame_rd_test_get_samples(twolame_options * glopts);
+subband_t *twolame_rd_test_get_subband(twolame_options * glopts);
+unsigned int (*twolame_rd_test_get_scalar(twolame_options * glopts))[3][SBLIMIT];
+unsigned int (*twolame_rd_test_get_bit_alloc(twolame_options * glopts))[SBLIMIT];
+unsigned int (*twolame_rd_test_get_scfsi(twolame_options * glopts))[SBLIMIT];
+#endif
 
 #endif
 

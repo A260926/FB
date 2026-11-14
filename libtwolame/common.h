@@ -291,6 +291,9 @@ struct twolame_options_struct {
     int vbr_max_bitrate;
     FLOAT vbrlevel;             // Set VBR quality. [0.0] (sensible range -10.0 -> 10.0)
 
+    // Intra-frame rate-distortion optimization (fixed-budget exact search)
+    int rd_optimization;        // TRUE [FALSE]
+
     // Miscellaneous Options That Nobody Ever Uses
     TWOLAME_Emphasis emphasis;  // [n]one, 5(50/15 microseconds), c(ccitt j.17)
     int copyright;              // [FALSE]

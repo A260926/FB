@@ -339,6 +339,34 @@ int twolame_init_params(twolame_options * glopts)
     }
 
     /*
+     * Intra-frame rate-distortion optimization only supports the fixed
+     * configurations it can solve exactly. Reject everything else here,
+     * before the VBR code below could silently switch joint stereo to
+     * normal stereo.
+     */
+    if (glopts->rd_optimization) {
+        if (glopts->vbr) {
+            fprintf(stderr, "twolame_init_params(): RD optimization is not available in VBR mode.\n");
+            return -1;
+        }
+        if (glopts->freeformat) {
+            fprintf(stderr,
+                    "twolame_init_params(): RD optimization is not available in freeformat mode.\n");
+            return -1;
+        }
+        if (glopts->mode == TWOLAME_JOINT_STEREO) {
+            fprintf(stderr,
+                    "twolame_init_params(): RD optimization is not available in joint stereo mode.\n");
+            return -1;
+        }
+        if (glopts->mode == TWOLAME_DUAL_CHANNEL) {
+            fprintf(stderr,
+                    "twolame_init_params(): RD optimization is not available in dual channel mode.\n");
+            return -1;
+        }
+    }
+
+    /*
      * MFC Feb 2003: in VBR mode, joint
      * stereo doesn't make any sense at
      * the moment, as there are no noisy
@@ -387,6 +415,27 @@ int twolame_init_params(twolame_options * glopts)
         fprintf(stderr,
                 "twolame_init_params(): sorry, twolame doesn't support resampling (yet).\n");
         return -1;
+    }
+
+    /* RD mode solves against the no-padding frame capacity. Make sure
+       the reserved ancillary bits plus the unavoidable header, CRC and
+       allocation syntax still leave a non-negative audio budget. */
+    if (glopts->rd_optimization) {
+        double average =
+            (1152.0 / ((FLOAT) glopts->samplerate_out / 1000.0))
+            * ((FLOAT) glopts->bitrate / 8.0);
+        int frame_bits_nopad = (int) average * 8;
+        int reserved = glopts->num_ancillary_bits
+            + twolame_rd_fixed_overhead(glopts);
+
+        if (reserved > frame_bits_nopad) {
+            fprintf(stderr,
+                    "twolame_init_params(): RD optimization: ancillary reserve of %i bits "
+                    "plus fixed overhead of %i bits exceeds the no-padding frame capacity of "
+                    "%i bits.\n", glopts->num_ancillary_bits,
+                    twolame_rd_fixed_overhead(glopts), frame_bits_nopad);
+            return -1;
+        }
     }
 
     // Initialise internal variables
@@ -598,8 +647,19 @@ static int encode_frame(twolame_options * glopts, bit_stream * bs)
     }
 
 
-    twolame_sf_transmission_pattern(glopts, glopts->scalar, glopts->scfsi);
-    twolame_main_bit_allocation(glopts, glopts->smr, glopts->scfsi, glopts->bit_alloc, &adb);
+    if (glopts->rd_optimization) {
+        /* glopts->scalar still holds the three raw scalefactor indices
+           computed above; they must not be overwritten by the legacy
+           transmission pattern. The solver jointly selects allocation
+           levels, SCFSI and scalefactors under the fixed budget. */
+        if (twolame_rd_bit_allocation(glopts, &adb) != 0) {
+            fprintf(stderr, "twolame: rate-distortion bit allocation failed.\n");
+            return -1;
+        }
+    } else {
+        twolame_sf_transmission_pattern(glopts, glopts->scalar, glopts->scfsi);
+        twolame_main_bit_allocation(glopts, glopts->smr, glopts->scfsi, glopts->bit_alloc, &adb);
+    }
 
     twolame_write_header(glopts, bs);
 
@@ -610,9 +670,15 @@ static int encode_frame(twolame_options * glopts, bit_stream * bs)
     twolame_write_bit_alloc(glopts, glopts->bit_alloc, bs);
     twolame_write_scalefactors(glopts, glopts->bit_alloc, glopts->scfsi, glopts->scalar, bs);
 
-    twolame_subband_quantization(glopts, glopts->scalar, *glopts->sb_sample, glopts->j_scale,
-                                 *glopts->j_sample, glopts->bit_alloc, *glopts->subband);
-    twolame_write_samples(glopts, *glopts->subband, glopts->bit_alloc, bs);
+    if (glopts->rd_optimization) {
+        /* Quantization codes were produced by the solver with the same
+           rule used for its distortion comparisons. */
+        twolame_rd_write_samples(glopts, bs);
+    } else {
+        twolame_subband_quantization(glopts, glopts->scalar, *glopts->sb_sample, glopts->j_scale,
+                                     *glopts->j_sample, glopts->bit_alloc, *glopts->subband);
+        twolame_write_samples(glopts, *glopts->subband, glopts->bit_alloc, bs);
+    }
 
     // If not all the bits were used, write out a stack of zeros
     for (i = 0; i < adb; i++)

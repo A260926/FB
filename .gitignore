@@ -1,5 +1,6 @@
 .deps
 .libs
+.task-build
 *.a
 *.gz
 *.la

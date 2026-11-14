@@ -754,6 +754,42 @@ TL_API int twolame_set_VBR(twolame_options * glopts, int vbr);
 TL_API int twolame_get_VBR(twolame_options * glopts);
 
 
+/** Enable/Disable intra-frame rate-distortion optimization.
+ *
+ *  When enabled, the quantization level (bit allocation) and the
+ *  three scalefactor transmission patterns (SCFSI) of every active
+ *  subband/channel unit are jointly selected by an exact bounded
+ *  search that minimizes the squared reconstruction error of the
+ *  frame within the fixed (no-padding) bit budget.
+ *
+ *  Only MPEG-1/2 CBR mono and normal stereo streams are supported.
+ *  VBR, freeformat, joint stereo and dual channel are rejected by
+ *  twolame_init_params().
+ *
+ *  The setting is locked in once twolame_init_params() has succeeded;
+ *  further calls to this function then fail and leave the setting
+ *  unchanged.
+ *
+ *  Default: FALSE (0)
+ *
+ *  \param glopts          pointer to twolame options pointer
+ *  \param rd              0 to disable, 1 to enable
+ *  \return                0 if successful, -1 on a NULL pointer, an
+ *                         illegal value or an attempt to change the
+ *                         setting after initialisation
+ */
+TL_API int twolame_set_RD_optimization(twolame_options * glopts, int rd);
+
+
+/** Get the rate-distortion optimization state.
+ *
+ *  \param glopts          pointer to twolame options pointer
+ *  \return                state of RD optimization (1/0), or -1 on
+ *                         a NULL pointer
+ */
+TL_API int twolame_get_RD_optimization(twolame_options * glopts);
+
+
 /** Set the level/quality of the VBR audio.
  *
  *  The level value can is a measurement of quality - the higher

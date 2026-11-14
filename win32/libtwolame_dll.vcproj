@@ -349,6 +349,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\libtwolame\rd_allocation.c"
+				>
+			</File>
+			<File
 				RelativePath="..\libtwolame\subband.c"
 				>
 			</File>

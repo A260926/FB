@@ -43,6 +43,7 @@ libtwolame_la_SOURCES = \
 	psycho_4.h \
 	psycho_n1.c \
 	psycho_n1.h \
+	rd_allocation.c \
 	subband.c \
 	subband.h \
 	twolame.c \

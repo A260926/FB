@@ -67,6 +67,58 @@ Standard automake process:
 
 
 
+INTRA-FRAME RATE-DISTORTION OPTIMIZATION
+----------------------------------------
+
+By default TwoLAME chooses the scalefactor transmission pattern
+(SCFSI) first and then greedily adds bits using SNR-SMR ratios. An
+optional intra-frame rate-distortion (RD) optimization instead solves
+the quantization level and the three-way scalefactor sharing of every
+active subband/channel as one fixed-budget problem: it minimizes the
+actual squared reconstruction error of the whole frame, accumulated in
+double precision over all 36 samples of every active unit, under the
+no-padding bit budget. The search is an exact integer-budget bounded
+solve with backtracking - no per-subband truncation or greedy decision.
+
+The mode is off by default and only affects encoding when enabled. It
+supports MPEG-1/2 constant bitrate mono and normal stereo. VBR,
+freeformat, joint stereo and dual channel are rejected by
+twolame_init_params(), as is a configuration whose reserved ancillary
+bits plus fixed syntax would exceed the no-padding frame capacity.
+
+The setting must be chosen before twolame_init_params() and is locked
+afterwards; the setter rejects NULL pointers, values other than 0/1 and
+any change after initialisation, leaving the previous value intact.
+
+A minimal C example:
+
+```c
+#include <twolame.h>
+
+twolame_options *opts = twolame_init();
+twolame_set_num_channels(opts, 2);
+twolame_set_in_samplerate(opts, 44100);
+twolame_set_out_samplerate(opts, 44100);
+twolame_set_mode(opts, TWOLAME_STEREO);
+twolame_set_bitrate(opts, 192);
+
+if (twolame_set_RD_optimization(opts, 1) != 0) {
+    /* illegal value, or the encoder was already initialised */
+}
+if (twolame_init_params(opts) != 0) {
+    /* unsupported configuration for RD optimization */
+}
+
+/* twolame_encode_buffer*() and twolame_encode_flush() are unchanged;
+   padding, CRC, scaling, the psychoacoustic model and flush behaviour
+   all follow the regular library. */
+```
+
+Use twolame_get_RD_optimization() to read the current state. With the
+option left at its default of 0 the public interface and the encoded
+bytes are unchanged.
+
+
 REFERENCE PAPERS
 ----------------
 
