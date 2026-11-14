@@ -1,6 +1,7 @@
 .PHONY : android
 
-EXTRA_DIST = ChangeLog src/lib/*.h src/bin/*.h README* libshine.sym js
+EXTRA_DIST = ChangeLog src/lib/*.h src/bin/*.h README* libshine.sym js \
+             examples/gapless.c
 
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS  = -I m4
@@ -11,11 +12,11 @@ lib_LTLIBRARIES      = libshine.la
 libshine_la_SOURCES  = src/lib/bitstream.c src/lib/huffman.c \
                        src/lib/l3bitstream.c src/lib/l3loop.c src/lib/l3mdct.c \
                        src/lib/l3subband.c src/lib/layer3.c src/lib/reservoir.c \
-                       src/lib/tables.c
+                       src/lib/tables.c src/lib/gapless.c
 
 libshine_la_LDFLAGS  = -lm -no-undefined -version-info 3:1:0 -export-symbols libshine.sym
 libshine_ladir       = ${prefix}/include/shine
-libshine_la_HEADERS  = src/lib/layer3.h
+libshine_la_HEADERS  = src/lib/layer3.h src/lib/gapless.h
 
 bin_PROGRAMS     = shineenc
 shineenc_SOURCES = src/bin/main.c src/bin/wave.c

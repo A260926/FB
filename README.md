@@ -39,6 +39,66 @@ write(written, data);
 shine_close(s);
 ```
 
+Gapless streaming API
+----------------------
+
+The classic API above only accepts fixed-size PCM blocks and never flushes
+the samples still held by the analysis filter bank and MDCT overlap, so it
+cannot reproduce the true beginning and end of a recording of unknown
+length. The gapless API (`src/lib/gapless.h`) wraps the same encoding core
+to fix this:
+
+```c
+#include <shine/gapless.h>
+
+/* Append bytes, in order. Return 0 on success, negative on failure. */
+int on_write(void *user, const unsigned char *data, size_t len);
+
+/* Overwrite bytes already handed to on_write, starting at `offset`. */
+int on_patch(void *user, uint64_t offset, const unsigned char *data,
+             size_t len);
+
+shine_gapless_t *g = shine_gapless_open(&config, my_context,
+                                        on_write, on_patch);
+
+/* Any number of interleaved frames (samples per channel) per call. */
+shine_gapless_write(g, pcm_chunk, chunk_frames);
+/* ...more chunks of arbitrary size... */
+
+shine_gapless_finish(g);   /* drain the tail and finalize the Info tag */
+shine_gapless_close(g);
+```
+
+Properties of the gapless API:
+
+- Input PCM is interleaved `int16_t`; `frames` always counts samples per
+  channel, and any fragment size (including zero-length writes) is accepted.
+- Every output starts with a standard Info/LAME tag frame. Its flags are
+  `3` (frame count + byte count) and the 36-byte LAME extension starts with
+  `LAME3.100`; the big-endian counts and the packed 12-bit encoder delay /
+  end padding are written back with the patch callback at finish time. The
+  reported delay is the encoder's own 528-sample delay only - the decoder
+  delay is never claimed as encoder delay.
+- The trailing partial block is zero padded and one extra silent block is
+  encoded so the filter bank and MDCT history are really drained; the audio
+  bytes are byte-for-byte identical to feeding the same padded PCM to the
+  classic encoder. No samples are dropped, duplicated or replaced by
+  silence, and trimming yields exactly the input number of samples per
+  channel.
+- Memory stays bounded regardless of recording length: one PCM block, the
+  encoder bit buffer and the single tag frame.
+- After any callback failure the instance enters a sticky error state and
+  emits no more bytes. Finishing an empty recording returns
+  `SHINE_GAPLESS_ERR_EMPTY`; calling `shine_gapless_finish()` repeatedly is
+  allowed (repeat calls succeed and write nothing), and no audio is accepted
+  afterwards.
+- Supported configurations: MPEG-I Layer III, 44.1/48 kHz, 128 kbps, mono or
+  stereo with matching channel modes. Everything else is rejected at
+  `shine_gapless_open()`.
+
+A complete file-backed example (including `fseeko`-based callbacks) lives in
+[`examples/gapless.c`](examples/gapless.c).
+
 How fast is it?
 ---------------
 
