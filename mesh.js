@@ -179,11 +179,12 @@ MeshBuilder.prototype.append = function(lo_x, lo_y, hi_x, hi_y, val) {
   }
   
   var flipAO = a00 + a11 < a10 + a01
-  
+
   if(a00 + a11 === a10 + a01) {
     flipAO = Math.max(a00,a11) < Math.max(a10,a01)
   }
-  
+
+
   if(flipAO) {
     if(!flip) {
       buffer[ptr+u] = lo_x
@@ -530,4 +531,26 @@ function computeMesh(array, voxelSideTextureIDs) {
   return rbuffer.subarray(0, rptr)
 }
 
+//Internals reused by the exact AO path (exact-mesh.js) and its tests
+computeMesh.vertexAO = vertexAO
+computeMesh.facetAO = facetAO
+computeMesh.generateSurfaceVoxel = generateSurfaceVoxel
+computeMesh.surfaceStencil = surfaceStencil
+computeMesh.MeshBuilder = MeshBuilder
+computeMesh.AO_TABLE = AO_TABLE
+computeMesh.OPAQUE_BIT = OPAQUE_BIT
+computeMesh.VOXEL_MASK = VOXEL_MASK
+computeMesh.AO_SHIFT = AO_SHIFT
+computeMesh.AO_BITS = AO_BITS
+computeMesh.AO_MASK = AO_MASK
+computeMesh.FLIP_BIT = FLIP_BIT
+computeMesh.TEXTURE_SHIFT = TEXTURE_SHIFT
+computeMesh.TEXTURE_MASK = TEXTURE_MASK
+computeMesh.VERTEX_SIZE = VERTEX_SIZE
+computeMesh.voxelTexture = voxelTexture
 module.exports = computeMesh
+//Lazy wrapper avoids a load-time circular dependency: exact-mesh.js requires
+//this module for its internals, so it is only loaded when exactAO is called.
+computeMesh.exactAO = function(array, voxelSideTextureIDs) {
+  return require("./exact-mesh.js")(array, voxelSideTextureIDs)
+}
