@@ -24,6 +24,9 @@ Thumbs.db
 ## Build dir
 build/*
 
+## Offline test/build output (support/*.sh)
+.output/
+
 ## Stuff in example
 example/_*
 

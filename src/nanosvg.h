@@ -142,6 +142,78 @@ typedef struct NSVGpath
 	struct NSVGpath* next;		// Pointer to next path, or NULL if last element.
 } NSVGpath;
 
+enum NSVGmarkerUnits {
+	NSVG_MARKER_UNITS_STROKE_WIDTH = 0,
+	NSVG_MARKER_UNITS_USER_SPACE = 1
+};
+
+enum NSVGmarkerOrient {
+	NSVG_MARKER_ORIENT_ANGLE = 0,
+	NSVG_MARKER_ORIENT_AUTO = 1,
+	NSVG_MARKER_ORIENT_AUTO_START_REVERSE = 2
+};
+
+enum NSVGmarkerSlot {
+	NSVG_MARKER_SLOT_START = 0,
+	NSVG_MARKER_SLOT_MID = 1,
+	NSVG_MARKER_SLOT_END = 2
+};
+
+// One shape drawn inside a marker definition, in the marker's content
+// coordinates. Group transforms are already baked into the paths and the
+// stroke width follows NanoSVG's average-scale convention. Paint follows
+// the style scope at the definition site, never the referencing shape.
+typedef struct NSVGmarkerNode {
+	NSVGpaint fill;				// Fill paint of the node.
+	NSVGpaint stroke;			// Stroke paint of the node.
+	float strokeWidth;			// Stroke width in marker content coordinates.
+	char strokeLineJoin;
+	char strokeLineCap;
+	float miterLimit;
+	char fillRule;
+	float opacity;
+	NSVGpath* paths;			// Paths of the node, in content coordinates.
+	struct NSVGmarkerNode* next;
+} NSVGmarkerNode;
+
+// Parsed <marker> definition. Stored on the NSVGimage and shared by every
+// reference; never mutated by a specific reference.
+typedef struct NSVGmarker {
+	char id[64];				// 'id' attribute of the marker.
+	float markerWidth;			// Viewport width (defaults to 3).
+	float markerHeight;			// Viewport height (defaults to 3).
+	float refX, refY;			// Reference point in content coordinates.
+	char units;					// See NSVGmarkerUnits.
+	char orient;				// See NSVGmarkerOrient.
+	float orientAngle;			// Used when orient is NSVG_MARKER_ORIENT_ANGLE.
+	char hasViewBox;			// Whether a viewBox was specified.
+	float viewMinx, viewMiny, viewWidth, viewHeight;
+	char aspectNone;			// preserveAspectRatio="none".
+	NSVGmarkerNode* nodes;		// Children in definition order.
+	struct NSVGmarker* next;
+} NSVGmarker;
+
+// One marker placement on a referencing shape: which marker, at which local
+// vertex, rotated by which local angle (radians, local coordinates).
+typedef struct NSVGmarkerPlacement {
+	NSVGmarker* marker;
+	float x, y;					// Vertex in the referencing shape's local space.
+	float angle;				// Orientation in the referencing shape's local space.
+	char slot;					// One of NSVG_MARKER_SLOT_*.
+	struct NSVGmarkerPlacement* next;
+} NSVGmarkerPlacement;
+
+// Original (pre-flattening) vertices of one subpath, in the shape's local
+// coordinates. One entry per path command, so arcs that became several
+// cubic segments still count as one segment for marker placement. Each
+// point stores six floats: x, y, incoming tangent, outgoing tangent.
+typedef struct NSVGmarkerTrace {
+	float* pts;					// npts vertices, six floats each.
+	int npts;
+	char closed;
+	struct NSVGmarkerTrace* next;
+} NSVGmarkerTrace;
+
 typedef struct NSVGshape
 {
 	char id[64];				// Optional 'id' attr of the shape or its group
@@ -163,6 +235,12 @@ typedef struct NSVGshape
 	char strokeGradient[64];	// Optional 'id' of stroke gradient
 	float xform[6];				// Root transformation for fill/stroke gradient
 	NSVGpath* paths;			// Linked list of paths in the image.
+	char markerStart[64];		// Optional url(#id) of the start marker.
+	char markerMid[64];			// Optional url(#id) of the mid markers.
+	char markerEnd[64];			// Optional url(#id) of the end marker.
+	float markerStrokeWidth;	// Original stroke width in local user units.
+	NSVGmarkerTrace* markerTrace;		// Original segments for marker placement.
+	NSVGmarkerPlacement* markerPlacements; // Resolved placements, start/mid/end order.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 } NSVGshape;
 
@@ -171,6 +249,8 @@ typedef struct NSVGimage
 	float width;				// Width of the image.
 	float height;				// Height of the image.
 	NSVGshape* shapes;			// Linked list of shapes in the image.
+	NSVGmarker* markers;		// Marker definitions referenced by the shapes.
+	float rootXform[6];			// Root viewBox transform (markers compose after shape xforms).
 } NSVGimage;
 
 // Parses SVG file from a file, returns SVG image as paths.
@@ -446,6 +526,9 @@ typedef struct NSVGattrib
 	char hasStroke;
 	char visible;
     unsigned char paintOrder;
+	char markerStart[64];		// Marker ids, empty means unset, "none" disables.
+	char markerMid[64];
+	char markerEnd[64];
 } NSVGattrib;
 
 typedef struct NSVGstyleDeclaration
@@ -467,6 +550,14 @@ typedef struct NSVGparser
 	NSVGstyleDeclaration* styles;
 	NSVGgradientData* gradients;
 	NSVGshape* shapesTail;
+	NSVGmarker* markers;				// Marker definitions accumulated so far.
+	NSVGmarker* markerCurrent;			// Marker being parsed, or NULL.
+	NSVGmarkerNode* markerNodeTail;		// Tail of the current marker's node list.
+	int markerDepth;					// <marker> nesting depth (only depth 1 is active).
+	float* mtrPts;						// Trace scratch: six floats per vertex.
+	int mtrNpts, mtrCpts;
+	NSVGmarkerTrace* trList;			// Traces committed for the current shape.
+	NSVGmarkerTrace* trTail;
 	float viewMinx, viewMiny, viewWidth, viewHeight;
 	int alignX, alignY, alignType;
 	float dpi;
@@ -555,7 +646,7 @@ static void nsvg__xformPremultiply(float* t, float* s)
 	memcpy(t, s2, sizeof(float)*6);
 }
 
-static void nsvg__xformPoint(float* dx, float* dy, float x, float y, float* t)
+static void nsvg__xformPoint(float* dx, float* dy, float x, float y, const float* t)
 {
 	*dx = x*t[0] + y*t[2] + t[4];
 	*dy = x*t[1] + y*t[3] + t[5];
@@ -712,12 +803,500 @@ static void nsvg__deleteGradientData(NSVGgradientData* grad)
 	}
 }
 
+/* ---------------------------------------------------------------------------
+ * Marker support
+ *
+ * Marker definitions are parsed while the document is read and kept on the
+ * parser. Referencing shapes remember raw url(#id) strings plus a trace of
+ * the original path vertices (one entry per path command, so a normalized
+ * arc still counts as one segment). After the whole document has been parsed
+ * the placements are resolved in local coordinates; the rasterizer composes
+ * the full affine matrix at draw time, which keeps definitions shareable.
+ * --------------------------------------------------------------------------- */
+
+// Helpers defined later in the file; declared here so marker parsing can
+// reuse them without changing the existing definition order.
+static double nsvg__atof(const char* s);
+static const char* nsvg__parseNumber(const char* s, char* it, const int size);
+static NSVGattrib* nsvg__getAttr(NSVGparser* p);
+static void nsvg__pushAttr(NSVGparser* p);
+static void nsvg__popAttr(NSVGparser* p);
+static void nsvg__parseAttribs(NSVGparser* p, const char** attr);
+static float nsvg__getAverageScale(const float* t);
+
+static int nsvg__finitef(float v)
+{
+	return isfinite(v);
+}
+
+static NSVGmarker* nsvg__findMarker(NSVGparser* p, const char* id)
+{
+	NSVGmarker* m;
+	if (id == NULL || id[0] == '\0' || strcmp(id, "none") == 0)
+		return NULL;
+	for (m = p->markers; m != NULL; m = m->next) {
+		if (strcmp(m->id, id) == 0)
+			return m;
+	}
+	return NULL;
+}
+
+static void nsvg__deleteMarkerNodes(NSVGmarkerNode* node)
+{
+	while (node != NULL) {
+		NSVGmarkerNode* next = node->next;
+		nsvg__deletePaths(node->paths);
+		nsvg__deletePaint(&node->fill);
+		nsvg__deletePaint(&node->stroke);
+		free(node);
+		node = next;
+	}
+}
+
+static void nsvg__deleteMarkers(NSVGmarker* marker)
+{
+	while (marker != NULL) {
+		NSVGmarker* next = marker->next;
+		nsvg__deleteMarkerNodes(marker->nodes);
+		free(marker);
+		marker = next;
+	}
+}
+
+static void nsvg__deleteTrace(NSVGmarkerTrace* trace)
+{
+	while (trace != NULL) {
+		NSVGmarkerTrace* next = trace->next;
+		free(trace->pts);
+		free(trace);
+		trace = next;
+	}
+}
+
+static void nsvg__deletePlacements(NSVGmarkerPlacement* pl)
+{
+	while (pl != NULL) {
+		NSVGmarkerPlacement* next = pl->next;
+		free(pl);
+		pl = next;
+	}
+}
+
+// Parse a unitless finite marker coordinate. Returns 0 when the value is not
+// a finite number.
+static int nsvg__parseMarkerNumber(const char* str, float* out)
+{
+	float v;
+	if (str == NULL) return 0;
+	v = (float)nsvg__atof(str);
+	if (!nsvg__finitef(v)) return 0;
+	*out = v;
+	return 1;
+}
+
+static void nsvg__beginMarker(NSVGparser* p, const char** attr)
+{
+	NSVGmarker* m;
+	int i;
+
+	m = (NSVGmarker*)malloc(sizeof(NSVGmarker));
+	if (m == NULL) return;
+	memset(m, 0, sizeof(NSVGmarker));
+	m->markerWidth = 3.0f;
+	m->markerHeight = 3.0f;
+	m->refX = 0.0f;
+	m->refY = 0.0f;
+	m->units = NSVG_MARKER_UNITS_STROKE_WIDTH;
+	m->orient = NSVG_MARKER_ORIENT_ANGLE;
+	m->orientAngle = 0.0f;
+	m->hasViewBox = 0;
+	m->aspectNone = 0;
+
+	for (i = 0; attr[i]; i += 2) {
+		const char* name = attr[i];
+		const char* value = attr[i+1];
+		if (strcmp(name, "id") == 0) {
+			strncpy(m->id, value, 63);
+			m->id[63] = '\0';
+		} else if (strcmp(name, "markerWidth") == 0) {
+			nsvg__parseMarkerNumber(value, &m->markerWidth);
+		} else if (strcmp(name, "markerHeight") == 0) {
+			nsvg__parseMarkerNumber(value, &m->markerHeight);
+		} else if (strcmp(name, "refX") == 0) {
+			nsvg__parseMarkerNumber(value, &m->refX);
+		} else if (strcmp(name, "refY") == 0) {
+			nsvg__parseMarkerNumber(value, &m->refY);
+		} else if (strcmp(name, "markerUnits") == 0) {
+			if (strcmp(value, "userSpaceOnUse") == 0)
+				m->units = NSVG_MARKER_UNITS_USER_SPACE;
+			else
+				m->units = NSVG_MARKER_UNITS_STROKE_WIDTH;
+		} else if (strcmp(name, "orient") == 0) {
+			if (strcmp(value, "auto") == 0) {
+				m->orient = NSVG_MARKER_ORIENT_AUTO;
+			} else if (strcmp(value, "auto-start-reverse") == 0) {
+				m->orient = NSVG_MARKER_ORIENT_AUTO_START_REVERSE;
+			} else {
+				float angle;
+				m->orient = NSVG_MARKER_ORIENT_ANGLE;
+				if (nsvg__parseMarkerNumber(value, &angle))
+					m->orientAngle = angle / 180.0f * NSVG_PI;
+			}
+		} else if (strcmp(name, "viewBox") == 0) {
+			const char* s = value;
+			char buf[64];
+			float nums[4];
+			int k;
+			for (k = 0; k < 4; k++) {
+				while (*s && (nsvg__isspace(*s) || *s == ',')) s++;
+				s = nsvg__parseNumber(s, buf, 64);
+				nums[k] = (float)nsvg__atof(buf);
+			}
+			if (nsvg__finitef(nums[0]) && nsvg__finitef(nums[1]) &&
+				nums[2] > 0.0f && nums[3] > 0.0f) {
+				m->hasViewBox = 1;
+				m->viewMinx = nums[0];
+				m->viewMiny = nums[1];
+				m->viewWidth = nums[2];
+				m->viewHeight = nums[3];
+			}
+		} else if (strcmp(name, "preserveAspectRatio") == 0) {
+			if (strstr(value, "none") != 0)
+				m->aspectNone = 1;
+		}
+	}
+
+	// Marker content inherits the presentation attributes of the marker
+	// element itself.
+	nsvg__pushAttr(p);
+	nsvg__parseAttribs(p, attr);
+
+	m->next = p->markers;
+	p->markers = m;
+	p->markerCurrent = m;
+	p->markerDepth = 1;
+}
+
+static void nsvg__endMarker(NSVGparser* p)
+{
+	p->markerCurrent = NULL;
+	p->markerDepth = 0;
+	nsvg__popAttr(p);
+}
+
+// Redirects nsvg__addShape() while marker content is being parsed: the shape
+// is converted into a marker node instead of entering image->shapes.
+static void nsvg__addMarkerNode(NSVGparser* p)
+{
+	NSVGattrib* attr = nsvg__getAttr(p);
+	NSVGmarker* m = p->markerCurrent;
+	NSVGmarkerNode* node;
+	float avgScale;
+
+	if (m == NULL || p->plist == NULL)
+		return;
+
+	node = (NSVGmarkerNode*)malloc(sizeof(NSVGmarkerNode));
+	if (node == NULL) {
+		nsvg__deletePaths(p->plist);
+		p->plist = NULL;
+		return;
+	}
+	memset(node, 0, sizeof(NSVGmarkerNode));
+
+	// Only solid colors are supported inside markers; gradients and other
+	// unsupported paints fall back to no paint.
+	if (attr->hasFill == 1) {
+		node->fill.type = NSVG_PAINT_COLOR;
+		node->fill.color = attr->fillColor;
+		node->fill.color |= (unsigned int)(attr->fillOpacity*255) << 24;
+	} else {
+		node->fill.type = NSVG_PAINT_NONE;
+	}
+	if (attr->hasStroke == 1) {
+		node->stroke.type = NSVG_PAINT_COLOR;
+		node->stroke.color = attr->strokeColor;
+		node->stroke.color |= (unsigned int)(attr->strokeOpacity*255) << 24;
+	} else {
+		node->stroke.type = NSVG_PAINT_NONE;
+	}
+
+	avgScale = nsvg__getAverageScale(attr->xform);
+	node->strokeWidth = attr->strokeWidth * avgScale;
+	node->strokeLineJoin = attr->strokeLineJoin;
+	node->strokeLineCap = attr->strokeLineCap;
+	node->miterLimit = attr->miterLimit;
+	node->fillRule = attr->fillRule;
+	node->opacity = attr->opacity;
+
+	// nsvg__addPath() already baked the cumulative attribute transform into
+	// the path points, so they are in marker content coordinates.
+	node->paths = p->plist;
+	p->plist = NULL;
+
+	if (m->nodes == NULL)
+		m->nodes = node;
+	else
+		p->markerNodeTail->next = node;
+	p->markerNodeTail = node;
+}
+
+// --- Trace of original path-command vertices (six floats per vertex:
+// x, y, incoming tangent xy, outgoing tangent xy). ---
+
+static void nsvg__trReset(NSVGparser* p)
+{
+	p->mtrNpts = 0;
+}
+
+static void nsvg__trMove(NSVGparser* p, float x, float y)
+{
+	if (p->markerCurrent) return;
+	if (p->mtrNpts+1 > p->mtrCpts) {
+		p->mtrCpts = p->mtrCpts ? p->mtrCpts*2 : 8;
+		p->mtrPts = (float*)realloc(p->mtrPts, p->mtrCpts*6*sizeof(float));
+		if (!p->mtrPts) { p->mtrNpts = 0; return; }
+	}
+	p->mtrPts[p->mtrNpts*6+0] = x;
+	p->mtrPts[p->mtrNpts*6+1] = y;
+	p->mtrPts[p->mtrNpts*6+2] = 0.0f;
+	p->mtrPts[p->mtrNpts*6+3] = 0.0f;
+	p->mtrPts[p->mtrNpts*6+4] = 0.0f;
+	p->mtrPts[p->mtrNpts*6+5] = 0.0f;
+	p->mtrNpts++;
+}
+
+// Records the end vertex of the path segment that was just added. The
+// tangents are derived later from the actual cubic storage.
+static void nsvg__trSeg(NSVGparser* p)
+{
+	if (p->markerCurrent || p->npts <= 0) return;
+	nsvg__trMove(p, p->pts[(p->npts-1)*2+0], p->pts[(p->npts-1)*2+1]);
+}
+
+static void nsvg__trCommit(NSVGparser* p, char closed)
+{
+	NSVGmarkerTrace* trace;
+	int n, i;
+
+	if (p->markerCurrent) { p->mtrNpts = 0; return; }
+	n = p->mtrNpts;
+	p->mtrNpts = 0;
+	if (n < 2) return;
+
+	// Derive segment directions from the cubic runs when their layout matches
+	// the trace: the outgoing tangent is 3*(first control - start), the
+	// incoming one 3*(end - last control). Lines degenerate to the endpoint
+	// delta, so the same formula works for them.
+	{
+		int expected = closed ? 1 + 3*n : 1 + 3*(n-1);
+		if (p->npts == expected) {
+			for (i = 0; i < (closed ? n : n-1); i++) {
+				float* p0 = &p->pts[(3*i)*2];
+				float* c1 = &p->pts[(3*i+1)*2];
+				float* c2 = &p->pts[(3*i+2)*2];
+				float* p1 = &p->pts[(3*i+3)*2];
+				float* v0 = &p->mtrPts[i*6];
+				float* v1 = &p->mtrPts[((i+1) % n)*6];
+				float ox = 3.0f*(c1[0]-p0[0]);
+				float oy = 3.0f*(c1[1]-p0[1]);
+				float ix = 3.0f*(p1[0]-c2[0]);
+				float iy = 3.0f*(p1[1]-c2[1]);
+				if (ox != 0.0f || oy != 0.0f) { v0[4] = ox; v0[5] = oy; }
+				if (ix != 0.0f || iy != 0.0f) { v1[2] = ix; v1[3] = iy; }
+			}
+		} else {
+			for (i = 0; i < n-1; i++) {
+				float* v0 = &p->mtrPts[i*6];
+				float* v1 = &p->mtrPts[(i+1)*6];
+				float dx = v1[0] - v0[0];
+				float dy = v1[1] - v0[1];
+				v0[4] = dx; v0[5] = dy;
+				v1[2] = dx; v1[3] = dy;
+			}
+			if (closed) {
+				float* v0 = &p->mtrPts[(n-1)*6];
+				float* v1 = &p->mtrPts[0];
+				float dx = v1[0] - v0[0];
+				float dy = v1[1] - v0[1];
+				v0[4] = dx; v0[5] = dy;
+				v1[2] = dx; v1[3] = dy;
+			}
+		}
+	}
+
+	// Repair zero-length segments: look for the nearest non-zero direction
+	// in the same subpath, wrapping across the seam when closed.
+	for (i = 0; i < n; i++) {
+		float* v = &p->mtrPts[i*6];
+		int k;
+		if (v[4] == 0.0f && v[5] == 0.0f) {
+			for (k = 1; k < n; k++) {
+				int j = closed ? (i+k) % n : i+k;
+				float* o = &p->mtrPts[j*6];
+				if (j < n && (o[4] != 0.0f || o[5] != 0.0f)) {
+					v[4] = o[4]; v[5] = o[5];
+					break;
+				}
+				if (j >= n) break;
+			}
+		}
+		if (v[2] == 0.0f && v[3] == 0.0f) {
+			for (k = 1; k < n; k++) {
+				int j = closed ? (i-k+n) % n : i-k;
+				float* o;
+				if (j < 0) break;
+				o = &p->mtrPts[j*6];
+				if (o[2] != 0.0f || o[3] != 0.0f) {
+					v[2] = o[2]; v[3] = o[3];
+					break;
+				}
+			}
+		}
+		if (v[4] == 0.0f && v[5] == 0.0f && (v[2] != 0.0f || v[3] != 0.0f)) {
+			v[4] = v[2]; v[5] = v[3];
+		}
+		if (v[2] == 0.0f && v[3] == 0.0f && (v[4] != 0.0f || v[5] != 0.0f)) {
+			v[2] = v[4]; v[3] = v[5];
+		}
+	}
+
+	trace = (NSVGmarkerTrace*)malloc(sizeof(NSVGmarkerTrace));
+	if (trace == NULL) return;
+	trace->npts = n;
+	trace->closed = closed;
+	trace->pts = (float*)malloc((size_t)n*6*sizeof(float));
+	if (trace->pts == NULL) { free(trace); return; }
+	memcpy(trace->pts, p->mtrPts, (size_t)n*6*sizeof(float));
+	trace->next = NULL;
+	if (p->trList == NULL)
+		p->trList = trace;
+	else
+		p->trTail->next = trace;
+	p->trTail = trace;
+}
+
+// Short-arc bisector of an incoming and outgoing direction, returned as an
+// angle. The angle difference is normalized to (-180, 180]; exactly opposite
+// directions resolve to +180 degrees.
+static float nsvg__markerBisector(float inx, float iny, float outx, float outy)
+{
+	float a0, a1, da;
+	if ((inx == 0.0f && iny == 0.0f) || (outx == 0.0f && outy == 0.0f)) {
+		float x = inx + outx, y = iny + outy;
+		if (x == 0.0f && y == 0.0f) return 0.0f;
+		return atan2f(y, x);
+	}
+	a0 = atan2f(iny, inx);
+	a1 = atan2f(outy, outx);
+	da = a1 - a0;
+	while (da <= -NSVG_PI) da += 2.0f*NSVG_PI;
+	while (da > NSVG_PI) da -= 2.0f*NSVG_PI;
+	if (fabsf(fabsf(da) - NSVG_PI) < 1e-6f)
+		return NSVG_PI;	// Exactly opposite: mandated +180 degree convention.
+	return a0 + da*0.5f;
+}
+
+static void nsvg__appendPlacement(NSVGshape* shape, NSVGmarker* marker,
+								  float x, float y, float angle, char slot)
+{
+	NSVGmarkerPlacement* pl = (NSVGmarkerPlacement*)malloc(sizeof(NSVGmarkerPlacement));
+	NSVGmarkerPlacement* tail;
+	if (pl == NULL) return;
+	pl->marker = marker;
+	pl->x = x; pl->y = y;
+	pl->angle = angle;
+	pl->slot = slot;
+	pl->next = NULL;
+	if (shape->markerPlacements == NULL) {
+		shape->markerPlacements = pl;
+	} else {
+		tail = shape->markerPlacements;
+		while (tail->next != NULL) tail = tail->next;
+		tail->next = pl;
+	}
+}
+
+static float nsvg__markerSlotAngle(NSVGmarker* marker, float pathAngle, char slot)
+{
+	switch (marker->orient) {
+		case NSVG_MARKER_ORIENT_AUTO:
+			return pathAngle;
+		case NSVG_MARKER_ORIENT_AUTO_START_REVERSE:
+			return pathAngle + (slot == NSVG_MARKER_SLOT_START ? NSVG_PI : 0.0f);
+		default:
+			return marker->orientAngle;
+	}
+}
+
+// Resolves marker references for every shape. Runs after the full document
+// has been parsed, so definitions may appear after their references.
+static void nsvg__resolveMarkers(NSVGparser* p)
+{
+	NSVGshape* shape;
+
+	for (shape = p->image->shapes; shape != NULL; shape = shape->next) {
+		NSVGmarkerTrace* trace;
+		NSVGmarker *ms, *mm, *me;
+
+		ms = nsvg__findMarker(p, shape->markerStart);
+		mm = nsvg__findMarker(p, shape->markerMid);
+		me = nsvg__findMarker(p, shape->markerEnd);
+		if (ms == NULL && mm == NULL && me == NULL)
+			continue;
+
+		// Slot order: all starts, then all mids, then all ends. Traces and
+		// vertices keep their input order within each slot.
+		for (trace = shape->markerTrace; trace != NULL; trace = trace->next) {
+			int n = trace->npts;
+			if (n < 2) continue;
+			if (ms != NULL) {
+				float* v = &trace->pts[0];
+				float a = atan2f(v[5], v[4]);
+				nsvg__appendPlacement(shape, ms, v[0], v[1],
+					nsvg__markerSlotAngle(ms, a, NSVG_MARKER_SLOT_START),
+					NSVG_MARKER_SLOT_START);
+			}
+		}
+		for (trace = shape->markerTrace; trace != NULL; trace = trace->next) {
+			int n = trace->npts;
+			int i, first, last;
+			if (n < 2) continue;
+			if (mm == NULL) continue;
+			if (trace->closed) { first = 0; last = n-1; }
+			else { first = 1; last = n-2; }
+			for (i = first; i <= last; i++) {
+				float* v = &trace->pts[i*6];
+				float a = nsvg__markerBisector(v[2], v[3], v[4], v[5]);
+				nsvg__appendPlacement(shape, mm, v[0], v[1],
+					nsvg__markerSlotAngle(mm, a, NSVG_MARKER_SLOT_MID),
+					NSVG_MARKER_SLOT_MID);
+			}
+		}
+		for (trace = shape->markerTrace; trace != NULL; trace = trace->next) {
+			int n = trace->npts;
+			float* v;
+			float a;
+			if (n < 2 || me == NULL) continue;
+			if (trace->closed) v = &trace->pts[0];	// Z arrives back at the start
+			else v = &trace->pts[(n-1)*6];
+			a = atan2f(v[3], v[2]);
+			nsvg__appendPlacement(shape, me, v[0], v[1],
+				nsvg__markerSlotAngle(me, a, NSVG_MARKER_SLOT_END),
+				NSVG_MARKER_SLOT_END);
+		}
+	}
+}
+
 static void nsvg__deleteParser(NSVGparser* p)
 {
 	if (p != NULL) {
 		nsvg__deleteStyles(p->styles);
 		nsvg__deletePaths(p->plist);
 		nsvg__deleteGradientData(p->gradients);
+		nsvg__deleteMarkers(p->markers);
+		nsvg__deleteTrace(p->trList);
+		free(p->mtrPts);
 		nsvgDelete(p->image);
 		free(p->pts);
 		free(p);
@@ -938,7 +1517,7 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 	return grad;
 }
 
-static float nsvg__getAverageScale(float* t)
+static float nsvg__getAverageScale(const float* t)
 {
 	float sx = sqrtf(t[0]*t[0] + t[2]*t[2]);
 	float sy = sqrtf(t[1]*t[1] + t[3]*t[3]);
@@ -986,6 +1565,13 @@ static void nsvg__addShape(NSVGparser* p)
 	if (p->plist == NULL)
 		return;
 
+	// Shapes inside a marker definition become marker nodes, never visible
+	// image shapes.
+	if (p->markerCurrent != NULL) {
+		nsvg__addMarkerNode(p);
+		return;
+	}
+
 	shape = (NSVGshape*)malloc(sizeof(NSVGshape));
 	if (shape == NULL) goto error;
 	memset(shape, 0, sizeof(NSVGshape));
@@ -996,6 +1582,7 @@ static void nsvg__addShape(NSVGparser* p)
 	memcpy(shape->xform, attr->xform, sizeof shape->xform);
 	scale = nsvg__getAverageScale(attr->xform);
 	shape->strokeWidth = attr->strokeWidth * scale;
+	shape->markerStrokeWidth = attr->strokeWidth;
 	shape->strokeDashOffset = attr->strokeDashOffset * scale;
 	shape->strokeDashCount = (char)attr->strokeDashCount;
 	for (i = 0; i < attr->strokeDashCount; i++)
@@ -1006,6 +1593,15 @@ static void nsvg__addShape(NSVGparser* p)
 	shape->fillRule = attr->fillRule;
 	shape->opacity = attr->opacity;
     shape->paintOrder = attr->paintOrder;
+
+	memcpy(shape->markerStart, attr->markerStart, sizeof shape->markerStart);
+	memcpy(shape->markerMid, attr->markerMid, sizeof shape->markerMid);
+	memcpy(shape->markerEnd, attr->markerEnd, sizeof shape->markerEnd);
+
+	// Attach the trace of original path vertices for marker placement.
+	shape->markerTrace = p->trList;
+	p->trList = NULL;
+	p->trTail = NULL;
 
 	shape->paths = p->plist;
 	p->plist = NULL;
@@ -1922,6 +2518,19 @@ static int nsvg__parseAttr(NSVGparser* p, const char* name, const char* value)
 		attr->stopOffset = nsvg__parseCoordinate(p, value, 0.0f, 1.0f);
 	} else if (strcmp(name, "paint-order") == 0) {
 		attr->paintOrder = nsvg__parsePaintOrder(value);
+	} else if (strcmp(name, "marker-start") == 0 ||
+			   strcmp(name, "marker-mid") == 0 ||
+			   strcmp(name, "marker-end") == 0) {
+		char* dst;
+		if (strcmp(name, "marker-start") == 0) dst = attr->markerStart;
+		else if (strcmp(name, "marker-mid") == 0) dst = attr->markerMid;
+		else dst = attr->markerEnd;
+		if (strcmp(value, "none") == 0) {
+			strcpy(dst, "none");
+		} else if (strncmp(value, "url(", 4) == 0 && strchr(value, '#')) {
+			// Only in-document url(#id) references are supported.
+			nsvg__parseUrl(dst, value);
+		}
 	} else if (strcmp(name, "id") == 0) {
 		strncpy(attr->id, value, 63);
 		attr->id[63] = '\0';
@@ -2392,42 +3001,51 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 							rargs = nsvg__getArgsPerElement(cmd);
 							cpx2 = cpx; cpy2 = cpy;
 							initPoint = 1;
+							nsvg__trMove(p, cpx, cpy);
 							break;
 						case 'l':
 						case 'L':
 							nsvg__pathLineTo(p, &cpx, &cpy, args, cmd == 'l' ? 1 : 0);
 							cpx2 = cpx; cpy2 = cpy;
+							nsvg__trSeg(p);
 							break;
 						case 'H':
 						case 'h':
 							nsvg__pathHLineTo(p, &cpx, &cpy, args, cmd == 'h' ? 1 : 0);
 							cpx2 = cpx; cpy2 = cpy;
+							nsvg__trSeg(p);
 							break;
 						case 'V':
 						case 'v':
 							nsvg__pathVLineTo(p, &cpx, &cpy, args, cmd == 'v' ? 1 : 0);
 							cpx2 = cpx; cpy2 = cpy;
+							nsvg__trSeg(p);
 							break;
 						case 'C':
 						case 'c':
 							nsvg__pathCubicBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 'c' ? 1 : 0);
+							nsvg__trSeg(p);
 							break;
 						case 'S':
 						case 's':
 							nsvg__pathCubicBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 's' ? 1 : 0);
+							nsvg__trSeg(p);
 							break;
 						case 'Q':
 						case 'q':
 							nsvg__pathQuadBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 'q' ? 1 : 0);
+							nsvg__trSeg(p);
 							break;
 						case 'T':
 						case 't':
 							nsvg__pathQuadBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args, cmd == 't' ? 1 : 0);
+							nsvg__trSeg(p);
 							break;
 						case 'A':
 						case 'a':
 							nsvg__pathArcTo(p, &cpx, &cpy, args, cmd == 'a' ? 1 : 0);
 							cpx2 = cpx; cpy2 = cpy;
+							nsvg__trSeg(p);
 							break;
 						default:
 							if (nargs >= 2) {
@@ -2445,6 +3063,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 					// Commit path.
 					if (p->npts > 0)
 						nsvg__addPath(p, closedFlag);
+					nsvg__trCommit(p, closedFlag);
 					// Start new subpath.
 					nsvg__resetPath(p);
 					closedFlag = 0;
@@ -2463,9 +3082,11 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 						cpx2 = cpx; cpy2 = cpy;
 						nsvg__addPath(p, closedFlag);
 					}
+					nsvg__trCommit(p, 1);
 					// Start new subpath.
 					nsvg__resetPath(p);
 					nsvg__moveTo(p, cpx, cpy);
+					nsvg__trMove(p, cpx, cpy);
 					closedFlag = 0;
 					nargs = 0;
 				}
@@ -2480,6 +3101,7 @@ static void nsvg__parsePath(NSVGparser* p, const char** attr)
 		// Commit path.
 		if (p->npts)
 			nsvg__addPath(p, closedFlag);
+		nsvg__trCommit(p, closedFlag);
 	}
 
 	nsvg__addShape(p);
@@ -2621,11 +3243,15 @@ static void nsvg__parseLine(NSVGparser* p, const char** attr)
 	}
 
 	nsvg__resetPath(p);
+	nsvg__trReset(p);
 
 	nsvg__moveTo(p, x1, y1);
+	nsvg__trMove(p, x1, y1);
 	nsvg__lineTo(p, x2, y2);
+	nsvg__trMove(p, x2, y2);
 
 	nsvg__addPath(p, 0);
+	nsvg__trCommit(p, 0);
 
 	nsvg__addShape(p);
 }
@@ -2639,6 +3265,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 	char item[64];
 
 	nsvg__resetPath(p);
+	nsvg__trReset(p);
 
 	for (i = 0; attr[i]; i += 2) {
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
@@ -2653,6 +3280,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 							nsvg__moveTo(p, args[0], args[1]);
 						else
 							nsvg__lineTo(p, args[0], args[1]);
+						nsvg__trMove(p, args[0], args[1]);
 						nargs = 0;
 						npts++;
 					}
@@ -2662,6 +3290,7 @@ static void nsvg__parsePoly(NSVGparser* p, const char** attr, int closeFlag)
 	}
 
 	nsvg__addPath(p, (char)closeFlag);
+	nsvg__trCommit(p, (char)closeFlag);
 
 	nsvg__addShape(p);
 }
@@ -2837,8 +3466,58 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 {
 	NSVGparser* p = (NSVGparser*)ud;
 
+	if (strcmp(el, "marker") == 0) {
+		if (p->markerCurrent == NULL) {
+			// Markers live in defs; beginMarker() sets up the inherited
+			// style scope.
+			nsvg__beginMarker(p, attr);
+		} else {
+			// Nested markers are unsupported; track the depth so their own
+			// end tag does not close the outer definition.
+			p->markerDepth++;
+		}
+		return;
+	}
+
+	if (p->markerCurrent != NULL) {
+		// Marker content: only plain shapes and grouping g's are supported.
+		if (strcmp(el, "g") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseAttribs(p, attr);
+		} else if (strcmp(el, "path") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parsePath(p, attr);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "rect") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseRect(p, attr);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "circle") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseCircle(p, attr);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "ellipse") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseEllipse(p, attr);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "line") == 0)  {
+			nsvg__pushAttr(p);
+			nsvg__parseLine(p, attr);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "polyline") == 0)  {
+			nsvg__pushAttr(p);
+			nsvg__parsePoly(p, attr, 0);
+			nsvg__popAttr(p);
+		} else if (strcmp(el, "polygon") == 0)  {
+			nsvg__pushAttr(p);
+			nsvg__parsePoly(p, attr, 1);
+			nsvg__popAttr(p);
+		}
+		return;
+	}
+
 	if (p->defsFlag) {
-		// Skip everything but gradients and styles in defs
+		// Skip everything but gradients, markers and styles in defs
 		if (strcmp(el, "linearGradient") == 0) {
 			nsvg__parseGradient(p, attr, NSVG_PAINT_LINEAR_GRADIENT);
 		} else if (strcmp(el, "radialGradient") == 0) {
@@ -2902,6 +3581,15 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 static void nsvg__endElement(void* ud, const char* el)
 {
 	NSVGparser* p = (NSVGparser*)ud;
+
+	if (strcmp(el, "marker") == 0) {
+		if (p->markerDepth > 1) {
+			p->markerDepth--;
+			return;
+		}
+		nsvg__endMarker(p);
+		return;
+	}
 
 	if (strcmp(el, "g") == 0) {
 		nsvg__popAttr(p);
@@ -3105,6 +3793,18 @@ static void nsvg__scaleToViewbox(NSVGparser* p, const char* units)
 	sx *= us;
 	sy *= us;
 	avgs = (sx+sy) / 2.0f;
+
+	// Remember the root/viewBox transform so marker placement can compose it
+	// after the referencing shape's own transform. Points are mapped as
+	// (p + translate) * scale, i.e. scale * translate in column convention.
+	nsvg__xformSetScale(t, sx, sy);
+	{
+		float tv[6];
+		nsvg__xformSetTranslation(tv, tx, ty);
+		nsvg__xformMultiply(t, tv);
+	}
+	memcpy(p->image->rootXform, t, sizeof(float)*6);
+
 	for (shape = p->image->shapes; shape != NULL; shape = shape->next) {
 		shape->bounds[0] = (shape->bounds[0] + tx) * sx;
 		shape->bounds[1] = (shape->bounds[1] + ty) * sy;
@@ -3189,8 +3889,14 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 	// Scale to viewBox
 	nsvg__scaleToViewbox(p, units);
 
+	// Resolve marker references now that every definition has been parsed.
+	nsvg__resolveMarkers(p);
+
 	ret = p->image;
 	p->image = NULL;
+	// Marker definitions are owned by the image from now on.
+	ret->markers = p->markers;
+	p->markers = NULL;
 
 	nsvg__deleteParser(p);
 
@@ -3267,9 +3973,12 @@ void nsvgDelete(NSVGimage* image)
 		nsvg__deletePaths(shape->paths);
 		nsvg__deletePaint(&shape->fill);
 		nsvg__deletePaint(&shape->stroke);
+		nsvg__deleteTrace(shape->markerTrace);
+		nsvg__deletePlacements(shape->markerPlacements);
 		free(shape);
 		shape = snext;
 	}
+	nsvg__deleteMarkers(image->markers);
 	free(image);
 }
 

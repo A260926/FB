@@ -1372,6 +1372,241 @@ static void dumpEdges(NSVGrasterizer* r, const char* name)
 }
 */
 
+/* Marker rasterization keeps its own affine helpers so this header can be
+ * expanded in a translation unit that does not also expand the parser.
+ * Names are unique to avoid clashes when both headers are combined. */
+
+static void nsvg__mIdentity(float* t)
+{
+	t[0]=1.0f; t[1]=0.0f; t[2]=0.0f;
+	t[3]=1.0f; t[4]=0.0f; t[5]=0.0f;
+}
+
+static void nsvg__mSetTranslation(float* t, float tx, float ty)
+{
+	t[0]=1.0f; t[1]=0.0f; t[2]=0.0f;
+	t[3]=1.0f; t[4]=tx;   t[5]=ty;
+}
+
+static void nsvg__mSetScale(float* t, float sx, float sy)
+{
+	t[0]=sx;  t[1]=0.0f; t[2]=0.0f;
+	t[3]=sy;  t[4]=0.0f; t[5]=0.0f;
+}
+
+static void nsvg__mSetRotation(float* t, float a)
+{
+	float cs = cosf(a), sn = sinf(a);
+	t[0]=cs;  t[1]=sn;  t[2]=-sn;
+	t[3]=cs;  t[4]=0.0f; t[5]=0.0f;
+}
+
+// Post-multiply: t <- t * s (column-vector convention, same as the parser).
+static void nsvg__mMultiply(float* t, const float* s)
+{
+	float t0 = t[0]*s[0] + t[1]*s[2];
+	float t2 = t[2]*s[0] + t[3]*s[2];
+	float t4 = t[4]*s[0] + t[5]*s[2] + s[4];
+	t[1] = t[0]*s[1] + t[1]*s[3];
+	t[3] = t[2]*s[1] + t[3]*s[3];
+	t[5] = t[4]*s[1] + t[5]*s[3] + s[5];
+	t[0] = t0; t[2] = t2; t[4] = t4;
+}
+
+static void nsvg__mPoint(const float* t, float x, float y, float* ox, float* oy)
+{
+	*ox = x*t[0] + y*t[2] + t[4];
+	*oy = x*t[1] + y*t[3] + t[5];
+}
+
+static float nsvg__mAvgScale(const float* t)
+{
+	float sx = sqrtf(t[0]*t[0] + t[2]*t[2]);
+	float sy = sqrtf(t[1]*t[1] + t[3]*t[3]);
+	return (sx + sy) * 0.5f;
+}
+
+static void nsvg__flattenMarkerFill(NSVGrasterizer* r, NSVGpath* path, const float* m)
+{
+	int i;
+	float x, y;
+	r->npoints = 0;
+	nsvg__mPoint(m, path->pts[0], path->pts[1], &x, &y);
+	nsvg__addPathPoint(r, x, y, 0);
+	for (i = 0; i < path->npts-1; i += 3) {
+		float p[8];
+		nsvg__mPoint(m, path->pts[i*2], path->pts[i*2+1], &p[0], &p[1]);
+		nsvg__mPoint(m, path->pts[(i+1)*2], path->pts[(i+1)*2+1], &p[2], &p[3]);
+		nsvg__mPoint(m, path->pts[(i+2)*2], path->pts[(i+2)*2+1], &p[4], &p[5]);
+		nsvg__mPoint(m, path->pts[(i+3)*2], path->pts[(i+3)*2+1], &p[6], &p[7]);
+		nsvg__flattenCubicBez(r, p[0],p[1], p[2],p[3], p[4],p[5], p[6],p[7], 0, 0);
+	}
+	nsvg__mPoint(m, path->pts[0], path->pts[1], &x, &y);
+	nsvg__addPathPoint(r, x, y, 0);
+	{
+		int j;
+		for (i = 0, j = r->npoints-1; i < r->npoints; j = i++)
+			nsvg__addEdge(r, r->points[j].x, r->points[j].y, r->points[i].x, r->points[i].y);
+	}
+}
+
+static void nsvg__flattenMarkerStroke(NSVGrasterizer* r, NSVGmarkerNode* node,
+									  NSVGpath* path, const float* m, float scale,
+									  float lineWidth)
+{
+	int i;
+	float x, y;
+	r->npoints = 0;
+	nsvg__mPoint(m, path->pts[0], path->pts[1], &x, &y);
+	nsvg__addPathPoint(r, x*scale, y*scale, NSVG_PT_CORNER);
+	for (i = 0; i < path->npts-1; i += 3) {
+		float p[8];
+		nsvg__mPoint(m, path->pts[i*2], path->pts[i*2+1], &p[0], &p[1]);
+		nsvg__mPoint(m, path->pts[(i+1)*2], path->pts[(i+1)*2+1], &p[2], &p[3]);
+		nsvg__mPoint(m, path->pts[(i+2)*2], path->pts[(i+2)*2+1], &p[4], &p[5]);
+		nsvg__mPoint(m, path->pts[(i+3)*2], path->pts[(i+3)*2+1], &p[6], &p[7]);
+		nsvg__flattenCubicBez(r, p[0]*scale,p[1]*scale, p[2]*scale,p[3]*scale,
+		                      p[4]*scale,p[5]*scale, p[6]*scale,p[7]*scale, 0, NSVG_PT_CORNER);
+	}
+	if (r->npoints < 2)
+		return;
+	nsvg__prepareStroke(r, node->miterLimit, node->strokeLineJoin);
+	nsvg__expandStroke(r, r->points, r->npoints, path->closed,
+	                   node->strokeLineJoin, node->strokeLineCap, lineWidth);
+}
+
+// Builds the content-to-image-space matrix for one placement. NanoSVG
+// matrices act on column vectors (x' = M x), so each later stage is
+// post-multiplied. The raster entry tx/ty/scale are composed later by the
+// common edge pipeline, exactly as for ordinary shapes.
+static void nsvg__markerMatrix(NSVGimage* image, NSVGshape* shape,
+							   NSVGmarkerPlacement* pl, float* m)
+{
+	NSVGmarker* marker = pl->marker;
+	float t[6], v[6];
+	float rx, ry, units;
+
+	nsvg__mIdentity(v);
+	if (marker->hasViewBox) {
+		float sx = marker->markerWidth / marker->viewWidth;
+		float sy = marker->markerHeight / marker->viewHeight;
+		float ox = 0.0f, oy = 0.0f;
+		if (!marker->aspectNone) {
+			float s = sx < sy ? sx : sy;
+			sx = sy = s;
+			ox = (marker->markerWidth - marker->viewWidth*s) * 0.5f;
+			oy = (marker->markerHeight - marker->viewHeight*s) * 0.5f;
+		}
+		v[0] = sx; v[1] = 0.0f; v[2] = 0.0f; v[3] = sy;
+		v[4] = ox - marker->viewMinx*sx;
+		v[5] = oy - marker->viewMiny*sy;
+	}
+	memcpy(m, v, sizeof(float)*6);
+
+	// Map the reference point together with the content, then move the
+	// anchor to the origin.
+	nsvg__mPoint(v, marker->refX, marker->refY, &rx, &ry);
+	nsvg__mSetTranslation(t, -rx, -ry);
+	nsvg__mMultiply(m, t);
+
+	// markerUnits scaling.
+	if (marker->units == NSVG_MARKER_UNITS_STROKE_WIDTH)
+		units = shape->markerStrokeWidth;
+	else
+		units = 1.0f;
+	nsvg__mSetScale(t, units, units);
+	nsvg__mMultiply(m, t);
+
+	// Orientation, then the vertex translation.
+	nsvg__mSetRotation(t, pl->angle);
+	nsvg__mMultiply(m, t);
+	nsvg__mSetTranslation(t, pl->x, pl->y);
+	nsvg__mMultiply(m, t);
+
+	// Referencing shape (and ancestor) transform, then the root viewBox.
+	nsvg__mMultiply(m, shape->xform);
+	nsvg__mMultiply(m, image->rootXform);
+}
+
+static void nsvg__rasterizeMarkerPlacement(NSVGrasterizer* r, NSVGimage* image,
+										   NSVGshape* shape, NSVGmarkerPlacement* pl,
+										   float tx, float ty, float scale)
+{
+	NSVGmarker* marker = pl->marker;
+	NSVGmarkerNode* node;
+	float m[6];
+	int i;
+
+	if (marker->markerWidth <= 0.0f || marker->markerHeight <= 0.0f)
+		return;
+	if (marker->units == NSVG_MARKER_UNITS_STROKE_WIDTH &&
+		shape->markerStrokeWidth == 0.0f)
+		return;
+
+	nsvg__markerMatrix(image, shape, pl, m);
+
+	for (node = marker->nodes; node != NULL; node = node->next) {
+		NSVGpath* path;
+		// Marker child stroke widths keep NanoSVG's average-scale convention;
+		// the path geometry itself goes through the full affine matrix. The
+		// raster entry scale is applied to the width here because the points
+		// only pick it up later through the common edge transform.
+		float nodeLineWidth = node->strokeWidth * nsvg__mAvgScale(m) * scale;
+
+		if (node->fill.type != NSVG_PAINT_NONE) {
+			NSVGcachedPaint cache;
+			nsvg__resetPool(r);
+			r->freelist = NULL;
+			r->nedges = 0;
+			for (path = node->paths; path != NULL; path = path->next)
+				nsvg__flattenMarkerFill(r, path, m);
+			for (i = 0; i < r->nedges; i++) {
+				NSVGedge* e = &r->edges[i];
+				e->x0 = tx + e->x0*scale;
+				e->y0 = (ty + e->y0*scale) * NSVG__SUBSAMPLES;
+				e->x1 = tx + e->x1*scale;
+				e->y1 = (ty + e->y1*scale) * NSVG__SUBSAMPLES;
+			}
+			if (r->nedges != 0)
+				qsort(r->edges, r->nedges, sizeof(NSVGedge), nsvg__cmpEdge);
+			nsvg__initPaint(&cache, &node->fill, node->opacity);
+			nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, node->fillRule);
+		}
+
+		if (node->stroke.type != NSVG_PAINT_NONE && nodeLineWidth > 0.01f) {
+			NSVGcachedPaint cache;
+			nsvg__resetPool(r);
+			r->freelist = NULL;
+			r->nedges = 0;
+			for (path = node->paths; path != NULL; path = path->next)
+				nsvg__flattenMarkerStroke(r, node, path, m, scale, nodeLineWidth);
+			/* Stroke edges are already in device pixels: only apply the
+			 * translation and the scanline sub-sampling factor. */
+			for (i = 0; i < r->nedges; i++) {
+				NSVGedge* e = &r->edges[i];
+				e->x0 = tx + e->x0;
+				e->y0 = (ty + e->y0) * NSVG__SUBSAMPLES;
+				e->x1 = tx + e->x1;
+				e->y1 = (ty + e->y1) * NSVG__SUBSAMPLES;
+			}
+			if (r->nedges != 0)
+				qsort(r->edges, r->nedges, sizeof(NSVGedge), nsvg__cmpEdge);
+			nsvg__initPaint(&cache, &node->stroke, node->opacity);
+			nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, NSVG_FILLRULE_NONZERO);
+		}
+	}
+}
+
+static void nsvg__rasterizeMarkers(NSVGrasterizer* r, NSVGimage* image,
+								   NSVGshape* shape, float tx, float ty, float scale)
+{
+	NSVGmarkerPlacement* pl;
+	// Placements are stored start -> mid -> end, with input order inside each
+	// slot, so a single pass honors the required drawing order.
+	for (pl = shape->markerPlacements; pl != NULL; pl = pl->next)
+		nsvg__rasterizeMarkerPlacement(r, image, shape, pl, tx, ty, scale);
+}
+
 void nsvgRasterize(NSVGrasterizer* r,
 				   NSVGimage* image, float tx, float ty, float scale,
 				   unsigned char* dst, int w, int h, int stride)
@@ -1455,6 +1690,9 @@ void nsvgRasterize(NSVGrasterizer* r,
                 nsvg__initPaint(&cache, &shape->stroke, shape->opacity);
 
                 nsvg__rasterizeSortedEdges(r, tx,ty,scale, &cache, NSVG_FILLRULE_NONZERO);
+            }
+            if (paintOrder == NSVG_PAINT_MARKERS) {
+                nsvg__rasterizeMarkers(r, image, shape, tx, ty, scale);
             }
         }
 	}

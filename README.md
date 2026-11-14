@@ -32,6 +32,40 @@ The parser library is accompanied with really simpler SVG rasterizer. Currently 
 
 The intended usage for the rasterizer is to for example bake icons of different size into a texture. The rasterizer is not particular fast or accurate, but it's small and packed in one header file.
 
+## Markers
+
+The parser and rasterizer implement the subset of SVG [markers](https://www.w3.org/TR/SVG11/painting.html#MarkerElement) needed to put arrowheads and similar symbols on the vertices of a path. Marker definitions live in the root `<defs>` with a unique `id`; a definition is found even when it appears after the shapes that reference it. `path`, `line`, `polyline` and `polygon` accept `marker-start`, `marker-mid` and `marker-end` as presentation attributes or inside an inline `style`, and inherit them through enclosing `<g>` scopes. Setting a position to `none` disables just that position, and a reference that cannot be resolved is skipped while the shape itself still draws.
+
+Save the following as `arrow.svg` and open it, or pass it to `nsvgParseFromFile` followed by `nsvgRasterize`:
+
+```svg
+<svg width="120" height="40" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10"
+            refX="8" refY="5" orient="auto"
+            markerUnits="strokeWidth" overflow="visible">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#d1495b"/>
+    </marker>
+  </defs>
+  <line x1="10" y1="20" x2="100" y2="20"
+        stroke="#2e4057" stroke-width="3"
+        marker-end="url(#arrow)"/>
+</svg>
+```
+
+The same file is checked in at [example/marker.svg](example/marker.svg).
+
+Supported scope:
+
+- `markerWidth`/`markerHeight` (default 3), `refX`/`refY` (default 0) as unitless finite numbers; a non-positive width or height suppresses that marker.
+- `markerUnits` of `strokeWidth` (default) and `userSpaceOnUse`. A `strokeWidth` marker with a zero reference stroke width is not drawn; a `userSpaceOnUse` marker is drawn even when the referencing shape has no stroke.
+- `orient` as a unitless angle, `auto`, and `auto-start-reverse` (the last one only reverses the automatic direction at each subpath start by 180°).
+- Optional `viewBox` with four finite numbers and positive width/height, plus the default `xMidYMid meet` and `none` forms of `preserveAspectRatio`. Without a viewBox the marker content coordinates are used directly.
+- Marker content may contain solid-color filled or stroked paths and nested `<g>` elements with `transform`. Paint and stroke width follow the style scope at the definition site; the referencing shape's colors are not inherited, and `context-fill`/`context-stroke` are not implemented.
+- Placement follows the original path segments (a normalized arc still counts as one segment), including mid markers at every connection point, separate start/end markers on closed subpaths, and tangent handling for degenerate zero-length segments.
+- Markers participate in the existing `paint-order` slots, drawn start, then mid, then end, while later ordinary sibling shapes keep their normal occlusion behavior.
+
+Not supported: `<use>`, external resources, nested markers, gradients or other non-solid paints inside markers, CSS selectors beyond the existing class styles, group opacity, and marker viewport clipping (the bundled materials set `overflow="visible"`).
 
 ## Example Usage
 
