@@ -23,6 +23,13 @@ static void pgl_assemble_lines(GLenum mode, GLsizei count);
 static void pgl_assemble_tris(GLenum mode, GLsizei count);
 static void pgl_update_clip_rect(void);
 
+// Transform feedback (defined below once the line/tri slot helpers exist).
+// pgl_feedback_capture() appends one session's worth of assembled primitive
+// vertices; pgl_feedback_draw_check() enforces family and buffer-alias rules
+// before any vertex shader callback runs.
+static void pgl_feedback_capture(GLenum mode, GLsizei count);
+static int pgl_feedback_draw_check(GLenum mode);
+
 // This is the prototype for either implementation; only one is defined based on
 // whether PGL_BETTER_THICK_LINES is defined
 static void draw_thick_line(vec3 hp1, vec3 hp2, float w1, float w2, float* v1_out, float* v2_out, unsigned int provoke, float poly_offset);
@@ -372,7 +379,23 @@ static void run_pipeline(GLenum mode, const GLvoid* indices, GLsizei count, GLsi
 
 	PGL_ASSERT(count <= PGL_MAX_VERTICES);
 
+	// Reject an incompatible feedback draw (primitive family, or source
+	// objects aliasing the target buffer) before any shader callback.
+	if (c->feedback.active && !c->feedback.paused) {
+		if (!pgl_feedback_draw_check(mode))
+			return;
+	}
+
 	vertex_stage(indices, count, instance, base_instance, use_elements);
+
+	// Pre-clip capture from the raw vertex shader results, before the
+	// clipper/culler can drop anything. Rasterization continues normally
+	// unless the session is already in overflow.
+	if (c->feedback.active && !c->feedback.paused && !c->feedback.overflowed)
+		pgl_feedback_capture(mode, count);
+
+	if (c->feedback.raster_discard)
+		return;
 
 	//fragment portion
 	if (mode == GL_POINTS) {
@@ -2740,5 +2763,146 @@ static void draw_fragment(Shader_Builtins* b, int x, int y, int do_frag_processi
 		PGL_ASSERT(c->mrt_color[att].buf);
 		draw_pixel_color_rt(&c->mrt_color[att], b->gl_FragData[i], x, y, (int)i);
 	}
+}
+
+
+/*
+ * Transform feedback
+ *
+ * Feedback records are assembled from the pre-clip vertex shader results in
+ * c->glverts (clip_space = gl_Position, vs_out = all varyings). Nothing here
+ * ever looks at clipper/culler output or re-runs a vertex shader: strips,
+ * fans and line loops are expanded with the same slot helpers the rasterizer
+ * uses, so winding, the closing line-loop segment and incomplete-tail
+ * dropping all match the normal pipeline and repeated indices stay repeated.
+ */
+
+enum { PGL_FB_POINTS = 1, PGL_FB_LINES = 2, PGL_FB_TRIS = 3 };
+
+static int pgl_feedback_family(GLenum mode)
+{
+	if (mode == GL_POINTS)
+		return PGL_FB_POINTS;
+	if (mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP)
+		return PGL_FB_LINES;
+	if (mode == GL_TRIANGLES || mode == GL_TRIANGLE_STRIP || mode == GL_TRIANGLE_FAN)
+		return PGL_FB_TRIS;
+	return 0;
+}
+
+// Runs before any vertex shader callback of a captured draw. A non-empty
+// draw whose primitive family does not match the session's, or one whose
+// enabled vertex attributes / element buffer alias the feedback target, is
+// rejected with GL_INVALID_OPERATION and the draw does nothing at all.
+static int pgl_feedback_draw_check(GLenum mode)
+{
+	glVertex_Array* va = &c->vertex_arrays.a[c->cur_vertex_array];
+	GLuint target = c->feedback.buffer;
+	int i;
+
+	if (pgl_feedback_family(mode) != pgl_feedback_family(c->feedback.mode)) {
+		PGL_SET_ERR(GL_INVALID_OPERATION);
+		return 0;
+	}
+
+	for (i = 0; i < GL_MAX_VERTEX_ATTRIBS; ++i) {
+		if (va->vertex_attribs[i].enabled && va->vertex_attribs[i].buf == target) {
+			PGL_SET_ERR(GL_INVALID_OPERATION);
+			return 0;
+		}
+	}
+
+	if (va->element_buffer == target) {
+		PGL_SET_ERR(GL_INVALID_OPERATION);
+		return 0;
+	}
+
+	return 1;
+}
+
+static void pgl_feedback_write(GLsizei slot, float* dst, GLsizei vsize)
+{
+	glVertex* v = &c->glverts.a[slot];
+
+	dst[0] = v->clip_space.x;
+	dst[1] = v->clip_space.y;
+	dst[2] = v->clip_space.z;
+	dst[3] = v->clip_space.w;
+	if (vsize)
+		memcpy(dst + 4, v->vs_out, (size_t)vsize * sizeof(float));
+}
+
+// Appends one run_pipeline() call's assembled primitives. Only called while
+// the session is active, unpaused and not already in overflow. Capacity is
+// checked per whole primitive against the live cursor so a primitive that
+// does not fit sets the sticky overflow flag and nothing partial is ever
+// written; bytes outside the session range are never touched.
+static void pgl_feedback_capture(GLenum mode, GLsizei count)
+{
+	const GLsizei rf = c->feedback.record_floats;
+	const GLsizei vsize = c->programs.a[c->feedback.program].vs_output_size;
+	const GLsizeiptr record_bytes = (GLsizeiptr)rf * (GLsizeiptr)sizeof(float);
+	float* base = (float*)(c->buffers.a[c->feedback.buffer].data +
+	                       c->feedback.offset);
+	GLsizei out_count = (GLsizei)(c->feedback.cursor / record_bytes);
+	GLsizei prim, nprims;
+	GLsizei i0, i1, i2;
+	unsigned provoke;
+
+	// Returns GL_FALSE and latches overflow once the next n records do not
+	// fit the remaining range. The cursor itself only moves on a full write.
+	#define PGL_FB_ROOM(n) \
+		(c->feedback.cursor + (GLsizeiptr)(n) * record_bytes <= c->feedback.size)
+
+	switch (pgl_feedback_family(mode)) {
+	case PGL_FB_POINTS:
+		for (GLsizei k = 0; k < count; ++k) {
+			if (!PGL_FB_ROOM(1)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_feedback_write(k, base + (GLsizeiptr)out_count * rf, vsize);
+			++out_count;
+			c->feedback.cursor += record_bytes;
+		}
+		break;
+
+	case PGL_FB_LINES:
+		nprims = pgl_line_prim_count(mode, count);
+		for (prim = 0; prim < nprims; ++prim) {
+			if (!PGL_FB_ROOM(2)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_line_slots(mode, count, prim, &i0, &i1, &provoke);
+			pgl_feedback_write(i0, base + (GLsizeiptr)out_count * rf, vsize);
+			pgl_feedback_write(i1, base + (GLsizeiptr)(out_count + 1) * rf, vsize);
+			out_count += 2;
+			c->feedback.cursor += 2 * record_bytes;
+		}
+		break;
+
+	case PGL_FB_TRIS:
+		nprims = pgl_tri_prim_count(mode, count);
+		for (prim = 0; prim < nprims; ++prim) {
+			if (!PGL_FB_ROOM(3)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_tri_slots(mode, prim, &i0, &i1, &i2, &provoke);
+			pgl_feedback_write(i0, base + (GLsizeiptr)out_count * rf, vsize);
+			pgl_feedback_write(i1, base + (GLsizeiptr)(out_count + 1) * rf, vsize);
+			pgl_feedback_write(i2, base + (GLsizeiptr)(out_count + 2) * rf, vsize);
+			out_count += 3;
+			c->feedback.cursor += 3 * record_bytes;
+		}
+		break;
+
+	default:
+		PGL_ASSERT(0 && "feedback capture with unsupported mode");
+		break;
+	}
+
+	#undef PGL_FB_ROOM
 }
 

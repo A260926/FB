@@ -19,6 +19,10 @@ PGLDEF void pglClearScreen(void)
 
 PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation)
 {
+	// Changing the current program's output layout is forbidden for the whole
+	// feedback session, including while paused.
+	PGL_ERR((c->feedback.active && c->cur_program == c->feedback.program), GL_INVALID_OPERATION);
+
 	c->programs.a[c->cur_program].vs_output_size = n;
 	c->vs_output.size = n;
 
@@ -141,6 +145,11 @@ PGLDEF void pglBufferData(GLenum target, GLsizei size, const GLvoid* data, GLenu
 
 	target -= GL_ARRAY_BUFFER;
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
+
+	// Library rewrites of the feedback target are forbidden while a session
+	// is active, including while paused.
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
 
 	// data can't be null for user_owned data
 	PGL_ERR(!data, GL_INVALID_VALUE);

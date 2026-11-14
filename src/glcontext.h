@@ -182,5 +182,23 @@ typedef struct glContext
 
 	// Bits 0..2: polygon-mode edges v0-v1, v1-v2, v2-v0. One triangle call.
 	int assemble_edges;
+
+	// Transform feedback session (pglBeginFeedback/pglEndFeedback). Captures
+	// pre-clip gl_Position plus every varying of the current program into an
+	// ordinary buffer range, one tightly packed vertex record per assembled
+	// primitive vertex. All state is per-context.
+	struct {
+		GLboolean active;       // between Begin and End
+		GLboolean paused;       // Begin ... Pause, or Resume ... Pause
+		GLboolean overflowed;   // sticky until the next successful Begin
+		GLboolean raster_discard; // pglRasterizerDiscard; independent of the session
+		GLuint buffer;          // target buffer name
+		GLuint program;         // program that was current at Begin
+		GLenum mode;            // GL_POINTS, GL_LINES or GL_TRIANGLES
+		GLintptr offset;        // session range start (bytes, 4-aligned)
+		GLsizeiptr size;        // session range size (bytes, 4-aligned)
+		GLsizeiptr cursor;      // bytes appended so far (always a whole record)
+		GLsizei record_floats;  // 4 (gl_Position) + program varying count
+	} feedback;
 } glContext;
 

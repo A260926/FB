@@ -292,6 +292,92 @@ PGL will print all errors to `stdout` and you can set your own message handler w
 So what version of OpenGL is PortableGL?  _Shrug_, it's still mostly 3.x but I will add things outside of
 3.x as long as it makes sense to me and is in line with the goals and priorities of the project.
 
+Transform Feedback (pre-clip capture and replay)
+=================================================
+
+PortableGL provides a small, PGL-specific transform feedback API that captures the
+*pre-clipping* output of the vertex shader into an ordinary buffer, so an expensive
+deformation can be computed once and redrawn later without running the vertex shader
+again:
+
+```c
+void pglBeginFeedback(GLuint buffer, GLintptr offset, GLsizeiptr size, GLenum mode);
+void pglPauseFeedback(void);
+void pglResumeFeedback(void);
+void pglEndFeedback(void);
+GLuint    pglFeedbackVertexCount(void);
+GLboolean pglFeedbackOverflowed(void);
+void      pglRasterizerDiscard(GLboolean enabled);
+```
+
+`pglBeginFeedback` starts a session on the currently bound program, capturing into the
+`[offset, offset+size)` byte range of an *existing* buffer. `mode` is one of
+`GL_POINTS`, `GL_LINES` or `GL_TRIANGLES` and fixes the primitive family for the whole
+session. `offset` and `size` are non-negative, 4-byte-aligned byte counts that must fit
+inside the buffer's data store (an empty range is legal). Every `glDraw*` entry point
+participates: arrays, elements, instanced and MultiDraw calls.
+
+### Record layout
+
+Strips, fans and line loops are expanded into complete primitives exactly the way the
+rasterizer assembles them (odd/even strip winding, triangle fans, the closing
+line-loop segment), repeated indices are preserved, shared vertices are not shaded a
+second time, and incomplete primitive tails are dropped. One record is written per
+assembled primitive vertex, tightly packed with no padding:
+
+```
+[ gl_Position.x, gl_Position.y, gl_Position.z, gl_Position.w,   // 4 floats
+  varying[0], ..., varying[vs_output_size-1] ]                  // all program varyings
+```
+
+so each record is `(4 + vs_output_size)` floats, i.e. `(4 + vs_output_size) * 4` bytes.
+Records are taken straight from the vertex shader results before clipping: degenerate,
+off-frustum or subsequently culled primitives are still captured. They are appended in
+draw order (each sub-draw and each instance appends independently).
+
+### Capacity, pause and rasterizer discard
+
+If a whole primitive does not fit in the remaining range, a sticky overflow flag is set,
+the complete primitives already written are kept, nothing partial is written, bytes
+outside the range are never touched, and the session stops appending for the rest of
+its life while normal rasterization continues. `pglFeedbackVertexCount()` and
+`pglFeedbackOverflowed()` stay valid after `pglEndFeedback` and until the next
+*successful* `pglBeginFeedback` (the only call that resets them). `pglPauseFeedback`
+suspends capture while ordinary drawing continues; `pglResumeFeedback` continues at the
+old cursor but requires the program that was current at Begin. `pglRasterizerDiscard`
+only skips rasterization — vertex shading and feedback still run — and pause/end never
+change that switch.
+
+### Replaying the records
+
+Because the records live in a normal buffer, replay uses the regular vertex attribute
+API with a pass-through vertex shader. Given a program with 3 varyings and a record
+stride of `7` floats:
+
+```c
+enum { RECORD_FLOATS = 4 + 3 };
+
+pglBeginFeedback(fb, 0, nverts * RECORD_FLOATS * sizeof(float), GL_TRIANGLES);
+glDrawArrays(GL_TRIANGLES, 0, nverts);
+pglEndFeedback();
+GLuint n = pglFeedbackVertexCount();
+
+/* later, possibly after pglEndFeedback and in another frame: */
+glBindBuffer(GL_ARRAY_BUFFER, fb);
+glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE,
+                      RECORD_FLOATS * (int)sizeof(float), 0);                 /* position */
+glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                      RECORD_FLOATS * (int)sizeof(float),
+                      (void*)(4 * sizeof(float)));                           /* varyings */
+glUseProgram(passthrough_program);   /* gl_Position = attrib0; varyings = attrib1 */
+glDrawArrays(GL_TRIANGLES, 0, n);    /* deformation shader never runs again */
+```
+
+A complete, runnable, windowless version of this flow (including a
+rasterizer-discard capture) is in
+[`examples/original/feedback_replay.c`](examples/original/feedback_replay.c); build it
+with `make -f feedback_replay.make` in that directory.
+
 References
 ==========
 

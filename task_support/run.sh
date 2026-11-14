@@ -7,7 +7,8 @@ node task_support/amalgamate.mjs
 ${CC:-cc} -std=c99 -O1 -I.task-build -I. task_support/baseline.c -lm -o .task-build/baseline
 if [[ $mode == target ]]; then
   ${CC:-cc} -std=c99 -O1 -I.task-build -I. testing/feedback_target.c task_support/driver.c -lm -o .task-build/target
-  output_log=$(mktemp)
+  # Repo-local log: works in sandboxes that disallow runtime-mapped temp paths.
+  output_log=.task-build/target-output.log
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

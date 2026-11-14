@@ -70,6 +70,7 @@ static void init_glVertex_Attrib(glVertex_Attrib* v)
 static void init_glVertex_Array(glVertex_Array* v)
 {
 	v->deleted = GL_FALSE;
+	v->element_buffer = 0;
 	for (int i=0; i<GL_MAX_VERTEX_ATTRIBS; ++i)
 		init_glVertex_Attrib(&v->vertex_attribs[i]);
 }
@@ -636,6 +637,9 @@ PGLDEF void glDeleteBuffers(GLsizei n, const GLuint* buffers)
 		if (!buffers[i] || buffers[i] >= c->buffers.size)
 			continue;
 
+		// The feedback target is locked for the whole session, paused or not.
+		PGL_ERR((c->feedback.active && buffers[i] == c->feedback.buffer), GL_INVALID_OPERATION);
+
 		// NOTE(rswinkle): type is stored as correct index not the raw enum value so no need to
 		// subtract here see glBindBuffer
 		type = c->buffers.a[buffers[i]].type;
@@ -762,6 +766,11 @@ PGLDEF void glBufferData(GLenum target, GLsizeiptr size, const GLvoid* data, GLe
 	target -= GL_ARRAY_BUFFER;
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
 
+	// Library rewrites of the feedback target are forbidden while a session
+	// is active, including while paused.
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
+
 	// the spec says any pre-existing data store is deleted but there's no reason to
 	// c->buffers.a[c->bound_buffers[target]].data is always NULL or valid
 	u8* tmp = (u8*)PGL_REALLOC(c->buffers.a[c->bound_buffers[target]].data, size);
@@ -786,6 +795,8 @@ PGLDEF void glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, con
 
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
 	PGL_ERR((offset + size > c->buffers.a[c->bound_buffers[target]].size), GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
 
 	memcpy(&c->buffers.a[c->bound_buffers[target]].data[offset], data, size);
 }
@@ -797,6 +808,7 @@ PGLDEF void glNamedBufferData(GLuint buffer, GLsizeiptr size, const GLvoid* data
 
 	PGL_ERR((!buffer || buffer >= c->buffers.size || c->buffers.a[buffer].deleted), GL_INVALID_OPERATION);
 	PGL_ERR(size < 0, GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && buffer == c->feedback.buffer), GL_INVALID_OPERATION);
 
 	//always NULL or valid
 	PGL_FREE(c->buffers.a[buffer].data);
@@ -817,6 +829,7 @@ PGLDEF void glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size
 	PGL_ERR((!buffer || buffer >= c->buffers.size || c->buffers.a[buffer].deleted), GL_INVALID_OPERATION);
 	PGL_ERR((offset < 0 || size < 0), GL_INVALID_VALUE);
 	PGL_ERR((offset + size > c->buffers.a[buffer].size), GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && buffer == c->feedback.buffer), GL_INVALID_OPERATION);
 
 	memcpy(&c->buffers.a[buffer].data[offset], data, size);
 }
@@ -2163,6 +2176,83 @@ PGLDEF void glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLen
 	}
 }
 
+// Transform feedback sessions. The capture itself runs from run_pipeline()
+// (gl_internal.c) against the pre-clip vertex shader results; these entry
+// points only manage session state and validation. On every error the
+// existing feedback state is left untouched.
+
+PGLDEF void pglBeginFeedback(GLuint buffer, GLintptr offset, GLsizeiptr size, GLenum mode)
+{
+	// Enum and value validation first; neither touches session state.
+	PGL_ERR((mode != GL_POINTS && mode != GL_LINES && mode != GL_TRIANGLES), GL_INVALID_ENUM);
+	PGL_ERR((offset < 0 || size < 0 || (offset & 3) != 0 || (size & 3) != 0), GL_INVALID_VALUE);
+
+	// Session ordering, program and target buffer validity.
+	PGL_ERR(c->feedback.active, GL_INVALID_OPERATION);
+	PGL_ERR((!buffer || buffer >= (GLuint)c->buffers.size || c->buffers.a[buffer].deleted),
+	        GL_INVALID_OPERATION);
+	PGL_ERR((c->cur_program >= (GLuint)c->programs.size || c->programs.a[c->cur_program].deleted),
+	        GL_INVALID_OPERATION);
+
+	// A range that does not fit the existing data store is a range error.
+	glBuffer* target = &c->buffers.a[buffer];
+	PGL_ERR((offset > target->size || size > target->size - offset), GL_INVALID_VALUE);
+
+	c->feedback.active = GL_TRUE;
+	c->feedback.paused = GL_FALSE;
+	c->feedback.overflowed = GL_FALSE;
+	c->feedback.buffer = buffer;
+	c->feedback.program = c->cur_program;
+	c->feedback.mode = mode;
+	c->feedback.offset = offset;
+	c->feedback.size = size;
+	c->feedback.cursor = 0;
+	c->feedback.record_floats = 4 + c->programs.a[c->cur_program].vs_output_size;
+	// raster_discard is intentionally not changed
+}
+
+PGLDEF void pglPauseFeedback(void)
+{
+	PGL_ERR((!c->feedback.active || c->feedback.paused), GL_INVALID_OPERATION);
+	c->feedback.paused = GL_TRUE;
+}
+
+PGLDEF void pglResumeFeedback(void)
+{
+	PGL_ERR((!c->feedback.active || !c->feedback.paused), GL_INVALID_OPERATION);
+	// Programs may be switched while paused; Resume requires the Begin program.
+	PGL_ERR((c->cur_program != c->feedback.program), GL_INVALID_OPERATION);
+	c->feedback.paused = GL_FALSE;
+}
+
+PGLDEF void pglEndFeedback(void)
+{
+	PGL_ERR(!c->feedback.active, GL_INVALID_OPERATION);
+	c->feedback.active = GL_FALSE;
+	c->feedback.paused = GL_FALSE;
+	// Count/overflow stay queryable until the next successful Begin, which is
+	// the only call allowed to clear them.
+}
+
+PGLDEF GLuint pglFeedbackVertexCount(void)
+{
+	GLsizeiptr record_bytes = (GLsizeiptr)c->feedback.record_floats * (GLsizeiptr)sizeof(float);
+	if (!record_bytes)
+		return 0;
+	return (GLuint)(c->feedback.cursor / record_bytes);
+}
+
+PGLDEF GLboolean pglFeedbackOverflowed(void)
+{
+	return c->feedback.overflowed;
+}
+
+PGLDEF void pglRasterizerDiscard(GLboolean enabled)
+{
+	// Independent of the feedback session: Pause/End never touch it.
+	c->feedback.raster_discard = enabled ? GL_TRUE : GL_FALSE;
+}
+
 PGLDEF void glDebugMessageCallback(GLDEBUGPROC callback, void* userParam)
 {
 	c->dbg_callback = callback;
@@ -2777,6 +2867,9 @@ PGLDEF void glDeleteProgram(GLuint program)
 
 	PGL_ERR(program >= c->programs.size, GL_INVALID_VALUE);
 
+	// The Begin program may not be deleted for the whole session, paused or not.
+	PGL_ERR((c->feedback.active && program == c->feedback.program), GL_INVALID_OPERATION);
+
 	c->programs.a[program].deleted = GL_TRUE;
 }
 
@@ -2784,6 +2877,12 @@ PGLDEF void glUseProgram(GLuint program)
 {
 	// Not a problem if program is marked "deleted" already
 	PGL_ERR(program >= c->programs.size, GL_INVALID_VALUE);
+
+	// Program switching is forbidden while a feedback session is recording;
+	// it is allowed while paused, but pglResumeFeedback() requires switching
+	// back to the program that was current at Begin.
+	PGL_ERR((c->feedback.active && !c->feedback.paused &&
+	         program != c->feedback.program), GL_INVALID_OPERATION);
 
 	c->vs_output.size = c->programs.a[program].vs_output_size;
 	// c->vs_output.output_buf was pre-allocated to max size needed in init_glContext

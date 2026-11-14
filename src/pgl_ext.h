@@ -39,6 +39,35 @@ PGLDEF void pglSetTextureSRGB(GLuint texture, GLboolean srgb);
 glVertexAttribPointer(index, size, type, normalized, stride, (void*)(offset))
 
 
+// Pre-clip transform feedback.
+//
+// A feedback session captures, for every vertex of every assembled primitive
+// (strips, fans and line loops expanded exactly as the rasterizer assembles
+// them, repeated indices preserved, incomplete tails dropped), the
+// gl_Position produced by the vertex shader followed by all of the program's
+// varying floats. Each record is tightly packed:
+//
+//     [ position.x, position.y, position.z, position.w,
+//       varying[0], ..., varying[vs_output_size-1] ]
+//
+// so a record is (4 + vs_output_size) floats with no padding. Records are
+// appended to the [offset, offset+size) byte range of an existing buffer and
+// can be fed straight back through the normal vertex attribute APIs. Data is
+// taken from the pre-clip vertex shader results only: clipped, culled,
+// degenerate or off-frustum primitives are still captured, and no vertex
+// shader is ever re-run for a shared vertex.
+//
+// pglRasterizerDiscard() only suppresses rasterization; vertex shading and
+// feedback still run.
+PGLDEF void pglBeginFeedback(GLuint buffer, GLintptr offset, GLsizeiptr size, GLenum mode);
+PGLDEF void pglPauseFeedback(void);
+PGLDEF void pglResumeFeedback(void);
+PGLDEF void pglEndFeedback(void);
+PGLDEF GLuint pglFeedbackVertexCount(void);
+PGLDEF GLboolean pglFeedbackOverflowed(void);
+PGLDEF void pglRasterizerDiscard(GLboolean enabled);
+
+
 PGLDEF GLuint pglCreateFragProgram(frag_func fragment_shader, GLboolean fragdepth_or_discard);
 
 //TODO

@@ -106,6 +106,9 @@ build/*
 !build/Makefile
 !build/*.make
 
+# Task harness amalgamated header and binaries
+.task-build/
+
 *.zip
 *.tbz2
 *.tgz

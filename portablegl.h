@@ -4161,6 +4161,24 @@ typedef struct glContext
 
 	// Bits 0..2: polygon-mode edges v0-v1, v1-v2, v2-v0. One triangle call.
 	int assemble_edges;
+
+	// Transform feedback session (pglBeginFeedback/pglEndFeedback). Captures
+	// pre-clip gl_Position plus every varying of the current program into an
+	// ordinary buffer range, one tightly packed vertex record per assembled
+	// primitive vertex. All state is per-context.
+	struct {
+		GLboolean active;       // between Begin and End
+		GLboolean paused;       // Begin ... Pause, or Resume ... Pause
+		GLboolean overflowed;   // sticky until the next successful Begin
+		GLboolean raster_discard; // pglRasterizerDiscard; independent of the session
+		GLuint buffer;          // target buffer name
+		GLuint program;         // program that was current at Begin
+		GLenum mode;            // GL_POINTS, GL_LINES or GL_TRIANGLES
+		GLintptr offset;        // session range start (bytes, 4-aligned)
+		GLsizeiptr size;        // session range size (bytes, 4-aligned)
+		GLsizeiptr cursor;      // bytes appended so far (always a whole record)
+		GLsizei record_floats;  // 4 (gl_Position) + program varying count
+	} feedback;
 } glContext;
 
 
@@ -4617,6 +4635,35 @@ PGLDEF void pglSetTextureSRGB(GLuint texture, GLboolean srgb);
 
 #define pglVertexAttribPointer(index, size, type, normalized, stride, offset) \
 glVertexAttribPointer(index, size, type, normalized, stride, (void*)(offset))
+
+
+// Pre-clip transform feedback.
+//
+// A feedback session captures, for every vertex of every assembled primitive
+// (strips, fans and line loops expanded exactly as the rasterizer assembles
+// them, repeated indices preserved, incomplete tails dropped), the
+// gl_Position produced by the vertex shader followed by all of the program's
+// varying floats. Each record is tightly packed:
+//
+//     [ position.x, position.y, position.z, position.w,
+//       varying[0], ..., varying[vs_output_size-1] ]
+//
+// so a record is (4 + vs_output_size) floats with no padding. Records are
+// appended to the [offset, offset+size) byte range of an existing buffer and
+// can be fed straight back through the normal vertex attribute APIs. Data is
+// taken from the pre-clip vertex shader results only: clipped, culled,
+// degenerate or off-frustum primitives are still captured, and no vertex
+// shader is ever re-run for a shared vertex.
+//
+// pglRasterizerDiscard() only suppresses rasterization; vertex shading and
+// feedback still run.
+PGLDEF void pglBeginFeedback(GLuint buffer, GLintptr offset, GLsizeiptr size, GLenum mode);
+PGLDEF void pglPauseFeedback(void);
+PGLDEF void pglResumeFeedback(void);
+PGLDEF void pglEndFeedback(void);
+PGLDEF GLuint pglFeedbackVertexCount(void);
+PGLDEF GLboolean pglFeedbackOverflowed(void);
+PGLDEF void pglRasterizerDiscard(GLboolean enabled);
 
 
 PGLDEF GLuint pglCreateFragProgram(frag_func fragment_shader, GLboolean fragdepth_or_discard);
@@ -7491,6 +7538,13 @@ static void pgl_assemble_lines(GLenum mode, GLsizei count);
 static void pgl_assemble_tris(GLenum mode, GLsizei count);
 static void pgl_update_clip_rect(void);
 
+// Transform feedback (defined below once the line/tri slot helpers exist).
+// pgl_feedback_capture() appends one session's worth of assembled primitive
+// vertices; pgl_feedback_draw_check() enforces family and buffer-alias rules
+// before any vertex shader callback runs.
+static void pgl_feedback_capture(GLenum mode, GLsizei count);
+static int pgl_feedback_draw_check(GLenum mode);
+
 // This is the prototype for either implementation; only one is defined based on
 // whether PGL_BETTER_THICK_LINES is defined
 static void draw_thick_line(vec3 hp1, vec3 hp2, float w1, float w2, float* v1_out, float* v2_out, unsigned int provoke, float poly_offset);
@@ -7840,7 +7894,23 @@ static void run_pipeline(GLenum mode, const GLvoid* indices, GLsizei count, GLsi
 
 	PGL_ASSERT(count <= PGL_MAX_VERTICES);
 
+	// Reject an incompatible feedback draw (primitive family, or source
+	// objects aliasing the target buffer) before any shader callback.
+	if (c->feedback.active && !c->feedback.paused) {
+		if (!pgl_feedback_draw_check(mode))
+			return;
+	}
+
 	vertex_stage(indices, count, instance, base_instance, use_elements);
+
+	// Pre-clip capture from the raw vertex shader results, before the
+	// clipper/culler can drop anything. Rasterization continues normally
+	// unless the session is already in overflow.
+	if (c->feedback.active && !c->feedback.paused && !c->feedback.overflowed)
+		pgl_feedback_capture(mode, count);
+
+	if (c->feedback.raster_discard)
+		return;
 
 	//fragment portion
 	if (mode == GL_POINTS) {
@@ -10210,6 +10280,147 @@ static void draw_fragment(Shader_Builtins* b, int x, int y, int do_frag_processi
 	}
 }
 
+
+/*
+ * Transform feedback
+ *
+ * Feedback records are assembled from the pre-clip vertex shader results in
+ * c->glverts (clip_space = gl_Position, vs_out = all varyings). Nothing here
+ * ever looks at clipper/culler output or re-runs a vertex shader: strips,
+ * fans and line loops are expanded with the same slot helpers the rasterizer
+ * uses, so winding, the closing line-loop segment and incomplete-tail
+ * dropping all match the normal pipeline and repeated indices stay repeated.
+ */
+
+enum { PGL_FB_POINTS = 1, PGL_FB_LINES = 2, PGL_FB_TRIS = 3 };
+
+static int pgl_feedback_family(GLenum mode)
+{
+	if (mode == GL_POINTS)
+		return PGL_FB_POINTS;
+	if (mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP)
+		return PGL_FB_LINES;
+	if (mode == GL_TRIANGLES || mode == GL_TRIANGLE_STRIP || mode == GL_TRIANGLE_FAN)
+		return PGL_FB_TRIS;
+	return 0;
+}
+
+// Runs before any vertex shader callback of a captured draw. A non-empty
+// draw whose primitive family does not match the session's, or one whose
+// enabled vertex attributes / element buffer alias the feedback target, is
+// rejected with GL_INVALID_OPERATION and the draw does nothing at all.
+static int pgl_feedback_draw_check(GLenum mode)
+{
+	glVertex_Array* va = &c->vertex_arrays.a[c->cur_vertex_array];
+	GLuint target = c->feedback.buffer;
+	int i;
+
+	if (pgl_feedback_family(mode) != pgl_feedback_family(c->feedback.mode)) {
+		PGL_SET_ERR(GL_INVALID_OPERATION);
+		return 0;
+	}
+
+	for (i = 0; i < GL_MAX_VERTEX_ATTRIBS; ++i) {
+		if (va->vertex_attribs[i].enabled && va->vertex_attribs[i].buf == target) {
+			PGL_SET_ERR(GL_INVALID_OPERATION);
+			return 0;
+		}
+	}
+
+	if (va->element_buffer == target) {
+		PGL_SET_ERR(GL_INVALID_OPERATION);
+		return 0;
+	}
+
+	return 1;
+}
+
+static void pgl_feedback_write(GLsizei slot, float* dst, GLsizei vsize)
+{
+	glVertex* v = &c->glverts.a[slot];
+
+	dst[0] = v->clip_space.x;
+	dst[1] = v->clip_space.y;
+	dst[2] = v->clip_space.z;
+	dst[3] = v->clip_space.w;
+	if (vsize)
+		memcpy(dst + 4, v->vs_out, (size_t)vsize * sizeof(float));
+}
+
+// Appends one run_pipeline() call's assembled primitives. Only called while
+// the session is active, unpaused and not already in overflow. Capacity is
+// checked per whole primitive against the live cursor so a primitive that
+// does not fit sets the sticky overflow flag and nothing partial is ever
+// written; bytes outside the session range are never touched.
+static void pgl_feedback_capture(GLenum mode, GLsizei count)
+{
+	const GLsizei rf = c->feedback.record_floats;
+	const GLsizei vsize = c->programs.a[c->feedback.program].vs_output_size;
+	const GLsizeiptr record_bytes = (GLsizeiptr)rf * (GLsizeiptr)sizeof(float);
+	float* base = (float*)(c->buffers.a[c->feedback.buffer].data +
+	                       c->feedback.offset);
+	GLsizei out_count = (GLsizei)(c->feedback.cursor / record_bytes);
+	GLsizei prim, nprims;
+	GLsizei i0, i1, i2;
+	unsigned provoke;
+
+	// Returns GL_FALSE and latches overflow once the next n records do not
+	// fit the remaining range. The cursor itself only moves on a full write.
+	#define PGL_FB_ROOM(n) \
+		(c->feedback.cursor + (GLsizeiptr)(n) * record_bytes <= c->feedback.size)
+
+	switch (pgl_feedback_family(mode)) {
+	case PGL_FB_POINTS:
+		for (GLsizei k = 0; k < count; ++k) {
+			if (!PGL_FB_ROOM(1)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_feedback_write(k, base + (GLsizeiptr)out_count * rf, vsize);
+			++out_count;
+			c->feedback.cursor += record_bytes;
+		}
+		break;
+
+	case PGL_FB_LINES:
+		nprims = pgl_line_prim_count(mode, count);
+		for (prim = 0; prim < nprims; ++prim) {
+			if (!PGL_FB_ROOM(2)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_line_slots(mode, count, prim, &i0, &i1, &provoke);
+			pgl_feedback_write(i0, base + (GLsizeiptr)out_count * rf, vsize);
+			pgl_feedback_write(i1, base + (GLsizeiptr)(out_count + 1) * rf, vsize);
+			out_count += 2;
+			c->feedback.cursor += 2 * record_bytes;
+		}
+		break;
+
+	case PGL_FB_TRIS:
+		nprims = pgl_tri_prim_count(mode, count);
+		for (prim = 0; prim < nprims; ++prim) {
+			if (!PGL_FB_ROOM(3)) {
+				c->feedback.overflowed = GL_TRUE;
+				break;
+			}
+			pgl_tri_slots(mode, prim, &i0, &i1, &i2, &provoke);
+			pgl_feedback_write(i0, base + (GLsizeiptr)out_count * rf, vsize);
+			pgl_feedback_write(i1, base + (GLsizeiptr)(out_count + 1) * rf, vsize);
+			pgl_feedback_write(i2, base + (GLsizeiptr)(out_count + 2) * rf, vsize);
+			out_count += 3;
+			c->feedback.cursor += 3 * record_bytes;
+		}
+		break;
+
+	default:
+		PGL_ASSERT(0 && "feedback capture with unsupported mode");
+		break;
+	}
+
+	#undef PGL_FB_ROOM
+}
+
 // I just set everything even if not everything applies to the type
 // see section 3.8.15 pg 181 of spec for what it's supposed to be
 // TODO better name and inline?
@@ -12010,6 +12221,7 @@ static void init_glVertex_Attrib(glVertex_Attrib* v)
 static void init_glVertex_Array(glVertex_Array* v)
 {
 	v->deleted = GL_FALSE;
+	v->element_buffer = 0;
 	for (int i=0; i<GL_MAX_VERTEX_ATTRIBS; ++i)
 		init_glVertex_Attrib(&v->vertex_attribs[i]);
 }
@@ -12576,6 +12788,9 @@ PGLDEF void glDeleteBuffers(GLsizei n, const GLuint* buffers)
 		if (!buffers[i] || buffers[i] >= c->buffers.size)
 			continue;
 
+		// The feedback target is locked for the whole session, paused or not.
+		PGL_ERR((c->feedback.active && buffers[i] == c->feedback.buffer), GL_INVALID_OPERATION);
+
 		// NOTE(rswinkle): type is stored as correct index not the raw enum value so no need to
 		// subtract here see glBindBuffer
 		type = c->buffers.a[buffers[i]].type;
@@ -12702,6 +12917,11 @@ PGLDEF void glBufferData(GLenum target, GLsizeiptr size, const GLvoid* data, GLe
 	target -= GL_ARRAY_BUFFER;
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
 
+	// Library rewrites of the feedback target are forbidden while a session
+	// is active, including while paused.
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
+
 	// the spec says any pre-existing data store is deleted but there's no reason to
 	// c->buffers.a[c->bound_buffers[target]].data is always NULL or valid
 	u8* tmp = (u8*)PGL_REALLOC(c->buffers.a[c->bound_buffers[target]].data, size);
@@ -12726,6 +12946,8 @@ PGLDEF void glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, con
 
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
 	PGL_ERR((offset + size > c->buffers.a[c->bound_buffers[target]].size), GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
 
 	memcpy(&c->buffers.a[c->bound_buffers[target]].data[offset], data, size);
 }
@@ -12737,6 +12959,7 @@ PGLDEF void glNamedBufferData(GLuint buffer, GLsizeiptr size, const GLvoid* data
 
 	PGL_ERR((!buffer || buffer >= c->buffers.size || c->buffers.a[buffer].deleted), GL_INVALID_OPERATION);
 	PGL_ERR(size < 0, GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && buffer == c->feedback.buffer), GL_INVALID_OPERATION);
 
 	//always NULL or valid
 	PGL_FREE(c->buffers.a[buffer].data);
@@ -12757,6 +12980,7 @@ PGLDEF void glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size
 	PGL_ERR((!buffer || buffer >= c->buffers.size || c->buffers.a[buffer].deleted), GL_INVALID_OPERATION);
 	PGL_ERR((offset < 0 || size < 0), GL_INVALID_VALUE);
 	PGL_ERR((offset + size > c->buffers.a[buffer].size), GL_INVALID_VALUE);
+	PGL_ERR((c->feedback.active && buffer == c->feedback.buffer), GL_INVALID_OPERATION);
 
 	memcpy(&c->buffers.a[buffer].data[offset], data, size);
 }
@@ -14103,6 +14327,83 @@ PGLDEF void glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLen
 	}
 }
 
+// Transform feedback sessions. The capture itself runs from run_pipeline()
+// (gl_internal.c) against the pre-clip vertex shader results; these entry
+// points only manage session state and validation. On every error the
+// existing feedback state is left untouched.
+
+PGLDEF void pglBeginFeedback(GLuint buffer, GLintptr offset, GLsizeiptr size, GLenum mode)
+{
+	// Enum and value validation first; neither touches session state.
+	PGL_ERR((mode != GL_POINTS && mode != GL_LINES && mode != GL_TRIANGLES), GL_INVALID_ENUM);
+	PGL_ERR((offset < 0 || size < 0 || (offset & 3) != 0 || (size & 3) != 0), GL_INVALID_VALUE);
+
+	// Session ordering, program and target buffer validity.
+	PGL_ERR(c->feedback.active, GL_INVALID_OPERATION);
+	PGL_ERR((!buffer || buffer >= (GLuint)c->buffers.size || c->buffers.a[buffer].deleted),
+	        GL_INVALID_OPERATION);
+	PGL_ERR((c->cur_program >= (GLuint)c->programs.size || c->programs.a[c->cur_program].deleted),
+	        GL_INVALID_OPERATION);
+
+	// A range that does not fit the existing data store is a range error.
+	glBuffer* target = &c->buffers.a[buffer];
+	PGL_ERR((offset > target->size || size > target->size - offset), GL_INVALID_VALUE);
+
+	c->feedback.active = GL_TRUE;
+	c->feedback.paused = GL_FALSE;
+	c->feedback.overflowed = GL_FALSE;
+	c->feedback.buffer = buffer;
+	c->feedback.program = c->cur_program;
+	c->feedback.mode = mode;
+	c->feedback.offset = offset;
+	c->feedback.size = size;
+	c->feedback.cursor = 0;
+	c->feedback.record_floats = 4 + c->programs.a[c->cur_program].vs_output_size;
+	// raster_discard is intentionally not changed
+}
+
+PGLDEF void pglPauseFeedback(void)
+{
+	PGL_ERR((!c->feedback.active || c->feedback.paused), GL_INVALID_OPERATION);
+	c->feedback.paused = GL_TRUE;
+}
+
+PGLDEF void pglResumeFeedback(void)
+{
+	PGL_ERR((!c->feedback.active || !c->feedback.paused), GL_INVALID_OPERATION);
+	// Programs may be switched while paused; Resume requires the Begin program.
+	PGL_ERR((c->cur_program != c->feedback.program), GL_INVALID_OPERATION);
+	c->feedback.paused = GL_FALSE;
+}
+
+PGLDEF void pglEndFeedback(void)
+{
+	PGL_ERR(!c->feedback.active, GL_INVALID_OPERATION);
+	c->feedback.active = GL_FALSE;
+	c->feedback.paused = GL_FALSE;
+	// Count/overflow stay queryable until the next successful Begin, which is
+	// the only call allowed to clear them.
+}
+
+PGLDEF GLuint pglFeedbackVertexCount(void)
+{
+	GLsizeiptr record_bytes = (GLsizeiptr)c->feedback.record_floats * (GLsizeiptr)sizeof(float);
+	if (!record_bytes)
+		return 0;
+	return (GLuint)(c->feedback.cursor / record_bytes);
+}
+
+PGLDEF GLboolean pglFeedbackOverflowed(void)
+{
+	return c->feedback.overflowed;
+}
+
+PGLDEF void pglRasterizerDiscard(GLboolean enabled)
+{
+	// Independent of the feedback session: Pause/End never touch it.
+	c->feedback.raster_discard = enabled ? GL_TRUE : GL_FALSE;
+}
+
 PGLDEF void glDebugMessageCallback(GLDEBUGPROC callback, void* userParam)
 {
 	c->dbg_callback = callback;
@@ -14717,6 +15018,9 @@ PGLDEF void glDeleteProgram(GLuint program)
 
 	PGL_ERR(program >= c->programs.size, GL_INVALID_VALUE);
 
+	// The Begin program may not be deleted for the whole session, paused or not.
+	PGL_ERR((c->feedback.active && program == c->feedback.program), GL_INVALID_OPERATION);
+
 	c->programs.a[program].deleted = GL_TRUE;
 }
 
@@ -14724,6 +15028,12 @@ PGLDEF void glUseProgram(GLuint program)
 {
 	// Not a problem if program is marked "deleted" already
 	PGL_ERR(program >= c->programs.size, GL_INVALID_VALUE);
+
+	// Program switching is forbidden while a feedback session is recording;
+	// it is allowed while paused, but pglResumeFeedback() requires switching
+	// back to the program that was current at Begin.
+	PGL_ERR((c->feedback.active && !c->feedback.paused &&
+	         program != c->feedback.program), GL_INVALID_OPERATION);
 
 	c->vs_output.size = c->programs.a[program].vs_output_size;
 	// c->vs_output.output_buf was pre-allocated to max size needed in init_glContext
@@ -17272,6 +17582,10 @@ PGLDEF void pglClearScreen(void)
 
 PGLDEF void pglSetInterp(GLsizei n, GLenum* interpolation)
 {
+	// Changing the current program's output layout is forbidden for the whole
+	// feedback session, including while paused.
+	PGL_ERR((c->feedback.active && c->cur_program == c->feedback.program), GL_INVALID_OPERATION);
+
 	c->programs.a[c->cur_program].vs_output_size = n;
 	c->vs_output.size = n;
 
@@ -17394,6 +17708,11 @@ PGLDEF void pglBufferData(GLenum target, GLsizei size, const GLvoid* data, GLenu
 
 	target -= GL_ARRAY_BUFFER;
 	PGL_ERR(!c->bound_buffers[target], GL_INVALID_OPERATION);
+
+	// Library rewrites of the feedback target are forbidden while a session
+	// is active, including while paused.
+	PGL_ERR((c->feedback.active && c->bound_buffers[target] == c->feedback.buffer),
+	        GL_INVALID_OPERATION);
 
 	// data can't be null for user_owned data
 	PGL_ERR(!data, GL_INVALID_VALUE);
