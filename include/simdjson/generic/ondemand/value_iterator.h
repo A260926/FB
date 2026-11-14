@@ -509,6 +509,7 @@ protected:
   friend class array;
   friend class value;
   friend class field;
+  friend class forked_value;
 }; // value_iterator
 
 } // namespace ondemand

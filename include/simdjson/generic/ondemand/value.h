@@ -5,6 +5,7 @@
 #include "simdjson/generic/ondemand/base.h"
 #include "simdjson/generic/implementation_simdjson_result_base.h"
 #include "simdjson/generic/ondemand/value_iterator.h"
+#include "simdjson/generic/ondemand/forked_value.h"
 #include "simdjson/jsonpathutil.h"
 #include "simdjson/generic/ondemand/deserialize.h"
 #include <vector>
@@ -836,6 +837,30 @@ public:
 #endif
   simdjson_inline error_code for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept;
 
+  /**
+   * Create an independent fork of this value.
+   *
+   * The value must still be unconsumed: only type()-style inspection (which
+   * does not consume) is allowed beforehand. fork() does not move the source
+   * cursor, so the same value can be forked more than once and afterwards read
+   * or skipped normally by the parent path. The returned forked_value owns its
+   * own cursor, decode buffer and development-check state; it shares only the
+   * read-only structural indexes and the input buffer. See forked_value for the
+   * full lifetime and threading contract.
+   *
+   * The fork's root is this exact value, and its iteration is bounded to it:
+   * it cannot run into the next sibling. Reads performed through the fork do
+   * not affect this value, the parent iteration or any other fork.
+   *
+   * @returns A forked_value, or:
+   *          - OUT_OF_ORDER_ITERATION if the value has already been consumed
+   *            (only reported when SIMDJSON_DEVELOPMENT_CHECKS is enabled;
+   *            without it the call follows the library's normal
+   *            out-of-order usage contract),
+   *          - MEMALLOC if the fork's private storage cannot be allocated.
+   */
+  simdjson_warn_unused simdjson_inline simdjson_result<forked_value> fork() noexcept;
+
 protected:
   /**
    * Create a value.
@@ -881,6 +906,7 @@ protected:
   friend class array_iterator;
   friend class field;
   friend class object;
+  friend class forked_value;
   friend struct simdjson_result<value>;
   friend struct simdjson_result<field>;
   friend class field;
@@ -1067,6 +1093,11 @@ public:
   template <typename Func>
 #endif
   simdjson_inline error_code for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept;
+
+  /** @copydoc SIMDJSON_IMPLEMENTATION::ondemand::value::fork */
+  simdjson_warn_unused simdjson_inline
+      simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::forked_value>
+      fork() noexcept;
 };
 
 // Forward-declare explicit specializations so MSVC /permissive- sees them before

@@ -27,8 +27,19 @@ simdjson_inline json_iterator::json_iterator(json_iterator &&other) noexcept
 #ifdef SIMDJSON_EXPERIMENTAL_ALLOW_INCOMPLETE_JSON
     , _allow_incomplete_json{other._allow_incomplete_json}
 #endif
+    , _fork_end{other._fork_end},
+    _fork_root_depth{other._fork_root_depth},
+    _owned_string_buf{other._owned_string_buf},
+    _owned_string_capacity{other._owned_string_capacity}
+#if SIMDJSON_DEVELOPMENT_CHECKS
+    , _owned_start_positions{other._owned_start_positions},
+    _owned_start_positions_capacity{other._owned_start_positions_capacity}
+#endif
 {
-  other.parser = nullptr;
+  // A document move transfers ownership of the parser-backed iterator and
+  // kills the source; a fork only borrows the parser, whose ownership stays with
+  // the original document, so the moved-from fork keeps a live parser pointer.
+  if (!other.is_fork()) { other.parser = nullptr; }
 }
 simdjson_inline json_iterator &json_iterator::operator=(json_iterator &&other) noexcept {
   token = other.token;
@@ -41,7 +52,15 @@ simdjson_inline json_iterator &json_iterator::operator=(json_iterator &&other) n
 #ifdef SIMDJSON_EXPERIMENTAL_ALLOW_INCOMPLETE_JSON
   _allow_incomplete_json = other._allow_incomplete_json;
 #endif
-  other.parser = nullptr;
+  _fork_end = other._fork_end;
+  _fork_root_depth = other._fork_root_depth;
+  _owned_string_buf = other._owned_string_buf;
+  _owned_string_capacity = other._owned_string_capacity;
+#if SIMDJSON_DEVELOPMENT_CHECKS
+  _owned_start_positions = other._owned_start_positions;
+  _owned_start_positions_capacity = other._owned_start_positions_capacity;
+#endif
+  if (!other.is_fork()) { other.parser = nullptr; }
   return *this;
 }
 
@@ -83,8 +102,13 @@ simdjson_inline error_code json_iterator::rewind() noexcept {
   if (!is_alive()) { return error ? error : UNINITIALIZED; }
   token.set_position( root_position() );
   logger::log_headers(); // We start again
-  _string_buf_loc = parser->string_buf.get();
-  _depth = 1;
+  if (is_fork()) {
+    _string_buf_loc = _owned_string_buf;
+    _depth = _fork_root_depth;
+  } else {
+    _string_buf_loc = parser->string_buf.get();
+    _depth = 1;
+  }
   return SUCCESS;
 }
 
@@ -318,6 +342,7 @@ simdjson_inline bool json_iterator::at_root() const noexcept {
 }
 
 simdjson_inline bool json_iterator::is_single_token() const noexcept {
+  if (is_fork()) { return _fork_end == root_position() + 1; }
   return parser->implementation->n_structural_indexes == 1;
 }
 
@@ -359,16 +384,35 @@ simdjson_inline void json_iterator::assert_more_tokens(uint32_t required_tokens)
 
 simdjson_inline void json_iterator::assert_valid_position(token_position position) const noexcept {
   (void)position; // Suppress unused parameter warning
+  if (is_fork()) {
+#ifndef SIMDJSON_CLANG_VISUAL_STUDIO
+    SIMDJSON_ASSUME( position >= root_position() );
+    SIMDJSON_ASSUME( position <= _fork_end );
+#endif
+    return;
+  }
 #ifndef SIMDJSON_CLANG_VISUAL_STUDIO
   SIMDJSON_ASSUME( position >= &parser->implementation->structural_indexes[0] );
   SIMDJSON_ASSUME( position < &parser->implementation->structural_indexes[parser->implementation->n_structural_indexes] );
 #endif
 }
 
+simdjson_inline bool json_iterator::is_fork() const noexcept {
+  return _fork_end != nullptr;
+}
+
+simdjson_inline size_t json_iterator::fork_max_depth() const noexcept {
+#if SIMDJSON_DEVELOPMENT_CHECKS
+  if (is_fork()) { return _owned_start_positions_capacity; }
+#endif
+  return parser->max_depth();
+}
+
 simdjson_inline bool json_iterator::at_end() const noexcept {
   return position() == end_position();
 }
 simdjson_inline token_position json_iterator::end_position() const noexcept {
+  if (is_fork()) { return _fork_end; }
   uint32_t n_structural_indexes{parser->implementation->n_structural_indexes};
   return &parser->implementation->structural_indexes[n_structural_indexes];
 }
@@ -455,6 +499,7 @@ simdjson_inline uint32_t json_iterator::peek_root_length(token_position position
 }
 
 simdjson_inline token_position json_iterator::last_position() const noexcept {
+  if (is_fork()) { return _fork_end - 1; }
   // The following line fails under some compilers...
   // SIMDJSON_ASSUME(parser->implementation->n_structural_indexes > 0);
   // since it has side-effects.
@@ -498,12 +543,21 @@ simdjson_inline token_position json_iterator::position() const noexcept {
 }
 
 simdjson_inline simdjson_result<std::string_view> json_iterator::unescape(raw_json_string in, bool allow_replacement) noexcept {
+  // The fork's _string_buf_loc points at its own decode buffer; parse_string()
+  // only reads the shared input and writes through dst, so the same
+  // implementation decodes for every cursor. The overflow guard must compare
+  // against the buffer this iterator actually owns, though.
 #if SIMDJSON_DEVELOPMENT_CHECKS
   auto result = parser->unescape(in, _string_buf_loc, allow_replacement);
 #if !defined(SIMDJSON_VISUAL_STUDIO) && !defined(SIMDJSON_CLANG_VISUAL_STUDIO)
   // Under Visual Studio, the next SIMDJSON_ASSUME fails with: the argument
   // has side effects that will be discarded.
-  SIMDJSON_ASSUME(!parser->string_buffer_overflow(_string_buf_loc));
+  if (is_fork()) {
+    SIMDJSON_ASSUME(!(_string_buf_loc < _owned_string_buf
+                      || size_t(_string_buf_loc - _owned_string_buf) >= _owned_string_capacity));
+  } else {
+    SIMDJSON_ASSUME(!parser->string_buffer_overflow(_string_buf_loc));
+  }
 #endif // !defined(SIMDJSON_VISUAL_STUDIO) && !defined(SIMDJSON_CLANG_VISUAL_STUDIO)
   return result;
 #else
@@ -517,7 +571,12 @@ simdjson_inline simdjson_result<std::string_view> json_iterator::unescape_wobbly
 #if !defined(SIMDJSON_VISUAL_STUDIO) && !defined(SIMDJSON_CLANG_VISUAL_STUDIO)
   // Under Visual Studio, the next SIMDJSON_ASSUME fails with: the argument
   // has side effects that will be discarded.
-  SIMDJSON_ASSUME(!parser->string_buffer_overflow(_string_buf_loc));
+  if (is_fork()) {
+    SIMDJSON_ASSUME(!(_string_buf_loc < _owned_string_buf
+                      || size_t(_string_buf_loc - _owned_string_buf) >= _owned_string_capacity));
+  } else {
+    SIMDJSON_ASSUME(!parser->string_buffer_overflow(_string_buf_loc));
+  }
 #endif // !defined(SIMDJSON_VISUAL_STUDIO) && !defined(SIMDJSON_CLANG_VISUAL_STUDIO)
   return result;
 #else
@@ -530,8 +589,13 @@ simdjson_inline void json_iterator::reenter_child(token_position position, depth
   SIMDJSON_ASSUME(_depth == child_depth - 1);
 #if SIMDJSON_DEVELOPMENT_CHECKS
 #ifndef SIMDJSON_CLANG_VISUAL_STUDIO
-  SIMDJSON_ASSUME(size_t(child_depth) < parser->max_depth());
-  SIMDJSON_ASSUME(position >= parser->start_positions[child_depth]);
+  if (is_fork()) {
+    SIMDJSON_ASSUME(size_t(child_depth) < _owned_start_positions_capacity);
+    SIMDJSON_ASSUME(position >= _owned_start_positions[child_depth]);
+  } else {
+    SIMDJSON_ASSUME(size_t(child_depth) < parser->max_depth());
+    SIMDJSON_ASSUME(position >= parser->start_positions[child_depth]);
+  }
 #endif
 #endif
   token.set_position(position);
@@ -549,13 +613,21 @@ simdjson_warn_unused simdjson_inline error_code json_iterator::consume_character
 #if SIMDJSON_DEVELOPMENT_CHECKS
 
 simdjson_inline token_position json_iterator::start_position(depth_t depth) const noexcept {
+  if (is_fork()) {
+    SIMDJSON_ASSUME(size_t(depth) < _owned_start_positions_capacity);
+    return size_t(depth) < _owned_start_positions_capacity ? _owned_start_positions[depth] : nullptr;
+  }
   SIMDJSON_ASSUME(size_t(depth) < parser->max_depth());
   return size_t(depth) < parser->max_depth() ? parser->start_positions[depth] : 0;
 }
 
 simdjson_inline void json_iterator::set_start_position(depth_t depth, token_position position) noexcept {
-  SIMDJSON_ASSUME(size_t(depth) < parser->max_depth());
-  if(size_t(depth) < parser->max_depth()) { parser->start_positions[depth] = position; }
+  SIMDJSON_ASSUME(size_t(depth) < (is_fork() ? _owned_start_positions_capacity : parser->max_depth()));
+  if (is_fork()) {
+    if(size_t(depth) < _owned_start_positions_capacity) { _owned_start_positions[depth] = position; }
+  } else if(size_t(depth) < parser->max_depth()) {
+    parser->start_positions[depth] = position;
+  }
 }
 
 #endif

@@ -11,6 +11,8 @@ namespace simdjson {
 namespace SIMDJSON_IMPLEMENTATION {
 namespace ondemand {
 
+class forked_value;
+
 /**
  * Iterates through JSON tokens, keeping track of depth and string buffer.
  *
@@ -62,6 +64,41 @@ protected:
   bool _streaming{false};
 #ifdef SIMDJSON_EXPERIMENTAL_ALLOW_INCOMPLETE_JSON
   bool _allow_incomplete_json{false};
+#endif
+
+  //
+  // Fork support (see ondemand::forked_value). All of these are neutral for an
+  // ordinary document iterator: when they are null/zero the iterator behaves
+  // exactly as before. A fork iterator gets its own end bound and its own
+  // decode/dev-check storage, so its cursor, depth and error state are fully
+  // independent of the parent document and of sibling forks.
+  //
+
+  /**
+   * One past the last structural token this iterator may reach. Null for an
+   * ordinary document iterator, whose end is the parser's structural-index
+   * sentinel. A fork sets it just past its sub-value's closing token, so its
+   * iteration can never cross into the next sibling.
+   */
+  token_position _fork_end{};
+  /**
+   * Depth the forked sub-value lives at in the original document. Zero for an
+   * ordinary document iterator (whose root is at depth 1). rewind() restores
+   * this rather than assuming the fork root is at document depth.
+   */
+  depth_t _fork_root_depth{};
+  /**
+   * Privately owned string decode buffer (null on ordinary iterators, which
+   * decode into the parser's string buffer). _string_buf_loc points inside it.
+   */
+  uint8_t *_owned_string_buf{};
+  /** Capacity of _owned_string_buf. */
+  size_t _owned_string_capacity{0};
+#if SIMDJSON_DEVELOPMENT_CHECKS
+  /** Privately owned per-depth container-start table (null on ordinary iterators). */
+  token_position *_owned_start_positions{};
+  /** Number of entries in _owned_start_positions. */
+  size_t _owned_start_positions_capacity{0};
 #endif
 
 public:
@@ -130,6 +167,18 @@ public:
    * Tell whether the iterator is live (has not been moved).
    */
   simdjson_inline bool is_alive() const noexcept;
+
+  /**
+   * Tell whether this is an independently bounded fork cursor rather than the
+   * iterator of the original document.
+   */
+  simdjson_inline bool is_fork() const noexcept;
+
+  /**
+   * The number of per-depth container-start slots this iterator can use. A fork
+   * owns its own (sub-value sized) table; an ordinary iterator uses the parser's.
+   */
+  simdjson_inline size_t fork_max_depth() const noexcept;
 
   /**
    * Abandon this iterator, setting depth to 0 (as if the document is finished).
@@ -339,6 +388,7 @@ protected:
   friend class parser;
   friend class value_iterator;
   friend class field;
+  friend class forked_value;
   template <typename... Args>
   friend simdjson_inline void logger::log_line(const json_iterator &iter, const char *title_prefix, const char *title, std::string_view detail, int delta, int depth_delta, logger::log_level level, Args&&... args) noexcept;
   template <typename... Args>

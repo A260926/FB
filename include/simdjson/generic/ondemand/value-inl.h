@@ -437,7 +437,7 @@ inline error_code value::for_each_at_path_segments(const std::vector<internal::j
   // function, and each one descends one level into the document. A path with
   // many segments applied to a deeply nested document would otherwise recurse
   // without bound and overflow the stack.
-  if (size_t(iter.depth()) >= iter.json_iter().parser->max_depth()) { return DEPTH_ERROR; }
+  if (size_t(iter.depth()) >= iter.json_iter().fork_max_depth()) { return DEPTH_ERROR; }
   json_type t;
   SIMDJSON_TRY(type().get(t));
   switch (t) {
@@ -454,6 +454,16 @@ inline error_code value::for_each_at_path_segments(const std::vector<internal::j
   default:
       return INVALID_JSON_POINTER;
   }
+}
+
+simdjson_warn_unused simdjson_inline simdjson_result<forked_value> value::fork() noexcept {
+#if SIMDJSON_DEVELOPMENT_CHECKS
+  // type() is explicitly non-consuming, so a value it was called on is still at
+  // its start. A value that has moved off its start has been (partly) consumed
+  // and cannot be forked.
+  if (!iter.at_start()) { return OUT_OF_ORDER_ITERATION; }
+#endif
+  return forked_value::make(iter.json_iter(), iter.start_position(), iter.depth());
 }
 
 } // namespace ondemand
@@ -780,6 +790,12 @@ inline error_code simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value>::for
     return error();
   }
   return first.for_each_at_path_with_wildcard(json_path, std::forward<Func>(callback));
+}
+
+simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::forked_value>
+simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value>::fork() noexcept {
+  if (error()) { return error(); }
+  return first.fork();
 }
 
 } // namespace simdjson

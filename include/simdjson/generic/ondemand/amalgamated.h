@@ -6,6 +6,7 @@
 #include "simdjson/generic/ondemand/base.h"
 #include "simdjson/generic/ondemand/deserialize.h"
 #include "simdjson/generic/ondemand/value_iterator.h"
+#include "simdjson/generic/ondemand/forked_value.h"
 #include "simdjson/generic/ondemand/value.h"
 #include "simdjson/generic/ondemand/logger.h"
 #include "simdjson/generic/ondemand/token_iterator.h"
@@ -46,6 +47,7 @@
 #include "simdjson/generic/ondemand/raw_json_string-inl.h"
 #include "simdjson/generic/ondemand/token_iterator-inl.h"
 #include "simdjson/generic/ondemand/value_iterator-inl.h"
+#include "simdjson/generic/ondemand/forked_value-inl.h"
 #include "simdjson/generic/ondemand/serialization-inl.h"
 
 // JSON path accessor (compile-time) - must be after inline definitions
