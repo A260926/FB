@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -21,6 +22,18 @@ func findSegmentWithInvPosition(segments []*playlist.MediaSegment, invPos int) (
 	}
 
 	return segments[index], index
+}
+
+func codecsEqual(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, ca := range a {
+		if ca != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func findSegmentWithID(seqNo int, segments []*playlist.MediaSegment, id int) (*playlist.MediaSegment, int, int) {
@@ -91,6 +104,15 @@ type clientStreamDownloader struct {
 	errGroup                 *errgroup.Group
 	parent                   clientStreamDownloaderParent
 
+	// adaptive bitrate (ABR) runtime switching.
+	// abrVariants is nil when runtime switching is not available
+	// (media playlist provided directly, or audio rendition stream).
+	abrVariants        []*playlist.MultivariantVariant
+	abrInitialVariant  *playlist.MultivariantVariant
+	abrMultivariantURL *url.URL
+	bandwidthLimit     *atomic.Uint64
+	abrCurrentVariant  *playlist.MultivariantVariant
+
 	segmentQueue *clientSegmentQueue
 	curSegmentID *int
 
@@ -104,6 +126,7 @@ type clientStreamDownloader struct {
 func (d *clientStreamDownloader) initialize() {
 	d.chTracks = make(chan []*Track)
 	d.chStartStreaming = make(chan map[*Track]*clientTrack)
+	d.abrCurrentVariant = d.abrInitialVariant
 }
 
 func (d *clientStreamDownloader) run(errGroupCtx context.Context) error {
@@ -204,7 +227,7 @@ func (d *clientStreamDownloader) runTraditional(errGroupCtx context.Context) err
 	pl := d.firstPlaylist
 
 	for {
-		seg, payload, err := d.downloadNextSegment(errGroupCtx, pl)
+		seg, payload, err := d.nextSegment(errGroupCtx, pl)
 		if err != nil {
 			return err
 		}
@@ -224,6 +247,120 @@ func (d *clientStreamDownloader) runTraditional(errGroupCtx context.Context) err
 			return err
 		}
 	}
+}
+
+// nextSegment returns the next segment to process.
+// Before the segment, the bandwidth limit is checked once and, if needed,
+// the download is moved to another variant of the multivariant playlist.
+func (d *clientStreamDownloader) nextSegment(
+	errGroupCtx context.Context,
+	pl *playlist.Media,
+) (*playlist.MediaSegment, []byte, error) {
+	if d.curSegmentID != nil && d.abrEnabled() {
+		seg, payload, ok, err := d.abrDownloadNextSegment(errGroupCtx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if ok {
+			return seg, payload, nil
+		}
+	}
+
+	return d.downloadNextSegment(errGroupCtx, pl)
+}
+
+// abrEnabled returns whether runtime variant switching is available.
+// It is restricted to traditional, complete MPEG-TS segments:
+// fMP4 streams and low-latency parts are excluded.
+func (d *clientStreamDownloader) abrEnabled() bool {
+	return d.abrVariants != nil &&
+		(d.firstPlaylist.Map == nil || d.firstPlaylist.Map.URI == "")
+}
+
+// abrCandidates returns the variants that can be switched to at runtime:
+// those with the same CODECS and AUDIO of the initially selected variant.
+func (d *clientStreamDownloader) abrCandidates() []*playlist.MultivariantVariant {
+	var ret []*playlist.MultivariantVariant //nolint:prealloc
+	for _, v := range d.abrVariants {
+		if codecsEqual(v.Codecs, d.abrInitialVariant.Codecs) &&
+			v.Audio == d.abrInitialVariant.Audio {
+			ret = append(ret, v)
+		}
+	}
+	return ret
+}
+
+// abrDownloadNextSegment attempts to download the next segment from the
+// variant that matches the current bandwidth limit.
+// It returns ok=false when the segment must be downloaded from the current
+// variant instead; in this case no state is modified, so that the current
+// variant keeps downloading the same sequence and the switch can be
+// attempted again at the next segment boundary.
+func (d *clientStreamDownloader) abrDownloadNextSegment(
+	errGroupCtx context.Context,
+) (*playlist.MediaSegment, []byte, bool, error) {
+	// read the latest limit once per segment boundary
+	limit := d.bandwidthLimit.Load()
+
+	target := pickVariantByBandwidth(d.abrCandidates(), limit)
+	if target == nil || target == d.abrCurrentVariant {
+		return nil, nil, false, nil
+	}
+
+	nextID := *d.curSegmentID + 1
+
+	u, err := clientAbsoluteURL(d.abrMultivariantURL, target.URI)
+	if err != nil {
+		return nil, nil, false, nil
+	}
+
+	d.onDownloadStreamPlaylist(u.String())
+
+	finalURL, pli, err := downloadPlaylist(errGroupCtx, d.httpClient, d.onRequest, u)
+	if err != nil {
+		if errGroupCtx.Err() != nil {
+			return nil, nil, false, err
+		}
+		return nil, nil, false, nil
+	}
+
+	pl, ok := pli.(*playlist.Media)
+	if !ok {
+		return nil, nil, false, nil
+	}
+
+	seg, segPos, invPos := findSegmentWithID(pl.MediaSequence, pl.Segments, nextID)
+	if seg == nil {
+		// the candidate playlist does not have the sequence yet
+		return nil, nil, false, nil
+	}
+
+	if !pl.Endlist && invPos > d.maxDistance {
+		return nil, nil, false, nil
+	}
+
+	// relative URIs and implicit byte-ranges are interpreted
+	// according to the candidate playlist itself
+	byts, err := d.downloadSegmentFromURL(
+		errGroupCtx,
+		finalURL,
+		seg.URI,
+		new(segmentByteRangeStart(pl.Segments, segPos)),
+		seg.ByteRangeLength)
+	if err != nil {
+		if errGroupCtx.Err() != nil {
+			return nil, nil, false, err
+		}
+		return nil, nil, false, nil
+	}
+
+	// the media response completed successfully: commit the variant,
+	// its redirected playlist URL and the sequence together.
+	d.abrCurrentVariant = target
+	d.playlistURL = finalURL
+	d.curSegmentID = new(nextID)
+
+	return seg, byts, true, nil
 }
 
 func (d *clientStreamDownloader) downloadPlaylist(
@@ -310,7 +447,17 @@ func (d *clientStreamDownloader) downloadSegment(
 	start *uint64,
 	length *uint64,
 ) ([]byte, error) {
-	u, err := clientAbsoluteURL(d.playlistURL, uri)
+	return d.downloadSegmentFromURL(errGroupCtx, d.playlistURL, uri, start, length)
+}
+
+func (d *clientStreamDownloader) downloadSegmentFromURL(
+	errGroupCtx context.Context,
+	baseURL *url.URL,
+	uri string,
+	start *uint64,
+	length *uint64,
+) ([]byte, error) {
+	u, err := clientAbsoluteURL(baseURL, uri)
 	if err != nil {
 		return nil, err
 	}

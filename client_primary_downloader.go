@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -80,7 +81,50 @@ func downloadPlaylist(
 	return res.Request.URL, pl, nil
 }
 
-func pickLeadingPlaylist(variants []*playlist.MultivariantVariant) *playlist.MultivariantVariant {
+// pickVariantByBandwidth picks a variant among candidates, according to a
+// bandwidth limit in bits per second (0 means no limit).
+// Without a limit, it returns the variant with the greatest bandwidth.
+// With a limit, it returns the variant with the greatest bandwidth within the
+// limit; if all candidates exceed the limit, it returns the one with the
+// lowest bandwidth. Ties are resolved by list order.
+func pickVariantByBandwidth(
+	candidates []*playlist.MultivariantVariant,
+	bandwidthLimit uint64,
+) *playlist.MultivariantVariant {
+	if bandwidthLimit != 0 {
+		var best *playlist.MultivariantVariant
+		for _, v := range candidates {
+			if uint64(v.Bandwidth) <= bandwidthLimit &&
+				(best == nil || v.Bandwidth > best.Bandwidth) {
+				best = v
+			}
+		}
+		if best != nil {
+			return best
+		}
+
+		var lowest *playlist.MultivariantVariant
+		for _, v := range candidates {
+			if lowest == nil || v.Bandwidth < lowest.Bandwidth {
+				lowest = v
+			}
+		}
+		return lowest
+	}
+
+	var best *playlist.MultivariantVariant
+	for _, v := range candidates {
+		if best == nil || v.Bandwidth > best.Bandwidth {
+			best = v
+		}
+	}
+	return best
+}
+
+func pickLeadingPlaylist(
+	variants []*playlist.MultivariantVariant,
+	bandwidthLimit uint64,
+) *playlist.MultivariantVariant {
 	var candidates []*playlist.MultivariantVariant //nolint:prealloc
 	for _, v := range variants {
 		if !checkSupport(v.Codecs) {
@@ -92,15 +136,7 @@ func pickLeadingPlaylist(variants []*playlist.MultivariantVariant) *playlist.Mul
 		return nil
 	}
 
-	// pick the variant with the greatest bandwidth
-	var leadingPlaylist *playlist.MultivariantVariant
-	for _, v := range candidates {
-		if leadingPlaylist == nil ||
-			v.Bandwidth > leadingPlaylist.Bandwidth {
-			leadingPlaylist = v
-		}
-	}
-	return leadingPlaylist
+	return pickVariantByBandwidth(candidates, bandwidthLimit)
 }
 
 func getRenditionsByGroup(
@@ -134,6 +170,7 @@ type clientPrimaryDownloader struct {
 	onDownloadSegment         ClientOnDownloadSegmentFunc
 	onDownloadPart            ClientOnDownloadPartFunc
 	onDecodeError             ClientOnDecodeErrorFunc
+	bandwidthLimit            *atomic.Uint64
 	parent                    clientPrimaryDownloaderParent
 
 	clientTracks     map[*Track]*clientTrack
@@ -213,7 +250,7 @@ func (d *clientPrimaryDownloader) run(errGroupCtx context.Context) error {
 		streams = append(streams, stream)
 
 	case *playlist.Multivariant:
-		leadingPlaylist := pickLeadingPlaylist(plt.Variants)
+		leadingPlaylist := pickLeadingPlaylist(plt.Variants, d.bandwidthLimit.Load())
 		if leadingPlaylist == nil {
 			return fmt.Errorf("no variants with supported codecs found")
 		}
@@ -238,6 +275,10 @@ func (d *clientPrimaryDownloader) run(errGroupCtx context.Context) error {
 			firstPlaylist:            nil,
 			errGroup:                 d.errGroup,
 			parent:                   d,
+			abrVariants:              plt.Variants,
+			abrInitialVariant:        leadingPlaylist,
+			abrMultivariantURL:       d.primaryPlaylistURL,
+			bandwidthLimit:           d.bandwidthLimit,
 		}
 		stream.initialize()
 

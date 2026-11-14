@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -128,6 +129,7 @@ type Client struct {
 	primaryDownloader *clientPrimaryDownloader
 	tracks            map[*Track]*clientTrack
 	closeError        error
+	bandwidthLimit    atomic.Uint64
 
 	// out
 	done chan struct{}
@@ -200,6 +202,19 @@ func (c *Client) Start() error {
 func (c *Client) Close() {
 	c.ctxCancel()
 	<-c.done
+}
+
+// SetBandwidthLimit sets the maximum bandwidth that the client is allowed to
+// use, in bits per second. A value of zero means no limit.
+// It can be called both before Start and while the client is running,
+// including from inside data callbacks, since it only stores the latest value
+// and never waits for downloads.
+// The limit is applied when picking the initial variant of a multivariant
+// playlist and, for traditional MPEG-TS streams, it is re-evaluated before
+// every segment, allowing the client to switch variant at runtime without
+// interrupting track callbacks.
+func (c *Client) SetBandwidthLimit(bitsPerSecond uint64) {
+	c.bandwidthLimit.Store(bitsPerSecond)
 }
 
 // Wait waits for any error of the Client.
@@ -306,6 +321,7 @@ func (c *Client) runInner() error {
 		onDownloadSegment:         c.OnDownloadSegment,
 		onDownloadPart:            c.OnDownloadPart,
 		onDecodeError:             c.OnDecodeError,
+		bandwidthLimit:            &c.bandwidthLimit,
 		parent:                    c,
 	}
 	c.primaryDownloader.initialize()
