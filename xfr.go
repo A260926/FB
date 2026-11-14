@@ -2,7 +2,9 @@ package dns
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -46,6 +48,12 @@ func (t *Transfer) tsigProvider() TsigProvider {
 //	dnscon := &dns.Conn{Conn:con}
 //	transfer = &dns.Transfer{Conn: dnscon}
 //	channel, err := transfer.In(message, master)
+//
+// The Envelopes are still delivered one per received reply message, but the
+// point at which an IXFR stream is considered complete is decided by the same
+// record-sequence grammar as InZone: serial numbers use RFC 1982 arithmetic,
+// AXFR fallbacks and multi-group incremental sequences are recognized across
+// message boundaries, and a single-SOA no-change answer ends the transfer.
 func (t *Transfer) In(q *Msg, a string) (env chan *Envelope, err error) {
 	switch q.Question[0].Qtype {
 	case TypeAXFR, TypeIXFR:
@@ -53,11 +61,111 @@ func (t *Transfer) In(q *Msg, a string) (env chan *Envelope, err error) {
 		return nil, &Error{"unsupported question type"}
 	}
 
+	if err := t.dialAndWrite(q, a); err != nil {
+		return nil, err
+	}
+
+	env = make(chan *Envelope)
+	go func() {
+		defer func() {
+			// First close the connection, then the channel. This allows functions
+			// blocked on the channel to assume that the connection is closed and no
+			// further operations are pending when they resume.
+			t.Close()
+			close(env)
+		}()
+		g := newXfrGrammar(q.Question[0].Qtype, q.Question[0].Name, querySOA(q), false, noopXfrApplier{})
+		t.runTransfer(q, g, func(e *Envelope) { env <- e })
+	}()
+
+	return env, nil
+}
+
+// InZone performs an incoming AXFR or IXFR with the server in a and returns
+// the complete, independently owned snapshot of the zone.
+//
+// q must carry exactly one class IN question, of type TypeAXFR or TypeIXFR.
+// The address a is interpreted exactly as for In.
+//
+// For an AXFR, base is ignored and the answer must be a full zone bracketed by
+// identical apex SOA records. For an IXFR, base must be the complete current
+// snapshot of the zone: it must contain exactly one apex SOA, whose serial is
+// the serial given in the authority SOA of q, and otherwise only in-zone class
+// IN records with no duplicate identities and no RRsets carrying conflicting
+// TTLs. A single-SOA answer whose serial is equal to or older than the local
+// serial yields an independent copy of base; the server's older SOA never
+// replaces the local one. An AXFR fallback inside an IXFR answer replaces the
+// whole snapshot instead of being applied on top of base.
+//
+// On success the returned slice and the record objects in it are owned by the
+// caller: the single apex SOA is placed first, later records have no
+// guaranteed order, and mutating q, base or the returned records never affects
+// the other side. Neither q nor base nor their mutable RDATA is modified. On
+// failure InZone returns nil and an error describing the cause, and no partial
+// snapshot is published.
+//
+// As with In, the connection is closed before InZone returns. InZone does not
+// add persistence, automatic retries or DNSSEC validation.
+func (t *Transfer) InZone(q *Msg, a string, base []RR) ([]RR, error) {
+	qtype, apex, nsSOA, err := validateZoneQuery(q)
+	if err != nil {
+		return nil, err
+	}
+
+	query := q.Copy()
+	var app *zoneApplier
+	var expected *SOA
+	strict := false
+	if qtype == TypeIXFR {
+		app, expected, err = validateBase(apex, base)
+		if err != nil {
+			return nil, err
+		}
+		if expected.Serial != nsSOA.Serial {
+			return nil, &Error{err: fmt.Sprintf("xfr: IXFR query serial %d does not match the base snapshot serial %d", nsSOA.Serial, expected.Serial)}
+		}
+		strict = true
+	} else {
+		app = newZoneApplier(apex)
+	}
+
+	if err := t.dialAndWrite(query, a); err != nil {
+		return nil, err
+	}
+	defer t.Close()
+
+	g := newXfrGrammar(qtype, apex, expected, strict, app)
+	if err := t.runTransfer(query, g, nil); err != nil {
+		return nil, err
+	}
+
+	if qtype == TypeIXFR && g.noChange() {
+		// A single-SOA answer is only a no-change when the server's serial is
+		// equal to or behind the local one. A newer serial with no delta is an
+		// incomplete answer, and an incomparable serial is an error.
+		rel, err := serialRelation(g.lead.Serial, expected.Serial)
+		if err != nil {
+			return nil, err
+		}
+		if rel == 1 {
+			return nil, &Error{err: "xfr: single-SOA IXFR answer announces a newer serial without any changes"}
+		}
+		// Keep the local snapshot (never the server's stale SOA). The applier
+		// holds an independent, validated copy of base with the SOA first.
+		return app.snapshot()
+	}
+	return app.snapshot()
+}
+
+// dialAndWrite establishes the transfer connection when none was supplied on
+// t.Conn and sends the query.
+func (t *Transfer) dialAndWrite(q *Msg, a string) error {
 	timeout := dnsTimeout
 	if t.DialTimeout != 0 {
 		timeout = t.DialTimeout
 	}
 
+	var err error
 	if t.Conn == nil {
 		if t.TLS != nil {
 			t.Conn, err = DialTimeoutWithTLS("tcp-tls", a, t.TLS, timeout)
@@ -65,142 +173,84 @@ func (t *Transfer) In(q *Msg, a string) (env chan *Envelope, err error) {
 			t.Conn, err = DialTimeout("tcp", a, timeout)
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	if err := t.WriteMsg(q); err != nil {
-		return nil, err
-	}
-
-	env = make(chan *Envelope)
-	switch q.Question[0].Qtype {
-	case TypeAXFR:
-		go t.inAxfr(q, env)
-	case TypeIXFR:
-		go t.inIxfr(q, env)
-	}
-
-	return env, nil
+	return t.WriteMsg(q)
 }
 
-func (t *Transfer) inAxfr(q *Msg, c chan *Envelope) {
-	first := true
-	defer func() {
-		// First close the connection, then the channel. This allows functions blocked on
-		// the channel to assume that the connection is closed and no further operations are
-		// pending when they resume.
-		t.Close()
-		close(c)
-	}()
+// runTransfer reads reply messages until the transfer grammar reaches a legal
+// end. deliver, when non-nil, receives one Envelope per reply message exactly
+// as the records arrived; transport and protocol errors are delivered through
+// it as well. The connection itself is not closed here.
+func (t *Transfer) runTransfer(q *Msg, g *xfrGrammar, deliver func(*Envelope)) error {
 	timeout := dnsTimeout
 	if t.ReadTimeout != 0 {
 		timeout = t.ReadTimeout
 	}
+
 	for {
 		t.Conn.SetReadDeadline(time.Now().Add(timeout))
 		in, err := t.ReadMsg()
 		if err != nil {
-			c <- &Envelope{nil, err}
-			return
+			// A clean connection close (io.EOF for TCP, io.ErrClosedPipe for
+			// net.Pipe) ends the transfer only where the grammar permits it.
+			if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe)) && g.acceptEOF() {
+				return nil
+			}
+			return t.fail(deliver, nil, err)
 		}
 		if q.Id != in.Id {
-			c <- &Envelope{in.Answer, ErrId}
-			return
+			return t.fail(deliver, in.Answer, ErrId)
 		}
-		if first {
-			if in.Rcode != RcodeSuccess {
-				c <- &Envelope{in.Answer, &Error{err: fmt.Sprintf(errXFR, in.Rcode)}}
-				return
-			}
-			if !isSOAFirst(in) {
-				c <- &Envelope{in.Answer, ErrSoa}
-				return
-			}
-			first = !first
-			// only one answer that is SOA, receive more
-			if len(in.Answer) == 1 {
-				t.tsigTimersOnly = true
-				c <- &Envelope{in.Answer, nil}
-				continue
-			}
+		if in.Rcode != RcodeSuccess {
+			return t.fail(deliver, in.Answer, &Error{err: fmt.Sprintf(errXFR, in.Rcode)})
 		}
 
-		if !first {
-			t.tsigTimersOnly = true // Subsequent envelopes use this.
-			if isSOALast(in) {
-				c <- &Envelope{in.Answer, nil}
-				return
+		for _, rr := range in.Answer {
+			if err := g.step(rr); err != nil {
+				return t.fail(deliver, in.Answer, err)
 			}
-			c <- &Envelope{in.Answer, nil}
+		}
+		if g.state == gStart {
+			// The opening message carried no record at all; the answer must
+			// begin with an apex SOA.
+			return t.fail(deliver, in.Answer, ErrSoa)
+		}
+		// Only the opening message seeds the TSIG timing state; later
+		// messages in the same transfer reuse it.
+		t.tsigTimersOnly = true
+
+		if deliver != nil {
+			deliver(&Envelope{in.Answer, nil})
+		}
+		if g.ended() || g.noChangeConfirmed() {
+			return nil
 		}
 	}
 }
 
-func (t *Transfer) inIxfr(q *Msg, c chan *Envelope) {
-	var serial uint32 // The first serial seen is the current server serial
-	axfr := true
-	n := 0
-	qser := q.Ns[0].(*SOA).Serial
-	defer func() {
-		// First close the connection, then the channel. This allows functions blocked on
-		// the channel to assume that the connection is closed and no further operations are
-		// pending when they resume.
-		t.Close()
-		close(c)
-	}()
-	timeout := dnsTimeout
-	if t.ReadTimeout != 0 {
-		timeout = t.ReadTimeout
+// fail reports a transfer error, delivering the offending message's records
+// alongside the error to envelope consumers, and returns the error.
+func (t *Transfer) fail(deliver func(*Envelope), rr []RR, err error) error {
+	if deliver != nil {
+		deliver(&Envelope{rr, err})
 	}
-	for {
-		t.SetReadDeadline(time.Now().Add(timeout))
-		in, err := t.ReadMsg()
-		if err != nil {
-			c <- &Envelope{nil, err}
-			return
-		}
-		if q.Id != in.Id {
-			c <- &Envelope{in.Answer, ErrId}
-			return
-		}
-		if in.Rcode != RcodeSuccess {
-			c <- &Envelope{in.Answer, &Error{err: fmt.Sprintf(errXFR, in.Rcode)}}
-			return
-		}
-		if n == 0 {
-			// Check if the returned answer is ok
-			if !isSOAFirst(in) {
-				c <- &Envelope{in.Answer, ErrSoa}
-				return
-			}
-			// This serial is important
-			serial = in.Answer[0].(*SOA).Serial
-			// Check if there are no changes in zone
-			if qser >= serial {
-				c <- &Envelope{in.Answer, nil}
-				return
-			}
-		}
-		// Now we need to check each message for SOA records, to see what we need to do
-		t.tsigTimersOnly = true
-		for _, rr := range in.Answer {
-			if v, ok := rr.(*SOA); ok {
-				if v.Serial == serial {
-					n++
-					// quit if it's a full axfr or the servers' SOA is repeated the third time
-					if axfr && n == 2 || n == 3 {
-						c <- &Envelope{in.Answer, nil}
-						return
-					}
-				} else if axfr {
-					// it's an ixfr
-					axfr = false
-				}
-			}
-		}
-		c <- &Envelope{in.Answer, nil}
+	return err
+}
+
+// querySOA returns the authority SOA carried by an IXFR query, or nil when the
+// query does not provide a usable one.
+func querySOA(q *Msg) *SOA {
+	if len(q.Ns) == 0 {
+		return nil
 	}
+	soa, ok := q.Ns[0].(*SOA)
+	if !ok {
+		return nil
+	}
+	return soa
 }
 
 // Out performs an outgoing transfer with the client connecting in w.
@@ -275,16 +325,6 @@ func (t *Transfer) WriteMsg(m *Msg) (err error) {
 	}
 	_, err = t.Write(out)
 	return err
-}
-
-func isSOAFirst(in *Msg) bool {
-	return len(in.Answer) > 0 &&
-		in.Answer[0].Header().Rrtype == TypeSOA
-}
-
-func isSOALast(in *Msg) bool {
-	return len(in.Answer) > 0 &&
-		in.Answer[len(in.Answer)-1].Header().Rrtype == TypeSOA
 }
 
 const errXFR = "bad xfr rcode: %d"

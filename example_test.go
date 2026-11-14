@@ -147,3 +147,51 @@ func ExamplePrivateHandle() {
 	// ;; ANSWER SECTION:
 	// miek.nl.	3600	IN	APAIR	1.2.3.4 1.2.3.5
 }
+
+// ExampleTransfer_InZone shows how to obtain a complete, owned zone snapshot
+// with an IXFR. The base snapshot is the current local copy, with its apex SOA
+// serial matching the authority SOA of the query. On success InZone returns a
+// fresh slice whose first record is the single apex SOA; the base snapshot and
+// the query are left untouched.
+func ExampleTransfer_InZone() {
+	const zone = "example.org."
+	master := "198.51.100.10:53"
+
+	base := []dns.RR{
+		mustRR(zone + " 3600 IN SOA ns1.example.org. hostmaster.example.org. 42 7200 3600 1209600 300"),
+		mustRR(zone + " 3600 IN NS ns1.example.org."),
+		mustRR("www.example.org. 300 IN A 203.0.113.5"),
+	}
+
+	t := new(dns.Transfer)
+	q := new(dns.Msg)
+	q.SetIxfr(zone, 42, "ns1.example.org.", "hostmaster.example.org.")
+
+	snapshot, err := t.InZone(q, master, base)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// snapshot[0] is the single apex SOA; the remaining records have no
+	// guaranteed order and are independent of base and of each other.
+	if _, ok := snapshot[0].(*dns.SOA); !ok {
+		log.Fatal("InZone result does not start with an SOA")
+	}
+
+	// An AXFR ignores base and requires no local snapshot.
+	axfr := new(dns.Msg)
+	axfr.SetAxfr(zone)
+	full, err := t.InZone(axfr, master, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = full
+}
+
+func mustRR(s string) dns.RR {
+	rr, err := dns.NewRR(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return rr
+}

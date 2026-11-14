@@ -194,6 +194,19 @@ request an AXFR for miek.nl. with TSIG key named "axfr." and secret
 You can now read the records from the transfer as they come in. Each envelope
 is checked with TSIG. If something is not correct an error is returned.
 
+If you only need the resulting zone rather than the per-message envelopes, use
+Transfer.InZone instead of counting SOA records yourself. It accepts a single
+class IN AXFR or IXFR question and, for an IXFR, the complete local snapshot in
+base (with exactly one apex SOA whose serial matches the query's authority
+SOA). It interprets the whole RR stream with the same AXFR/IXFR record grammar
+as In, applying RFC 1982 serial arithmetic across TCP message boundaries, and
+returns an independently owned snapshot whose single apex SOA is placed first:
+
+	snapshot, err := t.InZone(q, master, base)
+	// snapshot[0] is the apex SOA; the other records follow in no guaranteed
+	// order. A single-SOA answer that is not newer than base yields a copy of
+	// base, and an AXFR answer to an IXFR query replaces the whole snapshot.
+
 A custom TSIG implementation can be used. This requires additional code to
 perform any session establishment and signature generation/verification. The
 client must be configured with an implementation of the TsigProvider interface:
