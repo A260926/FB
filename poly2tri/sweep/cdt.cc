@@ -33,9 +33,11 @@
 namespace p2t {
 
 CDT::CDT(const std::vector<Point*>& polyline)
+    : sweep_context_(new SweepContext(polyline)),
+      sweep_(new Sweep),
+      constraint_editor_(*sweep_context_),
+      triangulated_(false)
 {
-  sweep_context_ = new SweepContext(polyline);
-  sweep_ = new Sweep;
 }
 
 void CDT::AddHole(const std::vector<Point*>& polyline)
@@ -50,6 +52,8 @@ void CDT::AddPoint(Point* point) {
 void CDT::Triangulate()
 {
   sweep_->Triangulate(*sweep_context_);
+  triangulated_ = true;
+  constraint_editor_.MarkTriangulated();
 }
 
 std::vector<p2t::Triangle*> CDT::GetTriangles()
@@ -60,6 +64,20 @@ std::vector<p2t::Triangle*> CDT::GetTriangles()
 std::list<p2t::Triangle*> CDT::GetMap()
 {
   return sweep_context_->GetMap();
+}
+
+CDT::ConstraintId CDT::InsertConstraint(Point* a, Point* b)
+{
+  if (!triangulated_)
+    return 0;
+  return constraint_editor_.Insert(a, b);
+}
+
+bool CDT::RemoveConstraint(ConstraintId id)
+{
+  if (!triangulated_)
+    return false;
+  return constraint_editor_.Remove(id);
 }
 
 CDT::~CDT()

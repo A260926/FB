@@ -5,6 +5,7 @@ lib = static_library('poly2tri', sources : [
 	'poly2tri/common/shapes.cc',
 	'poly2tri/sweep/advancing_front.cc',
 	'poly2tri/sweep/cdt.cc',
+	'poly2tri/sweep/constraint_editor.cc',
 	'poly2tri/sweep/sweep.cc',
 	'poly2tri/sweep/sweep_context.cc',
 ])
@@ -17,5 +18,7 @@ if boost_test_dep.found()
 		'unittest/TriangleTest.cpp',
 	], dependencies : [boost_test_dep, thread_dep], link_with : lib))
 endif
+
+executable('constraint_edit_example', 'examples/constraint_edit.cpp', link_with : lib)
 
 poly2tri_dep = declare_dependency(include_directories : include, link_with : lib)

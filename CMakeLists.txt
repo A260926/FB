@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 
 option(P2T_BUILD_TESTS "Build tests" OFF)
 option(P2T_BUILD_TESTBED "Build the testbed application" OFF)
+option(P2T_BUILD_EXAMPLES "Build the example programs" OFF)
 
 file(GLOB SOURCES poly2tri/common/*.cc poly2tri/sweep/*.cc)
 file(GLOB HEADERS poly2tri/*.h poly2tri/common/*.h poly2tri/sweep/*.h)
@@ -21,6 +22,11 @@ endif()
 if(P2T_BUILD_TESTS)
     enable_testing()
     add_subdirectory(unittest)
+endif()
+
+if(P2T_BUILD_EXAMPLES)
+    add_executable(constraint_edit_example examples/constraint_edit.cpp)
+    target_link_libraries(constraint_edit_example PRIVATE poly2tri)
 endif()
 
 if(P2T_BUILD_TESTBED)

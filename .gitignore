@@ -7,6 +7,7 @@
 .waf3-*/
 waf3-*/
 build/
+.build/
 
 # Visual Studio Code
 /.vscode/*cache*

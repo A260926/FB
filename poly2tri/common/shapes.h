@@ -43,6 +43,8 @@ namespace p2t {
 
 struct Edge;
 
+class ConstraintEditor;
+
 struct P2T_DLL_SYMBOL Point {
 
   double x, y;
@@ -152,6 +154,11 @@ struct P2T_DLL_SYMBOL Edge {
 //      "Triangulations in CGAL"
 class P2T_DLL_SYMBOL Triangle {
 public:
+
+/// Editable constraint bookkeeping lives in the CDT but needs to rewrite
+/// triangle topology vertex-for-vertex without going through the public
+/// neighbour helpers.
+friend class ConstraintEditor;
 
 /// Constructor
 Triangle(Point& a, Point& b, Point& c);

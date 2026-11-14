@@ -32,10 +32,13 @@
 #pragma once
 
 #include "advancing_front.h"
+#include "constraint_editor.h"
 #include "sweep_context.h"
 #include "sweep.h"
 
 #include "../common/dll_symbol.h"
+
+#include <cstdint>
 
 /**
  *
@@ -48,6 +51,8 @@ namespace p2t {
 class P2T_DLL_SYMBOL CDT
 {
 public:
+  /// Handle returned by InsertConstraint.  Never reused for the lifetime of a CDT.
+  using ConstraintId = std::uint64_t;
 
   /**
    * Constructor - add polyline with non repeating points
@@ -90,6 +95,27 @@ public:
    */
   std::list<Triangle*> GetMap();
 
+  /**
+   * Force the segment between two existing mesh points into the current
+   * triangulation, without rebuilding the mesh.
+   *
+   * Both points must be distinct Point objects that the finished mesh
+   * actually uses.  The segment may run through existing vertices (it is
+   * split into real sub-edges), may overlap or touch other constraints, but
+   * must not properly cross a protected edge or leave the filled region.
+   *
+   * @return a non-zero id unique for this CDT, or 0 when rejected
+   */
+  ConstraintId InsertConstraint(Point* a, Point* b);
+
+  /**
+   * Remove one constraint id.  Sub-edges shared with other constraints stay
+   * protected until the last contributing id is gone.
+   *
+   * @return false for unknown, zero, or already removed ids
+   */
+  bool RemoveConstraint(ConstraintId id);
+
   private:
 
   /**
@@ -98,7 +124,8 @@ public:
 
   SweepContext* sweep_context_;
   Sweep* sweep_;
-
+  ConstraintEditor constraint_editor_;
+  bool triangulated_;
 };
 
 }
