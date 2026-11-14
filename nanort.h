@@ -698,7 +698,12 @@ class NodeHitComparator {
 template <typename T>
 class BVHAccel {
  public:
-  BVHAccel() : pad0_(0) { (void)pad0_; }
+  BVHAccel()
+      : pad0_(0),
+        build_generation_(0),
+        refit_revision_(0) {
+    (void)pad0_;
+  }
   ~BVHAccel() {}
 
   ///
@@ -716,6 +721,41 @@ class BVHAccel {
   template <class Prim, class Pred>
   bool Build(const unsigned int num_primitives, const Prim &p, const Pred &pred,
              const BVHBuildOptions<T> &options = BVHBuildOptions<T>());
+
+  ///
+  /// Refit BVH bounds after vertex updates.
+  ///
+  /// The topology and index buffer are unchanged. The caller has already
+  /// updated vertex positions and passes the original primitive indices
+  /// whose faces were affected. Duplicate indices are processed once.
+  ///
+  /// Only leaf nodes containing a dirty primitive and their ancestors are
+  /// updated: the tree is not rebuilt, nodes and `indices_` are not
+  /// reordered, and bounds of primitives outside the affected leaves are
+  /// never re-read. Unchanged primitives sharing a leaf with a dirty one may
+  /// be re-read.
+  ///
+  /// @return false when the tree is invalid or an index is out of range;
+  ///         in that case the tree and all version information are
+  ///         unchanged. An empty but valid `dirty` list returns true and
+  ///         leaves the versions unchanged.
+  ///
+  template <class Prim>
+  bool Refit(const Prim &p, const std::vector<unsigned int> &dirty);
+
+  /// Build generation. Incremented on every Build() call (including the
+  /// empty-input failure case), starting from 0.
+  unsigned long long GetBuildGeneration() const { return build_generation_; }
+
+  /// Refit revision. Incremented once per successful non-empty Refit(),
+  /// reset to 0 on every Build().
+  unsigned long long GetRefitRevision() const { return refit_revision_; }
+
+  /// Sorted, de-duplicated original primitive indices of the last
+  /// successful non-empty Refit(). Cleared on every Build().
+  const std::vector<unsigned int> &GetLastRefitPrimitives() const {
+    return last_refit_prims_;
+  }
 
   ///
   /// Get statistics of built BVH tree. Valid after `Build()`
@@ -857,6 +897,19 @@ class BVHAccel {
   BVHBuildOptions<T> options_;
   BVHBuildStatistics stats_;
   unsigned int pad0_;
+
+  // Per-primitive back pointer to the leaf node containing it, and parent
+  // node index for each node (root parent is UINT_MAX). Both are prepared
+  // once at Build() time so Refit() never scans the whole tree.
+  std::vector<unsigned int> prim_leaf_;
+  std::vector<unsigned int> parent_;
+
+  unsigned long long build_generation_;
+  unsigned long long refit_revision_;
+  std::vector<unsigned int> last_refit_prims_;
+
+  /// Fills prim_leaf_ and parent_ from the finished tree.
+  void BuildOwnership();
 };
 
 // Predefined SAH predicator for triangle.
@@ -1886,6 +1939,14 @@ bool BVHAccel<T>::Build(unsigned int num_primitives, const Prim &p,
   options_ = options;
   stats_ = BVHBuildStatistics();
 
+  // Every Build() publishes a new generation and resets refit state,
+  // including the empty-input case that invalidates the tree.
+  ++build_generation_;
+  refit_revision_ = 0;
+  last_refit_prims_.clear();
+  prim_leaf_.clear();
+  parent_.clear();
+
   nodes_.clear();
   bboxes_.clear();
 #if defined(NANORT_ENABLE_PARALLEL_BUILD)
@@ -1895,6 +1956,7 @@ bool BVHAccel<T>::Build(unsigned int num_primitives, const Prim &p,
   assert(options_.bin_size > 1);
 
   if (num_primitives == 0) {
+    indices_.clear();
     return false;
   }
 
@@ -2135,6 +2197,140 @@ bool BVHAccel<T>::Build(unsigned int num_primitives, const Prim &p,
   }
 #endif
 
+  // Prepare primitive -> leaf and node -> parent ownership once, so that
+  // Refit() never has to scan the tree to locate a primitive.
+  BuildOwnership();
+
+  return true;
+}
+
+template <typename T>
+void BVHAccel<T>::BuildOwnership() {
+  const unsigned int num_prims =
+      static_cast<unsigned int>(indices_.size());
+  prim_leaf_.assign(num_prims, static_cast<unsigned int>(-1));
+  parent_.assign(nodes_.size(), static_cast<unsigned int>(-1));
+
+  for (size_t ni = 0; ni < nodes_.size(); ++ni) {
+    const BVHNode<T> &node = nodes_[ni];
+    if (node.flag == 1) {
+      // Leaf: record the leaf slot for every original primitive it holds.
+      const unsigned int count = node.data[0];
+      const unsigned int offset = node.data[1];
+      for (unsigned int k = 0; k < count; ++k) {
+        const unsigned int prim = indices_[offset + k];
+        prim_leaf_[prim] = static_cast<unsigned int>(ni);
+      }
+    } else {
+      // Branch: link both children back to this node.
+      parent_[node.data[0]] = static_cast<unsigned int>(ni);
+      parent_[node.data[1]] = static_cast<unsigned int>(ni);
+    }
+  }
+}
+
+template <typename T>
+template <class Prim>
+bool BVHAccel<T>::Refit(const Prim &p,
+                        const std::vector<unsigned int> &dirty) {
+  // Invalid tree: refuse without touching the tree or versions.
+  if (nodes_.empty() || prim_leaf_.size() != indices_.size()) {
+    return false;
+  }
+
+  const unsigned int num_prims =
+      static_cast<unsigned int>(indices_.size());
+
+  // Validate every index before changing anything.
+  for (size_t i = 0; i < dirty.size(); ++i) {
+    if (dirty[i] >= num_prims) {
+      return false;
+    }
+  }
+
+  // A legal empty update changes nothing.
+  if (dirty.empty()) {
+    return true;
+  }
+
+  // De-duplicate the original primitive indices.
+  std::vector<unsigned int> unique_dirty = dirty;
+  std::sort(unique_dirty.begin(), unique_dirty.end());
+  unique_dirty.erase(
+      std::unique(unique_dirty.begin(), unique_dirty.end()),
+      unique_dirty.end());
+
+  // Collect the leaf nodes that contain a dirty primitive.
+  std::vector<unsigned int> dirty_leaves;
+  dirty_leaves.reserve(unique_dirty.size());
+  for (size_t i = 0; i < unique_dirty.size(); ++i) {
+    const unsigned int leaf = prim_leaf_[unique_dirty[i]];
+    if (leaf == static_cast<unsigned int>(-1)) {
+      // Defensive: ownership table must cover every primitive after Build.
+      return false;
+    }
+    dirty_leaves.push_back(leaf);
+  }
+  std::sort(dirty_leaves.begin(), dirty_leaves.end());
+  dirty_leaves.erase(
+      std::unique(dirty_leaves.begin(), dirty_leaves.end()),
+      dirty_leaves.end());
+
+  // Refit each affected leaf by re-reading only the primitives it stores.
+  for (size_t li = 0; li < dirty_leaves.size(); ++li) {
+    BVHNode<T> &leaf = nodes_[dirty_leaves[li]];
+    const unsigned int count = leaf.data[0];
+    const unsigned int offset = leaf.data[1];
+
+    real3<T> bmin, bmax;
+    const unsigned int first_prim = indices_[offset];
+    p.BoundingBox(&bmin, &bmax, first_prim);
+    for (unsigned int k = 1; k < count; ++k) {
+      real3<T> pbmin, pbmax;
+      p.BoundingBox(&pbmin, &pbmax, indices_[offset + k]);
+      for (int axis = 0; axis < 3; ++axis) {
+        bmin[axis] = std::min(bmin[axis], pbmin[axis]);
+        bmax[axis] = std::max(bmax[axis], pbmax[axis]);
+      }
+    }
+    for (int axis = 0; axis < 3; ++axis) {
+      leaf.bmin[axis] = bmin[axis];
+      leaf.bmax[axis] = bmax[axis];
+    }
+  }
+
+  // Mark every ancestor of every refitted leaf.
+  std::vector<unsigned char> marked(nodes_.size(), 0);
+  std::vector<unsigned int> affected;
+  for (size_t li = 0; li < dirty_leaves.size(); ++li) {
+    unsigned int cur = parent_[dirty_leaves[li]];
+    while (cur != static_cast<unsigned int>(-1)) {
+      if (marked[cur]) break;  // This rootward chain is already marked.
+      marked[cur] = 1;
+      affected.push_back(cur);
+      cur = parent_[cur];
+    }
+  }
+
+  // BuildTree always emits a parent node before its children, so a parent's
+  // index is smaller than either child's. Processing marked nodes in
+  // descending index order therefore recomputes every affected ancestor from
+  // already-up-to-date children (refitted leaves or lower ancestors),
+  // regardless of how the dirty leaves are distributed in the tree.
+  std::sort(affected.begin(), affected.end(),
+            std::greater<unsigned int>());
+  for (size_t i = 0; i < affected.size(); ++i) {
+    BVHNode<T> &node = nodes_[affected[i]];
+    const BVHNode<T> &left = nodes_[node.data[0]];
+    const BVHNode<T> &right = nodes_[node.data[1]];
+    for (int axis = 0; axis < 3; ++axis) {
+      node.bmin[axis] = std::min(left.bmin[axis], right.bmin[axis]);
+      node.bmax[axis] = std::max(left.bmax[axis], right.bmax[axis]);
+    }
+  }
+
+  ++refit_revision_;
+  last_refit_prims_.swap(unique_dirty);
   return true;
 }
 

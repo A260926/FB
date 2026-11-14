@@ -1,0 +1,25 @@
+CASE projection empty_mesh checks=3
+CASE projection strip checks=3
+CASE projection centerline_miss checks=3
+CASE projection side_clipping checks=2
+CASE projection depth_clipping checks=6
+CASE projection far_faces_culling checks=4
+CASE projection refit_mechanics checks=27
+CASE projection refit_separate_subtrees checks=18
+CASE projection empty_build_generation checks=5
+GROUP projection cases=9 checks=71 COMPLETE
+CASE union overlapping_strips checks=1
+CASE union duplicate_reversed checks=3
+CASE union retriangulation_shared_edge checks=4
+CASE union cache_repeat_free checks=3
+CASE union cache_incremental checks=5
+CASE union cache_move_in_out checks=7
+CASE union cache_duplicate_removal checks=4
+CASE union cache_skipped_updates checks=6
+CASE union cache_rebuild_view_change checks=8
+CASE union cache_two_interleaved checks=6
+GROUP union cases=10 checks=47 COMPLETE
+CASE render pixel_colors checks=12291
+CASE render umbra_penumbra checks=3
+GROUP render cases=2 checks=12294 COMPLETE
+TARGET_COMPLETE cases=21
