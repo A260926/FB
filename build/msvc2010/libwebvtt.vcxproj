@@ -188,6 +188,8 @@
     <ClCompile Include="..\..\src\libwebvtt\error.c" />
     <ClCompile Include="..\..\src\libwebvtt\lexer.c" />
     <ClCompile Include="..\..\src\libwebvtt\parser.c" />
+    <ClCompile Include="..\..\src\libwebvtt\region.c" />
+    <ClCompile Include="..\..\src\libwebvtt\region_player.c" />
     <ClCompile Include="..\..\src\libwebvtt\string.c" />
   </ItemGroup>
   <ItemGroup>
@@ -196,6 +198,7 @@
     <ClInclude Include="..\..\include\webvtt\string.h" />
     <ClInclude Include="..\..\include\webvtt\util.h" />
     <ClInclude Include="..\..\include\webvtt\parser.h" />
+    <ClInclude Include="..\..\include\webvtt\region.h" />
     <ClInclude Include="..\..\src\libwebvtt\cuetext_internal.h" />
     <ClInclude Include="..\..\src\libwebvtt\cue_internal.h" />
     <ClInclude Include="..\..\src\libwebvtt\parser_internal.h" />

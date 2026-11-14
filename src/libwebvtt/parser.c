@@ -215,6 +215,10 @@ retry:
       case M_SKIP_CUE:
         /* Nothing to do here. */
         break;
+      case M_REGION:
+        /* 'self->finished' is set above, so this flushes the last line. */
+        status = webvtt_region_read( self, buffer, &pos, len, self->finished );
+        break;
     }
     cleanup_stack( self );
   }
@@ -227,6 +231,7 @@ webvtt_delete_parser( webvtt_parser self )
 {
   if( self ) {
     cleanup_stack( self );
+    webvtt_region_cleanup( self );
 
     webvtt_release_string( &self->line_buffer );
     webvtt_free( self );
@@ -804,12 +809,55 @@ _recheck:
           goto _finish;
         }
 
-        status = webvtt_proc_cueline( self, cue, &text );
-        ++self->line;
-        if( self->mode != M_WEBVTT ) {
+        /**
+         * A line consisting of exactly REGION starts a region definition
+         * block instead of a cue. Definitions are accepted before the first
+         * cue; a block that appears later is consumed and reported.
+         *
+         * The line text lives on the current frame, so detach it into the
+         * region machinery before popping.
+         */
+        /**
+         * A line consisting of exactly REGION starts a region definition
+         * block instead of a cue. Definitions are accepted before the first
+         * cue; a block that appears later is consumed and reported.
+         *
+         * The provisional cue and the T_CUE frame are discarded, leaving the
+         * parser in the same state it would occupy between two cue blocks.
+         */
+        if( webvtt_region_is_keyword( &text ) && !( cue->flags & CUE_HAVE_ID ) ) {
+          webvtt_uint start_line = self->line;
+          webvtt_release_string( &text );
+          if( self->top->type == V_CUE ) {
+            webvtt_release_cue( &self->top->v.cue );
+          }
+          /* Return to the clean inter-block state: only T_BODY remains. */
+          self->top = self->stack;
+          self->top->type = V_NONE;
+          self->top->v.cue = 0;
+          self->top->state = T_BODY;
+          if( self->stack + 1 < self->stack + self->stack_alloc ) {
+            ( self->stack + 1 )->state = 0;
+          }
+          self->popped = 0;
+          ++self->line;
+          self->column = 1;
+          self->token_pos = 0;
+          self->mode = M_REGION;
+          if( WEBVTT_FAILED( status = webvtt_region_begin( self ) ) ) {
+            goto _finish;
+          }
+          self->region_start_line = start_line;
           goto _finish;
+        } else {
+          status = webvtt_proc_cueline( self, cue, &text );
+          self->seen_cue = 1;
+          ++self->line;
+          if( self->mode != M_WEBVTT ) {
+            goto _finish;
+          }
+          self->popped = 0;
         }
-        self->popped = 0;
       }
       break;
     }
@@ -954,6 +1002,7 @@ webvtt_proc_cuetext( webvtt_parser self, const char *b,
 
   if( status == WEBVTT_SUCCESS ) {
     if( self->mode != M_SKIP_CUE ) {
+      self->seen_cue = 1;
       /**
        * Once we've successfully read the cuetext into line_buffer, call the
        * cuetext parser from cuetext.c
@@ -1029,6 +1078,13 @@ webvtt_parse_chunk( webvtt_parser self, const void *buffer, webvtt_uint len )
       case M_SKIP_CUE:
         if( WEBVTT_FAILED( status = webvtt_proc_cuetext( self, b, &pos, len,
                                                          self->finished ) ) ) {
+          return status;
+        }
+        break;
+
+      case M_REGION:
+        status = webvtt_region_read( self, b, &pos, len, self->finished );
+        if( WEBVTT_FAILED( status ) ) {
           return status;
         }
         break;

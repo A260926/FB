@@ -31,6 +31,7 @@ webvttinclude_HEADERS = \
   cue.h \
   error.h \
   parser.h \
+  region.h \
   string.h \
   util.h \
   node.h

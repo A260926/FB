@@ -39,6 +39,9 @@ extern "C" {
 /* Forward declare webvtt_parser */
 struct webvtt_parser_t;
 
+/* Forward declare webvtt_region (see <webvtt/region.h>) */
+struct webvtt_region_t;
+
 #define WEBVTT_AUTO (0xFFFFFFFF)
 
 typedef enum
@@ -90,6 +93,20 @@ webvtt_cue_t {
     * Parsed cue-text (NULL if has not been parsed)
     */
   webvtt_node *node_head;
+
+  /**
+    * REGION extension: bound region, or NULL when the cue is unbound.
+    * A bound cue holds a reference to the region; it is released together
+    * with the cue.
+    */
+  struct webvtt_region_t *region;
+
+  /**
+    * PRIVATE: raw region reference collected from the cue settings. The
+    * parser resolves it against its own region table once the whole timing
+    * line has been processed.
+    */
+  webvtt_string region_id;
 } webvtt_cue;
 
 WEBVTT_EXPORT webvtt_status

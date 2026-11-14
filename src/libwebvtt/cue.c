@@ -28,6 +28,7 @@
 #include <string.h>
 #include "parser_internal.h"
 #include "cue_internal.h"
+#include <webvtt/region.h>
 
 WEBVTT_EXPORT webvtt_status
 webvtt_create_cue( webvtt_cue **pcue )
@@ -56,6 +57,7 @@ webvtt_create_cue( webvtt_cue **pcue )
   webvtt_ref( &cue->refs );
   webvtt_init_string( &cue->id );
   webvtt_init_string( &cue->body );
+  webvtt_init_string( &cue->region_id );
   cue->from = 0xFFFFFFFFFFFFFFFF;
   cue->until = 0xFFFFFFFFFFFFFFFF;
   cue->snap_to_lines = 1;
@@ -86,7 +88,9 @@ webvtt_release_cue( webvtt_cue **pcue )
     if( webvtt_deref( &cue->refs ) == 0 ) {
       webvtt_release_string( &cue->id );
       webvtt_release_string( &cue->body );
+      webvtt_release_string( &cue->region_id );
       webvtt_release_node( &cue->node_head );
+      webvtt_release_region( &cue->region );
       webvtt_free( cue );
     }
   }
@@ -413,6 +417,47 @@ webvtt_cue_set_vertical( webvtt_cue *cue, const char *value )
   return WEBVTT_BAD_VERTICAL;
 }
 
+static webvtt_status
+cue_set_region( webvtt_cue *cue, const char *value )
+{
+  webvtt_string id;
+  const char *c;
+
+  if( !cue || !value ) {
+    return WEBVTT_INVALID_PARAM;
+  }
+  if( !*value ) {
+    return WEBVTT_BAD_CUESETTING;
+  }
+  /* An id must not contain whitespace or the cue-time separator. */
+  for( c = value; *c; ++c ) {
+    if( *c == ' ' || *c == '\t' || *c == '\r' || *c == '\n'
+        || *c == '\f' ) {
+      return WEBVTT_BAD_CUESETTING;
+    }
+  }
+  if( strstr( value, "-->" ) ) {
+    return WEBVTT_BAD_CUESETTING;
+  }
+
+  webvtt_init_string( &id );
+  if( WEBVTT_FAILED( webvtt_create_string_with_text( &id, value, -1 ) ) ) {
+    webvtt_release_string( &id );
+    return WEBVTT_OUT_OF_MEMORY;
+  }
+  webvtt_release_string( &cue->region_id );
+  cue->region_id = id;
+  cue->flags |= CUE_HAVE_REGION;
+
+  /**
+   * The last syntactically valid 'region' setting wins; earlier bindings
+   * (if any) are dropped. Resolution against the parser's region table
+   * happens later, once the whole settings line has been processed.
+   */
+  webvtt_release_region( &cue->region );
+  return WEBVTT_SUCCESS;
+}
+
 static struct
 {
   const char *keyword;
@@ -423,6 +468,7 @@ static struct
   { "position", &webvtt_cue_set_position },
   { "size", &webvtt_cue_set_size },
   { "vertical", &webvtt_cue_set_vertical },
+  { "region", &cue_set_region },
 };
 
 /**
@@ -549,6 +595,15 @@ webvtt_cue_validate_set_settings( webvtt_parser self, webvtt_cue *cue,
 
   if( self ) {
     self->column = column;
+  }
+
+  /**
+   * Region binding is evaluated after all settings on the line have been
+   * processed, so neither the order of 'region' relative to line/size/vertical
+   * nor the presence of an earlier invalid value can change the result.
+   */
+  if( self ) {
+    webvtt_region_bind_cue( self, cue );
   }
   return WEBVTT_SUCCESS;
 }

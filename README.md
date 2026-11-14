@@ -52,6 +52,18 @@ When running tests with valgrind, any test that fails valgrind (even if it passe
         void webvtt_release_cue( webvtt_cue **pcue );
         int webvtt_validate_cue( webvtt_cue *cue );
 
+### WebVTT Regions
+        webvtt_status webvtt_parser_set_region_callback( webvtt_parser, webvtt_region_fn );
+        void webvtt_ref_region( webvtt_region * );
+        void webvtt_release_region( webvtt_region ** );
+
+        webvtt_status webvtt_region_player_create( webvtt_cue *const *, size_t, webvtt_region_player ** );
+        void webvtt_region_player_delete( webvtt_region_player * );
+        webvtt_status webvtt_region_player_advance( webvtt_region_player *, webvtt_timestamp );
+        webvtt_status webvtt_region_player_seek( webvtt_region_player *, webvtt_timestamp );
+        const webvtt_region_row *webvtt_region_player_rows( const webvtt_region_player *, size_t * );
+        webvtt_status webvtt_region_player_write_svg( const webvtt_region_player *, double, double, double, FILE * );
+
 ### WebVTT Nodes
         void webvtt_init_node( webvtt_node **node );
         void webvtt_ref_node( webvtt_node *node );
@@ -60,6 +72,82 @@ When running tests with valgrind, any test that fails valgrind (even if it passe
 ### Application Callbacks
         typedef int ( WEBVTT_CALLBACK *webvtt_error_fn )( void *userdata, webvtt_uint line, webvtt_uint col, webvtt_error error );
         typedef void ( WEBVTT_CALLBACK *webvtt_cue_fn )( void *userdata, webvtt_cue *cue );
+        typedef void ( WEBVTT_CALLBACK *webvtt_region_fn )( void *userdata, webvtt_region *region );
+
+## REGION definitions and the scroll-up region player
+
+A WebVTT file may open with `REGION` blocks between the signature and the
+first cue:
+
+```
+WEBVTT
+
+REGION
+id:main
+width:60%
+lines:3
+regionanchor:0%,100%
+viewportanchor:20%,80%
+scroll:up
+
+00:00:01.000 --> 00:00:06.000 region:main
+First line
+Second line
+```
+
+The streaming entry points (`webvtt_parse_chunk` and
+`webvtt_finish_parsing`) consume these blocks. A definition is published
+only once its terminating blank line has been read, through the callback
+installed with `webvtt_parser_set_region_callback`. A definition placed
+after the first cue is ignored and reported.
+
+A cue's `region:ID` setting is resolved against the parser's region table
+after the entire timing/settings line has been processed. Unknown ids leave
+the cue unbound, and a cue that ends up with `vertical` other than
+horizontal, an explicit `line`, or a `size` other than 100% is not bound to
+its region (it is still delivered through the ordinary cue callback).
+
+### Reference lifetimes
+
+* The region passed to `webvtt_region_fn` is **borrowed**. Call
+  `webvtt_ref_region` if you want to keep it; release it later with
+  `webvtt_release_region`. The parser's table holds its own reference.
+* Replacing a definition with the same id only affects the lookup table for
+  cues parsed later; an object already delivered to your callback is never
+  modified, so retained references remain valid.
+* A cue bound to a region owns a reference to it; the region is released
+  when the last reference to the cue goes away. Deleting the parser does not
+  invalidate cues or regions that the application already received.
+* `webvtt_region_player_create` retains every valid cue and the regions it
+  displays. The player never depends on the parser afterwards and never
+  mutates the cues or their node trees, so the application may release its
+  own cue references once the player exists.
+
+### Playback
+
+The player renders `scroll:up` regions as line queues. `advance(t)` processes
+every cue arrival up to `t` in start-time then input order; on a tie, rows
+that expire at `t` are removed before new cues are added. Lines pushed past
+a region's `lines` limit are evicted from the top and never come back, even
+if the cue that caused the overflow expires later. `seek(t)` clears the
+display and replays the same arrival history from the beginning, so jumping
+straight to a late time produces the same roll-up state as advancing there
+one cue at a time. Two players do not share state.
+
+`webvtt_region_player_rows` returns a borrowed array (valid until the next
+advance, seek or delete); `webvtt_region_player_write_svg` writes one
+complete SVG document with the region rectangles, clip paths and text lines.
+
+A standalone example is provided:
+
+```
+examples/vttregions input.vtt width height line_step time...
+```
+
+It parses the file, deletes the parser, then prints one frame per requested
+time (milliseconds) to stdout, each preceded by `<!-- frame TIME -->`.
+Moving backwards between requested times uses `seek`; otherwise `advance` is
+used. Diagnostics go to stderr and any failure returns non-zero.
         
 ### Strings
         void webvtt_init_string( webvtt_string *result );

@@ -28,6 +28,7 @@
 #ifndef __INTERN_PARSER_H__
 # define __INTERN_PARSER_H__
 # include <webvtt/parser.h>
+# include <webvtt/region.h>
 # include "string_internal.h"
 # ifndef NDEBUG
 #   define NDEBUG
@@ -69,6 +70,7 @@ webvtt_parse_mode_t {
   M_WEBVTT = 0,
   M_CUETEXT,
   M_SKIP_CUE,
+  M_REGION,
 } webvtt_parse_mode;
 
 
@@ -205,6 +207,21 @@ webvtt_parser_t {
   webvtt_lexer_state tstate;
   webvtt_uint token_pos;
   char token[0x100];
+
+  /**
+   * REGION extension state
+   */
+  webvtt_region_fn on_region;
+  webvtt_region **regions; /* per-parser region lookup table */
+  webvtt_uint region_count;
+  webvtt_uint region_alloc;
+  webvtt_region *region_building; /* block currently being parsed */
+  webvtt_bool region_discard; /* block appeared too late, ignore it */
+  webvtt_bool region_have_id;
+  webvtt_bool region_line_ready; /* line buffer contains a whole line */
+  webvtt_uint region_start_line;
+  webvtt_string region_line;
+  webvtt_bool seen_cue; /* at least one real cue block was started */
 };
 
 WEBVTT_INTERN webvtt_token
@@ -267,6 +284,25 @@ webvtt_parse_timings_and_settings( webvtt_parser self, const webvtt_string *line
 WEBVTT_INTERN int
 parse_cueparams( webvtt_parser self, const char *text, webvtt_uint len,
                  webvtt_cue *cue );
+
+/**
+ * REGION extension helpers (region.c)
+ */
+WEBVTT_INTERN int
+webvtt_region_is_keyword( const webvtt_string *line );
+
+WEBVTT_INTERN webvtt_status
+webvtt_region_begin( webvtt_parser self );
+
+WEBVTT_INTERN webvtt_status
+webvtt_region_read( webvtt_parser self, const char *b, webvtt_uint *ppos,
+                    webvtt_uint len, webvtt_bool finish );
+
+WEBVTT_INTERN void
+webvtt_region_cleanup( webvtt_parser self );
+
+WEBVTT_INTERN void
+webvtt_region_bind_cue( webvtt_parser self, webvtt_cue *cue );
 
 /**
  * Flags which can apply additional meaning to a token. find_token() will

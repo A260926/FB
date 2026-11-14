@@ -34,6 +34,12 @@
     <ClCompile Include="..\..\src\libwebvtt\cuetext.c">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\libwebvtt\region.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\libwebvtt\region_player.c">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\webvtt\cue.h">
@@ -46,6 +52,9 @@
       <Filter>include\webvtt</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\webvtt\parser.h">
+      <Filter>include\webvtt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\webvtt\region.h">
       <Filter>include\webvtt</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\webvtt\string.h">

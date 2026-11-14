@@ -101,6 +101,12 @@ extern "C" {
     WEBVTT_CUE_CONTAINS_SEPARATOR,
     /* A webvtt cue contains only a cue-id, and no cuetimes or payload. */
     WEBVTT_CUE_INCOMPLETE,
+    /* A REGION definition field has an invalid value. */
+    WEBVTT_REGION_BAD_VALUE,
+    /* A REGION definition block has no valid id and is discarded. */
+    WEBVTT_REGION_MISSING_ID,
+    /* A REGION definition block appeared after the first cue. */
+    WEBVTT_REGION_AFTER_CUE,
   };
   typedef enum webvtt_error_t webvtt_error;
 

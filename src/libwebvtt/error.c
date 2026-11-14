@@ -57,6 +57,9 @@ static const char *errstr[] = {
   /* WEBVTT_ALIGN_BAD_VALUE */ "'align' cue-setting must have a value of either 'start', 'middle', or 'end'",
   /* WEBVTT_CUE_CONTAINS_SEPARATOR */ "cue-text line contains unescaped timestamp separator '-->'",
   /* WEBVTT_CUE_INCOMPLETE */ "cue contains cue-id, but is missing cuetimes or cue text",
+  /* WEBVTT_REGION_BAD_VALUE */ "invalid value for REGION definition field",
+  /* WEBVTT_REGION_MISSING_ID */ "REGION definition block has no valid id",
+  /* WEBVTT_REGION_AFTER_CUE */ "REGION definition block after the first cue is ignored",
 };
 
 /**
