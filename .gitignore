@@ -19,6 +19,7 @@
 *.ver
 .depend
 .DS_Store
+.task-build/
 config.*
 boxdumper
 muxer

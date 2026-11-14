@@ -373,7 +373,7 @@ for src in $SRC_CORE; do
     SRCS="$SRCS core/$src"
 done
 
-SRC_CLI="cli.c"
+SRC_CLI="cli.c cutplan.c"
 
 SRC_TOOLS=""
 OBJ_TOOLS=""
