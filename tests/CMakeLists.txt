@@ -104,5 +104,17 @@ endif()
 
 add_dependencies(check ELFIOTest)
 
+# Standalone DWARF4 type layout cases. This executable is self-contained
+# (no gtest dependency); task_support/run.sh also builds it directly.
+add_executable(type_layout_cases type_layout_cases.cpp)
+target_link_libraries(type_layout_cases PRIVATE elfio::elfio)
+add_test(
+    NAME
+    type_layout_cases
+    COMMAND
+    ${CMAKE_CURRENT_BINARY_DIR}/type_layout_cases
+    WORKING_DIRECTORY
+    ${CMAKE_CURRENT_BINARY_DIR})
+
 include(GoogleTest)
 gtest_discover_tests(ELFIOTest)
