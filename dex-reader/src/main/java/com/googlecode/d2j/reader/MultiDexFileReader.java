@@ -33,7 +33,8 @@ public class MultiDexFileReader implements BaseDexFileReader {
         if (data.length < 3) {
             throw new IOException("File too small to be a dex/zip");
         }
-        if ("dex".equals(new String(data, 0, 3, StandardCharsets.ISO_8859_1))) {// dex
+        if ("dex".equals(new String(data, 0, 3, StandardCharsets.ISO_8859_1))
+                || CompactDexSupport.isCompactDex(data)) {// ordinary dex or CompactDex
             return new DexFileReader(data);
         } else if ("PK".equals(new String(data, 0, 2, StandardCharsets.ISO_8859_1))) {// ZIP
             TreeMap<String, DexFileReader> dexFileReaders = new TreeMap<>();

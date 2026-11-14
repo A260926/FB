@@ -143,37 +143,98 @@ public class DexFileReader implements BaseDexFileReader {
     final int method_handle_ids_size;
     final int dex_version;
 
+    /** True when the image is a CompactDex v001 container rather than an ordinary dex. */
+    final boolean compact;
     /**
-     * read dex from a {@link ByteBuffer}.
-     * 
+     * Start of the owned data region for CompactDex, {@code 0} for ordinary dex. Payload offsets
+     * (string data, type lists, class data, code, debug, map, ...) are relative to this position.
+     */
+    final int dataOff;
+    /** Parsed CompactDex header, {@code null} for ordinary dex. */
+    final private CompactDexSupport.Header compactHeader;
+
+    /**
+     * read dex from a {@link ByteBuffer}. The position and limit of the caller's buffer are
+     * preserved.
+     *
      * @param in
      */
-    public DexFileReader(ByteBuffer in) {
-        in.position(0);
-        in = in.asReadOnlyBuffer().order(ByteOrder.BIG_ENDIAN);
-        int magic = in.getInt() & 0xFFFFFF00;
+    public DexFileReader(ByteBuffer original) {
+        final int savedPosition = original.position();
+        final int savedLimit = original.limit();
+        try {
+            // Work on an independent read-only view so the caller's position/limit are never
+            // moved by the parse.
+            ByteBuffer in = original.asReadOnlyBuffer().order(ByteOrder.BIG_ENDIAN);
+            in.position(0);
+            int magic = in.getInt() & 0xFFFFFF00;
 
-        final int MAGIC_DEX = 0x6465780A & 0xFFFFFF00;// hex for 'dex ', ignore the 0A
-        final int MAGIC_ODEX = 0x6465790A & 0xFFFFFF00;// hex for 'dey ', ignore the 0A
+            final int MAGIC_DEX = 0x6465780A & 0xFFFFFF00;// hex for 'dex ', ignore the 0A
+            final int MAGIC_ODEX = 0x6465790A & 0xFFFFFF00;// hex for 'dey ', ignore the 0A
 
-        if (magic == MAGIC_DEX) {
-            // ok
-        } else if (magic == MAGIC_ODEX) {
-            throw new DexException("Odex unsupported.");
-        } else {
-            throw new DexException("Magic unsupported.");
+            if (magic == MAGIC_DEX) {
+                // ok
+            } else if (magic == MAGIC_ODEX) {
+                throw new DexException("Odex unsupported.");
+            } else {
+                in.position(0);
+                if (isCompactDexMagic(in)) {
+                    this.compact = true;
+                    in.position(4);
+                    int compactVersion = in.getInt() >> 8; // bytes 4..7, e.g. "001\0"
+                    if (compactVersion != 0x00303031) { // "001"
+                        throw new DexException("Unsupported CompactDex version.");
+                    }
+                    this.dex_version = DEX_035;
+                    in.order(ByteOrder.LITTLE_ENDIAN);
+                    if (in.getInt(36) != CompactDexSupport.HEADER_SIZE) {
+                        throw new DexException("Unsupported CompactDex header size.");
+                    }
+                    init(in, true);
+                    this.dataOff = in.getInt(108);
+                    this.compactHeader = new CompactDexSupport.Header(in);
+                    return;
+                }
+                throw new DexException("Magic unsupported.");
+            }
+            this.compact = false;
+            int version = in.getInt() >> 8;
+            if (version < DEX_035 || version > DEX_040) {
+                System.err.println("Unknown DEX version. Trying anyway...");
+            }
+            this.dex_version = version;
+            in.order(ByteOrder.LITTLE_ENDIAN);
+            init(in, false);
+            this.dataOff = 0;
+            this.compactHeader = null;
+        } finally {
+            // The parse only moved the independent read-only view; restore the caller buffer
+            // regardless so position and limit are preserved contractually.
+            original.limit(savedLimit).position(savedPosition);
         }
-        int version = in.getInt() >> 8;
-        if (version < DEX_035 || version > DEX_040) {
-            System.err.println("Unknown DEX version. Trying anyway...");
-        }
-        this.dex_version = version;
-        in.order(ByteOrder.LITTLE_ENDIAN);
+    }
 
+    private static boolean isCompactDexMagic(ByteBuffer in) {
+        int p = in.position();
+        try {
+            byte[] actual = new byte[CompactDexSupport.MAGIC.length];
+            in.get(actual);
+            for (int i = 0; i < actual.length; i++) {
+                if (actual[i] != CompactDexSupport.MAGIC[i]) {
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            in.position(p);
+        }
+    }
+
+    private void init(ByteBuffer in, boolean isCompact) {
         // skip uint checksum
         // and 20 bytes signature
         // and uint file_size
-        // and uint header_size 0x70
+        // and uint header_size (0x70 for dex, 0x88 for CompactDex)
         skip(in, 4 + 20 + 4 + 4);
 
         int endian_tag = in.getInt();
@@ -185,7 +246,11 @@ public class DexFileReader implements BaseDexFileReader {
         // and uint link_off
         skip(in, 4 + 4);
 
-        int map_off = in.getInt();
+        // For CompactDex the payload lives in a separate owned data region; every payload
+        // offset (map, strings, type lists, class data, code, debug, ...) is relative to
+        // data_off. ID tables stay in the main region and keep absolute file offsets.
+        final int payloadBase = isCompact ? in.getInt(108) : 0;
+        int map_off = in.getInt() + payloadBase;
 
         string_ids_size = in.getInt();
         int string_ids_off = in.getInt();
@@ -230,6 +295,7 @@ public class DexFileReader implements BaseDexFileReader {
         this.call_site_ids_size = call_site_ids_size;
         this.method_handle_ids_size = method_handle_ids_size;
 
+        // ID tables address the main region.
         stringIdIn = slice(in, string_ids_off, string_ids_size * 4);
         typeIdIn = slice(in, type_ids_off, type_ids_size * 4);
         protoIdIn = slice(in, proto_ids_off, proto_ids_size * 12);
@@ -239,17 +305,31 @@ public class DexFileReader implements BaseDexFileReader {
         callSiteIdIn = slice(in, call_site_ids_off, call_site_ids_size * 4);
         methodHandleIdIn = slice(in, method_handle_ids_off, method_handle_ids_size * 8);
 
+        // Whole-image views for items that stay in the main region.
         in.position(0);
-        annotationsDirectoryItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        annotationSetItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        annotationItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        annotationSetRefListIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        classDataIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        codeItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        stringDataIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        encodedArrayItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        typeListIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-        debugInfoIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer whole = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer dataView;
+        if (isCompact) {
+            // Payload views are confined to the owned data region, so data-relative offsets can
+            // be used directly without rewriting a single byte of the image.
+            ByteBuffer data = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+            data.position(payloadBase);
+            dataView = data.slice().order(ByteOrder.LITTLE_ENDIAN);
+        } else {
+            dataView = whole;
+        }
+        // Annotation items, encoded arrays, class data, code items, string data, type lists and
+        // debug info are all payload: they live in the data region of a CompactDex image.
+        annotationsDirectoryItemIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        annotationSetItemIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        annotationItemIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        annotationSetRefListIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        encodedArrayItemIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        classDataIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        codeItemIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        stringDataIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        typeListIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        debugInfoIn = dataView.duplicate().order(ByteOrder.LITTLE_ENDIAN);
     }
 
     /**
@@ -1062,7 +1142,7 @@ public class DexFileReader implements BaseDexFileReader {
                         if (dcv != null) {
                             try {
                                 acceptCode(code_off, dcv, config, (method_access_flags & DexConstants.ACC_STATIC) != 0,
-                                        method);
+                                        method, method_id);
                             } catch (Exception e) {
                                 throw new DexException(e, "while accept code in method:[%s] @%08x", method.toString(),
                                         code_off);
@@ -1374,17 +1454,40 @@ public class DexFileReader implements BaseDexFileReader {
         }
     }
 
-    /* package */void acceptCode(int code_off, DexCodeVisitor dcv, int config, boolean isStatic, Method method) {
+    /* package */void acceptCode(int code_off, DexCodeVisitor dcv, int config, boolean isStatic, Method method,
+            int methodId) {
         ByteBuffer in = codeItemIn;
-        in.position(code_off);
-        int registers_size = 0xFFFF & in.getShort();
-        in.getShort();// ins_size ushort
-        in.getShort();// outs_size ushort
-        int tries_size = 0xFFFF & in.getShort();
-        int debug_info_off = in.getInt();
-        int insns = in.getInt();
+        int registers_size;
+        int tries_size;
+        int insns;
+        int insnsOff;
+        int afterInsnsOff;
+        int debug_info_off;
+        if (compact) {
+            // Compact code item: two-word header, possible reverse-ordered extension words in
+            // front, and no per-item debug offset. The debug offset is recovered from the sparse
+            // table by method identity, never borrowed from a previously visited method.
+            CompactDexSupport.CodeItem item = CompactDexSupport.readCodeItem(in, code_off);
+            registers_size = item.registersSize;
+            tries_size = item.triesSize;
+            insns = item.insnsSize;
+            insnsOff = item.insnsOff;
+            afterInsnsOff = item.afterInsnsOff;
+            debug_info_off = CompactDexSupport.findDebugInfoOffset(in, compactHeader, methodId);
+        } else {
+            in.position(code_off);
+            registers_size = 0xFFFF & in.getShort();
+            in.getShort();// ins_size ushort
+            in.getShort();// outs_size ushort
+            tries_size = 0xFFFF & in.getShort();
+            debug_info_off = in.getInt();
+            insns = in.getInt();
+            insnsOff = in.position();
+            afterInsnsOff = insnsOff + insns * 2;
+        }
 
         byte[] insnsArray = new byte[insns * 2];
+        in.position(insnsOff);
         in.get(insnsArray);
         dcv.visitRegister(registers_size);
         BitSet nextInsn = new BitSet();
@@ -1392,6 +1495,7 @@ public class DexFileReader implements BaseDexFileReader {
         Set<Integer> handlers = new HashSet<>();
         // 处理异常处理
         if (tries_size > 0) {
+            in.position(afterInsnsOff);
             if ((insns & 0x01) != 0) {// skip padding
                 in.getShort();
             }
