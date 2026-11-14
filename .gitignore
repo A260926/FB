@@ -8,3 +8,4 @@ ext/boost
 **/Makefile
 librapidcheck.a
 rapidcheckConfig.cmake
+/.isolated

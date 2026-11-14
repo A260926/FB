@@ -40,6 +40,7 @@ add_library(rapidcheck
   src/Check.cpp
   src/Classify.cpp
   src/GenerationFailure.cpp
+  src/Isolated.cpp
   src/Log.cpp
   src/Random.cpp
   src/Show.cpp
