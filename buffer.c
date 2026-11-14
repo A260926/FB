@@ -133,6 +133,10 @@
 #define CHAIN_PINNED(ch)  (((ch)->flags & EVBUFFER_MEM_PINNED_ANY) != 0)
 #define CHAIN_PINNED_R(ch)  (((ch)->flags & EVBUFFER_MEM_PINNED_R) != 0)
 
+/* Bound used when sizing a fresh chain for a small copy, mirroring the
+ * heuristic in evbuffer_add(). */
+#define EVBUFFER_CHAIN_MAX_AUTO_SIZE 4096
+
 /* evbuffer_ptr support */
 #define PTR_NOT_FOUND(ptr) do {			\
 	(ptr)->pos = -1;					\
@@ -904,17 +908,27 @@ APPEND_CHAIN(struct evbuffer *dst, struct evbuffer *src)
 	dst->total_len += src->total_len;
 }
 
-static inline void
-APPEND_CHAIN_MULTICAST(struct evbuffer *dst, struct evbuffer *src)
+/* Build a detached, privately owned list of multicast reference chains
+ * describing a non-destructive snapshot of every non-empty chain in src.
+ *
+ * No state belonging to src or dst is modified here: in particular the
+ * source chains keep their flags and reference counts and src keeps its own
+ * reference count.  The reference-count group is established later, and
+ * atomically, by evbuffer_commit_multicast_chains_().  On allocation failure
+ * every chain prepared so far is released and NULL is returned, leaving no
+ * trace behind. */
+static struct evbuffer_chain *
+evbuffer_prepare_multicast_chains_(struct evbuffer *src, size_t *total_out)
 {
-	struct evbuffer_chain *tmp;
-	struct evbuffer_chain *chain = src->first;
-	struct evbuffer_multicast_parent *extra;
+	struct evbuffer_chain *chain, *head = NULL, **tailp = &head;
+	size_t total = 0;
 
-	ASSERT_EVBUFFER_LOCKED(dst);
 	ASSERT_EVBUFFER_LOCKED(src);
 
-	for (; chain; chain = chain->next) {
+	for (chain = src->first; chain; chain = chain->next) {
+		struct evbuffer_chain *tmp;
+		struct evbuffer_multicast_parent *extra;
+
 		if (!chain->off || chain->flags & EVBUFFER_DANGLING) {
 			/* skip empty chains */
 			continue;
@@ -923,24 +937,63 @@ APPEND_CHAIN_MULTICAST(struct evbuffer *dst, struct evbuffer *src)
 		tmp = evbuffer_chain_new(sizeof(struct evbuffer_multicast_parent));
 		if (!tmp) {
 			event_warn("%s: out of memory", __func__);
-			return;
+			evbuffer_free_all_chains(head);
+			return NULL;
 		}
 		extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp);
+		extra->source = src;
+		extra->parent = chain;
+		tmp->buffer_len = chain->buffer_len;
+		tmp->misalign = chain->misalign;
+		tmp->off = chain->off;
+		/* The chain stays an ordinary private chain while it is only on
+		 * the detached list: evbuffer_chain_free() must not touch the
+		 * source buffer/chain reference counts on rollback.  The
+		 * multicast flags are published with the reference group in
+		 * evbuffer_commit_multicast_chains_(). */
+		tmp->buffer = chain->buffer;
+
+		*tailp = tmp;
+		tailp = &tmp->next;
+		total += chain->off;
+	}
+
+	*total_out = total;
+	return head;
+}
+
+/* Publish a detached multicast chain list into dst and establish, as a
+ * group, the references that keep the snapshot storage alive: one reference
+ * to the source buffer and one to each source chain, which also becomes
+ * immutable.  All allocations have already succeeded by the time this runs,
+ * so the commit cannot fail and a caller never needs to roll it back. */
+static void
+evbuffer_commit_multicast_chains_(struct evbuffer *dst, struct evbuffer *src,
+    struct evbuffer_chain *head)
+{
+	struct evbuffer_chain *chain;
+
+	ASSERT_EVBUFFER_LOCKED(dst);
+	ASSERT_EVBUFFER_LOCKED(src);
+
+	for (chain = head; chain; ) {
+		struct evbuffer_chain *next = chain->next;
+		struct evbuffer_multicast_parent *extra =
+		    EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, chain);
 		/* reference evbuffer containing source chain so it
 		 * doesn't get released while the chain is still
 		 * being referenced to */
 		evbuffer_incref_(src);
-		extra->source = src;
 		/* reference source chain which now becomes immutable */
-		evbuffer_chain_incref(chain);
-		extra->parent = chain;
-		chain->flags |= EVBUFFER_IMMUTABLE;
-		tmp->buffer_len = chain->buffer_len;
-		tmp->misalign = chain->misalign;
-		tmp->off = chain->off;
-		tmp->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE;
-		tmp->buffer = chain->buffer;
-		evbuffer_chain_insert(dst, tmp);
+		evbuffer_chain_incref(extra->parent);
+		extra->parent->flags |= EVBUFFER_IMMUTABLE;
+		chain->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE;
+		/* The snapshot list was linked for rollback bookkeeping;
+		 * detach the link so evbuffer_chain_insert() performs the
+		 * publication linking itself.  Ordering is kept via next. */
+		chain->next = NULL;
+		evbuffer_chain_insert(dst, chain);
+		chain = next;
 	}
 }
 
@@ -1012,13 +1065,13 @@ int
 evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
 {
 	size_t in_total_len, out_total_len;
-	struct evbuffer_chain *chain;
+	struct evbuffer_chain *chain, *snapshot;
+	size_t snapshot_len = 0;
 	int result = 0;
 
 	EVBUFFER_LOCK2(inbuf, outbuf);
 	in_total_len = inbuf->total_len;
 	out_total_len = outbuf->total_len;
-	chain = inbuf->first;
 
 	if (in_total_len == 0)
 		goto done;
@@ -1028,7 +1081,7 @@ evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
 		goto done;
 	}
 
-	for (; chain; chain = chain->next) {
+	for (chain = inbuf->first; chain; chain = chain->next) {
 		if ((chain->flags & (EVBUFFER_FILESEGMENT|EVBUFFER_SENDFILE|EVBUFFER_MULTICAST)) != 0) {
 			/* chain type can not be referenced */
 			result = -1;
@@ -1036,12 +1089,27 @@ evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
 		}
 	}
 
+	/* Build the complete snapshot on a detached list before changing
+	 * either buffer: an allocation failure rolls back by freeing the
+	 * detached chains and leaves both buffers, their reference counts and
+	 * their callback state exactly as they were on entry. */
+	snapshot = evbuffer_prepare_multicast_chains_(inbuf, &snapshot_len);
+	if (!snapshot) {
+		result = -1;
+		goto done;
+	}
+	EVUTIL_ASSERT(snapshot_len == in_total_len);
+
 	if (out_total_len == 0) {
 		/* There might be an empty chain at the start of outbuf; free
-		 * it. */
+		 * it.  Reset the header pointers as well so the commit inserts
+		 * the snapshot as the first chain rather than chasing freed
+		 * links. */
 		evbuffer_free_all_chains(outbuf->first);
+		outbuf->first = outbuf->last = NULL;
+		outbuf->last_with_datap = &outbuf->first;
 	}
-	APPEND_CHAIN_MULTICAST(outbuf, inbuf);
+	evbuffer_commit_multicast_chains_(outbuf, inbuf, snapshot);
 
 	outbuf->n_add_for_cb += in_total_len;
 	evbuffer_invoke_callbacks_(outbuf);
@@ -1253,6 +1321,69 @@ done:
 	return result;
 }
 
+/* Prepare (but do not install) the chain that holds the partial tail copied
+ * out of the last source chain touched by evbuffer_remove_buffer().
+ *
+ * The copy itself is the only allocation a partial remove needs beyond the
+ * zero-cost transfer of whole chains.  Doing it up front keeps the whole
+ * operation atomic: until this returns successfully nothing in either buffer
+ * has changed, so an allocation failure is reported with the entry state
+ * fully intact.  The returned chain is private (no flags set) and owns its
+ * own storage; on failure any partial chain is released and NULL returned.
+ *
+ * dst may already hold data; *use_chain is set to a writable dst chain with
+ * enough tail space when no new chain is needed, otherwise it stays NULL and
+ * *new_chain receives a fresh chain holding the copied bytes. */
+static int
+evbuffer_prepare_remove_tail_(struct evbuffer *dst,
+    const struct evbuffer_chain *src_chain, size_t datlen,
+    int allow_inline,
+    struct evbuffer_chain **new_chain, struct evbuffer_chain **use_chain)
+{
+	struct evbuffer_chain *last;
+	size_t space, to_alloc;
+
+	ASSERT_EVBUFFER_LOCKED(dst);
+
+	*new_chain = NULL;
+	*use_chain = NULL;
+	if (datlen == 0)
+		return 0;
+
+	/* Inlining into dst's current tail chain is only possible when no
+	 * whole source chains are transferred ahead of the tail: otherwise
+	 * that chain stops being the last chain once the moved prefix is
+	 * appended and the copied bytes would land in the middle. */
+	last = *dst->last_with_datap;
+	if (allow_inline && last && !(last->flags & EVBUFFER_IMMUTABLE)) {
+		space = CHAIN_SPACE_LEN(last);
+		if (space >= datlen) {
+			/* The existing tail chain has room; no allocation and
+			 * no copy is needed until commit time. */
+			*use_chain = last;
+			return 0;
+		}
+	}
+
+	to_alloc = last ? last->buffer_len : 0;
+	if (to_alloc <= EVBUFFER_CHAIN_MAX_AUTO_SIZE / 2)
+		to_alloc <<= 1;
+	if (datlen > to_alloc)
+		to_alloc = datlen;
+
+	*new_chain = evbuffer_chain_new(to_alloc);
+	if (*new_chain == NULL) {
+		event_warn("%s: out of memory", __func__);
+		return -1;
+	}
+	/* Only the cross-chain boundary fragment is copied; whole source
+	 * chains are transferred untouched. */
+	memcpy((*new_chain)->buffer,
+	    src_chain->buffer + src_chain->misalign, datlen);
+	(*new_chain)->off = datlen;
+	return 0;
+}
+
 /* reads data from the src buffer to the dst buffer, avoids memcpy as
  * possible. */
 /*  XXXX should return ev_ssize_t */
@@ -1264,12 +1395,15 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 
 	/*XXX can fail badly on sendfile case. */
 	struct evbuffer_chain *chain, *previous;
-	size_t nread = 0;
+	struct evbuffer_chain *new_chain, *use_chain;
+	struct evbuffer_chain **src_lastp;
+	size_t nread = 0, tail_len, moved_len;
 	int result;
 
 	EVBUFFER_LOCK2(src, dst);
 
 	chain = previous = src->first;
+	src_lastp = src->last_with_datap;
 
 	if (datlen == 0 || dst == src) {
 		result = 0;
@@ -1283,13 +1417,22 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 
 	/* short-cut if there is no more data buffered */
 	if (datlen >= src->total_len) {
+		/* evbuffer_add_buffer() only performs pointer surgery and
+		 * refcount-free chain transfers; its own failure points (a
+		 * pinned-source copy) happen before either buffer changes, so
+		 * a -1 still leaves both buffers untouched. */
 		datlen = src->total_len;
-		evbuffer_add_buffer(dst, src);
+		if (evbuffer_add_buffer(dst, src) < 0) {
+			result = -1;
+			goto done;
+		}
 		result = (int)datlen; /*XXXX should return ev_ssize_t*/
 		goto done;
 	}
 
-	/* removes chains if possible */
+	/* Walk the source chain list to find how many whole chains move and
+	 * how many bytes must be copied out of the next chain.  This is pure
+	 * inspection: no buffer state is changed yet. */
 	while (chain->off <= datlen) {
 		/* We can't remove the last with data from src unless we
 		 * remove all chains, in which case we would have done the if
@@ -1298,13 +1441,26 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		nread += chain->off;
 		datlen -= chain->off;
 		previous = chain;
-		if (src->last_with_datap == &chain->next)
-			src->last_with_datap = &src->first;
+		if (src_lastp == &chain->next)
+			src_lastp = &src->first;
 		chain = chain->next;
 	}
+	tail_len = datlen;
+	moved_len = nread;
 
-	if (chain != src->first) {
-		/* we can remove the chain */
+	/* Allocate and fill the tail copy first; on failure nothing has been
+	 * touched and the entry state is preserved. */
+	if (evbuffer_prepare_remove_tail_(dst, chain, tail_len,
+	        moved_len == 0, &new_chain, &use_chain) < 0) {
+		result = -1;
+		goto done;
+	}
+
+	/* Commit point: every required resource is available, so from here on
+	 * the operation cannot fail and no callback is invoked before both
+	 * buffers reflect the full transfer. */
+	if (moved_len) {
+		/* transfer the whole source chains verbatim */
 		struct evbuffer_chain **chp;
 		chp = evbuffer_free_trailing_empty_chains(dst);
 
@@ -1315,23 +1471,30 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		}
 		dst->last = previous;
 		previous->next = NULL;
+		src->last_with_datap = src_lastp;
 		src->first = chain;
 		advance_last_with_data(dst);
 
-		dst->total_len += nread;
-		dst->n_add_for_cb += nread;
+		dst->total_len += moved_len;
 	}
 
-	/* we know that there is more data in the src buffer than
-	 * we want to read, so we manually drain the chain */
-	evbuffer_add(dst, chain->buffer + chain->misalign, datlen);
-	chain->misalign += datlen;
-	chain->off -= datlen;
-	nread += datlen;
+	/* install the copied tail fragment */
+	if (new_chain) {
+		evbuffer_chain_insert(dst, new_chain);
+	} else if (use_chain) {
+		memcpy(CHAIN_SPACE_PTR(use_chain),
+		    chain->buffer + chain->misalign, tail_len);
+		use_chain->off += tail_len;
+		dst->total_len += tail_len;
+	}
 
-	/* You might think we would want to increment dst->n_add_for_cb
-	 * here too.  But evbuffer_add above already took care of that.
-	 */
+	/* manually drain the copied bytes from the source chain */
+	chain->misalign += tail_len;
+	chain->off -= tail_len;
+	nread += tail_len;
+
+	/* Account for the whole operation as a single change each side. */
+	dst->n_add_for_cb += nread;
 	src->total_len -= nread;
 	src->n_del_for_cb += nread;
 
@@ -1721,8 +1884,6 @@ done:
 
 	return result;
 }
-
-#define EVBUFFER_CHAIN_MAX_AUTO_SIZE 4096
 
 /* Adds data to an event buffer */
 

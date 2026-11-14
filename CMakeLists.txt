@@ -1016,7 +1016,8 @@ if (NOT EVENT__DISABLE_SAMPLES)
         hello-world
         signal-test
         http-connect
-        time-test)
+        time-test
+        buffer-retry)
 
     foreach(SAMPLE ${SAMPLES})
         add_sample_prog(OFF ${SAMPLE} sample/${SAMPLE}.c)
