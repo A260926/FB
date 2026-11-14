@@ -3,6 +3,7 @@
 
 #include "microsoft_demangle.h"
 #include <ctype.h>
+#include <limits.h>
 
 #define MICROSOFT_NAME_LEN            (256)
 #define MICROSOFR_CLASS_NAMESPACE_LEN (256)
@@ -11,6 +12,13 @@
 typedef struct SAbbrState {
 	DemList *types;
 	DemList *names;
+	// Structured thunk / this-adjustment capture (see microsoft_demangle_info).
+	RzMsvcInfo *info; ///< destination result, may be NULL
+	bool capture; ///< true when `info` must be filled
+	const char *origin; ///< start of the original symbol (offset base)
+	RzMsvcInfoError err; ///< first strict parsing error
+	size_t err_offset; ///< offset of `err` inside `origin`
+	bool err_set; ///< true once `err` has been set
 } SAbbrState;
 
 typedef enum EObjectType {
@@ -188,8 +196,8 @@ static EDemanglerErr parse_data_type(SAbbrState *abbr, const char *sym, SDataTyp
 static size_t get_namespace_and_name(SAbbrState *abbr, const char *buf, STypeCodeStr *type_code_str, size_t *amount_of_names, bool memorize);
 static inline EDemanglerErr get_storage_class(const char encoded, const char **storage_class);
 static inline size_t get_ptr_modifier(const char *encoded, SDataType *ptr_modifier);
-static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCodeStr *type_code_str, char **demangled_function, size_t *chars_read);
-static EDemanglerErr parse_microsoft_mangled_name(SAbbrState *abbr, const char *sym, char **demangled_name, size_t *chars_read);
+static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCodeStr *type_code_str, char **demangled_function, size_t *chars_read, bool record);
+static EDemanglerErr parse_microsoft_mangled_name(SAbbrState *abbr, const char *sym, char **demangled_name, size_t *chars_read, bool record);
 static EDemanglerErr parse_microsoft_rtti_mangled_name(SAbbrState *abbr, const char *sym, char **demangled_name, size_t *chars_read);
 
 static void run_state(SAbbrState *abbr, SStateInfo *state_info, STypeCodeStr *type_code_str) {
@@ -306,7 +314,7 @@ static int get_template_params(SAbbrState *abbr, const char *sym, size_t *amount
 				sdatatype_fini(&data_type);
 			} else {
 				char *tmp = NULL;
-				err = parse_function(abbr, sym, &str, &tmp, &ret);
+				err = parse_function(abbr, sym, &str, &tmp, &ret, false);
 				*str_type_code = dem_str_newf("&%s", tmp);
 				free(tmp);
 			}
@@ -1047,7 +1055,7 @@ static size_t get_namespace_and_name(SAbbrState *abbr, const char *buf, STypeCod
 			}
 			char *demangled = NULL;
 			if (nested_name) {
-				parse_microsoft_mangled_name(abbr, tmp, &demangled, &len);
+				parse_microsoft_mangled_name(abbr, tmp, &demangled, &len, false);
 				tmp += len;
 				read_len += len;
 			}
@@ -2203,24 +2211,284 @@ static EDemanglerErr parse_data_type(SAbbrState *abbr, const char *sym, SDataTyp
 	return eDemanglerErrOK;
 }
 
-static EDemanglerErr parse_function_type(const char *sym, SDataType *data_type,
-	size_t *len, bool *is_static, bool *is_implicit_this_pointer) {
+///////////////////////////////////////////////////////////////////////////////
+// Structured thunk / this-adjustment decoding
+//
+// The MSVC mangling encodes the `this` adjustment directly in the mangled
+// symbol.  The two virtual forms use the `$` prefix:
+//
+//   $0 .. $5                  vtordisp   : vtordisp, static offset
+//   $R0 .. $R5                vtordispex : vbptr, vbtable slot, vtordisp, static
+//
+// The `$` prefix replaces the member function access code, so the following
+// bytes (this pointer qualification, calling convention, return type and
+// arguments) are still decoded by the regular function parser.
+///////////////////////////////////////////////////////////////////////////////
+
+// Maximum number of hexadecimal nibbles accepted for one encoded number:
+// eight nibbles are exactly one 32 bit pattern.
+#define MSVC_MAX_HEX_DIGITS 8
+
+static inline size_t msvc_info_offset(SAbbrState *abbr, const char *pos) {
+	if (!abbr || !abbr->origin || !pos) {
+		return 0;
+	}
+	return (size_t)(pos - abbr->origin);
+}
+
+static inline void msvc_info_set_error(SAbbrState *abbr, RzMsvcInfoError err, size_t offset) {
+	if (!abbr || !abbr->capture || abbr->err_set) {
+		return;
+	}
+	abbr->err = err;
+	abbr->err_offset = offset;
+	abbr->err_set = true;
+}
+
+/// \brief Decode one MSVC encoded number from *pos.
+///
+/// Encoding (matching the original MSVC scheme used by get_num()):
+///   - `0`..`8` encode 1..9, `9` encodes 10, each is one self terminating byte.
+///   - `A`..`P` are hexadecimal digits (`A` is 0) terminated by `@`.
+///   - an optional leading `?` marks an explicitly negative number.
+///
+/// Without an explicit `?`, the accumulated 32 bit pattern is interpreted as
+/// two's complement (so `PPPPPPPM@` is -4 and not 4294967292).
+///
+/// On success *pos is advanced past the whole token.  On failure *pos is left
+/// at the first offending byte and the returned category describes the error.
+static RzMsvcInfoError msvc_parse_number(SAbbrState *abbr, const char **pos, RzMsvcNumber *out) {
+	const char *p = *pos;
+	const char *start = p;
+	bool negative = false;
+	uint32_t acc = 0;
+
+	if (*p == '?') {
+		negative = true;
+		p++;
+	}
+	if (!*p) {
+		// Report the position where the number was expected, so callers can
+		// point at the exact byte that is missing.
+		*pos = p;
+		return RZ_MSVC_INFO_ERR_INCOMPLETE_ADJUST;
+	}
+
+	if (*p >= '0' && *p <= '8') {
+		acc = (uint32_t)(*p - '0') + 1;
+		p++;
+	} else if (*p == '9') {
+		acc = 10;
+		p++;
+	} else if (*p == '@') {
+		// A bare `@` encodes 0 (this mirrors the historical get_num()).
+		acc = 0;
+		p++;
+	} else if (*p >= 'A' && *p <= 'P') {
+		size_t digits = 0;
+		while (*p >= 'A' && *p <= 'P') {
+			if (++digits > MSVC_MAX_HEX_DIGITS) {
+				return RZ_MSVC_INFO_ERR_NUMBER_RANGE;
+			}
+			acc = acc * 16u + (uint32_t)(*p - 'A');
+			p++;
+		}
+		if (*p != '@') {
+			return RZ_MSVC_INFO_ERR_NUMBER;
+		}
+		p++; // terminating '@'
+	} else {
+		return RZ_MSVC_INFO_ERR_NUMBER;
+	}
+
+	int32_t value;
+	if (negative) {
+		// Explicit magnitude, it must be representable as a signed 32 bit
+		// value before negation.
+		if (acc > 0x80000000u) {
+			return RZ_MSVC_INFO_ERR_NUMBER_RANGE;
+		}
+		value = (int32_t)(-(int64_t)acc);
+	} else {
+		// Raw 32 bit two's complement pattern.
+		value = (int32_t)acc;
+	}
+
+	if (out) {
+		out->present = true;
+		out->value = value;
+		out->start = msvc_info_offset(abbr, start);
+		out->end = msvc_info_offset(abbr, p);
+	}
+	*pos = p;
+	return RZ_MSVC_INFO_ERR_NONE;
+}
+
+/// \brief Parse one adjustment number and record a strict error on failure.
+///
+/// `report` is false for nested parses (for example a function type used as a
+/// template argument) so that a malformed inner adjustment cannot overwrite
+/// the structured result of the outermost symbol.
+static EDemanglerErr msvc_parse_adjust_number(SAbbrState *abbr, bool report, const char **pos, RzMsvcNumber *out) {
+	const char *start = *pos;
+	RzMsvcInfoError nerr = msvc_parse_number(abbr, pos, out);
+	if (nerr == RZ_MSVC_INFO_ERR_NONE) {
+		return eDemanglerErrOK;
+	}
+	if (report) {
+		msvc_info_set_error(abbr, nerr,
+			nerr == RZ_MSVC_INFO_ERR_INCOMPLETE_ADJUST
+				? msvc_info_offset(abbr, *pos)
+				: msvc_info_offset(abbr, start));
+	}
+	return eDemanglerErrUncorrectMangledSymbol;
+}
+
+static inline bool msvc_is_adjust_prefix(const char *sym) {
+	if (!sym || sym[0] != '$') {
+		return false;
+	}
+	if (sym[1] == 'R') {
+		return sym[2] >= '0' && sym[2] <= '5';
+	}
+	return sym[1] >= '0' && sym[1] <= '5';
+}
+
+static inline void msvc_adjust_access(unsigned index, RzMsvcAccess *access, RzMsvcDistance *distance) {
+	if (index < 2) {
+		*access = RZ_MSVC_ACCESS_PRIVATE;
+	} else if (index < 4) {
+		*access = RZ_MSVC_ACCESS_PROTECTED;
+	} else {
+		*access = RZ_MSVC_ACCESS_PUBLIC;
+	}
+	*distance = (index & 1) ? RZ_MSVC_DISTANCE_FAR : RZ_MSVC_DISTANCE_NEAR;
+}
+
+static inline void msvc_access_from_letter(char letter, RzMsvcAccess *access, RzMsvcDistance *distance) {
+	if (letter == 'Y' || letter == 'Z') {
+		*access = RZ_MSVC_ACCESS_NONE;
+		*distance = (letter == 'Z') ? RZ_MSVC_DISTANCE_FAR : RZ_MSVC_DISTANCE_NEAR;
+		return;
+	}
+	if (letter < 'A' || letter > 'X') {
+		*access = RZ_MSVC_ACCESS_NONE;
+		*distance = RZ_MSVC_DISTANCE_NONE;
+		return;
+	}
+	int idx = letter - 'A';
+	if (idx < 8) {
+		*access = RZ_MSVC_ACCESS_PRIVATE;
+	} else if (idx < 16) {
+		*access = RZ_MSVC_ACCESS_PROTECTED;
+	} else {
+		*access = RZ_MSVC_ACCESS_PUBLIC;
+	}
+	*distance = (idx & 1) ? RZ_MSVC_DISTANCE_FAR : RZ_MSVC_DISTANCE_NEAR;
+}
+
+static inline RzMsvcThisModifier msvc_this_modifier(char encoded) {
+	switch (encoded) {
+	case 'A':
+		return RZ_MSVC_THIS_PLAIN;
+	case 'B':
+	case 'J':
+		return RZ_MSVC_THIS_CONST;
+	case 'C':
+	case 'G':
+	case 'K':
+		return RZ_MSVC_THIS_VOLATILE;
+	case 'D':
+	case 'H':
+	case 'L':
+		return RZ_MSVC_THIS_CONST_VOLATILE;
+	default:
+		return RZ_MSVC_THIS_NONE;
+	}
+}
+
+static inline const char *msvc_thunk_prefix(RzMsvcAccess access) {
+	switch (access) {
+	case RZ_MSVC_ACCESS_PRIVATE:
+		return "[thunk]:private virtual";
+	case RZ_MSVC_ACCESS_PROTECTED:
+		return "[thunk]:protected virtual";
+	default:
+		return "[thunk]:public virtual";
+	}
+}
+
+static EDemanglerErr parse_function_type(SAbbrState *abbr, const char *sym, SDataType *data_type,
+	size_t *len, bool *is_static, bool *is_implicit_this_pointer, bool record) {
 	const char *curr_pos = sym;
+	bool is_thunk = false;
+	RzMsvcAdjustKind kind = RZ_MSVC_ADJUST_NONE;
+	RzMsvcAccess access = RZ_MSVC_ACCESS_NONE;
+	RzMsvcDistance distance = RZ_MSVC_DISTANCE_NONE;
+	RzMsvcNumber static_offset = { 0 };
+	RzMsvcNumber vtordisp = { 0 };
+	RzMsvcNumber vbptr = { 0 };
+	RzMsvcNumber vbtable_slot = { 0 };
 	*is_static = *is_implicit_this_pointer = false;
-#define SET_THUNK_MODIFIER(letter, modifier_str) \
-	case letter: { \
-		SStateInfo state; \
-		init_state_struct(&state, curr_pos); \
-		char *num = get_num(&state); \
-		if (!num) { \
-			return eDemanglerErrUncorrectMangledSymbol; \
-		} \
-		data_type->left = strdup(modifier_str); \
-		data_type->right = dem_str_newf("`adjustor{%s}'", num); \
-		free(num); \
-		*is_implicit_this_pointer = true; \
-		curr_pos += state.amount_of_read_chars; \
-		break; \
+
+	if (msvc_is_adjust_prefix(curr_pos)) {
+		// Virtual base adjustment: $0..$5 (vtordisp) or $R0..$R5
+		// (vtordispex).  This prefix replaces the access code.
+		const char *num_pos;
+		unsigned index;
+		bool is_ex;
+		if (curr_pos[1] == 'R') {
+			is_ex = true;
+			index = (unsigned)(curr_pos[2] - '0');
+			num_pos = curr_pos + 3;
+		} else {
+			is_ex = false;
+			index = (unsigned)(curr_pos[1] - '0');
+			num_pos = curr_pos + 2;
+		}
+
+		EDemanglerErr nerr = eDemanglerErrOK;
+		if (is_ex) {
+			nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &vbptr);
+			if (nerr == eDemanglerErrOK) {
+				nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &vbtable_slot);
+			}
+			if (nerr == eDemanglerErrOK) {
+				nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &vtordisp);
+			}
+			if (nerr == eDemanglerErrOK) {
+				nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &static_offset);
+			}
+			kind = RZ_MSVC_ADJUST_VTORDISPEX;
+		} else {
+			nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &vtordisp);
+			if (nerr == eDemanglerErrOK) {
+				nerr = msvc_parse_adjust_number(abbr, record, &num_pos, &static_offset);
+			}
+			kind = RZ_MSVC_ADJUST_VTORDISP;
+		}
+		if (nerr != eDemanglerErrOK) {
+			return nerr;
+		}
+
+		curr_pos = num_pos;
+		msvc_adjust_access(index, &access, &distance);
+		is_thunk = true;
+		*is_implicit_this_pointer = true;
+		data_type->left = strdup(msvc_thunk_prefix(access));
+		if (!data_type->left) {
+			return eDemanglerErrMemoryAllocation;
+		}
+		data_type->right = is_ex
+			? dem_str_newf("`vtordispex{%d,%d,%d,%d}'",
+				  (int)vbptr.value, (int)vbtable_slot.value,
+				  (int)vtordisp.value, (int)static_offset.value)
+			: dem_str_newf("`vtordisp{%d,%d}'",
+				  (int)vtordisp.value, (int)static_offset.value);
+		if (!data_type->right) {
+			return eDemanglerErrMemoryAllocation;
+		}
+		goto record_and_return;
 	}
 
 #define SET_ACCESS_MODIFIER(letter, flag_set, modifier_str) \
@@ -2230,31 +2498,32 @@ static EDemanglerErr parse_function_type(const char *sym, SDataType *data_type,
 		break;
 
 	/* Functions */
-	switch (*curr_pos++) {
+	char access_code = *curr_pos++;
+	switch (access_code) {
 		SET_ACCESS_MODIFIER('A', is_implicit_this_pointer, "private");
 		SET_ACCESS_MODIFIER('B', is_implicit_this_pointer, "private");
 		SET_ACCESS_MODIFIER('C', is_static, "private: static");
 		SET_ACCESS_MODIFIER('D', is_static, "private: static");
 		SET_ACCESS_MODIFIER('E', is_implicit_this_pointer, "private virtual");
 		SET_ACCESS_MODIFIER('F', is_implicit_this_pointer, "private virtual");
-		SET_THUNK_MODIFIER('G', "[thunk]:private virtual");
-		SET_THUNK_MODIFIER('H', "[thunk]:private virtual");
+		SET_ACCESS_MODIFIER('G', is_implicit_this_pointer, "[thunk]:private virtual");
+		SET_ACCESS_MODIFIER('H', is_implicit_this_pointer, "[thunk]:private virtual");
 		SET_ACCESS_MODIFIER('I', is_implicit_this_pointer, "protected");
 		SET_ACCESS_MODIFIER('J', is_implicit_this_pointer, "protected");
 		SET_ACCESS_MODIFIER('K', is_static, "protected: static");
 		SET_ACCESS_MODIFIER('L', is_static, "protected: static");
 		SET_ACCESS_MODIFIER('M', is_implicit_this_pointer, "protected virtual");
 		SET_ACCESS_MODIFIER('N', is_implicit_this_pointer, "protected virtual");
-		SET_THUNK_MODIFIER('O', "[thunk]:protected virtual");
-		SET_THUNK_MODIFIER('P', "[thunk]:protected virtual");
+		SET_ACCESS_MODIFIER('O', is_implicit_this_pointer, "[thunk]:protected virtual");
+		SET_ACCESS_MODIFIER('P', is_implicit_this_pointer, "[thunk]:protected virtual");
 		SET_ACCESS_MODIFIER('Q', is_implicit_this_pointer, "public");
 		SET_ACCESS_MODIFIER('R', is_implicit_this_pointer, "public");
 		SET_ACCESS_MODIFIER('S', is_static, "public: static");
 		SET_ACCESS_MODIFIER('T', is_static, "public: static");
 		SET_ACCESS_MODIFIER('U', is_implicit_this_pointer, "public virtual");
 		SET_ACCESS_MODIFIER('V', is_implicit_this_pointer, "public virtual");
-		SET_THUNK_MODIFIER('W', "[thunk]:public virtual");
-		SET_THUNK_MODIFIER('X', "[thunk]:public virtual");
+		SET_ACCESS_MODIFIER('W', is_implicit_this_pointer, "[thunk]:public virtual");
+		SET_ACCESS_MODIFIER('X', is_implicit_this_pointer, "[thunk]:public virtual");
 	case 'Y': // near
 	case 'Z': // far
 		break;
@@ -2262,6 +2531,41 @@ static EDemanglerErr parse_function_type(const char *sym, SDataType *data_type,
 		return eDemanglerErrUncorrectMangledSymbol;
 	}
 #undef SET_ACCESS_MODIFIER
+
+	msvc_access_from_letter(access_code, &access, &distance);
+	is_thunk = (access_code >= 'G' && access_code <= 'X' &&
+		((access_code - 'A') % 8) >= 6); // G/H, O/P, W/X
+
+	if (is_thunk) {
+		// Static adjustor thunk: one number, the static offset.
+		kind = RZ_MSVC_ADJUST_STATIC;
+		if (abbr->capture && record) {
+			// Strict decoding, keeps byte ranges and reports errors.
+			EDemanglerErr nerr = msvc_parse_adjust_number(abbr, record, &curr_pos, &static_offset);
+			if (nerr != eDemanglerErrOK) {
+				return nerr;
+			}
+			data_type->right = dem_str_newf("`adjustor{%d}'", (int)static_offset.value);
+		} else {
+			// Legacy lenient decoding, byte for byte identical to the
+			// historical handler output.
+			SStateInfo state;
+			init_state_struct(&state, curr_pos);
+			char *num = get_num(&state);
+			if (!num) {
+				return eDemanglerErrUncorrectMangledSymbol;
+			}
+			data_type->right = dem_str_newf("`adjustor{%s}'", num);
+			free(num);
+			curr_pos += state.amount_of_read_chars;
+			static_offset.present = false;
+		}
+		if (!data_type->right) {
+			return eDemanglerErrMemoryAllocation;
+		}
+	}
+
+record_and_return:
 	if (len) {
 		*len = curr_pos - sym;
 	}
@@ -2271,10 +2575,25 @@ static EDemanglerErr parse_function_type(const char *sym, SDataType *data_type,
 	if (!data_type->right) {
 		data_type->right = strdup("");
 	}
+	if (!data_type->left || !data_type->right) {
+		return eDemanglerErrMemoryAllocation;
+	}
+
+	if (abbr->capture && record && abbr->info) {
+		RzMsvcInfo *info = abbr->info;
+		info->is_thunk = is_thunk;
+		info->kind = kind;
+		info->access = access;
+		info->distance = distance;
+		info->static_offset = static_offset;
+		info->vtordisp = vtordisp;
+		info->vbptr = vbptr;
+		info->vbtable_slot = vbtable_slot;
+	}
 	return eDemanglerErrOK;
 }
 
-static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCodeStr *type_code_str, char **demangled_function, size_t *chars_read) {
+static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCodeStr *type_code_str, char **demangled_function, size_t *chars_read, bool record) {
 	EDemanglerErr err = eDemanglerErrOK;
 	bool is_implicit_this_pointer;
 	bool is_static;
@@ -2299,7 +2618,7 @@ static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCode
 		curr_pos += 3;
 	}
 
-	err = parse_function_type(curr_pos, &data_type, &len, &is_static, &is_implicit_this_pointer);
+	err = parse_function_type(abbr, curr_pos, &data_type, &len, &is_static, &is_implicit_this_pointer, record);
 	if (err != eDemanglerErrOK) {
 		goto parse_function_err;
 	}
@@ -2328,6 +2647,9 @@ static EDemanglerErr parse_function(SAbbrState *abbr, const char *sym, STypeCode
 		err = get_storage_class(*curr_pos, &memb_func_access_code);
 		if (err != eDemanglerErrOK) {
 			goto parse_function_err;
+		}
+		if (abbr->capture && record && abbr->info) {
+			abbr->info->this_modifier = msvc_this_modifier(*curr_pos);
 		}
 		curr_pos++;
 	}
@@ -2452,7 +2774,7 @@ parse_function_err:
 /// mangled name of a static class member object:
 /// <public name> ::= ?<name>@[<classname>@](1->inf)@2<type><storage class>
 ///////////////////////////////////////////////////////////////////////////////
-static EDemanglerErr parse_microsoft_mangled_name(SAbbrState *abbr, const char *sym, char **demangled_name, size_t *chars_read) {
+static EDemanglerErr parse_microsoft_mangled_name(SAbbrState *abbr, const char *sym, char **demangled_name, size_t *chars_read, bool record) {
 	STypeCodeStr type_code_str;
 	EDemanglerErr err = eDemanglerErrOK;
 
@@ -2503,8 +2825,8 @@ static EDemanglerErr parse_microsoft_mangled_name(SAbbrState *abbr, const char *
 		*demangled_name = dem_str_append(*demangled_name, type_code_str.type_str);
 		*demangled_name = dem_str_append(*demangled_name, data_type.right);
 		sdatatype_fini(&data_type);
-	} else if (isalpha(*curr_pos)) {
-		err = parse_function(abbr, curr_pos, &type_code_str, demangled_name, &len);
+	} else if (msvc_is_adjust_prefix(curr_pos) || isalpha(*curr_pos)) {
+		err = parse_function(abbr, curr_pos, &type_code_str, demangled_name, &len, record);
 		curr_pos += len;
 	} else {
 		err = eDemanglerErrUncorrectMangledSymbol;
@@ -2550,29 +2872,70 @@ static EDemanglerErr parse_microsoft_rtti_mangled_name(SAbbrState *abbr, const c
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-EDemanglerErr microsoft_demangle(SDemangler *demangler, char **demangled_name) {
+static EDemanglerErr microsoft_demangle_impl(SDemangler *demangler, char **demangled_name, RzMsvcInfo *info) {
 	EDemanglerErr err = eDemanglerErrOK;
-	//	DemListIter *it = NULL;
-	//	char *tmp = NULL;
+	size_t consumed = 0;
 
 	// TODO: need refactor... maybe remove the static variable somewhere?
 	SAbbrState abbr;
+	memset(&abbr, 0, sizeof(abbr));
 	abbr.types = dem_list_newf(free);
 	abbr.names = dem_list_newf(free);
+	abbr.info = info;
+	abbr.capture = info != NULL;
 
 	if (!demangler || !demangled_name) {
 		err = eDemanglerErrMemoryAllocation;
 		goto microsoft_demangle_err;
 	}
 
+	abbr.origin = demangler->symbol;
+
 	if (!strncmp(demangler->symbol, ".?", 2)) {
-		err = parse_microsoft_rtti_mangled_name(&abbr, demangler->symbol + 2, demangled_name, NULL);
+		err = parse_microsoft_rtti_mangled_name(&abbr, demangler->symbol + 2, demangled_name, &consumed);
+		consumed += 2;
+	} else if (demangler->symbol[0] != '?') {
+		err = eDemanglerErrUncorrectMangledSymbol;
 	} else {
-		err = parse_microsoft_mangled_name(&abbr, demangler->symbol + 1, demangled_name, NULL);
+		err = parse_microsoft_mangled_name(&abbr, demangler->symbol + 1, demangled_name, &consumed, info != NULL);
+		consumed += 1;
+	}
+
+	if (err == eDemanglerErrOK && info && !abbr.err_set) {
+		size_t total = strlen(demangler->symbol);
+		if (consumed < total) {
+			// The structured entry point is strict: the whole symbol has to
+			// be consumed.  The historical handler keeps its lenient policy.
+			msvc_info_set_error(&abbr, RZ_MSVC_INFO_ERR_TRAILING, consumed);
+			err = eDemanglerErrUncorrectMangledSymbol;
+		}
 	}
 
 microsoft_demangle_err:
+	if (info) {
+		if (err != eDemanglerErrOK && !abbr.err_set) {
+			abbr.err = (err == eDemanglerErrMemoryAllocation)
+				? RZ_MSVC_INFO_ERR_MEMORY
+				: RZ_MSVC_INFO_ERR_SYNTAX;
+			abbr.err_offset = demangler && demangler->symbol
+				? strlen(demangler->symbol)
+				: 0;
+			abbr.err_set = true;
+		}
+		info->error = abbr.err_set ? abbr.err : RZ_MSVC_INFO_ERR_NONE;
+		info->error_offset = abbr.err_set ? abbr.err_offset : 0;
+	}
 	dem_list_free(abbr.names);
 	dem_list_free(abbr.types);
 	return err;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+EDemanglerErr microsoft_demangle(SDemangler *demangler, char **demangled_name) {
+	return microsoft_demangle_impl(demangler, demangled_name, NULL);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+EDemanglerErr microsoft_demangle_info(SDemangler *demangler, char **demangled_name, RzMsvcInfo *info) {
+	return microsoft_demangle_impl(demangler, demangled_name, info);
 }

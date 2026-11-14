@@ -22,6 +22,7 @@ libdemangle_src = [
     'src' / 'java.c',
     'src' / 'microsoft_demangle.c',
     'src' / 'msvc.c',
+    'src' / 'msvc_info.c',
     'src' / 'objc.c',
     'src' / 'pascal' / 'pascal.c',
     'src' / 'rust' / 'punycode.c',
