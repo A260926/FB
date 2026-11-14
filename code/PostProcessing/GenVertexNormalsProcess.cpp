@@ -45,6 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // internal headers
 #include "GenVertexNormalsProcess.h"
+#include "MorphFrameCompletion.h"
 #include "ProcessHelper.h"
 #include <assimp/Exceptional.h>
 #include <assimp/qnan.h>
@@ -73,6 +74,8 @@ void GenVertexNormalsProcess::SetupProperties(const Importer *pImp) {
     // Get the current value of the AI_CONFIG_PP_GSN_MAX_SMOOTHING_ANGLE property
     configMaxAngle = pImp->GetPropertyFloat(AI_CONFIG_PP_GSN_MAX_SMOOTHING_ANGLE, (ai_real)175.0);
     configMaxAngle = AI_DEG_TO_RAD(std::max(std::min(configMaxAngle, (ai_real)175.0), (ai_real)0.0));
+
+    configMorphFrameCompletion = pImp->GetPropertyBool(AI_CONFIG_PP_MORPH_FRAME_COMPLETION, false);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -88,6 +91,13 @@ void GenVertexNormalsProcess::Execute(aiScene *pScene) {
     for (unsigned int a = 0; a < pScene->mNumMeshes; ++a) {
         if (GenMeshVertexNormals(pScene->mMeshes[a], a))
             bHas = true;
+    }
+
+    if (configMorphFrameCompletion) {
+        const bool reverseWinding = flippedWindingOrder_ != leftHanded_;
+        for (unsigned int a = 0; a < pScene->mNumMeshes; ++a) {
+            CompleteMorphTargetNormals(pScene->mMeshes[a], configMaxAngle, reverseWinding);
+        }
     }
 
     if (bHas) {

@@ -1,0 +1,318 @@
+{
+    "asset": {
+        "version": "2.0",
+        "generator": "Open Asset Import Library (assimp v6.0.af18bd6a)"
+    },
+    "extensionsUsed": [
+        "KHR_materials_volume",
+        "FB_ngon_encoding"
+    ],
+    "accessors": [
+        {
+            "bufferView": 0,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                1.0,
+                1.0,
+                0.0
+            ],
+            "min": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "bufferView": 1,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "min": [
+                0.0,
+                0.0,
+                1.0
+            ]
+        },
+        {
+            "bufferView": 2,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC4",
+            "max": [
+                1.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "min": [
+                1.0,
+                0.0,
+                0.0,
+                1.0
+            ]
+        },
+        {
+            "bufferView": 3,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC2",
+            "max": [
+                1.0,
+                1.0
+            ],
+            "min": [
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "bufferView": 4,
+            "byteOffset": 0,
+            "componentType": 5123,
+            "count": 3,
+            "type": "SCALAR",
+            "max": [
+                2
+            ],
+            "min": [
+                0
+            ]
+        },
+        {
+            "bufferView": 5,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                1.0,
+                0.0,
+                1.0
+            ],
+            "min": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "bufferView": 6,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                -0.44721364974975586,
+                0.0,
+                -0.10557270050048828
+            ],
+            "min": [
+                -0.44721364974975586,
+                0.0,
+                -0.10557270050048828
+            ]
+        },
+        {
+            "bufferView": 7,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                -0.10557270050048828,
+                0.0,
+                0.44721364974975586
+            ],
+            "min": [
+                -0.10557270050048828,
+                0.0,
+                0.44721364974975586
+            ]
+        },
+        {
+            "bufferView": 8,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                0.0,
+                1.0,
+                1.0
+            ],
+            "min": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "bufferView": 9,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                -0.6666666865348816,
+                -0.3333333432674408,
+                -0.3333333134651184
+            ],
+            "min": [
+                -0.6666666865348816,
+                -0.3333333432674408,
+                -0.3333333134651184
+            ]
+        },
+        {
+            "bufferView": 10,
+            "byteOffset": 0,
+            "componentType": 5126,
+            "count": 3,
+            "type": "VEC3",
+            "max": [
+                -0.2928931713104248,
+                0.0,
+                0.7071068286895752
+            ],
+            "min": [
+                -0.2928931713104248,
+                0.0,
+                0.7071068286895752
+            ]
+        }
+    ],
+    "buffers": [
+        {
+            "byteLength": 368,
+            "uri": "morph_example_out.bin"
+        }
+    ],
+    "bufferViews": [
+        {
+            "buffer": 0,
+            "byteOffset": 0,
+            "byteLength": 36,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 36,
+            "byteLength": 36,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 72,
+            "byteLength": 48,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 120,
+            "byteLength": 24,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 144,
+            "byteLength": 6,
+            "target": 34963
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 152,
+            "byteLength": 36
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 188,
+            "byteLength": 36
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 224,
+            "byteLength": 36
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 260,
+            "byteLength": 36
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 296,
+            "byteLength": 36
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 332,
+            "byteLength": 36
+        }
+    ],
+    "materials": [
+        {
+            "name": "DefaultMaterial"
+        }
+    ],
+    "meshes": [
+        {
+            "name": "face",
+            "primitives": [
+                {
+                    "mode": 4,
+                    "material": 0,
+                    "indices": 4,
+                    "attributes": {
+                        "POSITION": 0,
+                        "NORMAL": 1,
+                        "TANGENT": 2,
+                        "TEXCOORD_0": 3
+                    },
+                    "targets": [
+                        {
+                            "POSITION": 5,
+                            "NORMAL": 6,
+                            "TANGENT": 7
+                        },
+                        {
+                            "POSITION": 8,
+                            "NORMAL": 9,
+                            "TANGENT": 10
+                        }
+                    ]
+                }
+            ],
+            "extras": {
+                "targetNames": [
+                    "brow_raise",
+                    "jaw_open"
+                ]
+            }
+        }
+    ],
+    "nodes": [
+        {
+            "name": "head",
+            "mesh": 0
+        }
+    ],
+    "scenes": [
+        {
+            "nodes": [
+                0
+            ]
+        }
+    ],
+    "scene": 0
+}

@@ -1,0 +1,13 @@
+#!/bin/bash
+# Sandbox-only shim: stock macOS mktemp writes to /var/folders/... which this
+# Seatbelt profile blocks. Honor a writable TMPDIR instead. The task harness
+# (task_support/run.sh) is invoked unchanged; only this PATH shim differs.
+dir="${TMPDIR:-/tmp}"
+if [[ $# -eq 0 ]]; then
+  f="$dir/tmp.$$.$RANDOM.$RANDOM"
+  umask 077
+  ( set -C; : > "$f" )
+  printf '%s\n' "$f"
+else
+  /usr/bin/mktemp "$@"
+fi

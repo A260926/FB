@@ -102,6 +102,8 @@ private:
     /** Configuration option: maximum smoothing angle, in radians*/
     float configMaxAngle;
     unsigned int configSourceUV;
+    /** Configuration option: complete missing tangent frames on morph target frames*/
+    bool configMorphFrameCompletion = false;
 };
 
 } // end of namespace Assimp

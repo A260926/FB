@@ -147,6 +147,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     "PP_GSN_MAX_SMOOTHING_ANGLE"
 
 // ---------------------------------------------------------------------------
+/** @brief Enables completion of missing normal/tangent streams on morph
+ *         target frames (aiAnimMesh) during the normal and tangent steps.
+ *
+ * By default #aiProcess_GenSmoothNormals and #aiProcess_CalcTangentSpace
+ * only fill the base aiMesh streams while aiAnimMesh targets that merely
+ * replace positions keep empty normals/tangents. When this option is
+ * enabled, both steps additionally visit every morph target:
+ * @li The smooth-normals step computes missing target normals from the
+ *     target's own positions (base positions are used if a target does
+ *     not replace positions), building a per-target spatial neighborhood
+ *     instead of reusing the base pose grouping.
+ * @li The tangent step computes missing target tangent/bitangent pairs
+ *     from the target positions, the target normals (base normals are
+ *     inherited if a target does not replace normals) and the base UV0
+ *     channel.
+ *
+ * The option only changes what the two steps do once they are active;
+ * the base streams keep their previous behavior. Existing artist-authored
+ * arrays on a target are never overwritten and base streams are never
+ * released by target processing.
+ * Property type: bool. Default value: false.
+ */
+#define AI_CONFIG_PP_MORPH_FRAME_COMPLETION \
+    "PP_MORPH_FRAME_COMPLETION"
+
+// ---------------------------------------------------------------------------
 /** @brief Sets the colormap (= palette) to be used to decode embedded
  *         textures in MDL (Quake or 3DGS) files.
  *
@@ -1131,6 +1157,19 @@ enum aiComponent
  */
 #define AI_CONFIG_EXPORT_GLTF_UNLIMITED_SKINNING_BONES_PER_VERTEX \
         "USE_UNLIMITED_BONES_PER VERTEX"
+
+/** @brief Specifies whether the glTF2 exporter writes morph target tangents.
+ *
+ * When enabled, every morph target that carries tangents gets a
+ * FLOAT/VEC3 TANGENT accessor holding the difference between the
+ * target tangent xyz and the base mesh tangent xyz, analogous to the
+ * GLTF2_TARGET_NORMAL_EXP normal differences. Only plain (non-sparse)
+ * accessors are emitted. The base tangent handedness (w) and the
+ * target ordering remain unchanged; the bitangent is reconstructed on
+ * import as w * (N x T).
+ * Property type: Bool. Default value: false.
+ */
+#define AI_CONFIG_GLTF2_TARGET_TANGENT_EXP "GLTF2_TARGET_TANGENT_EXP"
 
 /** @brief Specifies whether to write the value referenced to opacity in TransparencyFactor of each material. 
  *

@@ -1375,6 +1375,8 @@ void glTF2Exporter::ExportMeshes() {
                               this->mProperties->GetPropertyBool("GLTF2_SPARSE_ACCESSOR_EXP");
             bool bIncludeNormal = this->mProperties->HasPropertyBool("GLTF2_TARGET_NORMAL_EXP") &&
                                   this->mProperties->GetPropertyBool("GLTF2_TARGET_NORMAL_EXP");
+            bool bIncludeTangent = this->mProperties->HasPropertyBool(AI_CONFIG_GLTF2_TARGET_TANGENT_EXP) &&
+                                   this->mProperties->GetPropertyBool(AI_CONFIG_GLTF2_TARGET_TANGENT_EXP);
             bool bExportTargetNames = this->mProperties->HasPropertyBool("GLTF2_TARGETNAMES_EXP") &&
                                       this->mProperties->GetPropertyBool("GLTF2_TARGETNAMES_EXP");
 
@@ -1429,7 +1431,21 @@ void glTF2Exporter::ExportMeshes() {
                     delete[] pNormalDiff;
                 }
 
-                // tangent?
+                // tangent xyz difference, always as a plain non-sparse accessor
+                if (bIncludeTangent && pAnimMesh->HasTangentsAndBitangents() &&
+                        aim->mTangents != nullptr && aim->mBitangents != nullptr) {
+                    aiVector3D *pTangentDiff = new aiVector3D[pAnimMesh->mNumVertices];
+                    for (unsigned int vt = 0; vt < pAnimMesh->mNumVertices; ++vt) {
+                        pTangentDiff[vt] = pAnimMesh->mTangents[vt] - aim->mTangents[vt];
+                    }
+                    Ref<Accessor> vec = ExportData(*mAsset, meshId, b,
+                            pAnimMesh->mNumVertices, pTangentDiff,
+                            AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
+                    if (vec) {
+                        p.targets[am].tangent.push_back(vec);
+                    }
+                    delete[] pTangentDiff;
+                }
             }
         }
     }

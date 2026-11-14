@@ -47,6 +47,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // internal headers
 #include "CalcTangentsProcess.h"
+#include "MorphFrameCompletion.h"
 #include "ProcessHelper.h"
 #include <assimp/TinyFormatter.h>
 #include <assimp/qnan.h>
@@ -77,6 +78,8 @@ void CalcTangentsProcess::SetupProperties(const Importer *pImp) {
     configMaxAngle = AI_DEG_TO_RAD(configMaxAngle);
 
     configSourceUV = pImp->GetPropertyInteger(AI_CONFIG_PP_CT_TEXTURE_CHANNEL_INDEX, 0);
+
+    configMorphFrameCompletion = pImp->GetPropertyBool(AI_CONFIG_PP_MORPH_FRAME_COMPLETION, false);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -89,6 +92,12 @@ void CalcTangentsProcess::Execute(aiScene *pScene) {
     bool bHas = false;
     for (unsigned int a = 0; a < pScene->mNumMeshes; a++) {
         if (ProcessMesh(pScene->mMeshes[a], a)) bHas = true;
+    }
+
+    if (configMorphFrameCompletion) {
+        for (unsigned int a = 0; a < pScene->mNumMeshes; a++) {
+            CompleteMorphTargetTangents(pScene->mMeshes[a], configMaxAngle, configSourceUV);
+        }
     }
 
     if (bHas) {

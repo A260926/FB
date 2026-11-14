@@ -1,0 +1,15 @@
+CASE generation completes_all_targets checks=49
+CASE generation per_target_neighborhoods checks=25
+CASE generation slanted_triangle_analytic checks=12
+CASE generation option_and_flag_gating checks=11
+GROUP generation cases=4 checks=97 COMPLETE
+CASE ownership preserves_artist_streams checks=16
+CASE ownership fills_missing_stream_only checks=11
+CASE ownership repeated_processing checks=8
+CASE ownership isolation_and_metadata checks=15
+GROUP ownership cases=4 checks=50 COMPLETE
+CASE gltf stores_tangent_differences checks=31
+CASE gltf switch_off_keeps_legacy_output checks=15
+CASE gltf reimport_restores_endpoints checks=35
+GROUP gltf cases=3 checks=81 COMPLETE
+TARGET_COMPLETE cases=11

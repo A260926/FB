@@ -1,0 +1,34 @@
+-- Shared libraries disabled
+-- Looking for ZLIB...
+-- Checking for module 'zzip-zlib-config'
+--   Package 'zzip-zlib-config' not found
+-- Found ZLIB: optimized;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/libz.tbd;debug;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/libz.tbd
+-- Checking for module 'minizip'
+--   Package 'minizip' not found
+-- VRML disabled
+-- tinyusdz disabled
+INFO Hunter enabled or RT-extension not found. glTF import/export will be built without Open3DGC-compression.
+-- Enabled importer formats: GLTF
+-- Disabled importer formats: AMF 3DS AC ASE ASSBIN B3D BVH COLLADA DXF CSM HMP IRRMESH IQM IRR LWO LWS MD2 MD3 MD5 MDC MDL NFF NDO OFF OBJ OGRE OPENGEX PLY MS3D COB BLEND IFC XGL FBX Q3D Q3BSP RAW SIB SMD STL TERRAGEN 3D USD X X3D 3MF MMD
+-- Enabled exporter formats: GLTF
+-- Disabled exporter formats: OBJ OPENGEX PLY 3DS ASSBIN ASSXML COLLADA FBX STL X X3D 3MF PBRT ASSJSON STEP
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/solo/pro/UserFB/workspace/FSC18B8AC365BDU6932/attempts/20261114T110408913588Z/repo/.task-build/lib
+[100%] Built target assimp
+CASE generation completes_all_targets checks=49
+CASE generation per_target_neighborhoods checks=25
+CASE generation slanted_triangle_analytic checks=12
+CASE generation option_and_flag_gating checks=11
+GROUP generation cases=4 checks=97 COMPLETE
+CASE ownership preserves_artist_streams checks=16
+CASE ownership fills_missing_stream_only checks=11
+CASE ownership repeated_processing checks=8
+CASE ownership isolation_and_metadata checks=15
+GROUP ownership cases=4 checks=50 COMPLETE
+CASE gltf stores_tangent_differences checks=31
+CASE gltf switch_off_keeps_legacy_output checks=15
+CASE gltf reimport_restores_endpoints checks=35
+GROUP gltf cases=3 checks=81 COMPLETE
+TARGET_COMPLETE cases=11
+BASELINE_OK base_normal_z=1.000000 base_tangent_x=1.000000 morph_normal=0 morph_tangent=0 gltf_roundtrip=1

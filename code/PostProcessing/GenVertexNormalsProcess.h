@@ -103,6 +103,8 @@ public:
 private:
     /** Configuration option: maximum smoothing angle, in radians*/
     ai_real configMaxAngle;
+    /** Configuration option: complete missing normals on morph target frames*/
+    bool configMorphFrameCompletion = false;
     mutable bool force_ = false;
     mutable bool flippedWindingOrder_ = false;
     mutable bool leftHanded_ = false;
