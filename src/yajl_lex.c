@@ -90,6 +90,23 @@ struct yajl_lexer_t {
     /* shall we validate utf8 inside strings? */
     unsigned int validateUTF8;
 
+    /* state for streamed string values (see yajl_lex_string_stream_next).
+     * Only a bounded amount of state is kept across chunks: a partial
+     * escape sequence, a partial utf8 sequence or one pending high
+     * surrogate.  Decoded content is accumulated in streamBuf and handed
+     * to the parser whenever it reaches the delivery threshold. */
+    unsigned int streamEsc;         /* 0: none, 1: backslash seen, 2: in \u */
+    unsigned int streamHexCount;    /* hex digits read for the current \u */
+    unsigned int streamHexValue;    /* value of the current \u escape */
+    unsigned int streamSurrogate;   /* pending high surrogate, 0 if none */
+    unsigned int streamClosePending;/* closing quote consumed, end owed */
+    unsigned char streamUtf8[4];    /* bytes of an in-progress utf8 char */
+    unsigned int streamUtf8Len;     /* bytes of it buffered so far */
+    unsigned int streamUtf8Need;    /* continuation bytes still expected */
+    unsigned char streamUtf8Min;    /* allowed range of the second byte */
+    unsigned char streamUtf8Max;
+    yajl_buf streamBuf;             /* decoded bytes pending delivery */
+
     yajl_alloc_funcs * alloc;
 };
 
@@ -107,6 +124,7 @@ yajl_lex_alloc(yajl_alloc_funcs * alloc,
     yajl_lexer lxr = (yajl_lexer) YA_MALLOC(alloc, sizeof(struct yajl_lexer_t));
     memset((void *) lxr, 0, sizeof(struct yajl_lexer_t));
     lxr->buf = yajl_buf_alloc(alloc);
+    lxr->streamBuf = yajl_buf_alloc(alloc);
     lxr->allowComments = allowComments;
     lxr->validateUTF8 = validateUTF8;
     lxr->alloc = alloc;
@@ -117,6 +135,7 @@ void
 yajl_lex_free(yajl_lexer lxr)
 {
     yajl_buf_free(lxr->buf);
+    yajl_buf_free(lxr->streamBuf);
     YA_FREE(lxr->alloc, lxr);
     return;
 }
@@ -365,6 +384,283 @@ yajl_lex_string(yajl_lexer lexer, const unsigned char * jsonText,
     return tok;
 }
 
+/* --- streamed string values -----------------------------------------
+ *
+ * The routines below implement incremental lexing of a string in value
+ * position (see yajl_set_string_stream).  Unlike yajl_lex_string, the
+ * content is decoded and handed to the parser in fragments as it
+ * arrives, so the memory footprint does not depend on the length of the
+ * string.  Streamed strings are always validated (utf8, escapes,
+ * control characters and surrogates), independent of the
+ * validateUTF8 lexer setting.
+ */
+
+/* deliver a fragment once this many decoded bytes were gathered.  The
+ * delivery buffer never grows past this plus a single character. */
+#define YAJL_STREAM_FRAG_THRESHOLD 4096
+
+/* classify a utf8 lead byte.  returns 1 and sets *need (continuation
+ * bytes expected) and the valid range for the second byte when the lead
+ * byte may start a well formed, non-overlong utf8 sequence encoding a
+ * unicode scalar value, 0 otherwise. */
+static int
+yajl_stream_utf8_lead(unsigned char c, unsigned int * need,
+                      unsigned char * min, unsigned char * max)
+{
+    *min = 0x80;
+    *max = 0xBF;
+    if (c >= 0xC2 && c <= 0xDF) { *need = 1; return 1; }
+    if (c == 0xE0) { *need = 2; *min = 0xA0; return 1; }
+    if (c == 0xED) { *need = 2; *max = 0x9F; return 1; }
+    if (c >= 0xE1 && c <= 0xEF) { *need = 2; return 1; }
+    if (c == 0xF0) { *need = 3; *min = 0x90; return 1; }
+    if (c >= 0xF1 && c <= 0xF3) { *need = 3; return 1; }
+    if (c == 0xF4) { *need = 3; *max = 0x8F; return 1; }
+    return 0;
+}
+
+/* encode a unicode scalar value as utf8, returns the number of bytes */
+static unsigned int
+yajl_stream_utf8_encode(unsigned int cp, unsigned char * out)
+{
+    if (cp < 0x80) {
+        out[0] = (unsigned char) cp;
+        return 1;
+    } else if (cp < 0x800) {
+        out[0] = (unsigned char) (0xC0 | (cp >> 6));
+        out[1] = (unsigned char) (0x80 | (cp & 0x3F));
+        return 2;
+    } else if (cp < 0x10000) {
+        out[0] = (unsigned char) (0xE0 | (cp >> 12));
+        out[1] = (unsigned char) (0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (unsigned char) (0x80 | (cp & 0x3F));
+        return 3;
+    } else {
+        out[0] = (unsigned char) (0xF0 | (cp >> 18));
+        out[1] = (unsigned char) (0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (unsigned char) (0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (unsigned char) (0x80 | (cp & 0x3F));
+        return 4;
+    }
+}
+
+yajl_tok
+yajl_lex_string_stream_next(yajl_lexer lexer,
+                            const unsigned char * jsonText,
+                            size_t jsonTextLen, size_t * offset,
+                            const unsigned char ** outBuf, size_t * outLen)
+{
+    unsigned char c;
+
+    *outBuf = NULL;
+    *outLen = 0;
+
+    /* the closing quote was consumed during a previous call but the
+     * final fragment had not been delivered yet */
+    if (lexer->streamClosePending) {
+        lexer->streamClosePending = 0;
+        return yajl_tok_string_stream_end;
+    }
+
+    for (;;) {
+        /* complete a pending \uXXXX escape */
+        while (lexer->streamEsc == 2) {
+            unsigned int v;
+            if (*offset >= jsonTextLen) goto need_more_input;
+            c = jsonText[(*offset)++];
+            if (!(charLookupTable[c] & VHC)) {
+                (*offset)--;
+                lexer->error = yajl_lex_string_invalid_hex_char;
+                return yajl_tok_error;
+            }
+            v = c - '0';
+            if (c >= 'a') v = c - 'a' + 10;
+            else if (c >= 'A') v = c - 'A' + 10;
+            lexer->streamHexValue = (lexer->streamHexValue << 4) | v;
+            if (++lexer->streamHexCount < 4) continue;
+            lexer->streamEsc = 0;
+            /* a full \uXXXX value was read */
+            {
+                unsigned int cp = lexer->streamHexValue;
+                unsigned char utf8[4];
+                unsigned int n;
+                if (lexer->streamSurrogate) {
+                    /* a high surrogate must be followed by a low one */
+                    if (cp < 0xDC00 || cp > 0xDFFF) {
+                        lexer->error = yajl_lex_string_isolated_surrogate;
+                        return yajl_tok_error;
+                    }
+                    cp = 0x10000 + ((lexer->streamSurrogate - 0xD800) << 10)
+                         + (cp - 0xDC00);
+                    lexer->streamSurrogate = 0;
+                } else if (cp >= 0xD800 && cp <= 0xDBFF) {
+                    /* high surrogate: wait for the low one */
+                    lexer->streamSurrogate = cp;
+                    continue;
+                } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                    lexer->error = yajl_lex_string_isolated_surrogate;
+                    return yajl_tok_error;
+                }
+                n = yajl_stream_utf8_encode(cp, utf8);
+                yajl_buf_append(lexer->streamBuf, utf8, n);
+                if (yajl_buf_len(lexer->streamBuf) >=
+                    YAJL_STREAM_FRAG_THRESHOLD) goto deliver;
+            }
+        }
+
+        /* complete a pending simple escape */
+        if (lexer->streamEsc == 1) {
+            unsigned char d;
+            if (*offset >= jsonTextLen) goto need_more_input;
+            c = jsonText[(*offset)++];
+            if (c == 'u') {
+                lexer->streamEsc = 2;
+                lexer->streamHexCount = 0;
+                lexer->streamHexValue = 0;
+                continue;
+            }
+            if (lexer->streamSurrogate) {
+                /* a high surrogate must be followed by \uDC00-\uDFFF */
+                (*offset)--;
+                lexer->error = yajl_lex_string_isolated_surrogate;
+                return yajl_tok_error;
+            }
+            switch (c) {
+                case '"':  d = '"';  break;
+                case '\\': d = '\\'; break;
+                case '/':  d = '/';  break;
+                case 'b':  d = '\b'; break;
+                case 'f':  d = '\f'; break;
+                case 'n':  d = '\n'; break;
+                case 'r':  d = '\r'; break;
+                case 't':  d = '\t'; break;
+                default:
+                    (*offset)--;
+                    lexer->error = yajl_lex_string_invalid_escaped_char;
+                    return yajl_tok_error;
+            }
+            lexer->streamEsc = 0;
+            yajl_buf_append(lexer->streamBuf, &d, 1);
+            if (yajl_buf_len(lexer->streamBuf) >=
+                YAJL_STREAM_FRAG_THRESHOLD) goto deliver;
+        }
+
+        /* complete a pending multi-byte utf8 sequence */
+        while (lexer->streamUtf8Need) {
+            unsigned char lo = 0x80, hi = 0xBF;
+            if (*offset >= jsonTextLen) goto need_more_input;
+            if (lexer->streamUtf8Len == 1) {
+                lo = lexer->streamUtf8Min;
+                hi = lexer->streamUtf8Max;
+            }
+            c = jsonText[(*offset)++];
+            if (c < lo || c > hi) {
+                (*offset)--;
+                lexer->error = yajl_lex_string_invalid_utf8;
+                return yajl_tok_error;
+            }
+            lexer->streamUtf8[lexer->streamUtf8Len++] = c;
+            lexer->streamUtf8Need--;
+        }
+        if (lexer->streamUtf8Len) {
+            yajl_buf_append(lexer->streamBuf, lexer->streamUtf8,
+                            lexer->streamUtf8Len);
+            lexer->streamUtf8Len = 0;
+            if (yajl_buf_len(lexer->streamBuf) >=
+                YAJL_STREAM_FRAG_THRESHOLD) goto deliver;
+        }
+
+        /* fast path: copy a run of ordinary single-byte characters */
+        if (*offset < jsonTextLen) {
+            size_t run = yajl_string_scan(jsonText + *offset,
+                                          jsonTextLen - *offset, 1);
+            if (run) {
+                if (lexer->streamSurrogate) {
+                    lexer->error = yajl_lex_string_isolated_surrogate;
+                    return yajl_tok_error;
+                }
+                /* fill the delivery buffer, handing off full buffers as
+                 * we go so memory stays bounded */
+                while (run) {
+                    size_t take =
+                        YAJL_STREAM_FRAG_THRESHOLD -
+                        yajl_buf_len(lexer->streamBuf);
+                    if (take > run) take = run;
+                    yajl_buf_append(lexer->streamBuf, jsonText + *offset,
+                                    take);
+                    *offset += take;
+                    run -= take;
+                    if (yajl_buf_len(lexer->streamBuf) >=
+                        YAJL_STREAM_FRAG_THRESHOLD) goto deliver;
+                }
+                continue;
+            }
+        }
+
+        if (*offset >= jsonTextLen) goto need_more_input;
+
+        c = jsonText[(*offset)++];
+
+        if (c == '"') {
+            if (lexer->streamSurrogate) {
+                (*offset)--;
+                lexer->error = yajl_lex_string_isolated_surrogate;
+                return yajl_tok_error;
+            }
+            if (yajl_buf_len(lexer->streamBuf)) {
+                /* deliver the final fragment first, end comes next */
+                lexer->streamClosePending = 1;
+                goto deliver;
+            }
+            return yajl_tok_string_stream_end;
+        }
+        if (c == '\\') {
+            lexer->streamEsc = 1;
+            continue;
+        }
+        if (charLookupTable[c] & IJC) {
+            (*offset)--;
+            lexer->error = yajl_lex_string_invalid_json_char;
+            return yajl_tok_error;
+        }
+        /* a multi-byte utf8 character begins here */
+        if (lexer->streamSurrogate) {
+            (*offset)--;
+            lexer->error = yajl_lex_string_isolated_surrogate;
+            return yajl_tok_error;
+        }
+        {
+            unsigned int need;
+            unsigned char mn, mx;
+            if (!yajl_stream_utf8_lead(c, &need, &mn, &mx)) {
+                (*offset)--;
+                lexer->error = yajl_lex_string_invalid_utf8;
+                return yajl_tok_error;
+            }
+            lexer->streamUtf8[0] = c;
+            lexer->streamUtf8Len = 1;
+            lexer->streamUtf8Need = need;
+            lexer->streamUtf8Min = mn;
+            lexer->streamUtf8Max = mx;
+        }
+    }
+
+  need_more_input:
+    /* hand off whatever was fully decoded; incomplete escapes, utf8
+     * sequences and surrogates stay behind in fixed size state */
+    if (yajl_buf_len(lexer->streamBuf)) goto deliver;
+    return yajl_tok_eof;
+
+  deliver:
+    *outBuf = yajl_buf_data(lexer->streamBuf);
+    *outLen = yajl_buf_len(lexer->streamBuf);
+    /* the parser delivers the fragment synchronously, so the buffer may
+     * be reused starting with the next call.  Note: only the length is
+     * reset here (yajl_buf_clear would clobber the first byte) */
+    yajl_buf_truncate(lexer->streamBuf, 0);
+    return yajl_tok_string_stream_chunk;
+}
+
 #define RETURN_IF_EOF if (*offset >= jsonTextLen) return yajl_tok_eof;
 
 static yajl_tok
@@ -495,10 +791,11 @@ yajl_lex_comment(yajl_lexer lexer, const unsigned char * jsonText,
     return tok;
 }
 
-yajl_tok
-yajl_lex_lex(yajl_lexer lexer, const unsigned char * jsonText,
-             size_t jsonTextLen, size_t * offset,
-             const unsigned char ** outBuf, size_t * outLen)
+static yajl_tok
+yajl_lex_lex_impl(yajl_lexer lexer, const unsigned char * jsonText,
+                  size_t jsonTextLen, size_t * offset,
+                  const unsigned char ** outBuf, size_t * outLen,
+                  int streamValueStrings)
 {
     yajl_tok tok = yajl_tok_error;
     unsigned char c;
@@ -594,6 +891,23 @@ yajl_lex_lex(yajl_lexer lexer, const unsigned char * jsonText,
                 goto lexed;
             }
             case '"': {
+                if (streamValueStrings) {
+                    /* the parser wants strings in value position
+                     * streamed: report the opening quote only, the
+                     * content is pulled incrementally with
+                     * yajl_lex_string_stream_next.  Reset the bounded
+                     * carry-over state of the streaming scanner. */
+                    lexer->streamEsc = 0;
+                    lexer->streamHexCount = 0;
+                    lexer->streamHexValue = 0;
+                    lexer->streamSurrogate = 0;
+                    lexer->streamClosePending = 0;
+                    lexer->streamUtf8Len = 0;
+                    lexer->streamUtf8Need = 0;
+                    yajl_buf_clear(lexer->streamBuf);
+                    tok = yajl_tok_string_stream_begin;
+                    goto lexed;
+                }
                 tok = yajl_lex_string(lexer, (const unsigned char *) jsonText,
                                       jsonTextLen, offset);
                 goto lexed;
@@ -687,6 +1001,24 @@ yajl_lex_lex(yajl_lexer lexer, const unsigned char * jsonText,
     return tok;
 }
 
+yajl_tok
+yajl_lex_lex(yajl_lexer lexer, const unsigned char * jsonText,
+             size_t jsonTextLen, size_t * offset,
+             const unsigned char ** outBuf, size_t * outLen)
+{
+    return yajl_lex_lex_impl(lexer, jsonText, jsonTextLen, offset,
+                             outBuf, outLen, 0);
+}
+
+yajl_tok
+yajl_lex_lex_value(yajl_lexer lexer, const unsigned char * jsonText,
+                   size_t jsonTextLen, size_t * offset,
+                   const unsigned char ** outBuf, size_t * outLen)
+{
+    return yajl_lex_lex_impl(lexer, jsonText, jsonTextLen, offset,
+                             outBuf, outLen, 1);
+}
+
 const char *
 yajl_lex_error_to_string(yajl_lex_error error)
 {
@@ -718,6 +1050,8 @@ yajl_lex_error_to_string(yajl_lex_error error)
         case yajl_lex_unallowed_comment:
             return "probable comment found in input text, comments are "
                    "not enabled.";
+        case yajl_lex_string_isolated_surrogate:
+            return "isolated surrogate in string.";
     }
     return "unknown error code";
 }

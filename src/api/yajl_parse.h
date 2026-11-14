@@ -95,6 +95,75 @@ extern "C" {
         int (* yajl_end_array)(void * ctx);
     } yajl_callbacks;
 
+    /** Optional callbacks for incremental ("streaming") delivery of
+     *  string values.
+     *
+     *  By default yajl buffers every string in its entirety and delivers
+     *  it through yajl_callbacks.yajl_string only once the closing quote
+     *  has been reached.  For very large string values this forces the
+     *  parser to accumulate the whole value internally.  A handle may
+     *  instead be configured (see yajl_set_string_stream) with this
+     *  independent callback table, in which case strings appearing in
+     *  *value* position are decoded and delivered incrementally as the
+     *  input arrives:
+     *
+     *  - begin() fires once when the opening quote of a string value is
+     *    recognized (this includes the empty string),
+     *  - fragment() fires one or more times with successive, non-empty
+     *    spans of the decoded UTF-8 content of the string (without the
+     *    quotes, escapes already processed).  Concatenating all
+     *    fragments yields exactly the unicode content of the string.
+     *    A fragment never ends in the middle of a UTF-8 sequence or
+     *    between the halves of a surrogate pair, and the passed buffer
+     *    may be reused by the parser as soon as the callback returns,
+     *  - end() fires once when the closing quote of the string is
+     *    consumed.
+     *
+     *  Just like yajl_callbacks, every callback returns an integer:
+     *  non-zero to continue the parse, zero to cancel it, in which case
+     *  yajl_status_client_canceled is returned and no further callbacks
+     *  (in particular no end()) are made.
+     *
+     *  Streamed string values are always validated: invalid UTF-8,
+     *  invalid escapes, raw control characters and isolated surrogates
+     *  are parse errors, even when the yajl_dont_validate_strings option
+     *  is set (that option keeps its meaning only for the classic
+     *  delivery path used by map keys and by handles without streaming
+     *  callbacks).
+     */
+    typedef struct {
+        int (* begin)(void * ctx);
+        int (* fragment)(void * ctx, const unsigned char * bytes,
+                         size_t length);
+        int (* end)(void * ctx);
+    } yajl_string_stream_callbacks;
+
+    /** Install (or, when callbacks is NULL, remove) the streaming string
+     *  value callbacks of a parser handle.  The table is copied into the
+     *  handle; the context pointer passed to the callbacks remains the
+     *  one given to yajl_alloc.
+     *
+     *  While installed, strings in value position (array elements,
+     *  object values and top level values) are reported through these
+     *  callbacks and yajl_callbacks.yajl_string is no longer invoked
+     *  for them.  Map keys are still delivered whole through
+     *  yajl_callbacks.yajl_map_key, and numbers, booleans, null and
+     *  container events are unaffected.
+     *
+     *  This may only be called before parsing has started (that is,
+     *  before the first yajl_parse or yajl_complete_parse call).
+     *
+     *  example:
+     *    yajl_set_string_stream(h, &my_stream_callbacks); // enable
+     *    yajl_set_string_stream(h, NULL);                 // disable
+     *
+     *  \returns nonzero on success, zero if parsing already started or
+     *           if the supplied table is incomplete (in both cases the
+     *           previous configuration is left unchanged).
+     */
+    YAJL_API int yajl_set_string_stream(yajl_handle h,
+                                        const yajl_string_stream_callbacks * callbacks);
+
     /** allocate a parser handle
      *  \param callbacks  a yajl callbacks structure specifying the
      *                    functions to call when different JSON entities

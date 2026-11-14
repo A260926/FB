@@ -42,7 +42,15 @@ typedef enum {
     yajl_tok_string_with_escapes,
 
     /* comment tokens are not currently returned to the parser, ever */
-    yajl_tok_comment
+    yajl_tok_comment,
+
+    /* streamed string values (see yajl_set_string_stream): begin is
+     * returned by yajl_lex_lex_value when the opening quote of a string
+     * in value position is seen, chunk and end are returned by
+     * yajl_lex_string_stream_next while the string content is consumed */
+    yajl_tok_string_stream_begin,
+    yajl_tok_string_stream_chunk,
+    yajl_tok_string_stream_end
 } yajl_tok;
 
 typedef struct yajl_lexer_t * yajl_lexer;
@@ -79,6 +87,32 @@ yajl_tok yajl_lex_lex(yajl_lexer lexer, const unsigned char * jsonText,
                       size_t jsonTextLen, size_t * offset,
                       const unsigned char ** outBuf, size_t * outLen);
 
+/** variant of yajl_lex_lex used by the parser in value position when
+ *  string streaming is enabled: instead of lexing a whole string token,
+ *  the opening quote yields yajl_tok_string_stream_begin and the string
+ *  content is then retrieved incrementally with
+ *  yajl_lex_string_stream_next.  All other tokens behave exactly as in
+ *  yajl_lex_lex. */
+yajl_tok yajl_lex_lex_value(yajl_lexer lexer, const unsigned char * jsonText,
+                            size_t jsonTextLen, size_t * offset,
+                            const unsigned char ** outBuf, size_t * outLen);
+
+/** continue lexing a streamed string value after
+ *  yajl_tok_string_stream_begin.  Returns
+ *  yajl_tok_string_stream_chunk with decoded UTF-8 bytes in
+ *  outBuf/outLen (never empty, never ending inside a multi-byte
+ *  character; the buffer is reused on the next call),
+ *  yajl_tok_string_stream_end once the closing quote was consumed,
+ *  yajl_tok_eof when more input is needed, or yajl_tok_error.  Only a
+ *  small constant amount of state (a partial escape, utf8 sequence or
+ *  pending surrogate) is retained across calls, so memory usage does
+ *  not grow with the length of the string. */
+yajl_tok yajl_lex_string_stream_next(yajl_lexer lexer,
+                                     const unsigned char * jsonText,
+                                     size_t jsonTextLen, size_t * offset,
+                                     const unsigned char ** outBuf,
+                                     size_t * outLen);
+
 /** have a peek at the next token, but don't move the lexer forward */
 yajl_tok yajl_lex_peek(yajl_lexer lexer, const unsigned char * jsonText,
                        size_t jsonTextLen, size_t offset);
@@ -95,7 +129,8 @@ typedef enum {
     yajl_lex_missing_integer_after_decimal,
     yajl_lex_missing_integer_after_exponent,
     yajl_lex_missing_integer_after_minus,
-    yajl_lex_unallowed_comment
+    yajl_lex_unallowed_comment,
+    yajl_lex_string_isolated_surrogate
 } yajl_lex_error;
 
 const char * yajl_lex_error_to_string(yajl_lex_error error);

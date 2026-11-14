@@ -56,6 +56,14 @@ struct yajl_handle_t {
     yajl_alloc_funcs alloc;
     /* bitfield */
     unsigned int flags;
+    /* optional streaming string value callbacks (copied into the handle
+     * by yajl_set_string_stream) */
+    yajl_string_stream_callbacks stringStreamCallbacks;
+    /* nonzero when the streaming string value callbacks are installed */
+    unsigned int stringStreamEnabled;
+    /* nonzero while a streamed string value is in progress (its content
+     * may span any number of input chunks) */
+    unsigned int stringStreaming;
 };
 
 yajl_status

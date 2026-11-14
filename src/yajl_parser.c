@@ -155,13 +155,34 @@ yajl_render_error_string(yajl_handle hand, const unsigned char * jsonText,
     }
 
 
+/* got a value.  transition depends on the state we're in. */
+static void
+yajl_parser_value_transition(yajl_handle hand)
+{
+    yajl_state s = yajl_bs_current(hand->stateStack);
+    if (s == yajl_state_start || s == yajl_state_got_value) {
+        yajl_bs_set(hand->stateStack, yajl_state_parse_complete);
+    } else if (s == yajl_state_map_need_val) {
+        yajl_bs_set(hand->stateStack, yajl_state_map_got_val);
+    } else {
+        yajl_bs_set(hand->stateStack, yajl_state_array_got_val);
+    }
+}
+
 yajl_status
 yajl_do_finish(yajl_handle hand)
 {
     yajl_status stat;
-    stat = yajl_do_parse(hand,(const unsigned char *) " ",1);
 
-    if (stat != yajl_status_ok) return stat;
+    /* when a streamed string value is still open, the synthetic space
+     * below would be reported to the client as string content: skip it
+     * and let the state check alone decide (premature EOF, unless
+     * partial values are allowed) */
+    if (!hand->stringStreaming) {
+        stat = yajl_do_parse(hand,(const unsigned char *) " ",1);
+
+        if (stat != yajl_status_ok) return stat;
+    }
 
     switch(yajl_bs_current(hand->stateStack))
     {
@@ -174,6 +195,9 @@ yajl_do_finish(yajl_handle hand)
         default:
             if (!(hand->flags & yajl_allow_partial_values))
             {
+                /* the unclosed streamed string (if any) is abandoned
+                 * here: the handle stays in its error state */
+                hand->stringStreaming = 0;
                 yajl_bs_set(hand->stateStack, yajl_state_parse_error);
                 hand->parseError = "premature EOF";
                 return yajl_status_error;
@@ -194,6 +218,39 @@ yajl_do_parse(yajl_handle hand, const unsigned char * jsonText,
     *offset = 0;
 
   around_again:
+    /* a streamed string value interrupted at a chunk boundary resumes
+     * here, before any other parser state is considered.  The lexer
+     * hands us decoded fragments until the closing quote (end), the end
+     * of the available input (eof), invalid content (error) or client
+     * cancelation. */
+    if (hand->stringStreaming) {
+        for (;;) {
+            tok = yajl_lex_string_stream_next(hand->lexer, jsonText,
+                                              jsonTextLen, offset,
+                                              &buf, &bufLen);
+            if (tok == yajl_tok_string_stream_chunk) {
+                if (!hand->stringStreamCallbacks.fragment(hand->ctx,
+                                                          buf, bufLen)) {
+                    hand->stringStreaming = 0;
+                    _CC_CHK(0);
+                }
+                continue;
+            }
+            if (tok == yajl_tok_string_stream_end) {
+                hand->stringStreaming = 0;
+                _CC_CHK(hand->stringStreamCallbacks.end(hand->ctx));
+                yajl_parser_value_transition(hand);
+                goto around_again;
+            }
+            if (tok == yajl_tok_eof) {
+                return yajl_status_ok;
+            }
+            /* yajl_tok_error: invalid content inside the string */
+            hand->stringStreaming = 0;
+            yajl_bs_set(hand->stateStack, yajl_state_lexical_error);
+            goto around_again;
+        }
+    }
     switch (yajl_bs_current(hand->stateStack)) {
         case yajl_state_parse_complete:
             if (hand->flags & yajl_allow_multiple_values) {
@@ -229,8 +286,15 @@ yajl_do_parse(yajl_handle hand, const unsigned char * jsonText,
 
             yajl_state stateToPush = yajl_state_start;
 
-            tok = yajl_lex_lex(hand->lexer, jsonText, jsonTextLen,
-                               offset, &buf, &bufLen);
+            if (hand->stringStreamEnabled) {
+                /* strings in value position are delivered incrementally
+                 * through the streaming string callbacks */
+                tok = yajl_lex_lex_value(hand->lexer, jsonText, jsonTextLen,
+                                         offset, &buf, &bufLen);
+            } else {
+                tok = yajl_lex_lex(hand->lexer, jsonText, jsonTextLen,
+                                   offset, &buf, &bufLen);
+            }
 
             switch (tok) {
                 case yajl_tok_eof:
@@ -253,6 +317,13 @@ yajl_do_parse(yajl_handle hand, const unsigned char * jsonText,
                                     yajl_buf_len(hand->decodeBuf)));
                     }
                     break;
+                case yajl_tok_string_stream_begin:
+                    /* the opening quote of a string value: notify the
+                     * client, then let the streaming continuation at the
+                     * top of this function deliver the content */
+                    _CC_CHK(hand->stringStreamCallbacks.begin(hand->ctx));
+                    hand->stringStreaming = 1;
+                    goto around_again;
                 case yajl_tok_bool:
                     if (hand->callbacks && hand->callbacks->yajl_boolean) {
                         _CC_CHK(hand->callbacks->yajl_boolean(hand->ctx,
@@ -357,16 +428,7 @@ yajl_do_parse(yajl_handle hand, const unsigned char * jsonText,
                     goto around_again;
             }
             /* got a value.  transition depends on the state we're in. */
-            {
-                yajl_state s = yajl_bs_current(hand->stateStack);
-                if (s == yajl_state_start || s == yajl_state_got_value) {
-                    yajl_bs_set(hand->stateStack, yajl_state_parse_complete);
-                } else if (s == yajl_state_map_need_val) {
-                    yajl_bs_set(hand->stateStack, yajl_state_map_got_val);
-                } else {
-                    yajl_bs_set(hand->stateStack, yajl_state_array_got_val);
-                }
-            }
+            yajl_parser_value_transition(hand);
             if (stateToPush != yajl_state_start) {
                 yajl_bs_push(hand->stateStack, stateToPush);
             }

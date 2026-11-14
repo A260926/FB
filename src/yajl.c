@@ -68,14 +68,46 @@ yajl_alloc(const yajl_callbacks * callbacks,
 
     hand->callbacks = callbacks;
     hand->ctx = ctx;
-    hand->lexer = NULL; 
+    hand->lexer = NULL;
     hand->bytesConsumed = 0;
     hand->decodeBuf = yajl_buf_alloc(&(hand->alloc));
     hand->flags	    = 0;
+    memset((void *) &(hand->stringStreamCallbacks), 0,
+           sizeof(hand->stringStreamCallbacks));
+    hand->stringStreamEnabled = 0;
+    hand->stringStreaming = 0;
     yajl_bs_init(hand->stateStack, &(hand->alloc));
     yajl_bs_push(hand->stateStack, yajl_state_start);
 
     return hand;
+}
+
+int
+yajl_set_string_stream(yajl_handle h,
+                       const yajl_string_stream_callbacks * callbacks)
+{
+    if (h == NULL) return 0;
+
+    /* the lexer is allocated lazily upon the first parse: its existence
+     * means parsing already started and streaming configuration time is
+     * over */
+    if (h->lexer != NULL) return 0;
+
+    if (callbacks == NULL) {
+        memset((void *) &(h->stringStreamCallbacks), 0,
+               sizeof(h->stringStreamCallbacks));
+        h->stringStreamEnabled = 0;
+        return 1;
+    }
+
+    if (callbacks->begin == NULL || callbacks->fragment == NULL ||
+        callbacks->end == NULL) return 0;
+
+    /* the handle keeps its own copy of the table */
+    memcpy((void *) &(h->stringStreamCallbacks), (void *) callbacks,
+           sizeof(h->stringStreamCallbacks));
+    h->stringStreamEnabled = 1;
+    return 1;
 }
 
 int
