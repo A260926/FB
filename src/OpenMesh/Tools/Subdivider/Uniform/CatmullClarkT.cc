@@ -95,9 +95,18 @@ template <typename MeshType, typename RealType>
 bool
 CatmullClarkT<MeshType,RealType>::subdivide( MeshType& _m , size_t _n , const bool _update_points)
 {
+  const bool refine_uv =
+      refine_texcoords_ && _m.has_halfedge_texcoords2D();
+
   // Do _n subdivisions
   for ( size_t i = 0; i < _n; ++i)
   {
+    // Read the face-varying texture coordinates of this round before any
+    // topological change.  Geometry and topology are not affected by this.
+    FaceVaryingTexcoordsT<MeshType,RealType> fvar(
+        FaceVaryingTexcoordsT<MeshType,RealType>::CATMULL_CLARK);
+    if (refine_uv)
+      fvar.prepare(_m);
 
     // Compute face centroid
     FaceIter f_itr   = _m.faces_begin();
@@ -130,13 +139,13 @@ CatmullClarkT<MeshType,RealType>::subdivide( MeshType& _m , size_t _n , const bo
     // Attention! Creating new edges, hence make sure the loop ends correctly.
     e_itr = _m.edges_begin();
     for ( ; e_itr != e_end; ++e_itr)
-      split_edge( _m, *e_itr );
+      split_edge( _m, *e_itr, refine_uv ? &fvar : 0 );
 
     // Commit changes in topology and reconsitute consistency
     // Attention! Creating new faces, hence make sure the loop ends correctly.
     f_itr   = _m.faces_begin();
     for ( ; f_itr != f_end; ++f_itr)
-      split_face( _m, *f_itr);
+      split_face( _m, *f_itr, refine_uv ? &fvar : 0 );
 
 
 #if defined(_DEBUG) || defined(DEBUG)
@@ -154,7 +163,8 @@ CatmullClarkT<MeshType,RealType>::subdivide( MeshType& _m , size_t _n , const bo
 
 template <typename MeshType, typename RealType>
 void
-CatmullClarkT<MeshType,RealType>::split_face( MeshType& _m, const FaceHandle& _fh)
+CatmullClarkT<MeshType,RealType>::split_face( MeshType& _m, const FaceHandle& _fh,
+    FaceVaryingTexcoordsT<MeshType,RealType>* _fvar)
 {
   /*
      Split an n-gon into n quads by connecting
@@ -171,10 +181,21 @@ CatmullClarkT<MeshType,RealType>::split_face( MeshType& _m, const FaceHandle& _f
   // new mesh vertex from face centroid
   VertexHandle vh = _m.add_vertex(_m.property( fp_pos_, _fh ));
 
+  const TexCoord2D fp_tex =
+      _fvar ? _fvar->face_point(_fh) : TexCoord2D();
+
   HalfedgeHandle hend = _m.halfedge_handle(_fh);
   HalfedgeHandle hh = _m.next_halfedge_handle(hend);
 
   HalfedgeHandle hold = _m.new_edge(_m.to_vertex_handle(hend), vh);
+
+  if (_fvar)
+  {
+    // hold ends in the face centroid; its opposite ends in the corner.
+    _m.set_texcoord2D(hold, fp_tex);
+    _m.set_texcoord2D(_m.opposite_halfedge_handle(hold),
+                      _m.texcoord2D(hend));
+  }
 
   _m.set_next_halfedge_handle(hend, hold);
   _m.set_face_handle(hold, _fh);
@@ -190,6 +211,15 @@ CatmullClarkT<MeshType,RealType>::split_face( MeshType& _m, const FaceHandle& _f
     _m.set_halfedge_handle(fnew, hh);
 
     HalfedgeHandle hnew = _m.new_edge(_m.to_vertex_handle(hnext), vh);
+
+    if (_fvar)
+    {
+      // hnew ends in the face centroid; its opposite ends in the corner
+      // reached by hnext, hence shares that corner's texture coordinate.
+      _m.set_texcoord2D(hnew, fp_tex);
+      _m.set_texcoord2D(_m.opposite_halfedge_handle(hnew),
+                        _m.texcoord2D(hnext));
+    }
 
     _m.set_face_handle(hnew,  fnew);
     _m.set_face_handle(hold,  fnew);
@@ -220,7 +250,8 @@ CatmullClarkT<MeshType,RealType>::split_face( MeshType& _m, const FaceHandle& _f
 
 template <typename MeshType, typename RealType>
 void
-CatmullClarkT<MeshType,RealType>::split_edge( MeshType& _m, const EdgeHandle& _eh)
+CatmullClarkT<MeshType,RealType>::split_edge( MeshType& _m, const EdgeHandle& _eh,
+    FaceVaryingTexcoordsT<MeshType,RealType>* _fvar)
 {
   HalfedgeHandle heh     = _m.halfedge_handle(_eh, 0);
   HalfedgeHandle opp_heh = _m.halfedge_handle(_eh, 1);
@@ -277,6 +308,9 @@ CatmullClarkT<MeshType,RealType>::split_edge( MeshType& _m, const EdgeHandle& _e
   // Never forget this, when playing with the topology
   _m.adjust_outgoing_halfedge( vh );
   _m.adjust_outgoing_halfedge( vh1 );
+
+  if (_fvar)
+    _fvar->write_split_edge(_m, heh, opp_heh, new_heh, opp_new_heh);
 }
 
 //-----------------------------------------------------------------------------

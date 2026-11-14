@@ -56,6 +56,7 @@
 //== INCLUDES =================================================================
 
 #include <OpenMesh/Tools/Subdivider/Uniform/SubdividerT.hh>
+#include <OpenMesh/Tools/Subdivider/Uniform/FaceVaryingTexcoordsT.hh>
 
 // -------------------- STL
 #if defined(OM_CC_MIPS)
@@ -93,6 +94,7 @@ public:
 
   typedef typename MeshType::Point                  Point;
   typedef typename MeshType::Normal                 Normal;
+  typedef typename MeshType::TexCoord2D             TexCoord2D;
   typedef typename MeshType::FaceIter               FaceIter;
   typedef typename MeshType::EdgeIter               EdgeIter;
   typedef typename MeshType::VertexIter             VertexIter;
@@ -105,16 +107,29 @@ public:
   typedef SubdividerT< MeshType, RealType >           parent_t;
 
   /// Constructor
-  CatmullClarkT(  ) : parent_t() {  }
+  CatmullClarkT(  ) : parent_t(), refine_texcoords_(false) {  }
 
   /// Constructor
-  CatmullClarkT(MeshType &_m) : parent_t(_m) {  }
+  CatmullClarkT(MeshType &_m) : parent_t(_m), refine_texcoords_(false) {  }
 
   virtual ~CatmullClarkT() {}
 
 public:
 
   const char *name() const { return "Uniform CatmullClark"; }
+
+  /** \brief Request refinement of halfedge texture coordinates.
+   *
+   *  When enabled and the mesh has halfedge texcoords requested, every
+   *  subdivision round also refines the face-varying texture coordinates.
+   *  The mesh property has to be requested by the caller and is left
+   *  untouched otherwise.
+   */
+  void set_refine_texcoords( bool _enable )
+  { refine_texcoords_ = _enable; }
+
+  /// Whether face-varying texture coordinate refinement is enabled.
+  bool refine_texcoords() const { return refine_texcoords_; }
 
 protected:
 
@@ -140,9 +155,11 @@ private:
    * @{ */
   //===========================================================================
 
-  void split_edge( MeshType& _m, const EdgeHandle& _eh);
+  void split_edge( MeshType& _m, const EdgeHandle& _eh,
+                   FaceVaryingTexcoordsT<MeshType,RealType>* _fvar);
 
-  void split_face( MeshType& _m, const FaceHandle& _fh);
+  void split_face( MeshType& _m, const FaceHandle& _fh,
+                   FaceVaryingTexcoordsT<MeshType,RealType>* _fvar);
 
   void compute_midpoint( MeshType& _m, const EdgeHandle& _eh);
 
@@ -156,6 +173,8 @@ private:
   OpenMesh::EPropHandleT< Point > ep_pos_; // new edge pts
   OpenMesh::FPropHandleT< Point > fp_pos_; // new face pts
   OpenMesh::EPropHandleT<double> creaseWeights_;// crease weights
+
+  bool refine_texcoords_;
 
 };
 

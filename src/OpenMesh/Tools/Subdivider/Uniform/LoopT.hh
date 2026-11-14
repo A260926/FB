@@ -57,6 +57,7 @@
 
 #include <OpenMesh/Core/System/config.hh>
 #include <OpenMesh/Tools/Subdivider/Uniform/SubdividerT.hh>
+#include <OpenMesh/Tools/Subdivider/Uniform/FaceVaryingTexcoordsT.hh>
 #include <OpenMesh/Core/Utils/vector_cast.hh>
 // -------------------- STL
 #include <vector>
@@ -93,17 +94,19 @@ public:
   typedef MeshType                                mesh_t;
   typedef SubdividerT< mesh_t, real_t >           parent_t;
 
+  typedef typename mesh_t::TexCoord2D             TexCoord2D;
+
   typedef std::pair< real_t, real_t >             weight_t;
   typedef std::vector< std::pair<real_t,real_t> > weights_t;
 
 public:
 
 
-  LoopT(void) : parent_t(), _1over8( 1.0/8.0 ), _3over8( 3.0/8.0 )
+  LoopT(void) : parent_t(), _1over8( 1.0/8.0 ), _3over8( 3.0/8.0 ), refine_texcoords_(false)
   { init_weights(); }
 
 
-  LoopT( mesh_t& _m ) : parent_t(_m), _1over8( 1.0/8.0 ), _3over8( 3.0/8.0 )
+  LoopT( mesh_t& _m ) : parent_t(_m), _1over8( 1.0/8.0 ), _3over8( 3.0/8.0 ), refine_texcoords_(false)
   { init_weights(); }
 
 
@@ -114,6 +117,20 @@ public:
 
 
   const char *name() const { return "Uniform Loop"; }
+
+
+  /** \brief Request refinement of halfedge texture coordinates.
+   *
+   *  When enabled and the mesh has halfedge texcoords requested, every
+   *  subdivision round also refines the face-varying texture coordinates.
+   *  The mesh property has to be requested by the caller and is left
+   *  untouched otherwise.
+   */
+  void set_refine_texcoords( bool _enable )
+  { refine_texcoords_ = _enable; }
+
+  /// Whether face-varying texture coordinate refinement is enabled.
+  bool refine_texcoords() const { return refine_texcoords_; }
 
 
   /// Pre-compute weights
@@ -152,9 +169,19 @@ protected:
     typename mesh_t::EdgeIter   eit, e_end;
     typename mesh_t::VertexIter vit;
 
+    const bool refine_uv =
+        refine_texcoords_ && _m.has_halfedge_texcoords2D();
+
     // Do _n subdivisions
     for (size_t i=0; i < _n; ++i)
     {
+      // Read the face-varying texture coordinates of this round before any
+      // topological change.  Geometry and topology are not affected.
+      FaceVaryingTexcoordsT<mesh_t, real_t> fvar(
+          FaceVaryingTexcoordsT<mesh_t, real_t>::LOOP);
+      fvar.set_weights(&weights_);
+      if (refine_uv)
+        fvar.prepare(_m);
 
       if(_update_points) {
         // compute new positions for old vertices
@@ -173,7 +200,7 @@ protected:
       // Attention! Creating new edges, hence make sure the loop ends correctly.
       e_end = _m.edges_end();
       for (eit=_m.edges_begin(); eit != e_end; ++eit)
-        split_edge(_m, *eit );
+        split_edge(_m, *eit, refine_uv ? &fvar : 0 );
 
 
       // Commit changes in topology and reconsitute consistency
@@ -181,7 +208,7 @@ protected:
       // Attention! Creating new faces, hence make sure the loop ends correctly.
       f_end   = _m.faces_end();
       for (fit = _m.faces_begin(); fit != f_end; ++fit)
-        split_face(_m, *fit );
+        split_face(_m, *fit, refine_uv ? &fvar : 0 );
 
       if(_update_points) {
         // Commit changes in geometry
@@ -232,7 +259,8 @@ private:
 
 private: // topological modifiers
 
-  void split_face(mesh_t& _m, const typename mesh_t::FaceHandle& _fh)
+  void split_face(mesh_t& _m, const typename mesh_t::FaceHandle& _fh,
+                  FaceVaryingTexcoordsT<mesh_t,real_t>* _fvar)
   {
     typename mesh_t::HalfedgeHandle
       heh1(_m.halfedge_handle(_fh)),
@@ -240,13 +268,14 @@ private: // topological modifiers
       heh3(_m.next_halfedge_handle(_m.next_halfedge_handle(heh2)));
 
     // Cutting off every corner of the 6_gon
-    corner_cutting( _m, heh1 );
-    corner_cutting( _m, heh2 );
-    corner_cutting( _m, heh3 );
+    corner_cutting( _m, heh1, _fvar );
+    corner_cutting( _m, heh2, _fvar );
+    corner_cutting( _m, heh3, _fvar );
   }
 
 
-  void corner_cutting(mesh_t& _m, const typename mesh_t::HalfedgeHandle& _he)
+  void corner_cutting(mesh_t& _m, const typename mesh_t::HalfedgeHandle& _he,
+                      FaceVaryingTexcoordsT<mesh_t,real_t>* _fvar)
   {
     // Define Halfedge Handles
     typename mesh_t::HalfedgeHandle
@@ -262,6 +291,17 @@ private: // topological modifiers
     typename mesh_t::VertexHandle
       vh1 = _m.to_vertex_handle(heh1),
       vh2 = _m.to_vertex_handle(heh5);
+
+    // Corner texture values of this chart before the cut.  Every halfedge
+    // carries the coordinate of its end vertex.  The texcoord property can
+    // be absent, in which case refinement was requested on a mesh without
+    // the required property; the values are then unused.
+    typename mesh_t::TexCoord2D uv_vh1, uv_vh2;
+    if (_fvar)
+    {
+      uv_vh1 = _m.texcoord2D(heh1);
+      uv_vh2 = _m.texcoord2D(heh5);
+    }
 
     typename mesh_t::HalfedgeHandle
       heh2(_m.next_halfedge_handle(heh5)),
@@ -304,10 +344,20 @@ private: // topological modifiers
     _m.set_face_handle(heh3, fh_new);
 
     _m.set_halfedge_handle(fh_new, heh1);
+
+    if (_fvar)
+    {
+      // heh1 stays in the corner triangle and already ends in vh1.  heh3
+      // ends in vh2 and belongs to the corner triangle, heh4 ends in vh1
+      // and belongs to the old (truncated) face.
+      _m.set_texcoord2D(heh3, uv_vh2);
+      _m.set_texcoord2D(heh4, uv_vh1);
+    }
   }
 
 
-  void split_edge(mesh_t& _m, const typename mesh_t::EdgeHandle& _eh)
+  void split_edge(mesh_t& _m, const typename mesh_t::EdgeHandle& _eh,
+                  FaceVaryingTexcoordsT<mesh_t,real_t>* _fvar)
   {
     typename mesh_t::HalfedgeHandle
       heh     = _m.halfedge_handle(_eh, 0),
@@ -366,6 +416,9 @@ private: // topological modifiers
     // Never forget this, when playing with the topology
     _m.adjust_outgoing_halfedge( vh );
     _m.adjust_outgoing_halfedge( vh1 );
+
+    if (_fvar)
+      _fvar->write_split_edge(_m, heh, opp_heh, new_heh, opp_new_heh);
   }
 
 private: // geometry helper
@@ -457,6 +510,8 @@ private: // data
 
   const real_t _1over8;
   const real_t _3over8;
+
+  bool refine_texcoords_;
 
 };
 
