@@ -467,6 +467,37 @@ you can enable it in GL/gl.h
 #define COMPILETIME_TINYGL_COMPAT_TEST 1
 ```
 
+## GL_FEEDBACK coordinate conventions
+
+`GL_FEEDBACK` (enabled with `TGL_FEATURE_ALT_RENDERMODES`) returns a stream of
+`GLfloat` records. Tokens (`GL_POINT_TOKEN`, `GL_LINE_TOKEN`,
+`GL_POLYGON_TOKEN`, `GL_PASS_THROUGH_TOKEN`, ...) and the polygon vertex count
+are stored as the numeric float value of the integer constant, not by
+reinterpreting the integer bits. Each record is either written completely or
+not at all; if a record does not fit, the write pointer locks and
+`glRenderMode(GL_RENDER)` returns a negative count.
+
+Vertex coordinates follow TinyGL's own viewport convention (x right, y down):
+
+* `x`, `y` are floating point window coordinates computed directly from the
+  clip-space vertex with the current viewport `scale`/`trans`
+  (`x = X/W * scale.x + trans.x`, `y = Y/W * scale.y + trans.y`). They keep
+  full float precision and are never derived from the integer rasterizer
+  `ZBufferPoint`.
+* `z` is the window depth in `[0,1]`: `(Z/W + 1) / 2`.
+* the fourth coordinate in `GL_4D_COLOR_TEXTURE` is the clip-space `w`.
+* color is the clipped, interpolated RGBA.
+* texture coordinates are the four components produced by the texture matrix
+  and then interpolated through clipping, with no perspective divide. They are
+  emitted even when `GL_TEXTURE_2D` is disabled.
+
+Both finite perspective and orthographic projection work, and input object
+vertices are assumed to have `w = 1`. Feedback never runs fragment depth or
+blending, so the color and depth buffers are left untouched. `glPassThrough`
+participates in the display list command chain: `GL_COMPILE` only records it,
+while `GL_COMPILE_AND_EXECUTE` records and runs it immediately.
+`glFeedbackBuffer` and `glRenderMode` stay immediate and are not recorded.
+
 ## FIXED BUGS FROM THE ORIGINAL!
 
 TinyGL 0.4 by Bellard had incorrect color interpolation and issues with

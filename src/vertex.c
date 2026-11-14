@@ -139,6 +139,10 @@ static void gl_transform_to_viewport_vertex_c(GLVertex* v) {
 		v->zp.x = (GLint)(v->pc.X * winv * c->viewport.scale.X + c->viewport.trans.X);
 		v->zp.y = (GLint)(v->pc.Y * winv * c->viewport.scale.Y + c->viewport.trans.Y);
 		v->zp.z = (GLint)(v->pc.Z * winv * c->viewport.scale.Z + c->viewport.trans.Z);
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+		if (c->render_mode == GL_FEEDBACK)
+			gl_feedback_transform(v);
+#endif
 	}
 
 	v->zp.r = (GLint)(v->color.v[0] * COLOR_CORRECTED_MULT_MASK + COLOR_MIN_MULT) & COLOR_MASK;

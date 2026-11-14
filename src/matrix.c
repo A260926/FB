@@ -19,16 +19,20 @@ void glopMatrixMode(GLParam* p) {
 	switch (mode) {
 	case GL_MODELVIEW:
 		c->matrix_mode = 0;
+		/* editing the texture matrix leaves the combined projection marked
+		   clean; returning to a geometry matrix must recompute it */
+		c->matrix_model_projection_updated = 1;
 		break;
 	case GL_PROJECTION:
 		c->matrix_mode = 1;
+		c->matrix_model_projection_updated = 1;
 		break;
 	case GL_TEXTURE:
 		c->matrix_mode = 2;
 		break;
 	default:
 		break;
-		
+
 	}
 }
 

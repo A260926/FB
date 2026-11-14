@@ -18,6 +18,10 @@ static void gl_transform_to_viewport_clip_c(GLVertex* v) { /* MARK: NOT_INLINED_
 		v->zp.x = (GLint)(v->pc.X * winv * c->viewport.scale.X + c->viewport.trans.X);
 		v->zp.y = (GLint)(v->pc.Y * winv * c->viewport.scale.Y + c->viewport.trans.Y);
 		v->zp.z = (GLint)(v->pc.Z * winv * c->viewport.scale.Z + c->viewport.trans.Z);
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+		if (c->render_mode == GL_FEEDBACK)
+			gl_feedback_transform(v);
+#endif
 	}
 	/* color */
 	v->zp.r = (GLint)(v->color.v[0] * COLOR_CORRECTED_MULT_MASK + COLOR_MIN_MULT) & COLOR_MASK;
@@ -27,10 +31,36 @@ static void gl_transform_to_viewport_clip_c(GLVertex* v) { /* MARK: NOT_INLINED_
 	/* texture */
 
 	if (c->texture_2d_enabled) {
-		v->zp.s = (GLint)(v->tex_coord.X * (ZB_POINT_S_MAX - ZB_POINT_S_MIN) + ZB_POINT_S_MIN); 
-		v->zp.t = (GLint)(v->tex_coord.Y * (ZB_POINT_T_MAX - ZB_POINT_T_MIN) + ZB_POINT_T_MIN); 
+		v->zp.s = (GLint)(v->tex_coord.X * (ZB_POINT_S_MAX - ZB_POINT_S_MIN) + ZB_POINT_S_MIN);
+		v->zp.t = (GLint)(v->tex_coord.Y * (ZB_POINT_T_MAX - ZB_POINT_T_MIN) + ZB_POINT_T_MIN);
 	}
 }
+
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+/* Floating point window coordinates for GL_FEEDBACK. The rasterizer keeps
+   using the integer ZBufferPoint; feedback never derives values from it.
+   X/Y use the TinyGL viewport mapping (x right, y down), Z is the depth in
+   [0,1] and W is the clip-space w. */
+void gl_feedback_transform(GLVertex* v) {
+	GLContext* c = gl_get_context();
+	GLfloat winv = 1.0f / v->pc.W;
+	v->fb.X = v->pc.X * winv * c->viewport.scale.X + c->viewport.trans.X;
+	v->fb.Y = v->pc.Y * winv * c->viewport.scale.Y + c->viewport.trans.Y;
+	v->fb.Z = (v->pc.Z * winv + 1.0f) * 0.5f;
+	v->fb.W = v->pc.W;
+}
+
+/* Interpolate every feedback attribute at a clipping intersection. The
+   parameter t is computed independently by the plane clip routines. */
+void gl_feedback_interpolate(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) {
+	GLint i;
+	for (i = 0; i < 4; i++) {
+		q->color.v[i] = p0->color.v[i] + (p1->color.v[i] - p0->color.v[i]) * t;
+		/* texture coordinates are interpolated without perspective divide */
+		q->tex_coord.v[i] = p0->tex_coord.v[i] + (p1->tex_coord.v[i] - p0->tex_coord.v[i]) * t;
+	}
+}
+#endif
 
 
 
@@ -107,8 +137,9 @@ void gl_draw_point(GLVertex* p0) {
  * Line Clipping
  */
 
-static void GLinterpolate(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) { 
+static void GLinterpolate(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) {
 	GLint i;
+	GLContext* c = gl_get_context();
 	q->pc.X = p0->pc.X + (p1->pc.X - p0->pc.X) * t;
 	q->pc.Y = p0->pc.Y + (p1->pc.Y - p0->pc.Y) * t;
 	q->pc.Z = p0->pc.Z + (p1->pc.Z - p0->pc.Z) * t;
@@ -116,8 +147,15 @@ static void GLinterpolate(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) {
 #ifdef _OPENMP
 #pragma omp simd
 #endif
+	/* rasterizer path: unchanged, only the three packed color channels */
 	for (i = 0; i < 3; i++)
 		q->color.v[i] = p0->color.v[i] + (p1->color.v[i] - p0->color.v[i]) * t;
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+	if (c->render_mode == GL_FEEDBACK) {
+		/* feedback needs alpha and all four texture components as well */
+		gl_feedback_interpolate(q, p0, p1, t);
+	}
+#endif
 }
 
 /* Line Clipping algorithm from 'Computer Graphics', Principles and
@@ -207,21 +245,27 @@ void gl_draw_line(GLVertex* p1, GLVertex* p2) {
 
 /*Triangles*/
 
-static void updateTmp(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) { 
+static void updateTmp(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) {
 	GLContext* c = gl_get_context();
-	{
 
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+	if (c->render_mode == GL_FEEDBACK) {
+		/* clipped feedback vertices carry the complete attribute set */
+		gl_feedback_interpolate(q, p0, p1, t);
+	} else
+#endif
+	{
 		q->color.v[0] = p0->color.v[0] + (p1->color.v[0] - p0->color.v[0]) * t;
 		q->color.v[1] = p0->color.v[1] + (p1->color.v[1] - p0->color.v[1]) * t;
 		q->color.v[2] = p0->color.v[2] + (p1->color.v[2] - p0->color.v[2]) * t;
-	}
 
-#if TGL_OPTIMIZATION_HINT_BRANCH_COST < 1
-	if (c->texture_2d_enabled)
-#endif
-	{
-		q->tex_coord.X = p0->tex_coord.X + (p1->tex_coord.X - p0->tex_coord.X) * t;
-		q->tex_coord.Y = p0->tex_coord.Y + (p1->tex_coord.Y - p0->tex_coord.Y) * t;
+	#if TGL_OPTIMIZATION_HINT_BRANCH_COST < 1
+		if (c->texture_2d_enabled)
+	#endif
+		{
+			q->tex_coord.X = p0->tex_coord.X + (p1->tex_coord.X - p0->tex_coord.X) * t;
+			q->tex_coord.Y = p0->tex_coord.Y + (p1->tex_coord.Y - p0->tex_coord.Y) * t;
+		}
 	}
 
 	q->clip_code = gl_clipcode(q->pc.X, q->pc.Y, q->pc.Z, q->pc.W);
@@ -244,9 +288,15 @@ void gl_draw_triangle(GLVertex* p0, GLVertex* p1, GLVertex* p2) {
 	/* we handle the non clipped case here to go faster */
 	if (co == 0) {
 		GLfloat norm;
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+		if (c->render_mode == GL_FEEDBACK) {
+			/* feedback vertices keep floating point window coordinates */
+			norm = (p1->fb.X - p0->fb.X) * (p2->fb.Y - p0->fb.Y) - (p2->fb.X - p0->fb.X) * (p1->fb.Y - p0->fb.Y);
+		} else
+#endif
 		norm = (GLfloat)(p1->zp.x - p0->zp.x) * (GLfloat)(p2->zp.y - p0->zp.y) - (GLfloat)(p2->zp.x - p0->zp.x) * (GLfloat)(p1->zp.y - p0->zp.y);
 
-		if (norm == 0) 
+		if (norm == 0)
 			return;
 
 		front = norm < 0.0;

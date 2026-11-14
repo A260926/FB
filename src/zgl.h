@@ -136,6 +136,11 @@ typedef struct GLVertex {
 	ZBufferPoint zp; /* GLinteger coordinates for the rasterization */
 	GLint clip_code; /* clip code */
 	GLint edge_flag;
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+	/* GL_FEEDBACK window coordinates, kept in floating point.
+	   X/Y: viewport mapped (x right, y down). Z: depth in [0,1]. W: clip w. */
+	V4 fb;
+#endif
 } GLVertex;
 
 typedef struct GLImage {
@@ -412,11 +417,17 @@ void gl_draw_triangle(GLVertex* p0, GLVertex* p1, GLVertex* p2);
 void gl_draw_line(GLVertex* p0, GLVertex* p1);
 void gl_draw_point(GLVertex* p0);
 
-void gl_draw_triangle_point(GLVertex* p0, GLVertex* p1, GLVertex* p2);	
-void gl_draw_triangle_line(GLVertex* p0, GLVertex* p1, GLVertex* p2);	
-void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2);	
-void gl_draw_triangle_select(GLVertex* p0, GLVertex* p1, GLVertex* p2); 
+void gl_draw_triangle_point(GLVertex* p0, GLVertex* p1, GLVertex* p2);
+void gl_draw_triangle_line(GLVertex* p0, GLVertex* p1, GLVertex* p2);
+void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2);
+void gl_draw_triangle_select(GLVertex* p0, GLVertex* p1, GLVertex* p2);
 void gl_draw_triangle_feedback(GLVertex* p0, GLVertex* p1, GLVertex* p2);
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+/* compute the floating point feedback window coordinates of a clip vertex */
+void gl_feedback_transform(GLVertex* v);
+/* full attribute interpolation for a clipping intersection at parameter t */
+void gl_feedback_interpolate(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t);
+#endif
 /* matrix.c */
 void gl_print_matrix(const GLfloat* m);
 /*

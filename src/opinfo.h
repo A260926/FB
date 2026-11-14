@@ -37,6 +37,7 @@ ADD_OP(InitNames, 0, "")
 ADD_OP(PushName, 1, "%d")
 ADD_OP(PopName, 0, "")
 ADD_OP(LoadName, 1, "%d")
+ADD_OP(PassThrough, 1, "%f")
 
 ADD_OP(TexImage2D, 9, "%d %d %d  %d %d %d  %d %d %d")
 ADD_OP(TexImage1D, 8, "%d %d  %d %d %d  %d %d %d")

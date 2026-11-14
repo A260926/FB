@@ -19,7 +19,8 @@ GLint glRenderMode(GLint mode) {
 		break;
 	case GL_FEEDBACK:
 		if (c->feedback_overflow)
-			result = -c->feedback_hits;
+			/* negative even when not a single complete record fit */
+			result = (c->feedback_hits > 0) ? -c->feedback_hits : -1;
 		else
 			result = c->feedback_hits;
 		c->feedback_overflow = 0;
@@ -121,160 +122,153 @@ void glFeedbackBuffer(GLint size, GLenum type, GLfloat* buf) {
 #endif
 }
 
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+/* number of floats written per feedback vertex for each feedback type */
+static GLuint gl_feedback_vertex_size(GLenum type) {
+	switch (type) {
+	case GL_2D:
+		return 2; /* x y */
+	case GL_3D:
+		return 3; /* x y z */
+	case GL_3D_COLOR:
+		return 3 + 4; /* x y z, rgba */
+	case GL_3D_COLOR_TEXTURE:
+		return 3 + 4 + 4; /* x y z, rgba, stq */
+	case GL_4D_COLOR_TEXTURE:
+		return 4 + 4 + 4; /* x y z w, rgba, stq */
+	default:
+		return 0;
+	}
+}
+
+static GLuint gl_feedback_vertex_pos(GLenum type) {
+	switch (type) {
+	case GL_2D:
+		return 2;
+	case GL_3D:
+	case GL_3D_COLOR:
+	case GL_3D_COLOR_TEXTURE:
+		return 3;
+	case GL_4D_COLOR_TEXTURE:
+		return 4;
+	default:
+		return 0;
+	}
+}
+
+static void gl_write_feedback_vertex(GLContext* c, GLVertex* v) {
+	GLenum type = c->feedback_type;
+	GLuint pos = gl_feedback_vertex_pos(type);
+
+	/* window coordinates are floating point feedback values, never the
+	   integer ZBufferPoint rasterization coordinates */
+	if (pos >= 2) {
+		*(c->feedback_ptr++) = v->fb.X;
+		*(c->feedback_ptr++) = v->fb.Y;
+	}
+	if (pos >= 3)
+		*(c->feedback_ptr++) = v->fb.Z;
+	if (pos >= 4)
+		*(c->feedback_ptr++) = v->fb.W;
+
+	if (type == GL_3D_COLOR || type == GL_3D_COLOR_TEXTURE || type == GL_4D_COLOR_TEXTURE) {
+		*(c->feedback_ptr++) = v->color.X;
+		*(c->feedback_ptr++) = v->color.Y;
+		*(c->feedback_ptr++) = v->color.Z;
+		*(c->feedback_ptr++) = v->color.W;
+	}
+	if (type == GL_3D_COLOR_TEXTURE || type == GL_4D_COLOR_TEXTURE) {
+		*(c->feedback_ptr++) = v->tex_coord.X;
+		*(c->feedback_ptr++) = v->tex_coord.Y;
+		*(c->feedback_ptr++) = v->tex_coord.Z;
+		*(c->feedback_ptr++) = v->tex_coord.W;
+	}
+}
+#endif
+
 void gl_add_feedback(GLfloat token, GLVertex* v1, GLVertex* v2, GLVertex* v3, GLfloat passthrough_token_value) {
 #if TGL_FEATURE_ALT_RENDERMODES == 1
 	GLContext* c = gl_get_context();
+	GLuint vertex_size, record_size, vertex_count, i;
+	GLVertex* verts[3];
+
+	/* only the feedback render mode emits records; this also keeps
+	   PassThrough safe when no feedback buffer is bound */
+	if (c->render_mode != GL_FEEDBACK)
+		return;
+
+	/* once the buffer overflowed the write pointer is locked for the
+	   remainder of this feedback pass */
 	if (c->feedback_overflow)
 		return;
-	GLuint feedback_hits_needed = 2;
-	GLuint vertex_feedback_hits_needed = 0;
-	GLuint vertex_pos_hits_needed = 2;
-	GLuint vertex_color_hits_needed = 4;
-	GLuint vertex_texture_hits_needed = 4;
-#if TGL_FEATURE_ERROR_CHECK == 1
-	GLuint done = 0;
-#endif
-	switch (c->feedback_type) {
-	case GL_2D:
-		vertex_feedback_hits_needed = 2;
-		vertex_pos_hits_needed = 2;
-		vertex_color_hits_needed = 0;
-		vertex_texture_hits_needed = 0;
-		break;
-	case GL_3D:
-		vertex_feedback_hits_needed = 3;
-		vertex_pos_hits_needed = 3;
-		vertex_color_hits_needed = 0;
-		vertex_texture_hits_needed = 0;
-		break;
-	case GL_3D_COLOR:
-		vertex_feedback_hits_needed = 3 + 4;
-		vertex_pos_hits_needed = 3;
-		vertex_color_hits_needed = 4;
-		vertex_texture_hits_needed = 0;
-		break;
-	case GL_3D_COLOR_TEXTURE:
-		vertex_feedback_hits_needed = 3 + 4 + 4;
-		vertex_pos_hits_needed = 3;
-		vertex_color_hits_needed = 4;
-		vertex_texture_hits_needed = 4;
-		break;
-	case GL_4D_COLOR_TEXTURE:
-		vertex_feedback_hits_needed = 4 + 4 + 4;
-		vertex_pos_hits_needed = 4;
-		vertex_color_hits_needed = 4;
-		vertex_texture_hits_needed = 4;
-		break;
-	default:
-		vertex_feedback_hits_needed = 0;
-		vertex_pos_hits_needed = 0;
-		vertex_color_hits_needed = 0;
-		vertex_texture_hits_needed = 0;
-		break;
-	}
-	if (token == GL_PASS_THROUGH_TOKEN)
-		feedback_hits_needed = 1 + 1; 
-	else if (token == GL_POINT_TOKEN)
-		feedback_hits_needed = 1 + 1 * vertex_feedback_hits_needed; 
-	else if (token == GL_LINE_TOKEN || token == GL_LINE_RESET_TOKEN)
-		feedback_hits_needed = 1 + 2 * vertex_feedback_hits_needed; 
-	else if (token == GL_POLYGON_TOKEN)
-		feedback_hits_needed = 1 + 1 + 3 * vertex_feedback_hits_needed; 
-	else if (token == GL_BITMAP_TOKEN)
-		feedback_hits_needed = 1 + 1 * vertex_feedback_hits_needed; 
-	else if (token == GL_DRAW_PIXEL_TOKEN || token == GL_COPY_PIXEL_TOKEN)
-		feedback_hits_needed = 1 + 1 * vertex_feedback_hits_needed; 
-	else
-		return;
-	c->feedback_hits += feedback_hits_needed;
-	if (c->feedback_hits > (GLint)c->feedback_size) {
-		c->feedback_overflow = 1;
-		c->feedback_hits -= feedback_hits_needed;
-		return;
-	}
-	
-#if TGL_FEATURE_ERROR_CHECK == 1
-#define DONE_ERROR_CHECK                                                                                                                                       \
-	{                                                                                                                                                          \
-		if (++done > feedback_hits_needed) {                                                                                                                   \
-			gl_fatal_error("\nBAD FEEDBACK BUFFER WRITE DETECTED\n");                                                                                          \
-		}                                                                                                                                                      \
-	}
-#else
-#define DONE_ERROR_CHECK /* a comment*/
-#endif
-#define WRITE_FLOAT(f)                                                                                                                                         \
-	{                                                                                                                                                          \
-		DONE_ERROR_CHECK;                                                                                                                                      \
-		*(c->feedback_ptr++) = f;                                                                                                                              \
-	}
-#define WRITE_UINT(u)                                                                                                                                          \
-	{                                                                                                                                                          \
-		DONE_ERROR_CHECK;                                                                                                                                      \
-		*(((GLuint*)c->feedback_ptr++)) = u;                                                                                                                   \
-	}
-#define WRITE_VERTEX(v)                                                                                                                                        \
-	{                                                                                                                                                          \
-		if (vertex_pos_hits_needed == 2) {                                                                                                                     \
-			WRITE_FLOAT(v->zp.x)                                                                                                                               \
-			WRITE_FLOAT(v->zp.y)                                                                                                                               \
-		}                                                                                                                                                      \
-		if (vertex_pos_hits_needed == 3) {                                                                                                                     \
-			WRITE_FLOAT(v->zp.x)                                                                                                                               \
-			WRITE_FLOAT(v->zp.y)                                                                                                                               \
-			WRITE_FLOAT(v->zp.z)                                                                                                                               \
-		}                                                                                                                                                      \
-		if (vertex_pos_hits_needed == 4) {                                                                                                                     \
-			WRITE_FLOAT(v->zp.x)                                                                                                                               \
-			WRITE_FLOAT(v->zp.y)                                                                                                                               \
-			WRITE_FLOAT(v->zp.z)                                                                                                                               \
-			WRITE_FLOAT(v->pc.W)                                                                                                                               \
-		}                                                                                                                                                      \
-		if (vertex_color_hits_needed == 4) {                                                                                                                   \
-			WRITE_FLOAT(v->color.X)                                                                                                                            \
-			WRITE_FLOAT(v->color.Y)                                                                                                                            \
-			WRITE_FLOAT(v->color.Z)                                                                                                                            \
-			WRITE_FLOAT(v->color.W)                                                                                                                            \
-		}                                                                                                                                                      \
-		if (vertex_texture_hits_needed == 4) {                                                                                                                 \
-			WRITE_FLOAT(v->tex_coord.X)                                                                                                                        \
-			WRITE_FLOAT(v->tex_coord.Y)                                                                                                                        \
-			WRITE_FLOAT(v->tex_coord.Z)                                                                                                                        \
-			WRITE_FLOAT(v->tex_coord.W)                                                                                                                        \
-		}                                                                                                                                                      \
-	}
+
+	vertex_size = gl_feedback_vertex_size(c->feedback_type);
+
 	if (token == GL_PASS_THROUGH_TOKEN) {
-		WRITE_UINT(GL_PASS_THROUGH_TOKEN);
-		WRITE_FLOAT(passthrough_token_value);
+		vertex_count = 0;
+		record_size = 2; /* token + passthrough value */
+	} else if (token == GL_POINT_TOKEN || token == GL_BITMAP_TOKEN || token == GL_DRAW_PIXEL_TOKEN || token == GL_COPY_PIXEL_TOKEN) {
+		vertex_count = 1;
+		record_size = 1 + vertex_size;
 	} else if (token == GL_LINE_TOKEN || token == GL_LINE_RESET_TOKEN) {
-		WRITE_UINT(token);
-		WRITE_VERTEX(v1);
-		WRITE_VERTEX(v2);
+		vertex_count = 2;
+		record_size = 1 + 2 * vertex_size;
 	} else if (token == GL_POLYGON_TOKEN) {
-		WRITE_UINT(GL_POLYGON_TOKEN);
-		WRITE_UINT(3);
-		WRITE_VERTEX(v1);
-		WRITE_VERTEX(v2);
-		WRITE_VERTEX(v3);
-	} else if (token == GL_BITMAP_TOKEN) {
-		WRITE_UINT(GL_BITMAP_TOKEN);
-		WRITE_VERTEX(v1);
-	} else if (token == GL_DRAW_PIXEL_TOKEN || token == GL_COPY_PIXEL_TOKEN) {
-		WRITE_UINT(token);
-		WRITE_VERTEX(v1);
+		vertex_count = 3;
+		record_size = 1 + 1 + 3 * vertex_size; /* token + vertex count + vertices */
+	} else {
+		return;
 	}
-#if TGL_FEATURE_ERROR_CHECK == 1
-	if (done != feedback_hits_needed)
-		gl_fatal_error("Failed to write enough information to the buffer.");
-#endif
-/* End of gl_add_feedback*/
+
+	/* a record is either written completely or not at all */
+	if ((GLuint)c->feedback_hits + record_size > c->feedback_size) {
+		c->feedback_overflow = 1;
+		return;
+	}
+
+	/* tokens and polygon vertex counts are numeric float values, not bit casts */
+	*(c->feedback_ptr++) = token;
+
+	if (token == GL_PASS_THROUGH_TOKEN) {
+		*(c->feedback_ptr++) = passthrough_token_value;
+		c->feedback_hits += record_size;
+		return;
+	}
+
+	if (token == GL_POLYGON_TOKEN)
+		*(c->feedback_ptr++) = (GLfloat)vertex_count;
+
+	verts[0] = v1;
+	verts[1] = v2;
+	verts[2] = v3;
+	for (i = 0; i < vertex_count; i++)
+		gl_write_feedback_vertex(c, verts[i]);
+
+	c->feedback_hits += record_size;
 #endif
 	return;
 }
+
+void glopPassThrough(GLParam* p) {
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+	gl_add_feedback(GL_PASS_THROUGH_TOKEN, NULL, NULL, NULL, p[1].f);
+#endif
+}
+
 void glPassThrough(GLfloat token) {
 
 #include "error_check_no_context.h"
-	gl_add_feedback(GL_PASS_THROUGH_TOKEN, NULL, NULL, NULL, token);
+#if TGL_FEATURE_ALT_RENDERMODES == 1
+	GLParam p[2];
+	p[0].op = OP_PassThrough;
+	p[1].f = token;
+	/* routed through the op chain so display lists record it; the call is
+	   only emitted into the feedback buffer when the list is executed while
+	   GL_FEEDBACK is the current render mode */
+	gl_add_op(p);
+#else
+	return;
+#endif
 }
 void glopInitNames(GLParam* p) {
 #if TGL_FEATURE_ALT_RENDERMODES == 1
