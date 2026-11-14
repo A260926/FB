@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>t3d - texture idwmap</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+	<div id="info" class="dark">
+		<a href="" target="_blank">t3d</a> - texture idwmap
+	</div>
+
+	<!-- Import maps polyfill -->
+	<!-- Remove this when import maps will be widely supported -->
+	<script async src="./libs/es-module-shims.js"></script>
+
+	<script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+	<script type="module">
+		import * as t3d from 't3d';
+		import { ColorGradient } from 't3d/addons/math/ColorGradient.js';
+		import { IDWMapGenerator } from 't3d/addons/textures/IDWMapGenerator.js';
+		import { GradientTextureGenerator } from 't3d/addons/textures/GradientTextureGenerator.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const contextParams = { antialias: true, alpha: false };
+		const gl = canvas.getContext('webgl2', contextParams) || canvas.getContext('webgl', contextParams);
+		const renderer = new t3d.WebGLRenderer(gl);
+		const screenRenderTarget = new t3d.ScreenRenderTarget(canvas);
+		screenRenderTarget.setColorClearValue(0.6, 0.6, 0.6, 1);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 120, 120);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 0.1, 1000);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		const generator = new IDWMapGenerator(1024, 1024);
+
+		const colorGradient = new ColorGradient()
+			.addColorStop(0.1, new t3d.Color3(0x0000ff))
+			.addColorStop(0.4, new t3d.Color3(0x00ffff))
+			.addColorStop(0.6, new t3d.Color3(0x00ff00))
+			.addColorStop(0.8, new t3d.Color3(0xffff00))
+			.addColorStop(1.0, new t3d.Color3(0xff0000));
+
+		const gradientTexture = new GradientTextureGenerator()
+			.gradient(colorGradient)
+			.getTexture();
+
+		const planeGeometry = new t3d.PlaneGeometry(50, 50);
+
+		const material = new t3d.BasicMaterial();
+		material.diffuseMap = generator.getGrayTexture();
+		const mesh = new t3d.Mesh(planeGeometry, material);
+		mesh.position.set(30, 0, 0);
+		scene.add(mesh);
+
+		const material2 = new t3d.BasicMaterial();
+		material2.diffuseMap = generator.getTexture();
+		const mesh2 = new t3d.Mesh(planeGeometry, material2);
+		mesh2.position.set(-30, 0, 0);
+		scene.add(mesh2);
+
+		const size = [60, 60];
+		const params = { exponent: 2, gradientTexture: 0, isoline: true };
+
+		function updateTextures() {
+			generator.render(renderer, [
+				[-30, 15, 10],
+				[-15, -15, 5],
+				[30, 15, 25],
+				[30, -15, 14]
+			], {
+				size: size,
+				range: [1, 28],
+				exponent: params.exponent
+			}).colorize(renderer, gradientTexture, {
+				isoline: params.isoline
+			});
+		}
+
+		updateTextures();
+
+		const gui = new GUI();
+		gui.add(params, 'exponent', [1, 2, 3]).onChange(updateTextures);
+		gui.add(params, 'isoline').onChange(updateTextures);
+		gui.close();
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			scene.updateMatrix();
+			scene.updateRenderStates(camera);
+			scene.updateRenderQueue(camera);
+
+			renderer.renderScene(scene, camera, screenRenderTarget);
+		}
+
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 0.1, 1000);
+
+			screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+
+</html>

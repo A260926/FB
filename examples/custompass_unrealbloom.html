@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>t3d - custom pass unreal bloom</title>
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - custom pass unreal bloom
+    </div>
+
+    <script src="./libs/nanobar.js"></script>
+
+    <!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { Timer } from 't3d/addons/misc/Timer.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+		import { GLTFLoader } from 't3d/addons/loaders/glTF/GLTFLoader.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { UnrealBloomPass } from 't3d/addons/pass/UnrealBloomPass.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const contextParams = { antialias: false, alpha: false };
+		const gl = canvas.getContext('webgl2', contextParams) || canvas.getContext('webgl', contextParams);
+
+		const renderer = new t3d.WebGLRenderer(gl);
+
+		const screenRenderTarget = new t3d.ScreenRenderTarget(canvas);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(-1, 2, 5);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+		controller.maxDistance = 10;
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 1);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 3);
+		directionalLight.position.set(-3, 3, 0);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		// Load model
+
+		const nanobar = new Nanobar();
+		nanobar.el.style.background = 'gray';
+
+		const loadingManager = new t3d.LoadingManager(function() {
+			nanobar.go(100);
+			nanobar.el.style.background = 'transparent';
+		}, function(url, itemsLoaded, itemsTotal) {
+			if (itemsLoaded < itemsTotal) {
+				nanobar.go(itemsLoaded / itemsTotal * 100);
+			}
+		});
+
+		let animation;
+
+		const loader = new GLTFLoader(loadingManager);
+		loader.load('./resources/models/gltf/PrimaryIonDrive.glb').then(function(result) {
+			const object = result.root;
+		
+			object.traverse(function(obj) {
+				if (obj.material && obj.material.transparent) {
+					obj.material.depthWrite = false;
+				}
+			});
+		
+			animation = new t3d.AnimationMixer();
+			result.animations.forEach(function(clip) {
+				const action = new t3d.AnimationAction(clip);
+				action.weight = 1;
+				animation.addAction(action);
+			});
+
+			scene.add(object);
+		});
+
+		// Passes
+
+		const tempRenderTarget = t3d.OffscreenRenderTarget.create2D(width, height);
+		tempRenderTarget.texture.type = t3d.PIXEL_TYPE.HALF_FLOAT;
+		if (renderer.capabilities.version > 1) {
+			tempRenderTarget.texture.format = t3d.PIXEL_FORMAT.RGB;
+			tempRenderTarget.texture.internalformat = t3d.PIXEL_FORMAT.R11F_G11F_B10F;
+		}
+		tempRenderTarget.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget.generateMipmaps = false;
+
+		UnrealBloomPass.supportWebGL1 = renderer.capabilities.version < 2;
+		const bloomPass = new UnrealBloomPass(width, height);
+
+		// GUI
+
+		const gui = new GUI();
+		gui.add(bloomPass, 'threshold', 0, 1, 0.01);
+		gui.add(bloomPass, 'strength', 0, 3, 0.01);
+		gui.add(bloomPass, 'radius', 0, 1, 0.01);
+		gui.add(bloomPass, 'toneMappingExposure', 0, 16, 0.01);
+
+		// Loop
+		
+		const timer = new Timer();
+
+		function loop(timestamp) {
+			requestAnimationFrame(loop);
+
+			timer.update(timestamp);
+
+			controller.update();
+		
+			animation && animation.update(timer.getDelta());
+		
+			scene.updateMatrix();
+			scene.updateRenderStates(camera);
+			scene.updateRenderQueue(camera);
+
+			renderer.renderScene(scene, camera, tempRenderTarget);
+			bloomPass.update(renderer, tempRenderTarget, screenRenderTarget);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+		
+			tempRenderTarget.resize(width, height);
+			screenRenderTarget.resize(width, height);
+			bloomPass.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+    </script>
+</body>
+</html>

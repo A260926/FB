@@ -1,0 +1,266 @@
+{
+	"light": [
+		"light_directlight",
+		"light_pointlight",
+		"light_spotlight",
+		"light_rectarealight",
+		"light_hemispherelight",
+		"light_sphericalharmonicslight",
+		"light_shadow",
+		"light_shadow_adapter",
+		"light_softshadow",
+		"light_group"
+	],
+	"geometry": [
+		"geometry_geometries",
+		"geometry_loader_assimp2json",
+		"geometry_loader_vox",
+		"geometry_loader_gltf",
+		"geometry_loader_gltf2",
+		"geometry_loader_gltf3",
+		"geometry_loader_gltf_helmat",
+		"geometry_loader_gltf_tangent",
+		"geometry_loader_gltf_lights",
+		"geometry_loader_gltf_skinning",
+		"geometry_loader_gltf_morphtargets",
+		"geometry_loader_gltf_instancing",
+		"geometry_loader_gltf_materials_unlit",
+		"geometry_loader_gltf_materials_clearcoat",
+		"geometry_loader_gltf_materials_transmission",
+		"geometry_loader_gltf_materials_dispersion",
+		"geometry_loader_gltf_uvtransform",
+		"geometry_loader_gltf_draco",
+		"geometry_loader_gltf_meshopt",
+		"geometry_loader_gltf_camera",
+		"geometry_loader_gltf_avif",
+		"geometry_loader_gltf_pointer",
+		"geometry_builder_shapes",
+		"geometry_builder_lines",
+		"geometry_builder_edges",
+		"geometry_groups",
+		"geometry_boundings"
+	],
+	"material": [
+		"material_materials",
+		"material_depth",
+		"material_pbr",
+		"material_normalmap",
+		"material_emissivemap",
+		"material_bumpmap",
+		"material_lightmap",
+		"material_envmap",
+		"material_uvtransform",
+		"material_uvcoord",
+		"material_transparent",
+		"material_blending",
+		"material_flatshading",
+		"material_vertexcolors",
+		"material_clippingplanes",
+		"material_clearcoat",
+		"material_alphamask",
+		"material_alphahash",
+		"material_shadermaterial",
+		"material_shader_shadow",
+		"material_shader_matcap",
+		"material_shader_background",
+		"material_shader_skybox",
+		"material_shader_skybox_filter",
+		"material_shader_skybox_groundprojected",
+		"material_shader_sky",
+		"material_shader_sky2",
+		"material_shader_sky_gradient",
+		"material_shader_water",
+		"material_shader_water_pbr",
+		"material_shader_xray",
+		"material_shader_grid",
+		"material_shader_extend",
+		"material_shader_fakeInterior",
+		"material_shader_volume",
+		"material_shader_volume_layered"
+	],
+	"texture": [
+		"texture_anisotropic",
+		"texture_mipmap",
+		"texture_video",
+		"texture_integer",
+		"texture_depth",
+		"texture_2darray",
+		"texture_3d",
+		"texture_loader_imagebitmap",
+		"texture_loader_hdr",
+		"texture_loader_hdr_panorama",
+		"texture_loader_hdr_cube",
+		"texture_loader_exr",
+		"texture_loader_env",
+		"texture_loader_ktx2",
+		"texture_loader_compressed_dds",
+		"texture_loader_compressed_pvr",
+		"texture_loader_tga",
+		"texture_generator_heatmap",
+		"texture_generator_idwmap"
+	],
+	"scene": [
+		"scene_fog",
+		"scene_gamma_correction",
+		"scene_anchor",
+		"scene_clippingplanes"
+	],
+	"camera": [
+		"camera_projection",
+		"camera_multiple"
+	],
+	"controls": [
+		"controls_camera_orbit",
+		"controls_camera_fly",
+		"controls_camera_free",
+		"controls_camera_view",
+		"controls_transform"
+	],
+	"probes": [
+		"probes_reflection",
+		"probes_reflection_planar"
+	],
+	"math": [
+		"math_curve",
+		"math_curve_motion",
+		"math_octree",
+		"math_obb"
+	],
+	"sprite": [
+		"sprite_sprites"
+	],
+	"points": [
+		"points_sprites"
+	],
+	"lines": [
+		"lines_lines",
+		"lines_dashedlines",
+		"lines_instancedlines"
+	],
+	"text": [
+		"text_typeface",
+		"text_sdf",
+		"text_sdf_dynamic",
+		"text_bitmap",
+		"text_bitmap_dynamic"
+	],
+	"canvas2d": [
+		"canvas2d_canvas2d"
+	],
+	"raycast": [
+		"raycast_raycaster"
+	],
+	"stereo": [
+		"stereo_anaglyph",
+		"stereo_webvr_car",
+		"stereo_webxr_vr_car"
+	],
+	"physics": [
+		"physics_cannon",
+		"physics_ammo",
+		"physics_ammo_softbody_volume",
+		"physics_rapier",
+		"physics_rapier_character_controller",
+		"physics_ik"
+	],
+	"navigation": [
+		"navigation_recast_generation",
+		"navigation_recast_crowd",
+		"navigation_recast_obstacles",
+		"navigation_recast_walking",
+		"navigation_pathfinding"
+	],
+	"particle": [
+		"particle_particle"
+	],
+	"animation": [
+		"animation_morphtargets",
+		"animation_skinned_mesh",
+		"animation_keyframe_animation",
+		"animation_snake",
+		"animation_multiple",
+		"animation_crossfade",
+		"animation_blending_additive",
+		"animation_bone_attach",
+		"animation_skinned_instancing",
+		"animation_interpolant"
+	],
+	"custompass": [
+		"custompass_car",
+		"custompass_deferred",
+		"custompass_gbuffer",
+		"custompass_ssao",
+		"custompass_sketch",
+		"custompass_ssr",
+		"custompass_dof",
+		"custompass_taa",
+		"custompass_bloom",
+		"custompass_unrealbloom",
+		"custompass_blur",
+		"custompass_msaa",
+		"custompass_motion_blur",
+		"custompass_motion_blur2",
+		"custompass_depth_texture_share",
+		"custompass_depth_buffer_share",
+		"custompass_gpupick",
+		"custompass_lensflare",
+		"custompass_transmission",
+		"custompass_shadow_planar",
+		"custompass_oit",
+		"custompass_rendertarget_2d",
+		"custompass_rendertarget_3d",
+		"custompass_xray"
+	],
+	"renderer": [
+		"renderer_culling_frustum",
+		"renderer_culling_contribution",
+		"renderer_deferred",
+		"renderer_deferred_lighting",
+		"renderer_clustered_lighting"
+	],
+	"webgl": [
+		"webgl_depthfunc",
+		"webgl_instanced_draw",
+		"webgl_multi_draw",
+		"webgl_mesh_batch",
+		"webgl_polygonoffset",
+		"webgl_logarithmicDepthBuffer",
+		"webgl_canvas_transparent",
+		"webgl_stencil",
+		"webgl_external_texture",
+		"webgl_external_buffer",
+		"webgl_primitive_restart",
+		"webgl_clipculldistance",
+		"webgl_renderinfo",
+		"webgl_query_occlusion",
+		"webgl_query_occlusion_proxy",
+		"webgl_query_timer",
+		"webgl_helpers",
+		"webgl_contextlost",
+		"webgl_shader_compile",
+		"webgl_shader_precompile"
+	],
+	"exporter": [
+		"exporter_gltf",
+		"exporter_draco"
+	],
+	"lab": [
+		"lab_clouds",
+		"lab_clouds_shader",
+		"lab_earth",
+		"lab_ocean",
+		"lab_ocean_fft",
+		"lab_ground",
+		"lab_texture_variation",
+		"lab_ik",
+		"lab_gltf_grass",
+		"lab_geometry_grass",
+		"lab_geometry_images",
+		"lab_terrain",
+		"lab_water_simulation",
+		"lab_histogram",
+		"lab_linechart_fill",
+		"lab_impostor_octahedral",
+		"lab_impostor_octahedral_instancing"
+	]
+}

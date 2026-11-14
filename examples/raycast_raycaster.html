@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - raycaster</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - raycaster
+		<br/>
+		move mouse to raycast objects
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 0, 400);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 2000);
+		scene.add(camera);
+
+		// meshes
+
+		const container = new t3d.Object3D();
+		scene.add(container);
+
+		// indexed geometry
+		const planeGeometry = new t3d.PlaneGeometry(20, 20, 20);
+
+		// non-indexed geometry with groups
+		const triangleGeometry = new t3d.Geometry();
+		const positionAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array([10, 10, 0, -10, -10, 0, 10, -10, 0]), 3));
+		const normalAttribute = new t3d.Attribute(new t3d.Buffer(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3));
+		triangleGeometry.addAttribute('a_Position', positionAttribute);
+		triangleGeometry.addAttribute('a_Normal', normalAttribute);
+		triangleGeometry.computeBoundingBox();
+		triangleGeometry.computeBoundingSphere();
+		triangleGeometry.addGroup(0, 3, 0);
+
+		for (let i = 0; i < 15; i++) {
+			const material = new t3d.BasicMaterial();
+			material.side = t3d.DRAW_SIDE.DOUBLE;
+			material.diffuse.setHex(0x888888);
+			const plane = new t3d.Mesh(planeGeometry, material);
+			randomPosition(plane);
+			plane.euler.x = -Math.PI / 2;
+			container.add(plane);
+		}
+
+		for (let i = 0; i < 15; i++) {
+			const material = new t3d.BasicMaterial();
+			material.side = t3d.DRAW_SIDE.DOUBLE;
+			material.diffuse.setHex(0x888888);
+			const triangle = new t3d.Mesh(triangleGeometry, [material]);
+			randomPosition(triangle);
+			container.add(triangle);
+		}
+
+		function randomPosition(mesh) {
+			mesh.position.x = Math.random() * 200 - 100;
+			mesh.position.y = Math.random() * 200 - 100;
+			mesh.position.z = Math.random() * 200 - 100;
+		}
+
+		// input
+
+		const raycaster = new t3d.Raycaster();
+
+		const mouse = new t3d.Vector2();
+
+		document.addEventListener('mousemove', function(e) {
+			mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+			mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+			raycaster.setFromCamera(mouse, camera);
+
+			for (let i = 0, l = container.children.length; i < l; i++) {
+				const child = container.children[i];
+				setColor(child, 0x888888);
+			}
+
+			const array = raycaster.intersectObject(container, true);
+			for (let i = 0, l = array.length; i < l; i++) {
+				const object = array[i].object;
+				if (i === 0) {
+					setColor(object, 0xff0000);
+				}
+			}
+		});
+
+		function setColor(mesh, hex) {
+			const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+			material.diffuse.setHex(hex);
+		}
+
+		//
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			// rotate camera
+			camera.position.x = 600 * Math.sin(count / 1000 * .5);
+			camera.position.z = 600 * Math.cos(count / 1000 * .5);
+			camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 2000);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

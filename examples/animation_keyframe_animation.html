@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - keyframe animation</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - keyframe animation
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { Timer } from 't3d/addons/misc/Timer.js';
+		import { Texture2DLoader } from 't3d/addons/loaders/Texture2DLoader.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 80, 130);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 1000);
+		scene.add(camera);
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 0.3);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.7);
+		directionalLight.position.set(20, 30, 40);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		// create box and plane
+
+		const texture = new Texture2DLoader().load('./resources/hardwood2_diffuse.jpg');
+		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
+
+		const boxMaterial = new t3d.PhongMaterial();
+		boxMaterial.diffuse.setHex(0xffffff);
+		boxMaterial.diffuseMap = texture;
+		const box = new t3d.Mesh(new t3d.BoxGeometry(10, 10, 10), boxMaterial);
+		scene.add(box);
+
+		const planeMaterial = new t3d.LambertMaterial();
+		planeMaterial.diffuse.setHex(0xffffff);
+		const plane = new t3d.Mesh(new t3d.PlaneGeometry(100, 100), planeMaterial);
+		plane.position.y = -10;
+		scene.add(plane);
+
+		// create keyframe animation
+
+		const times = [0, 1, 2, 3, 4];
+
+		const track = new t3d.VectorKeyframeTrack(box, 'position', times, [
+			20, 0, 20,
+			20, 0, -20,
+			-20, 0, -20,
+			-20, 0, 20,
+			20, 0, 20
+		]);
+
+		const track2 = new t3d.VectorKeyframeTrack(box, 'scale', times, [
+			0.8, 0.8, 0.8,
+			1.5, 0.8, 0.8,
+			1.5, 1.5, 0.8,
+			1.5, 0.8, 0.8,
+			0.8, 0.8, 0.8
+		]);
+
+		const track3 = new t3d.QuaternionKeyframeTrack(box, 'quaternion', times, [
+			0, 0, 0, 1,
+			0.5, 0.5, 0.5, 0.5,
+			0, 0, 0, 1,
+			-0.5, -0.5, 0.5, 0.5,
+			0, 0, 0, 1
+		]);
+
+		const track4 = new t3d.ColorKeyframeTrack(box.material, 'diffuse', times, [
+			1, 1, 1,
+			1, 0, 0,
+			0, 1, 0,
+			0, 0, 1,
+			1, 1, 1
+		]);
+
+		const track5 = new t3d.VectorKeyframeTrack(box.material, 'diffuseMapTransform.offset', times, [
+			0, 0,
+			1, 1,
+			2, 2,
+			3, 3,
+			4, 4
+		]);
+
+		const tracks = [track, track2, track3, track4, track5];
+
+		const clip1 = new t3d.KeyframeClip('run', [track, track2]);
+		const clip2 = new t3d.KeyframeClip('change', [track3, track4, track5]);
+
+		const action1 = new t3d.AnimationAction(clip1);
+		const action2 = new t3d.AnimationAction(clip2);
+
+		const animation = new t3d.AnimationMixer();
+		animation.addAction(action1);
+		animation.addAction(action2);
+
+		action1.time = 0;
+		action1.weight = 1;
+		action2.time = 0;
+		action2.weight = 1;
+
+		// gui
+
+		const params = { anim1: true, anim2: true, speedFactor: 1, interpolant: 'Linear' };
+		const gui = new GUI();
+		gui.add(params, 'anim1').onChange(value => {
+			if (value) {
+				action1.time = 0;
+				action1.weight = 1;
+			} else {
+				action1.weight = 0;
+			}
+		});
+		gui.add(params, 'anim2').onChange(value => {
+			if (value) {
+				action2.time = 0;
+				action2.weight = 1;
+			} else {
+				action2.weight = 0;
+			}
+		});
+		gui.add(params, 'speedFactor', 0, 2, 0.01);
+		gui.add(params, 'interpolant', ['Linear', 'Step']).onChange(value => {
+			const interpolant = value === 'Linear' ? t3d.LinearInterpolant : t3d.StepInterpolant;
+			tracks.forEach(track => track.setInterpolant(interpolant));
+		});
+
+		//
+
+		const timer = new Timer();
+
+		function loop(timestamp) {
+			requestAnimationFrame(loop);
+
+			timer.update(timestamp);
+
+			animation.update(timer.getDelta() * params.speedFactor);
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

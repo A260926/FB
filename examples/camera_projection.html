@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - camera projection</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - camera projection<br/>
+		Sliding the `projWeight` to achieve smooth switching<br/>
+		between perspective(0) and orthogonal(1) camera.
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { GridHelper } from 't3d/addons/objects/GridHelper.js';
+		import { SkyBox } from 't3d/addons/objects/SkyBox.js';
+		import { TextureCubeLoader } from 't3d/addons/loaders/TextureCubeLoader.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const cubeTexturePath = './resources/skybox/sunset/';
+		const cubeTexture = new TextureCubeLoader().load([
+			cubeTexturePath + 'px.jpg',
+			cubeTexturePath + 'nx.jpg',
+			cubeTexturePath + 'py.jpg',
+			cubeTexturePath + 'ny.jpg',
+			cubeTexturePath + 'pz.jpg',
+			cubeTexturePath + 'nz.jpg'
+		]);
+		const skyBox = new SkyBox(cubeTexture);
+		scene.add(skyBox);
+
+		scene.environment = cubeTexture;
+
+		const boxGeometry = new t3d.BoxGeometry(20, 20, 20);
+		const boxMaterial = new t3d.PBRMaterial();
+		boxMaterial.roughness = 0.6;
+		boxMaterial.metalness = 0.1;
+		const boxMesh = new t3d.Mesh(boxGeometry, boxMaterial);
+		scene.add(boxMesh);
+
+		const grid = new GridHelper(100, 20, 0xffffff, 0x888888);
+		grid.position.y = -10;
+		scene.add(grid);
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 0.1);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.6);
+		directionalLight.position.set(-30, 20, -40);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		const camera = new t3d.Camera();
+		camera.position.set(-40, 20, -70);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+		controller.enableDollying = false;
+
+		// global variables
+
+		const cameraDistance = camera.position.getLength();
+
+		const _perspectiveProjection = new t3d.PerspectiveProjection(60, width / height);
+
+		const viewHeight = Math.tan(_perspectiveProjection.fov / 180 * Math.PI / 2) * cameraDistance * 2;
+		const _orthographicProjection = new t3d.OrthographicProjection();
+		_orthographicProjection.setSize(viewHeight * width / height, viewHeight);
+
+		const _skyboxProjection = new t3d.PerspectiveProjection(90, width / height); // fov 90 for skybox when in ortho mode
+		
+		const _combinedProjectionMatrix = new t3d.Matrix4();
+
+		const params = { projWeight: 0 };
+		
+		// input
+
+		skyBox.material.uniforms.u_Projection = new Float32Array(16);
+
+		function setCameraProjection() {
+			if (params.projWeight == 0) {
+				camera.setProjectionMatrix(_perspectiveProjection.matrix);
+				_perspectiveProjection.matrix.toArray(skyBox.material.uniforms.u_Projection);
+			} else if (params.projWeight == 1) {
+				camera.setProjectionMatrix(_orthographicProjection.matrix);
+				_skyboxProjection.matrix.toArray(skyBox.material.uniforms.u_Projection);
+			} else {
+				const alpha = easeOut(params.projWeight); // use easeOut to make the transition more 'linear'
+				_combinedProjectionMatrix.lerpMatrices(_perspectiveProjection.matrix, _orthographicProjection.matrix, alpha);
+				camera.setProjectionMatrix(_combinedProjectionMatrix);
+
+				_combinedProjectionMatrix.lerpMatrices(_perspectiveProjection.matrix, _skyboxProjection.matrix, params.projWeight);
+				_combinedProjectionMatrix.toArray(skyBox.material.uniforms.u_Projection);
+			}
+		}
+
+		function easeOut(t) {
+			return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+		}
+
+		setCameraProjection();
+
+		const gui = new GUI();
+		gui.add(params, 'projWeight', 0, 1, 0.01).onChange(setCameraProjection);
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			_perspectiveProjection.aspect = width / height;
+			_orthographicProjection.setSize(viewHeight * width / height, viewHeight);
+			_skyboxProjection.aspect = width / height;
+			setCameraProjection();
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

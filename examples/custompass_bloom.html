@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - custom pass bloom</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - custom pass bloom
+    </div>
+
+	<script src="./libs/nanobar.js"></script>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { GLTFLoader } from 't3d/addons/loaders/glTF/GLTFLoader.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { BlurShader } from 't3d/addons/shaders/BlurShader.js';
+		import { CopyShader } from 't3d/addons/shaders/CopyShader.js';
+		import { LuminosityHighPassShader } from 't3d/addons/shaders/LuminosityHighPassShader.js';
+		import { BlurPass } from 't3d/addons/pass/BlurPass.js';
+		import { Clock } from 't3d/addons/Clock.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const scene = new t3d.Scene();
+
+		const nanobar = new Nanobar();
+		nanobar.el.style.background = 'gray';
+
+		const loadingManager = new t3d.LoadingManager(function() {
+			nanobar.go(100);
+			nanobar.el.style.background = 'transparent';
+		}, function(url, itemsLoaded, itemsTotal) {
+			if (itemsLoaded < itemsTotal) {
+				nanobar.go(itemsLoaded / itemsTotal * 100);
+			}
+		});
+
+		let animation;
+
+		const loader = new GLTFLoader(loadingManager);
+		loader.load('./resources/models/gltf/PrimaryIonDrive.glb').then(function(result) {
+			const object = result.root;
+
+			object.traverse(function(obj) {
+				if (obj.material && obj.material.transparent) {
+					obj.material.depthWrite = false;
+				}
+			});
+
+			animation = new t3d.AnimationMixer();
+			result.animations.forEach(function(clip) {
+				const action = new t3d.AnimationAction(clip);
+				action.weight = 1;
+				animation.addAction(action);
+			});
+
+			scene.add(object);
+		});
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 1);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 1);
+		directionalLight.position.set(-3, 3, 0);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		const camera = new t3d.Camera();
+		camera.position.set(-1, 2, 5);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		const screenRenderTarget = new t3d.ScreenRenderTarget(canvas);
+
+		const contextParams = { antialias: false, alpha: false };
+		const gl = canvas.getContext('webgl2', contextParams) || canvas.getContext('webgl', contextParams);
+		const renderer = new t3d.WebGLRenderer(gl);
+
+		const tempRenderTarget = t3d.OffscreenRenderTarget.create2D(width, height);
+		tempRenderTarget.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget.generateMipmaps = false;
+
+		const tempRenderTarget1 = t3d.OffscreenRenderTarget.create2D(width, height);
+		tempRenderTarget1.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget1.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget1.generateMipmaps = false;
+
+		const tempRenderTarget2 = t3d.OffscreenRenderTarget.create2D(width, height);
+		tempRenderTarget2.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget2.texture.magFilter = t3d.TEXTURE_FILTER.LINEAR;
+		tempRenderTarget2.generateMipmaps = false;
+
+		const shadowMapPass = new t3d.ShadowMapPass();
+
+		const highLightPass = new t3d.ShaderPostPass(LuminosityHighPassShader);
+		highLightPass.uniforms.luminosityThreshold = 0;
+		highLightPass.uniforms.tDiffuse = tempRenderTarget.texture;
+
+		const blurXPass = new BlurPass(BlurShader);
+		blurXPass.uniforms.tDiffuse = tempRenderTarget1.texture;
+		blurXPass.uniforms.textureSize = [width, height];
+		blurXPass.uniforms.blurSize = 3;
+		blurXPass.uniforms.direction = 0;
+		blurXPass.setKernelSize(13);
+
+		const blurYPass = new BlurPass(BlurShader);
+		blurYPass.uniforms.tDiffuse = tempRenderTarget2.texture;
+		blurYPass.uniforms.textureSize = [width, height];
+		blurYPass.uniforms.blurSize = 3;
+		blurYPass.uniforms.direction = 1;
+		blurYPass.setKernelSize(13);
+
+		const copyPass = new t3d.ShaderPostPass(CopyShader);
+
+		// gui
+		const bloomParams = { enable: true, intensity: 2, kernelSize: 13 };
+		const gui = new GUI();
+		gui.add({ version: 'WebGL ' + renderer.capabilities.version }, 'version').disable();
+		gui.add(bloomParams, 'enable');
+		gui.add(highLightPass.uniforms, 'luminosityThreshold', 0, 1, 0.01);
+		gui.add(blurXPass.uniforms, 'blurSize', 0, 10, 0.01);
+		gui.add(blurYPass.uniforms, 'blurSize', 0, 10, 0.01);
+		gui.add(bloomParams, 'intensity', 0, 3, 0.01);
+		gui.add(bloomParams, 'kernelSize', [5, 9, 13]).onChange(val => {
+			blurXPass.setKernelSize(val);
+			blurYPass.setKernelSize(val);
+		});
+
+		const clock = new Clock();
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+			animation && animation.update(clock.getDelta());
+
+			scene.updateMatrix();
+			scene.updateRenderStates(camera);
+			scene.updateRenderQueue(camera);
+
+			shadowMapPass.render(renderer, scene);
+
+			renderer.renderScene(scene, camera, tempRenderTarget);
+
+			highLightPass.render(renderer, tempRenderTarget1);
+
+			blurXPass.render(renderer, tempRenderTarget2);
+
+			blurYPass.render(renderer, tempRenderTarget1);
+
+			copyPass.material.transparent = false;
+			copyPass.uniforms.tDiffuse = tempRenderTarget.texture;
+			copyPass.uniforms.opacity = 1;
+			screenRenderTarget.setClear(true, true, true);
+			copyPass.render(renderer, screenRenderTarget);
+
+			if (bloomParams.enable) {
+				copyPass.material.transparent = true;
+				copyPass.material.blending = t3d.BLEND_TYPE.ADD;
+				copyPass.uniforms.tDiffuse = tempRenderTarget1.texture;
+				copyPass.uniforms.opacity = bloomParams.intensity;
+				screenRenderTarget.setClear(false, false, false);
+				copyPass.render(renderer, screenRenderTarget);
+			}
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+
+			screenRenderTarget.resize(width, height);
+			tempRenderTarget.resize(width, height);
+			tempRenderTarget1.resize(width, height);
+
+			blurXPass.uniforms.textureSize = [width, height];
+			blurYPass.uniforms.textureSize = [width, height];
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

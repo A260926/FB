@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>t3d - transform controls</title>
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - transform controls
+		<br/>"W" translate | "E" rotate | "R" scale | "A" all
+		<br/>"Shift" snap or select multiple
+    </div>
+
+    <!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { Texture2DLoader } from 't3d/addons/loaders/Texture2DLoader.js';
+		import { GridHelper } from 't3d/addons/objects/GridHelper.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { TransformControls } from 't3d/addons/controls/TransformControls.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+		forwardRenderer.screenRenderTarget.setColorClearValue(0.6, 0.7, 0.8, 1);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 8, 10);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+		scene.add(camera);
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 0.4);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.9);
+		directionalLight.position.set(20, 30, 40);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		const texture = new Texture2DLoader().load('./resources/logo.jpg');
+
+		const boxGeometry = new t3d.BoxGeometry(1, 1, 1);
+		const boxMaterial = new t3d.LambertMaterial();
+		boxMaterial.diffuseMap = texture;
+
+		const boxes = [];
+		const box1 = new t3d.Mesh(boxGeometry, boxMaterial);
+		box1.position.set(-2, 0, 0);
+		box1.euler.set(Math.PI / 6, 0, Math.PI / 6);
+		scene.add(box1);
+		boxes.push(box1);
+		const box2 = new t3d.Mesh(boxGeometry, boxMaterial);
+		box2.position.set(2, 0, 0);
+		scene.add(box2);
+		boxes.push(box2);
+
+		const grid = new GridHelper(50, 50, 0xffffff, 0x888888);
+		scene.add(grid);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		camera.updateMatrix();
+		const transformControls = new TransformControls(camera, canvas);
+		scene.add(transformControls);
+
+		const raycaster = new t3d.Raycaster();
+		const mouse = new t3d.Vector2();
+		let shiftKeyPressed = false;
+
+		document.addEventListener('mousedown', event => {
+			if (event.button !== 0) return;
+			mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+			mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+			raycaster.setFromCamera(mouse, camera);
+
+			const array = raycaster.intersectObjects(boxes, true);
+			if (array.length) {
+				const object = array[0].object;
+				if (!shiftKeyPressed) {
+					transformControls.group.reset();
+				}
+				transformControls.group.addObject(object);
+				syncTransformPanel();
+			}
+		});
+
+		document.addEventListener('keydown', event => {
+			switch (event.key) {
+				case 'w':
+					transformControls.mode = 'translate';
+					break;
+				case 'r':
+					transformControls.mode = 'scale';
+					break;
+				case 'e':
+					transformControls.mode = 'rotate';
+					break;
+				case 'a':
+					transformControls.mode = 'all';
+					break;
+				case 'Shift':
+					shiftKeyPressed = true;
+					transformControls.translateSnap = params.translateSnap;
+					transformControls.scaleSnap = params.scaleSnap;
+					transformControls.rotateSnap = params.rotateSnap * Math.PI / 180;
+					break;
+			}
+		});
+
+		document.addEventListener('keyup', event => {
+			switch (event.key) {
+				case 'Shift':
+					shiftKeyPressed = false;
+					transformControls.translateSnap = null;
+					transformControls.scaleSnap = null;
+					transformControls.rotateSnap = null;
+					break;
+			}
+		});
+
+		const params = { translateSnap: 1, scaleSnap: 0.5, rotateSnap: 30, translate: '0.00, 0.00, 0.00', rotate: '0.00, 0.00, 0.00', scale: '1.00, 1.00, 1.00' };
+		const gui = new GUI();
+		gui.add(transformControls, 'mode', ['translate', 'scale', 'rotate', 'all']).listen();
+		gui.add(transformControls, 'size', 0.5, 1.5);
+		gui.add(transformControls.group, 'anchorType', ['center', 'pivot']).onChange(syncTransformPanel);
+		gui.add(transformControls.group, 'coordinateType', ['local', 'global']);
+		const snapFolder = gui.addFolder('Snap').close();
+		snapFolder.add(params, 'translateSnap', 0, 10, 0.1);
+		snapFolder.add(params, 'scaleSnap', 0, 10, 0.1);
+		snapFolder.add(params, 'rotateSnap', 0, 180, 1);
+		const transformFolder = gui.addFolder('Transform');
+		transformFolder.add(params, 'translate').listen().disable();
+		transformFolder.add(params, 'rotate').listen().disable();
+		transformFolder.add(params, 'scale').listen().disable();
+
+		const tempWorldMatrix = new t3d.Matrix4();
+		const tempPosition = new t3d.Vector3();
+		const tempQuaternion = new t3d.Quaternion();
+		const tempScale = new t3d.Vector3();
+		const tempEuler = new t3d.Euler();
+
+		function processNumber(value, radToDeg = false) {
+			if (radToDeg) {
+				value *= 180 / Math.PI;
+			}
+
+			value = Math.round(value * 100) / 100;
+
+			return value.toFixed(2);
+		}
+
+		function syncTransformPanel() {
+			if (transformControls.group.objects.length > 1) {
+				transformControls.group.getWorldMatrix(tempWorldMatrix);
+				tempWorldMatrix.decompose(tempPosition, tempQuaternion, tempScale);
+				tempEuler.setFromQuaternion(tempQuaternion);
+			} else if (transformControls.group.objects.length > 0) {
+				const object = transformControls.group.objects[0];
+				tempPosition.copy(object.position);
+				tempEuler.copy(object.euler);
+				tempScale.copy(object.scale);
+			} else {
+				tempPosition.set(0, 0, 0);
+				tempEuler.set(0, 0, 0);
+				tempScale.set(1, 1, 1);
+			}
+
+			params.translate = `${processNumber(tempPosition.x)}, ${processNumber(tempPosition.y)}, ${processNumber(tempPosition.z)}`;
+			params.rotate = `${processNumber(tempEuler.x, true)}, ${processNumber(tempEuler.y, true)}, ${processNumber(tempEuler.z, true)}`;
+			params.scale = `${processNumber(tempScale.x)}, ${processNumber(tempScale.y)}, ${processNumber(tempScale.z)}`;
+		}
+
+		box1.updateMatrix();
+		transformControls.group.addObject(box1);
+		transformControls.onDrag = syncTransformPanel;
+		syncTransformPanel();
+
+		transformControls.onDragStart = function() {
+			controller.enabled = false;
+		};
+
+		transformControls.onDragEnd = function() {
+			controller.enabled = true;
+		};
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			transformControls.update();
+
+			forwardRenderer.render(scene, camera);
+		}
+
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 500);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+
+		window.addEventListener('resize', onWindowResize, false);
+    </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+import {
+	ScreenRenderTarget,
+	ShadowMapPass,
+	WebGLRenderer
+} from 't3d';
+
+/**
+ * A simple Forward WebGL Renderer.
+ * @memberof t3d
+ */
+class ForwardRenderer extends WebGLRenderer {
+
+	/**
+	 * @param {HTMLCanvasElement} view - The canvas elements.
+	 * @param {object} [options] - The {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/getContext options for webgl context}.
+	 */
+	constructor(view, options) {
+		const defaultContextParams = {
+			antialias: true, // antialias
+			alpha: false, // effect performance, default false
+			// premultipliedAlpha: false, // effect performance, default false
+			stencil: true
+		};
+
+		const gl = view.getContext('webgl2', options || defaultContextParams) || view.getContext('webgl', options || defaultContextParams);
+
+		super(gl);
+
+		if (this.capabilities.version < 2) {
+			console.info('ForwardRenderer use WebGL1 because of your browser not support WebGL2.');
+		}
+
+		this.screenRenderTarget = new ScreenRenderTarget(view);
+
+		this.shadowMapPass = new ShadowMapPass();
+
+		/**
+		 * Defines whether the shadow pass should automatically update.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.shadowAutoUpdate = true;
+
+		/**
+		 * If {@link ForwardRenderer.shadowAutoUpdate} is set true and this set true, shadow will update and set this to false automatically.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.shadowNeedsUpdate = true;
+
+		/**
+		 * Defines whether the scene should automatically update its matrix.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.matrixAutoUpdate = true;
+
+		/**
+		 * Defines whether the scene should automatically update its render states.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.renderStatesAutoUpdate = true;
+
+		/**
+		 * Defines whether the scene should automatically update its render queue.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.renderQueueAutoUpdate = true;
+	}
+
+	set autoClear(value) {
+		console.warn('ForwardRenderer: autoClear has been deprecated. Use renderTarget.setClear(...) instead.');
+	}
+
+	get autoClear() {
+		console.warn('ForwardRenderer: autoClear has been deprecated. Use renderTarget.setClear(...) instead.');
+		return true;
+	}
+
+	// deprecated since 0.5.0
+	set backRenderTarget(value) {
+		this.screenRenderTarget = value;
+	}
+
+	get backRenderTarget() {
+		return this.screenRenderTarget;
+	}
+
+	/**
+	 * Render a scene using a camera.
+	 * The render is done to the renderTarget (if specified) or to the canvas as usual.
+	 * @param {Scene} scene - The scene.
+	 * @param {Camera} camera - The camera.
+	 * @param {RenderTargetBase} [renderTarget] - The render is done to the renderTarget (if specified) or to the canvas as usual.
+	 * @param {boolean} [forceClear=false] - Deprecated. Whether to clear the output before rendering. Use renderTarget.setClear(...) instead.
+	 */
+	render(scene, camera, renderTarget, forceClear) {
+		if (forceClear !== undefined) {
+			console.warn('The fourth parameter forceClear has been deprecated. Use renderTarget.setClear(...) instead.');
+		}
+
+		this.matrixAutoUpdate && scene.updateMatrix();
+
+		this.renderStatesAutoUpdate && scene.updateRenderStates(camera);
+		this.renderQueueAutoUpdate && scene.updateRenderQueue(camera);
+
+		if (this.shadowAutoUpdate || this.shadowNeedsUpdate) {
+			this.shadowMapPass.render(this, scene);
+
+			this.shadowNeedsUpdate = false;
+		}
+
+		if (renderTarget === undefined) {
+			renderTarget = this.screenRenderTarget;
+		}
+
+		this.renderScene(scene, camera, renderTarget);
+
+		if (renderTarget.texture) {
+			this.generateMipmaps(renderTarget.texture);
+		}
+	}
+
+}
+
+export { ForwardRenderer };
