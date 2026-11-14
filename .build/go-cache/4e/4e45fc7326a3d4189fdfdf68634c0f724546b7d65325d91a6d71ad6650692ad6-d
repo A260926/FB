@@ -1,0 +1,17 @@
+./parser.go
+./position_plan.go
+./pseudo_classes.go
+./selector.go
+./serialize.go
+./specificity.go
+./attribute_roundtrip_test.go
+./benchmark_test.go
+./is_test.go
+./lang_test.go
+./nth_of_test.go
+./null_escape_test.go
+./parser_test.go
+./selector_test.go
+./serialize_test.go
+./specificity_test.go
+./w3_test.go

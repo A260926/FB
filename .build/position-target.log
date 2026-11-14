@@ -1,0 +1,23 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestPositionPlanResults
+--- PASS: TestPositionPlanResults (0.00s)
+=== RUN   TestPositionPlanFilterAcrossTrees
+--- PASS: TestPositionPlanFilterAcrossTrees (0.00s)
+=== RUN   TestPositionPlanCustomMatcherOrder
+--- PASS: TestPositionPlanCustomMatcherOrder (0.00s)
+=== RUN   TestPositionPlanWork
+    positional_plan_test.go:373: li:nth-child(2n+1): [{1024 0 256} {2048 0 512} {4096 0 1024}]
+    positional_plan_test.go:373: li:nth-last-child(-n+4): [{1024 0 4} {2048 0 4} {4096 0 4}]
+    positional_plan_test.go:373: li:nth-of-type(2n): [{1024 0 256} {2048 0 512} {4096 0 1024}]
+    positional_plan_test.go:373: li:nth-last-of-type(3n+1): [{1024 0 171} {2048 0 342} {4096 0 683}]
+    positional_plan_test.go:373: li:nth-child(2n of .visible): [{1024 512 128} {2048 1024 256} {4096 2048 512}]
+    positional_plan_test.go:373: li:nth-child(2n of .visible):not(:nth-last-child(-n+2 of .visible)): [{1024 1024 127} {2048 2048 255} {4096 4096 511}]
+--- PASS: TestPositionPlanWork (0.81s)
+=== RUN   TestPositionPlanIsolation
+=== RUN   TestPositionPlanIsolation/tree_changes
+=== RUN   TestPositionPlanIsolation/concurrent_queries
+--- PASS: TestPositionPlanIsolation (0.01s)
+    --- PASS: TestPositionPlanIsolation/tree_changes (0.00s)
+    --- PASS: TestPositionPlanIsolation/concurrent_queries (0.01s)
+PASS
+ok  	github.com/andybalholm/cascadia	2.083s

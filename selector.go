@@ -148,8 +148,26 @@ func queryInto(n *html.Node, m Matcher, storage []*html.Node) []*html.Node {
 
 // QueryAll returns a slice of all the nodes that match m, from the descendants
 // of n.
+//
+// The whole traversal shares one query-scoped positional plan: each parent's
+// element children are indexed once, so positional pseudo-classes do not walk
+// the same siblings again for every candidate. The plan lives only for this
+// call. Matchers that are not implemented by this package's parser are still
+// evaluated through their own Match methods, in the usual order.
 func QueryAll(n *html.Node, m Matcher) []*html.Node {
-	return queryInto(n, m, nil)
+	pc := newPlanContext()
+	return queryIntoPlan(n, m, pc, nil)
+}
+
+func queryIntoPlan(n *html.Node, m Matcher, pc *planContext, storage []*html.Node) []*html.Node {
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if planMatch(pc, m, child) {
+			storage = append(storage, child)
+		}
+		storage = queryIntoPlan(child, m, pc, storage)
+	}
+
+	return storage
 }
 
 // Match returns true if the node matches the selector.
@@ -197,10 +215,13 @@ func (s Selector) Filter(nodes []*html.Node) (result []*html.Node) {
 	return result
 }
 
-// Filter returns the nodes that match m.
+// Filter returns the nodes that match m. Input order and duplicate nodes are
+// preserved. Like QueryAll, one call shares a single query-scoped positional
+// plan, so positional pseudo-classes index each candidate's parent once.
 func Filter(nodes []*html.Node, m Matcher) (result []*html.Node) {
+	pc := newPlanContext()
 	for _, n := range nodes {
-		if m.Match(n) {
+		if planMatch(pc, m, n) {
 			result = append(result, n)
 		}
 	}
