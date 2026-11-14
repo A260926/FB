@@ -753,6 +753,128 @@ void plm_frame_to_abgr(plm_frame_t *frame, uint8_t *dest, int stride);
 
 
 // -----------------------------------------------------------------------------
+// plm_video_reverse public API
+//
+// Reverse-order ("rewind") playback of a raw MPEG1 Video elementary stream.
+// This is deliberately a video-only, elementary-stream interface: no MPEG-PS
+// demuxing, no audio and no windowing is involved.
+//
+// The caller owns `bytes`; it must stay valid and unchanged until the reverse
+// instance is destroyed. The library never modifies or copies the compressed
+// stream. It only stores byte offsets and a small header state per picture.
+//
+// Indexing
+// --------
+// plm_video_reverse_create() scans the elementary stream once and builds the
+// display-order index. It neither reconstructs macroblocks nor runs the IDCT.
+// The index is linear in the number of coded pictures (a byte offset plus the
+// temporal_reference, picture coding type and global display number), with one
+// small entry per GOP. GOP time_code is not used as a frame number; display
+// order is derived from temporal_reference within each GOP, and GOPs are
+// concatenated in stream (coding) order.
+//
+// The intended input is a single sequence: constant dimensions, frame rate and
+// quantization matrices (repeated identical sequence headers are allowed), a
+// closed first GOP starting with an I picture, exactly one I picture per group,
+// unique non-wrapping temporal_reference values within a group, no broken_link,
+// no D pictures, no truncation, and a final coded picture that is I or P.
+// Both closed and open GOPs are supported, including B pictures that are coded
+// after the following I picture, are displayed before it and need reference
+// pictures from the previous group.
+//
+// G is the maximum display-order group span: the number of display frames in
+// every interval between consecutive I pictures, plus the leading and trailing
+// partial intervals. `max_cached_frames` must be at least G. create() returns
+// NULL for zero capacity, empty input, a malformed/unsupported stream, or a
+// capacity below G.
+//
+// Frame delivery
+// --------------
+// A new instance starts at the last display frame. plm_video_reverse_next()
+// returns the current frame and advances one display frame backwards; it
+// returns NULL once playback is exhausted, and repeated calls continue to
+// return NULL (the first frame is never repeated). A successful seek after
+// exhaustion re-arms the instance, including seeking back to that frame.
+//
+// seek() takes a zero-based display frame number. It returns 1 if the frame is
+// valid (the next plm_video_reverse_next() returns exactly that frame, then
+// successively earlier ones) and 0 if it is out of range. In the latter case
+// the cursor and any borrowed frame remain unchanged.
+//
+// The returned plm_frame_t (and its planes) is owned by the reverse instance
+// and is only borrowed by the caller: it stays valid until the next call to
+// plm_video_reverse_next(), a successful plm_video_reverse_seek(), or
+// plm_video_reverse_destroy(). `frame->time` is the picture's original forward
+// local time (display frame number / frame rate), not a reverse elapsed time.
+// Cached frames own their pixels; they are copies of the decoder's working
+// planes and are overwritten when a new display segment is built.
+
+typedef struct plm_video_reverse_t plm_video_reverse_t;
+
+
+// Statistics.
+//
+// index_bytes: number of times source bytes were inspected while the index was
+//   built in plm_video_reverse_create(). The counter is incremented by the
+//   index scanner and bit reader for every byte of the caller's input they
+//   actually look at. The index is built only once; after create() this counter
+//   does not change and never exceeds 8 * length.
+//
+// pictures_decoded: number of times a real picture reconstruction path was
+//   entered (plm_video_decode_picture(), including pre-roll pictures decoded
+//   only to provide references and pictures re-decoded when a segment is
+//   rebuilt). It is zero after create() and is not derived from output frames.
+//
+// cached_frames_peak: maximum number of fully cached display frames whose
+//   pixels were simultaneously owned by the instance. Reserved capacity does
+//   not count; a frame counts while its pixels are valid in the cache. This is
+//   zero after create().
+
+typedef struct {
+	size_t index_bytes;
+	size_t pictures_decoded;
+	size_t cached_frames_peak;
+} plm_video_reverse_stats_t;
+
+
+// Create a reverse player over a caller-owned MPEG1 Video elementary stream.
+// Returns NULL on failure (see above). No picture is reconstructed here.
+
+plm_video_reverse_t *plm_video_reverse_create(
+	const uint8_t *bytes, size_t length, size_t max_cached_frames
+);
+
+
+// Destroy a reverse player. The caller's input bytes are not freed.
+
+void plm_video_reverse_destroy(plm_video_reverse_t *self);
+
+
+// Get the number of display frames in the indexed stream.
+
+size_t plm_video_reverse_get_count(plm_video_reverse_t *self);
+
+
+// Seek to a zero-based display frame number. Returns 1 on success, 0 when out
+// of range (the cursor is left unchanged).
+
+int plm_video_reverse_seek(plm_video_reverse_t *self, size_t display_frame);
+
+
+// Get the current display frame and move one display frame backwards. Returns
+// NULL when exhausted. The returned frame is borrowed as described above.
+
+plm_frame_t *plm_video_reverse_next(plm_video_reverse_t *self);
+
+
+// Copy the current counters into *stats. Passing NULL for stats is a no-op.
+
+void plm_video_reverse_get_stats(
+	plm_video_reverse_t *self, plm_video_reverse_stats_t *stats
+);
+
+
+// -----------------------------------------------------------------------------
 // plm_audio public API
 // Decode MPEG-1 Audio Layer II ("mp2") data into raw samples
 
@@ -3652,7 +3774,841 @@ PLM_DEFINE_FRAME_CONVERT_FUNCTION(plm_frame_to_abgr, 4, 3, 2, 1)
 
 
 // -----------------------------------------------------------------------------
+// plm_video_reverse implementation
+//
+// State and memory
+// ----------------
+// The reverse player owns three kinds of state:
+//
+//  1. The compressed index: one plm_video_reverse_picture_t per coded picture.
+//     Each entry stores only the byte offset of the picture start code, the
+//     temporal_reference, the picture coding type, the GOP index, the global
+//     display frame number and the post-header bit position. There are no
+//     per-picture pixels and no per-picture decoder snapshots. The array grows
+//     in powers of two with PLM_REALLOC; its size is linear in the number of
+//     coded pictures.
+//
+//  2. The GOP index: one plm_video_reverse_gop_t per group, storing coding- and
+//     display-order ranges plus the position of the group's I picture. This is
+//     linear in the number of groups, which is bounded by the number of coded
+//     pictures.
+//
+//  3. The pixel cache: exactly min(display_frame_count, max_cached_frames)
+//     frame buffers, each owning its own Y/Cr/Cb planes. Together with the
+//     three working frames inside the plm_video_t decoder this is the complete
+//     pixel storage of the reverse player.
+//
+// No copy of the compressed stream is made. The decoder reads the caller's
+// bytes directly through a plm_buffer over fixed memory, and the reverse path
+// calls plm_video_decode_picture() directly instead of plm_video_decode(), so
+// the buffer's discard/memmove step never runs and the caller's immutable
+// input is never written.
+//
+// Segments are anchored at I pictures in display order. Let d[g] be the global
+// display frame number of group g's I picture. Segment g covers display frames
+// [d[g], d[g+1]) (the final segment ends at the last frame); a leading partial
+// segment covers [0, d[0]) when the first I picture is not displayed first.
+// The segment size d[g+1] - d[g] (and the leading/trailing partial sizes) is
+// exactly the interval count that defines G, so no segment exceeds G display
+// frames and caching a whole segment needs at most G cache slots.
+//
+// Building segment g decodes the tail of group g (its I picture and every
+// picture displayed at or after it; the group's leading B pictures belong to
+// the previous segment and are skipped) and, when group g+1 is open, the I
+// picture of group g+1 plus its leading B pictures. After the tail of group g
+// the decoder's three working planes have rotated so frame_forward holds the
+// group's last reference picture; decoding the next I rotates that reference
+// into frame_forward again and puts the I in frame_backward, which is exactly
+// the pair those leading B pictures predict from. The existing picture, slice,
+// motion-compensation and block-reconstruction path is used unchanged; each
+// reconstructed display frame is copied into its own cache slot. Consecutive
+// plm_video_reverse_next() calls within a segment reuse those slots and do not
+// touch the decoder.
+//
+// COUNTING
+// --------
+// - stats.index_bytes is incremented by plm_video_reverse_read_bits() and by
+//   the start-code scanner in plm_video_reverse_build_index(): the only code
+//   that inspects the caller's compressed bytes. Each source byte touched by a
+//   read_bits() call contributes once to that call. The index is built exactly
+//   once in create(); create() does not reconstruct pictures, and the counter
+//   never changes afterwards.
+// - stats.pictures_decoded is incremented in plm_video_reverse_decode_coded(),
+//   immediately before each call to plm_video_decode_picture(). That is the
+//   only place the real reconstruction path is entered; it counts re-decoded,
+//   boundary and skipped pictures as well as displayed ones.
+// - stats.cached_frames_peak is the largest number of cache slots filled with
+//   pixels by a segment build (reserved but unfilled capacity does not count).
+//
+// SPACE ACCOUNTING (all through PLM_MALLOC/PLM_REALLOC/PLM_FREE)
+// -------------------------------------------------------------
+// Constant per instance: sizeof(plm_video_reverse_t) (one struct holding the
+// sequence state, the reader, pointers and counters).
+//
+// Linear in the number of coded pictures P:
+//   sizeof(plm_video_reverse_picture_t) * P     (compressed index; offsets +
+//                                                header state only)
+// The array capacity is rounded up to the next power of two, so the allocated
+// footprint is at most 2 * that value. No compressed bytes are stored.
+//
+// Linear in the number of groups G_gop (at most P):
+//   sizeof(plm_video_reverse_gop_t) * G_gop     (group display/coding ranges)
+// also grown to a power of two.
+//
+// Pixel storage (the only pixel allocation made by the reverse player):
+//   frame_data_size * min(P, max_cached_frames)  (cache plane data)
+//   sizeof(plm_frame_t) * min(P, max_cached_frames) (cache frame descriptors)
+// plus the three working frames that plm_video_create_with_buffer() allocates
+// inside the embedded decoder (frame_data_size * 3). The three working frames
+// are reused for every reconstruction; there is no extra per-picture snapshot.
+//
+// Therefore the total is O(P + min(P, max_cached_frames) * pixels) and the
+// only per-frame pixel storage beyond the decoder's work frames is the cache.
+// The tests cross-check these allocations against a real malloc/realloc/free
+// record.
+
+typedef struct plm_video_reverse_picture_t {
+	size_t offset;          // byte offset of the 00 00 01 00 start code
+	int temporal_reference; // GOP-local display number
+	int picture_type;       // PLM_VIDEO_PICTURE_TYPE_*
+	int display_frame;      // global zero-based display frame number
+} plm_video_reverse_picture_t;
+
+typedef struct plm_video_reverse_gop_t {
+	int first_coded;             // first coded picture of the group
+	int last_coded;              // last coded picture of the group
+	int i_coded;                 // the group's single I picture
+	int i_temporal_reference;    // its temporal_reference
+	int i_display;               // its global display frame number
+	int leading_count;           // pictures of this group displayed before its I
+} plm_video_reverse_gop_t;
+
+typedef struct plm_video_reverse_sequence_t {
+	int width;
+	int height;
+	int mb_width;
+	int mb_height;
+	int rate_code;
+	int intra_present;
+	int non_intra_present;
+	uint8_t intra[64];
+	uint8_t non_intra[64];
+	double framerate;
+	size_t frame_data_size;
+} plm_video_reverse_sequence_t;
+
+struct plm_video_reverse_t {
+	const uint8_t *bytes;
+	size_t length;
+
+	plm_video_reverse_sequence_t sequence;
+
+	plm_video_reverse_picture_t *pictures;
+	size_t picture_count;
+	size_t picture_capacity;
+
+	plm_video_reverse_gop_t *gops;
+	size_t gop_count;
+	size_t gop_capacity;
+	int group_span;             // G
+
+	size_t max_cached_frames;
+	size_t frame_count;
+	uint8_t *cache_data;
+	plm_frame_t *cache_frames;
+
+	plm_video_t *decoder;
+
+	int segment_valid;
+	int segment_lo;
+	int segment_hi;
+
+	int cursor;
+
+	plm_video_reverse_stats_t stats;
+};
+
+// Read `bit_count` bits (at most 32) from the caller's bytes. Bounds are
+// checked against `length`. Each distinct source byte touched by this call
+// contributes one to stats.index_bytes.
+static int plm_video_reverse_read_bits(
+	plm_video_reverse_t *self,
+	size_t byte_offset, int bit_offset, int bit_count, int *ok
+) {
+	int value = 0;
+	size_t previous = (size_t)-1;
+	for (int i = 0; i < bit_count; i++) {
+		size_t pos = byte_offset + ((bit_offset + i) >> 3);
+		if (pos >= self->length) {
+			*ok = FALSE;
+			return 0;
+		}
+		if (pos != previous) {
+			self->stats.index_bytes++;
+			previous = pos;
+		}
+		int bit = (self->bytes[pos] >> (7 - ((bit_offset + i) & 7))) & 1;
+		value = (value << 1) | bit;
+	}
+	return value;
+}
+
+// Parse a sequence header at `start` (the offset of its 00 00 01 b3 start
+// code). Bit positions match plm_video_decode_sequence_header().
+static int plm_video_reverse_parse_sequence_header(
+	plm_video_reverse_t *self, size_t start, plm_video_reverse_sequence_t *out
+) {
+	int ok = TRUE;
+	int width = plm_video_reverse_read_bits(self, start + 4, 0, 12, &ok);
+	int height = plm_video_reverse_read_bits(self, start + 4, 12, 12, &ok);
+	int rate_code = plm_video_reverse_read_bits(self, start + 4, 28, 4, &ok);
+	if (!ok || width <= 0 || height <= 0 || rate_code <= 0 || rate_code >= 16) {
+		return FALSE;
+	}
+	double framerate = PLM_VIDEO_PICTURE_RATE[rate_code];
+	if (framerate <= 0) {
+		return FALSE;
+	}
+
+	// 12 + 12 + 4 + 4 + 18 + 1 + 10 + 1 = 62 bits, then the matrix flags.
+	int bit = 62;
+	int intra_present = plm_video_reverse_read_bits(self, start + 4, bit, 1, &ok);
+	bit += 1;
+	memset(out->intra, 0, sizeof(out->intra));
+	if (intra_present) {
+		for (int i = 0; i < 64; i++) {
+			out->intra[i] = (uint8_t)plm_video_reverse_read_bits(
+				self, start + 4, bit + i * 8, 8, &ok
+			);
+		}
+		bit += 64 * 8;
+	}
+	int non_intra_present = plm_video_reverse_read_bits(self, start + 4, bit, 1, &ok);
+	bit += 1;
+	memset(out->non_intra, 0, sizeof(out->non_intra));
+	if (non_intra_present) {
+		for (int i = 0; i < 64; i++) {
+			out->non_intra[i] = (uint8_t)plm_video_reverse_read_bits(
+				self, start + 4, bit + i * 8, 8, &ok
+			);
+		}
+		bit += 64 * 8;
+	}
+	if (!ok || ((size_t)bit + 7) / 8 > self->length - (start + 4)) {
+		return FALSE;
+	}
+
+	out->width = width;
+	out->height = height;
+	out->mb_width = (width + 15) >> 4;
+	out->mb_height = (height + 15) >> 4;
+	out->rate_code = rate_code;
+	out->framerate = framerate;
+	out->intra_present = intra_present;
+	out->non_intra_present = non_intra_present;
+	out->frame_data_size =
+		(size_t)(out->mb_width << 4) * (size_t)(out->mb_height << 4) +
+		2 * ((size_t)(out->mb_width << 3) * (size_t)(out->mb_height << 3));
+	return TRUE;
+}
+
+// Compare the parsed form of two sequence headers, including both quantization
+// matrices. Used to enforce the constant-sequence input contract.
+static int plm_video_reverse_sequence_equal(
+	const plm_video_reverse_sequence_t *a, const plm_video_reverse_sequence_t *b
+) {
+	if (
+		a->width != b->width || a->height != b->height ||
+		a->rate_code != b->rate_code ||
+		a->intra_present != b->intra_present ||
+		a->non_intra_present != b->non_intra_present
+	) {
+		return FALSE;
+	}
+	if (a->intra_present && memcmp(a->intra, b->intra, 64) != 0) {
+		return FALSE;
+	}
+	if (a->non_intra_present && memcmp(a->non_intra, b->non_intra, 64) != 0) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static int plm_video_reverse_picture_type_valid(int type) {
+	return
+		type == PLM_VIDEO_PICTURE_TYPE_INTRA ||
+		type == PLM_VIDEO_PICTURE_TYPE_PREDICTIVE ||
+		type == PLM_VIDEO_PICTURE_TYPE_B;
+}
+
+static plm_video_reverse_picture_t *plm_video_reverse_add_picture(
+	plm_video_reverse_t *self
+) {
+	if (self->picture_count == self->picture_capacity) {
+		size_t capacity = self->picture_capacity ? self->picture_capacity * 2 : 16;
+		plm_video_reverse_picture_t *grown = (plm_video_reverse_picture_t *)PLM_REALLOC(
+			self->pictures, capacity * sizeof(plm_video_reverse_picture_t)
+		);
+		if (!grown) {
+			return NULL;
+		}
+		self->pictures = grown;
+		self->picture_capacity = capacity;
+	}
+	plm_video_reverse_picture_t *picture = &self->pictures[self->picture_count];
+	memset(picture, 0, sizeof(*picture));
+	picture->display_frame = -1;
+	self->picture_count++;
+	return picture;
+}
+
+static plm_video_reverse_gop_t *plm_video_reverse_add_gop(
+	plm_video_reverse_t *self
+) {
+	if (self->gop_count == self->gop_capacity) {
+		size_t capacity = self->gop_capacity ? self->gop_capacity * 2 : 8;
+		plm_video_reverse_gop_t *grown = (plm_video_reverse_gop_t *)PLM_REALLOC(
+			self->gops, capacity * sizeof(plm_video_reverse_gop_t)
+		);
+		if (!grown) {
+			return NULL;
+		}
+		self->gops = grown;
+		self->gop_capacity = capacity;
+	}
+	plm_video_reverse_gop_t *gop = &self->gops[self->gop_count];
+	memset(gop, 0, sizeof(*gop));
+	gop->first_coded = (int)self->picture_count;
+	gop->last_coded = (int)self->picture_count - 1;
+	gop->i_coded = -1;
+	self->gop_count++;
+	return gop;
+}
+
+// Build the compressed index and global display numbering. Only source-byte
+// inspections performed here contribute to stats.index_bytes. No picture is
+// reconstructed and no pixel storage is allocated by this function.
+static int plm_video_reverse_build_index(plm_video_reverse_t *self) {
+	int have_sequence = FALSE;
+	int current_gop = -1;
+	int first_gop_closed = FALSE;
+	size_t pos = 0;
+
+	while (pos + 3 < self->length) {
+		uint8_t b0 = self->bytes[pos];
+		self->stats.index_bytes++;
+		if (b0 != 0x00) {
+			pos++;
+			continue;
+		}
+		uint8_t b1 = self->bytes[pos + 1];
+		self->stats.index_bytes++;
+		if (b1 != 0x00) {
+			pos++;
+			continue;
+		}
+		uint8_t b2 = self->bytes[pos + 2];
+		self->stats.index_bytes++;
+		if (b2 != 0x01) {
+			pos++;
+			continue;
+		}
+		uint8_t start_code = self->bytes[pos + 3];
+		self->stats.index_bytes++;
+		size_t start = pos;
+		pos += 4;
+
+		if (start_code == (uint8_t)PLM_START_SEQUENCE) {
+			plm_video_reverse_sequence_t sequence;
+			if (!plm_video_reverse_parse_sequence_header(self, start, &sequence)) {
+				return FALSE;
+			}
+			if (!have_sequence) {
+				self->sequence = sequence;
+				have_sequence = TRUE;
+			}
+			else if (!plm_video_reverse_sequence_equal(&self->sequence, &sequence)) {
+				return FALSE;
+			}
+		}
+		else if (start_code == 0xB8) { // group of pictures
+			if (start + 8 > self->length) {
+				return FALSE;
+			}
+			int ok = TRUE;
+			int closed = plm_video_reverse_read_bits(self, start + 4, 25, 1, &ok);
+			int broken_link = plm_video_reverse_read_bits(self, start + 4, 26, 1, &ok);
+			if (!ok || broken_link) {
+				return FALSE;
+			}
+			if (self->gop_count == 0) {
+				first_gop_closed = closed ? TRUE : FALSE;
+			}
+			if (!plm_video_reverse_add_gop(self)) {
+				return FALSE;
+			}
+			current_gop = (int)self->gop_count - 1;
+		}
+		else if (start_code == (uint8_t)PLM_START_PICTURE) {
+			if (current_gop < 0) {
+				return FALSE;
+			}
+			int ok = TRUE;
+			int temporal_reference =
+				plm_video_reverse_read_bits(self, start + 4, 0, 10, &ok);
+			int picture_type =
+				plm_video_reverse_read_bits(self, start + 4, 10, 3, &ok);
+			if (!ok || !plm_video_reverse_picture_type_valid(picture_type)) {
+				return FALSE;
+			}
+			int bit = 13 + 16; // temporal_reference + picture_type + vbv_delay
+			if (
+				picture_type == PLM_VIDEO_PICTURE_TYPE_PREDICTIVE ||
+				picture_type == PLM_VIDEO_PICTURE_TYPE_B
+			) {
+				plm_video_reverse_read_bits(self, start + 4, bit, 1, &ok);
+				int f_code =
+					plm_video_reverse_read_bits(self, start + 4, bit + 1, 3, &ok);
+				if (!ok || f_code == 0) {
+					return FALSE;
+				}
+				bit += 4;
+				if (picture_type == PLM_VIDEO_PICTURE_TYPE_B) {
+					plm_video_reverse_read_bits(self, start + 4, bit, 1, &ok);
+					int b_code =
+						plm_video_reverse_read_bits(self, start + 4, bit + 1, 3, &ok);
+					if (!ok || b_code == 0) {
+						return FALSE;
+					}
+					bit += 4;
+				}
+			}
+			plm_video_reverse_picture_t *picture =
+				plm_video_reverse_add_picture(self);
+			if (!picture) {
+				return FALSE;
+			}
+			picture->offset = start;
+			picture->temporal_reference = temporal_reference;
+			picture->picture_type = picture_type;
+			self->gops[current_gop].last_coded = (int)self->picture_count - 1;
+		}
+		// Extensions, user data, sequence end and padding create no pictures.
+	}
+
+	if (!have_sequence || self->picture_count == 0 || self->gop_count == 0) {
+		return FALSE;
+	}
+
+	// The first group must be closed and its single I picture must be the very
+	// first coded picture of the stream.
+	if (!first_gop_closed) {
+		return FALSE;
+	}
+	if (
+		self->gops[0].first_coded != 0 ||
+		self->pictures[0].picture_type != PLM_VIDEO_PICTURE_TYPE_INTRA
+	) {
+		return FALSE;
+	}
+
+	// Each group must have exactly one I picture, as its first coded picture,
+	// with unique non-wrapping temporal_reference values in the group.
+	for (size_t g = 0; g < self->gop_count; g++) {
+		plm_video_reverse_gop_t *gop = &self->gops[g];
+		if (gop->last_coded < gop->first_coded) {
+			return FALSE;
+		}
+		int intra_count = 0;
+		uint8_t seen[1024];
+		memset(seen, 0, sizeof(seen));
+		for (int i = gop->first_coded; i <= gop->last_coded; i++) {
+			plm_video_reverse_picture_t *p = &self->pictures[i];
+			if (p->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA) {
+				intra_count++;
+				gop->i_coded = i;
+				gop->i_temporal_reference = p->temporal_reference;
+			}
+			int tr = p->temporal_reference;
+			if (tr < 0 || tr >= (int)sizeof(seen) || seen[tr]) {
+				return FALSE;
+			}
+			seen[tr] = TRUE;
+		}
+		if (intra_count != 1 || gop->i_coded != gop->first_coded) {
+			return FALSE;
+		}
+	}
+
+	// The last coded picture must be a complete reference (I or P).
+	int last_type = self->pictures[self->picture_count - 1].picture_type;
+	if (
+		last_type != PLM_VIDEO_PICTURE_TYPE_INTRA &&
+		last_type != PLM_VIDEO_PICTURE_TYPE_PREDICTIVE
+	) {
+		return FALSE;
+	}
+
+	// Assign global display frame numbers: within each group by ascending
+	// temporal_reference, groups concatenated in stream order. For an open GOP
+	// its leading pictures have the smallest temporal references, are coded
+	// after the group's I and display after the previous group, so sorting
+	// places them exactly there. GOP time_code is never used as a frame number.
+	int display = 0;
+	for (size_t g = 0; g < self->gop_count; g++) {
+		plm_video_reverse_gop_t *gop = &self->gops[g];
+		int n = gop->last_coded - gop->first_coded + 1;
+		for (int k = 0; k < n; k++) {
+			int best = -1;
+			for (int j = 0; j < n; j++) {
+				int index = gop->first_coded + j;
+				if (self->pictures[index].display_frame >= 0) {
+					continue;
+				}
+				if (
+					best < 0 ||
+					self->pictures[index].temporal_reference <
+						self->pictures[best].temporal_reference
+				) {
+					best = index;
+				}
+			}
+			if (best < 0) {
+				return FALSE;
+			}
+			self->pictures[best].display_frame = display++;
+		}
+		int leading = 0;
+		for (int i = gop->first_coded; i <= gop->last_coded; i++) {
+			if (self->pictures[i].temporal_reference < gop->i_temporal_reference) {
+				leading++;
+			}
+		}
+		gop->leading_count = leading;
+		gop->i_display = self->pictures[gop->i_coded].display_frame;
+	}
+
+	// The first group is closed with its I picture as its first coded picture,
+	// so that I is displayed first (i_display == 0). The I-anchored segments then
+	// partition the whole display sequence with no leading partial interval.
+	if (self->gops[0].i_display != 0) {
+		return FALSE;
+	}
+
+	// G is the largest number of display frames in an I-anchored segment: the
+	// leading partial interval before the first I, every interval between
+	// adjacent I pictures in display order, and the trailing partial interval.
+	int group_span = self->gops[0].i_display;
+	for (size_t g = 0; g < self->gop_count; g++) {
+		int next = (g + 1 < self->gop_count)
+			? self->gops[g + 1].i_display
+			: (int)self->picture_count;
+		int size = next - self->gops[g].i_display;
+		if (size > group_span) {
+			group_span = size;
+		}
+	}
+	self->group_span = group_span;
+	return TRUE;
+}
+
+// --- cache and decode helpers ----------------------------------------------
+
+static void plm_video_reverse_init_cache_frame(
+	plm_video_reverse_t *self, size_t index
+) {
+	uint8_t *base = self->cache_data + index * self->sequence.frame_data_size;
+	plm_video_init_frame(self->decoder, &self->cache_frames[index], base);
+	self->cache_frames[index].time = 0;
+}
+
+// Decode one coded picture at its indexed offset through the real picture
+// reconstruction path. This is the only place where stats.pictures_decoded is
+// incremented.
+static int plm_video_reverse_decode_coded(
+	plm_video_reverse_t *self, int coded_index
+) {
+	plm_video_reverse_picture_t *picture = &self->pictures[coded_index];
+
+	// Position the buffer just after the picture start code, exactly where
+	// plm_video_decode() leaves it before calling plm_video_decode_picture().
+	plm_buffer_seek(self->decoder->buffer, picture->offset + 4);
+	self->decoder->start_code = PLM_START_PICTURE;
+
+	self->stats.pictures_decoded++;
+	plm_video_decode_picture(self->decoder);
+
+	return self->decoder->picture_type == picture->picture_type;
+}
+
+static void plm_video_reverse_copy_frame(
+	plm_video_reverse_t *self, plm_frame_t *source, size_t slot
+) {
+	plm_frame_t *dest = &self->cache_frames[slot];
+	size_t luma = (size_t)(self->sequence.mb_width << 4) *
+		(size_t)(self->sequence.mb_height << 4);
+	size_t chroma = (size_t)(self->sequence.mb_width << 3) *
+		(size_t)(self->sequence.mb_height << 3);
+	memcpy(dest->y.data, source->y.data, luma);
+	memcpy(dest->cr.data, source->cr.data, chroma);
+	memcpy(dest->cb.data, source->cb.data, chroma);
+}
+
+// Decode a coded picture and copy it to its cache slot if it displays inside
+// [lo, hi].
+static int plm_video_reverse_decode_and_store(
+	plm_video_reverse_t *self, int coded_index, int lo, int hi
+) {
+	plm_video_reverse_picture_t *picture = &self->pictures[coded_index];
+	if (!plm_video_reverse_decode_coded(self, coded_index)) {
+		return FALSE;
+	}
+	int display_frame = picture->display_frame;
+	if (display_frame < lo || display_frame > hi) {
+		return TRUE;
+	}
+	// B pictures are reconstructed into frame_current; reference pictures are
+	// rotated into frame_backward, mirroring plm_video_decode()'s selection.
+	plm_frame_t *reconstructed =
+		(picture->picture_type == PLM_VIDEO_PICTURE_TYPE_B)
+			? &self->decoder->frame_current
+			: &self->decoder->frame_backward;
+	plm_video_reverse_copy_frame(
+		self, reconstructed, (size_t)(display_frame - lo)
+	);
+	return TRUE;
+}
+
+// Materialise the display range of I-anchored segment `gop_index` in the cache.
+static int plm_video_reverse_build_segment(
+	plm_video_reverse_t *self, int gop_index
+) {
+	plm_video_reverse_gop_t *gop = &self->gops[gop_index];
+	int lo = gop->i_display;
+	int hi = (gop_index + 1 < (int)self->gop_count)
+		? self->gops[gop_index + 1].i_display - 1
+		: (int)self->picture_count - 1;
+	int size = hi - lo + 1;
+	if (size <= 0 || (size_t)size > self->frame_count) {
+		return FALSE;
+	}
+
+	// Tail of this group: its I picture and every picture displayed at or after
+	// it. Its leading B pictures belong to the previous segment and are skipped.
+	if (!plm_video_reverse_decode_and_store(self, gop->i_coded, lo, hi)) {
+		return FALSE;
+	}
+	for (int i = gop->i_coded + 1; i <= gop->last_coded; i++) {
+		if (self->pictures[i].temporal_reference < gop->i_temporal_reference) {
+			continue;
+		}
+		if (!plm_video_reverse_decode_and_store(self, i, lo, hi)) {
+			return FALSE;
+		}
+	}
+
+	// Leading B pictures of the next (open) group display inside this segment.
+	// Decoding the next I rotates this group's last reference into
+	// frame_forward, and the I into frame_backward: the pair they predict from.
+	if (gop_index + 1 < (int)self->gop_count && self->gops[gop_index + 1].leading_count > 0) {
+		plm_video_reverse_gop_t *next = &self->gops[gop_index + 1];
+		if (!plm_video_reverse_decode_and_store(self, next->i_coded, lo, hi)) {
+			return FALSE;
+		}
+		for (int i = next->i_coded + 1; i <= next->last_coded; i++) {
+			if (self->pictures[i].temporal_reference >= next->i_temporal_reference) {
+				continue;
+			}
+			if (!plm_video_reverse_decode_and_store(self, i, lo, hi)) {
+				return FALSE;
+			}
+		}
+	}
+
+	if (self->stats.cached_frames_peak < (size_t)size) {
+		self->stats.cached_frames_peak = (size_t)size;
+	}
+	self->segment_lo = lo;
+	self->segment_hi = hi;
+	self->segment_valid = TRUE;
+	return TRUE;
+}
+
+// Locate the segment containing `display_frame`. Segments partition the display
+// sequence [0, count) because the first group's I picture is displayed first.
+static int plm_video_reverse_find_segment(
+	plm_video_reverse_t *self, int display_frame, int *gop
+) {
+	for (size_t g = 0; g < self->gop_count; g++) {
+		int lo = self->gops[g].i_display;
+		int hi = (g + 1 < self->gop_count)
+			? self->gops[g + 1].i_display - 1
+			: (int)self->picture_count - 1;
+		if (display_frame >= lo && display_frame <= hi) {
+			*gop = (int)g;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+// Ensure the cache holds `display_frame`, rebuilding its segment only when the
+// frame lies outside the currently materialised segment.
+static int plm_video_reverse_ensure_frame(
+	plm_video_reverse_t *self, int display_frame
+) {
+	if (
+		self->segment_valid &&
+		display_frame >= self->segment_lo &&
+		display_frame <= self->segment_hi
+	) {
+		return TRUE;
+	}
+	int gop;
+	if (!plm_video_reverse_find_segment(self, display_frame, &gop)) {
+		return FALSE;
+	}
+	return plm_video_reverse_build_segment(self, gop);
+}
+
+// --- public implementation --------------------------------------------------
+
+plm_video_reverse_t *plm_video_reverse_create(
+	const uint8_t *bytes, size_t length, size_t max_cached_frames
+) {
+	if (!bytes || length == 0 || max_cached_frames == 0) {
+		return NULL;
+	}
+	plm_video_reverse_t *self =
+		(plm_video_reverse_t *)PLM_MALLOC(sizeof(plm_video_reverse_t));
+	if (!self) {
+		return NULL;
+	}
+	memset(self, 0, sizeof(plm_video_reverse_t));
+	self->bytes = bytes;
+	self->length = length;
+	self->max_cached_frames = max_cached_frames;
+	self->cursor = -1;
+	self->segment_hi = -1;
+
+	if (!plm_video_reverse_build_index(self)) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+	if (max_cached_frames < (size_t)self->group_span) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+
+	// Create the decoder over the caller's bytes with zero copying. The buffer
+	// is fixed-memory and read-only in this path: decode_coded() calls
+	// plm_video_decode_picture() directly, so the buffer is never discarded or
+	// compacted and the input bytes are never written. Only the decoder's three
+	// working frames are allocated; pictures_decoded stays 0.
+	plm_buffer_t *buffer = plm_buffer_create_with_memory(
+		(uint8_t *)(void *)bytes, length, FALSE
+	);
+	if (!buffer) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+	self->decoder = plm_video_create_with_buffer(buffer, TRUE);
+	if (!self->decoder || !plm_video_has_header(self->decoder)) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+	if (
+		plm_video_get_width(self->decoder) != self->sequence.width ||
+		plm_video_get_height(self->decoder) != self->sequence.height
+	) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+
+	self->frame_count = self->picture_count < max_cached_frames
+		? self->picture_count
+		: max_cached_frames;
+	self->cache_data = (uint8_t *)PLM_MALLOC(
+		self->frame_count * self->sequence.frame_data_size
+	);
+	self->cache_frames = (plm_frame_t *)PLM_MALLOC(
+		self->frame_count * sizeof(plm_frame_t)
+	);
+	if (!self->cache_data || !self->cache_frames) {
+		plm_video_reverse_destroy(self);
+		return NULL;
+	}
+	memset(self->cache_frames, 0, self->frame_count * sizeof(plm_frame_t));
+	for (size_t i = 0; i < self->frame_count; i++) {
+		plm_video_reverse_init_cache_frame(self, i);
+	}
+
+	self->segment_valid = FALSE;
+	self->segment_lo = 0;
+	self->segment_hi = -1;
+	self->cursor = (int)self->picture_count - 1;
+	return self;
+}
+
+void plm_video_reverse_destroy(plm_video_reverse_t *self) {
+	if (!self) {
+		return;
+	}
+	if (self->decoder) {
+		plm_video_destroy(self->decoder);
+	}
+	PLM_FREE(self->cache_frames);
+	PLM_FREE(self->cache_data);
+	PLM_FREE(self->gops);
+	PLM_FREE(self->pictures);
+	PLM_FREE(self);
+}
+
+size_t plm_video_reverse_get_count(plm_video_reverse_t *self) {
+	return self ? self->picture_count : 0;
+}
+
+int plm_video_reverse_seek(plm_video_reverse_t *self, size_t display_frame) {
+	if (!self || display_frame >= self->picture_count) {
+		return 0;
+	}
+	if (!plm_video_reverse_ensure_frame(self, (int)display_frame)) {
+		return 0;
+	}
+	self->cursor = (int)display_frame;
+	return 1;
+}
+
+plm_frame_t *plm_video_reverse_next(plm_video_reverse_t *self) {
+	if (!self || self->cursor < 0) {
+		return NULL;
+	}
+	int display_frame = self->cursor;
+	if (!plm_video_reverse_ensure_frame(self, display_frame)) {
+		return NULL;
+	}
+	plm_frame_t *frame = &self->cache_frames[
+		(size_t)(display_frame - self->segment_lo)
+	];
+	frame->time = (double)display_frame / self->sequence.framerate;
+	self->cursor = display_frame - 1;
+	return frame;
+}
+
+void plm_video_reverse_get_stats(
+	plm_video_reverse_t *self, plm_video_reverse_stats_t *stats
+) {
+	if (!self || !stats) {
+		return;
+	}
+	*stats = self->stats;
+}
+
+
+
+// -----------------------------------------------------------------------------
 // plm_audio implementation
+
 
 // Based on kjmp2 by Martin J. Fiedler
 // http://keyj.emphy.de/kjmp2/

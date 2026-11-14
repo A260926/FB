@@ -27,6 +27,8 @@ A Makefile to build the example applications is included.
 - `pl_mpeg_extract_frames`: a command line tool that dumps all frames into BMPs
 - `pl_mpeg_player_gl`: a video player using SDL2 and OpenGL
 - `pl_mpeg_player_sdl`: a video player using SDL2 and it's built-in 2d renderer
+- `reverse_video`: reverse playback of a raw MPEG1 elementary stream, using the
+  `plm_video_reverse_*` API (no external dependencies)
 
 The players require the SDL2 library to be installed.
 
@@ -35,6 +37,7 @@ make # build all
 make extract # only build pl_mpeg_extract_frames
 make player_gl # only build pl_mpeg_player_gl
 make player_sdl # only build pl_mpeg_player_sdl
+make reverse # only build examples/reverse_video.c
 ```
 
 
@@ -59,6 +62,23 @@ highest. You may use `-b:v` to set a fixed bitrate instead; e.g.
 If you just want to quickly test the library, try this file:
 
 https://phoboslab.org/files/bjork-all-is-full-of-love.mpg
+
+
+## Reverse playback
+
+`plm_video_reverse_*` (see the API in `pl_mpeg.h`) plays a raw MPEG1
+Video elementary stream in reverse display order without expanding the whole
+video into memory and without replaying from the start for every frame. It
+indexes the compressed stream once (offsets and picture-header state only),
+caches at most one display-order group at a time, and rebuilds the next needed
+reference pictures when crossing a group boundary. Open GOPs are supported: B
+pictures coded after a new I picture but displayed before it are reconstructed
+using the previous group's reference pictures.
+
+The API is index-only at creation (`pictures_decoded == 0`), exposes borrow
+semantics for returned frames, and reports `index_bytes`, `pictures_decoded` and
+`cached_frames_peak` through `plm_video_reverse_get_stats()`. See
+`examples/reverse_video.c` for a complete example.
 
 
 ## Limitations
