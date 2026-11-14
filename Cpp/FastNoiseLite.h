@@ -51,6 +51,9 @@
 #define FASTNOISELITE_H
 
 #include <cmath>
+#include <vector>
+#include <map>
+#include <algorithm>
 
 class FastNoiseLite
 {
@@ -391,6 +394,38 @@ public:
             DomainWarpFractalIndependent(x, y, z);
             break;
         }
+    }
+
+    /// <summary>
+    /// Per-pixel result of an exact 2D cellular (Voronoi stone) area bake.
+    /// coverage: fraction of the pixel rectangle occupied by stone (the rest
+    ///           is the black seam), always in [0, 1].
+    /// value:    mean greyscale over the whole pixel rectangle, seam counted
+    ///           as black, i.e. sum(stone area * cell hash value) / pixel area.
+    /// </summary>
+    struct CellularPixel2D
+    {
+        double coverage;
+        double value;
+    };
+
+    /// <summary>
+    /// Exact area bake of the 2D Euclidean cellular noise.
+    /// Pixel (i, j) covers the world-space rectangle
+    /// [x0 + i*dx, x0 + (i+1)*dx] x [y0 + j*dy, y0 + (j+1)*dy],
+    /// written with x varying fastest. World coordinates are scaled by the
+    /// current frequency; seam is the physical gap width in noise coordinates.
+    /// Only the current seed, frequency and cellular jitter are used.
+    /// Stone of feature a is its Euclidean Voronoi cell eroded by seam/2:
+    /// for every other feature b, point p belongs to a when
+    /// |p-b|^2 - |p-a|^2 &gt;= seam * |b-a|. The resulting convex polygons are
+    /// clipped against each pixel rectangle and integrated exactly (no point
+    /// sampling). Empty cells contribute nothing.
+    /// </summary>
+    void BakeCellular2D(double x0, double y0, double dx, double dy,
+        unsigned width, unsigned height, double seam, CellularPixel2D* out) const
+    {
+        BakeCellular2DImpl(x0, y0, dx, dy, width, height, seam, out);
     }
 
 private:
@@ -2441,6 +2476,274 @@ private:
         xr += vx * warpAmp;
         yr += vy * warpAmp;
         zr += vz * warpAmp;
+    }
+
+    // ------------------------------------------------------------------
+    // Exact 2D cellular (Voronoi stone) area bake
+    // ------------------------------------------------------------------
+
+    struct CellFeature2D
+    {
+        double x, y;     // feature position in noise coordinates
+        double value;    // signed hash greyscale, hash * (1 / 2^31)
+        int k, l;        // originating integer lattice cell
+    };
+
+    struct CellPoly2D
+    {
+        CellFeature2D feature;
+        std::vector< std::pair<double, double> > polygon;
+        double xmin, xmax, ymin, ymax; // axis-aligned bounds of the polygon
+    };
+
+    // Feature belonging to integer lattice cell (k, l). The hash and the
+    // RandVecs2D index follow SingleCellular exactly; only the arithmetic is
+    // carried out in double.
+    CellFeature2D BakeFeature2D(int k, int l, double cellularJitter) const
+    {
+        int hash = Hash(mSeed, k * PrimeX, l * PrimeY);
+        int idx = hash & (255 << 1);
+
+        double ox = (double)Lookup<float>::RandVecs2D[idx] * cellularJitter;
+        double oy = (double)Lookup<float>::RandVecs2D[idx | 1] * cellularJitter;
+
+        CellFeature2D f;
+        f.k = k;
+        f.l = l;
+        f.x = (double)k + ox;
+        f.y = (double)l + oy;
+        f.value = (double)hash * (1.0 / 2147483648.0);
+        return f;
+    }
+
+    // Signed area of a convex polygon given in order.
+    static double BakePolygonArea(const std::vector< std::pair<double, double> >& poly)
+    {
+        size_t n = poly.size();
+        if (n < 3)
+            return 0.0;
+        double twice = 0.0;
+        for (size_t i = 0; i < n; i++)
+        {
+            const std::pair<double, double>& p = poly[i];
+            const std::pair<double, double>& q = poly[(i + 1) % n];
+            twice += p.first * q.second - q.first * p.second;
+        }
+        return twice * 0.5;
+    }
+
+    // Keep the part of a convex polygon inside the half-plane n . p >= c.
+    // The stone of a against competitor b is the half-plane
+    // 2 (a - b) . p >= seam |a - b| + |a|^2 - |b|^2.
+    static void BakeClipHalfPlane(std::vector< std::pair<double, double> >& poly,
+        double nx, double ny, double c)
+    {
+        std::vector< std::pair<double, double> > out;
+        size_t n = poly.size();
+        if (n == 0)
+            return;
+        for (size_t i = 0; i < n; i++)
+        {
+            const std::pair<double, double>& s = poly[i];
+            const std::pair<double, double>& e = poly[(i + 1) % n];
+            double ds = nx * s.first + ny * s.second - c;
+            double de = nx * e.first + ny * e.second - c;
+            bool sin = ds >= 0.0;
+            bool ein = de >= 0.0;
+
+            if (sin)
+                out.push_back(s);
+            if (sin != ein)
+            {
+                double t = ds / (ds - de);
+                out.push_back(std::make_pair(
+                    s.first + t * (e.first - s.first),
+                    s.second + t * (e.second - s.second)));
+            }
+        }
+        poly.swap(out);
+    }
+
+    // Intersect a convex polygon with an axis-aligned rectangle.
+    static void BakeClipRect(std::vector< std::pair<double, double> >& poly,
+        double xmin, double ymin, double xmax, double ymax)
+    {
+        // x >= xmin
+        BakeClipHalfPlane(poly, 1.0, 0.0, xmin);
+        // x <= xmax  <=>  -x >= -xmax
+        BakeClipHalfPlane(poly, -1.0, 0.0, -xmax);
+        // y >= ymin
+        BakeClipHalfPlane(poly, 0.0, 1.0, ymin);
+        // y <= ymax
+        BakeClipHalfPlane(poly, 0.0, -1.0, -ymax);
+    }
+
+    void BakeCellular2DImpl(double x0, double y0, double dx, double dy,
+        unsigned width, unsigned height, double seam, CellularPixel2D* out) const
+    {
+        const double freq = (double)mFrequency;
+
+        // Request rectangle in noise coordinates; each pixel is dx*freq wide.
+        const double rx0 = x0 * freq;
+        const double ry0 = y0 * freq;
+        const double rdx = dx * freq;
+        const double rdy = dy * freq;
+        const double rx1 = rx0 + rdx * (double)width;
+        const double ry1 = ry0 + rdy * (double)height;
+
+        // Float rule from SingleCellular, widened to double.
+        const float cellularJitterFloat = 0.43701595f * mCellularJitterModifier;
+        const double jitterRadius = (double)std::fabs(cellularJitterFloat);
+
+        // Every plane point has an integer lattice point within sqrt(0.5),
+        // hence every point has some feature within D.
+        const double D = 0.70710678118654752440 + jitterRadius;
+
+        // A feature touching the request lies within D of it. A competitor
+        // that erodes its boundary lies at most 2D + seam further away, so
+        // every relevant feature sits in the rectangle expanded by E.
+        // Lattice cells are enumerated, not features, so add the jitter
+        // radius once more: any lattice cell whose feature can reach E of
+        // the request lies within E + jitterRadius of it.
+        const double E = 3.0 * D + 2.0 + jitterRadius;
+
+        int kmin = (int)std::floor(rx0 - E);
+        int kmax = (int)std::floor(rx1 + E);
+        int lmin = (int)std::floor(ry0 - E);
+        int lmax = (int)std::floor(ry1 + E);
+
+        // Build the finite candidate set. Features landing on the exact
+        // same position keep the lexicographically smallest (k, l) identity.
+        std::map< std::pair<double, double>, CellFeature2D > unique;
+        for (int l = lmin; l <= lmax; l++)
+        {
+            for (int k = kmin; k <= kmax; k++)
+            {
+                CellFeature2D f = BakeFeature2D(k, l, (double)cellularJitterFloat);
+                std::pair<double, double> key = std::make_pair(f.x, f.y);
+                std::map< std::pair<double, double>, CellFeature2D >::iterator it = unique.find(key);
+                if (it == unique.end())
+                {
+                    unique.insert(std::make_pair(key, f));
+                }
+                else if (f.k < it->second.k || (f.k == it->second.k && f.l < it->second.l))
+                {
+                    it->second = f;
+                }
+            }
+        }
+
+        std::vector<CellFeature2D> candidates;
+        candidates.reserve(unique.size());
+        for (std::map< std::pair<double, double>, CellFeature2D >::iterator it = unique.begin();
+             it != unique.end(); ++it)
+        {
+            candidates.push_back(it->second);
+        }
+
+        // Construct each stone polygon once, clipped against the whole
+        // request: the Voronoi cell eroded by seam/2 against every other
+        // candidate. Candidates outside the geometric bound cannot change
+        // any polygon intersecting the request, so this set is sufficient.
+        // The starting box extends beyond every candidate feature (all
+        // within E of the request), so the request never acts as a cell
+        // boundary and no real Voronoi edge is clipped before the erosion.
+        std::vector<CellPoly2D> cells;
+        const double startSize = E + 1.0;
+        for (size_t a = 0; a < candidates.size(); a++)
+        {
+            const CellFeature2D& fa = candidates[a];
+            std::vector< std::pair<double, double> > poly;
+            poly.push_back(std::make_pair(rx0 - startSize, ry0 - startSize));
+            poly.push_back(std::make_pair(rx1 + startSize, ry0 - startSize));
+            poly.push_back(std::make_pair(rx1 + startSize, ry1 + startSize));
+            poly.push_back(std::make_pair(rx0 - startSize, ry1 + startSize));
+
+            for (size_t b = 0; b < candidates.size(); b++)
+            {
+                if (a == b)
+                    continue;
+                const CellFeature2D& fb = candidates[b];
+                double abx = fa.x - fb.x;
+                double aby = fa.y - fb.y;
+                double dist = std::sqrt(abx * abx + aby * aby);
+                if (dist == 0.0)
+                    continue; // coincident feature, already deduplicated
+                double nx = 2.0 * abx;
+                double ny = 2.0 * aby;
+                double c = seam * dist + fa.x * fa.x + fa.y * fa.y
+                    - fb.x * fb.x - fb.y * fb.y;
+                BakeClipHalfPlane(poly, nx, ny, c);
+                if (poly.empty())
+                    break;
+            }
+
+            if (poly.size() < 3 || std::fabs(BakePolygonArea(poly)) <= 0.0)
+                continue;
+
+            BakeClipRect(poly, rx0, ry0, rx1, ry1);
+            if (poly.size() < 3 || std::fabs(BakePolygonArea(poly)) <= 0.0)
+                continue;
+
+            CellPoly2D cell;
+            cell.feature = fa;
+            cell.polygon = poly;
+            cell.xmin = cell.xmax = poly[0].first;
+            cell.ymin = cell.ymax = poly[0].second;
+            for (size_t i = 1; i < poly.size(); i++)
+            {
+                cell.xmin = std::min(cell.xmin, poly[i].first);
+                cell.xmax = std::max(cell.xmax, poly[i].first);
+                cell.ymin = std::min(cell.ymin, poly[i].second);
+                cell.ymax = std::max(cell.ymax, poly[i].second);
+            }
+            cells.push_back(cell);
+        }
+
+        // Accumulate each stone over the pixels its clipped polygon touches.
+        const double pixelArea = rdx * rdy;
+        for (unsigned j = 0; j < height; j++)
+        {
+            for (unsigned i = 0; i < width; i++)
+            {
+                out[(size_t)j * width + i].coverage = 0.0;
+                out[(size_t)j * width + i].value = 0.0;
+            }
+        }
+
+        for (size_t c = 0; c < cells.size(); c++)
+        {
+            const CellPoly2D& cell = cells[c];
+            int i0 = (int)std::floor((cell.xmin - rx0) / rdx);
+            int i1 = (int)std::floor((cell.xmax - rx0) / rdx);
+            int j0 = (int)std::floor((cell.ymin - ry0) / rdy);
+            int j1 = (int)std::floor((cell.ymax - ry0) / rdy);
+            i0 = std::max(i0, 0);
+            j0 = std::max(j0, 0);
+            i1 = std::min(i1, (int)width - 1);
+            j1 = std::min(j1, (int)height - 1);
+
+            for (int j = j0; j <= j1; j++)
+            {
+                double pymin = ry0 + (double)j * rdy;
+                double pymax = pymin + rdy;
+                for (int i = i0; i <= i1; i++)
+                {
+                    double pxmin = rx0 + (double)i * rdx;
+                    double pxmax = pxmin + rdx;
+
+                    std::vector< std::pair<double, double> > piece = cell.polygon;
+                    BakeClipRect(piece, pxmin, pymin, pxmax, pymax);
+                    double area = std::fabs(BakePolygonArea(piece));
+                    if (area <= 0.0)
+                        continue;
+
+                    size_t idx = (size_t)j * width + (size_t)i;
+                    out[idx].coverage += area / pixelArea;
+                    out[idx].value += (area / pixelArea) * cell.feature.value;
+                }
+            }
+        }
     }
 };
 
