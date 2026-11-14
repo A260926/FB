@@ -3,6 +3,18 @@ MLT Release Notes
 
 Version 7.43.0
 
+Framework
+  - Added `mlt_playlist_roll_mix()` to roll (slide) an existing playlist mix
+    along its two neighbouring clips without changing its length or curves. A
+    positive delta moves the whole transition later in program time by growing
+    the left body and shrinking the right body; a negative delta reverses it.
+    Only a complete, undamaged `mlt_playlist_mix()` structure is accepted; any
+    invalid index, broken link, blank or repeated entry is rejected without
+    modifying the playlist. The tractor, field, transition and the four source
+    cuts keep their object identities, and external `producer-changed`
+    listeners receive a single notification after the commit.
+  - Added the matching `Mlt::Playlist::roll_mix()` C++ wrapper.
+
 Modules
   - Fixed `subtitle` and `subtitle_feed` dropping every cue after a blank
     line. An empty line is no longer read as a cue number.

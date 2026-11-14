@@ -247,6 +247,11 @@ int Playlist::mix_add(int clip, Transition *transition)
                                 transition == NULL ? NULL : transition->get_transition());
 }
 
+int Playlist::roll_mix(int mix_index, int delta)
+{
+    return mlt_playlist_roll_mix(get_playlist(), mix_index, delta);
+}
+
 int Playlist::repeat(int clip, int count)
 {
     return mlt_playlist_repeat_clip(get_playlist(), clip, count);

@@ -123,6 +123,8 @@ public:
     int mix_out(int clip, int length);
     /** Add a transition to an existing mix at \p clip. */
     int mix_add(int clip, Transition *transition);
+    /** Roll (slide) the mix at \p mix_index by \p delta signed program frames. */
+    int roll_mix(int mix_index, int delta);
     /** Repeat the clip at \p clip \p count additional times. */
     int repeat(int clip, int count);
     /** Return the producer for clip \p clip. Caller owns the result. */

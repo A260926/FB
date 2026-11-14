@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 /** \brief Virtual playlist entry used by mlt_playlist_s
 */
@@ -1557,6 +1558,260 @@ int mlt_playlist_mix_add(mlt_playlist self, int clip, mlt_transition transition)
         mlt_transition_set_in_and_out(transition, 0, self->list[clip]->frame_count - 1);
     }
     return error;
+}
+
+/** Validate that a producer is an independent cut whose parent is an ordinary producer.
+ *
+ * The cut must not be a playlist or a tractor itself, and neither may its parent.
+ * \private \memberof mlt_playlist_s
+ * \param cut a producer expected to be a cut
+ * \param parent receives the cut's parent producer
+ * \return true if the structure is not a plain cut of an ordinary producer
+ */
+
+static int roll_mix_reject_parent(mlt_producer cut, mlt_producer *parent)
+{
+    if (cut == NULL || !mlt_producer_is_cut(cut))
+        return 1;
+    mlt_producer cut_parent = mlt_producer_cut_parent(cut);
+    if (cut_parent == NULL || mlt_producer_is_cut(cut_parent))
+        return 1;
+    mlt_service_type type = mlt_service_identify(MLT_PRODUCER_SERVICE(cut_parent));
+    if (type == mlt_service_playlist_type || type == mlt_service_tractor_type)
+        return 1;
+    *parent = cut_parent;
+    return 0;
+}
+
+/** Roll (slide) an existing mix along its two neighbouring clips.
+ *
+ * Unlike resizing a mix, rolling moves the whole transition in program time while
+ * keeping its length, curves and every involved service object intact. Only the
+ * source windows of the two body cuts and the two cuts held by the mix tractor
+ * change; the playlist keeps the same number of entries and the same total length.
+ *
+ * Only a complete, undamaged mix created by mlt_playlist_mix() is accepted: three
+ * adjacent entries (left body, mix, right body), each repeated once, where the mix
+ * entry is a cut of a tractor carrying the \em mlt_mix marker, the tractor holds
+ * exactly two ordinary source cuts on tracks 0 and 1, the body cuts share the
+ * respective source parents, the source windows are contiguous and the \em mix_in
+ * and \em mix_out links are intact in both directions. Anything else, including
+ * blanks or repeated entries, is rejected without modifying the playlist.
+ *
+ * A positive \p delta shifts the transition later: the left body grows by \p delta
+ * frames, the right body shrinks by \p delta frames, and both mix cuts slide by
+ * \p delta. A negative \p delta does the reverse. All new windows are checked
+ * before anything is changed: both bodies must keep at least one frame, the two
+ * mix cuts must keep the same positive length, every endpoint must stay inside the
+ * parent's [0, length - 1] window, and the 64-bit arithmetic must not overflow
+ * \ref mlt_position. Invalid rolls fail without clamping, swapping or any partial
+ * edit.
+ *
+ * On success the play head keeps its absolute program position. External
+ * \em producer-changed listeners on the playlist receive a single notification
+ * fired after the commit, when all four windows and the entry cache are coherent.
+ * A \p delta of zero on a valid structure succeeds silently.
+ *
+ * For example, with source windows A = [100, 119] and B = [200, 229] and a
+ * 6-frame mix, the playlist holds a left body [100, 113], mix cuts [114, 119]
+ * and [200, 205], a right body [206, 229] and is 44 frames long:
+ *
+ * \code
+ * mlt_playlist_roll_mix(playlist, 1, 3);
+ * \endcode
+ *
+ * moves the transition from program frame 14 to frame 17, leaving the left body at
+ * [100, 116], the mix cuts at [117, 122] and [203, 208], the right body at
+ * [209, 229], the mix length at 6 frames and the program length at 44 frames.
+ * Rolling back with
+ *
+ * \code
+ * mlt_playlist_roll_mix(playlist, 1, -3);
+ * \endcode
+ *
+ * restores every window to its original state.
+ *
+ * \public \memberof mlt_playlist_s
+ * \param self a playlist
+ * \param mix_index the index of the mix entry within the playlist
+ * \param delta signed number of program frames to move the mix
+ * \return false on success, true if the index or structure is invalid or the roll
+ * does not fit the available source material
+ */
+
+int mlt_playlist_roll_mix(mlt_playlist self, int mix_index, mlt_position delta)
+{
+    if (self == NULL || mix_index <= 0 || mix_index + 1 >= self->count)
+        return 1;
+
+    playlist_entry *left_entry = self->list[mix_index - 1];
+    playlist_entry *mix_entry = self->list[mix_index];
+    playlist_entry *right_entry = self->list[mix_index + 1];
+
+    // Every entry must be a single, non-blank clip.
+    if (left_entry->repeat != 1 || mix_entry->repeat != 1 || right_entry->repeat != 1
+        || entry_is_blank(left_entry) || entry_is_blank(mix_entry)
+        || entry_is_blank(right_entry))
+        return 1;
+
+    mlt_producer body_left = left_entry->producer;
+    mlt_producer mix_cut = mix_entry->producer;
+    mlt_producer body_right = right_entry->producer;
+
+    // The mix entry must be a cut of a tractor marked as a mix.
+    if (!mlt_producer_is_cut(mix_cut))
+        return 1;
+    mlt_producer tractor_producer = mlt_producer_cut_parent(mix_cut);
+    if (tractor_producer == NULL
+        || mlt_service_identify(MLT_PRODUCER_SERVICE(tractor_producer))
+               != mlt_service_tractor_type)
+        return 1;
+    mlt_tractor tractor = (mlt_tractor) tractor_producer;
+    mlt_properties tractor_properties = MLT_TRACTOR_PROPERTIES(tractor);
+    if (mlt_properties_get_data(tractor_properties, "mlt_mix", NULL) != tractor)
+        return 1;
+
+    // The bodies must be independent cuts of ordinary source producers.
+    mlt_producer parent_left = NULL;
+    mlt_producer parent_right = NULL;
+    if (roll_mix_reject_parent(body_left, &parent_left)
+        || roll_mix_reject_parent(body_right, &parent_right))
+        return 1;
+
+    // The tractor must hold exactly two tracks, each an independent source cut.
+    mlt_multitrack multitrack = mlt_tractor_multitrack(tractor);
+    if (multitrack == NULL || mlt_multitrack_count(multitrack) != 2)
+        return 1;
+    mlt_producer cut_a = mlt_tractor_get_track(tractor, 0);
+    mlt_producer cut_b = mlt_tractor_get_track(tractor, 1);
+    mlt_producer track_parent_left = NULL;
+    mlt_producer track_parent_right = NULL;
+    if (roll_mix_reject_parent(cut_a, &track_parent_left)
+        || roll_mix_reject_parent(cut_b, &track_parent_right))
+        return 1;
+
+    // The four cuts must be distinct objects and share the expected parents.
+    if (cut_a == body_left || cut_b == body_right || cut_a == cut_b
+        || cut_a == body_right || cut_b == body_left || body_left == body_right)
+        return 1;
+    if (track_parent_left != parent_left || track_parent_right != parent_right)
+        return 1;
+
+    // The bidirectional mix_in/mix_out links must still point at the body cuts.
+    if (mlt_properties_get_data(tractor_properties, "mix_in", NULL) != body_left
+        || mlt_properties_get_data(tractor_properties, "mix_out", NULL) != body_right)
+        return 1;
+    if (mlt_properties_get_data(MLT_PRODUCER_PROPERTIES(body_left), "mix_out", NULL) != tractor
+        || mlt_properties_get_data(MLT_PRODUCER_PROPERTIES(body_right), "mix_in", NULL)
+               != tractor)
+        return 1;
+
+    mlt_position body_left_in = mlt_producer_get_in(body_left);
+    mlt_position body_left_out = mlt_producer_get_out(body_left);
+    mlt_position body_right_in = mlt_producer_get_in(body_right);
+    mlt_position body_right_out = mlt_producer_get_out(body_right);
+    mlt_position cut_a_in = mlt_producer_get_in(cut_a);
+    mlt_position cut_a_out = mlt_producer_get_out(cut_a);
+    mlt_position cut_b_in = mlt_producer_get_in(cut_b);
+    mlt_position cut_b_out = mlt_producer_get_out(cut_b);
+
+    // The cached entry windows must match the live service windows.
+    if (left_entry->frame_in != body_left_in || left_entry->frame_out != body_left_out
+        || right_entry->frame_in != body_right_in || right_entry->frame_out != body_right_out
+        || mix_entry->frame_in != mlt_producer_get_in(mix_cut)
+        || mix_entry->frame_out != mlt_producer_get_out(mix_cut))
+        return 1;
+
+    mlt_position mix_length = mlt_producer_get_playtime(mix_cut);
+    mlt_position cut_a_length = cut_a_out - cut_a_in + 1;
+    mlt_position cut_b_length = cut_b_out - cut_b_in + 1;
+
+    // Both mix cuts must span the same positive number of frames as the mix entry.
+    if (mix_length <= 0 || cut_a_length != mix_length || cut_b_length != mix_length
+        || mix_entry->frame_count != mix_length)
+        return 1;
+
+    // Source windows must be contiguous: body, then mix cut, on each side.
+    if (body_left_out + 1 != cut_a_in || cut_b_out + 1 != body_right_in)
+        return 1;
+
+    mlt_position parent_left_length = mlt_producer_get_length(parent_left);
+    mlt_position parent_right_length = mlt_producer_get_length(parent_right);
+    if (parent_left_length <= 0 || parent_right_length <= 0)
+        return 1;
+
+    // Compute every new window in 64 bits and reject overflow of mlt_position.
+    int64_t shift = delta;
+    int64_t new_body_left_out = (int64_t) body_left_out + shift;
+    int64_t new_body_right_in = (int64_t) body_right_in + shift;
+    int64_t new_cut_a_in = (int64_t) cut_a_in + shift;
+    int64_t new_cut_a_out = (int64_t) cut_a_out + shift;
+    int64_t new_cut_b_in = (int64_t) cut_b_in + shift;
+    int64_t new_cut_b_out = (int64_t) cut_b_out + shift;
+
+    int64_t bounds[] = {new_body_left_out, new_body_right_in, new_cut_a_in, new_cut_a_out,
+                        new_cut_b_in,       new_cut_b_out};
+    for (size_t i = 0; i < sizeof(bounds) / sizeof(bounds[0]); i++)
+        if (bounds[i] < INT32_MIN || bounds[i] > INT32_MAX)
+            return 1;
+
+    // Both bodies must keep at least one frame and the mix cuts stay equally long.
+    if (new_body_left_out < body_left_in || new_body_right_in > body_right_out)
+        return 1;
+    if (new_cut_a_out - new_cut_a_in + 1 != mix_length
+        || new_cut_b_out - new_cut_b_in + 1 != mix_length)
+        return 1;
+
+    // Every endpoint must remain inside its parent's [0, length - 1] window.
+    if (body_left_in < 0 || new_body_left_out >= parent_left_length
+        || new_cut_a_in < 0 || new_cut_a_out >= parent_left_length
+        || new_cut_b_in < 0 || new_cut_b_out >= parent_right_length
+        || new_body_right_in < 0 || body_right_out >= parent_right_length)
+        return 1;
+
+    // The rolled windows must stay contiguous.
+    if (new_body_left_out + 1 != new_cut_a_in || new_cut_b_out + 1 != new_body_right_in)
+        return 1;
+
+    // A zero delta on a valid structure is a successful no-op without notification.
+    if (delta == 0)
+        return 0;
+
+    mlt_properties properties = MLT_PLAYLIST_PROPERTIES(self);
+    mlt_producer playlist_producer = MLT_PLAYLIST_PRODUCER(self);
+
+    // Keep the playlist from refreshing into intermediate states.
+    mlt_events_block(MLT_PRODUCER_PROPERTIES(parent_left), self);
+    mlt_events_block(MLT_PRODUCER_PROPERTIES(parent_right), self);
+    // Silence the playlist's internal property-changed forwarding so that the
+    // single committed notification below is the only producer-changed event.
+    mlt_events_block(properties, playlist_producer);
+
+    mlt_producer_set_in_and_out(body_left, body_left_in, (mlt_position) new_body_left_out);
+    mlt_producer_set_in_and_out(body_right, (mlt_position) new_body_right_in, body_right_out);
+    mlt_producer_set_in_and_out(cut_a,
+                                (mlt_position) new_cut_a_in,
+                                (mlt_position) new_cut_a_out);
+    mlt_producer_set_in_and_out(cut_b,
+                                (mlt_position) new_cut_b_in,
+                                (mlt_position) new_cut_b_out);
+
+    // Keep the entry cache coherent with the real service windows.
+    left_entry->frame_in = body_left_in;
+    left_entry->frame_out = (mlt_position) new_body_left_out;
+    right_entry->frame_in = (mlt_position) new_body_right_in;
+    right_entry->frame_out = body_right_out;
+
+    mlt_playlist_virtual_refresh(self);
+
+    mlt_events_unblock(properties, playlist_producer);
+    mlt_events_unblock(MLT_PRODUCER_PROPERTIES(parent_right), self);
+    mlt_events_unblock(MLT_PRODUCER_PROPERTIES(parent_left), self);
+
+    // One notification, fired only after every window and cache is committed.
+    mlt_events_fire(properties, "producer-changed", mlt_event_data_none());
+
+    return 0;
 }
 
 /** Return the clip at the clip index.
