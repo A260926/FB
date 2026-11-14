@@ -265,6 +265,17 @@ class GraphNode extends EventHandler {
      */
     _enabledInHierarchy = false;
 
+    /**
+     * True while {@link GraphNode#reparentBatch} is committing a batch on the hierarchy rooted at
+     * this node. The flag is also found by walking up from a nested batch boundary, so re-entrant
+     * batches are rejected before the tree is touched. Released in a finally block, including when
+     * a notification callback throws.
+     *
+     * @type {boolean}
+     * @private
+     */
+    _reparentBatchLocked = false;
+
     /** @ignore */
     scaleCompensation = false;
 
@@ -1015,6 +1026,229 @@ class GraphNode extends EventHandler {
             } else {
                 parent.addChild(this);
             }
+        }
+    }
+
+    /**
+     * Apply several reparenting operations to this hierarchy atomically. This node is the fixed
+     * boundary of the operation: every `node` in `changes` must be a descendant of it at call
+     * time, every `parent` must be this node or one of its descendants, and this node itself can
+     * never be moved. Each record describes a final parent, not a step in a sequence, so a batch
+     * can reverse grandparent/grandchild relationships as long as the result is still a single
+     * tree rooted at this node.
+     *
+     * The whole batch is validated before anything is changed: a cycle, an out-of-bounds node, a
+     * duplicate `node`, a move of this node or a malformed record throws an {@link Error} with no
+     * side effects and without firing any event. Records whose final parent equals the current
+     * parent are no-ops: an empty batch or an all-no-op batch fires nothing.
+     *
+     * On commit the moved nodes are first removed from their original parent's child lists and
+     * then appended to their new parents in the order of `changes`; unmoved siblings keep their
+     * relative order. Local position, rotation and scale are preserved. Parent links, graph
+     * depths, effective enabled state and world transform caches are fully updated before any
+     * hierarchy state hook or hierarchy event runs, so hooks and event handlers always observe
+     * the committed tree.
+     *
+     * @param {Array<{node: GraphNode, parent: GraphNode}>} changes - Final-parent records.
+     * @returns {GraphNode} This node, the boundary root of the batch.
+     * @example
+     * root.reparentBatch([
+     *     { node: a, parent: b },
+     *     { node: b, parent: root }
+     * ]);
+     */
+    reparentBatch(changes) {
+        if (!Array.isArray(changes)) {
+            throw new Error('reparentBatch: changes must be an array of { node, parent } records');
+        }
+
+        // Re-entrant batches are unsupported: a batch running on an ancestor is still notifying.
+        let ancestor = this;
+        while (ancestor) {
+            if (ancestor._reparentBatchLocked) {
+                throw new Error('reparentBatch: cannot start a batch while another batch is notifying');
+            }
+            ancestor = ancestor._parent;
+        }
+
+        // Validate every record against the original tree before touching it.
+        const moved = [];
+        const seen = new Set();
+        const finalParent = new Map();
+
+        for (let i = 0; i < changes.length; i++) {
+            const record = changes[i];
+            if (!record || typeof record !== 'object' ||
+                !(record.node instanceof GraphNode) || !(record.parent instanceof GraphNode)) {
+                throw new Error('reparentBatch: every record must be { node, parent } GraphNode pairs');
+            }
+
+            const { node, parent } = record;
+
+            if (node === this) {
+                throw new Error('reparentBatch: the boundary root cannot be moved');
+            }
+            if (seen.has(node)) {
+                throw new Error(`reparentBatch: node ${node.name} appears more than once in the batch`);
+            }
+            if (!node.isDescendantOf(this)) {
+                throw new Error(`reparentBatch: node ${node.name} must be a descendant of the boundary root`);
+            }
+            if (parent !== this && !parent.isDescendantOf(this)) {
+                throw new Error(`reparentBatch: parent ${parent.name} must be the boundary root or one of its descendants`);
+            }
+            if (parent === node) {
+                throw new Error(`reparentBatch: node ${node.name} cannot be parented to itself`);
+            }
+
+            seen.add(node);
+            finalParent.set(node, parent);
+            if (node._parent !== parent) {
+                moved.push({ node, oldParent: node._parent, newParent: parent });
+            }
+        }
+
+        // Nothing to do: never lock, never notify.
+        if (moved.length === 0) {
+            return this;
+        }
+
+        // Validate the proposed graph against the original tree. Non-moved nodes keep their
+        // original parent edges, so a new cycle can only enter through a moved node: walking the
+        // proposed parent chain up from each new parent must never return to the moved node.
+        for (const { node, newParent } of moved) {
+            const visited = new Set();
+            let current = newParent;
+            while (current) {
+                if (current === node || visited.has(current)) {
+                    throw new Error('reparentBatch: the records would create a cycle in the hierarchy');
+                }
+                visited.add(current);
+                current = finalParent.has(current) ? finalParent.get(current) : current._parent;
+            }
+        }
+
+        // From here on the batch is committed; notifications run under the lock and a throwing
+        // callback propagates out without rolling the committed structure back.
+        this._reparentBatchLocked = true;
+        try {
+            this._reparentBatchCommit(moved);
+            this._reparentBatchNotify(moved);
+        } finally {
+            this._reparentBatchLocked = false;
+        }
+
+        return this;
+    }
+
+    /**
+     * Rewires the tree for a validated batch and brings every cached state up to date without
+     * firing any event.
+     *
+     * @param {Array<{node: GraphNode, oldParent: GraphNode, newParent: GraphNode}>} moved - The
+     * records whose parent actually changes, in input order.
+     * @private
+     */
+    _reparentBatchCommit(moved) {
+        // Collect the pre-order snapshots used by the hierarchy events before rewiring.
+        for (const record of moved) {
+            record.oldSubtree = [];
+            record.node.forEach((n) => {
+                if (n !== record.node) {
+                    record.oldSubtree.push(n);
+                }
+            });
+        }
+
+        // Remove every moved node from its original parent's child list first, so intermediate
+        // states never expose a node under two parents or a partial hierarchy.
+        for (const record of moved) {
+            const children = record.oldParent._children;
+            children.splice(children.indexOf(record.node), 1);
+            record.node._parent = null;
+        }
+
+        // Append to the new parents in input order.
+        for (const record of moved) {
+            record.newParent._children.push(record.node);
+            record.node._parent = record.newParent;
+        }
+
+        // Recompute every depth from the boundary root in one pass, so nested moves are correct
+        // regardless of the order of the records. The boundary root's own parent never changes.
+        this._updateGraphDepth();
+
+        // Recompute effective enabled state in final-tree pre-order, collecting exactly the nodes
+        // whose effective state changes, including descendants that were not moved themselves.
+        const changed = [];
+        const visit = (node, parentEnabledInHierarchy) => {
+            const enabledInHierarchy = node._enabled && parentEnabledInHierarchy;
+            if (node._enabledInHierarchy !== enabledInHierarchy) {
+                node._enabledInHierarchy = enabledInHierarchy;
+                changed.push({ node, enabled: enabledInHierarchy });
+            }
+            const children = node._children;
+            for (let i = 0; i < children.length; i++) {
+                visit(children[i], enabledInHierarchy);
+            }
+        };
+        // The boundary root keeps the outer context it had before the batch.
+        visit(this, this._enabledInHierarchy);
+
+        // Invalidate the world transforms of every moved subtree, mirroring _onInsertChild:
+        // the dirty flags make getWorldTransform() resolve against the final parent chain, and
+        // frozen ancestors are unfrozen so a tree frozen by syncHierarchy still recomputes.
+        // Local position, rotation and scale are never touched.
+        for (const record of moved) {
+            record.node._dirtifyWorld();
+            if (record.newParent._frozen) {
+                record.node._unfreezeParentToRoot();
+            }
+        }
+
+        // State hooks only run once the whole tree and every cache are consistent.
+        for (const { node, enabled } of changed) {
+            node._beingEnabled = true;
+            node._onHierarchyStateChanged(enabled);
+            node._beingEnabled = false;
+        }
+        for (const { node } of changed) {
+            if (node._onHierarchyStatePostChanged) {
+                node._onHierarchyStatePostChanged();
+            }
+        }
+    }
+
+    /**
+     * Fires the hierarchy events for a committed batch in the input order of the moved records.
+     * Every handler observes the final tree; only the parent arguments preserve the old and new
+     * parent identities.
+     *
+     * @param {Array<{node: GraphNode, oldParent: GraphNode, newParent: GraphNode}>} moved - The
+     * records whose parent actually changes, in input order.
+     * @private
+     */
+    _reparentBatchNotify(moved) {
+        for (const record of moved) {
+            // Final-tree snapshots, collected now that the commit is complete.
+            const newSubtree = [];
+            record.node.forEach((n) => {
+                if (n !== record.node) {
+                    newSubtree.push(n);
+                }
+            });
+
+            record.node.fire('remove', record.oldParent);
+            for (let i = 0; i < record.oldSubtree.length; i++) {
+                record.oldSubtree[i].fire('removehierarchy', record.oldParent);
+            }
+            record.oldParent.fire('childremove', record.node);
+
+            record.node.fire('insert', record.newParent);
+            for (let i = 0; i < newSubtree.length; i++) {
+                newSubtree[i].fire('inserthierarchy', record.newParent);
+            }
+            record.newParent.fire('childinsert', record.node);
         }
     }
 
