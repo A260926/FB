@@ -2533,6 +2533,94 @@ namespace noise
 
     };
 
+    /// Maximum width or height of the base texture accepted by
+    /// BuildPeriodicTextureRegion().
+    const int PERIODIC_TEXTURE_MAX_SIZE = 4096;
+
+    /// Describes a tileable base texture and the physical area it covers.
+    ///
+    /// The base texture is @a width by @a height texels.  Its texels tile
+    /// seamlessly over the rectangle spanning the physical coordinates
+    /// [ @a lowerX, @a upperX ] x [ @a lowerZ, @a upperZ ].  Moving one full
+    /// texture extent in X or Z lands on an identical copy of the texture.
+    ///
+    /// @a bumpHeight is the ratio of elevation resolution to spatial
+    /// resolution used when encoding the normal maps; it is applied to every
+    /// mip level.
+    struct PeriodicTextureSpec
+    {
+
+      /// Width of the base texture, in texels (1 to
+      /// #PERIODIC_TEXTURE_MAX_SIZE).
+      int width;
+
+      /// Height of the base texture, in texels (1 to
+      /// #PERIODIC_TEXTURE_MAX_SIZE).
+      int height;
+
+      /// Lower X boundary of the physical area covered by the texture.
+      double lowerX;
+
+      /// Upper X boundary of the physical area covered by the texture.
+      double upperX;
+
+      /// Lower Z boundary of the physical area covered by the texture.
+      double lowerZ;
+
+      /// Upper Z boundary of the physical area covered by the texture.
+      double upperZ;
+
+      /// Bump height used when encoding the normal maps.
+      double bumpHeight;
+
+    };
+
+    /// Builds a region of a tileable mipmapped height/normal texture.
+    ///
+    /// Coordinates are defined against the whole texture described by @a
+    /// spec, but only the requested rectangular region is generated.  Level 0
+    /// is the base texture; each subsequent level halves each dimension
+    /// (rounding down, with a minimum size of one) and is produced by
+    /// area-weighted averaging of the previous level instead of resampling the
+    /// source module.  The final level is always 1 x 1.
+    ///
+    /// The region coordinates (@a x, @a y, @a width, @a height) refer to the
+    /// requested @a level and may be negative or extend past one period; they
+    /// wrap periodically around that level's dimensions.  The output is always
+    /// a row-ordered image of exactly the requested region size.  Baking the
+    /// whole texture in one call produces values identical to baking it as any
+    /// collection of regions, regardless of region order or offsets.
+    ///
+    /// Only the mip texels actually touched by the region (including the
+    /// periodic neighbors read by the normal calculation) are generated, and
+    /// the four periodic source samples behind any base texel are evaluated at
+    /// most once per call.
+    ///
+    /// @param sourceModule The module that generates the source values; it is
+    /// sampled on the y = 0 plane.
+    /// @param spec Description of the base texture and its physical extent.
+    /// @param level The mip level to build, starting at zero.
+    /// @param x Left coordinate of the region within @a level (may be
+    /// negative).
+    /// @param y Bottom coordinate of the region within @a level (may be
+    /// negative).
+    /// @param width Width of the region; must not exceed this level's width.
+    /// @param height Height of the region; must not exceed this level's height.
+    /// @param heights Destination noise map, resized to @a width by @a height
+    /// and filled bottom-to-top with the region's heights.
+    /// @param normals Destination image, resized to @a width by @a height and
+    /// filled bottom-to-top with the region's encoded normals.
+    ///
+    /// @throw noise::ExceptionInvalidParam An input parameter is invalid, or a
+    /// value returned by the source module is not finite.  The two output
+    /// objects are left unmodified.
+    ///
+    /// Any other exception thrown by the source module is passed through
+    /// unchanged.
+    void BuildPeriodicTextureRegion (const module::Module& sourceModule,
+      const PeriodicTextureSpec& spec, unsigned int level, int x, int y,
+      int width, int height, NoiseMap& heights, Image& normals);
+
   }
 
 }

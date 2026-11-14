@@ -62,3 +62,39 @@ You may also want to [learn how coherent noise is generated](http://libnoise.sou
 
 *Note:* libnoise does not generate images, it only generates [coherent-noise](http://libnoise.sourceforge.net/glossary/index.html#coherentnoise) values.
 It is up to the programmer to use these values to generate images.
+
+## Tileable mipmapped texture baking
+
+`examples/noiseutils.h` provides `noise::utils::BuildPeriodicTextureRegion()` for baking tileable height and normal maps in parallel chunks.
+Coordinates are defined against the whole texture described by a `PeriodicTextureSpec`, but each call only generates the requested rectangular region of one mip level.
+Regions may use negative offsets or extend past one period; the results wrap periodically, so baking a texture as many small chunks in any order gives values identical to baking it whole, including the normals at chunk edges.
+
+Level zero is sampled at texel centers and blended from four periodic source samples with a quintic S-curve, which removes first- and second-order jumps at the seams.
+Higher levels are area-weighted averages of the previous level (odd dimensions keep their last row and column), and normals always read the real periodic neighbors of their level rather than being clamped to the chunk.
+
+```cpp
+noise::utils::PeriodicTextureSpec spec;
+spec.width = 256;
+spec.height = 128;
+spec.lowerX = -2.0;
+spec.upperX = 2.0;
+spec.lowerZ = -1.0;
+spec.upperZ = 1.0;
+spec.bumpHeight = 0.5;
+
+const int chunkWidth = 32;
+const int chunkHeight = 32;
+for (int y = 0; y < spec.height; y += chunkHeight) {
+  for (int x = 0; x < spec.width; x += chunkWidth) {
+    noise::utils::NoiseMap heights;
+    noise::utils::Image normals;
+    // Each chunk is an independent job: it touches only the mip texels its
+    // heights and normals actually depend on and never builds the full map.
+    noise::utils::BuildPeriodicTextureRegion(sourceModule, spec,
+      /*level=*/0, x, y, chunkWidth, chunkHeight, heights, normals);
+    // Copy heights/normals into the matching slot of the shared texture.
+  }
+}
+```
+
+A complete, runnable version (including negative offsets, seam crossing, and an area-weighted mip level) lives in `examples/textureperiodic.cpp`.

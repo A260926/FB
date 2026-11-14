@@ -20,7 +20,11 @@
 // off every 'zig'.)
 //
 
+#include <cmath>
 #include <fstream>
+#include <map>
+#include <utility>
+#include <vector>
 
 #include <noise/interp.h>
 #include <noise/mathconsts.h>
@@ -1296,4 +1300,539 @@ void RendererNormalMap::Render ()
       ++pDest;
     }
   }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Periodic texture region baking
+
+namespace
+{
+
+  // Wraps an arbitrary texel coordinate into [0, size).  Size is always
+  // positive.  Works for negative coordinates and for coordinates several
+  // periods away.
+  int WrapTexel (long long coordinate, int size)
+  {
+    long long wrapped = coordinate % size;
+    if (wrapped < 0) {
+      wrapped += size;
+    }
+    return static_cast<int>(wrapped);
+  }
+
+  // Quintic S-curve used to replace the linear blending weights of the planar
+  // noise-map builder.  Its first and second derivatives are zero at both
+  // ends, so periodic copies join without first- or second-order jumps.
+  double QuinticBlend (double t)
+  {
+    double t3 = t * t * t;
+    double t4 = t3 * t;
+    double t5 = t4 * t;
+    return (6.0 * t5) - (15.0 * t4) + (10.0 * t3);
+  }
+
+  // A half-open range of physical texel indices on one level.
+  struct TexelRange
+  {
+    int begin;
+    int end;
+  };
+
+  // A contiguous, sparse slice of one mip level stored in unwrapped
+  // coordinates.  The slice covers [m_originX, m_originX + m_countX) by
+  // [m_originY, m_originY + m_countY); counts never exceed the level's full
+  // dimensions so every physical texel appears at most once.  Reads and
+  // writes address unwrapped coordinates; periodic wrapping is applied by the
+  // caller before a value is computed.  Layer values are stored as float
+  // (down-sampling accumulates in double before rounding here).
+  class SparseLevel
+  {
+    public:
+
+      SparseLevel (long long originX, long long originY, int countX,
+        int countY):
+        m_originX (originX),
+        m_originY (originY),
+        m_countX (countX),
+        m_countY (countY),
+        m_values (static_cast<size_t>(countX) * countY, 0.0f)
+      {
+      }
+
+      int GetCountX () const
+      {
+        return m_countX;
+      }
+
+      int GetCountY () const
+      {
+        return m_countY;
+      }
+
+      long long GetOriginX () const
+      {
+        return m_originX;
+      }
+
+      long long GetOriginY () const
+      {
+        return m_originY;
+      }
+
+      // Reads the texel at an unwrapped coordinate contained in the slice.
+      double Get (long long x, long long y) const
+      {
+        int lx = static_cast<int>(x - m_originX);
+        int ly = static_cast<int>(y - m_originY);
+        return static_cast<double>(
+          m_values[static_cast<size_t>(ly) * m_countX + lx]);
+      }
+
+      // Stores the texel at an unwrapped coordinate contained in the slice.
+      void SetValue (long long x, long long y, double value)
+      {
+        int lx = static_cast<int>(x - m_originX);
+        int ly = static_cast<int>(y - m_originY);
+        m_values[static_cast<size_t>(ly) * m_countX + lx] =
+          static_cast<float>(value);
+      }
+
+      // Returns the unwrapped coordinate of the unique slot in this slice
+      // holding physical texel @a physicalIndex.  The slice is known to
+      // contain that texel.
+      long long UnwrappedIndex (int physicalIndex, int fullSize,
+        long long origin) const
+      {
+        int offset = WrapTexel (static_cast<long long>(physicalIndex)
+          - origin, fullSize);
+        return origin + offset;
+      }
+
+    private:
+
+      long long m_originX;
+      long long m_originY;
+      int m_countX;
+      int m_countY;
+      std::vector<float> m_values;
+
+  };
+
+  // Returns the physical parent texels [begin, end) overlapped by child texel
+  // @a childIndex.  Both levels tile the same unit interval, so the child
+  // texel spans [childIndex / childSize, (childIndex + 1) / childSize).
+  TexelRange OverlappingTexels (int childIndex, int childSize, int parentSize)
+  {
+    long long begin =
+      static_cast<long long>(childIndex) * parentSize / childSize;
+    long long numerator =
+      (static_cast<long long>(childIndex) + 1) * parentSize;
+    long long end = numerator / childSize;
+    if (numerator % childSize != 0) {
+      end++;
+    }
+    if (end > parentSize) {
+      end = parentSize;
+    }
+    TexelRange range;
+    range.begin = static_cast<int>(begin);
+    range.end = static_cast<int>(end);
+    return range;
+  }
+
+  // Overlap length between child texel @a childIndex and parent texel @a
+  // texelIndex, measured in parent-texel units so the weights over one child
+  // texel sum to the child size in that dimension.
+  double OverlapLength (int childIndex, int texelIndex, int childSize,
+    int parentSize)
+  {
+    double childBegin =
+      static_cast<double>(childIndex) / static_cast<double>(childSize);
+    double childEnd =
+      static_cast<double>(childIndex + 1) / static_cast<double>(childSize);
+    double texelBegin =
+      static_cast<double>(texelIndex) / static_cast<double>(parentSize);
+    double texelEnd =
+      static_cast<double>(texelIndex + 1) / static_cast<double>(parentSize);
+    double begin = childBegin > texelBegin? childBegin: texelBegin;
+    double end = childEnd < texelEnd? childEnd: texelEnd;
+    if (end <= begin) {
+      return 0.0;
+    }
+    return (end - begin) * static_cast<double>(parentSize);
+  }
+
+}
+
+namespace noise
+{
+
+  namespace utils
+  {
+
+    // Owns the sparse slices of one bake and frees them on any exit.
+    struct SliceHolder
+    {
+      std::vector<SparseLevel*> slices;
+
+      ~SliceHolder ()
+      {
+        for (size_t i = 0; i < slices.size (); i++) {
+          delete slices[i];
+        }
+      }
+    };
+
+    // Floor and ceiling division for a positive divisor; the dividend may be
+    // negative.
+    long long FloorDiv (long long dividend, long long divisor)
+    {
+      long long quotient = dividend / divisor;
+      long long remainder = dividend % divisor;
+      if (remainder < 0) {
+        quotient--;
+      }
+      return quotient;
+    }
+
+    long long CeilDiv (long long dividend, long long divisor)
+    {
+      long long quotient = dividend / divisor;
+      long long remainder = dividend % divisor;
+      if (remainder > 0) {
+        quotient++;
+      }
+      return quotient;
+    }
+
+    // Evaluates one base texel, blending its four periodic sources with the
+    // quintic S-curve.  Results are cached for the duration of one bake so a
+    // base texel's four source samples are taken at most once.  Exceptions
+    // from the source module propagate; non-finite source values are rejected.
+    class BaseTexelEvaluator
+    {
+      public:
+
+        BaseTexelEvaluator (const module::Module& sourceModule,
+          const PeriodicTextureSpec& spec):
+          m_module (sourceModule),
+          m_spec (spec),
+          m_extentX (spec.upperX - spec.lowerX),
+          m_extentZ (spec.upperZ - spec.lowerZ)
+        {
+        }
+
+        double Evaluate (int i, int j)
+        {
+          std::pair<int, int> key (i, j);
+          std::map<std::pair<int, int>, double>::iterator it =
+            m_cache.find (key);
+          if (it != m_cache.end ()) {
+            return it->second;
+          }
+
+          double u = (static_cast<double>(i) + 0.5)
+            / static_cast<double>(m_spec.width);
+          double v = (static_cast<double>(j) + 0.5)
+            / static_cast<double>(m_spec.height);
+          double px = m_spec.lowerX + u * m_extentX;
+          double pz = m_spec.lowerZ + v * m_extentZ;
+
+          double sw = m_module.GetValue (px, 0.0, pz);
+          double se = m_module.GetValue (px + m_extentX, 0.0, pz);
+          double nw = m_module.GetValue (px, 0.0, pz + m_extentZ);
+          double ne = m_module.GetValue (px + m_extentX, 0.0,
+            pz + m_extentZ);
+          if (!std::isfinite (sw) || !std::isfinite (se)
+            || !std::isfinite (nw) || !std::isfinite (ne)) {
+            throw noise::ExceptionInvalidParam ();
+          }
+
+          double blendX = 1.0 - QuinticBlend (u);
+          double blendZ = 1.0 - QuinticBlend (v);
+          double z0 = sw + (se - sw) * blendX;
+          double z1 = nw + (ne - nw) * blendX;
+          double value = z0 + (z1 - z0) * blendZ;
+          if (!std::isfinite (value)) {
+            throw noise::ExceptionInvalidParam ();
+          }
+
+          m_cache[key] = value;
+          return value;
+        }
+
+      private:
+
+        const module::Module& m_module;
+        const PeriodicTextureSpec& m_spec;
+        double m_extentX;
+        double m_extentZ;
+        std::map<std::pair<int, int>, double> m_cache;
+
+    };
+
+    void BuildPeriodicTextureRegion (const module::Module& sourceModule,
+      const PeriodicTextureSpec& spec, unsigned int level, int x, int y,
+      int width, int height, NoiseMap& heights, Image& normals)
+    {
+      // Validate every input before touching either output object so that a
+      // rejected call leaves both outputs unmodified.
+      if (spec.width < 1 || spec.width > PERIODIC_TEXTURE_MAX_SIZE
+        || spec.height < 1 || spec.height > PERIODIC_TEXTURE_MAX_SIZE
+        || !std::isfinite (spec.lowerX) || !std::isfinite (spec.upperX)
+        || !std::isfinite (spec.lowerZ) || !std::isfinite (spec.upperZ)
+        || !(spec.upperX > spec.lowerX)
+        || !(spec.upperZ > spec.lowerZ)
+        || !std::isfinite (spec.upperX - spec.lowerX)
+        || !std::isfinite (spec.upperZ - spec.lowerZ)
+        || !std::isfinite (spec.bumpHeight)
+        || width <= 0 || height <= 0) {
+        throw noise::ExceptionInvalidParam ();
+      }
+
+      // Walk the halving sequence up to the requested level.  Halving stops
+      // changing the dimensions at the terminal 1 x 1 level, so any deeper
+      // request is invalid.  Compute the terminal depth first (without
+      // allocating the level table) so an absurdly large level value is
+      // rejected before any allocation.
+      int terminalDepth = 0;
+      {
+        int probeWidth = spec.width;
+        int probeHeight = spec.height;
+        while (probeWidth > 1 || probeHeight > 1) {
+          probeWidth = (probeWidth > 1)? probeWidth / 2: 1;
+          probeHeight = (probeHeight > 1)? probeHeight / 2: 1;
+          ++terminalDepth;
+        }
+      }
+      if (level > static_cast<unsigned int>(terminalDepth)) {
+        throw noise::ExceptionInvalidParam ();
+      }
+
+      int targetWidth = spec.width;
+      int targetHeight = spec.height;
+      for (unsigned int cur = 0; cur < level; cur++) {
+        targetWidth = (targetWidth > 1)? targetWidth / 2: 1;
+        targetHeight = (targetHeight > 1)? targetHeight / 2: 1;
+      }
+
+      // The region may not be larger than the level it is taken from.
+      if (width > targetWidth || height > targetHeight) {
+        throw noise::ExceptionInvalidParam ();
+      }
+
+      // Dimensions of every level.
+      std::vector<int> levelWidths (level + 1);
+      std::vector<int> levelHeights (level + 1);
+      levelWidths[0] = spec.width;
+      levelHeights[0] = spec.height;
+      for (unsigned int cur = 1; cur <= level; cur++) {
+        levelWidths[cur] = (levelWidths[cur - 1] > 1)
+          ? levelWidths[cur - 1] / 2: 1;
+        levelHeights[cur] = (levelHeights[cur - 1] > 1)
+          ? levelHeights[cur - 1] / 2: 1;
+      }
+
+      // A window is a contiguous range of unwrapped texel indices on one
+      // level.  The target window is the requested region enlarged by the one
+      // texel consumed by the periodic central differences (a dimension of one
+      // has no distinct neighbor).
+      struct Window
+      {
+        long long minX;
+        long long minY;
+        int countX;
+        int countY;
+      };
+      std::vector<Window> windows (level + 1);
+      Window& targetWindow = windows[level];
+      targetWindow.minX = static_cast<long long>(x)
+        - ((targetWidth == 1)? 0: 1);
+      targetWindow.minY = static_cast<long long>(y)
+        - ((targetHeight == 1)? 0: 1);
+      targetWindow.countX = (targetWidth == 1)? 1: width + 2;
+      targetWindow.countY = (targetHeight == 1)? 1: height + 2;
+      if (targetWindow.countX > targetWidth) {
+        targetWindow.countX = targetWidth;
+      }
+      if (targetWindow.countY > targetHeight) {
+        targetWindow.countY = targetHeight;
+      }
+
+      // Expand each window onto the previous level by taking the full
+      // overlap of its boundary texels.  Unwrapped indices keep the window
+      // coherent where it crosses a period seam.
+      for (unsigned int cur = level; cur > 0; cur--) {
+        const Window& child = windows[cur];
+        Window& parent = windows[cur - 1];
+        long long childEndX = child.minX + child.countX;
+        long long childEndY = child.minY + child.countY;
+        parent.minX = FloorDiv (child.minX * levelWidths[cur - 1],
+          levelWidths[cur]);
+        parent.minY = FloorDiv (child.minY * levelHeights[cur - 1],
+          levelHeights[cur]);
+        long long parentEndX = CeilDiv (childEndX * levelWidths[cur - 1],
+          levelWidths[cur]);
+        long long parentEndY = CeilDiv (childEndY * levelHeights[cur - 1],
+          levelHeights[cur]);
+        parent.countX = static_cast<int>(parentEndX - parent.minX);
+        parent.countY = static_cast<int>(parentEndY - parent.minY);
+        // A window spanning a full period already contains every physical
+        // texel; never store the same seam texel twice.
+        if (parent.countX > levelWidths[cur - 1]) {
+          parent.countX = levelWidths[cur - 1];
+        }
+        if (parent.countY > levelHeights[cur - 1]) {
+          parent.countY = levelHeights[cur - 1];
+        }
+      }
+
+      // Allocate the sparse slices; nothing outside the windows is stored.
+      SliceHolder holder;
+      holder.slices.resize (level + 1);
+      for (unsigned int cur = 0; cur <= level; cur++) {
+        holder.slices[cur] = new SparseLevel (windows[cur].minX,
+          windows[cur].minY, windows[cur].countX, windows[cur].countY);
+      }
+
+      double extentX = spec.upperX - spec.lowerX;
+      double extentZ = spec.upperZ - spec.lowerZ;
+      BaseTexelEvaluator evaluator (sourceModule, spec);
+
+      // Fill the base level, evaluating only the texels in its window.
+      SparseLevel& base = *holder.slices[0];
+      for (int ly = 0; ly < base.GetCountY (); ly++) {
+        for (int lx = 0; lx < base.GetCountX (); lx++) {
+          long long unwrappedX = base.GetOriginX () + lx;
+          long long unwrappedY = base.GetOriginY () + ly;
+          int i = WrapTexel (unwrappedX, spec.width);
+          int j = WrapTexel (unwrappedY, spec.height);
+          base.SetValue (unwrappedX, unwrappedY, evaluator.Evaluate (i, j));
+        }
+      }
+
+      // Build every higher level from the previous one by area-weighted
+      // averaging.  Each level stores double values; all accumulation stays
+      // in double.
+      for (unsigned int cur = 1; cur <= level; cur++) {
+        const SparseLevel& parent = *holder.slices[cur - 1];
+        SparseLevel& child = *holder.slices[cur];
+        int parentWidth = levelWidths[cur - 1];
+        int parentHeight = levelHeights[cur - 1];
+        int childWidth = levelWidths[cur];
+        int childHeight = levelHeights[cur];
+
+        for (int ly = 0; ly < child.GetCountY (); ly++) {
+          for (int lx = 0; lx < child.GetCountX (); lx++) {
+            long long childX = child.GetOriginX () + lx;
+            long long childY = child.GetOriginY () + ly;
+            int physicalX = WrapTexel (childX, childWidth);
+            int physicalY = WrapTexel (childY, childHeight);
+
+            TexelRange xRange = OverlappingTexels (physicalX, childWidth,
+              parentWidth);
+            TexelRange yRange = OverlappingTexels (physicalY, childHeight,
+              parentHeight);
+
+            double accum = 0.0;
+            double weightSum = 0.0;
+            for (int py = yRange.begin; py < yRange.end; py++) {
+              long long slotY = parent.UnwrappedIndex (py, parentHeight,
+                parent.GetOriginY ());
+              double weightY = OverlapLength (physicalY, py, childHeight,
+                parentHeight);
+              for (int px = xRange.begin; px < xRange.end; px++) {
+                long long slotX = parent.UnwrappedIndex (px, parentWidth,
+                  parent.GetOriginX ());
+                double weightX = OverlapLength (physicalX, px, childWidth,
+                  parentWidth);
+                double weight = weightX * weightY;
+                accum += parent.Get (slotX, slotY) * weight;
+                weightSum += weight;
+              }
+            }
+            child.SetValue (childX, childY, accum / weightSum);
+          }
+        }
+      }
+
+      // All source values are now computed; resize the outputs only after the
+      // failure-prone work so rejected calls never alter them.
+      heights.SetSize (width, height);
+      normals.SetSize (width, height);
+
+      const SparseLevel& target = *holder.slices[level];
+      double spacingX = extentX / static_cast<double>(targetWidth);
+      double spacingZ = extentZ / static_cast<double>(targetHeight);
+
+      // Reads a periodic neighbor through the target slice's window.
+      for (int ly = 0; ly < height; ly++) {
+        for (int lx = 0; lx < width; lx++) {
+          long long centerX = static_cast<long long>(x) + lx;
+          long long centerY = static_cast<long long>(y) + ly;
+
+          int physicalX = WrapTexel (centerX, targetWidth);
+          int physicalY = WrapTexel (centerY, targetHeight);
+          long long slotX = target.UnwrappedIndex (physicalX, targetWidth,
+            target.GetOriginX ());
+          long long slotY = target.UnwrappedIndex (physicalY, targetHeight,
+            target.GetOriginY ());
+          double center = target.Get (slotX, slotY);
+
+          // A dimension of one reads itself as its neighbor, yielding a zero
+          // derivative.  Otherwise the real periodic neighbors are used even
+          // when they lie outside the requested region.
+          double left = center;
+          double right = center;
+          double down = center;
+          double up = center;
+          if (targetWidth > 1) {
+            int leftPhysical = WrapTexel (centerX - 1, targetWidth);
+            int rightPhysical = WrapTexel (centerX + 1, targetWidth);
+            left = target.Get (target.UnwrappedIndex (leftPhysical,
+              targetWidth, target.GetOriginX ()), slotY);
+            right = target.Get (target.UnwrappedIndex (rightPhysical,
+              targetWidth, target.GetOriginX ()), slotY);
+          }
+          if (targetHeight > 1) {
+            int downPhysical = WrapTexel (centerY - 1, targetHeight);
+            int upPhysical = WrapTexel (centerY + 1, targetHeight);
+            down = target.Get (slotX, target.UnwrappedIndex (downPhysical,
+              targetHeight, target.GetOriginY ()));
+            up = target.Get (slotX, target.UnwrappedIndex (upPhysical,
+              targetHeight, target.GetOriginY ()));
+          }
+
+          // Central differences over twice the physical spacing.
+          double slopeX = (targetWidth == 1)? 0.0:
+            (right - left) / (2.0 * spacingX);
+          double slopeZ = (targetHeight == 1)? 0.0:
+            (up - down) / (2.0 * spacingZ);
+
+          double normalX = -slopeX * spec.bumpHeight;
+          double normalZ = -slopeZ * spec.bumpHeight;
+          double length = std::sqrt (normalX * normalX
+            + normalZ * normalZ + 1.0);
+          double unitX = normalX / length;
+          double unitZ = normalZ / length;
+          double unitY = 1.0 / length;
+
+          noise::uint8 red = static_cast<noise::uint8>(
+            static_cast<noise::uint>(std::floor ((unitX + 1.0) * 127.5))
+            & 0xff);
+          noise::uint8 green = static_cast<noise::uint8>(
+            static_cast<noise::uint>(std::floor ((unitZ + 1.0) * 127.5))
+            & 0xff);
+          noise::uint8 blue = static_cast<noise::uint8>(
+            static_cast<noise::uint>(std::floor ((unitY + 1.0) * 127.5))
+            & 0xff);
+
+          heights.SetValue (lx, ly, static_cast<float>(center));
+          normals.SetValue (lx, ly, Color (red, green, blue, 255));
+        }
+      }
+    }
+
+  }
+
 }
