@@ -54,6 +54,7 @@ set(CAPTION_SOURCES
   src/eia608_from_utf8.c
   src/mpeg.c
   src/scc.c
+  src/scc_timeline.c
   src/srt.c
   src/utf8.c
   src/vtt.c
@@ -67,6 +68,7 @@ set(CAPTION_HEADERS
   caption/eia608_charmap.h
   caption/mpeg.h
   caption/scc.h
+  caption/scc_timeline.h
   caption/srt.h
   caption/utf8.h
   caption/vtt.h

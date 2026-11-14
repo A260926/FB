@@ -22,42 +22,83 @@
 /* THE SOFTWARE.                                                                              */
 /**********************************************************************************************/
 #include "caption.h"
-#include "scc.h"
+#include "scc_timeline.h"
+#include "utf8.h"
 #include "vtt.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char** argv)
+// parses a non-negative integer transmission frame number
+static int parse_frame(const char* text, uint32_t* frame)
 {
-
-    if (argc < 2) {
-        fprintf(stderr, "Usage: scc2vtt input.scc\n\nOutput: vtt file to stdin\n");
+    if (!text || !text[0]) {
         return 0;
     }
-    int i;
-    scc_t* scc = NULL;
-    size_t scc_size = 0;
-    caption_frame_t frame;
-    vtt_t* vtt = 0;
-    utf8_char_t* scc_data_ptr = utf8_load_text_file(argv[1], &scc_size);
-    utf8_char_t* scc_data = scc_data_ptr;
 
-    vtt = vtt_new();
-    caption_frame_init(&frame);
-    scc_data += scc_to_608(&scc, scc_data);
-
-    while (scc->cc_size) {
-        for (i = 0; i < scc->cc_size; ++i) {
-            if (LIBCAPTION_READY == caption_frame_decode(&frame, scc->cc_data[i], scc->timestamp)) {
-                vtt_cue_from_caption_frame(&frame, vtt);
-            }
+    for (const char* p = text; *p; ++p) {
+        if (*p < '0' || *p > '9') {
+            return 0;
         }
+    }
 
-        scc_data += scc_to_608(&scc, scc_data);
+    errno = 0;
+    char* end = NULL;
+    unsigned long long value = strtoull(text, &end, 10);
+
+    if (errno || !end || *end || 0xFFFFFFFFull < value) {
+        return 0;
+    }
+
+    (*frame) = (uint32_t)value;
+    return 1;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc != 4) {
+        fprintf(stderr, "Usage: scc2vtt input.scc begin_frame end_frame\n\n"
+                        "Exports the half-open window [begin_frame, end_frame) of integer\n"
+                        "transmission frames at 30000/1001 fps as WebVTT on stdout\n");
+        return EXIT_FAILURE;
+    }
+
+    uint32_t begin_frame = 0, end_frame = 0;
+
+    if (!parse_frame(argv[2], &begin_frame) || !parse_frame(argv[3], &end_frame) || begin_frame >= end_frame) {
+        fprintf(stderr, "scc2vtt: invalid frame window '%s' '%s'\n", argv[2], argv[3]);
+        return EXIT_FAILURE;
+    }
+
+    FILE* probe = fopen(argv[1], "rb");
+
+    if (!probe) {
+        fprintf(stderr, "scc2vtt: unable to open '%s'\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+
+    fclose(probe);
+
+    size_t scc_size = 0;
+    utf8_char_t* scc_data = utf8_load_text_file(argv[1], &scc_size);
+
+    if (!scc_data) {
+        fprintf(stderr, "scc2vtt: unable to read '%s'\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+
+    scc_timeline_error_t error = SCC_TIMELINE_OK;
+    size_t error_line = 0;
+    vtt_t* vtt = scc_timeline_to_vtt(scc_data, scc_size, begin_frame, end_frame, &error, &error_line);
+
+    if (!vtt) {
+        fprintf(stderr, "scc2vtt: import failed with error %d at line %zu\n", (int)error, error_line);
+        free(scc_data);
+        return EXIT_FAILURE;
     }
 
     vtt_dump(vtt);
     vtt_free(vtt);
-    free(scc_data_ptr);
+    free(scc_data);
     return EXIT_SUCCESS;
 }
