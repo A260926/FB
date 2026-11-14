@@ -2311,19 +2311,19 @@ void ins(x86emu_t *emu, int size)
 
       switch(size) {
         case 1:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_byte_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_EDI, fetch_io_byte(emu, emu->x86.R_DX));
             emu->x86.R_EDI += inc;
           }
           break;
         case 2:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_word_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_EDI, fetch_io_word(emu, emu->x86.R_DX));
             emu->x86.R_EDI += inc;
           }
           break;
         case 4:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_long_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_EDI, fetch_io_long(emu, emu->x86.R_DX));
             emu->x86.R_EDI += inc;
           }
@@ -2352,19 +2352,19 @@ void ins(x86emu_t *emu, int size)
 
       switch(size) {
         case 1:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_byte_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_DI, fetch_io_byte(emu, emu->x86.R_DX));
             emu->x86.R_DI += inc;
           }
           break;
         case 2:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_word_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_DI, fetch_io_word(emu, emu->x86.R_DX));
             emu->x86.R_DI += inc;
           }
           break;
         case 4:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_data_long_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_DI, fetch_io_long(emu, emu->x86.R_DX));
             emu->x86.R_DI += inc;
           }
@@ -2406,19 +2406,19 @@ void outs(x86emu_t *emu, int size)
    
       switch(size) {
         case 1:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_byte(emu, emu->x86.R_DX, fetch_data_byte_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_ESI));
             emu->x86.R_ESI += inc;
           }
           break;
         case 2:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_word(emu, emu->x86.R_DX, fetch_data_word_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_ESI));
             emu->x86.R_ESI += inc;
           }
           break;
         case 4:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_long(emu, emu->x86.R_DX, fetch_data_long_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_ESI));
             emu->x86.R_ESI += inc;
           }
@@ -2447,19 +2447,19 @@ void outs(x86emu_t *emu, int size)
    
       switch(size) {
         case 1:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_byte(emu, emu->x86.R_DX, fetch_data_byte_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_SI));
             emu->x86.R_SI += inc;
           }
           break;
         case 2:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_word(emu, emu->x86.R_DX, fetch_data_word_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_SI));
             emu->x86.R_SI += inc;
           }
           break;
         case 4:
-          while(count--) {
+          while(count-- && !data_access_pending(emu)) {
             store_io_long(emu, emu->x86.R_DX, fetch_data_long_abs(emu, emu->x86.seg + R_ES_INDEX, emu->x86.R_SI));
             emu->x86.R_SI += inc;
           }
@@ -2490,14 +2490,18 @@ Pushes a word onto the stack.
 void push_word(x86emu_t *emu, u16 w)
 {
   if(MODE_STACK32) {
+    /* validate the future stack slot against SS before moving ESP */
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP - 2, 2, 1)) return;
     emu->x86.R_ESP -= 2;
     store_data_word_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP, w);
   }
   else {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP - 2, 2, 1)) return;
     emu->x86.R_SP -= 2;
     store_data_word_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP, w);
   }
 }
+
 
 /****************************************************************************
 REMARKS:
@@ -2506,14 +2510,17 @@ Pushes a long onto the stack.
 void push_long(x86emu_t *emu, u32 w)
 {
   if(MODE_STACK32) {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP - 4, 4, 1)) return;
     emu->x86.R_ESP -= 4;
     store_data_long_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP, w);
   }
   else {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP - 4, 4, 1)) return;
     emu->x86.R_SP -= 4;
     store_data_long_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP, w);
   }
 }
+
 
 /****************************************************************************
 REMARKS:
@@ -2524,16 +2531,21 @@ u16 pop_word(x86emu_t *emu)
   u16 res;
 
   if(MODE_STACK32) {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP, 2, 0)) return 0;
     res = fetch_data_word_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP);
+    if(data_access_pending(emu)) return 0;
     emu->x86.R_ESP += 2;
   }
   else {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP, 2, 0)) return 0;
     res = fetch_data_word_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP);
+    if(data_access_pending(emu)) return 0;
     emu->x86.R_SP += 2;
   }
 
   return res;
 }
+
 
 /****************************************************************************
 REMARKS:
@@ -2544,11 +2556,15 @@ u32 pop_long(x86emu_t *emu)
   u32 res;
 
   if(MODE_STACK32) {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP, 4, 0)) return 0;
     res = fetch_data_long_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_ESP);
+    if(data_access_pending(emu)) return 0;
     emu->x86.R_ESP += 4;
   }
   else {
+    if(!data_access_ok(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP, 4, 0)) return 0;
     res = fetch_data_long_abs(emu, emu->x86.seg + R_SS_INDEX, emu->x86.R_SP);
+    if(data_access_pending(emu)) return 0;
     emu->x86.R_SP += 4;
   }
 

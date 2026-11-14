@@ -45,7 +45,6 @@ static void handle_interrupt(x86emu_t *emu);
 static void generate_int(x86emu_t *emu, u8 nr, unsigned type, unsigned errcode);
 static void log_regs(x86emu_t *emu);
 static void log_code(x86emu_t *emu);
-static void check_data_access(x86emu_t *emu, sel_t *seg, u32 ofs, u32 size);
 static unsigned decode_memio(x86emu_t *emu, u32 addr, u32 *val, unsigned type);
 static unsigned emu_memio(x86emu_t *emu, u32 addr, u32 *val, unsigned type);
 static void idt_lookup(x86emu_t *emu, u8 nr, u32 *new_cs, u32 *new_eip);
@@ -482,7 +481,7 @@ cpu-state-varible emu->x86.mode. There are several potential states:
 
 Each of the above 7 items are handled with a bit in the mode field.
 ****************************************************************************/
-static sel_t *get_data_segment(x86emu_t *emu)
+sel_t *get_data_segment(x86emu_t *emu)
 {
   sel_t *seg;
 
@@ -540,7 +539,9 @@ I128_reg_t fetch_data_qlong(x86emu_t *emu, u32 ofs)
 {
   I128_reg_t ret;
   int i;
-  for (i = 0; i < sizeof(I128_reg_t); i++) {
+  memset(&ret, 0, sizeof ret);
+  if(!data_access_ok(emu, get_data_segment(emu), ofs, sizeof ret, 0)) return ret;
+  for (i = 0; i < (int) sizeof(I128_reg_t); i++) {
     ret.reg[i] = fetch_data_byte(emu, ofs + i);
   }
   return ret;
@@ -556,11 +557,11 @@ Byte value read from the absolute memory location.
 ****************************************************************************/
 u8 fetch_data_byte_abs(x86emu_t *emu, sel_t *seg, u32 ofs)
 {
-  u32 val;
+  u32 val = 0;
 
-  check_data_access(emu, seg, ofs, 1);
-
-  decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_8 + X86EMU_MEMIO_R);
+  if(data_access_ok(emu, seg, ofs, 1, 0)) {
+    decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_8 + X86EMU_MEMIO_R);
+  }
 
   return val;
 }
@@ -575,11 +576,11 @@ Word value read from the absolute memory location.
 ****************************************************************************/
 u16 fetch_data_word_abs(x86emu_t *emu, sel_t *seg, u32 ofs)
 {
-  u32 val;
+  u32 val = 0;
 
-  check_data_access(emu, seg, ofs, 2);
-
-  decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_16 + X86EMU_MEMIO_R);
+  if(data_access_ok(emu, seg, ofs, 2, 0)) {
+    decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_16 + X86EMU_MEMIO_R);
+  }
 
   return val;
 }
@@ -594,11 +595,11 @@ Long value read from the absolute memory location.
 ****************************************************************************/
 u32 fetch_data_long_abs(x86emu_t *emu, sel_t *seg, u32 ofs)
 {
-  u32 val;
+  u32 val = 0;
 
-  check_data_access(emu, seg, ofs, 4);
-
-  decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_32 + X86EMU_MEMIO_R);
+  if(data_access_ok(emu, seg, ofs, 4, 0)) {
+    decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_32 + X86EMU_MEMIO_R);
+  }
 
   return val;
 }
@@ -657,7 +658,8 @@ the current 'default' segment, which may have been overridden.
 void store_data_qlong(x86emu_t *emu, u32 ofs, I128_reg_t val)
 {
   int i;
-  for (i = 0; i < sizeof(I128_reg_t); i++) {
+  if(!data_access_ok(emu, get_data_segment(emu), ofs, sizeof val, 1)) return;
+  for (i = 0; i < (int) sizeof(I128_reg_t); i++) {
     store_data_word_abs(emu, get_data_segment(emu), ofs, val.reg[i]);
   }
 }
@@ -675,9 +677,9 @@ void store_data_byte_abs(x86emu_t *emu, sel_t *seg, u32 ofs, u8 val)
 {
   u32 val32 = val;
 
-  check_data_access(emu, seg, ofs, 1);
-
-  decode_memio(emu, seg->base + ofs, &val32, X86EMU_MEMIO_8 + X86EMU_MEMIO_W);
+  if(data_access_ok(emu, seg, ofs, 1, 1)) {
+    decode_memio(emu, seg->base + ofs, &val32, X86EMU_MEMIO_8 + X86EMU_MEMIO_W);
+  }
 }
 
 /****************************************************************************
@@ -693,9 +695,9 @@ void store_data_word_abs(x86emu_t *emu, sel_t *seg, u32 ofs, u16 val)
 {
   u32 val32 = val;
 
-  check_data_access(emu, seg, ofs, 2);
-
-  decode_memio(emu, seg->base + ofs, &val32, X86EMU_MEMIO_16 + X86EMU_MEMIO_W);
+  if(data_access_ok(emu, seg, ofs, 2, 1)) {
+    decode_memio(emu, seg->base + ofs, &val32, X86EMU_MEMIO_16 + X86EMU_MEMIO_W);
+  }
 }
 
 /****************************************************************************
@@ -709,9 +711,9 @@ Writes a long value to an absolute memory location.
 ****************************************************************************/
 void store_data_long_abs(x86emu_t *emu, sel_t *seg, u32 ofs, u32 val)
 {
-  check_data_access(emu, seg, ofs, 4);
-
-  decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_32 + X86EMU_MEMIO_W);
+  if(data_access_ok(emu, seg, ofs, 4, 1)) {
+    decode_memio(emu, seg->base + ofs, &val, X86EMU_MEMIO_32 + X86EMU_MEMIO_W);
+  }
 }
 
 
@@ -1842,11 +1844,34 @@ void log_regs(x86emu_t *emu)
 }
 
 
-void check_data_access(x86emu_t *emu, sel_t *seg, u32 ofs, u32 size)
+/*
+ * Report whether a fault is already pending for the instruction in flight.
+ * Handlers use it to stop after a failed segmented data access so no target
+ * register, arithmetic flag or data memory gets modified.
+ */
+int data_access_pending(x86emu_t *emu)
+{
+  return emu->x86.intr_type != 0;
+}
+
+
+/*
+ * Validate a segmented data access against the cached descriptor.
+ *
+ * The whole [ofs, ofs + size) range is checked before any data memory is
+ * touched. Range, type (read vs. write) and null selector failures raise
+ * #SS(0) for accesses actually using SS and #GP(0) for every other segment
+ * register. Returns 1 when the access may proceed, 0 when a fault is
+ * pending. The descriptor load path keeps its own present/permission checks.
+ */
+int data_access_ok(x86emu_t *emu, sel_t *seg, u32 ofs, u32 size, int write)
 {
   char **p = &emu->log.ptr;
   static char seg_name[7] = "ecsdfg?";
   unsigned idx = seg - emu->x86.seg, lf;
+  unsigned acc = seg->acc;
+  u64 last;
+  u32 upper;
 
   if((emu->log.trace & X86EMU_TRACE_ACC) && *p) {
     lf = LOG_FREE(emu);
@@ -1874,11 +1899,73 @@ void check_data_access(x86emu_t *emu, sel_t *seg, u32 ofs, u32 size)
     }
   }
 
-  if(ofs + size - 1 > seg->limit) {
-    INTR_RAISE_GP(emu, seg->sel);
+  /* real mode keeps its unprotected, effective-address only behavior */
+  if(MODE_REAL(emu)) return 1;
+
+  /* the segment register identity, not the selector value, picks the vector */
+  if(idx == R_SS_INDEX) {
+    /* null SS: the fault is reported when SS is actually used (#SS(0)) */
+    if((seg->sel & 0xfffc) == 0) {
+      INTR_RAISE_SS(emu, 0);
+      return 0;
+    }
+  }
+  else if(idx != R_CS_INDEX && (seg->sel & 0xfffc) == 0) {
+    /* referencing a null DS/ES/FS/GS is always #GP(0) */
+    INTR_RAISE_GP(emu, 0);
+    return 0;
   }
 
-  return;
+  /* access type checks against the cached descriptor type */
+  if(!ACC_S(acc)) {
+    /* system descriptors cannot serve as data segments */
+    if(idx == R_SS_INDEX) INTR_RAISE_SS(emu, 0);
+    else INTR_RAISE_GP(emu, 0);
+    return 0;
+  }
+
+  if(ACC_E(acc)) {
+    /* code segment: data reads only when readable, writes are impossible */
+    if(write || !ACC_R(acc)) {
+      INTR_RAISE_GP(emu, 0);
+      return 0;
+    }
+  }
+  else if(write && !ACC_W(acc)) {
+    /* read-only data segment */
+    if(idx == R_SS_INDEX) INTR_RAISE_SS(emu, 0);
+    else INTR_RAISE_GP(emu, 0);
+    return 0;
+  }
+
+  /*
+   * Range check. The last byte offset is computed in 64 bit so an
+   * access starting near 0xffffffff cannot wrap around and hide itself.
+   */
+  last = (u64) ofs + size - 1;
+
+  if(!ACC_E(acc) && ACC_ED(acc)) {
+    /*
+     * Expand-down data segment: the start must be strictly above the
+     * limit and the complete tail must stay below the D/B bound. The
+     * bound comes from the segment, not the address size of the access.
+     */
+    upper = ACC_D(acc) ? 0xffffffffu : 0xffffu;
+
+    if(ofs <= seg->limit || last > upper) {
+      if(idx == R_SS_INDEX) INTR_RAISE_SS(emu, 0);
+      else INTR_RAISE_GP(emu, 0);
+      return 0;
+    }
+  }
+  else if(last > seg->limit) {
+    /* ordinary expand-up data or code segment */
+    if(idx == R_SS_INDEX) INTR_RAISE_SS(emu, 0);
+    else INTR_RAISE_GP(emu, 0);
+    return 0;
+  }
+
+  return 1;
 }
 
 

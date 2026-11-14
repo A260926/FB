@@ -83,6 +83,18 @@ void store_data_word_abs(x86emu_t *emu, sel_t *seg, u32 offset, u16 val);
 void store_data_long(x86emu_t *emu, u32 offset, u32 val);
 void store_data_long_abs(x86emu_t *emu, sel_t *seg, u32 offset, u32 val);
 void store_data_qlong(x86emu_t *emu, u32 ofs, I128_reg_t val);
+
+/*
+ * Segmented data access protection. data_access_ok() validates the whole
+ * [offset, offset + size) range against the cached segment descriptor and
+ * the requested read/write permission without touching data memory. It
+ * raises #SS(0)/#GP(0) on failure and returns 0; data_access_pending()
+ * reports a pending data access fault so handlers can bail out before
+ * committing anything.
+ */
+sel_t *get_data_segment(x86emu_t *emu);
+int data_access_ok(x86emu_t *emu, sel_t *seg, u32 ofs, u32 size, int write);
+int data_access_pending(x86emu_t *emu);
 u8 fetch_io_byte(x86emu_t *emu, u32 offset);
 u16 fetch_io_word(x86emu_t *emu, u32 offset);
 u32 fetch_io_long(x86emu_t *emu, u32 offset);
