@@ -1,0 +1,563 @@
+package astisub_test
+
+import (
+	"bytes"
+	"io/ioutil"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/asticode/go-astikit"
+	"github.com/asticode/go-astisub"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestWebVTT(t *testing.T) {
+	// Open
+	s, err := astisub.OpenFile("./testdata/example-in.vtt")
+	assert.NoError(t, err)
+	assertSubtitleItems(t, s)
+	// Comments
+	assert.Equal(t, []string{"this a nice example", "of a VTT"}, s.Items[0].Comments)
+	assert.Equal(t, []string{"This a comment inside the VTT", "and this is the second line"}, s.Items[1].Comments)
+	// Regions
+	assert.Equal(t, 2, len(s.Regions))
+	assert.Equal(t, astisub.Region{ID: "fred", InlineStyle: &astisub.StyleAttributes{WebVTTLines: 3, WebVTTRegionAnchor: "0%,100%", WebVTTScroll: "up", WebVTTViewportAnchor: "10%,90%", WebVTTWidth: "40%"}}, *s.Regions["fred"])
+	assert.Equal(t, astisub.Region{ID: "bill", InlineStyle: &astisub.StyleAttributes{WebVTTLines: 3, WebVTTRegionAnchor: "100%,100%", WebVTTScroll: "up", WebVTTViewportAnchor: "90%,90%", WebVTTWidth: "40%"}}, *s.Regions["bill"])
+	assert.Equal(t, s.Regions["bill"], s.Items[0].Region)
+	assert.Equal(t, s.Regions["fred"], s.Items[1].Region)
+	// Styles
+	expected := astisub.StyleAttributes{
+		WebVTTAlign:    "left",
+		WebVTTPosition: &astisub.WebVTTPosition{XPosition: "10%", Alignment: "line-left"},
+		WebVTTSize:     "35%",
+	}
+	// propagateWebVTTAttributes() sets these based on WebVTT attributes
+	expected.TTMLTextAlign = astikit.StrPtr("left") // From WebVTTAlign since "start" is not a valid position alignment
+	expected.TTMLOrigin = astikit.StrPtr("10% 80%") // From position: 10% X, 80% Y (default when no line specified)
+	expected.TTMLExtent = astikit.StrPtr("35% 10%") // From size: 35% width, 10% height (default when no line specified)
+	assert.Equal(t, expected, *s.Items[1].InlineStyle)
+
+	// No subtitles to write
+	w := &bytes.Buffer{}
+	err = astisub.Subtitles{}.WriteToWebVTT(w)
+	assert.EqualError(t, err, astisub.ErrNoSubtitlesToWrite.Error())
+
+	// Write
+	c, err := ioutil.ReadFile("./testdata/example-out.vtt")
+	assert.NoError(t, err)
+	err = s.WriteToWebVTT(w)
+	assert.NoError(t, err)
+	assert.Equal(t, string(c), w.String())
+}
+
+func TestBroken1WebVTT(t *testing.T) {
+	// Open bad, broken WebVTT file
+	_, err := astisub.OpenFile("./testdata/broken-1-in.vtt")
+	assert.Nil(t, err)
+}
+
+func TestNonUTF8WebVTT(t *testing.T) {
+	_, err := astisub.OpenFile("./testdata/example-in-non-utf8.vtt")
+	assert.Error(t, err)
+}
+
+func TestWebVTTWithVoiceName(t *testing.T) {
+	testData := `WEBVTT
+
+	NOTE this a example with voicename
+
+	1
+	00:02:34.000 --> 00:02:35.000
+	<v.first.local Roger Bingham>I'm the fist speaker
+
+	2
+	00:02:34.000 --> 00:02:35.000
+	<v Bingham>I'm the second speaker
+
+	3
+	00:00:04.000 --> 00:00:08.000
+	<v Lee>What are you doing here?</v>
+
+	4
+	00:00:04.000 --> 00:00:08.000
+	<v Bob>Incorrect tag?</vi>`
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+
+	assert.Len(t, s.Items, 4)
+	assert.Equal(t, "Roger Bingham", s.Items[0].Lines[0].VoiceName)
+	assert.Equal(t, "Bingham", s.Items[1].Lines[0].VoiceName)
+	assert.Equal(t, "Lee", s.Items[2].Lines[0].VoiceName)
+	assert.Equal(t, "Bob", s.Items[3].Lines[0].VoiceName)
+
+	b := &bytes.Buffer{}
+	err = s.WriteToWebVTT(b)
+	assert.NoError(t, err)
+	assert.Equal(t, `WEBVTT
+
+NOTE this a example with voicename
+
+1
+00:02:34.000 --> 00:02:35.000
+<v Roger Bingham>I'm the fist speaker
+
+2
+00:02:34.000 --> 00:02:35.000
+<v Bingham>I'm the second speaker
+
+3
+00:00:04.000 --> 00:00:08.000
+<v Lee>What are you doing here?
+
+4
+00:00:04.000 --> 00:00:08.000
+<v Bob>Incorrect tag?
+`, b.String())
+}
+
+func TestWebVTTWithTimestampMap(t *testing.T) {
+	testData := `WEBVTT
+	X-TIMESTAMP-MAP=MPEGTS:180000, LOCAL:00:00:00.000
+
+	00:00.933 --> 00:02.366
+	♪ ♪
+
+	00:02.400 --> 00:03.633
+	Evening.`
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+
+	assert.Len(t, s.Items, 2)
+
+	assert.Equal(t, s.Items[0].StartAt.Milliseconds(), int64(933))
+	assert.Equal(t, s.Items[0].EndAt.Milliseconds(), int64(2366))
+	assert.Equal(t, s.Items[1].StartAt.Milliseconds(), int64(2400))
+	assert.Equal(t, s.Items[1].EndAt.Milliseconds(), int64(3633))
+	assert.Equal(t, s.Metadata.WebVTTTimestampMap.Offset(), time.Duration(time.Second*2))
+
+	b := &bytes.Buffer{}
+	err = s.WriteToWebVTT(b)
+	assert.NoError(t, err)
+	assert.Equal(t, `WEBVTT
+X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:180000
+
+1
+00:00:00.933 --> 00:00:02.366
+♪ ♪
+
+2
+00:00:02.400 --> 00:00:03.633
+Evening.
+`, b.String())
+}
+
+func TestWebVTTTags(t *testing.T) {
+	testData := `WEBVTT
+
+	00:01:00.000 --> 00:02:00.000
+	<u><i>Italic with underline text</i></u> some extra
+
+	00:02:00.000 --> 00:03:00.000
+	<lang en>English here</lang> <c.yellow.bg_blue>Yellow text on blue background</c>
+
+	00:03:00.000 --> 00:04:00.000
+	<v Joe><c.red><i>Joe's words are red in italic</i></c>
+
+	00:04:00.000 --> 00:05:00.000
+	<customed_tag.class1.class2>Text here</customed_tag>
+
+	00:05:00.000 --> 00:06:00.000
+	<v Joe>Joe says something</v> <v Bob>Bob says something</v>
+
+	00:06:00.000 --> 00:07:00.000
+	Text with a <00:06:30.000>timestamp in the middle
+
+	00:08:00.000 --> 00:09:00.000
+	<i>Test with multi line italics
+	Terminated on the next line</i>
+	
+	00:09:00.000 --> 00:10:00.000
+	<i>Unterminated styles
+	
+	00:10:00.000 --> 00:11:00.000
+	Do no fall to the next item
+	
+	00:12:00.000 --> 00:13:00.000
+	<i>x</i>^3 * <i>x</i> = 100`
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	require.NoError(t, err)
+
+	require.Len(t, s.Items, 10)
+
+	b := &bytes.Buffer{}
+	err = s.WriteToWebVTT(b)
+	require.NoError(t, err)
+	require.Equal(t, `WEBVTT
+
+1
+00:01:00.000 --> 00:02:00.000
+<u><i>Italic with underline text</i></u> some extra
+
+2
+00:02:00.000 --> 00:03:00.000
+<lang en>English here</lang> <c.yellow.bg_blue>Yellow text on blue background</c>
+
+3
+00:03:00.000 --> 00:04:00.000
+<v Joe><c.red><i>Joe's words are red in italic</i></c>
+
+4
+00:04:00.000 --> 00:05:00.000
+<customed_tag.class1.class2>Text here</customed_tag>
+
+5
+00:05:00.000 --> 00:06:00.000
+<v Joe>Joe says something Bob says something
+
+6
+00:06:00.000 --> 00:07:00.000
+Text with a <00:06:30.000>timestamp in the middle
+
+7
+00:08:00.000 --> 00:09:00.000
+<i>Test with multi line italics</i>
+<i>Terminated on the next line</i>
+
+8
+00:09:00.000 --> 00:10:00.000
+<i>Unterminated styles</i>
+
+9
+00:10:00.000 --> 00:11:00.000
+Do no fall to the next item
+
+10
+00:12:00.000 --> 00:13:00.000
+<i>x</i>^3 * <i>x</i> = 100
+`, b.String())
+}
+
+func TestWebVTTParseDuration(t *testing.T) {
+	testData := `WEBVTT
+	1
+	00:00:01.876-->00:0:03.390
+	Duration without enclosing space
+
+	2
+	00:00:03.391-->00:00:06.567	align:middle
+	Duration with tab spaced styles`
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	require.NoError(t, err)
+
+	require.Len(t, s.Items, 2)
+	assert.Equal(t, 1*time.Second+876*time.Millisecond, s.Items[0].StartAt)
+	assert.Equal(t, 3*time.Second+390*time.Millisecond, s.Items[0].EndAt)
+	assert.Equal(t, "Duration without enclosing space", s.Items[0].Lines[0].String())
+	assert.Equal(t, 3*time.Second+391*time.Millisecond, s.Items[1].StartAt)
+	assert.Equal(t, 6*time.Second+567*time.Millisecond, s.Items[1].EndAt)
+	assert.Equal(t, "Duration with tab spaced styles", s.Items[1].Lines[0].String())
+	assert.NotNil(t, s.Items[1].InlineStyle)
+	assert.Equal(t, s.Items[1].InlineStyle.WebVTTAlign, "middle")
+}
+
+func TestWebVTTMissingEndTimeBoundary(t *testing.T) {
+	testData := `WEBVTT
+
+1
+00:00:01.000 -->
+Some subtitle text`
+
+	_, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing webvtt end time boundary")
+}
+
+func TestWebVTTColorToTTML(t *testing.T) {
+	testData := `WEBVTT
+
+1
+00:00:01.000 --> 00:00:03.000
+<c.red>Red text</c> and <c.blue.bg_yellow>blue text on yellow background</c>
+
+2
+00:00:04.000 --> 00:00:06.000
+<c.green>Green text</c> with <c.bg_cyan>text on cyan background</c>
+
+3
+00:00:07.000 --> 00:00:09.000
+Normal text with <c.magenta>magenta</c> and <c.orange>unknown color</c>`
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	require.NoError(t, err)
+	require.Len(t, s.Items, 3)
+
+	// Test item 1: Red text and blue text on yellow background
+	item1 := s.Items[0]
+	require.Len(t, item1.Lines, 1)
+	require.Len(t, item1.Lines[0].Items, 3) // "Red text", " and ", "blue text on yellow background"
+
+	// Check red text
+	redItem := item1.Lines[0].Items[0]
+	assert.Equal(t, "Red text", redItem.Text)
+	require.NotNil(t, redItem.InlineStyle)
+	require.NotNil(t, redItem.InlineStyle.TTMLColor)
+	assert.Equal(t, astisub.ColorRed, redItem.InlineStyle.TTMLColor)
+	assert.Nil(t, redItem.InlineStyle.TTMLBackgroundColor)
+
+	// Check blue text on yellow background
+	blueYellowItem := item1.Lines[0].Items[2]
+	assert.Equal(t, "blue text on yellow background", blueYellowItem.Text)
+	require.NotNil(t, blueYellowItem.InlineStyle)
+	require.NotNil(t, blueYellowItem.InlineStyle.TTMLColor)
+	require.NotNil(t, blueYellowItem.InlineStyle.TTMLBackgroundColor)
+	assert.Equal(t, astisub.ColorBlue, blueYellowItem.InlineStyle.TTMLColor)
+	assert.Equal(t, astisub.ColorYellow, blueYellowItem.InlineStyle.TTMLBackgroundColor)
+
+	// Test item 2: Green text and background color only
+	item2 := s.Items[1]
+	require.Len(t, item2.Lines, 1)
+	require.Len(t, item2.Lines[0].Items, 3) // "Green text", " with ", "text on cyan background"
+
+	// Check green text
+	greenItem := item2.Lines[0].Items[0]
+	assert.Equal(t, "Green text", greenItem.Text)
+	require.NotNil(t, greenItem.InlineStyle)
+	require.NotNil(t, greenItem.InlineStyle.TTMLColor)
+	assert.Equal(t, astisub.ColorGreen, greenItem.InlineStyle.TTMLColor)
+	assert.Nil(t, greenItem.InlineStyle.TTMLBackgroundColor)
+
+	// Check text with cyan background only
+	cyanBgItem := item2.Lines[0].Items[2]
+	assert.Equal(t, "text on cyan background", cyanBgItem.Text)
+	require.NotNil(t, cyanBgItem.InlineStyle)
+	assert.Nil(t, cyanBgItem.InlineStyle.TTMLColor) // No foreground color specified
+	require.NotNil(t, cyanBgItem.InlineStyle.TTMLBackgroundColor)
+	assert.Equal(t, astisub.ColorCyan, cyanBgItem.InlineStyle.TTMLBackgroundColor)
+
+	// Test item 3: Known and unknown colors
+	item3 := s.Items[2]
+	require.Len(t, item3.Lines, 1)
+	require.Len(t, item3.Lines[0].Items, 4) // "Normal text with ", "magenta", " and ", "unknown color"
+
+	// Check magenta text (known color)
+	magentaItem := item3.Lines[0].Items[1]
+	assert.Equal(t, "magenta", magentaItem.Text)
+	require.NotNil(t, magentaItem.InlineStyle)
+	require.NotNil(t, magentaItem.InlineStyle.TTMLColor)
+	assert.Equal(t, astisub.ColorMagenta, magentaItem.InlineStyle.TTMLColor)
+
+	// Check unknown color (should not set TTMLColor because "orange" is not in webVTTColorMap)
+	unknownColorItem := item3.Lines[0].Items[3]
+	assert.Equal(t, "unknown color", unknownColorItem.Text)
+	require.NotNil(t, unknownColorItem.InlineStyle)
+	assert.Nil(t, unknownColorItem.InlineStyle.TTMLColor) // Unknown color should not be converted
+	assert.Nil(t, unknownColorItem.InlineStyle.TTMLBackgroundColor)
+}
+
+func TestWebVTTRegionFormats(t *testing.T) {
+	// Test 1: New REGION format (W3C spec compliant)
+	newFormatData := `WEBVTT
+
+REGION
+id:testRegion
+width:50%
+lines:3
+regionanchor:0%,100%
+viewportanchor:10%,90%
+scroll:up
+
+00:00:01.000 --> 00:00:02.000 region:testRegion
+Test subtitle
+`
+
+	s1, err := astisub.ReadFromWebVTT(strings.NewReader(newFormatData))
+	require.NoError(t, err)
+	require.Len(t, s1.Regions, 1)
+	r1 := s1.Regions["testRegion"]
+	require.NotNil(t, r1)
+	assert.Equal(t, "testRegion", r1.ID)
+	assert.Equal(t, "50%", r1.InlineStyle.WebVTTWidth)
+	assert.Equal(t, 3, r1.InlineStyle.WebVTTLines)
+	assert.Equal(t, "0%,100%", r1.InlineStyle.WebVTTRegionAnchor)
+	assert.Equal(t, "10%,90%", r1.InlineStyle.WebVTTViewportAnchor)
+	assert.Equal(t, "up", r1.InlineStyle.WebVTTScroll)
+
+	// Test 2: Old Region: format (backward compatibility)
+	oldFormatData := `WEBVTT
+
+Region: id=testRegion width=50% lines=3 regionanchor=0%,100% viewportanchor=10%,90% scroll=up
+
+00:00:01.000 --> 00:00:02.000 region:testRegion
+Test subtitle
+`
+
+	s2, err := astisub.ReadFromWebVTT(strings.NewReader(oldFormatData))
+	require.NoError(t, err)
+	require.Len(t, s2.Regions, 1)
+	r2 := s2.Regions["testRegion"]
+	require.NotNil(t, r2)
+	assert.Equal(t, "testRegion", r2.ID)
+	assert.Equal(t, "50%", r2.InlineStyle.WebVTTWidth)
+	assert.Equal(t, 3, r2.InlineStyle.WebVTTLines)
+	assert.Equal(t, "0%,100%", r2.InlineStyle.WebVTTRegionAnchor)
+	assert.Equal(t, "10%,90%", r2.InlineStyle.WebVTTViewportAnchor)
+	assert.Equal(t, "up", r2.InlineStyle.WebVTTScroll)
+
+	// Test 3: Verify both formats parse to the same result
+	assert.Equal(t, r1.ID, r2.ID)
+	assert.Equal(t, r1.InlineStyle.WebVTTWidth, r2.InlineStyle.WebVTTWidth)
+	assert.Equal(t, r1.InlineStyle.WebVTTLines, r2.InlineStyle.WebVTTLines)
+	assert.Equal(t, r1.InlineStyle.WebVTTRegionAnchor, r2.InlineStyle.WebVTTRegionAnchor)
+	assert.Equal(t, r1.InlineStyle.WebVTTViewportAnchor, r2.InlineStyle.WebVTTViewportAnchor)
+	assert.Equal(t, r1.InlineStyle.WebVTTScroll, r2.InlineStyle.WebVTTScroll)
+
+	// Test 4: Verify writing always uses new REGION format
+	buf := &bytes.Buffer{}
+	err = s1.WriteToWebVTT(buf)
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "REGION")
+	assert.Contains(t, output, "id:testRegion")
+	assert.Contains(t, output, "width:50%")
+	assert.NotContains(t, output, "Region:") // Should NOT contain old format
+	assert.NotContains(t, output, "id=") // Should NOT use equals signs
+}
+
+// A cue-body line that looks like a block header must be kept as literal cue
+// text: no block is started, and no region/style/comment/metadata is captured.
+func TestWebVTTBlockKeywordsInCueText(t *testing.T) {
+	for _, line := range []string{
+		"REGION",         // new REGION block format (exact match)
+		"Region: hi",     // legacy Region: format
+		"STYLE",          // STYLE block (exact)
+		"STYLEsomething", // STYLE block (HasPrefix, not exact)
+		"NOTE something", // comment block
+	} {
+		t.Run(line, func(t *testing.T) {
+			testData := "WEBVTT\n\n1\n00:01:00.000 --> 00:02:00.000\n" + line + "\n"
+
+			s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+			assert.NoError(t, err)
+
+			require.Len(t, s.Items, 1)
+			require.Len(t, s.Items[0].Lines, 1)
+			assert.Equal(t, line, s.Items[0].Lines[0].String())
+			assert.Empty(t, s.Regions)
+			assert.Empty(t, s.Styles)
+			assert.Empty(t, s.Items[0].Comments)
+
+			b := &bytes.Buffer{}
+			err = s.WriteToWebVTT(b)
+			assert.NoError(t, err)
+			assert.Equal(t, testData, b.String())
+		})
+	}
+}
+
+// A REGION line followed by a "key: value" line inside a cue must stay literal
+// text and must not inject a bogus region into the header.
+func TestWebVTTRegionThenSettingInCueText(t *testing.T) {
+	testData := `WEBVTT
+
+1
+00:01:00.000 --> 00:02:00.000
+REGION
+Speaker: hi
+`
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+
+	require.Len(t, s.Items, 1)
+	require.Len(t, s.Items[0].Lines, 2)
+	assert.Equal(t, "REGION", s.Items[0].Lines[0].String())
+	assert.Equal(t, "Speaker: hi", s.Items[0].Lines[1].String())
+	assert.Empty(t, s.Regions)
+
+	b := &bytes.Buffer{}
+	err = s.WriteToWebVTT(b)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, b.String())
+}
+
+// X-TIMESTAMP-MAP in a cue body must stay literal text: no parse error and no
+// Metadata.WebVTTTimestampMap capture.
+func TestWebVTTTimestampMapInCueText(t *testing.T) {
+	testData := `WEBVTT
+
+1
+00:01:00.000 --> 00:02:00.000
+X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0
+`
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+
+	require.Len(t, s.Items, 1)
+	require.Len(t, s.Items[0].Lines, 1)
+	assert.Equal(t, "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0", s.Items[0].Lines[0].String())
+	assert.Nil(t, s.Metadata)
+
+	b := &bytes.Buffer{}
+	err = s.WriteToWebVTT(b)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, b.String())
+}
+
+// Regression: real REGION/STYLE/NOTE header blocks (between cues) still parse
+// into Regions/Styles/comments.
+func TestWebVTTBlockHeadersStillParse(t *testing.T) {
+	testData := `WEBVTT
+
+REGION
+id:fred
+width:40%
+
+STYLE
+::cue { color: red }
+
+NOTE a comment
+
+1
+00:01:00.000 --> 00:02:00.000
+Hello
+`
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+
+	require.Len(t, s.Regions, 1)
+	assert.Equal(t, "fred", s.Regions["fred"].ID)
+	assert.Equal(t, "40%", s.Regions["fred"].InlineStyle.WebVTTWidth)
+
+	require.Len(t, s.Styles, 1)
+
+	require.Len(t, s.Items, 1)
+	assert.Equal(t, []string{"a comment"}, s.Items[0].Comments)
+	require.Len(t, s.Items[0].Lines, 1)
+	assert.Equal(t, "Hello", s.Items[0].Lines[0].String())
+}
+
+func TestWebVTTSpaceOnlyLineInCue(t *testing.T) {
+	s, err := astisub.ReadFromWebVTT(strings.NewReader("WEBVTT\n\n00:01.000 --> 00:02.000\n \nHello\n\n00:03.000 --> 00:04.000\nC\n"))
+	assert.NoError(t, err)
+	assert.Len(t, s.Items, 2)
+	assert.Equal(t, "Hello", s.Items[0].String())
+}
+
+func TestWebVTTUnescapesAllEntities(t *testing.T) {
+	testData := "WEBVTT\n\n1\n00:01:00.000 --> 00:02:00.000\n&gt;&gt; It&#39;s caf&eacute;\n"
+
+	s, err := astisub.ReadFromWebVTT(strings.NewReader(testData))
+	assert.NoError(t, err)
+	require.Len(t, s.Items, 1)
+	assert.Equal(t, ">> It's café", s.Items[0].Lines[0].String())
+
+	b := &bytes.Buffer{}
+	err = s.WriteToSRT(b)
+	assert.NoError(t, err)
+	assert.Contains(t, b.String(), ">> It's café\n")
+}
