@@ -201,6 +201,39 @@
             // the Z80_INT pin will now be set if any of the chips wants to issue an interrupt request
         }
     ~~~
+
+    Fetch-byte tracing (banked ROM mapping)
+    --------------------------------------
+    When memory is banked, re-reading an address after an instruction has run may
+    return different bytes than the ones the CPU actually executed. To capture the
+    executed encoding, use z80_tick_trace() instead of z80_tick() and tell the core
+    the provenance (an opaque source id and offset) of the byte it samples each
+    tick. The core emits BEGIN/BYTE/END/INT events through a callback at the exact
+    sampling ticks, and never touches files or interprets the source ids itself.
+
+    ~~~C
+        z80_t cpu;
+        z80_trace_t trace;
+        pins = z80_init(&cpu);
+        // attach right after init/reset/prefetch; this clears any half-finished
+        // record and starts a clean history (no fabricated END is emitted)
+        z80_trace_init(&trace, my_callback, my_user_data);
+        while (!done) {
+            uint64_t source_id; uint32_t source_offset;
+            // ... derive the source of the byte readable on the current request
+            pins = z80_tick_trace(&cpu, pins, &trace, source_id, source_offset);
+            // ... drive the data bus as usual
+        }
+    ~~~
+
+    Encoding bytes (prefix/opcode/operand) are only recorded when the core truly
+    samples them, so WAIT states never duplicate or predate a BYTE and WAIT ticks
+    never supply the source. Refresh cycles, ordinary data reads/writes and stack
+    accesses produce no BYTE events. HALT is recorded once; the subsequent HALT
+    loop stays silent until an interrupt. A z80_trace_t is plain host-held state
+    with no globals, so two CPUs can be stepped interleaved with independent
+    tracers. The event pointer is valid only for the duration of the callback;
+    copy anything you want to keep. See examples/z80_fetch_trace_example.c.
 #*/
 /*
     zlib/libpng license
@@ -375,6 +408,125 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins);
 uint64_t z80_prefetch(z80_t* cpu, uint16_t new_pc);
 // return true when full instruction has finished
 bool z80_opdone(z80_t* cpu);
+
+//------------------------------------------------------------------------------
+// Optional instruction fetch-byte tracing
+//
+// The tracer records the encoding bytes of instructions at the exact tick the
+// execution core actually samples them from the data bus (after any WAIT
+// states), together with the host-supplied source of each sampled byte. This
+// is meant for banked ROM mapping where re-reading memory after an instruction
+// has finished may return completely different bytes.
+//
+// The core never interprets source ids, never touches files and knows nothing
+// about a bank controller: source_id/source_offset are opaque values supplied
+// by the host on every z80_tick_trace() call and attached verbatim to the
+// events recorded on that tick.
+//
+// Trace state lives entirely in the host-held z80_trace_t instance. There are
+// no process-global variables, so two CPUs may be stepped interleaved, each
+// with its own independent tracer.
+
+// event kinds delivered through the trace callback
+typedef enum {
+    Z80_TRACE_BEGIN = 1,  // a new instruction fetch has started
+    Z80_TRACE_BYTE  = 2,  // one encoding byte was actually sampled
+    Z80_TRACE_END   = 3,  // the instruction has fully executed
+    Z80_TRACE_INT   = 4,  // an interrupt/NMI entry sequence was taken
+} z80_trace_event_type_t;
+
+// role of a sampled byte inside the instruction encoding
+typedef enum {
+    Z80_TRACE_PREFIX  = 1, // DD/FD/ED/CB prefix byte (repeated DD/FD kept)
+    Z80_TRACE_OPCODE  = 2, // final opcode byte handed to the decoder
+    Z80_TRACE_OPERAND = 3, // displacement / immediate / address operand
+} z80_trace_byte_role_t;
+
+// kind of interrupt entry recorded in a Z80_TRACE_INT event
+typedef enum {
+    Z80_TRACE_INT_IM0 = 0, // IM0: ack byte is decoded as the opcode
+    Z80_TRACE_INT_IM1 = 1, // IM1: no ack data consumed, fixed vector 0x0038
+    Z80_TRACE_INT_IM2 = 2, // IM2: ack byte is the interrupt vector
+    Z80_TRACE_INT_NMI = 3, // NMI: the discarded M1 read is not an instruction
+} z80_trace_int_kind_t;
+
+// sentinel source id attached to bytes sampled in an interrupt acknowledge
+// cycle (M1|IORQ) instead of a regular memory read
+#define Z80_TRACE_SOURCE_ACK ((uint64_t)-1)
+
+typedef struct {
+    // common fields, valid for every event kind
+    z80_trace_event_type_t type;
+    uint64_t tick;          // tick on which the event is emitted (1-based)
+    uint64_t instr_id;      // monotonic instruction number (1-based); 0 for INT
+    union {
+        struct {
+            uint16_t pc;    // logical PC of the instruction's first byte
+        } begin;
+        struct {
+            uint8_t  value;         // byte value sampled from the data bus
+            bool     has_addr;      // false for ack-sourced bytes (IM0)
+            uint16_t addr;          // logical address, 16-bit wrapped
+            z80_trace_byte_role_t role;
+            uint64_t source_id;     // opaque host source (or Z80_TRACE_SOURCE_ACK)
+            uint32_t source_offset; // opaque host offset inside that source
+        } byte;
+        struct {
+            uint16_t pc;        // PC after the instruction has executed
+            uint32_t num_bytes; // number of encoding BYTE events recorded
+        } end;
+        struct {
+            z80_trace_int_kind_t kind;
+            bool     has_ack;       // an ack-cycle byte was sampled
+            uint8_t  ack_data;      // valid when has_ack (IM0 opcode / IM2 vector)
+            uint64_t source_id;     // ack source, valid when has_ack
+            uint32_t source_offset;
+        } interrupt;
+    };
+} z80_trace_event_t;
+
+// The event pointer is only valid for the duration of the callback. The core
+// keeps no copy and may overwrite the storage on return, so the callback must
+// copy anything it wants to retain. source ids are owned by the host and must
+// remain meaningful to the host only; the core stores them by value.
+typedef void (*z80_trace_cb_t)(const z80_trace_event_t* event, void* user_data);
+
+typedef struct {
+    // --- host configuration ---
+    z80_trace_cb_t callback;
+    void* user_data;
+    // --- core-private bookkeeping, do not touch from host code ---
+    uint64_t tick_count;    // number of z80_tick_trace() calls so far
+    uint64_t instr_id;      // last assigned instruction number
+    bool instr_open;        // a BEGIN is waiting for its END
+    bool halted;            // CPU is in the HALT loop, suppress loop fetches
+    // instruction-stream memory read (non-M1 _mread(pc++)) bookkeeping
+    bool expect_code;       // next sampled MREQ|RD byte is an encoding byte
+    bool expect_opcode;     // that byte is the final DDFDCB opcode, not operand
+    // M1 opcode/prefix fetch sampling point is armed at request time and
+    // consumed on the tick the core actually samples the byte (post-WAIT)
+    bool m1_armed;
+    uint32_t num_bytes;     // encoding bytes recorded for the open instruction
+    uint8_t pending_int;    // 0, or z80_trace_int_kind_t+1 awaiting ack data
+    // per-tick source description, latched from z80_tick_trace() arguments
+    uint64_t src_id;
+    uint32_t src_off;
+} z80_trace_t;
+
+// Initialize (or reset) a tracer and attach it to a callback. Call this right
+// after z80_init(), z80_reset() or z80_prefetch(): any instruction that was in
+// flight before re-initialization is dropped without a fabricated END, and no
+// tracing history is reconstructed.
+void z80_trace_init(z80_trace_t* trace, z80_trace_cb_t callback, void* user_data);
+
+// Step the CPU for one tick with fetch tracing enabled. source_id and
+// source_offset describe the provenance of the data the host drives onto the
+// bus on this tick; they are opaque to the core and only used in BYTE/INT
+// events whose bytes are sampled on this tick. WAIT ticks simply keep the
+// previous request pending and record nothing. The returned pin mask and the
+// per-tick CPU state are identical to a plain z80_tick() call.
+uint64_t z80_tick_trace(z80_t* cpu, uint64_t pins, z80_trace_t* trace,
+                        uint64_t source_id, uint32_t source_offset);
 
 #ifdef __cplusplus
 } // extern C
@@ -859,6 +1011,194 @@ static inline uint8_t _z80_get_db(uint64_t pins) {
     return (uint8_t)(pins>>16);
 }
 
+//-- fetch tracing helpers ----------------------------------------------------
+// All helpers are no-ops on a NULL tracer so that the plain z80_tick() path
+// compiles down to the original behaviour.
+static inline void _z80_trace_emit(z80_trace_t* tr, const z80_trace_event_t* ev) {
+    if (tr->callback) {
+        tr->callback(ev, tr->user_data);
+    }
+}
+
+static inline void _z80_trace_begin(z80_trace_t* tr, uint16_t pc) {
+    tr->instr_id++;
+    tr->instr_open = true;
+    tr->num_bytes = 0;
+    z80_trace_event_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = Z80_TRACE_BEGIN;
+    ev.tick = tr->tick_count;
+    ev.instr_id = tr->instr_id;
+    ev.begin.pc = pc;
+    _z80_trace_emit(tr, &ev);
+}
+
+static inline void _z80_trace_end(z80_trace_t* tr, uint16_t pc) {
+    if (!tr->instr_open) {
+        return;
+    }
+    tr->instr_open = false;
+    z80_trace_event_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = Z80_TRACE_END;
+    ev.tick = tr->tick_count;
+    ev.instr_id = tr->instr_id;
+    ev.end.pc = pc;
+    ev.end.num_bytes = tr->num_bytes;
+    _z80_trace_emit(tr, &ev);
+}
+
+static inline void _z80_trace_emit_byte(z80_trace_t* tr, uint8_t value, uint16_t addr,
+                                        bool has_addr, bool ack,
+                                        z80_trace_byte_role_t role,
+                                        uint64_t src_id, uint32_t src_off) {
+    z80_trace_event_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = Z80_TRACE_BYTE;
+    ev.tick = tr->tick_count;
+    ev.instr_id = tr->instr_id;
+    ev.byte.value = value;
+    ev.byte.has_addr = has_addr;
+    ev.byte.addr = addr;
+    ev.byte.role = role;
+    ev.byte.source_id = ack ? Z80_TRACE_SOURCE_ACK : src_id;
+    ev.byte.source_offset = src_off;
+    tr->num_bytes++;
+    _z80_trace_emit(tr, &ev);
+}
+
+static inline void _z80_trace_int_emit(z80_trace_t* tr, z80_trace_int_kind_t kind,
+                                       bool has_ack, uint8_t ack_data,
+                                       uint64_t src_id, uint32_t src_off) {
+    z80_trace_event_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = Z80_TRACE_INT;
+    ev.tick = tr->tick_count;
+    ev.instr_id = 0;
+    ev.interrupt.kind = kind;
+    ev.interrupt.has_ack = has_ack;
+    ev.interrupt.ack_data = ack_data;
+    ev.interrupt.source_id = has_ack ? src_id : 0;
+    ev.interrupt.source_offset = has_ack ? src_off : 0;
+    _z80_trace_emit(tr, &ev);
+}
+
+static inline z80_trace_byte_role_t _z80_trace_m1_role(uint8_t value) {
+    return ((value == 0xCB) || (value == 0xDD) || (value == 0xED) || (value == 0xFD))
+        ? Z80_TRACE_PREFIX : Z80_TRACE_OPCODE;
+}
+
+// An interrupt entry was decided this tick (inside _z80_fetch). IM1 and NMI
+// consume no acknowledge byte and are reported immediately; IM0 and IM2 wait
+// for the M1|IORQ acknowledge machine cycle to actually sample the bus.
+static inline void _z80_trace_int_entry(z80_trace_t* tr, z80_trace_int_kind_t kind) {
+    if (!tr) {
+        return;
+    }
+    // an interrupt always leaves the HALT loop and abandons any pending fetch
+    tr->halted = false;
+    tr->m1_armed = false;
+    tr->expect_code = false;
+    if ((kind == Z80_TRACE_INT_IM0) || (kind == Z80_TRACE_INT_IM2)) {
+        tr->pending_int = (uint8_t)kind + 1;
+    }
+    else {
+        _z80_trace_int_emit(tr, kind, false, 0, 0, 0);
+    }
+}
+
+// Acknowledge-cycle sampling point (runs only after WAIT has been released).
+// The acknowledge data is reported on the interrupt record; for IM0 it is also
+// the instruction's opcode, for IM2 it is only the interrupt vector. Returns
+// the sampled bus byte so it can replace a plain _z80_get_db() at the call site.
+static inline uint8_t _z80_trace_ack(z80_trace_t* tr, z80_t* cpu, uint64_t pins) {
+    const uint8_t data = _z80_get_db(pins);
+    if (!tr || !tr->pending_int) {
+        return data;
+    }
+    const z80_trace_int_kind_t kind = (z80_trace_int_kind_t)(tr->pending_int - 1);
+    tr->pending_int = 0;
+    _z80_trace_int_emit(tr, kind, true, data, tr->src_id, tr->src_off);
+    if (kind == Z80_TRACE_INT_IM0) {
+        // the acknowledge byte is decoded as the opcode of a new instruction;
+        // it comes from the ack cycle and has no memory logical address
+        _z80_trace_begin(tr, cpu->pc);
+        _z80_trace_emit_byte(tr, data, 0, false, true,
+                             Z80_TRACE_OPCODE, tr->src_id, tr->src_off);
+    }
+    return data;
+}
+
+// Arm the tracer for an M1 continuation fetch (DD/FD/ED/CB). Never opens or
+// closes an instruction here, and the HALT loop stays silent.
+static inline void _z80_trace_arm_m1(z80_trace_t* tr) {
+    if (!tr || tr->halted) {
+        return;
+    }
+    tr->m1_armed = true;
+}
+
+// First fetch of a new instruction (only called from the normal-fetch path of
+// _z80_fetch). Closes the previous instruction, opens the new one and arms its
+// M1 sampling point.
+static inline void _z80_trace_new_fetch(z80_trace_t* tr, uint64_t pins) {
+    if (!tr) {
+        return;
+    }
+    const uint16_t pc = (uint16_t)Z80_GET_ADDR(pins);
+    if (pins & Z80_HALT) {
+        // entering or spinning in the HALT loop: close the HALT instruction
+        // exactly once, then record nothing until an interrupt wakes the CPU
+        if (!tr->halted) {
+            tr->halted = true;
+            _z80_trace_end(tr, pc);
+        }
+        return;
+    }
+    tr->halted = false;
+    _z80_trace_end(tr, pc);
+    if (!tr->instr_open) {
+        _z80_trace_begin(tr, pc);
+    }
+    tr->m1_armed = true;
+}
+
+// A non-M1 instruction-stream memory read request was issued (_mread(pc++)).
+// ddfdcb_opcode marks the final DDFDCB opcode read; all others are operands.
+static inline void _z80_trace_code_read(z80_trace_t* tr, bool ddfdcb_opcode) {
+    if (!tr) {
+        return;
+    }
+    tr->expect_code = true;
+    tr->expect_opcode = ddfdcb_opcode;
+}
+
+// True sampling point: runs only on the tick where the core accepts the bus
+// value, never while WAIT keeps the request pending.
+static inline uint8_t _z80_trace_gd(z80_trace_t* tr, uint64_t pins) {
+    const uint8_t value = _z80_get_db(pins);
+    if (!tr) {
+        return value;
+    }
+    if (tr->expect_code) {
+        // non-M1 instruction-stream read: displacement/immediate/address, or
+        // the final non-M1 DDFDCB opcode read
+        tr->expect_code = false;
+        const z80_trace_byte_role_t role = tr->expect_opcode
+            ? Z80_TRACE_OPCODE : Z80_TRACE_OPERAND;
+        tr->expect_opcode = false;
+        _z80_trace_emit_byte(tr, value, (uint16_t)Z80_GET_ADDR(pins), true, false,
+                             role, tr->src_id, tr->src_off);
+    }
+    else if (tr->m1_armed) {
+        // M1 opcode/prefix fetch; the value alone decides the byte role
+        tr->m1_armed = false;
+        _z80_trace_emit_byte(tr, value, (uint16_t)Z80_GET_ADDR(pins), true, false,
+                             _z80_trace_m1_role(value), tr->src_id, tr->src_off);
+    }
+    return value;
+}
+
 // CB-prefix block action
 static inline bool _z80_cb_action(z80_t* cpu, uint8_t z0, uint8_t z1) {
     const uint8_t x = cpu->opcode>>6;
@@ -929,8 +1269,8 @@ static inline bool _z80_cb_action(z80_t* cpu, uint8_t z0, uint8_t z1) {
 }
 
 // compute the effective memory address for DD+CB/FD+CB instructions
-static inline void _z80_ddfdcb_addr(z80_t* cpu, uint64_t pins) {
-    uint8_t d = _z80_get_db(pins);
+static inline void _z80_ddfdcb_addr(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
+    uint8_t d = _z80_trace_gd(tr, pins);
     cpu->addr = cpu->hlx[cpu->hlx_idx].hl + (int8_t)d;
     cpu->wz = cpu->addr;
 }
@@ -943,13 +1283,15 @@ static inline uint64_t _z80_refresh(z80_t* cpu, uint64_t pins) {
 }
 
 // initiate a fetch machine cycle for regular (non-prefixed) instructions, or initiate interrupt handling
-static inline uint64_t _z80_fetch(z80_t* cpu, uint64_t pins) {
+static inline uint64_t _z80_fetch(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     cpu->hlx_idx = 0;
     cpu->prefix_active = false;
     // shortcut no interrupts requested
     if (cpu->int_bits == 0) {
         cpu->step = Z80_M1_T2;
-        return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+        pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+        _z80_trace_new_fetch(tr, pins);
+        return pins;
     } else if (cpu->int_bits & Z80_NMI) {
         // non-maskable interrupt starts with a regular M1 machine cycle
         cpu->step = Z80_NMI_STEP;
@@ -958,18 +1300,25 @@ static inline uint64_t _z80_fetch(z80_t* cpu, uint64_t pins) {
             pins &= ~Z80_HALT;
             cpu->pc++;
         }
-        // NOTE: PC is *not* incremented!
-        return _z80_set_ab_x(pins, cpu->pc, Z80_M1|Z80_MREQ|Z80_RD);
+        // NOTE: PC is *not* incremented! The M1 read below is discarded by the
+        // CPU and must not be traced as an instruction or opcode.
+        pins = _z80_set_ab_x(pins, cpu->pc, Z80_M1|Z80_MREQ|Z80_RD);
+        // close the interrupted instruction (no-op when waking from HALT, the
+        // HALT record was already closed) before the interrupt entry record
+        _z80_trace_end(tr, cpu->pc);
+        _z80_trace_int_entry(tr, Z80_TRACE_INT_NMI);
+        return pins;
     } else if (cpu->int_bits & Z80_INT) {
         if (cpu->iff1) {
             // maskable interrupts start with a special M1 machine cycle which
             // doesn't fetch the next opcode, but instead activate the
             // pins M1|IOQR to request a special byte which is handled differently
             // depending on interrupt mode
+            z80_trace_int_kind_t kind;
             switch (cpu->im) {
-                case 0: cpu->step = Z80_INT_IM0_STEP; break;
-                case 1: cpu->step = Z80_INT_IM1_STEP; break;
-                case 2: cpu->step = Z80_INT_IM2_STEP; break;
+                case 0: cpu->step = Z80_INT_IM0_STEP; kind = Z80_TRACE_INT_IM0; break;
+                case 1: cpu->step = Z80_INT_IM1_STEP; kind = Z80_TRACE_INT_IM1; break;
+                case 2: cpu->step = Z80_INT_IM2_STEP; kind = Z80_TRACE_INT_IM2; break;
                 default: _Z80_UNREACHABLE;
             }
             cpu->int_bits = 0;
@@ -978,11 +1327,16 @@ static inline uint64_t _z80_fetch(z80_t* cpu, uint64_t pins) {
                 cpu->pc++;
             }
             // NOTE: PC is not incremented, and no pins are activated here
+            // close the interrupted instruction before the interrupt record
+            _z80_trace_end(tr, cpu->pc);
+            _z80_trace_int_entry(tr, kind);
             return pins;
         } else {
             // oops, maskable interrupt requested but disabled
             cpu->step = Z80_M1_T2;
-            return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+            pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+            _z80_trace_new_fetch(tr, pins);
+            return pins;
         }
     } else {
         _Z80_UNREACHABLE;
@@ -990,7 +1344,7 @@ static inline uint64_t _z80_fetch(z80_t* cpu, uint64_t pins) {
     }
 }
 
-static inline uint64_t _z80_fetch_cb(z80_t* cpu, uint64_t pins) {
+static inline uint64_t _z80_fetch_cb(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     cpu->prefix_active = true;
     if (cpu->hlx_idx > 0) {
         // this is a DD+CB / FD+CB instruction, continue
@@ -1005,29 +1359,37 @@ static inline uint64_t _z80_fetch_cb(z80_t* cpu, uint64_t pins) {
         // handle DD/FD prefix and then branches either to the
         // special CB or CBHL decoder block
         cpu->step = Z80_CB_M1_T2; // => opcode fetch for CB prefixed instructions
-        return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+        pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+        _z80_trace_arm_m1(tr);
+        return pins;
     }
 }
 
-static inline uint64_t _z80_fetch_dd(z80_t* cpu, uint64_t pins) {
+static inline uint64_t _z80_fetch_dd(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     cpu->step = Z80_DDFD_M1_T2;
     cpu->hlx_idx = 1;
     cpu->prefix_active = true;
-    return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    _z80_trace_arm_m1(tr);
+    return pins;
 }
 
-static inline uint64_t _z80_fetch_fd(z80_t* cpu, uint64_t pins) {
+static inline uint64_t _z80_fetch_fd(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     cpu->step = Z80_DDFD_M1_T2;
     cpu->hlx_idx = 2;
     cpu->prefix_active = true;
-    return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    _z80_trace_arm_m1(tr);
+    return pins;
 }
 
-static inline uint64_t _z80_fetch_ed(z80_t* cpu, uint64_t pins) {
+static inline uint64_t _z80_fetch_ed(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     cpu->step = Z80_ED_M1_T2;
     cpu->hlx_idx = 0;
     cpu->prefix_active = true;
-    return _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    pins = _z80_set_ab_x(pins, cpu->pc++, Z80_M1|Z80_MREQ|Z80_RD);
+    _z80_trace_arm_m1(tr);
+    return pins;
 }
 
 uint64_t z80_prefetch(z80_t* cpu, uint16_t new_pc) {
@@ -1042,16 +1404,20 @@ uint64_t z80_prefetch(z80_t* cpu, uint16_t new_pc) {
 #define _sax(ab,x)          pins=_z80_set_ab_x(pins,ab,x)
 #define _sad(ab,d)          pins=_z80_set_ab_db(pins,ab,d)
 #define _sadx(ab,d,x)       pins=_z80_set_ab_db_x(pins,ab,d,x)
-#define _gd()               _z80_get_db(pins)
+#define _gd()               _z80_trace_gd(tr,pins)
 
 // high level helper macros
 #define _goto(n)        cpu->step=n;goto step_to
 #define _fetch()        goto fetch_next
-#define _fetch_dd()     pins=_z80_fetch_dd(cpu,pins);
-#define _fetch_fd()     pins=_z80_fetch_fd(cpu,pins);
-#define _fetch_ed()     pins=_z80_fetch_ed(cpu,pins);
-#define _fetch_cb()     pins=_z80_fetch_cb(cpu,pins);
+#define _fetch_dd()     pins=_z80_fetch_dd(cpu,pins,tr);
+#define _fetch_fd()     pins=_z80_fetch_fd(cpu,pins,tr);
+#define _fetch_ed()     pins=_z80_fetch_ed(cpu,pins,tr);
+#define _fetch_cb()     pins=_z80_fetch_cb(cpu,pins,tr);
 #define _mread(ab)      _sax(ab,Z80_MREQ|Z80_RD)
+// instruction-stream read (_mread(pc++)): mark the next sampled byte as an
+// encoding operand, or as the final non-M1 opcode of a DD/FD+CB instruction
+#define _mread_operand(ab)  do{_mread(ab);_z80_trace_code_read(tr,false);}while(0)
+#define _mread_opcode(ab)   do{_mread(ab);_z80_trace_code_read(tr,true);}while(0)
 #define _mwrite(ab,d)   _sadx(ab,d,Z80_MREQ|Z80_WR)
 #define _ioread(ab)     _sax(ab,Z80_IORQ|Z80_RD)
 #define _iowrite(ab,d)  _sadx(ab,d,Z80_IORQ|Z80_WR)
@@ -1065,7 +1431,10 @@ uint64_t z80_prefetch(z80_t* cpu, uint16_t new_pc) {
 #define _cc_p           (!(cpu->f&Z80_SF))
 #define _cc_m           (cpu->f&Z80_SF)
 
-uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
+// Shared execution core for both the plain and the tracing tick. With a NULL
+// tracer every trace hook is a no-op, so this is byte-for-byte the original
+// z80_tick() behaviour, including the returned pin mask and per-tick state.
+static uint64_t _z80_tick_core(z80_t* cpu, uint64_t pins, z80_trace_t* tr) {
     pins &= ~(Z80_CTRL_PIN_MASK|Z80_RETI);
     switch (cpu->step) {
         // <% decoder
@@ -1320,7 +1689,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  248: if(!_cc_m){_goto(1148+6);};_goto(1148); // RET M (0)
         case  249: cpu->sp=cpu->hlx[cpu->hlx_idx].hl;_goto(1155); // LD SP,HL (0)
         case  250: _goto(1157); // JP M,nn (0)
-        case  251: cpu->iff1=cpu->iff2=false;pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2=true;goto step_to; // EI (0)
+        case  251: cpu->iff1=cpu->iff2=false;pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2=true;goto step_to; // EI (0)
         case  252: _goto(1163); // CALL M,nn (0)
         case  253: _fetch_fd();goto step_to; // FD prefix (0)
         case  254: _goto(1176); // CP n (0)
@@ -1581,10 +1950,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  509: _fetch(); // ED NOP (0)
         case  510: _fetch(); // ED NOP (0)
         case  511: _fetch(); // ED NOP (0)
-        case  512: _wait();_mread(cpu->pc++);_goto(513); // LD BC,nn (1)
+        case  512: _wait();_mread_operand(cpu->pc++);_goto(513); // LD BC,nn (1)
         case  513: cpu->c=_gd();_goto(514); // LD BC,nn (2)
         case  514: _goto(515); // LD BC,nn (3)
-        case  515: _wait();_mread(cpu->pc++);_goto(516); // LD BC,nn (4)
+        case  515: _wait();_mread_operand(cpu->pc++);_goto(516); // LD BC,nn (4)
         case  516: cpu->b=_gd();_goto(517); // LD BC,nn (5)
         case  517: _fetch(); // LD BC,nn (6)
         case  518: _wait();_mwrite(cpu->bc,cpu->a);cpu->wzl=cpu->c+1;cpu->wzh=cpu->a;_goto(519); // LD (BC),A (1)
@@ -1592,7 +1961,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  520: _fetch(); // LD (BC),A (3)
         case  521: _goto(522); // INC BC (1)
         case  522: _fetch(); // INC BC (2)
-        case  523: _wait();_mread(cpu->pc++);_goto(524); // LD B,n (1)
+        case  523: _wait();_mread_operand(cpu->pc++);_goto(524); // LD B,n (1)
         case  524: cpu->b=_gd();_goto(525); // LD B,n (2)
         case  525: _fetch(); // LD B,n (3)
         case  526: _goto(527); // ADD HL,BC (1)
@@ -1607,11 +1976,11 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  535: _fetch(); // LD A,(BC) (3)
         case  536: _goto(537); // DEC BC (1)
         case  537: _fetch(); // DEC BC (2)
-        case  538: _wait();_mread(cpu->pc++);_goto(539); // LD C,n (1)
+        case  538: _wait();_mread_operand(cpu->pc++);_goto(539); // LD C,n (1)
         case  539: cpu->c=_gd();_goto(540); // LD C,n (2)
         case  540: _fetch(); // LD C,n (3)
         case  541: _goto(542); // DJNZ d (1)
-        case  542: _wait();_mread(cpu->pc++);_goto(543); // DJNZ d (2)
+        case  542: _wait();_mread_operand(cpu->pc++);_goto(543); // DJNZ d (2)
         case  543: cpu->dlatch=_gd();if(--cpu->b==0){_goto(544+5);};_goto(544); // DJNZ d (3)
         case  544: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(545); // DJNZ d (4)
         case  545: _goto(546); // DJNZ d (5)
@@ -1619,10 +1988,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  547: _goto(548); // DJNZ d (7)
         case  548: _goto(549); // DJNZ d (8)
         case  549: _fetch(); // DJNZ d (9)
-        case  550: _wait();_mread(cpu->pc++);_goto(551); // LD DE,nn (1)
+        case  550: _wait();_mread_operand(cpu->pc++);_goto(551); // LD DE,nn (1)
         case  551: cpu->e=_gd();_goto(552); // LD DE,nn (2)
         case  552: _goto(553); // LD DE,nn (3)
-        case  553: _wait();_mread(cpu->pc++);_goto(554); // LD DE,nn (4)
+        case  553: _wait();_mread_operand(cpu->pc++);_goto(554); // LD DE,nn (4)
         case  554: cpu->d=_gd();_goto(555); // LD DE,nn (5)
         case  555: _fetch(); // LD DE,nn (6)
         case  556: _wait();_mwrite(cpu->de,cpu->a);cpu->wzl=cpu->e+1;cpu->wzh=cpu->a;_goto(557); // LD (DE),A (1)
@@ -1630,10 +1999,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  558: _fetch(); // LD (DE),A (3)
         case  559: _goto(560); // INC DE (1)
         case  560: _fetch(); // INC DE (2)
-        case  561: _wait();_mread(cpu->pc++);_goto(562); // LD D,n (1)
+        case  561: _wait();_mread_operand(cpu->pc++);_goto(562); // LD D,n (1)
         case  562: cpu->d=_gd();_goto(563); // LD D,n (2)
         case  563: _fetch(); // LD D,n (3)
-        case  564: _wait();_mread(cpu->pc++);_goto(565); // JR d (1)
+        case  564: _wait();_mread_operand(cpu->pc++);_goto(565); // JR d (1)
         case  565: cpu->dlatch=_gd();_goto(566); // JR d (2)
         case  566: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(567); // JR d (3)
         case  567: _goto(568); // JR d (4)
@@ -1653,10 +2022,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  581: _fetch(); // LD A,(DE) (3)
         case  582: _goto(583); // DEC DE (1)
         case  583: _fetch(); // DEC DE (2)
-        case  584: _wait();_mread(cpu->pc++);_goto(585); // LD E,n (1)
+        case  584: _wait();_mread_operand(cpu->pc++);_goto(585); // LD E,n (1)
         case  585: cpu->e=_gd();_goto(586); // LD E,n (2)
         case  586: _fetch(); // LD E,n (3)
-        case  587: _wait();_mread(cpu->pc++);_goto(588); // JR NZ,d (1)
+        case  587: _wait();_mread_operand(cpu->pc++);_goto(588); // JR NZ,d (1)
         case  588: cpu->dlatch=_gd();if(!(_cc_nz)){_goto(589+5);};_goto(589); // JR NZ,d (2)
         case  589: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(590); // JR NZ,d (3)
         case  590: _goto(591); // JR NZ,d (4)
@@ -1664,16 +2033,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  592: _goto(593); // JR NZ,d (6)
         case  593: _goto(594); // JR NZ,d (7)
         case  594: _fetch(); // JR NZ,d (8)
-        case  595: _wait();_mread(cpu->pc++);_goto(596); // LD HL,nn (1)
+        case  595: _wait();_mread_operand(cpu->pc++);_goto(596); // LD HL,nn (1)
         case  596: cpu->hlx[cpu->hlx_idx].l=_gd();_goto(597); // LD HL,nn (2)
         case  597: _goto(598); // LD HL,nn (3)
-        case  598: _wait();_mread(cpu->pc++);_goto(599); // LD HL,nn (4)
+        case  598: _wait();_mread_operand(cpu->pc++);_goto(599); // LD HL,nn (4)
         case  599: cpu->hlx[cpu->hlx_idx].h=_gd();_goto(600); // LD HL,nn (5)
         case  600: _fetch(); // LD HL,nn (6)
-        case  601: _wait();_mread(cpu->pc++);_goto(602); // LD (nn),HL (1)
+        case  601: _wait();_mread_operand(cpu->pc++);_goto(602); // LD (nn),HL (1)
         case  602: cpu->wzl=_gd();_goto(603); // LD (nn),HL (2)
         case  603: _goto(604); // LD (nn),HL (3)
-        case  604: _wait();_mread(cpu->pc++);_goto(605); // LD (nn),HL (4)
+        case  604: _wait();_mread_operand(cpu->pc++);_goto(605); // LD (nn),HL (4)
         case  605: cpu->wzh=_gd();_goto(606); // LD (nn),HL (5)
         case  606: _goto(607); // LD (nn),HL (6)
         case  607: _wait();_mwrite(cpu->wz++,cpu->hlx[cpu->hlx_idx].l);_goto(608); // LD (nn),HL (7)
@@ -1684,10 +2053,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  612: _fetch(); // LD (nn),HL (12)
         case  613: _goto(614); // INC HL (1)
         case  614: _fetch(); // INC HL (2)
-        case  615: _wait();_mread(cpu->pc++);_goto(616); // LD H,n (1)
+        case  615: _wait();_mread_operand(cpu->pc++);_goto(616); // LD H,n (1)
         case  616: cpu->hlx[cpu->hlx_idx].h=_gd();_goto(617); // LD H,n (2)
         case  617: _fetch(); // LD H,n (3)
-        case  618: _wait();_mread(cpu->pc++);_goto(619); // JR Z,d (1)
+        case  618: _wait();_mread_operand(cpu->pc++);_goto(619); // JR Z,d (1)
         case  619: cpu->dlatch=_gd();if(!(_cc_z)){_goto(620+5);};_goto(620); // JR Z,d (2)
         case  620: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(621); // JR Z,d (3)
         case  621: _goto(622); // JR Z,d (4)
@@ -1702,10 +2071,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  630: _goto(631); // ADD HL,HL (5)
         case  631: _goto(632); // ADD HL,HL (6)
         case  632: _fetch(); // ADD HL,HL (7)
-        case  633: _wait();_mread(cpu->pc++);_goto(634); // LD HL,(nn) (1)
+        case  633: _wait();_mread_operand(cpu->pc++);_goto(634); // LD HL,(nn) (1)
         case  634: cpu->wzl=_gd();_goto(635); // LD HL,(nn) (2)
         case  635: _goto(636); // LD HL,(nn) (3)
-        case  636: _wait();_mread(cpu->pc++);_goto(637); // LD HL,(nn) (4)
+        case  636: _wait();_mread_operand(cpu->pc++);_goto(637); // LD HL,(nn) (4)
         case  637: cpu->wzh=_gd();_goto(638); // LD HL,(nn) (5)
         case  638: _goto(639); // LD HL,(nn) (6)
         case  639: _wait();_mread(cpu->wz++);_goto(640); // LD HL,(nn) (7)
@@ -1716,10 +2085,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  644: _fetch(); // LD HL,(nn) (12)
         case  645: _goto(646); // DEC HL (1)
         case  646: _fetch(); // DEC HL (2)
-        case  647: _wait();_mread(cpu->pc++);_goto(648); // LD L,n (1)
+        case  647: _wait();_mread_operand(cpu->pc++);_goto(648); // LD L,n (1)
         case  648: cpu->hlx[cpu->hlx_idx].l=_gd();_goto(649); // LD L,n (2)
         case  649: _fetch(); // LD L,n (3)
-        case  650: _wait();_mread(cpu->pc++);_goto(651); // JR NC,d (1)
+        case  650: _wait();_mread_operand(cpu->pc++);_goto(651); // JR NC,d (1)
         case  651: cpu->dlatch=_gd();if(!(_cc_nc)){_goto(652+5);};_goto(652); // JR NC,d (2)
         case  652: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(653); // JR NC,d (3)
         case  653: _goto(654); // JR NC,d (4)
@@ -1727,16 +2096,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  655: _goto(656); // JR NC,d (6)
         case  656: _goto(657); // JR NC,d (7)
         case  657: _fetch(); // JR NC,d (8)
-        case  658: _wait();_mread(cpu->pc++);_goto(659); // LD SP,nn (1)
+        case  658: _wait();_mread_operand(cpu->pc++);_goto(659); // LD SP,nn (1)
         case  659: cpu->spl=_gd();_goto(660); // LD SP,nn (2)
         case  660: _goto(661); // LD SP,nn (3)
-        case  661: _wait();_mread(cpu->pc++);_goto(662); // LD SP,nn (4)
+        case  661: _wait();_mread_operand(cpu->pc++);_goto(662); // LD SP,nn (4)
         case  662: cpu->sph=_gd();_goto(663); // LD SP,nn (5)
         case  663: _fetch(); // LD SP,nn (6)
-        case  664: _wait();_mread(cpu->pc++);_goto(665); // LD (nn),A (1)
+        case  664: _wait();_mread_operand(cpu->pc++);_goto(665); // LD (nn),A (1)
         case  665: cpu->wzl=_gd();_goto(666); // LD (nn),A (2)
         case  666: _goto(667); // LD (nn),A (3)
-        case  667: _wait();_mread(cpu->pc++);_goto(668); // LD (nn),A (4)
+        case  667: _wait();_mread_operand(cpu->pc++);_goto(668); // LD (nn),A (4)
         case  668: cpu->wzh=_gd();_goto(669); // LD (nn),A (5)
         case  669: _goto(670); // LD (nn),A (6)
         case  670: _wait();_mwrite(cpu->wz++,cpu->a);cpu->wzh=cpu->a;_goto(671); // LD (nn),A (7)
@@ -1758,13 +2127,13 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  686: _wait();_mwrite(cpu->addr,cpu->dlatch);_goto(687); // DEC (HL) (5)
         case  687: _goto(688); // DEC (HL) (6)
         case  688: _fetch(); // DEC (HL) (7)
-        case  689: _wait();_mread(cpu->pc++);_goto(690); // LD (HL),n (1)
+        case  689: _wait();_mread_operand(cpu->pc++);_goto(690); // LD (HL),n (1)
         case  690: cpu->dlatch=_gd();_goto(691); // LD (HL),n (2)
         case  691: _goto(692); // LD (HL),n (3)
         case  692: _wait();_mwrite(cpu->addr,cpu->dlatch);_goto(693); // LD (HL),n (4)
         case  693: _goto(694); // LD (HL),n (5)
         case  694: _fetch(); // LD (HL),n (6)
-        case  695: _wait();_mread(cpu->pc++);_goto(696); // JR C,d (1)
+        case  695: _wait();_mread_operand(cpu->pc++);_goto(696); // JR C,d (1)
         case  696: cpu->dlatch=_gd();if(!(_cc_c)){_goto(697+5);};_goto(697); // JR C,d (2)
         case  697: cpu->pc+=(int8_t)cpu->dlatch;cpu->wz=cpu->pc;_goto(698); // JR C,d (3)
         case  698: _goto(699); // JR C,d (4)
@@ -1779,10 +2148,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  707: _goto(708); // ADD HL,SP (5)
         case  708: _goto(709); // ADD HL,SP (6)
         case  709: _fetch(); // ADD HL,SP (7)
-        case  710: _wait();_mread(cpu->pc++);_goto(711); // LD A,(nn) (1)
+        case  710: _wait();_mread_operand(cpu->pc++);_goto(711); // LD A,(nn) (1)
         case  711: cpu->wzl=_gd();_goto(712); // LD A,(nn) (2)
         case  712: _goto(713); // LD A,(nn) (3)
-        case  713: _wait();_mread(cpu->pc++);_goto(714); // LD A,(nn) (4)
+        case  713: _wait();_mread_operand(cpu->pc++);_goto(714); // LD A,(nn) (4)
         case  714: cpu->wzh=_gd();_goto(715); // LD A,(nn) (5)
         case  715: _goto(716); // LD A,(nn) (6)
         case  716: _wait();_mread(cpu->wz++);_goto(717); // LD A,(nn) (7)
@@ -1790,7 +2159,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  718: _fetch(); // LD A,(nn) (9)
         case  719: _goto(720); // DEC SP (1)
         case  720: _fetch(); // DEC SP (2)
-        case  721: _wait();_mread(cpu->pc++);_goto(722); // LD A,n (1)
+        case  721: _wait();_mread_operand(cpu->pc++);_goto(722); // LD A,n (1)
         case  722: cpu->a=_gd();_goto(723); // LD A,n (2)
         case  723: _fetch(); // LD A,n (3)
         case  724: _wait();_mread(cpu->addr);_goto(725); // LD B,(HL) (1)
@@ -1872,22 +2241,22 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  800: _wait();_mread(cpu->sp++);_goto(801); // POP BC (4)
         case  801: cpu->b=_gd();_goto(802); // POP BC (5)
         case  802: _fetch(); // POP BC (6)
-        case  803: _wait();_mread(cpu->pc++);_goto(804); // JP NZ,nn (1)
+        case  803: _wait();_mread_operand(cpu->pc++);_goto(804); // JP NZ,nn (1)
         case  804: cpu->wzl=_gd();_goto(805); // JP NZ,nn (2)
         case  805: _goto(806); // JP NZ,nn (3)
-        case  806: _wait();_mread(cpu->pc++);_goto(807); // JP NZ,nn (4)
+        case  806: _wait();_mread_operand(cpu->pc++);_goto(807); // JP NZ,nn (4)
         case  807: cpu->wzh=_gd();if(_cc_nz){cpu->pc=cpu->wz;};_goto(808); // JP NZ,nn (5)
         case  808: _fetch(); // JP NZ,nn (6)
-        case  809: _wait();_mread(cpu->pc++);_goto(810); // JP nn (1)
+        case  809: _wait();_mread_operand(cpu->pc++);_goto(810); // JP nn (1)
         case  810: cpu->wzl=_gd();_goto(811); // JP nn (2)
         case  811: _goto(812); // JP nn (3)
-        case  812: _wait();_mread(cpu->pc++);_goto(813); // JP nn (4)
+        case  812: _wait();_mread_operand(cpu->pc++);_goto(813); // JP nn (4)
         case  813: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(814); // JP nn (5)
         case  814: _fetch(); // JP nn (6)
-        case  815: _wait();_mread(cpu->pc++);_goto(816); // CALL NZ,nn (1)
+        case  815: _wait();_mread_operand(cpu->pc++);_goto(816); // CALL NZ,nn (1)
         case  816: cpu->wzl=_gd();_goto(817); // CALL NZ,nn (2)
         case  817: _goto(818); // CALL NZ,nn (3)
-        case  818: _wait();_mread(cpu->pc++);_goto(819); // CALL NZ,nn (4)
+        case  818: _wait();_mread_operand(cpu->pc++);_goto(819); // CALL NZ,nn (4)
         case  819: cpu->wzh=_gd();if (!_cc_nz){_goto(820+7);};_goto(820); // CALL NZ,nn (5)
         case  820: _goto(821); // CALL NZ,nn (6)
         case  821: _goto(822); // CALL NZ,nn (7)
@@ -1904,7 +2273,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  832: _wait();_mwrite(--cpu->sp,cpu->c);_goto(833); // PUSH BC (5)
         case  833: _goto(834); // PUSH BC (6)
         case  834: _fetch(); // PUSH BC (7)
-        case  835: _wait();_mread(cpu->pc++);_goto(836); // ADD n (1)
+        case  835: _wait();_mread_operand(cpu->pc++);_goto(836); // ADD n (1)
         case  836: cpu->dlatch=_gd();_goto(837); // ADD n (2)
         case  837: _z80_add8(cpu,cpu->dlatch);_fetch(); // ADD n (3)
         case  838: _goto(839); // RST 0h (1)
@@ -1927,16 +2296,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  855: _wait();_mread(cpu->sp++);_goto(856); // RET (4)
         case  856: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(857); // RET (5)
         case  857: _fetch(); // RET (6)
-        case  858: _wait();_mread(cpu->pc++);_goto(859); // JP Z,nn (1)
+        case  858: _wait();_mread_operand(cpu->pc++);_goto(859); // JP Z,nn (1)
         case  859: cpu->wzl=_gd();_goto(860); // JP Z,nn (2)
         case  860: _goto(861); // JP Z,nn (3)
-        case  861: _wait();_mread(cpu->pc++);_goto(862); // JP Z,nn (4)
+        case  861: _wait();_mread_operand(cpu->pc++);_goto(862); // JP Z,nn (4)
         case  862: cpu->wzh=_gd();if(_cc_z){cpu->pc=cpu->wz;};_goto(863); // JP Z,nn (5)
         case  863: _fetch(); // JP Z,nn (6)
-        case  864: _wait();_mread(cpu->pc++);_goto(865); // CALL Z,nn (1)
+        case  864: _wait();_mread_operand(cpu->pc++);_goto(865); // CALL Z,nn (1)
         case  865: cpu->wzl=_gd();_goto(866); // CALL Z,nn (2)
         case  866: _goto(867); // CALL Z,nn (3)
-        case  867: _wait();_mread(cpu->pc++);_goto(868); // CALL Z,nn (4)
+        case  867: _wait();_mread_operand(cpu->pc++);_goto(868); // CALL Z,nn (4)
         case  868: cpu->wzh=_gd();if (!_cc_z){_goto(869+7);};_goto(869); // CALL Z,nn (5)
         case  869: _goto(870); // CALL Z,nn (6)
         case  870: _goto(871); // CALL Z,nn (7)
@@ -1946,10 +2315,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  874: _wait();_mwrite(--cpu->sp,cpu->pcl);cpu->pc=cpu->wz;_goto(875); // CALL Z,nn (11)
         case  875: _goto(876); // CALL Z,nn (12)
         case  876: _fetch(); // CALL Z,nn (13)
-        case  877: _wait();_mread(cpu->pc++);_goto(878); // CALL nn (1)
+        case  877: _wait();_mread_operand(cpu->pc++);_goto(878); // CALL nn (1)
         case  878: cpu->wzl=_gd();_goto(879); // CALL nn (2)
         case  879: _goto(880); // CALL nn (3)
-        case  880: _wait();_mread(cpu->pc++);_goto(881); // CALL nn (4)
+        case  880: _wait();_mread_operand(cpu->pc++);_goto(881); // CALL nn (4)
         case  881: cpu->wzh=_gd();_goto(882); // CALL nn (5)
         case  882: _goto(883); // CALL nn (6)
         case  883: _goto(884); // CALL nn (7)
@@ -1959,7 +2328,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  887: _wait();_mwrite(--cpu->sp,cpu->pcl);cpu->pc=cpu->wz;_goto(888); // CALL nn (11)
         case  888: _goto(889); // CALL nn (12)
         case  889: _fetch(); // CALL nn (13)
-        case  890: _wait();_mread(cpu->pc++);_goto(891); // ADC n (1)
+        case  890: _wait();_mread_operand(cpu->pc++);_goto(891); // ADC n (1)
         case  891: cpu->dlatch=_gd();_goto(892); // ADC n (2)
         case  892: _z80_adc8(cpu,cpu->dlatch);_fetch(); // ADC n (3)
         case  893: _goto(894); // RST 8h (1)
@@ -1982,23 +2351,23 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  910: _wait();_mread(cpu->sp++);_goto(911); // POP DE (4)
         case  911: cpu->d=_gd();_goto(912); // POP DE (5)
         case  912: _fetch(); // POP DE (6)
-        case  913: _wait();_mread(cpu->pc++);_goto(914); // JP NC,nn (1)
+        case  913: _wait();_mread_operand(cpu->pc++);_goto(914); // JP NC,nn (1)
         case  914: cpu->wzl=_gd();_goto(915); // JP NC,nn (2)
         case  915: _goto(916); // JP NC,nn (3)
-        case  916: _wait();_mread(cpu->pc++);_goto(917); // JP NC,nn (4)
+        case  916: _wait();_mread_operand(cpu->pc++);_goto(917); // JP NC,nn (4)
         case  917: cpu->wzh=_gd();if(_cc_nc){cpu->pc=cpu->wz;};_goto(918); // JP NC,nn (5)
         case  918: _fetch(); // JP NC,nn (6)
-        case  919: _wait();_mread(cpu->pc++);_goto(920); // OUT (n),A (1)
+        case  919: _wait();_mread_operand(cpu->pc++);_goto(920); // OUT (n),A (1)
         case  920: cpu->wzl=_gd();cpu->wzh=cpu->a;_goto(921); // OUT (n),A (2)
         case  921: _goto(922); // OUT (n),A (3)
         case  922: _iowrite(cpu->wz,cpu->a);_goto(923); // OUT (n),A (4)
         case  923: _wait();cpu->wzl++;_goto(924); // OUT (n),A (5)
         case  924: _goto(925); // OUT (n),A (6)
         case  925: _fetch(); // OUT (n),A (7)
-        case  926: _wait();_mread(cpu->pc++);_goto(927); // CALL NC,nn (1)
+        case  926: _wait();_mread_operand(cpu->pc++);_goto(927); // CALL NC,nn (1)
         case  927: cpu->wzl=_gd();_goto(928); // CALL NC,nn (2)
         case  928: _goto(929); // CALL NC,nn (3)
-        case  929: _wait();_mread(cpu->pc++);_goto(930); // CALL NC,nn (4)
+        case  929: _wait();_mread_operand(cpu->pc++);_goto(930); // CALL NC,nn (4)
         case  930: cpu->wzh=_gd();if (!_cc_nc){_goto(931+7);};_goto(931); // CALL NC,nn (5)
         case  931: _goto(932); // CALL NC,nn (6)
         case  932: _goto(933); // CALL NC,nn (7)
@@ -2015,7 +2384,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  943: _wait();_mwrite(--cpu->sp,cpu->e);_goto(944); // PUSH DE (5)
         case  944: _goto(945); // PUSH DE (6)
         case  945: _fetch(); // PUSH DE (7)
-        case  946: _wait();_mread(cpu->pc++);_goto(947); // SUB n (1)
+        case  946: _wait();_mread_operand(cpu->pc++);_goto(947); // SUB n (1)
         case  947: cpu->dlatch=_gd();_goto(948); // SUB n (2)
         case  948: _z80_sub8(cpu,cpu->dlatch);_fetch(); // SUB n (3)
         case  949: _goto(950); // RST 10h (1)
@@ -2032,23 +2401,23 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  960: _wait();_mread(cpu->sp++);_goto(961); // RET C (5)
         case  961: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(962); // RET C (6)
         case  962: _fetch(); // RET C (7)
-        case  963: _wait();_mread(cpu->pc++);_goto(964); // JP C,nn (1)
+        case  963: _wait();_mread_operand(cpu->pc++);_goto(964); // JP C,nn (1)
         case  964: cpu->wzl=_gd();_goto(965); // JP C,nn (2)
         case  965: _goto(966); // JP C,nn (3)
-        case  966: _wait();_mread(cpu->pc++);_goto(967); // JP C,nn (4)
+        case  966: _wait();_mread_operand(cpu->pc++);_goto(967); // JP C,nn (4)
         case  967: cpu->wzh=_gd();if(_cc_c){cpu->pc=cpu->wz;};_goto(968); // JP C,nn (5)
         case  968: _fetch(); // JP C,nn (6)
-        case  969: _wait();_mread(cpu->pc++);_goto(970); // IN A,(n) (1)
+        case  969: _wait();_mread_operand(cpu->pc++);_goto(970); // IN A,(n) (1)
         case  970: cpu->wzl=_gd();cpu->wzh=cpu->a;_goto(971); // IN A,(n) (2)
         case  971: _goto(972); // IN A,(n) (3)
         case  972: _goto(973); // IN A,(n) (4)
         case  973: _wait();_ioread(cpu->wz++);_goto(974); // IN A,(n) (5)
         case  974: cpu->a=_gd();_goto(975); // IN A,(n) (6)
         case  975: _fetch(); // IN A,(n) (7)
-        case  976: _wait();_mread(cpu->pc++);_goto(977); // CALL C,nn (1)
+        case  976: _wait();_mread_operand(cpu->pc++);_goto(977); // CALL C,nn (1)
         case  977: cpu->wzl=_gd();_goto(978); // CALL C,nn (2)
         case  978: _goto(979); // CALL C,nn (3)
-        case  979: _wait();_mread(cpu->pc++);_goto(980); // CALL C,nn (4)
+        case  979: _wait();_mread_operand(cpu->pc++);_goto(980); // CALL C,nn (4)
         case  980: cpu->wzh=_gd();if (!_cc_c){_goto(981+7);};_goto(981); // CALL C,nn (5)
         case  981: _goto(982); // CALL C,nn (6)
         case  982: _goto(983); // CALL C,nn (7)
@@ -2058,7 +2427,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case  986: _wait();_mwrite(--cpu->sp,cpu->pcl);cpu->pc=cpu->wz;_goto(987); // CALL C,nn (11)
         case  987: _goto(988); // CALL C,nn (12)
         case  988: _fetch(); // CALL C,nn (13)
-        case  989: _wait();_mread(cpu->pc++);_goto(990); // SBC n (1)
+        case  989: _wait();_mread_operand(cpu->pc++);_goto(990); // SBC n (1)
         case  990: cpu->dlatch=_gd();_goto(991); // SBC n (2)
         case  991: _z80_sbc8(cpu,cpu->dlatch);_fetch(); // SBC n (3)
         case  992: _goto(993); // RST 18h (1)
@@ -2081,10 +2450,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1009: _wait();_mread(cpu->sp++);_goto(1010); // POP HL (4)
         case 1010: cpu->hlx[cpu->hlx_idx].h=_gd();_goto(1011); // POP HL (5)
         case 1011: _fetch(); // POP HL (6)
-        case 1012: _wait();_mread(cpu->pc++);_goto(1013); // JP PO,nn (1)
+        case 1012: _wait();_mread_operand(cpu->pc++);_goto(1013); // JP PO,nn (1)
         case 1013: cpu->wzl=_gd();_goto(1014); // JP PO,nn (2)
         case 1014: _goto(1015); // JP PO,nn (3)
-        case 1015: _wait();_mread(cpu->pc++);_goto(1016); // JP PO,nn (4)
+        case 1015: _wait();_mread_operand(cpu->pc++);_goto(1016); // JP PO,nn (4)
         case 1016: cpu->wzh=_gd();if(_cc_po){cpu->pc=cpu->wz;};_goto(1017); // JP PO,nn (5)
         case 1017: _fetch(); // JP PO,nn (6)
         case 1018: _wait();_mread(cpu->sp);_goto(1019); // EX (SP),HL (1)
@@ -2102,10 +2471,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1030: _goto(1031); // EX (SP),HL (13)
         case 1031: _goto(1032); // EX (SP),HL (14)
         case 1032: _fetch(); // EX (SP),HL (15)
-        case 1033: _wait();_mread(cpu->pc++);_goto(1034); // CALL PO,nn (1)
+        case 1033: _wait();_mread_operand(cpu->pc++);_goto(1034); // CALL PO,nn (1)
         case 1034: cpu->wzl=_gd();_goto(1035); // CALL PO,nn (2)
         case 1035: _goto(1036); // CALL PO,nn (3)
-        case 1036: _wait();_mread(cpu->pc++);_goto(1037); // CALL PO,nn (4)
+        case 1036: _wait();_mread_operand(cpu->pc++);_goto(1037); // CALL PO,nn (4)
         case 1037: cpu->wzh=_gd();if (!_cc_po){_goto(1038+7);};_goto(1038); // CALL PO,nn (5)
         case 1038: _goto(1039); // CALL PO,nn (6)
         case 1039: _goto(1040); // CALL PO,nn (7)
@@ -2122,7 +2491,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1050: _wait();_mwrite(--cpu->sp,cpu->hlx[cpu->hlx_idx].l);_goto(1051); // PUSH HL (5)
         case 1051: _goto(1052); // PUSH HL (6)
         case 1052: _fetch(); // PUSH HL (7)
-        case 1053: _wait();_mread(cpu->pc++);_goto(1054); // AND n (1)
+        case 1053: _wait();_mread_operand(cpu->pc++);_goto(1054); // AND n (1)
         case 1054: cpu->dlatch=_gd();_goto(1055); // AND n (2)
         case 1055: _z80_and8(cpu,cpu->dlatch);_fetch(); // AND n (3)
         case 1056: _goto(1057); // RST 20h (1)
@@ -2139,16 +2508,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1067: _wait();_mread(cpu->sp++);_goto(1068); // RET PE (5)
         case 1068: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(1069); // RET PE (6)
         case 1069: _fetch(); // RET PE (7)
-        case 1070: _wait();_mread(cpu->pc++);_goto(1071); // JP PE,nn (1)
+        case 1070: _wait();_mread_operand(cpu->pc++);_goto(1071); // JP PE,nn (1)
         case 1071: cpu->wzl=_gd();_goto(1072); // JP PE,nn (2)
         case 1072: _goto(1073); // JP PE,nn (3)
-        case 1073: _wait();_mread(cpu->pc++);_goto(1074); // JP PE,nn (4)
+        case 1073: _wait();_mread_operand(cpu->pc++);_goto(1074); // JP PE,nn (4)
         case 1074: cpu->wzh=_gd();if(_cc_pe){cpu->pc=cpu->wz;};_goto(1075); // JP PE,nn (5)
         case 1075: _fetch(); // JP PE,nn (6)
-        case 1076: _wait();_mread(cpu->pc++);_goto(1077); // CALL PE,nn (1)
+        case 1076: _wait();_mread_operand(cpu->pc++);_goto(1077); // CALL PE,nn (1)
         case 1077: cpu->wzl=_gd();_goto(1078); // CALL PE,nn (2)
         case 1078: _goto(1079); // CALL PE,nn (3)
-        case 1079: _wait();_mread(cpu->pc++);_goto(1080); // CALL PE,nn (4)
+        case 1079: _wait();_mread_operand(cpu->pc++);_goto(1080); // CALL PE,nn (4)
         case 1080: cpu->wzh=_gd();if (!_cc_pe){_goto(1081+7);};_goto(1081); // CALL PE,nn (5)
         case 1081: _goto(1082); // CALL PE,nn (6)
         case 1082: _goto(1083); // CALL PE,nn (7)
@@ -2158,7 +2527,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1086: _wait();_mwrite(--cpu->sp,cpu->pcl);cpu->pc=cpu->wz;_goto(1087); // CALL PE,nn (11)
         case 1087: _goto(1088); // CALL PE,nn (12)
         case 1088: _fetch(); // CALL PE,nn (13)
-        case 1089: _wait();_mread(cpu->pc++);_goto(1090); // XOR n (1)
+        case 1089: _wait();_mread_operand(cpu->pc++);_goto(1090); // XOR n (1)
         case 1090: cpu->dlatch=_gd();_goto(1091); // XOR n (2)
         case 1091: _z80_xor8(cpu,cpu->dlatch);_fetch(); // XOR n (3)
         case 1092: _goto(1093); // RST 28h (1)
@@ -2181,16 +2550,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1109: _wait();_mread(cpu->sp++);_goto(1110); // POP AF (4)
         case 1110: cpu->a=_gd();_goto(1111); // POP AF (5)
         case 1111: _fetch(); // POP AF (6)
-        case 1112: _wait();_mread(cpu->pc++);_goto(1113); // JP P,nn (1)
+        case 1112: _wait();_mread_operand(cpu->pc++);_goto(1113); // JP P,nn (1)
         case 1113: cpu->wzl=_gd();_goto(1114); // JP P,nn (2)
         case 1114: _goto(1115); // JP P,nn (3)
-        case 1115: _wait();_mread(cpu->pc++);_goto(1116); // JP P,nn (4)
+        case 1115: _wait();_mread_operand(cpu->pc++);_goto(1116); // JP P,nn (4)
         case 1116: cpu->wzh=_gd();if(_cc_p){cpu->pc=cpu->wz;};_goto(1117); // JP P,nn (5)
         case 1117: _fetch(); // JP P,nn (6)
-        case 1118: _wait();_mread(cpu->pc++);_goto(1119); // CALL P,nn (1)
+        case 1118: _wait();_mread_operand(cpu->pc++);_goto(1119); // CALL P,nn (1)
         case 1119: cpu->wzl=_gd();_goto(1120); // CALL P,nn (2)
         case 1120: _goto(1121); // CALL P,nn (3)
-        case 1121: _wait();_mread(cpu->pc++);_goto(1122); // CALL P,nn (4)
+        case 1121: _wait();_mread_operand(cpu->pc++);_goto(1122); // CALL P,nn (4)
         case 1122: cpu->wzh=_gd();if (!_cc_p){_goto(1123+7);};_goto(1123); // CALL P,nn (5)
         case 1123: _goto(1124); // CALL P,nn (6)
         case 1124: _goto(1125); // CALL P,nn (7)
@@ -2207,7 +2576,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1135: _wait();_mwrite(--cpu->sp,cpu->f);_goto(1136); // PUSH AF (5)
         case 1136: _goto(1137); // PUSH AF (6)
         case 1137: _fetch(); // PUSH AF (7)
-        case 1138: _wait();_mread(cpu->pc++);_goto(1139); // OR n (1)
+        case 1138: _wait();_mread_operand(cpu->pc++);_goto(1139); // OR n (1)
         case 1139: cpu->dlatch=_gd();_goto(1140); // OR n (2)
         case 1140: _z80_or8(cpu,cpu->dlatch);_fetch(); // OR n (3)
         case 1141: _goto(1142); // RST 30h (1)
@@ -2226,16 +2595,16 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1154: _fetch(); // RET M (7)
         case 1155: _goto(1156); // LD SP,HL (1)
         case 1156: _fetch(); // LD SP,HL (2)
-        case 1157: _wait();_mread(cpu->pc++);_goto(1158); // JP M,nn (1)
+        case 1157: _wait();_mread_operand(cpu->pc++);_goto(1158); // JP M,nn (1)
         case 1158: cpu->wzl=_gd();_goto(1159); // JP M,nn (2)
         case 1159: _goto(1160); // JP M,nn (3)
-        case 1160: _wait();_mread(cpu->pc++);_goto(1161); // JP M,nn (4)
+        case 1160: _wait();_mread_operand(cpu->pc++);_goto(1161); // JP M,nn (4)
         case 1161: cpu->wzh=_gd();if(_cc_m){cpu->pc=cpu->wz;};_goto(1162); // JP M,nn (5)
         case 1162: _fetch(); // JP M,nn (6)
-        case 1163: _wait();_mread(cpu->pc++);_goto(1164); // CALL M,nn (1)
+        case 1163: _wait();_mread_operand(cpu->pc++);_goto(1164); // CALL M,nn (1)
         case 1164: cpu->wzl=_gd();_goto(1165); // CALL M,nn (2)
         case 1165: _goto(1166); // CALL M,nn (3)
-        case 1166: _wait();_mread(cpu->pc++);_goto(1167); // CALL M,nn (4)
+        case 1166: _wait();_mread_operand(cpu->pc++);_goto(1167); // CALL M,nn (4)
         case 1167: cpu->wzh=_gd();if (!_cc_m){_goto(1168+7);};_goto(1168); // CALL M,nn (5)
         case 1168: _goto(1169); // CALL M,nn (6)
         case 1169: _goto(1170); // CALL M,nn (7)
@@ -2245,7 +2614,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1173: _wait();_mwrite(--cpu->sp,cpu->pcl);cpu->pc=cpu->wz;_goto(1174); // CALL M,nn (11)
         case 1174: _goto(1175); // CALL M,nn (12)
         case 1175: _fetch(); // CALL M,nn (13)
-        case 1176: _wait();_mread(cpu->pc++);_goto(1177); // CP n (1)
+        case 1176: _wait();_mread_operand(cpu->pc++);_goto(1177); // CP n (1)
         case 1177: cpu->dlatch=_gd();_goto(1178); // CP n (2)
         case 1178: _z80_cp8(cpu,cpu->dlatch);_fetch(); // CP n (3)
         case 1179: _goto(1180); // RST 38h (1)
@@ -2270,10 +2639,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1198: _goto(1199); // SBC HL,BC (5)
         case 1199: _goto(1200); // SBC HL,BC (6)
         case 1200: _fetch(); // SBC HL,BC (7)
-        case 1201: _wait();_mread(cpu->pc++);_goto(1202); // LD (nn),BC (1)
+        case 1201: _wait();_mread_operand(cpu->pc++);_goto(1202); // LD (nn),BC (1)
         case 1202: cpu->wzl=_gd();_goto(1203); // LD (nn),BC (2)
         case 1203: _goto(1204); // LD (nn),BC (3)
-        case 1204: _wait();_mread(cpu->pc++);_goto(1205); // LD (nn),BC (4)
+        case 1204: _wait();_mread_operand(cpu->pc++);_goto(1205); // LD (nn),BC (4)
         case 1205: cpu->wzh=_gd();_goto(1206); // LD (nn),BC (5)
         case 1206: _goto(1207); // LD (nn),BC (6)
         case 1207: _wait();_mwrite(cpu->wz++,cpu->c);_goto(1208); // LD (nn),BC (7)
@@ -2287,7 +2656,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1215: _goto(1216); // RETN (3)
         case 1216: _wait();_mread(cpu->sp++);_goto(1217); // RETN (4)
         case 1217: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(1218); // RETN (5)
-        case 1218: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETN (6)
+        case 1218: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETN (6)
         case 1219: cpu->i=cpu->a;_fetch(); // LD I,A (1)
         case 1220: _goto(1221); // IN C,(C) (1)
         case 1221: _wait();_ioread(cpu->bc);_goto(1222); // IN C,(C) (2)
@@ -2304,10 +2673,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1232: _goto(1233); // ADC HL,BC (5)
         case 1233: _goto(1234); // ADC HL,BC (6)
         case 1234: _fetch(); // ADC HL,BC (7)
-        case 1235: _wait();_mread(cpu->pc++);_goto(1236); // LD BC,(nn) (1)
+        case 1235: _wait();_mread_operand(cpu->pc++);_goto(1236); // LD BC,(nn) (1)
         case 1236: cpu->wzl=_gd();_goto(1237); // LD BC,(nn) (2)
         case 1237: _goto(1238); // LD BC,(nn) (3)
-        case 1238: _wait();_mread(cpu->pc++);_goto(1239); // LD BC,(nn) (4)
+        case 1238: _wait();_mread_operand(cpu->pc++);_goto(1239); // LD BC,(nn) (4)
         case 1239: cpu->wzh=_gd();_goto(1240); // LD BC,(nn) (5)
         case 1240: _goto(1241); // LD BC,(nn) (6)
         case 1241: _wait();_mread(cpu->wz++);_goto(1242); // LD BC,(nn) (7)
@@ -2321,7 +2690,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1249: _goto(1250); // RETI (3)
         case 1250: _wait();_mread(cpu->sp++);_goto(1251); // RETI (4)
         case 1251: cpu->wzh=_gd();cpu->pc=cpu->wz;_goto(1252); // RETI (5)
-        case 1252: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1252: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1253: cpu->r=cpu->a;_fetch(); // LD R,A (1)
         case 1254: _goto(1255); // IN D,(C) (1)
         case 1255: _wait();_ioread(cpu->bc);_goto(1256); // IN D,(C) (2)
@@ -2338,10 +2707,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1266: _goto(1267); // SBC HL,DE (5)
         case 1267: _goto(1268); // SBC HL,DE (6)
         case 1268: _fetch(); // SBC HL,DE (7)
-        case 1269: _wait();_mread(cpu->pc++);_goto(1270); // LD (nn),DE (1)
+        case 1269: _wait();_mread_operand(cpu->pc++);_goto(1270); // LD (nn),DE (1)
         case 1270: cpu->wzl=_gd();_goto(1271); // LD (nn),DE (2)
         case 1271: _goto(1272); // LD (nn),DE (3)
-        case 1272: _wait();_mread(cpu->pc++);_goto(1273); // LD (nn),DE (4)
+        case 1272: _wait();_mread_operand(cpu->pc++);_goto(1273); // LD (nn),DE (4)
         case 1273: cpu->wzh=_gd();_goto(1274); // LD (nn),DE (5)
         case 1274: _goto(1275); // LD (nn),DE (6)
         case 1275: _wait();_mwrite(cpu->wz++,cpu->e);_goto(1276); // LD (nn),DE (7)
@@ -2350,7 +2719,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1278: _wait();_mwrite(cpu->wz,cpu->d);_goto(1279); // LD (nn),DE (10)
         case 1279: _goto(1280); // LD (nn),DE (11)
         case 1280: _fetch(); // LD (nn),DE (12)
-        case 1281: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1281: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1282: cpu->a=cpu->i;cpu->f=_z80_sziff2_flags(cpu, cpu->i);_fetch(); // LD A,I (1)
         case 1283: _goto(1284); // IN E,(C) (1)
         case 1284: _wait();_ioread(cpu->bc);_goto(1285); // IN E,(C) (2)
@@ -2367,10 +2736,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1295: _goto(1296); // ADC HL,DE (5)
         case 1296: _goto(1297); // ADC HL,DE (6)
         case 1297: _fetch(); // ADC HL,DE (7)
-        case 1298: _wait();_mread(cpu->pc++);_goto(1299); // LD DE,(nn) (1)
+        case 1298: _wait();_mread_operand(cpu->pc++);_goto(1299); // LD DE,(nn) (1)
         case 1299: cpu->wzl=_gd();_goto(1300); // LD DE,(nn) (2)
         case 1300: _goto(1301); // LD DE,(nn) (3)
-        case 1301: _wait();_mread(cpu->pc++);_goto(1302); // LD DE,(nn) (4)
+        case 1301: _wait();_mread_operand(cpu->pc++);_goto(1302); // LD DE,(nn) (4)
         case 1302: cpu->wzh=_gd();_goto(1303); // LD DE,(nn) (5)
         case 1303: _goto(1304); // LD DE,(nn) (6)
         case 1304: _wait();_mread(cpu->wz++);_goto(1305); // LD DE,(nn) (7)
@@ -2379,7 +2748,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1307: _wait();_mread(cpu->wz);_goto(1308); // LD DE,(nn) (10)
         case 1308: cpu->d=_gd();_goto(1309); // LD DE,(nn) (11)
         case 1309: _fetch(); // LD DE,(nn) (12)
-        case 1310: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1310: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1311: cpu->a=cpu->r;cpu->f=_z80_sziff2_flags(cpu, cpu->r);_fetch(); // LD A,R (1)
         case 1312: _goto(1313); // IN H,(C) (1)
         case 1313: _wait();_ioread(cpu->bc);_goto(1314); // IN H,(C) (2)
@@ -2396,10 +2765,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1324: _goto(1325); // SBC HL,HL (5)
         case 1325: _goto(1326); // SBC HL,HL (6)
         case 1326: _fetch(); // SBC HL,HL (7)
-        case 1327: _wait();_mread(cpu->pc++);_goto(1328); // LD (nn),HL (1)
+        case 1327: _wait();_mread_operand(cpu->pc++);_goto(1328); // LD (nn),HL (1)
         case 1328: cpu->wzl=_gd();_goto(1329); // LD (nn),HL (2)
         case 1329: _goto(1330); // LD (nn),HL (3)
-        case 1330: _wait();_mread(cpu->pc++);_goto(1331); // LD (nn),HL (4)
+        case 1330: _wait();_mread_operand(cpu->pc++);_goto(1331); // LD (nn),HL (4)
         case 1331: cpu->wzh=_gd();_goto(1332); // LD (nn),HL (5)
         case 1332: _goto(1333); // LD (nn),HL (6)
         case 1333: _wait();_mwrite(cpu->wz++,cpu->l);_goto(1334); // LD (nn),HL (7)
@@ -2408,7 +2777,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1336: _wait();_mwrite(cpu->wz,cpu->h);_goto(1337); // LD (nn),HL (10)
         case 1337: _goto(1338); // LD (nn),HL (11)
         case 1338: _fetch(); // LD (nn),HL (12)
-        case 1339: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1339: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1340: _wait();_mread(cpu->hl);_goto(1341); // RRD (1)
         case 1341: cpu->dlatch=_gd();_goto(1342); // RRD (2)
         case 1342: cpu->dlatch=_z80_rrd(cpu,cpu->dlatch);_goto(1343); // RRD (3)
@@ -2434,10 +2803,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1362: _goto(1363); // ADC HL,HL (5)
         case 1363: _goto(1364); // ADC HL,HL (6)
         case 1364: _fetch(); // ADC HL,HL (7)
-        case 1365: _wait();_mread(cpu->pc++);_goto(1366); // LD HL,(nn) (1)
+        case 1365: _wait();_mread_operand(cpu->pc++);_goto(1366); // LD HL,(nn) (1)
         case 1366: cpu->wzl=_gd();_goto(1367); // LD HL,(nn) (2)
         case 1367: _goto(1368); // LD HL,(nn) (3)
-        case 1368: _wait();_mread(cpu->pc++);_goto(1369); // LD HL,(nn) (4)
+        case 1368: _wait();_mread_operand(cpu->pc++);_goto(1369); // LD HL,(nn) (4)
         case 1369: cpu->wzh=_gd();_goto(1370); // LD HL,(nn) (5)
         case 1370: _goto(1371); // LD HL,(nn) (6)
         case 1371: _wait();_mread(cpu->wz++);_goto(1372); // LD HL,(nn) (7)
@@ -2446,7 +2815,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1374: _wait();_mread(cpu->wz);_goto(1375); // LD HL,(nn) (10)
         case 1375: cpu->h=_gd();_goto(1376); // LD HL,(nn) (11)
         case 1376: _fetch(); // LD HL,(nn) (12)
-        case 1377: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1377: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1378: _wait();_mread(cpu->hl);_goto(1379); // RLD (1)
         case 1379: cpu->dlatch=_gd();_goto(1380); // RLD (2)
         case 1380: cpu->dlatch=_z80_rld(cpu,cpu->dlatch);_goto(1381); // RLD (3)
@@ -2472,10 +2841,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1400: _goto(1401); // SBC HL,SP (5)
         case 1401: _goto(1402); // SBC HL,SP (6)
         case 1402: _fetch(); // SBC HL,SP (7)
-        case 1403: _wait();_mread(cpu->pc++);_goto(1404); // LD (nn),SP (1)
+        case 1403: _wait();_mread_operand(cpu->pc++);_goto(1404); // LD (nn),SP (1)
         case 1404: cpu->wzl=_gd();_goto(1405); // LD (nn),SP (2)
         case 1405: _goto(1406); // LD (nn),SP (3)
-        case 1406: _wait();_mread(cpu->pc++);_goto(1407); // LD (nn),SP (4)
+        case 1406: _wait();_mread_operand(cpu->pc++);_goto(1407); // LD (nn),SP (4)
         case 1407: cpu->wzh=_gd();_goto(1408); // LD (nn),SP (5)
         case 1408: _goto(1409); // LD (nn),SP (6)
         case 1409: _wait();_mwrite(cpu->wz++,cpu->spl);_goto(1410); // LD (nn),SP (7)
@@ -2484,7 +2853,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1412: _wait();_mwrite(cpu->wz,cpu->sph);_goto(1413); // LD (nn),SP (10)
         case 1413: _goto(1414); // LD (nn),SP (11)
         case 1414: _fetch(); // LD (nn),SP (12)
-        case 1415: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1415: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1416: _goto(1417); // IN A,(C) (1)
         case 1417: _wait();_ioread(cpu->bc);_goto(1418); // IN A,(C) (2)
         case 1418: cpu->dlatch=_gd();cpu->wz=cpu->bc+1;_goto(1419); // IN A,(C) (3)
@@ -2500,10 +2869,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1428: _goto(1429); // ADC HL,SP (5)
         case 1429: _goto(1430); // ADC HL,SP (6)
         case 1430: _fetch(); // ADC HL,SP (7)
-        case 1431: _wait();_mread(cpu->pc++);_goto(1432); // LD SP,(nn) (1)
+        case 1431: _wait();_mread_operand(cpu->pc++);_goto(1432); // LD SP,(nn) (1)
         case 1432: cpu->wzl=_gd();_goto(1433); // LD SP,(nn) (2)
         case 1433: _goto(1434); // LD SP,(nn) (3)
-        case 1434: _wait();_mread(cpu->pc++);_goto(1435); // LD SP,(nn) (4)
+        case 1434: _wait();_mread_operand(cpu->pc++);_goto(1435); // LD SP,(nn) (4)
         case 1435: cpu->wzh=_gd();_goto(1436); // LD SP,(nn) (5)
         case 1436: _goto(1437); // LD SP,(nn) (6)
         case 1437: _wait();_mread(cpu->wz++);_goto(1438); // LD SP,(nn) (7)
@@ -2512,7 +2881,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1440: _wait();_mread(cpu->wz);_goto(1441); // LD SP,(nn) (10)
         case 1441: cpu->sph=_gd();_goto(1442); // LD SP,(nn) (11)
         case 1442: _fetch(); // LD SP,(nn) (12)
-        case 1443: pins=_z80_fetch(cpu,pins);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
+        case 1443: pins=_z80_fetch(cpu,pins,tr);cpu->iff1=cpu->iff2;goto step_to; // RETI (6)
         case 1444: _wait();_mread(cpu->hl++);_goto(1445); // LDI (1)
         case 1445: cpu->dlatch=_gd();_goto(1446); // LDI (2)
         case 1446: _goto(1447); // LDI (3)
@@ -2690,10 +3059,10 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1618: _wait();_mwrite(cpu->hl,cpu->dlatch);_goto(1619); // cbhl (5)
         case 1619: _goto(1620); // cbhl (6)
         case 1620: _fetch(); // cbhl (7)
-        case 1621: _wait();_mread(cpu->pc++);_goto(1622); // ddfdcb (0)
-        case 1622: _z80_ddfdcb_addr(cpu,pins);_goto(1623); // ddfdcb (1)
+        case 1621: _wait();_mread_operand(cpu->pc++);_goto(1622); // ddfdcb (0)
+        case 1622: _z80_ddfdcb_addr(cpu,pins,tr);_goto(1623); // ddfdcb (1)
         case 1623: _goto(1624); // ddfdcb (2)
-        case 1624: _wait();_mread(cpu->pc++);_goto(1625); // ddfdcb (3)
+        case 1624: _wait();_mread_opcode(cpu->pc++);_goto(1625); // ddfdcb (3)
         case 1625: cpu->opcode=_gd();_goto(1626); // ddfdcb (4)
         case 1626: _goto(1627); // ddfdcb (5)
         case 1627: _goto(1628); // ddfdcb (6)
@@ -2707,7 +3076,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1635: _fetch(); // ddfdcb (14)
         case 1636: cpu->iff1=cpu->iff2=false;_goto(1637); // int_im0 (0)
         case 1637: pins|=(Z80_M1|Z80_IORQ);_goto(1638); // int_im0 (1)
-        case 1638: _wait();cpu->opcode=_z80_get_db(pins);_goto(1639); // int_im0 (2)
+        case 1638: _wait();cpu->opcode=_z80_trace_ack(tr,cpu,pins);_goto(1639); // int_im0 (2)
         case 1639: pins=_z80_refresh(cpu,pins);_goto(1640); // int_im0 (3)
         case 1640: cpu->addr=cpu->hl;_goto(cpu->opcode);_goto(1641); // int_im0 (4)
         case 1641: _fetch(); // int_im0 (5)
@@ -2726,7 +3095,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         case 1654: _fetch(); // int_im1 (12)
         case 1655: cpu->iff1=cpu->iff2=false;_goto(1656); // int_im2 (0)
         case 1656: pins|=(Z80_M1|Z80_IORQ);_goto(1657); // int_im2 (1)
-        case 1657: _wait();cpu->dlatch=_z80_get_db(pins);_goto(1658); // int_im2 (2)
+        case 1657: _wait();cpu->dlatch=_z80_trace_ack(tr,cpu,pins);_goto(1658); // int_im2 (2)
         case 1658: pins=_z80_refresh(cpu,pins);_goto(1659); // int_im2 (3)
         case 1659: _goto(1660); // int_im2 (4)
         case 1660: _goto(1661); // int_im2 (5)
@@ -2763,11 +3132,11 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
             _goto(_z80_indirect_table[cpu->opcode] ? Z80_DDFD_D_T1 : cpu->opcode);
         //=== optional d-loading cycle for (IX+d), (IY+d)
         case Z80_DDFD_D_T1: _goto(Z80_DDFD_D_T2);
-        case Z80_DDFD_D_T2: _wait(); _mread(cpu->pc++); _goto(Z80_DDFD_D_T3);
+        case Z80_DDFD_D_T2: _wait(); _mread_operand(cpu->pc++); _goto(Z80_DDFD_D_T3);
         case Z80_DDFD_D_T3: cpu->addr += (int8_t)_gd(); cpu->wz = cpu->addr; _goto(Z80_DDFD_D_T4);
         //--- special case LD (IX/IY+d),n or filler ticks
         case Z80_DDFD_D_T4: _goto(Z80_DDFD_D_T5);
-        case Z80_DDFD_D_T5: if (cpu->opcode == 0x36) { _wait();_mread(cpu->pc++); }; _goto(Z80_DDFD_D_T6);
+        case Z80_DDFD_D_T5: if (cpu->opcode == 0x36) { _wait();_mread_operand(cpu->pc++); }; _goto(Z80_DDFD_D_T6);
         case Z80_DDFD_D_T6: if (cpu->opcode == 0x36) { cpu->dlatch = _gd(); }; _goto(Z80_DDFD_D_T7);
         case Z80_DDFD_D_T7: _goto(Z80_DDFD_D_T8);
         case Z80_DDFD_D_T8: _goto((cpu->opcode==0x36) ? Z80_DDFD_LDHLN_WR_T1 : cpu->opcode);
@@ -2799,7 +3168,7 @@ uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
         default: _Z80_UNREACHABLE;
     }
 fetch_next:
-    pins = _z80_fetch(cpu, pins);
+    pins = _z80_fetch(cpu, pins, tr);
 step_to: {
     // track NMI 0 => 1 edge and current INT pin state, this will track the
     // relevant interrupt status up to the last instruction cycle and will
@@ -2809,6 +3178,29 @@ step_to: {
         cpu->int_bits = ((cpu->int_bits | rising_nmi) & Z80_NMI) | (pins & Z80_INT);
     }
     return pins;
+}
+
+uint64_t z80_tick(z80_t* cpu, uint64_t pins) {
+    return _z80_tick_core(cpu, pins, 0);
+}
+
+void z80_trace_init(z80_trace_t* trace, z80_trace_cb_t callback, void* user_data) {
+    CHIPS_ASSERT(trace);
+    memset(trace, 0, sizeof(*trace));
+    trace->callback = callback;
+    trace->user_data = user_data;
+}
+
+uint64_t z80_tick_trace(z80_t* cpu, uint64_t pins, z80_trace_t* trace,
+                        uint64_t source_id, uint32_t source_offset) {
+    CHIPS_ASSERT(cpu);
+    CHIPS_ASSERT(trace);
+    // the host describes the provenance of whatever byte this tick samples;
+    // WAIT ticks simply keep the prior request pending and record nothing
+    trace->tick_count++;
+    trace->src_id = source_id;
+    trace->src_off = source_offset;
+    return _z80_tick_core(cpu, pins, trace);
 }
 
 #undef _sa
@@ -2822,6 +3214,8 @@ step_to: {
 #undef _fetch_ed
 #undef _fetch_cb
 #undef _mread
+#undef _mread_operand
+#undef _mread_opcode
 #undef _mwrite
 #undef _ioread
 #undef _iowrite
