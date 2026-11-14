@@ -1269,5 +1269,6 @@ class elfio
 #include <elfio/elfio_array.hpp>
 #include <elfio/elfio_modinfo.hpp>
 #include <elfio/elfio_versym.hpp>
+#include <elfio/elfio_bb_map.hpp>
 
 #endif // ELFIO_HPP

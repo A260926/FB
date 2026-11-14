@@ -98,3 +98,6 @@ _*/
 *.bbl
 *.toc
 *.blg
+
+# task support build output
+.task-build/
