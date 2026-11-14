@@ -46,28 +46,30 @@ THE SOFTWARE.
 // ../../
 #include "nanort.h"
 
+// Shared UV surface reconstruction helpers (also used by examples/uv_baker).
+#include "uv_surface.h"
+
 #include "image_saver.hh"
 
 typedef nanort::real3<float> float3;
 
 namespace example {
 
-namespace {
-
+// Thin compatibility wrappers.  The actual interpolation / normal math lives
+// in uv_surface.h so the legacy rasterizer and the baker agree exactly.
 template <typename T>
 inline T Lerp(T v0, T v1, T v2, float u, float v) {
-  return (1.0f - u - v) * v0 + u * v1 + v * v2;
+  return uv_surface::Lerp(v0, v1, v2, u, v);
 }
 
 inline void CalcNormal(float3& N, float3 v0, float3 v1, float3 v2) {
-  float3 v10 = v1 - v0;
-  float3 v20 = v2 - v0;
-
-  N = vcross(v20, v10);
-  N = vnormalize(N);
+  const float p0[3] = {v0[0], v0[1], v0[2]};
+  const float p1[3] = {v1[0], v1[1], v1[2]};
+  const float p2[3] = {v2[0], v2[1], v2[2]};
+  if (!uv_surface::ComputeLegacyTriangleNormal(N.v, p0, p1, p2)) {
+    N = float3(0.0f, 0.0f, 0.0f);
+  }
 }
-
-}  // namespace
 
 struct Config {
   std::string obj_filename;
@@ -234,23 +236,15 @@ static std::string GetBaseDir(const std::string& filepath) {
 }
 
 static void SetupVerticesForUVRaster(Mesh* mesh) {
-  mesh->uv_vertices.clear();
-
-  // Set UV coord as vertex position.
-  for (size_t i = 0; i < mesh->triangulated_indices.size(); i++) {
-    const float vx = mesh->facevarying_uvs[2 * i + 0];
-    const float vy = mesh->facevarying_uvs[2 * i + 1];
-    const float vz = 0.0f;
-
-    mesh->uv_vertices.push_back(vx);
-    mesh->uv_vertices.push_back(vy);
-    mesh->uv_vertices.push_back(vz);
+  std::size_t uv_triangle_corners = 0;
+  if (!uv_surface::BuildUVTriangleMesh(
+          mesh->facevarying_uvs.data(), mesh->facevarying_uvs.size(),
+          &mesh->uv_vertices, &mesh->uv_face_indices, &uv_triangle_corners)) {
+    // Preserve the historical shape: an empty/invalid UV array yields empty
+    // output arrays.
+    mesh->uv_vertices.clear();
+    mesh->uv_face_indices.clear();
   }
-
-  // fill verterx indices.(facevarying indices)
-  // uv_face_indices[i] = i;
-  mesh->uv_face_indices.resize(mesh->triangulated_indices.size());
-  std::iota(mesh->uv_face_indices.begin(), mesh->uv_face_indices.end(), 0);
 }
 
 static bool LoadObj(Mesh& mesh, const char* filename, int shape_id) {
