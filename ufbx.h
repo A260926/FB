@@ -4948,6 +4948,13 @@ typedef struct ufbx_evaluate_opts {
 	bool evaluate_skinning; // < Evaluate skinning (see ufbx_mesh.skinned_vertices)
 	bool evaluate_caches;   // < Evaluate vertex caches (see ufbx_mesh.skinned_vertices)
 
+	// Evaluate supported `Parent-Child` constraints and apply them to the
+	// evaluated node hierarchy and skinning.
+	// Only a limited subset of constraints is supported and scenes containing
+	// effective unsupported constraints fail evaluation, see
+	// `misc/parent-constraints.md` for details.
+	bool evaluate_constraints;
+
 	// Evaluation flags.
 	// See `ufbx_evaluate_flags` for information.
 	uint32_t evaluate_flags;

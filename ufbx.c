@@ -21172,7 +21172,7 @@ ufbxi_nodiscard ufbxi_noinline static int ufbxi_modify_geometry(ufbxi_context *u
 	bool do_geometry_transforms = false;
 	if (uc->opts.geometry_transform_handling == UFBX_GEOMETRY_TRANSFORM_HANDLING_MODIFY_GEOMETRY
 		|| uc->opts.geometry_transform_handling == UFBX_GEOMETRY_TRANSFORM_HANDLING_MODIFY_GEOMETRY_NO_FALLBACK) {
-		// Prefetch geometry transforms for processing, they will later be overwritten in `ufbxi_update_node()`.
+		// Prefetch geometry transforms for processing, they will later be overwritten in `ufbxi_update_node_local()`.
 		ufbxi_for_ptr_list(ufbx_node, p_node, uc->scene.nodes) {
 			ufbx_node *node = *p_node;
 			if (node->is_root) continue;
@@ -22955,7 +22955,10 @@ ufbxi_noinline static ufbx_transform ufbxi_get_constraint_transform(const ufbx_p
 	return t;
 }
 
-ufbxi_noinline static void ufbxi_update_node(ufbx_node *node, const ufbx_transform_override *overrides, size_t num_overrides)
+// Computes `node.local_transform`, `node.node_to_parent` and
+// `node.geometry_transform` from the evaluated properties, without
+// touching any transforms of other nodes.
+ufbxi_noinline static void ufbxi_update_node_local(ufbx_node *node, const ufbx_transform_override *overrides, size_t num_overrides)
 {
 	node->rotation_order = (ufbx_rotation_order)ufbxi_find_enum(&node->props, ufbxi_RotationOrder, UFBX_ROTATION_ORDER_XYZ, UFBX_ROTATION_ORDER_SPHERIC);
 	node->euler_rotation = ufbxi_find_vec3(&node->props, ufbxi_Lcl_Rotation, 0.0f, 0.0f, 0.0f);
@@ -22994,7 +22997,13 @@ ufbxi_noinline static void ufbxi_update_node(ufbx_node *node, const ufbx_transfo
 	} else {
 		node->geometry_transform = ufbx_identity_transform;
 	}
+}
 
+// Computes the world space transforms of `node` assuming `node.local_transform`,
+// `node.node_to_parent` and `node.geometry_transform` are up to date and all
+// ancestor nodes have been updated.
+ufbxi_noinline static void ufbxi_update_node_world(ufbx_node *node)
+{
 	ufbx_matrix unscaled_node_to_parent = ufbxi_unscaled_transform_to_matrix(&node->local_transform);
 
 	node->inherit_scale = node->local_transform.scale;
@@ -23806,12 +23815,20 @@ ufbxi_noinline static void ufbxi_update_adjust_transforms(ufbxi_context *uc, ufb
 	}
 }
 
-ufbxi_noinline static void ufbxi_update_scene(ufbx_scene *scene, bool initial, const ufbx_transform_override *transform_overrides, size_t num_transform_overrides)
+ufbxi_noinline static void ufbxi_update_scene_nodes(ufbx_scene *scene, const ufbx_transform_override *transform_overrides, size_t num_transform_overrides)
 {
 	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
-		ufbxi_update_node(*p_node, transform_overrides, num_transform_overrides);
+		ufbxi_update_node_local(*p_node, transform_overrides, num_transform_overrides);
 	}
+	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
+		ufbxi_update_node_world(*p_node);
+	}
+}
 
+// Updates all derived state from `ufbx_node.local_transform`/`node_to_world`
+// that does not affect the node transforms themselves.
+ufbxi_noinline static void ufbxi_update_scene_derived(ufbx_scene *scene, bool initial)
+{
 	ufbxi_for_ptr_list(ufbx_light, p_light, scene->lights) {
 		ufbxi_update_light(*p_light);
 	}
@@ -23868,6 +23885,426 @@ ufbxi_noinline static void ufbxi_update_scene(ufbx_scene *scene, bool initial, c
 
 	ufbxi_update_anim(scene);
 }
+
+ufbxi_noinline static void ufbxi_update_scene(ufbx_scene *scene, bool initial, const ufbx_transform_override *transform_overrides, size_t num_transform_overrides)
+{
+	ufbxi_update_scene_nodes(scene, transform_overrides, num_transform_overrides);
+	ufbxi_update_scene_derived(scene, initial);
+}
+
+// -- Parent-Child constraint evaluation
+
+// Tolerance for "unit" scale and "identity" offsets in constraints.
+#define UFBXI_CONSTRAINT_EPSILON ((ufbx_real)1e-6)
+
+// Upper bound for constraint-provided numeric values. Anything larger is
+// considered bogus data and results in evaluation failing.
+#define UFBXI_CONSTRAINT_LIMIT ((ufbx_real)1e30)
+
+static ufbxi_forceinline bool ufbxi_constraint_is_finite_real(ufbx_real v)
+{
+	return ufbx_fabs((double)v) < (double)UFBX_INFINITY;
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_is_finite_vec3(ufbx_vec3 v)
+{
+	return ufbxi_constraint_is_finite_real(v.x) && ufbxi_constraint_is_finite_real(v.y) && ufbxi_constraint_is_finite_real(v.z);
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_is_finite_quat(ufbx_quat q)
+{
+	return ufbxi_constraint_is_finite_real(q.x) && ufbxi_constraint_is_finite_real(q.y)
+		&& ufbxi_constraint_is_finite_real(q.z) && ufbxi_constraint_is_finite_real(q.w);
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_vec3_in_range(ufbx_vec3 v)
+{
+	return ufbx_fabs((double)v.x) <= (double)UFBXI_CONSTRAINT_LIMIT
+		&& ufbx_fabs((double)v.y) <= (double)UFBXI_CONSTRAINT_LIMIT
+		&& ufbx_fabs((double)v.z) <= (double)UFBXI_CONSTRAINT_LIMIT;
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_quat_in_range(ufbx_quat q)
+{
+	return ufbx_fabs((double)q.x) <= (double)UFBXI_CONSTRAINT_LIMIT
+		&& ufbx_fabs((double)q.y) <= (double)UFBXI_CONSTRAINT_LIMIT
+		&& ufbx_fabs((double)q.z) <= (double)UFBXI_CONSTRAINT_LIMIT
+		&& ufbx_fabs((double)q.w) <= (double)UFBXI_CONSTRAINT_LIMIT;
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_is_unit_vec3(ufbx_vec3 v)
+{
+	return ufbx_fabs((double)(v.x - (ufbx_real)1.0)) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)(v.y - (ufbx_real)1.0)) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)(v.z - (ufbx_real)1.0)) <= (double)UFBXI_CONSTRAINT_EPSILON;
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_is_zero_vec3(ufbx_vec3 v)
+{
+	return ufbx_fabs((double)v.x) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)v.y) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)v.z) <= (double)UFBXI_CONSTRAINT_EPSILON;
+}
+
+static ufbxi_forceinline bool ufbxi_constraint_is_identity_quat(ufbx_quat q)
+{
+	return ufbx_fabs((double)q.x) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)q.y) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)q.z) <= (double)UFBXI_CONSTRAINT_EPSILON
+		&& ufbx_fabs((double)(q.w - (ufbx_real)1.0)) <= (double)UFBXI_CONSTRAINT_EPSILON;
+}
+
+static ufbxi_noinline int ufbxi_constraint_fail(ufbx_error *error, const char *reason)
+{
+	if (error && !error->description.data) {
+		error->description.data = reason;
+		error->description.length = strlen(reason);
+	}
+	return ufbxi_fail_imp_err(error, reason, ufbxi_function, ufbxi_line);
+}
+
+// Sets the error info to mention the constraint and the involved nodes.
+static ufbxi_noinline void ufbxi_constraint_set_info(ufbx_error *error, const ufbx_constraint *constraint, const ufbx_node *node, const ufbx_node *target, const char *reason)
+{
+	if (!error) return;
+
+	const char *constraint_name = constraint ? constraint->name.data : ufbxi_empty_char;
+	size_t constraint_len = constraint ? constraint->name.length : 0;
+	const char *node_name = node ? node->name.data : ufbxi_empty_char;
+	size_t node_len = node ? node->name.length : 0;
+	const char *target_name = target ? target->name.data : ufbxi_empty_char;
+	size_t target_len = target ? target->name.length : 0;
+
+	if (constraint && node && target) {
+		ufbxi_fmt_err_info(error, "constraint \"%.*s\" on node \"%.*s\" targeting \"%.*s\": %s",
+			(int)constraint_len, constraint_name, (int)node_len, node_name, (int)target_len, target_name, reason);
+	} else if (constraint && node) {
+		ufbxi_fmt_err_info(error, "constraint \"%.*s\" on node \"%.*s\": %s",
+			(int)constraint_len, constraint_name, (int)node_len, node_name, reason);
+	} else if (node) {
+		ufbxi_fmt_err_info(error, "node \"%.*s\": %s", (int)node_len, node_name, reason);
+	} else {
+		ufbxi_fmt_err_info(error, "%s", reason);
+	}
+}
+
+typedef struct {
+	ufbx_constraint *constraint;
+	uint32_t node_id;
+	uint32_t target_id;
+	ufbx_real weight;
+
+	// Animated local of `node` before any constraint is applied.
+	ufbx_matrix base_node_to_parent;
+	// Offset transform of `target` as a matrix.
+	ufbx_matrix target_offset;
+} ufbxi_constraint_plan;
+
+static ufbxi_forceinline void ufbxi_constraint_add_dep(uint32_t *dep_head, uint32_t *dep_next, uint32_t *dep_node,
+	uint32_t *p_num_edges, uint32_t from, uint32_t dependent)
+{
+	uint32_t edge = (*p_num_edges)++;
+	dep_node[edge] = dependent;
+	dep_next[edge] = dep_head[from];
+	dep_head[from] = edge;
+}
+
+// Applies supported `Parent-Child` constraints to `scene` node transforms.
+//
+// Requires `ufbxi_update_scene_nodes()` to have been called on `scene` and
+// `ufbxi_update_constraint()` to have been called on all constraints for the
+// evaluated time.
+ufbxi_nodiscard static ufbxi_noinline int ufbxi_evaluate_constraints(ufbx_scene *scene, ufbx_error *error, ufbxi_buf *tmp)
+{
+	size_t num_nodes = scene->nodes.count;
+	if (num_nodes == 0) return 1;
+	ufbxi_check_err_msg(error, num_nodes <= UINT32_MAX, "Too many nodes");
+
+	// First pass: determine which constraints are effective, ie. active and
+	// with a non-zero overall weight. Validate all effective constraints.
+	size_t max_plans = scene->constraints.count;
+	ufbxi_constraint_plan *plans = ufbxi_push(tmp, ufbxi_constraint_plan, max_plans > 0 ? max_plans : 1);
+	ufbxi_check_err(error, plans);
+
+	uint32_t *node_plan = ufbxi_push(tmp, uint32_t, num_nodes);
+	ufbxi_check_err(error, node_plan);
+	for (size_t i = 0; i < num_nodes; i++) node_plan[i] = UINT32_MAX;
+
+	size_t num_plans = 0;
+
+	ufbxi_for_ptr_list(ufbx_constraint, p_constraint, scene->constraints) {
+		ufbx_constraint *constraint = *p_constraint;
+
+		// Ignored constraints do not impose any restrictions or dependencies.
+		if (!constraint->active) continue;
+
+		ufbx_real weight = constraint->weight;
+		if (!ufbxi_constraint_is_finite_real(weight)) {
+			ufbxi_constraint_set_info(error, constraint, constraint->node, NULL, "Non-finite constraint weight");
+			return ufbxi_constraint_fail(error, "Non-finite constraint weight");
+		}
+		if (weight <= (ufbx_real)0.0) continue;
+		if (weight > (ufbx_real)1.0) weight = (ufbx_real)1.0;
+
+		ufbx_node *node = constraint->node;
+		if (!node) {
+			ufbxi_constraint_set_info(error, constraint, NULL, NULL, "Constraint has no constrained node");
+			return ufbxi_constraint_fail(error, "Constraint has no constrained node");
+		}
+		if (node->typed_id >= num_nodes || scene->nodes.data[node->typed_id] != node) {
+			ufbxi_constraint_set_info(error, constraint, node, NULL, "Constrained node is not part of the scene");
+			return ufbxi_constraint_fail(error, "Constrained node is not part of the scene");
+		}
+
+		if (constraint->targets.count != 1) {
+			ufbxi_constraint_set_info(error, constraint, node, NULL, "Constraint must have exactly one target");
+			return ufbxi_constraint_fail(error, "Constraint must have exactly one target");
+		}
+		ufbx_constraint_target *target = &constraint->targets.data[0];
+
+		ufbx_real target_weight = target->weight;
+		if (!ufbxi_constraint_is_finite_real(target_weight)) {
+			ufbxi_constraint_set_info(error, constraint, node, target->node, "Non-finite target weight");
+			return ufbxi_constraint_fail(error, "Non-finite target weight");
+		}
+		if (target_weight < (ufbx_real)0.0) {
+			ufbxi_constraint_set_info(error, constraint, node, target->node, "Negative target weight");
+			return ufbxi_constraint_fail(error, "Negative target weight");
+		}
+		// A single target with zero weight means the constraint has no effect.
+		if (target_weight == (ufbx_real)0.0) continue;
+
+		if (constraint->type != UFBX_CONSTRAINT_PARENT) {
+			ufbxi_constraint_set_info(error, constraint, node, target->node, "Unsupported constraint type");
+			return ufbxi_constraint_fail(error, "Unsupported constraint type");
+		}
+
+		ufbx_node *target_node = target->node;
+		if (!target_node) {
+			ufbxi_constraint_set_info(error, constraint, node, NULL, "Constraint target has no node");
+			return ufbxi_constraint_fail(error, "Constraint target has no node");
+		}
+		if (target_node->typed_id >= num_nodes || scene->nodes.data[target_node->typed_id] != target_node) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Constraint target is not part of the scene");
+			return ufbxi_constraint_fail(error, "Constraint target is not part of the scene");
+		}
+
+		// Only fully enabled translation and rotation, with scaling disabled, is supported.
+		if (!constraint->constrain_translation[0] || !constraint->constrain_translation[1] || !constraint->constrain_translation[2]
+			|| !constraint->constrain_rotation[0] || !constraint->constrain_rotation[1] || !constraint->constrain_rotation[2]
+			|| constraint->constrain_scale[0] || constraint->constrain_scale[1] || constraint->constrain_scale[2]) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Unsupported constraint axes");
+			return ufbxi_constraint_fail(error, "Unsupported constraint axes");
+		}
+
+		// Target offset: translation and rotation allowed, scale must be unit.
+		ufbx_transform offset = target->transform;
+		if (!ufbxi_constraint_is_finite_vec3(offset.translation) || !ufbxi_constraint_is_finite_quat(offset.rotation)
+			|| !ufbxi_constraint_is_finite_vec3(offset.scale)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Non-finite target offset");
+			return ufbxi_constraint_fail(error, "Non-finite target offset");
+		}
+		if (!ufbxi_constraint_vec3_in_range(offset.translation)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Target offset out of range");
+			return ufbxi_constraint_fail(error, "Target offset out of range");
+		}
+		if (!ufbxi_constraint_quat_in_range(offset.rotation)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Target offset out of range");
+			return ufbxi_constraint_fail(error, "Target offset out of range");
+		}
+		ufbx_real offset_rotation_len = ufbx_quat_dot(offset.rotation, offset.rotation);
+		if (!(offset_rotation_len > (ufbx_real)0.0)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Degenerate target offset rotation");
+			return ufbxi_constraint_fail(error, "Degenerate target offset rotation");
+		}
+		offset.rotation = ufbx_quat_normalize(offset.rotation);
+		if (!ufbxi_constraint_is_unit_vec3(offset.scale)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Target offset scale must be unit");
+			return ufbxi_constraint_fail(error, "Target offset scale must be unit");
+		}
+
+		// Constraint transform offset must be identity.
+		ufbx_transform transform_offset = constraint->transform_offset;
+		if (!ufbxi_constraint_is_finite_vec3(transform_offset.translation) || !ufbxi_constraint_is_finite_quat(transform_offset.rotation)
+			|| !ufbxi_constraint_is_finite_vec3(transform_offset.scale)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Non-finite constraint transform offset");
+			return ufbxi_constraint_fail(error, "Non-finite constraint transform offset");
+		}
+		if (!ufbxi_constraint_is_zero_vec3(transform_offset.translation)
+			|| !ufbxi_constraint_is_identity_quat(transform_offset.rotation)
+			|| !ufbxi_constraint_is_unit_vec3(transform_offset.scale)) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Constraint transform offset must be identity");
+			return ufbxi_constraint_fail(error, "Constraint transform offset must be identity");
+		}
+
+		// At most a single effective constraint per node.
+		uint32_t node_id = node->typed_id;
+		if (node_plan[node_id] != UINT32_MAX) {
+			ufbxi_constraint_set_info(error, constraint, node, target_node, "Multiple constraints on a single node");
+			return ufbxi_constraint_fail(error, "Multiple constraints on a single node");
+		}
+
+		ufbxi_constraint_plan *plan = &plans[num_plans];
+		plan->constraint = constraint;
+		plan->node_id = node_id;
+		plan->target_id = target_node->typed_id;
+		plan->weight = weight;
+		plan->base_node_to_parent = node->node_to_parent;
+		// The offset may translate and rotate, but its scale is required to be
+		// unit, so force it to be exactly identity to keep the target pose rigid.
+		offset.scale = ufbxi_one_vec3;
+		plan->target_offset = ufbx_transform_to_matrix(&offset);
+
+		node_plan[node_id] = (uint32_t)num_plans;
+		num_plans++;
+	}
+
+	// No effective constraints: keep the regular evaluation untouched.
+	if (num_plans == 0) return 1;
+
+	// With effective constraints we require a transform setup where the
+	// constraint math can manipulate world matrices safely.
+	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
+		ufbx_node *node = *p_node;
+		ufbx_transform local = node->local_transform;
+
+		if (!ufbxi_constraint_is_finite_vec3(local.translation) || !ufbxi_constraint_is_finite_quat(local.rotation)
+			|| !ufbxi_constraint_is_finite_vec3(local.scale)) {
+			ufbxi_constraint_set_info(error, NULL, node, NULL, "Non-finite node transform");
+			return ufbxi_constraint_fail(error, "Non-finite node transform");
+		}
+		if (!ufbxi_constraint_is_unit_vec3(local.scale)) {
+			ufbxi_constraint_set_info(error, NULL, node, NULL, "Node local scale must be unit");
+			return ufbxi_constraint_fail(error, "Node local scale must be unit");
+		}
+		if (node->inherit_mode != UFBX_INHERIT_MODE_NORMAL) {
+			ufbxi_constraint_set_info(error, NULL, node, NULL, "Node inherit mode must be normal");
+			return ufbxi_constraint_fail(error, "Node inherit mode must be normal");
+		}
+		if (node->scale_helper || node->geometry_transform_helper || node->is_scale_helper
+			|| node->is_geometry_transform_helper || node->is_scale_compensate_parent || node->inherit_scale_node) {
+			ufbxi_constraint_set_info(error, NULL, node, NULL, "Node uses helper nodes");
+			return ufbxi_constraint_fail(error, "Node uses helper nodes");
+		}
+		if (node->has_adjust_transform || node->has_root_adjust_transform
+			|| node->adjust_mirror_axis != UFBX_MIRROR_AXIS_NONE) {
+			ufbxi_constraint_set_info(error, NULL, node, NULL, "Node uses coordinate adjustment transforms");
+			return ufbxi_constraint_fail(error, "Node uses coordinate adjustment transforms");
+		}
+	}
+
+	// Build a dependency graph combining parent-child relationships and
+	// effective target dependencies, and evaluate nodes in topological order.
+	// There is at most one parent edge and one constraint edge per node.
+	ufbxi_check_err_msg(error, num_nodes <= (SIZE_MAX - 1) / 2, "Too many nodes");
+	size_t max_edges = num_nodes * 2 + 1;
+
+	uint32_t *indegree = ufbxi_push_zero(tmp, uint32_t, num_nodes);
+	uint32_t *dep_head = ufbxi_push(tmp, uint32_t, num_nodes);
+	uint32_t *dep_next = ufbxi_push(tmp, uint32_t, max_edges);
+	uint32_t *dep_node = ufbxi_push(tmp, uint32_t, max_edges);
+	uint32_t *queue = ufbxi_push(tmp, uint32_t, num_nodes);
+	ufbxi_check_err(error, indegree && dep_head && dep_next && dep_node && queue);
+
+	for (size_t i = 0; i < num_nodes; i++) dep_head[i] = UINT32_MAX;
+
+	uint32_t num_edges = 0;
+	for (size_t i = 0; i < num_nodes; i++) {
+		ufbx_node *node = scene->nodes.data[i];
+		if (node->parent) {
+			uint32_t parent_id = node->parent->typed_id;
+			ufbxi_check_err_msg(error, parent_id < num_nodes && scene->nodes.data[parent_id] == node->parent, "Parent node is not part of the scene");
+			indegree[i]++;
+			ufbxi_constraint_add_dep(dep_head, dep_next, dep_node, &num_edges, parent_id, (uint32_t)i);
+		}
+	}
+	for (size_t i = 0; i < num_plans; i++) {
+		indegree[plans[i].node_id]++;
+		ufbxi_constraint_add_dep(dep_head, dep_next, dep_node, &num_edges, plans[i].target_id, plans[i].node_id);
+	}
+	ufbx_assert(num_edges <= max_edges);
+
+	uint32_t queue_begin = 0, queue_end = 0;
+	for (size_t i = 0; i < num_nodes; i++) {
+		if (indegree[i] == 0) queue[queue_end++] = (uint32_t)i;
+	}
+
+	size_t num_processed = 0;
+	while (queue_begin < queue_end) {
+		uint32_t node_id = queue[queue_begin++];
+		ufbx_node *node = scene->nodes.data[node_id];
+		num_processed++;
+
+		uint32_t plan_ix = node_plan[node_id];
+		if (plan_ix != UINT32_MAX) {
+			ufbxi_constraint_plan *plan = &plans[plan_ix];
+			ufbx_node *target = scene->nodes.data[plan->target_id];
+			ufbx_node *parent = node->parent;
+
+			const ufbx_matrix *parent_world = parent ? &parent->node_to_world : &ufbx_identity_matrix;
+
+			// G: parent final world * animated local without the constraint.
+			ufbx_matrix base = ufbx_matrix_mul(parent_world, &plan->base_node_to_parent);
+			// D: target final world * target offset.
+			ufbx_matrix dst = ufbx_matrix_mul(&target->node_to_world, &plan->target_offset);
+
+			ufbx_transform base_t = ufbx_matrix_to_transform(&base);
+			ufbx_transform dst_t = ufbx_matrix_to_transform(&dst);
+
+			ufbx_transform blended;
+			blended.translation.x = base_t.translation.x + (dst_t.translation.x - base_t.translation.x) * plan->weight;
+			blended.translation.y = base_t.translation.y + (dst_t.translation.y - base_t.translation.y) * plan->weight;
+			blended.translation.z = base_t.translation.z + (dst_t.translation.z - base_t.translation.z) * plan->weight;
+			blended.rotation = ufbx_quat_slerp(base_t.rotation, dst_t.rotation, plan->weight);
+			blended.scale = ufbxi_one_vec3;
+
+			ufbx_matrix blended_matrix = ufbx_transform_to_matrix(&blended);
+			ufbx_matrix world_to_parent = ufbx_matrix_invert(parent_world);
+			ufbx_matrix local_matrix = ufbx_matrix_mul(&world_to_parent, &blended_matrix);
+
+			ufbx_transform local = ufbx_matrix_to_transform(&local_matrix);
+			// Local scale is invariant and must remain unit.
+			local.scale = ufbxi_one_vec3;
+			node->local_transform = local;
+			node->node_to_parent = ufbx_transform_to_matrix(&local);
+		}
+
+		// Recompute world matrices so descendants and skinning see the final pose.
+		ufbxi_update_node_world(node);
+
+		for (uint32_t edge = dep_head[node_id]; edge != UINT32_MAX; edge = dep_next[edge]) {
+			uint32_t dependent = dep_node[edge];
+			ufbx_assert(indegree[dependent] > 0);
+			if (--indegree[dependent] == 0) {
+				queue[queue_end++] = dependent;
+			}
+		}
+	}
+
+	if (num_processed != num_nodes) {
+		// Find a constrained node involved in the cycle for a helpful error.
+		ufbx_node *cycle_node = NULL;
+		ufbx_constraint *cycle_constraint = NULL;
+		for (size_t i = 0; i < num_nodes; i++) {
+			if (indegree[i] == 0) continue;
+			if (node_plan[i] != UINT32_MAX) {
+				cycle_node = scene->nodes.data[i];
+				cycle_constraint = plans[node_plan[i]].constraint;
+				break;
+			}
+			if (!cycle_node) cycle_node = scene->nodes.data[i];
+		}
+		ufbx_node *cycle_target = NULL;
+		if (cycle_constraint) {
+			cycle_target = cycle_constraint->targets.count > 0 ? cycle_constraint->targets.data[0].node : NULL;
+		}
+		ufbxi_constraint_set_info(error, cycle_constraint, cycle_node, cycle_target, "Constraint dependency cycle");
+		return ufbxi_constraint_fail(error, "Constraint dependency cycle");
+	}
+
+	return 1;
+}
+
 
 static ufbxi_noinline void ufbxi_update_scene_metadata(ufbx_metadata *metadata)
 {
@@ -26408,7 +26845,19 @@ ufbxi_nodiscard static ufbxi_noinline int ufbxi_evaluate_imp(ufbxi_eval_context 
 	}
 
 	// Update all derived values
-	ufbxi_update_scene(&ec->scene, false, anim.transform_overrides.data, anim.transform_overrides.count);
+	if (ec->opts.evaluate_constraints) {
+		// Constraints are evaluated using the animated properties, so update
+		// them before solving the node transforms.
+		ufbxi_for_ptr_list(ufbx_constraint, p_constraint, ec->scene.constraints) {
+			ufbxi_update_constraint(*p_constraint);
+		}
+
+		ufbxi_update_scene_nodes(&ec->scene, anim.transform_overrides.data, anim.transform_overrides.count);
+		ufbxi_check_err(&ec->error, ufbxi_evaluate_constraints(&ec->scene, &ec->error, &ec->tmp));
+		ufbxi_update_scene_derived(&ec->scene, false);
+	} else {
+		ufbxi_update_scene(&ec->scene, false, anim.transform_overrides.data, anim.transform_overrides.count);
+	}
 
 	// Evaluate skinning if requested
 	if (ec->opts.evaluate_skinning) {

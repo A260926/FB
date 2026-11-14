@@ -23,3 +23,6 @@ __pycache__/
 # FBX backup files
 
 *.bck/
+
+# Task build output
+.task-build/
