@@ -47,7 +47,8 @@ void PrintUsage()
 		<< " -glsl       generate GLSL (default)\n"
 		<< " -hlsl       generate HLSL\n"
 		<< " -legacyhlsl generate legacy HLSL\n"
-		<< " -metal      generate MSL\n";
+		<< " -metal      generate MSL\n"
+		<< " -emulatecbuffer  emit cbuffers as a vec4 uniform array (GLSL)\n";
 }
 
 int main( int argc, char* argv[] )
@@ -60,6 +61,7 @@ int main( int argc, char* argv[] )
 
 	Target target = Target_FragmentShader;
 	Language language = Language_GLSL;
+	bool emulateConstantBuffer = false;
 
 	for( int argn = 1; argn < argc; ++argn )
 	{
@@ -93,6 +95,10 @@ int main( int argc, char* argv[] )
 		else if( String_Equal( arg, "-metal" ) )
 		{
 			language = Language_Metal;
+		}
+		else if( String_Equal( arg, "-emulatecbuffer" ) )
+		{
+			emulateConstantBuffer = true;
 		}
 		else if( fileName == NULL )
 		{
@@ -134,7 +140,12 @@ int main( int argc, char* argv[] )
 	if (language == Language_GLSL)
 	{
 		GLSLGenerator generator;
-		if (!generator.Generate( &tree, GLSLGenerator::Target(target), GLSLGenerator::Version_140, entryName ))
+		GLSLGenerator::Options options;
+		if (emulateConstantBuffer)
+		{
+			options.flags = GLSLGenerator::Flag_EmulateConstantBuffer;
+		}
+		if (!generator.Generate( &tree, GLSLGenerator::Target(target), GLSLGenerator::Version_140, entryName, options ))
 		{
 			Log_Error( "Translation failed, aborting\n" );
 			return 1;

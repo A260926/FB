@@ -65,6 +65,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\CodeWriter.cpp" />
+    <ClCompile Include="src\ConstantBufferLayout.cpp" />
     <ClCompile Include="src\Engine.cpp" />
     <ClCompile Include="src\GLSLGenerator.cpp" />
     <ClCompile Include="src\HLSLGenerator.cpp" />
@@ -76,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CodeWriter.h" />
+    <ClInclude Include="src\ConstantBufferLayout.h" />
     <ClInclude Include="src\Engine.h" />
     <ClInclude Include="src\GLSLGenerator.h" />
     <ClInclude Include="src\HLSLGenerator.h" />

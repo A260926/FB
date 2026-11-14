@@ -102,8 +102,95 @@ static int GetFunctionArguments(HLSLFunctionCall* functionCall, HLSLExpression* 
     return numArguments;
 }
 
+/** True when the expression cannot modify state (used for dynamic cbuffer indices). */
+static bool IsSideEffectFreeIntegerExpression(HLSLExpression* expression)
+{
+    if (expression == NULL)
+    {
+        return false;
+    }
+
+    const HLSLBaseType baseType = ScalarBaseType[expression->expressionType.baseType];
+    if (baseType != HLSLBaseType_Int && baseType != HLSLBaseType_Uint &&
+        baseType != HLSLBaseType_Bool)
+    {
+        return false;
+    }
+
+    switch (expression->nodeType)
+    {
+    case HLSLNodeType_LiteralExpression:
+        return true;
+
+    case HLSLNodeType_IdentifierExpression:
+        return true;
+
+    case HLSLNodeType_ArrayAccess:
+        {
+            HLSLArrayAccess* arrayAccess = static_cast<HLSLArrayAccess*>(expression);
+            return IsSideEffectFreeIntegerExpression(arrayAccess->array) &&
+                   IsSideEffectFreeIntegerExpression(arrayAccess->index);
+        }
+
+    case HLSLNodeType_UnaryExpression:
+        {
+            HLSLUnaryExpression* unary = static_cast<HLSLUnaryExpression*>(expression);
+            if (unary->unaryOp == HLSLUnaryOp_PreIncrement ||
+                unary->unaryOp == HLSLUnaryOp_PreDecrement ||
+                unary->unaryOp == HLSLUnaryOp_PostIncrement ||
+                unary->unaryOp == HLSLUnaryOp_PostDecrement)
+            {
+                return false;
+            }
+            return IsSideEffectFreeIntegerExpression(unary->expression);
+        }
+
+    case HLSLNodeType_BinaryExpression:
+        {
+            HLSLBinaryExpression* binary = static_cast<HLSLBinaryExpression*>(expression);
+            if (IsAssignOp(binary->binaryOp))
+            {
+                return false;
+            }
+            return IsSideEffectFreeIntegerExpression(binary->expression1) &&
+                   IsSideEffectFreeIntegerExpression(binary->expression2);
+        }
+
+    case HLSLNodeType_ConditionalExpression:
+        {
+            HLSLConditionalExpression* conditional = static_cast<HLSLConditionalExpression*>(expression);
+            return IsSideEffectFreeIntegerExpression(conditional->condition) &&
+                   IsSideEffectFreeIntegerExpression(conditional->trueExpression) &&
+                   IsSideEffectFreeIntegerExpression(conditional->falseExpression);
+        }
+
+    case HLSLNodeType_CastingExpression:
+        return IsSideEffectFreeIntegerExpression(
+            static_cast<HLSLCastingExpression*>(expression)->expression);
+
+    case HLSLNodeType_ConstructorExpression:
+        {
+            HLSLExpression* argument = static_cast<HLSLConstructorExpression*>(expression)->argument;
+            while (argument != NULL)
+            {
+                if (!IsSideEffectFreeIntegerExpression(argument))
+                {
+                    return false;
+                }
+                argument = argument->nextExpression;
+            }
+            return true;
+        }
+
+    default:
+        // Function calls and anything else may have side effects or be non-integer.
+        return false;
+    }
+}
+
 GLSLGenerator::GLSLGenerator() :
-    m_writer(/* writeFileNames= */ false)
+    m_writer(/* writeFileNames= */ false),
+    m_bufferLayouts(&m_layoutAllocator)
 {
     m_tree                      = NULL;
     m_entryName                 = NULL;
@@ -113,6 +200,14 @@ GLSLGenerator::GLSLGenerator() :
     m_inAttribPrefix            = NULL;
     m_outAttribPrefix           = NULL;
     m_error                     = false;
+
+    // Drop layouts cached for any previous tree so a reused generator cannot
+    // resolve a new tree against stale pointers.
+    for (int i = 0; i < m_bufferLayouts.GetSize(); ++i)
+    {
+        m_layoutAllocator.Delete(m_bufferLayouts[i].layout);
+    }
+    m_bufferLayouts.Resize(0);
     m_matrixRowFunction[0]      = 0;
     m_matrixCtorFunction[0]     = 0;
     m_matrixMulFunction[0]      = 0;
@@ -129,6 +224,14 @@ GLSLGenerator::GLSLGenerator() :
 	m_bvecTernary[ 0 ]			= 0;
     m_outputPosition            = false;
     m_outputTargets             = 0;
+}
+
+GLSLGenerator::~GLSLGenerator()
+{
+    for (int i = 0; i < m_bufferLayouts.GetSize(); ++i)
+    {
+        m_layoutAllocator.Delete(m_bufferLayouts[i].layout);
+    }
 }
 
 bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, const char* entryName, const Options& options)
@@ -1140,14 +1243,55 @@ void GLSLGenerator::OutputBuffer(int indent, HLSLBuffer* buffer)
     if (buffer->field == NULL)
         return;
 
-    if (m_options.flags & Flag_EmulateConstantBuffer)
+    const bool emulate = (m_options.flags & Flag_EmulateConstantBuffer) != 0;
+    const bool hasPackOffset = ConstantBufferHasPackOffset(buffer);
+
+    if (!emulate && hasPackOffset)
     {
-        unsigned int size = 0;
-        LayoutBuffer(buffer, size);
+        Error("Explicit packoffset on buffer '%s' requires the Flag_EmulateConstantBuffer option",
+              buffer->name);
+        return;
+    }
 
-        unsigned int uniformSize = (size + 3) / 4;
+    if (emulate)
+    {
+        // Validate every field type and array length up front so buffers
+        // without packoffsets get the same clean diagnostics as explicit
+        // ones instead of generating unusable output.
+        bool typeValid = true;
+        for (HLSLDeclaration* checkField = buffer->field; checkField != NULL;
+             checkField = static_cast<HLSLDeclaration*>(checkField->nextStatement))
+        {
+            if (!ValidateConstantBufferFieldType(m_tree, checkField->type, checkField->name,
+                                                  &GLSLGenerator::LayoutErrorCallback, this))
+            {
+                typeValid = false;
+            }
+        }
+        if (!typeValid)
+        {
+            return;
+        }
 
-        m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "uniform vec4 %s%s[%d];", m_options.constantBufferPrefix, buffer->name, uniformSize);
+        if (hasPackOffset)
+        {
+            const ConstantBufferLayout* layout = GetBufferLayout(buffer);
+            if (layout == NULL || !layout->valid)
+                return;
+
+            m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line,
+                "uniform vec4 %s%s[%d];", m_options.constantBufferPrefix, buffer->name,
+                layout->numRegisters);
+        }
+        else
+        {
+            unsigned int size = 0;
+            LayoutBuffer(buffer, size);
+
+            unsigned int uniformSize = (size + 3) / 4;
+
+            m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "uniform vec4 %s%s[%d];", m_options.constantBufferPrefix, buffer->name, uniformSize);
+        }
     }
     else
     {
@@ -1171,6 +1315,140 @@ inline void alignForWrite(unsigned int& offset, unsigned int size)
 
     if (offset / 4 != (offset + size - 1) / 4)
         offset = (offset + 3) & ~3;
+}
+
+void GLSLGenerator::LayoutErrorCallback(void* userData, const char* message)
+{
+    static_cast<GLSLGenerator*>(userData)->Error("%s", message);
+}
+
+const ConstantBufferLayout* GLSLGenerator::GetBufferLayout(HLSLBuffer* buffer)
+{
+    for (int i = 0; i < m_bufferLayouts.GetSize(); ++i)
+    {
+        if (m_bufferLayouts[i].buffer == buffer)
+        {
+            return m_bufferLayouts[i].layout;
+        }
+    }
+
+    ConstantBufferLayout* layout = BuildConstantBufferLayout(
+        &m_layoutAllocator, m_tree, buffer, &GLSLGenerator::LayoutErrorCallback, this);
+
+    BufferLayoutEntry entry;
+    entry.buffer = buffer;
+    entry.layout = layout;
+    m_bufferLayouts.PushBack(entry);
+    return layout;
+}
+
+bool GLSLGenerator::GetExpressionFieldOffset(HLSLExpression* expression,
+                                             const ConstantBufferLayout*& layout,
+                                             unsigned int& offset,
+                                             Array<DynamicIndexTerm>& dynamicTerms)
+{
+    if (expression->nodeType == HLSLNodeType_IdentifierExpression)
+    {
+        HLSLIdentifierExpression* identifierExpression = static_cast<HLSLIdentifierExpression*>(expression);
+        if (!identifierExpression->global)
+        {
+            return false;
+        }
+        HLSLBuffer* buffer = NULL;
+        HLSLDeclaration* declaration = m_tree->FindGlobalDeclaration(identifierExpression->name, &buffer);
+        if (declaration == NULL || buffer == NULL)
+        {
+            return false;
+        }
+        layout = GetBufferLayout(buffer);
+        if (layout == NULL || !layout->valid)
+        {
+            return false;
+        }
+        const ConstantBufferFieldLayout* field = layout->FindField(declaration);
+        if (field == NULL)
+        {
+            return false;
+        }
+        offset = field->offset;
+        return true;
+    }
+
+    if (expression->nodeType == HLSLNodeType_MemberAccess)
+    {
+        HLSLMemberAccess* memberAccess = static_cast<HLSLMemberAccess*>(expression);
+        if (memberAccess->object->expressionType.baseType != HLSLBaseType_UserDefined)
+        {
+            return false;
+        }
+        unsigned int objectOffset = 0;
+        if (!GetExpressionFieldOffset(memberAccess->object, layout, objectOffset, dynamicTerms))
+        {
+            return false;
+        }
+        unsigned int memberOffset = 0;
+        if (!GetStructMemberOffset(m_tree, memberAccess->object->expressionType,
+                                   memberAccess->field, memberOffset))
+        {
+            Error("Unknown member '%s'", memberAccess->field);
+            return false;
+        }
+        offset = objectOffset + memberOffset;
+        return true;
+    }
+
+    if (expression->nodeType == HLSLNodeType_ArrayAccess)
+    {
+        HLSLArrayAccess* arrayAccess = static_cast<HLSLArrayAccess*>(expression);
+        if (!arrayAccess->array->expressionType.array)
+        {
+            return false;
+        }
+        unsigned int arrayOffset = 0;
+        if (!GetExpressionFieldOffset(arrayAccess->array, layout, arrayOffset, dynamicTerms))
+        {
+            return false;
+        }
+
+        HLSLType elementType = arrayAccess->array->expressionType;
+        elementType.array = false;
+        unsigned int stride = 0;
+        if (!GetConstantArrayStride(m_tree, elementType, stride))
+        {
+            Error("Constant buffer layout is not supported for %s", GetTypeName(elementType));
+            return false;
+        }
+
+        int arrayIndex = 0;
+        if (m_tree->GetExpressionValue(arrayAccess->index, arrayIndex))
+        {
+            int arrayLength = 0;
+            if (m_tree->GetExpressionValue(arrayAccess->array->expressionType.arraySize, arrayLength) &&
+                (arrayIndex < 0 || arrayIndex >= arrayLength))
+            {
+                Error("Constant buffer array index %d is outside the valid range [0, %d)",
+                      arrayIndex, arrayLength);
+                return false;
+            }
+            offset = arrayOffset + static_cast<unsigned int>(arrayIndex) * stride;
+            return true;
+        }
+        if (!IsSideEffectFreeIntegerExpression(arrayAccess->index))
+        {
+            Error("Dynamic constant buffer index must be an integer expression without side effects");
+            return false;
+        }
+
+        DynamicIndexTerm term;
+        term.registerStride = stride / 4;
+        term.index          = arrayAccess->index;
+        dynamicTerms.PushBack(term);
+
+        offset = arrayOffset;
+        return true;
+    }
+
+    return false;
 }
 
 void GLSLGenerator::LayoutBuffer(HLSLBuffer* buffer, unsigned int& offset)
@@ -1315,8 +1593,123 @@ HLSLBuffer* GLSLGenerator::GetBufferAccessExpression(HLSLExpression* expression)
     return 0;
 }
 
+void GLSLGenerator::EmitDynamicIndexPrefix(const Array<DynamicIndexTerm>& dynamicTerms)
+{
+    for (int i = 0; i < dynamicTerms.GetSize(); ++i)
+    {
+        m_writer.Write("%d*(", dynamicTerms[i].registerStride);
+        OutputExpression(dynamicTerms[i].index);
+        m_writer.Write(")+");
+    }
+}
+
+void GLSLGenerator::OutputExplicitBufferAccess(HLSLBuffer* buffer,
+                                               const Array<DynamicIndexTerm>& dynamicTerms,
+                                               unsigned int baseOffset, const HLSLType& type,
+                                               unsigned int postOffset)
+{
+    const unsigned int index = baseOffset + postOffset;
+
+    if (type.array)
+    {
+        Error("Constant buffer access is not supported for arrays (use indexing instead)");
+    }
+    else if (type.baseType == HLSLBaseType_Float)
+    {
+        m_writer.Write("%s%s[", m_options.constantBufferPrefix, buffer->name);
+        EmitDynamicIndexPrefix(dynamicTerms);
+        m_writer.Write("%d].%c", index / 4, "xyzw"[index % 4]);
+    }
+    else if (type.baseType == HLSLBaseType_Float2)
+    {
+        m_writer.Write("%s%s[", m_options.constantBufferPrefix, buffer->name);
+        EmitDynamicIndexPrefix(dynamicTerms);
+        m_writer.Write("%d].%s", index / 4,
+                       index % 4 == 0 ? "xy" : index % 4 == 1 ? "yz" : "zw");
+    }
+    else if (type.baseType == HLSLBaseType_Float3)
+    {
+        m_writer.Write("%s%s[", m_options.constantBufferPrefix, buffer->name);
+        EmitDynamicIndexPrefix(dynamicTerms);
+        m_writer.Write("%d].%s", index / 4,
+                       index % 4 == 0 ? "xyz" : "yzw");
+    }
+    else if (type.baseType == HLSLBaseType_Float4)
+    {
+        m_writer.Write("%s%s[", m_options.constantBufferPrefix, buffer->name);
+        EmitDynamicIndexPrefix(dynamicTerms);
+        m_writer.Write("%d]", index / 4);
+    }
+    else if (type.baseType == HLSLBaseType_Float4x4)
+    {
+        m_writer.Write("mat4(");
+        for (int i = 0; i < 4; ++i)
+        {
+            const unsigned int columnIndex = baseOffset + postOffset + i * 4;
+            m_writer.Write("%s%s[", m_options.constantBufferPrefix, buffer->name);
+            EmitDynamicIndexPrefix(dynamicTerms);
+            m_writer.Write("%d]%c", columnIndex / 4, i == 3 ? ')' : ',');
+        }
+    }
+    else if (type.baseType == HLSLBaseType_UserDefined)
+    {
+        HLSLStruct* st = m_tree->FindGlobalStruct(type.typeName);
+        if (st == NULL)
+        {
+            Error("Unknown type %s", type.typeName);
+            return;
+        }
+
+        m_writer.Write("%s(", st->name);
+
+        unsigned int offset = postOffset;
+        for (HLSLStructField* field = st->field; field != NULL; field = field->nextField)
+        {
+            // Each member is aligned before it is read, matching the offsets
+            // returned by the layout query (including internal struct gaps).
+            unsigned int alignment = 0;
+            if (!GetConstantTypeAlignment(m_tree, field->type, alignment))
+            {
+                Error("Constant buffer layout is not supported for %s", GetTypeName(field->type));
+                return;
+            }
+            offset = AlignConstantBufferOffset(offset, alignment);
+
+            OutputExplicitBufferAccess(buffer, dynamicTerms, baseOffset, field->type, offset);
+            if (field->nextField != NULL)
+            {
+                m_writer.Write(",");
+            }
+            if (!AdvanceConstantBufferType(m_tree, field->type, offset))
+            {
+                Error("Constant buffer layout is not supported for %s", GetTypeName(field->type));
+                return;
+            }
+        }
+        m_writer.Write(")");
+    }
+    else
+    {
+        Error("Constant buffer layout is not supported for %s", GetTypeName(type));
+    }
+}
+
 void GLSLGenerator::OutputBufferAccessExpression(HLSLBuffer* buffer, HLSLExpression* expression, const HLSLType& type, unsigned int postOffset)
 {
+    if (ConstantBufferHasPackOffset(buffer))
+    {
+        const ConstantBufferLayout* layout = NULL;
+        unsigned int baseOffset = 0;
+        Array<DynamicIndexTerm> dynamicTerms(&m_layoutAllocator);
+        if (!GetExpressionFieldOffset(expression, layout, baseOffset, dynamicTerms))
+        {
+            Error("Failed to resolve constant buffer access for '%s'", buffer->name);
+            return;
+        }
+        OutputExplicitBufferAccess(buffer, dynamicTerms, baseOffset, type, postOffset);
+        return;
+    }
+
     if (type.array)
     {
         Error("Constant buffer access is not supported for arrays (use indexing instead)");

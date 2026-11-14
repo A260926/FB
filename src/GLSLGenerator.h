@@ -12,6 +12,7 @@
 
 #include "CodeWriter.h"
 #include "HLSLTree.h"
+#include "ConstantBufferLayout.h"
 
 namespace M4
 {
@@ -56,6 +57,7 @@ public:
     };
 
     GLSLGenerator();
+    ~GLSLGenerator();
     
     bool Generate(HLSLTree* tree, Target target, Version versiom, const char* entryName, const Options& options = Options());
     const char* GetResult() const;
@@ -95,11 +97,34 @@ private:
     void LayoutBufferElement(const HLSLType& type, unsigned int& offset);
     void LayoutBufferAlign(const HLSLType& type, unsigned int& offset);
 
+    /** One dynamic array-index term contributing to a register index. */
+    struct DynamicIndexTerm
+    {
+        unsigned int    registerStride;
+        HLSLExpression* index;
+    };
+
+    /** Builds (once) and returns the shared layout for an emulated buffer. */
+    const ConstantBufferLayout* GetBufferLayout(HLSLBuffer* buffer);
+    /** Returns the linear float offset of the root field behind expression.
+     *  Dynamic array indices are collected as register-stride terms so the
+     *  caller can emit the index arithmetic in the right place. */
+    bool GetExpressionFieldOffset(HLSLExpression* expression,
+                                  const ConstantBufferLayout*& layout,
+                                  unsigned int& offset,
+                                  Array<DynamicIndexTerm>& dynamicTerms);
+
     HLSLBuffer* GetBufferAccessExpression(HLSLExpression* expression);
     void OutputBufferAccessExpression(HLSLBuffer* buffer, HLSLExpression* expression, const HLSLType& type, unsigned int postOffset);
+    void EmitDynamicIndexPrefix(const Array<DynamicIndexTerm>& dynamicTerms);
+    void OutputExplicitBufferAccess(HLSLBuffer* buffer, const Array<DynamicIndexTerm>& dynamicTerms,
+                                    unsigned int baseOffset, const HLSLType& type,
+                                    unsigned int postOffset);
     unsigned int OutputBufferAccessIndex(HLSLExpression* expression, unsigned int postOffset);
 
     void OutputBuffer(int indent, HLSLBuffer* buffer);
+
+    static void LayoutErrorCallback(void* userData, const char* message);
 
     HLSLFunction* FindFunction(HLSLRoot* root, const char* name);
     HLSLStruct* FindStruct(HLSLRoot* root, const char* name);
@@ -154,6 +179,14 @@ private:
 	char                m_bvecTernary[ 64 ];
 
     bool                m_error;
+
+    struct BufferLayoutEntry
+    {
+        HLSLBuffer*             buffer;
+        ConstantBufferLayout*   layout;
+    };
+    Allocator                       m_layoutAllocator;
+    Array<BufferLayoutEntry>        m_bufferLayouts;
 
     char                m_reservedWord[s_numReservedWords][64];
 

@@ -70,6 +70,8 @@ private:
     bool ParseStatement(HLSLStatement*& statement, const HLSLType& returnType);
     bool ParseDeclaration(HLSLDeclaration*& declaration);
     bool ParseFieldDeclaration(HLSLStructField*& field);
+    /** Parses an optional ": packoffset(cN[.x/y/z/w])" on a cbuffer field. */
+    bool AcceptPackOffset(HLSLDeclaration& declaration);
     //bool ParseBufferFieldDeclaration(HLSLBufferField*& field);
     bool ParseExpression(HLSLExpression*& expression);
     bool ParseBinaryExpression(int priority, HLSLExpression*& expression);

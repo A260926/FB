@@ -1383,6 +1383,17 @@ bool HLSLParser::ParseTopLevel(HLSLStatement*& statement)
                 m_tokenizer.Error("Expected variable declaration");
                 return false;
             }
+            if (!AcceptPackOffset(*field))
+            {
+                return false;
+            }
+            // A comma separated declaration line shares the one packoffset.
+            for (HLSLDeclaration* extra = field->nextDeclaration; extra != NULL;
+                 extra = extra->nextDeclaration)
+            {
+                extra->hasPackOffset = field->hasPackOffset;
+                extra->packOffset    = field->packOffset;
+            }
             DeclareVariable( field->name, field->type );
             field->buffer = buffer;
             if (buffer->field == NULL)
@@ -1946,6 +1957,101 @@ bool HLSLParser::ParseFieldDeclaration(HLSLStructField*& field)
     }
     return false;
 }*/
+
+bool HLSLParser::AcceptPackOffset(HLSLDeclaration& declaration)
+{
+    if (!Accept(':'))
+    {
+        return true;
+    }
+
+    if (!Expect("packoffset"))
+    {
+        return false;
+    }
+    if (!Expect('('))
+    {
+        return false;
+    }
+
+    const char* registerName = NULL;
+    if (!ExpectIdentifier(registerName))
+    {
+        return false;
+    }
+
+    // The register must be "c" followed by a non-negative decimal number.
+    if (registerName[0] != 'c' || registerName[1] == 0)
+    {
+        m_tokenizer.Error("Invalid packoffset '%s': expected cN with a non-negative register number", registerName);
+        return false;
+    }
+
+    char* end = NULL;
+    long registerIndex = String_ToInteger(registerName + 1, &end);
+    if (end == NULL || *end != 0 || registerIndex < 0)
+    {
+        m_tokenizer.Error("Invalid packoffset '%s': expected cN with a non-negative register number", registerName);
+        return false;
+    }
+
+    long component = 0;
+    bool explicitComponent = false;
+    if (Accept('.'))
+    {
+        const char* componentName = NULL;
+        if (!ExpectIdentifier(componentName))
+        {
+            return false;
+        }
+        if (componentName[1] != 0)
+        {
+            m_tokenizer.Error("Invalid packoffset component '%s': expected x, y, z or w", componentName);
+            return false;
+        }
+        switch (componentName[0])
+        {
+        case 'x': component = 0; break;
+        case 'y': component = 1; break;
+        case 'z': component = 2; break;
+        case 'w': component = 3; break;
+        default:
+            m_tokenizer.Error("Invalid packoffset component '%s': expected x, y, z or w", componentName);
+            return false;
+        }
+        explicitComponent = true;
+    }
+
+    if (!Expect(')'))
+    {
+        return false;
+    }
+
+    // Guard against overflowing the linear float slot arithmetic.
+    const long maxRegister = 0x7fffffffL / 4;
+    if (registerIndex > maxRegister)
+    {
+        m_tokenizer.Error("packoffset register c%ld is out of range", registerIndex);
+        return false;
+    }
+
+    declaration.hasPackOffset = true;
+    declaration.packOffset    = static_cast<int>(registerIndex * 4 + component);
+
+    // Keep the textual form so the HLSL generator can write the packoffset
+    // back out unchanged.
+    if (!explicitComponent)
+    {
+        declaration.registerName = m_tree->AddStringFormat("c%ld", registerIndex);
+    }
+    else
+    {
+        static const char components[] = { 'x', 'y', 'z', 'w' };
+        declaration.registerName = m_tree->AddStringFormat("c%ld.%c", registerIndex,
+                                                           components[component]);
+    }
+    return true;
+}
 
 bool HLSLParser::CheckTypeCast(const HLSLType& srcType, const HLSLType& dstType)
 {

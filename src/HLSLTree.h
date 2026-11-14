@@ -406,6 +406,8 @@ struct HLSLDeclaration : public HLSLStatement
         nextDeclaration = NULL;
         assignment      = NULL;
         buffer          = NULL;
+        hasPackOffset   = false;
+        packOffset      = -1;
     }
     const char*         name;
     HLSLType            type;
@@ -414,6 +416,12 @@ struct HLSLDeclaration : public HLSLStatement
     HLSLDeclaration*    nextDeclaration;    // If multiple variables declared on a line.
     HLSLExpression*     assignment;
     HLSLBuffer*         buffer;
+
+    // Explicit ": packoffset(cN[.x/y/z/w])" on a constant buffer field. packOffset
+    // is stored as the linear float slot (register * 4 + component). Only valid
+    // for top level fields of a cbuffer/tbuffer.
+    bool                hasPackOffset;
+    int                 packOffset;
 };
 
 struct HLSLStruct : public HLSLStatement
