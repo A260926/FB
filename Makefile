@@ -3,6 +3,7 @@
 TARGET1 = rtsp_server
 TARGET2 = rtsp_pusher
 TARGET3 = rtsp_h264_file
+TARGET4 = rtsp_nack_retransmit
 
 OBJS_PATH = objs
 
@@ -34,7 +35,10 @@ OBJS4 = $(patsubst %.cpp,$(OBJS_PATH)/%.o,$(SRC4))
 SRC5  = $(notdir $(wildcard ./example/rtsp_h264_file.cpp))
 OBJS5 = $(patsubst %.cpp,$(OBJS_PATH)/%.o,$(SRC5))
 
-all: BUILD_DIR $(TARGET1) $(TARGET2) $(TARGET3)
+SRC6  = $(notdir $(wildcard ./example/rtsp_nack_retransmit.cpp))
+OBJS6 = $(patsubst %.cpp,$(OBJS_PATH)/%.o,$(SRC6))
+
+all: BUILD_DIR $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4)
 
 BUILD_DIR:
 	@-mkdir -p $(OBJS_PATH)
@@ -44,8 +48,11 @@ $(TARGET1) : $(OBJS1) $(OBJS2) $(OBJS3)
 
 $(TARGET2) : $(OBJS1) $(OBJS2) $(OBJS4)
 	$(CXX) $^ -o $@ $(CFLAGS) $(LD_FLAGS) $(CXX_FLAGS)
-   
+
 $(TARGET3) : $(OBJS1) $(OBJS2) $(OBJS5)
+	$(CXX) $^ -o $@ $(CFLAGS) $(LD_FLAGS) $(CXX_FLAGS)
+
+$(TARGET4) : $(OBJS1) $(OBJS2) $(OBJS6)
 	$(CXX) $^ -o $@ $(CFLAGS) $(LD_FLAGS) $(CXX_FLAGS)
     
 $(OBJS_PATH)/%.o : ./example/%.cpp
@@ -56,4 +63,4 @@ $(OBJS_PATH)/%.o : ./src/xop/%.cpp
 	$(CXX) -c  $< -o  $@  $(CXX_FLAGS) $(INC)
 
 clean:
-	-rm -rf $(OBJS_PATH) $(TARGET1) $(TARGET2) $(TARGET3)
+	-rm -rf $(OBJS_PATH) $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4)

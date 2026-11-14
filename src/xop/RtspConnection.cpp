@@ -109,16 +109,22 @@ bool RtspConnection::HandleRtspRequest(BufferReader& buffer)
 	}
 #endif
 
-	if (rtsp_request_->ParseRequest(&buffer)) {
+	while (buffer.ReadableBytes() > 0) {
+		if (buffer.Peek()[0] == '$') {
+			if (!HandleRtcp(buffer)) {
+				break; // 交错帧未收全, 留在接收缓冲里等后续数据
+			}
+			continue; // 完整的帧已按各自长度消费, 继续解析后续消息
+		}
+
+		if (!rtsp_request_->ParseRequest(&buffer)) {
+			return false;
+		}
+		if (!rtsp_request_->GotAll()) {
+			break; // RTSP 消息未收全
+		}
+
 		RtspRequest::Method method = rtsp_request_->GetMethod();
-		if(method == RtspRequest::RTCP) {
-			HandleRtcp(buffer);
-			return true;
-		}
-		else if(!rtsp_request_->GotAll()) {
-			return true;
-		}
-        
 		switch (method)
 		{
 		case RtspRequest::OPTIONS:
@@ -146,9 +152,6 @@ bool RtspConnection::HandleRtspRequest(BufferReader& buffer)
 		if (rtsp_request_->GotAll()) {
 			rtsp_request_->Reset();
 		}
-	}
-	else {
-		return false;
 	}
 
 	return true;
@@ -203,22 +206,44 @@ void RtspConnection::SendRtspMessage(std::shared_ptr<char> buf, uint32_t size)
 	return;
 }
 
-void RtspConnection::HandleRtcp(BufferReader& buffer)
-{    
-	char *peek = buffer.Peek();
-	if(peek[0] == '$' &&  buffer.ReadableBytes() > 4) {
-		uint32_t pkt_size = peek[2]<<8 | peek[3];
-		if(pkt_size +4 >=  buffer.ReadableBytes()) {
-			buffer.Retrieve(pkt_size +4);  
+bool RtspConnection::HandleRtcp(BufferReader& buffer)
+{
+	while (buffer.ReadableBytes() > 0) {
+		char *peek = buffer.Peek();
+		if (peek[0] != '$') {
+			return true; // 后面是 RTSP 控制消息, 交还给请求解析
 		}
+
+		if (buffer.ReadableBytes() < RTP_TCP_HEAD_SIZE) {
+			return false; // 帧头未收全, 留在接收缓冲里
+		}
+
+		uint32_t pkt_size = ((uint32_t)(uint8_t)peek[2] << 8) | (uint8_t)peek[3];
+		if (buffer.ReadableBytes() < pkt_size + RTP_TCP_HEAD_SIZE) {
+			return false; // 帧体未收全, 留在接收缓冲里
+		}
+
+		// 一个完整的交错帧: 按协商的 RTCP 通道交给对应的媒体通道处理
+		if (rtp_conn_ != nullptr) {
+			rtp_conn_->HandleRtcpFrame((uint8_t)peek[1],
+					(const uint8_t*)peek + RTP_TCP_HEAD_SIZE, pkt_size);
+		}
+		buffer.Retrieve(pkt_size + RTP_TCP_HEAD_SIZE);
 	}
+
+	return true;
 }
- 
+
 void RtspConnection::HandleRtcp(SOCKET sockfd)
 {
-	char buf[1024] = {0};
-	if(recv(sockfd, buf, 1024, 0) > 0) {
+	char buf[2048] = {0};
+	int n = (int)recv(sockfd, buf, sizeof(buf), 0);
+	if(n > 0) {
 		KeepAlive();
+		// UDP 下一个数据报就是一份完整的 RTCP 复合包
+		if (rtp_conn_ != nullptr) {
+			rtp_conn_->HandleRtcpPacket(sockfd, (const uint8_t*)buf, (uint32_t)n);
+		}
 	}
 }
 

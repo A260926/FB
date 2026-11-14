@@ -17,6 +17,18 @@
 * 支持心跳检测(单播)。
 * 支持RTSP推流(TCP)。
 * 支持摘要认证(Digest Authentication)。
+* 支持 RFC 4585 Generic NACK 重传(仅限单播)。
+
+Generic NACK 重传
+-
+* 范围: 仅 RFC 4585 的 RTPFB/FMT=1 (Generic NACK)。不支持 RTX 负载、
+  独立重传 SSRC, 也不做 SDP 协商; 组播与 pusher 行为不变。
+* 服务器为每个连接的每条媒体通道保留最近 512 个已发送的 RTP 原包。
+  客户端的 NACK 需到达该媒体协商的 RTCP 通道(TCP 交错)或 RTCP 端口(UDP),
+  且反馈中的媒体 SSRC 要与该通道一致; 找不到的包直接忽略。
+* 重传的 RTP 字节与首次发送完全一致, 不占用正常序号; TCP 下仍走该媒体
+  的 RTP 交错通道。
+* 示例: example/rtsp_nack_retransmit.cpp (自包含, 不需要外部播放器)。
 
 编译环境
 -

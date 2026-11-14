@@ -90,7 +90,7 @@ private:
 	bool OnRead(BufferReader& buffer);
 	void OnClose();
 	void HandleRtcp(SOCKET sockfd);
-	void HandleRtcp(BufferReader& buffer);   
+	bool HandleRtcp(BufferReader& buffer);
 	bool HandleRtspRequest(BufferReader& buffer);
 	bool HandleRtspResponse(BufferReader& buffer);
 

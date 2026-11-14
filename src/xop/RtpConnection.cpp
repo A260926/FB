@@ -4,21 +4,40 @@
 #include "RtpConnection.h"
 #include "RtspConnection.h"
 #include "net/SocketUtil.h"
+#include <atomic>
+#include <cstring>
 
 using namespace std;
 using namespace xop;
+
+namespace
+{
+/* <0 表示随机起始序号(默认), 否则为受控的起始序号 */
+std::atomic_int g_initial_packet_seq(-1);
+}
+
+void RtpConnection::SetInitialPacketSeq(int seq)
+{
+	if (seq >= 0 && seq <= 0xffff) {
+		g_initial_packet_seq.store(seq);
+	}
+	else {
+		g_initial_packet_seq.store(-1);
+	}
+}
 
 RtpConnection::RtpConnection(std::weak_ptr<TcpConnection> rtsp_connection)
     : rtsp_connection_(rtsp_connection)
 {
 	std::random_device rd;
+	int initial_seq = g_initial_packet_seq.load();
 
 	for(int chn=0; chn<MAX_MEDIA_CHANNEL; chn++) {
 		rtpfd_[chn] = 0;
 		rtcpfd_[chn] = 0;
 		memset(&media_channel_info_[chn], 0, sizeof(media_channel_info_[chn]));
 		media_channel_info_[chn].rtp_header.version = RTP_VERSION;
-		media_channel_info_[chn].packet_seq = rd()&0xffff;
+		media_channel_info_[chn].packet_seq = (initial_seq >= 0) ? (uint16_t)initial_seq : (rd()&0xffff);
 		media_channel_info_[chn].rtp_header.seq = 0; //htons(1);
 		media_channel_info_[chn].rtp_header.ts = htonl(rd());
 		media_channel_info_[chn].rtp_header.ssrc = htonl(rd());
@@ -249,14 +268,18 @@ int RtpConnection::SendRtpPacket(MediaChannelId channel_id, RtpPacket pkt)
 	bool ret = rtsp_conn->task_scheduler_->AddTriggerEvent([this, channel_id, pkt] {
 		this->SetFrameType(pkt.type);
 		this->SetRtpHeader(channel_id, pkt);
-		if((media_channel_info_[channel_id].is_play || media_channel_info_[channel_id].is_record) && has_key_frame_ ) {            
+		if((media_channel_info_[channel_id].is_play || media_channel_info_[channel_id].is_record) && has_key_frame_ ) {
+			if(!is_multicast_) {
+				// 实际交给发送路径的原包, 存一份私有拷贝供 Generic NACK 重传
+				this->SaveRtpPacket(channel_id, pkt.data.get()+RTP_TCP_HEAD_SIZE, pkt.size-RTP_TCP_HEAD_SIZE);
+			}
 			if(transport_mode_ == RTP_OVER_TCP) {
 				SendRtpOverTcp(channel_id, pkt);
 			}
 			else {
 				SendRtpOverUdp(channel_id, pkt);
 			}
-                   
+
 			//media_channel_info_[channel_id].octetCount  += pkt.size;
 			//media_channel_info_[channel_id].packetCount += 1;
 		}
@@ -286,11 +309,119 @@ int RtpConnection::SendRtpOverUdp(MediaChannelId channel_id, RtpPacket pkt)
 {
 	int ret = sendto(rtpfd_[channel_id], (const char*)pkt.data.get()+4, pkt.size-4, 0,
 					(struct sockaddr *)&(peer_rtp_addr_[channel_id]), sizeof(struct sockaddr_in));
-                   
-	if(ret < 0) {        
+
+	if(ret < 0) {
 		Teardown();
 		return -1;
 	}
 
 	return ret;
+}
+
+void RtpConnection::SaveRtpPacket(MediaChannelId channel_id, const uint8_t* data, uint32_t size)
+{
+	if (size < RTP_HEADER_SIZE) {
+		return;
+	}
+
+	SavedRtpPacket saved;
+	saved.seq = (uint16_t)((data[2] << 8) | data[3]);
+	saved.size = size;
+	saved.data.reset(new uint8_t[size], std::default_delete<uint8_t[]>());
+	memcpy(saved.data.get(), data, size);
+
+	std::deque<SavedRtpPacket>& history = saved_rtp_packets_[channel_id];
+	history.push_back(saved);
+	while (history.size() > kMaxSavedRtpPackets) {
+		history.pop_front(); // 按正常发送顺序淘汰最旧的包
+	}
+}
+
+bool RtpConnection::HandleRtcpFrame(uint8_t rtcp_channel, const uint8_t* data, uint32_t size)
+{
+	if (is_closed_ || transport_mode_ != RTP_OVER_TCP) {
+		return false;
+	}
+
+	for (int chn = 0; chn < MAX_MEDIA_CHANNEL; chn++) {
+		if (media_channel_info_[chn].is_setup &&
+			media_channel_info_[chn].rtcp_channel == rtcp_channel) {
+			HandleRtcpFeedback((MediaChannelId)chn, data, size);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool RtpConnection::HandleRtcpPacket(SOCKET rtcp_sockfd, const uint8_t* data, uint32_t size)
+{
+	if (is_closed_ || transport_mode_ != RTP_OVER_UDP) {
+		return false;
+	}
+
+	for (int chn = 0; chn < MAX_MEDIA_CHANNEL; chn++) {
+		if (media_channel_info_[chn].is_setup && rtcpfd_[chn] == rtcp_sockfd) {
+			HandleRtcpFeedback((MediaChannelId)chn, data, size);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void RtpConnection::HandleRtcpFeedback(MediaChannelId channel_id, const uint8_t* data, uint32_t size)
+{
+	std::vector<RtcpNackRequest> nacks;
+	if (!ParseRtcpFeedback(data, size, nacks)) {
+		return; // 非法的复合包不触发任何补包
+	}
+
+	uint32_t media_ssrc = ntohl(media_channel_info_[channel_id].rtp_header.ssrc);
+	for (size_t n = 0; n < nacks.size(); n++) {
+		if (nacks[n].media_ssrc != media_ssrc) {
+			continue; // 媒体 SSRC 对不上
+		}
+
+		for (size_t k = 0; k < nacks[n].seq_list.size(); k++) {
+			RetransmitRtpPacket(channel_id, nacks[n].seq_list[k]);
+		}
+	}
+}
+
+bool RtpConnection::RetransmitRtpPacket(MediaChannelId channel_id, uint16_t seq)
+{
+	std::deque<SavedRtpPacket>& history = saved_rtp_packets_[channel_id];
+	for (size_t n = 0; n < history.size(); n++) {
+		if (history[n].seq != seq) {
+			continue;
+		}
+
+		// 原样补发第一次发送的 RTP 字节: 不推进正常序号, 也不再进入历史
+		if (transport_mode_ == RTP_OVER_TCP) {
+			auto conn = rtsp_connection_.lock();
+			if (!conn) {
+				return false;
+			}
+
+			uint32_t frame_size = history[n].size + RTP_TCP_HEAD_SIZE;
+			std::shared_ptr<char> frame(new char[frame_size], std::default_delete<char[]>());
+			frame.get()[0] = '$';
+			frame.get()[1] = (char)media_channel_info_[channel_id].rtp_channel;
+			frame.get()[2] = (char)((history[n].size & 0xFF00) >> 8);
+			frame.get()[3] = (char)(history[n].size & 0xFF);
+			memcpy(frame.get() + RTP_TCP_HEAD_SIZE, history[n].data.get(), history[n].size);
+			conn->Send(frame, frame_size);
+			return true;
+		}
+		else if (transport_mode_ == RTP_OVER_UDP) {
+			int ret = sendto(rtpfd_[channel_id], (const char*)history[n].data.get(), history[n].size, 0,
+						(struct sockaddr *)&(peer_rtp_addr_[channel_id]), sizeof(struct sockaddr_in));
+			return ret >= 0;
+		}
+
+		return false;
+	}
+
+	return false; // 找不到的包直接忽略
 }
