@@ -15,7 +15,7 @@ for src in extras/ma_crossfade/*.c; do
 done
 if [[ $mode == target ]]; then
   cc "${flags[@]}" task_support/driver.c tests/crossfade/contract.c "${objects[@]}" -lm -lpthread -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/ma-crossfade-log.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

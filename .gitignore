@@ -1,6 +1,7 @@
 \#docs/
 /_private/
 /build/
+/.task-build/
 /data/debugging/
 /data/private/
 /tickets/
