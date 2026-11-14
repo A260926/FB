@@ -7,7 +7,7 @@ This is a Golang library to manipulate subtitles.
 
 It allows you to manipulate `srt`, `stl`, `ttml`, `ssa/ass`, `webvtt` and `teletext` files for now.
 
-Available operations are `parsing`, `writing`, `applying linear correction`, `syncing`, `fragmenting`, `unfragmenting`, `merging` and `optimizing`.
+Available operations are `parsing`, `writing`, `applying linear correction`, `syncing`, `fragmenting`, `unfragmenting`, `merging`, `optimizing` and `assembling from clips`.
 
 # Installation
 
@@ -45,6 +45,15 @@ s1.Unfragment()
 
 // Apply linear correction
 s1.ApplyLinearCorrection(1*time.Second, 2*time.Second, 5*time.Second, 7*time.Second)
+
+// Assemble a subtitle track from clips of source subtitles. Clips are laid
+// end to end in the order given; In and Out are half-open ranges in the
+// source's own timeline and Duration is the length of the segment in the
+// assembled track (so it can slow a segment down or speed it up).
+assembled, _ := astisub.Assemble([]astisub.EditClip{
+    {Source: s1, In: 3 * time.Second, Out: 6 * time.Second, Duration: 6 * time.Second},
+    {Source: s2, In: 0, Out: 2 * time.Second, Duration: time.Second},
+})
 
 // Write subtitles
 s1.Write("/path/to/example.srt")
@@ -84,6 +93,22 @@ If **astisub** has been installed properly you can:
 
         astisub sync -i example.srt -s "-2s" -o example.out.srt
 
+- assemble a subtitle track from a clip manifest. The manifest is a JSON array
+  whose entries have `source`, `in`, `out` and `duration` string fields using
+  Go duration syntax; `source` is resolved relative to the manifest's
+  directory. The manifest is fully assembled before the output is opened, so a
+  bad manifest never truncates an existing output file. The output format is
+  chosen from its extension, as with the other subcommands:
+
+        astisub assemble -i clips.json -o example.out.vtt
+
+  with `clips.json` containing for instance:
+
+        [
+          {"source": "example.srt", "in": "3s", "out": "6s", "duration": "6s"},
+          {"source": "example2.ttml", "in": "0s", "out": "2s", "duration": "1s"}
+        ]
+
 # Features and roadmap
 
 - [x] parsing
@@ -94,6 +119,7 @@ If **astisub** has been installed properly you can:
 - [x] ordering
 - [x] optimizing
 - [x] linear correction
+- [x] assembling from clips
 - [x] .srt
 - [x] .ttml
 - [x] .vtt

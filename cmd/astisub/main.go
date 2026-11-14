@@ -1,12 +1,24 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"log"
+	"path/filepath"
+	"time"
 
 	"github.com/asticode/go-astikit"
 	"github.com/asticode/go-astisub"
 )
+
+// assembleManifestEntry represents one entry of an assemble manifest
+type assembleManifestEntry struct {
+	Source   string `json:"source"`
+	In       string `json:"in"`
+	Out      string `json:"out"`
+	Duration string `json:"duration"`
+}
 
 // Flags
 var (
@@ -26,6 +38,13 @@ func main() {
 	cmd := astikit.FlagCmd()
 	flag.Var(&inputPath, "i", "the input paths")
 	flag.Parse()
+
+	// Assemble reads its clips from a manifest instead of opening the first
+	// input path, and must fully succeed before the output is opened.
+	if cmd == "assemble" {
+		assemble()
+		return
+	}
 
 	// Validate input path
 	if len(*inputPath.Slice) == 0 {
@@ -136,5 +155,87 @@ func main() {
 		}
 	default:
 		log.Fatalf("Invalid subcommand %s", cmd)
+	}
+}
+
+// assemble loads an assemble manifest and writes the assembled subtitle track.
+// The whole manifest is read and assembled before the output is opened, so a
+// bad manifest never truncates an existing output file.
+func assemble() {
+	// Validate the paths
+	if len(*inputPath.Slice) == 0 {
+		log.Fatal("Use -i to provide an assemble manifest path")
+	}
+	if len(*outputPath) <= 0 {
+		log.Fatal("Use -o to provide an output path")
+	}
+	manifestPath := (*inputPath.Slice)[0]
+	manifestDir := filepath.Dir(manifestPath)
+
+	// Read the manifest
+	data, err := ioutil.ReadFile(manifestPath)
+	if err != nil {
+		log.Fatalf("%s while reading %s", err, manifestPath)
+	}
+	var entries []assembleManifestEntry
+	if err = json.Unmarshal(data, &entries); err != nil {
+		log.Fatalf("%s while parsing %s", err, manifestPath)
+	}
+
+	// Load each distinct source once. Identity is the normalized absolute path
+	// so that repeated references to the same file share one *Subtitles.
+	sources := make(map[string]*astisub.Subtitles)
+	clips := make([]astisub.EditClip, 0, len(entries))
+	for _, entry := range entries {
+		sourcePath := entry.Source
+		if !filepath.IsAbs(sourcePath) {
+			sourcePath = filepath.Join(manifestDir, sourcePath)
+		}
+		absolutePath, err := filepath.Abs(sourcePath)
+		if err != nil {
+			log.Fatalf("%s while resolving %s", err, entry.Source)
+		}
+
+		var sub *astisub.Subtitles
+		if existing, ok := sources[absolutePath]; ok {
+			sub = existing
+		} else {
+			if sub, err = astisub.Open(astisub.Options{Filename: absolutePath, Teletext: astisub.TeletextOptions{Page: *teletextPage}}); err != nil {
+				log.Fatalf("%s while opening %s", err, absolutePath)
+			}
+			sources[absolutePath] = sub
+		}
+
+		in, err := time.ParseDuration(entry.In)
+		if err != nil {
+			log.Fatalf("%s while parsing in %q", err, entry.In)
+		}
+		out, err := time.ParseDuration(entry.Out)
+		if err != nil {
+			log.Fatalf("%s while parsing out %q", err, entry.Out)
+		}
+		duration, err := time.ParseDuration(entry.Duration)
+		if err != nil {
+			log.Fatalf("%s while parsing duration %q", err, entry.Duration)
+		}
+
+		clips = append(clips, astisub.EditClip{
+			Source:   sub,
+			In:       in,
+			Out:      out,
+			Duration: duration,
+		})
+	}
+
+	// The whole manifest must be read and assembled before the output is
+	// opened: a bad manifest must never truncate an existing file.
+	assembled, err := astisub.Assemble(clips)
+	if err != nil {
+		log.Fatalf("%s while assembling clips", err)
+	}
+
+	// Write
+	if err = assembled.Write(*outputPath); err != nil {
+		log.Fatalf("%s while writing to %s", err, *outputPath)
 	}
 }
