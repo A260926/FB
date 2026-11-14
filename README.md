@@ -13,6 +13,7 @@ var Headers map[string]string // Set headers as a map of key-value pairs, an alt
 var Cookies map[string]string // Set cookies as a map of key-value  pairs, an alternative to calling Cookie() individually
 func Get(string) (string,error){} // Takes the url as an argument, returns HTML string
 func GetWithClient(string, *http.Client){} // Takes the url and a custom HTTP client as arguments, returns HTML string
+func CollectFramesWithClient(context.Context, string, *http.Client) (*FramePage, error) {} // Fetches the page and its iframes as a tree of documents
 func Header(string, string){} // Takes key,value pair to set as headers for the HTTP request made in Get()
 func Cookie(string, string){} // Takes key, value pair to set as cookies to be sent with the HTTP request in Get()
 func HTMLParse(string) Root {} // Takes the HTML string as an argument, returns a pointer to the DOM constructed
@@ -78,6 +79,43 @@ func main() {
 	}
 }
 ```
+
+## Nested pages and iframes
+`Get` and `HTMLParse` only return the outer document. When the content you
+want lives in iframes, use `CollectFramesWithClient`: it fetches the page and
+every iframe it embeds (including `srcdoc` frames) and returns them as a tree.
+Each `FramePage` has its own `Document`, `BaseURL` and child `Frames`, so the
+usual `Find`, `Attrs`, `Text` and `HTML` helpers keep working at every level.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/anaskhan96/soup"
+)
+
+func main() {
+	page, err := soup.CollectFramesWithClient(context.Background(), "https://vendor.example/catalog", nil)
+	if err != nil {
+		os.Exit(1)
+	}
+	for i, frame := range page.Frames {
+		fmt.Println(i, frame.URL, frame.BaseURL)
+		if title := frame.Document.Find("h1"); title.Error == nil {
+			fmt.Println(title.Text())
+		}
+	}
+}
+```
+
+Relative iframe sources are resolved against the parent's base address, which
+comes from the final response URL and the first usable `base[href]` of the
+document. Frames pointing back to one of their ancestors are kept in place
+with `Cycle` set, instead of being fetched again.
 
 ## Contributions
 This package was developed in my free time. However, contributions from everybody in the community are welcome, to make it a better web scraper. If you think there should be a particular feature or function included in the package, feel free to open up a new issue or pull request.

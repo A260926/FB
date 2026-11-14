@@ -6,6 +6,7 @@ package soup
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -47,14 +48,26 @@ const (
 type Error struct {
 	Type ErrorType
 	msg  string
+	// cause preserves the underlying error so callers can inspect it with
+	// errors.Is while the Error text and Type stay as they always were.
+	cause error
 }
 
 func (se Error) Error() string {
 	return se.msg
 }
 
+// Unwrap returns the underlying error, if any.
+func (se Error) Unwrap() error {
+	return se.cause
+}
+
 func newError(t ErrorType, msg string) Error {
 	return Error{Type: t, msg: msg}
+}
+
+func newErrorCause(t ErrorType, msg string, cause error) Error {
+	return Error{Type: t, msg: msg, cause: cause}
 }
 
 // Root is a structure containing a pointer to an html node, the node value, and an error variable to return an error if one occurred
@@ -94,14 +107,12 @@ func Cookie(n string, v string) {
 	Cookies[n] = v
 }
 
-// GetWithClient returns the HTML returned by the url using a provided HTTP client
-func GetWithClient(url string, client *http.Client) (string, error) {
-	req, err := http.NewRequest("GET", url, nil)
+// newGetRequest builds a GET request for url, applying the package Headers and
+// Cookies.
+func newGetRequest(ctx context.Context, url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		if debug {
-			panic("Couldn't perform GET request to " + url)
-		}
-		return "", newError(ErrCreatingGetRequest, "error creating get request to "+url)
+		return nil, err
 	}
 	// Set headers
 	for hName, hValue := range Headers {
@@ -114,23 +125,49 @@ func GetWithClient(url string, client *http.Client) (string, error) {
 			Value: cValue,
 		})
 	}
+	return req, nil
+}
+
+// getBody performs a GET request to url with client and returns the response
+// along with its complete body. The body is always closed; callers own the
+// returned response but must not read its Body again.
+func getBody(ctx context.Context, url string, client *http.Client) (*http.Response, []byte, error) {
+	req, err := newGetRequest(ctx, url)
+	if err != nil {
+		if debug {
+			panic("Couldn't perform GET request to " + url)
+		}
+		return nil, nil, newErrorCause(ErrCreatingGetRequest, "error creating get request to "+url, err)
+	}
 	// Perform request
 	resp, err := client.Do(req)
 	if err != nil {
 		if debug {
 			panic("Couldn't perform GET request to " + url)
 		}
-		return "", newError(ErrInGetRequest, "couldn't perform GET request to "+url)
+		return nil, nil, newErrorCause(ErrInGetRequest, "couldn't perform GET request to "+url, err)
 	}
 	defer resp.Body.Close()
-	bytes, err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		if debug {
 			panic("Unable to read the response body")
 		}
-		return "", newError(ErrReadingResponse, "unable to read the response body")
+		return nil, nil, newErrorCause(ErrReadingResponse, "unable to read the response body", err)
 	}
-	return string(bytes), nil
+	return resp, body, nil
+}
+
+// GetWithClient returns the HTML returned by the url using a provided HTTP client
+func GetWithClient(url string, client *http.Client) (string, error) {
+	if client == nil {
+		client = defaultClient
+	}
+	_, body, err := getBody(context.Background(), url, client)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
 
 // Get returns the HTML returned by the url in string using the default HTTP client
