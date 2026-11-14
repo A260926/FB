@@ -8,6 +8,7 @@ package jitterbuffer
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pion/rtp"
 )
@@ -23,6 +24,12 @@ var (
 	ErrBufferUnderrun = errors.New("invalid Peek: Empty jitter buffer")
 	// ErrPopWhileBuffering is returned if a jitter buffer is not in a playback state.
 	ErrPopWhileBuffering = errors.New("attempt to pop while buffering")
+	// ErrPlayoutNotReady is returned by a timed jitter buffer when the packet at
+	// the playout head has been received but its playout time has not arrived.
+	ErrPlayoutNotReady = errors.New("playout not ready")
+	// ErrInvalidPlayoutConfig is returned by NewTimed when its configuration is
+	// invalid (a zero clock rate, a negative delay, or a nil clock).
+	ErrInvalidPlayoutConfig = errors.New("invalid timed playout configuration")
 )
 
 const (
@@ -76,6 +83,16 @@ type JitterBuffer struct {
 	stats         Stats
 	listeners     map[Event][]EventListener
 	mutex         sync.Mutex
+
+	// Timed playout state. When timed is true the buffer schedules delivery
+	// against the RTP media clock instead of waiting for minStartCount packets.
+	timed      bool
+	clockRate  uint32
+	delay      time.Duration
+	now        func() time.Time
+	anchored   bool
+	anchorTime time.Time
+	anchorTS   uint32
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -107,6 +124,49 @@ func New(opts ...Option) *JitterBuffer {
 	}
 
 	return jb
+}
+
+// NewTimed initializes a jitter buffer that schedules Pop against the RTP
+// media clock. The first accepted packet establishes an anchor from its
+// arrival time (as reported by now), RTP timestamp and sequence number, and
+// every packet becomes due at
+//
+//	arrival + delay + (packet.Timestamp - anchorTimestamp) * 1s / clockRate
+//
+// Timed mode never waits for a packet count, starts no goroutines and creates
+// no timers: the caller drives playout by calling Pop while now advances
+// monotonically. It returns ErrInvalidPlayoutConfig if clockRate is zero,
+// delay is negative, or now is nil.
+func NewTimed(clockRate uint32, delay time.Duration, now func() time.Time) (*JitterBuffer, error) {
+	if clockRate == 0 || delay < 0 || now == nil {
+		return nil, ErrInvalidPlayoutConfig
+	}
+
+	jb := New()
+	jb.timed = true
+	jb.clockRate = clockRate
+	jb.delay = delay
+	jb.now = now
+
+	return jb, nil
+}
+
+// playoutDue computes the wall-clock playout time of a packet from its RTP
+// timestamp, using integer math only. The caller must hold the mutex and the
+// buffer must be anchored.
+func (jb *JitterBuffer) playoutDue(timestamp uint32) time.Time {
+	//nolint:gosec // G115 the signed cast interprets the 32-bit timestamp wrap.
+	delta := int64(int32(timestamp - jb.anchorTS))
+
+	return jb.anchorTime.Add(jb.delay).Add(time.Duration(delta * 1e9 / int64(jb.clockRate)))
+}
+
+// seqForwardDelta is the signed modular distance of a sequence number from the
+// playout head: negative values are already behind the head. Both counters are
+// 16-bit, so the narrowing conversion is intentional and safe.
+func seqForwardDelta(seq, playoutHead uint16) int16 {
+	//nolint:gosec // G115 modular sequence comparison relies on the wrap.
+	return int16(seq - playoutHead)
 }
 
 // WithMinimumPacketCount will set the required number of packets to be received before
@@ -153,9 +213,19 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 // Push an RTP packet into the jitter buffer, this does not clone
 // the data so if the memory is expected to be reused, the caller should
 // take this in to account and pass a copy of the packet they wish to buffer.
+//
+// In timed mode the first accepted packet anchors the media clock. Packets
+// that duplicate an already accepted sequence number or arrive behind the
+// playout head are dropped, and dropped packets never rebuild the anchor.
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
+
+	if jb.timed {
+		jb.pushTimed(packet)
+
+		return
+	}
 
 	if jb.packets.Length() == 0 {
 		jb.emit(StartBuffering)
@@ -173,6 +243,58 @@ func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	jb.updateStats(packet.SequenceNumber)
 	jb.packets.Push(packet, packet.SequenceNumber)
 	jb.updateState()
+}
+
+func (jb *JitterBuffer) pushTimed(packet *rtp.Packet) bool {
+	if !jb.anchored {
+		// The first accepted packet establishes the anchor and playout head.
+		jb.anchored = true
+		jb.anchorTime = jb.now()
+		jb.anchorTS = packet.Timestamp
+		jb.playoutHead = packet.SequenceNumber
+		jb.state = Emitting
+		jb.playoutReady = true
+		jb.emit(StartBuffering)
+		jb.emit(BeginPlayback)
+		jb.updateStats(packet.SequenceNumber)
+		jb.packets.Push(packet, packet.SequenceNumber)
+
+		return true
+	}
+	// Duplicates keep the content of the first accepted packet.
+	if _, err := jb.packets.Find(packet.SequenceNumber); err == nil {
+		return false
+	}
+
+	// Late packets whose sequence is already behind the playout head are
+	// discarded and must not rebuild the anchor.
+	if seqForwardDelta(packet.SequenceNumber, jb.playoutHead) < 0 {
+		return false
+	}
+
+	if jb.packets.Length() > jb.overflowLen {
+		jb.stats.overflowCount++
+		jb.emit(BufferOverflow)
+	}
+
+	jb.updateStats(packet.SequenceNumber)
+	jb.packets.Push(packet, packet.SequenceNumber)
+
+	return true
+}
+
+// pushTimedAccepted pushes a packet in timed mode and reports whether it was
+// accepted. A duplicated or late packet is rejected and returns false without
+// rebuilding the anchor.
+func (jb *JitterBuffer) pushTimedAccepted(packet *rtp.Packet) bool {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+
+	if !jb.timed {
+		return false
+	}
+
+	return jb.pushTimed(packet)
 }
 
 func (jb *JitterBuffer) emit(event Event) {
@@ -211,9 +333,21 @@ func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
 }
 
 // Pop an RTP packet from the jitter buffer at the current playout head.
+//
+// In timed mode the received packet closest to the playout head in sequence
+// order is selected. If its media-clock playout time has not been reached yet
+// Pop returns ErrPlayoutNotReady without moving the playout head; otherwise
+// the packet is delivered and the head advances past it, skipping any missing
+// sequences in between. An empty queue still returns ErrBufferUnderrun and
+// never re-anchors the clock.
 func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
+
+	if jb.timed {
+		return jb.popTimed()
+	}
+
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -226,6 +360,44 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	}
 	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
+
+	return packet, nil
+}
+
+func (jb *JitterBuffer) popTimed() (*rtp.Packet, error) {
+	if jb.packets.Length() == 0 {
+		jb.stats.underflowCount++
+		jb.emit(BufferUnderflow)
+
+		return nil, ErrBufferUnderrun
+	}
+
+	// Pick the received packet with the smallest forward distance from the
+	// playout head, comparing sequence numbers modulo 2^16.
+	head := jb.packets.next
+	closest := head
+	closestDist := seqForwardDelta(head.priority, jb.playoutHead)
+	for pos := head.next; pos != nil; pos = pos.next {
+		dist := seqForwardDelta(pos.priority, jb.playoutHead)
+		if dist < closestDist {
+			closest = pos
+			closestDist = dist
+		}
+	}
+
+	if jb.now().Before(jb.playoutDue(closest.val.Timestamp)) {
+		return nil, ErrPlayoutNotReady
+	}
+
+	packet, err := jb.packets.PopAt(closest.priority)
+	if err != nil {
+		jb.stats.underflowCount++
+		jb.emit(BufferUnderflow)
+
+		return nil, err
+	}
+	// Advance past the delivered packet; any missing sequences are skipped.
+	jb.playoutHead = closest.priority + 1
 
 	return packet, nil
 }
@@ -284,10 +456,29 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 }
 
 // Clear will empty the buffer and optionally reset the state.
+//
+// In timed mode Clear(false) only drops cached packets while keeping the
+// playout head and clock anchor, whereas Clear(true) also removes the anchor
+// so the next accepted packet re-anchors the schedule. The construction
+// parameters (clock rate, delay, clock) are retained either way.
 func (jb *JitterBuffer) Clear(resetState bool) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
 	jb.packets.Clear()
+
+	if jb.timed {
+		if resetState {
+			jb.anchored = false
+			jb.anchorTime = time.Time{}
+			jb.anchorTS = 0
+			jb.playoutHead = 0
+			jb.playoutReady = false
+			jb.state = Buffering
+			jb.stats = Stats{0, 0, 0}
+		}
+
+		return
+	}
 
 	if resetState {
 		jb.lastSequence = 0

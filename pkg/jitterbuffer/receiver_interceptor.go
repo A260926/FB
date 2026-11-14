@@ -4,7 +4,9 @@
 package jitterbuffer
 
 import (
+	"io"
 	"sync"
+	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
@@ -19,8 +21,9 @@ type InterceptorFactory struct {
 // NewInterceptor constructs a new ReceiverInterceptor.
 func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	receiverInterceptor := &ReceiverInterceptor{
-		close:  make(chan struct{}),
-		buffer: New(),
+		close:   make(chan struct{}),
+		buffer:  New(),
+		streams: make(map[uint32]*timedReadState),
 	}
 
 	for _, opt := range g.opts {
@@ -64,6 +67,23 @@ type ReceiverInterceptor struct {
 	close         chan struct{}
 	log           logging.LeveledLogger
 	loggerFactory logging.LoggerFactory
+
+	// Timed playout configuration. When timed is true each bound SSRC gets
+	// its own clock-scheduled JitterBuffer built from its StreamInfo.ClockRate.
+	timed      bool
+	timedDelay time.Duration
+	timedNow   func() time.Time
+	streams    map[uint32]*timedReadState
+}
+
+// timedReadState holds the per-SSRC timed jitter buffer and the attributes
+// captured for each accepted packet.
+type timedReadState struct {
+	mu      sync.Mutex
+	jb      *JitterBuffer
+	attrs   map[uint16]interceptor.Attributes
+	invalid bool
+	closed  bool
 }
 
 // NewInterceptor returns a new InterceptorFactory.
@@ -74,8 +94,93 @@ func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, err
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (i *ReceiverInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
+	info *interceptor.StreamInfo, reader interceptor.RTPReader,
 ) interceptor.RTPReader {
+	if !i.timed {
+		return i.bindPacketStream(reader)
+	}
+
+	state := &timedReadState{attrs: make(map[uint16]interceptor.Attributes)}
+	if info.ClockRate == 0 {
+		// A zero clock rate cannot drive a media clock: keep the reader shape
+		// but fail every Read without touching the upstream.
+		state.invalid = true
+	} else {
+		jb, err := NewTimed(info.ClockRate, i.timedDelay, i.timedNow)
+		if err != nil {
+			state.invalid = true
+		} else {
+			state.jb = jb
+		}
+	}
+
+	i.m.Lock()
+	i.streams[info.SSRC] = state
+	i.m.Unlock()
+
+	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+		return state.read(reader, b, a)
+	})
+}
+
+// read drives one SSRC's clock-scheduled buffer: it first delivers any packet
+// already due, otherwise reads upstream at most once, enqueues the parsed
+// packet and tries delivery a second time.
+func (s *timedReadState) read(reader interceptor.RTPReader, b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return 0, nil, io.ErrClosedPipe
+	}
+	if s.invalid {
+		return 0, nil, ErrInvalidPlayoutConfig
+	}
+
+	// Deliver anything already due before reading more from upstream.
+	if packet, err := s.jb.Pop(); err == nil {
+		return deliverPacket(packet, b, s)
+	}
+
+	// At most one upstream read per call, parsing only the first n bytes.
+	buf := make([]byte, len(b))
+	n, attr, err := reader.Read(buf, a)
+	if err != nil {
+		return n, attr, err
+	}
+	packet := &rtp.Packet{}
+	if err := packet.Unmarshal(buf[:n]); err != nil {
+		return 0, nil, err
+	}
+
+	// Keep the attributes from the moment the packet was first accepted;
+	// duplicates and late packets neither replace content nor attributes.
+	if s.jb.pushTimedAccepted(packet) {
+		s.attrs[packet.SequenceNumber] = cloneAttributes(attr)
+	}
+
+	// Try once more after enqueueing.
+	packet, err = s.jb.Pop()
+	if err != nil {
+		return 0, nil, ErrPlayoutNotReady
+	}
+
+	return deliverPacket(packet, b, s)
+}
+
+// deliverPacket serializes a due packet into b and returns the attributes
+// captured when that packet was accepted.
+func deliverPacket(
+	packet *rtp.Packet, b []byte, state *timedReadState,
+) (int, interceptor.Attributes, error) {
+	attr := state.attrs[packet.SequenceNumber]
+	delete(state.attrs, packet.SequenceNumber)
+	n, err := packet.MarshalTo(b)
+
+	return n, attr, err
+}
+
+func (i *ReceiverInterceptor) bindPacketStream(reader interceptor.RTPReader) interceptor.RTPReader {
 	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		buf := make([]byte, len(b))
 		n, attr, err := reader.Read(buf, a)
@@ -104,19 +209,74 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
+func (i *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	defer i.wg.Wait()
+
+	if !i.timed {
+		i.m.Lock()
+		defer i.m.Unlock()
+		i.buffer.Clear(true)
+
+		return
+	}
+
 	i.m.Lock()
-	defer i.m.Unlock()
-	i.buffer.Clear(true)
+	state := i.streams[info.SSRC]
+	delete(i.streams, info.SSRC)
+	i.m.Unlock()
+
+	if state != nil {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.closed = true
+		if state.jb != nil {
+			state.jb.Clear(true)
+		}
+		state.attrs = make(map[uint16]interceptor.Attributes)
+	}
 }
 
 // Close closes the interceptor.
 func (i *ReceiverInterceptor) Close() error {
 	defer i.wg.Wait()
+
+	if !i.timed {
+		i.m.Lock()
+		defer i.m.Unlock()
+		i.buffer.Clear(true)
+
+		return nil
+	}
+
 	i.m.Lock()
-	defer i.m.Unlock()
-	i.buffer.Clear(true)
+	streams := i.streams
+	i.streams = make(map[uint32]*timedReadState)
+	i.m.Unlock()
+
+	for _, state := range streams {
+		state.mu.Lock()
+		state.closed = true
+		if state.jb != nil {
+			state.jb.Clear(true)
+		}
+		state.attrs = make(map[uint16]interceptor.Attributes)
+		state.mu.Unlock()
+	}
 
 	return nil
+}
+
+// cloneAttributes returns a shallow copy of the given attributes so attributes
+// handed back with a delivered packet cannot be overwritten by later packets
+// that reuse the same map.
+func cloneAttributes(a interceptor.Attributes) interceptor.Attributes {
+	if a == nil {
+		return nil
+	}
+	cloned := make(interceptor.Attributes, len(a))
+	for key, value := range a {
+		cloned[key] = value
+	}
+
+	return cloned
 }
