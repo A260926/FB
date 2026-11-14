@@ -6,9 +6,10 @@ const PolygonTreeNode = require('./PolygonTreeNode')
 // This separate class for the root of the tree in order to hold the PolygonTreeNode root.
 // The actual tree is kept in this.rootnode
 class Tree {
-  constructor (polygons) {
+  constructor (polygons, options) {
     this.polygonTree = new PolygonTreeNode()
     this.rootnode = new Node(null)
+    this.options = options
     if (polygons) this.addPolygons(polygons)
   }
 
@@ -20,7 +21,7 @@ class Tree {
   // Remove all polygons in this BSP tree that are inside the other BSP tree
   // `tree`.
   clipTo (tree, alsoRemovecoplanarFront = false) {
-    this.rootnode.clipTo(tree, alsoRemovecoplanarFront)
+    this.rootnode.clipTo(tree, alsoRemovecoplanarFront, this.options)
   }
 
   allPolygons () {
@@ -34,7 +35,7 @@ class Tree {
     for (let i = 0; i < polygons.length; i++) {
       polygontreenodes[i] = this.polygonTree.addChild(polygons[i])
     }
-    this.rootnode.addPolygonTreeNodes(polygontreenodes)
+    this.rootnode.addPolygonTreeNodes(polygontreenodes, this.options)
   }
 
   clear () {

@@ -6,6 +6,7 @@ const measureEpsilon = require('../../measurements/measureEpsilon')
 
 const fromFakePolygons = require('./fromFakePolygons')
 const to3DWalls = require('./to3DWalls')
+const { legacyOptions } = require('./booleanOptions')
 const subtractGeom3 = require('./subtractGeom3')
 
 /*
@@ -18,7 +19,7 @@ const subtract = (...geometries) => {
   geometries = flatten(geometries)
   const newgeometries = geometries.map((geometry) => to3DWalls({ z0: -1, z1: 1 }, geometry))
 
-  const newgeom3 = subtractGeom3(newgeometries)
+  const newgeom3 = subtractGeom3(newgeometries, legacyOptions)
   const epsilon = measureEpsilon(newgeom3)
 
   return fromFakePolygons(epsilon, geom3.toPolygons(newgeom3))

@@ -129,7 +129,10 @@ test('union of geom3 with rounding issues #137', (t) => {
   const obs = union(geometry1, geometry2)
   const pts = geom3.toPoints(obs)
   t.notThrows(() => geom3.validate(obs))
-  t.is(pts.length, 6) // number of polygons in union
+  // The 1e-6 gap between the two solids is larger than the smallest feature
+  // the boolean operations resolve (2^-20), so the two surfaces stay separate
+  // and the union keeps both layers instead of fusing them.
+  t.is(pts.length, 12) // number of polygons in union
 })
 
 // Test for push loop optimization: verify union works correctly with multiple geometries

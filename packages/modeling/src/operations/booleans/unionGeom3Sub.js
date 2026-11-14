@@ -9,13 +9,13 @@ const { Tree } = require('./trees')
  * @param {geom3} geometry2 - geometry to union
  * @returns {geom3} new 3D geometry
  */
-const unionSub = (geometry1, geometry2) => {
+const unionSub = (geometry1, geometry2, options) => {
   if (!mayOverlap(geometry1, geometry2)) {
     return unionForNonIntersecting(geometry1, geometry2)
   }
 
-  const a = new Tree(geom3.toPolygons(geometry1))
-  const b = new Tree(geom3.toPolygons(geometry2))
+  const a = new Tree(geom3.toPolygons(geometry1), options)
+  const b = new Tree(geom3.toPolygons(geometry2), options)
 
   a.clipTo(b, false)
   // b.clipTo(a, true); // ERROR: doesn't work

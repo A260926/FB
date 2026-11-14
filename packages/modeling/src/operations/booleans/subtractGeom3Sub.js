@@ -10,13 +10,13 @@ const { Tree } = require('./trees')
  * @param {geom3} geometry2 - a geometry
  * @returns {geom3} new 3D geometry
  */
-const subtractGeom3Sub = (geometry1, geometry2) => {
+const subtractGeom3Sub = (geometry1, geometry2, options) => {
   if (!mayOverlap(geometry1, geometry2)) {
     return geom3.clone(geometry1)
   }
 
-  const a = new Tree(geom3.toPolygons(geometry1))
-  const b = new Tree(geom3.toPolygons(geometry2))
+  const a = new Tree(geom3.toPolygons(geometry1), options)
+  const b = new Tree(geom3.toPolygons(geometry2), options)
 
   a.invert()
   a.clipTo(b)

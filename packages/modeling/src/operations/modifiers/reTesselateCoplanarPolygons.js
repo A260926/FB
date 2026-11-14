@@ -9,13 +9,23 @@ const { insertSorted, fnNumberSort } = require('../../utils')
 
 const poly3 = require('../../geometries/poly3')
 
+const { toleranceForPoint2s } = require('../../maths/utils/tolerance')
+
+// Dimensionless tolerance used when comparing line directions.
+const DIRECTION_TOLERANCE = 1e-10
+
 /*
  * Retesselation for a set of COPLANAR polygons.
  * @param {poly3[]} sourcepolygons - list of polygons
+ * @param {Object} [options] - options
+ * @param {Boolean} [options.legacy] - keep the historical absolute tolerances
+ *                                    (used by the 2D boolean path)
  * @returns {poly3[]} new set of polygons
  */
-const reTesselateCoplanarPolygons = (sourcepolygons) => {
+const reTesselateCoplanarPolygons = (sourcepolygons, options) => {
   if (sourcepolygons.length < 2) return sourcepolygons
+
+  const legacy = options !== undefined && options !== null && options.legacy === true
 
   const destpolygons = []
   const numpolygons = sourcepolygons.length
@@ -26,21 +36,41 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
   const topy2polygonindexes = new Map()
   const ycoordinatetopolygonindexes = new Map()
 
-  // convert all polygon vertices to 2D
+  // Convert all polygon vertices to 2D first, without binning, and measure the
+  // magnitude of the local coordinates. The tolerance below is derived from
+  // that magnitude, so features which are small compared to the working
+  // coordinates are kept distinct, while coincident vertices are still
+  // recognised.
+  const rawvertices2d = []
+  const allpoints = []
+  for (let polygonindex = 0; polygonindex < numpolygons; polygonindex++) {
+    const poly3d = sourcepolygons[polygonindex]
+    const vertices2d = []
+    const numvertices = poly3d.vertices.length
+    for (let i = 0; i < numvertices; i++) {
+      const pos2d = orthobasis.to2D(poly3d.vertices[i])
+      vertices2d.push(pos2d)
+      allpoints.push(pos2d)
+    }
+    rawvertices2d.push(vertices2d)
+  }
+  const tolerance = legacy ? EPS : toleranceForPoint2s(allpoints)
+  const directionTolerance = legacy ? EPS : DIRECTION_TOLERANCE
+
   // Make a list of all encountered y coordinates
   // And build a map of all polygons that have a vertex at a certain y coordinate:
   const ycoordinatebins = new Map()
-  const ycoordinateBinningFactor = 10 / EPS
+  const ycoordinateBinningFactor = 10 / tolerance
   for (let polygonindex = 0; polygonindex < numpolygons; polygonindex++) {
-    const poly3d = sourcepolygons[polygonindex]
+    const inputvertices2d = rawvertices2d[polygonindex]
     let vertices2d = []
-    let numvertices = poly3d.vertices.length
+    let numvertices = inputvertices2d.length
     let minindex = -1
     if (numvertices > 0) {
       let miny
       let maxy
       for (let i = 0; i < numvertices; i++) {
-        let pos2d = orthobasis.to2D(poly3d.vertices[i])
+        let pos2d = inputvertices2d[i]
         // perform binning of y coordinates: If we have multiple vertices very
         // close to each other, give them the same y coordinate:
         const ycoordinatebin = Math.floor(pos2d[1] * ycoordinateBinningFactor)
@@ -105,9 +135,9 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
   //                      and polygonvertices2d arrays)
   //        leftvertexindex: the index of the vertex at the left side of the polygon (lowest x)
   //                         that is at or just above the current y coordinate
-  //        rightvertexindex: dito at right hand side of polygon
+  //        rightvertexindex: dito at right hand side
   //        topleft, bottomleft: coordinates of the left side of the polygon crossing the current y coordinate
-  //        topright, bottomright: coordinates of the right hand side of the polygon crossing the current y coordinate
+  //        topright, bottomright: ditto at the right hand side
   let activepolygons = []
   let prevoutpolygonrow = []
   for (let yindex = 0; yindex < ycoordinates.length; yindex++) {
@@ -117,7 +147,7 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
     // update activepolygons for this y coordinate:
     // - Remove any polygons that end at this y coordinate
     // - update leftvertexindex and rightvertexindex (which point to the current vertex index
-    //   at the the left and right side of the polygon
+    //   at the the left and right side of the polygon)
     // Iterate over all polygons that have a corner at this y coordinate:
     const polygonindexeswithcorner = ycoordinatetopolygonindexes.get(ycoordinate)
     let removeCount = 0 // track removals to filter at end (avoids O(n²) splice)
@@ -246,7 +276,7 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
         const prevoutpolygon = newoutpolygonrow[newoutpolygonrow.length - 1]
         const d1 = vec2.distance(outpolygon.topleft, prevoutpolygon.topright)
         const d2 = vec2.distance(outpolygon.bottomleft, prevoutpolygon.bottomright)
-        if ((d1 < EPS) && (d2 < EPS)) {
+        if ((d1 < tolerance) && (d2 < tolerance)) {
           // we can join this polygon with the one to the left:
           outpolygon.topleft = prevoutpolygon.topleft
           outpolygon.leftline = prevoutpolygon.leftline
@@ -267,8 +297,8 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
             // We have a match if the sidelines are equal or if the top coordinates
             // are on the sidelines of the previous polygon
             const prevpolygon = prevoutpolygonrow[ii]
-            if (vec2.distance(prevpolygon.bottomleft, thispolygon.topleft) < EPS) {
-              if (vec2.distance(prevpolygon.bottomright, thispolygon.topright) < EPS) {
+            if (vec2.distance(prevpolygon.bottomleft, thispolygon.topleft) < tolerance) {
+              if (vec2.distance(prevpolygon.bottomright, thispolygon.topright) < tolerance) {
                 // Yes, the top of this polygon matches the bottom of the previous:
                 matchedindexes.add(ii)
                 // Now check if the joined polygon would remain convex:
@@ -280,8 +310,8 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
                 const v4 = line2.direction(prevpolygon.rightline)
                 const d2 = v3[0] - v4[0]
 
-                const leftlinecontinues = Math.abs(d1) < EPS
-                const rightlinecontinues = Math.abs(d2) < EPS
+                const leftlinecontinues = Math.abs(d1) < directionTolerance
+                const rightlinecontinues = Math.abs(d2) < directionTolerance
                 const leftlineisconvex = leftlinecontinues || (d1 >= 0)
                 const rightlineisconvex = rightlinecontinues || (d2 >= 0)
                 if (leftlineisconvex && rightlineisconvex) {
@@ -304,7 +334,7 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
           // Finish the polygon with the last point(s):
           const prevpolygon = prevoutpolygonrow[ii]
           prevpolygon.outpolygon.rightpoints.push(prevpolygon.bottomright)
-          if (vec2.distance(prevpolygon.bottomright, prevpolygon.bottomleft) > EPS) {
+          if (vec2.distance(prevpolygon.bottomright, prevpolygon.bottomleft) > tolerance) {
             // polygon ends with a horizontal line:
             prevpolygon.outpolygon.leftpoints.push(prevpolygon.bottomleft)
           }
@@ -328,7 +358,7 @@ const reTesselateCoplanarPolygons = (sourcepolygons) => {
           rightpoints: []
         }
         thispolygon.outpolygon.leftpoints.push(thispolygon.topleft)
-        if (vec2.distance(thispolygon.topleft, thispolygon.topright) > EPS) {
+        if (vec2.distance(thispolygon.topleft, thispolygon.topright) > tolerance) {
           // we have a horizontal line at the top:
           thispolygon.outpolygon.rightpoints.push(thispolygon.topright)
         }

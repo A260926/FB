@@ -1,5 +1,6 @@
 const plane = require('../../../maths/plane')
 const poly3 = require('../../../geometries/poly3')
+const { planeResidual } = require('../../../maths/utils/tolerance')
 
 // # class Node
 // Holds a node in a BSP tree.
@@ -33,7 +34,7 @@ class Node {
 
   // clip polygontreenodes to our plane
   // calls remove() for all clipped PolygonTreeNodes
-  clipPolygons (polygontreenodes, alsoRemovecoplanarFront) {
+  clipPolygons (polygontreenodes, alsoRemovecoplanarFront, options) {
     let current = { node: this, polygontreenodes: polygontreenodes }
     let node
     const stack = []
@@ -54,7 +55,7 @@ class Node {
           if (!treenode.isRemoved()) {
             // split this polygon tree node using the plane
             // NOTE: children are added to the tree if there are spanning polygons
-            treenode.splitByPlane(plane, coplanarfrontnodes, backnodes, frontnodes, backnodes)
+            treenode.splitByPlane(plane, coplanarfrontnodes, backnodes, frontnodes, backnodes, node.planeResidual, options)
           }
         }
 
@@ -79,12 +80,12 @@ class Node {
 
   // Remove all polygons in this BSP tree that are inside the other BSP tree
   // `tree`.
-  clipTo (tree, alsoRemovecoplanarFront) {
+  clipTo (tree, alsoRemovecoplanarFront, options) {
     let node = this
     const stack = []
     do {
       if (node.polygontreenodes.length > 0) {
-        tree.rootnode.clipPolygons(node.polygontreenodes, alsoRemovecoplanarFront)
+        tree.rootnode.clipPolygons(node.polygontreenodes, alsoRemovecoplanarFront, options)
       }
       if (node.front) stack.push(node.front)
       if (node.back) stack.push(node.back)
@@ -92,7 +93,7 @@ class Node {
     } while (node !== undefined)
   }
 
-  addPolygonTreeNodes (newpolygontreenodes) {
+  addPolygonTreeNodes (newpolygontreenodes, options) {
     let current = { node: this, polygontreenodes: newpolygontreenodes }
     const stack = []
     do {
@@ -110,12 +111,15 @@ class Node {
         // index = Math.floor(Math.random()*polygontreenodes.length)
         const bestpoly = polygontreenodes[index].getPolygon()
         node.plane = poly3.plane(bestpoly)
+        // Remember how far the source polygon's own vertices sit from its
+        // plane: this plane cannot be trusted to better than that.
+        node.planeResidual = planeResidual(node.plane, bestpoly.vertices)
       }
       const frontnodes = []
       const backnodes = []
       const n = polygontreenodes.length
       for (let i = 0; i < n; ++i) {
-        polygontreenodes[i].splitByPlane(node.plane, node.polygontreenodes, backnodes, frontnodes, backnodes)
+        polygontreenodes[i].splitByPlane(node.plane, node.polygontreenodes, backnodes, frontnodes, backnodes, node.planeResidual, options)
       }
 
       if (frontnodes.length > 0) {

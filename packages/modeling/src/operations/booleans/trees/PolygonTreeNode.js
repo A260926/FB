@@ -6,6 +6,10 @@ const poly3 = require('../../../geometries/poly3')
 
 const splitPolygonByPlane = require('./splitPolygonByPlane')
 
+const { toleranceForPoints } = require('../../../maths/utils/tolerance')
+
+const { isLegacyOptions } = require('../booleanOptions')
+
 // # class PolygonTreeNode
 // This class manages hierarchical splits of polygons.
 // At the top is a root node which does not hold a polygon, only child PolygonTreeNodes.
@@ -115,7 +119,7 @@ class PolygonTreeNode {
   // If the plane doesn't intersect the polygon, the 'this' object is added to one of the arrays
   // If the plane does intersect the polygon, two new child nodes are created for the front and back fragments,
   //  and added to both arrays.
-  splitByPlane (plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes) {
+  splitByPlane (plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes, planeResidual, options) {
     if (this.children.length) {
       const queue = [this.children]
       let i
@@ -131,21 +135,22 @@ class PolygonTreeNode {
             queue.push(node.children)
           } else {
             // no children. Split the polygon:
-            node._splitByPlane(plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes)
+            node._splitByPlane(plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes, planeResidual, options)
           }
         }
       }
     } else {
-      this._splitByPlane(plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes)
+      this._splitByPlane(plane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes, planeResidual, options)
     }
   }
 
   // only to be called for nodes with no children
-  _splitByPlane (splane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes) {
+  _splitByPlane (splane, coplanarfrontnodes, coplanarbacknodes, frontnodes, backnodes, planeResidual, options) {
     const polygon = this.polygon
     if (polygon) {
+      const legacy = isLegacyOptions(options)
       const bound = poly3.measureBoundingSphere(polygon)
-      const sphereradius = bound[3] + EPS // ensure radius is LARGER then polygon
+      const sphereradius = bound[3] + (legacy ? EPS : toleranceForPoints(polygon.vertices, splane)) // ensure radius is LARGER then polygon
       const spherecenter = bound
       const d = vec3.dot(splane, spherecenter) - splane[3]
       if (d > sphereradius) {
@@ -153,7 +158,7 @@ class PolygonTreeNode {
       } else if (d < -sphereradius) {
         backnodes.push(this)
       } else {
-        const splitresult = splitPolygonByPlane(splane, polygon)
+        const splitresult = splitPolygonByPlane(splane, polygon, planeResidual, options)
         switch (splitresult.type) {
           case 0:
             // coplanar front:

@@ -21,6 +21,14 @@
 
 This library contains boolean operations based on Constructive Solid Geometry (CSG). CSG is a modelling technique that uses boolean operations like union and intersection to combine 3D solids. This library implements CSG operations on meshes elegantly and concisely using BSP trees, and is meant to serve as an easily understandable implementation of the algorithm.
 
+### Numerical precision of the 3D booleans
+
+The 3D boolean operations (`booleans.union`, `booleans.intersect`, `booleans.subtract`) use tolerances that follow the magnitude of the coordinates being compared, rather than a single absolute epsilon. This is what allows features of very different size to coexist in one model: a `2^-20` thick slab can be intersected with, or used to cut, a `2^20` sized solid without the thin feature collapsing, as long as the coordinates involved are meaningful to the double precision representation (all features clearly larger than the rounding interval of the coordinates at their position). Two surfaces `2^-20` apart remain distinct; truly coincident surfaces are still merged and their shared faces are removed.
+
+The same applies to operands that are rotated, sheared, non-uniformly scaled, mirrored, or translated to large coordinates before the operation: the operation is performed on the geometry as it stands, and the result corresponds to the transformed input.
+
+**Scope and limitations.** The 3D booleans require closed, oriented solids bounded by finite, convex, non-degenerate planar faces. Features that are already below the resolution of the coordinate representation are not recovered: if two operands cannot be distinguished at the precision at which they are supplied (for example, a distance smaller than the rounding interval of the numbers involved), the operation treats them as coincident. Non-manifold input (edges shared by more than two faces, open shells, self-intersecting or non-convex faces) and degenerate input (zero-area faces, zero-length edges) are not repaired by this precision handling and may produce unexpected results. The 2D boolean path is unchanged and continues to operate at the original spatial resolution.
+
 ## Table of Contents
 
 - [Installation](#installation)

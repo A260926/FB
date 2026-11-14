@@ -1,6 +1,7 @@
 const flatten = require('../../utils/flatten')
 
 const retessellate = require('../modifiers/retessellate')
+const { isLegacyOptions } = require('./booleanOptions')
 
 const intersectSub = require('./intersectGeom3Sub')
 
@@ -11,14 +12,16 @@ const intersectSub = require('./intersectGeom3Sub')
  * @returns {geom3} new 3D geometry
  */
 const intersect = (...geometries) => {
+  // the last argument may be the internal options marker
+  const options = isLegacyOptions(geometries[geometries.length - 1]) ? geometries.pop() : undefined
   geometries = flatten(geometries)
 
   let newgeometry = geometries.shift()
   geometries.forEach((geometry) => {
-    newgeometry = intersectSub(newgeometry, geometry)
+    newgeometry = intersectSub(newgeometry, geometry, options)
   })
 
-  newgeometry = retessellate(newgeometry)
+  newgeometry = retessellate(newgeometry, options)
   return newgeometry
 }
 
