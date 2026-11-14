@@ -70,6 +70,29 @@ enum gl_light_type {
     GL_SPOT,
 };
 
+/*
+ * How an output attribute slot is interpolated at fragment centers.
+ *
+ * GL_INTERP_SMOOTH        perspective-correct (the historical behavior)
+ * GL_INTERP_NOPERSPECTIVE affine interpolation in screen space
+ * GL_INTERP_FLAT          constant value from the provoking vertex
+ *
+ * Only attribute slots 4 and above are affected.  Slots 0-3 hold the
+ * clip-space position and are always interpolated as before.  A zero
+ * initialized pipeline therefore keeps every slot smooth.
+ */
+enum gl_interpolation_mode {
+    GL_INTERP_SMOOTH = 0,
+    GL_INTERP_NOPERSPECTIVE = 1,
+    GL_INTERP_FLAT = 2
+};
+
+/* which vertex of a primitive supplies flat shaded attributes */
+enum gl_provoking_vertex {
+    GL_PROVOKE_FIRST = 0,
+    GL_PROVOKE_LAST = 1
+};
+
 struct gl_framebuffer {
     uint32_t *colors;
     float *depths;           
@@ -87,6 +110,8 @@ struct gl_pipeline {
     int n_attr_in;
     int n_attr_out;
     int winding;
+    enum gl_interpolation_mode interp[GL_MAX_ATTRIBUTE_COUNT];
+    enum gl_provoking_vertex provoking;
 };
 
 struct gl_obj {
@@ -133,6 +158,8 @@ void gl_bind_texture(uint32_t *colors, int width, int height);
 void gl_bind_base_color(float r, float g, float b);
 void gl_bind_custom_vs(vs_f vs, int n_attr_out);
 void gl_bind_custom_fs(fs_f fs);
+int gl_bind_interpolation(int slot, enum gl_interpolation_mode mode);
+int gl_bind_provoking_vertex(enum gl_provoking_vertex which);
 void gl_bind_color_vs();
 void gl_bind_color_fs();
 void gl_bind_texture_vs();

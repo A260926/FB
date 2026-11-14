@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "gl.h"
 #include "clip.h"
@@ -29,18 +30,34 @@ winding_order(int winding, float *v0, float *v1, float *v2)
     return (e01 + e12 + e20) * winding > 0;  /* same sign */
 }
 
+/**************
+ * interp_mode *
+ **************/
+
+/* interpolation mode of an output slot; slots 0-3 always stay smooth */
+
+static enum gl_interpolation_mode
+interp_mode(struct gl_pipeline *pipe, int slot)
+{
+    if (slot < 4 || slot >= GL_MAX_ATTRIBUTE_COUNT ||
+        slot >= pipe->n_attr_out)
+        return GL_INTERP_SMOOTH;
+    return pipe->interp[slot];
+}
+
 /*************
  * draw_prim *
  *************/
 
 /* matches the correct drawing routine with the primitive type */
 
-static void 
+static void
 draw_prim(
     struct raster *rast,
-    float *pts, 
+    float *pts,
     int n_pts,
-    enum gl_primitive prim_type)
+    enum gl_primitive prim_type,
+    const float *flat)
 {
     switch (prim_type) {
         case GL_POINT_LIST:    /* point list */
@@ -64,7 +81,7 @@ draw_prim(
                 for (int i = 2; i < n_pts; i++) {
                     float *v2 = pts + i * rast->n_attr;
                     if (winding_order(rast->winding, v0, v1, v2))
-                        draw_tr(rast, v0, v1, v2);
+                        draw_tr(rast, v0, v1, v2, flat);
                     v1 = v2;
                 }
             }
@@ -145,18 +162,36 @@ gl_render(
     /* setup variables */
     
     struct raster rast = {
-        .fbuf    = pipe->fbuf, 
+        .fbuf    = pipe->fbuf,
         .uniform = pipe->uniform,
-        .fs      = pipe->fs, 
+        .fs      = pipe->fs,
         .n_attr  = pipe->n_attr_out,
-        .winding = pipe->winding
+        .winding = pipe->winding,
+        .interp  = NULL
     };
+
+    /*
+     * Interpolation modes are only honored for GL_TRIANGLE_LIST.  All
+     * other primitives keep their historical (smooth) behavior.
+     */
+    enum gl_interpolation_mode modes[GL_MAX_ATTRIBUTE_COUNT];
+    int has_npersp = 0;
+
+    for (int i = 0; i < GL_MAX_ATTRIBUTE_COUNT; i++) {
+        modes[i] = (prim_type == GL_TRIANGLE_LIST)
+            ? interp_mode(pipe, i)
+            : GL_INTERP_SMOOTH;
+        if (modes[i] == GL_INTERP_NOPERSPECTIVE)
+            has_npersp = 1;
+    }
+    rast.interp = modes;
 
     int prim_size, n_prims;
 
     float *pts_out;
     float tmp[16 * GL_MAX_ATTRIBUTE_COUNT]; /* holds current face */;
     uint8_t *clip_flags;
+    float flat_vals[GL_MAX_ATTRIBUTE_COUNT];
 
     prim_size = 0;
     split_prim(prim_type, &prim_size);
@@ -178,6 +213,22 @@ gl_render(
 
         /* grab clip flags while vertex is still hot */
         clip_test(pts_out + i * pipe->n_attr_out, clip_flags + i);
+
+        /*
+         * noperspective attributes are affine in screen space.  The
+         * screen affine value at a point inside the triangle is the
+         * homogeneous blend of (attribute * w) divided by the
+         * homogeneous blend of w.  Storing attribute * w here and
+         * dividing after clipping reproduces that value both at the
+         * original vertices and at every clip intersection.
+         */
+        if (has_npersp) {
+            for (int j = 4; j < pipe->n_attr_out && j < GL_MAX_ATTRIBUTE_COUNT; j++) {
+                if (modes[j] == GL_INTERP_NOPERSPECTIVE)
+                    pts_out[i * pipe->n_attr_out + j] *=
+                        pts_out[i * pipe->n_attr_out + 3];
+            }
+        }
     }
 
     for (int i = 0; i < n_prims * prim_size; i += prim_size) {
@@ -205,15 +256,37 @@ gl_render(
         if (clip_and != 0)  /* outside frustum */
             continue;
 
+        /*
+         * The flat source is one of the original primitive vertices,
+         * picked before clipping so a trimmed away source can never be
+         * replaced by an intersection point.
+         */
+        const float *flat_src = tmp;
+        if (prim_type == GL_TRIANGLE_LIST && prim_size > 0 &&
+            pipe->provoking == GL_PROVOKE_LAST)
+            flat_src = tmp + (prim_size - 1) * pipe->n_attr_out;
+        memcpy(flat_vals, flat_src,
+               (size_t)pipe->n_attr_out * sizeof(float));
+
         int clipped_prim_size = prim_size;
         if (clip_or != 0)     /* if intersect frustum */
             clip_poly(tmp, &clipped_prim_size, pipe->n_attr_out, clip_or);
 
         /* perspective divide */
-        for (int j = 0; j < clipped_prim_size; j++)
-            screen_space(pipe->fbuf, tmp + j * pipe->n_attr_out);
-        
-        draw_prim(&rast, tmp, clipped_prim_size, prim_type);
+        for (int j = 0; j < clipped_prim_size; j++) {
+            float *pt = tmp + j * pipe->n_attr_out;
+
+            /* undo the w premultiplication now that w is interpolated */
+            if (has_npersp) {
+                for (int k = 4; k < pipe->n_attr_out && k < GL_MAX_ATTRIBUTE_COUNT; k++) {
+                    if (modes[k] == GL_INTERP_NOPERSPECTIVE)
+                        pt[k] /= pt[3];
+                }
+            }
+            screen_space(pipe->fbuf, pt);
+        }
+
+        draw_prim(&rast, tmp, clipped_prim_size, prim_type, flat_vals);
     }
     free(pts_out);
     free(clip_flags);

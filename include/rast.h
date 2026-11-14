@@ -40,10 +40,12 @@ struct raster {
     fs_f fs;
     int n_attr;
     int winding;
+    const enum gl_interpolation_mode *interp;  /* per-slot modes (>=4) */
 };
 
 void draw_pt(struct raster *rast, float *pt);
 void draw_ln(struct raster *rast, float *v0, float *v1);
-void draw_tr(struct raster *rast, float *v0, float *v1, float *v2);
+void draw_tr(struct raster *rast, float *v0, float *v1, float *v2,
+             const float *flat);
 
 #endif    /* RAST_H */

@@ -21,6 +21,7 @@ SR is a lightweight software rendering library written in C.  It exposes the mai
 </p>
 
 * perspective-correct interpolation
+* per-attribute smooth / noperspective / flat interpolation
 * texture mapping
 * spot, point, & directional lighting
 * clipping
@@ -68,6 +69,60 @@ This buffer has two points, each with six attributes.  As such, `n_pts = 2` and 
 Finally, `winding` specefies a winding order of the input vertices: 1 for counter-clock-wise and -1 for clock-wise.
 
 The only assumptions SR will make about the user defined vertex shader is that the clip space coordinates of the vertex (x, y, z, w) appear at the front of the buffer.
+
+### Interpolation modes
+
+By default every output attribute is interpolated perspective-correct
+(`GL_INTERP_SMOOTH`).  A pipeline can select a mode per attribute slot
+with `interp`; a pipeline that is zero initialized therefore keeps the
+original smooth behavior.  Attribute slots 0-3 hold the clip-space
+position and are always interpolated as before; the setting applies to
+the valid output slots 4 through 31.  Each slot may be:
+
+* `GL_INTERP_SMOOTH` - perspective-correct, the historical behavior.
+* `GL_INTERP_NOPERSPECTIVE` - affine across the projected polygon in
+  screen space (useful for screen-space quantities like a ruler).
+* `GL_INTERP_FLAT` - the whole primitive gets the value from its
+  provoking vertex.
+
+The provoking vertex is selected by `provoking`: `GL_PROVOKE_FIRST` takes
+the first original vertex of the primitive, `GL_PROVOKE_LAST` the last.
+The choice is made before clipping, so a provoking vertex that is cut
+away still supplies its value and is never replaced by an intersection
+point.  Adjacent primitives that share an index keep their own provoking
+vertex, and the clipped polygon is fanned into triangles that all use the
+same value.
+
+```c
+/* struct gl_pipeline */
+struct gl_pipeline {
+    /* ... */
+    enum gl_interpolation_mode interp[GL_MAX_ATTRIBUTE_COUNT];
+    enum gl_provoking_vertex provoking;
+};
+```
+
+The global (bound) pipeline exposes the same configuration to `gl_renderl`
+through two functions:
+
+```c
+/* slot must be in [4, 31]; mode must be one of the enum values.
+ * Returns 1 on success, 0 on an invalid argument (state untouched). */
+int gl_bind_interpolation(int slot, enum gl_interpolation_mode mode);
+
+/* GL_PROVOKE_FIRST or GL_PROVOKE_LAST; same success convention. */
+int gl_bind_provoking_vertex(enum gl_provoking_vertex which);
+```
+
+Both settings are part of the bound pipeline state: `gl_render` reads the
+`interp`/`provoking` fields of the pipeline passed to it, and the bound
+functions only affect `gl_renderl`.  Binding a new vertex or fragment
+shader does not reset the interpolation configuration, so alternating
+calls to the two entry points never leak state into each other.
+
+The modes currently take effect for `GL_TRIANGLE_LIST`.  Other primitive
+types keep their previous behavior.  The implementation assumes finite
+vertex data with positive w.
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/8971799/189635638-c78c674f-316b-4337-b5c3-75948d0e468e.png" />

@@ -151,6 +151,20 @@ static struct gl_pipeline g_pipe = {
     .n_attr_in        = 0,
     .n_attr_out       = 0,
     .winding          = GL_WINDING_ORDER_CCW,
+    .provoking        = GL_PROVOKE_FIRST,
+    .interp           = {
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH, GL_INTERP_SMOOTH,
+        GL_INTERP_SMOOTH, GL_INTERP_SMOOTH
+    },
 };
 
 /********************************************************************
@@ -274,6 +288,50 @@ extern void
 gl_bind_custom_fs(fs_f fs)
 {
     g_pipe.fs = fs;
+}
+
+/************************
+ * gl_bind_interpolation *
+ ************************/
+
+/**
+ * selects the interpolation mode of an output attribute slot.
+ * Only slots 4..31 are configurable; slots 0-3 keep the position
+ * layout and stay smooth.  Returns 1 on success, 0 (state untouched)
+ * on an invalid mode or slot.
+ */
+
+extern int
+gl_bind_interpolation(int slot, enum gl_interpolation_mode mode)
+{
+    if (slot < 4 || slot >= GL_MAX_ATTRIBUTE_COUNT)
+        return 0;
+    if (mode != GL_INTERP_SMOOTH && mode != GL_INTERP_NOPERSPECTIVE &&
+        mode != GL_INTERP_FLAT)
+        return 0;
+
+    g_pipe.interp[slot] = mode;
+    return 1;
+}
+
+/***************************
+ * gl_bind_provoking_vertex *
+ ***************************/
+
+/**
+ * picks the vertex that feeds flat shaded attributes: the first or
+ * the last original vertex of the primitive.  Returns 1 on success,
+ * 0 (state untouched) for an unknown value.
+ */
+
+extern int
+gl_bind_provoking_vertex(enum gl_provoking_vertex which)
+{
+    if (which != GL_PROVOKE_FIRST && which != GL_PROVOKE_LAST)
+        return 0;
+
+    g_pipe.provoking = which;
+    return 1;
 }
 
 /*******************

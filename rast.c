@@ -122,9 +122,9 @@ draw_pt(struct raster *rast, float *pt)
 
 /* rasterize a triangle to framebuffer */
 
-void 
-draw_tr(struct raster *rast, float *v0, float *v1, float *v2)
-{   
+void
+draw_tr(struct raster *rast, float *v0, float *v1, float *v2, const float *flat)
+{
     /* find bounding box */
 
     struct bbox bbox; 
@@ -182,8 +182,27 @@ draw_tr(struct raster *rast, float *v0, float *v1, float *v2)
                 /* interpolate rest of points */
 
                 for (int i = 4; i < (int)rast->n_attr; i++) {
-                    float P = (a * v0[i] + b * v1[i] + c * v2[i]);
-                    pt[i] = P * pt[2]; /* to clip space */
+                    enum gl_interpolation_mode mode = GL_INTERP_SMOOTH;
+
+                    if (rast->interp && i < GL_MAX_ATTRIBUTE_COUNT)
+                        mode = rast->interp[i];
+
+                    if (mode == GL_INTERP_FLAT) {
+                        /* provoking vertex picked by the pipeline */
+                        pt[i] = flat[i];
+                    } else if (mode == GL_INTERP_NOPERSPECTIVE) {
+                        /*
+                         * the pipeline already reduced the attribute to
+                         * its screen affine value at each vertex, so a
+                         * plain screen barycentric mix is the answer
+                         * (this also holds across clip seams).
+                         */
+                        pt[i] = b0 * v0[i] + b1 * v1[i] + b2 * v2[i];
+                    } else {
+                        /* perspective-correct: weight each value by w */
+                        float P = (a * v0[i] + b * v1[i] + c * v2[i]);
+                        pt[i] = P * pt[2]; /* to clip space */
+                    }
                 }
 
                 draw_pt(rast, pt);
