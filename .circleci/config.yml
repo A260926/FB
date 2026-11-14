@@ -1,0 +1,76 @@
+#
+# YAML anchor to keep configuration DRY.
+#
+common: &common
+  # This conforms to Go workspace requirements (we are pre-modules).
+  working_directory: /go/src/github.com/google/goexpect
+  steps:
+    - checkout
+    - run:
+        name: Go version
+        command: go version
+    - run:
+        name: Get dependencies
+        command: go get -v ./...
+    - run:
+        name: Run unit tests
+        command: go test -v ./...
+
+common_modules: &common_modules
+  steps:
+    - checkout
+    - run:
+        name: Go version
+        command: go version
+    - run:
+        name: Run unit tests
+        command: go test -v ./...
+
+
+#
+# CircleCI.
+#
+version: 2
+
+jobs:
+  go-1.11:
+    docker:
+      - image: circleci/golang:1.11
+    <<: *common
+  go-1.12:
+    docker:
+      - image: circleci/golang:1.12
+    <<: *common
+  go-1.14:
+    docker:
+      - image: circleci/golang:1.14
+    <<: *common
+  go-1.11_modules:
+    docker:
+      - image: circleci/golang:1.11
+    <<: *common_modules
+  go-1.12_modules:
+    docker:
+      - image: circleci/golang:1.12
+    <<: *common_modules
+  go-1.14_modules:
+    docker:
+      - image: circleci/golang:1.14
+    <<: *common_modules
+  go-latest_modules:
+    docker:
+      - image: circleci/golang:latest
+    <<: *common_modules
+
+workflows:
+  version: 2
+  test:
+    # These will run in parallel.
+    jobs:
+      - go-1.11
+      - go-1.12
+      - go-1.14
+      - go-1.11_modules
+      - go-1.12_modules
+      - go-1.14_modules
+      - go-latest_modules

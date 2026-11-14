@@ -1,0 +1,31 @@
+# github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+github.com/golang/glog
+# github.com/golang/protobuf v1.3.3
+github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/timestamp
+# github.com/google/goterm v0.0.0-20190703233501-fc88cf888a3f
+github.com/google/goterm/term
+# github.com/ziutek/telnet v0.0.0-20180329124119-c3b780dc415b
+github.com/ziutek/telnet
+# golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
+golang.org/x/crypto/blowfish
+golang.org/x/crypto/chacha20
+golang.org/x/crypto/curve25519
+golang.org/x/crypto/ed25519
+golang.org/x/crypto/ed25519/internal/edwards25519
+golang.org/x/crypto/internal/subtle
+golang.org/x/crypto/poly1305
+golang.org/x/crypto/ssh
+golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+# golang.org/x/sys v0.0.0-20190412213103-97732733099d
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
+# google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
+google.golang.org/genproto/googleapis/rpc/status
+# google.golang.org/grpc v1.31.0
+google.golang.org/grpc/codes
+google.golang.org/grpc/internal/status
+google.golang.org/grpc/status
