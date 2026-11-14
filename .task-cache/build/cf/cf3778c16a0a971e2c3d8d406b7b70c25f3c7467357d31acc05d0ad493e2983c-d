@@ -1,0 +1,4 @@
+./main.go
+_cgo_gotypes.go
+h264_decoder.cgo1.go
+_cgo_import.go

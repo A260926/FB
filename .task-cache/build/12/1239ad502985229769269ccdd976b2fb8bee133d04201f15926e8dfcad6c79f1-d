@@ -1,0 +1,12 @@
+./disk_part_reader.go
+./double_writer.go
+./factory.go
+./factory_disk.go
+./factory_ram.go
+./file.go
+./file_disk.go
+./file_ram.go
+./part.go
+./part_disk.go
+./part_ram.go
+./ram_file_reader.go

@@ -1,0 +1,12 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestABRSelection
+    check.go:29: TASK_GROUP_DONE TestABRSelection checks=70
+--- PASS: TestABRSelection (0.00s)
+=== RUN   TestABRCommit
+    check.go:29: TASK_GROUP_DONE TestABRCommit checks=21
+--- PASS: TestABRCommit (0.06s)
+=== RUN   TestABRContinuity
+    check.go:29: TASK_GROUP_DONE TestABRContinuity checks=11
+--- PASS: TestABRContinuity (0.03s)
+PASS
+ok  	github.com/bluenviron/gohlslib/v2	0.459s

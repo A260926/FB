@@ -1,0 +1,5 @@
+./dummy_image.go
+./main.go
+_cgo_gotypes.go
+h264_encoder.cgo1.go
+_cgo_import.go
