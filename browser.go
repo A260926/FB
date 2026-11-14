@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-rod/rod/lib/cdp"
@@ -250,14 +251,20 @@ func (b *Browser) Call(ctx context.Context, sessionID, methodName string, params
 // PageFromSession is used for low-level debugging.
 func (b *Browser) PageFromSession(sessionID proto.TargetSessionID) *Page {
 	sessionCtx, cancel := context.WithCancel(b.ctx)
-	return &Page{
-		e:             b.e,
-		ctx:           sessionCtx,
-		sessionCancel: cancel,
-		sleeper:       b.sleeper,
-		browser:       b,
-		SessionID:     sessionID,
+	page := &Page{
+		e:                b.e,
+		ctx:              sessionCtx,
+		sessionCancel:    cancel,
+		sleeper:          b.sleeper,
+		browser:          b,
+		SessionID:        sessionID,
+		jsCtxLock:        &sync.Mutex{},
+		jsCtxID:          new(proto.RuntimeRemoteObjectID),
+		helpersLock:      &sync.Mutex{},
+		dialogScriptLock: &atomic.Pointer[dialogScriptRun]{},
 	}
+	page.root = page
+	return page
 }
 
 // PageFromTarget gets or creates a Page instance.
@@ -281,17 +288,18 @@ func (b *Browser) PageFromTarget(targetID proto.TargetTargetID) (*Page, error) {
 	sessionCtx, cancel := context.WithCancel(b.ctx)
 
 	page = &Page{
-		e:             b.e,
-		ctx:           sessionCtx,
-		sessionCancel: cancel,
-		sleeper:       b.sleeper,
-		browser:       b,
-		TargetID:      targetID,
-		SessionID:     session.SessionID,
-		FrameID:       proto.PageFrameID(targetID),
-		jsCtxLock:     &sync.Mutex{},
-		jsCtxID:       new(proto.RuntimeRemoteObjectID),
-		helpersLock:   &sync.Mutex{},
+		e:                b.e,
+		ctx:              sessionCtx,
+		sessionCancel:    cancel,
+		sleeper:          b.sleeper,
+		browser:          b,
+		TargetID:         targetID,
+		SessionID:        session.SessionID,
+		FrameID:          proto.PageFrameID(targetID),
+		jsCtxLock:        &sync.Mutex{},
+		jsCtxID:          new(proto.RuntimeRemoteObjectID),
+		helpersLock:      &sync.Mutex{},
+		dialogScriptLock: &atomic.Pointer[dialogScriptRun]{},
 	}
 
 	page.root = page

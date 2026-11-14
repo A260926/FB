@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-rod/rod/lib/cdp"
@@ -70,6 +71,10 @@ type Page struct {
 	jsCtxID     *proto.RuntimeRemoteObjectID // use pointer so that page clones can share the change
 	helpersLock *sync.Mutex
 	helpers     map[proto.RuntimeRemoteObjectID]map[string]proto.RuntimeRemoteObjectID
+
+	// dialogScriptLock is the per-session single-flight guard of
+	// Page.WithDialogScript. Clones share it through the root page.
+	dialogScriptLock *atomic.Pointer[dialogScriptRun]
 }
 
 // String interface.
