@@ -77,6 +77,14 @@ vec2 Model::uv(const int iface, const int nthvert) const {
     return tex[facet_tex[iface*3+nthvert]];
 }
 
+int Model::face_pos(const int iface, const int nthvert) const {
+    return facet_vrt[iface*3+nthvert];
+}
+
+const std::vector<int>& Model::face_positions() const {
+    return facet_vrt;
+}
+
 const TGAImage& Model::diffuse()  const { return diffusemap;  }
 const TGAImage& Model::specular() const { return specularmap; }
 

@@ -1,3 +1,4 @@
+#pragma once
 #include "tgaimage.h"
 #include "geometry.h"
 

@@ -99,3 +99,96 @@ cmake --build build -j &&
 build/tinyrenderer obj/diablo3_pose/diablo3_pose.obj obj/floor.obj
 ```
 The rendered image is saved to `framebuffer.tga`.
+
+## Differentiable rasterizer
+
+`differentiable.h` / `differentiable.cpp` add a differentiable rendering
+interface next to the classic `rasterize()` path. The classic `IShader`,
+`rasterize()` and the command-line byte images are untouched: both paths share
+the coverage, barycentric and depth-selection logic in `raster_core.h`
+(`raster_core::prepare()`, `bary_screen()`, `bary_clip()`, `depth()`,
+`depth_passes()`, `pixel_bounds()`).
+
+### Interface
+
+- `DiffScene make_scene(const Model&)` creates an owning scene from a mesh
+loaded by `Model`. Positions are shared by the original position index; UVs are
+stored per face corner and never merged. `Model::face_pos(face, corner)` /
+`Model::face_positions()` expose the read-only position indices.
+- A scene is editable: `positions`, `corner_uv`, and a float RGB texture of at
+least 2x2 texels (`tex_width`, `tex_height`, `tex_rgb`). The initial texture is
+`diffuse()`'s R/G/B divided by 255 (TGA stores BGR, so the channels are
+swapped), and its row order matches `TGAImage::get`.
+- `DiffForward diff_forward(scene, width, height, light)` snapshots the current
+global `ModelView`, `Perspective` and `Viewport` and renders one frame. The
+`light` argument is the unit *view-space* direction towards the light source.
+The ModelView must be rigid; callers guarantee positive finite non-degenerate
+`w` inside the frustum. Output size is the given width and height.
+- Pixel sampling, area culling and the "larger z/w is nearer" depth rule are
+identical to `rasterize()`: integer pixel centres, `z <= zbuffer` rejected,
+equal depths keep the face drawn first, and background pixels are zero
+(zero colour, zero depth, face `-1`).
+- The material is linear diffuse only: `C = T(u,v) * (0.2 + 0.8*max(0, N.L))`,
+with `N = normalize(cross(P1-P0, P2-P0))` in view space. Output is unclamped
+`double` RGB. UVs are interpolated with the classic perspective-correct
+weights. Sampling clamps `u,v` to `[0,1]`, maps them to
+`(u*(W-1), v*(H-1))` and mixes bilinearly; the origin is `floor`, the right/lower
+cell wins on an interior grid line, and the bottom-right endpoint uses the
+last legal cell.
+- `diff_forward` returns linear RGB, depth and the winning face id per pixel.
+The `DiffForward` record owns all forward values it needs: it remains valid
+after the source Model is destroyed, after the scene is edited, after the
+global camera changes, or after another frame is rendered.
+- `DiffGrad diff_backward(const DiffForward&, g_rgb)` returns the gradient of
+`sum_pixels g . C` with respect to positions, per-corner UVs and each RGB
+texel. Gradients start from zero on every call, so one record can be backpropagated
+repeatedly with different `g`. Work is proportional to the number of stored
+records, not a re-render or a per-parameter image sweep. The implementation is
+hand-written adjoint code; no autodiff library is used.
+
+### Fixed-visibility limitation
+
+Backpropagation differentiates the colour within the coverage, culling, face
+selection, pixel rounding and bilinear-cell branches fixed by the forward
+pass. It does *not* differentiate silhouette or occlusion changes, a change of
+the winning face, or a jump to another texel cell. The screen-space
+barycentric weights, clip `w` and the unit face normal are all treated as
+differentiable; the chain through projection, perspective-correct UVs, the
+face normal and shading is preserved. UV gradients are zero outside the clamp
+and exactly on its endpoints. The `max(0, N.L)` derivative is zero at zero.
+Contributions of faces sharing a position are summed; background pixels,
+hidden faces and never-sampled texels get zero.
+
+### Example
+
+`examples/fit_texture.cpp` generates a small OBJ and an uneven TGA diffuse
+map, loads them through `Model`, and fits the texture with a few gradient
+descent steps. It reports the squared error on the initially visible pixels
+before and after, and writes before/after renderings plus the fitted texture.
+
+```sh
+# from the repository root
+c++ -std=c++20 -O2 -I. examples/fit_texture.cpp \
+    our_gl.cpp model.cpp tgaimage.cpp differentiable.cpp -o fit_texture
+mkdir -p out
+./fit_texture out
+```
+
+It prints `visible_pixels=...`, `mse_before=...` and `mse_after=...`; the
+error decreases substantially. Outputs are `out/fit_texture_before.tga`,
+`out/fit_texture_after.tga`, `out/fit_texture_target.tga` and
+`out/fit_texture_fitted.tga`.
+
+### Tests
+
+```sh
+bash task_support/run.sh target
+```
+
+This builds and runs `tests/differentiable_cases.cpp` (the `forward`,
+`adjoint` and `lifetime` groups) with `TASK_CHECK`, then builds and runs the
+existing legacy rasterization baseline. The adjoint cases use their own
+scalar loss and two-step central differences on parameters chosen away from
+branch switches, with an independent reference renderer for the forward
+values.
+
