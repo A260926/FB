@@ -8,9 +8,9 @@ override CXXFLAGS+=-std=c++0x -Wall -fPIC
 all: libdwarf++.a libdwarf++.so.$(SONAME) libdwarf++.so libdwarf++.pc
 
 SRCS := dwarf.cc cursor.cc die.cc value.cc abbrev.cc \
-	expr.cc rangelist.cc line.cc attrs.cc \
+	expr.cc rangelist.cc line.cc line_index.cc attrs.cc \
 	die_str_map.cc elf.cc to_string.cc
-HDRS := dwarf++.hh data.hh internal.hh small_vector.hh ../elf/to_hex.hh
+HDRS := dwarf++.hh data.hh internal.hh small_vector.hh line_index.hh ../elf/to_hex.hh
 CLEAN :=
 
 libdwarf++.a: $(SRCS:.cc=.o)
@@ -65,7 +65,7 @@ install: libdwarf++.a libdwarf++.so.$(SONAME) libdwarf++.so libdwarf++.pc
 	install -t $(DESTDIR)$(PREFIX)/lib libdwarf++.so.$(SONAME)
 	install -t $(DESTDIR)$(PREFIX)/lib libdwarf++.so
 	install -d $(DESTDIR)$(PREFIX)/include/libelfin/dwarf
-	install -t $(DESTDIR)$(PREFIX)/include/libelfin/dwarf data.hh dwarf++.hh small_vector.hh
+	install -t $(DESTDIR)$(PREFIX)/include/libelfin/dwarf data.hh dwarf++.hh small_vector.hh line_index.hh
 	sed 's,^libdir=.*,libdir=$(PREFIX)/lib,;s,^includedir=.*,includedir=$(PREFIX)/include,' libdwarf++.pc \
 		> $(DESTDIR)$(PREFIX)/lib/pkgconfig/libdwarf++.pc
 

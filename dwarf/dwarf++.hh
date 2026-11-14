@@ -1312,7 +1312,8 @@ public:
         /** Equality operator */
         bool operator==(const iterator &o) const
         {
-                return o.pos == pos && o.table == table;
+                return o.pos == pos && o.table == table &&
+                        o.has_entry == has_entry;
         }
 
         /** Inequality operator */
@@ -1339,6 +1340,11 @@ private:
         const line_table *table;
         line_table::entry entry, regs;
         section_offset pos;
+        // True if this iterator currently refers to a line table
+        // entry.  An iterator holding the final entry of a table
+        // (such as a trailing end_sequence row) can have the same
+        // pos as the end iterator, so this distinguishes the two.
+        bool has_entry;
 
         /**
          * Process the next opcode.  If the opcode "adds a row to the

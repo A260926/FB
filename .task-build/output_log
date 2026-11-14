@@ -1,0 +1,12 @@
+CASE operation_ranges op_slots_and_equal_coordinates checks=22
+CASE operation_ranges overlapping_shuffled_sequences checks=17
+CASE operation_ranges sequence_tail_termination checks=20
+CASE operation_ranges malformed_programs checks=5
+GROUP operation_ranges cases=4 checks=64 COMPLETE
+CASE source_sites breakpoints_for_line checks=17
+CASE source_sites exact_path_and_line checks=7
+GROUP source_sites cases=2 checks=24 COMPLETE
+CASE ownership dynamic_files_and_lifetime checks=7
+CASE ownership index_copies checks=9
+GROUP ownership cases=2 checks=16 COMPLETE
+TARGET_COMPLETE cases=8

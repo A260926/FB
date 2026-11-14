@@ -260,7 +260,7 @@ line_table::entry::get_description() const
 }
 
 line_table::iterator::iterator(const line_table *table, section_offset pos)
-        : table(table), pos(pos)
+        : table(table), pos(pos), has_entry(false)
 {
         if (table) {
                 regs.reset(table->m->default_is_stmt);
@@ -296,6 +296,11 @@ line_table::iterator::operator++()
                                            " in line table");
         }
 
+        // An entry was emitted even if the cursor is now at the end
+        // of the section; only a lack of output makes this an end
+        // iterator.  In particular, this keeps a trailing
+        // end_sequence row visible to iteration.
+        has_entry = output;
         pos = cur.get_section_offset();
         return *this;
 }
