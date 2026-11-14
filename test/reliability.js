@@ -160,12 +160,13 @@ describe("Crawler reliability", function() {
             crawler.queue.length.should.equal(5);
             crawler.queue._oldestUnfetchedIndex.should.equal(oldestUnfetchedIndex);
 
+            // The scan index is keyed by request identity (requestKey) rather
+            // than just the URL so POST requests with different bodies can be
+            // told apart. It should still contain one entry per queue item.
             crawler.queue._scanIndex.should.have.all.keys(
-                "http://127.0.0.1:3000/",
-                "http://127.0.0.1:3000/sitemap.xml",
-                "http://127.0.0.1:3000/stage2",
-                "http://127.0.0.1:3000/stage/3",
-                "http://127.0.0.1:3000/stage/4"
+                crawler.queue.map(function(item) {
+                    return item.requestKey;
+                })
             );
 
             crawler.queue.filterItems(function() {

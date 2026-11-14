@@ -825,6 +825,88 @@ item from it. If you're queueing a URL manually, use this method rather than
 | [force] | <code>Boolean</code> | If true, the URL will be queued regardless of whether it already exists in the queue or not. |
 
 
+<a name="Crawler+queueRequest"></a>
+
+#### crawler.queueRequest(request, [referrer], [force]) ⇒ <code>Boolean</code>
+
+Some sites distinguish pages through a `POST` request body rather than the URL - think of a search or a paginated form that always posts to the same endpoint. `queueRequest` lets you queue those requests. They go through the exact same domain filtering, robots.txt rules, fetch conditions, queue, scheduling and response handling as a [`queueURL`](#Crawler+queueURL) call, and links discovered in their responses are queued in turn.
+
+`request` is an object with four properties:
+
+| Param | Type | Description |
+| --- | --- | --- |
+| request.url | <code>String</code> | An absolute or relative URL. Relative URLs are made absolute to the referrer queue item, exactly as in `queueURL`. |
+| [request.method] | <code>String</code> | The HTTP method, case-insensitive. Only `GET` and `POST` are accepted. Defaults to `GET`. |
+| [request.body] | <code>String</code> \| <code>Buffer</code> | The request body. Strings are encoded as UTF-8 bytes; defaults to an empty body. A `GET` with a non-empty body, any method other than GET/POST, or a wrongly typed argument throws a `TypeError` before the request is admitted. |
+| [request.contentType] | <code>String</code> | The `Content-Type` for a `POST`. Defaults to `application/octet-stream`. Explicit values are trimmed at both ends and then compared as complete strings. This field is ignored for `GET`. |
+
+The return value is the same plain Boolean as `queueURL` (it is never a Promise): it indicates whether the request entered the admission pipeline. The method and body are never appended to the actual URL.
+
+Here is a crawl that walks several POST-powered search pages and still follows the links returned in each response:
+
+```js
+var Crawler = require("simplecrawler");
+
+var crawler = new Crawler("https://example.com/")
+    .on("fetchcomplete", function(queueItem, responseBuffer) {
+        console.log(queueItem.method, queueItem.url, responseBuffer.length, "bytes");
+    });
+
+crawler.respectRobotsTxt = false;
+
+[1, 2, 3].forEach(function(page) {
+    crawler.queueRequest({
+        url: "https://example.com/search",
+        method: "POST",
+        body: JSON.stringify({ query: "docs", page: page }),
+        contentType: "application/json"
+    });
+});
+
+crawler.start();
+```
+
+A Buffer can be passed for binary bodies, including bodies containing zero bytes:
+
+```js
+crawler.queueRequest({
+    url: "https://example.com/upload-query",
+    method: "POST",
+    body: Buffer.from([0x00, 0xff, 0x10, 0x00]),
+    contentType: "application/octet-stream"
+});
+```
+
+##### Request identity and duplicate detection
+
+Each queue item carries a reproducible `requestKey`. Two requests are considered the same - and the second one triggers a `queueduplicate` event instead of being fetched - only when all of the following match:
+
+1. the normalized URL (the same canonicalization `queueURL` uses),
+2. the method,
+3. the exact bytes of the body, and
+4. the `Content-Type` (for `POST`).
+
+Consequences worth knowing:
+
+* Two JSON bodies that differ only by whitespace are fetched separately, because their bytes differ.
+* An empty `POST` is never merged with a `GET` on the same URL.
+* `force` works exactly as for `queueURL` and bypasses this check.
+* Everything produced by `queueURL`, the initial page and link discovery is a bodiless `GET`, so existing URL-based behavior is unchanged.
+
+The request description is copied when it is admitted, so mutating the Buffer or object you passed in afterwards never changes the already-queued request. When the request is actually sent, the stored bytes are transmitted and `Content-Length` is calculated from the byte count. A `POST` always sends its own `Content-Type`; a matching header in `crawler.customHeaders` cannot override it.
+
+The built-in cache stores `GET` responses only. `POST` requests neither read from nor write to the cache.
+
+##### Redirects
+
+Redirect handling follows the HTTP semantics for request methods:
+
+* `301`, `302` and `303` convert a `POST` into an empty `GET` and drop the body headers (`Content-Type` and `Content-Length`).
+* `307` and `308` preserve the method, the exact body bytes and the content type.
+
+The redirect target is a brand new request and passes through normal duplicate detection. For example, a `303` from `POST /search` to a `GET /result` that was already fetched is not fetched again, while a `307` to the same URL carrying a different `POST` body is not swallowed by URL-based deduplication. The existing `fetchredirect` event receives the target queue item, including its method, body and content type. Domain and robots.txt admission apply to the target as usual.
+
+
 ### Queue items
 
 Because when working with simplecrawler, you'll constantly be handed queue items, it helps to know what's inside them. Here's the formal documentation of the properties that they contain.
@@ -840,6 +922,10 @@ QueueItems represent resources in the queue that have been fetched, or will be e
 | --- | --- | --- |
 | id | <code>Number</code> | A unique ID assigned by the queue when the queue item is added |
 | url | <code>String</code> | The complete, canonical URL of the resource |
+| method | <code>String</code> | The HTTP method of the request, either `GET` or `POST`. Defaults to `GET` |
+| body | <code>Buffer</code> | The exact bytes sent as the request body. Always an empty Buffer for `GET` requests |
+| contentType | <code>String</code> | The `Content-Type` sent with a `POST` request. Defaults to `application/octet-stream`; not set for `GET` |
+| requestKey | <code>String</code> | A reproducible identity built from the normalized URL, method, exact body bytes and content type. Used for duplicate detection |
 | protocol | <code>String</code> | The protocol of the resource (http, https) |
 | host | <code>String</code> | The full domain/hostname of the resource |
 | port | <code>Number</code> | The port of the resource |
@@ -952,6 +1038,10 @@ crawler.queue.filterItems({
 ### Saving and reloading the queue (freeze/defrost)
 
 It can be convenient to be able to save the crawl progress and later be able to reload it if your application fails or you need to abort the crawl for some reason. The `crawler.queue.freeze` and `crawler.queue.defrost` methods will let you do this.
+
+The frozen JSON keeps each queue item's `method`, `body` (including binary bodies with zero bytes - Buffers are serialized as `{ "type": "Buffer", "data": [...] }` and revived on defrost), `contentType` and `requestKey`. A defrosted queue therefore keeps its request identities and the same duplicate detection, and a `POST` re-sends exactly the bytes it was queued with. Queue files written by older versions, which only contain URLs, are still read: those items are loaded as bodiless `GET` requests.
+
+These new fields and the request-identity deduplication are part of the built-in `FetchQueue`. Custom, third-party queue backends keep their existing method signatures and continue to work for plain `GET` crawls, but they do not automatically gain `POST` support unless they store and compare the request identity themselves.
 
 **A word of warning** - they are not CPU friendly as they rely on `JSON.parse` and `JSON.stringify`. Use them only when you need to save the queue - don't call them after every request or your application's performance will be incredibly poor - they block like *crazy*. That said, using them when your crawler commences and stops is perfectly reasonable.
 
