@@ -222,6 +222,21 @@ ud_insn_opr(const struct ud *u, unsigned int n)
 }
 
 
+/*
+ * =============================================================================
+ * ud_insn_evex
+ *    Return the AVX-512 decoration information for the current decoded
+ *    instruction, or NULL when the instruction is not a supported, fully
+ *    decoded EVEX instruction.
+ * =============================================================================
+ */
+const struct ud_evex_info*
+ud_insn_evex(const struct ud *u)
+{
+  return u->evex_valid ? &u->evex_info : NULL;
+}
+
+
 /* =============================================================================
  * ud_opr_is_sreg
  *    Returns non-zero if the given operand is of a segment register type.

@@ -26,7 +26,8 @@ EXTRA_DIST = \
 	$(srcdir)/oprgen.py \
 	$(srcdir)/symresolve.ref \
 	$(srcdir)/installcheck.c \
-	$(srcdir)/libcheck.c
+	$(srcdir)/libcheck.c \
+	$(srcdir)/evex_contract.c
 
 if HAVE_YASM
 tests: difftest test-sym-resolver test-libcheck

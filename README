@@ -24,6 +24,11 @@ libudis86
     - MMX, FPU (x87), AMD 3DNow
     - SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AES,
     - AMD-V, INTEL-VMX, SMX
+    - AVX-512 (EVEX), limited subset (64 bit mode): VADDPS/VADDPD,
+      VMULPS/VMULPD, VADDSS/VADDSD, VMULSS/VMULSD, VMOVUPS/VMOVUPD,
+      including register and memory forms, 0-31 vector registers, write
+      masks, zeroing, broadcast and embedded rounding. The decoration
+      information is exposed through ud_insn_evex().
   o Instructions are defined in an XML document, with opcode
     tables generated for performance.
   o Supports output in both INTEL (NASM) as well as AT&T (GNU as) style

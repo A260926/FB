@@ -67,8 +67,17 @@ gen_operand(struct ud* u, struct ud_operand* op)
     if (u->pfx_seg) {
       ud_asmprintf(u, "%%%s:", ud_reg_tab[u->pfx_seg - UD_R_AL]);
     }
-    if (op->offset != 0) { 
-      ud_syn_print_mem_disp(u, op, 0);
+    if (op->offset != 0) {
+      if (u->evex_valid) {
+        /*
+         * The AT&T decoration syntax is not extended in this version, but
+         * EVEX operands must still format correctly: disp8 is compressed
+         * and is stored pre-scaled by the decoder.
+         */
+        ud_syn_print_evex_mem_disp(u, op, 0);
+      } else {
+        ud_syn_print_mem_disp(u, op, 0);
+      }
     }
     if (op->base) {
       ud_asmprintf(u, "(%%%s", ud_reg_tab[op->base - UD_R_AL]);

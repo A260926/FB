@@ -58,6 +58,7 @@
 
 static int decode_ext(struct ud *u, uint16_t ptr);
 static int decode_opcode(struct ud *u);
+static int decode_evex(struct ud *u);
 
 enum reg_class { /* register classes */
   REGCLASS_GPR,
@@ -940,6 +941,16 @@ clear_insn(register struct ud* u)
   u->br_far    = 0;
   u->vex_op    = 0;
   u->_rex      = 0;
+  u->evex_valid = 0;
+  u->evex_b1   = 0;
+  u->evex_b2   = 0;
+  u->evex_b3   = 0;
+  u->evex_info.vector_bits = 0;
+  u->evex_info.mask        = 0;
+  u->evex_info.zeroing     = 0;
+  u->evex_info.broadcast   = 0;
+  u->evex_info.rounding    = 0;
+  u->evex_info.sae         = 0;
   u->operand[0].type = UD_NONE;
   u->operand[1].type = UD_NONE;
   u->operand[2].type = UD_NONE;
@@ -1133,9 +1144,380 @@ decode_vex(struct ud *u)
       index = 0x1 | ((u->vex_b1 & 0x3) << 2);
     }
   }
-  return decode_ext(u, u->le->table[index]); 
+  return decode_ext(u, u->le->table[index]);
 }
 
+
+/* =============================================================================
+ * AVX-512 (EVEX) decoding
+ *
+ * This is a deliberately narrow decoder for a fixed set of EVEX instructions
+ * in 64 bit mode:
+ *
+ *   VADDPS/VADDPD/VMULPS/VMULPD      packed, 128/256/512 bit
+ *   VADDSS/VADDSD/VMULSS/VMULSD      scalar, XMM width
+ *   VMOVUPS/VMOVUPD                  register and memory, 128/256/512 bit
+ *
+ * Everything else (any other opcode, map, pp/W combination or reserved
+ * encoding) is rejected, leaving the normal invalid-instruction state.
+ * =============================================================================
+ */
+
+/*
+ * evex_vector_reg
+ *    Map a 0..31 vector register number to its enum ud_type value for the
+ *    given effective vector width.
+ */
+static enum ud_type
+evex_vector_reg(unsigned int num, unsigned int bits)
+{
+  switch (bits) {
+  case 512:
+    UD_ASSERT(num < 32);
+    return (enum ud_type) (UD_R_ZMM0 + num);
+  case 256:
+    return num < 16 ? (enum ud_type) (UD_R_YMM0 + num)
+                    : (enum ud_type) (UD_R_YMM16 + (num - 16));
+  default:
+    UD_ASSERT(bits == 128);
+    return num < 16 ? (enum ud_type) (UD_R_XMM0 + num)
+                    : (enum ud_type) (UD_R_XMM16 + (num - 16));
+  }
+}
+
+
+/*
+ * evex_operand_reset
+ *    Fully initialize an operand of the current instruction so that no
+ *    state from an earlier decode can leak through.
+ */
+static void
+evex_operand_reset(struct ud_operand *op)
+{
+  op->type   = UD_NONE;
+  op->size   = 0;
+  op->base   = UD_NONE;
+  op->index  = UD_NONE;
+  op->scale  = 0;
+  op->offset = 0;
+  op->lval.uqword = 0;
+  op->_legacy = 0;
+  op->_oprcode = 0;
+}
+
+
+static void
+evex_decode_reg(struct ud *u,
+                struct ud_operand *op,
+                unsigned int num,
+                unsigned int bits)
+{
+  (void) u;
+  evex_operand_reset(op);
+  op->type = UD_OP_REG;
+  op->base = evex_vector_reg(num, bits);
+  op->size = (uint16_t) bits;
+}
+
+
+/*
+ * evex_decode_rm
+ *    Decode ModRM.rm as either a vector register (mod == 3) or a memory
+ *    operand.  For memory operands the existing generic address decoding is
+ *    reused, with the EVEX B'/X' bits supplying the fourth bit of the base
+ *    and index registers (GPRs only ever reach r15).  The compressed disp8
+ *    is expanded by `disp_scale` bytes; disp32 and RIP-relative
+ *    displacements are never scaled.
+ *
+ *    `size` is the number of bits actually accessed in memory.
+ */
+static void
+evex_decode_rm(struct ud *u,
+               struct ud_operand *op,
+               unsigned int rm_num,
+               unsigned int bits,
+               unsigned int size,
+               unsigned int disp_scale)
+{
+  uint8_t m = modrm(u);
+
+  if (MODRM_MOD(m) == 3) {
+    evex_decode_reg(u, op, rm_num, bits);
+    return;
+  }
+
+  /*
+   * Reuse the legacy memory decoder.  It reads REX.B/REX.X from u->_rex in
+   * 64 bit addressing and from u->pfx_rex in 32 bit addressing, so mirror
+   * the EVEX extension bits into both.  These are GPR extension bits, not
+   * the vector-register high bits.
+   */
+  u->_rex = (uint8_t) (((~u->evex_b1 >> 5) & 1) << 0) |
+            (uint8_t) (((~u->evex_b1 >> 6) & 1) << 1);
+  u->pfx_rex = u->_rex;
+
+  evex_operand_reset(op);
+  decode_modrm_rm(u, op, REGCLASS_XMM, size);
+
+  /*
+   * The extension bits were only staged for the address decoder; drop them
+   * so they cannot influence a later operand or the text translation.
+   */
+  u->_rex = 0;
+  u->pfx_rex = 0;
+
+  /*
+   * All EVEX disp8 encodings are compressed.  Store the scaled, signed
+   * displacement while keeping offset == 8 to record how it was encoded.
+   * The syntax layer knows to read lval.sdword for EVEX.
+   */
+  if (!u->error && op->offset == 8) {
+    op->lval.sdword = (int32_t) ((int8_t) op->lval.ubyte) * (int32_t) disp_scale;
+  }
+}
+
+
+/*
+ * decode_evex
+ *    Decode an EVEX-prefixed instruction (0x62 has already been consumed
+ *    into inp_curr()).
+ */
+static int
+decode_evex(struct ud *u)
+{
+  uint8_t p0, p1, p2, op;
+  unsigned int map, pp, w, ll, b, z, aaa;
+  unsigned int vvvv_raw, vp, vreg, reg_num, rm_num;
+  unsigned int elem_bits = 0, vec_bits = 0, mem_size = 0, disp_scale = 0;
+  unsigned int mask, broadcast = 0, rounding = 0, sae = 0, zeroing;
+  unsigned int scalar = 0, is_move = 0, is_store = 0;
+  enum ud_mnemonic_code mnemonic;
+  struct ud_evex_info *info;
+
+  /* Legacy prefixes that the EVEX prefix itself encodes are not allowed. */
+  if (u->pfx_opr || u->pfx_str || u->pfx_rex || u->pfx_lock) {
+    UD_RETURN_WITH_ERROR(u, "legacy prefix before evex");
+  }
+
+  p0 = inp_next(u);
+  p1 = inp_next(u);
+  p2 = inp_next(u);
+  UD_RETURN_ON_ERROR(u);
+
+  u->evex_b1 = p0;
+  u->evex_b2 = p1;
+  u->evex_b3 = p2;
+
+  /* reserved bits: P0[3:2] must be 0, P1[2] must be 1 */  if ((p0 & 0x0c) != 0x00) {
+    UD_RETURN_WITH_ERROR(u, "reserved evex bits in P0");
+  }
+  if ((p1 & 0x04) != 0x04) {
+    UD_RETURN_WITH_ERROR(u, "reserved evex bit in P1");
+  }
+
+  map = p0 & 0x03;
+  if (map != 0x01) {
+    UD_RETURN_WITH_ERROR(u, "unsupported evex opcode map");
+  }
+
+  pp   = p1 & 0x03;
+  w    = (p1 >> 7) & 0x01;
+  ll   = (p2 >> 5) & 0x03;
+  b    = (p2 >> 4) & 0x01;
+  z    = (p2 >> 7) & 0x01;
+  aaa  = p2 & 0x07;
+
+  vvvv_raw = (p1 >> 3) & 0x0f;
+  vp       = (p2 >> 3) & 0x01;
+  /* EVEX.vvvv is stored inverted; V' supplies bit 4. */
+  vreg = (((~vp) & 1) << 4) | ((~vvvv_raw) & 0x0f);
+
+  op = inp_next(u);
+  UD_RETURN_ON_ERROR(u);
+
+  /* ModRM.reg: R supplies bit 4, R' supplies bit 3 (both inverted). */
+  reg_num = (((~p0 >> 4) & 1) << 4) |
+            (((~p0 >> 7) & 1) << 3) |
+            MODRM_REG(modrm(u));
+  /* ModRM.rm for vector registers: X' supplies bit 4, B' bit 3. */
+  rm_num  = (((~p0 >> 6) & 1) << 4) |
+            (((~p0 >> 5) & 1) << 3) |
+            MODRM_RM(modrm(u));
+
+  u->primary_opcode = op;
+
+  /*
+   * Select the instruction.  Only the exact pp/W encodings of the
+   * supported instructions are accepted.
+   */
+  if (op == 0x58 || op == 0x59) {
+    if (pp == 0x00 && w == 0x00) {
+      mnemonic = (op == 0x58) ? UD_Ivaddps : UD_Ivmulps;
+      elem_bits = 32;
+      scalar = 0;
+    } else if (pp == 0x01 && w == 0x01) {
+      mnemonic = (op == 0x58) ? UD_Ivaddpd : UD_Ivmulpd;
+      elem_bits = 64;
+      scalar = 0;
+    } else if (pp == 0x02 && w == 0x00) {
+      mnemonic = (op == 0x58) ? UD_Ivaddss : UD_Ivmulss;
+      elem_bits = 32;
+      scalar = 1;
+    } else if (pp == 0x03 && w == 0x01) {
+      mnemonic = (op == 0x58) ? UD_Ivaddsd : UD_Ivmulsd;
+      elem_bits = 64;
+      scalar = 1;
+    } else {
+      UD_RETURN_WITH_ERROR(u, "unsupported evex add/mul encoding");
+    }
+    is_move = 0;
+  } else if (op == 0x10 || op == 0x11) {
+    if (pp == 0x00 && w == 0x00) {
+      mnemonic = UD_Ivmovups;
+    } else if (pp == 0x01 && w == 0x01) {
+      mnemonic = UD_Ivmovupd;
+    } else {
+      UD_RETURN_WITH_ERROR(u, "unsupported evex move encoding");
+    }
+    is_move = 1;
+    is_store = (op == 0x11);
+    scalar = 0;
+  } else {
+    UD_RETURN_WITH_ERROR(u, "unsupported evex opcode");
+  }
+
+  /*
+   * Resolve the vector length and the EVEX.b meaning.  EVEX.b is a
+   * broadcast for memory sources and embedded rounding/SAE for register
+   * sources of the arithmetic forms.
+   */
+  if (is_move) {
+    /* VMOV has no vvvv source: raw vvvv must be 1111b and V' must be 1. */
+    if (vvvv_raw != 0x0f || vp != 1) {
+      UD_RETURN_WITH_ERROR(u, "reserved vvvv for evex move");
+    }
+    /* VMOV has no broadcast and no embedded rounding. */
+    if (b) {
+      UD_RETURN_WITH_ERROR(u, "invalid evex.b for move");
+    }
+    if (ll == 0x03) {
+      UD_RETURN_WITH_ERROR(u, "reserved evex vector length");
+    }
+    vec_bits = (ll == 0) ? 128 : (ll == 1) ? 256 : 512;
+  } else if (scalar) {
+    if (b) {
+      /* Register source: embedded rounding + SAE. */
+      if (MODRM_MOD(modrm(u)) != 3) {
+        UD_RETURN_WITH_ERROR(u, "invalid scalar broadcast");
+      }
+      vec_bits = 128;
+      rounding = ll + 1;   /* 0=RN, 1=RD, 2=RU, 3=RZ */
+      sae = 1;
+    } else {
+      /* Scalar is LIG: L'L is ignored when there is no rounding. */
+      vec_bits = 128;
+    }
+  } else {
+    if (b) {
+      if (MODRM_MOD(modrm(u)) == 3) {
+        /*
+         * Embedded rounding: L'L selects the rounding mode instead of the
+         * vector length.  These forms only exist with 512 bit operands.
+         */
+        vec_bits = 512;
+        rounding = ll + 1;
+        sae = 1;
+      } else {
+        if (ll == 0x03) {
+          UD_RETURN_WITH_ERROR(u, "reserved evex vector length");
+        }
+        vec_bits = (ll == 0) ? 128 : (ll == 1) ? 256 : 512;
+        broadcast = vec_bits / elem_bits;
+      }
+    } else {
+      if (ll == 0x03) {
+        UD_RETURN_WITH_ERROR(u, "reserved evex vector length");
+      }
+      vec_bits = (ll == 0) ? 128 : (ll == 1) ? 256 : 512;
+    }
+  }
+
+  /*
+   * Masking rules: {z} requires an explicit mask, and a memory destination
+   * (VMOV store) cannot be zeroing.
+   */
+  mask = aaa;
+  zeroing = z ? 1u : 0u;
+  if (zeroing && mask == 0) {
+    UD_RETURN_WITH_ERROR(u, "zeroing without mask");
+  }
+  if (zeroing && is_move && is_store && MODRM_MOD(modrm(u)) != 3) {
+    UD_RETURN_WITH_ERROR(u, "zeroing with memory destination");
+  }
+
+  /*
+   * Compute the memory operand size and the disp8 compression factor.
+   * The operand size always describes the number of bits actually
+   * accessed: for a broadcast source that is the element size, not the
+   * whole vector.
+   */
+  if (is_move) {
+    mem_size   = vec_bits;
+    disp_scale = vec_bits / 8;
+  } else if (scalar) {
+    mem_size   = elem_bits;
+    disp_scale = elem_bits / 8;
+  } else if (broadcast) {
+    mem_size   = elem_bits;
+    disp_scale = elem_bits / 8;
+  } else {
+    mem_size   = vec_bits;
+    disp_scale = vec_bits / 8;
+  }
+
+  /*
+   * Build the operands.  Arithmetic forms are V, H, W; VMOV forms are
+   * V, W (load) or W, V (store).
+   */
+  u->adr_mode = u->pfx_adr ? 32 : 64;
+  u->opr_mode = 32;
+
+  if (!is_move) {
+    evex_operand_reset(&u->operand[3]);
+    evex_decode_reg(u, &u->operand[0], reg_num, vec_bits);
+    evex_decode_reg(u, &u->operand[1], vreg, vec_bits);
+    evex_decode_rm(u, &u->operand[2], rm_num, vec_bits,
+                   mem_size, disp_scale);
+  } else if (!is_store) {
+    evex_operand_reset(&u->operand[2]);
+    evex_operand_reset(&u->operand[3]);
+    evex_decode_reg(u, &u->operand[0], reg_num, vec_bits);
+    evex_decode_rm(u, &u->operand[1], rm_num, vec_bits,
+                   mem_size, disp_scale);
+  } else {
+    evex_operand_reset(&u->operand[2]);
+    evex_operand_reset(&u->operand[3]);
+    evex_decode_rm(u, &u->operand[0], rm_num, vec_bits,
+                   mem_size, disp_scale);
+    evex_decode_reg(u, &u->operand[1], reg_num, vec_bits);
+  }
+  UD_RETURN_ON_ERROR(u);
+
+  u->mnemonic = mnemonic;
+  u->itab_entry = &ud_itab[0];
+
+  info = &u->evex_info;
+  info->vector_bits = (uint16_t) vec_bits;
+  info->mask        = (uint8_t) mask;
+  info->zeroing     = (uint8_t) zeroing;
+  info->broadcast   = (uint8_t) broadcast;
+  info->rounding    = (uint8_t) rounding;
+  info->sae         = (uint8_t) sae;
+
+  u->evex_valid = 1;
+
+  return 0;
+}
 
 /*
  * decode_ext()
@@ -1218,6 +1600,13 @@ decode_opcode(struct ud *u)
   uint16_t ptr;
   UD_ASSERT(u->le->type == UD_TAB__OPC_TABLE);
   UD_RETURN_ON_ERROR(u);
+  /*
+   * 0x62 introduces an EVEX prefix in 64 bit mode.  (In 16/32 bit mode the
+   * same byte is BOUND and keeps the table-driven legacy behaviour.)
+   */
+  if (u->dis_mode == 64 && inp_curr(u) == 0x62) {
+    return decode_evex(u);
+  }
   ptr = u->le->table[inp_curr(u)];
   return decode_ext(u, ptr);
 }

@@ -484,6 +484,94 @@ disassembled instruction using the function :func:`ud_insn_opr`.
         UD_R_XMM8,  UD_R_XMM9,  UD_R_XMM10, UD_R_XMM11,
         UD_R_XMM12, UD_R_XMM13, UD_R_XMM14, UD_R_XMM15,
 
+    AVX-512 Registers (added after the pre-existing enumerators so that all
+    older values are unchanged):
+
+    .. code-block:: c
+
+        UD_R_XMM16 .. UD_R_XMM31,
+        UD_R_YMM16 .. UD_R_YMM31,
+        UD_R_ZMM0  .. UD_R_ZMM31
+
+
+.. c:function:: const struct ud_evex_info* ud_insn_evex(const ud_t* u)
+
+    .. versionadded:: 1.8
+
+    Returns the AVX-512 (EVEX) decoration information for the instruction
+    most recently decoded into `u`, or :code:`NULL` when that instruction was
+    not produced by the supported EVEX decoder. Non-EVEX instructions, and
+    EVEX encodings that are unsupported, invalid or truncated, all return
+    :code:`NULL`; no information from a previous instruction is retained.
+
+    The returned pointer is owned by the :type:`ud_t` object. It stays valid
+    until the next :func:`ud_disassemble` / :func:`ud_decode` or until the
+    object is re-initialized, and the structure it points to is derived from
+    the same decode as :func:`ud_insn_opr` and :func:`ud_insn_mnemonic`.
+
+    AVX-512 support is currently limited to 64 bit mode and to the following
+    EVEX instructions, with both their register and ordinary memory forms:
+
+    - ``VADDPS`` / ``VADDPD`` and ``VMULPS`` / ``VMULPD`` (packed,
+      128/256/512 bit)
+    - ``VADDSS`` / ``VADDSD`` and ``VMULSS`` / ``VMULSD`` (scalar, XMM
+      operand width)
+    - ``VMOVUPS`` / ``VMOVUPD`` (128/256/512 bit)
+
+    Any register number from 0 to 31 can be decoded in ModRM.reg, in the
+    register form of ModRM.rm, and in vvvv together with V'.
+
+    .. c:type:: struct ud_evex_info
+
+    The structure has the following fields:
+
+    .. c:member:: uint16_t ud_evex_info.vector_bits
+
+        Effective vector width in bits: 128, 256 or 512. Scalar
+        instructions always report 128 (their XMM operand width).
+
+    .. c:member:: uint8_t ud_evex_info.mask
+
+        Number of the ``{k}`` write-mask (1 to 7), or 0 when the
+        instruction has no explicit mask.
+
+    .. c:member:: uint8_t ud_evex_info.zeroing
+
+        Non-zero when zeroing masking (``{z}``) is in effect.
+
+    .. c:member:: uint8_t ud_evex_info.broadcast
+
+        Number of lanes to which a memory element is broadcast (``{1toN}``);
+        zero when there is no broadcast.
+
+    .. c:member:: uint8_t ud_evex_info.rounding
+
+        Embedded rounding override: 0 for none, 1 RN, 2 RD, 3 RU, 4 RZ.
+
+    .. c:member:: uint8_t ud_evex_info.sae
+
+        Non-zero when suppress-all-exceptions is in effect.
+
+    For the packed arithmetic forms, ``EVEX.b`` means a broadcast when the
+    source is memory and embedded rounding / SAE when the source is a
+    register; in the latter case ``L'L`` selects the rounding mode rather
+    than the vector length. The scalar register forms report rounding as
+    well, and never report a broadcast.
+
+    Compressed disp8 displacements are expanded by the decoder: by the full
+    vector size for full-vector memory operands, by the element size for
+    broadcast sources, and by the element size for scalars. disp32 and
+    RIP-relative displacements are never scaled. For a broadcast memory
+    source, the operand :c:member:`size <ud_operand_t.size>` is the element
+    size (32 or 64 bits), not the full vector size.
+
+    With the INTEL syntax the matching decorations are printed: ``{kN}`` and
+    optional ``{z}`` after the destination operand, ``{1toN}`` after a
+    broadcast memory operand, and ``{rn-sae}`` / ``{rd-sae}`` / ``{ru-sae}``
+    / ``{rz-sae}`` for the register rounding forms. Undecorated operands are
+    left unadorned, and ordinary instructions are formatted exactly as
+    before. The AT&T decoration syntax is not extended in this version.
+
 
 Inspect Prefixes
 ----------------

@@ -124,8 +124,35 @@ enum ud_type
   UD_R_RIP,
 
   /* Operand Types */
-  UD_OP_REG,  UD_OP_MEM,  UD_OP_PTR,  UD_OP_IMM,  
-  UD_OP_JIMM, UD_OP_CONST
+  UD_OP_REG,  UD_OP_MEM,  UD_OP_PTR,  UD_OP_IMM,
+  UD_OP_JIMM, UD_OP_CONST,
+
+  /*
+   * AVX-512 vector registers.
+   *
+   * These are appended after the pre-existing enumerators so that every
+   * value that existed before the AVX-512 decoder was added keeps its
+   * original numeric value.  XMM16..XMM31 and YMM16..YMM31 complete the
+   * upper halves of the existing XMM/YMM ranges; ZMM0..ZMM31 are new.
+   */
+  UD_R_XMM16, UD_R_XMM17, UD_R_XMM18, UD_R_XMM19,
+  UD_R_XMM20, UD_R_XMM21, UD_R_XMM22, UD_R_XMM23,
+  UD_R_XMM24, UD_R_XMM25, UD_R_XMM26, UD_R_XMM27,
+  UD_R_XMM28, UD_R_XMM29, UD_R_XMM30, UD_R_XMM31,
+
+  UD_R_YMM16, UD_R_YMM17, UD_R_YMM18, UD_R_YMM19,
+  UD_R_YMM20, UD_R_YMM21, UD_R_YMM22, UD_R_YMM23,
+  UD_R_YMM24, UD_R_YMM25, UD_R_YMM26, UD_R_YMM27,
+  UD_R_YMM28, UD_R_YMM29, UD_R_YMM30, UD_R_YMM31,
+
+  UD_R_ZMM0,  UD_R_ZMM1,  UD_R_ZMM2,  UD_R_ZMM3,
+  UD_R_ZMM4,  UD_R_ZMM5,  UD_R_ZMM6,  UD_R_ZMM7,
+  UD_R_ZMM8,  UD_R_ZMM9,  UD_R_ZMM10, UD_R_ZMM11,
+  UD_R_ZMM12, UD_R_ZMM13, UD_R_ZMM14, UD_R_ZMM15,
+  UD_R_ZMM16, UD_R_ZMM17, UD_R_ZMM18, UD_R_ZMM19,
+  UD_R_ZMM20, UD_R_ZMM21, UD_R_ZMM22, UD_R_ZMM23,
+  UD_R_ZMM24, UD_R_ZMM25, UD_R_ZMM26, UD_R_ZMM27,
+  UD_R_ZMM28, UD_R_ZMM29, UD_R_ZMM30, UD_R_ZMM31
 };
 
 #include "itab.h"
@@ -162,6 +189,24 @@ struct ud_operand {
    */
   uint64_t        _legacy; /* this will be removed in 1.8 */
   uint8_t         _oprcode;
+};
+
+/* -----------------------------------------------------------------------------
+ * struct ud_evex_info - AVX-512 (EVEX) decoration information.
+ *
+ * Filled in by the decoder for the supported EVEX instructions in 64 bit
+ * mode; otherwise ud_insn_evex() returns NULL.  The structure is owned by
+ * the ud_t object and stays valid until the next decode or re-initialization.
+ * All of its fields describe the same decode as ud_insn_opr().
+ * -----------------------------------------------------------------------------
+ */
+struct ud_evex_info {
+  uint16_t  vector_bits;  /* effective vector width: 128, 256 or 512; 128 for scalar */
+  uint8_t   mask;         /* k mask number 1..7; 0 when no mask is written */
+  uint8_t   zeroing;      /* nonzero for {z} (zeroing) masking */
+  uint8_t   broadcast;    /* number of lanes a memory element is broadcast to; 0 if none */
+  uint8_t   rounding;     /* 0 none, 1 RN, 2 RD, 3 RU, 4 RZ */
+  uint8_t   sae;          /* nonzero when suppress-all-exceptions is in effect */
 };
 
 /* -----------------------------------------------------------------------------
@@ -230,6 +275,18 @@ struct ud
   uint8_t   vex_b1;
   uint8_t   vex_b2;
   uint8_t   primary_opcode;
+  /*
+   * EVEX decode state (internal use only).
+   *
+   * evex_b1..evex_b3 are the three bytes following the 0x62 escape and
+   * evex_valid is set only for a fully decoded, supported EVEX instruction.
+   * ud_insn_evex() exposes none of this directly; it returns &evex_info.
+   */
+  uint8_t   evex_valid;
+  uint8_t   evex_b1;
+  uint8_t   evex_b2;
+  uint8_t   evex_b3;
+  struct ud_evex_info evex_info;
   void *    user_opaque_data;
   struct ud_itab_entry * itab_entry;
   struct ud_lookup_table_list_entry *le;

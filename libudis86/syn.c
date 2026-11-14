@@ -84,7 +84,35 @@ const char* ud_reg_tab[] =
   "ymm8", "ymm9", "ymm10",  "ymm11",
   "ymm12", "ymm13", "ymm14", "ymm15",
 
-  "rip"
+  "rip",
+
+  /*
+   * Placeholders for UD_OP_REG .. UD_OP_CONST.  The AVX-512 register
+   * enumerators were appended after the operand-type enumerators (to
+   * preserve the numeric values of the pre-existing enumerators), so the
+   * flat table indexed by (base - UD_R_AL) needs these gap entries.
+   */
+  "", "", "", "", "", "",
+
+  /* AVX-512 registers (see enum ud_type in types.h) */
+  "xmm16", "xmm17", "xmm18", "xmm19",
+  "xmm20", "xmm21", "xmm22", "xmm23",
+  "xmm24", "xmm25", "xmm26", "xmm27",
+  "xmm28", "xmm29", "xmm30", "xmm31",
+
+  "ymm16", "ymm17", "ymm18", "ymm19",
+  "ymm20", "ymm21", "ymm22", "ymm23",
+  "ymm24", "ymm25", "ymm26", "ymm27",
+  "ymm28", "ymm29", "ymm30", "ymm31",
+
+  "zmm0",  "zmm1",  "zmm2",  "zmm3",
+  "zmm4",  "zmm5",  "zmm6",  "zmm7",
+  "zmm8",  "zmm9",  "zmm10", "zmm11",
+  "zmm12", "zmm13", "zmm14", "zmm15",
+  "zmm16", "zmm17", "zmm18", "zmm19",
+  "zmm20", "zmm21", "zmm22", "zmm23",
+  "zmm24", "zmm25", "zmm26", "zmm27",
+  "zmm28", "zmm29", "zmm30", "zmm31"
 };
 
 
@@ -101,6 +129,53 @@ ud_syn_rel_target(struct ud *u, struct ud_operand *opr)
   }
 }
 
+
+/*
+ * ud_syn_print_evex_mem_disp
+ *    Print the displacement of an EVEX memory operand.  For a disp8 the
+ *    decoder has already stored the sign extended, compression-scaled
+ *    value in lval.sdword; disp32 / disp64 / RIP-relative displacements are
+ *    stored unscaled.  `sign` requests an explicit '+' for positive
+ *    displacements that follow a base or index register.
+ */
+void
+ud_syn_print_evex_mem_disp(struct ud* u, const struct ud_operand *op, int sign)
+{
+  int64_t v;
+  /*
+   * A displacement with neither base nor index is an absolute address and
+   * is always printed unsigned; otherwise it is signed relative to the
+   * base/index.
+   */
+  int absolute = (op->base == UD_NONE && op->index == UD_NONE);
+  switch (op->offset) {
+  case 8:
+  case 16:
+  case 32:
+    if (absolute) {
+      uint64_t a;
+      switch (op->offset) {
+      case 8:  a = op->lval.ubyte;  break;
+      case 16: a = op->lval.uword;  break;
+      default: a = op->lval.udword; break;
+      }
+      ud_asmprintf(u, "0x%" FMT64 "x", a);
+      return;
+    }
+    v = op->lval.sdword;
+    break;
+  case 64:
+    ud_asmprintf(u, "0x%" FMT64 "x", op->lval.uqword);
+    return;
+  default:
+    return;
+  }
+  if (v < 0) {
+    ud_asmprintf(u, "-0x%" FMT64 "x", (uint64_t) -v);
+  } else if (v > 0) {
+    ud_asmprintf(u, "%s0x%" FMT64 "x", sign ? "+" : "", (uint64_t) v);
+  }
+}
 
 /*
  * asmprintf

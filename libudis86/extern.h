@@ -86,6 +86,16 @@ extern LIBUDIS86_DLLEXTERN unsigned int ud_insn_len(const struct ud* u);
 
 extern LIBUDIS86_DLLEXTERN const struct ud_operand* ud_insn_opr(const struct ud *u, unsigned int n);
 
+/*
+ * AVX-512 decoration information for the current instruction.
+ *
+ * Returns NULL for non-EVEX instructions and for EVEX encodings that are
+ * invalid or truncated; a non-NULL result describes the same decode as
+ * ud_insn_opr() and ud_insn_mnemonic(), and remains valid until the next
+ * ud_disassemble()/ud_decode() or until the object is re-initialized.
+ */
+extern LIBUDIS86_DLLEXTERN const struct ud_evex_info* ud_insn_evex(const struct ud *u);
+
 extern LIBUDIS86_DLLEXTERN int ud_opr_is_sreg(const struct ud_operand *opr);
 
 extern LIBUDIS86_DLLEXTERN int ud_opr_is_gpr(const struct ud_operand *opr);

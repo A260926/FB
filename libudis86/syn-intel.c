@@ -82,10 +82,19 @@ static void gen_operand(struct ud* u, struct ud_operand* op, int syn_cast)
       }
     }
     if (op->offset != 0) {
-      ud_syn_print_mem_disp(u, op, (op->base  != UD_NONE || 
+      if (u->evex_valid) {
+        ud_syn_print_evex_mem_disp(u, op,
+                                   (op->base != UD_NONE ||
                                     op->index != UD_NONE) ? 1 : 0);
+      } else {
+        ud_syn_print_mem_disp(u, op, (op->base  != UD_NONE ||
+                                      op->index != UD_NONE) ? 1 : 0);
+      }
     }
     ud_asmprintf(u, "]");
+    if (u->evex_valid && u->evex_info.broadcast) {
+      ud_asmprintf(u, "{1to%d}", u->evex_info.broadcast);
+    }
     break;
       
   case UD_OP_IMM:
@@ -190,6 +199,12 @@ ud_translate_intel(struct ud* u)
       }
     }
     gen_operand(u, &u->operand[0], cast);
+    if (u->evex_valid && u->evex_info.mask) {
+      ud_asmprintf(u, "{%s%d}", "k", u->evex_info.mask);
+      if (u->evex_info.zeroing) {
+        ud_asmprintf(u, "{z}");
+      }
+    }
   }
 
   if (u->operand[1].type != UD_NONE) {
@@ -216,6 +231,17 @@ ud_translate_intel(struct ud* u)
   if (u->operand[3].type != UD_NONE) {
     ud_asmprintf(u, ", ");
     gen_operand(u, &u->operand[3], 0);
+  }
+
+  /*
+   * Register-source embedded rounding (with SAE) is printed after the
+   * operand list.  It only ever applies to the EVEX arithmetic forms.
+   */
+  if (u->evex_valid && u->evex_info.rounding) {
+    static const char* rounding_name[] = { "rn", "rd", "ru", "rz" };
+    ud_asmprintf(u, ", {%s-sae}", rounding_name[u->evex_info.rounding - 1]);
+  } else if (u->evex_valid && u->evex_info.sae) {
+    ud_asmprintf(u, ", {sae}");
   }
 }
 
