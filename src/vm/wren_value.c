@@ -206,6 +206,15 @@ void wrenEnsureStack(WrenVM* vm, ObjFiber* fiber, int needed)
   // single array, hence the slightly redundant-looking arithmetic below.
   if (fiber->stack != oldStack)
   {
+#ifdef WREN_FUZZ_TEST_HOOKS
+    // Read-only test instrumentation: count Value stack relocations, and in
+    // particular those that occurred while the fiber still had open upvalues
+    // pointing into the (now stale) old stack.
+    vm->fuzzStackMovesTotal++;
+    if (fiber->openUpvalues != NULL)
+      vm->fuzzStackMovesWithOpenUpvalue++;
+#endif
+
     // Top of the stack.
     if (vm->apiStack >= oldStack && vm->apiStack <= fiber->stackTop)
     {

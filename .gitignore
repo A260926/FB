@@ -1,6 +1,9 @@
 # Build outputs
 /bin
 /lib
+# Local fuzz/build scratch for test/fuzz/check-upvalues.sh
+/.fuzzbuild
+/.baseline
 # Intermediate files
 *.obj
 Debug/

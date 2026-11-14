@@ -111,6 +111,16 @@ struct WrenVM
   // There is a single global symbol table for all method names on all classes.
   // Method calls are dispatched directly by index in this table.
   SymbolTable methodNames;
+
+#ifdef WREN_FUZZ_TEST_HOOKS
+  // Test-only, read-only observability for test/fuzz. These counters never
+  // influence execution; they exist so the upvalue fuzz chain can prove that a
+  // Value stack relocation happened while open upvalues were live. Normal
+  // builds do not define WREN_FUZZ_TEST_HOOKS, so these fields do not exist.
+  int fuzzStackMovesWithOpenUpvalue;
+  int fuzzStackMovesTotal;
+  int fuzzGarbageCollections;
+#endif
 };
 
 // A generic allocation function that handles all explicit memory management.

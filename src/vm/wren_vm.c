@@ -124,6 +124,9 @@ void wrenFreeVM(WrenVM* vm)
 
 void wrenCollectGarbage(WrenVM* vm)
 {
+#ifdef WREN_FUZZ_TEST_HOOKS
+  vm->fuzzGarbageCollections++;
+#endif
 #if WREN_DEBUG_TRACE_MEMORY || WREN_DEBUG_TRACE_GC
   printf("-- gc --\n");
 
@@ -1843,6 +1846,22 @@ void wrenInsertInList(WrenVM* vm, int listSlot, int index, int elementSlot)
   
   wrenListInsert(vm, list, vm->apiStack[elementSlot], index);
 }
+
+#ifdef WREN_FUZZ_TEST_HOOKS
+// Test-only read-only accessors used by test/fuzz/upvalue_model.c. They expose
+// instrumentation counters, never interpreter state that could feed an
+// expectation. When WREN_FUZZ_TEST_HOOKS is not defined these symbols do not
+// exist and the fuzz driver never references them.
+int wrenFuzzTestStackMoves(WrenVM* vm)
+{
+  return vm->fuzzStackMovesWithOpenUpvalue;
+}
+
+int wrenFuzzTestCollections(WrenVM* vm)
+{
+  return vm->fuzzGarbageCollections;
+}
+#endif
 
 int wrenGetMapCount(WrenVM* vm, int slot)
 {
