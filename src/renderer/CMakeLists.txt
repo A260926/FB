@@ -4,6 +4,8 @@ project(renderer)
 
 set(SOURCE_FILES
 	Renderer.h
+	ClusteredLighting.h
+	ClusteredLighting.cpp
 	EdgeData.h
 	EdgeEquation.h
 	IRasterizer.h
