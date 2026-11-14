@@ -53,6 +53,64 @@ The following utility programs are included:
  * **mesh_info**: Print out some information about a mesh
  * **xf**: Create or compose transformations in .xf files
 
+## Face direction fields
+
+`include/FaceField.h` provides `trimesh::FaceFieldSystem` (implemented in
+`libsrc/face_field.cc`), a solver for smooth N-symmetry direction ("cross")
+fields on oriented, non-degenerate, 2-manifold triangle meshes.  Unlike
+`diffuse_vector`, which averages world-space vector components, directions
+are transported across each interior edge by unfolding the two incident
+triangles into a common plane first.  Directions are stored per face as the
+complex coefficient `z` of the n-th power of the angle in a local tangent
+frame `(e1, e2, normal)` with `e2 = normal x e1`, so a unit direction at
+angle `theta` corresponds to `z = exp(i*n*theta)`.  For two faces `f`, `g`
+sharing an edge, with `d` the unit vector along the common edge from the
+smaller to the larger vertex index and `theta_f`, `theta_g` its angles in
+the two frames, the transport factor is
+`T_fg = exp(i*n*(theta_f - theta_g))`, and `solve()` returns the unique
+minimizer of
+
+```
+E(z) = sum_f  A_f * |z_f - u_f|^2
+     + tau * sum_{interior edges (f,g)}  w_fg * |z_f - T_fg z_g|^2 ,
+     z_f = h_f on constrained faces
+```
+
+with `A_f` the triangle area and `w_fg = |edge|^2 / (A_f + A_g)`.  The
+magnitude of `z` is meaningful and the result is never renormalized.  The
+constructor builds the connection, the free-row operator and the
+preconditioner once (all storage is O(#faces), in double precision), so
+repeated solves with new data are cheap, and the mesh may be modified or
+destroyed after construction.  Invalid input (bad indices, non-finite
+data, non-unit or non-tangent bases, `n` outside 1..8, non-positive
+`tau`, duplicate constraints, non-manifold or inconsistently oriented
+edges) throws `std::invalid_argument`.
+
+```cpp
+#include "FaceField.h"
+using namespace trimesh;
+
+TriMesh *mesh = TriMesh::read("bent.ply");
+std::vector<vec> e1(mesh->faces.size());
+for (size_t f = 0; f < mesh->faces.size(); f++) {
+    vec nrm = normalized(mesh->trinorm(f));
+    vec a(1.0f, 0.0f, 0.0f);
+    e1[f] = normalized(a - nrm * (a DOT nrm));   // unit tangent per face
+}
+std::vector<int> fixed;
+fixed.push_back(0);
+FaceFieldSystem sys(*mesh, e1, 4, 1.0, fixed);   // 4-RoSy field, tau = 1
+
+std::vector<std::complex<double> > u(mesh->faces.size(), 0.0);
+std::vector<std::complex<double> > h(1, 1.0);    // z_0 = 1
+FaceFieldSystem::Result r = sys.solve(u, h);     // r.z and r.residual
+
+// Same geometry, bases and constraints: new right-hand sides re-use the
+// operator and preconditioner built in the constructor.
+u[17] = std::complex<double>(0.0, 2.0);
+FaceFieldSystem::Result r2 = sys.solve(u, h);
+```
+
 ## Fork Details
 
 This fork stays as close as possible to the original [trimesh2](http://gfx.cs.princeton.edu/proj/trimesh2/) code, only changing the actual source files when a solution for compilation errors cannot be reached through VS pre-build steps or preprocessor magic.

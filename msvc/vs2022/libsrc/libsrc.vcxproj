@@ -23,6 +23,7 @@
     <ClInclude Include="..\..\..\include\bsphere.h" />
     <ClInclude Include="..\..\..\include\Color.h" />
     <ClInclude Include="..\..\..\include\endianutil.h" />
+    <ClInclude Include="..\..\..\include\FaceField.h" />
     <ClInclude Include="..\..\..\include\GLCamera.h" />
     <ClInclude Include="..\..\..\include\GLManager.h" />
     <ClInclude Include="..\..\..\include\ICP.h" />
@@ -42,6 +43,7 @@
     <ClCompile Include="..\..\..\libsrc\conn_comps.cc" />
     <ClCompile Include="..\..\..\libsrc\diffuse.cc" />
     <ClCompile Include="..\..\..\libsrc\edgeflip.cc" />
+    <ClCompile Include="..\..\..\libsrc\face_field.cc" />
     <ClCompile Include="..\..\..\libsrc\faceflip.cc" />
     <ClCompile Include="..\..\..\libsrc\filter.cc" />
     <ClCompile Include="..\..\..\libsrc\GLCamera.cc" />

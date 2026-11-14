@@ -19,6 +19,7 @@ CCFILES =	TriMesh_bounding.cc \
 		conn_comps.cc \
 		diffuse.cc \
 		edgeflip.cc \
+		face_field.cc \
 		faceflip.cc \
 		filter.cc \
 		make.cc \
