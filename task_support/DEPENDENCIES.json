@@ -1,0 +1,413 @@
+{
+  "repo": "https://github.com/raff/godet",
+  "commit": "d17141a7d9a0d0affae6adcb34424299861eb647",
+  "dependencies": [
+    {
+      "name": "httpclient",
+      "repo": "https://github.com/gobs/httpclient",
+      "commit": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e",
+      "added_go_mod": true,
+      "local": "deps/httpclient",
+      "licenses": [
+        "deps/httpclient/LICENSE"
+      ]
+    },
+    {
+      "name": "pretty",
+      "repo": "https://github.com/gobs/pretty",
+      "commit": "09732c25a95b8e10e85177a3201cf4c7fe35a377",
+      "added_go_mod": true,
+      "local": "deps/pretty",
+      "licenses": [
+        "deps/pretty/LICENSE"
+      ]
+    },
+    {
+      "name": "simplejson",
+      "repo": "https://github.com/gobs/simplejson",
+      "commit": "c70e6bd5e26b37fd37b5225d00d600b93d348e58",
+      "added_go_mod": true,
+      "local": "deps/simplejson",
+      "licenses": [
+        "deps/simplejson/LICENSE"
+      ]
+    },
+    {
+      "name": "websocket",
+      "repo": "https://github.com/gorilla/websocket",
+      "commit": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d",
+      "added_go_mod": false,
+      "local": "deps/websocket",
+      "licenses": [
+        "deps/websocket/LICENSE"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "deps/httpclient/.gitignore",
+      "sha256": "3b200cfb357ee153e2d3de275b705b133b86c5c8429fee6d738f83268fe3fc0c",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:.gitignore"
+    },
+    {
+      "path": "deps/httpclient/LICENSE",
+      "sha256": "3f46a3eab9e60e15fedb713a2cf71b3c4e13e4307580916ffc45a68a4c67b757",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:LICENSE"
+    },
+    {
+      "path": "deps/httpclient/README.md",
+      "sha256": "cfb30a901d77eef1bd89740482664d52853920f45ec2b0f25c2aa0aa9e53d344",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:README.md"
+    },
+    {
+      "path": "deps/httpclient/cmd/httpclient/main.go",
+      "sha256": "eb5b8e0f527f431b3dd42f4a9eccca712c88a8215040f6b6e68f1e2afc655cbd",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:cmd/httpclient/main.go"
+    },
+    {
+      "path": "deps/httpclient/go.mod",
+      "sha256": "46f51ec38fa616af5a523399132457c60f60c5043713619c94ec012ec46042ec",
+      "origin": "added local module declaration"
+    },
+    {
+      "path": "deps/httpclient/httpclient.go",
+      "sha256": "5d08449b60748dfbf5661f34ef927508f66c5d1dfb9ffa55883231780065a447",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:httpclient.go"
+    },
+    {
+      "path": "deps/httpclient/httpclient_test.go",
+      "sha256": "b88ae457fa0faa0ffbe38d86238b551ce1c515d4286af89eea6534e8315bb4df",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:httpclient_test.go"
+    },
+    {
+      "path": "deps/httpclient/httpfile.go",
+      "sha256": "15e09ec90bbc545c103a10d10b2173a83461a3f25299006c0f9d3c55f77d5753",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:httpfile.go"
+    },
+    {
+      "path": "deps/httpclient/logging.go",
+      "sha256": "aab0d1e0828d1081ab6e1fc49fbe4bd946ef7629400394a3e6b4a9e6e325036b",
+      "origin": "6c30f8bfb6e7cae24d7c4144b9577a89cd61f37e:logging.go"
+    },
+    {
+      "path": "deps/pretty/.gitignore",
+      "sha256": "db366b7384cb19e8cb6512f3fe2a59d7a9d71187909bd8791f3bc6347a5b343c",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:.gitignore"
+    },
+    {
+      "path": "deps/pretty/LICENSE",
+      "sha256": "3f46a3eab9e60e15fedb713a2cf71b3c4e13e4307580916ffc45a68a4c67b757",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:LICENSE"
+    },
+    {
+      "path": "deps/pretty/README.md",
+      "sha256": "0563ccf383dcfbf8b3c56ba44a80f60b9cadb6b7d30d28b7d41a274ca0d9fb88",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:README.md"
+    },
+    {
+      "path": "deps/pretty/go.mod",
+      "sha256": "fdc37ef2fb9e3a14ab8d11dd1dad1bf143acdf354947f17652b99fc98fd2bf35",
+      "origin": "added local module declaration"
+    },
+    {
+      "path": "deps/pretty/pretty.go",
+      "sha256": "6f99801246efb14a1b5135c912223a87d5fd17feb971e7098a836a5f8f16d6a5",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:pretty.go"
+    },
+    {
+      "path": "deps/pretty/pretty_test.go",
+      "sha256": "763758c80f9525bb4c6f169d71c1ab29492668c92341cdcadd3ab2b62a04e2f4",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:pretty_test.go"
+    },
+    {
+      "path": "deps/pretty/tabprinter.go",
+      "sha256": "8bb7a815381a30e07434c4958cab68c6edd224367148180776ae8a5e1575a5f3",
+      "origin": "09732c25a95b8e10e85177a3201cf4c7fe35a377:tabprinter.go"
+    },
+    {
+      "path": "deps/simplejson/.travis.yml",
+      "sha256": "afc3f05294e80e4869458e3884cfd8d7f332055f39336be353473d464c98cba9",
+      "origin": "c70e6bd5e26b37fd37b5225d00d600b93d348e58:.travis.yml"
+    },
+    {
+      "path": "deps/simplejson/LICENSE",
+      "sha256": "89807acf2309bd285f033404ee78581602f3cd9b819a16ac2f0e5f60ff4a473e",
+      "origin": "c70e6bd5e26b37fd37b5225d00d600b93d348e58:LICENSE"
+    },
+    {
+      "path": "deps/simplejson/README.md",
+      "sha256": "fe17d5ba1b95997cf1a3201116f9cda275a3de2b41dcb28094039dd610fe5a97",
+      "origin": "c70e6bd5e26b37fd37b5225d00d600b93d348e58:README.md"
+    },
+    {
+      "path": "deps/simplejson/go.mod",
+      "sha256": "30bccac77f574654e8dd901fa675df859817778c4aa259ebce8846ee2de39a04",
+      "origin": "added local module declaration"
+    },
+    {
+      "path": "deps/simplejson/simplejson.go",
+      "sha256": "12af2e91cad3cae2cf1cb19cd71ef75b8c899c16024f4146349ff65243939d00",
+      "origin": "c70e6bd5e26b37fd37b5225d00d600b93d348e58:simplejson.go"
+    },
+    {
+      "path": "deps/simplejson/simplejson_test.go",
+      "sha256": "7314507a39e4088d5f988c90e44988f68df5818df8c7f0ea5fa268c76fd653d1",
+      "origin": "c70e6bd5e26b37fd37b5225d00d600b93d348e58:simplejson_test.go"
+    },
+    {
+      "path": "deps/websocket/.circleci/config.yml",
+      "sha256": "3103e1665e2e2433f830f6fa4262247b56aa0366b54ae9fbe5973eac0b475b4c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:.circleci/config.yml"
+    },
+    {
+      "path": "deps/websocket/.github/release-drafter.yml",
+      "sha256": "9cb8b3b86b6956a5b5f73146e65188082c6414be421e055987128c74c6902cdb",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:.github/release-drafter.yml"
+    },
+    {
+      "path": "deps/websocket/.gitignore",
+      "sha256": "f62e0890c991c82fb90f2b47bb92fa2498004d2a1c835aa57a3525b41810ab89",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:.gitignore"
+    },
+    {
+      "path": "deps/websocket/AUTHORS",
+      "sha256": "fdebefabdd93d9701887ac1fa4df716322f71651000442cfd947325648a06675",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:AUTHORS"
+    },
+    {
+      "path": "deps/websocket/LICENSE",
+      "sha256": "2be1b548b0387ca8948e1bb9434e709126904d15f622cc2d0d8e7f186e4d122d",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:LICENSE"
+    },
+    {
+      "path": "deps/websocket/README.md",
+      "sha256": "39378602fe8b59e9321fbe09d00e9bd79426889b519b63c5d959755c514cbb3a",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:README.md"
+    },
+    {
+      "path": "deps/websocket/client.go",
+      "sha256": "9631cec72f7f15cc0aca1507ea97f4d8a5fb392426b964b43c11af2dd353e66c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:client.go"
+    },
+    {
+      "path": "deps/websocket/client_server_test.go",
+      "sha256": "b58a89d3398023b2c025f86f9a27bc4d3b149bd846fe12f96be4ad028d2cb2e8",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:client_server_test.go"
+    },
+    {
+      "path": "deps/websocket/client_test.go",
+      "sha256": "1434a5b072cf47db664b20a2a319473387889db21a46898f1bb709afa4aad14d",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:client_test.go"
+    },
+    {
+      "path": "deps/websocket/compression.go",
+      "sha256": "da9552ba7160a2e271fc6731a9f35ff9d8a606508bad3152a7cef48353b0e6ca",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:compression.go"
+    },
+    {
+      "path": "deps/websocket/compression_test.go",
+      "sha256": "538c1fce0b25bbb5b989908cceada1467659af1e1768df011fdcf2ff1c45c55c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:compression_test.go"
+    },
+    {
+      "path": "deps/websocket/conn.go",
+      "sha256": "43e43e797f891846fcf6cdb92de318ccc38f5b346a24d58f7076bd4fecc6341b",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:conn.go"
+    },
+    {
+      "path": "deps/websocket/conn_broadcast_test.go",
+      "sha256": "2f531b230989b382a68c83994f85f6e0f21dee3a9f686ebe868613cddf9f500b",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:conn_broadcast_test.go"
+    },
+    {
+      "path": "deps/websocket/conn_test.go",
+      "sha256": "ec0812f1e57f427664bf1f2b70a1f1a1543e6d3c3fd7e9a916f26cbdca579614",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:conn_test.go"
+    },
+    {
+      "path": "deps/websocket/doc.go",
+      "sha256": "44394398f44c944db92c67689ecb0e2ebbf064e312b3be833878b9838d3859f8",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:doc.go"
+    },
+    {
+      "path": "deps/websocket/example_test.go",
+      "sha256": "03d782ae8bbc2b26e902dbe06a585d2163aeb898d2f405dbf2450424f4d8932c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:example_test.go"
+    },
+    {
+      "path": "deps/websocket/examples/autobahn/README.md",
+      "sha256": "daa1c2f2b40e5c33f31ea6cabdb13e1d67362f315ab8b48a31b934b4655a5e6a",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/autobahn/README.md"
+    },
+    {
+      "path": "deps/websocket/examples/autobahn/config/fuzzingclient.json",
+      "sha256": "607b636869ce1d0857dee4c97ffd73bf4a7c1da8530ef51d4333f8b1b843dc11",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/autobahn/config/fuzzingclient.json"
+    },
+    {
+      "path": "deps/websocket/examples/autobahn/server.go",
+      "sha256": "ad6da3b5055f38a63e95269d0a8f1c2dbf41f3528426671157051cfb461322ca",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/autobahn/server.go"
+    },
+    {
+      "path": "deps/websocket/examples/chat/README.md",
+      "sha256": "06ac98fdc7498d82fa6cf272e12dafb6725d79dfbf468fd77c86b60f97dc9c89",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/chat/README.md"
+    },
+    {
+      "path": "deps/websocket/examples/chat/client.go",
+      "sha256": "27eccc57bafcc15c880d6cb11d131310c2eafe75b8572d812c30ca3eb7dc1e0c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/chat/client.go"
+    },
+    {
+      "path": "deps/websocket/examples/chat/home.html",
+      "sha256": "58db96b30ca7207a08adb20b8348e144c5ec943d7a2ab4909eaaf0b4e9e64a69",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/chat/home.html"
+    },
+    {
+      "path": "deps/websocket/examples/chat/hub.go",
+      "sha256": "54ac0d161a6c432c7142ad6c3c655c87a1ba2fc76fa0cd9e08233c49077b8730",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/chat/hub.go"
+    },
+    {
+      "path": "deps/websocket/examples/chat/main.go",
+      "sha256": "c5fc4a8442cf42cde80366cb480e5b282855f642acc492085fcd377f24dc5c1b",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/chat/main.go"
+    },
+    {
+      "path": "deps/websocket/examples/command/README.md",
+      "sha256": "e65a70bd6e7c100db650ee248aaad1bbdace43ab1e70fbf6a7508bcdbf3fcea2",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/command/README.md"
+    },
+    {
+      "path": "deps/websocket/examples/command/home.html",
+      "sha256": "2c50294d5ee3b7362af7222268c2fdd257041f8e1e6946309e101101ed766787",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/command/home.html"
+    },
+    {
+      "path": "deps/websocket/examples/command/main.go",
+      "sha256": "c3f0506ec242e244ff7d287467d9ffaa80ed816319c73688e21f03b843ecb618",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/command/main.go"
+    },
+    {
+      "path": "deps/websocket/examples/echo/README.md",
+      "sha256": "21a918aa1bba103e182aa05e9bd5d7694d638faf8716aafe266c76e412ace9ae",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/echo/README.md"
+    },
+    {
+      "path": "deps/websocket/examples/echo/client.go",
+      "sha256": "b42a9460db27f4ac144400ccce578eeaf26e71f479ba51f2fb5335110934b4ea",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/echo/client.go"
+    },
+    {
+      "path": "deps/websocket/examples/echo/server.go",
+      "sha256": "9587e41283606a3fdeb47f1a36c7137abc0af6152ed7d3f24fdeef9fffcb9ab8",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/echo/server.go"
+    },
+    {
+      "path": "deps/websocket/examples/filewatch/README.md",
+      "sha256": "aae3744e8d6a9a3658c4a6f7be200ffff574b2c748b0e35e2bda7e0dff1e9d74",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/filewatch/README.md"
+    },
+    {
+      "path": "deps/websocket/examples/filewatch/main.go",
+      "sha256": "a6c1901f7805ff3d619707043b591d5097a9e70b914af2522b0ee79adb4e23b2",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:examples/filewatch/main.go"
+    },
+    {
+      "path": "deps/websocket/go.mod",
+      "sha256": "09dc8a9227a54c1069ea065d610a5f2ca195f1f5fba6e7dbb2d7eb0fd6e01df6",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:go.mod"
+    },
+    {
+      "path": "deps/websocket/go.sum",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:go.sum"
+    },
+    {
+      "path": "deps/websocket/join.go",
+      "sha256": "478a075f66cc85d65fbd33a899d78cdb85417cd39dd40b637f3356d41b54bcf8",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:join.go"
+    },
+    {
+      "path": "deps/websocket/join_test.go",
+      "sha256": "32a344294a7d89c2c232a8dd267a3b07f575eebc5b8919d0801910b3a106b58b",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:join_test.go"
+    },
+    {
+      "path": "deps/websocket/json.go",
+      "sha256": "07db3e16c3e9377428efad014fa7040d6322024c395c22be544022922f258863",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:json.go"
+    },
+    {
+      "path": "deps/websocket/json_test.go",
+      "sha256": "d157130d115fd6cf32f6baf5ae2f5dd1c8607a8aa48f3605a61194c26327b344",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:json_test.go"
+    },
+    {
+      "path": "deps/websocket/mask.go",
+      "sha256": "964df1f35553a0893ae496fc41da0020583af35c3a3d21c6d94f6bc3f17bcc5c",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:mask.go"
+    },
+    {
+      "path": "deps/websocket/mask_safe.go",
+      "sha256": "7cc67544eee2b25ea32a1d685d7dc154a8ac24fa293b4aec193b5c532f39bc57",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:mask_safe.go"
+    },
+    {
+      "path": "deps/websocket/mask_test.go",
+      "sha256": "5b0e1e7bead39edf7fb52872a268eb551fcca27abb94431082940c5ce0abf7c6",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:mask_test.go"
+    },
+    {
+      "path": "deps/websocket/prepared.go",
+      "sha256": "c7409038c8ec669b344dfb765adde184f30194cced3bed9a40fb18b00242377e",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:prepared.go"
+    },
+    {
+      "path": "deps/websocket/prepared_test.go",
+      "sha256": "b42a41678da00ebbc5a8e9024b73b41ea6755c413eb51c901ca548c3a9d64f57",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:prepared_test.go"
+    },
+    {
+      "path": "deps/websocket/proxy.go",
+      "sha256": "1de1143bcf6d841321cfa455fbf374458f57d5da6ff3e8485f3d40bce92875e8",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:proxy.go"
+    },
+    {
+      "path": "deps/websocket/server.go",
+      "sha256": "fe9dba44a7e83daf4d7006db804ce08cfff5dc8e1ae1a19236e8614a36a0675a",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:server.go"
+    },
+    {
+      "path": "deps/websocket/server_test.go",
+      "sha256": "a0364ae8dac0788d2f382427097d0aa658e273e1192e2074e7dccb798ac915a6",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:server_test.go"
+    },
+    {
+      "path": "deps/websocket/tls_handshake.go",
+      "sha256": "844bc0b9adec92ccbf6684ee0dbdf0396add98b86bec331ca80b57555c3e7ffd",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:tls_handshake.go"
+    },
+    {
+      "path": "deps/websocket/tls_handshake_116.go",
+      "sha256": "95ec0e677b6a1ed3d3b2d72d10f8e17078e83232324710a2fca7d533659cd3ef",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:tls_handshake_116.go"
+    },
+    {
+      "path": "deps/websocket/util.go",
+      "sha256": "cc5a71996d2309dc4889b9b8c31b555e46a883b3d219870260f833ae223f64d2",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:util.go"
+    },
+    {
+      "path": "deps/websocket/util_test.go",
+      "sha256": "dbdd8bcdd54d80f7ec893a8a6416e3ef7200202c60637187c67e22bab6dfc63d",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:util_test.go"
+    },
+    {
+      "path": "deps/websocket/x_net_proxy.go",
+      "sha256": "1d8dde1dcb3aacce8f71d134063b16cbd6c9664bbf0dcafe0e97577b8743cc13",
+      "origin": "ce903f6d1d961af3a8602f2842c8b1c3fca58c4d:x_net_proxy.go"
+    }
+  ]
+}
