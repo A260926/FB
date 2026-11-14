@@ -1,0 +1,36 @@
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cal3DPlugin_Max2012_32_VS2010", "Cal3DPlugin_Max2012_32_VS2010.vcxproj", "{B6F1A12E-701C-4958-A291-E8815FFE47B0}"
+	ProjectSection(ProjectDependencies) = postProject
+		{43C77C5C-7216-4A67-8211-9F7797494488} = {43C77C5C-7216-4A67-8211-9F7797494488}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cal3DLib_VS2010", "newsrc\Cal3DLib_VS2010.vcxproj", "{43C77C5C-7216-4A67-8211-9F7797494488}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Debug|Win32.Build.0 = Debug|Win32
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Debug|x64.ActiveCfg = Debug|Win32
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Release|Win32.ActiveCfg = Release|Win32
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Release|Win32.Build.0 = Release|Win32
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Release|x64.ActiveCfg = Release|x64
+		{B6F1A12E-701C-4958-A291-E8815FFE47B0}.Release|x64.Build.0 = Release|x64
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Debug|Win32.ActiveCfg = Debug|Win32
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Debug|x64.ActiveCfg = Debug|x64
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Debug|x64.Build.0 = Debug|x64
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Release|Win32.ActiveCfg = Release|Win32
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Release|Win32.Build.0 = Release|Win32
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Release|x64.ActiveCfg = Release|x64
+		{43C77C5C-7216-4A67-8211-9F7797494488}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

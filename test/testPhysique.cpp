@@ -1,0 +1,495 @@
+#include "TestPrologue.h"
+#include <cal3d/bonetransform.h>
+#include <cal3d/coremorphtarget.h>
+#include <cal3d/submesh.h>
+#include <cal3d/physique.h>
+
+#include <cstring>
+
+#ifndef IMVU_NO_INTRINSICS
+// Pull in __rdtsc() intrinsic
+#if defined(_MSC_VER)
+#   include <intrin.h>
+#else
+#   include <x86intrin.h>
+#endif
+#endif
+
+FIXTURE(PhysiqueFixture) {
+};
+
+FIXTURE(skin_x87) {
+    CalPhysique::SkinRoutine skin;
+    SETUP(skin_x87) {
+        skin = CalPhysique::calculateVerticesAndNormals_x87;
+    }
+};
+
+#ifndef IMVU_NO_INTRINSICS
+FIXTURE(skin_SSE_intrinsics) {
+    CalPhysique::SkinRoutine skin;
+    SETUP(skin_SSE_intrinsics) {
+        skin = CalPhysique::calculateVerticesAndNormals_SSE_intrinsics;
+    }
+};
+#endif
+
+
+#ifdef IMVU_NO_INTRINSICS
+FIXTURE(skin_SSE) {
+    CalPhysique::SkinRoutine skin;
+    SETUP(skin_SSE) {
+        skin = CalPhysique::calculateVerticesAndNormals_x87;
+    }
+};
+#else
+FIXTURE_EXTENDS(skin_SSE, skin_SSE_intrinsics) {
+};
+#endif
+
+#if defined(IMVU_NO_INTRINSICS)
+#define APPLY_SKIN_FIXTURES(test)         \
+  APPLY_TEST_F(skin_x87, test)            \
+  APPLY_TEST_F(skin_SSE, test)
+#else
+#define APPLY_SKIN_FIXTURES(test)         \
+  APPLY_TEST_F(skin_x87, test)            \
+  APPLY_TEST_F(skin_SSE_intrinsics, test) \
+  APPLY_TEST_F(skin_SSE, test)
+#endif
+
+ABSTRACT_TEST(single_identity_bone) {
+    BoneTransform bt;
+    bt.rowx = CalVector4(1, 0, 0, 0);
+    bt.rowy = CalVector4(0, 1, 0, 0);
+    bt.rowz = CalVector4(0, 0, 1, 0);
+
+    CalCoreSubmesh::Vertex v[] = {
+        { CalPoint4(1, 2, 3), CalVector4(0, 1, 0) },
+    };
+
+    CalCoreSubmesh::Influence i[] = {
+        CalCoreSubmesh::Influence(0, 1.0f, true),
+    };
+
+    CalVector4 output[2];
+    this->skin(&bt, 1, v, i, output);
+    CHECK_EQUAL(output[0].x, 1);
+    CHECK_EQUAL(output[0].y, 2);
+    CHECK_EQUAL(output[0].z, 3);
+    CHECK_EQUAL(output[1].x, 0);
+    CHECK_EQUAL(output[1].y, 1);
+    CHECK_EQUAL(output[1].z, 0);
+}
+APPLY_SKIN_FIXTURES(single_identity_bone);
+
+ABSTRACT_TEST(two_translated_bones) {
+    BoneTransform bt[2];
+    bt[0].rowx = CalVector4(1, 0, 0, 1);
+    bt[0].rowy = CalVector4(0, 1, 0, 0);
+    bt[0].rowz = CalVector4(0, 0, 1, 0);
+    bt[1].rowx = CalVector4(1, 0, 0, 0);
+    bt[1].rowy = CalVector4(0, 1, 0, 1);
+    bt[1].rowz = CalVector4(0, 0, 1, 0);
+
+    CalCoreSubmesh::Vertex v[] = {
+        { CalPoint4(1, 2, 3), CalVector4(1, 1, 0) },
+    };
+
+    CalCoreSubmesh::Influence i[] = {
+        CalCoreSubmesh::Influence(0, 0.5f, false),
+        CalCoreSubmesh::Influence(1, 0.5f, true),
+    };
+
+    CalVector4 output[2];
+    this->skin(bt, 1, v, i, output);
+    CHECK_EQUAL(output[0].x, 1.5);
+    CHECK_EQUAL(output[0].y, 2.5);
+    CHECK_EQUAL(output[0].z, 3);
+    CHECK_EQUAL(output[1].x, 1);
+    CHECK_EQUAL(output[1].y, 1);
+    CHECK_EQUAL(output[1].z, 0);
+}
+APPLY_SKIN_FIXTURES(two_translated_bones);
+
+ABSTRACT_TEST(three_translated_bones) {
+    BoneTransform bt[] = {
+        BoneTransform(
+            CalVector4(1, 0, 0, 1),
+            CalVector4(0, 1, 0, 0),
+            CalVector4(0, 0, 1, 0)
+        ),
+        BoneTransform(
+            CalVector4(1, 0, 0, 0),
+            CalVector4(0, 1, 0, 1),
+            CalVector4(0, 0, 1, 0)
+        ),
+        BoneTransform(
+            CalVector4(1, 0, 0, 0),
+            CalVector4(0, 1, 0, 0),
+            CalVector4(0, 0, 1, 1)
+        ),
+    };
+
+    CalCoreSubmesh::Vertex v[] = {
+        { CalPoint4(1, 2, 3), CalVector4(1, 1, 0) },
+    };
+
+    CalCoreSubmesh::Influence i[] = {
+        CalCoreSubmesh::Influence(0, 1.0f / 3.0f, false),
+        CalCoreSubmesh::Influence(1, 1.0f / 3.0f, false),
+        CalCoreSubmesh::Influence(2, 1.0f / 3.0f, true),
+    };
+
+    CalVector4 output[2];
+    this->skin(bt, 1, v, i, output);
+
+    CHECK_CLOSE(output[0].x, 4.0f / 3.0f, 1.e-5);
+    CHECK_CLOSE(output[0].y, 7.0f / 3.0f, 1.e-5);
+    CHECK_CLOSE(output[0].z, 10.0f / 3.0f, 1.e-5);
+    CHECK_CLOSE(output[1].x, 1, 1.e-5);
+    CHECK_CLOSE(output[1].y, 1, 1.e-5);
+    CHECK_CLOSE(output[1].z, 0, 1.e-5);
+}
+APPLY_SKIN_FIXTURES(three_translated_bones);
+
+ABSTRACT_TEST(two_rotated_bones) {
+    BoneTransform bt[] = {
+        // 90 degree rotation about z
+        BoneTransform(
+            CalVector4(0, -1, 0, 0),
+            CalVector4(1,  0, 0, 0),
+            CalVector4(0,  0, 1, 0)
+        ),
+        // -90 degree rotation about x
+        BoneTransform(
+            CalVector4(1,  0, 0, 0),
+            CalVector4(0,  0, 1, 0),
+            CalVector4(0, -1, 0, 0)
+        ),
+    };
+
+    CalCoreSubmesh::Vertex v[] = {
+        { CalPoint4(1, 1, 1), CalVector4(1, 1, 1) },
+    };
+
+    CalCoreSubmesh::Influence i[] = {
+        CalCoreSubmesh::Influence(0, 0.5f, false),
+        CalCoreSubmesh::Influence(1, 0.5f, true),
+    };
+
+    CalVector4 output[2];
+    this->skin(bt, 1, v, i, output);
+    CHECK_EQUAL(output[0].x, 0);
+    CHECK_EQUAL(output[0].y, 1);
+    CHECK_EQUAL(output[0].z, 0);
+    CHECK_EQUAL(output[1].x, 0);
+    CHECK_EQUAL(output[1].y, 1);
+    CHECK_EQUAL(output[1].z, 0);
+}
+APPLY_SKIN_FIXTURES(two_rotated_bones);
+
+#ifndef IMVU_NO_INTRINSICS
+ABSTRACT_TEST(skin_10000_vertices_1_influence_cycle_count) {
+    const int N = 10000;
+    const int TrialCount = 10;
+
+    CalCoreSubmesh::Vertex v[N];
+    CalCoreSubmesh::Influence i[N];
+    for (int k = 0; k < N; ++k) {
+        v[k].position = CalPoint4(CalVector(1.0f, 2.0f, 3.0f));
+        v[k].normal = CalVector4(CalVector(0.0f, 0.0f, 1.0f));
+        i[k].boneId = 0;
+        i[k].weight = 1.0f;
+        i[k].lastInfluenceForThisVertex = true;
+    }
+
+    BoneTransform bt;
+    memset(&bt, 0, sizeof(bt));
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[N * 2] CAL3D_ALIGN_TAIL(16);
+
+    cal3d_int64 min = 99999999999999LL;
+    for (int t = 0; t < TrialCount; ++t) {
+        cal3d_int64 start = __rdtsc();
+        this->skin(&bt, N, v, i, output);
+        cal3d_int64 end = __rdtsc();
+        cal3d_int64 elapsed = end - start;
+        if (elapsed < min) {
+            min = elapsed;
+        }
+    }
+
+    printf("Cycles per vertex: %d\n", (int)(min / N));
+}
+APPLY_SKIN_FIXTURES(skin_10000_vertices_1_influence_cycle_count);
+#endif
+
+static ISTD::shared_ptr<CalCoreSubmesh> djinnCoreSubmesh(int N) {
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh = ISTD::make_shared<CalCoreSubmesh>(N, false, 0);
+    for (int k = 0; k < N; ++k) {
+        CalCoreSubmesh::Vertex v;
+        v.position = CalPoint4(CalVector(1.0f, 2.0f, 3.0f));
+        v.normal = CalVector4(CalVector(0.0f, 0.0f, 1.0f));
+        std::vector<CalCoreSubmesh::Influence> inf(1);
+        inf[0].boneId = 0;
+        inf[0].weight = 1.0f;
+        inf[0].lastInfluenceForThisVertex = true;
+        coreSubmesh->addVertex(v, 0, inf);
+    }
+    return coreSubmesh;
+}
+
+static ISTD::shared_ptr<CalCoreMorphTarget> djinnMorphTarget(int N, const char* name) {
+    CalCoreMorphTarget::VertexOffsetArray vertexOffsets;
+    for (int k = 0; k < N; ++k) {
+        VertexOffset bv;
+        bv.vertexId = k;
+        bv.position.set(1.0f, 2.0f, 3.0f, 1.0f);
+        bv.normal.set(0.0f, 0.0f, 1.0f, 0.0f);
+        vertexOffsets.push_back(bv);
+    }
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget = ISTD::make_shared<CalCoreMorphTarget>(name, N, vertexOffsets);
+    return morphTarget;
+}
+
+#ifndef IMVU_NO_INTRINSICS
+TEST_F(PhysiqueFixture, morph_targets_performance_test) {
+    const int N = 10000;
+    const int TrialCount = 10;
+
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh(djinnCoreSubmesh(N));
+
+    coreSubmesh->addMorphTarget(djinnMorphTarget(N, "foo1"));
+    coreSubmesh->addMorphTarget(djinnMorphTarget(N, "foo2"));
+
+    CalSubmesh submesh(coreSubmesh);
+    submesh.setMorphTargetWeight("foo1", 0.25f);
+    submesh.setMorphTargetWeight("foo2", 0.25f);
+
+    BoneTransform bt;
+    memset(&bt, 0, sizeof(bt));
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[N * 2] CAL3D_ALIGN_TAIL(16);
+
+    cal3d_int64 min = 99999999999999LL;
+    for (int t = 0; t < TrialCount; ++t) {
+        cal3d_int64 start = __rdtsc();
+        CalPhysique::calculateVerticesAndNormals(&bt, &submesh, &output[0].x);
+        cal3d_int64 end = __rdtsc();
+        cal3d_int64 elapsed = end - start;
+        if (elapsed < min) {
+            min = elapsed;
+        }
+    }
+
+    printf("Cycles per vertex: %d\n", (int)(min / N));
+}
+
+TEST_F(PhysiqueFixture, bunch_of_unweighted_morph_targets_performance_test) {
+    const int N = 10000;
+    const int M = 30;
+    const int TrialCount = 10;
+
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh(djinnCoreSubmesh(N));
+
+    for (int i = 0; i < M; ++i) {
+        char buf[80];
+        sprintf(buf, "%d", i);
+        coreSubmesh->addMorphTarget(djinnMorphTarget(N, buf));
+    }
+
+    CalSubmesh submesh(coreSubmesh);
+    submesh.setMorphTargetWeight("0", 0.25f);
+
+    BoneTransform bt;
+    memset(&bt, 0, sizeof(bt));
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[N * 2] CAL3D_ALIGN_TAIL(16);
+
+    cal3d_int64 min = 99999999999999LL;
+    for (int t = 0; t < TrialCount; ++t) {
+        cal3d_int64 start = __rdtsc();
+        CalPhysique::calculateVerticesAndNormals(&bt, &submesh, &output[0].x);
+        cal3d_int64 end = __rdtsc();
+        cal3d_int64 elapsed = end - start;
+        if (elapsed < min) {
+            min = elapsed;
+        }
+    }
+
+    printf("Cycles per vertex: %d\n", (int)(min / N));
+}
+#endif
+
+TEST_F(PhysiqueFixture, single_morph_target) {
+    std::vector<CalCoreSubmesh::Influence> inf(1);
+    inf[0].boneId = 0;
+    inf[0].weight = 1.0f;
+    inf[0].lastInfluenceForThisVertex = true;
+
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh = ISTD::make_shared<CalCoreSubmesh>(3, false, 1);
+    CalCoreSubmesh::Vertex v;
+
+    v.position = CalPoint4(CalVector(0, 0, 0));
+    v.normal = CalVector4(CalVector(0, 0, 0));
+    coreSubmesh->addVertex(v, 0, inf);
+    coreSubmesh->addVertex(v, 0, inf);
+    coreSubmesh->addVertex(v, 0, inf);
+
+    CalCoreMorphTarget::VertexOffsetArray vertexOffsets;
+
+    VertexOffset bv;
+    bv.position = CalPoint4(CalVector(1, 1, 1));
+    bv.normal = CalVector4(CalVector(1, 1, 1));
+    bv.vertexId = 0;
+    vertexOffsets.push_back(bv);
+    bv.vertexId = 1;
+    vertexOffsets.push_back(bv);
+    bv.vertexId = 2;
+    vertexOffsets.push_back(bv);
+
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget = ISTD::make_shared<CalCoreMorphTarget>("foo", 3, vertexOffsets);
+    coreSubmesh->addMorphTarget(morphTarget);
+
+    CalSubmesh submesh(coreSubmesh);
+    submesh.setMorphTargetWeight("foo", 0.5f);
+    
+    BoneTransform bt;
+    bt.rowx.set(1, 0, 0, 0);
+    bt.rowy.set(0, 1, 0, 0);
+    bt.rowz.set(0, 0, 1, 0);
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[3 * 2] CAL3D_ALIGN_TAIL(16);
+
+    CalPhysique::calculateVerticesAndNormals(&bt, &submesh, &output[0].x);
+
+    CHECK_EQUAL(0.5, output[0].x);
+    CHECK_EQUAL(0.5, output[0].y);
+    CHECK_EQUAL(0.5, output[0].z);
+    //CHECK_EQUAL(1.0, output[0].w);
+    CHECK_EQUAL(0.5, output[1].x);
+    CHECK_EQUAL(0.5, output[1].y);
+    CHECK_EQUAL(0.5, output[1].z);
+    //CHECK_EQUAL(0.0, output[1].w);
+}
+
+TEST_F(PhysiqueFixture, two_morph_targets) {
+    std::vector<CalCoreSubmesh::Influence> inf(1);
+    inf[0].boneId = 0;
+    inf[0].weight = 1.0f;
+    inf[0].lastInfluenceForThisVertex = true;
+
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh = ISTD::make_shared<CalCoreSubmesh>(3, false, 1);
+    CalCoreSubmesh::Vertex v;
+
+    v.position = CalPoint4(CalVector(0, 0, 0));
+    v.normal = CalVector4(CalVector(0, 0, 0));
+    coreSubmesh->addVertex(v, 0, inf);
+    coreSubmesh->addVertex(v, 0, inf);
+    coreSubmesh->addVertex(v, 0, inf);
+
+    VertexOffset bv;
+    bv.position = CalPoint4(CalVector(1, 1, 1));
+    bv.normal = CalVector4(CalVector(1, 1, 1));
+
+    CalCoreMorphTarget::VertexOffsetArray morphVertices1;
+    bv.vertexId = 0;
+    morphVertices1.push_back(bv);
+    bv.vertexId = 1;
+    morphVertices1.push_back(bv);
+    bv.vertexId = 2;
+    morphVertices1.push_back(bv);
+
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget1 = ISTD::make_shared<CalCoreMorphTarget>("foo", 3, morphVertices1);
+    coreSubmesh->addMorphTarget(morphTarget1);
+
+    CalCoreMorphTarget::VertexOffsetArray morphVertices2;
+    bv.vertexId = 0;
+    morphVertices2.push_back(bv);
+    bv.vertexId = 1;
+    morphVertices2.push_back(bv);
+    bv.vertexId = 2;
+    morphVertices2.push_back(bv);
+
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget2 = ISTD::make_shared<CalCoreMorphTarget>("bar", 3, morphVertices2);
+    coreSubmesh->addMorphTarget(morphTarget2);
+
+    CalSubmesh submesh(coreSubmesh);
+    submesh.setMorphTargetWeight("foo", 0.25f);
+    submesh.setMorphTargetWeight("bar", 0.25f);
+    
+    BoneTransform bt;
+    bt.rowx.set(1, 0, 0, 0);
+    bt.rowy.set(0, 1, 0, 0);
+    bt.rowz.set(0, 0, 1, 0);
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[3 * 2] CAL3D_ALIGN_TAIL(16);
+
+    CalPhysique::calculateVerticesAndNormals(&bt, &submesh, &output[0].x);
+
+    CHECK_EQUAL(0.5, output[0].x);
+    CHECK_EQUAL(0.5, output[0].y);
+    CHECK_EQUAL(0.5, output[0].z);
+    //CHECK_EQUAL(1.0, output[0].w);
+    CHECK_EQUAL(0.5, output[1].x);
+    CHECK_EQUAL(0.5, output[1].y);
+    CHECK_EQUAL(0.5, output[1].z);
+    //CHECK_EQUAL(0.0, output[1].w);
+}
+
+TEST_F(PhysiqueFixture, two_disjoint_morph_targets) {
+    std::vector<CalCoreSubmesh::Influence> inf(1);
+    inf[0].boneId = 0;
+    inf[0].weight = 1.0f;
+    inf[0].lastInfluenceForThisVertex = true;
+
+    ISTD::shared_ptr<CalCoreSubmesh> coreSubmesh = ISTD::make_shared<CalCoreSubmesh>(2, false, 1);
+    CalCoreSubmesh::Vertex v;
+
+    v.position = CalPoint4(CalVector(0, 0, 0));
+    v.normal = CalVector4(CalVector(0, 0, 0));
+    coreSubmesh->addVertex(v, 0, inf);
+    coreSubmesh->addVertex(v, 0, inf);
+
+    VertexOffset bv;
+    bv.position = CalPoint4(CalVector(1, 1, 1));
+    bv.normal = CalVector4(CalVector(1, 1, 1));
+
+    CalCoreMorphTarget::VertexOffsetArray morphVertices1;
+    bv.vertexId = 0;
+    morphVertices1.push_back(bv);
+
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget1 = ISTD::make_shared<CalCoreMorphTarget>("foo", 2, morphVertices1);
+    coreSubmesh->addMorphTarget(morphTarget1);
+
+    CalCoreMorphTarget::VertexOffsetArray morphVertices2;
+    bv.vertexId = 1;
+    morphVertices2.push_back(bv);
+
+    ISTD::shared_ptr<CalCoreMorphTarget> morphTarget2 = ISTD::make_shared<CalCoreMorphTarget>("bar", 2, morphVertices2);
+    coreSubmesh->addMorphTarget(morphTarget2);
+
+    CalSubmesh submesh(coreSubmesh);
+    submesh.setMorphTargetWeight("foo", 1.0f);
+    submesh.setMorphTargetWeight("bar", 1.0f);
+    
+    BoneTransform bt;
+    bt.rowx.set(1, 0, 0, 0);
+    bt.rowy.set(0, 1, 0, 0);
+    bt.rowz.set(0, 0, 1, 0);
+
+    CAL3D_ALIGN_HEAD(16) CalVector4 output[2 * 2] CAL3D_ALIGN_TAIL(16);
+
+    CalPhysique::calculateVerticesAndNormals(&bt, &submesh, &output[0].x);
+
+    // position of vertex 0
+    CHECK_EQUAL(1, output[0].x);
+    CHECK_EQUAL(1, output[0].y);
+    CHECK_EQUAL(1, output[0].z);
+
+    // position of vertex 1
+    CHECK_EQUAL(1, output[2].x);
+    CHECK_EQUAL(1, output[2].y);
+    CHECK_EQUAL(1, output[2].z);
+}
