@@ -37,7 +37,33 @@ type File struct {
 
 	dylibOrdinalBySymbol map[uint32]uint8
 	bindKindBySymbol     map[uint32]BindKind
-	closer io.Closer
+	closer               io.Closer
+
+	// Fileset support. A container is the outermost image that owns the
+	// underlying bytes; every image in a fileset hierarchy, including the
+	// container itself, reads its section and linkedit data through it using
+	// container-relative offsets. A nil container means this File stands alone.
+	container *File
+	// r is the ReaderAt this image was built from. For a container it owns
+	// the whole byte image; every child shares it read-only so that all
+	// offsets stay container-relative.
+	r io.ReaderAt
+	// memoryMode records whether the image was opened through NewFileFromMemory.
+	memoryMode bool
+	// headerOff is the container-relative offset of this image's Mach-O
+	// header and load commands.
+	headerOff int64
+	// entry is the LC_FILESET_ENTRY that opened this File, or nil for the
+	// container and for standalone images.
+	entry *FilesetEntry
+	// parent is the File whose entry opened this one. It is nil for the
+	// container and for standalone images.
+	parent *File
+	// entries holds the parsed LC_FILESET_ENTRY commands, in file order.
+	entries []*FilesetEntry
+	// children maps an entry ID to the lazily opened child File. Entry IDs
+	// are only unique within their immediate parent, so the map is per File.
+	children map[string]*File
 }
 
 // A Load represents any Mach-O load command.
@@ -279,24 +305,40 @@ func (f *File) Close() error {
 
 // NewFile creates a new macho.File for accessing a Mach-o binary file in an underlying reader.
 func NewFile(r io.ReaderAt) (*File, error) {
-	return newFileInternal(r, false)
+	return newFileInternal(r, false, nil, 0)
 }
 
 // NewFileFromMemory creates a new macho.File for accessing a Mach-O binary in-memory image in an underlying reader.
 func NewFileFromMemory(r io.ReaderAt) (*File, error) {
-	return newFileInternal(r, true)
+	return newFileInternal(r, true, nil, 0)
 }
 
-// NewFile creates a new File for accessing a PE binary in an underlying reader.
-func newFileInternal(r io.ReaderAt, memoryMode bool) (*File, error) {
+// newFileInternal parses a Mach-O image in an underlying reader.
+//
+// container is the File that owns the underlying bytes and their coordinate
+// system; headerOff is the container-relative offset of this image's header.
+// A nil container means the image owns its own bytes and its header starts at
+// offset zero. Section and linkedit offsets are always interpreted in the
+// container's coordinate system, so nested filesets never accumulate offsets.
+func newFileInternal(r io.ReaderAt, memoryMode bool, container *File, headerOff int64) (*File, error) {
 
 	f := new(File)
-	sr := io.NewSectionReader(r, 0, 1<<63-1)
+	if container == nil {
+		// A standalone image is its own container; child images share this
+		// File's reader and container-relative offsets.
+		f.container = f
+	} else {
+		f.container = container
+	}
+	f.r = r
+	f.memoryMode = memoryMode
+	f.headerOff = headerOff
+	sr := io.NewSectionReader(r, headerOff, 1<<63-1)
 
 	// Read and decode Mach magic to determine byte order, size.
 	// Magic32 and Magic64 differ only in the bottom bit.
 	var ident [4]byte
-	if _, err := r.ReadAt(ident[0:], 0); err != nil {
+	if _, err := r.ReadAt(ident[0:], headerOff); err != nil {
 		return nil, err
 	}
 	be := binary.BigEndian.Uint32(ident[0:])
@@ -317,13 +359,15 @@ func newFileInternal(r io.ReaderAt, memoryMode bool) (*File, error) {
 		return nil, err
 	}
 
-	// Then load commands.
+	// Then load commands. The header and load commands are read relative to
+	// this image's own header offset; every other offset (sections,
+	// relocations, symbol and string tables) stays container-relative.
 	offset := int64(fileHeaderSize32)
 	if f.Magic == Magic64 {
 		offset = fileHeaderSize64
 	}
 	dat := make([]byte, f.Cmdsz)
-	if _, err := r.ReadAt(dat, offset); err != nil {
+	if _, err := r.ReadAt(dat, headerOff+offset); err != nil {
 		return nil, err
 	}
 	f.Loads = make([]Load, f.Ncmd)
@@ -699,6 +743,14 @@ func newFileInternal(r io.ReaderAt, memoryMode bool) (*File, error) {
 				return nil, err
 			}
 			f.EntryPoint = entryPoint.EntryOff
+
+		case LoadCmdFilesetEntry:
+			fe, err := parseFilesetEntry(bo, cmddat, offset)
+			if err != nil {
+				return nil, err
+			}
+			f.entries = append(f.entries, fe)
+			f.Loads[i] = fe
 		}
 		if s != nil {
 			if !memoryMode {
@@ -758,7 +810,15 @@ type relocInfo struct {
 
 func (f *File) pushSection(sh *Section, r io.ReaderAt) error {
 	f.Sections = append(f.Sections, sh)
-	sh.sr = io.NewSectionReader(r, int64(sh.Offset), int64(sh.Size))
+	switch sh.Flags & SectionTypeMask {
+	case SectionTypeZerofill, SectionTypeGBZerofill:
+		// A zerofill section exists only in virtual memory and carries no
+		// file bytes, so give it an empty reader rather than one anchored at
+		// its meaningless zero offset.
+		sh.sr = io.NewSectionReader(r, 0, 0)
+	default:
+		sh.sr = io.NewSectionReader(r, int64(sh.Offset), int64(sh.Size))
+	}
 	sh.ReaderAt = sh.sr
 
 	if sh.Nreloc > 0 {

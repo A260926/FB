@@ -4,6 +4,10 @@ const N_SECT = 0x0E
 const N_PEXT = 0x10
 const N_EXT = 0x01
 
+// NTypeMask selects the symbol type bits (N_UNDF, N_ABS, N_SECT, N_PBUD)
+// out of a Symbol's Type.
+const NTypeMask = 0x0E
+
 // Export - describes a single export entry (similar to PE version for future refactoring)
 type Export struct {
 	//Ordinal        uint32 // no ordinals for Mach-O

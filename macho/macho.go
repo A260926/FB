@@ -35,10 +35,11 @@ const (
 type Type uint32
 
 const (
-	TypeObj    Type = 1
-	TypeExec   Type = 2
-	TypeDylib  Type = 6
-	TypeBundle Type = 8
+	TypeObj     Type = 1
+	TypeExec    Type = 2
+	TypeDylib   Type = 6
+	TypeBundle  Type = 8
+	TypeFileset Type = 12
 )
 
 var typeStrings = []intName{
@@ -46,6 +47,7 @@ var typeStrings = []intName{
 	{uint32(TypeExec), "Exec"},
 	{uint32(TypeDylib), "Dylib"},
 	{uint32(TypeBundle), "Bundle"},
+	{uint32(TypeFileset), "Fileset"},
 }
 
 func (t Type) String() string   { return stringName(uint32(t), typeStrings, false) }
@@ -95,10 +97,11 @@ const (
 	LoadCmdFuncStarts LoadCmd = 0x26 // Function Starts
 	LoadCmdDataInCode LoadCmd = 0x29 // Data In Code
 
-	LoadReqDyld       LoadCmd = 0x80000000
-	LoadCmdMain       LoadCmd = (0x28 | LoadReqDyld) // replacement for LC_UNIXTHREAD
-	LoadCmdRpath      LoadCmd = 0x8000001c
-	LoadCmdDylinkInfo LoadCmd = 0x80000022 // Dynamic Linker Info Only
+	LoadReqDyld         LoadCmd = 0x80000000
+	LoadCmdMain         LoadCmd = (0x28 | LoadReqDyld) // replacement for LC_UNIXTHREAD
+	LoadCmdRpath        LoadCmd = 0x8000001c
+	LoadCmdDylinkInfo   LoadCmd = 0x80000022 // Dynamic Linker Info Only
+	LoadCmdFilesetEntry LoadCmd = (0x35 | LoadReqDyld)
 )
 
 var cmdStrings = []intName{
@@ -300,6 +303,18 @@ const (
 	FlagHasTLVDescriptors     uint32 = 0x800000
 	FlagNoHeapExecution       uint32 = 0x1000000
 	FlagAppExtensionSafe      uint32 = 0x2000000
+)
+
+// Section type/attribute flags, stored in the low byte of SectionHeader.Flags.
+const (
+	// SectionTypeMask extracts the section type from SectionHeader.Flags.
+	SectionTypeMask uint32 = 0xff
+	// SectionTypeZerofill marks a section that occupies only virtual memory
+	// and has no bytes in the file.
+	SectionTypeZerofill uint32 = 1
+	// SectionTypeGB zerofill marks a zerofill section backed by a guarded
+	// malloc region; it likewise has no file bytes.
+	SectionTypeGBZerofill uint32 = 0xc
 )
 
 // A Section32 is a 32-bit Mach-O section header.
