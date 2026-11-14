@@ -112,6 +112,10 @@ typedef boxsize_t MP4D_file_offset_t;
 // Used for private stream, as suggested in http://www.mp4ra.org/handler.html
 #define MP4E_HANDLER_TYPE_GESM                                  0x6765736D
 
+// WebVTT sample entry ('wvtt') FourCC, as reported in
+// MP4D_track_t->sample_entry
+#define MP4D_SAMPLE_ENTRY_WVTT                                  0x77767474
+
 
 #define HEVC_NAL_VPS 32
 #define HEVC_NAL_SPS 33
@@ -130,7 +134,8 @@ typedef enum
     e_audio,
     e_video,
     e_private,
-    e_audio_pcm // raw/uncompressed PCM audio (QuickTime 'sowt' sample entry)
+    e_audio_pcm, // raw/uncompressed PCM audio (QuickTime 'sowt' sample entry)
+    e_webvtt     // WebVTT subtitle track ('wvtt' sample entry, 'text' handler)
 } track_media_kind_t;
 
 typedef struct
@@ -165,6 +170,21 @@ typedef struct
 
 } MP4E_track_t;
 
+/**
+*   One cue for MP4E_write_webvtt().
+*   Times are in the fixed WebVTT track timescale (1000, milliseconds).
+*   'id' and 'settings' may be NULL; 'text' must be a non-empty UTF-8 string.
+*   All strings are stored as-is, without escaping.
+*/
+typedef struct
+{
+    uint32_t start_ms;
+    uint32_t end_ms;
+    const char *id;
+    const char *settings;
+    const char *text;
+} MP4E_webvtt_cue_t;
+
 typedef struct MP4D_sample_to_chunk_t_tag MP4D_sample_to_chunk_t;
 
 typedef struct
@@ -181,6 +201,12 @@ typedef struct
 
     // DSI data size
     unsigned dsi_bytes;
+
+    // FourCC of the sample entry found in the track's 'stsd' box (e.g.
+    // 0x77767474 == 'wvtt'). Zero when the track's sample entry was not
+    // recognized. For non-'wvtt' tracks this is informational only and
+    // does not affect the meaning of dsi/dsi_bytes.
+    unsigned sample_entry;
 
     // MP4 object type code
     // case 0x00: return "Forbidden";
@@ -275,6 +301,14 @@ typedef struct
     unsigned stc_cache_group;
     unsigned stc_cache_nc;
     unsigned stc_cache_sum;
+
+    // WebVTT parsing bookkeeping: how many 'wvtt' sample entries and how many
+    // 'vttC' configuration boxes were seen for this track, and the entry_count
+    // its 'stsd' declared. Used to reject multi-description tracks and
+    // missing/duplicated configuration.
+    unsigned wvtt_sample_entries;
+    unsigned vttc_config_boxes;
+    unsigned stsd_entry_count;
 
     // MP4D_frame_offset()'s in-chunk byte-offset resume point -- see that
     // function's comment. Independent of stc_cache_* above: this caches
@@ -445,6 +479,43 @@ MP4E_mux_t *MP4E_open(int sequential_mode_flag, int enable_fragmentation, void *
 int MP4E_add_track(MP4E_mux_t *mux, const MP4E_track_t *track_data);
 
 /**
+*   Add an embedded WebVTT subtitle track.
+*   'language' is a 3-letter ISO 639-2T code (not necessarily NUL-terminated).
+*   'config' is 'config_bytes' bytes of UTF-8 WebVTT header text, stored
+*   verbatim into the 'wvtt' sample entry's 'vttC' box; must be non-NULL and
+*   non-empty, with no extra string terminator implied. Both language and
+*   config are copied, and stay owned by the library after this call.
+*   The track time scale is fixed to 1000 (milliseconds).
+*
+*   The samples of the track are supplied all at once by MP4E_write_webvtt();
+*   MP4E_put_sample() must not be used on this track.
+*
+*   return zero-based track ID, or error code MP4E_STATUS_*
+*/
+int MP4E_add_webvtt_track(MP4E_mux_t *mux, const char language[4], const void *config, int config_bytes);
+
+/**
+*   Build the sample table of a WebVTT track from cues and write its samples.
+*   Cues may be given in any order and may overlap. 'total_ms' must be in
+*   [1, INT32_MAX] and every cue must satisfy start_ms < end_ms <= total_ms.
+*   'count' may be zero (with 'cues' == NULL), producing a track of a single
+*   empty sample spanning the whole duration.
+*
+*   Sample boundaries are 0, total_ms and all cue start/end points, sorted and
+*   deduplicated; each adjacent pair becomes one sample. A sample's payload
+*   holds one 'vttc' box per cue active in that half-open interval, in the
+*   same order the cues appeared in the input array. Empty samples hold a
+*   single empty 'vtte' box.
+*
+*   The whole submission is validated before any sample byte is written or
+*   any track index changes; a rejected call leaves the muxer usable and a
+*   later valid call can still succeed.
+*
+*   return error code MP4E_STATUS_*
+*/
+int MP4E_write_webvtt(MP4E_mux_t *mux, int track, const MP4E_webvtt_cue_t *cues, int count, uint32_t total_ms);
+
+/**
 *   Add new sample to specified track
 *   The tracks numbered starting with 0, according to order of MP4E_add_track() calls
 *   'kind' is one of MP4E_SAMPLE_... defines
@@ -579,6 +650,15 @@ enum
     BOX_chan    = FOUR_CHAR_INT( 'c', 'h', 'a', 'n' ),//QuickTime channel layout box (inside 'sowt')
     BOX_mp4v    = FOUR_CHAR_INT( 'm', 'p', '4', 'v' ),//MPEGVisualSampleEntryAtomType
 
+    // WebVTT subtitle atoms (ISO/IEC 14496-30)
+    BOX_wvtt    = FOUR_CHAR_INT( 'w', 'v', 't', 't' ),//WebVTTSampleEntryAtomType
+    BOX_vttC    = FOUR_CHAR_INT( 'v', 't', 't', 'C' ),//WebVTTConfigurationBox
+    BOX_vttc    = FOUR_CHAR_INT( 'v', 't', 't', 'c' ),//WebVTTCueBox
+    BOX_vtte    = FOUR_CHAR_INT( 'v', 't', 't', 'e' ),//WebVTTEmptyCueBox
+    BOX_iden    = FOUR_CHAR_INT( 'i', 'd', 'e', 'n' ),//WebVTTIdBox
+    BOX_sttg    = FOUR_CHAR_INT( 's', 't', 't', 'g' ),//WebVTTSettingsBox
+    BOX_payl    = FOUR_CHAR_INT( 'p', 'a', 'y', 'l' ),//WebVTTCueTextualPayloadBox
+
     // http://www.itscj.ipsj.or.jp/sc29/open/29view/29n7644t.doc
     BOX_avc1    = FOUR_CHAR_INT( 'a', 'v', 'c', '1' ),
     BOX_avc2    = FOUR_CHAR_INT( 'a', 'v', 'c', '2' ),
@@ -682,6 +762,8 @@ enum
 // General MPEG-4 systems streams (without specific handler).
 // Used for private stream, as suggested in http://www.mp4ra.org/handler.html
 #define MP4E_HANDLER_TYPE_GESM                                  0x6765736D
+// Text track : 'text' (WebVTT subtitles)
+#define MP4E_HANDLER_TYPE_TEXT                                  0x74657874
 
 typedef struct
 {
@@ -706,6 +788,12 @@ typedef struct
     minimp4_vector_t vsps;  // or dsi for audio
     minimp4_vector_t vpps;  // not used for audio
     minimp4_vector_t vvps;  // used for HEVC
+
+    // WebVTT: copied 'vttC' configuration bytes. The sample payloads are
+    // written (and their offsets recorded) at MP4E_write_webvtt() time, so no
+    // partial data is left behind by a rejected submission.
+    minimp4_vector_t vtt_config;
+    int webvtt_written;     // non-zero once a cue table was accepted
 
 } track_t;
 
@@ -861,15 +949,13 @@ MP4E_mux_t *MP4E_open(int sequential_mode_flag, int enable_fragmentation, void *
 }
 
 /**
-*   Add new track
+*   Allocate and append a track. Returns its zero-based ID or a negative
+*   error code. Does not restrict the media kind: callers validate that.
 */
-int MP4E_add_track(MP4E_mux_t *mux, const MP4E_track_t *track_data)
+static int mp4e_alloc_track(MP4E_mux_t *mux, const MP4E_track_t *track_data)
 {
     track_t *tr;
-    int ntr = mux->tracks.bytes / sizeof(track_t);
-
-    if (!mux || !track_data)
-        return MP4E_STATUS_BAD_ARGUMENTS;
+    int ntr = mux->tracks.bytes / (int)sizeof(track_t);
 
     tr = (track_t*)minimp4_vector_alloc_tail(&mux->tracks, sizeof(track_t));
     if (!tr)
@@ -877,10 +963,79 @@ int MP4E_add_track(MP4E_mux_t *mux, const MP4E_track_t *track_data)
     memset(tr, 0, sizeof(track_t));
     memcpy(&tr->info, track_data, sizeof(*track_data));
     if (!minimp4_vector_init(&tr->smpl, 256))
+    {
+        mux->tracks.bytes = ntr * (int)sizeof(track_t);
         return MP4E_STATUS_NO_MEMORY;
+    }
     minimp4_vector_init(&tr->vsps, 0);
     minimp4_vector_init(&tr->vpps, 0);
     minimp4_vector_init(&tr->pending_sample, 0);
+    minimp4_vector_init(&tr->vtt_config, 0);
+    return ntr;
+}
+
+/**
+*   Add new track
+*/
+int MP4E_add_track(MP4E_mux_t *mux, const MP4E_track_t *track_data)
+{
+    if (!mux || !track_data)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (track_data->track_media_kind == e_webvtt)
+        return MP4E_STATUS_BAD_ARGUMENTS; // use MP4E_add_webvtt_track()
+    return mp4e_alloc_track(mux, track_data);
+}
+
+/**
+*   Look up a track by its zero-based ID, NULL if the ID is out of range
+*/
+static track_t *mp4e_get_track(MP4E_mux_t *mux, int track_id)
+{
+    if (!mux || track_id < 0 || track_id >= mux->tracks.bytes / (int)sizeof(track_t))
+        return NULL;
+    return ((track_t*)mux->tracks.data) + track_id;
+}
+
+/**
+*   Add an embedded WebVTT subtitle track
+*/
+int MP4E_add_webvtt_track(MP4E_mux_t *mux, const char language[4], const void *config, int config_bytes)
+{
+    MP4E_track_t info;
+    track_t *tr;
+    int ntr, old_bytes;
+
+    if (!mux || !language || !config || config_bytes <= 0)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (mux->enable_fragmentation)
+        return MP4E_STATUS_BAD_ARGUMENTS; // not supported in fragmented mode
+
+    old_bytes = mux->tracks.bytes;
+    memset(&info, 0, sizeof(info));
+    info.language[0] = (unsigned char)language[0];
+    info.language[1] = (unsigned char)language[1];
+    info.language[2] = (unsigned char)language[2];
+    info.language[3] = 0;
+    info.track_media_kind = e_webvtt;
+    info.time_scale = 1000;
+    info.default_duration = 0;
+
+    ntr = mp4e_alloc_track(mux, &info);
+    if (ntr < 0)
+        return ntr;
+    tr = mp4e_get_track(mux, ntr);
+
+    if (!minimp4_vector_put(&tr->vtt_config, config, config_bytes))
+    {
+        // Roll the (last) track back, so a failed add is not observable.
+        minimp4_vector_reset(&tr->vtt_config);
+        minimp4_vector_reset(&tr->smpl);
+        minimp4_vector_reset(&tr->vsps);
+        minimp4_vector_reset(&tr->vpps);
+        minimp4_vector_reset(&tr->pending_sample);
+        mux->tracks.bytes = old_bytes;
+        return MP4E_STATUS_NO_MEMORY;
+    }
     return ntr;
 }
 
@@ -1009,7 +1164,233 @@ static int add_sample_descriptor(MP4E_mux_t *mux, track_t *tr, int data_bytes, i
     return NULL != minimp4_vector_put(&tr->smpl, &smp, sizeof(sample_t));
 }
 
+/**
+*   Append a WebVTT box: 4-byte size, 4-byte name, payload
+*/
+static int vtt_put_box(minimp4_vector_t *v, uint32_t name, const void *payload, size_t bytes)
+{
+    unsigned char header[8];
+    if (bytes > (size_t)INT_MAX - 8)
+        return 0;
+    WR4(header, (uint32_t)bytes + 8);
+    WR4(header + 4, name);
+    if (!minimp4_vector_put(v, header, 8))
+        return 0;
+    return !bytes || NULL != minimp4_vector_put(v, payload, (int)bytes);
+}
+
+static int vtt_cue_box_size(const MP4E_webvtt_cue_t *cue)
+{
+    size_t size = 8;    // 'vttc'
+    size_t text = strlen(cue->text);
+    if (cue->id)
+        size += 8 + strlen(cue->id);
+    if (cue->settings)
+        size += 8 + strlen(cue->settings);
+    size += 8 + text;
+    if (size > (size_t)INT_MAX)
+        return -1;
+    return (int)size;
+}
+
+static int vtt_put_cue(minimp4_vector_t *v, const MP4E_webvtt_cue_t *cue)
+{
+    unsigned char header[8];
+    int cue_size = vtt_cue_box_size(cue);
+    size_t id_bytes = cue->id ? strlen(cue->id) : 0;
+    size_t settings_bytes = cue->settings ? strlen(cue->settings) : 0;
+    size_t text_bytes = strlen(cue->text);
+
+    if (cue_size < 0)
+        return 0;
+    WR4(header, (uint32_t)cue_size);
+    WR4(header + 4, BOX_vttc);
+    if (!minimp4_vector_put(v, header, 8))
+        return 0;
+    if (cue->id && !vtt_put_box(v, BOX_iden, cue->id, id_bytes))
+        return 0;
+    if (cue->settings && !vtt_put_box(v, BOX_sttg, cue->settings, settings_bytes))
+        return 0;
+    return vtt_put_box(v, BOX_payl, cue->text, text_bytes);
+}
+
+/**
+*   Compare function for the sample boundary qsort()
+*/
+static int vtt_cmp_u32(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t*)a, y = *(const uint32_t*)b;
+    return (x > y) - (x < y);
+}
+
 static int mp4e_flush_index(MP4E_mux_t *mux);
+
+/**
+*   Write a WebVTT track's sample table and payloads in one go.
+*
+*   The whole input is validated and the complete sample payload is built in
+*   memory before the track's index or the output file are touched, so a
+*   rejected call leaves the muxer exactly as it was and a later valid call
+*   can still succeed.
+*/
+int MP4E_write_webvtt(MP4E_mux_t *mux, int track, const MP4E_webvtt_cue_t *cues, int count, uint32_t total_ms)
+{
+    track_t *tr;
+    uint32_t *bounds = NULL;
+    sample_t *samples = NULL;
+    int i, nbounds = 0, sample_count, sample;
+    minimp4_vector_t data;
+    int err = MP4E_STATUS_OK;
+
+    if (!mux || count < 0 || total_ms < 1 || total_ms > (uint32_t)INT_MAX)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (count > 0 && !cues)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    // Vector sizes and offsets are tracked in ints; keep the derived counts
+    // and byte totals representable.
+    if (count > (INT_MAX - 2) / 2)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    tr = mp4e_get_track(mux, track);
+    if (!tr || tr->info.track_media_kind != e_webvtt)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (mux->enable_fragmentation)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (tr->webvtt_written || tr->smpl.bytes || tr->pending_sample.bytes)
+        return MP4E_STATUS_BAD_ARGUMENTS; // one submission per track
+
+    for (i = 0; i < count; i++)
+    {
+        if (!cues[i].text || !cues[i].text[0])
+            return MP4E_STATUS_BAD_ARGUMENTS;
+        if (cues[i].start_ms >= cues[i].end_ms || cues[i].end_ms > total_ms)
+            return MP4E_STATUS_BAD_ARGUMENTS;
+        if (vtt_cue_box_size(&cues[i]) < 0)
+            return MP4E_STATUS_BAD_ARGUMENTS;
+    }
+
+    // Sample boundaries: 0, total_ms and every cue start/end, sorted and
+    // deduplicated.
+    bounds = (uint32_t*)malloc(((size_t)count*2 + 2)*sizeof(uint32_t));
+    samples = (sample_t*)malloc(((size_t)count*2 + 2)*sizeof(sample_t));
+    if (!bounds || !samples)
+    {
+        err = MP4E_STATUS_NO_MEMORY;
+        goto done;
+    }
+    bounds[nbounds++] = 0;
+    bounds[nbounds++] = total_ms;
+    for (i = 0; i < count; i++)
+    {
+        bounds[nbounds++] = cues[i].start_ms;
+        bounds[nbounds++] = cues[i].end_ms;
+    }
+    qsort(bounds, nbounds, sizeof(bounds[0]), vtt_cmp_u32);
+    {
+        int write = 0;
+        for (i = 0; i < nbounds; i++)
+        {
+            if (!write || bounds[i] != bounds[write - 1])
+                bounds[write++] = bounds[i];
+        }
+        nbounds = write;
+    }
+    sample_count = nbounds - 1;
+
+    minimp4_vector_init(&data, 0);
+
+    for (sample = 0; sample < sample_count; sample++)
+    {
+        uint32_t start = bounds[sample], end = bounds[sample + 1];
+        size_t sample_start = (size_t)data.bytes;
+        int active = 0;
+
+        for (i = 0; i < count; i++)
+        {
+            // Active in the half-open interval [start, end), in input order.
+            if (cues[i].start_ms <= start && cues[i].end_ms > start)
+            {
+                if (!vtt_put_cue(&data, &cues[i]))
+                {
+                    err = MP4E_STATUS_NO_MEMORY;
+                    goto done;
+                }
+                active++;
+            }
+        }
+        if (!active)
+        {
+            unsigned char header[8];
+            WR4(header, 8);
+            WR4(header + 4, BOX_vtte);
+            if (!minimp4_vector_put(&data, header, 8))
+            {
+                err = MP4E_STATUS_NO_MEMORY;
+                goto done;
+            }
+        }
+
+        memset(&samples[sample], 0, sizeof(sample_t));
+        samples[sample].size = (boxsize_t)(data.bytes - (int)sample_start);
+        samples[sample].duration = end - start;
+        samples[sample].flag_random_access = 1;
+    }
+
+    // Everything validated. Write the samples now, then commit the index.
+    // Other tracks' samples are written as they were submitted (or flushed
+    // at index time), so appending here keeps every offsets table honest.
+    if (mux->sequential_mode_flag)
+    {
+        // Same layout as the other tracks in sequential mode: one 'mdat'
+        // box per sample.
+        int pos = 0;
+        for (i = 0; i < sample_count; i++)
+        {
+            int size = (int)samples[i].size;
+            unsigned char base[8];
+            WR4(base, (uint32_t)size + 8);
+            WR4(base + 4, BOX_mdat);
+            err = mux->write_callback(mux->write_pos, base, 8, mux->token);
+            if (err)
+                goto done;
+            mux->write_pos += 8;
+            samples[i].offset = (boxsize_t)mux->write_pos;
+            err = mux->write_callback(mux->write_pos, data.data + pos, size, mux->token);
+            if (err)
+                goto done;
+            mux->write_pos += size;
+            pos += size;
+        }
+    } else
+    {
+        // Default mode: the payloads form one contiguous run.
+        boxsize_t offset = (boxsize_t)mux->write_pos;
+        for (i = 0; i < sample_count; i++)
+        {
+            samples[i].offset = offset;
+            offset += samples[i].size;
+        }
+        err = mux->write_callback(mux->write_pos, data.data, data.bytes, mux->token);
+        if (err)
+            goto done;
+        mux->write_pos += data.bytes;
+    }
+
+    // Commit the index last: a writer error must not leave a half-built
+    // sample table behind.
+    if (!minimp4_vector_put(&tr->smpl, samples, sample_count*(int)sizeof(sample_t)))
+    {
+        err = MP4E_STATUS_NO_MEMORY;
+        goto done;
+    }
+    tr->webvtt_written = 1;
+
+done:
+    free(bounds);
+    free(samples);
+    minimp4_vector_reset(&data);
+    return err;
+}
+
 
 /**
 *   Write Movie Fragment: 'moof' box
@@ -1125,7 +1506,11 @@ int MP4E_put_sample(MP4E_mux_t *mux, int track_num, const void *data, int data_b
     track_t *tr;
     if (!mux || !data)
         return MP4E_STATUS_BAD_ARGUMENTS;
-    tr = ((track_t*)mux->tracks.data) + track_num;
+    tr = mp4e_get_track(mux, track_num);
+    if (!tr)
+        return MP4E_STATUS_BAD_ARGUMENTS;
+    if (tr->info.track_media_kind == e_webvtt)
+        return MP4E_STATUS_BAD_ARGUMENTS; // use MP4E_write_webvtt()
 
     if (mux->enable_fragmentation)
     {
@@ -1209,6 +1594,23 @@ int MP4E_set_text_comment(MP4E_mux_t *mux, const char *comment)
 }
 
 /**
+*   Whether the movie contains at least one embedded WebVTT track. Only then
+*   does the movie duration follow the longest track instead of the first
+*   one; files without WebVTT keep their pre-existing mvhd duration exactly.
+*/
+static int mp4e_has_webvtt_track(MP4E_mux_t *mux)
+{
+    unsigned ntr, ntracks = mux->tracks.bytes / (int)sizeof(track_t);
+    for (ntr = 0; ntr < ntracks; ntr++)
+    {
+        track_t *tr = ((track_t*)mux->tracks.data) + ntr;
+        if (tr->info.track_media_kind == e_webvtt)
+            return 1;
+    }
+    return 0;
+}
+
+/**
 *   Write file index 'moov' box with all its boxes and indexes
 */
 static int mp4e_flush_index(MP4E_mux_t *mux)
@@ -1217,6 +1619,7 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
     unsigned char **stack = stack_base;
     unsigned char *base, *p;
     unsigned int ntr, index_bytes, ntracks = mux->tracks.bytes / sizeof(track_t);
+    uint64_t index_need;
     int i, err;
 
     // How much memory needed for indexes
@@ -1227,20 +1630,27 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
     // file header size = 148 bytes
 #define FILE_HEADER_BYTES 256
 #define TRACK_HEADER_BYTES 512
-    index_bytes = FILE_HEADER_BYTES;
+    // 64-bit accumulator: caller-provided WebVTT configuration bytes can be
+    // large, and a 32-bit sum could wrap to a small allocation while the
+    // writes below still emit the full payload.
+    index_need = FILE_HEADER_BYTES;
     if (mux->text_comment)
-        index_bytes += 128 + strlen(mux->text_comment);
+        index_need += 128 + strlen(mux->text_comment);
     for (ntr = 0; ntr < ntracks; ntr++)
     {
         track_t *tr = ((track_t*)mux->tracks.data) + ntr;
-        index_bytes += TRACK_HEADER_BYTES;          // fixed amount (implementation-dependent)
+        index_need += TRACK_HEADER_BYTES;          // fixed amount (implementation-dependent)
         // may need extra 4 bytes for duration field + 4 bytes for worst-case random access box
-        index_bytes += tr->smpl.bytes * (sizeof(sample_t) + 4 + 4) / sizeof(sample_t);
-        index_bytes += tr->vsps.bytes;
-        index_bytes += tr->vpps.bytes;
+        index_need += (uint64_t)tr->smpl.bytes / sizeof(sample_t) * (sizeof(sample_t) + 4 + 4);
+        index_need += (uint64_t)tr->vsps.bytes;
+        index_need += (uint64_t)tr->vpps.bytes;
+        index_need += (uint64_t)tr->vtt_config.bytes + 32;   // 'wvtt' + 'vttC' headers + slack
 
         ERR(write_pending_data(mux, tr));
     }
+    if (index_need > UINT_MAX)
+        return MP4E_STATUS_NO_MEMORY;
+    index_bytes = (unsigned int)index_need;
 
     base = (unsigned char*)malloc(index_bytes);
     if (!base)
@@ -1282,9 +1692,26 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
 
         if (ntracks)
         {
-            track_t *tr = ((track_t*)mux->tracks.data) + 0;    // take 1st track
-            unsigned duration = get_duration(tr);
-            duration = (unsigned)(duration * 1LL * MOOV_TIMESCALE / tr->info.time_scale);
+            unsigned duration;
+            if (mp4e_has_webvtt_track(mux))
+            {
+                // With an embedded subtitle track the movie duration must
+                // cover every track, not just the first one.
+                unsigned max_duration = 0;
+                for (ntr = 0; ntr < ntracks; ntr++)
+                {
+                    track_t *tr = ((track_t*)mux->tracks.data) + ntr;
+                    unsigned d = (unsigned)(get_duration(tr) * 1LL * MOOV_TIMESCALE / tr->info.time_scale);
+                    if (d > max_duration)
+                        max_duration = d;
+                }
+                duration = max_duration;
+            } else
+            {
+                track_t *tr = ((track_t*)mux->tracks.data) + 0;    // take 1st track
+                duration = get_duration(tr);
+                duration = (unsigned)(duration * 1LL * MOOV_TIMESCALE / tr->info.time_scale);
+            }
             WRITE_4(MOOV_TIMESCALE); // duration
             WRITE_4(duration); // duration
         }
@@ -1338,6 +1765,10 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
             case e_private:
                 handler_type = MP4E_HANDLER_TYPE_GESM;
                 break;
+            case e_webvtt:
+                handler_type = MP4E_HANDLER_TYPE_TEXT;
+                handler_ascii = "TextHandler";
+                break;
             default:
                 return MP4E_STATUS_BAD_ARGUMENTS;
         }
@@ -1360,7 +1791,8 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
             WRITE_4(0); WRITE_4(0x00010000); WRITE_4(0);
             WRITE_4(0); WRITE_4(0); WRITE_4(0x40000000);
 
-            if (tr->info.track_media_kind == e_audio || tr->info.track_media_kind == e_private)
+            if (tr->info.track_media_kind == e_audio || tr->info.track_media_kind == e_private ||
+                tr->info.track_media_kind == e_webvtt)
             {
                 WRITE_4(0); // width
                 WRITE_4(0); // height
@@ -1419,6 +1851,12 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
                         ATOM_FULL(BOX_vmhd, 1);
                         WRITE_2(0); // graphicsmode
                         WRITE_2(0); WRITE_2(0); WRITE_2(0); // opcolor[3]
+                        END_ATOM;
+                    }
+                    if (tr->info.track_media_kind == e_webvtt)
+                    {
+                        // Null Media Header Box, required for text tracks
+                        ATOM_FULL(BOX_nmhd, 0);
                         END_ATOM;
                     }
 
@@ -1533,6 +1971,24 @@ static int mp4e_flush_index(MP4E_mux_t *mux)
                                     WRITE_4(layout_tag); // channel layout tag
                                     WRITE_4(0);          // channel bitmap
                                     WRITE_4(0);          // number of channel descriptions
+                                END_ATOM;
+                            END_ATOM;
+                        }
+                        else if (tr->info.track_media_kind == e_webvtt)
+                        {
+                            // WebVTTSampleEntry extends SampleEntry
+                            ATOM(BOX_wvtt);
+                                // SampleEntry common header
+                                WRITE_4(0); WRITE_2(0); // reserved[6]
+                                WRITE_2(1); // data_reference_index
+
+                                // WebVTTConfigurationBox: the caller's
+                                // header bytes, stored verbatim.
+                                ATOM(BOX_vttC);
+                                    for (i = 0; i < tr->vtt_config.bytes; i++)
+                                    {
+                                        WRITE_1(tr->vtt_config.data[i]);
+                                    }
                                 END_ATOM;
                             END_ATOM;
                         }
@@ -1812,8 +2268,10 @@ int MP4E_close(MP4E_mux_t *mux)
         track_t *tr = ((track_t*)mux->tracks.data) + ntr;
         minimp4_vector_reset(&tr->vsps);
         minimp4_vector_reset(&tr->vpps);
+        minimp4_vector_reset(&tr->vvps);
         minimp4_vector_reset(&tr->smpl);
         minimp4_vector_reset(&tr->pending_sample);
+        minimp4_vector_reset(&tr->vtt_config);
     }
     minimp4_vector_reset(&mux->tracks);
     free(mux);
@@ -2723,6 +3181,7 @@ int MP4D_open(MP4D_demux_t *mp4, int (*read_callback)(int64_t offset, void *buff
             {BOX_stsd, BOX_ATOM},
             {BOX_mp4a, BOX_ATOM},
             {BOX_mp4s, BOX_ATOM},
+            {BOX_wvtt, BOX_ATOM},
 #if MP4D_AVC_SUPPORTED
             {BOX_mp4v, BOX_ATOM},
             {BOX_avc1, BOX_ATOM},
@@ -3144,7 +3603,52 @@ broken_android_meta_hack:
 #endif
 
         case BOX_stsd:
-            SKIP(4); // entry_count, BOX_mp4a & BOX_mp4v boxes follows immediately
+            // entry_count, then the sample entries follow. Recorded so a
+            // 'wvtt' track can require exactly one description.
+            if (tr)
+                tr->stsd_entry_count = READ(4);
+            else
+                SKIP(4);
+            break;
+
+        case BOX_wvtt:
+            if (!tr)
+            {
+                ERROR("broken file structure!");
+            }
+            if (!tr->sample_entry)
+                tr->sample_entry = MP4D_SAMPLE_ENTRY_WVTT;
+            tr->wvtt_sample_entries++;
+            SKIP(6*1 + 2/*Base SampleEntry*/);
+            break;
+
+        case BOX_vttC:
+            if (!tr || tr->sample_entry != MP4D_SAMPLE_ENTRY_WVTT)
+                break;
+            tr->vttc_config_boxes++;
+            if (tr->vttc_config_boxes > 1)
+            {
+                ERROR("duplicate vttC box");
+            }
+            if (payload_bytes)
+            {
+                // (uint64_t) cast: same truncate-before-size-check gap as
+                // OD_DSI's dsi buffer above.
+                MALLOC(unsigned char*, tr->dsi, (uint64_t)payload_bytes);
+                for (i = 0; i < payload_bytes; i++)
+                {
+                    tr->dsi[i] = minimp4_read(mp4, 1, &eof_flag);
+                }
+                tr->dsi_bytes = i;
+                payload_bytes = 0;
+                // A truncated configuration box (its declared payload runs
+                // past the end of the file) leaves zero bytes behind; reject
+                // rather than presenting a silently garbled vttC.
+                if (eof_flag)
+                {
+                    ERROR("truncated vttC box");
+                }
+            }
             break;
 
         case BOX_mp4s:  // private stream
@@ -3152,6 +3656,8 @@ broken_android_meta_hack:
             {
                 ERROR("broken file structure!");
             }
+            if (!tr->sample_entry)
+                tr->sample_entry = BOX_mp4s;
             SKIP(6*1 + 2/*Base SampleEntry*/);
             break;
 
@@ -3160,6 +3666,8 @@ broken_android_meta_hack:
             {
                 ERROR("broken file structure!");
             }
+            if (!tr->sample_entry)
+                tr->sample_entry = BOX_mp4a;
 #if MP4D_INFO_SUPPORTED
             SKIP(6*1+2/*Base SampleEntry*/  + 4*2);
             tr->SampleDescription.audio.channelcount = READ(2);
@@ -3179,6 +3687,8 @@ broken_android_meta_hack:
             {
                 ERROR("broken file structure!");
             }
+            if (!tr->sample_entry)
+                tr->sample_entry = box_name;
 #if MP4D_INFO_SUPPORTED
             SKIP(6*1 + 2/*Base SampleEntry*/ + 2 + 2 + 4*3);
             tr->SampleDescription.video.width  = READ(2);
@@ -3400,6 +3910,24 @@ broken_android_meta_hack:
     if (!mp4->track_count)
     {
         RETURN_ERROR("no tracks found");
+    }
+
+    // WebVTT tracks: only single-description entries are supported, and the
+    // 'vttC' configuration box is mandatory and must be unique. Unknown
+    // sibling boxes inside the entry were skipped above, as usual.
+    for (i = 0; i < mp4->track_count; i++)
+    {
+        tr = mp4->track + i;
+        if (!tr->wvtt_sample_entries)
+            continue;
+        if (tr->stsd_entry_count != 1 || tr->wvtt_sample_entries != 1)
+        {
+            RETURN_ERROR("multiple WebVTT sample descriptions are not supported");
+        }
+        if (tr->vttc_config_boxes != 1)
+        {
+            RETURN_ERROR("missing or duplicate vttC box in wvtt sample entry");
+        }
     }
     return 1;
 }
