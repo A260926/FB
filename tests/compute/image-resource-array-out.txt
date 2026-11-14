@@ -1,0 +1,22 @@
+#version 450
+layout(local_size_x = 8) in;
+layout(rgba8, binding = 0) readonly uniform image2D sources[2];
+layout(rgba8, binding = 2) writeonly uniform image2D destinations[2];
+layout(binding = 5) uniform sampler2D extra;
+layout(rgba8, binding = 4) writeonly uniform image2D combined;
+void main ()
+{
+  uint t0 = (gl_WorkGroupID.x & 1u);
+  vec4 t1 = (imageLoad(sources[int(t0)], ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy)) + texelFetch(extra, ivec2(gl_GlobalInvocationID.xy), 0));
+  imageStore(destinations[int(t0)], ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy), t1);
+  vec2 t2 = vec2(imageSize(sources[int(t0)]));
+  imageStore(combined, ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy), (t1 + vec4(t2, 0.0, 0.0)));
+}
+
+// stats: 4 alu 5 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 4
+//  #0: sources (high image2d) 0x0 [2] loc 0 format rgba8 component float readonly
+//  #1: destinations (high image2d) 0x0 [2] loc 2 format rgba8 component float writeonly
+//  #2: extra (high 2d) 0x0 [-1] loc 5
+//  #3: combined (high image2d) 0x0 [-1] loc 4 format rgba8 component float writeonly

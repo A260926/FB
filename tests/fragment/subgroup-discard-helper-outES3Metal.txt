@@ -1,0 +1,36 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 230
+#error This shader requires Metal 2.3 or newer
+#endif
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  uint4 result [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  if ((_mtl_i.gl_FragCoord.x < 4.0)) {
+    discard_fragment();
+  }
+  if ((_mtl_i.gl_FragCoord.y < 4.0)) {
+    discard_fragment();
+  }
+  uint t0 = ((_mtl_i.gl_FragCoord.x < 8.0) ? 1u : 2u);
+  _mtl_o.result = uint4(t0);
+  if ((!simd_is_helper_thread())) {
+    uint t1 = simd_sum(1u);
+    uint t2 = simd_or(t0);
+    _mtl_o.result.xy = uint4(t1, t2, 0u, 0u).xy;
+  }
+  return _mtl_o;
+}
+
+// stats: 5 alu 2 tex 3 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0

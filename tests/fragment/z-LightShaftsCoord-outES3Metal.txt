@@ -1,0 +1,71 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float2 xlv_TEXCOORD0;
+};
+struct xlatMtlShaderOutput {
+  half4 _xlat_varying0 [[color(0)]];
+  half4 _xlat_varying1 [[color(1)]];
+  half4 _xlat_varying2 [[color(2)]];
+  half4 _xlat_varying3 [[color(3)]];
+};
+struct xlatMtlShaderUniform {
+  float4 _ZBufferParams;
+  float4 _LightPos;
+  float4x4 _FrustumRays;
+  float4 _CameraPosLocal;
+  float4 _CoordTexDim;
+  float4 _ScreenTexDim;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _CameraDepthTexture [[texture(0)]], sampler _mtlsmp__CameraDepthTexture [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 _glesFragData[4];
+  half t0 = half((_mtl_i.xlv_TEXCOORD0.y - (0.5 / _mtl_u._CoordTexDim.y)));
+  float t1 = float(saturate(t0));
+  half t2 = half(((_mtl_i.xlv_TEXCOORD0.x - (0.5 / _mtl_u._CoordTexDim.x)) * (_mtl_u._CoordTexDim.x / (_mtl_u._CoordTexDim.x - 1.0))));
+  float t3 = float(saturate(t2));
+  float t4 = (t1 * 4.0);
+  float t5 = ((fract(t4) * 2.0) - 1.0);
+  float t6 = (-t5);
+  half4 t7 = half4((int(clamp(floor(t4), 0.0, 3.0)) == int4(0, 1, 2, 3)));
+  float2 t8 = ((mix(_mtl_u._LightPos.xy, (-float2(dot(float4(t6, -1.0, t5, 1.0), float4(t7)), dot(float4(-1.0, t5, 1.0, t6), float4(t7)))), float2(t3)) * 0.5) + 0.5);
+  float t9 = float(_CameraDepthTexture.sample(_mtlsmp__CameraDepthTexture, ((floor((t8 * _mtl_u._ScreenTexDim.xy)) + 0.5) * _mtl_u._ScreenTexDim.zw)).x);
+  half4 t10 = half4(_mtl_u._FrustumRays[0]);
+  half4 t11 = half4(_mtl_u._FrustumRays[1]);
+  half4 t12 = half4(_mtl_u._FrustumRays[2]);
+  float3 t13 = mix(mix(float3(half3(t10.x, t11.x, t12.x)), float3(half3(t10.y, t11.y, t12.y)), t8.xxx), mix(float3(half3(t10.w, t11.w, t12.w)), float3(half3(t10.z, t11.z, t12.z)), t8.xxx), t8.yyy);
+  float t14 = length(t13);
+  float3 t15 = (1.0 / (t13 / t14));
+  float3 t16 = (t15 * (-0.5 - _mtl_u._CameraPosLocal.xyz));
+  float3 t17 = (t15 * (0.5 - _mtl_u._CameraPosLocal.xyz));
+  float3 t18 = min(t17, t16);
+  float3 t19 = max(t17, t16);
+  float2 t20 = max(t18.xx, t18.yz);
+  float t21 = max(t20.x, t20.y);
+  float2 t22 = min(t19.xx, t19.yz);
+  float t23 = min(t22.x, t22.y);
+  float t24 = (1.0 / ((_mtl_u._ZBufferParams.x * t9) + _mtl_u._ZBufferParams.y));
+  _glesFragData[0] = half4(float4(t8, 0.0, 0.0));
+  _glesFragData[1] = half4((((max(t21, 0.0) >= t23) || (t24 < (t21 / t14))) ? (-float4(t24)) : min(float4(t24), float4((t23 / t14)))));
+  _mtl_o._xlat_varying0 = _glesFragData[0];
+  _mtl_o._xlat_varying1 = _glesFragData[1];
+  _mtl_o._xlat_varying2 = _glesFragData[2];
+  _mtl_o._xlat_varying3 = _glesFragData[3];
+  return _mtl_o;
+}
+
+// stats: 58 alu 1 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+// uniforms: 6 (total size: 144)
+//  #0: _ZBufferParams (high float) 4x1 [-1] loc 0
+//  #1: _LightPos (high float) 4x1 [-1] loc 16
+//  #2: _FrustumRays (high float) 4x4 [-1] loc 32
+//  #3: _CameraPosLocal (high float) 4x1 [-1] loc 96
+//  #4: _CoordTexDim (high float) 4x1 [-1] loc 112
+//  #5: _ScreenTexDim (high float) 4x1 [-1] loc 128
+// textures: 1
+//  #0: _CameraDepthTexture (medium 2d) 0x0 [-1] loc 0

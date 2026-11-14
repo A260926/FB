@@ -1,0 +1,36 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 320
+#error This shader requires Metal 3.2 or newer
+#endif
+struct _xlat_buf_Results_std430 {
+  uint4 values[1];
+};
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, slice, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint face, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, face, slice, &expected, vec<T, 4>(value)); return expected.x; }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Results_std430& results [[buffer(1)]]
+  , texture3d<uint, access::read_write, memory_coherence_device> volume [[texture(0)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = volume.atomic_fetch_add(uint3(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xyz), uint4(1u)).x;
+  uint t1 = _xlat_image_comp_swap(volume, uint3(int4((1 + int(gl_GlobalInvocationID.x)), 0, 0, 0).xyz), 0u, uint((2 + int(gl_GlobalInvocationID.x))));
+  uint t2 = gl_GlobalInvocationID.x;
+  uint t3 = _xlat_image_comp_swap(volume, uint3(int4(-1, 0, 0, 0).xyz), 0u, t2);
+  int3 t4 = int3(volume.get_width(), volume.get_height(), volume.get_depth());
+  uint t5 = _xlat_image_comp_swap(volume, uint3(int4(t4, 0).xyz), 0u, t2);
+  results.values[int(t2)] = uint4(t0, t1, t3, t5);
+}
+
+// stats: 2 alu 5 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: Results storage instance results layout std430 (size: unknown) metal 1
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0
+// textures: 1
+//  #0: volume (high image3d) 0x0 [-1] loc 0 format r32ui component uint

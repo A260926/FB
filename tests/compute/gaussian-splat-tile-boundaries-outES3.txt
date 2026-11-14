@@ -1,0 +1,60 @@
+#version 310 es
+layout(local_size_x = 256) in;
+layout(std430, binding = 2) buffer BoundsBuffer {
+  restrict writeonly highp uvec2 bounds_buffer[];
+};
+layout(std430, binding = 1) buffer SortBuffer {
+  restrict readonly highp uint sort_buffer[];
+};
+layout(std430, binding = 0) buffer Histograms {
+  restrict readonly highp uint sort_buffer_size;
+  restrict readonly highp uint histogram[];
+};
+shared highp uint tile_ids[257];
+void main ()
+{
+  highp uint t0 = sort_buffer_size;
+  bool t1 = (gl_GlobalInvocationID.x < t0);
+  if (t1) {
+    if (((int(gl_LocalInvocationIndex) == 0) && (int(gl_GlobalInvocationID.x) != 0))) {
+      tile_ids[0] = (sort_buffer[(int(gl_GlobalInvocationID.x) - 1)] >> 16u);
+    }
+    tile_ids[(int(gl_LocalInvocationIndex) + 1)] = (sort_buffer[int(gl_GlobalInvocationID.x)] >> 16u);
+  }
+  barrier();
+  if (t1) {
+    highp uint t2 = tile_ids[(int(gl_LocalInvocationIndex) + 1)];
+    highp int t3 = bounds_buffer.length();
+    if ((int(gl_GlobalInvocationID.x) == 0)) {
+      if ((t2 < uint(t3))) {
+        bounds_buffer[int(t2)].x = 0u;
+      }
+    } else {
+      highp uint t4 = tile_ids[int(gl_LocalInvocationIndex)];
+      if ((int(t4) != int(t2))) {
+        if ((t4 < uint(t3))) {
+          bounds_buffer[int(t4)].y = gl_GlobalInvocationID.xx.y;
+        }
+        if ((t2 < uint(t3))) {
+          bounds_buffer[int(t2)].x = gl_GlobalInvocationID.xx.x;
+        }
+      }
+    }
+    if ((((1 + int(gl_GlobalInvocationID.x)) == int(t0)) && (t2 < uint(t3)))) {
+      bounds_buffer[int(t2)].y = uvec2(t0).y;
+    }
+  }
+}
+
+// stats: 18 alu 0 tex 9 flow
+// workgroup size: 256 1 1
+// buffer #0: BoundsBuffer storage layout std430 binding 2 (size: unknown)
+//  member #0: uvec2[] bounds_buffer offset 0 array runtime stride 8 writeonly
+//  member #1: uvec2 [] parent 0 offset 0 writeonly
+// buffer #1: Histograms storage layout std430 binding 0 (size: unknown)
+//  member #0: uint sort_buffer_size offset 0 readonly
+//  member #1: uint[] histogram offset 4 array runtime stride 4 readonly (unused)
+//  member #2: uint [] parent 1 offset 4 readonly (unused)
+// buffer #2: SortBuffer storage layout std430 binding 1 (size: unknown)
+//  member #0: uint[] sort_buffer offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly

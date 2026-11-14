@@ -1,0 +1,23 @@
+#version 310 es
+precision highp float;
+precision highp int;
+layout(std430) buffer Data {
+  mediump ivec2 values[4];
+} data;
+uniform mediump int index;
+uniform mediump int operand;
+out mediump vec4 color;
+void main ()
+{
+  mediump int t0 = atomicAdd(data.values[index][0], operand);
+  mediump int t1 = atomicCompSwap(data.values[index][1], t0, operand);
+  color = vec4(float(t0), float(t1), 0.0, 1.0);
+}
+
+// stats: 2 alu 0 tex 0 flow
+// uniforms: 2 (total size: 0)
+//  #0: index (medium int) 1x1 [-1]
+//  #1: operand (medium int) 1x1 [-1]
+// buffer #0: Data storage instance data layout std430 (size: 32)
+//  member #0: ivec2[4] values offset 0 array 4 stride 8
+//  member #1: ivec2 [] parent 0 offset 0

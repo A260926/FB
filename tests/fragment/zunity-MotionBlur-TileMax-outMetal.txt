@@ -1,0 +1,57 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float2 xlv_TEXCOORD0;
+};
+struct xlatMtlShaderOutput {
+  float4 _xlat_varying0 [[color(0)]];
+  float4 _xlat_varying1 [[color(1)]];
+  float4 _xlat_varying2 [[color(2)]];
+  float4 _xlat_varying3 [[color(3)]];
+};
+struct xlatMtlShaderUniform {
+  float4 _MainTex_TexelSize;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<float> _MainTex [[texture(0)]], sampler _mtlsmp__MainTex [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float4 xlatgl_FragData[4];
+  int r0 = 0;
+  half2 r1 = 0;
+  r1 = half2(_MainTex.sample(_mtlsmp__MainTex, _mtl_i.xlv_TEXCOORD0).xy);
+  for (r0 = 0; (r0 < 8); r0++) {
+    float t0 = float(r0);
+    float4 t1 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(0.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t2 = mix(r1, half2(t1.xy), half2(step(dot(r1, r1), half(dot(t1.xy, t1.xy)))));
+    float4 t3 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(1.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t4 = mix(t2, half2(t3.xy), half2(step(dot(t2, t2), half(dot(t3.xy, t3.xy)))));
+    float4 t5 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(2.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t6 = mix(t4, half2(t5.xy), half2(step(dot(t4, t4), half(dot(t5.xy, t5.xy)))));
+    float4 t7 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(3.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t8 = mix(t6, half2(t7.xy), half2(step(dot(t6, t6), half(dot(t7.xy, t7.xy)))));
+    float4 t9 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(4.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t10 = mix(t8, half2(t9.xy), half2(step(dot(t8, t8), half(dot(t9.xy, t9.xy)))));
+    float4 t11 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(5.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t12 = mix(t10, half2(t11.xy), half2(step(dot(t10, t10), half(dot(t11.xy, t11.xy)))));
+    float4 t13 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(6.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    half2 t14 = mix(t12, half2(t13.xy), half2(step(dot(t12, t12), half(dot(t13.xy, t13.xy)))));
+    float4 t15 = _MainTex.sample(_mtlsmp__MainTex, (_mtl_i.xlv_TEXCOORD0 + (float2(7.0, t0) * _mtl_u._MainTex_TexelSize.xy)));
+    r1 = mix(t14, half2(t15.xy), half2(step(dot(t14, t14), half(dot(t15.xy, t15.xy)))));
+  }
+  xlatgl_FragData[0] = float4(half4(r1.x, r1.y, half(0.0), half(0.0)));
+  _mtl_o._xlat_varying0 = xlatgl_FragData[0];
+  _mtl_o._xlat_varying1 = xlatgl_FragData[1];
+  _mtl_o._xlat_varying2 = xlatgl_FragData[2];
+  _mtl_o._xlat_varying3 = xlatgl_FragData[3];
+  return _mtl_o;
+}
+
+// stats: 59 alu 9 tex 2 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+// uniforms: 1 (total size: 16)
+//  #0: _MainTex_TexelSize (high float) 4x1 [-1] loc 0
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1] loc 0

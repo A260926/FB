@@ -1,0 +1,104 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_ClusterRender_std430 {
+  uint data[1];
+};
+struct _xlat_buf_ClusterStore_std430 {
+  uint data[1];
+};
+struct _xlat_buf_Params_std140 {
+  uint cluster_render_data_size;
+  uint max_render_element_count_div_32;
+  uint2 cluster_screen_size;
+  uint render_element_count_div_32;
+  uint max_cluster_element_count_div_32;
+  uint pad1;
+  uint pad2;
+};
+static_assert(sizeof(_xlat_buf_Params_std140) == 32, "std140 size");
+struct _xlat_RenderElement_std430 {
+  uint type;
+  uint touches_near;
+  uint touches_far;
+  uint original_index;
+  float4 transform_inv[3];
+  packed_float3 scale;
+  uint pad;
+};
+static_assert(sizeof(_xlat_RenderElement_std430) == 80, "std430 size");
+struct _xlat_buf_RenderElements_std430 {
+  _xlat_RenderElement_std430 data[1];
+};
+template <typename T> inline T _xlat_findLSB(T x) { return select(T(ctz(x)), T(-1), x == T(0)); }
+template <typename T> inline T _xlat_findMSBu(T x) { return select(T(31) - T(clz(x)), T(-1), x == T(0)); }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 8, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_ClusterRender_std430& cluster_render [[buffer(1)]]
+  , device _xlat_buf_ClusterStore_std430& cluster_store [[buffer(2)]]
+  , constant _xlat_buf_Params_std140& params [[buffer(3)]]
+  , const device _xlat_buf_RenderElements_std430& render_elements [[buffer(4)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  int r0 = 0;
+  uint r1 = 0;
+  int r2 = 0;
+  uint2 t0 = uint2(params.cluster_screen_size);
+  if ((!any((gl_GlobalInvocationID.xy >= t0) != bool2(false)))) {
+    int t1 = (int(gl_GlobalInvocationID.x) + (int(t0.x) * int(gl_GlobalInvocationID.y)));
+    int t2 = (t1 * int(uint(params.cluster_render_data_size)));
+    for (r2 = 0; (uint(r2) < uint(params.render_element_count_div_32)); r2++) {
+      r1 = uint(cluster_render.data[(t2 + r2)]);
+      while ((int(r1) != 0)) {
+        int t3 = int(_xlat_findLSB(int(r1)));
+        int t4 = ((r2 << int(5u)) + t3);
+        uint t5 = uint(render_elements.data[t4].type);
+        uint t6 = uint(cluster_render.data[((t2 + int(uint(params.max_render_element_count_div_32))) + t4)]);
+        if ((int(t6) != 0)) {
+          short t7 = short(int(_xlat_findMSBu(t6)));
+          int t8 = int((t7 + short(1)));
+          int t9 = (bool(render_elements.data[t4].touches_far) ? 32 : t8);
+          uint t10 = uint(params.max_cluster_element_count_div_32);
+          int t11 = ((t1 + (int(t5) * (int(t0.x) * int(t0.y)))) * (int(t10) + 32));
+          uint t12 = uint(render_elements.data[t4].original_index);
+          for (r0 = (bool(render_elements.data[t4].touches_near) ? 0 : int(_xlat_findLSB(int(t6)))); (uint(r0) < uint(t9)); r0++) {
+            uint t13 = uint(cluster_store.data[((t11 + int(t10)) + r0)]);
+            uint t14 = ((int(t13) == 0) ? 65535u : t13);
+            cluster_store.data[((t11 + int(t10)) + r0)] = (min(t12, (t14 & 65535u)) | uint((int(max(uint((int(t12) + 1)), (t14 >> uint(16u)))) << int(16u))));
+          }
+          cluster_store.data[(t11 + int((t12 >> uint(5u))))] = (uint(cluster_store.data[(t11 + int((t12 >> uint(5u))))]) | uint((1 << int(t12))));
+        }
+        r1 = (r1 & uint((~(1 << int(uint(t3))))));
+      }
+    }
+  }
+}
+
+// stats: 46 alu 0 tex 8 flow
+// workgroup size: 8 8 1
+// buffer #0: ClusterRender storage instance cluster_render layout std430 binding 1 (size: unknown) metal 1
+//  member #0: uint[] data offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly
+// buffer #1: ClusterStore storage instance cluster_store layout std430 binding 2 (size: unknown) metal 2
+//  member #0: uint[] data offset 0 array runtime stride 4
+//  member #1: uint [] parent 0 offset 0
+// buffer #2: Params instance params layout std140 binding 0 (size: 32) metal 3
+//  member #0: uint cluster_render_data_size offset 0
+//  member #1: uint max_render_element_count_div_32 offset 4
+//  member #2: uvec2 cluster_screen_size offset 8
+//  member #3: uint render_element_count_div_32 offset 16
+//  member #4: uint max_cluster_element_count_div_32 offset 20
+//  member #5: uint pad1 offset 24 (unused)
+//  member #6: uint pad2 offset 28 (unused)
+// buffer #3: RenderElements storage instance render_elements layout std430 binding 3 (size: unknown) metal 4
+//  member #0: RenderElement[] data offset 0 array runtime stride 80 readonly
+//  member #1: RenderElement [] parent 0 offset 0 readonly
+//  member #2: uint type parent 1 offset 0 readonly
+//  member #3: bool touches_near parent 1 offset 4 readonly
+//  member #4: bool touches_far parent 1 offset 8 readonly
+//  member #5: uint original_index parent 1 offset 12 readonly
+//  member #6: mat3x4 transform_inv parent 1 offset 16 matrix-stride 16 readonly (unused)
+//  member #7: vec3 scale parent 1 offset 64 readonly (unused)
+//  member #8: uint pad parent 1 offset 76 readonly (unused)

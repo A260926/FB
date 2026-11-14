@@ -1,0 +1,15 @@
+struct shadow_map_t {
+  mat4 transform;
+};
+uniform shadow_map_t ShadowMaps[1];
+attribute vec3 _in_position;
+void main ()
+{
+  gl_Position = (ShadowMaps[0].transform * vec4(_in_position, 1.0));
+}
+
+// stats: 6 alu 0 tex 0 flow
+// inputs: 1
+//  #0: _in_position (high float) 3x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: ShadowMaps (high other) 0x0 [1]

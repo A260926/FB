@@ -1,0 +1,56 @@
+#version 320 es
+precision highp float;
+precision highp int;
+layout(early_fragment_tests) in;
+struct NodeType {
+  highp vec4 color;
+  highp float depth;
+  highp uint next;
+};
+layout(std430, binding = 0) buffer linkedLists {
+  NodeType nodes[];
+};
+in highp vec3 Position;
+in highp vec3 Normal;
+uniform highp vec4 LightPosition;
+uniform highp vec3 LightIntensity;
+uniform highp vec4 Kd;
+uniform highp vec4 Ka;
+layout(r32ui, binding = 0) uniform highp uimage2D headPointers;
+layout(binding = 0, offset = 0) uniform atomic_uint nextNodeCounter;
+uniform highp uint MaxNodes;
+void main ()
+{
+  highp uint t0 = atomicCounterIncrement(nextNodeCounter);
+  if ((t0 < MaxNodes)) {
+    highp ivec2 t1 = ivec2(gl_FragCoord.xy);
+    highp uint t2 = imageAtomicExchange(headPointers, ivec4(t1, 0, 0).xy, t0);
+    highp vec3 t3 = (LightPosition.xyz - Position);
+    highp vec3 t4 = (LightIntensity * (Ka.xyz + (Kd.xyz * max(dot(normalize(t3), normalize(Normal)), 0.0))));
+    nodes[int(t0)].color = vec4(t4, Kd.w);
+    nodes[int(t0)].depth = gl_FragCoord.z;
+    nodes[int(t0)].next = t2;
+  }
+}
+
+// stats: 14 alu 1 tex 1 flow
+// inputs: 3
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+//  #1: Position (high float) 3x1 [-1]
+//  #2: Normal (high float) 3x1 [-1]
+// uniforms: 5 (total size: 0)
+//  #0: LightPosition (high float) 4x1 [-1]
+//  #1: LightIntensity (high float) 3x1 [-1]
+//  #2: Kd (high float) 4x1 [-1]
+//  #3: Ka (high float) 4x1 [-1]
+//  #4: MaxNodes (high int) 1x1 [-1]
+// buffer #0: linkedLists storage layout std430 binding 0 (size: unknown)
+//  member #0: NodeType[] nodes offset 0 array runtime stride 32
+//  member #1: NodeType [] parent 0 offset 0
+//  member #2: vec4 color parent 1 offset 0
+//  member #3: float depth parent 1 offset 16
+//  member #4: uint next parent 1 offset 20
+// buffer #1: atomic_counters_0 atomic-counter layout atomic-counter binding 0 (size: 4)
+//  member #0: atomic_uint nextNodeCounter offset 0
+// textures: 1
+//  #0: headPointers (high image2d) 0x0 [-1] loc 0 format r32ui component uint

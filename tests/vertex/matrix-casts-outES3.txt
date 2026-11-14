@@ -1,0 +1,23 @@
+#version 300 es
+uniform highp mat4 uniMat4F;
+uniform mediump mat4 uniMat4H;
+uniform mediump mat3 uniMat3H;
+uniform highp mat2 uniMat2F;
+uniform mediump mat2 uniMat2H;
+void main ()
+{
+  mediump vec4 t0 = uniMat4F[0];
+  mediump vec2 t1 = uniMat2F[0];
+  highp vec4 t2 = uniMat4H[0];
+  highp vec3 t3 = uniMat3H[0];
+  highp vec2 t4 = uniMat2H[0];
+  gl_Position = vec4((((((t0.x * 2.0) + t1.x) + t2.x) + t3.x) + t4.x), 0.0, 0.0, 0.0);
+}
+
+// stats: 5 alu 0 tex 0 flow
+// uniforms: 5 (total size: 0)
+//  #0: uniMat4F (high float) 4x4 [-1]
+//  #1: uniMat4H (medium float) 4x4 [-1]
+//  #2: uniMat3H (medium float) 3x3 [-1]
+//  #3: uniMat2F (high float) 2x2 [-1]
+//  #4: uniMat2H (medium float) 2x2 [-1]

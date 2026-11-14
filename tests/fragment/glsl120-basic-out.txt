@@ -1,0 +1,14 @@
+#version 120
+uniform float inInit;
+uniform mat4x3 nonSqMat;
+uniform vec4 uniInit;
+void main ()
+{
+  gl_FragColor = vec4((1.2 + nonSqMat[0].x), 6.0, (inInit + 4.0), (-1.0 + uniInit.w));
+}
+
+// stats: 3 alu 0 tex 0 flow
+// uniforms: 3 (total size: 0)
+//  #0: inInit (high float) 1x1 [-1]
+//  #1: nonSqMat (high float) 3x4 [-1]
+//  #2: uniInit (high float) 4x1 [-1]

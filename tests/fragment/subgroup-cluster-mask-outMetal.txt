@@ -1,0 +1,33 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 230
+#error This shader requires Metal 2.3 or newer
+#endif
+struct xlatMtlShaderInput {
+  int2 range [[flat]];
+  uint mask [[flat]];
+};
+struct xlatMtlShaderOutput {
+  uint4 result [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  int t0 = simd_min(_mtl_i.range.x);
+  int t1 = simd_broadcast_first(t0);
+  int t2 = simd_max(_mtl_i.range.y);
+  int t3 = simd_broadcast_first(t2);
+  uint t4 = simd_or(_mtl_i.mask);
+  uint t5 = simd_broadcast_first(t4);
+  int2 t6 = simd_max(_mtl_i.range);
+  _mtl_o.result = uint4(int4(t1, t3, int(t5), t6.y));
+  return _mtl_o;
+}
+
+// stats: 0 alu 0 tex 0 flow
+// inputs: 2
+//  #0: range (high int) 2x1 [-1]
+//  #1: mask (high int) 1x1 [-1]

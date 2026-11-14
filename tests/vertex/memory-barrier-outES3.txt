@@ -1,0 +1,8 @@
+#version 310 es
+void main ()
+{
+  memoryBarrier();
+  gl_Position = vec4(0.0);
+}
+
+// stats: 0 alu 0 tex 0 flow

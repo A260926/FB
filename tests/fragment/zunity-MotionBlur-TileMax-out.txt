@@ -1,0 +1,37 @@
+uniform sampler2D _MainTex;
+uniform vec4 _MainTex_TexelSize;
+varying vec2 xlv_TEXCOORD0;
+void main ()
+{
+  int r0;
+  vec2 r1;
+  r1 = texture2D(_MainTex, xlv_TEXCOORD0).xy;
+  for (r0 = 0; (r0 < 8); r0++) {
+    float t0 = float(r0);
+    vec4 t1 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(0.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t2 = mix(r1, t1.xy, vec2(step(dot(r1, r1), dot(t1.xy, t1.xy))));
+    vec4 t3 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(1.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t4 = mix(t2, t3.xy, vec2(step(dot(t2, t2), dot(t3.xy, t3.xy))));
+    vec4 t5 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(2.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t6 = mix(t4, t5.xy, vec2(step(dot(t4, t4), dot(t5.xy, t5.xy))));
+    vec4 t7 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(3.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t8 = mix(t6, t7.xy, vec2(step(dot(t6, t6), dot(t7.xy, t7.xy))));
+    vec4 t9 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(4.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t10 = mix(t8, t9.xy, vec2(step(dot(t8, t8), dot(t9.xy, t9.xy))));
+    vec4 t11 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(5.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t12 = mix(t10, t11.xy, vec2(step(dot(t10, t10), dot(t11.xy, t11.xy))));
+    vec4 t13 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(6.0, t0) * _MainTex_TexelSize.xy)));
+    vec2 t14 = mix(t12, t13.xy, vec2(step(dot(t12, t12), dot(t13.xy, t13.xy))));
+    vec4 t15 = texture2D(_MainTex, (xlv_TEXCOORD0 + (vec2(7.0, t0) * _MainTex_TexelSize.xy)));
+    r1 = mix(t14, t15.xy, vec2(step(dot(t14, t14), dot(t15.xy, t15.xy))));
+  }
+  gl_FragData[0] = vec4(r1.x, r1.y, 0.0, 0.0);
+}
+
+// stats: 59 alu 9 tex 2 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: _MainTex_TexelSize (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

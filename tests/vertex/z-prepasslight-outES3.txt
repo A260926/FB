@@ -1,0 +1,26 @@
+#version 300 es
+uniform highp vec4 _ProjectionParams;
+uniform highp mat4 glstate_matrix_modelview0;
+uniform highp mat4 glstate_matrix_mvp;
+in highp vec4 _vertex;
+in highp vec3 _normal;
+out highp vec4 xlv_TEXCOORD0;
+out highp vec3 xlv_TEXCOORD1;
+void main ()
+{
+  highp vec4 t0 = (glstate_matrix_mvp * _vertex);
+  highp vec4 t1 = (t0 * 0.5);
+  highp vec2 t2 = (vec2(t1.x, (t1.y * _ProjectionParams.x)) + t1.w);
+  gl_Position = t0;
+  xlv_TEXCOORD0 = vec4(t2, t0.zw);
+  xlv_TEXCOORD1 = mix(((glstate_matrix_modelview0 * _vertex).xyz * vec3(-1.0, -1.0, 1.0)), _normal, vec3(float((_normal.z != 0.0))));
+}
+
+// stats: 21 alu 0 tex 0 flow
+// inputs: 2
+//  #0: _vertex (high float) 4x1 [-1]
+//  #1: _normal (high float) 3x1 [-1]
+// uniforms: 3 (total size: 0)
+//  #0: _ProjectionParams (high float) 4x1 [-1]
+//  #1: glstate_matrix_modelview0 (high float) 4x4 [-1]
+//  #2: glstate_matrix_mvp (high float) 4x4 [-1]

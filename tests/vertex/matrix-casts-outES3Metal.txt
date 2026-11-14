@@ -1,0 +1,34 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+};
+struct xlatMtlShaderUniform {
+  float4x4 uniMat4F;
+  half4x4 uniMat4H;
+  half3x3 uniMat3H;
+  float2x2 uniMat2F;
+  half2x2 uniMat2H;
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half4 t0 = half4(_mtl_u.uniMat4F[0]);
+  half2 t1 = half2(_mtl_u.uniMat2F[0]);
+  float4 t2 = float4(_mtl_u.uniMat4H[0]);
+  float3 t3 = float3(_mtl_u.uniMat3H[0]);
+  float2 t4 = float2(_mtl_u.uniMat2H[0]);
+  _mtl_o.gl_Position = float4((((float(((t0.x * half(2.0)) + t1.x)) + t2.x) + t3.x) + t4.x), 0.0, 0.0, 0.0);
+  return _mtl_o;
+}
+
+// stats: 5 alu 0 tex 0 flow
+// uniforms: 5 (total size: 144)
+//  #0: uniMat4F (high float) 4x4 [-1] loc 0
+//  #1: uniMat4H (medium float) 4x4 [-1] loc 64
+//  #2: uniMat3H (medium float) 3x3 [-1] loc 96
+//  #3: uniMat2F (high float) 2x2 [-1] loc 120
+//  #4: uniMat2H (medium float) 2x2 [-1] loc 136

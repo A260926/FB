@@ -1,0 +1,12 @@
+varying vec4 xlv_TEXCOORD0;
+void main ()
+{
+  bvec4 t0 = notEqual(fract(xlv_TEXCOORD0), vec4(0.0));
+  bvec4 t1 = lessThan(vec4(0.5), xlv_TEXCOORD0);
+  vec4 t2 = ((vec4((t1.x ? 1.0 : 5.0), (t1.y ? 2.0 : 6.0), (t1.z ? 3.0 : 7.0), (t1.w ? 4.0 : 8.0)) * 2.0) + vec4((t0.x ? 1.0 : 2.0), (t0.y ? 1.0 : 2.0), (t0.z ? 1.0 : 2.0), (t0.w ? 1.0 : 2.0)));
+  gl_FragData[0] = (t2 + (vec4((t1.x ? 1.0 : 2.0), (t1.y ? 1.0 : 2.0), (t1.z ? 1.0 : 2.0), (t1.w ? 1.0 : 2.0)) * 2.0));
+}
+
+// stats: 19 alu 0 tex 0 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]

@@ -1,0 +1,44 @@
+#version 310 es
+struct particle {
+  highp vec2 pos;
+  highp vec2 vel;
+};
+layout(std430, binding = 0) buffer vs_ssbo {
+  readonly particle prt[];
+};
+out highp vec4 color;
+void main ()
+{
+  highp vec2 verts[3];
+  verts[0] = vec2(-0.01, -0.02);
+  verts[1] = vec2(0.01, -0.02);
+  verts[2] = vec2(0.0, 0.02);
+  highp vec2 t0 = verts[gl_VertexID];
+  highp vec2 t1 = prt[gl_InstanceID].vel;
+  highp float t2 = abs(t1.y);
+  bool t3 = (0.0 >= t1.y);
+  highp float t4 = (t3 ? t1.x : t2);
+  highp float t5 = ((abs(t4) >= 1e+18) ? 0.25 : 1.0);
+  highp float t6 = (1.0 / (t4 * t5));
+  highp float t7 = ((t2 == abs(t1.x)) ? 1.0 : (abs(((t3 ? t2 : t1.x) * t5)) * abs(t6)));
+  bool t8 = (1.0 >= t7);
+  highp float t9 = (t8 ? t7 : (1.0 / t7));
+  highp float t10 = (t9 * t9);
+  highp float t11 = ((t9 * ((((((((((-0.0121323215 * t10) + 0.053681377) * t10) - 0.11735032) * t10) + 0.1938925) * t10) - 0.33267564) * t10) + 0.9999793)) + (t8 ? 0.0 : -1.5707964));
+  highp float t12 = ((float(t3) * 1.5707964) + uintBitsToFloat(((floatBitsToUint(t11) & 2147483647u) | (floatBitsToUint(t7) & 2147483648u))));
+  highp float t13 = ((min(t1.x, t6) < 0.0) ? (-t12) : t12);
+  highp float t14 = (-t13);
+  highp float t15 = cos(t14);
+  highp float t16 = sin(t14);
+  highp float t17 = ((t0.x * t15) - (t0.y * t16));
+  highp vec2 t18 = (vec2(t17, ((t0.x * t16) + (t0.y * t15))) + prt[gl_InstanceID].pos);
+  gl_Position = vec4(t18, 0.0, 1.0);
+  color = vec4(((1.0 - sin((1.0 - t13))) - t1.y), ((0.1 - t1.y) + (t17 * 1e+02)), (t1.x + cos((0.5 - t13))), 1.0);
+}
+
+// stats: 63 alu 0 tex 0 flow
+// buffer #0: vs_ssbo storage layout std430 binding 0 (size: unknown)
+//  member #0: particle[] prt offset 0 array runtime stride 16 readonly
+//  member #1: particle [] parent 0 offset 0 readonly
+//  member #2: vec2 pos parent 1 offset 0 readonly
+//  member #3: vec2 vel parent 1 offset 8 readonly

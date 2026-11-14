@@ -1,0 +1,83 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 xlv_TEXCOORD0;
+  float3 xlv_TEXCOORD1;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float4x4 _CameraToWorld;
+  float4 _LightColor;
+  float4x4 _LightMatrix0;
+  float4 _LightPos;
+  float4 _LightPositionRange;
+  float4 _LightShadowData;
+  float4 _ProjectionParams;
+  float3 _WorldSpaceCameraPos;
+  float4 _ZBufferParams;
+  float4 unity_LightmapFade;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _CameraDepthTexture [[texture(0)]], sampler _mtlsmp__CameraDepthTexture [[sampler(0)]]
+  , texture2d<half> _CameraNormalsTexture [[texture(1)]], sampler _mtlsmp__CameraNormalsTexture [[sampler(1)]]
+  , texturecube<half> _LightTexture0 [[texture(2)]], sampler _mtlsmp__LightTexture0 [[sampler(2)]]
+  , texture2d<half> _LightTextureB0 [[texture(3)]], sampler _mtlsmp__LightTextureB0 [[sampler(3)]]
+  , texturecube<half> _ShadowMapTexture [[texture(4)]], sampler _mtlsmp__ShadowMapTexture [[sampler(4)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float2 t0 = (_mtl_i.xlv_TEXCOORD0.xy / _mtl_i.xlv_TEXCOORD0.w);
+  half4 t1 = _CameraNormalsTexture.sample(_mtlsmp__CameraNormalsTexture, t0);
+  half3 t2 = ((t1.xyz * half(2.0)) - half(1.0));
+  half3 t3 = normalize(t2);
+  float t4 = float(_CameraDepthTexture.sample(_mtlsmp__CameraDepthTexture, t0).x);
+  float3 t5 = ((_mtl_i.xlv_TEXCOORD1 * (_mtl_u._ProjectionParams.z / _mtl_i.xlv_TEXCOORD1.z)) * (1.0 / ((_mtl_u._ZBufferParams.x * t4) + _mtl_u._ZBufferParams.y)));
+  float4 t6 = (_mtl_u._CameraToWorld * float4(t5, 1.0));
+  float3 t7 = (t6.xyz - _mtl_u._LightPos.xyz);
+  float t8 = dot(t7, t7);
+  half3 t9 = half3((-(t7 * rsqrt(t8))));
+  float t10 = float(_LightTextureB0.sample(_mtlsmp__LightTextureB0, float2((t8 * _mtl_u._LightPos.w))).w);
+  float4 t11 = float4(_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, (t7 + 0.0078125)));
+  float4 t12 = float4(_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, (t7 + float3(-0.0078125, -0.0078125, 0.0078125))));
+  float4 t13 = float4(_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, (t7 + float3(-0.0078125, 0.0078125, -0.0078125))));
+  float4 t14 = float4(_ShadowMapTexture.sample(_mtlsmp__ShadowMapTexture, (t7 + float3(0.0078125, -0.0078125, -0.0078125))));
+  half4 t15 = half4(_mtl_u._LightShadowData.xxxx);
+  float4 t16 = float4(dot(t11, float4(1.0, 0.00392157, 1.53787e-05, 6.22737e-09)), dot(t12, float4(1.0, 0.00392157, 1.53787e-05, 6.22737e-09)), dot(t13, float4(1.0, 0.00392157, 1.53787e-05, 6.22737e-09)), dot(t14, float4(1.0, 0.00392157, 1.53787e-05, 6.22737e-09)));
+  bool4 t17 = (t16 < ((sqrt(t8) * 0.97) * _mtl_u._LightPositionRange.w));
+  float t18 = ((t10 * float(dot(half4((t17.x ? t15.x : half(1.0)), (t17.y ? t15.y : half(1.0)), (t17.z ? t15.z : half(1.0)), (t17.w ? t15.w : half(1.0))), half4(0.25)))) * float(_LightTexture0.sample(_mtlsmp__LightTexture0, (_mtl_u._LightMatrix0 * float4(t6.xyz, 1.0)).xyz).w));
+  float3 t19 = (t6.xyz - _mtl_u._WorldSpaceCameraPos);
+  float3 t20 = (float3(t9) - normalize(t19));
+  half3 t21 = half3(normalize(t20));
+  float t22 = float(pow(max(half(0.0), dot(t21, t3)), (t1.w * half(128.0))));
+  half t23 = half(t18);
+  half4 t24 = half4((_mtl_u._LightColor.xyz * (float(max(half(0.0), dot(t9, t3))) * t18)).xyzx);
+  half3 t25 = half3(_mtl_u._LightColor.xyz);
+  half4 t26 = half4(float4(((t22 * float(saturate(t23))) * float(dot(t25, half3(0.22, 0.707, 0.071))))));
+  half t27 = half((1.0 - ((t5.z * _mtl_u.unity_LightmapFade.z) + _mtl_u.unity_LightmapFade.w)));
+  _mtl_o._fragData = exp2((-(half4(t24.xyz, t26.w) * saturate(t27))));
+  return _mtl_o;
+}
+
+// stats: 75 alu 8 tex 0 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 4x1 [-1]
+//  #1: xlv_TEXCOORD1 (high float) 3x1 [-1]
+// uniforms: 10 (total size: 256)
+//  #0: _CameraToWorld (high float) 4x4 [-1] loc 0
+//  #1: _LightColor (high float) 4x1 [-1] loc 64
+//  #2: _LightMatrix0 (high float) 4x4 [-1] loc 80
+//  #3: _LightPos (high float) 4x1 [-1] loc 144
+//  #4: _LightPositionRange (high float) 4x1 [-1] loc 160
+//  #5: _LightShadowData (high float) 4x1 [-1] loc 176
+//  #6: _ProjectionParams (high float) 4x1 [-1] loc 192
+//  #7: _WorldSpaceCameraPos (high float) 3x1 [-1] loc 208
+//  #8: _ZBufferParams (high float) 4x1 [-1] loc 224
+//  #9: unity_LightmapFade (high float) 4x1 [-1] loc 240
+// textures: 5
+//  #0: _CameraDepthTexture (medium 2d) 0x0 [-1] loc 0
+//  #1: _CameraNormalsTexture (medium 2d) 0x0 [-1] loc 1
+//  #2: _LightTexture0 (medium cube) 0x0 [-1] loc 2
+//  #3: _LightTextureB0 (medium 2d) 0x0 [-1] loc 3
+//  #4: _ShadowMapTexture (medium cube) 0x0 [-1] loc 4

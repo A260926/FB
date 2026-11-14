@@ -1,0 +1,66 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_element_float2_16 { float2 value; char _pad[8]; };
+struct _xlat_Light_std140_row {
+  packed_float3 direction;
+  float intensity;
+};
+static_assert(sizeof(_xlat_Light_std140_row) == 16, "std140 size");
+struct _xlat_element_float_16 { float value; char _pad[12]; };
+struct _xlat_buf_Scene_std140_row {
+  float unused;
+  char _pad0[12];
+  _xlat_element_float2_16 transform[3];
+  _xlat_element_float2_16 other[3];
+  _xlat_Light_std140_row lights[2];
+  _xlat_element_float_16 weights[3];
+  uint enabled;
+  uint flags;
+  int count;
+  char _pad1[4];
+};
+static_assert(sizeof(_xlat_buf_Scene_std140_row) == 208, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Scene_std140_row& scene [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float r0 = 0;
+  half3 t0 = ((half3(float3(scene.transform[0].value[0], scene.transform[1].value[0], scene.transform[2].value[0])) * half(scene.weights[_mtl_u.index].value)) + half3(float3(scene.transform[0].value[1], scene.transform[1].value[1], scene.transform[2].value[1])));
+  float3 t1 = float3(t0);
+  float3 t2 = (t1 + (float3(scene.lights[_mtl_u.index].direction) * float(scene.lights[1].intensity)));
+  float2 t3 = (t2.xy + ((float2(scene.other[0].value) + float2(scene.other[1].value)) + float2(scene.other[2].value)));
+  float3 t4 = (float3(t3, t2.z) * float(half(short(scene.count))));
+  if (bool(scene.enabled)) {
+    r0 = float(uint(scene.flags));
+  } else {
+    r0 = 0.0;
+  }
+  _mtl_o.gl_Position = float4(t4, r0);
+  return _mtl_o;
+}
+
+// stats: 10 alu 0 tex 1 flow
+// uniforms: 1 (total size: 4)
+//  #0: index (high int) 1x1 [-1] loc 0
+// buffer #0: Scene instance scene layout std140 binding 3 (size: 208) metal 1
+//  member #0: float unused offset 0 (unused)
+//  member #1: mat2x3 transform offset 16 matrix-stride 16 row-major
+//  member #2: mat3x2 other offset 64 matrix-stride 16
+//  member #3: Light[2] lights offset 112 array 2 stride 16
+//  member #4: Light [] parent 3 offset 112
+//  member #5: vec3 direction parent 4 offset 112
+//  member #6: float intensity parent 4 offset 124
+//  member #7: float[3] weights offset 144 array 3 stride 16
+//  member #8: float [] parent 7 offset 144
+//  member #9: bool enabled offset 192
+//  member #10: uint flags offset 196
+//  member #11: int count offset 200

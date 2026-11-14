@@ -1,0 +1,42 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_element_float2_16 { float2 value; char _pad[8]; };
+struct _xlat_Entry_std140 {
+  packed_float3 color;
+  float weight;
+  _xlat_element_float2_16 pairs[2];
+};
+static_assert(sizeof(_xlat_Entry_std140) == 48, "std140 size");
+struct _xlat_buf_Data_std140 {
+  int index;
+  char _pad0[12];
+  _xlat_Entry_std140 entries[1];
+};
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std140& _xlat_blk_Data [[buffer(1)]]
+  , constant uint* _mtl_buffer_sizes [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  _xlat_blk_Data.entries[int(_xlat_blk_Data.index)].weight = float2(_xlat_blk_Data.entries[int(_xlat_blk_Data.index)].pairs[1].value).x;
+  float3 t0 = (float3(_xlat_blk_Data.entries[int(_xlat_blk_Data.index)].color) * float(_xlat_blk_Data.entries[int(_xlat_blk_Data.index)].weight));
+  _mtl_o.color = float4(t0, float((max(int(_mtl_buffer_sizes[1]) - 16, 0) / 48)));
+  return _mtl_o;
+}
+
+// stats: 2 alu 0 tex 0 flow
+// buffer #0: Data storage layout std140 (size: unknown) metal 1 metal-size-buffer 2
+//  member #0: int index offset 0
+//  member #1: Entry[] entries offset 16 array runtime stride 48
+//  member #2: Entry [] parent 1 offset 16
+//  member #3: vec3 color parent 2 offset 16
+//  member #4: float weight parent 2 offset 28
+//  member #5: vec2[2] pairs parent 2 offset 32 array 2 stride 16
+//  member #6: vec2 [] parent 5 offset 32

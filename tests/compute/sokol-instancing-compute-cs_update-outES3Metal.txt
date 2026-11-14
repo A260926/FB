@@ -1,0 +1,47 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_cs_params_std140 {
+  float dt;
+  int num_particles;
+  char _pad0[8];
+};
+static_assert(sizeof(_xlat_buf_cs_params_std140) == 16, "std140 size");
+struct _xlat_particle_std430 {
+  float4 pos;
+  float4 vel;
+};
+static_assert(sizeof(_xlat_particle_std430) == 32, "std430 size");
+struct _xlat_buf_cs_ssbo_std430 {
+  _xlat_particle_std430 prt[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 64, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_cs_params_std140& _xlat_blk_cs_params [[buffer(1)]]
+  , device _xlat_buf_cs_ssbo_std430& _xlat_blk_cs_ssbo [[buffer(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  if ((gl_GlobalInvocationID.x < uint(int(_xlat_blk_cs_params.num_particles)))) {
+    float4 t0 = float4(_xlat_blk_cs_ssbo.prt[int(gl_GlobalInvocationID.x)].vel);
+    float t1 = float(_xlat_blk_cs_params.dt);
+    float4 t2 = float4(t0.x, (t0.y - t1), t0.zw);
+    float4 t3 = (float4(_xlat_blk_cs_ssbo.prt[int(gl_GlobalInvocationID.x)].pos) + (t2 * t1));
+    bool t4 = (t3.y < -2.0);
+    float4 t5 = (t4 ? (t2 * float4(0.8, -0.8, 0.8, 0.0)) : t2);
+    _xlat_blk_cs_ssbo.prt[int(gl_GlobalInvocationID.x)].pos = (t4 ? float4(t3.x, -1.8, t3.zw) : t3);
+    _xlat_blk_cs_ssbo.prt[int(gl_GlobalInvocationID.x)].vel = t5;
+  }
+}
+
+// stats: 8 alu 0 tex 1 flow
+// workgroup size: 64 1 1
+// buffer #0: cs_params layout std140 binding 0 (size: 16) metal 1
+//  member #0: float dt offset 0
+//  member #1: int num_particles offset 4
+// buffer #1: cs_ssbo storage layout std430 binding 0 (size: unknown) metal 2
+//  member #0: particle[] prt offset 0 array runtime stride 32
+//  member #1: particle [] parent 0 offset 0
+//  member #2: vec4 pos parent 1 offset 0
+//  member #3: vec4 vel parent 1 offset 16

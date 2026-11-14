@@ -1,0 +1,53 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Config_std140 {
+  uint limit;
+  char _pad0[12];
+};
+static_assert(sizeof(_xlat_buf_Config_std140) == 16, "std140 size");
+struct _xlat_buf_Results_std430 {
+  uint values[1];
+};
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 1, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Config_std140& config [[buffer(1)]]
+  , device _xlat_buf_Results_std430& results [[buffer(2)]]
+  , constant uint* _mtl_buffer_sizes [[buffer(3)]]
+  , device atomic_uint* _mtl_atomic4 [[buffer(4)]]
+  , device atomic_uint* _mtl_atomic5 [[buffer(5)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = atomic_load_explicit(&_mtl_atomic4[2], memory_order_relaxed);
+  uint t1 = (gl_GlobalInvocationID.x % 3u);
+  uint t2 = atomic_fetch_add_explicit(&_mtl_atomic4[3 + t1], 1u, memory_order_relaxed);
+  uint t3 = (uint((int(t1) + 1)) % 3u);
+  uint t4 = (atomic_fetch_sub_explicit(&_mtl_atomic4[3 + t3], 1u, memory_order_relaxed) - 1u);
+  uint t5 = atomic_fetch_add_explicit(&_mtl_atomic5[5], 1u, memory_order_relaxed);
+  uint t6 = atomic_load_explicit(&_mtl_atomic5[8 + t3 + 3 * (gl_GlobalInvocationID.x & 1u)], memory_order_relaxed);
+  int t7 = ((((int(t0) + int(t2)) + int(t4)) + int(t5)) + int(t6));
+  atomic_fetch_add_explicit(&_mtl_atomic4[2], 1u, memory_order_relaxed);
+  (atomic_fetch_sub_explicit(&_mtl_atomic5[5], 1u, memory_order_relaxed) - 1u);
+  if ((gl_GlobalInvocationID.x < min(uint((max(int(_mtl_buffer_sizes[2]) - 0, 0) / 4)), uint(config.limit)))) {
+    results.values[int(gl_GlobalInvocationID.x)] = uint(t7);
+  }
+}
+
+// stats: 10 alu 0 tex 1 flow
+// workgroup size: 1 1 1
+// buffer #0: Config instance config layout std140 (size: 16) metal 1
+//  member #0: uint limit offset 0
+// buffer #1: Results storage instance results layout std430 (size: unknown) metal 2 metal-size-buffer 3
+//  member #0: uint[] values offset 0 array runtime stride 4
+//  member #1: uint [] parent 0 offset 0
+// buffer #2: atomic_counters_0 atomic-counter layout atomic-counter binding 0 (size: 24) metal 4
+//  member #0: atomic_uint first offset 8
+//  member #1: atomic_uint[3] counters offset 12 array 3 stride 4
+//  member #2: atomic_uint [] parent 1 offset 12
+// buffer #3: atomic_counters_3 atomic-counter layout atomic-counter binding 3 (size: 56) metal 5
+//  member #0: atomic_uint other offset 20
+//  member #1: atomic_uint[2][3] grid offset 32 array 2 stride 12
+//  member #2: atomic_uint[3] [] parent 1 offset 32 array 3 stride 4
+//  member #3: atomic_uint [] parent 2 offset 32

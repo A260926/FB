@@ -1,0 +1,18 @@
+#version 310 es
+layout(local_size_x = 8) in;
+layout(rgba32f, binding = 0) coherent readonly uniform highp image2D sourceImage;
+layout(rgba32f, binding = 1) coherent writeonly uniform highp image3D destinationImage;
+layout(r32ui, binding = 2) coherent uniform highp uimage2DArray data;
+void main ()
+{
+  imageStore(destinationImage, ivec3(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xyz), imageLoad(sourceImage, ivec2(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xy)));
+  imageStore(data, ivec3(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xyz), uvec4((ivec4(imageLoad(data, ivec3(uvec4(gl_GlobalInvocationID.xy, 0u, 0u).xyz))) + 1)));
+  memoryBarrierImage();
+}
+
+// stats: 1 alu 4 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 3
+//  #0: sourceImage (high image2d) 0x0 [-1] loc 0 format rgba32f component float readonly
+//  #1: destinationImage (high image3d) 0x0 [-1] loc 1 format rgba32f component float writeonly
+//  #2: data (high image2darray) 0x0 [-1] loc 2 format r32ui component uint

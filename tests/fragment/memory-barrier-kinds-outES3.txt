@@ -1,0 +1,19 @@
+#version 310 es
+precision highp float;
+precision highp int;
+uniform bool condition;
+out highp vec4 color;
+void main ()
+{
+  memoryBarrierBuffer();
+  memoryBarrierImage();
+  if (condition) {
+    memoryBarrier();
+  }
+  memoryBarrier();
+  color = vec4(1.0);
+}
+
+// stats: 0 alu 0 tex 1 flow
+// uniforms: 1 (total size: 0)
+//  #0: condition (high bool) 1x1 [-1]

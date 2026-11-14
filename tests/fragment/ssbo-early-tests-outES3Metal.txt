@@ -1,0 +1,24 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Data_std430 {
+  uint value;
+};
+static_assert(sizeof(_xlat_buf_Data_std430) == 4, "std430 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Data_std430& data [[buffer(1)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  data.value = 1u;
+  return _mtl_o;
+}
+
+// stats: 0 alu 0 tex 0 flow
+// buffer #0: Data storage instance data layout std430 (size: 4) metal 1
+//  member #0: uint value offset 0

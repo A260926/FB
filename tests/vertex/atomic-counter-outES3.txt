@@ -1,0 +1,17 @@
+#version 310 es
+layout(binding = 0, offset = 4) uniform atomic_uint counter;
+layout(binding = 2, offset = 0) uniform atomic_uint counters[2];
+void main ()
+{
+  highp uint t0 = atomicCounter(counters[int((uint(gl_VertexID) & 1u))]);
+  highp uint t1 = atomicCounter(counter);
+  highp uint t2 = atomicCounter(counter);
+  gl_Position = vec4(float(t0), float(t1), float(t2), 1.0);
+}
+
+// stats: 4 alu 0 tex 0 flow
+// buffer #0: atomic_counters_0 atomic-counter layout atomic-counter binding 0 (size: 8)
+//  member #0: atomic_uint counter offset 4
+// buffer #1: atomic_counters_2 atomic-counter layout atomic-counter binding 2 (size: 8)
+//  member #0: atomic_uint[2] counters offset 0 array 2 stride 4
+//  member #1: atomic_uint [] parent 0 offset 0

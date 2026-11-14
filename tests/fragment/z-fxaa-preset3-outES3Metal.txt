@@ -1,0 +1,108 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  half2 xlv_TEXCOORD0;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  half4 _MainTex_TexelSize;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _MainTex [[texture(0)]], sampler _mtlsmp__MainTex [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  bool r0 = false;
+  bool r1 = false;
+  int r2 = 0;
+  half2 r3 = 0;
+  half2 r4 = 0;
+  half r5 = 0;
+  half r6 = 0;
+  half r7 = 0;
+  half3 r8 = 0;
+  half4 t0 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(0.0, -1.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+  half4 t1 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(-1.0, 0.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+  half4 t2 = _MainTex.sample(_mtlsmp__MainTex, float2(_mtl_i.xlv_TEXCOORD0), level(0.0));
+  half4 t3 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(1.0, 0.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+  half4 t4 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(0.0, 1.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+  half t5 = ((t0.y * half(1.9632108)) + t0.x);
+  half t6 = ((t1.y * half(1.9632108)) + t1.x);
+  half t7 = ((t2.y * half(1.9632108)) + t2.x);
+  half t8 = ((t3.y * half(1.9632108)) + t3.x);
+  half t9 = ((t4.y * half(1.9632108)) + t4.x);
+  half t10 = max(t7, max(max(t5, t6), max(t9, t8)));
+  half t11 = (t10 - min(t7, min(min(t5, t6), min(t9, t8))));
+  if ((t11 < max(half(0.041666668), (t10 * half(0.125))))) {
+    r8 = t2.xyz;
+  } else {
+    half t12 = (abs((((((t5 + t6) + t8) + t9) * half(0.25)) - t7)) / t11);
+    half4 t13 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 - _mtl_u._MainTex_TexelSize.xy)), level(0.0));
+    half4 t14 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(1.0, -1.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+    half4 t15 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + (half2(-1.0, 1.0) * _mtl_u._MainTex_TexelSize.xy))), level(0.0));
+    half4 t16 = _MainTex.sample(_mtlsmp__MainTex, float2((_mtl_i.xlv_TEXCOORD0 + _mtl_u._MainTex_TexelSize.xy)), level(0.0));
+    half3 t17 = (((((t0.xyz + t1.xyz) + t2.xyz) + t3.xyz) + t4.xyz) + (((t13.xyz + t14.xyz) + t15.xyz) + t16.xyz));
+    half t18 = (half(0.5) * t5);
+    half t19 = (half(0.25) * ((t13.y * half(1.9632108)) + t13.x));
+    half t20 = (half(0.25) * ((t14.y * half(1.9632108)) + t14.x));
+    half t21 = (half(0.5) * t6);
+    half t22 = (half(0.5) * t8);
+    half t23 = (half(0.5) * t9);
+    half t24 = (half(0.25) * ((t15.y * half(1.9632108)) + t15.x));
+    half t25 = (half(0.25) * ((t16.y * half(1.9632108)) + t16.x));
+    bool t26 = (((abs(((t19 - t21) + t24)) + abs(((t18 - t7) + t23))) + abs(((t20 - t22) + t25))) >= ((abs(((t19 - t18) + t20)) + abs(((t21 - t7) + t22))) + abs(((t24 - t23) + t25))));
+    half t27 = (t26 ? _mtl_u._MainTex_TexelSize.y : _mtl_u._MainTex_TexelSize.x);
+    half t28 = (t26 ? t5 : t6);
+    half t29 = (t26 ? t9 : t8);
+    half t30 = abs((t29 - t7));
+    half t31 = abs((t28 - t7));
+    bool t32 = (t31 >= t30);
+    half t33 = (t32 ? (-t27) : t27);
+    half t34 = (t33 * half(0.5));
+    half2 t35 = (t26 ? half2(_mtl_u._MainTex_TexelSize.x, half(0.0)) : half2(half(0.0), _mtl_u._MainTex_TexelSize.y));
+    half2 t36 = half2((_mtl_i.xlv_TEXCOORD0.x + (t26 ? half(0.0) : t34)), (_mtl_i.xlv_TEXCOORD0.y + (t26 ? t34 : half(0.0))));
+    r3 = (t36 - t35);
+    r4 = (t36 + t35);
+    r7 = (half(0.5) * (t7 + (t32 ? t28 : t29)));
+    half t37 = (max(t30, t31) * half(0.25));
+    r1 = false;
+    r0 = false;
+    r6 = r7;
+    r5 = r7;
+    for (r2 = 0; (r2 < 16); r2++) {
+      if ((!r0)) {
+        half4 t38 = _MainTex.sample(_mtlsmp__MainTex, float2(r3), level(0.0));
+        r6 = ((t38.y * half(1.9632108)) + t38.x);
+      }
+      if ((!r1)) {
+        half4 t39 = _MainTex.sample(_mtlsmp__MainTex, float2(r4), level(0.0));
+        r5 = ((t39.y * half(1.9632108)) + t39.x);
+      }
+      r0 = (r0 || (abs((r6 - r7)) >= t37));
+      r1 = (r1 || (abs((r5 - r7)) >= t37));
+      if ((r0 && r1)) {
+        break;
+      }
+      r3 = (r0 ? r3 : (r3 - t35));
+      r4 = (r1 ? r4 : (r4 + t35));
+    }
+    half t40 = (t26 ? (_mtl_i.xlv_TEXCOORD0.x - r3.x) : (_mtl_i.xlv_TEXCOORD0.y - r3.y));
+    half t41 = (t26 ? (r4.x - _mtl_i.xlv_TEXCOORD0.x) : (r4.y - _mtl_i.xlv_TEXCOORD0.y));
+    half t42 = ((half(0.5) + (min(t41, t40) * (half(-1.0) / (t41 + t40)))) * (((t7 < r7) == (((t40 < t41) ? r6 : r5) < r7)) ? half(0.0) : t33));
+    half4 t43 = _MainTex.sample(_mtlsmp__MainTex, float2(half2((_mtl_i.xlv_TEXCOORD0.x + (t26 ? half(0.0) : t42)), (_mtl_i.xlv_TEXCOORD0.y + (t26 ? t42 : half(0.0))))), level(0.0));
+    half t44 = min(half(0.75), (max(half(0.0), (t12 - half(0.25))) * half(1.3333334)));
+    r8 = ((((t17 * half(0.11111111)) * t44) + t43.xyz) - (t44 * t43.xyz));
+  }
+  _mtl_o._fragData = half4(r8.x, r8.y, r8.z, half(0.0));
+  return _mtl_o;
+}
+
+// stats: 165 alu 12 tex 6 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (medium float) 2x1 [-1]
+// uniforms: 1 (total size: 8)
+//  #0: _MainTex_TexelSize (medium float) 4x1 [-1] loc 0
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1] loc 0

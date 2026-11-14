@@ -1,0 +1,32 @@
+#version 300 es
+precision highp float;
+precision highp int;
+uniform highp float uni1;
+uniform mediump vec4 uni4;
+uniform mediump sampler2D tex1;
+uniform mediump float _AtmosphereThickness;
+in highp vec4 var_uv;
+out mediump vec4 out_data;
+void main ()
+{
+  mediump vec4 t0 = var_uv.xyxx;
+  highp vec3 t1 = texture(tex1, t0.xy).xyz;
+  mediump vec4 t2 = (vec3(uni4.x, 0.0, 0.0) + t1).xyzx;
+  mediump vec4 t3 = vec4((t2.z + uni1));
+  mediump vec4 t4 = vec4((uni1 + 2.0));
+  mediump float t5 = pow(_AtmosphereThickness, 2.5);
+  highp float t6 = (0.049999997 * t5);
+  highp float t7 = (0.031416 * t5);
+  mediump vec4 t8 = vec4((t2.x + pow(t6, t7)));
+  out_data = ((0.5 < var_uv.x) ? vec4(t8.x, t2.y, t3.z, t4.w) : vec4(t2.xy, t3.z, t4.w));
+}
+
+// stats: 10 alu 1 tex 0 flow
+// inputs: 1
+//  #0: var_uv (high float) 4x1 [-1]
+// uniforms: 3 (total size: 0)
+//  #0: uni1 (high float) 1x1 [-1]
+//  #1: uni4 (medium float) 4x1 [-1]
+//  #2: _AtmosphereThickness (medium float) 1x1 [-1]
+// textures: 1
+//  #0: tex1 (medium 2d) 0x0 [-1]

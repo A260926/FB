@@ -1,0 +1,47 @@
+# Exercise the runner against disposable copies of the shader fixtures.
+set(work "${CMAKE_CURRENT_BINARY_DIR}/runner-checks")
+set(fixtures "${work}/fixtures")
+file(REMOVE_RECURSE "${work}")
+file(MAKE_DIRECTORY "${fixtures}/vertex" "${fixtures}/fragment" "${fixtures}/compute")
+
+function(check_run expected_result expected_message)
+    execute_process(COMMAND "${TEST_RUNNER}" ${ARGN}
+        WORKING_DIRECTORY "${work}"
+        RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+    if(NOT "${result}" STREQUAL "${expected_result}" OR NOT output MATCHES "${expected_message}")
+        message(FATAL_ERROR "Unexpected runner result (${result}):\n${output}\n${error}")
+    endif()
+endfunction()
+
+foreach(suffix IN ITEMS in out)
+    file(COPY "${TEST_SOURCE_DIR}/vertex/glsl140-basic-${suffix}.txt" DESTINATION "${fixtures}/vertex")
+    file(COPY "${TEST_SOURCE_DIR}/compute/workgroup-layout-${suffix}.txt" DESTINATION "${fixtures}/compute")
+endforeach()
+foreach(suffix IN ITEMS inES3 outES3 outES3Metal)
+    file(COPY "${TEST_SOURCE_DIR}/fragment/glsl120-basic-${suffix}.txt" DESTINATION "${fixtures}/fragment")
+endforeach()
+
+# An empty Metal expectation must fail and produce an actual-output file.
+set(name "glsl120-basic-outES3Metal.txt")
+set(expected "${fixtures}/fragment/${name}")
+file(READ "${expected}" original)
+string(REPLACE "\r\n" "\n" original "${original}")
+file(WRITE "${expected}" "")
+check_run(1 "does not match optimized output.*outES3Metal" "${fixtures}")
+file(READ "${expected}" unchanged)
+file(READ "${work}/test-output/fragment/${name}.actual" actual)
+if(NOT unchanged STREQUAL "" OR NOT actual STREQUAL original)
+    message(FATAL_ERROR "Mismatch did not preserve the expectation and record the actual output")
+endif()
+
+file(REMOVE "${expected}")
+check_run(1 "missing or unreadable expected output.*outES3Metal" "${fixtures}")
+if(EXISTS "${expected}")
+    message(FATAL_ERROR "A missing expectation was silently created")
+endif()
+check_run(0 "Updated" "${fixtures}" --update-expected)
+file(READ "${expected}" updated)
+if(NOT updated STREQUAL original)
+    message(FATAL_ERROR "Explicit expectation update wrote incorrect output")
+endif()
+check_run(0 "3 tests.*succeeded" "${fixtures}")

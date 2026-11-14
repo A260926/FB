@@ -1,0 +1,83 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Params_std140 {
+  int4 section;
+  int2 target;
+  uint flags;
+  float luminance_multiplier;
+  float glow_strength;
+  float glow_bloom;
+  float glow_hdr_threshold;
+  float glow_hdr_scale;
+  float glow_exposure;
+  float glow_white;
+  float glow_luminance_cap;
+  float glow_auto_exposure_scale;
+  float camera_z_far;
+  float camera_z_near;
+  float2 octmap_border_size;
+  float4 set_color;
+};
+static_assert(sizeof(_xlat_buf_Params_std140) == 96, "std140 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 8, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Params_std140& params [[buffer(1)]]
+  , texture2d<float> source_color [[texture(0)]], sampler _mtlsmp_source_color [[sampler(0)]]
+  , texture2d<float, access::write> dest_buffer [[texture(1)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]]
+  , uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]])
+{
+  threadgroup float4 local_cache[256];
+  threadgroup float4 temp_cache[128];
+  int4 t0 = int4(params.section);
+  float2 t1 = float2(t0.zw);
+  float2 t2 = min(max(((float2(uint2(((t0.xy + int2(gl_GlobalInvocationID.xy)) + int2(gl_LocalInvocationID.xy)))) - 3.5) / t1), (0.5 / t1)), (1.0 - (1.5 / t1)));
+  int t3 = (int(gl_LocalInvocationID.y) << int(5u));
+  int t4 = ((int(gl_LocalInvocationID.x) << int(1u)) + t3);
+  local_cache[t4] = source_color.sample(_mtlsmp_source_color, t2, level(0.0));
+  local_cache[(t4 + 1)] = source_color.sample(_mtlsmp_source_color, (t2 + float2((1.0 / float(t0.z)), 0.0)), level(0.0));
+  local_cache[(t4 + 16)] = source_color.sample(_mtlsmp_source_color, (t2 + float2(0.0, (1.0 / float(t0.w)))), level(0.0));
+  local_cache[(17 + t4)] = source_color.sample(_mtlsmp_source_color, (t2 + (1.0 / t1)), level(0.0));
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  int t5 = (int(gl_LocalInvocationID.x) + t3);
+  float4 t6 = (((((local_cache[(t5 + 4)] * 0.214607) + (local_cache[(5 + t5)] * 0.189879)) + (local_cache[(6 + t5)] * 0.131514)) + (local_cache[(7 + t5)] * 0.071303)) + (local_cache[(3 + t5)] * 0.189879));
+  float4 t7 = (((((local_cache[(20 + t5)] * 0.214607) + (local_cache[(21 + t5)] * 0.189879)) + (local_cache[(22 + t5)] * 0.131514)) + (local_cache[(23 + t5)] * 0.071303)) + (local_cache[(19 + t5)] * 0.189879));
+  float4 t8 = ((t7 + (local_cache[(18 + t5)] * 0.131514)) + (local_cache[(17 + t5)] * 0.071303));
+  int t9 = (int(gl_LocalInvocationID.x) << int(4u));
+  int t10 = ((int(gl_LocalInvocationID.y) << int(1u)) + t9);
+  temp_cache[t10] = ((t6 + (local_cache[(2 + t5)] * 0.131514)) + (local_cache[(1 + t5)] * 0.071303));
+  temp_cache[(t10 + 1)] = t8;
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  if ((!any((int2(gl_GlobalInvocationID.xy) >= t0.zw) != bool2(false)))) {
+    int t11 = (int(gl_LocalInvocationID.y) + t9);
+    float4 t12 = (((((temp_cache[(t11 + 4)] * 0.214607) + (temp_cache[(5 + t11)] * 0.189879)) + (temp_cache[(6 + t11)] * 0.131514)) + (temp_cache[(7 + t11)] * 0.071303)) + (temp_cache[(3 + t11)] * 0.189879));
+    int2 t13 = (int2(gl_GlobalInvocationID.xy) + int2(params.target));
+    dest_buffer.write(((t12 + (temp_cache[(2 + t11)] * 0.131514)) + (temp_cache[(1 + t11)] * 0.071303)), uint2(int4(t13, 0, 0).xy));
+  }
+}
+
+// stats: 95 alu 5 tex 1 flow
+// workgroup size: 8 8 1
+// buffer #0: Params instance params layout std140 binding 0 (size: 96) metal 1
+//  member #0: ivec4 section offset 0
+//  member #1: ivec2 target offset 16
+//  member #2: uint flags offset 24 (unused)
+//  member #3: float luminance_multiplier offset 28 (unused)
+//  member #4: float glow_strength offset 32 (unused)
+//  member #5: float glow_bloom offset 36 (unused)
+//  member #6: float glow_hdr_threshold offset 40 (unused)
+//  member #7: float glow_hdr_scale offset 44 (unused)
+//  member #8: float glow_exposure offset 48 (unused)
+//  member #9: float glow_white offset 52 (unused)
+//  member #10: float glow_luminance_cap offset 56 (unused)
+//  member #11: float glow_auto_exposure_scale offset 60 (unused)
+//  member #12: float camera_z_far offset 64 (unused)
+//  member #13: float camera_z_near offset 68 (unused)
+//  member #14: vec2 octmap_border_size offset 72 (unused)
+//  member #15: vec4 set_color offset 80 (unused)
+// textures: 2
+//  #0: source_color (high 2d) 0x0 [-1] loc 0
+//  #1: dest_buffer (high image2d) 0x0 [-1] loc 1 format rgba16f component float writeonly

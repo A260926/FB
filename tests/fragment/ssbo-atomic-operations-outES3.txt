@@ -1,0 +1,33 @@
+#version 310 es
+precision highp float;
+precision highp int;
+layout(std430, binding = 2) buffer Data {
+  highp int signedValue;
+  highp uint unsignedValue;
+} data;
+out highp vec4 color;
+void main ()
+{
+  highp int t0 = atomicAdd(data.signedValue, -3);
+  highp int t1 = atomicMin(data.signedValue, -5);
+  highp int t2 = atomicMax(data.signedValue, 2);
+  highp int t3 = atomicAnd(data.signedValue, 7);
+  highp int t4 = atomicOr(data.signedValue, 8);
+  highp int t5 = atomicXor(data.signedValue, 3);
+  highp int t6 = atomicExchange(data.signedValue, -9);
+  highp int t7 = atomicCompSwap(data.signedValue, -9, 4);
+  highp uint t8 = atomicAdd(data.unsignedValue, 3u);
+  highp uint t9 = atomicMin(data.unsignedValue, 5u);
+  highp uint t10 = atomicMax(data.unsignedValue, 2147483648u);
+  highp uint t11 = atomicAnd(data.unsignedValue, 7u);
+  highp uint t12 = atomicOr(data.unsignedValue, 8u);
+  highp uint t13 = atomicXor(data.unsignedValue, 3u);
+  highp uint t14 = atomicExchange(data.unsignedValue, 9u);
+  highp uint t15 = atomicCompSwap(data.unsignedValue, 9u, 4u);
+  color = vec4(float((((((((t0 + t1) + t2) + t3) + t4) + t5) + t6) + t7)), float(uint((((((((int(t8) + int(t9)) + int(t10)) + int(t11)) + int(t12)) + int(t13)) + int(t14)) + int(t15)))), 0.0, 1.0);
+}
+
+// stats: 16 alu 0 tex 0 flow
+// buffer #0: Data storage instance data layout std430 binding 2 (size: 8)
+//  member #0: int signedValue offset 0
+//  member #1: uint unsignedValue offset 4

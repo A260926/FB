@@ -1,0 +1,19 @@
+uniform sampler2D _CameraDepthTexture;
+uniform sampler2D _MainTex;
+uniform vec4 _ZBufferParams;
+void main ()
+{
+  vec2 t0 = gl_TexCoord[0].xy;
+  vec4 t1 = texture2D(_MainTex, t0);
+  float t2 = ((1.0 / ((_ZBufferParams.z * texture2D(_CameraDepthTexture, t0).x) + _ZBufferParams.w)) * 0.01);
+  gl_FragData[0] = vec4(vec2(t2), t1.zw);
+}
+
+// stats: 4 alu 2 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 1 (total size: 0)
+//  #0: _ZBufferParams (high float) 4x1 [-1]
+// textures: 2
+//  #0: _CameraDepthTexture (high 2d) 0x0 [-1]
+//  #1: _MainTex (high 2d) 0x0 [-1]

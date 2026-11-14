@@ -1,0 +1,20 @@
+#version 310 es
+layout(local_size_x = 4, local_size_y = 2, local_size_z = 3) in;
+layout(std430) buffer Data {
+  highp uvec4 values[];
+} data;
+void main ()
+{
+  highp int t0 = (((int(gl_WorkGroupID.x) + (int(gl_NumWorkGroups.x) * (int(gl_WorkGroupID.y) + (int(gl_NumWorkGroups.y) * int(gl_WorkGroupID.z))))) * 24) + int(gl_LocalInvocationIndex));
+  highp int t1 = (t0 << 2u);
+  data.values[t1] = uvec4(gl_GlobalInvocationID, gl_LocalInvocationIndex);
+  data.values[(t1 + 1)] = uvec4(gl_LocalInvocationID, 4u);
+  data.values[(t1 + 2)] = uvec4(gl_WorkGroupID, 2u);
+  data.values[(t1 + 3)] = uvec4(gl_NumWorkGroups, 3u);
+}
+
+// stats: 10 alu 0 tex 0 flow
+// workgroup size: 4 2 3
+// buffer #0: Data storage instance data layout std430 (size: unknown)
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0

@@ -1,0 +1,69 @@
+uniform vec4 _Color;
+uniform vec4 _LightShadowData;
+uniform vec4 _MainTex_ST;
+uniform mat4 _Object2World;
+uniform vec4 _Scale;
+uniform float _SquashAmount;
+uniform vec4 _SquashPlaneNormal;
+uniform float _TimeX;
+uniform vec4 _Wind;
+uniform mat4 _World2Shadow;
+uniform mat4 _World2Shadow1;
+uniform mat4 _World2Shadow2;
+uniform mat4 _World2Shadow3;
+attribute vec4 TANGENT;
+void main ()
+{
+  vec4 t0 = vec4(dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[0].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[1].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[2].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[3].xyz));
+  float t1 = (1.0 - abs(TANGENT.w));
+  vec3 t2 = ((gl_Vertex + ((TANGENT * gl_ModelViewMatrixInverseTranspose) * t1)).xyz * _Scale.xyz);
+  float t3 = (dot(_Object2World[3].xyz, vec3(1.0)) + gl_Color.x);
+  vec4 t4 = abs(((fract((-0.5 + (fract(((_TimeX + vec2(dot(t2, vec3((gl_Color.y + t3))), t3)).xxyy * vec4(1.975, 0.793, 0.375, 0.193))) * 2.0))) * 2.0) - 1.0));
+  vec4 t5 = ((t4 * t4) * (3.0 - (2.0 * t4)));
+  vec2 t6 = (t5.xz + t5.yw);
+  vec3 t7 = ((gl_Color.y * 0.1) * mix(gl_Normal, normalize(t0).xyz, vec3(t1)));
+  vec3 t8 = ((t2 + (((t6.xyx * vec3(t7.x, (gl_MultiTexCoord1.y * 0.3), t7.z)) + ((_Wind.xyz * t6.y) * gl_MultiTexCoord1.y)) * _Wind.w)) + (gl_MultiTexCoord1.x * _Wind.xyz));
+  vec3 t9 = mix((t8 + (dot(_SquashPlaneNormal.xyz, (vec3(0.0, _SquashPlaneNormal.w, 0.0) - t8)) * _SquashPlaneNormal.xyz)), t8, vec3(_SquashAmount));
+  vec3 t10 = (gl_Color.w * _Color.xyz);
+  vec2 t11 = ((gl_MultiTexCoord0.xy * _MainTex_ST.xy) + _MainTex_ST.zw);
+  vec4 t12 = (gl_ModelViewMatrix * vec4(t9, 1.0));
+  vec4 t13 = (_Object2World * vec4(t9, 1.0));
+  vec4 t14 = (_World2Shadow * t13);
+  vec4 t15 = (_World2Shadow1 * t13);
+  vec4 t16 = (_World2Shadow2 * t13);
+  vec4 t17 = (_World2Shadow3 * t13);
+  gl_Position = (gl_ModelViewProjectionMatrix * vec4(t9, 1.0));
+  gl_TexCoord[0] = vec4(t14.xyz, 0.0);
+  gl_TexCoord[1] = vec4(t15.xyz, 0.0);
+  gl_TexCoord[2] = vec4(t16.xyz, 0.0);
+  gl_TexCoord[3] = vec4(t17.xyz, 0.0);
+  gl_TexCoord[4] = vec4((-t12.z), (_LightShadowData.w - (t12.z * _LightShadowData.z)), 0.0, 0.0);
+  gl_TexCoord[5] = vec4(t11, 0.0, 0.0);
+  gl_FrontColor = vec4(t10, _Color.w);
+}
+
+// stats: 102 alu 0 tex 0 flow
+// inputs: 6
+//  #0: gl_MultiTexCoord1 (high float) 4x1 [-1] loc 7
+//  #1: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #2: gl_Color (high float) 4x1 [-1] loc 2
+//  #3: gl_Normal (high float) 3x1 [-1] loc 1
+//  #4: gl_Vertex (high float) 4x1 [-1] loc 0
+//  #5: TANGENT (high float) 4x1 [-1]
+// uniforms: 16 (total size: 0)
+//  #0: gl_ModelViewMatrixInverseTranspose (high float) 4x4 [-1]
+//  #1: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #2: gl_ModelViewMatrix (high float) 4x4 [-1]
+//  #3: _Color (high float) 4x1 [-1]
+//  #4: _LightShadowData (high float) 4x1 [-1]
+//  #5: _MainTex_ST (high float) 4x1 [-1]
+//  #6: _Object2World (high float) 4x4 [-1]
+//  #7: _Scale (high float) 4x1 [-1]
+//  #8: _SquashAmount (high float) 1x1 [-1]
+//  #9: _SquashPlaneNormal (high float) 4x1 [-1]
+//  #10: _TimeX (high float) 1x1 [-1]
+//  #11: _Wind (high float) 4x1 [-1]
+//  #12: _World2Shadow (high float) 4x4 [-1]
+//  #13: _World2Shadow1 (high float) 4x4 [-1]
+//  #14: _World2Shadow2 (high float) 4x4 [-1]
+//  #15: _World2Shadow3 (high float) 4x4 [-1]

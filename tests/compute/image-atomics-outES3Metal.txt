@@ -1,0 +1,60 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 310
+#error This shader requires Metal 3.1 or newer
+#endif
+struct _xlat_buf_SignedResults_std430 {
+  int4 values[1];
+};
+struct _xlat_buf_UnsignedResults_std430 {
+  uint4 values[1];
+};
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, slice, &expected, vec<T, 4>(value)); return expected.x; }
+template <typename Tex, typename C, typename T> inline T _xlat_image_comp_swap(Tex tex, C coord, uint face, uint slice, T compare, T value) { vec<T, 4> expected(compare); tex.atomic_compare_exchange_weak(coord, face, slice, &expected, vec<T, 4>(value)); return expected.x; }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_SignedResults_std430& signedResults [[buffer(1)]]
+  , device _xlat_buf_UnsignedResults_std430& unsignedResults [[buffer(2)]]
+  , texture2d<uint, access::read_write> counters [[texture(0)]]
+  , texture2d_array<int, access::read_write> layers [[texture(1)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = counters.atomic_fetch_add(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(1u)).x;
+  uint t1 = counters.atomic_fetch_min(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(2u)).x;
+  uint t2 = counters.atomic_fetch_max(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(3u)).x;
+  uint t3 = counters.atomic_fetch_and(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(4u)).x;
+  uint t4 = counters.atomic_fetch_or(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(5u)).x;
+  uint t5 = counters.atomic_fetch_xor(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(6u)).x;
+  uint t6 = counters.atomic_exchange(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), uint4(7u)).x;
+  uint t7 = _xlat_image_comp_swap(counters, uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 0u, 0u)).xy), 8u, 9u);
+  int t8 = (int(gl_GlobalInvocationID.x) << int(1u));
+  unsignedResults.values[t8] = uint4(t0, t1, t2, t3);
+  int t9 = (t8 + 1);
+  unsignedResults.values[t9] = uint4(t4, t5, t6, t7);
+  int t10 = layers.atomic_fetch_add(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(1)).x;
+  int t11 = layers.atomic_fetch_min(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(-3)).x;
+  int t12 = layers.atomic_fetch_max(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(3)).x;
+  int t13 = layers.atomic_fetch_and(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(-1)).x;
+  int t14 = layers.atomic_fetch_or(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(5)).x;
+  int t15 = layers.atomic_fetch_xor(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(6)).x;
+  int t16 = layers.atomic_exchange(uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), int4(7)).x;
+  int t17 = _xlat_image_comp_swap(layers, uint2(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.x, 0u, 1u, 0u)).z), 8, 9);
+  signedResults.values[t8] = int4(t10, t11, t12, t13);
+  signedResults.values[t9] = int4(t14, t15, t16, t17);
+}
+
+// stats: 2 alu 16 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: SignedResults storage instance signedResults layout std430 (size: unknown) metal 1
+//  member #0: ivec4[] values offset 0 array runtime stride 16
+//  member #1: ivec4 [] parent 0 offset 0
+// buffer #1: UnsignedResults storage instance unsignedResults layout std430 (size: unknown) metal 2
+//  member #0: uvec4[] values offset 0 array runtime stride 16
+//  member #1: uvec4 [] parent 0 offset 0
+// textures: 2
+//  #0: counters (high image2d) 0x0 [-1] loc 0 format r32ui component uint
+//  #1: layers (high image2darray) 0x0 [-1] loc 1 format r32i component int

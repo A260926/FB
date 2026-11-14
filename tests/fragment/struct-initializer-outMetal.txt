@@ -1,0 +1,34 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 position;
+  float3 varyingNormalDirection;
+};
+struct xlatMtlShaderOutput {
+  float4 gl_FragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float4x4 v_inv;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = normalize(_mtl_i.varyingNormalDirection);
+  float4 t1 = (_mtl_u.v_inv[3] - _mtl_i.position);
+  float4 t2 = (float4(0.0, 3.0, 0.0, 1.0) - _mtl_i.position);
+  float t3 = rsqrt(dot(t2.xyz, t2.xyz));
+  float3 t4 = (t3 * t2.xyz);
+  float t5 = dot(t0, t4);
+  float3 t6 = (-t4);
+  float3 t7 = ((0.040000003 + ((t5 >= 0.0) ? (float3((2.0 * t3)) * pow(max(0.0, dot((t6 - ((float3(dot(t0, t6)) * 2.0) * t0)), normalize(t1.xyz))), 5.0)) : float3(0.0))) + ((float3(2.0, 1.6, 1.6) * t3) * max(0.0, t5)));
+  _mtl_o.gl_FragColor = float4(t7, 1.0);
+  return _mtl_o;
+}
+
+// stats: 29 alu 0 tex 0 flow
+// inputs: 2
+//  #0: position (high float) 4x1 [-1]
+//  #1: varyingNormalDirection (high float) 3x1 [-1]
+// uniforms: 1 (total size: 64)
+//  #0: v_inv (high float) 4x4 [-1] loc 0

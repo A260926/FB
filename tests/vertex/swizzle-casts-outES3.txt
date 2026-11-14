@@ -1,0 +1,22 @@
+#version 300 es
+in highp vec4 _glesVertex;
+in highp vec4 _glesMultiTexCoord0;
+uniform highp vec4 unity_LightShadowBias;
+uniform highp mat4 glstate_matrix_mvp;
+out mediump vec2 xlv_TEXCOORD1;
+void main ()
+{
+  mediump vec4 t0 = _glesMultiTexCoord0;
+  highp vec4 t1 = (glstate_matrix_mvp * _glesVertex);
+  highp float t2 = (t1.z + clamp((unity_LightShadowBias.x / t1.w), 0.0, 1.0));
+  gl_Position = vec4(t1.xy, mix(t2, max(t2, (-t1.w)), unity_LightShadowBias.y), t1.w);
+  xlv_TEXCOORD1 = t0.xy;
+}
+
+// stats: 13 alu 0 tex 0 flow
+// inputs: 2
+//  #0: _glesVertex (high float) 4x1 [-1]
+//  #1: _glesMultiTexCoord0 (high float) 4x1 [-1]
+// uniforms: 2 (total size: 0)
+//  #0: unity_LightShadowBias (high float) 4x1 [-1]
+//  #1: glstate_matrix_mvp (high float) 4x4 [-1]

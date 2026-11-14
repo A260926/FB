@@ -1,0 +1,29 @@
+#version 310 es
+precision highp float;
+precision highp int;
+layout(std430) buffer Data {
+  highp uint value;
+  highp uint results[4];
+};
+uniform bool update;
+out highp vec4 color;
+void main ()
+{
+  value = 7u;
+  atomicAdd(value, 1u);
+  highp uint t0 = value;
+  if (update) {
+    atomicExchange(results[0], 5u);
+    atomicCompSwap(results[1], 5u, 6u);
+    results[2] = value;
+  }
+  color = vec4(7.0, float(t0), float(value), 1.0);
+}
+
+// stats: 2 alu 0 tex 1 flow
+// uniforms: 1 (total size: 0)
+//  #0: update (high bool) 1x1 [-1]
+// buffer #0: Data storage layout std430 (size: 20)
+//  member #0: uint value offset 0
+//  member #1: uint[4] results offset 4 array 4 stride 4
+//  member #2: uint [] parent 1 offset 4

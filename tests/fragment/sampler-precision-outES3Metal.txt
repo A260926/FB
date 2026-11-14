@@ -1,0 +1,37 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 varUV;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> texlow [[texture(0)]], sampler _mtlsmp_texlow [[sampler(0)]]
+  , texture2d<half> texmed [[texture(1)]], sampler _mtlsmp_texmed [[sampler(1)]]
+  , texture2d<float> texhigh [[texture(2)]], sampler _mtlsmp_texhigh [[sampler(2)]]
+  , texturecube<half> cubelow [[texture(3)]], sampler _mtlsmp_cubelow [[sampler(3)]]
+  , texturecube<half> cubemed [[texture(4)]], sampler _mtlsmp_cubemed [[sampler(4)]]
+  , texturecube<float> cubehigh [[texture(5)]], sampler _mtlsmp_cubehigh [[sampler(5)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float2 t0 = _mtl_i.varUV.xy;
+  half4 t1 = half4((float4((texlow.sample(_mtlsmp_texlow, t0) + texmed.sample(_mtlsmp_texmed, t0))) + texhigh.sample(_mtlsmp_texhigh, t0)));
+  float3 t2 = _mtl_i.varUV.xyz;
+  _mtl_o._fragData = half4((float4(((t1 + cubelow.sample(_mtlsmp_cubelow, t2)) + cubemed.sample(_mtlsmp_cubemed, t2))) + cubehigh.sample(_mtlsmp_cubehigh, t2)));
+  return _mtl_o;
+}
+
+// stats: 5 alu 6 tex 0 flow
+// inputs: 1
+//  #0: varUV (high float) 4x1 [-1]
+// textures: 6
+//  #0: texlow (medium 2d) 0x0 [-1] loc 0
+//  #1: texmed (medium 2d) 0x0 [-1] loc 1
+//  #2: texhigh (high 2d) 0x0 [-1] loc 2
+//  #3: cubelow (medium cube) 0x0 [-1] loc 3
+//  #4: cubemed (medium cube) 0x0 [-1] loc 4
+//  #5: cubehigh (high cube) 0x0 [-1] loc 5

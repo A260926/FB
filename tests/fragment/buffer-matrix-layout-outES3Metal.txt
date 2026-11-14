@@ -1,0 +1,54 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_element_packed_float3_16 { packed_float3 value; char _pad[4]; };
+struct _xlat_Entry_std430_row {
+  float2 matrix[3];
+};
+static_assert(sizeof(_xlat_Entry_std430_row) == 24, "std430 size");
+struct _xlat_buf_StorageData_std430_row {
+  float2 rows[3];
+  char _pad0[8];
+  _xlat_element_packed_float3_16 columns[2];
+  _xlat_Entry_std430_row entries[2];
+};
+static_assert(sizeof(_xlat_buf_StorageData_std430_row) == 112, "std430 size");
+struct _xlat_element_float2_16 { float2 value; char _pad[8]; };
+struct _xlat_buf_UniformData_std140_row {
+  _xlat_element_float2_16 uniformRows[3];
+  _xlat_element_packed_float3_16 uniformColumns[2];
+};
+static_assert(sizeof(_xlat_buf_UniformData_std140_row) == 80, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_StorageData_std430_row& _xlat_blk_StorageData [[buffer(1)]]
+  , constant _xlat_buf_UniformData_std140_row& _xlat_blk_UniformData [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float3 t0 = (float3(float3(_xlat_blk_StorageData.rows[0][0], _xlat_blk_StorageData.rows[1][0], _xlat_blk_StorageData.rows[2][0])) + float3(_xlat_blk_StorageData.columns[_mtl_u.index].value));
+  float3 t1 = float3(float3(_xlat_blk_StorageData.entries[_mtl_u.index].matrix[0][1], _xlat_blk_StorageData.entries[_mtl_u.index].matrix[1][1], _xlat_blk_StorageData.entries[_mtl_u.index].matrix[2][1]));
+  float3 t2 = float3(float3(_xlat_blk_UniformData.uniformRows[0].value[_mtl_u.index], _xlat_blk_UniformData.uniformRows[1].value[_mtl_u.index], _xlat_blk_UniformData.uniformRows[2].value[_mtl_u.index]));
+  float3 t3 = (((t0 + (float3(float3(_xlat_blk_StorageData.rows[0][1], _xlat_blk_StorageData.rows[1][1], _xlat_blk_StorageData.rows[2][1])) * 2.0)) + t1) + (((float3(_xlat_blk_UniformData.uniformColumns[0].value) * 2.0) + t2) + float3(_xlat_blk_UniformData.uniformColumns[1].value)));
+  _mtl_o.color = float4(t3, 1.0);
+  return _mtl_o;
+}
+
+// stats: 8 alu 0 tex 0 flow
+// uniforms: 1 (total size: 4)
+//  #0: index (high int) 1x1 [-1] loc 0
+// buffer #0: StorageData storage layout std430 (size: 112) metal 1
+//  member #0: mat2x3 rows offset 0 matrix-stride 8 row-major readonly
+//  member #1: mat2x3 columns offset 32 matrix-stride 16 readonly
+//  member #2: Entry[2] entries offset 64 array 2 stride 24 readonly
+//  member #3: Entry [] parent 2 offset 64 readonly
+//  member #4: mat2x3 matrix parent 3 offset 64 matrix-stride 8 row-major readonly
+// buffer #1: UniformData layout std140 (size: 80) metal 2
+//  member #0: mat2x3 uniformRows offset 0 matrix-stride 16 row-major
+//  member #1: mat2x3 uniformColumns offset 48 matrix-stride 16

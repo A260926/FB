@@ -1,0 +1,40 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Output_std430 {
+  float results[1];
+};
+struct _xlat_buf_Source_std430 {
+  float values[3][1];
+};
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_Output_std430& _xlat_blk_Output [[buffer(1)]]
+  , const device _xlat_buf_Source_std430& sources_0 [[buffer(2)]]
+  , const device _xlat_buf_Source_std430& sources_1 [[buffer(3)]]
+  , constant uint* _mtl_buffer_sizes [[buffer(4)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  const device _xlat_buf_Source_std430* sources[2] = { &sources_0, &sources_1 };
+  _xlat_blk_Output.results[_mtl_u.index] = (float((*sources[0]).values[_mtl_u.index][2]) + float((*sources[1]).values[_mtl_u.index][1]));
+  _mtl_o.color = float4(float((max(int(_mtl_buffer_sizes[2 + 0u]) - 0, 0) / 12)), float((max(int(_mtl_buffer_sizes[2 + 1u]) - 0, 0) / 12)), 3.0, 1.0);
+  return _mtl_o;
+}
+
+// stats: 3 alu 0 tex 0 flow
+// uniforms: 1 (total size: 4)
+//  #0: index (high int) 1x1 [-1] loc 0
+// buffer #0: Output storage layout std430 (size: unknown) metal 1
+//  member #0: float[] results offset 0 array runtime stride 4 writeonly
+//  member #1: float [] parent 0 offset 0 writeonly
+// buffer #1: Source storage instance sources layout std430 array 2 (size: unknown) metal 2 metal-size-buffer 4
+//  member #0: float[][3] values offset 0 array runtime stride 12 readonly
+//  member #1: float[3] [] parent 0 offset 0 array 3 stride 4 readonly
+//  member #2: float [] parent 1 offset 0 readonly

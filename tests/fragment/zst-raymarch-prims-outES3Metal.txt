@@ -1,0 +1,1283 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+  float4 fragColor [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  float3 iResolution;
+  float iTime;
+  float4 iMouse;
+  int iFrame;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  bool r0 = false;
+  float r1 = 0;
+  float r2 = 0;
+  float2 r3 = 0;
+  float r4 = 0;
+  float3 r5 = 0;
+  float3 r6 = 0;
+  float r7 = 0;
+  int r8 = 0;
+  bool r9 = false;
+  float r10 = 0;
+  float r11 = 0;
+  float2 r12 = 0;
+  float r13 = 0;
+  float3 r14 = 0;
+  float3 r15 = 0;
+  int r16 = 0;
+  float3 r17 = 0;
+  bool r18 = false;
+  float r19 = 0;
+  float r20 = 0;
+  float2 r21 = 0;
+  float r22 = 0;
+  float3 r23 = 0;
+  float3 r24 = 0;
+  int r25 = 0;
+  float r26 = 0;
+  float r27 = 0;
+  bool r28 = false;
+  float r29 = 0;
+  float r30 = 0;
+  float2 r31 = 0;
+  float r32 = 0;
+  float3 r33 = 0;
+  float3 r34 = 0;
+  int r35 = 0;
+  float r36 = 0;
+  float r37 = 0;
+  bool r38 = false;
+  float r39 = 0;
+  float r40 = 0;
+  float2 r41 = 0;
+  float r42 = 0;
+  float3 r43 = 0;
+  float3 r44 = 0;
+  int r45 = 0;
+  float r46 = 0;
+  float r47 = 0;
+  float r48 = 0;
+  float3 r49 = 0;
+  float3 r50 = 0;
+  float2 r51 = 0;
+  float3 r52 = 0;
+  float t0 = ((0.1 * (32.0 + (_mtl_u.iTime * 1.5))) + (7.0 * (_mtl_u.iMouse.xy / _mtl_u.iResolution.xy).x));
+  float3 t1 = float3((4.5 * cos(t0)), 2.2, (4.5 * sin(t0)));
+  float3 t2 = (-t1);
+  float3 t3 = (t1 * rsqrt(dot(t2, t2)));
+  float3 t4 = ((t3.zxy * float3(1.0, 0.0, 0.0)) - (t3.yzx * float3(0.0, 0.0, 1.0)));
+  float3 t5 = normalize(t4);
+  float3 t6 = ((t3.yzx * t5.zxy) - (t3.zxy * t5.yzx));
+  float2 t7 = (((2.0 * _mtl_i.gl_FragCoord.xy) - _mtl_u.iResolution.xy) / _mtl_u.iResolution.y);
+  float3 t8 = float3(t7, 2.5);
+  float3 t9 = normalize(t8);
+  float3 t10 = ((float2x3(t5, t6) * t9.xy) - (t3 * t9.z));
+  float2 t11 = (((2.0 * (_mtl_i.gl_FragCoord.xy + float2(1.0, 0.0))) - _mtl_u.iResolution.xy) / _mtl_u.iResolution.y);
+  float2 t12 = (((2.0 * (_mtl_i.gl_FragCoord.xy + float2(0.0, 1.0))) - _mtl_u.iResolution.xy) / _mtl_u.iResolution.y);
+  float3 t13 = float3(t11, 2.5);
+  float3 t14 = normalize(t13);
+  float3 t15 = ((float2x3(t5, t6) * t14.xy) - (t3 * t14.z));
+  float3 t16 = float3(t12, 2.5);
+  float3 t17 = normalize(t16);
+  float3 t18 = ((float2x3(t5, t6) * t17.xy) - (t3 * t17.z));
+  float3 t19 = (float3(0.25, -0.75, -0.75) + t1);
+  float t20 = ((-t19.y) / t10.y);
+  bool t21 = (0.0 < t20);
+  r51 = (t21 ? float2(t20, 1.0) : float2(-1.0));
+  float t22 = (t21 ? min(2e+01, t20) : 2e+01);
+  float3 t23 = (1.0 / t10);
+  float3 t24 = (t23 * (float3(0.25, -1.15, -0.25) + t1));
+  float3 t25 = (abs(t23) * float3(2.5, 0.41, 3.0));
+  float3 t26 = ((-t24) - t25);
+  float3 t27 = (t25 - t24);
+  float t28 = max(max(t26.x, t26.y), t26.z);
+  float t29 = min(min(t27.x, t27.y), t27.z);
+  if (((max(t28, 0.0) < t29) && (t28 < t22))) {
+    float t30 = min(t29, t22);
+    r7 = max(t28, 1.0);
+    for (r8 = 0; ((r8 < 70) && (r7 < t30)); r8++) {
+      float3 t31 = (t19 + (t10 * r7));
+      float3 t32 = (abs((t31 + float3(2.0, -0.3, -0.25))) - float3(0.3, 0.3, 1.0));
+      float3 t33 = max(t32, float3(0.0));
+      r3 = float2(t31.y, 0.0);
+      if (((min(max(t32.x, max(t32.y, t32.z)), 0.0) + length(t33)) < t31.y)) {
+        float3 t34 = (t31 + float3(2.0, -0.25, -0.0));
+        float t35 = (length(t34) - 0.25);
+        float2 t36 = ((t31.y < t35) ? r3 : float2(t35, 26.9));
+        float3 t37 = abs((t31 + float3(2.0, -0.25, -1.0)).xzy);
+        float2 t38 = (float2(0.15, 0.25) - (2.0 * t37.xz));
+        float t39 = clamp((((0.15 * t38.x) - (0.25 * t38.y)) / 0.085), -1.0, 1.0);
+        float2 t40 = (t37.xz - (float2(0.075, 0.125) * float2((1.0 - t39), (1.0 + t39))));
+        float t41 = (t37.y - 0.04);
+        float t42 = ((length(t40) * sign((((t37.x * 0.25) - 0.0375) + (t37.z * 0.15)))) - 0.08);
+        float2 t43 = max(float2(t42, t41), float2(0.0));
+        float t44 = (min(max(t42, t41), 0.0) + length(t43));
+        r3 = ((t36.x < t44) ? t36 : float2(t44, 17.0));
+      }
+      float3 t45 = (abs((t31 + float3(-0.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t46 = max(t45, float3(0.0));
+      if (((min(max(t45.x, max(t45.y, t45.z)), 0.0) + length(t46)) < r3.x)) {
+        float3 t47 = (t31 + float3(-0.0, -0.3, -1.0));
+        float3 t48 = (t47 * float3(1.0, -1.0, 1.0));
+        float t49 = abs(t48.x);
+        float2 t50 = float2(t49, t48.y);
+        float3 t51 = float3(t49, t48.yz);
+        float t52 = (sqrt(((dot(t51, t51) + 0.0625) - (0.5 * (((-0.866025 * t47.y) < (-0.5 * t49)) ? dot(t50, float2(0.866025, -0.5)) : length(t50))))) - 0.05);
+        float2 t53 = ((r3.x < t52) ? r3 : float2(t52, 25.0));
+        float3 t54 = abs((t31 + float3(-0.0, -0.25, -0.0)));
+        float3 t55 = (abs((float3(-0.275, -0.225, -0.175) + t54)) - 0.025);
+        float3 t56 = (t54 - float3(0.3, 0.25, 0.2));
+        float3 t57 = max(float3(t56.x, t55.yz), float3(0.0));
+        float3 t58 = max(float3(t55.x, t56.y, t55.z), float3(0.0));
+        float3 t59 = max(float3(t55.xy, t56.z), float3(0.0));
+        float t60 = min(min((length(t57) + min(max(t56.x, max(t55.y, t55.z)), 0.0)), (length(t58) + min(max(t55.x, max(t56.y, t55.z)), 0.0))), (length(t59) + min(max(t55.x, max(t55.y, t56.z)), 0.0)));
+        float2 t61 = ((t53.x < t60) ? t53 : float2(t60, 16.9));
+        float3 t62 = (t31 + float3(-0.0, -0.45, 1.0));
+        float t63 = length(t62.xz);
+        float2 t64 = float2(t63, t62.y);
+        float2 t65 = (t64 - (float2(0.3375, -0.45) * saturate((dot(t64, float2(0.3375, -0.45)) / 0.31640625))));
+        float2 t66 = (t64 - (float2(0.3375, -0.45) * float2(saturate((t63 / 0.3375)), 1.0)));
+        float t67 = (sqrt(min(dot(t65, t65), dot(t66, t66))) * sign(max((-((t63 * -0.45) - (t62.y * 0.3375))), (-t31.y))));
+        float2 t68 = ((t61.x < t67) ? t61 : float2(t67, 55.0));
+        float3 t69 = (t31 + float3(-0.0, -0.25, 2.0));
+        float t70 = length(t69.xz);
+        float2 t71 = float2(t70, t69.y);
+        float2 t72 = ((t71 - float2(0.1, 0.25)) + (float2(-0.15, 0.5) * saturate((dot((float2(0.1, 0.25) - t71), float2(-0.15, 0.5)) / 0.2725))));
+        float t73 = (abs(t69.y) - 0.25);
+        float2 t74 = float2((t70 - min(t70, ((t69.y < 0.0) ? 0.25 : 0.1))), t73);
+        float t75 = sqrt(min(dot(t74, t74), dot(t72, t72)));
+        float t76 = ((max(t72.x, t73) < 0.0) ? (-t75) : t75);
+        float2 t77 = ((t68.x < t76) ? t68 : float2(t76, 13.67));
+        float3 t78 = (t31 + float3(-0.0, -0.0, 3.0));
+        float t79 = length(t78.xz);
+        float2 t80 = float2(t79, t78.y);
+        float2 t81 = (t80 - (float2(0.6, 0.8) * clamp(dot(t80, float2(0.6, 0.8)), 0.0, 0.4)));
+        float t82 = max((length(t80) - 0.4), (length(t81) * sign(((0.8 * t79) - (0.6 * t78.y)))));
+        r3 = ((t77.x < t82) ? t77 : float2(t82, 49.13));
+      }
+      float3 t83 = (abs((t31 + float3(-1.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t84 = max(t83, float3(0.0));
+      if (((min(max(t83.x, max(t83.y, t83.z)), 0.0) + length(t84)) < r3.x)) {
+        float3 t85 = (t31 - float3(1.0, 0.3, 1.0));
+        float2 t86 = float2((length(t85.xy) - 0.25), t85.z);
+        float t87 = (length(t86) - 0.05);
+        float2 t88 = ((r3.x < t87) ? r3 : float2(t87, 7.1));
+        float3 t89 = (abs((t31 + float3(-1.0, -0.25, -0.0))) - float3(0.3, 0.25, 0.1));
+        float3 t90 = max(t89, float3(0.0));
+        float t91 = (min(max(t89.x, max(t89.y, t89.z)), 0.0) + length(t90));
+        float2 t92 = ((t88.x < t91) ? t88 : float2(t91, 3.0));
+        float3 t93 = (float3(-0.9, -0.1, 1.1) + t31);
+        float3 t94 = (t93 - (float3(0.3) * saturate((dot(t93, float3(0.3)) / 0.27))));
+        float t95 = (length(t94) - 0.1);
+        float2 t96 = ((t92.x < t95) ? t92 : float2(t95, 31.9));
+        float3 t97 = (t31 + float3(-1.0, -0.25, 2.0));
+        float2 t98 = (abs(float2(length(t97.xz), t97.y)) - float2(0.15, 0.25));
+        float2 t99 = max(t98, float2(0.0));
+        float t100 = (min(max(t98.x, t98.y), 0.0) + length(t99));
+        float2 t101 = ((t96.x < t100) ? t96 : float2(t100, 8.0));
+        float3 t102 = abs((t31 + float3(-1.0, -0.2, 3.0)));
+        float2 t103 = (t102.xy - (float2(-1.7320508, 1.0) * min(dot(float2(-0.8660254, 0.5), t102.xy), 0.0)));
+        float2 t104 = (t103 - float2(clamp(t103.x, -0.11547001, 0.11547001), 0.2));
+        float t105 = (length(t104) * sign((t103.y - 0.2)));
+        float t106 = (t102.z - 0.05);
+        float2 t107 = max(float2(t105, t106), float2(0.0));
+        float t108 = (min(max(t105, t106), 0.0) + length(t107));
+        r3 = ((t101.x < t108) ? t101 : float2(t108, 18.4));
+      }
+      float3 t109 = (abs((t31 + float3(1.0, -0.35, 1.0))) - float3(0.35, 0.35, 2.5));
+      float3 t110 = max(t109, float3(0.0));
+      if (((min(max(t109.x, max(t109.y, t109.z)), 0.0) + length(t110)) < r3.x)) {
+        float3 t111 = (t31 + float3(1.0, 0.6, 3.0));
+        float2 t112 = abs(t111.xz);
+        float2 t113 = (((t112.x < t112.y) ? t112.yx : t112) - 0.5);
+        float t114 = (t111.y - (0.5 * t113.x));
+        float t115 = (t113.x + (0.5 * t111.y));
+        float t116 = (t113.y + saturate((-t113.y)));
+        float t117 = saturate(((t114 - (0.5 * t113.y)) / 1.5));
+        float t118 = (t113.y + (0.5 * t117));
+        float t119 = (t114 - (1.25 * t117));
+        float t120 = (((0.0 < min(t114, ((-(t113.y * 1.25)) - (t114 * 0.5)))) ? 0.0 : min((((1.25 * t116) * t116) + (t114 * t114)), (((1.25 * t118) * t118) + (t119 * t119)))) + (t115 * t115));
+        float t121 = (sqrt((t120 / 1.25)) * sign(max(t115, (-t111.y))));
+        float2 t122 = ((r3.x < t121) ? r3 : float2(t121, 13.56));
+        r5 = abs((t31 + float3(1.0, -0.15, 2.0)));
+        float t123 = (((r5.x - 0.35) + r5.y) + r5.z);
+        if (((3.0 * r5.x) >= t123)) {
+          bool t124 = ((3.0 * r5.z) < t123);
+          bool t125 = ((3.0 * r5.y) < t123);
+          bool t126 = (t125 || t124);
+          r4 = (t126 ? r4 : (t123 * 0.57735026));
+          r5 = (t125 ? r5.yzx : (t124 ? r5.zxy : r6));
+          r0 = (!t126);
+        } else {
+          r0 = false;
+        }
+        if ((!r0)) {
+          float t127 = clamp((0.5 * ((r5.z + 0.35) - r5.y)), 0.0, 0.35);
+          float3 t128 = float3(r5.x, ((r5.y - 0.35) + t127), (r5.z - t127));
+          r4 = length(t128);
+        }
+        float2 t129 = ((t122.x < r4) ? t122 : float2(r4, 23.56));
+        float3 t130 = (t31 + float3(1.0, -0.15, 1.0));
+        float2 t131 = (t130.xy / 0.25980762);
+        float t132 = (t131.y + 0.57735026);
+        float t133 = (1.7320508 * t132);
+        float t134 = (abs(t131.x) - 1.0);
+        float2 t135 = (float2((t134 - t133), ((-(1.7320508 * t134)) - t132)) / 2.0);
+        float3 t136 = (((-t134) < t133) ? float3(t135, t130.z) : float3(t134, t132, t130.z));
+        float2 t137 = float2((t136.x - clamp(t136.x, -2.0, 0.0)), t136.y);
+        float t138 = ((length(t137) * 0.25980762) * sign((-t136.y)));
+        float t139 = (abs(t136.z) - 0.05);
+        float2 t140 = max(float2(t138, t139), float2(0.0));
+        float t141 = (length(t140) + min(max(t138, t139), 0.0));
+        float2 t142 = ((t129.x < t141) ? t129 : float2(t141, 43.5));
+        float3 t143 = (t31 + float3(1.0, -0.25, -0.0));
+        float3 t144 = (t143 / float3(0.2, 0.25, 0.05));
+        float3 t145 = (t143 / float3(0.040000003, 0.0625, 0.0025000002));
+        float t146 = length(t144);
+        float t147 = ((t146 * (t146 - 1.0)) / length(t145));
+        float2 t148 = ((t142.x < t147) ? t142 : float2(t147, 43.17));
+        float3 t149 = (t31 + float3(1.0, -0.25, -1.0));
+        float t150 = abs(t149.x);
+        float2 t151 = float2(t150, t149.y);
+        float2 t152 = ((float2(-0.26749888, 0.9635582) * t150) + (float2(0.9635582, 0.26749888) * t149.y));
+        float t153 = length(t151);
+        float2 t154 = (float2(((0.0 < max(t152.y, t152.x)) ? t152.x : (-t153)), abs((((0.0 < t152.x) ? t152.y : t153) - 0.2))) + float2(-0.3, -0.0));
+        float2 t155 = max(t154, float2(0.0));
+        float2 t156 = (abs(float2((length(t155) + min(0.0, max(t154.x, t154.y))), t149.z)) - float2(0.03, 0.08));
+        float2 t157 = max(t156, float2(0.0));
+        float t158 = (min(max(t156.x, t156.y), 0.0) + length(t157));
+        r3 = ((t148.x < t158) ? t148 : float2(t158, 11.5));
+      } else {
+        r5 = r6;
+      }
+      float3 t159 = (abs((t31 + float3(-2.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t160 = max(t159, float3(0.0));
+      if (((min(max(t159.x, max(t159.y, t159.z)), 0.0) + length(t160)) < r3.x)) {
+        float3 t161 = abs((t31 + float3(-2.0, -0.2, 3.0)));
+        float2 t162 = (t161.xy - (float2(-1.847759, 0.76536685) * min(dot(float2(-0.9238795, 0.38268343), t161.xy), 0.0)));
+        float2 t163 = (t162 - (float2(1.847759, 0.76536685) * min(dot(float2(0.9238795, 0.38268343), t162), 0.0)));
+        float2 t164 = (t163 - float2(clamp(t163.x, -0.082842715, 0.082842715), 0.2));
+        float t165 = (length(t164) * sign(t164.y));
+        float t166 = (t161.z - 0.05);
+        float2 t167 = max(float2(t165, t166), float2(0.0));
+        float t168 = (min(max(t165, t166), 0.0) + length(t167));
+        float2 t169 = ((r3.x < t168) ? r3 : float2(t168, 51.8));
+        float3 t170 = (float3(-2.1, -0.04, 2.0) + t31);
+        float t171 = dot(t170, float3(-0.3, 0.45, 0.1));
+        float3 t172 = ((t170 * 0.3025) - (float3(-0.3, 0.45, 0.1) * t171));
+        float t173 = (abs((t171 - 0.15125)) - 0.15125);
+        float t174 = ((t173 * 0.3025) * t173);
+        float t175 = (length(t172) - 0.0242);
+        float t176 = (t175 * t175);
+        float t177 = ((max(t175, t173) < 0.0) ? (-min(t176, t174)) : (((0.0 < t175) ? t176 : 0.0) + ((0.0 < t173) ? t174 : 0.0)));
+        float t178 = ((sign(t177) * sqrt(abs(t177))) / 0.3025);
+        float2 t179 = ((t169.x < t178) ? t169 : float2(t178, 31.2));
+        float3 t180 = (float3(-2.1, -0.09, 1.0) + t31);
+        float t181 = (dot(t180, float3(-0.3, 0.4, 0.1)) / 0.26000002);
+        float t182 = (t181 * 0.26000002);
+        float t183 = sqrt((dot(t180, t180) - (t182 * t181)));
+        float t184 = (t183 - 0.15);
+        float t185 = saturate((((-0.10000001 * t184) + t182) / 0.27));
+        float t186 = (t184 - (t185 * -0.10000001));
+        float t187 = (t181 - t185);
+        float t188 = (abs((t181 - 0.5)) - 0.5);
+        float t189 = max(0.0, (t183 + ((t181 < 0.5) ? -0.15 : -0.05)));
+        float t190 = sqrt(min(((t189 * t189) + ((t188 * 0.26000002) * t188)), ((t186 * t186) + ((t187 * 0.26000002) * t187))));
+        float t191 = ((max(t186, t188) < 0.0) ? (-t190) : t190);
+        float2 t192 = ((t179.x < t191) ? t179 : float2(t191, 46.1));
+        float3 t193 = (float3(-2.1, -0.15, -0.0) + t31);
+        float t194 = dot(t193, float3(-0.2, 0.35, 0.1));
+        float3 t195 = ((t193 * 0.1725) - (float3(-0.2, 0.35, 0.1) * t194));
+        float t196 = dot(t195, t195);
+        float t197 = ((t194 * 0.1725) * t194);
+        float t198 = (t194 - 0.1725);
+        float t199 = ((t198 * 0.1725) * t198);
+        float t200 = (0.010000002 * t196);
+        if ((t200 < ((sign(t198) * 0.1625) * t199))) {
+          r1 = ((sqrt((t196 + t199)) * 5.7971015) - 0.05);
+        } else {
+          r1 = (-0.15 + ((((sign(t194) * 0.1625) * t197) < t200) ? (sqrt((t196 + t197)) * 5.7971015) : ((sqrt((0.94202894 * t196)) + (t194 * 0.10000001)) * 5.7971015)));
+        }
+        float2 t201 = ((t192.x < r1) ? t192 : float2(r1, 51.7));
+        float3 t202 = (t31 - float3(2.0, 0.2, 1.0));
+        float2 t203 = float2(length(t202.xz), t202.y);
+        float t204 = dot(t203, float2(-0.3333333, 0.94280905));
+        if ((t204 < 0.0)) {
+          r2 = (length(t203) - 0.2);
+        } else {
+          float2 t205 = (t203 + float2(-0.0, -0.3));
+          r2 = ((0.28284273 < t204) ? (length(t205) - 0.1) : (dot(t203, float2(0.94280905, 0.3333333)) - 0.2));
+        }
+        r3 = ((t201.x < r2) ? t201 : float2(r2, 37.0));
+      }
+      if ((abs(r3.x) < (0.0001 * r7))) {
+        r51 = float2(r7, r3.y);
+        break;
+      }
+      r7 = (r7 + r3.x);
+      r6 = r5;
+    }
+  }
+  if ((-0.5 < r51.y)) {
+    float3 t206 = (t19 + (r51.x * t10));
+    bool t207 = (r51.y < 1.5);
+    if ((!t207)) {
+      r17 = float3(0.0);
+      for (r16 = min(_mtl_u.iFrame, 0); (r16 < 4); r16++) {
+        float3 t208 = ((float3(float(int((uint(((r16 + 3) >> int(1u))) & 1u))), float(int((uint((r16 >> int(1u))) & 1u))), float(int((uint(r16) & 1u)))) * 2.0) - 1.0);
+        float3 t209 = (t206 + (0.00028865002 * t208));
+        float3 t210 = (abs((t209 + float3(2.0, -0.3, -0.25))) - float3(0.3, 0.3, 1.0));
+        float3 t211 = max(t210, float3(0.0));
+        r12 = float2(t209.y, 0.0);
+        if (((min(max(t210.x, max(t210.y, t210.z)), 0.0) + length(t211)) < t209.y)) {
+          float3 t212 = (t209 + float3(2.0, -0.25, -0.0));
+          float t213 = (length(t212) - 0.25);
+          float2 t214 = ((t209.y < t213) ? r12 : float2(t213, 26.9));
+          float3 t215 = abs((t209 + float3(2.0, -0.25, -1.0)).xzy);
+          float2 t216 = (float2(0.15, 0.25) - (2.0 * t215.xz));
+          float t217 = clamp((((0.15 * t216.x) - (0.25 * t216.y)) / 0.085), -1.0, 1.0);
+          float2 t218 = (t215.xz - (float2(0.075, 0.125) * float2((1.0 - t217), (1.0 + t217))));
+          float t219 = (t215.y - 0.04);
+          float t220 = ((length(t218) * sign((((t215.x * 0.25) - 0.0375) + (t215.z * 0.15)))) - 0.08);
+          float2 t221 = max(float2(t220, t219), float2(0.0));
+          float t222 = (min(max(t220, t219), 0.0) + length(t221));
+          r12 = ((t214.x < t222) ? t214 : float2(t222, 17.0));
+        }
+        float3 t223 = (abs((t209 + float3(-0.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+        float3 t224 = max(t223, float3(0.0));
+        if (((min(max(t223.x, max(t223.y, t223.z)), 0.0) + length(t224)) < r12.x)) {
+          float3 t225 = (t209 + float3(-0.0, -0.3, -1.0));
+          float3 t226 = (t225 * float3(1.0, -1.0, 1.0));
+          float t227 = abs(t226.x);
+          float2 t228 = float2(t227, t226.y);
+          float3 t229 = float3(t227, t226.yz);
+          float t230 = (sqrt(((dot(t229, t229) + 0.0625) - (0.5 * (((-0.866025 * t225.y) < (-0.5 * t227)) ? dot(t228, float2(0.866025, -0.5)) : length(t228))))) - 0.05);
+          float2 t231 = ((r12.x < t230) ? r12 : float2(t230, 25.0));
+          float3 t232 = abs((t209 + float3(-0.0, -0.25, -0.0)));
+          float3 t233 = (abs((float3(-0.275, -0.225, -0.175) + t232)) - 0.025);
+          float3 t234 = (t232 - float3(0.3, 0.25, 0.2));
+          float3 t235 = max(float3(t234.x, t233.yz), float3(0.0));
+          float3 t236 = max(float3(t233.x, t234.y, t233.z), float3(0.0));
+          float3 t237 = max(float3(t233.xy, t234.z), float3(0.0));
+          float t238 = min(min((length(t235) + min(max(t234.x, max(t233.y, t233.z)), 0.0)), (length(t236) + min(max(t233.x, max(t234.y, t233.z)), 0.0))), (length(t237) + min(max(t233.x, max(t233.y, t234.z)), 0.0)));
+          float2 t239 = ((t231.x < t238) ? t231 : float2(t238, 16.9));
+          float3 t240 = (t209 + float3(-0.0, -0.45, 1.0));
+          float t241 = length(t240.xz);
+          float2 t242 = float2(t241, t240.y);
+          float2 t243 = (t242 - (float2(0.3375, -0.45) * saturate((dot(t242, float2(0.3375, -0.45)) / 0.31640625))));
+          float2 t244 = (t242 - (float2(0.3375, -0.45) * float2(saturate((t241 / 0.3375)), 1.0)));
+          float t245 = (sqrt(min(dot(t243, t243), dot(t244, t244))) * sign(max((-((t241 * -0.45) - (t240.y * 0.3375))), (-t209.y))));
+          float2 t246 = ((t239.x < t245) ? t239 : float2(t245, 55.0));
+          float3 t247 = (t209 + float3(-0.0, -0.25, 2.0));
+          float t248 = length(t247.xz);
+          float2 t249 = float2(t248, t247.y);
+          float2 t250 = ((t249 - float2(0.1, 0.25)) + (float2(-0.15, 0.5) * saturate((dot((float2(0.1, 0.25) - t249), float2(-0.15, 0.5)) / 0.2725))));
+          float t251 = (abs(t247.y) - 0.25);
+          float2 t252 = float2((t248 - min(t248, ((t247.y < 0.0) ? 0.25 : 0.1))), t251);
+          float t253 = sqrt(min(dot(t252, t252), dot(t250, t250)));
+          float t254 = ((max(t250.x, t251) < 0.0) ? (-t253) : t253);
+          float2 t255 = ((t246.x < t254) ? t246 : float2(t254, 13.67));
+          float3 t256 = (t209 + float3(-0.0, -0.0, 3.0));
+          float t257 = length(t256.xz);
+          float2 t258 = float2(t257, t256.y);
+          float2 t259 = (t258 - (float2(0.6, 0.8) * clamp(dot(t258, float2(0.6, 0.8)), 0.0, 0.4)));
+          float t260 = max((length(t258) - 0.4), (length(t259) * sign(((0.8 * t257) - (0.6 * t256.y)))));
+          r12 = ((t255.x < t260) ? t255 : float2(t260, 49.13));
+        }
+        float3 t261 = (abs((t209 + float3(-1.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+        float3 t262 = max(t261, float3(0.0));
+        if (((min(max(t261.x, max(t261.y, t261.z)), 0.0) + length(t262)) < r12.x)) {
+          float3 t263 = (t209 - float3(1.0, 0.3, 1.0));
+          float2 t264 = float2((length(t263.xy) - 0.25), t263.z);
+          float t265 = (length(t264) - 0.05);
+          float2 t266 = ((r12.x < t265) ? r12 : float2(t265, 7.1));
+          float3 t267 = (abs((t209 + float3(-1.0, -0.25, -0.0))) - float3(0.3, 0.25, 0.1));
+          float3 t268 = max(t267, float3(0.0));
+          float t269 = (min(max(t267.x, max(t267.y, t267.z)), 0.0) + length(t268));
+          float2 t270 = ((t266.x < t269) ? t266 : float2(t269, 3.0));
+          float3 t271 = (float3(-0.9, -0.1, 1.1) + t209);
+          float3 t272 = (t271 - (float3(0.3) * saturate((dot(t271, float3(0.3)) / 0.27))));
+          float t273 = (length(t272) - 0.1);
+          float2 t274 = ((t270.x < t273) ? t270 : float2(t273, 31.9));
+          float3 t275 = (t209 + float3(-1.0, -0.25, 2.0));
+          float2 t276 = (abs(float2(length(t275.xz), t275.y)) - float2(0.15, 0.25));
+          float2 t277 = max(t276, float2(0.0));
+          float t278 = (min(max(t276.x, t276.y), 0.0) + length(t277));
+          float2 t279 = ((t274.x < t278) ? t274 : float2(t278, 8.0));
+          float3 t280 = abs((t209 + float3(-1.0, -0.2, 3.0)));
+          float2 t281 = (t280.xy - (float2(-1.7320508, 1.0) * min(dot(float2(-0.8660254, 0.5), t280.xy), 0.0)));
+          float2 t282 = (t281 - float2(clamp(t281.x, -0.11547001, 0.11547001), 0.2));
+          float t283 = (length(t282) * sign((t281.y - 0.2)));
+          float t284 = (t280.z - 0.05);
+          float2 t285 = max(float2(t283, t284), float2(0.0));
+          float t286 = (min(max(t283, t284), 0.0) + length(t285));
+          r12 = ((t279.x < t286) ? t279 : float2(t286, 18.4));
+        }
+        float3 t287 = (abs((t209 + float3(1.0, -0.35, 1.0))) - float3(0.35, 0.35, 2.5));
+        float3 t288 = max(t287, float3(0.0));
+        if (((min(max(t287.x, max(t287.y, t287.z)), 0.0) + length(t288)) < r12.x)) {
+          float3 t289 = (t209 + float3(1.0, 0.6, 3.0));
+          float2 t290 = abs(t289.xz);
+          float2 t291 = (((t290.x < t290.y) ? t290.yx : t290) - 0.5);
+          float t292 = (t289.y - (0.5 * t291.x));
+          float t293 = (t291.x + (0.5 * t289.y));
+          float t294 = (t291.y + saturate((-t291.y)));
+          float t295 = saturate(((t292 - (0.5 * t291.y)) / 1.5));
+          float t296 = (t291.y + (0.5 * t295));
+          float t297 = (t292 - (1.25 * t295));
+          float t298 = (((0.0 < min(t292, ((-(t291.y * 1.25)) - (t292 * 0.5)))) ? 0.0 : min((((1.25 * t294) * t294) + (t292 * t292)), (((1.25 * t296) * t296) + (t297 * t297)))) + (t293 * t293));
+          float t299 = (sqrt((t298 / 1.25)) * sign(max(t293, (-t289.y))));
+          float2 t300 = ((r12.x < t299) ? r12 : float2(t299, 13.56));
+          r14 = abs((t209 + float3(1.0, -0.15, 2.0)));
+          float t301 = (((r14.x - 0.35) + r14.y) + r14.z);
+          if (((3.0 * r14.x) >= t301)) {
+            bool t302 = ((3.0 * r14.z) < t301);
+            bool t303 = ((3.0 * r14.y) < t301);
+            bool t304 = (t303 || t302);
+            r13 = (t304 ? r13 : (t301 * 0.57735026));
+            r14 = (t303 ? r14.yzx : (t302 ? r14.zxy : r15));
+            r9 = (!t304);
+          } else {
+            r9 = false;
+          }
+          if ((!r9)) {
+            float t305 = clamp((0.5 * ((r14.z + 0.35) - r14.y)), 0.0, 0.35);
+            float3 t306 = float3(r14.x, ((r14.y - 0.35) + t305), (r14.z - t305));
+            r13 = length(t306);
+          }
+          float2 t307 = ((t300.x < r13) ? t300 : float2(r13, 23.56));
+          float3 t308 = (t209 + float3(1.0, -0.15, 1.0));
+          float2 t309 = (t308.xy / 0.25980762);
+          float t310 = (t309.y + 0.57735026);
+          float t311 = (1.7320508 * t310);
+          float t312 = (abs(t309.x) - 1.0);
+          float2 t313 = (float2((t312 - t311), ((-(1.7320508 * t312)) - t310)) / 2.0);
+          float3 t314 = (((-t312) < t311) ? float3(t313, t308.z) : float3(t312, t310, t308.z));
+          float2 t315 = float2((t314.x - clamp(t314.x, -2.0, 0.0)), t314.y);
+          float t316 = ((length(t315) * 0.25980762) * sign((-t314.y)));
+          float t317 = (abs(t314.z) - 0.05);
+          float2 t318 = max(float2(t316, t317), float2(0.0));
+          float t319 = (length(t318) + min(max(t316, t317), 0.0));
+          float2 t320 = ((t307.x < t319) ? t307 : float2(t319, 43.5));
+          float3 t321 = (t209 + float3(1.0, -0.25, -0.0));
+          float3 t322 = (t321 / float3(0.2, 0.25, 0.05));
+          float3 t323 = (t321 / float3(0.040000003, 0.0625, 0.0025000002));
+          float t324 = length(t322);
+          float t325 = ((t324 * (t324 - 1.0)) / length(t323));
+          float2 t326 = ((t320.x < t325) ? t320 : float2(t325, 43.17));
+          float3 t327 = (t209 + float3(1.0, -0.25, -1.0));
+          float t328 = abs(t327.x);
+          float2 t329 = float2(t328, t327.y);
+          float2 t330 = ((float2(-0.26749888, 0.9635582) * t328) + (float2(0.9635582, 0.26749888) * t327.y));
+          float t331 = length(t329);
+          float2 t332 = (float2(((0.0 < max(t330.y, t330.x)) ? t330.x : (-t331)), abs((((0.0 < t330.x) ? t330.y : t331) - 0.2))) + float2(-0.3, -0.0));
+          float2 t333 = max(t332, float2(0.0));
+          float2 t334 = (abs(float2((length(t333) + min(0.0, max(t332.x, t332.y))), t327.z)) - float2(0.03, 0.08));
+          float2 t335 = max(t334, float2(0.0));
+          float t336 = (min(max(t334.x, t334.y), 0.0) + length(t335));
+          r12 = ((t326.x < t336) ? t326 : float2(t336, 11.5));
+        } else {
+          r14 = r15;
+        }
+        float3 t337 = (abs((t209 + float3(-2.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+        float3 t338 = max(t337, float3(0.0));
+        if (((min(max(t337.x, max(t337.y, t337.z)), 0.0) + length(t338)) < r12.x)) {
+          float3 t339 = abs((t209 + float3(-2.0, -0.2, 3.0)));
+          float2 t340 = (t339.xy - (float2(-1.847759, 0.76536685) * min(dot(float2(-0.9238795, 0.38268343), t339.xy), 0.0)));
+          float2 t341 = (t340 - (float2(1.847759, 0.76536685) * min(dot(float2(0.9238795, 0.38268343), t340), 0.0)));
+          float2 t342 = (t341 - float2(clamp(t341.x, -0.082842715, 0.082842715), 0.2));
+          float t343 = (length(t342) * sign(t342.y));
+          float t344 = (t339.z - 0.05);
+          float2 t345 = max(float2(t343, t344), float2(0.0));
+          float t346 = (min(max(t343, t344), 0.0) + length(t345));
+          float2 t347 = ((r12.x < t346) ? r12 : float2(t346, 51.8));
+          float3 t348 = (float3(-2.1, -0.04, 2.0) + t209);
+          float t349 = dot(t348, float3(-0.3, 0.45, 0.1));
+          float3 t350 = ((t348 * 0.3025) - (float3(-0.3, 0.45, 0.1) * t349));
+          float t351 = (abs((t349 - 0.15125)) - 0.15125);
+          float t352 = ((t351 * 0.3025) * t351);
+          float t353 = (length(t350) - 0.0242);
+          float t354 = (t353 * t353);
+          float t355 = ((max(t353, t351) < 0.0) ? (-min(t354, t352)) : (((0.0 < t353) ? t354 : 0.0) + ((0.0 < t351) ? t352 : 0.0)));
+          float t356 = ((sign(t355) * sqrt(abs(t355))) / 0.3025);
+          float2 t357 = ((t347.x < t356) ? t347 : float2(t356, 31.2));
+          float3 t358 = (float3(-2.1, -0.09, 1.0) + t209);
+          float t359 = (dot(t358, float3(-0.3, 0.4, 0.1)) / 0.26000002);
+          float t360 = (t359 * 0.26000002);
+          float t361 = sqrt((dot(t358, t358) - (t360 * t359)));
+          float t362 = (t361 - 0.15);
+          float t363 = saturate((((-0.10000001 * t362) + t360) / 0.27));
+          float t364 = (t362 - (t363 * -0.10000001));
+          float t365 = (t359 - t363);
+          float t366 = (abs((t359 - 0.5)) - 0.5);
+          float t367 = max(0.0, (t361 + ((t359 < 0.5) ? -0.15 : -0.05)));
+          float t368 = sqrt(min(((t367 * t367) + ((t366 * 0.26000002) * t366)), ((t364 * t364) + ((t365 * 0.26000002) * t365))));
+          float t369 = ((max(t364, t366) < 0.0) ? (-t368) : t368);
+          float2 t370 = ((t357.x < t369) ? t357 : float2(t369, 46.1));
+          float3 t371 = (float3(-2.1, -0.15, -0.0) + t209);
+          float t372 = dot(t371, float3(-0.2, 0.35, 0.1));
+          float3 t373 = ((t371 * 0.1725) - (float3(-0.2, 0.35, 0.1) * t372));
+          float t374 = dot(t373, t373);
+          float t375 = ((t372 * 0.1725) * t372);
+          float t376 = (t372 - 0.1725);
+          float t377 = ((t376 * 0.1725) * t376);
+          float t378 = (0.010000002 * t374);
+          if ((t378 < ((sign(t376) * 0.1625) * t377))) {
+            r10 = ((sqrt((t374 + t377)) * 5.7971015) - 0.05);
+          } else {
+            r10 = (-0.15 + ((((sign(t372) * 0.1625) * t375) < t378) ? (sqrt((t374 + t375)) * 5.7971015) : ((sqrt((0.94202894 * t374)) + (t372 * 0.10000001)) * 5.7971015)));
+          }
+          float2 t379 = ((t370.x < r10) ? t370 : float2(r10, 51.7));
+          float3 t380 = (t209 - float3(2.0, 0.2, 1.0));
+          float2 t381 = float2(length(t380.xz), t380.y);
+          float t382 = dot(t381, float2(-0.3333333, 0.94280905));
+          if ((t382 < 0.0)) {
+            r11 = (length(t381) - 0.2);
+          } else {
+            float2 t383 = (t381 + float2(-0.0, -0.3));
+            r11 = ((0.28284273 < t382) ? (length(t383) - 0.1) : (dot(t381, float2(0.94280905, 0.3333333)) - 0.2));
+          }
+          r12 = ((t379.x < r11) ? t379 : float2(r11, 37.0));
+        }
+        r17 = (r17 + ((0.5773 * t208) * r12.x));
+        r15 = r14;
+      }
+      r49 = normalize(r17);
+    } else {
+      r49 = float3(0.0, 1.0, 0.0);
+    }
+    float t384 = dot(r49, t10);
+    float3 t385 = (t10 - ((float3(t384) * 2.0) * r49));
+    if (t207) {
+      float3 t386 = (t10 / t10.y);
+      float2 t387 = (t19.yy * 3.0);
+      float2 t388 = ((abs((t387 * (t386 - (t15 / t15.y)).xz)) + 0.001) + abs((t387 * (t386 - (t18 / t18.y)).xz)));
+      float2 t389 = (0.5 * t388);
+      float2 t390 = (3.0 * t206.xz);
+      float2 t391 = ((2.0 * (abs((fract(((t390 - t389) * 0.5)) - 0.5)) - abs((fract(((t390 + t389) * 0.5)) - 0.5)))) / t388);
+      r50 = (0.15 + (float3((0.5 - ((0.5 * t391.x) * t391.y))) * 0.05));
+      r48 = 0.4;
+    } else {
+      r50 = (0.2 + (0.2 * sin(((r51.y * 2.0) + float3(0.0, 1.0, 2.0)))));
+      r48 = 1.0;
+    }
+    r45 = min(_mtl_u.iFrame, 0);
+    r26 = 1.0;
+    r27 = 0.0;
+    for (r25 = r45; (r25 < 5); r25++) {
+      float t392 = (0.01 + ((0.12 * float(r25)) / 4.0));
+      float3 t393 = (t206 + (t392 * r49));
+      float3 t394 = (abs((t393 + float3(2.0, -0.3, -0.25))) - float3(0.3, 0.3, 1.0));
+      float3 t395 = max(t394, float3(0.0));
+      r21 = float2(t393.y, 0.0);
+      if (((min(max(t394.x, max(t394.y, t394.z)), 0.0) + length(t395)) < t393.y)) {
+        float3 t396 = (t393 + float3(2.0, -0.25, -0.0));
+        float t397 = (length(t396) - 0.25);
+        float2 t398 = ((t393.y < t397) ? r21 : float2(t397, 26.9));
+        float3 t399 = abs((t393 + float3(2.0, -0.25, -1.0)).xzy);
+        float2 t400 = (float2(0.15, 0.25) - (2.0 * t399.xz));
+        float t401 = clamp((((0.15 * t400.x) - (0.25 * t400.y)) / 0.085), -1.0, 1.0);
+        float2 t402 = (t399.xz - (float2(0.075, 0.125) * float2((1.0 - t401), (1.0 + t401))));
+        float t403 = (t399.y - 0.04);
+        float t404 = ((length(t402) * sign((((t399.x * 0.25) - 0.0375) + (t399.z * 0.15)))) - 0.08);
+        float2 t405 = max(float2(t404, t403), float2(0.0));
+        float t406 = (min(max(t404, t403), 0.0) + length(t405));
+        r21 = ((t398.x < t406) ? t398 : float2(t406, 17.0));
+      }
+      float3 t407 = (abs((t393 + float3(-0.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t408 = max(t407, float3(0.0));
+      if (((min(max(t407.x, max(t407.y, t407.z)), 0.0) + length(t408)) < r21.x)) {
+        float3 t409 = (t393 + float3(-0.0, -0.3, -1.0));
+        float3 t410 = (t409 * float3(1.0, -1.0, 1.0));
+        float t411 = abs(t410.x);
+        float2 t412 = float2(t411, t410.y);
+        float3 t413 = float3(t411, t410.yz);
+        float t414 = (sqrt(((dot(t413, t413) + 0.0625) - (0.5 * (((-0.866025 * t409.y) < (-0.5 * t411)) ? dot(t412, float2(0.866025, -0.5)) : length(t412))))) - 0.05);
+        float2 t415 = ((r21.x < t414) ? r21 : float2(t414, 25.0));
+        float3 t416 = abs((t393 + float3(-0.0, -0.25, -0.0)));
+        float3 t417 = (abs((float3(-0.275, -0.225, -0.175) + t416)) - 0.025);
+        float3 t418 = (t416 - float3(0.3, 0.25, 0.2));
+        float3 t419 = max(float3(t418.x, t417.yz), float3(0.0));
+        float3 t420 = max(float3(t417.x, t418.y, t417.z), float3(0.0));
+        float3 t421 = max(float3(t417.xy, t418.z), float3(0.0));
+        float t422 = min(min((length(t419) + min(max(t418.x, max(t417.y, t417.z)), 0.0)), (length(t420) + min(max(t417.x, max(t418.y, t417.z)), 0.0))), (length(t421) + min(max(t417.x, max(t417.y, t418.z)), 0.0)));
+        float2 t423 = ((t415.x < t422) ? t415 : float2(t422, 16.9));
+        float3 t424 = (t393 + float3(-0.0, -0.45, 1.0));
+        float t425 = length(t424.xz);
+        float2 t426 = float2(t425, t424.y);
+        float2 t427 = (t426 - (float2(0.3375, -0.45) * saturate((dot(t426, float2(0.3375, -0.45)) / 0.31640625))));
+        float2 t428 = (t426 - (float2(0.3375, -0.45) * float2(saturate((t425 / 0.3375)), 1.0)));
+        float t429 = (sqrt(min(dot(t427, t427), dot(t428, t428))) * sign(max((-((t425 * -0.45) - (t424.y * 0.3375))), (-t393.y))));
+        float2 t430 = ((t423.x < t429) ? t423 : float2(t429, 55.0));
+        float3 t431 = (t393 + float3(-0.0, -0.25, 2.0));
+        float t432 = length(t431.xz);
+        float2 t433 = float2(t432, t431.y);
+        float2 t434 = ((t433 - float2(0.1, 0.25)) + (float2(-0.15, 0.5) * saturate((dot((float2(0.1, 0.25) - t433), float2(-0.15, 0.5)) / 0.2725))));
+        float t435 = (abs(t431.y) - 0.25);
+        float2 t436 = float2((t432 - min(t432, ((t431.y < 0.0) ? 0.25 : 0.1))), t435);
+        float t437 = sqrt(min(dot(t436, t436), dot(t434, t434)));
+        float t438 = ((max(t434.x, t435) < 0.0) ? (-t437) : t437);
+        float2 t439 = ((t430.x < t438) ? t430 : float2(t438, 13.67));
+        float3 t440 = (t393 + float3(-0.0, -0.0, 3.0));
+        float t441 = length(t440.xz);
+        float2 t442 = float2(t441, t440.y);
+        float2 t443 = (t442 - (float2(0.6, 0.8) * clamp(dot(t442, float2(0.6, 0.8)), 0.0, 0.4)));
+        float t444 = max((length(t442) - 0.4), (length(t443) * sign(((0.8 * t441) - (0.6 * t440.y)))));
+        r21 = ((t439.x < t444) ? t439 : float2(t444, 49.13));
+      }
+      float3 t445 = (abs((t393 + float3(-1.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t446 = max(t445, float3(0.0));
+      if (((min(max(t445.x, max(t445.y, t445.z)), 0.0) + length(t446)) < r21.x)) {
+        float3 t447 = (t393 - float3(1.0, 0.3, 1.0));
+        float2 t448 = float2((length(t447.xy) - 0.25), t447.z);
+        float t449 = (length(t448) - 0.05);
+        float2 t450 = ((r21.x < t449) ? r21 : float2(t449, 7.1));
+        float3 t451 = (abs((t393 + float3(-1.0, -0.25, -0.0))) - float3(0.3, 0.25, 0.1));
+        float3 t452 = max(t451, float3(0.0));
+        float t453 = (min(max(t451.x, max(t451.y, t451.z)), 0.0) + length(t452));
+        float2 t454 = ((t450.x < t453) ? t450 : float2(t453, 3.0));
+        float3 t455 = (float3(-0.9, -0.1, 1.1) + t393);
+        float3 t456 = (t455 - (float3(0.3) * saturate((dot(t455, float3(0.3)) / 0.27))));
+        float t457 = (length(t456) - 0.1);
+        float2 t458 = ((t454.x < t457) ? t454 : float2(t457, 31.9));
+        float3 t459 = (t393 + float3(-1.0, -0.25, 2.0));
+        float2 t460 = (abs(float2(length(t459.xz), t459.y)) - float2(0.15, 0.25));
+        float2 t461 = max(t460, float2(0.0));
+        float t462 = (min(max(t460.x, t460.y), 0.0) + length(t461));
+        float2 t463 = ((t458.x < t462) ? t458 : float2(t462, 8.0));
+        float3 t464 = abs((t393 + float3(-1.0, -0.2, 3.0)));
+        float2 t465 = (t464.xy - (float2(-1.7320508, 1.0) * min(dot(float2(-0.8660254, 0.5), t464.xy), 0.0)));
+        float2 t466 = (t465 - float2(clamp(t465.x, -0.11547001, 0.11547001), 0.2));
+        float t467 = (length(t466) * sign((t465.y - 0.2)));
+        float t468 = (t464.z - 0.05);
+        float2 t469 = max(float2(t467, t468), float2(0.0));
+        float t470 = (min(max(t467, t468), 0.0) + length(t469));
+        r21 = ((t463.x < t470) ? t463 : float2(t470, 18.4));
+      }
+      float3 t471 = (abs((t393 + float3(1.0, -0.35, 1.0))) - float3(0.35, 0.35, 2.5));
+      float3 t472 = max(t471, float3(0.0));
+      if (((min(max(t471.x, max(t471.y, t471.z)), 0.0) + length(t472)) < r21.x)) {
+        float3 t473 = (t393 + float3(1.0, 0.6, 3.0));
+        float2 t474 = abs(t473.xz);
+        float2 t475 = (((t474.x < t474.y) ? t474.yx : t474) - 0.5);
+        float t476 = (t473.y - (0.5 * t475.x));
+        float t477 = (t475.x + (0.5 * t473.y));
+        float t478 = (t475.y + saturate((-t475.y)));
+        float t479 = saturate(((t476 - (0.5 * t475.y)) / 1.5));
+        float t480 = (t475.y + (0.5 * t479));
+        float t481 = (t476 - (1.25 * t479));
+        float t482 = (((0.0 < min(t476, ((-(t475.y * 1.25)) - (t476 * 0.5)))) ? 0.0 : min((((1.25 * t478) * t478) + (t476 * t476)), (((1.25 * t480) * t480) + (t481 * t481)))) + (t477 * t477));
+        float t483 = (sqrt((t482 / 1.25)) * sign(max(t477, (-t473.y))));
+        float2 t484 = ((r21.x < t483) ? r21 : float2(t483, 13.56));
+        r23 = abs((t393 + float3(1.0, -0.15, 2.0)));
+        float t485 = (((r23.x - 0.35) + r23.y) + r23.z);
+        if (((3.0 * r23.x) >= t485)) {
+          bool t486 = ((3.0 * r23.z) < t485);
+          bool t487 = ((3.0 * r23.y) < t485);
+          bool t488 = (t487 || t486);
+          r22 = (t488 ? r22 : (t485 * 0.57735026));
+          r23 = (t487 ? r23.yzx : (t486 ? r23.zxy : r24));
+          r18 = (!t488);
+        } else {
+          r18 = false;
+        }
+        if ((!r18)) {
+          float t489 = clamp((0.5 * ((r23.z + 0.35) - r23.y)), 0.0, 0.35);
+          float3 t490 = float3(r23.x, ((r23.y - 0.35) + t489), (r23.z - t489));
+          r22 = length(t490);
+        }
+        float2 t491 = ((t484.x < r22) ? t484 : float2(r22, 23.56));
+        float3 t492 = (t393 + float3(1.0, -0.15, 1.0));
+        float2 t493 = (t492.xy / 0.25980762);
+        float t494 = (t493.y + 0.57735026);
+        float t495 = (1.7320508 * t494);
+        float t496 = (abs(t493.x) - 1.0);
+        float2 t497 = (float2((t496 - t495), ((-(1.7320508 * t496)) - t494)) / 2.0);
+        float3 t498 = (((-t496) < t495) ? float3(t497, t492.z) : float3(t496, t494, t492.z));
+        float2 t499 = float2((t498.x - clamp(t498.x, -2.0, 0.0)), t498.y);
+        float t500 = ((length(t499) * 0.25980762) * sign((-t498.y)));
+        float t501 = (abs(t498.z) - 0.05);
+        float2 t502 = max(float2(t500, t501), float2(0.0));
+        float t503 = (length(t502) + min(max(t500, t501), 0.0));
+        float2 t504 = ((t491.x < t503) ? t491 : float2(t503, 43.5));
+        float3 t505 = (t393 + float3(1.0, -0.25, -0.0));
+        float3 t506 = (t505 / float3(0.2, 0.25, 0.05));
+        float3 t507 = (t505 / float3(0.040000003, 0.0625, 0.0025000002));
+        float t508 = length(t506);
+        float t509 = ((t508 * (t508 - 1.0)) / length(t507));
+        float2 t510 = ((t504.x < t509) ? t504 : float2(t509, 43.17));
+        float3 t511 = (t393 + float3(1.0, -0.25, -1.0));
+        float t512 = abs(t511.x);
+        float2 t513 = float2(t512, t511.y);
+        float2 t514 = ((float2(-0.26749888, 0.9635582) * t512) + (float2(0.9635582, 0.26749888) * t511.y));
+        float t515 = length(t513);
+        float2 t516 = (float2(((0.0 < max(t514.y, t514.x)) ? t514.x : (-t515)), abs((((0.0 < t514.x) ? t514.y : t515) - 0.2))) + float2(-0.3, -0.0));
+        float2 t517 = max(t516, float2(0.0));
+        float2 t518 = (abs(float2((length(t517) + min(0.0, max(t516.x, t516.y))), t511.z)) - float2(0.03, 0.08));
+        float2 t519 = max(t518, float2(0.0));
+        float t520 = (min(max(t518.x, t518.y), 0.0) + length(t519));
+        r21 = ((t510.x < t520) ? t510 : float2(t520, 11.5));
+      } else {
+        r23 = r24;
+      }
+      float3 t521 = (abs((t393 + float3(-2.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t522 = max(t521, float3(0.0));
+      if (((min(max(t521.x, max(t521.y, t521.z)), 0.0) + length(t522)) < r21.x)) {
+        float3 t523 = abs((t393 + float3(-2.0, -0.2, 3.0)));
+        float2 t524 = (t523.xy - (float2(-1.847759, 0.76536685) * min(dot(float2(-0.9238795, 0.38268343), t523.xy), 0.0)));
+        float2 t525 = (t524 - (float2(1.847759, 0.76536685) * min(dot(float2(0.9238795, 0.38268343), t524), 0.0)));
+        float2 t526 = (t525 - float2(clamp(t525.x, -0.082842715, 0.082842715), 0.2));
+        float t527 = (length(t526) * sign(t526.y));
+        float t528 = (t523.z - 0.05);
+        float2 t529 = max(float2(t527, t528), float2(0.0));
+        float t530 = (min(max(t527, t528), 0.0) + length(t529));
+        float2 t531 = ((r21.x < t530) ? r21 : float2(t530, 51.8));
+        float3 t532 = (float3(-2.1, -0.04, 2.0) + t393);
+        float t533 = dot(t532, float3(-0.3, 0.45, 0.1));
+        float3 t534 = ((t532 * 0.3025) - (float3(-0.3, 0.45, 0.1) * t533));
+        float t535 = (abs((t533 - 0.15125)) - 0.15125);
+        float t536 = ((t535 * 0.3025) * t535);
+        float t537 = (length(t534) - 0.0242);
+        float t538 = (t537 * t537);
+        float t539 = ((max(t537, t535) < 0.0) ? (-min(t538, t536)) : (((0.0 < t537) ? t538 : 0.0) + ((0.0 < t535) ? t536 : 0.0)));
+        float t540 = ((sign(t539) * sqrt(abs(t539))) / 0.3025);
+        float2 t541 = ((t531.x < t540) ? t531 : float2(t540, 31.2));
+        float3 t542 = (float3(-2.1, -0.09, 1.0) + t393);
+        float t543 = (dot(t542, float3(-0.3, 0.4, 0.1)) / 0.26000002);
+        float t544 = (t543 * 0.26000002);
+        float t545 = sqrt((dot(t542, t542) - (t544 * t543)));
+        float t546 = (t545 - 0.15);
+        float t547 = saturate((((-0.10000001 * t546) + t544) / 0.27));
+        float t548 = (t546 - (t547 * -0.10000001));
+        float t549 = (t543 - t547);
+        float t550 = (abs((t543 - 0.5)) - 0.5);
+        float t551 = max(0.0, (t545 + ((t543 < 0.5) ? -0.15 : -0.05)));
+        float t552 = sqrt(min(((t551 * t551) + ((t550 * 0.26000002) * t550)), ((t548 * t548) + ((t549 * 0.26000002) * t549))));
+        float t553 = ((max(t548, t550) < 0.0) ? (-t552) : t552);
+        float2 t554 = ((t541.x < t553) ? t541 : float2(t553, 46.1));
+        float3 t555 = (float3(-2.1, -0.15, -0.0) + t393);
+        float t556 = dot(t555, float3(-0.2, 0.35, 0.1));
+        float3 t557 = ((t555 * 0.1725) - (float3(-0.2, 0.35, 0.1) * t556));
+        float t558 = dot(t557, t557);
+        float t559 = ((t556 * 0.1725) * t556);
+        float t560 = (t556 - 0.1725);
+        float t561 = ((t560 * 0.1725) * t560);
+        float t562 = (0.010000002 * t558);
+        if ((t562 < ((sign(t560) * 0.1625) * t561))) {
+          r19 = ((sqrt((t558 + t561)) * 5.7971015) - 0.05);
+        } else {
+          r19 = (-0.15 + ((((sign(t556) * 0.1625) * t559) < t562) ? (sqrt((t558 + t559)) * 5.7971015) : ((sqrt((0.94202894 * t558)) + (t556 * 0.10000001)) * 5.7971015)));
+        }
+        float2 t563 = ((t554.x < r19) ? t554 : float2(r19, 51.7));
+        float3 t564 = (t393 - float3(2.0, 0.2, 1.0));
+        float2 t565 = float2(length(t564.xz), t564.y);
+        float t566 = dot(t565, float2(-0.3333333, 0.94280905));
+        if ((t566 < 0.0)) {
+          r20 = (length(t565) - 0.2);
+        } else {
+          float2 t567 = (t565 + float2(-0.0, -0.3));
+          r20 = ((0.28284273 < t566) ? (length(t567) - 0.1) : (dot(t565, float2(0.94280905, 0.3333333)) - 0.2));
+        }
+        r21 = ((t563.x < r20) ? t563 : float2(r20, 37.0));
+      }
+      r27 = (r27 + ((t392 - r21.x) * r26));
+      if ((0.35 < r27)) {
+        break;
+      }
+      r26 = (r26 * 0.95);
+      r24 = r23;
+    }
+    float t568 = (0.5 + (0.5 * r49.y));
+    float t569 = (saturate((1.0 - (3.0 * r27))) * t568);
+    float3 t570 = (float3(-0.5698029, 0.45584232, -0.6837635) - t10);
+    float3 t571 = normalize(t570);
+    float t572 = dot(r49, float3(-0.5698029, 0.45584232, -0.6837635));
+    float t573 = (0.8 - t206.y);
+    float t574 = (t573 / 0.45584232);
+    float t575 = ((0.0 < t574) ? min(2.5, t574) : 2.5);
+    r37 = 1.0;
+    r36 = 0.02;
+    for (r35 = r45; (r35 < 24); r35++) {
+      float3 t576 = (t206 + (float3(-0.5698029, 0.45584232, -0.6837635) * r36));
+      float3 t577 = (abs((t576 + float3(2.0, -0.3, -0.25))) - float3(0.3, 0.3, 1.0));
+      float3 t578 = max(t577, float3(0.0));
+      r31 = float2(t576.y, 0.0);
+      if (((min(max(t577.x, max(t577.y, t577.z)), 0.0) + length(t578)) < t576.y)) {
+        float3 t579 = (t576 + float3(2.0, -0.25, -0.0));
+        float t580 = (length(t579) - 0.25);
+        float2 t581 = ((t576.y < t580) ? r31 : float2(t580, 26.9));
+        float3 t582 = abs((t576 + float3(2.0, -0.25, -1.0)).xzy);
+        float2 t583 = (float2(0.15, 0.25) - (2.0 * t582.xz));
+        float t584 = clamp((((0.15 * t583.x) - (0.25 * t583.y)) / 0.085), -1.0, 1.0);
+        float2 t585 = (t582.xz - (float2(0.075, 0.125) * float2((1.0 - t584), (1.0 + t584))));
+        float t586 = (t582.y - 0.04);
+        float t587 = ((length(t585) * sign((((t582.x * 0.25) - 0.0375) + (t582.z * 0.15)))) - 0.08);
+        float2 t588 = max(float2(t587, t586), float2(0.0));
+        float t589 = (min(max(t587, t586), 0.0) + length(t588));
+        r31 = ((t581.x < t589) ? t581 : float2(t589, 17.0));
+      }
+      float3 t590 = (abs((t576 + float3(-0.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t591 = max(t590, float3(0.0));
+      if (((min(max(t590.x, max(t590.y, t590.z)), 0.0) + length(t591)) < r31.x)) {
+        float3 t592 = (t576 + float3(-0.0, -0.3, -1.0));
+        float3 t593 = (t592 * float3(1.0, -1.0, 1.0));
+        float t594 = abs(t593.x);
+        float2 t595 = float2(t594, t593.y);
+        float3 t596 = float3(t594, t593.yz);
+        float t597 = (sqrt(((dot(t596, t596) + 0.0625) - (0.5 * (((-0.866025 * t592.y) < (-0.5 * t594)) ? dot(t595, float2(0.866025, -0.5)) : length(t595))))) - 0.05);
+        float2 t598 = ((r31.x < t597) ? r31 : float2(t597, 25.0));
+        float3 t599 = abs((t576 + float3(-0.0, -0.25, -0.0)));
+        float3 t600 = (abs((float3(-0.275, -0.225, -0.175) + t599)) - 0.025);
+        float3 t601 = (t599 - float3(0.3, 0.25, 0.2));
+        float3 t602 = max(float3(t601.x, t600.yz), float3(0.0));
+        float3 t603 = max(float3(t600.x, t601.y, t600.z), float3(0.0));
+        float3 t604 = max(float3(t600.xy, t601.z), float3(0.0));
+        float t605 = min(min((length(t602) + min(max(t601.x, max(t600.y, t600.z)), 0.0)), (length(t603) + min(max(t600.x, max(t601.y, t600.z)), 0.0))), (length(t604) + min(max(t600.x, max(t600.y, t601.z)), 0.0)));
+        float2 t606 = ((t598.x < t605) ? t598 : float2(t605, 16.9));
+        float3 t607 = (t576 + float3(-0.0, -0.45, 1.0));
+        float t608 = length(t607.xz);
+        float2 t609 = float2(t608, t607.y);
+        float2 t610 = (t609 - (float2(0.3375, -0.45) * saturate((dot(t609, float2(0.3375, -0.45)) / 0.31640625))));
+        float2 t611 = (t609 - (float2(0.3375, -0.45) * float2(saturate((t608 / 0.3375)), 1.0)));
+        float t612 = (sqrt(min(dot(t610, t610), dot(t611, t611))) * sign(max((-((t608 * -0.45) - (t607.y * 0.3375))), (-t576.y))));
+        float2 t613 = ((t606.x < t612) ? t606 : float2(t612, 55.0));
+        float3 t614 = (t576 + float3(-0.0, -0.25, 2.0));
+        float t615 = length(t614.xz);
+        float2 t616 = float2(t615, t614.y);
+        float2 t617 = ((t616 - float2(0.1, 0.25)) + (float2(-0.15, 0.5) * saturate((dot((float2(0.1, 0.25) - t616), float2(-0.15, 0.5)) / 0.2725))));
+        float t618 = (abs(t614.y) - 0.25);
+        float2 t619 = float2((t615 - min(t615, ((t614.y < 0.0) ? 0.25 : 0.1))), t618);
+        float t620 = sqrt(min(dot(t619, t619), dot(t617, t617)));
+        float t621 = ((max(t617.x, t618) < 0.0) ? (-t620) : t620);
+        float2 t622 = ((t613.x < t621) ? t613 : float2(t621, 13.67));
+        float3 t623 = (t576 + float3(-0.0, -0.0, 3.0));
+        float t624 = length(t623.xz);
+        float2 t625 = float2(t624, t623.y);
+        float2 t626 = (t625 - (float2(0.6, 0.8) * clamp(dot(t625, float2(0.6, 0.8)), 0.0, 0.4)));
+        float t627 = max((length(t625) - 0.4), (length(t626) * sign(((0.8 * t624) - (0.6 * t623.y)))));
+        r31 = ((t622.x < t627) ? t622 : float2(t627, 49.13));
+      }
+      float3 t628 = (abs((t576 + float3(-1.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t629 = max(t628, float3(0.0));
+      if (((min(max(t628.x, max(t628.y, t628.z)), 0.0) + length(t629)) < r31.x)) {
+        float3 t630 = (t576 - float3(1.0, 0.3, 1.0));
+        float2 t631 = float2((length(t630.xy) - 0.25), t630.z);
+        float t632 = (length(t631) - 0.05);
+        float2 t633 = ((r31.x < t632) ? r31 : float2(t632, 7.1));
+        float3 t634 = (abs((t576 + float3(-1.0, -0.25, -0.0))) - float3(0.3, 0.25, 0.1));
+        float3 t635 = max(t634, float3(0.0));
+        float t636 = (min(max(t634.x, max(t634.y, t634.z)), 0.0) + length(t635));
+        float2 t637 = ((t633.x < t636) ? t633 : float2(t636, 3.0));
+        float3 t638 = (float3(-0.9, -0.1, 1.1) + t576);
+        float3 t639 = (t638 - (float3(0.3) * saturate((dot(t638, float3(0.3)) / 0.27))));
+        float t640 = (length(t639) - 0.1);
+        float2 t641 = ((t637.x < t640) ? t637 : float2(t640, 31.9));
+        float3 t642 = (t576 + float3(-1.0, -0.25, 2.0));
+        float2 t643 = (abs(float2(length(t642.xz), t642.y)) - float2(0.15, 0.25));
+        float2 t644 = max(t643, float2(0.0));
+        float t645 = (min(max(t643.x, t643.y), 0.0) + length(t644));
+        float2 t646 = ((t641.x < t645) ? t641 : float2(t645, 8.0));
+        float3 t647 = abs((t576 + float3(-1.0, -0.2, 3.0)));
+        float2 t648 = (t647.xy - (float2(-1.7320508, 1.0) * min(dot(float2(-0.8660254, 0.5), t647.xy), 0.0)));
+        float2 t649 = (t648 - float2(clamp(t648.x, -0.11547001, 0.11547001), 0.2));
+        float t650 = (length(t649) * sign((t648.y - 0.2)));
+        float t651 = (t647.z - 0.05);
+        float2 t652 = max(float2(t650, t651), float2(0.0));
+        float t653 = (min(max(t650, t651), 0.0) + length(t652));
+        r31 = ((t646.x < t653) ? t646 : float2(t653, 18.4));
+      }
+      float3 t654 = (abs((t576 + float3(1.0, -0.35, 1.0))) - float3(0.35, 0.35, 2.5));
+      float3 t655 = max(t654, float3(0.0));
+      if (((min(max(t654.x, max(t654.y, t654.z)), 0.0) + length(t655)) < r31.x)) {
+        float3 t656 = (t576 + float3(1.0, 0.6, 3.0));
+        float2 t657 = abs(t656.xz);
+        float2 t658 = (((t657.x < t657.y) ? t657.yx : t657) - 0.5);
+        float t659 = (t656.y - (0.5 * t658.x));
+        float t660 = (t658.x + (0.5 * t656.y));
+        float t661 = (t658.y + saturate((-t658.y)));
+        float t662 = saturate(((t659 - (0.5 * t658.y)) / 1.5));
+        float t663 = (t658.y + (0.5 * t662));
+        float t664 = (t659 - (1.25 * t662));
+        float t665 = (((0.0 < min(t659, ((-(t658.y * 1.25)) - (t659 * 0.5)))) ? 0.0 : min((((1.25 * t661) * t661) + (t659 * t659)), (((1.25 * t663) * t663) + (t664 * t664)))) + (t660 * t660));
+        float t666 = (sqrt((t665 / 1.25)) * sign(max(t660, (-t656.y))));
+        float2 t667 = ((r31.x < t666) ? r31 : float2(t666, 13.56));
+        r33 = abs((t576 + float3(1.0, -0.15, 2.0)));
+        float t668 = (((r33.x - 0.35) + r33.y) + r33.z);
+        if (((3.0 * r33.x) >= t668)) {
+          bool t669 = ((3.0 * r33.z) < t668);
+          bool t670 = ((3.0 * r33.y) < t668);
+          bool t671 = (t670 || t669);
+          r32 = (t671 ? r32 : (t668 * 0.57735026));
+          r33 = (t670 ? r33.yzx : (t669 ? r33.zxy : r34));
+          r28 = (!t671);
+        } else {
+          r28 = false;
+        }
+        if ((!r28)) {
+          float t672 = clamp((0.5 * ((r33.z + 0.35) - r33.y)), 0.0, 0.35);
+          float3 t673 = float3(r33.x, ((r33.y - 0.35) + t672), (r33.z - t672));
+          r32 = length(t673);
+        }
+        float2 t674 = ((t667.x < r32) ? t667 : float2(r32, 23.56));
+        float3 t675 = (t576 + float3(1.0, -0.15, 1.0));
+        float2 t676 = (t675.xy / 0.25980762);
+        float t677 = (t676.y + 0.57735026);
+        float t678 = (1.7320508 * t677);
+        float t679 = (abs(t676.x) - 1.0);
+        float2 t680 = (float2((t679 - t678), ((-(1.7320508 * t679)) - t677)) / 2.0);
+        float3 t681 = (((-t679) < t678) ? float3(t680, t675.z) : float3(t679, t677, t675.z));
+        float2 t682 = float2((t681.x - clamp(t681.x, -2.0, 0.0)), t681.y);
+        float t683 = ((length(t682) * 0.25980762) * sign((-t681.y)));
+        float t684 = (abs(t681.z) - 0.05);
+        float2 t685 = max(float2(t683, t684), float2(0.0));
+        float t686 = (length(t685) + min(max(t683, t684), 0.0));
+        float2 t687 = ((t674.x < t686) ? t674 : float2(t686, 43.5));
+        float3 t688 = (t576 + float3(1.0, -0.25, -0.0));
+        float3 t689 = (t688 / float3(0.2, 0.25, 0.05));
+        float3 t690 = (t688 / float3(0.040000003, 0.0625, 0.0025000002));
+        float t691 = length(t689);
+        float t692 = ((t691 * (t691 - 1.0)) / length(t690));
+        float2 t693 = ((t687.x < t692) ? t687 : float2(t692, 43.17));
+        float3 t694 = (t576 + float3(1.0, -0.25, -1.0));
+        float t695 = abs(t694.x);
+        float2 t696 = float2(t695, t694.y);
+        float2 t697 = ((float2(-0.26749888, 0.9635582) * t695) + (float2(0.9635582, 0.26749888) * t694.y));
+        float t698 = length(t696);
+        float2 t699 = (float2(((0.0 < max(t697.y, t697.x)) ? t697.x : (-t698)), abs((((0.0 < t697.x) ? t697.y : t698) - 0.2))) + float2(-0.3, -0.0));
+        float2 t700 = max(t699, float2(0.0));
+        float2 t701 = (abs(float2((length(t700) + min(0.0, max(t699.x, t699.y))), t694.z)) - float2(0.03, 0.08));
+        float2 t702 = max(t701, float2(0.0));
+        float t703 = (min(max(t701.x, t701.y), 0.0) + length(t702));
+        r31 = ((t693.x < t703) ? t693 : float2(t703, 11.5));
+      } else {
+        r33 = r34;
+      }
+      float3 t704 = (abs((t576 + float3(-2.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t705 = max(t704, float3(0.0));
+      if (((min(max(t704.x, max(t704.y, t704.z)), 0.0) + length(t705)) < r31.x)) {
+        float3 t706 = abs((t576 + float3(-2.0, -0.2, 3.0)));
+        float2 t707 = (t706.xy - (float2(-1.847759, 0.76536685) * min(dot(float2(-0.9238795, 0.38268343), t706.xy), 0.0)));
+        float2 t708 = (t707 - (float2(1.847759, 0.76536685) * min(dot(float2(0.9238795, 0.38268343), t707), 0.0)));
+        float2 t709 = (t708 - float2(clamp(t708.x, -0.082842715, 0.082842715), 0.2));
+        float t710 = (length(t709) * sign(t709.y));
+        float t711 = (t706.z - 0.05);
+        float2 t712 = max(float2(t710, t711), float2(0.0));
+        float t713 = (min(max(t710, t711), 0.0) + length(t712));
+        float2 t714 = ((r31.x < t713) ? r31 : float2(t713, 51.8));
+        float3 t715 = (float3(-2.1, -0.04, 2.0) + t576);
+        float t716 = dot(t715, float3(-0.3, 0.45, 0.1));
+        float3 t717 = ((t715 * 0.3025) - (float3(-0.3, 0.45, 0.1) * t716));
+        float t718 = (abs((t716 - 0.15125)) - 0.15125);
+        float t719 = ((t718 * 0.3025) * t718);
+        float t720 = (length(t717) - 0.0242);
+        float t721 = (t720 * t720);
+        float t722 = ((max(t720, t718) < 0.0) ? (-min(t721, t719)) : (((0.0 < t720) ? t721 : 0.0) + ((0.0 < t718) ? t719 : 0.0)));
+        float t723 = ((sign(t722) * sqrt(abs(t722))) / 0.3025);
+        float2 t724 = ((t714.x < t723) ? t714 : float2(t723, 31.2));
+        float3 t725 = (float3(-2.1, -0.09, 1.0) + t576);
+        float t726 = (dot(t725, float3(-0.3, 0.4, 0.1)) / 0.26000002);
+        float t727 = (t726 * 0.26000002);
+        float t728 = sqrt((dot(t725, t725) - (t727 * t726)));
+        float t729 = (t728 - 0.15);
+        float t730 = saturate((((-0.10000001 * t729) + t727) / 0.27));
+        float t731 = (t729 - (t730 * -0.10000001));
+        float t732 = (t726 - t730);
+        float t733 = (abs((t726 - 0.5)) - 0.5);
+        float t734 = max(0.0, (t728 + ((t726 < 0.5) ? -0.15 : -0.05)));
+        float t735 = sqrt(min(((t734 * t734) + ((t733 * 0.26000002) * t733)), ((t731 * t731) + ((t732 * 0.26000002) * t732))));
+        float t736 = ((max(t731, t733) < 0.0) ? (-t735) : t735);
+        float2 t737 = ((t724.x < t736) ? t724 : float2(t736, 46.1));
+        float3 t738 = (float3(-2.1, -0.15, -0.0) + t576);
+        float t739 = dot(t738, float3(-0.2, 0.35, 0.1));
+        float3 t740 = ((t738 * 0.1725) - (float3(-0.2, 0.35, 0.1) * t739));
+        float t741 = dot(t740, t740);
+        float t742 = ((t739 * 0.1725) * t739);
+        float t743 = (t739 - 0.1725);
+        float t744 = ((t743 * 0.1725) * t743);
+        float t745 = (0.010000002 * t741);
+        if ((t745 < ((sign(t743) * 0.1625) * t744))) {
+          r29 = ((sqrt((t741 + t744)) * 5.7971015) - 0.05);
+        } else {
+          r29 = (-0.15 + ((((sign(t739) * 0.1625) * t742) < t745) ? (sqrt((t741 + t742)) * 5.7971015) : ((sqrt((0.94202894 * t741)) + (t739 * 0.10000001)) * 5.7971015)));
+        }
+        float2 t746 = ((t737.x < r29) ? t737 : float2(r29, 51.7));
+        float3 t747 = (t576 - float3(2.0, 0.2, 1.0));
+        float2 t748 = float2(length(t747.xz), t747.y);
+        float t749 = dot(t748, float2(-0.3333333, 0.94280905));
+        if ((t749 < 0.0)) {
+          r30 = (length(t748) - 0.2);
+        } else {
+          float2 t750 = (t748 + float2(-0.0, -0.3));
+          r30 = ((0.28284273 < t749) ? (length(t750) - 0.1) : (dot(t748, float2(0.94280905, 0.3333333)) - 0.2));
+        }
+        r31 = ((t746.x < r30) ? t746 : float2(r30, 37.0));
+      }
+      r37 = min(r37, saturate(((8.0 * r31.x) / r36)));
+      r36 = (r36 + clamp(r31.x, 0.01, 0.2));
+      if (((r37 < 0.004) || (t575 < r36))) {
+        break;
+      }
+      r34 = r33;
+    }
+    float t751 = saturate(r37);
+    float t752 = (saturate(t572) * ((t751 * t751) * (3.0 - (2.0 * t751))));
+    float3 t753 = (((pow(saturate(dot(r49, t571)), 16.0) * float3(6.5, 5.0, 3.5)) * t752) * (0.04 + (0.96 * pow(saturate((1.0 - dot(t571, float3(-0.5698029, 0.45584232, -0.6837635)))), 5.0))));
+    float3 t754 = (((float3(2.86, 2.2, 1.54) * r50) * t752) + (t753 * r48));
+    float t755 = (saturate(sqrt(t568)) * t569);
+    float t756 = saturate(((t385.y + 0.2) / 0.4));
+    float t757 = (t756 * (3.0 - (2.0 * t756)));
+    float t758 = (t573 / t385.y);
+    float t759 = ((0.0 < t758) ? min(2.5, t758) : 2.5);
+    r47 = 1.0;
+    r46 = 0.02;
+    for (; (r45 < 24); r45++) {
+      float3 t760 = (t206 + (t385 * r46));
+      float3 t761 = (abs((t760 + float3(2.0, -0.3, -0.25))) - float3(0.3, 0.3, 1.0));
+      float3 t762 = max(t761, float3(0.0));
+      r41 = float2(t760.y, 0.0);
+      if (((min(max(t761.x, max(t761.y, t761.z)), 0.0) + length(t762)) < t760.y)) {
+        float3 t763 = (t760 + float3(2.0, -0.25, -0.0));
+        float t764 = (length(t763) - 0.25);
+        float2 t765 = ((t760.y < t764) ? r41 : float2(t764, 26.9));
+        float3 t766 = abs((t760 + float3(2.0, -0.25, -1.0)).xzy);
+        float2 t767 = (float2(0.15, 0.25) - (2.0 * t766.xz));
+        float t768 = clamp((((0.15 * t767.x) - (0.25 * t767.y)) / 0.085), -1.0, 1.0);
+        float2 t769 = (t766.xz - (float2(0.075, 0.125) * float2((1.0 - t768), (1.0 + t768))));
+        float t770 = (t766.y - 0.04);
+        float t771 = ((length(t769) * sign((((t766.x * 0.25) - 0.0375) + (t766.z * 0.15)))) - 0.08);
+        float2 t772 = max(float2(t771, t770), float2(0.0));
+        float t773 = (min(max(t771, t770), 0.0) + length(t772));
+        r41 = ((t765.x < t773) ? t765 : float2(t773, 17.0));
+      }
+      float3 t774 = (abs((t760 + float3(-0.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t775 = max(t774, float3(0.0));
+      if (((min(max(t774.x, max(t774.y, t774.z)), 0.0) + length(t775)) < r41.x)) {
+        float3 t776 = (t760 + float3(-0.0, -0.3, -1.0));
+        float3 t777 = (t776 * float3(1.0, -1.0, 1.0));
+        float t778 = abs(t777.x);
+        float2 t779 = float2(t778, t777.y);
+        float3 t780 = float3(t778, t777.yz);
+        float t781 = (sqrt(((dot(t780, t780) + 0.0625) - (0.5 * (((-0.866025 * t776.y) < (-0.5 * t778)) ? dot(t779, float2(0.866025, -0.5)) : length(t779))))) - 0.05);
+        float2 t782 = ((r41.x < t781) ? r41 : float2(t781, 25.0));
+        float3 t783 = abs((t760 + float3(-0.0, -0.25, -0.0)));
+        float3 t784 = (abs((float3(-0.275, -0.225, -0.175) + t783)) - 0.025);
+        float3 t785 = (t783 - float3(0.3, 0.25, 0.2));
+        float3 t786 = max(float3(t785.x, t784.yz), float3(0.0));
+        float3 t787 = max(float3(t784.x, t785.y, t784.z), float3(0.0));
+        float3 t788 = max(float3(t784.xy, t785.z), float3(0.0));
+        float t789 = min(min((length(t786) + min(max(t785.x, max(t784.y, t784.z)), 0.0)), (length(t787) + min(max(t784.x, max(t785.y, t784.z)), 0.0))), (length(t788) + min(max(t784.x, max(t784.y, t785.z)), 0.0)));
+        float2 t790 = ((t782.x < t789) ? t782 : float2(t789, 16.9));
+        float3 t791 = (t760 + float3(-0.0, -0.45, 1.0));
+        float t792 = length(t791.xz);
+        float2 t793 = float2(t792, t791.y);
+        float2 t794 = (t793 - (float2(0.3375, -0.45) * saturate((dot(t793, float2(0.3375, -0.45)) / 0.31640625))));
+        float2 t795 = (t793 - (float2(0.3375, -0.45) * float2(saturate((t792 / 0.3375)), 1.0)));
+        float t796 = (sqrt(min(dot(t794, t794), dot(t795, t795))) * sign(max((-((t792 * -0.45) - (t791.y * 0.3375))), (-t760.y))));
+        float2 t797 = ((t790.x < t796) ? t790 : float2(t796, 55.0));
+        float3 t798 = (t760 + float3(-0.0, -0.25, 2.0));
+        float t799 = length(t798.xz);
+        float2 t800 = float2(t799, t798.y);
+        float2 t801 = ((t800 - float2(0.1, 0.25)) + (float2(-0.15, 0.5) * saturate((dot((float2(0.1, 0.25) - t800), float2(-0.15, 0.5)) / 0.2725))));
+        float t802 = (abs(t798.y) - 0.25);
+        float2 t803 = float2((t799 - min(t799, ((t798.y < 0.0) ? 0.25 : 0.1))), t802);
+        float t804 = sqrt(min(dot(t803, t803), dot(t801, t801)));
+        float t805 = ((max(t801.x, t802) < 0.0) ? (-t804) : t804);
+        float2 t806 = ((t797.x < t805) ? t797 : float2(t805, 13.67));
+        float3 t807 = (t760 + float3(-0.0, -0.0, 3.0));
+        float t808 = length(t807.xz);
+        float2 t809 = float2(t808, t807.y);
+        float2 t810 = (t809 - (float2(0.6, 0.8) * clamp(dot(t809, float2(0.6, 0.8)), 0.0, 0.4)));
+        float t811 = max((length(t809) - 0.4), (length(t810) * sign(((0.8 * t808) - (0.6 * t807.y)))));
+        r41 = ((t806.x < t811) ? t806 : float2(t811, 49.13));
+      }
+      float3 t812 = (abs((t760 + float3(-1.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t813 = max(t812, float3(0.0));
+      if (((min(max(t812.x, max(t812.y, t812.z)), 0.0) + length(t813)) < r41.x)) {
+        float3 t814 = (t760 - float3(1.0, 0.3, 1.0));
+        float2 t815 = float2((length(t814.xy) - 0.25), t814.z);
+        float t816 = (length(t815) - 0.05);
+        float2 t817 = ((r41.x < t816) ? r41 : float2(t816, 7.1));
+        float3 t818 = (abs((t760 + float3(-1.0, -0.25, -0.0))) - float3(0.3, 0.25, 0.1));
+        float3 t819 = max(t818, float3(0.0));
+        float t820 = (min(max(t818.x, max(t818.y, t818.z)), 0.0) + length(t819));
+        float2 t821 = ((t817.x < t820) ? t817 : float2(t820, 3.0));
+        float3 t822 = (float3(-0.9, -0.1, 1.1) + t760);
+        float3 t823 = (t822 - (float3(0.3) * saturate((dot(t822, float3(0.3)) / 0.27))));
+        float t824 = (length(t823) - 0.1);
+        float2 t825 = ((t821.x < t824) ? t821 : float2(t824, 31.9));
+        float3 t826 = (t760 + float3(-1.0, -0.25, 2.0));
+        float2 t827 = (abs(float2(length(t826.xz), t826.y)) - float2(0.15, 0.25));
+        float2 t828 = max(t827, float2(0.0));
+        float t829 = (min(max(t827.x, t827.y), 0.0) + length(t828));
+        float2 t830 = ((t825.x < t829) ? t825 : float2(t829, 8.0));
+        float3 t831 = abs((t760 + float3(-1.0, -0.2, 3.0)));
+        float2 t832 = (t831.xy - (float2(-1.7320508, 1.0) * min(dot(float2(-0.8660254, 0.5), t831.xy), 0.0)));
+        float2 t833 = (t832 - float2(clamp(t832.x, -0.11547001, 0.11547001), 0.2));
+        float t834 = (length(t833) * sign((t832.y - 0.2)));
+        float t835 = (t831.z - 0.05);
+        float2 t836 = max(float2(t834, t835), float2(0.0));
+        float t837 = (min(max(t834, t835), 0.0) + length(t836));
+        r41 = ((t830.x < t837) ? t830 : float2(t837, 18.4));
+      }
+      float3 t838 = (abs((t760 + float3(1.0, -0.35, 1.0))) - float3(0.35, 0.35, 2.5));
+      float3 t839 = max(t838, float3(0.0));
+      if (((min(max(t838.x, max(t838.y, t838.z)), 0.0) + length(t839)) < r41.x)) {
+        float3 t840 = (t760 + float3(1.0, 0.6, 3.0));
+        float2 t841 = abs(t840.xz);
+        float2 t842 = (((t841.x < t841.y) ? t841.yx : t841) - 0.5);
+        float t843 = (t840.y - (0.5 * t842.x));
+        float t844 = (t842.x + (0.5 * t840.y));
+        float t845 = (t842.y + saturate((-t842.y)));
+        float t846 = saturate(((t843 - (0.5 * t842.y)) / 1.5));
+        float t847 = (t842.y + (0.5 * t846));
+        float t848 = (t843 - (1.25 * t846));
+        float t849 = (((0.0 < min(t843, ((-(t842.y * 1.25)) - (t843 * 0.5)))) ? 0.0 : min((((1.25 * t845) * t845) + (t843 * t843)), (((1.25 * t847) * t847) + (t848 * t848)))) + (t844 * t844));
+        float t850 = (sqrt((t849 / 1.25)) * sign(max(t844, (-t840.y))));
+        float2 t851 = ((r41.x < t850) ? r41 : float2(t850, 13.56));
+        r43 = abs((t760 + float3(1.0, -0.15, 2.0)));
+        float t852 = (((r43.x - 0.35) + r43.y) + r43.z);
+        if (((3.0 * r43.x) >= t852)) {
+          bool t853 = ((3.0 * r43.z) < t852);
+          bool t854 = ((3.0 * r43.y) < t852);
+          bool t855 = (t854 || t853);
+          r42 = (t855 ? r42 : (t852 * 0.57735026));
+          r43 = (t854 ? r43.yzx : (t853 ? r43.zxy : r44));
+          r38 = (!t855);
+        } else {
+          r38 = false;
+        }
+        if ((!r38)) {
+          float t856 = clamp((0.5 * ((r43.z + 0.35) - r43.y)), 0.0, 0.35);
+          float3 t857 = float3(r43.x, ((r43.y - 0.35) + t856), (r43.z - t856));
+          r42 = length(t857);
+        }
+        float2 t858 = ((t851.x < r42) ? t851 : float2(r42, 23.56));
+        float3 t859 = (t760 + float3(1.0, -0.15, 1.0));
+        float2 t860 = (t859.xy / 0.25980762);
+        float t861 = (t860.y + 0.57735026);
+        float t862 = (1.7320508 * t861);
+        float t863 = (abs(t860.x) - 1.0);
+        float2 t864 = (float2((t863 - t862), ((-(1.7320508 * t863)) - t861)) / 2.0);
+        float3 t865 = (((-t863) < t862) ? float3(t864, t859.z) : float3(t863, t861, t859.z));
+        float2 t866 = float2((t865.x - clamp(t865.x, -2.0, 0.0)), t865.y);
+        float t867 = ((length(t866) * 0.25980762) * sign((-t865.y)));
+        float t868 = (abs(t865.z) - 0.05);
+        float2 t869 = max(float2(t867, t868), float2(0.0));
+        float t870 = (length(t869) + min(max(t867, t868), 0.0));
+        float2 t871 = ((t858.x < t870) ? t858 : float2(t870, 43.5));
+        float3 t872 = (t760 + float3(1.0, -0.25, -0.0));
+        float3 t873 = (t872 / float3(0.2, 0.25, 0.05));
+        float3 t874 = (t872 / float3(0.040000003, 0.0625, 0.0025000002));
+        float t875 = length(t873);
+        float t876 = ((t875 * (t875 - 1.0)) / length(t874));
+        float2 t877 = ((t871.x < t876) ? t871 : float2(t876, 43.17));
+        float3 t878 = (t760 + float3(1.0, -0.25, -1.0));
+        float t879 = abs(t878.x);
+        float2 t880 = float2(t879, t878.y);
+        float2 t881 = ((float2(-0.26749888, 0.9635582) * t879) + (float2(0.9635582, 0.26749888) * t878.y));
+        float t882 = length(t880);
+        float2 t883 = (float2(((0.0 < max(t881.y, t881.x)) ? t881.x : (-t882)), abs((((0.0 < t881.x) ? t881.y : t882) - 0.2))) + float2(-0.3, -0.0));
+        float2 t884 = max(t883, float2(0.0));
+        float2 t885 = (abs(float2((length(t884) + min(0.0, max(t883.x, t883.y))), t878.z)) - float2(0.03, 0.08));
+        float2 t886 = max(t885, float2(0.0));
+        float t887 = (min(max(t885.x, t885.y), 0.0) + length(t886));
+        r41 = ((t877.x < t887) ? t877 : float2(t887, 11.5));
+      } else {
+        r43 = r44;
+      }
+      float3 t888 = (abs((t760 + float3(-2.0, -0.3, 1.0))) - float3(0.35, 0.3, 2.5));
+      float3 t889 = max(t888, float3(0.0));
+      if (((min(max(t888.x, max(t888.y, t888.z)), 0.0) + length(t889)) < r41.x)) {
+        float3 t890 = abs((t760 + float3(-2.0, -0.2, 3.0)));
+        float2 t891 = (t890.xy - (float2(-1.847759, 0.76536685) * min(dot(float2(-0.9238795, 0.38268343), t890.xy), 0.0)));
+        float2 t892 = (t891 - (float2(1.847759, 0.76536685) * min(dot(float2(0.9238795, 0.38268343), t891), 0.0)));
+        float2 t893 = (t892 - float2(clamp(t892.x, -0.082842715, 0.082842715), 0.2));
+        float t894 = (length(t893) * sign(t893.y));
+        float t895 = (t890.z - 0.05);
+        float2 t896 = max(float2(t894, t895), float2(0.0));
+        float t897 = (min(max(t894, t895), 0.0) + length(t896));
+        float2 t898 = ((r41.x < t897) ? r41 : float2(t897, 51.8));
+        float3 t899 = (float3(-2.1, -0.04, 2.0) + t760);
+        float t900 = dot(t899, float3(-0.3, 0.45, 0.1));
+        float3 t901 = ((t899 * 0.3025) - (float3(-0.3, 0.45, 0.1) * t900));
+        float t902 = (abs((t900 - 0.15125)) - 0.15125);
+        float t903 = ((t902 * 0.3025) * t902);
+        float t904 = (length(t901) - 0.0242);
+        float t905 = (t904 * t904);
+        float t906 = ((max(t904, t902) < 0.0) ? (-min(t905, t903)) : (((0.0 < t904) ? t905 : 0.0) + ((0.0 < t902) ? t903 : 0.0)));
+        float t907 = ((sign(t906) * sqrt(abs(t906))) / 0.3025);
+        float2 t908 = ((t898.x < t907) ? t898 : float2(t907, 31.2));
+        float3 t909 = (float3(-2.1, -0.09, 1.0) + t760);
+        float t910 = (dot(t909, float3(-0.3, 0.4, 0.1)) / 0.26000002);
+        float t911 = (t910 * 0.26000002);
+        float t912 = sqrt((dot(t909, t909) - (t911 * t910)));
+        float t913 = (t912 - 0.15);
+        float t914 = saturate((((-0.10000001 * t913) + t911) / 0.27));
+        float t915 = (t913 - (t914 * -0.10000001));
+        float t916 = (t910 - t914);
+        float t917 = (abs((t910 - 0.5)) - 0.5);
+        float t918 = max(0.0, (t912 + ((t910 < 0.5) ? -0.15 : -0.05)));
+        float t919 = sqrt(min(((t918 * t918) + ((t917 * 0.26000002) * t917)), ((t915 * t915) + ((t916 * 0.26000002) * t916))));
+        float t920 = ((max(t915, t917) < 0.0) ? (-t919) : t919);
+        float2 t921 = ((t908.x < t920) ? t908 : float2(t920, 46.1));
+        float3 t922 = (float3(-2.1, -0.15, -0.0) + t760);
+        float t923 = dot(t922, float3(-0.2, 0.35, 0.1));
+        float3 t924 = ((t922 * 0.1725) - (float3(-0.2, 0.35, 0.1) * t923));
+        float t925 = dot(t924, t924);
+        float t926 = ((t923 * 0.1725) * t923);
+        float t927 = (t923 - 0.1725);
+        float t928 = ((t927 * 0.1725) * t927);
+        float t929 = (0.010000002 * t925);
+        if ((t929 < ((sign(t927) * 0.1625) * t928))) {
+          r39 = ((sqrt((t925 + t928)) * 5.7971015) - 0.05);
+        } else {
+          r39 = (-0.15 + ((((sign(t923) * 0.1625) * t926) < t929) ? (sqrt((t925 + t926)) * 5.7971015) : ((sqrt((0.94202894 * t925)) + (t923 * 0.10000001)) * 5.7971015)));
+        }
+        float2 t930 = ((t921.x < r39) ? t921 : float2(r39, 51.7));
+        float3 t931 = (t760 - float3(2.0, 0.2, 1.0));
+        float2 t932 = float2(length(t931.xz), t931.y);
+        float t933 = dot(t932, float2(-0.3333333, 0.94280905));
+        if ((t933 < 0.0)) {
+          r40 = (length(t932) - 0.2);
+        } else {
+          float2 t934 = (t932 + float2(-0.0, -0.3));
+          r40 = ((0.28284273 < t933) ? (length(t934) - 0.1) : (dot(t932, float2(0.94280905, 0.3333333)) - 0.2));
+        }
+        r41 = ((t930.x < r40) ? t930 : float2(r40, 37.0));
+      }
+      r47 = min(r47, saturate(((8.0 * r41.x) / r46)));
+      r46 = (r46 + clamp(r41.x, 0.01, 0.2));
+      if (((r47 < 0.004) || (t759 < r46))) {
+        break;
+      }
+      r44 = r43;
+    }
+    float t935 = saturate(r47);
+    float t936 = saturate((1.0 + t384));
+    float3 t937 = ((t754 + ((float3(0.24000001, 0.36, 0.69) * r50) * t755)) + ((((((t756 * float3(0.8, 1.2, 2.6)) * t757) * t755) * (0.04 + (0.96 * pow(t936, 5.0)))) * ((t935 * t935) * (3.0 - (2.0 * t935)))) * r48));
+    float3 t938 = ((t937 + ((0.1375 * r50) * ((saturate(dot(float2(0.6401844, 0.7682213), r49.xz)) * saturate((1.0 - t206.y))) * t569))) + ((r50 * 0.25) * ((t936 * t936) * t569)));
+    r52 = mix(t938, float3(0.7, 0.7, 0.9), float3((1.0 - exp2((-(((0.00014426949 * r51.x) * r51.x) * r51.x))))));
+  } else {
+    r52 = (float3(0.7, 0.7, 0.9) - (max(t10.y, 0.0) * 0.3));
+  }
+  float3 t939 = pow(saturate(r52), float3(0.4545));
+  _mtl_o.fragColor = float4(t939, 1.0);
+  return _mtl_o;
+}
+
+// stats: 3231 alu 0 tex 63 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// uniforms: 4 (total size: 52)
+//  #0: iResolution (high float) 3x1 [-1] loc 0
+//  #1: iTime (high float) 1x1 [-1] loc 16
+//  #2: iMouse (high float) 4x1 [-1] loc 32
+//  #3: iFrame (high int) 1x1 [-1] loc 48

@@ -1,0 +1,20 @@
+uniform vec4 _Color;
+uniform float _Cutoff;
+uniform sampler2D _MainTex;
+void main ()
+{
+  vec4 t0 = (_Color * texture2D(_MainTex, gl_TexCoord[0].xy));
+  if ((t0.w < _Cutoff)) {
+    discard;
+  }
+  gl_FragData[0] = t0;
+}
+
+// stats: 2 alu 2 tex 1 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 2 (total size: 0)
+//  #0: _Color (high float) 4x1 [-1]
+//  #1: _Cutoff (high float) 1x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

@@ -1,0 +1,56 @@
+#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) out mediump vec4 _fragData;
+uniform mediump sampler2D _MainTex;
+uniform highp vec4 _MainTex_TexelSize;
+in highp vec2 xlv_TEXCOORD0;
+in highp vec4 xlv_TEXCOORD1;
+void main ()
+{
+  mediump vec4 r0;
+  mediump vec4 t0 = vec4(xlv_TEXCOORD1.xy, 0.0, 0.0);
+  highp float t1 = textureLod(_MainTex, t0.xy, t0.w).y;
+  mediump vec4 t2 = vec4(xlv_TEXCOORD1.xw, 0.0, 0.0);
+  highp float t3 = textureLod(_MainTex, t2.xy, t2.w).y;
+  mediump vec4 t4 = vec4(xlv_TEXCOORD1.zy, 0.0, 0.0);
+  highp float t5 = textureLod(_MainTex, t4.xy, t4.w).y;
+  mediump vec4 t6 = vec4(xlv_TEXCOORD1.zw, 0.0, 0.0);
+  highp float t7 = textureLod(_MainTex, t6.xy, t6.w).y;
+  mediump vec4 t8 = vec4(xlv_TEXCOORD0, 0.0, 0.0);
+  r0 = textureLod(_MainTex, t8.xy, t8.w);
+  highp float t9 = r0.y;
+  highp float t10 = (t5 + 0.00260417);
+  highp float t11 = max(max(t10, t7), max(t1, t3));
+  highp float t12 = min(min(t10, t7), min(t1, t3));
+  highp float t13 = (t3 - t10);
+  highp float t14 = (t7 - t1);
+  if (((max(t11, t9) - min(t12, t9)) >= max(0.05, (t11 * 0.125)))) {
+    highp vec2 t15 = vec2((t13 + t14), (t13 - t14));
+    highp vec2 t16 = normalize(t15);
+    highp vec2 t17 = (t16 * (_MainTex_TexelSize.xyxy * vec4(-0.5, -0.5, 0.5, 0.5)).zw);
+    highp vec2 t18 = (xlv_TEXCOORD0 - t17);
+    mediump vec4 t19 = vec4(t18, 0.0, 0.0);
+    highp vec2 t20 = (xlv_TEXCOORD0 + t17);
+    mediump vec4 t21 = vec4(t20, 0.0, 0.0);
+    highp vec2 t22 = (clamp((t16 / (min(abs(t16.x), abs(t16.y)) * 8.0)), -2.0, 2.0) * (_MainTex_TexelSize.xyxy * vec4(-2.0, -2.0, 2.0, 2.0)).zw);
+    highp vec2 t23 = (xlv_TEXCOORD0 - t22);
+    mediump vec4 t24 = vec4(t23, 0.0, 0.0);
+    highp vec2 t25 = (xlv_TEXCOORD0 + t22);
+    mediump vec4 t26 = vec4(t25, 0.0, 0.0);
+    mediump vec4 t27 = (textureLod(_MainTex, t19.xy, t19.w) + textureLod(_MainTex, t21.xy, t21.w));
+    mediump vec4 t28 = (0.25 * ((textureLod(_MainTex, t24.xy, t24.w) + textureLod(_MainTex, t26.xy, t26.w)) + t27));
+    mediump vec3 t29 = (t27.xyz * 0.5);
+    r0 = (((t28.y < t12) || (t11 < t28.y)) ? vec4(t29, t28.w) : t28);
+  }
+  _fragData = r0;
+}
+
+// stats: 44 alu 9 tex 1 flow
+// inputs: 2
+//  #0: xlv_TEXCOORD0 (high float) 2x1 [-1]
+//  #1: xlv_TEXCOORD1 (high float) 4x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: _MainTex_TexelSize (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1]

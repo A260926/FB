@@ -1,0 +1,92 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Params_std140 {
+  uint base_index;
+  uint pad0;
+  uint pad1;
+  uint pad2;
+};
+static_assert(sizeof(_xlat_buf_Params_std140) == 16, "std140 size");
+struct _xlat_RenderElement_std430 {
+  uint type;
+  uint touches_near;
+  uint touches_far;
+  uint original_index;
+  float4 transform_inv[3];
+  packed_float3 scale;
+  uint pad;
+};
+static_assert(sizeof(_xlat_RenderElement_std430) == 80, "std430 size");
+struct _xlat_buf_RenderElements_std430 {
+  _xlat_RenderElement_std430 data[1];
+};
+struct _xlat_buf_State_std140 {
+  float4 projection[4];
+  float inv_z_far;
+  uint screen_to_clusters_shift;
+  uint cluster_screen_width;
+  uint cluster_data_size;
+  uint cluster_depth_offset;
+  uint pad0;
+  uint pad1;
+  uint pad2;
+};
+static_assert(sizeof(_xlat_buf_State_std140) == 96, "std140 size");
+struct xlatMtlShaderInput {
+  float3 vertex_attrib [[attribute(0)]];
+};
+struct xlatMtlShaderOutput {
+  float4 gl_Position [[position]];
+  float depth_interp [[user(locn0)]];
+  uint element_index [[user(locn1)]] [[flat]];
+};
+struct xlatMtlShaderUniform {
+};
+vertex xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Params_std140& params [[buffer(1)]]
+  , const device _xlat_buf_RenderElements_std430& render_elements [[buffer(2)]]
+  , constant _xlat_buf_State_std140& state [[buffer(3)]]
+  , uint gl_InstanceID [[instance_id]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  int t0 = (int(uint(params.base_index)) + int(gl_InstanceID));
+  _mtl_o.element_index = uint(t0);
+  float3 t1 = (_mtl_i.vertex_attrib * float3(render_elements.data[t0].scale));
+  float4 t2 = float4(t1, 1.0);
+  float t3 = dot(t2, float4(render_elements.data[t0].transform_inv[0]));
+  float t4 = dot(t2, float4(render_elements.data[t0].transform_inv[1]));
+  float t5 = dot(t2, float4(render_elements.data[t0].transform_inv[2]));
+  _mtl_o.depth_interp = (-t5);
+  _mtl_o.gl_Position = ((((float4(state.projection[0]) * t3) + (float4(state.projection[1]) * t4)) + (float4(state.projection[2]) * t5)) + float4(state.projection[3]));
+  return _mtl_o;
+}
+
+// stats: 12 alu 0 tex 0 flow
+// inputs: 1
+//  #0: vertex_attrib (high float) 3x1 [-1] loc 0
+// buffer #0: Params instance params layout std140 binding 0 (size: 16) metal 1
+//  member #0: uint base_index offset 0
+//  member #1: uint pad0 offset 4 (unused)
+//  member #2: uint pad1 offset 8 (unused)
+//  member #3: uint pad2 offset 12 (unused)
+// buffer #1: RenderElements storage instance render_elements layout std430 binding 2 (size: unknown) metal 2
+//  member #0: RenderElement[] data offset 0 array runtime stride 80 readonly
+//  member #1: RenderElement [] parent 0 offset 0 readonly
+//  member #2: uint type parent 1 offset 0 readonly (unused)
+//  member #3: bool touches_near parent 1 offset 4 readonly (unused)
+//  member #4: bool touches_far parent 1 offset 8 readonly (unused)
+//  member #5: uint original_index parent 1 offset 12 readonly (unused)
+//  member #6: mat3x4 transform_inv parent 1 offset 16 matrix-stride 16 readonly
+//  member #7: vec3 scale parent 1 offset 64 readonly
+//  member #8: uint pad parent 1 offset 76 readonly (unused)
+// buffer #2: State instance state layout std140 binding 1 (size: 96) metal 3
+//  member #0: mat4 projection offset 0 matrix-stride 16
+//  member #1: float inv_z_far offset 64 (unused)
+//  member #2: uint screen_to_clusters_shift offset 68 (unused)
+//  member #3: uint cluster_screen_width offset 72 (unused)
+//  member #4: uint cluster_data_size offset 76 (unused)
+//  member #5: uint cluster_depth_offset offset 80 (unused)
+//  member #6: uint pad0 offset 84 (unused)
+//  member #7: uint pad1 offset 88 (unused)
+//  member #8: uint pad2 offset 92 (unused)

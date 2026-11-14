@@ -1,0 +1,39 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_buf_Config_std140 {
+  char _pad0[32];
+  float4 color;
+  char _pad1[16];
+  uint count;
+  char _pad2[12];
+};
+static_assert(sizeof(_xlat_buf_Config_std140) == 80, "std140 size");
+struct _xlat_buf_Output_std430 {
+  uint header;
+  char _pad0[28];
+  float4 values[8];
+};
+static_assert(sizeof(_xlat_buf_Output_std430) == 160, "std430 size");
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , constant _xlat_buf_Config_std140& config [[buffer(1)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  if ((gl_GlobalInvocationID.x < min(uint(config.count), 8u))) {
+    outputData.values[int(gl_GlobalInvocationID.x)] = float4(config.color);
+  }
+}
+
+// stats: 2 alu 0 tex 1 flow
+// workgroup size: 8 1 1
+// buffer #0: Config instance config layout std140 binding 1 (size: 80) metal 1
+//  member #0: vec4 color offset 32
+//  member #1: uint count offset 64
+// buffer #1: Output storage instance outputData layout std430 binding 2 (size: 160) metal 2
+//  member #0: uint header offset 0 (unused)
+//  member #1: vec4[8] values offset 32 array 8 stride 16
+//  member #2: vec4 [] parent 1 offset 32

@@ -1,0 +1,21 @@
+uniform float _Angle;
+uniform vec4 _CenterRadius;
+uniform sampler2D _MainTex;
+void main ()
+{
+  vec2 t0 = (gl_TexCoord[1].xy / _CenterRadius.zw);
+  float t1 = clamp((1.0 - length(t0)), 0.0, 1.0);
+  float t2 = ((t1 * t1) * _Angle);
+  float t3 = cos(t2);
+  float t4 = sin(t2);
+  gl_FragData[0] = texture2D(_MainTex, (vec2(((t3 * gl_TexCoord[1].x) - (t4 * gl_TexCoord[1].y)), ((t4 * gl_TexCoord[1].x) + (t3 * gl_TexCoord[1].y))) + _CenterRadius.xy));
+}
+
+// stats: 16 alu 1 tex 0 flow
+// inputs: 1
+//  #0: gl_TexCoord (high float) 4x1 [0] loc 4
+// uniforms: 2 (total size: 0)
+//  #0: _Angle (high float) 1x1 [-1]
+//  #1: _CenterRadius (high float) 4x1 [-1]
+// textures: 1
+//  #0: _MainTex (high 2d) 0x0 [-1]

@@ -1,0 +1,75 @@
+uniform vec4 _Color;
+uniform vec4 _MainTex_ST;
+uniform mat4 _Object2World;
+uniform vec4 _Scale;
+uniform float _SquashAmount;
+uniform vec4 _SquashPlaneNormal;
+uniform float _TimeX;
+uniform vec4 _Wind;
+uniform mat4 _World2Object;
+uniform vec3 _WorldSpaceCameraPos;
+uniform vec4 _WorldSpaceLightPos0;
+uniform vec4 unity_Scale;
+attribute vec4 TANGENT;
+varying vec4 xlv_FOG;
+void main ()
+{
+  vec4 t0 = vec4(dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[0].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[1].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[2].xyz), dot(gl_Normal, gl_ModelViewMatrixInverseTranspose[3].xyz));
+  vec3 t1 = vec3(gl_Normal.z, 0.0, (-gl_Normal.x));
+  vec4 t2 = vec4(dot(t1.xz, gl_ModelViewMatrixInverseTranspose[0].xz), dot(t1.xz, gl_ModelViewMatrixInverseTranspose[1].xz), dot(t1.xz, gl_ModelViewMatrixInverseTranspose[2].xz), dot(t1.xz, gl_ModelViewMatrixInverseTranspose[3].xz));
+  vec4 t3 = normalize(t2);
+  float t4 = (1.0 - abs(TANGENT.w));
+  vec3 t5 = mix(gl_Normal, normalize(t0).xyz, vec3(t4));
+  vec4 t6 = mix(TANGENT, vec4(t3.xyz, -1.0), vec4(t4));
+  vec3 t7 = ((gl_Vertex + ((TANGENT * gl_ModelViewMatrixInverseTranspose) * t4)).xyz * _Scale.xyz);
+  float t8 = (dot(_Object2World[3].xyz, vec3(1.0)) + gl_Color.x);
+  vec4 t9 = abs(((fract((-0.5 + (fract(((_TimeX + vec2(dot(t7, vec3((gl_Color.y + t8))), t8)).xxyy * vec4(1.975, 0.793, 0.375, 0.193))) * 2.0))) * 2.0) - 1.0));
+  vec4 t10 = ((t9 * t9) * (3.0 - (2.0 * t9)));
+  vec2 t11 = (t10.xz + t10.yw);
+  vec3 t12 = ((gl_Color.y * 0.1) * t5);
+  vec3 t13 = ((t7 + (((t11.xyx * vec3(t12.x, (gl_MultiTexCoord1.y * 0.3), t12.z)) + ((_Wind.xyz * t11.y) * gl_MultiTexCoord1.y)) * _Wind.w)) + (gl_MultiTexCoord1.x * _Wind.xyz));
+  vec3 t14 = mix((t13 + (dot(_SquashPlaneNormal.xyz, (vec3(0.0, _SquashPlaneNormal.w, 0.0) - t13)) * _SquashPlaneNormal.xyz)), t13, vec3(_SquashAmount));
+  vec3 t15 = (gl_Color.w * _Color.xyz);
+  vec3 t16 = normalize(t5);
+  vec3 t17 = normalize(t6.xyz);
+  vec4 t18 = (gl_ModelViewProjectionMatrix * vec4(t14, 1.0));
+  vec2 t19 = ((gl_MultiTexCoord0.xy * _MainTex_ST.xy) + _MainTex_ST.zw);
+  vec3 t20 = (((t16.yzx * t17.zxy) - (t16.zxy * t17.yzx)) * t6.w);
+  vec4 t21 = (_World2Object * _WorldSpaceLightPos0);
+  vec3 t22 = vec3(t17.x, t20.x, t16.x);
+  vec3 t23 = vec3(t17.y, t20.y, t16.y);
+  vec3 t24 = vec3(t17.z, t20.z, t16.z);
+  vec3 t25 = (mat3(t22, t23, t24) * t21.xyz);
+  vec3 t26 = (((_World2Object * vec4(_WorldSpaceCameraPos, 1.0)).xyz * unity_Scale.w) - t14);
+  vec3 t27 = (mat3(t22, t23, t24) * t26);
+  gl_Position = t18;
+  xlv_FOG = vec4(t18.z, 0.0, 0.0, 0.0);
+  gl_TexCoord[0] = vec4(t19, 0.0, 0.0);
+  gl_FrontColor = vec4(t15, _Color.w);
+  gl_TexCoord[1] = vec4(t25, 0.0);
+  gl_TexCoord[2] = vec4(t27, 0.0);
+}
+
+// stats: 103 alu 0 tex 0 flow
+// inputs: 6
+//  #0: gl_MultiTexCoord1 (high float) 4x1 [-1] loc 7
+//  #1: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #2: gl_Color (high float) 4x1 [-1] loc 2
+//  #3: gl_Normal (high float) 3x1 [-1] loc 1
+//  #4: gl_Vertex (high float) 4x1 [-1] loc 0
+//  #5: TANGENT (high float) 4x1 [-1]
+// uniforms: 14 (total size: 0)
+//  #0: gl_ModelViewMatrixInverseTranspose (high float) 4x4 [-1]
+//  #1: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #2: _Color (high float) 4x1 [-1]
+//  #3: _MainTex_ST (high float) 4x1 [-1]
+//  #4: _Object2World (high float) 4x4 [-1]
+//  #5: _Scale (high float) 4x1 [-1]
+//  #6: _SquashAmount (high float) 1x1 [-1]
+//  #7: _SquashPlaneNormal (high float) 4x1 [-1]
+//  #8: _TimeX (high float) 1x1 [-1]
+//  #9: _Wind (high float) 4x1 [-1]
+//  #10: _World2Object (high float) 4x4 [-1]
+//  #11: _WorldSpaceCameraPos (high float) 3x1 [-1]
+//  #12: _WorldSpaceLightPos0 (high float) 4x1 [-1]
+//  #13: unity_Scale (high float) 4x1 [-1]

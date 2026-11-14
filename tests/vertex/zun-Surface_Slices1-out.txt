@@ -1,0 +1,27 @@
+uniform vec4 _MainTex_ST;
+uniform mat4 _Object2World;
+uniform vec4 _ProjectionParams;
+varying vec4 xlv_FOG;
+void main ()
+{
+  vec4 t0 = (gl_ModelViewProjectionMatrix * gl_Vertex);
+  vec2 t1 = ((gl_MultiTexCoord0.xy * _MainTex_ST.xy) + _MainTex_ST.zw);
+  vec4 t2 = (_Object2World * gl_Vertex);
+  vec4 t3 = (t0 * 0.5);
+  vec2 t4 = (vec2(t3.x, (t3.y * _ProjectionParams.x)) + t3.w);
+  gl_Position = t0;
+  xlv_FOG = vec4(t0.z, 0.0, 0.0, 0.0);
+  gl_TexCoord[0] = vec4(t1, 0.0, 0.0);
+  gl_TexCoord[1] = vec4(t2.xyz, 0.0);
+  gl_TexCoord[2] = vec4(t4, t0.zw);
+}
+
+// stats: 19 alu 0 tex 0 flow
+// inputs: 2
+//  #0: gl_MultiTexCoord0 (high float) 4x1 [-1] loc 6
+//  #1: gl_Vertex (high float) 4x1 [-1] loc 0
+// uniforms: 4 (total size: 0)
+//  #0: gl_ModelViewProjectionMatrix (high float) 4x4 [-1]
+//  #1: _MainTex_ST (high float) 4x1 [-1]
+//  #2: _Object2World (high float) 4x4 [-1]
+//  #3: _ProjectionParams (high float) 4x1 [-1]

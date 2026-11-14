@@ -1,0 +1,63 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct _xlat_Pair_std430_row {
+  float x;
+  float y;
+};
+static_assert(sizeof(_xlat_Pair_std430_row) == 8, "std430 size");
+struct _xlat_element_packed_float3_16 { packed_float3 value; char _pad[4]; };
+struct _xlat_buf_Input_std430_row {
+  _xlat_Pair_std430_row pairs[2];
+  float2 matrices[2][2];
+  _xlat_element_packed_float3_16 transform[2];
+  packed_float3 direction;
+  float weight;
+};
+static_assert(sizeof(_xlat_buf_Input_std430_row) == 96, "std430 size");
+struct _xlat_element_float_16 { float value; char _pad[12]; };
+struct _xlat_buf_Output_std140 {
+  _xlat_element_float_16 values[2];
+  float4 result;
+};
+static_assert(sizeof(_xlat_buf_Output_std140) == 48, "std140 size");
+struct xlatMtlShaderInput {
+};
+struct xlatMtlShaderOutput {
+  float4 color [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  int index;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device _xlat_buf_Input_std430_row& source [[buffer(1)]]
+  , device _xlat_buf_Output_std140& _xlat_blk_Output [[buffer(2)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  float t0 = float(source.pairs[_mtl_u.index].x);
+  float t1 = float(source.pairs[_mtl_u.index].y);
+  float2 t2 = ((float2(float2(source.matrices[_mtl_u.index][0][0], source.matrices[_mtl_u.index][1][0])) * t0) + (float2(float2(source.matrices[_mtl_u.index][0][1], source.matrices[_mtl_u.index][1][1])) * t1));
+  _xlat_blk_Output.values[_mtl_u.index].value = t2.x;
+  float3 t3 = (((float3(source.transform[0].value) * t2.x) + float3(source.direction)) + (float3(source.transform[1].value) * t2.y));
+  _xlat_blk_Output.result = float4(t3, float(source.weight));
+  _mtl_o.color = float4(t2, t0, t1);
+  return _mtl_o;
+}
+
+// stats: 7 alu 0 tex 0 flow
+// uniforms: 1 (total size: 4)
+//  #0: index (high int) 1x1 [-1] loc 0
+// buffer #0: Input storage instance source layout std430 binding 2 (size: 96) metal 1
+//  member #0: Pair[2] pairs offset 0 array 2 stride 8 readonly
+//  member #1: Pair [] parent 0 offset 0 readonly
+//  member #2: float x parent 1 offset 0 readonly
+//  member #3: float y parent 1 offset 4 readonly
+//  member #4: mat2[2] matrices offset 16 array 2 stride 16 readonly
+//  member #5: mat2 [] parent 4 offset 16 matrix-stride 8 row-major readonly
+//  member #6: mat2x3 transform offset 48 matrix-stride 16 readonly
+//  member #7: vec3 direction offset 80 readonly
+//  member #8: float weight offset 92 readonly
+// buffer #1: Output storage layout std140 binding 4 (size: 48) metal 2
+//  member #0: float[2] values offset 0 array 2 stride 16 writeonly
+//  member #1: float [] parent 0 offset 0 writeonly
+//  member #2: vec4 result offset 32 writeonly

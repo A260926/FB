@@ -1,0 +1,89 @@
+#version 320 es
+layout(local_size_x = 8, local_size_y = 8) in;
+struct RenderElement {
+  highp uint type;
+  bool touches_near;
+  bool touches_far;
+  highp uint original_index;
+  highp mat3x4 transform_inv;
+  highp vec3 scale;
+  highp uint pad;
+};
+layout(std430, binding = 3) restrict buffer RenderElements {
+  restrict readonly RenderElement data[];
+} render_elements;
+layout(std430, binding = 2) restrict buffer ClusterStore {
+  restrict highp uint data[];
+} cluster_store;
+layout(std430, binding = 1) restrict buffer ClusterRender {
+  restrict readonly highp uint data[];
+} cluster_render;
+layout(std140, binding = 0) uniform Params {
+  highp uint cluster_render_data_size;
+  highp uint max_render_element_count_div_32;
+  highp uvec2 cluster_screen_size;
+  highp uint render_element_count_div_32;
+  highp uint max_cluster_element_count_div_32;
+  highp uint pad1;
+  highp uint pad2;
+} params;
+void main ()
+{
+  highp int r0;
+  highp uint r1;
+  highp int r2;
+  if ((!(greaterThanEqual(gl_GlobalInvocationID.xy, params.cluster_screen_size) != bvec2(false)))) {
+    highp int t0 = (int(gl_GlobalInvocationID.x) + (int(params.cluster_screen_size.x) * int(gl_GlobalInvocationID.y)));
+    highp int t1 = (t0 * int(params.cluster_render_data_size));
+    for (r2 = 0; (uint(r2) < params.render_element_count_div_32); r2++) {
+      r1 = cluster_render.data[(t1 + r2)];
+      while ((int(r1) != 0)) {
+        highp int t2 = findLSB(int(r1));
+        highp int t3 = ((r2 << 5u) + t2);
+        highp uint t4 = render_elements.data[t3].type;
+        highp uint t5 = cluster_render.data[((t1 + int(params.max_render_element_count_div_32)) + t3)];
+        if ((int(t5) != 0)) {
+          mediump int t6 = findMSB(t5);
+          highp int t7 = (t6 + 1);
+          highp int t8 = (render_elements.data[t3].touches_far ? 32 : t7);
+          highp int t9 = ((t0 + (int(t4) * (int(params.cluster_screen_size.x) * int(params.cluster_screen_size.y)))) * (int(params.max_cluster_element_count_div_32) + 32));
+          highp uint t10 = render_elements.data[t3].original_index;
+          for (r0 = (render_elements.data[t3].touches_near ? 0 : findLSB(int(t5))); (uint(r0) < uint(t8)); r0++) {
+            highp uint t11 = cluster_store.data[((t9 + int(params.max_cluster_element_count_div_32)) + r0)];
+            highp uint t12 = ((int(t11) == 0) ? 65535u : t11);
+            cluster_store.data[((t9 + int(params.max_cluster_element_count_div_32)) + r0)] = (min(t10, (t12 & 65535u)) | uint((int(max(uint((int(t10) + 1)), (t12 >> 16u))) << 16u)));
+          }
+          cluster_store.data[(t9 + int((t10 >> 5u)))] = (cluster_store.data[(t9 + int((t10 >> 5u)))] | uint((1 << t10)));
+        }
+        r1 = (r1 & uint((~(1 << uint(t2)))));
+      }
+    }
+  }
+}
+
+// stats: 46 alu 0 tex 8 flow
+// workgroup size: 8 8 1
+// buffer #0: ClusterRender storage instance cluster_render layout std430 binding 1 (size: unknown)
+//  member #0: uint[] data offset 0 array runtime stride 4 readonly
+//  member #1: uint [] parent 0 offset 0 readonly
+// buffer #1: ClusterStore storage instance cluster_store layout std430 binding 2 (size: unknown)
+//  member #0: uint[] data offset 0 array runtime stride 4
+//  member #1: uint [] parent 0 offset 0
+// buffer #2: Params instance params layout std140 binding 0 (size: 32)
+//  member #0: uint cluster_render_data_size offset 0
+//  member #1: uint max_render_element_count_div_32 offset 4
+//  member #2: uvec2 cluster_screen_size offset 8
+//  member #3: uint render_element_count_div_32 offset 16
+//  member #4: uint max_cluster_element_count_div_32 offset 20
+//  member #5: uint pad1 offset 24 (unused)
+//  member #6: uint pad2 offset 28 (unused)
+// buffer #3: RenderElements storage instance render_elements layout std430 binding 3 (size: unknown)
+//  member #0: RenderElement[] data offset 0 array runtime stride 80 readonly
+//  member #1: RenderElement [] parent 0 offset 0 readonly
+//  member #2: uint type parent 1 offset 0 readonly
+//  member #3: bool touches_near parent 1 offset 4 readonly
+//  member #4: bool touches_far parent 1 offset 8 readonly
+//  member #5: uint original_index parent 1 offset 12 readonly
+//  member #6: mat3x4 transform_inv parent 1 offset 16 matrix-stride 16 readonly (unused)
+//  member #7: vec3 scale parent 1 offset 64 readonly (unused)
+//  member #8: uint pad parent 1 offset 76 readonly (unused)

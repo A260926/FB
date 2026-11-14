@@ -1,0 +1,72 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 320
+#error This shader requires Metal 3.2 or newer
+#endif
+struct _xlat_Entry_std430 {
+  float4 value;
+  float4 transform[4];
+};
+static_assert(sizeof(_xlat_Entry_std430) == 80, "std430 size");
+struct _xlat_buf_Input_std430 {
+  _xlat_Entry_std430 entries[1];
+};
+struct _xlat_buf_Ordinary_std430 {
+  uint value;
+  uint results[1];
+};
+struct _xlat_buf_Output_std430 {
+  uint counter;
+  uint payload;
+  char _pad0[8];
+  _xlat_Entry_std430 entries[8];
+};
+static_assert(sizeof(_xlat_buf_Output_std430) == 656, "std430 size");
+template <typename P, typename T> inline T _xlat_atomic_comp_swap(P p, T compare, T value) { T expected = compare; atomic_compare_exchange_weak_explicit(p, &expected, value, memory_order_relaxed, memory_order_relaxed); return expected; }
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , const device coherent(device) _xlat_buf_Input_std430& inputData [[buffer(1)]]
+  , device _xlat_buf_Ordinary_std430& ordinary [[buffer(2)]]
+  , device _xlat_buf_Output_std430& outputData [[buffer(3)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  uint t0 = gl_GlobalInvocationID.x;
+  float4 t1 = float4(inputData.entries[int(t0)].value);
+  float4 t2 = float4(inputData.entries[int(t0)].transform[0]);
+  float4 t3 = float4(inputData.entries[int(t0)].transform[1]);
+  float4 t4 = float4(inputData.entries[int(t0)].transform[2]);
+  float4 t5 = float4(inputData.entries[int(t0)].transform[3]);
+  outputData.entries[int(t0)].value = t1;
+  outputData.entries[int(t0)].transform[0] = t2;
+  outputData.entries[int(t0)].transform[1] = t3;
+  outputData.entries[int(t0)].transform[2] = t4;
+  outputData.entries[int(t0)].transform[3] = t5;
+  outputData.entries[int(t0)].transform[int((gl_GlobalInvocationID.x & 3u))][1] = float4(0.0, t1.x, 0.0, 0.0).y;
+  int t6 = (1 + int(gl_GlobalInvocationID.x));
+  uint t7 = _xlat_atomic_comp_swap((device atomic_uint*)&outputData.counter, t0, uint(t6));
+  uint t8 = _xlat_atomic_comp_swap((device atomic_uint*)&ordinary.value, t0, uint(t6));
+  atomic_thread_fence(mem_flags::mem_device, memory_order_seq_cst, thread_scope_device);
+  ordinary.results[int(t0)] = uint(((int(uint(outputData.payload)) + int(t7)) + int(t8)));
+}
+
+// stats: 4 alu 0 tex 0 flow
+// workgroup size: 8 1 1
+// buffer #0: Input storage instance inputData layout std430 binding 0 (size: unknown) metal 1
+//  member #0: Entry[] entries offset 0 array runtime stride 80 readonly
+//  member #1: Entry [] parent 0 offset 0 readonly
+//  member #2: vec4 value parent 1 offset 0 readonly
+//  member #3: mat4 transform parent 1 offset 16 matrix-stride 16 readonly
+// buffer #1: Ordinary storage instance ordinary layout std430 binding 2 (size: unknown) metal 2
+//  member #0: uint value offset 0
+//  member #1: uint[] results offset 4 array runtime stride 4
+//  member #2: uint [] parent 1 offset 4
+// buffer #2: Output storage instance outputData layout std430 binding 1 (size: 656) metal 3
+//  member #0: uint counter offset 0
+//  member #1: uint payload offset 4
+//  member #2: Entry[8] entries offset 16 array 8 stride 80
+//  member #3: Entry [] parent 2 offset 16
+//  member #4: vec4 value parent 3 offset 16
+//  member #5: mat4 transform parent 3 offset 32 matrix-stride 16

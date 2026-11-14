@@ -1,0 +1,68 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+#if __METAL_VERSION__ < 320
+#error This shader requires Metal 3.2 or newer
+#endif
+struct _xlat_buf_GeometrySBO_std430 {
+  uint count;
+  uint maxNodeCount;
+};
+static_assert(sizeof(_xlat_buf_GeometrySBO_std430) == 8, "std430 size");
+struct _xlat_Node_std430 {
+  float4 color;
+  float depth;
+  uint next;
+  char _pad0[8];
+};
+static_assert(sizeof(_xlat_Node_std430) == 32, "std430 size");
+struct _xlat_buf_LinkedListSBO_std430 {
+  _xlat_Node_std430 nodes[1];
+};
+struct _xlat_buf_PushConsts_std140 {
+  float4 model[4];
+  float4 color;
+};
+static_assert(sizeof(_xlat_buf_PushConsts_std140) == 80, "std140 size");
+struct xlatMtlShaderInput {
+  float4 gl_FragCoord [[position]];
+};
+struct xlatMtlShaderOutput {
+};
+struct xlatMtlShaderUniform {
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , device _xlat_buf_GeometrySBO_std430& _xlat_blk_GeometrySBO [[buffer(1)]]
+  , device _xlat_buf_LinkedListSBO_std430& _xlat_blk_LinkedListSBO [[buffer(2)]]
+  , constant _xlat_buf_PushConsts_std140& pushConsts [[buffer(3)]]
+  , texture2d<uint, access::read_write, memory_coherence_device> headIndexImage [[texture(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  uint t0 = atomic_fetch_add_explicit((device atomic_uint*)&_xlat_blk_GeometrySBO.count, 1u, memory_order_relaxed);
+  if ((t0 < uint(_xlat_blk_GeometrySBO.maxNodeCount))) {
+    int2 t1 = int2(_mtl_i.gl_FragCoord.xy);
+    uint t2 = headIndexImage.atomic_exchange(uint2(int4(t1, 0, 0).xy), uint4(t0)).x;
+    _xlat_blk_LinkedListSBO.nodes[int(t0)].color = float4(pushConsts.color);
+    _xlat_blk_LinkedListSBO.nodes[int(t0)].depth = _mtl_i.gl_FragCoord.z;
+    _xlat_blk_LinkedListSBO.nodes[int(t0)].next = t2;
+  }
+  return _mtl_o;
+}
+
+// stats: 2 alu 1 tex 1 flow
+// inputs: 1
+//  #0: gl_FragCoord (high float) 4x1 [-1] loc 0
+// buffer #0: GeometrySBO storage layout std430 binding 1 (size: 8) metal 1
+//  member #0: uint count offset 0
+//  member #1: uint maxNodeCount offset 4
+// buffer #1: LinkedListSBO storage layout std430 binding 3 (size: unknown) metal 2
+//  member #0: Node[] nodes offset 0 array runtime stride 32
+//  member #1: Node [] parent 0 offset 0
+//  member #2: vec4 color parent 1 offset 0
+//  member #3: float depth parent 1 offset 16
+//  member #4: uint next parent 1 offset 20
+// buffer #2: PushConsts instance pushConsts layout std140 binding 0 (size: 80) metal 3
+//  member #0: mat4 model offset 0 matrix-stride 16 (unused)
+//  member #1: vec4 color offset 64
+// textures: 1
+//  #0: headIndexImage (high image2d) 0x0 [-1] loc 0 format r32ui component uint

@@ -1,0 +1,23 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderUniform {
+};
+// threadsPerThreadgroup: 8, 1, 1
+kernel void xlatMtlMain (constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<uint, access::read_write> counters [[texture(0)]]
+  , texture2d_array<int, access::read> layers [[texture(1)]]
+  , texture3d<int, access::write> volume [[texture(2)]]
+  , uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+  counters.write(uint4((int4(counters.read(uint2(int4(uint4(gl_GlobalInvocationID.xy, 0u, 0u)).xy))) + (1 + int(gl_GlobalInvocationID.x)))), uint2(int4(uint4(gl_GlobalInvocationID.xy, 0u, 0u)).xy));
+  int4 t0 = layers.read(uint2(int4(uint4(gl_GlobalInvocationID.xy, uint((int3(layers.get_width(), layers.get_height(), layers.get_array_size()).z - 1)), 0u)).xy), uint(int4(uint4(gl_GlobalInvocationID.xy, uint((int3(layers.get_width(), layers.get_height(), layers.get_array_size()).z - 1)), 0u)).z));
+  volume.write(t0, uint3(int4(uint4(gl_GlobalInvocationID.xy, uint((int3(volume.get_width(), volume.get_height(), volume.get_depth()).z - 1)), 0u)).xyz));
+}
+
+// stats: 4 alu 6 tex 0 flow
+// workgroup size: 8 1 1
+// textures: 3
+//  #0: counters (high image2d) 0x0 [-1] loc 0 format r32ui component uint
+//  #1: layers (high image2darray) 0x0 [-1] loc 1 format rgba32i component int readonly
+//  #2: volume (high image3d) 0x0 [-1] loc 2 format rgba16i component int writeonly

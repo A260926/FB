@@ -1,0 +1,12 @@
+attribute vec3 _in_position;
+uniform mat4 mtx;
+void main ()
+{
+  gl_Position = ((((vec4(mtx[0].x, 0.0, 0.0, 0.0) * _in_position.x) + (mtx[1] * _in_position.y)) + (mtx[2] * _in_position.z)) + mtx[3]);
+}
+
+// stats: 6 alu 0 tex 0 flow
+// inputs: 1
+//  #0: _in_position (high float) 3x1 [-1]
+// uniforms: 1 (total size: 0)
+//  #0: mtx (high float) 4x4 [-1]

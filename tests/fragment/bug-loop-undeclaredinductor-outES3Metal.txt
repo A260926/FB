@@ -1,0 +1,57 @@
+#include <metal_stdlib>
+#pragma clang diagnostic ignored "-Wparentheses-equality"
+using namespace metal;
+struct xlatMtlShaderInput {
+  half2 xlv_TEXCOORD0;
+};
+struct xlatMtlShaderOutput {
+  half4 _fragData [[color(0)]];
+};
+struct xlatMtlShaderUniform {
+  half _NumPasses;
+  half4 _ContrastShift;
+  half4 _SaturationShift;
+  half4 _HueShift;
+  half4 _LuminosityShift;
+};
+fragment xlatMtlShaderOutput xlatMtlMain (xlatMtlShaderInput _mtl_i [[stage_in]], constant xlatMtlShaderUniform& _mtl_u [[buffer(0)]]
+  , texture2d<half> _MainTex [[texture(0)]], sampler _mtlsmp__MainTex [[sampler(0)]])
+{
+  xlatMtlShaderOutput _mtl_o;
+  half3 r0 = 0;
+  half4 r1 = 0;
+  r1 = _MainTex.sample(_mtlsmp__MainTex, float2(_mtl_i.xlv_TEXCOORD0));
+  if ((half(0.0) < _mtl_u._NumPasses)) {
+    if ((half(0.0) != _mtl_u._NumPasses)) {
+      half t0 = ((_mtl_u._ContrastShift.x * half(3.0)) + half(12.0));
+      r0 = ((r1.xyz - half(0.5)) * pow((cos(t0) + half(1.0)), t0));
+      if ((half(1.0) != _mtl_u._NumPasses)) {
+        half t1 = ((_mtl_u._SaturationShift.y * half(3.0)) + half(12.0));
+        r0 = ((r0 - half(0.5)) * pow((cos(t1) + half(1.0)), t1));
+        if ((half(2.0) != _mtl_u._NumPasses)) {
+          half t2 = ((_mtl_u._HueShift.z * half(3.0)) + half(12.0));
+          half3 t3 = ((r0 - half(0.5)) * pow((cos(t2) + half(1.0)), t2));
+          half t4 = ((_mtl_u._LuminosityShift.x * half(3.0)) + half(12.0));
+          r0 = ((half(3.0) != _mtl_u._NumPasses) ? ((t3 - half(0.5)) * pow((cos(t4) + half(1.0)), t4)) : t3);
+        }
+      }
+    } else {
+      r0 = r1.xyz;
+    }
+    r1 = half4(r0.x, r0.y, r0.z, r1.w);
+  }
+  _mtl_o._fragData = half4(r1.x, r1.y, r1.z, half(1.0));
+  return _mtl_o;
+}
+
+// stats: 34 alu 1 tex 4 flow
+// inputs: 1
+//  #0: xlv_TEXCOORD0 (medium float) 2x1 [-1]
+// uniforms: 5 (total size: 40)
+//  #0: _NumPasses (medium float) 1x1 [-1] loc 0
+//  #1: _ContrastShift (medium float) 4x1 [-1] loc 8
+//  #2: _SaturationShift (medium float) 4x1 [-1] loc 16
+//  #3: _HueShift (medium float) 4x1 [-1] loc 24
+//  #4: _LuminosityShift (medium float) 4x1 [-1] loc 32
+// textures: 1
+//  #0: _MainTex (medium 2d) 0x0 [-1] loc 0
