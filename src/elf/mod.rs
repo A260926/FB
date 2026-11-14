@@ -77,6 +77,7 @@ if_sylvan! {
     pub use section_header::SectionHeader;
     pub use sym::Symtab;
     pub use sym::Sym;
+    pub use sym::SymbolSection;
     pub use dynamic::Dyn;
     pub use dynamic::Dynamic;
     pub use reloc::Reloc;
@@ -86,6 +87,43 @@ if_sylvan! {
     pub type ProgramHeaders = Vec<ProgramHeader>;
     pub type SectionHeaders = Vec<SectionHeader>;
     pub type ShdrIdx = usize;
+
+    /// A physical symbol table section (`SHT_SYMTAB` or `SHT_DYNSYM`) together
+    /// with the string table its `sh_link` points at.
+    #[derive(Debug, Clone)]
+    pub struct SymbolTable<'a> {
+        /// Section header index of the symbol table section.
+        pub section: ShdrIdx,
+        /// The parsed symbol table, with any `SHT_SYMTAB_SHNDX` attachment
+        /// applied so `get`/`iter`/`to_vec` resolve `SHN_XINDEX` entries.
+        pub symtab: Symtab<'a>,
+        /// The string table section named by the symbol table's `sh_link`.
+        pub strtab: Strtab<'a>,
+    }
+
+    /// A symbol reached through a relocation record.
+    #[derive(Debug, Clone)]
+    pub struct RelocSymbolRef<'a> {
+        /// Section header index of the `SHT_REL`/`SHT_RELA` section.
+        pub reloc_section: ShdrIdx,
+        /// Record number inside the relocation section.
+        pub reloc_index: usize,
+        /// Section the relocations apply to, i.e. the relocation section's
+        /// `sh_info`.
+        pub target_section: ShdrIdx,
+        /// Section header index of the symbol table named by the relocation
+        /// section's `sh_link`.
+        pub symtab_section: ShdrIdx,
+        /// Symbol number inside that table, i.e. the relocation's `r_sym`.
+        pub symbol_index: usize,
+        /// The referenced symbol, with any extension-resolved `st_shndx`.
+        pub symbol: Sym,
+        /// The symbol name, looked up in the table's own string table.
+        pub name: Option<&'a str>,
+        /// Where the symbol is defined, according to its raw and extended
+        /// section indices.
+        pub section: SymbolSection,
+    }
 
     #[derive(Debug)]
     /// An ELF binary. The underlying data structures are read according to the headers byte order and container size (32 or 64).
@@ -149,6 +187,10 @@ if_sylvan! {
         /// Contains the version needed information from the optional section
         /// [`SHT_GNU_VERNEED`][section_header::SHT_GNU_VERNEED] (GNU extenstion).
         pub verneed : Option<VerneedSection<'a>>,
+        /// Every physical `SHT_SYMTAB`/`SHT_DYNSYM` section in the file, keyed
+        /// by section header index, each paired with its own string table and
+        /// any attached `SHT_SYMTAB_SHNDX` extension table.
+        symbol_tables: Vec<SymbolTable<'a>>,
         ctx: Ctx,
     }
 
@@ -220,6 +262,103 @@ if_sylvan! {
             self.header.e_type == header::ET_REL
         }
 
+        /// Every physical symbol table section (`SHT_SYMTAB` and
+        /// `SHT_DYNSYM`) found in the file, in section header order, each
+        /// paired with the string table named by its `sh_link`.
+        ///
+        /// Symbol tables are never merged: two tables containing the same
+        /// symbol index or the same symbol name stay distinct.
+        #[inline]
+        pub fn symbol_tables(&self) -> &[SymbolTable<'a>] {
+            &self.symbol_tables
+        }
+
+        /// Access the symbol table stored in physical section header
+        /// `section`, together with its own string table.
+        ///
+        /// Returns `None` when `section` is not an `SHT_SYMTAB`/`SHT_DYNSYM`
+        /// section. The conventional [`Elf::syms`] field remains available for
+        /// the regular symbol table.
+        #[inline]
+        pub fn symbol_table(&self, section: ShdrIdx) -> Option<&SymbolTable<'a>> {
+            self.symbol_tables
+                .iter()
+                .find(|entry| entry.section == section)
+        }
+
+        /// Resolve the symbol referenced by relocation record `reloc_index`
+        /// inside relocation section `reloc_section`.
+        ///
+        /// Both `SHT_REL` and `SHT_RELA` sections are followed through their
+        /// own `sh_link` to find the symbol table; the regular [`Elf::syms`]
+        /// table is never assumed. `Ok(None)` means the section or record
+        /// number does not exist; an internally inconsistent reference (a
+        /// `sh_link` that is not a symbol table, or an `r_sym` past the end of
+        /// the table) returns an error. The relocation records themselves are
+        /// left untouched, so [`Elf::shdr_relocs`] keeps its original order,
+        /// offsets, types and addends.
+        pub fn reloc_symbol(
+            &self,
+            reloc_section: ShdrIdx,
+            reloc_index: usize,
+        ) -> error::Result<Option<RelocSymbolRef<'a>>> {
+            let relocs = match self
+                .shdr_relocs
+                .iter()
+                .find_map(|(idx, relocs)| (*idx == reloc_section).then_some(relocs))
+            {
+                Some(relocs) => relocs,
+                None => return Ok(None),
+            };
+            let Some(reloc) = relocs.get(reloc_index) else {
+                return Ok(None);
+            };
+            let shdr = self.section_headers.get(reloc_section).ok_or_else(|| {
+                error::Error::Malformed(format!(
+                    "Relocation section {reloc_section} is missing from section headers"
+                ))
+            })?;
+            if shdr.sh_type != section_header::SHT_REL
+                && shdr.sh_type != section_header::SHT_RELA
+            {
+                return Err(error::Error::Malformed(format!(
+                    "Section {reloc_section} is not an SHT_REL/SHT_RELA section"
+                )));
+            }
+
+            let symtab_section = shdr.sh_link as usize;
+            let entry = self.symbol_table(symtab_section).ok_or_else(|| {
+                error::Error::Malformed(format!(
+                    "Relocation section {reloc_section} sh_link ({symtab_section}) does not name a symbol table section"
+                ))
+            })?;
+            let symbol_index = reloc.r_sym;
+            let symbol = entry.symtab.get(symbol_index).ok_or_else(|| {
+                error::Error::Malformed(format!(
+                    "Relocation record {reloc_index} in section {reloc_section} references symbol {symbol_index}, \
+                     but symbol table section {symtab_section} only holds {} symbols",
+                    entry.symtab.len()
+                ))
+            })?;
+            let section = entry.symtab.section_kind(symbol_index).ok_or_else(|| {
+                error::Error::Malformed(format!(
+                    "Failed to read section index of symbol {symbol_index} in table section {symtab_section}"
+                ))
+            })?;
+            let name = entry.strtab.get_at(symbol.st_name);
+
+            Ok(Some(RelocSymbolRef {
+                reloc_section,
+                reloc_index,
+                target_section: shdr.sh_info as usize,
+                symtab_section,
+                symbol_index,
+                symbol,
+                name,
+                section,
+            }))
+        }
+
         /// Parses the contents to get the Header only. This `bytes` buffer should contain at least the length for parsing Header.
         pub fn parse_header(bytes: &'a [u8]) -> error::Result<Header> {
             bytes.pread::<Header>(0)
@@ -256,6 +395,7 @@ if_sylvan! {
                 versym: None,
                 verdef: None,
                 verneed: None,
+                symbol_tables: vec![],
             })
         }
 
@@ -311,15 +451,20 @@ if_sylvan! {
             let strtab_idx = header.e_shstrndx as usize;
             let shdr_strtab = get_strtab(&section_headers, strtab_idx)?;
 
-            let mut syms = Symtab::default();
-            let mut strtab = Strtab::default();
-            if let Some(shdr) = section_headers.iter().rfind(|shdr| shdr.sh_type as u32 == section_header::SHT_SYMTAB) {
+            // Build the registry of every physical SHT_SYMTAB/SHT_DYNSYM
+            // section together with its own string table.
+            let mut symbol_tables: Vec<SymbolTable<'a>> = vec![];
+            for (idx, shdr) in section_headers.iter().enumerate() {
+                if shdr.sh_type != section_header::SHT_SYMTAB
+                    && shdr.sh_type != section_header::SHT_DYNSYM
+                {
+                    continue;
+                }
                 let size = shdr.sh_entsize;
                 let initial_count = if size == 0 { 0 } else { shdr.sh_size / size };
 
                 // Check for extremely large counts that exceed usize capacity
                 let count = if initial_count > usize::MAX as u64 {
-
                     Err(crate::error::Error::Malformed(
                         format!(
                             "Symbol table count ({}) from section header exceeds maximum possible value",
@@ -335,8 +480,68 @@ if_sylvan! {
                     initial_count
                 };
 
-                syms = Symtab::parse_with_opts(bytes, shdr.sh_offset as usize, count as usize, ctx, opts)?;
-                strtab = get_strtab(&section_headers, shdr.sh_link as usize)?;
+                let table = Symtab::parse_with_opts(bytes, shdr.sh_offset as usize, count as usize, ctx, opts)?;
+                let table_strtab = get_strtab(&section_headers, shdr.sh_link as usize)?;
+                symbol_tables.push(SymbolTable {
+                    section: idx,
+                    symtab: table,
+                    strtab: table_strtab,
+                });
+            }
+
+            // Every SHT_SYMTAB_SHNDX section must attach to exactly one of the
+            // symbol tables above; these are strict validity checks. In
+            // permissive mode a bad attachment is ignored instead of failing.
+            if !permissive {
+                for shndx_shdr in section_headers.iter() {
+                    if shndx_shdr.sh_type != section_header::SHT_SYMTAB_SHNDX {
+                        continue;
+                    }
+                    let link = shndx_shdr.sh_link as usize;
+                    match section_headers.get(link) {
+                        Some(linked)
+                            if linked.sh_type == section_header::SHT_SYMTAB
+                                || linked.sh_type == section_header::SHT_DYNSYM => {}
+                        _ => {
+                            return Err(crate::error::Error::Malformed(format!(
+                                "SHT_SYMTAB_SHNDX section sh_link ({link}) does not name a symbol table section"
+                            )));
+                        }
+                    }
+                }
+            }
+
+            // Validate each attachment (uniqueness, length, entry contents and
+            // index bounds) and attach its bytes to the matching table.
+            for entry in symbol_tables.iter_mut() {
+                let extended = validate_symtab_shndx(
+                    bytes,
+                    &section_headers,
+                    entry.section,
+                    entry.symtab.len(),
+                    ctx,
+                )
+                .or_permissive_and_value(
+                    permissive,
+                    "Invalid SHT_SYMTAB_SHNDX attachment; leaving symbol table without extension table",
+                    None,
+                )?;
+                if let Some(extended_bytes) = extended {
+                    entry.symtab.with_extended_sections(extended_bytes);
+                }
+            }
+
+            // The conventional syms/strtab fields keep pointing at the last
+            // SHT_SYMTAB section, matching the previous rfind() behaviour.
+            let mut syms = Symtab::default();
+            let mut strtab = Strtab::default();
+            if let Some(entry) = symbol_tables
+                .iter()
+                .rev()
+                .find(|entry| section_headers[entry.section].sh_type == section_header::SHT_SYMTAB)
+            {
+                syms = entry.symtab.clone();
+                strtab = entry.strtab.clone();
             }
 
             let mut is_pie = false;
@@ -407,6 +612,60 @@ if_sylvan! {
                     num_syms = cmp::max(num_syms, max_reloc_sym + 1);
                 }
                 dynsyms = Symtab::parse_with_opts(bytes, dyn_info.symtab, num_syms, ctx, opts)?;
+
+                // With PT_DYNAMIC the dynamic symbol source and count above are
+                // preserved; the section's extension table is only attached
+                // when that section describes the exact same byte range and
+                // symbol count.
+                if let Some(entry) = symbol_tables
+                    .iter()
+                    .find(|entry| section_headers[entry.section].sh_type == section_header::SHT_DYNSYM)
+                {
+                    let dynsym_shdr = &section_headers[entry.section];
+                    let sym_size = Sym::size(ctx.container);
+                    let section_end = (dynsym_shdr.sh_offset as usize)
+                        .checked_add(dynsym_shdr.sh_size as usize);
+                    let dynamic_end = num_syms
+                        .checked_mul(sym_size)
+                        .and_then(|span| dyn_info.symtab.checked_add(span));
+                    let matches = match (section_end, dynamic_end) {
+                        (Some(section_end), Some(dynamic_end)) => {
+                            dynsym_shdr.sh_offset as usize == dyn_info.symtab
+                                && section_end == dynamic_end
+                                && entry.symtab.len() == num_syms
+                        }
+                        _ => false,
+                    };
+                    if !matches {
+                        let err = crate::error::Error::Malformed(format!(
+                            "SHT_DYNSYM section {} does not match the PT_DYNAMIC symbol table \
+                             (section offset {:#x}, size {:#x}, {} symbols; dynamic offset {:#x}, {} symbols)",
+                            entry.section,
+                            dynsym_shdr.sh_offset,
+                            dynsym_shdr.sh_size,
+                            entry.symtab.len(),
+                            dyn_info.symtab,
+                            num_syms
+                        ));
+                        if permissive {
+                            // Keep the dynamic symbol source/count as parsed
+                            // above and simply leave the attachment off.
+                            let _ = err;
+                        } else {
+                            return Err(err);
+                        }
+                    } else if let Some(extended_bytes) = entry.symtab.extended_sections_bytes() {
+                        dynsyms.with_extended_sections(extended_bytes);
+                    }
+                }
+            } else if let Some(entry) = symbol_tables
+                .iter()
+                .find(|entry| section_headers[entry.section].sh_type == section_header::SHT_DYNSYM)
+            {
+                // No PT_DYNAMIC: read the dynamic symbols straight from the
+                // SHT_DYNSYM section and its own string table.
+                dynsyms = entry.symtab.clone();
+                dynstrtab = entry.strtab.clone();
             }
 
             let mut shdr_relocs = vec![];
@@ -466,6 +725,7 @@ if_sylvan! {
                 versym,
                 verdef,
                 verneed,
+                symbol_tables,
             })
         }
     }
@@ -476,6 +736,130 @@ if_sylvan! {
             let elf = Elf::parse(src)?;
             Ok((elf, src.len()))
         }
+    }
+
+    /// Validate the (at most one) `SHT_SYMTAB_SHNDX` section attached to symbol
+    /// table section `symtab_section` and return its backing bytes.
+    ///
+    /// Strict checks performed here, per the task contract:
+    /// - the attachment is unique;
+    /// - it names `symtab_section` through `sh_link`, which must be either
+    ///   `SHT_SYMTAB` or `SHT_DYNSYM`;
+    /// - it holds exactly one 32-bit entry per symbol;
+    /// - an entry is only allowed to be non-zero when the corresponding
+    ///   symbol's raw `st_shndx` is `SHN_XINDEX`;
+    /// - every extended value is a valid section header index;
+    /// - an `SHN_XINDEX` symbol must have an attachment to resolve it.
+    ///
+    /// Returns `Ok(None)` when no attachment section exists.
+    fn validate_symtab_shndx<'a>(
+        bytes: &'a [u8],
+        section_headers: &[SectionHeader],
+        symtab_section: ShdrIdx,
+        symbol_count: usize,
+        ctx: Ctx,
+    ) -> error::Result<Option<&'a [u8]>> {
+        use scroll::Pread;
+
+        let mut attachment: Option<&SectionHeader> = None;
+        for shdr in section_headers {
+            if shdr.sh_type != section_header::SHT_SYMTAB_SHNDX {
+                continue;
+            }
+            if shdr.sh_link as usize == symtab_section {
+                if attachment.is_some() {
+                    return Err(error::Error::Malformed(format!(
+                        "Symbol table section {symtab_section} has more than one SHT_SYMTAB_SHNDX attachment"
+                    )));
+                }
+                attachment = Some(shdr);
+            }
+        }
+
+        let Some(shndx_shdr) = attachment else {
+            // No attachment section: every raw st_shndx must therefore be a
+            // directly encodable value; SHN_XINDEX has nowhere to resolve.
+            let sym_shdr = &section_headers[symtab_section];
+            let sym_size = Sym::size(ctx.container);
+            let raw_field_offset = match ctx.container {
+                Container::Little => sym::sym32::SIZEOF_SYM - 2,
+                Container::Big => 6,
+            };
+            let sym_bytes = bytes.pread_with::<&[u8]>(
+                sym_shdr.sh_offset as usize,
+                sym_shdr.sh_size as usize,
+            )?;
+            for index in 0..symbol_count {
+                let raw = sym_bytes
+                    .pread_with::<u16>(index * sym_size + raw_field_offset, ctx.le)?;
+                if u32::from(raw) == section_header::SHN_XINDEX {
+                    return Err(error::Error::Malformed(format!(
+                        "Symbol {index} in table {symtab_section} uses SHN_XINDEX but no SHT_SYMTAB_SHNDX section is attached"
+                    )));
+                }
+            }
+            return Ok(None);
+        };
+
+        shndx_shdr.check_size(bytes.len())?;
+        let expected_len = symbol_count.checked_mul(4).ok_or_else(|| {
+            error::Error::Malformed("SHT_SYMTAB_SHNDX entry count overflow".into())
+        })?;
+        if shndx_shdr.sh_entsize != 0 && shndx_shdr.sh_entsize != 4 {
+            return Err(error::Error::Malformed(format!(
+                "SHT_SYMTAB_SHNDX section attached to symbol table {symtab_section} has sh_entsize {}, expected 4",
+                shndx_shdr.sh_entsize
+            )));
+        }
+        if shndx_shdr.sh_size as usize != expected_len {
+            return Err(error::Error::Malformed(format!(
+                "SHT_SYMTAB_SHNDX section attached to symbol table {symtab_section} has {} bytes, expected {expected_len} \
+                 (one 32-bit entry for each of {symbol_count} symbols)",
+                shndx_shdr.sh_size
+            )));
+        }
+
+        let extended_bytes = bytes.pread_with::<&[u8]>(
+            shndx_shdr.sh_offset as usize,
+            shndx_shdr.sh_size as usize,
+        )?;
+
+        // The raw 16-bit section encodings live in the symbol table section.
+        let sym_shdr = &section_headers[symtab_section];
+        let sym_size = Sym::size(ctx.container);
+        let sym_bytes = bytes.pread_with::<&[u8]>(
+            sym_shdr.sh_offset as usize,
+            sym_shdr.sh_size as usize,
+        )?;
+        let raw_field_offset = match ctx.container {
+            Container::Little => sym::sym32::SIZEOF_SYM - 2,
+            Container::Big => 6,
+        };
+
+        for index in 0..symbol_count {
+            let value = extended_bytes
+                .pread_with::<u32>(index * 4, ctx.le)?;
+            let raw = sym_bytes
+                .pread_with::<u16>(index * sym_size + raw_field_offset, ctx.le)?;
+            let is_xindex = u32::from(raw) == section_header::SHN_XINDEX;
+            if is_xindex {
+                if value as usize >= section_headers.len() {
+                    return Err(error::Error::Malformed(format!(
+                        "SHT_SYMTAB_SHNDX entry {index} for symbol table {symtab_section} names section {}, \
+                         but the file only has {} sections",
+                        value,
+                        section_headers.len()
+                    )));
+                }
+            } else if value != 0 {
+                return Err(error::Error::Malformed(format!(
+                    "SHT_SYMTAB_SHNDX entry {index} for symbol table {symtab_section} is {value}, \
+                     but the symbol's raw st_shndx is {raw:#06x} rather than SHN_XINDEX"
+                )));
+            }
+        }
+
+        Ok(Some(extended_bytes))
     }
 
     fn gnu_hash_len(bytes: &[u8], offset: usize, ctx: Ctx) -> error::Result<usize> {

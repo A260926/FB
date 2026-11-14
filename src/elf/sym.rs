@@ -150,6 +150,44 @@ pub fn visibility_to_str(typ: u8) -> &'static str {
     }
 }
 
+/// Where a symbol is defined, according to its `st_shndx` value together with
+/// any attached `SHT_SYMTAB_SHNDX` extension table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SymbolSection {
+    /// `SHN_UNDEF`: the symbol is undefined and must be resolved elsewhere.
+    Undefined,
+    /// `SHN_ABS`: the symbol is an absolute value.
+    Absolute,
+    /// `SHN_COMMON`: the symbol is a common block symbol.
+    Common,
+    /// One of the reserved section indices (`SHN_LORESERVE`..`SHN_HIRESERVE`)
+    /// other than `SHN_ABS`, `SHN_COMMON` or `SHN_XINDEX`; the raw 16-bit
+    /// encoding is preserved.
+    Reserved(u16),
+    /// An ordinary section header index. Large indices that were encoded as
+    /// `SHN_XINDEX` and resolved through an extension table are reported here
+    /// as well, even when their numeric value falls inside the reserved range.
+    Section(usize),
+}
+
+/// Classify a symbol's defining section from its raw 16-bit encoding and the
+/// (possibly extension-resolved) section index.
+///
+/// A raw `SHN_XINDEX` value is reported as [`SymbolSection::Reserved`] here;
+/// [`Symtab::section_kind`] upgrades it to [`SymbolSection::Section`] once an
+/// attached extension table resolves it.
+pub(crate) fn classify_symbol_section(raw: u16, resolved: usize) -> SymbolSection {
+    use crate::elf::section_header as sh;
+    match u32::from(raw) {
+        sh::SHN_UNDEF => SymbolSection::Undefined,
+        sh::SHN_ABS => SymbolSection::Absolute,
+        sh::SHN_COMMON => SymbolSection::Common,
+        sh::SHN_LORESERVE..=sh::SHN_HIRESERVE => SymbolSection::Reserved(raw),
+        _ => SymbolSection::Section(resolved),
+    }
+}
+
 macro_rules! elf_sym_std_impl {
     ($size:ty) => {
         #[cfg(test)]
@@ -385,6 +423,26 @@ impl Sym {
     pub fn st_visibility(&self) -> u8 {
         st_visibility(self.st_other)
     }
+    /// The raw 16-bit `st_shndx` encoding as stored in the symbol entry.
+    ///
+    /// For symbols read from a [`Symtab`] without an attached
+    /// `SHT_SYMTAB_SHNDX` extension table this is identical to `st_shndx`.
+    /// Symbols whose table has an attachment should be inspected through
+    /// [`Symtab::raw_shndx`] to obtain the raw encoding.
+    #[inline]
+    pub fn raw_st_shndx(&self) -> u16 {
+        self.st_shndx as u16
+    }
+    /// Classify the section that defines this symbol.
+    ///
+    /// This classification is based on the value as carried by this `Sym`
+    /// value. For symbols resolved through an attached extension table, use
+    /// [`Symtab::section_kind`], which additionally remembers the original
+    /// 16-bit encoding.
+    #[inline]
+    pub fn symbol_section(&self) -> SymbolSection {
+        classify_symbol_section(self.raw_st_shndx(), self.st_shndx)
+    }
     #[cfg(feature = "endian_fd")]
     /// Parse `count` vector of ELF symbols from `offset`
     pub fn parse(bytes: &[u8], mut offset: usize, count: usize, ctx: Ctx) -> Result<Vec<Sym>> {
@@ -491,7 +549,7 @@ if_alloc! {
 }
 
 if_alloc! {
-    #[derive(Default)]
+    #[derive(Default, Clone)]
     /// An ELF symbol table, allowing lazy iteration over symbols
     pub struct Symtab<'a> {
         bytes: &'a [u8],
@@ -499,6 +557,10 @@ if_alloc! {
         ctx: Ctx,
         start: usize,
         end: usize,
+        /// Optional `SHT_SYMTAB_SHNDX` extension table, one 32-bit entry per
+        /// symbol. When present, symbols whose raw `st_shndx` is
+        /// `SHN_XINDEX` take their section index from this slice.
+        extended: Option<&'a [u8]>,
     }
 
     impl<'a> fmt::Debug for Symtab<'a> {
@@ -508,6 +570,7 @@ if_alloc! {
                 .field("bytes", &len)
                 .field("range", &format_args!("{:#x}..{:#x}", self.start, self.end))
                 .field("count", &self.count)
+                .field("extended_section_indices", &self.extended.is_some())
                 .field("Symbols", &self.to_vec())
                 .finish()
         }
@@ -515,6 +578,11 @@ if_alloc! {
 
     impl<'a> Symtab<'a> {
         /// Parse a table of `count` ELF symbols from `offset`.
+        ///
+        /// The returned table has no attached `SHT_SYMTAB_SHNDX` extension
+        /// table, so `SHN_XINDEX` values are left untouched in `st_shndx`.
+        /// Extension tables are attached internally when parsing through
+        /// [`crate::elf::Elf`].
         pub fn parse(bytes: &'a [u8], offset: usize, count: usize, ctx: Ctx) -> Result<Symtab<'a>> {
             Self::parse_with_opts(bytes, offset, count, ctx, &crate::options::ParseOptions::default())
         }
@@ -529,7 +597,7 @@ if_alloc! {
                 )).or_permissive_and_value(
                     opts.parse_mode.is_permissive(),
                     "Symbol table offset is beyond file boundary, returning empty symbol table",
-                    Symtab { bytes: &[], count: 0, ctx, start: offset, end: offset }
+                    Symtab { bytes: &[], count: 0, ctx, start: offset, end: offset, extended: None }
                 );
             }
 
@@ -580,23 +648,133 @@ if_alloc! {
                     count: actual_count,
                     ctx,
                     start: offset,
-                    end: offset + requested_size
+                    end: offset + requested_size,
+                    extended: None,
                 })
                 .or_permissive_and_value(
                     opts.parse_mode.is_permissive(),
                     "Failed to read symbol table data",
-                    Symtab { bytes: &[], count: 0, ctx, start: offset, end: offset },
+                    Symtab { bytes: &[], count: 0, ctx, start: offset, end: offset, extended: None },
                 )
         }
 
+        /// Attach the bytes of an `SHT_SYMTAB_SHNDX` section to this symbol table.
+        ///
+        /// `extended` must hold exactly one 32-bit entry per symbol; the
+        /// caller ([`Elf`](crate::elf::Elf)) is responsible for validating the
+        /// section's size, uniqueness and `sh_link` before attaching. After
+        /// attaching, [`Symtab::get`], [`Symtab::iter`] and
+        /// [`Symtab::to_vec`] resolve `SHN_XINDEX` symbols through this table.
+        pub(crate) fn with_extended_sections(&mut self, extended: &'a [u8]) {
+            self.extended = Some(extended);
+        }
+
+        /// Whether an `SHT_SYMTAB_SHNDX` extension table is attached.
+        #[inline]
+        pub fn has_extended_sections(&self) -> bool {
+            self.extended.is_some()
+        }
+
+        /// The raw bytes of the attached `SHT_SYMTAB_SHNDX` section, if any.
+        #[inline]
+        pub(crate) fn extended_sections_bytes(&self) -> Option<&'a [u8]> {
+            self.extended
+        }
+
+        /// Read the raw 16-bit `st_shndx` encoding of the symbol at `index`.
+        ///
+        /// Returns `None` if the symbol table has no symbol at `index`.
+        #[inline]
+        pub fn raw_shndx(&self, index: usize) -> Option<u16> {
+            if index >= self.count {
+                return None;
+            }
+            let sym_size = Sym::size_with(&self.ctx);
+            // st_shndx is the last field of the 32-bit layout (offset 14);
+            // in the 64-bit layout it follows st_info/st_other (offset 6).
+            let field_offset = match self.ctx.container {
+                Container::Little => sym32::SIZEOF_SYM - 2,
+                Container::Big => 6,
+            };
+            self.bytes
+                .pread_with::<u16>(index * sym_size + field_offset, self.ctx.le)
+                .ok()
+        }
+
+        /// Resolve the defining section index of the symbol at `index`.
+        ///
+        /// A raw `SHN_XINDEX` value is replaced by the corresponding entry in
+        /// the attached extension table. Without an attachment, or when the
+        /// raw value is not `SHN_XINDEX`, the symbol's own `st_shndx` is
+        /// returned unchanged.
+        #[inline]
+        pub fn resolved_shndx(&self, index: usize) -> Option<usize> {
+            let sym = self.get(index)?;
+            let raw = self.raw_shndx(index)?;
+            if u32::from(raw) == crate::elf::section_header::SHN_XINDEX {
+                if let Some(extended) = self.extended {
+                    return extended
+                        .pread_with::<u32>(index * 4, self.ctx.le)
+                        .ok()
+                        .map(|value| value as usize);
+                }
+            }
+            Some(sym.st_shndx)
+        }
+
+        /// Classify the defining section of the symbol at `index`.
+        ///
+        /// Unlike [`Sym::symbol_section`], this keeps the original 16-bit
+        /// encoding around when an extension table resolves an `SHN_XINDEX`
+        /// entry, so a large index is reported as `Section` even when its
+        /// numeric value lands inside the reserved range. Without an
+        /// attachment, an unresolved `SHN_XINDEX` stays `Reserved`.
+        #[inline]
+        pub fn section_kind(&self, index: usize) -> Option<SymbolSection> {
+            let raw = self.raw_shndx(index)?;
+            if u32::from(raw) == crate::elf::section_header::SHN_XINDEX {
+                return match self.resolved_shndx(index)? {
+                    // resolved_shndx only diverges from the raw value when an
+                    // extension table is attached; distinguish the two cases.
+                    resolved if self.extended.is_some() => Some(SymbolSection::Section(resolved)),
+                    _ => Some(SymbolSection::Reserved(raw)),
+                };
+            }
+            let resolved = self.resolved_shndx(index)?;
+            Some(classify_symbol_section(raw, resolved))
+        }
+
         /// Try to parse a single symbol from the binary, at `index`.
+        ///
+        /// If an `SHT_SYMTAB_SHNDX` extension table is attached and the
+        /// symbol's raw `st_shndx` is `SHN_XINDEX`, the returned symbol's
+        /// `st_shndx` carries the extended section index.
         #[inline]
         pub fn get(&self, index: usize) -> Option<Sym> {
             if index >= self.count {
                 None
             } else {
-                Some(self.bytes.pread_with(index * Sym::size_with(&self.ctx), self.ctx).unwrap())
+                let mut sym: Sym = self.bytes.pread_with(index * Sym::size_with(&self.ctx), self.ctx).unwrap();
+                if let Some(resolved) = self.extension_for(index, sym.st_shndx) {
+                    sym.st_shndx = resolved;
+                }
+                Some(sym)
             }
+        }
+
+        /// Look up the extension-table value for `index` when the symbol's raw
+        /// section index is `SHN_XINDEX`; `st_shndx` here still holds the raw
+        /// 16-bit value because the extension has not been applied yet.
+        #[inline]
+        fn extension_for(&self, index: usize, raw_shndx: usize) -> Option<usize> {
+            if raw_shndx as u32 != crate::elf::section_header::SHN_XINDEX {
+                return None;
+            }
+            let extended = self.extended?;
+            extended
+                .pread_with::<u32>(index * 4, self.ctx.le)
+                .ok()
+                .map(|value| value as usize)
         }
 
         /// The number of symbols in the table.
@@ -647,6 +825,7 @@ if_alloc! {
                 index: 0,
                 count: self.count,
                 ctx: self.ctx,
+                extended: self.extended,
             }
         }
     }
@@ -658,6 +837,7 @@ if_alloc! {
         index: usize,
         count: usize,
         ctx: Ctx,
+        extended: Option<&'a [u8]>,
     }
 
     impl<'a> Iterator for SymIterator<'a> {
@@ -668,8 +848,17 @@ if_alloc! {
             if self.index >= self.count {
                 None
             } else {
+                let index = self.index;
                 self.index += 1;
-                Some(self.bytes.gread_with(&mut self.offset, self.ctx).unwrap())
+                let mut sym: Sym = self.bytes.gread_with(&mut self.offset, self.ctx).unwrap();
+                if sym.st_shndx as u32 == crate::elf::section_header::SHN_XINDEX {
+                    if let Some(extended) = self.extended {
+                        if let Ok(value) = extended.pread_with::<u32>(index * 4, self.ctx.le) {
+                            sym.st_shndx = value as usize;
+                        }
+                    }
+                }
+                Some(sym)
             }
         }
     }

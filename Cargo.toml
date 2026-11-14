@@ -67,3 +67,7 @@ repository = "m4b/goblin"
 [[example]]
 name = "baseline"
 path = "task_support/baseline.rs"
+
+[[example]]
+name = "symbol_sections"
+path = "examples/symbol_sections.rs"

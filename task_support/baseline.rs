@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[path="fixture.rs"] mod fixture;
 use fixture::{Format,Section};
 fn main() {
@@ -16,11 +17,16 @@ fn main() {
             extended.push(Section{kind:18,link:6,entsize:4,data:f.words(&[0,65521]),..Section::default()});
             extended.resize(65537,Section::default());extended[65536].kind=1;extended[65521].kind=1;
             let b=f.image(&extended);let e=goblin::elf::Elf::parse(&b).unwrap();
-            assert_eq!(e.dynsyms.len(),0);
-            println!("MISSING_DYNSYM class={} endian={} declared_table=6 parsed_symbols=0 expected=2",if wide{64}else{32},if little{"LE"}else{"BE"});
-            let got=e.syms.get(1).unwrap().st_shndx;assert_eq!(got,65535);
+            assert_eq!(e.dynsyms.len(),2);
+            assert_eq!(e.dynstrtab.get_at(e.dynsyms.get(1).unwrap().st_name),Some("beta"));
+            println!("DYNSYM_FROM_SECTION class={} endian={} declared_table=6 parsed_symbols=2",if wide{64}else{32},if little{"LE"}else{"BE"});
+            let got=e.syms.get(1).unwrap().st_shndx;assert_eq!(got,65536);
             assert_eq!(e.syms.iter().nth(1).unwrap().st_shndx,got);
-            println!("MISSING_SHNDX class={} endian={} raw_returned={} defined_section=65536 sections={}",if wide{64}else{32},if little{"LE"}else{"BE"},got,e.section_headers.len());
+            assert_eq!(e.syms.to_vec()[1].st_shndx,got);
+            assert_eq!(e.syms.raw_shndx(1),Some(0xffff));
+            assert_eq!(e.dynsyms.get(1).unwrap().st_shndx,65521);
+            assert_eq!(e.dynsyms.raw_shndx(1),Some(0xffff));
+            println!("RESOLVED_SHNDX class={} endian={} symtab_defined_section=65536 dynsym_defined_section=65521 sections={}",if wide{64}else{32},if little{"LE"}else{"BE"},e.section_headers.len());
         }
     }}
     println!("BASELINE_OK");
