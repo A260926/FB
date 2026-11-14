@@ -1,0 +1,23 @@
+CASE typing sampler_kinds_distinct checks=3
+CASE typing coordinate_dimensions checks=5
+CASE typing reference_is_scalar_float checks=3
+CASE typing argument_counts checks=3
+CASE typing resource_restrictions checks=4
+CASE typing stage_restrictions checks=9
+GROUP typing cases=6 checks=27 COMPLETE
+CASE lowering implicit_dref_fragment checks=7
+CASE lowering explicit_zero_lod checks=4
+CASE lowering dimensions_1d_and_cube checks=6
+CASE lowering asymmetric_coords_and_refs checks=13
+CASE lowering mixed_sampling_single_descriptor checks=14
+CASE lowering binding_preserved checks=5
+CASE lowering helper_parameters checks=7
+CASE lowering scalar_ordinary_sample_valid checks=5
+CASE lowering declaration_order_stable checks=9
+GROUP lowering cases=9 checks=70 COMPLETE
+CASE compat interleaved_compilation checks=10
+CASE compat runtime_reference_dataflow checks=7
+CASE compat runtime_reference_through_helper checks=6
+CASE compat all_stages_roundtrip checks=9
+GROUP compat cases=4 checks=32 COMPLETE
+TARGET_COMPLETE cases=19

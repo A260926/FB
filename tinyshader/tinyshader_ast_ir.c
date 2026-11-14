@@ -270,6 +270,94 @@ static IRType *convertTypeToIR(Module *module, IRModule *ir_module, AstType *typ
     return NULL;
 }
 
+// Image variables/parameters marked as depth-comparison use a separately
+// cached OpTypeImage with Depth=1. The ordinary image intern type is never
+// mutated, so unrelated textures keep their original type.
+static IRType *convertImageDeclTypeToIR(
+    Module *module, IRModule *ir_module, AstType *type, AstDecl *decl)
+{
+    TS_ASSERT(type->kind == TYPE_IMAGE);
+
+    IRType *sampled_type = convertTypeToIR(
+        module, ir_module, ts__getScalarType(type->image.sampled_type));
+
+    if (decl && decl->is_depth_comparison)
+    {
+        return ts__irNewDepthImageType(ir_module, sampled_type, type->image.dim);
+    }
+
+    return ts__irNewImageType(ir_module, sampled_type, type->image.dim);
+}
+
+// Conversion used whenever a concrete variable, parameter or global is created,
+// so depth-classified images consistently use their depth intern type.
+static IRType *convertDeclTypeToIR(
+    Module *module, IRModule *ir_module, AstDecl *decl)
+{
+    AstType *type = decl->type;
+    if (type->kind == TYPE_IMAGE)
+    {
+        return convertImageDeclTypeToIR(module, ir_module, type, decl);
+    }
+
+    if ((type->kind == TYPE_ARRAY || type->kind == TYPE_RUNTIME_ARRAY) &&
+        type->array.sub->kind == TYPE_IMAGE)
+    {
+        IRType *elem_type =
+            convertImageDeclTypeToIR(module, ir_module, type->array.sub, decl);
+
+        if (type->kind == TYPE_RUNTIME_ARRAY)
+        {
+            return ts__irNewRuntimeArrayType(ir_module, elem_type);
+        }
+
+        IRType *size_type = ts__irNewIntType(ir_module, 32, false);
+        IRInst *size = ts__irBuildConstInt(ir_module, size_type, type->array.size);
+        return ts__irNewArrayType(ir_module, elem_type, size);
+    }
+
+    return convertTypeToIR(module, ir_module, type);
+}
+
+// Image sampling always produces a four-component vector in SPIR-V. Narrow it
+// to the scalar/vector type the HLSL signature declared by extracting
+// components, rather than emitting an illegally-typed sample instruction.
+static IRInst *narrowSampledResult(
+    Module *ast_mod,
+    IRModule *ir_mod,
+    AstType *hlsl_type,
+    IRInst *vec4_value)
+{
+    TsCompiler *compiler = ast_mod->compiler;
+
+    if (ts__getScalarTypeNoVec(hlsl_type))
+    {
+        uint32_t index = 0;
+        return ts__irBuildCompositeExtract(ir_mod, vec4_value, &index, 1);
+    }
+
+    if (hlsl_type->kind == TYPE_VECTOR && hlsl_type->vector.size == 4)
+    {
+        return vec4_value;
+    }
+
+    if (hlsl_type->kind == TYPE_VECTOR)
+    {
+        uint32_t count = hlsl_type->vector.size;
+        IRInst **fields = NEW_ARRAY(compiler, IRInst *, count);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            uint32_t index = i;
+            fields[i] = ts__irBuildCompositeExtract(ir_mod, vec4_value, &index, 1);
+        }
+
+        IRType *target_type = convertTypeToIR(ast_mod, ir_mod, hlsl_type);
+        return ts__irBuildCompositeConstruct(ir_mod, target_type, fields, count);
+    }
+
+    return vec4_value;
+}
+
 static void astBuildExpr(Module *ast_mod, IRModule *ir_mod, AstExpr *expr)
 {
     TsCompiler *compiler = ast_mod->compiler;
@@ -897,13 +985,25 @@ static void astBuildExpr(Module *ast_mod, IRModule *ir_mod, AstExpr *expr)
             astBuildExpr(ast_mod, ir_mod, expr->func_call.self_param);
             TS_ASSERT(expr->func_call.self_param->value);
 
-            if (self_type->kind == TYPE_IMAGE && strcmp(method_name, "Sample") == 0)
+            bool is_sample = strcmp(method_name, "Sample") == 0;
+            bool is_sample_level = strcmp(method_name, "SampleLevel") == 0;
+            bool is_sample_cmp = strcmp(method_name, "SampleCmp") == 0;
+            bool is_sample_cmp_lod_zero =
+                strcmp(method_name, "SampleCmpLevelZero") == 0;
+
+            if (self_type->kind == TYPE_IMAGE &&
+                (is_sample || is_sample_level || is_sample_cmp ||
+                 is_sample_cmp_lod_zero))
             {
+                bool is_cmp = is_sample_cmp || is_sample_cmp_lod_zero;
+
                 uint32_t param_count = arrLength(expr->func_call.params);
                 IRInst **param_values = NEW_ARRAY(compiler, IRInst *, param_count);
 
                 IRInst *self_value = loadVal(ir_mod, expr->func_call.self_param->value);
 
+                // Each argument is evaluated exactly once; the runtime
+                // reference value is never replaced by a constant.
                 for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
                 {
                     AstExpr *param = expr->func_call.params.ptr[i];
@@ -912,6 +1012,8 @@ static void astBuildExpr(Module *ast_mod, IRModule *ir_mod, AstExpr *expr)
                     param_values[i] = loadVal(ir_mod, param->value);
                 }
 
+                // Combine the image and sampler with OpSampledImage. The
+                // sampler and image operands keep their original identity.
                 IRInst **sampled_image_params = NEW_ARRAY(compiler, IRInst *, 2);
                 sampled_image_params[0] = self_value;
                 sampled_image_params[1] = param_values[0];
@@ -923,43 +1025,58 @@ static void astBuildExpr(Module *ast_mod, IRModule *ir_mod, AstExpr *expr)
                     sampled_image_params,
                     2);
 
-                IRType *result_type = convertTypeToIR(ast_mod, ir_mod, expr->type);
                 IRInst *coords = param_values[1];
-                expr->value =
-                    ts__irBuildSampleImplicitLod(ir_mod, result_type, sampled_image, coords);
-            }
-            else if (
-                self_type->kind == TYPE_IMAGE && strcmp(method_name, "SampleLevel") == 0)
-            {
-                uint32_t param_count = arrLength(expr->func_call.params);
-                IRInst **param_values = NEW_ARRAY(compiler, IRInst *, param_count);
 
-                IRInst *self_value = loadVal(ir_mod, expr->func_call.self_param->value);
-
-                for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
+                if (is_cmp)
                 {
-                    AstExpr *param = expr->func_call.params.ptr[i];
-                    astBuildExpr(ast_mod, ir_mod, param);
-                    TS_ASSERT(param->value);
-                    param_values[i] = loadVal(ir_mod, param->value);
+                    // Dref is emitted as its own operand, never folded into
+                    // the coordinate or reused as the LOD. Result is a scalar
+                    // float for every supported texture dimension.
+                    IRType *float_type = ts__irNewFloatType(ir_mod, 32);
+                    IRInst *reference = param_values[2];
+
+                    if (is_sample_cmp_lod_zero)
+                    {
+                        IRInst *zero_lod = ts__irBuildConstFloat(ir_mod, float_type, 0.0);
+                        expr->value = ts__irBuildSampleDrefExplicitLod(
+                            ir_mod,
+                            float_type,
+                            sampled_image,
+                            coords,
+                            reference,
+                            zero_lod);
+                    }
+                    else
+                    {
+                        expr->value = ts__irBuildSampleDrefImplicitLod(
+                            ir_mod, float_type, sampled_image, coords, reference);
+                    }
                 }
+                else
+                {
+                    // Ordinary sampling always returns a four-component vector
+                    // matching the image element type. Narrow it afterwards to
+                    // the scalar/vector type the HLSL method declared.
+                    TS_ASSERT(self_value->type->kind == IR_TYPE_IMAGE);
+                    IRType *vec4_type = ts__irNewVectorType(
+                        ir_mod, self_value->type->image.sampled_type, 4);
 
-                IRInst **sampled_image_params = NEW_ARRAY(compiler, IRInst *, 2);
-                sampled_image_params[0] = self_value;
-                sampled_image_params[1] = param_values[0];
+                    IRInst *sampled = NULL;
+                    if (is_sample)
+                    {
+                        sampled = ts__irBuildSampleImplicitLod(
+                            ir_mod, vec4_type, sampled_image, coords);
+                    }
+                    else
+                    {
+                        IRInst *lod = param_values[2];
+                        sampled = ts__irBuildSampleExplicitLod(
+                            ir_mod, vec4_type, sampled_image, coords, lod);
+                    }
 
-                IRInst *sampled_image = ts__irBuildBuiltinCall(
-                    ir_mod,
-                    IR_BUILTIN_CREATE_SAMPLED_IMAGE,
-                    ts__irNewSampledImageType(ir_mod, self_value->type),
-                    sampled_image_params,
-                    2);
-
-                IRType *result_type = convertTypeToIR(ast_mod, ir_mod, expr->type);
-                IRInst *coords = param_values[1];
-                IRInst *lod = param_values[2];
-                expr->value =
-                    ts__irBuildSampleExplicitLod(ir_mod, result_type, sampled_image, coords, lod);
+                    expr->value = narrowSampledResult(
+                        ast_mod, ir_mod, expr->type, sampled);
+                }
             }
             else if (
                 self_type->kind == TYPE_IMAGE &&
@@ -2082,7 +2199,7 @@ static void astBuildDecl(Module *ast_mod, IRModule *ir_mod, AstDecl *decl)
             switch (param_decl->var.parameter_kind)
             {
             case PARAM_IN: {
-                IRType *ir_type = convertTypeToIR(ast_mod, ir_mod, param_decl->type);
+                IRType *ir_type = convertDeclTypeToIR(ast_mod, ir_mod, param_decl);
                 ptr_func_params[i] = ts__irBuildAlloca(ir_mod, ir_type);
                 break;
             }
@@ -2095,7 +2212,7 @@ static void astBuildDecl(Module *ast_mod, IRModule *ir_mod, AstDecl *decl)
         for (uint32_t i = 0; i < arrLength(decl->func.var_decls); ++i)
         {
             AstDecl *var_decl = decl->func.var_decls.ptr[i];
-            IRType *ir_type = convertTypeToIR(ast_mod, ir_mod, var_decl->type);
+            IRType *ir_type = convertDeclTypeToIR(ast_mod, ir_mod, var_decl);
 
             var_decl->value = NULL;
             if (!isTypeOpaque(ir_type))
@@ -2142,7 +2259,7 @@ static void astBuildDecl(Module *ast_mod, IRModule *ir_mod, AstDecl *decl)
     }
 
     case DECL_VAR: {
-        IRType *ir_type = convertTypeToIR(ast_mod, ir_mod, decl->type);
+        IRType *ir_type = convertDeclTypeToIR(ast_mod, ir_mod, decl);
 
         if (decl->var.value_expr)
         {
@@ -2443,13 +2560,27 @@ void ts__astModuleBuild(Module *ast_mod, IRModule *ir_mod)
 
             if (!decl->func.called) break;
 
-            IRType *ir_type = convertTypeToIR(ast_mod, ir_mod, decl->type);
-            decl->value = ts__irAddFunction(ir_mod, ir_type, SpvFunctionControlInlineMask);
+            // Build the function signature with decl-aware parameter types so
+            // the function type and its OpFunctionParameter types agree,
+            // including depth-classified image parameters.
+            IRType *return_ir_type =
+                convertTypeToIR(ast_mod, ir_mod, decl->type->func.return_type);
+            uint32_t ir_param_count = arrLength(decl->func.params);
+            IRType **ir_param_types = NEW_ARRAY(compiler, IRType *, ir_param_count);
+            for (uint32_t k = 0; k < ir_param_count; ++k)
+            {
+                AstDecl *param = decl->func.params.ptr[k];
+                ir_param_types[k] = convertDeclTypeToIR(ast_mod, ir_mod, param);
+            }
+            IRType *func_ir_type =
+                ts__irNewFuncType(ir_mod, return_ir_type, ir_param_types, ir_param_count);
+
+            decl->value = ts__irAddFunction(ir_mod, func_ir_type, SpvFunctionControlInlineMask);
 
             for (uint32_t k = 0; k < arrLength(decl->func.params); ++k)
             {
                 AstDecl *param = decl->func.params.ptr[k];
-                IRType *ir_param_type = convertTypeToIR(ast_mod, ir_mod, param->type);
+                IRType *ir_param_type = ir_param_types[k];
                 bool by_reference = false;
                 if (param->var.parameter_kind == PARAM_OUT)
                 {
@@ -2495,7 +2626,7 @@ void ts__astModuleBuild(Module *ast_mod, IRModule *ir_mod)
             }
             else
             {
-                ir_type = convertTypeToIR(ast_mod, ir_mod, decl->type);
+                ir_type = convertDeclTypeToIR(ast_mod, ir_mod, decl);
             }
 
             TS_ASSERT(ir_type);

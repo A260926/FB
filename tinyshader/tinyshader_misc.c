@@ -659,6 +659,7 @@ static const char *TOKEN_STRINGS[TOKEN_MAX] = {
     [TOKEN_RW_STRUCTURED_BUFFER] = "RWStructuredBuffer",
     [TOKEN_SAMPLER] = "sampler",
     [TOKEN_SAMPLER_STATE] = "SamplerState",
+    [TOKEN_SAMPLER_COMPARISON_STATE] = "SamplerComparisonState",
     [TOKEN_TEXTURE_1D] = "Texture1D",
     [TOKEN_TEXTURE_2D] = "Texture2D",
     [TOKEN_TEXTURE_3D] = "Texture3D",

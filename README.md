@@ -106,6 +106,33 @@ SamplerState gInput3; // Binding: 2, Set: 0
 [[vk::binding(2, 1)]] SamplerState gInput3; // Binding: 2, Set: 1
 ```
 
+### Comparison (depth) sampling
+
+`SamplerComparisonState` is a distinct type from `SamplerState`: the two never
+implicitly convert, even though both encode to `OpTypeSampler`. Scalar float
+textures (`Texture1D<float>`, `Texture2D<float>`, `TextureCube<float>`) expose
+two depth-reference methods. Coordinates are `float`, `float2` and `float3`
+respectively, the reference is a single `float`, and the result is always a
+`float`.
+
+```hlsl
+Texture2D<float> depth_tex;
+SamplerComparisonState cmp_sampler;
+
+float main(float2 uv : TEXCOORD0, float reference : TEXCOORD1) : SV_Target
+{
+    // OpImageSampleDrefImplicitLod; fragment shaders only.
+    float a = depth_tex.SampleCmp(cmp_sampler, uv, reference);
+    // OpImageSampleDrefExplicitLod with Lod = 0.0; all stages.
+    float b = depth_tex.SampleCmpLevelZero(cmp_sampler, uv, reference);
+    return a + b;
+}
+```
+
+`SampleCmp` is only valid in fragment shaders; `SampleCmpLevelZero` compiles in
+vertex, fragment and compute shaders. Texture arrays, 3D, integer and
+multi-component depth textures are not part of this subset.
+
 ### Stage inputs/outputs
 You can either pass the stage inputs/outputs as individual parameters or put them in a struct, where
 each struct member occupies a location.

@@ -274,6 +274,7 @@ typedef enum TokenKind {
     TOKEN_RW_STRUCTURED_BUFFER,
     TOKEN_SAMPLER,
     TOKEN_SAMPLER_STATE,
+    TOKEN_SAMPLER_COMPARISON_STATE,
     TOKEN_TEXTURE_1D,
     TOKEN_TEXTURE_2D,
     TOKEN_TEXTURE_3D,
@@ -486,6 +487,8 @@ typedef enum IRInstKind {
 
     IR_INST_SAMPLE_IMPLICIT_LOD,
     IR_INST_SAMPLE_EXPLICIT_LOD,
+    IR_INST_SAMPLE_DREF_IMPLICIT_LOD,
+    IR_INST_SAMPLE_DREF_EXPLICIT_LOD,
     IR_INST_QUERY_SIZE_LOD,
     IR_INST_QUERY_LEVELS,
 
@@ -700,6 +703,7 @@ struct IRInst
             IRInst *image_sampler;
             IRInst *coords;
             IRInst *lod;
+            IRInst *dref; // standalone depth-reference operand for the Dref variants
         } sample;
 
         struct
@@ -906,6 +910,11 @@ typedef struct AstType
     char *string;
     uint32_t size;
     uint32_t align;
+
+    // Only meaningful for TYPE_SAMPLER: a SamplerComparisonState when true.
+    // Comparison and ordinary samplers are distinct frontend types even though
+    // both encode to OpTypeSampler; they must never implicitly convert.
+    bool sampler_is_comparison;
 
     union
     {
@@ -1143,6 +1152,11 @@ struct AstDecl
     int64_t *resolved_int;
     char *semantic;
 
+    // True when this image variable/parameter feeds a comparison sampling
+    // method. Frontend-only marker used to pick a separate depth image intern
+    // type; it never mutates the shared ordinary image type.
+    bool is_depth_comparison;
+
     union
     {
         struct
@@ -1244,6 +1258,11 @@ struct AstExpr
             AstExpr *sampled_type_expr;
             SpvDim dim;
         } texture;
+
+        struct
+        {
+            bool is_comparison;
+        } sampler;
 
         struct
         {
@@ -1445,6 +1464,10 @@ IRType *ts__irNewStructType(
     IRMemberDecoration *field_decorations,
     uint32_t field_decoration_count);
 IRType *ts__irNewImageType(IRModule *m, IRType *sampled_type, SpvDim dim);
+// Depth images (OpTypeImage Depth=1) are only required for the Dref sampling
+// path. They are cached independently so ordinary shared image intern types
+// are never mutated.
+IRType *ts__irNewDepthImageType(IRModule *m, IRType *sampled_type, SpvDim dim);
 IRType *ts__irNewSampledImageType(IRModule *m, IRType *image_type);
 
 void ts__irDecorateType(IRModule *m, IRType *type, const IRDecoration *decoration);
@@ -1508,6 +1531,15 @@ IRInst *ts__irBuildSampleImplicitLod(
     IRModule *m, IRType *type, IRInst *image_sampler, IRInst *coords);
 IRInst *ts__irBuildSampleExplicitLod(
     IRModule *m, IRType *type, IRInst *image_sampler, IRInst *coords, IRInst *lod);
+IRInst *ts__irBuildSampleDrefImplicitLod(
+    IRModule *m, IRType *type, IRInst *image_sampler, IRInst *coords, IRInst *dref);
+IRInst *ts__irBuildSampleDrefExplicitLod(
+    IRModule *m,
+    IRType *type,
+    IRInst *image_sampler,
+    IRInst *coords,
+    IRInst *dref,
+    IRInst *lod);
 IRInst *ts__irBuildQuerySizeLod(IRModule *m, IRInst *image, IRInst *lod);
 IRInst *ts__irBuildQueryLevels(IRModule *m, IRInst *image);
 IRInst *ts__irBuildCast(IRModule *m, IRType *dst_type, IRInst *value);

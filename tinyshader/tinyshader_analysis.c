@@ -188,6 +188,7 @@ static char *typeToString(TsCompiler *compiler, AstType *type)
 
     case TYPE_SAMPLER: {
         prefix = "sampler";
+        if (type->sampler_is_comparison) postfix = "comparison";
         break;
     }
 
@@ -382,7 +383,7 @@ char *ts__typeToPrettyString(TsCompiler *compiler, AstType *type)
     }
 
     case TYPE_SAMPLER: {
-        str = "SamplerState";
+        str = type->sampler_is_comparison ? "SamplerComparisonState" : "SamplerState";
         break;
     }
 
@@ -586,6 +587,14 @@ static AstType *newBasicType(Module *m, AstTypeKind kind)
 {
     AstType *ty = NEW(m->compiler, AstType);
     ty->kind = kind;
+    return getCachedType(m, ty);
+}
+
+static AstType *newSamplerType(Module *m, bool is_comparison)
+{
+    AstType *ty = NEW(m->compiler, AstType);
+    ty->kind = TYPE_SAMPLER;
+    ty->sampler_is_comparison = is_comparison;
     return getCachedType(m, ty);
 }
 
@@ -2872,31 +2881,96 @@ static void analyzerAnalyzeExpr(Analyzer *a, AstExpr *expr, AstType *expected_ty
                 break;
             }
 
-            if (self_type->kind == TYPE_IMAGE && strcmp(method_name, "Sample") == 0)
+            AstType *texture_component_type = self_type->image.sampled_type;
+
+            bool is_sample_cmp = strcmp(method_name, "SampleCmp") == 0;
+            bool is_sample_cmp_lod_zero =
+                strcmp(method_name, "SampleCmpLevelZero") == 0;
+            bool is_cmp_method = is_sample_cmp || is_sample_cmp_lod_zero;
+            bool is_sample_level = strcmp(method_name, "SampleLevel") == 0;
+            bool is_ordinary_sample = strcmp(method_name, "Sample") == 0;
+
+            if (self_type->kind == TYPE_IMAGE &&
+                (is_ordinary_sample || is_sample_level || is_cmp_method))
             {
-                AstType *texture_component_type = self_type->image.sampled_type;
+                bool valid = true;
+
+                if (is_cmp_method)
+                {
+                    // The supported comparison subset is scalar float depth
+                    // textures of dimension 1D/2D/Cube. Integer, multi-component
+                    // and 3D depth textures are deliberately not extended.
+                    if (self_type->image.dim == SpvDim3D)
+                    {
+                        ts__addErr(
+                            compiler,
+                            &expr->loc,
+                            "'%s' is not supported on 3D textures",
+                            method_name);
+                        valid = false;
+                    }
+
+                    if (texture_component_type->kind != TYPE_FLOAT ||
+                        ts__getScalarType(texture_component_type) !=
+                            texture_component_type)
+                    {
+                        ts__addErr(
+                            compiler,
+                            &expr->loc,
+                            "'%s' requires a scalar float depth texture",
+                            method_name);
+                        valid = false;
+                    }
+
+                    // OpImageSampleDrefImplicitLod is only valid in the
+                    // fragment execution model.
+                    if (is_sample_cmp && m->stage != TS_SHADER_STAGE_FRAGMENT)
+                    {
+                        ts__addErr(
+                            compiler,
+                            &expr->loc,
+                            "'SampleCmp' is only allowed in fragment shaders; "
+                            "use 'SampleCmpLevelZero' for an explicit zero LOD");
+                        valid = false;
+                    }
+                }
+
+                AstType *float_type = newFloatType(m, 32);
+
+                // Sample/SampleLevel take an ordinary sampler, the comparison
+                // methods take a distinct SamplerComparisonState. The two never
+                // implicitly convert even though both become OpTypeSampler.
+                AstType *sampler_type = newSamplerType(m, is_cmp_method);
+                AstType *coord_type = NULL;
+                switch (self_type->image.dim)
+                {
+                // A 1D image coordinate is a scalar float: SPIR-V vectors must
+                // have at least two components.
+                case SpvDim1D: coord_type = float_type; break;
+                case SpvDim2D: coord_type = newVectorType(m, float_type, 2); break;
+                case SpvDim3D:
+                case SpvDimCube:
+                    coord_type = newVectorType(m, float_type, 3);
+                    break;
+
+                default: TS_ASSERT(0); break;
+                }
 
                 uint32_t func_param_count = 2;
+                if (is_sample_level || is_cmp_method) func_param_count = 3;
+
                 AstType **func_param_types =
                     NEW_ARRAY(compiler, AstType *, func_param_count);
 
-                func_param_types[0] = newBasicType(m, TYPE_SAMPLER);
-
-                AstType *float_type = newFloatType(m, 32);
-                switch (self_type->image.dim)
+                func_param_types[0] = sampler_type;
+                func_param_types[1] = coord_type;
+                if (is_sample_level)
                 {
-                case SpvDim1D:
-                    func_param_types[1] = newVectorType(m, float_type, 1);
-                    break;
-                case SpvDim2D:
-                    func_param_types[1] = newVectorType(m, float_type, 2);
-                    break;
-                case SpvDim3D:
-                case SpvDimCube:
-                    func_param_types[1] = newVectorType(m, float_type, 3);
-                    break;
-
-                default: TS_ASSERT(0); break;
+                    func_param_types[2] = float_type; // LOD
+                }
+                else if (is_cmp_method)
+                {
+                    func_param_types[2] = float_type; // standalone reference
                 }
 
                 if (func_param_count != arrLength(expr->func_call.params))
@@ -2905,63 +2979,21 @@ static void analyzerAnalyzeExpr(Analyzer *a, AstExpr *expr, AstType *expected_ty
                         compiler,
                         &expr->loc,
                         "wrong amount of parameters for function call");
-                    break;
+                    valid = false;
                 }
 
-                for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
+                if (valid)
                 {
-                    AstExpr *param = expr->func_call.params.ptr[i];
-                    analyzerAnalyzeExpr(a, param, func_param_types[i]);
+                    for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
+                    {
+                        AstExpr *param = expr->func_call.params.ptr[i];
+                        analyzerAnalyzeExpr(a, param, func_param_types[i]);
+                    }
+
+                    // Comparison sampling always yields a single float,
+                    // independent of the texture component type.
+                    expr->type = is_cmp_method ? float_type : texture_component_type;
                 }
-
-                expr->type = texture_component_type;
-            }
-            else if (
-                self_type->kind == TYPE_IMAGE && strcmp(method_name, "SampleLevel") == 0)
-            {
-                AstType *texture_component_type = self_type->image.sampled_type;
-
-                uint32_t func_param_count = 3;
-                AstType **func_param_types =
-                    NEW_ARRAY(compiler, AstType *, func_param_count);
-
-                func_param_types[0] = newBasicType(m, TYPE_SAMPLER);
-
-                AstType *float_type = newFloatType(m, 32);
-                func_param_types[2] = float_type;
-
-                switch (self_type->image.dim)
-                {
-                case SpvDim1D:
-                    func_param_types[1] = newVectorType(m, float_type, 1);
-                    break;
-                case SpvDim2D:
-                    func_param_types[1] = newVectorType(m, float_type, 2);
-                    break;
-                case SpvDim3D:
-                case SpvDimCube:
-                    func_param_types[1] = newVectorType(m, float_type, 3);
-                    break;
-
-                default: TS_ASSERT(0); break;
-                }
-
-                if (func_param_count != arrLength(expr->func_call.params))
-                {
-                    ts__addErr(
-                        compiler,
-                        &expr->loc,
-                        "wrong amount of parameters for function call");
-                    break;
-                }
-
-                for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
-                {
-                    AstExpr *param = expr->func_call.params.ptr[i];
-                    analyzerAnalyzeExpr(a, param, func_param_types[i]);
-                }
-
-                expr->type = texture_component_type;
             }
             else if (
                 self_type->kind == TYPE_IMAGE &&
@@ -3266,7 +3298,7 @@ static void analyzerAnalyzeExpr(Analyzer *a, AstExpr *expr, AstType *expected_ty
 
     case EXPR_SAMPLER_TYPE: {
         expr->type = newBasicType(m, TYPE_TYPE);
-        expr->as_type = newBasicType(m, TYPE_SAMPLER);
+        expr->as_type = newSamplerType(m, expr->sampler.is_comparison);
         break;
     }
 
@@ -4495,6 +4527,368 @@ static void analyzerAnalyzeDecl(Analyzer *a, AstDecl *decl)
     }
 }
 
+static AstDecl *rootImageDecl(AstExpr *expr)
+{
+    if (!expr) return NULL;
+
+    switch (expr->kind)
+    {
+    case EXPR_IDENT: return expr->ident.decl;
+    case EXPR_SUBSCRIPT: return rootImageDecl(expr->subscript.left);
+    case EXPR_ACCESS: return rootImageDecl(expr->access.base);
+    case EXPR_AUTO_CAST: return rootImageDecl(expr->auto_cast.sub);
+    default: break;
+    }
+
+    return NULL;
+}
+
+static void markComparisonImageDeclsExpr(AstExpr *expr);
+
+static void markComparisonImageDeclsStmt(AstStmt *stmt)
+{
+    if (!stmt) return;
+
+    switch (stmt->kind)
+    {
+    case STMT_DECL:
+        if (stmt->decl) markComparisonImageDeclsExpr(stmt->decl->var.value_expr);
+        break;
+    case STMT_EXPR: markComparisonImageDeclsExpr(stmt->expr); break;
+    case STMT_RETURN: markComparisonImageDeclsExpr(stmt->return_.value); break;
+    case STMT_BLOCK:
+        for (uint32_t i = 0; i < arrLength(stmt->block.stmts); ++i)
+        {
+            markComparisonImageDeclsStmt(stmt->block.stmts.ptr[i]);
+        }
+        break;
+    case STMT_IF:
+        markComparisonImageDeclsExpr(stmt->if_.cond);
+        markComparisonImageDeclsStmt(stmt->if_.if_stmt);
+        markComparisonImageDeclsStmt(stmt->if_.else_stmt);
+        break;
+    case STMT_WHILE:
+        markComparisonImageDeclsExpr(stmt->while_.cond);
+        markComparisonImageDeclsStmt(stmt->while_.stmt);
+        break;
+    case STMT_DO_WHILE:
+        markComparisonImageDeclsExpr(stmt->do_while.cond);
+        markComparisonImageDeclsStmt(stmt->do_while.stmt);
+        break;
+    case STMT_FOR:
+        if (stmt->for_.init) markComparisonImageDeclsStmt(stmt->for_.init);
+        markComparisonImageDeclsExpr(stmt->for_.cond);
+        markComparisonImageDeclsExpr(stmt->for_.inc);
+        markComparisonImageDeclsStmt(stmt->for_.stmt);
+        break;
+
+    default: break;
+    }
+}
+
+static void markComparisonImageDeclsExpr(AstExpr *expr)
+{
+    if (!expr) return;
+
+    switch (expr->kind)
+    {
+    case EXPR_AUTO_CAST:
+        markComparisonImageDeclsExpr(expr->auto_cast.sub);
+        break;
+
+    case EXPR_UNARY:
+        markComparisonImageDeclsExpr(expr->unary.right);
+        break;
+
+    case EXPR_BINARY:
+        markComparisonImageDeclsExpr(expr->binary.left);
+        markComparisonImageDeclsExpr(expr->binary.right);
+        break;
+
+    case EXPR_TERNARY:
+        markComparisonImageDeclsExpr(expr->ternary.cond);
+        markComparisonImageDeclsExpr(expr->ternary.true_expr);
+        markComparisonImageDeclsExpr(expr->ternary.false_expr);
+        break;
+
+    case EXPR_SUBSCRIPT:
+        markComparisonImageDeclsExpr(expr->subscript.left);
+        markComparisonImageDeclsExpr(expr->subscript.right);
+        break;
+
+    case EXPR_ACCESS:
+        markComparisonImageDeclsExpr(expr->access.base);
+        for (uint32_t i = 0; i < arrLength(expr->access.chain); ++i)
+        {
+            markComparisonImageDeclsExpr(expr->access.chain.ptr[i]);
+        }
+        break;
+
+    case EXPR_VAR_ASSIGN:
+        markComparisonImageDeclsExpr(expr->var_assign.assigned_expr);
+        markComparisonImageDeclsExpr(expr->var_assign.value_expr);
+        break;
+
+    case EXPR_COMPOSITE_LITERAL:
+        for (uint32_t i = 0; i < arrLength(expr->composite_literal.exprs); ++i)
+        {
+            markComparisonImageDeclsExpr(expr->composite_literal.exprs.ptr[i]);
+        }
+        break;
+
+    case EXPR_FUNC_CALL: {
+        for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
+        {
+            markComparisonImageDeclsExpr(expr->func_call.params.ptr[i]);
+        }
+
+        if (expr->func_call.self_param)
+        {
+            AstExpr *self = expr->func_call.self_param;
+            markComparisonImageDeclsExpr(self);
+
+            AstExpr *method_name_expr = expr->func_call.func_expr;
+            if (method_name_expr && method_name_expr->kind == EXPR_IDENT)
+            {
+                char *method_name = method_name_expr->ident.name;
+                if (strcmp(method_name, "SampleCmp") == 0 ||
+                    strcmp(method_name, "SampleCmpLevelZero") == 0)
+                {
+                    AstDecl *image_decl = rootImageDecl(self);
+                    if (image_decl && image_decl->type &&
+                        image_decl->type->kind == TYPE_IMAGE)
+                    {
+                        image_decl->is_depth_comparison = true;
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    default: break;
+    }
+}
+
+// Propagate the depth-comparison marker from a callee's image parameters to
+// the image arguments supplied at every call site, so both sides share the
+// same depth image intern type across the OpFunctionCall boundary.
+static void propagateDepthComparisonCallsExpr(AstExpr *expr);
+
+static void propagateDepthComparisonCallsStmt(AstStmt *stmt)
+{
+    if (!stmt) return;
+
+    switch (stmt->kind)
+    {
+    case STMT_DECL:
+        if (stmt->decl) propagateDepthComparisonCallsExpr(stmt->decl->var.value_expr);
+        break;
+    case STMT_EXPR: propagateDepthComparisonCallsExpr(stmt->expr); break;
+    case STMT_RETURN: propagateDepthComparisonCallsExpr(stmt->return_.value); break;
+    case STMT_BLOCK:
+        for (uint32_t i = 0; i < arrLength(stmt->block.stmts); ++i)
+        {
+            propagateDepthComparisonCallsStmt(stmt->block.stmts.ptr[i]);
+        }
+        break;
+    case STMT_IF:
+        propagateDepthComparisonCallsExpr(stmt->if_.cond);
+        propagateDepthComparisonCallsStmt(stmt->if_.if_stmt);
+        propagateDepthComparisonCallsStmt(stmt->if_.else_stmt);
+        break;
+    case STMT_WHILE:
+        propagateDepthComparisonCallsExpr(stmt->while_.cond);
+        propagateDepthComparisonCallsStmt(stmt->while_.stmt);
+        break;
+    case STMT_DO_WHILE:
+        propagateDepthComparisonCallsExpr(stmt->do_while.cond);
+        propagateDepthComparisonCallsStmt(stmt->do_while.stmt);
+        break;
+    case STMT_FOR:
+        if (stmt->for_.init) propagateDepthComparisonCallsStmt(stmt->for_.init);
+        propagateDepthComparisonCallsExpr(stmt->for_.cond);
+        propagateDepthComparisonCallsExpr(stmt->for_.inc);
+        propagateDepthComparisonCallsStmt(stmt->for_.stmt);
+        break;
+
+    default: break;
+    }
+}
+
+static void propagateDepthComparisonCallsExpr(AstExpr *expr)
+{
+    if (!expr) return;
+
+    switch (expr->kind)
+    {
+    case EXPR_AUTO_CAST:
+        propagateDepthComparisonCallsExpr(expr->auto_cast.sub);
+        break;
+    case EXPR_UNARY:
+        propagateDepthComparisonCallsExpr(expr->unary.right);
+        break;
+    case EXPR_BINARY:
+        propagateDepthComparisonCallsExpr(expr->binary.left);
+        propagateDepthComparisonCallsExpr(expr->binary.right);
+        break;
+    case EXPR_TERNARY:
+        propagateDepthComparisonCallsExpr(expr->ternary.cond);
+        propagateDepthComparisonCallsExpr(expr->ternary.true_expr);
+        propagateDepthComparisonCallsExpr(expr->ternary.false_expr);
+        break;
+    case EXPR_SUBSCRIPT:
+        propagateDepthComparisonCallsExpr(expr->subscript.left);
+        propagateDepthComparisonCallsExpr(expr->subscript.right);
+        break;
+    case EXPR_ACCESS:
+        propagateDepthComparisonCallsExpr(expr->access.base);
+        for (uint32_t i = 0; i < arrLength(expr->access.chain); ++i)
+        {
+            propagateDepthComparisonCallsExpr(expr->access.chain.ptr[i]);
+        }
+        break;
+    case EXPR_VAR_ASSIGN:
+        propagateDepthComparisonCallsExpr(expr->var_assign.assigned_expr);
+        propagateDepthComparisonCallsExpr(expr->var_assign.value_expr);
+        break;
+    case EXPR_COMPOSITE_LITERAL:
+        for (uint32_t i = 0; i < arrLength(expr->composite_literal.exprs); ++i)
+        {
+            propagateDepthComparisonCallsExpr(expr->composite_literal.exprs.ptr[i]);
+        }
+        break;
+
+    case EXPR_FUNC_CALL: {
+        for (uint32_t i = 0; i < arrLength(expr->func_call.params); ++i)
+        {
+            propagateDepthComparisonCallsExpr(expr->func_call.params.ptr[i]);
+        }
+        if (expr->func_call.self_param)
+        {
+            propagateDepthComparisonCallsExpr(expr->func_call.self_param);
+            break;
+        }
+
+        // Free function call: map marked callee parameters onto arguments.
+        AstExpr *callee_expr = expr->func_call.func_expr;
+        if (callee_expr && callee_expr->kind == EXPR_IDENT &&
+            callee_expr->ident.decl &&
+            callee_expr->ident.decl->kind == DECL_FUNC)
+        {
+            AstDecl *callee = callee_expr->ident.decl;
+            uint32_t count = arrLength(expr->func_call.params);
+            if (count != arrLength(callee->func.params)) break;
+
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                AstDecl *param = callee->func.params.ptr[i];
+                if (!param->is_depth_comparison) continue;
+
+                AstDecl *arg_decl = rootImageDecl(expr->func_call.params.ptr[i]);
+                if (arg_decl && arg_decl->type &&
+                    arg_decl->type->kind == TYPE_IMAGE &&
+                    !arg_decl->is_depth_comparison)
+                {
+                    arg_decl->is_depth_comparison = true;
+                }
+            }
+        }
+        break;
+    }
+
+    default: break;
+    }
+}
+
+// Image declarations feeding a comparison sampling method need a depth
+// (OpTypeImage Depth=1) intern type. The marker is propagated through opaque
+// image assignments and helper function parameters so every use of a texture
+// keeps one descriptor identity with a consistent depth type.
+static void resolveDepthComparisonDecls(Module *module)
+{
+    for (uint32_t i = 0; i < module->decl_count; ++i)
+    {
+        AstDecl *decl = module->decls[i];
+        if (decl->kind != DECL_FUNC) continue;
+
+        for (uint32_t j = 0; j < arrLength(decl->func.stmts); ++j)
+        {
+            markComparisonImageDeclsStmt(decl->func.stmts.ptr[j]);
+        }
+    }
+
+    bool changed = true;
+    while (changed)
+    {
+        changed = false;
+
+        // Opaque image assignment/initialization propagation. This covers
+        // globals, function parameters and local image variables.
+        for (uint32_t i = 0; i < module->decl_count; ++i)
+        {
+            AstDecl *func_decl = module->decls[i];
+            if (func_decl->kind != DECL_FUNC) continue;
+
+            for (uint32_t j = 0; j < arrLength(func_decl->func.params); ++j)
+            {
+                AstDecl *decl = func_decl->func.params.ptr[j];
+                if (!decl->is_depth_comparison) continue;
+
+                AstDecl *source = rootImageDecl(decl->var.value_expr);
+                if (source && source != decl && source->type &&
+                    source->type->kind == TYPE_IMAGE &&
+                    !source->is_depth_comparison)
+                {
+                    source->is_depth_comparison = true;
+                    changed = true;
+                }
+            }
+
+            for (uint32_t j = 0; j < arrLength(func_decl->func.var_decls); ++j)
+            {
+                AstDecl *decl = func_decl->func.var_decls.ptr[j];
+                if (!decl->is_depth_comparison) continue;
+
+                AstDecl *source = rootImageDecl(decl->var.value_expr);
+                if (source && source != decl && source->type &&
+                    source->type->kind == TYPE_IMAGE &&
+                    !source->is_depth_comparison)
+                {
+                    source->is_depth_comparison = true;
+                    changed = true;
+                }
+            }
+        }
+
+        for (uint32_t i = 0; i < module->decl_count; ++i)
+        {
+            AstDecl *decl = module->decls[i];
+            if (decl->kind != DECL_VAR || !decl->is_depth_comparison) continue;
+
+            AstDecl *source = rootImageDecl(decl->var.value_expr);
+            if (source && source != decl && source->type &&
+                source->type->kind == TYPE_IMAGE && !source->is_depth_comparison)
+            {
+                source->is_depth_comparison = true;
+                changed = true;
+            }
+        }
+
+        // Helper function parameter to call-site argument propagation.
+        for (uint32_t i = 0; i < module->decl_count; ++i)
+        {
+            AstDecl *decl = module->decls[i];
+            if (decl->kind != DECL_FUNC) continue;
+
+            for (uint32_t j = 0; j < arrLength(decl->func.stmts); ++j)
+            {
+                propagateDepthComparisonCallsStmt(decl->func.stmts.ptr[j]);
+            }
+        }
+    }
+}
+
 void ts__analyze(
     TsCompiler *compiler, Module *module, AstDecl **decls, size_t decl_count)
 {
@@ -4525,4 +4919,10 @@ void ts__analyze(
     }
 
     analyzerPopScope(a, a->module->scope);
+
+    // Only walk a complete program; malformed programs already reported errors.
+    if (arrLength(compiler->errors) == 0)
+    {
+        resolveDepthComparisonDecls(module);
+    }
 }

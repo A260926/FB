@@ -187,6 +187,20 @@ static char *irTypeToString(TsCompiler *compiler, IRType *type)
         default: TS_ASSERT(0); break;
         }
 
+        // Depth images get an independent cache entry; an ordinary shared image
+        // intern type is never flipped into a depth type.
+        if (type->image.depth == 1)
+        {
+            ts__sbReset(&compiler->sb);
+            ts__sbSprintf(
+                &compiler->sb,
+                "image_%s_%s_depth",
+                sub,
+                postfix ? postfix : "");
+            type->string = ts__sbBuild(&compiler->sb, &compiler->alloc);
+            return type->string;
+        }
+
         break;
     }
 
@@ -475,6 +489,20 @@ IRType *ts__irNewImageType(IRModule *m, IRType *sampled_type, SpvDim dim)
     ty->image.sampled_type = sampled_type;
     ty->image.dim = dim;
     ty->image.depth = 2; // 2 means no indication as to whether this is a depth or non-depth image
+    ty->image.arrayed = 0;
+    ty->image.multisampled = 0;
+    ty->image.sampled = 1;
+    ty->image.format = SpvImageFormatUnknown;
+    return irGetCachedType(m, ty);
+}
+
+IRType *ts__irNewDepthImageType(IRModule *m, IRType *sampled_type, SpvDim dim)
+{
+    IRType *ty = NEW(m->compiler, IRType);
+    ty->kind = IR_TYPE_IMAGE;
+    ty->image.sampled_type = sampled_type;
+    ty->image.dim = dim;
+    ty->image.depth = 1; // depth image, required by the Dref sampling opcodes
     ty->image.arrayed = 0;
     ty->image.multisampled = 0;
     ty->image.sampled = 1;
@@ -1184,6 +1212,48 @@ IRInst *ts__irBuildSampleExplicitLod(
 
     inst->sample.image_sampler = image_sampler;
     inst->sample.coords = coords;
+    inst->sample.lod = lod;
+
+    IRInst *block = ts__irGetCurrentBlock(m);
+    arrPush(m->compiler, &block->block.insts, inst);
+
+    return inst;
+}
+
+IRInst *ts__irBuildSampleDrefImplicitLod(
+    IRModule *m, IRType *type, IRInst *image_sampler, IRInst *coords, IRInst *dref)
+{
+    IRInst *inst = NEW(m->compiler, IRInst);
+    inst->kind = IR_INST_SAMPLE_DREF_IMPLICIT_LOD;
+    inst->type = type;
+    TS_ASSERT(inst->type);
+
+    inst->sample.image_sampler = image_sampler;
+    inst->sample.coords = coords;
+    inst->sample.dref = dref;
+
+    IRInst *block = ts__irGetCurrentBlock(m);
+    arrPush(m->compiler, &block->block.insts, inst);
+
+    return inst;
+}
+
+IRInst *ts__irBuildSampleDrefExplicitLod(
+    IRModule *m,
+    IRType *type,
+    IRInst *image_sampler,
+    IRInst *coords,
+    IRInst *dref,
+    IRInst *lod)
+{
+    IRInst *inst = NEW(m->compiler, IRInst);
+    inst->kind = IR_INST_SAMPLE_DREF_EXPLICIT_LOD;
+    inst->type = type;
+    TS_ASSERT(inst->type);
+
+    inst->sample.image_sampler = image_sampler;
+    inst->sample.coords = coords;
+    inst->sample.dref = dref;
     inst->sample.lod = lod;
 
     IRInst *block = ts__irGetCurrentBlock(m);
@@ -2625,6 +2695,52 @@ static void irModuleEncodeBlock(IRModule *m, IRInst *block)
                 lod->id,
             };
             irModuleEncodeInst(m, SpvOpImageSampleExplicitLod, params, 6);
+            break;
+        }
+
+        case IR_INST_SAMPLE_DREF_IMPLICIT_LOD: {
+            inst->id = irModuleReserveId(m);
+
+            IRInst *sampled_image = inst->sample.image_sampler;
+            IRInst *coordinate = inst->sample.coords;
+            IRInst *dref = inst->sample.dref;
+            TS_ASSERT(dref);
+
+            // Dref is a dedicated operand between the coordinate and the
+            // optional image operands; it is never folded into the coordinate.
+            uint32_t params[5] = {
+                inst->type->id,
+                inst->id,
+                sampled_image->id,
+                coordinate->id,
+                dref->id,
+            };
+            irModuleEncodeInst(m, SpvOpImageSampleDrefImplicitLod, params, 5);
+            break;
+        }
+
+        case IR_INST_SAMPLE_DREF_EXPLICIT_LOD: {
+            inst->id = irModuleReserveId(m);
+
+            IRInst *sampled_image = inst->sample.image_sampler;
+            IRInst *coordinate = inst->sample.coords;
+            IRInst *dref = inst->sample.dref;
+            IRInst *lod = inst->sample.lod;
+            TS_ASSERT(dref);
+            TS_ASSERT(lod);
+
+            uint32_t operand_mask = SpvImageOperandsLodMask;
+
+            uint32_t params[7] = {
+                inst->type->id,
+                inst->id,
+                sampled_image->id,
+                coordinate->id,
+                dref->id,
+                operand_mask,
+                lod->id,
+            };
+            irModuleEncodeInst(m, SpvOpImageSampleDrefExplicitLod, params, 7);
             break;
         }
 

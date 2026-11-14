@@ -256,10 +256,15 @@ static AstExpr *parsePrimaryExpr(Parser *p)
     }
 
     case TOKEN_SAMPLER:
-    case TOKEN_SAMPLER_STATE: {
+    case TOKEN_SAMPLER_STATE:
+    case TOKEN_SAMPLER_COMPARISON_STATE: {
+        Token *sampler_tok = parserPeek(p, 0);
+
         AstExpr *type_expr = NEW(compiler, AstExpr);
         type_expr->kind = EXPR_SAMPLER_TYPE;
-        type_expr->loc = parserPeek(p, 0)->loc;
+        type_expr->loc = sampler_tok->loc;
+        type_expr->sampler.is_comparison =
+            sampler_tok->kind == TOKEN_SAMPLER_COMPARISON_STATE;
 
         parserNext(p, 1);
 

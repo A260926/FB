@@ -79,6 +79,10 @@ static TsCompiler *ts__CompilerCreate(void)
         (void *)TOKEN_RW_STRUCTURED_BUFFER);
     ts__hashSet(&compiler->keyword_table, "sampler", (void *)TOKEN_SAMPLER);
     ts__hashSet(&compiler->keyword_table, "SamplerState", (void *)TOKEN_SAMPLER_STATE);
+    ts__hashSet(
+        &compiler->keyword_table,
+        "SamplerComparisonState",
+        (void *)TOKEN_SAMPLER_COMPARISON_STATE);
     ts__hashSet(&compiler->keyword_table, "Texture1D", (void *)TOKEN_TEXTURE_1D);
     ts__hashSet(&compiler->keyword_table, "Texture2D", (void *)TOKEN_TEXTURE_2D);
     ts__hashSet(&compiler->keyword_table, "Texture3D", (void *)TOKEN_TEXTURE_3D);

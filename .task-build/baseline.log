@@ -1,0 +1,73 @@
+In file included from tinyshader/tinyshader_unity.c:8:
+In file included from tinyshader/tinyshader.c:5:
+tinyshader/tinyshader_internal.h:1341:3: warning: redefinition of typedef 'TsCompiler' is a C11 feature [-Wtypedef-redefinition]
+ 1341 | } TsCompiler;
+      |   ^
+tinyshader/tinyshader_internal.h:23:27: note: previous definition is here
+   23 | typedef struct TsCompiler TsCompiler;
+      |                           ^
+In file included from tinyshader/tinyshader_unity.c:11:
+tinyshader/tinyshader_lexer.c:461:37: warning: cast to smaller integer type 'TokenKind' (aka 'enum TokenKind') from 'void *' [-Wvoid-pointer-to-enum-cast]
+  461 |                     l->token.kind = (TokenKind)result;
+      |                                     ^~~~~~~~~~~~~~~~~
+In file included from tinyshader/tinyshader_unity.c:13:
+tinyshader/tinyshader_analysis.c:1444:21: warning: format specifies type 'long' but the argument has type 'int64_t' (aka 'long long') [-Wformat]
+ 1443 |                     "index '%ld' is out of matrix bounds '%u'",
+      |                             ~~~
+      |                             %lld
+ 1444 |                     *right->resolved_int,
+      |                     ^~~~~~~~~~~~~~~~~~~~
+tinyshader/tinyshader_analysis.c:1461:21: warning: format specifies type 'long' but the argument has type 'int64_t' (aka 'long long') [-Wformat]
+ 1460 |                     "index '%ld' is out of array bounds '%zu'",
+      |                             ~~~
+      |                             %lld
+ 1461 |                     *right->resolved_int,
+      |                     ^~~~~~~~~~~~~~~~~~~~
+tinyshader/tinyshader_analysis.c:1623:37: warning: cast to smaller integer type 'AstBuiltinFunction' (aka 'enum AstBuiltinFunction') from 'void *' [-Wvoid-pointer-to-enum-cast]
+ 1623 |                 builtin_func_kind = (AstBuiltinFunction)result;
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from tinyshader/tinyshader_unity.c:15:
+tinyshader/tinyshader_ast_ir.c:679:37: warning: cast to smaller integer type 'AstBuiltinFunction' (aka 'enum AstBuiltinFunction') from 'void *' [-Wvoid-pointer-to-enum-cast]
+  679 |                 builtin_func_kind = (AstBuiltinFunction)result;
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+6 warnings generated.
+SPIRV_BYTES=1088
+BASELINE_OK
+In file included from tinyshader/tinyshader_unity.c:8:
+In file included from tinyshader/tinyshader.c:5:
+tinyshader/tinyshader_internal.h:1341:3: warning: redefinition of typedef 'TsCompiler' is a C11 feature [-Wtypedef-redefinition]
+ 1341 | } TsCompiler;
+      |   ^
+tinyshader/tinyshader_internal.h:23:27: note: previous definition is here
+   23 | typedef struct TsCompiler TsCompiler;
+      |                           ^
+In file included from tinyshader/tinyshader_unity.c:11:
+tinyshader/tinyshader_lexer.c:461:37: warning: cast to smaller integer type 'TokenKind' (aka 'enum TokenKind') from 'void *' [-Wvoid-pointer-to-enum-cast]
+  461 |                     l->token.kind = (TokenKind)result;
+      |                                     ^~~~~~~~~~~~~~~~~
+In file included from tinyshader/tinyshader_unity.c:13:
+tinyshader/tinyshader_analysis.c:1444:21: warning: format specifies type 'long' but the argument has type 'int64_t' (aka 'long long') [-Wformat]
+ 1443 |                     "index '%ld' is out of matrix bounds '%u'",
+      |                             ~~~
+      |                             %lld
+ 1444 |                     *right->resolved_int,
+      |                     ^~~~~~~~~~~~~~~~~~~~
+tinyshader/tinyshader_analysis.c:1461:21: warning: format specifies type 'long' but the argument has type 'int64_t' (aka 'long long') [-Wformat]
+ 1460 |                     "index '%ld' is out of array bounds '%zu'",
+      |                             ~~~
+      |                             %lld
+ 1461 |                     *right->resolved_int,
+      |                     ^~~~~~~~~~~~~~~~~~~~
+tinyshader/tinyshader_analysis.c:1623:37: warning: cast to smaller integer type 'AstBuiltinFunction' (aka 'enum AstBuiltinFunction') from 'void *' [-Wvoid-pointer-to-enum-cast]
+ 1623 |                 builtin_func_kind = (AstBuiltinFunction)result;
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from tinyshader/tinyshader_unity.c:15:
+tinyshader/tinyshader_ast_ir.c:679:37: warning: cast to smaller integer type 'AstBuiltinFunction' (aka 'enum AstBuiltinFunction') from 'void *' [-Wvoid-pointer-to-enum-cast]
+  679 |                 builtin_func_kind = (AstBuiltinFunction)result;
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+6 warnings generated.
+ORDINARY_SAMPLING implicit=1 explicit=1 combined=2
+UPSTREAM_SAMPLE_OK tests/valid/test.frag.hlsl
+UPSTREAM_SAMPLE_OK tests/valid/test.vert.hlsl
+SAMPLING_BASELINE_OK
+BASELINE_OK
