@@ -1,0 +1,6 @@
+URL: http://www.glfw.org/
+Version: 3.4
+License: zlib/libpng license
+License File: LICENSE.md
+Description: GLFW is a free, open source, portable library for OpenGL
+             application development.
