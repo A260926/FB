@@ -3,7 +3,8 @@ INCLUDES = -I../include
 
 include ../Makerules
 
-CCFILES =	TriMesh_bounding.cc \
+CCFILES =	AdaptiveRefiner.cc \
+		TriMesh_bounding.cc \
 		TriMesh_connectivity.cc \
 		TriMesh_curvature.cc \
 		TriMesh_io.cc \

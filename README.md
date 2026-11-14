@@ -53,6 +53,109 @@ The following utility programs are included:
  * **mesh_info**: Print out some information about a mesh
  * **xf**: Create or compose transformations in .xf files
 
+## Locally adaptive red refinement (`AdaptiveRefiner`)
+
+`include/AdaptiveRefiner.h` / `libsrc/AdaptiveRefiner.cc` add a second, persistent
+subdivision model next to the existing whole-mesh `subdiv()` (whose behaviour
+is unchanged).  It is meant for sculpting brushes: refine only the faces under
+the brush, keep their history, and undo it again later.
+
+```cpp
+#include "AdaptiveRefiner.h"
+
+TriMesh base = /* finite, non-degenerate, consistently oriented 2-manifold */;
+AdaptiveRefiner refiner(base);
+
+auto root_ids = refiner.leaves();      // initially every input face
+refiner.refine({ 17, 42 });           // red-split these two current leaves
+AdaptiveRefiner::Snapshot snap = refiner.snapshot();
+snap.mesh.write("brush.obj");         // ordinary indexed triangle mesh
+```
+
+### Red-leaf numbering
+
+* A `NodeId` is a `std::uint64_t`.  The **root nodes are numbered exactly like
+  the input faces**: root face `i` is node `i`.  Every other node gets the
+  next never-used number when it is first created.
+* Numbers are monotone and permanent: once a node id has been published it
+  always denotes the same triangle.  Coarsening a parent and refining it again
+  re-activates its original four child ids rather than allocating new ones.
+* `leaves()` returns the current red leaves sorted by id.
+  `children(id)` returns the four children in the fixed local template order
+  `(v0,m01,m20), (v1,m12,m01), (v2,m20,m12), (m01,m12,m20)`; it is empty for a
+  node that has never been subdivided, and keeps returning the same four ids
+  after that parent has been coarsened.
+
+### Midpoint identity and interpolation
+
+* Level-0 vertices keep the input vertex index as their persistent number.
+* An edge midpoint is identified **topologically** by the unordered pair of
+  persistent endpoint numbers, never by spatial distance.  Two vertices at the
+  same position with different indices (coincident but distinct components)
+  stay distinct.  A midpoint is created when first needed, gets the next free
+  persistent number, and reuses that number forever.
+* Midpoint ordering does not depend on request order: within a refinement
+  round, leaves are processed in `NodeId` order and edges in sorted
+  persistent-endpoint order, and closure is applied in rounds.
+* Positions, colors and confidences of exported vertices are always
+  interpolated with the linear midpoint rule **directly from the original
+  mesh**, never by re-interpolating previously compacted indices.
+
+### The one-level-gap rule and closure
+
+* After refinement, any two red leaves that share an edge of positive length
+  differ by at most one level.  Faces that only touch at a vertex are
+  unconstrained.  The closure refines the *coarser* side only, propagating
+  locally across root-edge boundaries; a whole connected component is never
+  uniformly refined just to satisfy the rule.
+* If the closure would need a level greater than `MAX_LEVEL` (12),
+  `refine()` throws `std::runtime_error` and the refiner is unchanged.
+  Invalid, deactivated or non-leaf ids throw `std::invalid_argument`, also
+  without leaving a partial subtree.
+
+### Coarsening blocked
+
+`coarsen(parents)` retracts a parent only when all four of its children are
+current red leaves.  The request is judged **as a whole**: if the retraction of
+any requested parent would create a level gap larger than one, the call
+returns `false`, changes nothing, and does not coarsen other (legal) parents
+from the same request.  Bad ids, non-parents and incomplete sibling groups
+throw `std::invalid_argument`.  A successful call returns `true`.
+
+### Green transition triangles in `snapshot()`
+
+Red leaves are exported in leaf-id order with a fixed template.  When a
+red leaf has a neighbour one level finer across a shared edge, the coarser
+leaf gets **green** transition triangles so the output stays watertight:
+
+| split edges | output triangles | shape |
+|-------------|------------------|-------|
+| 0 | 1 | plain red leaf |
+| 1 | 2 | one midpoint, edge split in two |
+| 2 | 3 | one midline triangle plus two corner triangles |
+| 3 | 4 | three corner triangles plus a central triangle |
+
+For a two-split patch, the remaining quad's diagonal is chosen as the
+lexicographically smaller of the two candidate diagonals expressed as ordered
+persistent-endpoint pairs, which makes exports deterministic.  Green faces are
+not red leaves and cannot be passed to `refine()`.
+
+Each red leaf's own output faces cover its area exactly, the output has no
+hanging vertices, overlaps, cracks or extra boundary, and winding matches the
+root face.  Output vertices contain only points actually used, sorted by
+persistent id.
+
+`Snapshot::root_face[i]` and `Snapshot::leaf_id[i]` are parallel to
+`Snapshot::mesh.faces`.  The exported `TriMesh` is a plain indexed mesh: all
+derived fields (strips, grid, flags, normals, curvature, point areas,
+connectivity) are empty and the bounding volumes are invalid, so calling
+`need_normals()`, `need_pointareas()` or `need_across_edge()` recomputes them
+consistently.
+
+A complete runnable walkthrough (refine, coarsen, OBJ export) is in
+`examples/adaptive_refinement.cc`; `tests/adaptive_refinement.cc` checks the
+contract above and is wired into `sh support/run.sh target`.
+
 ## Fork Details
 
 This fork stays as close as possible to the original [trimesh2](http://gfx.cs.princeton.edu/proj/trimesh2/) code, only changing the actual source files when a solution for compilation errors cannot be reached through VS pre-build steps or preprocessor magic.
