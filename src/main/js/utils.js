@@ -1,0 +1,432 @@
+/*
+ * Copyright (c) 2016, Pierre-Anthony Lemieux <pal@sandflow.com>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright notice, this
+ *   list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * @module imscUtils
+ */
+
+/*
+ * Parses a TTML color expression
+ *
+ */
+
+const HEX_COLOR_RE = /#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})?/;
+const DEC_COLOR_RE = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/;
+const DEC_COLORA_RE = /rgba\(\s*(\d+),\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/;
+const NAMED_COLOR = {
+    transparent: [0, 0, 0, 0],
+    black: [0, 0, 0, 255],
+    silver: [192, 192, 192, 255],
+    gray: [128, 128, 128, 255],
+    white: [255, 255, 255, 255],
+    maroon: [128, 0, 0, 255],
+    red: [255, 0, 0, 255],
+    purple: [128, 0, 128, 255],
+    fuchsia: [255, 0, 255, 255],
+    magenta: [255, 0, 255, 255],
+    green: [0, 128, 0, 255],
+    lime: [0, 255, 0, 255],
+    olive: [128, 128, 0, 255],
+    yellow: [255, 255, 0, 255],
+    navy: [0, 0, 128, 255],
+    blue: [0, 0, 255, 255],
+    teal: [0, 128, 128, 255],
+    aqua: [0, 255, 255, 255],
+    cyan: [0, 255, 255, 255],
+};
+
+/**
+ * @param {string} str
+ * @returns {[number, number, number, number]}
+ */
+export function parseColor(str) {
+
+    let m;
+
+    let r = null;
+
+    const nc = NAMED_COLOR[str.toLowerCase()];
+
+    if (nc !== undefined) {
+
+        r = nc;
+
+    } else if ((m = HEX_COLOR_RE.exec(str)) !== null) {
+
+        r = [parseInt(m[1], 16),
+        parseInt(m[2], 16),
+        parseInt(m[3], 16),
+        (m[4] !== undefined ? parseInt(m[4], 16) : 255)];
+
+    } else if ((m = DEC_COLOR_RE.exec(str)) !== null) {
+
+        r = [parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+            255];
+
+    } else if ((m = DEC_COLORA_RE.exec(str)) !== null) {
+
+        r = [parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+        parseInt(m[4])];
+
+    }
+
+    return r;
+};
+
+const LENGTH_RE = /^((?:\+|-)?\d*(?:\.\d+)?)(px|em|c|%|rh|rw)$/;
+
+/**
+ * @param {string} str
+ * @returns {{ value: number, unit: string } | null}
+ */
+export function parseLength(str) {
+
+    let m;
+
+    let r = null;
+
+    if ((m = LENGTH_RE.exec(str)) !== null) {
+
+        r = { value: parseFloat(m[1]), unit: m[2] };
+    }
+
+    return r;
+};
+
+/**
+ * @param {string} str
+ * @returns {string | any[] | null}
+ */
+export function parseTextShadow(str) {
+
+    const shadows = str.match(/([^(,)]|\([^)]+\))+/g);
+
+    const r = [];
+
+    for (let i = 0; i < shadows.length; i++) {
+
+        const shadow = shadows[i].split(" ");
+
+        if (shadow.length === 1 && shadow[0] === "none") {
+
+            return "none";
+
+        } else if (shadow.length > 1 && shadow.length < 5) {
+
+            const out_shadow = [null, null, null, null];
+
+            /* x offset */
+
+            let l = parseLength(shadow.shift());
+
+            if (l === null)
+                return null;
+
+            out_shadow[0] = l;
+
+            /* y offset */
+
+            l = parseLength(shadow.shift());
+
+            if (l === null)
+                return null;
+
+            out_shadow[1] = l;
+
+            /* is there a third component */
+
+            if (shadow.length === 0) {
+                r.push(out_shadow);
+                continue;
+            }
+
+            l = parseLength(shadow[0]);
+
+            if (l !== null) {
+
+                out_shadow[2] = l;
+
+                shadow.shift();
+
+            }
+
+            if (shadow.length === 0) {
+                r.push(out_shadow);
+                continue;
+            }
+
+            const c = parseColor(shadow[0]);
+
+            if (c === null)
+                return null;
+
+            out_shadow[3] = c;
+
+            r.push(out_shadow);
+        }
+
+    }
+
+    return r;
+};
+
+/**
+ * @typedef {{ value: number, unit: string }} Offset
+ * @typedef {{ edge: string, offset: Offset }} Position
+ */
+
+/**
+ * @param {string} str
+ * @returns {{h: Position, v: Position} | null}
+ */
+export function parsePosition(str) {
+
+    /* see https://www.w3.org/TR/ttml2/#style-value-position */
+
+    const s = str.split(" ");
+
+    const isKeyword = function (str) {
+
+        return str === "center" ||
+            str === "left" ||
+            str === "top" ||
+            str === "bottom" ||
+            str === "right";
+
+    };
+
+    if (s.length > 4) {
+
+        return null;
+
+    }
+
+    /* initial clean-up pass */
+
+    for (let j = 0; j < s.length; j++) {
+
+        if (!isKeyword(s[j])) {
+
+            const l = parseLength(s[j]);
+
+            if (l === null)
+                return null;
+
+            s[j] = l;
+        }
+
+    }
+
+    /* position default */
+
+    const pos = {
+        h: { edge: "left", offset: { value: 50, unit: "%" } },
+        v: { edge: "top", offset: { value: 50, unit: "%" } },
+    };
+
+    /* update position */
+
+    for (let i = 0; i < s.length;) {
+
+        /* extract the current component */
+
+        const comp = s[i++];
+
+        if (isKeyword(comp)) {
+
+            /* we have a keyword */
+
+            let offset = { value: 0, unit: "%" };
+
+            /* peek at the next component */
+
+            if (s.length !== 2 && i < s.length && (!isKeyword(s[i]))) {
+
+                /* followed by an offset */
+
+                offset = s[i++];
+
+            }
+
+            /* skip if center */
+
+            if (comp === "right") {
+
+                pos.h.edge = comp;
+
+                pos.h.offset = offset;
+
+            } else if (comp === "bottom") {
+
+                pos.v.edge = comp;
+
+                pos.v.offset = offset;
+
+            } else if (comp === "left") {
+
+                pos.h.offset = offset;
+
+            } else if (comp === "top") {
+
+                pos.v.offset = offset;
+
+            }
+
+        } else if (s.length === 1 || s.length === 2) {
+
+            /* we have a bare value */
+
+            if (i === 1) {
+
+                /* assign it to left edge if first bare value */
+
+                pos.h.offset = comp;
+
+            } else {
+
+                /* assign it to top edge if second bare value */
+
+                pos.v.offset = comp;
+
+            }
+
+        } else {
+
+            /* error condition */
+
+            return null;
+
+        }
+
+    }
+
+    return pos;
+};
+
+export class ComputedLength {
+    /**
+     * @param {number} rw
+     * @param {number} rh
+     */
+    constructor(rw, rh) {
+        this.rw = rw;
+        this.rh = rh;
+    }
+
+    /**
+     * @param {number} width
+     * @param {number} height
+     * @returns {number}
+     */
+    toUsedLength(width, height) {
+        return width * this.rw + height * this.rh;
+    };
+
+    /**
+     * @returns {boolean}
+     */
+    isZero() {
+        return this.rw === 0 && this.rh === 0;
+    };
+
+}
+
+/**
+ * Computes a specified length to a root container relative length
+ *
+ * @param {number} lengthVal Length value to be computed
+ * @param {string} lengthUnit Units of the length value
+ * @param {number} emScale length of 1em, or null if em is not allowed
+ * @param {number} percentScale length to which , or null if perecentage is not allowed
+ * @param {number} cellScale length of 1c, or null if c is not allowed
+ * @param {number} pxScale length of 1px, or null if px is not allowed
+ * @param {number} direction 0 if the length is computed in the horizontal direction, 1 if the length is computed in the vertical direction
+ * @return {number} Computed length
+ */
+export function toComputedLength(lengthVal, lengthUnit, emLength, percentLength, cellLength, pxLength) {
+
+    if (lengthUnit === "%" && percentLength) {
+
+        return new ComputedLength(
+            percentLength.rw * lengthVal / 100,
+            percentLength.rh * lengthVal / 100,
+        );
+
+    } else if (lengthUnit === "em" && emLength) {
+
+        return new ComputedLength(
+            emLength.rw * lengthVal,
+            emLength.rh * lengthVal,
+        );
+
+    } else if (lengthUnit === "c" && cellLength) {
+
+        return new ComputedLength(
+            lengthVal * cellLength.rw,
+            lengthVal * cellLength.rh,
+        );
+
+    } else if (lengthUnit === "px" && pxLength) {
+
+        return new ComputedLength(
+            lengthVal * pxLength.rw,
+            lengthVal * pxLength.rh,
+        );
+
+    } else if (lengthUnit === "rh") {
+
+        return new ComputedLength(
+            0,
+            lengthVal / 100,
+        );
+
+    } else if (lengthUnit === "rw") {
+
+        return new ComputedLength(
+            lengthVal / 100,
+            0,
+        );
+
+    } else {
+
+        return null;
+
+    }
+
+}
+
+/**
+ * @param {Object} obj
+ * @param {string} prop
+ * @returns {boolean}
+ */
+export function hasOwnProperty(obj, prop) {
+    return Object.prototype.hasOwnProperty.call(obj, prop);
+}

@@ -1,0 +1,3 @@
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" tts:extent="200px 100px">
+<head><layout><region xml:id="r" tts:origin="10% 10%" tts:extent="80% 80%" tts:displayAlign="center"/></layout></head>
+<body region="r"><div><p begin="1s" end="3s" tts:fontSize="20px">A<span tts:ruby="container"><span tts:ruby="base">B</span><span tts:ruby="text">bee</span></span><span tts:color="red"> C</span></p></div></body></tt>
