@@ -1,0 +1,22 @@
+#!/bin/bash
+# Sandbox-compatible mktemp shim.
+#
+# Some sandboxes forbid creating entries in the OS default mktemp directory
+# while $TMPDIR points at a writable per-session directory. Route the no-arg
+# and bare "-d" invocations used by checks/*.sh into $TMPDIR; anything else is
+# passed through unchanged to the real binary. This wrapper's own directory is
+# excluded from PATH so it cannot recurse into itself.
+this_dir="$(cd "$(dirname "$0")" && pwd)"
+real_mktemp="$(PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^$this_dir\$" | paste -sd ':' -)" command -v mktemp)"
+base="${TMPDIR:-/tmp}"
+case "$*" in
+    "")
+        exec "$real_mktemp" "$base/tmp.XXXXXXXXXX"
+        ;;
+    "-d")
+        exec "$real_mktemp" -d "$base/tmp.XXXXXXXXXX"
+        ;;
+    *)
+        exec "$real_mktemp" "$@"
+        ;;
+esac
