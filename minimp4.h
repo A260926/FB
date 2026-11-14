@@ -435,6 +435,12 @@ MP4E_mux_t *MP4E_open(int sequential_mode_flag, int enable_fragmentation, void *
     int (*write_callback)(int64_t offset, const void *buffer, size_t size, void *token));
 
 /**
+*   Return non-zero if the multiplexer was opened in fragmented (fMP4) mode.
+*   Needed by wrappers that keep MP4E_mux_t opaque and cannot support that mode.
+*/
+int MP4E_is_fragmented(const MP4E_mux_t *mux);
+
+/**
 *   Add new track
 *   The track_data parameter does not referred by the multiplexer after function
 *   return, and may be allocated in short-time memory. The dsi member of
@@ -858,6 +864,11 @@ MP4E_mux_t *MP4E_open(int sequential_mode_flag, int enable_fragmentation, void *
     }
     minimp4_vector_init(&mux->tracks, 2*sizeof(track_t));
     return mux;
+}
+
+int MP4E_is_fragmented(const MP4E_mux_t *mux)
+{
+    return mux ? mux->enable_fragmentation : 0;
 }
 
 /**
