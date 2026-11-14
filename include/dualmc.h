@@ -42,13 +42,39 @@ struct Vertex {
 struct Quad {
     /// non-initializing constructor
     Quad();
-    
+
     /// initializing constructor
     Quad(QuadIndexType i0, QuadIndexType i1,QuadIndexType i2, QuadIndexType i3);
-    
+
     // quad indices
     QuadIndexType i0,i1,i2,i3;
-    
+
+};
+
+/// quad indices structure for a periodically tiled volume.
+/// In addition to the shared vertex indices each quad corner stores the
+/// number of periods the canonical cell image is shifted along each axis.
+struct PeriodicQuad {
+    /// non-initializing constructor
+    PeriodicQuad();
+
+    /// initializing constructor
+    PeriodicQuad(QuadIndexType i0, QuadIndexType i1, QuadIndexType i2, QuadIndexType i3);
+
+    // quad indices
+    QuadIndexType i0,i1,i2,i3;
+
+    // per corner period offsets along the x-, y-, and z-axis
+    int32_t offset[4][3];
+};
+
+/// vertex and quad output of the periodic iso surface extraction
+struct PeriodicMesh {
+    /// dual points, positioned inside the canonical periodic domain
+    std::vector<Vertex> vertices;
+
+    /// quads with periodic tiling offsets
+    std::vector<PeriodicQuad> quads;
 };
 
 /// \class  DualMC
@@ -83,6 +109,22 @@ public:
         std::vector<Quad> & quads
         );
 
+    /// Extracts the iso surface of a periodically repeating volume.
+    /// The array stores exactly one period with no duplicated endpoint samples
+    /// (each dimension has at least three samples). Sample access, ambiguous
+    /// cell neighbor lookups and grid edge ownership wrap around all three
+    /// axes. Output vertices live in the canonical period unit box while each
+    /// quad corner carries the period offsets of its lifted cell image.
+    /// The lookup tables, edge intersection averaging and face winding are
+    /// identical to build().
+    void buildPeriodic(
+        VolumeDataType const * data,
+        int32_t const nx, int32_t const ny, int32_t const nz,
+        VolumeDataType const iso,
+        bool const generateManifold,
+        PeriodicMesh & out
+        );
+
 private:
 
     /// Extract quad mesh with shared vertex indices.
@@ -91,12 +133,19 @@ private:
         std::vector<Vertex> & vertices,
         std::vector<Quad> & quads
         );
-        
+
     /// Extract quad soup.
     void buildQuadSoup(
         VolumeDataType const iso,
         std::vector<Vertex> & vertices,
         std::vector<Quad> & quads
+        );
+
+    /// Extract the periodically tiled quad mesh with shared vertices and
+    /// per-corner period offsets.
+    void buildPeriodicQuads(
+        VolumeDataType const iso,
+        PeriodicMesh & out
         );
 
 
@@ -142,9 +191,43 @@ private:
     QuadIndexType getSharedDualPointIndex(int32_t const cx, int32_t const cy, int32_t const cz,
       VolumeDataType const iso, DMCEdgeCode const edge,
       std::vector<Vertex> & vertices);
-    
+
     /// Compute a linearized cell cube index.
     int32_t gA(int32_t const x, int32_t const y, int32_t const z) const;
+
+    /// Wrap a lattice coordinate into the canonical range [0,n) of a period.
+    static int32_t wrapCoord(int32_t const v, int32_t const n);
+
+    /// Periodically wrapped sample access at arbitrary lattice coordinates.
+    VolumeDataType sampleAt(int32_t const x, int32_t const y, int32_t const z) const;
+
+    /// Get the 8-bit in-out mask of a cell at an unwrapped lower corner on
+    /// the infinite periodic lattice.
+    int getCellCodePeriodic(int32_t const cx, int32_t const cy, int32_t const cz,
+      VolumeDataType const iso) const;
+
+    /// Periodic variant of getDualPointCode. Manifold neighbor cells are
+    /// resolved across period seams.
+    int getDualPointCodePeriodic(int32_t const cx, int32_t const cy, int32_t const cz,
+      VolumeDataType const iso, DMCEdgeCode const edge) const;
+
+    /// Periodic variant of calculateDualPoint for a canonical cell corner.
+    void calculateDualPointPeriodic(int32_t const cx, int32_t const cy, int32_t const cz,
+      VolumeDataType const iso, int const pointCode, Vertex &v) const;
+
+    /// Get the shared index of a dual point of a canonical cell for the
+    /// periodic extraction.
+    QuadIndexType getSharedPeriodicDualPointIndex(int32_t const cx, int32_t const cy, int32_t const cz,
+      VolumeDataType const iso, DMCEdgeCode const edge,
+      std::vector<Vertex> & vertices);
+
+    /// Resolve a quad corner from an unwrapped cell lower corner: wrap the
+    /// cell into the canonical period, return its shared vertex index and
+    /// the period offset of the lifted cell image.
+    QuadIndexType getPeriodicCorner(int32_t const ux, int32_t const uy, int32_t const uz,
+      VolumeDataType const iso, DMCEdgeCode const edge,
+      std::vector<Vertex> & vertices,
+      int32_t offsets[3]);
 
 private:
     // static lookup tables needed for (manifold) dual marching cubes
@@ -191,6 +274,9 @@ private:
     
     /// Hash map for shared vertex index computations
     std::unordered_map<DualPointKey,QuadIndexType,DualPointKeyHash> pointToIndex;
+
+    /// Hash map for shared vertex index computations of the periodic build
+    std::unordered_map<DualPointKey,QuadIndexType,DualPointKeyHash> periodicPointToIndex;
 };
 
 // inline function definitions
@@ -231,6 +317,22 @@ Quad::Quad(
 
 //------------------------------------------------------------------------------
 
+inline
+PeriodicQuad::PeriodicQuad() : offset{{0,0,0},{0,0,0},{0,0,0},{0,0,0}} {}
+
+//------------------------------------------------------------------------------
+
+inline
+PeriodicQuad::PeriodicQuad(
+    QuadIndexType i0,
+    QuadIndexType i1,
+    QuadIndexType i2,
+    QuadIndexType i3
+    ) : i0(i0),i1(i1),i2(i2),i3(i3),
+        offset{{0,0,0},{0,0,0},{0,0,0},{0,0,0}} {}
+
+//------------------------------------------------------------------------------
+
 template<class T> inline
 int32_t DualMC<T>::gA(int32_t const x, int32_t const y, int32_t const z) const {
     return x + dims[0] * (y + dims[1] * z);
@@ -243,6 +345,8 @@ bool DualMC<T>::DualPointKey::operator==(typename DualMC<T>::DualPointKey const 
 }
 
 #include "dualmc.tpp"
+
+#include "dualmc_periodic.tpp"
 
 #include "dualmc_tables.tpp"
 

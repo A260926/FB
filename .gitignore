@@ -5,3 +5,4 @@ gentables.exe
 *.obj
 *.o
 *.dep
+.task-build/
