@@ -7,6 +7,7 @@
 #include "lexbor/style/element_steps.h"
 #include "lexbor/dom/interfaces/document.h"
 
+#include "lexbor/html/input_steps.h"
 #include "lexbor/style/html/interfaces/element.h"
 #include "lexbor/html/interfaces/option_element.h"
 #include "lexbor/style/html/interfaces/style_element.h"
@@ -18,6 +19,8 @@ lxb_style_element_steps_insertion(lxb_dom_node_t *inserted_node)
 {
     lxb_dom_node_cb_insertion_f inserted;
     lxb_tag_id_t tag_id = inserted_node->local_name;
+
+    lxb_html_input_steps_insertion(inserted_node);
 
     if (tag_id >= LXB_TAG__LAST_ENTRY) {
         if (tag_id == LXB_TAG__LAST_ENTRY) {
@@ -46,6 +49,8 @@ lxb_style_element_steps_removing(lxb_dom_node_t *removed_node,
 {
     lxb_dom_node_cb_removing_f removed;
     lxb_tag_id_t tag_id = removed_node->local_name;
+
+    lxb_html_input_steps_removal(removed_node, old_parent);
 
     if (tag_id >= LXB_TAG__LAST_ENTRY) {
         if (tag_id == LXB_TAG__LAST_ENTRY) {

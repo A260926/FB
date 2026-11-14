@@ -8,9 +8,28 @@
 #include "lexbor/dom/interfaces/document.h"
 #include "lexbor/dom/interfaces/element.h"
 
+#include "lexbor/html/input_steps.h"
 #include "lexbor/style/html/interfaces/element.h"
 #include "lexbor/style/html/interfaces/option_element.h"
 #include "lexbor/style/attribute_steps_res.h"
+
+
+static bool
+lxb_style_attribute_steps_needed(lxb_dom_element_t *element,
+                                 lxb_dom_attr_id_t name)
+{
+    lxb_dom_node_t *node = &element->node;
+
+    if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return false;
+    }
+
+    if (name == LXB_DOM_ATTR_ID) {
+        return true;
+    }
+
+    return node->ns == LXB_NS_HTML && node->local_name == LXB_TAG_INPUT;
+}
 
 
 lxb_status_t
@@ -23,6 +42,11 @@ lxb_style_attribute_steps_change(lxb_dom_element_t *element,
     lxb_tag_id_t tag_id;
     lxb_dom_node_t *node;
     lxb_dom_element_attr_change_f change;
+
+    if (lxb_style_attribute_steps_needed(element, name)) {
+        (void) lxb_html_input_steps_attr(element, name,
+                                         LXB_HTML_INPUT_ATTR_CHANGE);
+    }
 
     node = lxb_dom_interface_node(element);
     tag_id = node->local_name;
@@ -60,6 +84,11 @@ lxb_style_attribute_steps_append(lxb_dom_element_t *element,
     lxb_dom_node_t *node;
     lxb_dom_element_attr_change_f append;
 
+    if (lxb_style_attribute_steps_needed(element, name)) {
+        (void) lxb_html_input_steps_attr(element, name,
+                                         LXB_HTML_INPUT_ATTR_APPEND);
+    }
+
     node = lxb_dom_interface_node(element);
     tag_id = node->local_name;
 
@@ -96,6 +125,11 @@ lxb_style_attribute_steps_remove(lxb_dom_element_t *element,
     lxb_dom_node_t *node;
     lxb_dom_element_attr_change_f remove;
 
+    if (lxb_style_attribute_steps_needed(element, name)) {
+        (void) lxb_html_input_steps_attr(element, name,
+                                         LXB_HTML_INPUT_ATTR_REMOVE);
+    }
+
     node = lxb_dom_interface_node(element);
     tag_id = node->local_name;
 
@@ -131,6 +165,11 @@ lxb_style_attribute_steps_replace(lxb_dom_element_t *element,
     lxb_tag_id_t tag_id;
     lxb_dom_node_t *node;
     lxb_dom_element_attr_change_f replace;
+
+    if (lxb_style_attribute_steps_needed(element, name)) {
+        (void) lxb_html_input_steps_attr(element, name,
+                                         LXB_HTML_INPUT_ATTR_REPLACE);
+    }
 
     node = lxb_dom_interface_node(element);
     tag_id = node->local_name;

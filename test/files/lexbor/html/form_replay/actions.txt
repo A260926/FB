@@ -1,0 +1,22 @@
+# Offline form entry replay: recorded user actions.
+# select <doc> <id>, unselect <doc> <id>, name/form <doc> <id> <value>,
+# move <doc> <node> <parent>, reset <doc> <form>, attr <doc> <id> <name> [value].
+
+# Document A: select an external control associated by form attribute.
+select A ext1
+# It joins the alpha group; alpha's checked a1 is cleared.
+# Rename a2 and move it away: leaving a group selects no replacement.
+name A a2 color2
+move A a2 sink
+# Bring the holder subtree (one checked control) into alpha.
+move A holder alpha
+# Reset alpha restores its checked content-attribute defaults.
+reset A alpha
+# Flip the default of a2 by attribute while a1 is dirty.
+select A a1
+attr A a1 checked -
+
+# Document B: move a checked control into the gamma group, then reset.
+select B b1
+move B b4 gamma
+reset B gamma

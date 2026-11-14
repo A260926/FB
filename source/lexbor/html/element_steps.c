@@ -10,6 +10,7 @@
 #include "lexbor/tag/const.h"
 #include "lexbor/ns/const.h"
 
+#include "lexbor/html/input_steps.h"
 #include "lexbor/html/interfaces/option_element.h"
 #include "lexbor/html/interfaces/select_element.h"
 #include "lexbor/html/interfaces/selectedcontent_element.h"
@@ -28,6 +29,8 @@ lxb_html_element_steps_insertion(lxb_dom_node_t *inserted_node)
     if (inserted_node->ns != LXB_NS_HTML) {
         return LXB_STATUS_OK;
     }
+
+    lxb_html_input_steps_insertion(inserted_node);
 
     tag_id = inserted_node->local_name;
 
@@ -62,6 +65,8 @@ lxb_html_element_steps_removing(lxb_dom_node_t *removed_node,
     if (removed_node->ns != LXB_NS_HTML) {
         return LXB_STATUS_OK;
     }
+
+    lxb_html_input_steps_removal(removed_node, old_parent);
 
     tag_id = removed_node->local_name;
 

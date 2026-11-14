@@ -6,6 +6,7 @@
 
 #include "lexbor/html/interfaces/form_element.h"
 #include "lexbor/html/interfaces/document.h"
+#include "lexbor/html/input_steps.h"
 
 
 lxb_html_form_element_t *
@@ -32,4 +33,10 @@ lxb_html_form_element_interface_destroy(lxb_html_form_element_t *form_element)
 {
     (void) lxb_dom_node_interface_destroy(lxb_dom_interface_node(form_element));
     return NULL;
+}
+
+lxb_status_t
+lxb_html_form_element_reset(lxb_html_form_element_t *form_element)
+{
+    return lxb_html_input_steps_reset(form_element);
 }
