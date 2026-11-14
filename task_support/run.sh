@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 mode=${1:-baseline}
 if [[ $mode == target ]]; then
  test -s switch_recovery_test.mjs
- output_log=$(mktemp)
+ output_log=$(mktemp "${TMPDIR:-/tmp}/r2dec.XXXXXX")
  trap 'rm -f "$output_log"' EXIT
  set +e
  node task_support/driver.mjs >"$output_log" 2>&1

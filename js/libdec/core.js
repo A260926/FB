@@ -11,6 +11,7 @@ import Classes from './core/classes.js';
 import Functions from './core/functions.js';
 import Instruction from './core/instruction.js';
 import ControlFlow from './core/controlflow.js';
+import SwitchRecovery from './core/switch.js';
 import XRefs from './core/xrefs.js';
 import Anno from './annotation.js';
 import Long from './long.js';
@@ -37,7 +38,12 @@ var _hardcoded_fixes = function(routine_name, return_type) {
  * @param  {Object} arch_context - Current architecture context object.
  */
 var _post_analysis = function(session, arch, arch_context) {
+    // Recover indirect jumps (switchop) before the generic control flow pass so
+    // the switch structure drives the same block/instruction objects printed by
+    // core.print. Functions without a switchop are left untouched.
+    SwitchRecovery(session);
     ControlFlow(session);
+    SwitchRecovery.orderBlocks(session);
     if (arch.postanalisys) {
         arch.postanalisys(session.instructions, arch_context);
     }
@@ -150,6 +156,10 @@ var _print = function(session) {
  */
 var _session = function(data, arch) {
     this.blocks = [new Block()];
+    // Original radare2 graph, retained for control-flow recovery (switchop).
+    this.rawGraph = data.graph[0];
+    this.switches = [];
+    this.switchOrder = null;
     var instructions = [];
     var symbols = new Symbols(data.xrefs.symbols);
     var strings = new Strings(data.xrefs.strings);

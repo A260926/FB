@@ -89,4 +89,51 @@ One last thing:
   - `simplified` is a string containing the standard assembly (for example: `call 0x4a234`).
   - the returned object is available under `instr.parsed`, meanwhile the original string can still be found under `instr.assembly` or `instr.simplified`.
 
+## Switch recovery (`session.switches`)
+
+Indirect jumps carrying a radare2 `switchop` are recovered by
+`js/libdec/core/switch.js`, which runs before the generic `ControlFlow` pass
+and drives the same block/instruction objects used by `core.print`. A function
+without a `switchop` is left on the original path and gets `session.switches`
+set to an empty array. The current scope is a single, non nested switch per
+function.
+
+Every recovered switch appends one object to `session.switches`:
+
+```
+{
+  dispatch:       "0x1005",                 // hex string: indirect jump instruction
+  selector:       "eax",                    // switchop.selector, used verbatim
+  cases: [                                  // one entry per switchop.cases entry
+    { "value": 0, "target": "0x1010" },     // value: signed 32 bit constant
+    { "value": 1, "target": "0x1010" }      // target: hex string, a block entry
+  ],
+  defaultTarget:  "0x1030",                 // hex string, or null when absent
+  join:           "0x1040",                 // hex string common tail, or null
+  edges: [                                  // original blocks inside the region
+    { "from": "0x1010", "to": "0x1040" },
+    { "from": "0x1030", "to": null }        // null destination == function return
+  ]
+}
+```
+
+Rules behind the data:
+
+* Every address is a lowercase hexadecimal string (`"0x.."`); numeric labels in
+  `cases[].value` are integers.
+* Cases jumping to the same block share that block body; the shared body is
+  printed once, with the values combined on one `case` label line.
+* Fallthrough is derived only from graph edges, never from label values or
+  physical addresses, so no `break` is invented for a graph fallthrough.
+* `join` is the common post-dominator of every case target. A path that returns
+  directly prevents any join, in which case `join` is `null`; such a return is
+  recorded with `to: null` and is never attached to the join.
+* `edges` lists the original blocks of the recovered region with their real
+  successors. Back edges (in-case loops) and cross-label jumps stay explicit and
+  are rendered with address labels plus `goto`; no edge is removed and no block
+  with side effects is copied.
+* The printed `switch (` line carries the dispatch instruction offset, each
+  `case`/`default` line carries the target block offset, and all other lines
+  keep their originating instruction address.
+
 Deroad.

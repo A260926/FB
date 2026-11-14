@@ -1,0 +1,835 @@
+{
+  "description": "legal synthetic x86-64 raw images for switch recovery tests; never execute",
+  "fixtures": {
+    "aliases_join": {
+      "base": "0x2000",
+      "sha256": "35701a34cafba5d89084b8b4d7b14c1cbc82bb558bc962ce11a073864714df6e",
+      "image_hex": "83f8027715ff24c500310000b80a000000eb0eb814000000eb07b81e000000eb0083c001c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f802",
+              "opcode": "cmp eax, 2"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7715",
+              "opcode": "ja 0x201a"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b80a000000",
+              "opcode": "mov eax, 10"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "eb0e",
+              "opcode": "jmp 0x2021"
+            }
+          ]
+        },
+        {
+          "offset": "0x2013",
+          "ops": [
+            {
+              "offset": "0x2013",
+              "size": 5,
+              "bytes": "b814000000",
+              "opcode": "mov eax, 20"
+            },
+            {
+              "offset": "0x2018",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x2021"
+            }
+          ]
+        },
+        {
+          "offset": "0x201a",
+          "ops": [
+            {
+              "offset": "0x201a",
+              "size": 5,
+              "bytes": "b81e000000",
+              "opcode": "mov eax, 30"
+            },
+            {
+              "offset": "0x201f",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2021"
+            }
+          ]
+        },
+        {
+          "offset": "0x2021",
+          "ops": [
+            {
+              "offset": "0x2021",
+              "size": 3,
+              "bytes": "83c001",
+              "opcode": "add eax, 1"
+            },
+            {
+              "offset": "0x2024",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "aliases_goto": {
+      "base": "0x2000",
+      "sha256": "bc759eda1f3a07d5f0ddd2fbab3320d858c1077eb924d492ecd70e9af5f3c5e0",
+      "image_hex": "83f8017715ff24c500310000b801000000eb0db802000000eb06b809000000c383c003c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f801",
+              "opcode": "cmp eax, 1"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7715",
+              "opcode": "ja 0x201a"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b801000000",
+              "opcode": "mov eax, 1"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "eb0d",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x2013",
+          "ops": [
+            {
+              "offset": "0x2013",
+              "size": 5,
+              "bytes": "b802000000",
+              "opcode": "mov eax, 2"
+            },
+            {
+              "offset": "0x2018",
+              "size": 2,
+              "bytes": "eb06",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x201a",
+          "ops": [
+            {
+              "offset": "0x201a",
+              "size": 5,
+              "bytes": "b809000000",
+              "opcode": "mov eax, 9"
+            },
+            {
+              "offset": "0x201f",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        },
+        {
+          "offset": "0x2020",
+          "ops": [
+            {
+              "offset": "0x2020",
+              "size": 3,
+              "bytes": "83c003",
+              "opcode": "add eax, 3"
+            },
+            {
+              "offset": "0x2023",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "aliases_default_shared": {
+      "base": "0x2000",
+      "sha256": "89a5b0a5235e61430914ea3a9c89168ace58d2fd9ac6138bb7b6e2623bdc03a0",
+      "image_hex": "83f801770eff24c500310000b80a000000eb07b814000000eb0083c001c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f801",
+              "opcode": "cmp eax, 1"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "770e",
+              "opcode": "ja 0x2013"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b80a000000",
+              "opcode": "mov eax, 10"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x201a"
+            }
+          ]
+        },
+        {
+          "offset": "0x2013",
+          "ops": [
+            {
+              "offset": "0x2013",
+              "size": 5,
+              "bytes": "b814000000",
+              "opcode": "mov eax, 20"
+            },
+            {
+              "offset": "0x2018",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x201a"
+            }
+          ]
+        },
+        {
+          "offset": "0x201a",
+          "ops": [
+            {
+              "offset": "0x201a",
+              "size": 3,
+              "bytes": "83c001",
+              "opcode": "add eax, 1"
+            },
+            {
+              "offset": "0x201d",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "fallthrough_chain": {
+      "base": "0x2000",
+      "sha256": "9a2d9f44848a23b47cf4bbbf3e91552f8f97e89893bb6cc2b01b8f1a579a9c38",
+      "image_hex": "83f805771aff24c500310000b864000000b8c8000000eb00b832000000eb07b84d000000eb0083c001c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f805",
+              "opcode": "cmp eax, 5"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "771a",
+              "opcode": "ja 0x201f"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b864000000",
+              "opcode": "mov eax, 100"
+            }
+          ]
+        },
+        {
+          "offset": "0x2011",
+          "ops": [
+            {
+              "offset": "0x2011",
+              "size": 5,
+              "bytes": "b8c8000000",
+              "opcode": "mov eax, 200"
+            },
+            {
+              "offset": "0x2016",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2018"
+            }
+          ]
+        },
+        {
+          "offset": "0x2018",
+          "ops": [
+            {
+              "offset": "0x2018",
+              "size": 5,
+              "bytes": "b832000000",
+              "opcode": "mov eax, 50"
+            },
+            {
+              "offset": "0x201d",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x2026"
+            }
+          ]
+        },
+        {
+          "offset": "0x201f",
+          "ops": [
+            {
+              "offset": "0x201f",
+              "size": 5,
+              "bytes": "b84d000000",
+              "opcode": "mov eax, 77"
+            },
+            {
+              "offset": "0x2024",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2026"
+            }
+          ]
+        },
+        {
+          "offset": "0x2026",
+          "ops": [
+            {
+              "offset": "0x2026",
+              "size": 3,
+              "bytes": "83c001",
+              "opcode": "add eax, 1"
+            },
+            {
+              "offset": "0x2029",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "exits_tail_return": {
+      "base": "0x2000",
+      "sha256": "9287ffb630057d980ad71fae2e59d6f5c9e149738aa77818ecf623733e69f869",
+      "image_hex": "83f8017715ff24c500310000b801000000eb0db802000000eb06b809000000c383c001c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f801",
+              "opcode": "cmp eax, 1"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7715",
+              "opcode": "ja 0x201a"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b801000000",
+              "opcode": "mov eax, 1"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "eb0d",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x2013",
+          "ops": [
+            {
+              "offset": "0x2013",
+              "size": 5,
+              "bytes": "b802000000",
+              "opcode": "mov eax, 2"
+            },
+            {
+              "offset": "0x2018",
+              "size": 2,
+              "bytes": "eb06",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x201a",
+          "ops": [
+            {
+              "offset": "0x201a",
+              "size": 5,
+              "bytes": "b809000000",
+              "opcode": "mov eax, 9"
+            },
+            {
+              "offset": "0x201f",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        },
+        {
+          "offset": "0x2020",
+          "ops": [
+            {
+              "offset": "0x2020",
+              "size": 3,
+              "bytes": "83c001",
+              "opcode": "add eax, 1"
+            },
+            {
+              "offset": "0x2023",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "exits_local_if": {
+      "base": "0x2000",
+      "sha256": "8f695cb2b0eb3c302ee9174ea37dd1acda55b8346ee0842b7434fb8a3c2688c0",
+      "image_hex": "83f8017725ff24c500310000b80100000085c07407ba08000000eb15ba07000000eb0eb802000000eb07b809000000eb0001d0c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f801",
+              "opcode": "cmp eax, 1"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7725",
+              "opcode": "ja 0x202a"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b801000000",
+              "opcode": "mov eax, 1"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "85c0",
+              "opcode": "test eax, eax"
+            },
+            {
+              "offset": "0x2013",
+              "size": 2,
+              "bytes": "7407",
+              "opcode": "je 0x201c"
+            }
+          ]
+        },
+        {
+          "offset": "0x2015",
+          "ops": [
+            {
+              "offset": "0x2015",
+              "size": 5,
+              "bytes": "ba08000000",
+              "opcode": "mov edx, 8"
+            },
+            {
+              "offset": "0x201a",
+              "size": 2,
+              "bytes": "eb15",
+              "opcode": "jmp 0x2031"
+            }
+          ]
+        },
+        {
+          "offset": "0x201c",
+          "ops": [
+            {
+              "offset": "0x201c",
+              "size": 5,
+              "bytes": "ba07000000",
+              "opcode": "mov edx, 7"
+            },
+            {
+              "offset": "0x2021",
+              "size": 2,
+              "bytes": "eb0e",
+              "opcode": "jmp 0x2031"
+            }
+          ]
+        },
+        {
+          "offset": "0x2023",
+          "ops": [
+            {
+              "offset": "0x2023",
+              "size": 5,
+              "bytes": "b802000000",
+              "opcode": "mov eax, 2"
+            },
+            {
+              "offset": "0x2028",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x2031"
+            }
+          ]
+        },
+        {
+          "offset": "0x202a",
+          "ops": [
+            {
+              "offset": "0x202a",
+              "size": 5,
+              "bytes": "b809000000",
+              "opcode": "mov eax, 9"
+            },
+            {
+              "offset": "0x202f",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2031"
+            }
+          ]
+        },
+        {
+          "offset": "0x2031",
+          "ops": [
+            {
+              "offset": "0x2031",
+              "size": 2,
+              "bytes": "01d0",
+              "opcode": "add eax, edx"
+            },
+            {
+              "offset": "0x2033",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "exits_loop": {
+      "base": "0x2000",
+      "sha256": "c879e0eded82e3a8bfc83db77beea40263f86de44eb9840b408039a793431d40",
+      "image_hex": "83f8017714ff24c5003100004083f80375faba05000000eb07b863000000eb0090c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f801",
+              "opcode": "cmp eax, 1"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7714",
+              "opcode": "ja 0x2019"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 7,
+              "bytes": "ff24c500310000",
+              "opcode": "jmp qword [rax*8 + 0x3100]"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 1,
+              "bytes": "40",
+              "opcode": "inc eax"
+            },
+            {
+              "offset": "0x200d",
+              "size": 3,
+              "bytes": "83f803",
+              "opcode": "cmp eax, 3"
+            },
+            {
+              "offset": "0x2010",
+              "size": 2,
+              "bytes": "75fa",
+              "opcode": "jne 0x200c"
+            }
+          ]
+        },
+        {
+          "offset": "0x2012",
+          "ops": [
+            {
+              "offset": "0x2012",
+              "size": 5,
+              "bytes": "ba05000000",
+              "opcode": "mov edx, 5"
+            },
+            {
+              "offset": "0x2017",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x2019",
+          "ops": [
+            {
+              "offset": "0x2019",
+              "size": 5,
+              "bytes": "b863000000",
+              "opcode": "mov eax, 99"
+            },
+            {
+              "offset": "0x201e",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2020"
+            }
+          ]
+        },
+        {
+          "offset": "0x2020",
+          "ops": [
+            {
+              "offset": "0x2020",
+              "size": 1,
+              "bytes": "90",
+              "opcode": "nop"
+            },
+            {
+              "offset": "0x2021",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    },
+    "plain_if": {
+      "base": "0x2000",
+      "sha256": "5b73a3131ce944c46ddb379926e2340909f83abe2a1fd87ab42005f8e5a90bec",
+      "image_hex": "83f8007407b801000000eb07b802000000eb00c3",
+      "blocks": [
+        {
+          "offset": "0x2000",
+          "ops": [
+            {
+              "offset": "0x2000",
+              "size": 3,
+              "bytes": "83f800",
+              "opcode": "cmp eax, 0"
+            },
+            {
+              "offset": "0x2003",
+              "size": 2,
+              "bytes": "7407",
+              "opcode": "je 0x200c"
+            }
+          ]
+        },
+        {
+          "offset": "0x2005",
+          "ops": [
+            {
+              "offset": "0x2005",
+              "size": 5,
+              "bytes": "b801000000",
+              "opcode": "mov eax, 1"
+            },
+            {
+              "offset": "0x200a",
+              "size": 2,
+              "bytes": "eb07",
+              "opcode": "jmp 0x2013"
+            }
+          ]
+        },
+        {
+          "offset": "0x200c",
+          "ops": [
+            {
+              "offset": "0x200c",
+              "size": 5,
+              "bytes": "b802000000",
+              "opcode": "mov eax, 2"
+            },
+            {
+              "offset": "0x2011",
+              "size": 2,
+              "bytes": "eb00",
+              "opcode": "jmp 0x2013"
+            }
+          ]
+        },
+        {
+          "offset": "0x2013",
+          "ops": [
+            {
+              "offset": "0x2013",
+              "size": 1,
+              "bytes": "c3",
+              "opcode": "ret"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
