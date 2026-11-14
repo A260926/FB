@@ -49,6 +49,9 @@ bool DecoderImpl::Initialize(EncodingScheme encoding_scheme,
     type_ = type;
     profile_ = profile;
     language_id_ = language_id;
+    // User macro support defaults to disabled after Initialize, definitions are dropped
+    user_macro_enabled_ = false;
+    ClearUserMacroState();
     ResetInternalState();
     return true;
 }
@@ -60,11 +63,13 @@ void DecoderImpl::SetEncodingScheme(EncodingScheme encoding_scheme) {
         EncodingScheme detected_encoding = DetectEncodingScheme();
         if (active_encoding_ != detected_encoding) {
             active_encoding_ = detected_encoding;
+            ClearUserMacroState();
             ResetInternalState();
         }
     } else {  // encoding_scheme != kAuto
         if (active_encoding_ != encoding_scheme) {
             active_encoding_ = encoding_scheme;
+            ClearUserMacroState();
             ResetInternalState();
         }
     }
@@ -88,6 +93,15 @@ void DecoderImpl::SetReplaceMSZFullWidthAlphanumeric(bool replace) {
 
 void DecoderImpl::SetReplaceMSZFullWidthJapanese(bool replace) {
     replace_msz_fullwidth_ja_ = replace;
+}
+
+void DecoderImpl::SetUserMacroEnabled(bool enabled) {
+    if (user_macro_enabled_ == enabled) {
+        return;
+    }
+    // Toggling the switch drops all user-defined macros; re-enabling cannot restore them
+    user_macro_enabled_ = enabled;
+    ClearUserMacroState();
 }
 
 uint32_t DecoderImpl::QueryISO6392LanguageCode(LanguageId language_id) const {
@@ -194,6 +208,10 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
 
     if (!ret) {
         caption_.reset();
+        // Drop the incomplete definition (if any) and the active invocation chain.
+        // Already committed user macro definitions survive the error.
+        AbortUserMacroDefinition();
+        user_macro_invoke_stack_.clear();
         return DecodeStatus::kError;
     }
 
@@ -220,6 +238,8 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
 
 void DecoderImpl::Flush() {
     ResetInternalState();
+    // Flush clears user-defined macros and the active invocation state, but keeps the switch
+    ClearUserMacroState();
     // We need to accept caption management data again, if we are about to face a seek or discontinuity
     prev_dgi_group_ = -1;
 }
@@ -439,6 +459,7 @@ bool DecoderImpl::ParseCaptionManagementData(const uint8_t* data, size_t length)
         EncodingScheme detected_encoding = DetectEncodingScheme();
         if (active_encoding_ != detected_encoding) {
             active_encoding_ = detected_encoding;
+            ClearUserMacroState();
             ResetInternalState();
         }
     }
@@ -526,7 +547,13 @@ bool DecoderImpl::ParseDataUnit(const uint8_t* data, size_t length) {
         }
 
         if (data_unit_parameter == 0x20) {
-            ParseStatementBody(data + offset + 5, data_unit_size);
+            if (!ParseStatementBody(data + offset + 5, data_unit_size)) {
+                // In user macro mode, statement body parse errors must propagate to Decode()
+                if (user_macro_enabled_ && active_encoding_ == EncodingScheme::kARIB_STD_B24_JIS) {
+                    log_->e("DecoderImpl: ParseStatementBody failed");
+                    return false;
+                }
+            }
         } else if (data_unit_parameter == 0x30) {
             ParseDRCS(data + offset + 5, data_unit_size, 1);
         } else if (data_unit_parameter == 0x31) {
@@ -546,7 +573,11 @@ bool DecoderImpl::ParseStatementBody(const uint8_t* data, size_t length) {
         bool ret = false;
         size_t bytes_processed = 0;
 
-        if (active_encoding_ == EncodingScheme::kARIB_STD_B24_UTF8) {
+        if (user_macro_def_active_) {
+            // Capturing a user macro definition: store raw bytes until the terminator.
+            // The capture may span data units and Decode() calls.
+            ret = HandleUserMacroDefinitionByte(data + offset, length - offset, &bytes_processed);
+        } else if (active_encoding_ == EncodingScheme::kARIB_STD_B24_UTF8) {
             if (ch <= 0x1F) {
                 ret = HandleC0(data + offset, length - offset, &bytes_processed);
             } else if (ch == 0x7F) {
@@ -1086,9 +1117,36 @@ bool DecoderImpl::HandleC1(const uint8_t* data, size_t remain_bytes, size_t* byt
                 return false;
             }
             break;
-        case C1::MACRO:  // Macro Command
-            // Not used according to ARIB TR-B14
-            return false;
+        case C1::MACRO: {  // Macro Command
+            if (!user_macro_enabled_ || active_encoding_ != EncodingScheme::kARIB_STD_B24_JIS) {
+                // Not used according to ARIB TR-B14
+                return false;
+            }
+            if (!user_macro_invoke_stack_.empty()) {
+                // Definition commands are not allowed while a macro is being expanded
+                log_->e("DecoderImpl: MACRO command inside user macro expansion");
+                return false;
+            }
+            if (remain_bytes < 2)
+                return false;
+            uint8_t param = data[1];
+            if (param == 0x40 || param == 0x41) {  // Define / define with immediate execution
+                if (remain_bytes < 3)
+                    return false;
+                uint8_t mc = data[2];
+                if (mc < 0x21 || mc > 0x7E)
+                    return false;
+                user_macro_def_active_ = true;
+                user_macro_def_code_ = mc;
+                user_macro_def_execute_ = (param == 0x41);
+                user_macro_def_body_.clear();
+                bytes = 3;
+            } else {
+                // MACRO 0x4F without an active definition, or unknown MACRO parameter
+                return false;
+            }
+            break;
+        }
         case C1::RPC:  // Repeat Character
             // TODO
             if (remain_bytes < 2)
@@ -1361,11 +1419,19 @@ bool DecoderImpl::HandleGLGR(const uint8_t* data, size_t remain_bytes, size_t* b
         MoveRelativeActivePos(1, 0);
     } else if (entry->graphics_set == GraphicSet::kMacro) {
         uint8_t key = ch;
-        if (key >= 0x60 && key <= 0x6F) {
+        if (user_macro_enabled_ && active_encoding_ == EncodingScheme::kARIB_STD_B24_JIS &&
+                user_macro_defined_[key - 0x21]) {
+            // User-defined macros take precedence over the default ones,
+            // even if the user definition is empty
+            if (!ExpandUserMacro(key)) {
+                return false;
+            }
+        } else if (key >= 0x60 && key <= 0x6F) {
             if (!ParseStatementBody(kDefaultMacros[key & 0x0F], sizeof(kDefaultMacros[0]))) {
                 return false;
             }
         }
+        // Undefined macro numbers are no-ops
     } else if (entry->graphics_set >= GraphicSet::kDRCS_0 &&
                entry->graphics_set <= GraphicSet::kDRCS_15) {
         uint32_t map_index = static_cast<uint32_t>(entry->graphics_set) - static_cast<uint32_t>(GraphicSet::kDRCS_0);
@@ -1414,6 +1480,104 @@ bool DecoderImpl::HandleUTF8(const uint8_t* data, size_t remain_bytes, size_t* b
     MoveRelativeActivePos(1, 0);
 
     return true;
+}
+
+void DecoderImpl::ClearUserMacroState() {
+    for (auto& macro : user_macros_) {
+        macro.clear();
+    }
+    user_macro_defined_.fill(false);
+    user_macro_invoke_stack_.clear();
+    AbortUserMacroDefinition();
+}
+
+void DecoderImpl::AbortUserMacroDefinition() {
+    // Drop the incomplete definition without touching the committed table
+    user_macro_def_active_ = false;
+    user_macro_def_code_ = 0;
+    user_macro_def_execute_ = false;
+    user_macro_def_body_.clear();
+}
+
+bool DecoderImpl::HandleUserMacroDefinitionByte(const uint8_t* data, size_t remain_bytes, size_t* bytes_processed) {
+    if (data[0] != C1::MACRO) {
+        // Definition body byte: stored raw, never interpreted at definition time
+        user_macro_def_body_.push_back(data[0]);
+        *bytes_processed = 1;
+        return true;
+    }
+
+    // MACRO command inside (or terminating) the definition
+    if (remain_bytes < 2)
+        return false;
+
+    uint8_t param = data[1];
+    if (param == 0x4F) {  // End of definition
+        if (!CommitUserMacroDefinition())
+            return false;
+        *bytes_processed = 2;
+        return true;
+    } else if (param == 0x40 || param == 0x41) {
+        // A new definition implicitly terminates the current one:
+        // commit the current item first, then start the next definition
+        if (remain_bytes < 3)
+            return false;
+        uint8_t mc = data[2];
+        if (mc < 0x21 || mc > 0x7E)
+            return false;
+        if (!CommitUserMacroDefinition())
+            return false;
+        user_macro_def_active_ = true;
+        user_macro_def_code_ = mc;
+        user_macro_def_execute_ = (param == 0x41);
+        user_macro_def_body_.clear();
+        *bytes_processed = 3;
+        return true;
+    }
+
+    // Unknown MACRO parameter
+    return false;
+}
+
+bool DecoderImpl::CommitUserMacroDefinition() {
+    size_t slot = static_cast<size_t>(user_macro_def_code_ - 0x21);
+    // The table owns a copy of the body, independent of the caller's buffer
+    user_macros_[slot] = user_macro_def_body_;
+    user_macro_defined_[slot] = true;
+
+    user_macro_def_body_.clear();
+    user_macro_def_active_ = false;
+    bool execute = user_macro_def_execute_;
+    user_macro_def_execute_ = false;
+
+    if (execute) {
+        // MACRO 0x41: execute right after the definition has been committed
+        return ExpandUserMacro(user_macro_def_code_);
+    }
+    return true;
+}
+
+bool DecoderImpl::ExpandUserMacro(uint8_t macro_code) {
+    size_t slot = static_cast<size_t>(macro_code - 0x21);
+
+    // Detect only true cycles through the active invocation chain.
+    // Sequential reuse of the same macro is legal and must not be treated as recursion.
+    for (uint8_t active_code : user_macro_invoke_stack_) {
+        if (active_code == macro_code) {
+            log_->e("DecoderImpl: Recursive user macro invocation: 0x%02X", macro_code);
+            return false;
+        }
+    }
+
+    user_macro_invoke_stack_.push_back(macro_code);
+    // The body is expanded as a self-contained statement under the current
+    // G0..G3 / GL / GR and display state; state changes leak back to the caller.
+    // A truncated character at the end of the body cannot borrow the caller's
+    // following bytes, since only the body buffer is parsed here.
+    bool ret = ParseStatementBody(user_macros_[slot].data(), user_macros_[slot].size());
+    user_macro_invoke_stack_.pop_back();
+
+    return ret;
 }
 
 void DecoderImpl::PushCharacter(uint32_t ucs4, uint32_t pua) {

@@ -80,6 +80,11 @@ void aribcc_decoder_set_replace_msz_fullwidth_japanese(aribcc_decoder_t* decoder
     impl->SetReplaceMSZFullWidthJapanese(replace);
 }
 
+void aribcc_decoder_set_user_macro_enabled(aribcc_decoder_t* decoder, bool enabled) {
+    auto impl = reinterpret_cast<DecoderImpl*>(decoder);
+    impl->SetUserMacroEnabled(enabled);
+}
+
 uint32_t aribcc_decoder_query_iso6392_language_code(aribcc_decoder_t* decoder, aribcc_languageid_t language_id) {
     auto impl = reinterpret_cast<DecoderImpl*>(decoder);
     return impl->QueryISO6392LanguageCode(static_cast<LanguageId>(language_id));

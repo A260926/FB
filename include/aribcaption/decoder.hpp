@@ -168,6 +168,24 @@ public:
     ARIBCC_API void SetReplaceMSZFullWidthJapanese(bool replace);
 
     /**
+     * Set whether to enable user-defined macros (ARIB STD-B24 MACRO command) for
+     * the ARIB STD-B24 JIS encoding scheme.
+     *
+     * Default is false, which keeps the conventional TR-B14 broadcast decoding behavior:
+     * the MACRO command terminates statement parsing and only the 16 built-in default
+     * macros (0x60..0x6F) can be invoked through the Macro graphic set.
+     *
+     * When enabled, MACRO 0x40 / 0x41 define (and optionally immediately execute) custom
+     * macros numbered 0x21..0x7E, terminated by MACRO 0x4F. Defined macros are invoked
+     * through the Macro graphic set like the default ones, take precedence over them,
+     * and persist across data units and Decode() calls until a reset boundary
+     * (Flush, re-Initialize, encoding scheme change, or disabling this switch).
+     *
+     * @param enabled bool
+     */
+    ARIBCC_API void SetUserMacroEnabled(bool enabled);
+
+    /**
      * Query ISO639-2 Language Code for specific language id
      * @param language_id See @LanguageId
      * @return uint32_t, e.g. "jpn" => 6A 70 6E => 0x006A706E. May be 0 if language is unknown.

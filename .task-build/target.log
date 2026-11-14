@@ -1,0 +1,20 @@
+CASE definitions define_vs_immediate_execute checks=13
+CASE definitions cross_unit_and_implicit_end checks=7
+CASE definitions empty_overrides_default checks=6
+CASE definitions invalid_definition_errors checks=13
+GROUP definitions cases=4 checks=39 COMPLETE
+CASE execution invoke_via_gl_gr_ss3 checks=9
+CASE execution codeset_state_at_invocation checks=6
+CASE execution state_changes_leak_to_outer checks=11
+CASE execution nested_and_sequential_reuse checks=6
+CASE execution cycle_detection_error checks=8
+CASE execution trailing_incomplete_char checks=6
+CASE execution position_accounting checks=10
+GROUP execution cases=7 checks=56 COMPLETE
+CASE lifecycle persist_across_decodes checks=14
+CASE lifecycle cs_vs_flush checks=12
+CASE lifecycle disable_and_reinitialize checks=12
+CASE lifecycle encoding_change_clears checks=10
+CASE lifecycle c_api_and_instance_isolation checks=23
+GROUP lifecycle cases=5 checks=71 COMPLETE
+TARGET_COMPLETE cases=16

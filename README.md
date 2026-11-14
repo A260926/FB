@@ -150,6 +150,55 @@ gcc main.c -o main `pkg-config --cflags --libs --static libaribcaption`
 gcc main.c -o main `pkg-config --cflags --libs libaribcaption`
 ```
 
+## User-defined macros (ARIB STD-B24 MACRO)
+Some caption streams use broadcaster-defined macros transmitted with the MACRO control
+command (ARIB STD-B24 §7.1.1.6) instead of only the 16 built-in default macros.
+Support for these user-defined macros is opt-in and only applies to the
+`kARIB_STD_B24_JIS` encoding scheme. It is disabled by default, which keeps the
+conventional ARIB TR-B14 broadcast decoding behavior (a MACRO command simply stops
+statement parsing).
+
+Enable it after `Initialize()` via the C++ or C API:
+```cpp
+decoder.SetUserMacroEnabled(true);                    // C++
+aribcc_decoder_set_user_macro_enabled(decoder, true); // C API
+```
+
+While enabled, `MACRO 0x40 MC` starts a definition and `MACRO 0x41 MC` starts a
+definition that is executed immediately after being committed; `MACRO 0x4F` ends the
+current definition (a new define command also ends it implicitly). Macro numbers range
+from 0x21 to 0x7E. Definition bodies are stored as raw bytes and are only interpreted
+when the macro is invoked through the Macro graphic set (e.g. G3 via SS3, or GL/GR after
+LS3/LS3R), using the G0..G3 designation, GL/GR invocation and display state active at
+that moment. User-defined macros take precedence over the default macros (an empty
+definition still overrides), and undefined numbers render nothing. Definitions persist
+across data units and `Decode()` calls; `CS` (clear screen) keeps them, while `Flush()`,
+re-`Initialize()`, an encoding scheme change, or disabling the switch drops them.
+Malformed definitions or expansion errors (e.g. recursive invocation) make `Decode()`
+return `kError` without delivering a partial caption.
+
+```cpp
+#include <aribcaption/context.hpp>
+#include <aribcaption/decoder.hpp>
+
+aribcaption::Context context;
+aribcaption::Decoder decoder(context);
+decoder.Initialize(aribcaption::EncodingScheme::kARIB_STD_B24_JIS);
+decoder.SetUserMacroEnabled(true);
+
+aribcaption::DecodeResult result;
+// Statement bytes: MACRO 0x40 0x21, body {MSZ, LS1, 'A'}, MACRO 0x4F  (define macro 0x21)
+//                  SS3 0x21                                          (invoke it)
+const uint8_t statement[] = {
+    0x95, 0x40, 0x21, 0x89, 0x0E, 0x41, 0x95, 0x4F,
+    0x1D, 0x21
+};
+// ... wrap `statement` into a caption statement data group / PES packet ...
+if (decoder.Decode(pes_data, pes_length, pts, result) == aribcaption::DecodeStatus::kGotCaption) {
+    // result.caption->text == "A": the macro expanded into the normal caption output
+}
+```
+
 ## Documents
 See the comments in [public headers](include/aribcaption), and [sample code with ffmpeg](test/ffmpeg)
 

@@ -25,6 +25,7 @@
 #include <initializer_list>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include "aribcaption/caption.hpp"
 #include "aribcaption/context.hpp"
 #include "aribcaption/decoder.hpp"
@@ -48,6 +49,7 @@ public:
     void SwitchLanguage(LanguageId language_id);
     void SetReplaceMSZFullWidthAlphanumeric(bool replace);
     void SetReplaceMSZFullWidthJapanese(bool replace);
+    void SetUserMacroEnabled(bool enabled);
     [[nodiscard]]
     uint32_t QueryISO6392LanguageCode(LanguageId language_id) const;
     DecodeStatus Decode(const uint8_t* pes_data, size_t length, int64_t pts, DecodeResult& out_result);
@@ -69,6 +71,11 @@ private:
     bool HandleCSI(const uint8_t* data, size_t remain_bytes, size_t* bytes_processed);
     bool HandleGLGR(const uint8_t* data, size_t remain_bytes, size_t* bytes_processed, CodesetEntry* entry);
     bool HandleUTF8(const uint8_t* data, size_t remain_bytes, size_t* bytes_processed);
+    void ClearUserMacroState();
+    void AbortUserMacroDefinition();
+    bool HandleUserMacroDefinitionByte(const uint8_t* data, size_t remain_bytes, size_t* bytes_processed);
+    bool CommitUserMacroDefinition();
+    bool ExpandUserMacro(uint8_t macro_code);
     void PushCharacter(uint32_t ucs4, uint32_t pua = 0);
     void PushDRCSCharacter(uint32_t code, DRCS& drcs);
     void PushCaptionChar(const CaptionChar& caption_char);
@@ -131,6 +138,19 @@ private:
         kMacroEntry          // G3
     };
     std::vector<std::unordered_map<uint16_t, DRCS>> drcs_maps_{16};
+
+    // User-defined macro (ARIB STD-B24 MACRO command) state.
+    // The table is owned per decoder instance and persists across data units and Decode() calls.
+    static constexpr size_t kUserMacroSlotCount = 0x7E - 0x21 + 1;  // 94 slots: 0x21..0x7E
+    bool user_macro_enabled_ = false;
+    std::array<std::vector<uint8_t>, kUserMacroSlotCount> user_macros_;  // raw definition bodies
+    std::array<bool, kUserMacroSlotCount> user_macro_defined_{};
+    std::vector<uint8_t> user_macro_invoke_stack_;  // active invocation chain, for cycle detection
+
+    bool user_macro_def_active_ = false;    // a definition is being captured
+    uint8_t user_macro_def_code_ = 0;       // macro code being defined
+    bool user_macro_def_execute_ = false;   // execute after definition completes (MACRO 0x41)
+    std::vector<uint8_t> user_macro_def_body_;
 
     int64_t pts_ = PTS_NOPTS;  // in milliseconds
 
