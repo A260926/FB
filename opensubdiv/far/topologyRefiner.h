@@ -198,6 +198,59 @@ public:
     /// \brief Unrefine the topology, keeping only the base level.
     void Unrefine();
 
+    //
+    // In-place editing of coarse-level sharpness
+    //
+
+    /// \brief Descriptor for a single sharpness value to assign to an edge or a vertex
+    ///        of the base level.
+    ///
+    /// Values are absolute: 0 is smooth and Sdc::Crease::SHARPNESS_INFINITE (10)
+    /// is infinitely sharp.  Indices are the indices of the corresponding edge or
+    /// vertex in the base level (level 0) of the refined topology.
+    ///
+    struct SharpnessEdit {
+        SharpnessEdit() : index(0), sharpness(0.0f) { }
+        SharpnessEdit(Index indexArg, float sharpnessArg)
+            : index(indexArg), sharpness(sharpnessArg) { }
+
+        Index index;        ///< Index of the edge or vertex in the base level
+        float sharpness;    ///< Absolute sharpness value in the range [0, 10]
+    };
+
+    /// \brief Updates the sharpness values assigned to edges and vertices of the
+    ///        base level and propagates them through the existing refinement
+    ///        hierarchy in place.
+    ///
+    /// The refined topology is not modified:  component counts, indices, parent/child
+    /// mappings and all topological relations in every level are left intact, so
+    /// previously obtained TopologyLevel views remain valid.  Only the sharpness
+    /// values and the derived crease classifications (component tags and vertex
+    /// rules) are recomputed in each existing level -- from the base level down
+    /// through the final level.  Interpolation performed afterwards by
+    /// PrimvarRefiner and StencilTables created afterwards will reflect the new
+    /// shape.
+    ///
+    /// Edits are absolute and cumulative:  a subsequent call modifies the values
+    /// left by the most recent successful call, so sharpness may be lowered as well
+    /// as raised.  Indices in each list must be unique and the lists themselves must
+    /// contain valid base-level edges/vertices with finite sharpness in [0, 10]; if
+    /// any entry is invalid, false is returned and nothing is modified.  Boundary
+    /// edges are sharpened by the existing boundary interpolation rules regardless
+    /// of the values assigned here, as the topology does not change.
+    ///
+    /// This is only supported for uniformly refined refiners (RefineUniform()) with
+    /// at least one refinement level, complete topology in all levels, no holes, no
+    /// face-varying channels, and no shared base level.  False is returned otherwise.
+    ///
+    /// @param edges      Edges of the base level whose sharpness is to be updated
+    /// @param vertices   Vertices of the base level whose sharpness is to be updated
+    ///
+    /// @return           True if the edit was applied, false if it was rejected
+    ///
+    bool UpdateUniformSharpness(std::vector<SharpnessEdit> const & edges,
+                                std::vector<SharpnessEdit> const & vertices);
+
 
     //@{
     /// @name Number and properties of face-varying channels:
@@ -252,6 +305,8 @@ private:
 
     void initializeInventory();
     void updateInventory(Vtr::internal::Level const & newLevel);
+
+    void updateBaseLevelSharpnessAndTags();
 
     void appendLevel(Vtr::internal::Level & newLevel);
     void appendRefinement(Vtr::internal::Refinement & newRefinement);

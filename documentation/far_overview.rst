@@ -120,6 +120,81 @@ topology via TopologyLevel instances.
 .. image:: images/topology_refiner.png
    :align: center
 
+Editing Coarse Sharpness In Place
+*********************************
+
+A uniform refinement hierarchy can have the sharpness values of its coarse
+(level 0) edges and vertices edited in place with
+*TopologyRefiner::UpdateUniformSharpness()*.  The refined topology is not
+rebuilt:  component counts, indices, the parent/child mappings and all
+topological relations in every level are left untouched, so TopologyLevel
+references obtained before the edit remain valid and can be cached.  Only the
+sharpness values and their derived crease classifications and vertex rules are
+recomputed through the existing levels.
+
+The update takes two lists of absolute values -- 0 is smooth, and
+``Sdc::Crease::SHARPNESS_INFINITE`` (10) is infinitely sharp.  Indices refer to
+edges and vertices of level 0, and indices within each list must be unique.
+Edits accumulate from the most recent successful call, so values may be raised
+or lowered.  If any entry is out of range or not finite, false is returned and
+nothing is modified; empty lists succeed.
+
+This is supported for uniformly refined Catmark and Loop topologies with at
+least one refinement level, complete topology in all levels, no holes, no
+face-varying channels and no shared coarse level.  Interpolation after the
+edit is still performed by PrimvarRefiner, or by a StencilTable created after
+the edit;  a StencilTable created earlier keeps the meaning it had when it was
+created.
+
+.. code:: c++
+
+    #include <opensubdiv/far/topologyRefiner.h>
+    #include <opensubdiv/far/primvarRefiner.h>
+    #include <opensubdiv/far/stencilTableFactory.h>
+
+    #include <memory>
+    #include <vector>
+
+    using namespace OpenSubdiv;
+
+    //  refiner was created from a mesh and then refined with RefineUniform():
+    //      Far::TopologyRefiner::UniformOptions options(3);
+    //      options.fullTopologyInLastLevel = true;
+    //      refiner->RefineUniform(options);
+
+    typedef Far::TopologyRefiner::SharpnessEdit SharpnessEdit;
+
+    Far::TopologyLevel const & baseLevel = refiner->GetLevel(0);
+
+    //  Make base-level edge 7 semi-sharp and vertex 3 infinitely sharp:
+    std::vector<SharpnessEdit> edges, vertices;
+    edges.push_back(SharpnessEdit(7, 2.5f));
+    vertices.push_back(SharpnessEdit(3, 10.0f));
+
+    if (!refiner->UpdateUniformSharpness(edges, vertices)) {
+        //  rejected: bad index, duplicate index or out-of-range/non-finite value
+        //  (the refiner is unchanged in that case)
+        return;
+    }
+
+    //  Later edits are absolute and accumulate on the current state, so the
+    //  same edge can be relaxed back to smooth:
+    edges.clear();
+    vertices.clear();
+    edges.push_back(SharpnessEdit(7, 0.0f));
+    vertices.push_back(SharpnessEdit(3, 0.0f));
+    refiner->UpdateUniformSharpness(edges, vertices);
+
+    //  Interpolation now reflects the new crease shape:
+    Far::PrimvarRefinerReal<double> primvarRefiner(*refiner);
+    //  ... primvarRefiner.Interpolate(1, srcValues, dstValues); ...
+
+    //  A StencilTable built from the edited refiner also captures the new shape:
+    Far::StencilTableFactoryReal<double>::Options stencilOptions;
+    stencilOptions.generateIntermediateLevels = false;
+    std::unique_ptr<const Far::StencilTableReal<double> > stencilTable(
+        Far::StencilTableFactoryReal<double>::Create(*refiner, stencilOptions));
+
 Far::TopologyRefinerFactory
 ===========================
 

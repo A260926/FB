@@ -29,6 +29,7 @@
 #include "../vtr/triRefinement.h"
 
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 
 
@@ -121,6 +122,308 @@ TopologyRefiner::Unrefine() {
     _maxLevel = 0;
 
     assembleFarLevels();
+}
+
+
+//
+//  (Re)classify the base level components from their current sharpness values.
+//
+//  This is the second half of what TopologyRefinerFactoryBase does when it
+//  prepares component tags and sharpness on the base level.  It is factored out
+//  here so that in-place sharpness edits produce exactly the same component
+//  tags (and hence interpolation Rules) as a refiner constructed from scratch
+//  with those sharpness values.
+//
+void
+TopologyRefiner::updateBaseLevelSharpnessAndTags() {
+
+    Vtr::internal::Level& baseLevel = getLevel(0);
+
+    Sdc::Crease creasing(_subdivOptions);
+
+    bool sharpenCornerVerts =
+        (_subdivOptions.GetVtxBoundaryInterpolation() ==
+            Sdc::Options::VTX_BOUNDARY_EDGE_AND_CORNER);
+
+    bool sharpenNonManFeatures = true;
+
+    //
+    //  Process the Edge tags first, as Vertex tags (notably the Rule) are
+    //  dependent on properties of their incident edges.  Boundary and
+    //  non-manifold edges are infinitely sharp regardless of assigned values:
+    //
+    for (Vtr::Index eIndex = 0; eIndex < baseLevel.getNumEdges(); ++eIndex) {
+        Vtr::internal::Level::ETag& eTag = baseLevel.getEdgeTag(eIndex);
+
+        float& eSharpness = baseLevel.getEdgeSharpness(eIndex);
+
+        eTag._boundary = (baseLevel.getNumEdgeFaces(eIndex) < 2);
+        if (eTag._boundary || (eTag._nonManifold && sharpenNonManFeatures)) {
+            eSharpness = Sdc::Crease::SHARPNESS_INFINITE;
+        }
+        eTag._infSharp  = Sdc::Crease::IsInfinite(eSharpness);
+        eTag._semiSharp = Sdc::Crease::IsSharp(eSharpness) && !eTag._infSharp;
+    }
+
+    //
+    //  Process the Vertex tags now -- for some tags (semi-sharp and its rule)
+    //  we need to inspect all incident edges:
+    //
+    int schemeRegularInteriorValence =
+        Sdc::SchemeTypeTraits::GetRegularVertexValence(_subdivType);
+    int schemeRegularBoundaryValence = schemeRegularInteriorValence / 2;
+
+    for (Vtr::Index vIndex = 0; vIndex < baseLevel.getNumVertices(); ++vIndex) {
+        Vtr::internal::Level::VTag& vTag = baseLevel.getVertexTag(vIndex);
+
+        float& vSharpness = baseLevel.getVertexSharpness(vIndex);
+
+        Vtr::ConstIndexArray vEdges = baseLevel.getVertexEdges(vIndex);
+        Vtr::ConstIndexArray vFaces = baseLevel.getVertexFaces(vIndex);
+
+        //
+        //  Take inventory of properties of incident edges that affect this
+        //  vertex:
+        //
+        int boundaryEdgeCount    = 0;
+        int infSharpEdgeCount    = 0;
+        int semiSharpEdgeCount   = 0;
+        int nonManifoldEdgeCount = 0;
+        for (int i = 0; i < vEdges.size(); ++i) {
+            Vtr::internal::Level::ETag const& eTag =
+                baseLevel.getEdgeTag(vEdges[i]);
+
+            boundaryEdgeCount    += eTag._boundary;
+            infSharpEdgeCount    += eTag._infSharp;
+            semiSharpEdgeCount   += eTag._semiSharp;
+            nonManifoldEdgeCount += eTag._nonManifold;
+        }
+        int sharpEdgeCount = infSharpEdgeCount + semiSharpEdgeCount;
+
+        //
+        //  Sharpen the vertex before using it in conjunction with incident edge
+        //  properties to determine the semi-sharp tag and rule:
+        //
+        bool isTopologicalCorner = (vFaces.size() == 1) && (vEdges.size() == 2);
+        bool isSharpenedCorner =  isTopologicalCorner && sharpenCornerVerts;
+        if (isSharpenedCorner) {
+            vSharpness = Sdc::Crease::SHARPNESS_INFINITE;
+        } else if (vTag._nonManifold && sharpenNonManFeatures) {
+            //
+            //  We avoid sharpening non-manifold vertices when they occur on
+            //  interior non-manifold creases, i.e. a pair of opposing non-
+            //  manifold edges with more than two incident faces.  In these
+            //  cases there are more incident faces than edges (1 more for
+            //  each additional "fin") and no boundaries.
+            //
+            if (! ((nonManifoldEdgeCount == 2) && (boundaryEdgeCount == 0) &&
+                   (vFaces.size() > vEdges.size()))) {
+                vSharpness = Sdc::Crease::SHARPNESS_INFINITE;
+            }
+        }
+
+        vTag._infSharp       = Sdc::Crease::IsInfinite(vSharpness);
+        vTag._semiSharp      = Sdc::Crease::IsSemiSharp(vSharpness);
+        vTag._semiSharpEdges = (semiSharpEdgeCount > 0);
+
+        vTag._rule = (Vtr::internal::Level::VTag::VTagSize)
+            creasing.DetermineVertexVertexRule(vSharpness, sharpEdgeCount);
+
+        //
+        //  Assign topological tags -- note that the "xordinary" tag is not
+        //  assigned if non-manifold:
+        //
+        vTag._boundary = (boundaryEdgeCount > 0);
+        vTag._corner = isTopologicalCorner && vTag._infSharp;
+        if (vTag._nonManifold) {
+            vTag._xordinary = false;
+        } else if (vTag._corner) {
+            vTag._xordinary = false;
+        } else if (vTag._boundary) {
+            vTag._xordinary = (vFaces.size() != schemeRegularBoundaryValence);
+        } else {
+            vTag._xordinary = (vFaces.size() != schemeRegularInteriorValence);
+        }
+        vTag._incomplete = 0;
+
+        //
+        //  Assign tags specific to inf-sharp features to identify regular
+        //  topologies partitioned by inf-sharp creases -- must be no semi-
+        //  sharp features here (and manifold for now):
+        //
+        vTag._infSharpEdges   = (infSharpEdgeCount > 0);
+        vTag._infSharpCrease  = false;
+        vTag._infIrregular    = vTag._infSharp || vTag._infSharpEdges;
+
+        if (vTag._infSharpEdges) {
+            //  Ignore semi-sharp vertex sharpness when computing the
+            //  inf-sharp Rule:
+            Sdc::Crease::Rule infRule = creasing.DetermineVertexVertexRule(
+                (vTag._infSharp ? vSharpness : 0.0f), infSharpEdgeCount);
+
+            if (infRule == Sdc::Crease::RULE_CREASE) {
+                vTag._infSharpCrease = true;
+
+                //  A "regular" inf-crease can only occur along a manifold
+                //  regular boundary or by bisecting a manifold interior
+                //  region (it is also possible along non-manifold vertices
+                //  in some cases, but that requires much more effort to
+                //  detect -- perhaps later...)
+                //
+                if (!vTag._xordinary && !vTag._nonManifold) {
+                    if (vTag._boundary) {
+                        vTag._infIrregular = false;
+                    } else {
+                        assert((schemeRegularInteriorValence == 4) ||
+                            (schemeRegularInteriorValence == 6));
+
+                        if (schemeRegularInteriorValence == 4) {
+                            vTag._infIrregular =
+                                (baseLevel.getEdgeTag(vEdges[0])._infSharp !=
+                                 baseLevel.getEdgeTag(vEdges[2])._infSharp);
+                        } else if (schemeRegularInteriorValence == 6) {
+                            vTag._infIrregular =
+                                (baseLevel.getEdgeTag(vEdges[0])._infSharp !=
+                                 baseLevel.getEdgeTag(vEdges[3])._infSharp) ||
+                                (baseLevel.getEdgeTag(vEdges[1])._infSharp !=
+                                 baseLevel.getEdgeTag(vEdges[4])._infSharp);
+                        }
+                    }
+                }
+            } else if (infRule == Sdc::Crease::RULE_CORNER) {
+                //  A regular set of inf-corners occurs when all edges are
+                //  sharp and not a smooth corner:
+                //
+                if ((infSharpEdgeCount == vEdges.size() &&
+                    ((vEdges.size() > 2) || vTag._infSharp))) {
+                    vTag._infIrregular = false;
+                }
+            }
+        }
+
+        //
+        //  If any irregular faces are present, mark whether or not a vertex
+        //  is incident any irregular face:
+        //
+        if (_hasIrregFaces) {
+            int regSize = _regFaceSize;
+            for (int i = 0; i < vFaces.size(); ++i) {
+                if (baseLevel.getFaceVertices(vFaces[i]).size() != regSize) {
+                    vTag._incidIrregFace = true;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+//
+//  In-place editing of base level sharpness:
+//
+bool
+TopologyRefiner::UpdateUniformSharpness(std::vector<SharpnessEdit> const & edges,
+                                        std::vector<SharpnessEdit> const & vertices) {
+
+    //
+    //  Reject anything outside the supported configuration.  The refined topology
+    //  must be complete in all levels so that crease classification can be
+    //  recomputed without changing any topology:
+    //
+    if (_subdivType != Sdc::SCHEME_CATMARK && _subdivType != Sdc::SCHEME_LOOP) {
+        return false;
+    }
+    if ((_subdivOptions.GetCreasingMethod() != Sdc::Options::CREASE_UNIFORM) &&
+        (_subdivOptions.GetCreasingMethod() != Sdc::Options::CREASE_CHAIKIN)) {
+        return false;
+    }
+    if (!_isUniform || _refinements.empty() || !_baseLevelOwned) {
+        return false;
+    }
+    if (_hasHoles || (GetNumFVarChannels() > 0)) {
+        return false;
+    }
+    if (_subdivOptions.GetVtxBoundaryInterpolation() ==
+            Sdc::Options::VTX_BOUNDARY_NONE) {
+        return false;
+    }
+
+    Vtr::internal::Level const & baseLevel = getLevel(0);
+
+    int const numLevels = (int) _levels.size();
+    if (numLevels != (_maxLevel + 1)) {
+        return false;
+    }
+    for (int level = 0; level < numLevels; ++level) {
+        Vtr::internal::Level const & lev = getLevel(level);
+        if ((lev.getNumFaceEdgesTotal() == 0) ||
+            (lev.getNumEdgeVerticesTotal() == 0) ||
+            (lev.getNumEdgeFacesTotal() == 0) ||
+            (lev.getNumVertexFacesTotal() == 0) ||
+            (lev.getNumVertexEdgesTotal() == 0)) {
+            return false;
+        }
+        if (lev.getNumFVarChannels() > 0) {
+            return false;
+        }
+        for (Vtr::Index e = 0; e < lev.getNumEdges(); ++e) {
+            if (lev.getEdgeTag(e)._nonManifold) return false;
+        }
+        for (Vtr::Index v = 0; v < lev.getNumVertices(); ++v) {
+            if (lev.getVertexTag(v)._nonManifold) return false;
+        }
+    }
+
+    //
+    //  Validate the entire batch up front so a rejected edit modifies nothing:
+    //
+    int const numEdges = baseLevel.getNumEdges();
+    int const numVerts = baseLevel.getNumVertices();
+
+    std::vector<bool> edgeSeen(numEdges, false);
+    for (size_t i = 0; i < edges.size(); ++i) {
+        Index e = edges[i].index;
+        if ((e < 0) || (e >= numEdges)) return false;
+        if (!std::isfinite(edges[i].sharpness) ||
+            (edges[i].sharpness < Sdc::Crease::SHARPNESS_SMOOTH) ||
+            (edges[i].sharpness > Sdc::Crease::SHARPNESS_INFINITE)) return false;
+        if (edgeSeen[e]) return false;
+        edgeSeen[e] = true;
+    }
+    std::vector<bool> vertSeen(numVerts, false);
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        Index v = vertices[i].index;
+        if ((v < 0) || (v >= numVerts)) return false;
+        if (!std::isfinite(vertices[i].sharpness) ||
+            (vertices[i].sharpness < Sdc::Crease::SHARPNESS_SMOOTH) ||
+            (vertices[i].sharpness > Sdc::Crease::SHARPNESS_INFINITE)) return false;
+        if (vertSeen[v]) return false;
+        vertSeen[v] = true;
+    }
+
+    //
+    //  Assign the absolute values -- all indices and values have been validated:
+    //
+    for (size_t i = 0; i < edges.size(); ++i) {
+        getLevel(0).getEdgeSharpness(edges[i].index) = edges[i].sharpness;
+    }
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        getLevel(0).getVertexSharpness(vertices[i].index) = vertices[i].sharpness;
+    }
+
+    //
+    //  Rebuild the base level classification and then propagate the tags and
+    //  sharpness values through the existing hierarchy.  Only the sharpness and
+    //  tag values are rewritten; component counts, indices, relations and
+    //  parent/child mappings are untouched, as are their allocations.
+    //
+    updateBaseLevelSharpnessAndTags();
+
+    for (int level = 1; level <= _maxLevel; ++level) {
+        Vtr::internal::Refinement & refinement = getRefinement(level - 1);
+        refinement.propagateComponentTags();
+        refinement.subdivideSharpnessValues();
+    }
+    return true;
 }
 
 
