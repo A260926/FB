@@ -13,5 +13,61 @@ The BVH itself makes minimal assumptions on the items it may contain: Objects ne
 getIntersection(), getBBox(), and getCentroid() functions in order to be queryable.
 The included example code renders a million spheres distributed inside of a cube using the BVH (in <3 seconds on my old MacBook!)   
 
-I have attempted to comment this code well and make everything well-understood. If there is an issue 
+I have attempted to comment this code well and make everything well-understood. If there is an issue
 with the code, a question as to how something works, or if you use this in a project, please let me know!
+
+Quantized offline ray preview
+=============================
+
+A built BVH can be exported into a memory-efficient quantized tree for
+offline ray previews (include/FastBVH/QuantizedBVH.h and
+include/FastBVH/QuantizedTraverser.h, both pulled in by FastBVH.h).
+DefaultBuilder, BVH and the original Traverser are used exactly as before:
+
+    FastBVH::DefaultBuilder<float> builder;
+    auto bvh = builder(primitives, box_converter);
+    FastBVH::QuantizedBVH<float, Sphere> qbvh(bvh);  // bvh may be destroyed now
+    FastBVH::QuantizedTraverser<float, Sphere, SphereIntersector> trav(qbvh, isect);
+    auto hit = trav.traverse(ray);                   // OnlyTestOcclusion also supported
+
+Quantization grid
+-----------------
+Each QuantizedNode stores its bounding box as uint16_t min[3]/max[3] plus
+the usual start/primitive_count/right_offset layout fields: 24 bytes per
+node instead of the full-precision Node. On every axis, grid point q
+corresponds to
+
+    parent.min + (parent.max - parent.min) * q / 65535
+
+The root node spans the whole grid (0..65535) over the separately stored
+root bounds (getRootBounds()); every other node is encoded against the
+actually-decoded box of its parent, never against the original floating
+point parent box. Encoding rounds outwards, so a decoded box always covers
+the closed source box of its node, and each end overshoots by at most
+2/65535 of the parent axis span plus 32*epsilon*max(1, |parent ends|).
+A zero-width parent axis keeps its coordinate (no division by zero).
+decodeQuantizedBounds(parent, node) is public and performs the decoding;
+queries decode boxes on the fly into a per-call working stack, so the tree
+is never decompressed into a floating point cache.
+
+Lifetime and ownership
+----------------------
+QuantizedBVH owns only the quantized node array and the root bounds. It
+never keeps the original floating point nodes and never keeps a copied
+bounding box array, so the source BVH may be destroyed right after the
+export; closest-hit and occlusion queries keep working from the compressed
+nodes alone. Primitives follow the old rules: they are borrowed, not
+copied, so the caller-owned primitive array must outlive the QuantizedBVH,
+and leaf slots refer to the exact same primitives as the source tree.
+
+Running the checks
+------------------
+    bash task_support/run.sh target
+
+compiles the new headers and tests/quantized_target.cpp, runs the
+encoding/traversal/integration case groups (level-by-level decode
+conservativeness and tightness, brute-force closest/occlusion comparisons,
+source-tree independence and borrowed-primitive identity), writes a small
+windowless quantized_preview.ppm render that is checked pixel by pixel
+against brute force, prints the actual node byte counts and primitive
+callback counts, and finally re-runs the 64-sphere baseline.
