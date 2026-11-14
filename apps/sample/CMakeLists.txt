@@ -58,7 +58,8 @@ set(VCG_EXAMPLE_PROJECTS
 	trimesh_voronoi
 	trimesh_voronoiatlas
 	trimesh_voronoiclustering
-	trimesh_voronoisampling)
+	trimesh_voronoisampling
+	trimesh_volume_preserve)
 
 foreach(VCG_EXAMPLE ${VCG_EXAMPLE_PROJECTS})
 	add_subdirectory(${VCG_EXAMPLE})

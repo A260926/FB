@@ -27,8 +27,10 @@
 #include<vcg/math/quadric.h>
 #include<vcg/complex/algorithms/update/bounding.h>
 #include<vcg/complex/algorithms/local_optimization/tri_edge_collapse.h>
+#include<vcg/complex/algorithms/local_optimization/volume_preservation.h>
 #include<vcg/complex/algorithms/local_optimization.h>
 #include<vcg/complex/algorithms/stat.h>
+#include<stdexcept>
 
 
 namespace vcg{
@@ -105,7 +107,42 @@ public:
   double    ScaleFactor=1.0;
   bool      ScaleIndependent=true;
   bool      UseArea =true;
-  bool      UseVertexWeight=false;  
+  bool      UseVertexWeight=false;
+  /**
+    Exact volume preservation for closed, oriented, 2-manifold triangle
+    meshes (default false).
+
+    When true, every edge collapse is placed at the constrained QEM minimum:
+    instead of the unconstrained quadric optimum, the final position x is the
+    point on the affine hyperplane that keeps the directed volume of the
+    affected one-ring unchanged (shared faces disappear and are counted only
+    in the old ring; every other incident face is rewritten once with its
+    endpoint moved to x). This is an exact equality constraint, not a
+    normal-directed nudge and not a finite-weight penalty.
+
+    Requirements (checked in Init before any candidate, vertex mark or
+    quadric is created; violations throw std::invalid_argument):
+      - OptimalPlacement == true and PreserveTopology == true;
+      - finite coordinates, strictly positive face area;
+      - closed, coherently oriented, 2-manifold mesh.
+    Several mutually disconnected shells are allowed, and a shell may be
+    globally inverted. Self-intersecting geometry is accepted and not
+    repaired. When PreserveVolume is false nothing changes: open meshes,
+    parameter meanings, candidates and cleanup keep their original behavior.
+
+    Rank handling. The reduced 3x3 QEM matrix and the constraint matrix can
+    both be singular (e.g. planar rings, plane-only quadrics). A constrained
+    minimum is still computed via SVD null-space reduction; when several
+    minimizers exist the one closest to the edge midpoint is chosen. If the
+    equality is identically zero the unconstrained minimum (same midpoint
+    rule) is used; if it is 0 = d with d != 0, or no finite point satisfying
+    the equality exists, only that single candidate is rejected and the rest
+    of the simplification continues. All arithmetic uses a local frame
+    centered on the edge midpoint, so models placed far from the world origin
+    do not lose the guarantee to large-number cancellation.
+    See volume_preservation.h and docs/volume_preservation.md.
+  */
+  bool      PreserveVolume = false;
 
   TriEdgeCollapseQuadricParameter() {}
 };
@@ -130,6 +167,13 @@ public:
   typedef HelperType QH;
   
   CoordType optimalPos;  // Local storage of the once computed optimal position of the collapse.
+  // Read-only access to the collapsing pair; useful for inspection from
+  // drivers and tests without granting write access to the topology state.
+  inline const VertexPair & CollapsePair() const { return this->pos; }
+  // Whether optimalPos satisfies the volume equality; only meaningful with
+  // PreserveVolume. A failed trial placement leaves every mesh datum untouched
+  // and makes IsFeasible reject this single candidate.
+  bool volumePlacementOk = true;
   
   // Pointer to the vector that store the Write flags. Used to preserve them if you ask to preserve for the boundaries.
   static std::vector<typename TriMeshType::VertexPointer>  & WV(){
@@ -148,33 +192,62 @@ public:
 
   inline bool IsFeasible(BaseParameterClass *_pp){
     QParameter *pp=(QParameter *)_pp;
+    if(pp->PreserveVolume)
+    {
+      // Re-evaluate the constraint on the current live mesh: ring faces,
+      // coordinates and quadrics must not be frozen at Init time. A candidate
+      // with no finite volume preserving position is rejected alone, without
+      // touching coordinates, quadrics, marks or VF links.
+      volumePlacementOk =
+        VolumePreservationHelper<TriMeshType>::ConstrainedPlacement(
+          this->pos.V(0), this->pos.V(1),
+          QH::Qd(this->pos.V(0)), QH::Qd(this->pos.V(1)), this->optimalPos);
+      if(!volumePlacementOk)
+      {
+        ++( TEC::FailStat::Volume() );
+        return false;
+      }
+    }
     if(!pp->PreserveTopology) return true;
-    
+
     bool res = ( EdgeCollapser<TriMeshType, VertexPair>::LinkConditions(this->pos) );
     if(!res) ++( TEC::FailStat::LinkConditionEdge() );
     return res;
   }
-  
+
   void ComputePosition(BaseParameterClass *_pp)
   {
     QParameter *pp=(QParameter *)_pp;
     CoordType newPos = (this->pos.V(0)->P()+this->pos.V(1)->P())/2.0;
-    if(pp->OptimalPlacement==false)
-      newPos=this->pos.V(1)->P();      
-    else 
+    if(pp->PreserveVolume)
     {
-      if((QH::Qd(this->pos.V(0)).Apply(newPos) + QH::Qd(this->pos.V(1)).Apply(newPos)) > 2.0*pp->QuadricEpsilon)              
+      // Exact constrained QEM minimum on the volume preserving affine plane.
+      // This is neither a normal-directed nudge nor a finite-weight penalty;
+      // rank deficiency is handled inside the helper.
+      volumePlacementOk =
+        VolumePreservationHelper<TriMeshType>::ConstrainedPlacement(
+          this->pos.V(0), this->pos.V(1),
+          QH::Qd(this->pos.V(0)), QH::Qd(this->pos.V(1)), newPos);
+      this->optimalPos = newPos;
+      return;
+    }
+    volumePlacementOk = true;
+    if(pp->OptimalPlacement==false)
+      newPos=this->pos.V(1)->P();
+    else
+    {
+      if((QH::Qd(this->pos.V(0)).Apply(newPos) + QH::Qd(this->pos.V(1)).Apply(newPos)) > 2.0*pp->QuadricEpsilon)
       {
         QuadricType q=QH::Qd(this->pos.V(0));
         q+=QH::Qd(this->pos.V(1));
-        
+
         Point3<QuadricType::ScalarType> x;
         if(pp->SVDPlacement)
           q.MinimumClosestToPoint(x,Point3d::Construct(newPos));
-        else 
+        else
           q.Minimum(x);
-        newPos = CoordType::Construct(x);  
-      }      
+        newPos = CoordType::Construct(x);
+      }
     }
     this->optimalPos = newPos;
   }
@@ -208,7 +281,17 @@ public:
   
   static void Init(TriMeshType &m, HeapType &h_ret, BaseParameterClass *_pp)
   {
-    QParameter *pp=(QParameter *)_pp;    
+    QParameter *pp=(QParameter *)_pp;
+    if(pp->PreserveVolume)
+    {
+      // The constrained placement relies on the symmetric, topology
+      // preserving pipeline. Validate everything before candidates, marks or
+      // quadrics are created so a rejected input leaves the mesh untouched.
+      if(!pp->OptimalPlacement || !pp->PreserveTopology)
+        throw std::invalid_argument(
+          "PreserveVolume requires OptimalPlacement=true and PreserveTopology=true");
+      VolumePreservationHelper<TriMeshType>::ValidateMesh(m);
+    }
     pp->CosineThr=cos(pp->NormalThrRad);
     h_ret.clear();
     vcg::tri::UpdateTopology<TriMeshType>::VertexFace(m);

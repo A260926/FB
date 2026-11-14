@@ -4,6 +4,13 @@
 !/**/
 !*.*
 
+# Eigen umbrella headers are intentionally extensionless (e.g. Eigen/Core)
+!eigenlib/Eigen/*
+!eigenlib/unsupported/Eigen/*
+
+# Local task build outputs
+.task-build/
+
 # QTCreator user prefs
 *.user
 
