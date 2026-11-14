@@ -67,6 +67,8 @@
 #include <libaaf/utils.h>
 #include <libaaf/log.h>
 
+#include "AAFGainLayersInternal.h"
+
 
 
 #define debug( ... ) \
@@ -84,6 +86,278 @@ static aafRational_t AAFI_DEFAULT_TC_EDIT_RATE = { 25, 1 };
 
 
 
+/* ****************************************************************************
+ *          N e s t e d   c l i p   g a i n   l a y e r   t r a c k i n g
+ * ****************************************************************************
+ *
+ * A CompositionMob audio track Sequence can contain nested
+ * AAFOperationDef_MonoAudioGain OperationGroups. Each one applies its own
+ * ConstantValue/VaryingValue Amplitude curve to its single InputSegment,
+ * which can itself be a SourceClip, a Sequence (possibly starting with a
+ * Filler and holding sibling clips) or another MonoAudioGain OperationGroup.
+ *
+ * While walking the object tree we keep a stack of the MonoAudioGain groups
+ * that are currently open. Every leaf clip receives one independent
+ * aafiGainLayer per open group, with the clip's position inside that group.
+ * The stack is pure parser state : nothing it holds escapes into a clip
+ * without going through aafi_gainLayer_clone().
+ */
+
+typedef struct gainGroupFrame
+{
+	/* The OperationGroup aafObject, mostly for identification/diagnostics. */
+	aafObject          *opgroup;
+
+	/*
+	 * OperationGroup Component::Length, in the current track edit units.
+	 */
+	aafPosition_t       group_length;
+
+	/*
+	 * Non-zero when this frame's OperationGroup is the outermost track
+	 * volume fader (direct child of the TimelineMobSlot). Such a group is
+	 * tracked on aafiAudioTrack.gain and never becomes a clip layer.
+	 */
+	int                 is_track_fader;
+
+	/*
+	 * Position, inside this OperationGroup, of the component currently
+	 * being descended into. Grows by each Sequence component's Length, so
+	 * leading Filler and sibling clips consume group time exactly as on the
+	 * timeline.
+	 */
+	aafPosition_t       cursor;
+
+	/*
+	 * Position, inside this OperationGroup, of the start of the branch that
+	 * currently contains the parsing point. Copied onto each leaf layer.
+	 */
+	aafPosition_t       branch_offset;
+
+	/*
+	 * The curve published for this group, built from its
+	 * ConstantValue/VaryingValue Amplitude parameter. NULL means the group
+	 * could not be interpreted; nested groups must then fail to publish.
+	 */
+	aafiGainLayer      *curve;
+
+} gainGroupFrame;
+
+
+#define AAFI_GAIN_GROUP_STACK_MAX 128
+
+static struct
+{
+	gainGroupFrame  frame[AAFI_GAIN_GROUP_STACK_MAX];
+	int             count;
+
+} gainGroupStack;
+
+
+static int
+gainStack_depth( void )
+{
+	return gainGroupStack.count;
+}
+
+
+static gainGroupFrame *
+gainStack_top( void )
+{
+	if ( gainGroupStack.count == 0 ) {
+		return NULL;
+	}
+
+	return &gainGroupStack.frame[gainGroupStack.count - 1];
+}
+
+
+static gainGroupFrame *
+gainStack_push( aafObject *opgroup )
+{
+	if ( gainGroupStack.count >= AAFI_GAIN_GROUP_STACK_MAX ) {
+		return NULL;
+	}
+
+	gainGroupFrame *f = &gainGroupStack.frame[gainGroupStack.count++];
+
+	f->opgroup       = opgroup;
+	f->group_length  = 0;
+	f->cursor        = 0;
+	f->branch_offset = 0;
+	f->curve         = NULL;
+	f->is_track_fader = 0;
+
+	return f;
+}
+
+
+static void
+gainStack_pop( void )
+{
+	if ( gainGroupStack.count == 0 ) {
+		return;
+	}
+
+	gainGroupStack.count--;
+}
+
+
+/*
+ * Publish every open MonoAudioGain layer onto a leaf clip. Each clip gets an
+ * independent deep copy, so releasing a sibling clip or the parser templates
+ * can never affect another clip's layers.
+ *
+ * @return 0 on success, -1 if an open group has no usable curve or on
+ *         allocation failure.
+ */
+static int
+gainStack_publishToClip( aafiAudioClip *clip )
+{
+	for ( int i = 0; i < gainGroupStack.count; i++ ) {
+
+		gainGroupFrame *f = &gainGroupStack.frame[i];
+
+		/* the outermost track volume fader is never a clip layer */
+		if ( f->is_track_fader ) {
+			continue;
+		}
+
+		/*
+		 * A group whose curve could not be interpreted publishes no layer
+		 * (it must not be silently turned into unity gain); skip it while
+		 * still publishing the other valid layers around it.
+		 */
+		if ( !f->curve ) {
+			continue;
+		}
+
+		aafiGainLayer *layer = aafi_gainLayer_clone( f->curve );
+
+		if ( !layer ) {
+			return -1;
+		}
+
+		layer->group_offset = f->branch_offset;
+
+		if ( aafi_clip_appendGainLayer( clip, layer ) != 0 ) {
+			aafi_gainLayer_free( layer );
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+
+/*
+ * Attach a ConstantValue Amplitude curve to the currently open gain group.
+ *
+ * @return 0 on success, -1 if the value is not a valid non-negative rational.
+ */
+static int
+gainStack_setConstant( aafRational_t *value )
+{
+	gainGroupFrame *f = gainStack_top();
+
+	if ( !f || !value || value->denominator <= 0 || value->numerator < 0 ) {
+		return -1;
+	}
+
+	aafiGainLayer *layer = aafi_gainLayer_new();
+
+	if ( !layer ) {
+		return -1;
+	}
+
+	layer->type         = AAFI_GAIN_LAYER_CONSTANT;
+	layer->group_length = f->group_length;
+	layer->constant     = *value;
+
+	aafi_gainLayer_free( f->curve );
+	f->curve = layer;
+
+	return 0;
+}
+
+
+/*
+ * Attach a VaryingValue Amplitude curve to the currently open gain group.
+ * The control point arrays are copied, the caller keeps ownership of its own
+ * buffers.
+ *
+ * Only Linear and Constant interpolation are accepted. The point list is
+ * validated exactly (see aafi_gainLayer_validatePoints()).
+ *
+ * @return 0 on success, -1 on any invalid or unsupported input.
+ */
+static int
+gainStack_setVarying( uint32_t             interpolation,
+                      const aafRational_t *times,
+                      const aafRational_t *values,
+                      unsigned int         cnt )
+{
+	gainGroupFrame *f = gainStack_top();
+
+	if ( !f ) {
+		return -1;
+	}
+
+	int type = 0;
+
+	if ( interpolation & AAFI_INTERPOL_LINEAR ) {
+		type = AAFI_GAIN_LAYER_VARYING_LINEAR;
+	} else if ( interpolation & AAFI_INTERPOL_CONSTANT ) {
+		type = AAFI_GAIN_LAYER_VARYING_CONSTANT;
+	} else {
+		/* None/Log/Power/BSpline and unknown interpolations are not supported. */
+		return -1;
+	}
+
+	if ( aafi_gainLayer_validatePoints( times, values, cnt ) != 0 ) {
+		return -1;
+	}
+
+	aafRational_t *t_copy = calloc( cnt, sizeof(aafRational_t) );
+	aafRational_t *v_copy = calloc( cnt, sizeof(aafRational_t) );
+
+	if ( !t_copy || !v_copy ) {
+		free( t_copy );
+		free( v_copy );
+		return -1;
+	}
+
+	memcpy( t_copy, times,  cnt * sizeof(aafRational_t) );
+	memcpy( v_copy, values, cnt * sizeof(aafRational_t) );
+
+	aafiGainLayer *layer = aafi_gainLayer_new();
+
+	if ( !layer ) {
+		free( t_copy );
+		free( v_copy );
+		return -1;
+	}
+
+	layer->type         = type;
+	layer->group_length = f->group_length;
+	layer->point_cnt    = cnt;
+	layer->point_time   = t_copy;
+	layer->point_value  = v_copy;
+
+	aafi_gainLayer_free( f->curve );
+	f->curve = layer;
+
+	return 0;
+}
+
+
+
+/*
+ * Resets the legacy single-layer gain context. gain_layer_error is
+ * deliberately not touched here: it is latched for the whole
+ * aafi_retrieveData() run and only cleared at its entry, so an error raised
+ * inside a nested group cannot be wiped by an outer group's cleanup.
+ */
 #define RESET_CTX__AudioGain( ctx )            \
 	ctx.current_clip_is_muted = 0;               \
 	ctx.current_clip_gain = NULL;                \
@@ -1080,6 +1354,15 @@ static int parse_SourceClip( AAF_Iface *aafi, aafObject *SourceClip, td *__ptd )
 					aafi->ctx.current_clip_gain_is_used++;
 					aafi->ctx.current_clip_variable_gain_is_used++;
 
+					/*
+					 * Publish one independent layer per open MonoAudioGain
+					 * group, with the clip's measured offset inside each one.
+					 */
+					if ( gainStack_publishToClip( audioClip ) != 0 ) {
+						aafi->ctx.gain_layer_error = 1;
+						return -1;
+					}
+
 
 					/*
 					 * ComponentAttributeList is non-standard, but used by Avid Media Composer
@@ -1686,7 +1969,36 @@ static int parse_Sequence( AAF_Iface *aafi, aafObject *Sequence, td *__ptd )
 
 	uint32_t i = 0;
 	AAFI_foreach_ObjectInSet( &Component, Components, i, __td ) {
-		parse_Component( aafi, Component, &__td );
+
+		/*
+		 * When this Sequence is the InputSegment (or nested inside it) of an
+		 * open MonoAudioGain OperationGroup, account for every component's
+		 * Length as group time, so leading Filler and sibling clips offset
+		 * the layers of any later leaf clip. Only the nearest open group is
+		 * driven here : nested groups own their own frame and cursor.
+		 */
+		gainGroupFrame *gainFrame = gainStack_top();
+
+		if ( gainFrame ) {
+			gainFrame->branch_offset = gainFrame->cursor;
+		}
+
+		int seq_rc = parse_Component( aafi, Component, &__td );
+
+		if ( gainFrame ) {
+
+			int64_t *component_length = aaf_get_propertyValue( Component, PID_Component_Length, &AAFTypeID_LengthType );
+
+			if ( component_length && *component_length > 0 ) {
+				gainFrame->cursor += *component_length;
+			}
+		}
+
+		if ( seq_rc < 0 ) {
+			free( aafi->ctx.avid_warp_clip_edit_rate );
+			aafi->ctx.avid_warp_clip_edit_rate = NULL;
+			return seq_rc;
+		}
 	}
 
 
@@ -1833,6 +2145,9 @@ static int parse_OperationGroup( AAF_Iface *aafi, aafObject *OpGroup, td *__ptd 
 
 
 	int rc = 0;
+
+	/* Non-zero while this call owns a clip-gain frame on gainGroupStack. */
+	int pushedGainFrame = 0;
 
 	aafWeakRef_t *OperationDefWeakRef = aaf_get_propertyValue( OpGroup, PID_OperationGroup_Operation, &AAFTypeID_OperationDefinitionWeakReference );
 
@@ -2010,9 +2325,69 @@ static int parse_OperationGroup( AAF_Iface *aafi, aafObject *OpGroup, td *__ptd 
 
 		TRACE_OBJ( aafi, OpGroup, &__td );
 
+		/*
+		 * Every MonoAudioGain group gets a frame. The outermost one, when it
+		 * is a direct child of the TimelineMobSlot, is the track volume
+		 * fader and stays on aafiAudioTrack.gain; all the others are clip
+		 * gain layers. Frames are nested so the parser state of an outer
+		 * group survives the parsing of an inner one.
+		 */
+		{
+			int64_t *group_length = aaf_get_propertyValue( OpGroup, PID_Component_Length, &AAFTypeID_LengthType );
+
+			if ( !group_length || *group_length <= 0 ) {
+				TRACE_OBJ_ERROR( aafi, OpGroup, &__td, "MonoAudioGain OperationGroup has no valid Component::Length" );
+				aafi->ctx.gain_layer_error = 1;
+				rc = -1;
+				goto end;
+			}
+
+			gainGroupFrame *gainFrame = gainStack_push( OpGroup );
+
+			if ( !gainFrame ) {
+				TRACE_OBJ_ERROR( aafi, OpGroup, &__td, "MonoAudioGain nesting is too deep" );
+				aafi->ctx.gain_layer_error = 1;
+				rc = -1;
+				goto end;
+			}
+
+			gainFrame->group_length   = *group_length;
+
+			/*
+			 * Track volume fader detection, matching the historical
+			 * current_opgroup_affect_track rule : walk up the ancestors,
+			 * skipping OperationGroups, and check that the first non-group
+			 * container is a TimelineMobSlot of the TopLevel CompositionMob.
+			 * The result is stored per-frame so an inner group can never
+			 * overwrite an outer group's classification.
+			 */
+			gainFrame->is_track_fader =
+				( OperationGroupParent != NULL &&
+				  aafUIDCmp( OperationGroupParent->Class->ID,
+				             &AAFClassID_TimelineMobSlot ) &&
+				  ParentMob == aafi->ctx.TopLevelCompositionMob );
+
+			pushedGainFrame = 1;
+		}
+
 		uint32_t i = 0;
 		AAFI_foreach_ObjectInSet( &Param, Parameters, i, __td ) {
 			parse_Parameter( aafi, Param, &__td );
+		}
+
+		/*
+		 * A clip layer without any interpretable Amplitude parameter is left
+		 * without a curve. It is skipped at publication time rather than
+		 * published as an implicit unity layer, and it does not abort the
+		 * import of other valid clips. A warning is emitted for visibility.
+		 */
+		if ( pushedGainFrame ) {
+
+			gainGroupFrame *gainFrame = gainStack_top();
+
+			if ( gainFrame && !gainFrame->is_track_fader && !gainFrame->curve ) {
+				TRACE_OBJ_WARNING( aafi, OpGroup, &__td, "MonoAudioGain OperationGroup has no usable Amplitude parameter, not publishing a gain layer" );
+			}
 		}
 	}
 	else if ( aafUIDCmp( OperationIdentification, &AAFOperationDef_MonoAudioPan ) ) {
@@ -2122,6 +2497,24 @@ end:
 
 			RESET_CTX__AudioGain( aafi->ctx );
 		}
+	}
+
+
+	/*
+	 * Leave the clip gain layer frame after the InputSegment has been walked.
+	 * Any following sibling component is back under the outer group (or the
+	 * track) and must not inherit this group's curve.
+	 */
+	if ( pushedGainFrame ) {
+
+		gainGroupFrame *gainFrame = gainStack_top();
+
+		if ( gainFrame ) {
+			aafi_gainLayer_free( gainFrame->curve );
+			gainFrame->curve = NULL;
+		}
+
+		gainStack_pop();
 	}
 
 	return rc;
@@ -2238,6 +2631,55 @@ static int parse_ConstantValue( AAF_Iface *aafi, aafObject *ConstantValue, td *_
 			debug( "Ignoring AdjustedClip audio level: %i/%i (%+05.1lf dB) ", Gain->value[0].numerator, Gain->value[0].denominator, 20 * log10( aafRationalToDouble( Gain->value[0] ) ) );
 			TRACE_OBJ_WARNING( aafi, ConstantValue, &__td, "Ignoring AdjustedClip audio level" );
 			aafi_freeAudioGain( Gain );
+		}
+		else if ( gainStack_depth() > 0 ) {
+			/*
+			 * MonoAudioGain parameter. The curve always goes onto the open
+			 * group frame.
+			 */
+			gainGroupFrame *topFrame = gainStack_top();
+			int isTrackFader = ( topFrame && topFrame->is_track_fader );
+
+			int constSetRc = gainStack_setConstant( value );
+
+			if ( constSetRc != 0 ) {
+				/* not a valid strict layer; fall through to legacy handling */
+				TRACE_OBJ_WARNING( aafi, ConstantValue, &__td, "Constant not published as a strict gain layer: %i/%i", value->numerator, value->denominator );
+			}
+
+			if ( isTrackFader && constSetRc == 0 ) {
+				/* outermost track volume fader : keep the legacy track path */
+				if ( !aafi->ctx.current_track ) {
+					TRACE_OBJ_ERROR( aafi, ConstantValue, &__td, "Current track not set, dropping this volume: %i/%i (%+05.1lf dB)", Gain->value[0].numerator, Gain->value[0].denominator, 20 * log10( aafRationalToDouble( Gain->value[0] ) ) );
+					aafi_freeAudioGain( Gain );
+					return -1;
+				}
+
+				if ( aafi->ctx.current_track->gain ) {
+					TRACE_OBJ_ERROR( aafi, ConstantValue, &__td, "Track volume was already set, dropping this one: %i/%i (%+05.1lf dB)", Gain->value[0].numerator, Gain->value[0].denominator, 20 * log10( aafRationalToDouble( Gain->value[0] ) ) );
+					aafi_freeAudioGain( Gain );
+					return -1;
+				}
+
+				aafi->ctx.current_track->gain = Gain;
+				TRACE_OBJ( aafi, ConstantValue, &__td );
+				return 0;
+			}
+
+			/*
+			 * Clip layer. Feed the legacy single-slot context fields
+			 * first-come, first-served at any depth, so single-layer projects
+			 * and the Resolve nested 1:1-wrapper case keep their historical
+			 * gain/automation content.
+			 */
+			if ( !aafi->ctx.current_clip_gain ) {
+				aafi->ctx.current_clip_gain = Gain;
+			}
+			else {
+				aafi_freeAudioGain( Gain );
+			}
+
+			TRACE_OBJ( aafi, ConstantValue, &__td );
 		}
 		else if ( aafi->ctx.current_opgroup_affect_track ) {
 			/*
@@ -2457,9 +2899,108 @@ static int parse_VaryingValue( AAF_Iface *aafi, aafObject *VaryingValue, td *__p
 		 * we have a flat gain curve. So we can assume constant gain here.
 		 */
 
-		if ( Gain->pts_cnt == 2 &&
+		int flatTwoPoints = ( Gain->pts_cnt == 2 &&
 		   ( Gain->value[0].numerator   == Gain->value[1].numerator   ) &&
-		   ( Gain->value[0].denominator == Gain->value[1].denominator ) )
+		   ( Gain->value[0].denominator == Gain->value[1].denominator ) );
+
+
+		if ( gainStack_depth() > 0 ) {
+			/*
+			 * MonoAudioGain parameter. The curve is validated before being
+			 * copied onto the open group frame. A malformed point list or an
+			 * unsupported interpolation is never published as a layer (so it
+			 * cannot be mistaken for a valid gain curve), but it does not
+			 * abort the import of unrelated valid clips : the frame simply
+			 * stays without a curve and is skipped at publication time. This
+			 * preserves the historical tolerance of single-layer files such
+			 * as some ProTools exports whose point times are not normalized
+			 * to [0,1].
+			 */
+			gainGroupFrame *topFrame = gainStack_top();
+			int isTrackFader = ( topFrame && topFrame->is_track_fader );
+
+			int setRc = gainStack_setVarying( interpolation,
+			                                  Gain->time,
+			                                  Gain->value,
+			                                  Gain->pts_cnt );
+
+			if ( setRc != 0 && !isTrackFader ) {
+				/*
+				 * Not usable as a strict gain layer: keep the frame without
+				 * a curve (it will be skipped at publication). Fall through
+				 * to the tolerant legacy automation handling below instead
+				 * of dropping the curve altogether.
+				 */
+				TRACE_OBJ_WARNING( aafi, VaryingValue, &__td, "Curve not published as a strict gain layer" );
+			}
+
+			if ( isTrackFader ) {
+				/* outermost track volume fader : keep the legacy track path */
+				if ( setRc != 0 ) {
+					aafi_freeAudioGain( Gain );
+					return -1;
+				}
+
+				if ( !aafi->ctx.current_track ) {
+					TRACE_OBJ_ERROR( aafi, VaryingValue, &__td, "Current track not set, dropping this volume" );
+					aafi_freeAudioGain( Gain );
+					return -1;
+				}
+
+				if ( aafi->ctx.current_track->gain ) {
+					TRACE_OBJ_ERROR( aafi, VaryingValue, &__td, "Track volume was already set" );
+					aafi_freeAudioGain( Gain );
+					return -1;
+				}
+
+				aafi->ctx.current_track->gain = Gain;
+				TRACE_OBJ( aafi, VaryingValue, &__td );
+				return 0;
+			}
+
+			/*
+			 * Clip layer. The legacy single-layer fields keep their
+			 * historical content first-come, first-served at any depth,
+			 * including skipping a continuous 1:1 (0 dB) automation so a
+			 * nested real gain can still fill them.
+			 */
+			if ( flatTwoPoints &&
+			     aafRationalToDouble( Gain->value[0] ) == 1.0f )
+			{
+				TRACE_OBJ_INFO( aafi, VaryingValue, &__td, "Value is continuous 1:1 (0db), skipping it." );
+				aafi_freeAudioGain( Gain );
+				return -1;
+			}
+
+			if ( flatTwoPoints ) {
+
+				Gain->flags |= AAFI_AUDIO_GAIN_CONSTANT;
+
+				if ( !aafi->ctx.current_clip_gain ) {
+					aafi->ctx.current_clip_gain = Gain;
+				}
+				else {
+					aafi_freeAudioGain( Gain );
+				}
+			}
+			else {
+
+				Gain->flags |= AAFI_AUDIO_GAIN_VARIABLE;
+
+				if ( !aafi->ctx.current_clip_variable_gain ) {
+					aafi->ctx.current_clip_variable_gain = Gain;
+				}
+				else {
+					aafi_freeAudioGain( Gain );
+				}
+			}
+
+			TRACE_OBJ( aafi, VaryingValue, &__td );
+			return 0;
+		}
+
+
+		if ( flatTwoPoints )
 		{
 			if ( aafRationalToDouble(Gain->value[0]) == 1.0f ) {
 				/*
@@ -3301,6 +3842,10 @@ int aafi_retrieveData( AAF_Iface *aafi )
 	}
 	__td.ll[0] = 0;
 
+	/* fresh import : no gain group may be left open from a previous run */
+	gainGroupStack.count = 0;
+	aafi->ctx.gain_layer_error = 0;
+
 	int compositionMobParsed = 0;
 	aafObject *Mob = NULL;
 
@@ -3565,6 +4110,16 @@ int aafi_retrieveData( AAF_Iface *aafi )
 			}
 
 			audioClip = (aafiAudioClip*)audioItem->data;
+
+			/*
+			 * A clip without any resolved essence (e.g. a minimal in-memory
+			 * composition used for structural testing) simply keeps zero
+			 * channels and is skipped by the essence post-processing.
+			 */
+			if ( !audioClip->essencePointerList ) {
+				continue;
+			}
+
 			audioClip->channels = aafi_getAudioEssencePointerChannelCount( audioClip->essencePointerList );
 
 			/*
@@ -3604,6 +4159,11 @@ int aafi_retrieveData( AAF_Iface *aafi )
 
 	if ( protools_AAF( aafi ) ) {
 		protools_post_processing( aafi );
+	}
+
+	if ( aafi->ctx.gain_layer_error || gainStack_depth() != 0 ) {
+		error( "Nested clip gain layer import failed" );
+		return -1;
 	}
 
 	return 0;

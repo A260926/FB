@@ -37,6 +37,7 @@
 
 #include <libaaf/AAFTypes.h>
 #include <libaaf/AAFCore.h>
+#include <libaaf/AAFGainLayers.h>
 
 
 
@@ -514,6 +515,18 @@ typedef struct aafiAudioClip
 	aafiAudioGain            *gain;
 	aafiAudioGain            *automation;
 
+	/*
+	 * Ordered (outermost first) list of nested clip gain layers, one per
+	 * MonoAudioGain OperationGroup that wraps the clip inside its track.
+	 *
+	 * NULL when the clip has no clip gain layer. This is what
+	 * aafi_clip_gain_layer_count() and aafi_clip_gain_at() evaluate. It is
+	 * independent from gain/automation above (the legacy single-layer fields,
+	 * kept for backward compatibility) and from aafiAudioTrack.gain, which is
+	 * the track volume fader and is never applied by aafi_clip_gain_at().
+	 */
+	aafiGainLayer            *gain_layers;
+
 	int                       mute;
 
 	aafPosition_t             pos; /* in edit unit, edit rate definition is aafiAudioTrack->edit_rate */
@@ -903,6 +916,14 @@ typedef struct aafiContext
 
 	aafiAudioGain    *current_clip_variable_gain;
 	int               current_clip_variable_gain_is_used;
+
+	/*
+	 * Set when a nested MonoAudioGain layer cannot be interpreted or
+	 * published (zero length, no control points, duplicated/unordered point
+	 * times, invalid denominator, unsupported interpolation). Makes
+	 * aafi_retrieveData() fail rather than silently dropping a layer.
+	 */
+	int               gain_layer_error;
 
 	/* Essence */
 

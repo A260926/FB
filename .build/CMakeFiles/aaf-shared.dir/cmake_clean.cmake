@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFClass.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFClass.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFCore.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFCore.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFDump.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFDump.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFToText.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFCore/AAFToText.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFGainLayers.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFGainLayers.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIEssenceFile.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIEssenceFile.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIParser.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIParser.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIface.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/AAFIface.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/MediaComposer.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/MediaComposer.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/ProTools.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/ProTools.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/RIFFParser.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/RIFFParser.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/Resolve.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/Resolve.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/URIParser.c.o"
+  "CMakeFiles/aaf-shared.dir/src/AAFIface/URIParser.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/LibCFB/CFBDump.c.o"
+  "CMakeFiles/aaf-shared.dir/src/LibCFB/CFBDump.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/LibCFB/LibCFB.c.o"
+  "CMakeFiles/aaf-shared.dir/src/LibCFB/LibCFB.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/common/log.c.o"
+  "CMakeFiles/aaf-shared.dir/src/common/log.c.o.d"
+  "CMakeFiles/aaf-shared.dir/src/common/utils.c.o"
+  "CMakeFiles/aaf-shared.dir/src/common/utils.c.o.d"
+  "lib/aaf"
+  "lib/aaf.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C)
+  include(CMakeFiles/aaf-shared.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

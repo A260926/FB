@@ -87,6 +87,7 @@ usage: aaftool [analysis|extraction] [options] [AAFFILE]
 * Supports multi-channel tracks.
 * Supports fade in/out and x-fades.
 * Supports clip-based and track-based fixed and varying gain.
+* Supports nested clip gain layers (multiple MonoAudioGain OperationGroups wrapping a clip), with an exact-rational compound gain query API.
 * Supports track-based fixed/varying pan.
 * Supports timecode
 * Supports composition metadata (comments, tapeid, etc.)
@@ -197,6 +198,45 @@ AAFI_foreachAudioTrack( aafi, audioTrack ) {
 	}
 }
 ```
+
+### Nested clip gain layers
+
+An audio clip can be wrapped by several nested `MonoAudioGain`
+OperationGroups inside its track Sequence. Each one is an independent gain
+*layer* with its own ConstantValue/VaryingValue curve. libaaf keeps every
+layer (leading Filler and sibling clips are taken into account when locating
+a clip inside each group) and exposes a stateless query that returns the
+compound linear amplitude multiplier at a clip-local position.
+
+The position is a rational number of track edit units, relative to the start
+of the clip, so fractional edit units are handled exactly. All time
+comparisons use integer rational arithmetic; control point times are
+normalized over each OperationGroup's own length, never over the clip.
+
+```C
+aafiAudioClip *audioClip = aafi_timelineItemToAudioClip( audioItem );
+
+/* number of nested clip gain layers (0 for a plain clip) */
+size_t layers = aafi_clip_gain_layer_count( audioClip );
+
+/* compound gain half an edit unit after the start of the clip */
+aafRational_t offset = { 1, 2 };
+double        multiplier = 1.0;
+
+if ( aafi_clip_gain_at( audioClip, offset, &multiplier ) == 0 ) {
+	/* multiplier is the product of every layer evaluated at that point */
+}
+```
+
+The track volume fader is a different thing. It is the outermost
+`MonoAudioGain` OperationGroup attached to the TimelineMobSlot and stays
+available through `aafiAudioTrack.gain` / `aafiAudioTrack.automation`. It is
+not counted as a clip layer and is never multiplied in by
+`aafi_clip_gain_at()`: combine the track fader and the clip compound gain
+yourself when you need the total signal gain. The legacy
+`aafiAudioClip.gain` / `.automation` fields remain available for
+single-layer projects and are kept independent from the new layer list.
+
 
 ## Build
 

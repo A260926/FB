@@ -51,6 +51,8 @@
 #include <libaaf/AAFIface.h>
 #include <libaaf/AAFIParser.h>
 
+#include "AAFGainLayersInternal.h"
+
 
 #define debug( ... ) \
 	AAF_LOG( aafi->log, aafi, LOG_SRC_ID_AAF_IFACE, VERB_DEBUG, __VA_ARGS__ )
@@ -1147,6 +1149,7 @@ void aafi_freeAudioClip( aafiAudioClip *audioClip )
 
 	aafi_freeAudioGain( audioClip->gain );
 	aafi_freeAudioGain( audioClip->automation );
+	aafi_gainLayer_freeList( &audioClip->gain_layers );
 	aafi_freeMetadata( &(audioClip->metadata) );
 
 	free( audioClip );

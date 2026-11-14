@@ -30,6 +30,7 @@ extern "C" {
 #include <libaaf/LibCFB.h>
 #include <libaaf/AAFCore.h>
 #include <libaaf/AAFIface.h>
+#include <libaaf/AAFGainLayers.h>
 #include <libaaf/AAFIEssenceFile.h>
 
 #include <libaaf/CFBDump.h>
