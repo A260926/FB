@@ -7,6 +7,22 @@
 import type {Protocol} from 'devtools-protocol';
 
 import type {Frame} from '../api/Frame.js';
+import {
+  IDENTITY_MATRIX,
+  affineFromQuad,
+  applyAffine,
+  clipConvexPolygon,
+  multiplyAffine,
+  pointInConvexPolygon,
+  protocolQuadToPoints,
+  quadBoundingBox,
+  quadFromRect,
+  quadInteriorPoint,
+  transformQuad,
+  type AffineMatrix,
+  type GeometryPoint,
+  type GeometryRect,
+} from '../common/FrameGeometry.js';
 import {getQueryHandlerAndSelector} from '../common/GetQueryHandler.js';
 import {LazyArg} from '../common/LazyArg.js';
 import type {
@@ -18,7 +34,11 @@ import type {
   NodeFor,
 } from '../common/types.js';
 import type {KeyInput} from '../common/USKeyboardLayout.js';
-import {isString, withSourcePuppeteerURLIfNone} from '../common/util.js';
+import {
+  debugError,
+  isString,
+  withSourcePuppeteerURLIfNone,
+} from '../common/util.js';
 import {assert} from '../util/assert.js';
 import {AsyncIterableUtil} from '../util/AsyncIterableUtil.js';
 import {throwIfDisposed} from '../util/decorators.js';
@@ -718,25 +738,60 @@ export abstract class ElementHandle<
   abstract contentFrame(): Promise<Frame | null>;
 
   /**
-   * Returns the middle point within an element unless a specific offset is provided.
+   * Returns a point within the element that can be used to interact with it.
+   *
+   * The point is selected from the intersection of the element's border box
+   * with the visible areas of every frame it is nested in. Frame borders,
+   * padding and independent scrolling are taken into account, as well as CSS
+   * transforms on the element and its ancestor frames.
+   *
+   * If `offset` is provided, it is interpreted as a local CSS pixel offset
+   * from the top-left corner of the element's **untransformed** border box,
+   * and then mapped to the main frame. An error is thrown if the resulting
+   * point is clipped away by a frame.
+   *
+   * Throws if the visible intersection is empty.
    */
   @throwIfDisposed()
   @bindIsolatedHandle
   async clickablePoint(offset?: Offset): Promise<Point> {
-    const box = await this.#clickableBox();
-    if (!box) {
+    const projection = await this.#projectGeometry();
+    if (!projection) {
       throw new Error('Node is either not clickable or not an Element');
     }
     if (offset !== undefined) {
-      return {
-        x: box.x + offset.x,
-        y: box.y + offset.y,
-      };
+      const point = applyAffine(projection.localToMain, offset);
+      if (
+        !pointInConvexPolygon(point, projection.visiblePolygon, CLICK_TOLERANCE)
+      ) {
+        throw new Error(
+          'The provided offset points outside the visible area of the element',
+        );
+      }
+      return point;
     }
-    return {
-      x: box.x + box.width / 2,
-      y: box.y + box.height / 2,
-    };
+    const point = quadInteriorPoint(projection.visiblePolygon);
+    if (!point) {
+      throw new Error('Node is either not clickable or not an Element');
+    }
+    return point;
+  }
+
+  /**
+   * @internal
+   *
+   * Returns the element's border box projected into the main frame's
+   * viewport as four clockwise corners, or an empty array if the element is
+   * not laid out. This is the same projection that backs
+   * {@link ElementHandle.boundingBox}, and is used to observe stability of
+   * the element relative to the main frame (not just within its own frame).
+   */
+  async _projectedCorners(): Promise<Point[]> {
+    const projection = await this.#projectGeometry();
+    if (!projection || projection.borderPolygon.length !== 4) {
+      return [];
+    }
+    return projection.borderPolygon;
   }
 
   /**
@@ -1111,114 +1166,332 @@ export abstract class ElementHandle<
     await this.frame.page().keyboard.press(key, options);
   }
 
-  async #clickableBox(): Promise<BoundingBox | null> {
-    const boxes = await this.evaluate(element => {
-      if (!(element instanceof Element)) {
-        return null;
-      }
-      return [...element.getClientRects()].map(rect => {
-        return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
-      });
-    });
-    if (!boxes?.length) {
+  /**
+   * Projects the element's border box into the main frame's viewport.
+   *
+   * The result contains the complete projected quad (before clipping), the
+   * visible polygon after intersecting with every nested frame's visible
+   * area and viewport, the affine transform from the element's local
+   * (untransformed) border box to the main frame viewport, and the axis
+   * aligned bounding box of the complete projection.
+   *
+   * Returns `null` if the element or one of its ancestor frames is not laid
+   * out.
+   */
+  async #projectGeometry(): Promise<ElementProjection | null> {
+    const chain = await this.#frameChain();
+    if (!chain) {
       return null;
     }
-    await this.#intersectBoundingBoxesWithFrame(boxes);
-    let frame = this.frame;
-    let parentFrame: Frame | null | undefined;
-    while ((parentFrame = frame?.parentFrame())) {
-      using handle = await frame.frameElement();
-      if (!handle) {
-        throw new Error('Unsupported frame type');
-      }
-      const parentBox = await handle.evaluate(element => {
-        // Element is not visible.
-        if (element.getClientRects().length === 0) {
-          return null;
-        }
-        const rect = element.getBoundingClientRect();
-        const style = window.getComputedStyle(element);
-        return {
-          left:
-            rect.left +
-            parseInt(style.paddingLeft, 10) +
-            parseInt(style.borderLeftWidth, 10),
-          top:
-            rect.top +
-            parseInt(style.paddingTop, 10) +
-            parseInt(style.borderTopWidth, 10),
-        };
-      });
-      if (!parentBox) {
-        return null;
-      }
-      for (const box of boxes) {
-        box.x += parentBox.left;
-        box.y += parentBox.top;
-      }
-      await handle.#intersectBoundingBoxesWithFrame(boxes);
-      frame = parentFrame;
-    }
-    const box = boxes.find(box => {
-      return box.width >= 1 && box.height >= 1;
-    });
-    if (!box) {
+    const elementGeometry = await this.#elementBorderGeometry();
+    if (!elementGeometry) {
       return null;
+    }
+    const {points, layoutWidth, layoutHeight} = elementGeometry;
+    // Protocol quads for this element are relative to the root frame of the
+    // element's CDP target, with transforms of all same-target ancestors
+    // already applied.
+    const elementFrameToMain = chain.rootToMain.get(
+      this.#targetRoot(this.frame),
+    );
+    if (!elementFrameToMain) {
+      return null;
+    }
+    const localToElementFrame = affineFromQuad(
+      points,
+      layoutWidth,
+      layoutHeight,
+    );
+    const localToMain = multiplyAffine(elementFrameToMain, localToElementFrame);
+    const borderPolygon = transformQuad(
+      quadFromRect({x: 0, y: 0, width: layoutWidth, height: layoutHeight}),
+      localToMain,
+    );
+
+    let visiblePolygon = borderPolygon;
+    for (const clip of chain.viewClips) {
+      if (visiblePolygon.length < 3) {
+        break;
+      }
+      visiblePolygon = clipConvexPolygon(visiblePolygon, clip);
     }
     return {
-      x: box.x,
-      y: box.y,
-      height: box.height,
-      width: box.width,
+      borderBox: quadBoundingBox(borderPolygon),
+      borderPolygon,
+      visiblePolygon,
+      localToMain,
     };
   }
 
-  async #intersectBoundingBoxesWithFrame(boxes: BoundingBox[]) {
-    const {documentWidth, documentHeight} = await this.frame
-      .isolatedRealm()
-      .evaluate(() => {
-        return {
-          documentWidth: document.documentElement.clientWidth,
-          documentHeight: document.documentElement.clientHeight,
-        };
-      });
-    for (const box of boxes) {
-      intersectBoundingBox(box, documentWidth, documentHeight);
+  /**
+   * Computes transforms from each frame in the element's ancestor chain into
+   * the main frame's viewport, plus the main-frame clip polygons of every
+   * frame viewport (and of the main viewport itself).
+   *
+   * Protocol quads returned by a frame's CDP session are relative to the root
+   * frame of that session's target. Therefore a frame owner's content quad is
+   * already expressed in the parent's target-root coordinates, and only
+   * target boundaries require composition. This is what makes nested and
+   * cross-origin frames work without reading `parent.document`.
+   */
+  async #frameChain(): Promise<FrameChain | null> {
+    const frames: Frame[] = [];
+    let frame: Frame | null = this.frame;
+    while (frame) {
+      frames.unshift(frame);
+      frame = frame.parentFrame();
     }
+    const frameToMain = new Map<Frame, AffineMatrix>();
+    const rootToMain = new Map<Frame, AffineMatrix>();
+    const viewClips: GeometryPoint[][] = [];
+    for (const current of frames) {
+      const parent = current.parentFrame();
+      if (!parent) {
+        // Main frame.
+        frameToMain.set(current, IDENTITY_MATRIX);
+        rootToMain.set(current, IDENTITY_MATRIX);
+        const viewport = await viewportSizeOf(current);
+        if (!viewport) {
+          return null;
+        }
+        viewClips.push(quadFromRect({x: 0, y: 0, ...viewport}));
+        continue;
+      }
+      const owner = await this.#frameOwnerGeometry(parent, current);
+      if (!owner) {
+        return null;
+      }
+      const parentRoot = this.#targetRoot(parent);
+      const parentRootToMain = rootToMain.get(parentRoot);
+      if (!parentRootToMain) {
+        return null;
+      }
+      // `owner.content` is the image of the child viewport, expressed in the
+      // parent's target-root coordinates.
+      const viewportToParentRoot = affineFromQuad(
+        owner.content,
+        owner.viewport.width,
+        owner.viewport.height,
+      );
+      const viewportToMain = multiplyAffine(
+        parentRootToMain,
+        viewportToParentRoot,
+      );
+      frameToMain.set(current, viewportToMain);
+      if (!sameTarget(parent, current)) {
+        // `current` starts a new CDP target, so its protocol quads are
+        // relative to its own viewport.
+        rootToMain.set(current, viewportToMain);
+      }
+      viewClips.push(transformQuad(owner.content, parentRootToMain));
+    }
+    return {frameToMain, rootToMain, viewClips};
+  }
+
+  /**
+   * Returns the topmost frame that shares the CDP target (and therefore the
+   * coordinate space of protocol quads) with `frame`.
+   */
+  #targetRoot(frame: Frame): Frame {
+    let root = frame;
+    let parent = root.parentFrame();
+    while (parent && sameTarget(root, parent)) {
+      root = parent;
+      parent = root.parentFrame();
+    }
+    return root;
+  }
+
+  /**
+   * Whether the DevTools protocol's `DOM.getBoxModel` is usable for this
+   * handle. WebDriver BiDi sessions in browsers without CDP support cannot
+   * use it, so the DOM fallback is used instead.
+   */
+  protected supportsProtocolGeometry(): boolean {
+    return true;
+  }
+
+  /**
+   * Returns the element's border box quad relative to its target root, along
+   * with its untransformed border box size in CSS pixels.
+   *
+   * On CDP this uses the protocol's box model, which already applies the
+   * element's own transforms. Other protocols fall back to the DOM.
+   */
+  async #elementBorderGeometry(): Promise<{
+    points: GeometryPoint[];
+    layoutWidth: number;
+    layoutHeight: number;
+  } | null> {
+    let model: Protocol.DOM.BoxModel | null = null;
+    if (this.supportsProtocolGeometry()) {
+      try {
+        model = (
+          await this.frame.client.send('DOM.getBoxModel', {
+            backendNodeId: await this.backendNodeId(),
+          })
+        ).model;
+      } catch (error) {
+        // The element is not laid out (for example `display: none`).
+        debugError(error);
+        return null;
+      }
+    }
+    if (model) {
+      const points = protocolQuadToPoints(model.border);
+      if (points.length !== 4) {
+        return null;
+      }
+      // `model.width`/`model.height` are the untransformed border box layout
+      // size, exactly the rectangle the border quad is the image of.
+      if (!model.width || !model.height) {
+        return null;
+      }
+      return {
+        points,
+        layoutWidth: model.width,
+        layoutHeight: model.height,
+      };
+    }
+    return await this.#elementBorderGeometryFromDom();
+  }
+
+  /**
+   * DOM fallback for the protocol element geometry, used by protocols that
+   * cannot provide transformed quads. It returns the element's axis-aligned
+   * border box as reported by the DOM, which is exact for untransformed
+   * elements and the previously available approximation otherwise.
+   */
+  async #elementBorderGeometryFromDom(): Promise<{
+    points: GeometryPoint[];
+    layoutWidth: number;
+    layoutHeight: number;
+  } | null> {
+    const geometry = await this.evaluate(element => {
+      if (!(element instanceof Element)) {
+        return null;
+      }
+      if (element.getClientRects().length === 0) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        return null;
+      }
+      return {
+        points: [
+          {x: rect.left, y: rect.top},
+          {x: rect.left + rect.width, y: rect.top},
+          {x: rect.left + rect.width, y: rect.top + rect.height},
+          {x: rect.left, y: rect.top + rect.height},
+        ],
+        layoutWidth: rect.width,
+        layoutHeight: rect.height,
+      };
+    });
+    return geometry;
+  }
+
+  /**
+   * Returns the rendered content quad of the frame element that owns
+   * `childFrame`, expressed in the coordinate space of `parentFrame`'s target
+   * root, together with the child viewport's layout size.
+   *
+   * `frameElement` and the parent's DOM are only used on protocols without
+   * protocol geometry; the CDP path never reads `parent.document`, so it also
+   * works across origins.
+   */
+  async #frameOwnerGeometry(
+    parentFrame: Frame,
+    childFrame: Frame,
+  ): Promise<FrameOwnerGeometry | null> {
+    const viewport = await viewportSizeOf(childFrame);
+    if (!viewport) {
+      return null;
+    }
+    if (this.supportsProtocolGeometry()) {
+      const session = parentFrame.client;
+      let backendNodeId: number;
+      try {
+        ({backendNodeId} = await session.send('DOM.getFrameOwner', {
+          frameId: childFrame._id,
+        }));
+      } catch (error) {
+        debugError(error);
+        return null;
+      }
+      let model: Protocol.DOM.BoxModel;
+      try {
+        ({model} = await session.send('DOM.getBoxModel', {backendNodeId}));
+      } catch (error) {
+        debugError(error);
+        return null;
+      }
+      const content = protocolQuadToPoints(model.content);
+      if (content.length !== 4) {
+        return null;
+      }
+      return {content, viewport};
+    }
+    using owner = await childFrame.frameElement();
+    if (!owner) {
+      return null;
+    }
+    const content = await owner.evaluate(element => {
+      if (!(element instanceof Element)) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      const left =
+        rect.left +
+        (parseFloat(style.paddingLeft) || 0) +
+        (parseFloat(style.borderLeftWidth) || 0);
+      const top =
+        rect.top +
+        (parseFloat(style.paddingTop) || 0) +
+        (parseFloat(style.borderTopWidth) || 0);
+      return [
+        {x: left, y: top},
+        {x: left + rect.width, y: top},
+        {x: left + rect.width, y: top + rect.height},
+        {x: left, y: top + rect.height},
+      ];
+    });
+    if (!content) {
+      return null;
+    }
+    return {content, viewport};
+  }
+
+  /**
+   * Returns the affine transform from this element's own frame viewport into
+   * the main frame's viewport.
+   */
+  async #frameToMainTransform(): Promise<AffineMatrix | null> {
+    const chain = await this.#frameChain();
+    return chain?.frameToMain.get(this.frame) ?? null;
   }
 
   /**
    * This method returns the bounding box of the element (relative to the main frame),
    * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
    * (example: `display: none`).
+   *
+   * The result is the axis-aligned bounding box of the element's complete
+   * border box projected into the main frame's viewport. Frame borders,
+   * padding, independent scrolling and CSS transforms on the element and on
+   * any ancestor frames are all accounted for. The box is not clipped to the
+   * visible area; see {@link ElementHandle.clickablePoint} for that.
    */
   @throwIfDisposed()
   @bindIsolatedHandle
   async boundingBox(): Promise<BoundingBox | null> {
-    const box = await this.evaluate(element => {
-      if (!(element instanceof Element)) {
-        return null;
-      }
-      // Element is not visible.
-      if (element.getClientRects().length === 0) {
-        return null;
-      }
-      const rect = element.getBoundingClientRect();
-      return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
-    });
-    if (!box) {
+    const projection = await this.#projectGeometry();
+    if (!projection?.borderBox) {
       return null;
     }
-    const offset = await this.#getTopLeftCornerOfFrame();
-    if (!offset) {
-      return null;
-    }
-    return {
-      x: box.x + offset.x,
-      y: box.y + offset.y,
-      height: box.height,
-      width: box.width,
-    };
+    return projection.borderBox;
   }
 
   /**
@@ -1309,8 +1582,8 @@ export abstract class ElementHandle<
     if (!model) {
       return null;
     }
-    const offset = await this.#getTopLeftCornerOfFrame();
-    if (!offset) {
+    const frameToMain = await this.#frameToMainTransform();
+    if (!frameToMain) {
       return null;
     }
     for (const attribute of [
@@ -1319,55 +1592,22 @@ export abstract class ElementHandle<
       'border',
       'margin',
     ] as const) {
-      for (const point of model[attribute]) {
-        point.x += offset.x;
-        point.y += offset.y;
-      }
+      model[attribute] = transformQuad(model[attribute], frameToMain) as Quad;
     }
     return model;
-  }
-
-  async #getTopLeftCornerOfFrame() {
-    const point = {x: 0, y: 0};
-    let frame = this.frame;
-    let parentFrame: Frame | null | undefined;
-    while ((parentFrame = frame?.parentFrame())) {
-      using handle = await frame.frameElement();
-      if (!handle) {
-        throw new Error('Unsupported frame type');
-      }
-      const parentBox = await handle.evaluate(element => {
-        // Element is not visible.
-        if (element.getClientRects().length === 0) {
-          return null;
-        }
-        const rect = element.getBoundingClientRect();
-        const style = window.getComputedStyle(element);
-        return {
-          left:
-            rect.left +
-            parseInt(style.paddingLeft, 10) +
-            parseInt(style.borderLeftWidth, 10),
-          top:
-            rect.top +
-            parseInt(style.paddingTop, 10) +
-            parseInt(style.borderTopWidth, 10),
-        };
-      });
-      if (!parentBox) {
-        return null;
-      }
-      point.x += parentBox.left;
-      point.y += parentBox.top;
-      frame = parentFrame;
-    }
-    return point;
   }
 
   /**
    * This method scrolls element into view if needed, and then uses
    * {@link Page.(screenshot:2) } to take a screenshot of the element.
    * If the element is detached from DOM, the method throws an error.
+   *
+   * The captured area matches the element's complete border box projected
+   * into the main frame viewport, as returned by
+   * {@link ElementHandle.boundingBox}. The clip is translated into document
+   * coordinates using the main frame's scroll offset (not the element's own
+   * frame, which may be scrolled independently). `deviceScaleFactor` only
+   * affects the resolution of the produced image, not the clip origin.
    */
   async screenshot(
     options: Readonly<ScreenshotOptions> & {encoding: 'base64'},
@@ -1389,15 +1629,16 @@ export abstract class ElementHandle<
     }
     const elementClip = await this.#nonEmptyVisibleBoundingBox();
 
-    const [pageLeft, pageTop] = await this.evaluate(() => {
-      if (!window.visualViewport) {
-        throw new Error('window.visualViewport is not supported.');
-      }
-      return [
-        window.visualViewport.pageLeft,
-        window.visualViewport.pageTop,
-      ] as const;
-    });
+    // `boundingBox` is expressed relative to the main frame's viewport, so
+    // the clip must be offset by the main document's scroll position. The
+    // element's own document may have a different scroll offset and must not
+    // be used.
+    const [pageLeft, pageTop] = await page
+      .mainFrame()
+      .isolatedRealm()
+      .evaluate(() => {
+        return [window.scrollX, window.scrollY] as const;
+      });
     elementClip.x += pageLeft;
     elementClip.y += pageTop;
     if (clip) {
@@ -1583,21 +1824,103 @@ export interface AutofillData {
   };
 }
 
-function intersectBoundingBox(
-  box: BoundingBox,
-  width: number,
-  height: number,
-): void {
-  box.width = Math.max(
-    box.x >= 0
-      ? Math.min(width - box.x, box.width)
-      : Math.min(width, box.width + box.x),
-    0,
-  );
-  box.height = Math.max(
-    box.y >= 0
-      ? Math.min(height - box.y, box.height)
-      : Math.min(height, box.height + box.y),
-    0,
-  );
+/**
+ * Tolerance, in CSS pixels, used when deciding whether a point falls inside
+ * a projected polygon or a visible area. It keeps points on, or within a
+ * fraction of a pixel of, a boundary valid.
+ */
+const CLICK_TOLERANCE = 0.01;
+
+/**
+ * @internal
+ */
+interface FrameOwnerGeometry {
+  /**
+   * The frame element's rendered content box in the parent's target-root
+   * coordinate space. This is the image of the child frame's viewport.
+   */
+  content: GeometryPoint[];
+  /**
+   * The child frame's viewport layout size in CSS pixels.
+   */
+  viewport: {width: number; height: number};
+}
+
+/**
+ * @internal
+ */
+interface FrameChain {
+  /**
+   * Maps each frame's viewport coordinates into the main frame's viewport.
+   */
+  frameToMain: Map<Frame, AffineMatrix>;
+  /**
+   * Maps the viewport of each frame that starts a new CDP target into the
+   * main frame's viewport.
+   */
+  rootToMain: Map<Frame, AffineMatrix>;
+  /**
+   * Clip polygons, in the main frame's viewport, that bound the visible area
+   * of each frame between the element and the main frame, including the main
+   * frame's own viewport.
+   */
+  viewClips: GeometryPoint[][];
+}
+
+/**
+ * @internal
+ */
+interface ElementProjection {
+  /**
+   * The axis-aligned bounding box of the complete projected border box.
+   */
+  borderBox: GeometryRect | null;
+  /**
+   * The complete projected border box, before clipping.
+   */
+  borderPolygon: GeometryPoint[];
+  /**
+   * The part of the projected border box visible through every ancestor
+   * frame's viewport. Empty when the element cannot be clicked.
+   */
+  visiblePolygon: GeometryPoint[];
+  /**
+   * Maps the element's local CSS pixel coordinates (with the origin at the
+   * top-left corner of its untransformed border box) into the main frame's
+   * viewport.
+   */
+  localToMain: AffineMatrix;
+}
+
+/**
+ * @internal
+ */
+function sameTarget(a: Frame, b: Frame): boolean {
+  return a.client === b.client;
+}
+
+/**
+ * @internal
+ */
+async function viewportSizeOf(
+  frame: Frame,
+): Promise<{width: number; height: number} | null> {
+  try {
+    const viewport = await frame.isolatedRealm().evaluate(() => {
+      // `innerWidth`/`innerHeight` describe the frame's layout viewport,
+      // which is exactly the size of the frame element's content box — the
+      // rectangle that the protocol's content quad is the image of.
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
+    });
+    if (!viewport.width || !viewport.height) {
+      return null;
+    }
+    return viewport;
+  } catch (error) {
+    debugError(error);
+    return null;
+  }
 }

@@ -1,0 +1,24 @@
+0 verbose cli /Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.userfb-build/node22-bootstrap/cache/_npx/5dad66f2cb301fc2/node_modules/node/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.20.0
+2 info using node@v22.23.2
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.npmrc
+5 silly config load:file:/Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.userfb-build/node22-bootstrap/user.npmrc
+6 silly config load:file:/Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.userfb-build/node22-bootstrap/global.npmrc
+7 verbose title npm exec hereby build
+8 verbose argv "exec" "--workspace" "puppeteer-core" "--" "hereby" "build"
+9 verbose logfile logs-max:10 dir:/Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.userfb-build/node22-bootstrap/cache/_logs/2026-11-14T01_00_40_017Z-
+10 verbose logfile /Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo/.userfb-build/node22-bootstrap/cache/_logs/2026-11-14T01_00_40_017Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly logfile done cleaning log files
+13 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+14 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+15 http fetch GET 200 https://registry.npmjs.org/node 67ms (cache revalidated)
+16 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+17 verbose shrinkwrap failed to load node_modules/.package-lock.json missing from lockfile: node_modules/node/node_modules/node-bin-darwin-arm64
+18 verbose cwd /Users/solo/pro/UserFB/workspace/Z1174/attempts/20261113T135417228143Z/repo
+19 verbose os Darwin 27.0.0
+20 verbose node v22.23.2
+21 verbose npm  v11.20.0
+22 verbose exit 0
+23 info ok

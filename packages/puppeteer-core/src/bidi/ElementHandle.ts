@@ -136,6 +136,15 @@ export class BidiElementHandle<
     });
   }
 
+  /**
+   * BiDi sessions are per-frame objects, so the protocol's coordinate space
+   * cannot be attributed to a shared target root. Use the DOM-based geometry
+   * path instead.
+   */
+  override supportsProtocolGeometry(): boolean {
+    return false;
+  }
+
   override async backendNodeId(): Promise<number> {
     if (!this.frame.page().browser().cdpSupported) {
       throw new UnsupportedOperation();

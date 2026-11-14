@@ -33,13 +33,55 @@ import type {EventType} from '../../common/EventEmitter.js';
 import {EventEmitter} from '../../common/EventEmitter.js';
 import type {Awaitable, HandleFor, NodeFor} from '../../common/types.js';
 import {debugError, fromAbortSignal, timeout} from '../../common/util.js';
-import type {
-  BoundingBox,
-  ClickOptions,
-  ElementHandle,
-} from '../ElementHandle.js';
+import type {ClickOptions, ElementHandle, Point} from '../ElementHandle.js';
 import type {Frame} from '../Frame.js';
 import type {Page} from '../Page.js';
+
+/**
+ * Maximum movement, in CSS pixels, of a projected element corner between two
+ * adjacent rendering frames for the element to be considered stable.
+ *
+ * @internal
+ */
+const STABLE_CORNER_TOLERANCE = 0.25;
+
+/**
+ * Resolves on the next rendering frame of the element's frame.
+ *
+ * @internal
+ */
+async function nextAnimationFrame(handle: ElementHandle<Node>): Promise<void> {
+  await handle.frame.mainRealm().evaluate(() => {
+    return new Promise<void>(resolve => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
+/**
+ * @internal
+ */
+function projectedCornersAreStable(
+  previous: readonly Point[],
+  next: readonly Point[],
+): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+  for (let index = 0; index < previous.length; index++) {
+    const a = previous[index]!;
+    const b = next[index]!;
+    if (
+      Math.abs(a.x - b.x) > STABLE_CORNER_TOLERANCE ||
+      Math.abs(a.y - b.y) > STABLE_CORNER_TOLERANCE
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Whether to wait for the element to be
@@ -291,8 +333,14 @@ export abstract class Locator<T> extends EventEmitter<LocatorEvents> {
   };
 
   /**
-   * Compares the bounding box of the element for two consecutive animation
-   * frames and waits till they are the same.
+   * Waits until the element's projected corners are stable across at least
+   * two adjacent rendering frames.
+   *
+   * The corners are the element's border box projected into the main frame's
+   * viewport, so motion of any ancestor frame (or of the main document itself)
+   * is observed, even while the element's local rectangle stays the same.
+   * Every corner must move at most {@link STABLE_CORNER_TOLERANCE} CSS pixels
+   * between consecutive frames.
    */
   #waitForStableBoundingBoxIfNeeded = <ElementType extends Element>(
     handle: HandleFor<ElementType>,
@@ -300,42 +348,29 @@ export abstract class Locator<T> extends EventEmitter<LocatorEvents> {
     if (!this.#waitForStableBoundingBox) {
       return EMPTY;
     }
+    // Each comparison is a separate observable emission, so retrying (and
+    // unsubscribing on abort or timeout) simply restarts or stops the
+    // sampling. State is local to this call, so an action never inherits
+    // another wait's comparison state.
+    let previous: Point[] | null = null;
     return defer(() => {
-      // Note we don't use waitForFunction because that relies on RAF.
       return from(
-        handle.evaluate(element => {
-          return new Promise<[BoundingBox, BoundingBox]>(resolve => {
-            window.requestAnimationFrame(() => {
-              const rect1 = element.getBoundingClientRect();
-              window.requestAnimationFrame(() => {
-                const rect2 = element.getBoundingClientRect();
-                resolve([
-                  {
-                    x: rect1.x,
-                    y: rect1.y,
-                    width: rect1.width,
-                    height: rect1.height,
-                  },
-                  {
-                    x: rect2.x,
-                    y: rect2.y,
-                    width: rect2.width,
-                    height: rect2.height,
-                  },
-                ]);
-              });
-            });
-          });
-        }),
+        (async () => {
+          await nextAnimationFrame(handle);
+          return await (
+            handle as unknown as ElementHandle<Element>
+          )._projectedCorners();
+        })(),
       );
     }).pipe(
-      first(([rect1, rect2]) => {
-        return (
-          rect1.x === rect2.x &&
-          rect1.y === rect2.y &&
-          rect1.width === rect2.width &&
-          rect1.height === rect2.height
-        );
+      first(corners => {
+        const stable =
+          previous !== null &&
+          previous.length === 4 &&
+          corners.length === 4 &&
+          projectedCornersAreStable(previous, corners);
+        previous = corners;
+        return stable;
       }),
       retry({delay: RETRY_DELAY}),
       ignoreElements(),

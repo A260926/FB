@@ -191,6 +191,8 @@ When connected using Chrome DevTools Protocol, it returns a DOM.BackendNodeId fo
 
 This method returns the bounding box of the element (relative to the main frame), or `null` if the element is [not part of the layout](https://drafts.csswg.org/css-display-4/#box-generation) (example: `display: none`).
 
+The result is the axis-aligned bounding box of the element's complete border box projected into the main frame's viewport. Frame borders, padding, independent scrolling and CSS transforms on the element and on any ancestor frames are all accounted for. The box is not clipped to the visible area; see [ElementHandle.clickablePoint()](./puppeteer.elementhandle.clickablepoint.md) for that.
+
 </td></tr>
 <tr><td>
 
@@ -226,7 +228,13 @@ This method scrolls element into view if needed, and then uses [Page.mouse](./pu
 
 </td><td>
 
-Returns the middle point within an element unless a specific offset is provided.
+Returns a point within the element that can be used to interact with it.
+
+The point is selected from the intersection of the element's border box with the visible areas of every frame it is nested in. Frame borders, padding and independent scrolling are taken into account, as well as CSS transforms on the element and its ancestor frames.
+
+If `offset` is provided, it is interpreted as a local CSS pixel offset from the top-left corner of the element's **untransformed** border box, and then mapped to the main frame. An error is thrown if the resulting point is clipped away by a frame.
+
+Throws if the visible intersection is empty.
 
 </td></tr>
 <tr><td>
@@ -424,6 +432,8 @@ If `key` is a single character and no modifier keys besides `Shift` are being he
 </td><td>
 
 This method scrolls element into view if needed, and then uses [Page.screenshot()](./puppeteer.page.screenshot.md) to take a screenshot of the element. If the element is detached from DOM, the method throws an error.
+
+The captured area matches the element's complete border box projected into the main frame viewport, as returned by [ElementHandle.boundingBox()](./puppeteer.elementhandle.boundingbox.md). The clip is translated into document coordinates using the main frame's scroll offset (not the element's own frame, which may be scrolled independently). `deviceScaleFactor` only affects the resolution of the produced image, not the clip origin.
 
 </td></tr>
 <tr><td>

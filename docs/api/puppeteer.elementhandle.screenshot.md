@@ -8,6 +8,8 @@ sidebar_label: ElementHandle.screenshot
 
 This method scrolls element into view if needed, and then uses [Page.screenshot()](./puppeteer.page.screenshot.md) to take a screenshot of the element. If the element is detached from DOM, the method throws an error.
 
+The captured area matches the element's complete border box projected into the main frame viewport, as returned by [ElementHandle.boundingBox()](./puppeteer.elementhandle.boundingbox.md). The clip is translated into document coordinates using the main frame's scroll offset (not the element's own frame, which may be scrolled independently). `deviceScaleFactor` only affects the resolution of the produced image, not the clip origin.
+
 ### Signature
 
 ```typescript
