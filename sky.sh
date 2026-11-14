@@ -111,4 +111,33 @@ vec3 skyColourTable(vec3 viewDir, vec3 sunDir, float roughness)
     return skyColourTable(cosTheta, cosGamma, roughness);
 }
 
+// Optional full spherical-harmonic diffuse path. Define SKY_SH_ENABLE_SH
+// before including this file and bind s_skySHCoeffs to the 49 x 1 RGBAF32
+// texture filled by SSLib::SkySH::FillTexture(roughness). The texture holds
+// the 49 SH coefficients already multiplied by their per-band cosine-power
+// kernel weights, so this entry only sums basis functions and must not
+// convolve again. A different roughness requires a re-filled texture.
+#ifdef SKY_SH_ENABLE_SH
+#include "sky_sh_basis.inc"
+
+uniform sampler2D s_skySHCoeffs;
+
+vec3 skyColourSH(vec3 viewDir)
+{
+    float basis[SKY_SH_COEFF_COUNT];
+    skySHEvalBasis(viewDir, basis);
+
+    vec3 result = vec3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < SKY_SH_COEFF_COUNT; i++)
+    {
+        vec2 uv = vec2((float(i) + 0.5) / float(SKY_SH_COEFF_COUNT), 0.5);
+        vec4 coefficient = texture2D(s_skySHCoeffs, uv);
+        result += coefficient.xyz * basis[i];
+    }
+
+    return result;
+}
+#endif
+
 #endif
