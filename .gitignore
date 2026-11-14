@@ -72,3 +72,6 @@ _ReSharper*/
 *.tar.gz
 tests/bufoverrun
 tests/symresolve
+
+# task harness build output
+.task-build/

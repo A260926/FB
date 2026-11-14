@@ -16,15 +16,19 @@ libudis86_la_SOURCES = \
 	syn-intel.c \
 	syn-att.c \
 	udis86.c \
+	cfg_normalize.c \
+	cfg_match.c \
 	udint.h \
 	syn.h \
-	decode.h
+	decode.h \
+	cfg_internal.h
 
 include_ladir = ${includedir}/libudis86
 include_la_HEADERS = \
 	types.h \
 	extern.h \
-	itab.h
+	itab.h \
+	cfg_match.h
 
 
 BUILT_SOURCES = \
