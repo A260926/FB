@@ -294,6 +294,7 @@ set(WABT_LIBRARY_CC
   src/binary-reader-ir.cc
   src/binary-reader-logging.cc
   src/binary-reader.cc
+  src/binary-reference-map.cc
   src/binary-writer-spec.cc
   src/binary-writer.cc
   src/binary.cc
@@ -345,6 +346,7 @@ set(WABT_LIBRARY_H
   include/wabt/binary-reader-ir.h
   include/wabt/binary-reader-logging.h
   include/wabt/binary-reader.h
+  include/wabt/binary-reference-map.h
   include/wabt/binary-writer-spec.h
   include/wabt/binary-writer.h
   include/wabt/binary.h

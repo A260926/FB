@@ -17,12 +17,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+
+#if HAVE_STRCASECMP
+#include <strings.h>
+#endif
 
 #include "wabt/binary-reader-objdump.h"
 #include "wabt/binary-reader.h"
+#include "wabt/binary-reference-map.h"
 #include "wabt/common.h"
+#include "wabt/error-formatter.h"
 #include "wabt/option-parser.h"
 #include "wabt/stream.h"
+#include "wabt/string-format.h"
 
 using namespace wabt;
 
@@ -64,11 +72,136 @@ static void ParseOptions(int argc, char** argv) {
                    "Print section offsets instead of file offsets "
                    "in code disassembly",
                    []() { s_objdump_options.section_offsets = true; });
+  parser.AddOption(0, "reference-map",
+                   "Print the read-only reference index: every supported "
+                   "relocation with its source field bytes and typed target "
+                   "identity",
+                   []() { s_objdump_options.reference_map = true; });
   parser.AddArgument(
       "filename", OptionParser::ArgumentCount::OneOrMore,
       [](const char* argument) { s_infiles.push_back(argument); });
 
   parser.Parse(argc, argv);
+}
+
+static std::string SectionDisplayName(const ReferenceSection& section) {
+  if (section.section_type == BinarySection::Custom) {
+    return section.name;
+  }
+  return GetSectionName(section.section_type);
+}
+
+static std::string HexBytes(const std::vector<uint8_t>& encoding) {
+  std::string result;
+  for (size_t i = 0; i < encoding.size(); ++i) {
+    if (i) {
+      result += ' ';
+    }
+    result += StringPrintf("%02x", encoding[i]);
+  }
+  return result;
+}
+
+static std::string FormatSource(const ReferenceSource& source) {
+  switch (source.kind) {
+    case ReferenceSource::Kind::FunctionInstruction:
+      return StringPrintf("func[%" PRIindex "] instruction@0x%" PRIzx,
+                          source.function_index, source.instruction_offset);
+    case ReferenceSource::Kind::DataSegment:
+      return StringPrintf("data[%" PRIindex "]+0x%" PRIzx,
+                          source.data_segment, source.data_segment_offset);
+    case ReferenceSource::Kind::CustomContent:
+      return StringPrintf("custom[%" PRIindex "]+0x%" PRIzx,
+                          source.custom_section_index,
+                          source.custom_content_offset);
+  }
+  return "?";
+}
+
+static std::string FormatTarget(const ReferenceTarget& target) {
+  switch (target.kind) {
+    case ReferenceTarget::Kind::Type:
+      return StringPrintf("type[%" PRIindex "]", target.index);
+    case ReferenceTarget::Kind::Function:
+    case ReferenceTarget::Kind::Global:
+    case ReferenceTarget::Kind::Table: {
+      const char* kind = target.kind == ReferenceTarget::Kind::Function
+                             ? "func"
+                         : target.kind == ReferenceTarget::Kind::Global
+                             ? "global"
+                             : "table";
+      std::string text = StringPrintf(
+          "%s symbol[%" PRIindex "] index[%" PRIindex "]", kind,
+          target.symbol_index, target.index);
+      if (target.imported) {
+        text += StringPrintf(" import<%s.%s>", target.import_module.c_str(),
+                             target.import_field.c_str());
+      }
+      return text;
+    }
+    case ReferenceTarget::Kind::Data: {
+      std::string text =
+          StringPrintf("data symbol[%" PRIindex "]", target.symbol_index);
+      if (target.defined) {
+        text += StringPrintf(" segment[%" PRIindex "]+0x%x size=%u",
+                             target.data_segment, target.data_offset,
+                             target.data_size);
+      } else {
+        text += " external undefined";
+      }
+      return text;
+    }
+    case ReferenceTarget::Kind::Section:
+      return StringPrintf("section symbol[%" PRIindex "] section[%" PRIindex "]",
+                          target.symbol_index, target.index);
+  }
+  return "?";
+}
+
+static Result PrintReferenceMap(const BinaryReferenceMap& map,
+                                const char* section_filter) {
+  if (section_filter) {
+    // Match the historical -j behavior: an unknown section name is an error
+    // even when it would simply hide every reference line.
+    bool section_found = false;
+    for (const ReferenceSection& section : map.sections) {
+      if (strcasecmp(section_filter,
+                     SectionDisplayName(section).c_str()) == 0) {
+        section_found = true;
+        break;
+      }
+    }
+    if (!section_found) {
+      fprintf(stderr, "Section not found: %s\n", section_filter);
+      return Result::Error;
+    }
+  }
+
+  printf("\nReference Map:\n\n");
+  for (const ReferenceRecord& record : map.records) {
+    const ReferenceSection* section =
+        map.GetSection(record.target_section_index);
+    if (section_filter && section) {
+      std::string name = SectionDisplayName(*section);
+      if (strcasecmp(section_filter, name.c_str()) != 0) {
+        continue;
+      }
+    }
+
+    printf("reloc.section[%" PRIindex "] entry[%" PRIindex "] -> section[%"
+           PRIindex "] field=%s section_offset=0x%" PRIzx
+           " file=0x%" PRIzx "..0x%" PRIzx " bytes=%s addend=%d source=%s",
+           record.reloc_section_index, record.reloc_entry_index,
+           record.target_section_index, GetRelocTypeName(record.type),
+           record.section_offset, record.file_begin, record.file_end,
+           HexBytes(record.encoding).c_str(), record.addend,
+           FormatSource(record.source).c_str());
+    for (const ReferenceTarget& target : record.targets) {
+      printf(" -> %s", FormatTarget(target).c_str());
+    }
+    printf("\n");
+  }
+  return Result::Ok;
 }
 
 Result dump_file(const char* filename) {
@@ -83,6 +216,24 @@ Result dump_file(const char* filename) {
   ObjdumpState state;
 
   Result result = Result::Ok;
+
+  // Reference map pass: build the complete read-only index before anything
+  // is printed for it, so a validation failure never emits a partial report.
+  BinaryReferenceMap reference_map;
+  if (s_objdump_options.reference_map) {
+    Errors errors;
+    Features features;
+    features.EnableAll();
+    ReadBinaryOptions read_options(features, s_objdump_options.log_stream,
+                                   /*read_debug_names=*/true,
+                                   /*stop_on_first_error=*/true,
+                                   /*fail_on_custom_section_error=*/true);
+    if (Failed(ReadBinaryReferenceMap(file_data, read_options, &errors,
+                                      &reference_map))) {
+      FormatErrorsToFile(errors, Location::Type::Binary);
+      return Result::Error;
+    }
+  }
 
   // Pass 0: Prepass
   s_objdump_options.mode = ObjdumpMode::Prepass;
@@ -113,6 +264,12 @@ Result dump_file(const char* filename) {
     result |= ReadBinaryObjdump(file_data, &s_objdump_options, &state);
   }
 
+  // Pass 5: Print the read-only reference index.
+  if (s_objdump_options.reference_map && Succeeded(result)) {
+    result |= PrintReferenceMap(reference_map,
+                                s_objdump_options.section_name);
+  }
+
   return result;
 }
 
@@ -121,12 +278,14 @@ int ProgramMain(int argc, char** argv) {
 
   ParseOptions(argc, argv);
   if (!s_objdump_options.headers && !s_objdump_options.details &&
-      !s_objdump_options.disassemble && !s_objdump_options.raw) {
+      !s_objdump_options.disassemble && !s_objdump_options.raw &&
+      !s_objdump_options.reference_map) {
     fprintf(stderr, "At least one of the following switches must be given:\n");
     fprintf(stderr, " -d/--disassemble\n");
     fprintf(stderr, " -h/--headers\n");
     fprintf(stderr, " -x/--details\n");
     fprintf(stderr, " -s/--full-contents\n");
+    fprintf(stderr, " --reference-map\n");
     return 1;
   }
 

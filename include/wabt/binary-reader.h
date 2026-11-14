@@ -232,6 +232,25 @@ class BinaryReaderDelegate {
   virtual Result OnOpcodeBlockSig(Type sig_type) = 0;
   virtual Result OnOpcodeType(Type type) = 0;
 
+  // Optional range callbacks, invoked while the original bytes are being
+  // consumed.  OnOpcodeImmediateRange reports the exact file byte span of one
+  // instruction immediate field (including padded multi-byte LEB128 encodings);
+  // |field_index| distinguishes the fields of multi-immediate instructions
+  // such as call_indirect.  OnFunctionBodySizeRange reports the span of the
+  // function body size LEB in the code section.  The default implementations
+  // do nothing, so existing delegates are unaffected.
+  virtual Result OnOpcodeImmediateRange(Opcode opcode,
+                                        unsigned field_index,
+                                        Offset begin,
+                                        Offset end) {
+    return Result::Ok;
+  }
+  virtual Result OnFunctionBodySizeRange(Index function_index,
+                                         Offset begin,
+                                         Offset end) {
+    return Result::Ok;
+  }
+
   virtual Result OnUnaryExpr(Opcode opcode) = 0;
   virtual Result OnBinaryExpr(Opcode opcode) = 0;
   virtual Result OnTernaryExpr(Opcode opcode) = 0;

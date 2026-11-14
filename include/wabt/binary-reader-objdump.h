@@ -46,6 +46,7 @@ struct ObjdumpOptions {
   bool debug;
   bool relocs;
   bool section_offsets;
+  bool reference_map;
   ObjdumpMode mode;
   const char* filename;
   const char* section_name;

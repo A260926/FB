@@ -19,4 +19,5 @@ options:
   -x, --details                Show section details
   -r, --reloc                  Show relocations inline with disassembly
       --section-offsets        Print section offsets instead of file offsets in code disassembly
+      --reference-map          Print the read-only reference index: every supported relocation with its source field bytes and typed target identity
 ;;; STDOUT ;;)

@@ -32,6 +32,15 @@ Print extra debug information
 Show section details
 .It Fl r , Fl Fl reloc
 Show relocations inline with disassembly
+.It Fl Fl reference-map
+Print the read-only reference index: each supported relocation with its
+source field bytes, location and typed type or symbol target identity.
+Can be combined with
+.Fl d ,
+.Fl x
+and
+.Fl j ;
+the section filter only limits the displayed source sections.
 .El
 .Sh EXAMPLES
 

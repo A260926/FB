@@ -168,6 +168,12 @@ class BinaryReader {
   Result ReadTagType(Index* out_sig_index);
   Result ReadAddress(Address* out_value, Index memory, const char* desc);
   Result ReadFunctionBody(Offset end_offset);
+  // Emit OnOpcodeImmediateRange for the field just consumed, whose first byte
+  // was at |begin|.  Uses the live reader offset so padded LEB128 encodings are
+  // reported with their exact physical length.
+  Result CallbackImmediateRange(Opcode opcode,
+                                unsigned field_index,
+                                Offset begin);
   // ReadInstructions reads until end_offset or the nesting depth reaches zero.
   Result ReadInstructions(Offset end_offset, const char* context);
   Result ReadNameSection(Offset section_size);
@@ -747,6 +753,13 @@ Result BinaryReader::ReadAddress(Address* out_value,
   }
 }
 
+Result BinaryReader::CallbackImmediateRange(Opcode opcode,
+                                            unsigned field_index,
+                                            Offset begin) {
+  return delegate_->OnOpcodeImmediateRange(opcode, field_index, begin,
+                                           state_.offset);
+}
+
 Result BinaryReader::ReadFunctionBody(Offset end_offset) {
   uint64_t total_locals = 0;
   Index num_local_decls;
@@ -787,9 +800,11 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
       case Opcode::Block: {
         nested_blocks.push(opcode);
         Type sig_type;
+        Offset sig_begin = state_.offset;
         CHECK_RESULT(ReadType(&sig_type, "block signature type"));
         ERROR_UNLESS(IsBlockType(sig_type),
                      "expected valid block signature type");
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, sig_begin));
         CALLBACK(OnBlockExpr, sig_type);
         CALLBACK(OnOpcodeBlockSig, sig_type);
         break;
@@ -798,9 +813,11 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
       case Opcode::Loop: {
         nested_blocks.push(opcode);
         Type sig_type;
+        Offset sig_begin = state_.offset;
         CHECK_RESULT(ReadType(&sig_type, "loop signature type"));
         ERROR_UNLESS(IsBlockType(sig_type),
                      "expected valid block signature type");
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, sig_begin));
         CALLBACK(OnLoopExpr, sig_type);
         CALLBACK(OnOpcodeBlockSig, sig_type);
         break;
@@ -809,9 +826,11 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
       case Opcode::If: {
         nested_blocks.push(opcode);
         Type sig_type;
+        Offset sig_begin = state_.offset;
         CHECK_RESULT(ReadType(&sig_type, "if signature type"));
         ERROR_UNLESS(IsBlockType(sig_type),
                      "expected valid block signature type");
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, sig_begin));
         CALLBACK(OnIfExpr, sig_type);
         CALLBACK(OnOpcodeBlockSig, sig_type);
         break;
@@ -929,7 +948,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::I32Const: {
         uint32_t value;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadS32Leb128(&value, "i32.const value"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnI32ConstExpr, value);
         CALLBACK(OnOpcodeUint32, value);
         break;
@@ -970,7 +991,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::GlobalGet: {
         Index global_index;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&global_index, "global.get global index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnGlobalGetExpr, global_index);
         CALLBACK(OnOpcodeIndex, global_index);
         break;
@@ -986,7 +1009,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::GlobalSet: {
         Index global_index;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&global_index, "global.set global index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnGlobalSetExpr, global_index);
         CALLBACK(OnOpcodeIndex, global_index);
         break;
@@ -1002,7 +1027,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::Call: {
         Index func_index;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&func_index, "call function index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnCallExpr, func_index);
         CALLBACK(OnOpcodeIndex, func_index);
         break;
@@ -1010,8 +1037,11 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::CallIndirect: {
         Index sig_index;
+        Offset sig_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&sig_index, "call_indirect signature index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, sig_begin));
         Index table_index = 0;
+        Offset table_begin = state_.offset;
         if (options_.features.reference_types_enabled()) {
           CHECK_RESULT(ReadIndex(&table_index, "call_indirect table index"));
         } else {
@@ -1019,6 +1049,7 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
           CHECK_RESULT(ReadU8(&reserved, "call_indirect reserved"));
           ERROR_UNLESS(reserved == 0, "call_indirect reserved value must be 0");
         }
+        CHECK_RESULT(CallbackImmediateRange(opcode, 1, table_begin));
         CALLBACK(OnCallIndirectExpr, sig_index, table_index);
         CALLBACK(OnOpcodeUint32Uint32, sig_index, table_index);
         break;
@@ -1026,7 +1057,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::ReturnCall: {
         Index func_index;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&func_index, "return_call"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnReturnCallExpr, func_index);
         CALLBACK(OnOpcodeIndex, func_index);
         break;
@@ -1034,8 +1067,11 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::ReturnCallIndirect: {
         Index sig_index;
+        Offset sig_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&sig_index, "return_call_indirect"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, sig_begin));
         Index table_index = 0;
+        Offset table_begin = state_.offset;
         if (options_.features.reference_types_enabled()) {
           CHECK_RESULT(
               ReadIndex(&table_index, "return_call_indirect table index"));
@@ -1045,6 +1081,7 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
           ERROR_UNLESS(reserved == 0,
                        "return_call_indirect reserved value must be 0");
         }
+        CHECK_RESULT(CallbackImmediateRange(opcode, 1, table_begin));
         CALLBACK(OnReturnCallIndirectExpr, sig_index, table_index);
         CALLBACK(OnOpcodeUint32Uint32, sig_index, table_index);
         break;
@@ -1939,7 +1976,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::TableGet: {
         Index table;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&table, "table index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnTableGetExpr, table);
         CALLBACK(OnOpcodeUint32, table);
         break;
@@ -1947,7 +1986,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::TableSet: {
         Index table;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&table, "table index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnTableSetExpr, table);
         CALLBACK(OnOpcodeUint32, table);
         break;
@@ -1955,7 +1996,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::TableGrow: {
         Index table;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&table, "table index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnTableGrowExpr, table);
         CALLBACK(OnOpcodeUint32, table);
         break;
@@ -1963,7 +2006,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::TableSize: {
         Index table;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&table, "table index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnTableSizeExpr, table);
         CALLBACK(OnOpcodeUint32, table);
         break;
@@ -1971,7 +2016,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::TableFill: {
         Index table;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&table, "table index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnTableFillExpr, table);
         CALLBACK(OnOpcodeUint32, table);
         break;
@@ -1984,7 +2031,9 @@ Result BinaryReader::ReadInstructions(Offset end_offset, const char* context) {
 
       case Opcode::RefFunc: {
         Index func;
+        Offset imm_begin = state_.offset;
         CHECK_RESULT(ReadIndex(&func, "func index"));
+        CHECK_RESULT(CallbackImmediateRange(opcode, 0, imm_begin));
         CALLBACK(OnRefFuncExpr, func);
         CALLBACK(OnOpcodeUint32, func);
         break;
@@ -3092,11 +3141,15 @@ Result BinaryReader::ReadCodeSection(Offset section_size) {
     Offset func_offset = state_.offset;
     state_.offset = func_offset;
     uint32_t body_size;
+    Offset body_size_begin = state_.offset;
     CHECK_RESULT(ReadU32Leb128(&body_size, "function body size"));
+    Offset body_size_end = state_.offset;
     Offset body_start_offset = state_.offset;
     Offset end_offset = body_start_offset + body_size;
     ERROR_UNLESS(end_offset >= body_start_offset && end_offset <= read_end_,
                  "invalid function body size: extends past end");
+    CHECK_RESULT(delegate_->OnFunctionBodySizeRange(func_index, body_size_begin,
+                                                    body_size_end));
     CALLBACK(BeginFunctionBody, func_index, body_size);
 
     if (options_.skip_function_bodies) {
