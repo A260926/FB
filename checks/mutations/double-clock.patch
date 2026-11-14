@@ -1,0 +1,11 @@
+--- a/src/player.c
++++ b/src/player.c
+@@ -281,7 +281,7 @@
+ 	struct module_data *m = &ctx->m;
+ 
+ 	if (x < 0xffff)	{	/* increment tick */
+-		x++;
++		x += 2;
+ 	}
+ 
+ 	if (x < 0) {

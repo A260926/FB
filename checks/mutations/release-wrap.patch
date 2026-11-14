@@ -1,0 +1,11 @@
+--- a/src/player.c
++++ b/src/player.c
+@@ -255,7 +255,7 @@
+ 	sue = env->sue << 1;
+ 
+ 	/* Release at the end of a sustain loop, run another loop */
+-	if (has_sus && key_off && x == data[sue] + 1) {
++	if (0 && has_sus && key_off && x == data[sue] + 1) {
+ 		x = data[sus];
+ 	} else
+ 	/* If enabled, stay in the sustain loop */

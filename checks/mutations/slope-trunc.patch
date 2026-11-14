@@ -1,0 +1,11 @@
+--- a/src/player.c
++++ b/src/player.c
+@@ -116,7 +116,7 @@
+ 	/* Interpolation requires x1 <= x <= x2 */
+ 	if (x < x1 || x2 < x1) return y1;
+ 
+-	return x2 == x1 ? y2 : ((y2 - y1) * (x - x1) / (x2 - x1)) + y1;
++	return x2 == x1 ? y2 : ((y2 - y1) / (x2 - x1) * (x - x1)) + y1;
+ }
+ 
+ #ifndef LIBXMP_CORE_PLAYER
