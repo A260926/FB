@@ -28,8 +28,12 @@ void glopMatrixMode(GLParam* p) {
 		break;
 	default:
 		break;
-		
+
 	}
+	/* switching back to a geometry matrix stack after texture-matrix
+	   edits must force a recompute at the next glBegin, otherwise a
+	   context that never drew before would use an uncomputed projection */
+	gl_matrix_update();
 }
 
 void glopLoadMatrix(GLParam* p) {

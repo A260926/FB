@@ -1,6 +1,7 @@
 #include "../include/zbuffer.h"
 #include "msghandling.h"
 #include <stdlib.h>
+#include <math.h>
 
 
 
@@ -488,3 +489,194 @@ void ZB_fillTriangleMappingPerspectiveNOBLEND(ZBuffer* zb, ZBufferPoint* p0, ZBu
 }
 
 #endif 
+
+/*
+
+		   DEPTH (SHADOW) TEXTURE MAPPED TRIANGLES
+
+*/
+
+void ZB_setDepthTexture(ZBuffer* zb, const GLfloat* depth, GLint dim, GLint compare_mode, GLint compare_func, GLint linear) {
+	zb->depth_texture = depth;
+	zb->depth_texture_dim = dim;
+	zb->depth_compare_mode = compare_mode;
+	zb->depth_compare_func = compare_func;
+	zb->depth_linear = linear;
+}
+
+void ZB_clearDepthTexture(ZBuffer* zb) {
+	zb->depth_texture = NULL;
+	zb->depth_texture_dim = 0;
+	zb->depth_compare_mode = GL_NONE;
+	zb->depth_compare_func = GL_LEQUAL;
+	zb->depth_linear = 0;
+}
+
+static GLint tgl_depth_clampi(GLint i, GLint dim) {
+	if (i < 0)
+		return 0;
+	if (i > dim - 1)
+		return dim - 1;
+	return i;
+}
+
+static GLfloat tgl_depth_fetch(const GLfloat* depth, GLint dim, GLint ix, GLint iy) {
+	return depth[tgl_depth_clampi(iy, dim) * dim + tgl_depth_clampi(ix, dim)];
+}
+
+/* clamp-to-edge depth lookup; returns either the stored depth gray
+   (GL_NONE) or the 0/1 comparison result, filtered as configured */
+static GLfloat tgl_depth_lookup(ZBuffer* zb, GLfloat u, GLfloat v, GLfloat ref) {
+	const GLfloat* depth = zb->depth_texture;
+	GLint dim = zb->depth_texture_dim;
+	GLint compare = (zb->depth_compare_mode == GL_COMPARE_R_TO_TEXTURE);
+	GLint less = (zb->depth_compare_func == GL_LESS);
+
+#define TGL_DEPTH_PASS(store) (less ? (ref < (store)) : (ref <= (store)))
+
+	if (!zb->depth_linear) {
+		GLint ix = (GLint)floorf(u * (GLfloat)dim);
+		GLint iy = (GLint)floorf(v * (GLfloat)dim);
+		GLfloat stored = tgl_depth_fetch(depth, dim, ix, iy);
+		if (compare)
+			return TGL_DEPTH_PASS(stored) ? 1.0f : 0.0f;
+		return stored;
+	} else {
+		GLfloat gx = u * (GLfloat)dim - 0.5f;
+		GLfloat gy = v * (GLfloat)dim - 0.5f;
+		GLint x0 = (GLint)floorf(gx);
+		GLint y0 = (GLint)floorf(gy);
+		GLfloat fx = gx - (GLfloat)x0;
+		GLfloat fy = gy - (GLfloat)y0;
+		GLfloat w00 = (1.0f - fx) * (1.0f - fy);
+		GLfloat w10 = fx * (1.0f - fy);
+		GLfloat w01 = (1.0f - fx) * fy;
+		GLfloat w11 = fx * fy;
+		GLfloat s00 = tgl_depth_fetch(depth, dim, x0, y0);
+		GLfloat s10 = tgl_depth_fetch(depth, dim, x0 + 1, y0);
+		GLfloat s01 = tgl_depth_fetch(depth, dim, x0, y0 + 1);
+		GLfloat s11 = tgl_depth_fetch(depth, dim, x0 + 1, y0 + 1);
+		if (compare) {
+			return (TGL_DEPTH_PASS(s00) ? w00 : 0.0f) + (TGL_DEPTH_PASS(s10) ? w10 : 0.0f) + (TGL_DEPTH_PASS(s01) ? w01 : 0.0f) +
+				   (TGL_DEPTH_PASS(s11) ? w11 : 0.0f);
+		}
+		return s00 * w00 + s10 * w10 + s01 * w01 + s11 * w11;
+	}
+#undef TGL_DEPTH_PASS
+}
+
+static PIXEL tgl_depth_gray_pixel(GLfloat g) {
+	GLint gray;
+	if (g < 0.0f)
+		g = 0.0f;
+	else if (g > 1.0f)
+		g = 1.0f;
+	gray = (GLint)(g * 255.0f + 0.5f);
+	if (gray > 255)
+		gray = 255;
+#if TGL_FEATURE_RENDER_BITS == 32
+	return (PIXEL)((gray << 16) | (gray << 8) | gray);
+#elif TGL_FEATURE_RENDER_BITS == 16
+	{
+		GLint c = gray >> 3;
+		return (PIXEL)((c << 11) | (c << 5) | c);
+	}
+#endif
+}
+
+#define TGL_DEPTH_DRAW_LINE(BLEND_PIXEL)                                                                                                                         \
+	{                                                                                                                                                             \
+		register GLushort* pz;                                                                                                                                    \
+		register PIXEL* pp;                                                                                                                                       \
+		register GLuint z;                                                                                                                                        \
+		register GLint n;                                                                                                                                         \
+		register GLfloat sw, tw, rw, qw;                                                                                                                          \
+		OR1OG1OB1DECL                                                                                                                                             \
+		n = (x2 >> 16) - x1;                                                                                                                                      \
+		pp = (PIXEL*)pp1 + x1;                                                                                                                                    \
+		pz = pz1 + x1;                                                                                                                                            \
+		z = z1;                                                                                                                                                   \
+		sw = sw1;                                                                                                                                                 \
+		tw = tw1;                                                                                                                                                 \
+		rw = rw1;                                                                                                                                                 \
+		qw = qw1;                                                                                                                                                 \
+		or1 = r1;                                                                                                                                                 \
+		og1 = g1;                                                                                                                                                 \
+		ob1 = b1;                                                                                                                                                 \
+		while (n >= 0) {                                                                                                                                          \
+			GLfloat qinv = 1.0f / qw;                                                                                                                             \
+			GLfloat u = sw * qinv;                                                                                                                                \
+			GLfloat v = tw * qinv;                                                                                                                                \
+			GLfloat ref = rw * qinv;                                                                                                                              \
+			GLfloat g = tgl_depth_lookup(zb, u, v, ref);                                                                                                         \
+			PIXEL tpix = tgl_depth_gray_pixel(g);                                                                                                                 \
+			GLuint zz = z >> ZB_POINT_Z_FRAC_BITS;                                                                                                                \
+			if (ZCMPSIMP(zz, pz[0], 0, 0)) {                                                                                                                      \
+				BLEND_PIXEL(RGB_MIX_FUNC(or1, og1, ob1, tpix), pp[0]);                                                                                           \
+				if (zbdw)                                                                                                                                         \
+					pz[0] = zz;                                                                                                                                   \
+			}                                                                                                                                                     \
+			z += dzdx;                                                                                                                                            \
+			sw += dswdx;                                                                                                                                          \
+			tw += dtwdx;                                                                                                                                          \
+			rw += drwdx;                                                                                                                                          \
+			qw += dqwdx;                                                                                                                                          \
+			OR1G1B1INCR                                                                                                                                           \
+			pz += 1;                                                                                                                                              \
+			pp++;                                                                                                                                                 \
+			n--;                                                                                                                                                  \
+		}                                                                                                                                                         \
+	}
+
+#define TGL_SHADOW_RASTER_HEADER                                                                                                                                 \
+	GLubyte zbdw = zb->depth_write;                                                                                                                              \
+	GLubyte zbdt = zb->depth_test;                                                                                                                               \
+	TGL_STIPPLEVARS
+
+void ZB_fillTriangleDepthPerspective(ZBuffer* zb, ZBufferPoint* p0, ZBufferPoint* p1, ZBufferPoint* p2) {
+	TGL_BLEND_VARS
+	TGL_SHADOW_RASTER_HEADER;
+#define INTERP_Z
+#define INTERP_RGB
+#define INTERP_SHADOW
+#undef OR1OG1OB1DECL
+#undef OR1G1B1INCR
+#define OR1OG1OB1DECL                                                                                                                                           \
+	register GLint or1, og1, ob1;
+#define OR1G1B1INCR                                                                                                                                             \
+	og1 += dgdx;                                                                                                                                                 \
+	or1 += drdx;                                                                                                                                                 \
+	ob1 += dbdx;
+#define DRAW_INIT()
+#define PUT_PIXEL(_a)
+#define DRAW_LINE()                                                                                                                                            \
+	TGL_DEPTH_DRAW_LINE(TGL_BLEND_FUNC)
+#include "ztriangle.h"
+#undef OR1OG1OB1DECL
+#undef OR1G1B1INCR
+}
+
+void ZB_fillTriangleDepthPerspectiveNOBLEND(ZBuffer* zb, ZBufferPoint* p0, ZBufferPoint* p1, ZBufferPoint* p2) {
+	TGL_SHADOW_RASTER_HEADER;
+#define INTERP_Z
+#define INTERP_RGB
+#define INTERP_SHADOW
+#undef OR1OG1OB1DECL
+#undef OR1G1B1INCR
+#define OR1OG1OB1DECL                                                                                                                                           \
+	register GLint or1, og1, ob1;
+#define OR1G1B1INCR                                                                                                                                             \
+	og1 += dgdx;                                                                                                                                                 \
+	or1 += drdx;                                                                                                                                                 \
+	ob1 += dbdx;
+#define DRAW_INIT()
+#define PUT_PIXEL(_a)
+#define DRAW_LINE()                                                                                                                                            \
+	TGL_DEPTH_DRAW_LINE(TGL_NO_BLEND_FUNC)
+#include "ztriangle.h"
+#undef OR1OG1OB1DECL
+#undef OR1G1B1INCR
+}
+
+#undef TGL_DEPTH_DRAW_LINE
+#undef TGL_SHADOW_RASTER_HEADER

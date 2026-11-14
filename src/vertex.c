@@ -134,20 +134,16 @@ void glopBegin(GLParam* p) {
 
 static void gl_transform_to_viewport_vertex_c(GLVertex* v) {
 	GLContext* c = gl_get_context();
-	{
-		GLfloat winv = 1.0 / v->pc.W;
-		v->zp.x = (GLint)(v->pc.X * winv * c->viewport.scale.X + c->viewport.trans.X);
-		v->zp.y = (GLint)(v->pc.Y * winv * c->viewport.scale.Y + c->viewport.trans.Y);
-		v->zp.z = (GLint)(v->pc.Z * winv * c->viewport.scale.Z + c->viewport.trans.Z);
-	}
-
-	v->zp.r = (GLint)(v->color.v[0] * COLOR_CORRECTED_MULT_MASK + COLOR_MIN_MULT) & COLOR_MASK;
-	v->zp.g = (GLint)(v->color.v[1] * COLOR_CORRECTED_MULT_MASK + COLOR_MIN_MULT) & COLOR_MASK;
-	v->zp.b = (GLint)(v->color.v[2] * COLOR_CORRECTED_MULT_MASK + COLOR_MIN_MULT) & COLOR_MASK;
-
+	GLfloat winv;
+	gl_transform_to_viewport_clip_c(v);
+	/* the clip.c variant computes the same viewport transform; the
+	   projective depth-texture channels are shared between both paths */
+	winv = 1.0f / v->pc.W;
 	if (c->texture_2d_enabled) {
-		v->zp.s = (GLint)(v->tex_coord.X * (ZB_POINT_S_MAX - ZB_POINT_S_MIN) + ZB_POINT_S_MIN); 
-		v->zp.t = (GLint)(v->tex_coord.Y * (ZB_POINT_T_MAX - ZB_POINT_T_MIN) + ZB_POINT_T_MIN); 
+		v->zp.sw = v->tex_coord.X * winv;
+		v->zp.tw = v->tex_coord.Y * winv;
+		v->zp.rw = v->tex_coord.Z * winv;
+		v->zp.qw = v->tex_coord.W * winv;
 	}
 }
 

@@ -51,6 +51,12 @@ Things to keep in mind:
 	GLfloat tz1, dtzdx, dtzdy, dtzdl_min, dtzdl_max;
 	GLfloat fdzdx, fndzdx, ndszdx, ndtzdx;
 #endif
+#ifdef INTERP_SHADOW
+	GLfloat sw1, dswdx, dswdy, dswdl_min, dswdl_max;
+	GLfloat tw1, dtwdx, dtwdy, dtwdl_min, dtwdl_max;
+	GLfloat rw1, drwdx, drwdy, drwdl_min, drwdl_max;
+	GLfloat qw1, dqwdx, dqwdy, dqwdl_min, dqwdl_max;
+#endif
 
 	/* we sort the vertex with increasing y */
 	if (p1->y < p0->y) {
@@ -163,7 +169,25 @@ Things to keep in mind:
 			dtzdy = (fdx1 * d2 - fdx2 * d1);
 		}
 #endif
-	} 
+
+#ifdef INTERP_SHADOW
+#define TGL_SHADOW_GRADS(PFX, FIELD)                                                                                                                              \
+		{                                                                                                                                                          \
+			d1 = p1->FIELD - p0->FIELD;                                                                                                                           \
+			d2 = p2->FIELD - p0->FIELD;                                                                                                                           \
+			d##PFX##dx = (fdy2 * d1 - fdy1 * d2);                                                                                                                 \
+			d##PFX##dy = (fdx1 * d2 - fdx2 * d1);                                                                                                                 \
+		}
+		{
+			GLfloat d1, d2;
+			TGL_SHADOW_GRADS(sw, sw)
+			TGL_SHADOW_GRADS(tw, tw)
+			TGL_SHADOW_GRADS(rw, rw)
+			TGL_SHADOW_GRADS(qw, qw)
+		}
+#undef TGL_SHADOW_GRADS
+#endif
+	}
 	/* screen coordinates */
 
 	pp1 = (PIXEL*)(zb->pbuf) + zb->xsize * p0->y; 
@@ -265,6 +289,17 @@ Things to keep in mind:
 				tz1 = l1->tz;
 				dtzdl_min = (dtzdy + dtzdx * dxdy_min);
 				dtzdl_max = dtzdl_min + dtzdx;
+#endif
+#ifdef INTERP_SHADOW
+#define TGL_SHADOW_EDGE(PFX)                                                                                                                                      \
+				PFX##1 = l1->PFX;                                                                                                                                 \
+				d##PFX##dl_min = (d##PFX##dy + d##PFX##dx * dxdy_min);                                                                                            \
+				d##PFX##dl_max = d##PFX##dl_min + d##PFX##dx;
+				TGL_SHADOW_EDGE(sw)
+				TGL_SHADOW_EDGE(tw)
+				TGL_SHADOW_EDGE(rw)
+				TGL_SHADOW_EDGE(qw)
+#undef TGL_SHADOW_EDGE
 #endif
 			}
 			/* compute values for the right edge */
@@ -370,6 +405,15 @@ Things to keep in mind:
 				sz1 += dszdl_max;
 				tz1 += dtzdl_max;
 #endif
+#ifdef INTERP_SHADOW
+#define TGL_SHADOW_STEP(PFX)                                                                                                                                     \
+				PFX##1 += d##PFX##dl_max;
+				TGL_SHADOW_STEP(sw)
+				TGL_SHADOW_STEP(tw)
+				TGL_SHADOW_STEP(rw)
+				TGL_SHADOW_STEP(qw)
+#undef TGL_SHADOW_STEP
+#endif
 			} else {
 				x1 += dxdy_min;
 #ifdef INTERP_Z
@@ -387,6 +431,15 @@ Things to keep in mind:
 #ifdef INTERP_STZ
 				sz1 += dszdl_min;
 				tz1 += dtzdl_min;
+#endif
+#ifdef INTERP_SHADOW
+#define TGL_SHADOW_STEP(PFX)                                                                                                                                     \
+				PFX##1 += d##PFX##dl_min;
+				TGL_SHADOW_STEP(sw)
+				TGL_SHADOW_STEP(tw)
+				TGL_SHADOW_STEP(rw)
+				TGL_SHADOW_STEP(qw)
+#undef TGL_SHADOW_STEP
 #endif
 			}
 
@@ -408,6 +461,9 @@ Things to keep in mind:
 #undef INTERP_RGB
 #undef INTERP_ST
 #undef INTERP_STZ
+#ifdef INTERP_SHADOW
+#undef INTERP_SHADOW
+#endif
 
 #undef DRAW_INIT
 #undef DRAW_LINE

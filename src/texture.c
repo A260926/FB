@@ -62,11 +62,22 @@ void* glGetTexturePixmap(GLint text, GLint level, GLint* xsize, GLint* ysize) {
 #endif
 		*xsize = tex->images[level].xsize;
 	*ysize = tex->images[level].ysize;
+	if (tex->images[level].is_depth)
+		return tex->images[level].depth;
 	return tex->images[level].pixmap;
+}
+
+static void free_texture_image_storage(GLImage* im) {
+	if (im->depth) {
+		gl_free(im->depth);
+		im->depth = NULL;
+	}
+	im->is_depth = 0;
 }
 
 static void free_texture(GLContext* c, GLint h) {
 	GLTexture *t, **ht;
+	GLint level;
 
 	t = find_texture(h);
 	if (t->prev == NULL) {
@@ -78,6 +89,8 @@ static void free_texture(GLContext* c, GLint h) {
 	if (t->next != NULL)
 		t->next->prev = t->prev;
 
+	for (level = 0; level < MAX_TEXTURE_LEVELS; level++)
+		free_texture_image_storage(&t->images[level]);
 	gl_free(t);
 }
 
@@ -105,6 +118,11 @@ GLTexture* alloc_texture(GLint h) {
 	*ht = t;
 
 	t->handle = h;
+	/* depth texture defaults: no comparison, LEQUAL, NEAREST */
+	t->compare_mode = GL_NONE;
+	t->compare_func = GL_LEQUAL;
+	t->min_filter = GL_NEAREST;
+	t->mag_filter = GL_NEAREST;
 
 	return t;
 }
@@ -208,13 +226,13 @@ void glopCopyTexImage2D(GLParam* p) {
 	GLint i, j;
 	GLint target = p[1].i;
 	GLint level = p[2].i;
+	GLint internalformat = p[3].i;
 	GLint x = p[4].i;
 	GLint y = p[5].i;
 	GLsizei w = p[6].i;
 	GLsizei h = p[7].i;
 	GLint border = p[8].i;
 	GLContext* c = gl_get_context();
-	y -= h;
 
 	if (c->readbuffer != GL_FRONT || c->current_texture == NULL || target != GL_TEXTURE_2D || border != 0 ||
 		w != TGL_FEATURE_TEXTURE_DIM || /*TODO Implement image interp*/
@@ -227,9 +245,45 @@ void glopCopyTexImage2D(GLParam* p) {
 #endif
 	}
 	im = &c->current_texture->images[level];
-	data = c->current_texture->images[level].pixmap;
 	im->xsize = TGL_FEATURE_TEXTURE_DIM;
 	im->ysize = TGL_FEATURE_TEXTURE_DIM;
+
+	if (internalformat == GL_DEPTH_COMPONENT) {
+		GLfloat* depth;
+		GLint xsize = c->zb->xsize;
+		GLint ysize = c->zb->ysize;
+		if (!im->depth)
+			im->depth = gl_malloc(sizeof(GLfloat) * TGL_FEATURE_TEXTURE_DIM * TGL_FEATURE_TEXTURE_DIM);
+		if (!im->depth) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+#define ERROR_FLAG GL_OUT_OF_MEMORY
+#include "error_check.h"
+#else
+			gl_fatal_error("GL_OUT_OF_MEMORY");
+#endif
+		}
+		im->is_depth = 1;
+		depth = im->depth;
+		/* independent snapshot of the current ZBuffer: 16 bit camera Z
+		   (0 = far after clear) maps to normalized 1 - z/65535.
+		   x/y are lower-left window coordinates; texture row 0 holds
+		   the bottom region row, so framebuffer memory row (top origin)
+		   is ysize-1-(y+j). */
+		for (j = 0; j < h; j++)
+			for (i = 0; i < w; i++) {
+				GLint sx = x + i;
+				GLint sy = ysize - 1 - (y + j);
+				GLushort zz = c->zb->zbuf[sy * xsize + sx];
+				depth[j * w + i] = 1.0f - (GLfloat)zz / 65535.0f;
+			}
+		return;
+	}
+
+	/* RGB copy replaces any previous depth storage */
+	free_texture_image_storage(im);
+	data = c->current_texture->images[level].pixmap;
+	y -= h;
+
 	/* TODO implement the scaling and stuff that the GL spec says it should have.*/
 #if TGL_FEATURE_MULTITHREADED_COPY_TEXIMAGE_2D == 1
 #ifdef _OPENMP
@@ -322,6 +376,39 @@ void glopTexImage2D(GLParam* p) {
 	GLubyte* pixels1;
 	GLint do_free=0;
 	GLContext* c = gl_get_context();
+
+	if (components == GL_DEPTH_COMPONENT) {
+		GLint count;
+		if (!(c->current_texture != NULL && target == GL_TEXTURE_2D && level == 0 && border == 0 &&
+			  format == GL_DEPTH_COMPONENT && type == GL_FLOAT &&
+			  width == TGL_FEATURE_TEXTURE_DIM && height == TGL_FEATURE_TEXTURE_DIM)) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+#define ERROR_FLAG GL_INVALID_ENUM
+#include "error_check.h"
+#else
+			gl_fatal_error("glTexImage2D: combination of parameters not handled!!");
+#endif
+		}
+		im = &c->current_texture->images[level];
+		count = TGL_FEATURE_TEXTURE_DIM * TGL_FEATURE_TEXTURE_DIM;
+		if (!im->depth)
+			im->depth = gl_malloc(sizeof(GLfloat) * count);
+		if (!im->depth) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+#define ERROR_FLAG GL_OUT_OF_MEMORY
+#include "error_check.h"
+#else
+			gl_fatal_error("GL_OUT_OF_MEMORY");
+#endif
+		}
+		/* copy the caller's data: later clears, draws or overwriting the
+		   source array must not change the texture */
+		memcpy(im->depth, pixels, sizeof(GLfloat) * count);
+		im->is_depth = 1;
+		im->xsize = width;
+		im->ysize = height;
+		return;
+	}
 	{
 #if TGL_FEATURE_ERROR_CHECK == 1
 		if (!(c->current_texture != NULL && target == GL_TEXTURE_2D && level == 0 && components == 3 && border == 0 && format == GL_RGB &&
@@ -356,6 +443,8 @@ void glopTexImage2D(GLParam* p) {
 	}
 
 	im = &c->current_texture->images[level];
+	/* an RGB redefinition releases any previous depth storage */
+	free_texture_image_storage(im);
 	im->xsize = width;
 	im->ysize = height;
 #if TGL_FEATURE_RENDER_BITS == 32
@@ -367,6 +456,37 @@ void glopTexImage2D(GLParam* p) {
 #endif
 	if (do_free)
 		gl_free(pixels1);
+}
+
+void glopTexParameter(GLParam* p) {
+	GLint target = p[1].i;
+	GLint pname = p[2].i;
+	GLint param = p[3].i;
+	GLContext* c = gl_get_context();
+	GLTexture* t;
+	if (target != GL_TEXTURE_2D || c->current_texture == NULL)
+		return;
+	t = c->current_texture;
+	switch (pname) {
+	case GL_TEXTURE_COMPARE_MODE:
+		if (param == GL_NONE || param == GL_COMPARE_R_TO_TEXTURE)
+			t->compare_mode = param;
+		break;
+	case GL_TEXTURE_COMPARE_FUNC:
+		if (param == GL_LEQUAL || param == GL_LESS)
+			t->compare_func = param;
+		break;
+	case GL_TEXTURE_MIN_FILTER:
+		if (param == GL_NEAREST || param == GL_LINEAR)
+			t->min_filter = param;
+		break;
+	case GL_TEXTURE_MAG_FILTER:
+		if (param == GL_NEAREST || param == GL_LINEAR)
+			t->mag_filter = param;
+		break;
+	default:
+		break;
+	}
 }
 
 /* TODO: not all tests are done */

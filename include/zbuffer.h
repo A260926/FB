@@ -245,12 +245,18 @@ typedef GLushort PIXEL;
 
 typedef struct {
 
-    
-    
+
+
     GLushort *zbuf;
     PIXEL *pbuf;
     PIXEL *current_texture;
-    
+
+    /* active depth texture (normalized [0,1] GLfloat rows, row 0 = bottom) */
+    const GLfloat *depth_texture;
+    GLint depth_texture_dim;
+    GLint depth_compare_mode;   /* GL_NONE or GL_COMPARE_R_TO_TEXTURE */
+    GLint depth_compare_func;   /* GL_LEQUAL or GL_LESS */
+    GLint depth_linear;         /* 0 = GL_NEAREST, 1 = GL_LINEAR */
 
 	/* point size*/
     GLfloat pointsize;
@@ -279,8 +285,14 @@ typedef struct {
   GLint x,y,z;     /* integer coordinates in the zbuffer */
   GLint s,t;       /* coordinates for the mapping */
   GLint r,g,b;     /* color indexes */
-  
+
   GLfloat sz,tz;   /* temporary coordinates for mapping */
+
+  /* projective depth-texture coordinates, pre-divided by the camera
+     homogeneous w: sw = s/w, tw = t/w, rw = r/w, qw = q/w, where
+     (s,t,r,q) are the texture-matrix transformed glTexCoord4f values.
+     Ratios such as sw/qw recover s/q without keeping 1/w separately. */
+  GLfloat sw, tw, rw, qw;
 } ZBufferPoint;
 
 /* zbuffer.c */
@@ -318,6 +330,15 @@ void ZB_line_z(ZBuffer * zb, ZBufferPoint * p1, ZBufferPoint * p2);
 /* ztriangle.c */
 
 void ZB_setTexture(ZBuffer *zb, PIXEL *texture);
+
+void ZB_setDepthTexture(ZBuffer *zb, const GLfloat *depth, GLint dim,
+                        GLint compare_mode, GLint compare_func, GLint linear);
+void ZB_clearDepthTexture(ZBuffer *zb);
+
+void ZB_fillTriangleDepthPerspective(ZBuffer *zb,
+                    ZBufferPoint *p0,ZBufferPoint *p1,ZBufferPoint *p2);
+void ZB_fillTriangleDepthPerspectiveNOBLEND(ZBuffer *zb,
+                    ZBufferPoint *p0,ZBufferPoint *p1,ZBufferPoint *p2);
 
 void ZB_fillTriangleFlat(ZBuffer *zb,
 		 ZBufferPoint *p1,ZBufferPoint *p2,ZBufferPoint *p3);

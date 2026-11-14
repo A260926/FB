@@ -41,6 +41,7 @@ static void endSharedState(GLContext* c) {
 		t = s->texture_hash_table[i];
 		while (t) {
 			GLTexture** ht;
+			GLint level;
 			if (t->prev == NULL) {
 				ht = &c->shared_state.texture_hash_table[t->handle & TEXTURE_HASH_TABLE_MASK];
 				*ht = t->next;
@@ -50,6 +51,11 @@ static void endSharedState(GLContext* c) {
 			n = t->next;
 			if (t->next != NULL)
 				t->next->prev = t->prev;
+			/* release any owned depth storage before the object itself */
+			for (level = 0; level < MAX_TEXTURE_LEVELS; level++) {
+				if (t->images[level].depth)
+					gl_free(t->images[level].depth);
+			}
 			gl_free(t);
 			t = n;
 		}

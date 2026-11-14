@@ -42,6 +42,7 @@ ADD_OP(TexImage2D, 9, "%d %d %d  %d %d %d  %d %d %d")
 ADD_OP(TexImage1D, 8, "%d %d  %d %d %d  %d %d %d")
 ADD_OP(CopyTexImage2D, 8, "%d %d %d %d  %d %d %d %d")
 ADD_OP(BindTexture, 2, "%C %d")
+ADD_OP(TexParameter, 3, "%d %d %d")
 
 
 

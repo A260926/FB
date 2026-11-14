@@ -552,19 +552,15 @@ void glTexEnvi(GLint target, GLint pname, GLint param) {
 }
 
 void glTexParameteri(GLint target, GLint pname, GLint param) {
-
+	GLParam p[4];
 #include "error_check_no_context.h"
-
-
-
-
-
-
-
-
-
-
+	p[0].op = OP_TexParameter;
+	p[1].i = target;
+	p[2].i = pname;
+	p[3].i = param;
+	gl_add_op(p);
 }
+
 
 /*
 void glPixelStorei(GLint pname, GLint param) {

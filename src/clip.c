@@ -10,7 +10,7 @@
 #define CLIP_ZMIN (1 << 4)
 #define CLIP_ZMAX (1 << 5)
 
-static void gl_transform_to_viewport_clip_c(GLVertex* v) { /* MARK: NOT_INLINED_IN_OG*/
+void gl_transform_to_viewport_clip_c(GLVertex* v) { /* MARK: NOT_INLINED_IN_OG*/
 	GLContext* c = gl_get_context();
 	/* coordinates */
 	{
@@ -27,8 +27,14 @@ static void gl_transform_to_viewport_clip_c(GLVertex* v) { /* MARK: NOT_INLINED_
 	/* texture */
 
 	if (c->texture_2d_enabled) {
-		v->zp.s = (GLint)(v->tex_coord.X * (ZB_POINT_S_MAX - ZB_POINT_S_MIN) + ZB_POINT_S_MIN); 
-		v->zp.t = (GLint)(v->tex_coord.Y * (ZB_POINT_T_MAX - ZB_POINT_T_MIN) + ZB_POINT_T_MIN); 
+		GLfloat winv = 1.0f / v->pc.W;
+		v->zp.s = (GLint)(v->tex_coord.X * (ZB_POINT_S_MAX - ZB_POINT_S_MIN) + ZB_POINT_S_MIN);
+		v->zp.t = (GLint)(v->tex_coord.Y * (ZB_POINT_T_MAX - ZB_POINT_T_MIN) + ZB_POINT_T_MIN);
+		/* projective depth-texture channels, divided by camera w */
+		v->zp.sw = v->tex_coord.X * winv;
+		v->zp.tw = v->tex_coord.Y * winv;
+		v->zp.rw = v->tex_coord.Z * winv;
+		v->zp.qw = v->tex_coord.W * winv;
 	}
 }
 
@@ -222,6 +228,8 @@ static void updateTmp(GLVertex* q, GLVertex* p0, GLVertex* p1, GLfloat t) {
 	{
 		q->tex_coord.X = p0->tex_coord.X + (p1->tex_coord.X - p0->tex_coord.X) * t;
 		q->tex_coord.Y = p0->tex_coord.Y + (p1->tex_coord.Y - p0->tex_coord.Y) * t;
+		q->tex_coord.Z = p0->tex_coord.Z + (p1->tex_coord.Z - p0->tex_coord.Z) * t;
+		q->tex_coord.W = p0->tex_coord.W + (p1->tex_coord.W - p0->tex_coord.W) * t;
 	}
 
 	q->clip_code = gl_clipcode(q->pc.X, q->pc.Y, q->pc.Z, q->pc.W);
@@ -396,9 +404,10 @@ int count_triangles, count_triangles_textured, count_pixels;
 #endif
 
 /* see vertex.c to see how the draw functions are assigned.*/
-void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2) { 
+void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2) {
 	GLContext* c = gl_get_context();
 	if (c->texture_2d_enabled) {
+		GLTexture* tex = c->current_texture;
 		/* if(c->current_texture)*/
 #if TGL_FEATURE_LIT_TEXTURES == 1
 		if (c->current_shade_model != GL_SMOOTH) {
@@ -412,7 +421,22 @@ void gl_draw_triangle_fill(GLVertex* p0, GLVertex* p1, GLVertex* p2) {
 		}
 #endif
 
-		ZB_setTexture(c->zb, c->current_texture->images[0].pixmap);
+		if (tex->images[0].is_depth) {
+			GLint linear = (tex->min_filter == GL_LINEAR || tex->mag_filter == GL_LINEAR);
+			ZB_setDepthTexture(c->zb, tex->images[0].depth, tex->images[0].xsize, tex->compare_mode, tex->compare_func, linear);
+#if TGL_FEATURE_BLEND == 1
+			if (c->zb->enable_blend)
+				ZB_fillTriangleDepthPerspective(c->zb, &p0->zp, &p1->zp, &p2->zp);
+			else
+				ZB_fillTriangleDepthPerspectiveNOBLEND(c->zb, &p0->zp, &p1->zp, &p2->zp);
+#else
+			ZB_fillTriangleDepthPerspectiveNOBLEND(c->zb, &p0->zp, &p1->zp, &p2->zp);
+#endif
+			ZB_clearDepthTexture(c->zb);
+			return;
+		}
+
+		ZB_setTexture(c->zb, tex->images[0].pixmap);
 #if TGL_FEATURE_BLEND == 1
 		if (c->zb->enable_blend)
 			ZB_fillTriangleMappingPerspective(c->zb, &p0->zp, &p1->zp, &p2->zp);

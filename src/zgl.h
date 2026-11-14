@@ -140,7 +140,9 @@ typedef struct GLVertex {
 
 typedef struct GLImage {
 	PIXEL pixmap[TGL_FEATURE_TEXTURE_DIM * TGL_FEATURE_TEXTURE_DIM];
+	GLfloat* depth; /* non-NULL for GL_DEPTH_COMPONENT images (owned copy) */
 	GLint xsize, ysize;
+	GLint is_depth;
 } GLImage;
 
 /* textures */
@@ -151,6 +153,10 @@ typedef struct GLTexture {
 	GLImage images[MAX_TEXTURE_LEVELS];
 	struct GLTexture *next, *prev;
 	GLint handle;
+	GLint compare_mode;     /* GL_NONE or GL_COMPARE_R_TO_TEXTURE */
+	GLint compare_func;     /* GL_LEQUAL or GL_LESS */
+	GLint min_filter;       /* GL_NEAREST or GL_LINEAR */
+	GLint mag_filter;
 } GLTexture;
 
 /* buffers */
@@ -411,6 +417,7 @@ static GLfloat clampf(GLfloat a, GLfloat min, GLfloat max) {
 void gl_draw_triangle(GLVertex* p0, GLVertex* p1, GLVertex* p2);
 void gl_draw_line(GLVertex* p0, GLVertex* p1);
 void gl_draw_point(GLVertex* p0);
+void gl_transform_to_viewport_clip_c(GLVertex* v);
 
 void gl_draw_triangle_point(GLVertex* p0, GLVertex* p1, GLVertex* p2);	
 void gl_draw_triangle_line(GLVertex* p0, GLVertex* p1, GLVertex* p2);	
