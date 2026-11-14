@@ -150,6 +150,70 @@ If build with configuration type "Release", then:
 
     ctest -C Release
 
+## Receive-side recovery regression tests ##
+
+The library's own self-test (`test_framing`, built from `src/framing.c`)
+already round-trips encoder-produced pages and covers several lost-page
+branches.  On top of that, `tests/recovery_cases.c` adds an independent
+receive-side regression suite for the case a low-latency audio link
+occasionally corrupts bytes: after the sync layer drops a bad page, the
+packet layer must not glue the leftover fragments onto the audio that
+follows.  Production behavior is unchanged; no new player is added.
+
+What the suite adds beyond the existing self-test:
+
+- Independent reference models: input pages are assembled by hand in the
+  test file (little-endian header fields, hand-written lacing values
+  including 255 runs, zero terminators and zero-length packets, CRC-32
+  computed bitwise from polynomial 0x04c11db7).  `ogg_stream_packetin()`/
+  `ogg_stream_flush()`/`ogg_page_checksum_set()` are not used to build
+  the reference input, and no second decode pass of the library acts as
+  the oracle; expected page bytes and packet/hole event sequences are
+  stored as standalone models.  Packet bodies contain fake `OggS`
+  capture patterns that must stay inert.
+- Combination chains the old test does not exercise end to end:
+  truncated capture markers and header-complete/body-missing inputs fed
+  byte by byte, in header-crossing short chunks and as one block with
+  identical event streams; CRC-bad pages adjacent to bogus `OggS` pages
+  between good pages; `ogg_sync_pageseek()` skip counts vs. the single
+  desync notification of `ogg_sync_pageout()` per garbage run; orphan
+  suffixes spanning multiple 255 lacing values followed by zero-length
+  and complete packets on a recovery page; granule ownership (only the
+  last packet completed on a page) and packetno accounting across holes;
+  `ogg_stream_packetpeek()` consuming a hole exactly once while repeated
+  peeks (and NULL-output calls) on a packet do not consume; two
+  interleaved serials with varied feed chunking and drain timing, a
+  >65025-byte packet spanning pages, recovery after an adjacent corrupt
+  page, and reset/replay with no stale half-packet or desync state.
+
+### Running ###
+
+    bash task_support/run.sh baseline   # library self-tests only
+    bash task_support/run.sh target     # plus the recovery suite
+    bash task_support/variants.sh       # suite + mutation checks
+
+`variants.sh` first builds and runs the recovery suite against the
+unmodified library, then repeats it against three temporary single-line
+degradations of `src/framing.c` (accepting CRC-mismatched pages, not
+skipping orphan suffixes, and `packetpeek` not advancing past holes).
+Each degradation must be caught by the suite's `TASK_CHECK` assertions.
+
+### Example recovery event sequence ###
+
+For a stream where page 1 (the first 65025 bytes of a 70000-byte
+packet) is lost and page 2 resumes with the orphan tail followed by a
+zero-length packet and a complete 255-byte packet, the expected event
+sequence is:
+
+    packet  300 bytes  packetno=0 granule=1000 bos   (queued before loss)
+    hole                                             (page 1 missing)
+    packet  0 bytes    packetno=2 granule=-1         (zero-length)
+    packet  255 bytes  packetno=3 granule=3000       (page 2 granule)
+    packet  10 bytes   packetno=4 granule=4000 eos
+
+The hole consumes packet sequence number 1; the orphan suffix is
+dropped silently, producing neither a packet nor an extra hole.
+
 ## License ##
 
 THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.
