@@ -13153,6 +13153,1311 @@ namespace pugi
 
 #endif
 
+// Incremental, record-at-a-time streaming parser (backing implementation of pugi::xml_record_reader).
+//
+// The bulk parser above (xml_parser::parse_tree) needs one contiguous, zero-terminated, mutable buffer
+// and keeps every byte of it alive for the whole document. This engine instead owns a small, growable
+// staging buffer and drives the *same* token classification and text/attribute conversion helpers
+// (chartype_table, strconv_escape via strconv_pcdata/strconv_attribute, append_new_node/
+// append_new_attribute) from an explicit state machine that can park at any byte boundary and resume
+// on the next feed(). DOM strings of the in-flight record point into the staging buffer; when a direct
+// child of the root element closes it is delivered through the callback and the record nodes together
+// with the staging bytes they referenced are reclaimed, so residency depends on the current record and
+// the unfinished token only, never on the number of records already delivered.
+PUGI_IMPL_NS_BEGIN
+	enum record_stream_status
+	{
+		record_stream_need_input = 0,
+		record_stream_done = 1,
+		record_stream_error = 2
+	};
+
+	class record_stream_engine
+	{
+	public:
+		record_stream_engine(xml_document& doc, void (*callback)(const xml_document&, void*), void* userdata)
+			: _doc(doc)
+			, _doc_struct(static_cast<xml_document_struct*>(doc.internal_object()))
+			, _callback(callback)
+			, _userdata(userdata)
+			, _buf(0)
+			, _capacity(0)
+			, _length(0)
+			, _pos(0)
+			, _base(0)
+			, _total(0)
+			, _state(state_content)
+			, _root(0)
+			, _root_ready(false)
+			, _cursor(0)
+			, _attr(0)
+			, _tok(0)
+			, _section(0)
+			, _quote(0)
+			, _depth(0)
+			, _saw_element(false)
+			, _root_closed(false)
+			, _final(false)
+			, _bom_seen(0)
+			, _pi_declaration(false)
+			, _self_close_offset(0)
+			, _pcdata_created(false)
+			, _mark_offset(0)
+			, _end_match(0)
+			, _terminal(false)
+			, _terminal_status(record_stream_need_input)
+			, _terminal_error(status_ok)
+			, _terminal_offset(0)
+		{
+		}
+
+		~record_stream_engine()
+		{
+			if (_buf) xml_memory::deallocate(_buf);
+		}
+
+		// Capacity of every raw-input byte storage still held (the staging buffer backing unfinished
+		// tokens and the current input block; allocator-owned decoded strings are not counted).
+		size_t retained_input_bytes() const
+		{
+			return _capacity;
+		}
+
+		int feed(const void* data, size_t size, bool final, xml_parse_status& out_error, size_t& out_offset)
+		{
+			if (_terminal)
+			{
+				out_error = _terminal_error;
+				out_offset = _terminal_offset;
+				return _terminal_status;
+			}
+
+			if (size)
+			{
+				if (!append_bytes(static_cast<const char*>(data), size))
+					return fail_terminal(status_out_of_memory, _total, out_error, out_offset);
+
+				_total += size;
+
+				if (!run(final))
+				{
+					out_error = _terminal_error;
+					out_offset = _terminal_offset;
+					return record_stream_error;
+				}
+			}
+
+			if (final)
+			{
+				if (!_root_closed)
+				{
+					xml_parse_status st = _saw_element ? status_end_element_mismatch : status_no_document_element;
+					return fail_terminal(st, _total, out_error, out_offset);
+				}
+
+				_terminal = true;
+				_terminal_status = record_stream_done;
+				_terminal_error = status_ok;
+				_terminal_offset = 0;
+				out_error = status_ok;
+				out_offset = 0;
+				return record_stream_done;
+			}
+
+			out_error = status_ok;
+			out_offset = 0;
+			return record_stream_need_input;
+		}
+
+	private:
+		enum state_t
+		{
+			state_content,         // at a boundary where text or markup begins
+			state_markup,          // '<' consumed, s points at the character after it
+			state_start_name,      // reading an element name
+			state_in_tag,          // after element name, among attributes / '/' / '>'
+			state_self_closing,    // consumed a '/' whose matching '>' may arrive in a later feed
+			state_attr_name,       // reading attribute name
+			state_attr_after_name, // attribute name terminated, expecting '='
+			state_attr_quote,      // got '=', expecting opening quote
+			state_attr_value,      // inside quoted attribute value
+			state_end_name,        // reading closing tag name
+			state_pi,              // reading '<?' target name
+			state_pi_body,         // inside a processing instruction / declaration body, scanning for '?>'
+			state_bang,            // inside '<!', deciding comment/cdata/doctype
+			state_comment,         // inside '<!-- ... -->'
+			state_cdata,           // inside '<![CDATA[ ... ]]>'
+			state_pcdata,          // inside element text
+			state_done,
+			state_error
+		};
+
+		enum drive_result { drive_error, drive_ok, drive_compacted, drive_park };
+
+		xml_document& _doc;
+		xml_document_struct* _doc_struct;
+		void (*_callback)(const xml_document&, void*);
+		void* _userdata;
+
+		char* _buf;          // owned, zero-terminated staging storage; DOM in-situ strings point here
+		size_t _capacity;    // allocated capacity of _buf
+		size_t _length;      // valid bytes in _buf (excluding the terminating zero)
+		size_t _pos;         // parse position as an index into _buf
+		size_t _base;        // absolute stream offset of _buf[0]
+		size_t _total;       // absolute stream position, i.e. total bytes ever fed
+
+		state_t _state;
+		xml_node_struct* _root;    // document element, persistent once created
+		bool _root_ready;          // root start tag fully parsed and its strings copied to allocator storage
+		xml_node_struct* _cursor;  // currently open element
+		xml_attribute_struct* _attr;
+		char* _tok;                // start of the token currently being read
+		char* _section;            // start of the current comment/CDATA content
+		char _quote;               // attribute value quote
+		int _depth;                // open element depth (0 outside, 1 at the root element)
+		bool _saw_element;
+		bool _root_closed;
+		bool _final;               // the current run() got the final feed flag
+
+		int _bom_seen;             // BOM prefix bytes matched so far (0..3, 3 means BOM consumed/absent)
+		bool _pi_declaration;      // the PI currently being scanned is an XML declaration
+		size_t _self_close_offset; // absolute offset of a parked '/' expecting '>'
+
+		// persistent in-place conversion gap for the unfinished text/attribute/CDATA section; it is
+		// reset when a section starts and survives feed boundaries until the section terminates
+		gap _g;
+
+		bool _pcdata_created;
+		size_t _mark_offset; // absolute offset of the token being validated
+		size_t _end_match;   // characters already matched while reading a split closing tag name
+
+		bool _terminal;
+		int _terminal_status;
+		xml_parse_status _terminal_error;
+		size_t _terminal_offset;
+
+		xml_allocator& alloc()
+		{
+			return *static_cast<xml_allocator*>(_doc_struct);
+		}
+
+		int fail_terminal(xml_parse_status status, size_t offset, xml_parse_status& out_error, size_t& out_offset)
+		{
+			_state = state_error;
+			_terminal = true;
+			_terminal_status = record_stream_error;
+			_terminal_error = status;
+			_terminal_offset = offset;
+			out_error = status;
+			out_offset = offset;
+			return record_stream_error;
+		}
+
+		bool fail(xml_parse_status status, size_t offset)
+		{
+			_state = state_error;
+			_terminal = true;
+			_terminal_status = record_stream_error;
+			_terminal_error = status;
+			_terminal_offset = offset;
+			return false;
+		}
+
+		size_t absolute(const char* p) const
+		{
+			return _base + static_cast<size_t>(p - _buf);
+		}
+
+		// --- staging buffer ownership -------------------------------------------------------------------
+
+		bool inflight_record() const
+		{
+			return _root != 0 && _root->first_child != 0;
+		}
+
+		bool append_bytes(const char* data, size_t size)
+		{
+			// Reuse the front of the storage only when no live DOM string references staging bytes.
+			if (_pos == _length && !inflight_record() && _state == state_content)
+			{
+				_base += _length;
+				_pos = 0;
+				_length = 0;
+				_tok = 0;
+				_section = 0;
+				_g.end = 0;
+				_g.size = 0;
+			}
+
+			if (_length + size + 1 > _capacity)
+			{
+				size_t new_capacity = _capacity ? _capacity : 256;
+				while (new_capacity < _length + size + 1)
+					new_capacity *= 2;
+
+				char* old = _buf;
+				char* new_buffer = static_cast<char*>(xml_memory::allocate(new_capacity));
+				if (!new_buffer) return false;
+
+				if (_length) memcpy(new_buffer, old, _length);
+
+				ptrdiff_t delta = new_buffer - old;
+				if (delta)
+				{
+					if (_tok) _tok += delta;
+					if (_section) _section += delta;
+					if (_g.end) _g.end += delta;
+					if (_root) relocate_strings(_root, delta);
+				}
+
+				if (old) xml_memory::deallocate(old);
+				_buf = new_buffer;
+				_capacity = new_capacity;
+			}
+
+			memcpy(_buf + _length, data, size);
+			_length += size;
+			_buf[_length] = 0;
+			return true;
+		}
+
+		// Downsize the staging buffer when a delivered record left most of its capacity unused. At this
+		// point the only surviving tree node is the root, whose strings are allocator-backed, so the
+		// buffer has no live in-situ references and can be replaced freely.
+		void shrink_staging()
+		{
+			const size_t minimum_capacity = 256;
+			size_t needed = _length + 1;
+			size_t target = minimum_capacity;
+			while (target < needed) target *= 2;
+
+			if (target >= _capacity) return;
+
+			char* old = _buf;
+			char* smaller = static_cast<char*>(xml_memory::allocate(target));
+			if (!smaller) return; // keep the existing buffer if reallocation fails
+
+			if (_length) memcpy(smaller, old, _length);
+			smaller[_length] = 0;
+
+			if (old) xml_memory::deallocate(old);
+			_buf = smaller;
+			_capacity = target;
+		}
+
+		void relocate_strings(xml_node_struct* node, ptrdiff_t delta)
+		{
+			if ((node->header & xml_memory_page_name_allocated_or_shared_mask) == 0 && node->name)
+				node->name += delta;
+			if ((node->header & xml_memory_page_value_allocated_or_shared_mask) == 0 && node->value)
+				node->value += delta;
+
+			for (xml_attribute_struct* a = node->first_attribute; a; a = a->next_attribute)
+			{
+				if ((a->header & xml_memory_page_name_allocated_or_shared_mask) == 0 && a->name)
+					a->name += delta;
+				if ((a->header & xml_memory_page_value_allocated_or_shared_mask) == 0 && a->value)
+					a->value += delta;
+			}
+
+			for (xml_node_struct* child = node->first_child; child; child = child->next_sibling)
+				relocate_strings(child, delta);
+		}
+
+		// Copy root element name/attributes out of the reusable staging buffer into allocator-owned
+		// strings, so discarding consumed staging prefixes can never invalidate the root element.
+		void persist_root_strings()
+		{
+			persist_string(_root->name, _root->header, xml_memory_page_name_allocated_mask);
+			persist_string(_root->value, _root->header, xml_memory_page_value_allocated_mask);
+
+			for (xml_attribute_struct* a = _root->first_attribute; a; a = a->next_attribute)
+			{
+				persist_string(a->name, a->header, xml_memory_page_name_allocated_mask);
+				persist_string(a->value, a->header, xml_memory_page_value_allocated_mask);
+			}
+		}
+
+		void persist_string(char_t*& str, uintptr_t& header, uintptr_t mask)
+		{
+			if (!str || (header & mask)) return;
+
+			size_t length = strlength(str);
+			char_t* copy = alloc().allocate_string(length + 1);
+			if (!copy) return; // leave the in-situ pointer; the staging bytes simply stay live
+
+			memcpy(copy, str, (length + 1) * sizeof(char_t));
+			str = copy;
+			header |= mask;
+		}
+
+		// Reclaim the delivered record subtree. The staging buffer itself is compacted by run(), which
+		// owns the live parse cursor and the held-back tail.
+		void discard_record(xml_node_struct* record)
+		{
+			remove_node(record);
+			destroy_node(record, alloc());
+		}
+
+		// --- in-place conversion state for the resumable text/attribute/CDATA loops ---------------------
+
+		void clear_gap()
+		{
+			_g.end = 0;
+			_g.size = 0;
+		}
+
+		// --- main driver --------------------------------------------------------------------------------
+
+		bool run(bool final)
+		{
+			_final = final;
+
+			// A trailing CR, a dangling entity or an unfinished section terminator is held back so the
+			// conversion loops always see the same byte stream as the bulk parser on a complete buffer.
+			size_t hold = hold_back_limit(final);
+
+			bool holding = hold < _length;
+			char held_byte = 0;
+			if (holding)
+			{
+				held_byte = _buf[hold];
+				_buf[hold] = 0;
+			}
+
+			bool ok = true;
+			for (;;)
+			{
+				char* s = _buf + _pos;
+				char* end = _buf + hold;
+
+				drive_result r = drive(s, end);
+				_pos = static_cast<size_t>(s - _buf);
+
+				if (r == drive_error)
+				{
+					ok = false;
+					break;
+				}
+
+				if (r == drive_compacted)
+				{
+					// A record was just delivered and discarded; s points right after its closing '>'.
+					// Compact the staging buffer around that cursor and keep the held-back tail intact.
+					size_t prefix = static_cast<size_t>(s - _buf);
+					size_t tail = _length - prefix;
+
+					if (tail) memmove(_buf, s, tail);
+					_base += prefix;
+					_length = tail;
+					_pos = 0;
+					_buf[_length] = 0;
+					_tok = 0;
+					_section = 0;
+					_g.end = 0;
+					_g.size = 0;
+
+					// The completed record's nodes (and every in-situ string into staging) are gone, and
+					// the root owns allocator-backed strings, so no live pointer references this buffer.
+					// Release oversized capacity so residency tracks the current record, not a past one.
+					shrink_staging();
+					hold -= prefix;
+					continue;
+				}
+
+				break; // drive_ok (caught up) or drive_park (waiting on a held-back token)
+			}
+
+			if (holding)
+				_buf[hold] = held_byte;
+
+			return ok;
+		}
+
+		size_t hold_back_limit(bool final)
+		{
+			if (final) return _length;
+
+			// a trailing CR may be the first half of a CRLF pair; split comment/CDATA terminators
+			// and character references are handled by cursor rewind / entity parking instead
+			if (_length && _buf[_length - 1] == '\r')
+				return _length - 1;
+
+			return _length;
+		}
+
+		// An entity is only handed to the shared strconv_escape once its fate is decidable inside the
+		// current buffer (a closing ';', a markup '<' or the attribute quote is present). Otherwise we
+		// park at the '&' and re-read it on the next feed, so a split reference is never half-consumed.
+		bool entity_decidable(const char* amp, char* end, char extra_terminator)
+		{
+			for (const char* p = amp; p < end; ++p)
+			{
+				if (*p == ';' || *p == '<' || (extra_terminator && *p == extra_terminator))
+					return true;
+			}
+			return false;
+		}
+
+		drive_result drive(char*& s, char* end)
+		{
+			for (;;)
+			{
+				// every handler parks by consuming up to the planted end; once caught up, wait for input
+				if (s >= end) return drive_ok;
+
+				drive_result r;
+				switch (_state)
+				{
+				case state_content:        r = handle_content(s, end); break;
+				case state_markup:         r = handle_markup(s, end); break;
+				case state_start_name:     r = handle_start_name(s, end); break;
+				case state_in_tag:         r = handle_in_tag(s, end); break;
+				case state_self_closing:   r = handle_self_closing(s, end); break;
+				case state_attr_name:      r = handle_attr_name(s, end); break;
+				case state_attr_after_name:r = handle_attr_after_name(s, end); break;
+				case state_attr_quote:     r = handle_attr_quote(s, end); break;
+				case state_attr_value:     r = handle_attr_value(s, end); break;
+				case state_end_name:       r = handle_end_name(s, end); break;
+				case state_pi:             r = handle_pi(s, end); break;
+				case state_pi_body:        r = handle_pi_body(s, end); break;
+				case state_bang:           r = handle_bang(s, end); break;
+				case state_comment:        r = handle_comment(s, end); break;
+				case state_cdata:          r = handle_cdata(s, end); break;
+				case state_pcdata:         r = handle_pcdata(s, end); break;
+				case state_done:           return drive_ok;
+				case state_error:          return drive_error;
+				default:                   return drive_error;
+				}
+
+				if (r != drive_ok)
+					return r;
+			}
+		}
+
+		bool need_more(char* s, char* end)
+		{
+			return s >= end;
+		}
+
+		// --- BOM ----------------------------------------------------------------------------------------
+
+		// Consumes an optional leading EF BB BF sequence even when it spans feed boundaries.
+		// Consumes an optional leading EF BB BF sequence even when it spans feed boundaries. On a
+		// mismatch the already-consumed prefix is re-exposed as ordinary content, so no bytes are lost.
+		drive_result handle_bom(char*& s, char* end)
+		{
+			static const unsigned char bom[3] = { 0xef, 0xbb, 0xbf };
+
+			while (_bom_seen < 3)
+			{
+				if (need_more(s, end)) return drive_ok;
+
+				if (static_cast<unsigned char>(*s) != bom[_bom_seen])
+				{
+					// not a BOM: rewind over any matched prefix and let normal parsing read those bytes
+					s -= _bom_seen;
+					_bom_seen = 3;
+					return drive_ok;
+				}
+
+				++_bom_seen;
+				++s;
+			}
+
+			return drive_ok;
+		}
+
+		// --- state handlers -----------------------------------------------------------------------------
+
+		drive_result handle_content(char*& s, char* end)
+		{
+			if (_bom_seen < 3)
+			{
+				drive_result r = handle_bom(s, end);
+				if (r != drive_ok || need_more(s, end)) return r;
+			}
+
+			if (need_more(s, end)) return drive_ok;
+
+			if (*s == '<')
+			{
+				++s;
+				_state = state_markup;
+				return drive_ok;
+			}
+
+			char* text_start = s;
+
+			if (_depth <= 1)
+			{
+				// document level and the root element interior: whitespace/separators are ignored,
+				// any other character data is reported as status_bad_pcdata
+				while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+
+				if (need_more(s, end)) return drive_ok;
+				if (*s == '<') return drive_ok; // re-dispatch markup from the same position
+
+				fail(status_bad_pcdata, absolute(text_start));
+				return drive_error;
+			}
+
+			_tok = text_start;
+			_pcdata_created = false;
+			_state = state_pcdata;
+			return drive_ok;
+		}
+
+		drive_result handle_markup(char*& s, char* end)
+		{
+			// s points just after '<'; reaching the planted end means the '<' was the last available byte
+			if (need_more(s, end)) return drive_ok;
+
+			char c = *s;
+			_mark_offset = absolute(s - 1); // offset of the '<'
+
+			if (PUGI_IMPL_IS_CHARTYPE(c, ct_start_symbol))
+			{
+				_tok = s;
+				_state = state_start_name;
+				return drive_ok;
+			}
+
+			if (c == '/')
+			{
+				++s;
+				_tok = s;
+				_end_match = 0;
+				_state = state_end_name;
+				return drive_ok;
+			}
+
+			if (c == '?')
+			{
+				++s;
+				_tok = s;
+				_state = state_pi;
+				return drive_ok;
+			}
+
+			if (c == '!')
+			{
+				++s;
+				_state = state_bang;
+				return drive_ok;
+			}
+
+			fail(status_unrecognized_tag, _mark_offset);
+			return drive_error;
+		}
+
+		drive_result handle_start_name(char*& s, char* end)
+		{
+			while (PUGI_IMPL_IS_CHARTYPE(*s, ct_symbol)) ++s;
+
+			if (need_more(s, end)) return drive_ok; // name split across feeds
+
+			char delimiter = *s;
+			*s = 0;
+			++s;
+
+			if (delimiter != '>' && !PUGI_IMPL_IS_CHARTYPE(delimiter, ct_space) && delimiter != '/')
+			{
+				fail(status_bad_start_element, absolute(s - 1));
+				return drive_error;
+			}
+
+			if (_depth == 0)
+			{
+				if (_root_closed)
+				{
+					fail(status_bad_start_element, _mark_offset); // a second document element
+					return drive_error;
+				}
+
+				xml_node_struct* node = append_new_node(_doc_struct, alloc(), node_element);
+				if (!node) { fail(status_out_of_memory, absolute(_tok)); return drive_error; }
+				node->name = _tok;
+				_root = node;
+				_cursor = node;
+				_saw_element = true;
+				_depth = 1;
+			}
+			else
+			{
+				xml_node_struct* node = append_new_node(_cursor, alloc(), node_element);
+				if (!node) { fail(status_out_of_memory, absolute(_tok)); return drive_error; }
+				node->name = _tok;
+				_cursor = node;
+				++_depth;
+			}
+
+			if (delimiter == '>')
+			{
+				finish_start_tag();
+				_state = state_content;
+			}
+			else if (delimiter == '/')
+			{
+				if (need_more(s, end)) { _self_close_offset = absolute(s - 1); _state = state_self_closing; return drive_park; }
+				if (*s != '>') { fail(status_bad_start_element, absolute(s)); return drive_error; }
+				++s;
+				drive_result r = do_close_element();
+				if (r != drive_ok) return r;
+				_state = state_content;
+			}
+			else
+			{
+				_state = state_in_tag;
+			}
+
+			return drive_ok;
+		}
+
+		void finish_start_tag()
+		{
+			// the root element outlives every staging buffer, so its strings must own their storage
+			if (_depth == 1 && !_root_ready)
+			{
+				persist_root_strings();
+				_root_ready = true;
+			}
+		}
+
+		drive_result handle_in_tag(char*& s, char* end)
+		{
+			while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+			if (need_more(s, end)) return drive_ok;
+
+			if (PUGI_IMPL_IS_CHARTYPE(*s, ct_start_symbol))
+			{
+				_tok = s;
+				_state = state_attr_name;
+				return drive_ok;
+			}
+
+			if (*s == '/')
+			{
+				_self_close_offset = absolute(s);
+				++s;
+				if (need_more(s, end)) { _state = state_self_closing; return drive_park; }
+				if (*s != '>') { fail(status_bad_start_element, absolute(s)); return drive_error; }
+				++s;
+				finish_start_tag();
+				drive_result r = do_close_element();
+				if (r != drive_ok) return r;
+				_state = state_content;
+				return drive_ok;
+			}
+
+			if (*s == '>')
+			{
+				++s;
+				finish_start_tag();
+				_state = state_content;
+				return drive_ok;
+			}
+
+			fail(status_bad_start_element, absolute(s));
+			return drive_error;
+		}
+
+		// Resume a self-closing tag whose '/' was in the previous feed and whose '>' arrives now.
+		drive_result handle_self_closing(char*& s, char* end)
+		{
+			if (need_more(s, end))
+			{
+				if (_final) { fail(status_bad_start_element, _self_close_offset); return drive_error; }
+				return drive_park;
+			}
+
+			if (*s != '>') { fail(status_bad_start_element, absolute(s)); return drive_error; }
+			++s;
+			finish_start_tag();
+			drive_result r = do_close_element();
+			if (r != drive_ok) return r;
+			_state = state_content;
+			return drive_ok;
+		}
+
+		drive_result handle_attr_name(char*& s, char* end)
+		{
+			while (PUGI_IMPL_IS_CHARTYPE(*s, ct_symbol)) ++s;
+			if (need_more(s, end)) return drive_ok;
+
+			char delimiter = *s;
+			*s = 0;
+			++s;
+
+			if (delimiter != '=' && !PUGI_IMPL_IS_CHARTYPE(delimiter, ct_space))
+			{
+				fail(status_bad_attribute, absolute(s - 1));
+				return drive_error;
+			}
+
+			xml_attribute_struct* a = append_new_attribute(_cursor, alloc());
+			if (!a) { fail(status_out_of_memory, absolute(_tok)); return drive_error; }
+			a->name = _tok;
+			_attr = a;
+
+			if (delimiter == '=')
+			{
+				// the '=' was consumed above; the opening quote (optionally preceded by whitespace) next
+				_state = state_attr_quote;
+				return drive_ok;
+			}
+
+			// whitespace separated the name from a not-yet-consumed '='
+			_state = state_attr_after_name;
+			return drive_ok;
+		}
+
+		drive_result handle_attr_after_name(char*& s, char* end)
+		{
+			while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+			if (need_more(s, end)) return drive_park;
+
+			if (*s != '=') { fail(status_bad_attribute, absolute(s)); return drive_error; }
+			++s;
+
+			_state = state_attr_quote;
+			return drive_ok;
+		}
+
+		drive_result handle_attr_quote(char*& s, char* end)
+		{
+			while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+			if (need_more(s, end)) return drive_park;
+
+			if (*s != '"' && *s != '\'')
+			{
+				fail(status_bad_attribute, absolute(s));
+				return drive_error;
+			}
+
+			_quote = *s;
+			++s;
+			_attr->value = s;
+			clear_gap();
+			_state = state_attr_value;
+			return drive_ok;
+		}
+
+		// Resumable counterpart of strconv_attribute_impl<opt_true>::parse_wconv (the parse_default
+		// attribute converter): whitespace normalization, CRLF folding and entity/character reference
+		// expansion share the exact same rules; only the loop can pause at a feed boundary.
+		drive_result handle_attr_value(char*& s, char* end)
+		{
+			while (s < end)
+			{
+				while (!PUGI_IMPL_IS_CHARTYPE(*s, ct_parse_attr_ws)) ++s;
+				if (s >= end) break; // planted end: the value simply continues in the next feed
+
+				if (*s == _quote)
+				{
+					*_g.flush(s) = 0;
+					clear_gap();
+					++s;
+					_state = state_in_tag;
+					return drive_ok;
+				}
+				else if (PUGI_IMPL_IS_CHARTYPE(*s, ct_space))
+				{
+					if (*s == '\r')
+					{
+						*s++ = ' ';
+						if (*s == '\n') _g.push(s, 1);
+					}
+					else
+					{
+						*s++ = ' ';
+					}
+				}
+				else if (*s == '&')
+				{
+					if (!entity_decidable(s, end, _quote)) return drive_park; // split reference
+					s = strconv_escape(s, _g);
+				}
+				else
+				{
+					break; // planted null
+				}
+			}
+
+			return drive_ok;
+		}
+
+		drive_result handle_end_name(char*& s, char* end)
+		{
+			if (!_cursor || !_cursor->name)
+			{
+				fail(status_end_element_mismatch, _mark_offset);
+				return drive_error;
+			}
+
+			// resume a possibly split name comparison at the first not-yet-matched character
+			const char* expected = _cursor->name + _end_match;
+
+			while (PUGI_IMPL_IS_CHARTYPE(*s, ct_symbol))
+			{
+				if (need_more(s, end)) return drive_ok; // split closing tag: _end_match already updated
+				if (*s != *expected)
+				{
+					fail(status_end_element_mismatch, _mark_offset);
+					return drive_error;
+				}
+				++s;
+				++expected;
+				++_end_match;
+			}
+
+			// the planted end stopped the scan: the rest of the (possibly split) name arrives later
+			if (need_more(s, end)) return drive_ok;
+
+			if (*expected)
+			{
+				fail(status_end_element_mismatch, _mark_offset);
+				return drive_error;
+			}
+
+			while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+			if (need_more(s, end)) return drive_ok;
+			if (*s != '>') { fail(status_bad_end_element, absolute(s)); return drive_error; }
+			++s;
+
+			drive_result r = do_close_element();
+			if (r != drive_ok) return r;
+			_state = state_content;
+			return drive_ok;
+		}
+
+		drive_result handle_pi(char*& s, char* end)
+		{
+			char* target = _tok;
+			if (need_more(s, end)) return drive_ok;
+			if (!PUGI_IMPL_IS_CHARTYPE(*target, ct_start_symbol))
+			{
+				fail(status_bad_pi, _mark_offset);
+				return drive_error;
+			}
+
+			while (PUGI_IMPL_IS_CHARTYPE(*s, ct_symbol)) ++s;
+			if (need_more(s, end)) return drive_ok;
+
+			bool declaration = target[0] == 'x' && target[1] == 'm' && target[2] == 'l' && (s - target) == 3;
+			if (declaration && (_depth != 0 || _saw_element))
+			{
+				fail(status_bad_pi, _mark_offset);
+				return drive_error;
+			}
+
+			char delimiter = *s;
+			if (!PUGI_IMPL_IS_CHARTYPE(delimiter, ct_space) && delimiter != '?')
+			{
+				fail(status_bad_pi, absolute(s));
+				return drive_error;
+			}
+
+			_pi_declaration = declaration;
+			_state = state_pi_body;
+			return handle_pi_body(s, end);
+		}
+
+		drive_result handle_pi_body(char*& s, char* end)
+		{
+			char* target = _tok;
+
+			while (s < end)
+			{
+				if (s[0] == '?')
+				{
+					if (s + 1 >= end)
+					{
+						if (_final) { fail(status_bad_pi, _mark_offset); return drive_error; }
+						return drive_park; // '?' split from '>'
+					}
+					if (s[1] == '>')
+					{
+						// declaration content is the half-open range [target, s) ending at '?'
+						if (_pi_declaration && !validate_declaration(target, s))
+						{
+							fail(status_bad_pi, _mark_offset);
+							return drive_error;
+						}
+						s += 2;
+						_state = state_content;
+						return drive_ok;
+					}
+				}
+
+				++s;
+			}
+
+			if (_final) { fail(status_bad_pi, _mark_offset); return drive_error; }
+			return drive_park;
+		}
+
+		// Strict declaration subset: version="1.0" is required; encoding, if present, must be UTF-8;
+		// standalone is allowed. No nodes are created for declarations or PIs under parse_default.
+		bool validate_declaration(char* begin, char* end)
+		{
+			char* p = begin + 3; // skip 'xml'
+
+			skip_decl_ws(p, end);
+			if (!match_decl_word(p, end, "version")) return false;
+			skip_decl_ws(p, end);
+			if (p >= end || *p != '=') return false;
+			++p;
+			skip_decl_ws(p, end);
+			if (!match_decl_quoted(p, end, "1.0")) return false;
+
+			skip_decl_ws(p, end);
+			if (p < end && match_decl_word(p, end, "encoding"))
+			{
+				skip_decl_ws(p, end);
+				if (p >= end || *p != '=') return false;
+				++p;
+				skip_decl_ws(p, end);
+				char quote = 0;
+				if (!decl_quote(p, end, quote)) return false;
+				static const char utf8[] = "UTF-8";
+				for (size_t i = 0; i < sizeof(utf8) - 1; ++i)
+				{
+					if (p >= end || (*p | ' ') != (utf8[i] | ' ')) return false;
+					++p;
+				}
+				if (p >= end || *p != quote) return false;
+				++p;
+				skip_decl_ws(p, end);
+			}
+
+			if (p < end && match_decl_word(p, end, "standalone"))
+			{
+				skip_decl_ws(p, end);
+				if (p >= end || *p != '=') return false;
+				++p;
+				skip_decl_ws(p, end);
+				char quote2 = 0;
+				if (!decl_quote(p, end, quote2)) return false;
+
+				bool standalone_ok = false;
+				static const char standalone_values[][4] = { "yes", "no" };
+				for (size_t i = 0; i < sizeof(standalone_values) / sizeof(standalone_values[0]); ++i)
+				{
+					size_t n = strlen(standalone_values[i]);
+					if (static_cast<size_t>(end - p) >= n + 1 && memcmp(p, standalone_values[i], n) == 0 && p[n] == quote2)
+					{
+						p += n + 1;
+						standalone_ok = true;
+						break;
+					}
+				}
+				if (!standalone_ok) return false;
+				skip_decl_ws(p, end);
+			}
+
+			return p == end;
+		}
+
+		static void skip_decl_ws(char*& s, char* end)
+		{
+			while (s < end && PUGI_IMPL_IS_CHARTYPE(*s, ct_space)) ++s;
+		}
+
+		static bool match_decl_word(char*& s, char* end, const char* word)
+		{
+			size_t n = strlen(word);
+			if (static_cast<size_t>(end - s) < n) return false;
+			if (memcmp(s, word, n) != 0) return false;
+			s += n;
+			return true;
+		}
+
+		static bool match_decl_quoted(char*& s, char* end, const char* value)
+		{
+			char quote = 0;
+			if (!decl_quote(s, end, quote)) return false;
+			size_t n = strlen(value);
+			if (static_cast<size_t>(end - s) < n) return false;
+			if (memcmp(s, value, n) != 0) return false;
+			s += n;
+			if (s >= end || *s != quote) return false;
+			++s;
+			return true;
+		}
+
+		static bool decl_quote(char*& s, char* end, char& quote)
+		{
+			if (s >= end || (*s != '"' && *s != '\'')) return false;
+			quote = *s;
+			++s;
+			return true;
+		}
+
+		drive_result handle_bang(char*& s, char* end)
+		{
+			static const char cdata[] = "[CDATA[";
+			static const char doctype[] = "DOCTYPE";
+
+			if (need_more(s, end)) return drive_ok;
+
+			if (*s == '-')
+			{
+				++s;
+				if (need_more(s, end))
+				{
+					// the second dash arrives in a later feed; rewind so both dashes are re-read together
+					--s;
+					return drive_park;
+				}
+				if (*s != '-') { fail(status_bad_comment, _mark_offset); return drive_error; }
+				++s;
+				_section = s;
+				_mark_offset = absolute(s); // comment content start
+				_state = state_comment;
+				return drive_ok;
+			}
+
+			// match "[CDATA[" with partial-input tolerance
+			{
+				size_t matched = 0;
+				while (matched < sizeof(cdata) - 1 && s + matched < end && s[matched] == cdata[matched])
+					++matched;
+
+				if (matched == sizeof(cdata) - 1)
+				{
+					if (_depth == 0) { fail(status_bad_cdata, _mark_offset); return drive_error; }
+					s += matched;
+					xml_node_struct* node = append_new_node(_cursor, alloc(), node_cdata);
+					if (!node) { fail(status_out_of_memory, absolute(s)); return drive_error; }
+					node->value = s;
+					_section = s;
+					_mark_offset = absolute(s);
+					clear_gap();
+					_state = state_cdata;
+					return drive_ok;
+				}
+
+				if (s + matched >= end) return drive_park; // keyword split across feeds
+			}
+
+			// match "DOCTYPE"
+			{
+				size_t matched = 0;
+				while (matched < sizeof(doctype) - 1 && s + matched < end && s[matched] == doctype[matched])
+					++matched;
+
+				if (matched == sizeof(doctype) - 1)
+				{
+					fail(status_bad_doctype, _mark_offset);
+					return drive_error;
+				}
+
+				if (s + matched >= end) return drive_park; // keyword split across feeds
+			}
+
+			fail(status_unrecognized_tag, _mark_offset);
+			return drive_error;
+		}
+
+		// Comment scan; parse_default keeps no comment nodes and performs no comment EOL conversion.
+		// On a feed boundary the cursor is rewound over a dangling '-' / '--' prefix of the '-->'
+		// terminator so the next feed re-reads the whole terminator.
+		drive_result handle_comment(char*& s, char* end)
+		{
+			while (s < end)
+			{
+				if (s[0] == '-' && s + 1 < end && s[1] == '-' && s + 2 < end)
+				{
+					if (s[2] == '>')
+					{
+						s += 3;
+						_state = state_content;
+						return drive_ok;
+					}
+
+					++s; // a bare '--' that is not the terminator is treated as content
+					continue;
+				}
+
+				if (s[0] == '-' && s + 1 < end && s[1] == '-')
+					break; // saw '--' but the closing '>' is beyond the current window
+				if (s[0] == '-' && s + 1 >= end)
+					break; // a single dangling '-' may begin the terminator
+
+				++s;
+			}
+
+			// rewind at most the two leading dashes of an unfinished '-->' terminator
+			int dashes = 0;
+			while (dashes < 2 && s > _section && s[-1] == '-')
+			{
+				--s;
+				++dashes;
+			}
+
+			if (_final) { fail(status_bad_comment, _mark_offset); return drive_error; }
+			return drive_park;
+		}
+
+		// CDATA scan sharing the EOL normalization (CR/LF) and gap logic of strconv_cdata. On a feed
+		// boundary the cursor is rewound over a dangling ']' (or ']]') prefix of the ']]>' terminator so
+		// the next feed re-reads the whole terminator rather than starting in its middle.
+		drive_result handle_cdata(char*& s, char* end)
+		{
+			while (s < end)
+			{
+				if (*s == '\r')
+				{
+					*s++ = '\n';
+					if (*s == '\n') _g.push(s, 1);
+				}
+				else if (s[0] == ']' && s + 1 < end && s[1] == ']' && s[2] == '>')
+				{
+					*_g.flush(s) = 0;
+					clear_gap();
+					s += 3;
+					_state = state_content;
+					return drive_ok;
+				}
+				else
+				{
+					++s;
+				}
+			}
+
+			// rewind any partial ']]>' terminator so it is re-scanned once the rest has arrived
+			while (s > _section && s[-1] == ']')
+				--s;
+
+			if (_final) { fail(status_bad_cdata, _mark_offset); return drive_error; }
+			return drive_park;
+		}
+
+		drive_result handle_pcdata(char*& s, char* end)
+		{
+			if (!_pcdata_created)
+			{
+				char* p = s;
+				while (p < end && PUGI_IMPL_IS_CHARTYPE(*p, ct_space)) ++p;
+
+				if (p >= end)
+					return drive_park; // park at the text start so its CR/LF are folded once the node exists
+				if (*p == '<')
+				{
+					s = p; // advance over the ignorable whitespace, then re-dispatch the '<'
+					_state = state_content;
+					return drive_ok;
+				}
+
+				// genuine character data: create the node pointing at the text start, then fall through
+				// to the conversion loop which re-processes from 's' (including any leading line breaks)
+				xml_node_struct* node = append_new_node(_cursor, alloc(), node_pcdata);
+				if (!node) { fail(status_out_of_memory, absolute(_tok)); return drive_error; }
+				node->value = _tok;
+				_cursor = node->parent;
+				_pcdata_created = true;
+				clear_gap();
+			}
+
+			// Resumable counterpart of the parse_default PCDATA converter: EOL folding and entity/
+			// character reference expansion use the same rules; only the loop can pause at a boundary.
+			while (s < end)
+			{
+				while (!PUGI_IMPL_IS_CHARTYPE(*s, ct_parse_pcdata)) ++s;
+				if (s >= end) break; // planted end: more text may arrive
+
+				if (*s == '<')
+				{
+					*_g.flush(s) = 0;
+					clear_gap();
+					++s; // step over '<' and dispatch the rest as markup
+					_state = state_markup;
+					return drive_ok;
+				}
+				else if (*s == '\r')
+				{
+					*s++ = '\n';
+					if (*s == '\n') _g.push(s, 1);
+				}
+				else if (*s == '&')
+				{
+					if (!entity_decidable(s, end, 0)) return drive_park; // split reference
+					s = strconv_escape(s, _g);
+				}
+				else
+				{
+					break; // planted null
+				}
+			}
+
+			return drive_ok;
+		}
+
+		// Pops the current element; delivers a record whenever a direct child of the root closes.
+		drive_result do_close_element()
+		{
+			xml_node_struct* closed = _cursor;
+			if (!closed)
+			{
+				fail(status_end_element_mismatch, _mark_offset);
+				return drive_error;
+			}
+
+			bool is_root = (closed == _root);
+			bool is_record = !is_root && closed->parent == _root;
+
+			_cursor = closed->parent;
+			--_depth;
+			_state = state_content;
+
+			if (is_root)
+			{
+				persist_root_strings();
+				_root_closed = true;
+				return drive_ok;
+			}
+
+			if (is_record)
+			{
+				// hand over the temporary document (root element plus this single record)
+				_callback(_doc, _userdata);
+
+				discard_record(closed);
+				return drive_compacted;
+			}
+
+			return drive_ok;
+		}
+	};
+PUGI_IMPL_NS_END
+
+// External-linkage bridge used by extras/record_reader.cpp. The engine type lives in the internal
+// (anonymous, in source builds) implementation namespace, so it crosses the translation unit boundary
+// as an opaque pointer together with plain-data results.
+namespace pugi
+{
+	PUGI_IMPL_FN void* xml_record_reader_create_engine(xml_document& doc, void (*callback)(const xml_document&, void*), void* userdata)
+	{
+		return new impl::record_stream_engine(doc, callback, userdata);
+	}
+
+	PUGI_IMPL_FN void xml_record_reader_destroy_engine(void* engine)
+	{
+		delete static_cast<impl::record_stream_engine*>(engine);
+	}
+
+	PUGI_IMPL_FN int xml_record_reader_feed_engine(void* engine, const void* data, size_t size, bool final, xml_parse_status& error, size_t& offset)
+	{
+		return static_cast<impl::record_stream_engine*>(engine)->feed(data, size, final, error, offset);
+	}
+
+	PUGI_IMPL_FN size_t xml_record_reader_retained_engine(const void* engine)
+	{
+		return static_cast<const impl::record_stream_engine*>(engine)->retained_input_bytes();
+	}
+}
+
 #ifdef __BORLANDC__
 #	pragma option pop
 #endif
