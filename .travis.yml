@@ -1,0 +1,85 @@
+dist: xenial
+language: cpp
+
+notifications:
+  email: false
+
+matrix:
+  include:
+
+# GCC builds.
+
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - g++-4.9
+            - swig
+      env:
+         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
+
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - g++-5
+            - swig
+      env:
+         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
+
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+            - swig
+      env:
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - swig
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+
+# Clang builds.
+
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - clang-4.0
+            - swig
+      env:
+        - MATRIX_EVAL="CC=clang-4.0 && CXX=clang++-4.0"
+
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - clang-5.0
+            - swig
+      env:
+        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
+
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - clang-6.0
+            - swig
+      env:
+        - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0"
+
+before_install:
+  - eval "${MATRIX_EVAL}"
+
+script:
+  - make devel
