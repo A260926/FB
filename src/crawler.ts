@@ -3,6 +3,7 @@ import { Cluster } from "./rateLimiter/index.js";
 import { isBoolean, isFunction, setDefaults, flattenDeep, lowerObjectKeys, isNumber } from "./lib/utils.js";
 import { getValidOptions, alignOptions, getCharset, renameOptionParams } from "./options.js";
 import { getLogger } from "./logger.js";
+import { OrderedCallbackQueue } from "./orderedCallbacks.js";
 import type { CrawlerOptions, RequestOptions, RequestConfig, CrawlerResponse } from "./types/crawler.js";
 import { load } from "cheerio";
 import seenreq from "seenreq";
@@ -23,6 +24,7 @@ async function loadGot() {
 
 class Crawler extends EventEmitter {
     private _limiters: Cluster;
+    private _orderedCallbacks: OrderedCallbackQueue | null;
     private _UAIndex = 0;
     private _proxyIndex = 0;
 
@@ -46,6 +48,7 @@ class Crawler extends EventEmitter {
             timeout: 20000,
             isJson: false,
             silence: false,
+            orderedCallbacks: false,
             rejectUnauthorized: false, // set to "true" in production environment.
             userAgents: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
         };
@@ -65,6 +68,12 @@ class Crawler extends EventEmitter {
             defaultPriority: this.options.priority!,
             homogeneous: this.options.homogeneous,
         });
+
+        this._orderedCallbacks = this.options.orderedCallbacks
+            ? new OrderedCallbackQueue({
+                  onCallbackError: (error, response) => this.emit("callbackError", error, response),
+              })
+            : null;
 
         this.seen = new seenreq(this.options.seenreq);
         this.seen
@@ -92,11 +101,25 @@ class Crawler extends EventEmitter {
         this._limiters
             .getRateLimiter(options.rateLimiterId)
             .submit(options.priority as number, (done, rateLimiterId) => {
-                options.release = () => {
+                const limiterRelease = () => {
                     done();
                     this.emit("_release");
                 };
-                options.callback = options.callback || options.release;
+                options.release = limiterRelease;
+
+                if (this._orderedCallbacks) {
+                    // The limiter is starting the task now: reserve the
+                    // delivery position at this exact moment. The slot is only
+                    // released by the ordered queue once the callback is done.
+                    this._orderedCallbacks.register(options, limiterRelease);
+                    // Both `done` and `options.release` go through the entry so
+                    // neither can free the limiter slot without advancing the queue.
+                    options.release = () => {
+                        this._orderedCallbacks!.release(options);
+                    };
+                } else {
+                    options.callback = options.callback || options.release;
+                }
 
                 if (rateLimiterId) {
                     this.emit("limiterChange", options, rateLimiterId);
@@ -190,8 +213,15 @@ class Crawler extends EventEmitter {
                 return;
             } else {
                 log.error(`${error} occurred on ${options.url}. Request failed.`);
+                const failureResponse: CrawlerResponse = { options };
+                if (this._orderedCallbacks && this._orderedCallbacks.has(options)) {
+                    // The final failure still occupies its sequence slot until
+                    // it has been delivered in order.
+                    this._orderedCallbacks.markReady(options, error, failureResponse);
+                    return failureResponse;
+                }
                 if (options.callback && typeof options.callback === "function") {
-                    return options.callback(error, { options }, options.release);
+                    return options.callback(error, failureResponse, options.release);
                 } else {
                     throw error;
                 }
@@ -240,6 +270,13 @@ class Crawler extends EventEmitter {
                     log.warn("HTML detected failed. Set jQuery to false to mute this warning.");
                 }
             }
+        }
+
+        if (this._orderedCallbacks && this._orderedCallbacks.has(options)) {
+            // Wait for earlier entries to be delivered first; the limiter slot
+            // stays occupied until this callback's done runs.
+            this._orderedCallbacks.markReady(options, null, response);
+            return response;
         }
 
         if (options.callback && typeof options.callback === "function") {

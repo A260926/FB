@@ -429,6 +429,17 @@ crawler.on("drain", () => {
 });
 ```
 
+### Event: 'callbackError'
+
+-   `error`
+-   `response`
+
+Only emitted when [`orderedCallbacks`](#orderedcallbacks) is enabled. If a delivered callback
+throws synchronously, or the Promise it returns is rejected, the error is reported here instead of
+becoming an unhandled rejection. The entry is then finished so the next callback can be delivered;
+the request itself is never retried. Calling `done` before throwing still releases the limiter slot
+only once.
+
 ### crawler.add(url|options)
 
 -   `url | options`
@@ -498,6 +509,33 @@ items in the **crawler.add()** calls if you want them to be specific to that ite
 -   **Type:** `boolean`
 -   **Default** : false
 -   If true, the crawler will dynamically reallocate the tasks within the queue blocked due to header blocking to other queues.
+
+#### `orderedCallbacks`
+
+-   **Type:** `boolean`
+-   **Default** : false
+-   If true, callbacks of requests submitted via `crawler.add()` / `crawler.queue()` are delivered
+    one at a time and in the order the rate limiter actually starts each task — not the order of
+    `add()` calls, `schedule` events or response completion. All rate limiters share one delivery
+    sequence, so a task started on limiter B that finishes before an earlier task started on
+    limiter A still waits for A's callback to call `done`.
+-   Only callback delivery is serialized. HTTP requests keep being dispatched according to
+    `priority`, `rateLimiterId`, `homogeneous` and `maxConnections`, and response downloads,
+    charset/DOM/JSON processing remain fully concurrent. A waiting result keeps occupying its own
+    limiter slot until its `done` runs, which bounds the number of buffered responses by the
+    connection limits. Requests sent through `crawler.send()` never enter this sequence.
+-   Retries do not change a task's position: only a success or the final failure after retries are
+    exhausted becomes ready, and failures are delivered in order as well. Candidates rejected by
+    `skipDuplicates` are never dispatched and therefore take no position.
+-   `done` is idempotent: calling it more than once, adding new requests from inside a callback, or
+    a `done` that unblocks the next callback never releases another task's slot or skips an entry.
+    A later callback never nests inside the previous callback's body, even if `done` was called in
+    the middle of it. A callback that returns normally without calling `done` keeps waiting; a
+    fulfilled Promise is not treated as an implicit `done`.
+-   If a callback throws synchronously or returns a rejected Promise, the error is reported through
+    the [`callbackError`](#event-callbackerror) event and the entry finishes so delivery can
+    continue; no unhandled rejection is emitted and the request is not retried. Requests without a
+    callback release their slot automatically, as usual.
 
 #### `userAgents`
 

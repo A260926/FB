@@ -11,6 +11,7 @@ export const globalOnlyOptions = [
     "priorityLevels",
     "skipDuplicates",
     "homogeneous",
+    "orderedCallbacks",
     "userAgents",
     "silence",
 ];

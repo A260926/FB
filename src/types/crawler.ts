@@ -35,6 +35,16 @@ export type GlobalOnlyOptions = {
     homogeneous: boolean;
     /**
      * Global Only option.
+     * @default false
+     * @description If true, callbacks of queued (`add`/`queue`) requests are delivered one at a
+     * time, in the order the rate limiter actually starts each task rather than the order the
+     * responses arrive. HTTP requests, response downloads and body processing stay fully
+     * concurrent; only callback delivery is serialized. Each delivered callback keeps occupying
+     * its limiter slot until its `done` is called. `send` requests never enter this queue.
+     */
+    orderedCallbacks?: boolean;
+    /**
+     * Global Only option.
      * @default undefined
      * @description If passed, the crawler will rotate the user agent for each request. The "userAgents" option must be an array if activated.
      */
