@@ -32,6 +32,12 @@ class camera {
     double defocus_angle = 0;  // Variation angle of rays through each pixel
     double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
 
+    // When false (the default) light sampling uses the original time-less dispatch, so legacy
+    // scenes keep their exact random-number order. When true the light proposal and its density
+    // are both evaluated at the current path ray's shutter time, and every subsequent bounce
+    // reuses that same time.
+    bool enable_time_lights = false;
+
     void render(const hittable& world, const hittable& lights) {
         initialize();
 
@@ -170,7 +176,12 @@ class camera {
             return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights);
         }
 
-        auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
+        // The same time feeds the proposal and the density query, and is carried on the
+        // scattered ray so later bounces keep using it. With time lights disabled, the legacy
+        // two-argument constructor preserves the original dispatch and random order.
+        shared_ptr<hittable_pdf> light_ptr = enable_time_lights
+            ? make_shared<hittable_pdf>(lights, rec.p, r.time())
+            : make_shared<hittable_pdf>(lights, rec.p);
         mixture_pdf p(light_ptr, srec.pdf_ptr);
 
         ray scattered = ray(rec.p, p.generate(), r.time());

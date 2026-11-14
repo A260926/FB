@@ -58,21 +58,33 @@ class cosine_pdf : public pdf {
 
 class hittable_pdf : public pdf {
   public:
+    // Legacy entry point: dispatches exactly as before, using the time-less virtuals.
     hittable_pdf(const hittable& objects, const point3& origin)
-      : objects(objects), origin(origin)
+      : objects(objects), origin(origin), use_time(false), light_time(0)
+    {}
+
+    // Time-aware entry point: proposals and density queries both use the given shutter time.
+    hittable_pdf(const hittable& objects, const point3& origin, double time)
+      : objects(objects), origin(origin), use_time(true), light_time(time)
     {}
 
     double value(const vec3& direction) const override {
+        if (use_time)
+            return objects.pdf_value(origin, direction, light_time);
         return objects.pdf_value(origin, direction);
     }
 
     vec3 generate() const override {
+        if (use_time)
+            return objects.random(origin, light_time);
         return objects.random(origin);
     }
 
   private:
     const hittable& objects;
     point3 origin;
+    bool use_time;
+    double light_time;
 };
 
 

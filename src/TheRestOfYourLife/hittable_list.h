@@ -64,6 +64,21 @@ class hittable_list : public hittable {
         return objects[random_int(0, int_size-1)]->random(origin);
     }
 
+    double pdf_value(const point3& origin, const vec3& direction, double time) const override {
+        auto weight = 1.0 / objects.size();
+        auto sum = 0.0;
+
+        for (const auto& object : objects)
+            sum += weight * object->pdf_value(origin, direction, time);
+
+        return sum;
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        auto int_size = int(objects.size());
+        return objects[random_int(0, int_size-1)]->random(origin, time);
+    }
+
   private:
     aabb bbox;
 };

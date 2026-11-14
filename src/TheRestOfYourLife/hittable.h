@@ -52,6 +52,18 @@ class hittable {
     virtual vec3 random(const point3& origin) const {
         return vec3(1,0,0);
     }
+
+    // Time-aware sampling entry points. The default implementation falls back to the legacy
+    // time-less virtuals, so a custom hittable that only implements the old interface keeps
+    // working. Objects that move (or wrap something that moves) override these and forward the
+    // given time so that light proposals and intersection tests see the same instant.
+    virtual double pdf_value(const point3& origin, const vec3& direction, double time) const {
+        return pdf_value(origin, direction);
+    }
+
+    virtual vec3 random(const point3& origin, double time) const {
+        return random(origin);
+    }
 };
 
 
@@ -78,6 +90,16 @@ class translate : public hittable {
     }
 
     aabb bounding_box() const override { return bbox; }
+
+    double pdf_value(const point3& origin, const vec3& direction, double time) const override {
+        // Transform the query into object space, keeping the same shutter time.
+        return object->pdf_value(origin - offset, direction, time);
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        // A pure translation leaves directions unchanged.
+        return object->random(origin - offset, time);
+    }
 
   private:
     shared_ptr<hittable> object;
@@ -162,11 +184,43 @@ class rotate_y : public hittable {
 
     aabb bounding_box() const override { return bbox; }
 
+    double pdf_value(const point3& origin, const vec3& direction, double time) const override {
+        // Rotations preserve solid angle, so the world-space density equals the object-space
+        // density once the query is rotated back.
+        auto local_origin = rotate_inverse(origin);
+        auto local_direction = rotate_inverse(direction);
+        return object->pdf_value(local_origin, local_direction, time);
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        auto local_origin = rotate_inverse(origin);
+        auto local_direction = object->random(local_origin, time);
+        return rotate_forward(local_direction);
+    }
+
   private:
     shared_ptr<hittable> object;
     double sin_theta;
     double cos_theta;
     aabb bbox;
+
+    // World -> object space (the transpose of the stored rotation).
+    point3 rotate_inverse(const point3& p) const {
+        return point3(
+            (cos_theta * p.x()) - (sin_theta * p.z()),
+            p.y(),
+            (sin_theta * p.x()) + (cos_theta * p.z())
+        );
+    }
+
+    // Object -> world space.
+    point3 rotate_forward(const point3& p) const {
+        return point3(
+            (cos_theta * p.x()) + (sin_theta * p.z()),
+            p.y(),
+            (-sin_theta * p.x()) + (cos_theta * p.z())
+        );
+    }
 };
 
 

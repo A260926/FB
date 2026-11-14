@@ -96,6 +96,23 @@ class quad : public hittable {
         return p - origin;
     }
 
+    double pdf_value(const point3& origin, const vec3& direction, double time) const override {
+        // The quad itself is static; the probe ray still carries the time so nested moving
+        // wrappers see a consistent instant.
+        hit_record rec;
+        if (!this->hit(ray(origin, direction, time), interval(0.001, infinity), rec))
+            return 0;
+
+        auto distance_squared = rec.t * rec.t * direction.length_squared();
+        auto cosine = std::fabs(dot(direction, rec.normal) / direction.length());
+
+        return distance_squared / (cosine * area);
+    }
+
+    vec3 random(const point3& origin, double /*time*/) const override {
+        return random(origin);
+    }
+
   private:
     point3 Q;
     vec3 u, v;

@@ -187,6 +187,74 @@ If you spot errors, have suggested corrections, or would like to help out with t
 _**please review the [CONTRIBUTING][] document for the most effective way to proceed.**_
 
 
+Time-Dependent Affine Light Instances (`TheRestOfYourLife`)
+------------------------------------------------------------
+
+`src/TheRestOfYourLife/affine_light.h` adds `affine_instance`, a reusable wrapper that turns
+any hittable (a sphere, quad, moving sphere, or another wrapper) into a moving, arbitrarily
+deformed light. It can be nested, and one underlying object may be shared by several
+instances; the object itself is never moved.
+
+### World transform and matrix layout
+
+A local point `p` is mapped to world space by
+
+    x_world(time) = A * p + b(time),   b(time) = (1 - time) * b0 + time * b1,
+    time in [0, 1].
+
+`mat3` stores its nine entries **row-major** as `e[row][column]` and multiplies a column
+vector, so `(A * v)[i] = sum_j A(i,j) * v[j]`. `mat3::from_rows` / `mat3::from_columns`
+construct matrices from basis vectors, and `inverse()` / `transpose()` / `determinant()`
+are provided. The linear part may contain non-uniform scale and shear, and may have a
+negative determinant. The matrix and the two translation endpoints are copied at
+construction; non-finite or singular input is rejected with `std::invalid_argument`.
+
+Rays are transformed by the inverse map using one shared shutter time. The ray parameter is
+unchanged, so a non-normalized world direction still yields a `t` for which `ray.at(t)` is
+the world hit point. Normals use the inverse transpose of `A` and are re-normalized; the
+local object's exterior side is authoritative, so mirroring never swaps inside and outside.
+Material, UV coordinates and the ray time are preserved, and the bounding box covers the
+whole shutter interval (including both translation endpoints).
+
+### Time-aware sampling entry points
+
+`hittable` gains two virtuals alongside the original time-less ones:
+
+    virtual double pdf_value(const point3& origin, const vec3& direction, double time) const;
+    virtual vec3   random     (const point3& origin, double time) const;
+
+Both default to the legacy two-/one-argument virtuals, so a custom object that only
+implements the old interface keeps working unchanged. `hittable_list`, `translate`,
+`rotate_y`, `sphere` (including moving spheres) and `quad` override them and forward the
+same time; `affine_instance` evaluates its wrapped object at the given instant and treats
+the legacy entry points as a `time = 0` request.
+
+`hittable_pdf` has a three-argument constructor `(objects, origin, time)` that dispatches
+through the time-aware entry points; the original two-argument constructor keeps its exact
+legacy dispatch. `camera` adds `enable_time_lights` (default `false`). When enabled, the
+`mixture_pdf` is built at the current path ray's time, the scattered ray keeps that time,
+and every later bounce reuses it, so the proposal, density query and visibility hit always
+share one instant. With the flag off, the random-number order and output of static legacy
+scenes are unchanged.
+
+### Density measure: world solid angle with the direction Jacobian
+
+Proposals reuse the local object's own `random()`/`pdf_value()`, evaluated after mapping
+the observation point back into local space; the generated local direction is mapped back
+with `A`. `pdf_value` returns a **world-space solid-angle density**. For the direction map
+`d_world = A * d_local`,
+
+    d(omega_world) / d(omega_local) = |det A| * |d_local|^3 / |d_world|^3,
+    pdf_world(d_world) = pdf_local(d_local) * |d_world|^3
+                                      / (|det A| * |d_local|^3).
+
+This is a genuine solid-angle Jacobian, not an area ratio or a bare division by the
+determinant. It is invariant when the query direction is scaled by any positive factor, and
+the absolute value of the determinant keeps the density non-negative under mirroring. A
+zero or non-finite query direction returns zero density; an out-of-range or non-finite time
+is rejected.
+
+
 
 [book1]:           books/RayTracingInOneWeekend.html
 [book2]:           books/RayTracingTheNextWeek.html

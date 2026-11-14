@@ -90,6 +90,28 @@ class sphere : public hittable {
         return uvw.transform(random_to_sphere(radius, distance_squared));
     }
 
+    double pdf_value(const point3& origin, const vec3& direction, double time) const override {
+        // Same cone-angle density as the stationary path, but evaluated against the sphere's
+        // position at the given shutter time. The probe ray carries the same time so moving
+        // geometry is intersected at that instant.
+        hit_record rec;
+        if (!this->hit(ray(origin, direction, time), interval(0.001, infinity), rec))
+            return 0;
+
+        auto dist_squared = (center.at(time) - origin).length_squared();
+        auto cos_theta_max = std::sqrt(1 - radius*radius/dist_squared);
+        auto solid_angle = 2*pi*(1-cos_theta_max);
+
+        return  1 / solid_angle;
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        vec3 direction = center.at(time) - origin;
+        auto distance_squared = direction.length_squared();
+        onb uvw(direction);
+        return uvw.transform(random_to_sphere(radius, distance_squared));
+    }
+
   private:
     ray center;
     double radius;
