@@ -28,6 +28,13 @@ type Request struct {
 	// Set this true to cancel requests. Should be used on middlewares.
 	Cancelled bool
 
+	// Source identifies the source handle this request was submitted through.
+	// It is set by the scraper when the request is issued via a Source handle
+	// and stays nil for requests submitted directly to Geziyor.
+	// URL deduplication is scoped by this value: requests with different
+	// sources never deduplicate against each other.
+	Source interface{}
+
 	// Chrome actions to be run if the request is Rendered
 	Actions []chromedp.Action
 

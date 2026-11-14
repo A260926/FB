@@ -223,18 +223,27 @@ func (g *Geziyor) Do(req *client.Request, callback func(g *Geziyor, r *client.Re
 	}
 	g.wgRequests.Add(1)
 	if req.Synchronized {
-		g.do(req, callback)
+		g.do(req, callback, nil)
 	} else {
-		go g.do(req, callback)
+		go g.do(req, callback, nil)
 	}
 }
 
 // Do sends an HTTP request
-func (g *Geziyor) do(req *client.Request, callback func(g *Geziyor, r *client.Response)) {
-	g.acquireSem(req)
-	defer g.releaseSem(req)
+func (g *Geziyor) do(req *client.Request, callback func(g *Geziyor, r *client.Response), source *Source) {
 	defer g.wgRequests.Done()
+	if source != nil {
+		defer source.wg.Done()
+	}
 	defer g.recoverMe()
+
+	// Wait for scheduling resources. If the source is closed while waiting,
+	// the task gives up here: it never reaches the middlewares, the network
+	// or the visited URL set.
+	if !g.acquireSem(req, source) {
+		return
+	}
+	defer g.releaseSem(req)
 
 	for _, middlewareFunc := range g.reqMiddlewares {
 		middlewareFunc.ProcessRequest(req)
@@ -267,25 +276,87 @@ func (g *Geziyor) do(req *client.Request, callback func(g *Geziyor, r *client.Re
 	}
 }
 
-func (g *Geziyor) acquireSem(req *client.Request) {
+// acquireSem waits until all scheduling resources (rate limit, per-host and
+// global concurrency slots) for the request are available and reports whether
+// they were acquired. If the source is closed while waiting, it stops
+// waiting, releases whatever was already taken and returns false. The
+// per-host slot is taken before the global one so that tasks queued behind a
+// saturated host never hold global slots that other hosts could use.
+func (g *Geziyor) acquireSem(req *client.Request, source *Source) bool {
+	var cancel <-chan struct{}
+	rateCtx := req.Context()
+	if source != nil {
+		cancel = source.cancelCh
+		rateCtx = source.ctx
+	}
+
 	if g.rateLimiter != nil {
-		_ = g.rateLimiter.Wait(req.Context())
-	}
-	if g.Opt.ConcurrentRequests != 0 {
-		g.semGlobal <- struct{}{}
-	}
-	if g.Opt.ConcurrentRequestsPerDomain != 0 {
-		g.semHosts.RLock()
-		hostSem, exists := g.semHosts.hostSems[req.Host]
-		g.semHosts.RUnlock()
-		if !exists {
-			hostSem = make(chan struct{}, g.Opt.ConcurrentRequestsPerDomain)
-			g.semHosts.Lock()
-			g.semHosts.hostSems[req.Host] = hostSem
-			g.semHosts.Unlock()
+		if source != nil {
+			if err := g.rateLimiter.Wait(rateCtx); err != nil {
+				return false
+			}
+		} else {
+			_ = g.rateLimiter.Wait(rateCtx)
 		}
-		hostSem <- struct{}{}
 	}
+
+	var hostSem chan struct{}
+	if g.Opt.ConcurrentRequestsPerDomain != 0 {
+		hostSem = g.hostSemFor(req.Host)
+		select {
+		case hostSem <- struct{}{}:
+		case <-cancel:
+			return false
+		}
+	}
+
+	if g.Opt.ConcurrentRequests != 0 {
+		select {
+		case g.semGlobal <- struct{}{}:
+		case <-cancel:
+			if hostSem != nil {
+				<-hostSem
+			}
+			return false
+		}
+	}
+
+	// Execution boundary: all resources are held and the first request
+	// middleware is about to run. A concurrent Close lands exactly on one
+	// side of this check.
+	select {
+	case <-cancel:
+		if g.Opt.ConcurrentRequests != 0 {
+			<-g.semGlobal
+		}
+		if hostSem != nil {
+			<-hostSem
+		}
+		return false
+	default:
+		return true
+	}
+}
+
+// hostSemFor returns the concurrency slot channel for the given host,
+// creating it on first use. Creation is fully serialized so concurrent first
+// accesses of the same host (from any sources) all share one channel and
+// cannot exceed the per-host limit.
+func (g *Geziyor) hostSemFor(host string) chan struct{} {
+	g.semHosts.RLock()
+	hostSem, exists := g.semHosts.hostSems[host]
+	g.semHosts.RUnlock()
+	if exists {
+		return hostSem
+	}
+	g.semHosts.Lock()
+	defer g.semHosts.Unlock()
+	if hostSem, exists = g.semHosts.hostSems[host]; exists {
+		return hostSem
+	}
+	hostSem = make(chan struct{}, g.Opt.ConcurrentRequestsPerDomain)
+	g.semHosts.hostSems[host] = hostSem
+	return hostSem
 }
 
 func (g *Geziyor) releaseSem(req *client.Request) {
