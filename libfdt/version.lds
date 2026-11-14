@@ -82,6 +82,11 @@ LIBFDT_1.2 {
 		fdt_overlay_target_offset;
 		fdt_get_symbol;
 		fdt_get_symbol_namelen;
+		fdt_mmio_translate;
+		fdt_mmio_report_free;
+		fdt_mmio_reg_entry;
+		fdt_mmio_audit;
+		fdt_mmio_audit_free;
 	local:
 		*;
 };

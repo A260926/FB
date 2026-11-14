@@ -8,6 +8,7 @@ sources = files(
   'fdt_addresses.c',
   'fdt_check.c',
   'fdt_empty_tree.c',
+  'fdt_mmio.c',
   'fdt_overlay.c',
   'fdt_ro.c',
   'fdt_rw.c',
@@ -48,6 +49,7 @@ if not wheel_only
   install_headers(
     files(
       'fdt.h',
+      'fdt_mmio.h',
       'libfdt.h',
       'libfdt_env.h',
     )
