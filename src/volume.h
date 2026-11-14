@@ -31,6 +31,19 @@ typedef struct volume volume_t;
 
 typedef struct tile tile_t;
 
+/* Type: volume_sample_t
+ * A voxel sample with separate surface color and density.
+ *
+ * rgba    - Appearance color of the surface (including alpha).
+ * density - Physical density of the voxel.  A value of zero means the
+ *           voxel is empty, regardless of rgba.  Surface generation uses
+ *           this value for shape; rgba is only used for vertex colors.
+ */
+typedef struct {
+    uint8_t rgba[4];
+    uint8_t density;
+} volume_sample_t;
+
 /* Enum: VOLUME_ITER
  * Some flags that can be used to modify the behavior of the iteration
  * function.
@@ -137,6 +150,41 @@ uint8_t volume_get_alpha_at(const volume_t *volume, volume_iterator_t *it,
 void volume_set_at(volume_t *volume, volume_iterator_t *it,
                  const int pos[3], const uint8_t v[4]);
 
+/*
+ * Function: volume_set_sample_at
+ *
+ * Set a single voxel sample in a volume, storing the surface color and
+ * the density independently.
+ *
+ * Inputs:
+ *   volume - The volume.
+ *   it   - Optional volume iterator.  Successive access to the same volume
+ *          using the iterator are optimized.
+ *   pos  - Position of the voxel.
+ *   v    - Sample to set.
+ */
+void volume_set_sample_at(volume_t *volume, volume_iterator_t *it,
+                 const int pos[3], const volume_sample_t *v);
+
+/*
+ * Function: volume_get_sample_at
+ *
+ * Get a single voxel sample.
+ *
+ * Voxels written with <volume_set_at> use the legacy interpretation: the
+ * legacy alpha is returned as density, and the appearance alpha is 255 when
+ * the density is nonzero, 0 otherwise.  The RGB channels are returned as
+ * stored.
+ *
+ * Inputs:
+ *   volume - The volume.
+ *   it   - Optional volume iterator.
+ *   pos  - Position of the voxel.
+ *   out  - Returned sample.
+ */
+void volume_get_sample_at(const volume_t *volume, volume_iterator_t *it,
+                 const int pos[3], volume_sample_t *out);
+
 // XXX: we should remove this one I guess.
 void volume_remove_empty_tiles(volume_t *volume, bool fast);
 
@@ -227,6 +275,16 @@ void volume_copy_tile(const volume_t *src, const int src_pos[3],
 void volume_read(const volume_t *volume,
                  const int pos[3], const int size[3],
                  uint8_t *data);
+
+/*
+ * Function: volume_read_samples
+ *
+ * Same aligned block read as <volume_read> (a tile plus a one voxel
+ * border), but outputs <volume_sample_t> records instead of raw RGBA.
+ */
+void volume_read_samples(const volume_t *volume,
+                 const int pos[3], const int size[3],
+                 volume_sample_t *data);
 
 int volume_get_tiles_count(const volume_t *volume);
 

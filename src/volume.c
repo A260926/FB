@@ -47,6 +47,14 @@ struct tile_data
     int         ref;
     uint64_t    id;
     uint8_t     voxels[TILE_SIZE * TILE_SIZE * TILE_SIZE][4]; // RGBA voxels.
+    // Physical density of each voxel, independent of the RGBA alpha.
+    // Zero means empty.  Legacy volume_set_at writes keeps this equal to
+    // the voxel alpha.
+    uint8_t     densities[TILE_SIZE * TILE_SIZE * TILE_SIZE];
+    // 1 for voxels written with volume_set_sample_at (explicit surface
+    // color + density), 0 for voxels using the legacy alpha-as-density
+    // interpretation.
+    uint8_t     explicit[TILE_SIZE * TILE_SIZE * TILE_SIZE];
 };
 
 struct tile
@@ -80,7 +88,11 @@ static volume_global_stats_t g_global_stats = {};
             for (x = 0; x < N; x++)
 
 #define DATA_AT(d, x, y, z) (d->voxels[x + y * N + z * N * N])
+#define DENS_AT(d, x, y, z) (d->densities[x + y * N + z * N * N])
+#define EXPL_AT(d, x, y, z) (d->explicit[x + y * N + z * N * N])
 #define TILE_AT(c, x, y, z) (DATA_AT(c->data, x, y, z))
+#define TILE_DENS(c, x, y, z) (DENS_AT(c->data, x, y, z))
+#define TILE_EXPL(c, x, y, z) (EXPL_AT(c->data, x, y, z))
 
 static void mat4_mul_vec4(float mat[4][4], const float v[4], float out[4])
 {
@@ -149,7 +161,7 @@ static bool tile_is_empty(const tile_t *tile, bool fast)
     if (fast) return false;
 
     TILE_ITER(x, y, z) {
-        if (TILE_AT(tile, x, y, z)[3]) return false;
+        if (TILE_DENS(tile, x, y, z)) return false;
     }
     return true;
 }
@@ -208,6 +220,8 @@ static void tile_prepare_write(tile_t *tile)
     tile_data_t *data;
     data = calloc(1, sizeof(*tile->data));
     memcpy(data->voxels, tile->data->voxels, N * N * N * 4);
+    memcpy(data->densities, tile->data->densities, N * N * N);
+    memcpy(data->explicit, tile->data->explicit, N * N * N);
     data->ref = 1;
     tile->data = data;
     tile->data->id = ++g_uid;
@@ -231,6 +245,31 @@ static void tile_get_at(const tile_t *tile, const int pos[3],
     assert(y >= 0 && y < N);
     assert(z >= 0 && z < N);
     memcpy(out, TILE_AT(tile, x, y, z), 4);
+}
+
+static void tile_get_sample_at(const tile_t *tile, const int pos[3],
+                                volume_sample_t *out)
+{
+    int x, y, z;
+    if (!tile) {
+        memset(out, 0, sizeof(*out));
+        return;
+    }
+    x = pos[0] - tile->pos[0];
+    y = pos[1] - tile->pos[1];
+    z = pos[2] - tile->pos[2];
+    assert(x >= 0 && x < N);
+    assert(y >= 0 && y < N);
+    assert(z >= 0 && z < N);
+    memcpy(out->rgba, TILE_AT(tile, x, y, z), 4);
+    if (TILE_EXPL(tile, x, y, z)) {
+        out->density = TILE_DENS(tile, x, y, z);
+    } else {
+        // Legacy interpretation: the stored alpha is the density, and the
+        // appearance alpha is binary.
+        out->density = out->rgba[3];
+        out->rgba[3] = out->rgba[3] ? 255 : 0;
+    }
 }
 
 /*
@@ -273,7 +312,10 @@ bool volume_get_bbox(const volume_t *volume, int bbox[2][3], bool exact)
     } else {
         iter = volume_get_iterator(volume, VOLUME_ITER_SKIP_EMPTY);
         while (volume_iter(&iter, pos)) {
-            if (!volume_get_alpha_at(volume, &iter, pos)) continue;
+            // Density defines the physical extent, not the surface alpha.
+            volume_sample_t sample;
+            volume_get_sample_at(volume, &iter, pos, &sample);
+            if (!sample.density) continue;
             ret[0][0] = min(ret[0][0], pos[0]);
             ret[0][1] = min(ret[0][1], pos[1]);
             ret[0][2] = min(ret[0][2], pos[2]);
@@ -553,8 +595,9 @@ void volume_get_at(const volume_t *volume, volume_iterator_t *it,
     return tile_get_at(tile, pos, out);
 }
 
-void volume_set_at(volume_t *volume, volume_iterator_t *iter,
-                 const int pos[3], const uint8_t v[4])
+static void volume_set_voxel(volume_t *volume, volume_iterator_t *iter,
+                 const int pos[3], const uint8_t rgba[4],
+                 uint8_t density, bool explicit_sample)
 {
     int p[3] = {pos[0] & ~(int)(N - 1),
                 pos[1] & ~(int)(N - 1),
@@ -579,7 +622,54 @@ void volume_set_at(volume_t *volume, volume_iterator_t *iter,
     assert(p[0] >= 0 && p[0] < N);
     assert(p[1] >= 0 && p[1] < N);
     assert(p[2] >= 0 && p[2] < N);
-    memcpy(TILE_AT(tile, p[0], p[1], p[2]), v, 4);
+    memcpy(TILE_AT(tile, p[0], p[1], p[2]), rgba, 4);
+    TILE_DENS(tile, p[0], p[1], p[2]) = density;
+    TILE_EXPL(tile, p[0], p[1], p[2]) = explicit_sample ? 1 : 0;
+}
+
+void volume_set_at(volume_t *volume, volume_iterator_t *iter,
+                 const int pos[3], const uint8_t v[4])
+{
+    // Legacy behavior: the alpha value is the density.
+    volume_set_voxel(volume, iter, pos, v, v[3], false);
+}
+
+void volume_set_sample_at(volume_t *volume, volume_iterator_t *iter,
+                 const int pos[3], const volume_sample_t *v)
+{
+    volume_set_voxel(volume, iter, pos, v->rgba, v->density, true);
+}
+
+void volume_get_sample_at(const volume_t *volume, volume_iterator_t *it,
+                 const int pos[3], volume_sample_t *out)
+{
+    tile_t *tile;
+    int p[3];
+
+    if (it && it->tile_id && it->tile_id == get_tile_id(it->tile)) {
+        p[0] = pos[0] - it->tile_pos[0];
+        p[1] = pos[1] - it->tile_pos[1];
+        p[2] = pos[2] - it->tile_pos[2];
+        if (    p[0] >= 0 && p[0] < N &&
+                p[1] >= 0 && p[1] < N &&
+                p[2] >= 0 && p[2] < N) {
+            if (!it->tile) {
+                memset(out, 0, sizeof(*out));
+            } else {
+                memcpy(out->rgba, TILE_AT(it->tile, p[0], p[1], p[2]), 4);
+                if (TILE_EXPL(it->tile, p[0], p[1], p[2])) {
+                    out->density = TILE_DENS(it->tile, p[0], p[1], p[2]);
+                } else {
+                    out->density = out->rgba[3];
+                    out->rgba[3] = out->rgba[3] ? 255 : 0;
+                }
+            }
+            return;
+        }
+    }
+
+    tile = volume_get_tile_at(volume, pos, it);
+    tile_get_sample_at(tile, pos, out);
 }
 
 void volume_clear_tile(volume_t *volume, volume_iterator_t *it, const int pos[3])
@@ -816,6 +906,90 @@ rest:
         p[2] = pos[2] + z;
         volume_get_at(volume, &accessor, p, v);
         memcpy(&data[(z * size[1] * size[0] + y * size[0] + x) * 4], v, 4);
+    }
+}
+
+void volume_read_samples(const volume_t *volume,
+               const int pos[3], const int size[3],
+               volume_sample_t *data)
+{
+    // Same aligned block as volume_read: a tile plus a one voxel border.
+    assert(pos[0] - (pos[0] & ~(int)(N - 1)) == N - 1);
+    assert(pos[1] - (pos[1] & ~(int)(N - 1)) == N - 1);
+    assert(pos[2] - (pos[2] & ~(int)(N - 1)) == N - 1);
+    assert(size[0] == N + 2);
+    assert(size[1] == N + 2);
+    assert(size[2] == N + 2);
+
+    tile_t *tile;
+    int tile_pos[3] = {pos[0] + 1, pos[1] + 1, pos[2] + 1};
+    int i, z, y, x, dx, dy, dz, p[3];
+    volume_accessor_t accessor;
+
+    memset(data, 0, size[0] * size[1] * size[2] * sizeof(*data));
+    tile = volume_get_tile_at(volume, tile_pos, NULL);
+    if (tile) {
+        for (z = 0; z < N; z++)
+        for (y = 0; y < N; y++)
+        for (x = 0; x < N; x++) {
+            dx = x + 1;
+            dy = y + 1;
+            dz = z + 1;
+            tile_get_sample_at(
+                    tile,
+                    (int[]){tile->pos[0] + x, tile->pos[1] + y,
+                            tile->pos[2] + z},
+                    &data[dz * size[1] * size[0] + dy * size[0] + dx]);
+        }
+    }
+
+    // Fill the border the same way volume_read does: planes, edges, then
+    // corners, so that the accessor stays on the same tile as much as
+    // possible.
+    accessor = volume_get_accessor(volume);
+    const int ranges[26][3][2] = {
+        // 6 planes.
+        {{0,         1}, {1,     N + 1}, {1,     N + 1}},
+        {{N + 1, N + 2}, {1,     N + 1}, {1,     N + 1}},
+        {{1,     N + 1}, {0,         1}, {1,     N + 1}},
+        {{1,     N + 1}, {N + 1, N + 2}, {1,     N + 1}},
+        {{1,     N + 1}, {1,     N + 1}, {0,         1}},
+        {{1,     N + 1}, {1,     N + 1}, {N + 1, N + 2}},
+        // 4 edges moving along X.
+        {{1,     N + 1}, {0,         1}, {0,         1}},
+        {{1,     N + 1}, {N + 1, N + 2}, {0,         1}},
+        {{1,     N + 1}, {0,         1}, {N + 1, N + 2}},
+        {{1,     N + 1}, {N + 1, N + 2}, {N + 1, N + 2}},
+        // 4 edges moving along Y.
+        {{0,         1}, {1,     N + 1}, {0,         1}},
+        {{N + 1, N + 2}, {1,     N + 1}, {0,         1}},
+        {{0,         1}, {1,     N + 1}, {1,     N + 2}},
+        {{N + 1, N + 2}, {1,     N + 1}, {1,     N + 2}},
+        // 4 edges moving along Z.
+        {{0,         1}, {0,         1}, {1,     N + 1}},
+        {{N + 1, N + 2}, {0,         1}, {1,     N + 1}},
+        {{0,         1}, {N + 1, N + 2}, {1,     N + 1}},
+        {{N + 1, N + 2}, {N + 1, N + 2}, {1,     N + 1}},
+        // 8 Corners.
+        {{0,     1    }, {0,     1    }, {0,     1    }},
+        {{N + 1, N + 2}, {0,     1    }, {0,     1    }},
+        {{0,     1    }, {N + 1, N + 2}, {0,     1    }},
+        {{N + 1, N + 2}, {N + 1, N + 2}, {0,     1    }},
+        {{0,     1    }, {0,     1    }, {N + 1, N + 2}},
+        {{N + 1, N + 2}, {0,     1    }, {N + 1, N + 2}},
+        {{0,     1    }, {N + 1, N + 2}, {N + 1, N + 2}},
+        {{N + 1, N + 2}, {N + 1, N + 2}, {N + 1, N + 2}},
+    };
+
+    for (i = 0; i < 26; i++)
+    for (z = ranges[i][2][0]; z < ranges[i][2][1]; z++)
+    for (y = ranges[i][1][0]; y < ranges[i][1][1]; y++)
+    for (x = ranges[i][0][0]; x < ranges[i][0][1]; x++) {
+        p[0] = pos[0] + x;
+        p[1] = pos[1] + y;
+        p[2] = pos[2] + z;
+        volume_get_sample_at(volume, &accessor, p,
+                &data[z * size[1] * size[0] + y * size[0] + x]);
     }
 }
 

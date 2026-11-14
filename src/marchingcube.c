@@ -253,8 +253,8 @@ int volume_generate_vertices_mc(const volume_t *volume, const int block_pos[3],
                                 int *size, int *subdivide)
 {
     int i, vi, x, y, z, v, vx, vy, vz, nb_tri, nb_tri_tot = 0;
-    uint8_t tmp[4];
-    uint8_t *data;
+    const volume_sample_t *tmp;
+    volume_sample_t *data;
 
     int densities[8];
     int p[3], s[3];
@@ -269,29 +269,26 @@ int volume_generate_vertices_mc(const volume_t *volume, const int block_pos[3],
     *subdivide = MC_VOXEL_SUB_POS;
 
     // To speed things up we first get the voxel cube around the block.
-    data = malloc((N + 2) * (N + 2) * (N + 2) * 4);
+    data = malloc((N + 2) * (N + 2) * (N + 2) * sizeof(*data));
     p[0] = block_pos[0] - 1;
     p[1] = block_pos[1] - 1;
     p[2] = block_pos[2] - 1;
     s[0] = N + 2;
     s[1] = N + 2;
     s[2] = N + 2;
-    volume_read(volume, p, s, data);
+    volume_read_samples(volume, p, s, data);
 
-#define get_at(d, x, y, z, out) do { \
-    memcpy(out, &data[( \
-                (x + 1) + \
-                (y + 1) * (N + 2) + \
-                (z + 1) * (N + 2) * (N + 2)) * 4], 4); \
-} while (0)
+#define get_sample(d, x, y, z) \
+    (&(d)[((x) + 1) + ((y) + 1) * (N + 2) + \
+           ((z) + 1) * (N + 2) * (N + 2)])
 
     // Get the smallest rect we need to consider.
     // XXX: can we measure how much we gain with that?
     for (z = -1; z < N + 1; z++)
     for (y = -1; y < N + 1; y++)
     for (x = -1; x < N + 1; x++) {
-        get_at(data, x, y, z, tmp);
-        if (tmp[3]) {
+        tmp = get_sample(data, x, y, z);
+        if (tmp->density) {
             rect[0][0] = min(rect[0][0], x - 2);
             rect[0][1] = min(rect[0][1], y - 2);
             rect[0][2] = min(rect[0][2], z - 2);
@@ -316,24 +313,24 @@ int volume_generate_vertices_mc(const volume_t *volume, const int block_pos[3],
             vx = x + VERTICES_POSITIONS[v][0];
             vy = y + VERTICES_POSITIONS[v][1];
             vz = z + VERTICES_POSITIONS[v][2];
-            get_at(data, vx, vy, vz, tmp);
-            densities[v] = tmp[3];
+            densities[v] = get_sample(data, vx, vy, vz)->density;
         }
         nb_tri = mc_compute(densities, tri);
 
         for (i = 0; i < nb_tri; i++) {
             for (v = 0; v < 3; v++) {
+                const volume_sample_t *c1, *c2;
                 mc_interp_pos(&tri[i][v], tri[i][v].pos, flat);
-                uint8_t c1[4], c2[4];
-                get_at(data, x + VERTICES_POSITIONS[tri[i][v].v0][0],
+                c1 = get_sample(data, x + VERTICES_POSITIONS[tri[i][v].v0][0],
                              y + VERTICES_POSITIONS[tri[i][v].v0][1],
-                             z + VERTICES_POSITIONS[tri[i][v].v0][2],
-                             c1);
-                get_at(data, x + VERTICES_POSITIONS[tri[i][v].v1][0],
+                             z + VERTICES_POSITIONS[tri[i][v].v0][2]);
+                c2 = get_sample(data, x + VERTICES_POSITIONS[tri[i][v].v1][0],
                              y + VERTICES_POSITIONS[tri[i][v].v1][1],
-                             z + VERTICES_POSITIONS[tri[i][v].v1][2],
-                             c2);
-                memcpy(tri[i][v].color, c1[3] > c2[3] ? c1 : c2, 4);
+                             z + VERTICES_POSITIONS[tri[i][v].v1][2]);
+                // The color comes from the denser endpoint; on equality
+                // keep the existing second endpoint choice.
+                const volume_sample_t *c = c1->density > c2->density ? c1 : c2;
+                memcpy(tri[i][v].color, c->rgba, sizeof(tri[i][v].color));
             }
         }
         if (flat) nb_tri = split_triangles(nb_tri, tri, tri);
@@ -342,8 +339,8 @@ int volume_generate_vertices_mc(const volume_t *volume, const int block_pos[3],
             compute_triangle_normal(tri[i], n);
             for (v = 0; v < 3; v++) {
                 vi = nb_tri_tot * 3 + v;
+                // The appearance alpha is kept as authored, not forced.
                 memcpy(out[vi].color, tri[i][v].color, sizeof(out[vi].color));
-                out[vi].color[3] = 255;
                 out[vi].pos[0] = tri[i][v].pos[0] + x * MC_VOXEL_SUB_POS + MC_VOXEL_SUB_POS / 2 + 0.5;
                 out[vi].pos[1] = tri[i][v].pos[1] + y * MC_VOXEL_SUB_POS + MC_VOXEL_SUB_POS / 2 + 0.5;
                 out[vi].pos[2] = tri[i][v].pos[2] + z * MC_VOXEL_SUB_POS + MC_VOXEL_SUB_POS / 2 + 0.5;
