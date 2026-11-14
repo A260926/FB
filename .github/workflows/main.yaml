@@ -1,0 +1,71 @@
+name: Build All
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.1.1
+    - name: Set up Go
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.0.0
+      with:
+        go-version: '>=1.21.0'
+    - name: Check formatting
+      run: test -z "$(gofmt -l .)"
+    - name: Check vet
+      run: go vet ./...
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.1.1
+    - name: Set up Go
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.0.0
+      with:
+        go-version: '>=1.21.0'
+    - name: Build test binaries
+      run: bash build_test_files.sh
+    - name: Run tests
+      run: go test ./...
+
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.1.1
+    - name: Set up Go
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.0.0
+      with:
+        go-version: '>=1.21.0'
+    - name: Display Go version
+      run: go version
+    - name: Windows Build
+      run: |
+        $Env:GOOS='windows'
+        go build -ldflags="-X main.Version=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name }}" -o GoReSym.exe
+        Compress-Archive -DestinationPath GoReSym-windows.zip -LiteralPath ./GoReSym.exe -CompressionLevel Fastest
+        Remove-Item ./GoReSym.exe
+    - name: Linux Build
+      run: |
+        $Env:GOOS='linux'
+        go build -ldflags="-X main.Version=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name }}" -o GoReSym
+        Compress-Archive -DestinationPath GoReSym-linux.zip -LiteralPath ./GoReSym -CompressionLevel Fastest
+        Remove-Item ./GoReSym
+    - name: Mac Build
+      run: |
+        $Env:GOOS='darwin'
+        go build -ldflags="-X main.Version=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name }}" -o GoReSym
+        Compress-Archive -DestinationPath GoReSym-mac.zip -LiteralPath ./GoReSym -CompressionLevel Fastest
+        Remove-Item ./GoReSym
+    - name: Release
+      uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.0.4
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          GoReSym-windows.zip
+          GoReSym-linux.zip
+          GoReSym-mac.zip

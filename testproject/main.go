@@ -1,0 +1,46 @@
+/*Copyright (C) 2022 Mandiant, Inc. All Rights Reserved.*/
+package main
+
+import (
+	"fmt"
+)
+
+type TaggedStruct struct {
+	ID       uint64 `json:"id" db:"user_id"`
+	Name     string `json:"name"`
+	password string `json:"password"`
+	Active   bool
+}
+
+func sum(s []int, c chan int) {
+	sum := 0
+	for _, v := range s {
+		sum += v
+	}
+	c <- sum
+}
+
+func main() {
+	var Ts TaggedStruct
+	Ts.ID = 1234
+	Ts.Name = "test"
+	Ts.password = "password"
+	Ts.Active = true
+
+	fmt.Println(Ts)
+
+	c := make(chan int)
+	s := []int{7, 2, 8, 9}
+	go sum(s, c)
+
+	messages := make(chan string)
+	go func() { messages <- "ping" }()
+
+	fmt.Println("Hello, this is a test")
+
+	msg := <-messages
+	fmt.Println(msg)
+
+	x := <-c
+	fmt.Println(x)
+}

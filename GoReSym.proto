@@ -1,0 +1,83 @@
+syntax = "proto3";
+package GoReSym;
+option go_package = "protobuf/GoReSym/";
+
+message PcLnTabMetadata {
+    uint64 va = 1 [json_name="VA"];
+    string version = 2 [json_name="Version"];
+    string endianess = 3 [json_name="Endianess"];
+    uint32 cpuQuantum = 4 [json_name="CpuQuantum"];
+    string cpuQuantumStr = 5 [json_name="CpuQuantumStr"];
+    uint32 pointerSize = 6 [json_name="PointerSize"];
+}
+
+message FuncMetadata {
+    uint64 start = 1 [json_name="Start"];
+    uint64 end = 2 [json_name="End"];
+    string packageName = 3 [json_name="PackageName"];
+    string fullName = 4 [json_name="FullName"];
+}
+
+message GoSlice {
+    uint64 data = 1 [json_name="Data"];
+    uint64 len = 2 [json_name="Len"];
+    uint64 capacity = 3 [json_name="Capacity"];
+}
+
+message ModuleData {
+    uint64 va = 1 [json_name="VA"];
+    uint64 types = 2 [json_name="Types"];
+    uint64 etypes = 3 [json_name="ETypes"];
+    GoSlice typeLinks = 4 [json_name="Typelinks"];
+    GoSlice itabLinks = 5 [json_name="ITablinks"];
+    GoSlice legacyTypes = 6 [json_name="LegacyTypes"];
+    uint64 textVa = 7 [json_name="TextVA"];
+}
+
+message StringEntry {
+    string str = 1 [json_name="Str"];
+    uint64 start = 2 [json_name="Start"];
+}
+
+message Type {
+    uint64 va = 1 [json_name="VA"];
+    string str = 2 [json_name="Str"];
+    string kind = 3 [json_name="Kind"];
+    string reconstructed = 4 [json_name="Reconstructed"];
+}
+
+message Module {
+    string path = 1 [json_name="Path"];
+    string version = 2 [json_name="Version"];
+    string sum = 3 [json_name="Sum"];
+    string replace= 4 [json_name="Replace"];
+}
+
+message BuildSetting {
+    string key = 1 [json_name="Key"];
+    string value = 2 [json_name="Value"];
+}
+
+message BuildInfo {
+    string goVersion = 1 [json_name="GoVersion"];
+    string path = 2 [json_name="Path"];
+    Module main = 3 [json_name="Main"];
+    repeated Module deps = 4 [json_name="Deps"];
+    repeated BuildSetting settings = 5 [json_name="Settings"];
+}
+
+message ExtractMetadata {
+    string version = 1 [json_name="Version"];
+    string buildId = 2 [json_name="BuildId"];
+    string arch = 3 [json_name="Arch"];
+    string os = 4 [json_name="OS"];
+    PcLnTabMetadata tabMeta = 5 [json_name="TabMeta"];
+    ModuleData moduleMeta = 6 [json_name="ModuleMeta"];
+    repeated Type types = 7 [json_name="Types"];
+    repeated Type interfaces = 8 [json_name="Interfaces"];
+    BuildInfo buildInfo = 9 [json_name="BuildInfo"];
+    repeated string files = 10 [json_name="Files"];
+    repeated FuncMetadata userFunctions = 11 [json_name="UserFunctions"];
+    repeated FuncMetadata stdFunctions = 12 [json_name="StdFunctions"];
+    repeated StringEntry strings = 13 [json_name="Strings"];
+}

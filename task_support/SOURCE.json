@@ -1,0 +1,45 @@
+{
+  "upstream": {
+    "repository": "https://github.com/mandiant/GoReSym",
+    "commit": "fa3f0577e6f5d5692cf98348ac512dec52bbc04b",
+    "license": "LICENSE"
+  },
+  "submodules": [
+    {
+      "path": "BinjaPython",
+      "repository": "https://github.com/xusheng6/binja-GoReSym",
+      "commit": "55aa4db31ff6790932ab8ccbcea62744c021a70f",
+      "license": "BinjaPython/LICENSE",
+      "scope": "preserved upstream Python plugin, never built/imported/executed by this Go task"
+    }
+  ],
+  "vendor": {
+    "lock": "go.mod + go.sum + vendor/modules.txt",
+    "packages": "Existing Go dependencies vendored without source changes; no new dependency added",
+    "licenses": [
+      "vendor/github.com/elliotchance/orderedmap/LICENSE",
+      "vendor/golang.org/x/arch/LICENSE",
+      "vendor/golang.org/x/exp/LICENSE",
+      "vendor/rsc.io/binaryregexp/LICENSE"
+    ]
+  },
+  "go_license": {
+    "repository": "https://github.com/golang/go",
+    "commit": "a9ce111d580581fb925ae88f125c69b7d93504ea",
+    "path": "LICENSE",
+    "tag": "go1.26.4",
+    "local": "task_support/licenses/Go-LICENSE"
+  },
+  "changes": [
+    "task_support/fixture/main.go",
+    "task_support/fixtures.sh",
+    "task_support/baseline/main.go",
+    "task_support/run.sh",
+    "task_support/taskcheck/check.go",
+    "task_support/FORMAT.md",
+    "task_support/licenses/Go-LICENSE",
+    "task_support/SOURCE.json",
+    "vendor/**"
+  ],
+  "implementation_status": "no inline API, decoder, CLI flag, or future target tests supplied"
+}
