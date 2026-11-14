@@ -16,6 +16,7 @@ typedef struct {
 
 /* mesh loading/releasing */
 mesh_t *mesh_load(const char *filename);
+mesh_t *mesh_create(vertex_t *vertices, int num_faces);
 void mesh_release(mesh_t *mesh);
 
 /* vertex retrieving */

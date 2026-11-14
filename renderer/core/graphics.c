@@ -61,6 +61,7 @@ void framebuffer_clear_depth(framebuffer_t *framebuffer, float depth) {
 struct program {
     vertex_shader_t *vertex_shader;
     fragment_shader_t *fragment_shader;
+    fragment_depth_shader_t *fragment_depth_shader;
     int sizeof_attribs;
     int sizeof_varyings;
     int sizeof_uniforms;
@@ -77,8 +78,10 @@ struct program {
     void *out_varyings[MAX_VARYINGS];
 };
 
-program_t *program_create(
-        vertex_shader_t *vertex_shader, fragment_shader_t *fragment_shader,
+static program_t *program_allocate(
+        vertex_shader_t *vertex_shader,
+        fragment_shader_t *fragment_shader,
+        fragment_depth_shader_t *fragment_depth_shader,
         int sizeof_attribs, int sizeof_varyings, int sizeof_uniforms,
         int double_sided, int enable_blend) {
     program_t *program;
@@ -91,6 +94,7 @@ program_t *program_create(
 
     program->vertex_shader = vertex_shader;
     program->fragment_shader = fragment_shader;
+    program->fragment_depth_shader = fragment_depth_shader;
     program->sizeof_attribs = sizeof_attribs;
     program->sizeof_varyings = sizeof_varyings;
     program->sizeof_uniforms = sizeof_uniforms;
@@ -113,6 +117,26 @@ program_t *program_create(
     }
 
     return program;
+}
+
+program_t *program_create(
+        vertex_shader_t *vertex_shader, fragment_shader_t *fragment_shader,
+        int sizeof_attribs, int sizeof_varyings, int sizeof_uniforms,
+        int double_sided, int enable_blend) {
+    return program_allocate(vertex_shader, fragment_shader, NULL,
+                            sizeof_attribs, sizeof_varyings, sizeof_uniforms,
+                            double_sided, enable_blend);
+}
+
+program_t *program_create_deep(
+        vertex_shader_t *vertex_shader,
+        fragment_depth_shader_t *fragment_depth_shader,
+        int sizeof_attribs, int sizeof_varyings, int sizeof_uniforms,
+        int double_sided, int enable_blend) {
+    assert(fragment_depth_shader != NULL);
+    return program_allocate(vertex_shader, NULL, fragment_depth_shader,
+                            sizeof_attribs, sizeof_varyings, sizeof_uniforms,
+                            double_sided, enable_blend);
 }
 
 void program_release(program_t *program) {
@@ -425,20 +449,8 @@ static void interpolate_varyings(
     }
 }
 
-static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
-                          int backface, int index, float depth) {
-    vec4_t color;
-    int discard;
-
-    /* execute fragment shader */
-    discard = 0;
-    color = program->fragment_shader(program->shader_varyings,
-                                     program->shader_uniforms,
-                                     &discard,
-                                     backface);
-    if (discard) {
-        return;
-    }
+static void commit_fragment(framebuffer_t *framebuffer, program_t *program,
+                            int index, vec4_t color, float depth) {
     color = vec4_saturate(color);
 
     /* perform blending */
@@ -457,6 +469,46 @@ static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
     framebuffer->color_buffer[index * 4 + 1] = float_to_uchar(color.y);
     framebuffer->color_buffer[index * 4 + 2] = float_to_uchar(color.z);
     framebuffer->depth_buffer[index] = depth;
+}
+
+static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
+                          int backface, int index, float depth) {
+    if (program->fragment_depth_shader != NULL) {
+        /*
+         * the custom depth may be closer or farther than the interpolated
+         * one, so no early rejection is allowed: run the shader first and
+         * apply the same <= rule against the buffer afterwards
+         */
+        fragment_output_t output =
+            program->fragment_depth_shader(program->shader_varyings,
+                                           program->shader_uniforms,
+                                           backface, depth);
+        if (output.discard) {
+            return;
+        }
+        if (!isfinite(output.depth) ||
+            output.depth < 0 || output.depth > 1) {
+            return;
+        }
+        if (output.depth <= framebuffer->depth_buffer[index]) {
+            commit_fragment(framebuffer, program, index,
+                            output.color, output.depth);
+        }
+    } else {
+        vec4_t color;
+        int discard;
+
+        /* execute fragment shader */
+        discard = 0;
+        color = program->fragment_shader(program->shader_varyings,
+                                         program->shader_uniforms,
+                                         &discard,
+                                         backface);
+        if (discard) {
+            return;
+        }
+        commit_fragment(framebuffer, program, index, color, depth);
+    }
 }
 
 static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
@@ -507,8 +559,17 @@ static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
             if (weight0_okay && weight1_okay && weight2_okay) {
                 int index = y * width + x;
                 float depth = interpolate_depth(screen_depths, weights);
-                /* early depth testing */
-                if (depth <= framebuffer->depth_buffer[index]) {
+                if (program->fragment_depth_shader != NULL) {
+                    /*
+                     * the shader owns the final depth test, so the base
+                     * depth must never reject the fragment ahead of it
+                     */
+                    interpolate_varyings(varyings, program->shader_varyings,
+                                         program->sizeof_varyings,
+                                         weights, recip_w);
+                    draw_fragment(framebuffer, program, backface, index, depth);
+                } else if (depth <= framebuffer->depth_buffer[index]) {
+                    /* early depth testing */
                     interpolate_varyings(varyings, program->shader_varyings,
                                          program->sizeof_varyings,
                                          weights, recip_w);

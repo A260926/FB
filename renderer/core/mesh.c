@@ -180,6 +180,29 @@ mesh_t *mesh_load(const char *filename) {
     }
 }
 
+/*
+ * build a mesh around an already allocated vertex array; the mesh takes
+ * ownership of the array, which mesh_release will free
+ */
+mesh_t *mesh_create(vertex_t *vertices, int num_faces) {
+    vec3_t bbox_min = vec3_new(+1e6, +1e6, +1e6);
+    vec3_t bbox_max = vec3_new(-1e6, -1e6, -1e6);
+    mesh_t *mesh;
+    int i;
+
+    assert(vertices != NULL && num_faces > 0);
+    for (i = 0; i < num_faces * 3; i++) {
+        bbox_min = vec3_min(bbox_min, vertices[i].position);
+        bbox_max = vec3_max(bbox_max, vertices[i].position);
+    }
+
+    mesh = (mesh_t*)malloc(sizeof(mesh_t));
+    mesh->num_faces = num_faces;
+    mesh->vertices = vertices;
+    mesh->center = vec3_div(vec3_add(bbox_min, bbox_max), 2);
+    return mesh;
+}
+
 void mesh_release(mesh_t *mesh) {
     free(mesh->vertices);
     free(mesh);
