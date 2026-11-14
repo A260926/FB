@@ -1575,11 +1575,10 @@ CalCoreMeshPtr CalLoader::loadXmlCoreMesh(cal3d::TiXmlDocument & doc)
                  texcoord = texcoord->NextSiblingElement();
                }
                blendVert = blendVert->NextSiblingElement();
-               morphTarget->setBlendVertex(blendVertI, Vertex);
              } else {
 
                CalCoreSubmesh::Vertex & origVertex = vectorVertex[blendVertI];
-               // use the origVertex
+               // Vertices omitted from a sparse target inherit the base shape.
                Vertex.position = origVertex.position;
                Vertex.normal = origVertex.normal;
                std::vector<std::vector<CalCoreSubmesh::TextureCoordinate> >& vectorvectorTextureCoordinate =
@@ -1591,6 +1590,9 @@ CalCoreMeshPtr CalLoader::loadXmlCoreMesh(cal3d::TiXmlDocument & doc)
 
              }
 
+             // Store every vertex so the in-memory target is a dense array of
+             // absolute blend vertices, with the base shape filling omissions.
+             morphTarget->setBlendVertex(blendVertI, Vertex);
            }
            pCoreSubmesh->addCoreSubMorphTarget(morphTarget);
 

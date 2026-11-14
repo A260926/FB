@@ -1907,9 +1907,17 @@ CalCoreSubmesh *CalLoader::loadCoreSubmesh(CalDataSource& dataSrc, int version)
 
 	 int nbBlendVertex, cpt = 0;
 	  dataSrc.readInteger(nbBlendVertex);
-	  assert(nbBlendVertex > 0);
+	  assert(nbBlendVertex >= 0);
 
-	  dataSrc.readInteger(blendVertId);
+	  // A sparse target may carry zero records (a fully unchanged target).
+	  if(nbBlendVertex > 0)
+	  {
+	    dataSrc.readInteger(blendVertId);
+	  }
+	  else
+	  {
+	    blendVertId = vertexCount;
+	  }
 
       for( int blendVertI = 0; blendVertI < vertexCount; blendVertI++ )
       {
@@ -1946,10 +1954,26 @@ CalCoreSubmesh *CalLoader::loadCoreSubmesh(CalDataSource& dataSrc, int version)
                return 0;
             }
 
-            morphTarget->setBlendVertex(blendVertI, Vertex);
 			if (++cpt<nbBlendVertex ) dataSrc.readInteger(blendVertId);
 			else blendVertId = vertexCount;
          }
+         else
+         {
+            // Vertices omitted from a sparse target inherit the base shape.
+            const CalCoreSubmesh::Vertex& origVertex = vertexVector[blendVertI];
+            Vertex.position = origVertex.position;
+            Vertex.normal = origVertex.normal;
+            for(int textureCoordinateId = 0;
+                textureCoordinateId < textureCoordinateCount; ++textureCoordinateId)
+            {
+               Vertex.textureCoords.push_back(
+                  pCoreSubmesh->getVectorVectorTextureCoordinate()
+                     [textureCoordinateId][blendVertI]);
+            }
+         }
+
+         // Store every vertex: a dense array of absolute blend vertices.
+         morphTarget->setBlendVertex(blendVertI, Vertex);
       }
       pCoreSubmesh->addCoreSubMorphTarget(morphTarget);
    }

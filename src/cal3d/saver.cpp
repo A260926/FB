@@ -909,47 +909,47 @@ bool CalSaver::saveCoreSubmesh(std::ofstream& file, const std::string& strFilena
 	{
 		CalCoreSubMorphTarget * morphTarget = vectorMorphs[morphId];
 		CalPlatform::writeString(file, morphTarget->getName());
-		int morphVertCount = 0;
 
-		CalPlatform::writeInteger(file, (int)morphTarget->getBlendVertexCount());
-
-		for (int blendId = 0; blendId < morphTarget->getBlendVertexCount(); ++blendId)
+		// Determine the true sparse record set first.  A vertex is written
+		// whenever its absolute target differs from the base shape in
+		// position, normal or texture coordinate; there is no threshold, so
+		// tiny position moves and normal/UV-only edits survive the roundtrip.
+		std::vector<int> sparseVertexIds;
+		int blendVertexCount = morphTarget->getBlendVertexCount();
+		for (int blendId = 0; blendId < blendVertexCount; ++blendId)
 		{
 			CalCoreSubMorphTarget::BlendVertex const * bv = morphTarget->getBlendVertex(blendId);
 			if (!bv) {
 				continue;
 			}
-			CalCoreSubmesh::Vertex& Vertex = vectorVertex[blendId];
-			static double differenceTolerance = 0.01;
-			CalVector positionDiff = bv->position - Vertex.position;
-			CalVector normalDiff = bv->normal - Vertex.normal;
-			double positionDiffLength = fabs(positionDiff.length());
-			// double normalDiffLength = fabs(normalDiff.length());
-
-			bool skip = false;
-			//      if( positionDiffLength < differenceTolerance && normalDiffLength < differenceTolerance ) {
-			if (positionDiffLength < differenceTolerance) {
-				skip = true;
-			}
+			CalCoreSubmesh::Vertex& baseVertex = vectorVertex[blendId];
+			bool differs = (bv->position != baseVertex.position)
+			             || (bv->normal   != baseVertex.normal);
 
 			std::vector<CalCoreSubmesh::TextureCoordinate> const & textureCoords = bv->textureCoords;
-			size_t tcI;
-			for (tcI = 0; tcI < textureCoords.size(); tcI++) {
+			for (size_t tcI = 0; tcI < textureCoords.size() && !differs; tcI++) {
 				CalCoreSubmesh::TextureCoordinate const & tc1 = textureCoords[tcI];
 				CalCoreSubmesh::TextureCoordinate const & tc2 = vectorvectorTextureCoordinate[tcI][blendId];
-				if (fabs(tc1.u - tc2.u) > differenceTolerance ||
-					fabs(tc1.v - tc2.v) > differenceTolerance)
-				{
-					skip = false;
+				if (tc1.u != tc2.u || tc1.v != tc2.v) {
+					differs = true;
 				}
 			}
 
-
-			if (skip) {
-				continue;
+			if (differs) {
+				sparseVertexIds.push_back(blendId);
 			}
+		}
 
-			morphVertCount++;
+		// The sparse record count is written explicitly; a fully unchanged
+		// target still serializes as an empty morph with count zero.
+		CalPlatform::writeInteger(file, (int)sparseVertexIds.size());
+
+		for (size_t recordI = 0; recordI < sparseVertexIds.size(); ++recordI)
+		{
+			int blendId = sparseVertexIds[recordI];
+			CalCoreSubMorphTarget::BlendVertex const * bv = morphTarget->getBlendVertex(blendId);
+			std::vector<CalCoreSubmesh::TextureCoordinate> const & textureCoords = bv->textureCoords;
+
 			CalPlatform::writeInteger(file, blendId);
 			CalPlatform::writeFloat(file, bv->position.x);
 			CalPlatform::writeFloat(file, bv->position.y);
@@ -957,13 +957,12 @@ bool CalSaver::saveCoreSubmesh(std::ofstream& file, const std::string& strFilena
 			CalPlatform::writeFloat(file, bv->normal.x);
 			CalPlatform::writeFloat(file, bv->normal.y);
 			CalPlatform::writeFloat(file, bv->normal.z);
-			for (tcI = 0; tcI < textureCoords.size(); tcI++) {
+			for (size_t tcI = 0; tcI < textureCoords.size(); tcI++) {
 				CalCoreSubmesh::TextureCoordinate const & tc1 = textureCoords[tcI];
 				CalPlatform::writeFloat(file, tc1.u);
 				CalPlatform::writeFloat(file, tc1.v);
 			}
 		}
-
 	}
 
 
@@ -1730,54 +1729,59 @@ bool CalSaver::saveXmlCoreMesh(const std::string& strFilename, CalCoreMesh *pCor
 			//morph.SetAttribute("MORPHID", str.str());
 			morph.SetAttribute("NAME", morphTarget->getName());
 
-			int morphVertCount = 0;
-			for (int blendId = 0; blendId < morphTarget->getBlendVertexCount(); ++blendId)
+			// Determine the true sparse record set first.  A vertex is written
+			// whenever its absolute target differs from the base shape in
+			// position, normal or texture coordinate; there is no threshold, so
+			// tiny position moves and normal/UV-only edits survive the roundtrip.
+			std::vector<int> sparseVertexIds;
+			int morphBlendCount = morphTarget->getBlendVertexCount();
+			for (int blendId = 0; blendId < morphBlendCount; ++blendId)
 			{
 				CalCoreSubMorphTarget::BlendVertex const * bv = morphTarget->getBlendVertex(blendId);
 				if (!bv)
 				{
 					continue;
 				}
-				CalCoreSubmesh::Vertex& Vertex = vectorVertex[blendId];
-				static double differenceTolerance = 1.0;
-				CalVector positionDiff = bv->position - Vertex.position;
-				CalVector normalDiff = bv->normal - Vertex.normal;
-				double positionDiffLength = fabs(positionDiff.length());
-				//  double normalDiffLength = fabs(normalDiff.length());
-
-				bool skip = false;
-				//                    if( positionDiffLength < differenceTolerance && normalDiffLength < differenceTolerance ) {
-				if (positionDiffLength < differenceTolerance)
-				{
-					skip = true;
-				}
+				CalCoreSubmesh::Vertex& baseVertex = vectorVertex[blendId];
+				CalVector positionDiff = bv->position - baseVertex.position;
+				bool differs = (positionDiff.length() != 0.0f)
+				             || (bv->normal != baseVertex.normal);
 
 				std::vector<CalCoreSubmesh::TextureCoordinate> const & textureCoords = bv->textureCoords;
-				size_t tcI;
-				for (tcI = 0; tcI < textureCoords.size(); tcI++)
+				for (size_t tcI = 0; tcI < textureCoords.size() && !differs; tcI++)
 				{
 					CalCoreSubmesh::TextureCoordinate const & tc1 = textureCoords[tcI];
 					CalCoreSubmesh::TextureCoordinate const & tc2 = vectorvectorTextureCoordinate[tcI][blendId];
-					if (fabs(tc1.u - tc2.u) > differenceTolerance ||
-						fabs(tc1.v - tc2.v) > differenceTolerance)
+					if (tc1.u != tc2.u || tc1.v != tc2.v)
 					{
-						skip = false;
+						differs = true;
 					}
 				}
 
-
-				if (skip)
+				if (differs)
 				{
-					continue;
+					sparseVertexIds.push_back(blendId);
 				}
-				morphVertCount++;
+			}
+
+			// The sparse count is written explicitly; a fully unchanged target
+			// still serializes as an empty morph with count zero.
+			str.str("");
+			str << sparseVertexIds.size();
+			morph.SetAttribute("NUMBLENDVERTS", str.str());
+
+			for (size_t recordI = 0; recordI < sparseVertexIds.size(); ++recordI)
+			{
+				int blendId = sparseVertexIds[recordI];
+				CalCoreSubMorphTarget::BlendVertex const * bv = morphTarget->getBlendVertex(blendId);
+				CalVector positionDiff = bv->position - vectorVertex[blendId].position;
+
 				TiXmlElement blendVert("BLENDVERTEX");
 				str.str("");
 				str << blendId;
-
 				blendVert.SetAttribute("VERTEXID", str.str());
 				str.str("");
-				str << positionDiffLength;
+				str << positionDiff.length();
 				blendVert.SetAttribute("POSDIFF", str.str());
 
 				TiXmlElement pos("POSITION");
@@ -1794,7 +1798,7 @@ bool CalSaver::saveXmlCoreMesh(const std::string& strFilename, CalCoreMesh *pCor
 
 				blendVert.InsertEndChild(pos);
 				blendVert.InsertEndChild(norm);
-				for (tcI = 0; tcI < bv->textureCoords.size(); tcI++)
+				for (size_t tcI = 0; tcI < bv->textureCoords.size(); tcI++)
 				{
 					TiXmlElement tcXml("TEXCOORD");
 					str.str("");
@@ -1807,9 +1811,6 @@ bool CalSaver::saveXmlCoreMesh(const std::string& strFilename, CalCoreMesh *pCor
 
 				morph.InsertEndChild(blendVert);
 			}
-			str.str("");
-			str << morphVertCount;
-			morph.SetAttribute("NUMBLENDVERTS", str.str());
 			submesh.InsertEndChild(morph);
 		}
 

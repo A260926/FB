@@ -16,9 +16,12 @@
 #include "cal3d/global.h"
 #include "cal3d/vector.h"
 #include "cal3d/coresubmesh.h"
+#include "cal3d/coresubmorphtarget.h"
+#include <cstddef>
 
 namespace cal3d{
 	class CalCoreSubmesh;
+	class CalCoreSubMorphTarget;
 
 
 	// Structure used to return an array of the morphs that have non-zero weights.
@@ -26,6 +29,19 @@ namespace cal3d{
 	{
 		int morphId_;
 		float weight_;
+	};
+
+	// Actual work performed by the most recent sparse morph evaluation.
+	// Counters only measure the local morph pass; skinning never adds to them.
+	struct MorphWorkStats
+	{
+		// Number of vertices whose local morphed position/normal was rebuilt.
+		std::size_t rebuiltVertices;
+		// Number of sparse target/vertex delta pairs that were read. A pair
+		// carrying both a position and a normal delta counts once.
+		std::size_t deltaVisits;
+
+		MorphWorkStats() : rebuiltVertices(0), deltaVisits(0) { }
 	};
 	class CAL3D_API CalSubmesh
 	{
@@ -115,12 +131,39 @@ namespace cal3d{
 		/**returns the morph target weights vector**/
 		inline const std::vector<float>& getVectorMorphTargetWeight() const{ return m_vectorMorphTargetWeight; }
 
+		/** Recomputes the local morph results if the weights changed since the
+		  * last evaluation.  Every skinning entry point calls this first, so
+		  * weights written through setMorphTargetWeight, the MorphTargetMixer or
+		  * the writable weight vector reference all take effect immediately.
+		  * Only vertices touched by a target whose weight changed are rebuilt,
+		  * and only their associated sparse delta pairs are read. **/
+		void syncMorphCache();
+
+		/** Local (pre-skinning) morphed positions, base + sum(w*(target-base)). **/
+		inline const std::vector<CalVector>& getVectorMorphedVertex() const	{ return m_vectorMorphedVertex; }
+		/** Local (pre-skinning) morphed normals, base + sum(w*(target-base)). **/
+		inline const std::vector<CalVector>& getVectorMorphedNormal() const	{ return m_vectorMorphedNormal; }
+
+		/** Work statistics of the most recent output entry point. **/
+		inline MorphWorkStats getMorphWorkStats() const						{ return m_morphWorkStats; }
+
 		/**returns wheter the submesh instance handles vertex data internally.**/
 		inline bool hasInternalData() const							{ return m_bInternalData; }
 		/** Disable internal data (and thus springs system)**/
 		void disableInternalData();
 
 	private:
+		// One sparse target/vertex delta pair. BlendVertex stores absolute
+		// targets, so the local result applies (target - base) scaled by weight.
+		struct MorphDeltaRef
+		{
+			int												morphTargetId;
+			const CalCoreSubMorphTarget::BlendVertex*		blendVertex;
+		};
+
+		// Builds the sparse delta index once; safe to scan all core data here.
+		void buildMorphDeltaIndex();
+
 		CalCoreSubmesh                         *m_pCoreSubmesh;
 		std::vector<float>                      m_vectorMorphTargetWeight;
 		std::vector<float>                      m_vectorAccumulatedWeight;
@@ -136,6 +179,24 @@ namespace cal3d{
 		int                                     m_faceCount;
 		int                                     m_coreMaterialId;
 		bool                                    m_bInternalData;
+
+		// Sparse, immutable morph index built once in the constructor.
+		// Vertices touched by each target, and targets touching each vertex.
+		std::vector<std::vector<int> >          m_vectorMorphTargetVertices;
+		std::vector<std::vector<MorphDeltaRef> >m_vectorVertexMorphDelta;
+
+		// Per-instance local morph results (never share, never hold skinned data).
+		std::vector<CalVector>                  m_vectorMorphedVertex;
+		std::vector<CalVector>                  m_vectorMorphedNormal;
+
+		// Weights used for the current local results; cache is rebuilt against these.
+		std::vector<float>                      m_vectorLastMorphTargetWeight;
+
+		// Reused scratch storage for incremental rebuilds.
+		std::vector<char>                       m_vectorMorphVertexDirty;
+		std::vector<int>                        m_vectorMorphDirtyVertex;
+
+		MorphWorkStats                          m_morphWorkStats;
 	};
 }
 #endif

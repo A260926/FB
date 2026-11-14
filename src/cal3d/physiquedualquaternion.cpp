@@ -37,129 +37,6 @@
 
 
 using namespace cal3d;
-static void CalcMorphBlendedPosition( CalSubmesh *pSubmesh, int vertexID,
-                                      float baseWeight, std::vector<int>& morphIDs,
-                                      CalVector& outPosition )
-{
-  CalCoreSubmesh::Vertex& vertex =
-    pSubmesh->getCoreSubmesh()->getVectorVertex()[vertexID];
-
-  if (morphIDs.empty())
-  {
-    outPosition = vertex.position;
-  }
-  else
-  {
-    // get the sub morph target vector from the core sub mesh
-    std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-      pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-    outPosition = baseWeight * vertex.position;
-
-    int morphTargetId;
-    for (int i = 0; i < morphIDs.size(); ++i)
-    {
-      morphTargetId = morphIDs[i];
-      float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-      CalCoreSubMorphTarget::BlendVertex	blendVertex;
-      vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexID, blendVertex);
-      outPosition += currentWeight * blendVertex.position;
-    }
-  }
-}
-
-
-static void CalcMorphBlendedNormal( CalSubmesh *pSubmesh, int vertexID,
-                                    float baseWeight, std::vector<int>& morphIDs,
-                                    CalVector& outNormal )
-{
-  CalCoreSubmesh::Vertex& vertex =
-    pSubmesh->getCoreSubmesh()->getVectorVertex()[vertexID];
-
-  if (morphIDs.empty())
-  {
-    outNormal = vertex.normal;
-  }
-  else
-  {
-    // get the sub morph target vector from the core sub mesh
-    std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-      pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-    outNormal = baseWeight * vertex.normal;
-
-    int morphTargetId;
-    for (int i = 0; i < morphIDs.size(); ++i)
-    {
-      morphTargetId = morphIDs[i];
-      float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-      CalCoreSubMorphTarget::BlendVertex	blendVertex;
-      vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexID, blendVertex);
-      outNormal += currentWeight * blendVertex.normal;
-    }
-  }
-}
-
-static void CalcMorphBlendedPositionAndNormal( CalSubmesh *pSubmesh, int vertexID,
-                                               float baseWeight, std::vector<int>& morphIDs,
-                                               CalVector& outPosition,
-                                               CalVector& outNormal )
-{
-  CalCoreSubmesh::Vertex& vertex =
-    pSubmesh->getCoreSubmesh()->getVectorVertex()[vertexID];
-
-  if (morphIDs.empty())
-  {
-    outPosition = vertex.position;
-    outNormal = vertex.normal;
-  }
-  else
-  {
-    // get the sub morph target vector from the core sub mesh
-    std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-      pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-    outPosition = baseWeight * vertex.position;
-    outNormal = baseWeight * vertex.normal;
-
-    int morphTargetId;
-    for (int i = 0; i < morphIDs.size(); ++i)
-    {
-      morphTargetId = morphIDs[i];
-      float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-      CalCoreSubMorphTarget::BlendVertex	blendVertex;
-      vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexID, blendVertex);
-      outPosition += currentWeight * blendVertex.position;
-      outNormal += currentWeight * blendVertex.normal;
-    }
-  }
-}
-
-static void GetUsedMorphTargetIDs( CalSubmesh *pSubmesh, std::vector<int>& outMorphIDs )
-{
-  int morphTargetCount = pSubmesh->getMorphTargetWeightCount();
-
-  int morphTargetId;
-  for (morphTargetId=0; morphTargetId < morphTargetCount; ++morphTargetId)
-  {
-    if (pSubmesh->getMorphTargetWeight(morphTargetId) > FLT_EPSILON)
-    {
-      outMorphIDs.push_back( morphTargetId );
-    }
-  }
-}
-
-static float CalcMorphBaseWeight( CalSubmesh *pSubmesh,  const std::vector<int>& morphIDs )
-{
-  float	baseWeight = 1.0f;
-
-  for (std::vector<int>::const_iterator i = morphIDs.begin(); i != morphIDs.end(); ++i)
-  {
-    baseWeight -= pSubmesh->getMorphTargetWeight( *i );
-  }
-
-  return baseWeight;
-}
 
 inline static void StoreVectorInBuffer( const CalVector& inVec, float* outBuffer )
 {
@@ -167,6 +44,10 @@ inline static void StoreVectorInBuffer( const CalVector& inVec, float* outBuffer
   outBuffer[1] = inVec.y;
   outBuffer[2] = inVec.z;
 }
+
+// Local morph blending now lives in CalSubmesh::syncMorphCache; these helpers
+// only perform the dual-quaternion skinning of the already morphed data, so
+// the LBS and DQ entries always start from identical local positions/normals.
 
 static void CalcInfluencedPosition( const CalVector& morphedPosition,
                                     const std::vector<CalCoreSubmesh::Influence>& vectorInfluence,
@@ -317,12 +198,10 @@ int CalPhysiqueDualQuat::calculateVertices(CalSubmesh *pSubmesh, float *pVertexB
   // get the number of vertices
   const int vertexCount = pSubmesh->getVertexCount();
 
-  // Get IDs of morph targets with nonzero weight
-  std::vector<int> morphIDs;
-  GetUsedMorphTargetIDs( pSubmesh, morphIDs );
-
-  // calculate the base weight
-  float baseWeight = CalcMorphBaseWeight( pSubmesh, morphIDs );
+  // Evaluate the shared local morph cache once, identical to the LBS entries.
+  pSubmesh->syncMorphCache();
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
 
   // Check for spring case
   bool hasSpringsAndInternalData =
@@ -336,10 +215,8 @@ int CalPhysiqueDualQuat::calculateVertices(CalSubmesh *pSubmesh, float *pVertexB
     // get the vertex
     const CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector morphedPosition;
-    CalcMorphBlendedPosition( pSubmesh, vertexId, baseWeight, morphIDs,
-      morphedPosition );
+    // local morph blend shared by every skinning entry
+    const CalVector& morphedPosition = vectorMorphedVertex[vertexId];
 
     // blend influences by bones
     CalVector	influencedPosition;
@@ -404,12 +281,10 @@ int CalPhysiqueDualQuat::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBu
   // get the number of vertices
   const int vertexCount = pSubmesh->getVertexCount();
 
-  // Get IDs of morph targets with nonzero weight
-  std::vector<int> morphIDs;
-  GetUsedMorphTargetIDs( pSubmesh, morphIDs );
-
-  // calculate the base weight
-  float baseWeight = CalcMorphBaseWeight( pSubmesh, morphIDs );
+  // same local morph cache as the LBS entries
+  pSubmesh->syncMorphCache();
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // calculate normal for all submesh vertices
   int vertexId;
@@ -418,23 +293,28 @@ int CalPhysiqueDualQuat::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBu
     // get the vertex
     const CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector morphedNormal;
-    CalcMorphBlendedNormal( pSubmesh, vertexId, baseWeight, morphIDs,
-      morphedNormal );
+    // local morph blend shared by every skinning entry
+    const CalVector& morphedNormal = vectorMorphedNormal[vertexId];
 
     // blend together all vertex influences
     CalVector	influencedNormal;
     CalcInfluencedNormal( morphedNormal, vertex.vectorInfluence,
       vectorBone, influencedNormal );
 
-    // re-normalize normal if necessary
+    // Normalization off keeps the transformed normal's length; on, normalize
+    // every non-zero result and leave a zero normal at zero.
     if (m_Normalize)
     {
       influencedNormal.x /= m_axisFactorX;
       influencedNormal.y /= m_axisFactorY;
       influencedNormal.z /= m_axisFactorZ;
-      influencedNormal.normalize();
+      float squaredLength = influencedNormal.x * influencedNormal.x
+                          + influencedNormal.y * influencedNormal.y
+                          + influencedNormal.z * influencedNormal.z;
+      if(squaredLength > 0.0f)
+      {
+        influencedNormal.normalize();
+      }
     }
 
     StoreVectorInBuffer( influencedNormal, pNormalBuffer );
@@ -479,12 +359,12 @@ int CalPhysiqueDualQuat::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float
   // get the number of vertices
   const int vertexCount = pSubmesh->getVertexCount();
 
-  // Get IDs of morph targets with nonzero weight
-  std::vector<int> morphIDs;
-  GetUsedMorphTargetIDs( pSubmesh, morphIDs );
-
-  // calculate the base weight
-  float baseWeight = CalcMorphBaseWeight( pSubmesh, morphIDs );
+  // same local morph cache as the LBS entries
+  pSubmesh->syncMorphCache();
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // Check for spring case
   bool hasSpringsAndInternalData =
@@ -493,17 +373,14 @@ int CalPhysiqueDualQuat::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float
 
   // calculate all submesh vertices
   int vertexId;
-  CalCoreSubMorphTarget::BlendVertex	blendVertex;
   for(vertexId = 0; vertexId < vertexCount; ++vertexId)
   {
     // get the vertex
     const CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector morphedPosition;
-    CalVector morphedNormal;
-    CalcMorphBlendedPositionAndNormal( pSubmesh, vertexId, baseWeight, morphIDs,
-      morphedPosition, morphedNormal );
+    // local morph blend shared by every skinning entry
+    const CalVector& morphedPosition = vectorMorphedVertex[vertexId];
+    const CalVector& morphedNormal   = vectorMorphedNormal[vertexId];
 
     // blend influences by bones
     CalVector	influencedPosition;
@@ -517,13 +394,20 @@ int CalPhysiqueDualQuat::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float
     CalcInfluencedNormal( morphedNormal, vertex.vectorInfluence,
       vectorBone, influencedNormal );
 
-    // re-normalize normal if necessary
+    // Normalization off keeps the transformed normal's length; on, normalize
+    // every non-zero result and leave a zero normal at zero.
     if (m_Normalize)
     {
       influencedNormal.x /= m_axisFactorX;
       influencedNormal.y /= m_axisFactorY;
       influencedNormal.z /= m_axisFactorZ;
-      influencedNormal.normalize();
+      float squaredLength = influencedNormal.x * influencedNormal.x
+                          + influencedNormal.y * influencedNormal.y
+                          + influencedNormal.z * influencedNormal.z;
+      if(squaredLength > 0.0f)
+      {
+        influencedNormal.normalize();
+      }
     }
 
     // save vertex position
@@ -535,23 +419,19 @@ int CalPhysiqueDualQuat::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float
       // assign new vertex position if there is no vertex weight
       if(physicalProperty.weight == 0.0f)
       {
-        pVertexBuffer[0] = influencedPosition.x * m_axisFactorX;
-        pVertexBuffer[1] = influencedPosition.y * m_axisFactorY;
-        pVertexBuffer[2] = influencedPosition.z * m_axisFactorZ;
+        StoreVectorInBuffer( influencedPosition, pVertexBuffer );
       }
     }
     else
     {
-      pVertexBuffer[0] = influencedPosition.x * m_axisFactorX;
-      pVertexBuffer[1] = influencedPosition.y * m_axisFactorY;
-      pVertexBuffer[2] = influencedPosition.z * m_axisFactorZ;
+      StoreVectorInBuffer( influencedPosition, pVertexBuffer );
     }
 
     pVertexBuffer[3] = influencedNormal.x;
     pVertexBuffer[4] = influencedNormal.y;
     pVertexBuffer[5] = influencedNormal.z;
 
-    // next vertex position in buffer	
+    // next vertex position in buffer
     pVertexBuffer = (float *)(((char *)pVertexBuffer) + stride) ;
   }
 
@@ -605,12 +485,12 @@ int CalPhysiqueDualQuat::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubme
   // get the number of vertices
   const int vertexCount = pSubmesh->getVertexCount();
 
-  // Get IDs of morph targets with nonzero weight
-  std::vector<int>	morphIDs;
-  GetUsedMorphTargetIDs( pSubmesh, morphIDs );
-
-  // calculate the base weight
-  float baseWeight = CalcMorphBaseWeight( pSubmesh, morphIDs );
+  // same local morph cache as the LBS entries
+  pSubmesh->syncMorphCache();
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // Check for spring case
   bool hasSpringsAndInternalData =
@@ -619,17 +499,14 @@ int CalPhysiqueDualQuat::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubme
 
   // calculate all submesh vertices
   int vertexId;
-  CalCoreSubMorphTarget::BlendVertex blendVertex;
   for(vertexId = 0; vertexId < vertexCount; ++vertexId)
   {
     // get the vertex
     const CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector morphedPosition;
-    CalVector morphedNormal;
-    CalcMorphBlendedPositionAndNormal( pSubmesh, vertexId, baseWeight, morphIDs,
-      morphedPosition, morphedNormal );
+    // local morph blend shared by every skinning entry
+    const CalVector& morphedPosition = vectorMorphedVertex[vertexId];
+    const CalVector& morphedNormal   = vectorMorphedNormal[vertexId];
 
     // blend influences by bones
     CalVector	influencedPosition;
@@ -643,13 +520,20 @@ int CalPhysiqueDualQuat::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubme
     CalcInfluencedNormal( morphedNormal, vertex.vectorInfluence,
       vectorBone, influencedNormal );
 
-    // re-normalize normal if necessary
+    // Normalization off keeps the transformed normal's length; on, normalize
+    // every non-zero result and leave a zero normal at zero.
     if (m_Normalize)
     {
       influencedNormal.x /= m_axisFactorX;
       influencedNormal.y /= m_axisFactorY;
       influencedNormal.z /= m_axisFactorZ;
-      influencedNormal.normalize();
+      float squaredLength = influencedNormal.x * influencedNormal.x
+                          + influencedNormal.y * influencedNormal.y
+                          + influencedNormal.z * influencedNormal.z;
+      if(squaredLength > 0.0f)
+      {
+        influencedNormal.normalize();
+      }
     }
 
     // save vertex position
@@ -661,16 +545,12 @@ int CalPhysiqueDualQuat::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubme
       // assign new vertex position if there is no vertex weight
       if(physicalProperty.weight == 0.0f)
       {
-        pVertexBuffer[0] = influencedPosition.x * m_axisFactorX;
-        pVertexBuffer[1] = influencedPosition.y * m_axisFactorY;
-        pVertexBuffer[2] = influencedPosition.z * m_axisFactorZ;
+        StoreVectorInBuffer( influencedPosition, pVertexBuffer );
       }
     }
     else
     {
-      pVertexBuffer[0] = influencedPosition.x * m_axisFactorX;
-      pVertexBuffer[1] = influencedPosition.y * m_axisFactorY;
-      pVertexBuffer[2] = influencedPosition.z * m_axisFactorZ;
+      StoreVectorInBuffer( influencedPosition, pVertexBuffer );
     }
 
     pVertexBuffer[3] = influencedNormal.x;

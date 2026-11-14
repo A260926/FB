@@ -68,6 +68,10 @@ int CalPhysique::calculateVertices(CalSubmesh *pSubmesh, float *pVertexBuffer, i
 	  stride = 3*sizeof(float);
   }
 
+  // Evaluate the shared local morph cache once; every output entry point
+  // goes through this so all weight write paths are honored identically.
+  pSubmesh->syncMorphCache();
+
   // get bone vector of the skeleton
   const std::vector<CalBone *>& vectorBone = m_pModel->getSkeleton()->getVectorBone();
 
@@ -81,23 +85,9 @@ int CalPhysique::calculateVertices(CalSubmesh *pSubmesh, float *pVertexBuffer, i
   int vertexCount;
   vertexCount = pSubmesh->getVertexCount();
 
-  // get the sub morph target vector from the core sub mesh
-  std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-  pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-
-  // Get the number of morph targets and cache the weights in an array
-  // that can be indexed quickly inside the vertex inner loop.
-  int morphTargetCount = pSubmesh->getMorphTargetWeightCount();
-  static int const morphTargetCountMax = 100; // Arbitrary.
-  if( morphTargetCount > morphTargetCountMax ) {
-     morphTargetCount = morphTargetCountMax;
-  }
-  static float morphTargetScaleArray[ morphTargetCountMax ];
-  for(int i = 0; i < morphTargetCount; i++ )
-  {
-     morphTargetScaleArray[ i ] = pSubmesh->getMorphTargetWeight( i );
-  }
+  // local (pre-skinning) morphed positions shared by every skinning entry
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
 
   // Check for spring case
   bool	hasSpringsAndInternalData =
@@ -113,26 +103,8 @@ int CalPhysique::calculateVertices(CalSubmesh *pSubmesh, float *pVertexBuffer, i
     // get the vertex
     CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector position=vertex.position;
-
-    {
-
-      int morphTargetId;
-      for(morphTargetId=0; morphTargetId < morphTargetCount;++morphTargetId)
-      {
-         CalCoreSubMorphTarget::BlendVertex const * blendVertex =
-            vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexId);
-         float morphScale = morphTargetScaleArray[ morphTargetId ];
-         if( blendVertex )
-         {
-            position.x += morphScale * blendVertex->position.x;
-            position.y += morphScale * blendVertex->position.y;
-            position.z += morphScale * blendVertex->position.z;
-         }
-
-      }
-    }
+    // local morph blend (base + sum(w*(target-base)))
+    const CalVector& position = vectorMorphedVertex[vertexId];
 
     // initialize vertex
     float x, y, z;
@@ -213,44 +185,20 @@ int CalPhysique::calculateVertices(CalSubmesh *pSubmesh, float *pVertexBuffer, i
 
 CalVector CalPhysique::calculateVertex(CalSubmesh *pSubmesh, int vertexId)
 {
+  // Keep the single-vertex query consistent with the batch entries.
+  pSubmesh->syncMorphCache();
+
   // get bone vector of the skeleton
   const std::vector<CalBone *>& vectorBone = m_pModel->getSkeleton()->getVectorBone();
 
   // get vertex of the core submesh
   std::vector<CalCoreSubmesh::Vertex>& vectorVertex = pSubmesh->getCoreSubmesh()->getVectorVertex();
 
-  // get physical property vector of the core submesh
-  //std::vector<CalCoreSubmesh::PhysicalProperty>& vectorPhysicalProperty = pSubmesh->getCoreSubmesh()->getVectorPhysicalProperty();
-
-  // get the sub morph target vector from the core sub mesh
-  std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-  pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-
-
-  // get the number of morph targets
-  int morphTargetCount = pSubmesh->getMorphTargetWeightCount();
-
   // get the vertex
   CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-  // blend the morph targets
-  CalVector position=vertex.position;
-
-
-  {
-
-    int morphTargetId;
-    for(morphTargetId=0; morphTargetId < morphTargetCount;++morphTargetId)
-    {
-      CalCoreSubMorphTarget::BlendVertex	blendVertex;
-	  vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexId, blendVertex);
-      float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-      position.x += currentWeight*blendVertex.position.x;
-      position.y += currentWeight*blendVertex.position.y;
-      position.z += currentWeight*blendVertex.position.z;
-    }
-  }
+  // local morph blend shared by every skinning entry
+  const CalVector& position = pSubmesh->getVectorMorphedVertex()[vertexId];
 
   // initialize vertex
   float x, y, z;
@@ -288,30 +236,7 @@ CalVector CalPhysique::calculateVertex(CalSubmesh *pSubmesh, int vertexId)
 		  z += influence.weight * v.z;
 	  }
   }
-  /*
-  // save vertex position
-  if(pSubmesh->getCoreSubmesh()->getSpringCount() > 0 && pSubmesh->hasInternalData())
-  {
-    // get the pgysical property of the vertex
-    CalCoreSubmesh::PhysicalProperty& physicalProperty = vectorPhysicalProperty[vertexId];
-
-    // assign new vertex position if there is no vertex weight
-    if(physicalProperty.weight == 0.0f)
-    {
-      pVertexBuffer[0] = x;
-      pVertexBuffer[1] = y;
-      pVertexBuffer[2] = z;
-    }
-  }
-  else
-  {
-    pVertexBuffer[0] = x;
-    pVertexBuffer[1] = y;
-    pVertexBuffer[2] = z;
-  }
-  */
   // return the vertex
-  //return CalVector(x, y, z);
   return CalVector(x*m_axisFactorX,y*m_axisFactorY,z*m_axisFactorZ);
 }
  /*****************************************************************************/
@@ -438,6 +363,9 @@ int CalPhysique::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBuffer, in
 	  stride = 3*sizeof(float);
   }
 
+  // same local morph cache as the position entries
+  pSubmesh->syncMorphCache();
+
   // get bone vector of the skeleton
   const std::vector<CalBone *>& vectorBone = m_pModel->getSkeleton()->getVectorBone();
 
@@ -448,14 +376,9 @@ int CalPhysique::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBuffer, in
   int vertexCount;
   vertexCount = pSubmesh->getVertexCount();
 
-  // get the sub morph target vector from the core sub mesh
-  std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-  pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
-
-
-
-  // get the number of morph targets
-  int morphTargetCount = pSubmesh->getMorphTargetWeightCount();
+  // local (pre-skinning) morphed normals shared by every skinning entry
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // calculate normal for all submesh vertices
   int vertexId;
@@ -464,23 +387,8 @@ int CalPhysique::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBuffer, in
     // get the vertex
     CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector normal=vertex.normal;
-
-    {
-      int morphTargetId;
-      for(morphTargetId=0; morphTargetId < morphTargetCount;++morphTargetId)
-      {
-         CalCoreSubMorphTarget::BlendVertex const * blendVertex =
-            vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexId);
-         float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-         if( blendVertex ) {
-            normal.x += currentWeight*blendVertex->normal.x;
-            normal.y += currentWeight*blendVertex->normal.y;
-            normal.z += currentWeight*blendVertex->normal.z;
-         }
-      }
-    }
+    // local morph blend (base + sum(w*(target-base)))
+    const CalVector& normal = vectorMorphedNormal[vertexId];
 
     // initialize normal
     float nx, ny, nz;
@@ -518,19 +426,30 @@ int CalPhysique::calculateNormals(CalSubmesh *pSubmesh, float *pNormalBuffer, in
 		}
 	}
 
-    // re-normalize normal if necessary
+    // With normalization off, keep the transformed normal's length.  With
+    // it on, normalize every non-zero result and leave a zero normal at zero.
     if (m_Normalize)
     {
 	  nx/= m_axisFactorX;
 	  ny/= m_axisFactorY;
 	  nz/= m_axisFactorZ;
 
-      float scale;
-      scale = (float)( 1.0f / sqrt(nx * nx + ny * ny + nz * nz));
+      float squaredLength = nx * nx + ny * ny + nz * nz;
+      if(squaredLength > 0.0f)
+      {
+        float scale;
+        scale = (float)( 1.0f / sqrt(squaredLength));
 
-      pNormalBuffer[0] = nx * scale;
-      pNormalBuffer[1] = ny * scale;
-      pNormalBuffer[2] = nz * scale;
+        pNormalBuffer[0] = nx * scale;
+        pNormalBuffer[1] = ny * scale;
+        pNormalBuffer[2] = nz * scale;
+      }
+      else
+      {
+        pNormalBuffer[0] = 0.0f;
+        pNormalBuffer[1] = 0.0f;
+        pNormalBuffer[2] = 0.0f;
+      }
     }
     else
     {
@@ -569,8 +488,12 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
 	  stride = 6*sizeof(float);
   }
 
+  // same local morph cache as the separate position/normal entries
+  pSubmesh->syncMorphCache();
+
   // get bone vector of the skeleton
   const std::vector<CalBone *>& vectorBone = m_pModel->getSkeleton()->getVectorBone();
+
  // CalBone ** vectorBonePtr = &vectorBone[0];
 
   // get vertex vector of the core submesh
@@ -582,6 +505,11 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
   // get the number of vertices
   int vertexCount = pSubmesh->getVertexCount();
 
+  // local (pre-skinning) morphed positions and normals
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // Check for spring case
   bool	hasSpringsAndInternalData =
@@ -590,19 +518,14 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
 
   // calculate all submesh vertices
   int vertexId;
-  //CalCoreSubMorphTarget::BlendVertex	blendVertex;
   for(vertexId = 0; vertexId < vertexCount; ++vertexId)
   {
     // get the vertex
     CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // Off unless normalizing set to on and either there are morph targets or multiple influences.
-    bool mustNormalize = false;
-
-    // blend the morph targets
-    CalVector position=vertex.position;
-    CalVector normal=vertex.normal;
-
+    // local morph blend shared by every skinning entry
+    const CalVector& position = vectorMorphedVertex[vertexId];
+    const CalVector& normal   = vectorMorphedNormal[vertexId];
 
     // initialize vertex
     float x, y, z;
@@ -619,10 +542,6 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
     // blend together all vertex influences
     int influenceId;
 	int influenceCount=(int)vertex.vectorInfluence.size();
-    if(influenceCount > 1)
-	{
-      mustNormalize = true; // If multiple influences, normalize the normals!
-    }
 
     for(influenceId = 0; influenceId < influenceCount; ++influenceId)
     {
@@ -650,11 +569,18 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
        ny += influence.weight * n.y;
        nz += influence.weight * n.z;
     }
+    if(influenceCount == 0)
+    {
+      x = position.x;
+      y = position.y;
+      z = position.z;
+      nx = normal.x;
+      ny = normal.y;
+      nz = normal.z;
+    }
     // save vertex position
     if(hasSpringsAndInternalData)
     {
-       mustNormalize = true;
-
       // get the physical property of the vertex
       CalCoreSubmesh::PhysicalProperty& physicalProperty = vectorPhysicalProperty[vertexId];
 
@@ -673,19 +599,30 @@ int CalPhysique::calculateVerticesAndNormals(CalSubmesh *pSubmesh, float *pVerte
       pVertexBuffer[2] = z * m_axisFactorZ;
     }
 
-    // re-normalize normal if necessary
-    if (m_Normalize && mustNormalize)
+    // With normalization off, keep the transformed normal's length; with it
+    // on normalize every non-zero result and leave a zero normal at zero.
+    if (m_Normalize)
     {
 	  nx/= m_axisFactorX;
 	  ny/= m_axisFactorY;
 	  nz/= m_axisFactorZ;
 
-      float scale;
-      scale = (float)( 1.0f / sqrt(nx * nx + ny * ny + nz * nz));
+      float squaredLength = nx * nx + ny * ny + nz * nz;
+      if(squaredLength > 0.0f)
+      {
+        float scale;
+        scale = (float)( 1.0f / sqrt(squaredLength));
 
-      pVertexBuffer[3] = nx * scale;
-      pVertexBuffer[4] = ny * scale;
-      pVertexBuffer[5] = nz * scale;
+        pVertexBuffer[3] = nx * scale;
+        pVertexBuffer[4] = ny * scale;
+        pVertexBuffer[5] = nz * scale;
+      }
+      else
+      {
+        pVertexBuffer[3] = 0.0f;
+        pVertexBuffer[4] = 0.0f;
+        pVertexBuffer[5] = 0.0f;
+      }
     }
     else
     {
@@ -750,14 +687,14 @@ int CalPhysique::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubmesh, floa
   int vertexCount;
   vertexCount = pSubmesh->getVertexCount();
 
-  // get the sub morph target vector from the core sub mesh
-  std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
-  pSubmesh->getCoreSubmesh()->getVectorCoreSubMorphTarget();
+  // same local morph cache as the other entries
+  pSubmesh->syncMorphCache();
 
-
-
-  // get the number of morph targets
-  int morphTargetCount = pSubmesh->getMorphTargetWeightCount();
+  // local (pre-skinning) morphed positions and normals
+  const std::vector<CalVector>& vectorMorphedVertex =
+    pSubmesh->getVectorMorphedVertex();
+  const std::vector<CalVector>& vectorMorphedNormal =
+    pSubmesh->getVectorMorphedNormal();
 
   // Check for spring case
   bool	hasSpringsAndInternalData =
@@ -771,30 +708,9 @@ int CalPhysique::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubmesh, floa
     // get the vertex
     CalCoreSubmesh::Vertex& vertex = vectorVertex[vertexId];
 
-    // blend the morph targets
-    CalVector position=vertex.position;
-    CalVector normal=vertex.normal;
-
-    {
-
-      int morphTargetId;
-      for(morphTargetId=0; morphTargetId < morphTargetCount;++morphTargetId)
-      {
-         CalCoreSubMorphTarget::BlendVertex const * blendVertex =
-            vectorSubMorphTarget[morphTargetId]->getBlendVertex(vertexId);
-         float currentWeight = pSubmesh->getMorphTargetWeight(morphTargetId);
-         if( currentWeight != 0 ) {
-            if( blendVertex ) {
-               position.x += currentWeight*blendVertex->position.x;
-               position.y += currentWeight*blendVertex->position.y;
-               position.z += currentWeight*blendVertex->position.z;
-               normal.x += currentWeight*blendVertex->normal.x;
-               normal.y += currentWeight*blendVertex->normal.y;
-               normal.z += currentWeight*blendVertex->normal.z;
-            }
-         }
-      }
-    }
+    // local morph blend shared by every skinning entry
+    const CalVector& position = vectorMorphedVertex[vertexId];
+    const CalVector& normal   = vectorMorphedNormal[vertexId];
 
     // initialize vertex
     float x, y, z;
@@ -871,19 +787,30 @@ int CalPhysique::calculateVerticesNormalsAndTexCoords(CalSubmesh *pSubmesh, floa
       pVertexBuffer[2] = z * m_axisFactorZ;
     }
 
-	 // re-normalize normal if necessary
+	 // With normalization off, keep the transformed normal's length; with it
+	 // on normalize every non-zero result and leave a zero normal at zero.
     if (m_Normalize)
     {
 	  nx/= m_axisFactorX;
 	  ny/= m_axisFactorY;
 	  nz/= m_axisFactorZ;
 
-      float scale;
-      scale = (float) (1.0f / sqrt(nx * nx + ny * ny + nz * nz));
+      float squaredLength = nx * nx + ny * ny + nz * nz;
+      if(squaredLength > 0.0f)
+      {
+        float scale;
+        scale = (float) (1.0f / sqrt(squaredLength));
 
-      pVertexBuffer[3] = nx * scale;
-      pVertexBuffer[4] = ny * scale;
-      pVertexBuffer[5] = nz * scale;
+        pVertexBuffer[3] = nx * scale;
+        pVertexBuffer[4] = ny * scale;
+        pVertexBuffer[5] = nz * scale;
+      }
+      else
+      {
+        pVertexBuffer[3] = 0.0f;
+        pVertexBuffer[4] = 0.0f;
+        pVertexBuffer[5] = 0.0f;
+      }
     }
     else
     {

@@ -100,6 +100,191 @@ CalSubmesh::CalSubmesh(CalCoreSubmesh *coreSubmesh)
     {
         m_bInternalData = false;
     }
+
+    // Every instance owns its own local morph results, sized to the full
+    // core vertex set independently of the internal/spring data arrays.
+    int coreVertexCount = m_pCoreSubmesh->getVertexCount();
+    m_vectorMorphedVertex.reserve(coreVertexCount);
+    m_vectorMorphedVertex.resize(coreVertexCount);
+    m_vectorMorphedNormal.reserve(coreVertexCount);
+    m_vectorMorphedNormal.resize(coreVertexCount);
+    m_vectorLastMorphTargetWeight.reserve(m_pCoreSubmesh->getCoreSubMorphTargetCount());
+    m_vectorLastMorphTargetWeight.resize(m_pCoreSubmesh->getCoreSubMorphTargetCount(), 0.0f);
+    m_vectorMorphVertexDirty.reserve(coreVertexCount);
+    m_vectorMorphVertexDirty.resize(coreVertexCount, 0);
+    for(int vertexId = 0; vertexId < coreVertexCount; ++vertexId)
+    {
+        m_vectorMorphedVertex[vertexId] = m_pCoreSubmesh->getVectorVertex()[vertexId].position;
+        m_vectorMorphedNormal[vertexId] = m_pCoreSubmesh->getVectorVertex()[vertexId].normal;
+    }
+
+    // The core data is immutable from here on, so the sparse index is
+    // built exactly once and never revisited at runtime.
+    buildMorphDeltaIndex();
+}
+
+/*****************************************************************************/
+/** Builds the sparse morph delta index.
+  *
+  * Initialization is allowed to scan the whole core data set.  For every
+  * target we record the vertices that actually carry a delta, and for every
+  * vertex the target delta pairs touching it.  Only non-identical targets
+  * create a pair, so a fully unchanged target keeps an empty support set and
+  * is still preserved as a target (its zero deltas cost nothing at runtime).
+  *****************************************************************************/
+
+void CalSubmesh::buildMorphDeltaIndex()
+{
+    int morphTargetCount = m_pCoreSubmesh->getCoreSubMorphTargetCount();
+    int coreVertexCount = m_pCoreSubmesh->getVertexCount();
+
+    m_vectorMorphTargetVertices.clear();
+    m_vectorMorphTargetVertices.resize(morphTargetCount);
+    m_vectorVertexMorphDelta.clear();
+    m_vectorVertexMorphDelta.resize(coreVertexCount);
+
+    std::vector<CalCoreSubMorphTarget*>& vectorSubMorphTarget =
+        m_pCoreSubmesh->getVectorCoreSubMorphTarget();
+    std::vector<CalCoreSubmesh::Vertex>& vectorVertex =
+        m_pCoreSubmesh->getVectorVertex();
+
+    for(int morphTargetId = 0; morphTargetId < morphTargetCount; ++morphTargetId)
+    {
+        CalCoreSubMorphTarget* morphTarget = vectorSubMorphTarget[morphTargetId];
+        int blendVertexCount = morphTarget->getBlendVertexCount();
+        if(blendVertexCount > coreVertexCount)
+        {
+            blendVertexCount = coreVertexCount;
+        }
+
+        for(int vertexId = 0; vertexId < blendVertexCount; ++vertexId)
+        {
+            const CalCoreSubMorphTarget::BlendVertex* blendVertex =
+                morphTarget->getBlendVertex(vertexId);
+            if(!blendVertex)
+            {
+                continue;
+            }
+
+            // BlendVertex holds absolute targets; a vertex identical to the
+            // base shape contributes no delta in either position or normal.
+            const CalCoreSubmesh::Vertex& baseVertex = vectorVertex[vertexId];
+            bool hasPositionDelta = (blendVertex->position != baseVertex.position);
+            bool hasNormalDelta   = (blendVertex->normal   != baseVertex.normal);
+            if(!hasPositionDelta && !hasNormalDelta)
+            {
+                continue;
+            }
+
+            MorphDeltaRef deltaRef;
+            deltaRef.morphTargetId = morphTargetId;
+            deltaRef.blendVertex = blendVertex;
+
+            m_vectorVertexMorphDelta[vertexId].push_back(deltaRef);
+            m_vectorMorphTargetVertices[morphTargetId].push_back(vertexId);
+        }
+    }
+}
+
+/*****************************************************************************/
+/** Evaluates the local morph results incrementally.
+  *
+  * If no weight changed since the last evaluation this is an O(target count)
+  * comparison with zero delta accesses and zero rebuilt vertices.  Otherwise
+  * only the union of the support sets of the changed targets is rebuilt, each
+  * dirty vertex being recomputed from the base shape and the current weights,
+  * so toggling weights back and forth cannot accumulate drift.  Bone-space
+  * coordinates never enter these arrays.
+  *****************************************************************************/
+
+void CalSubmesh::syncMorphCache()
+{
+    int morphTargetCount = (int)m_vectorMorphTargetWeight.size();
+
+    // Identify targets whose weight changed, allowing one full comparison.
+    m_vectorMorphDirtyVertex.clear();
+    bool anyChanged = false;
+    for(int morphTargetId = 0; morphTargetId < morphTargetCount; ++morphTargetId)
+    {
+        float weight = m_vectorMorphTargetWeight[morphTargetId];
+        if(weight == m_vectorLastMorphTargetWeight[morphTargetId])
+        {
+            continue;
+        }
+        anyChanged = true;
+
+        const std::vector<int>& touchedVertices =
+            m_vectorMorphTargetVertices[morphTargetId];
+        for(size_t i = 0; i < touchedVertices.size(); ++i)
+        {
+            int vertexId = touchedVertices[i];
+            if(!m_vectorMorphVertexDirty[vertexId])
+            {
+                m_vectorMorphVertexDirty[vertexId] = 1;
+                m_vectorMorphDirtyVertex.push_back(vertexId);
+            }
+        }
+    }
+
+    m_morphWorkStats = MorphWorkStats();
+
+    if(!anyChanged)
+    {
+        // Weights match the last evaluation: no morph work at all.
+        return;
+    }
+
+    std::vector<CalCoreSubmesh::Vertex>& vectorVertex =
+        m_pCoreSubmesh->getVectorVertex();
+
+    size_t deltaVisits = 0;
+
+    // Rebuild every dirty vertex straight from the base shape.
+    for(size_t dirtyIndex = 0; dirtyIndex < m_vectorMorphDirtyVertex.size(); ++dirtyIndex)
+    {
+        int vertexId = m_vectorMorphDirtyVertex[dirtyIndex];
+        m_vectorMorphVertexDirty[vertexId] = 0;
+
+        const CalCoreSubmesh::Vertex& baseVertex = vectorVertex[vertexId];
+        CalVector position = baseVertex.position;
+        CalVector normal = baseVertex.normal;
+
+        // Only this vertex's associated delta pairs are ever touched.
+        const std::vector<MorphDeltaRef>& deltas =
+            m_vectorVertexMorphDelta[vertexId];
+        for(size_t i = 0; i < deltas.size(); ++i)
+        {
+            const MorphDeltaRef& deltaRef = deltas[i];
+            float weight = m_vectorMorphTargetWeight[deltaRef.morphTargetId];
+            if(weight == 0.0f)
+            {
+                continue;
+            }
+            const CalCoreSubMorphTarget::BlendVertex& blendVertex =
+                *deltaRef.blendVertex;
+            // Absolute targets: local = base + sum(w * (target - base)).
+            position.x += weight * (blendVertex.position.x - baseVertex.position.x);
+            position.y += weight * (blendVertex.position.y - baseVertex.position.y);
+            position.z += weight * (blendVertex.position.z - baseVertex.position.z);
+            normal.x   += weight * (blendVertex.normal.x   - baseVertex.normal.x);
+            normal.y   += weight * (blendVertex.normal.y   - baseVertex.normal.y);
+            normal.z   += weight * (blendVertex.normal.z   - baseVertex.normal.z);
+            ++deltaVisits;
+        }
+
+        m_vectorMorphedVertex[vertexId] = position;
+        m_vectorMorphedNormal[vertexId] = normal;
+    }
+
+    m_morphWorkStats.rebuiltVertices = m_vectorMorphDirtyVertex.size();
+    m_morphWorkStats.deltaVisits = deltaVisits;
+
+    // Snapshot the weights these results were computed against.
+    for(int morphTargetId = 0; morphTargetId < morphTargetCount; ++morphTargetId)
+    {
+        m_vectorLastMorphTargetWeight[morphTargetId] =
+            m_vectorMorphTargetWeight[morphTargetId];
+    }
 }
 
 
