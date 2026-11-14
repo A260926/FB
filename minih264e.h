@@ -169,6 +169,17 @@ typedef struct H264E_create_param_tag
     void (*run_func_in_thread)(void *token, void (*job_func)(void*), void *job_data[], int njobs);
 #endif
 
+    // Progressive intra refresh: number of macroblock rows forced to intra
+    // coding in every P frame. The refresh band walks from the top macroblock
+    // row to the bottom, then a new cycle starts at the top.
+    // 0: disabled, legacy behaviour.
+    // Positive r: refresh r macroblock rows per P frame (1..frame MB rows).
+    // Negative values are rejected with H264E_STATUS_BAD_PARAMETER.
+    // Enabled mode requires: 16-aligned size, single AVC layer, single thread,
+    // infinite GOP (gop == 0), no long-term references, no VBV and no
+    // temporal denoise.
+    int intra_refresh_rows;
+
 } H264E_create_param_t;
 
 /**
@@ -754,6 +765,16 @@ typedef struct H264E_persist_tag
     // Consecutive IDR's must have different idr_pic_id,
     // unless there are some P between them
     uint8_t next_idr_pic_id;
+
+    // Progressive intra refresh state (param.intra_refresh_rows > 0)
+    struct
+    {
+        int row;            // First macroblock row of the next refresh band
+        int band_top;       // First row of the current frame's band
+        int band_bottom;    // One-past-last row of the current frame's band
+        int cycle_rows;     // Rows already trusted at the start of the frame
+        int active;         // Non-zero while encoding a refresh P frame
+    } refresh;
 
     pix_t *pbest;                   // Macroblock best predictor
     pix_t *ptest;                   // Macroblock predictor under test
@@ -8976,6 +8997,8 @@ static void encode_pps(h264e_enc_t *enc, int pps_id)
 *   Encode Slice Header
 *   ref: [1] 7.3.3
 */
+static int refresh_frame_active(const h264e_enc_t *enc);
+
 static void encode_slice_header(h264e_enc_t *enc, int frame_type, int long_term_idx_use, int long_term_idx_update, int pps_id, int enc_type)
 {
     // slice reset
@@ -9116,7 +9139,15 @@ static void encode_slice_header(h264e_enc_t *enc, int frame_type, int long_term_
     } else
 #endif
     {
-        UE(enc->speed.disable_deblock);             // disable deblock
+        int deblock_idc = enc->speed.disable_deblock;
+        if (refresh_frame_active(enc) && !deblock_idc)
+        {
+            // idc == 2: keep deblocking inside slices, disable it on slice
+            // borders (band edge and soft NALU splits), matching the local
+            // reconstruction's border handling exactly.
+            deblock_idc = 2;
+        }
+        UE(deblock_idc);                              // disable deblock
     }
 
     if (enc->speed.disable_deblock != 1)
@@ -10074,6 +10105,167 @@ static void mv_clusters_update(h264e_enc_t *enc, point_t mv)
     }
 }
 
+/************************************************************************/
+/*      Progressive intra refresh: trusted-region motion constraints    */
+/************************************************************************/
+
+/**
+*   Refresh mode is active for the current P frame.
+*/
+static int refresh_frame_active(const h264e_enc_t *enc)
+{
+    return enc->param.intra_refresh_rows > 0 && enc->refresh.active;
+}
+
+/**
+*   The current macroblock lies inside the refresh band and must be
+*   coded entirely intra (no skip, no inter).
+*/
+static int refresh_mb_in_band(const h264e_enc_t *enc)
+{
+    if (!refresh_frame_active(enc))
+    {
+        return 0;
+    }
+    return enc->mb.y >= enc->refresh.band_top && enc->mb.y < enc->refresh.band_bottom;
+}
+
+/**
+*   Verify that ALL luma samples used by a fractional/integer luma prediction
+*   are inside the already trusted area of the previous reference picture.
+*
+*   Quarter-pel luma interpolation uses the 6-tap H.264 filter, so any
+*   fractional component widens the support by 2 pixels on each side and,
+*   for the diagonal half-pel position, by one extra row. The check works on
+*   actual sample support, not merely on the motion-vector endpoint.
+*
+*   mv_abs is an absolute, quarter-pel motion vector for the macroblock
+*   origin; px/py are the partition offset inside the macroblock (luma pixels)
+*   and pw/ph are the partition size.
+*/
+static int refresh_luma_support_safe(const h264e_enc_t *enc, point_t mv_abs,
+    int px, int py, int pw, int ph)
+{
+    int trusted_bottom = enc->refresh.cycle_rows*16; // trusted luma rows
+    int origin_x = (mv_abs.s.x >> 2) + px;
+    int origin_y = (mv_abs.s.y >> 2) + py;
+    int fx = mv_abs.s.x & 3;
+    int fy = mv_abs.s.y & 3;
+    int x0, y0, x1, y1;
+
+    if (!refresh_frame_active(enc) || trusted_bottom <= 0)
+    {
+        return 0;
+    }
+
+    // Integer sample span of the prediction block
+    x0 = origin_x;
+    y0 = origin_y;
+    x1 = origin_x + pw - 1;
+    y1 = origin_y + ph - 1;
+
+    // Horizontal 6-tap filter is used for any horizontal half/quarter position
+    if (fx)
+    {
+        x0 -= 2;
+        x1 += 2;
+    }
+    // Vertical 6-tap filter for vertical half/quarter positions; the diagonal
+    // half-pel path (fx == 2 && fy == 2) filters an intermediate extended
+    // vertically by one additional row.
+    if (fy)
+    {
+        y0 -= 2;
+        y1 += 2;
+        if (fx && fy == 2)
+        {
+            y1 += 1;
+        }
+    }
+
+    if (x0 < 0 || y0 < 0 || x1 >= enc->frame.w || y1 >= trusted_bottom)
+    {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+*   Verify that all chroma samples used by a chroma prediction stay inside
+*   the trusted area. Chroma uses bilinear interpolation over the 2x2 cell
+*   surrounding the fractional position, so any fractional component extends
+*   the support by one sample on the corresponding axis.
+*/
+static int refresh_chroma_support_safe(const h264e_enc_t *enc, point_t mv_abs,
+    int px, int py, int pw, int ph)
+{
+    int trusted_bottom = enc->refresh.cycle_rows*8; // trusted chroma rows
+    int origin_x = (mv_abs.s.x >> 3) + px;
+    int origin_y = (mv_abs.s.y >> 3) + py;
+    int fx = mv_abs.s.x & 7;
+    int fy = mv_abs.s.y & 7;
+    int x0, y0, x1, y1;
+
+    if (!refresh_frame_active(enc) || trusted_bottom <= 0)
+    {
+        return 0;
+    }
+
+    x0 = origin_x;
+    y0 = origin_y;
+    x1 = origin_x + pw - 1;
+    y1 = origin_y + ph - 1;
+
+    if (fx)
+    {
+        x1 += 1;
+    }
+    if (fy)
+    {
+        y1 += 1;
+    }
+
+    if (x0 < 0 || y0 < 0 || x1 >= enc->frame.w/2 || y1 >= trusted_bottom)
+    {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+*   Full safety check for an inter partition candidate: both luma and chroma
+*   interpolation support must remain inside the trusted prefix.
+*/
+static int refresh_mv_safe(const h264e_enc_t *enc, point_t mv_abs,
+    int px, int py, int pw, int ph)
+{
+    return refresh_luma_support_safe(enc, mv_abs, px, py, pw, ph) &&
+           refresh_chroma_support_safe(enc, mv_abs, px, py, pw/2, ph/2);
+}
+
+/**
+*   Conservative absolute-qpel bounding rectangle for motion vectors of one
+*   partition whose whole interpolation support stays inside the trusted
+*   prefix. The bounds assume the worst-case fractional phase, so every MV
+*   clipped to this rectangle passes refresh_mv_safe().
+*/
+static rectangle_t refresh_safe_range(const h264e_enc_t *enc,
+    int px, int py, int pw, int ph)
+{
+    int tb_l = enc->refresh.cycle_rows*16;
+    int tb_c = enc->refresh.cycle_rows*8;
+    int w = enc->frame.w;
+    int ymax_l = tb_l - py - ph - 3;                    // luma 6-tap, worst phase
+    int ymax_c = 2*(tb_c - py/2 - ph/2 - 1) + 1;        // chroma bilinear
+    int xmax_l = w - px - pw - 3;
+    int xmax_c = 2*(w/2 - px/2 - pw/2 - 1) + 1;
+    rectangle_t r;
+    r.tl = enc->frame.mv_limit.tl;
+    r.br.s.x = MIN(xmax_l, xmax_c)*4 + 3;
+    r.br.s.y = MIN(ymax_l, ymax_c)*4 + 3;
+    return r;
+}
+
 /**
 *   Choose inter mode: skip/coded, ME partition, find MV
 */
@@ -10090,6 +10282,7 @@ static void inter_choose_mode(h264e_enc_t *enc)
     const pix_t *ref_yuv = enc->ref.yuv[0];
     int ref_stride = enc->ref.stride[0];
     int mv_cand_cost_best = 0;
+    int refresh_safe = refresh_frame_active(enc);
     mv_skip = enc->mb.mv_skip_pred;
     mv_skip_a = mb_abs_mv(enc, mv_skip);
 
@@ -10099,8 +10292,11 @@ static void inter_choose_mode(h264e_enc_t *enc)
         enc->df.df_mv[i].u32       = enc->mv_pred[8 + 4*enc->mb.x + i].u32;
     }
 
-    // Try skip mode
-    if (mv_in_rect(mv_skip_a, &enc->frame.mv_qpel_limit))
+    // Try skip mode. In refresh mode skip is an inter prediction whose whole
+    // sampling support must stay inside the trusted prefix; an unsafe skip
+    // candidate is simply not offered.
+    if (mv_in_rect(mv_skip_a, &enc->frame.mv_qpel_limit) &&
+        (!refresh_safe || refresh_mv_safe(enc, mv_skip_a, 0, 0, 16, 16)))
     {
         int *sad4 = cand_sad4[0];
         interpolate_luma(ref_yuv, ref_stride, mv_skip_a, point(16, 16), enc->ptest);
@@ -10185,7 +10381,8 @@ static void inter_choose_mode(h264e_enc_t *enc)
     for (/*j = 0*/; j < ncand; j++)
     {
         point_t mv = mb_abs_mv(enc, mv_cand[j]);
-        if (mv_in_rect(mv, &enc->frame.mv_limit))
+        if (mv_in_rect(mv, &enc->frame.mv_limit) &&
+            (!refresh_safe || refresh_mv_safe(enc, mv, 0, 0, 16, 16)))
         {
             int mv_cand_cost = me_mv_cand_cost(mv_cand[j], mv_pred_16x16, enc->rc.qp);
 
@@ -10206,6 +10403,14 @@ static void inter_choose_mode(h264e_enc_t *enc)
                 mv_best = mv_cand[j];
             }
         }
+    }
+
+    if (refresh_safe && sad_best == 0x7FFFFFFF)
+    {
+        // No inter candidate keeps its whole sampling support inside the
+        // trusted prefix: leave mode selection to intra coding.
+        enc->mb.type = 0x7FFFFFFF;
+        return;
     }
 
     sad_best += me_mv_cost(mv_best, mv_pred_16x16, enc->rc.qp);
@@ -10249,6 +10454,17 @@ static void inter_choose_mode(h264e_enc_t *enc)
                         //mv_pred,
                         mb_abs_mv(enc, mv_pred),
                         enc->rc.qp);
+                }
+
+                if (refresh_safe)
+                {
+                    // Restrict the full-pel/fractional search to vectors whose
+                    // complete interpolation support stays trusted. Applied
+                    // after every range (re)initialization above.
+                    rectangle_t sr = refresh_safe_range(enc, part.s.x, part.s.y, wh.s.x, wh.s.y);
+                    range.br.s.x = MIN(range.br.s.x, sr.br.s.x);
+                    range.br.s.y = MIN(range.br.s.y, sr.br.s.y);
+                    mv_clip(&mvabs, &range);
                 }
 
                 part_sad += me_search_diamond(enc, ref_yuv + part.s.y*ref_stride + part.s.x,
@@ -10306,6 +10522,28 @@ static void inter_choose_mode(h264e_enc_t *enc)
         memcpy(enc->mb.mv,  part_mv [enc->mb.type], 16*sizeof(point_t));
         memcpy(enc->mb.mvd, part_mvd[enc->mb.type], 16*sizeof(point_t));
 
+        if (refresh_safe)
+        {
+            // Recreate the luma predictor from the final coded MV so the
+            // encoder reconstruction uses exactly the interpolation result a
+            // standards decoder obtains, rather than an in-search scratch
+            // variant (which can differ by a rounding step).
+            int bw, bh, nx, ny, kx, ky;
+            bw = (enc->mb.type & 2) ? 8 : 16;
+            bh = (enc->mb.type & 1) ? 8 : 16;
+            for (ny = 0, ky = 0; ny < 16; ny += bh, ky++)
+            {
+                for (nx = 0, kx = 0; nx < 16; nx += bw, kx++)
+                {
+                    int part_idx = ky*(16/bw) + kx;
+                    point_t mva = mb_abs_mv(enc, enc->mb.mv[part_idx]);
+                    interpolate_luma(ref_yuv + ny*ref_stride + nx, ref_stride,
+                        mva, point(bw, bh), enc->pbest + ny*16 + nx);
+                }
+            }
+            interpolate_chroma(enc, mb_abs_mv(enc, enc->mb.mv[0])); /* per-partition MVs are read inside */
+        }
+
         if (enc->mb.cost > sad_skip)
         {
             enc->mb.type = 0;
@@ -10325,6 +10563,11 @@ static void inter_choose_mode(h264e_enc_t *enc)
 /************************************************************************/
 #define MB_FLAG_SVC_INTRA 1
 #define MB_FLAG_SLICE_START_DEBLOCK_2 2
+/* Refresh mode: the bitstream marks every slice with disable_deblock_idc 2,
+ * so the local reconstruction must skip vertical/horizontal filtering on
+ * slice borders exactly like a standards decoder. */
+#define MB_FLAG_REFRESH_DEBLOCK_V 4
+#define MB_FLAG_REFRESH_DEBLOCK_H 8
 
 /**
 *   Set deblock filter strength
@@ -10447,13 +10690,16 @@ static void mb_deblock(deblock_filter_t *df, int mb_type, int qp_this, int mbx, 
     uint8_t *tc0 = par.tc0; //[16*2];
 
     df_strength(df, mb_type, mbx, strength, IntraBLFlag);
-    if (!mbx || (IntraBLFlag & MB_FLAG_SLICE_START_DEBLOCK_2))
+    if (!mbx || (IntraBLFlag & MB_FLAG_SLICE_START_DEBLOCK_2) ||
+        (IntraBLFlag & MB_FLAG_REFRESH_DEBLOCK_V))
     {
         strength32[0] = 0;
     }
 
-    if (!mby)
+    if (!mby || (IntraBLFlag & MB_FLAG_REFRESH_DEBLOCK_H))
     {
+        // Only the top edge (word 4) is on the slice/frame border; internal
+        // horizontal edges (words 5..7) keep normal filtering.
         strength32[4] = 0;
     }
 
@@ -10544,8 +10790,12 @@ static void mb_encode(h264e_enc_t *enc, int enc_type)
     enc->mb.type = 0;
     enc->mb.cost = 0x7FFFFFFF;
 
-    if (enc->slice.type == SLICE_TYPE_P)
+    if (enc->slice.type == SLICE_TYPE_P && !refresh_mb_in_band(enc))
     {
+        // Outside the refresh band, normal inter mode selection runs, but the
+        // refresh logic rejects every candidate whose motion compensation
+        // touches not-yet-refreshed reference samples. Band macroblocks skip
+        // inter prediction altogether and are forced to intra below.
         inter_choose_mode(enc);
     }
 #if H264E_SVC_API
@@ -10604,6 +10854,27 @@ _WRITE_MB:
             }
         }
 #endif
+        if (refresh_frame_active(enc))
+        {
+            // Keep the local reconstruction's deblocking rules identical to
+            // the idc == 2 rules signalled in the bitstream: slice borders are
+            // not filtered. Horizontal edges are filtered by the lower MB (its
+            // top edge), so MBs of a new slice whose top neighbour belongs to
+            // the previous slice lose their top edge; the first MB of a slice
+            // loses its left edge. This covers the band edge and every soft
+            // slice split requested through desired_nalu_bytes, including
+            // splits in the middle of a macroblock row.
+            int slice_start_row = enc->slice.start_mb_num / enc->frame.nmbx;
+            int slice_start_mbx = enc->slice.start_mb_num % enc->frame.nmbx;
+            if (enc->mb.num == enc->slice.start_mb_num)
+            {
+                base_mode |= MB_FLAG_REFRESH_DEBLOCK_V;
+            }
+            if (mby == slice_start_row && enc->mb.x >= slice_start_mbx)
+            {
+                base_mode |= MB_FLAG_REFRESH_DEBLOCK_H;
+            }
+        }
         mb_deblock(&enc->df, enc->mb.type, enc->rc.prev_qp, mbx, mby, &enc->dec, base_mode);
     }
 }
@@ -11052,6 +11323,39 @@ static int enc_check_create_params(const H264E_create_param_t *par)
     {
         return H264E_STATUS_BAD_ARGUMENT;   // NULL argument
     }
+    if (par->intra_refresh_rows < 0)
+    {
+        return H264E_STATUS_BAD_PARAMETER;  // negative refresh size
+    }
+    if (par->intra_refresh_rows > 0)
+    {
+        // Progressive intra refresh supports only a restricted AVC
+        // configuration, validated before the generic size checks so every
+        // unsupported combination reports BAD_PARAMETER uniformly.
+        int bad = (par->width <= 0 || par->height <= 0) ||
+            ((par->width | par->height) & 15) ||
+            par->gop != 0 ||
+            par->max_long_term_reference_frames != 0 ||
+            par->vbv_size_bytes != 0 ||
+            par->temporal_denoise_flag;
+#if H264E_SVC_API
+        bad |= (par->num_layers != 1);
+#endif
+#if H264E_MAX_THREADS
+        bad |= (par->max_threads > 1);
+#endif
+        if (par->height > 0)
+        {
+            bad |= (par->intra_refresh_rows > ((par->height + 15) >> 4));
+        } else
+        {
+            bad = 1;
+        }
+        if (bad)
+        {
+            return H264E_STATUS_BAD_PARAMETER;
+        }
+    }
     if ((int)(par->vbv_size_bytes | par->gop) < 0)
     {
         return H264E_STATUS_BAD_PARAMETER;  // negative GOP or VBV size
@@ -11175,6 +11479,14 @@ int H264E_init(h264e_enc_t *enc, const H264E_create_param_t *opt)
     int i, ret;
     (void)i;
 
+    /* Validate even when called without a preceding H264E_sizeof, so an
+     * unsupported intra-refresh configuration is rejected here too. */
+    ret = enc_check_create_params(opt);
+    if (ret)
+    {
+        return ret;
+    }
+
     ret = H264E_init_one(enc_curr, opt, 0);
 
 #if H264E_SVC_API
@@ -11210,12 +11522,42 @@ static void encode_slice(h264e_enc_t *enc, int frame_type, int long_term_idx_use
     // encode frame
     do
     {   // encode row
+        if (refresh_frame_active(enc) && enc->mb.y == enc->refresh.band_bottom &&
+            enc->mb.y < enc->frame.nmby)
+        {
+            // Slice boundary on the refresh band's lower edge. It carries the
+            // same neighbour/deblocking isolation the local reconstruction
+            // relies on, so any standards-conformant decoder applies identical
+            // rules instead of pulling unrefreshed samples across the edge.
+            if (enc->mb.skip_run)
+            {
+                UE(enc->mb.skip_run);
+                enc->mb.skip_run = 0;
+            }
+            nal_end(enc);
+            encode_slice_header(enc, frame_type, long_term_idx_use, long_term_idx_update, pps_id, enc_type);
+        }
         do
         {   // encode macroblock
+            // Soft NALU splitting. In refresh mode a split in the middle of a
+            // macroblock row would change intra/motion neighbour availability
+            // for part of a row while the encoder's per-MB contexts assume a
+            // single rule per row; such streams are not reconstructed
+            // identically by standards decoders. Restrict refresh splits to
+            // macroblock-row boundaries, where slice neighbour/deblocking
+            // rules are well-defined and match the local reconstruction.
             if (enc->run_param.desired_nalu_bytes &&
-                h264e_bs_get_pos_bits(enc->bs) > enc->run_param.desired_nalu_bytes*8u)
+                h264e_bs_get_pos_bits(enc->bs) > enc->run_param.desired_nalu_bytes*8u &&
+                (!refresh_frame_active(enc) || enc->mb.x == 0))
             {
-                // start new slice
+                // start new slice. A pending skip run must be finalized in the
+                // slice that owns those macroblocks, otherwise the new slice's
+                // first_mb_in_slice leaves macroblocks undecoded.
+                if (enc->mb.skip_run)
+                {
+                    UE(enc->mb.skip_run);
+                    enc->mb.skip_run = 0;
+                }
                 nal_end(enc);
                 encode_slice_header(enc, frame_type, long_term_idx_use, long_term_idx_update, pps_id, enc_type);
             }
@@ -11461,6 +11803,17 @@ int H264E_encode(H264E_persist_t *enc, H264E_scratch_t *scratch, const H264E_run
     int is_refers_to_long_term;
     int error;
 
+    if (enc->param.intra_refresh_rows > 0 && opt &&
+        opt->frame_type != H264E_FRAME_TYPE_DEFAULT &&
+        opt->frame_type != H264E_FRAME_TYPE_KEY &&
+        opt->frame_type != H264E_FRAME_TYPE_P)
+    {
+        // Only default/key/P frames are allowed with intra refresh. Reject
+        // before touching the input or emitting any NALU, so a failed call
+        // neither advances the refresh position nor disturbs rate control.
+        return H264E_STATUS_BAD_PARAMETER;
+    }
+
     error = check_parameters_align(&enc->param, in);
     if (error)
     {
@@ -11527,6 +11880,26 @@ int H264E_encode(H264E_persist_t *enc, H264E_scratch_t *scratch, const H264E_run
     if (frame_type == H264E_FRAME_TYPE_DEFAULT)
     {
         frame_type = enc->frame.num ? H264E_FRAME_TYPE_P : H264E_FRAME_TYPE_KEY;
+    }
+
+    if (enc->param.intra_refresh_rows > 0)
+    {
+        if (frame_type == H264E_FRAME_TYPE_KEY)
+        {
+            // IDR: full-picture intra, next P starts a fresh cycle at the top
+            enc->refresh.active = 0;
+            enc->refresh.row = 0;
+        } else
+        {
+            // P frame: force one horizontal band to intra. The prefix above
+            // the band (cycle_rows) is already trusted for this cycle and is
+            // the only area inter prediction may sample from.
+            int r = enc->param.intra_refresh_rows;
+            enc->refresh.active = 1;
+            enc->refresh.band_top = enc->refresh.row;
+            enc->refresh.band_bottom = MIN(enc->refresh.row + r, enc->frame.nmby);
+            enc->refresh.cycle_rows = enc->refresh.row;
+        }
     }
     // Estimate long-term indexes from frame type
     // index 0 means "short-term" reference
@@ -11653,6 +12026,18 @@ int H264E_encode(H264E_persist_t *enc, H264E_scratch_t *scratch, const H264E_run
     {
         H264E_encode_one(enc, opt, long_term_idx_use, is_refers_to_long_term, long_term_idx_update,
             frame_type, enc->param.sps_id*4 + 0, 0);
+    }
+
+    if (enc->param.intra_refresh_rows > 0 && frame_type != H264E_FRAME_TYPE_KEY)
+    {
+        // Successful refresh P frame: the band is now part of the trusted
+        // prefix. A short final band wraps the next P frame back to the top.
+        enc->refresh.row = enc->refresh.band_bottom;
+        if (enc->refresh.row >= enc->frame.nmby)
+        {
+            enc->refresh.row = 0;
+        }
+        enc->refresh.active = 0;
     }
 
     *sizeof_coded_data = enc->out_pos;
