@@ -64,6 +64,7 @@ struct rtmp_packet_t
 	uint8_t* payload;
 	size_t capacity; // only for network read
 	size_t bytes; // only for network read
+	size_t chunk_bytes; // payload bytes received in current network chunk (read only)
 };
 
 // 5.3.1. Chunk Format (p11)
@@ -166,6 +167,14 @@ struct rtmp_t
 int rtmp_chunk_read(struct rtmp_t* rtmp, const uint8_t* data, size_t bytes);
 /// @return 0-ok, other-error
 int rtmp_chunk_write(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* header, const uint8_t* payload);
+
+/// compress message header against the previous message on the same chunk stream
+/// @return NULL-error, otherwise the zipped header saved in out_packets
+const struct rtmp_chunk_header_t* rtmp_chunk_header_zip_ex(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* header);
+
+/// write the fmt-3 continuation chunk header (with extended timestamp when required)
+/// @return header bytes
+uint32_t rtmp_chunk_continue_header_write(uint8_t* out, const struct rtmp_chunk_header_t* header);
 
 int rtmp_handler(struct rtmp_t* rtmp, struct rtmp_chunk_header_t* header, const uint8_t* payload);
 int rtmp_event_handler(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* header, const uint8_t* data);

@@ -21,6 +21,7 @@
 		46C5B3812183EE1500419E57 /* rtmp-control-message.c in Sources */ = {isa = PBXBuildFile; fileRef = 46C5B3732183EE1500419E57 /* rtmp-control-message.c */; };
 		46C5B3822183EE1500419E57 /* rtmp-chunk-header.c in Sources */ = {isa = PBXBuildFile; fileRef = 46C5B3742183EE1500419E57 /* rtmp-chunk-header.c */; };
 		46C5B3832183EE1500419E57 /* rtmp-chunk-read.c in Sources */ = {isa = PBXBuildFile; fileRef = 46C5B3752183EE1500419E57 /* rtmp-chunk-read.c */; };
+		46C5B3902183EE1500419E57 /* rtmp-chunk-scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 46C5B3912183EE1500419E57 /* rtmp-chunk-scheduler.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		46C5B3732183EE1500419E57 /* rtmp-control-message.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "rtmp-control-message.c"; sourceTree = "<group>"; };
 		46C5B3742183EE1500419E57 /* rtmp-chunk-header.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "rtmp-chunk-header.c"; sourceTree = "<group>"; };
 		46C5B3752183EE1500419E57 /* rtmp-chunk-read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "rtmp-chunk-read.c"; sourceTree = "<group>"; };
+		46C5B3912183EE1500419E57 /* rtmp-chunk-scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "rtmp-chunk-scheduler.c"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +89,7 @@
 				46C5B3732183EE1500419E57 /* rtmp-control-message.c */,
 				46C5B3742183EE1500419E57 /* rtmp-chunk-header.c */,
 				46C5B3752183EE1500419E57 /* rtmp-chunk-read.c */,
+				46C5B3912183EE1500419E57 /* rtmp-chunk-scheduler.c */,
 			);
 			path = source;
 			sourceTree = "<group>";
@@ -172,6 +175,7 @@
 				46C5B37E2183EE1500419E57 /* rtmp-server.c in Sources */,
 				46C5B3792183EE1500419E57 /* rtmp-control-handler.c in Sources */,
 				46C5B37C2183EE1500419E57 /* rtmp-event.c in Sources */,
+				46C5B3902183EE1500419E57 /* rtmp-chunk-scheduler.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -28,42 +28,22 @@ static struct rtmp_packet_t* rtmp_packet_find(struct rtmp_t* rtmp, uint32_t cid)
 	return NULL;
 }
 
-//static struct rtmp_packet_t* rtmp_packet_create(struct rtmp_t* rtmp, uint32_t cid)
-//{
-//	uint32_t i;
-//	struct rtmp_packet_t* pkt;
-//
-//	// The protocol supports up to 65597 streams with IDs 3-65599
-//	assert(cid <= 65535 + 64 && cid >= 2 /* Protocol Control Messages */);
-//	assert(NULL == rtmp_packet_find(rtmp, cid));
-//	for (i = 0; i < N_CHUNK_STREAM; i++)
-//	{
-//		pkt = rtmp->out_packets + ((i + cid) % N_CHUNK_STREAM);
-//		if (0 == pkt->header.cid)
-//			return pkt;
-//	}
-//	return NULL;
-//}
-
-static const struct rtmp_chunk_header_t* rtmp_chunk_header_zip(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* header)
+const struct rtmp_chunk_header_t* rtmp_chunk_header_zip_ex(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* header)
 {
 	struct rtmp_packet_t* pkt; // previous saved chunk header
 	struct rtmp_chunk_header_t h;
 
 	assert(0 != header->cid && 1 != header->cid);
 	assert(RTMP_CHUNK_TYPE_0 == header->fmt || RTMP_CHUNK_TYPE_1 == header->fmt);
-	
+
 	memcpy(&h, header, sizeof(h));
 
 	// find previous chunk header
 	pkt = rtmp_packet_find(rtmp, h.cid);
 	if (NULL == pkt)
 	{
-		//pkt = rtmp_packet_create(rtmp, h.cid);
-		//if (NULL == pkt)
-		//	return NULL; // too many chunk stream id
 		assert(0);
-		return NULL; // can't find chunk stream id 
+		return NULL; // can't find chunk stream id
 	}
 
 	h.fmt = RTMP_CHUNK_TYPE_0;
@@ -89,6 +69,32 @@ static const struct rtmp_chunk_header_t* rtmp_chunk_header_zip(struct rtmp_t* rt
 	return &pkt->header;
 }
 
+//static struct rtmp_packet_t* rtmp_packet_create(struct rtmp_t* rtmp, uint32_t cid)
+//{
+//	uint32_t i;
+//	struct rtmp_packet_t* pkt;
+//
+//	// The protocol supports up to 65597 streams with IDs 3-65599
+//	assert(cid <= 65535 + 64 && cid >= 2 /* Protocol Control Messages */);
+//	assert(NULL == rtmp_packet_find(rtmp, cid));
+//	for (i = 0; i < N_CHUNK_STREAM; i++)
+//	{
+//		pkt = rtmp->out_packets + ((i + cid) % N_CHUNK_STREAM);
+//		if (0 == pkt->header.cid)
+//			return pkt;
+//	}
+//	return NULL;
+//}
+
+uint32_t rtmp_chunk_continue_header_write(uint8_t* out, const struct rtmp_chunk_header_t* header)
+{
+	uint32_t headerSize;
+	headerSize = rtmp_chunk_basic_header_write(out, RTMP_CHUNK_TYPE_3, header->cid);
+	if (header->timestamp >= 0xFFFFFF)
+		headerSize += rtmp_chunk_extended_timestamp_write(out + headerSize, header->timestamp);
+	return headerSize;
+}
+
 int rtmp_chunk_write(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* h, const uint8_t* payload)
 {
 	int r = 0;
@@ -97,7 +103,7 @@ int rtmp_chunk_write(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* h, c
 	const struct rtmp_chunk_header_t* header;
 
 	// compression rtmp chunk header
-	header = rtmp_chunk_header_zip(rtmp, h);
+	header = rtmp_chunk_header_zip_ex(rtmp, h);
 	if (!header || header->length >= 0xFFFFFF)
 		return -EINVAL; // invalid length
 
@@ -132,9 +138,7 @@ int rtmp_chunk_write(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* h, c
 		{
 			p += headerSize; // next chunk header
 			assert(p + N <= rtmp->chunk_write_header.ptr + rtmp->chunk_write_header.capacity);
-			headerSize = rtmp_chunk_basic_header_write(p, RTMP_CHUNK_TYPE_3, header->cid);
-			if (header->timestamp >= 0xFFFFFF)
-				headerSize += rtmp_chunk_extended_timestamp_write(p + headerSize, header->timestamp);
+			headerSize = rtmp_chunk_continue_header_write(p, header);
 			assert(headerSize == N);
 		}
 	}

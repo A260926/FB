@@ -11,6 +11,29 @@
 # librtmp
 1. rtmp-client: RTMP publish/play
 2. rtmp-server: RTMP Server live/vod streaming
+3. rtmp-server chunk interleave: emit one chunk per event-loop step so audio can cut in between video chunks
+
+```c
+/* opt-in chunk interleave mode (single thread, no recursive sends from the send callback) */
+rtmp_server_enable_chunk_interleave(server);
+
+/* submit only queues the message; the library keeps the data */
+rtmp_server_send_video(server, frame, bytes, timestamp);
+
+/* event loop: every iteration pushes at most one complete chunk to the send handler */
+for (;;) {
+    int r = rtmp_server_send_step(server);
+    if (r < 0)        break;      /* send error: output stops, queued messages are freed on destroy */
+    if (r == 0)       wait_io();  /* queue empty, wait for more media or socket events */
+
+    /* a later audio submit lands between the remaining chunks of the video frame */
+    if (have_audio)
+        rtmp_server_send_audio(server, audio, audio_bytes, audio_ts);
+
+    /* change the outgoing chunk size; it applies only after the control message is fully sent */
+    rtmp_server_set_chunk_size(server, 4096);
+}
+```
 
 # libmpeg
 1. ITU-T H.222.0 PS/TS read/write

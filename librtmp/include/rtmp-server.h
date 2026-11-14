@@ -66,9 +66,27 @@ int rtmp_server_input(rtmp_server_t* rtmp, const uint8_t* data, size_t bytes);
 /// send audio/video data(VOD only)
 /// @param[in] rtmp rtmp_server_create instance
 /// @return 0-ok, other-error
+/// @note in chunk interleave mode, 0 only means the message is queued;
+/// the media bytes are emitted later through rtmp_server_send_step
 int rtmp_server_send_audio(rtmp_server_t* rtmp, const void* data, size_t bytes, uint32_t timestamp);
 int rtmp_server_send_video(rtmp_server_t* rtmp, const void* data, size_t bytes, uint32_t timestamp);
 int rtmp_server_send_script(rtmp_server_t* rtmp, const void* data, size_t bytes, uint32_t timestamp);
+
+/// enable chunk interleave mode; after it is enabled, media messages are only
+/// queued by the send_xxx APIs and emitted one full chunk at a time via
+/// rtmp_server_send_step. Single thread use only, do not call send APIs
+/// recursively from inside the send callback.
+/// @return 0-ok, other-error; enabling twice keeps the queued state
+int rtmp_server_enable_chunk_interleave(rtmp_server_t* rtmp);
+
+/// emit at most one complete chunk through the send handler
+/// @return 1-one chunk sent, 0-queue empty, <0-error (output stops)
+int rtmp_server_send_step(rtmp_server_t* rtmp);
+
+/// enqueue a Set Chunk Size protocol control message (chunk interleave mode only)
+/// @param[in] size 64 ~ 0x800000
+/// @return 0-queued, <0-invalid argument or mode not enabled; nothing is emitted or queued
+int rtmp_server_set_chunk_size(rtmp_server_t* rtmp, uint32_t size);
 
 /// [OPTIONAL] must call on onplay/onpublish return RTMP_SERVER_ASYNC_START
 /// @param[in] code 0-ok, RTMP_SERVER_START_RECONNECT-reconnect, other-error

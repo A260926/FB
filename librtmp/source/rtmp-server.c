@@ -6,6 +6,7 @@
 #include "rtmp-netconnection.h"
 #include "rtmp-control-message.h"
 #include "rtmp-event.h"
+#include "rtmp-chunk-scheduler.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,6 +47,8 @@ struct rtmp_server_t
 		int reset;
 		int play; // RTMP_SERVER_ONPLAY/RTMP_SERVER_ONPUBLISH
 	} start;
+
+	struct rtmp_chunk_scheduler_t* scheduler; // NULL-synchronous mode
 };
 
 static int rtmp_server_send_control(struct rtmp_t* rtmp, const uint8_t* payload, uint32_t bytes, uint32_t stream_id)
@@ -451,6 +454,10 @@ void rtmp_server_destroy(struct rtmp_server_t* ctx)
 {
 	size_t i;
 	assert(sizeof(ctx->rtmp.in_packets) == sizeof(ctx->rtmp.out_packets));
+
+	// release media messages still held by the interleave scheduler
+	rtmp_chunk_scheduler_destroy(ctx->scheduler);
+
 	for (i = 0; i < N_CHUNK_STREAM; i++)
 	{
 		assert(NULL == ctx->rtmp.out_packets[i].payload);
@@ -595,6 +602,8 @@ int rtmp_server_send_audio(struct rtmp_server_t* ctx, const void* data, size_t b
 	header.type = RTMP_TYPE_AUDIO;
 	header.stream_id = ctx->stream_id;
 
+	if (ctx->scheduler)
+		return rtmp_chunk_scheduler_submit(ctx->scheduler, &header, (const uint8_t*)data);
 	return rtmp_chunk_write(&ctx->rtmp, &header, (const uint8_t*)data);
 }
 
@@ -611,6 +620,8 @@ int rtmp_server_send_video(struct rtmp_server_t* ctx, const void* data, size_t b
 	header.type = RTMP_TYPE_VIDEO;
 	header.stream_id = ctx->stream_id;
 
+	if (ctx->scheduler)
+		return rtmp_chunk_scheduler_submit(ctx->scheduler, &header, (const uint8_t*)data);
 	return rtmp_chunk_write(&ctx->rtmp, &header, (const uint8_t*)data);
 }
 
@@ -624,5 +635,33 @@ int rtmp_server_send_script(struct rtmp_server_t* ctx, const void* data, size_t 
 	header.type = RTMP_TYPE_DATA;
 	header.stream_id = ctx->stream_id;
 
+	if (ctx->scheduler)
+		return rtmp_chunk_scheduler_submit(ctx->scheduler, &header, (const uint8_t*)data);
 	return rtmp_chunk_write(&ctx->rtmp, &header, (const uint8_t*)data);
+}
+
+int rtmp_server_enable_chunk_interleave(struct rtmp_server_t* ctx)
+{
+	// repeated enable must not clear messages already queued
+	if (ctx->scheduler)
+		return 0;
+
+	ctx->scheduler = rtmp_chunk_scheduler_create(&ctx->rtmp);
+	return ctx->scheduler ? 0 : -ENOMEM;
+}
+
+int rtmp_server_send_step(struct rtmp_server_t* ctx)
+{
+	if (!ctx->scheduler)
+		return -EINVAL;
+	return rtmp_chunk_scheduler_step(ctx->scheduler);
+}
+
+int rtmp_server_set_chunk_size(struct rtmp_server_t* ctx, uint32_t size)
+{
+	if (!ctx->scheduler)
+		return -EINVAL; // synchronous mode keeps its fixed output chunk size
+	if (size < 64 || size > 0x800000)
+		return -EINVAL; // invalid value: nothing emitted or queued
+	return rtmp_chunk_scheduler_submit_chunk_size(ctx->scheduler, size);
 }

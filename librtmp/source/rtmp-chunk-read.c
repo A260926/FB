@@ -196,6 +196,10 @@ int rtmp_chunk_read(struct rtmp_t* rtmp, const uint8_t* data, size_t bytes)
 					if (0 != rtmp_packet_alloc(rtmp, parser->pkt))
 						return -ENOMEM;
 				}
+				// every parsed chunk header starts a new network chunk; track its
+				// payload offset separately so a mid-message Set Chunk Size cannot
+				// confuse the accumulated message offset with a chunk boundary
+				parser->pkt->chunk_bytes = 0;
 				parser->state = RTMP_PARSE_PAYLOAD;
 
 				// rewind extended_timestamp_buffer
@@ -208,9 +212,9 @@ int rtmp_chunk_read(struct rtmp_t* rtmp, const uint8_t* data, size_t bytes)
 			break;
 
 		case RTMP_PARSE_PAYLOAD:
-			if (NULL == parser->pkt || NULL == parser->pkt->payload 
-				|| parser->pkt->bytes > parser->pkt->capacity 
-				|| parser->pkt->bytes > parser->pkt->header.length 
+			if (NULL == parser->pkt || NULL == parser->pkt->payload
+				|| parser->pkt->bytes > parser->pkt->capacity
+				|| parser->pkt->bytes > parser->pkt->header.length
 				|| parser->pkt->header.length > parser->pkt->capacity)
 			{
 				assert(0);
@@ -218,10 +222,11 @@ int rtmp_chunk_read(struct rtmp_t* rtmp, const uint8_t* data, size_t bytes)
 			}
 			//assert(parser->pkt->bytes <= parser->pkt->header.length);
 			//assert(parser->pkt->capacity >= parser->pkt->header.length);
-			size = MIN(rtmp->in_chunk_size - (parser->pkt->bytes % rtmp->in_chunk_size), parser->pkt->header.length - parser->pkt->bytes);
+			size = MIN(rtmp->in_chunk_size - parser->pkt->chunk_bytes, parser->pkt->header.length - parser->pkt->bytes);
 			size = MIN(size, bytes - offset);
 			if(size > 0) memcpy(parser->pkt->payload + parser->pkt->bytes, data + offset, size);
 			parser->pkt->bytes += size;
+			parser->pkt->chunk_bytes += size;
 			offset += size;
 
 			if (parser->pkt->bytes >= parser->pkt->header.length)
@@ -235,7 +240,7 @@ int rtmp_chunk_read(struct rtmp_t* rtmp, const uint8_t* data, size_t bytes)
 				r = rtmp_handler(rtmp, &header, parser->pkt->payload);
 				if(0 != r) return r;
 			}
-			else if (0 == (parser->pkt->bytes % rtmp->in_chunk_size))
+			else if (parser->pkt->chunk_bytes >= rtmp->in_chunk_size)
 			{
 				// next chunk
 				parser->state = RTMP_PARSE_INIT;

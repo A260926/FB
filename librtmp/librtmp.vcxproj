@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="source\rtmp-chunk-header.c" />
     <ClCompile Include="source\rtmp-chunk-read.c" />
+    <ClCompile Include="source\rtmp-chunk-scheduler.c" />
     <ClCompile Include="source\rtmp-chunk-write.c" />
     <ClCompile Include="source\rtmp-client.c" />
     <ClCompile Include="source\rtmp-control-handler.c" />
@@ -35,6 +36,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\rtmp-chunk-header.h" />
+    <ClInclude Include="include\rtmp-chunk-scheduler.h" />
     <ClInclude Include="include\rtmp-control-message.h" />
     <ClInclude Include="include\rtmp-event.h" />
     <ClInclude Include="include\rtmp-handshake.h" />
