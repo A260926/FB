@@ -24,6 +24,7 @@ celt/modes.h \
 celt/os_support.h \
 celt/pitch.h \
 celt/celt_lpc.h \
+celt/postfilter_trace.h \
 celt/x86/celt_lpc_sse.h \
 celt/quant_bands.h \
 celt/rate.h \

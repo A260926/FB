@@ -43,6 +43,10 @@ set(OPUS_DISABLE_INTRINSICS_HELP_STR "disable all intrinsics optimizations.")
 option(OPUS_DISABLE_INTRINSICS ${OPUS_DISABLE_INTRINSICS_HELP_STR} OFF)
 add_feature_info(OPUS_DISABLE_INTRINSICS OPUS_DISABLE_INTRINSICS ${OPUS_DISABLE_INTRINSICS_HELP_STR})
 
+set(OPUS_POSTFILTER_TRACE_HELP_STR "expose read-only CELT post-filter observation points for tests.")
+option(OPUS_POSTFILTER_TRACE ${OPUS_POSTFILTER_TRACE_HELP_STR} OFF)
+add_feature_info(OPUS_POSTFILTER_TRACE OPUS_POSTFILTER_TRACE ${OPUS_POSTFILTER_TRACE_HELP_STR})
+
 set(OPUS_FIXED_POINT_HELP_STR "compile as fixed-point (for machines without a fast enough FPU).")
 option(OPUS_FIXED_POINT ${OPUS_FIXED_POINT_HELP_STR} OFF)
 add_feature_info(OPUS_FIXED_POINT OPUS_FIXED_POINT ${OPUS_FIXED_POINT_HELP_STR})
@@ -352,6 +356,10 @@ endif()
 
 if(OPUS_CUSTOM_MODES)
   target_compile_definitions(opus PRIVATE CUSTOM_MODES)
+endif()
+
+if(OPUS_POSTFILTER_TRACE)
+  target_compile_definitions(opus PRIVATE CELT_POSTFILTER_TRACE)
 endif()
 
 if(OPUS_FAST_MATH)
@@ -738,6 +746,35 @@ if(BUILD_TESTING AND NOT BUILD_SHARED_LIBS)
     target_compile_definitions(test_opus_dred PRIVATE OPUS_BUILD)
     add_test(NAME test_opus_dred COMMAND ${CMAKE_COMMAND}
           -DTEST_EXECUTABLE=$<TARGET_FILE:test_opus_dred>
+          -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
+          -P "${PROJECT_SOURCE_DIR}/cmake/RunTest.cmake")
+  endif()
+
+  # Pitch post-filter content regressions.  These use the internal CELT headers
+  # and, for the decoder-level test, the read-only observation hook enabled by
+  # OPUS_POSTFILTER_TRACE.  They are meaningless in a fixed-point build.
+  if(OPUS_POSTFILTER_TRACE AND NOT OPUS_FIXED_POINT)
+    add_executable(test_postfilter_unit tests/test_postfilter_unit.c)
+    target_include_directories(test_postfilter_unit
+                               PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
+                                       ${CMAKE_CURRENT_SOURCE_DIR}
+                                       ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_link_libraries(test_postfilter_unit PRIVATE opus ${OPUS_REQUIRED_LIBRARIES})
+    target_compile_definitions(test_postfilter_unit PRIVATE OPUS_BUILD)
+    add_test(NAME test_postfilter_unit COMMAND ${CMAKE_COMMAND}
+          -DTEST_EXECUTABLE=$<TARGET_FILE:test_postfilter_unit>
+          -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
+          -P "${PROJECT_SOURCE_DIR}/cmake/RunTest.cmake")
+
+    add_executable(test_postfilter_decode tests/test_postfilter_decode.c)
+    target_include_directories(test_postfilter_decode
+                               PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
+                                       ${CMAKE_CURRENT_SOURCE_DIR}
+                                       ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_link_libraries(test_postfilter_decode PRIVATE opus ${OPUS_REQUIRED_LIBRARIES})
+    target_compile_definitions(test_postfilter_decode PRIVATE OPUS_BUILD)
+    add_test(NAME test_postfilter_decode COMMAND ${CMAKE_COMMAND}
+          -DTEST_EXECUTABLE=$<TARGET_FILE:test_postfilter_decode>
           -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
           -P "${PROJECT_SOURCE_DIR}/cmake/RunTest.cmake")
   endif()

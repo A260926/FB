@@ -51,6 +51,10 @@
 #include "celt_lpc.h"
 #include "vq.h"
 
+#ifdef CELT_POSTFILTER_TRACE
+#include "postfilter_trace.h"
+#endif
+
 #ifdef ENABLE_DEEP_PLC
 #include "lpcnet.h"
 #include "lpcnet_private.h"
@@ -1299,6 +1303,34 @@ int celt_decode_with_ec_dred(CELTDecoder * OPUS_RESTRICT st, const unsigned char
    celt_synthesis(mode, X, out_syn, oldBandE, start, effEnd,
                   C, CC, isTransient, LM, st->downsample, silence, st->arch);
 
+#ifdef CELT_POSTFILTER_TRACE
+   {
+      /* Test-only, read-only observation of the pitch post-filter.  The two
+         callback frames let a test compare one generation at a time.  Keeping
+         this here avoids duplicating decoder-side state in the test. */
+      celt_postfilter_frame tf;
+      tf.phase = CELT_POSTFILTER_TRACE_BEFORE;
+      tf.frame_size = N;
+      tf.short_mdct_size = mode->shortMdctSize;
+      tf.lm = LM;
+      tf.overlap = overlap;
+      tf.channels = CC;
+      tf.arch = st->arch;
+      tf.pitch = postfilter_pitch;
+      tf.gain = postfilter_gain;
+      tf.tapset = postfilter_tapset;
+      tf.history_len = COMBFILTER_MAXPERIOD;
+      tf.guard_len = overlap;
+      tf.window = mode->window;
+      for (c=0;c<CC;c++) {
+         tf.samples[c] = out_syn[c];
+         tf.history[c] = out_syn[c]-COMBFILTER_MAXPERIOD;
+         tf.guard[c] = out_syn[c]+N;
+      }
+      celt_postfilter_trace_frame(&tf);
+   }
+#endif
+
    c=0; do {
       st->postfilter_period=IMAX(st->postfilter_period, COMBFILTER_MINPERIOD);
       st->postfilter_period_old=IMAX(st->postfilter_period_old, COMBFILTER_MINPERIOD);
@@ -1311,6 +1343,30 @@ int celt_decode_with_ec_dred(CELTDecoder * OPUS_RESTRICT st, const unsigned char
                mode->window, overlap, st->arch);
 
    } while (++c<CC);
+#ifdef CELT_POSTFILTER_TRACE
+   {
+      celt_postfilter_frame tf;
+      tf.phase = CELT_POSTFILTER_TRACE_AFTER;
+      tf.frame_size = N;
+      tf.short_mdct_size = mode->shortMdctSize;
+      tf.lm = LM;
+      tf.overlap = overlap;
+      tf.channels = CC;
+      tf.arch = st->arch;
+      tf.pitch = postfilter_pitch;
+      tf.gain = postfilter_gain;
+      tf.tapset = postfilter_tapset;
+      tf.history_len = COMBFILTER_MAXPERIOD;
+      tf.guard_len = overlap;
+      tf.window = mode->window;
+      for (c=0;c<CC;c++) {
+         tf.samples[c] = out_syn[c];
+         tf.history[c] = out_syn[c]-COMBFILTER_MAXPERIOD;
+         tf.guard[c] = out_syn[c]+N;
+      }
+      celt_postfilter_trace_frame(&tf);
+   }
+#endif
    st->postfilter_period_old = st->postfilter_period;
    st->postfilter_gain_old = st->postfilter_gain;
    st->postfilter_tapset_old = st->postfilter_tapset;

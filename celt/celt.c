@@ -187,14 +187,15 @@ void comb_filter_const_c(opus_val32 *y, opus_val32 *x, int T, int N,
 #endif
 
 #ifndef OVERRIDE_comb_filter
+/* Pitch post-filter.  y and x may be the same buffer (the decoder filters in
+   place), in which case a delayed tap is allowed to read samples this call
+   has already written back.  Evaluate the recurrence one output sample at a
+   time so that behaviour is explicit; do not fuse over several positions. */
 void comb_filter(opus_val32 *y, opus_val32 *x, int T0, int T1, int N,
       opus_val16 g0, opus_val16 g1, int tapset0, int tapset1,
       const opus_val16 *window, int overlap, int arch)
 {
    int i;
-   /* printf ("%d %d %f %f\n", T0, T1, g0, g1); */
-   opus_val16 g00, g01, g02, g10, g11, g12;
-   opus_val32 x0, x1, x2, x3, x4;
    static const opus_val16 gains[3][3] = {
          {QCONST16(0.3066406250f, 15), QCONST16(0.2170410156f, 15), QCONST16(0.1296386719f, 15)},
          {QCONST16(0.4638671875f, 15), QCONST16(0.2680664062f, 15), QCONST16(0.f, 15)},
@@ -202,57 +203,52 @@ void comb_filter(opus_val32 *y, opus_val32 *x, int T0, int T1, int N,
 
    if (g0==0 && g1==0)
    {
-      /* OPT: Happens to work without the OPUS_MOVE(), but only because the current encoder already copies x to y */
       if (x!=y)
          OPUS_MOVE(y, x, N);
       return;
    }
    /* When the gain is zero, T0 and/or T1 is set to zero. We need
-      to have then be at least 2 to avoid processing garbage data. */
+      to have them be at least 2 to avoid processing garbage data. */
    T0 = IMAX(T0, COMBFILTER_MINPERIOD);
    T1 = IMAX(T1, COMBFILTER_MINPERIOD);
-   g00 = MULT16_16_P15(g0, gains[tapset0][0]);
-   g01 = MULT16_16_P15(g0, gains[tapset0][1]);
-   g02 = MULT16_16_P15(g0, gains[tapset0][2]);
-   g10 = MULT16_16_P15(g1, gains[tapset1][0]);
-   g11 = MULT16_16_P15(g1, gains[tapset1][1]);
-   g12 = MULT16_16_P15(g1, gains[tapset1][2]);
-   x1 = x[-T1+1];
-   x2 = x[-T1  ];
-   x3 = x[-T1-1];
-   x4 = x[-T1-2];
-   /* If the filter didn't change, we don't need the overlap */
+   /* If the filter didn't change, we don't need the overlap. */
    if (g0==g1 && T0==T1 && tapset0==tapset1)
       overlap=0;
+
    for (i=0;i<overlap;i++)
    {
-      opus_val16 f;
-      x0=x[i-T1+2];
+      opus_val16 f, wo, wn;
+      opus_val32 acc;
       f = MULT16_16_Q15(window[i],window[i]);
-      y[i] = x[i]
-               + MULT16_32_Q15(MULT16_16_Q15((Q15ONE-f),g00),x[i-T0])
-               + MULT16_32_Q15(MULT16_16_Q15((Q15ONE-f),g01),ADD32(x[i-T0+1],x[i-T0-1]))
-               + MULT16_32_Q15(MULT16_16_Q15((Q15ONE-f),g02),ADD32(x[i-T0+2],x[i-T0-2]))
-               + MULT16_32_Q15(MULT16_16_Q15(f,g10),x2)
-               + MULT16_32_Q15(MULT16_16_Q15(f,g11),ADD32(x1,x3))
-               + MULT16_32_Q15(MULT16_16_Q15(f,g12),ADD32(x0,x4));
-      y[i] = SATURATE(y[i], SIG_SAT);
-      x4=x3;
-      x3=x2;
-      x2=x1;
-      x1=x0;
-
+      wo = Q15ONE-f;
+      wn = f;
+      /* A single output sample is produced from the two generations.  The
+         taps are read with plain indices so that, when x==y, taps for this
+         position see whatever earlier iterations already wrote. */
+      acc = x[i];
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wo, MULT16_16_P15(g0, gains[tapset0][0])), x[i-T0]));
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wo, MULT16_16_P15(g0, gains[tapset0][1])),
+            ADD32(x[i-T0+1], x[i-T0-1])));
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wo, MULT16_16_P15(g0, gains[tapset0][2])),
+            ADD32(x[i-T0+2], x[i-T0-2])));
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wn, MULT16_16_P15(g1, gains[tapset1][0])), x[i-T1]));
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wn, MULT16_16_P15(g1, gains[tapset1][1])),
+            ADD32(x[i-T1+1], x[i-T1-1])));
+      acc = ADD32(acc, MULT16_32_Q15(MULT16_16_Q15(wn, MULT16_16_P15(g1, gains[tapset1][2])),
+            ADD32(x[i-T1+2], x[i-T1-2])));
+      y[i] = SATURATE(acc, SIG_SAT);
    }
    if (g1==0)
    {
-      /* OPT: Happens to work without the OPUS_MOVE(), but only because the current encoder already copies x to y */
       if (x!=y)
          OPUS_MOVE(y+overlap, x+overlap, N-overlap);
       return;
    }
-
-   /* Compute the part with the constant filter. */
-   comb_filter_const(y+i, x+i, T1, N-i, g10, g11, g12, arch);
+   /* Constant second-generation filter for the remainder of the frame. */
+   comb_filter_const(y+i, x+i, T1, N-i,
+         MULT16_16_P15(g1, gains[tapset1][0]),
+         MULT16_16_P15(g1, gains[tapset1][1]),
+         MULT16_16_P15(g1, gains[tapset1][2]), arch);
 }
 #endif /* OVERRIDE_comb_filter */
 
