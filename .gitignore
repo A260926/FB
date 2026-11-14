@@ -3,3 +3,6 @@
 *.dSYM
 *~
 example
+.task-build/
+.task-bin/
+subtract_output.obj
