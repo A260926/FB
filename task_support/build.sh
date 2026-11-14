@@ -3,6 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 mkdir -p .build
 if [ ! -f .build/Makefile ]; then
+ if [ ! -x ./configure ]; then autoreconf -fi; fi
  (cd .build; ../configure --disable-shared --enable-static --disable-openmp --disable-formats --disable-devices --without-libltdl --without-ladspa --without-magic --without-png --without-id3tag --without-libgsm --without-opencore-amrnb --without-opencore-amrwb --without-vo-amrwbenc --without-mad --without-lame --without-twolame --without-libsndfile CC=cc CFLAGS="-O2 -std=gnu99")
 fi
 make -C .build -j2
