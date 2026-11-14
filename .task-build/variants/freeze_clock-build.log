@@ -1,0 +1,58 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+BASELINE_RTMP_SHORT_ID_OK
+BASELINE_RTMP_EXTENDED_ID_UNSUPPORTED
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+ok  	github.com/bluenviron/gortmplib/pkg/chunk	0.250s
+--- FAIL: TestReader (0.00s)
+    --- FAIL: TestReader/(chunk0)_+_(chunk2)_+_(chunk3) (0.00s)
+        reader_test.go:351: 
+            	Error Trace:	/tmp/claude-501/rtmp-task.juUAK9db/freeze_clock/pkg/rawmessage/reader_test.go:351
+            	Error:      	Not equal: 
+            	            	expected: []*rawmessage.Message{(*rawmessage.Message)(0x102fc2c18), (*rawmessage.Message)(0x102fc2c48), (*rawmessage.Message)(0x102fc2c78)}
+            	            	actual  : []*rawmessage.Message{(*rawmessage.Message)(0x606e69d196b0), (*rawmessage.Message)(0x606e69d196e0), (*rawmessage.Message)(0x606e69d19710)}
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -27,3 +27,3 @@
+            	            	   ChunkStreamID: (uint8) 27,
+            	            	-  Timestamp: (time.Duration) 18606000000,
+            	            	+  Timestamp: (time.Duration) 18591000000,
+            	            	   Type: (uint8) 6,
+            	Test:       	TestReader/(chunk0)_+_(chunk2)_+_(chunk3)
+    --- FAIL: TestReader/(chunk0_+_chunk3)_+_(chunk1_+_chunk3)_+_(chunk2_+_chunk3)_+_(chunk3_+_chunk3) (0.00s)
+        reader_test.go:351: 
+            	Error Trace:	/tmp/claude-501/rtmp-task.juUAK9db/freeze_clock/pkg/rawmessage/reader_test.go:351
+            	Error:      	Not equal: 
+            	            	expected: []*rawmessage.Message{(*rawmessage.Message)(0x102fc2d08), (*rawmessage.Message)(0x102fc2d38), (*rawmessage.Message)(0x102fc2d68), (*rawmessage.Message)(0x102fc2d98)}
+            	            	actual  : []*rawmessage.Message{(*rawmessage.Message)(0x606e69dbc540), (*rawmessage.Message)(0x606e69dbc570), (*rawmessage.Message)(0x606e69dbc5a0), (*rawmessage.Message)(0x606e69dbc5d0)}
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -63,3 +63,3 @@
+            	            	   ChunkStreamID: (uint8) 27,
+            	            	-  Timestamp: (time.Duration) 18606000000,
+            	            	+  Timestamp: (time.Duration) 18591000000,
+            	            	   Type: (uint8) 6,
+            	Test:       	TestReader/(chunk0_+_chunk3)_+_(chunk1_+_chunk3)_+_(chunk2_+_chunk3)_+_(chunk3_+_chunk3)
+    --- FAIL: TestReader/extended_timestamp_deltas_across_chunk_formats (0.00s)
+        reader_test.go:351: 
+            	Error Trace:	/tmp/claude-501/rtmp-task.juUAK9db/freeze_clock/pkg/rawmessage/reader_test.go:351
+            	Error:      	Not equal: 
+            	            	expected: []*rawmessage.Message{(*rawmessage.Message)(0x102fc2ee8), (*rawmessage.Message)(0x102fc2f18), (*rawmessage.Message)(0x102fc2f48), (*rawmessage.Message)(0x102fc2f78), (*rawmessage.Message)(0x102fc2fa8)}
+            	            	actual  : []*rawmessage.Message{(*rawmessage.Message)(0x606e69dbdec0), (*rawmessage.Message)(0x606e69e08000), (*rawmessage.Message)(0x606e69e08030), (*rawmessage.Message)(0x606e69e08060), (*rawmessage.Message)(0x606e69e08090)}
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -39,3 +39,3 @@
+            	            	   ChunkStreamID: (uint8) 27,
+            	            	-  Timestamp: (time.Duration) 50331646000000,
+            	            	+  Timestamp: (time.Duration) 33554431000000,
+            	            	   Type: (uint8) 4,
+            	Test:       	TestReader/extended_timestamp_deltas_across_chunk_formats
+FAIL
+FAIL	github.com/bluenviron/gortmplib/pkg/rawmessage	0.246s
+ok  	github.com/bluenviron/gortmplib/pkg/bytecounter	0.235s
+FAIL

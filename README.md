@@ -39,6 +39,33 @@ Features:
 
 [Click to open the API Documentation](https://pkg.go.dev/github.com/bluenviron/gortmplib#pkg-index)
 
+## Clock and acknowledgement wire evidence
+
+The media clock and acknowledgement behavior of `pkg/rawmessage` is pinned
+to the exact bytes on the wire by `pkg/rawmessage/clock_wire_test.go`, which
+encodes and parses chunks with an independent byte model instead of the
+library's own chunk codec. A worked cross-chunk-stream example:
+
+| event | chunk stream | header | clock effect |
+| ----- | ------------ | ------ | ------------ |
+| 1 | 4 | fmt0, extended timestamp 0xFFFFFFF0 | video message opens at 4294967280 ms |
+| 2 | 6 | fmt0, timestamp 500 | audio message opens on an independent clock |
+| 3 | 4 | fmt3, extended timestamp inherited | video continuation, clock unchanged |
+| 4 | 6 | fmt1, delta 20 | audio clock advances to 520 ms |
+| 5 | 4 | fmt2, delta 0x20 | video clock wraps to 16 ms (uint32) |
+| 6 | 6 | fmt3 | next audio message, clock advances by the previous delta |
+
+The acknowledgement window counts the bytes that actually enter the
+connection — compressed headers, extended timestamp fields and continuation
+headers included — and the acknowledged position advances by exactly one
+window per `OnAckNeeded` callback.
+
+The older round-trip tests serialized chunk objects and decoded them again
+with the same library, so a consistent misunderstanding of the wire format
+in both directions could pass unnoticed. The independent byte reference
+closes that gap for header layout, fmt 0/1/2/3 selection, timestamp delta
+inheritance and acknowledgement byte counting.
+
 ## Specifications
 
 | name                                                                                      | area           |

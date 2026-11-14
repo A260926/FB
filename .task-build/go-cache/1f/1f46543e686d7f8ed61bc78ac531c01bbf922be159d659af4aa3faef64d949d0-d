@@ -1,0 +1,3 @@
+./clock_wire_test.go
+./reader_test.go
+./writer_test.go

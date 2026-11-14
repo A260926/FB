@@ -1,0 +1,8 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+BASELINE_RTMP_SHORT_ID_OK
+BASELINE_RTMP_EXTENDED_ID_UNSUPPORTED
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+ok  	github.com/bluenviron/gortmplib/pkg/chunk	0.258s
+ok  	github.com/bluenviron/gortmplib/pkg/rawmessage	0.251s
+ok  	github.com/bluenviron/gortmplib/pkg/bytecounter	0.241s
+RTMP_BASELINE_COMPLETE

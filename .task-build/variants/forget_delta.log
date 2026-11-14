@@ -1,0 +1,29 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestClockWireWriter
+    clock_wire_test.go:613: wire size: got 620 want 602
+    clock_wire_test.go:510: chunk 2: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 2: raw bytes: got 84 00 00 28 46 47 48 49 4A 4B 4C 4D 4E 4F want C4 46 47 48 49 4A 4B 4C 4D 4E 4F
+    clock_wire_test.go:510: chunk 5: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 5: raw bytes: got 86 00 00 14 4F 50 51 52 53 54 55 56 want C6 4F 50 51 52 53 54 55 56
+    clock_wire_test.go:510: chunk 7: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 7: raw bytes: got 86 00 00 00 55 56 57 58 59 5A 5B 5C want C6 55 56 57 58 59 5A 5B 5C
+    clock_wire_test.go:510: chunk 15: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 15: raw bytes: got 84 00 00 28 67 68 69 6A 6B 6C 6D 6E 6F 70 71 72 73 74 75 76 want C4 67 68 69 6A 6B 6C 6D 6E 6F 70 71 72 73 74 75 76
+    clock_wire_test.go:510: chunk 27: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 27: raw bytes: got 84 FF FF FF 00 FF FF FF 73 74 75 76 77 78 79 7A 7B 7C 7D 7E 7F 80 81 82 want C4 00 FF FF FF 73 74 75 76 77 78 79 7A 7B 7C 7D 7E 7F 80 81 82
+    clock_wire_test.go:510: chunk 33: fmt: got 2 want 3
+    clock_wire_test.go:531: chunk 33: raw bytes: got 84 00 00 28 79 7A 7B 7C 7D 7E 7F 80 81 82 83 84 85 86 87 88 want C4 79 7A 7B 7C 7D 7E 7F 80 81 82 83 84 85 86 87 88
+    clock_wire_test.go:643: spot chunk 15: fmt: got 2 want 3
+    clock_wire_test.go:643: spot chunk 27: fmt: got 2 want 3
+    clock_wire_test.go:643: spot chunk 33: fmt: got 2 want 3
+    clock_wire_test.go:643: spot chunk 2: fmt: got 2 want 3
+--- FAIL: TestClockWireWriter (0.00s)
+=== RUN   TestClockWireReader
+    check.go:29: TASK_GROUP_DONE TestClockWireReader checks=153
+--- PASS: TestClockWireReader (0.00s)
+=== RUN   TestClockWireAck
+    check.go:29: TASK_GROUP_DONE TestClockWireAck checks=92
+--- PASS: TestClockWireAck (0.00s)
+FAIL
+FAIL	github.com/bluenviron/gortmplib/pkg/rawmessage	0.084s
+FAIL

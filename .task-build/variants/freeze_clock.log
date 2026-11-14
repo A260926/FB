@@ -1,0 +1,18 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestClockWireWriter
+    check.go:29: TASK_GROUP_DONE TestClockWireWriter checks=365
+--- PASS: TestClockWireWriter (0.00s)
+=== RUN   TestClockWireReader
+    clock_wire_test.go:756: whole supply: message 4: timestamp: got 540ms want 560 ms
+    clock_wire_test.go:756: whole supply: message 6: timestamp: got 16ms want 48 ms
+    clock_wire_test.go:756: one byte at a time: message 4: timestamp: got 540ms want 560 ms
+    clock_wire_test.go:756: one byte at a time: message 6: timestamp: got 16ms want 48 ms
+    clock_wire_test.go:756: odd short blocks: message 4: timestamp: got 540ms want 560 ms
+    clock_wire_test.go:756: odd short blocks: message 6: timestamp: got 16ms want 48 ms
+--- FAIL: TestClockWireReader (0.00s)
+=== RUN   TestClockWireAck
+    check.go:29: TASK_GROUP_DONE TestClockWireAck checks=92
+--- PASS: TestClockWireAck (0.00s)
+FAIL
+FAIL	github.com/bluenviron/gortmplib/pkg/rawmessage	0.083s
+FAIL

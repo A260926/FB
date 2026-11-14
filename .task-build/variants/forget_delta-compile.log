@@ -1,0 +1,2 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+ok  	github.com/bluenviron/gortmplib/pkg/rawmessage	0.115s [no tests to run]
