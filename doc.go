@@ -27,4 +27,13 @@
 //	session.Delete()
 //	chromeDriver.Stop()
 //
+// Binding legacy, id-less forms:
+//
+// Session.BindFields and WebElement.BindFields build a complete one-to-one
+// plan between field labels and the controls placed to their right. The
+// call only performs lookups, displayed/enabled checks and GetLocation/Size
+// reads (never clicks, key input, scrolling or JavaScript), and returns the
+// bound WebElements in slot order. See FieldSlot, Locator and BindError for
+// the details; README.md contains a full data-entry example.
+//
 package webdriver
