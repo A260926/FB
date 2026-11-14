@@ -58,6 +58,7 @@
 #include "integrators/ao.h"
 #include "integrators/path.h"
 #include "integrators/sppm.h"
+#include "integrators/transientvolpath.h"
 #include "integrators/volpath.h"
 #include "integrators/whitted.h"
 #include "lights/diffuse.h"
@@ -114,6 +115,7 @@
 #include "textures/wrinkled.h"
 #include "media/grid.h"
 #include "media/homogeneous.h"
+#include "transient.h"
 
 #include <map>
 #include <stdio.h>
@@ -182,6 +184,10 @@ struct RenderOptions {
     std::map<std::string, std::vector<std::shared_ptr<Primitive>>> instances;
     std::vector<std::shared_ptr<Primitive>> *currentInstance = nullptr;
     bool haveScatteringMedia = false;
+    // Transient-only bookkeeping.
+    bool animatedGeometry = false;
+    bool sawBSSRDFMaterial = false;
+    bool sawNonHomogeneousMedium = false;
 };
 
 // MaterialInstance represents both an instance of a material as well as
@@ -600,6 +606,10 @@ std::shared_ptr<Material> MakeMaterial(const std::string &name,
             "Use \"path\" or \"volpath\".",
             name.c_str(), renderOptions->IntegratorName.c_str());
 
+    if ((name == "subsurface" || name == "kdsubsurface") &&
+        renderOptions->IntegratorName == "transientvolpath")
+        renderOptions->sawBSSRDFMaterial = true;
+
     mp.ReportUnused();
     if (!material) Error("Unable to create material \"%s\"", name.c_str());
     else ++nMaterialsCreated;
@@ -696,8 +706,20 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
     sig_s = paramSet.FindOneSpectrum("sigma_s", sig_s) * scale;
     Medium *m = NULL;
     if (name == "homogeneous") {
-        m = new HomogeneousMedium(sig_a, sig_s, g);
+        // Group (propagation) index for transient flight times.  It is
+        // distinct from the phase IOR "eta" of surface BSDFs.
+        Float groupIndex = paramSet.FindOneFloat("groupindex", 1.f);
+        if (!std::isfinite(groupIndex) || groupIndex < 1.f) {
+            Error("Medium \"groupindex\" must be finite and at least 1; got "
+                  "%g.", groupIndex);
+            MarkTransientConstructionError();
+            return NULL;
+        }
+        m = new HomogeneousMedium(sig_a, sig_s, g, groupIndex);
     } else if (name == "heterogeneous") {
+        if (renderOptions &&
+            renderOptions->IntegratorName == "transientvolpath")
+            renderOptions->sawNonHomogeneousMedium = true;
         int nitems;
         const Float *data = paramSet.FindFloat("density", &nitems);
         if (!data) {
@@ -731,6 +753,9 @@ std::shared_ptr<Light> MakeLight(const std::string &name,
                                  const Transform &light2world,
                                  const MediumInterface &mediumInterface) {
     std::shared_ptr<Light> light;
+    const bool transient =
+        renderOptions &&
+        renderOptions->IntegratorName == "transientvolpath";
     if (name == "point")
         light =
             CreatePointLight(light2world, mediumInterface.outside, paramSet);
@@ -748,6 +773,14 @@ std::shared_ptr<Light> MakeLight(const std::string &name,
         light = CreateInfiniteLight(light2world, paramSet);
     else
         Warning("Light \"%s\" unknown.", name.c_str());
+    if (transient && light &&
+        !dynamic_cast<PointLight *>(light.get())) {
+        Error("transientvolpath only supports finite PointLight and constant "
+              "DiffuseAreaLight sources; LightSource \"%s\" is rejected.",
+              name.c_str());
+        MarkTransientConstructionError();
+        return nullptr;
+    }
     paramSet.ReportUnused();
     return light;
 }
@@ -861,6 +894,8 @@ Film *MakeFilm(const std::string &name, const ParamSet &paramSet,
     Film *film = nullptr;
     if (name == "image")
         film = CreateFilm(paramSet, std::move(filter));
+    else if (name == "transient")
+        film = CreateTransientFilm(paramSet, std::move(filter));
     else
         Warning("Film \"%s\" unknown.", name.c_str());
     paramSet.ReportUnused();
@@ -875,6 +910,8 @@ void pbrtInit(const Options &opt) {
         Error("pbrtInit() has already been called.");
     currentApiState = APIState::OptionsBlock;
     renderOptions.reset(new RenderOptions);
+    // A fresh API session must not inherit a construction failure flag.
+    ConsumeTransientConstructionError();
     graphicsState = GraphicsState();
     catIndentCount = 0;
 
@@ -1302,11 +1339,17 @@ void pbrtNamedMaterial(const std::string &name) {
 void pbrtLightSource(const std::string &name, const ParamSet &params) {
     VERIFY_WORLD("LightSource");
     WARN_IF_ANIMATED_TRANSFORM("LightSource");
+    if (renderOptions->IntegratorName == "transientvolpath" &&
+        curTransform.IsAnimated())
+        renderOptions->animatedGeometry = true;
     MediumInterface mi = graphicsState.CreateMediumInterface();
     std::shared_ptr<Light> lt = MakeLight(name, params, curTransform[0], mi);
-    if (!lt)
-        Error("LightSource: light type \"%s\" unknown.", name.c_str());
-    else
+    if (!lt) {
+        if (!TransientConstructionErrorOccurred())
+            Error("LightSource: light type \"%s\" unknown.", name.c_str());
+        // Otherwise the specific construction Error() (e.g. an invalid
+        // pulse) was already reported; rendering will be aborted.
+    } else
         renderOptions->lights.push_back(lt);
     if (PbrtOptions.cat || PbrtOptions.toPly) {
         printf("%*sLightSource \"%s\" ", catIndentCount, "", name.c_str());
@@ -1363,6 +1406,8 @@ void pbrtShape(const std::string &name, const ParamSet &params) {
         }
     } else {
         // Initialize _prims_ and _areaLights_ for animated shape
+        if (renderOptions->IntegratorName == "transientvolpath")
+            renderOptions->animatedGeometry = true;
 
         // Create initial shape or shapes for animated shape
         if (graphicsState.areaLight != "")
@@ -1582,6 +1627,9 @@ void pbrtObjectInstance(const std::string &name) {
     AnimatedTransform animatedInstanceToWorld(
         InstanceToWorld[0], renderOptions->transformStartTime,
         InstanceToWorld[1], renderOptions->transformEndTime);
+    if (renderOptions->IntegratorName == "transientvolpath" &&
+        animatedInstanceToWorld.IsActuallyAnimated())
+        renderOptions->animatedGeometry = true;
     std::shared_ptr<Primitive> prim(
         std::make_shared<TransformedPrimitive>(in[0], animatedInstanceToWorld));
     renderOptions->primitives.push_back(prim);
@@ -1630,6 +1678,8 @@ void pbrtWorldEnd() {
     ImageTexture<Float, Float>::ClearCache();
     ImageTexture<RGBSpectrum, Spectrum>::ClearCache();
     renderOptions.reset(new RenderOptions);
+    // Reset the per-scene construction failure flag for the next WorldEnd.
+    ConsumeTransientConstructionError();
 
     if (!PbrtOptions.cat && !PbrtOptions.toPly) {
         MergeWorkerThreadStats();
@@ -1674,6 +1724,23 @@ Integrator *RenderOptions::MakeIntegrator() const {
     }
 
     Integrator *integrator = nullptr;
+    const bool transientMode = IntegratorName == "transientvolpath";
+
+    // Enforce the integrator/film pairing before any construction result is
+    // used: a transient integrator needs a transient film, and the steady
+    // integrators must never be handed one.
+    if (transientMode && !camera->film->IsTransient()) {
+        Error("Integrator \"transientvolpath\" requires Film \"transient\"; "
+              "the current film is not a transient film.");
+        return nullptr;
+    }
+    if (!transientMode && camera->film->IsTransient()) {
+        Error("Film \"transient\" can only be used with Integrator "
+              "\"transientvolpath\"; integrator \"%s\" is rejected.",
+              IntegratorName.c_str());
+        return nullptr;
+    }
+
     if (IntegratorName == "whitted")
         integrator = CreateWhittedIntegrator(IntegratorParams, sampler, camera);
     else if (IntegratorName == "directlighting")
@@ -1683,7 +1750,33 @@ Integrator *RenderOptions::MakeIntegrator() const {
         integrator = CreatePathIntegrator(IntegratorParams, sampler, camera);
     else if (IntegratorName == "volpath")
         integrator = CreateVolPathIntegrator(IntegratorParams, sampler, camera);
-    else if (IntegratorName == "bdpt") {
+    else if (IntegratorName == "transientvolpath") {
+        // Transient-only scene restrictions, reported before rendering so a
+        // rejected scene never produces partial output.
+        bool ok = !ConsumeTransientConstructionError();
+        if (camera->CameraToWorld.IsActuallyAnimated()) {
+            Error("transientvolpath rejects animated (motion) camera "
+                  "transforms; the scene must be static.");
+            ok = false;
+        }
+        if (animatedGeometry) {
+            Error("transientvolpath rejects animated (motion) geometry "
+                  "transforms; the scene must be static.");
+            ok = false;
+        }
+        if (sawBSSRDFMaterial) {
+            Error("transientvolpath rejects BSSRDF/subsurface materials.");
+            ok = false;
+        }
+        if (sawNonHomogeneousMedium) {
+            Error("transientvolpath rejects non-homogeneous media; only "
+                  "HomogeneousMedium and vacuum are supported.");
+            ok = false;
+        }
+        integrator = CreateTransientVolPathIntegrator(
+            IntegratorParams, sampler, camera, ok);
+        if (!ok) return nullptr;
+    } else if (IntegratorName == "bdpt") {
         integrator = CreateBDPTIntegrator(IntegratorParams, sampler, camera);
     } else if (IntegratorName == "mlt") {
         integrator = CreateMLTIntegrator(IntegratorParams, camera);

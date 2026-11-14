@@ -424,6 +424,9 @@ class AnimatedTransform {
     bool HasScale() const {
         return startTransform->HasScale() || endTransform->HasScale();
     }
+    // True when the start and end transforms differ, i.e. the object or
+    // camera really carries motion.  Transient rendering rejects motion.
+    bool IsActuallyAnimated() const { return actuallyAnimated; }
     Bounds3f MotionBounds(const Bounds3f &b) const;
     Bounds3f BoundPointMotion(const Point3f &p) const;
 

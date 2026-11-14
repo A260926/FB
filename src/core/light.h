@@ -42,6 +42,7 @@
 #include "pbrt.h"
 #include "memory.h"
 #include "interaction.h"
+#include "transient.h"
 
 namespace pbrt {
 
@@ -82,6 +83,11 @@ class Light {
     const int flags;
     const int nSamples;
     const MediumInterface mediumInterface;
+
+    // Temporal emission pulse used by transient rendering.  Null for
+    // steady-state lights.  When set, the pulse is normalized to unit
+    // integral so the light's I / L remains the full-pulse energy.
+    std::shared_ptr<TemporalPulse> pulse;
 
   protected:
     // Light Protected Data

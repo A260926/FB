@@ -48,18 +48,30 @@ class HomogeneousMedium : public Medium {
   public:
     // HomogeneousMedium Public Methods
     HomogeneousMedium(const Spectrum &sigma_a, const Spectrum &sigma_s, Float g)
+        : HomogeneousMedium(sigma_a, sigma_s, g, 1.f) {}
+    HomogeneousMedium(const Spectrum &sigma_a, const Spectrum &sigma_s, Float g,
+                      Float groupIndex)
         : sigma_a(sigma_a),
           sigma_s(sigma_s),
           sigma_t(sigma_s + sigma_a),
-          g(g) {}
+          g(g),
+          groupIndex(groupIndex) {}
     Spectrum Tr(const Ray &ray, Sampler &sampler) const;
     Spectrum Sample(const Ray &ray, Sampler &sampler, MemoryArena &arena,
                     MediumInteraction *mi) const;
+
+    // Group refractive index of the medium.  This is the propagation-speed
+    // index used for transient flight times (group velocity c / groupIndex)
+    // and is intentionally separate from the phase (wave) IOR "eta" used by
+    // surface BSDFs.  Vacuum is represented by the absence of a medium and
+    // implicitly has group index one.
+    Float GroupIndex() const { return groupIndex; }
 
   private:
     // HomogeneousMedium Private Data
     const Spectrum sigma_a, sigma_s, sigma_t;
     const Float g;
+    const Float groupIndex;
 };
 
 }  // namespace pbrt

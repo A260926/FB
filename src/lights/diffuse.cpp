@@ -36,20 +36,21 @@
 #include "sampling.h"
 #include "shapes/triangle.h"
 #include "stats.h"
+#include "transient.h"
 
 namespace pbrt {
 
 // DiffuseAreaLight Method Definitions
-DiffuseAreaLight::DiffuseAreaLight(const Transform &LightToWorld,
-                                   const MediumInterface &mediumInterface,
-                                   const Spectrum &Lemit, int nSamples,
-                                   const std::shared_ptr<Shape> &shape,
-                                   bool twoSided)
+DiffuseAreaLight::DiffuseAreaLight(
+    const Transform &LightToWorld, const MediumInterface &mediumInterface,
+    const Spectrum &Lemit, int nSamples, const std::shared_ptr<Shape> &shape,
+    bool twoSided, std::shared_ptr<TemporalPulse> temporalPulse)
     : AreaLight(LightToWorld, mediumInterface, nSamples),
       Lemit(Lemit),
       shape(shape),
       twoSided(twoSided),
       area(shape->Area()) {
+    pulse = std::move(temporalPulse);
     // Warn if light has transformation with non-uniform scale, though not
     // for Triangles, since this doesn't matter for them.
     if (WorldToLight.HasScale() &&
@@ -141,8 +142,13 @@ std::shared_ptr<AreaLight> CreateDiffuseAreaLight(
                                        paramSet.FindOneInt("nsamples", 1));
     bool twoSided = paramSet.FindOneBool("twosided", false);
     if (PbrtOptions.quickRender) nSamples = std::max(1, nSamples / 4);
+    std::shared_ptr<TemporalPulse> pulse = CreateTemporalPulse(paramSet);
+    if (!pulse) {
+        MarkTransientConstructionError();
+        return nullptr;
+    }
     return std::make_shared<DiffuseAreaLight>(light2world, medium, L * sc,
-                                              nSamples, shape, twoSided);
+                                              nSamples, shape, twoSided, pulse);
 }
 
 }  // namespace pbrt

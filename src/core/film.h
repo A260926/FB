@@ -45,6 +45,7 @@
 #include "filter.h"
 #include "stats.h"
 #include "parallel.h"
+#include <array>
 
 namespace pbrt {
 
@@ -54,6 +55,8 @@ struct FilmTilePixel {
     Float filterWeightSum = 0.f;
 };
 
+struct TimedContribution;
+
 // Film Declarations
 class Film {
   public:
@@ -62,14 +65,22 @@ class Film {
          std::unique_ptr<Filter> filter, Float diagonal,
          const std::string &filename, Float scale,
          Float maxSampleLuminance = Infinity);
+    virtual ~Film() = default;
     Bounds2i GetSampleBounds() const;
     Bounds2f GetPhysicalExtent() const;
-    std::unique_ptr<FilmTile> GetFilmTile(const Bounds2i &sampleBounds);
-    void MergeFilmTile(std::unique_ptr<FilmTile> tile);
+    virtual std::unique_ptr<FilmTile> GetFilmTile(
+        const Bounds2i &sampleBounds);
+    virtual void MergeFilmTile(std::unique_ptr<FilmTile> tile);
     void SetImage(const Spectrum *img) const;
     void AddSplat(const Point2f &p, Spectrum v);
-    void WriteImage(Float splatScale = 1);
-    void Clear();
+    virtual void WriteImage(Float splatScale = 1);
+    virtual void Clear();
+
+    // Transient film hook.  The steady-state image film has no time bins
+    // and returns an empty vector; TransientFilm overrides this.
+    virtual std::vector<std::array<double, 3>> GetTransientRGB(
+        const Point2i &p) const;
+    virtual bool IsTransient() const { return false; }
 
     // Film Public Data
     const Point2i fullResolution;
@@ -94,6 +105,15 @@ class Film {
     const Float scale;
     const Float maxSampleLuminance;
 
+  protected:
+    // Accessors for the TransientFilm subclass, which reuses the same
+    // spatial filter table and merge synchronization.
+    static int FilterTableWidthValue() { return filterTableWidth; }
+    const Float *FilterTableValues() const { return filterTable; }
+    std::mutex &FilmMutex() { return mutex; }
+    Float FilmScale() const { return scale; }
+
+  private:
     // Film Private Methods
     Pixel &GetPixel(const Point2i &p) {
         CHECK(InsideExclusive(p, croppedPixelBounds));
@@ -118,8 +138,9 @@ class FilmTile {
           maxSampleLuminance(maxSampleLuminance) {
         pixels = std::vector<FilmTilePixel>(std::max(0, pixelBounds.Area()));
     }
-    void AddSample(const Point2f &pFilm, Spectrum L,
-                   Float sampleWeight = 1.) {
+    virtual ~FilmTile() = default;
+    virtual void AddSample(const Point2f &pFilm, Spectrum L,
+                           Float sampleWeight = 1.) {
         ProfilePhase _(Prof::AddFilmSample);
         if (L.y() > maxSampleLuminance)
             L *= maxSampleLuminance / L.y();
@@ -159,6 +180,13 @@ class FilmTile {
             }
         }
     }
+    // Transient hook.  Only TransientFilmTile overrides this; a steady
+    // FilmTile must never receive timed contributions (the pairing is
+    // enforced when the integrator is created).
+    virtual void AddTransientSample(
+        const Point2f &pFilm,
+        const std::vector<struct TimedContribution> &contributions,
+        Float rayWeight);
     FilmTilePixel &GetPixel(const Point2i &p) {
         CHECK(InsideExclusive(p, pixelBounds));
         int width = pixelBounds.pMax.x - pixelBounds.pMin.x;
@@ -174,6 +202,19 @@ class FilmTile {
         return pixels[offset];
     }
     Bounds2i GetPixelBounds() const { return pixelBounds; }
+
+  protected:
+    // Accessors used by the transient film tile subclass to reuse the same
+    // spatial filtering without touching private storage.
+    const Vector2f &TileFilterRadius() const { return filterRadius; }
+    const Vector2f &TileInvFilterRadius() const { return invFilterRadius; }
+    const Float *TileFilterTable() const { return filterTable; }
+    int TileFilterTableSize() const { return filterTableSize; }
+    int TilePixelOffset(const Point2i &p) const {
+        int width = pixelBounds.pMax.x - pixelBounds.pMin.x;
+        return (p.x - pixelBounds.pMin.x) +
+               (p.y - pixelBounds.pMin.y) * width;
+    }
 
   private:
     // FilmTile Private Data

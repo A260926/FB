@@ -98,6 +98,10 @@ class SamplerIntegrator : public Integrator {
   protected:
     // SamplerIntegrator Protected Data
     std::shared_ptr<const Camera> camera;
+    // Accessors for subclasses (e.g. the transient integrator) that run
+    // their own tile render loop.
+    Sampler &GetSampler() const { return *sampler; }
+    const Bounds2i &GetPixelBounds() const { return pixelBounds; }
 
   private:
     // SamplerIntegrator Private Data

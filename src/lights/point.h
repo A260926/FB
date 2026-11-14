@@ -42,6 +42,7 @@
 #include "pbrt.h"
 #include "light.h"
 #include "shape.h"
+#include "transient.h"
 
 namespace pbrt {
 
@@ -51,9 +52,15 @@ class PointLight : public Light {
     // PointLight Public Methods
     PointLight(const Transform &LightToWorld,
                const MediumInterface &mediumInterface, const Spectrum &I)
+        : PointLight(LightToWorld, mediumInterface, I, nullptr) {}
+    PointLight(const Transform &LightToWorld,
+               const MediumInterface &mediumInterface, const Spectrum &I,
+               std::shared_ptr<TemporalPulse> temporalPulse)
         : Light((int)LightFlags::DeltaPosition, LightToWorld, mediumInterface),
           pLight(LightToWorld(Point3f(0, 0, 0))),
-          I(I) {}
+          I(I) {
+        pulse = std::move(temporalPulse);
+    }
     Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
                        Float *pdf, VisibilityTester *vis) const;
     Spectrum Power() const;

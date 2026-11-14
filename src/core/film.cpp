@@ -36,10 +36,24 @@
 #include "paramset.h"
 #include "imageio.h"
 #include "stats.h"
+#include "transient.h"
+#include <array>
 
 namespace pbrt {
 
 STAT_MEMORY_COUNTER("Memory/Film pixels", filmPixelMemory);
+
+std::vector<std::array<double, 3>> Film::GetTransientRGB(
+    const Point2i &) const {
+    // The steady-state image film has no time bins.
+    return {};
+}
+
+void FilmTile::AddTransientSample(
+    const Point2f &, const std::vector<TimedContribution> &, Float) {
+    Error("Timed contributions were given to a non-transient film tile; "
+          "the transientvolpath integrator requires a Film \"transient\".");
+}
 
 // Film Method Definitions
 Film::Film(const Point2i &resolution, const Bounds2f &cropWindow,
