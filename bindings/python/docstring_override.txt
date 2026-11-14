@@ -1,0 +1,27 @@
+cross_section__warp__warp_func:
+  Move the vertices of this CrossSection (creating a new one) according to
+  any arbitrary input function, followed by a union operation (with a
+  Positive fill rule) that ensures any introduced intersections are not
+  included in the result.
+  :param warp_func: A function that takes the original vertex position and
+  return the new position.
+cross_section__warp_batch__warp_func:
+  Same as CrossSection::warp but calls warpFunc with
+  an ndarray[n, 2] instead of processing only one vertex at a time.
+  :param warp_func: A function that takes multiple vertex positions as an
+  ndarray[n, 2] and returns the new vertex positions. The result should have the
+  same shape as the input.
+manifold__warp__warp_func:
+  This function does not change the topology, but allows the vertices to be
+  moved according to any arbitrary input function. It is easy to create a
+  function that warps a geometrically valid object into one which overlaps, but
+  that is not checked here, so it is up to the user to choose their function
+  with discretion.
+  :param warp_func: A function that takes the original vertex position and
+  return the new position.
+manifold__warp_batch__warp_func:
+  Same as Manifold::warp but calls warpFunc with with
+  an ndarray[n, 3] instead of processing only one vertex at a time.
+  :param warp_func: A function that takes multiple vertex positions as an
+  ndarray[n, 3] and returns the new vertex positions. The result should have the
+  same shape as the input.

@@ -1,0 +1,106 @@
+name: build_wheels
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Released tag to add files to, e.g. v3.5.3.'
+      publish:
+        description: 'Upload to PyPI. Only allowed for an already-released tag.'
+        type: boolean
+        default: false
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-15-intel: x86-64
+        # macos-15: arm64
+        os: [ubuntu-22.04, ubuntu-22.04-arm, windows-2025, windows-11-arm, macos-15-intel, macos-15]
+    steps:
+      - run: |
+          git config --global submodule.fetchJobs 8
+          git config --global core.longpaths true
+      - if: matrix.os == 'macos-15'
+        run: echo "CIBW_ARCHS=arm64 universal2" >> "$GITHUB_ENV"
+      - if: matrix.os == 'windows-11-arm'
+        # NumPy has no Windows Arm wheels for these, so the tests can't run.
+        run: echo "CIBW_SKIP=cp39-win_arm64 cp310-win_arm64" >> $env:GITHUB_ENV
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v4.3
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  make_sdist:
+    name: Make SDist
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.tag || github.sha }}
+    - name: Build SDist
+      run: pipx run build --sdist
+    - name: Confirm SDist can be built
+      run: |
+        # FIXME: why doesn't scikit_build_core automatically download ninja?
+        sudo apt-get update
+        sudo apt-get install ninja-build libtbb-dev
+        pip wheel dist/*.tar.gz
+    - uses: actions/upload-artifact@v7
+      with:
+        name: python-sdist
+        path: dist/*.tar.gz
+
+  pypi-publish:
+    name: Upload release to PyPI
+    needs: [build_wheels, make_sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/manifold3d
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read  # checkout, and the release lookup below
+    # A release creates a version. A dispatch can only add files to one that
+    # already exists, which the next step enforces.
+    if: ${{ github.event_name == 'release' || inputs.publish }}
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.tag || github.sha }}
+    - name: Check the tag is an already-published release
+      if: github.event_name == 'workflow_dispatch'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        if [ -z "$TAG" ]; then
+          echo "Set the tag input to the release being backfilled, e.g. v3.5.3"
+          exit 1
+        fi
+        gh release view "$TAG" --json tagName > /dev/null
+        version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+        if [ "v$version" != "$TAG" ]; then
+          echo "pyproject.toml says $version but the tag is $TAG"
+          exit 1
+        fi
+    - uses: actions/download-artifact@v8
+      with:
+        pattern: python-*
+        merge-multiple: true
+        path: dist
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        # Never replaces anything already on PyPI, and makes a publish that died
+        # partway through re-runnable.
+        skip-existing: true
