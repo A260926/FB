@@ -120,6 +120,7 @@ build-*
 
 # CMake build files
 build/
+.task-build/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
