@@ -69,13 +69,58 @@ func (e *Expression) EncodeBinary(w io.Writer) error {
 		}
 		_, err = w.Write([]byte{byte(0x00)})
 		return err
-	} else if e.Opcode == InstrToOpcode["block"] ||
-		e.Opcode == InstrToOpcode["if"] ||
-		e.Opcode == InstrToOpcode["loop"] {
-		_, err := w.Write([]byte{byte(e.Opcode), byte(e.Result)})
+	} else if e.Opcode == InstrToOpcode["try_table"] {
+		_, err := w.Write([]byte{byte(e.Opcode)})
 		if err != nil {
 			return err
 		}
+		_, err = w.Write(e.BlockTypeBytes())
+		if err != nil {
+			return err
+		}
+		err = encoding.WriteUvarint(w, uint64(len(e.Catches)))
+		if err != nil {
+			return err
+		}
+		for _, c := range e.Catches {
+			_, err = w.Write([]byte{byte(c.Kind)})
+			if err != nil {
+				return err
+			}
+			switch c.Kind {
+			case CatchTag, CatchTagRef:
+				err = encoding.WriteUvarint(w, uint64(c.TagIndex))
+				if err != nil {
+					return err
+				}
+				err = encoding.WriteUvarint(w, uint64(c.LabelIndex))
+				if err != nil {
+					return err
+				}
+			case CatchAll, CatchAllRef:
+				err = encoding.WriteUvarint(w, uint64(c.LabelIndex))
+				if err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("Unsupported try_table catch kind %d", c.Kind)
+			}
+		}
+		return nil
+	} else if e.Opcode == InstrToOpcode["throw"] {
+		_, err := w.Write([]byte{byte(e.Opcode)})
+		if err != nil {
+			return err
+		}
+		return encoding.WriteUvarint(w, uint64(e.TagIndex))
+	} else if e.Opcode == InstrToOpcode["block"] ||
+		e.Opcode == InstrToOpcode["if"] ||
+		e.Opcode == InstrToOpcode["loop"] {
+		_, err := w.Write([]byte{byte(e.Opcode)})
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(e.BlockTypeBytes())
 		return err
 	} else if e.Opcode == InstrToOpcode["i32.const"] {
 		_, err := w.Write([]byte{byte(e.Opcode)})

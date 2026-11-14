@@ -38,6 +38,13 @@ type WasmFile struct {
 	Data     []*DataEntry
 	Elem     []*ElemEntry
 
+	// Tag holds the defined tag section entries (section 13).
+	Tag []*TagEntry
+
+	// TagImport holds imported tags (import kind 4). They are kept separate
+	// from Import so that tag imports cannot consume the function index prefix.
+	TagImport []*ImportEntry
+
 	Debug *debug.WasmDebug
 }
 
@@ -74,6 +81,13 @@ type ImportEntry struct {
 	Name   string
 	Type   types.ExportType
 	Index  int
+}
+
+// TagEntry is one tag declaration. Attribute is the tag attribute byte
+// (currently always zero); TypeIndex refers to the shared type section.
+type TagEntry struct {
+	Attribute byte
+	TypeIndex int
 }
 
 // TableEntry
@@ -134,11 +148,25 @@ func (wf *WasmFile) GetCustomSectionData(name string) []byte {
 	return nil
 }
 
+// FunctionImportCount returns the number of imported functions. Only function
+// imports form the function index prefix; imported tags and other import kinds
+// do not shift it.
+func (wf *WasmFile) FunctionImportCount() int {
+	n := 0
+	for _, i := range wf.Import {
+		if i.Type == types.ExportFunc {
+			n++
+		}
+	}
+	return n
+}
+
 func (wf *WasmFile) FindFunction(pc uint64) int {
+	prefix := wf.FunctionImportCount()
 	for index, c := range wf.Code {
 
 		if c.PCValid && pc >= c.CodeSectionPtr && pc <= (c.CodeSectionPtr+c.CodeSectionLen) {
-			return len(wf.Import) + index
+			return prefix + index
 		}
 	}
 	return -1

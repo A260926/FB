@@ -83,6 +83,22 @@ func (wf *WasmFile) EncodeWat(w io.Writer) error {
 			return err
 		}
 	}
+	for _, t := range wf.TagImport {
+		edata := fmt.Sprintf("    (import \"%s\" \"%s\" (tag (type %d)))\n", t.Module, t.Name, t.Index)
+		_, err = wr.WriteString(edata)
+		if err != nil {
+			return err
+		}
+	}
+
+	// #### Write out Tag
+	for _, t := range wf.Tag {
+		edata := fmt.Sprintf("    (tag (type %d))\n", t.TypeIndex)
+		_, err = wr.WriteString(edata)
+		if err != nil {
+			return err
+		}
+	}
 
 	// #### Write out Global
 	for index, g := range wf.Global {

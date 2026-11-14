@@ -85,12 +85,39 @@ func (e *Expression) EncodeWat(w io.Writer, prefix string, wd WasmDebugContext) 
 		e.Opcode == InstrToOpcode["loop"] {
 
 		result := ""
-		if e.Result != types.ValNone {
+		if e.BlockTypeIsIndex {
+			result = fmt.Sprintf(" (type %d)", e.BlockTypeIndex)
+		} else if e.Result != types.ValNone {
 			result = fmt.Sprintf(" (result %s)", types.ByteToValType[e.Result])
 		}
 
 		_, err := wr.WriteString(fmt.Sprintf("%s%s%s%s\n", prefix, opcodeToInstr[e.Opcode], result, comment))
 
+		return err
+	} else if e.Opcode == InstrToOpcode["try_table"] {
+		result := ""
+		if e.BlockTypeIsIndex {
+			result = fmt.Sprintf(" (type %d)", e.BlockTypeIndex)
+		} else if e.Result != types.ValNone {
+			result = fmt.Sprintf(" (result %s)", types.ByteToValType[e.Result])
+		}
+		catches := ""
+		for _, c := range e.Catches {
+			switch c.Kind {
+			case CatchTag:
+				catches = fmt.Sprintf("%s (catch %d %d)", catches, c.TagIndex, c.LabelIndex)
+			case CatchTagRef:
+				catches = fmt.Sprintf("%s (catch_ref %d %d)", catches, c.TagIndex, c.LabelIndex)
+			case CatchAll:
+				catches = fmt.Sprintf("%s (catch_all %d)", catches, c.LabelIndex)
+			case CatchAllRef:
+				catches = fmt.Sprintf("%s (catch_all_ref %d)", catches, c.LabelIndex)
+			}
+		}
+		_, err := wr.WriteString(fmt.Sprintf("%s%s%s%s%s\n", prefix, opcodeToInstr[e.Opcode], result, catches, comment))
+		return err
+	} else if e.Opcode == InstrToOpcode["throw"] {
+		_, err := wr.WriteString(fmt.Sprintf("%s%s %d%s\n", prefix, opcodeToInstr[e.Opcode], e.TagIndex, comment))
 		return err
 	} else if e.Opcode == InstrToOpcode["i32.const"] {
 		value := fmt.Sprintf(" %d", e.I32Value)

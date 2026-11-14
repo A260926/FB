@@ -130,6 +130,8 @@ func (wf *WasmFile) DecodeBinary(data []byte) (err error) {
 			err = wf.ParseSectionData(sectionData)
 		} else if sectionType == byte(types.SectionDataCount) {
 			err = wf.ParseSectionDataCount(sectionData)
+		} else if sectionType == byte(types.SectionTag) {
+			err = wf.ParseSectionTag(sectionData)
 		} else {
 			return fmt.Errorf("Unknown section %d", sectionType)
 		}
@@ -159,6 +161,40 @@ func getDataContext(data []byte) []byte {
 		l = 16
 	}
 	return data[:l]
+}
+
+/**
+ * Parse a Tag section (section 13)
+ *
+ */
+func (wf *WasmFile) ParseSectionTag(data []byte) error {
+	ptr := 0
+	tagVecLength, l := binary.Uvarint(data)
+	if l <= 0 {
+		return fmt.Errorf("Error decoding SectionTag tagVecLength %x", getDataContext(data))
+	}
+	ptr += l
+
+	for i := 0; i < int(tagVecLength); i++ {
+		if ptr >= len(data) {
+			return fmt.Errorf("Error decoding SectionTag truncated at tag %d", i)
+		}
+		attribute := data[ptr]
+		ptr++
+		if attribute != 0 {
+			return fmt.Errorf("Unsupported tag attribute %d at tag %d", attribute, i)
+		}
+		typeIndex, l := binary.Uvarint(data[ptr:])
+		if l <= 0 {
+			return fmt.Errorf("Error decoding SectionTag typeIndex %x", getDataContext(data[ptr:]))
+		}
+		ptr += l
+		wf.Tag = append(wf.Tag, &TagEntry{
+			Attribute: attribute,
+			TypeIndex: int(typeIndex),
+		})
+	}
+	return nil
 }
 
 /**
@@ -256,7 +292,7 @@ func (wf *WasmFile) ParseSectionCode(data []byte) error {
 
 		expression, _, err := expression.NewExpression(code[locptr:], codeptr+uint64(locptr))
 		if err != nil {
-			return err
+			return fmt.Errorf("Error decoding function %d: %w", wf.FunctionImportCount()+len(wf.Code), err)
 		}
 
 		c := &CodeEntry{
@@ -314,28 +350,66 @@ func (wf *WasmFile) ParseSectionElem(data []byte) error {
 func (wf *WasmFile) ParseSectionImport(data []byte) error {
 	ptr := 0
 	importVecLength, l := binary.Uvarint(data)
+	if l <= 0 {
+		return fmt.Errorf("Error decoding SectionImport importVecLength %x", getDataContext(data))
+	}
 	ptr += l
 
 	for i := 0; i < int(importVecLength); i++ {
+		if ptr >= len(data) {
+			return fmt.Errorf("Error decoding SectionImport truncated at import %d", i)
+		}
 		modLength, l := binary.Uvarint(data[ptr:])
+		if l <= 0 || ptr+l+int(modLength) > len(data) {
+			return fmt.Errorf("Error decoding SectionImport module at import %d", i)
+		}
 		ptr += l
 		mod := data[ptr : ptr+int(modLength)]
 		ptr += int(modLength)
 		nameLength, l := binary.Uvarint(data[ptr:])
+		if l <= 0 || ptr+l+int(nameLength) > len(data) {
+			return fmt.Errorf("Error decoding SectionImport name at import %d", i)
+		}
 		ptr += l
 		name := data[ptr : ptr+int(nameLength)]
 		ptr += int(nameLength)
+		if ptr >= len(data) {
+			return fmt.Errorf("Error decoding SectionImport kind at import %d", i)
+		}
 		importType := data[ptr]
 		ptr++
+		// A tag import is "tag_type": attribute byte then type index. Other
+		// kinds have a single type/limits/index immediate that this decoder
+		// stores in Index.
+		index := 0
+		if importType == byte(types.ExportTag) {
+			if ptr >= len(data) {
+				return fmt.Errorf("Error decoding SectionImport tag attribute at import %d", i)
+			}
+			if data[ptr] != 0 {
+				return fmt.Errorf("Unsupported tag attribute %d at import %d", data[ptr], i)
+			}
+			ptr++
+		}
 		importIndex, l := binary.Uvarint(data[ptr:])
+		if l <= 0 {
+			return fmt.Errorf("Error decoding SectionImport index at import %d", i)
+		}
 		ptr += l
+		index = int(importIndex)
 		e := &ImportEntry{
 			Module: string(mod),
 			Name:   string(name),
 			Type:   types.ExportType(importType),
-			Index:  int(importIndex),
+			Index:  index,
 		}
-		wf.Import = append(wf.Import, e)
+		if e.Type == types.ExportTag {
+			// Imported tags are tracked separately so they never occupy a
+			// function index in wf.Import.
+			wf.TagImport = append(wf.TagImport, e)
+		} else {
+			wf.Import = append(wf.Import, e)
+		}
 	}
 	return nil
 }

@@ -62,10 +62,16 @@ func (wf *WasmFile) EncodeBinary(w io.Writer) error {
 	}
 
 	// Section Import
-	if len(wf.Import) > 0 {
+	if len(wf.Import) > 0 || len(wf.TagImport) > 0 {
 		var buf bytes.Buffer
-		encoding.WriteUvarint(&buf, uint64(len(wf.Import)))
+		encoding.WriteUvarint(&buf, uint64(len(wf.Import)+len(wf.TagImport)))
 		for _, i := range wf.Import {
+			err = i.EncodeBinary(&buf)
+			if err != nil {
+				return err
+			}
+		}
+		for _, i := range wf.TagImport {
 			err = i.EncodeBinary(&buf)
 			if err != nil {
 				return err
@@ -79,7 +85,6 @@ func (wf *WasmFile) EncodeBinary(w io.Writer) error {
 			return err
 		}
 	}
-
 	// Section Function
 	if len(wf.Function) > 0 {
 		var buf bytes.Buffer
@@ -131,6 +136,22 @@ func (wf *WasmFile) EncodeBinary(w io.Writer) error {
 
 		// Write a single memory section
 		writeSectionHeader(w, byte(types.SectionMemory), buf.Len())
+		_, err = w.Write(buf.Bytes())
+		if err != nil {
+			return err
+		}
+	}
+
+	// Section Tag (section 13, before Globals per the binary format order)
+	if len(wf.Tag) > 0 {
+		var buf bytes.Buffer
+		encoding.WriteUvarint(&buf, uint64(len(wf.Tag)))
+		for _, t := range wf.Tag {
+			buf.WriteByte(t.Attribute)
+			encoding.WriteUvarint(&buf, uint64(t.TypeIndex))
+		}
+
+		writeSectionHeader(w, byte(types.SectionTag), buf.Len())
 		_, err = w.Write(buf.Bytes())
 		if err != nil {
 			return err
@@ -283,6 +304,13 @@ func (ie *ImportEntry) EncodeBinary(w io.Writer) error {
 	_, err = w.Write(exportType)
 	if err != nil {
 		return err
+	}
+	if ie.Type == types.ExportTag {
+		// A tag import is a tagtype: attribute byte zero, then the type index.
+		_, err = w.Write([]byte{0})
+		if err != nil {
+			return err
+		}
 	}
 
 	return encoding.WriteUvarint(w, uint64(ie.Index))

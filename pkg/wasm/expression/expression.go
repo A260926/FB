@@ -17,6 +17,7 @@
 package expression
 
 import (
+	"github.com/loopholelabs/wasm-toolkit/pkg/wasm/encoding"
 	"github.com/loopholelabs/wasm-toolkit/pkg/wasm/types"
 )
 
@@ -69,6 +70,11 @@ var InstrToOpcode = map[string]Opcode{
 	"return":        Opcode(0x0f),
 	"call":          Opcode(0x10),
 	"call_indirect": Opcode(0x11),
+
+	// Exception handling
+	"throw":     Opcode(0x08),
+	"throw_ref": Opcode(0x0a),
+	"try_table": Opcode(0x1f),
 
 	// Parametric
 	"drop":   Opcode(0x1a),
@@ -259,6 +265,23 @@ func init() {
 	}
 }
 
+// CatchKind is the encoding of one try_table catch clause.
+type CatchKind byte
+
+const (
+	CatchTag    CatchKind = 0 // catch <tag> <label>
+	CatchTagRef CatchKind = 1 // catch_ref <tag> <label>
+	CatchAll    CatchKind = 2 // catch_all <label>
+	CatchAllRef CatchKind = 3 // catch_all_ref <label>
+)
+
+// Catch is one clause of a try_table catch vector, in encoded order.
+type Catch struct {
+	Kind       CatchKind
+	TagIndex   int
+	LabelIndex int
+}
+
 type Expression struct {
 	PC          uint64 // Program Counter (This is the byte offset into the Code section)
 	PCNext      uint64
@@ -274,10 +297,16 @@ type Expression struct {
 	LabelIndex  int
 	TypeIndex   int
 	TableIndex  int
+	TagIndex    int
 	Labels      []int
+	Catches     []Catch
 	Result      types.ValType
-	MemAlign    int
-	MemOffset   int
+	// BlockTypeIsIndex is set when a block/loop/if/try_table block type is a
+	// signed LEB33 non-negative type index instead of an empty/single value type.
+	BlockTypeIsIndex bool
+	BlockTypeIndex   int
+	MemAlign         int
+	MemOffset        int
 
 	// This is set if the instruction has as I32Value that needs resolving (offset)
 	DataOffsetNeedsLinking bool
@@ -295,6 +324,15 @@ type Expression struct {
 	// This is set if the instruction refers to a FuncIndex that needs resolving
 	FunctionNeedsLinking bool
 	FunctionId           string
+}
+
+// BlockTypeBytes returns the encoded block type: an empty/single value type
+// byte or a signed LEB33 type index.
+func (e *Expression) BlockTypeBytes() []byte {
+	if e.BlockTypeIsIndex {
+		return encoding.AppendSleb128(make([]byte, 0), int64(e.BlockTypeIndex))
+	}
+	return []byte{byte(e.Result)}
 }
 
 // Returns true if the opcode has no arguments (Simple single Opcode)
@@ -439,7 +477,9 @@ func (e *Expression) HasNoArgs() bool {
 		e.Opcode == InstrToOpcode["i32.extend16_s"] ||
 		e.Opcode == InstrToOpcode["i64.extend8_s"] ||
 		e.Opcode == InstrToOpcode["i64.extend16_s"] ||
-		e.Opcode == InstrToOpcode["i64.extend32_s"]
+		e.Opcode == InstrToOpcode["i64.extend32_s"] ||
+
+		e.Opcode == InstrToOpcode["throw_ref"]
 }
 
 // Returns true if the expression has memory args.
@@ -488,8 +528,23 @@ func (e *Expression) Equals(f *Expression) bool {
 		e.GlobalIndex != f.GlobalIndex ||
 		e.LabelIndex != f.LabelIndex ||
 		e.TypeIndex != f.TypeIndex ||
-		e.TableIndex != f.TableIndex {
+		e.TableIndex != f.TableIndex ||
+		e.TagIndex != f.TagIndex {
 		return false
+	}
+
+	if e.BlockTypeIsIndex != f.BlockTypeIsIndex ||
+		e.BlockTypeIndex != f.BlockTypeIndex {
+		return false
+	}
+
+	if len(e.Catches) != len(f.Catches) {
+		return false
+	}
+	for i, c := range e.Catches {
+		if c != f.Catches[i] {
+			return false
+		}
 	}
 
 	if e.MemAlign != f.MemAlign ||

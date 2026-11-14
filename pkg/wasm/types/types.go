@@ -61,6 +61,7 @@ const (
 	SectionCode      SectionId = 10
 	SectionData      SectionId = 11
 	SectionDataCount SectionId = 12
+	SectionTag       SectionId = 13
 )
 
 const (
@@ -75,6 +76,7 @@ const (
 	ExportTable  ExportType = 1
 	ExportMem    ExportType = 2
 	ExportGlobal ExportType = 3
+	ExportTag    ExportType = 4
 )
 
 const FuncTypePrefix byte = 0x60
