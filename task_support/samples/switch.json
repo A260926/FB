@@ -1,0 +1,153 @@
+{
+  "arch": "x86",
+  "bits": 64,
+  "image": {
+    "base": 4096,
+    "sha256": "297411accdd4c453b69cd5e4c402348cff23482a3a336891e4f360e8c2989b37",
+    "kind": "legal synthetic x86-64 raw image; never execute"
+  },
+  "graph": [
+    {
+      "name": "choose",
+      "blocks": [
+        {
+          "offset": 4096,
+          "jump": 4144,
+          "fail": 4101,
+          "ops": [
+            {
+              "offset": 4096,
+              "opcode": "cmp eax, 2",
+              "bytes": "83f802",
+              "size": 3,
+              "type": "cmp"
+            },
+            {
+              "offset": 4099,
+              "opcode": "ja 0x1030",
+              "bytes": "772b",
+              "size": 2,
+              "type": "cjmp",
+              "jump": 4144
+            }
+          ]
+        },
+        {
+          "offset": 4101,
+          "switchop": {
+            "offset": 4101,
+            "selector": "eax",
+            "defval": 4144,
+            "minval": 0,
+            "maxval": 2,
+            "cases": [
+              {
+                "value": 0,
+                "jump": 4112
+              },
+              {
+                "value": 1,
+                "jump": 4112
+              },
+              {
+                "value": 2,
+                "jump": 4128
+              }
+            ]
+          },
+          "ops": [
+            {
+              "offset": 4101,
+              "opcode": "jmp qword [rax*8 + 0x1100]",
+              "bytes": "ff24c500110000",
+              "size": 7,
+              "type": "ijmp"
+            }
+          ]
+        },
+        {
+          "offset": 4112,
+          "jump": 4160,
+          "ops": [
+            {
+              "offset": 4112,
+              "opcode": "mov eax, 10",
+              "bytes": "b80a000000",
+              "size": 5,
+              "type": "mov"
+            },
+            {
+              "offset": 4117,
+              "opcode": "jmp 0x1040",
+              "bytes": "eb29",
+              "size": 2,
+              "type": "jmp",
+              "jump": 4160
+            }
+          ]
+        },
+        {
+          "offset": 4128,
+          "jump": 4160,
+          "ops": [
+            {
+              "offset": 4128,
+              "opcode": "mov eax, 20",
+              "bytes": "b814000000",
+              "size": 5,
+              "type": "mov"
+            },
+            {
+              "offset": 4133,
+              "opcode": "jmp 0x1040",
+              "bytes": "eb19",
+              "size": 2,
+              "type": "jmp",
+              "jump": 4160
+            }
+          ]
+        },
+        {
+          "offset": 4144,
+          "jump": 4160,
+          "ops": [
+            {
+              "offset": 4144,
+              "opcode": "mov eax, 30",
+              "bytes": "b81e000000",
+              "size": 5,
+              "type": "mov"
+            },
+            {
+              "offset": 4149,
+              "opcode": "jmp 0x1040",
+              "bytes": "eb09",
+              "size": 2,
+              "type": "jmp",
+              "jump": 4160
+            }
+          ]
+        },
+        {
+          "offset": 4160,
+          "ops": [
+            {
+              "offset": 4160,
+              "opcode": "add eax, 1",
+              "bytes": "83c001",
+              "size": 3,
+              "type": "add"
+            },
+            {
+              "offset": 4163,
+              "opcode": "ret",
+              "bytes": "c3",
+              "size": 1,
+              "type": "ret"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
