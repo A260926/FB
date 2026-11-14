@@ -165,7 +165,47 @@ No element found at (0, 0)
 
 LunaSVG supports nearly all graphical features outlined in the SVG 1.1 and SVG 1.2 Tiny specifications. The primary exceptions are animation, filters, and scripts. As LunaSVG is designed for static rendering, animation is unlikely to be supported in the future. However, support for filters may be added. It currently handles a wide variety of elements, including:
 
-`<a>` `<circle>` `<clipPath>` `<defs>` `<ellipse>` `<g>` `<image>` `<line>` `<linearGradient>` `<marker>` `<mask>` `<path>` `<pattern>` `<polygon>` `<polyline>` `<radialGradient>` `<rect>` `<stop>` `<style>` `<svg>` `<symbol>` `<text>` `<tspan>` `<use>`
+`<a>` `<circle>` `<clipPath>` `<defs>` `<ellipse>` `<g>` `<image>` `<line>` `<linearGradient>` `<marker>` `<mask>` `<path>` `<pattern>` `<polygon>` `<polyline>` `<radialGradient>` `<rect>` `<stop>` `<style>` `<svg>` `<symbol>` `<text>` `<textPath>` `<tspan>` `<use>`
+
+### Text on a Path (`<textPath>`)
+
+A single horizontal, left-to-right `<textPath>` can be the sole text subtree of a
+`<text>` element; nested `<tspan>` elements with their own font size, fill and
+stroke are supported. `method="align"` and `spacing="exact"` are used.
+
+- `href` and `xlink:href` both resolve to a `<path>` in the same document. When
+  both are present, `href` wins. External references are not loaded.
+- The referenced path must contain exactly one open subpath built from line,
+  quadratic or cubic segments (arcs are represented as cubic segments after
+  parsing). Zero-length segments are ignored. A path that is entirely zero
+  length, contains multiple subpaths, is closed, or cannot be resolved hides the
+  text on the path; it never falls back to horizontal text and does not affect
+  sibling elements.
+- The path element's own `transform` is applied to its geometry before arc
+  length measurement; ancestor transforms are not. The text element and its own
+  ancestors still transform the positioned glyphs, and the path scale is never
+  folded into the font size.
+- `startOffset` accepts a finite unitless length or a percentage; percentages
+  are relative to the measured path length. Negative values and values above
+  `100%` are valid. Glyphs whose baseline midpoint falls outside `[0, length]`
+  are neither clamped nor drawn, but still participate in the overall length and
+  advance the following glyphs.
+- The layout is resolved on the one-dimensional distance axis first, applying
+  font advances, `letter-spacing`, `word-spacing`, per-`tspan` font sizes and
+  accumulated `dx`. `dy` accumulates along the local downward normal and
+  `rotate` uses the per-character list with the last value continued. Character
+  `x`/`y` lists are not supported in this mode.
+- `text-anchor` (`start`/`middle`/`end`) applies to the whole `<textPath>`.
+  `textLength` on the `<textPath>` supports both `lengthAdjust` values:
+  `spacing` redistributes inter-character gaps, while `spacingAndGlyphs` also
+  scales each glyph's advance and horizontal extent without changing its height.
+- Each glyph stays rigid: it is scaled horizontally, rotated to the path
+  tangent plus its `rotate` value, and placed so its font-space baseline
+  midpoint lands on the sampled path position. Fill, stroke, clipping, opacity
+  groups and bounding boxes all use the same per-glyph positions.
+
+Vertical text, bidirectional text, ligatures, automatic kerning, glyph
+stretching to fit the curve, and external references are not implemented.
 
 ## Installation
 

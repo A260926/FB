@@ -7,6 +7,8 @@
 
 namespace lunasvg {
 
+class SVGTextPathElement;
+
 class SVGTextPositioningElement;
 class SVGTextElement;
 
@@ -142,6 +144,38 @@ public:
     SVGTSpanElement(Document* document);
 };
 
+class SVGTextPathElement final : public SVGTextPositioningElement, public SVGURIReference {
+public:
+    SVGTextPathElement(Document* document);
+
+    bool isTextPathElement() const final { return true; }
+
+    const SVGLength& startOffset() const { return m_startOffset; }
+    SVGElement* targetElement() const;
+
+private:
+    SVGLength m_startOffset;
+};
+
+// One positioned glyph of a text-on-path layout. Distances are measured on
+// the path's one-dimensional arc length axis before placement.
+struct SVGPathGlyph {
+    char32_t character = 0;
+    const SVGTextPositioningElement* element = nullptr;
+    float baseAdvance = 0;   // original font advance u
+    float advance = 0;       // adjusted advance a = k * u
+    float scaleX = 1.f;      // horizontal glyph scale k
+    float start = 0.f;       // start distance s on the length axis
+    float normalOffset = 0.f;// accumulated dy along the downward normal
+    float angle = 0.f;       // additional rotate angle in degrees
+    bool visible = false;    // the glyph midpoint lies on the path
+    Point position;          // sampled baseline midpoint
+    Point tangent;           // sampled unit tangent
+    Transform transform;     // full glyph transform (excludes text ancestors)
+};
+
+using SVGPathGlyphList = std::vector<SVGPathGlyph>;
+
 class SVGTextElement final : public SVGTextPositioningElement {
 public:
     SVGTextElement(Document* document);
@@ -154,8 +188,11 @@ public:
 
 private:
     Rect boundingBox(bool includeStroke) const;
+    void layoutTextPath(const SVGTextPathElement* textPathElement);
     SVGTextFragmentList m_fragments;
+    SVGPathGlyphList m_pathGlyphs;
     std::u32string m_text;
+    bool m_isTextPath = false;
 };
 
 } // namespace lunasvg

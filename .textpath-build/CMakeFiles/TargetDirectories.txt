@@ -1,0 +1,14 @@
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/lunasvg.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/edit_cache.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/rebuild_cache.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/list_install_components.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/install.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/install/local.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/CMakeFiles/install/strip.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/plutovg.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/edit_cache.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/rebuild_cache.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/list_install_components.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/install.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/install/local.dir
+/Users/solo/pro/UserFB/workspace/FS7A70E0F6EE14U5409/attempts/20261114T175936967096Z/repo/.textpath-build/plutovg/CMakeFiles/install/strip.dir

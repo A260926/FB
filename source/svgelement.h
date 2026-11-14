@@ -29,6 +29,7 @@ public:
     virtual bool isGeometryElement() const { return false; }
     virtual bool isTextContentElement() const { return false; }
     virtual bool isTextPositioningElement() const { return false; }
+    virtual bool isTextPathElement() const { return false; }
 
     Document* document() const { return m_document; }
     SVGRootElement* rootElement() const { return m_document->rootElement(); }
@@ -105,6 +106,7 @@ enum class ElementID : uint8_t {
     Svg,
     Symbol,
     Text,
+    TextPath,
     Tspan,
     Use
 };
@@ -272,11 +274,13 @@ public:
     SVGURIReference(SVGElement* element);
 
     const SVGString& href() const { return m_href; }
-    const std::string& hrefString() const { return m_href.value(); }
+    // href takes priority over the legacy xlink:href when both are present.
+    const std::string& hrefString() const;
     SVGElement* getTargetElement(const Document* document) const;
 
 private:
     SVGString m_href;
+    SVGString m_xlinkHref;
 };
 
 class SVGPaintServer {

@@ -67,6 +67,7 @@ enum class PropertyID : uint8_t {
     Rx,
     Ry,
     SpreadMethod,
+    StartOffset,
     Stop_Color,
     Stop_Opacity,
     Stroke,
@@ -91,6 +92,7 @@ enum class PropertyID : uint8_t {
     X,
     X1,
     X2,
+    XLinkHref,
     Y,
     Y1,
     Y2

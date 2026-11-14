@@ -23,6 +23,7 @@ endif()
 set(lunasvg_sources
     source/lunasvg.cpp
     source/graphics.cpp
+    source/pathmeasure.cpp
     source/svgelement.cpp
     source/svggeometryelement.cpp
     source/svglayoutstate.cpp
@@ -36,6 +37,7 @@ set(lunasvg_sources
 set(lunasvg_headers
     include/lunasvg.h
     source/graphics.h
+    source/pathmeasure.h
     source/svgelement.h
     source/svggeometryelement.h
     source/svglayoutstate.h

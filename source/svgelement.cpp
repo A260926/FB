@@ -38,6 +38,7 @@ ElementID elementid(std::string_view name)
         {"svg", ElementID::Svg},
         {"symbol", ElementID::Symbol},
         {"text", ElementID::Text},
+        {"textPath", ElementID::TextPath},
         {"tspan", ElementID::Tspan},
         {"use", ElementID::Use}
     };
@@ -114,6 +115,8 @@ std::unique_ptr<SVGElement> SVGElement::create(Document* document, ElementID id)
         return std::make_unique<SVGStyleElement>(document);
     case ElementID::Text:
         return std::make_unique<SVGTextElement>(document);
+    case ElementID::TextPath:
+        return std::make_unique<SVGTextPathElement>(document);
     case ElementID::Tspan:
         return std::make_unique<SVGTSpanElement>(document);
     default:
@@ -568,13 +571,22 @@ Rect SVGFitToViewBox::getClipRect(const Size& viewportSize) const
 
 SVGURIReference::SVGURIReference(SVGElement* element)
     : m_href(PropertyID::Href)
+    , m_xlinkHref(PropertyID::XLinkHref)
 {
     element->addProperty(m_href);
+    element->addProperty(m_xlinkHref);
+}
+
+const std::string& SVGURIReference::hrefString() const
+{
+    if(!m_href.value().empty())
+        return m_href.value();
+    return m_xlinkHref.value();
 }
 
 SVGElement* SVGURIReference::getTargetElement(const Document* document) const
 {
-    std::string_view value(m_href.value());
+    std::string_view value(hrefString());
     if(value.empty() || value.front() != '#')
         return nullptr;
     return document->rootElement()->getElementById(value.substr(1));
@@ -806,6 +818,7 @@ inline bool isDisallowedElement(const SVGElement* element)
     case ElementID::Svg:
     case ElementID::Symbol:
     case ElementID::Text:
+    case ElementID::TextPath:
     case ElementID::Tspan:
     case ElementID::Use:
         return false;

@@ -14,6 +14,7 @@ plutovg_dep = dependency('plutovg',
 lunasvg_sources = [
     'source/lunasvg.cpp',
     'source/graphics.cpp',
+    'source/pathmeasure.cpp',
     'source/svgelement.cpp',
     'source/svggeometryelement.cpp',
     'source/svgpaintelement.cpp',

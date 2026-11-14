@@ -1,8 +1,11 @@
 #include "svgtextelement.h"
 #include "svglayoutstate.h"
 #include "svgrenderstate.h"
+#include "svggeometryelement.h"
+#include "pathmeasure.h"
 
 #include <cassert>
+#include <cmath>
 
 namespace lunasvg {
 
@@ -515,6 +518,178 @@ SVGTSpanElement::SVGTSpanElement(Document* document)
 {
 }
 
+SVGTextPathElement::SVGTextPathElement(Document* document)
+    : SVGTextPositioningElement(document, ElementID::TextPath)
+    , SVGURIReference(this)
+    , m_startOffset(PropertyID::StartOffset, LengthDirection::Horizontal, LengthNegativeMode::Allow)
+{
+    addProperty(m_startOffset);
+}
+
+SVGElement* SVGTextPathElement::targetElement() const
+{
+    const auto& value = hrefString();
+    if(value.empty() || value.front() != '#')
+        return nullptr;
+    auto element = rootElement()->getElementById(std::string_view(value).substr(1));
+    if(element && element->id() == ElementID::Path)
+        return element;
+    return nullptr;
+}
+
+namespace {
+
+struct PathCharacter {
+    char32_t character;
+    const SVGTextPositioningElement* element;
+};
+
+struct PathCharacterAdjust {
+    float dx = 0.f;
+    float dy = 0.f;
+    float rotate = 0.f;
+    bool hasRotate = false;
+};
+
+// Collects the codepoints of a textPath subtree together with the positioning
+// element that owns each one. Whitespace handling mirrors SVGTextFragmentsBuilder.
+class TextPathCollector {
+public:
+    void walk(const SVGTextPathElement* textPath)
+    {
+        m_textPath = textPath;
+        walkElement(textPath);
+        fillAdjustments(textPath);
+    }
+
+    const std::vector<PathCharacter>& characters() const { return m_characters; }
+    const std::map<size_t, PathCharacterAdjust>& adjustments() const { return m_adjustments; }
+
+private:
+    void walkElement(const SVGTextPositioningElement* element)
+    {
+        m_ranges.emplace_back(element, m_characters.size(), m_characters.size());
+        for(const auto& child : element->children()) {
+            if(child->isTextNode()) {
+                collectText(static_cast<const SVGTextNode*>(child.get()), element);
+            } else if(auto childElement = toSVGElement(child);
+                childElement && childElement->isTextPositioningElement()) {
+                walkElement(static_cast<const SVGTextPositioningElement*>(childElement));
+            }
+        }
+        m_ranges.back().end = m_characters.size();
+    }
+
+    void collectText(const SVGTextNode* node, const SVGTextPositioningElement* element)
+    {
+        const auto& text = node->data();
+        if(text.empty())
+            return;
+        plutovg_text_iterator_t it;
+        plutovg_text_iterator_init(&it, text.data(), text.length(), PLUTOVG_TEXT_ENCODING_UTF8);
+        while(plutovg_text_iterator_has_next(&it)) {
+            auto currentCharacter = plutovg_text_iterator_next(&it);
+            if(currentCharacter == '\t' || currentCharacter == '\n' || currentCharacter == '\r')
+                currentCharacter = ' ';
+            if(currentCharacter == ' ' && m_lastCharacter == ' ' && element->white_space() == WhiteSpace::Default)
+                continue;
+            m_characters.push_back(PathCharacter{static_cast<char32_t>(currentCharacter), element});
+            m_lastCharacter = currentCharacter;
+        }
+    }
+
+    void fillAdjustments(const SVGElement* element)
+    {
+        if(auto positioning = element->isTextPositioningElement() ? static_cast<const SVGTextPositioningElement*>(element) : nullptr) {
+            for(auto& range : m_ranges) {
+                if(range.element != positioning)
+                    continue;
+                const auto& dxList = positioning->dx();
+                const auto& dyList = positioning->dy();
+                const auto& rotateList = positioning->rotate();
+                if(dxList.empty() && dyList.empty() && rotateList.empty())
+                    continue;
+                LengthContext lengthContext(positioning);
+                std::optional<float> lastRotation;
+                for(auto offset = range.start; offset < range.end; ++offset) {
+                    auto index = offset - range.start;
+                    if(index >= dxList.size() && index >= dyList.size() && index >= rotateList.size())
+                        break;
+                    auto& adjust = m_adjustments[offset];
+                    if(index < dxList.size())
+                        adjust.dx = lengthContext.valueForLength(dxList[index], LengthDirection::Horizontal);
+                    if(index < dyList.size())
+                        adjust.dy = lengthContext.valueForLength(dyList[index], LengthDirection::Vertical);
+                    if(index < rotateList.size()) {
+                        adjust.rotate = rotateList[index];
+                        adjust.hasRotate = true;
+                        lastRotation = adjust.rotate;
+                    }
+                }
+                if(lastRotation) {
+                    for(auto offset = range.start + rotateList.size(); offset < range.end; ++offset) {
+                        auto& adjust = m_adjustments[offset];
+                        adjust.rotate = *lastRotation;
+                        adjust.hasRotate = true;
+                    }
+                }
+            }
+        }
+
+        for(const auto& child : element->children()) {
+            if(auto childElement = toSVGElement(child))
+                fillAdjustments(childElement);
+        }
+    }
+
+    struct Range {
+        const SVGTextPositioningElement* element;
+        size_t start;
+        size_t end;
+        Range(const SVGTextPositioningElement* element, size_t start, size_t end)
+            : element(element), start(start), end(end)
+        {}
+    };
+
+    const SVGTextPathElement* m_textPath = nullptr;
+    std::vector<PathCharacter> m_characters;
+    std::vector<Range> m_ranges;
+    std::map<size_t, PathCharacterAdjust> m_adjustments;
+    char32_t m_lastCharacter = ' ';
+};
+
+static float glyphAdvance(const Font& font, char32_t character)
+{
+    std::u32string text(1, static_cast<char32_t>(character));
+    return font.measureText(std::u32string_view(text));
+}
+
+static Rect glyphExtents(const Font& font, char32_t character)
+{
+    plutovg_rect_t extents = {0};
+    plutovg_font_face_get_glyph_metrics(font.face().get(), font.size(), character, nullptr, nullptr, &extents);
+    return Rect(extents.x, extents.y, extents.w, extents.h);
+}
+
+// The referenced path may be declared after the text and therefore not yet
+// laid out in this pass. Runs the layout state chain down to the target so its
+// geometry reflects this round's attributes without involving any sibling.
+static void ensureElementLaidOut(SVGElement* target)
+{
+    std::vector<SVGElement*> chain;
+    for(auto element = target; element && !element->isRootElement(); element = element->parentElement())
+        chain.push_back(element);
+
+    SVGLayoutState state;
+    for(auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        SVGLayoutState next(state, *it);
+        (*it)->layoutElement(next);
+        state = next;
+    }
+}
+
+} // namespace
+
 SVGTextElement::SVGTextElement(Document* document)
     : SVGTextPositioningElement(document, ElementID::Text)
 {
@@ -523,18 +698,199 @@ SVGTextElement::SVGTextElement(Document* document)
 void SVGTextElement::layout(SVGLayoutState& state)
 {
     SVGTextPositioningElement::layout(state);
+    m_fragments.clear();
+    m_pathGlyphs.clear();
+    m_isTextPath = false;
+
+    const SVGTextPathElement* textPathElement = nullptr;
+    for(const auto& child : children()) {
+        if(auto element = toSVGElement(child); element && element->isTextPathElement()) {
+            textPathElement = static_cast<const SVGTextPathElement*>(element);
+            break;
+        }
+    }
+
+    if(textPathElement) {
+        m_isTextPath = true;
+        layoutTextPath(textPathElement);
+        return;
+    }
+
     SVGTextFragmentsBuilder(m_text, m_fragments).build(this);
+}
+
+void SVGTextElement::layoutTextPath(const SVGTextPathElement* textPathElement)
+{
+    if(textPathElement->isDisplayNone())
+        return;
+    auto target = textPathElement->targetElement();
+    if(target == nullptr)
+        return;
+    ensureElementLaidOut(target);
+    auto geometry = static_cast<const SVGGeometryElement*>(target);
+    if(!geometry->isRenderable())
+        return;
+
+    // Only the path element's own transform participates; ancestors do not.
+    PathMeasure measure(geometry->path(), geometry->localTransform());
+    if(!measure.valid())
+        return;
+
+    TextPathCollector collector;
+    collector.walk(textPathElement);
+    const auto& characters = collector.characters();
+    if(characters.empty())
+        return;
+
+    const auto count = characters.size();
+    std::vector<float> baseAdvance(count);
+    std::vector<float> spacing(count);
+    for(size_t i = 0; i < count; ++i) {
+        const auto& font = characters[i].element->font();
+        baseAdvance[i] = glyphAdvance(font, characters[i].character);
+        auto gap = characters[i].element->letter_spacing();
+        if(i > 0 && characters[i].character == ' ' && characters[i - 1].character != ' ')
+            gap += characters[i].element->word_spacing();
+        spacing[i] = gap;
+    }
+
+    // One dimensional advance, spacing, font size and dx accumulation.
+    std::vector<float> startDistance(count);
+    std::vector<float> normalOffset(count, 0.f);
+    float cursor = 0.f;
+    for(size_t i = 0; i < count; ++i) {
+        if(auto it = collector.adjustments().find(i); it != collector.adjustments().end()) {
+            cursor += it->second.dx;
+            normalOffset[i] = (i > 0 ? normalOffset[i - 1] : 0.f) + it->second.dy;
+        } else if(i > 0) {
+            normalOffset[i] = normalOffset[i - 1];
+        }
+        startDistance[i] = cursor;
+        cursor += baseAdvance[i] + spacing[i];
+    }
+    float contentLength = cursor;
+    if(count > 0)
+        contentLength -= spacing[count - 1];
+
+    // rotate follows the per-character list with last value continuation.
+    std::vector<float> rotation(count, 0.f);
+    for(size_t i = 0; i < count; ++i) {
+        if(auto it = collector.adjustments().find(i); it != collector.adjustments().end() && it->second.hasRotate)
+            rotation[i] = it->second.rotate;
+    }
+
+    std::vector<float> scaleX(count, 1.f);
+    if(textPathElement->hasAttribute(PropertyID::TextLength) && contentLength > 0.f) {
+        LengthContext lengthContext(textPathElement);
+        auto textLength = lengthContext.valueForLength(textPathElement->textLength());
+        if(textLength > 0.f) {
+            if(textPathElement->lengthAdjust() == LengthAdjust::SpacingAndGlyphs) {
+                auto k = textLength / contentLength;
+                for(size_t i = 0; i < count; ++i) {
+                    scaleX[i] = k;
+                    spacing[i] *= k;
+                    startDistance[i] *= k;
+                }
+            } else if(count > 1) {
+                auto shift = (textLength - contentLength) / float(count - 1);
+                for(size_t i = 0; i < count; ++i)
+                    startDistance[i] += shift * float(i);
+            }
+        }
+    }
+
+    // Recalculate advances after any glyph scaling.
+    std::vector<float> advance(count);
+    for(size_t i = 0; i < count; ++i)
+        advance[i] = baseAdvance[i] * scaleX[i];
+
+    float totalLength = 0.f;
+    for(size_t i = 0; i < count; ++i)
+        totalLength += advance[i] + (i + 1 < count ? spacing[i] : 0.f);
+
+    // Text anchoring applies to the whole textPath, never per tspan.
+    auto anchorOffset = calculateTextAnchorOffset(textPathElement, totalLength);
+
+    // startOffset: finite unitless length or percentage of the measured path.
+    float pathStart = 0.f;
+    LengthContext lengthContext(textPathElement);
+    const auto& startLength = textPathElement->startOffset();
+    if(startLength.value().units() == LengthUnits::Percent)
+        pathStart = startLength.value().value() / 100.f * float(measure.length());
+    else
+        pathStart = lengthContext.valueForLength(startLength.value(), LengthDirection::Horizontal);
+
+    m_pathGlyphs.reserve(count);
+    for(size_t i = 0; i < count; ++i) {
+        SVGPathGlyph glyph;
+        glyph.character = characters[i].character;
+        glyph.element = characters[i].element;
+        glyph.baseAdvance = baseAdvance[i];
+        glyph.advance = advance[i];
+        glyph.scaleX = scaleX[i];
+        glyph.normalOffset = normalOffset[i];
+        glyph.angle = rotation[i];
+        glyph.start = pathStart + anchorOffset + startDistance[i];
+
+        auto midpoint = glyph.start + glyph.advance * 0.5f;
+        Point position;
+        Point tangent;
+        if(measure.sample(midpoint, position, tangent)) {
+            glyph.visible = true;
+            glyph.position = position;
+            glyph.tangent = tangent;
+            // Downward normal in SVG's y-down coordinate space.
+            auto normal = Point(-tangent.y, tangent.x);
+            auto baselinePoint = position + Point(normal.x * glyph.normalOffset, normal.y * glyph.normalOffset);
+            auto tangentAngle = 180.f * std::atan2(tangent.y, tangent.x) / PLUTOVG_PI;
+            // Map font-space (u/2, 0) onto the sampled baseline midpoint.
+            glyph.transform = Transform::translated(baselinePoint.x, baselinePoint.y)
+                * Transform::rotated(tangentAngle + glyph.angle, 0.f, 0.f)
+                * Transform::scaled(glyph.scaleX, 1.f)
+                * Transform::translated(-glyph.baseAdvance * 0.5f, 0.f);
+        }
+        m_pathGlyphs.push_back(glyph);
+    }
 }
 
 void SVGTextElement::render(SVGRenderState& state) const
 {
-    if(m_fragments.empty() || isVisibilityHidden() || isDisplayNone())
+    if(isVisibilityHidden() || isDisplayNone())
         return;
+    if(m_isTextPath) {
+        if(m_pathGlyphs.empty())
+            return;
+    } else if(m_fragments.empty()) {
+        return;
+    }
+
     SVGBlendInfo blendInfo(this);
     SVGRenderState newState(this, state, localTransform());
     newState.beginGroup(blendInfo);
     if(newState.mode() == SVGRenderMode::Clipping) {
         newState->setColor(Color::White);
+    }
+
+    if(m_isTextPath) {
+        for(const auto& glyph : m_pathGlyphs) {
+            if(!glyph.visible || glyph.element->isVisibilityHidden())
+                continue;
+            std::u32string text(1, glyph.character);
+            const auto& font = glyph.element->font();
+            auto transform = newState.currentTransform() * glyph.transform;
+            if(newState.mode() == SVGRenderMode::Clipping) {
+                newState->fillText(std::u32string_view(text), font, Point(0.f, 0.f), transform);
+            } else {
+                const auto& fill = glyph.element->fill();
+                const auto& stroke = glyph.element->stroke();
+                if(fill.applyPaint(newState))
+                    newState->fillText(std::u32string_view(text), font, Point(0.f, 0.f), transform);
+                if(stroke.applyPaint(newState))
+                    newState->strokeText(std::u32string_view(text), glyph.element->stroke_width(), font, Point(0.f, 0.f), transform);
+            }
+        }
+        newState.endGroup(blendInfo);
+        return;
     }
 
     std::u32string_view wholeText(m_text);
@@ -566,6 +922,23 @@ void SVGTextElement::render(SVGRenderState& state) const
 Rect SVGTextElement::boundingBox(bool includeStroke) const
 {
     auto boundingBox = Rect::Invalid;
+    if(m_isTextPath) {
+        for(const auto& glyph : m_pathGlyphs) {
+            if(!glyph.visible || glyph.element->isVisibilityHidden())
+                continue;
+            const auto& font = glyph.element->font();
+            auto rect = glyphExtents(font, glyph.character);
+            if(!rect.isValid() || rect.isEmpty())
+                continue;
+            if(includeStroke && glyph.element->stroke().isRenderable())
+                rect.inflate(glyph.element->stroke_width() / 2.f);
+            boundingBox.unite(glyph.transform.mapRect(rect));
+        }
+        if(!boundingBox.isValid())
+            boundingBox = Rect::Empty;
+        return boundingBox;
+    }
+
     for(const auto& fragment : m_fragments) {
         const auto& font = fragment.element->font();
         const auto& stroke = fragment.element->stroke();
