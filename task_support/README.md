@@ -1,0 +1,5 @@
+Use Node.js >=22. Runtime dependency sources and licenses are bundled in node_modules. The full TypeScript 5.7.3 package and its license are in task_support/vendor/typescript; compiler-lock.json and dependencies-lock.json fix the supplied versions and integrity. No npm or online installation is needed.
+
+`bash task_support/run.sh baseline` transpiles the current src tree into dist and runs the supplied public-source HTTP example. `bash task_support/run.sh target` rebuilds the same current tree, then executes the new file named in target.json. build.cjs uses the bundled TypeScript transpileModule API with ESNext modules and ES2022 output, like a transpilation build; it does not claim static type-checking.
+
+check.cjs exports group(name, async c => {...}) and c.check(condition, message). ESM files can use `import check from '../task_support/check.cjs'; const {group}=check;`. Every required group must finish with a content check. Skips, empty groups, caught failed checks, and an early successful process exit fail. The completion report is removed before every target child execution.

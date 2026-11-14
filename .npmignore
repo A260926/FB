@@ -1,0 +1,15 @@
+.circleci
+.vscode
+.idea
+.gitignore
+.npmignore
+coverage
+
+node_modules
+src
+test
+CHANGELOG.md
+pnpm-lock.yaml
+tsconfig.json
+eslint.config.js
+crawler_primary.png

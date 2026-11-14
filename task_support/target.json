@@ -1,0 +1,14 @@
+{
+  "target": "test/stream-consumer.test.mjs",
+  "groups": [
+    "Streaming acquisition",
+    "Consumer settlement",
+    "Queue pressure"
+  ],
+  "build": "task_support/build.cjs",
+  "baseline": [
+    [
+      "task_support/baseline.mjs"
+    ]
+  ]
+}
