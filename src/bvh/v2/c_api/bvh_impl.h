@@ -162,7 +162,12 @@ static size_t bvh_get_prim_id(const typename BvhTypes<T, Dim>::Bvh* bvh, size_t 
 
 template <typename T, size_t Dim>
 static size_t bvh_get_prim_count(const typename BvhTypes<T, Dim>::Bvh* bvh) {
-    return reinterpret_cast<const bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh)->prim_ids.size();
+    auto& native = *reinterpret_cast<const bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh);
+    // In editable mode, `prim_ids` also holds free slots, so the number of primitives is derived
+    // from the leaves instead of the storage size.
+    if (native.edit_state)
+        return native.edit_state->boxes.size();
+    return native.prim_ids.size();
 }
 
 template <typename T, size_t Dim>
@@ -198,6 +203,49 @@ static void bvh_node_set_first_id(typename BvhTypes<T, Dim>::Node* node, size_t 
 template <typename T, size_t Dim>
 static typename BvhTypes<T, Dim>::BBox bvh_node_get_bbox(const typename BvhTypes<T, Dim>::Node* node) {
     return translate(reinterpret_cast<const bvh::v2::Node<T, Dim>*>(node)->get_bbox());
+}
+
+template <typename T, size_t Dim>
+static bool bvh_enable_edits(
+    typename BvhTypes<T, Dim>::Bvh* bvh,
+    const typename BvhTypes<T, Dim>::BBox* boxes,
+    size_t count)
+{
+    if (bvh == nullptr || (count != 0 && boxes == nullptr))
+        return false;
+    auto& native = *reinterpret_cast<bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh);
+    std::vector<bvh::v2::BBox<T, Dim>> translated;
+    translated.reserve(count);
+    for (size_t i = 0; i < count; ++i)
+        translated.push_back(translate<T, Dim>(boxes[i]));
+    return native.enable_edits(std::span<const bvh::v2::BBox<T, Dim>>(translated.data(), translated.size()));
+}
+
+template <typename T, size_t Dim>
+static bool bvh_insert_primitive(
+    typename BvhTypes<T, Dim>::Bvh* bvh,
+    size_t id,
+    const typename BvhTypes<T, Dim>::BBox* box)
+{
+    if (bvh == nullptr || box == nullptr)
+        return false;
+    return reinterpret_cast<bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh)->insert_primitive(
+        id, translate<T, Dim>(*box));
+}
+
+template <typename T, size_t Dim>
+static bool bvh_erase_primitive(typename BvhTypes<T, Dim>::Bvh* bvh, size_t id) {
+    if (bvh == nullptr)
+        return false;
+    return reinterpret_cast<bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh)->erase_primitive(id);
+}
+
+template <typename T, size_t Dim>
+static bvh_edit_stats bvh_get_last_edit_stats(const typename BvhTypes<T, Dim>::Bvh* bvh) {
+    if (bvh == nullptr)
+        return bvh_edit_stats { 0, 0 };
+    const auto stats = reinterpret_cast<const bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh)->last_edit_stats();
+    return bvh_edit_stats { stats.node_visits, stats.primitive_visits };
 }
 
 template <typename T, size_t Dim>
@@ -241,6 +289,8 @@ static void bvh_intersect_ray(
     static constexpr size_t stack_size = 64;
     auto translated_ray = translate<T, Dim>(*ray);
     auto& translated_bvh = *reinterpret_cast<const bvh::v2::Bvh<bvh::v2::Node<T, Dim>>*>(bvh);
+    if (translated_bvh.nodes.empty())
+        return;
     bvh::v2::SmallStack<typename bvh::v2::Node<T, Dim>::Index, stack_size> stack;
     translated_bvh.template intersect<AnyHit, RobustTraversal>(
         translated_ray, translated_bvh.get_root().index, stack,
@@ -350,6 +400,33 @@ static void bvh_intersect_ray(
         const typename BvhCallback<T>::Type* callback) \
     { \
         bvh_intersect_ray<T, Dim, false, true>(bvh, ray, callback); \
+    }
+
+#define BVH_EDIT_IMPL(T, Dim, suffix) \
+    BVH_EXPORT bool bvh##suffix##_enable_edits( \
+        typename BvhTypes<T, Dim>::Bvh* bvh, \
+        const typename BvhTypes<T, Dim>::BBox* boxes, \
+        size_t count) \
+    { \
+        return bvh_enable_edits<T, Dim>(bvh, boxes, count); \
+    } \
+    BVH_EXPORT bool bvh##suffix##_insert_primitive( \
+        typename BvhTypes<T, Dim>::Bvh* bvh, \
+        size_t id, \
+        const typename BvhTypes<T, Dim>::BBox* box) \
+    { \
+        return bvh_insert_primitive<T, Dim>(bvh, id, box); \
+    } \
+    BVH_EXPORT bool bvh##suffix##_erase_primitive( \
+        typename BvhTypes<T, Dim>::Bvh* bvh, \
+        size_t id) \
+    { \
+        return bvh_erase_primitive<T, Dim>(bvh, id); \
+    } \
+    BVH_EXPORT struct bvh_edit_stats bvh##suffix##_get_last_edit_stats( \
+        const typename BvhTypes<T, Dim>::Bvh* bvh) \
+    { \
+        return bvh_get_last_edit_stats<T, Dim>(bvh); \
     }
 
 } // namespace bvh::v2::c_api

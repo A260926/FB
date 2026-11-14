@@ -24,5 +24,7 @@ BVH_IMPL(float, 3, 3f)
 BVH_IMPL(double, 2, 2d)
 BVH_IMPL(double, 3, 3d)
 
+BVH_EDIT_IMPL(float, 3, 3f)
+
 } // extern "C"
 } // namespace bvh::v2::c_api

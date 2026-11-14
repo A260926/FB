@@ -82,6 +82,12 @@ struct bvh_intersect_callbackd {
     bool (*user_fn)(void*, double*, size_t begin, size_t end);
 };
 
+// Editable-mode work counters for the most recent edit.
+struct bvh_edit_stats {
+    size_t node_visits;
+    size_t primitive_visits;
+};
+
 // Thread Pool ------------------------------------------------------------------------------------
 
 // A thread count of zero instructs the thread pool to detect the number of threads available on the
@@ -227,6 +233,19 @@ BVH_API void bvh2f_optimize(struct bvh_thread_pool*, struct bvh2f*);
 BVH_API void bvh3f_optimize(struct bvh_thread_pool*, struct bvh3f*);
 BVH_API void bvh2d_optimize(struct bvh_thread_pool*, struct bvh2d*);
 BVH_API void bvh3d_optimize(struct bvh_thread_pool*, struct bvh3d*);
+
+// Editable Mode ----------------------------------------------------------------------------------
+
+// Editable mode allows inserting and erasing primitives identified by stable, possibly sparse
+// external IDs (in the range [0, 2^31)), without rebuilding the BVH. The bounding boxes must be
+// finite and ordered (`min <= max` on every axis). Primitives are identified by their external IDs
+// through `bvh*_get_prim_id`, and traversal callbacks keep receiving leaf slot ranges. Enabling
+// builds an auxiliary index from the given boxes (indexed from 0 to `count - 1`) without changing
+// the topology. Editing mode is only supported on the 3D float BVH.
+BVH_API bool bvh3f_enable_edits(struct bvh3f*, const struct bvh_bbox3f* boxes, size_t count);
+BVH_API bool bvh3f_insert_primitive(struct bvh3f*, size_t id, const struct bvh_bbox3f* box);
+BVH_API bool bvh3f_erase_primitive(struct bvh3f*, size_t id);
+BVH_API struct bvh_edit_stats bvh3f_get_last_edit_stats(const struct bvh3f*);
 
 // BVH Intersection -------------------------------------------------------------------------------
 
