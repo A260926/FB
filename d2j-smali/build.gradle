@@ -1,0 +1,19 @@
+apply plugin: 'antlr'
+
+dependencies {
+  compile 'org.antlr:antlr4-runtime:4.9.3' // Newer versions only for Java 11+
+  compile project(':dex-reader')
+  antlr 'org.antlr:antlr4:4.9.3' // Newer versions only for Java 11+
+  compile project(':d2j-base-cmd')
+  compile project(':dex-writer')
+    testImplementation "com.android.tools.smali:smali-baksmali:3.0.3"
+}
+
+generateGrammarSource {
+    arguments += ['-no-listener', '-visitor','-package','com.googlecode.d2j.smali.antlr4']
+}
+
+sourceSets {
+    test.output.resourcesDir = "build/classes/test"
+    main.antlr.srcDirs = ['src/main/antlr4']
+}
