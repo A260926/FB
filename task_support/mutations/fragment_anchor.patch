@@ -1,0 +1,11 @@
+--- a/libspeexdsp/jitter.c
++++ b/libspeexdsp/jitter.c
+@@ -678,7 +678,7 @@
+    int i, j;
+    for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+    {
+-      if (jitter->packets[i].data && jitter->packets[i].timestamp==jitter->last_returned_timestamp)
++      if (jitter->packets[i].data && jitter->packets[i].timestamp==jitter->pointer_timestamp)
+          break;
+    }
+    if (i!=SPEEX_JITTER_MAX_BUFFER_SIZE)

@@ -1,0 +1,11 @@
+--- a/libspeexdsp/jitter.c
++++ b/libspeexdsp/jitter.c
+@@ -375,7 +375,7 @@
+       for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+       {
+          /* Make sure we don't discard a "just-late" packet in case we want to play it next (if we interpolate). */
+-         if (jitter->packets[i].data && LE32(jitter->packets[i].timestamp + jitter->packets[i].span, jitter->pointer_timestamp))
++         if (jitter->packets[i].data && LT32(jitter->packets[i].timestamp + jitter->packets[i].span, jitter->pointer_timestamp))
+          {
+             /*fprintf (stderr, "cleaned (not played)\n");*/
+             if (jitter->destroy)

@@ -1,0 +1,17 @@
+--- a/libspeexdsp/jitter.c
++++ b/libspeexdsp/jitter.c
+@@ -66,10 +66,10 @@
+ 
+ #define TSUB(a,b) ((spx_int32_t)((a)-(b)))
+ 
+-#define GT32(a,b) (((spx_int32_t)((a)-(b)))>0)
+-#define GE32(a,b) (((spx_int32_t)((a)-(b)))>=0)
+-#define LT32(a,b) (((spx_int32_t)((a)-(b)))<0)
+-#define LE32(a,b) (((spx_int32_t)((a)-(b)))<=0)
++#define GT32(a,b) (((spx_uint32_t)(a))>((spx_uint32_t)(b)))
++#define GE32(a,b) (((spx_uint32_t)(a))>=((spx_uint32_t)(b)))
++#define LT32(a,b) (((spx_uint32_t)(a))<((spx_uint32_t)(b)))
++#define LE32(a,b) (((spx_uint32_t)(a))<=((spx_uint32_t)(b)))
+ 
+ #define ROUND_DOWN(x, step) ((x)<0 ? ((x)-(step)+1)/(step)*(step) : (x)/(step)*(step))
+ 
