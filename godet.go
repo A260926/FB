@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -104,6 +103,15 @@ var (
 	ErrorNoResponse = errors.New("no response")
 	// ErrorClose is returned if a method is called after the connection has been close
 	ErrorClose = errors.New("closed")
+	// ErrorEventOverflow is the termination reason reported to pending and
+	// future commands when a subscribed event arrives while the pending
+	// event queue is full.
+	ErrorEventOverflow = errors.New("event queue overflow")
+	// ErrorDisconnect is the termination reason reported to pending and
+	// future commands when the current connection read or write fails.
+	// The reported error wraps the underlying cause and matches
+	// errors.Is(err, ErrorDisconnect).
+	ErrorDisconnect = errors.New("disconnected")
 
 	MaxReadBufferSize  = 0          // default gorilla/websocket buffer size
 	MaxWriteBufferSize = 100 * 1024 // this should be large enough to send large scripts
@@ -306,15 +314,17 @@ func Headers(headers map[string]string) ConnectOption {
 // and interact with the browser through the DevTools Protocol.
 type RemoteDebugger struct {
 	http    *httpclient.HttpClient // HTTP client for API requests
-	ws      *websocket.Conn        // WebSocket connection for interaction with the browser
-	current string                 // Current tab ID
-	reqID   int                    // Request ID counter
 	verbose bool                   // Verbose logging enabled
 
-	sync.Mutex           // Mutex for thread safety
-	closed     chan bool // Channel to signal connection closure
+	sync.Mutex                 // guards the fields below
+	ws         *websocket.Conn // Current WebSocket connection
+	current    string          // Current tab ID
+	reqID      int             // Request ID counter
+	closed     chan bool       // Closed when the connection is terminated
+	notify     chan wsMessage  // Termination notification (never the normal queue)
+	termReason error           // First termination reason, nil while active
 
-	requests  chan Params                  // Channel for outgoing requests
+	wmu       sync.Mutex                   // Serializes writes to the current socket
 	responses map[int]chan json.RawMessage // Map of request IDs to response channels
 	callbacks map[string]EventCallback     // Map of event names to callback functions
 	domains   map[string]bool              // Map of enabled protocol domains
@@ -342,11 +352,11 @@ func Connect(port string, verbose bool, options ...ConnectOption) (*RemoteDebugg
 
 	remote := &RemoteDebugger{
 		http:      client,
-		requests:  make(chan Params),
 		responses: map[int]chan json.RawMessage{},
 		callbacks: map[string]EventCallback{},
 		domains:   map[string]bool{},
 		events:    make(chan wsMessage, 256),
+		notify:    make(chan wsMessage, 1),
 		closed:    make(chan bool),
 		verbose:   verbose,
 	}
@@ -360,7 +370,6 @@ func Connect(port string, verbose bool, options ...ConnectOption) (*RemoteDebugg
 		return nil, err
 	}
 
-	go remote.sendMessages()
 	go remote.processEvents()
 	return remote, nil
 }
@@ -388,9 +397,11 @@ func (remote *RemoteDebugger) connectWs(tab *Tab) error {
 		}
 	}
 
+	remote.Lock()
 	if remote.ws != nil {
 		if tab.ID == remote.current {
 			// nothing to do
+			remote.Unlock()
 			return nil
 		}
 
@@ -398,12 +409,13 @@ func (remote *RemoteDebugger) connectWs(tab *Tab) error {
 			log.Println("disconnecting from current tab, id", remote.current)
 		}
 
-		remote.Lock()
 		ws := remote.ws
 		remote.ws, remote.current = nil, ""
 		remote.Unlock()
 
 		_ = ws.Close()
+	} else {
+		remote.Unlock()
 	}
 
 	if len(tab.WsURL) == 0 {
@@ -437,24 +449,13 @@ func (remote *RemoteDebugger) connectWs(tab *Tab) error {
 	return nil
 }
 
-func (remote *RemoteDebugger) socket() (ws *websocket.Conn) {
-	remote.Lock()
-	ws = remote.ws
-	remote.Unlock()
-	return
-}
-
 // Close terminates the connection to the Chrome instance.
-// After calling Close, no further method calls should be made on the RemoteDebugger.
+// Pending commands are woken with ErrorClose and an EventClosed notification
+// is delivered once the currently running callback (if any) returns.
+// Close does not wait for a running callback and is safe to call multiple
+// times and from multiple goroutines.
 func (remote *RemoteDebugger) Close() (err error) {
-	remote.Lock()
-	ws := remote.ws
-	remote.ws = nil
-	remote.Unlock()
-
-	if ws != nil { // already closed
-		close(remote.requests)
-		close(remote.closed)
+	if ws := remote.terminate(ErrorClose, EventClosed, nil); ws != nil {
 		err = ws.Close()
 	}
 
@@ -487,9 +488,21 @@ func (remote *RemoteDebugger) SendRequest(method string, params Params) (map[str
 }
 
 // sendRawReplyRequest sends a request and returns the reply bytes.
+//
+// Settlement boundary: the request is registered, written at most once and
+// its waiter is settled exactly once, either with the reply or with the
+// termination reason. A waiter settled with a reply is never turned into a
+// failure, even if the connection terminates right after.
 func (remote *RemoteDebugger) sendRawReplyRequest(method string, params Params) ([]byte, error) {
 	remote.Lock()
-	if remote.ws == nil {
+	if remote.termReason != nil {
+		reason := remote.termReason
+		remote.Unlock()
+		return nil, reason
+	}
+
+	ws := remote.ws
+	if ws == nil {
 		remote.Unlock()
 		return nil, ErrorClose
 	}
@@ -506,139 +519,228 @@ func (remote *RemoteDebugger) sendRawReplyRequest(method string, params Params) 
 		"params": params,
 	}
 
-	remote.requests <- command
-	reply := <-responseChan
+	remote.wmu.Lock()
+	select {
+	case <-remote.closed:
+		// terminated while waiting for the write turn: don't write
+		remote.wmu.Unlock()
+		remote.deregister(reqID)
+		return nil, remote.reason()
+	default:
+	}
 
+	if remote.verbose {
+		log.Printf("SEND %#v\n", command)
+	}
+
+	err := ws.WriteJSON(command)
+	remote.wmu.Unlock()
+
+	if err != nil {
+		if remote.verbose {
+			log.Println("write message:", err)
+		}
+		remote.disconnect(err)
+	}
+
+	select {
+	case reply := <-responseChan:
+		return reply, nil
+	case <-remote.closed:
+		// a reply delivered before the termination still settles the command
+		select {
+		case reply := <-responseChan:
+			return reply, nil
+		default:
+		}
+		remote.deregister(reqID)
+		return nil, remote.reason()
+	}
+}
+
+// terminate records the termination reason (the first reason wins), detaches
+// the current socket, wakes all accepted but unsettled commands and queues
+// the termination notification. It returns the detached socket if this call
+// terminated the connection, nil if it was already terminated.
+func (remote *RemoteDebugger) terminate(reason error, event string, params Params) *websocket.Conn {
+	remote.Lock()
+	if remote.termReason != nil {
+		remote.Unlock()
+		return nil
+	}
+
+	remote.termReason = reason
+	ws := remote.ws
+	remote.ws, remote.current = nil, ""
+	remote.responses = map[int]chan json.RawMessage{}
+	close(remote.closed)
+	remote.Unlock()
+
+	payload := []byte("{}")
+	if params != nil {
+		if raw, err := json.Marshal(params); err == nil {
+			payload = raw
+		}
+	}
+
+	// the termination notification never goes through the normal event queue
+	select {
+	case remote.notify <- wsMessage{Method: event, Params: payload}:
+	default:
+	}
+
+	return ws
+}
+
+// disconnect terminates the connection after a read or write failure,
+// preserving the underlying cause.
+func (remote *RemoteDebugger) disconnect(cause error) {
+	reason := fmt.Errorf("%w: %w", ErrorDisconnect, cause)
+	if ws := remote.terminate(reason, EventDisconnect, nil); ws != nil {
+		_ = ws.Close()
+	}
+}
+
+// eventOverflow terminates the connection because the event queue is full.
+func (remote *RemoteDebugger) eventOverflow() {
+	params := Params{"reason": ErrorEventOverflow.Error()}
+	if ws := remote.terminate(ErrorEventOverflow, EventDisconnect, params); ws != nil {
+		_ = ws.Close()
+	}
+}
+
+// reason returns the termination reason, nil while the connection is active.
+func (remote *RemoteDebugger) reason() error {
+	remote.Lock()
+	defer remote.Unlock()
+	return remote.termReason
+}
+
+// deregister removes the response channel for reqID, if still present.
+func (remote *RemoteDebugger) deregister(reqID int) {
 	remote.Lock()
 	delete(remote.responses, reqID)
 	remote.Unlock()
-
-	return reply, nil
 }
 
-func (remote *RemoteDebugger) sendMessages() {
-	for message := range remote.requests {
-		ws := remote.socket()
-		if ws == nil { // the socket is now closed
-			break
-		}
-
-		if remote.verbose {
-			log.Printf("SEND %#v\n", message)
-		}
-
-		err := ws.WriteJSON(message)
-		if err != nil {
-			log.Println("write message:", err)
-		}
-	}
-}
-
-func permanentError(err error) bool {
-	if websocket.IsUnexpectedCloseError(err) {
-		log.Println("unexpected close error")
-		return true
-	}
-
-	if neterr, ok := err.(net.Error); ok && !neterr.Temporary() {
-		log.Println("permanent network error")
-		return true
-	}
-
-	return false
-}
-
+// readMessages delivers events and command replies for one socket. It never
+// runs user callbacks and never blocks on the event queue: a subscribed
+// event that finds the queue full terminates the connection.
 func (remote *RemoteDebugger) readMessages(ws *websocket.Conn) {
-	remoteClosed := false
-
-loop:
 	for {
-		select {
-		case <-remote.closed:
-			remoteClosed = true
-			break loop
+		var message wsMessage
 
-		default:
-			if remote.socket() != ws { // this socket is now closed
-				break loop
+		err := ws.ReadJSON(&message)
+		if err != nil {
+			remote.Lock()
+			current := remote.ws == ws
+			remote.Unlock()
+
+			if current {
+				// the current connection failed: terminate it
+				if remote.verbose {
+					log.Println("read message:", err)
+				}
+				remote.disconnect(err)
+			}
+			// otherwise this socket was replaced or closed on purpose:
+			// exit quietly without disturbing the new connection
+			return
+		}
+
+		if message.Method == "" {
+			//
+			// a method reply: it never goes through the event queue
+			//
+			if remote.verbose {
+				log.Println("REPLY", message.ID, string(message.Result))
 			}
 
-			var message wsMessage
-
-			err := ws.ReadJSON(&message)
-			if err != nil {
-				if remote.socket() != ws { // this socket is now closed
-					continue // one more check for remote.closed
-				}
-
-				log.Println("read message:", err)
-				if permanentError(err) {
-					break loop
-				}
-			} else if message.Method != "" {
-				if remote.verbose {
-					log.Println("EVENT", message.Method, string(message.Params), len(remote.events))
-				}
-
-				remote.Lock()
-				_, ok := remote.callbacks[message.Method]
-				remote.Unlock()
-
-				if !ok {
-					continue // don't queue unrequested events
-				}
-
+			remote.Lock()
+			ch := remote.responses[message.ID]
+			if ch != nil {
+				delete(remote.responses, message.ID)
 				select {
-				case remote.events <- message:
-
-				case <-remote.closed:
-					remoteClosed = true
-					break loop
+				case ch <- message.Result:
+				default:
 				}
-			} else {
-				//
-				// should be a method reply
-				//
-				if remote.verbose {
-					log.Println("REPLY", message.ID, string(message.Result))
-				}
+			}
+			remote.Unlock()
 
-				remote.Lock()
-				ch := remote.responses[message.ID]
-				remote.Unlock()
+			continue
+		}
 
-				if ch != nil {
-					ch <- message.Result
-				}
+		//
+		// an event: queue it for the dispatcher, never run it here
+		//
+		if remote.verbose {
+			log.Println("EVENT", message.Method, string(message.Params), len(remote.events))
+		}
+
+		remote.Lock()
+		terminated := remote.termReason != nil
+		subscribed := remote.callbacks[message.Method] != nil
+		queued := false
+		if !terminated && subscribed {
+			select {
+			case remote.events <- message:
+				queued = true
+			default:
 			}
 		}
-	}
-
-	// log.Println("exit readMessages", remoteClosed)
-
-	if remoteClosed {
-		remote.events <- wsMessage{Method: EventClosed, Params: []byte("{}")}
-		close(remote.events)
-	} else if remote.socket() == ws { // we should still be connected but something is wrong
-		remote.events <- wsMessage{Method: EventDisconnect, Params: []byte("{}")}
-	}
-}
-
-func (remote *RemoteDebugger) processEvents() {
-	for ev := range remote.events {
-		remote.Lock()
-		cb := remote.callbacks[ev.Method]
 		remote.Unlock()
 
-		if cb != nil {
-			var params Params
-			if err := json.Unmarshal(ev.Params, &params); err != nil {
-				log.Println("unmarshal", string(ev.Params), len(ev.Params), err)
-			} else {
-				cb(params)
-			}
+		switch {
+		case terminated:
+			return // stop accepting events once terminated
+		case !subscribed:
+			continue // don't queue events without a handler
+		case !queued:
+			remote.eventOverflow()
+			return
 		}
 	}
+}
+
+// processEvents is the only goroutine that runs user callbacks: serially and
+// in receive order. On termination it drops the queued events and delivers
+// the termination notification once, after the running callback returns.
+func (remote *RemoteDebugger) processEvents() {
+	for {
+		select {
+		case ev := <-remote.notify:
+			remote.dispatchEvent(ev)
+			return
+		default:
+		}
+
+		select {
+		case ev := <-remote.events:
+			remote.dispatchEvent(ev)
+		case ev := <-remote.notify:
+			remote.dispatchEvent(ev)
+			return
+		}
+	}
+}
+
+// dispatchEvent invokes the callback currently registered for ev.Method.
+func (remote *RemoteDebugger) dispatchEvent(ev wsMessage) {
+	remote.Lock()
+	cb := remote.callbacks[ev.Method]
+	remote.Unlock()
+
+	if cb == nil {
+		return
+	}
+
+	var params Params
+	if err := json.Unmarshal(ev.Params, &params); err != nil {
+		log.Println("unmarshal", string(ev.Params), len(ev.Params), err)
+		return
+	}
+
+	cb(params)
 }
 
 // Version returns version information (protocol, browser, etc.).
@@ -713,7 +815,14 @@ func (remote *RemoteDebugger) ActivateTab(tab *Tab) error {
 		err = remote.connectWs(tab)
 
 		if err == nil {
+			remote.Lock()
+			domains := make(map[string]bool, len(remote.domains))
 			for domain, state := range remote.domains {
+				domains[domain] = state
+			}
+			remote.Unlock()
+
+			for domain, state := range domains {
 				remote.DomainEvents(domain, state)
 			}
 		}
@@ -2025,6 +2134,7 @@ func (remote *RemoteDebugger) CloseBrowser() {
 func (remote *RemoteDebugger) DomainEvents(domain string, enable bool) error {
 	method := domain
 
+	remote.Lock()
 	if enable {
 		remote.domains[method] = true
 		method += ".enable"
@@ -2032,6 +2142,7 @@ func (remote *RemoteDebugger) DomainEvents(domain string, enable bool) error {
 		delete(remote.domains, method)
 		method += ".disable"
 	}
+	remote.Unlock()
 
 	_, err := remote.SendRequest(method, nil)
 	return err

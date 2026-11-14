@@ -98,3 +98,37 @@ _ = remote.SaveScreenshot("screenshot.png", 0644, 0, true)
 _ = remote.SavePDF("page.pdf", 0644)
 
 ```
+
+## Event callbacks and termination
+
+Callbacks registered with `CallbackEvent` run serially, in the order the
+events are received, on a single dispatcher goroutine; the read loop itself
+only queues events and never runs user code. A callback may synchronously
+send commands (e.g. `MouseEvent`, `Evaluate`) and may call `Close`.
+
+Subscribed events are buffered with a pending capacity of 256; the callback
+currently running does not count against it. Events without a registered
+(non-nil) handler are ignored and do not consume capacity. If the buffer is
+full when another subscribed event arrives, the connection is terminated
+instead of blocking or silently dropping the event.
+
+Termination behavior:
+
+- explicit `Close` — pending and future commands fail with `ErrorClose`,
+  and an `EventClosed` (`RemoteDebugger.closed`) notification is delivered;
+- read/write failure of the current connection — commands fail with an
+  error matching `errors.Is(err, godet.ErrorDisconnect)` (the underlying
+  cause is preserved), and `EventDisconnect` (`RemoteDebugger.disconnected`)
+  is delivered;
+- event queue overflow — commands fail with an error matching
+  `errors.Is(err, godet.ErrorEventOverflow)`, and `EventDisconnect` is
+  delivered with `params["reason"] == "event queue overflow"`.
+
+The first termination reason wins: later `Close` calls or I/O errors do not
+replace it. Commands that were already settled with a reply are unaffected;
+duplicate or late replies are discarded. On termination, queued events are
+dropped, the currently running callback is allowed to return, and the
+termination notification (`EventClosed`/`EventDisconnect`) is then delivered
+exactly once. `Close` never waits for a running callback, and concurrent
+`Close` calls are safe.
+
