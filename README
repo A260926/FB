@@ -133,3 +133,63 @@ o-----------------------------------------------------------------------------o
 
 
 o-----------------------------------------------------------------------------o
+| 8 CalSpringChain (secondary bone-chain swing)                              |
+o-----------------------------------------------------------------------------o
+
+  CalSpringChain adds a bone chain that carries its own world-space motion
+  state (endpoints, velocities and a fixed 1/120 s substep time balance) on
+  top of the normal CalMixer output.  It writes a shortest-swing rotation
+  correction straight into the real CalSkeleton, leaving the core skeleton,
+  animations, inverse bind poses and all existing interfaces untouched.
+
+  Per frame, run the mixer first, then advance the chain.  Time is accumulated
+  in fixed substeps, so any legal dt in [0, 1] is honored and splitting the
+  same total time across different dt values yields identical state.
+
+  Minimal C++ use:
+
+    CalMixer mixer;
+    CalSkeleton skeleton(coreSkeleton);
+
+    // Bones ordered parent-to-child; the chain must be consecutive in the
+    // parent hierarchy.  Final segment tip is given in the last bone's frame.
+    CalSpringChain chain;
+    CalSpringChain::Config config;
+    config.stiffness = 20.0f;                       // >= 0
+    config.damping   = 4.0f;                        // >= 0
+    config.gravity   = CalVector(0.0f, -9.8f, 0.0f);
+    config.contacts.push_back(
+        CalSpringChain::Contact(CalVector(0, -2, 0), 0.5f));
+
+    CalSpringChain::ResultCode rc = CalSpringChain::create(
+        chain, skeleton,
+        std::vector<int>{0, 1, 2, 3},              // parent-to-child ids
+        CalVector(1.0f, 0.0f, 0.0f),               // final tip, local frame
+        config);
+    // rc == CalSpringChain::SUCCESS on success; any other code leaves the
+    // chain and skeleton unchanged.
+
+    cal3d::RotateTranslate objectToWorld;          // rigid transform only
+
+    // Once after the first mixer update, or after a teleport.
+    mixer.updateSkeleton(&skeleton, {}, {});
+    chain.reset(skeleton, objectToWorld);
+
+    // Every frame: mixer first, then the chain.
+    mixer.updateSkeleton(&skeleton, {}, {});
+    chain.advance(skeleton, objectToWorld, deltaTimeSeconds);
+
+    // Read-only diagnostics.
+    float lengthError   = chain.maxLengthError();
+    float penetration   = chain.remainingPenetration();
+    float balance       = chain.timeBalance();
+    unsigned long long steps = chain.accumulatedSubsteps();
+    const CalVector* tip = chain.endpoint(chain.segmentCount() - 1);
+
+  All entry points return a CalSpringChain::ResultCode instead of throwing;
+  invalid indices, discontinuous chains, zero/non-finite segment lengths,
+  negative parameters, invalid spheres, non-rigid transforms and scaled
+  skeletons are rejected without modifying any state.
+
+
+o-----------------------------------------------------------------------------o

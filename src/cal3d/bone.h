@@ -57,6 +57,13 @@ public:
         const cal3d::RotateTranslate& transform,
         float subsequentAttenuation);
 
+    // Replaces the accumulated local pose.  Used by CalSpringChain to write
+    // its swing-corrected rotation back into the skeleton; the next
+    // CalMixer::updateSkeleton() call overwrites it from the animations.
+    void setRelativeTransform(const cal3d::RotateTranslate& transform) {
+        transformAccumulator.reset(transform);
+    }
+
     void calculateAbsolutePose(const CalBone* bones);
 
 private:
