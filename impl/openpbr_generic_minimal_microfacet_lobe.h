@@ -51,6 +51,8 @@ void openpbr_initialize_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(OPENPBR_
 
 OpenPBR_BsdfLobeType openpbr_get_lobe_type(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE) lobe)
 {
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeReflection;
     return OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection;
 }
 
@@ -58,6 +60,10 @@ OpenPBR_DiffuseSpecular openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREA
                                                      const vec3 view_direction,
                                                      const vec3 light_direction)
 {
+    // A delta lobe has no finite solid-angle value; its contribution is exposed through the discrete query.
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_make_zero_diffuse_specular();
+
     const float idotn = dot(lobe.normal_ff, view_direction);
     const float odotn = dot(lobe.normal_ff, light_direction);
 
@@ -87,6 +93,10 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
                                  const vec3 view_direction,
                                  const vec3 light_direction)
 {
+    // The continuous PDF excludes the discrete mass; use the discrete query for delta lobes.
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return 0.0f;
+
     const float idotn = dot(lobe.normal_ff, view_direction);
     const float odotn = dot(lobe.normal_ff, light_direction);
 
@@ -124,6 +134,23 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf,
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
 {
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+    {
+        const float idotn = dot(view_direction, lobe.normal_ff);
+        light_direction = openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff);
+
+        if (idotn * dot(light_direction, lobe.normal_ff) <= 0.0f)
+        {
+            openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+            return false;
+        }
+
+        weight = openpbr_make_diffuse_specular_from_specular(openpbr_reflection_coefficient(lobe.refl_trans_coeff, idotn));
+        pdf = 1.0f;
+        sampled_type = OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeReflection;
+        return true;
+    }
+
     const float idotn = dot(view_direction, lobe.normal_ff);
 
     // Choose microfacet normal_ff (in the caller's coordinate space).
@@ -171,11 +198,42 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_
     return true;
 }
 
+// Returns the discrete probability mass assigned to the given direction by this lobe.
+float openpbr_calculate_discrete_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return 0.0f;
+
+    return openpbr_directions_match_for_delta(openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff), light_direction) ? 1.0f : 0.0f;
+}
+
+// Returns the integrated discrete reflection contribution in the given direction.
+OpenPBR_DiffuseSpecular openpbr_calculate_discrete_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE) lobe,
+                                                              const vec3 view_direction,
+                                                              const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_make_zero_diffuse_specular();
+
+    if (!openpbr_directions_match_for_delta(openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff), light_direction))
+        return openpbr_make_zero_diffuse_specular();
+
+    const float idotn = dot(view_direction, lobe.normal_ff);
+    return openpbr_make_diffuse_specular_from_specular(openpbr_reflection_coefficient(lobe.refl_trans_coeff, idotn));
+}
+
 float openpbr_estimate_lobe_contribution(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE) lobe,
                                          const vec3 view_direction,
                                          const vec3 path_throughput)
 {
     const float idotn = dot(view_direction, lobe.normal_ff);
+
+    // A delta lobe reflects exactly its directional reflection coefficient, so no energy table lookup is needed.
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_max_component_of_throughput_weighted_color(path_throughput, openpbr_reflection_coefficient(lobe.refl_trans_coeff, idotn));
+
     // Here we assume that the microfacet distribution is a GGX one and calculate the estimated weight accordingly.
     return openpbr_estimate_weight_when_applied_to_ggx_microfacet_distribution(
         lobe.refl_trans_coeff, path_throughput, idotn, openpbr_get_isotropic_alpha(lobe.microfacet_distr));

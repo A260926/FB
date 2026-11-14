@@ -459,7 +459,16 @@ void openpbr_prepare_lobes(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPB
                                         coat_roughness_adjustment_factor * openpbr_fourth_power(adjusted_coat_roughness))),
             resolved_inputs.coat_weight);
 
-    OPENPBR_CONSTEXPR_LOCAL bool DeltaSpecularSupported = false;    // TODO: Support isotropic and delta specular lobes and remove this constant.
+    // Delta (discrete) specular is supported only for the material combinations handled by the
+    // discrete path. Thin-walled, fuzz, subsurface, thin-film, and dispersive materials keep the
+    // previous clamped-microfacet behavior. Base metalness, transmission weight, and coat weight
+    // may be mixed freely, and the base and coat normals may differ.
+    const bool dispersion_enabled = OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableDispersion) && resolved_inputs.transmission_dispersion_scale > 0.0f &&
+                                    resolved_inputs.transmission_dispersion_abbe_number > 0.0f && resolved_inputs.base_metalness < 1.0f;
+    const bool DeltaSpecularSupported = !resolved_inputs.geometry_thin_walled && resolved_inputs.fuzz_weight == 0.0f &&
+                                        resolved_inputs.subsurface_weight == 0.0f && resolved_inputs.thin_film_weight == 0.0f &&
+                                        !dispersion_enabled;
+
     OPENPBR_CONSTEXPR_LOCAL float MinMicrofacetRoughness = 0.001f;  // empirically, visible artifacts start appearing a little above 1e-7f
     OPENPBR_CONSTEXPR_LOCAL float MinMicrofacetAlpha = openpbr_square(MinMicrofacetRoughness);
 
@@ -993,6 +1002,23 @@ float openpbr_pdf_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_Pr
     return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
                ? openpbr_calculate_lobe_pdf(prepared.fuzz_lobe, prepared.view_direction, light_direction)
                : openpbr_calculate_lobe_pdf(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
+}
+
+// Returns the total discrete probability mass for the given direction across the whole material.
+float openpbr_discrete_pdf_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared, const vec3 light_direction)
+{
+    return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
+               ? openpbr_calculate_discrete_lobe_pdf(prepared.fuzz_lobe, prepared.view_direction, light_direction)
+               : openpbr_calculate_discrete_lobe_pdf(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
+}
+
+// Returns the integrated discrete contribution in the given direction across the whole material.
+OpenPBR_DiffuseSpecular openpbr_eval_discrete_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                                   const vec3 light_direction)
+{
+    return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
+               ? openpbr_calculate_discrete_lobe_value(prepared.fuzz_lobe, prepared.view_direction, light_direction)
+               : openpbr_calculate_discrete_lobe_value(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
 }
 
 // Computes the probability and color weight for a biased straight-through shadow ray.

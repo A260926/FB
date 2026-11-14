@@ -63,9 +63,15 @@ vec2 openpbr_compute_anisotropic_alpha(const float isotropic_alpha,
     // If delta specular is not supported, we also need clamp isotropic alpha values to
     // ensure they are above a minimum value. (If delta specular is supported, we can
     // use the delta specular lobe to handle the case where the alpha is too small.)
+    //
+    // A lobe becomes discrete only when both effective alphas are exactly zero. When only one
+    // axis is zero (which anisotropy can produce), or when the effective alpha is positive,
+    // the usual clamping still applies.
     if (openpbr_anisotropy > 0.0f || !delta_specular_supported)
     {
-        anisotropic_alpha = max(anisotropic_alpha, vec2(min_microfacet_alpha));
+        const bool both_alphas_are_zero = anisotropic_alpha.x == 0.0f && anisotropic_alpha.y == 0.0f;
+        if (!(delta_specular_supported && both_alphas_are_zero))
+            anisotropic_alpha = max(anisotropic_alpha, vec2(min_microfacet_alpha));
     }
 
     return anisotropic_alpha;
@@ -277,6 +283,31 @@ vec3 openpbr_metal_average_fresnel_with_f82_tint(const vec3 f0, const vec3 f82_t
     const vec3 b = openpbr_compute_metal_schlick_b_factor(f0, f82_tint);
     const vec3 average_albedo = r + white_minus_r * (1.0f / 21.0f) - b * (1.0f / 126.0f);
     return saturate(average_albedo);
+}
+
+// A discrete (delta) specular event is considered to match a query direction when the
+// squared distance between the ideal event direction and the query direction is at most this value.
+OPENPBR_CONSTEXPR_GLOBAL float OpenPBR_DeltaDirectionMatchSquaredDistance = 1.0e-12f;
+
+OPENPBR_INLINE_FUNCTION bool openpbr_is_delta_alpha(const float isotropic_alpha)
+{
+    // Only an exactly-zero isotropic alpha represents a delta lobe. The anisotropic alpha
+    // components are both zero in this case; a single zero component (e.g. at full anisotropy)
+    // keeps the usual clamped microfacet behavior instead.
+    return isotropic_alpha == 0.0f;
+}
+
+OPENPBR_INLINE_FUNCTION bool openpbr_directions_match_for_delta(const vec3 direction_a, const vec3 direction_b)
+{
+    const vec3 difference = direction_a - direction_b;
+    return dot(difference, difference) <= OpenPBR_DeltaDirectionMatchSquaredDistance;
+}
+
+// Returns the ideal mirror direction for a view direction pointing away from the surface.
+// The result also points away from the surface (into the same hemisphere as the face-forwarded normal).
+OPENPBR_INLINE_FUNCTION vec3 openpbr_ideal_reflection_direction(const vec3 view_direction, const vec3 normal_ff)
+{
+    return openpbr_fast_normalize(2.0f * dot(view_direction, normal_ff) * normal_ff - view_direction);
 }
 
 // Calculates refracted direction.

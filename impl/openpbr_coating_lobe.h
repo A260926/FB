@@ -91,10 +91,14 @@ float openpbr_proportion_reflected(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_RE
 {
     if (cosine > 0.0f)
     {
+        // A delta coat reflection is a discrete event; its directional reflectance is the Fresnel
+        // reflectance at the view angle, and no energy table lookup is performed.
         const float proportion_reflected_from_full_coat =
-            openpbr_compute_dielectric_energy_reflected(lobe.coat_reflection_lobe.refl_trans_coeff.eta_t_over_eta_i,
-                                                        openpbr_get_isotropic_alpha(lobe.coat_reflection_lobe.microfacet_distr),
-                                                        cosine);
+            openpbr_is_delta_microfacet_distribution(lobe.coat_reflection_lobe.microfacet_distr)
+                ? openpbr_fresnel(lobe.coat_reflection_lobe.refl_trans_coeff.eta_t_over_eta_i, cosine)
+                : openpbr_compute_dielectric_energy_reflected(lobe.coat_reflection_lobe.refl_trans_coeff.eta_t_over_eta_i,
+                                                              openpbr_get_isotropic_alpha(lobe.coat_reflection_lobe.microfacet_distr),
+                                                              cosine);
         return proportion_reflected_from_full_coat * lobe.presence;
     }
     else  // inside
@@ -237,6 +241,46 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     }
 }
 
+// Returns the total discrete probability mass assigned to the given direction by the coating and its base.
+float openpbr_calculate_discrete_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_CoatingLobe_AggregateLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction)
+{
+    if (lobe.inside)
+    {
+        // When inside, the coat only tints; the discrete probability is inherited from the base.
+        return openpbr_calculate_discrete_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
+    }
+
+    const float coat_reflection_prob = openpbr_coat_reflection_probability(lobe, view_direction);
+    const float coat_pdf = coat_reflection_prob * openpbr_calculate_discrete_lobe_pdf(lobe.coat_reflection_lobe, view_direction, light_direction);
+    const float base_pdf = (1.0f - coat_reflection_prob) * openpbr_calculate_discrete_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
+    return coat_pdf + base_pdf;
+}
+
+// Returns the total integrated discrete contribution in the given direction from the coating and its base.
+// Both the coat reflection and the base reflection can contribute to the same direction when their normals
+// agree; the coat reflection is scaled by its presence and the base by its full layered attenuation.
+OpenPBR_DiffuseSpecular openpbr_calculate_discrete_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_CoatingLobe_AggregateLobe) lobe,
+                                                              const vec3 view_direction,
+                                                              const vec3 light_direction)
+{
+    if (lobe.inside)
+    {
+        const float odotn = dot(light_direction, lobe.normal_ff);
+        const vec3 base_layer_scale = openpbr_coat_passage_color_multiplier(lobe, -odotn);  // negative to tint only transmission
+
+        return openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.base_lobe, view_direction, light_direction), base_layer_scale);
+    }
+    else
+    {
+        return openpbr_add_diffuse_specular(
+            openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction), lobe.presence),
+            openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.base_lobe, view_direction, light_direction),
+                                           openpbr_base_layer_scale_complete(lobe, light_direction)));
+    }
+}
+
 // Given a view direction, sample a light direction,
 // evaluate the throughput and pdf for this direction,
 // and return whether a sample was successfully generated.
@@ -292,8 +336,25 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                 }
                 else  // delta
                 {
-                    // Include presence to match the coat term in the eval path (openpbr_combine_coat_and_base_evals).
-                    weight = openpbr_scale_diffuse_specular(weight, lobe.presence * inverse_coat_reflection_prob);
+                    // Merge every discrete contribution that lands on this direction, including the
+                    // base reflection when both normals produce the same direction. The sampled
+                    // direction is the coat's ideal event, so the coat's discrete mass includes it.
+                    // The base discrete mass is still the per-event mass observed through the base
+                    // aggregate when the base aggregate samples the specular lobe.
+                    const float coat_mass = openpbr_calculate_discrete_lobe_pdf(lobe.coat_reflection_lobe, view_direction, light_direction);
+                    const float base_mass = openpbr_calculate_discrete_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
+                    const float total_mass = coat_reflection_prob * coat_mass + (1.0f - coat_reflection_prob) * base_mass;
+
+                    OpenPBR_DiffuseSpecular total_contribution = openpbr_scale_diffuse_specular(
+                        openpbr_calculate_discrete_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction), lobe.presence);
+                    total_contribution = openpbr_add_diffuse_specular(
+                        total_contribution,
+                        openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.base_lobe, view_direction, light_direction),
+                                                       openpbr_base_layer_scale_complete(lobe, light_direction)));
+
+                    weight = total_mass > 0.0f ? openpbr_scale_diffuse_specular(total_contribution, 1.0f / total_mass)
+                                               : openpbr_make_zero_diffuse_specular();
+                    pdf = total_mass;
                 }
             }
         }
@@ -320,8 +381,23 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                 }
                 else  // delta
                 {
-                    const vec3 remaining_scale_factors = openpbr_base_layer_scale_complete(lobe, light_direction) * inverse_base_prob;
-                    weight = openpbr_scale_diffuse_specular(weight, remaining_scale_factors);
+                    // Merge every discrete contribution that lands on this direction. The base
+                    // reflection was sampled, but the coat reflection (with a possibly different
+                    // normal) contributes only if it produces exactly the same direction.
+                    const float coat_mass = openpbr_calculate_discrete_lobe_pdf(lobe.coat_reflection_lobe, view_direction, light_direction);
+                    const float base_mass = openpbr_calculate_discrete_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
+                    const float total_mass = coat_reflection_prob * coat_mass + (1.0f - coat_reflection_prob) * base_mass;
+
+                    OpenPBR_DiffuseSpecular total_contribution = openpbr_scale_diffuse_specular(
+                        openpbr_calculate_discrete_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction), lobe.presence);
+                    total_contribution = openpbr_add_diffuse_specular(
+                        total_contribution,
+                        openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.base_lobe, view_direction, light_direction),
+                                                       openpbr_base_layer_scale_complete(lobe, light_direction)));
+
+                    weight = total_mass > 0.0f ? openpbr_scale_diffuse_specular(total_contribution, 1.0f / total_mass)
+                                               : openpbr_make_zero_diffuse_specular();
+                    pdf = total_mass;
                 }
             }
         }

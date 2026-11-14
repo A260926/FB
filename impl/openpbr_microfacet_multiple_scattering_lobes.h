@@ -106,6 +106,14 @@ void openpbr_initialize_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(OpenPBR_
     lobe.scale_refl = scale_refl;
     lobe.scale_trans = scale_trans;
 
+    lobe.reflection_ratio_ti = 0.0f;
+    lobe.energy_complement_ti_idotn = 0.0f;
+
+    // A zero-alpha base specular lobe is a discrete event that already conserves energy through
+    // its Fresnel coefficients, so the multiple-scattering compensation must be disabled entirely.
+    if (alpha == 0.0f)
+        return;
+
     if (lobe.alpha < OpenPBR_MinAlphaWithVisibleEnergyLoss)
         return;
 
@@ -258,6 +266,7 @@ void openpbr_initialize_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(OpenPBR_
     lobe.normal_ff = normal_ff;
     lobe.alpha = alpha;
     lobe.scale = scale;
+    lobe.energy_complement_idotn = 0.0f;
 
     if (lobe.alpha < OpenPBR_MinAlphaWithVisibleEnergyLoss)
         return;

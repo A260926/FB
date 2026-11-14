@@ -461,6 +461,26 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     return mix(base_pdf, sheen_pdf, sheen_prob);
 }
 
+// Returns the total discrete probability mass assigned to the given direction by the fuzz layer and its base.
+// The sheen layer is never discrete; it only dilutes the base's mass by the base sampling probability.
+float openpbr_calculate_discrete_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction)
+{
+    const float sheen_prob = openpbr_sheen_probability(lobe, view_direction);
+    return (1.0f - sheen_prob) * openpbr_calculate_discrete_lobe_pdf(lobe.coating_lobe, view_direction, light_direction);
+}
+
+// Returns the integrated discrete contribution in the given direction, attenuated by the fuzz layer.
+OpenPBR_DiffuseSpecular openpbr_calculate_discrete_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
+                                                              const vec3 view_direction,
+                                                              const vec3 light_direction)
+{
+    const vec3 light_dir_local = openpbr_world_to_local(lobe.basis, light_direction);
+    return openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.coating_lobe, view_direction, light_direction),
+                                          openpbr_base_layer_scale_complete(lobe, light_dir_local));
+}
+
 // Given a view direction, sample a light direction,
 // evaluate the throughput and pdf for this direction,
 // and return whether a sample was successfully generated.
@@ -536,7 +556,19 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         }
         else  // delta
         {
-            weight = openpbr_scale_diffuse_specular(weight, openpbr_base_layer_scale_complete(lobe, light_dir_local) * reciprocal_base_prob);
+            // The fuzz layer dilutes the base's discrete mass and attenuates the base contribution.
+            // Note that a delta base lobe can only occur when the fuzz layer is disabled, in which
+            // case base_prob is one; this branch is retained for consistency.
+            const float base_mass = openpbr_calculate_discrete_lobe_pdf(lobe.coating_lobe, view_direction, light_direction);
+            const float total_mass = base_prob * base_mass;
+
+            weight = total_mass > 0.0f
+                         ? openpbr_scale_diffuse_specular(
+                               openpbr_scale_diffuse_specular(openpbr_calculate_discrete_lobe_value(lobe.coating_lobe, view_direction, light_direction),
+                                                              openpbr_base_layer_scale_complete(lobe, light_dir_local)),
+                               1.0f / total_mass)
+                         : openpbr_make_zero_diffuse_specular();
+            pdf = total_mass;
         }
     }
 

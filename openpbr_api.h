@@ -52,9 +52,35 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR
 }
 
 // Returns the PDF for sampling the given light direction.
+//
+// This is the continuous (per-steradian) density only. Discrete (delta) specular events are
+// excluded even when the query direction exactly matches an ideal mirror or refraction
+// direction; use openpbr_discrete_pdf() for their probability mass. The result is finite.
 OPENPBR_INLINE_FUNCTION float openpbr_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared, const vec3 light_direction)
 {
     return openpbr_pdf_impl(prepared, light_direction);
+}
+
+// Returns the total discrete probability mass for the given light direction across the whole material.
+//
+// A direction matches a discrete event when its squared distance to the ideal direction is at most
+// 1e-12. Directions that do not match any discrete event, and materials without delta lobes, return
+// zero. The result is never infinite.
+OPENPBR_INLINE_FUNCTION float openpbr_discrete_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                                   const vec3 light_direction)
+{
+    return openpbr_discrete_pdf_impl(prepared, light_direction);
+}
+
+// Evaluates the integrated contribution of the discrete events in the given light direction.
+//
+// The result is the total discrete energy contribution (in the same DiffuseSpecular format as
+// openpbr_eval) rather than a finite-width peak value. openpbr_eval() itself only returns the
+// continuous part. Materials without delta lobes, and non-matching directions, return zero.
+OPENPBR_INLINE_FUNCTION OpenPBR_DiffuseSpecular openpbr_eval_discrete(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                                                      const vec3 light_direction)
+{
+    return openpbr_eval_discrete_impl(prepared, light_direction);
 }
 
 #endif  // OPENPBR_API_H

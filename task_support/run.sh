@@ -7,7 +7,7 @@ mkdir -p .task-build
 c++ -std=c++17 -O2 -I. -Ivendor/glm tests/bsdf_baseline.cpp -o .task-build/baseline
 if [[ $mode == target ]]; then
   c++ -std=c++17 -O2 -I. -Ivendor/glm -x c++ tests/delta_target.cpp task_support/driver.c -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

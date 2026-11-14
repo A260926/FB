@@ -312,12 +312,96 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
     }
     else
     {
-        // If a delta lobe is sampled, don't attempt to combine its weight with the other lobes
-        // (theoretically multiple delta lobes could be combined but we're not doing that).
-        weight = openpbr_scale_diffuse_specular(weight, total_weight / selected_lobe_weight);
+        // If a delta lobe is sampled, don't attempt to combine its weight with the other lobes.
+        // The reported PDF is the discrete probability mass for this event direction over the whole
+        // material, and the returned weight is the total discrete contribution divided by that mass.
+        // Several delta lobes can share a direction (for example a smooth coat and a smooth base
+        // reflection), so accumulate every lobe that produces this exact direction.
+        const float selected_probability = pdf * selected_lobe_weight / total_weight;
+
+        OpenPBR_DiffuseSpecular total_contribution = openpbr_make_zero_diffuse_specular();
+        float total_probability = 0.0f;
+
+        if (selected_lobe_index == OpenPBR_SpecularLobeIndex)
+        {
+            total_contribution = openpbr_add_diffuse_specular(
+                total_contribution, openpbr_calculate_discrete_lobe_value(lobe.specular_lobe, view_direction, light_direction));
+            total_probability += selected_probability;
+        }
+        else
+        {
+            total_contribution = openpbr_add_diffuse_specular(
+                total_contribution, openpbr_calculate_discrete_lobe_value(lobe.specular_lobe, view_direction, light_direction));
+            total_probability += lobe.lobe_weights[OpenPBR_SpecularLobeIndex] *
+                                 openpbr_calculate_discrete_lobe_pdf(lobe.specular_lobe, view_direction, light_direction) / total_weight;
+        }
+
+        // Other delta-capable lobes in the aggregate currently do not produce discrete events,
+        // so only the specular lobe contributes here.
+
+        if (total_probability > 0.0f)
+        {
+            weight = openpbr_scale_diffuse_specular(total_contribution, 1.0f / total_probability);
+            pdf = total_probability;
+        }
+        else
+        {
+            // No discrete event actually matches this direction: report a failed sample using the
+            // usual convention rather than returning a bogus zero-weight success.
+            openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+            return false;
+        }
     }
 
     return true;
+}
+
+// Returns the total lobe selection weight used by openpbr_select_lobe, respecting disabled lobes.
+float openpbr_total_lobe_selection_weight(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe)
+{
+    float total_weight = 0.0f;
+
+    total_weight += lobe.lobe_weights[OpenPBR_SpecularLobeIndex];
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
+        total_weight += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex];
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic))
+        total_weight += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex];
+    total_weight += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex];
+    total_weight += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex];
+    total_weight += lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex];
+
+    return total_weight;
+}
+
+// Returns the total discrete probability mass assigned to the given direction by the base aggregate.
+// Only the specular lobe can currently be discrete. The continuous lobes never contribute.
+float openpbr_calculate_discrete_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.specular_lobe.microfacet_distr))
+        return 0.0f;
+
+    const float total_weight = openpbr_total_lobe_selection_weight(lobe);
+    const float specular_weight = lobe.lobe_weights[OpenPBR_SpecularLobeIndex];
+    if (!(total_weight > 0.0f) || specular_weight <= 0.0f)
+        return 0.0f;
+
+    // The per-lobe sampling probability is its share of the base aggregate's selection weight.
+    const float specular_probability = specular_weight / total_weight;
+    return specular_probability * openpbr_calculate_discrete_lobe_pdf(lobe.specular_lobe, view_direction, light_direction);
+}
+
+// Returns the integrated discrete contribution of the base aggregate in the given direction,
+// i.e. the sum of the participating lobes' discrete contributions.
+OpenPBR_DiffuseSpecular openpbr_calculate_discrete_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,
+                                                              const vec3 view_direction,
+                                                              const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.specular_lobe.microfacet_distr))
+        return openpbr_make_zero_diffuse_specular();
+
+    return openpbr_calculate_discrete_lobe_value(lobe.specular_lobe, view_direction, light_direction);
 }
 
 float openpbr_estimate_lobe_contribution(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,

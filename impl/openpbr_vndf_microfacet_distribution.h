@@ -86,4 +86,13 @@ float openpbr_get_isotropic_alpha(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF
     return microfacet_distr.isotropic_alpha;
 }
 
+// A microfacet distribution represents a discrete (delta) specular event exactly when both
+// effective alpha components are zero. Such a lobe does not cover a finite solid angle and
+// must be sampled discretely rather than through the GGX distribution.
+OPENPBR_INLINE_FUNCTION bool openpbr_is_delta_microfacet_distribution(
+    OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution) microfacet_distr)
+{
+    return microfacet_distr.alpha.x == 0.0f && microfacet_distr.alpha.y == 0.0f;
+}
+
 #endif  // !OPENPBR_VNDF_MICROFACET_DISTRIBUTION_H

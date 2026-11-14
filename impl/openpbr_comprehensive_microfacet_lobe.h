@@ -70,9 +70,138 @@ void openpbr_initialize_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(OpenPBR_
 OpenPBR_BsdfLobeType openpbr_get_lobe_type(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe)
                                                lobe)
 {
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) ? OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeReflection |
+                                                                            OpenPBR_BsdfLobeTypeTransmission
+                                                                      : OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeReflection;
+
     return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency)
                ? OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection | OpenPBR_BsdfLobeTypeTransmission
                : OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection;
+}
+
+// Returns the ideal transmitted direction for a delta (zero-roughness) interface, using Snell refraction
+// about the face-forwarded normal. The result points away from the surface on the opposite side.
+bool openpbr_compute_delta_transmission_direction(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
+                                                      OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
+                                                  const vec3 view_direction,
+                                                  const float idotn,
+                                                  OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(vec3) light_direction)
+{
+    if (!openpbr_refract(view_direction, lobe.normal_ff, idotn, lobe.eta_t_over_eta_i.r, light_direction))
+        return false;
+
+    // Transmission must land on the opposite side of the surface.
+    return idotn * dot(light_direction, lobe.normal_ff) < 0.0f;
+}
+
+bool openpbr_sample_delta_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe)
+                                   lobe,
+                               const vec3 rand,
+                               const vec3 view_direction,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(vec3) light_direction,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) weight,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
+{
+    const float idotn = dot(view_direction, lobe.normal_ff);
+
+    const OpenPBR_AllCoefficientsAndProbabilities coeffs_and_probs =
+        openpbr_all_coefficients_and_probabilities(lobe.refl_trans_coeff, lobe.path_throughput, idotn);
+
+    const float reflection_probability = coeffs_and_probs.reflection_probability;
+    const float transmission_probability = coeffs_and_probs.transmission_probability;
+
+    if (reflection_probability + transmission_probability == 0.0f)
+    {
+        openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+        return false;
+    }
+
+    if (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) || rand.z < reflection_probability)  // reflection
+    {
+        light_direction = openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff);
+
+        if (idotn * dot(light_direction, lobe.normal_ff) <= 0.0f)
+        {
+            openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+            return false;
+        }
+
+        // The weight is the discrete contribution divided by the probability of choosing this event,
+        // matching the convention used by the rough paths.
+        weight = openpbr_make_diffuse_specular_from_specular(coeffs_and_probs.reflection_coefficient / reflection_probability);
+        pdf = reflection_probability;
+        sampled_type = OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeReflection;
+
+        return true;
+    }
+    else  // transmission
+    {
+        if (!openpbr_compute_delta_transmission_direction(lobe, view_direction, idotn, light_direction))
+        {
+            openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+            return false;
+        }
+
+        weight = openpbr_make_diffuse_specular_from_specular(coeffs_and_probs.transmission_coefficient / transmission_probability);
+        pdf = transmission_probability;
+        sampled_type = OpenPBR_BsdfLobeTypeSpecular | OpenPBR_BsdfLobeTypeTransmission;
+
+        return true;
+    }
+}
+
+// Returns the discrete probability mass (in the directional sense) that this lobe assigns to the given
+// light direction. It is nonzero only for delta lobes and only when the direction matches an ideal event.
+float openpbr_calculate_discrete_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
+                                              OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return 0.0f;
+
+    const float idotn = dot(view_direction, lobe.normal_ff);
+
+    const OpenPBR_AllCoefficientsAndProbabilities coeffs_and_probs =
+        openpbr_all_coefficients_and_probabilities(lobe.refl_trans_coeff, lobe.path_throughput, idotn);
+
+    if (openpbr_directions_match_for_delta(openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff), light_direction))
+        return coeffs_and_probs.reflection_probability;
+
+    vec3 transmitted_direction;
+    if (openpbr_compute_delta_transmission_direction(lobe, view_direction, idotn, transmitted_direction) &&
+        openpbr_directions_match_for_delta(transmitted_direction, light_direction))
+        return coeffs_and_probs.transmission_probability;
+
+    return 0.0f;
+}
+
+// Returns the integrated (solid-angle) contribution of the discrete event in the given direction.
+// For a microfacet coefficient this is the reflection or transmission coefficient itself.
+OpenPBR_DiffuseSpecular openpbr_calculate_discrete_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
+                                                                  OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
+                                                              const vec3 view_direction,
+                                                              const vec3 light_direction)
+{
+    if (!openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_make_zero_diffuse_specular();
+
+    const float idotn = dot(view_direction, lobe.normal_ff);
+
+    const OpenPBR_AllCoefficientsAndProbabilities coeffs_and_probs =
+        openpbr_all_coefficients_and_probabilities(lobe.refl_trans_coeff, lobe.path_throughput, idotn);
+
+    if (openpbr_directions_match_for_delta(openpbr_ideal_reflection_direction(view_direction, lobe.normal_ff), light_direction))
+        return openpbr_make_diffuse_specular_from_specular(coeffs_and_probs.reflection_coefficient);
+
+    vec3 transmitted_direction;
+    if (openpbr_compute_delta_transmission_direction(lobe, view_direction, idotn, transmitted_direction) &&
+        openpbr_directions_match_for_delta(transmitted_direction, light_direction))
+        return openpbr_make_diffuse_specular_from_specular(coeffs_and_probs.transmission_coefficient);
+
+    return openpbr_make_zero_diffuse_specular();
 }
 
 OpenPBR_DiffuseSpecular
@@ -80,6 +209,10 @@ openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(Open
                              const vec3 view_direction,
                              const vec3 light_direction)
 {
+    // A delta lobe has no finite solid-angle value; its contribution is exposed through the discrete query.
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_make_zero_diffuse_specular();
+
     const float idotn = dot(lobe.normal_ff, view_direction);
     const float odotn = dot(lobe.normal_ff, light_direction);
 
@@ -168,6 +301,10 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
                                  const vec3 view_direction,
                                  const vec3 light_direction)
 {
+    // The continuous PDF excludes the discrete mass; use the discrete query for delta lobes.
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return 0.0f;
+
     const float idotn = dot(lobe.normal_ff, view_direction);
     const float odotn = dot(lobe.normal_ff, light_direction);
 
@@ -261,6 +398,9 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf,
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
 {
+    if (openpbr_is_delta_microfacet_distribution(lobe.microfacet_distr))
+        return openpbr_sample_delta_lobe(lobe, rand, view_direction, light_direction, weight, pdf, sampled_type);
+
     const float idotn = dot(view_direction, lobe.normal_ff);
 
     // Choose microfacet normal_ff (in the caller's coordinate space).
