@@ -33186,6 +33186,1356 @@ ufbx_abi ufbx_vec3 ufbx_get_weighted_face_normal(const ufbx_vertex_vec3 *positio
 	return ufbx_catch_get_weighted_face_normal(NULL, positions, face);
 }
 
+// -- Analytic motion evaluation
+//
+// All derivative propagation is done in this section with explicit analytic
+// formulas: no adjacent-time evaluation, finite differencing or baking is used
+// anywhere in this code path.
+
+static ufbxi_forceinline bool ufbxm_finite_d(double v)
+{
+	return v == v && ufbx_fabs(v) < UFBX_INFINITY;
+}
+
+static ufbxi_forceinline bool ufbxm_finite_r(ufbx_real v)
+{
+	return ufbxm_finite_d((double)v);
+}
+
+typedef struct ufbxm_dvec3 {
+	union {
+		struct { double x, y, z; };
+		double v[3];
+	};
+} ufbxm_dvec3;
+typedef struct ufbxm_dquat {
+	union {
+		struct { double x, y, z, w; };
+		double v[4];
+	};
+} ufbxm_dquat;
+typedef struct ufbxm_dmat { double v[12]; } ufbxm_dmat;
+
+static const ufbxm_dvec3 ufbxm_dzero = { 0.0, 0.0, 0.0 };
+
+static ufbxi_forceinline ufbxm_dvec3 ufbxm_vec3_to_d(ufbx_vec3 v)
+{
+	ufbxm_dvec3 r = { v.x, v.y, v.z };
+	return r;
+}
+
+static ufbxi_forceinline ufbx_vec3 ufbxm_vec3_from_d(ufbxm_dvec3 v)
+{
+	ufbx_vec3 r = { (ufbx_real)v.x, (ufbx_real)v.y, (ufbx_real)v.z };
+	return r;
+}
+
+static ufbxi_forceinline bool ufbxm_dvec3_finite(ufbxm_dvec3 v)
+{
+	return ufbxm_finite_d(v.x) && ufbxm_finite_d(v.y) && ufbxm_finite_d(v.z);
+}
+
+static ufbxi_forceinline ufbxm_dvec3 ufbxm_dv3(double x, double y, double z)
+{
+	ufbxm_dvec3 r = { x, y, z };
+	return r;
+}
+
+static ufbxi_forceinline ufbxm_dvec3 ufbxm_dv3_add(ufbxm_dvec3 a, ufbxm_dvec3 b)
+{
+	return ufbxm_dv3(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+static ufbxm_dmat ufbxm_dmat_from_ufbx(const ufbx_matrix *m)
+{
+	ufbxm_dmat r;
+	for (size_t i = 0; i < 12; i++) r.v[i] = (double)m->v[i];
+	return r;
+}
+
+static ufbx_matrix ufbxm_dmat_to_ufbx(const ufbxm_dmat *m)
+{
+	ufbx_matrix r;
+	for (size_t i = 0; i < 12; i++) r.v[i] = (ufbx_real)m->v[i];
+	return r;
+}
+
+static bool ufbxm_dmat_finite(const ufbxm_dmat *m)
+{
+	for (size_t i = 0; i < 12; i++) {
+		if (!ufbxm_finite_d(m->v[i])) return false;
+	}
+	return true;
+}
+
+// dst = a * b for 4x3 affine matrices
+static ufbxm_dmat ufbxm_dmat_mul(const ufbxm_dmat *a, const ufbxm_dmat *b)
+{
+	ufbxm_dmat dst;
+	for (size_t col = 0; col < 3; col++) {
+		size_t j = col * 3;
+		for (size_t row = 0; row < 3; row++) {
+			dst.v[j + row] =
+				a->v[0 + row] * b->v[j + 0] +
+				a->v[3 + row] * b->v[j + 1] +
+				a->v[6 + row] * b->v[j + 2];
+		}
+	}
+	for (size_t row = 0; row < 3; row++) {
+		dst.v[9 + row] =
+			a->v[0 + row] * b->v[9 + 0] +
+			a->v[3 + row] * b->v[9 + 1] +
+			a->v[6 + row] * b->v[9 + 2] +
+			a->v[9 + row];
+	}
+	return dst;
+}
+
+// Position transformed by an affine matrix (includes translation)
+static ufbxm_dvec3 ufbxm_dmat_pos(const ufbxm_dmat *m, ufbxm_dvec3 p)
+{
+	return ufbxm_dv3(
+		m->v[0] * p.x + m->v[3] * p.y + m->v[6] * p.z + m->v[9],
+		m->v[1] * p.x + m->v[4] * p.y + m->v[7] * p.z + m->v[10],
+		m->v[2] * p.x + m->v[5] * p.y + m->v[8] * p.z + m->v[11]);
+}
+
+// Direction transformed by a matrix (ignores translation)
+static ufbxm_dvec3 ufbxm_dmat_dir(const ufbxm_dmat *m, ufbxm_dvec3 p)
+{
+	return ufbxm_dv3(
+		m->v[0] * p.x + m->v[3] * p.y + m->v[6] * p.z,
+		m->v[1] * p.x + m->v[4] * p.y + m->v[7] * p.z,
+		m->v[2] * p.x + m->v[5] * p.y + m->v[8] * p.z);
+}
+
+static ufbxi_forceinline ufbxm_dquat ufbxm_dq(double x, double y, double z, double w)
+{
+	ufbxm_dquat r = { x, y, z, w };
+	return r;
+}
+
+static ufbxi_forceinline ufbxm_dquat ufbxm_dquat_add(ufbxm_dquat a, ufbxm_dquat b)
+{
+	return ufbxm_dq(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
+
+// Mirrors `ufbxi_mul_quat()`
+static ufbxm_dquat ufbxm_dquat_mul(ufbxm_dquat a, ufbxm_dquat b)
+{
+	return ufbxm_dq(
+		a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+		a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+		a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+		a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z);
+}
+
+// Mirrors `ufbx_quat_rotate_vec3()`
+static ufbxm_dvec3 ufbxm_dquat_rotate(ufbxm_dquat q, ufbxm_dvec3 v)
+{
+	double xy = q.x*v.y - q.y*v.x;
+	double xz = q.x*v.z - q.z*v.x;
+	double yz = q.y*v.z - q.z*v.y;
+	return ufbxm_dv3(
+		2.0 * (q.w*yz + q.y*xy + q.z*xz) + v.x,
+		2.0 * (-q.x*xy - q.w*xz + q.z*yz) + v.y,
+		2.0 * (-q.x*xz - q.y*yz + q.w*xy) + v.z);
+}
+
+// Time derivative of `rotate(q(t), v(t))` for a unit quaternion:
+//   d/dt = omega_world x (q*v) + q*v',  omega_world = 2 * vec(q' * q*)
+static ufbxm_dvec3 ufbxm_dquat_rotate_deriv(ufbxm_dquat q, ufbxm_dquat dq,
+	ufbxm_dvec3 v, ufbxm_dvec3 dv)
+{
+	ufbxm_dquat qc = ufbxm_dq(-q.x, -q.y, -q.z, q.w);
+	ufbxm_dquat wq = ufbxm_dquat_mul(dq, qc);
+	ufbxm_dvec3 omega = ufbxm_dv3(2.0 * wq.x, 2.0 * wq.y, 2.0 * wq.z);
+	ufbxm_dvec3 r = ufbxm_dquat_rotate(q, v);
+	ufbxm_dvec3 cross = ufbxm_dv3(
+		omega.y*r.z - omega.z*r.y,
+		omega.z*r.x - omega.x*r.z,
+		omega.x*r.y - omega.y*r.x);
+	return ufbxm_dv3_add(cross, ufbxm_dquat_rotate(q, dv));
+}
+
+// Double precision version of `ufbx_euler_to_quat()`, angles in degrees.
+static ufbxm_dquat ufbxm_euler_to_dquat(ufbxm_dvec3 v, ufbx_rotation_order order)
+{
+	double vx = v.x * (UFBXI_DEG_TO_RAD_DOUBLE * 0.5);
+	double vy = v.y * (UFBXI_DEG_TO_RAD_DOUBLE * 0.5);
+	double vz = v.z * (UFBXI_DEG_TO_RAD_DOUBLE * 0.5);
+	double cx = ufbx_cos(vx), sx = ufbx_sin(vx);
+	double cy = ufbx_cos(vy), sy = ufbx_sin(vy);
+	double cz = ufbx_cos(vz), sz = ufbx_sin(vz);
+	ufbxm_dquat q;
+
+	switch (order) {
+	case UFBX_ROTATION_ORDER_XYZ:
+		q = ufbxm_dq(-cx*sy*sz + cy*cz*sx, cx*cz*sy + cy*sx*sz, cx*cy*sz - cz*sx*sy, cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBX_ROTATION_ORDER_XZY:
+		q = ufbxm_dq(cx*sy*sz + cy*cz*sx, cx*cz*sy + cy*sx*sz, cx*cy*sz - cz*sx*sy, cx*cy*cz - sx*sy*sz);
+		break;
+	case UFBX_ROTATION_ORDER_YZX:
+		q = ufbxm_dq(-cx*sy*sz + cy*cz*sx, cx*cz*sy - cy*sx*sz, cx*cy*sz + cz*sx*sy, cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBX_ROTATION_ORDER_YXZ:
+		q = ufbxm_dq(-cx*sy*sz + cy*cz*sx, cx*cz*sy + cy*sx*sz, cx*cy*sz + cz*sx*sy, cx*cy*cz - sx*sy*sz);
+		break;
+	case UFBX_ROTATION_ORDER_ZXY:
+		q = ufbxm_dq(cx*sy*sz + cy*cz*sx, cx*cz*sy - cy*sx*sz, cx*cy*sz - cz*sx*sy, cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBX_ROTATION_ORDER_ZYX:
+		q = ufbxm_dq(cx*sy*sz + cy*cz*sx, cx*cz*sy - cy*sx*sz, cx*cy*sz + cz*sx*sy, cx*cy*cz - sx*sy*sz);
+		break;
+	default:
+		q = ufbxm_dq(0.0, 0.0, 0.0, 1.0);
+		break;
+	}
+	return q;
+}
+
+// Solve the cubic Bezier x-axis polynomial x(u) = x_target for `u`.
+// The time control points are guaranteed monotonic by the caller.
+static bool ufbxm_solve_bezier_u(double x1, double x2, double x_target, double *out_u)
+{
+	if (x_target <= 0.0) { *out_u = 0.0; return true; }
+	if (x_target >= 1.0) { *out_u = 1.0; return true; }
+
+	double p1_3 = x1 * 3.0, p2_3 = x2 * 3.0;
+	double a = p1_3 - p2_3 + 1.0;
+	double b = p2_3 - p1_3 - p1_3;
+	double c = p1_3;
+
+	double lo = 0.0, hi = 1.0;
+	double u = x_target;
+	for (size_t i = 0; i < 32; i++) {
+		double u2 = u*u, u3 = u2*u;
+		double f = a*u3 + b*u2 + c*u - x_target;
+		double df = 3.0*a*u2 + 2.0*b*u + c;
+		if (ufbx_fabs(f) <= 1e-14) break;
+		if (df > 1e-12) {
+			double next = u - f / df;
+			if (next > lo && next < hi) {
+				u = next;
+				continue;
+			}
+		}
+		// Bisection fallback
+		double fm = a*(lo*lo*lo) + b*(lo*lo) + c*lo - x_target;
+		double mid = (lo + hi) * 0.5;
+		double fmid = a*(mid*mid*mid) + b*(mid*mid) + c*mid - x_target;
+		if ((fm <= 0.0) == (fmid <= 0.0)) lo = mid; else hi = mid;
+		u = mid;
+	}
+
+	double u2 = u*u, u3 = u2*u;
+	double residual = ufbx_fabs(a*u3 + b*u2 + c*u - x_target);
+	if (residual > 1e-10) return false;
+	*out_u = u;
+	return true;
+}
+
+ufbx_abi bool ufbx_evaluate_curve_motion(const ufbx_anim_curve *curve, double time,
+	ufbx_real default_value, ufbx_motion_side side, ufbx_motion_sample *result)
+{
+	if (!result) return false;
+	if (side != UFBX_MOTION_LEFT && side != UFBX_MOTION_RIGHT) return false;
+	if (!ufbxm_finite_d(time)) return false;
+
+	if (!curve || curve->keyframes.count == 0) {
+		if (!ufbxm_finite_r(default_value)) return false;
+		result->value = default_value;
+		result->derivative = 0.0f;
+		return true;
+	}
+
+	if (curve->pre_extrapolation.mode != UFBX_EXTRAPOLATION_CONSTANT ||
+		curve->post_extrapolation.mode != UFBX_EXTRAPOLATION_CONSTANT) {
+		return false;
+	}
+
+	size_t count = curve->keyframes.count;
+	const ufbx_keyframe *keys = curve->keyframes.data;
+
+	if (count == 1) {
+		if (!ufbxm_finite_r(keys[0].value)) return false;
+		result->value = keys[0].value;
+		result->derivative = 0.0f;
+		return true;
+	}
+
+	// Constant extension outside the keyframe range
+	if (time < keys[0].time) {
+		if (!ufbxm_finite_r(keys[0].value)) return false;
+		result->value = keys[0].value;
+		result->derivative = 0.0f;
+		return true;
+	}
+	if (time > keys[count - 1].time) {
+		if (!ufbxm_finite_r(keys[count - 1].value)) return false;
+		result->value = keys[count - 1].value;
+		result->derivative = 0.0f;
+		return true;
+	}
+
+	// Exact first/last keyframes, one side is the constant extension.
+	if (time == keys[0].time) {
+		if (side == UFBX_MOTION_LEFT) {
+			if (!ufbxm_finite_r(keys[0].value)) return false;
+			result->value = keys[0].value;
+			result->derivative = 0.0f;
+			return true;
+		}
+		// Fall through using the segment starting at the first key.
+	} else if (time == keys[count - 1].time) {
+		if (side == UFBX_MOTION_RIGHT) {
+			if (!ufbxm_finite_r(keys[count - 1].value)) return false;
+			result->value = keys[count - 1].value;
+			result->derivative = 0.0f;
+			return true;
+		}
+		// Fall through using the segment ending at the last key.
+	}
+
+	// Find the first key strictly after `time`.
+	size_t begin = 0, end = count;
+	while (end - begin >= 8) {
+		size_t mid = (begin + end) >> 1;
+		if (keys[mid].time <= time) begin = mid + 1;
+		else end = mid;
+	}
+	size_t next_ix = count;
+	for (size_t i = begin; i < count; i++) {
+		if (keys[i].time > time) { next_ix = i; break; }
+	}
+
+	size_t seg_prev, seg_next;
+	if (next_ix == count) {
+		// time == last keyframe time, approached from the left
+		ufbx_assert(keys[count - 1].time == time && side == UFBX_MOTION_LEFT);
+		if (keys[count - 1].time != time || side != UFBX_MOTION_LEFT) return false;
+		seg_prev = count - 2;
+		seg_next = count - 1;
+	} else if (next_ix == 0) {
+		// time == first keyframe time, approached from the right
+		ufbx_assert(keys[0].time == time && side == UFBX_MOTION_RIGHT);
+		if (keys[0].time != time || side != UFBX_MOTION_RIGHT) return false;
+		seg_prev = 0;
+		seg_next = 1;
+	} else if (keys[next_ix - 1].time == time) {
+		// Exact interior keyframe: pick the segment on the requested side.
+		if (side == UFBX_MOTION_LEFT) {
+			seg_prev = next_ix - 2;
+			seg_next = next_ix - 1;
+		} else {
+			seg_prev = next_ix - 1;
+			seg_next = next_ix;
+		}
+	} else {
+		seg_prev = next_ix - 1;
+		seg_next = next_ix;
+	}
+
+	const ufbx_keyframe *prev = &keys[seg_prev];
+	const ufbx_keyframe *next = &keys[seg_next];
+
+	double delta_time = next->time - prev->time;
+	if (!ufbxm_finite_d(delta_time) || delta_time <= 0.0) return false;
+
+	double value, derivative;
+	switch (prev->interpolation) {
+
+	case UFBX_INTERPOLATION_CONSTANT_PREV:
+		value = (double)prev->value;
+		derivative = 0.0;
+		break;
+
+	case UFBX_INTERPOLATION_CONSTANT_NEXT:
+		value = (double)next->value;
+		derivative = 0.0;
+		break;
+
+	case UFBX_INTERPOLATION_LINEAR:
+	{
+		double t = (time - prev->time) / delta_time;
+		double y0 = (double)prev->value, y1 = (double)next->value;
+		value = y0 * (1.0 - t) + y1 * t;
+		derivative = (y1 - y0) / delta_time;
+		break;
+	}
+
+	case UFBX_INTERPOLATION_CUBIC:
+	{
+		double x1 = (double)prev->right.dx / delta_time;
+		double x2 = 1.0 - (double)next->left.dx / delta_time;
+		// Time control points must be non-decreasing: 0 <= x1 <= x2 <= 1
+		if (!(x1 >= 0.0 && x2 >= x1 && x2 <= 1.0)) return false;
+
+		double x_target = (time - prev->time) / delta_time;
+		double u;
+		if (!ufbxm_solve_bezier_u(x1, x2, x_target, &u)) return false;
+
+		double y0 = (double)prev->value;
+		double y3 = (double)next->value;
+		double y1 = y0 + (double)prev->right.dy;
+		double y2 = y3 - (double)next->left.dy;
+
+		double uu = 1.0 - u;
+		double u2 = u*u, uu2 = uu*uu;
+
+		value = uu2*uu*y0 + 3.0*(uu2*u*y1 + uu*u2*y2) + u2*u*y3;
+
+		double dx_du = 3.0 * (uu2 * x1 + 2.0*uu*u*(x2 - x1) + u2*(1.0 - x2));
+		if (!(dx_du > 0.0)) return false;
+		double dy_du = 3.0 * (uu2*(y1 - y0) + 2.0*uu*u*(y2 - y1) + u2*(y3 - y2));
+
+		derivative = dy_du / (delta_time * dx_du);
+		break;
+	}
+
+	default:
+		return false;
+	}
+
+	if (!ufbxm_finite_d(value) || !ufbxm_finite_d(derivative)) return false;
+	result->value = (ufbx_real)value;
+	result->derivative = (ufbx_real)derivative;
+	return true;
+}
+
+// -- Scene level motion evaluation
+
+typedef struct {
+	ufbxm_dvec3 value;
+	ufbxm_dvec3 derivative;
+} ufbxm_dvec3_motion;
+
+typedef struct {
+	ufbxm_dquat value;
+	ufbxm_dquat derivative;
+} ufbxm_dquat_motion;
+
+typedef struct {
+	ufbxm_dmat value;
+	ufbxm_dmat derivative;
+} ufbxm_dmat_motion;
+
+typedef struct {
+	// Cached local transform motion in double precision.
+	ufbxm_dmat_motion local;
+	// Node-to-world motion.
+	ufbxm_dmat_motion world;
+	// Geometry-to-node (static, only the value part varies).
+	ufbxm_dmat geometry_to_node;
+	// Geometry-to-world motion.
+	ufbxm_dmat_motion geometry_to_world;
+	const ufbx_node *node;
+} ufbxm_node_motion;
+
+typedef struct {
+	const ufbx_anim_curve *curve;
+	ufbx_real default_value;
+} ufbxm_curve_ref;
+
+typedef struct {
+	ufbxm_curve_ref refs[3];
+} ufbxm_vec3_curves;
+
+typedef struct {
+	// Owning allocations, freed on every failure path and via ufbx_free_motion.
+	char **blocks;
+	size_t num_blocks;
+	size_t cap_blocks;
+	ufbx_error error;
+} ufbxm_malloc_ctx;
+
+static void ufbxm_fail(ufbx_error *error, const char *msg)
+{
+	if (error) {
+		memset(error, 0, sizeof(*error));
+		error->type = UFBX_ERROR_UNKNOWN;
+		error->description.data = msg;
+		error->description.length = strlen(msg);
+		error->info[0] = '\0';
+	}
+}
+
+static void *ufbxm_alloc(ufbxm_malloc_ctx *ctx, size_t size)
+{
+	if (size == 0) size = 1;
+	void *ptr = ufbx_malloc(size);
+	if (!ptr) {
+		ufbxm_fail(&ctx->error, "Out of memory");
+		return NULL;
+	}
+	if (ctx->num_blocks == ctx->cap_blocks) {
+		size_t new_cap = ctx->cap_blocks ? ctx->cap_blocks * 2 : 16;
+		char **new_blocks = (char**)ufbx_malloc(new_cap * sizeof(char*));
+		if (!new_blocks) {
+			ufbx_free(ptr, size);
+			ufbxm_fail(&ctx->error, "Out of memory");
+			return NULL;
+		}
+		memcpy(new_blocks, ctx->blocks, ctx->num_blocks * sizeof(char*));
+		if (ctx->blocks) ufbx_free(ctx->blocks, ctx->cap_blocks * sizeof(char*));
+		ctx->blocks = new_blocks;
+		ctx->cap_blocks = new_cap;
+	}
+	ctx->blocks[ctx->num_blocks++] = (char*)ptr;
+	return ptr;
+}
+
+static void ufbxm_free_all(ufbxm_malloc_ctx *ctx)
+{
+	for (size_t i = 0; i < ctx->num_blocks; i++) {
+		ufbx_free(ctx->blocks[i], 0);
+	}
+	if (ctx->blocks) ufbx_free(ctx->blocks, ctx->cap_blocks * sizeof(char*));
+	ctx->blocks = NULL;
+	ctx->num_blocks = ctx->cap_blocks = 0;
+}
+
+static ufbxm_dvec3 ufbxm_dv3_scale(ufbxm_dvec3 v, double s)
+{
+	return ufbxm_dv3(v.x * s, v.y * s, v.z * s);
+}
+
+// Derivative of the affine product A*B. Derivative matrices have an implicit
+// zero fourth row (unlike affine matrices whose implicit fourth row is
+// [0 0 0 1]), so (A*B') has no A-translation carry in its translation column.
+static ufbxm_dmat ufbxm_dmat_mul_deriv(const ufbxm_dmat *a, const ufbxm_dmat *da,
+	const ufbxm_dmat *b, const ufbxm_dmat *db)
+{
+	ufbxm_dmat r;
+	for (size_t col = 0; col < 3; col++) {
+		size_t j = col * 3;
+		for (size_t row = 0; row < 3; row++) {
+			r.v[j + row] =
+				da->v[0 + row] * b->v[j + 0] +
+				da->v[3 + row] * b->v[j + 1] +
+				da->v[6 + row] * b->v[j + 2] +
+				a->v[0 + row] * db->v[j + 0] +
+				a->v[3 + row] * db->v[j + 1] +
+				a->v[6 + row] * db->v[j + 2];
+		}
+	}
+	for (size_t row = 0; row < 3; row++) {
+		// da*b translation keeps da's translation (b has the implicit 1),
+		// a*db translation has no carry (db has implicit 0).
+		r.v[9 + row] =
+			da->v[0 + row] * b->v[9 + 0] +
+			da->v[3 + row] * b->v[9 + 1] +
+			da->v[6 + row] * b->v[9 + 2] +
+			da->v[9 + row] +
+			a->v[0 + row] * db->v[9 + 0] +
+			a->v[3 + row] * db->v[9 + 1] +
+			a->v[6 + row] * db->v[9 + 2];
+	}
+	return r;
+}
+
+static ufbxm_dmat ufbxm_dmat_mul_motion(const ufbxm_dmat_motion *a, const ufbxm_dmat_motion *b,
+	ufbxm_dmat_motion *out)
+{
+	out->value = ufbxm_dmat_mul(&a->value, &b->value);
+	out->derivative = ufbxm_dmat_mul_deriv(&a->value, &a->derivative, &b->value, &b->derivative);
+	return out->value;
+}
+
+// Build the 3x4 matrix of a translation/rotation(unit quat)/scale transform and
+// its analytic derivative in double precision.
+static void ufbxm_trs_to_dmat(ufbxm_dvec3 t, ufbxm_dquat q, ufbxm_dvec3 s,
+	ufbxm_dvec3 dt, ufbxm_dquat dq, ufbxm_dvec3 ds, ufbxm_dmat *m, ufbxm_dmat *dm)
+{
+	double sx = 2.0 * s.x, sy = 2.0 * s.y, sz = 2.0 * s.z;
+	double dsx = 2.0 * ds.x, dsy = 2.0 * ds.y, dsz = 2.0 * ds.z;
+	double xx = q.x*q.x, xy = q.x*q.y, xz = q.x*q.z, xw = q.x*q.w;
+	double yy = q.y*q.y, yz = q.y*q.z, yw = q.y*q.w;
+	double zz = q.z*q.z, zw = q.z*q.w;
+	double dxx = 2.0*q.x*dq.x, dxy = q.x*dq.y + dq.x*q.y, dxz = q.x*dq.z + dq.x*q.z, dxw = q.x*dq.w + dq.x*q.w;
+	double dyy = 2.0*q.y*dq.y, dyz = q.y*dq.z + dq.y*q.z, dyw = q.y*dq.w + dq.y*q.w;
+	double dzz = 2.0*q.z*dq.z, dzw = q.z*dq.w + dq.z*q.w;
+
+	m->v[0] = sx * (- yy - zz + 0.5);
+	m->v[1] = sx * (+ xy + zw);
+	m->v[2] = sx * (- yw + xz);
+	m->v[3] = sy * (- zw + xy);
+	m->v[4] = sy * (- xx - zz + 0.5);
+	m->v[5] = sy * (+ xw + yz);
+	m->v[6] = sz * (+ xz + yw);
+	m->v[7] = sz * (- xw + yz);
+	m->v[8] = sz * (- xx - yy + 0.5);
+	m->v[9] = t.x; m->v[10] = t.y; m->v[11] = t.z;
+
+	dm->v[0] = dsx * (- yy - zz + 0.5) + sx * (- dyy - dzz);
+	dm->v[1] = dsx * (xy + zw) + sx * (dxy + dzw);
+	dm->v[2] = dsx * (- yw + xz) + sx * (- dyw + dxz);
+	dm->v[3] = dsy * (- zw + xy) + sy * (- dzw + dxy);
+	dm->v[4] = dsy * (- xx - zz + 0.5) + sy * (- dxx - dzz);
+	dm->v[5] = dsy * (xw + yz) + sy * (dxw + dyz);
+	dm->v[6] = dsz * (xz + yw) + sz * (dxz + dyw);
+	dm->v[7] = dsz * (- xw + yz) + sz * (- dxw + dyz);
+	dm->v[8] = dsz * (- xx - yy + 0.5) + sz * (- dxx - dyy);
+	dm->v[9] = dt.x; dm->v[10] = dt.y; dm->v[11] = dt.z;
+}
+
+// Resolve the (at most three) curves animating a vec3 property of `element`.
+// Returns false if an unexpected animated property is found. `out` holds the
+// static default values from the element properties.
+static bool ufbxm_resolve_vec3(const ufbx_anim *anim, const ufbx_element *element, const char *name,
+	ufbxm_vec3_curves *curves, ufbxm_dvec3 *out_value, ufbxm_dvec3 *out_deriv,
+	double def_x, double def_y, double def_z)
+{
+	curves->refs[0].curve = NULL; curves->refs[1].curve = NULL; curves->refs[2].curve = NULL;
+	*out_deriv = ufbxm_dzero;
+
+	ufbx_prop *prop = ufbx_find_prop(&element->props, name);
+	if (prop) {
+		out_value->x = prop->value_vec3.x;
+		out_value->y = prop->value_vec3.y;
+		out_value->z = prop->value_vec3.z;
+	} else {
+		*out_value = ufbxm_dv3(def_x, def_y, def_z);
+	}
+	// Without a curve the evaluated value must stay at the static value, so use
+	// it as the per-component default.
+	curves->refs[0].default_value = (ufbx_real)out_value->x;
+	curves->refs[1].default_value = (ufbx_real)out_value->y;
+	curves->refs[2].default_value = (ufbx_real)out_value->z;
+
+	if (anim->layers.count) {
+		ufbx_anim_layer *layer = anim->layers.data[0];
+		ufbx_anim_prop *aprop = ufbx_find_anim_prop(layer, element, name);
+		if (aprop) {
+			ufbx_anim_value *av = aprop->anim_value;
+			for (size_t i = 0; i < 3; i++) {
+				if (av->curves[i]) curves->refs[i].curve = av->curves[i];
+				// Mirrors `ufbx_evaluate_anim_value_vec3_flags()` for missing curves.
+				curves->refs[i].default_value = av->default_value.v[i];
+			}
+		}
+	}
+	return true;
+}
+
+static bool ufbxm_eval_vec3(const ufbxm_vec3_curves *curves, double time, ufbx_motion_side side,
+	ufbxm_dvec3 *value, ufbxm_dvec3 *deriv)
+{
+	ufbx_motion_sample s;
+	for (size_t i = 0; i < 3; i++) {
+		ufbx_real def = curves->refs[i].default_value;
+		if (!ufbx_evaluate_curve_motion(curves->refs[i].curve, time, def, side, &s)) return false;
+		value->v[i] = s.value;
+		deriv->v[i] = s.derivative;
+	}
+	return true;
+}
+
+// Mirrors `ufbxi_get_transform()` while propagating analytic derivatives.
+// Only the supported subset is reached: no scale helpers, no adjust transforms,
+// no mirroring, finite positive scales.
+static bool ufbxm_eval_node_local(const ufbx_anim *anim, const ufbx_node *node,
+	double time, ufbx_motion_side side, ufbxm_dmat_motion *out)
+{
+	ufbxm_vec3_curves tc, rc, sc;
+	ufbxm_dvec3 t, dt, r, dr, s, ds;
+
+	{
+		ufbx_prop *p;
+		ufbxm_dvec3 sp = ufbxm_dzero, rp = ufbxm_dzero, so = ufbxm_dzero, ro = ufbxm_dzero;
+		ufbxm_dvec3 pre_e = ufbxm_dzero, post_e = ufbxm_dzero;
+		if ((p = ufbx_find_prop(&node->props, ufbxi_ScalingPivot))) sp = ufbxm_vec3_to_d(p->value_vec3);
+		if ((p = ufbx_find_prop(&node->props, ufbxi_RotationPivot))) rp = ufbxm_vec3_to_d(p->value_vec3);
+		if ((p = ufbx_find_prop(&node->props, ufbxi_ScalingOffset))) so = ufbxm_vec3_to_d(p->value_vec3);
+		if ((p = ufbx_find_prop(&node->props, ufbxi_RotationOffset))) ro = ufbxm_vec3_to_d(p->value_vec3);
+		if ((p = ufbx_find_prop(&node->props, ufbxi_PreRotation))) pre_e = ufbxm_vec3_to_d(p->value_vec3);
+		if ((p = ufbx_find_prop(&node->props, ufbxi_PostRotation))) post_e = ufbxm_vec3_to_d(p->value_vec3);
+
+		if (!ufbxm_resolve_vec3(anim, &node->element, ufbxi_Lcl_Translation, &tc, &t, &dt, 0.0, 0.0, 0.0)) return false;
+		if (!ufbxm_resolve_vec3(anim, &node->element, ufbxi_Lcl_Rotation, &rc, &r, &dr, 0.0, 0.0, 0.0)) return false;
+		if (!ufbxm_resolve_vec3(anim, &node->element, ufbxi_Lcl_Scaling, &sc, &s, &ds, 1.0, 1.0, 1.0)) return false;
+		if (!ufbxm_eval_vec3(&tc, time, side, &t, &dt)) return false;
+		if (!ufbxm_eval_vec3(&rc, time, side, &r, &dr)) return false;
+		if (!ufbxm_eval_vec3(&sc, time, side, &s, &ds)) return false;
+
+		if (!(ufbxm_dvec3_finite(t) && ufbxm_dvec3_finite(dt) &&
+			ufbxm_dvec3_finite(r) && ufbxm_dvec3_finite(dr) &&
+			ufbxm_dvec3_finite(s) && ufbxm_dvec3_finite(ds))) return false;
+		if (!(s.x > 0.0 && s.y > 0.0 && s.z > 0.0)) return false;
+
+		// Mirrors `ufbxi_get_transform()`: the rotation order property is only
+		// honored when rotation space is active, otherwise lcl rotation uses XYZ.
+		ufbx_rotation_order order = node->use_rotation_space
+			? node->rotation_order : UFBX_ROTATION_ORDER_XYZ;
+		ufbxm_dquat pre_q = ufbxm_euler_to_dquat(pre_e, UFBX_ROTATION_ORDER_XYZ);
+		ufbxm_dquat post_inv_q = ufbxm_euler_to_dquat(post_e, UFBX_ROTATION_ORDER_XYZ);
+		post_inv_q.x = -post_inv_q.x; post_inv_q.y = -post_inv_q.y; post_inv_q.z = -post_inv_q.z;
+
+		// State, mirrors `ufbxi_get_transform()` applied on an identity transform.
+		ufbxm_dvec3 st = ufbxm_dzero;
+		ufbxm_dquat sq = ufbxm_dq(0.0, 0.0, 0.0, 1.0);
+		ufbxm_dvec3 ss = ufbxm_dv3(1.0, 1.0, 1.0);
+		ufbxm_dvec3 dst_v = ufbxm_dzero;
+		ufbxm_dquat dsq = ufbxm_dq(0.0, 0.0, 0.0, 0.0);
+		ufbxm_dvec3 dss = ufbxm_dzero;
+
+		// Subtract scale pivot (static).
+		st = ufbxm_dv3(st.x - sp.x, st.y - sp.y, st.z - sp.z);
+
+		// `ufbxi_mul_scale()`: translation and state scale times the lcl scaling.
+		for (size_t i = 0; i < 3; i++) {
+			dst_v.v[i] = dst_v.v[i] * s.v[i] + st.v[i] * ds.v[i];
+			dss.v[i] = dss.v[i] * s.v[i] + ss.v[i] * ds.v[i];
+			st.v[i] *= s.v[i];
+			ss.v[i] *= s.v[i];
+		}
+
+		// Add scale pivot and scale offset (both static).
+		st = ufbxm_dv3(st.x + sp.x, st.y + sp.y, st.z + sp.z);
+		st = ufbxm_dv3_add(st, so);
+
+		// Subtract rotation pivot (static).
+		st = ufbxm_dv3(st.x - rp.x, st.y - rp.y, st.z - rp.z);
+
+		ufbxm_dquat q = ufbxm_euler_to_dquat(r, order);
+		ufbxm_dquat dq = ufbxm_dq(0.0, 0.0, 0.0, 0.0);
+		if (order >= UFBX_ROTATION_ORDER_XYZ && order <= UFBX_ROTATION_ORDER_ZYX) {
+			// Exact derivative: q is the order-specific product of three
+			// half-angle axis quaternions, differentiated by the product rule.
+			static const char order_axes[6][3] = {
+				{ 'X', 'Y', 'Z' }, { 'X', 'Z', 'Y' }, { 'Y', 'Z', 'X' },
+				{ 'Y', 'X', 'Z' }, { 'Z', 'X', 'Y' }, { 'Z', 'Y', 'X' },
+			};
+			const char *axes = order_axes[order];
+			ufbxm_dquat qa[3], dqa[3];
+			for (size_t axis = 0; axis < 3; axis++) {
+				double half = r.v[axis] * (UFBXI_DEG_TO_RAD_DOUBLE * 0.5);
+				double dhalf = dr.v[axis] * (UFBXI_DEG_TO_RAD_DOUBLE * 0.5);
+				double ch = ufbx_cos(half), sh = ufbx_sin(half);
+				ufbxm_dquat aq = ufbxm_dq(0.0, 0.0, 0.0, 1.0);
+				ufbxm_dquat adq = ufbxm_dq(0.0, 0.0, 0.0, 0.0);
+				aq.v[axis] = sh;
+				aq.w = ch;
+				adq.v[axis] = ch * dhalf;
+				adq.w = -sh * dhalf;
+				qa[axis] = aq;
+				dqa[axis] = adq;
+			}
+			ufbxm_dquat fold = ufbxm_dq(0.0, 0.0, 0.0, 1.0);
+			ufbxm_dquat dfold = ufbxm_dq(0.0, 0.0, 0.0, 0.0);
+			// Target product: qa(axes[2]) * qa(axes[1]) * qa(axes[0]).
+			for (size_t j = 0; j < 3; j++) {
+				size_t axis = (size_t)(axes[j] - 'X');
+				dfold = ufbxm_dquat_add(
+					ufbxm_dquat_mul(dqa[axis], fold),
+					ufbxm_dquat_mul(qa[axis], dfold));
+				fold = ufbxm_dquat_mul(qa[axis], fold);
+			}
+			dq = dfold;
+		}
+
+		ufbxm_dquat chain_q, chain_dq;
+		if (node->use_rotation_space) {
+			// `ufbxi_get_transform()` left-multiplies post_inv, then r, then pre
+			// onto the state rotation, so the resulting chain is pre*r*post_inv.
+			chain_q = ufbxm_dquat_mul(ufbxm_dquat_mul(pre_q, q), post_inv_q);
+			chain_dq = ufbxm_dquat_mul(ufbxm_dquat_mul(pre_q, dq), post_inv_q);
+		} else {
+			chain_q = q;
+			chain_dq = dq;
+		}
+
+		// Rotate the accumulated translation and left-multiply the state rotation.
+		dst_v = ufbxm_dquat_rotate_deriv(chain_q, chain_dq, st, dst_v);
+		st = ufbxm_dquat_rotate(chain_q, st);
+		dsq = ufbxm_dquat_add(ufbxm_dquat_mul(chain_dq, sq), ufbxm_dquat_mul(chain_q, dsq));
+		sq = ufbxm_dquat_mul(chain_q, sq);
+
+		// Add rotation pivot, rotation offset and the lcl translation.
+		st = ufbxm_dv3(st.x + rp.x, st.y + rp.y, st.z + rp.z);
+		st = ufbxm_dv3_add(st, ro);
+		st = ufbxm_dv3_add(st, t);
+		dst_v = ufbxm_dv3_add(dst_v, dt);
+
+		ufbxm_trs_to_dmat(st, sq, ss, dst_v, dsq, dss, &out->value, &out->derivative);
+		if (!ufbxm_dmat_finite(&out->value) || !ufbxm_dmat_finite(&out->derivative)) return false;
+	}
+	return true;
+}
+
+typedef struct {
+	ufbx_motion motion;
+	ufbxm_malloc_ctx ctx;
+} ufbxm_result_imp;
+
+static void *ufbxm_result_alloc(ufbxm_result_imp *res, size_t size)
+{
+	return ufbxm_alloc(&res->ctx, size);
+}
+
+static bool ufbxm_name_is(const ufbx_anim_prop *aprop, const char *name)
+{
+	return aprop->prop_name.length == strlen(name) && strcmp(aprop->prop_name.data, name) == 0;
+}
+
+// Validate the supported scene/animation subset and reject everything else
+// with a descriptive error rather than silently treating it as static.
+static bool ufbxm_validate(const ufbx_scene *scene, const ufbx_anim *anim, ufbx_error *error)
+{
+	// A fully static scene has no animation layers; otherwise exactly one layer
+	// is required.
+	if (anim->layers.count > 1) {
+		ufbxm_fail(error, "motion: only animations with at most one layer are supported");
+		return false;
+	}
+	if (anim->prop_overrides.count != 0 || anim->transform_overrides.count != 0) {
+		ufbxm_fail(error, "motion: property and transform overrides are not supported");
+		return false;
+	}
+	if (scene->constraints.count != 0) {
+		ufbxm_fail(error, "motion: constraints are not supported");
+		return false;
+	}
+
+	ufbx_anim_layer *layer = anim->layers.count ? anim->layers.data[0] : NULL;
+	// With a single layer the first (and only) layer always overrides, so the
+	// multi-layer blend/composition modes have no observable effect.
+	if (layer) {
+		for (size_t i = 0; i < layer->anim_props.count; i++) {
+			ufbx_anim_prop *aprop = &layer->anim_props.data[i];
+			ufbx_element *elem = aprop->element;
+			bool ok = false;
+			if (elem->type == UFBX_ELEMENT_NODE) {
+				ok = ufbxm_name_is(aprop, ufbxi_Lcl_Translation) ||
+					ufbxm_name_is(aprop, ufbxi_Lcl_Rotation) ||
+					ufbxm_name_is(aprop, ufbxi_Lcl_Scaling);
+			} else if (elem->type == UFBX_ELEMENT_BLEND_CHANNEL) {
+				ok = ufbxm_name_is(aprop, ufbxi_DeformPercent);
+			}
+			if (!ok) {
+				ufbxm_fail(error, "motion: animated pivot, geometry or other unsupported property");
+				return false;
+			}
+			ufbx_prop *prop = ufbx_find_prop(&elem->props, aprop->prop_name.data);
+			if (prop && (prop->flags & UFBX_PROP_FLAG_CONNECTED) && !anim->ignore_connections) {
+				ufbxm_fail(error, "motion: connected animated properties are not supported");
+				return false;
+			}
+		}
+	}
+
+	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
+		ufbx_node *node = *p_node;
+		if (node->inherit_mode != UFBX_INHERIT_MODE_NORMAL) {
+			ufbxm_fail(error, "motion: only normal scale inheritance is supported");
+			return false;
+		}
+		if (node->use_rotation_space &&
+			(node->rotation_order < UFBX_ROTATION_ORDER_XYZ ||
+				node->rotation_order > UFBX_ROTATION_ORDER_ZYX)) {
+			ufbxm_fail(error, "motion: spheric rotation order is not supported");
+			return false;
+		}
+		if (node->is_scale_helper || node->is_geometry_transform_helper || node->has_adjust_transform) {
+			ufbxm_fail(error, "motion: scale helpers, geometry helpers and adjust transforms are not supported");
+			return false;
+		}
+		for (size_t i = 0; i < node->props.props.count; i++) {
+			if ((node->props.props.data[i].flags & UFBX_PROP_FLAG_CONNECTED) && !anim->ignore_connections) {
+				ufbxm_fail(error, "motion: connected node properties are not supported");
+				return false;
+			}
+		}
+	}
+
+	ufbxi_for_ptr_list(ufbx_blend_channel, p_channel, scene->blend_channels) {
+		ufbx_blend_channel *channel = *p_channel;
+		for (size_t i = 0; i < channel->props.props.count; i++) {
+			if ((channel->props.props.data[i].flags & UFBX_PROP_FLAG_CONNECTED) && !anim->ignore_connections) {
+				ufbxm_fail(error, "motion: connected blend channel properties are not supported");
+				return false;
+			}
+		}
+	}
+
+	ufbxi_for_ptr_list(ufbx_mesh, p_mesh, scene->meshes) {
+		ufbx_mesh *mesh = *p_mesh;
+		if (mesh->cache_deformers.count != 0) {
+			ufbxm_fail(error, "motion: geometry caches are not supported");
+			return false;
+		}
+		if (mesh->skin_deformers.count > 1) {
+			ufbxm_fail(error, "motion: meshes with multiple skin deformers are not supported");
+			return false;
+		}
+		if (mesh->skin_deformers.count == 1) {
+			ufbx_skin_deformer *skin = mesh->skin_deformers.data[0];
+			if (skin->skinning_method != UFBX_SKINNING_METHOD_LINEAR) {
+				ufbxm_fail(error, "motion: only linear blend skinning is supported");
+				return false;
+			}
+			for (size_t v = 0; v < skin->vertices.count; v++) {
+				if (skin->vertices.data[v].dq_weight != 0.0f) {
+					ufbxm_fail(error, "motion: dual quaternion skinning is not supported");
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+// Per-channel morph weight motion plus side-aware effective keyframe weights.
+typedef struct {
+	double weight;
+	double derivative;
+} ufbxm_channel_motion;
+
+static bool ufbxm_eval_channel(const ufbx_anim *anim, const ufbx_blend_channel *channel,
+	double time, ufbx_motion_side side, ufbxm_channel_motion *out)
+{
+	ufbx_real def = channel->weight * (ufbx_real)100.0;
+	ufbx_anim_prop *aprop = NULL;
+	if (anim->layers.count)
+		aprop = ufbx_find_anim_prop(anim->layers.data[0], &channel->element, ufbxi_DeformPercent);
+	ufbx_motion_sample s;
+	if (aprop && aprop->anim_value->curves[0]) {
+		if (!ufbx_evaluate_curve_motion(aprop->anim_value->curves[0], time,
+			aprop->anim_value->default_value.x, side, &s)) return false;
+	} else {
+		s.value = def;
+		s.derivative = 0.0f;
+	}
+	out->weight = (double)s.value * 0.01;
+	out->derivative = (double)s.derivative * 0.01;
+	return ufbxm_finite_d(out->weight) && ufbxm_finite_d(out->derivative);
+}
+
+// Side-aware reimplementation of `ufbxi_update_blend_channel()`: returns the
+// effective weight and its time derivative for every keyframe.
+static bool ufbxm_blend_effective(const ufbx_blend_channel *channel, double w, double dw,
+	ufbx_motion_side side, double *out_eff, double *out_deff)
+{
+	size_t num = channel->keyframes.count;
+	for (size_t i = 0; i < num; i++) { out_eff[i] = 0.0; out_deff[i] = 0.0; }
+	if (num == 0) return true;
+
+	const ufbx_blend_keyframe *keys = channel->keyframes.data;
+	ptrdiff_t last_negative = -1;
+	for (size_t i = 0; i < num; i++) if (keys[i].target_weight < 0.0) last_negative = (ptrdiff_t)i;
+
+	// Index pair selected by the loop, `-1` means ufbx's implicit zero key.
+	ptrdiff_t prev_ix = -1, next_ix = -1;
+	if (w > 0.0) {
+		// Mirrors the positive-weight loop of `ufbxi_update_blend_channel()`.
+		ptrdiff_t prev = last_negative, next = -1;
+		for (ptrdiff_t i = last_negative + 1; i < (ptrdiff_t)num; i++) {
+			prev = next;
+			next = i;
+			// Strict comparison matches ufbx; at an exact target weight LEFT
+			// also breaks so the interval below the current weight is chosen.
+			if (keys[i].target_weight > w ||
+				(side == UFBX_MOTION_LEFT && keys[i].target_weight == w)) {
+				break;
+			}
+		}
+		prev_ix = prev;
+		next_ix = next;
+	} else {
+		// Mirrors the negative-weight loop.
+		ptrdiff_t prev = (last_negative + 1 < (ptrdiff_t)num) ? last_negative + 1 : -1;
+		ptrdiff_t next = -1;
+		for (ptrdiff_t i = last_negative; i >= 0; i--) {
+			prev = next;
+			next = i;
+			if (keys[i].target_weight < w ||
+				(side == UFBX_MOTION_RIGHT && keys[i].target_weight == w)) {
+				break;
+			}
+		}
+		prev_ix = prev;
+		next_ix = next;
+	}
+
+	if (next_ix < 0 && prev_ix < 0) return true;
+	double prev_target = prev_ix >= 0 ? (double)keys[prev_ix].target_weight : 0.0;
+	double next_target = next_ix >= 0 ? (double)keys[next_ix].target_weight : 0.0;
+	double delta = next_target - prev_target;
+	if (delta == 0.0) return true;
+	double t = (w - prev_target) / delta;
+	// A negative index is ufbx's implicit zero key, which has no shape entry.
+	if (prev_ix >= 0) {
+		out_eff[prev_ix] = 1.0 - t;
+		out_deff[prev_ix] = -dw / delta;
+	}
+	if (next_ix >= 0) {
+		out_eff[next_ix] = t;
+		out_deff[next_ix] = dw / delta;
+	}
+	return true;
+}
+
+// Accumulate the sparse blend shape offsets of one deformer into the local
+// morph position and its derivative.
+static bool ufbxm_apply_blend_deformer(const ufbx_blend_deformer *blend,
+	const ufbx_anim *anim, double time, ufbx_motion_side side,
+	ufbxm_dvec3 *local_pos, ufbxm_dvec3 *local_vel, size_t num_vertices, ufbx_error *error)
+{
+	ufbxi_for_ptr_list(ufbx_blend_channel, p_chan, blend->channels) {
+		ufbx_blend_channel *channel = *p_chan;
+		ufbxm_channel_motion cm;
+		if (!ufbxm_eval_channel(anim, channel, time, side, &cm)) {
+			ufbxm_fail(error, "motion: blend channel weight curve evaluation failed");
+			return false;
+		}
+
+		size_t num_keys = channel->keyframes.count;
+		double *eff = (double*)ufbx_malloc((num_keys ? num_keys : 1) * sizeof(double));
+		double *deff = (double*)ufbx_malloc((num_keys ? num_keys : 1) * sizeof(double));
+		if (!eff || !deff) {
+			if (eff) ufbx_free(eff, 0);
+			if (deff) ufbx_free(deff, 0);
+			ufbxm_fail(error, "Out of memory");
+			return false;
+		}
+		if (!ufbxm_blend_effective(channel, cm.weight, cm.derivative, side, eff, deff)) {
+			ufbx_free(eff, 0);
+			ufbx_free(deff, 0);
+			ufbxm_fail(error, "motion: blend in-between evaluation failed");
+			return false;
+		}
+
+		for (size_t k = 0; k < num_keys; k++) {
+			if (eff[k] == 0.0 && deff[k] == 0.0) continue;
+			const ufbx_blend_shape *shape = channel->keyframes.data[k].shape;
+			double shape_weight = eff[k];
+			double shape_dweight = deff[k];
+			for (size_t i = 0; i < shape->num_offsets; i++) {
+				uint32_t vertex = shape->offset_vertices.data[i];
+				if (vertex >= num_vertices) continue;
+				ufbxm_dvec3 offset = ufbxm_vec3_to_d(shape->position_offsets.data[i]);
+				double per_vertex = 1.0;
+				if (i < shape->offset_weights.count) per_vertex = (double)shape->offset_weights.data[i];
+				local_pos[vertex] = ufbxm_dv3_add(local_pos[vertex],
+					ufbxm_dv3_scale(offset, shape_weight * per_vertex));
+				local_vel[vertex] = ufbxm_dv3_add(local_vel[vertex],
+					ufbxm_dv3_scale(offset, shape_dweight * per_vertex));
+			}
+		}
+		ufbx_free(eff, 0);
+		ufbx_free(deff, 0);
+	}
+	return true;
+}
+
+// Linear blend skinning matrix for a vertex, matching
+// `ufbx_catch_get_skin_vertex_matrix()` including weight normalization. Vertices
+// without effective weights use the supplied instance geometry-to-world motion
+// (including its derivative).
+static ufbxm_dmat ufbxm_skin_vertex_matrix(const ufbx_skin_deformer *skin,
+	const ufbxm_dmat *bone_mats, const ufbxm_dmat *bone_dmats, size_t vertex,
+	const ufbxm_dmat *fallback, const ufbxm_dmat *fallback_deriv, ufbxm_dmat *out_deriv)
+{
+	ufbxm_dmat mat = { { 0.0 } }, dmat = { { 0.0 } };
+	double total_weight = 0.0;
+	ufbx_skin_vertex sv = skin->vertices.data[vertex];
+	for (uint32_t i = 0; i < sv.num_weights; i++) {
+		ufbx_skin_weight sw = skin->weights.data[sv.weight_begin + i];
+		ufbx_skin_cluster *cluster = skin->clusters.data[sw.cluster_index];
+		if (!cluster->bone_node) continue;
+		total_weight += (double)sw.weight;
+		double w = (double)sw.weight;
+		for (size_t j = 0; j < 12; j++) {
+			mat.v[j] += bone_mats[sw.cluster_index].v[j] * w;
+			dmat.v[j] += bone_dmats[sw.cluster_index].v[j] * w;
+		}
+	}
+
+	if (total_weight <= 0.0) {
+		*out_deriv = fallback_deriv ? *fallback_deriv : (ufbxm_dmat){ { 0.0 } };
+		return fallback ? *fallback : (ufbxm_dmat){ { 0.0 } };
+	}
+	if (ufbx_fabs(total_weight - 1.0) > UFBX_EPSILON && ufbx_fabs(total_weight) > UFBX_EPSILON) {
+		double rcp = 1.0 / total_weight;
+		for (size_t j = 0; j < 12; j++) {
+			mat.v[j] *= rcp;
+			dmat.v[j] *= rcp;
+		}
+	}
+	*out_deriv = dmat;
+	return mat;
+}
+
+static int ufbxm_motion_node_cmp(const void *a, const void *b)
+{
+	uint32_t ia = ((const ufbx_motion_node*)a)->node_id;
+	uint32_t ib = ((const ufbx_motion_node*)b)->node_id;
+	return ia < ib ? -1 : ia > ib ? 1 : 0;
+}
+
+static int ufbxm_motion_instance_cmp(const void *a, const void *b)
+{
+	uint32_t ia = ((const ufbx_motion_instance*)a)->node_id;
+	uint32_t ib = ((const ufbx_motion_instance*)b)->node_id;
+	return ia < ib ? -1 : ia > ib ? 1 : 0;
+}
+
+static bool ufbxm_evaluate_imp(const ufbx_scene *scene, const ufbx_anim *anim,
+	double time, ufbx_motion_side side, ufbx_error *error, ufbxm_result_imp *res)
+{
+	memset(res, 0, sizeof(*res));
+
+	if (!scene || !anim) {
+		ufbxm_fail(error, "motion: scene and anim must be non-NULL");
+		return false;
+	}
+	if (side != UFBX_MOTION_LEFT && side != UFBX_MOTION_RIGHT) {
+		ufbxm_fail(error, "motion: invalid side");
+		return false;
+	}
+	if (!ufbxm_finite_d(time)) {
+		ufbxm_fail(error, "motion: invalid time");
+		return false;
+	}
+	if (!ufbxm_validate(scene, anim, error)) return false;
+
+	size_t num_nodes = scene->nodes.count;
+	ufbxm_node_motion *node_motion = (ufbxm_node_motion*)ufbxm_result_alloc(res,
+		num_nodes * sizeof(ufbxm_node_motion));
+	if (!node_motion) { ufbxm_fail(error, "Out of memory"); return false; }
+	memset(node_motion, 0, num_nodes * sizeof(ufbxm_node_motion));
+
+	// typed_id -> motion slot lookup, scene typed ids are dense.
+	ufbxm_node_motion **by_typed = (ufbxm_node_motion**)ufbxm_result_alloc(res,
+		num_nodes * sizeof(ufbxm_node_motion*));
+	if (!by_typed) { ufbxm_fail(error, "Out of memory"); return false; }
+	memset(by_typed, 0, num_nodes * sizeof(ufbxm_node_motion*));
+	for (size_t i = 0; i < num_nodes; i++) {
+		node_motion[i].node = scene->nodes.data[i];
+		by_typed[scene->nodes.data[i]->typed_id] = &node_motion[i];
+	}
+
+	// Local and world node motion, traversed in scene order (parents first).
+	for (size_t i = 0; i < num_nodes; i++) {
+		const ufbx_node *node = scene->nodes.data[i];
+		ufbxm_node_motion *nm = &node_motion[i];
+		nm->geometry_to_node = ufbxm_dmat_from_ufbx(&node->geometry_to_node);
+
+		if (node->is_root) {
+			nm->local.value = ufbxm_dmat_from_ufbx(&node->node_to_parent);
+			nm->local.derivative = (ufbxm_dmat){ { 0.0 } };
+			nm->world = nm->local;
+		} else {
+			if (!ufbxm_eval_node_local(anim, node, time, side, &nm->local)) {
+				ufbxm_fail(error, "motion: node transform curve evaluation failed");
+				return false;
+			}
+			ufbxm_node_motion *parent_nm = by_typed[node->parent->typed_id];
+			ufbxm_dmat_mul_motion(&parent_nm->world, &nm->local, &nm->world);
+		}
+
+		// Geometry transform is static: value moves with the node, derivative is
+		// d(world) * geometry_to_node.
+		nm->geometry_to_world.value = ufbxm_dmat_mul(&nm->world.value, &nm->geometry_to_node);
+		nm->geometry_to_world.derivative = ufbxm_dmat_mul(&nm->world.derivative, &nm->geometry_to_node);
+
+		if (!ufbxm_dmat_finite(&nm->world.value) || !ufbxm_dmat_finite(&nm->world.derivative) ||
+			!ufbxm_dmat_finite(&nm->geometry_to_world.value) ||
+			!ufbxm_dmat_finite(&nm->geometry_to_world.derivative)) {
+			ufbxm_fail(error, "motion: non-finite node transform result");
+			return false;
+		}
+	}
+
+	// Public node list, sorted by typed id.
+	ufbx_motion_node *out_nodes = (ufbx_motion_node*)ufbxm_result_alloc(res,
+		num_nodes * sizeof(ufbx_motion_node));
+	if (!out_nodes) { ufbxm_fail(error, "Out of memory"); return false; }
+	for (size_t i = 0; i < num_nodes; i++) {
+		out_nodes[i].node_id = node_motion[i].node->typed_id;
+		out_nodes[i].world = ufbxm_dmat_to_ufbx(&node_motion[i].world.value);
+		out_nodes[i].world_derivative = ufbxm_dmat_to_ufbx(&node_motion[i].world.derivative);
+	}
+	qsort(out_nodes, num_nodes, sizeof(ufbx_motion_node), ufbxm_motion_node_cmp);
+	res->motion.nodes.data = out_nodes;
+	res->motion.nodes.count = num_nodes;
+
+	// Instances: one entry per mesh-carrying node, ordered by node typed id.
+	size_t num_instances = 0;
+	for (size_t i = 0; i < num_nodes; i++) if (node_motion[i].node->mesh) num_instances++;
+	ufbx_motion_instance *out_instances = NULL;
+	if (num_instances) {
+		out_instances = (ufbx_motion_instance*)ufbxm_result_alloc(res,
+			num_instances * sizeof(ufbx_motion_instance));
+		if (!out_instances) { ufbxm_fail(error, "Out of memory"); return false; }
+		memset(out_instances, 0, num_instances * sizeof(ufbx_motion_instance));
+	}
+
+	// Scratch for bone cluster matrices per mesh.
+	size_t max_clusters = 0;
+	for (size_t m = 0; m < scene->meshes.count; m++) {
+		if (scene->meshes.data[m]->skin_deformers.count) {
+			size_t c = scene->meshes.data[m]->skin_deformers.data[0]->clusters.count;
+			if (c > max_clusters) max_clusters = c;
+		}
+	}
+	ufbxm_dmat *bone_mats = NULL, *bone_dmats = NULL;
+	if (max_clusters) {
+		bone_mats = (ufbxm_dmat*)ufbx_malloc(max_clusters * sizeof(ufbxm_dmat));
+		bone_dmats = (ufbxm_dmat*)ufbx_malloc(max_clusters * sizeof(ufbxm_dmat));
+		if (!bone_mats || !bone_dmats) {
+			if (bone_mats) ufbx_free(bone_mats, 0);
+			if (bone_dmats) ufbx_free(bone_dmats, 0);
+			ufbxm_fail(error, "Out of memory");
+			return false;
+		}
+	}
+
+	size_t out_ix = 0;
+	ufbxi_for_ptr_list(ufbx_mesh, p_mesh, scene->meshes) {
+		ufbx_mesh *mesh = *p_mesh;
+		size_t num_vertices = mesh->num_vertices;
+		ufbxm_dvec3 *local_pos = (ufbxm_dvec3*)ufbx_malloc(num_vertices * sizeof(ufbxm_dvec3));
+		ufbxm_dvec3 *local_vel = (ufbxm_dvec3*)ufbx_malloc(num_vertices * sizeof(ufbxm_dvec3));
+		if (!local_pos || !local_vel) {
+			if (local_pos) ufbx_free(local_pos, 0);
+			if (local_vel) ufbx_free(local_vel, 0);
+			if (bone_mats) ufbx_free(bone_mats, 0);
+			if (bone_dmats) ufbx_free(bone_dmats, 0);
+			ufbxm_fail(error, "Out of memory");
+			return false;
+		}
+		for (size_t v = 0; v < num_vertices; v++) {
+			local_pos[v] = ufbxm_vec3_to_d(mesh->vertices.data[v]);
+			local_vel[v] = ufbxm_dzero;
+		}
+
+		// Sparse blend shapes first, then skinning, matching ufbx.
+		for (size_t b = 0; b < mesh->blend_deformers.count; b++) {
+			if (!ufbxm_apply_blend_deformer(mesh->blend_deformers.data[b], anim, time, side,
+				local_pos, local_vel, num_vertices, error)) {
+				ufbx_free(local_pos, 0);
+				ufbx_free(local_vel, 0);
+				if (bone_mats) ufbx_free(bone_mats, 0);
+				if (bone_dmats) ufbx_free(bone_dmats, 0);
+				return false;
+			}
+		}
+
+		const ufbx_skin_deformer *skin = mesh->skin_deformers.count ? mesh->skin_deformers.data[0] : NULL;
+		if (skin) {
+			for (size_t c = 0; c < skin->clusters.count; c++) {
+				const ufbx_skin_cluster *cluster = skin->clusters.data[c];
+				if (!cluster->bone_node) {
+					// Mirrors `ufbxi_update_skin_cluster()` for missing bones,
+					// the resulting matrix is static.
+					ufbxm_dmat bind = ufbxm_dmat_from_ufbx(&cluster->bind_to_world);
+					ufbxm_dmat g2b = ufbxm_dmat_from_ufbx(&cluster->geometry_to_bone);
+					bone_mats[c] = ufbxm_dmat_mul(&bind, &g2b);
+					bone_dmats[c] = (ufbxm_dmat){ { 0.0 } };
+					continue;
+				}
+				ufbxm_node_motion *bnm = by_typed[cluster->bone_node->typed_id];
+				ufbxm_dmat g2b = ufbxm_dmat_from_ufbx(&cluster->geometry_to_bone);
+				bone_mats[c] = ufbxm_dmat_mul(&bnm->world.value, &g2b);
+				bone_dmats[c] = ufbxm_dmat_mul(&bnm->world.derivative, &g2b);
+			}
+		}
+
+		// Emit one result per instance of the mesh.
+		for (size_t inst = 0; inst < mesh->instances.count; inst++) {
+			ufbx_node *node = mesh->instances.data[inst];
+			ufbxm_node_motion *nm = by_typed[node->typed_id];
+			ufbx_motion_instance *mi = &out_instances[out_ix++];
+			mi->node_id = node->typed_id;
+			mi->mesh_id = mesh->typed_id;
+
+			ufbx_vec3 *positions = (ufbx_vec3*)ufbxm_result_alloc(res, num_vertices * sizeof(ufbx_vec3));
+			ufbx_vec3 *velocities = (ufbx_vec3*)ufbxm_result_alloc(res, num_vertices * sizeof(ufbx_vec3));
+			if (!positions || !velocities) { ufbxm_fail(error, "Out of memory"); return false; }
+
+			for (size_t v = 0; v < num_vertices; v++) {
+				ufbxm_dvec3 pos, vel;
+				if (skin) {
+					ufbxm_dmat dmat;
+					ufbxm_dmat mat = ufbxm_skin_vertex_matrix(skin, bone_mats, bone_dmats, v,
+						&nm->geometry_to_world.value, &nm->geometry_to_world.derivative, &dmat);
+					// Skinned output is already in world space: no instance matrix.
+					// d(M*p)/dt = M'*p (full affine, includes bone translation rates)
+					//            + linear(M)*p' (morph velocity is a direction vector).
+					pos = ufbxm_dmat_pos(&mat, local_pos[v]);
+					vel = ufbxm_dv3_add(ufbxm_dmat_pos(&dmat, local_pos[v]),
+						ufbxm_dmat_dir(&mat, local_vel[v]));
+				} else {
+					// Unweighted geometry follows the instance geometry transform.
+					pos = ufbxm_dmat_pos(&nm->geometry_to_world.value, local_pos[v]);
+					vel = ufbxm_dv3_add(ufbxm_dmat_pos(&nm->geometry_to_world.derivative, local_pos[v]),
+						ufbxm_dmat_dir(&nm->geometry_to_world.value, local_vel[v]));
+				}
+				if (!ufbxm_dvec3_finite(pos) || !ufbxm_dvec3_finite(vel)) {
+					ufbxm_fail(error, "motion: non-finite vertex motion result");
+					return false;
+				}
+				positions[v] = ufbxm_vec3_from_d(pos);
+				velocities[v] = ufbxm_vec3_from_d(vel);
+			}
+			mi->positions.data = positions;
+			mi->positions.count = num_vertices;
+			mi->velocities.data = velocities;
+			mi->velocities.count = num_vertices;
+		}
+
+		ufbx_free(local_pos, 0);
+		ufbx_free(local_vel, 0);
+	}
+	if (bone_mats) ufbx_free(bone_mats, 0);
+	if (bone_dmats) ufbx_free(bone_dmats, 0);
+
+	ufbx_assert(out_ix == num_instances);
+	if (num_instances) {
+		qsort(out_instances, num_instances, sizeof(ufbx_motion_instance), ufbxm_motion_instance_cmp);
+	}
+	res->motion.instances.data = out_instances;
+	res->motion.instances.count = out_ix;
+	return true;
+}
+
+ufbx_abi ufbx_motion *ufbx_evaluate_motion(const ufbx_scene *scene, const ufbx_anim *anim,
+	double time, ufbx_motion_side side, ufbx_error *error)
+{
+#if UFBXI_FEATURE_SCENE_EVALUATION
+	ufbxm_result_imp *res = (ufbxm_result_imp*)ufbx_malloc(sizeof(ufbxm_result_imp));
+	if (!res) {
+		ufbxm_fail(error, "Out of memory");
+		return NULL;
+	}
+	memset(res, 0, sizeof(*res));
+	if (!ufbxm_evaluate_imp(scene, anim ? anim : scene->anim, time, side, error, res)) {
+		ufbxm_free_all(&res->ctx);
+		ufbx_free(res, 0);
+		return NULL;
+	}
+	if (error) ufbxi_clear_error(error);
+	return &res->motion;
+#else
+	if (error) {
+		memset(error, 0, sizeof(ufbx_error));
+		ufbxi_fmt_err_info(error, "UFBX_ENABLE_SCENE_EVALUATION");
+		ufbxi_report_err_msg(error, "UFBXI_FEATURE_SCENE_EVALUATION", "Feature disabled");
+	}
+	return NULL;
+#endif
+}
+
+ufbx_abi void ufbx_free_motion(ufbx_motion *motion)
+{
+	if (!motion) return;
+	ufbxm_result_imp *res = (ufbxm_result_imp*)((char*)motion - offsetof(ufbxm_result_imp, motion));
+	ufbxm_free_all(&res->ctx);
+	ufbx_free(res, 0);
+}
+
 #ifdef __cplusplus
 }
 #endif

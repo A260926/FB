@@ -5245,6 +5245,69 @@ typedef struct ufbx_panic {
 
 // -- API
 
+// -- Analytic motion evaluation
+
+// Which side of a time instant to evaluate, relevant at discontinuous keyframes.
+typedef enum ufbx_motion_side UFBX_ENUM_REPR {
+	// Limit from times smaller than the query time.
+	UFBX_MOTION_LEFT,
+	// Limit from times greater than the query time.
+	UFBX_MOTION_RIGHT,
+
+	UFBX_ENUM_FORCE_WIDTH(UFBX_MOTION_SIDE)
+} ufbx_motion_side;
+
+UFBX_ENUM_TYPE(ufbx_motion_side, UFBX_MOTION_SIDE, UFBX_MOTION_RIGHT);
+
+// Value and the derivative with respect to time (in seconds) of an animation
+// curve at a single instant.
+typedef struct ufbx_motion_sample {
+	ufbx_real value;
+	ufbx_real derivative;
+} ufbx_motion_sample;
+
+// Per-node world-space motion, sorted by `ufbx_node.typed_id`.
+typedef struct ufbx_motion_node {
+	// `ufbx_node.typed_id` of the node.
+	uint32_t node_id;
+
+	// Node-to-world matrix at the query time.
+	ufbx_matrix world;
+	// Derivative of `world` with respect to time (per second).
+	ufbx_matrix world_derivative;
+} ufbx_motion_node;
+
+UFBX_LIST_TYPE(ufbx_motion_node_list, ufbx_motion_node);
+
+// Per-instance vertex motion for a node that has a mesh attached, sorted by
+// the node's `ufbx_node.typed_id`.
+typedef struct ufbx_motion_instance {
+	// `ufbx_node.typed_id` of the node the mesh is attached to.
+	uint32_t node_id;
+	// `ufbx_mesh.typed_id` of the attached mesh.
+	uint32_t mesh_id;
+
+	// World-space positions indexed by the mesh control vertex index.
+	ufbx_vec3_list positions;
+	// World-space velocities (derivatives per second) of `positions`.
+	ufbx_vec3_list velocities;
+} ufbx_motion_instance;
+
+UFBX_LIST_TYPE(ufbx_motion_instance_list, ufbx_motion_instance);
+
+// Self-contained result of an analytic motion evaluation.
+// The result owns all of its arrays and stores only source element ids, so it
+// remains valid after the source scene has been freed and multiple results may
+// be held at the same time.
+typedef struct ufbx_motion ufbx_motion;
+struct ufbx_motion {
+	// All scene nodes, sorted by `ufbx_node.typed_id`.
+	ufbx_motion_node_list nodes;
+
+	// Nodes with an attached mesh, sorted by the node's `ufbx_node.typed_id`.
+	ufbx_motion_instance_list instances;
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -5494,6 +5557,34 @@ ufbx_abi ufbx_real ufbx_evaluate_blend_weight_flags(const ufbx_anim *anim, const
 // NOTE: The returned scene refers to the original `scene` so the original
 // scene cannot be freed until all evaluated scenes are freed.
 ufbx_abi ufbx_scene *ufbx_evaluate_scene(const ufbx_scene *scene, const ufbx_anim *anim, double time, const ufbx_evaluate_opts *opts, ufbx_error *error);
+
+// Evaluate an animation curve together with its analytic time derivative.
+//
+// Supports all four `ufbx_interpolation` modes. Cubic segments are evaluated as
+// time-parameterized Bezier curves, the normalized segment time is never used
+// as the Bezier parameter directly. At an exact keyframe both `value` and
+// `derivative` are taken as the one-sided limit of the requested `side`.
+//
+// The curve must use constant extrapolation on both ends: an empty curve
+// returns `default_value` with zero derivative, a single-key curve and the
+// regions outside the keyframe range are constant. Returns `false` (without
+// modifying `result`) if `time` or `side` is invalid, the curve uses
+// non-constant extrapolation, a cubic segment has non-monotonic time control
+// points or a non-positive time derivative, or if the result is not finite.
+ufbx_abi bool ufbx_evaluate_curve_motion(const ufbx_anim_curve *curve, double time,
+	ufbx_real default_value, ufbx_motion_side side, ufbx_motion_sample *result);
+
+// Evaluate the analytic world-space motion of the whole scene at `time`.
+//
+// The derivatives are propagated through the animation curves, node hierarchy
+// and deformation chain in a single time sample, no finite differencing is
+// used. See `misc/motion.md` for the supported feature set; unsupported
+// features result in an error instead of being silently treated as static.
+ufbx_abi ufbx_motion *ufbx_evaluate_motion(const ufbx_scene *scene, const ufbx_anim *anim,
+	double time, ufbx_motion_side side, ufbx_error *error);
+
+// Free a motion result returned by `ufbx_evaluate_motion()`.
+ufbx_abi void ufbx_free_motion(ufbx_motion *motion);
 
 // Create a custom animation descriptor.
 // `ufbx_anim_opts` is used to specify animation layers and weights.
