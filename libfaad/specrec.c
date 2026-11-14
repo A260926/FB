@@ -50,6 +50,7 @@
 #include "drc.h"
 #include "lt_predict.h"
 #include "ic_predict.h"
+#include "tns_observe.h"
 #ifdef SSR_DEC
 #include "ssr.h"
 #include "ssr_fb.h"
@@ -1050,6 +1051,13 @@ uint8_t reconstruct_single_channel(NeAACDecStruct *hDecoder, ic_stream *ics,
     tns_decode_frame(ics, &(ics->tns), hDecoder->sf_index, hDecoder->object_type,
         spec_coef, hDecoder->frameLength);
 
+#ifdef FAAD_TNS_TEST_OBSERVE
+    /* Test builds only: report the final spectrum between TNS and the filter
+     * bank.  A normal build has neither the symbol nor this call. */
+    if (faad_tns_observe)
+        faad_tns_observe(sce->channel, hDecoder->frameLength, spec_coef);
+#endif
+
     /* drc decoding */
 #ifdef APPLY_DRC
     if (hDecoder->drc->present)
@@ -1306,6 +1314,16 @@ uint8_t reconstruct_channel_pair(NeAACDecStruct *hDecoder, ic_stream *ics1, ic_s
         spec_coef1, hDecoder->frameLength);
     tns_decode_frame(ics2, &(ics2->tns), hDecoder->sf_index, hDecoder->object_type,
         spec_coef2, hDecoder->frameLength);
+
+#ifdef FAAD_TNS_TEST_OBSERVE
+    /* Test builds only: report the final spectrum between TNS and the filter
+     * bank.  A normal build has neither the symbol nor this call. */
+    if (faad_tns_observe)
+    {
+        faad_tns_observe(cpe->channel, hDecoder->frameLength, spec_coef1);
+        faad_tns_observe((uint8_t)cpe->paired_channel, hDecoder->frameLength, spec_coef2);
+    }
+#endif
 
     /* drc decoding */
 #if APPLY_DRC

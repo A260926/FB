@@ -112,6 +112,16 @@ if(FAAD_APPLY_DRC)
   )
 endif()
 
+# Dedicated numeric-regression builds may ask for a read-only observation
+# point between TNS decoding and the filter bank.  It is off by default, so a
+# normal build contains neither the call nor the symbol.
+option(FAAD_TNS_TEST_OBSERVE "Compile the test-only TNS observation hook" OFF)
+if(FAAD_TNS_TEST_OBSERVE)
+  list(APPEND FAAD_DEFINES
+    FAAD_TNS_TEST_OBSERVE
+  )
+endif()
+
 check_library_exists(m lrintf "" HAVE_LIBM)
 if(HAVE_LIBM)
   list(APPEND CMAKE_REQUIRED_LIBRARIES m)
