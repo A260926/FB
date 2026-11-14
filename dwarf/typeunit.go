@@ -158,3 +158,8 @@ func (tur *typeUnitReader) clone() typeReader {
 func (tur *typeUnitReader) offset() Offset {
 	return tur.b.off
 }
+
+// dwarf returns the Data this reader reads from.
+func (tur *typeUnitReader) dwarf() *Data {
+	return tur.d
+}

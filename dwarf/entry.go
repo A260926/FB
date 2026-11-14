@@ -250,6 +250,9 @@ type Entry struct {
 //	flag              bool           ClassFlag
 //	reference
 //	  to info         dwarf.Offset   ClassReference
+//	  to supplementary
+//	  object          dwarf.SupplementaryOffset
+//	                                 ClassReference
 //	  to type unit    uint64         ClassReferenceSig
 //	string            string         ClassString
 //	exprloc           []byte         ClassExprLoc
@@ -322,10 +325,11 @@ const (
 	// the "rangelist" section.
 	ClassRangeListPtr
 
-	// ClassReference represents values that are an Offset offset
-	// of an Entry in the info section (for use with Reader.Seek).
-	// The DWARF specification combines ClassReference and
-	// ClassReferenceSig into class "reference".
+	// ClassReference represents values that are an Offset offset of an
+	// Entry in the info section (for use with Reader.Seek), or a
+	// SupplementaryOffset into the supplementary object bound with
+	// Data.SetSupplementary. The DWARF specification combines
+	// ClassReference and ClassReferenceSig into class "reference".
 	ClassReference
 
 	// ClassReferenceSig represents values that are a uint64 type
@@ -666,14 +670,27 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 			val = resolveStrx(uint64(strBase), off)
 
 		case formStrpSup:
+			var off uint64 // offset into supplementary .debug_str
 			is64, known := b.format.dwarf64()
 			if !known {
 				b.error("unknown size for DW_FORM_strp_sup")
 			} else if is64 {
-				val = b.uint64()
+				off = b.uint64()
 			} else {
-				val = b.uint32()
+				off = uint64(b.uint32())
 			}
+			if uint64(int(off)) != off {
+				b.error("DW_FORM_strp_sup offset out of range")
+			}
+			if b.err != nil {
+				return nil
+			}
+			s, err := b.dwarf.supplementaryString(off)
+			if err != nil {
+				b.err = err
+				return nil
+			}
+			val = s
 
 		// lineptr, loclistptr, macptr, rangelistptr
 		// New in DWARF 4, but clang can generate them with -gdwarf-2.
@@ -699,9 +716,10 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 			// 64-bit type signature.
 			val = b.uint64()
 		case formRefSup4:
-			val = b.uint32()
+			val = SupplementaryOffset(b.uint32())
 		case formRefSup8:
-			val = b.uint64()
+			// A 64-bit supplementary reference; do not truncate to 32 bits.
+			val = SupplementaryOffset(b.uint64())
 
 		// loclist
 		case formLoclistx:
@@ -893,6 +911,12 @@ func (r *Reader) clone() typeReader {
 // typeReader interface.
 func (r *Reader) offset() Offset {
 	return r.b.off
+}
+
+// dwarf returns the Data this reader reads from. This is used by the
+// typeReader interface.
+func (r *Reader) dwarf() *Data {
+	return r.d
 }
 
 // SeekPC returns the [Entry] for the compilation unit that includes pc,

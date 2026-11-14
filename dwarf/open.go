@@ -48,6 +48,12 @@ type Data struct {
 	typeCache   map[Offset]Type
 	typeSigs    map[uint64]*typeUnit
 	unit        []unit
+
+	// DWARF 5 supplementary object state; see SetSupplementary.
+	supSection    []byte // contents of this object's .debug_sup, if added
+	supSectionSet bool   // AddSection has supplied .debug_sup
+	supBoundAsSup bool   // this Data has been bound as another's supplementary object
+	supData       *Data  // bound supplementary object, if any
 }
 
 var errSegmentSelector = errors.New("non-zero segment_selector size not supported")
@@ -134,6 +140,15 @@ func (d *Data) AddSection(name string, contents []byte) error {
 		d.strOffsets = contents
 	case ".debug_rnglists":
 		d.rngLists = contents
+	case ".debug_sup":
+		if d.supBoundAsSup {
+			return errors.New("dwarf: cannot replace .debug_sup of a bound supplementary object")
+		}
+		if d.supData != nil {
+			return errors.New("dwarf: cannot replace .debug_sup after SetSupplementary")
+		}
+		d.supSection = contents
+		d.supSectionSet = true
 	}
 	// Just ignore names that we don't yet support.
 	return err

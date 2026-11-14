@@ -369,6 +369,10 @@ type typeReader interface {
 	// AddressSize returns the size in bytes of addresses in the current
 	// compilation unit.
 	AddressSize() int
+	// dwarf returns the Data that owns the offsets read by this reader.
+	// It is used to keep type caches and supplementary references scoped
+	// to the object they belong to.
+	dwarf() *Data
 }
 
 // Type reads the type at off in the DWARF “info” section.
@@ -404,7 +408,15 @@ func (tf *typeFixer) apply() {
 // type cache, appends new typedef types to typedefs, and computes the
 // sizes of types. Callers should pass nil for typedefs; this is used
 // for internal recursion.
+//
+// off is interpreted in the object that r reads from. An [Offset] child
+// reference is resolved against that same object and its type cache, so
+// numerically equal offsets in the main and supplementary objects do not
+// share a type identity. A [SupplementaryOffset] child reference is
+// resolved against the bound supplementary object with that object's
+// reader, address size, and compilation-unit base offsets.
 func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Offset]Type, fixups *typeFixer) (Type, error) {
+	owner := r.dwarf()
 	if t, ok := typeCache[off]; ok {
 		return t, nil
 	}
@@ -482,11 +494,27 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 		var t Type
 		switch toff := tval.(type) {
 		case Offset:
-			if t, err = d.readType(name, r.clone(), toff, typeCache, fixups); err != nil {
+			if t, err = owner.readType(name, r.clone(), toff, typeCache, fixups); err != nil {
+				return nil
+			}
+		case SupplementaryOffset:
+			sup, serr := owner.supplementary()
+			if serr != nil {
+				err = DecodeError{name, e.Offset, serr.Error()}
+				return nil
+			}
+			if toff > SupplementaryOffset(^Offset(0)) {
+				err = DecodeError{name, e.Offset, "supplementary type offset out of range"}
+				return nil
+			}
+			if t, err = sup.readType("sup_info", sup.Reader(), Offset(toff), sup.typeCache, fixups); err != nil {
+				if !isDecodeError(err) {
+					err = DecodeError{"sup_info", Offset(toff), err.Error()}
+				}
 				return nil
 			}
 		case uint64:
-			if t, err = d.sigToType(toff); err != nil {
+			if t, err = owner.sigToType(toff); err != nil {
 				return nil
 			}
 		default:
@@ -657,8 +685,9 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 			switch loc := kid.Val(AttrDataMemberLoc).(type) {
 			case []byte:
 				// TODO: Should have original compilation
-				// unit here, not unknownFormat.
-				b := makeBuf(d, unknownFormat{}, "location", 0, loc)
+				// unit here, not unknownFormat. Use the object that
+				// owns the entry so supplementary byte order wins.
+				b := makeBuf(owner, unknownFormat{}, "location", 0, loc)
 				if b.uint8() != opPlusUconst {
 					err = DecodeError{name, kid.Offset, "unexpected opcode"}
 					goto Error
