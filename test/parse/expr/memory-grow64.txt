@@ -1,0 +1,7 @@
+;;; TOOL: wat2wasm
+(module
+  (memory i64 1)
+  (func
+    i64.const 100
+    memory.grow
+    drop))

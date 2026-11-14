@@ -1,0 +1,8 @@
+;;; TOOL: wat2wasm
+(module
+  (tag $e1)
+  (func
+    try
+    catch $e1
+      rethrow 0
+    end))

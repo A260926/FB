@@ -1,0 +1,8 @@
+;;; TOOL: run-gen-wasm
+magic
+version
+section("foo") { "hello" }
+(;; STDOUT ;;;
+(module
+  (@custom "foo" "hello"))
+;;; STDOUT ;;)

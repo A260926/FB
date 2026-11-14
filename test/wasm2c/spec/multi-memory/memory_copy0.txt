@@ -1,0 +1,5 @@
+;;; TOOL: run-spec-wasm2c
+;;; STDIN_FILE: third_party/testsuite/proposals/multi-memory/memory_copy0.wast
+(;; STDOUT ;;;
+21/21 tests passed.
+;;; STDOUT ;;)

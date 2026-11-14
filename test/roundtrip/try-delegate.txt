@@ -1,0 +1,30 @@
+;;; TOOL: run-roundtrip
+;;; ARGS: --stdout --debug-names
+(module
+  (func
+    try
+      try
+        nop
+      delegate 0
+      try
+        nop
+      delegate 0
+    catch_all
+    end
+  )
+)
+(;; STDOUT ;;;
+(module
+  (type (;0;) (func))
+  (func (;0;) (type 0)
+    try  ;; label = @1
+      try  ;; label = @2
+        nop
+      delegate 0
+      try  ;; label = @2
+        nop
+      delegate 0
+    catch_all
+    end)
+  (@custom "name" "\02\03\01\00\00"))
+;;; STDOUT ;;)

@@ -1,0 +1,90 @@
+.Dd $Mdocdate$
+.Dt WABT 1
+.Os
+.Sh NAME
+.Nm spectest-interp
+.Nd read a Spectest JSON file, and run its tests in the interpreter
+.Sh SYNOPSIS
+.Nm spectest-interp
+.Op options
+.Ar filename
+.Sh DESCRIPTION
+.Nm
+read a Spectest JSON file, and run its tests in the interpreter.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl Fl help
+Print this help message
+.It Fl Fl version
+Print version information
+.It Fl v , Fl Fl verbose
+Use multiple times for more info
+.It Fl Fl disable-exceptions
+Disable Experimental exception handling
+.It Fl Fl disable-mutable-globals
+Disable Import/export mutable globals
+.It Fl Fl disable-saturating-float-to-int
+Disable Saturating float-to-int operators
+.It Fl Fl disable-sign-extension
+Disable Sign-extension operators
+.It Fl Fl disable-simd
+Disable SIMD support
+.It Fl Fl enable-threads
+Enable Threading support
+.It Fl Fl enable-function-references
+Enable Typed function references
+.It Fl Fl disable-multi-value
+Disable Multi-value
+.It Fl Fl disable-tail-call
+Disable Tail-call support
+.It Fl Fl disable-bulk-memory
+Disable Bulk-memory operations
+.It Fl Fl disable-reference-types
+Disable Reference types (externref)
+.It Fl Fl disable-annotations
+Disable Custom annotation syntax
+.It Fl Fl enable-code-metadata
+Enable Code metadata
+.It Fl Fl enable-gc
+Enable Garbage collection
+.It Fl Fl disable-memory64
+Disable 64-bit memory
+.It Fl Fl disable-multi-memory
+Disable Multi-memory
+.It Fl Fl disable-extended-const
+Disable Extended constant expressions
+.It Fl Fl disable-relaxed-simd
+Disable Relaxed SIMD
+.It Fl Fl enable-custom-page-sizes
+Enable Custom page sizes
+.It Fl Fl enable-compact-imports
+Enable Compact import section
+.It Fl Fl enable-wide-arithmetic
+Enable Wide arithmetic
+.It Fl Fl enable-all
+Enable all features
+.It Fl V , Fl Fl value-stack-size=SIZE
+Size in elements of the value stack
+.It Fl C , Fl Fl call-stack-size=SIZE
+Size in elements of the call stack
+.El
+.Sh EXAMPLES
+parse test.json and run the spec tests
+.Pp
+.Dl $ spectest-interp test.json
+.Sh SEE ALSO
+.Xr wasm-interp 1 ,
+.Xr wasm-objdump 1 ,
+.Xr wasm-stats 1 ,
+.Xr wasm-strip 1 ,
+.Xr wasm-validate 1 ,
+.Xr wasm2c 1 ,
+.Xr wasm2wat 1 ,
+.Xr wast2json 1 ,
+.Xr wat-desugar 1 ,
+.Xr wat2wasm 1 
+.Sh BUGS
+If you find a bug, please report it at
+.br
+.Lk https://github.com/WebAssembly/wabt/issues .

@@ -1,0 +1,4 @@
+;;; TOOL: wat2wasm
+(module quote "")
+(;; STDOUT ;;;
+;;; STDOUT ;;)

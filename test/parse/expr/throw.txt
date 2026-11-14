@@ -1,0 +1,4 @@
+;;; TOOL: wat2wasm
+(module
+  (tag $e1)
+  (func throw $e1))

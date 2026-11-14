@@ -1,0 +1,23 @@
+;;; TOOL: run-roundtrip
+;;; ARGS: --stdout --enable-function-references --debug-names
+(module
+  (type $t0 (func))
+  (type $t1 (func))
+
+  (type $t2 (func (param (ref $t0) (ref $t1) (ref 1))))
+
+  (func $f1 (param (ref $t0) (ref 0))
+    (local (ref $t0) (ref 0)
+           (ref $t1) (ref 1))
+  )
+)
+(;; STDOUT ;;;
+(module
+  (type $t0 (func))
+  (type $t1 (func))
+  (type $t2 (func (param (ref 0) (ref 1) (ref 1))))
+  (type (;3;) (func (param (ref 0) (ref 0))))
+  (func $f1 (type 3) (param (ref 0) (ref 0))
+    (local (ref 0) (ref 0) (ref 1) (ref 1)))
+  (@custom "name" "\01\05\01\00\02f1\02\03\01\00\00\04\0d\03\00\02t0\01\02t1\02\02t2"))
+;;; STDOUT ;;)

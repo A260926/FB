@@ -1,0 +1,4 @@
+;;; TOOL: wat2wasm
+(module
+  (@custom "custom" "contents")
+  (@custom "custom2" (after code) "stuff"))

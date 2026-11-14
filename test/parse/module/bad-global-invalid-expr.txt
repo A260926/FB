@@ -1,0 +1,13 @@
+;;; TOOL: wat2wasm
+;;; ARGS: --disable-extended-const
+;;; ERROR: 1
+(module
+  (global i32 
+    i32.const 1
+    i32.const 2
+    i32.add))
+(;; STDERR ;;;
+out/test/parse/module/bad-global-invalid-expr.txt:8:5: error: invalid initializer: instruction not valid in initializer expression: i32.add
+    i32.add))
+    ^^^^^^^
+;;; STDERR ;;)

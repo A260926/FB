@@ -1,0 +1,7 @@
+;;; TOOL: wast2json
+(module
+  (tag $t)
+  (func $foo (throw $t))
+  (export "foo" (func $foo)))
+
+(assert_exception (invoke "foo"))

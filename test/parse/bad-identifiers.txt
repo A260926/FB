@@ -1,0 +1,27 @@
+;;; TOOL: wat2wasm
+;;; ERROR: 1
+(module
+  (func $)
+  (func $ (param i32))
+  (func $"")
+  (func $"" (param i32))
+  (func $"a")
+  (func $"a" (param i32))
+)
+(;; STDERR ;;;
+out/test/parse/bad-identifiers.txt:4:9: error: empty identifier.
+  (func $)
+        ^
+out/test/parse/bad-identifiers.txt:5:9: error: empty identifier.
+  (func $ (param i32))
+        ^
+out/test/parse/bad-identifiers.txt:6:9: error: empty identifier.
+  (func $"")
+        ^^^
+out/test/parse/bad-identifiers.txt:7:9: error: empty identifier.
+  (func $"" (param i32))
+        ^^^
+out/test/parse/bad-identifiers.txt:9:4: error: redefinition of function "$a"
+  (func $"a" (param i32))
+   ^^^^
+;;; STDERR ;;)

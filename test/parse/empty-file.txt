@@ -1,0 +1,5 @@
+;;; TOOL: wat2wasm
+;; empty file
+(;; STDERR ;;;
+out/test/parse/empty-file.txt:3:1: warning: empty module
+;;; STDERR ;;)

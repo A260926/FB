@@ -1,0 +1,13 @@
+;;; TOOL: run-roundtrip
+;;; ARGS: --stdout --inline-export --debug-names
+(module
+  (func $foo
+    nop)
+  (export "foo" (func $foo)))
+(;; STDOUT ;;;
+(module
+  (type (;0;) (func))
+  (func $foo (export "foo") (type 0)
+    nop)
+  (@custom "name" "\01\06\01\00\03foo\02\03\01\00\00"))
+;;; STDOUT ;;)
