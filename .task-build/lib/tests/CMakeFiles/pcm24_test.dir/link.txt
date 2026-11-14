@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/pcm24_test.dir/pcm24_test.c.o -o pcm24_test  ../src/libsoxr.a -lm

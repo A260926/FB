@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsoxr.a CMakeFiles/soxr.dir/soxr.c.o "CMakeFiles/soxr.dir/data-io.c.o" CMakeFiles/soxr.dir/dbesi0.c.o CMakeFiles/soxr.dir/filter.c.o CMakeFiles/soxr.dir/fft4g64.c.o CMakeFiles/soxr.dir/cr.c.o CMakeFiles/soxr.dir/cr32.c.o CMakeFiles/soxr.dir/fft4g32.c.o CMakeFiles/soxr.dir/cr64.c.o CMakeFiles/soxr.dir/vr32.c.o
+/usr/bin/ranlib libsoxr.a

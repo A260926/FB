@@ -214,12 +214,18 @@ typedef enum {          /* Datatypes supported for I/O to/from the resampler: */
   SOXR_FLOAT32_I = SOXR_FLOAT32, SOXR_FLOAT64_I, SOXR_INT32_I, SOXR_INT16_I,
 
   /* Use for split channels: */
-  SOXR_FLOAT32_S = SOXR_SPLIT  , SOXR_FLOAT64_S, SOXR_INT32_S, SOXR_INT16_S
+  SOXR_FLOAT32_S = SOXR_SPLIT  , SOXR_FLOAT64_S, SOXR_INT32_S, SOXR_INT16_S,
+
+  /* Packed, signed 24-bit PCM: exactly 3 bytes per sample, no alignment
+   * requirement; little- or big-endian, interleaved or split channels. */
+  SOXR_INT24_LE_I = 8, SOXR_INT24_BE_I = 9,
+  SOXR_INT24_LE_S = SOXR_INT24_LE_I | SOXR_SPLIT,
+  SOXR_INT24_BE_S = SOXR_INT24_BE_I | SOXR_SPLIT
 
 } soxr_datatype_t;
 
 #define soxr_datatype_size(x)  /* Returns `sizeof' a soxr_datatype_t sample. */\
-  ((unsigned char *)"\4\10\4\2")[(x)&3]
+  (((x) & 8) ? 3 : ((unsigned char *)"\4\10\4\2")[(x)&3])
 
 
 

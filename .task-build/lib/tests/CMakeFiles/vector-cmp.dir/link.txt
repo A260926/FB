@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/vector-cmp.dir/vector-cmp.c.o" -o vector-cmp  ../src/libsoxr.a -lm

@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/vector-gen.dir/vector-gen.c.o" -o vector-gen  ../src/libsoxr.a -lm

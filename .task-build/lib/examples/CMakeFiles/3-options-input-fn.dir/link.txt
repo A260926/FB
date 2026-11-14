@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/3-options-input-fn.dir/3-options-input-fn.c.o" -o 3-options-input-fn  ../src/libsoxr.a -lm

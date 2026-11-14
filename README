@@ -25,6 +25,39 @@ either floating-point or integer, and multiple channels either interleaved
 or split in separate buffers.  The API is documented in the header file
 `soxr.h', together with sample code found in the 'examples' directory.
 
+Packed 24-bit PCM datatypes
+---------------------------
+
+In addition to the 16- and 32-bit integer formats, four datatypes handle
+packed, signed 24-bit PCM directly, with no intermediate 32-bit buffer:
+
+  SOXR_INT24_LE_I  little-endian, channel-interleaved frames
+  SOXR_INT24_BE_I  big-endian,    channel-interleaved frames
+  SOXR_INT24_LE_S  little-endian, array of per-channel pointers
+  SOXR_INT24_BE_S  big-endian,    array of per-channel pointers
+
+Each sample occupies exactly three bytes, packed consecutively: samples do
+not step by four bytes and the buffers need not be aligned beyond that
+required for `unsigned char'.  In interleaved form the bytes of the channels
+within a frame are adjacent; in split form each channel is a separate
+three-bytes-per-frame buffer.  soxr_datatype_size( ) returns 3 for all four
+types.  Buffer lengths (ilen, olen, idone, odone) remain counts of frames per
+channel, so a caller advancing a packed buffer moves by 3 bytes times the
+number of channels per frame.
+
+A sample is reconstructed from its three bytes as a signed integer in the
+range [-8388608, 8388607] (i.e. [-2^23, 2^23 - 1]); the normalised full scale
+is 8388608 (2^23), so an integer value v corresponds to v / 8388608 in the
+floating-point domain.  When writing 24-bit output, each internal result is
+scaled to 24-bit LSB units, rounded half away from zero (ties go to the
+larger magnitude), then saturated to the range above; every saturated
+sample increments soxr_num_clips individually, including several within one
+multi-channel frame.  Packed-24 output is never dithered (the default TPDF
+dithering still applies only to 16-bit output).  The `scale' field of
+soxr_io_spec remains a linear audio gain applied during resampling; it is not
+a byte shift.
+
+
 For compatibility with the popular `libsamplerate' library, the header file
 `soxr-lsr.h' is provided and may be used as an alternative API.³  Note
 however, that libsoxr does not provide a full emulation of libsamplerate

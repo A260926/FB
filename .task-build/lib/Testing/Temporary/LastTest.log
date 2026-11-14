@@ -1,0 +1,174 @@
+Start testing: Nov 14 09:40 JST
+----------------------------------------------------------
+1/9 Testing: 20-bit-perfect-44100-192000
+1/9 Test: 20-bit-perfect-44100-192000
+Command: "/opt/homebrew/bin/cmake" "-Dbits=20" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=192000" "-Dirate=44100" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"20-bit-perfect-44100-192000" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 20.298694
+
+<end of output>
+Test time =   0.37 sec
+----------------------------------------------------------
+Test Passed.
+"20-bit-perfect-44100-192000" end time: Nov 14 09:40 JST
+"20-bit-perfect-44100-192000" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/9 Testing: 20-bit-perfect-192000-44100
+2/9 Test: 20-bit-perfect-192000-44100
+Command: "/opt/homebrew/bin/cmake" "-Dbits=20" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=44100" "-Dirate=192000" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"20-bit-perfect-192000-44100" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 20.762193
+
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"20-bit-perfect-192000-44100" end time: Nov 14 09:40 JST
+"20-bit-perfect-192000-44100" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/9 Testing: 20-bit-perfect-44100-65537
+3/9 Test: 20-bit-perfect-44100-65537
+Command: "/opt/homebrew/bin/cmake" "-Dbits=20" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=65537" "-Dirate=44100" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"20-bit-perfect-44100-65537" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 20.606610
+
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"20-bit-perfect-44100-65537" end time: Nov 14 09:40 JST
+"20-bit-perfect-44100-65537" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/9 Testing: 20-bit-perfect-65537-44100
+4/9 Test: 20-bit-perfect-65537-44100
+Command: "/opt/homebrew/bin/cmake" "-Dbits=20" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=44100" "-Dirate=65537" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"20-bit-perfect-65537-44100" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 20.861728
+
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"20-bit-perfect-65537-44100" end time: Nov 14 09:40 JST
+"20-bit-perfect-65537-44100" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/9 Testing: 28-bit-perfect-44100-192000
+5/9 Test: 28-bit-perfect-44100-192000
+Command: "/opt/homebrew/bin/cmake" "-Dbits=28" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=192000" "-Dirate=44100" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"28-bit-perfect-44100-192000" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 29.415037
+
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"28-bit-perfect-44100-192000" end time: Nov 14 09:40 JST
+"28-bit-perfect-44100-192000" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/9 Testing: 28-bit-perfect-192000-44100
+6/9 Test: 28-bit-perfect-192000-44100
+Command: "/opt/homebrew/bin/cmake" "-Dbits=28" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=44100" "-Dirate=192000" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"28-bit-perfect-192000-44100" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 30.000000
+
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"28-bit-perfect-192000-44100" end time: Nov 14 09:40 JST
+"28-bit-perfect-192000-44100" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/9 Testing: 28-bit-perfect-44100-65537
+7/9 Test: 28-bit-perfect-44100-65537
+Command: "/opt/homebrew/bin/cmake" "-Dbits=28" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=65537" "-Dirate=44100" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"28-bit-perfect-44100-65537" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 29.415037
+
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"28-bit-perfect-44100-65537" end time: Nov 14 09:40 JST
+"28-bit-perfect-44100-65537" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/9 Testing: 28-bit-perfect-65537-44100
+8/9 Test: 28-bit-perfect-65537-44100
+Command: "/opt/homebrew/bin/cmake" "-Dbits=28" "-DBIN=./" "-DEXAMPLES_BIN=../examples/" "-DlenToSkip=1" "-Dorate=44100" "-Dirate=65537" "-Dlen=16" "-P" "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/tests/cmp-test.cmake"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"28-bit-perfect-65537-44100" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+-- 30.000000
+
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"28-bit-perfect-65537-44100" end time: Nov 14 09:40 JST
+"28-bit-perfect-65537-44100" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/9 Testing: 1-delay-clear
+9/9 Test: 1-delay-clear
+Command: "/Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests/1-delay-clear"
+Directory: /Users/solo/pro/UserFB/workspace/FSE41FEA1E43C5U6918/attempts/20261113T202029870395Z/repo/.task-build/lib/tests
+"1-delay-clear" start time: Nov 14 09:40 JST
+Output:
+----------------------------------------------------------
+ 9599  4410     0
+    0   729  3681
+    0   629  3781
+    0   529  3881
+    0   429  3981
+    0   329  4081
+    0   229  4181
+    0   129  4281
+    0    29  4381
+    0     0  4410
+ 9599  4410     0
+    0   729  3681
+    0   629  3781
+    0   529  3881
+    0   429  3981
+    0   329  4081
+    0   229  4181
+    0   129  4281
+    0    29  4381
+    0     0  4410
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"1-delay-clear" end time: Nov 14 09:40 JST
+"1-delay-clear" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 14 09:40 JST

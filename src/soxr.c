@@ -177,13 +177,36 @@ soxr_runtime_spec_t soxr_runtime_spec(unsigned num_threads)
 
 
 
+static bool valid_datatype(soxr_datatype_t type)
+{
+  switch (type) {
+    case SOXR_FLOAT32_I: case SOXR_FLOAT64_I:
+    case SOXR_INT32_I:   case SOXR_INT16_I:
+    case SOXR_FLOAT32_S: case SOXR_FLOAT64_S:
+    case SOXR_INT32_S:   case SOXR_INT16_S:
+    case SOXR_INT24_LE_I: case SOXR_INT24_BE_I:
+    case SOXR_INT24_LE_S: case SOXR_INT24_BE_S:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static double datatype_full_scale_of(soxr_datatype_t type)
+{
+  static const double datatype_full_scale[] = {1, 1, 65536.*32768, 32768};
+  if ((type & ~(soxr_datatype_t)SOXR_SPLIT) >= SOXR_INT24_LE_I)
+    return 8388608.;                       /* 24-bit full scale, i.e. 2^23. */
+  return datatype_full_scale[type & 3];
+}
+
 soxr_io_spec_t soxr_io_spec(
   soxr_datatype_t itype,
   soxr_datatype_t otype)
 {
   soxr_io_spec_t spec, * p = &spec;
   memset(p, 0, sizeof(*p));
-  if ((itype | otype) >= SOXR_SPLIT * 2)
+  if (!valid_datatype(itype) || !valid_datatype(otype))
     p->e = "invalid io datatype(s)";
   else {
     p->itype = itype;
@@ -367,7 +390,6 @@ soxr_t soxr_create(
 {
   double io_ratio = output_rate!=0? input_rate!=0?
     input_rate / output_rate : -1 : input_rate!=0? -1 : 0;
-  static const float datatype_full_scale[] = {1, 1, 65536.*32768, 32768};
   soxr_t p = 0;
   soxr_error_t error = 0;
 
@@ -390,7 +412,9 @@ soxr_t soxr_create(
 #endif
 
   if (q_spec && q_spec->e)  error = q_spec->e;
-  else if (io_spec && (io_spec->itype | io_spec->otype) >= SOXR_SPLIT * 2)
+  else if (io_spec && io_spec->e) error = io_spec->e;
+  else if (io_spec && (!valid_datatype(io_spec->itype) ||
+      !valid_datatype(io_spec->otype)))
     error = "invalid io datatype(s)";
 
   if (!error && !(p = calloc(sizeof(*p), 1))) error = "malloc failed";
@@ -425,8 +449,8 @@ soxr_t soxr_create(
     runtime_flag("SOXR_STRICT_BUF", 1, 2, &p->runtime_spec.flags);
     runtime_flag("SOXR_NOSMALLINTOPT", 1, 3, &p->runtime_spec.flags);
 
-    p->io_spec.scale *= datatype_full_scale[p->io_spec.otype & 3] /
-                        datatype_full_scale[p->io_spec.itype & 3];
+    p->io_spec.scale *= datatype_full_scale_of(p->io_spec.otype) /
+                        datatype_full_scale_of(p->io_spec.itype);
 
     p->seed = (unsigned long)time(0) ^ (unsigned long)(size_t)p;
 
@@ -680,13 +704,16 @@ static size_t soxr_output_no_callback(soxr_t p, soxr_buf_t out, size_t len)
 #pragma omp parallel for
   for (i = 0; i < (int)p->num_channels; ++i) {
     size_t done1;
-    done1 = soxr_output_1ch(p, (unsigned)i, ((soxr_bufs_t)out)[i], len, separated);
+    soxr_buf_t dest = separated? ((soxr_bufs_t)out)[i] : out;
+    done1 = soxr_output_1ch(p, (unsigned)i, dest, len, separated);
     if (!i)
       done = done1;
   } else
 #endif
-  for (u = 0; u < p->num_channels; ++u)
-    done = soxr_output_1ch(p, u, ((soxr_bufs_t)out)[u], len, separated);
+  for (u = 0; u < p->num_channels; ++u) {
+    soxr_buf_t dest = separated? ((soxr_bufs_t)out)[u] : out;
+    done = soxr_output_1ch(p, u, dest, len, separated);
+  }
 
   if (!separated)
     p->clips += (p->interleave)(p->io_spec.otype, &out, (sample_t const * const *)p->channel_ptrs,
@@ -702,9 +729,23 @@ size_t soxr_output(soxr_t p, void * out, size_t len0)
   size_t ilen = min(p->max_ilen, (size_t)ceil((double)olen *p->io_ratio));
   void const * in = out; /* Set to !=0, so that caller may leave unset. */
   bool was_flushing;
+  bool separated = !!(p->io_spec.otype & SOXR_SPLIT);
+  soxr_buf_t * split_out = 0;
+  unsigned u;
 
   if (!p || p->error) return 0;
   if (!out && len0) {p->error = "null output buffer pointer"; return 0;}
+
+  /* With an input function, split output needs an adjustable copy of the
+   * per-channel pointer array (it cannot be stepped as a byte buffer); the
+   * single-iteration paths pass the caller's array straight through. */
+  if (separated && p->input_fn) {
+    split_out = (soxr_buf_t *)malloc(p->num_channels * sizeof(*split_out));
+    if (!split_out) {p->error = "malloc failed"; return 0;}
+    for (u = 0; u < p->num_channels; ++u)
+      split_out[u] = ((soxr_bufs_t)out)[u];
+    out = split_out;
+  }
 
   do {
     odone = soxr_output_no_callback(p, out, olen);
@@ -712,8 +753,12 @@ size_t soxr_output(soxr_t p, void * out, size_t len0)
     if (odone0 == len0 || !p->input_fn || p->flushing)
       break;
 
-    osize = soxr_datatype_size(p->io_spec.otype) * p->num_channels;
-    out = (char *)out + osize * odone;
+    osize = soxr_datatype_size(p->io_spec.otype);
+    if (split_out)
+      for (u = 0; u < p->num_channels; ++u)
+        split_out[u] = (char *)split_out[u] + osize * odone;
+    else
+      out = (char *)out + osize * p->num_channels * odone;
     olen -= odone;
     idone = p->input_fn(p->input_fn_state, &in, ilen);
     was_flushing = p->flushing;
@@ -721,6 +766,7 @@ size_t soxr_output(soxr_t p, void * out, size_t len0)
       p->error = "input function reported failure";
     else soxr_input(p, in, idone);
   } while (odone || idone || (!was_flushing && p->flushing));
+  free(split_out);
   return odone0;
 }
 
