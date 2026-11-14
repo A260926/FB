@@ -32,6 +32,28 @@ IBTF::createFromPathList(const PathList &path_list) noexcept {
   }
 }
 
+Result<IBTF::Ptr, BTFError>
+IBTF::createSplitFromPath(const IBTF &base,
+                          const std::filesystem::path &path) noexcept {
+  try {
+    if (base.getOriginToken() == 0) {
+      return BTFError(BTFErrorInformation{
+          BTFErrorInformation::Code::InvalidSplitBase,
+      });
+    }
+
+    return Ptr(new BTF(base, path));
+
+  } catch (const std::bad_alloc &) {
+    return BTFError(BTFErrorInformation{
+        BTFErrorInformation::Code::MemoryAllocationFailure,
+    });
+
+  } catch (const BTFError &e) {
+    return e;
+  }
+}
+
 BTFKind IBTF::getBTFTypeKind(const BTFType &btf_type) noexcept {
   return static_cast<BTFKind>(btf_type.index());
 }

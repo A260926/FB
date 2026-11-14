@@ -8,8 +8,13 @@
 
 #include "btfheadergenerator.h"
 
+#include "btftypereferences.h"
+
 #include <algorithm>
+#include <cctype>
+#include <map>
 #include <optional>
+#include <set>
 #include <streambuf>
 #include <unordered_set>
 #include <variant>
@@ -107,6 +112,11 @@ bool BTFHeaderGenerator::generate(std::string &header,
     return false;
   }
 
+  return generateFromContext(context, header);
+}
+
+bool BTFHeaderGenerator::generateFromContext(Context &context,
+                                             std::string &header) {
   if (!adjustTypeNames(context)) {
     return false;
   }
@@ -138,7 +148,342 @@ bool BTFHeaderGenerator::generate(std::string &header,
   return true;
 }
 
+bool BTFHeaderGenerator::generateModules(
+    std::string &header,
+    const std::vector<std::pair<std::string, const IBTF *>> &modules) const {
+  header.clear();
+
+  Context context;
+  context.allow_duplicate_fundamental_names = true;
+
+  std::string generated_header;
+  if (!buildModuleContext(context, modules)) {
+    return false;
+  }
+
+  if (!generateFromContext(context, generated_header)) {
+    return false;
+  }
+
+  header = std::move(generated_header);
+  return true;
+}
+
 BTFHeaderGenerator::BTFHeaderGenerator() {}
+
+namespace {
+
+bool isValidCIdentifier(const std::string &name) {
+  if (name.empty()) {
+    return false;
+  }
+
+  auto is_first = static_cast<unsigned char>(name.front());
+  if (!(std::isalpha(is_first) || is_first == '_')) {
+    return false;
+  }
+
+  for (auto ch : name) {
+    auto uch = static_cast<unsigned char>(ch);
+    if (!(std::isalnum(uch) || uch == '_')) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Identity of a type in the union: which load introduced it and its ID in the
+// view that owns it. Two independently loaded bases therefore never collapse,
+// even when their bytes are identical.
+using TypeKey = std::pair<BTFSourceID, std::uint32_t>;
+
+struct TypeKeyHash final {
+  std::size_t operator()(const TypeKey &key) const noexcept {
+    auto a = std::hash<std::uint64_t>{}(key.first);
+    auto b = std::hash<std::uint32_t>{}(key.second);
+    return a ^ (b + 0x9e3779b97f4a7c15ULL + (a << 6) + (a >> 2));
+  }
+};
+
+bool isNamedTagOrAlias(const BTFType &btf_type) {
+  switch (IBTF::getBTFTypeKind(btf_type)) {
+  case BTFKind::Struct:
+  case BTFKind::Union:
+  case BTFKind::Enum:
+  case BTFKind::Fwd:
+  case BTFKind::Typedef:
+    return true;
+
+  default:
+    return false;
+  }
+}
+
+std::optional<std::string> getDeclarationName(const BTFType &btf_type) {
+  switch (IBTF::getBTFTypeKind(btf_type)) {
+  case BTFKind::Struct:
+    return std::get<StructBTFType>(btf_type).opt_name;
+  case BTFKind::Union:
+    return std::get<UnionBTFType>(btf_type).opt_name;
+  case BTFKind::Enum:
+    return std::get<EnumBTFType>(btf_type).opt_name;
+  case BTFKind::Fwd:
+    return std::get<FwdBTFType>(btf_type).name;
+  case BTFKind::Typedef:
+    return std::get<TypedefBTFType>(btf_type).name;
+  default:
+    return std::nullopt;
+  }
+}
+
+void setDeclarationName(BTFType &btf_type, const std::string &name) {
+  switch (IBTF::getBTFTypeKind(btf_type)) {
+  case BTFKind::Struct:
+    std::get<StructBTFType>(btf_type).opt_name = name;
+    break;
+  case BTFKind::Union:
+    std::get<UnionBTFType>(btf_type).opt_name = name;
+    break;
+  case BTFKind::Enum:
+    std::get<EnumBTFType>(btf_type).opt_name = name;
+    break;
+  case BTFKind::Fwd:
+    std::get<FwdBTFType>(btf_type).name = name;
+    break;
+  case BTFKind::Typedef:
+    std::get<TypedefBTFType>(btf_type).name = name;
+    break;
+  default:
+    break;
+  }
+}
+
+} // namespace
+
+bool BTFHeaderGenerator::buildModuleContext(
+    Context &context,
+    const std::vector<std::pair<std::string, const IBTF *>> &modules) {
+
+  if (modules.empty()) {
+    return false;
+  }
+
+  std::unordered_set<std::string> module_names;
+  for (const auto &module : modules) {
+    if (!isValidCIdentifier(module.first)) {
+      return false;
+    }
+
+    if (!module_names.insert(module.first).second) {
+      return false;
+    }
+
+    if (module.second == nullptr) {
+      return false;
+    }
+
+    bool has_provenance{false};
+    auto all = module.second->getAll();
+    for (const auto &p : all) {
+      if (module.second->getTypeScope(p.first).has_value()) {
+        has_provenance = true;
+        break;
+      }
+    }
+
+    if (!has_provenance) {
+      return false;
+    }
+  }
+
+  // Internal ordering is by module name, never by argument order, so that
+  // swapping the caller's modules yields byte-identical output. The module
+  // name becomes the prefix of every type that module introduces.
+  std::vector<std::pair<std::string, const IBTF *>> ordered_modules = modules;
+  std::sort(ordered_modules.begin(), ordered_modules.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+
+  // One entry per dense generator ID. `origin_view` is the view whose own
+  // numbering the record's type references are expressed in; `source` is the
+  // load that introduced the type, which decides its module prefix.
+  struct DenseEntry final {
+    std::uint32_t dense_id{};
+    const IBTF *origin_view{nullptr};
+    BTFSourceID source{0};
+  };
+
+  // Per module: a flat list of (view ID, dense ID) pairs in sorted view-ID
+  // order. The originating view of every dense type is the module that
+  // first contributed it under its provenance key.
+  struct ModuleMapping final {
+    const IBTF *view{nullptr};
+    std::string name;
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> id_pairs;
+  };
+
+  // The module name that owns each source load. A type is prefixed with the
+  // name of the module view that introduced its source, so an inherited
+  // ancestor keeps a stable name regardless of which sibling is listed
+  // first and regardless of the caller's argument order.
+  std::unordered_map<BTFSourceID, std::string> source_to_module_name;
+  for (const auto &module : modules) {
+    auto token = module.second->getOriginToken();
+    if (token == 0) {
+      return false;
+    }
+
+    if (!source_to_module_name.insert({token, module.first}).second) {
+      // The same view named twice cannot have two prefixes.
+      return false;
+    }
+  }
+
+  std::vector<DenseEntry> entries;
+  std::vector<ModuleMapping> mappings;
+  std::unordered_map<TypeKey, std::uint32_t, TypeKeyHash> key_to_dense;
+  std::uint32_t next_dense_id{1U};
+
+  for (const auto &module : ordered_modules) {
+    auto view_type_map = module.second->getAll();
+
+    std::vector<std::uint32_t> view_ids;
+    view_ids.reserve(view_type_map.size());
+    for (const auto &p : view_type_map) {
+      view_ids.push_back(p.first);
+    }
+    std::sort(view_ids.begin(), view_ids.end());
+
+    ModuleMapping mapping{module.second, module.first, {}};
+    mapping.id_pairs.reserve(view_ids.size());
+
+    for (auto view_id : view_ids) {
+      auto opt_scope = module.second->getTypeScope(view_id);
+      if (!opt_scope.has_value()) {
+        return false;
+      }
+
+      TypeKey key{opt_scope->source, opt_scope->id};
+      auto it = key_to_dense.find(key);
+      if (it == key_to_dense.end()) {
+        auto dense_id = next_dense_id++;
+        it = key_to_dense.insert({key, dense_id}).first;
+
+        context.btf_type_map.insert({dense_id, view_type_map.at(view_id)});
+        entries.push_back(
+            DenseEntry{dense_id, module.second, opt_scope->source});
+      }
+
+      mapping.id_pairs.push_back({view_id, it->second});
+    }
+
+    mappings.push_back(std::move(mapping));
+  }
+
+  // Rewrite each dense record exactly once, using the own numbering of the
+  // view that contributed it.
+  for (const auto &entry : entries) {
+    const ModuleMapping *origin{nullptr};
+    for (const auto &mapping : mappings) {
+      if (mapping.view != entry.origin_view) {
+        continue;
+      }
+
+      for (const auto &pair : mapping.id_pairs) {
+        if (pair.second == entry.dense_id) {
+          origin = &mapping;
+          break;
+        }
+      }
+
+      if (origin != nullptr) {
+        break;
+      }
+    }
+
+    if (origin == nullptr) {
+      return false;
+    }
+
+    auto &btf_type = context.btf_type_map.at(entry.dense_id);
+
+    bool ok = detail::forEachTypeReference(
+        btf_type, [&](std::uint32_t &reference) -> bool {
+          if (reference == 0) {
+            return true;
+          }
+
+          for (const auto &pair : origin->id_pairs) {
+            if (pair.first == reference) {
+              reference = pair.second;
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+    if (!ok) {
+      return false;
+    }
+  }
+
+  // Every load that introduced a type must be represented by a supplied
+  // module view, otherwise its types would be emitted without the module
+  // prefix that identifies their source. This also catches a caller that
+  // passes only sibling views and forgets the shared base.
+  std::unordered_set<BTFSourceID> covered_sources;
+  for (const auto &module : modules) {
+    covered_sources.insert(module.second->getOriginToken());
+  }
+
+  for (const auto &entry : entries) {
+    if (covered_sources.count(entry.source) == 0) {
+      return false;
+    }
+  }
+
+  // Prefix every declared tag/alias with the name of the module that
+  // introduced it, then remain stable under enumeration.
+  std::unordered_set<std::string> used_names;
+
+  for (const auto &entry : entries) {
+    auto &btf_type = context.btf_type_map.at(entry.dense_id);
+    if (!isNamedTagOrAlias(btf_type)) {
+      continue;
+    }
+
+    auto opt_name = getDeclarationName(btf_type);
+    if (!opt_name.has_value() || opt_name->empty()) {
+      continue;
+    }
+
+    auto module_it = source_to_module_name.find(entry.source);
+    if (module_it == source_to_module_name.end()) {
+      return false;
+    }
+
+    auto prefixed = module_it->second + "__" + opt_name.value();
+    if (!used_names.insert(prefixed).second) {
+      return false;
+    }
+
+    setDeclarationName(btf_type, prefixed);
+
+    if (IBTF::getBTFTypeKind(btf_type) == BTFKind::Enum) {
+      auto &enum_type = std::get<EnumBTFType>(btf_type);
+      for (auto &value : enum_type.value_list) {
+        value.name = prefixed + "__" + value.name;
+
+        if (!used_names.insert(value.name).second) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
 
 bool BTFHeaderGenerator::saveBTFTypeMap(Context &context,
                                         const IBTF::Ptr &btf) {
@@ -233,6 +578,14 @@ bool BTFHeaderGenerator::adjustTypeNames(Context &context) {
 
       if (visited_name_list.count(key) > 0) {
         if (!can_be_renamed) {
+          // Fundamental integer types are declared by spelling only, so
+          // duplicates across modules are harmless in union mode.
+          const auto kind = btfparse::IBTF::getBTFTypeKind(p.second);
+          if (context.allow_duplicate_fundamental_names &&
+              kind == btfparse::BTFKind::Int) {
+            continue;
+          }
+
           return false;
         }
 

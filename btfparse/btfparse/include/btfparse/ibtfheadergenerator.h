@@ -10,6 +10,10 @@
 
 #include <btfparse/ibtf.h>
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace btfparse {
 
 class IBTFHeaderGenerator {
@@ -21,6 +25,19 @@ public:
   virtual ~IBTFHeaderGenerator() = default;
 
   virtual bool generate(std::string &header, const IBTF::Ptr &btf) const = 0;
+
+  // Generates a single header holding the union of the given module views.
+  // Modules are emitted in the supplied order. Types inherited from a
+  // shared base are declared once; independently parsed bases are never
+  // merged. Every named tag, fwd and typedef is prefixed with
+  // "<module>__", enum members are prefixed with "<module>__<enum>__",
+  // and fundamental integer/float spelling is left untouched. The header
+  // is only assigned on success; on any failure it is cleared and the
+  // call returns false.
+  virtual bool
+  generateModules(std::string &header,
+                  const std::vector<std::pair<std::string, const IBTF *>>
+                      &modules) const = 0;
 
   IBTFHeaderGenerator(const IBTFHeaderGenerator &) = delete;
   IBTFHeaderGenerator &operator=(const IBTFHeaderGenerator &) = delete;

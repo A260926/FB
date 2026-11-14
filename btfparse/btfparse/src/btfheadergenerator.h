@@ -9,6 +9,8 @@
 #pragma once
 
 #include <sstream>
+#include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -23,13 +25,18 @@ public:
   virtual bool generate(std::string &header,
                         const IBTF::Ptr &btf) const override;
 
+  virtual bool
+  generateModules(std::string &header,
+                  const std::vector<std::pair<std::string, const IBTF *>>
+                      &modules) const override;
+
 private:
   BTFHeaderGenerator();
 
 public:
   struct Context final {
     BTFTypeMap btf_type_map;
-    std::unordered_set<std::uint32_t> top_level_type_list;
+    std::set<std::uint32_t> top_level_type_list;
     std::unordered_map<std::string, std::uint32_t> fwd_type_map;
 
     std::uint32_t padding_byte_id{0};
@@ -41,11 +48,9 @@ public:
 
     std::unordered_set<std::uint32_t> visited_type_list;
 
-    std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, bool>>
-        type_tree;
+    std::map<std::uint32_t, std::map<std::uint32_t, bool>> type_tree;
 
-    std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>
-        inverse_type_tree;
+    std::map<std::uint32_t, std::set<std::uint32_t>> inverse_type_tree;
 
     std::vector<std::vector<std::uint32_t>> modifier_list_stack;
     std::vector<std::uint32_t> modifier_list;
@@ -59,10 +64,23 @@ public:
     std::optional<std::string> opt_variable_name;
 
     std::size_t indent_level{0};
+
+    // Union generation keeps the spelling of fundamental integer types
+    // ("int", "unsigned char", ...) unchanged, so several independently
+    // loaded modules may each contribute an identically named fundamental
+    // type. Collisions there are benign because fundamentals are never
+    // emitted as top-level declarations; the single-module path keeps the
+    // original strict behavior.
+    bool allow_duplicate_fundamental_names{false};
   };
 
   static bool saveBTFTypeMap(Context &context, const IBTF::Ptr &btf);
   static bool adjustTypeNames(Context &context);
+
+  static bool generateFromContext(Context &context, std::string &header);
+  static bool buildModuleContext(
+      Context &context,
+      const std::vector<std::pair<std::string, const IBTF *>> &modules);
 
   static std::uint32_t generateTypeID(Context &context);
   static bool materializePadding(Context &context);

@@ -8,6 +8,12 @@
 
 #include "btf.h"
 
+#include "btftypereferences.h"
+
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace btfparse {
@@ -92,8 +98,57 @@ parseStructOrUnionData(Type &output, const BTFFileList &btf_file_list,
 
 } // namespace
 
+namespace {
+
+// Process-wide, monotonically increasing identity for one parsed load. Never
+// reset, so a freed view's token cannot be mistaken for a later load even
+// when the bytes on disk are identical.
+std::atomic<BTFSourceID> gNextSourceToken{1};
+
+// Local types of a split layer are numbered right after the highest ancestor
+// ID, exactly as split BTF numbering works.
+const std::uint32_t kSplitAncestorGap{1U};
+
+std::uint32_t nextSplitTypeID(
+    const std::unordered_map<std::uint32_t, BTFType> &type_map) {
+
+  std::uint32_t highest_id{0};
+  for (const auto &p : type_map) {
+    highest_id = std::max(highest_id, p.first);
+  }
+
+  return highest_id + kSplitAncestorGap;
+}
+
+std::string readStringAt(const std::string &section, std::uint64_t offset) {
+  if (offset >= section.size()) {
+    throw BTFError(BTFErrorInformation{
+        BTFErrorInformation::Code::InvalidStringOffset,
+        BTFErrorInformation::FileRange{offset, 0},
+    });
+  }
+
+  auto begin = section.data() + offset;
+  auto end = static_cast<const char *>(std::memchr(
+      begin, 0, section.size() - static_cast<std::size_t>(offset)));
+  if (end == nullptr) {
+    throw BTFError(BTFErrorInformation{
+        BTFErrorInformation::Code::InvalidStringOffset,
+        BTFErrorInformation::FileRange{offset, 0},
+    });
+  }
+
+  return std::string(begin, end);
+}
+
+} // namespace
+
 struct BTF::PrivateData final {
   BTFTypeMap btf_type_map;
+  std::unordered_map<std::uint32_t, BTFTypeScope> scope_map;
+  std::string string_section;
+  BTFSourceID origin_token{0};
+  std::uint32_t depth{0};
 };
 
 BTF::~BTF() {}
@@ -123,8 +178,27 @@ std::uint32_t BTF::count() const noexcept {
 
 BTFTypeMap BTF::getAll() const noexcept { return d->btf_type_map; }
 
+std::optional<BTFTypeScope>
+BTF::getTypeScope(std::uint32_t id) const noexcept {
+  auto it = d->scope_map.find(id);
+  if (it == d->scope_map.end()) {
+    return std::nullopt;
+  }
+
+  return it->second;
+}
+
+std::string BTF::getStringSection() const { return d->string_section; }
+
+BTFSourceID BTF::getOriginToken() const noexcept { return d->origin_token; }
+
+std::uint32_t BTF::getDepth() const noexcept { return d->depth; }
+
 BTF::BTF(const PathList &path_list) : d(new PrivateData) {
   BTFFileList btf_file_list;
+
+  std::uint32_t string_base_offset{0};
+  std::string cumulative_strings;
 
   for (const auto &path : path_list) {
     auto file_reader_res = IFileReader::open(path);
@@ -151,15 +225,47 @@ BTF::BTF(const PathList &path_list) : d(new PrivateData) {
     }
 
     btf_file.btf_header = btf_header_res.takeValue();
+
+    auto string_res = readSection(
+        file_reader, btf_file.btf_header.hdr_len + btf_file.btf_header.str_off,
+        btf_file.btf_header.str_len);
+    if (string_res.failed()) {
+      throw string_res.takeError();
+    }
+
+    cumulative_strings += string_res.takeValue();
+
+    // A linear path list concatenates the string tables in file order, and
+    // offsets are relative to that concatenation. Retain the cumulative
+    // prefix so the split path can reuse it verbatim.
+    btf_file.string_start = string_base_offset;
+    btf_file.string_size = btf_file.btf_header.str_len;
+    btf_file.cumulative_string_section = cumulative_strings;
+
+    string_base_offset += btf_file.btf_header.str_len;
     btf_file_list.push_back(std::move(btf_file));
   }
 
-  auto btf_type_map_res = parseTypeSections(btf_file_list);
+  auto btf_type_map_res = parseTypeSection(btf_file_list, 1U);
   if (btf_type_map_res.failed()) {
     throw btf_type_map_res.takeError();
   }
 
+  d->origin_token = gNextSourceToken.fetch_add(1);
+  d->depth = 0;
   d->btf_type_map = btf_type_map_res.takeValue();
+
+  // A root load is a plain BTF file (or linear chain of files). Every type
+  // belongs to this root scope at its own ID.
+  for (const auto &p : d->btf_type_map) {
+    d->scope_map.insert(
+        {p.first, BTFTypeScope{d->origin_token, 0, p.first}});
+  }
+
+  // The strings retained by a root are the concatenation of every input
+  // file's string table, matching the global offsets used by the linear
+  // interface.
+  d->string_section = std::move(cumulative_strings);
 }
 
 BTFError BTF::convertFileReaderError(const FileReaderError &error) noexcept {
@@ -203,61 +309,135 @@ BTFError BTF::convertFileReaderError(const FileReaderError &error) noexcept {
   };
 }
 
-std::optional<BTFError>
-BTF::detectEndianness(bool &little_endian, IFileReader &file_reader) noexcept {
-  try {
-    file_reader.seek(0);
-    file_reader.setEndianness(true);
+BTF::BTF(const IBTF &base, const std::filesystem::path &path)
+    : d(new PrivateData) {
 
-    auto magic = file_reader.u16();
-    if (magic == kLittleEndianMagicValue) {
-      little_endian = true;
+  auto base_type_map = base.getAll();
 
-    } else if (magic == kBigEndianMagicValue) {
-      little_endian = false;
+  auto file_reader_res = IFileReader::open(path);
+  if (file_reader_res.failed()) {
+    throw convertFileReaderError(file_reader_res.takeError());
+  }
 
-    } else {
-      return BTFError{
-          BTFErrorInformation{
-              BTFErrorInformation::Code::InvalidMagicValue,
-          },
-      };
+  BTFFile btf_file;
+  btf_file.file_reader = file_reader_res.takeValue();
+
+  auto &file_reader = *btf_file.file_reader.get();
+
+  bool little_endian{false};
+  auto opt_error = detectEndianness(little_endian, file_reader);
+  if (opt_error.has_value()) {
+    throw opt_error.value();
+  }
+
+  file_reader.setEndianness(little_endian);
+
+  auto btf_header_res = readBTFHeader(file_reader);
+  if (btf_header_res.failed()) {
+    throw btf_header_res.takeError();
+  }
+
+  btf_file.btf_header = btf_header_res.takeValue();
+
+  auto child_string_res =
+      readSection(file_reader,
+                  btf_file.btf_header.hdr_len + btf_file.btf_header.str_off,
+                  btf_file.btf_header.str_len);
+  if (child_string_res.failed()) {
+    throw child_string_res.takeError();
+  }
+
+  auto child_string = child_string_res.takeValue();
+
+  // A child view's string offsets continue the ancestor table. Keep the
+  // ancestor bytes in front so offsets used by both the child and any
+  // future grandchild resolve identically, even after the parent handle is
+  // destroyed.
+  auto base_string_section = base.getStringSection();
+  btf_file.string_start =
+      static_cast<std::uint32_t>(base_string_section.size());
+  btf_file.string_size = btf_file.btf_header.str_len;
+  btf_file.cumulative_string_section = base_string_section + child_string;
+  BTFFileList btf_file_list;
+  btf_file_list.push_back(std::move(btf_file));
+
+  // Local IDs start after the highest ancestor ID.
+  std::uint32_t local_first_id = nextSplitTypeID(base_type_map);
+
+  auto parsed_res = parseTypeSection(btf_file_list, local_first_id);
+  if (parsed_res.failed()) {
+    throw parsed_res.takeError();
+  }
+
+  auto parsed_local_types = parsed_res.takeValue();
+
+  d->origin_token = gNextSourceToken.fetch_add(1);
+  d->depth = base.getDepth() + 1;
+  d->string_section = base_string_section + child_string;
+
+  // Ancestors keep their IDs and their scopes.
+  for (const auto &p : base_type_map) {
+    auto opt_scope = base.getTypeScope(p.first);
+    if (!opt_scope.has_value()) {
+      throw BTFError(BTFErrorInformation{
+          BTFErrorInformation::Code::InvalidSplitBase,
+          BTFErrorInformation::FileRange{p.first, 0},
+      });
     }
 
-    return std::nullopt;
-
-  } catch (const FileReaderError &error) {
-    return convertFileReaderError(error);
+    d->btf_type_map.insert({p.first, p.second});
+    d->scope_map.insert({p.first, opt_scope.value()});
   }
-}
 
-Result<BTFHeader, BTFError>
-BTF::readBTFHeader(IFileReader &file_reader) noexcept {
-  try {
-    file_reader.seek(0);
+  // Split BTF type references are global: they either name an ancestor ID
+  // (kept verbatim) or one of this layer's own IDs. Sparse layer numbering
+  // is compacted here, and the same map rewrites references, so a
+  // sibling's same-numbered ID can never resolve into this layer by
+  // accident.
+  std::map<std::uint32_t, BTFType> sorted_local_types(parsed_local_types.begin(),
+                                                      parsed_local_types.end());
 
-    BTFHeader btf_header{};
-    btf_header.magic = file_reader.u16();
-    btf_header.version = file_reader.u8();
-    btf_header.flags = file_reader.u8();
-    btf_header.hdr_len = file_reader.u32();
-    btf_header.type_off = file_reader.u32();
-    btf_header.type_len = file_reader.u32();
-    btf_header.str_off = file_reader.u32();
-    btf_header.str_len = file_reader.u32();
+  std::map<std::uint32_t, std::uint32_t> source_to_global;
+  std::uint32_t next_global_id{local_first_id};
+  for (const auto &p : sorted_local_types) {
+    source_to_global.insert({p.first, next_global_id});
+    ++next_global_id;
+  }
 
-    return btf_header;
+  for (auto &p : sorted_local_types) {
+    auto global_id = source_to_global.at(p.first);
 
-  } catch (const FileReaderError &error) {
-    return convertFileReaderError(error);
+    auto remap = [&](std::uint32_t &reference) -> bool {
+      if (reference == 0 || base_type_map.count(reference) > 0) {
+        return true;
+      }
+
+      auto map_it = source_to_global.find(reference);
+      if (map_it == source_to_global.end()) {
+        throw BTFError(BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidSplitTypeReference,
+            BTFErrorInformation::FileRange{reference, 0},
+        });
+      }
+
+      reference = map_it->second;
+      return true;
+    };
+
+    detail::forEachTypeReference(p.second, remap);
+
+    d->btf_type_map.insert({global_id, std::move(p.second)});
+    d->scope_map.insert(
+        {global_id, BTFTypeScope{d->origin_token, d->depth, global_id}});
   }
 }
 
 Result<BTFTypeMap, BTFError>
-BTF::parseTypeSections(const BTFFileList &btf_file_list) noexcept {
+BTF::parseTypeSection(const BTFFileList &btf_file_list,
+                      std::uint32_t first_type_id) noexcept {
   BTFTypeMap btf_type_map;
 
-  std::uint32_t type_id{1U};
+  std::uint32_t type_id{first_type_id};
 
   try {
     for (auto &btf_file : btf_file_list) {
@@ -316,6 +496,83 @@ BTF::parseTypeSections(const BTFFileList &btf_file_list) noexcept {
     }
 
     return btf_type_map;
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFTypeMap, BTFError>
+BTF::parseTypeSections(const BTFFileList &btf_file_list) noexcept {
+  return parseTypeSection(btf_file_list, 1U);
+}
+
+Result<std::string, BTFError>
+BTF::readSection(IFileReader &file_reader, std::uint64_t offset,
+                 std::uint32_t size) noexcept {
+  std::string buffer;
+
+  if (size == 0) {
+    return buffer;
+  }
+
+  try {
+    file_reader.seek(offset);
+    buffer.resize(size);
+
+    file_reader.read(reinterpret_cast<std::uint8_t *>(&buffer[0]), size);
+
+    return buffer;
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+std::optional<BTFError>
+BTF::detectEndianness(bool &little_endian, IFileReader &file_reader) noexcept {
+  try {
+    file_reader.seek(0);
+    file_reader.setEndianness(true);
+
+    auto magic = file_reader.u16();
+    if (magic == kLittleEndianMagicValue) {
+      little_endian = true;
+
+    } else if (magic == kBigEndianMagicValue) {
+      little_endian = false;
+
+    } else {
+      return BTFError{
+          BTFErrorInformation{
+              BTFErrorInformation::Code::InvalidMagicValue,
+          },
+      };
+    }
+
+    return std::nullopt;
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFHeader, BTFError>
+BTF::readBTFHeader(IFileReader &file_reader) noexcept {
+  try {
+    file_reader.seek(0);
+
+    BTFHeader btf_header{};
+    btf_header.magic = file_reader.u16();
+    btf_header.version = file_reader.u8();
+    btf_header.flags = file_reader.u8();
+    btf_header.hdr_len = file_reader.u32();
+    btf_header.type_off = file_reader.u32();
+    btf_header.type_len = file_reader.u32();
+    btf_header.str_off = file_reader.u32();
+    btf_header.str_len = file_reader.u32();
+
+    return btf_header;
 
   } catch (const FileReaderError &error) {
     return convertFileReaderError(error);
@@ -969,22 +1226,25 @@ BTF::parseDataSecData(const BTFFileList &btf_file_list,
 
 Result<std::string, BTFError> BTF::parseString(const BTFFileList &btf_file_list,
                                                std::uint64_t offset) noexcept {
-  std::uint32_t start_offset{};
 
+  // Each BTFFile's cumulative_string_section holds the global string bytes
+  // [0, string_start + string_size). Offsets used by split children continue
+  // the ancestor table, so an offset may belong to an ancestor region that
+  // has no file entry of its own. The cumulative prefix resolves it.
   for (const auto &btf_file : btf_file_list) {
-    auto end_offset = start_offset + btf_file.btf_header.str_len;
-    auto relative_offset = offset - start_offset;
+    auto end_offset = std::uint64_t(btf_file.string_start) +
+                      std::uint64_t(btf_file.string_size);
 
-    if (relative_offset < end_offset) {
-      auto &file_reader = *btf_file.file_reader.get();
-
-      auto absolute_offset = btf_file.btf_header.hdr_len +
-                             btf_file.btf_header.str_off + relative_offset;
-
-      return parseString(file_reader, absolute_offset);
+    if (offset >= end_offset) {
+      continue;
     }
 
-    start_offset = end_offset;
+    try {
+      return readStringAt(btf_file.cumulative_string_section, offset);
+
+    } catch (const BTFError &error) {
+      return error;
+    }
   }
 
   return BTFError{

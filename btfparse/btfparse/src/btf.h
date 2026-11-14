@@ -13,6 +13,8 @@
 #include <btfparse/ibtf.h>
 #include <btfparse/ifilereader.h>
 
+#include <map>
+#include <string>
 #include <vector>
 
 namespace btfparse {
@@ -20,6 +22,14 @@ namespace btfparse {
 struct BTFFile final {
   BTFHeader btf_header;
   IFileReader::Ptr file_reader;
+
+  // The bytes [string_start, string_start + string_size) are this file's
+  // own string table. cumulative_string_section holds every string byte
+  // from global offset 0 through this block, so a file whose offsets
+  // continue a previous split base can resolve ancestor strings too.
+  std::uint32_t string_start{};
+  std::uint32_t string_size{};
+  std::string cumulative_string_section;
 };
 
 using BTFFileList = std::vector<BTFFile>;
@@ -41,11 +51,19 @@ public:
   virtual std::uint32_t count() const noexcept override;
   virtual BTFTypeMap getAll() const noexcept override;
 
+  virtual std::optional<BTFTypeScope>
+  getTypeScope(std::uint32_t id) const noexcept override;
+
+  virtual std::string getStringSection() const override;
+  virtual BTFSourceID getOriginToken() const noexcept override;
+  virtual std::uint32_t getDepth() const noexcept override;
+
 private:
   struct PrivateData;
   std::unique_ptr<PrivateData> d;
 
   BTF(const PathList &path_list);
+  BTF(const IBTF &base, const std::filesystem::path &path);
 
 public:
   static BTFError convertFileReaderError(const FileReaderError &error) noexcept;
@@ -58,6 +76,17 @@ public:
 
   static Result<BTFTypeMap, BTFError>
   parseTypeSections(const BTFFileList &btf_file_list) noexcept;
+
+  // Parses one or more consecutive type sections starting at `first_type_id`.
+  // Split children rely on this to place their local types right after the
+  // ancestor numbering while their records still use global type IDs.
+  static Result<BTFTypeMap, BTFError>
+  parseTypeSection(const BTFFileList &btf_file_list,
+                   std::uint32_t first_type_id) noexcept;
+
+  static Result<std::string, BTFError>
+  readSection(IFileReader &file_reader, std::uint64_t offset,
+              std::uint32_t size) noexcept;
 
   static Result<BTFTypeHeader, BTFError>
   parseTypeHeader(IFileReader &file_reader) noexcept;

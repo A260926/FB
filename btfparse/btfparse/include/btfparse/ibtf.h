@@ -11,10 +11,12 @@
 #include <btfparse/error.h>
 #include <btfparse/result.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +45,12 @@ struct BTFErrorInformation final {
     InvalidVarBTFTypeEncoding,
     InvalidDataSecBTFTypeEncoding,
     InvalidStringOffset,
+    InvalidSplitBase,
+    InvalidSplitTypeReference,
+    InvalidModuleName,
+    InvalidModule,
+    InvalidTypeLayout,
+    ObjectSizeMismatch,
   };
 
   struct FileRange final {
@@ -145,11 +153,47 @@ struct BTFErrorInformationPrinter final {
     case BTFErrorInformation::Code::InvalidStringOffset:
       buffer << "Invalid string offset";
       break;
+
+    case BTFErrorInformation::Code::InvalidSplitBase:
+      buffer << "Invalid split BTF base view";
+      break;
+
+    case BTFErrorInformation::Code::InvalidSplitTypeReference:
+      buffer << "Invalid type reference in split BTF";
+      break;
+
+    case BTFErrorInformation::Code::InvalidModuleName:
+      buffer << "Invalid module name";
+      break;
+
+    case BTFErrorInformation::Code::InvalidModule:
+      buffer << "Invalid module view";
+      break;
+
+    case BTFErrorInformation::Code::InvalidTypeLayout:
+      buffer << "Invalid type layout";
+      break;
+
+    case BTFErrorInformation::Code::ObjectSizeMismatch: {
+      buffer << "Input length does not match the selected layout";
+
+      if (error_information.opt_file_range.has_value()) {
+        const auto &file_range = error_information.opt_file_range.value();
+        buffer << " (got " << file_range.offset << " bytes, expected "
+               << file_range.size << " bytes)";
+      }
+      break;
+    }
     }
 
     buffer << "'";
 
-    if (error_information.opt_file_range.has_value()) {
+    // ObjectSizeMismatch embeds both lengths in its message above; the
+    // generic file-range suffix would misleadingly render them as an
+    // interval, so skip it for that code.
+    if (error_information.code !=
+            BTFErrorInformation::Code::ObjectSizeMismatch &&
+        error_information.opt_file_range.has_value()) {
       const auto &file_range = error_information.opt_file_range.value();
       buffer << ", File range: " << file_range.offset << " - "
              << (file_range.offset + file_range.size);
@@ -332,6 +376,26 @@ using BTFType =
 using BTFTypeMap = std::unordered_map<std::uint32_t, BTFType>;
 using PathList = std::vector<std::filesystem::path>;
 
+// Opaque, process-local identity for one loaded BTF view. Tokens are never
+// reused, even after the owning view is destroyed, so independent loads of
+// identical bytes can never be confused for one another.
+using BTFSourceID = std::uint64_t;
+
+// Identifies the origin of a type inside a split view.
+//
+// - `source` is the identity of the load that introduced the type.
+// - `depth` is 0 for the root load and increases by one per split layer.
+// - `id` is the ID under which the queried view exposes the type. Ancestor
+//   types keep their original ID; a split layer numbers its own types right
+//   after the highest ancestor ID, so the same numeric ID in two sibling
+//   layers refers to two different types. Together, (`source`, `id`) is the
+//   stable identity of a type across views, independent of its name.
+struct BTFTypeScope final {
+  BTFSourceID source{0};
+  std::uint32_t depth{0};
+  std::uint32_t id{0};
+};
+
 class IBTF {
 public:
   using Ptr = std::unique_ptr<IBTF>;
@@ -342,11 +406,40 @@ public:
   static Result<Ptr, BTFError>
   createFromPathList(const PathList &path_list) noexcept;
 
+  // Creates a split child of an already parsed view. The child keeps all
+  // ancestor types visible under their original IDs, maps its own local IDs
+  // (starting right after the ancestor maximum) into the shared numbering
+  // space, and owns its string table so it stays usable after the base
+  // handle (and the source file) are gone.
+  static Result<Ptr, BTFError>
+  createSplitFromPath(const IBTF &base,
+                      const std::filesystem::path &path) noexcept;
+
   virtual std::optional<BTFType> getType(std::uint32_t id) const noexcept = 0;
   virtual std::optional<BTFKind> getKind(std::uint32_t id) const noexcept = 0;
 
   virtual std::uint32_t count() const noexcept = 0;
   virtual BTFTypeMap getAll() const noexcept = 0;
+
+  // Scope metadata for a view. The root returns depth 0 for every ID; split
+  // views report which load introduced the requested type. This is the
+  // authoritative provenance used when rewriting type references; names are
+  // never consulted to infer identity.
+  virtual std::optional<BTFTypeScope>
+  getTypeScope(std::uint32_t) const noexcept {
+    return std::nullopt;
+  }
+
+  // Raw string section owned by this view, using the same global offsets as
+  // its type records. Retaining these bytes (not just decoded names) is what
+  // lets a split child resolve ancestor strings that no ancestor type used,
+  // and what lets grandchildren keep loading after the parent handle and the
+  // source file are gone.
+  virtual std::string getStringSection() const { return {}; }
+
+  // Identity of the load behind this view, and its split depth.
+  virtual BTFSourceID getOriginToken() const noexcept { return 0; }
+  virtual std::uint32_t getDepth() const noexcept { return 0; }
 
   static BTFKind getBTFTypeKind(const BTFType &btf_type) noexcept;
 
