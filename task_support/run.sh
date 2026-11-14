@@ -10,7 +10,7 @@ cmake --build .task-build --target clean >>.task-build.log 2>&1
 cmake --build .task-build --target task_baseline -j 4 >.task-build.log 2>&1 || { tail -n 40 .task-build.log; exit 1; }
 if [[ $mode == target ]]; then
   cmake --build .task-build --target task_target -j 4 >>.task-build.log 2>&1 || { tail -n 40 .task-build.log; exit 1; }
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/task-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

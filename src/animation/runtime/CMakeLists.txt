@@ -8,6 +8,7 @@ add_library(ozz_animation
   ik_two_bone_job.cc
   local_to_model_job.cc
   motion_blending_job.cc
+  pose_palette_cache.cc
   sampling_job.cc
   skeleton.cc
   skeleton_utils.cc
@@ -27,6 +28,7 @@ target_sources(ozz_animation PUBLIC
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/ik_two_bone_job.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/local_to_model_job.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/motion_blending_job.h
+    ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/pose_palette_cache.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/sampling_job.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/skeleton.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/runtime/skeleton_utils.h

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libozz_geometry_r.a CMakeFiles/ozz_geometry.dir/skinning_job.cc.o
+/usr/bin/ranlib libozz_geometry_r.a

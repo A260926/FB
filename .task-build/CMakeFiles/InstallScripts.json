@@ -1,0 +1,19 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/base/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/options/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/runtime/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/offline/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/offline/tools/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/offline/fbx/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/animation/offline/gltf/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/geometry/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/.task-build/upstream/src/geometry/runtime/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

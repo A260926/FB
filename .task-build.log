@@ -1,0 +1,63 @@
+[  8%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/containers/string_archive.cc.o
+[  8%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/log.cc.o
+[  8%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/memory/allocator.cc.o
+[  8%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/platform.cc.o
+[ 11%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/encode/group_varint.cc.o
+[ 13%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/io/archive.cc.o
+[ 15%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/io/stream.cc.o
+[ 17%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/maths/box.cc.o
+[ 20%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/maths/simd_math.cc.o
+[ 24%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/maths/math_archive.cc.o
+[ 24%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/maths/soa_math_archive.cc.o
+/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/src/base/maths/simd_math.cc:58:9: warning: Ozz libraries were built with Reference (scalar) math implementation [-W#pragma-messages]
+   58 | #pragma message("Ozz libraries were built with " _OZZ_SIMD_IMPLEMENTATION \
+      |         ^
+1 warning generated.
+[ 26%] Building CXX object upstream/src/base/CMakeFiles/ozz_base.dir/maths/simd_math_archive.cc.o
+[ 28%] Linking CXX static library libozz_base_r.a
+[ 28%] Built target ozz_base
+[ 31%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/blending_job.cc.o
+[ 33%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/animation_utils.cc.o
+[ 35%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/animation.cc.o
+[ 37%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/ik_aim_job.cc.o
+[ 40%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/ik_two_bone_job.cc.o
+[ 42%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/local_to_model_job.cc.o
+[ 44%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/motion_blending_job.cc.o
+[ 46%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/pose_palette_cache.cc.o
+[ 51%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/skeleton.cc.o
+[ 51%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/sampling_job.cc.o
+[ 53%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/skeleton_utils.cc.o
+[ 55%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/track.cc.o
+[ 57%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/track_sampling_job.cc.o
+[ 60%] Building CXX object upstream/src/animation/runtime/CMakeFiles/ozz_animation.dir/track_triggering_job.cc.o
+[ 62%] Linking CXX static library libozz_animation_r.a
+[ 62%] Built target ozz_animation
+[ 66%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_animation_archive.cc.o
+[ 66%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_animation.cc.o
+[ 68%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/animation_builder.cc.o
+[ 71%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_animation_utils.cc.o
+[ 73%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/animation_optimizer.cc.o
+[ 75%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/additive_animation_builder.cc.o
+[ 77%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/motion_extractor.cc.o
+[ 80%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_skeleton.cc.o
+[ 82%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_skeleton_archive.cc.o
+[ 84%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/skeleton_builder.cc.o
+[ 86%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_track.cc.o
+[ 88%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/raw_track_utils.cc.o
+[ 91%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/track_builder.cc.o
+[ 93%] Building CXX object upstream/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/track_optimizer.cc.o
+[ 95%] Linking CXX static library libozz_animation_offline_r.a
+[ 95%] Built target ozz_animation_offline
+[ 97%] Building CXX object CMakeFiles/task_baseline.dir/baseline.cpp.o
+[100%] Linking CXX executable task_baseline
+[100%] Built target task_baseline
+[ 27%] Built target ozz_base
+[ 29%] Building CXX object upstream/src/geometry/runtime/CMakeFiles/ozz_geometry.dir/skinning_job.cc.o
+[ 60%] Built target ozz_animation
+[ 91%] Built target ozz_animation_offline
+[ 93%] Linking CXX static library libozz_geometry_r.a
+[ 93%] Built target ozz_geometry
+[ 97%] Building CXX object CMakeFiles/task_target.dir/Users/solo/pro/UserFB/workspace/FS8B065B2B198FU9362/attempts/20261114T165018981008Z/repo/test/pose_palette_cache_test.cpp.o
+[ 97%] Building CXX object CMakeFiles/task_target.dir/driver.c.o
+[100%] Linking CXX executable target
+[100%] Built target task_target
