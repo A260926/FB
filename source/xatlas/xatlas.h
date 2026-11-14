@@ -189,6 +189,12 @@ struct ChartOptions
 
 	bool useInputMeshUvs = false; // Use MeshDecl::vertexUvData for charts.
 	bool fixWinding = false; // Enforce consistent texture coordinate winding.
+
+	// LSCM solver selection. The default (false) accumulates normal equations A'A x = A'b and solves them with
+	// preconditioned CG. Set true to keep the rectangular LSCM relations A x = b and run LSQR directly on the
+	// sparse rows, without forming A'A. This avoids squaring the system condition number, which can help long,
+	// thin charts and charts with large scale differences. paramFunc still takes precedence when set.
+	bool useLsqr = false;
 };
 
 // Call after all AddMesh calls. Can be called multiple times to recompute charts with different options.

@@ -68,6 +68,43 @@ You can call any of these functions multiple times, followed by the proceeding f
 
 See the [viewer](https://github.com/jpcy/xatlas/tree/master/source/examples/viewer) for example code.
 
+### LSCM solver selection (`ChartOptions::useLsqr`)
+
+The least squares conformal map (LSCM) step solves an over-determined linear system built from the
+triangle relations. Two solvers are available:
+
+- `useLsqr = false` (the default): the relations are accumulated into the normal equations
+  `AᵀA x = Aᵀb` and solved with a Jacobi-preconditioned conjugate gradient.
+- `useLsqr = true`: the original rectangular rows `A x = b` are kept after the locked variables are
+  eliminated, and [LSQR](https://web.stanford.edu/group/SOL/software/lsqr/) (Golub-Kahan
+  bidiagonalization) is run directly on them using only sparse `A*x` and `Aᵀ*y` products. `AᵀA` is
+  never formed, so the condition number is not squared. This is intended for long, thin charts and
+  charts whose coefficients have large scale differences. The implementation uses `double`, depends
+  only on the C++ standard library (no Eigen/BLAS), and its storage grows linearly with the number of
+  rows, columns and non-zeros.
+
+The same field exists on the C API as `xatlasChartOptions.useLsqr` (default false), and
+`xatlasChartOptionsInit` initializes it. A `paramFunc` callback, when set, always takes precedence
+over either internal solver. Chart segmentation, packing and all other options are unaffected.
+
+The LSQR solve starts from the zero vector of free variables and keeps the locked values exactly.
+Convergence is checked against the true residual `r = A*x - b` using two independently recomputed,
+scaled indicators:
+
+- stationarity: `eta = ||Aᵀr|| / (||A||F · ||r||)` — lets an incompatible least-squares system
+  terminate correctly at a nonzero residual;
+- scaled backward error: `rho = ||r|| / (||A||F · ||x|| + ||b||)` — lets a consistent system
+  terminate near machine precision.
+
+A zero-over-zero denominator is defined as zero. The reported error is `min(eta, rho)`, and a solve
+succeeds when either indicator is at most `threshold`; the step budget is `max_iterations`. The
+terminal status is one of `Converged`, `IterationLimit`, `Breakdown` (numerical stagnation without
+meeting the stationarity test) or `InvalidInput` (non-finite data or non-positive tolerance).
+Rank-deficient, zero-column, zero-right-hand-side and fully-locked systems are accepted at any finite
+stationary point. If the LSQR solve fails, no half-finished UVs are written back and the chart is
+treated as an invalid parameterization by the existing pipeline; the default CG path's output is
+unchanged.
+
 ### Pack multiple atlases into a single atlas
 
 1. Create an empty atlas with `xatlas::Create`.
