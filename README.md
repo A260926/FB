@@ -348,6 +348,17 @@ Working with the minimal decoder is equally simple:
     ...
 ```
 
+## Real-mode physical graph
+
+`inc/bdx86_realmode.h` builds a read-only logical control-flow graph from immutable physical ROM fragments with
+`RmBuildGraph` and releases it with `RmFreeGraph`. Instructions are decoded through the regular `NdDecodeEx` API in
+16-bit mode and never executed. Nodes are logical `(CS, IP)` pairs, so segment aliases which reach the same physical
+byte stay distinct, while every fetched byte keeps its fragment ID, in-fragment offset and A20-effective physical
+address. Direct near/far calls connect to their target routines and only reach a continuation when the callee has a
+matching return summary; unsupported instructions and non-paired returns are reported as positioned opaque
+terminations. A complete example is in `examples/realmode.c`, the regression tests live in
+`tests/realmode_contract.c`, and the API and supported subset are documented in `docs/source/realmode.rst`.
+
 ## Credits
 
 The entire Bitdefender HVI team.

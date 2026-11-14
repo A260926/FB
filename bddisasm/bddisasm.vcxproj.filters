@@ -66,6 +66,9 @@
     <ClCompile Include="bdx86_operand.c">
       <Filter>Source Files\x86</Filter>
     </ClCompile>
+    <ClCompile Include="bdx86_realmode.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\inc\bddisasm_version.h">
@@ -129,6 +132,9 @@
       <Filter>Header Files\public\x86\defs</Filter>
     </ClInclude>
     <ClInclude Include="..\inc\bdx86_cpuidflags.h">
+      <Filter>Header Files\public\x86\defs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_realmode.h">
       <Filter>Header Files\public\x86\defs</Filter>
     </ClInclude>
     <ClInclude Include="..\inc\bdx86_registers.h">

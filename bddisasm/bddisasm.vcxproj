@@ -668,6 +668,7 @@
     </ClCompile>
     <ClCompile Include="bdx86_idbe.c" />
     <ClCompile Include="bdx86_operand.c" />
+    <ClCompile Include="bdx86_realmode.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\inc\bdx86_api_legacy.h" />
@@ -675,6 +676,7 @@
     <ClInclude Include="..\inc\bdx86_core.h" />
     <ClInclude Include="..\inc\bdx86_constants.h" />
     <ClInclude Include="..\inc\bdx86_cpuidflags.h" />
+    <ClInclude Include="..\inc\bdx86_realmode.h" />
     <ClInclude Include="..\inc\bddisasm.h" />
     <ClInclude Include="..\inc\bddisasm_status.h" />
     <ClInclude Include="..\inc\bddisasm_types.h" />

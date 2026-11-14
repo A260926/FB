@@ -9,7 +9,9 @@ Welcome to bddisasm's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-   
+
+   realmode
+
 About
 =====
 
