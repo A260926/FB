@@ -1,6 +1,7 @@
 #include "glsl_optimizer.h"
 #include "nir_optimize.h"
 #include "nir_printer.h"
+#include "nir_specialize.h"
 #include "buffer_layout.h"
 #include "image_formats.h"
 #include "main/mtypes.h"
@@ -752,7 +753,9 @@ calculate_stats(nir_shader* nir, int* math, int* tex, int* flow)
 
 // ---------------------------------------------------------------------------
 
-glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+static glslopt_shader*
+optimize_impl(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options,
+              bool specialize, const glslopt_specialized_uniform* bindings, int bindingCount)
 {
    if (!ctx)
       return NULL;
@@ -814,6 +817,31 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
       return result;
    }
    glslopt_lower_nir(nir);
+   // An empty table must follow the exact same pipeline as glslopt_optimize,
+   // regardless of target, so the specialization machinery only runs when the
+   // caller actually names a leaf.
+   if (specialize && bindingCount > 0) {
+      // First version: OpenGL target, GLSL 330, vertex/fragment only.
+      if (ctx->target != kGlslTargetOpenGL || info.es || info.version != 330 ||
+          (type != kGlslOptShaderVertex && type != kGlslOptShaderFragment)) {
+         result->fail("Uniform specialization is only supported for OpenGL GLSL 330 vertex and fragment shaders.");
+         return result;
+      }
+      std::vector<glslopt_spec_leaf> leaves;
+      std::string specError;
+      if (!glslopt_spec_build_leaves(nir, bindings, bindingCount, leaves, specError)) {
+         result->fail(specError.c_str());
+         return result;
+      }
+      if (!leaves.empty()) {
+         glslopt_spec_rewrite_loads(nir, leaves);
+         // Bring the freshly rewritten loads through SSA and dead-code cleanup
+         // before the regular pipeline folds the constants and prunes the
+         // branches and texture operations they make unreachable.
+         NIR_PASS(_, nir, nir_opt_dce);
+         NIR_PASS(_, nir, nir_opt_deref);
+      }
+   }
    if (metal) {
       if (const char* error = validate_metal(nir)) {
          result->fail(error);
@@ -864,6 +892,20 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
    calculate_stats(nir, &result->statsMath, &result->statsTex, &result->statsFlow);
    result->status = true;
    return result;
+}
+
+glslopt_shader*
+glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+{
+   // The original entry point keeps its exact behavior, on every target.
+   return optimize_impl(ctx, type, shaderSource, options, false, nullptr, 0);
+}
+
+glslopt_shader*
+glslopt_optimize_specialized(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource,
+                             unsigned options, const glslopt_specialized_uniform* bindings, int bindingCount)
+{
+   return optimize_impl(ctx, type, shaderSource, options, true, bindings, bindingCount);
 }
 
 void glslopt_shader_delete(glslopt_shader* shader)
@@ -954,4 +996,9 @@ void glslopt_shader_get_stats(glslopt_shader* shader, int* approxMath, int* appr
    *approxMath = shader->statsMath;
    *approxTex = shader->statsTex;
    *approxFlow = shader->statsFlow;
+}
+
+nir_shader* glslopt_test_get_nir(glslopt_shader* shader)
+{
+   return shader ? shader->shader->nir : nullptr;
 }

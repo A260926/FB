@@ -2,6 +2,11 @@
 #ifndef GLSL_OPTIMIZER_H
 #define GLSL_OPTIMIZER_H
 
+#include <stdint.h>
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
+
 /*
  Main GLSL optimizer interface.
  See ../../README.md for more instructions.
@@ -77,6 +82,64 @@ void glslopt_cleanup (glslopt_ctx* ctx);
 void glslopt_set_max_unroll_iterations (glslopt_ctx* ctx, unsigned iterations);
 
 glslopt_shader* glslopt_optimize (glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options);
+
+// ---------------------------------------------------------------------------
+// Partial specialization of default (non-block) uniforms.
+//
+// Values are passed as typed component arrays, never through generated GLSL
+// text. A specialization path starts at a uniform name and may then descend
+// through struct fields and constant indices into fixed-size arrays; the leaf
+// is a complete scalar or vector. Swizzles, matrices, interface-block members,
+// samplers and images are not accepted.
+//
+// Only the OpenGL target with GLSL 330 vertex/fragment shaders is supported in
+// this version; anything else makes the result fail with a log entry.
+// Aggregates keep their declaration and layout when some elements remain
+// runtime values. An empty binding table produces output identical to
+// glslopt_optimize. The binding table is only read; it is never modified.
+
+enum glslopt_value_type {
+   kGlslValueTypeFloat32 = 0,
+   kGlslValueTypeInt32,          // also used for uint uniforms (same 32-bit pattern)
+   kGlslValueTypeBool,
+};
+
+enum glslopt_path_segment_kind {
+   kGlslPathStructField = 0,
+   kGlslPathArrayIndex,
+};
+
+struct glslopt_path_segment {
+   glslopt_path_segment_kind kind;
+   const char* field;  // struct field name when kind == kGlslPathStructField, NULL otherwise
+   int arrayIndex;     // constant element index when kind == kGlslPathArrayIndex
+};
+
+struct glslopt_uniform_value {
+   glslopt_value_type type;
+   int components;                       // 1 for scalars, otherwise the vector size
+   const float* floatValues;             // components entries when type == kGlslValueTypeFloat32
+   const int32_t* intValues;             // components entries for Int32, and 0/1 entries for Bool
+};
+
+struct glslopt_specialized_uniform {
+   const char* uniform;                  // root default-uniform name
+   int segmentCount;
+   const glslopt_path_segment* segments; // fields and constant indices, in traversal order
+   const glslopt_uniform_value* value;   // typed leaf value
+};
+
+// Runs the same pipeline as glslopt_optimize after substituting the given
+// uniform leaves, so the regular optimizer folds the dependent branches,
+// arithmetic and texture operations away. On any invalid binding (unknown
+// path, duplicate target, out-of-range index or type/value mismatch) the whole
+// result fails, the log identifies the offending path, and no output is
+// returned. The returned shader uses the same lifetime rules as
+// glslopt_optimize and is released with glslopt_shader_delete.
+glslopt_shader* glslopt_optimize_specialized (glslopt_ctx* ctx, glslopt_shader_type type,
+   const char* shaderSource, unsigned options,
+   const glslopt_specialized_uniform* bindings, int bindingCount);
+
 bool glslopt_get_status (glslopt_shader* shader);
 const char* glslopt_get_output (glslopt_shader* shader);
 const char* glslopt_get_log (glslopt_shader* shader);

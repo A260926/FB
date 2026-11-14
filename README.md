@@ -84,6 +84,56 @@ glslopt_cleanup (ctx);
 ```
 
 
+Partial uniform specialization
+-------------------------------
+
+`glslopt_optimize_specialized` takes the same context, stage, source and
+options as `glslopt_optimize`, plus a table of typed uniform values. Known
+values are substituted into the NIR before the regular optimizer runs, so
+branches, arithmetic and texture operations that only depend on them are
+folded and eliminated together with the uniforms, samplers and texture calls
+that become unused. Values are passed as typed component arrays, never by
+splicing GLSL text:
+
+```cpp
+const float weight = 2.5f;
+const int32_t enabled = 1;
+glslopt_uniform_value fv = { kGlslValueTypeFloat32, 1, &weight, nullptr };
+glslopt_uniform_value bv = { kGlslValueTypeBool, 1, nullptr, &enabled };
+glslopt_path_segment at1 = { kGlslPathArrayIndex, nullptr, 1 };
+glslopt_specialized_uniform bindings[] = {
+    { "weights", 1, &at1, &fv },    // weights[1] = 2.5
+    { "enabled", 0, nullptr, &bv }, // scalar uniform
+};
+shader = glslopt_optimize_specialized(ctx, kGlslOptShaderFragment, source, 0,
+                                      bindings, 2);
+```
+
+A path starts at a default (non-block) uniform name and descends through struct
+fields and constant indices of fixed-size arrays to a complete scalar or
+vector. Swizzles, matrices, interface-block members, samplers and images are
+not accepted. Float values must be finite and bool values must be 0 or 1.
+Paths and types are checked against the declarations before optimization, so
+unused but valid uniforms can be specialized; an unknown path, duplicate
+target, out-of-range index or type/value mismatch fails the whole result and
+the log names the offending path.
+
+Aggregates are only partially replaced. If `weights[1]` is known, constant
+reads of that element fold while the other elements stay runtime uniforms; a
+dynamic read `weights[i]` selects the constant when `i == 1` and the original
+uniform value otherwise. The runtime index and any side effects before it are
+evaluated exactly once, in their original position, so replacements never move
+into a short-circuited branch. This also applies through inlined helper
+functions. Aggregates with remaining runtime reads keep their name and array
+shape, so host upload layout is unchanged. An empty table produces output
+identical to `glslopt_optimize`, and the result object uses the same
+status/output/log/lifecycle API.
+
+This first version supports only the OpenGL target with GLSL 330 vertex and
+fragment shaders; other targets or stages return a failed result with a log
+message, while an empty table always follows the baseline pipeline.
+
+
 Language Support
 ----------------
 

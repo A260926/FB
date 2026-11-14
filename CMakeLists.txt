@@ -23,6 +23,7 @@ add_library(glsl_optimizer STATIC
     src/glsl/nir_printer.cpp
     src/glsl/nir_print_glsl.cpp
     src/glsl/nir_print_metal.cpp
+    src/glsl/nir_specialize.cpp
     src/c11/threads.cpp
     src/compiler/builtin_types.c
     src/compiler/glsl/ast_array_index.cpp
@@ -242,6 +243,17 @@ if(BUILD_TESTING)
         "-DTEST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runner.cmake"
     )
+
+    # Partial-specialization tests, including the small CPU NIR interpreter.
+    add_executable(glslopt_specialization_tests
+        tests/specialization/test_specialization.cpp
+        tests/specialization/nir_cpu_interp.cpp
+    )
+    target_link_libraries(glslopt_specialization_tests PRIVATE glsl_optimizer)
+    target_include_directories(glslopt_specialization_tests PRIVATE
+        include src/glsl src src/mesa src/gallium/include src/compiler
+        src/compiler/glsl src/compiler/glsl/glcpp src/compiler/nir)
+    add_test(NAME specialization COMMAND glslopt_specialization_tests)
 endif()
 
 # Node addon, when built through cmake-js (npm install)
