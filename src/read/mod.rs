@@ -43,6 +43,7 @@
 //! ```
 
 use alloc::borrow::Cow;
+use alloc::vec::Vec;
 use core::{fmt, result};
 
 #[cfg(not(feature = "std"))]
@@ -1085,6 +1086,11 @@ pub enum RelocationTarget {
     Section(SectionIndex),
     /// The offset is an absolute address.
     Absolute,
+    /// The target is a fixed address that does not refer to a symbol or section.
+    ///
+    /// This is used for scattered relocations, such as those in 32-bit Mach-O
+    /// files, whose `r_value` is an absolute address in the original layout.
+    Address(u64),
 }
 
 /// A relocation entry.
@@ -1096,6 +1102,7 @@ pub struct Relocation {
     size: u8,
     target: RelocationTarget,
     subtractor: Option<SymbolIndex>,
+    subtractor_target: Option<RelocationTarget>,
     addend: i64,
     implicit_addend: bool,
     flags: RelocationFlags,
@@ -1110,6 +1117,9 @@ impl fmt::Debug for Relocation {
             .field("target", &self.target);
         if let Some(subtractor) = self.subtractor {
             s.field("subtractor", &subtractor);
+        }
+        if let Some(subtractor_target) = self.subtractor_target {
+            s.field("subtractor_target", &subtractor_target);
         }
         s.field("addend", &self.addend)
             .field("implicit_addend", &self.implicit_addend)
@@ -1151,6 +1161,17 @@ impl Relocation {
     #[inline]
     pub fn subtractor(&self) -> Option<SymbolIndex> {
         self.subtractor
+    }
+
+    /// A subtractor target that is not identified by a symbol.
+    ///
+    /// This is used for scattered relocations, where both ends of a difference
+    /// are given as absolute addresses. The relocation calculation subtracts the
+    /// value of the returned target, if any. Symbol based subtractors are reported
+    /// by [`Relocation::subtractor`] instead.
+    #[inline]
+    pub fn subtractor_target(&self) -> Option<RelocationTarget> {
+        self.subtractor_target
     }
 
     /// The addend to use in the relocation calculation.
@@ -1209,6 +1230,37 @@ impl RelocationMap {
         Ok(map)
     }
 
+    /// Construct a new relocation map for a section, using the given section
+    /// addresses for relocations whose targets are given as absolute addresses.
+    ///
+    /// This is required for scattered relocations, such as those found in 32-bit
+    /// Mach-O files, where the target is recorded as an address in the original
+    /// section layout. Each pair in `section_addresses` gives the new start
+    /// address of the section with the given index. The original section layout
+    /// is determined from the non-empty sections of `file`, and the internal
+    /// offset of an address within its section is retained when mapping it to
+    /// the new layout. Two maps built with different layouts can be queried
+    /// independently; neither the file nor the caller's layout is modified.
+    ///
+    /// Fails if a layout entry names the same section index twice, if an address
+    /// used by a relocation is contained by no section or by more than one
+    /// section, or if the section containing it has no layout entry.
+    pub fn new_with_section_addresses<'data, 'file, T>(
+        file: &'file T,
+        section: &T::Section<'file>,
+        section_addresses: &[(SectionIndex, u64)],
+    ) -> Result<Self>
+    where
+        T: Object<'data>,
+    {
+        let layout = SectionLayout::new(file, section.index(), section_addresses)?;
+        let mut map = RelocationMap(Map::new());
+        for (offset, relocation) in section.relocations() {
+            map.add_with_section_addresses(file, &layout, offset, relocation)?;
+        }
+        Ok(map)
+    }
+
     /// Add a single relocation to the map.
     pub fn add<'data: 'file, 'file, T>(
         &mut self,
@@ -1219,15 +1271,112 @@ impl RelocationMap {
     where
         T: Object<'data>,
     {
+        if matches!(relocation.target(), RelocationTarget::Address(_)) {
+            // Scattered relocations are only supported by
+            // `new_with_section_addresses`. Previously they were hidden from the
+            // iterator entirely, so leave their offsets unmapped rather than
+            // failing, preserving the behaviour of existing callers.
+            return Ok(());
+        }
+        if relocation.kind() == RelocationKind::None {
+            return Ok(());
+        }
+        if relocation.subtractor().is_some() || relocation.subtractor_target().is_some() {
+            return Err(Error("Unsupported relocation subtractor"));
+        }
+        if relocation.encoding() != RelocationEncoding::Generic {
+            return Err(Error("Unsupported relocation encoding"));
+        }
+        let entry = self.make_entry(file, &relocation)?;
+        if self.0.insert(offset, entry).is_some() {
+            return Err(Error("Multiple relocations for offset"));
+        }
+        Ok(())
+    }
+
+    /// Add a single relocation, interpreting absolute address targets using the
+    /// given section layout.
+    ///
+    /// Relocations with symbol or section targets keep the layout independent
+    /// behaviour of [`RelocationMap::add`].
+    fn add_with_section_addresses<'data, 'file, T>(
+        &mut self,
+        file: &'file T,
+        layout: &SectionLayout,
+        offset: u64,
+        relocation: Relocation,
+    ) -> Result<()>
+    where
+        T: Object<'data>,
+    {
         if relocation.subtractor().is_some() {
             return Err(Error("Unsupported relocation subtractor"));
         }
+        let RelocationTarget::Address(address) = relocation.target() else {
+            // Plain relocations keep their original, layout independent meaning.
+            if relocation.subtractor_target().is_some() {
+                return Err(Error("Unsupported relocation subtractor"));
+            }
+            if relocation.kind() == RelocationKind::None {
+                return Ok(());
+            }
+            if relocation.encoding() != RelocationEncoding::Generic {
+                return Err(Error("Unsupported relocation encoding"));
+            }
+            let entry = self.make_entry(file, &relocation)?;
+            return if self.0.insert(offset, entry).is_some() {
+                Err(Error("Multiple relocations for offset"))
+            } else {
+                Ok(())
+            };
+        };
+        if relocation.encoding() != RelocationEncoding::Generic {
+            return Err(Error("Unsupported relocation encoding"));
+        }
+
+        // The movement of the section containing an old address. The address's
+        // internal offset within that section is retained by applying the
+        // section's start-to-start delta alone.
+        let mut delta = layout.address_delta(address)?;
+        if let Some(RelocationTarget::Address(sub_address)) = relocation.subtractor_target() {
+            delta = delta.wrapping_sub(layout.address_delta(sub_address)?);
+        } else if relocation.subtractor_target().is_some() {
+            return Err(Error("Unsupported relocation target"));
+        }
+        if let RelocationFlags::MachO { r_pcrel: true, .. } = relocation.flags() {
+            // PC-relative fields also follow the section containing the field.
+            delta = delta.wrapping_sub(layout.source_delta()?);
+        }
+        let entry = RelocationMapEntry {
+            implicit_addend: relocation.has_implicit_addend(),
+            addend: relocation.addend() as u64,
+            delta,
+            mask: relocation_mask(relocation.size()),
+        };
+        if self.0.insert(offset, entry).is_some() {
+            return Err(Error("Multiple relocations for offset"));
+        }
+        Ok(())
+    }
+
+    /// Build the layout independent part of a relocation entry.
+    fn make_entry<'data, 'file, T>(
+        &self,
+        file: &'file T,
+        relocation: &Relocation,
+    ) -> Result<RelocationMapEntry>
+    where
+        T: Object<'data>,
+    {
         let mut entry = RelocationMapEntry {
             implicit_addend: relocation.has_implicit_addend(),
             addend: relocation.addend() as u64,
+            delta: 0,
+            // Preserve the untruncated behaviour of the layout independent map.
+            mask: u64::MAX,
         };
         match relocation.kind() {
-            RelocationKind::None => return Ok(()),
+            RelocationKind::None => return Ok(entry),
             RelocationKind::Absolute => match relocation.target() {
                 RelocationTarget::Symbol(symbol_idx) => {
                     let symbol = file
@@ -1253,27 +1402,37 @@ impl RelocationMap {
                 return Err(Error("Unsupported relocation type"));
             }
         }
-        if relocation.encoding() != RelocationEncoding::Generic {
-            return Err(Error("Unsupported relocation encoding"));
-        }
-        if self.0.insert(offset, entry).is_some() {
-            return Err(Error("Multiple relocations for offset"));
-        }
-        Ok(())
+        Ok(entry)
     }
 
     /// Relocate a value that was read from the section at the given offset.
+    ///
+    /// For scattered relocations in a map built with
+    /// [`RelocationMap::new_with_section_addresses`], the result is truncated
+    /// to the width of the relocated field, so negative residuals and wrapping
+    /// values are retained in that field width. Layout independent relocations
+    /// are not truncated.
     pub fn relocate(&self, offset: u64, value: u64) -> u64 {
-        if let Some(relocation) = self.0.get(&offset) {
-            if relocation.implicit_addend {
-                // Use the explicit addend too, because it may have the symbol value.
-                value.wrapping_add(relocation.addend)
-            } else {
-                relocation.addend
-            }
+        let Some(relocation) = self.0.get(&offset) else {
+            return value;
+        };
+        let base = if relocation.implicit_addend {
+            // Use the explicit addend too, because it may have the symbol value.
+            value.wrapping_add(relocation.addend)
         } else {
-            value
-        }
+            relocation.addend
+        };
+        base.wrapping_add(relocation.delta) & relocation.mask
+    }
+}
+
+/// Mask covering the field width of a relocation.
+///
+/// A width of zero or an unsupported width means the value is not truncated.
+fn relocation_mask(size_bits: u8) -> u64 {
+    match size_bits {
+        8 | 16 | 32 | 64 => 1u64.wrapping_shl(u32::from(size_bits)).wrapping_sub(1),
+        _ => u64::MAX,
     }
 }
 
@@ -1281,6 +1440,90 @@ impl RelocationMap {
 struct RelocationMapEntry {
     implicit_addend: bool,
     addend: u64,
+    /// Wrapping adjustment applied to the field value when sections move.
+    delta: u64,
+    /// Mask of the bits that fit in the relocated field.
+    mask: u64,
+}
+
+/// The original section layout together with the new start addresses supplied
+/// by the caller of [`RelocationMap::new_with_section_addresses`].
+#[derive(Debug)]
+struct SectionLayout {
+    /// Non-empty sections as `(index, original start address, size)`.
+    sections: Vec<(SectionIndex, u64, u64)>,
+    /// New start address for each section index named by the caller.
+    addresses: Map<usize, u64>,
+    /// The index of the section containing the relocated fields.
+    source: SectionIndex,
+}
+
+impl SectionLayout {
+    fn new<'data, T: Object<'data>>(
+        file: &T,
+        source: SectionIndex,
+        section_addresses: &[(SectionIndex, u64)],
+    ) -> Result<Self> {
+        let mut addresses = Map::new();
+        for (index, address) in section_addresses {
+            if addresses.insert(index.0, *address).is_some() {
+                return Err(Error("Duplicate section address in relocation layout"));
+            }
+        }
+        // Only non-empty sections can own an address, and the half open ranges
+        // are matched directly rather than guessed from names or ordering.
+        let sections = file
+            .sections()
+            .filter(|section| section.size() != 0)
+            .map(|section| (section.index(), section.address(), section.size()))
+            .collect();
+        Ok(SectionLayout {
+            sections,
+            addresses,
+            source,
+        })
+    }
+
+    /// Find the unique non-empty section whose half open range contains the
+    /// address, and return its index and original start address.
+    fn locate(&self, address: u64) -> Result<(SectionIndex, u64)> {
+        let mut found = None;
+        for (index, start, size) in &self.sections {
+            if address >= *start && address < start.wrapping_add(*size) {
+                if found.is_some() {
+                    return Err(Error("Address in multiple sections in relocation layout"));
+                }
+                found = Some((*index, *start));
+            }
+        }
+        found.read_error("Address not in any section in relocation layout")
+    }
+
+    /// The wrapping delta between the new and original start of the section
+    /// containing an old address.
+    fn address_delta(&self, address: u64) -> Result<u64> {
+        let (index, original) = self.locate(address)?;
+        let new = *self
+            .addresses
+            .get(&index.0)
+            .read_error("Missing section address in relocation layout")?;
+        Ok(new.wrapping_sub(original))
+    }
+
+    /// The wrapping delta for the section containing the relocated fields.
+    fn source_delta(&self) -> Result<u64> {
+        let original = self
+            .sections
+            .iter()
+            .find(|(index, _, _)| *index == self.source)
+            .map(|(_, start, _)| *start)
+            .read_error("Missing source section in relocation layout")?;
+        let new = *self
+            .addresses
+            .get(&self.source.0)
+            .read_error("Missing section address in relocation layout")?;
+        Ok(new.wrapping_sub(original))
+    }
 }
 
 /// A data compression format.

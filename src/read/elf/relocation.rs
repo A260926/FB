@@ -565,6 +565,7 @@ fn parse_relocation<Elf: FileHeader>(
         size,
         target,
         subtractor: None,
+        subtractor_target: None,
         addend: reloc.r_addend,
         implicit_addend,
         flags,

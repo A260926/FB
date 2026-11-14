@@ -2,6 +2,25 @@
 
 --------------------------------------------------------------------------------
 
+## Unreleased
+
+### Breaking changes
+
+* Added `read::RelocationTarget::Address` and a `subtractor_target` field to
+  `read::Relocation`, together with the `read::Relocation::subtractor_target`
+  accessor.
+
+### Changed
+
+* `read::macho` now exposes scattered relocations in little-endian 32-bit
+  `MH_OBJECT` files instead of skipping them. Scattered `GENERIC_RELOC_VANILLA`
+  records and `GENERIC_RELOC_SECTDIFF`/`GENERIC_RELOC_LOCAL_SECTDIFF` records
+  paired with `GENERIC_RELOC_PAIR` are reported with `RelocationTarget::Address`
+  targets. Added `read::RelocationMap::new_with_section_addresses` to map the
+  embedded old addresses onto a caller supplied section layout.
+
+--------------------------------------------------------------------------------
+
 ## 0.41.0
 
 Released 2026/11/10.

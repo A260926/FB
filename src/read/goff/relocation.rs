@@ -130,6 +130,7 @@ where
                 size,
                 target: RelocationTarget::Symbol(target),
                 subtractor,
+                subtractor_target: None,
                 addend: 0,
                 implicit_addend,
                 flags: crate::read::RelocationFlags::Goff { flags },

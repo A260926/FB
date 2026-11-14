@@ -1851,6 +1851,7 @@ impl<'data, 'file, R> Iterator for WasmRelocationIterator<'data, 'file, R> {
             size,
             target,
             subtractor: None,
+            subtractor_target: None,
             // Wasm relocation entries always carry an explicit addend.
             implicit_addend: false,
             addend,
