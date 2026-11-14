@@ -38,3 +38,61 @@ Use the **[Issue Tracker](https://github.com/libgdx/libgdx/issues)** here on Git
 libGDX benefits greatly from contributions made by our dedicated developer community. We appreciate any assistance in making libGDX even better. Check out the [CONTRIBUTING.md](https://github.com/libgdx/libgdx/blob/master/.github/CONTRIBUTING.md) file for details on how to contribute. Note that contributing involves working directly with libGDX's source code, a process that regular users do not typically undertake. Refer to the [Working with the Source](https://libgdx.com/dev/from-source/) article for guidance.
 
 You can also support our infrastructure (build server, web server, test devices) by contributing financially through our [Patreon](https://patreon.com/libgdx)!
+
+## Pose-space corrective deformation
+
+`com.badlogic.gdx.graphics.g3d.utils.PoseSpaceDeformer` interpolates artist authored corrective displacements (for example elbow
+volume corrections) after animation blending and before linear blend skinning. It is pure Java, needs no OpenGL or native
+library, and does not change animation interpolation or any shader.
+
+Minimal Java usage:
+
+```java
+// Prepare once. Rotations are the unit local bone rotations in the same order as driverIds;
+// each sample carries sparse displacements in bind-mesh space.
+PoseSpaceDeformer.Sample[] samples = ...;
+PoseSpaceDeformer.Prepared prepared = PoseSpaceDeformer.prepare(
+    vertexCount, new String[] {"upperArm", "foreArm"},
+    new Quaternion[] {bindUpper, bindFore}, new double[] {1.0, 1.0}, 0.8, samples);
+
+// After AnimationController.update(...) (or BaseAnimationController) and instance.calculateTransforms():
+float[] world = new float[vertexCount * 3];
+prepared.evaluate(instance, nodePart, bindPositions, boneIndices4, boneWeights4, world);
+```
+
+`bindPositions` holds bind-mesh positions (`x, y, z` per vertex). `boneIndices4` and `boneWeights4` are
+`vertexCount * 4` long, indices refer to `NodePart.bones`, weights are non-negative and sum to one per vertex. `outWorld` may
+alias `bindPositions`; on failure it is left untouched.
+
+Coordinate spaces and ordering: the sparse `deltas` are in bind-mesh space and are added to `bindPositions` first. The result is
+then skinned with the existing `NodePart.bones` palette (which already contains the inverse bind transforms) using four-weight
+linear blend skinning, and finally transformed by `instance.transform` to world space. The node's `globalTransform` is not applied
+again for skinned parts, and the mesh is not modified or uploaded. Driver rotations are read from the animated
+`Node.localTransform`, not from `Node.rotation`, and only each driver's own local rotation contributes to the pose distance.
+Animated drivers may have non-driven parents.
+
+The pose kernel is explicit: for driver `b`, `r_b = inverse(bindRotation_b) * localRotation_b` (samples use the same
+convention); squared pose distance is `sum(weight_b * (1 - dot(r_b, s_b)^2))` with the dot product of unit quaternions clamped
+to `[-1, 1]`; the kernel is `exp(-beta * distance)`. With `K` the sample-to-sample kernel matrix and `k(q)` the kernel between
+the current pose and each sample, the correction is `delta(q) = k(q)^T * K^(-1) * D` where `D` holds each sample's displacement
+for the vertex. This solves the linear system rather than normalizing kernel weights, so negative interpolation coefficients
+are preserved. `K` is LU-factorized with partial pivoting during `prepare` and is not refactored per evaluation. Kernel and
+linear algebra use `double`; output positions are `float`.
+
+Paths with equivalent poses are rejected: if the absolute dot product of every driver rotation is within `1e-6` (about 0.16
+degrees), the two samples are duplicates, so a quaternion and its negation count as the same pose. `prepare` also rejects an
+empty driver list, duplicate driver ids, non-unit or non-finite rotations, non-positive or non-finite `beta`/weights,
+out-of-range or duplicate vertex indices, and non-finite deltas. At least one neutral sample (bind rotations with all-zero
+deltas) is required.
+
+Ill-conditioned sample sets: the LU decomposition uses partial pivoting and throws `IllegalArgumentException` as soon as a pivot's
+absolute value is below `1e-10`. There is no implicit regularization and samples are never silently dropped. A well-conditioned
+small sample set (for example four poses with distinct joint angles) is accepted normally.
+
+`evaluate` rejects a missing bone/node, a `NodePart` from another instance, a missing or non-finite `part.bones` palette, wrong
+array lengths, invalid bone indices or weights, a non-affine/non-invertible instance transform, and driver local matrices with
+shear, reflection, singularity or non-uniform scale. Driver local matrices must be rotation plus translation with a positive
+uniform scale. All validation happens before anything is written, so a rejected call never leaves a partially updated output.
+`Prepared` data is copied during `prepare`, is immutable afterwards, and may be shared across model instances, including
+interleaved evaluations.
+
