@@ -8,9 +8,11 @@ list(APPEND PEPARSERLIB_SOURCEFILES
   include/pe-parse/parse.h
   include/pe-parse/nt-headers.h
   include/pe-parse/to_string.h
+  include/pe-parse/cxx_eh3.h
 
   src/buffer.cpp
   src/parse.cpp
+  src/cxx_eh3.cpp
 )
 
 # NOTE(ww): On Windows we use the Win32 API's built-in UTF16 conversion

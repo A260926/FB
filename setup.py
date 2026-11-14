@@ -42,6 +42,7 @@ SOURCE_FILES = [
     os.path.join(pepy, "pepy.cpp"),
     os.path.join(here, "pe-parser-library", "src", "parse.cpp"),
     os.path.join(here, "pe-parser-library", "src", "buffer.cpp"),
+    os.path.join(here, "pe-parser-library", "src", "cxx_eh3.cpp"),
 ]
 
 INCLUDE_DIRS = []

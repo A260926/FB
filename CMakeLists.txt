@@ -32,6 +32,7 @@ add_subdirectory(pe-parser-library)
 
 if (BUILD_COMMAND_LINE_TOOLS)
   add_subdirectory(dump-pe)
+  add_subdirectory(examples/eh3_dump)
 endif ()
 
 # `peparse_format` target.
