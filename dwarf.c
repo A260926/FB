@@ -663,6 +663,20 @@ struct unit
   uint64_t addr_base;
   /* Offset of compilation unit in .debug_rnglists.  */
   uint64_t rnglists_base;
+  /* The DWARF 5 dwo_id of a skeleton or split compilation unit.  Only
+     valid when HAS_DWO_ID is set.  */
+  uint64_t dwo_id;
+  /* Whether DWO_ID holds a real value.  */
+  int has_dwo_id;
+  /* Whether this unit is a DW_UT_skeleton unit.  */
+  int is_skeleton;
+  /* Whether DW_AT_str_offsets_base was seen on the root DIE.  */
+  int have_str_offsets_base;
+  /* For a skeleton unit, the split DWARF data bound through
+     backtrace_dwarf_attach_split.  NULL when no split unit is attached.
+     The split data owns the function tree and the split file table; the
+     skeleton unit keeps owning the line number program.  */
+  struct dwarf_data *split;
   /* Primary source file.  */
   const char *filename;
   /* Compilation command working directory.  */
@@ -723,6 +737,8 @@ struct unit_vector
 
 /* The information we need to map a PC to a file and line.  */
 
+struct split_bundle;
+
 struct dwarf_data
 {
   /* The data for the next file we know about.  */
@@ -746,6 +762,10 @@ struct dwarf_data
   /* A vector used for function addresses.  We keep this here so that
      we can grow the vector as we read more functions.  */
   struct function_vector fvec;
+  /* For split data created by backtrace_dwarf_attach_split, the bundle
+     holding the copied .dwo section bytes; NULL for ordinary modules.
+     The split data is never linked into the fileline query chain.  */
+  struct split_bundle *split_bundle;
 };
 
 /* Report an error for a DWARF buffer.  */
@@ -2576,7 +2596,10 @@ find_address_ranges (struct backtrace_state *state,
 	      if ((abbrev->tag == DW_TAG_compile_unit
 		   || abbrev->tag == DW_TAG_skeleton_unit)
 		  && val.encoding == ATTR_VAL_REF_SECTION)
-		u->str_offsets_base = val.u.uint;
+			{
+			  u->str_offsets_base = val.u.uint;
+			  u->have_str_offsets_base = 1;
+			}
 	      break;
 
 	    case DW_AT_addr_base:
@@ -2743,6 +2766,15 @@ build_address_map (struct backtrace_state *state,
       if (u == NULL)
 	goto fail;
 
+      /* Fields set by the unit_type switch and the attribute scan
+	 below must start cleared, since the later field initialization
+	 block deliberately reassigns the original fields.  */
+      u->dwo_id = 0;
+      u->has_dwo_id = 0;
+      u->is_skeleton = 0;
+      u->have_str_offsets_base = 0;
+      u->split = NULL;
+
       *pu = u;
       ++units_count;
 
@@ -2768,8 +2800,12 @@ build_address_map (struct backtrace_state *state,
 	  break;
 	case DW_UT_compile: case DW_UT_partial:
 	  break;
-	case DW_UT_skeleton: case DW_UT_split_compile:
-	  read_uint64 (&unit_buf); /* dwo_id */
+	case DW_UT_skeleton:
+	  u->is_skeleton = 1;
+	  /* Fall through.  */
+	case DW_UT_split_compile:
+	  u->dwo_id = read_uint64 (&unit_buf);
+	  u->has_dwo_id = 1;
 	  break;
 	default:
 	  break;
@@ -2791,6 +2827,9 @@ build_address_map (struct backtrace_state *state,
       u->str_offsets_base = 0;
       u->addr_base = 0;
       u->rnglists_base = 0;
+      /* dwo_id/is_skeleton/split and have_str_offsets_base were
+	 initialized at allocation and may already have been set by the
+	 unit_type switch; do not reset them here.  */
 
       /* The actual line number mappings will be read as needed.  */
       u->lines = NULL;
@@ -4238,6 +4277,13 @@ report_inlined_functions (struct backtrace_state *state, uintptr_t pc,
    ERROR_CALLBACK and return 0.  Sets *FOUND to 1 if the PC is found,
    0 if not.  */
 
+static int split_lookup_function (struct backtrace_state *state,
+				  struct unit *skeleton_u, uintptr_t pc,
+				  const struct line *ln,
+				  backtrace_full_callback callback,
+				  backtrace_error_callback error_callback,
+				  void *data, int *handled);
+
 static int
 dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 		 uintptr_t pc, backtrace_full_callback callback,
@@ -4407,10 +4453,27 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 				sizeof (struct line), line_search);
   if (ln == NULL)
     {
+      int split_handled;
+
       /* The PC is between the low_pc and high_pc attributes of the
 	 compilation unit, but no entry in the line table covers it.
 	 This implies that the start of the compilation unit has no
-	 line number information.  */
+	 line number information.  A bound split unit may still know
+	 the function.  */
+
+      if (entry->u->is_skeleton && entry->u->split != NULL)
+	{
+	  struct line fallback;
+
+	  memset (&fallback, 0, sizeof fallback);
+	  fallback.filename = entry->u->filename;
+	  if (!split_lookup_function (state, entry->u, pc, &fallback,
+				      callback, error_callback, data,
+				      &split_handled))
+	    return 0;
+	  if (split_handled)
+	    return 0;
+	}
 
       if (entry->u->abs_filename == NULL)
 	{
@@ -4449,7 +4512,27 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 			    0, NULL, 0, 0);
     }
 
-  /* Search for function name within this unit.  */
+  /* Search for function name within this unit.  A skeleton unit has
+     no functions of its own; when a split unit is attached, the
+     function tree and inline chain come from the split DWO while the
+     innermost executed row stays the main object's line row.  */
+
+  if (entry->u->is_skeleton && entry->u->split != NULL)
+    {
+      int split_handled;
+
+      if (!split_lookup_function (state, entry->u, pc, ln, callback,
+				  error_callback, data, &split_handled))
+	return 0;
+      if (split_handled)
+	return 0;
+
+      /* No split function covers this PC: keep the main object's line
+	 information and explicitly report that function evidence is
+	 missing.  */
+      return call_callback (state, callback, data, pc, ln->filename,
+			    ln->lineno, NULL, ln->disc, 0);
+    }
 
   if (entry->u->function_addrs_count == 0)
     return call_callback (state, callback, data, pc, ln->filename, ln->lineno,
@@ -4604,6 +4687,7 @@ build_dwarf_data (struct backtrace_state *state,
   fdata->dwarf_sections = *dwarf_sections;
   fdata->is_bigendian = is_bigendian;
   memset (&fdata->fvec, 0, sizeof fdata->fvec);
+  fdata->split_bundle = NULL;
 
   return fdata;
 }
@@ -4668,6 +4752,913 @@ backtrace_dwarf_add (struct backtrace_state *state,
     }
 
   *fileline_fn = dwarf_fileline;
+
+  return 1;
+}
+
+/* Split DWARF support.  A skeleton compilation unit keeps owning the
+   PC ranges, the real line number program and .debug_addr; the bound
+   split compilation unit supplies the function tree, abbreviations,
+   strings and its own DWARF 5 file table.  The split data is reached
+   only through the skeleton unit and is never linked into the fileline
+   query chain.  */
+
+/* Owned copy of the .dwo section bytes of one attachment.  Keeping the
+   copies here lets the caller release or delete the original buffers
+   (and, for the ELF entry point, the file itself) as soon as the
+   attachment returns.  */
+
+struct split_bundle
+{
+  unsigned char *data[DEBUG_MAX];
+  size_t size[DEBUG_MAX];
+  /* The parsed DWARF 5 file table of the split unit.  */
+  struct line_header lhdr;
+  /* Whether LHDR holds a parsed table.  */
+  int have_lhdr;
+};
+
+/* Free the section copies of BUNDLE.  Only used on attachment failure
+   paths; on success the bundle lives as long as the state.  */
+
+static void
+split_free_bundle (struct backtrace_state *state, struct split_bundle *bundle,
+		   backtrace_error_callback error_callback, void *data)
+{
+  size_t i;
+
+  if (bundle->have_lhdr)
+    free_line_header (state, &bundle->lhdr, error_callback, data);
+  for (i = 0; i < DEBUG_MAX; ++i)
+    {
+      if (bundle->data[i] != NULL)
+	backtrace_free (state, bundle->data[i], bundle->size[i],
+			error_callback, data);
+    }
+  backtrace_free (state, bundle, sizeof *bundle, error_callback, data);
+}
+
+/* Scan the split .debug_info.dwo section without building anything.
+   The bundle must contain exactly one DWARF 5 split compilation unit;
+   record its 64-bit dwo_id in *DWO_ID.  Type units and anything else
+   are rejected.  Returns 1 on success, 0 after reporting an error.  */
+
+static int
+split_scan_identity (const struct dwarf_sections *sections, int is_bigendian,
+		     backtrace_error_callback error_callback, void *data,
+		     uint64_t *dwo_id)
+{
+  struct dwarf_buf info;
+  unsigned int unit_count;
+  uint64_t found_id;
+
+  info.name = ".debug_info.dwo";
+  info.start = sections->data[DEBUG_INFO];
+  info.buf = info.start;
+  info.left = sections->size[DEBUG_INFO];
+  info.is_bigendian = is_bigendian;
+  info.error_callback = error_callback;
+  info.data = data;
+  info.reported_underflow = 0;
+
+  unit_count = 0;
+  found_id = 0;
+  while (info.left > 0)
+    {
+      int is_dwarf64;
+      uint64_t len;
+      struct dwarf_buf unit_buf;
+      int version;
+      int unit_type;
+
+      len = read_initial_length (&info, &is_dwarf64);
+      unit_buf = info;
+      unit_buf.left = len;
+      if (!advance (&info, len))
+	return 0;
+
+      version = read_uint16 (&unit_buf);
+      if (version != 5)
+	{
+	  error_callback (data,
+			  "split DWARF unit is not DWARF version 5", 0);
+	  return 0;
+	}
+
+      unit_type = read_byte (&unit_buf);
+      if (unit_type == DW_UT_type || unit_type == DW_UT_split_type)
+	{
+	  error_callback (data,
+			  "split DWARF type units are not supported", 0);
+	  return 0;
+	}
+      if (unit_type != DW_UT_split_compile)
+	{
+	  error_callback (data,
+			  ("split DWARF bundle does not contain a split "
+			   "compilation unit"), 0);
+	  return 0;
+	}
+
+      /* Address size and abbrev offset.  */
+      read_byte (&unit_buf);
+      read_offset (&unit_buf, is_dwarf64);
+      found_id = read_uint64 (&unit_buf);
+      ++unit_count;
+    }
+
+  if (info.reported_underflow)
+    return 0;
+
+  if (unit_count != 1)
+    {
+      error_callback (data,
+		      ("split DWARF bundle must contain exactly one split "
+		       "compilation unit"), 0);
+      return 0;
+    }
+
+  *dwo_id = found_id;
+  return 1;
+}
+
+/* Context shared while reading the split function tree.  */
+
+struct split_context
+{
+  struct backtrace_state *state;
+  /* The split module.  */
+  struct dwarf_data *sdata;
+  /* Its single unit.  */
+  struct unit *su;
+  /* The split file table.  */
+  const struct line_header *lhdr;
+  /* The skeleton's sections, used to resolve addrx through the main
+     object's .debug_addr.  */
+  const struct dwarf_sections *main_sections;
+  /* DW_AT_addr_base of the skeleton unit.  */
+  uint64_t addr_base;
+  backtrace_error_callback error_callback;
+  void *data;
+};
+
+/* Resolve one string attribute through the split module's
+   .debug_str.dwo / .debug_str_offsets.dwo contributions.  */
+
+static int
+split_attr_string (struct split_context *ctx, const struct attr_val *val,
+		   const char **string)
+{
+  return resolve_string (&ctx->sdata->dwarf_sections,
+			 ctx->su->is_dwarf64, ctx->sdata->is_bigendian,
+			 ctx->su->str_offsets_base, val,
+			 ctx->error_callback, ctx->data, string);
+}
+
+/* Resolve an addrx index through the main object's .debug_addr,
+   indexed from the skeleton's addr_base.  */
+
+static int
+split_resolve_addr (struct split_context *ctx, uint64_t index,
+		    uintptr_t *address)
+{
+  return resolve_addr_index (ctx->main_sections, ctx->addr_base,
+			     ctx->su->addrsize, ctx->sdata->is_bigendian,
+			     index, ctx->error_callback, ctx->data, address);
+}
+
+/* Read the name (and declaration line) of a split DIE referenced by a
+   unit-local offset, as produced by DW_FORM_ref4 abstract origins.  */
+
+static const char *
+split_referenced_name (struct split_context *ctx, uint64_t offset,
+		       int *decl_lineno)
+{
+  struct unit *su;
+  struct dwarf_buf unit_buf;
+  uint64_t code;
+  const struct abbrev *abbrev;
+  const char *ret;
+  size_t i;
+
+  su = ctx->su;
+
+  if (offset < su->unit_data_offset
+      || offset - su->unit_data_offset >= su->unit_data_len)
+    {
+      ctx->error_callback (ctx->data,
+			   ("abstract origin or specification out of range "
+			    "in split DWARF"), 0);
+      return NULL;
+    }
+
+  offset -= su->unit_data_offset;
+
+  unit_buf.name = ".debug_info.dwo";
+  unit_buf.start = ctx->sdata->dwarf_sections.data[DEBUG_INFO];
+  unit_buf.buf = su->unit_data + offset;
+  unit_buf.left = su->unit_data_len - offset;
+  unit_buf.is_bigendian = ctx->sdata->is_bigendian;
+  unit_buf.error_callback = ctx->error_callback;
+  unit_buf.data = ctx->data;
+  unit_buf.reported_underflow = 0;
+
+  code = read_uleb128 (&unit_buf);
+  if (code == 0)
+    {
+      dwarf_buf_error (&unit_buf,
+		       "invalid abstract origin or specification", 0);
+      return NULL;
+    }
+
+  abbrev = lookup_abbrev (&su->abbrevs, code, ctx->error_callback,
+			  ctx->data);
+  if (abbrev == NULL)
+    return NULL;
+
+  ret = NULL;
+  for (i = 0; i < abbrev->num_attrs; ++i)
+    {
+      struct attr_val val;
+
+      if (!read_attribute (abbrev->attrs[i].form, abbrev->attrs[i].val,
+			   &unit_buf, su->is_dwarf64, su->version,
+			   su->addrsize, &ctx->sdata->dwarf_sections, NULL,
+			   &val))
+	return NULL;
+
+      switch (abbrev->attrs[i].name)
+	{
+	case DW_AT_name:
+	  if (ret != NULL)
+	    break;
+	  if (!split_attr_string (ctx, &val, &ret))
+	    return NULL;
+	  break;
+
+	case DW_AT_linkage_name:
+	case DW_AT_MIPS_linkage_name:
+	  {
+	    const char *s;
+
+	    s = NULL;
+	    if (!split_attr_string (ctx, &val, &s))
+	      return NULL;
+	    if (s != NULL)
+	      return s;
+	  }
+	  break;
+
+	case DW_AT_specification:
+	case DW_AT_abstract_origin:
+	  if (val.encoding != ATTR_VAL_REF_UNIT)
+	    {
+	      ctx->error_callback (ctx->data,
+				   ("unsupported cross-unit reference in "
+				    "split DWARF"), 0);
+	      return NULL;
+	    }
+	  {
+	    const char *name;
+
+	    name = split_referenced_name (ctx, val.u.uint, decl_lineno);
+	    if (name != NULL)
+	      ret = name;
+	  }
+	  break;
+
+	case DW_AT_decl_line:
+	  if (val.encoding == ATTR_VAL_UINT)
+	    *decl_lineno = (int) val.u.uint;
+	  break;
+
+	default:
+	  break;
+	}
+    }
+
+  return ret;
+}
+
+/* Turn the low_pc/high_pc pair gathered for one split DIE into an
+   absolute address range.  addrx values are resolved through the main
+   object's .debug_addr; a constant high_pc is a length.  */
+
+static int
+split_resolve_pcrange (struct split_context *ctx,
+		       const struct pcrange *pcrange,
+		       uintptr_t *low_out, uintptr_t *high_out)
+{
+  uintptr_t lowpc;
+  uintptr_t highpc;
+
+  if (pcrange->have_ranges)
+    {
+      ctx->error_callback (ctx->data,
+			   ("ranges and rnglists are not supported in split "
+			    "DWARF units"), 0);
+      return 0;
+    }
+
+  if (!pcrange->have_lowpc || !pcrange->have_highpc)
+    return 0;
+
+  if (pcrange->lowpc_is_addr_index)
+    {
+      if (!split_resolve_addr (ctx, pcrange->lowpc, &lowpc))
+	return 0;
+    }
+  else
+    lowpc = pcrange->lowpc;
+
+  if (pcrange->highpc_is_addr_index)
+    {
+      if (!split_resolve_addr (ctx, pcrange->highpc, &highpc))
+	return 0;
+    }
+  else
+    {
+      highpc = pcrange->highpc;
+      if (pcrange->highpc_is_relative)
+	highpc += lowpc;
+    }
+
+  *low_out = lowpc;
+  *high_out = highpc;
+  return 1;
+}
+
+/* Read one split DIE and its children, adding function ranges to the
+   supplied vectors.  Only low_pc/high_pc functions, ref4 abstract
+   origins and the DWARF 5 split file table are supported.  */
+
+static int
+split_read_entry (struct split_context *ctx, struct dwarf_buf *unit_buf,
+		  uintptr_t base,
+		  struct function_vector *vec_function,
+		  struct function_vector *vec_inlined)
+{
+  while (unit_buf->left > 0)
+    {
+      uint64_t code;
+      const struct abbrev *abbrev;
+      int is_function;
+      struct function *function;
+      struct function_vector *vec;
+      struct pcrange pcrange;
+      size_t i;
+
+      code = read_uleb128 (unit_buf);
+      if (code == 0)
+	return 1;
+
+      abbrev = lookup_abbrev (&ctx->su->abbrevs, code,
+			      ctx->error_callback, ctx->data);
+      if (abbrev == NULL)
+	return 0;
+
+      is_function = (abbrev->tag == DW_TAG_subprogram
+		     || abbrev->tag == DW_TAG_entry_point
+		     || abbrev->tag == DW_TAG_inlined_subroutine);
+
+      if (abbrev->tag == DW_TAG_inlined_subroutine)
+	vec = vec_inlined;
+      else
+	vec = vec_function;
+
+      function = NULL;
+      if (is_function)
+	{
+	  function = ((struct function *)
+		      backtrace_alloc (ctx->state, sizeof *function,
+				       ctx->error_callback, ctx->data));
+	  if (function == NULL)
+	    return 0;
+	  memset (function, 0, sizeof *function);
+	}
+
+      memset (&pcrange, 0, sizeof pcrange);
+      for (i = 0; i < abbrev->num_attrs; ++i)
+	{
+	  struct attr_val val;
+
+	  if (!read_attribute (abbrev->attrs[i].form, abbrev->attrs[i].val,
+			       unit_buf, ctx->su->is_dwarf64,
+			       ctx->su->version, ctx->su->addrsize,
+			       &ctx->sdata->dwarf_sections, NULL, &val))
+	    return 0;
+
+	  if (abbrev->tag == DW_TAG_compile_unit
+	      && abbrev->attrs[i].name == DW_AT_low_pc)
+	    {
+	      if (val.encoding == ATTR_VAL_ADDRESS)
+		base = (uintptr_t) val.u.uint;
+	      else if (val.encoding == ATTR_VAL_ADDRESS_INDEX
+		       && !split_resolve_addr (ctx, val.u.uint, &base))
+		return 0;
+	    }
+
+	  if (!is_function)
+	    continue;
+
+	  switch (abbrev->attrs[i].name)
+	    {
+	    case DW_AT_call_file:
+	      if (val.encoding == ATTR_VAL_UINT)
+		{
+		  if (ctx->lhdr == NULL
+		      || val.u.uint >= ctx->lhdr->filenames_count)
+		    {
+		      dwarf_buf_error (unit_buf,
+				       ("invalid file number in DW_AT_call_file "
+					"attribute"), 0);
+		      return 0;
+		    }
+		  function->caller_filename =
+		    ctx->lhdr->filenames[val.u.uint];
+		}
+	      break;
+
+	    case DW_AT_GNU_discriminator:
+	      if (val.encoding == ATTR_VAL_UINT)
+		function->caller_disc = (unsigned int) val.u.uint;
+	      break;
+
+	    case DW_AT_decl_line:
+	      if (val.encoding == ATTR_VAL_UINT)
+		function->decl_lineno = (int) val.u.uint;
+	      break;
+
+	    case DW_AT_call_line:
+	      if (val.encoding == ATTR_VAL_UINT)
+		function->caller_lineno = (int) val.u.uint;
+	      break;
+
+	    case DW_AT_abstract_origin:
+	    case DW_AT_specification:
+	      if (val.encoding != ATTR_VAL_REF_UNIT)
+		{
+		  ctx->error_callback (ctx->data,
+				       ("unsupported abstract origin form in "
+					"split DWARF"), 0);
+		  return 0;
+		}
+	      {
+		const char *name;
+
+		name = split_referenced_name (ctx, val.u.uint,
+					      &function->decl_lineno);
+		if (name != NULL)
+		  function->name = name;
+	      }
+	      break;
+
+	    case DW_AT_name:
+	    case DW_AT_linkage_name:
+	    case DW_AT_MIPS_linkage_name:
+	      if (function->name == NULL
+		  && !split_attr_string (ctx, &val, &function->name))
+		return 0;
+	      break;
+
+	    case DW_AT_low_pc:
+	    case DW_AT_high_pc:
+	    case DW_AT_ranges:
+	      update_pcrange (&abbrev->attrs[i], &val, &pcrange);
+	      break;
+
+	    default:
+	      break;
+	    }
+	}
+
+      if (is_function && function->name == NULL)
+	{
+	  backtrace_free (ctx->state, function, sizeof *function,
+			  ctx->error_callback, ctx->data);
+	  is_function = 0;
+	}
+
+      if (is_function)
+	{
+	  uintptr_t lowpc;
+	  uintptr_t highpc;
+
+	  if (!split_resolve_pcrange (ctx, &pcrange, &lowpc, &highpc))
+	    {
+	      if (pcrange.have_ranges)
+		return 0;
+	      backtrace_free (ctx->state, function, sizeof *function,
+			      ctx->error_callback, ctx->data);
+	      is_function = 0;
+	    }
+	  else if (lowpc != base || highpc != base)
+	    {
+	      if (!add_function_range (ctx->state, (void *) function,
+				       lowpc, highpc, ctx->error_callback,
+				       ctx->data, (void *) vec))
+		return 0;
+	    }
+	  else
+	    {
+	      backtrace_free (ctx->state, function, sizeof *function,
+			      ctx->error_callback, ctx->data);
+	      is_function = 0;
+	    }
+	}
+
+      if (abbrev->has_children)
+	{
+	  if (!is_function)
+	    {
+	      if (!split_read_entry (ctx, unit_buf, base,
+				     vec_function, vec_inlined))
+		return 0;
+	    }
+	  else
+	    {
+	      struct function_vector fvec;
+	      struct function_addrs *p;
+	      struct function_addrs *faddrs;
+
+	      memset (&fvec, 0, sizeof fvec);
+	      if (!split_read_entry (ctx, unit_buf, base,
+				     vec_function, &fvec))
+		return 0;
+
+	      if (fvec.count > 0)
+		{
+		  p = ((struct function_addrs *)
+			backtrace_vector_grow (ctx->state,
+					       sizeof (struct function_addrs),
+					       ctx->error_callback, ctx->data,
+					       &fvec.vec));
+		  if (p == NULL)
+		    return 0;
+		  p->low = 0;
+		  --p->low;
+		  p->high = p->low;
+		  p->function = NULL;
+
+		  if (!backtrace_vector_release (ctx->state, &fvec.vec,
+						 ctx->error_callback,
+						 ctx->data))
+		    return 0;
+
+		  faddrs = (struct function_addrs *) fvec.vec.base;
+		  backtrace_qsort (faddrs, fvec.count,
+				   sizeof (struct function_addrs),
+				   function_addrs_compare);
+		  function->function_addrs = faddrs;
+		  function->function_addrs_count = fvec.count;
+		}
+	    }
+	}
+    }
+
+  return 1;
+}
+
+/* Look up PC in the function tree of the split unit bound to
+   SKELETON_U.  Sets *HANDLED to 1 when a function was found and the
+   callback (including the inline chain) has been emitted; leaves it 0
+   when the split unit has no function for PC, so the caller falls back
+   to line-only reporting.  */
+
+static int
+split_lookup_function (struct backtrace_state *state,
+		       struct unit *skeleton_u, uintptr_t pc,
+		       const struct line *ln,
+		       backtrace_full_callback callback,
+		       backtrace_error_callback error_callback
+			 ATTRIBUTE_UNUSED,
+		       void *data, int *handled)
+{
+  struct dwarf_data *sdata;
+  struct unit *su;
+  struct function_addrs *p;
+  struct function_addrs *fmatch;
+  struct function *function;
+  const char *filename;
+  int lineno;
+  unsigned int disc;
+  int decl_lineno;
+  int ret;
+
+  *handled = 0;
+
+  sdata = skeleton_u->split;
+  su = sdata->units[0];
+  if (su->function_addrs_count == 0 || pc + 1 == 0)
+    return 1;
+
+  p = ((struct function_addrs *)
+       bsearch (&pc, su->function_addrs, su->function_addrs_count,
+		sizeof (struct function_addrs), function_addrs_search));
+  if (p == NULL)
+    return 1;
+
+  while (pc == (p + 1)->low)
+    ++p;
+  fmatch = NULL;
+  while (1)
+    {
+      if (pc < p->high)
+	{
+	  fmatch = p;
+	  break;
+	}
+      if (p == su->function_addrs)
+	break;
+      if ((p - 1)->low < p->low)
+	break;
+      --p;
+    }
+  if (fmatch == NULL)
+    return 1;
+
+  *handled = 1;
+  function = fmatch->function;
+
+  /* The innermost executed row always comes from the main object's
+     line program.  Inline call sites are taken from the split file
+     table.  */
+  filename = ln->filename;
+  lineno = ln->lineno;
+  disc = ln->disc;
+  decl_lineno = function->decl_lineno;
+
+  ret = report_inlined_functions (state, pc, function, callback, data,
+				  &filename, &lineno, &disc, &decl_lineno);
+  if (ret != 0)
+    return ret;
+
+  return call_callback (state, callback, data, pc, filename, lineno,
+			function->name, disc, decl_lineno);
+}
+
+/* Bind SPLIT_SECTIONS to the unique matching skeleton unit in
+   MAIN_ENTRY.  See internal.h for the contract.  */
+
+int
+backtrace_dwarf_attach_split (struct backtrace_state *state,
+			      struct dwarf_data *main_entry,
+			      const struct dwarf_sections *split_sections,
+			      int is_bigendian,
+			      backtrace_error_callback error_callback,
+			      void *data)
+{
+  uint64_t dwo_id;
+  size_t i;
+  size_t skeleton_index;
+  unsigned int skeleton_matches;
+  struct unit *skeleton_u;
+  struct split_bundle *bundle;
+  struct dwarf_sections copied;
+  struct libbacktrace_base_address zero_base;
+  struct dwarf_data *sdata;
+  struct unit *su;
+  struct split_context ctx;
+  struct function_vector fvec;
+  struct dwarf_buf unit_buf;
+  struct dwarf_buf line_buf;
+  uint64_t line_len;
+  int line_is_dwarf64;
+
+  if (state == NULL || main_entry == NULL || split_sections == NULL)
+    {
+      error_callback (data, "invalid argument to split DWARF attach", 0);
+      return 0;
+    }
+
+  if (state->threaded)
+    {
+      error_callback (data,
+		      ("split DWARF attach is only supported for "
+		       "non-threaded backtrace states"), 0);
+      return 0;
+    }
+
+  if (split_sections->size[DEBUG_INFO] == 0
+      || split_sections->data[DEBUG_INFO] == NULL)
+    {
+      error_callback (data, "split DWARF bundle has no .debug_info.dwo", 0);
+      return 0;
+    }
+
+  if (!split_scan_identity (split_sections, is_bigendian,
+			    error_callback, data, &dwo_id))
+    return 0;
+
+  /* Identity: exactly one skeleton of this main object may carry the
+     full 64-bit dwo_id, and it must not already be bound.  */
+  skeleton_matches = 0;
+  skeleton_index = 0;
+  for (i = 0; i < main_entry->units_count; ++i)
+    {
+      struct unit *u;
+
+      u = main_entry->units[i];
+      if (u->is_skeleton && u->has_dwo_id && u->dwo_id == dwo_id)
+	{
+	  ++skeleton_matches;
+	  skeleton_index = i;
+	}
+    }
+
+  if (skeleton_matches == 0)
+    {
+      error_callback (data,
+		      "no skeleton unit matches the split DWARF dwo_id", 0);
+      return 0;
+    }
+  if (skeleton_matches > 1)
+    {
+      error_callback (data,
+		      ("ambiguous skeleton unit match for the split DWARF "
+		       "dwo_id"), 0);
+      return 0;
+    }
+
+  skeleton_u = main_entry->units[skeleton_index];
+  if (skeleton_u->split != NULL)
+    {
+      error_callback (data,
+		      ("skeleton unit already has a split DWARF unit "
+		       "attached"), 0);
+      return 0;
+    }
+
+  /* Take ownership of copies so the caller may release the input
+     sections as soon as this returns.  */
+  bundle = ((struct split_bundle *)
+	    backtrace_alloc (state, sizeof *bundle, error_callback, data));
+  if (bundle == NULL)
+    return 0;
+  memset (bundle, 0, sizeof *bundle);
+
+  for (i = 0; i < DEBUG_MAX; ++i)
+    {
+      if (split_sections->size[i] == 0)
+	continue;
+      bundle->data[i] = ((unsigned char *)
+			 backtrace_alloc (state, split_sections->size[i],
+					  error_callback, data));
+      if (bundle->data[i] == NULL)
+	{
+	  split_free_bundle (state, bundle, error_callback, data);
+	  return 0;
+	}
+      memcpy (bundle->data[i], split_sections->data[i],
+	      split_sections->size[i]);
+      bundle->size[i] = split_sections->size[i];
+    }
+
+  for (i = 0; i < DEBUG_MAX; ++i)
+    {
+      copied.data[i] = bundle->data[i];
+      copied.size[i] = bundle->size[i];
+    }
+
+  /* The DWO never carries its own .debug_addr: addrx forms index the
+     main object's .debug_addr from the skeleton's addr_base.  Borrow
+     the contribution, shifted to addr_base so index 0 maps correctly
+     while the production range reader parses the unit.  The borrowed
+     pointer stays valid for the state lifetime because the main object
+     owns it.  */
+  if (skeleton_u->addr_base
+      > main_entry->dwarf_sections.size[DEBUG_ADDR])
+    {
+      error_callback (data, "skeleton addr_base out of range", 0);
+      split_free_bundle (state, bundle, error_callback, data);
+      return 0;
+    }
+  copied.data[DEBUG_ADDR] =
+    main_entry->dwarf_sections.data[DEBUG_ADDR] + skeleton_u->addr_base;
+  copied.size[DEBUG_ADDR] =
+    main_entry->dwarf_sections.size[DEBUG_ADDR] - skeleton_u->addr_base;
+
+  /* Parse the split unit through the production DWARF reader.  It is
+     deliberately not linked into the fileline chain: it is only
+     reachable through SKELETON_U.  */
+  memset (&zero_base, 0, sizeof zero_base);
+  sdata = build_dwarf_data (state, zero_base, &copied, is_bigendian, NULL,
+			    error_callback, data);
+  if (sdata == NULL)
+    {
+      split_free_bundle (state, bundle, error_callback, data);
+      return 0;
+    }
+  sdata->split_bundle = bundle;
+
+  if (sdata->units_count != 1)
+    {
+      error_callback (data,
+		      ("split DWARF bundle must contain exactly one split "
+		       "compilation unit"), 0);
+      return 0;
+    }
+  su = sdata->units[0];
+
+  /* Determine the str_offsets contribution.  Without an explicit
+     DW_AT_str_offsets_base, the default base follows the DWARF 32/64
+     .debug_str_offsets header.  */
+  if (!su->have_str_offsets_base)
+    {
+      size_t header_size;
+
+      if (copied.size[DEBUG_STR_OFFSETS] == 0)
+	su->str_offsets_base = 0;
+      else
+	{
+	  header_size = su->is_dwarf64 ? 16 : 8;
+	  if (copied.size[DEBUG_STR_OFFSETS] < header_size)
+	    {
+	      error_callback (data,
+			      (".debug_str_offsets.dwo header is "
+			       "truncated"), 0);
+	      return 0;
+	    }
+	  su->str_offsets_base = header_size;
+	}
+    }
+
+  /* Parse the split file table; there is no line program to run.  */
+  memset (&bundle->lhdr, 0, sizeof bundle->lhdr);
+  bundle->have_lhdr = 0;
+  if (copied.size[DEBUG_LINE] != 0)
+    {
+      line_buf.name = ".debug_line.dwo";
+      line_buf.start = copied.data[DEBUG_LINE];
+      line_buf.buf = copied.data[DEBUG_LINE];
+      line_buf.left = copied.size[DEBUG_LINE];
+      line_buf.is_bigendian = is_bigendian;
+      line_buf.error_callback = error_callback;
+      line_buf.data = data;
+      line_buf.reported_underflow = 0;
+
+      line_len = read_initial_length (&line_buf, &line_is_dwarf64);
+      line_buf.left = line_len;
+      if (!read_line_header (state, sdata, su, line_is_dwarf64, &line_buf,
+			     &bundle->lhdr))
+	return 0;
+      bundle->have_lhdr = 1;
+    }
+
+  /* Read the function tree eagerly so that PC queries immediately
+     after the attachment see functions and inline chains.  */
+  memset (&fvec, 0, sizeof fvec);
+
+  memset (&ctx, 0, sizeof ctx);
+  ctx.state = state;
+  ctx.sdata = sdata;
+  ctx.su = su;
+  ctx.lhdr = bundle->have_lhdr ? &bundle->lhdr : NULL;
+  ctx.main_sections = &main_entry->dwarf_sections;
+  ctx.addr_base = skeleton_u->addr_base;
+  ctx.error_callback = error_callback;
+  ctx.data = data;
+
+  unit_buf.name = ".debug_info.dwo";
+  unit_buf.start = copied.data[DEBUG_INFO];
+  unit_buf.buf = su->unit_data;
+  unit_buf.left = su->unit_data_len;
+  unit_buf.is_bigendian = is_bigendian;
+  unit_buf.error_callback = error_callback;
+  unit_buf.data = data;
+  unit_buf.reported_underflow = 0;
+
+  if (!split_read_entry (&ctx, &unit_buf, 0, &fvec, &fvec))
+    return 0;
+
+  if (fvec.count > 0)
+    {
+      struct function_addrs *sentinel;
+
+      sentinel = ((struct function_addrs *)
+		  backtrace_vector_grow (state,
+					 sizeof (struct function_addrs),
+					 error_callback, data, &fvec.vec));
+      if (sentinel == NULL)
+	return 0;
+      sentinel->low = 0;
+      --sentinel->low;
+      sentinel->high = sentinel->low;
+      sentinel->function = NULL;
+
+      if (!backtrace_vector_release (state, &fvec.vec, error_callback, data))
+	return 0;
+
+      su->function_addrs = (struct function_addrs *) fvec.vec.base;
+      backtrace_qsort (su->function_addrs, fvec.count,
+		       sizeof (struct function_addrs),
+		       function_addrs_compare);
+      su->function_addrs_count = fvec.count;
+    }
+
+  /* Commit only once everything parsed successfully: a failed
+     attachment leaves every previously readable unit untouched.  */
+  skeleton_u->split = sdata;
 
   return 1;
 }

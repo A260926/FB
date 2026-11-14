@@ -7568,3 +7568,240 @@ backtrace_initialize (struct backtrace_state *state, const char *filename,
 
   return 1;
 }
+
+/* Read the uncompressed .debug_*.dwo sections of an ELF DWO file and
+   bind them to MAIN_ENTRY through backtrace_dwarf_attach_split.  This
+   deliberately reuses the production ELF section reading machinery
+   (the same header structures, views and section name table) instead
+   of carrying a second parser.  The file is only opened for reading;
+   the descriptor and all views are released before returning, because
+   the attach routine copies the section bytes.  A failure never calls
+   backtrace_dwarf_add, so the file can never enter the ordinary
+   fileline query chain.  */
+
+int
+backtrace_elf_attach_split (struct backtrace_state *state,
+			    struct dwarf_data *main_entry,
+			    const char *path,
+			    backtrace_error_callback error_callback,
+			    void *data)
+{
+  int descriptor;
+  struct elf_view ehdr_view;
+  b_elf_ehdr ehdr;
+  off_t shoff;
+  unsigned int shnum;
+  unsigned int shstrndx;
+  struct elf_view shdrs_view;
+  struct elf_view names_view;
+  const b_elf_shdr *shdrs;
+  const b_elf_shdr *shstrhdr;
+  const char *names;
+  size_t shstr_size;
+  unsigned int i;
+  int j;
+  int is_bigendian;
+  struct elf_view section_views[DEBUG_MAX];
+  unsigned char section_views_valid[DEBUG_MAX];
+  struct dwarf_sections split_sections;
+  int ret;
+  int any_view;
+
+  if (state == NULL || main_entry == NULL || path == NULL)
+    {
+      error_callback (data, "invalid argument to ELF split DWARF attach",
+		      0);
+      return 0;
+    }
+
+  descriptor = backtrace_open (path, error_callback, data, NULL);
+  if (descriptor < 0)
+    return 0;
+
+  shdrs_view.release = 0;
+  names_view.release = 0;
+  memset (&section_views_valid[0], 0, sizeof section_views_valid);
+  memset (&split_sections, 0, sizeof split_sections);
+  any_view = 0;
+
+  if (!elf_get_view (state, descriptor, NULL, 0, 0, sizeof ehdr,
+		     error_callback, data, &ehdr_view))
+    goto fail;
+
+  memcpy (&ehdr, ehdr_view.view.data, sizeof ehdr);
+  elf_release_view (state, &ehdr_view, error_callback, data);
+
+  if (ehdr.e_ident[EI_MAG0] != ELFMAG0
+      || ehdr.e_ident[EI_MAG1] != ELFMAG1
+      || ehdr.e_ident[EI_MAG2] != ELFMAG2
+      || ehdr.e_ident[EI_MAG3] != ELFMAG3)
+    {
+      error_callback (data, "split DWARF file is not ELF", 0);
+      goto fail;
+    }
+  if (ehdr.e_ident[EI_VERSION] != EV_CURRENT)
+    {
+      error_callback (data, "split DWARF file is unrecognized ELF version",
+		      0);
+      goto fail;
+    }
+
+#if BACKTRACE_ELF_SIZE == 32
+#define BACKTRACE_SPLIT_ELFCLASS ELFCLASS32
+#else
+#define BACKTRACE_SPLIT_ELFCLASS ELFCLASS64
+#endif
+
+  if (ehdr.e_ident[EI_CLASS] != BACKTRACE_SPLIT_ELFCLASS)
+    {
+      error_callback (data,
+		      "split DWARF file is unexpected ELF class", 0);
+      goto fail;
+    }
+
+  if (ehdr.e_ident[EI_DATA] != ELFDATA2LSB
+      && ehdr.e_ident[EI_DATA] != ELFDATA2MSB)
+    {
+      error_callback (data, "split DWARF file has unknown endianness", 0);
+      goto fail;
+    }
+  is_bigendian = ehdr.e_ident[EI_DATA] == ELFDATA2MSB;
+
+  shoff = ehdr.e_shoff;
+  shnum = ehdr.e_shnum;
+  shstrndx = ehdr.e_shstrndx;
+
+  if (shnum == 0 || shstrndx == 0 || shoff == 0)
+    {
+      error_callback (data,
+		      "split DWARF file has no section header table", 0);
+      goto fail;
+    }
+
+  if (shstrndx == SHN_XINDEX)
+    {
+      struct elf_view shdr_view;
+      const b_elf_shdr *shdr;
+
+      if (!elf_get_view (state, descriptor, NULL, 0, shoff, sizeof shdr,
+			 error_callback, data, &shdr_view))
+	goto fail;
+      shdr = (const b_elf_shdr *) shdr_view.view.data;
+      shstrndx = shdr->sh_link;
+      elf_release_view (state, &shdr_view, error_callback, data);
+      if (shstrndx == SHN_XINDEX || shstrndx >= shnum)
+	{
+	  error_callback (data,
+			  "split DWARF file has invalid section name table",
+			  0);
+	  goto fail;
+	}
+    }
+
+  /* Section headers, skipping the null header at index 0.  */
+  if (!elf_get_view (state, descriptor, NULL, 0,
+		     shoff + sizeof (b_elf_shdr),
+		     (shnum - 1) * sizeof (b_elf_shdr),
+		     error_callback, data, &shdrs_view))
+    goto fail;
+  shdrs = (const b_elf_shdr *) shdrs_view.view.data;
+
+  shstrhdr = &shdrs[shstrndx - 1];
+  shstr_size = shstrhdr->sh_size;
+  if (!elf_get_view (state, descriptor, NULL, 0, shstrhdr->sh_offset,
+		     shstrhdr->sh_size, error_callback, data, &names_view))
+    goto fail;
+  names = (const char *) names_view.view.data;
+
+  for (i = 1; i < shnum; ++i)
+    {
+      const b_elf_shdr *shdr;
+      unsigned int sh_name;
+      const char *name;
+      size_t name_len;
+
+      shdr = &shdrs[i - 1];
+      sh_name = shdr->sh_name;
+      if (sh_name >= shstr_size)
+	{
+	  error_callback (data, "ELF section name out of range", 0);
+	  goto fail;
+	}
+      name = names + sh_name;
+      name_len = strnlen (name, shstr_size - sh_name);
+
+      for (j = 0; j < (int) DEBUG_MAX; ++j)
+	{
+	  size_t base_len;
+
+	  base_len = strlen (dwarf_section_names[j]);
+	  if (name_len != base_len + 4
+	      || strncmp (name, dwarf_section_names[j], base_len) != 0
+	      || strcmp (name + base_len, ".dwo") != 0)
+	    continue;
+
+	  if ((shdr->sh_flags & SHF_COMPRESSED) != 0)
+	    {
+	      error_callback (data,
+			      ("compressed .dwo debug sections are not "
+			       "supported"), 0);
+	      goto fail;
+	    }
+
+	  if (shdr->sh_size == 0)
+	    break;
+
+	  if (!elf_get_view (state, descriptor, NULL, 0, shdr->sh_offset,
+			     shdr->sh_size, error_callback, data,
+			     &section_views[j]))
+	    goto fail;
+	  section_views_valid[j] = 1;
+	  any_view = 1;
+	  split_sections.data[j] =
+	    (const unsigned char *) section_views[j].view.data;
+	  split_sections.size[j] = (size_t) shdr->sh_size;
+	  break;
+	}
+    }
+
+  if (!any_view || split_sections.size[DEBUG_INFO] == 0)
+    {
+      error_callback (data,
+		      "ELF split DWARF file has no .debug_info.dwo", 0);
+      goto fail;
+    }
+
+  /* The attach routine copies every byte, so the views and descriptor
+     can be released as soon as it returns.  It also performs all the
+     dwo_id identity checks; nothing here is added to the query chain.  */
+  ret = backtrace_dwarf_attach_split (state, main_entry, &split_sections,
+				      is_bigendian, error_callback, data);
+
+  for (j = 0; j < (int) DEBUG_MAX; ++j)
+    {
+      if (section_views_valid[j])
+	elf_release_view (state, &section_views[j], error_callback, data);
+    }
+  elf_release_view (state, &names_view, error_callback, data);
+  elf_release_view (state, &shdrs_view, error_callback, data);
+
+  /* The attachment is already committed at this point, so a close
+     failure (reported through backtrace_close itself) must not make the
+     caller believe the binding failed.  */
+  (void) backtrace_close (descriptor, error_callback, data);
+
+  return ret;
+
+ fail:
+  for (j = 0; j < (int) DEBUG_MAX; ++j)
+    {
+      if (section_views_valid[j])
+	elf_release_view (state, &section_views[j], error_callback, data);
+    }
+  if (names_view.release)
+    elf_release_view (state, &names_view, error_callback, data);
+  if (shdrs_view.release)
+    elf_release_view (state, &shdrs_view, error_callback, data);
+  backtrace_close (descriptor, error_callback, data);
+  return 0;
+}

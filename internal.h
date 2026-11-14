@@ -375,6 +375,43 @@ extern int backtrace_dwarf_add (struct backtrace_state *state,
 				void *data, fileline *fileline_fn,
 				struct dwarf_data **fileline_entry);
 
+/* Attach the DWARF 5 split full compilation unit (DW_UT_split_compile)
+   described by SPLIT_SECTIONS to the single DW_UT_skeleton unit inside
+   MAIN_ENTRY whose 64-bit dwo_id matches.  MAIN_ENTRY is the object
+   returned by backtrace_dwarf_add; it keeps owning the PC ranges, the
+   line number programs and .debug_addr, while the split sections supply
+   the function tree, abbreviations, strings and their own DWARF 5 file
+   table.  The buffers in SPLIT_SECTIONS must remain valid for the whole
+   lifetime of STATE.  This is only supported for non-threaded states.
+   Returns 1 on success, 0 after reporting an error when the dwo_id does
+   not match the unique skeleton, the pairing is ambiguous or duplicated,
+   or the split data is malformed.  A failed attachment never disturbs
+   units that were already readable.  */
+
+extern int backtrace_dwarf_attach_split (
+	struct backtrace_state *state,
+	struct dwarf_data *main_entry,
+	const struct dwarf_sections *split_sections,
+	int is_bigendian,
+	backtrace_error_callback error_callback,
+	void *data);
+
+/* Open the ELF64 DWO file at PATH, read its uncompressed
+   .debug_*.dwo sections and bind them to MAIN_ENTRY through
+   backtrace_dwarf_attach_split.  The descriptor is closed before this
+   function returns; section bytes are copied, so the file may be
+   deleted afterwards and later PC queries keep working.  A failure is
+   reported through ERROR_CALLBACK and never appends the file as an
+   ordinary module to the fileline query chain.  Returns 1 on success, 0
+   on error.  */
+
+extern int backtrace_elf_attach_split (
+	struct backtrace_state *state,
+	struct dwarf_data *main_entry,
+	const char *path,
+	backtrace_error_callback error_callback,
+	void *data);
+
 /* A data structure to pass to backtrace_syminfo_to_full.  */
 
 struct backtrace_call_full
