@@ -97,6 +97,13 @@ const (
 	// to a command that is still pending when this happens.
 	ErrTargetDetached Error = "target detached"
 
+	// ErrNodeDetached is the error of a query that starts from a node that is
+	// no longer in the document. The node of a [FromNode] option leaves the
+	// document when the page removes the element or loads a new document. The
+	// query returns the error at once. It does not wait for the node, and it
+	// does not use the document root.
+	ErrNodeDetached Error = "node detached"
+
 	// ErrNoTarget is the error of a func that reads the target of a context
 	// that has no target yet. The first Run opens the target.
 	ErrNoTarget Error = "context has no target"

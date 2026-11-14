@@ -330,10 +330,15 @@ func (t *Target) documentUpdated(ctx context.Context) {
 	f.Lock()
 	defer f.Unlock()
 
-	// invalidate nodes
+	// Invalidate the nodes of the old document. A removal event already
+	// invalidated the nodes that it removed, and it took them out of the
+	// index. invalidate closes no channel twice.
 	if f.Root != nil {
-		close(f.Root.Invalidated)
+		f.Root.invalidate()
 		f.Root = nil
+	}
+	for _, n := range f.Nodes {
+		n.invalidate()
 	}
 
 	f.Nodes = make(map[cdp.NodeID]*Node)
@@ -346,7 +351,6 @@ func (t *Target) documentUpdated(ctx context.Context) {
 		return
 	}
 	f.Root = newNode(res.Root)
-	f.Root.Invalidated = make(chan struct{})
 	walk(f.Nodes, f.Root)
 }
 

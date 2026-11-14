@@ -266,6 +266,18 @@ func (s *Selector) run(ctx context.Context, t *Target, last func(context.Context
 		if fromNode == nil {
 			fromNode = root
 		} else {
+			// A node that an earlier query saved can leave the document
+			// when the page changes. Do not query from it, and do not
+			// fall back to the document root. The index maps the node ID
+			// to this node only while the node is valid, so the test
+			// also fails for a node of another document or target.
+			frame.RLock()
+			live := frame.Nodes[fromNode.NodeID] == fromNode
+			frame.RUnlock()
+			if !live {
+				return true, fmt.Errorf("selector %q: %w", s.text, ErrNodeDetached)
+			}
+
 			frameID := t.enclosingFrame(fromNode)
 			t.frameMu.RLock()
 			execCtx = t.execContexts[frameID]
@@ -283,7 +295,10 @@ func (s *Selector) run(ctx context.Context, t *Target, last func(context.Context
 		// If this is an iframe node, we want to run the query
 		// on its "content document" node instead. Otherwise,
 		// queries will return no results.
-		if doc := fromNode.ContentDocument; doc != nil {
+		fromNode.RLock()
+		doc := fromNode.ContentDocument
+		fromNode.RUnlock()
+		if doc != nil {
 			fromNode = doc
 		}
 
@@ -379,6 +394,12 @@ type QueryOption = func(*Selector)
 //
 // Note: [Search] and [JSPath] selectors do not support FromNode now. The
 // option is mainly useful for [CSS] selectors.
+//
+// A page can replace the part of the document that holds the node. A form
+// that renders a field group again is an example. The node is then invalid,
+// and its Invalidated channel is closed. A query with the node returns an
+// error that wraps [ErrNodeDetached]. Query the document again for the new
+// element, and use its node.
 //
 // FromNode does not reach into an iframe from another site. Chrome runs such an
 // iframe in its own process, as a separate target, and the node of the iframe

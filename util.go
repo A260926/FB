@@ -57,6 +57,8 @@ func clearFrameState(f *Frame, fs FrameState) {
 // nodeOp is a node manipulation operation.
 type nodeOp func(*Node)
 
+// walk adds the node and its descendants to the index m, and links them to
+// their parents.
 func walk(m map[cdp.NodeID]*Node, n *Node) {
 	n.RLock()
 	defer n.RUnlock()
@@ -65,7 +67,6 @@ func walk(m map[cdp.NodeID]*Node, n *Node) {
 	for _, c := range n.Children {
 		c.Lock()
 		c.Parent = n
-		c.Invalidated = n.Invalidated
 		c.Unlock()
 
 		walk(m, c)
@@ -74,7 +75,6 @@ func walk(m map[cdp.NodeID]*Node, n *Node) {
 	for _, c := range n.ShadowRoots {
 		c.Lock()
 		c.Parent = n
-		c.Invalidated = n.Invalidated
 		c.Unlock()
 
 		walk(m, c)
@@ -83,7 +83,6 @@ func walk(m map[cdp.NodeID]*Node, n *Node) {
 	for _, c := range n.PseudoElements {
 		c.Lock()
 		c.Parent = n
-		c.Invalidated = n.Invalidated
 		c.Unlock()
 
 		walk(m, c)
@@ -96,10 +95,49 @@ func walk(m map[cdp.NodeID]*Node, n *Node) {
 
 		c.Lock()
 		c.Parent = n
-		c.Invalidated = n.Invalidated
 		c.Unlock()
 
 		walk(m, c)
+	}
+}
+
+// detach removes the node and its subtree from the index m, and invalidates
+// every node in it. The subtree holds the children, the shadow roots, the
+// pseudo elements, the content document and the template content. The
+// distributed nodes of a node only reference nodes of other subtrees, and
+// they stay.
+//
+// The caller holds the lock of the frame. detach never holds the lock of a
+// node while it takes the lock of a child, so a reader that walks the tree
+// up, as FullXPath does, cannot block it.
+func detach(m map[cdp.NodeID]*Node, n *Node) {
+	n.RLock()
+	children := n.Children
+	shadowRoots := n.ShadowRoots
+	pseudoElements := n.PseudoElements
+	contentDocument := n.ContentDocument
+	templateContent := n.TemplateContent
+	n.RUnlock()
+
+	if m[n.NodeID] == n {
+		delete(m, n.NodeID)
+	}
+	n.invalidate()
+
+	for _, c := range children {
+		detach(m, c)
+	}
+	for _, c := range shadowRoots {
+		detach(m, c)
+	}
+	for _, c := range pseudoElements {
+		detach(m, c)
+	}
+	if contentDocument != nil {
+		detach(m, contentDocument)
+	}
+	if templateContent != nil {
+		detach(m, templateContent)
 	}
 }
 
@@ -188,10 +226,17 @@ func childNodeInserted(m map[cdp.NodeID]*Node, prevID cdp.NodeID, c *Node) nodeO
 func childNodeRemoved(m map[cdp.NodeID]*Node, id cdp.NodeID) nodeOp {
 	return func(n *Node) {
 		n.Lock()
-		defer n.Unlock()
+		var c *Node
+		n.Children, c = removeNode(n.Children, id)
+		n.Unlock()
 
-		n.Children = removeNode(n.Children, id)
-		delete(m, id)
+		if c == nil {
+			// The parent has no child with this id. The event can be a
+			// duplicate, or it can name a node of another branch. Leave
+			// the index alone.
+			return
+		}
+		detach(m, c)
 	}
 }
 
@@ -208,10 +253,16 @@ func shadowRootPushed(m map[cdp.NodeID]*Node, c *Node) nodeOp {
 func shadowRootPopped(m map[cdp.NodeID]*Node, id cdp.NodeID) nodeOp {
 	return func(n *Node) {
 		n.Lock()
-		defer n.Unlock()
+		var c *Node
+		n.ShadowRoots, c = removeNode(n.ShadowRoots, id)
+		n.Unlock()
 
-		n.ShadowRoots = removeNode(n.ShadowRoots, id)
-		delete(m, id)
+		if c == nil {
+			// The host has no shadow root with this id. Leave the index
+			// alone.
+			return
+		}
+		detach(m, c)
 	}
 }
 
@@ -228,10 +279,16 @@ func pseudoElementAdded(m map[cdp.NodeID]*Node, c *Node) nodeOp {
 func pseudoElementRemoved(m map[cdp.NodeID]*Node, id cdp.NodeID) nodeOp {
 	return func(n *Node) {
 		n.Lock()
-		defer n.Unlock()
+		var c *Node
+		n.PseudoElements, c = removeNode(n.PseudoElements, id)
+		n.Unlock()
 
-		n.PseudoElements = removeNode(n.PseudoElements, id)
-		delete(m, id)
+		if c == nil {
+			// The element has no pseudo element with this id. Leave the
+			// index alone.
+			return
+		}
+		detach(m, c)
 	}
 }
 
@@ -302,9 +359,12 @@ func insertNode(n []*Node, prevID cdp.NodeID, c *Node) []*Node {
 	return n
 }
 
-func removeNode(n []*Node, id cdp.NodeID) []*Node {
+// removeNode removes the node with the id from the list, and returns the
+// list and the node. It returns the list unchanged and a nil node when the
+// list has no node with the id.
+func removeNode(n []*Node, id cdp.NodeID) ([]*Node, *Node) {
 	if len(n) == 0 {
-		return n
+		return n, nil
 	}
 
 	var found bool
@@ -317,10 +377,11 @@ func removeNode(n []*Node, id cdp.NodeID) []*Node {
 	}
 
 	if !found {
-		return n
+		return n, nil
 	}
 
-	return slices.Delete(n, i, i+1)
+	c := n[i]
+	return slices.Delete(n, i, i+1), c
 }
 
 // isCouldNotComputeBoxModelError unwraps err as a MessageError and determines

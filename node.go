@@ -32,16 +32,33 @@ type Node struct {
 	// PseudoElements shadows the PseudoElements field of the protocol node.
 	PseudoElements []*Node
 
-	// Invalidated is closed when the node is no longer valid.
+	// Invalidated is closed when the node is no longer valid: the document
+	// was replaced, or the node was removed from the document. Each node
+	// has its own channel. A new node with the same node ID has a new
+	// channel, and the closed channel of the old node stays closed.
 	Invalidated chan struct{}
 	// State is the state of the node.
 	State NodeState
 
+	// invalidateOnce makes invalidate close Invalidated only once.
+	invalidateOnce sync.Once
+
 	sync.RWMutex
 }
 
+// invalidate closes the Invalidated channel of the node. It is safe to call
+// it more than once: only the first call closes the channel.
+func (n *Node) invalidate() {
+	n.invalidateOnce.Do(func() {
+		if n.Invalidated != nil {
+			close(n.Invalidated)
+		}
+	})
+}
+
 // newNode converts a protocol node and its descendants into a Node tree. It
-// moves the child links from the protocol nodes to the new nodes.
+// moves the child links from the protocol nodes to the new nodes. Every new
+// node gets its own Invalidated channel.
 func newNode(n *cdp.Node) *Node {
 	if n == nil {
 		return nil
@@ -53,6 +70,7 @@ func newNode(n *cdp.Node) *Node {
 		ShadowRoots:     newNodes(n.ShadowRoots),
 		TemplateContent: newNode(n.TemplateContent),
 		PseudoElements:  newNodes(n.PseudoElements),
+		Invalidated:     make(chan struct{}),
 	}
 	n.Children, n.ContentDocument, n.ShadowRoots = nil, nil, nil
 	n.TemplateContent, n.PseudoElements = nil, nil
