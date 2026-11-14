@@ -4,6 +4,8 @@ project(renderer)
 
 set(SOURCE_FILES
 	Renderer.h
+	DepthPeeler.h
+	DepthPeeler.cpp
 	EdgeData.h
 	EdgeEquation.h
 	IRasterizer.h
@@ -15,6 +17,7 @@ set(SOURCE_FILES
 	PolyClipper.cpp
 	PolyClipper.h
 	Rasterizer.h
+	SurfaceRasterizer.h
 	TriangleEquations.h
 	VertexCache.h
 	VertexConfig.h

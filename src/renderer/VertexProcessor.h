@@ -28,6 +28,7 @@ SOFTWARE.
 
 #include <vector>
 #include <cassert>
+#include <cstdint>
 
 #include "IRasterizer.h"
 #include "VertexConfig.h"
@@ -90,6 +91,14 @@ public:
 	/// Draw a number of points, lines or triangles.
 	void drawElements(DrawMode mode, size_t count, int *indices) const;
 
+	/// Draw a triangle list carrying a stable per-triangle surface id.
+	/** count is the number of indices (a multiple of 3 for triangles) and
+	  surfaceIds holds one id per input triangle (count / 3 entries).  The
+	  ids survive the 1024 primitive batching and the clipping fan: every
+	  fan piece produced from one input triangle keeps its id.  Only
+	  triangles are supported; other modes ignore the ids. */
+	void drawElements(DrawMode mode, size_t count, int *indices, const uint64_t *surfaceIds) const;
+
 private:
 	struct ClipMask {
 		enum Enum {
@@ -118,6 +127,11 @@ private:
 	void drawPrimitives(DrawMode mode) const;
 	void cullTriangles() const;
 	void transformVertices() const;
+
+	// Id-aware draw path.
+	void processPrimitivesIds(DrawMode mode) const;
+	void clipTrianglesIds() const;
+	void drawPrimitivesIds(DrawMode mode) const;
 
 private:
 	struct {
@@ -149,6 +163,10 @@ private:
 	mutable std::vector<int> m_indicesOut;
 	mutable std::vector<int> m_clipMask;
 	mutable std::vector<bool> m_alreadyProcessed;
+
+	// Per-triangle surface ids for the id-aware draw path.  One entry per
+	// triangle currently held in m_indicesOut.
+	mutable std::vector<uint64_t> m_surfaceIds;
 };
 
 } // end namespace swr

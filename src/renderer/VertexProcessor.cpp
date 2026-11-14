@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "VertexProcessor.h"
+#include "SurfaceRasterizer.h"
 
 namespace swr {
 
@@ -117,6 +118,64 @@ void VertexProcessor::drawElements(DrawMode mode, size_t count, int *indices) co
 	}
 
 	processPrimitives(mode);
+}
+
+void VertexProcessor::drawElements(DrawMode mode, size_t count, int *indices, const uint64_t *surfaceIds) const
+{
+	// Surface ids only apply to triangles.  Everything else takes the
+	// unchanged ordinary path.
+	if (mode != DrawMode::Triangle || surfaceIds == nullptr)
+	{
+		drawElements(mode, count, indices);
+		return;
+	}
+
+	m_verticesOut.clear();
+	m_indicesOut.clear();
+	m_surfaceIds.clear();
+
+	// TODO: Max 1024 primitives per batch.
+	VertexCache vCache;
+
+	for (size_t i = 0; i < count; i++)
+	{
+		int index = indices[i];
+		int outputIndex = vCache.lookup(index);
+
+		if (outputIndex != -1)
+		{
+			m_indicesOut.push_back(outputIndex);
+		}
+		else
+		{
+			VertexShaderInput vIn;
+			initVertexInput(vIn, index);
+
+			int outputIndex = (int)m_verticesOut.size();
+			m_indicesOut.push_back(outputIndex);
+			m_verticesOut.resize(m_verticesOut.size() + 1);
+			VertexShaderOutput &vOut = m_verticesOut.back();
+
+			processVertex(vIn, &vOut);
+
+			vCache.set(index, outputIndex);
+		}
+
+		// One id per input triangle, recorded in submission order.
+		if (i % 3 == 2)
+			m_surfaceIds.push_back(surfaceIds[i / 3]);
+
+		if (primitiveCount(mode) >= 1024)
+		{
+			processPrimitivesIds(mode);
+			m_verticesOut.clear();
+			m_indicesOut.clear();
+			m_surfaceIds.clear();
+			vCache.clear();
+		}
+	}
+
+	processPrimitivesIds(mode);
 }
 
 int VertexProcessor::clipMask(VertexShaderOutput &v) const
@@ -373,6 +432,95 @@ void VertexProcessor::transformVertices() const
 		vOut.z = 0.5f * (m_depthRange.f - m_depthRange.n) * vOut.z + 0.5f * (m_depthRange.n + m_depthRange.f);
 
 		m_alreadyProcessed[index] = true;
+	}
+}
+
+void VertexProcessor::processPrimitivesIds(DrawMode mode) const
+{
+	clipTrianglesIds();
+	transformVertices();
+	drawPrimitivesIds(mode);
+}
+
+void VertexProcessor::clipTrianglesIds() const
+{
+	m_clipMask.clear();
+	m_clipMask.resize(m_verticesOut.size());
+
+	for (size_t i = 0; i < m_verticesOut.size(); i++)
+		m_clipMask[i] = clipMask(m_verticesOut[i]);
+
+	const size_t triangleCount = m_indicesOut.size() / 3;
+	std::vector<uint64_t> idsOut;
+	idsOut.reserve(triangleCount);
+
+	for (size_t t = 0; t < triangleCount; ++t)
+	{
+		size_t i = t * 3;
+		const uint64_t surfaceId = t < m_surfaceIds.size() ? m_surfaceIds[t] : 0;
+
+		int i0 = m_indicesOut[i];
+		int i1 = m_indicesOut[i + 1];
+		int i2 = m_indicesOut[i + 2];
+
+		int clipMask = m_clipMask[i0] | m_clipMask[i1] | m_clipMask[i2];
+
+		polyClipper.init(&m_verticesOut, i0, i1, i2, m_avarCount, m_pvarCount);
+
+		if (clipMask & ClipMask::PosX) polyClipper.clipToPlane(-1, 0, 0, 1);
+		if (clipMask & ClipMask::NegX) polyClipper.clipToPlane( 1, 0, 0, 1);
+		if (clipMask & ClipMask::PosY) polyClipper.clipToPlane( 0,-1, 0, 1);
+		if (clipMask & ClipMask::NegY) polyClipper.clipToPlane( 0, 1, 0, 1);
+		if (clipMask & ClipMask::PosZ) polyClipper.clipToPlane( 0, 0,-1, 1);
+		if (clipMask & ClipMask::NegZ) polyClipper.clipToPlane( 0, 0, 1, 1);
+
+		if (polyClipper.fullyClipped())
+		{
+			m_indicesOut[i] = -1;
+			m_indicesOut[i + 1] = -1;
+			m_indicesOut[i + 2] = -1;
+			idsOut.push_back(surfaceId);
+			continue;
+		}
+
+		std::vector<int> &indices = polyClipper.indices();
+
+		m_indicesOut[i] = indices[0];
+		m_indicesOut[i + 1] = indices[1];
+		m_indicesOut[i + 2] = indices[2];
+		// Every fan piece produced by this input triangle keeps the same
+		// surface id, so clipped surfaces stay a single surface.
+		idsOut.push_back(surfaceId);
+		for (size_t idx = 3; idx < indices.size(); ++idx) {
+			m_indicesOut.push_back(indices[0]);
+			m_indicesOut.push_back(indices[idx - 1]);
+			m_indicesOut.push_back(indices[idx]);
+			idsOut.push_back(surfaceId);
+		}
+	}
+
+	m_surfaceIds.swap(idsOut);
+}
+
+void VertexProcessor::drawPrimitivesIds(DrawMode mode) const
+{
+	if (mode != DrawMode::Triangle)
+	{
+		drawPrimitives(mode);
+		return;
+	}
+
+	cullTriangles();
+
+	ISurfaceIdSink *sink = dynamic_cast<ISurfaceIdSink *>(m_rasterizer);
+	if (sink != nullptr && m_surfaceIds.size() == m_indicesOut.size() / 3)
+	{
+		sink->drawTriangleListIds(&m_verticesOut[0], &m_indicesOut[0],
+			m_indicesOut.size(), &m_surfaceIds[0]);
+	}
+	else
+	{
+		m_rasterizer->drawTriangleList(&m_verticesOut[0], &m_indicesOut[0], m_indicesOut.size());
 	}
 }
 
