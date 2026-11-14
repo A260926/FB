@@ -1,0 +1,9 @@
+[ 27%] Built target ozz_base
+[ 31%] Built target ozz_geometry
+[ 60%] Built target ozz_animation
+[ 62%] Building CXX object ozz/src/animation/offline/CMakeFiles/ozz_animation_offline.dir/skeleton_reducer.cc.o
+[ 64%] Linking CXX static library libozz_animation_offline_r.a
+[ 93%] Built target ozz_animation_offline
+[ 95%] Building CXX object CMakeFiles/task_runner.dir/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/test/animation/offline/skeleton_reducer_target.cpp.o
+[ 97%] Linking CXX executable task_runner
+[100%] Built target task_runner

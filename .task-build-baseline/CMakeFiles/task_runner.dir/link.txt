@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/task_runner.dir/baseline.cpp.o -o task_runner  ozz/src/animation/offline/libozz_animation_offline_r.a ozz/src/geometry/runtime/libozz_geometry_r.a ozz/src/animation/runtime/libozz_animation_r.a ozz/src/base/libozz_base_r.a

@@ -11,6 +11,7 @@ add_library(ozz_animation_offline
   raw_skeleton.cc
   raw_skeleton_archive.cc
   skeleton_builder.cc
+  skeleton_reducer.cc
   raw_track.cc
   raw_track_utils.cc
   track_builder.cc
@@ -29,6 +30,7 @@ target_sources(ozz_animation_offline PUBLIC
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/motion_extractor.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_skeleton.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/skeleton_builder.h
+    ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/skeleton_reducer.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_track.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/raw_track_utils.h
     ${PROJECT_SOURCE_DIR}/include/ozz/animation/offline/track_builder.h

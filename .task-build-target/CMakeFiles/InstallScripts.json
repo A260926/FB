@@ -1,0 +1,19 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/base/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/options/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/runtime/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/offline/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/offline/tools/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/offline/fbx/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/animation/offline/gltf/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/geometry/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS9DAA9DCA24EDU9854/attempts/20261114T073142057223Z/repo/.task-build-target/ozz/src/geometry/runtime/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

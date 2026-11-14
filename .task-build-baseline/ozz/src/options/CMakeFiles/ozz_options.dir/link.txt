@@ -1,0 +1,2 @@
+/usr/bin/ar qc libozz_options_r.a CMakeFiles/ozz_options.dir/options.cc.o
+/usr/bin/ranlib libozz_options_r.a

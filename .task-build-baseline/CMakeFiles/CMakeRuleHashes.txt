@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+13332becc3c639cbc8c8c6caf81087bb ozz/src/animation/offline/CMakeFiles/BUILD_FUSE_ozz_animation_offline
+86c49b4e29c5181caaf92c4d8c107a1d ozz/src/animation/runtime/CMakeFiles/BUILD_FUSE_ozz_animation
+9c49f2d8b501f629511ff8036de0927c ozz/src/base/CMakeFiles/BUILD_FUSE_ozz_base
+94d01fe3464c3dd72351a4cf381e04c8 ozz/src/geometry/runtime/CMakeFiles/BUILD_FUSE_ozz_geometry
+44c31ead48c8e0def95ed6e4cc560377 ozz/src/options/CMakeFiles/BUILD_FUSE_ozz_options
+9776d11ff8b95e16d03db1a9e58d0805 ozz/src_fused/ozz_animation.cc
+6a4ad719d0e7750ec1021a8a858f3697 ozz/src_fused/ozz_animation_offline.cc
+a78578cb6de55c0c51ad16de0bfb3e65 ozz/src_fused/ozz_base.cc
+711fc3ccc63590f2b510770b8d288af8 ozz/src_fused/ozz_geometry.cc
+8e83347be7cd7a01b8c6be2b831fc93b ozz/src_fused/ozz_options.cc
