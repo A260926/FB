@@ -568,6 +568,143 @@ uint64 WriteFrame(IMkvWriter* writer, const Frame* const frame,
                           cluster->timecode_scale());
 }
 
+uint64 WriteFrameDecodeOrder(IMkvWriter* writer, const Frame* const frame,
+                             Cluster* cluster) {
+  if (!writer || !frame || !cluster || !cluster->timecode_scale())
+    return 0;
+
+  const uint64 timecode_scale = cluster->timecode_scale();
+
+  // The Block timecode is the presentation timestamp (PTS) relative to the
+  // cluster timecode, over the full signed 16-bit range.
+  int64 relative_timecode = 0;
+  if (!cluster->GetRelativeTimecode(
+          static_cast<int64>(frame->timestamp() / timecode_scale),
+          &relative_timecode)) {
+    return 0;
+  }
+
+  uint64 block_additions_elem_size = 0;
+  uint64 block_more_payload_size = 0;
+  if (frame->additional()) {
+    const uint64 block_additional_elem_size =
+        EbmlElementSize(libwebm::kMkvBlockAdditional, frame->additional(),
+                        frame->additional_length());
+    const uint64 block_addid_elem_size = EbmlElementSize(
+        libwebm::kMkvBlockAddID, static_cast<uint64>(frame->add_id()));
+    block_more_payload_size =
+        block_addid_elem_size + block_additional_elem_size;
+    const uint64 block_more_elem_size =
+        EbmlMasterElementSize(libwebm::kMkvBlockMore, block_more_payload_size) +
+        block_more_payload_size;
+    block_additions_elem_size =
+        EbmlMasterElementSize(libwebm::kMkvBlockAdditions,
+                              block_more_elem_size) +
+        block_more_elem_size;
+  }
+
+  uint64 discard_padding_elem_size = 0;
+  if (frame->discard_padding() != 0) {
+    discard_padding_elem_size =
+        EbmlElementSize(libwebm::kMkvDiscardPadding,
+                        static_cast<int64>(frame->discard_padding()));
+  }
+
+  // Each reference produces a signed ReferenceBlock whose value is the
+  // difference between the referenced frame's quantized absolute PTS and this
+  // frame's quantized absolute PTS. The endpoints are quantized separately
+  // before the difference is taken, and a difference of zero is still written.
+  const int64 frame_absolute_timecode =
+      static_cast<int64>(frame->timestamp() / timecode_scale);
+  int64 reference_timecodes[Frame::kMaxReferenceBlockTimestamps];
+  uint64 reference_block_elem_size = 0;
+  for (int32 i = 0; i < frame->reference_block_timestamps_size(); ++i) {
+    const int64 reference_absolute_timecode =
+        frame->reference_block_timestamps(i) /
+        static_cast<int64>(timecode_scale);
+    reference_timecodes[i] =
+        reference_absolute_timecode - frame_absolute_timecode;
+    reference_block_elem_size += EbmlElementSize(
+        libwebm::kMkvReferenceBlock, reference_timecodes[i]);
+  }
+
+  const uint64 duration = frame->duration() / timecode_scale;
+  uint64 block_duration_elem_size = 0;
+  if (duration > 0)
+    block_duration_elem_size =
+        EbmlElementSize(libwebm::kMkvBlockDuration, duration);
+
+  const uint64 block_payload_size = 4 + frame->length();
+  const uint64 block_elem_size =
+      EbmlMasterElementSize(libwebm::kMkvBlock, block_payload_size) +
+      block_payload_size;
+
+  const uint64 block_group_payload_size =
+      block_elem_size + block_additions_elem_size +
+      discard_padding_elem_size + reference_block_elem_size +
+      block_duration_elem_size;
+
+  if (!WriteEbmlMasterElement(writer, libwebm::kMkvBlockGroup,
+                              block_group_payload_size)) {
+    return 0;
+  }
+
+  if (!WriteEbmlMasterElement(writer, libwebm::kMkvBlock, block_payload_size))
+    return 0;
+
+  if (WriteUInt(writer, frame->track_number()))
+    return 0;
+
+  if (SerializeInt(writer, relative_timecode, 2))
+    return 0;
+
+  // For a Block, flags is always 0. The keyframe flag is conveyed by the
+  // absence of ReferenceBlock elements.
+  if (SerializeInt(writer, 0, 1))
+    return 0;
+
+  if (writer->Write(frame->frame(), static_cast<uint32>(frame->length())))
+    return 0;
+
+  if (frame->additional()) {
+    const uint64 block_more_elem_size =
+        EbmlMasterElementSize(libwebm::kMkvBlockMore, block_more_payload_size) +
+        block_more_payload_size;
+    if (!WriteEbmlMasterElement(writer, libwebm::kMkvBlockAdditions,
+                                block_more_elem_size) ||
+        !WriteEbmlMasterElement(writer, libwebm::kMkvBlockMore,
+                                block_more_payload_size) ||
+        !WriteEbmlElement(writer, libwebm::kMkvBlockAddID,
+                          static_cast<uint64>(frame->add_id())) ||
+        !WriteEbmlElement(writer, libwebm::kMkvBlockAdditional,
+                          frame->additional(), frame->additional_length())) {
+      return 0;
+    }
+  }
+
+  if (frame->discard_padding() != 0 &&
+      !WriteEbmlElement(writer, libwebm::kMkvDiscardPadding,
+                        static_cast<int64>(frame->discard_padding()))) {
+    return 0;
+  }
+
+  for (int32 i = 0; i < frame->reference_block_timestamps_size(); ++i) {
+    if (!WriteEbmlElement(writer, libwebm::kMkvReferenceBlock,
+                          reference_timecodes[i])) {
+      return 0;
+    }
+  }
+
+  if (duration > 0 &&
+      !WriteEbmlElement(writer, libwebm::kMkvBlockDuration, duration)) {
+    return 0;
+  }
+
+  return EbmlMasterElementSize(libwebm::kMkvBlockGroup,
+                               block_group_payload_size) +
+         block_group_payload_size;
+}
+
 uint64 WriteVoidElement(IMkvWriter* writer, uint64 size) {
   if (!writer)
     return false;

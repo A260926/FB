@@ -146,3 +146,100 @@ Bug reports
 Bug reports can be filed in the libwebm issue tracker:
 https://issues.webmproject.org/.
 For security reports, select 'Security report' from the Template dropdown.
+
+
+Decode order muxing example
+
+The default muxing path requires monotonically non-decreasing presentation
+timestamps, because it is oriented towards frames delivered in presentation
+order. Frames that are delivered in decode order (for example a display order
+of I, B, P that is submitted as I, P, B) can instead use decode order mode.
+Enable it before the first frame is written. Decode order mode requires a
+seekable writer and Segment::kFile, and cannot be combined with chunking,
+kLive mode or accurate cluster durations.
+
+In this mode:
+  * Frames are written in exactly the order in which AddGenericFrame() accepts
+    them; frames are never sorted and audio frames are never held back.
+  * Every frame needs an explicit decode timestamp (DTS) and a positive
+    duration, both in nanoseconds. The existing timestamp stays the
+    presentation timestamp (PTS), in nanoseconds, and is the only timestamp
+    written into the Block.
+  * Key video frames and audio frames have no references. Non-key video frames
+    carry one or two references, given as the absolute PTS (nanoseconds) of the
+    referenced frames. The muxer never infers a reference from a previous frame.
+  * The global DTS must not decrease and each track's DTS must be strictly
+    increasing, while the PTS is allowed to go backwards.
+  * An invalid frame is rejected (AddGenericFrame() returns false), nothing is
+    written for it, no clock advances, and a later valid frame still succeeds.
+
+  #include <cstdint>
+  #include "mkvmuxer/mkvmuxer.h"
+
+  using mkvmuxer::Frame;
+  using mkvmuxer::IMkvWriter;
+  using mkvmuxer::Segment;
+
+  void WriteDecodeOrder(IMkvWriter* writer) {
+    Segment segment;
+    segment.Init(writer);
+    segment.set_mode(Segment::kFile);
+    segment.SetDecodeOrder(true);  // Must precede the first frame.
+
+    const uint64_t video_track = segment.AddVideoTrack(16, 16, 1);
+    const uint64_t audio_track = segment.AddAudioTrack(48000, 2, 2);
+
+    const uint64_t kFrameDuration = 40000000ULL;  // Nanoseconds.
+    uint8_t compressed_frame[] = {0x00, 0x00, 0x00, 0x01};
+
+    // I frame: keyframe, no references.
+    Frame i_frame;
+    i_frame.Init(compressed_frame, sizeof(compressed_frame));
+    i_frame.set_track_number(video_track);
+    i_frame.set_is_key(true);
+    i_frame.set_timestamp(0);                  // PTS, nanoseconds.
+    i_frame.set_decode_timestamp(0);           // DTS, nanoseconds.
+    i_frame.set_duration(kFrameDuration);
+    segment.AddGenericFrame(&i_frame);
+
+    // P frame: submitted before the B frame even though it is displayed after
+    // it. It references the I frame by the I frame's absolute PTS.
+    Frame p_frame;
+    p_frame.Init(compressed_frame, sizeof(compressed_frame));
+    p_frame.set_track_number(video_track);
+    p_frame.set_is_key(false);
+    p_frame.set_timestamp(80000000);           // PTS.
+    p_frame.set_decode_timestamp(40000000);    // DTS.
+    p_frame.set_duration(kFrameDuration);
+    p_frame.AddReferenceBlockTimestamp(0);     // Referenced frame PTS.
+    segment.AddGenericFrame(&p_frame);
+
+    // B frame: PTS moves backwards relative to the P frame, but the DTS keeps
+    // increasing. It may reference up to two frames by their absolute PTS.
+    Frame b_frame;
+    b_frame.Init(compressed_frame, sizeof(compressed_frame));
+    b_frame.set_track_number(video_track);
+    b_frame.set_is_key(false);
+    b_frame.set_timestamp(40000000);           // PTS.
+    b_frame.set_decode_timestamp(80000000);    // DTS.
+    b_frame.set_duration(kFrameDuration);
+    b_frame.AddReferenceBlockTimestamp(0);
+    b_frame.AddReferenceBlockTimestamp(80000000);
+    segment.AddGenericFrame(&b_frame);
+
+    // Audio frames have no references and are written immediately.
+    Frame audio_frame;
+    audio_frame.Init(compressed_frame, sizeof(compressed_frame));
+    audio_frame.set_track_number(audio_track);
+    audio_frame.set_is_key(true);
+    audio_frame.set_timestamp(20000000);
+    audio_frame.set_decode_timestamp(120000000);
+    audio_frame.set_duration(20000000);
+    segment.AddGenericFrame(&audio_frame);
+
+    segment.Finalize();
+  }
+
+The legacy single-reference Frame::set_reference_block_timestamp() interface
+keeps working in both modes; it is kept in sync with the reference timestamp
+list used by decode order mode.

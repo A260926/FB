@@ -101,6 +101,11 @@ set(mkvmuxer_tests_sources
     "${LIBWEBM_SRC_DIR}/testing/test_util.cc"
     "${LIBWEBM_SRC_DIR}/testing/test_util.h")
 
+# Standalone, GoogleTest-free test for the Segment decode order mode. It has
+# its own main() and links only against the muxer/parser libraries.
+set(decode_order_test_sources
+    "${LIBWEBM_SRC_DIR}/testing/decode_order_test.cc")
+
 set(mkvparser_public_headers "${LIBWEBM_SRC_DIR}/mkvparser/mkvparser.h"
                              "${LIBWEBM_SRC_DIR}/mkvparser/mkvreader.h")
 
@@ -340,6 +345,12 @@ add_library(webvtt_common OBJECT ${webvtt_common_sources})
 
 add_library(webm ${libwebm_common_sources} $<TARGET_OBJECTS:mkvmuxer>
                  $<TARGET_OBJECTS:mkvparser>)
+
+# Standalone decode order test; intentionally not gated on ENABLE_TESTS
+# because it does not depend on GoogleTest.
+add_executable(decode_order_test ${decode_order_test_sources})
+target_link_libraries(decode_order_test LINK_PUBLIC webm)
+
 
 if(ENABLE_SAMPLE_PROGRAMS)
   add_executable(mkvparser_sample ${mkvparser_sample_sources})

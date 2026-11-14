@@ -187,9 +187,15 @@ Frame::Frame()
       length_(0),
       track_number_(0),
       timestamp_(0),
+      decode_timestamp_(0),
+      decode_timestamp_set_(false),
       discard_padding_(0),
       reference_block_timestamp_(0),
-      reference_block_timestamp_set_(false) {}
+      reference_block_timestamp_set_(false),
+      reference_block_timestamps_size_(0) {
+  memset(reference_block_timestamps_, 0,
+         sizeof(reference_block_timestamps_));
+}
 
 Frame::~Frame() {
   delete[] frame_;
@@ -218,9 +224,15 @@ bool Frame::CopyFrom(const Frame& frame) {
   is_key_ = frame.is_key();
   track_number_ = frame.track_number();
   timestamp_ = frame.timestamp();
+  decode_timestamp_ = frame.decode_timestamp();
+  decode_timestamp_set_ = frame.decode_timestamp_set();
   discard_padding_ = frame.discard_padding();
   reference_block_timestamp_ = frame.reference_block_timestamp();
   reference_block_timestamp_set_ = frame.reference_block_timestamp_set();
+  reference_block_timestamps_size_ = frame.reference_block_timestamps_size();
+  for (int32_t i = 0; i < reference_block_timestamps_size_; ++i) {
+    reference_block_timestamps_[i] = frame.reference_block_timestamps(i);
+  }
   return true;
 }
 
@@ -283,6 +295,40 @@ void Frame::set_duration(uint64_t duration) {
 void Frame::set_reference_block_timestamp(int64_t reference_block_timestamp) {
   reference_block_timestamp_ = reference_block_timestamp;
   reference_block_timestamp_set_ = true;
+
+  // Keep the reference list in sync so the new multi-reference interface and
+  // the legacy single-reference interface describe the same dependency.
+  reference_block_timestamps_size_ = 0;
+  reference_block_timestamps_[reference_block_timestamps_size_++] =
+      reference_block_timestamp;
+}
+
+bool Frame::AddReferenceBlockTimestamp(
+    int64_t reference_block_timestamp) {
+  if (reference_block_timestamps_size_ >= kMaxReferenceBlockTimestamps)
+    return false;
+
+  for (int32_t i = 0; i < reference_block_timestamps_size_; ++i) {
+    if (reference_block_timestamps_[i] == reference_block_timestamp)
+      return false;
+  }
+
+  reference_block_timestamps_[reference_block_timestamps_size_++] =
+      reference_block_timestamp;
+
+  // Keep the legacy single-reference fields valid for callers that only use
+  // the old interface.
+  if (!reference_block_timestamp_set_) {
+    reference_block_timestamp_ = reference_block_timestamp;
+    reference_block_timestamp_set_ = true;
+  }
+  return true;
+}
+
+void Frame::ClearReferenceBlockTimestamps() {
+  reference_block_timestamps_size_ = 0;
+  reference_block_timestamp_set_ = false;
+  reference_block_timestamp_ = 0;
 }
 
 ///////////////////////////////////////////////////////////////
@@ -2558,7 +2604,8 @@ bool Tags::ExpandTagsArray() {
 // Cluster class
 
 Cluster::Cluster(uint64_t timecode, int64_t cues_pos, uint64_t timecode_scale,
-                 bool write_last_frame_with_duration, bool fixed_size_timecode)
+                 bool write_last_frame_with_duration, bool fixed_size_timecode,
+                 bool decode_order)
     : blocks_added_(0),
       finalized_(false),
       fixed_size_timecode_(fixed_size_timecode),
@@ -2568,6 +2615,9 @@ Cluster::Cluster(uint64_t timecode, int64_t cues_pos, uint64_t timecode_scale,
       size_position_(-1),
       timecode_(timecode),
       timecode_scale_(timecode_scale),
+      decode_order_(decode_order),
+      has_first_frame_(false),
+      first_frame_dts_(0),
       write_last_frame_with_duration_(write_last_frame_with_duration),
       writer_(NULL) {}
 
@@ -2757,6 +2807,24 @@ int64_t Cluster::GetRelativeTimecode(int64_t abs_timecode) const {
   return rel_timecode;
 }
 
+bool Cluster::GetRelativeTimecode(int64_t abs_timecode,
+                                  int64_t* relative_timecode) const {
+  if (!relative_timecode)
+    return false;
+
+  const int64_t cluster_timecode = static_cast<int64_t>(timecode());
+  const int64_t rel_timecode = abs_timecode - cluster_timecode;
+
+  // The block timecode is a signed 16-bit integer, so the complete legal
+  // range is [-32768, 32767]. -1 is a valid value here and must not be
+  // confused with the failure sentinel used by the other overload.
+  if (rel_timecode < kMinBlockTimecode || rel_timecode > kMaxBlockTimecode)
+    return false;
+
+  *relative_timecode = rel_timecode;
+  return true;
+}
+
 bool Cluster::DoWriteFrame(const Frame* const frame) {
   if (!frame || !frame->IsValid())
     return false;
@@ -2770,6 +2838,33 @@ bool Cluster::DoWriteFrame(const Frame* const frame) {
 
   PostWriteBlock(element_size);
   last_block_timestamp_[frame->track_number()] = frame->timestamp();
+  return true;
+}
+
+bool Cluster::HasValidFrameContents(const Frame* frame) const {
+  if (!frame || frame->length() == 0 || !frame->frame())
+    return false;
+  if ((frame->additional_length() != 0 && !frame->additional()) ||
+      (frame->additional() != NULL && frame->additional_length() == 0)) {
+    return false;
+  }
+  if (frame->track_number() == 0 || frame->track_number() > kMaxTrackNumber)
+    return false;
+  return true;
+}
+
+bool Cluster::AddFrameDecodeOrder(const Frame* const frame) {
+  if (!HasValidFrameContents(frame))
+    return false;
+
+  if (!PreWriteBlock())
+    return false;
+
+  const uint64_t element_size = WriteFrameDecodeOrder(writer_, frame, this);
+  if (element_size == 0)
+    return false;
+
+  PostWriteBlock(element_size);
   return true;
 }
 
@@ -3180,6 +3275,9 @@ Segment::Segment()
       accurate_cluster_duration_(false),
       fixed_size_cluster_timecode_(false),
       estimate_file_duration_(false),
+      decode_order_(false),
+      last_decode_timestamp_(0),
+      max_frame_end_timestamp_(0),
       ebml_header_size_(0),
       payload_pos_(0),
       size_position_(0),
@@ -3294,6 +3392,8 @@ bool Segment::Init(IMkvWriter* ptr_writer) {
          sizeof(track_frames_written_[0]) * kMaxTrackNumber);
   memset(&last_track_timestamp_, 0,
          sizeof(last_track_timestamp_[0]) * kMaxTrackNumber);
+  memset(&last_track_decode_timestamp_, 0,
+         sizeof(last_track_decode_timestamp_[0]) * kMaxTrackNumber);
   return segment_info_.Init();
 }
 
@@ -3359,25 +3459,29 @@ bool Segment::Finalize() {
     double duration =
         (static_cast<double>(last_timestamp_) + last_block_duration_) /
         segment_info_.timecode_scale();
-    if (duration_ > 0.0) {
+    if (decode_order_) {
+      // In decode order mode the duration is always taken from the largest
+      // PTS plus duration endpoint of all accepted frames, so the last
+      // delivered frame and any explicitly set duration are ignored.
+      duration = static_cast<double>(max_frame_end_timestamp_) /
+                 segment_info_.timecode_scale();
+    } else if (duration_ > 0.0) {
       duration = duration_;
-    } else {
-      if (last_block_duration_ == 0 && estimate_file_duration_) {
-        const int num_tracks = static_cast<int>(tracks_.track_entries_size());
-        for (int i = 0; i < num_tracks; ++i) {
-          if (track_frames_written_[i] < 2)
-            continue;
+    } else if (last_block_duration_ == 0 && estimate_file_duration_) {
+      const int num_tracks = static_cast<int>(tracks_.track_entries_size());
+      for (int i = 0; i < num_tracks; ++i) {
+        if (track_frames_written_[i] < 2)
+          continue;
 
-          // Estimate the duration for the last block of a Track.
-          const double nano_per_frame =
-              static_cast<double>(last_track_timestamp_[i]) /
-              (track_frames_written_[i] - 1);
-          const double track_duration =
-              (last_track_timestamp_[i] + nano_per_frame) /
-              segment_info_.timecode_scale();
-          if (track_duration > duration)
-            duration = track_duration;
-        }
+        // Estimate the duration for the last block of a Track.
+        const double nano_per_frame =
+            static_cast<double>(last_track_timestamp_[i]) /
+            (track_frames_written_[i] - 1);
+        const double track_duration =
+            (last_track_timestamp_[i] + nano_per_frame) /
+            segment_info_.timecode_scale();
+        if (track_duration > duration)
+          duration = track_duration;
       }
     }
     segment_info_.set_duration(duration);
@@ -3611,6 +3715,9 @@ bool Segment::AddGenericFrame(const Frame* frame) {
   if (!frame)
     return false;
 
+  if (decode_order_)
+    return AddFrameDecodeOrder(frame);
+
   if (!CheckHeaderInfo())
     return false;
 
@@ -3708,6 +3815,231 @@ bool Segment::AddGenericFrame(const Frame* frame) {
 }
 
 void Segment::OutputCues(bool output_cues) { output_cues_ = output_cues; }
+
+void Segment::SetDecodeOrder(bool decode_order) {
+  // Once the header has been written the muxing mode is fixed.
+  if (header_written_)
+    return;
+  decode_order_ = decode_order;
+}
+
+bool Segment::DecodeOrderConfigurationValid() const {
+  return mode_ == kFile && !chunking_ && !accurate_cluster_duration_ &&
+         writer_header_ != NULL && writer_header_->Seekable();
+}
+
+int Segment::TestFrameDecodeOrder(uint64_t track_number,
+                                  uint64_t frame_timestamp_ns,
+                                  uint64_t frame_decode_timestamp_ns,
+                                  bool is_key) const {
+  if (force_new_cluster_)
+    return 1;
+
+  if (cluster_list_size_ <= 0)
+    return 1;
+
+  const uint64_t timecode_scale = segment_info_.timecode_scale();
+  const int64_t frame_timecode =
+      static_cast<int64_t>(frame_timestamp_ns / timecode_scale);
+
+  const Cluster* const last_cluster = cluster_list_[cluster_list_size_ - 1];
+  const int64_t last_cluster_timecode =
+      static_cast<int64_t>(last_cluster->timecode());
+  const int64_t delta_timecode = frame_timecode - last_cluster_timecode;
+
+  // A block timecode below the signed 16-bit minimum cannot be represented
+  // even in a new cluster with the same timecode, so reject the frame.
+  if (delta_timecode < kMinBlockTimecode)
+    return -1;
+
+  // A block timecode above the signed 16-bit maximum needs a fresh cluster.
+  if (delta_timecode > kMaxBlockTimecode)
+    return 2;
+
+  // A video keyframe always starts a new cluster, unless it is the first
+  // frame of a cluster that was just created for it (for example after a
+  // positive timecode overflow), which would leave an empty cluster behind.
+  if (is_key && tracks_.TrackIsVideo(track_number) &&
+      last_cluster->blocks_added() > 0) {
+    return 1;
+  }
+
+  // The duration threshold is measured by the DTS span since the cluster's
+  // first frame, so a later B frame with a smaller PTS cannot move the
+  // threshold backwards.
+  if (max_cluster_duration_ > 0 && last_cluster->has_first_frame()) {
+    const uint64_t dts_span =
+        frame_decode_timestamp_ns - last_cluster->first_frame_dts();
+    if (dts_span >= max_cluster_duration_)
+      return 1;
+  }
+
+  // The size threshold uses the payload already written to the cluster.
+  if (max_cluster_size_ > 0 &&
+      last_cluster->payload_size() >= max_cluster_size_) {
+    return 1;
+  }
+
+  return 0;
+}
+
+bool Segment::MakeNewClusterDecodeOrder(const Frame* frame) {
+  const int32_t new_size = cluster_list_size_ + 1;
+
+  if (new_size > cluster_list_capacity_) {
+    const int32_t new_capacity =
+        (cluster_list_capacity_ <= 0) ? 1 : cluster_list_capacity_ * 2;
+    Cluster** const clusters =
+        new (std::nothrow) Cluster*[new_capacity];  // NOLINT
+    if (!clusters)
+      return false;
+
+    for (int32_t i = 0; i < cluster_list_size_; ++i) {
+      clusters[i] = cluster_list_[i];
+    }
+
+    delete[] cluster_list_;
+
+    cluster_list_ = clusters;
+    cluster_list_capacity_ = new_capacity;
+  }
+
+  if (cluster_list_size_ > 0) {
+    Cluster* const old_cluster = cluster_list_[cluster_list_size_ - 1];
+    if (!old_cluster || !old_cluster->Finalize())
+      return false;
+  }
+
+  if (output_cues_)
+    new_cuepoint_ = true;
+
+  // The cluster timecode is the quantized PTS of its first frame.
+  const uint64_t cluster_timecode =
+      frame->timestamp() / segment_info_.timecode_scale();
+
+  Cluster*& cluster = cluster_list_[cluster_list_size_];
+  const int64_t offset = MaxOffset();
+  cluster = new (std::nothrow)
+      Cluster(cluster_timecode, offset, segment_info_.timecode_scale(),
+              false, fixed_size_cluster_timecode_, true);
+  if (!cluster)
+    return false;
+
+  if (!cluster->Init(writer_cluster_))
+    return false;
+
+  cluster->set_first_frame_dts(frame->decode_timestamp());
+  cluster_list_size_ = new_size;
+  return true;
+}
+
+bool Segment::AddFrameDecodeOrder(const Frame* frame) {
+  // The incompatible configuration is rejected before the header is written.
+  if (!DecodeOrderConfigurationValid())
+    return false;
+
+  if (!CheckHeaderInfo())
+    return false;
+
+  if (!frame || !frame->frame() || frame->length() == 0)
+    return false;
+
+  // Every frame needs an explicit DTS and a positive duration.
+  if (!frame->decode_timestamp_set() || !frame->duration_set() ||
+      frame->duration() == 0) {
+    return false;
+  }
+
+  // The track number must identify a known track.
+  if (!tracks_.GetTrackByNumber(frame->track_number()))
+    return false;
+
+  // PTS plus duration must not overflow.
+  if (frame->timestamp() > UINT64_MAX - frame->duration())
+    return false;
+
+  const bool is_audio = tracks_.TrackIsAudio(frame->track_number());
+  const int32_t reference_count = frame->reference_block_timestamps_size();
+
+  // Reference timestamps are absolute presentation timestamps, so they must be
+  // non-negative.
+  for (int32_t i = 0; i < reference_count; ++i) {
+    if (frame->reference_block_timestamps(i) < 0)
+      return false;
+  }
+
+  // Key video frames and audio frames carry no references; non-key video
+  // frames carry one or two. References are never inferred from a previous
+  // frame.
+  if (frame->is_key() || is_audio) {
+    if (reference_count != 0)
+      return false;
+  } else {
+    if (reference_count < 1 ||
+        reference_count > Frame::kMaxReferenceBlockTimestamps) {
+      return false;
+    }
+  }
+
+  // The global DTS must not decrease, and the per-track DTS must be strictly
+  // increasing. PTS is allowed to go backwards. A track's first frame is
+  // allowed at any DTS, including zero.
+  const uint64_t track_index = frame->track_number() - 1;
+  if (frame->decode_timestamp() < last_decode_timestamp_)
+    return false;
+  if (track_frames_written_[track_index] > 0 &&
+      frame->decode_timestamp() <=
+          last_track_decode_timestamp_[track_index]) {
+    return false;
+  }
+
+  // Decide whether the frame belongs to the current cluster or a new one.
+  for (;;) {
+    const int result = TestFrameDecodeOrder(
+        frame->track_number(), frame->timestamp(),
+        frame->decode_timestamp(), frame->is_key());
+    if (result < 0)
+      return false;
+
+    force_new_cluster_ = false;
+
+    if (result > 0 && !MakeNewClusterDecodeOrder(frame))
+      return false;
+
+    if (result <= 1)
+      break;
+    // result == 2: retry against the freshly created cluster.
+  }
+
+  if (cluster_list_size_ < 1)
+    return false;
+
+  Cluster* const cluster = cluster_list_[cluster_list_size_ - 1];
+  if (!cluster)
+    return false;
+
+  if (!cluster->AddFrameDecodeOrder(frame))
+    return false;
+
+  // Cue points are created only for real video keyframes.
+  if (new_cuepoint_ && cues_track_ == frame->track_number()) {
+    if (frame->is_key() && !AddCuePoint(frame->timestamp(), cues_track_))
+      return false;
+    new_cuepoint_ = false;
+  }
+
+  // Everything below only runs after the frame has been written, so a failed
+  // frame never advances any clock.
+  last_decode_timestamp_ = frame->decode_timestamp();
+  last_track_decode_timestamp_[track_index] = frame->decode_timestamp();
+  track_frames_written_[track_index]++;
+
+  const uint64_t frame_end = frame->timestamp() + frame->duration();
+  if (frame_end > max_frame_end_timestamp_)
+    max_frame_end_timestamp_ = frame_end;
+
+  return true;
+}
 
 void Segment::AccurateClusterDuration(bool accurate_cluster_duration) {
   accurate_cluster_duration_ = accurate_cluster_duration;

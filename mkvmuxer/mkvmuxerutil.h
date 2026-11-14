@@ -27,6 +27,7 @@ class IMkvWriter;
 
 const uint64 kEbmlUnknownValue = 0x01FFFFFFFFFFFFFFULL;
 const int64 kMaxBlockTimecode = 0x07FFFLL;
+const int64 kMinBlockTimecode = -0x08000LL;  // -32768, signed 16-bit minimum.
 
 // Writes out |value| in Big Endian order. Returns 0 on success.
 int32 SerializeInt(IMkvWriter* writer, int64 value, int32 size);
@@ -88,6 +89,14 @@ bool WriteEbmlElement(IMkvWriter* writer, uint64 type, uint64 value,
 // SimpleBlock) based on the parameters of the Frame.
 uint64 WriteFrame(IMkvWriter* writer, const Frame* const frame,
                   Cluster* cluster);
+
+// Outputs a Mkv Frame in decode order mode. The frame is always written as a
+// BlockGroup: the Block carries the presentation timestamp (PTS), each entry
+// in the frame's reference list produces a signed ReferenceBlock, and the
+// frame's duration is written as a BlockDuration. The decode timestamp (DTS)
+// is never written. Returns the number of bytes written, or 0 on failure.
+uint64 WriteFrameDecodeOrder(IMkvWriter* writer, const Frame* const frame,
+                             Cluster* cluster);
 
 // Output a void element. |size| must be the entire size in bytes that will be
 // void. The function will calculate the size of the void header and subtract
