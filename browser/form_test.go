@@ -66,12 +66,13 @@ func TestBrowserFormDefaultNotSelected(t *testing.T) {
 	f, err := bow.Form("[name='default']")
 	testassert.Nil(t, err)
 
-	testassert.Equal(t, false, f.(*Form).selects["count"].multiple)
+	testassert.Equal(t, false, f.(*Form).byName["count"][0].multiple)
 
-	// Initial state should not have any radio or checkbox inputs selected
+	// Initial state should not have any radio or checkbox inputs selected.
+	// The single select still defaults to its first enabled option (count="").
 	// submit with second button
 	err = f.Click("submit2")
-	testassert.Equal(t, "age=&submit2=submitted2", string(bow.body))
+	testassert.Equal(t, "age=&count=&submit2=submitted2", string(bow.body))
 
 	// Change text intput for age
 	// submit with first button
@@ -79,51 +80,51 @@ func TestBrowserFormDefaultNotSelected(t *testing.T) {
 	testassert.Nil(t, err)
 	err = f.Click("submit1")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&submit1=submitted1`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&submit1=submitted1`, string(bow.body))
 
 	// gender does not exist in the form, so Set() is required to add it to the form
 	err = f.Set("gender", "male")
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=male&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=male&submit2=submitted2`, string(bow.body))
 
 	// Change gender
 	err = f.Input("gender", "female")
 	testassert.Nil(t, err)
 	err = f.Click("submit1")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&submit1=submitted1`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&submit1=submitted1`, string(bow.body))
 
 	err = f.Set("option1", "on")
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option1=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option1=on&submit2=submitted2`, string(bow.body))
 
 	err = f.Set("option2", "on")
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option1=on&option2=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option1=on&option2=on&submit2=submitted2`, string(bow.body))
 
 	// uncheck option1
 	f.Remove("option1")
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option2=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option2=on&submit2=submitted2`, string(bow.body))
 
 	// uncheck option2
 	f.Remove("option2")
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&submit2=submitted2`, string(bow.body))
 
 	err = f.Check("option1")
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option1=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option1=on&submit2=submitted2`, string(bow.body))
 	b, err := f.IsChecked("option1")
 	testassert.Nil(t, err)
 	testassert.Equal(t, true, b)
@@ -133,14 +134,14 @@ func TestBrowserFormDefaultNotSelected(t *testing.T) {
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option1=on&option2=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option1=on&option2=on&submit2=submitted2`, string(bow.body))
 
 	// uncheck option1
 	err = f.UnCheck("option1")
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&option2=on&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&option2=on&submit2=submitted2`, string(bow.body))
 	b, err = f.IsChecked("option1")
 	testassert.Nil(t, err)
 	testassert.Equal(t, false, b)
@@ -150,7 +151,7 @@ func TestBrowserFormDefaultNotSelected(t *testing.T) {
 	testassert.Nil(t, err)
 	err = f.Click("submit2")
 	testassert.Nil(t, err)
-	testassert.Equal(t, `age=55&gender=female&submit2=submitted2`, string(bow.body))
+	testassert.Equal(t, `age=55&count=&gender=female&submit2=submitted2`, string(bow.body))
 	_, err = f.IsChecked("option3")
 	testassert.Equal(t, surferrors.NewElementNotFound("No checkbox found with name 'option3'."), err)
 
@@ -206,7 +207,7 @@ func TestBrowserFormSelected(t *testing.T) {
 	f, err := bow.Form("[name='default']")
 	testassert.Nil(t, err)
 
-	testassert.Equal(t, false, f.(*Form).selects["count"].multiple)
+	testassert.Equal(t, false, f.(*Form).byName["count"][0].multiple)
 
 	// Initial state should have defaults selected
 	err = f.Submit()
@@ -252,7 +253,7 @@ func TestBrowserFormDefaultsSelected(t *testing.T) {
 	f, err := bow.Form("[name='default']")
 	testassert.Nil(t, err)
 
-	testassert.Equal(t, false, f.(*Form).selects["count"].multiple)
+	testassert.Equal(t, false, f.(*Form).byName["count"][0].multiple)
 
 	// Initial state should have defaults selected
 	err = f.Submit()
@@ -297,7 +298,7 @@ func TestBrowserFormSelectMultiple(t *testing.T) {
 	f, err := bow.Form("[name='default']")
 	testassert.Nil(t, err)
 
-	testassert.Equal(t, true, f.(*Form).selects["count"].multiple)
+	testassert.Equal(t, true, f.(*Form).byName["count"][0].multiple)
 
 	// Check initial values
 	vals, err := f.SelectValues("count")
@@ -318,12 +319,13 @@ func TestBrowserFormSelectMultiple(t *testing.T) {
 	testassert.Nil(t, err)
 	testassert.Equal(t, "count=1&count=3&submit=submitted", string(bow.body))
 
-	// select multi count by value
+	// select multi count by value; values are emitted in option order, not
+	// the order in which they were passed.
 	err = f.SelectByOptionValue("count", "5", "1")
 	testassert.Nil(t, err)
 	err = f.Submit()
 	testassert.Nil(t, err)
-	testassert.Equal(t, `count=5&count=1&submit=submitted`, string(bow.body))
+	testassert.Equal(t, `count=1&count=5&submit=submitted`, string(bow.body))
 
 	// select multi count by label
 	err = f.SelectByOptionLabel("count", "Two", "Three")

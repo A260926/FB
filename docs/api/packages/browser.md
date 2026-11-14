@@ -211,6 +211,10 @@ type Browsable interface {
 	// OpenForm appends the data values to the given URL and sends a GET request.
 	OpenForm(url string, data url.Values) error
 
+	// OpenFormEntries sends a GET request with the entries encoded onto the
+	// URL in the given order, replacing any query string already present.
+	OpenFormEntries(url string, entries []FormEntry) error
+
 	// OpenBookmark calls Get() with the URL for the bookmark with the given name.
 	OpenBookmark(name string) error
 
@@ -220,8 +224,19 @@ type Browsable interface {
 	// PostForm requests the given URL using the POST method with the given data.
 	PostForm(url string, data url.Values) error
 
+	// PostFormEntries requests the given URL using the POST method with an
+	// application/x-www-form-urlencoded body built from the entries in their
+	// given order, without sorting the names.
+	PostFormEntries(url string, entries []FormEntry) error
+
 	// PostMultipart requests the given URL using the POST method with the given data using multipart/form-data format.
 	PostMultipart(u string, fields url.Values, files FileSet) error
+
+	// PostMultipartEntries requests the given URL using the POST method with a
+	// multipart/form-data body whose field and file parts follow the entry
+	// order.  The files slice aligns one-to-one with the file entries; their
+	// readers are consumed but remain owned by the caller.
+	PostMultipartEntries(u string, entries []FormEntry, files []*File) error
 
 	// Back loads the previously requested page.
 	Back() bool
@@ -426,6 +441,14 @@ func (bow *Browser) OpenForm(u string, data url.Values) error
 ```
 OpenForm appends the data values to the given URL and sends a GET request.
 
+#### func (*Browser) OpenFormEntries
+
+```go
+func (bow *Browser) OpenFormEntries(u string, entries []FormEntry) error
+```
+OpenFormEntries sends a GET request with the entries encoded onto the URL in
+the given order, replacing any query string already present on the URL.
+
 #### func (*Browser) Post
 
 ```go
@@ -440,6 +463,15 @@ func (bow *Browser) PostForm(u string, data url.Values) error
 ```
 PostForm requests the given URL using the POST method with the given data.
 
+#### func (*Browser) PostFormEntries
+
+```go
+func (bow *Browser) PostFormEntries(u string, entries []FormEntry) error
+```
+PostFormEntries requests the given URL using the POST method with an
+application/x-www-form-urlencoded body built from the entries in their given
+order, without sorting the names.
+
 #### func (*Browser) PostMultipart
 
 ```go
@@ -447,6 +479,16 @@ func (bow *Browser) PostMultipart(u string, fields url.Values, files FileSet) er
 ```
 PostMultipart requests the given URL using the POST method with the given data
 using multipart/form-data format.
+
+#### func (*Browser) PostMultipartEntries
+
+```go
+func (bow *Browser) PostMultipartEntries(u string, entries []FormEntry, files []*File) error
+```
+PostMultipartEntries requests the given URL using the POST method with a
+multipart/form-data body whose field and file parts follow the entry order.
+The files align one-to-one with the file entries; their readers are consumed
+but stay owned by the caller.
 
 #### func (*Browser) Reload
 
@@ -695,6 +737,16 @@ func (f *Form) Dom() *goquery.Selection
 ```
 Dom returns the inner *goquery.Selection.
 
+#### func (*Form) Entries
+
+```go
+func (f *Form) Entries() []FormEntry
+```
+Entries returns an independent copy of the entries that would be sent, in
+document order.  For file entries the value is the file name; submit buttons
+are excluded until one is clicked.  The returned slice is a copy, so mutating
+it never affects the form.
+
 #### func (*Form) File
 
 ```go
@@ -842,7 +894,24 @@ type Submittable interface {
 	ClickByValue(name, value string) error
 	Submit() error
 	Dom() *goquery.Selection
+	Entries() []FormEntry
 }
 ```
 
 Submittable represents an element that may be submitted, such as a form.
+
+#### type FormEntry
+
+```go
+type FormEntry struct {
+	Name   string
+	Value  string
+	IsFile bool
+}
+```
+
+FormEntry is a single name/value pair collected from a successful form
+control, kept in the document order in which it will be sent.  For a file
+entry the value is the file name.  `Submittable.Entries` returns an
+independent copy, so mutating the returned slice never affects the form.
+

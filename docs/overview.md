@@ -131,6 +131,39 @@ returns an instance of `browser.Submittable`, which contains methods for setting
 In the example above the call `fm.Input("user", "JoeRedditor")` finds the input element named "user", and
 `fm.Input("passwd", "d234rlkasd")` finds the input element named "passwd".
 
+# Form Entries and Ordering
+
+When a form is created, Surf takes a snapshot of the successful controls in the document's tree order and keeps
+that order for the life of the form. A control without a `form` attribute belongs to its nearest ancestor form;
+a control with a `form="id"` attribute is associated only with the first element in the document carrying that id,
+and that element must itself be a form. Repeated parameters are therefore sent in the order the controls appear,
+and the same order is preserved on the wire for both GET query strings and `application/x-www-form-urlencoded` and
+`multipart/form-data` POST bodies — the names are never alphabetically sorted. GET replaces any query string
+already present on the form's action.
+
+Disabled controls are excluded, including descendants of a disabled `fieldset`, except for controls inside that
+fieldset's first direct `legend`. Unchecked checkboxes and radio buttons, reset and plain buttons, and controls
+with an empty name are not sent; a checked box without a `value` sends `on`, and a textarea sends its text content.
+Selects submit their enabled options in option order; a single select without an explicit `selected` option
+defaults to its first enabled option, while a multiple select may submit nothing. Newlines inside field values
+are normalized to CRLF when the request is encoded.
+
+`Entries()` exposes the ordered, ready-to-send name/value pairs as an independent slice, which is handy for
+inspecting a form before submitting it. Each entry is a `browser.FormEntry` whose `IsFile` flag marks file
+controls; for a file entry the value is the chosen file name.
+
+```go
+for _, entry := range fm.Entries() {
+    fmt.Printf("%s=%s (file=%t)\n", entry.Name, entry.Value, entry.IsFile)
+}
+```
+
+The name-level mutation methods (`Input`, `Set`, `Remove`, `RemoveValue`, `Check`, `UnCheck`, the
+`SelectByOption*` methods, `File` and `SetFile`) all operate on this single ordered dataset, so changes stay in
+the controls' original positions. Submit buttons only contribute when one is clicked, and then only the clicked
+button is included, at the position it occupies in the document.
+
+
 
 # Downloading
 Surf makes it easy to download page assets, such as images, stylesheets, and scripts. They can even be downloaded

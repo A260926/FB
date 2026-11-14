@@ -107,6 +107,10 @@ type Browsable interface {
 	// OpenForm appends the data values to the given URL and sends a GET request.
 	OpenForm(url string, data url.Values) error
 
+	// OpenFormEntries sends a GET request with the entries encoded onto the
+	// URL in the given order, replacing any query string already present.
+	OpenFormEntries(url string, entries []FormEntry) error
+
 	// OpenBookmark calls Get() with the URL for the bookmark with the given name.
 	OpenBookmark(name string) error
 
@@ -116,8 +120,19 @@ type Browsable interface {
 	// PostForm requests the given URL using the POST method with the given data.
 	PostForm(url string, data url.Values) error
 
+	// PostFormEntries requests the given URL using the POST method with an
+	// application/x-www-form-urlencoded body built from the entries in their
+	// given order, without sorting the names.
+	PostFormEntries(url string, entries []FormEntry) error
+
 	// PostMultipart requests the given URL using the POST method with the given data using multipart/form-data format.
 	PostMultipart(u string, fields url.Values, files FileSet) error
+
+	// PostMultipartEntries requests the given URL using the POST method with a
+	// multipart/form-data body whose field and file parts follow the entry
+	// order.  The files slice aligns one-to-one with the file entries; their
+	// readers are consumed but remain owned by the caller.
+	PostMultipartEntries(u string, entries []FormEntry, files []*File) error
 
 	// Back loads the previously requested page.
 	Back() bool
@@ -256,6 +271,18 @@ func (bow *Browser) OpenForm(u string, data url.Values) error {
 	return bow.Open(ul.String())
 }
 
+// OpenFormEntries sends a GET request with the entries encoded onto the URL
+// in the given order.  The entries replace any query string already present.
+func (bow *Browser) OpenFormEntries(u string, entries []FormEntry) error {
+	ul, err := url.Parse(u)
+	if err != nil {
+		return err
+	}
+	ul.RawQuery = encodeEntries(entries)
+
+	return bow.Open(ul.String())
+}
+
 // OpenBookmark calls Open() with the URL for the bookmark with the given name.
 func (bow *Browser) OpenBookmark(name string) error {
 	url, err := bow.bookmarks.Read(name)
@@ -277,6 +304,12 @@ func (bow *Browser) Post(u string, contentType string, body io.Reader) error {
 // PostForm requests the given URL using the POST method with the given data.
 func (bow *Browser) PostForm(u string, data url.Values) error {
 	return bow.Post(u, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+}
+
+// PostFormEntries requests the given URL using the POST method with an
+// application/x-www-form-urlencoded body built in entry order.
+func (bow *Browser) PostFormEntries(u string, entries []FormEntry) error {
+	return bow.Post(u, "application/x-www-form-urlencoded", strings.NewReader(encodeEntries(entries)))
 }
 
 // PostMultipart requests the given URL using the POST method with the given data using multipart/form-data format.
@@ -305,6 +338,51 @@ func (bow *Browser) PostMultipart(u string, fields url.Values, files FileSet) er
 	if err != nil {
 		return err
 
+	}
+	return bow.Post(u, writer.FormDataContentType(), body)
+}
+
+// PostMultipartEntries requests the given URL using the POST method with a
+// multipart/form-data body whose field and file parts are written in entry
+// order.  The files slice aligns one-to-one with the file entries; readers
+// are copied but stay owned by the caller.
+func (bow *Browser) PostMultipartEntries(u string, entries []FormEntry, files []*File) error {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	fileIndex := 0
+	for _, entry := range entries {
+		if entry.IsFile {
+			var file *File
+			if fileIndex < len(files) {
+				file = files[fileIndex]
+			}
+			fileIndex++
+			fileName := entry.Value
+			var data io.Reader
+			if file != nil {
+				if file.fileName != "" {
+					fileName = file.fileName
+				}
+				data = file.data
+			}
+			fw, err := writer.CreateFormFile(entry.Name, fileName)
+			if err != nil {
+				return err
+			}
+			if data != nil {
+				if _, err = io.Copy(fw, data); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err := writer.WriteField(entry.Name, normalizeNewlines(entry.Value)); err != nil {
+			return err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return err
 	}
 	return bow.Post(u, writer.FormDataContentType(), body)
 }
