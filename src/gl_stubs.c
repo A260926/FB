@@ -1,0 +1,115 @@
+
+#ifndef PGL_EXCLUDE_STUBS
+
+// Stubs to let real OpenGL libs compile with minimal modifications/ifdefs
+// add what you need
+
+PGLDEF const GLubyte* glGetStringi(GLenum name, GLuint index) { return NULL; }
+
+
+// glGenerateMipmap / glGenerateTextureMipmap are implemented in gl_impl.c
+
+PGLDEF void glGetDoublev(GLenum pname, GLdouble* params) { }
+PGLDEF void glGetInteger64v(GLenum pname, GLint64* params) { }
+
+// Drawbuffers (glDrawBuffers implemented in gl_fbo.c)
+PGLDEF void glNamedFramebufferDrawBuffers(GLuint framebuffer, GLsizei n, const GLenum* bufs) {}
+
+// Framebuffers/Renderbuffers (core FBO API implemented in gl_fbo.c)
+PGLDEF void glFramebufferTexture1D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {}
+PGLDEF void glFramebufferTexture3D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLint layer) {}
+
+PGLDEF void glFramebufferTextureLayer(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer) {}
+PGLDEF void glNamedFramebufferTextureLayer(GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer) {}
+
+PGLDEF void glNamedFramebufferReadBuffer(GLuint framebuffer, GLenum mode) {}
+
+PGLDEF void glBlitNamedFramebuffer(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter) {}
+
+// MSAA is not supported; these do not allocate storage.
+PGLDEF void glRenderbufferStorageMultisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {}
+PGLDEF void glNamedRenderbufferStorageMultisample(GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {}
+
+
+PGLDEF void glGetProgramiv(GLuint program, GLenum pname, GLint* params) { }
+PGLDEF void glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei* length, GLchar* infoLog) { }
+PGLDEF void glAttachShader(GLuint program, GLuint shader) { }
+PGLDEF void glCompileShader(GLuint shader) { }
+PGLDEF void glGetShaderInfoLog(GLuint shader, GLsizei maxLength, GLsizei* length, GLchar* infoLog) { }
+PGLDEF void glLinkProgram(GLuint program) { }
+PGLDEF void glShaderSource(GLuint shader, GLsizei count, const GLchar** string, const GLint* length) { }
+PGLDEF void glGetShaderiv(GLuint shader, GLenum pname, GLint* params) { }
+PGLDEF void glDeleteShader(GLuint shader) { }
+PGLDEF void glDetachShader(GLuint program, GLuint shader) { }
+
+PGLDEF GLuint glCreateProgram(void) { return 0; }
+PGLDEF GLuint glCreateShader(GLenum shaderType) { return 0; }
+PGLDEF GLint glGetUniformLocation(GLuint program, const GLchar* name) { return 0; }
+PGLDEF GLint glGetAttribLocation(GLuint program, const GLchar* name) { return 0; }
+
+PGLDEF GLboolean glUnmapBuffer(GLenum target) { return GL_TRUE; }
+PGLDEF GLboolean glUnmapNamedBuffer(GLuint buffer) { return GL_TRUE; }
+
+// TODO?
+
+PGLDEF void glActiveTexture(GLenum texture) { }
+PGLDEF void glTexParameterf(GLenum target, GLenum pname, GLfloat param) {}
+
+PGLDEF void glTextureParameterf(GLuint texture, GLenum pname, GLfloat param) {}
+
+// TODO what the heck are these?
+PGLDEF void glTexParameterliv(GLenum target, GLenum pname, const GLint* params) {}
+PGLDEF void glTexParameterluiv(GLenum target, GLenum pname, const GLuint* params) {}
+
+PGLDEF void glTextureParameterliv(GLuint texture, GLenum pname, const GLint* params) {}
+PGLDEF void glTextureParameterluiv(GLuint texture, GLenum pname, const GLuint* params) {}
+
+PGLDEF void glCompressedTexImage1D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const GLvoid* data) {}
+PGLDEF void glCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid* data) {}
+PGLDEF void glCompressedTexImage3D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid* data) {}
+
+PGLDEF void glTexBuffer(GLenum target, GLenum internalformat, GLuint buffer) { }
+PGLDEF void glTextureBuffer(GLuint texture, GLenum internalformat, GLuint buffer) { }
+
+
+PGLDEF void glUniform1f(GLint location, GLfloat v0) { }
+PGLDEF void glUniform2f(GLint location, GLfloat v0, GLfloat v1) { }
+PGLDEF void glUniform3f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2) { }
+PGLDEF void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) { }
+
+PGLDEF void glUniform1i(GLint location, GLint v0) { }
+PGLDEF void glUniform2i(GLint location, GLint v0, GLint v1) { }
+PGLDEF void glUniform3i(GLint location, GLint v0, GLint v1, GLint v2) { }
+PGLDEF void glUniform4i(GLint location, GLint v0, GLint v1, GLint v2, GLint v3) { }
+
+PGLDEF void glUniform1ui(GLint location, GLuint v0) { }
+PGLDEF void glUniform2ui(GLint location, GLuint v0, GLuint v1) { }
+PGLDEF void glUniform3ui(GLint location, GLuint v0, GLuint v1, GLuint v2) { }
+PGLDEF void glUniform4ui(GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) { }
+
+PGLDEF void glUniform1fv(GLint location, GLsizei count, const GLfloat* value) { }
+PGLDEF void glUniform2fv(GLint location, GLsizei count, const GLfloat* value) { }
+PGLDEF void glUniform3fv(GLint location, GLsizei count, const GLfloat* value) { }
+PGLDEF void glUniform4fv(GLint location, GLsizei count, const GLfloat* value) { }
+
+PGLDEF void glUniform1iv(GLint location, GLsizei count, const GLint* value) { }
+PGLDEF void glUniform2iv(GLint location, GLsizei count, const GLint* value) { }
+PGLDEF void glUniform3iv(GLint location, GLsizei count, const GLint* value) { }
+PGLDEF void glUniform4iv(GLint location, GLsizei count, const GLint* value) { }
+
+PGLDEF void glUniform1uiv(GLint location, GLsizei count, const GLuint* value) { }
+PGLDEF void glUniform2uiv(GLint location, GLsizei count, const GLuint* value) { }
+PGLDEF void glUniform3uiv(GLint location, GLsizei count, const GLuint* value) { }
+PGLDEF void glUniform4uiv(GLint location, GLsizei count, const GLuint* value) { }
+
+PGLDEF void glUniformMatrix2fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix3fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix2x3fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix3x2fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix2x4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix4x2fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix3x4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+PGLDEF void glUniformMatrix4x3fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) { }
+
+#endif

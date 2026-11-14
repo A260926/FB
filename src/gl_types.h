@@ -1,0 +1,927 @@
+
+
+
+#include <stdint.h>
+
+// References
+// https://www.khronos.org/opengl/wiki/OpenGL_Type
+// https://registry.khronos.org/EGL/api/KHR/khrplatform.h
+// https://raw.githubusercontent.com/KhronosGroup/OpenGL-Registry/main/xml/gl.xml
+//
+// NOTES:
+// Non-negative is not the same as unsigned
+// They use plain int for GLsizei not unsigned like you'd think hence all
+// the GL_INVALID_VALUE errors when a GLsizei param is < 0
+// Similarly, according to these links, GLsizeiptr is signed
+//
+// Also, there are some minor/rare contradictions in the links above. They use
+// plain int for GLint and GLsizei and unsigned int for GLbitfield but the first
+// link above insists all 3 must be 32-bits while the C standard only guarantees
+// an int (signed or unsigned) is *at least* 16-bits.  Obviously 16 bit
+// architectures are rare and it's probably impossible to run OpenGL on one for
+// other reasons, but still, why not use an int32_t/khronos_int32_t in the
+// official registry?
+
+typedef uint8_t   GLboolean;
+typedef char      GLchar;
+typedef int8_t    GLbyte;
+typedef uint8_t   GLubyte;
+typedef int16_t   GLshort;
+typedef uint16_t  GLushort;
+typedef int32_t   GLint;
+typedef uint32_t  GLuint;
+typedef int64_t   GLint64;
+typedef uint64_t  GLuint64;
+
+typedef int32_t   GLsizei;
+
+typedef uint32_t  GLenum;
+typedef uint32_t  GLbitfield;
+
+typedef intptr_t  GLintptr;
+typedef intptr_t  GLsizeiptr;
+typedef void      GLvoid;
+
+typedef float     GLfloat;
+typedef float     GLclampf;
+
+// not used
+typedef double    GLdouble;
+typedef double    GLclampd;
+
+#define PGL_UNUSED(var) (void)(var)
+
+// Color {r,g,b,a} as u32 (FBO U8 writemask). LE: R in the low byte.
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#define PGL_COLOR_U8_R 0xFF000000u
+#define PGL_COLOR_U8_G 0x00FF0000u
+#define PGL_COLOR_U8_B 0x0000FF00u
+#define PGL_COLOR_U8_A 0x000000FFu
+#else
+#define PGL_COLOR_U8_R 0x000000FFu
+#define PGL_COLOR_U8_G 0x0000FF00u
+#define PGL_COLOR_U8_B 0x00FF0000u
+#define PGL_COLOR_U8_A 0xFF000000u
+#endif
+
+enum
+{
+	//gl error codes
+	GL_NO_ERROR = 0,
+	GL_INVALID_ENUM,
+	GL_INVALID_VALUE,
+	GL_INVALID_OPERATION,
+	GL_INVALID_FRAMEBUFFER_OPERATION,
+	GL_OUT_OF_MEMORY,
+
+	//buffer types (only ARRAY_BUFFER and ELEMENT_ARRAY_BUFFER are currently used)
+	GL_ARRAY_BUFFER,
+	GL_COPY_READ_BUFFER,
+	GL_COPY_WRITE_BUFFER,
+	GL_ELEMENT_ARRAY_BUFFER,
+	GL_PIXEL_PACK_BUFFER,
+	GL_PIXEL_UNPACK_BUFFER,
+	GL_TEXTURE_BUFFER,
+	GL_TRANSFORM_FEEDBACK_BUFFER,
+	GL_UNIFORM_BUFFER,
+	GL_NUM_BUFFER_TYPES,
+
+	// Framebuffer stuff (unused/supported yet)
+	GL_FRAMEBUFFER,
+	GL_DRAW_FRAMEBUFFER,
+	GL_READ_FRAMEBUFFER,
+	GL_FRAMEBUFFER_BINDING,
+	GL_DRAW_FRAMEBUFFER_BINDING,
+	GL_READ_FRAMEBUFFER_BINDING,
+
+	GL_COLOR_ATTACHMENT0,
+	GL_COLOR_ATTACHMENT1,
+	GL_COLOR_ATTACHMENT2,
+	GL_COLOR_ATTACHMENT3,
+	GL_COLOR_ATTACHMENT4,
+	GL_COLOR_ATTACHMENT5,
+	GL_COLOR_ATTACHMENT6,
+	GL_COLOR_ATTACHMENT7,
+
+	GL_DEPTH_ATTACHMENT,
+	GL_STENCIL_ATTACHMENT,
+	GL_DEPTH_STENCIL_ATTACHMENT,
+
+	// glClearBuffer* buffer argument (not COLOR_BUFFER_BIT etc.)
+	GL_COLOR,
+	GL_DEPTH,
+	GL_STENCIL,
+	GL_DEPTH_STENCIL,
+
+	// Framebuffer completeness
+	GL_FRAMEBUFFER_COMPLETE,
+	GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
+	GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT,
+	GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS,
+	GL_FRAMEBUFFER_UNSUPPORTED,
+	// Desktop: non-GL_NONE DRAW_BUFFERi / READ_BUFFER must name an attached image
+	GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER,
+	GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER,
+
+	GL_NONE,
+	GL_DONT_CARE,
+
+	GL_RENDERBUFFER,
+
+	//buffer use hints (not used currently)
+	GL_STREAM_DRAW,
+	GL_STREAM_READ,
+	GL_STREAM_COPY,
+	GL_STATIC_DRAW,
+	GL_STATIC_READ,
+	GL_STATIC_COPY,
+	GL_DYNAMIC_DRAW,
+	GL_DYNAMIC_READ,
+	GL_DYNAMIC_COPY,
+
+	// mapped buffer access
+	GL_READ_ONLY,
+	GL_WRITE_ONLY,
+	GL_READ_WRITE,
+
+	//polygon modes
+	GL_POINT,
+	GL_LINE,
+	GL_FILL,
+
+	//primitive types
+	GL_POINTS,
+	GL_LINES,
+	GL_LINE_STRIP,
+	GL_LINE_LOOP,
+	GL_TRIANGLES,
+	GL_TRIANGLE_STRIP,
+	GL_TRIANGLE_FAN,
+
+	// unsupported primitives because I don't support the geometry shader
+	GL_LINE_STRIP_ADJACENCY,
+	GL_LINES_ADJACENCY,
+	GL_TRIANGLES_ADJACENCY,
+	GL_TRIANGLE_STRIP_ADJACENCY,
+
+	//depth functions (and stencil funcs)
+	GL_LESS,
+	GL_LEQUAL,
+	GL_GREATER,
+	GL_GEQUAL,
+	GL_EQUAL,
+	GL_NOTEQUAL,
+	GL_ALWAYS,
+	GL_NEVER,
+
+	//blend functions
+	GL_ZERO,
+	GL_ONE,
+	GL_SRC_COLOR,
+	GL_ONE_MINUS_SRC_COLOR,
+	GL_DST_COLOR,
+	GL_ONE_MINUS_DST_COLOR,
+	GL_SRC_ALPHA,
+	GL_ONE_MINUS_SRC_ALPHA,
+	GL_DST_ALPHA,
+	GL_ONE_MINUS_DST_ALPHA,
+	GL_CONSTANT_COLOR,
+	GL_ONE_MINUS_CONSTANT_COLOR,
+	GL_CONSTANT_ALPHA,
+	GL_ONE_MINUS_CONSTANT_ALPHA,
+	GL_SRC_ALPHA_SATURATE,
+	NUM_BLEND_FUNCS,
+	GL_SRC1_COLOR,
+	GL_ONE_MINUS_SRC1_COLOR,
+	GL_SRC1_ALPHA,
+	GL_ONE_MINUS_SRC1_ALPHA,
+	//NUM_BLEND_FUNCS
+
+	//blend equations
+	GL_FUNC_ADD,
+	GL_FUNC_SUBTRACT,
+	GL_FUNC_REVERSE_SUBTRACT,
+	GL_MIN,
+	GL_MAX,
+	NUM_BLEND_EQUATIONS,
+
+	//texture types
+	GL_TEXTURE_UNBOUND,
+	GL_TEXTURE_1D,
+	GL_TEXTURE_2D,
+	GL_TEXTURE_3D,
+	GL_TEXTURE_1D_ARRAY,
+	GL_TEXTURE_2D_ARRAY,
+	GL_TEXTURE_RECTANGLE,
+	GL_TEXTURE_CUBE_MAP,
+
+	// not needed (just use uniforms (or globals), that's the beauty of
+	// software rendering, everything is normal/unified RAM. Also the fact
+	// that this is used for both textures and buffers breaks my convenient
+	// enum -> bound array index scheme so it would be a pain anyway
+	//GL_TEXTURE_BUFFER,
+
+	GL_NUM_TEXTURE_TYPES,
+	GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+	GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+	GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
+	GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
+
+	//texture parameters i
+	GL_TEXTURE_BASE_LEVEL,
+	GL_TEXTURE_BORDER_COLOR, // doesn't actually do anything
+	GL_TEXTURE_COMPARE_FUNC,
+	GL_TEXTURE_COMPARE_MODE,
+	GL_TEXTURE_LOD_BIAS,
+	GL_TEXTURE_MIN_FILTER,
+	GL_TEXTURE_MAG_FILTER,
+	GL_TEXTURE_MIN_LOD,
+	GL_TEXTURE_MAX_LOD,
+	GL_TEXTURE_MAX_LEVEL,
+	GL_TEXTURE_SWIZZLE_R,
+	GL_TEXTURE_SWIZZLE_G,
+	GL_TEXTURE_SWIZZLE_B,
+	GL_TEXTURE_SWIZZLE_A,
+	GL_TEXTURE_SWIZZLE_RGBA,
+	GL_TEXTURE_WRAP_S,
+	GL_TEXTURE_WRAP_T,
+	GL_TEXTURE_WRAP_R,
+
+	//texture parameter values
+	// CLAMP_TO_BORDER is an alias to CLAMP_TO_EDGE by default
+	// enable it by defining PGL_ENABLE_CLAMP_TO_BORDER
+	GL_REPEAT,
+	GL_CLAMP_TO_EDGE,
+	GL_CLAMP_TO_BORDER,
+	GL_MIRRORED_REPEAT,
+	GL_NEAREST,
+	GL_LINEAR,
+	GL_NEAREST_MIPMAP_NEAREST,
+	GL_NEAREST_MIPMAP_LINEAR,
+	GL_LINEAR_MIPMAP_NEAREST,
+	GL_LINEAR_MIPMAP_LINEAR,
+
+	//texture/depth/stencil formats including some from GLES and custom
+	PGL_ONE_ALPHA, // Like GL_ALPHA except uses 1's for rgb not 0's
+
+	// From OpenGL ES
+	GL_ALPHA, // Fills 0's in for rgb
+	GL_LUMINANCE, // used for rgb, fills 1 for alpha
+	GL_LUMINANCE_ALPHA, // lum used for rgb
+
+	GL_RED,
+	GL_RG,
+	GL_RGB,
+	GL_BGR,
+	GL_RGBA,
+	GL_BGRA,
+	GL_RGBA16F, // alias of RGBA32F: float RGBA, 4x float32
+	GL_RGBA32F,
+	GL_SRGB,         // U8 RGB stored encoded; decode RGB on sample
+	GL_SRGB8,
+	GL_SRGB_ALPHA,   // U8 RGBA stored encoded; decode RGB, alpha linear
+	GL_SRGB8_ALPHA8,
+	GL_COMPRESSED_RED,
+	GL_COMPRESSED_RG,
+	GL_COMPRESSED_RGB,
+	GL_COMPRESSED_RGBA,
+	//lots more go here but not important
+
+	// Depth/stencil: texture format and/or RB internalformat.
+	// Integer 16/24/32: storage and packing follow the compile-time
+	// format (PGL_D24S8 or PGL_D16), not the bit depth in the name.
+	GL_DEPTH_COMPONENT,
+	GL_DEPTH_COMPONENT16,
+	GL_DEPTH_COMPONENT24,
+	GL_DEPTH_COMPONENT32,
+	GL_DEPTH_COMPONENT32F, // float32 depth; not packed with stencil
+
+	GL_DEPTH24_STENCIL8,  // RB internalformat when PGL_D24S8
+	GL_DEPTH32F_STENCIL8, // not accepted (porting alias)
+
+	GL_STENCIL_INDEX1,
+	GL_STENCIL_INDEX4,
+	GL_STENCIL_INDEX8,   // stencil-only RB; use with PGL_D16, not packed D24S8
+	GL_STENCIL_INDEX16,
+
+	
+	//PixelStore parameters
+	GL_UNPACK_ALIGNMENT,
+	GL_PACK_ALIGNMENT,
+
+	// Texture units (not used but eases porting)
+	// but I'm not doing 80 or bothering with GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+	GL_TEXTURE0,
+	GL_TEXTURE1,
+	GL_TEXTURE2,
+	GL_TEXTURE3,
+	GL_TEXTURE4,
+	GL_TEXTURE5,
+	GL_TEXTURE6,
+	GL_TEXTURE7,
+	
+	//implemented glEnable options
+	GL_CULL_FACE,
+	GL_DEPTH_TEST,
+	GL_DEPTH_CLAMP,
+	GL_LINE_SMOOTH,  // TODO correctly
+	GL_BLEND,
+	GL_COLOR_WRITEMASK,
+	GL_COLOR_LOGIC_OP,
+	GL_POLYGON_OFFSET_POINT,
+	GL_POLYGON_OFFSET_LINE,
+	GL_POLYGON_OFFSET_FILL,
+	GL_SCISSOR_TEST,
+	GL_STENCIL_TEST,
+	GL_TEXTURE_CUBE_MAP_SEAMLESS,
+
+	//provoking vertex
+	GL_FIRST_VERTEX_CONVENTION,
+	GL_LAST_VERTEX_CONVENTION,
+
+	//point sprite stuff
+	GL_POINT_SPRITE_COORD_ORIGIN,
+	GL_UPPER_LEFT,
+	GL_LOWER_LEFT,
+
+	//front face determination/culling
+	GL_FRONT,
+	GL_BACK,
+	GL_FRONT_AND_BACK,
+	GL_CCW,
+	GL_CW,
+
+	// default-FB color buffers (DrawBuffer / ReadBuffer / DrawBuffers)
+	GL_LEFT,
+	GL_RIGHT,
+	GL_FRONT_LEFT,
+	GL_FRONT_RIGHT,
+	GL_BACK_LEFT,
+	GL_BACK_RIGHT,
+
+	// glLogicOp logic ops
+	GL_CLEAR,
+	GL_SET,
+	GL_COPY,
+	GL_COPY_INVERTED,
+	GL_NOOP,
+	GL_AND,
+	GL_NAND,
+	GL_OR,
+	GL_NOR,
+	GL_XOR,
+	GL_EQUIV,
+	GL_AND_REVERSE,
+	GL_AND_INVERTED,
+	GL_OR_REVERSE,
+	GL_OR_INVERTED,
+	GL_INVERT,
+
+	// glStencilOp
+	GL_KEEP,
+	//GL_ZERO, already defined in blend functions aggh
+	GL_REPLACE,
+	GL_INCR,
+	GL_INCR_WRAP,
+	GL_DECR,
+	GL_DECR_WRAP,
+	//GL_INVERT,   // already defined in LogicOps
+
+	//data types
+	GL_UNSIGNED_BYTE,
+	GL_BYTE,
+	GL_UNSIGNED_SHORT,
+	GL_SHORT,
+	GL_UNSIGNED_INT,
+	GL_INT,
+	GL_FLOAT,
+	GL_DOUBLE,
+
+	GL_BITMAP,  // TODO what is this for?
+
+	//glGetString info
+	GL_VENDOR,
+	GL_RENDERER,
+	GL_VERSION,
+	GL_SHADING_LANGUAGE_VERSION,
+
+	// glGet enums
+	GL_POLYGON_OFFSET_FACTOR,
+	GL_POLYGON_OFFSET_UNITS,
+	GL_POINT_SIZE,
+
+	GL_LINE_WIDTH,
+	GL_ALIASED_LINE_WIDTH_RANGE,
+	GL_SMOOTH_LINE_WIDTH_RANGE,
+	GL_SMOOTH_LINE_WIDTH_GRANULARITY,
+
+	GL_DEPTH_CLEAR_VALUE,
+	GL_DEPTH_RANGE,
+	GL_STENCIL_WRITE_MASK,
+	GL_STENCIL_REF,
+	GL_STENCIL_VALUE_MASK,
+	GL_STENCIL_FUNC,
+	GL_STENCIL_FAIL,
+	GL_STENCIL_PASS_DEPTH_FAIL,
+	GL_STENCIL_PASS_DEPTH_PASS,
+
+	GL_STENCIL_BACK_WRITE_MASK,
+	GL_STENCIL_BACK_REF,
+	GL_STENCIL_BACK_VALUE_MASK,
+	GL_STENCIL_BACK_FUNC,
+	GL_STENCIL_BACK_FAIL,
+	GL_STENCIL_BACK_PASS_DEPTH_FAIL,
+	GL_STENCIL_BACK_PASS_DEPTH_PASS,
+
+	GL_LOGIC_OP_MODE,
+	GL_BLEND_SRC_RGB,
+	GL_BLEND_SRC_ALPHA,
+	GL_BLEND_DST_RGB,
+	GL_BLEND_DST_ALPHA,
+
+	GL_BLEND_EQUATION_RGB,
+	GL_BLEND_EQUATION_ALPHA,
+
+	GL_CULL_FACE_MODE,
+	GL_FRONT_FACE,
+	GL_DEPTH_FUNC,
+	//GL_POINT_SPRITE_COORD_ORIGIN,
+	GL_PROVOKING_VERTEX,
+
+	GL_POLYGON_MODE,
+
+	GL_MAJOR_VERSION,
+	GL_MINOR_VERSION,
+	GL_CONTEXT_FLAGS,
+	GL_CONTEXT_FLAG_DEBUG_BIT,
+
+	GL_TEXTURE_BINDING_1D,
+	GL_TEXTURE_BINDING_1D_ARRAY,
+	GL_TEXTURE_BINDING_2D,
+	GL_TEXTURE_BINDING_2D_ARRAY,
+
+	// Not supported
+	GL_TEXTURE_BINDING_2D_MULTISAMPLE,
+	GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY,
+
+	GL_TEXTURE_BINDING_3D,
+	GL_TEXTURE_BINDING_BUFFER,
+	GL_TEXTURE_BINDING_CUBE_MAP,
+	GL_TEXTURE_BINDING_RECTANGLE,
+
+	GL_ARRAY_BUFFER_BINDING,
+	GL_ELEMENT_ARRAY_BUFFER_BINDING,
+	GL_VERTEX_ARRAY_BINDING,
+	GL_CURRENT_PROGRAM,
+
+	GL_VIEWPORT,
+	GL_SCISSOR_BOX,
+
+	GL_MAX_TEXTURE_BUFFER_SIZE,
+	GL_MAX_TEXTURE_IMAGE_UNITS,
+	GL_MAX_TEXTURE_LOD_BIAS,
+	GL_MAX_TEXTURE_SIZE,
+	GL_MAX_3D_TEXTURE_SIZE,
+	GL_MAX_ARRAY_TEXTURE_LAYERS,
+
+	// glDebugOutput
+	GL_DEBUG_OUTPUT,
+	GL_DEBUG_OUTPUT_SYNCHRONOUS,
+
+	GL_DEBUG_SOURCE_API,
+	GL_DEBUG_SOURCE_SHADER_COMPILER,
+	GL_DEBUG_SOURCE_WINDOW_SYSTEM,
+	GL_DEBUG_SOURCE_THIRD_PARTY,
+	GL_DEBUG_SOURCE_APPLICATION,
+	GL_DEBUG_SOURCE_OTHER,
+
+	GL_DEBUG_TYPE_ERROR,
+	GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR,
+	GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR,
+	GL_DEBUG_TYPE_PERFORMANCE,
+	GL_DEBUG_TYPE_PORTABILITY,
+	GL_DEBUG_TYPE_MARKER,
+	GL_DEBUG_TYPE_PUSH_GROUP,
+	GL_DEBUG_TYPE_POP_GROUP,
+	GL_DEBUG_TYPE_OTHER,
+
+	GL_DEBUG_SEVERITY_HIGH,
+	GL_DEBUG_SEVERITY_MEDIUM,
+	GL_DEBUG_SEVERITY_LOW,
+	GL_DEBUG_SEVERITY_NOTIFICATION,
+
+	GL_MAX_DEBUG_MESSAGE_LENGTH,
+
+	//shader types etc. not used, just here for compatibility add what you
+	//need so you can use your OpenGL code with PortableGL with minimal changes
+	GL_COMPUTE_SHADER,
+	GL_VERTEX_SHADER,
+	GL_TESS_CONTROL_SHADER,
+	GL_TESS_EVALUATION_SHADER,
+	GL_GEOMETRY_SHADER,
+	GL_FRAGMENT_SHADER,
+
+	GL_INFO_LOG_LENGTH,
+	GL_COMPILE_STATUS,
+	GL_LINK_STATUS,
+
+	// buffer clearing selections are a mask so can't have overlap
+	// choosing arbitrary bits higher than all other constants in enum
+	GL_COLOR_BUFFER_BIT = 1 << 10,
+	GL_DEPTH_BUFFER_BIT = 1 << 11,
+	GL_STENCIL_BUFFER_BIT = 1 << 12
+};
+
+#define GL_FALSE 0
+#define GL_TRUE 1
+
+#define GL_STENCIL_BITS 8
+
+// Just GL_STENCIL_BITS of 1's, not an official GL enum/value
+//#define PGL_STENCIL_MASK ((1 << GL_STENCIL_BITS)-1)
+#define PGL_STENCIL_MASK 0xFF
+
+
+// Define both PGL_MAX_VERTICES and GL_MAX_VERTEX_ATTRIBS, or neither (not one).
+#if defined(PGL_MAX_VERTICES) && defined(GL_MAX_VERTEX_ATTRIBS)
+#if GL_MAX_VERTEX_ATTRIBS < 4
+#error "GL_MAX_VERTEX_ATTRIBS must be >= 4"
+#include "force_fatal_error_with_nonexistent_include.h"
+#endif
+#elif !defined(PGL_MAX_VERTICES) && !defined(GL_MAX_VERTEX_ATTRIBS)
+/* ok */
+#else
+#error "Define both PGL_MAX_VERTICES and GL_MAX_VERTEX_ATTRIBS, or neither"
+#include "force_fatal_error_with_nonexistent_include.h"
+#endif
+
+// Guard-band NDC limits are stored by the viewport helper. The clipper still
+// uses the frustum (±w) until a later change reads these. 0 forces the four
+// limits to ±1. Pixels outside ±PGL_RASTER_SAFE_XY overflow the int edge math.
+#ifndef PGL_GUARD_BAND
+#define PGL_GUARD_BAND 1
+#endif
+#ifndef PGL_GUARD_BAND_PIXELS
+#define PGL_GUARD_BAND_PIXELS 1024
+#endif
+#define PGL_RASTER_SAFE_XY 4194303
+
+#ifndef PGL_MAX_VERTICES
+#ifdef PGL_TINY_MEM
+// 80 KB
+#define GL_MAX_VERTEX_ATTRIBS 4
+#define PGL_MAX_VERTICES 5000
+#elif defined(PGL_SMALL_MEM)
+// 800 KB
+#define GL_MAX_VERTEX_ATTRIBS 4
+#define PGL_MAX_VERTICES 50000
+#elif defined(PGL_MED_MEM)
+//1.6 MB
+#define GL_MAX_VERTEX_ATTRIBS 4
+#define PGL_MAX_VERTICES 100000
+#else
+// 64 MB
+#define GL_MAX_VERTEX_ATTRIBS 8
+#define PGL_MAX_VERTICES 500000
+#endif
+#endif
+
+// One chunk of primitive records. Bit 31 of a vertex index is the clip arena.
+// Provoke shares a word with the front bit and three edge bits, so it has 28.
+#define PGL_VERT_ARENA     (1u << 31)
+#define PGL_INDEX_MASK     0x7FFFFFFFu
+#define PGL_PROVOKE_BITS   28u
+#define PGL_PROVOKE_MASK   ((1u << PGL_PROVOKE_BITS) - 1u)
+#define PGL_FRONT_BIT      (1u << 28)
+#define PGL_EDGE_V0        (1u << 29)
+#define PGL_EDGE_V1        (1u << 30)
+#define PGL_EDGE_V2        (1u << 31)
+
+#ifndef PGL_CHUNK_PRIMS
+#define PGL_CHUNK_PRIMS 4096
+#endif
+#define PGL_MAX_CLIP_TRIS 64
+#define PGL_MAX_CLIP_VERTS 126
+#define PGL_CLIP_ARENA_INIT 256
+
+#if PGL_CLIP_ARENA_INIT < PGL_MAX_CLIP_VERTS
+#error "clip arena must hold one primitive without growing inside the clipper"
+#endif
+
+#if PGL_MAX_VERTICES > (1u << PGL_PROVOKE_BITS)
+#error "provoke is packed into 28 bits"
+#endif
+#if PGL_CHUNK_PRIMS < PGL_MAX_CLIP_TRIS
+#error "PGL_CHUNK_PRIMS must hold one clipped triangle"
+#endif
+
+typedef struct pgl_tri {
+	u32 v[3];
+	u32 meta;
+} pgl_tri;
+
+typedef struct pgl_line {
+	u32 v[2];
+	u32 meta; /* provoke only */
+} pgl_line;
+
+typedef char pgl_tri_size_ok[(sizeof(pgl_tri) == 16) ? 1 : -1];
+typedef char pgl_line_size_ok[(sizeof(pgl_line) == 12) ? 1 : -1];
+
+#define GL_MAX_VERTEX_OUTPUT_COMPONENTS (4*GL_MAX_VERTEX_ATTRIBS)
+
+// Mostly arbitrarily chosen, some match my AMD/Mesa output, some not really used
+#define GL_MAX_DRAW_BUFFERS 4
+#define GL_MAX_COLOR_ATTACHMENTS 4
+
+#define PGL_MAX_ALIASED_WIDTH 2048.0f
+// Primary knob: full chain L0..L(n-1) down to 1px. Max edge is 2^(n-1).
+// 15 => 16384 (current default); lower this if you want smaller limits / less stack in glTexture.
+#define PGL_MAX_MIPMAP_LEVELS 15
+#define PGL_MAX_TEXTURE_SIZE (1 << (PGL_MAX_MIPMAP_LEVELS - 1))
+#define PGL_MAX_3D_TEXTURE_SIZE 8192
+#define PGL_MAX_ARRAY_TEXTURE_LAYERS 8192
+#define PGL_MAX_DEBUG_MESSAGE_LENGTH 256
+
+// TODO for now I only support smooth AA lines width 1, so granularity is meaningless
+#define PGL_MAX_SMOOTH_WIDTH 1.0f
+#define PGL_SMOOTH_GRANULARITY 1.0f
+
+enum { PGL_SMOOTH, PGL_FLAT, PGL_NOPERSPECTIVE };
+
+#define PGL_SMOOTH2 PGL_SMOOTH, PGL_SMOOTH
+#define PGL_SMOOTH3 PGL_SMOOTH2, PGL_SMOOTH
+#define PGL_SMOOTH4 PGL_SMOOTH3, PGL_SMOOTH
+
+#define PGL_FLAT2 PGL_FLAT, PGL_FLAT
+#define PGL_FLAT3 PGL_FLAT2, PGL_FLAT
+#define PGL_FLAT4 PGL_FLAT3, PGL_FLAT
+
+#define PGL_NOPERSPECTIVE2 PGL_NOPERSPECTIVE, PGL_NOPERSPECTIVE
+#define PGL_NOPERSPECTIVE3 PGL_NOPERSPECTIVE2, PGL_NOPERSPECTIVE
+#define PGL_NOPERSPECTIVE4 PGL_NOPERSPECTIVE3, PGL_NOPERSPECTIVE
+
+//TODO NOT USED YET
+typedef struct PerVertex {
+	vec4 gl_Position;
+	float gl_PointSize;
+	float gl_ClipDistance[6];
+} PerVertex;
+
+// TODO separate structs for vertex and fragment shader builtins?
+// input vs output?
+typedef struct Shader_Builtins
+{
+	// vertex inputs
+	GLint gl_InstanceID;
+	GLint gl_BaseInstance; // 4.6 feature
+
+	// vertex outputs
+	vec4 gl_Position;
+	//float gl_PointSize;
+	//float gl_ClipDistance[6]
+
+	// fragment inputs
+	vec4 gl_FragCoord;
+	vec2 gl_PointCoord;
+	GLboolean gl_FrontFacing;  // struct packing fail I know
+
+	// fragment outputs
+	// Single-target shaders: write gl_FragColor (draw buffer 0 / back_buffer).
+	// MRT (glDrawBuffers n>1): write gl_FragData[i] for each draw buffer i.
+	vec4 gl_FragColor;
+	vec4 gl_FragData[GL_MAX_DRAW_BUFFERS];
+	float gl_FragDepth;
+	GLboolean discard;
+
+} Shader_Builtins;
+
+// TODO GLfloat* and GLvoid*?
+typedef void (*vert_func)(float* vs_output, vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms);
+typedef void (*frag_func)(float* fs_input, Shader_Builtins* builtins, void* uniforms);
+
+typedef void (*GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
+
+typedef struct glProgram
+{
+	vert_func vertex_shader;
+	frag_func fragment_shader;
+	void* uniform;
+	GLsizei vs_output_size;
+	GLenum interpolation[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
+
+	GLboolean fragdepth_or_discard;
+
+	GLboolean deleted;
+
+} glProgram;
+
+typedef struct glBuffer
+{
+	/*
+	GLenum usage;
+	GLenum access;
+	GLint access_flags;
+	void* map_pointer;
+	GLsizei map_offset;
+	GLsizei map_length;
+	*/
+
+	GLsizei size;
+	GLenum type;
+	u8* data;
+
+	GLboolean deleted;
+
+	// true if the user uses one of the pgl data extension functions that
+	// doesn't copy the data.
+	// If true, PGL does not free it when deleting the buffer
+	GLboolean user_owned;
+} glBuffer;
+
+typedef struct glVertex_Attrib
+{
+	GLint size;      // number of components 1-4
+	GLenum type;     // GL_FLOAT, default
+	GLsizei stride;  //
+	GLsizeiptr offset;  // binding offset (VertexArrayVertexBuffer)
+	GLuint relativeoffset; // AttribFormat; fetch uses offset + relativeoffset
+	GLboolean normalized;
+	GLuint buf;
+	GLboolean enabled;
+	GLuint divisor;
+} glVertex_Attrib;
+
+typedef struct glVertex_Array
+{
+	glVertex_Attrib vertex_attribs[GL_MAX_VERTEX_ATTRIBS];
+
+	GLuint element_buffer;
+	GLboolean deleted;
+
+} glVertex_Array;
+
+// Descriptor for one mip level.  data points into the single tex->data allocation
+// (never freed individually).  levels[0].data == tex->data when the texture has image data.
+typedef struct glMipLevel
+{
+	GLsizei w;
+	GLsizei h;
+	u8* data;
+} glMipLevel;
+
+typedef struct glTexture
+{
+	GLsizei w;
+	GLsizei h;
+	GLsizei d;
+
+	// Single allocation holds the full packed chain [L0][L1]...[Ln-1] (~4/3 base size).
+	// Freeing tex->data frees every level.  levels[] is a fixed table of views into it.
+	// num_levels: 0 empty, 1 base only, >1 mip chain present.
+	GLint num_levels;
+	glMipLevel levels[PGL_MAX_MIPMAP_LEVELS];
+	// Bytes allocated for data when !user_owned (0 if user_owned or empty)
+	size_t data_alloc;
+
+	//GLint base_level;  // Not used yet
+#ifdef PGL_ENABLE_CLAMP_TO_BORDER
+	vec4 border_color;
+#endif
+
+	GLenum mag_filter;
+	GLenum min_filter;
+	GLenum wrap_s;
+	GLenum wrap_t;
+	GLenum wrap_r;
+
+	// Pixel layout for tex->data (Phase D):
+	// datatype: GL_UNSIGNED_BYTE or GL_FLOAT
+	// format: GL_RED / GL_RG / GL_RGBA (color), or GL_DEPTH_COMPONENT (depth)
+	// components: 1, 2, or 4 (derived from format; RGB32F not supported)
+	// Depth textures: components=1; sample returns depth in .r (normalized if integer Z pack)
+	GLenum datatype;
+	GLenum format;
+	GLint components;
+	GLboolean is_depth;
+	GLboolean is_srgb; // U8 color: sample RGB via sRGB→linear; storage still RGBA8
+	
+	GLenum type; // GL_TEXTURE_UNBOUND, GL_TEXTURE_2D etc.
+
+	GLboolean deleted;
+
+	// TODO same meaning as in glBuffer
+	GLboolean user_owned;
+
+	// Row origin for sampling (and documenting RT write layout).
+	// GL_FALSE (default): linear index y*w+x — uploaded assets (optional vflip on load).
+	// GL_TRUE: lastrow-style — logical/fragCoord y=0 is memory row h-1, matching
+	// default FB writes and pglSetTexBackBuffer / pglTextureAsRenderTarget RTs.
+	// See scratch/ai_notes/render_to_texture.md Phase A.
+	GLboolean invert_y;
+	// data + (h-1)*w*bpp when invert_y and L0 is set; else NULL. Sample paths use
+	// index math (not this pointer); kept for symmetry with glFramebuffer and apps.
+	u8* lastrow;
+
+	// Start of the single image allocation (level 0 / full chain)
+	u8* data;
+} glTexture;
+
+typedef struct glVertex
+{
+	vec4 clip_space;
+	vec4 screen_space;
+	int clip_code;
+	int edge_flag;
+	float* vs_out;
+} glVertex;
+
+// Clip-generated vertices for one chunk. count rewinds; cap sticks.
+typedef struct pgl_clip_arena {
+	glVertex* verts;
+	float* varyings;
+	int count;
+	int cap;
+	int prim_base;
+} pgl_clip_arena;
+
+typedef struct glFramebuffer
+{
+	u8* buf;
+	u8* lastrow; //better or worse than + h-1 every pixel draw?
+	GLsizei w;
+	GLsizei h;
+} glFramebuffer;
+
+// One texture or renderbuffer attachment on a framebuffer object
+// (not the pixel glFramebuffer surface).
+typedef struct glFBO_Attachment
+{
+	GLuint tex;   // 0 = none
+	GLuint rb;    // 0 = none; mutually exclusive with tex
+	GLint level;  // texture mip index; missing levels → incomplete FBO
+	GLenum textarget; // GL_TEXTURE_2D / RECTANGLE, or a cube face
+} glFBO_Attachment;
+
+// GL framebuffer *object* (name handle). Name 0 is the default window FB (not stored here).
+typedef struct glFBO
+{
+	glFBO_Attachment color[GL_MAX_COLOR_ATTACHMENTS];
+	glFBO_Attachment depth;
+	glFBO_Attachment stencil; // packed with integer D24S8 depth, or separate RB on PGL_D16
+
+	// Draw/read buffer state is per-framebuffer (GL 3+).
+	GLenum draw_buffers[GL_MAX_DRAW_BUFFERS];
+	GLsizei num_draw_buffers;
+	GLenum read_buffer; // glReadBuffer; default COLOR_ATTACHMENT0
+
+	GLboolean deleted;
+	GLboolean status_dirty;
+	GLenum status; // last completeness result
+} glFBO;
+
+// Renderbuffer: non-sampleable storage (depth/stencil).
+typedef struct glRenderbuffer
+{
+	GLsizei w;
+	GLsizei h;
+	GLenum internalformat;
+	GLboolean deleted;
+	GLboolean user_owned;
+	size_t data_alloc;
+	u8* data;
+	u8* lastrow;
+} glRenderbuffer;
+
+// Resolved color RT for FBO draws (not default FB pix_t). Writes use texture
+// storage format (Color U8 or float), never window pix_t.
+typedef struct pglColorRT
+{
+	u8* buf;
+	u8* lastrow;
+	GLsizei w;
+	GLsizei h;
+	GLenum datatype; // GL_UNSIGNED_BYTE or GL_FLOAT
+	GLint components; // 1, 2, 4
+} pglColorRT;
+
+typedef struct Vertex_Shader_output
+{
+	GLsizei size;
+	GLenum* interpolation;
+
+	// TODO Should this be a vector?  or just a pointer?
+	// All I currently use is the constructor, reserve and free...
+	// I could remove the rest of the cvector_float functions to save on bloat
+	// but still easily add back functions as needed...
+	//
+	// or like comment in init_glContext says just allocate to the max size and be done
+	float* output_buf;
+} Vertex_Shader_output;
+
+
+typedef void (*draw_triangle_func)(glVertex* v0, glVertex* v1, glVertex* v2, unsigned int provoke);
+
+

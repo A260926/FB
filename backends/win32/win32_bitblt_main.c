@@ -1,0 +1,218 @@
+// Adapted from this tutorial, couldn't find a license
+// https://croakingkero.com/tutorials/drawing_pixels_win32_gdi/
+
+// Changes for PortableGL are in public domain if applicable
+// otherwise (c) Robert Winkler under MIT License
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <windows.h>
+
+#define PGL_ARGB32
+#define PORTABLEGL_IMPLEMENTATION
+#include "portablegl.h"
+
+#define WIDTH 640
+#define HEIGHT 480
+
+struct {
+	int w;
+	int h;
+	// TODO use pix_t* and try a 16 bit pixel format? Can windows support that?
+	uint32_t* pixels;
+} frame = {0};
+
+typedef struct My_Uniforms {
+	vec4 v_color;
+} My_Uniforms;
+
+glContext the_Context;
+
+LRESULT CALLBACK handle_events(HWND, UINT, WPARAM, LPARAM);
+
+void identity_vs(float* vs_output, vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms);
+void uniform_color_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms);
+void draw_frame(void);
+
+static bool quit = false;
+static BITMAPINFO frame_bitmap_info;
+static HBITMAP frame_bitmap     = 0;
+static HDC frame_device_context = 0;
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR pCmdLine, int nCmdShow)
+{
+	frame.w = WIDTH;
+	frame.h = HEIGHT;
+
+	// Initialize PGL with arbitrary non-null value for backbuf pointer since we don't
+	// have the pixels yet but need to indicate PGL should not manage the back buffer
+	// when we call pglResizeFramebuffer in the WM_SIZE event on window creation.
+	frame.pixels = (uint32_t*)1;
+	if (!init_glContext(&the_Context, (pix_t**)&frame.pixels, frame.w, frame.h)) {
+		puts("Failed to initialize glContext");
+		exit(0);
+	}
+
+	const char window_class_name[] = "PGLWindowClass";
+	static WNDCLASS window_class      = {0};
+	window_class.lpfnWndProc          = handle_events;
+	window_class.hInstance            = hInstance;
+	window_class.lpszClassName        = window_class_name;
+	RegisterClass(&window_class);
+
+	frame_bitmap_info.bmiHeader.biSize        = sizeof(frame_bitmap_info.bmiHeader);
+	frame_bitmap_info.bmiHeader.biPlanes      = 1;
+	frame_bitmap_info.bmiHeader.biBitCount    = 32;
+	frame_bitmap_info.bmiHeader.biCompression = BI_RGB;
+	frame_device_context                      = CreateCompatibleDC(0);
+
+	// Calculate the required size of the window rectangle based on desired client area size
+	DWORD win_style = WS_OVERLAPPED | WS_VISIBLE;
+	RECT win_rect = { 0, 0, frame.w, frame.h };
+	AdjustWindowRectEx(&win_rect, win_style, FALSE, 0);
+
+	static HWND window_handle;
+	window_handle = CreateWindow(window_class_name, "PortableGL Win32 BitBlt", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+	                             640, 300, win_rect.right - win_rect.left, win_rect.bottom - win_rect.top, NULL, NULL, hInstance, NULL);
+	if (window_handle == NULL) {
+		return -1;
+	}
+
+	// Now that we have the pixels we can actually set the back buffer that was
+	// allocated by CreateDIBSection in the triggered WM_SIZE event
+	pglSetBackBuffer(frame.pixels, frame.w, frame.h, GL_TRUE);
+
+	// Setup al your OpenGL data/buffers/shaders etc.
+	float points[] =
+	{
+		-0.5, -0.5, 0,
+		 0.5, -0.5, 0,
+		 0,    0.5, 0
+	};
+
+	// Not actually needed for PGL but there's
+	// no default vao in core profile so if you want it for form's sake...
+	//GLuint vao;
+	//glGenVertexArrays(1, &vao);
+	//glBindVertexArray(vao);
+
+	GLuint triangle;
+	glGenBuffers(1, &triangle);
+	glBindBuffer(GL_ARRAY_BUFFER, triangle);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+	GLuint program = pglCreateProgram(identity_vs, uniform_color_fs, 0, NULL, GL_FALSE);
+	glUseProgram(program);
+
+	My_Uniforms the_uniforms;
+	pglSetUniform(&the_uniforms);
+
+	vec4 Red = { 1.0f, 0.0f, 0.0f, 1.0f };
+	vec4 Blue = { 0.0f, 0.0f, 1.0f, 1.0f };
+	the_uniforms.v_color = Red;
+	//the_uniforms.v_color = Blue;
+
+	glClearColor(0, 0, 0, 1);
+
+	while (!quit) {
+		static MSG message = {0};
+		while (PeekMessage(&message, NULL, 0, 0, PM_REMOVE)) {
+			DispatchMessage(&message);
+		}
+
+		draw_frame();
+
+		InvalidateRect(window_handle, NULL, FALSE);
+		UpdateWindow(window_handle);
+	}
+
+	free_glContext(&the_Context);
+	return 0;
+}
+
+void draw_frame(void)
+{
+	// put all your GL stuff here
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
+LRESULT CALLBACK handle_events(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	switch (message) {
+	case WM_QUIT:
+	case WM_DESTROY: {
+		quit = true;
+	} break;
+
+	case WM_PAINT: {
+		static PAINTSTRUCT paint;
+		static HDC device_context;
+		device_context = BeginPaint(window_handle, &paint);
+		BitBlt(device_context, paint.rcPaint.left, paint.rcPaint.top,
+		       paint.rcPaint.right - paint.rcPaint.left, paint.rcPaint.bottom - paint.rcPaint.top,
+		       frame_device_context, paint.rcPaint.left, paint.rcPaint.top, SRCCOPY);
+		EndPaint(window_handle, &paint);
+	} break;
+
+	case WM_KEYDOWN:
+		if (wParam == VK_ESCAPE) {
+			quit = true;
+		}
+		break;
+
+	case WM_SIZE: {
+		// NOTE(rswinkle): A negative biHeight indicates that the bitmap is topdown
+		// like you normally think of memory. Ironically, PGL goes through some hoops
+		// (accessing framebuffers through a pointer to the last row and negating y)
+		// to address that mismatch between standard memory acces and OpenGL y
+		// coordinates increasing upward
+		frame_bitmap_info.bmiHeader.biWidth  = LOWORD(lParam);
+		frame_bitmap_info.bmiHeader.biHeight = -HIWORD(lParam);
+
+		if (frame_bitmap) DeleteObject(frame_bitmap);
+		frame_bitmap =
+		    CreateDIBSection(NULL, &frame_bitmap_info, DIB_RGB_COLORS, (void**)&frame.pixels, 0, 0);
+		SelectObject(frame_device_context, frame_bitmap);
+
+		frame.w  = LOWORD(lParam);
+		frame.h = HIWORD(lParam);
+
+		// Resize depth/stencil and set backbuf to new pixel array
+		pglResizeFramebuffer(frame.w, frame.h);
+		pglSetBackBuffer(frame.pixels, frame.w, frame.h, GL_TRUE);
+
+		glViewport(0, 0, frame.w, frame.h);
+
+		// Need both of these not just the first like with stretchDIBits
+		// to get redrawing while resizing
+		draw_frame();
+		InvalidateRect(window_handle, NULL, FALSE);
+
+	} break;
+
+	case WM_CREATE: {
+		// happens before WM_SIZE when CreateWindow*() is called
+	} break;
+
+	default: {
+		return DefWindowProc(window_handle, message, wParam, lParam);
+	}
+	}
+	return 0;
+}
+
+void identity_vs(float* vs_output, vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms)
+{
+	PGL_UNUSED(vs_output);
+	PGL_UNUSED(uniforms);
+	builtins->gl_Position = vertex_attribs[0];
+}
+
+void uniform_color_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
+{
+	PGL_UNUSED(fs_input);
+	builtins->gl_FragColor = ((My_Uniforms*)uniforms)->v_color;
+}
