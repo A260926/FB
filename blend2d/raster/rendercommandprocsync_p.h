@@ -9,6 +9,7 @@
 #include <blend2d/core/context_p.h>
 #include <blend2d/geometry/commons_p.h>
 #include <blend2d/pipeline/pipedefs_p.h>
+#include <blend2d/raster/affinemask_p.h>
 #include <blend2d/raster/analyticrasterizer_p.h>
 #include <blend2d/raster/edgebuilder_p.h>
 #include <blend2d/raster/rendercommand_p.h>
@@ -82,6 +83,10 @@ static BL_INLINE BLResult fill_box_masked_a(WorkData& work_data, const Pipeline:
   fill_func(&work_data.ctx_data, &fill_data, fetch_data);
 
   return BL_SUCCESS;
+}
+
+static BL_INLINE BLResult fill_affine_mask(WorkData& work_data, const Pipeline::DispatchData& dispatch_data, const AffineMaskData& md, const void* fetch_data) noexcept {
+  return affine_mask_composite_rows(work_data.ctx_data, dispatch_data, fetch_data, md, md.box.y0, md.box.y1);
 }
 
 static BL_NOINLINE BLResult fill_analytic(WorkData& work_data, const Pipeline::DispatchData& dispatch_data, uint32_t alpha, const EdgeStorage<int>* edge_storage, BLFillRule fill_rule, const void* fetch_data) noexcept {

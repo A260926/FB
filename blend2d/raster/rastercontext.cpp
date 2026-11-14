@@ -18,6 +18,7 @@
 #include <blend2d/pipeline/piperuntime_p.h>
 #include <blend2d/pixelops/scalar_p.h>
 #include <blend2d/pipeline/reference/fixedpiperuntime_p.h>
+#include <blend2d/raster/affinemask_p.h>
 #include <blend2d/raster/edgebuilder_p.h>
 #include <blend2d/raster/rastercontext_p.h>
 #include <blend2d/raster/rastercontextops_p.h>
@@ -997,22 +998,16 @@ Use64Bit:
 
 static BL_INLINE void release_batch_fetch_data(BLRasterContextImpl* ctx_impl, RenderCommandQueue* queue) noexcept {
   while (queue) {
-    RenderCommand* command_data = queue->_data;
-    for (size_t i = 0; i < queue->_fetch_data_marks.size_in_words(); i++) {
-      BLBitWord bits = queue->_fetch_data_marks.data[i];
-      ParametrizedBitOps<BitOrder::kLSB, BLBitWord>::BitIterator it(bits);
+    // Scan every command, not only the style fetch-marked ones: a solid-style mask command retains a mask image
+    // even though it has no style RenderFetchData, so it would otherwise leak its retained image implementation.
+    for (size_t i = 0; i < queue->size(); i++) {
+      RenderCommand& command = queue->_data[i];
 
-      while (it.has_next()) {
-        size_t bit_index = it.next();
-        RenderCommand& command = command_data[bit_index];
+      if (command.retains_style_fetch_data())
+        command._source.fetch_data->release(ctx_impl);
 
-        if (command.retains_style_fetch_data())
-          command._source.fetch_data->release(ctx_impl);
-
-        if (command.retains_mask_image_data())
-          ImageInternal::release_impl<RCMode::kMaybe>(command._payload.box_mask_a.mask_image_i.ptr);
-      }
-      command_data += IntOps::bit_size_of<BLBitWord>();
+      if (command.retains_mask_image_data())
+        ImageInternal::release_impl<RCMode::kMaybe>(command.retained_mask_image_impl());
     }
     queue = queue->next();
   }
@@ -3170,7 +3165,97 @@ BL_NOINLINE BLResult fill_clipped_box_masked_a<kAsync>(
 
   return enqueue_command(ctx_impl, command, qy0, ds.fetch_data, [&](RenderCommand* command) noexcept {
     ObjectInternal::retain_impl<RCMode::kMaybe>(command->_payload.box_mask_a.mask_image_i.ptr);
+    command->add_flags(RenderCommandFlags::kRetainsMaskImageData);
   });
+}
+
+// bl::RasterEngine - ContextImpl - Internals - Fill Affine Mask
+// =============================================================
+
+// Builds the inverse-mapped, bilinearly sampled coverage for a mask positioned through the context's final
+// affine transform. The coverage lives in the provided arena and is composited through the current fill
+// pipeline, so gradients and patterns keep their own coordinate matrices untouched.
+template<RenderingMode kRM>
+static BL_NOINLINE BLResult fill_clipped_affine_mask(
+    BLRasterContextImpl* ctx_impl, DispatchInfo di, DispatchStyle ds,
+    const BLPoint& origin, const BLImageCore* mask, const BLRectI& mask_rect) noexcept {
+
+  if (mask_rect.w == 0 || mask_rect.h == 0)
+    return BL_SUCCESS;
+
+  const BLMatrix2D& final_transform = ctx_impl->final_transform();
+
+  BLMatrix2D inverse_transform;
+  BLResult invert_result = BLMatrix2D::invert(inverse_transform, final_transform);
+  if (invert_result != BL_SUCCESS)
+    return invert_result;
+
+  AffineMaskData md{};
+  md.alpha = di.alpha;
+
+  BLResult prepare_result = affine_mask_prepare(
+    final_transform, inverse_transform, origin, mask_rect,
+    ctx_impl->final_clip_box_d(), ctx_impl->final_clip_box_i(), md);
+  if (prepare_result != BL_SUCCESS)
+    return prepare_result;
+
+  // Empty selection or fully clipped out - nothing to write.
+  if (md.box.x0 >= md.box.x1 || md.box.y0 >= md.box.y1)
+    return BL_SUCCESS;
+
+  BLImageImpl* mask_impl = ImageInternal::get_impl(mask);
+  md.mask_pixels = static_cast<const uint8_t*>(mask_impl->pixel_data);
+  md.mask_stride = mask_impl->stride;
+  md.mask_x = mask_rect.x;
+  md.mask_y = mask_rect.y;
+  md.mask_w = mask_rect.w;
+  md.mask_h = mask_rect.h;
+
+  ArenaAllocator& zone = kRM == kAsync
+    ? ctx_impl->worker_mgr()._allocator
+    : ctx_impl->sync_work_data.work_zone;
+
+  size_t coverage_size = size_t(md.box.x1 - md.box.x0) * size_t(md.box.y1 - md.box.y0);
+
+  // Keep every arena allocation 8-byte aligned and sized to an 8-byte boundary. The batch allocator relies on
+  // its cursor staying aligned for later `allocNoAlignT()` calls (for example when the command queue grows).
+  constexpr size_t kArenaAlignment = 8;
+  size_t aligned_coverage_size = IntOps::align_up(coverage_size, kArenaAlignment);
+
+  AffineMaskData* md_storage = zone.allocT<AffineMaskData>(sizeof(AffineMaskData));
+  if (BL_UNLIKELY(!md_storage))
+    return bl_make_error(BL_ERROR_OUT_OF_MEMORY);
+
+  uint8_t* coverage = static_cast<uint8_t*>(zone.alloc(aligned_coverage_size, kArenaAlignment));
+  if (BL_UNLIKELY(!coverage))
+    return bl_make_error(BL_ERROR_OUT_OF_MEMORY);
+
+  md.coverage = coverage;
+  affine_mask_rasterize(md);
+  *md_storage = md;
+
+  di.add_fill_type(Pipeline::FillType::kMask);
+
+  if constexpr (kRM == kSync) {
+    Pipeline::DispatchData dispatch_data;
+    BL_PROPAGATE(ensure_fetch_and_dispatch_data(ctx_impl, di.signature, ds.fetch_data, &dispatch_data));
+    return CommandProcSync::fill_affine_mask(ctx_impl->sync_work_data, dispatch_data, *md_storage,
+                                             ds.fetch_data->get_pipeline_data());
+  }
+  else {
+    RenderCommand* command = ctx_impl->worker_mgr->current_command();
+    BL_PROPAGATE(ensure_fetch_and_dispatch_data(ctx_impl, di.signature, ds.fetch_data, command->pipe_dispatch_data()));
+
+    command->init_command(di.alpha);
+    command->init_fill_affine_mask(md_storage, mask);
+
+    uint8_t qy0 = uint8_t(md.box.y0 >> ctx_impl->command_quantization_shift_aa());
+
+    return enqueue_command(ctx_impl, command, qy0, ds.fetch_data, [&](RenderCommand* command) noexcept {
+      ObjectInternal::retain_impl<RCMode::kMaybe>(command->_payload.affine_mask.mask_image_i.ptr);
+      command->add_flags(RenderCommandFlags::kRetainsMaskImageData);
+    });
+  }
 }
 
 // bl::RasterEngine - ContextImpl - Internals - Stroke Unclipped Path
@@ -3592,6 +3677,9 @@ static BLResult BL_CDECL fill_text_op_i_ext_impl(BLContextImpl* base_impl, const
 
 template<RenderingMode kRM>
 static BL_INLINE BLResult fill_unclipped_mask_d(BLRasterContextImpl* ctx_impl, DispatchInfo di, DispatchStyle ds, BLPoint dst, const BLImageCore* mask, BLRectI mask_rect) noexcept {
+  // The affine fallback needs the unmodified selection, whereas the aligned path below clips its own copy.
+  const BLRectI original_mask_rect = mask_rect;
+
   if (ctx_impl->final_transform_type() <= BL_TRANSFORM_TYPE_TRANSLATE) {
     double startX = dst.x * ctx_impl->final_transform_fixed().m00 + ctx_impl->final_transform_fixed().m20;
     double startY = dst.y * ctx_impl->final_transform_fixed().m11 + ctx_impl->final_transform_fixed().m21;
@@ -3625,54 +3713,16 @@ static BL_INLINE BLResult fill_unclipped_mask_d(BLRasterContextImpl* ctx_impl, D
       mask_rect.w = x1 - x0;
       mask_rect.h = y1 - y0;
 
-      // Pixel aligned fill with a pixel aligned mask.
+      // Pixel aligned fill with a pixel aligned mask - kept as the exact legacy synchronous byte path.
       if (isBoxAligned24x8(dst_box_u)) {
         return fill_clipped_box_masked_a<kRM>(ctx_impl, di, ds, BLBoxI(x0, y0, x1, y1), mask, BLPointI(mask_rect.x, mask_rect.y));
       }
-
-      // TODO: [Rendering Context] Masking support.
-      /*
-      BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-      serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-      if (!serializer.mask_fetch_data()->setup_pattern_blit(x0, y0))
-        return BL_SUCCESS;
-      */
-    }
-    else {
-      // TODO: [Rendering Context] Masking support.
-      /*
-      BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-      serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-      if (!serializer.mask_fetch_data()->setup_pattern_fx_fy(BL_RASTER_CONTEXT_PREFERRED_BLIT_EXTEND, ctx_impl->hints().pattern_quality, start_fx, start_fy))
-        return BL_SUCCESS;
-      */
-    }
-
-    /*
-    return fill_clipped_box_u<RenderCommandSerializerFlags::kMask>(ctx_impl, serializer, dst_box_u);
-    */
-  }
-
-  return bl_make_error(BL_ERROR_NOT_IMPLEMENTED);
-
-  // TODO: [Rendering Context] Masking support.
-  /*
-  else {
-    BLMatrix2D m(ctx_impl->final_transform());
-    m.translate(dst.x, dst.y);
-
-    BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-    serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-    if (!serializer.mask_fetch_data()->setup_pattern_affine(BL_RASTER_CONTEXT_PREFERRED_BLIT_EXTEND, ctx_impl->hints().pattern_quality, m)) {
-      serializer.rollback_fetch_data(ctx_impl);
-      return BL_SUCCESS;
     }
   }
 
-  BLBox final_box(dst.x, dst.y, dst.x + double(mask_rect.w), dst.y + double(mask_rect.h));
-  return bl_raster_context_impl_finalize_blit(ctx_impl, serializer,
-         fill_unclipped_box<RenderCommandSerializerFlags::kMask>(ctx_impl, serializer, final_box));
-  */
+  // Fractional origin, reflection, shear, non-uniform scale, or rotation - sample the mask through the
+  // final affine transform with bilinear interpolation.
+  return fill_clipped_affine_mask<kRM>(ctx_impl, di, ds, dst, mask, original_mask_rect);
 }
 
 template<RenderingMode kRM>

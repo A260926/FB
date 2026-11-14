@@ -7,6 +7,7 @@
 #define BLEND2D_RASTER_RENDERCOMMANDPROCASYNC_P_H_INCLUDED
 
 #include <blend2d/raster/edgebuilder_p.h>
+#include <blend2d/raster/affinemask_p.h>
 #include <blend2d/raster/renderbatch_p.h>
 #include <blend2d/raster/rendercommandprocsync_p.h>
 #include <blend2d/raster/workdata_p.h>
@@ -213,7 +214,8 @@ static CommandStatus fillBoxMaskA(ProcData& proc_data, const RenderCommand& comm
     const uint8_t* mask_data = (static_cast<const uint8_t*>(mask_impl->pixel_data) + intptr_t(maskY) * mask_impl->stride) + maskX * (mask_impl->depth / 8u);
 
     Pipeline::MaskCommand mask_commands[2];
-    Pipeline::MaskCommandType vMaskCmd = command.alpha() >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithoutGA : Pipeline::MaskCommandType::kVMaskA8WithGA;
+    // Must match the synchronous path - when global alpha is below 255 the pipeline has to multiply the mask.
+    Pipeline::MaskCommandType vMaskCmd = command.alpha() >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithGA : Pipeline::MaskCommandType::kVMaskA8WithoutGA;
 
     mask_commands[0].init_vmask(vMaskCmd, uint32_t(box_i.x0), uint32_t(box_i.x1), mask_data, mask_impl->stride);
     mask_commands[1].init_repeat();
@@ -230,6 +232,28 @@ static CommandStatus fillBoxMaskA(ProcData& proc_data, const RenderCommand& comm
     }
     else {
       // TODO:
+    }
+  }
+
+  return CommandStatus(box_i.y1 <= int(proc_data.bandY1()));
+}
+
+static CommandStatus fillAffineMask(ProcData& proc_data, const RenderCommand& command) noexcept {
+  const AffineMaskData& md = *command._payload.affine_mask.affine_mask_data.ptr;
+  const BLBoxI& box_i = md.box;
+
+  int y0 = bl_max(box_i.y0, int(proc_data.bandY0()));
+  int y1 = bl_min(box_i.y1, int(proc_data.bandY1()));
+
+  if (y0 < y1) {
+    Pipeline::FillFunc fill_func = command.pipe_dispatch_data()->fill_func;
+    const void* fetch_data = command.get_pipe_fetch_data();
+
+    if (fill_func) {
+      BLResult result = affine_mask_composite_rows(proc_data.work_data()->ctx_data, *command.pipe_dispatch_data(),
+                                                   fetch_data, md, y0, y1);
+      if (result != BL_SUCCESS)
+        proc_data.work_data()->accumulate_error(result);
     }
   }
 
@@ -482,6 +506,9 @@ static CommandStatus process_command(ProcData& proc_data, const RenderCommand& c
 
     case RenderCommandType::kFillBoxMaskA:
       return fillBoxMaskA(proc_data, command);
+
+    case RenderCommandType::kFillAffineMask:
+      return fillAffineMask(proc_data, command);
 
     default:
       return CommandStatus::kDone;

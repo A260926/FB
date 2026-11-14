@@ -89,6 +89,38 @@ Bindings
 
   * [Download Page](https://blend2d.com/download.html#Bindings) provides a list of Blend2D bindings
 
+Transformed Mask Fills (`fill_mask`)
+------------------------------------
+
+`BLContext::fill_mask()` paints an A8 coverage mask through the current fill style. In addition to the legacy
+pixel-aligned fast path, masks can now be positioned through the context's full final affine transform:
+fractional origins, rotation/reflection, shear and non-uniform scale are all supported on PRGB32 targets.
+
+Key semantics:
+
+  * **Selection origin.** When a `mask_area` is supplied, the `origin` argument maps the **top-left corner of the
+    selected rectangle**, not the `(0, 0)` corner of the whole mask image. Pixels outside the selection are treated
+    as zero coverage; non-zero pixels adjacent to the selection are never read.
+  * **Transparent boundary.** Coverage is computed per device-pixel center by inverting the final transform and
+    bilinearly interpolating the A8 source, whose pixel centers sit at half-integer coordinates
+    (`i + 0.5`, `j + 0.5`). The interpolation footprint is allowed to cross the selection boundary: taps outside
+    contribute zero, the edge is never clamped, and the last valid pixel is not repeated or implicitly extended.
+  * **Two independent coordinate spaces.** The mask follows `origin` and the context transform, while a gradient or
+    pattern keeps its own matrix combined with the context transform. The mask origin / `mask_area` offset is never
+    added to the brush.
+  * **Coverage and compositing.** Global alpha and fill alpha continue to apply and are folded into the coverage a
+    single time. `SRC_OVER` and `SRC_COPY` are supported; under partial coverage `SRC_COPY` interpolates between the
+    old destination and the source instead of erasing the rest of the target.
+  * **Asynchronous ownership.** On an asynchronous context the queued command retains the mask image implementation
+    and all required style data. After a call returns you may release the source `BLImage`, mutate a shared image
+    (which triggers copy-on-write), replace the brush, or change the transform; the pixels produced after `flush()`
+    correspond to the source content and state captured at call time. No target-sized temporary image or forced
+    flush is used, and asynchronous contexts are never silently switched to synchronous execution.
+
+A self-contained demo that procedurally builds an A8 mask and writes a PPM image lives in
+[`examples/affine_mask.cpp`](./examples/affine_mask.cpp). The task test suite in `task_tests/target.cpp`
+(groups `sampling`, `styles`, `deferred`, `compatibility`) is built and run by `task_support/target.sh`.
+
 License
 -------
 

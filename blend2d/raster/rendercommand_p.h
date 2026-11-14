@@ -21,6 +21,7 @@
 namespace bl::RasterEngine {
 
 struct RenderFetchData;
+struct AffineMaskData;
 
 //! Source data that belongs to a \ref RenderCommand, but stored separately.
 union RenderCommandSource {
@@ -41,7 +42,8 @@ enum class RenderCommandType : uint8_t {
   kFillBoxA = 1,
   kFillBoxU = 2,
   kFillAnalytic = 3,
-  kFillBoxMaskA = 4
+  kFillBoxMaskA = 4,
+  kFillAffineMask = 5
 };
 
 //! Raster command flags.
@@ -110,6 +112,15 @@ struct RenderCommand {
     BLBoxI box_i;
   };
 
+  //! FillAffineMask payload - mask sampled through the context's final affine transform.
+  //!
+  //! The command retains `mask_image_i`, which is released during batch finalization, and points to
+  //! `affine_mask_data` that holds the rasterized coverage and all sampling parameters.
+  struct FillAffineMask {
+    Ptr64<AffineMaskData> affine_mask_data;
+    Ptr64<BLImageImpl> mask_image_i;
+  };
+
   //! FillAnalytic and FillMaskAnalytic payload, used by the asynchronous rendering context implementation.
   struct FillAnalytic {
     //! Fetch data used by mask `kTypeFillMaskAnalytic` command types.
@@ -132,6 +143,8 @@ struct RenderCommand {
     FillBox box;
     //! Payload used by FillBoxAMaskA.
     FillBoxMaskA box_mask_a;
+    //! Payload used by FillAffineMask.
+    FillAffineMask affine_mask;
     //! Payload used by FillAnalytic in case of asynchronous rendering.
     FillAnalytic analytic;
 
@@ -145,6 +158,7 @@ struct RenderCommand {
   BL_STATIC_ASSERT(sizeof(Payload) == kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillBox) == kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillBoxMaskA) <= kPayloadDataSize);
+  BL_STATIC_ASSERT(sizeof(FillAffineMask) <= kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillAnalytic) <= kPayloadDataSize);
 
   //! \}
@@ -215,6 +229,12 @@ struct RenderCommand {
     _type = RenderCommandType::kFillBoxMaskA;
   }
 
+  BL_INLINE void init_fill_affine_mask(AffineMaskData* affine_mask_data, const BLImageCore* mask_image) noexcept {
+    _payload.affine_mask.affine_mask_data.ptr = affine_mask_data;
+    _payload.affine_mask.mask_image_i.ptr = ImageInternal::get_impl(mask_image);
+    _type = RenderCommandType::kFillAffineMask;
+  }
+
   //! Sets edges of FillAnalytic or FillMaskAnalytic command.
   BL_INLINE void set_analytic_edges(EdgeStorage<int>* edge_storage) noexcept {
     _payload.analytic.edges.ptr = edge_storage->flatten_edge_links();
@@ -243,6 +263,7 @@ struct RenderCommand {
   BL_INLINE_NODEBUG bool is_fill_box_u() const noexcept { return _type == RenderCommandType::kFillBoxU; }
   BL_INLINE_NODEBUG bool is_fill_analytic() const noexcept { return _type == RenderCommandType::kFillAnalytic; }
   BL_INLINE_NODEBUG bool is_fill_box_mask_a() const noexcept { return _type == RenderCommandType::kFillBoxMaskA; }
+  BL_INLINE_NODEBUG bool is_fill_affine_mask() const noexcept { return _type == RenderCommandType::kFillAffineMask; }
 
   BL_INLINE_NODEBUG RenderCommandFlags flags() const noexcept { return RenderCommandFlags(_flags); }
   BL_INLINE_NODEBUG bool has_flag(RenderCommandFlags flag) const noexcept { return uint32_t(_flags & flag) != 0; }
@@ -253,6 +274,13 @@ struct RenderCommand {
   BL_INLINE_NODEBUG bool retains_mask() const noexcept { return has_flag(RenderCommandFlags::kRetainsMaskImageData | RenderCommandFlags::kRetainsMaskFetchData); }
   BL_INLINE_NODEBUG bool retains_mask_image_data() const noexcept { return has_flag(RenderCommandFlags::kRetainsMaskImageData); }
   BL_INLINE_NODEBUG bool retains_mask_fetch_data() const noexcept { return has_flag(RenderCommandFlags::kRetainsMaskFetchData); }
+
+  //! Returns the mask image impl retained by either an aligned or affine mask command.
+  BL_INLINE BLImageImpl* retained_mask_image_impl() const noexcept {
+    return _type == RenderCommandType::kFillAffineMask
+      ? _payload.affine_mask.mask_image_i.ptr
+      : _payload.box_mask_a.mask_image_i.ptr;
+  }
 
   BL_INLINE_NODEBUG uint32_t alpha() const noexcept { return _alpha; }
   BL_INLINE_NODEBUG const BLBoxI& box_i() const noexcept { return _payload.box.box_i; }
