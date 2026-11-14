@@ -57,6 +57,10 @@ namespace acl
 			return uint32_t(request_id.value >> 32);
 		}
 
+		// Implemented in database_read_state.impl.h (included at the bottom of this file). Routes
+		// completion/cancellation through the read-scope residency protocol.
+		bool handle_streamer_completion(database_context_v0& context, const streaming_request& request, bool success);
+
 		inline void execute_request(bool success, database_context_v0& context, const streaming_request& request)
 		{
 			const quality_tier tier = request.tier;
@@ -165,9 +169,11 @@ namespace acl
 		if (request.generation_id != generation_id)
 			return;
 
-		acl_impl::execute_request(true, *m_context, request);
+		// With read scopes, the effect may have to wait until every active reader releases.
+		acl_impl::handle_streamer_completion(*m_context, request, true);
 
-		// Mark our request as invalid
+		// Mark our request as invalid. The streamer request slot can be recycled as soon as
+		// complete() returns; any held publication keeps its own copy of the request details.
 		request.reset();
 	}
 
@@ -189,7 +195,8 @@ namespace acl
 		if (request.generation_id != generation_id)
 			return;
 
-		acl_impl::execute_request(false, *m_context, request);
+		// Cancellation follows the same publication rules as completion.
+		acl_impl::handle_streamer_completion(*m_context, request, false);
 
 		// Mark our request as invalid
 		request.reset();
@@ -228,3 +235,7 @@ namespace acl
 }
 
 ACL_IMPL_FILE_PRAGMA_POP
+
+// Read scope protocol implementation. Included outside the namespace blocks because it opens
+// its own namespaces and relies on execute_request() plus the declarations defined above.
+#include "acl/decompression/database/impl/database_read_state.impl.h"

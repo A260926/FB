@@ -1,0 +1,14 @@
+CASE residency defers_full_eviction checks=48
+CASE residency partial_chunk_requests checks=14
+CASE residency scope_is_movable checks=9
+GROUP residency cases=3 checks=71 COMPLETE
+CASE publication async_completion_held checks=12
+CASE publication cancel_follows_old_rules checks=11
+CASE publication synchronous_reentrant_completion checks=11
+CASE publication gate_reopens_after_commit checks=6
+GROUP publication cases=4 checks=40 COMPLETE
+CASE threads two_readers_release_in_order checks=43
+CASE threads acquire_eviction_handshake checks=256
+CASE threads async_completion_races_release checks=9
+GROUP threads cases=3 checks=308 COMPLETE
+TARGET_COMPLETE cases=10

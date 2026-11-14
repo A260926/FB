@@ -31,6 +31,7 @@
 #include "acl/core/iallocator.h"
 #include "acl/core/impl/compiler_utils.h"
 #include "acl/decompression/database/database_settings.h"
+#include "acl/decompression/database/database_read_scope.h"
 #include "acl/decompression/database/database_streamer.h"
 #include "acl/decompression/database/impl/database_context.h"
 
@@ -54,6 +55,12 @@ namespace acl
 		//////////////////////////////////////////////////////////////////////////
 		// The streaming request has been dispatched
 		dispatched,
+
+		//////////////////////////////////////////////////////////////////////////
+		// The stream out request could not run because read scopes are currently
+		// pinning the residency snapshot. The request has been recorded and it will
+		// run automatically once the last read scope is released.
+		deferred,
 
 		//////////////////////////////////////////////////////////////////////////
 		// The streaming request has been ignored because streaming is already in progress
@@ -154,6 +161,22 @@ namespace acl
 		//////////////////////////////////////////////////////////////////////////
 		// Returns whether or not a streaming request is in flight for the specified tier (medium or low).
 		bool is_streaming(quality_tier tier) const;
+
+		//////////////////////////////////////////////////////////////////////////
+		// Attempts to acquire a read scope pinning the current residency snapshot.
+		//
+		// While a scope is held, streamed in publications and streamed out evictions cannot
+		// change the resident sample set or free the backing bulk data. A stream out requested
+		// while scopes are active returns database_stream_request_result::deferred and runs once
+		// the last scope is released. As soon as any publication or eviction is pending, further
+		// acquisitions fail (the returned scope is invalid) until every pending operation has
+		// committed; they never block the calling thread.
+		//
+		// Multiple threads may each hold their own scope, typically one per decompression context.
+		// Each decompression context must still be used by a single thread at a time.
+		// Contexts initialized without streamers (fully inline bulk data) support scopes too,
+		// but nothing can be deferred since there is nothing to stream.
+		database_read_scope try_acquire_read();
 
 		//////////////////////////////////////////////////////////////////////////
 		// Issues a stream in request and returns the current status for the specified tier (medium or low).

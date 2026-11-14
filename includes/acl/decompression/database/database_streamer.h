@@ -27,6 +27,7 @@
 #include "acl/version.h"
 #include "acl/core/quality_tiers.h"
 #include "acl/core/impl/compiler_utils.h"
+#include "acl/decompression/database/impl/database_streamer_types.h"
 
 #include <cstdint>
 
@@ -40,46 +41,6 @@ namespace acl
 	{
 		struct database_context_v0;
 	}
-
-	//////////////////////////////////////////////////////////////////////////
-	// Enum representing a streaming action
-	//////////////////////////////////////////////////////////////////////////
-	enum class streaming_action
-	{
-		stream_in,
-		stream_out,
-	};
-
-	//////////////////////////////////////////////////////////////////////////
-	// A streaming request
-	//////////////////////////////////////////////////////////////////////////
-	struct streaming_request
-	{
-		streaming_action		action = streaming_action::stream_in;
-		quality_tier			tier = quality_tier::highest_importance;	// Marks the request as invalid since we never stream the highest tier
-		uint32_t				first_chunk_index = 0;
-		uint32_t				num_streaming_chunks = 0;
-		uint32_t				generation_id = 0;
-
-		bool is_valid() const { return tier != quality_tier::highest_importance; }
-		void reset() { tier = quality_tier::highest_importance; }
-	};
-
-	//////////////////////////////////////////////////////////////////////////
-	// A streaming request ID
-	//
-	// The internal value is an implementation detail.
-	//////////////////////////////////////////////////////////////////////////
-	struct streaming_request_id
-	{
-		// Opaque value
-		uint64_t value;
-
-		bool is_valid() const { return value != ~0ULL; }
-	};
-
-	// An invalid streaming request ID
-	constexpr streaming_request_id k_invalid_streamer_request_id = { ~0ULL };
 
 	////////////////////////////////////////////////////////////////////////////////
 	// The base class for database streamers.

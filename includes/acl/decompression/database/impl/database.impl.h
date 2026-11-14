@@ -35,6 +35,7 @@
 #include "acl/decompression/database/impl/database_context.h"
 
 #include <cstdint>
+#include <mutex>
 
 ACL_IMPL_FILE_PRAGMA_PUSH
 
@@ -154,6 +155,10 @@ namespace acl
 			acl_impl::database_runtime_clip_header* clip_header = clip_metadata.get_clip_header(m_context.clip_segment_headers);
 			clip_header->clip_hash = clip_metadata.clip_hash;
 		}
+
+		// Allocate the read-scope bookkeeping up front so acquiring a scope never races on its creation.
+		// Initialization is single threaded by contract.
+		m_context.read_state = acl_impl::create_read_state(m_context, allocator);
 
 		// Bulk data is inline so stream everything in right away
 		const acl_impl::database_chunk_description* chunk_descriptions = header.get_chunk_descriptions_medium();
@@ -284,6 +289,10 @@ namespace acl
 			clip_header->clip_hash = clip_metadata.clip_hash;
 		}
 
+		// Allocate the read-scope bookkeeping up front so acquiring a scope never races on its creation.
+		// Initialization is single threaded by contract.
+		m_context.read_state = acl_impl::create_read_state(m_context, allocator);
+
 		return true;
 	}
 
@@ -298,12 +307,37 @@ namespace acl
 
 		ACL_ASSERT(!is_streaming(quality_tier::medium_importance), "Behavior is undefined if context is reset while streaming is in progress");
 		ACL_ASSERT(!is_streaming(quality_tier::lowest_importance), "Behavior is undefined if context is reset while streaming is in progress");
+		ACL_ASSERT(!acl_impl::has_active_readers(m_context), "Behavior is undefined if context is reset while a read scope is held");
+		bool has_pending_operation = false;
+		{
+			// No deferred or in-flight operation may survive a reset; the caller must let every
+			// request finish (including any completion held by a read scope) before resetting.
+			std::lock_guard<std::mutex> guard(m_context.read_state->lock);
+			for (const acl_impl::database_deferred_operation& operation : m_context.read_state->operations)
+				has_pending_operation = has_pending_operation || operation.is_used();
+		}
+		ACL_ASSERT(!has_pending_operation, "Behavior is undefined if context is reset while a streaming request is pending");
+		(void)has_pending_operation;
+
+		// Tear down the read-scope bookkeeping first. The caller guarantees that every reader and
+		// every streaming request has finished by this point.
+		acl_impl::destroy_read_state(m_context);
 
 		const uint32_t runtime_data_size = acl_impl::calculate_runtime_data_size(*m_context.db);
 		deallocate_type_array(*m_context.allocator, acl_impl::bit_cast<uint8_t*>(m_context.loaded_chunks[0]), runtime_data_size);
 
 		// Just reset the DB pointer, this will mark us as no longer initialized indicating everything is stale
 		m_context.db = nullptr;
+	}
+
+	template<class database_settings_type>
+	inline database_read_scope database_context<database_settings_type>::try_acquire_read()
+	{
+		if (!is_initialized())
+			return database_read_scope();	// Invalid scope
+
+		acl_impl::database_read_state* state = acl_impl::acquire_read(m_context);
+		return database_read_scope(state);
 	}
 
 	template<class database_settings_type>
@@ -451,9 +485,6 @@ namespace acl
 		if (tier == quality_tier::highest_importance)
 			return database_stream_request_result::invalid_database_tier;
 
-		if (is_streaming(tier))
-			return database_stream_request_result::streaming_in_progress;	// Can't stream while we are streaming
-
 		const acl_impl::database_header& header = acl_impl::get_database_header(*m_context.db);
 		const acl_impl::database_chunk_description* chunk_descriptions = tier == quality_tier::medium_importance ? header.get_chunk_descriptions_medium() : header.get_chunk_descriptions_low();
 
@@ -463,21 +494,33 @@ namespace acl
 		const bitset_description desc = bitset_description::make_from_num_bits(num_chunks);
 		const uint32_t max_chunk_size = header.max_chunk_size;
 
+		database_streamer* streamer = m_context.streamers[tier_index];
+
+		// Every residency decision and bookkeeping mutation is serialized. The lock is released only
+		// across the user streamer call so a reentrant complete()/cancel() can re-acquire it.
+		std::unique_lock<std::mutex> read_lock(m_context.read_state->lock);
+
+		if (is_streaming(tier))
+			return database_stream_request_result::streaming_in_progress;	// Can't stream while we are streaming
+
 		uint32_t first_chunk_index = ~0U;
 
 		// Clamp the total number of chunks we can stream
 		num_chunks_to_stream = std::min<uint32_t>(num_chunks_to_stream, num_chunks);
 
-		// Look for chunks that aren't loaded yet and aren't streaming yet
+		// Look for chunks that aren't loaded yet and aren't streaming yet. Chunk index i maps to
+		// bit (31 - i), so the first unloaded chunk is the count of consecutive set bits starting
+		// at the most significant bit. Counting leading zeros of the inverted word handles holes
+		// left by a partial stream out; a fully loaded word inverts to zero and is skipped.
 		const uint32_t num_entries = desc.get_size();
 		const uint32_t* loaded_chunks = m_context.loaded_chunks[tier_index];
 		for (uint32_t entry_index = 0; entry_index < num_entries; ++entry_index)
 		{
 			const uint32_t maybe_loaded = loaded_chunks[entry_index];
-			const uint32_t num_pending_chunks = count_trailing_zeros(maybe_loaded);
-			if (num_pending_chunks != 0)
+			const uint32_t num_loaded_prefix_chunks = count_leading_zeros(~maybe_loaded);
+			if (num_loaded_prefix_chunks != 32)
 			{
-				first_chunk_index = (entry_index * 32) + (32 - num_pending_chunks);
+				first_chunk_index = (entry_index * 32) + num_loaded_prefix_chunks;
 				break;
 			}
 		}
@@ -494,8 +537,6 @@ namespace acl
 
 		if (num_streaming_chunks == 0)
 			return database_stream_request_result::done;	// Nothing more to stream
-
-		database_streamer* streamer = m_context.streamers[tier_index];
 
 		const streaming_request_id request_id = streamer->build_request(streaming_action::stream_in, tier, first_chunk_index, num_streaming_chunks);
 		if (!request_id.is_valid())
@@ -516,6 +557,12 @@ namespace acl
 		uint32_t* streaming_chunks = m_context.streaming_chunks[tier_index];
 		bitset_set_range(streaming_chunks, desc, first_chunk_index, num_streaming_chunks, true);
 
+		// Record the request so a completion arriving on another thread is held while readers are active.
+		acl_impl::register_dispatched_operation_locked(m_context, streaming_action::stream_in, tier,
+			first_chunk_index, num_streaming_chunks, request_id, stream_start_offset, stream_size, can_allocate_bulk_data);
+
+		read_lock.unlock();
+
 		// Fire the stream in request and let the streamer handle it (sync/async)
 		streamer->stream_in(stream_start_offset, stream_size, can_allocate_bulk_data, tier, request_id);
 
@@ -533,9 +580,6 @@ namespace acl
 		if (tier == quality_tier::highest_importance)
 			return database_stream_request_result::invalid_database_tier;
 
-		if (is_streaming(tier))
-			return database_stream_request_result::streaming_in_progress;	// Can't stream while we are streaming
-
 		const acl_impl::database_header& header = acl_impl::get_database_header(*m_context.db);
 		const acl_impl::database_chunk_description* chunk_descriptions = tier == quality_tier::medium_importance ? header.get_chunk_descriptions_medium() : header.get_chunk_descriptions_low();
 
@@ -544,6 +588,15 @@ namespace acl
 		const uint32_t num_chunks = header.num_chunks[tier_index];
 		const bitset_description desc = bitset_description::make_from_num_bits(num_chunks);
 		const uint32_t max_chunk_size = header.max_chunk_size;
+
+		database_streamer* streamer = m_context.streamers[tier_index];
+
+		// Every residency decision and bookkeeping mutation is serialized. The lock is released only
+		// across the user streamer call so a reentrant complete()/cancel() can re-acquire it.
+		std::unique_lock<std::mutex> read_lock(m_context.read_state->lock);
+
+		if (is_streaming(tier))
+			return database_stream_request_result::streaming_in_progress;	// Can't stream while we are streaming
 
 		// Clamp the total number of chunks we can stream
 		num_chunks_to_stream = std::min<uint32_t>(num_chunks_to_stream, num_chunks);
@@ -577,8 +630,6 @@ namespace acl
 		if (num_streaming_chunks == 0)
 			return database_stream_request_result::done;	// Nothing more to stream
 
-		database_streamer* streamer = m_context.streamers[tier_index];
-
 		const streaming_request_id request_id = streamer->build_request(streaming_action::stream_out, tier, first_chunk_index, num_streaming_chunks);
 		if (!request_id.is_valid())
 			return database_stream_request_result::no_free_streaming_requests;
@@ -590,45 +641,41 @@ namespace acl
 		const acl_impl::database_chunk_description& last_chunk_description = chunk_descriptions[last_chunk_index];
 		const uint32_t stream_size = ((num_streaming_chunks - 1) * max_chunk_size) + last_chunk_description.size;
 
-		// Mark chunks as in-streaming
-		uint32_t* streaming_chunks = m_context.streaming_chunks[tier_index];
-		bitset_set_range(streaming_chunks, desc, first_chunk_index, num_streaming_chunks, true);
-
-		const uint8_t*& bulk_data_ref = m_context.bulk_data[tier_index];
-		const uint8_t* bulk_data = bulk_data_ref;
-		ACL_ASSERT(bulk_data != nullptr, "Bulk data should be allocated when we stream out");
-
 		// We can deallocate our bulk data if we are streaming out the last chunks
 		const uint32_t num_loaded_chunks = bitset_count_set_bits(loaded_chunks, desc);
 		const bool can_deallocate_bulk_data = num_streaming_chunks == num_loaded_chunks;
-		if (can_deallocate_bulk_data)
-			bulk_data_ref = nullptr;
 
-		// Unregister our chunks
-		const uint32_t end_chunk_index = first_chunk_index + num_streaming_chunks;
-		for (uint32_t chunk_index = first_chunk_index; chunk_index < end_chunk_index; ++chunk_index)
+		// Mark chunks as in-streaming right away so repeated requests keep returning
+		// streaming_in_progress, whether or not the actual eviction has to wait for readers.
+		uint32_t* streaming_chunks = m_context.streaming_chunks[tier_index];
+		bitset_set_range(streaming_chunks, desc, first_chunk_index, num_streaming_chunks, true);
+
+		if (acl_impl::should_defer_stream_out_locked(*m_context.read_state))
 		{
-			const acl_impl::database_chunk_description& chunk_description = chunk_descriptions[chunk_index];
-			const acl_impl::database_chunk_header* chunk_header = chunk_description.get_chunk_header(bulk_data);
-			ACL_ASSERT(chunk_header->index == chunk_index, "Unexpected chunk index");
-
-			const acl_impl::database_chunk_segment_header* chunk_segment_headers = chunk_header->get_segment_headers();
-			const uint32_t num_segments = chunk_header->num_segments;
-			for (uint32_t segment_index = 0; segment_index < num_segments; ++segment_index)
+			// Readers are pinning this residency snapshot. Record the request without touching the
+			// segment headers, the chunks, or the bulk data. The last reader dispatches it.
+			const bool queued = acl_impl::defer_stream_out_locked(m_context, tier, first_chunk_index, num_streaming_chunks,
+				request_id, stream_start_offset, stream_size, can_deallocate_bulk_data);
+			ACL_ASSERT(queued, "Failed to queue a deferred stream out request");
+			if (!queued)
 			{
-				const acl_impl::database_chunk_segment_header& chunk_segment_header = chunk_segment_headers[segment_index];
-
-#if defined(ACL_HAS_ASSERT_CHECKS)
-				const acl_impl::database_runtime_clip_header* clip_header = chunk_segment_header.get_clip_header(m_context.clip_segment_headers);
-				ACL_ASSERT(clip_header->clip_hash == chunk_segment_header.clip_hash, "Unexpected clip hash");
-#endif
-
-				acl_impl::database_runtime_segment_header* segment_header = chunk_segment_header.get_segment_header(m_context.clip_segment_headers);
-				const uint64_t tier_metadata = (uint64_t(chunk_segment_header.samples_offset) << 32) | chunk_segment_header.sample_indices;
-				ACL_ASSERT(segment_header->tier_metadata[tier_index].load(acl_impl::k_memory_order_relaxed) == tier_metadata, "Database tier metadata should have been initialized"); (void)tier_metadata;
-				segment_header->tier_metadata[tier_index].store(0, acl_impl::k_memory_order_relaxed);
+				// Should never happen: roll back the in-streaming bits and report we ran out of requests.
+				bitset_set_range(streaming_chunks, desc, first_chunk_index, num_streaming_chunks, false);
+				return database_stream_request_result::no_free_streaming_requests;
 			}
+
+			return database_stream_request_result::deferred;
 		}
+
+		// No reader is active: tear down the residency snapshot now, while still holding the lock.
+		acl_impl::tear_down_streamed_out_chunks_locked(m_context, tier, first_chunk_index,
+			num_streaming_chunks, can_deallocate_bulk_data);
+
+		// Track the request so a completion arriving from another thread follows the publication rules.
+		acl_impl::register_dispatched_operation_locked(m_context, streaming_action::stream_out, tier,
+			first_chunk_index, num_streaming_chunks, request_id, stream_start_offset, stream_size, false);
+
+		read_lock.unlock();
 
 		// Fire the stream out request and let the streamer handle it (sync/async)
 		streamer->stream_out(stream_start_offset, stream_size, can_deallocate_bulk_data, tier, request_id);

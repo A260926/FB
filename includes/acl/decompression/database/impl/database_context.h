@@ -43,6 +43,8 @@ namespace acl
 
 	namespace acl_impl
 	{
+		struct database_read_state;	// Defined in database_read_state.h
+
 		// TODO: If we need to make the context smaller, we can use offsets for the bitsets instead of pointers
 		// from the clip_segment_headers base pointer. The bitsets also follow linearly in memory, we could store only
 		// one offset for the base, and index with the tier * desc.size
@@ -71,7 +73,11 @@ namespace acl
 			// Cached hash of the bound database instance
 			uint32_t db_hash = 0;												//  44 |  88
 
-			uint8_t padding1[sizeof(void*) == 4 ? 16 : 36] = { 0 };				//  48 |  92
+			// Lazily allocated read-scope bookkeeping, null until the first read scope
+			// is acquired. Lives in the padding to preserve the context size.
+			database_read_state* read_state = nullptr;							//  48 |  96
+
+			uint8_t padding1[sizeof(void*) == 4 ? 12 : 24] = { 0 };				//  52 | 104
 
 			//														Total size:	    64 | 128
 

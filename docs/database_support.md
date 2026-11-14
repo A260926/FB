@@ -68,3 +68,53 @@ The rest of the decompression code remains unchanged.
 It is safe to stream in data while decompression is in progress. Doing so it thread safe. However, only a single stream in/out request can be in flight at a time and streaming out cannot be done while decompression is in progress.
 
 Once a streamer finishes a read request (e.g. file IO), it can complete the stream request from any thread.
+
+## Read scopes and concurrent eviction
+
+The default contract above assumes the host coordinates its threads externally: an animation thread may decompress while a streaming thread streams data in, but a stream out request is only legal once no decompression is touching the database. When that coordination is inconvenient, a read scope can pin a residency snapshot instead.
+
+`database_context::try_acquire_read()` returns a movable, non-copyable RAII handle of type `acl::database_read_scope`. While at least one scope is held on a database:
+
+- The resident set of samples and the bulk bytes backing them stay valid for every decompression performed through the scope. Repeated `seek(..)`, `decompress_tracks(..)`, and `decompress_track(..)` calls never observe a layer that finished streaming in after the scope was acquired.
+- A `stream_out(..)` request does not run. It returns `database_stream_request_result::deferred` without touching segment headers, overwriting chunks, or freeing bulk data, and it is executed automatically once the last scope is released.
+- A `stream_in(..)` request can still be dispatched. If its `complete(..)` notification arrives while scopes are active, the completion record is held and the segment headers are only published once the last scope is released. `cancel(..)` follows the same rules.
+- New acquisitions fail immediately with an invalid scope as soon as any publication or eviction is pending. Acquisition never blocks; once every pending operation commits, the database reopens and `try_acquire_read()` succeeds again.
+
+Acquisition therefore uses a gate rather than a lock held for the whole read: the streaming thread is never blocked waiting for a reader, and the internal bookkeeping mutex is never held while calling into a user streamer (which may reentrantly call `complete(..)` or `cancel(..)`).
+
+### Object and thread lifetimes
+
+- Multiple threads may read the same database concurrently. Each thread uses its own `decompression_context`; a single decompression context is still only ever used by one thread at a time. Every thread acquires its own read scope on the shared `database_context`.
+- The compressed database, its streamers, and the `database_context` must outlive every read scope and every decompression using them.
+- Asynchronous IO may still be in flight when the last scope is released; releasing a scope does not wait for IO. The deferred work commits when its completion eventually arrives.
+- `reset(..)`, `relocated(..)`, and destruction remain the caller's responsibility: they must only run after every read scope has been released and every streaming request has finished.
+- Calls made without ever acquiring a scope keep the original synchronous behavior unchanged. The compressed animation and database binary formats are unchanged.
+
+### Example
+
+```c++
+acl::database_context<acl::default_database_settings> database_context;
+database_context.initialize(allocator, database, medium_streamer, low_streamer);
+
+// On the animation thread: pin the snapshot, then sample as many times as needed,
+// even while the streaming thread asks for evictions.
+acl::database_read_scope read = database_context.try_acquire_read();
+if (!read.is_valid())
+{
+	// A publication or eviction is already pending; retry later or skip this frame.
+}
+else
+{
+	decompression_context.seek(sample_time, acl::sample_rounding_policy::none);
+	decompression_context.decompress_tracks(writer);
+
+	decompression_context.seek(other_sample_time, acl::sample_rounding_policy::none);
+	decompression_context.decompress_track(bone_index, single_track_writer);
+}
+// Releasing the last scope commits every deferred eviction / held publication.
+read.release();
+
+// On the streaming thread, concurrently:
+acl::database_stream_request_result result = database_context.stream_out(acl::quality_tier::lowest_importance);
+// result is 'deferred' while a scope is active, 'dispatched' otherwise.
+```
