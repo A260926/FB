@@ -1,0 +1,611 @@
+package gortmplib
+
+import (
+	"crypto/md5"
+	"encoding/base64"
+	"fmt"
+	"io"
+	"net/url"
+	"strings"
+
+	"github.com/bluenviron/gortmplib/pkg/amf0"
+	"github.com/bluenviron/gortmplib/pkg/bytecounter"
+	"github.com/bluenviron/gortmplib/pkg/handshake"
+	"github.com/bluenviron/gortmplib/pkg/message"
+	"github.com/bluenviron/gortmplib/pkg/rc4rw"
+)
+
+const (
+	serverSalt      = "testsalt"
+	serverChallenge = "testchallenge"
+)
+
+func queryDecode(enc string) map[string]string {
+	// do not use url.ParseQuery since values are not URL-encoded
+	vals := make(map[string]string)
+
+	for kv := range strings.SplitSeq(enc, "&") {
+		tmp := strings.SplitN(kv, "=", 2)
+		if len(tmp) == 2 {
+			vals[tmp[0]] = tmp[1]
+		}
+	}
+
+	return vals
+}
+
+func queryEncode(dec map[string]string) string {
+	tmp := make([]string, len(dec))
+	i := 0
+
+	for k, v := range dec {
+		tmp[i] = k + "=" + v
+		i++
+	}
+
+	return strings.Join(tmp, "&")
+}
+
+func authResponse(user, pass, salt, opaque, challenge, challenge2 string) string {
+	h := md5.New()
+	h.Write([]byte(user))
+	h.Write([]byte(salt))
+	h.Write([]byte(pass))
+	str := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+	h = md5.New()
+	h.Write([]byte(str))
+	if opaque != "" {
+		h.Write([]byte(opaque))
+	} else {
+		h.Write([]byte(challenge))
+	}
+	h.Write([]byte(challenge2))
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func joinURL(tcURL string, streamKey string) (*url.URL, error) {
+	tu, err := url.Parse(tcURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if streamKey == "" || (streamKey[0] == '?' && strings.HasSuffix(tcURL, streamKey)) {
+		return tu, nil
+	}
+
+	su, err := url.Parse("./" + streamKey)
+	if err != nil {
+		return nil, err
+	}
+
+	basePath := tu.EscapedPath()
+	streamPath := strings.TrimPrefix(su.EscapedPath(), "./")
+	tu.Path += "/" + strings.TrimPrefix(su.Path, "./")
+	tu.RawPath = basePath + "/" + streamPath
+
+	if tu.RawPath == tu.Path {
+		tu.RawPath = ""
+	}
+
+	if su.RawQuery != "" {
+		if tu.RawQuery != "" {
+			tu.RawQuery += "&"
+		}
+		tu.RawQuery += su.RawQuery
+	}
+	tu.ForceQuery = tu.ForceQuery || su.ForceQuery
+
+	if su.Fragment != "" {
+		tu.Fragment = su.Fragment
+		tu.RawFragment = su.RawFragment
+	}
+
+	return tu, nil
+}
+
+func objectOrArray(in any) (amf0.Object, bool) {
+	switch o := in.(type) {
+	case amf0.Object:
+		return o, true
+
+	case amf0.ECMAArray:
+		return amf0.Object(o), true
+
+	default:
+		return nil, false
+	}
+}
+
+// ServerConn is a server-side RTMP connection.
+type ServerConn struct {
+	RW io.ReadWriter
+
+	// filled by Initialize
+	connectChunkStreamID byte
+	connectCommandID     int
+	app                  string
+	tcURL                string
+	FourCcList           amf0.StrictArray
+	FlashVer             string
+
+	// filled by Accept
+	URL     *url.URL
+	Publish bool
+
+	bc             *bytecounter.ReadWriter
+	mrw            *message.ReadWriter
+	actionCommand  *message.CommandAMF0
+	actionAccepted bool
+}
+
+// Initialize initializes ServerConn.
+func (c *ServerConn) Initialize() error {
+	c.bc = bytecounter.NewReadWriter(c.RW)
+
+	keyIn, keyOut, err := handshake.DoServer(c.bc, false)
+	if err != nil {
+		return err
+	}
+
+	var rw io.ReadWriter
+	if keyIn != nil {
+		rw, err = rc4rw.New(c.bc, keyIn, keyOut)
+		if err != nil {
+			return err
+		}
+	} else {
+		rw = c.bc
+	}
+
+	c.mrw = message.NewReadWriter(rw, c.bc, false)
+
+	connectCmd, err := readCommand(c.mrw)
+	if err != nil {
+		return err
+	}
+
+	if connectCmd.Name != "connect" {
+		return fmt.Errorf("unexpected command: %+v", connectCmd)
+	}
+
+	if len(connectCmd.Arguments) < 1 {
+		return fmt.Errorf("invalid connect command: %+v", connectCmd)
+	}
+
+	c.connectChunkStreamID = connectCmd.ChunkStreamID
+	c.connectCommandID = connectCmd.CommandID
+
+	connectObject, ok := objectOrArray(connectCmd.Arguments[0])
+	if !ok {
+		return fmt.Errorf("invalid connect command: %+v", connectCmd)
+	}
+
+	c.app, ok = connectObject.GetString("app")
+	if !ok {
+		return fmt.Errorf("invalid connect command: %+v", connectCmd)
+	}
+
+	c.tcURL, ok = connectObject.GetString("tcUrl")
+	if !ok {
+		c.tcURL, ok = connectObject.GetString("tcurl")
+		if !ok {
+			return fmt.Errorf("invalid connect command: %+v", connectCmd)
+		}
+	}
+	c.tcURL = strings.Trim(c.tcURL, "'")
+
+	if raw, ok2 := connectObject.Get("fourCcList"); ok2 {
+		if arr, ok3 := raw.(amf0.StrictArray); ok3 {
+			c.FourCcList = arr
+		}
+	}
+
+	c.FlashVer, _ = connectObject.GetString("flashVer")
+
+	return nil
+}
+
+func (c *ServerConn) checkCredentials(expectedUser string, expectedPass string) error {
+	i := strings.Index(c.tcURL, "?authmod=adobe")
+	if i < 0 {
+		err := c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID: c.connectChunkStreamID,
+			Name:          "_error",
+			CommandID:     c.connectCommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "error"},
+					{Key: "code", Value: "NetConnection.Connect.Rejected"},
+					{Key: "description", Value: "code=403 need auth; authmod=adobe"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		return fmt.Errorf("need auth")
+	}
+
+	authParams := c.tcURL[i+1:]
+	vals := queryDecode(authParams)
+
+	user := vals["user"]
+	if user == "" {
+		return fmt.Errorf("user not provided")
+	}
+
+	clientChallenge := vals["challenge"]
+	response := vals["response"]
+
+	if clientChallenge == "" || response == "" {
+		err := c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID: c.connectChunkStreamID,
+			Name:          "_error",
+			CommandID:     c.connectCommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "error"},
+					{Key: "code", Value: "NetConnection.Connect.Rejected"},
+					{
+						Key: "description",
+						Value: fmt.Sprintf("authmod=adobe ?reason=needauth&user=%s&salt=%s&challenge=%s",
+							user, serverSalt, serverChallenge),
+					},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		return fmt.Errorf("need auth 2")
+	}
+
+	expectedResponse := authResponse(expectedUser, expectedPass, serverSalt, "", serverChallenge, clientChallenge)
+	if expectedResponse != response {
+		err := c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID: c.connectChunkStreamID,
+			Name:          "_error",
+			CommandID:     c.connectCommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "error"},
+					{Key: "code", Value: "NetConnection.Connect.Rejected"},
+					{Key: "description", Value: "authmod=adobe ?reason=authfailed"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		return fmt.Errorf("authentication failed")
+	}
+
+	return nil
+}
+
+// CheckCredentials checks credentials.
+//
+// Deprecated: use AcceptIfCredentialsMatch instead.
+func (c *ServerConn) CheckCredentials(expectedUser string, expectedPass string) error {
+	return c.checkCredentials(expectedUser, expectedPass)
+}
+
+// AcceptIfCredentialsMatch accepts the connection if credentials match.
+//
+// Deprecated: use AcceptConnIfCredentialsMatch instead.
+func (c *ServerConn) AcceptIfCredentialsMatch(expectedUser, expectedPass string) error {
+	return c.AcceptConnIfCredentialsMatch(expectedUser, expectedPass)
+}
+
+// Accept accepts the connection.
+//
+// Deprecated: use AcceptConn instead.
+func (c *ServerConn) Accept() error {
+	return c.AcceptConn()
+}
+
+// AcceptConnIfCredentialsMatch accepts the connection if credentials match.
+func (c *ServerConn) AcceptConnIfCredentialsMatch(expectedUser, expectedPass string) error {
+	err := c.checkCredentials(expectedUser, expectedPass)
+	if err != nil {
+		return err
+	}
+
+	return c.AcceptConn()
+}
+
+// AcceptConn accepts the connection.
+func (c *ServerConn) AcceptConn() error {
+	err := c.mrw.Write(&message.SetWindowAckSize{
+		Value: 2500000,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = c.mrw.Write(&message.SetPeerBandwidth{
+		Value: 2500000,
+		Type:  2,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = c.mrw.Write(&message.SetChunkSize{
+		Value: 65536,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = c.mrw.Write(&message.CommandAMF0{
+		ChunkStreamID: c.connectChunkStreamID,
+		Name:          "_result",
+		CommandID:     c.connectCommandID,
+		Arguments: []any{
+			amf0.Object{
+				{Key: "fmsVer", Value: "LNX 9,0,124,2"},
+				{Key: "capabilities", Value: float64(31)},
+			},
+			amf0.Object{
+				{Key: "level", Value: "status"},
+				{Key: "code", Value: "NetConnection.Connect.Success"},
+				{Key: "description", Value: "Connection succeeded."},
+				{Key: "objectEncoding", Value: float64(encodingAMF0)},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	// strip auth parameters from tcURL
+	if i := strings.Index(c.tcURL, "?authmod=adobe"); i >= 0 { //nolint:gocritic
+		var authParams string
+		c.tcURL, authParams = c.tcURL[:i], c.tcURL[i+1:]
+		vals := queryDecode(authParams)
+		delete(vals, "authmod")
+		delete(vals, "user")
+		delete(vals, "challenge")
+		delete(vals, "response")
+		q := queryEncode(vals)
+		if q != "" {
+			c.tcURL += "?" + q
+		}
+	}
+
+	for {
+		var cmd *message.CommandAMF0
+		cmd, err = readCommand(c.mrw)
+		if err != nil {
+			return err
+		}
+
+		switch cmd.Name {
+		case "createStream":
+			err = c.mrw.Write(&message.CommandAMF0{
+				ChunkStreamID: cmd.ChunkStreamID,
+				Name:          "_result",
+				CommandID:     cmd.CommandID,
+				Arguments: []any{
+					nil,
+					float64(1),
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+		case "play":
+			if len(cmd.Arguments) < 2 {
+				return fmt.Errorf("invalid play command arguments")
+			}
+
+			streamKey, ok := cmd.Arguments[1].(string)
+			if !ok {
+				return fmt.Errorf("invalid play command arguments")
+			}
+
+			c.URL, err = joinURL(c.tcURL, streamKey)
+			if err != nil {
+				return err
+			}
+
+			c.actionCommand = cmd
+			c.Publish = false
+
+			return nil
+
+		case "publish":
+			if len(cmd.Arguments) < 2 {
+				return fmt.Errorf("invalid publish command arguments")
+			}
+
+			streamKey, ok := cmd.Arguments[1].(string)
+			if !ok {
+				return fmt.Errorf("invalid publish command arguments")
+			}
+
+			c.URL, err = joinURL(c.tcURL, streamKey)
+			if err != nil {
+				return err
+			}
+
+			c.actionCommand = cmd
+			c.Publish = true
+
+			return nil
+		}
+	}
+}
+
+// AcceptAction accepts the action (play or publish) command.
+func (c *ServerConn) AcceptAction() error {
+	c.actionAccepted = true
+
+	if !c.Publish {
+		err := c.mrw.Write(&message.UserControlStreamIsRecorded{
+			StreamID: 1,
+		})
+		if err != nil {
+			return err
+		}
+
+		err = c.mrw.Write(&message.UserControlStreamBegin{
+			StreamID: 1,
+		})
+		if err != nil {
+			return err
+		}
+
+		err = c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID:   5,
+			MessageStreamID: 0x1000000,
+			Name:            "onStatus",
+			CommandID:       c.actionCommand.CommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "status"},
+					{Key: "code", Value: "NetStream.Play.Reset"},
+					{Key: "description", Value: "play reset"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		err = c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID:   5,
+			MessageStreamID: 0x1000000,
+			Name:            "onStatus",
+			CommandID:       c.actionCommand.CommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "status"},
+					{Key: "code", Value: "NetStream.Play.Start"},
+					{Key: "description", Value: "play start"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		err = c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID:   5,
+			MessageStreamID: 0x1000000,
+			Name:            "onStatus",
+			CommandID:       c.actionCommand.CommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "status"},
+					{Key: "code", Value: "NetStream.Data.Start"},
+					{Key: "description", Value: "data start"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		err = c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID:   5,
+			MessageStreamID: 0x1000000,
+			Name:            "onStatus",
+			CommandID:       c.actionCommand.CommandID,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "status"},
+					{Key: "code", Value: "NetStream.Play.PublishNotify"},
+					{Key: "description", Value: "publish notify"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		err := c.mrw.Write(&message.CommandAMF0{
+			ChunkStreamID:   5,
+			Name:            "onStatus",
+			CommandID:       c.actionCommand.CommandID,
+			MessageStreamID: 0x1000000,
+			Arguments: []any{
+				nil,
+				amf0.Object{
+					{Key: "level", Value: "status"},
+					{Key: "code", Value: "NetStream.Publish.Start"},
+					{Key: "description", Value: "publish start"},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RejectAction rejects the action (play or publish) command.
+func (c *ServerConn) RejectAction() error {
+	code := "NetStream.Play.Failed"
+	description := "authentication failed"
+
+	if c.Publish {
+		code = "NetStream.Publish.Unauthorized"
+		description = "authentication failed"
+	}
+
+	err := c.mrw.Write(&message.CommandAMF0{
+		ChunkStreamID:   5,
+		MessageStreamID: 0x1000000,
+		Name:            "onStatus",
+		CommandID:       c.actionCommand.CommandID,
+		Arguments: []any{
+			nil,
+			amf0.Object{
+				{Key: "level", Value: "error"},
+				{Key: "code", Value: code},
+				{Key: "description", Value: description},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// BytesReceived returns the number of bytes received.
+func (c *ServerConn) BytesReceived() uint64 {
+	return c.bc.Reader.Count()
+}
+
+// BytesSent returns the number of bytes sent.
+func (c *ServerConn) BytesSent() uint64 {
+	return c.bc.Writer.Count()
+}
+
+// Read reads a message.
+func (c *ServerConn) Read() (message.Message, error) {
+	return c.mrw.Read()
+}
+
+// Write writes a message.
+func (c *ServerConn) Write(msg message.Message) error {
+	return c.mrw.Write(msg)
+}

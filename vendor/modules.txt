@@ -1,0 +1,29 @@
+# github.com/abema/go-mp4 v1.7.4
+## explicit; go 1.14
+github.com/abema/go-mp4
+github.com/abema/go-mp4/internal/bitio
+github.com/abema/go-mp4/internal/util
+# github.com/bluenviron/mediacommon/v2 v2.9.7
+## explicit; go 1.26.0
+github.com/bluenviron/mediacommon/v2/pkg/bits
+github.com/bluenviron/mediacommon/v2/pkg/codecs/ac3
+github.com/bluenviron/mediacommon/v2/pkg/codecs/av1
+github.com/bluenviron/mediacommon/v2/pkg/codecs/flac
+github.com/bluenviron/mediacommon/v2/pkg/codecs/h264
+github.com/bluenviron/mediacommon/v2/pkg/codecs/h265
+github.com/bluenviron/mediacommon/v2/pkg/codecs/mpeg1audio
+github.com/bluenviron/mediacommon/v2/pkg/codecs/mpeg4audio
+github.com/bluenviron/mediacommon/v2/pkg/codecs/opus
+# github.com/google/uuid v1.6.0
+## explicit
+github.com/google/uuid
+# github.com/stretchr/testify v1.12.1
+## explicit; go 1.17
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/assert/yaml
+github.com/stretchr/testify/internal/difflib
+github.com/stretchr/testify/internal/spew
+github.com/stretchr/testify/require
+# go.yaml.in/yaml/v3 v3.0.5
+## explicit; go 1.16
+go.yaml.in/yaml/v3
