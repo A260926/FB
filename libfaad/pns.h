@@ -44,6 +44,20 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
                 uint8_t channel_pair, uint8_t object_type,
                 /* RNG states */ uint32_t *__r1, uint32_t *__r2);
 
+#ifdef PNS_TEST_HOOK
+/* Read-only observation points consumed by tests/pns_stream.c. They only
+ * exist in test builds; normal builds expose neither symbols nor callbacks.
+ * The hooks observe the spectra immediately after PNS and immediately after
+ * M/S, together with the frame-end global RNG state. */
+void pns_test_hook_pns(const ic_stream *ics_left, const ic_stream *ics_right,
+                       const real_t *spec_left, const real_t *spec_right,
+                       uint16_t frame_len, uint8_t channel_pair,
+                       uint32_t r1, uint32_t r2);
+void pns_test_hook_ms(const ic_stream *ics, const ic_stream *icsr,
+                      const real_t *l_spec, const real_t *r_spec,
+                      uint16_t frame_len);
+#endif
+
 static INLINE uint8_t is_noise(ic_stream *ics, uint8_t group, uint8_t sfb)
 {
     if (ics->sfb_cb[group][sfb] == NOISE_HCB)

@@ -183,9 +183,14 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
             uint16_t base = group * nshort;
             for (sfb = 0; sfb < ics_left->max_sfb; sfb++)
             {
+                uint8_t noise_left = is_noise(ics_left, g, sfb);
+                uint8_t noise_right = (ics_right != NULL) &&
+                    is_noise(ics_right, g, sfb);
+                /* Snapshot of the global RNG state, taken only when the left
+                   channel actually generates a vector in this band. */
                 uint32_t r1_dep = 0, r2_dep = 0;
 
-                if (is_noise(ics_left, g, sfb))
+                if (noise_left)
                 {
 #ifdef LTP_DEC
                     /* Simultaneous use of LTP and PNS is not prevented in the
@@ -229,8 +234,7 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
    substitution in only one channel of a channel pair the setting of ms_used[]
    is not evaluated.
 */
-                if ((ics_right != NULL)
-                    && is_noise(ics_right, g, sfb))
+                if (noise_right)
                 {
 #ifdef LTP_DEC
                     /* See comment above. */
@@ -242,7 +246,11 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
                     ics_right->pred.prediction_used[sfb] = 0;
 #endif
 
-                    if (channel_pair && is_noise(ics_left, g, sfb) &&
+                    /* Correlated noise requires PNS in BOTH channels of this
+                       band; when only the right band is a noise band the
+                       ms_used setting is not evaluated and this vector is
+                       generated independently, advancing the global RNG. */
+                    if (noise_left && channel_pair &&
                         (((ics_left->ms_mask_present == 1) &&
                         (ics_left->ms_used[g][sfb])) ||
                         (ics_left->ms_mask_present == 2)))
@@ -252,7 +260,9 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
                         begin = min(base + ics_right->swb_offset[sfb], frame_len);
                         end = min(base + ics_right->swb_offset[sfb+1], frame_len);
 
-                        /* Generate random vector dependent on left channel*/
+                        /* Generate random vector dependent on left channel;
+                           dependency registers are local copies, so the global
+                           RNG state is not advanced. */
                         gen_rand_vector(&spec_right[begin],
                             ics_right->scale_factors[g][sfb], end - begin, sub, &r1_dep, &r2_dep);
 
@@ -269,4 +279,11 @@ void pns_decode(ic_stream *ics_left, ic_stream *ics_right,
             group++;
         } /* b */
     } /* g */
+
+#ifdef PNS_TEST_HOOK
+    /* Observation point: spectra right after PNS, plus the frame-end RNG
+       state. The hook is read-only and only exists in test builds. */
+    pns_test_hook_pns(ics_left, ics_right, spec_left, spec_right,
+        frame_len, channel_pair, *__r1, *__r2);
+#endif
 }

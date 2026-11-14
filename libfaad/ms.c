@@ -56,10 +56,16 @@ void ms_decode(ic_stream *ics, ic_stream *icsr, real_t *l_spec, real_t *r_spec,
                 {
                     /* If intensity stereo coding or noise substitution is on
                        for a particular scalefactor band, no M/S stereo decoding
-                       is carried out.
+                       is carried out. PNS can be active in either channel of
+                       the pair: when only the right channel substitutes noise,
+                       skipping the right-channel check would still mix that
+                       noise into the (silent) left channel. The spec states
+                       that for a band coded by PNS in only one channel the
+                       ms_used setting is not evaluated.
                      */
                     if ((ics->ms_used[g][sfb] || ics->ms_mask_present == 2) &&
-                        !is_intensity(icsr, g, sfb) && !is_noise(ics, g, sfb))
+                        !is_intensity(icsr, g, sfb) &&
+                        !is_noise(ics, g, sfb) && !is_noise(icsr, g, sfb))
                     {
                         for (i = ics->swb_offset[sfb]; i < min(ics->swb_offset[sfb+1], ics->swb_offset_max); i++)
                         {
@@ -74,4 +80,9 @@ void ms_decode(ic_stream *ics, ic_stream *icsr, real_t *l_spec, real_t *r_spec,
             }
         }
     }
+
+#ifdef PNS_TEST_HOOK
+    /* Observation point: spectra right after M/S. Read-only. */
+    pns_test_hook_ms(ics, icsr, l_spec, r_spec, frame_len);
+#endif
 }

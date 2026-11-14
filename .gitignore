@@ -1,2 +1,4 @@
 bazel-*
 build/
+.task-build/
+.task-pns/
