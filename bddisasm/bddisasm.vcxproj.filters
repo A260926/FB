@@ -1,0 +1,138 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Header Files\public">
+      <UniqueIdentifier>{8f31fedd-353c-4b9c-9e2d-bdb129e1e02b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+    <Filter Include="Other">
+      <UniqueIdentifier>{5e26c505-e8f5-4e6c-9d54-f20e36b637b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\x86">
+      <UniqueIdentifier>{39065bbd-3fd0-42b0-ba8e-d7395674b7ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\public\x86">
+      <UniqueIdentifier>{032f0e51-6265-4031-b702-5eb620d95964}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\private">
+      <UniqueIdentifier>{5eb8f135-5960-4e0e-a5a8-5214a7a9edcb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\private\x86">
+      <UniqueIdentifier>{db15a655-cc99-4e12-a8c3-55a485ee713c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\private\x86\tables">
+      <UniqueIdentifier>{b9961460-d06f-4288-9708-44ca965c4a0d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\private\x86\idb">
+      <UniqueIdentifier>{1afeef2f-6b37-4b08-b321-4789ced61bb8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\public\x86\api">
+      <UniqueIdentifier>{a32fb32a-5ab0-45b4-8262-1791007e2445}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\public\x86\defs">
+      <UniqueIdentifier>{cffff9de-0123-42c2-b693-7aee2456a39a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\private\x86\opclut">
+      <UniqueIdentifier>{71d053b5-37c1-4ca8-bc98-3b4a89e7cef4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="bddisasm_crt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bdx86_decoder.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="bdx86_formatter.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="bdx86_helpers.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="bdx86_idbe.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="bdx86_operand.c">
+      <Filter>Source Files\x86</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\inc\bddisasm_version.h">
+      <Filter>Header Files\public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bddisasm_types.h">
+      <Filter>Header Files\public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bddisasm_status.h">
+      <Filter>Header Files\public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bddisasm.h">
+      <Filter>Header Files\public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_core.h">
+      <Filter>Header Files\public\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_tabledefs.h">
+      <Filter>Header Files\private\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bddisasm_crt.h">
+      <Filter>Header Files\private</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_table_evex.h">
+      <Filter>Header Files\private\x86\tables</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_table_root.h">
+      <Filter>Header Files\private\x86\tables</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_table_vex.h">
+      <Filter>Header Files\private\x86\tables</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_table_xop.h">
+      <Filter>Header Files\private\x86\tables</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_operand.h">
+      <Filter>Header Files\private\x86</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_instructions.h">
+      <Filter>Header Files\private\x86\idb</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_mnemonics.h">
+      <Filter>Header Files\private\x86\idb</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_modrm.h">
+      <Filter>Header Files\private\x86\opclut</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_prefixes.h">
+      <Filter>Header Files\private\x86\opclut</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bdx86_rex2.h">
+      <Filter>Header Files\private\x86\opclut</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_api_legacy.h">
+      <Filter>Header Files\public\x86\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_api_mini.h">
+      <Filter>Header Files\public\x86\api</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_constants.h">
+      <Filter>Header Files\public\x86\defs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_cpuidflags.h">
+      <Filter>Header Files\public\x86\defs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\bdx86_registers.h">
+      <Filter>Header Files\public\x86\defs</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
