@@ -5,6 +5,10 @@ interface with soxr.  Note that real-world applications may also have to
 deal with file-formats, codecs, (more sophisticated) dithering, etc., which
 are not covered here.
 
+Examples 5 and 6 use the variable-rate (SOXR_VR) engine; example 6 shows how
+soxr_clone() forks a resampling pass so that two alternative continuations can
+be auditioned without re-converting the shared prefix.
+
 With the library installed, the examples may be built using commands similar
 to the following.  On unix-like systems:
 

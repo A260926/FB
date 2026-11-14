@@ -65,8 +65,8 @@ input or output (e.g. ilen, olen).                                            */
 /* E.g. #if SOXR_THIS_VERSION >= SOXR_VERSION(0,1,1) ...                      */
 
 #define SOXR_VERSION(x,y,z)     (((x)<<16)|((y)<<8)|(z))
-#define SOXR_THIS_VERSION       SOXR_VERSION(0,1,3)
-#define SOXR_THIS_VERSION_STR               "0.1.3"
+#define SOXR_THIS_VERSION       SOXR_VERSION(0,1,4)
+#define SOXR_THIS_VERSION_STR               "0.1.4"
 
 
 
@@ -201,6 +201,37 @@ SOXR soxr_error_t soxr_oneshot(
  * variable-rate resampler and how to use this function. */
 
 SOXR soxr_error_t soxr_set_io_ratio(soxr_t, double io_ratio, size_t slew_len);
+
+
+
+/* Clone a variable-rate resampler's complete mid-stream state, so that
+ * processing can be forked at the current point without re-processing the
+ * audio that led there.  Useful for e.g. offline auditioning of alternate
+ * branches from a common point.
+ *
+ * Only resamplers created with a configured number of channels and using
+ * SOXR_VR are supported; for any other resampler, or if `source' is NULL or
+ * already in an error state, NULL is returned.  `error', if not NULL, is set
+ * to the reason (and to "no error" on success).  The error state of `source'
+ * is never altered.
+ *
+ * Any point reached by a public call may be cloned, including while input
+ * remains buffered internally, while an I/O-ratio slew is still in progress,
+ * and while a rate-stage cross-fade is under way.  The clone inherits the
+ * audio format, channel count, quality and runtime settings, clip count and
+ * dither random state, and the whole live engine state: stage FIFOs,
+ * fractional positions, remaining slew and fade, and filter history.  Given
+ * the same subsequent input and calls, the clone and the source produce
+ * identical consumed counts, output counts and byte-identical PCM.  Buffered
+ * audio can be read from the clone without supplying more input.
+ *
+ * The clone's mutable audio and memory are wholly independent of the source:
+ * each may be deleted, resized, cleared, or cloned again without affecting
+ * the other.  Immutable coefficient tables are shared.  The source's input
+ * function is not copied to the clone (and is not called during cloning);
+ * install one on the clone with soxr_set_input_fn if wanted. */
+
+SOXR soxr_t soxr_clone(soxr_t source, soxr_error_t * error);
 
 
 

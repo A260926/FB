@@ -46,7 +46,7 @@ char const * soxr_version(void)
 
 typedef void sample_t; /* float or double */
 typedef void (* fn_t)(void);
-typedef fn_t control_block_t[10];
+typedef fn_t control_block_t[12];
 
 #define resampler_input        (*(sample_t * (*)(void *, sample_t * samples, size_t   n))p->control_block[0])
 #define resampler_process      (*(void (*)(void *, size_t))p->control_block[1])
@@ -58,6 +58,8 @@ typedef fn_t control_block_t[10];
 #define resampler_create       (*(char const * (*)(void * channel, void * shared, double io_ratio, soxr_quality_spec_t * q_spec, soxr_runtime_spec_t * r_spec, double scale))p->control_block[7])
 #define resampler_set_io_ratio (*(void (*)(void *, double io_ratio, size_t len))p->control_block[8])
 #define resampler_id           (*(char const * (*)(void))p->control_block[9])
+#define resampler_clone        (*(char const * (*)(void *, void const *))p->control_block[10])
+#define resampler_diag         (*(void (*)(void *, _soxr_vr_diag_t *))p->control_block[11])
 
 typedef void * resampler_t; /* For one channel. */
 typedef void * resampler_shared_t; /* Between channels. */
@@ -516,6 +518,15 @@ double soxr_delay(soxr_t p)
 
 
 
+void _soxr_vr_diag(soxr_t p, _soxr_vr_diag_t * diag)
+{
+  memset(diag, 0, sizeof(*diag));
+  if (p && !p->error && p->resamplers && p->control_block[11])
+    resampler_diag(p->resamplers[0], diag);
+}
+
+
+
 static soxr_error_t fatal_error(soxr_t p, soxr_error_t error)
 {
   soxr_delete0(p);
@@ -598,6 +609,75 @@ void soxr_delete(soxr_t p)
 
 
 
+/* Deep-copy one channel's engine state.  The destination block (already
+ * allocated to the engine's channel size) must be cleaned up by the engine's
+ * own close routine if anything goes wrong. */
+
+static char const * clone_resampler(soxr_t p, soxr_t source, unsigned i)
+{
+  return resampler_clone(p->resamplers[i], source->resamplers[i]);
+}
+
+
+
+soxr_t soxr_clone(soxr_t source, soxr_error_t * error0)
+{
+  soxr_t p = NULL;
+  soxr_error_t error = 0;
+
+  if (error0) *error0 = 0;
+  if (!source) error = "invalid soxr_t pointer";
+  else if ((error = source->error)) /* Leave source's error state untouched. */
+    ;
+  else if (!source->num_channels) error = "no channels configured";
+  else if (!(source->q_spec.flags & SOXR_VR))
+    error = "cloning is only supported for variable-rate (SOXR_VR) resamplers";
+  else if (!source->resamplers) error = "resampler not initialised";
+  else if (!source->control_block[10])
+    error = "this engine does not support cloning";
+
+  if (!error) {
+    size_t shared_size, channel_size;
+    unsigned i;
+
+    if (!(p = calloc(sizeof(*p), 1))) error = "malloc failed";
+    else {
+      *p = *source; /* Inherit all configuration; then detach owned storage. */
+      p->resamplers = NULL;
+      p->channel_ptrs = NULL;
+      p->shared = NULL;
+
+      resampler_sizes(&shared_size, &channel_size);
+      p->channel_ptrs = calloc(sizeof(*p->channel_ptrs), p->num_channels);
+      p->shared = shared_size? calloc(shared_size, 1) : NULL;
+      p->resamplers = calloc(sizeof(*p->resamplers), p->num_channels);
+      if ((shared_size && !p->shared) || !p->channel_ptrs || !p->resamplers)
+        error = "malloc failed";
+
+      for (i = 0; !error && i < p->num_channels; ++i) {
+        if (!(p->resamplers[i] = calloc(channel_size, 1)))
+          error = "malloc failed";
+        else if ((error = clone_resampler(p, source, i)))
+          break;
+      }
+      if (error) {
+        soxr_delete(p), p = NULL;
+      }
+      else {
+        /* As with soxr_create, an input function is not inherited; the caller
+         * may install one on the clone explicitly.  The source keeps its own. */
+        p->input_fn = NULL;
+        p->input_fn_state = NULL;
+        p->max_ilen = 0;
+      }
+    }
+  }
+  if (error0) *error0 = error;
+  return p;
+}
+
+
+
 soxr_error_t soxr_clear(soxr_t p) /* TODO: this, properly. */
 {
   if (p) {
@@ -610,6 +690,7 @@ soxr_error_t soxr_clear(soxr_t p) /* TODO: this, properly. */
     p->io_spec = tmp.io_spec;
     p->num_channels = tmp.num_channels;
     p->input_fn_state = tmp.input_fn_state;
+    p->max_ilen = tmp.max_ilen;
     memcpy(p->control_block, tmp.control_block, sizeof(p->control_block));
     p->deinterleave = tmp.deinterleave;
     p->interleave = tmp.interleave;

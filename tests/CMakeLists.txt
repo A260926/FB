@@ -5,6 +5,12 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PROJECT_C_FLAGS}")
 link_libraries (${PROJECT_NAME} ${LIBM_LIBRARIES})
 
 file (GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
+
+# vr_clone is a multi-case test that registers with task_support/check.h and
+# needs that directory's driver; it is built and run by task_support/run.sh,
+# not as one of the stand-alone sanity-test binaries here.
+list (REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/vr_clone.c)
+
 foreach (fe ${SOURCES})
   get_filename_component (f ${fe} NAME_WE)
   add_executable (${f} ${fe})

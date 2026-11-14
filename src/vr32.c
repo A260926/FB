@@ -286,6 +286,8 @@ typedef struct {
   fifo_t output_fifo;
   half_iir_t halfer;
   stream_t current, fadeout; /* Current/fade-in, fadeout streams. */
+  unsigned long diag_stage_switches; /* Diagnostic counters (see vr-diag.h). */
+  unsigned long diag_xfade_starts;
 } rate_t;
 
 static float fade_coefs[(2 << FADE_LEN_BITS) + 1];
@@ -396,6 +398,7 @@ static bool do_input_stage(rate_t * p, int stage_num, int sign, int min_stage_nu
       p->switch_stage_num = 0;
       if (s->is_fast != should_be_fast) {
         s->x_fade_len = 1 << FADE_LEN_BITS, s->is_fast = should_be_fast, ++p->xfade;
+        ++p->diag_xfade_starts;
         lsx_debug("xfade level %i, inc?=%i", stage_num, p->stage_inc);
       }
     }
@@ -503,6 +506,7 @@ static int vr_process(rate_t * p, int olen0)
           lshift(p->current.step.all, shift);
           lshift(p->current.step_step.all, shift);
           p->fade_len = AL(fade_coefs) - 1;
+          ++p->diag_stage_switches;
           lsx_debug("switch from stage %i to %i, x2 from %i to %i", p->fadeout.stage_num, p->current.stage_num, p->fadeout.is_d, p->current.is_d);
         }
       }
@@ -601,11 +605,109 @@ static void vr_close(rate_t * p)
   int i;
 
   fifo_delete(&p->output_fifo);
-  for (i = -1; i < p->num_stages; ++i) {
-    stage_t * s = &p->stages[i];
-    fifo_delete(&s->fifo);
+  p->output_fifo.data = NULL;
+  if (p->stages) {
+    for (i = -1; i < p->num_stages; ++i) {
+      fifo_delete(&p->stages[i].fifo);
+      p->stages[i].fifo.data = NULL;
+    }
+    free(p->stages - 1);
+    p->stages = NULL;
   }
-  free(p->stages - 1);
+}
+
+
+
+/* Deep-copy one FIFO's storage.  The cloned engine must own its audio outright:
+ * the source's buffers may grow, be reused or be freed independently. */
+
+static char const * clone_fifo(fifo_t * d, fifo_t const * s)
+{
+  size_t allocation = s->allocation;
+  if (!s->item_size || !s->data || !allocation) {
+    d->data = NULL, d->allocation = 0, d->item_size = s->item_size;
+    d->begin = d->end = 0;
+    return 0;
+  }
+  if (!(d->data = malloc(allocation)))
+    return "malloc failed";
+  memcpy(d->data, s->data, allocation);
+  d->allocation = allocation;
+  d->item_size = s->item_size;
+  d->begin = s->begin;
+  d->end = s->end;
+  return 0;
+}
+
+
+
+static float const * clone_stream_input(float const * p0,
+    fifo_t const * s, fifo_t const * d)
+{
+  size_t offset;
+  if (!p0 || !s->data || !d->data)
+    return NULL;
+  offset = (size_t)((char const *)p0 - s->data);
+  if (offset >= d->allocation)
+    return NULL;
+  return (float const *)(d->data + offset);
+}
+
+
+
+static char const * vr_clone(void * dest0, void const * src0)
+{
+  rate_t * d = dest0;
+  rate_t const * s = src0;
+  int i, num_stages = s->num_stages;
+  char const * error;
+
+  memcpy(d, s, sizeof(*d));
+  d->stages = NULL;
+  d->output_fifo.data = NULL;
+  d->current.input = d->fadeout.input = NULL;
+
+  if (!(d->stages = calloc((unsigned)num_stages + 1, sizeof(*d->stages))))
+    return "malloc failed";
+  d->stages += 1;
+  memcpy(d->stages - 1, s->stages - 1,
+      ((size_t)num_stages + 1) * sizeof(*d->stages));
+  for (i = -1; i < num_stages; ++i)
+    d->stages[i].fifo.data = NULL;
+
+  for (i = -1; i < num_stages; ++i)
+    if ((error = clone_fifo(&d->stages[i].fifo, &s->stages[i].fifo))) {
+      vr_close(d);
+      return error;
+    }
+  if ((error = clone_fifo(&d->output_fifo, &s->output_fifo))) {
+    vr_close(d);
+    return error;
+  }
+
+  d->current.input = clone_stream_input(s->current.input,
+      &s->stages[s->current.stage_num].fifo,
+      &d->stages[d->current.stage_num].fifo);
+  d->fadeout.input = clone_stream_input(s->fadeout.input,
+      &s->stages[s->fadeout.stage_num].fifo,
+      &d->stages[d->fadeout.stage_num].fifo);
+  return 0;
+}
+
+
+
+static void vr_diag(rate_t * p, _soxr_vr_diag_t * d)
+{
+  int i;
+  memset(d, 0, sizeof(*d));
+  d->stage_switches = p->diag_stage_switches;
+  d->xfade_starts = p->diag_xfade_starts;
+  d->fade_remaining = (unsigned long)max(0, p->fade_len);
+  d->slew_remaining = (unsigned long)max(0, p->slew_len);
+  d->input_buffered = (unsigned long)fifo_occupancy(&p->stages[0].fifo);
+  d->xfade_remaining = 0;
+  for (i = -1; i < p->num_stages; ++i)
+    d->xfade_remaining += (unsigned long)max(0, p->stages[i].x_fade_len);
 }
 
 static double vr_delay(rate_t * p)
@@ -648,4 +750,6 @@ fn_t _soxr_vr32_cb[] = {
   (fn_t)vr_create,
   (fn_t)vr_set_io_ratio,
   (fn_t)vr_id,
+  (fn_t)vr_clone,
+  (fn_t)vr_diag,
 };

@@ -15,7 +15,7 @@ endif ()
 if (${BUILD_EXAMPLES})
   list (APPEND SOURCES 1-single-block 2-stream 4-split-channels)
   if (${WITH_VR32})
-    list (APPEND SOURCES 5-variable-rate)
+    list (APPEND SOURCES 5-variable-rate 6-branch-preview)
   endif ()
 endif ()
 

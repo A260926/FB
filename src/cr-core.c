@@ -309,6 +309,8 @@ fn_t RATE_CB[] = {
   (fn_t)rate_create,
   (fn_t)0,
   (fn_t)id,
+  (fn_t)0, /* clone: not supported */
+  (fn_t)0, /* diagnostics: not applicable */
 };
 
 #endif

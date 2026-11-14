@@ -81,4 +81,12 @@
 
 
 
+/* Internal diagnostics for the variable-rate engine (not public API).  These
+ * let the test-suite show that a clone point was taken while stage-crossing
+ * fades, slews and buffered input were still live. */
+
+#include "vr-diag.h"
+
+
+
 #endif
