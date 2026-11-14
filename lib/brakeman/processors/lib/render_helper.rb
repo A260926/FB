@@ -66,19 +66,54 @@ module Brakeman::RenderHelper
     end
 
     template_env = only_ivars(:include_request_vars)
+    options = get_options args
 
-    #Hash the environment and the source of the template to avoid
-    #pointlessly processing templates, which can become prohibitively
-    #expensive in terms of time and memory.
-    digest = Digest::SHA1.new.update(template_env.instance_variable_get(:@env).to_a.sort.to_s << name).to_s.to_sym
+    #The locals and collection passed to this render are part of the
+    #template's context, just like instance variables. They must be added
+    #to the environment *before* computing the cache digest below, or
+    #renders of the same template with different values will look
+    #identical and all but the first will be skipped.
+    if hash? options[:locals]
+      hash_iterate options[:locals] do |key, value|
+        #Clone the value so that setting original_line and aliasing the
+        #template cannot modify the caller's source.
+        template_env[Sexp.new(:call, nil, key.value)] =
+          sexp?(value) ? value.deep_clone : value
+      end
+    end
+
+    if options[:collection]
+
+      #The collection name is the name of the partial without the leading
+      #underscore.
+      variable = template.name.to_s.match(/[^\/_][^\/]+$/)[0].to_sym
+
+      #Unless the :as => :variable_name option is used
+      if options[:as]
+        if string? options[:as] or symbol? options[:as]
+          variable = options[:as].value.to_sym
+        end
+      end
+
+      collection = get_class_target(options[:collection]) || Brakeman::Tracker::UNKNOWN_MODEL
+
+      template_env[Sexp.new(:call, nil, variable)] = Sexp.new(:call, Sexp.new(:const, collection), :new)
+    end
+
+    #Hash the environment, including locals, and the source of the template
+    #to avoid pointlessly processing templates, which can become
+    #prohibitively expensive in terms of time and memory.
+    #Templates with the same context can share the cached result, but
+    #templates reached with different locals or collections must be
+    #processed (and reported) separately.
+    env_digest = template_env.instance_variable_get(:@env).to_a.map(&:inspect).sort
+    digest = Digest::SHA1.new.update(env_digest.join << name).to_s.to_sym
 
     if @tracker.template_cache.include? digest
       #Already processed this template with identical environment
       return
     else
       @tracker.template_cache << digest
-
-      options = get_options args
 
       #Process layout
       if string? options[:layout]
@@ -89,30 +124,6 @@ module Brakeman::RenderHelper
         #Don't do this for partials
 
         process_layout
-      end
-
-      if hash? options[:locals]
-        hash_iterate options[:locals] do |key, value|
-          template_env[Sexp.new(:call, nil, key.value)] = value
-        end
-      end
-
-      if options[:collection]
-
-        #The collection name is the name of the partial without the leading
-        #underscore.
-        variable = template.name.to_s.match(/[^\/_][^\/]+$/)[0].to_sym
-
-        #Unless the :as => :variable_name option is used
-        if options[:as]
-          if string? options[:as] or symbol? options[:as]
-            variable = options[:as].value.to_sym
-          end
-        end
-
-        collection = get_class_target(options[:collection]) || Brakeman::Tracker::UNKNOWN_MODEL
-
-        template_env[Sexp.new(:call, nil, variable)] = Sexp.new(:call, Sexp.new(:const, collection), :new)
       end
 
       #Set original_line for values so it is clear
