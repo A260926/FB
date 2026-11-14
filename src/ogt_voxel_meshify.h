@@ -154,6 +154,13 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(const ogt_voxel_meshify_context* 
 // It will generally produce t-junctions which can make rasterization not water-tight based on your camera/project/distances.
 ogt_mesh* ogt_mesh_from_paletted_voxels_greedy(const ogt_voxel_meshify_context* ctx, const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette);
 
+// The conforming greedy meshifier uses the exact same greedy rectangular face partition as ogt_mesh_from_paletted_voxels_greedy,
+// but then unifies the boundaries of all rectangles in shared model geometry: any rectangle corner that falls strictly inside
+// another rectangle edge becomes a split point on that edge. Each original rectangle is then triangulated independently with
+// every boundary sub-segment represented by an actual triangle edge, so the output mesh contains no t-junctions and is
+// water-tight under any projection. Face attributes (normal, color and palette_index) are preserved per rectangle.
+ogt_mesh* ogt_mesh_from_paletted_voxels_greedy_conforming(const ogt_voxel_meshify_context* ctx, const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette);
+
 // The polygon meshifier will polygonize and triangulate connected voxels that are of the same color. The boundary of the polygon
 // will be tessellated only to the degree that is necessary to there are tessellations at color discontinuities.
 // This will mostly be water-tight, except for a very small number of cases.
@@ -1792,6 +1799,598 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
     assert( mesh->index_count <= max_index_count);
 
     return mesh;
+}
+
+
+// =================================================================================================================
+// conforming greedy meshing
+//
+// This path reuses the exact greedy rectangular face partition of _greedy_meshify_voxels_in_face_direction (same
+// slice scanning, occlusion, palette_index grouping and six directional transforms), but instead of emitting two
+// triangles per rectangle it records every greedy rectangle in integer model coordinates. After all six passes,
+// rectangle corners are unified against rectangle edges on shared axis-aligned lines: a corner that lies strictly
+// inside any edge becomes a split point on that edge, regardless of plane, normal or material. Each original
+// rectangle is then triangulated independently with every boundary sub-segment represented by a real triangle
+// edge, so the result has no t-junctions. Only original corner coordinates and the split coordinates derived from
+// them are ever used -- geometry is never moved and no other Steiner points are introduced.
+//
+// Grid dimensions are at most 64, so every coordinate lies in [0,64]. Boundary events are therefore organized as
+// a fixed set of axis-aligned lines (3 axes x 65 x 65 lines), each carrying a 65-bit mask. Endpoint masks record
+// rectangle edges, point masks record endpoints plus the split points contributed by foreign corners. Range
+// queries on a rectangle edge are simple bit ranges: memory grows with the number of rectangles and their split
+// associations, never with a per-voxel face grid.
+// =================================================================================================================
+
+static const uint32_t k_conform_max_coord = 64;
+static const uint32_t k_conform_line_count_per_axis = (k_conform_max_coord + 1) * (k_conform_max_coord + 1);
+
+// one axis-aligned rectangle produced by a greedy pass, stored in integer model coordinates
+struct ogt_conform_rect {
+    int32_t     fixed_axis;     // 0=x, 1=y, 2=z : axis the rectangle plane is perpendicular to
+    int32_t     fixed_value;    // integer coordinate of the plane
+    int32_t     min_axis;       // axis of the rectangle's local "u" direction (smaller of the two in-plane axes)
+    int32_t     max_axis;       // axis of the rectangle's local "v" direction
+    int32_t     min_value[2];   // min coordinate along min_axis / max_axis
+    int32_t     max_value[2];   // max coordinate along min_axis / max_axis
+    uint8_t     palette_index;  // material of the face
+    uint8_t     normal_axis;    // 0..5 : -x,+x,-y,+y,-z,+z
+};
+
+// the edge interior mask and the full split-point mask for one axis-aligned line
+struct ogt_conform_line_masks {
+    uint64_t interior_bits[2]; // coordinates strictly inside at least one rectangle edge on this line
+    uint64_t point_bits[2];    // edge endpoints plus every corner falling strictly inside an edge
+};
+
+static inline void _conform_bit_set(uint64_t bits[2], uint32_t value) {
+    bits[value >> 6] |= (uint64_t)1 << (value & 63);
+}
+
+static inline bool _conform_bit_test(const uint64_t bits[2], uint32_t value) {
+    return (bits[value >> 6] & ((uint64_t)1 << (value & 63))) != 0;
+}
+
+static inline uint32_t _conform_bit_count_range(const uint64_t bits[2], uint32_t lo, uint32_t hi) {
+    uint32_t count = 0;
+    for (uint32_t value = lo; value <= hi; value++)
+        count += _conform_bit_test(bits, value) ? 1 : 0;
+    return count;
+}
+
+static inline ogt_conform_line_masks& _conform_line(ogt_conform_line_masks* tables, int32_t line_axis, const int32_t point[3]) {
+    uint32_t key0 = (uint32_t)point[(line_axis + 1) % 3];
+    uint32_t key1 = (uint32_t)point[(line_axis + 2) % 3];
+    return tables[line_axis * k_conform_line_count_per_axis + key0 * (k_conform_max_coord + 1) + key1];
+}
+
+static int32_t _conform_rect_coord(const ogt_conform_rect& r, int32_t axis, uint32_t corner) {
+    // corner bit 0 selects min/max on min_axis, bit 1 selects min/max on max_axis
+    if (axis == r.fixed_axis)
+        return r.fixed_value;
+    if (axis == r.min_axis)
+        return (corner & 1) ? r.max_value[0] : r.min_value[0];
+    return (corner & 2) ? r.max_value[1] : r.min_value[1];
+}
+
+// greedy pass that records rectangles in integer model coordinates instead of emitting mesh vertices.
+// The scan, occlusion tests and palette_index grouping are identical to _greedy_meshify_voxels_in_face_direction.
+static bool _conform_greedy_collect_rects(
+    const uint8_t* voxels,
+    const ogt_mesh_rgba* palette,
+    int32_t size_x, int32_t size_y, int32_t size_z,
+    int32_t k_stride_x, int32_t k_stride_y, int32_t k_stride_z,
+    const ogt_mesh_transform& transform,
+    int32_t normal_axis,
+    ogt_conform_rect** rects, uint32_t* rect_count, uint32_t* rect_cap,
+    const ogt_voxel_meshify_context* ctx)
+{
+    (void)palette;
+    uint32_t max_voxels_per_slice = size_x * size_y;
+    assert(max_voxels_per_slice <= 65536);
+    ogt_mesh_bitset_64k voxel_polygonized;
+
+#define VOXELDATA_INDEX_C(_x,_y,_z)   ((_x) * k_stride_x) + ((_y) * k_stride_y) + ((_z) * k_stride_z)
+#define LOCALDATA_INDEX_C(_x,_y)      ((_x) + ((_y) * size_x))
+
+    for (int32_t k0 = 0; k0 < size_z; k0++) {
+        int32_t k1 = k0 + 1;
+        voxel_polygonized.clear(max_voxels_per_slice);
+        bool is_last_k_slice = (k1 == size_z);
+
+        for (int32_t j0 = 0; j0 < size_y; j0++) {
+            for (int32_t i0 = 0; i0 < size_x; i0++) {
+                uint8_t color_index = voxels[VOXELDATA_INDEX_C(i0, j0, k0)];
+                if ((color_index == 0) ||
+                    voxel_polygonized.is_set(LOCALDATA_INDEX_C(i0, j0)) ||
+                    (!is_last_k_slice && voxels[VOXELDATA_INDEX_C(i0, j0, k1)] != 0))
+                {
+                    continue;
+                }
+
+                int32_t i1;
+                for (i1 = i0 + 1; i1 < size_x; i1++) {
+                    if ((voxels[VOXELDATA_INDEX_C(i1, j0, k0)] != color_index) ||
+                        (voxel_polygonized.is_set(LOCALDATA_INDEX_C(i1, j0))) ||
+                        (!is_last_k_slice && voxels[VOXELDATA_INDEX_C(i1, j0, k1)] != 0))
+                    {
+                        break;
+                    }
+                }
+
+                int32_t j1 = j0 + 1;
+                for (j1 = j0 + 1; j1 < size_y; j1++) {
+                    bool got_j1 = false;
+                    for (int32_t a = i0; a < i1; a++) {
+                        if ((voxels[VOXELDATA_INDEX_C(a, j1, k0)] != color_index) ||
+                            (voxel_polygonized.is_set(LOCALDATA_INDEX_C(a, j1))) ||
+                            (!is_last_k_slice && voxels[VOXELDATA_INDEX_C(a, j1, k1)] != 0))
+                        {
+                            got_j1 = true;
+                            break;
+                        }
+                    }
+                    if (got_j1)
+                        break;
+                }
+
+                for (int32_t b = j0; b < j1; b++)
+                    for (int32_t a = i0; a < i1; a++)
+                        voxel_polygonized.set(LOCALDATA_INDEX_C(a, b));
+
+                if (*rect_count == *rect_cap) {
+                    uint32_t new_cap = *rect_cap ? *rect_cap * 2 : 64;
+                    ogt_conform_rect* grown = (ogt_conform_rect*)_voxel_meshify_malloc(ctx, sizeof(ogt_conform_rect) * new_cap);
+                    if (!grown)
+                        return false;
+                    if (*rects) {
+                        memcpy(grown, *rects, sizeof(ogt_conform_rect) * *rect_count);
+                        _voxel_meshify_free(ctx, *rects);
+                    }
+                    *rects = grown;
+                    *rect_cap = new_cap;
+                }
+
+                // map the pass-local (i,j,k) axes back onto model axes through the cardinal transform basis.
+                const ogt_mesh_vec3* side = _make_vec3_ptr(&transform.m00);  // local i direction
+                const ogt_mesh_vec3* up   = _make_vec3_ptr(&transform.m10);  // local j direction
+                const ogt_mesh_vec3* fwd  = _make_vec3_ptr(&transform.m20);  // local k (normal) direction
+                int32_t axis_i = (side->x != 0.0f) ? 0 : (side->y != 0.0f ? 1 : 2);
+                int32_t axis_j = (up->x != 0.0f)   ? 0 : (up->y != 0.0f   ? 1 : 2);
+                int32_t axis_k = (fwd->x != 0.0f)  ? 0 : (fwd->y != 0.0f  ? 1 : 2);
+
+                ogt_conform_rect& r = (*rects)[(*rect_count)++];
+                r.fixed_axis = axis_k;
+                r.min_axis = axis_i < axis_j ? axis_i : axis_j;
+                r.max_axis = axis_i < axis_j ? axis_j : axis_i;
+                r.palette_index = color_index;
+                r.normal_axis = (uint8_t)normal_axis;
+
+                // the face plane is the k1 boundary of slice k0 in local space
+                ogt_mesh_vec3 plane_model = _transform_point(transform, _make_vec3(0.0f, 0.0f, (float)k1));
+                float plane_coords[3] = { plane_model.x, plane_model.y, plane_model.z };
+                r.fixed_value = (int32_t)plane_coords[axis_k];
+
+                int32_t local_min[2] = { i0, j0 };
+                int32_t local_max[2] = { i1, j1 };
+                int32_t local_axis[2] = { axis_i, axis_j };
+                for (int32_t e = 0; e < 2; e++) {
+                    int32_t slot = (local_axis[e] == r.min_axis) ? 0 : 1;
+                    r.min_value[slot] = local_min[e];
+                    r.max_value[slot] = local_max[e];
+                }
+            }
+        }
+    }
+
+#undef VOXELDATA_INDEX_C
+#undef LOCALDATA_INDEX_C
+    return true;
+}
+
+static inline int64_t _conform_cross2d(int64_t ax, int64_t ay, int64_t bx, int64_t by) {
+    return ax * by - ay * bx;
+}
+
+// ear-clip a counter-clockwise, weakly convex rectangle boundary ring with collinear split points allowed.
+// Every boundary sub-segment stays an actual triangle edge and exactly ring_count - 2 positive-area triangles
+// are produced. An ear is rejected when another live vertex lies on its closing diagonal or strictly inside
+// the ear, so collinear points can never be stranded into a zero-area final triangle.
+static uint32_t _conform_triangulate_ring(
+    const int32_t* u_coords, const int32_t* v_coords, uint32_t ring_count,
+    uint32_t base_vertex, bool flip_winding, uint32_t* out_indices)
+{
+    // a rectangle boundary never holds more than 2*(64+64) points
+    uint32_t ring[256];
+    assert(ring_count <= 256);
+    for (uint32_t i = 0; i < ring_count; i++)
+        ring[i] = i;
+
+    uint32_t out_count = 0;
+    uint32_t alive = ring_count;
+    while (alive > 3) {
+        // rescan the whole (weakly convex) ring each iteration for a clip-able convex vertex. A vertex is
+        // clip-able when no other live vertex lies strictly inside its ear or on the closing diagonal.
+        int32_t found = -1;
+        for (uint32_t k = 0; k < alive; k++) {
+            uint32_t i0 = k;
+            uint32_t i1 = (k + 1) % alive;
+            uint32_t i2 = (k + 2) % alive;
+            uint32_t b0 = ring[i0], b1 = ring[i1], b2 = ring[i2];
+
+            int64_t e1x = (int64_t)u_coords[b1] - u_coords[b0];
+            int64_t e1y = (int64_t)v_coords[b1] - v_coords[b0];
+            int64_t e2x = (int64_t)u_coords[b2] - u_coords[b0];
+            int64_t e2y = (int64_t)v_coords[b2] - v_coords[b0];
+            if (_conform_cross2d(e1x, e1y, e2x, e2y) <= 0)
+                continue; // collinear or reflexive vertex, not an ear tip
+
+            bool is_ear = true;
+            for (uint32_t i = 0; i < alive; i++) {
+                if (i == i0 || i == i1 || i == i2)
+                    continue;
+                uint32_t bp = ring[i];
+                int64_t px = (int64_t)u_coords[bp] - u_coords[b0];
+                int64_t py = (int64_t)v_coords[bp] - v_coords[b0];
+
+                // strictly inside the ear triangle?
+                bool s0 = _conform_cross2d(e1x, e1y, px, py) > 0;
+                int64_t f2x = (int64_t)u_coords[b2] - u_coords[b1];
+                int64_t f2y = (int64_t)v_coords[b2] - v_coords[b1];
+                int64_t qx = (int64_t)u_coords[bp] - u_coords[b1];
+                int64_t qy = (int64_t)v_coords[bp] - v_coords[b1];
+                bool s1 = _conform_cross2d(f2x, f2y, qx, qy) > 0;
+                int64_t f0x = (int64_t)u_coords[b0] - u_coords[b2];
+                int64_t f0y = (int64_t)v_coords[b0] - v_coords[b2];
+                int64_t rx = (int64_t)u_coords[bp] - u_coords[b2];
+                int64_t ry = (int64_t)v_coords[bp] - v_coords[b2];
+                bool s2 = _conform_cross2d(f0x, f0y, rx, ry) > 0;
+                if (s0 && s1 && s2) {
+                    is_ear = false;
+                    break;
+                }
+
+                // collinear with the closing diagonal b0->b2 and strictly between them? clipping now would
+                // strand this boundary point, so leave this ear for a later pass.
+                int64_t dx = (int64_t)u_coords[b2] - u_coords[b0];
+                int64_t dy = (int64_t)v_coords[b2] - v_coords[b0];
+                if (_conform_cross2d(dx, dy, px, py) == 0 &&
+                    px * dx + py * dy > 0 &&
+                    px * dx + py * dy < dx * dx + dy * dy)
+                {
+                    is_ear = false;
+                    break;
+                }
+            }
+            if (is_ear) {
+                found = (int32_t)k;
+                break;
+            }
+        }
+
+        // a weakly convex rectangle ring always contains at least one clip-able ear
+        assert(found >= 0);
+        if (found < 0)
+            break;
+
+        uint32_t i1 = (uint32_t)((found + 1) % alive);
+        uint32_t b0 = ring[found], b1 = ring[i1], b2 = ring[(found + 2) % alive];
+        if (flip_winding) {
+            out_indices[out_count++] = base_vertex + b2;
+            out_indices[out_count++] = base_vertex + b1;
+            out_indices[out_count++] = base_vertex + b0;
+        }
+        else {
+            out_indices[out_count++] = base_vertex + b0;
+            out_indices[out_count++] = base_vertex + b1;
+            out_indices[out_count++] = base_vertex + b2;
+        }
+        // remove the ear tip b1 from the ring
+        for (uint32_t i = i1; i + 1 < alive; i++)
+            ring[i] = ring[i + 1];
+        alive--;
+    }
+
+    if (alive == 3) {
+        uint32_t b0 = ring[0], b1 = ring[1], b2 = ring[2];
+        assert(_conform_cross2d((int64_t)u_coords[b1] - u_coords[b0], (int64_t)v_coords[b1] - v_coords[b0],
+                                (int64_t)u_coords[b2] - u_coords[b0], (int64_t)v_coords[b2] - v_coords[b0]) > 0);
+        if (flip_winding) {
+            out_indices[out_count++] = base_vertex + b2;
+            out_indices[out_count++] = base_vertex + b1;
+            out_indices[out_count++] = base_vertex + b0;
+        }
+        else {
+            out_indices[out_count++] = base_vertex + b0;
+            out_indices[out_count++] = base_vertex + b1;
+            out_indices[out_count++] = base_vertex + b2;
+        }
+    }
+    return out_count;
+}
+
+ogt_mesh* ogt_mesh_from_paletted_voxels_greedy_conforming(
+    const ogt_voxel_meshify_context* ctx,
+    const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette)
+{
+    if (!ctx || !voxels || !palette)
+        return NULL;
+    if (size_x < 1 || size_y < 1 || size_z < 1 || size_x > 64 || size_y > 64 || size_z > 64)
+        return NULL;
+
+    const int32_t k_stride_x = 1;
+    const int32_t k_stride_y = size_x;
+    const int32_t k_stride_z = size_x * size_y;
+
+    ogt_conform_rect* rects = NULL;
+    uint32_t rect_count = 0;
+    uint32_t rect_cap = 0;
+
+    // the six passes use the exact same transforms and voxel pointer offsets as ogt_mesh_from_paletted_voxels_greedy
+    // +y pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            0.0f, 0.0f, 1.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels, palette, size_z, size_x, size_y, k_stride_z, k_stride_x, k_stride_y, t, 3, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+    // -y pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            0.0f, 0.0f, 1.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f,-1.0f, 0.0f, 0.0f,
+            0.0f, (float)(size_y), 0.0f, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels + (size_y - 1) * k_stride_y, palette, size_z, size_x, size_y, k_stride_z, k_stride_x, -k_stride_y, t, 2, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+    // +x pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels, palette, size_y, size_z, size_x, k_stride_y, k_stride_z, k_stride_x, t, 1, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+    // -x pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+           -1.0f, 0.0f, 0.0f, 0.0f,
+        (float)size_x, 0.0f, 0.0f, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels + (size_x - 1) * k_stride_x, palette, size_y, size_z, size_x, k_stride_y, k_stride_z, -k_stride_x, t, 0, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+    // +z pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels, palette, size_x, size_y, size_z, k_stride_x, k_stride_y, k_stride_z, t, 5, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+    // -z pass
+    {
+        ogt_mesh_transform t = _make_transform(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, -1.0f, 0.0f,
+            0.0f, 0.0f,(float)size_z, 0.0f);
+        if (!_conform_greedy_collect_rects(voxels + (size_z - 1) * k_stride_z, palette, size_x, size_y, size_z, k_stride_x, k_stride_y, -k_stride_z, t, 4, &rects, &rect_count, &rect_cap, ctx))
+            goto fail_after_rects;
+    }
+
+    // empty voxel set: return a valid, destroyable empty mesh
+    if (rect_count == 0) {
+        _voxel_meshify_free(ctx, rects);
+        ogt_mesh* empty = (ogt_mesh*)_voxel_meshify_malloc(ctx, sizeof(ogt_mesh));
+        if (!empty)
+            return NULL;
+        empty->vertex_count = 0;
+        empty->index_count = 0;
+        empty->vertices = NULL;
+        empty->indices = NULL;
+        return empty;
+    }
+
+    {
+        // one allocation for all axis-line event masks
+        uint32_t table_size = 3 * k_conform_line_count_per_axis;
+        ogt_conform_line_masks* tables = (ogt_conform_line_masks*)_voxel_meshify_malloc(ctx, sizeof(ogt_conform_line_masks) * table_size);
+        if (!tables)
+            goto fail_after_rects;
+        memset(tables, 0, sizeof(ogt_conform_line_masks) * table_size);
+
+        // pass 1: register every rectangle edge endpoint on its axis line
+        for (uint32_t ri = 0; ri < rect_count; ri++) {
+            const ogt_conform_rect& r = rects[ri];
+            int32_t edge_axes[2] = { r.min_axis, r.max_axis };
+            for (int32_t e = 0; e < 2; e++) {
+                int32_t line_axis = edge_axes[e];
+                int32_t other_axis = edge_axes[e ^ 1];
+                int32_t slot_line = (line_axis == r.min_axis) ? 0 : 1;
+                int32_t slot_other = (other_axis == r.min_axis) ? 0 : 1;
+                for (int32_t side = 0; side < 2; side++) {
+                    int32_t point[3];
+                    point[r.fixed_axis] = r.fixed_value;
+                    point[other_axis] = side ? r.max_value[slot_other] : r.min_value[slot_other];
+                    ogt_conform_line_masks& line = _conform_line(tables, line_axis, point);
+                    uint32_t lo = (uint32_t)r.min_value[slot_line];
+                    uint32_t hi = (uint32_t)r.max_value[slot_line];
+                    _conform_bit_set(line.point_bits, lo);
+                    _conform_bit_set(line.point_bits, hi);
+                    // every integer coordinate strictly inside this edge is a legal split location
+                    for (uint32_t c = lo + 1; c < hi; c++)
+                        _conform_bit_set(line.interior_bits, c);
+                }
+            }
+        }
+
+        // pass 2: every rectangle corner becomes a split point on any collinear edge line where it falls
+        // strictly between edge endpoints -- including edges of perpendicular faces. Plane, normal and
+        // material are intentionally irrelevant here.
+        for (uint32_t ri = 0; ri < rect_count; ri++) {
+            const ogt_conform_rect& r = rects[ri];
+            for (uint32_t corner = 0; corner < 4; corner++) {
+                int32_t point[3];
+                for (int32_t axis = 0; axis < 3; axis++)
+                    point[axis] = _conform_rect_coord(r, axis, corner);
+                for (int32_t line_axis = 0; line_axis < 3; line_axis++) {
+                    ogt_conform_line_masks& line = _conform_line(tables, line_axis, point);
+                    uint32_t value = (uint32_t)point[line_axis];
+                    // split only when this corner lies strictly inside some edge recorded on this line
+                    if (_conform_bit_test(line.interior_bits, value))
+                        _conform_bit_set(line.point_bits, value);
+                }
+            }
+        }
+
+        // count the exact output sizes from the final split points. The two parallel edges of a rectangle
+        // live on different axis-lines and can carry different split sets, so every edge is counted on its own.
+        uint32_t total_vertices = 0;
+        uint32_t total_indices = 0;
+        for (uint32_t ri = 0; ri < rect_count; ri++) {
+            const ogt_conform_rect& r = rects[ri];
+            uint32_t ring_points = 0;
+            for (uint32_t edge = 0; edge < 4; edge++) {
+                bool along_u = (edge == 0 || edge == 2);
+                int32_t line_axis = along_u ? r.min_axis : r.max_axis;
+                int32_t key[3];
+                key[r.fixed_axis] = r.fixed_value;
+                if (along_u)
+                    key[r.max_axis] = (edge == 2) ? r.max_value[1] : r.min_value[1];
+                else
+                    key[r.min_axis] = (edge == 3) ? r.min_value[0] : r.max_value[0];
+                const ogt_conform_line_masks& line = _conform_line(tables, line_axis, key);
+                int32_t lo = along_u ? r.min_value[0] : r.min_value[1];
+                int32_t hi = along_u ? r.max_value[0] : r.max_value[1];
+                // sub-segment count = point count - 1; summing the four edge sub-segment counts gives the
+                // number of distinct boundary ring points (each chain contributes its segment count).
+                ring_points += _conform_bit_count_range(line.point_bits, (uint32_t)lo, (uint32_t)hi) - 1;
+            }
+            total_vertices += ring_points;
+            total_indices += (ring_points - 2) * 3;
+        }
+
+        // single allocation, matching the single free in ogt_mesh_destroy
+        uint32_t mesh_size = sizeof(ogt_mesh) + (total_vertices * sizeof(ogt_mesh_vertex)) + (total_indices * sizeof(uint32_t));
+        ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+        if (!mesh) {
+            _voxel_meshify_free(ctx, tables);
+            goto fail_after_rects;
+        }
+        mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
+        mesh->indices = (uint32_t*)&mesh->vertices[total_vertices];
+        mesh->vertex_count = 0;
+        mesh->index_count = 0;
+
+        static const float k_normals[6][3] = {
+            { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f },
+            { 0.0f,-1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+            { 0.0f, 0.0f,-1.0f }, { 0.0f, 0.0f, 1.0f },
+        };
+
+        for (uint32_t ri = 0; ri < rect_count; ri++) {
+            const ogt_conform_rect& r = rects[ri];
+            int32_t axes[2] = { r.min_axis, r.max_axis };
+
+            // gather each of the four boundary edges independently.
+            //   edge 0: bottom, v = v_min, u ascends   (line along min_axis)
+            //   edge 1: right,  u = u_max, v ascends   (line along max_axis)
+            //   edge 2: top,    v = v_max, u descends  (line along min_axis, reversed)
+            //   edge 3: left,   u = u_min, v descends  (line along max_axis, reversed)
+            int32_t edge_u[4][65];
+            int32_t edge_v[4][65];
+            uint32_t edge_count[4] = { 0, 0, 0, 0 };
+            for (uint32_t edge = 0; edge < 4; edge++) {
+                bool along_u = (edge == 0 || edge == 2);
+                bool reversed = (edge == 2 || edge == 3);
+                int32_t line_axis = along_u ? r.min_axis : r.max_axis;
+                int32_t key[3];
+                key[r.fixed_axis] = r.fixed_value;
+                if (along_u)
+                    key[r.max_axis] = (edge == 2) ? r.max_value[1] : r.min_value[1];
+                else
+                    key[r.min_axis] = (edge == 3) ? r.min_value[0] : r.max_value[0];
+                const ogt_conform_line_masks& line = _conform_line(tables, line_axis, key);
+
+                int32_t lo = along_u ? r.min_value[0] : r.min_value[1];
+                int32_t hi = along_u ? r.max_value[0] : r.max_value[1];
+                for (int32_t c = lo; c <= hi; c++) {
+                    if (!_conform_bit_test(line.point_bits, (uint32_t)c))
+                        continue;
+                    edge_u[edge][edge_count[edge]] = along_u ? c : (reversed ? r.min_value[0] : r.max_value[0]);
+                    edge_v[edge][edge_count[edge]] = along_u ? (reversed ? r.max_value[1] : r.min_value[1]) : c;
+                    edge_count[edge]++;
+                }
+                if (reversed) {
+                    for (uint32_t a = 0, b = edge_count[edge] - 1; a < b; a++, b--) {
+                        int32_t tu = edge_u[edge][a]; edge_u[edge][a] = edge_u[edge][b]; edge_u[edge][b] = tu;
+                        int32_t tv = edge_v[edge][a]; edge_v[edge][a] = edge_v[edge][b]; edge_v[edge][b] = tv;
+                    }
+                }
+            }
+
+            // stitch the four chains into one closed ring. Chain 0 starts at the ring origin; chains 1 and 2
+            // skip their shared first corner; chain 3 additionally skips its closing point which equals the
+            // ring origin, so the ring contains every corner exactly once.
+            int32_t ring_u[256];
+            int32_t ring_v[256];
+            uint32_t ring_count = 0;
+            for (uint32_t edge = 0; edge < 4; edge++) {
+                uint32_t first = (edge == 0) ? 0 : 1;
+                uint32_t last = (edge == 3) ? edge_count[edge] - 1 : edge_count[edge];
+                for (uint32_t q = first; q < last; q++) {
+                    assert(ring_count < 256u);
+                    ring_u[ring_count] = edge_u[edge][q];
+                    ring_v[ring_count] = edge_v[edge][q];
+                    ring_count++;
+                }
+            }
+            uint32_t base_vertex = mesh->vertex_count;
+
+            ogt_mesh_vec3 normal = _make_vec3(k_normals[r.normal_axis][0], k_normals[r.normal_axis][1], k_normals[r.normal_axis][2]);
+            ogt_mesh_rgba color = palette[r.palette_index];
+
+            // every ring point copies the owning rectangle's face attributes -- nothing is averaged
+            for (uint32_t b = 0; b < ring_count; b++) {
+                int32_t coord[3];
+                coord[r.fixed_axis] = r.fixed_value;
+                coord[axes[0]] = ring_u[b];
+                coord[axes[1]] = ring_v[b];
+                mesh->vertices[mesh->vertex_count++] = _mesh_make_vertex(
+                    (float)coord[0], (float)coord[1], (float)coord[2],
+                    normal.x, normal.y, normal.z, color, r.palette_index);
+            }
+
+            // the boundary ring is counter-clockwise in (u,v). Flip when (u_axis x v_axis) points opposite
+            // to the face normal, so emitted triangles keep the greedy pass's outward winding.
+            ogt_mesh_vec3 u_unit = _make_vec3(r.min_axis == 0 ? 1.0f : 0.0f, r.min_axis == 1 ? 1.0f : 0.0f, r.min_axis == 2 ? 1.0f : 0.0f);
+            ogt_mesh_vec3 v_unit = _make_vec3(r.max_axis == 0 ? 1.0f : 0.0f, r.max_axis == 1 ? 1.0f : 0.0f, r.max_axis == 2 ? 1.0f : 0.0f);
+            bool flip_winding = _dot3(_cross3(u_unit, v_unit), normal) < 0.0f;
+            uint32_t emitted = _conform_triangulate_ring(ring_u, ring_v, ring_count, base_vertex, flip_winding, &mesh->indices[mesh->index_count]);
+            assert(emitted == (ring_count - 2) * 3);
+            mesh->index_count += emitted;
+        }
+
+        assert(mesh->vertex_count == total_vertices);
+        assert(mesh->index_count == total_indices);
+
+        _voxel_meshify_free(ctx, tables);
+        _voxel_meshify_free(ctx, rects);
+        return mesh;
+    }
+
+fail_after_rects:
+    _voxel_meshify_free(ctx, rects);
+    return NULL;
 }
 
 

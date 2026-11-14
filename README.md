@@ -107,7 +107,7 @@ rOBJ chunks are not supported in any capacity for now. If there is interest, do 
 
 ## ogt_voxel_meshify: converts voxel grid data to triangle mesh data
 
-This module contains 3 routines for converting paletted voxel grid data to triangle mesh data.
+This module contains 4 routines for converting paletted voxel grid data to triangle mesh data.
 
 - **ogt_mesh_from_paletted_voxels_simple**: returns the most naieve mesh possible, which will be tessellated at voxel granularity.
 ![image](https://user-images.githubusercontent.com/8569715/114662155-13c6c100-9cad-11eb-9274-177ad85a82a4.png)
@@ -115,8 +115,40 @@ This module contains 3 routines for converting paletted voxel grid data to trian
 - **ogt_mesh_from_paletted_voxels_greedy**: uses a greedy box-expansion pass to replce rectangular regions of voxels of the same color with a larger polygon that covers the box. It will generally produce t-junctions which can make rasterization not water-tight based on your camera/project/distances.
 ![image](https://user-images.githubusercontent.com/8569715/114662173-1b866580-9cad-11eb-8671-4b0cb4d404f9.png)
 
+- **ogt_mesh_from_paletted_voxels_greedy_conforming**: keeps the exact same greedy rectangular face partition as the plain greedy mesher (same scanning, occlusion, palette_index grouping and six directional transforms), but makes the result water-tight. After the rectangles are generated, every rectangle corner that falls strictly inside another rectangle edge becomes a split point on that edge, regardless of whether the two faces share a plane, normal or material. Each original rectangle is then triangulated independently with every boundary sub-segment represented by a real triangle edge, so the output contains no t-junctions while only original corner coordinates (and the split coordinates derived from them) are used. Face attributes (normal, color and palette_index) stay per-rectangle and are never averaged; vertices that share a position but differ in normal or material are intentionally not welded. The cost is more triangles and vertices than plain greedy meshing, but never the per-voxel face count of the simple mesher.
+
 - **ogt_mesh_from_paletted_voxels_polygon**: will polygonize and triangulate connected voxels that are of the same color. The boundary of the polygon will be tessellated only to the degree that is necessary to there are tessellations at color discontinuities. Generally produces slightly more triangles that greedy meshing but it is mostly water-tight, except for a very small number of cases.
 ![image](https://user-images.githubusercontent.com/8569715/114662191-20e3b000-9cad-11eb-8cd1-2e6be2a38512.png)
+
+### Choosing between greedy and greedy-conforming
+
+Both routines start from the identical greedy rectangle partition, so they describe exactly the same visible surface with the same materials. They differ only in how each rectangle is turned into triangles:
+
+- `ogt_mesh_from_paletted_voxels_greedy` emits two triangles per rectangle. Where a short edge of one rectangle ends in the interior of a longer edge of another, the long edge keeps no vertex there: the two sides of that geometric edge are split differently (a t-junction). Rasterizers can leave single-pixel cracks along such edges under some projections.
+- `ogt_mesh_from_paletted_voxels_greedy_conforming` inserts the missing vertices along the long edges first, then triangulates every rectangle so each boundary sub-segment is an actual triangle edge. Geometrically shared edges now reference the same split coordinates on both sides, which removes the cracks. It produces more triangles (a rectangle whose boundary holds `n` distinct points emits exactly `n-2` triangles instead of 2) but never moves any geometry and never adds points other than the rectangle corners and the splits they induce.
+
+A solid block with no interior corners on its edges still meshes to just two triangles per face, so the common no-junction case costs nothing extra.
+
+### Conforming mesher example
+
+Like the other meshers it is a single-header call; define `OGT_VOXEL_MESHIFY_IMPLEMENTATION` in exactly one translation unit, then pass the same context, voxel buffer (x fastest, dimensions between 1 and 64 on each axis) and 256-entry palette you would pass to the plain greedy mesher. Index `0` is air and every other index is solid regardless of its RGBA alpha.
+
+```c++
+#define OGT_VOXEL_MESHIFY_IMPLEMENTATION
+#include "ogt_voxel_meshify.h"
+
+// voxels are laid out x + y*size_x + z*size_x*size_y; 0 means empty
+ogt_voxel_meshify_context context = {}; // default malloc/free hooks
+ogt_mesh* mesh = ogt_mesh_from_paletted_voxels_greedy_conforming(
+    &context, voxel_data, size_x, size_y, size_z, voxel_palette);
+if (mesh) {
+    // mesh->vertices / mesh->indices are an indexed triangle list with no t-junctions.
+    // ... upload and render ...
+    ogt_mesh_destroy(&context, mesh);
+}
+```
+
+Custom allocators are supported through `context.alloc_func` / `context.free_func`; every allocation the call makes (including on failure paths) is released through the matching free hook, and the returned mesh is always released with `ogt_mesh_destroy`.
 
 
 More documentation and a demo will be added soon.
