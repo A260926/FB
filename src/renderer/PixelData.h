@@ -55,7 +55,11 @@ struct PixelData {
     // Triangle equations needed for derivative computation
     const TriangleEquations* equations;
 
-    PixelData() : equations(nullptr) {}
+    // Index of the original triangle in the submitted index list. This is
+    // only set by the panorama rasterization entry point; -1 otherwise.
+    int primitiveIndex;
+
+    PixelData() : equations(nullptr), primitiveIndex(-1) {}
 
     // Initialize pixel data for the given pixel coordinates.
     void init(const TriangleEquations &eqn, float x, float y, int aVarCount, int pVarCount, bool interpolateZ, bool interpolateW)

@@ -35,6 +35,7 @@ SOFTWARE.
 #include "PixelData.h"
 #include "EdgeData.h"
 #include "PixelShaderBase.h"
+#include "PanoramaRasterizer.h"
 
 namespace swr {
 
@@ -61,6 +62,7 @@ private:
 	void (Rasterizer::*m_triangleFunc)(const RasterizerVertex &v0, const RasterizerVertex &v1, const RasterizerVertex &v2) const;
 	void (Rasterizer::*m_lineFunc)(const RasterizerVertex &v0, const RasterizerVertex &v1) const;
 	void (Rasterizer::*m_pointFunc)(const RasterizerVertex &v) const;
+	PanoramaFragmentSink m_panoramaSink;
 
 public:
 	/// Constructor.
@@ -85,14 +87,28 @@ public:
 		m_maxX = x + width;
 		m_maxY = y + height;
 	}
-	
+
 	/// Set the pixel shader.
 	template <class PixelShader>
 	void setPixelShader()
 	{
 		m_triangleFunc = &Rasterizer::drawTriangleModeTemplate<PixelShader>;
 		m_lineFunc = &Rasterizer::drawLineTemplate<PixelShader>;
-		m_pointFunc = &Rasterizer::drawPointTemplate<PixelShader>;	
+		m_pointFunc = &Rasterizer::drawPointTemplate<PixelShader>;
+		m_panoramaSink = &Rasterizer::panoramaSinkTemplate<PixelShader>;
+	}
+
+	/// Draw an equirectangular panorama triangle list.
+	/** Vertices are in camera space and varyings are not pre-divided by w.
+	The pixel shader selected with setPixelShader receives the fragments via
+	drawPixel. The regular point/line/triangle path is unaffected. */
+	void drawPanoramaTriangleList(const RasterizerVertex *vertices, const int *indices, size_t indexCount, int width, int height, float nearRadius, float farRadius, PanoramaStats *stats = nullptr) const
+	{
+		rasterizePanoramaTriangleListClipped(
+			vertices, indices, indexCount, width, height,
+			nearRadius, farRadius,
+			m_panoramaSink, nullptr, stats,
+			m_minX, m_minY, m_maxX, m_maxY);
 	}
 
 	/// Draw a single point.
@@ -141,6 +157,42 @@ public:
 	}
 
 private:
+	template <class PixelShader>
+	static void panoramaSinkTemplate(void *context, int x, int y, float radialDistance, int primitiveIndex, float b0, float b1, float b2, const RasterizerVertex *v0, const RasterizerVertex *v1, const RasterizerVertex *v2)
+	{
+		(void)context;
+
+		PixelData p;
+		p.x = x;
+		p.y = y;
+		p.primitiveIndex = primitiveIndex;
+
+		// The panorama contract always provides these values, independent of
+		// the shader's interpolation flags.
+		p.z = radialDistance;
+		p.w = 1.0f;
+		p.invw = 1.0f;
+
+		for (int i = 0; i < MaxAVars; ++i)
+			p.avar[i] = 0.0f;
+		for (int i = 0; i < MaxPVars; ++i) {
+			p.pvar[i] = 0.0f;
+			p.pvarTemp[i] = 0.0f;
+		}
+
+		// Physical barycentric interpolation of the original triangle.
+		for (int i = 0; i < PixelShader::AVarCount; ++i)
+			p.avar[i] = b0 * v0->avar[i] + b1 * v1->avar[i] + b2 * v2->avar[i];
+
+		for (int i = 0; i < PixelShader::PVarCount; ++i)
+			p.pvar[i] = b0 * v0->pvar[i] + b1 * v1->pvar[i] + b2 * v2->pvar[i];
+
+		// The panorama path does not expose plane interpolation derivatives.
+		p.equations = nullptr;
+
+		PixelShader::drawPixel(p);
+	}
+
 	bool scissorTest(float x, float y) const
 	{
 		return (x >= m_minX && x < m_maxX && y >= m_minY && y < m_maxY);
