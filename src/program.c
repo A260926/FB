@@ -81,5 +81,9 @@ void spvm_program_delete(spvm_program_t prog)
 	if (prog->file_count)
 		free(prog->files);
 
+	// specialized programs own their rewritten source; ordinary ones borrow it
+	if (prog->owned_code)
+		free(prog->owned_code);
+
 	free(prog);
 }

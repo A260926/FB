@@ -43,6 +43,13 @@ typedef struct {
 	size_t code_length;
 	spvm_source code;
 
+	/* When non-NULL the program owns this word buffer (a specialized program
+	 * keeps its rewritten, self-contained module here) and code points into it;
+	 * it is released in spvm_program_delete. An ordinary spvm_program_create
+	 * leaves this NULL and borrows the caller's source instead. */
+	spvm_word* owned_code;
+	size_t owned_code_length;
+
 	spvm_word extension_count;
 	spvm_string* extensions;
 
