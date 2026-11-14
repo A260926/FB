@@ -28,6 +28,7 @@ import { fromParser } from "./doc.js";
 import { createSAXParserFromDOMParser } from "./dom_to_parser.js";
 
 export { renderHTML } from "./html.js";
+export { renderSVG } from "./svg.js";
 export { generateISD } from "./isd.js";
 export { createSAXParserFromDOMParser };
 

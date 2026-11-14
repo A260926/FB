@@ -36,7 +36,7 @@ import { byName } from "./styles.js";
  * @module imscHTML
  */
 
-const browserIsFirefox = /firefox/i.test(navigator.userAgent);
+const browserIsFirefox = typeof navigator !== "undefined" && /firefox/i.test(navigator.userAgent);
 
 /**
  * Function that maps <pre>smpte:background</pre> URIs to URLs resolving to image resource
@@ -1949,10 +1949,21 @@ for (let i = 0; i < STYLING_MAP_DEFS.length; i++) {
 
 /* CSS property names */
 
-const RUBYPOSITION_ISWK = "webkitRubyPosition" in window.getComputedStyle(document.documentElement);
+/*
+ * The computed-style probes below touch browser globals and are therefore
+ * evaluated lazily-like: in non-DOM environments (e.g. Node) an empty object
+ * is used so that this module can be imported for the sibling SVG renderer.
+ * The constants are only ever consulted while renderHTML() runs in a browser,
+ * where behaviour is unchanged.
+ */
+const _rootComputedStyle = (typeof window !== "undefined" && typeof document !== "undefined") ?
+    window.getComputedStyle(document.documentElement) :
+    {};
+
+const RUBYPOSITION_ISWK = "webkitRubyPosition" in _rootComputedStyle;
 
 const RUBYPOSITION_PROP = RUBYPOSITION_ISWK ? "webkitRubyPosition" : "rubyPosition";
 
-const TEXTEMPHASISSTYLE_PROP = "webkitTextEmphasisStyle" in window.getComputedStyle(document.documentElement) ? "webkitTextEmphasisStyle" : "textEmphasisStyle";
+const TEXTEMPHASISSTYLE_PROP = "webkitTextEmphasisStyle" in _rootComputedStyle ? "webkitTextEmphasisStyle" : "textEmphasisStyle";
 
-const TEXTEMPHASISPOSITION_PROP = "webkitTextEmphasisPosition" in window.getComputedStyle(document.documentElement) ? "webkitTextEmphasisPosition" : "textEmphasisPosition";
+const TEXTEMPHASISPOSITION_PROP = "webkitTextEmphasisPosition" in _rootComputedStyle ? "webkitTextEmphasisPosition" : "textEmphasisPosition";
