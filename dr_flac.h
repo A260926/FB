@@ -699,6 +699,19 @@ typedef struct
     drflac_bool32 _noBinarySearchSeek : 1;
     drflac_bool32 _noBruteForceSeek   : 1;
 
+    /*
+    Internal use only. Preserve-sample-timeline state. When timelinePreserveEnabled is set, a failed or missing FLAC frame is
+    replaced with silence instead of being skipped, so later frames stay at their declared sample positions. timelineSilenceRemaining
+    is the number of zero PCM frames still to emit before the next validated frame, and timelineDataConsumed is set after the first
+    read or seek so the mode can no longer be changed. timelineAnchorConfirmed records that at least one frame has been validated at
+    its declared position, which is a precondition for emitting any silence.
+    */
+    drflac_bool32 timelinePreserveEnabled : 1;
+    drflac_bool32 timelineDataConsumed    : 1;
+    drflac_bool32 timelineAnchorConfirmed : 1;
+    drflac_bool32 hasStreamInfoBlock      : 1;
+    drflac_uint64 timelineSilenceRemaining;
+
     /* The bit streamer. The raw FLAC data is fed through this object. */
     drflac_bs bs;
 
@@ -1007,6 +1020,55 @@ Return Value
 `DRFLAC_TRUE` if successful; `DRFLAC_FALSE` otherwise.
 */
 DRFLAC_API drflac_bool32 drflac_seek_to_pcm_frame(drflac* pFlac, drflac_uint64 pcmFrameIndex);
+
+/*
+Enables or disables the optional preserve-sample-timeline mode for native FLAC streams.
+
+
+Parameters
+----------
+pFlac (in)
+    The decoder.
+
+enabled (in)
+    Set to DRFLAC_TRUE to enable preservation of the sample timeline, or DRFLAC_FALSE to keep the default frame-skipping behavior.
+
+
+Return Value
+-------------
+`DRFLAC_TRUE` if the requested mode was applied; `DRFLAC_FALSE` otherwise, in which case the decoder is left unchanged.
+
+
+Remarks
+-------
+This may only be called after the decoder has been opened successfully and before the first read (including a NULL-buffer skip
+read) or the first call to drflac_seek_to_pcm_frame(). Calling it any later returns DRFLAC_FALSE.
+
+Enabling is only accepted for native (non-Ogg) streams that contain a STREAMINFO block with a non-zero total PCM frame count, and
+only for builds that perform CRC validation (i.e. DR_FLAC_NO_CRC is not defined). Headerless streams opened with drflac_open_relaxed()
+and Ogg streams are not supported. The first FLAC frame of the stream must decode successfully with a correct CRC; otherwise the
+first read simply reaches the end, as with a normal open.
+
+When enabled, a hole between two otherwise valid frames - caused by a CRC failure or by one or more frames being entirely missing -
+is filled with silence rather than being skipped over, so the audio that follows is delivered at the sample position declared by the
+stream. No decoded samples are modified: hole samples are exact zeros and valid frames are emitted untouched, with no resampling or
+smoothing. A hole is only confirmed when a later frame is fully decoded and passes both its header CRC-8 and frame CRC-16 checks; a
+sync code or a valid-looking frame header on its own is never enough to emit silence, and partial PCM from a failed frame is never
+delivered. A hole that runs to the end of the file is not filled: decoding ends after the last confirmed content and no silence is
+invented from STREAMINFO.
+
+Frame positions are taken from the FLAC frame coordinates: the frame number combined with the STREAMINFO block size for fixed block
+size streams (the final frame may be shorter), and the absolute sample number for variable block size streams. A valid frame that
+moves backwards, overlaps already delivered content, extends past the declared total sample count, or involves overflowing position
+arithmetic stops decoding instead of being interpreted as a hole.
+
+All three read formats (s32, s16 and f32) and NULL-buffer skip reads share the same timeline, and currentPCMFrame always reports the
+position in the original stream. drflac_seek_to_pcm_frame() likewise uses original sample coordinates while the mode is enabled:
+seeking into a hole succeeds and the following reads produce silence until the frame on the right side of the hole is reached.
+Seeking may take the slower brute-force path in this mode but CRC validation is never disabled. Disabling the mode (or never enabling
+it) leaves the existing fast paths and frame-skipping behavior unchanged.
+*/
+DRFLAC_API drflac_bool32 drflac_set_preserve_sample_timeline(drflac* pFlac, drflac_bool32 enabled);
 
 
 
@@ -5981,6 +6043,269 @@ static drflac_uint64 drflac__seek_forward_by_pcm_frames(drflac* pFlac, drflac_ui
 }
 
 
+/*
+Preserve-sample-timeline support.
+
+When timeline preservation is enabled, the decoder no longer treats the physical stream as a packed sequence of good frames.
+Instead each fully validated frame is placed at the sample position its header declares, and any space between the position the
+decoder is expected to output next and the start of that frame is emitted as exact-zero silence. A hole is therefore only ever
+confirmed from the right hand side, by a frame that has been fully decoded with both a correct header CRC-8 and frame CRC-16: a
+sync code or a CRC-8-valid header alone can never produce silence, and a failed frame never yields partial PCM.
+
+All working storage below is fixed in size and tied to a single FLAC frame; no allocation is ever proportional to a hole and the
+stream is never decoded up front.
+*/
+
+/* Returns the absolute first PCM frame of the current frame header, applying the fixed block size frame-number rule when needed. */
+static drflac_bool32 drflac__timeline_header_first_pcm_frame(drflac* pFlac, const drflac_frame_header* pHeader, drflac_uint64* pFirstPCMFrameOut)
+{
+    drflac_uint64 firstPCMFrame;
+
+    if (pHeader->pcmFrameNumber != 0) {
+        firstPCMFrame = pHeader->pcmFrameNumber;    /* Variable block size streams carry an absolute sample number. */
+    } else {
+        /* Fixed block size streams carry a frame number; position is frame * STREAMINFO block size. */
+        drflac_uint64 blockSize = pFlac->maxBlockSizeInPCMFrames;
+        if (blockSize == 0 || pHeader->flacFrameNumber > (((drflac_uint64)-1) / blockSize)) {
+            return DRFLAC_FALSE;    /* Position arithmetic would overflow. */
+        }
+        firstPCMFrame = (drflac_uint64)pHeader->flacFrameNumber * blockSize;
+    }
+
+    *pFirstPCMFrameOut = firstPCMFrame;
+    return DRFLAC_TRUE;
+}
+
+/*
+Validates the coordinates of a frame that has already been fully decoded (so its CRC-16 is known good). Returns DRFLAC_SUCCESS and
+the frame's sample range when it can be placed on the timeline, or DRFLAC_INVALID_DATA / DRFLAC_AT_END when it must stop decoding.
+*/
+static drflac_result drflac__timeline_validate_frame(drflac* pFlac, const drflac_frame_header* pHeader, drflac_uint64* pFirstPCMFrameOut, drflac_uint64* pLastPCMFrameOut)
+{
+    drflac_uint64 firstPCMFrame;
+    drflac_uint64 blockSize;
+    drflac_uint64 endPCMFrame;
+
+    if (pHeader->blockSizeInPCMFrames == 0) {
+        return DRFLAC_INVALID_DATA;
+    }
+    if (!drflac__timeline_header_first_pcm_frame(pFlac, pHeader, &firstPCMFrame)) {
+        return DRFLAC_INVALID_DATA;    /* Overflow. */
+    }
+
+    blockSize = pHeader->blockSizeInPCMFrames;
+    if (firstPCMFrame > (drflac_uint64)(-1) - blockSize) {
+        return DRFLAC_INVALID_DATA;    /* Overflow. */
+    }
+    endPCMFrame = firstPCMFrame + blockSize;    /* One past the frame's last sample. */
+
+    /* A frame may never extend past the total length declared by STREAMINFO. */
+    if (pFlac->totalPCMFrameCount != 0 && endPCMFrame > pFlac->totalPCMFrameCount) {
+        return DRFLAC_AT_END;
+    }
+
+    /* A frame may never move backwards or overlap samples already delivered. */
+    if (firstPCMFrame < pFlac->currentPCMFrame) {
+        return DRFLAC_INVALID_DATA;
+    }
+
+    *pFirstPCMFrameOut = firstPCMFrame;
+    *pLastPCMFrameOut  = endPCMFrame - 1;
+    return DRFLAC_SUCCESS;
+}
+
+/*
+Reads and fully decodes the next good frame, skipping over any number of bad frames. On success the current frame is a fully
+decoded, CRC-validated frame and *pFirstPCMFrameOut receives its declared starting sample; the decoder state otherwise matches a
+failed drflac__read_and_decode_next_flac_frame() call.
+*/
+static drflac_bool32 drflac__timeline_read_next_valid_frame(drflac* pFlac, drflac_uint64* pFirstPCMFrameOut)
+{
+    for (;;) {
+        drflac_result result;
+
+        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+            return DRFLAC_FALSE;    /* No more frames: an unconfirmed hole simply ends the stream. */
+        }
+
+        result = drflac__decode_flac_frame(pFlac);
+        if (result == DRFLAC_CRC_MISMATCH) {
+            continue;    /* Bad frame. Keep scanning; any silence it implied stays unconfirmed for now. */
+        }
+        if (result != DRFLAC_SUCCESS) {
+            return DRFLAC_FALSE;
+        }
+
+        /* This frame decoded fully and passed its CRC-16. It is the only thing allowed to confirm a hole. */
+        if (!drflac__timeline_header_first_pcm_frame(pFlac, &pFlac->currentFLACFrame.header, pFirstPCMFrameOut)) {
+            return DRFLAC_FALSE;
+        }
+        return DRFLAC_TRUE;
+    }
+}
+
+/*
+Ensures the decoder has either silence pending or a validated frame ready at the current output position. Returns DRFLAC_TRUE when
+output can proceed, or DRFLAC_FALSE when decoding must stop (end of stream with an unconfirmed hole, or an illegal frame position).
+On success currentFLACFrame describes a validated frame when pcmFramesRemaining is non-zero; otherwise timelineSilenceRemaining
+holds confirmed zero frames.
+*/
+static drflac_bool32 drflac__timeline_prepare(drflac* pFlac)
+{
+    if (pFlac->timelineSilenceRemaining > 0 || pFlac->currentFLACFrame.pcmFramesRemaining > 0) {
+        return DRFLAC_TRUE;
+    }
+
+    for (;;) {
+        drflac_uint64 firstPCMFrame;
+        drflac_uint64 lastPCMFrame;
+        drflac_result result;
+
+        if (!drflac__timeline_read_next_valid_frame(pFlac, &firstPCMFrame)) {
+            return DRFLAC_FALSE;
+        }
+
+        if (!pFlac->timelineAnchorConfirmed) {
+            /* The source's first frame must be a fully decoded, CRC-correct frame sitting at sample 0. */
+            if (firstPCMFrame != 0) {
+                return DRFLAC_FALSE;
+            }
+            pFlac->timelineAnchorConfirmed = DRFLAC_TRUE;
+        }
+
+        result = drflac__timeline_validate_frame(pFlac, &pFlac->currentFLACFrame.header, &firstPCMFrame, &lastPCMFrame);
+        if (result != DRFLAC_SUCCESS) {
+            /* Backwards, overlapping, out-of-range or overflowing coordinates stop decoding rather than defining a hole. */
+            return DRFLAC_FALSE;
+        }
+
+        if (firstPCMFrame < pFlac->currentPCMFrame) {
+            return DRFLAC_FALSE;    /* Defensive: validate_frame should already have rejected this. */
+        }
+
+        if (firstPCMFrame > pFlac->currentPCMFrame) {
+            /* A confirmed hole: fill exactly the missing samples with silence before touching the frame's audio. */
+            pFlac->timelineSilenceRemaining = firstPCMFrame - pFlac->currentPCMFrame;
+            return DRFLAC_TRUE;
+        }
+
+        /* Frame starts exactly where output is expected; its samples can be consumed directly. */
+        return DRFLAC_TRUE;
+    }
+}
+
+/* Emits up to framesToRead zero PCM frames into pBufferOut (which may be NULL for a skip read) and advances the timeline. */
+static drflac_uint64 drflac__timeline_read_silence(drflac* pFlac, drflac_uint64 framesToRead, void* pBufferOut, unsigned int bytesPerSample)
+{
+    unsigned int channelCount = pFlac->channels;
+    drflac_uint64 framesThisIteration = pFlac->timelineSilenceRemaining;
+    size_t bytesToZero;
+
+    if (framesThisIteration > framesToRead) {
+        framesThisIteration = framesToRead;
+    }
+
+    if (pBufferOut != NULL) {
+        /* Bounds are kept in bytes so the multiplication cannot silently wrap between frame and sample counts. */
+        if (framesThisIteration > ((size_t)-1 / channelCount) / bytesPerSample) {
+            return 0;
+        }
+        bytesToZero = (size_t)framesThisIteration * (size_t)channelCount * (size_t)bytesPerSample;
+        DRFLAC_ZERO_MEMORY(pBufferOut, bytesToZero);
+    }
+
+    pFlac->timelineSilenceRemaining -= framesThisIteration;
+    pFlac->currentPCMFrame           += framesThisIteration;
+    return framesThisIteration;
+}
+
+/*
+Shared entry point for the three typed read APIs. Defined after the format-specific decode helpers below; the prototype lets the
+public readers call it. fmt selects the output conversion, and pBufferOut may be NULL for a skip read (in which case fmt is
+irrelevant and no samples are written, only the timeline position moves).
+*/
+typedef enum
+{
+    drflac__timeline_format_s32 = 0,
+    drflac__timeline_format_s16 = 1,
+    drflac__timeline_format_f32 = 2
+} drflac__timeline_format;
+
+static drflac_uint64 drflac__timeline_read_pcm_frames(drflac* pFlac, drflac_uint64 framesToRead, void* pBufferOut, drflac__timeline_format fmt);
+
+
+/*
+Seeks to an original-stream sample coordinate in preserve-sample-timeline mode. Every frame up to the target is fully decoded and
+CRC validated, so a target inside a hole lands on pending silence and a target inside a frame lands inside that frame's PCM. This is
+the deliberately slower path; CRC checking is never disabled for it.
+*/
+static drflac_bool32 drflac__timeline_seek_to_pcm_frame(drflac* pFlac, drflac_uint64 pcmFrameIndex)
+{
+    drflac_uint64 targetPCMFrame = pcmFrameIndex;
+
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
+    /* Match the public seek behavior of clamping to the known end of the stream. */
+    if (pFlac->totalPCMFrameCount != 0 && targetPCMFrame > pFlac->totalPCMFrameCount) {
+        targetPCMFrame = pFlac->totalPCMFrameCount;
+    }
+
+    /* Always rebuild the timeline from the first frame so forward, backward and zero seeks share one code path. */
+    if (!drflac__seek_to_first_frame(pFlac)) {
+        return DRFLAC_FALSE;
+    }
+    pFlac->timelineSilenceRemaining = 0;
+    pFlac->timelineAnchorConfirmed = DRFLAC_FALSE;
+
+    while (pFlac->currentPCMFrame < targetPCMFrame) {
+        drflac_uint64 segmentFirst;
+        drflac_uint64 segmentLength;
+
+        if (!drflac__timeline_prepare(pFlac)) {
+            /* An unconfirmed tail hole cannot be seeked through; only an exact boundary at the end is acceptable. */
+            return pFlac->currentPCMFrame == targetPCMFrame;
+        }
+
+        segmentFirst = pFlac->currentPCMFrame;
+        if (pFlac->timelineSilenceRemaining > 0) {
+            segmentLength = pFlac->timelineSilenceRemaining;    /* A confirmed silence segment. */
+        } else {
+            drflac_uint64 frameFirst;
+            if (!drflac__timeline_header_first_pcm_frame(pFlac, &pFlac->currentFLACFrame.header, &frameFirst)) {
+                return DRFLAC_FALSE;
+            }
+            /* The frame is contiguous with the current output position; its remaining samples are the whole segment. */
+            if (frameFirst != segmentFirst) {
+                return DRFLAC_FALSE;
+            }
+            segmentLength = pFlac->currentFLACFrame.pcmFramesRemaining;
+        }
+
+        if (targetPCMFrame - segmentFirst < segmentLength) {
+            /* The target lies inside this segment. Leave the remainder (silence or frame PCM) in place for the next read. */
+            drflac_uint64 framesToConsume = targetPCMFrame - segmentFirst;
+            if (pFlac->timelineSilenceRemaining > 0) {
+                pFlac->timelineSilenceRemaining -= framesToConsume;
+            } else {
+                pFlac->currentFLACFrame.pcmFramesRemaining -= (drflac_uint32)framesToConsume;
+            }
+            pFlac->currentPCMFrame = targetPCMFrame;
+            return DRFLAC_TRUE;
+        }
+
+        /* Consume the whole segment and continue scanning toward the target. */
+        if (pFlac->timelineSilenceRemaining > 0) {
+            pFlac->timelineSilenceRemaining = 0;
+        } else {
+            pFlac->currentFLACFrame.pcmFramesRemaining = 0;
+        }
+        pFlac->currentPCMFrame += segmentLength;
+    }
+
+    return DRFLAC_TRUE;
+}
+
+
 static drflac_bool32 drflac__seek_to_pcm_frame__brute_force(drflac* pFlac, drflac_uint64 pcmFrameIndex)
 {
     drflac_bool32 isMidFrame = DRFLAC_FALSE;
@@ -8459,6 +8784,7 @@ static void drflac__init_from_info(drflac* pFlac, const drflac_init_info* pInit)
     pFlac->bitsPerSample           = (drflac_uint8)pInit->bitsPerSample;
     pFlac->totalPCMFrameCount      = pInit->totalPCMFrameCount;
     pFlac->container               = pInit->container;
+    pFlac->hasStreamInfoBlock      = pInit->hasStreamInfoBlock;
 }
 
 
@@ -9607,6 +9933,46 @@ DRFLAC_API void drflac_close(drflac* pFlac)
 }
 
 
+DRFLAC_API drflac_bool32 drflac_set_preserve_sample_timeline(drflac* pFlac, drflac_bool32 enabled)
+{
+    if (pFlac == NULL) {
+        return DRFLAC_FALSE;
+    }
+
+    if (enabled) {
+    #ifdef DR_FLAC_NO_CRC
+        /* Holes can only be delimited by validated frames; without CRC checks there is nothing to validate against. */
+        return DRFLAC_FALSE;
+    #else
+        /* Only native streams carrying a STREAMINFO block with a known total length can be placed on a sample timeline. */
+        if (pFlac->container != drflac_container_native || !pFlac->hasStreamInfoBlock || pFlac->totalPCMFrameCount == 0) {
+            return DRFLAC_FALSE;
+        }
+
+        /* The window is open only after a successful open and before the first read or seek. */
+        if (pFlac->timelineDataConsumed) {
+            return DRFLAC_FALSE;
+        }
+
+        /* Turning the mode on from a clean state; never mutate an already configured object on rejection. */
+        pFlac->timelinePreserveEnabled = DRFLAC_TRUE;
+        pFlac->timelineSilenceRemaining = 0;
+        pFlac->timelineAnchorConfirmed = DRFLAC_FALSE;
+        return DRFLAC_TRUE;
+    #endif
+    }
+
+    /* Disabling is accepted in the same configuration window and leaves the ordinary frame-skipping behavior in place. */
+    if (pFlac->timelineDataConsumed) {
+        return DRFLAC_FALSE;
+    }
+    pFlac->timelinePreserveEnabled = DRFLAC_FALSE;
+    pFlac->timelineSilenceRemaining = 0;
+    pFlac->timelineAnchorConfirmed = DRFLAC_FALSE;
+    return DRFLAC_TRUE;
+}
+
+
 #if 0
 static DRFLAC_INLINE void drflac_read_pcm_frames_s32__decode_left_side__reference(drflac* pFlac, drflac_uint64 frameCount, drflac_uint32 unusedBitsPerSample, const drflac_int32* pInputSamples0, const drflac_int32* pInputSamples1, drflac_int32* pOutputSamples)
 {
@@ -10597,12 +10963,106 @@ static DRFLAC_INLINE void drflac_read_pcm_frames_s32__decode(drflac* pFlac, drfl
     }
 }
 
+/* Forward declarations of the format-specific frame decoders so the shared timeline reader can dispatch to them below. */
+static DRFLAC_INLINE void drflac_read_pcm_frames_s32__decode(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, drflac_int32* pOutputSamples);
+static void drflac_read_pcm_frames_s32__decode_s64(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, drflac_int32* pOutputSamples);
+static DRFLAC_INLINE void drflac_read_pcm_frames_s16__decode(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, drflac_int16* pOutputSamples);
+static void drflac_read_pcm_frames_s16__decode_s64(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, drflac_int16* pOutputSamples);
+static DRFLAC_INLINE void drflac_read_pcm_frames_f32__decode(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, float* pOutputSamples);
+static void drflac_read_pcm_frames_f32__decode_s64(drflac* pFlac, drflac_uint64 frameCount, drflac_uint64 iFirstPCMFrame, float* pOutputSamples);
+
+/*
+Shared reader for preserve-sample-timeline mode used by all three public read APIs and by NULL-buffer skip reads. Hole samples are
+exact zeros; validated frame samples are emitted through the ordinary format-specific decoders, untouched and without resampling.
+pBufferOut may be NULL in which case the timeline position still advances but nothing is written.
+*/
+static drflac_uint64 drflac__timeline_read_pcm_frames(drflac* pFlac, drflac_uint64 framesToRead, void* pBufferOut, drflac__timeline_format fmt)
+{
+    unsigned int bytesPerSample = (fmt == drflac__timeline_format_s16) ? 2u : 4u;
+    drflac_uint8* pCursor = (drflac_uint8*)pBufferOut;
+    drflac_uint64 framesRead = 0;
+
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
+    while (framesToRead > 0) {
+        drflac_uint64 framesThisIteration;
+
+        if (!drflac__timeline_prepare(pFlac)) {
+            break;    /* End of confirmed content; no STREAMINFO-guessed tail silence is produced. */
+        }
+
+        if (pFlac->timelineSilenceRemaining > 0) {
+            framesThisIteration = drflac__timeline_read_silence(pFlac, framesToRead, pCursor, bytesPerSample);
+            if (framesThisIteration == 0) {
+                break;
+            }
+        } else {
+            /* A validated frame is ready. Its own PCM goes through the normal typed decode path, one frame-sized piece at a time. */
+            drflac_uint64 iFirstPCMFrame = pFlac->currentFLACFrame.header.blockSizeInPCMFrames - pFlac->currentFLACFrame.pcmFramesRemaining;
+
+            framesThisIteration = framesToRead;
+            if (framesThisIteration > pFlac->currentFLACFrame.pcmFramesRemaining) {
+                framesThisIteration = pFlac->currentFLACFrame.pcmFramesRemaining;
+            }
+
+            if (pCursor != NULL) {
+                switch (fmt)
+                {
+                    case drflac__timeline_format_s32:
+                    {
+                        if (pFlac->bitsPerSample != 32) {
+                            drflac_read_pcm_frames_s32__decode(pFlac, framesThisIteration, iFirstPCMFrame, (drflac_int32*)pCursor);
+                        } else {
+                            drflac_read_pcm_frames_s32__decode_s64(pFlac, framesThisIteration, iFirstPCMFrame, (drflac_int32*)pCursor);
+                        }
+                    } break;
+
+                    case drflac__timeline_format_s16:
+                    {
+                        if (pFlac->bitsPerSample != 32) {
+                            drflac_read_pcm_frames_s16__decode(pFlac, framesThisIteration, iFirstPCMFrame, (drflac_int16*)pCursor);
+                        } else {
+                            drflac_read_pcm_frames_s16__decode_s64(pFlac, framesThisIteration, iFirstPCMFrame, (drflac_int16*)pCursor);
+                        }
+                    } break;
+
+                    case drflac__timeline_format_f32:
+                    {
+                        if (pFlac->bitsPerSample != 32) {
+                            drflac_read_pcm_frames_f32__decode(pFlac, framesThisIteration, iFirstPCMFrame, (float*)pCursor);
+                        } else {
+                            drflac_read_pcm_frames_f32__decode_s64(pFlac, framesThisIteration, iFirstPCMFrame, (float*)pCursor);
+                        }
+                    } break;
+                }
+            }
+
+            pFlac->currentFLACFrame.pcmFramesRemaining -= (drflac_uint32)framesThisIteration;
+            pFlac->currentPCMFrame                   += framesThisIteration;
+        }
+
+        framesRead   += framesThisIteration;
+        framesToRead -= framesThisIteration;
+        if (pCursor != NULL) {
+            pCursor += framesThisIteration * (drflac_uint64)pFlac->channels * bytesPerSample;
+        }
+    }
+
+    return framesRead;
+}
+
 DRFLAC_API drflac_uint64 drflac_read_pcm_frames_s32(drflac* pFlac, drflac_uint64 framesToRead, drflac_int32* pBufferOut)
 {
     drflac_uint64 framesRead;
 
     if (pFlac == NULL || framesToRead == 0) {
         return 0;
+    }
+
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
+    if (pFlac->timelinePreserveEnabled) {
+        return drflac__timeline_read_pcm_frames(pFlac, framesToRead, pBufferOut, drflac__timeline_format_s32);
     }
 
     if (pBufferOut == NULL) {
@@ -11579,6 +12039,12 @@ DRFLAC_API drflac_uint64 drflac_read_pcm_frames_s16(drflac* pFlac, drflac_uint64
         return 0;
     }
 
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
+    if (pFlac->timelinePreserveEnabled) {
+        return drflac__timeline_read_pcm_frames(pFlac, framesToRead, pBufferOut, drflac__timeline_format_s16);
+    }
+
     if (pBufferOut == NULL) {
         return drflac__seek_forward_by_pcm_frames(pFlac, framesToRead);
     }
@@ -12525,6 +12991,12 @@ DRFLAC_API drflac_uint64 drflac_read_pcm_frames_f32(drflac* pFlac, drflac_uint64
         return 0;
     }
 
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
+    if (pFlac->timelinePreserveEnabled) {
+        return drflac__timeline_read_pcm_frames(pFlac, framesToRead, pBufferOut, drflac__timeline_format_f32);
+    }
+
     if (pBufferOut == NULL) {
         return drflac__seek_forward_by_pcm_frames(pFlac, framesToRead);
     }
@@ -12571,9 +13043,17 @@ DRFLAC_API drflac_bool32 drflac_seek_to_pcm_frame(drflac* pFlac, drflac_uint64 p
         return DRFLAC_FALSE;
     }
 
+    /* Any seek call, even a no-op to the current position, closes the configuration window. */
+    pFlac->timelineDataConsumed = DRFLAC_TRUE;
+
     /* Don't do anything if we're already on the seek point. */
     if (pFlac->currentPCMFrame == pcmFrameIndex) {
         return DRFLAC_TRUE;
+    }
+
+    /* Preserve-timeline seeks use original sample coordinates and validate every frame up to the target. */
+    if (pFlac->timelinePreserveEnabled) {
+        return drflac__timeline_seek_to_pcm_frame(pFlac, pcmFrameIndex);
     }
 
     if (pcmFrameIndex == 0) {
