@@ -56,6 +56,59 @@ The SendTimeout set timeout on the `Send` command, without timeout the `Send` co
 
 The BufferSize option provides a mechanism to configure the client io buffer size in bytes.
 
+### ExpectBatchContext
+
+`func (e *GExpect) ExpectBatchContext(ctx context.Context, batch []Batcher, timeout time.Duration) ([]BatchRes, error)`
+runs a batch while the whole batch is bounded by `ctx`. The `timeout` argument keeps its
+`ExpectBatch` meaning and only bounds a single wait.
+
+Cancellation (or the context deadline) stops every wait in the batch: waiting for a match,
+waiting for the send channel to accept an action, `SwitchCase` `Continue`/`Next` retries, and
+auto-sending a captured substitution result. Output arriving continuously never extends the
+context deadline. If `ctx` is already canceled on entry, nothing is executed at all. The
+returned error satisfies `errors.Is(err, context.Canceled)` or
+`errors.Is(err, context.DeadlineExceeded)` as appropriate.
+
+When the batch is canceled while an `Expect` step is waiting for a match, the step's still
+uncommitted local text is returned in an extra `BatchRes` whose `Idx` is the original batch
+index, whose `Output` is that text and whose `Match` is `nil`. The same text is put back at the
+front of the session buffer, ahead of bytes that arrive later, so a later normal `Expect` on the
+same session can match across both segments without losing or duplicating bytes. Matches that
+already completed (including committed `Continue`/`Next` matches) stay consumed and are never
+rolled back. With `PartialMatch(true)` the unmatched suffix is restored exactly once.
+`ExpectBatchContext` returns all completed `Expect` steps in `res`.
+
+The return point of a send is when the session's write goroutine receives the action. Once
+cancellation is observed the action is no longer submitted; when cancellation and delivery are
+both ready either outcome is allowed. A `Write` that was already submitted may complete, and no
+later batch actions are delivered after cancellation. Existing `SendTimeout` and `ctx` are both
+observed in the same wait: whichever is seen first ends it, and ordinary send errors are still
+reported. A signal action checks `ctx` before executing. Once the last action has completed the
+batch is successful; a later cancellation does not turn it into a failure.
+
+The method runs the batch in the calling goroutine and does not wrap `ExpectBatch` in a
+goroutine, so after it returns no leftover batch is reading the buffer, matching, or delivering
+later actions. It does not support concurrent `Expect`/`Send` calls on the same session from
+multiple callers, and it never cancels a batch by closing the session.
+
+The session output handling itself is unchanged: `ExpectBatch`, `Expect`,
+`ExpectSwitchCase` and `Send` keep their previous public behavior.
+
+### Cancellable form entry example
+
+[`examples/form`](examples/form/main.go) is a runnable, fully local business form entry flow. A
+child process simulates the service, prompting for a ticket number, an amount and a final
+confirmation. The automation reads fixed structured input, fills the form through
+`ExpectBatchContext`, and prints `completed`/`canceled`/`failed` together with the steps that
+completed. The service keeps the raw bytes it received and appends a business record only for a
+confirmed form.
+
+Run `go run ./examples/form` for a completed entry, or `go run ./examples/form revoke` to have
+the upper layer withdraw the request after the amount was entered but before the confirmation is
+sent. In the revoked case the confirmation is never submitted, so no new business record appears;
+the canceled batch's unmatched output stays in the session buffer, and the same session resumes
+the entry afterwards. Nothing connects to a real business system.
+
 ## Basic Examples
 
 ### networkbit.ch

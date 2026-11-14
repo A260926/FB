@@ -7,6 +7,7 @@ package expect
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -570,6 +571,11 @@ type Expecter interface {
 	// Failure of any of the batch commands will stop the execution, returning the results up to the
 	// failure.
 	ExpectBatch([]Batcher, time.Duration) ([]BatchRes, error)
+	// ExpectBatchContext is like ExpectBatch, but the whole batch is bounded by ctx.
+	// Cancellation stops waiting for matches and for the send channel, and no further
+	// batch commands are executed. The timeout argument keeps its ExpectBatch meaning
+	// and applies to each individual wait.
+	ExpectBatchContext(context.Context, []Batcher, time.Duration) ([]BatchRes, error)
 	// ExpectSwitchCase makes it possible to Expect with multiple regular expressions and actions. Returns the
 	// full output and submatches of the commands together with an index for the matching Case.
 	ExpectSwitchCase([]Caser, time.Duration) (string, []string, int, error)
@@ -640,8 +646,57 @@ func (e *GExpect) String() string {
 // ExpectBatch takes an array of BatchEntry and executes them in order filling in the BatchRes
 // array for any Expect command executed.
 func (e *GExpect) ExpectBatch(batch []Batcher, timeout time.Duration) ([]BatchRes, error) {
+	return e.expectBatch(nil, batch, timeout)
+}
+
+// ExpectBatchContext takes an array of BatchEntry and executes them in order filling in the
+// BatchRes array for any Expect command executed. The whole batch is bounded by ctx: when ctx is
+// canceled or its deadline expires no further actions are submitted and every wait in the batch
+// stops. The timeout argument keeps the ExpectBatch meaning and only bounds a single wait; new
+// output arriving never extends the context deadline.
+//
+// Cancellation while an Expect step waits for a match returns that step's still uncommitted
+// output in an extra BatchRes with Match set to nil. That output is also put back at the front of
+// the session buffer, so a later Expect call on the same session continues matching from those
+// bytes. Cancellation while a send or signal is being submitted does not fabricate an Expect
+// result.
+func (e *GExpect) ExpectBatchContext(ctx context.Context, batch []Batcher, timeout time.Duration) ([]BatchRes, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	res := []BatchRes{}
+	if err := ctx.Err(); err != nil {
+		// The context was already canceled on entry: perform no actions at all.
+		return res, contextError(ctx)
+	}
+	return e.expectBatch(ctx, batch, timeout)
+}
+
+// batchCancelStage describes where a context cancellation interrupted an Expect step.
+type batchCancelStage int
+
+const (
+	batchNoCancel batchCancelStage = iota
+	// batchCanceledWaiting means the step was canceled while waiting for a match. The text
+	// gathered for the step has been put back into the session buffer.
+	batchCanceledWaiting
+	// batchCanceledSending means the step matched and was canceled while submitting the
+	// resulting send. The match is consumed and no Expect result is fabricated.
+	batchCanceledSending
+)
+
+// contextError wraps the context error returned by ctx.Err() so that errors.Is can identify
+// context.Canceled and context.DeadlineExceeded.
+func contextError(ctx context.Context) error {
+	return fmt.Errorf("expect: batch canceled: %w", ctx.Err())
+}
+
+func (e *GExpect) expectBatch(ctx context.Context, batch []Batcher, timeout time.Duration) ([]BatchRes, error) {
 	res := []BatchRes{}
 	for i, b := range batch {
+		if ctx != nil && ctx.Err() != nil {
+			return res, contextError(ctx)
+		}
 		switch b.Cmd() {
 		case BatchExpect:
 			re, err := regexp.Compile(b.Arg())
@@ -652,13 +707,24 @@ func (e *GExpect) ExpectBatch(batch []Batcher, timeout time.Duration) ([]BatchRe
 			if to < 0 {
 				to = timeout
 			}
-			out, match, err := e.Expect(re, to)
+			out, match, _, stage, err := e.expectSwitchCase(ctx, []Caser{&Case{re, "", nil, 0}}, to)
+			switch stage {
+			case batchCanceledWaiting:
+				res = append(res, BatchRes{i, out, nil})
+				return res, err
+			case batchCanceledSending:
+				return res, err
+			}
 			res = append(res, BatchRes{i, out, match})
 			if err != nil {
 				return res, err
 			}
 		case BatchSend:
-			if err := e.Send(b.Arg()); err != nil {
+			canceled, err := e.sendAction(ctx, b.Arg())
+			if canceled {
+				return res, err
+			}
+			if err != nil {
 				return res, err
 			}
 		case BatchSwitchCase:
@@ -666,15 +732,28 @@ func (e *GExpect) ExpectBatch(batch []Batcher, timeout time.Duration) ([]BatchRe
 			if to < 0 {
 				to = timeout
 			}
-			out, match, _, err := e.ExpectSwitchCase(b.Cases(), to)
+			out, match, _, stage, err := e.expectSwitchCase(ctx, b.Cases(), to)
+			switch stage {
+			case batchCanceledWaiting:
+				res = append(res, BatchRes{i, out, nil})
+				return res, err
+			case batchCanceledSending:
+				return res, err
+			}
 			res = append(res, BatchRes{i, out, match})
 			if err != nil {
 				return res, err
 			}
 		case BatchSendSignal:
+			if ctx != nil && ctx.Err() != nil {
+				return res, contextError(ctx)
+			}
 			sigNr, err := strconv.Atoi(b.Arg())
 			if err != nil {
 				return res, err
+			}
+			if ctx != nil && ctx.Err() != nil {
+				return res, contextError(ctx)
 			}
 			if err := e.SendSignal(syscall.Signal(sigNr)); err != nil {
 				return res, err
@@ -708,12 +787,17 @@ func (e *GExpect) SendSignal(sig os.Signal) error {
 // 	Given: vf11.hnd01.net            UP      35 (4)        34 (4)          CONNECTED         0              0/0
 // 	Would send: show arp vf11.hnd01.net
 func (e *GExpect) ExpectSwitchCase(cs []Caser, timeout time.Duration) (string, []string, int, error) {
+	out, match, idx, _, err := e.expectSwitchCase(nil, cs, timeout)
+	return out, match, idx, err
+}
+
+func (e *GExpect) expectSwitchCase(ctx context.Context, cs []Caser, timeout time.Duration) (string, []string, int, batchCancelStage, error) {
 	// Compile all regexps
 	rs := make([]*regexp.Regexp, 0, len(cs))
 	for _, c := range cs {
 		re, err := c.RE()
 		if err != nil {
-			return "", []string{""}, -1, err
+			return "", []string{""}, -1, batchNoCancel, err
 		}
 		rs = append(rs, re)
 	}
@@ -749,12 +833,27 @@ func (e *GExpect) ExpectSwitchCase(cs []Caser, timeout time.Duration) (string, [
 	}
 	chTicker := time.NewTicker(check)
 	defer chTicker.Stop()
+	// ctxDone is nil for the legacy callers, which makes its select case permanently
+	// unavailable and keeps their behaviour unchanged.
+	var ctxDone <-chan struct{}
+	if ctx != nil {
+		ctxDone = ctx.Done()
+	}
 	// Read in current data and start actively check for matches.
 	var tbuf bytes.Buffer
-	if _, err := io.Copy(&tbuf, e); err != nil {
-		return tbuf.String(), nil, -1, fmt.Errorf("io.Copy failed: %v", err)
+	_, copyErr := e.copyOut(ctx, &tbuf)
+	if ctx != nil && ctx.Err() != nil {
+		return e.cancelStep(ctx, &tbuf)
+	}
+	if copyErr != nil {
+		return tbuf.String(), nil, -1, batchNoCancel, fmt.Errorf("io.Copy failed: %v", copyErr)
 	}
 	for {
+		// Observing cancellation here keeps it responsive even when output arrives
+		// continuously: the selected read branch can never starve the context.
+		if ctx != nil && ctx.Err() != nil {
+			return e.cancelStep(ctx, &tbuf)
+		}
 	L1:
 		for i, c := range cs {
 			if rs[i] == nil {
@@ -811,17 +910,24 @@ func (e *GExpect) ExpectSwitchCase(cs []Caser, timeout time.Duration) (string, [
 			}
 			// Don't send anything if string is empty.
 			if st != "" {
-				if err := e.Send(st); err != nil {
-					return o, match, i, fmt.Errorf("failed to send: %q err: %v", st, err)
+				canceled, err := e.sendAction(ctx, st)
+				if canceled {
+					// The match completed, so its bytes count as consumed and are
+					// not rolled back. No Expect result is fabricated for a step
+					// canceled while submitting its send.
+					return o, match, i, batchCanceledSending, err
+				}
+				if err != nil {
+					return o, match, i, batchNoCancel, fmt.Errorf("failed to send: %q err: %v", st, err)
 				}
 			}
 			// Tag handling.
 			switch t {
 			case OKTag, FailTag, NoTag:
-				return o, match, i, s.Err()
+				return o, match, i, batchNoCancel, s.Err()
 			case ContinueTag:
 				if !c.Retry() {
-					return o, match, i, s.Err()
+					return o, match, i, batchNoCancel, s.Err()
 				}
 				break L1
 			case NextTag:
@@ -829,40 +935,60 @@ func (e *GExpect) ExpectSwitchCase(cs []Caser, timeout time.Duration) (string, [
 			default:
 				s = NewStatusf(codes.Unknown, "Tag: %d unknown, err: %v", t, s)
 			}
-			return o, match, i, s.Err()
+			return o, match, i, batchNoCancel, s.Err()
 		}
 		if !e.check() {
-			nr, err := io.Copy(&tbuf, e)
+			nr, err := e.copyOut(ctx, &tbuf)
+			if ctx != nil && ctx.Err() != nil {
+				return e.cancelStep(ctx, &tbuf)
+			}
 			if err != nil {
-				return tbuf.String(), nil, -1, fmt.Errorf("io.Copy failed: %v", err)
+				return tbuf.String(), nil, -1, batchNoCancel, fmt.Errorf("io.Copy failed: %v", err)
 			}
 			if nr == 0 {
-				return tbuf.String(), nil, -1, errors.New("expect: Process not running")
+				return tbuf.String(), nil, -1, batchNoCancel, errors.New("expect: Process not running")
 			}
 		}
 		select {
+		case <-ctxDone:
+			// Canceled while waiting for a match: put the text gathered in this
+			// step back in front of the session buffer so a later Expect can
+			// continue matching it.
+			return e.cancelStep(ctx, &tbuf)
 		case <-timer.C:
 			// Expect timeout.
-			nr, err := io.Copy(&tbuf, e)
+			nr, err := e.copyOut(ctx, &tbuf)
+			if ctx != nil && ctx.Err() != nil {
+				return e.cancelStep(ctx, &tbuf)
+			}
 			if err != nil {
-				return tbuf.String(), nil, -1, fmt.Errorf("io.Copy failed: %v", err)
+				return tbuf.String(), nil, -1, batchNoCancel, fmt.Errorf("io.Copy failed: %v", err)
 			}
 			// If we got no new data we return otherwise give it another chance to match.
 			if nr == 0 {
-				return tbuf.String(), nil, -1, TimeoutError(timeout)
+				return tbuf.String(), nil, -1, batchNoCancel, TimeoutError(timeout)
 			}
 			timer = time.NewTimer(timeout)
 		case <-chTicker.C:
 			// Periodical timer to make sure data is handled in case the <-e.rcv channel
 			// was missed.
-			if _, err := io.Copy(&tbuf, e); err != nil {
-				return tbuf.String(), nil, -1, fmt.Errorf("io.Copy failed: %v", err)
+			if _, err := e.copyOut(ctx, &tbuf); err != nil {
+				if ctx != nil && ctx.Err() != nil {
+					return e.cancelStep(ctx, &tbuf)
+				}
+				return tbuf.String(), nil, -1, batchNoCancel, fmt.Errorf("io.Copy failed: %v", err)
+			}
+			if ctx != nil && ctx.Err() != nil {
+				return e.cancelStep(ctx, &tbuf)
 			}
 		case <-e.rcv:
 			// Data to fetch.
-			nr, err := io.Copy(&tbuf, e)
+			nr, err := e.copyOut(ctx, &tbuf)
+			if ctx != nil && ctx.Err() != nil {
+				return e.cancelStep(ctx, &tbuf)
+			}
 			if err != nil {
-				return tbuf.String(), nil, -1, fmt.Errorf("io.Copy failed: %v", err)
+				return tbuf.String(), nil, -1, batchNoCancel, fmt.Errorf("io.Copy failed: %v", err)
 			}
 			// timer shoud be reset when new output is available.
 			if nr > 0 {
@@ -870,6 +996,47 @@ func (e *GExpect) ExpectSwitchCase(cs []Caser, timeout time.Duration) (string, [
 			}
 		}
 	}
+}
+
+// copyOut drains the current session buffer into tbuf. When ctx is set, the drain stops
+// as soon as ctx is done, so a continuously producing session cannot keep the batch busy
+// past the context deadline.
+func (e *GExpect) copyOut(ctx context.Context, tbuf *bytes.Buffer) (int, error) {
+	if ctx == nil {
+		n, err := io.Copy(tbuf, e)
+		return int(n), err
+	}
+	total := 0
+	buf := make([]byte, 1024)
+	for {
+		if ctx.Err() != nil {
+			return total, ctx.Err()
+		}
+		nr, err := e.Read(buf)
+		if nr > 0 {
+			tbuf.Write(buf[:nr])
+			total += nr
+		}
+		if err != nil {
+			if err == io.EOF {
+				return total, nil
+			}
+			return total, err
+		}
+		if nr == 0 {
+			return total, nil
+		}
+	}
+}
+
+// cancelStep ends an Expect step that was canceled while waiting for a match. The step's
+// still uncommitted text is reported and put back at the front of the session buffer, ahead of
+// any bytes that arrive later, so the next Expect call on the same session can match across
+// both segments without losing or duplicating bytes.
+func (e *GExpect) cancelStep(ctx context.Context, tbuf *bytes.Buffer) (string, []string, int, batchCancelStage, error) {
+	uncommitted := tbuf.String()
+	e.returnUnmatchedSuffix(uncommitted)
+	return uncommitted, nil, -1, batchCanceledWaiting, contextError(ctx)
 }
 
 // GenOptions contains the options needed to set up a generic Spawner.
@@ -1211,6 +1378,9 @@ func (e *GExpect) Read(p []byte) (nr int, err error) {
 }
 
 func (e *GExpect) returnUnmatchedSuffix(p string) {
+	if p == "" {
+		return
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	newBuffer := bytes.NewBufferString(p)
@@ -1220,18 +1390,43 @@ func (e *GExpect) returnUnmatchedSuffix(p string) {
 
 // Send sends a string to spawned process.
 func (e *GExpect) Send(in string) error {
+	_, err := e.sendAction(nil, in)
+	return err
+}
+
+// sendAction submits in to the session's write goroutine. A non-nil ctx bounds the wait for
+// the write goroutine to receive the action. The send timeout and ctx are both observed by the
+// same select: whichever is seen first ends the wait. When ctx is canceled before the write
+// goroutine receives the action, nothing is submitted and canceled is true. Once submitted,
+// the underlying Write is allowed to complete, but no later action is ever submitted.
+func (e *GExpect) sendAction(ctx context.Context, in string) (canceled bool, err error) {
+	// Cancellation that is already observable must never commit the send. A
+	// cancellation racing with channel delivery is resolved by the select below,
+	// where either outcome is acceptable.
+	if ctx != nil && ctx.Err() != nil {
+		return true, contextError(ctx)
+	}
 	if !e.check() {
-		return errors.New("expect: Process not running")
+		return false, errors.New("expect: Process not running")
 	}
 
-	if e.sendTimeout == 0 {
-		e.snd <- in
-	} else {
-		select {
-		case <-time.After(e.sendTimeout):
-			return fmt.Errorf("send to spawned process command reached the timeout %v", e.sendTimeout)
-		case e.snd <- in:
-		}
+	var ctxDone <-chan struct{}
+	if ctx != nil {
+		ctxDone = ctx.Done()
+	}
+	var timeoutCh <-chan time.Time
+	if e.sendTimeout != 0 {
+		t := time.NewTimer(e.sendTimeout)
+		defer t.Stop()
+		timeoutCh = t.C
+	}
+
+	select {
+	case <-ctxDone:
+		return true, contextError(ctx)
+	case <-timeoutCh:
+		return false, fmt.Errorf("send to spawned process command reached the timeout %v", e.sendTimeout)
+	case e.snd <- in:
 	}
 
 	if e.verbose {
@@ -1246,7 +1441,7 @@ func (e *GExpect) Send(in string) error {
 		}
 	}
 
-	return nil
+	return false, nil
 }
 
 // runcmd executes the command and Wait for the return value.
