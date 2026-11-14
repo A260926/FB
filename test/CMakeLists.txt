@@ -29,6 +29,7 @@ add_executable(charls-test
     sample_traits_test.cpp
     scan_decoder_test.cpp
     scan_encoder_test.cpp
+    stream_decoder_contract_test.cpp
     support.cpp
     util_test.cpp
     validate_spiff_header_test.cpp
@@ -117,12 +118,27 @@ set(CHARLS_TEST_DATA_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/data/banny-hp1.jls
     ${CMAKE_CURRENT_SOURCE_DIR}/data/banny-hp2.jls
     ${CMAKE_CURRENT_SOURCE_DIR}/data/banny-hp3.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/tulips-gray-8bit-512-512-hp-encoder.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/test8_ilv_none_rm_7.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/test8_ilv_line_rm_7.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/test8_ilv_sample_rm_7.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/test8_ilv_sample_rm_300.jls
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/test16_rm_5.jls
 )
 
 add_custom_command(TARGET charls-test POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:charls-test>/data"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:charls-test>/data/conformance"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CHARLS_TEST_DATA_FILES}
         "$<TARGET_FILE_DIR:charls-test>/data/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t8c1e0.jls
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t8c2e0.jls
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t8c1e3.jls
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t8c2e3.jls
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t8nde0.jls
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/conformance/t16e3.jls
+        "$<TARGET_FILE_DIR:charls-test>/data/conformance/"
     COMMENT "Copying test data files to build directory"
 )

@@ -86,6 +86,79 @@ For other platforms, more install options, how to build from source, and more, t
 
 Once you have the library, the sample folder provides some code samples to get you started.
 
+### Incremental (row by row) decoding
+
+`charls::jpegls_stream_decoder` decodes a JPEG-LS byte stream that is supplied in small pieces and
+delivers one complete row at a time. It does not require the complete compressed stream or a
+destination buffer for the whole image. The parser and entropy decoder used by the existing
+whole-frame C and C++ API are not affected; both APIs use the same JPEG-LS numeric rules.
+
+```cpp
+#include <charls/jpegls_stream_decoder.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <vector>
+
+// Decodes a stream that arrives in small chunks and hands every decoded row to process_row().
+// process_row() is application specific: it receives the row bytes and their size.
+void process_row(const std::byte* row_data, std::size_t row_size);
+
+void decode_stream(const std::vector<std::byte>& encoded, std::size_t chunk_size)
+{
+    charls::jpegls_stream_decoder decoder;
+
+    std::size_t offset = 0;
+    bool done = false;
+    while (!done)
+    {
+        const std::size_t size = std::min(chunk_size, encoded.size() - offset);
+        const bool final = offset + size == encoded.size();
+
+        // The decoder reports how many bytes it accepted. A suffix that was not accepted needs to be
+        // submitted again; consumed bytes may be overwritten or released immediately.
+        const charls::stream_decode_result result = decoder.push(encoded.data() + offset, size, final);
+        offset += result.consumed;
+
+        switch (result.status)
+        {
+        case charls::stream_decode_status::row_ready:
+            // The row is only valid until the next push or reset. Its layout matches the whole-frame
+            // decoder: samples of a pixel are adjacent; samples above 8 bits use the host byte order.
+            const auto [row_data, row_size] = decoder.row();
+            process_row(row_data, row_size);
+            break;
+
+        case charls::stream_decode_status::need_input:
+            // All input was consumed, but no complete row is available yet. Keep final=true once the
+            // end of the input has been reached and submit the remaining suffix (or an empty buffer).
+            break;
+
+        case charls::stream_decode_status::done:
+            // All rows were delivered and the EOI marker was consumed and verified.
+            // Bytes after the EOI marker are not consumed and stay with the caller.
+            done = true;
+            break;
+        }
+    }
+}
+
+// A decoder can be reused for another stream, also with a different frame size.
+void reuse_decoder()
+{
+    charls::jpegls_stream_decoder decoder;
+    decoder.reset(); // Returns the decoder to the state directly after construction.
+}
+```
+
+`frame_info()` returns the frame information once the JPEG-LS frame header has been read. Calling it
+before that, or calling `row()` when the last `push` did not return `row_ready`, throws
+`charls::jpegls_error` with `jpegls_errc::invalid_operation`. `push` throws `jpegls_error` for a
+corrupted stream, for a stream that ends before all rows and the EOI marker have been read, and for
+JPEG-LS features that this entry point does not support (multi-scan planar color data, mapping
+tables, HP color transforms, DNL and oversize image dimensions). After an error the object must be
+reset before it can be reused.
+
 ## Release Management
 
 This repository is provided as source code, and specifically does not offer binary releases. Instead, it is encouraged to either “live at head” (build from the latest version of or, if necessary, build against a known, supported branch, known as a Long Term Support (LTS) branch.
