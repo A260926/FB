@@ -89,6 +89,8 @@ set(mkvmuxer_sources
     "${LIBWEBM_SRC_DIR}/mkvmuxer/mkvmuxer.cc"
     "${LIBWEBM_SRC_DIR}/mkvmuxer/mkvmuxerutil.cc"
     "${LIBWEBM_SRC_DIR}/mkvmuxer/mkvwriter.cc"
+    "${LIBWEBM_SRC_DIR}/mkvmuxer/standalone_chunker.cc"
+    "${LIBWEBM_SRC_DIR}/mkvmuxer/standalone_chunker.h"
     "${LIBWEBM_SRC_DIR}/common/webmids.h")
 
 set(mkvmuxer_sample_sources

@@ -30,6 +30,7 @@ namespace mkvmuxer {
 
 class MkvWriter;
 class Segment;
+class StandaloneChunker;
 
 const uint64_t kMaxTrackNumber = 126;
 
@@ -823,8 +824,8 @@ class VideoTrack : public Track {
   double frame_rate() const { return frame_rate_; }
   void set_height(uint64_t height) { height_ = height; }
   uint64_t height() const { return height_; }
-  uint64_t stereo_mode() { return stereo_mode_; }
-  uint64_t alpha_mode() { return alpha_mode_; }
+  uint64_t stereo_mode() const { return stereo_mode_; }
+  uint64_t alpha_mode() const { return alpha_mode_; }
   void set_width(uint64_t width) { width_ = width; }
   uint64_t width() const { return width_; }
   void set_colour_space(const char* colour_space);
@@ -1710,6 +1711,19 @@ class Segment {
   // That will force the interface to be dependent on files.
   bool SetChunking(bool chunking, const char* filename);
 
+  // Enables writing each output chunk as an independently playable WebM file.
+  // |base_name| is used to build the output filenames, which are
+  // |base_name|_XXXXXX.webm, numbered from zero in output order. Each file
+  // carries its own EBML header, SegmentInfo, Tracks, Clusters, SeekHead and
+  // Cues elements so that it can be opened and seeked on its own. Must be
+  // called after Init() and before the first frame is added. Only one video
+  // track (VP8 or VP9) plus an optional audio track (Opus) are supported on
+  // this path; all tracks must be added before the first frame. Chunk
+  // boundaries are placed at video key frames whose timestamp is at least
+  // max_cluster_duration() past the start of the current chunk.
+  bool SetStandaloneChunking(const char* base_name);
+
+  bool standalone_chunking() const { return standalone_chunking_; }
   bool chunking() const { return chunking_; }
   uint64_t cues_track() const { return cues_track_; }
   void set_max_cluster_duration(uint64_t max_cluster_duration) {
@@ -1840,6 +1854,12 @@ class Segment {
 
   // Base filename for the chunked files.
   char* chunking_base_name_;
+
+  // Flag telling whether or not the muxer is producing standalone chunks.
+  bool standalone_chunking_;
+
+  // Owns the frame buffers and output files for standalone chunking.
+  StandaloneChunker* standalone_chunker_;
 
   // File position offset where the Clusters end.
   int64_t cluster_end_offset_;

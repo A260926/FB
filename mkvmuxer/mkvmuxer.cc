@@ -25,6 +25,7 @@
 #include "common/webmids.h"
 #include "mkvmuxer/mkvmuxerutil.h"
 #include "mkvmuxer/mkvwriter.h"
+#include "mkvmuxer/standalone_chunker.h"
 #include "mkvparser/mkvparser.h"
 
 namespace mkvmuxer {
@@ -3159,6 +3160,8 @@ Segment::Segment()
       chunk_writer_header_(NULL),
       chunking_(false),
       chunking_base_name_(NULL),
+      standalone_chunking_(false),
+      standalone_chunker_(NULL),
       cluster_list_(NULL),
       cluster_list_capacity_(0),
       cluster_list_size_(0),
@@ -3215,6 +3218,7 @@ Segment::~Segment() {
 
   delete[] chunk_name_;
   delete[] chunking_base_name_;
+  delete standalone_chunker_;
 
   if (chunk_writer_cluster_) {
     chunk_writer_cluster_->Close();
@@ -3334,6 +3338,12 @@ bool Segment::CopyAndMoveCuesBeforeClusters(mkvparser::IMkvReader* reader,
 }
 
 bool Segment::Finalize() {
+  if (standalone_chunking_) {
+    if (!standalone_chunker_)
+      return false;
+    return standalone_chunker_->Finalize();
+  }
+
   if (WriteFramesAll() < 0)
     return false;
 
@@ -3611,6 +3621,12 @@ bool Segment::AddGenericFrame(const Frame* frame) {
   if (!frame)
     return false;
 
+  if (standalone_chunking_) {
+    if (!standalone_chunker_)
+      return false;
+    return standalone_chunker_->AddFrame(frame);
+  }
+
   if (!CheckHeaderInfo())
     return false;
 
@@ -3721,6 +3737,9 @@ bool Segment::SetChunking(bool chunking, const char* filename) {
   if (chunk_count_ > 0)
     return false;
 
+  if (chunking && standalone_chunking_)
+    return false;
+
   if (chunking) {
     if (!filename)
       return false;
@@ -3789,6 +3808,36 @@ bool Segment::SetChunking(bool chunking, const char* filename) {
 
   chunking_ = chunking;
 
+  return true;
+}
+
+bool Segment::SetStandaloneChunking(const char* base_name) {
+  if (!base_name || !*base_name)
+    return false;
+
+  // Must be set up after Init() and before the first frame, and cannot be
+  // combined with the shared-header chunking path.
+  if (!writer_cluster_ || header_written_ || frames_size_ > 0 ||
+      cluster_list_size_ > 0 || chunk_count_ > 0 || chunking_)
+    return false;
+
+  if (standalone_chunker_) {
+    if (standalone_chunking_)
+      return true;
+    delete standalone_chunker_;
+    standalone_chunker_ = NULL;
+  }
+
+  StandaloneChunker* const chunker = new (std::nothrow) StandaloneChunker();
+  if (!chunker)
+    return false;
+  if (!chunker->Init(this, base_name)) {
+    delete chunker;
+    return false;
+  }
+
+  standalone_chunker_ = chunker;
+  standalone_chunking_ = true;
   return true;
 }
 
