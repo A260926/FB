@@ -114,6 +114,33 @@ unsigned int* vx_voxelize_snap_3dgrid(vx_mesh_t const* mesh, // The input mesh
         unsigned int height,                                 // The texture resolution on y-axis
         unsigned int depth);                                 // The texture resolution on z-axis
 
+// vx_voxelize_solid: Rasterizes a closed, consistently oriented triangle mesh to a
+// solid occupancy volume usable as a 3d texture. Every output voxel is either 0 or 1.
+//
+// Occupancy is defined by the generalized (integer) winding number computed from
+// directed triangle crossings: a voxel is 1 when its center lies on any
+// non-degenerate triangle surface, or when its winding number is non-zero. Nested
+// shells therefore combine signed: same-oriented inner shells stay solid, reversed
+// inner shells carve cavities, and two coincident opposite shells cancel inside
+// while their surface samples remain 1. This is NOT a parity test and no flood fill
+// is used.
+//
+// origin: world position of the first voxel sampling center
+// step:   positive world spacing between centers on each axis
+// size:   positive number of voxels on each axis
+// out:    caller-owned buffer of size[0]*size[1]*size[2] bytes, filled with 0/1,
+//         stored x-fastest: out[(z*size[1]+y)*size[0]+x]
+//
+// Returns 1 on success, 0 on invalid arguments (null pointer, non-finite vertex
+// coordinate or step, non-positive step, zero size, size_t overflow of the voxel
+// count) or temporary allocation failure. On failure the out buffer is left
+// untouched. An empty mesh is valid and produces all zeros.
+int vx_voxelize_solid(vx_mesh_t const* mesh,
+                      const double origin[3],
+                      const double step[3],
+                      const unsigned int size[3],
+                      unsigned char* out);
+
 
 // Allocates a mesh that can contain nvertices vertices, nindices indices
 vx_mesh_t* vx_mesh_alloc(int nvertices, int nindices);
@@ -139,9 +166,15 @@ void vx_point_cloud_free(vx_point_cloud_t* pointcloud);
     if (x2 < min) min = x2;                 \
     if (x2 > max) max = x2;
 #define VX_CLAMP(v, lo, hi) VX_MAX(lo, VX_MIN(hi, v))
+#ifndef VX_MALLOC
 #define VX_MALLOC(T, N) ((T*) malloc(N * sizeof(T)))
+#endif
+#ifndef VX_FREE
 #define VX_FREE(T) free(T)
+#endif
+#ifndef VX_CALLOC
 #define VX_CALLOC(T, N) ((T*) calloc(N * sizeof(T), 1))
+#endif
 #define VX_SWAP(T, A, B) { T tmp = B; B = A; A = tmp; }
 #ifdef VOXELIZER_DEBUG
 #define VX_ASSERT(STMT) if (!(STMT)) { *(int *)0 = 0; }
@@ -1074,5 +1107,451 @@ unsigned int* vx_voxelize_snap_3dgrid(vx_mesh_t const* m,
 #undef VOXELIZER_EPSILON
 #undef VOXELIZER_INDICES_SIZE
 #undef VOXELIZER_HASH_TABLE_SIZE
+
+// ------------------------------------------------------------------------------------------------
+// SOLID OCCUPANCY VOXELIZATION
+//
+// Independent of the surface-only entry points above: colors, normals and the
+// precision inflation take no part. For each YZ column of sampling centers the
+// mesh is intersected by the directed line parallel to world +X. Transversal
+// crossings are accumulated as a signed integer winding number; a voxel center
+// lying exactly on any non-degenerate triangle is forced to 1 independently.
+//
+// This is generalized winding, not parity: reversed inner shells carve cavities
+// and coincident opposite shells cancel inside while their surfaces stay 1.
+//
+// Shared edges and vertices use one fixed top/left ownership rule in the YZ
+// projection, so re-diagonalizing a planar patch or inserting a coplanar vertex
+// cannot change the result. No ray perturbation, intersection merging or
+// epsilon inflation is used, so distinct parallel shells keep the cavity
+// between them.
+//
+// Work grows with the triangle count, the number of projected column events and
+// the number of output voxels; the mesh is never rescanned per voxel.
+// ------------------------------------------------------------------------------------------------
+
+typedef struct vxs_event {
+    double x;   // world x of a directed triangle crossing
+    int delta;  // signed winding contribution (+1 / -1)
+} vxs_event_t;
+
+typedef struct vxs_col {
+    vxs_event_t* events;
+    size_t count;
+    size_t cap;
+} vxs_col_t;
+
+static int vxs__finite(double v)
+{
+    return v == v && v != -INFINITY && v != INFINITY;
+}
+
+// Top/left half-open ownership of a column center P by directed edge A->B of a
+// counter-clockwise projected triangle (interior on the left of every edge).
+// C is the third vertex of the triangle, used to recognize the horizontal
+// "top" edge. The rule is purely geometric, so a shared edge of two
+// transversal faces is owned by exactly one of them, whatever the
+// triangulation. When the neighbor is parallel to the ray both abstain and
+// the exact-surface pass settles the contact instead.
+//
+// Collinearity is recognized with a scale-relative tolerance: two triangles
+// sharing an edge evaluate it from different reference vertices, so rounding
+// can turn an exact-zero cross into a value of either tiny sign and open a
+// gap. Only values within a few ULPs of the operands' scale are treated as
+// zero; a point any finite distance off the edge (e.g. across a narrow cavity)
+// keeps its true side, so no geometric proximity is ever merged.
+static int vxs__edge_owns(double ay, double az, double by, double bz,
+                          double cy, double cz, double py, double pz)
+{
+    (void) cy;
+    double ey = by - ay;
+    double ez = bz - az;
+    double cross = ey * (pz - az) - ez * (py - ay);
+    double scale = (fabs(ey) + fabs(ez)) *
+                   (fabs(py - ay) + fabs(pz - az));
+    if (cross != 0.0 && fabs(cross) > 1e-12 * (scale > 0.0 ? scale : 1.0)) {
+        return cross > 0.0;
+    }
+    // Center is exactly (or numerically) on the edge supporting line.
+    if (az == bz) {
+        // Horizontal edge: own it only when it is the top edge, i.e. the
+        // triangle interior extends towards +z from it.
+        return cz > az;
+    }
+    // Non-horizontal edge: own it only when directed towards -z (left edge).
+    return bz < az;
+}
+
+static int vxs__col_push(vxs_col_t* col, double x, int delta)
+{
+    if (col->count == col->cap) {
+        size_t ncap = col->cap ? col->cap * 2 : 8;
+        vxs_event_t* nev = VX_MALLOC(vxs_event_t, ncap);
+        if (!nev) {
+            return 0;
+        }
+        if (col->count) {
+            memcpy(nev, col->events, col->count * sizeof(vxs_event_t));
+            VX_FREE(col->events);
+        }
+        col->events = nev;
+        col->cap = ncap;
+    }
+    col->events[col->count].x = x;
+    col->events[col->count].delta = delta;
+    ++col->count;
+    return 1;
+}
+
+static int vxs__event_cmp(const void* pa, const void* pb)
+{
+    double xa = ((const vxs_event_t*) pa)->x;
+    double xb = ((const vxs_event_t*) pb)->x;
+    if (xa < xb) {
+        return -1;
+    }
+    if (xa > xb) {
+        return 1;
+    }
+    return 0;
+}
+
+// Exact point-on-triangle test for faces whose YZ projection is degenerate
+// (face parallel to the X ray). The center has to satisfy the triangle plane
+// and have non-negative barycentric coordinates in the 2D projection selected
+// by the largest plane-normal component. The plane residual is accepted at a
+// few ULPs of its operand scale so that rounding of an exact contact cannot
+// drop it; this never reorders or merges crossings.
+static int vxs__point_on_triangle(double px, double py, double pz,
+                                  const double a[3], const double b[3],
+                                  const double c[3], const double n[3])
+{
+    double r[3] = { px - a[0], py - a[1], pz - a[2] };
+    double d = n[0] * r[0] + n[1] * r[1] + n[2] * r[2];
+    double scale = (fabs(n[0]) + fabs(n[1]) + fabs(n[2])) *
+                   (fabs(r[0]) + fabs(r[1]) + fabs(r[2]));
+    if (d != 0.0 && fabs(d) > 1e-12 * (scale > 0.0 ? scale : 1.0)) {
+        return 0;
+    }
+
+    double e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+    double e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+    double l1, l2;
+
+    if (fabs(n[0]) >= fabs(n[1]) && fabs(n[0]) >= fabs(n[2])) {
+        double det = e1[1] * e2[2] - e1[2] * e2[1];
+        if (det == 0.0) {
+            return 0;
+        }
+        double qy = py - a[1], qz = pz - a[2];
+        l1 = (qy * e2[2] - qz * e2[1]) / det;
+        l2 = (e1[1] * qz - e1[2] * qy) / det;
+    } else if (fabs(n[1]) >= fabs(n[2])) {
+        double det = e1[2] * e2[0] - e1[0] * e2[2];
+        if (det == 0.0) {
+            return 0;
+        }
+        double qz = pz - a[2], qx = px - a[0];
+        l1 = (qz * e2[0] - qx * e2[2]) / det;
+        l2 = (e1[2] * qx - e1[0] * qz) / det;
+    } else {
+        double det = e1[0] * e2[1] - e1[1] * e2[0];
+        if (det == 0.0) {
+            return 0;
+        }
+        double qx = px - a[0], qy = py - a[1];
+        l1 = (qx * e2[1] - qy * e2[0]) / det;
+        l2 = (e1[0] * qy - e1[1] * qx) / det;
+    }
+
+    return l1 >= 0.0 && l2 >= 0.0 && (1.0 - l1 - l2) >= 0.0;
+}
+
+int vx_voxelize_solid(vx_mesh_t const* mesh,
+                      const double origin[3],
+                      const double step[3],
+                      const unsigned int size[3],
+                      unsigned char* out)
+{
+    if (!mesh || !origin || !step || !size || !out) {
+        return 0;
+    }
+    if (size[0] == 0 || size[1] == 0 || size[2] == 0) {
+        return 0;
+    }
+    if (!vxs__finite(step[0]) || !vxs__finite(step[1]) || !vxs__finite(step[2]) ||
+        !vxs__finite(origin[0]) || !vxs__finite(origin[1]) || !vxs__finite(origin[2]) ||
+        step[0] <= 0.0 || step[1] <= 0.0 || step[2] <= 0.0) {
+        return 0;
+    }
+
+    size_t plane = (size_t) size[0] * (size_t) size[1];
+    if (plane / (size_t) size[1] != (size_t) size[0]) {
+        return 0;
+    }
+    size_t total = plane * (size_t) size[2];
+    if (total / plane != (size_t) size[2]) {
+        return 0;
+    }
+
+    for (size_t v = 0; v < mesh->nvertices; ++v) {
+        if (!vxs__finite((double) mesh->vertices[v].x) ||
+            !vxs__finite((double) mesh->vertices[v].y) ||
+            !vxs__finite((double) mesh->vertices[v].z)) {
+            return 0;
+        }
+    }
+    for (size_t i = 0; i < mesh->nindices; ++i) {
+        if (mesh->indices[i] >= mesh->nvertices) {
+            return 0;
+        }
+    }
+
+    // An empty mesh is valid: occupancy is all zero.
+    if (mesh->nindices == 0) {
+        memset(out, 0, total);
+        return 1;
+    }
+
+    const double sx = step[0], sy = step[1], sz = step[2];
+    const double ox = origin[0], oy = origin[1], oz = origin[2];
+    const unsigned int nx = size[0], ny = size[1], nz = size[2];
+    const size_t ncol = (size_t) ny * (size_t) nz;
+
+    vxs_col_t* cols = VX_CALLOC(vxs_col_t, ncol);
+    // Exact surface hits are recorded per output voxel, separate from the
+    // directed crossings, so a contact only ever marks its own voxel.
+    unsigned char* surf = VX_CALLOC(unsigned char, total);
+    if (!cols || !surf) {
+        if (cols) {
+            for (size_t k = 0; k < ncol; ++k) {
+                VX_FREE(cols[k].events);
+            }
+        }
+        VX_FREE(cols);
+        VX_FREE(surf);
+        return 0;
+    }
+
+    int failed = 0;
+
+    for (size_t face = 0; face + 2 < mesh->nindices; face += 3) {
+        const vx_vertex_t* va = &mesh->vertices[mesh->indices[face + 0]];
+        const vx_vertex_t* vb = &mesh->vertices[mesh->indices[face + 1]];
+        const vx_vertex_t* vc = &mesh->vertices[mesh->indices[face + 2]];
+
+        double a[3] = { (double) va->x, (double) va->y, (double) va->z };
+        double b[3] = { (double) vb->x, (double) vb->y, (double) vb->z };
+        double c[3] = { (double) vc->x, (double) vc->y, (double) vc->z };
+
+        double e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+        double e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+        double n[3] = {
+            e1[1] * e2[2] - e1[2] * e2[1],
+            e1[2] * e2[0] - e1[0] * e2[2],
+            e1[1] * e2[0] - e1[0] * e2[1]
+        };
+        if (n[0] == 0.0 && n[1] == 0.0 && n[2] == 0.0) {
+            continue; // zero-area face: ignored
+        }
+
+        // Signed area of the YZ projection; its sign is the face normal's x.
+        double proj = n[0];
+
+        if (proj == 0.0) {
+            // Face parallel to the X ray: it never creates a transversal
+            // crossing. Scan the centers in its 3D bounding box and keep the
+            // ones lying exactly on the triangle as surface voxels.
+            double lox = a[0], hix = a[0], loy = a[1], hiy = a[1];
+            double loz = a[2], hiz = a[2];
+            for (int k = 1; k < 3; ++k) {
+                const double* p = (k == 1) ? b : c;
+                if (p[0] < lox) lox = p[0];
+                if (p[0] > hix) hix = p[0];
+                if (p[1] < loy) loy = p[1];
+                if (p[1] > hiy) hiy = p[1];
+                if (p[2] < loz) loz = p[2];
+                if (p[2] > hiz) hiz = p[2];
+            }
+            double d0 = ceil((lox - ox) / sx), d1 = floor((hix - ox) / sx);
+            double e0 = ceil((loy - oy) / sy), e1v = floor((hiy - oy) / sy);
+            double f0 = ceil((loz - oz) / sz), f1 = floor((hiz - oz) / sz);
+            if (d1 < 0.0 || e1v < 0.0 || f1 < 0.0 ||
+                d0 > (double) (nx - 1) || e0 > (double) (ny - 1) ||
+                f0 > (double) (nz - 1)) {
+                continue;
+            }
+            if (d0 < 0.0) d0 = 0.0;
+            if (e0 < 0.0) e0 = 0.0;
+            if (f0 < 0.0) f0 = 0.0;
+            if (d1 > (double) (nx - 1)) d1 = (double) (nx - 1);
+            if (e1v > (double) (ny - 1)) e1v = (double) (ny - 1);
+            if (f1 > (double) (nz - 1)) f1 = (double) (nz - 1);
+            for (unsigned int ix = (unsigned int) d0; ix <= (unsigned int) d1; ++ix) {
+                double px = ox + (double) ix * sx;
+                for (unsigned int iy = (unsigned int) e0; iy <= (unsigned int) e1v; ++iy) {
+                    double py = oy + (double) iy * sy;
+                    for (unsigned int iz = (unsigned int) f0; iz <= (unsigned int) f1; ++iz) {
+                        double pz = oz + (double) iz * sz;
+                        if (vxs__point_on_triangle(px, py, pz, a, b, c, n)) {
+                            surf[((size_t) iz * (size_t) ny + (size_t) iy) *
+                                 (size_t) nx + (size_t) ix] = 1;
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Signed contribution of a directed +X crossing, fixed before the
+        // projection is canonicalized below.
+        int delta = (proj > 0.0) ? -1 : 1;
+
+        // Canonicalize to a counter-clockwise YZ projection: swap B and C for
+        // clockwise faces. The geometric crossing point is unchanged and the
+        // winding sign was already captured in delta, so a single ownership
+        // rule applies to every face regardless of shell orientation.
+        if (proj < 0.0) {
+            double tmp[3];
+            memcpy(tmp, b, sizeof(tmp));
+            memcpy(b, c, sizeof(tmp));
+            memcpy(c, tmp, sizeof(tmp));
+            proj = -proj;
+        }
+
+        // YZ bounding box of the projected triangle, snapped onto the sampled
+        // center lattice. The edge ownership tests below make it conservative.
+        double loy = a[1], hiy = a[1], loz = a[2], hiz = a[2];
+        if (b[1] < loy) loy = b[1];
+        if (b[1] > hiy) hiy = b[1];
+        if (c[1] < loy) loy = c[1];
+        if (c[1] > hiy) hiy = c[1];
+        if (b[2] < loz) loz = b[2];
+        if (b[2] > hiz) hiz = b[2];
+        if (c[2] < loz) loz = c[2];
+        if (c[2] > hiz) hiz = c[2];
+
+        double g0 = ceil((loy - oy) / sy), g1 = floor((hiy - oy) / sy);
+        double h0 = ceil((loz - oz) / sz), h1 = floor((hiz - oz) / sz);
+        if (g1 < 0.0 || h1 < 0.0 ||
+            g0 > (double) (ny - 1) || h0 > (double) (nz - 1)) {
+            continue;
+        }
+        if (g0 < 0.0) g0 = 0.0;
+        if (h0 < 0.0) h0 = 0.0;
+        if (g1 > (double) (ny - 1)) g1 = (double) (ny - 1);
+        if (h1 > (double) (nz - 1)) h1 = (double) (nz - 1);
+
+        // A +X ray crossing a face whose outward normal points +X (proj > 0)
+        // exits the shell, so the winding decreases; otherwise it increases.
+        double denom = (b[1] - a[1]) * (c[2] - a[2]) -
+                       (b[2] - a[2]) * (c[1] - a[1]);
+
+        for (unsigned int iz = (unsigned int) h0; iz <= (unsigned int) h1; ++iz) {
+            double pz = oz + (double) iz * sz;
+            for (unsigned int iy = (unsigned int) g0; iy <= (unsigned int) g1; ++iy) {
+                double py = oy + (double) iy * sy;
+
+                // Barycentric coordinates of the column center inside the YZ
+                // projection, always available since proj != 0.
+                double dy = py - a[1];
+                double dz = pz - a[2];
+                double u = (dy * (c[2] - a[2]) - dz * (c[1] - a[1])) / denom;
+                double v = ((b[1] - a[1]) * dz - (b[2] - a[2]) * dy) / denom;
+                double w = 1.0 - u - v;
+                double hx = w * a[0] + u * b[0] + v * c[0];
+                size_t colidx = (size_t) iz * (size_t) ny + (size_t) iy;
+
+                // Exact surface contact is decided independently of crossing
+                // ownership: any center inside the closed projected triangle
+                // whose crossing x equals an output center lies on the face,
+                // including edges shared with a face parallel to the ray.
+                // Equality is judged at a few ULPs of operand scale so float
+                // rounding of a true contact cannot miss it; a crossing any
+                // finite distance from a center keeps its own voxel, so narrow
+                // cavities between distinct shells are never collapsed.
+                if (u >= 0.0 && v >= 0.0 && w >= 0.0) {
+                    double q = (hx - ox) / sx;
+                    double qr = floor(q + 0.5);
+                    if (qr >= 0.0 && qr < (double) nx) {
+                        double cx = ox + qr * sx;
+                        double scale = fabs(hx);
+                        if (fabs(cx) > scale) scale = fabs(cx);
+                        if (sx > scale) scale = sx;
+                        if (fabs(hx - cx) <= 1e-12 * scale) {
+                            surf[colidx * (size_t) nx + (size_t) qr] = 1;
+                        }
+                    }
+                }
+
+                // Transversal crossings use the half-open top/left ownership
+                // rule of the canonical CCW projection, so a shared edge of two
+                // transversal faces is counted exactly once.
+                int inside =
+                    vxs__edge_owns(a[1], a[2], b[1], b[2], c[1], c[2], py, pz) &&
+                    vxs__edge_owns(b[1], b[2], c[1], c[2], a[1], a[2], py, pz) &&
+                    vxs__edge_owns(c[1], c[2], a[1], a[2], b[1], b[2], py, pz);
+                if (!inside) {
+                    continue;
+                }
+
+                if (!vxs__col_push(&cols[colidx], hx, delta)) {
+                    failed = 1;
+                    break;
+                }
+            }
+            if (failed) {
+                break;
+            }
+        }
+        if (failed) {
+            break;
+        }
+    }
+
+    if (failed) {
+        for (size_t k = 0; k < ncol; ++k) {
+            VX_FREE(cols[k].events);
+        }
+        VX_FREE(cols);
+        VX_FREE(surf);
+        return 0;
+    }
+
+    for (size_t k = 0; k < ncol; ++k) {
+        if (cols[k].count > 1) {
+            qsort(cols[k].events, cols[k].count, sizeof(vxs_event_t), vxs__event_cmp);
+        }
+    }
+
+    // Rasterize each column. Winding starts at zero at x = -infinity and every
+    // crossing left of the first output center is counted first, so tiles cut
+    // out of a larger grid reproduce the one-shot volume byte for byte.
+    for (unsigned int iz = 0; iz < nz; ++iz) {
+        for (unsigned int iy = 0; iy < ny; ++iy) {
+            size_t colidx = (size_t) iz * (size_t) ny + (size_t) iy;
+            vxs_col_t* col = &cols[colidx];
+            size_t ev = 0;
+            int winding = 0;
+
+            for (unsigned int ix = 0; ix < nx; ++ix) {
+                double px = ox + (double) ix * sx;
+                while (ev < col->count && col->events[ev].x <= px) {
+                    winding += col->events[ev].delta;
+                    ++ev;
+                }
+                size_t outidx = colidx * (size_t) nx + (size_t) ix;
+                out[outidx] = (surf[outidx] || winding != 0) ? 1u : 0u;
+            }
+        }
+    }
+
+    for (size_t k = 0; k < ncol; ++k) {
+        VX_FREE(cols[k].events);
+    }
+    VX_FREE(cols);
+    VX_FREE(surf);
+    return 1;
+}
 
 #endif // VX_VOXELIZER_IMPLEMENTATION
