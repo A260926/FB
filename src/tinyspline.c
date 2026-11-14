@@ -1160,6 +1160,453 @@ ts_bspline_interpolate_catmull_rom(const tsReal *points,
 	free(cr_ctrlp);
 	TS_RETURN_SUCCESS(status)
 }
+
+/**
+ * Evaluates the j'th B-spline basis function of degree \p deg at \p u. The
+ * knot vector \p knots is assumed to contain no repeated knots (which holds
+ * for the periodically extended knot vector built below). Only the standard
+ * half-open interval convention is required because all evaluation points
+ * passed by the fitting code are interior points of a knot span.
+ */
+static tsReal
+ts_int_periodic_basis(const tsReal *knots,
+                      size_t j,
+                      size_t deg,
+                      tsReal u)
+{
+	tsReal left = 0.f, right = 0.f;
+	tsReal den;
+	if (deg == 0) {
+		return (u >= knots[j] && u < knots[j + 1]) ? 1.f : 0.f;
+	}
+	den = knots[j + deg] - knots[j];
+	if (den != 0.f)
+		left = (u - knots[j]) / den *
+		       ts_int_periodic_basis(knots, j, deg - 1, u);
+	den = knots[j + deg + 1] - knots[j + 1];
+	if (den != 0.f)
+		right = (knots[j + deg + 1] - u) / den *
+		        ts_int_periodic_basis(knots, j + 1, deg - 1, u);
+	return left + right;
+}
+
+/**
+ * Evaluates the \p order'th derivative (0 <= \p order <= 2) of the j'th
+ * B-spline basis function of degree \p deg at \p u.
+ */
+static tsReal
+ts_int_periodic_basis_der(const tsReal *knots,
+                          size_t j,
+                          size_t deg,
+                          tsReal u,
+                          size_t order)
+{
+	tsReal d1 = 0.f, d2 = 0.f;
+	tsReal den;
+	if (order == 0)
+		return ts_int_periodic_basis(knots, j, deg, u);
+	if (deg == 0)
+		return 0.f;
+	den = knots[j + deg] - knots[j];
+	if (den != 0.f)
+		d1 = (tsReal) deg * ts_int_periodic_basis_der(
+		     knots, j, deg - 1, u, order - 1) / den;
+	den = knots[j + deg + 1] - knots[j + 1];
+	if (den != 0.f)
+		d2 = (tsReal) deg * ts_int_periodic_basis_der(
+		     knots, j + 1, deg - 1, u, order - 1) / den;
+	return d1 - d2;
+}
+
+/**
+ * Solves the dense system A x = b where A is stored row-major in \p mat (n x
+ * n), b in \p rhs (n x dim, row-major), and the solution overwrites \p rhs.
+ * Uses row equilibration and Gaussian elimination with partial pivoting.
+ * Returns 0 on success and a non-zero value if A is (numerically) singular.
+ *
+ * Row equilibration is important here because the KKT matrix mixes rows with
+ * very different magnitudes (data terms of order one and regularization terms
+ * of order lambda). Without it, a tiny lambda would make well-posed systems
+ * look singular.
+ */
+static int
+ts_int_periodic_solve(tsReal *mat,
+                      tsReal *rhs,
+                      size_t n,
+                      size_t dim)
+{
+	size_t i, j, k, piv;
+	tsReal fac, tmp;
+	const tsReal tol = (tsReal) 1e-13f;
+
+	/* Equilibrate the rows (divide each row by its largest magnitude). */
+	for (i = 0; i < n; i++) {
+		tsReal scale = 0.f;
+		for (j = 0; j < n; j++) {
+			const tsReal v = (tsReal) fabs(mat[i * n + j]);
+			if (v > scale) scale = v;
+		}
+		if (scale > 0.f) {
+			for (j = 0; j < n; j++)
+				mat[i * n + j] /= scale;
+			for (j = 0; j < dim; j++)
+				rhs[i * dim + j] /= scale;
+		}
+	}
+
+	for (k = 0; k < n; k++) {
+		/* Find the pivot. */
+		piv = k;
+		for (i = k + 1; i < n; i++) {
+			if (fabs(mat[i * n + k]) > fabs(mat[piv * n + k]))
+				piv = i;
+		}
+		if (fabs(mat[piv * n + k]) <= tol) return 1;
+		if (piv != k) {
+			for (j = k; j < n; j++) {
+				tmp = mat[k * n + j];
+				mat[k * n + j] = mat[piv * n + j];
+				mat[piv * n + j] = tmp;
+			}
+			for (j = 0; j < dim; j++) {
+				tmp = rhs[k * dim + j];
+				rhs[k * dim + j] = rhs[piv * dim + j];
+				rhs[piv * dim + j] = tmp;
+			}
+		}
+		/* Eliminate. */
+		for (i = k + 1; i < n; i++) {
+			fac = mat[i * n + k] / mat[k * n + k];
+			if (fac == 0.f) continue;
+			mat[i * n + k] = 0.f;
+			for (j = k + 1; j < n; j++)
+				mat[i * n + j] -= fac * mat[k * n + j];
+			for (j = 0; j < dim; j++)
+				rhs[i * dim + j] -= fac * rhs[k * dim + j];
+		}
+	}
+	/* Back substitution (in place in rhs). */
+	for (j = 0; j < dim; j++) {
+		for (i = n; i-- > 0; ) {
+			tsReal sum = rhs[i * dim + j];
+			for (k = i + 1; k < n; k++)
+				sum -= mat[i * n + k] * rhs[k * dim + j];
+			rhs[i * dim + j] = sum / mat[i * n + i];
+		}
+	}
+	return 0;
+}
+
+tsError
+ts_bspline_fit_periodic_cubic(const tsReal *points,
+                              size_t num_points,
+                              size_t dimension,
+                              const tsReal *parameters,
+                              const tsReal *weights,
+                              const int *hard,
+                              tsReal lambda,
+                              tsBSpline *spline,
+                              tsStatus *status)
+{
+	/* The number of independent control points and the number of knots
+	 * of the periodically extended spline. */
+	const size_t m = num_points;
+	const size_t num_knots = m + 7;
+	const size_t num_ctrlp = m + 3;
+	const tsReal min_gap = (tsReal) 10.0f * (tsReal) TS_KNOT_EPSILON;
+	const tsReal gauss_x[3] = {
+		(tsReal) -0.77459666924148337704,
+		(tsReal) 0.0,
+		(tsReal) 0.77459666924148337704
+	};
+	const tsReal gauss_w[3] = {
+		(tsReal) 0.55555555555555555556,
+		(tsReal) 0.88888888888888888889,
+		(tsReal) 0.55555555555555555556
+	};
+
+	tsReal *knots = NULL;  /**< Periodically extended knots. */
+	tsReal *gram = NULL;   /**< Normal equations (m x m). */
+	tsReal *hard_rows = NULL; /**< Basis values of hard samples. */
+	tsReal *mat = NULL;    /**< KKT matrix. */
+	tsReal *rhs = NULL;    /**< Right-hand sides (n x dim). */
+	tsReal *ctrlp = NULL;  /**< Control points of the result. */
+	tsReal range;
+
+	size_t i, j, k, l, d, g, t;
+	size_t n_hard = 0, n;
+	size_t hard_count = 0;
+	tsBSpline result = ts_bspline_init();
+	tsError err;
+
+	ts_int_bspline_init(&result);
+	if (spline == NULL) {
+		TS_RETURN_0(status, TS_NUM_POINTS, "spline is NULL")
+	}
+	ts_int_bspline_init(spline);
+
+	/* Validate the input. */
+	if (points == NULL || parameters == NULL ||
+	    weights == NULL || hard == NULL) {
+		TS_RETURN_0(status, TS_NUM_POINTS,
+		            "points, parameters, weights, and hard must not be NULL")
+	}
+	if (m < 4) {
+		TS_RETURN_1(status, TS_NUM_POINTS,
+		            "num(points) (%lu) < 4",
+		            (unsigned long) m)
+	}
+	if (dimension != 2 && dimension != 3) {
+		TS_RETURN_1(status, TS_DIM_ZERO,
+		            "unsupported dimension: %lu (must be 2 or 3)",
+		            (unsigned long) dimension)
+	}
+	/* Check the knot limit before computing m + 7 so that the additions
+	 * below cannot overflow. */
+	if (m > (size_t) TS_MAX_NUM_KNOTS - 7) {
+		TS_RETURN_2(status, TS_NUM_KNOTS,
+		            "unsupported number of knots: %lu > %i",
+		            (unsigned long) m + 7, TS_MAX_NUM_KNOTS)
+	}
+	if (num_knots > (size_t) TS_MAX_NUM_KNOTS) {
+		TS_RETURN_2(status, TS_NUM_KNOTS,
+		            "unsupported number of knots: %lu > %i",
+		            (unsigned long) num_knots, TS_MAX_NUM_KNOTS)
+	}
+	if (!isfinite((double) lambda) || lambda <= (tsReal) 0.0) {
+		TS_RETURN_1(status, TS_NO_RESULT,
+		            "lambda (%f) must be finite and positive",
+		            (double) lambda)
+	}
+	for (i = 0; i <= m; i++) {
+		if (!isfinite((double) parameters[i])) {
+			TS_RETURN_1(status, TS_KNOTS_DECR,
+			            "parameters[%lu] is not finite",
+			            (unsigned long) i)
+		}
+	}
+	for (i = 0; i < m; i++) {
+		if (parameters[i + 1] - parameters[i] <= min_gap) {
+			TS_RETURN_2(status, TS_KNOTS_DECR,
+			            "parameters[%lu] and parameters[%lu] are too close",
+			            (unsigned long) i,
+			            (unsigned long) i + 1)
+		}
+		if (!isfinite((double) weights[i]) ||
+		    weights[i] < (tsReal) 0.0) {
+			TS_RETURN_2(status, TS_NO_RESULT,
+			            "weights[%lu] (%f) must be finite and non-negative",
+			            (unsigned long) i, (double) weights[i])
+		}
+		if (hard[i] != 0 && hard[i] != 1) {
+			TS_RETURN_2(status, TS_NO_RESULT,
+			            "hard[%lu] (%i) must be 0 or 1",
+			            (unsigned long) i, hard[i])
+		}
+		if (hard[i]) n_hard++;
+	}
+	for (i = 0; i < m * dimension; i++) {
+		if (!isfinite((double) points[i])) {
+			TS_RETURN_1(status, TS_NO_RESULT,
+			            "points[%lu] is not finite",
+			            (unsigned long) i)
+		}
+	}
+	if (n_hard == 0) {
+		int has_soft = 0;
+		for (i = 0; i < m; i++)
+			if (weights[i] > (tsReal) 0.0) has_soft = 1;
+		if (!has_soft) {
+			TS_RETURN_0(status, TS_NO_RESULT,
+			            "at least one sample must be weighted or hard")
+		}
+	}
+
+	range = parameters[m] - parameters[0];
+	if (!isfinite((double) range) || range <= (tsReal) 0.0) {
+		TS_RETURN_0(status, TS_KNOTS_DECR,
+		            "parameters span is not finite")
+	}
+	n = m + n_hard;
+
+	knots = (tsReal *) malloc(num_knots * sizeof(tsReal));
+	gram = (tsReal *) malloc(m * m * sizeof(tsReal));
+	mat = (tsReal *) malloc(n * n * sizeof(tsReal));
+	rhs = (tsReal *) malloc(n * dimension * sizeof(tsReal));
+	ctrlp = (tsReal *) malloc(num_ctrlp * dimension * sizeof(tsReal));
+	if (n_hard > 0) {
+		hard_rows = (tsReal *) malloc(
+			n_hard * m * sizeof(tsReal));
+	}
+	if (!knots || !gram || !mat || !rhs || !ctrlp ||
+	    (n_hard > 0 && !hard_rows)) {
+		err = TS_MALLOC;
+		if (status != NULL) {
+			status->code = TS_MALLOC;
+			sprintf(status->message, "out of memory");
+		}
+		goto cleanup;
+	}
+
+	/* Build the periodically extended knot vector:
+	 * [t_{m-3}-L, t_{m-2}-L, t_{m-1}-L, t_0, ..., t_m,
+	 *  t_1+L, t_2+L, t_3+L] with L = t_m - t_0. */
+	knots[0] = parameters[m - 3] - range;
+	knots[1] = parameters[m - 2] - range;
+	knots[2] = parameters[m - 1] - range;
+	for (i = 0; i <= m; i++)
+		knots[i + 3] = parameters[i];
+	knots[m + 4] = parameters[1] + range;
+	knots[m + 5] = parameters[2] + range;
+	knots[m + 6] = parameters[3] + range;
+	for (i = 0; i < num_knots; i++) {
+		if (!isfinite((double) knots[i])) {
+			err = TS_KNOTS_DECR;
+			if (status != NULL) {
+				status->code = TS_KNOTS_DECR;
+				sprintf(status->message,
+				        "periodic knot extension is not finite");
+			}
+			goto cleanup;
+		}
+	}
+
+	memset(gram, 0, m * m * sizeof(tsReal));
+	memset(rhs, 0, n * dimension * sizeof(tsReal));
+	if (n_hard > 0)
+		memset(hard_rows, 0,
+		       n_hard * m * sizeof(tsReal));
+
+	/* Sample rows: A[i][j] = N_{j,3}(t_i), the value of the fitted
+	 * spline at t_i is A[i] * x where x holds the m independent
+	 * control points (control point q+m equals control point q). */
+	for (i = 0; i < m; i++) {
+		tsReal av[4];
+		size_t iw[4];
+		int is_hard = hard[i] != 0;
+		tsReal wi = weights[i];
+
+		for (t = 0; t < 4; t++) {
+			av[t] = ts_int_periodic_basis(
+				knots, i + t, 3, parameters[i]);
+			iw[t] = (i + t) % m;
+		}
+		if (is_hard) {
+			for (t = 0; t < 4; t++)
+				hard_rows[hard_count * m + iw[t]] = av[t];
+			hard_count++;
+		} else if (wi > (tsReal) 0.0) {
+			for (t = 0; t < 4; t++) {
+				for (l = 0; l < 4; l++)
+					gram[iw[t] * m + iw[l]] +=
+						wi * av[t] * av[l];
+				for (d = 0; d < dimension; d++)
+					rhs[iw[t] * dimension + d] +=
+						wi * av[t] *
+						points[i * dimension + d];
+			}
+		}
+	}
+
+	/* Regularization: lambda * integral |C''|^2 dt. On each knot span
+	 * [knots[k], knots[k+1]] only the four basis functions k-3..k are
+	 * active and their second derivatives are linear. Thus, the 3-point
+	 * Gauss-Legendre rule integrates the squared second derivative
+	 * exactly. */
+	for (k = 3; k < m + 3; k++) {
+		tsReal a0 = knots[k];
+		tsReal a1 = knots[k + 1];
+		tsReal mid = (tsReal) 0.5f * (a0 + a1);
+		tsReal half = (tsReal) 0.5f * (a1 - a0);
+		size_t iw[4];
+		for (t = 0; t < 4; t++)
+			iw[t] = (k - 3 + t) % m;
+		for (g = 0; g < 3; g++) {
+			tsReal u = mid + half * gauss_x[g];
+			tsReal wgt = half * gauss_w[g] * lambda;
+			tsReal dd[4];
+			for (t = 0; t < 4; t++)
+				dd[t] = ts_int_periodic_basis_der(
+					knots, k - 3 + t, 3, u, 2);
+			for (t = 0; t < 4; t++)
+				for (l = 0; l < 4; l++)
+					gram[iw[t] * m + iw[l]] +=
+						wgt * dd[t] * dd[l];
+		}
+	}
+
+	/* Assemble the KKT system
+	 *     [ gram  B^T ] [ x   ]   [ rhs ]
+	 *     [ B     0   ] [ mu  ] = [ P   ]
+	 * where B contains the sampled values of the hard constraints. */
+	memset(mat, 0, n * n * sizeof(tsReal));
+	for (i = 0; i < m; i++) {
+		for (j = 0; j < m; j++)
+			mat[i * n + j] = gram[i * m + j];
+	}
+	/* Fill the constraint blocks in sample order. */
+	{
+		size_t row = 0;
+		for (i = 0; i < m; i++) {
+			if (!hard[i]) continue;
+			for (j = 0; j < m; j++) {
+				mat[j * n + (m + row)] = hard_rows[row * m + j];
+				mat[(m + row) * n + j] = hard_rows[row * m + j];
+			}
+			for (d = 0; d < dimension; d++)
+				rhs[(m + row) * dimension + d] =
+					points[i * dimension + d];
+			row++;
+		}
+	}
+
+	if (ts_int_periodic_solve(mat, rhs, n, dimension)) {
+		ts_bspline_free(&result);
+		free(knots); free(gram); free(mat); free(rhs);
+		free(ctrlp); if (hard_rows) free(hard_rows);
+		TS_RETURN_0(status, TS_NO_RESULT,
+		            "failed to solve the fitting system")
+	}
+
+	/* Copy the independent control points into the cyclic control net. */
+	for (j = 0; j < num_ctrlp; j++) {
+		for (d = 0; d < dimension; d++)
+			ctrlp[j * dimension + d] =
+				rhs[(j % m) * dimension + d];
+	}
+
+	TS_TRY(try, err, status)
+		TS_CALL(try, err, ts_bspline_new(
+		        num_ctrlp, dimension, 3, TS_OPENED,
+		        &result, status))
+		TS_CALL(try, err, ts_bspline_set_knots(
+		        &result, knots, status))
+		TS_CALL(try, err, ts_bspline_set_control_points(
+		        &result, ctrlp, status))
+	TS_CATCH(err)
+		ts_bspline_free(&result);
+	TS_FINALLY
+		/* Nothing to do here. */
+	TS_END_TRY
+	if (err) {
+		free(knots); free(gram); free(mat); free(rhs);
+		free(ctrlp); if (hard_rows) free(hard_rows);
+		return err;
+	}
+
+	ts_bspline_move(&result, spline);
+	TS_RETURN_SUCCESS(status)
+
+cleanup:
+	ts_bspline_free(&result);
+	if (knots) free(knots);
+	if (gram) free(gram);
+	if (mat) free(mat);
+	if (rhs) free(rhs);
+	if (ctrlp) free(ctrlp);
+	if (hard_rows) free(hard_rows);
+	return err;
+}
 /*! @} */
 
 

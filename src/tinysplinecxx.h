@@ -597,6 +597,79 @@ public:
 	                                     std::vector<real> *first = nullptr,
 	                                     std::vector<real> *last = nullptr,
 	                                     real epsilon = TS_POINT_EPSILON);
+
+	/**
+	 * Fits a closed, non-uniform periodic cubic spline to \p points.
+	 * This is the C++ counterpart of ::ts_bspline_fit_periodic_cubic. In
+	 * contrast to interpolateCubicNatural and interpolateCatmullRom, the
+	 * resulting spline is periodic: its position as well as its first
+	 * and second derivative are continuous at the seam
+	 * \p parameters.front() / \p parameters.back(). Repeating the first
+	 * point is neither necessary nor allowed.
+	 *
+	 * The spline minimizes
+	 *
+	 *     J = sum_i weights[i] * |C(parameters[i]) - points[i]|^2
+	 *         + lambda * integral |C''(t)|^2 dt
+	 *
+	 * where the samples with <tt>hard[i] != 0</tt> are satisfied exactly
+	 * and a weight of \c 0 excludes the corresponding point from the
+	 * error term. The hard constraints act on the sampled values of the
+	 * curve, not on individual control points.
+	 *
+	 * The result is an ordinary BSpline with
+	 * <tt>num_points + 3</tt> control points, <tt>num_points + 7</tt>
+	 * knots, and the domain
+	 * <tt>[parameters.front(), parameters.back()]</tt> (the parameters
+	 * are not normalized). The last three control points are the cyclic
+	 * copies of the first three control points.
+	 *
+	 * Example:
+	 *
+	 *     std::vector<tinyspline::real> points = {
+	 *         0.0, 0.0,  1.0, 0.5,  1.5, 1.5,
+	 *         1.0, 2.0,  0.0, 1.5, -0.5, 0.5
+	 *     };
+	 *     std::vector<tinyspline::real> parameters = {
+	 *         0.0, 0.7, 1.9, 2.6, 3.8, 5.1, 6.0
+	 *     };
+	 *     std::vector<tinyspline::real> weights = {
+	 *         1.0, 1.0, 0.5, 1.0, 1.0, 0.5
+	 *     };
+	 *     std::vector<int> hard = { 0, 0, 1, 0, 0, 0 };
+	 *     tinyspline::BSpline spline =
+	 *         tinyspline::BSpline::fitPeriodicCubic(
+	 *             points, 2, parameters, weights, hard, 0.1);
+	 *
+	 * @param points
+	 * 	The points to be fitted. Must contain num_points * dimension
+	 * 	values.
+	 * @param dimension
+	 * 	The dimensionality of the points. Must be 2 or 3.
+	 * @param parameters
+	 * 	The parameters of the points. Must contain num_points + 1
+	 * 	finite, strictly increasing values.
+	 * @param weights
+	 * 	The non-negative weights of the samples. Must contain num_points
+	 * 	values.
+	 * @param hard
+	 * 	Indicates which samples are hard constraints. Must contain
+	 * 	num_points values, each either 0 or 1.
+	 * @param lambda
+	 * 	The positive weight of the regularization term.
+	 * @return
+	 * 	The fitted spline.
+	 * @throws std::runtime_error
+	 * 	If the input is invalid (e.g., the sizes of the arrays do not
+	 * 	match) or if fitting failed.
+	 */
+	static BSpline fitPeriodicCubic(std_real_vector_in points,
+	                                size_t dimension,
+	                                std_real_vector_in parameters,
+	                                std_real_vector_in weights,
+	                                const std::vector<int> &hard,
+	                                real lambda = (real) 0.01);
+
 	static BSpline parseJson(std::string json);
 	static BSpline load(std::string path);
 

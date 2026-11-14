@@ -6,6 +6,10 @@ add_executable(json_export_c json_export.c)
 target_link_libraries(json_export_c PRIVATE tinyspline)
 set_target_properties(json_export_c PROPERTIES FOLDER "examples/c")
 
+add_executable(periodic_fit_c periodic_fit.c)
+target_link_libraries(periodic_fit_c PRIVATE tinyspline)
+set_target_properties(periodic_fit_c PROPERTIES FOLDER "examples/c")
+
 # ##############################################################################
 # GLUT's API supports only floats.
 # ##############################################################################

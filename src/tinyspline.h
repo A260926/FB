@@ -1710,6 +1710,126 @@ ts_bspline_interpolate_catmull_rom(const tsReal *points,
                                    tsReal epsilon,
                                    tsBSpline *spline,
                                    tsStatus *status);
+
+/**
+ * Fits a closed, non-uniform periodic cubic spline to \p points. In contrast
+ * to ::ts_bspline_interpolate_cubic_natural and
+ * ::ts_bspline_interpolate_catmull_rom, the resulting spline is periodic in
+ * the sense that its position as well as its first and second derivative are
+ * continuous at the seam \p parameters[0] / \p parameters[num_points]. That
+ * is, the spline does not have open ends (like the natural interpolant) and
+ * repeating the first point does not merely close the position.
+ *
+ * The spline minimizes the objective
+ *
+ *     J = sum_i weights[i] * |C(parameters[i]) - points[i]|^2
+ *         + lambda * integral_{parameters[0]}^{parameters[num_points]}
+ *                    |C''(t)|^2 dt
+ *
+ * subject to the hard constraints C(parameters[i]) == points[i] for each
+ * index \c i with <tt>hard[i] != 0</tt>. Here, \c C denotes the fitted
+ * spline. The hard constraints act on the sampled values of the curve, not
+ * on individual control points. The regularization term is the integral of
+ * the squared second derivative of the curve and therefore, in contrast to
+ * the cyclic second difference of control points, is invariant under a
+ * reparameterization of the curve. A weight of \c 0 excludes the
+ * corresponding point from the error term, however, the point's parameter
+ * remains a knot of the spline.
+ *
+ * The result is an ordinary ::tsBSpline of degree \c 3 with
+ * <tt>num_points + 3</tt> control points and <tt>num_points + 7</tt> knots.
+ * The last three control points are the cyclic copies of the first three
+ * control points, and the knot vector is the periodic extension of
+ * \p parameters. The domain of the result is
+ * <tt>[parameters[0], parameters[num_points]]</tt>; the parameters are not
+ * normalized. The result can be used with all other functions operating on
+ * ::tsBSpline (e.g., ::ts_bspline_eval, ::ts_bspline_derive, and
+ * ::ts_bspline_copy).
+ *
+ * The input arrays are not modified. The result owns its own data and must
+ * be released with ::ts_bspline_free. On failure, and if \p spline is not
+ * NULL, \p spline is initialized to an empty spline which can safely be
+ * passed to ::ts_bspline_free.
+ *
+ * Example:
+ *
+ *     tsReal points[] = {
+ *         0.0, 0.0,   1.0, 0.5,   1.5, 1.5,
+ *         1.0, 2.0,   0.0, 1.5,  -0.5, 0.5
+ *     };
+ *     tsReal parameters[] = {
+ *         0.0, 0.7, 1.9, 2.6, 3.8, 5.1, 6.0
+ *     };
+ *     tsReal weights[] = { 1.0, 1.0, 0.5, 1.0, 1.0, 0.5 };
+ *     int hard[] = { 0, 0, 1, 0, 0, 0 };
+ *     tsBSpline spline = ts_bspline_init();
+ *     tsStatus status;
+ *     if (ts_bspline_fit_periodic_cubic(
+ *             points, 6, 2, parameters, weights, hard,
+ *             0.1, &spline, &status)) {
+ *         // status.message describes the error.
+ *     }
+ *     ...
+ *     ts_bspline_free(&spline);
+ *
+ * @param[in] points
+ * 	The points to be fitted. The first point must not be repeated at
+ * 	the end (the spline is closed by construction). The length of
+ * 	\p points is <tt>num_points * dimension</tt>.
+ * @param[in] num_points
+ * 	The number of points in \p points. Must be at least \c 4.
+ * @param[in] dimension
+ * 	The dimensionality of the points. Must be \c 2 or \c 3.
+ * @param[in] parameters
+ * 	The parameters of the points. Must contain <tt>num_points + 1</tt>
+ * 	finite, strictly increasing values \c t_0 .. \c t_num_points. Only
+ * 	\c t_0 .. \c t_num_points-1 are samples; \c t_num_points only
+ * 	specifies the end of the period. Adjacent values must differ by more
+ * 	than <tt>10 * TS_KNOT_EPSILON</tt>. The values are used as knots
+ * 	without normalization.
+ * @param[in] weights
+ * 	The non-negative weights of the samples. Must contain \p num_points
+ * 	finite values. A weight of \c 0 excludes the corresponding sample
+ * 	from the error term.
+ * @param[in] hard
+ * 	Indicates which samples are hard constraints. Must contain
+ * 	\p num_points values, each either \c 0 or \c 1. The sample \c i is a
+ * 	hard constraint if <tt>hard[i] != 0</tt>.
+ * @param[in] lambda
+ * 	The positive weight of the regularization term. Must be finite and
+ * 	greater than \c 0.
+ * @param[out] spline
+ * 	The fitted spline.
+ * @param[out] status
+ * 	The status of this function. May be NULL.
+ * @return TS_SUCCESS
+ * 	On success.
+ * @return TS_NUM_POINTS
+ * 	If \p num_points is less than \c 4 or a required pointer is NULL.
+ * @return TS_DIM_ZERO
+ * 	If \p dimension is not \c 2 or \c 3.
+ * @return TS_NUM_KNOTS
+ * 	If the resulting spline would exceed ::TS_MAX_NUM_KNOTS.
+ * @return TS_KNOTS_DECR
+ * 	If \p parameters contains a non-finite value, is not strictly
+ * 	increasing, or if adjacent parameters are too close to each other.
+ * @return TS_NO_RESULT
+ * 	If a weight is negative or non-finite, if an entry of \p hard is not
+ * 	\c 0 or \c 1, if \p lambda is not finite and positive, or if no sample
+ * 	is either weighted or hard.
+ * @return TS_MALLOC
+ * 	If allocating memory failed.
+ */
+tsError TINYSPLINE_API
+ts_bspline_fit_periodic_cubic(const tsReal *points,
+                              size_t num_points,
+                              size_t dimension,
+                              const tsReal *parameters,
+                              const tsReal *weights,
+                              const int *hard,
+                              tsReal lambda,
+                              tsBSpline *spline,
+                              tsStatus *status);
 /*! @} */
 
 

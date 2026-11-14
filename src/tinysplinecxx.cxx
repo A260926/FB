@@ -958,6 +958,51 @@ tinyspline::BSpline::interpolateCatmullRom(std_real_vector_in points,
 }
 
 tinyspline::BSpline
+tinyspline::BSpline::fitPeriodicCubic(std_real_vector_in points,
+                                      size_t dimension,
+                                      std_real_vector_in parameters,
+                                      std_real_vector_in weights,
+                                      const std::vector<int> &hard,
+                                      real lambda)
+{
+	const size_t len_points = std_real_vector_read(points)size();
+	const size_t len_parameters =
+		std_real_vector_read(parameters)size();
+	const size_t len_weights = std_real_vector_read(weights)size();
+	if (dimension == 0)
+		throw std::runtime_error("unsupported dimension: 0");
+	if (len_points % dimension != 0)
+		throw std::runtime_error("#points % dimension != 0");
+	{
+		const size_t num_points = len_points / dimension;
+		if (len_parameters != num_points + 1) {
+			throw std::runtime_error(
+				"#parameters != #points + 1");
+		}
+		if (len_weights != num_points)
+			throw std::runtime_error(
+				"#weights != #points");
+		if (hard.size() != num_points)
+			throw std::runtime_error(
+				"#hard != #points");
+	}
+	tsBSpline data = ts_bspline_init();
+	tsStatus status;
+	if (ts_bspline_fit_periodic_cubic(
+			std_real_vector_read(points)data(),
+			len_points / dimension,
+			dimension,
+			std_real_vector_read(parameters)data(),
+			std_real_vector_read(weights)data(),
+			hard.data(),
+			lambda,
+			&data,
+			&status))
+		throw std::runtime_error(status.message);
+	return BSpline(data);
+}
+
+tinyspline::BSpline
 tinyspline::BSpline::parseJson(std::string json)
 {
 	tsBSpline data = ts_bspline_init();
