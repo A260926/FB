@@ -23,6 +23,20 @@ namespace manifold {
 enum class CsgNodeType { Union, Intersection, Difference, Leaf };
 
 class CsgLeafNode;
+class CsgWarpNode;
+
+// Deferred vertex warp. Holds the user's std::function (and therefore the
+// lifetime of any state it captures, including reference captures, which
+// remain the caller's responsibility) until the first observation forces the
+// owning CsgWarpNode to materialize. Warp invokes the scalar callback once per
+// vertex; WarpBatch invokes its callback exactly once with a VecView over the
+// whole vertex array.
+struct WarpOp {
+  enum class Kind { Scalar, Batch, None };
+  Kind kind;
+  std::function<void(vec3&)> scalar;
+  std::function<void(VecView<vec3>)> batch;
+};
 
 class CsgNode : public std::enable_shared_from_this<CsgNode> {
  public:
@@ -30,6 +44,26 @@ class CsgNode : public std::enable_shared_from_this<CsgNode> {
       ExecutionContext::Impl* ctx = nullptr) const = 0;
   virtual std::shared_ptr<CsgNode> Transform(const mat3x4& m) const = 0;
   virtual CsgNodeType GetNodeType() const = 0;
+  // Build a deferred warp stage over this node. The warp is not applied until
+  // the returned node is reduced to a leaf by an observation (Status, Volume,
+  // GetMeshGL, ...), at which point it runs on the fully materialized input
+  // mesh - never pushed through a Boolean onto its operands.
+  virtual std::shared_ptr<CsgNode> Warp(WarpOp op) const = 0;
+  // Downcast hook used to walk chains of warp stages iteratively without
+  // relying on RTTI. Only CsgWarpNode returns itself. The returned pointer is
+  // only valid while a shared_ptr keeping the node alive is held.
+  virtual CsgWarpNode* AsWarpNode() const { return nullptr; }
+  // Move this node's exclusively-owned structural children into `out`, so the
+  // caller can destroy a deep tree with an explicit work list instead of
+  // recursive destructors. Leaf nodes have nothing to release.
+  virtual void ReleaseChildren(
+      std::vector<std::shared_ptr<CsgNode>>& /*out*/) {}
+  // Append the structural children (without detaching them) for iterative
+  // tree walks.
+  virtual void CollectChildren(
+      std::vector<std::shared_ptr<CsgNode>>& /*out*/) const {}
+  // True once lazy evaluation has published a permanent cached result.
+  virtual bool IsCached() const { return false; }
   /// Count the leaves in the subtree rooted at this node. A CsgOpNode with
   /// a cached evaluation counts as a single leaf. Used for pre-pass progress
   /// denominator: a CSG tree with N leaves reduces to 1 result in N-1 ops.
@@ -58,6 +92,8 @@ class CsgLeafNode final : public CsgNode {
       ExecutionContext::Impl* ctx = nullptr) const override;
 
   std::shared_ptr<CsgNode> Transform(const mat3x4& m) const override;
+
+  std::shared_ptr<CsgNode> Warp(WarpOp op) const override;
 
   CsgNodeType GetNodeType() const override;
 
@@ -92,12 +128,20 @@ class CsgOpNode final : public CsgNode {
 
   std::shared_ptr<CsgNode> Transform(const mat3x4& m) const override;
 
+  std::shared_ptr<CsgNode> Warp(WarpOp op) const override;
+
   std::shared_ptr<CsgLeafNode> ToLeafNode(
       ExecutionContext::Impl* ctx = nullptr) const override;
 
   CsgNodeType GetNodeType() const override;
 
   size_t NumLeaves() const override;
+
+  bool IsCached() const override;
+
+  void ReleaseChildren(std::vector<std::shared_ptr<CsgNode>>& out) override;
+  void CollectChildren(
+      std::vector<std::shared_ptr<CsgNode>>& out) const override;
 
   ~CsgOpNode();
 
@@ -108,6 +152,63 @@ class CsgOpNode final : public CsgNode {
   mat3x4 transform_ = la::identity;
   // the following fields are for lazy evaluation, so they are mutable
   mutable std::shared_ptr<CsgLeafNode> cache_ = nullptr;
+};
+
+// A single deferred warp stage. The warp callback runs at most once, on the
+// whole materialized mesh of `child_`, when the node is first observed. The
+// cached result is shared by every Manifold holding (a copy of) this node, so
+// copies and concurrent observations never re-run the callback. A fresh Warp
+// call builds a fresh node and therefore a fresh stage.
+class CsgWarpNode final : public CsgNode {
+ public:
+  CsgWarpNode(std::shared_ptr<CsgNode> child, WarpOp op);
+  ~CsgWarpNode();
+
+  std::shared_ptr<CsgLeafNode> ToLeafNode(
+      ExecutionContext::Impl* ctx = nullptr) const override;
+
+  // Affine ops stay deferred and compose above the warp: warp-then-translate
+  // and translate-then-warp remain distinct expressions because the new node
+  // wraps the existing one rather than merging into it.
+  std::shared_ptr<CsgNode> Transform(const mat3x4& m) const override;
+
+  std::shared_ptr<CsgNode> Warp(WarpOp op) const override;
+
+  std::shared_ptr<CsgNode> Boolean(const std::shared_ptr<CsgNode>& second,
+                                   OpType op) override;
+
+  CsgWarpNode* AsWarpNode() const override {
+    return const_cast<CsgWarpNode*>(this);
+  }
+
+  CsgNodeType GetNodeType() const override { return CsgNodeType::Leaf; }
+
+  size_t NumLeaves() const override;
+
+  bool IsCached() const override;
+
+  void ReleaseChildren(std::vector<std::shared_ptr<CsgNode>>& out) override;
+  void CollectChildren(
+      std::vector<std::shared_ptr<CsgNode>>& out) const override;
+
+  // Snapshot the child pointer under the lock. Used by the iterative tree
+  // reducer, which never holds the mutex across a descent.
+  std::shared_ptr<CsgNode> Child() const;
+  // Apply this single warp stage to the already-reduced child and publish the
+  // result. No-op when another observation won the cache race.
+  void MaterializeSelf(ExecutionContext::Impl* ctx) const;
+
+ private:
+  std::shared_ptr<CsgNode> child_;
+  WarpOp op_;
+  // Affine transforms composed above this warp stage are folded here and
+  // applied to the materialized mesh after the warp callback.
+  mat3x4 transform_ = la::identity;
+  // The first materialized result. Published under mutex_; a successful
+  // materialization is permanent, so later copies and concurrent reads observe
+  // it without invoking the callback again.
+  mutable std::shared_ptr<CsgLeafNode> cache_;
+  mutable std::mutex mutex_;
 };
 
 }  // namespace manifold

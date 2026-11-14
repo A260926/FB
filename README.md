@@ -77,6 +77,58 @@ To aid in speed, this library makes extensive use of parallelization through TBB
 
 Look in the [samples](https://github.com/elalish/manifold/tree/master/samples) directory for examples of how to use this library to make interesting 3D models. You may notice that some of these examples bear a certain resemblance to my OpenSCAD designs on [Thingiverse](https://www.thingiverse.com/emmett), which is no accident. Much as I love OpenSCAD, my library is dramatically faster and the code is more flexible.
 
+### Lazy evaluation of `Warp` and `WarpBatch`
+
+Like the Boolean operators and the affine transforms (`Translate`, `Rotate`,
+`Scale`, `Transform`, `Mirror`), `Warp` and `WarpBatch` build a deferred
+expression: the callback is **not** run when the warped `Manifold` is created,
+copied, or extended with more operations. It runs exactly once, on the fully
+materialized mesh, when the result is first observed through `Status()`,
+`Volume()`, `GetMeshGL()`, or any other query. All copies that share the warp
+node reuse the single materialization, including concurrent reads on different
+threads. A fresh `Warp` call always begins a fresh stage.
+
+The `std::function` is owned by the deferred node held inside the returned
+`Manifold`, so it stays alive as long as any copy of the result does. Captures
+made **by value** are owned as well; captures made **by reference** are not, so
+their lifetime remains the caller's responsibility - the referenced object must
+outlive every possible observation of the result.
+
+```cpp
+using namespace manifold;
+
+int calls = 0;
+Manifold shell =
+    Manifold::Cube({2, 3, 4}) -
+    Manifold::Cube({1, 1, 6}).Translate({0.5, 1, -1});
+
+// No callback runs here, nor on the copy or the appended Translate.
+Manifold warped = shell.Warp([&calls](vec3& v) {
+  ++calls;                 // invoked once per vertex of the Boolean mesh
+  v.x += 0.5 * v.z * v.z;
+});
+Manifold moved = warped.Translate({1, 2, 3});
+// calls == 0 still.
+
+const double volume = moved.Volume();   // first observation: materializes now
+// calls == shell.NumVert(); the warp ran on the complete Boolean result,
+// never on the two operands separately.
+
+Manifold again = warped;
+(void)again.GetMeshGL();                // reuses the cached result
+// calls is unchanged.
+```
+
+`WarpBatch` differs only in callback granularity: it is invoked **once per
+stage** with a `VecView` over the whole vertex array rather than once per
+vertex. Stages have hard boundaries, so the order of operations is preserved:
+`warp.Translate(t)` and `Translate(t).warp` are different expressions, and a
+warp placed after a Boolean always deforms that Boolean's complete mesh instead
+of being pushed down onto its operands. If the source is already in an error
+state, the callback is skipped and the error propagates; a warp that produces
+non-finite positions likewise leaves the result in an error state and
+suppresses every later stage.
+
 ### Dependencies
 
 Manifold no longer has **any** required dependencies! However, we do have several optional dependencies, of which the first two are strongly encouraged:

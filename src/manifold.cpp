@@ -228,7 +228,10 @@ CsgLeafNode& Manifold::GetCsgLeafNode(ExecutionContext::Impl* ctx) const {
     ctx->totalPhases.store(booleans * kPhasesPerBoolean,
                            std::memory_order_relaxed);
   }
-  if (pNode_->GetNodeType() != CsgNodeType::Leaf) {
+  if (pNode_->GetNodeType() != CsgNodeType::Leaf ||
+      pNode_->AsWarpNode() != nullptr) {
+    // A CsgWarpNode reports the Leaf type but is not a CsgLeafNode: observing
+    // it forces the deferred warp stages to materialize.
     pNode_ = pNode_->ToLeafNode(ctx);
   }
   return *std::static_pointer_cast<CsgLeafNode>(pNode_);
@@ -609,6 +612,13 @@ Manifold Manifold::Mirror(vec3 normal) const {
  * that is not checked here, so it is up to the user to choose their function
  * with discretion.
  *
+ * The warp is deferred: warpFunc is not invoked here, nor when the result is
+ * copied or extended with more operations. The first observation of the result
+ * (Status, Volume, GetMeshGL, ...) materializes the whole upstream expression
+ * and then invokes warpFunc once per vertex of that materialized mesh. The
+ * std::function (and anything it captures) is owned by the deferred node;
+ * reference captures still have their lifetime managed by the caller.
+ *
  * Any normals recording set by `CalculateNormals()` is preserved across the
  * Warp, but the stored values reflect the pre-warp surface and may no longer
  * match the new geometry. Re-call `CalculateNormals()` if accurate normals
@@ -617,32 +627,30 @@ Manifold Manifold::Mirror(vec3 normal) const {
  * @param warpFunc A function that modifies a given vertex position.
  */
 Manifold Manifold::Warp(std::function<void(vec3&)> warpFunc) const {
-  auto oldImpl = GetCsgLeafNode().GetImpl();
-  if (oldImpl->status_ != Error::NoError)
-    return PropagateStatus(oldImpl->status_);
-  auto pImpl = std::make_shared<Impl>(*oldImpl);
-  pImpl->Warp(warpFunc);
-  return Manifold(std::make_shared<CsgLeafNode>(pImpl));
+  WarpOp op;
+  op.kind = WarpOp::Kind::Scalar;
+  op.scalar = std::move(warpFunc);
+  return Manifold(LoadPNode()->Warp(std::move(op)));
 }
 
 /**
  * Same as Manifold::Warp but calls warpFunc with
  * a VecView which is roughly equivalent to std::span
- * pointing to all vec3 elements to be modified in-place. Like Warp, this
- * preserves any normals recording without updating the stored values;
- * re-call `CalculateNormals()` if accurate normals matter after a non-rigid
- * warp.
+ * pointing to all vec3 elements to be modified in-place. The callback is
+ * invoked exactly once per deferred stage, with a view over the entire vertex
+ * array of the materialized mesh - it is never split into per-vertex calls.
+ * Like Warp, the call is deferred until the first observation and preserves
+ * any normals recording without updating the stored values; re-call
+ * `CalculateNormals()` if accurate normals matter after a non-rigid warp.
  *
  * @param warpFunc A function that modifies multiple vertex positions.
  */
 Manifold Manifold::WarpBatch(
     std::function<void(VecView<vec3>)> warpFunc) const {
-  auto oldImpl = GetCsgLeafNode().GetImpl();
-  if (oldImpl->status_ != Error::NoError)
-    return PropagateStatus(oldImpl->status_);
-  auto pImpl = std::make_shared<Impl>(*oldImpl);
-  pImpl->WarpBatch(warpFunc);
-  return Manifold(std::make_shared<CsgLeafNode>(pImpl));
+  WarpOp op;
+  op.kind = WarpOp::Kind::Batch;
+  op.batch = std::move(warpFunc);
+  return Manifold(LoadPNode()->Warp(std::move(op)));
 }
 
 /**

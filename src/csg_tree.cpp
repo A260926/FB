@@ -41,6 +41,18 @@ struct MeshCompare {
   }
 };
 
+// Drain a work list of exclusively-owned structural children without
+// recursion, so destroying a depth-N tree never grows the call stack. A child
+// with another owner is left untouched for that owner's own destruction.
+void DrainReleased(std::vector<std::shared_ptr<CsgNode>> work) {
+  while (!work.empty()) {
+    auto node = std::move(work.back());
+    work.pop_back();
+    if (node.use_count() != 1) continue;
+    node->ReleaseChildren(work);
+  }
+}
+
 }  // namespace
 namespace manifold {
 
@@ -117,6 +129,21 @@ std::shared_ptr<CsgLeafNode> CsgLeafNode::ToLeafNode(
 std::shared_ptr<CsgNode> CsgLeafNode::Transform(const mat3x4& m) const {
   std::lock_guard<std::mutex> lock(mutex_);
   return std::make_shared<CsgLeafNode>(pImpl_, m * Mat4(transform_));
+}
+
+std::shared_ptr<CsgNode> CsgLeafNode::Warp(WarpOp op) const {
+  // Snapshot under the lock once and build a fresh leaf via the two-argument
+  // constructor: copying *this here would re-enter the non-recursive mutex.
+  // The pending affine transform stays deferred on the new leaf.
+  std::shared_ptr<const Manifold::Impl> impl;
+  mat3x4 transform;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    impl = pImpl_;
+    transform = transform_;
+  }
+  return std::make_shared<CsgWarpNode>(
+      std::make_shared<CsgLeafNode>(impl, transform), std::move(op));
 }
 
 CsgNodeType CsgLeafNode::GetNodeType() const { return CsgNodeType::Leaf; }
@@ -564,33 +591,29 @@ CsgOpNode::CsgOpNode(const std::vector<std::shared_ptr<CsgNode>>& children,
     : impl_(children), op_(op) {}
 
 CsgOpNode::~CsgOpNode() {
-  if (impl_.UseCount() == 1) {
-    auto impl = impl_.GetGuard();
-    std::vector<std::shared_ptr<CsgOpNode>> toProcess;
-    auto handleChildren =
-        [&toProcess](std::vector<std::shared_ptr<CsgNode>>& children) {
-          while (!children.empty()) {
-            // move out so shrinking the vector will not trigger recursive drop
-            auto movedChild = std::move(children.back());
-            children.pop_back();
-            if (movedChild->GetNodeType() != CsgNodeType::Leaf)
-              toProcess.push_back(
-                  std::static_pointer_cast<CsgOpNode>(std::move(movedChild)));
-          }
-        };
-    handleChildren(*impl);
-    while (!toProcess.empty()) {
-      auto child = std::move(toProcess.back());
-      toProcess.pop_back();
-      // Only empty the child's impl if we are its last holder. Otherwise
-      // another live tree still references this CsgOpNode and may later
-      // try to evaluate it, which requires its impl intact.
-      if (child.use_count() == 1 && child->impl_.UseCount() == 1) {
-        auto childImpl = child->impl_.GetGuard();
-        handleChildren(*childImpl);
-      }
-    }
-  }
+  // Iteratively release an exclusively-owned subtree so a deep
+  // Boolean/warp expression does not unwind through recursive destructors.
+  std::vector<std::shared_ptr<CsgNode>> work;
+  ReleaseChildren(work);
+  DrainReleased(std::move(work));
+}
+
+bool CsgOpNode::IsCached() const { return cache_ != nullptr; }
+
+void CsgOpNode::ReleaseChildren(
+    std::vector<std::shared_ptr<CsgNode>>& out) {
+  // A shared impl_ backs another live CsgOpNode that may still evaluate it, so
+  // only detach when we are its sole holder.
+  if (impl_.UseCount() != 1) return;
+  auto guard = impl_.GetGuard();
+  for (auto& child : *guard) out.push_back(std::move(child));
+  guard->clear();
+}
+
+void CsgOpNode::CollectChildren(
+    std::vector<std::shared_ptr<CsgNode>>& out) const {
+  auto guard = impl_.GetGuard();
+  for (const auto& child : *guard) out.push_back(child);
 }
 
 std::shared_ptr<CsgNode> CsgOpNode::Boolean(
@@ -608,6 +631,198 @@ std::shared_ptr<CsgNode> CsgOpNode::Transform(const mat3x4& m) const {
   node->transform_ = m * Mat4(transform_);
   node->op_ = op_;
   return node;
+}
+
+std::shared_ptr<CsgNode> CsgOpNode::Warp(WarpOp op) const {
+  // The warp stays above the Boolean: it is not pushed down onto the operands.
+  // ToLeafNode() materializes the whole boolean mesh (applying this node's
+  // deferred affine) before the warp stage runs.
+  return std::make_shared<CsgWarpNode>(
+      std::const_pointer_cast<CsgNode>(shared_from_this()), std::move(op));
+}
+
+CsgWarpNode::CsgWarpNode(std::shared_ptr<CsgNode> child, WarpOp op)
+    : child_(std::move(child)), op_(std::move(op)) {}
+
+namespace {
+// Post-order, fully iterative reduction of a subtree to cached leaves. Warp
+// stages are applied bottom-up and Boolean nodes only enter their own
+// (iterative) evaluator once every warp stage beneath them is already cached,
+// which keeps alternating Boolean/warp chains from mutually recursing.
+struct ReduceFrame {
+  std::shared_ptr<CsgNode> node;
+  std::vector<std::shared_ptr<CsgNode>> kids;
+  size_t idx = 0;
+};
+
+void ReduceTree(const std::shared_ptr<CsgNode>& root,
+                ExecutionContext::Impl* ctx) {
+  if (root->IsCached()) return;
+  std::vector<ReduceFrame> stack;
+  stack.push_back({root, {}, 0});
+  while (!stack.empty()) {
+    ReduceFrame& frame = stack.back();
+    CsgWarpNode* warp = frame.node->AsWarpNode();
+    if (warp != nullptr) {
+      if (frame.idx == 0) {
+        // First visit: descend into the single child before warping.
+        frame.idx = 1;
+        if (!warp->IsCached()) {
+          stack.push_back({warp->Child(), {}, 0});
+        }
+        continue;
+      }
+      // The child is fully reduced; apply this stage once. A concurrent
+      // reduction that won the cache race makes this a no-op.
+      warp->MaterializeSelf(ctx);
+      stack.pop_back();
+      continue;
+    }
+    if (frame.node->GetNodeType() == CsgNodeType::Leaf) {
+      // An ordinary materialized leaf has nothing to reduce.
+      stack.pop_back();
+      continue;
+    }
+    if (frame.node->IsCached()) {
+      // A Boolean already evaluated: its result is permanent.
+      stack.pop_back();
+      continue;
+    }
+    // Boolean node: reduce every child first, then run its stack-machine
+    // evaluator, whose warp callouts now hit cached stages only.
+    if (frame.kids.empty()) frame.node->CollectChildren(frame.kids);
+    if (frame.idx < frame.kids.size()) {
+      auto child = frame.kids[frame.idx++];
+      if (!child->IsCached()) stack.push_back({child, {}, 0});
+      continue;
+    }
+    frame.node->ToLeafNode(ctx);
+    stack.pop_back();
+  }
+}
+}  // namespace
+
+CsgWarpNode::~CsgWarpNode() {
+  // Unwind an exclusively-owned chain (including alternating Boolean nodes)
+  // iteratively: an unobserved depth-10000 expression must not consume call
+  // stack when destroyed.
+  std::vector<std::shared_ptr<CsgNode>> work;
+  ReleaseChildren(work);
+  DrainReleased(std::move(work));
+}
+
+std::shared_ptr<CsgNode> CsgWarpNode::Transform(const mat3x4& m) const {
+  // The affine composes *above* the warp (warp-then-translate). The wrapper
+  // carries no warp callback of its own (WarpOp::Kind::None), so observing it
+  // only reduces the anchored warp expression and applies the matrix - it
+  // never re-runs a warp. Chained affines re-anchor to the same warp node and
+  // merely accumulate matrices, keeping warp-then-translate distinct from
+  // translate-then-warp.
+  WarpOp none;
+  none.kind = WarpOp::Kind::None;
+  std::shared_ptr<CsgNode> anchor =
+      op_.kind == WarpOp::Kind::None ? child_
+                                     : std::const_pointer_cast<CsgNode>(
+                                           shared_from_this());
+  auto node = std::make_shared<CsgWarpNode>(std::move(anchor), std::move(none));
+  node->transform_ = m * Mat4(transform_);
+  return node;
+}
+
+std::shared_ptr<CsgNode> CsgWarpNode::Warp(WarpOp op) const {
+  // A fresh Warp is a fresh stage, even when stacked on another warp.
+  return std::make_shared<CsgWarpNode>(
+      std::const_pointer_cast<CsgNode>(shared_from_this()), std::move(op));
+}
+
+std::shared_ptr<CsgNode> CsgWarpNode::Boolean(
+    const std::shared_ptr<CsgNode>& second, OpType op) {
+  // CsgNode's base implementation would try to reinterpret a non-leaf second
+  // operand as a CsgOpNode; a warp stage is not one. Always build a fresh op
+  // node, keeping the warp stage intact as a Boolean child.
+  std::vector<std::shared_ptr<CsgNode>> children({shared_from_this(), second});
+  return std::make_shared<CsgOpNode>(children, op);
+}
+
+size_t CsgWarpNode::NumLeaves() const {
+  // Iterative walk: deep warp chains must not recurse here either.
+  const CsgWarpNode* node = this;
+  for (;;) {
+    if (node->IsCached()) return 1;
+    CsgWarpNode* inner = node->child_->AsWarpNode();
+    if (inner == nullptr) return node->child_->NumLeaves();
+    node = inner;
+  }
+}
+
+bool CsgWarpNode::IsCached() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return cache_ != nullptr;
+}
+
+void CsgWarpNode::ReleaseChildren(
+    std::vector<std::shared_ptr<CsgNode>>& out) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (child_ != nullptr) out.push_back(std::move(child_));
+}
+
+void CsgWarpNode::CollectChildren(
+    std::vector<std::shared_ptr<CsgNode>>& out) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  out.push_back(child_);
+}
+
+std::shared_ptr<CsgNode> CsgWarpNode::Child() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return child_;
+}
+
+std::shared_ptr<CsgLeafNode> CsgWarpNode::ToLeafNode(
+    ExecutionContext::Impl* ctx) const {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (cache_ != nullptr) return cache_;
+  }
+  // Iterative reduction of the whole subtree below this stage.
+  ReduceTree(std::const_pointer_cast<CsgNode>(shared_from_this()), ctx);
+  std::lock_guard<std::mutex> lock(mutex_);
+  return cache_;
+}
+
+void CsgWarpNode::MaterializeSelf(ExecutionContext::Impl* ctx) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (cache_ != nullptr) return;
+
+  // The child has already been reduced by ReduceTree, so this only reads a
+  // cached leaf.
+  auto srcLeaf = child_->ToLeafNode(ctx);
+
+  if (op_.kind == WarpOp::Kind::None) {
+    // An affine-only wrapper: no callback, no mesh copy. Defer the matrix on
+    // the returned leaf exactly like the plain affine path.
+    cache_ = std::make_shared<CsgLeafNode>(srcLeaf->GetImpl(), transform_);
+    return;
+  }
+
+  // An errored source skips the callback; its status propagates and every
+  // later stage skips as well.
+  auto srcImpl = srcLeaf->GetImpl();
+  auto impl = std::make_shared<Manifold::Impl>(*srcImpl);
+  if (srcImpl->status_ == Manifold::Error::NoError) {
+    if (op_.kind == WarpOp::Kind::Scalar) {
+      impl->Warp(op_.scalar);
+    } else {
+      // One callback for the whole vertex array - never split per vertex.
+      impl->WarpBatch(op_.batch);
+    }
+  }
+
+  auto result = std::make_shared<CsgLeafNode>(impl);
+  if (transform_ != mat3x4(la::identity)) {
+    result = std::static_pointer_cast<CsgLeafNode>(
+        result->Transform(transform_));
+  }
+  cache_ = result;
 }
 
 struct CsgStackFrame {
@@ -796,12 +1011,24 @@ std::shared_ptr<CsgLeafNode> CsgOpNode::ToLeafNode(
       stack.pop_back();
     } else {
       auto add_children =
-          [&stack](std::shared_ptr<CsgNode>& node, OpType op, mat3x4 transform,
-                   CsgStackFrame::Nodes* dest1, CsgStackFrame::Nodes* dest2) {
-            if (node->GetNodeType() == CsgNodeType::Leaf)
-              dest1->push_back(std::static_pointer_cast<CsgLeafNode>(
-                  node->Transform(transform)));
-            else
+          [&](std::shared_ptr<CsgNode>& node, OpType op, mat3x4 transform,
+              CsgStackFrame::Nodes* dest1, CsgStackFrame::Nodes* dest2) {
+            if (node->GetNodeType() == CsgNodeType::Leaf) {
+              std::shared_ptr<CsgLeafNode> leaf;
+              if (node->AsWarpNode() != nullptr) {
+                // A warp stage reports Leaf but is not a CsgLeafNode:
+                // materialize it first, so the warp runs on the complete mesh
+                // rather than being pushed onto the Boolean operands.
+                leaf = node->ToLeafNode(ctx);
+                if (transform != mat3x4(la::identity))
+                  leaf = std::static_pointer_cast<CsgLeafNode>(
+                      leaf->Transform(transform));
+              } else {
+                leaf = std::static_pointer_cast<CsgLeafNode>(
+                    node->Transform(transform));
+              }
+              dest1->push_back(std::move(leaf));
+            } else
               stack.push_back(std::make_shared<CsgStackFrame>(
                   false, op, transform, dest1, dest2,
                   std::static_pointer_cast<const CsgOpNode>(node)));
