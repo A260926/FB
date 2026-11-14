@@ -356,6 +356,60 @@ for (size_t s = 0; s < shapes.size(); s++) {
 
 
 
+## Bounded handle weights (`bounded_weights.h`)
+
+`bounded_weights.h` / `bounded_weights.cpp` add an owning handle-weight
+context on top of a loaded mesh. Given `attrib_t`, all `shape_t`s and one
+position-index set per handle, `tinyobj::BoundedWeights` builds the cotangent
+Laplacian `L` and lumped mass matrix `M` of the triangle surface and solves
+the globally constrained bounded-biharmonic problem
+
+```
+minimize  1/2 * tr(W^T Q W),  Q = L^T M^{-1} L
+```
+
+jointly over all handle columns, with every row nonnegative and summing to
+one and handle rows fixed to unit vectors. Positions shared across shapes are
+one degree of freedom (UV/normal seams never split them); coincident but
+distinctly indexed positions are never welded. The context copies its input,
+so the original `attrib_t`/`shape_t` may be released after construction.
+
+Minimal load-to-deformation call (C++11, standard library only):
+
+```cpp
+#include "bounded_weights.h"
+#include "tiny_obj_loader.h"
+
+tinyobj::ObjReader reader;
+if (!reader.ParseFromFile("character.obj")) { /* reader.Error() */ }
+const tinyobj::attrib_t& attrib = reader.GetAttrib();
+const std::vector<tinyobj::shape_t>& shapes = reader.GetShapes();
+
+// Zero-based position indices chosen as handles in the modeling tool.
+std::vector<std::vector<int> > handles(2);
+handles[0].push_back(7);                 // e.g. left shoulder handle
+handles[1].push_back(12);                // e.g. right shoulder handle
+handles[1].push_back(13);                // one handle may own several points
+
+tinyobj::BoundedWeights weights(attrib, shapes, handles);
+if (!weights.solve(/*max_iterations=*/1000000)) {
+  // Budget exhausted: any previously converged weights remain available.
+}
+
+// Reuse the existing skin weight container (joint_id = handle index).
+std::vector<tinyobj::skin_weight_t> skin = weights.export_skin_weights();
+
+// Animate: each handle gets a finite affine transform relative to rest pose.
+// New positions are always computed from the original rest positions.
+std::vector<tinyobj::BoundedAffine> transforms(2);
+transforms[0].translation[1] = 0.5;      // lift handle 0
+std::vector<double> deformed = weights.deform(transforms);
+```
+
+Invalid input (empty or non-triangle meshes, out-of-range/non-manifold
+indices, non-finite or degenerate geometry, empty/overlapping handles, or a
+component without a handle) is rejected with `std::invalid_argument`.
+
 ## Optimized loader
 
 For large `.obj` files, tinyobjloader ships an optimized in-header loader,
