@@ -259,6 +259,15 @@ type Conn struct {
 	closed  bool
 	err     error // Protected by mu and closed until context is cancelled.
 
+	// Session multiplexing. A root Conn leaves session nil and owns at
+	// most one tunnel for the child session Conns created from it. A
+	// child Conn sets session and has no physical connection of its own.
+	session *sessionState
+	tunnel  *sessionTunnel
+	// sessionPending holds the in-flight commands of a child Conn. It
+	// is nil on a root Conn, which uses pending instead.
+	sessionPending map[uint64]*sessionCall
+
 	reqMu sync.Mutex // Protects following.
 	req   Request
 	// Encodes and decodes JSON onto conn. Encoding is
@@ -376,6 +385,10 @@ type Request struct {
 // send returns after the call has successfully been dispatched over
 // the RPC connection.
 func (c *Conn) send(ctx context.Context, call *rpcCall) (err error) {
+	if c.session != nil {
+		return c.sendSession(ctx, call)
+	}
+
 	defer func() {
 		// Give precedence for user cancellation.
 		select {
@@ -475,6 +488,12 @@ func (c *Conn) listen(method string, w streamWriter) (func(), error) {
 // Close closes the connection. Subsequent calls to Close will return the error
 // that closed the connection.
 func (c *Conn) close(err error) error {
+	if c.session != nil {
+		// A child session Conn shares the parent's physical
+		// connection; closing it must only end this session.
+		return c.closeSession(err)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -503,6 +522,12 @@ func (c *Conn) close(err error) error {
 			err = wserr
 			c.err = &closeError{msg: ErrConnClosing.msg, err: err}
 		}
+	}
+
+	// End every child session. The tunnel goroutines stop once their
+	// parent streams close as part of context cancellation.
+	if c.tunnel != nil {
+		c.tunnel.close(err)
 	}
 
 	// Delay cancel until c.err has settled, at this point any active

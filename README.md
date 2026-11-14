@@ -183,6 +183,61 @@ func run(timeout time.Duration) error {
 
 For more information, consult the [documentation](#documentation).
 
+## Controlling an attached target session
+
+Some debug targets speak the non-flattened session protocol: commands are
+sent with `Target.sendMessageToTarget` and replies arrive as
+`Target.receivedMessageFromTarget` events. Once a session has been attached
+(and you already hold its `sessionId`), `Conn.NewSession` hands you a child
+`*rpcc.Conn` that runs over the existing connection. The generated clients
+and `NewStream` work on it unchanged; no extra physical connection is
+opened and `NewSession` neither attaches nor starts Chrome.
+
+```go
+// sessionID was obtained earlier, e.g. from Target.attachToTarget.
+child, err := conn.NewSession(sessionID)
+if err != nil {
+    // An empty sessionID is rejected locally; creating the same
+    // sessionID twice returns an error wrapping rpcc.ErrSessionExists.
+    return err
+}
+// Closing the child ends only its own commands and streams. It does not
+// detach the session and it leaves the parent Conn (and siblings) open.
+defer child.Close()
+
+// The generated Runtime client drives the child target directly.
+rt := runtime.NewClient(child)
+reply, err := rt.Evaluate(ctx,
+    runtime.NewEvaluateArgs("document.title").SetReturnByValue(true))
+if err != nil {
+    // Both the outer acceptance and the inner result are awaited: an
+    // outer ResponseError takes precedence even if the inner result
+    // arrived first; an inner ResponseError remains errors.As-able.
+    return err
+}
+fmt.Println("title:", string(reply.Result.Value))
+
+// Notifications from the child target arrive on a stream of the child Conn.
+stream, err := rpcc.NewStream(ctx, "Runtime.consoleAPICalled", child)
+if err != nil {
+    return err
+}
+defer stream.Close()
+
+var event runtime.ConsoleAPICalledReply
+if err := stream.RecvMsg(&event); err != nil {
+    // A Target.detachedFromTarget for this session ends the Conn with
+    // an error wrapping rpcc.ErrSessionDetached.
+    return err
+}
+```
+
+The parent Conn keeps working in parallel: ordinary commands and its own
+event subscriptions (including the full `Target.receivedMessageFromTarget`
+events) are unaffected by the child sessions. A complete, runnable
+cross-target collection example lives in
+[`example/sessioncollect`](example/sessioncollect/sessioncollect.go).
+
 ## Acknowledgements
 
 The Go implementation of gRPC ([grpc-go](https://github.com/grpc/grpc-go)) has been a source of inspiration for some of the design decisions made in the `cdp` and `rpcc` packages. Some ideas have also been borrowed from the `net/rpc` package from the standard library.
