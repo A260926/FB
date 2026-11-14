@@ -1,0 +1,19 @@
+== guard enabled (first class heaps on) ==
+normal group: PASS (alloc, align, realloc, remote free, collect, reuse, thread exit)
+corruption group (each must report FREELIST_CORRUPTION and die with SIGABRT):
+  [PASS] local            exit=signal sig=6 reported=yes
+  [PASS] page_remote      exit=signal sig=6 reported=yes
+  [PASS] heap_remote      exit=signal sig=6 reported=yes
+  [PASS] batch_chain      exit=signal sig=6 reported=yes
+  [PASS] copy_other_word  exit=signal sig=6 reported=yes
+  [PASS] unmapped_word    exit=signal sig=6 reported=yes
+FREELIST GUARD CONTRACT: PASS
+== guard enabled (first class heaps off) ==
+== guard disabled control (default behaviour) ==
+disabled control: note head block not returned (got 0x120090060 want 0x120090030)
+disabled control: PASS (no FREELIST_CORRUPTION diagnostic, allocator kept original behaviour)
+== guard enabled, asserts disabled (must still abort, not an assert) ==
+== shadow mapping failure fails the allocation cleanly ==
+mapfail: PASS (shadow map failure fails the allocation, recovery is clean)
+guard checks passed
+RPMALLOC preserved=73 aligned=64 remote=joined

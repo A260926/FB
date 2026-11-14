@@ -1,0 +1,12 @@
+rpmalloc stress: 6 threads, 5 seconds
+  ... 1/5 s, allocs=3267567 cross-frees=1628032
+  ... 2/5 s, allocs=8933933 cross-frees=4460775
+  ... 3/5 s, allocs=14751520 cross-frees=7366425
+  ... 4/5 s, allocs=19837535 cross-frees=9912067
+  ... 5/5 s, allocs=22813051 cross-frees=11399933
+rpmalloc stress: PASSED
+  allocs       = 22813280
+  reallocs     = 5705361
+  local frees  = 11409138
+  cross frees  = 11404142 (drained 4096 at exit)
+  total bytes  = 1120901452486

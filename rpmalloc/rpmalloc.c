@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <signal.h>
 
 #if !defined(__has_builtin)
 #define __has_builtin(b) 0
@@ -189,6 +190,17 @@ madvise(caddr_t, size_t, int);
 #endif
 #if ENABLE_LEAK_DETECTION && !ENABLE_STATISTICS
 #error ENABLE_LEAK_DETECTION requires ENABLE_STATISTICS
+#endif
+#ifndef ENABLE_FREELIST_GUARD
+//! Enable shadow validation of free list chain words. When enabled every free block that can be
+//  linked into a free list gets a trusted shadow record outside user memory (in a separate mapping
+//  referenced by the span metadata). Each production write of a block next pointer is mirrored in
+//  the shadow record, and every read verifies the user visible chain word against the shadow before
+//  the pointer is followed. A mismatch reports FREELIST_CORRUPTION through the memory interface
+//  error callback and then aborts unconditionally. Defaults to 0, which keeps the original behaviour
+//  and adds no metadata, checks or mappings. This is not a guard against arbitrary metadata damage:
+//  only chain words stored in still mapped free user blocks are protected.
+#define ENABLE_FREELIST_GUARD 0
 #endif
 
 ////////////
@@ -554,6 +566,33 @@ struct block_t {
 	block_t* next;
 };
 
+#if ENABLE_FREELIST_GUARD
+//! Trusted shadow of the chain word of a block slot. One record per minimum sized block slot of a
+//  span, held in a mapping separate from user memory, so a write after free into the user block
+//  cannot reach it. The record holds the last next pointer the allocator stored in the block; it is
+//  indexed from the block address alone, like the slot table, with no per block lookup table.
+typedef struct freelist_shadow_t {
+	//! Expected value of the block next pointer, i.e. the last next the allocator stored. The allocator
+	//  allows benign dual reachability (a free block can name a block that was since popped), so this is
+	//  a chain word fact rather than a free/allocated state; detection happens by comparing on every read
+	uintptr_t expected_next;
+} freelist_shadow_t;
+
+//! Initial shadow value for a page of slots before any block is linked. It is odd while every valid
+//  stored next is null or an even block address, so an uninitialized record can never match a read
+#define FREELIST_SHADOW_ALLOCATED ((uintptr_t)0xFFFFFFFFFFFFFFFFULL)
+
+//! The shadow is indexed per minimum sized block slot, not per span slot table entry: a 64KiB slot
+//  table entry covers a whole small page that holds thousands of 16 byte blocks, so a slot indexed
+//  shadow would alias every block of a page to one record. One record per SMALL_GRANULARITY bytes
+//  gives each block its own trusted word
+#define FREELIST_SHADOW_SLOT_SHIFT 4
+#define FREELIST_SHADOW_SLOT_COUNT (SPAN_SIZE / SMALL_GRANULARITY)
+#define FREELIST_SHADOW_SPAN_SIZE ((size_t)FREELIST_SHADOW_SLOT_COUNT * sizeof(freelist_shadow_t))
+_Static_assert(SMALL_GRANULARITY == (1U << FREELIST_SHADOW_SLOT_SHIFT),
+                "Free list shadow granularity must match the minimum block size");
+#endif
+
 //! A page contains blocks of a given size. The page structures are packed in the metadata of the span holding the
 //  pages, not stored in the pages, so the structures of different pages do not map to the same cache sets and the
 //  blocks start at the page start
@@ -664,6 +703,14 @@ struct span_t {
 	uint32_t commit_on_demand : 1;
 	//! log2 of the commit granularity (the page size at map time)
 	uint32_t commit_shift : 6;
+#if ENABLE_FREELIST_GUARD
+	//! Shadow records for the block slots of the span, one per SMALL_GRANULARITY bytes, in a separate
+	//  mapping outside user memory so a write after free into the user block cannot reach them. Null
+	//  until mapped alongside the span, and while the span is a huge block span (huge blocks are never
+	//  linked into a free list). Page (re)initialization resets the records of its slots. Kept last so
+	//  the span header stays within SPAN_HEADER_SIZE.
+	freelist_shadow_t* freelist_shadow;
+#endif
 };
 
 // Control structure for a heap, either a thread heap or a first class heap if enabled
@@ -1470,6 +1517,159 @@ span_set_huge_slots(span_t* span) {
 	}
 }
 
+#if ENABLE_FREELIST_GUARD
+
+static inline size_t
+page_get_size(page_t* page);
+
+//! Fixed diagnostic prefix reported through the error callback before the unconditional abort
+#define FREELIST_GUARD_MESSAGE "FREELIST_CORRUPTION: free list chain word does not match shadow record"
+
+//! Report a corrupted chain word and terminate no matter what the callback does. The protection must
+//  stay effective in builds with asserts disabled, so this is a hard abort rather than an assertion,
+//  and the process is killed even if no error callback is set or the callback returns normally
+static NOINLINE void
+freelist_guard_abort(void) {
+	if (global_memory_interface && global_memory_interface->error_callback)
+		global_memory_interface->error_callback(FREELIST_GUARD_MESSAGE);
+	abort();
+	// Defensive: an abort() that somehow returns must not let execution follow the corrupted pointer
+	raise(SIGABRT);
+	__builtin_unreachable();
+}
+
+//! Trusted shadow record of the block. The span holding the block is found from the address alone, so
+//  the record is reached without dereferencing the block's (possibly corrupted) chain word
+static inline freelist_shadow_t*
+block_shadow_record(block_t* block) {
+	span_t* span = (span_t*)((uintptr_t)block & SPAN_MASK);
+	size_t index =
+	    ((uintptr_t)block >> FREELIST_SHADOW_SLOT_SHIFT) & (FREELIST_SHADOW_SLOT_COUNT - 1);
+	return span->freelist_shadow + index;
+}
+
+//! Verify the user visible chain word against the trusted shadow before the pointer is followed. A
+//  mismatch means a write after free (or another stray write) changed the block the allocator linked
+static inline void
+freelist_shadow_verify(block_t* block) {
+	if (UNEXPECTED(block_shadow_record(block)->expected_next != (uintptr_t)block->next))
+		freelist_guard_abort();
+}
+
+//! Record the expected next pointer in the shadow at the same time the chain word is written, keeping
+//  one single shadow fact across initialization, retries, splices and unlinks
+static inline void
+freelist_shadow_set(block_t* block, block_t* next) {
+	block->next = next;
+	block_shadow_record(block)->expected_next = (uintptr_t)next;
+}
+
+//! Commit (for reserve-only spans) and poison the shadow records of every minimum sized block slot of
+//  a page, before the page is published. Runs when a page is (re)initialized, so a decommitted and
+//  recommitted page, or a page reused for another size class, can never match shadow state left by
+//  the previous block layout. Returns non-zero if the shadow could not be committed
+static NOINLINE int
+freelist_shadow_commit_page(page_t* page) {
+	span_t* span = page_get_span(page);
+	if (!span->freelist_shadow)
+		return 0;
+	freelist_shadow_t* page_shadow = block_shadow_record(page->block_start);
+	size_t record_count = page_get_size(page) / SMALL_GRANULARITY;
+	size_t commit_size = record_count * sizeof(freelist_shadow_t);
+	// Fully committed spans map the shadow committed as well; only reserve-only spans commit on demand.
+	// The range starts at a page boundary (the block offset divided by two) and is page sized aligned
+	if (span->commit_on_demand && (global_memory_interface->memory_commit(page_shadow, commit_size) != 0))
+		return 1;
+	for (size_t irecord = 0; irecord < record_count; ++irecord)
+		page_shadow[irecord].expected_next = FREELIST_SHADOW_ALLOCATED;
+	return 0;
+}
+
+//! Release the shadow mapping of a span together with the span mapping. The shadow storage never
+//  recurses into rpmalloc or the system malloc, it is released through the memory interface
+static inline void
+freelist_shadow_unmap_span(span_t* span) {
+	if (span->freelist_shadow) {
+		global_memory_interface->memory_unmap(span->freelist_shadow, 0, FREELIST_SHADOW_SPAN_SIZE);
+		span->freelist_shadow = 0;
+	}
+}
+
+//! Reserve the shadow records for a fresh span of pages. The records sit in their own mapping outside
+//  user memory and are committed per page in freelist_shadow_commit_page (or fully up front for spans
+//  that do not commit on demand), bounding the resident cost to pages actually in use. A mapping or
+//  commit failure fails the span allocation, so a span never runs with unprotected free lists
+static NOINLINE int
+freelist_shadow_map_for_span(span_t* span) {
+	size_t offset = 0;
+	size_t mapped_size = 0;
+	freelist_shadow_t* shadow =
+	    (freelist_shadow_t*)memory_interface_map(FREELIST_SHADOW_SPAN_SIZE, 0, &offset, &mapped_size);
+	if (!shadow)
+		return 1;
+	if (!os_commit_on_demand() && (global_memory_interface->memory_commit(shadow, FREELIST_SHADOW_SPAN_SIZE) != 0)) {
+		global_memory_interface->memory_unmap(shadow, offset, mapped_size);
+		return 1;
+	}
+	span->freelist_shadow = shadow;
+	return 0;
+}
+
+//! Load and validate a chain word before following it. This is the guarded counterpart of reading
+//  block->next directly and must run before any dereference of the loaded pointer, in particular
+//  before block_get_page on the loaded block
+static inline block_t*
+freelist_chain_load(block_t* block) {
+	freelist_shadow_verify(block);
+	return block->next;
+}
+
+//! Write a chain word and mirror it in the shadow
+static inline void
+freelist_chain_store(block_t* block, block_t* next) {
+	freelist_shadow_set(block, next);
+}
+
+//! Write a chain word reached through its address (the deferred free paths keep a pointer to the
+//  next field of the last chained block) and mirror it in the shadow
+static inline void
+freelist_chain_store_at(block_t** chain_word, block_t* next) {
+	block_t* block = (block_t*)((char*)chain_word - offsetof(block_t, next));
+	freelist_shadow_set(block, next);
+}
+
+#else
+
+// Guard disabled: the accessors are thin inline pass-throughs with no shadow state, checks or extra
+// mappings, preserving the original behaviour and code generation
+static inline block_t*
+freelist_chain_load(block_t* block) {
+	return block->next;
+}
+
+static inline void
+freelist_chain_store(block_t* block, block_t* next) {
+	block->next = next;
+}
+
+static inline void
+freelist_chain_store_at(block_t** chain_word, block_t* next) {
+	*chain_word = next;
+}
+
+static inline int
+freelist_shadow_commit_page(page_t* page) {
+	(void)sizeof(page);
+	return 0;
+}
+
+static inline void
+freelist_shadow_unmap_span(span_t* span) {
+	(void)sizeof(span);
+}
+
+#endif
+
 //! Fast free key of a page owned by the given heap
 static inline uintptr_t
 page_key(heap_t* heap) {
@@ -1558,7 +1758,8 @@ page_block_realign(page_t* page, block_t* block) {
 static block_t*
 page_get_local_free_block(page_t* page) {
 	block_t* block = page->local_free;
-	page->local_free = block->next;
+	// Validate the chain word against the shadow before following it to the next head
+	page->local_free = freelist_chain_load(block);
 	++page->block_used;
 	return block;
 }
@@ -1708,7 +1909,7 @@ page_available_to_full(page_t* page) {
 
 static inline void
 page_put_local_free_block(page_t* page, block_t* block) {
-	block->next = page->local_free;
+	freelist_chain_store(block, page->local_free);
 	page->local_free = block;
 	_rpmalloc_stat_add_free(page->heap, page->size_class, 1);
 	if (UNEXPECTED(--page->block_used == 0)) {
@@ -1723,7 +1924,7 @@ page_put_local_free_block(page_t* page, block_t* block) {
 //  subtracted the blocks from the heap allocated size statistics
 static void
 page_put_thread_free_run(page_t* page, block_t* first, block_t* last, uint32_t count) {
-	last->next = page->local_free;
+	freelist_chain_store(last, page->local_free);
 	page->local_free = first;
 	page->remote_fed = 1;
 	_rpmalloc_stat_add_free(page->heap, page->size_class, count);
@@ -1757,7 +1958,9 @@ static NOINLINE void
 heap_put_thread_free_block_retry(atomic_uintptr_t* list, block_t* block, uintptr_t prev_head) {
 	uint32_t spin = 0;
 	do {
-		block->next = (void*)prev_head;
+		// Every retry rewrites the chain word and its shadow together, so a lost CAS never leaves a
+		// shadow fact that disagrees with the published word
+		freelist_chain_store(block, (block_t*)prev_head);
 		wait_spin(&spin);
 	} while (!atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)block, memory_order_release,
 	                                                memory_order_relaxed));
@@ -1769,7 +1972,7 @@ static NOINLINE void
 heap_put_thread_free_block(page_t* page, block_t* block) {
 	atomic_uintptr_t* list = &page->heap->thread_free[page->page_type];
 	uintptr_t prev_head = atomic_load_explicit(list, memory_order_relaxed);
-	block->next = (void*)prev_head;
+	freelist_chain_store(block, (block_t*)prev_head);
 	if (UNEXPECTED(!atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)block, memory_order_release,
 	                                                      memory_order_relaxed)))
 		heap_put_thread_free_block_retry(list, block, prev_head);
@@ -1787,7 +1990,10 @@ page_put_thread_free_block_retry(page_t* page, block_t* block, uint32_t block_of
 			heap_put_thread_free_block(page, block);
 			return;
 		}
-		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &block->next) + 1;
+		block_t* next_head = 0;
+		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &next_head) + 1;
+		// Publish the shadow before the token that publishes the chain
+		freelist_chain_store(block, next_head);
 		thread_free = page_block_to_thread_free_list(page, block_offset, list_size);
 		wait_spin(&spin);
 	} while (!atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
@@ -1807,7 +2013,9 @@ page_put_thread_free_block(page_t* page, block_t* block) {
 	}
 	uint32_t block_offset = page_block_offset(page, block);
 	rpmalloc_assert(!(block_offset % page->block_size), "Block pointer is not aligned to start of block");
-	uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &block->next) + 1;
+	block_t* next_head = 0;
+	uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &next_head) + 1;
+	freelist_chain_store(block, next_head);
 	uint64_t thread_free = page_block_to_thread_free_list(page, block_offset, list_size);
 	if (UNEXPECTED(!atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
 	                                                      memory_order_release, memory_order_relaxed)))
@@ -1822,7 +2030,8 @@ heap_put_thread_free_chain(page_t* page, block_t* head, block_t** tail_link) {
 	uintptr_t prev_head = atomic_load_explicit(list, memory_order_relaxed);
 	uint32_t spin = 0;
 	while (1) {
-		*tail_link = (void*)prev_head;
+		// The splice target is the chain word of the last chained block; update its shadow too
+		freelist_chain_store_at(tail_link, (block_t*)prev_head);
 		if (atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)head, memory_order_release,
 		                                          memory_order_relaxed))
 			return;
@@ -1844,7 +2053,10 @@ page_put_thread_free_chain(page_t* page, block_t* head, block_t** tail_link, uin
 			heap_put_thread_free_chain(page, head, tail_link);
 			return;
 		}
-		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, tail_link) + count;
+		block_t* next_head = 0;
+		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &next_head) + count;
+		// Splice the existing list behind the chain, mirroring the chain word of the last block
+		freelist_chain_store_at(tail_link, next_head);
 		uint64_t thread_free = page_block_to_thread_free_list(page, head_offset, list_size);
 		if (atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
 		                                          memory_order_release, memory_order_relaxed))
@@ -1988,12 +2200,15 @@ page_initialize_blocks(page_t* page) {
 		uint32_t max_list_count = page->block_count - page->block_initialized;
 		while (((void*)free_block < memory_page_next) && (list_count < max_list_count)) {
 			last_block = free_block;
-			free_block->next = pointer_offset(free_block, page->block_size);
-			free_block = free_block->next;
+			block_t* next_block = pointer_offset(free_block, page->block_size);
+			// Mirror each chain word of the freshly initialized run before it is published below
+			freelist_chain_store(free_block, next_block);
+			free_block = next_block;
 			++list_count;
 		}
 		if (list_count) {
-			last_block->next = 0;
+			// The terminator is null; its shadow must match so a consumer reading it stops correctly
+			freelist_chain_store(last_block, 0);
 			page->local_free = first_block;
 			page->block_initialized += list_count;
 		}
@@ -2299,8 +2514,10 @@ huge_cache_evict(uint64_t now, size_t extra, span_t** purge) {
 
 static void
 huge_cache_unmap(span_t** purge, uint32_t purge_count) {
-	for (uint32_t ispan = 0; ispan < purge_count; ++ispan)
+	for (uint32_t ispan = 0; ispan < purge_count; ++ispan) {
+		freelist_shadow_unmap_span(purge[ispan]);
 		global_memory_interface->memory_unmap(purge[ispan], purge[ispan]->offset, purge[ispan]->mapped_size);
+	}
 }
 
 //! Add committed and requested bytes to the live huge blocks, evicting cached mappings over the budget
@@ -2561,6 +2778,7 @@ span_deallocate_huge(span_t* span) {
 	if (huge_cache_push(span))
 		return;
 #endif
+	freelist_shadow_unmap_span(span);
 	global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 }
 
@@ -2606,7 +2824,8 @@ span_deallocate_block(page_t* page, void* block) {
 #if RPMALLOC_FIRST_CLASS_HEAPS
 			rpmalloc_assert(!page->heap_first_class, "Chained free into a page of a first class heap");
 #endif
-			*thread->chain_link = block;
+			// Link the previous chained block to this one, mirroring its chain word in the shadow
+			freelist_chain_store_at(thread->chain_link, (block_t*)block);
 			thread->chain_link = &((block_t*)block)->next;
 			thread->chain_count = ++chain_count;
 #if THREAD_FREE_CHAIN_LIMIT_BYTES
@@ -2672,7 +2891,7 @@ block_deallocate_heap(block_t* block, heap_t* owned_heap) {
 	// Optimized path for a free by the heap owner with non-huge block in page that is not full and has
 	// no aligned blocks, all of which the key encodes by matching the owned heap
 	if (EXPECTED(key == page_key(owned_heap))) {
-		block->next = page->local_free;
+		freelist_chain_store(block, page->local_free);
 		page->local_free = block;
 		_rpmalloc_stat_add_free(page->heap, page->size_class, 1);
 		if (UNEXPECTED(--page->block_used == 0))
@@ -3074,6 +3293,11 @@ heap_make_free_page_available(heap_t* heap, uint32_t size_class, page_t* page) {
 	page->heap_first_class = (heap->first_class != 0);
 #endif
 	page->heap = heap;
+	// Commit (if the span commits on demand) and reset the shadow of every block slot before the page
+	// is published for the size class, so the records cannot keep the fact of a previous block layout
+	// (page recycled, or decommitted and recommitted). A commit failure fails the page allocation
+	if (freelist_shadow_commit_page(page) != 0)
+		return 1;
 	page_set_key(page, page_key(heap));
 	page_t* head = heap->page_available[size_class];
 	page->next = head;
@@ -3153,6 +3377,14 @@ heap_get_span(heap_t* heap, page_type_t page_type) {
 		span->mapped_size = mapped_size;
 		// The first pages hold the span metadata
 		span->page_initialized = span_first_page(span);
+#if ENABLE_FREELIST_GUARD
+		// Map and fully commit the shadow records before the span is published. A failure fails the
+		// whole span allocation instead of leaving any of its free lists unprotected
+		if (freelist_shadow_map_for_span(span) != 0) {
+			global_memory_interface->memory_unmap(span, offset, mapped_size);
+			return 0;
+		}
+#endif
 
 		heap->span_partial[page_type] = span;
 	}
@@ -3202,7 +3434,9 @@ heap_collect_thread_free(heap_t* heap) {
 		page_t* block_page = block ? block_get_page(block) : 0;
 		while (block) {
 			block_t* last = block;
-			block_t* next_block = block->next;
+			// Verify the chain word against the shadow before following it, in particular before
+			// block_get_page reads through the loaded pointer
+			block_t* next_block = freelist_chain_load(block);
 			page_t* next_page = 0;
 			uint32_t count = 1;
 			while (next_block) {
@@ -3210,7 +3444,7 @@ heap_collect_thread_free(heap_t* heap) {
 				if (next_page != block_page)
 					break;
 				last = next_block;
-				next_block = next_block->next;
+				next_block = freelist_chain_load(next_block);
 				++count;
 			}
 			page_put_thread_free_run(block_page, block, last, count);
@@ -3298,7 +3532,8 @@ heap_pop_local_free(heap_t* heap, uint32_t size_class) {
 	block_t** free_list = heap->local_free + size_class;
 	block_t* block = *free_list;
 	if (EXPECTED(block != 0))
-		*free_list = block->next;
+		// Validate the chain word against the shadow before following it to the next head
+		*free_list = freelist_chain_load(block);
 	return block;
 }
 
@@ -3374,6 +3609,7 @@ heap_allocate_block_huge(heap_t* heap, size_t size, size_t zero_size) {
 			if (global_memory_interface->memory_commit(tail, commit_size - committed) != 0) {
 				// Unmap the cached mapping and map a fresh one instead. A mapping committed up to the request is
 				// accounted with the request size, as a fresh mapping is
+				freelist_shadow_unmap_span(span);
 				global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 				span = 0;
 				from_cache = 0;
@@ -3396,6 +3632,7 @@ heap_allocate_block_huge(heap_t* heap, size_t size, size_t zero_size) {
 		span = memory_interface_map(alloc_size, SPAN_SIZE, &offset, &mapped_size);
 #if ENABLE_DECOMMIT
 		if (span && commit_on_demand && (global_memory_interface->memory_commit(span, alloc_size) != 0)) {
+			freelist_shadow_unmap_span(span);
 			global_memory_interface->memory_unmap(span, offset, mapped_size);
 			span = 0;
 		}
@@ -3820,6 +4057,7 @@ heap_free_all(heap_t* heap) {
 		span_t* span = heap->span_partial[itype];
 		while (span) {
 			span_t* span_next = span->next;
+			freelist_shadow_unmap_span(span);
 			global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 			span = span_next;
 		}
@@ -3843,6 +4081,7 @@ heap_free_all(heap_t* heap) {
 				huge_cache_live_sub(span_huge_committed(span), (size_t)span->page_request * span->page_size);
 #endif
 			}
+			freelist_shadow_unmap_span(span);
 			global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 			span = span_next;
 		}
@@ -4434,7 +4673,7 @@ statistics_pending_deferred_blocks(void) {
 				block_t* block = (block_t*)atomic_load_explicit(&heap->thread_free[itype], memory_order_relaxed);
 				while (block) {
 					++deferred;
-					block = block->next;
+					block = freelist_chain_load(block);
 				}
 				if (heap->span_partial[itype])
 					deferred += span_deferred_block_count(heap->span_partial[itype]);
@@ -4590,7 +4829,7 @@ rpmalloc_thread_statistics(rpmalloc_thread_statistics_t* stats) {
 	for (uint32_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
 		size_t block_size = global_size_class[iclass].block_size;
 		size_t free_count = 0;
-		for (block_t* block = heap->local_free[iclass]; block; block = block->next)
+		for (block_t* block = heap->local_free[iclass]; block; block = freelist_chain_load(block))
 			++free_count;
 		for (page_t* page = heap->page_available[iclass]; page; page = page->next)
 			free_count += (size_t)(page->block_count - page->block_used);
@@ -4869,6 +5108,45 @@ rpmalloc_get_heap_for_ptr(void* ptr) {
 	return 0;
 }
 
+#endif
+
+#if defined(RPMALLOC_TEST_SEAMS)
+//! Test only observation seams. These are not part of the public API and are only compiled into test
+//  builds. They never bypass the real free list consumers; they let the contract tests inspect the
+//  trusted shadow fact so a corruption can be proven to diverge from what the allocator recorded.
+
+//! Sentinel returned for a block with no shadow record (guard disabled or a huge block span)
+#define RPMALLOC_TEST_SHADOW_NA ((uintptr_t)0xDEADBEEFDEADBEEFULL)
+
+//! Returns 1 when the free list guard is compiled in, 0 otherwise
+RPMALLOC_EXPORT int
+rpmalloc_test_guard_enabled(void) {
+	return ENABLE_FREELIST_GUARD;
+}
+
+//! Return the trusted shadow chain word recorded for the block, or RPMALLOC_TEST_SHADOW_NA when the
+//  guard is disabled or the block is in a huge block span with no shadow
+RPMALLOC_EXPORT uintptr_t
+rpmalloc_test_shadow_expected(const void* ptr) {
+#if ENABLE_FREELIST_GUARD
+	span_t* span = (span_t*)((uintptr_t)ptr & SPAN_MASK);
+	if (!span->freelist_shadow)
+		return RPMALLOC_TEST_SHADOW_NA;
+	size_t index =
+	    ((uintptr_t)ptr >> FREELIST_SHADOW_SLOT_SHIFT) & (FREELIST_SHADOW_SLOT_COUNT - 1);
+	return span->freelist_shadow[index].expected_next;
+#else
+	(void)sizeof(ptr);
+	return RPMALLOC_TEST_SHADOW_NA;
+#endif
+}
+
+//! Return non-zero if the page holding the block is currently flagged full, so a cross-thread free
+//  into it takes the heap level thread free list. Observation only, never consumes a list
+RPMALLOC_EXPORT int
+rpmalloc_test_block_page_full(const void* ptr) {
+	return block_get_page(ptr)->is_full;
+}
 #endif
 
 #include "malloc.c"

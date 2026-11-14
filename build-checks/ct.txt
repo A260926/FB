@@ -1,0 +1,19 @@
+DBGPUSH allocated block in page list block=0x70e0650c00 page=0x70e0013280
+0   main-on-dbg1                        0x00000001049dbaf0 heap_allocate_block_small_to_large + 696
+1   main-on-dbg1                        0x00000001049e56d4 crossallocator_thread + 444
+2   main-on-dbg1                        0x00000001049df93c thread_entry + 16
+3   libsystem_pthread.dylib             0x000000019a48dd00 _pthread_start + 136
+4   libsystem_pthread.dylib             0x000000019a488cec thread_start + 8
+DBG block=0x70e0650c00 word=0x70e0650000 shadow=0xffffffffffffffff bsize=3072 sclass=70 binit=16 bused=16 local=0x0 heaplocal=0x70e0650c00 hist=2 11 2 11 2 11 2 11 pos=3
+0   main-on-dbg1                        0x00000001049dae34 freelist_chain_load + 296
+1   main-on-dbg1                        0x00000001049dbd00 heap_allocate_block_generic + 152
+2   main-on-dbg1                        0x00000001049e56d4 crossallocator_thread + 444
+3   main-on-dbg1                        0x00000001049df93c thread_entry + 16
+4   libsystem_pthread.dylib             0x000000019a48dd00 _pthread_start + 136
+5   libsystem_pthread.dylib             0x000000019a488cec thread_start + 8
+Page decommit other type tests passed
+Memory allocation tests passed
+Zero allocation tests passed
+Memory reallocation tests passed
+Multiplication overflow tests passed
+Memory super aligned tests passed

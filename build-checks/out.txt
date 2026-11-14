@@ -1,0 +1,7 @@
+DBG block=0x70300f6240 word=0x70300f6200 shadow=0xffffffffffffffff bsize=64 aligned=0 start=0x70300f0000
+Page decommit other type tests passed
+Memory allocation tests passed
+Zero allocation tests passed
+Memory reallocation tests passed
+Multiplication overflow tests passed
+Memory super aligned tests passed

@@ -1,0 +1,31 @@
+Page decommit other type tests passed
+Memory allocation tests passed
+Zero allocation tests passed
+Memory reallocation tests passed
+Multiplication overflow tests passed
+Memory super aligned tests passed
+Memory cross thread free tests passed
+Remote free flush tests passed
+Released heap batching tests passed
+Heap switch chain flush tests passed
+First class heap unbatched free tests passed
+Heap takeover with held chain tests passed
+Heap set current without allocation tests passed
+Finalize when not initialized test skipped (key slot zero taken)
+Memory threaded tests passed
+Memory thread spam tests passed
+Thread exit heap tests passed
+Large page config test passed
+Huge pages test skipped (huge pages not supported)
+Transparent huge pages test skipped (not supported)
+First class heap tests passed
+Heapless free tests passed
+First class heap huge free tests passed
+Named pages test passed
+Finalize unmap (heap packing) tests passed
+Heap packing tests passed (65 first class heaps reused from one block)
+Thread statistics tests passed
+Page decommit tests passed
+Huge cache tests passed
+Cross thread collect tests passed
+All tests passed
