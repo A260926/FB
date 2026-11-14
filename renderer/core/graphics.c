@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "graphics.h"
+#include "graphics_internal.h"
 #include "macro.h"
 #include "maths.h"
 
@@ -56,26 +57,7 @@ void framebuffer_clear_depth(framebuffer_t *framebuffer, float depth) {
 
 /* program management */
 
-#define MAX_VARYINGS 10
-
-struct program {
-    vertex_shader_t *vertex_shader;
-    fragment_shader_t *fragment_shader;
-    int sizeof_attribs;
-    int sizeof_varyings;
-    int sizeof_uniforms;
-    int double_sided;
-    int enable_blend;
-    /* for shaders */
-    void *shader_attribs[3];
-    void *shader_varyings;
-    void *shader_uniforms;
-    /* for clipping */
-    vec4_t in_coords[MAX_VARYINGS];
-    vec4_t out_coords[MAX_VARYINGS];
-    void *in_varyings[MAX_VARYINGS];
-    void *out_varyings[MAX_VARYINGS];
-};
+#define MAX_VARYINGS GRAPHICS_MAX_VARYINGS
 
 program_t *program_create(
         vertex_shader_t *vertex_shader, fragment_shader_t *fragment_shader,
@@ -203,7 +185,9 @@ static float get_intersect_ratio(vec4_t prev, vec4_t curr, plane_t plane) {
 static int clip_against_plane(
         plane_t plane, int in_num_vertices, int varying_num_floats,
         vec4_t in_coords[MAX_VARYINGS], void *in_varyings[MAX_VARYINGS],
-        vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS]) {
+        float in_bary[MAX_VARYINGS][3],
+        vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS],
+        float out_bary[MAX_VARYINGS][3]) {
     int out_num_vertices = 0;
     int i, j;
 
@@ -233,6 +217,13 @@ static int clip_against_plane(
                                               curr_varyings[j],
                                               ratio);
             }
+            if (in_bary) {
+                for (j = 0; j < 3; j++) {
+                    out_bary[out_num_vertices][j] =
+                        float_lerp(in_bary[prev_index][j],
+                                   in_bary[curr_index][j], ratio);
+                }
+            }
             out_num_vertices += 1;
         }
 
@@ -243,6 +234,11 @@ static int clip_against_plane(
 
             *dest_coord = curr_coord;
             memcpy(dest_varyings, curr_varyings, sizeof_varyings);
+            if (in_bary) {
+                for (j = 0; j < 3; j++) {
+                    out_bary[out_num_vertices][j] = in_bary[curr_index][j];
+                }
+            }
             out_num_vertices += 1;
         }
     }
@@ -254,7 +250,8 @@ static int clip_against_plane(
     do {                                                                    \
         num_vertices = clip_against_plane(                                  \
             plane, num_vertices, varying_num_floats,                        \
-            in_coords, in_varyings, out_coords, out_varyings);              \
+            in_coords, in_varyings, in_bary,                                \
+            out_coords, out_varyings, out_bary);                            \
         if (num_vertices < 3) {                                             \
             return 0;                                                       \
         }                                                                   \
@@ -264,7 +261,8 @@ static int clip_against_plane(
     do {                                                                    \
         num_vertices = clip_against_plane(                                  \
             plane, num_vertices, varying_num_floats,                        \
-            out_coords, out_varyings, in_coords, in_varyings);              \
+            out_coords, out_varyings, out_bary,                             \
+            in_coords, in_varyings, in_bary);                               \
         if (num_vertices < 3) {                                             \
             return 0;                                                       \
         }                                                                   \
@@ -274,10 +272,12 @@ static int is_vertex_visible(vec4_t v) {
     return fabs(v.x) <= v.w && fabs(v.y) <= v.w && fabs(v.z) <= v.w;
 }
 
-static int clip_triangle(
+int graphics_clip_triangle(
         int sizeof_varyings,
         vec4_t in_coords[MAX_VARYINGS], void *in_varyings[MAX_VARYINGS],
-        vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS]) {
+        float in_bary[MAX_VARYINGS][3],
+        vec4_t out_coords[MAX_VARYINGS], void *out_varyings[MAX_VARYINGS],
+        float out_bary[MAX_VARYINGS][3]) {
     int v0_visible = is_vertex_visible(in_coords[0]);
     int v1_visible = is_vertex_visible(in_coords[1]);
     int v2_visible = is_vertex_visible(in_coords[2]);
@@ -288,6 +288,11 @@ static int clip_triangle(
         memcpy(out_varyings[0], in_varyings[0], sizeof_varyings);
         memcpy(out_varyings[1], in_varyings[1], sizeof_varyings);
         memcpy(out_varyings[2], in_varyings[2], sizeof_varyings);
+        if (in_bary) {
+            memcpy(out_bary[0], in_bary[0], sizeof(out_bary[0]));
+            memcpy(out_bary[1], in_bary[1], sizeof(out_bary[1]));
+            memcpy(out_bary[2], in_bary[2], sizeof(out_bary[2]));
+        }
         return 3;
     } else {
         int varying_num_floats = sizeof_varyings / sizeof(float);
@@ -406,9 +411,9 @@ static float interpolate_depth(float screen_depths[3], vec3_t weights) {
  * equation 15 in reference 1 (page 2) is a simplified 2d version of
  * equation 3.5 in reference 2 (page 58) which uses barycentric coordinates
  */
-static void interpolate_varyings(
-        void *src_varyings[3], void *dst_varyings,
-        int sizeof_varyings, vec3_t weights, float recip_w[3]) {
+void graphics_interpolate_varyings(
+        void *const src_varyings[3], void *dst_varyings,
+        int sizeof_varyings, vec3_t weights, const float recip_w[3]) {
     int num_floats = sizeof_varyings / sizeof(float);
     float *src0 = (float*)src_varyings[0];
     float *src1 = (float*)src_varyings[1];
@@ -425,8 +430,8 @@ static void interpolate_varyings(
     }
 }
 
-static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
-                          int backface, int index, float depth) {
+static int draw_fragment(framebuffer_t *framebuffer, program_t *program,
+                         int backface, int index) {
     vec4_t color;
     int discard;
 
@@ -437,7 +442,7 @@ static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
                                      &discard,
                                      backface);
     if (discard) {
-        return;
+        return 0;
     }
     color = vec4_saturate(color);
 
@@ -452,17 +457,31 @@ static void draw_fragment(framebuffer_t *framebuffer, program_t *program,
         color.z = color.z * color.w + float_from_uchar(dst_b) * (1 - color.w);
     }
 
-    /* write color and depth */
+    /* write color; the shared rasterizer commits the depth value */
     framebuffer->color_buffer[index * 4 + 0] = float_to_uchar(color.x);
     framebuffer->color_buffer[index * 4 + 1] = float_to_uchar(color.y);
     framebuffer->color_buffer[index * 4 + 2] = float_to_uchar(color.z);
-    framebuffer->depth_buffer[index] = depth;
+    return 1;
 }
 
-static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
-                              vec4_t clip_coords[3], void *varyings[3]) {
-    int width = framebuffer->width;
-    int height = framebuffer->height;
+typedef struct {
+    framebuffer_t *framebuffer;
+    program_t *program;
+} draw_fragment_context_t;
+
+static int draw_fragment_callback(void *user, const raster_fragment_t *frag) {
+    draw_fragment_context_t *ctx = (draw_fragment_context_t*)user;
+    graphics_interpolate_varyings(frag->varyings, ctx->program->shader_varyings,
+                                  ctx->program->sizeof_varyings,
+                                  frag->weights, frag->recip_w);
+    return draw_fragment(ctx->framebuffer, ctx->program, frag->backface,
+                         frag->index);
+}
+
+int graphics_rasterize_triangle(
+        int width, int height, float *depth_buffer,
+        vec4_t clip_coords[3], void *varyings[3], int double_sided,
+        raster_fragment_fn *fragment_fn, void *user) {
     vec3_t ndc_coords[3];
     vec2_t screen_coords[3];
     float screen_depths[3];
@@ -479,7 +498,7 @@ static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
 
     /* back-face culling */
     backface = is_back_facing(ndc_coords);
-    if (backface && !program->double_sided) {
+    if (backface && !double_sided) {
         return 1;
     }
 
@@ -508,11 +527,24 @@ static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
                 int index = y * width + x;
                 float depth = interpolate_depth(screen_depths, weights);
                 /* early depth testing */
-                if (depth <= framebuffer->depth_buffer[index]) {
-                    interpolate_varyings(varyings, program->shader_varyings,
-                                         program->sizeof_varyings,
-                                         weights, recip_w);
-                    draw_fragment(framebuffer, program, backface, index, depth);
+                if (depth <= depth_buffer[index]) {
+                    raster_fragment_t frag;
+                    frag.backface = backface;
+                    frag.index = index;
+                    frag.depth = depth;
+                    frag.weights = weights;
+                    frag.recip_w[0] = recip_w[0];
+                    frag.recip_w[1] = recip_w[1];
+                    frag.recip_w[2] = recip_w[2];
+                    frag.clip_coords[0] = clip_coords[0];
+                    frag.clip_coords[1] = clip_coords[1];
+                    frag.clip_coords[2] = clip_coords[2];
+                    frag.varyings[0] = varyings[0];
+                    frag.varyings[1] = varyings[1];
+                    frag.varyings[2] = varyings[2];
+                    if (fragment_fn(user, &frag)) {
+                        depth_buffer[index] = depth;
+                    }
                 }
             }
         }
@@ -524,6 +556,7 @@ static int rasterize_triangle(framebuffer_t *framebuffer, program_t *program,
 void graphics_draw_triangle(framebuffer_t *framebuffer, program_t *program) {
     int num_vertices;
     int i;
+    draw_fragment_context_t ctx;
 
     /* execute vertex shader */
     for (i = 0; i < 3; i++) {
@@ -534,9 +567,14 @@ void graphics_draw_triangle(framebuffer_t *framebuffer, program_t *program) {
     }
 
     /* triangle clipping */
-    num_vertices = clip_triangle(program->sizeof_varyings,
-                                 program->in_coords, program->in_varyings,
-                                 program->out_coords, program->out_varyings);
+    num_vertices = graphics_clip_triangle(program->sizeof_varyings,
+                                          program->in_coords,
+                                          program->in_varyings, NULL,
+                                          program->out_coords,
+                                          program->out_varyings, NULL);
+
+    ctx.framebuffer = framebuffer;
+    ctx.program = program;
 
     /* triangle assembly */
     for (i = 0; i < num_vertices - 2; i++) {
@@ -554,8 +592,11 @@ void graphics_draw_triangle(framebuffer_t *framebuffer, program_t *program) {
         varyings[1] = program->out_varyings[index1];
         varyings[2] = program->out_varyings[index2];
 
-        is_culled = rasterize_triangle(framebuffer, program,
-                                       clip_coords, varyings);
+        is_culled = graphics_rasterize_triangle(
+            framebuffer->width, framebuffer->height,
+            framebuffer->depth_buffer,
+            clip_coords, varyings, program->double_sided,
+            draw_fragment_callback, &ctx);
         if (is_culled) {
             break;
         }

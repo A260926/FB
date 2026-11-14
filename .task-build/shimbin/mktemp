@@ -1,0 +1,6 @@
+#!/bin/bash
+# sandbox workaround: mktemp without a template is denied; force a template
+if [[ $# -eq 0 ]]; then
+  exec /usr/bin/mktemp "${TMPDIR:-.}"/shimtmp.XXXXXXXX
+fi
+exec /usr/bin/mktemp "$@"

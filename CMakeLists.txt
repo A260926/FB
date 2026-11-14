@@ -11,6 +11,7 @@ set(HEADERS
     renderer/core/darray.h
     renderer/core/draw2d.h
     renderer/core/graphics.h
+    renderer/core/graphics_internal.h
     renderer/core/image.h
     renderer/core/macro.h
     renderer/core/maths.h
@@ -20,6 +21,7 @@ set(HEADERS
     renderer/core/scene.h
     renderer/core/skeleton.h
     renderer/core/texture.h
+    renderer/core/visibility.h
     renderer/scenes/blinn_scenes.h
     renderer/scenes/pbr_scenes.h
     renderer/scenes/scene_helper.h
@@ -43,6 +45,7 @@ set(SOURCES
     renderer/core/scene.c
     renderer/core/skeleton.c
     renderer/core/texture.c
+    renderer/core/visibility.c
     renderer/scenes/blinn_scenes.c
     renderer/scenes/pbr_scenes.c
     renderer/scenes/scene_helper.c

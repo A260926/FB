@@ -110,6 +110,91 @@ make
 
 ## Usage
 
+### Visibility buffer (re-colorable preview)
+
+`renderer/core/visibility.h` provides an opaque `visibility_t` buffer that
+records the final visible triangles once and can then be shaded repeatedly
+with new uniforms — handy for offline material previews, where changing a
+color scheme should not re-run vertex transformation, clipping or
+occlusion.
+
+The geometry stage runs the same clipping, coverage tolerance, back-face
+culling, `[0, 1]` depth range and `<=` equal-depth replacement rules as
+`graphics_draw_triangle`; both pipelines call the shared internals in
+`renderer/core/graphics_internal.h`, so they cannot diverge.  Each covered
+pixel retains only the original triangle's id, its barycentric weights in
+the caller's three original vertices, its depth and its facing.  The
+buffer itself owns a copy of the three original-vertex varying blocks for
+every submission, so callers may overwrite or release the program after
+`visibility_draw_triangle` returns.
+
+```c
+#include <stdint.h>
+#include "renderer/core/graphics.h"
+#include "renderer/core/visibility.h"
+
+/* program must have blending disabled; fragment shader is never called */
+visibility_t *visibility = visibility_create(640, 480);
+
+/* geometry stage: three vertex-shader calls, no fragment shading */
+visibility_draw_triangle(visibility, program, /* primitive_id */ 7, coverage);
+
+/* query the retained sample; background reports id UINT32_MAX */
+visibility_sample_t sample;
+int covered = visibility_read(visibility, x, y, &sample);
+/* sample.bary[0..2] weight the caller's original three vertices, sum to 1 */
+/* sample.depth, sample.backface, sample.primitive_id */
+
+/* shading stage: one shader call per covered pixel, re-runnable */
+palette_t palette_a;   /* different uniforms, same geometry */
+visibility_resolve(visibility, framebuffer, resolve_palette, &palette_a);
+visibility_resolve(visibility, framebuffer, resolve_palette, &palette_b);
+
+visibility_clear(visibility);   /* drop all submissions, depth back to 1 */
+visibility_release(visibility);
+```
+
+`visibility_draw_triangle` returns 0 on success.  `primitive_id` must be
+unique until the next `visibility_clear` and must not be `UINT32_MAX`.
+Programs created with `enable_blend` set are rejected before any callback
+runs or any buffer state changes.  The optional coverage callback
+
+```c
+int visibility_coverage_t(void *varyings, void *uniforms, int backface);
+```
+
+receives the perspective-correct interpolated varyings and the program's
+uniforms and keeps the candidate when it returns non-zero.  A rejected
+candidate does not occupy depth.  Passing `NULL` keeps every candidate.
+
+The resolve shader
+
+```c
+vec4_t visibility_shader_t(const void *varyings, void *uniforms,
+                           uint32_t primitive_id, int backface);
+```
+
+is called exactly once per covered pixel with the stored original-vertex
+varyings recombined by the stored barycentric weights.  There is no
+discard.  Colors are saturated and converted to bytes the same way as the
+framebuffer pipeline, the retained depth is written, and the target's
+alpha byte and all background pixels are left untouched.  A target whose
+dimensions differ from the buffer is rejected before any write.
+`visibility_resolve` never re-runs geometry or coverage.
+
+Build and run the tests:
+
+```
+bash task_support/run.sh target
+```
+
+This compiles the production visibility source and `renderer/tests/visibility_target.c`,
+runs the `capture`, `replay` and `compat` groups, and then re-runs the
+existing clipped/masked baseline.  The replay group also writes
+`.task-build/visibility_palette_a.ppm` and `.task-build/visibility_palette_b.ppm`
+(two color schemes of the same generated intersecting triangles) and checks
+their pixels.
+
 ### Launch
 
 If the software renderer is launched without arguments, one of the available
