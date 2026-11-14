@@ -1,0 +1,512 @@
+use object::read::elf::{FileHeader, SectionHeader};
+use object::read::{Object, ObjectSection, ObjectSymbol};
+use object::{
+    Architecture, BinaryFormat, Endianness, LittleEndian, RelocationFlags, RelocationKind,
+    SectionIndex, SectionKind, SymbolFlags, SymbolKind, SymbolScope, SymbolSection, U32, elf, read,
+    write,
+};
+use std::io::Write;
+
+#[test]
+fn phnum_overflow() {
+    let file_header = write::elf::FileHeader {
+        os_abi: elf::ELFOSABI_SYSV,
+        abi_version: 0,
+        e_type: elf::ET_DYN,
+        e_machine: elf::EM_X86_64,
+        e_entry: 0,
+        e_flags: elf::FileFlags(0),
+    };
+
+    for count in 0xfffe..0x10001 {
+        let mut bytes = Vec::new();
+        let mut writer = write::elf::Writer::new(Endianness::Little, true, &mut bytes);
+
+        writer.reserve_file_header();
+        writer.reserve_program_headers(count);
+        writer.reserve_null_section_index();
+        writer.reserve_shstrtab_section_index();
+        writer.reserve_shstrtab().unwrap();
+        writer.reserve_section_headers();
+
+        writer.write_file_header(&file_header).unwrap();
+        writer.write_align_program_headers();
+        for _ in 0..count {
+            writer.write_program_header(&write::elf::ProgramHeader {
+                p_type: elf::PT_NOTE,
+                p_flags: elf::ProgramFlags(0),
+                p_offset: 0,
+                p_vaddr: 0,
+                p_paddr: 0,
+                p_filesz: 0,
+                p_memsz: 0,
+                p_align: 0,
+            });
+        }
+        writer.write_shstrtab();
+        writer.write_null_section_header();
+        writer.write_shstrtab_section_header();
+
+        let object = read::elf::ElfFile64::<Endianness>::parse(&*bytes).unwrap();
+        assert_eq!(object.architecture(), Architecture::X86_64);
+        assert_eq!(object.elf_program_headers().len(), count as usize);
+    }
+
+    // Error if missing section headers.
+    let mut bytes = Vec::new();
+    let mut writer = write::elf::Writer::new(Endianness::Little, true, &mut bytes);
+    writer.reserve_file_header();
+    writer.reserve_program_headers(0xffff);
+    assert!(writer.write_file_header(&file_header).is_err());
+}
+
+#[test]
+fn symtab_shndx() {
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+
+    for i in 0..0x10000 {
+        let name = format!("func{}", i).into_bytes();
+        let section = object.add_subsection(write::StandardSection::Text, &name);
+        let offset = object.append_section_data(section, &[0xcc], 1);
+        object.add_symbol(write::Symbol {
+            name,
+            value: offset,
+            size: 1,
+            kind: SymbolKind::Text,
+            scope: SymbolScope::Linkage,
+            weak: false,
+            section: write::SymbolSection::Section(section),
+            flags: SymbolFlags::None,
+        });
+    }
+    let bytes = object.write().unwrap();
+
+    //std::fs::write(&"symtab_shndx.o", &bytes).unwrap();
+
+    let object = read::File::parse(&*bytes).unwrap();
+    assert_eq!(object.format(), BinaryFormat::Elf);
+    assert_eq!(object.architecture(), Architecture::X86_64);
+
+    for symbol in object.symbols() {
+        assert_eq!(
+            symbol.section(),
+            SymbolSection::Section(SectionIndex(symbol.index().0))
+        );
+    }
+}
+
+#[test]
+fn empty_symtab() {
+    let object = write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+    let bytes = object.write().unwrap();
+
+    let object = read::File::parse(&*bytes).unwrap();
+    assert_eq!(object.format(), BinaryFormat::Elf);
+    assert_eq!(object.architecture(), Architecture::X86_64);
+    let symtab = object.section_by_name(".symtab").unwrap();
+    assert_eq!(symtab.size(), 24);
+    let strtab = object.section_by_name(".strtab").unwrap();
+    assert_eq!(strtab.size(), 1);
+}
+
+// .dynsym must link to .dynstr even when only the null dynamic symbol is present.
+#[test]
+fn empty_dynsym() {
+    let file_header = write::elf::FileHeader {
+        os_abi: elf::ELFOSABI_SYSV,
+        abi_version: 0,
+        e_type: elf::ET_DYN,
+        e_machine: elf::EM_X86_64,
+        e_entry: 0,
+        e_flags: elf::FileFlags(0),
+    };
+
+    let mut bytes = Vec::new();
+    let mut writer = write::elf::Writer::new(Endianness::Little, true, &mut bytes);
+
+    writer.reserve_file_header();
+    writer.reserve_null_dynamic_symbol_index();
+    writer.reserve_dynsym();
+    writer.reserve_dynstr().unwrap();
+    writer.reserve_null_section_index();
+    writer.reserve_dynsym_section_index();
+    let dynstr_index = writer.reserve_dynstr_section_index();
+    writer.reserve_shstrtab_section_index();
+    writer.reserve_shstrtab().unwrap();
+    writer.reserve_section_headers();
+
+    writer.write_file_header(&file_header).unwrap();
+    writer.write_null_dynamic_symbol();
+    writer.write_dynstr();
+    writer.write_shstrtab();
+    writer.write_null_section_header();
+    writer.write_dynsym_section_header(0, 1);
+    writer.write_dynstr_section_header(0);
+    writer.write_shstrtab_section_header();
+
+    let object = read::elf::ElfFile64::<Endianness>::parse(&*bytes).unwrap();
+    let dynsym = object.section_by_name(".dynsym").unwrap();
+    assert_eq!(dynsym.size(), 24);
+    let dynstr = object.section_by_name(".dynstr").unwrap();
+    assert_eq!(dynstr.size(), 1);
+    assert_eq!(
+        dynsym.elf_section_header().sh_link(Endianness::Little),
+        dynstr_index.0,
+    );
+}
+
+#[test]
+fn aligned_sections() {
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+
+    let text_section_id = object.add_section(vec![], b".text".to_vec(), SectionKind::Text);
+    let text_section = object.section_mut(text_section_id);
+    text_section.set_data(&[][..], 4096);
+
+    let data_section_id = object.add_section(vec![], b".data".to_vec(), SectionKind::Data);
+    let data_section = object.section_mut(data_section_id);
+    data_section.set_data(&b"1234"[..], 16);
+
+    let bytes = object.write().unwrap();
+
+    let object = read::File::parse(&*bytes).unwrap();
+    assert_eq!(object.format(), BinaryFormat::Elf);
+    assert_eq!(object.architecture(), Architecture::X86_64);
+
+    let mut sections = object.sections();
+
+    let section = sections.next().unwrap();
+    assert_eq!(section.name(), Ok(".text"));
+    assert_eq!(section.file_range(), Some((4096, 0)));
+
+    let section = sections.next().unwrap();
+    assert_eq!(section.name(), Ok(".data"));
+    assert_eq!(section.file_range(), Some((4096, 4)));
+}
+
+#[cfg(feature = "compression")]
+#[test]
+fn compression_zlib() {
+    use object::LittleEndian as LE;
+    use object::read::ObjectSection;
+
+    let data = b"test data data data";
+    let len = data.len() as u64;
+
+    let mut ch = object::elf::CompressionHeader64::<LE>::default();
+    ch.ch_type.set(LE, object::elf::ELFCOMPRESS_ZLIB);
+    ch.ch_size.set(LE, len);
+    ch.ch_addralign.set(LE, 1);
+
+    let mut buf = Vec::new();
+    buf.write_all(object::bytes_of(&ch)).unwrap();
+    let mut encoder = flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
+    encoder.write_all(data).unwrap();
+    let compressed = encoder.finish().unwrap();
+
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+    let section = object.add_section(
+        Vec::new(),
+        b".debug_info".to_vec(),
+        object::SectionKind::Other,
+    );
+    object.section_mut(section).set_data(compressed, 1);
+    let object::SectionFlags::Elf { sh_flags, .. } = object.section_flags_mut(section) else {
+        unreachable!();
+    };
+    *sh_flags = object::elf::SHF_COMPRESSED;
+
+    let bytes = object.write().unwrap();
+
+    //std::fs::write(&"compression.o", &bytes).unwrap();
+
+    let object = read::File::parse(&*bytes).unwrap();
+    assert_eq!(object.format(), BinaryFormat::Elf);
+    assert_eq!(object.architecture(), Architecture::X86_64);
+
+    let section = object.section_by_name(".debug_info").unwrap();
+    let uncompressed = section.uncompressed_data().unwrap();
+    assert_eq!(data, &*uncompressed);
+}
+
+#[cfg(feature = "compression")]
+#[test]
+fn compression_gnu() {
+    use object::read::ObjectSection;
+    use std::io::Write;
+
+    let data = b"test data data data";
+    let len = data.len() as u32;
+
+    let mut buf = Vec::new();
+    buf.write_all(b"ZLIB\0\0\0\0").unwrap();
+    buf.write_all(&len.to_be_bytes()).unwrap();
+    let mut encoder = flate2::write::ZlibEncoder::new(buf, flate2::Compression::default());
+    encoder.write_all(data).unwrap();
+    let compressed = encoder.finish().unwrap();
+
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+    let section = object.add_section(
+        Vec::new(),
+        b".zdebug_info".to_vec(),
+        object::SectionKind::Other,
+    );
+    object.section_mut(section).set_data(compressed, 1);
+    let bytes = object.write().unwrap();
+
+    //std::fs::write(&"compression.o", &bytes).unwrap();
+
+    let object = read::File::parse(&*bytes).unwrap();
+    assert_eq!(object.format(), BinaryFormat::Elf);
+    assert_eq!(object.architecture(), Architecture::X86_64);
+
+    let section = object.section_by_name(".zdebug_info").unwrap();
+    let uncompressed = section.uncompressed_data().unwrap();
+    assert_eq!(data, &*uncompressed);
+}
+
+#[test]
+fn note() {
+    let endian = Endianness::Little;
+    let mut object = write::Object::new(BinaryFormat::Elf, Architecture::X86_64, endian);
+
+    // Add note section with align = 4.
+    let mut buffer = Vec::new();
+
+    let nt1 = elf::NoteType(1);
+    let nt2 = elf::NoteType(2);
+
+    buffer
+        .write_all(object::bytes_of(&elf::NoteHeader32 {
+            n_namesz: U32::new(endian, 6),
+            n_descsz: U32::new(endian, 11),
+            n_type: U32::new(endian, nt1),
+        }))
+        .unwrap();
+    buffer.write_all(b"name1\0\0\0").unwrap();
+    buffer.write_all(b"descriptor\0\0").unwrap();
+
+    buffer
+        .write_all(object::bytes_of(&elf::NoteHeader32 {
+            n_namesz: U32::new(endian, 6),
+            n_descsz: U32::new(endian, 11),
+            n_type: U32::new(endian, nt2),
+        }))
+        .unwrap();
+    buffer.write_all(b"name2\0\0\0").unwrap();
+    buffer.write_all(b"descriptor\0\0").unwrap();
+
+    let section = object.add_section(Vec::new(), b".note4".to_vec(), SectionKind::Note);
+    object.section_mut(section).set_data(buffer, 4);
+
+    // Add note section with align = 8.
+    let mut buffer = Vec::new();
+
+    buffer
+        .write_all(object::bytes_of(&elf::NoteHeader32 {
+            n_namesz: U32::new(endian, 6),
+            n_descsz: U32::new(endian, 11),
+            n_type: U32::new(endian, nt1),
+        }))
+        .unwrap();
+    buffer.write_all(b"name1\0\0\0\0\0\0\0").unwrap();
+    buffer.write_all(b"descriptor\0\0\0\0\0\0").unwrap();
+
+    buffer
+        .write_all(object::bytes_of(&elf::NoteHeader32 {
+            n_namesz: U32::new(endian, 4),
+            n_descsz: U32::new(endian, 11),
+            n_type: U32::new(endian, nt2),
+        }))
+        .unwrap();
+    buffer.write_all(b"abc\0").unwrap();
+    buffer.write_all(b"descriptor\0\0\0\0\0\0").unwrap();
+
+    let section = object.add_section(Vec::new(), b".note8".to_vec(), SectionKind::Note);
+    object.section_mut(section).set_data(buffer, 8);
+
+    let bytes = &*object.write().unwrap();
+
+    //std::fs::write(&"note.o", &bytes).unwrap();
+
+    let header = elf::FileHeader64::parse(bytes).unwrap();
+    let endian: LittleEndian = header.endian().unwrap();
+    let sections = header.sections(endian, bytes).unwrap();
+
+    let section = sections.section(SectionIndex(1)).unwrap();
+    assert_eq!(sections.section_name(endian, section).unwrap(), b".note4");
+    assert_eq!(section.sh_addralign(endian), 4);
+    let mut notes = section.notes(endian, bytes).unwrap().unwrap();
+    let note = notes.next().unwrap().unwrap();
+    assert_eq!(note.name(), b"name1");
+    assert_eq!(note.desc(), b"descriptor\0");
+    assert_eq!(note.n_type(endian), nt1);
+    let note = notes.next().unwrap().unwrap();
+    assert_eq!(note.name(), b"name2");
+    assert_eq!(note.desc(), b"descriptor\0");
+    assert_eq!(note.n_type(endian), nt2);
+    assert!(notes.next().unwrap().is_none());
+
+    let section = sections.section(SectionIndex(2)).unwrap();
+    assert_eq!(sections.section_name(endian, section).unwrap(), b".note8");
+    assert_eq!(section.sh_addralign(endian), 8);
+    let mut notes = section.notes(endian, bytes).unwrap().unwrap();
+    let note = notes.next().unwrap().unwrap();
+    assert_eq!(note.name(), b"name1");
+    assert_eq!(note.desc(), b"descriptor\0");
+    assert_eq!(note.n_type(endian), nt1);
+    let note = notes.next().unwrap().unwrap();
+    assert_eq!(note.name(), b"abc");
+    assert_eq!(note.desc(), b"descriptor\0");
+    assert_eq!(note.n_type(endian), nt2);
+    assert!(notes.next().unwrap().is_none());
+}
+
+#[test]
+fn gnu_property() {
+    gnu_property_inner::<elf::FileHeader32<Endianness>>(Architecture::I386);
+    gnu_property_inner::<elf::FileHeader64<Endianness>>(Architecture::X86_64);
+}
+
+fn gnu_property_inner<Elf: FileHeader<Endian = Endianness>>(architecture: Architecture) {
+    let endian = Endianness::Little;
+    let mut object = write::Object::new(BinaryFormat::Elf, architecture, endian);
+    object.add_elf_gnu_property_u32(
+        elf::GNU_PROPERTY_X86_FEATURE_1_AND,
+        elf::GNU_PROPERTY_X86_FEATURE_1_IBT | elf::GNU_PROPERTY_X86_FEATURE_1_SHSTK,
+    );
+
+    let bytes = &*object.write().unwrap();
+
+    //std::fs::write(&"note.o", &bytes).unwrap();
+
+    let header = Elf::parse(bytes).unwrap();
+    assert_eq!(header.endian().unwrap(), endian);
+    let sections = header.sections(endian, bytes).unwrap();
+    let section = sections.section(SectionIndex(1)).unwrap();
+    assert_eq!(
+        sections.section_name(endian, section).unwrap(),
+        b".note.gnu.property"
+    );
+    assert_eq!(section.sh_flags(endian), elf::SHF_ALLOC);
+    let mut notes = section.notes(endian, bytes).unwrap().unwrap();
+    let note = notes.next().unwrap().unwrap();
+    let mut props = note.gnu_properties(endian).unwrap();
+    let prop = props.next().unwrap().unwrap();
+    assert_eq!(prop.pr_type(), elf::GNU_PROPERTY_X86_FEATURE_1_AND);
+    assert_eq!(
+        prop.data_u32(endian).unwrap(),
+        elf::GNU_PROPERTY_X86_FEATURE_1_IBT | elf::GNU_PROPERTY_X86_FEATURE_1_SHSTK
+    );
+    assert!(props.next().unwrap().is_none());
+    assert!(notes.next().unwrap().is_none());
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn long_symbol_name() {
+    // `ReadCache::read_bytes_at_until` can't read long strings.
+    let name = vec![b'a'; 8192];
+
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::X86_64, Endianness::Little);
+    object.add_symbol(write::Symbol {
+        name: name.clone(),
+        value: 0,
+        size: 0,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Linkage,
+        weak: false,
+        section: write::SymbolSection::Absolute,
+        flags: SymbolFlags::None,
+    });
+    let bytes = object.write().unwrap();
+
+    let cache = read::ReadCache::new(std::io::Cursor::new(bytes));
+    let object = read::File::parse(&cache).unwrap();
+    let symbol = object.symbol_by_name_bytes(&name).unwrap();
+    assert_eq!(symbol.name_bytes().unwrap(), &name[..]);
+}
+
+#[test]
+fn xtensa_debug_relocations() {
+    let mut object =
+        write::Object::new(BinaryFormat::Elf, Architecture::Xtensa, Endianness::Little);
+
+    let text = object.section_id(write::StandardSection::Text);
+    object.append_section_data(text, &[0; 0x40], 4);
+    let func = object.add_symbol(write::Symbol {
+        name: b"func".to_vec(),
+        value: 0x20,
+        size: 0x20,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Linkage,
+        weak: false,
+        section: write::SymbolSection::Section(text),
+        flags: SymbolFlags::None,
+    });
+
+    let debug_str = object.add_section(Vec::new(), b".debug_str".to_vec(), SectionKind::Debug);
+    object.append_section_data(debug_str, &[0; 0x20], 1);
+    let debug_str_symbol = object.section_symbol(debug_str);
+
+    let debug_info = object.add_section(Vec::new(), b".debug_info".to_vec(), SectionKind::Debug);
+    let mut data = Vec::new();
+    // R_XTENSA_32 against `.debug_str`, with the offset stored in place.
+    data.extend_from_slice(&0x10u32.to_le_bytes());
+    // R_XTENSA_32 with both a stored and an explicit addend.
+    data.extend_from_slice(&0x2u32.to_le_bytes());
+    // R_XTENSA_32_ABS ignores the stored value.
+    data.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+    // R_XTENSA_PDIFF16 leaves the stored difference unchanged.
+    data.extend_from_slice(&0x1234u16.to_le_bytes());
+    object.append_section_data(debug_info, &data, 1);
+    for (offset, symbol, addend, r_type) in [
+        (0, debug_str_symbol, 0, elf::R_XTENSA_32),
+        (4, func, 4, elf::R_XTENSA_32),
+        (8, func, 4, elf::R_XTENSA_32_ABS),
+        (12, func, 0, elf::R_XTENSA_PDIFF16),
+    ] {
+        object
+            .add_relocation(
+                debug_info,
+                write::Relocation {
+                    offset,
+                    symbol,
+                    addend,
+                    flags: RelocationFlags::Elf { r_type },
+                },
+            )
+            .unwrap();
+    }
+
+    let bytes = object.write().unwrap();
+    let object = read::File::parse(&*bytes).unwrap();
+    let section = object.section_by_name(".debug_info").unwrap();
+
+    let relocations = section.relocations().collect::<Vec<_>>();
+    assert_eq!(relocations.len(), 4);
+    let (_, relocation) = &relocations[0];
+    assert_eq!(relocation.kind(), RelocationKind::Absolute);
+    assert!(relocation.has_implicit_addend());
+    let (_, relocation) = &relocations[1];
+    assert_eq!(relocation.kind(), RelocationKind::Absolute);
+    assert!(relocation.has_implicit_addend());
+    assert_eq!(relocation.addend(), 4);
+    let (_, relocation) = &relocations[2];
+    assert_eq!(relocation.kind(), RelocationKind::Absolute);
+    assert!(!relocation.has_implicit_addend());
+    assert_eq!(relocation.addend(), 4);
+    let (_, relocation) = &relocations[3];
+    assert_eq!(relocation.kind(), RelocationKind::None);
+
+    let map = section.relocation_map().unwrap();
+    assert_eq!(map.relocate(0, 0x10), 0x10);
+    assert_eq!(map.relocate(4, 0x2), 0x26);
+    assert_eq!(map.relocate(8, 0xffff_ffff), 0x24);
+    assert_eq!(map.relocate(12, 0x1234), 0x1234);
+}
