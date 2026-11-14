@@ -75,30 +75,6 @@ class Vp9HeaderParser {
   // Set the compressed VP9 frame.
   bool SetFrame(const uint8_t* frame, size_t length);
 
-  // Returns the next bit of the frame.
-  int ReadBit();
-
-  // Returns the next |bits| of the frame.
-  int VpxReadLiteral(int bits);
-
-  // Returns true if the vp9 sync code is valid.
-  bool ValidateVp9SyncCode();
-
-  // Parses bit_depth_, color_space_, subsampling_x_, subsampling_y_, and
-  // color_range_.
-  void ParseColorSpace();
-
-  // Parses width and height of the frame.
-  void ParseFrameResolution();
-
-  // Parses frame_parallel_mode_. This function skips over some features.
-  void ParseFrameParallelMode();
-
-  // Parses row and column tiles. This function skips over some features.
-  void ParseTileInfo();
-  void SkipDeltaQ();
-  int AlignPowerOfTwo(int value, int n);
-
   const uint8_t* frame_;
   size_t frame_size_;
   size_t bit_offset_;
