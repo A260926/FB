@@ -37,3 +37,14 @@ target_precompile_headers(Examples
   PUBLIC
     Examples_PCH.h
 )
+
+# Standalone, offline address-provenance example.  It deliberately has its own main() and does
+# not load the target image or contact a symbol server; it only reads a PDB file from disk.
+add_executable(ExampleAddressProvenance
+    ExampleAddressProvenance.cpp
+)
+
+target_link_libraries(ExampleAddressProvenance
+  PUBLIC
+    raw_pdb
+)

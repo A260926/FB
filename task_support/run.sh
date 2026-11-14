@@ -6,7 +6,7 @@ if [[ $mode == target ]]; then test -s tests/address_provenance.cpp; fi
 bash baseline/build.sh
 if [[ $mode == target ]]; then
   "${CXX:-clang++}" -std=c++17 -O0 -g -I. -Isrc -x c++ task_support/driver.c tests/address_provenance.cpp -x none .task-build/libraw_pdb.a -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

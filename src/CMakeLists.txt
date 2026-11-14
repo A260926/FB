@@ -12,9 +12,11 @@ set(SOURCES
 	Foundation/PDB_PointerUtil.h
 	Foundation/PDB_TypeTraits.h
 	Foundation/PDB_Warnings.h
-	
+
 	PDB.cpp
 	PDB.h
+	PDB_AddressProvenance.cpp
+	PDB_AddressProvenance.h
 	PDB_CoalescedMSFStream.cpp
 	PDB_CoalescedMSFStream.h
 	PDB_DBIStream.cpp

@@ -141,6 +141,54 @@ Running example "Lines"
 
 Furthermore, PDBs linked using /DEBUG:FASTLINK are not supported. These PDBs do not contain much information, since private symbol information is distributed among object files and library files.
 
+## Address provenance (OMAP)
+
+The low-level reader exposes the DBI section table and section contributions, but
+`ImageSectionStream::ConvertSectionOffsetToRVA()` simply adds a section's current virtual
+address to an offset. For binaries produced by link-time optimizers (identical COMDAT folding,
+block layout, `/ORDER`, ...) a single image address can correspond to several original code
+ranges, so treating `OMAP_TO_SRC` as a complete inverse map loses the folded sources.
+
+`PDB_AddressProvenance.h` provides an owning, C++17/standard-library index
+(`PDB::Provenance::AddressProvenance`, built through `BuildAddressProvenance()`) that copies
+everything it needs out of the `RawFile`; the `RawFile` and the backing PDB bytes may be
+released as soon as the index is built. It offers two query interfaces over half-open,
+64-bit RVA intervals:
+
+* `ProjectOriginal()` projects an original (pre-optimization) interval forward, cutting at
+  original section, OMAP row and contribution boundaries. Each piece reports `mapped`,
+  `deleted`, `unmapped`, `outside_section` or `outside_image`, its image interval when mapped,
+  the OMAP stream/row evidence and **all** covering contribution identities.
+* `InterpretImage()` builds a reverse interval index from the effective forward pieces and
+  enumerates **every** original source intersecting an image interval. Folded origins and
+  overlapping contributions are never deduplicated; positions with no source are returned as
+  explicit holes. Queries are index-hit based (no per-byte scan, no full-table walk).
+
+### Support scope
+
+* DBI `V70` with a Ver60 section contribution sub-stream.
+* The optional debug header is read by its actual length; trailing slots may be absent, and
+  stream index `0xffff` means "no such stream".
+* Both OMAP streams absent &rarr; an identity view built from the current section table.
+* `OMAP_FROM_SRC` present &rarr; requires the original `SectionHdrOrig` table. `OMAP_TO_SRC`
+  may be missing and is never used as a complete inverse map.
+* `OMAP_TO_SRC` present but `OMAP_FROM_SRC` absent &rarr; reported as
+  `OmapToSrcOnlyUnsupported`.
+* `OMAP_FROM_SRC` present but empty &rarr; a valid, fully unmapped index.
+* OMAP rows must be strictly ascending in source RVA; a `rvaTo` of zero marks a deleted
+  region and is never confused with a mapping to address zero. The final row extends only to
+  the end of its own original section.
+* Section ranges use `VirtualSize`, falling back to `SizeOfRawData` when it is zero;
+  non-empty sections in one coordinate system must not overlap.
+* Malformed stream lengths, half OMAP rows, non-ascending or overflowing OMAP data, corrupt
+  contribution tables and out-of-range contributions are rejected with diagnostics carrying
+  the MSF stream index and logical byte offset.
+* The MSF container/page directory itself is assumed valid; generic container validation is
+  intentionally out of scope for this module.
+
+The existing low-level reader remains dependency-free; only the provenance module, its
+example and its tests rely on the C++17 standard library.
+
 ## Documentation
 
 If you are unfamiliar with the basic structure of a PDB file, the <a href="https://llvm.org/docs/PDB/index.html">LLVM documentation</a> serves as a good introduction.
