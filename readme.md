@@ -91,3 +91,65 @@ I know it's just a simple toy, ok :)
   * WebAssembly in `Cpp/Emscripten/build.sh`. CPU, single threaded, no SIMD.
 * C# project in `Cs/TestCs.sln`. A command line app that renders some frames and dumps out final TGA screenshot at the end.
 * Unity project in `Unity`. I used Unity 2021.3.16.
+
+### MaterialSession (headless CPU material editing)
+
+`Cpp/Source/MaterialSession.h` provides an independent, window- and GPU-free
+material editing session for the CPU path. Geometry (the built-in spheres),
+the camera and the image size are fixed; there is no animation. Intersection,
+scattering and tracing are the same production code used by `Test.cpp`.
+
+A session is driven by whole material batches and by frame *tickets*:
+
+* **Publication is one atomic batch.** `Publish` takes one
+  `MaterialEntry` per sphere (`sphereIndex` must uniquely cover
+  `[0, SphereCount())`). The whole batch is rejected (`InvalidArgument`) on a
+  duplicate or out-of-range index, unknown type, non-finite value, negative
+  colour, roughness outside `[0,1]`, or a dielectric with `ri <= 0`; a failed
+  publication changes nothing. An empty batch is a no-op (`Empty`). Any other
+  valid batch, even an identical one, creates a new material generation,
+  returns that generation's full table plus the emissive sphere indices, and
+  immediately clears the accumulation image and the frame count.
+* **Frame snapshots own their data.** `BeginFrame` captures the current
+  generation in an owning snapshot (materials, emissive list, intersection
+  SoA, camera). Publications made afterwards never affect a frame already in
+  flight, and destroying or mutating the arrays passed to `Publish` is safe.
+  Indirect emissive hits, Lambert direct-light sampling and self-exclusion of
+  an emissive sphere all use the captured table.
+* **Tickets render privately, then commit.** `ComputeTicket` renders one frame
+  into the ticket's private linear-RGB buffer (the accumulation image is not
+  touched). `CommitTicket` adds exactly one frame, and only if the ticket
+  belongs to the session, computed successfully and still references the
+  current generation. Repeated commits, cross-session tickets, canceled
+  tickets and stale (superseded-generation) tickets leave the image and frame
+  count unchanged; a stale ticket can never overwrite the new image, and a new
+  generation always restarts frame numbering at zero.
+* **One active ticket per session.** Opening a second frame while the previous
+  ticket is still unterminated is refused. A ticket ends only on a successful
+  commit, `CancelTicket`, `ReleaseTicket` or destruction; a ticket that became
+  stale because of a publication keeps holding the slot (its commit is rejected
+  as `Stale`) until the caller ends it.
+* **Cancellation and session lifetime.** `CancelTicket` / `ReleaseTicket` end
+  a ticket without changing the image. A ticket keeps every render resource in
+  its own snapshot, so after the session is destroyed it can still be computed
+  and released; it then reports `SessionDead` and any commit is rejected.
+
+**Concurrency.** Sessions are independent: multiple sessions can compute at
+once. Within a session, publication can run concurrently with an in-flight
+compute, because rendering reads only the ticket's immutable snapshot and the
+session lock is not held during the render. There is no global render lock —
+work is parallelised over rows by the enkiTS build shipped in
+`Cpp/Source/enkiTS`, and each ticket captures its materials once instead of
+re-fetching them per ray. The scheduler is shared process-wide; host threads
+other than the main thread register as external enkiTS threads for the
+duration of a compute call. Accumulation stays deterministic: on a fixed
+generation, frames use the same four-samples-per-pixel xorshift rule as the
+production renderer, so the mean of the first N frames matches running the same
+snapshots sequentially.
+
+`examples/material_session.cpp` renders and commits one frame and writes a PPM
+(`material_session <output.ppm>`). The contract is covered by
+`tests/material_session.cpp` (groups `publication`, `lifetime`, `rendering`),
+which runs through `task_support/run.sh target` together with the original CPU
+render.
+
