@@ -1,0 +1,8 @@
+build/
+output/
+*.o
+*.out
+*.d
+.DS_Store
+*.swp
+*.swo

@@ -1,0 +1,39 @@
+{
+    "rendermode": "phong",
+    "useBVH": true,
+    "camera": {
+        "type": "pinhole",
+        "width": 20,
+        "height": 20,
+        "position": [0.0, 0.0, 5.0],
+        "lookAt": [0.0, 0.0, -1.0],
+        "upVector": [0.0, 1.0, 0.0],
+        "fov": 60.0,
+        "exposure": 0.1
+    },
+    "scene": {
+        "ambient_light": [0.1, 0.1, 0.1],
+        "backgroundcolor": [0.0, 0.0, 0.0],
+        "lightsources": [
+            {"type": "pointlight", "position": [5.0, 5.0, 5.0], "intensity": [1.0, 1.0, 1.0]}
+        ],
+        "shapes": [
+            {
+                "type": "sphere",
+                "center": [0.0, 0.0, 0.0],
+                "radius": 1.0,
+                "material": {
+                    "kd": 0.9,
+                    "ks": 0.1,
+                    "specularexponent": 32,
+                    "diffusecolor": [0.8, 0.3, 0.3],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 1.0,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            }
+        ]
+    }
+}
