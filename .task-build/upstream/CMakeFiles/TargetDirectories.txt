@@ -1,0 +1,7 @@
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/scimesh.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FSDD535358626DU11620/attempts/20261115T175834045253Z/repo/.task-build/upstream/CMakeFiles/install/strip.dir

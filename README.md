@@ -63,6 +63,9 @@ software rasterizer using smooth shading, no anti-aliasing. Render time 1.8 seco
 - Automatic camera framing (`camera_fit_mesh`, `camera_fit_scene`)
 - Per-vertex and per-face coloring (vertex colors, face colors)
 - Texture mapping with bilinear sampling
+- Paged (streamed) texture rendering: LRU page cache, explicit per-page
+  requests/delivery and incremental `step()` jobs, byte-identical to the
+  dense renderer
 - Basic mesh transform utilities: translate, scale, rotate, arbitrary 4x4 matrices
 - Basic image composition: cropping, stacking
 
@@ -170,6 +173,89 @@ write_png(img, "sphere.png")
 
 
 ### C++
+
+## Paged texture rendering (`PagedCache` / `PagedRenderJob`)
+
+When texture data arrives a page at a time — for example streamed over the
+network — the renderer never needs the whole texture resident. Two classes in
+`<scimesh/paged_texture.h>` and `<scimesh/paged_renderer.h>` add an
+incremental, page-driven render path that reuses the existing model
+transforms, clipping, coverage rules, material lighting and depth
+submission, and produces the same RGBA bytes as `Renderer::render_scene()`
+for the same inputs.
+
+### Public interface
+
+- `PagedCache(capacity)` — an LRU cache of whole texture pages (capacity
+  `N >= 1`, counted in pages regardless of edge-page size). It never stores a
+  complete texture and keeps no copy of an evicted page.
+  - `publish(TextureDescriptor{width, height, page_size, logical_id})`
+    returns an immutable, non-zero **version** handle. Re-publishing the same
+    logical id yields a distinct version; pages of different versions are
+    never mixed.
+  - `request_page(version, page_x, page_y, waiter)` returns `0` on a cache
+    hit (and refreshes LRU order) or a unique **ticket** for a new, shared
+    in-flight request. Multiple jobs waiting on the same version/page share
+    one request and ticket.
+  - `supply(ticket, width, height, bytes, byte_count)` delivers row-major
+    RGBA8 page data. Mismatched ticket, dimensions or byte count — including
+    null data — are rejected without changing state, and completing a ticket
+    twice has no second effect. Deliveries may arrive in any order.
+  - Observability: `pending_requests()`, `resident_page_count()`,
+    `capacity()`, `descriptor()`, `page_rect()`, plus `release(version)` and
+    `detach_waiter()` for lifecycle management.
+- `PagedRenderJob(cache, scene, camera, options, bindings, K)` copies every
+  geometric input and setting it needs and pins the named texture versions,
+  so the caller may mutate or free the `Scene`, `Camera` and `RenderOptions`
+  afterwards. `bindings` maps a mesh index to a texture version. `K >= 1` is
+  the maximum number of fragments parked waiting on pages at once.
+  - `step(budget)` advances the render by at most `budget` **raster steps**
+    and returns a `PagedJobStatus`: `READY`, `WAITING`, `COMPLETE`, `FAILED`
+    or `CANCELLED`. Examining one pixel of a triangle bounding box is one
+    step; resuming one parked fragment is one step. A budget of 0 never
+    advances the job.
+  - `cancel()` withdraws the job's cache waiters immediately; shared
+    requests keep serving other jobs, and a late response cannot revive it.
+  - Observability: `outstanding_requests()`, `pending_fragment_count()`,
+    `submission_count()`, `total_steps()`, `status()`, and `image()` /
+    `take_image()` once `COMPLETE`.
+- A parked fragment stores only its own (at most four) bilinear texels and
+  weights. Sampling follows `Image::sample_bilinear()` exactly — the same
+  clamp, `u*(width-1)` / `v*(height-1)` coordinates and arithmetic — and
+  zero-weight taps are never requested. Texture alpha must be 255; any other
+  value fails the job.
+
+### What a step means and how delivery works
+
+A fragment whose taps are not all resident is parked *before* any color,
+depth or normal write and asks the cache for the missing pages. When a page
+is supplied, the cache hands its texels to every waiting fragment at once;
+even if that page is evicted before the job's next `step()`, the delivered
+taps survive inside the fragments, so a capacity-1 cache never re-requests a
+page forever. When the pending limit `K` is reached and no work can
+continue, `step()` returns `WAITING`; the caller then supplies pages and
+steps again. Parked fragments resume in traversal order, and equal-depth
+surfaces keep the original submission order, so the final image is
+byte-identical to the dense renderer.
+
+### Resource ownership
+
+- The **cache owns** resident page bytes and in-flight request bookkeeping.
+- Each **job owns** its copied scene/camera/options, the output `Image`, the
+  depth/normal buffers and its parked fragments; it holds only a non-owning
+  reference to the cache, which must outlive it. Jobs detach their waiters in
+  their destructor (and on cancel/failure), leaving no dangling waiters.
+- A **completed `Image` owns its pixels**; cache evictions, texture version
+  release and job destruction never alter it.
+- The first version supports opaque triangle meshes, single sampling and
+  single-threaded rendering only; lines, points, text, blending, SSAO and any
+  anti-aliasing sample count other than 1, along with non-255 texture alpha,
+  are rejected up front with `std::invalid_argument`.
+
+A complete runnable program is in
+[`examples/paged_material.cpp`](examples/paged_material.cpp): it generates a
+mesh and texture pages in C++, renders with a capacity-1 cache, and writes
+`paged.ppm` plus `residency.txt` into an output directory.
 
 ## Documentation
 
