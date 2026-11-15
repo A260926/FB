@@ -1,0 +1,472 @@
+#include "Hittables/Rectangle.hpp"
+#include "Defaults.hpp"
+#include "Utilities.hpp"
+#include "Materials/Lambertian.hpp"
+#include "ONB.hpp"
+#include "Sampler.hpp"
+#include <cmath>
+#include <algorithm>
+
+namespace
+{
+	const double	RECTANGLE_AXIS_EPSILON_SQUARED = 1e-24;
+
+	bool	defaultRectangleBasis(const Vector3& orientation, Vector3& normal, Vector3& widthAxis, Vector3& heightAxis)
+	{
+		if (Utilities::vectorLengthSquared(orientation) <= 0.0)
+		{
+			return (false);
+		}
+
+		normal = Utilities::normalize(orientation);
+
+		if (std::fabs(normal.getY()) > 0.999)
+		{
+			widthAxis = Vector3(1.0, 0.0, 0.0);
+			heightAxis = Vector3(0.0, 0.0, 1.0);
+			return (true);
+		}
+		if (std::fabs(normal.getZ()) > 0.999)
+		{
+			widthAxis = Vector3(1.0, 0.0, 0.0);
+			heightAxis = Vector3(0.0, 1.0, 0.0);
+			return (true);
+		}
+		if (std::fabs(normal.getX()) > 0.999)
+		{
+			widthAxis = Vector3(0.0, 0.0, 1.0);
+			heightAxis = Vector3(0.0, 1.0, 0.0);
+			return (true);
+		}
+
+		Vector3 helper(0.0, 1.0, 0.0);
+		if (std::fabs(Utilities::dot(helper, normal)) > 0.9)
+		{
+			helper = Vector3(1.0, 0.0, 0.0);
+		}
+		widthAxis = Utilities::normalize(Utilities::cross(helper, normal));
+		heightAxis = Utilities::normalize(Utilities::cross(normal, widthAxis));
+
+		return (true);
+	}
+
+	bool	normalizedProjectedAxis(Vector3 axis, const Vector3& normal, Vector3& output)
+	{
+		axis = axis - (normal * Utilities::dot(axis, normal));
+		if (Utilities::vectorLengthSquared(axis) <= RECTANGLE_AXIS_EPSILON_SQUARED)
+		{
+			return (false);
+		}
+		output = Utilities::normalize(axis);
+		return (true);
+	}
+
+	Vector3	bilinearUV(const Vector3& uv0, const Vector3& uv1, const Vector3& uv2, const Vector3& uv3, double u, double v)
+	{
+		const Vector3 bottom = (uv0 * (1.0 - u)) + (uv1 * u);
+		const Vector3 top = (uv3 * (1.0 - u)) + (uv2 * u);
+
+		return ((bottom * (1.0 - v)) + (top * v));
+	}
+}
+
+/*
+	Constructors
+*/
+
+// Constructs the Rectangle with default values
+Rectangle::Rectangle(void)
+{
+	this->_transform = Transform(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(1.0, 1.0, 1.0));
+	this->_material = std::make_shared<Lambertian>(Color(0.6, 0.6, 0.6));
+	this->_width = 1.0;
+	this->_height = 1.0;
+	this->_widthAxis = Vector3(1.0, 0.0, 0.0);
+	this->_heightAxis = Vector3(0.0, 1.0, 0.0);
+	this->_uv0 = Vector3(0.0, 0.0, 0.0);
+	this->_uv1 = Vector3(1.0, 0.0, 0.0);
+	this->_uv2 = Vector3(1.0, 1.0, 0.0);
+	this->_uv3 = Vector3(0.0, 1.0, 0.0);
+	this->_hasAxes = false;
+	this->_hasTextureCoordinates = false;
+}
+
+Rectangle::Rectangle(const Rectangle& toCopy)
+{
+	this->_height = toCopy._height;
+	this->_width = toCopy._width;
+	this->_material = toCopy._material;
+	this->_transform = toCopy._transform;
+	this->_widthAxis = toCopy._widthAxis;
+	this->_heightAxis = toCopy._heightAxis;
+	this->_uv0 = toCopy._uv0;
+	this->_uv1 = toCopy._uv1;
+	this->_uv2 = toCopy._uv2;
+	this->_uv3 = toCopy._uv3;
+	this->_hasAxes = toCopy._hasAxes;
+	this->_hasTextureCoordinates = toCopy._hasTextureCoordinates;
+}
+
+// Constructs the Rectangle with custom values
+Rectangle::Rectangle(Transform transform, double width, double height, std::shared_ptr<Material> material)
+{
+	this->_transform = transform;
+	this->_width = width;
+	this->_height = height;
+	this->_material = material;
+	this->_widthAxis = Vector3(1.0, 0.0, 0.0);
+	this->_heightAxis = Vector3(0.0, 1.0, 0.0);
+	this->_uv0 = Vector3(0.0, 0.0, 0.0);
+	this->_uv1 = Vector3(1.0, 0.0, 0.0);
+	this->_uv2 = Vector3(1.0, 1.0, 0.0);
+	this->_uv3 = Vector3(0.0, 1.0, 0.0);
+	this->_hasAxes = false;
+	this->_hasTextureCoordinates = false;
+}
+
+bool	Rectangle::_buildBasis(Vector3& normal, Vector3& widthAxis, Vector3& heightAxis) const
+{
+	if (!defaultRectangleBasis(this->_transform.getOrientation(), normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+	if (!this->_hasAxes)
+	{
+		return (true);
+	}
+	if (!normalizedProjectedAxis(this->_widthAxis, normal, widthAxis))
+	{
+		return (false);
+	}
+	if (!normalizedProjectedAxis(this->_heightAxis, normal, heightAxis))
+	{
+		return (false);
+	}
+	heightAxis = heightAxis - (widthAxis * Utilities::dot(heightAxis, widthAxis));
+	if (Utilities::vectorLengthSquared(heightAxis) <= RECTANGLE_AXIS_EPSILON_SQUARED)
+	{
+		return (false);
+	}
+	heightAxis = Utilities::normalize(heightAxis);
+	return (true);
+}
+
+Vector3	Rectangle::_uvAt(double u, double v) const
+{
+	if (!this->_hasTextureCoordinates)
+	{
+		return (Vector3(u, v, 0.0));
+	}
+	return (bilinearUV(this->_uv0, this->_uv1, this->_uv2, this->_uv3, u, v));
+}
+
+// Sets the Rectangle's Transform
+void	Rectangle::setTransform(Transform transform)
+{
+	this->_transform = transform;
+}
+
+// Returns the Rectangle's material
+Material*	Rectangle::getMaterial(void) const
+{
+	return (this->_material.get());
+}
+
+// Sets the Rectangle's Material
+void	Rectangle::setMaterial(std::shared_ptr<Material> material)
+{
+	this->_material = material;
+}
+
+// Sets the Rectangle's Width
+void	Rectangle::setWidth(double width)
+{
+	this->_width = width;
+}
+
+// Sets the Rectangle's Height
+void	Rectangle::setHeight(double height)
+{
+	this->_height = height;
+}
+
+void	Rectangle::setAxes(Vector3 widthAxis, Vector3 heightAxis)
+{
+	this->_widthAxis = widthAxis;
+	this->_heightAxis = heightAxis;
+	this->_hasAxes =
+		Utilities::vectorLengthSquared(widthAxis) > RECTANGLE_AXIS_EPSILON_SQUARED
+		&& Utilities::vectorLengthSquared(heightAxis) > RECTANGLE_AXIS_EPSILON_SQUARED;
+}
+
+void	Rectangle::setTextureCoordinates(Vector3 uv0, Vector3 uv1, Vector3 uv2, Vector3 uv3)
+{
+	this->_uv0 = uv0;
+	this->_uv1 = uv1;
+	this->_uv2 = uv2;
+	this->_uv3 = uv3;
+	this->_hasTextureCoordinates = true;
+}
+
+// Calculates if the Rectangle is hit by 'ray', is closer than 't_max' and farther than T_MIN
+bool	Rectangle::hit(Ray& ray, HitRecord& hitRecord, double t_min, double t_max) const
+{
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+
+	if (this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+
+	double a = Utilities::dot(ray.getOrigin() - this->_transform.getPosition(), normal);
+	double b = Utilities::dot(ray.getDirection(), normal);
+	if (b == 0.0 || (a < 0.0 && b < 0.0) || (a > 0.0 && b > 0.0))
+	{
+		return (false);
+	}
+
+	double t = -a / b;
+	if (t > t_max || t < t_min)
+	{
+		return (false);
+	}
+
+	Vector3 d = ray.pointAtRay(t) - this->_transform.getPosition();
+	const double widthDistance = Utilities::dot(d, widthAxis);
+	const double heightDistance = Utilities::dot(d, heightAxis);
+	if (std::fabs(widthDistance) > (this->_width / 2.0) || std::fabs(heightDistance) > (this->_height / 2.0))
+	{
+		return (false);
+	}
+
+	hitRecord.t0 = t;
+	hitRecord.setFaceNormal(ray, normal);
+	HitRecord geometricHitRecord;
+	geometricHitRecord.setFaceNormal(ray, normal);
+	hitRecord.geometricNormal = geometricHitRecord.normal;
+	hitRecord.material = this->_material.get();
+	hitRecord.position = ray.pointAtRay(t);
+	const Vector3 uv = this->_uvAt(
+		(widthDistance / this->_width) + 0.5,
+		(heightDistance / this->_height) + 0.5
+	);
+	hitRecord.u = uv.getX();
+	hitRecord.v = uv.getY();
+
+	return (true);
+}
+
+bool	Rectangle::hitAny(Ray& ray, double t_min, double t_max) const
+{
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+
+	if (this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+
+	double a = Utilities::dot(ray.getOrigin() - this->_transform.getPosition(), normal);
+	double b = Utilities::dot(ray.getDirection(), normal);
+	if (b == 0.0 || (a < 0.0 && b < 0.0) || (a > 0.0 && b > 0.0))
+	{
+		return (false);
+	}
+
+	double t = -a / b;
+	if (t > t_max || t < t_min)
+	{
+		return (false);
+	}
+
+	Vector3 d = ray.pointAtRay(t) - this->_transform.getPosition();
+	const double widthDistance = Utilities::dot(d, widthAxis);
+	const double heightDistance = Utilities::dot(d, heightAxis);
+	return (
+		std::fabs(widthDistance) <= (this->_width / 2.0)
+		&& std::fabs(heightDistance) <= (this->_height / 2.0)
+	);
+}
+
+// Creates an AABB / bounding box for this Rectangle
+bool	Rectangle::createBoundingBox(AABB& outputBoundingBox) const
+{
+	const Vector3 position = this->_transform.getPosition();
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+	const double halfWidth = this->_width / 2.0;
+	const double halfHeight = this->_height / 2.0;
+
+	if (this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+
+	const Vector3 corner0 = position + (widthAxis * halfWidth) + (heightAxis * halfHeight);
+	const Vector3 corner1 = position + (widthAxis * halfWidth) - (heightAxis * halfHeight);
+	const Vector3 corner2 = position - (widthAxis * halfWidth) + (heightAxis * halfHeight);
+	const Vector3 corner3 = position - (widthAxis * halfWidth) - (heightAxis * halfHeight);
+
+	Vector3 minimum(
+		std::min(std::min(corner0.getX(), corner1.getX()), std::min(corner2.getX(), corner3.getX())),
+		std::min(std::min(corner0.getY(), corner1.getY()), std::min(corner2.getY(), corner3.getY())),
+		std::min(std::min(corner0.getZ(), corner1.getZ()), std::min(corner2.getZ(), corner3.getZ()))
+	);
+	Vector3 maximum(
+		std::max(std::max(corner0.getX(), corner1.getX()), std::max(corner2.getX(), corner3.getX())),
+		std::max(std::max(corner0.getY(), corner1.getY()), std::max(corner2.getY(), corner3.getY())),
+		std::max(std::max(corner0.getZ(), corner1.getZ()), std::max(corner2.getZ(), corner3.getZ()))
+	);
+	if (std::fabs(maximum.getX() - minimum.getX()) <= T_MIN)
+	{
+		minimum.setX(minimum.getX() - T_MIN);
+		maximum.setX(maximum.getX() + T_MIN);
+	}
+	if (std::fabs(maximum.getY() - minimum.getY()) <= T_MIN)
+	{
+		minimum.setY(minimum.getY() - T_MIN);
+		maximum.setY(maximum.getY() + T_MIN);
+	}
+	if (std::fabs(maximum.getZ() - minimum.getZ()) <= T_MIN)
+	{
+		minimum.setZ(minimum.getZ() - T_MIN);
+		maximum.setZ(maximum.getZ() + T_MIN);
+	}
+
+	outputBoundingBox = AABB(minimum, maximum);
+
+	return (true);
+}
+
+double  Rectangle::pdfValue(const Vector3& origin, const Vector3& vec) const
+{
+	Ray ray(origin, vec);
+	HitRecord	hitRecord;
+	if (!this->hit(ray, hitRecord, T_MIN, T_MAX))
+	{
+		return (0.0);
+	}
+
+	double area = this->_height * this->_width;
+	double distanceSquared = hitRecord.t0 * hitRecord.t0 * Utilities::vectorLengthSquared(vec);
+	double cosine = fabs(Utilities::dot(vec, hitRecord.normal) / Utilities::vectorLength(vec));
+
+	return (distanceSquared / (cosine * area));
+}
+
+// Returns a random point inside the rectangle's area
+Vector3 Rectangle::random(const Vector3& origin) const
+{
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+
+	if (this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (Vector3(0.0, 0.0, 0.0));
+	}
+
+	const Sampler::Sample2D sample = Sampler::sample2D(Sampler::DIM_LIGHT_SURFACE_POINT);
+	const Vector3 randomPointInsideRectangle = this->_transform.getPosition()
+		+ (widthAxis * ((sample.x - 0.5) * this->_width))
+		+ (heightAxis * ((sample.y - 0.5) * this->_height));
+
+	return (Utilities::normalize(randomPointInsideRectangle - origin));
+}
+
+bool	Rectangle::sampleLight(const Vector3& origin, HittableLightSample& sample) const
+{
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+
+	sample = HittableLightSample();
+	if (this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+
+	const Sampler::Sample2D surfaceSample = Sampler::sample2D(Sampler::DIM_LIGHT_SURFACE_POINT);
+	const Vector3 randomPointInsideRectangle = this->_transform.getPosition()
+		+ (widthAxis * ((surfaceSample.x - 0.5) * this->_width))
+		+ (heightAxis * ((surfaceSample.y - 0.5) * this->_height));
+	const Vector3 direction = randomPointInsideRectangle - origin;
+	const double distanceSquared = Utilities::vectorLengthSquared(direction);
+	if (!std::isfinite(distanceSquared) || distanceSquared <= 0.0)
+	{
+		return (false);
+	}
+
+	const double distance = std::sqrt(distanceSquared);
+	sample.direction = direction / distance;
+
+	const double area = this->_height * this->_width;
+	const double cosine = std::fabs(Utilities::dot(sample.direction, normal));
+	if (area <= 0.0 || cosine <= 0.0)
+	{
+		return (false);
+	}
+
+	sample.pdf = distanceSquared / (cosine * area);
+	sample.tMax = distance;
+	sample.material = this->_material.get();
+	sample.valid = std::isfinite(sample.pdf) && sample.pdf > 0.0;
+	return (sample.valid);
+}
+
+bool	Rectangle::sampleEmission(HittableEmissionSample& sample) const
+{
+	Vector3 normal;
+	Vector3 widthAxis;
+	Vector3 heightAxis;
+
+	sample = HittableEmissionSample();
+	if (!this->_material || this->_width <= 0.0 || this->_height <= 0.0 || !this->_buildBasis(normal, widthAxis, heightAxis))
+	{
+		return (false);
+	}
+
+	const double area = this->_height * this->_width;
+	const Color emitted = this->_material->emitted();
+	if (area <= 0.0 || Utilities::luminance(emitted) <= 0.0)
+	{
+		return (false);
+	}
+
+	const Sampler::Sample2D surfaceSample = Sampler::sample2D(Sampler::DIM_LIGHT_SURFACE_POINT);
+	sample.position = this->_transform.getPosition()
+		+ (widthAxis * ((surfaceSample.x - 0.5) * this->_width))
+		+ (heightAxis * ((surfaceSample.y - 0.5) * this->_height));
+	if (Sampler::sample1D(Sampler::DIM_LIGHT_EMISSION_SIDE) < 0.5)
+	{
+		normal = normal * -1.0;
+	}
+
+	const ONB basis(normal);
+	sample.normal = normal;
+	sample.direction = Utilities::normalize(basis.local(Sampler::cosineHemisphere(Sampler::DIM_LIGHT_EMISSION_DIRECTION)));
+	sample.emitted = emitted;
+	sample.powerScale = 2.0 * D_PI * area;
+	sample.valid = Utilities::vectorLengthSquared(sample.direction) > 0.0;
+	return (sample.valid);
+}
+
+double	Rectangle::lightSelectionWeight(void) const
+{
+	if (!this->_material)
+	{
+		return (0.0);
+	}
+
+	const double area = this->_width * this->_height;
+	const double luminance = Utilities::luminance(this->_material->emitted());
+	if (area <= 0.0 || !std::isfinite(luminance) || luminance <= 0.0)
+	{
+		return (0.0);
+	}
+	return (area * luminance);
+}

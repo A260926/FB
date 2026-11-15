@@ -1,0 +1,51 @@
+[settings]
+resolution=500,500
+samples=64
+maxlightbounces=0
+view_transform=aces
+bloom=0
+sky=atmosphere
+# The first atmosphere value is a fallback only; directional_light sun drives atmosphere direction and intensity.
+atmosphere=0.30,6360000.0,6420000.0,7994.0,1200.0,16,8,0.0
+meters_per_unit=1
+photographic_exposure=2,0.008,100
+distanceblueness=0
+
+[materials]
+material default_obj {
+type=principled
+base_color=(1,1,1)
+metallic=0
+roughness=0.89999998
+alpha=1
+transmission=0
+texture=../textures/earth_diff_jpg.ppm
+}
+material moon_regolith {
+type=principled
+base_color=srgb(0.56,0.55,0.50)
+metallic=0
+roughness=1
+}
+
+[scene]
+camera main {
+position=(10260604,0,-28190779)
+direction=(-0.3420201,0,0.9396926)
+focal_length_mm=67.177
+sensor_width_mm=36
+sensor_height_mm=36
+pinhole=1
+focus_distance=30000000
+}
+directional_light sun {
+direction=(-0.9659258,0.0,0.2588190)
+solar=1
+}
+objects{
+sphere moon {
+position=(-35981830,63512260,377405433)
+radius=1737400
+material=moon_regolith
+}
+}
