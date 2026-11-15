@@ -1,0 +1,16 @@
+{
+  "repo": "https://github.com/C-Chads/tinygl",
+  "commit": "36a7987e7bebfda19615ea33341b1cc0ff9c3b13",
+  "kind": "self-contained OSS export",
+  "gitlinks": [],
+  "gitmodules": false,
+  "exclusions": [
+    "Raw_Demos/SDL_Examples/include-demo/doc: optional display demos/docs/assets outside headless closure",
+    "lib: generated prebuilt libraries excluded",
+    "tgl_minimal.png: documentation image"
+  ],
+  "dependencies": [
+    "C99 standard library and system libm"
+  ],
+  "support_configuration": "task_support/build_config.h enables existing error reporting; production bytes unchanged; no OpenMP flags"
+}
