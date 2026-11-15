@@ -68,6 +68,55 @@ You can call any of these functions multiple times, followed by the proceeding f
 
 See the [viewer](https://github.com/jpcy/xatlas/tree/master/source/examples/viewer) for example code.
 
+### Shared UVs across multiple poses
+
+A mesh whose vertices move (a skinning bind pose plus a few discrete deformation
+poses) can share a single baked UV set. Fill `MeshDecl::poses` with an array of
+`MeshPose` entries; each entry carries the vertex positions of one pose with the
+same vertex numbering and face connectivity as `MeshDecl::vertexPositionData`.
+The base positions are an implicit pose with weight 1. `AddMesh` copies every
+position and weight, so the caller's arrays can be released as soon as it
+returns.
+
+```c
+xatlasMeshPose poses[2];
+poses[0].vertexPositionData = poseA.data();
+poses[0].vertexPositionStride = sizeof(float) * 3;
+poses[0].weight = 1.0f;
+poses[1].vertexPositionData = poseB.data();
+poses[1].vertexPositionStride = sizeof(float) * 3;
+poses[1].weight = 1.0f;
+
+xatlasMeshDecl decl;
+xatlasMeshDeclInit(&decl);
+decl.vertexPositionData = bindPose.data();
+decl.vertexPositionStride = sizeof(float) * 3;
+decl.vertexCount = vertexCount;
+decl.indexData = indices.data();
+decl.indexCount = indexCount;
+decl.indexFormat = XATLAS_INDEX_FORMAT_UINT32;
+decl.poses = poses;
+decl.poseCount = 2;
+
+xatlasAddMesh(atlas, &decl, 0);
+xatlasComputeCharts(atlas, NULL);
+xatlasPackCharts(atlas, &packOptions);
+```
+
+`ComputeCharts` solves one UV set for all poses: for every face and pose it
+minimizes the conformal residual `|z1 (U2 - U0) - z2 (U1 - U0)|^2 / (2 * 3D face
+area)`, summed with each pose's weight, with the UV translation/rotation/scale
+locked by the base-pose boundary diameter endpoints. Meshes with poses require
+triangle input and `ChartOptions::useInputMeshUvs == false` with
+`ChartOptions::paramFunc == null`. Packing sizes each chart by the largest
+per-pose surface area (the maximum over poses of the summed face area), which
+drives both the automatic `texelsPerUnit` estimate and the chart scale.
+
+A windowless example that runs AddMesh -> ComputeCharts -> PackCharts and writes
+an OBJ with the source vertex positions and generated UVs is in
+[examples/multipose_example.cpp](examples/multipose_example.cpp). It has no
+`main` function so it can be called from a test or driver.
+
 ### Pack multiple atlases into a single atlas
 
 1. Create an empty atlas with `xatlas::Create`.

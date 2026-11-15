@@ -34,6 +34,7 @@ MIT License
 Copyright (c) 2012 Brandon Pelfrey
 */
 #include "xatlas.h"
+#include "xatlas_multipose.h"
 #ifndef XATLAS_C_API
 #define XATLAS_C_API 0
 #endif
@@ -857,6 +858,19 @@ bool isFinite(const Vector3 &v)
 	return isFinite(v.x) && isFinite(v.y) && isFinite(v.z);
 }
 #endif
+
+static bool isFiniteVector(const Vector3 &v)
+{
+	// Exponents of all ones mean infinity or NaN, for either sign.
+	FloatUint32 u;
+	u.f = v.x;
+	if ((u.u & 0x7F800000u) == 0x7F800000u) return false;
+	u.f = v.y;
+	if ((u.u & 0x7F800000u) == 0x7F800000u) return false;
+	u.f = v.z;
+	if ((u.u & 0x7F800000u) == 0x7F800000u) return false;
+	return true;
+}
 
 struct Extents2
 {
@@ -2393,11 +2407,16 @@ struct MeshFlags
 class Mesh
 {
 public:
-	Mesh(float epsilon, uint32_t approxVertexCount, uint32_t approxFaceCount, uint32_t flags = 0, uint32_t id = UINT32_MAX) : m_epsilon(epsilon), m_flags(flags), m_id(id), m_faceIgnore(MemTag::Mesh), m_faceMaterials(MemTag::Mesh), m_indices(MemTag::MeshIndices), m_positions(MemTag::MeshPositions), m_normals(MemTag::MeshNormals), m_texcoords(MemTag::MeshTexcoords), m_nextColocalVertex(MemTag::MeshColocals), m_firstColocalVertex(MemTag::MeshColocals), m_boundaryEdges(MemTag::MeshBoundaries), m_oppositeEdges(MemTag::MeshBoundaries), m_edgeMap(MemTag::MeshEdgeMap, approxFaceCount * 3)
+	Mesh(float epsilon, uint32_t approxVertexCount, uint32_t approxFaceCount, uint32_t flags = 0, uint32_t id = UINT32_MAX, uint32_t extraPoseCount = 0) : m_epsilon(epsilon), m_flags(flags), m_id(id), m_extraPoseCount(extraPoseCount), m_faceIgnore(MemTag::Mesh), m_faceMaterials(MemTag::Mesh), m_indices(MemTag::MeshIndices), m_positions(MemTag::MeshPositions), m_posePositions(MemTag::MeshPositions), m_poseWeights(MemTag::MeshPositions), m_normals(MemTag::MeshNormals), m_texcoords(MemTag::MeshTexcoords), m_nextColocalVertex(MemTag::MeshColocals), m_firstColocalVertex(MemTag::MeshColocals), m_boundaryEdges(MemTag::MeshBoundaries), m_oppositeEdges(MemTag::MeshBoundaries), m_edgeMap(MemTag::MeshEdgeMap, approxFaceCount * 3)
 	{
 		m_indices.reserve(approxFaceCount * 3);
 		m_positions.reserve(approxVertexCount);
 		m_texcoords.reserve(approxVertexCount);
+		if (m_extraPoseCount > 0) {
+			m_posePositions.reserve(approxVertexCount * m_extraPoseCount);
+			m_poseWeights.resize(m_extraPoseCount);
+			m_poseWeights.fill(1.0f);
+		}
 		if (m_flags & MeshFlags::HasIgnoredFaces)
 			m_faceIgnore.reserve(approxFaceCount);
 		if (m_flags & MeshFlags::HasNormals)
@@ -2409,10 +2428,79 @@ public:
 	uint32_t flags() const { return m_flags; }
 	uint32_t id() const { return m_id; }
 
-	void addVertex(const Vector3 &pos, const Vector3 &normal = Vector3(0.0f), const Vector2 &texcoord = Vector2(0.0f))
+	// Number of additional poses beyond the base (binding) pose.
+	uint32_t extraPoseCount() const { return m_extraPoseCount; }
+
+	// Total number of poses, including the implicit base pose (index 0, weight 1).
+	uint32_t poseCount() const { return m_extraPoseCount + 1; }
+
+	// The base (binding) pose is pose 0. Additional poses keep the same vertex
+	// numbering and face connectivity as the base.
+	const Vector3 &posePosition(uint32_t pose, uint32_t vertex) const
+	{
+		XA_DEBUG_ASSERT(pose < poseCount());
+		XA_DEBUG_ASSERT(vertex < m_positions.size());
+		if (pose == 0)
+			return m_positions[vertex];
+		XA_DEBUG_ASSERT((vertex + 1) * m_extraPoseCount <= m_posePositions.size());
+		return m_posePositions[vertex * m_extraPoseCount + (pose - 1)];
+	}
+
+	float poseWeight(uint32_t pose) const
+	{
+		XA_DEBUG_ASSERT(pose < poseCount());
+		return pose == 0 ? 1.0f : m_poseWeights[pose - 1];
+	}
+
+	// Pointer to the extra pose positions (one per extra pose) of a vertex.
+	const Vector3 *extraPosePositions(uint32_t vertex) const
+	{
+		if (m_extraPoseCount == 0)
+			return nullptr;
+		XA_DEBUG_ASSERT((vertex + 1) * m_extraPoseCount <= m_posePositions.size());
+		return &m_posePositions[vertex * m_extraPoseCount];
+	}
+
+	// Base positions as a contiguous xyz array, for the shared-pose solver.
+	const float *basePositionFloats() const { return &m_positions[0].x; }
+
+	// Extra pose positions as a contiguous xyz array (interleaved per vertex).
+	const float *extraPosePositionFloats() const
+	{
+		return m_posePositions.isEmpty() ? nullptr : &m_posePositions[0].x;
+	}
+
+	void setExtraPoseWeights(const float *weights)
+	{
+		XA_DEBUG_ASSERT(weights || m_extraPoseCount == 0);
+		for (uint32_t i = 0; i < m_extraPoseCount; i++)
+			m_poseWeights[i] = weights[i];
+	}
+
+	const float *extraPoseWeights() const
+	{
+		return m_poseWeights.isEmpty() ? nullptr : m_poseWeights.data();
+	}
+
+	void copyPoseWeightsFrom(const Mesh &other)
+	{
+		XA_DEBUG_ASSERT(other.m_extraPoseCount == m_extraPoseCount);
+		if (m_extraPoseCount > 0) {
+			m_poseWeights.resize(m_extraPoseCount);
+			for (uint32_t i = 0; i < m_extraPoseCount; i++)
+				m_poseWeights[i] = other.m_poseWeights[i];
+		}
+	}
+
+	void addVertex(const Vector3 &pos, const Vector3 &normal = Vector3(0.0f), const Vector2 &texcoord = Vector2(0.0f), const Vector3 *extraPoses = nullptr)
 	{
 		XA_DEBUG_ASSERT(isFinite(pos));
 		m_positions.push_back(pos);
+		if (m_extraPoseCount > 0) {
+			XA_DEBUG_ASSERT(extraPoses);
+			for (uint32_t i = 0; i < m_extraPoseCount; i++)
+				m_posePositions.push_back(extraPoses[i]);
+		}
 		if (m_flags & MeshFlags::HasNormals)
 			m_normals.push_back(normal);
 		m_texcoords.push_back(texcoord);
@@ -2432,6 +2520,20 @@ public:
 			const uint32_t vertex1 = m_indices[firstIndex + (i + 1) % 3];
 			m_edgeMap.add(EdgeKey(vertex0, vertex1));
 		}
+	}
+
+	// Two vertices are colocal only if they are within epsilon in every pose.
+	// This prevents creating a continuous surface across a seam that closes in
+	// the base pose but opens in a later pose.
+	bool areColocal(uint32_t v0, uint32_t v1) const
+	{
+		if (!equal(m_positions[v0], m_positions[v1], m_epsilon))
+			return false;
+		for (uint32_t p = 0; p < m_extraPoseCount; p++) {
+			if (!equal(m_posePositions[v0 * m_extraPoseCount + p], m_posePositions[v1 * m_extraPoseCount + p], m_epsilon))
+				return false;
+		}
+		return true;
 	}
 
 	void createColocalsBVH()
@@ -2457,7 +2559,7 @@ public:
 			bvh.query(AABB(m_positions[i], m_epsilon), potential);
 			for (uint32_t j = 0; j < potential.size(); j++) {
 				const uint32_t otherVertex = potential[j];
-				if (otherVertex != i && equal(m_positions[i], m_positions[otherVertex], m_epsilon) && m_nextColocalVertex[otherVertex] == UINT32_MAX)
+				if (otherVertex != i && areColocal(i, otherVertex) && m_nextColocalVertex[otherVertex] == UINT32_MAX)
 					colocals.push_back(otherVertex);
 			}
 			if (colocals.size() == 1) {
@@ -2495,7 +2597,7 @@ public:
 			colocals.push_back(i); // Always add this vertex.
 			uint32_t otherVertex = positionToVertexMap.get(m_positions[i]);
 			while (otherVertex != UINT32_MAX) {
-				if (otherVertex != i && equal(m_positions[i], m_positions[otherVertex], m_epsilon) && m_nextColocalVertex[otherVertex] == UINT32_MAX)
+				if (otherVertex != i && areColocal(i, otherVertex) && m_nextColocalVertex[otherVertex] == UINT32_MAX)
 					colocals.push_back(otherVertex);
 				otherVertex = positionToVertexMap.getNext(m_positions[i], otherVertex);
 			}
@@ -2661,6 +2763,25 @@ public:
 		return area;
 	}
 
+	// Surface area of the mesh in the given pose (0 is the base pose).
+	float computePoseSurfaceArea(uint32_t pose) const
+	{
+		XA_DEBUG_ASSERT(pose < poseCount());
+		float area = 0;
+		for (uint32_t f = 0; f < faceCount(); f++)
+			area += computePoseFaceArea(f, pose);
+		return area;
+	}
+
+	// Largest surface area across all poses, including the base pose.
+	float computeMaxPoseSurfaceArea() const
+	{
+		float area = computeSurfaceArea();
+		for (uint32_t p = 0; p < m_extraPoseCount; p++)
+			area = max(area, computePoseSurfaceArea(p + 1));
+		return area;
+	}
+
 	// Returned value is always positive, even if some triangles are flipped.
 	float computeParametricArea() const
 	{
@@ -2675,6 +2796,14 @@ public:
 		const Vector3 &p0 = m_positions[m_indices[face * 3 + 0]];
 		const Vector3 &p1 = m_positions[m_indices[face * 3 + 1]];
 		const Vector3 &p2 = m_positions[m_indices[face * 3 + 2]];
+		return length(cross(p1 - p0, p2 - p0)) * 0.5f;
+	}
+
+	float computePoseFaceArea(uint32_t face, uint32_t pose) const
+	{
+		const Vector3 &p0 = posePosition(pose, m_indices[face * 3 + 0]);
+		const Vector3 &p1 = posePosition(pose, m_indices[face * 3 + 1]);
+		const Vector3 &p2 = posePosition(pose, m_indices[face * 3 + 2]);
 		return length(cross(p1 - p0, p2 - p0)) * 0.5f;
 	}
 
@@ -2779,10 +2908,13 @@ private:
 	float m_epsilon;
 	uint32_t m_flags;
 	uint32_t m_id;
+	uint32_t m_extraPoseCount;
 	Array<bool> m_faceIgnore;
 	Array<uint32_t> m_faceMaterials;
 	Array<uint32_t> m_indices;
 	Array<Vector3> m_positions;
+	Array<Vector3> m_posePositions; // Extra pose positions, m_extraPoseCount per vertex.
+	Array<float> m_poseWeights; // One per extra pose. The implicit base pose has weight 1.
 	Array<Vector3> m_normals;
 	Array<Vector2> m_texcoords;
 
@@ -7140,7 +7272,8 @@ public:
 		XA_UNUSED(chartId);
 		m_faceToSourceFaceMap.copyFrom(faces.data, faces.length);
 		const uint32_t approxVertexCount = min(faces.length * 3, sourceMesh->vertexCount());
-		m_unifiedMesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, sourceMesh->epsilon(), approxVertexCount, faces.length);
+		m_unifiedMesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, sourceMesh->epsilon(), approxVertexCount, faces.length, 0, UINT32_MAX, sourceMesh->extraPoseCount());
+		m_unifiedMesh->copyPoseWeightsFrom(*sourceMesh);
 		HashMap<uint32_t, PassthroughHash<uint32_t>> sourceVertexToUnifiedVertexMap(MemTag::Mesh, approxVertexCount), sourceVertexToChartVertexMap(MemTag::Mesh, approxVertexCount);
 		m_originalIndices.resize(faces.length * 3);
 		// Add geometry.
@@ -7158,7 +7291,7 @@ public:
 				uint32_t unifiedVertex = sourceVertexToUnifiedVertexMap.get(sourceUnifiedVertex);
 				if (unifiedVertex == UINT32_MAX) {
 					unifiedVertex = sourceVertexToUnifiedVertexMap.add(sourceUnifiedVertex);
-					m_unifiedMesh->addVertex(sourceMesh->position(sourceVertex), Vector3(0.0f), sourceMesh->texcoord(sourceVertex));
+					m_unifiedMesh->addVertex(sourceMesh->position(sourceVertex), Vector3(0.0f), sourceMesh->texcoord(sourceVertex), sourceMesh->extraPosePositions(sourceVertex));
 				}
 				if (sourceVertexToChartVertexMap.get(sourceVertex) == UINT32_MAX) {
 					sourceVertexToChartVertexMap.add(sourceVertex);
@@ -7200,7 +7333,8 @@ public:
 		Array<uint32_t> &chartMeshIndices = buffers.chartMeshIndices;
 		chartMeshIndices.resize(sourceMesh->vertexCount());
 		chartMeshIndices.fillBytes(0xff);
-		m_unifiedMesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, sourceMesh->epsilon(), m_faceToSourceFaceMap.size() * 3, m_faceToSourceFaceMap.size());
+		m_unifiedMesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, sourceMesh->epsilon(), m_faceToSourceFaceMap.size() * 3, m_faceToSourceFaceMap.size(), 0, UINT32_MAX, sourceMesh->extraPoseCount());
+		m_unifiedMesh->copyPoseWeightsFrom(*sourceMesh);
 		HashMap<uint32_t, PassthroughHash<uint32_t>> sourceVertexToUnifiedVertexMap(MemTag::Mesh, m_faceToSourceFaceMap.size() * 3);
 		// Add vertices.
 		for (uint32_t f = 0; f < faceCount; f++) {
@@ -7211,7 +7345,7 @@ public:
 				uint32_t unifiedVertex = sourceVertexToUnifiedVertexMap.get(sourceUnifiedVertex);
 				if (unifiedVertex == UINT32_MAX) {
 					unifiedVertex = sourceVertexToUnifiedVertexMap.add(sourceUnifiedVertex);
-					m_unifiedMesh->addVertex(sourceMesh->position(vertex), Vector3(0.0f), texcoords[parentVertex]);
+					m_unifiedMesh->addVertex(sourceMesh->position(vertex), Vector3(0.0f), texcoords[parentVertex], sourceMesh->extraPosePositions(vertex));
 				}
 				if (chartMeshIndices[vertex] == UINT32_MAX) {
 					chartMeshIndices[vertex] = m_originalVertexCount;
@@ -7271,6 +7405,11 @@ public:
 	{
 		const uint32_t unifiedVertexCount = m_unifiedMesh->vertexCount();
 		if (m_generatorType == segment::ChartGeneratorType::OriginalUv) {
+		} else if (m_unifiedMesh->extraPoseCount() > 0) {
+			// All poses share one set of UV unknowns. The planar and ortho
+			// shortcuts also go through the shared objective so later poses are
+			// never ignored.
+			parameterizeSharedPoses(boundaryGrid);
 		} else {
 			// Project vertices to plane.
 			XA_PROFILE_START(parameterizeChartsOrthogonal)
@@ -7335,6 +7474,26 @@ public:
 		backupTexcoords();
 	}
 
+	// Recompute one UV set shared by all poses of a final chart, starting from
+	// the chart's current texcoords (used to lock UV translation/rotation/scale
+	// at its boundary diameter vertices). Used both for freshly created charts
+	// and for sub-charts produced by the invalid-parameterization fallback.
+	void resolveSharedPoses(UniformGrid2 &boundaryGrid)
+	{
+		if (m_unifiedMesh->extraPoseCount() == 0)
+			return;
+		if (!solveSharedPoseUVs())
+			m_isInvalid = true;
+		XA_PROFILE_START(parameterizeChartsEvaluateQuality)
+		m_quality.computeBoundaryIntersection(m_unifiedMesh, boundaryGrid);
+		m_quality.computeFlippedFaces(m_unifiedMesh, nullptr);
+		m_quality.computeMetrics(m_unifiedMesh);
+		XA_PROFILE_END(parameterizeChartsEvaluateQuality)
+		if (m_quality.boundaryIntersection || m_quality.flippedTriangleCount > 0 || m_quality.zeroAreaTriangleCount > 0)
+			m_isInvalid = true;
+		backupTexcoords();
+	}
+
 	Vector2 computeParametricBounds() const
 	{
 		Vector2 minCorner(FLT_MAX, FLT_MAX);
@@ -7371,6 +7530,81 @@ private:
 	{
 		m_backupTexcoords.resize(m_unifiedMesh->vertexCount());
 		memcpy(m_backupTexcoords.data(), m_unifiedMesh->texcoords().data, m_unifiedMesh->vertexCount() * sizeof(Vector2));
+	}
+
+	// Pick two vertices to lock the UV translation, rotation and scale. Uses
+	// the base pose boundary diameter, with a deterministic fallback for
+	// charts without boundary vertices.
+	bool findSharedPosePins(uint32_t *pin0, uint32_t *pin1) const
+	{
+		if (findApproximateDiameterVertices(m_unifiedMesh, pin0, pin1))
+			return true;
+		const uint32_t vertexCount = m_unifiedMesh->vertexCount();
+		if (vertexCount < 2)
+			return false;
+		*pin0 = 0;
+		*pin1 = 1;
+		float bestDistance = -1.0f;
+		for (uint32_t v = 1; v < vertexCount; v++) {
+			const float distance = lengthSquared(m_unifiedMesh->position(v) - m_unifiedMesh->position(0));
+			if (distance > bestDistance) {
+				bestDistance = distance;
+				*pin1 = v;
+			}
+		}
+		return bestDistance > 0.0f;
+	}
+
+	// One UV set shared by all poses. The current (base ortho projection)
+	// texcoords seed the solve and provide the locked pin values.
+	bool solveSharedPoseUVs()
+	{
+		const uint32_t vertexCount = m_unifiedMesh->vertexCount();
+		if (vertexCount < 3 || m_unifiedMesh->faceCount() == 0)
+			return false;
+		uint32_t pin0, pin1;
+		if (!findSharedPosePins(&pin0, &pin1))
+			return false;
+		Array<float> uv;
+		uv.resize(vertexCount * 2);
+		for (uint32_t v = 0; v < vertexCount; v++) {
+			uv[v * 2 + 0] = m_unifiedMesh->texcoord(v).x;
+			uv[v * 2 + 1] = m_unifiedMesh->texcoord(v).y;
+		}
+		const float pinUv0[2] = { uv[pin0 * 2 + 0], uv[pin0 * 2 + 1] };
+		const float pinUv1[2] = { uv[pin1 * 2 + 0], uv[pin1 * 2 + 1] };
+		if (!multipose::SolveChart(vertexCount, m_unifiedMesh->indices().data, m_unifiedMesh->indexCount(),
+			m_unifiedMesh->basePositionFloats(), m_unifiedMesh->extraPosePositionFloats(), m_unifiedMesh->extraPoseCount(),
+			m_unifiedMesh->extraPoseWeights(), pin0, pin1, pinUv0, pinUv1, uv.data()))
+			return false;
+		for (uint32_t v = 0; v < vertexCount; v++)
+			m_unifiedMesh->texcoord(v) = Vector2(uv[v * 2 + 0], uv[v * 2 + 1]);
+		return true;
+	}
+
+	void parameterizeSharedPoses(UniformGrid2 &boundaryGrid)
+	{
+		const uint32_t unifiedVertexCount = m_unifiedMesh->vertexCount();
+		// Seed with the base pose's orthogonal projection; then solve the shared
+		// objective for every pose.
+		XA_PROFILE_START(parameterizeChartsOrthogonal)
+		for (uint32_t i = 0; i < unifiedVertexCount; i++)
+			m_unifiedMesh->texcoord(i) = Vector2(dot(m_basis.tangent, m_unifiedMesh->position(i)), dot(m_basis.bitangent, m_unifiedMesh->position(i)));
+		XA_PROFILE_END(parameterizeChartsOrthogonal)
+		if (!solveSharedPoseUVs()) {
+			m_isInvalid = true;
+			return;
+		}
+		XA_PROFILE_START(parameterizeChartsEvaluateQuality)
+		m_quality.computeBoundaryIntersection(m_unifiedMesh, boundaryGrid);
+		m_quality.computeFlippedFaces(m_unifiedMesh, nullptr);
+		m_quality.computeMetrics(m_unifiedMesh);
+		XA_PROFILE_END(parameterizeChartsEvaluateQuality)
+		// The UVs were not produced by a base-pose orthographic projection, so
+		// don't relabel the chart as Ortho. Planar charts keep their type (the
+		// shared solve still replaces the base projection).
+		if (m_quality.boundaryIntersection || m_quality.flippedTriangleCount > 0 || m_quality.zeroAreaTriangleCount > 0)
+			m_isInvalid = true;
 	}
 
 	Basis m_basis;
@@ -7459,6 +7693,9 @@ static void runCreateAndParameterizeChartTask(void *groupUserData, void *taskUse
 #if XA_CHECK_PIECEWISE_CHART_QUALITY
 		chart->evaluateQuality(args->boundaryGrid->get());
 #endif
+		// The fallback sub-chart must redo the shared-pose objective over its
+		// own face set. It never silently reverts to the base-pose expansion.
+		chart->resolveSharedPoses(groupArgs->boundaryGrid->get());
 		args->charts.push_back(chart);
 #if XA_DEBUG_EXPORT_OBJ_RECOMPUTED_CHARTS
 		if (file) {
@@ -7667,7 +7904,7 @@ private:
 		const uint32_t faceCount = m_faceToSourceFaceMap.size();
 		XA_DEBUG_ASSERT(faceCount > 0);
 		const uint32_t approxVertexCount = min(faceCount * 3, m_sourceMesh->vertexCount());
-		Mesh *mesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, m_sourceMesh->epsilon(), approxVertexCount, faceCount, m_sourceMesh->flags() & MeshFlags::HasNormals);
+		Mesh *mesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, m_sourceMesh->epsilon(), approxVertexCount, faceCount, m_sourceMesh->flags() & MeshFlags::HasNormals, UINT32_MAX, m_sourceMesh->extraPoseCount());
 		HashMap<uint32_t, PassthroughHash<uint32_t>> sourceVertexToVertexMap(MemTag::Mesh, approxVertexCount);
 		for (uint32_t f = 0; f < faceCount; f++) {
 			const uint32_t face = m_faceToSourceFaceMap[f];
@@ -7678,7 +7915,7 @@ private:
 					Vector3 normal(0.0f);
 					if (m_sourceMesh->flags() & MeshFlags::HasNormals)
 						normal = m_sourceMesh->normal(vertex);
-					mesh->addVertex(m_sourceMesh->position(vertex), normal, m_sourceMesh->texcoord(vertex));
+					mesh->addVertex(m_sourceMesh->position(vertex), normal, m_sourceMesh->texcoord(vertex), m_sourceMesh->extraPosePositions(vertex));
 				}
 			}
 		}
@@ -8117,7 +8354,7 @@ static void runAddChartTask(void *groupUserData, void *taskUserData)
 		const Vector2 bounds = paramChart->computeParametricBounds();
 		chart->parametricArea = bounds.x * bounds.y;
 	}
-	chart->surfaceArea = mesh->computeSurfaceArea();
+	chart->surfaceArea = mesh->computeMaxPoseSurfaceArea();
 	chart->vertices = mesh->texcoords();
 	chart->boundaryEdges = &mesh->boundaryEdges();
 	// Compute bounding box of chart.
@@ -9019,6 +9256,66 @@ static uint32_t DecodeIndex(IndexFormat format, const void *indexData, int32_t o
 	return uint32_t((int32_t)((const uint32_t *)indexData)[i] + offset);
 }
 
+static internal::Vector3 DecodePosePosition(const MeshPose &pose, uint32_t index)
+{
+	XA_DEBUG_ASSERT(pose.vertexPositionData);
+	XA_DEBUG_ASSERT(pose.vertexPositionStride >= 12);
+	// Copy through memcpy: the caller's stride and alignment are unconstrained.
+	internal::Vector3 position;
+	memcpy(&position, &((const uint8_t *)pose.vertexPositionData)[pose.vertexPositionStride * index], sizeof(float) * 3);
+	return position;
+}
+
+// Validate the metadata of the extra poses of a MeshDecl. A nonzero poseCount
+// with a null poses pointer, a null position pointer, a stride too small for
+// three floats or a non-positive / non-finite weight is an error.
+static AddMeshError ValidatePoseDecl(const MeshDecl &meshDecl)
+{
+	for (uint32_t p = 0; p < meshDecl.poseCount; p++) {
+		const MeshPose &pose = meshDecl.poses[p];
+		if (!pose.vertexPositionData)
+			return AddMeshError::Error;
+		if (pose.vertexPositionStride < 12)
+			return AddMeshError::Error;
+		if (!internal::isFinite(pose.weight) || !(pose.weight > 0.0f))
+			return AddMeshError::Error;
+	}
+	return AddMeshError::Success;
+}
+
+// True only for finite numbers: excludes infinities and NaN.
+static bool isFiniteCoordinate(const internal::Vector3 &v)
+{
+	return internal::isFiniteVector(v);
+}
+
+// Validate a pose-annotated mesh. Every extra pose must hold finite
+// coordinates, and every non-ignored face must have nonzero area in every
+// pose. Returns false when the poses are degenerate.
+static bool ValidatePoseGeometry(const internal::Mesh *mesh)
+{
+	if (mesh->extraPoseCount() == 0)
+		return true;
+	const uint32_t faceCount = mesh->faceCount();
+	for (uint32_t p = 1; p < mesh->poseCount(); p++) {
+		for (uint32_t v = 0; v < mesh->vertexCount(); v++) {
+			if (!isFiniteCoordinate(mesh->posePosition(p, v)))
+				return false;
+		}
+		for (uint32_t f = 0; f < faceCount; f++) {
+			if (mesh->isFaceIgnored(f))
+				continue;
+			const internal::Vector3 &p0 = mesh->posePosition(p, mesh->vertexAt(f * 3 + 0));
+			const internal::Vector3 &p1 = mesh->posePosition(p, mesh->vertexAt(f * 3 + 1));
+			const internal::Vector3 &p2 = mesh->posePosition(p, mesh->vertexAt(f * 3 + 2));
+			const float area = internal::length(internal::cross(p1 - p0, p2 - p0)) * 0.5f;
+			if (!(area > internal::kAreaEpsilon))
+				return false;
+		}
+	}
+	return true;
+}
+
 AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountHint)
 {
 	XA_DEBUG_ASSERT(atlas);
@@ -9030,6 +9327,20 @@ AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountH
 	if (!ctx->uvMeshes.isEmpty()) {
 		XA_PRINT_WARNING("AddMesh: Meshes and UV meshes cannot be added to the same atlas.\n");
 		return AddMeshError::Error;
+	}
+	if (meshDecl.poseCount > 0) {
+		if (!meshDecl.poses) {
+			XA_PRINT_WARNING("AddMesh: poseCount is nonzero but poses is null.\n");
+			return AddMeshError::Error;
+		}
+		if (meshDecl.faceVertexCount) {
+			XA_PRINT_WARNING("AddMesh: mesh poses require triangle input.\n");
+			return AddMeshError::Error;
+		}
+		if (ValidatePoseDecl(meshDecl) != AddMeshError::Success) {
+			XA_PRINT_WARNING("AddMesh: invalid mesh pose declaration.\n");
+			return AddMeshError::Error;
+		}
 	}
 #if XA_PROFILE
 	if (ctx->meshes.isEmpty())
@@ -9064,7 +9375,14 @@ AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountH
 		meshFlags |= internal::MeshFlags::HasNormals;
 	if (meshDecl.faceMaterialData)
 		meshFlags |= internal::MeshFlags::HasMaterials;
-	internal::Mesh *mesh = XA_NEW_ARGS(internal::MemTag::Mesh, internal::Mesh, meshDecl.epsilon, meshDecl.vertexCount, indexCount / 3, meshFlags, ctx->meshes.size());
+	internal::Mesh *mesh = XA_NEW_ARGS(internal::MemTag::Mesh, internal::Mesh, meshDecl.epsilon, meshDecl.vertexCount, indexCount / 3, meshFlags, ctx->meshes.size(), meshDecl.poseCount);
+	internal::Array<float> poseWeights;
+	if (meshDecl.poseCount > 0) {
+		poseWeights.resize(meshDecl.poseCount);
+		for (uint32_t p = 0; p < meshDecl.poseCount; p++)
+			poseWeights[p] = meshDecl.poses[p].weight;
+		mesh->setExtraPoseWeights(poseWeights.data());
+	}
 	for (uint32_t i = 0; i < meshDecl.vertexCount; i++) {
 		internal::Vector3 normal(0.0f);
 		internal::Vector2 texcoord(0.0f);
@@ -9072,7 +9390,15 @@ AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountH
 			normal = DecodeNormal(meshDecl, i);
 		if (meshDecl.vertexUvData)
 			texcoord = DecodeUv(meshDecl, i);
-		mesh->addVertex(DecodePosition(meshDecl, i), normal, texcoord);
+		internal::Array<internal::Vector3> extraPoses;
+		if (meshDecl.poseCount > 0) {
+			extraPoses.resize(meshDecl.poseCount);
+			for (uint32_t p = 0; p < meshDecl.poseCount; p++)
+				extraPoses[p] = DecodePosePosition(meshDecl.poses[p], i);
+			mesh->addVertex(DecodePosition(meshDecl, i), normal, texcoord, extraPoses.data());
+		} else {
+			mesh->addVertex(DecodePosition(meshDecl, i), normal, texcoord);
+		}
 	}
 	MeshPolygonMapping *meshPolygonMapping = nullptr;
 	if (meshDecl.faceVertexCount) {
@@ -9198,6 +9524,14 @@ AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountH
 	}
 	if (warningCount > kMaxWarnings)
 		XA_PRINT("   %u additional warnings truncated\n", warningCount - kMaxWarnings);
+	// Reject a pose-annotated mesh whose non-ignored faces are non-finite or
+	// degenerate in any pose. The mesh is not left in the context.
+	if (meshDecl.poseCount > 0 && !ValidatePoseGeometry(mesh)) {
+		mesh->~Mesh();
+		XA_FREE(mesh);
+		XA_PRINT_WARNING("AddMesh: degenerate mesh pose.\n");
+		return AddMeshError::Error;
+	}
 	XA_PROFILE_END(addMeshCopyData)
 	ctx->meshes.push_back(mesh);
 	ctx->meshPolygonMappings.push_back(meshPolygonMapping);
@@ -9233,7 +9567,8 @@ void AddMeshJoin(Atlas *atlas)
 	} else {
 		if (!ctx->addMeshProgress)
 			return;
-		ctx->taskScheduler->wait(&ctx->addMeshTaskGroup);
+		if (ctx->addMeshTaskGroup.value != UINT32_MAX)
+			ctx->taskScheduler->wait(&ctx->addMeshTaskGroup);
 		ctx->addMeshProgress->~Progress();
 		XA_FREE(ctx->addMeshProgress);
 		ctx->addMeshProgress = nullptr;
@@ -9367,6 +9702,20 @@ void ComputeCharts(Atlas *atlas, ChartOptions options)
 	AddMeshJoin(atlas);
 	if (ctx->meshes.isEmpty() && ctx->uvMeshInstances.isEmpty()) {
 		XA_PRINT_WARNING("ComputeCharts: No meshes. Call AddMesh or AddUvMesh first.\n");
+		return;
+	}
+	// Meshes with extra poses share one UV set across all poses; that path
+	// takes triangles only and cannot preserve original UVs or call a custom
+	// parameterization function.
+	bool hasPoses = false;
+	for (uint32_t i = 0; i < ctx->meshes.size(); i++) {
+		if (ctx->meshes[i]->extraPoseCount() > 0) {
+			hasPoses = true;
+			break;
+		}
+	}
+	if (hasPoses && (options.useInputMeshUvs || options.paramFunc)) {
+		XA_PRINT_WARNING("ComputeCharts: meshes with poses require useInputMeshUvs = false and paramFunc = null.\n");
 		return;
 	}
 	// Reset atlas state. This function may be called multiple times, or again after PackCharts.
@@ -9938,7 +10287,10 @@ static_assert(sizeof(xatlas::Chart) == sizeof(xatlasChart), "xatlasChart size mi
 static_assert(sizeof(xatlas::Vertex) == sizeof(xatlasVertex), "xatlasVertex size mismatch");
 static_assert(sizeof(xatlas::Mesh) == sizeof(xatlasMesh), "xatlasMesh size mismatch");
 static_assert(sizeof(xatlas::Atlas) == sizeof(xatlasAtlas), "xatlasAtlas size mismatch");
+static_assert(sizeof(xatlas::MeshPose) == sizeof(xatlasMeshPose), "xatlasMeshPose size mismatch");
 static_assert(sizeof(xatlas::MeshDecl) == sizeof(xatlasMeshDecl), "xatlasMeshDecl size mismatch");
+static_assert(offsetof(xatlas::MeshDecl, poses) == offsetof(xatlasMeshDecl, poses), "MeshDecl poses offset");
+static_assert(offsetof(xatlas::MeshDecl, poseCount) == offsetof(xatlasMeshDecl, poseCount), "MeshDecl poseCount offset");
 static_assert(sizeof(xatlas::UvMeshDecl) == sizeof(xatlasUvMeshDecl), "xatlasUvMeshDecl size mismatch");
 static_assert(sizeof(xatlas::ChartOptions) == sizeof(xatlasChartOptions), "xatlasChartOptions size mismatch");
 static_assert(sizeof(xatlas::PackOptions) == sizeof(xatlasPackOptions), "xatlasPackOptions size mismatch");

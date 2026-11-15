@@ -105,6 +105,17 @@ enum class IndexFormat
 	UInt32
 };
 
+// An additional discrete vertex position set for a mesh. Shares one UV set
+// with the mesh's base positions.
+struct MeshPose
+{
+	// Vertex positions for this pose. Uses the same vertex numbering and face
+	// connectivity as MeshDecl::vertexPositionData.
+	const void *vertexPositionData = nullptr;
+	uint32_t vertexPositionStride = 0; // In bytes. Must be at least 12.
+	float weight = 1.0f; // Must be finite and > 0. Weight of this pose in the shared UV solve.
+};
+
 // Input mesh declaration.
 struct MeshDecl
 {
@@ -136,6 +147,14 @@ struct MeshDecl
 
 	// Vertex positions within epsilon distance of each other are considered colocal.
 	float epsilon = 1.192092896e-07F;
+
+	// Optional. Additional vertex positions sharing one baked UV set with the
+	// base positions above. The base positions are an implicit pose with
+	// weight 1. Poses use triangle input only and require
+	// ChartOptions::useInputMeshUvs to be false and ChartOptions::paramFunc to
+	// be null. All positions and weights are copied by AddMesh.
+	const MeshPose *poses = nullptr;
+	uint32_t poseCount = 0;
 };
 
 enum class AddMeshError

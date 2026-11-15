@@ -134,6 +134,14 @@ xatlasIndexFormat;
 typedef struct
 {
 	const void *vertexPositionData;
+	uint32_t vertexPositionStride;
+	float weight;
+}
+xatlasMeshPose;
+
+typedef struct
+{
+	const void *vertexPositionData;
 	const void *vertexNormalData;
 	const void *vertexUvData;
 	const void *indexData;
@@ -149,6 +157,8 @@ typedef struct
 	uint32_t faceCount;
 	xatlasIndexFormat indexFormat;
 	float epsilon;
+	const xatlasMeshPose *poses;
+	uint32_t poseCount;
 }
 xatlasMeshDecl;
 
