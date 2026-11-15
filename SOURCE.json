@@ -1,0 +1,19 @@
+{
+  "repo": "https://github.com/Forceflow/trimesh2",
+  "commit": "76bc89310b45279ff3c40415a6f6d5789479b42f",
+  "license": "GPL-2.0-only; Miniball original notice in include/bsphere.h; gluit COPYING.freeglut/COPYING.glui preserved",
+  "retained_roots": [
+    "include",
+    "libsrc",
+    "utilsrc",
+    "gluit",
+    "COPYING",
+    "LICENSE",
+    "README.md",
+    "Makefile",
+    "Makerules",
+    "Makedefs.*"
+  ],
+  "private_manifest": "private/source-manifest.json",
+  "support": "task_support仅旧生产能力探针与通用驱动；未加入目标实现或目标测试"
+}
