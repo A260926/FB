@@ -24,7 +24,13 @@ void init_zbuffer(const int width, const int height) {
     zbuffer = std::vector(width*height, -1000.);
 }
 
-void rasterize(const Triangle &clip, const IShader &shader, TGAImage &framebuffer) {
+// Shared rasterization core: integer-pixel coverage, perspective-correct
+// barycentrics and the "larger z/w wins" depth commit are defined once here,
+// so the depth capture used by the projective baker cannot drift apart from
+// the regular Phong rendering path.
+template<class Fragment>
+static void rasterize_core(const Triangle &clip, const int width, const int height,
+                           std::vector<double> &depth_buffer, Fragment fragment) {
     vec4 ndc[3]    = { clip[0]/clip[0].w, clip[1]/clip[1].w, clip[2]/clip[2].w };                // normalized device coordinates
     vec2 screen[3] = { (Viewport*ndc[0]).xy(), (Viewport*ndc[1]).xy(), (Viewport*ndc[2]).xy() }; // screen coordinates
 
@@ -34,19 +40,32 @@ void rasterize(const Triangle &clip, const IShader &shader, TGAImage &framebuffe
     auto [bbminx,bbmaxx] = std::minmax({screen[0].x, screen[1].x, screen[2].x}); // bounding box for the triangle
     auto [bbminy,bbmaxy] = std::minmax({screen[0].y, screen[1].y, screen[2].y}); // defined by its top left and bottom right corners
 #pragma omp parallel for
-    for (int x=std::max<int>(bbminx, 0); x<=std::min<int>(bbmaxx, framebuffer.width()-1); x++) {         // clip the bounding box by the screen
-        for (int y=std::max<int>(bbminy, 0); y<=std::min<int>(bbmaxy, framebuffer.height()-1); y++) {
+    for (int x=std::max<int>(bbminx, 0); x<=std::min<int>(bbmaxx, width-1); x++) {         // clip the bounding box by the screen
+        for (int y=std::max<int>(bbminy, 0); y<=std::min<int>(bbmaxy, height-1); y++) {
             vec3 bc_screen = ABC.invert_transpose() * vec3{static_cast<double>(x), static_cast<double>(y), 1.}; // barycentric coordinates of {x,y} w.r.t the triangle
             vec3 bc_clip   = { bc_screen.x/clip[0].w, bc_screen.y/clip[1].w, bc_screen.z/clip[2].w };     // check https://github.com/ssloy/tinyrenderer/wiki/Technical-difficulties-linear-interpolation-with-perspective-deformations
             bc_clip = bc_clip / (bc_clip.x + bc_clip.y + bc_clip.z);
             if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue; // negative barycentric coordinate => the pixel is outside the triangle
             double z = bc_screen * vec3{ ndc[0].z, ndc[1].z, ndc[2].z };   // linear interpolation of the depth
-            if (z <= zbuffer[x+y*framebuffer.width()]) continue;   // discard fragments that are too deep w.r.t the z-buffer
-            auto [discard, color] = shader.fragment(bc_clip);
-            if (discard) continue;                                 // fragment shader can discard current fragment
-            zbuffer[x+y*framebuffer.width()] = z;                  // update the z-buffer
-            framebuffer.set(x, y, color);                          // update the framebuffer
+            if (z <= depth_buffer[x+y*width]) continue;   // discard fragments that are too deep w.r.t the z-buffer
+            if (fragment(x, y, bc_clip, z)) continue;     // fragment shader can discard current fragment
+            depth_buffer[x+y*width] = z;                  // update the z-buffer
         }
     }
 }
 
+void rasterize(const Triangle &clip, const IShader &shader, TGAImage &framebuffer) {
+    rasterize_core(clip, framebuffer.width(), framebuffer.height(), zbuffer,
+        [&](const int x, const int y, const vec3 &bc_clip, const double /*z*/) {
+            auto [discard, color] = shader.fragment(bc_clip);
+            if (discard) return true;
+            framebuffer.set(x, y, color); // update the framebuffer
+            return false;
+        });
+}
+
+void rasterize_depth(const Triangle &clip, std::vector<double> &depth_buffer,
+                     const int width, const int height) {
+    rasterize_core(clip, width, height, depth_buffer,
+        [](const int, const int, const vec3 &, const double) { return false; });
+}

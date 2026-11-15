@@ -24,6 +24,17 @@ find_package(OpenMP COMPONENTS CXX)
 set(SOURCES main.cpp our_gl.cpp model.cpp tgaimage.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(${PROJECT_NAME} PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)
+
+# Windowless projective texture baking demo (no extra dependencies).
+add_executable(projective_baker
+    examples/projective_baker.cpp
+    projective_baker.cpp
+    our_gl.cpp
+    model.cpp
+    tgaimage.cpp)
+target_include_directories(projective_baker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(projective_baker PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)
 
 file(GENERATE OUTPUT .gitignore CONTENT "*")

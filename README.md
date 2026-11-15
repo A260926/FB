@@ -99,3 +99,80 @@ cmake --build build -j &&
 build/tinyrenderer obj/diablo3_pose/diablo3_pose.obj obj/floor.obj
 ```
 The rendered image is saved to `framebuffer.tga`.
+
+## Windowless projective texture baking
+
+`projective_baker.h/.cpp` adds a headless interface that re-projects colors
+from several observation views back onto the per-face corner UVs of the
+models, producing a floating point material atlas. It never opens a window
+and never re-draws the source views.
+
+The pipeline is:
+
+1. **Depth capture.** `SourceCapture` takes the same geometry, one
+   world-to-clip matrix, the world camera position and a row-major linear
+   `double` RGB image. It rasterizes the geometry with the *same*
+   coverage/perspective/depth kernel as the regular `rasterize()` path
+   (`rasterize_depth()` in `our_gl.cpp` shares that kernel), honoring integer
+   pixels, the forward area `det >= 1` rule and the "larger `z/w` is nearer"
+   depth commit. Each capture owns private copies of the geometry, image,
+   projection data and depth buffer, so destroying/editing the caller's
+   `Model`s or images, changing the global camera state or interleaving other
+   captures does not change an existing capture.
+2. **UV bake.** `bake_atlas()` walks the UV triangles (no backface culling,
+   mirrored UVs allowed) with a top-left half-open coverage rule after
+   normalizing winding to counter-clockwise. The world point `P` and unit
+   world geometric normal `N` are reconstructed from UV-space barycentrics
+   only. For every source view, `P` is projected to
+   `s=(ndc.x+1)*width/2`, `t=(ndc.y+1)*height/2` and bilinearly sampled on the
+   integer pixel grid. Visibility is decided **per tap**: the receiver
+   triangle's three `z/w` values are extrapolated on the projection plane to
+   each integer tap, and a tap is accepted only when its depth is at least the
+   captured depth minus the caller supplied NDC epsilon. Each accepted tap
+   contributes `bilinear_weight * pow(max(0, N·normalize(eye-P)), 4)`; RGB is
+   accumulated across all taps and all views before a single division by the
+   total weight. Texels with no valid source keep their coverage and ownership
+   but stay at zero color/weight. True UV overlaps of distinct faces are
+   reported in `OverlapConflict` instead of being resolved by submission order.
+3. **State hygiene.** Both capture and bake save and restore the global
+   `ModelView`/`Viewport`/`Perspective`/`zbuffer` rasterizer state, and an empty
+   source list is legal (coverage-only bake).
+
+Minimal usage:
+
+```cpp
+#include "projective_baker.h"
+using namespace projective_baker;
+
+ProjectiveGeometry geometry({&model});                 // independent geometry snapshot
+SourceCapture view(geometry, world_to_clip, eye,      // captures depth with the
+                   linear_rgb, width, height);         // real rasterize() kernel
+std::vector<OverlapConflict> conflicts;
+BakeResult atlas = bake_atlas(geometry, {&view},       // covered[], owner_model/face[],
+                              atlas_w, atlas_h, 1e-9,  // rgb[] and weight[] per texel
+                              &conflicts);
+```
+
+Invalid dimensions/indices, non-finite values, UVs outside `[0,1]` and image
+length mismatches throw `projective_baker::bake_error` before any result is
+modified.
+
+### Demo and tests
+
+The demo generates a seam-split grid, two differently colored observation
+images and an occluder, writes the baked atlas (plus a weight image and
+source views) as TGA, installs the atlas as the model's diffuse material and
+renders it through the original `IShader`/`PhongShader` path:
+
+```sh
+cmake -Bbuild && cmake --build build -j
+build/projective_baker <output_directory>
+```
+
+The headless numeric test suite (projection, visibility and lifetime groups,
+no `main` of its own) is registered through `task_support/check.h` and runs
+together with the original production baseline:
+
+```sh
+bash task_support/run.sh target
+```
