@@ -744,6 +744,101 @@ class AnimationMixer extends EventDispatcher {
 	}
 
 	/**
+	 * Re-resolves the track bindings of all actions cached for the given root.
+	 *
+	 * This is useful when the subtree below the root (or the skeleton of a
+	 * skinned mesh) has been replaced by same-named objects while the
+	 * mixer's actions are supposed to keep playing: every cached binding is
+	 * resolved again against the current state of the hierarchy, including
+	 * bindings of paused and not yet started actions. The given root must be
+	 * the object the actions were created for - bindings are never migrated
+	 * to a different root, and actions bound to another root are left
+	 * untouched.
+	 *
+	 * Actions are not recreated and their time, fading and warping state is
+	 * preserved; actions sharing a track keep sharing their PropertyMixer
+	 * and all reference counts, use counts and the active sets stay as they
+	 * are. An active binding whose target changed first restores its old
+	 * target to the state captured at first activation, then captures the
+	 * new target's current state as its original and resets its accumulation
+	 * buffers; an inactive binding never touches scene properties and
+	 * captures the original state when its first action gets played.
+	 * Bindings whose target is unchanged keep their previously captured
+	 * original state.
+	 *
+	 * The operation is atomic: when a track cannot be resolved, an `Error`
+	 * is thrown and bindings, mixing buffers, action state and scene
+	 * properties are left unchanged.
+	 *
+	 * @param {Object3D} [root] - The root object to rebind, defaults to the mixer's root.
+	 * @return {AnimationMixer} A reference to this animation mixer.
+	 */
+	rebindRoot( root = this._root ) {
+
+		if ( root === null || typeof root !== 'object' || root.isAnimationObjectGroup === true ) {
+
+			throw new Error( 'THREE.AnimationMixer: rebindRoot() requires the root object the actions were created for.' );
+
+		}
+
+		const bindingsByName = this._bindingsByRootAndName[ root.uuid ];
+
+		if ( bindingsByName === undefined ) return this;
+
+		// phase 1: resolve every binding against the current hierarchy, so
+		// that a failure leaves bindings, buffers, action state and scene
+		// properties untouched
+
+		const pending = [];
+
+		for ( const trackName in bindingsByName ) {
+
+			const propertyMixer = bindingsByName[ trackName ];
+
+			pending.push( {
+				propertyMixer: propertyMixer,
+				resolution: propertyMixer.binding.resolveTarget( root, propertyMixer.valueSize )
+			} );
+
+		}
+
+		// phase 2: apply the resolutions
+
+		for ( let i = 0, n = pending.length; i !== n; ++ i ) {
+
+			const propertyMixer = pending[ i ].propertyMixer,
+				resolution = pending[ i ].resolution,
+				binding = propertyMixer.binding;
+
+			if ( binding.matchesTarget( resolution ) ) continue;
+
+			if ( propertyMixer.useCount > 0 ) {
+
+				// active binding: restore the old target to the state
+				// captured at first activation, then capture the new
+				// target's current state and reset the accumulation buffers
+
+				propertyMixer.restoreOriginalState();
+				binding.adoptTarget( resolution );
+				propertyMixer.saveOriginalState();
+
+			} else {
+
+				// inactive binding: leave scene properties alone, the
+				// original state is captured when the first action gets
+				// played
+
+				binding.adoptTarget( resolution );
+
+			}
+
+		}
+
+		return this;
+
+	}
+
+	/**
 	 * Deallocates all memory resources for a clip. Before using this method make
 	 * sure to call {@link AnimationAction#stop} for all related actions.
 	 *

@@ -717,6 +717,277 @@ class PropertyBinding {
 	}
 
 	/**
+	 * Resolves the target described by this binding's path against the given
+	 * root node, without modifying the binding itself.
+	 *
+	 * In contrast to {@link PropertyBinding#bind}, a target that cannot be
+	 * resolved is reported by throwing an `Error` instead of logging and
+	 * installing no-op accessors, and the resolved property is validated
+	 * against the value size of the track using this binding.
+	 *
+	 * @param {Object} rootNode - The root node to resolve the target against.
+	 * @param {number} valueSize - The value size of the track using this binding.
+	 * @return {Object} A descriptor of the resolved target, see
+	 * {@link PropertyBinding#adoptTarget} for its fields.
+	 */
+	resolveTarget( rootNode, valueSize ) {
+
+		const parsedPath = this.parsedPath,
+			objectName = parsedPath.objectName,
+			propertyName = parsedPath.propertyName;
+		let propertyIndex = parsedPath.propertyIndex;
+
+		const node = PropertyBinding.findNode( rootNode, parsedPath.nodeName );
+
+		if ( ! node ) {
+
+			throw new Error( 'THREE.PropertyBinding: No target node found for track: ' + this.path + '.' );
+
+		}
+
+		let targetObject = node;
+
+		if ( objectName ) {
+
+			let objectIndex = parsedPath.objectIndex;
+
+			// special cases were we need to reach deeper into the hierarchy to get the face materials....
+			switch ( objectName ) {
+
+				case 'materials':
+
+					if ( ! targetObject.material || ! targetObject.material.materials ) {
+
+						throw new Error( 'THREE.PropertyBinding: Can not bind to material as node does not have a material: ' + this.path );
+
+					}
+
+					targetObject = targetObject.material.materials;
+
+					break;
+
+				case 'bones':
+
+					if ( ! targetObject.skeleton ) {
+
+						throw new Error( 'THREE.PropertyBinding: Can not bind to bones as node does not have a skeleton: ' + this.path );
+
+					}
+
+					targetObject = targetObject.skeleton.bones;
+
+					// support resolving morphTarget names into indices.
+					for ( let i = 0; i < targetObject.length; i ++ ) {
+
+						if ( targetObject[ i ].name === objectIndex ) {
+
+							objectIndex = i;
+							break;
+
+						}
+
+					}
+
+					break;
+
+				case 'map':
+
+					if ( 'map' in targetObject ) {
+
+						targetObject = targetObject.map;
+						break;
+
+					}
+
+					if ( ! targetObject.material || ! targetObject.material.map ) {
+
+						throw new Error( 'THREE.PropertyBinding: Can not bind to material as node does not have a material: ' + this.path );
+
+					}
+
+					targetObject = targetObject.material.map;
+					break;
+
+				default:
+
+					if ( targetObject[ objectName ] === undefined ) {
+
+						throw new Error( 'THREE.PropertyBinding: Can not bind to objectName of node undefined: ' + this.path );
+
+					}
+
+					targetObject = targetObject[ objectName ];
+
+			}
+
+			if ( objectIndex !== undefined ) {
+
+				if ( targetObject[ objectIndex ] === undefined ) {
+
+					throw new Error( 'THREE.PropertyBinding: Trying to bind to objectIndex of objectName, but is undefined: ' + this.path );
+
+				}
+
+				targetObject = targetObject[ objectIndex ];
+
+			}
+
+		}
+
+		// resolve property
+		const nodeProperty = targetObject[ propertyName ];
+
+		if ( nodeProperty === undefined ) {
+
+			throw new Error( 'THREE.PropertyBinding: Trying to update property for track: ' + this.path + ' but it wasn\'t found.' );
+
+		}
+
+		// determine versioning scheme
+		let versioning = this.Versioning.None;
+
+		if ( targetObject.isMaterial === true ) {
+
+			versioning = this.Versioning.NeedsUpdate;
+
+		} else if ( targetObject.isObject3D === true ) {
+
+			versioning = this.Versioning.MatrixWorldNeedsUpdate;
+
+		}
+
+		// determine how the property gets bound
+		let bindingType = this.BindingType.Direct,
+			resolvedProperty;
+
+		if ( propertyIndex !== undefined ) {
+
+			// access a sub element of the property array (only primitives are supported right now)
+
+			if ( propertyName === 'morphTargetInfluences' ) {
+
+				// support resolving morphTarget names into indices.
+				if ( ! targetObject.geometry || ! targetObject.geometry.morphAttributes ) {
+
+					throw new Error( 'THREE.PropertyBinding: Can not bind to morphTargetInfluences because node does not have a geometry: ' + this.path );
+
+				}
+
+				if ( targetObject.morphTargetDictionary[ propertyIndex ] !== undefined ) {
+
+					propertyIndex = targetObject.morphTargetDictionary[ propertyIndex ];
+
+				}
+
+			}
+
+			bindingType = this.BindingType.ArrayElement;
+			resolvedProperty = nodeProperty;
+
+			if ( resolvedProperty[ propertyIndex ] === undefined ) {
+
+				throw new Error( 'THREE.PropertyBinding: Array index out of bounds for track: ' + this.path );
+
+			}
+
+			if ( valueSize !== 1 ) {
+
+				throw new Error( 'THREE.PropertyBinding: Value size ' + valueSize + ' of track does not match a single array element: ' + this.path );
+
+			}
+
+		} else if ( nodeProperty.fromArray !== undefined && nodeProperty.toArray !== undefined ) {
+
+			// must use copy for Object3D.Euler/Quaternion
+
+			bindingType = this.BindingType.HasFromToArray;
+			resolvedProperty = nodeProperty;
+
+			if ( nodeProperty.toArray( [] ).length !== valueSize ) {
+
+				throw new Error( 'THREE.PropertyBinding: Value size ' + valueSize + ' of track does not match the property dimension: ' + this.path );
+
+			}
+
+		} else if ( Array.isArray( nodeProperty ) ) {
+
+			bindingType = this.BindingType.EntireArray;
+			resolvedProperty = nodeProperty;
+
+			if ( nodeProperty.length !== valueSize ) {
+
+				throw new Error( 'THREE.PropertyBinding: Value size ' + valueSize + ' of track does not match the array length: ' + this.path );
+
+			}
+
+		} else {
+
+			if ( valueSize !== 1 ) {
+
+				throw new Error( 'THREE.PropertyBinding: Value size ' + valueSize + ' of track does not match a scalar property: ' + this.path );
+
+			}
+
+		}
+
+		return {
+
+			node: node,
+			targetObject: targetObject,
+			resolvedProperty: resolvedProperty,
+			propertyName: bindingType === this.BindingType.Direct ? propertyName : undefined,
+			propertyIndex: bindingType === this.BindingType.ArrayElement ? propertyIndex : undefined,
+			getValue: this.GetterByBindingType[ bindingType ],
+			setValue: this.SetterByBindingTypeAndVersioning[ bindingType ][ versioning ]
+
+		};
+
+	}
+
+	/**
+	 * Tests whether a resolution descriptor produced by
+	 * {@link PropertyBinding#resolveTarget} addresses the same target this
+	 * binding is currently bound to.
+	 *
+	 * The target identity is defined by the object actually being written
+	 * to (a TRS object, a property array or the owner of a direct property)
+	 * together with the property name or component index.
+	 *
+	 * @param {Object} resolution - A descriptor produced by {@link PropertyBinding#resolveTarget}.
+	 * @return {boolean} Whether the resolved target is identical to the current one.
+	 */
+	matchesTarget( resolution ) {
+
+		return this.getValue === resolution.getValue &&
+			this.setValue === resolution.setValue &&
+			this.node === resolution.node &&
+			this.targetObject === resolution.targetObject &&
+			this.resolvedProperty === resolution.resolvedProperty &&
+			this.propertyName === resolution.propertyName &&
+			this.propertyIndex === resolution.propertyIndex;
+
+	}
+
+	/**
+	 * Adopts a resolution descriptor produced by
+	 * {@link PropertyBinding#resolveTarget}, making this binding read from
+	 * and write to the resolved target.
+	 *
+	 * @param {Object} resolution - A descriptor produced by {@link PropertyBinding#resolveTarget}.
+	 */
+	adoptTarget( resolution ) {
+
+		this.node = resolution.node;
+		this.targetObject = resolution.targetObject;
+		this.resolvedProperty = resolution.resolvedProperty;
+		this.propertyName = resolution.propertyName;
+		this.propertyIndex = resolution.propertyIndex;
+		this.getValue = resolution.getValue;
+		this.setValue = resolution.setValue;
+
+	}
+
+	/**
 	 * Unbinds the property.
 	 */
 	unbind() {
