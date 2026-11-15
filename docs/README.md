@@ -9,6 +9,7 @@ Some of the main features include:
 - Supports non-rational and rational curves and surfaces of any order
 - Evaluate point and derivatives of any order
 - Knot insertion, splitting without affecting the original shape
+- Simultaneous C1 editing of touching rational patches with point handles
 - Wavefront OBJ format I/O
 
 The library is under development.
@@ -143,6 +144,95 @@ parm u 0 0 0 0 1 1 1 1
 parm v 0 0 0 0 1 1 1 1
 end
 ```
+
+## Patch networks: `PatchEditor`
+
+`tinynurbs::PatchEditor` (declared in `tinynurbs/core/patch_editor.h`, included
+by `tinynurbs/tinynurbs.h`) drags several touching rational CAD patches
+together.  The seam conditions hold along the *whole* edge, and the editor
+solves one global system instead of repairing one seam at a time.
+
+```cpp
+#include <tinynurbs/tinynurbs.h>
+
+std::vector<tinynurbs::RationalSurface3d> patches = {/* ... */};
+std::vector<tinynurbs::PatchSeam> seams = {
+    {0, tinynurbs::SurfaceEdge::UMax, 1, tinynurbs::SurfaceEdge::UMin, false},
+};
+
+tinynurbs::PatchEditor editor(patches, seams);
+
+tinynurbs::PatchHandle handle;
+handle.id = 1;
+handle.patch = 1;
+handle.u = 22.0;                          // original patch parameter
+handle.v = 1.0;
+handle.target = glm::dvec3(4.0, 3.0, 2.0);
+editor.set_handles({handle});
+
+tinynurbs::PatchEditorSnapshot snapshot = editor.solve(); // owned copies
+tinynurbs::PatchMesh mesh = tinynurbs::buildPatchMesh(snapshot);
+tinynurbs::writePatchMeshOBJ(mesh, "dragged.obj");
+```
+
+### Public structures
+
+| Type | Meaning |
+| --- | --- |
+| `SurfaceEdge` (`UMin`, `UMax`, `VMin`, `VMax`) | The four boundary edges of a patch in its own effective parameter domain. |
+| `PatchSeam` | Whole-edge pair: `patch_a`, `edge_a`, `patch_b`, `edge_b`, and `reversed` (the normalized along-edge parameter of B runs opposite to A). A patch edge may appear in **at most one** seam. |
+| `PatchHandle` | Hard point handle: unique `id`, `patch`, original-domain `u`/`v`, and 3-D `target`. |
+| `PatchEditorSnapshot` | Owned snapshot of a successful solve: `patches`, `seams`, the committed `handles`, plus the per-patch `original_knots_u` / `original_knots_v`. |
+| `PatchMesh` | Indexed triangle mesh: `positions` plus `triangles`; each `PatchMeshCorner` keeps `position`, `patch`, original `u`/`v` and an analytic `normal`. |
+| `buildPatchMesh(snapshot)` | Splits every original knot cell into a fixed 4x4 grid, merges seam stations, welds shared positions, and keeps per-patch corner attributes. Undeclared patches are never welded. |
+| `writePatchMeshOBJ(mesh, path)` / `writePatchMeshOBJ(snapshot, path)` | Writes a Wavefront OBJ (`v`, `vn`, `f`). Returns `false` if the file cannot be created. |
+
+### What the editor guarantees
+
+* Weights are never modified.  They may vary along an edge and need not agree
+  between the two patches.
+* For every seam and every normalized along-edge parameter `t`,
+  `A(t) = B(t)` and `DA(t) + DB(t) = 0`, where `DA`/`DB` are the derivatives
+  with respect to the normalized transverse parameter measured *from the
+  boundary into the patch interior* (and B is evaluated at `1-t` when the seam
+  is reversed).  This is C1 along the whole edge, not merely a small normal
+  angle, and not equality of homogeneous control points.
+* At construction the along-edge knot bases of seamed edges are unified with
+  exact knot insertion, which does not change the geometry.  The Cartesian
+  control points in that compatible basis are the fixed *rest* configuration.
+* Every solve returns the minimum total squared control-point displacement from
+  the rest configuration among all configurations satisfying every seam and
+  every staged handle simultaneously.  It is a single equality-constrained
+  projection, not a sequence of per-seam fixes and not a penalty method.
+* Handles constrain the surface point at `(u, v)`, not a control point.
+* `factorization_count()` counts numerical factorizations of the global
+  constraint matrix.  Re-targeting the same handle ids at the same patch,
+  `u`, `v` reuses the factorization; moving a handle, changing the handle set,
+  or changing the seam basis rebuilds it.
+
+### Errors
+
+| Exception | Raised when |
+| --- | --- |
+| `std::invalid_argument` (from the constructor) | Degree outside 1..3, non-clamped knots, interior knot multiplicity above the degree, non-positive or non-finite weights, non-finite coordinates, a degenerate patch, an out-of-range patch index, an invalid edge value, a patch edge used by more than one seam, or a seam degree mismatch. |
+| `std::invalid_argument` (from `set_handles`) | Out-of-range patch index, non-finite parameters or target, a parameter outside the patch domain, a duplicate id, or the same surface point constrained to two different targets.  The previously staged handles are left untouched. |
+| `std::runtime_error` (from `solve`) | Well-formed input whose simultaneous seam and handle constraints are incompatible, or a numerical failure.  The editor returns to the state of the last successful solve (initially the rest configuration with no handles), including the committed handle set. |
+
+Empty networks are valid: `solve()` returns an empty snapshot.  Staging an
+empty handle list still repairs the seams, and releasing all handles always
+solves relative to the original rest (a release is not a new rest).
+
+### Notes on the numerics
+
+The seam identities are multiplied through by the positive denominators, which
+turns them into polynomial identities.  On each span of the common knot
+segmentation the power-basis coefficients of those polynomials are required to
+vanish, yielding linear equations in the Cartesian control points.  The
+coefficient matrix is the same for all three coordinates, so it is factored
+once with a rank-revealing, row-pivoted modified Gram-Schmidt orthogonalization;
+dependent rows are dropped, which handles redundant seam equations and
+redundant coincident handles.  An inconsistent right-hand side (handles that
+cannot coexist with the seams) is reported as `std::runtime_error`.
 
 ## Primary Reference
 

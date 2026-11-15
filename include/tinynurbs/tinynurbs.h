@@ -10,5 +10,7 @@
 #include "core/curve.h"
 #include "core/evaluate.h"
 #include "core/modify.h"
+#include "core/patch_editor.h"
+#include "core/patch_mesh.h"
 #include "core/surface.h"
 #include "io/obj.h"
