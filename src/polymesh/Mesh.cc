@@ -418,6 +418,48 @@ void Mesh::reset()
     mCompact = true;
 }
 
+void Mesh::copy_vertex_slots(vertex_index from, vertex_index to) const
+{
+    for (auto a = mVertexAttrs; a; a = a->next_attribute())
+        a->copy_slot(from.value, to.value);
+}
+void Mesh::copy_face_slots(face_index from, face_index to) const
+{
+    for (auto a = mFaceAttrs; a; a = a->next_attribute())
+        a->copy_slot(from.value, to.value);
+}
+void Mesh::copy_edge_slots(edge_index from, edge_index to) const
+{
+    for (auto a = mEdgeAttrs; a; a = a->next_attribute())
+        a->copy_slot(from.value, to.value);
+}
+void Mesh::copy_halfedge_slots(halfedge_index from, halfedge_index to) const
+{
+    for (auto a = mHalfedgeAttrs; a; a = a->next_attribute())
+        a->copy_slot(from.value, to.value);
+}
+
+void Mesh::reset_vertex_slot(vertex_index to) const
+{
+    for (auto a = mVertexAttrs; a; a = a->next_attribute())
+        a->reset_slot(to.value);
+}
+void Mesh::reset_face_slot(face_index to) const
+{
+    for (auto a = mFaceAttrs; a; a = a->next_attribute())
+        a->reset_slot(to.value);
+}
+void Mesh::reset_edge_slot(edge_index to) const
+{
+    for (auto a = mEdgeAttrs; a; a = a->next_attribute())
+        a->reset_slot(to.value);
+}
+void Mesh::reset_halfedge_slot(halfedge_index to) const
+{
+    for (auto a = mHalfedgeAttrs; a; a = a->next_attribute())
+        a->reset_slot(to.value);
+}
+
 void Mesh::copy_from(const Mesh& m)
 {
     auto old_v_size = mVerticesSize;

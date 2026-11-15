@@ -252,6 +252,22 @@ void primitive_attribute<tag, AttrT>::clear_with_default()
     std::fill_n(this->data(), this->size(), mDefaultValue);
 }
 
+template <class tag, class AttrT>
+void primitive_attribute<tag, AttrT>::copy_slot(int from, int to)
+{
+    POLYMESH_ASSERT(0 <= from && from < this->size() && "out of bounds");
+    POLYMESH_ASSERT(0 <= to && to < this->size() && "out of bounds");
+    if (from != to)
+        this->mData[to] = this->mData[from]; // type-correct assignment
+}
+
+template <class tag, class AttrT>
+void primitive_attribute<tag, AttrT>::reset_slot(int to)
+{
+    POLYMESH_ASSERT(0 <= to && to < this->size() && "out of bounds");
+    this->mData[to] = mDefaultValue;
+}
+
 inline void Mesh::register_attr(primitive_attribute_base<vertex_tag>* attr) const
 {
     // insert in front

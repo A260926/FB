@@ -230,7 +230,7 @@ void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
             line >> p[2];
             ScalarT w;
             line >> w;
-            if (line.good())
+            if (!line.fail())
                 p[3] = w;
 
             positions[v] = p;
@@ -246,7 +246,7 @@ void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
             line >> t[1];
             ScalarT z;
             line >> z;
-            if (line.good())
+            if (!line.fail())
                 t[2] = z;
 
             raw_tex_coords.push_back(t);

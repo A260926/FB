@@ -182,6 +182,20 @@ protected:
                 swap(this->mData[t.first * mStride + i], this->mData[t.second * mStride + i]);
     }
 
+public:
+    void copy_slot(int from, int to) override
+    {
+        POLYMESH_ASSERT(0 <= from && from < size() && "out of bounds");
+        POLYMESH_ASSERT(0 <= to && to < size() && "out of bounds");
+        if (from != to)
+            std::memcpy(&this->mData[to * mStride], &this->mData[from * mStride], mStride);
+    }
+    void reset_slot(int to) override
+    {
+        POLYMESH_ASSERT(0 <= to && to < size() && "out of bounds");
+        std::memset(&this->mData[to * mStride], 0, mStride);
+    }
+
     template <class MeshT>
     friend struct low_level_attribute_api;
 

@@ -107,6 +107,28 @@ public:
     /// Asserts that mesh invariants hold, e.g. that the half-edge stored in a face actually bounds that face
     void assert_consistency() const;
 
+    // attribute slot copies
+public:
+    /// Copies the value of slot `from` into slot `to` for EVERY registered attribute of the
+    /// respective primitive kind (including attributes owned by the user that are not part of
+    /// an attribute_collection).
+    /// Both indices must be valid slots of this mesh.
+    /// The copies are type-correct assignments and therefore also work for non-trivial types.
+    ///
+    /// NOTE: if primitives were added in between, the attributes have already been resized.
+    ///       as this API works on indices, no stale pointer is ever read.
+    void copy_vertex_slots(vertex_index from, vertex_index to) const;
+    void copy_face_slots(face_index from, face_index to) const;
+    void copy_edge_slots(edge_index from, edge_index to) const;
+    void copy_halfedge_slots(halfedge_index from, halfedge_index to) const;
+
+    /// Resets slot `to` to the default value for EVERY registered attribute of the
+    /// respective primitive kind.
+    void reset_vertex_slot(vertex_index to) const;
+    void reset_face_slot(face_index to) const;
+    void reset_edge_slot(edge_index to) const;
+    void reset_halfedge_slot(halfedge_index to) const;
+
     // ctor
 public:
     Mesh() = default;

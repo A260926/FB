@@ -155,6 +155,10 @@ protected:
     void apply_remapping(std::vector<int> const& map) override;
     void apply_transpositions(std::vector<std::pair<int, int>> const& ts) override;
 
+public:
+    void copy_slot(int from, int to) override;
+    void reset_slot(int to) override;
+
     template <class MeshT>
     friend struct low_level_attribute_api;
 

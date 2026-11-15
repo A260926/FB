@@ -36,6 +36,18 @@ protected:
     virtual size_t byte_size() const = 0;
     virtual size_t allocated_byte_size() const = 0;
 
+public:
+    /// Copies the value at slot `from` to slot `to` in this attribute.
+    /// Both indices must be valid slots of the attribute's domain.
+    /// The copy is a type-correct assignment (works for non-trivial types).
+    virtual void copy_slot(int from, int to) = 0;
+    /// Resets slot `to` to this attribute's default value.
+    virtual void reset_slot(int to) = 0;
+
+    /// returns the next attribute in the mesh's registration list
+    /// (nullptr if this is the last one)
+    primitive_attribute_base* next_attribute() const { return mNextAttribute; }
+
     // links and unlinks the attribute with the mesh
     // CAUTION: does not change data in any way.
     void register_attr();

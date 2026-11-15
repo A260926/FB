@@ -26,6 +26,7 @@
 #include "algorithms/iteration.hh"
 #include "algorithms/normalize.hh"
 #include "algorithms/operations.hh"
+#include "algorithms/region_extrude.hh"
 #include "algorithms/sampling.hh"
 #include "algorithms/smoothing.hh"
 #include "algorithms/stats.hh"
