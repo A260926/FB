@@ -9,7 +9,7 @@ while IFS= read -r file; do production_sources+=("$file"); done < <(find include
 if [[ $mode == baseline ]]; then c++ -std=c++17 -O2 -I. -Iinclude task_support/baseline.cpp -o .task-build/baseline; fi
 if [[ $mode == target ]]; then
   c++ -std=c++17 -O2 -I. -Iinclude -x c++ "${production_sources[@]}" tests/streaming_test.cpp -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/dualmc-target-log.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

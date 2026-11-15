@@ -11,6 +11,7 @@
 /// \date   2009
 
 // c includes
+#include <cstddef>
 #include <cstdint>
 
 // stl includes
@@ -18,7 +19,7 @@
 #include <vector>
 
 namespace dualmc {
-    
+
 
 typedef float VertexComponentsType;
 typedef int32_t QuadIndexType;
@@ -42,13 +43,38 @@ struct Vertex {
 struct Quad {
     /// non-initializing constructor
     Quad();
-    
+
     /// initializing constructor
     Quad(QuadIndexType i0, QuadIndexType i1,QuadIndexType i2, QuadIndexType i3);
-    
+
     // quad indices
     QuadIndexType i0,i1,i2,i3;
-    
+
+};
+
+/// statistics reported by DualMC::buildStreaming.
+/// All fields are reset to zero at the beginning of every buildStreaming
+/// call and then updated while the extraction proceeds.
+struct StreamStats {
+    /// zero-initializing constructor
+    StreamStats();
+
+    /// Maximum number of volume sample values which was kept in memory
+    /// at the same time. Buffer capacities, working copies, and caches
+    /// of sample values are all accounted for.
+    size_t peakSampleValues;
+
+    /// Maximum number of dual point key records (vertex identities) which
+    /// was kept in memory at the same time.
+    size_t peakVertexKeys;
+
+    /// Number of vertices which were successfully handed to the emitVertex
+    /// callback. Only incremented after the callback returned true.
+    size_t emittedVertices;
+
+    /// Number of quads which were successfully handed to the emitQuad
+    /// callback. Only incremented after the callback returned true.
+    size_t emittedQuads;
 };
 
 /// \class  DualMC
@@ -82,6 +108,44 @@ public:
         std::vector<Vertex> & vertices,
         std::vector<Quad> & quads
         );
+
+    /// Extracts the iso surface for a volume which is only accessible
+    /// one z-plane at a time, without materializing the whole mesh.
+    ///
+    /// The volume is read by repeatedly invoking
+    /// readPlane(z, dst, dimX*dimY) which has to fill dst with the
+    /// dimX*dimY samples of z-plane z (x varies fastest). On a successful
+    /// run readPlane is invoked exactly once for every z in [0,dimZ-1] in
+    /// ascending order.
+    ///
+    /// Extracted geometry is handed directly to the caller:
+    /// emitVertex(id, vertex) receives every shared vertex exactly once
+    /// with its compact index id (0,1,2,...) and emitQuad(quad) receives
+    /// every quad. A quad is only emitted after all vertices it references
+    /// have been emitted. Vertex positions, vertex numbering, quad order,
+    /// and quad winding are identical to calling
+    /// build(..., generateManifold, false, ...) on the same volume.
+    ///
+    /// All three callbacks return a bool; returning false aborts the
+    /// extraction, buildStreaming then returns false and no further
+    /// callback is invoked. Exceptions thrown by a callback propagate
+    /// unchanged. If all planes were read and all geometry was emitted,
+    /// true is returned.
+    ///
+    /// Memory usage is O(dimX*dimY): at most 4*dimX*dimY sample values and
+    /// 8*dimX*dimY dual point keys are kept at the same time, independent
+    /// of dimZ and of the amount of emitted geometry. Statistics about the
+    /// extraction are reported in stats which is reset at call start.
+    template<class ReadPlane, class EmitVertex, class EmitQuad>
+    bool buildStreaming(
+        int32_t const dimX, int32_t const dimY, int32_t const dimZ,
+        VolumeDataType const iso,
+        bool const generateManifold,
+        ReadPlane readPlane,
+        EmitVertex emitVertex,
+        EmitQuad emitQuad,
+        StreamStats & stats
+        ) const;
 
 private:
 
@@ -231,6 +295,15 @@ Quad::Quad(
 
 //------------------------------------------------------------------------------
 
+inline
+StreamStats::StreamStats() :
+    peakSampleValues(0),
+    peakVertexKeys(0),
+    emittedVertices(0),
+    emittedQuads(0) {}
+
+//------------------------------------------------------------------------------
+
 template<class T> inline
 int32_t DualMC<T>::gA(int32_t const x, int32_t const y, int32_t const z) const {
     return x + dims[0] * (y + dims[1] * z);
@@ -243,6 +316,8 @@ bool DualMC<T>::DualPointKey::operator==(typename DualMC<T>::DualPointKey const 
 }
 
 #include "dualmc.tpp"
+
+#include "dualmc_streaming.tpp"
 
 #include "dualmc_tables.tpp"
 

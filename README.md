@@ -66,5 +66,45 @@ For code simplicity the example outputs surfaces in the
 [Wavefront OBJ](http://www.fileformat.info/format/wavefrontobj/egff.htm)
 format.
 
+# Streaming Extraction
+Some volumes can only be read one z-plane at a time. For these
+`DualMC<T>` offers `buildStreaming`, which applies the same (manifold)
+dual marching cubes rules as `build` but hands vertices and quads directly
+to caller supplied callbacks instead of materializing the whole mesh.
+Only O(dimX\*dimY) working storage is used, independent of the volume
+depth and the extracted surface size.
+
+The following example streams a float volume plane by plane and writes the
+surface directly in Wavefront OBJ format (OBJ indices are one-based):
+
+```cpp
+#include <cstdio>
+#include "dualmc.h"
+
+bool streamObj(FILE* in, FILE* out,
+               int32_t nx, int32_t ny, int32_t nz, float iso) {
+    dualmc::DualMC<float> builder;
+    dualmc::StreamStats stats;
+    return builder.buildStreaming(nx, ny, nz, iso, true,
+        [&](int32_t z, float* dst, std::size_t count) {
+            (void)z; // planes are requested in ascending z order
+            return std::fread(dst, sizeof(float), count, in) == count;
+        },
+        [&](dualmc::QuadIndexType, const dualmc::Vertex& v) {
+            return std::fprintf(out, "v %f %f %f\n", v.x, v.y, v.z) >= 0;
+        },
+        [&](const dualmc::Quad& q) {
+            return std::fprintf(out, "f %d %d %d %d\n",
+                q.i0 + 1, q.i1 + 1, q.i2 + 1, q.i3 + 1) >= 0;
+        },
+        stats);
+}
+```
+
+Each callback may abort the extraction by returning `false`, in which case
+`buildStreaming` returns `false` as well. `stats` reports how many vertices
+and quads were emitted and the peak number of simultaneously kept sample
+values and vertex keys.
+
 # License
 [BSD 3-Clause License](LICENSE)
