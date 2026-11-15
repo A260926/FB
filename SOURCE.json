@@ -1,0 +1,2303 @@
+{
+  "repo": "https://github.com/DragonBones/DragonBonesCPP",
+  "commit": "f696143045e07b7c4c4590bdd95534e9e8074b37",
+  "license": "MIT; bundled RapidJSON MIT and msinttypes BSD-3-Clause",
+  "files": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "df61e69e6cdf719603d2cc6ed0aca34e181220e0",
+      "included": false
+    },
+    {
+      "path": ".gitmodules",
+      "mode": "100644",
+      "git_blob": "ef3c93ac59a09e015ff62b9f4054171c00fcbd2c",
+      "included": false
+    },
+    {
+      "path": ".travis.yml",
+      "mode": "100644",
+      "git_blob": "4df277baf317c3f8a53f68f3ce846fdce346ff06",
+      "included": false
+    },
+    {
+      "path": "3rdParty/rapidjson/allocators.h",
+      "mode": "100644",
+      "git_blob": "c705969729a409f1da62d8cfeaa64f4e9fa3cf0b",
+      "sha256": "bb45a35fb31eac8f8da37392ffc0e64c2e46133886f2f8e59c6777843d380d26",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/document.h",
+      "mode": "100644",
+      "git_blob": "17af92264c1ddcd3e356c856f90cdfd3d9ea0ad8",
+      "sha256": "59fefe5d7d5d29bbb502b586d1ce4e45055a4001c0de9654747433b444170d7d",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/encodedstream.h",
+      "mode": "100644",
+      "git_blob": "145068386a0674aa6daa2b63f2fb2821f631f99c",
+      "sha256": "b44479a6e74ff0a5c461debd10de5a48810989e9565e6b1f20523a8449c39ccb",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/encodings.h",
+      "mode": "100644",
+      "git_blob": "baa7c2b17f8d8ee68fa4e9d3416e4f031dfa35e6",
+      "sha256": "4cc11051fca0f274fe3a296987de98d9d99174cd94aaf274652cab4c1c6f586f",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/error/en.h",
+      "mode": "100644",
+      "git_blob": "2db838bff2399dd02deeadfdbf3af7d008588f63",
+      "sha256": "5d040327a5b7b50367f5862fe88e9d742bcefcff52450279bfebb89a30072d2d",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/error/error.h",
+      "mode": "100644",
+      "git_blob": "95cb31a72fe2c335f3e9361c8c3d7478ce4fbdcf",
+      "sha256": "97563d14f2d7d5eee7ba73149b66034d3612c0e0358d0d591f9faa5d4c926f0a",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/filereadstream.h",
+      "mode": "100644",
+      "git_blob": "b56ea13b34257db5d1f54cb099b2d1da5e0cb1ad",
+      "sha256": "7ad99895d5deef0ad98993d09c6386880ab833962c1d886e6a11de45c74c32d4",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/filewritestream.h",
+      "mode": "100644",
+      "git_blob": "6378dd60ed47fd5431e3f9825da3b8315b0dc866",
+      "sha256": "5f64e24e43823c5b0d3adf5b43c17c1fbe70ddd2f9faaf4c9d9639789e779841",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/fwd.h",
+      "mode": "100644",
+      "git_blob": "e8104e841bcdcaca0bd415c208a746ed7d806ab5",
+      "sha256": "06a7b142b7b0e1d2b773e657bbafd9b861e4b0a17fadf49a806d8833ac6d557e",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/biginteger.h",
+      "mode": "100644",
+      "git_blob": "9d3e88c9981efd7506dada5e1ea2d5a89771540a",
+      "sha256": "3e139846902741c8a18da9e2be9d79f98d0a44e8966df41ae37910d49642ec83",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/diyfp.h",
+      "mode": "100644",
+      "git_blob": "c9fefdc6139b8312834d941b83985d1573554055",
+      "sha256": "ea94d97853cb1f4dfb6d14314386af71bae61d7ba015cc942c97c7116fbb599c",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/dtoa.h",
+      "mode": "100644",
+      "git_blob": "8d6350e626d01f0ed98e1d6868b3af66fd317e53",
+      "sha256": "36d9e86e6c2968bf839a73e69fc7ac149ba8e0ea1f667f82cc9b80241f7c111e",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/ieee754.h",
+      "mode": "100644",
+      "git_blob": "82bb0b99e5c247dde8999df261be91e0697e1420",
+      "sha256": "ae0a4ff88545bf762e659079bc35a0ad274c8ce9f46dbdf8bd034de749a46699",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/itoa.h",
+      "mode": "100644",
+      "git_blob": "01a4e7e72d7268de6866a5bde9df91aa8114b9d4",
+      "sha256": "b4d2564f0f6e44505142f0e553370d6018d470c9cc3896a1eae93f18a2baf2f3",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/meta.h",
+      "mode": "100644",
+      "git_blob": "5a9aaa42866d70fc426be74efbf27c53cdd52a42",
+      "sha256": "24d25dc872a13b7df5cb0b80c704ef1e06792ceaa6595a84bb63b3ecce615e45",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/pow10.h",
+      "mode": "100644",
+      "git_blob": "02f475d705fcbc478c38b529863210595ffe14c4",
+      "sha256": "6b8787ecc984887cc2579d7043c08ac57614b8c59e09073565538890dcd1ff21",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/regex.h",
+      "mode": "100644",
+      "git_blob": "422a5240bf568017e1c21d191cfa5f343194ec29",
+      "sha256": "38b53a5fa8ef845b577704741b531d14d4327b885950631ccb2c3d8687adff19",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/stack.h",
+      "mode": "100644",
+      "git_blob": "022c9aab41173b19368736c4ad5804bf805a0a2b",
+      "sha256": "9608f057f67fcbabd6cdc7ae35b0e6130b430deecf47d0c3670fd27eae806861",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/strfunc.h",
+      "mode": "100644",
+      "git_blob": "2edfae526788916e12a2b474da5f4a10a875f042",
+      "sha256": "a280976eedcc3b0cf4e73e96f809ea62b945b577d62df72a6e3c13f02abaa036",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/strtod.h",
+      "mode": "100644",
+      "git_blob": "289c413b07b04495cc32981e2c6979fbef0e0269",
+      "sha256": "344940dfc5936f2f4f967c4063d84da8fb3021cddb727d0e108b12e17ad0d6e6",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/internal/swap.h",
+      "mode": "100644",
+      "git_blob": "666e49f97b68d9dbf42304346391d4d2f82cd0bd",
+      "sha256": "1403bd099a25621c63a1234ca61daae0444f1538c4be7b193694cf41a76f14ac",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/istreamwrapper.h",
+      "mode": "100644",
+      "git_blob": "f5fe28977ebffe0539d60cc9957e27a23f8ac6cc",
+      "sha256": "6b370f558c1768789ce64a9015703685f5bc785b6c68278041147fc9b2d6387f",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/memorybuffer.h",
+      "mode": "100644",
+      "git_blob": "39bee1dec1c036d8ecd48a6ca57de16c168b6819",
+      "sha256": "cbfb33d4b2b826012c9932a664044cd70606ebd938ba9e35748892de2569e03f",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/memorystream.h",
+      "mode": "100644",
+      "git_blob": "1d71d8a4f0e0ade2b598f995ff811c5570da1c9b",
+      "sha256": "5381dd5981676dc6194cb384af6bcf623d9dee46b9b1508bd1e62c7cf3efac9f",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/msinttypes/inttypes.h",
+      "mode": "100644",
+      "git_blob": "18111286bf55bc0c89e7f47afcb046bbb02e1781",
+      "sha256": "78ee41fd99bcbe59ca93f6a870a83c0a90f4b179af571f6e684f2600491bbae7",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/msinttypes/stdint.h",
+      "mode": "100644",
+      "git_blob": "3d4477b9a024a8f326afe362ce3926e04f4c8ec9",
+      "sha256": "bf2d1bc4885bc1e0720ec9af8f399477c7e105ae1e70e2863c31a8123cae1c17",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/ostreamwrapper.h",
+      "mode": "100644",
+      "git_blob": "6f4667c08ad7ba3b05951a95c3be4927c79beb57",
+      "sha256": "8ab62eb2967a965b4b39bd03ae49c220e7a6cd6c5c680f39cb32ef652b2c3337",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/pointer.h",
+      "mode": "100644",
+      "git_blob": "0206ac1c8b647e0c1129a41e8af99dd05be10937",
+      "sha256": "c0f4bf66f0ae482c240aed4a22708da0c4e90f2944b47f8d22688c5fcbaf039c",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/prettywriter.h",
+      "mode": "100644",
+      "git_blob": "75dc474f4c19de072c9295a15408479c76289418",
+      "sha256": "453f1242fe007cf45d4378fca3df9d8b555302834728212583a20100586c9e88",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/rapidjson.h",
+      "mode": "100644",
+      "git_blob": "062e25e1132d746ea93091f0379a6cacbdc60175",
+      "sha256": "d9e6d49d0a86e856897dc3ac4e184adceb42ca2b31677e4d062034260ce56c8d",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/reader.h",
+      "mode": "100644",
+      "git_blob": "19f8849b14c09d2312d2ab9eaa502f3e88f9f735",
+      "sha256": "7825cd236782b26c3df953b30623218805b7c2faa66ff1029321c9f0030c841d",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/schema.h",
+      "mode": "100644",
+      "git_blob": "4c1eacbbf0bb2ba0f1b7cecf656a03fa9fe3b789",
+      "sha256": "7f545ac9eb4e241584e194bd163af033494de5a8d0f25ca8a19b272d0b24b0ef",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/stream.h",
+      "mode": "100644",
+      "git_blob": "dd2783b41344a806f1f5dbab45e7d3f6d63f5340",
+      "sha256": "74897022156b69a927cab9cf0b230b1185e47ffdaf04ecebedd89a6779daf6f2",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/stringbuffer.h",
+      "mode": "100644",
+      "git_blob": "78f34d2098e73e71149ba96b9e93b71020189619",
+      "sha256": "c7b50a0d3f98f7bd7f66bea78b3f94a8441f6e7669188f52e07d495e63f34cca",
+      "included": true
+    },
+    {
+      "path": "3rdParty/rapidjson/writer.h",
+      "mode": "100644",
+      "git_blob": "7d0610ebf039af6adef7efb680890a501035c25b",
+      "sha256": "ac576a4d12f75fdb90918efe4211582e6fa2dd5560be13759ff6223ee75ca04f",
+      "included": true
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/.gitignore",
+      "mode": "100644",
+      "git_blob": "aa724b77071afcbd9bb398053e05adaf7ac9405a",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/.gitignore",
+      "mode": "100644",
+      "git_blob": "42afabfd2abebf31384ca7797186a27a4b7dbee8",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/build.gradle.kts",
+      "mode": "100644",
+      "git_blob": "2b53266dc86907b14da94aac05c8fd1223d6287d",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/proguard-rules.pro",
+      "mode": "100644",
+      "git_blob": "481bb434814107eb79d7a30b676d344b0df2f8ce",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/androidTest/java/com/example/loongbones/ExampleInstrumentedTest.kt",
+      "mode": "100644",
+      "git_blob": "59408f6381ad5a0b707bd24c64bfb9c2261ccc0e",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/AndroidManifest.xml",
+      "mode": "100644",
+      "git_blob": "e93a5c6d1a3961d38708308bd7648f06ca1a4d3f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/bear/bear.json",
+      "mode": "100644",
+      "git_blob": "f62265b7340cdc1103d7467e6ee1bc4c600ce129",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/bear/bear_tex.json",
+      "mode": "100644",
+      "git_blob": "489e768da1b5e676b2fb797e5e3cedd56769e247",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/bear/bear_tex.png",
+      "mode": "100644",
+      "git_blob": "d7ae6bca003ffed8625685044d02e5899399cbb9",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/loong/loongbones-web.json",
+      "mode": "100644",
+      "git_blob": "26a47205be31ae84f6acd35dec755e0a5a834452",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/loong/loongbones-web_tex.json",
+      "mode": "100644",
+      "git_blob": "2a116ebd3399ae686e61931521b6692e3a07350f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/assets/dragonbones/models/loong/loongbones-web_tex.png",
+      "mode": "100644",
+      "git_blob": "1a86674e6f77cc6f0d02561f36812325510216dd",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/java/com/example/loongbones/MainActivity.kt",
+      "mode": "100644",
+      "git_blob": "9a85c77d46a75897fa7dc437c50dc280373f44ec",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/java/com/example/loongbones/ui/theme/Color.kt",
+      "mode": "100644",
+      "git_blob": "b6ad76b22e65114e138adb71fd0e351e08bf8bb5",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/java/com/example/loongbones/ui/theme/Theme.kt",
+      "mode": "100644",
+      "git_blob": "0ca91ad7674f4198e8e4def175fb409a094f933b",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/java/com/example/loongbones/ui/theme/Type.kt",
+      "mode": "100644",
+      "git_blob": "9a5d374589e27878899690a15dfa6e26e2e4aff0",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/drawable/ic_launcher_background.xml",
+      "mode": "100644",
+      "git_blob": "07d5da9cbf141911847041df5d7b87f0dd5ef9d4",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/drawable/ic_launcher_foreground.xml",
+      "mode": "100644",
+      "git_blob": "2b068d11462a4b96669193de13a711a3a36220a0",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "mode": "100644",
+      "git_blob": "6f3b755bf50c6b03d8714a9c6184705e6a08389f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "mode": "100644",
+      "git_blob": "6f3b755bf50c6b03d8714a9c6184705e6a08389f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-hdpi/ic_launcher.webp",
+      "mode": "100644",
+      "git_blob": "c209e78ecd372343283f4157dcfd918ec5165bb3",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp",
+      "mode": "100644",
+      "git_blob": "b2dfe3d1ba5cf3ee31b3ecc1ced89044a1f3b7a9",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-mdpi/ic_launcher.webp",
+      "mode": "100644",
+      "git_blob": "4f0f1d64e58ba64d180ce43ee13bf9a17835fbca",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp",
+      "mode": "100644",
+      "git_blob": "62b611da081676d42f6c3f78a2c91e7bcedddedb",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xhdpi/ic_launcher.webp",
+      "mode": "100644",
+      "git_blob": "948a3070fe34c611c42c0d3ad3013a0dce358be0",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp",
+      "mode": "100644",
+      "git_blob": "1b9a6956b3acdc11f40ce2bb3f6efbd845cc243f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp",
+      "mode": "100644",
+      "git_blob": "28d4b77f9f036a47549d47db79c16788749dca10",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp",
+      "mode": "100644",
+      "git_blob": "9287f5083623b375139afb391af71cc533a7dd37",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp",
+      "mode": "100644",
+      "git_blob": "aa7d6427e6fa1074b79ccd52ef67ac15c5637e85",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp",
+      "mode": "100644",
+      "git_blob": "9126ae37cbc3587421d6889eadd1d91fbf1994d4",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/values-night/themes.xml",
+      "mode": "100644",
+      "git_blob": "487af986c8f4b0ccc87d43f6400aac41de6da740",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/values/colors.xml",
+      "mode": "100644",
+      "git_blob": "f8c6127d327620c93d2b2d00342a68e97b98a48d",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/values/strings.xml",
+      "mode": "100644",
+      "git_blob": "e393ce980484a877d2b1f35a73659f82f40ddbfb",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/values/themes.xml",
+      "mode": "100644",
+      "git_blob": "55a5b3c76b7118186d6d73b6adb410289cce7cce",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/xml/backup_rules.xml",
+      "mode": "100644",
+      "git_blob": "fa0f996d2c2a6bdd11f5371de4268c8389d6c720",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/main/res/xml/data_extraction_rules.xml",
+      "mode": "100644",
+      "git_blob": "9ee9997b0b4726e57c27b2f7b21462b604ff8a88",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/app/src/test/java/com/example/loongbones/ExampleUnitTest.kt",
+      "mode": "100644",
+      "git_blob": "81d728f812cdeb958c0b0960d91e98114d2ec735",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/build.gradle.kts",
+      "mode": "100644",
+      "git_blob": "922f551105e1b8c176391b38c9436d45f172b546",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradle.properties",
+      "mode": "100644",
+      "git_blob": "20e2a01520742aff4ec9ce578ed4fe5f3a76fe77",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradle/libs.versions.toml",
+      "mode": "100644",
+      "git_blob": "66c71224d122db18a8395b484bfab60d3a983db6",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradle/wrapper/gradle-wrapper.jar",
+      "mode": "100644",
+      "git_blob": "e708b1c023ec8b20f512888fe07c5bd3ff77bb8f",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradle/wrapper/gradle-wrapper.properties",
+      "mode": "100644",
+      "git_blob": "4290e53bc77fab2efbf89cc5978caa81f99c84a0",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradlew",
+      "mode": "100644",
+      "git_blob": "4f906e0c811fc9e230eb44819f509cd0627f2600",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/gradlew.bat",
+      "mode": "100644",
+      "git_blob": "107acd32c4e687021ef32db511e8a206129b88ec",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/Demos/DragonBonesAndroid/settings.gradle.kts",
+      "mode": "100644",
+      "git_blob": "00bffebe0cf25c6b3630abbf08529d71d9c8d76a",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/README-zh_CN.md",
+      "mode": "100644",
+      "git_blob": "b1742e0aeb89a3c4dfd743f782de6990c116e4fd",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/README.md",
+      "mode": "100644",
+      "git_blob": "6a87130beba10f76736466b1eeb7257a85d6d8b9",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/.gitignore",
+      "mode": "100644",
+      "git_blob": "42afabfd2abebf31384ca7797186a27a4b7dbee8",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/CMakeLists.txt",
+      "mode": "100644",
+      "git_blob": "8bfb8801c422694d6eaa1fba16de94dd1f490134",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/build.gradle.kts",
+      "mode": "100644",
+      "git_blob": "933a8b917956637704a9fe37bcc4448a5fa6881b",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/JniBridge.cpp",
+      "mode": "100644",
+      "git_blob": "73a4b23402480ce801a622a07c9ff8ff6482c9e7",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/JniBridge.h",
+      "mode": "100644",
+      "git_blob": "eb8f0ad453c157b8174b6e38ad40341b8a87e864",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/opengl/OpenGLFactory.cpp",
+      "mode": "100644",
+      "git_blob": "b53addbcf7b7b64ef9227bc977690ef13932b237",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/opengl/OpenGLFactory.h",
+      "mode": "100644",
+      "git_blob": "adb270b73feb416514f5cd8c2b2c73679e27b0f4",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/opengl/OpenGLSlot.cpp",
+      "mode": "100644",
+      "git_blob": "fe746dd39b69b2399303c3e14221798f09efb5c4",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/opengl/OpenGLSlot.h",
+      "mode": "100644",
+      "git_blob": "d2398ffc5d6235914de68595e95d5f5d6e89ad2a",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/cpp/thirdParty/stb/stb_image.h",
+      "mode": "100644",
+      "git_blob": "196dfd5cc6ee3be167ce6280fb243327e77f4245",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/src/main/AndroidManifest.xml",
+      "mode": "100644",
+      "git_blob": "95b34b4a6c7a113faa8b549404819d7b5b0d53a7",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/src/main/java/com/dragonbones/DragonBonesController.kt",
+      "mode": "100644",
+      "git_blob": "a525218d945625cf580de692d9f19ca30dace2b5",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/src/main/java/com/dragonbones/DragonBonesView.kt",
+      "mode": "100644",
+      "git_blob": "6d426987c69c34dcf427fac66449e56197fe3830",
+      "included": false
+    },
+    {
+      "path": "AndroidCompose/src/dragonBones/src/main/java/com/dragonbones/JniBridge.kt",
+      "mode": "100644",
+      "git_blob": "fae9b6f293a01a739ab72fdbf59912c12d59eaa4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/AnimationBase.h",
+      "mode": "100644",
+      "git_blob": "0a6202e52d7a2d59c311b930b100ab5b5c2d84dc",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/AnimationLayer.h",
+      "mode": "100644",
+      "git_blob": "8d6802b6696d01573569e2a6d7a62c9db5fcbad6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/AppDelegate.cpp",
+      "mode": "100644",
+      "git_blob": "a928517bfc395aa05c39a0860cb39ca30cffc319",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/AppDelegate.h",
+      "mode": "100644",
+      "git_blob": "625506cc0d1ed1e091abf00e666ae45f47c44e89",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/BaseDemo.h",
+      "mode": "100644",
+      "git_blob": "03f8ec20f8ae2382bdbe36e264c73b1481e62395",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/BoneOffset.h",
+      "mode": "100644",
+      "git_blob": "1425c779b72cb3ebcd074a67212a103eb355c8cf",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/BoundingBox.h",
+      "mode": "100644",
+      "git_blob": "32c6aacf0f4e7f8ad01f59e5e0f1c24632856ef4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/CoreElement.cpp",
+      "mode": "100644",
+      "git_blob": "750a41c10c73c2df82496d22b6ecdf4e6c3ade5d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/CoreElement.h",
+      "mode": "100644",
+      "git_blob": "061839aff2676ad38d5ebf326da93e3df865506c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/DragHelper.cpp",
+      "mode": "100644",
+      "git_blob": "754798b1f1a17db1f6e87d0fda08092a0937bac7",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/DragHelper.h",
+      "mode": "100644",
+      "git_blob": "9e79f64bd97f0f3eea6ab00f39a1ff559cec592f",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/DragonBonesEvent.h",
+      "mode": "100644",
+      "git_blob": "6ca8189c38b83ec7f13818c1b74c8caed24a7f77",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/HelloDragonBones.h",
+      "mode": "100644",
+      "git_blob": "2f2361ea0c3bfbcb02a6803472a0ce98053795bc",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/InverseKinematics.h",
+      "mode": "100644",
+      "git_blob": "2e79fe90358d4b84a63538a23ac400959a39208d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/PerformanceTest.h",
+      "mode": "100644",
+      "git_blob": "784b857240fcad6730433f8ba7a3fd322782f9d4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/ReplaceAnimation.h",
+      "mode": "100644",
+      "git_blob": "1d7c3b6e377ba8d25dc0bc28b633197ce98d5ba3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/ReplaceSkin.h",
+      "mode": "100644",
+      "git_blob": "c082aecbaf44f50b1d7bd4713b38fc8acdd478f6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Classes/ReplaceSlotDisplay.h",
+      "mode": "100644",
+      "git_blob": "5efb1fe2f2557e7278301938eda54da42a017f2c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/background.png",
+      "mode": "100644",
+      "git_blob": "c587b0d2ad8ac182e6f3ab37c0f36f1d3c277022",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bounding_box_tester/bounding_box_tester_ske.json",
+      "mode": "100644",
+      "git_blob": "6eaddc0376fc7f09d8a5da387503cc28dd43d1d1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bounding_box_tester/bounding_box_tester_tex.json",
+      "mode": "100644",
+      "git_blob": "a039ddcd3e4df371860f6e50751dda00e29ebc09",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bounding_box_tester/bounding_box_tester_tex.png",
+      "mode": "100644",
+      "git_blob": "a670eaaed30b5b8e219192fa0eb65c21b4c0fedc",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bullet_01/bullet_01_ske.json",
+      "mode": "100644",
+      "git_blob": "7d0dd04caee4f933a5086521e42ffa4b70cee924",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bullet_01/bullet_01_tex.json",
+      "mode": "100644",
+      "git_blob": "bc5b0aa81a38422f2414a7ad95194246a5aa4e87",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/bullet_01/bullet_01_tex.png",
+      "mode": "100644",
+      "git_blob": "f28c5559b05be5e597bb3811c713b8c2cf9ce559",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/floor_board/floor_board_ske.json",
+      "mode": "100644",
+      "git_blob": "3f7816610d9327c99450353583b51ff43c104574",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/floor_board/floor_board_tex.json",
+      "mode": "100644",
+      "git_blob": "841a040438b9e0113ddec3b82686b922316ef5a6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/floor_board/floor_board_tex.png",
+      "mode": "100644",
+      "git_blob": "afe2daa51f22c26028f7e8588dbf94557be9054b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1002_101d_show/mecha_1002_101d_show_ske.dbbin",
+      "mode": "100644",
+      "git_blob": "1d6f88f7a2b9d1ca9f12d33748b2f41a7258a461",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1002_101d_show/mecha_1002_101d_show_ske.json",
+      "mode": "100644",
+      "git_blob": "bf0ac08fc905e0d035c5daa9edfac596e1f23ac3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1002_101d_show/mecha_1002_101d_show_tex.json",
+      "mode": "100644",
+      "git_blob": "0442abefba9c06677540bc9f831bca30856e80b7",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1002_101d_show/mecha_1002_101d_show_tex.png",
+      "mode": "100644",
+      "git_blob": "5e13ca25131ae773f0ac11e0068a6be824e3a4e6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d/mecha_1004d_ske.json",
+      "mode": "100644",
+      "git_blob": "53f47b2ef791f20d684dfa8ee947848cd9e14e71",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d/mecha_1004d_tex.json",
+      "mode": "100644",
+      "git_blob": "d99021f506c39aae2406b40aa067ebb3f5262d4b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d/mecha_1004d_tex.png",
+      "mode": "100644",
+      "git_blob": "507d282e4834f77a4d72485ebdfff936d60b75d9",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d_show/mecha_1004d_show_ske.json",
+      "mode": "100644",
+      "git_blob": "5b2f69a51dea7706473ce92fa8dbc421dbab4a28",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d_show/mecha_1004d_show_tex.json",
+      "mode": "100644",
+      "git_blob": "d735d44aaf59b300cadda65367502dbba22269cb",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1004d_show/mecha_1004d_show_tex.png",
+      "mode": "100644",
+      "git_blob": "8bb7755455caf426310c2fc69c6c2ade2c3cc1c5",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1406/mecha_1406_ske.dbbin",
+      "mode": "100644",
+      "git_blob": "6e062eaf0667eabfdbde821d57281dc079f424f2",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1406/mecha_1406_ske.json",
+      "mode": "100644",
+      "git_blob": "dccbb54ba838236d3a1545b02ce3e31ae0db31e5",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1406/mecha_1406_tex.json",
+      "mode": "100644",
+      "git_blob": "d2d221d31cd7f310fae03609977f7bfd7e7086c0",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1406/mecha_1406_tex.png",
+      "mode": "100644",
+      "git_blob": "5f70a869ec34ac4b2b394928e576c1de962b0eba",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1502b/mecha_1502b_ske.json",
+      "mode": "100644",
+      "git_blob": "5cdc8f206ba11448312fa8852556ca72bb375409",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1502b/mecha_1502b_tex.json",
+      "mode": "100644",
+      "git_blob": "0f5f63c19011300c8cae07344e62ad3f1a963a11",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_1502b/mecha_1502b_tex.png",
+      "mode": "100644",
+      "git_blob": "65167fea1ad5924f56493a91d006a4fc291ce27f",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_2903/mecha_2903_ske.json",
+      "mode": "100644",
+      "git_blob": "ec7f06fd5cae8586d649f33ae2d885241efd7536",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_2903/mecha_2903_tex.json",
+      "mode": "100644",
+      "git_blob": "61f526a2b8a893148eae07e1043e744d1087ce8b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/mecha_2903/mecha_2903_tex.png",
+      "mode": "100644",
+      "git_blob": "0b5751d37ec74995c88278b5dd40e93827e3caed",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/progress_bar/progress_bar_ske.json",
+      "mode": "100644",
+      "git_blob": "5abb73fc536b004ba27c805d3e29671a072d6f34",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/progress_bar/progress_bar_tex.json",
+      "mode": "100644",
+      "git_blob": "98db24d518da1dbfceb393a01ef4bed39071f8ef",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/progress_bar/progress_bar_tex.png",
+      "mode": "100644",
+      "git_blob": "042805fc0f8ff25b9350fe69f6f3b9bf1c78ee45",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/skin_1502b/skin_1502b_ske.json",
+      "mode": "100644",
+      "git_blob": "96ea64483c969ec9a31708fc1c0a596280a0b3c1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/skin_1502b/skin_1502b_tex.json",
+      "mode": "100644",
+      "git_blob": "2e82d63ea39929d7b8b1700481c9ce2b8c1afb15",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/skin_1502b/skin_1502b_tex.png",
+      "mode": "100644",
+      "git_blob": "eb1afbbedf94d065aef05f3f8457a9474555c318",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1000/weapon_1000_ske.json",
+      "mode": "100644",
+      "git_blob": "8edb04e9928ff4cf3956808311c43676376db0bb",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1000/weapon_1000_tex.json",
+      "mode": "100644",
+      "git_blob": "94b339f5d6f60943dc51746083e4e05b48dee166",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1000/weapon_1000_tex.png",
+      "mode": "100644",
+      "git_blob": "0d6c927b6bfcd2f5d17674bd0092265653ee9f70",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1004_show/weapon_1004_show_ske.json",
+      "mode": "100644",
+      "git_blob": "62af4fbb59793d501b29e5538272c9e1639048b9",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1004_show/weapon_1004_show_tex.json",
+      "mode": "100644",
+      "git_blob": "2b0e5825f862827978411c5b6903ff3ca76236c3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/weapon_1004_show/weapon_1004_show_tex.png",
+      "mode": "100644",
+      "git_blob": "d5e8ca41ad7ef968885d37571a9bb227b29ee881",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/body/body_ske.json",
+      "mode": "100644",
+      "git_blob": "d29ca340ed784dc86a7efaa71b4d862fe063c02d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/body/body_tex.json",
+      "mode": "100644",
+      "git_blob": "98e1faa3d06314cf2190471c76990e2e809ba7a1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/body/body_tex.png",
+      "mode": "100644",
+      "git_blob": "512d5b3782dab321d541f3e992c6841e8a5b641d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a/2010600a_ske.json",
+      "mode": "100644",
+      "git_blob": "c260dbb7de30aa451e6ed41a34dd5d46a41f3925",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a/2010600a_tex.json",
+      "mode": "100644",
+      "git_blob": "414d73edaea1fdcd2008f7026323ef118cb95935",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a/2010600a_tex.png",
+      "mode": "100644",
+      "git_blob": "793e03738b7ea5d42fc93c714fb2fddfee8d5371",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a_1/2010600a_1_ske.json",
+      "mode": "100644",
+      "git_blob": "e797b5352595ceddbf884228d0c73b01c8f72db2",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a_1/2010600a_1_tex.json",
+      "mode": "100644",
+      "git_blob": "008f7adc8045b625ea0569112450bad6b1d351ea",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2010600a_1/2010600a_1_tex.png",
+      "mode": "100644",
+      "git_blob": "99e5cb01605de59ddb108603b822334ac25cd730",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003/20208003_ske.json",
+      "mode": "100644",
+      "git_blob": "8c3ef2c7a4eaf7d9da5ec0e1ac35047c5c0018de",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003/20208003_tex.json",
+      "mode": "100644",
+      "git_blob": "bc9ce93f4427e4b46e942c146b728bb4154e31d6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003/20208003_tex.png",
+      "mode": "100644",
+      "git_blob": "e67e23303ed62ebb78a96e3d84cbb8b564580fc3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_1/20208003_1_ske.json",
+      "mode": "100644",
+      "git_blob": "c83ac75e585dc3a2e84a69489528b1a702754024",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_1/20208003_1_tex.json",
+      "mode": "100644",
+      "git_blob": "6cddea4162a23c96d0b4ffc616a68a8c32c576d5",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_1/20208003_1_tex.png",
+      "mode": "100644",
+      "git_blob": "92b983a32a834f52ebc2b22cce6c65ece95cc40d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_2/20208003_2_ske.json",
+      "mode": "100644",
+      "git_blob": "2e5cb48c69aacc32c6886d68e73b601820f53945",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_2/20208003_2_tex.json",
+      "mode": "100644",
+      "git_blob": "a56e1301cd4e02bea428fce6c511687d3f74fe26",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_2/20208003_2_tex.png",
+      "mode": "100644",
+      "git_blob": "7e6beb4ba3362d553180edd3ea8f97e85210db97",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_3/20208003_3_ske.json",
+      "mode": "100644",
+      "git_blob": "17b43fed07f78101e2e6b25ab4ac7778d279e0df",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_3/20208003_3_tex.json",
+      "mode": "100644",
+      "git_blob": "5936884ff21fbb22e9ec63e7b696263a6341ec65",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20208003_3/20208003_3_tex.png",
+      "mode": "100644",
+      "git_blob": "d081df3978a5a5f4d5022e41beed117a8a7f8974",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20405006/20405006_ske.json",
+      "mode": "100644",
+      "git_blob": "15b0be445b6647d52421af36b6561b96c3e5fdfc",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20405006/20405006_tex.json",
+      "mode": "100644",
+      "git_blob": "638dfabf711b772b7236c7986889c51bf730865b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20405006/20405006_tex.png",
+      "mode": "100644",
+      "git_blob": "d18632ec176ce0f737c1086bd103d5ad5bdf9195",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20509005/20509005_ske.json",
+      "mode": "100644",
+      "git_blob": "0f25c87f31445a44802fa423b0a7abeb127ba03b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20509005/20509005_tex.json",
+      "mode": "100644",
+      "git_blob": "21a55b01b4f3746016c77b69dd63ecb6b915f9da",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20509005/20509005_tex.png",
+      "mode": "100644",
+      "git_blob": "8229b121f5f71ed8134f220ec945fe6ffa5f7bc4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016/20703016_ske.json",
+      "mode": "100644",
+      "git_blob": "45484735cde26e7f02bc097257f5af023b3bf6b0",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016/20703016_tex.json",
+      "mode": "100644",
+      "git_blob": "7a09ea9ed5e22b2303581dd3de1cd6c9ce628716",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016/20703016_tex.png",
+      "mode": "100644",
+      "git_blob": "f34715989658e4620553403bf2289c7b07a95ed1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016_1/20703016_1_ske.json",
+      "mode": "100644",
+      "git_blob": "8894e5ea79cd01d17721f3e5431a86ba9dab20e0",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016_1/20703016_1_tex.json",
+      "mode": "100644",
+      "git_blob": "bf464f0d63c8f547167699242fb9fd852d75531b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20703016_1/20703016_1_tex.png",
+      "mode": "100644",
+      "git_blob": "337b59552285cc22e68c34dc41a32236f66ad585",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100c/2080100c_ske.json",
+      "mode": "100644",
+      "git_blob": "5190a9c4456fb40a096f532413ef035cce2b72c1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100c/2080100c_tex.json",
+      "mode": "100644",
+      "git_blob": "336f5623d78c48222fa3c1abf25b10465ea528c1",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100c/2080100c_tex.png",
+      "mode": "100644",
+      "git_blob": "43d81de2b7d6876a3509bbbe99e3957a8294abeb",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e/2080100e_ske.json",
+      "mode": "100644",
+      "git_blob": "ce85b654196ca759e751febfe4d5c786c3ab677c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e/2080100e_tex.json",
+      "mode": "100644",
+      "git_blob": "68bc4b5fc8a2208dfd3f777a947cb34cea8eaf1b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e/2080100e_tex.png",
+      "mode": "100644",
+      "git_blob": "1589c4888745f72a1873c96974ed4cb0db4d1a7a",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e_1/2080100e_1_ske.json",
+      "mode": "100644",
+      "git_blob": "9307f3cfeb26155d8c10636e186c028182724c71",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e_1/2080100e_1_tex.json",
+      "mode": "100644",
+      "git_blob": "8d0b6534a10017e789d067a4b95c35aead44b1f4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080100e_1/2080100e_1_tex.png",
+      "mode": "100644",
+      "git_blob": "34e9a8be5d730cc080dc205db5fbc8316fbbccb9",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20803005/20803005_ske.json",
+      "mode": "100644",
+      "git_blob": "518f956263c907b7254ebb853e1af1bb4a149669",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20803005/20803005_tex.json",
+      "mode": "100644",
+      "git_blob": "73d0d92c44d3ec174105e5e6fd2b88db8c9be6d3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/20803005/20803005_tex.png",
+      "mode": "100644",
+      "git_blob": "a9d4c1311d67ab11112bce5e24d4d70cc4b178ca",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b/2080500b_ske.json",
+      "mode": "100644",
+      "git_blob": "fd1b7c2a637227e8b21262ea4050474691f78859",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b/2080500b_tex.json",
+      "mode": "100644",
+      "git_blob": "580e8c403904791692a62c8c46b896896625ec5e",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b/2080500b_tex.png",
+      "mode": "100644",
+      "git_blob": "7f60188a69ebeb40bbdfde8ddf4e1de57742d0fd",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b_1/2080500b_1_ske.json",
+      "mode": "100644",
+      "git_blob": "d6ecc04f6a41058ea23dd2f0c2c63cb53d540cdd",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b_1/2080500b_1_tex.json",
+      "mode": "100644",
+      "git_blob": "8d93d619ce4c37713e0bcf55103dd831ed71711e",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit1/2080500b_1/2080500b_1_tex.png",
+      "mode": "100644",
+      "git_blob": "c2ea33a69e1b4de7f70571f2d3eeb6f7ccca6c0e",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010/20106010_ske.json",
+      "mode": "100644",
+      "git_blob": "6e548c558b7083b1fc5c0eec1c5c7c201aa1fce4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010/20106010_tex.json",
+      "mode": "100644",
+      "git_blob": "95a31df8394038df81e32b1068488eabdb71f136",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010/20106010_tex.png",
+      "mode": "100644",
+      "git_blob": "a63accfdc48288f4c766c54b57b36dc3fc131e8b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010_1/20106010_1_ske.json",
+      "mode": "100644",
+      "git_blob": "7b4dab900073a896cf0d674e8f04961db6fcfa79",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010_1/20106010_1_tex.json",
+      "mode": "100644",
+      "git_blob": "634d58a379786c553f02b0bb792f87897c22e7f3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20106010_1/20106010_1_tex.png",
+      "mode": "100644",
+      "git_blob": "39520453e61688941187d80ea03817371876f507",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006/20208006_ske.json",
+      "mode": "100644",
+      "git_blob": "9143ba02d201cfc7a1e1d1dc3eb32abce2a8386f",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006/20208006_tex.json",
+      "mode": "100644",
+      "git_blob": "46077a64b9f468c52dabe4941fdca45e594185df",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006/20208006_tex.png",
+      "mode": "100644",
+      "git_blob": "a9843ead775bc6412b5fd82653442c03fecc48b4",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_1/20208006_1_ske.json",
+      "mode": "100644",
+      "git_blob": "e4191732ebb052d13e56760cd8c9a2fe9bda0495",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_1/20208006_1_tex.json",
+      "mode": "100644",
+      "git_blob": "71f8607298ad235677ad116bafba680d8d34fc34",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_1/20208006_1_tex.png",
+      "mode": "100644",
+      "git_blob": "71fd5c118eb271f2a712cbf9089d63bbe03ec0ee",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_2/20208006_2_ske.json",
+      "mode": "100644",
+      "git_blob": "1516776fdc977382cdd2dcd2b568d4dfdcfc168c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_2/20208006_2_tex.json",
+      "mode": "100644",
+      "git_blob": "8d3eaae259a3b98e8d49668962ebf3e390d56314",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_2/20208006_2_tex.png",
+      "mode": "100644",
+      "git_blob": "0c29ea1dae897f7968a267c0d6f5018bdc118fcc",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_3/20208006_3_ske.json",
+      "mode": "100644",
+      "git_blob": "1ba2d807154c281a9fc5bab805a09f30dc09028b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_3/20208006_3_tex.json",
+      "mode": "100644",
+      "git_blob": "ddb9d7383f2a9795d3d85d0b120bc9b981f60ea6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20208006_3/20208006_3_tex.png",
+      "mode": "100644",
+      "git_blob": "c744296ce10dd42920cbd6f402e297bc8a14c3a8",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b/2040600b_ske.json",
+      "mode": "100644",
+      "git_blob": "1c4502272afbb0d48ea4f22665996fafd96a0852",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b/2040600b_tex.json",
+      "mode": "100644",
+      "git_blob": "5093a6b99671b2a786f0b7078696b6737d5007c9",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b/2040600b_tex.png",
+      "mode": "100644",
+      "git_blob": "25fde49f8947b226cb05062709110d0a16775c41",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b_1/2040600b_1_ske.json",
+      "mode": "100644",
+      "git_blob": "cc602223a6e75613c7406309c8bf9b784a322f28",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b_1/2040600b_1_tex.json",
+      "mode": "100644",
+      "git_blob": "34a05af899193519422884066c8be4a38625ba56",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2040600b_1/2040600b_1_tex.png",
+      "mode": "100644",
+      "git_blob": "56a67895ac36ff2d451bc9bd28f80d03fefd726f",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20509007/20509007_ske.json",
+      "mode": "100644",
+      "git_blob": "86fa4c6ffa3290bf0e8d29f5f63f9113dc11d348",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20509007/20509007_tex.json",
+      "mode": "100644",
+      "git_blob": "2d9f759b8ddaceb53010b257eba709ae97f6128c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20509007/20509007_tex.png",
+      "mode": "100644",
+      "git_blob": "d2e1d3d811f40d854046104001e7e4e7bc71b761",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020/20703020_ske.json",
+      "mode": "100644",
+      "git_blob": "dbbb2cd88ef5023956b106bfd17e0295f36a6ef6",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020/20703020_tex.json",
+      "mode": "100644",
+      "git_blob": "7bd40a4a63c66625b52d4a46db5756669fe2d2fe",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020/20703020_tex.png",
+      "mode": "100644",
+      "git_blob": "fa625f37c8d20942e5760a4c7fb5e16af63c6d4b",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020_1/20703020_1_ske.json",
+      "mode": "100644",
+      "git_blob": "1def5db3408858106d408431fd9874c7ff22997d",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020_1/20703020_1_tex.json",
+      "mode": "100644",
+      "git_blob": "aa965780bb291e51efc54afb71011e5c6fba68db",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20703020_1/20703020_1_tex.png",
+      "mode": "100644",
+      "git_blob": "5489dcfc20026db23859723b93d9a4448a698546",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20801015/20801015_ske.json",
+      "mode": "100644",
+      "git_blob": "ded7ac57cfb4f7b419fc5d6f1c334cac104b0e5c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20801015/20801015_tex.json",
+      "mode": "100644",
+      "git_blob": "173a3a0cfc8460a75efbd9eac095d5d78977b8ec",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/20801015/20801015_tex.png",
+      "mode": "100644",
+      "git_blob": "0a1f2dd25f6c370c10a6b945e9ced0ac219d3ba9",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2080b003/2080b003_ske.json",
+      "mode": "100644",
+      "git_blob": "df4996406d83cbc83bf471939ce4e709c86f7fc8",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2080b003/2080b003_tex.json",
+      "mode": "100644",
+      "git_blob": "7813d38f08101c0f4fd0b55b1a75eafd9beaf6bf",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/Demos/Resources/you_xin/suit2/2080b003/2080b003_tex.png",
+      "mode": "100644",
+      "git_blob": "302dc341d9d2f36c178d6af0d0b0deeced75c27a",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/README-zh_CN.md",
+      "mode": "100644",
+      "git_blob": "a2e709bb33f99c60eb232eeb69611c05915e8168",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/README.md",
+      "mode": "100644",
+      "git_blob": "fbc53354898a87711927e3c76fe530c19e314c6c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCArmatureDisplay.cpp",
+      "mode": "100644",
+      "git_blob": "0d39a29ed37672e662040e648b489567e33000bd",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCArmatureDisplay.h",
+      "mode": "100644",
+      "git_blob": "ea26ce8fcfedc505bed2205e18d8bcd90c33f57c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCDragonBonesHeaders.h",
+      "mode": "100644",
+      "git_blob": "0169845eef3739f8ae1a568d4ff5fedfece5e97c",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCFactory.cpp",
+      "mode": "100644",
+      "git_blob": "620399c753a549ae20d4a8d8a68a463d45ea44a3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCFactory.h",
+      "mode": "100644",
+      "git_blob": "c3f90dd09205b611fb7b6b69b8d884102d58562e",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCSlot.cpp",
+      "mode": "100644",
+      "git_blob": "28f23f927d808920d7bd5ec0739250cb35d23129",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCSlot.h",
+      "mode": "100644",
+      "git_blob": "d11bd62211d7fd0be41b3dacfa92eb4a04bdcbfb",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCTextureAtlasData.cpp",
+      "mode": "100644",
+      "git_blob": "a0a7cb3013828b50e8f6e061ba5dd1448d62e1b3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/cocos2dx/CCTextureAtlasData.h",
+      "mode": "100644",
+      "git_blob": "692afbd9df3f4d9fda031cea1dcca84c5c6545d3",
+      "included": false
+    },
+    {
+      "path": "Cocos2DX_3.x/src/dragonBones/proj.android/Android.mk",
+      "mode": "100644",
+      "git_blob": "b938032bbf3cb3ca9987805a67a6cea3bbc3d92e",
+      "included": false
+    },
+    {
+      "path": "DragonBones/src/dragonBones/DragonBonesHeaders.h",
+      "mode": "100644",
+      "git_blob": "8a7ab33d97b12ab77689830985c206ad0c889905",
+      "sha256": "9dbe347b0d0463ac666c84e5afc4b39b54bd8aed31b35077fddbf3633c17fd20",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/Animation.cpp",
+      "mode": "100644",
+      "git_blob": "87269ad72c9878f92d5c88ab3b6dd62a2cfdb13a",
+      "sha256": "152d9b9331781eef5a294995da15b56c326e7c38a73870faf18f957b439a7cb2",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/Animation.h",
+      "mode": "100644",
+      "git_blob": "d2e34f04c855fc8d8d16e47ff152a84da2b5c5fe",
+      "sha256": "d6b9068a8c5dbb77755484fb7acb7b788735c479db7d4a0e9da5eea77256cc57",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/AnimationState.cpp",
+      "mode": "100644",
+      "git_blob": "942e786f30e97df95ddb7813d4fb60e4ab492a02",
+      "sha256": "c16da5fe8c0e23c397ffbe2a461be352d841f3cde4729b779215e95c6bfc9118",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/AnimationState.h",
+      "mode": "100644",
+      "git_blob": "1ecce6c7b90bd6d0b83a5c448531a6e3c0f015ef",
+      "sha256": "53da907c5b98540d479082e8a7a3c0467e6eacdf994d1f9f2cbaf6e764978d51",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/BaseTimelineState.cpp",
+      "mode": "100644",
+      "git_blob": "820271763249a08450eb351abeb0e2f5c0eaa853",
+      "sha256": "05fc8ec78ef217288cb79cc3dd21d2ef2e104ec221b6cf56ff840d2423007f67",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/BaseTimelineState.h",
+      "mode": "100644",
+      "git_blob": "fdf6008c1b0beed1648c698f7d6cb0ed1c8aa364",
+      "sha256": "0960d1296baf1dfe9c543aec95f75990223cda2a0293fc60513de84ae9acfc28",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/IAnimatable.h",
+      "mode": "100644",
+      "git_blob": "2c08a4f556be6b7a47419d13baa66500820a9939",
+      "sha256": "b5107707b6b4ef642bd5965484b5e38a4688caab565ea1940357a2005e14017e",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/TimelineState.cpp",
+      "mode": "100644",
+      "git_blob": "34a5bde2996b041bdd2b0d173efd021311967c3d",
+      "sha256": "efae9120639d7e278a7cb7ea00b0984d2a048a875b9165372b616274b9328a4c",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/TimelineState.h",
+      "mode": "100644",
+      "git_blob": "2481ca3991ed9a34dda7a2c3d612b738cf8c9f8c",
+      "sha256": "32993a22db6fd50584526e1202f4bb49bbed90dd4c9e2eaf1062eb1215e214c0",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/WorldClock.cpp",
+      "mode": "100644",
+      "git_blob": "2cd3376f7e2a351e92b306ff3ae5ea4a9d90c6c8",
+      "sha256": "3063e4df31b7ba1ce5a8bf0054685c24c563dc43b25ad8090c9446d9ceccf80e",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/animation/WorldClock.h",
+      "mode": "100644",
+      "git_blob": "118b250b7979ea6baa7f3dd238c7a17a01651b38",
+      "sha256": "118b80ac2e555f891bbe9bf38fad40689dffb97a18755a3da3fe87de330f5688",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Armature.cpp",
+      "mode": "100644",
+      "git_blob": "2d0290a66169b308723ec0f28e89b39095253c72",
+      "sha256": "43fc5da648334ad3b39c6ff5f0498496ec0689aaa0161408150fe1e4af8aa81b",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Armature.h",
+      "mode": "100644",
+      "git_blob": "4aaa833fdcb9256b8a3322608cbaf98eefd5f5c4",
+      "sha256": "9ca640b909fd18eae5d95a52e2cc99d96a5319ba687eedb95d2f9834cd91628b",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Bone.cpp",
+      "mode": "100644",
+      "git_blob": "b1a1cc8cf8474d00f5a301d01bef86410ac284c9",
+      "sha256": "9daa3dfa394d94f98c772cdbbad762ce807983508189ceddc350dad6e465460a",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Bone.h",
+      "mode": "100644",
+      "git_blob": "3395b8a097f609139ba901bb50deb6f7317faf31",
+      "sha256": "4791fb834ccbc7801d243529895ba874ff4bfeca3981dabf79b040d5f3e495d6",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Constraint.cpp",
+      "mode": "100644",
+      "git_blob": "b1943017d2d7d4cae33f2a98d323afad9e213b31",
+      "sha256": "67d7371592bf0050399051c50783ec4011c2dff0597547ba230e8055be512378",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Constraint.h",
+      "mode": "100644",
+      "git_blob": "13abed418a32bc0ecccf8f5f3e76f15572cd5bab",
+      "sha256": "5e68c3fac11ebed4784dae95bb2aceeb6ec7f5b7ca104e4a0f53923b1c91bfed",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/DeformVertices.cpp",
+      "mode": "100644",
+      "git_blob": "b6c68b212c7e487f8047ca5d5412d42f857399a9",
+      "sha256": "ceec6881d8f54b01916e2fe69a7b7e53f8f4cc4e5dc2efcf86f2d0600bab8c07",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/DeformVertices.h",
+      "mode": "100644",
+      "git_blob": "49a67eb167948ac9b147c473598ccbb5fb943fec",
+      "sha256": "7d594b3d4bb913a7efb646e728ca38014c7fa8de6dd01759d4c91779a7c5bc57",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/IArmatureProxy.h",
+      "mode": "100644",
+      "git_blob": "972ecca9581a84df5f11b566574328713cedfa42",
+      "sha256": "4682700b57a2589a0767f42a87ab228c696b9024f78d50a2f69d8bb1a23d6554",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Slot.cpp",
+      "mode": "100644",
+      "git_blob": "67370ab355a036ea8dc47bc6ea825c8a22475a08",
+      "sha256": "7369d6f7015c68e6f14724bfd90cba1eef195ad580373eae89cc08fd6295da88",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/Slot.h",
+      "mode": "100644",
+      "git_blob": "8fb54d215fce0895719887e6f5f4413169afb9f2",
+      "sha256": "681cad82ef628ceffcdddea7040543e1b772747605a9fe194a92e92d1ea46746",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/TransformObject.cpp",
+      "mode": "100644",
+      "git_blob": "c295246df92bc416970a6c7373e33f592bb2c8ad",
+      "sha256": "b486ab0c0c4e5744db147e29f1bb9bb330f54940a2062e442596430e79c55806",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/armature/TransformObject.h",
+      "mode": "100644",
+      "git_blob": "593477f866de03b51aa726a2110a400548aad692",
+      "sha256": "bdef361acc79373f1478a4cbf41626b86cd22afdaaa81cbb73edf3f9aafbf731",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/core/BaseObject.cpp",
+      "mode": "100644",
+      "git_blob": "d679e41fcc1ddd004d6a704d5f636d997c6c214d",
+      "sha256": "d9c27320037663930ca7b610ea5693eeb5ea611bced511e4fb9ecd9cfc480b12",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/core/BaseObject.h",
+      "mode": "100644",
+      "git_blob": "a9421c8ef81ba16ffb7a7fdd4a694fd1a267f95e",
+      "sha256": "209c66bd6722a65df94ac3edb2eba4d13ed1748d41dbc19fb9399f7ff2a1f518",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/core/DragonBones.cpp",
+      "mode": "100644",
+      "git_blob": "67fceb3d96e55f9d89670d0c051d90fc03c66f03",
+      "sha256": "fee633ac69ea4520231f243023ef3e99079307e3637bd7456ad07c64d8bb4b0e",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/core/DragonBones.h",
+      "mode": "100644",
+      "git_blob": "62495fd0bdf1531c08e5782f5b51fa4c03d913cc",
+      "sha256": "9e7345f8fd8eb79fce4a2b96aaa99342cdd1adb8699a2a270cbe2523a82a23a1",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/event/EventObject.cpp",
+      "mode": "100644",
+      "git_blob": "d2a99c7ab0984ab41a12ea6f125111659c2fea0c",
+      "sha256": "de52b9649603e61fc3f26d12dd1b232ffa96164cad4c6aa11dbe50fb63d766dc",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/event/EventObject.h",
+      "mode": "100644",
+      "git_blob": "0c6500373d19c41747a8705374373cf8711415c2",
+      "sha256": "0e9817503402d31fc1241a4b77d8be15d0d0b0fd92383cf7636d3cc8e6330e10",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/event/IEventDispatcher.h",
+      "mode": "100644",
+      "git_blob": "c46f9f064fc423878778b8810062eba5b8264233",
+      "sha256": "942ad5bd6161db9eacf63d7d088fb1a22d6e0764952db889de0a25f54effbeb9",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/factory/BaseFactory.cpp",
+      "mode": "100644",
+      "git_blob": "edfe894a263f3b2259e74978d6b9743a68115b18",
+      "sha256": "a777269dc51fc52aeecfb56f10ee502cde09b61457ac423c58f05dcf5318fadc",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/factory/BaseFactory.h",
+      "mode": "100644",
+      "git_blob": "7500cbd745e66430588be53b36b1ba5bef18769a",
+      "sha256": "a0c8be7b214fc854d27879fb8b36f8423780909cce568c24eebc87c8b59da7ec",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/ColorTransform.h",
+      "mode": "100644",
+      "git_blob": "0e52a1471e8e9b3c9bd2723c5dc292d5c58dc923",
+      "sha256": "23e8a6b9edb56d0a890fa5ca36adec6c79701d1e7525e6ee955c31e1e298c27a",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Matrix.h",
+      "mode": "100644",
+      "git_blob": "febf9fd5b3920d9330a63d12a361e823f2afa83b",
+      "sha256": "343329bdbbee86026b0f9337decc306e6ae08cbadc7efbf02cf107cd6d468de2",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Point.cpp",
+      "mode": "100644",
+      "git_blob": "b584e4bb811f70c0a6e82fb06f9b635a004a2114",
+      "sha256": "cd89eeaa3e2d7e00fd0e25d18d87ab1498cd38ef697036f98608e455d0c56e61",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Point.h",
+      "mode": "100644",
+      "git_blob": "3824a16009f8ab0d2b3f6e7dc50a50d9961f655f",
+      "sha256": "f1093679b56ff503bb451b29725d86d253426c69d20d3e14e71a5bc26cc63bdc",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Rectangle.h",
+      "mode": "100644",
+      "git_blob": "ec2d0c7dec6140bb571fadeb99d3994f27548069",
+      "sha256": "f564dbbf8c847a2fefa84c170f54faefb7b090e50c66261259f4f27840cf9f5b",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Transform.cpp",
+      "mode": "100644",
+      "git_blob": "329196452cb519b06bc7c13d2d5edea6b98a326b",
+      "sha256": "3862ab763aff7e88a3cc313c6bc86104e6a46d62506a41acb19887035f82d758",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/geom/Transform.h",
+      "mode": "100644",
+      "git_blob": "432bc57bb5b50f34303f0142369c9359d2838f73",
+      "sha256": "0de289c4da21c6879ae59020699a8d27810d5aadd9bd2b30ebbdc6e7f95ea881",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/AnimationConfig.cpp",
+      "mode": "100644",
+      "git_blob": "5a59c39a581652f80268761dc7b63cbb7134fa39",
+      "sha256": "b0d6070ad2ef6e7e52baf413206703539346bd03ae98b579811487224479901f",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/AnimationConfig.h",
+      "mode": "100644",
+      "git_blob": "67b3a7570f04f592f386b2fa853a9715685fe299",
+      "sha256": "c9aa64648aa02b6d2260e3599cfc2c631495a1747ff2f16c4f10af2936e42a82",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/AnimationData.cpp",
+      "mode": "100644",
+      "git_blob": "24147c4a1f97890c2d9604b9ac17bd6f2c6194ac",
+      "sha256": "f463c12c5e77f71b6d9e46b3a205624cdd973d4b762cabca9977a9c0b0c7c92e",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/AnimationData.h",
+      "mode": "100644",
+      "git_blob": "81e5ec7b4cf9a55e5eb7278a91765004d4741f2d",
+      "sha256": "adc66a7cff2155609bef287120f0c980cf60547ebb8a75af5e2af02eb0d8e89f",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/ArmatureData.cpp",
+      "mode": "100644",
+      "git_blob": "152f270a515f1ec5e45fb07780725355891866c9",
+      "sha256": "f037ef7e79fab963bcfb00d3e4a5df4e7e3afe342051f2b16cbaf03698c70b23",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/ArmatureData.h",
+      "mode": "100644",
+      "git_blob": "f4f9d62902d683378146af5d4232e6dd6a62093a",
+      "sha256": "818bedfe3cb9712024a8e913a2be1b347827ff98879eaac1f123adca02da2b63",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/BoundingBoxData.cpp",
+      "mode": "100644",
+      "git_blob": "556f024e6488307e9642baabb7d371f557a834ad",
+      "sha256": "273f61e78a4f87eba7a8921ac264ef1011f763d2736e2bc76e87ce9cef2b6f6d",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/BoundingBoxData.h",
+      "mode": "100644",
+      "git_blob": "cb653ef73c1c2d8423faf738ff23232f18a0e8ba",
+      "sha256": "d13e0b92af4967893fc21b226e01e1d8be9faaef098b5fa1bf2a9b0b4f56f52d",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/CanvasData.cpp",
+      "mode": "100644",
+      "git_blob": "722ffd4a7eb7e684e10409363717b5f5267d086c",
+      "sha256": "86b7f6b0cf126f68712949a96580035ab01e9feaf07b453f5afb1c4b5a647a73",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/CanvasData.h",
+      "mode": "100644",
+      "git_blob": "954c769eb6a64928bb41da7b778207a78e465958",
+      "sha256": "478591f69d91e71199c16e545b7841a12bb3766079527a9c70354f4b0fc9479f",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/ConstraintData.cpp",
+      "mode": "100644",
+      "git_blob": "5dde00a540b44c3cf8727fe2e2e3217135254a34",
+      "sha256": "3ef5ee7a6f64721aabe358f429622845309d355b022aa437406ee54c06977224",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/ConstraintData.h",
+      "mode": "100644",
+      "git_blob": "8483a6b6dbc17f57d4821c0fd60ebd81f47d276f",
+      "sha256": "b06b3b048054ef83ea20ecfa96fb249cfad0431e1897b717907601f42eb74f61",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/DisplayData.cpp",
+      "mode": "100644",
+      "git_blob": "66e67e68148e45436f06ea40b8abeae616c03c56",
+      "sha256": "1af22711306080effe0b15f80ef7c2aa2b77bc4ff98278563d81ac756bf7e733",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/DisplayData.h",
+      "mode": "100644",
+      "git_blob": "2e441d8917cfcb9d034997731e7265d7940e555a",
+      "sha256": "9a8627fe7d43a47e3113cadbf75340f42d7904c0a1b2a9144adb8075d6943cd2",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/DragonBonesData.cpp",
+      "mode": "100644",
+      "git_blob": "c5fe80910deb8a55048454e055c2eabdb663de9e",
+      "sha256": "6e50fce78c2c0eb37836737420b6455a243fba8928e3ce7b23cbd244ffe8a994",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/DragonBonesData.h",
+      "mode": "100644",
+      "git_blob": "d498b27dd19da153883b80e5a61e17da6be1cd5b",
+      "sha256": "50709009285cc9de8c613932ccc5129ac1f8b8c5c8e7ae7dee64b39d463a5fff",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/SkinData.cpp",
+      "mode": "100644",
+      "git_blob": "e3b18835951d84808beae775fa7a4524e0507af1",
+      "sha256": "3a54e4c402f1d2cce785f811755c14861a322ee869c17cb868dc780b6ab3da8f",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/SkinData.h",
+      "mode": "100644",
+      "git_blob": "14daef6e761df81081db3af608a95e5954231448",
+      "sha256": "6249c6919a79eb42f473fc9404fd78934e215ce1663f73d0d82d8aff61ba02b5",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/TextureAtlasData.cpp",
+      "mode": "100644",
+      "git_blob": "207c8645220fbedb729855b2f67b875f9c8249aa",
+      "sha256": "6ea57a12f79517166e5b81c9fc4f781f4e0ec3127e2fee204785389e0f1a48f3",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/TextureAtlasData.h",
+      "mode": "100644",
+      "git_blob": "6458dc994bce4813731fdbbe998ef398261eb0d8",
+      "sha256": "3b19afa8ff634fa9303548b37af92e7250da30f1335df72fdb932aec1d09cc27",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/UserData.cpp",
+      "mode": "100644",
+      "git_blob": "b197980d633c1efda8bd77ec47db4a1a70cf344b",
+      "sha256": "70308664acad14cd2c5e042482e4543ecf03ddfd9780ad76d1f8d4f39c78999e",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/model/UserData.h",
+      "mode": "100644",
+      "git_blob": "68b4e4b24e10f2729d5f5bce097811f6aeb1e7d9",
+      "sha256": "6c34eace5f1bb649ebc9f1d2df1b5178820424febb0514a714c5c4e884a980a3",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/BinaryDataParser.cpp",
+      "mode": "100644",
+      "git_blob": "515c43b1ed512964bad22fc5672c8abb1a02ce0f",
+      "sha256": "217d7b00b676d07eafdeb15a82b715d59cb7a2ccadcf8eca3616874abde529bc",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/BinaryDataParser.h",
+      "mode": "100644",
+      "git_blob": "896196e887a4c8a4b6d6b3d8dc6539e8bbda4fd7",
+      "sha256": "a2f66c3b85dcac088510245816158de3603801e9a77bb2752b148e22bc10d3f5",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/DataParser.cpp",
+      "mode": "100644",
+      "git_blob": "a5632ffbedc9bda24b0a28b6911134410cd12f2b",
+      "sha256": "24b0b09ea0ae3e2360d7b5e1120d41dc0e7cb0fe05efb0d5636d8607fa703db0",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/DataParser.h",
+      "mode": "100644",
+      "git_blob": "de97eeb1e305c6db7c176b5be59c4a9ae5193829",
+      "sha256": "3a6cf0c9214acfcbd0c44fe81542e2e06be3affcd66f6844efb689be4ffc1ccc",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/JSONDataParser.cpp",
+      "mode": "100644",
+      "git_blob": "6743596017a6a4e1a447e0d992689f48187e7db2",
+      "sha256": "ee42f2a4b9d923b16300fa9ca157d46894c68127f555258ea256318da73675eb",
+      "included": true
+    },
+    {
+      "path": "DragonBones/src/dragonBones/parser/JSONDataParser.h",
+      "mode": "100644",
+      "git_blob": "d63575c6cda2ba535a7ac521e3de8e58ea262655",
+      "sha256": "f0ce0117057a7ad576f4a1a7ab9aba6de18831e8bb5a03cf3a8b27c6bb5ba257",
+      "included": true
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "00b61d672026ebddff35e1d71e371506001e39a2",
+      "sha256": "e055124edff26897970ce0437c48316c1007e88d3ffc4e1a4360f95b309949a4",
+      "included": true
+    },
+    {
+      "path": "README-zh_CN.md",
+      "mode": "100644",
+      "git_blob": "82f475b3dc88cd0249fb05124cafc10eaaadf0a4",
+      "included": false
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "0d02d1112f6ada41c1332f6778ed68c587ca12c7",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/.gitignore",
+      "mode": "100644",
+      "git_blob": "0be1eeaf45aecdbdd1ff2fef886b50fa6f563690",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/AnimationLayer.cpp",
+      "mode": "100644",
+      "git_blob": "6c68dd08d5fb8379c8a40a175387e52ee9f7888c",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/Makefile",
+      "mode": "100644",
+      "git_blob": "fc05986cce016586cff2c7cafd68f00c30a005fc",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/mecha_1004d_ske.json",
+      "mode": "100644",
+      "git_blob": "53f47b2ef791f20d684dfa8ee947848cd9e14e71",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/mecha_1004d_tex.json",
+      "mode": "100644",
+      "git_blob": "d99021f506c39aae2406b40aa067ebb3f5262d4b",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/mecha_1004d_tex.png",
+      "mode": "100644",
+      "git_blob": "507d282e4834f77a4d72485ebdfff936d60b75d9",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/AnimationLayer/settings.mk.example",
+      "mode": "100644",
+      "git_blob": "df57a48e3f2940abe09e2fe729f605715908e91c",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/.gitignore",
+      "mode": "100644",
+      "git_blob": "0be1eeaf45aecdbdd1ff2fef886b50fa6f563690",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/DragonBoy.cpp",
+      "mode": "100644",
+      "git_blob": "132a0cbaf5bcf6bac7f27a2f195d2c39f5764b2a",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/DragonBoy_ske.json",
+      "mode": "100644",
+      "git_blob": "bc8d5a8dad005365691ae312fda86b5141a85b5a",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/DragonBoy_tex.json",
+      "mode": "100644",
+      "git_blob": "95d701c980d1b177252393fc17bd6b175873bd48",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/DragonBoy_tex.png",
+      "mode": "100644",
+      "git_blob": "02cc390989b27934da368d08ce383a6abdacfb3e",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/Makefile",
+      "mode": "100644",
+      "git_blob": "fc05986cce016586cff2c7cafd68f00c30a005fc",
+      "included": false
+    },
+    {
+      "path": "SFML/Demos/HelloDragonBones/settings.mk.example",
+      "mode": "100644",
+      "git_blob": "df57a48e3f2940abe09e2fe729f605715908e91c",
+      "included": false
+    },
+    {
+      "path": "SFML/README-zh_CN.md",
+      "mode": "100644",
+      "git_blob": "d329950ac3be44472058f2640da1744b7bd6eede",
+      "included": false
+    },
+    {
+      "path": "SFML/README.md",
+      "mode": "100644",
+      "git_blob": "28bb8f9dde7176db90968b7de9ac32b0af51b47a",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLArmatureDisplay.cpp",
+      "mode": "100644",
+      "git_blob": "54609b254653f7e38322cb3284695cf8ed87b895",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLArmatureDisplay.h",
+      "mode": "100644",
+      "git_blob": "614a1a993c6c462c7134909a074c2b3c26761e94",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLArmatureProxy.cpp",
+      "mode": "100644",
+      "git_blob": "68054717c20fbe0b2e60188c849746a9e2e0193d",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLArmatureProxy.h",
+      "mode": "100644",
+      "git_blob": "01a6c88bacdcdf4e40e3399a7c5891453c86c11e",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLDisplay.h",
+      "mode": "100644",
+      "git_blob": "95d47c76e2cdcb35d4022a22b3132b1bc685d733",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLEventDispatcher.h",
+      "mode": "100644",
+      "git_blob": "812c05fdbbd0dc740fc77df32f3d3fab29690b7b",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLFactory.cpp",
+      "mode": "100644",
+      "git_blob": "3e7694df8dde44bcadac3d1b9aa2e75b9c1ba5ef",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLFactory.h",
+      "mode": "100644",
+      "git_blob": "e54cf8e916f34c43c4a08528f322d38509e0daef",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLNode.h",
+      "mode": "100644",
+      "git_blob": "b7fe832046b9d2fc476face8905128d3948b01ff",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLSlot.cpp",
+      "mode": "100644",
+      "git_blob": "9115a861aa001a7ea3faaa9d7b6bab7fc2819b1e",
+      "sha256": "a10ee610dc02d48202c5d367cefc2565c08722b631e5170ee04f922153965736",
+      "included": true
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLSlot.h",
+      "mode": "100644",
+      "git_blob": "ec004c37073f332795131317a50e67c6e58def6c",
+      "sha256": "e3c48d5c3465acc3cccb35972784dd1ba00733f7bebe514c279d17ed6e991dab",
+      "included": true
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLTextureAtlasData.cpp",
+      "mode": "100644",
+      "git_blob": "81d7af36d3a2094bbf1f5b70ce711e44317f7d95",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLTextureAtlasData.h",
+      "mode": "100644",
+      "git_blob": "29000aa595f060162f4d454771428a64d88ff8dc",
+      "included": false
+    },
+    {
+      "path": "SFML/src/dragonBones/SFMLTextureData.h",
+      "mode": "100644",
+      "git_blob": "e536118383820d38d877aa3f968e177535ba599e",
+      "included": false
+    }
+  ],
+  "exclusions": "Unused engine applications, demo assets, Android SDK and stale .gitmodules excluded. Original tree has no gitlinks. Complete DragonBones runtime and bundled RapidJSON retained; SFMLSlot production adapter retained for integration reference, not built offline.",
+  "gitmodules_original": "[submodule \"engines/cocos2d-x-3.x\"]\n\tpath = engines/cocos2d-x-3.x\n\turl = https://github.com/cocos2d/cocos2d-x.git\n\tbranch = cocos2d-x-3.0\n[submodule \"engines/cocos2d-x-2.x\"]\n\tpath = engines/cocos2d-x-2.x\n\turl = https://github.com/cocos2d/cocos2d-x.git\n\tbranch = cocos2d-x-2.2.3\n",
+  "supplemental_licenses": [
+    {
+      "path": "3rdParty/rapidjson/LICENSE.txt",
+      "origin": "https://raw.githubusercontent.com/Tencent/rapidjson/3d5848a7cd3367c5cb451c6493165b7745948308/license.txt",
+      "commit": "3d5848a7cd3367c5cb451c6493165b7745948308",
+      "sha256": "60ab263d1868282cb8262199edf648c21e45b729a78c6768bc9c27214a673da0",
+      "reason": "License supplement independently matched byte-for-byte against pinned v1.0.2 license source."
+    }
+  ]
+}
