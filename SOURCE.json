@@ -1,0 +1,10 @@
+{
+  "repo": "https://github.com/tunabrain/sparse-voxel-octrees",
+  "commit": "c4c2a9d3015056c269c73430f223e69e3b933b83",
+  "license": "Zlib; bundled LZ4 BSD-2-Clause and PLY notices retained",
+  "gitlinks": [],
+  "gitmodules": false,
+  "binary_included": [],
+  "symlinks_included": [],
+  "exclusion_reason": "All production src/ plus original build cmake/ and licenses retained; exclude optional model binary, screenshot, setup helpers and .gitignore. The CPU runner does not compile SDL viewer units."
+}
