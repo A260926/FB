@@ -10,7 +10,7 @@ for source in SkeletalAnimation/*.cpp; do object=".task-build/$(basename "$sourc
 c++ -std=c++11 -O1 -include cstring -I. -Ivendor/glm task_support/baseline.cpp "${objects[@]}" -o .task-build/baseline
 if [[ $mode == target ]]; then
   c++ -std=c++11 -O1 -include cstring -I. -Ivendor/glm tests/mirror_target.cpp "${objects[@]}" .task-build/driver.o -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/mirror-target-log.XXXXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

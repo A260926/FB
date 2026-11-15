@@ -12,6 +12,16 @@ namespace SA
 
 		void                            Update(float a_Dt);
 
+		// Runtime motion mirroring with per-bone blending (never serialized).
+		// a_Partners must cover every bone and be an involutive permutation
+		// (self pairs allowed); a_Normal is the unit normal of a mirror plane
+		// through the model origin. On success all weights default to 1 and the
+		// bind reference is (re)captured. On failure the previous valid
+		// configuration is kept. Clear() drops the configuration.
+		bool                            ConfigureMirror(const std::vector<unsigned int>& a_Partners, const glm::vec3& a_Normal);
+		bool                            SetMirrorWeights(const std::vector<float>& a_Weights);
+		void                            DisableMirror();
+
 		unsigned int                    GetNumMeshes() const { return m_Meshes.size(); }
 		const sAnimatedMesh&            GetMesh(unsigned int i) const { return m_Meshes[i]; }
 		void                            AddMesh(const sAnimatedMesh& a_Mesh) { m_Meshes.push_back(a_Mesh); }
@@ -35,9 +45,22 @@ namespace SA
 
 		float                           m_AnimationTime;
 
+		// Mirror configuration (runtime state only, cleared by Clear()).
+		bool                            m_MirrorEnabled;
+		glm::vec3                       m_MirrorNormal;
+		glm::mat4x4                     m_MirrorReflection;       // H: homogeneous reflection through the model origin
+		glm::mat4x4                     m_MirrorInvGlobalInverse; // inverse of I, captured at configure time
+		std::vector<unsigned int>       m_MirrorPartners;         // involutive bone permutation
+		std::vector<float>              m_MirrorWeights;          // per-bone blend weights in [0, 1]
+		std::vector<glm::mat4x4>        m_MirrorBindC;            // C_i = I * B_i (bind global in model space)
+		std::vector<glm::mat4x4>        m_MirrorBindInvC;         // inverse(C_i)
+		std::vector<int>                m_MirrorParents;          // parent bone index, -1 for the root
+		std::vector<unsigned int>       m_MirrorOrder;            // FK traversal order, parents before children
+
 	private:
 		void                            ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform);
 		void                            TransformVertices(const sSkeleton& a_Skeleton);
+		void                            UpdateMirrored();
 	};
 }
 
