@@ -1,0 +1,13 @@
+CASE identity names_and_offsets checks=26
+CASE identity call_ownership checks=32
+CASE identity origin_resolution checks=39
+GROUP identity cases=3 checks=97 COMPLETE
+CASE substitution forwarded_value checks=39
+CASE substitution unknown_isolation checks=54
+GROUP substitution cases=2 checks=93 COMPLETE
+CASE termination diamond_and_complete checks=31
+CASE termination incomplete_kept checks=14
+CASE termination cycle checks=15
+CASE termination reverse_and_lifetime checks=26
+GROUP termination cases=4 checks=86 COMPLETE
+TARGET_COMPLETE cases=9

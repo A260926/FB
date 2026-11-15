@@ -1,0 +1,23 @@
+SYNTHETIC_ELF bytes=608 cu=1 callsites=1
+FUNCTION index=0 cu=0x0 die=0x1e name=caller calls=1
+CALL call_site=0x32 return_pc=0x1010 origin_cu=0x0 origin_die=0x48 origin=known chains=1
+CHAIN call=0 index=0 kind=complete edges=1
+EDGE call=0 chain=0 edge=0 call_site=0x32 return_pc=0x1010 tail=0 origin_cu=0x0 origin_die=0x48 origin=known origin_attr=0x3b params=1
+PARAM call=0 chain=0 edge=0 param=0 reg=5 value=known 7 expr_off=0x43 bytes=10079f
+TAILCALL_SUMMARY functions=2 calls=1
+CASE identity names_and_offsets checks=26
+CASE identity call_ownership checks=32
+CASE identity origin_resolution checks=39
+GROUP identity cases=3 checks=97 COMPLETE
+CASE substitution forwarded_value checks=44
+CASE substitution unknown_isolation checks=55
+GROUP substitution cases=2 checks=99 COMPLETE
+CASE termination diamond_and_complete checks=31
+CASE termination incomplete_kept checks=14
+CASE termination cycle checks=15
+CASE termination reverse_and_lifetime checks=26
+GROUP termination cases=4 checks=86 COMPLETE
+TARGET_COMPLETE cases=9
+CALL return_pc=0x1010 origin=0x48 info=1
+CALL_VALUE bytes=10079f
+BASELINE_OK functions=2 callsites=1 parameters=1 dwarf=5

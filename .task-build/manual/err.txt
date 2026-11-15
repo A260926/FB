@@ -1,0 +1,2 @@
+DBG cycle kind=1 edges=1
+FAIL test/callsite_contract.c:1712 ch.csc_kind == DW_CS_CHAIN_CYCLE

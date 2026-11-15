@@ -5,6 +5,7 @@ libdwarf_src = [
   'dwarf_abbrev.c',
   'dwarf_alloc.c',
   'dwarf_arange.c',
+  'dwarf_callsite.c',
   'dwarf_crc.c',
   'dwarf_crc32.c',
   'dwarf_debugaddr.c',

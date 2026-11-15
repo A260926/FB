@@ -10333,6 +10333,364 @@ DW_API int dwarf_get_mmap_count(Dwarf_Debug dw_dbg,
     Dwarf_Unsigned *dw_malloc_size);
 /*! @} endgroup sectionallocpref */
 
+/*! @defgroup call_site_snapshot DWARF5 call site snapshots
+    @{
+
+    These functions turn the DWARF5 call site information in
+    .debug_info into an immutable, self contained snapshot that
+    can be queried after dwarf_finish() has been called.
+
+    Only the DWARF declarations are read. No instruction is
+    executed, no process is inspected, and nothing outside
+    the object file is consulted. A call site chain is a set
+    of candidates declared by the debug information. It is not
+    a claim about which machine path actually executed.
+
+    A snapshot owns copies of all data it exposes (names,
+    expression bytes, identities). The Dwarf_Debug used to
+    build it is not referenced after dwarf_callsite_snapshot_create()
+    returns, so the snapshot remains valid after dwarf_finish().
+    Release it with dwarf_callsite_snapshot_destroy().
+
+    A query result is also immutable and owns copies of every
+    chain, edge, parameter, and expression byte it reports.
+    Query results are independent of each other and of the
+    snapshot: they remain valid after dwarf_callsite_snapshot_destroy()
+    and must be released with dwarf_callsite_query_destroy().
+
+    The ownership rules, in one place:
+    - A snapshot is freed only by dwarf_callsite_snapshot_destroy().
+      Passing NULL is harmless. It never needs dwarf_finish().
+    - A query result is freed only by dwarf_callsite_query_destroy().
+      Passing NULL is harmless. Destroying the snapshot first is
+      allowed, and destroying either one twice is a caller error.
+    - Summary structs (Dwarf_Callsite_Call, Dwarf_Callsite_Chain,
+      Dwarf_Callsite_Edge, Dwarf_Callsite_Param) are copied by
+      value into caller storage. They contain no pointers to free.
+    - The name returned by dwarf_callsite_function_name() and the
+      byte pointer returned by dwarf_callsite_query_param_expression()
+      are borrowed from the snapshot or query and must not be freed.
+      They stay valid until that owner is destroyed.
+    - Ordinary free() is used internally. No new library
+      dependency is introduced.
+*/
+
+/*! @struct Dwarf_Callsite_Die_Identity_s
+
+    Identity of a DIE in .debug_info. Two DIEs are the same DIE
+    only if both the CU (identified by the section offset of the
+    CU header) and the section offset of the DIE itself match.
+    Equal function names never merge identities, and equal CU
+    relative offsets in different CUs never merge either.
+*/
+struct Dwarf_Callsite_Die_Identity_s {
+    Dwarf_Off dci_cu_header_offset;
+    Dwarf_Off dci_die_offset;
+};
+typedef struct Dwarf_Callsite_Die_Identity_s
+    Dwarf_Callsite_Die_Identity;
+
+/*! @enum Dwarf_Callsite_Chain_Kind
+    How a chain candidate terminates.
+*/
+enum Dwarf_Callsite_Chain_Kind {
+    /*! Every tail exit was followed and the final function
+        declared DW_AT_call_all_tail_calls. */
+    DW_CS_CHAIN_COMPLETE = 0,
+    /*! The chain ended where the debug information does not
+        declare the set of tail exits to be complete. */
+    DW_CS_CHAIN_INCOMPLETE = 1,
+    /*! Following a tail edge re-entered a function already
+        on this candidate's path. Only this candidate stops. */
+    DW_CS_CHAIN_CYCLE = 2
+};
+
+/*! @enum Dwarf_Callsite_Value_Kind
+    Whether a parameter value could be computed.
+*/
+enum Dwarf_Callsite_Value_Kind {
+    DW_CS_VALUE_KNOWN = 0,
+    DW_CS_VALUE_SYMBOLIC = 1,
+    DW_CS_VALUE_UNKNOWN = 2
+};
+
+/*! @enum Dwarf_Callsite_Unknown_Reason
+    Why a value or an origin could not be determined.
+    DW_CS_UNKNOWN_NONE means no problem.
+*/
+enum Dwarf_Callsite_Unknown_Reason {
+    DW_CS_UNKNOWN_NONE = 0,
+    /*! An entry_value referenced a register that the previous
+        edge did not provide. */
+    DW_CS_UNKNOWN_MISSING_ARGUMENT = 1,
+    /*! The call site parameter has no DW_AT_call_value. */
+    DW_CS_UNKNOWN_MISSING_VALUE = 2,
+    /*! The call site parameter has no usable DW_AT_location. */
+    DW_CS_UNKNOWN_MISSING_LOCATION = 3,
+    /*! DW_AT_call_target instead of DW_AT_call_origin: the
+        callee cannot be named statically. */
+    DW_CS_UNKNOWN_INDIRECT_TARGET = 4,
+    /*! The origin offset does not resolve into a known CU. */
+    DW_CS_UNKNOWN_UNRESOLVED_ORIGIN = 5,
+    /*! The expression uses an operation outside the supported
+        subset, or is malformed. */
+    DW_CS_UNKNOWN_UNSUPPORTED_EXPRESSION = 6,
+    /*! DW_AT_location is not a single DW_OP_regN/regx. */
+    DW_CS_UNKNOWN_UNSUPPORTED_LOCATION = 7,
+    /*! Signed 64 bit arithmetic overflowed. */
+    DW_CS_UNKNOWN_OVERFLOW = 8
+};
+
+/*! @struct Dwarf_Callsite_Param_s
+
+    One DW_TAG_call_site_parameter after substitution along a
+    chain. csp_expression_offset is the section offset of the
+    first expression byte and csp_expression_length is its byte
+    length. The bytes themselves are obtained with
+    dwarf_callsite_param_expression(). Bytes are retained for
+    every supported and unsupported expression and are never
+    zero filled.
+
+    When csp_value_kind is DW_CS_VALUE_KNOWN csp_value holds the
+    signed 64 bit value. When it is DW_CS_VALUE_SYMBOLIC the
+    value is csp_source_addend plus the unknown entry value of
+    csp_source_register in csp_source_function. When it is
+    DW_CS_VALUE_UNKNOWN csp_unknown_reason says why.
+*/
+struct Dwarf_Callsite_Param_s {
+    Dwarf_Bool csp_register_known;
+    Dwarf_Unsigned csp_register;
+    enum Dwarf_Callsite_Value_Kind csp_value_kind;
+    Dwarf_Signed csp_value;
+    Dwarf_Callsite_Die_Identity csp_source_function;
+    Dwarf_Unsigned csp_source_register;
+    Dwarf_Signed csp_source_addend;
+    enum Dwarf_Callsite_Unknown_Reason csp_unknown_reason;
+    Dwarf_Off csp_call_value_attr_offset;
+    Dwarf_Off csp_expression_offset;
+    Dwarf_Unsigned csp_expression_length;
+};
+typedef struct Dwarf_Callsite_Param_s Dwarf_Callsite_Param;
+
+/*! @struct Dwarf_Callsite_Edge_s
+
+    One call along a chain. cse_call_site_offset is the section
+    offset of the DW_TAG_call_site DIE, cse_origin_attr_offset
+    the section offset of the DW_AT_call_origin attribute (or of
+    DW_AT_call_target when the target is indirect).
+*/
+struct Dwarf_Callsite_Edge_s {
+    Dwarf_Off cse_call_site_offset;
+    Dwarf_Addr cse_call_return_pc;
+    Dwarf_Bool cse_is_tail_call;
+    Dwarf_Bool cse_origin_known;
+    Dwarf_Callsite_Die_Identity cse_origin;
+    enum Dwarf_Callsite_Unknown_Reason cse_origin_unknown_reason;
+    Dwarf_Off cse_origin_attr_offset;
+    Dwarf_Unsigned cse_parameter_count;
+};
+typedef struct Dwarf_Callsite_Edge_s Dwarf_Callsite_Edge;
+
+/*! @struct Dwarf_Callsite_Chain_s */
+struct Dwarf_Callsite_Chain_s {
+    enum Dwarf_Callsite_Chain_Kind csc_kind;
+    Dwarf_Unsigned csc_edge_count;
+};
+typedef struct Dwarf_Callsite_Chain_s Dwarf_Callsite_Chain;
+
+/*! @struct Dwarf_Callsite_Call_s
+
+    One call site matching a query. cscall_origin describes the
+    function the first edge calls.
+*/
+struct Dwarf_Callsite_Call_s {
+    Dwarf_Off cscall_call_site_offset;
+    Dwarf_Addr cscall_call_return_pc;
+    Dwarf_Bool cscall_origin_known;
+    Dwarf_Callsite_Die_Identity cscall_origin;
+    enum Dwarf_Callsite_Unknown_Reason cscall_origin_unknown_reason;
+    Dwarf_Unsigned cscall_chain_count;
+};
+typedef struct Dwarf_Callsite_Call_s Dwarf_Callsite_Call;
+
+typedef struct Dwarf_Callsite_Snapshot_s *Dwarf_Callsite_Snapshot;
+typedef struct Dwarf_Callsite_Query_s *Dwarf_Callsite_Query;
+
+/*! @brief Build an owned snapshot of the DWARF5 call sites.
+
+    Reads every .debug_info CU, records the subprogram DIE each
+    DW_TAG_call_site belongs to (through DW_TAG_lexical_block
+    children, while a nested DW_TAG_subprogram belongs to
+    itself), resolves DW_AT_call_origin forms including ref4 and
+    cross-CU ref_addr, and copies every expression byte.
+
+    The snapshot owns all returned data and does not reference
+    dw_dbg afterwards. Destroy it with
+    dwarf_callsite_snapshot_destroy().
+*/
+DW_API int dwarf_callsite_snapshot_create(Dwarf_Debug dw_dbg,
+    Dwarf_Callsite_Snapshot *dw_snapshot,
+    Dwarf_Error *dw_error);
+
+/*! @brief Release a snapshot created by
+    dwarf_callsite_snapshot_create().
+
+    Passing NULL is harmless. Query results are independent and
+    remain valid after this call.
+*/
+DW_API void dwarf_callsite_snapshot_destroy(
+    Dwarf_Callsite_Snapshot dw_snapshot);
+
+/*! @brief Return the identity of a DIE.
+
+    Uses the CU header section offset and the DIE section offset.
+    Must be called while dw_dbg is still open.
+*/
+DW_API int dwarf_callsite_die_identity(Dwarf_Die dw_die,
+    Dwarf_Callsite_Die_Identity *dw_identity,
+    Dwarf_Error *dw_error);
+
+/*! @brief Return the number of functions recorded in a snapshot. */
+DW_API int dwarf_callsite_snapshot_function_count(
+    Dwarf_Callsite_Snapshot dw_snapshot,
+    Dwarf_Unsigned *dw_count,
+    Dwarf_Error *dw_error);
+
+/*! @brief Return the identity of one recorded function. */
+DW_API int dwarf_callsite_snapshot_function_identity(
+    Dwarf_Callsite_Snapshot dw_snapshot,
+    Dwarf_Unsigned dw_index,
+    Dwarf_Callsite_Die_Identity *dw_identity,
+    Dwarf_Error *dw_error);
+
+/*! @brief Return the name of a recorded function.
+
+    The returned string is owned by the snapshot. *dw_name is set
+    to NULL when the DIE has no DW_AT_name. Returns DW_DLV_NO_ENTRY
+    when the identity is not a function in the snapshot.
+*/
+DW_API int dwarf_callsite_function_name(
+    Dwarf_Callsite_Snapshot dw_snapshot,
+    const Dwarf_Callsite_Die_Identity *dw_function,
+    const char **dw_name,
+    Dwarf_Error *dw_error);
+
+/*! @brief Return the number of call sites owned by a function. */
+DW_API int dwarf_callsite_snapshot_function_call_count(
+    Dwarf_Callsite_Snapshot dw_snapshot,
+    const Dwarf_Callsite_Die_Identity *dw_function,
+    Dwarf_Unsigned *dw_count,
+    Dwarf_Error *dw_error);
+
+/*! @brief Return one call site owned by a function.
+
+    dw_has_return_pc is FALSE if the call site has no
+    DW_AT_call_return_pc (for example a DW_AT_call_pc call).
+*/
+DW_API int dwarf_callsite_snapshot_function_call(
+    Dwarf_Callsite_Snapshot dw_snapshot,
+    const Dwarf_Callsite_Die_Identity *dw_function,
+    Dwarf_Unsigned dw_index,
+    Dwarf_Off *dw_call_site_offset,
+    Dwarf_Addr *dw_call_return_pc,
+    Dwarf_Bool *dw_has_return_pc,
+    Dwarf_Bool *dw_is_tail_call,
+    Dwarf_Error *dw_error);
+
+/*! @brief Query the calls of a function at a return PC.
+
+    Returns every call site owned by dw_function whose
+    DW_AT_call_return_pc equals dw_call_return_pc, in DIE order.
+    Each returned call carries its own tail call chain
+    candidates, computed independently.
+
+    On success returns DW_DLV_OK and sets *dw_query. When no call
+    matches, returns DW_DLV_NO_ENTRY and sets *dw_query to NULL.
+    Release a result with dwarf_callsite_query_destroy().
+*/
+DW_API int dwarf_callsite_query(Dwarf_Callsite_Snapshot dw_snapshot,
+    const Dwarf_Callsite_Die_Identity *dw_function,
+    Dwarf_Addr dw_call_return_pc,
+    Dwarf_Callsite_Query *dw_query,
+    Dwarf_Error *dw_error);
+
+/*! @brief Release a query result. Passing NULL is harmless. */
+DW_API void dwarf_callsite_query_destroy(
+    Dwarf_Callsite_Query dw_query);
+
+/*! @brief Number of matching calls in a query result. */
+DW_API int dwarf_callsite_query_call_count(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned *dw_count,
+    Dwarf_Error *dw_error);
+
+/*! @brief Summary of one matching call, including its chain count. */
+DW_API int dwarf_callsite_query_call(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned dw_call_index,
+    Dwarf_Callsite_Call *dw_call,
+    Dwarf_Error *dw_error);
+
+/*! @brief Summary of one chain candidate of a call. */
+DW_API int dwarf_callsite_query_chain(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned dw_call_index,
+    Dwarf_Unsigned dw_chain_index,
+    Dwarf_Callsite_Chain *dw_chain,
+    Dwarf_Error *dw_error);
+
+/*! @brief Summary of one edge of one chain candidate. */
+DW_API int dwarf_callsite_query_edge(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned dw_call_index,
+    Dwarf_Unsigned dw_chain_index,
+    Dwarf_Unsigned dw_edge_index,
+    Dwarf_Callsite_Edge *dw_edge,
+    Dwarf_Error *dw_error);
+
+/*! @brief One parameter of one edge, after chain substitution. */
+DW_API int dwarf_callsite_query_param(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned dw_call_index,
+    Dwarf_Unsigned dw_chain_index,
+    Dwarf_Unsigned dw_edge_index,
+    Dwarf_Unsigned dw_param_index,
+    Dwarf_Callsite_Param *dw_param,
+    Dwarf_Error *dw_error);
+
+/*! @brief Borrowed DW_AT_call_value expression bytes of one parameter.
+
+    The pointer is owned by the query and remains valid until the
+    query is destroyed. Bytes are returned even when the expression
+    is unsupported or overflowed.
+*/
+DW_API int dwarf_callsite_query_param_expression(
+    Dwarf_Callsite_Query dw_query,
+    Dwarf_Unsigned dw_call_index,
+    Dwarf_Unsigned dw_chain_index,
+    Dwarf_Unsigned dw_edge_index,
+    Dwarf_Unsigned dw_param_index,
+    const unsigned char **dw_bytes,
+    Dwarf_Unsigned *dw_length,
+    Dwarf_Error *dw_error);
+
+/*! @typedef dwarf_callsite_print_callback
+    Receives one NUL terminated line at a time. dw_user_pointer is
+    the pointer passed to dwarf_callsite_query_print().
+*/
+typedef void (*dwarf_callsite_print_callback)(void *dw_user_pointer,
+    const char *dw_line);
+
+/*! @brief Print a whole query result, one line at a time.
+
+    Does not need a Dwarf_Debug, so it works after dwarf_finish().
+    Nothing is printed when dw_query is NULL.
+*/
+DW_API int dwarf_callsite_query_print(Dwarf_Callsite_Query dw_query,
+    dwarf_callsite_print_callback dw_callback,
+    void *dw_user_pointer, Dwarf_Error *dw_error);
+/*! @} endgroup call_site_snapshot */
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

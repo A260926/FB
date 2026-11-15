@@ -19,6 +19,7 @@ dwarf_arange.h \
 dwarf_base_types.h \
 dwarf_crc.c \
 dwarf_crc32.c \
+dwarf_callsite.c \
 dwarf_debugaddr.c \
 dwarf_debugaddr.h \
 dwarf_debuglink.c \

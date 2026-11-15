@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/frame2.dir/frame2.c.o -o frame2  -Wl,-rpath,/Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/ex/src/lib/libdwarf ../../lib/libdwarf/libdwarf.2.3.4.dylib

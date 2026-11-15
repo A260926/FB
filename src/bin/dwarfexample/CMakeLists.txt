@@ -31,3 +31,7 @@ target_link_libraries(jitreader PRIVATE dwarf_example)
 add_executable(showsectiongroups showsectiongroups.c)
 set_folder(jitreader src/bin/dwarfexample)
 target_link_libraries(showsectiongroups PRIVATE dwarf_example)
+
+add_executable(tailcall tailcall.c)
+set_folder(tailcall src/bin/dwarfexample)
+target_link_libraries(tailcall PRIVATE dwarf_example)

@@ -3,6 +3,7 @@ dwarf_abbrev.c
 dwarf_alloc.c
 dwarf_crc.c
 dwarf_crc32.c
+dwarf_callsite.c
 dwarf_arange.c
 dwarf_debug_sup.c
 dwarf_debugaddr.c

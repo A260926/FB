@@ -6,7 +6,8 @@ examples = [
   'frame2.c',
   'jitreader.c',
   'showsectiongroups.c',
-  'simplereader.c'
+  'simplereader.c',
+  'tailcall.c'
 ]
 
 example_args = []

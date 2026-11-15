@@ -5,7 +5,7 @@ AUTOMAKE_OPTIONS=subdir-objects
 MAINTAINERCLEANFILES = Makefile.in
 
 bin_PROGRAMS = simplereader frame1 frame2 findfuncbypc \
-    dwdebuglink  jitreader showsectiongroups
+    dwdebuglink  jitreader showsectiongroups tailcall
 dwarfbigend=@DWARF_BIGENDIAN@
 
 simplereader_SOURCES = simplereader.c
@@ -56,6 +56,13 @@ showsectiongroups_CPPFLAGS = -I$(top_srcdir)/src/lib/libdwarf \
   -I$(top_builddir)/src/lib/libdwarf
 showsectiongroups_CFLAGS = $(DWARF_CFLAGS_WARN)
 showsectiongroups_LDADD = $(top_builddir)/src/lib/libdwarf/libdwarf.la \
+$(DWARF_LIBS)
+
+tailcall_SOURCES = tailcall.c
+tailcall_CPPFLAGS = -I$(top_srcdir)/src/lib/libdwarf \
+  -I$(top_builddir)/src/lib/libdwarf
+tailcall_CFLAGS = $(DWARF_CFLAGS_WARN)
+tailcall_LDADD = $(top_builddir)/src/lib/libdwarf/libdwarf.la \
 $(DWARF_LIBS)
 
 EXTRA_DIST = \

@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/wall/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/wall/src/lib/libdwarf/cmake_install.cmake",
+		"/Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/wall/doc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,19 @@
+src/lib/libdwarf/CMakeFiles/dwarf-shared.dir/dwarf_crc.c.o: \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_crc.c \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/ex/config.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/stddef.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stddef.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_size_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/libdwarf.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_local_malloc.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/libdwarf_private.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_base_types.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_opaque.h

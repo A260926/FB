@@ -1,0 +1,46 @@
+-- The C compiler identification is AppleClang 21.0.0.21000334
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Building dwarfexample... OFF
+-- Building api tests   ... OFF
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for sys/types.h
+-- Looking for sys/types.h - found
+-- Looking for malloc.h
+-- Looking for malloc.h - not found
+-- Looking for stdint.h
+-- Looking for stdint.h - found
+-- Looking for inttypes.h
+-- Looking for inttypes.h - found
+-- Looking for stddef.h
+-- Looking for stddef.h - found
+-- Looking for fcntl.h
+-- Looking for fcntl.h - found
+-- Looking for sys/stat.h
+-- Looking for sys/stat.h - found
+-- Looking for stdafx.h
+-- Looking for stdafx.h - not found
+-- Looking for sys/mman.h
+-- Looking for sys/mman.h - found
+-- Performing Test HAVE_UINTPTR_T
+-- Performing Test HAVE_UINTPTR_T - Success
+-- Performing Test HAVE_INTPTR_T
+-- Performing Test HAVE_INTPTR_T - Success
+-- Performing Test HAVE_FULL_MMAP
+-- Performing Test HAVE_FULL_MMAP - Success
+-- HAVE_UINTPTR_T 1: uintptr_t defined in stdint.h... YES
+-- uintptr_t value considered NO 
+-- HAVE_INTPTR_T 1: intptr_t defined in stdint.h... YES
+-- intptr_t value considered NO 
+-- ENABLE_DECOMPRESSION : OFF
+-- Build with zlib and zstd: NO
+-- CMAKE_SIZEOF_VOID_P ... : 8
+-- Compiler warning options... YES
+-- Install prefix ... /usr/local
+-- Configuring done (1.7s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/wall

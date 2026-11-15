@@ -1,0 +1,14 @@
+src/lib/libdwarf/CMakeFiles/dwarf-static.dir/dwarf_safe_strcpy.c.o: \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_safe_strcpy.c \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/.task-build/ex/config.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/stddef.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stddef.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_size_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /Users/solo/pro/UserFB/workspace/FS5AF621447D3DU9401/attempts/20261114T180017309919Z/repo/src/lib/libdwarf/dwarf_safe_strcpy.h
