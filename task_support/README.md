@@ -1,0 +1,5 @@
+直接导入src的ES模块，不运行npm安装或打包。生产源码及GLSL/WGSL模板来自PlayCanvas，LICENSE为MIT。NullGraphicsDevice是上游自带的无窗口设备，CPU动画、纹理/缓冲拥有关系、Renderer剔除前更新及uniform绑定都使用真实生产类；它不执行GPU光栅或原生shader编译。
+
+起点：bash task_support/run.sh baseline。实现后：bash task_support/run.sh target。测试默认导出{group,name,run(check)}数组，palette/pipeline/lifetime各至少一个用例，每例正常结束且至少调用一次check，不返回skip或状态。驱动实际导入InstancedSkin和MeshInstance API，强制新增生产、测试、示例非空。示例先运行于本次mktemp的新目录，poses.json须含两帧两角色的非空有限位置数据，测试可通过TASK_EXAMPLE_OUTPUT读取该产物。
+
+新增shader路径的检查应使用引擎LitShader和预处理器，不要求外部shader编译器；双真实GPU后端的视觉确认不在这个无设备入口内。例子可在无GPU下根据实际atlas与instance-buffer解码世界顶点，不能另算动画后绕过生产图集。公开接口应写JSDoc，保持core/platform/scene/framework的模块层级。
