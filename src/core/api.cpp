@@ -61,6 +61,7 @@
 #include "integrators/volpath.h"
 #include "integrators/whitted.h"
 #include "lights/diffuse.h"
+#include "lights/bilinear.h"
 #include "lights/distant.h"
 #include "lights/goniometric.h"
 #include "lights/infinite.h"
@@ -761,6 +762,9 @@ std::shared_ptr<AreaLight> MakeAreaLight(const std::string &name,
     if (name == "area" || name == "diffuse")
         area = CreateDiffuseAreaLight(light2world, mediumInterface.outside,
                                       paramSet, shape);
+    else if (name == "bilinear")
+        area = CreateBilinearAreaLight(light2world, mediumInterface.outside,
+                                       paramSet, shape);
     else
         Warning("Area light \"%s\" unknown.", name.c_str());
     paramSet.ReportUnused();

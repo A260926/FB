@@ -1,0 +1,60 @@
+# scenes/emissive-map.pbrt
+#
+# Demonstrates AreaLightSource "bilinear": a triangle whose emission follows a
+# low-resolution RGB map in texture space.  The light triangle hangs above a
+# diffuse floor and emits downward (its geometric normal is -y), casting an
+# uneven, map-shaped pool of light onto the floor and the back wall.
+#
+# The map is indexed as map[j*nu+i] at texture coordinate
+# (i/(nu-1), j/(nv-1)).  Here nu=4, nv=3 so there are 12 grid points and
+# 12*3 = 36 RGB floats.  Values are linear RGB (no sRGB decoding, no mip
+# filtering, no wrap addressing).  The map has a strong warm hotspot near
+# UV=(1,0) and a dark corner near UV=(0,1), so the illumination on the
+# receiver is visibly non-uniform.
+
+LookAt 0 1.05 5.2    0 1.05 -0.5    0 1 0
+Camera "perspective" "float fov" [55]
+
+Film "image" "integer xresolution" [480] "integer yresolution" [480]
+     "string filename" "emissive-map.exr"
+
+Sampler "halton" "integer pixelsamples" [64]
+Integrator "path" "integer maxdepth" [4]
+
+WorldBegin
+
+# Diffuse receiver (floor) at y = 0, facing up (+y), spanning x,z in [-12,12].
+Material "matte" "color Kd" [0.78 0.78 0.80]
+Shape "trianglemesh"
+    "point P" [ -12 0 -12   -12 0 12   12 0 12   12 0 -12 ]
+    "integer indices" [ 0 1 2  2 3 0 ]
+
+# Back wall at z = -8, facing into the scene (+z).
+Material "matte" "color Kd" [0.62 0.62 0.66]
+Shape "trianglemesh"
+    "point P" [ -12 0 -8   12 0 -8   12 9 -8   -12 9 -8 ]
+    "integer indices" [ 0 1 2  2 3 0 ]
+
+# The emissive triangle.  Its world vertices are (-3,2.5,-1), (3,2.5,-1) and
+# (0,2.5,2.5); their cross product points downward (-y), which is the
+# emitting hemisphere for a one-sided light.
+#
+# The texture coordinates form an oblique triangle inside [0,1]^2, so the
+# emission pattern is not aligned with the map axes: the strong hotspot sits
+# near world vertex (3,2.5,-1) and the near-black corner near (-3,2.5,-1).
+AttributeBegin
+    AreaLightSource "bilinear"
+        "integer nu" [4] "integer nv" [3]
+        "rgb map" [
+            0.02 0.02 0.03   0.40 0.28 0.12   1.20 0.85 0.40   2.20 1.55 0.75
+            0.02 0.02 0.03   0.12 0.10 0.08   0.55 0.42 0.22   0.22 0.16 0.09
+            0.01 0.01 0.02   0.02 0.02 0.03   0.06 0.05 0.04   0.12 0.09 0.05
+        ]
+        "integer samples" [16]
+    Shape "trianglemesh"
+        "point P" [ -2.2 1.8 -1.4   2.2 1.8 -1.4   0 1.8 2.0 ]
+        "float uv" [ 0.05 0.10   0.95 0.15   0.30 0.90 ]
+        "integer indices" [ 0 1 2 ]
+AttributeEnd
+
+WorldEnd

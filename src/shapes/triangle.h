@@ -93,6 +93,33 @@ class Triangle : public Shape {
     // reference point p.
     Float SolidAngle(const Point3f &p, int nSamples = 0) const;
 
+    // Access to the triangle's actual world-space vertices and texture
+    // coordinates.  These are shared with the emissive-map area light,
+    // which must use the world vertices (rather than object-space data or
+    // interpolated shading normals) when it evaluates the emitted
+    // radiance distribution.
+    Point3f P(int i) const { return mesh->p[v[i]]; }
+    Point2f UV(int i) const {
+        Point2f uv[3];
+        GetUVs(uv);
+        return uv[i];
+    }
+    bool HasAlphaMask() const {
+        return mesh->alphaMask != nullptr || mesh->shadowAlphaMask != nullptr;
+    }
+    // The geometric normal is formed from the actual world-space vertex
+    // positions and then oriented following the same convention used by
+    // Triangle::Intersect(); interpolated vertex normals play no part.  The
+    // sign convention (reverseOrientation XOR transformSwapsHandedness)
+    // matches Triangle::Sample()'s default path.
+    Normal3f GeometricNormal() const {
+        Vector3f ng = Cross(P(1) - P(0), P(2) - P(0));
+        Normal3f n;
+        if (ng.LengthSquared() > 0) n = Normal3f(Normalize(ng));
+        if (reverseOrientation ^ transformSwapsHandedness) n *= -1;
+        return n;
+    }
+
   private:
     // Triangle Private Methods
     void GetUVs(Point2f uv[3]) const {
