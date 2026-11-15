@@ -1,0 +1,7 @@
+!src/
+!src/**
+!cmake/
+!cmake/**
+!task_support/
+!task_support/**
+.task-build/
