@@ -1,0 +1,8 @@
+{
+  "repo": "https://github.com/dfsp-spirit/scimesh",
+  "commit": "dc67e7cfb3a4904911c3c4f1ec3913c0673ab315",
+  "license": "MIT; bundled third-party licenses in LICENSE.note",
+  "gitlinks": [],
+  "gitmodules": false,
+  "scope": "Entire standalone C++ production core, all vendored source, CMake, font and licenses. R bindings, R package docs/tests, optional examples, downloaded test assets and development tools are outside this C++ runtime."
+}

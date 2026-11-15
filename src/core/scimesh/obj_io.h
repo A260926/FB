@@ -1,0 +1,55 @@
+/// @file obj_io.h
+/// @brief Read Wavefront OBJ files (.obj).
+///
+/// OBJ is one of the most widely supported 3D file formats.  It is a
+/// simple text format that stores vertices, faces, normals, and texture
+/// coordinates.  Almost every 3D modeling program can export to OBJ.
+
+#pragma once
+
+#include <scimesh/mesh.h>
+#include <string>
+
+namespace scimesh {
+/// @brief Functions for reading OBJ files.
+namespace obj_io {
+
+/// @brief Load a mesh from a Wavefront OBJ file.
+///
+/// Reads vertex positions and face indices from the file.  OBJ is a text
+/// format — you can open `.obj` files in any text editor to inspect them.
+///
+/// @param path Filesystem path to the `.obj` file.
+/// @return A Mesh populated with the file's geometry.
+///
+/// @throws std::runtime_error if the file cannot be opened or parsed.
+///
+/// @par Example
+/// @code{.cpp}
+/// Mesh model = scimesh::obj_io::read_obj("teapot.obj");
+/// if (!model.is_valid()) {
+///     std::cerr << "Failed to load valid mesh from OBJ file\n";
+/// }
+/// @endcode
+///
+/// @par Supported features
+/// - Vertex positions (v)
+/// - Faces as triangles (f v1 v2 v3)
+/// - Quads and n-gons (fan-triangulated automatically)
+/// - Negative relative indices (e.g., f -1 -2 -3)
+/// - Face index slash notation (e.g., f 1/2/3, f 1//3)
+///
+/// @par Unsupported
+/// - Vertex normals (vn) — call compute_vertex_normals() after loading
+/// - Texture coordinates (vt) — no UVs are loaded, so textured rendering needs
+///   UVs that you assign yourself (see Mesh::uvs).  The data is parsed by
+///   libfs, so supporting `vt` would be a small addition; until then the
+///   renderer gets no UVs from an OBJ file.
+/// - Materials (.mtl) — only geometry is loaded, colors are not imported
+///   from material files.
+///
+/// @see read_ply(), read_stl(), Mesh::is_valid(), compute_vertex_normals()
+Mesh read_obj(const std::string &path);
+
+} // namespace obj_io
+} // namespace scimesh
