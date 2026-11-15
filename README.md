@@ -38,6 +38,8 @@ The main features of Cubiquity are:
 
 * Export to the [MagicaVoxel](https://ephtracy.github.io/) .vox format is provided by the [vox_writer](src/application/commands/export/vox_writer) library, which can also be used completely separately from Cubiquity.
 
+* An orthographic **beam preview** renderer provides a non-stochastic low-resolution view of absorbing/emitting voxel models. It composes absorption and emission along complete columns and averages the composed columns by covered pixel area, so occlusion correlation between layers is preserved. See [beam rendering](#beam-rendering-orthographic-preview).
+
 ## Structure
 The engine consists of a number of modules, each [implemented in a single C++ header and corresponding source file](src/cubiquity). There are no external dependencies (beyond the C++ standard library) and each module requires only those below it in the diagram. This makes it easy to drop the source files into your project, or alternatively you can build them into a static library.
 
@@ -111,6 +113,42 @@ Which should give the image below:
 Cubiquity includes a mesh voxelizer to convert Wavefront .obj files into Cubiquity volumes. It uses [generalised winding numbers](https://igl.ethz.ch/projects/winding-number/robust-inside-outside-segmentation-using-generalized-winding-numbers-siggraph-2013-jacobson-et-al.pdf) to perform an inside vs. outside test on octree nodes, and this allows it to correctly fill the interior of objects rather than just drawing a 'shell' into the volume. The approach is very slow - I am aware that there are *much* faster approaches based on e.g GPU rasterisation but the current method is much more robust against cracks, t-junctions, open/missing faces, and other imperfections in the geometry (as well as being conceptually simple).
 
 The various settings (file names, resolution, etc) are not yet exposed via command line parameters, so this tool is not actually usable at the moment (unless you are prepared to edit the source code yourself).
+
+#### Beam rendering (orthographic preview)
+When a voxel model is displayed very small, a single output pixel covers many parallel columns of voxels. `BeamVolume` (`src/library/beam_volume.h`) provides an orthographic, non-stochastic preview of such a model for a palette of absorbing/emitting media. Rather than point-sampling rays it integrates absorption and emission along the depth of each column and then averages the fully composed columns by the area they cover in the pixel. Two layers with the same mean density therefore give different results depending on whether their occluders line up in the same columns or in staggered columns.
+
+A medium is constant within each unit voxel and the model is purely absorbing and emissive: there is no interpolation, scattering, reflection or windowing. For a single homogeneous slab of length `L`, the transmission and premultiplied emission are
+
+    T = exp(-extinction * L)
+    C = emission * (1 - T) / extinction      (extinction > 0)
+    C = emission * L                         (extinction == 0)
+
+and the composed result for a near segment followed by a far segment is
+
+    C = C_near + T_near * C_far
+    T = T_near * T_far
+
+For a background colour `B` the displayed pixel is `radiance + transmittance * B`.
+
+The palette is an `std::array<OpticalMaterial, 256>` indexed by material id. Material 0 is required to be fully transparent (zero extinction and zero emission); all other coefficients must be finite and each component must lie in `[0, 1e6]`. Palettes are validated as a whole: `setPalette()` publishes the new optical representation only if every entry is valid, otherwise the previous representation and statistics are retained. Re-setting the palette which is already active is a no-op. The source `Volume` is never modified, must not be modified while a `BeamVolume` exists, and must outlive it.
+
+Queries take an axis (0, 1 or 2), a direction, a pair of transverse ranges and a depth window:
+
+    BeamResult query(int axis, bool reverse,
+                     const std::array<i64, 2>& lo, const std::array<i64, 2>& hi,
+                     i64 depthLo, i64 depthHi, BeamStats* stats = nullptr) const;
+
+All ranges are integer half-open voxel-index intervals with endpoints in `[-2^31, 2^31]`; the transverse axes are the remaining coordinate axes in increasing order. For example `axis=2, lo=(0,0), hi=(2,1), depth=[0,2)` selects the columns at x in {0,1}, y = 0 and walks z in {0,1}. Index endpoints sit half a unit outside the physical voxel boundary. `reverse=false` walks from low to high depth. Empty footprints or depth windows return zero radiance and unit transmittance, and invalid parameters throw `std::invalid_argument`. The returned `radiance` and `transmittance` are averages over the integer footprint.
+
+Preparation builds a reusable hierarchical column-transfer representation directly over the volume's `NodeStore`. Uniform leaves are measured at their real height, shared subgraphs share prepared nodes, and the cache identity includes the scale, axis and direction. Lateral averaging is only applied after a complete column has been composed, and partial depth windows are clipped before composition. Internally the implementation never materialises per-voxel arrays or per-column ray arrays, and it does not substitute average materials or fixed steps. `prepareStats()` reports the number of unique source `(node, height, axis, direction)` states and of prepared 2D transfer nodes from the most recent valid preparation. `BeamStats` counters are reset before each query and incremented where a source or transfer node is actually visited; queries never rebuild the persistent representation. For a volume filled with one single material the preparation counts are bounded by 512 and the per-query visit counts by 256, independent of direction, footprint and depth window. Interleaved models may need a larger transfer graph.
+
+`src/library/beam_render.h` builds a linear RGB image from a `BeamView`, issuing one integer-footprint query per pixel and optionally compositing a background colour before encoding. `examples/beam_preview.cpp` renders a two-layer staggered absorption/emission scene to `.task-build/beam.ppm`:
+
+    c++ -std=c++20 -O1 -I. -Isrc/library src/library/base.cpp src/library/cubiquity.cpp \
+        src/library/extraction.cpp src/library/geometry.cpp src/library/raytracing.cpp \
+        src/library/storage.cpp src/library/utility.cpp src/library/beam_volume.cpp \
+        src/library/beam_render.cpp examples/beam_preview.cpp -o .task-build/beam-example
+    .task-build/beam-example            # optionally pass an output .ppm path
 
 #### Tests
 These are various tests for my own internal use. There should be no need for you to run them.
