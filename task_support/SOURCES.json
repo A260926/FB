@@ -1,0 +1,692 @@
+{
+  "sources": [
+    {
+      "repo": "https://github.com/StandardCyborg/nurbs",
+      "commit": "2742ab100c679b9dc9e412a2804ec7762afb3bd0",
+      "license": "MIT",
+      "license_path": "LICENSE"
+    },
+    {
+      "repo": "https://github.com/stackgl/gl-vec3",
+      "commit": "219dbe7bd23426fb921ee8f53edeb33e7a308155",
+      "version": "1.1.3",
+      "license": "zlib",
+      "license_path": "vendor/gl-vec3/LICENSE.md",
+      "archive_sha1": "a47c62f918774a06cbed1b65bcd0288ecbb03826",
+      "archive_sha256": "afcb54ab895c4751cfbb959dfe6f73ece8c9e2b03f31021ac8b875c97638435c"
+    }
+  ],
+  "files": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "3c3629e647f5ddf82548912e337bea9826b434af",
+      "sha256": "16d30e4462189fb14dd611bdb708c510630c576a1f35b9383e89a4352da36c97",
+      "origin": "nurbs"
+    },
+    {
+      "path": ".npmignore",
+      "mode": "100644",
+      "git_blob": "d8f8d46921aa81abc4c0d27703a8908333ae38c3",
+      "sha256": "0dab0d00b42ecf3a4310f25bf4ee14cc4e428eba673717b51cead334e507e61b",
+      "origin": "nurbs"
+    },
+    {
+      "path": ".travis.yml",
+      "mode": "100644",
+      "git_blob": "5f98e90186a8eac91de02c911dbb25910f53e56c",
+      "sha256": "7d29a8b68f104448ed90cf62a2dba6f8ddd3f7ee4272ae01dbd00244e16aef7f",
+      "origin": "nurbs"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "84a8b00a4a6f9b87367537948ec83bca9adae81e",
+      "sha256": "677e41e4aa0736db63015a4d0487b39d3aa7841b1341a38aa84195a348e18c2c",
+      "origin": "nurbs"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "dc2266212e831a4dda008d7b8a17c20f63967cb1",
+      "sha256": "a1dc78d49a56c29a0cbc983527057272ac7a2d6d6618e4b49b29e52de11f6021",
+      "origin": "nurbs"
+    },
+    {
+      "path": "dist/nurbs.js",
+      "mode": "100644",
+      "git_blob": "aeb823f5481f52ad55f2ee5bdf4c062dfe681e33",
+      "sha256": "b996f60050784c174d1cea97ab575d72c329a0c643c56b79ed915967b1a38591",
+      "origin": "nurbs"
+    },
+    {
+      "path": "dist/nurbs.min.js",
+      "mode": "100644",
+      "git_blob": "ef8ef825407d4c0fa38b0f55405270831cc3080c",
+      "sha256": "7f2aaebfc3a67f4f319dc387086068417a591e3040d3e196a3c07930b8e219ab",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/arc.js",
+      "mode": "100644",
+      "git_blob": "9f95cdeab7f792ff399e83d116b089c839d3b4ac",
+      "sha256": "d9769f4d84d44e0e9d0574f01800d1a4815e979e0c0c735645b3bdd116200a9f",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/box.js",
+      "mode": "100644",
+      "git_blob": "9cc90e0980bbd2b1ccd408382c3d40de0cb70be5",
+      "sha256": "97a1bad7b70c43648c145e630e19afcec5f6d4999389f0b04529cefd123e165c",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/circle.js",
+      "mode": "100644",
+      "git_blob": "34f85e391ccc8b583ddfb1f568092a59b266f1bd",
+      "sha256": "2854811bf4a572f5f02363a87d46a6371e2cf0374f902dfbff89706671a70e16",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/from-points.js",
+      "mode": "100644",
+      "git_blob": "63e009f76b9d057666cad85f5511fd1d29a087f0",
+      "sha256": "31b3479305e12694f53e088336cb1aadcff255f6049d3023764fb4f9fdc5690e",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/hull.js",
+      "mode": "100644",
+      "git_blob": "a3ef29b304b904d0433d09e44b2c75b46b5be8bf",
+      "sha256": "fac4158fe2e141db830b5ca8d10ec614f99fff992582478ef77ac2aac76fbeb5",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/loft.js",
+      "mode": "100644",
+      "git_blob": "80f4b719c32f989c3a7903a68fe9e05cdc043c75",
+      "sha256": "9be9a5bab3d3a35b5b81ec85c4025442159be57bca0528790356d18d5db2ad64",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/sample.js",
+      "mode": "100644",
+      "git_blob": "29618ce4ae8b8f546b0113711485634ef7006ebf",
+      "sha256": "26ec3e844e7b240acd47e1825d0364161e8a09c4e31231da094eb6daf26477a3",
+      "origin": "nurbs"
+    },
+    {
+      "path": "extras/uniform-knots.js",
+      "mode": "100644",
+      "git_blob": "1a73427b3e1a9203d57223dc0138e3e6aab9912f",
+      "sha256": "75de4ffdd71f37fd09084fccd5ab76ff437d183c3c84210a987ebf8c627a8064",
+      "origin": "nurbs"
+    },
+    {
+      "path": "nurbs.js",
+      "mode": "100644",
+      "git_blob": "9fbaa399d47d5c90d0dc2da6d635f9aa4d41752b",
+      "sha256": "48bea964fc980d407c319dab2286e92e0767a02e619c9326c13a7263daa92248",
+      "origin": "nurbs"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "git_blob": "990e29724bdd5fd163767f784013ea9dc608ae63",
+      "sha256": "c127710df886b9619ce4a6c241758df5c964dba68640107b687b3cb36fd919e1",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/evaluate.js",
+      "mode": "100644",
+      "git_blob": "e45fbf79e4523708de3dac93b432a63b52d5dbdc",
+      "sha256": "0e4beafc348b8e6348147ca5233bcccaa55be585b80ebd77f60e04fc88af7873",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/numerical-derivative.js",
+      "mode": "100644",
+      "git_blob": "8615cf56917add83dd9992f665f9b059e60da400",
+      "sha256": "9ded3cd94f4f9a0c2df372259591fd42efce09cde9bc50406ff601c9aad12d1c",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/support.js",
+      "mode": "100644",
+      "git_blob": "d18ff35062125ecf9accc0e60d3310cf8aa0f3d9",
+      "sha256": "958e80d58b7861abde1305849678cbc6542e59918ef76bde4bc2eef876f165ba",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/transform.js",
+      "mode": "100644",
+      "git_blob": "e61b967dbca8f6dc9aa7d43543c60639603e778d",
+      "sha256": "e915c7ce29dabb55436cf9e06e9be9dd4523bc26b69ce9895264b66bdaf22fae",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/accessor-preamble.js",
+      "mode": "100644",
+      "git_blob": "20b3a579c5c99e2fbc32840a21179701cd44137d",
+      "sha256": "6af9059ab665cdd648bde6adff26d1140062dfb3257d6aecbf73c206ab509fc0",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/bisection-search.js",
+      "mode": "100644",
+      "git_blob": "cd501a698776a1cfd78c9931b4f84ebcb0f40c1d",
+      "sha256": "2b06ca9d8c702a131248b28eb7db91ce715c170e440f5e0f29c0bb0810d21940",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/cache-key.js",
+      "mode": "100644",
+      "git_blob": "66ceb9e2d32133fe642baf8942b31fa3cdf42e76",
+      "sha256": "f85de52235efd7dab2a5368f9232d1ccf536cf5cfdfd085ce4e9ac71c825ad14",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/create-accessors.js",
+      "mode": "100644",
+      "git_blob": "051c6321ffbefc2a8d55c5379899b010046bc231",
+      "sha256": "3eca287b2bbce9a191ae797bdd72fb3f1c103ca652ed1f67b237c3b7697d7af5",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/infer-type.js",
+      "mode": "100644",
+      "git_blob": "d4b09d1d277643b54ed48e35d415121ee54366e0",
+      "sha256": "465a843a881bd1b4c35ee1560ff64d636bd2a470bb013a5f8d463c2ad299f57e",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/is-array-like.js",
+      "mode": "100644",
+      "git_blob": "fa89c37d9bf07833d515295145498889877cf369",
+      "sha256": "4cfa1a6793d926f6525530354ddbe08a20ed62c4db36c08eea3d1174718444ef",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/is-ndarray-like.js",
+      "mode": "100644",
+      "git_blob": "5a2c75f14e77649c5c0b71dd4342dd7228bebd4f",
+      "sha256": "764ff8dc37509441175acd582eec326d28ec2033ce12182c0829f60121263982",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/is-ndarray.js",
+      "mode": "100644",
+      "git_blob": "1b7ab2d8cdbacc4aae7fd30fe1a8c3fc4e22cc54",
+      "sha256": "2cbab3ed1837a37105079fa0f3622dd30112723dc5308019421b29b85c0f759c",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/ndloop.js",
+      "mode": "100644",
+      "git_blob": "c8300156f7894f3da8c99aa01fd30abb36249251",
+      "sha256": "e1d1ec6ca7b864da68fd22502059087ea3f85a1d353927d46ef4bfa4f954652f",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/size-getter.js",
+      "mode": "100644",
+      "git_blob": "de395813cc5b10a7c876eb7c6fb3e251c8a3c762",
+      "sha256": "b49be8ffca67a82940e5d114ab0cde8a176803a1eb979281d498bb49689999ff",
+      "origin": "nurbs"
+    },
+    {
+      "path": "src/utils/variable.js",
+      "mode": "100644",
+      "git_blob": "efe6f8fd65f4c168dd9904fea95124b2f26a5c05",
+      "sha256": "4e0fcb9f62bd34d2c20ddefa364981bbd74f05192651ac5930f3454d59681da1",
+      "origin": "nurbs"
+    },
+    {
+      "path": "vendor/gl-vec3/package.json",
+      "mode": "0o644",
+      "sha256": "b40adb5806445edf4832e0229db74f16603057e5158f49b1efbd9af5cb5d8696",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/add.js",
+      "mode": "0o644",
+      "sha256": "30c7498859db4fe86a44dfbb89b5930a6d667c0c34f69a5936b7d71590a719b6",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/angle.js",
+      "mode": "0o644",
+      "sha256": "2762d1d00947252744607f98e6946494a72e4fa4ac886bb8b9c33b1d47e8d454",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/ceil.js",
+      "mode": "0o644",
+      "sha256": "81f53a644bd77e773c536716ffbf40bdd26c8bc7fbc6976c86ea38fd724ef2b5",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/clone.js",
+      "mode": "0o644",
+      "sha256": "be3848d438b916d9e26a4d662698230582e4bd0faa50f4e878a9cb01c28aebd0",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/copy.js",
+      "mode": "0o644",
+      "sha256": "7957cd0be01e220814c7136fb06a0d8fa380617d7ea177c97da5bb42fe1c13dd",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/create.js",
+      "mode": "0o644",
+      "sha256": "fae2c3b67a40d90678427a78ac3d714fa3ba76fcf99efdc6aab2f7e32422ee95",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/cross.js",
+      "mode": "0o644",
+      "sha256": "53e1f3879c8061e969b677e7d457eb9874d5499787b7b38ded4f1c4536a0278f",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/dist.js",
+      "mode": "0o644",
+      "sha256": "76ee3ce3a8ff4698cfb827e49a0050666b7abbf49d51cf570ef64d853f7e6df5",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/distance.js",
+      "mode": "0o644",
+      "sha256": "4081556e7ee07dd4e858d5d4fd6e7e30a03130881be32d8236dce9420d0e3d6f",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/div.js",
+      "mode": "0o644",
+      "sha256": "35cf4d3b7c7e75564ea147c9a2f1e29cbf04761e9534b29fb28d6480aabd63e3",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/divide.js",
+      "mode": "0o644",
+      "sha256": "cac8e98f75ad97d8aeee932d42762b474fd98e16de8f91745d908da05ff1dd83",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/dot.js",
+      "mode": "0o644",
+      "sha256": "7a0b868fb173e97db87aa4cc67c91aa57499eb7354ddf6c51a055e2308310010",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/epsilon.js",
+      "mode": "0o644",
+      "sha256": "ad2f1f44faa65b846b27abe6361fbb6187b24b9c8681fb95941fc9207983555e",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/equals.js",
+      "mode": "0o644",
+      "sha256": "5b0ea8c124028309423e05b73968f55b3fa3e9aa46fc61a84edc8e7d495bb541",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/exactEquals.js",
+      "mode": "0o644",
+      "sha256": "eeba29a7a90640daf6067bfe1eb75c18cf72c8096efda8b2a9a7314c54626786",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/floor.js",
+      "mode": "0o644",
+      "sha256": "d85b7056b8a8c8797d96d492c3a97b51e64d23009ed5d8377354eedf37e446c5",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/forEach.js",
+      "mode": "0o644",
+      "sha256": "c4ca795112cce3b5fbc7ae9ba33c0b7b7b08d20d7ec433fbc6e7246d2b67e78f",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/fromValues.js",
+      "mode": "0o644",
+      "sha256": "8f6a0f24a9cd62fdc65ca6d4c1cc83046cbd23bb7453195efc5aaf421abd4b69",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/index.js",
+      "mode": "0o644",
+      "sha256": "66f7784aeef2696ee541323ac37ec005dc68286d3460ebc938c938e2874922f2",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/inverse.js",
+      "mode": "0o644",
+      "sha256": "e68d23a853e0b6763d4f9f31146cbe2a72bef330d797581715c0959f6b664a9e",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/len.js",
+      "mode": "0o644",
+      "sha256": "5cf0cb067b7d4cc36e5a187fbc7e1e830406357ae5472a2a46ca2c38711f806f",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/length.js",
+      "mode": "0o644",
+      "sha256": "bc851b2fda336a8091b29322b6849f87bbf8fe296b74473fe04e6b36dfd877a0",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/lerp.js",
+      "mode": "0o644",
+      "sha256": "8739b972eb8daa00a32bf737dd06fb5374295f8acf97cda36b70f9a6645d5054",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/LICENSE.md",
+      "mode": "0o644",
+      "sha256": "28b772abdf0b639145dca52fb975cb322bac45ee098da1aa316d41e1d3c4493a",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/max.js",
+      "mode": "0o644",
+      "sha256": "dca5606e3ded983e51a004467e21e6c75a1843ecf3974cb0648c304cf99c8eeb",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/min.js",
+      "mode": "0o644",
+      "sha256": "4eeca493cecf1d9cd6417537dfbac51c7d7f02a39fc143e8e4672a0d059174d3",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/mul.js",
+      "mode": "0o644",
+      "sha256": "0ce4da709e87338526d931ae69758a4bf5200fc34a14a39e1bc7053639db85be",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/multiply.js",
+      "mode": "0o644",
+      "sha256": "a32dd9e3799600929adff0341fd343c89143d166037ad2da59d47584862f7ea4",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/negate.js",
+      "mode": "0o644",
+      "sha256": "d961218d4f456cf9af43374b19efdf7f4800b9b57af2bcf8eed046b1748f29d8",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/normalize.js",
+      "mode": "0o644",
+      "sha256": "4b509c3703634251964ed0bb80a93943a0b82ee0a9a6ef0c483cc3ff0caa7ff7",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/random.js",
+      "mode": "0o644",
+      "sha256": "98b9756313ea9743e4cecb82e834ea239a1373297ff39e50cafa06e038bf6795",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/README.md",
+      "mode": "0o644",
+      "sha256": "7a8673ed8417dcec253cbd87eb576073a8af7bc5c79df3908d8c8f9391b9ec1b",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/rotateX.js",
+      "mode": "0o644",
+      "sha256": "40347492ef9a47ba4b1d6d7f52ea2be05d5bc1a4f8ba00d453bb771e9e575fac",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/rotateY.js",
+      "mode": "0o644",
+      "sha256": "304d3da89579e9e460dac957821cc36a78400732f8bde4575d739148f30d8d8b",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/rotateZ.js",
+      "mode": "0o644",
+      "sha256": "eba7acae85b3a61b9aca4494c48e838b20c1dadaf1257e1ce6a96e1a93a17907",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/round.js",
+      "mode": "0o644",
+      "sha256": "f1acee1667bb0475cd802cc3ff02b594703722fe4fc0ba6cacbf87e65449347e",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/scale.js",
+      "mode": "0o644",
+      "sha256": "44d1d76a93071bf323de889e9f0037599c0e8b31642a0744120f88648d881097",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/scaleAndAdd.js",
+      "mode": "0o644",
+      "sha256": "3456ea2cfc59cbea82ddd4514e0d8d2989895fd28733682e6812cb0dccdb7de1",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/set.js",
+      "mode": "0o644",
+      "sha256": "757a3042e54d0590b034beffec62480d62b42300c5c8fecaed3a5c045de21809",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/sqrDist.js",
+      "mode": "0o644",
+      "sha256": "776caea22740f9ba63bbcda45029bf21940dc817f0ceb76a4107193b21c4b88e",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/sqrLen.js",
+      "mode": "0o644",
+      "sha256": "9ee4637cad0be73543bb16ce9eed7f52e5db9e52b12214d42fcba0a60804cd58",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/squaredDistance.js",
+      "mode": "0o644",
+      "sha256": "2e8cb223d6eac3f78c9ea31f1b8dc9512498a645c14dfd21b3251fc29e3e1ac5",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/squaredLength.js",
+      "mode": "0o644",
+      "sha256": "423091adabc8456187d2e3c1e7b68a403e92b0a0d035f236f4ff37c708ab3d0e",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/sub.js",
+      "mode": "0o644",
+      "sha256": "4d2bb26c0688f5e544d36f5d7aa8c7f2fcf2aef8675852fc2bb779a5c37a42c6",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/subtract.js",
+      "mode": "0o644",
+      "sha256": "94a6552df9147855f1877964c2b3a21504b82b62ac6c5a4fbae215c8dbe7c80d",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/transformMat3.js",
+      "mode": "0o644",
+      "sha256": "effb651fb5122c655a7a4f71cb7a2a23c302c2d13bba59d2067b0a2837faa8b8",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/transformMat4.js",
+      "mode": "0o644",
+      "sha256": "0171a2660d68f6e685b1272ed5203bb19005fb043f643cdd5e8e727f493ce30a",
+      "origin": "gl-vec3"
+    },
+    {
+      "path": "vendor/gl-vec3/transformQuat.js",
+      "mode": "0o644",
+      "sha256": "c61fcbe0156bad214801a61b99d62f70ba33cecc069ae5d3d474cd7412f337af",
+      "origin": "gl-vec3"
+    }
+  ],
+  "exclusions": [
+    {
+      "path": "docs/clamped.png",
+      "mode": "100644",
+      "git_blob": "2eb727d1daa88e224fc2cab938eb9092756ebc2c",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/closed-bspline.png",
+      "mode": "100644",
+      "git_blob": "7ba4b2541f4ceca600b9814769ba7ebf6b736745",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/closed-nurbs.png",
+      "mode": "100644",
+      "git_blob": "f7e6cf963f7bcf789de815daa53d896d961c5cd6",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/index.html",
+      "mode": "100644",
+      "git_blob": "9a227ff58114b5eee72dcfa37bea90d3e945771a",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/open.png",
+      "mode": "100644",
+      "git_blob": "31cc5105d7ef7b75db1d40f8e319c01d35634222",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/sc.png",
+      "mode": "100644",
+      "git_blob": "6a7716d9e0b13a1b842007527f951a5373bfbe2a",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/surface.png",
+      "mode": "100644",
+      "git_blob": "4b0c2fe01b32a5a60903c506aa411353155aa124",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "docs/transformed.png",
+      "mode": "100644",
+      "git_blob": "82bc49de79da6fed97ce4a2a52056d398666cc32",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/3d.js",
+      "mode": "100644",
+      "git_blob": "5fe7a33e605b58b641dc3aab3be76296479638b6",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/adaptive-curve-sampling.js",
+      "mode": "100644",
+      "git_blob": "e3e734f0feeceaf0b196ab37637181eca7a926b5",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/basis.js",
+      "mode": "100644",
+      "git_blob": "ed138b81b28884b22acdaa1e5dc96af8f8c9a714",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/basis2d.js",
+      "mode": "100644",
+      "git_blob": "ca1d8e97ddde10bb0c3d60d264c0ddbbe95d3770",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/clamped.js",
+      "mode": "100644",
+      "git_blob": "e573ed6772f127733587209ad48655dbe86553a6",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/index.js",
+      "mode": "100644",
+      "git_blob": "eb37bbff2817450e8064c045f1e84b97545f21c0",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/regl-camera.js",
+      "mode": "100644",
+      "git_blob": "f8540a91a3651c5406560760b18910a9d1d2361d",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "example/surface.js",
+      "mode": "100644",
+      "git_blob": "c1dbd179179de8a100261e608c7aa8cbb1290568",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "git_blob": "262cbbd712b1a21e1bd492bb44217f105485a630",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "rollup.config.js",
+      "mode": "100644",
+      "git_blob": "0d948f4d78949c2e65fdf918e5176f241a17b1cc",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/array-of-arrays.js",
+      "mode": "100644",
+      "git_blob": "b4d8f1e1725cab0c7e68da3194685d7ba7010cae",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/derivative.js",
+      "mode": "100644",
+      "git_blob": "4e5d7cb7e8cbf04c880c7cdcc31f531012bf997d",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/index.js",
+      "mode": "100644",
+      "git_blob": "834aa1b20dd9dceb58db857c732c1577f19aa635",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/infer-type.js",
+      "mode": "100644",
+      "git_blob": "e26a77181cb7e76ccefa9f7710a9c65ad6836e00",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/is-ndarray.js",
+      "mode": "100644",
+      "git_blob": "e685cf7d97115c2ad4c5db54d87541f52652da5a",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/ndarray.js",
+      "mode": "100644",
+      "git_blob": "35c19e8909c91d1574a736129ddf0b56631bf4a7",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    },
+    {
+      "path": "test/utils/naive-evaluate.js",
+      "mode": "100644",
+      "git_blob": "0c0ca6c4ee5894f36b442af9fe17b673504415ac",
+      "reason": "optional upstream browser demo, documentation asset, external test toolchain or unused development bundle metadata"
+    }
+  ],
+  "modifications": []
+}
