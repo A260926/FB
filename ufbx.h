@@ -5621,6 +5621,76 @@ ufbx_abi void ufbx_add_blend_shape_vertex_offsets(const ufbx_blend_shape *shape,
 // NOTE: This depends on the current animated blend weight of the deformer.
 ufbx_abi void ufbx_add_blend_vertex_offsets(const ufbx_blend_deformer *blend, ufbx_vec3 *vertices, size_t num_vertices, ufbx_real weight);
 
+// -- Skin weight fitting
+
+// Options for `ufbx_fit_skin_weights()`.
+// NOTE: Initialize to zero with `{ 0 }` (C) or `{ }` (C++)
+//
+// The fitter finds a constant set of at most `max_weights` non-negative,
+// normalized bone weights per vertex that best matches, over the animation at
+// every time in `sample_times[]`, the world-space vertex positions produced by
+// the original full skinning. The guarantee only covers the discrete samples:
+// the error is minimized and reported exactly at `sample_times[]`, nowhere else.
+typedef struct ufbx_skin_weight_fit_opts {
+	uint32_t _begin_zero;
+
+	// Animation sample times in seconds, must contain 1 to 64 strictly
+	// increasing, finite values. The array is copied by the call and does not
+	// need to outlive it.
+	const double *sample_times;
+	size_t num_samples;
+
+	// Maximum number of non-zero weights stored per vertex, from 1 to 4.
+	size_t max_weights;
+
+	// Maximum allowed per-vertex world-space Euclidean error (see
+	// `ufbx_skin_weight_fit_report.max_error`). Must be finite and non-negative.
+	double max_error;
+
+	uint32_t _end_zero;
+} ufbx_skin_weight_fit_opts;
+
+// Result report of `ufbx_fit_skin_weights()`.
+//
+// `max_error` is recomputed from the weights actually stored in the returned
+// scene (cast to `ufbx_real`), not from the internal double precision solver.
+typedef struct ufbx_skin_weight_fit_report {
+	// Largest world-space Euclidean error over every vertex and sample,
+	// recomputed from the final stored `ufbx_real` weights.
+	double max_error;
+
+	// Vertex that reaches `max_error`, the smallest index on a tie.
+	size_t worst_vertex;
+
+	// Sample index (into `ufbx_skin_weight_fit_opts.sample_times[]`) at which
+	// `worst_vertex` reaches `max_error`, the smallest index on a tie.
+	size_t worst_sample;
+
+	// Total number of positive influences stored in the fitted skin.
+	size_t total_weights;
+} ufbx_skin_weight_fit_report;
+
+// Fit the skin weights of a single mesh to at most `opts->max_weights`
+// influences per vertex, minimizing the summed squared world-space position
+// error over all `opts->sample_times` against the original full skinning.
+//
+// Returns a new independent scene (free it with `ufbx_free_scene()`) whose pose
+// at time zero has the fitted weights installed in both
+// `ufbx_skin_deformer.vertices/weights`, `max_weights_per_vertex` and every
+// `ufbx_skin_cluster.vertices/weights`. The source `scene`, `anim` and any
+// existing evaluated scenes are never modified. If `anim` is `NULL`,
+// `scene->anim` is used.
+//
+// Only a mesh with exactly one instance, one LINEAR `ufbx_skin_deformer` not
+// shared by any other mesh, without geometry caches, is supported. Blend shapes
+// are allowed and participate in the fitting. Returns `NULL` and fills `error`
+// without touching `report` on any invalid input, unsupported configuration or
+// when the optimal fit cannot stay within `opts->max_error`.
+ufbx_abi ufbx_scene *ufbx_fit_skin_weights(
+	const ufbx_scene *scene, const ufbx_anim *anim, size_t mesh_typed_id,
+	const ufbx_skin_weight_fit_opts *opts,
+	ufbx_skin_weight_fit_report *report, ufbx_error *error);
+
 // Curves/surfaces
 
 // Low-level utility to evaluate NURBS the basis functions.

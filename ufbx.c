@@ -30603,6 +30603,34 @@ ufbx_abi void ufbx_retain_scene(ufbx_scene *scene)
 	ufbxi_retain_ref(&imp->refcount);
 }
 
+// Internal allocation entry point for the skin weight fitter. Allocates from
+// the scene's own result buffer so the returned tables stay valid for the whole
+// lifetime of the scene and are released by the regular `ufbx_free_scene()`.
+// The fitter lives in a separate translation unit (src/ufbx_skin_fit.c) and so
+// cannot touch the private `ufbxi_scene_imp` layout directly.
+void *ufbxi_skin_fit_scene_push(ufbx_scene *scene, size_t elem_size, size_t count)
+{
+	ufbxi_scene_imp *imp = ufbxi_get_imp(ufbxi_scene_imp, scene);
+	ufbx_assert(imp->magic == UFBXI_SCENE_IMP_MAGIC);
+	if (imp->magic != UFBXI_SCENE_IMP_MAGIC || elem_size == 0) return NULL;
+	if (count == 0) return (void*)ufbxi_zero_size_buffer;
+
+	ufbx_error push_error;
+	imp->refcount.ator.error = &push_error;
+	ufbxi_buf buf = imp->refcount.buf;
+	buf.ator = &imp->refcount.ator;
+
+	void *ptr = ufbxi_push_size(&buf, elem_size, count);
+
+	imp->refcount.ator.error = NULL;
+	if (ptr) {
+		// Retain any new chunks the buffer had to allocate so that
+		// `ufbx_free_scene()` releases them together with the scene.
+		imp->refcount.buf = buf;
+	}
+	return ptr;
+}
+
 ufbx_abi ufbxi_noinline size_t ufbx_format_error(char *dst, size_t dst_size, const ufbx_error *error)
 {
 	if (!dst || !dst_size) return 0;
