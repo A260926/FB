@@ -1,6 +1,7 @@
 #include "Camera.h"
 
 #include "brdf/FancyBRDF.h"
+#include "PatchTransport.h"
 
 void Camera::initialize() {
     // Calculate the aspect ratio
@@ -111,6 +112,63 @@ Radiance Camera::trace_binary(const Ray& r, const Object& world) const {
         return Radiance(1,0,0);
     }
     return Radiance(0,0,0);
+}
+
+
+Radiance Camera::trace_fitted(const Ray& r, const Object& world, const EmissionFit& fit) const {
+    IntersectionRecord rec;
+    if (!world.intersect(r, Interval(0.001, infinity), rec)) {
+        return background;
+    }
+    // Only front faces of the fit's patch meshes carry fitted exitance.
+    // Back faces and every other occluder shade black; no light or ambient
+    // terms are added on top.
+    if (rec.patch_mesh != nullptr && rec.front_face) {
+        Radiance emission, exitance;
+        if (fit.lookup(rec.patch_mesh, rec.patch_face, emission, exitance)) {
+            return exitance / pi;
+        }
+    }
+    return Radiance(0, 0, 0);
+}
+
+
+void Camera::render_fitted(const Object& world, const EmissionFit& fit) {
+    initialize();
+    std::vector<Radiance> pixelData(static_cast<size_t>(image_width) * static_cast<size_t>(image_height));
+
+    std::vector<Vector3> poisson_samples;
+    if (sampling_method == AntiAliasing::POISSON) {
+        double min_distance = 0.5 / std::sqrt(samples_per_pixel);
+        poisson_samples = generate_poisson_disk_samples(samples_per_pixel, min_distance);
+    }
+
+    for (int j = 0; j < image_height; j++) {
+        std::clog << "\rRemaining rows: " << (image_height - j) << ' ' << std::flush;
+        for (int i = 0; i < image_width; i++) {
+            Radiance pixel_color(0, 0, 0);
+            for (int sample = 0; sample < samples_per_pixel; ++sample) {
+                Vector3 offset;
+                switch (sampling_method) {
+                    case AntiAliasing::RANDOM:
+                        offset = sample_offset();
+                        break;
+                    case AntiAliasing::JITTERED:
+                        offset = jittered_sample(sample);
+                        break;
+                    case AntiAliasing::POISSON:
+                        offset = poisson_samples[sample % poisson_samples.size()];
+                        break;
+                }
+                Ray r = get_sampled_ray(i, j, offset);
+                pixel_color += trace_fitted(r, world, fit);
+            }
+            pixel_color *= (1.0 / samples_per_pixel);
+            pixelData[static_cast<size_t>(j) * static_cast<size_t>(image_width) + static_cast<size_t>(i)] = tone_map(pixel_color);
+        }
+    }
+
+    output_image(pixelData);
 }
 
 

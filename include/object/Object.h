@@ -7,6 +7,7 @@
 #include <algorithm>
 
 
+class PatchMesh; // Forward declaration for patch identity in IntersectionRecord
 
 class IntersectionRecord {
   // Record the information of the intersection point
@@ -20,11 +21,23 @@ class IntersectionRecord {
 
     Material* mat_ptr = nullptr; // Pointer to the material of the object
 
+    // Patch identity: set only when the hit object is a face of a PatchMesh.
+    // Regular primitives (Sphere, Cylinder, Triangle, ...) leave these untouched.
+    const PatchMesh* patch_mesh = nullptr; // Source mesh that owns the hit face
+    int patch_face = -1;                   // Source face index within that mesh
+
     void set_face_normal(const Ray& r, const Vector3& outward_normal) {
         // Sets the hit record normal vector.
         front_face = dot(r.direction(), outward_normal) < 0;
         // If the ray hits the back face, flip the normal
         normal = front_face ? outward_normal : -outward_normal;
+        // A fresh hit record is being written by whichever primitive called
+        // this; clear any stale patch identity left by an earlier, farther
+        // hit during traversal. PatchMesh faces set their identity after
+        // calling set_face_normal, so regular primitives correctly report
+        // no patch identity.
+        patch_mesh = nullptr;
+        patch_face = -1;
     }
 
 };

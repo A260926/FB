@@ -8,6 +8,8 @@
 #include "light/LightList.h"
 #include "ThreadPool.h"
 
+class EmissionFit; // Forward declaration for render_fitted
+
 class Camera {
   public:
     /* Public Camera Parameters Here */
@@ -93,6 +95,14 @@ class Camera {
 
     std::vector<Radiance> render_path_parallel(const Object& world, Light& lights, size_t num_threads);
 
+    // Render a fitted emission result with the original camera projection,
+    // pixel sampling and tone mapping. Front-face hits on the fit's patch
+    // meshes show that source face's B/pi; back faces and every other
+    // occluder are black; misses show the camera background. No PointLight
+    // or ambient terms are added, and shared Materials are never modified,
+    // so any number of fit results can be rendered interleaved.
+    void render_fitted(const Object& world, const EmissionFit& fit);
+
 
 
   private:
@@ -130,6 +140,8 @@ class Camera {
     }
 
     Radiance trace_binary(const Ray& r, const Object& world) const;
+
+    Radiance trace_fitted(const Ray& r, const Object& world, const EmissionFit& fit) const;
 
     Radiance trace_phong(const Ray& r, const Object& world, const Light& lights, int depth) const;
 

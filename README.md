@@ -198,6 +198,136 @@ Rectangular area lights use `type: "rectlight"` with `u`, `v`, `width`, `height`
 | `phong` | Blinn-Phong shading with shadow rays, recursive reflection, and refraction via Schlick's approximation. Configurable bounce depth. | Lit scene with highlights, shadows, mirrors, and glass |
 | `path` | Monte Carlo path tracing. Each pixel sends multiple samples, bouncing through the scene with BRDF importance sampling. Russian Roulette terminates paths stochastically. | Physically-based global illumination with soft shadows and indirect lighting |
 
+## Inverse Lighting (Emission Fitting)
+
+A small inverse-lighting entry point lives on top of the regular scene
+graph: given a triangle mesh, per-face diffuse reflectance, a set of
+candidate emitting faces, and target brightness values on some faces, it
+solves for the non-negative RGB emission of each candidate face and renders
+the multi-bounce result through the original camera.
+
+### PatchMesh
+
+`include/object/PatchMesh.h` — an `Object` built from a vertex array,
+triangle indices, and one `Material*` per face:
+
+```cpp
+std::vector<Point3> verts = {Point3(0,0,0), Point3(1,0,0), Point3(0,1,0)};
+std::vector<std::array<int,3>> tris = {{{0, 1, 2}}};   // CCW = front face
+std::vector<Material*> mats = {&mat};                  // borrowed, not owned
+auto mesh = std::make_shared<PatchMesh>(verts, tris, mats);
+```
+
+- Vertices and indices are **owned** by the mesh (copied); materials follow
+  the usual external-lifetime convention (the mesh never deletes them).
+- Each triangle keeps its **source face number** (its position in the index
+  array); the internal BVH may reorder faces but never changes their ids.
+- The mesh is a regular `Object`: add it to the same `ObjectList` as
+  spheres, cylinders and triangles, call `world.build()`, and everything
+  occludes everything else. There is no separate fit-only world.
+- `IntersectionRecord` gained two fields: `patch_mesh` and `patch_face`.
+  Hits on a `PatchMesh` report the source mesh and source face number;
+  hits on regular primitives report `nullptr` / `-1`.
+- Only static, finite, non-degenerate triangles are accepted; construction
+  throws `std::invalid_argument` otherwise.
+
+### PatchTransport
+
+`include/PatchTransport.h` — discrete patch-to-patch transport over the
+faces of a list of meshes, embedded in the real (already built) world:
+
+```cpp
+ObjectList world;
+world.add(mesh);          // each mesh added exactly once
+world.add(occluders...);  // spheres, triangles, ... any Object
+world.build();
+
+PatchTransport transport({meshA, meshB}, world, /*eps=*/1e-6);
+```
+
+- Faces are numbered globally in mesh input order, then by source face
+  number; at most 128 faces.
+- Each face contributes three equal-weight area sample points at the cyclic
+  permutations of barycentric `(2/3, 1/6, 1/6)`. For every pair of distinct
+  faces the nine connecting segments are tested with the world's own
+  `intersect` on the open interval `(eps, dist - eps)`; every primitive
+  occludes double-sided, back faces do not transmit, and sample-point pairs
+  within `100*eps` contribute zero.
+- `H_ij = Ai*Aj/(9*pi) * sum_9 max(0, ni.d) * max(0, -nj.d) * V / dist^2`,
+  stored symmetrically, `H_ii = 0`. The whole `H` is divided by the single
+  global scale `max(1, s)` with `s = max_i sum_j H_ij/Ai` (never per-row
+  normalized, preserving area reciprocity), and `F_ij = H_ij/Ai`.
+- Materials must be flat diffuse: no textures, reflection or refraction,
+  and `rho = kd * diffusecolor` within `[0, 0.95]` per channel
+  (`std::invalid_argument` otherwise).
+- The transport keeps an owning snapshot of geometry and reflectance and no
+  reference to the world; rebuild it when geometry or occlusion changes.
+- Read-only queries: `face_count()`, `area(i)`, `form_factor(i, j)`,
+  `reflectance(i)`, `face_mesh(i)`, `face_source_index(i)`.
+
+### Fitting emission: PatchTransport::fit
+
+```cpp
+std::vector<int> candidates = {0, 1};                 // 1..16 distinct faces
+std::vector<FitObservation> observations = {          // 1..256 entries
+    {2, Radiance(0.55, 0.48, 0.40), 1.0},             // face, target, weight
+    {3, Radiance(0.40, 0.40, 0.45), 1.0},
+};
+std::optional<EmissionFit> fit =
+    transport.fit(candidates, observations, /*lambda=*/1e-4, /*budget=*/2000);
+if (!fit) { /* invalid input or iteration budget exhausted */ }
+```
+
+- Solves, per RGB channel, `min sum_o w_o |B_face(o) - target_o|^2 +
+  lambda * sum_k |x_k|^2` over candidate emissions `x >= 0`, where `B`
+  satisfies the full multi-reflection equation `B = E + rho * F * B`
+  (never a one-bounce approximation). Targets may be negative and are used
+  as-is; repeated observations accumulate as independent terms.
+- Succeeds only when every channel meets
+  `||x - max(0, x - grad)||_inf <= 1e-8 * max(1, ||grad_at_zero||_inf)`
+  with the true objective gradient; rank-deficient, fully occluded and
+  boundary (`x = 0`) optima are handled by an active-set solver.
+- Returns `std::nullopt` on invalid input or when the positive iteration
+  budget is exhausted; previously returned results are never modified and
+  no state leaks between fits.
+- `EmissionFit` owns mesh references plus per-face `emission(face)` (E) and
+  `exitance(face)` (B) values, `objective()`, and
+  `projected_gradient_norm()`; it stays valid after the transport is
+  destroyed.
+
+### Rendering a fit: Camera::render_fitted
+
+```cpp
+Camera cam;                       // configure exactly like a normal render
+cam.filename = "fitted.ppm";
+cam.render_fitted(world, *fit);   // world: the same ObjectList
+```
+
+Reuses the camera projection, pixel sampling and tone mapping. Front-face
+hits on the fit's meshes show that source face's `B/pi`; back faces and all
+other occluders are black; misses show the camera background. No point
+light or ambient terms are added, shared `Material`s are never modified,
+and any number of fit results can be rendered interleaved.
+
+### Example
+
+`examples/fit_emission.cpp` builds a small room (ceiling emitters, floor
+and wall targets, a sphere occluder), fits the ceiling emission to reach
+target brightness after all bounces, and writes a PPM:
+
+```bash
+c++ -std=c++17 -O2 -pthread -Iinclude -I. \
+    examples/fit_emission.cpp src/PatchMesh.cpp src/PatchTransport.cpp \
+    src/Camera.cpp src/Node.cpp src/ObjectList.cpp src/ImageWriter.cpp \
+    -o fit_emission
+./fit_emission out.ppm
+```
+
+Regression tests for the whole entry point (geometry, inverse, render
+groups) live in `task_tests/emission_fit.cpp`; `bash task_support/run.sh
+target` builds everything, runs the example, the three test groups, and the
+original triangle/BVH/camera baseline.
+
 ## Test Suite
 
 A smoke test builds the project and renders all scenes in `TestSuite/`:
@@ -210,7 +340,7 @@ This compiles the project, runs each JSON scene through the renderer, and checks
 
 ## Code Map
 
-The codebase uses a header-heavy architecture where most implementation lives in `.h` files. Only four modules have separate `.cpp` files (Camera, Node, ObjectList, ImageWriter).
+The codebase uses a header-heavy architecture where most implementation lives in `.h` files. Six modules have separate `.cpp` files (Camera, Node, ObjectList, ImageWriter, PatchMesh, PatchTransport).
 
 ```
 include/
@@ -218,11 +348,13 @@ include/
   Parser.h          -- Header-only JSON scene parser (nlohmann/json)
   Material.h        -- Material data struct, texture loading, GGX helpers
   ImageWriter.h     -- PPM P3 file writer
+  PatchTransport.h  -- Inverse lighting: discrete patch transport, emission fit
   object/
-    Object.h        -- Abstract base class (intersect, bounding_box)
+    Object.h        -- Abstract base class (intersect, bounding_box), patch identity in hit records
     Sphere.h        -- Analytic sphere intersection
     Triangle.h      -- Moller-Trumbore ray-triangle test
     Cylinder.h      -- Finite cylinder intersection
+    PatchMesh.h     -- Owned triangle mesh with per-face materials and source face ids
     ObjectList.h    -- Scene geometry collection, BVH entry point
   bvh/
     BoundingBox.h   -- AABB with ray-axis slab test
@@ -243,6 +375,13 @@ include/
     Radiance.h      -- Tone mapping functions
     Interval.h      -- Min/max interval for ray parameter bounds
     Utilities.h     -- Enums, constants, RNG, math helpers
+src/
+  PatchMesh.cpp     -- PatchMesh validation, internal BVH, intersection
+  PatchTransport.cpp -- Form factors, response inverse, NNLS emission solver
+examples/
+  fit_emission.cpp  -- Inverse-lighting example: fit ceiling emission, render B/pi
+task_tests/
+  emission_fit.cpp  -- geometry / inverse / render regression groups
 ```
 
 ## Performance
