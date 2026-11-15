@@ -19,7 +19,8 @@ done
 c++ -std=c++17 -O2 -I. task_support/baseline.cpp .task-build/*.o -o .task-build/baseline
 if [[ $mode == target ]]; then
   c++ -std=c++17 -O2 -I. task_support/driver.c test/skin_shadow_cases.cpp .task-build/*.o -o .task-build/target
-  output_log=$(mktemp)
+  output_log=.task-build/target-output.log
+  : > "$output_log"
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
