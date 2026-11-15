@@ -160,6 +160,114 @@ tiled at 1/3/8 threads and 16/32/64 px tiles compared byte for byte. CI runs the
 gcc/Linux and clang/macOS, renders every scene with the overlays, runs a small bench, and
 repeats the tests under ASan+UBSan.
 
+## Transient render pass (tile-local RGBA32F)
+
+The ordinary path quantizes each fragment to RGBA8 as soon as the shader returns, so an
+off-screen material flow that needs negative components or values above 1 cannot keep them.
+A transient render pass runs geometry, material processing and the final shade together inside
+one tile, against on-tile **RGBA32F** attachments. Intermediate attachments never touch the
+framebuffer and have no full-screen backing store; only the final attachment is converted once
+through `to_u8` at the end. Different tiles advance independently on the worker pool, exactly
+like the tiled fill, so 1/3 threads and any tile size produce byte-identical color and depth.
+
+### Plan and compiler (`include/softgpu/render_pass.hpp`)
+
+```cpp
+struct PassSubpass {
+  std::vector<int> inputs;   // ordered input attachment IDs, read-only this subpass
+  std::vector<int> outputs;  // ordered output attachment IDs, writable this subpass
+};
+
+struct RenderPassPlan {
+  std::map<int, Vec4> clear_values;  // clear value of every logical attachment ID
+  std::vector<PassSubpass> subpasses;
+  int final_output;                  // attachment resolved into the color framebuffer
+  int physical_slots;                // available physical on-tile RGBA32F slots
+  PassPlanInfo info;                 // filled in by the compiler
+};
+
+struct PassPlanInfo {
+  int min_slots;                  // minimum slots the liveness analysis needs
+  int physical_slots;             // budget the plan was compiled against
+  std::map<int, int> slot_for;    // logical attachment ID -> physical slot
+  std::map<int, int> first_output;
+  std::map<int, int> last_use;
+  bool compiled;
+};
+
+// Validates the plan and returns an immutable compiled plan. Throws std::invalid_argument for
+// an illegal reference, a feedback loop, a read of an attachment no earlier subpass produced,
+// an undefined final output, or a slot budget below the computed minimum. Nothing renderer-
+// side is touched, so a failed compile cannot leave a half-open pass.
+std::shared_ptr<RenderPassPlan> compile_render_pass(const RenderPassPlan& desc);
+```
+
+Plan rules enforced up front: every referenced ID has a clear value; each subpass's inputs and
+outputs hold no duplicates and never overlap; every input was output by an earlier subpass; the
+final output is produced somewhere. A declared attachment that is never used takes no slot.
+
+### Slot aliasing
+
+An attachment's closed liveness interval runs from the subpass that first outputs it to the
+last subpass that inputs or outputs it; the final output is extended to the end of the pass.
+Two intervals that merely share an endpoint still conflict, so such attachments get different
+slots; intervals separated by a strict gap share one. Compilation is an optimal interval-graph
+coloring, so `min_slots` is the true maximum simultaneous liveness — never the logical
+attachment count. `slot_for` publishes the logical-to-physical mapping.
+
+### Renderer interface
+
+```cpp
+class Renderer {
+ public:
+  // Validate against this renderer and open the pass at subpass 0. Throws std::logic_error if
+  // a pass is already active or ordinary tiled draws still await finish();
+  // std::invalid_argument if the plan was never compiled.
+  void begin_pass(const RenderPassPlan& plan);
+
+  // Record one draw into the current subpass. Allowed only when the subpass declares outputs;
+  // throws std::invalid_argument when DrawState::blend is true (the new path has no blender).
+  // VS, six-plane clipping, coverage, perspective attributes and ddx/ddy are the ordinary
+  // pipeline; cull/depth_test/depth_write follow DrawState. Consecutive calls may differ in N
+  // and FS. The fragment shader is bool(const Fragment<N>&, PassFragmentIO&).
+  template <int N, class Vertex, class VS, class FS>
+  void subpass_draw(const Vertex* verts, size_t nverts, const uint32_t* idx, size_t nidx,
+                    const VS& vs, const FS& fs, const DrawState& st = DrawState{});
+
+  void next_subpass();   // advance; std::logic_error past the last subpass
+  void end_pass();       // run every tile to completion and resolve the final attachment
+
+  size_t transient_peak_pixels() const;  // measured high-water mark of held Vec4 pixels
+};
+
+class PassFragmentIO {
+ public:
+  int input_count() const;
+  int output_count() const;
+  const Vec4& in(int i) const;  // current-pixel inputs only; no screen-space addressing
+  Vec4& out(int i);             // ordered like the subpass outputs list
+};
+```
+
+Each tile runs all subpasses in order over its already-binned geometry. An attachment is
+cleared to its own clear value over the valid tile area when the subpass that first outputs it
+starts — even if that subpass has no geometry — and later re-outputs preserve the existing
+contents. The framebuffer's depth is loaded per tile, shared through every subpass and written
+back at the end. Outputs start at zero for every fragment; a shader returning `false` writes no
+output and no depth (a re-output attachment keeps its previous value), and an accepted fragment
+commits all its outputs together.
+
+`transient_peak_pixels()` reports the largest number of `Vec4` pixels held at once. The hard
+bound is `workers * min_slots * tile_size^2` pixels
+(`workers * min_slots * tile_size^2 * sizeof(Vec4)` bytes); Immediate mode counts one worker,
+and depth and geometry are excluded. There is never a full-resolution float image.
+
+While a pass is active, ordinary `draw`, `clear`, `finish` and a second `begin_pass` throw
+`std::logic_error` and leave the recorded pass untouched; a pass cannot begin while ordinary
+draws are un-`finish`ed. In Immediate mode the tiles execute serially at `end_pass()`; in Tiled
+mode they reuse the worker threads. `examples/transient_material.cpp` is a five-attachment /
+two-slot demo that writes a P6 PPM to the path given on the command line.
+
 ## Next
 
 - Guard-band clipping: only clip against near/far and let the fixed-point range absorb the

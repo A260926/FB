@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 #include "softgpu/clip.hpp"
@@ -14,6 +15,17 @@
 #include "softgpu/thread_pool.hpp"
 
 namespace softgpu {
+
+// Full definitions live in render_pass.hpp; the renderer only holds pointers/handles so this
+// header's ordinary draw path does not depend on the pass machinery.
+struct RenderPassPlan;
+struct PassBatchBase;
+
+// One binned triangle reference inside one subpass: draw index within that subpass plus the
+// (chunk, triangle) location in that draw's set-up geometry.
+struct PassTriRef {
+  uint32_t draw = 0, chunk = 0, tri = 0;
+};
 
 // What the fragment shader sees. attr are perspective-correct; ddx/ddy are their exact
 // screen-space derivatives (a GPU would estimate them from a 2x2 quad).
@@ -66,7 +78,10 @@ class Renderer {
   // Triangles binned into a tile this frame (valid between the draws and finish()).
   uint32_t bin_count(int tx, int ty) const { return tile_counts_[static_cast<size_t>(ty) * tiles_x_ + tx]; }
 
-  void clear(Vec4 color, float depth = 1.0f) { fb_.clear(color, depth); }
+  void clear(Vec4 color, float depth = 1.0f) {
+    if (pass_active_) throw std::logic_error("clear() is not allowed inside a transient render pass");
+    fb_.clear(color, depth);
+  }
 
   // Debug overlays, drawn by finish() after the fill: triangle edges, and the tile grid tinted
   // by how many triangles were binned into each tile.
@@ -76,6 +91,7 @@ class Renderer {
   template <int N, class Vertex, class VS, class FS>
   void draw(const Vertex* verts, size_t nverts, const uint32_t* idx, size_t nidx, const VS& vs, const FS& fs,
             const DrawState& st = DrawState{}) {
+    if (pass_active_) throw std::logic_error("draw() is not allowed inside a transient render pass");
     const uint64_t t0 = now_ns();
     auto batch = std::make_unique<Batch<N, FS>>(fs, st);
 
@@ -194,6 +210,7 @@ class Renderer {
   // pass, and walks its triangles in submission order, so depth test and blending see the
   // same fragment order as the immediate path.
   void finish() {
+    if (pass_active_) throw std::logic_error("finish() is not allowed inside a transient render pass");
     const uint64_t t0 = now_ns();
     if (cfg_.mode == Mode::Tiled && !batches_.empty()) {
       pool_.run(bins_.size(), [&](size_t tile) {
@@ -222,6 +239,22 @@ class Renderer {
     return Rect{tx * cfg_.tile_size, ty * cfg_.tile_size, std::min(fb_.width, (tx + 1) * cfg_.tile_size) - 1,
                 std::min(fb_.height, (ty + 1) * cfg_.tile_size) - 1};
   }
+
+  // --- Transient render pass with on-tile RGBA32F attachments (defined in render_pass.hpp) ---
+  // begin_pass validates the already-compiled plan against this renderer, advances to the first
+  // subpass and allocates the per-tile transient store; subpass_draw records one draw into the
+  // current subpass; next_subpass advances (throws past the last subpass); end_pass runs every
+  // tile to completion and resolves the final attachment into the color framebuffer.
+  void begin_pass(const RenderPassPlan& plan);
+  template <int N, class Vertex, class VS, class FS>
+  void subpass_draw(const Vertex* verts, size_t nverts, const uint32_t* idx, size_t nidx, const VS& vs,
+                    const FS& fs, const DrawState& st = DrawState{});
+  void next_subpass();
+  void end_pass();
+  // High-water mark of Vec4 pixels held simultaneously in transient tile storage during the
+  // last (or current) pass. The byte bound is workers * min_slots * tile_size^2 * sizeof(Vec4);
+  // depth and geometry are not counted. Immediate mode counts as one worker.
+  size_t transient_peak_pixels() const { return pass_peak_pixels_; }
 
  private:
   struct TriRef {
@@ -374,6 +407,22 @@ class Renderer {
   std::vector<Line> edges_;
   std::mutex mu_;
   bool wireframe_ = false, show_tiles_ = false;
+
+  // Transient pass state. A pass owns the renderer between begin_pass and end_pass: ordinary
+  // draw/clear/finish are rejected while one is active, and a pass cannot begin while ordinary
+  // tiled draws are still recorded (batches_ non-empty means a finish() is pending).
+  bool pass_active_ = false;
+  const RenderPassPlan* pass_plan_ = nullptr;
+  int pass_subpass_ = -1;
+  // Per subpass: its recorded draws and one bin list per tile. All geometry is set up and
+  // binned at subpass_draw time, so end_pass only walks the bins.
+  std::vector<std::vector<std::unique_ptr<PassBatchBase>>> pass_batches_;
+  std::vector<std::vector<std::vector<PassTriRef>>> pass_bins_;
+  size_t pass_peak_pixels_ = 0;  // measured high-water mark of simultaneously held Vec4 pixels
 };
 
 }  // namespace softgpu
+
+// The transient render-pass plan, compiler and the definitions of the Renderer pass methods.
+// Included last so they see the complete Renderer class.
+#include "softgpu/render_pass.hpp"

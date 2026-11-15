@@ -2,6 +2,7 @@ build/
 build-*/
 .venv/
 out/
+.task-build/
 *.ppm
 *.pgm
 .DS_Store
