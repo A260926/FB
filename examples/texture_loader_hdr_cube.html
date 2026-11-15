@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - hdr loader</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - hdr loader for cube
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { SkyBox } from 't3d/addons/objects/SkyBox.js';
+		import { RGBETextureCubeLoader } from 't3d/addons/loaders/RGBELoader.js';
+		import { PMREMGenerator } from 't3d/addons/textures/PMREMGenerator.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const loader = new RGBETextureCubeLoader();
+
+		const capabilities = forwardRenderer.capabilities;
+		if ((capabilities.version > 1 || !!capabilities.getExtension('OES_texture_float')) &&
+			!!capabilities.getExtension('OES_texture_float_linear')) {
+			loader.type = t3d.PIXEL_TYPE.FLOAT;
+		}
+
+		const imageUrls = [
+			'./resources/hdr/pisaHDR/px.hdr',
+			'./resources/hdr/pisaHDR/nx.hdr',
+			'./resources/hdr/pisaHDR/py.hdr',
+			'./resources/hdr/pisaHDR/ny.hdr',
+			'./resources/hdr/pisaHDR/pz.hdr',
+			'./resources/hdr/pisaHDR/nz.hdr'
+		];
+
+		loader.loadAsync(imageUrls).then(texture => {
+			texture = (new PMREMGenerator()).prefilter(forwardRenderer, texture);
+		
+			const skyBox = new SkyBox(texture);
+			skyBox.gamma = true;
+			scene.add(skyBox);
+
+			const stepSize = 1.0 / 6;
+			const colors = [[1, 1, 1], [0.6, 0.44, 0.01]];
+			const sphere_geometry = new t3d.SphereGeometry(5, 32, 16);
+			for (let colorIndex = 0; colorIndex < 2; colorIndex += 1) {
+				for (let metalness = 0; metalness <= 1.0; metalness += stepSize) {
+					for (let roughness = 0; roughness <= 1.0; roughness += stepSize) {
+						const pbr_mat = new t3d.PBRMaterial();
+						pbr_mat.diffuse.fromArray(colors[colorIndex]);
+						pbr_mat.metalness = metalness;
+						pbr_mat.roughness = roughness;
+						pbr_mat.envMap = texture;
+
+						const sphere = new t3d.Mesh(sphere_geometry, pbr_mat);
+						sphere.position.x = roughness * 100 - 50;
+						sphere.position.y = metalness * 100 - 50;
+						sphere.position.z = -colorIndex * 15;
+						scene.add(sphere);
+					}
+				}
+			}
+
+			const gui = new GUI();
+			gui.add(skyBox, 'level', 0, 8, 1);
+			gui.add(camera, 'gammaFactor', 0, 3, 0.01);
+		});
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 0.1);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.1);
+		directionalLight.position.set(-30, 30, 30);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 0, 150);
+		camera.outputEncoding = t3d.TEXEL_ENCODING_TYPE.GAMMA;
+		camera.setPerspective(60 / 180 * Math.PI, width / height, 1, 1000);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(60 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

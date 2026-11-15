@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - exr loader</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - exr texture loader example<br/>
+		Image courtesy of <a href="http://www.pauldebevec.com/Research/HDR/" target="_blank" rel="noopener">Paul Debevec</a>.
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { EXRTexture2DLoader } from 't3d/addons/loaders/EXRLoader.js';
+		import { OutputShader } from 't3d/addons/shaders/OutputShader.js';
+		import { GUI } from './libs/lil-gui.esm.min.js';
+		import * as fflate from './libs/fflate.module.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const screenRenderTarget = new t3d.ScreenRenderTarget(canvas);
+
+		const contextParams = { antialias: false, alpha: false };
+		const gl = canvas.getContext('webgl2', contextParams) || canvas.getContext('webgl', contextParams);
+		const renderer = new t3d.WebGLRenderer(gl);
+
+		const outputPass = new t3d.ShaderPostPass(OutputShader);
+		outputPass.material.defines.SRGB_COLOR_SPACE = true;
+		outputPass.material.defines.REINHARD_TONE_MAPPING = true;
+
+		const renderTarget = t3d.OffscreenRenderTarget.create2D(width, height);
+		renderTarget.texture.type = t3d.PIXEL_TYPE.HALF_FLOAT;
+		renderTarget.texture.minFilter = t3d.TEXTURE_FILTER.LINEAR;
+		renderTarget.texture.generateMipmaps = false;
+		renderTarget.setColorClearValue(0, 0, 0, 1);
+
+		const scene = new t3d.Scene();
+
+		let aspect = width / height;
+		
+		const camera = new t3d.Camera();
+		camera.setOrtho(-aspect, aspect, -1, 1, 0, 1);
+		scene.add(camera);
+		
+		EXRTexture2DLoader.setfflate(fflate);
+		const loader = new EXRTexture2DLoader();
+		
+		const capabilities = renderer.capabilities;
+		if ((capabilities.version > 1 || !!capabilities.getExtension('OES_texture_float')) &&
+			!!capabilities.getExtension('OES_texture_float_linear')) {
+			loader.type = t3d.PIXEL_TYPE.FLOAT;
+		}
+
+		if (capabilities.version > 1) {
+			capabilities.getExtension('EXT_color_buffer_float');
+		} else {
+			capabilities.getExtension('OES_texture_half_float');
+			capabilities.getExtension('OES_texture_half_float_linear');
+		}
+
+		capabilities.getExtension('OES_texture_float_linear');
+		capabilities.getExtension('EXT_color_buffer_half_float');
+
+		loader.load('./resources/hdr/memorial.exr', function(texture) {
+			const plane_geometry = new t3d.PlaneGeometry(texture.image.width / texture.image.height * 1.5, 1.5);
+			const plane_material = new t3d.BasicMaterial();
+			plane_material.diffuseMap = texture;
+			const mesh = new t3d.Mesh(plane_geometry, plane_material);
+			mesh.euler.x = Math.PI / 2;
+
+			scene.add(mesh);
+		});
+
+		const gui = new GUI();
+		gui.add(outputPass.uniforms, 'toneMappingExposure', 0, 4, 0.01);
+
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			scene.updateMatrix();
+			scene.updateRenderStates(camera);
+			scene.updateRenderQueue(camera);
+
+			renderer.renderScene(scene, camera, renderTarget);
+
+			outputPass.uniforms.tDiffuse = renderTarget.texture;
+			outputPass.render(renderer, screenRenderTarget);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			aspect = width / height;
+
+			camera.setOrtho(-aspect, aspect, -1, 1, 0, 1);
+
+			screenRenderTarget.resize(width, height);
+			renderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

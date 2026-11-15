@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - materials</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - materials
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { SkyBox } from 't3d/addons/objects/SkyBox.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { Texture2DLoader } from 't3d/addons/loaders/Texture2DLoader.js';
+		import { TextureCubeLoader } from 't3d/addons/loaders/TextureCubeLoader.js';
+		import { AttenuationPBRMaterial } from 't3d/addons/materials/AttenuationMaterial.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const textureLoader = new Texture2DLoader();
+
+		const texture = textureLoader.load('./resources/hardwood2_diffuse.jpg');
+		texture.anisotropy = forwardRenderer.capabilities.maxAnisotropy;
+		texture.encoding = t3d.TEXEL_ENCODING_TYPE.SRGB;
+
+		const ao_texture = textureLoader.load('./resources/ao.png');
+
+		const cubeTexturePath = './resources/skybox/sunset/';
+		const cubeTexture = new TextureCubeLoader().load([
+			cubeTexturePath + 'px.jpg',
+			cubeTexturePath + 'nx.jpg',
+			cubeTexturePath + 'py.jpg',
+			cubeTexturePath + 'ny.jpg',
+			cubeTexturePath + 'pz.jpg',
+			cubeTexturePath + 'nz.jpg'
+		]);
+		cubeTexture.encoding = t3d.TEXEL_ENCODING_TYPE.SRGB;
+
+		const skyBox = new SkyBox(cubeTexture);
+		skyBox.gamma = true;
+		scene.add(skyBox);
+
+		const camera = new t3d.Camera();
+		camera.outputEncoding = t3d.TEXEL_ENCODING_TYPE.SRGB;
+		camera.position.set(0, 0, 12);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(60 / 180 * Math.PI, width / height, 1, 1000);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 0.7);
+		directionalLight.position.set(20, 30, 40);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		// materials
+
+		const points = new t3d.PointsMaterial();
+		points.size = 0.1;
+
+		const line = new t3d.LineMaterial();
+
+		const lineloop = new t3d.LineMaterial();
+		lineloop.drawMode = t3d.DRAW_MODE.LINE_LOOP;
+
+		const baisc = new t3d.BasicMaterial();
+		baisc.diffuse.setHex(0xffffff);
+		baisc.diffuseMap = texture;
+		baisc.aoMap = ao_texture;
+
+		const lambert = new t3d.LambertMaterial();
+		lambert.diffuse.setHex(0xffffff);
+		lambert.diffuseMap = texture;
+
+		const phong = new t3d.PhongMaterial();
+		phong.diffuse.setHex(0xffffff);
+		phong.diffuseMap = texture;
+
+		const pbr = new t3d.PBRMaterial();
+		pbr.diffuse.setHex(0xffffff);
+		pbr.diffuseMap = texture;
+
+		const attenuation = new AttenuationPBRMaterial();
+		attenuation.diffuseMap = texture;
+
+		// spheres
+
+		const geometry = new t3d.SphereGeometry(1, 20, 20);
+		const materials = [
+			points, line, lineloop, baisc,
+			lambert, phong, pbr, attenuation
+		];
+
+		for (let i = 0, l = materials.length; i < l; i++) {
+			for (let j = 0; j < 2; j++) {
+				let material = materials[i];
+				if (j > 0) {
+					material = material.clone();
+					material.envMap = cubeTexture;
+					material.envMapIntensity = i < 6 ? 0.5 : 1;
+				}
+				const sphere = new t3d.Mesh(geometry, material);
+				sphere.position.x = i % 4 * 2.5 - 3.5;
+				sphere.position.y = (-Math.floor(i / 4) * 5 + 3.5) - (j * 2.5);
+				scene.add(sphere);
+			}
+		}
+
+		//
+
+		function loop(timestamp) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			forwardRenderer.render(scene, camera);
+		}
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(60 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>

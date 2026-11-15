@@ -1,0 +1,13 @@
+{
+  "repo": "uinosoft/t3d.js",
+  "commit": "015b137e3268fdfe73b2e8b78ec3d3313c986114",
+  "license": "BSD-3-Clause",
+  "main_files": 714,
+  "unchanged_production": true,
+  "optional_exclusion_roots": [
+    "examples/resources/",
+    "examples/libs/",
+    "docs/"
+  ],
+  "closure": "All src, build, examples/jsm and original tests retained; target imports src and GLSL text via builtin Node loader; no npm install."
+}

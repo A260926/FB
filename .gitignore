@@ -1,0 +1,24 @@
+.DS_Store
+*.swp
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.project
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.user
+.vs/
+*.sw?
+
+# Logs
+npm-debug.log
+
+/docs
+
+**/node_modules
+*.local
+.jshintrc

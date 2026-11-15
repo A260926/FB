@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>t3d - geometries</title>
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <div id="info">
+        <a href="" target="_blank">t3d</a> - geometries
+    </div>
+
+	<!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="./libs/es-module-shims.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "t3d": "../build/t3d.module.js",
+                "t3d/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+		import * as t3d from 't3d';
+		import { Texture2DLoader } from 't3d/addons/loaders/Texture2DLoader.js';
+		import { ForwardRenderer } from 't3d/addons/render/ForwardRenderer.js';
+		import { OrbitControls } from 't3d/addons/controls/OrbitControls.js';
+		import { CircleGeometry } from 't3d/addons/geometries/CircleGeometry.js';
+		import { CapsuleGeometry } from 't3d/addons/geometries/CapsuleGeometry.js';
+		import { PolyhedronBuilder } from 't3d/addons/geometries/builders/PolyhedronBuilder.js';
+		import { TorusBuilder } from 't3d/addons/geometries/builders/TorusBuilder.js';
+		import { LatheBuilder } from 't3d/addons/geometries/builders/LatheBuilder.js';
+		import { GeometryUtils } from 't3d/addons/geometries/GeometryUtils.js';
+
+		let width = window.innerWidth || 2;
+		let height = window.innerHeight || 2;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		document.body.appendChild(canvas);
+
+		const forwardRenderer = new ForwardRenderer(canvas);
+
+		const scene = new t3d.Scene();
+
+		const camera = new t3d.Camera();
+		camera.position.set(0, 0, 150);
+		camera.lookAt(new t3d.Vector3(0, 0, 0), new t3d.Vector3(0, 1, 0));
+		camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 1000);
+		scene.add(camera);
+
+		const controller = new OrbitControls(camera, canvas);
+
+		// lights
+
+		const ambientLight = new t3d.AmbientLight(0xffffff, 0.2);
+		scene.add(ambientLight);
+
+		const directionalLight = new t3d.DirectionalLight(0xffffff, 1);
+		directionalLight.position.set(0, 0, 20);
+		directionalLight.lookAt(new t3d.Vector3(), new t3d.Vector3(0, 1, 0));
+		scene.add(directionalLight);
+
+		// create meshes
+
+		const texture = new Texture2DLoader().load('./resources/UV_Grid_Sm.jpg');
+		texture.wrapS = texture.wrapT = t3d.TEXTURE_WRAP.REPEAT;
+		texture.anisotropy = 16;
+
+		const material = new t3d.LambertMaterial();
+		material.diffuseMap = texture;
+		material.side = t3d.DRAW_SIDE.DOUBLE;
+
+		const geometries = [
+			new t3d.BoxGeometry(10, 10, 10),
+			new t3d.PlaneGeometry(10, 10),
+			new t3d.SphereGeometry(7, 20, 20),
+			new t3d.CylinderGeometry(5, 5, 10, 20, 1),
+			new t3d.CylinderGeometry(0, 5, 10, 20, 1),
+			new t3d.TorusKnotGeometry(5, 1.5),
+			new CircleGeometry(7),
+			new CapsuleGeometry(5, 8, 20),
+			createGeometryByData(LatheBuilder.getGeometryData([[0, -7], [5, -2], [5, 2], [0, 7]])),
+			createGeometryByData(TorusBuilder.getGeometryData(5, 2, 16, 16)),
+			createGeometryByData(PolyhedronBuilder.getTetrahedronGeometryData(8)),
+			createGeometryByData(PolyhedronBuilder.getOctahedronGeometryData(8)),
+			createGeometryByData(PolyhedronBuilder.getIcosahedronGeometryData(8)),
+			createGeometryByData(PolyhedronBuilder.getDodecahedronGeometryData(8))
+		];
+
+		const meshes = new t3d.Object3D();
+		scene.add(meshes);
+
+		for (let i = 0, l = geometries.length; i < l; i++) {
+			const mesh = new t3d.Mesh(geometries[i], material);
+
+			mesh.position.set(
+				(i % 4 - 1.5) * 18,
+				-(Math.floor(i / 4) - 1.5) * 22,
+				0
+			);
+
+			meshes.add(mesh);
+		}
+
+		function createGeometryByData(data) {
+			const geometry = new t3d.Geometry();
+
+			geometry.addAttribute('a_Position', new t3d.Attribute(new t3d.Buffer(new Float32Array(data.positions), 3)));
+			geometry.addAttribute('a_Uv', new t3d.Attribute(new t3d.Buffer(new Float32Array(data.uvs), 2)));
+
+			if (data.indices) {
+				geometry.setIndex(data.indices);
+			}
+
+			if (data.normals) {
+				geometry.addAttribute('a_Normal', new t3d.Attribute(new t3d.Buffer(new Float32Array(data.normals), 3)));
+			} else {
+				GeometryUtils.computeNormals(geometry);
+			}
+
+			geometry.computeBoundingBox();
+			geometry.computeBoundingSphere();
+
+			return geometry;
+		}
+
+		//
+
+		let lastCount = 0;
+		function loop(count) {
+			requestAnimationFrame(loop);
+
+			controller.update();
+
+			const delta = count - lastCount;
+			lastCount = count;
+
+			// rotate mesh
+			const meshesArray = meshes.children;
+			for (let i = 0, l = meshesArray.length; i < l; i++) {
+				const mesh = meshesArray[i];
+				mesh.euler.x += delta / 1000 * Math.PI / 5;
+				mesh.euler.y += delta / 1000 * Math.PI / 5;
+			}
+
+			forwardRenderer.render(scene, camera);
+		}
+
+		requestAnimationFrame(loop);
+
+		function onWindowResize() {
+			width = window.innerWidth || 2;
+			height = window.innerHeight || 2;
+
+			camera.setPerspective(45 / 180 * Math.PI, width / height, 1, 1000);
+
+			forwardRenderer.screenRenderTarget.resize(width, height);
+		}
+		window.addEventListener('resize', onWindowResize, false);
+	</script>
+</body>
+</html>
