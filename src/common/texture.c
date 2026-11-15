@@ -134,6 +134,22 @@ void tex_to_srgb(struct texture *t) {
 	t->colorspace = sRGB;
 }
 
+struct texture *tex_linear_view(const struct texture *t) {
+	if (!t || !t->data.byte_p) return NULL;
+	if (t->precision == float_p && t->colorspace == linear) return NULL;
+	struct texture *view = tex_new(float_p, t->width, t->height, t->channels);
+	if (!view) return NULL;
+	for (size_t x = 0; x < t->width; ++x) {
+		for (size_t y = 0; y < t->height; ++y) {
+			struct color c = tex_get_px(t, x, y, false);
+			if (t->colorspace == sRGB) c = colorFromSRGB(c);
+			tex_set_px(view, c, x, y);
+		}
+	}
+	view->colorspace = linear;
+	return view;
+}
+
 bool tex_uses_alpha(const struct texture *t) {
 	if (!t) return false;
 	if (t->channels < 4) return false;

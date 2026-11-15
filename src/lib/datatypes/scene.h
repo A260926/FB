@@ -30,7 +30,7 @@ struct world {
 	//Optional environment map / ambient color
 	const struct bsdfNode *background;
 	struct cr_shader_node *bg_desc;
-	struct texture_asset *textures;
+	struct texture_asset **textures;
 	struct bsdf_buffer *shader_buffers;
 	struct mesh *meshes;
 	struct instance *instances;

@@ -50,6 +50,38 @@ Things I'm looking to implement:
 - Proper physically based materials in place of the current ad-hoc implementations
 - More cool advanced techniques from research literature
 
+## Image texture assets
+
+Image nodes (`cr_cn_image`) that reference the same path within a scene
+share a single `struct texture_asset`, owned by the scene's texture cache
+(`world.textures`). The ownership and concurrency rules are:
+
+- **Raw source**: Each unique path is decoded at most once per scene. The
+  decode runs as a background task on the scene's `bg_worker` pool and
+  publishes the raw pixels into `texture_asset.t`. Once published, the raw
+  data is immutable; the scene cache owns it and frees it in
+  `scene_destroy()`.
+- **Linear view**: Requesting a node with `SRGB_TRANSFORM` flags the asset
+  (`linear_requested`). The linear view is generated exactly once — by the
+  decode task when the request arrived while decoding, or synchronously on
+  the calling thread when the request arrives after the decode completed —
+  and cached in `texture_asset.linear` as float data (RGB converted with
+  the `colorFromSRGB()` curve, alpha preserved). The view never modifies
+  the raw pixels, and sources that already are linear float data (HDR) are
+  sampled directly without a separate view. Nodes never own pixel data;
+  they sample whichever cached view their options describe, and fall back
+  to pink while the source is pending or after a failed decode. A failed
+  decode is cached as well: later requests for the same path do not retry.
+- **Async tasks**: Decode and view-generation tasks belong to the scene
+  that queued them. They never block a worker thread waiting for another
+  queued task, so a single-threaded pool cannot deadlock.
+  `scene_destroy()` and `serialize_renderer()` first drain the scene's
+  `bg_worker` pool, so all publishes complete before textures, nodes and
+  task arguments are released or packed. Scene serialization packs the
+  raw pixels plus the metadata needed to rebuild both views; the linear
+  view itself is a derived cache and is regenerated from the raw data on
+  deserialization rather than stored.
+
 ## Portability
 
 c-ray has been verified to work on the following architectures

@@ -22,6 +22,9 @@
 void tex_asset_free(struct texture_asset *a) {
 	if (a->path) free(a->path);
 	if (a->t) tex_destroy(a->t);
+	if (a->linear) tex_destroy(a->linear);
+	if (a->mu) v_mutex_destroy(a->mu);
+	free(a);
 }
 
 struct world *scene_new(void) {
@@ -36,10 +39,14 @@ struct world *scene_new(void) {
 
 void scene_destroy(struct world *scene) {
 	if (scene) {
-		// FIXME: elem_free
-		// scene->textures.elem_free = tex_asset_free;
+		// Drain background tasks (image decodes, linear view generation,
+		// mesh BVH builds) belonging to this scene before releasing the
+		// nodes, textures and task arguments they reference. Queued tasks
+		// run to completion here; v_threadpool_destroy() below would
+		// otherwise silently drop them.
+		v_threadpool_wait(scene->bg_worker);
 		for (size_t i = 0; i < v_arr_len(scene->textures); ++i)
-			tex_asset_free(&scene->textures[i]);
+			tex_asset_free(scene->textures[i]);
 		v_arr_free(scene->textures);
 		v_arr_free(scene->cameras);
 		// FIXME: elem_free

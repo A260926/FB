@@ -114,14 +114,15 @@ cJSON *serialize_texture(const struct texture *t) {
 	char *encoded = b64encode(t->data.byte_p, bytes);
 	cJSON_AddStringToObject(json, "data", encoded);
 	cJSON_AddBoolToObject(json, "isFloatPrecision", t->precision == float_p);
+	cJSON_AddBoolToObject(json, "isSRGB", t->colorspace == sRGB);
 	free(encoded);
 	return json;
 }
 
 struct texture *deserialize_texture(const cJSON *json) {
-	if (!json) return NULL;
+	if (!json || !cJSON_IsObject(json)) return NULL;
 	struct texture *tex = calloc(1, sizeof(*tex));
-	tex->colorspace = linear;
+	tex->colorspace = cJSON_IsTrue(cJSON_GetObjectItem(json, "isSRGB")) ? sRGB : linear;
 	char *data = cJSON_GetStringValue(cJSON_GetObjectItem(json, "data"));
 	tex->data.byte_p = b64decode(data, strlen(data), NULL);
 	tex->width = cJSON_GetNumberValue(cJSON_GetObjectItem(json, "width"));
@@ -716,10 +717,21 @@ static cJSON *serialize_scene(const struct world *in) {
 
 	cJSON *textures = cJSON_CreateArray();
 	for (size_t i = 0; i < v_arr_len(in->textures); ++i) {
-		cJSON *asset = cJSON_CreateObject();
-		cJSON_AddItemToObject(asset, "p", cJSON_CreateString(in->textures[i].path));
-		cJSON_AddItemToObject(asset, "t", serialize_texture(in->textures[i].t));
-		cJSON_AddItemToArray(textures, asset);
+		const struct texture_asset *asset = in->textures[i];
+		cJSON *json = cJSON_CreateObject();
+		cJSON_AddItemToObject(json, "p", cJSON_CreateString(asset->path));
+		bool failed = asset->state == tex_asset_failed;
+		// Only the raw source pixels are packed. The linear view is a
+		// derived cache and gets rebuilt from this data on the other
+		// side, so linear pixels are never converted a second time.
+		if (failed || !asset->t) {
+			cJSON_AddItemToObject(json, "t", cJSON_CreateNull());
+		} else {
+			cJSON_AddItemToObject(json, "t", serialize_texture(asset->t));
+		}
+		cJSON_AddBoolToObject(json, "failed", failed);
+		cJSON_AddBoolToObject(json, "linear_view", asset->linear_requested);
+		cJSON_AddItemToArray(textures, json);
 	}
 	cJSON_AddItemToObject(out, "textures", textures);
 
@@ -775,10 +787,21 @@ struct world *deserialize_scene(const cJSON *in) {
 	if (cJSON_IsArray(textures)) {
 		cJSON *texture = NULL;
 		cJSON_ArrayForEach(texture, textures) {
-			v_arr_add(out->textures, (struct texture_asset){
+			// Assets arrive fully decoded: the raw pixels are packed in
+			// the snapshot, so nothing is re-loaded (or retried) from
+			// disk here. The linear view is regenerated lazily from the
+			// raw data when a node asks for it.
+			bool failed = cJSON_IsTrue(cJSON_GetObjectItem(texture, "failed"));
+			struct texture_asset *asset = calloc(1, sizeof(*asset));
+			*asset = (struct texture_asset){
 				.path = stringCopy(cJSON_GetStringValue(cJSON_GetObjectItem(texture, "p"))),
-				.t = deserialize_texture(cJSON_GetObjectItem(texture, "t"))
-			});
+				.t = failed ? NULL : deserialize_texture(cJSON_GetObjectItem(texture, "t")),
+				.mu = v_mutex_create(),
+				.state = failed ? tex_asset_failed : tex_asset_ready,
+				.linear_requested = cJSON_IsTrue(cJSON_GetObjectItem(texture, "linear_view")),
+			};
+			if (!asset->t) asset->t = tex_new(none, 0, 0, 0);
+			v_arr_add(out->textures, asset);
 		}
 	}
 
@@ -882,6 +905,9 @@ struct prefs deserialize_prefs(const cJSON *in) {
 
 static cJSON *serialize_json(const struct renderer *r) {
 	if (!r) return NULL;
+	// Wait for async image decodes and view generations to publish
+	// before packing the textures into the snapshot.
+	if (r->scene) v_threadpool_wait(r->scene->bg_worker);
 	cJSON *out = cJSON_CreateObject();
 	cJSON_AddItemToObject(out, "scene", serialize_scene(r->scene));
 	cJSON_AddItemToObject(out, "prefs", serialize_prefs(r->prefs));

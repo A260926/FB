@@ -25,28 +25,69 @@
 
 struct decode_task_arg {
 	char *path;
-	struct texture *out;
-	uint8_t options;
+	struct texture_asset *asset;
 };
 
 void tex_decode_task(void *arg) {
 	struct decode_task_arg *dt = (struct decode_task_arg *)arg;
+	struct texture_asset *asset = dt->asset;
 	v_timer timer = v_timer_start();
 	file_data data = file_load(dt->path);
-	load_texture(dt->path, data, dt->out);
+	// Decode into the raw slot of the shared asset. Each path is only
+	// decoded once per scene; the raw data is published below and never
+	// modified afterwards.
+	int ret = data ? load_texture(dt->path, data, asset->t) : 1;
+	if (!data) logr(warning, "Failed to load file '%s'\n", dt->path);
 	long ms_decode = v_timer_get_ms(timer);
-	//Since the texture is probably srgb, transform it back to linear colorspace for rendering
-	if (dt->options & SRGB_TRANSFORM) tex_from_srgb(dt->out);
+	v_mutex_lock(asset->mu);
+	asset->decode_count++;
+	asset->state = ret ? tex_asset_failed : tex_asset_ready;
+	if (!ret && asset->linear_requested && !asset->linear_ready) {
+		// A node asked for the linear view while the decode was queued
+		// or running. Build it right here from the freshly published raw
+		// data, so a worker thread never has to sit idle waiting for
+		// another queued task to finish first.
+		asset->linear = tex_linear_view(asset->t);
+		asset->linear_ready = true;
+	}
+	v_mutex_release(asset->mu);
 	long ms_total = v_timer_get_ms(timer);
-	v_arr_free(data);
+	if (data) v_arr_free(data);
 	char buf[3][64];
-	logr(debug, "Async decode of '%s' took %s (%s dec, %s sRGB)\n",
+	logr(debug, "Async decode of '%s' took %s (%s dec, %s view)\n",
 		dt->path,
 		ms_to_readable(ms_total, buf[0]),
 		ms_to_readable(ms_decode, buf[1]),
 		ms_to_readable(ms_total - ms_decode, buf[2]));
 	free(dt->path);
 	free(dt);
+}
+
+// Find the shared image asset for `path`, creating it and queueing its
+// decode if this is the first request for this path in this scene.
+// Requests for the same path always share a single asset (and thus a
+// single decode and a single copy of the raw pixels), regardless of the
+// sampling options attached to each request.
+static struct texture_asset *scene_image_asset(struct world *scene, const char *path) {
+	for (size_t i = 0; i < v_arr_len(scene->textures); ++i) {
+		if (stringEquals(scene->textures[i]->path, path))
+			return scene->textures[i];
+	}
+	struct texture_asset *asset = calloc(1, sizeof(*asset));
+	*asset = (struct texture_asset){
+		.path = stringCopy(path),
+		.t = tex_new(none, 0, 0, 0),
+		.mu = v_mutex_create(),
+		.state = tex_asset_pending,
+	};
+	v_arr_add(scene->textures, asset);
+	struct decode_task_arg *arg = calloc(1, sizeof(*arg));
+	*arg = (struct decode_task_arg){
+		.path = stringCopy(path),
+		.asset = asset
+	};
+	v_threadpool_enqueue(scene->bg_worker, tex_decode_task, arg);
+	return asset;
 }
 
 const struct colorNode *build_color_node(struct cr_scene *s_ext, const struct cr_color_node *desc) {
@@ -70,28 +111,23 @@ const struct colorNode *build_color_node(struct cr_scene *s_ext, const struct cr
 				full = stringConcat(scene->asset_path, desc->arg.image.full_path);
 			char *path = full ? full : desc->arg.image.full_path;
 			windowsFixPath(path);
-			struct texture *tex = NULL;
-			// Note: We also deduplicate texture loads here, which ideally shouldn't be necessary.
-			for (size_t i = 0; i < v_arr_len(scene->textures); ++i) {
-				if (stringEquals(scene->textures[i].path, path)) {
-					tex = scene->textures[i].t;
+			struct texture_asset *asset = scene_image_asset(scene, path);
+			if (desc->arg.image.options & SRGB_TRANSFORM) {
+				// Flag that a linear-light view of this source is needed.
+				// If the raw data already finished decoding, build the
+				// view right here on the calling thread; otherwise the
+				// decode task picks this up when it publishes the source.
+				// Either way every SRGB_TRANSFORM node for this path ends
+				// up sampling the same cached view.
+				v_mutex_lock(asset->mu);
+				asset->linear_requested = true;
+				if (asset->state == tex_asset_ready && !asset->linear_ready) {
+					asset->linear = tex_linear_view(asset->t);
+					asset->linear_ready = true;
 				}
+				v_mutex_release(asset->mu);
 			}
-			if (!tex) {
-				tex = tex_new(none, 0, 0, 0);
-				v_arr_add(scene->textures, (struct texture_asset){
-					.path = stringCopy(path),
-					.t = tex,
-				});
-				struct decode_task_arg *arg = calloc(1, sizeof(*arg));
-				*arg = (struct decode_task_arg){
-					.path = stringCopy(path),
-					.out = tex,
-					.options = desc->arg.image.options
-				};
-				v_threadpool_enqueue(scene->bg_worker, tex_decode_task, arg);
-			}
-			const struct colorNode *new = newImageTexture(&s, tex, desc->arg.image.options);
+			const struct colorNode *new = newImageTexture(&s, asset, desc->arg.image.options);
 			if (full) free(full);
 			return new;
 		}

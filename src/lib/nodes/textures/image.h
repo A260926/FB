@@ -9,6 +9,6 @@
 #pragma once
 
 struct node_storage;
-struct texture;
+struct texture_asset;
 
-const struct colorNode *newImageTexture(const struct node_storage *s, const struct texture *texture, uint8_t options);
+const struct colorNode *newImageTexture(const struct node_storage *s, const struct texture_asset *asset, uint8_t options);
