@@ -1,0 +1,31 @@
+{
+  "name": "eigen.cxx",
+  "version": "5.2026.1",
+  "description": "Eigen is a C++ template library for linear algebra: matrices, vectors, numerical solvers, and related algorithms; Benoit Jacob (2007).",
+  "keywords": [
+    "c++",
+    "library",
+    "template library",
+    "algebra",
+    "linear algebra",
+    "matrix",
+    "vector",
+    "linear algebra",
+    "algorithms",
+    "eigen"
+  ],
+  "homepage": "https://github.com/nodef/eigen.cxx#readme",
+  "bugs": {
+    "url": "https://github.com/nodef/eigen.cxx/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nodef/eigen.cxx.git"
+  },
+  "license": "See COPYING.README",
+  "author": "wolfram77@gmail.com",
+  "main": "Eigen.h",
+  "scripts": {
+    "test": "bash build.sh test"
+  }
+}

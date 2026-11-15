@@ -1,5 +1,7 @@
 #include "geometrycentral/surface/quadric_error_simplification.h"
 
+#include "geometrycentral/surface/surface_anchors.h"
+
 namespace geometrycentral {
 namespace surface {
 
@@ -65,6 +67,8 @@ void quadricErrorSimplify(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geo
 
   std::priority_queue<PotentialEdge, std::vector<PotentialEdge>, decltype(cmp)> edgesToCheck(cmp);
 
+  if (mm.surfaceAnchorSet != nullptr) mm.surfaceAnchorSet->resetCounters();
+
   for (Edge e : mesh.edges()) {
     Quadric Qe = Q[e.halfedge().tailVertex()] + Q[e.halfedge().tipVertex()];
     Eigen::Vector3d q = Qe.optimalPoint();
@@ -100,11 +104,24 @@ void quadricErrorSimplify(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geo
     if (v == Vertex()) continue;
     Q[v] = Qe;
 
-    for (Edge f : v.adjacentEdges()) {
+    auto pushEdge = [&](Edge f) {
+      if (f == Edge() || f.isDead()) return;
       Quadric Qf(Q[f.halfedge().tailVertex()], Q[f.halfedge().tipVertex()]);
       Eigen::Vector3d q = Qf.optimalPoint();
       double cost = Qf.cost(q);
       edgesToCheck.push(std::make_tuple(cost, f));
+    };
+
+    for (Edge f : v.adjacentEdges()) {
+      pushEdge(f);
+    }
+
+    // Anchor-attachment changes can make previously rejected edges feasible; the constraint layer
+    // reports the affected edges so they leave any implicit blacklist and get recomputed.
+    if (mm.surfaceAnchorSet != nullptr) {
+      std::vector<Edge> anchorDirty;
+      mm.surfaceAnchorSet->takeDirtyEdges(anchorDirty);
+      for (Edge f : anchorDirty) pushEdge(f);
     }
   }
 

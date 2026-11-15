@@ -1,6 +1,10 @@
 #include "geometrycentral/surface/mutation_manager.h"
 
+#include "geometrycentral/surface/surface_anchors.h"
 #include "geometrycentral/utilities/elementary_geometry.h"
+
+#include <cmath>
+#include <stdexcept>
 
 namespace geometrycentral {
 namespace surface {
@@ -193,6 +197,9 @@ Halfedge MutationManager::splitEdge(Edge e, double tSplit, Vector3 newVertexPosi
 // Collapse an edge.
 // Returns the new vertex if the edge could be collapsed, and Vertex() otherwise
 Vertex MutationManager::collapseEdge(Edge e, double tCollapse) {
+  if (!std::isfinite(tCollapse) || tCollapse < 0. || tCollapse > 1.) {
+    throw std::invalid_argument("collapseEdge tCollapse must be finite and within [0,1]");
+  }
   if (!mayCollapseEdge(e)) return Vertex();
 
   Vector3 newPos{0., 0., 0.};
@@ -205,22 +212,41 @@ Vertex MutationManager::collapseEdge(Edge e, double tCollapse) {
 }
 
 Vertex MutationManager::collapseEdge(Edge e, Vector3 newVertexPosition) {
+  if (!std::isfinite(newVertexPosition.x) || !std::isfinite(newVertexPosition.y) ||
+      !std::isfinite(newVertexPosition.z)) {
+    throw std::invalid_argument("collapseEdge newVertexPosition must be finite");
+  }
   if (!mayCollapseEdge(e)) return Vertex();
 
   double tCollapse = -1;
   GC_SAFETY_ASSERT(geometry, "must have geometry to split by position");
   if (geometry) {
-    // Find the nearest tCoord
+    // Find the nearest tCoord: project the requested position onto the edge segment and clamp
+    // the result to [0,1].
     VertexData<Vector3>& pos = geometry->vertexPositions;
     Vector3 posTail = pos[e.halfedge().tailVertex()];
     Vector3 posTip = pos[e.halfedge().tipVertex()];
-    double tCollapse = pointLineSegmentNeaestLocation(newVertexPosition, posTail, posTip);
+    tCollapse = pointLineSegmentNeaestLocation(newVertexPosition, posTail, posTip);
   }
 
   return collapseEdge(e, tCollapse, newVertexPosition);
 }
 Vertex MutationManager::collapseEdge(Edge e, double tCollapse, Vector3 newVertexPosition) {
+  if (!std::isfinite(tCollapse) || tCollapse < 0. || tCollapse > 1.) {
+    throw std::invalid_argument("collapseEdge tCollapse must be finite and within [0,1]");
+  }
+  if (!std::isfinite(newVertexPosition.x) || !std::isfinite(newVertexPosition.y) ||
+      !std::isfinite(newVertexPosition.z)) {
+    throw std::invalid_argument("collapseEdge newVertexPosition must be finite");
+  }
   if (!mayCollapseEdge(e)) return Vertex();
+
+  // The bound anchor set gets a chance to reject the candidate before any observer fires and
+  // before the mesh is touched. A rejection leaves every state untouched.
+  if (surfaceAnchorSet != nullptr &&
+      !surfaceAnchorSet->evaluateCollapse(e, tCollapse, newVertexPosition)) {
+    return Vertex();
+  }
 
   // Invoke before callbacks
   // TODO need to handle possiblity that collapse fails -- check before calling
@@ -234,6 +260,12 @@ Vertex MutationManager::collapseEdge(Edge e, double tCollapse, Vector3 newVertex
   if (geometry) {
     VertexData<Vector3>& pos = geometry->vertexPositions;
     pos[newV] = newVertexPosition;
+  }
+
+  // Publish anchor attachment and refresh required geometry quantities before any after-callback
+  // runs, so observers see faceAreas/faceNormals/vertexDualAreas consistent with the new star.
+  if (surfaceAnchorSet != nullptr) {
+    surfaceAnchorSet->commitCollapse();
   }
 
   // Invoke after callbacks

@@ -42,3 +42,6 @@ compile_commands.json
 *.exe
 *.out
 *.app
+
+# Task harness local build directory
+.task-build/

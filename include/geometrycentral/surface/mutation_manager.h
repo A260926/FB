@@ -23,6 +23,7 @@ namespace surface {
 
 // Forward declare
 class MutationManager;
+class SurfaceAnchorSet;
 
 
 // ======================================================
@@ -302,6 +303,12 @@ private:
   // ======================================================
   // ======== Callback management
   // ======================================================
+
+  // Bound surface anchor set, if any. At most one at a time; the set owns its own registration.
+  SurfaceAnchorSet* surfaceAnchorSet = nullptr;
+  friend class SurfaceAnchorSet;
+  friend void quadricErrorSimplify(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geo, double tol,
+                                   MutationManager& mm);
 
   // The global list of all callback policies. Also handles memory ownership.
   std::vector<std::unique_ptr<MutationPolicy>> allPolicies;
