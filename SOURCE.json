@@ -1,0 +1,10 @@
+{
+  "repo": "https://github.com/teknologicus/polyvox",
+  "commit": "32fde3fc1e12c60948d1473fc561843c7393d916",
+  "license": "MIT",
+  "gitlinks": [],
+  "gitmodules": false,
+  "binary_included": [],
+  "symlinks_included": [],
+  "exclusion_reason": "Preserve all include/ production code and license; omit unrelated GUI infrastructure, other examples, bindings, test runners and packaging; selected original reference sources retained."
+}
