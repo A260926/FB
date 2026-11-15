@@ -1,0 +1,15 @@
+{
+  "repo": "https://github.com/micro-gl/micro-gl",
+  "commit": "869684fc8b3e4e84485b79ec045d6cec93b5a8dc",
+  "kind": "self-contained OSS export",
+  "gitlinks": [],
+  "gitmodules": false,
+  "exclusions": [
+    "examples: optional SDL/resources/assets not used by headless entry",
+    "intro_*.png and logo PNG: documentation images"
+  ],
+  "dependencies": [
+    "C++ standard library",
+    "bundled micro-tess and micro-alloc, licenses retained"
+  ]
+}
