@@ -36,8 +36,11 @@ import com.jme3.export.JmeExporter;
 import com.jme3.export.JmeImporter;
 import com.jme3.export.OutputCapsule;
 import com.jme3.material.MatParamOverride;
-import com.jme3.math.FastMath;
+import com.jme3.math.Matrix3f;
 import com.jme3.math.Matrix4f;
+import com.jme3.math.Quaternion;
+import com.jme3.math.Transform;
+import com.jme3.math.Vector3f;
 import com.jme3.renderer.RenderManager;
 import com.jme3.renderer.RendererException;
 import com.jme3.renderer.ViewPort;
@@ -48,7 +51,7 @@ import com.jme3.scene.Spatial;
 import com.jme3.scene.VertexBuffer;
 import com.jme3.scene.VertexBuffer.Type;
 import com.jme3.scene.control.AbstractControl;
-import com.jme3.scene.mesh.IndexBuffer;
+import com.jme3.scene.control.PostLogicalControl;
 import com.jme3.shader.VarType;
 import com.jme3.util.SafeArrayList;
 import com.jme3.util.TempVars;
@@ -57,7 +60,12 @@ import com.jme3.util.clone.JmeCloneable;
 
 import java.io.IOException;
 import java.nio.Buffer;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
+import java.nio.ShortBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -76,7 +84,7 @@ import java.util.logging.Logger;
  *
  * @author Nehon
  */
-public class SkinningControl extends AbstractControl implements JmeCloneable {
+public class SkinningControl extends AbstractControl implements JmeCloneable, PostLogicalControl {
 
     private static final Logger logger = Logger.getLogger(SkinningControl.class.getName());
 
@@ -84,6 +92,18 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
      * The maximum number of bones supported for hardware skinning in common shaders.
      */
     private static final int MAX_BONES_HW_SKINNING_SUPPORT = 255;
+
+    /**
+     * Minimum length of the (b-a) edge for a surface attachment frame to be
+     * considered valid.
+     */
+    private static final float MIN_SURFACE_EDGE_LENGTH = 1e-6f;
+
+    /**
+     * Minimum length of the (b-a) x (c-a) cross product for a surface
+     * attachment frame to be considered valid.
+     */
+    private static final float MIN_SURFACE_CROSS_LENGTH = 1e-10f;
 
     /**
      * The armature of the model.
@@ -133,6 +153,12 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
 
     private MatParamOverride numberOfJointsParam = new MatParamOverride(VarType.Int, "NumberOfBones", null);
     private MatParamOverride jointMatricesParam = new MatParamOverride(VarType.Matrix4Array, "BoneMatrices", null);
+
+    /**
+     * Surface attachments, keyed by name. These follow a deforming triangle of
+     * one of the {@link #targets} rather than a single bone.
+     */
+    private transient Map<String, SurfaceAttachment> surfaceAttachments;
 
     /**
      * Serialization only. Do not use.
@@ -419,6 +445,20 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
 
         this.numberOfJointsParam = cloner.clone(numberOfJointsParam);
         this.jointMatricesParam = cloner.clone(jointMatricesParam);
+
+        // Rebuild surface attachments against the cloned geometry/graph. The
+        // cloner is used for every mutable piece so that the clone owns its
+        // source, node, offset, and degeneracy-fallback state outright.
+        Map<String, SurfaceAttachment> clonedAttachments = null;
+        if (surfaceAttachments != null && !surfaceAttachments.isEmpty()) {
+            clonedAttachments = new HashMap<>();
+            for (Map.Entry<String, SurfaceAttachment> entry : surfaceAttachments.entrySet()) {
+                SurfaceAttachment originalAttachment = entry.getValue();
+                SurfaceAttachment copy = originalAttachment.cloneFor(cloner);
+                clonedAttachments.put(entry.getKey(), copy);
+            }
+        }
+        this.surfaceAttachments = clonedAttachments;
     }
 
     /**
@@ -481,6 +521,808 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
     }
 
     /**
+     * Creates a node that follows a deforming triangle of one of the meshes
+     * deformed by this control. Unlike a joint attachment node, the surface
+     * attachment tracks the skinned surface itself: its position is the
+     * barycentric combination of the three skinned triangle vertices and its
+     * orientation is derived from the deformed triangle's edges.
+     *
+     * <p>The returned node is attached directly to this control's spatial,
+     * which must be a {@link Node}. Callers are expected to add their content
+     * to the returned node, not to re-parent it.</p>
+     *
+     * <p>The triangle is identified the same way as
+     * {@link Mesh#getTriangle(int, int[])}. The barycentric coordinates must be
+     * non-negative and sum to one. The offset is copied and applied on top of
+     * the surface frame; it may contain a translation, a rotation, and a
+     * positive uniform scale.</p>
+     *
+     * @param name the name of the new attachment (not null, must not already
+     * be in use)
+     * @param source one of the animated geometries deformed by this control
+     * (not null)
+     * @param triangle the triangle index (&ge;0, &lt; triangle count)
+     * @param barycentric weights of the triangle's three vertices (not null,
+     * length=3, each &ge;0, sum=1)
+     * @param offset the offset from the surface frame (not null, copied)
+     * @return the new attachment node (not null)
+     * @throws IllegalArgumentException if any argument is invalid, if the name
+     * is already in use, if the triangle is out of range or degenerate in the
+     * bind pose, if the mesh has morph targets, or if the source geometry is
+     * not deformed by this control
+     */
+    public Node addSurfaceAttachment(String name, Geometry source, int triangle,
+            Vector3f barycentric, Transform offset) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Attachment name cannot be null or empty.");
+        }
+        if (source == null) {
+            throw new IllegalArgumentException("Source geometry cannot be null.");
+        }
+        if (barycentric == null) {
+            throw new IllegalArgumentException("Barycentric coordinates cannot be null.");
+        }
+        if (offset == null) {
+            throw new IllegalArgumentException("Offset cannot be null.");
+        }
+        if (!(spatial instanceof Node)) {
+            throw new IllegalArgumentException(
+                    "Surface attachments require the controlled Spatial to be a Node.");
+        }
+        if (surfaceAttachments != null && surfaceAttachments.containsKey(name)) {
+            throw new IllegalArgumentException(
+                    "A surface attachment named '" + name + "' already exists.");
+        }
+
+        // Refresh the target list so that a geometry whose mesh changed since
+        // the last render is still recognized as belonging to this control.
+        updateAnimationTargets(spatial);
+        if (!isTargetGeometry(source)) {
+            throw new IllegalArgumentException(
+                    "The given geometry is not deformed by this control.");
+        }
+
+        Mesh mesh = source.getMesh();
+        validateSurfaceMesh(mesh);
+
+        int triangleCount = mesh.getTriangleCount();
+        if (triangle < 0 || triangle >= triangleCount) {
+            throw new IllegalArgumentException("Triangle index " + triangle
+                    + " is out of range [0, " + triangleCount + ").");
+        }
+
+        float[] bary = {barycentric.x, barycentric.y, barycentric.z};
+        validateBarycentric(bary);
+
+        Transform offsetCopy = offset.clone();
+        validateOffset(offsetCopy);
+
+        // The triangle winding determines the front face, so keep the index
+        // order exactly as the mesh stores it.
+        int[] indices = new int[3];
+        readTriangleIndices(mesh, triangle, indices);
+        validateVertexIndex(mesh, indices[0]);
+        validateVertexIndex(mesh, indices[1]);
+        validateVertexIndex(mesh, indices[2]);
+
+        VertexBuffer bindPosBuffer = mesh.getBuffer(Type.BindPosePosition);
+        FloatBuffer bindPos = requireFloatPositionBuffer(bindPosBuffer, "BindPosePosition");
+        for (int index : indices) {
+            if ((long) index * 3 + 2 >= bindPos.limit()) {
+                throw new IllegalArgumentException(
+                        "Triangle index " + triangle + " references vertex " + index
+                        + ", which is outside the bind-pose positions.");
+            }
+        }
+
+        // Validate the bind triangle before creating any scene-graph node.
+        Vector3f bindA = readVector(bindPos, indices[0], new Vector3f());
+        Vector3f bindB = readVector(bindPos, indices[1], new Vector3f());
+        Vector3f bindC = readVector(bindPos, indices[2], new Vector3f());
+        Vector3f edge1 = bindB.subtract(bindA);
+        Vector3f edge2 = bindC.subtract(bindA);
+        if (isDegenerate(edge1, edge2)) {
+            throw new IllegalArgumentException(
+                    "The bind-pose triangle " + triangle + " is degenerate.");
+        }
+        if (!isFinite(bindA) || !isFinite(bindB) || !isFinite(bindC)) {
+            throw new IllegalArgumentException(
+                    "The bind-pose triangle " + triangle + " contains non-finite positions.");
+        }
+
+        // The chain from the source geometry to the controlled node must be
+        // finite and have non-zero scale.
+        Matrix4f sourceToNode = computeSourceToNodeTransform(source);
+
+        SurfaceAttachment attachment = new SurfaceAttachment();
+        attachment.name = name;
+        attachment.source = source;
+        attachment.mesh = mesh;
+        attachment.triangle = triangle;
+        attachment.indices = indices;
+        attachment.barycentric = new Vector3f(bary[0], bary[1], bary[2]);
+        attachment.offset = offsetCopy;
+        attachment.offsetScale = offsetCopy.getScale().x;
+
+        // Compute the initial transform before publishing anything, so a
+        // failure cannot leave a new node in the scene graph.
+        armature.update();
+        Matrix4f[] palette = armature.computeSkinningMatrices();
+        Transform initial = new Transform();
+        try {
+            computeSurfaceTransform(attachment, sourceToNode, palette, initial);
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException(
+                    "Could not compute the initial surface attachment frame.", ex);
+        }
+
+        Node node = new Node(name);
+        node.setLocalTransform(initial);
+
+        if (surfaceAttachments == null) {
+            surfaceAttachments = new HashMap<>();
+        }
+        surfaceAttachments.put(name, attachment);
+        attachment.node = node;
+
+        try {
+            ((Node) spatial).attachChild(node);
+        } catch (RuntimeException ex) {
+            surfaceAttachments.remove(name);
+            attachment.node = null;
+            throw ex;
+        }
+
+        return node;
+    }
+
+    /**
+     * Removes a surface attachment created by
+     * {@link #addSurfaceAttachment(String, Geometry, int, Vector3f, Transform)}.
+     * The attachment node is detached from the scene graph and is no longer
+     * driven by this control.
+     *
+     * @param name the name of the attachment to remove
+     * @return the detached attachment node, or null if no attachment had that
+     * name
+     */
+    public Node removeSurfaceAttachment(String name) {
+        if (surfaceAttachments == null) {
+            return null;
+        }
+        SurfaceAttachment attachment = surfaceAttachments.remove(name);
+        if (attachment == null) {
+            return null;
+        }
+        Node node = attachment.node;
+        if (node != null) {
+            node.removeFromParent();
+            attachment.node = null;
+        }
+        return node;
+    }
+
+    /**
+     * Returns the node of a surface attachment created by
+     * {@link #addSurfaceAttachment(String, Geometry, int, Vector3f, Transform)}.
+     *
+     * @param name the name of the attachment
+     * @return the pre-existing node, or null if no attachment has that name
+     */
+    public Node getSurfaceAttachment(String name) {
+        if (surfaceAttachments == null) {
+            return null;
+        }
+        SurfaceAttachment attachment = surfaceAttachments.get(name);
+        return attachment == null ? null : attachment.node;
+    }
+
+    /**
+     * Tests whether the given geometry is one of this control's deformation
+     * targets.
+     *
+     * @param geometry the geometry to test (may be null)
+     * @return true if the geometry is in {@link #targets}
+     */
+    private boolean isTargetGeometry(Geometry geometry) {
+        if (geometry == null) {
+            return false;
+        }
+        for (Geometry target : targets.getArray()) {
+            if (target == geometry) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Re-evaluates the skeleton pose and drives every surface attachment.
+     *
+     * <p>All new transforms are computed and validated before any attachment
+     * node is modified, so a failure leaves every attachment at its previous
+     * transform.</p>
+     *
+     * @param tpf time per frame (in seconds)
+     */
+    @Override
+    public void postLogicalUpdate(float tpf) {
+        if (!enabled) {
+            return;
+        }
+        if (surfaceAttachments == null || surfaceAttachments.isEmpty()) {
+            return;
+        }
+
+        // Re-confirm the skeleton pose: animation controls may have run after
+        // this control's ordinary update in the same frame.
+        armature.update();
+        Matrix4f[] palette = armature.computeSkinningMatrices();
+
+        SurfaceAttachment[] attachments = surfaceAttachments.values()
+                .toArray(new SurfaceAttachment[0]);
+        Transform[] computed = new Transform[attachments.length];
+
+        // Snapshot the fallback state of every attachment before evaluating
+        // anything, so a failure cannot partially publish new fallback state.
+        boolean[] hadRotation = new boolean[attachments.length];
+        Quaternion[] oldRotation = new Quaternion[attachments.length];
+        for (int i = 0; i < attachments.length; i++) {
+            hadRotation[i] = attachments[i].hasValidRotation;
+            oldRotation[i] = attachments[i].hasValidRotation
+                    ? attachments[i].lastValidRotation.clone() : null;
+        }
+
+        try {
+            for (int i = 0; i < attachments.length; i++) {
+                SurfaceAttachment attachment = attachments[i];
+
+                // The ancestor chain is re-evaluated every frame so that plain
+                // parent motion is picked up even while the animation is idle.
+                Matrix4f sourceToNode = computeSourceToNodeTransform(attachment.source);
+
+                Transform result = new Transform();
+                computeSurfaceTransform(attachment, sourceToNode, palette, result);
+                computed[i] = result;
+            }
+        } catch (RuntimeException ex) {
+            for (int i = 0; i < attachments.length; i++) {
+                attachments[i].hasValidRotation = hadRotation[i];
+                attachments[i].lastValidRotation = oldRotation[i];
+            }
+            throw ex;
+        }
+
+        // Publish only after every attachment evaluated successfully.
+        for (int i = 0; i < attachments.length; i++) {
+            attachments[i].node.setLocalTransform(computed[i]);
+        }
+    }
+
+    /**
+     * Evaluates the skinned position of a single vertex. This is the shared
+     * production path used both by software skinning and by surface
+     * attachment sampling.
+     *
+     * <p>Absolute buffer access is used so that neither direct nor heap
+     * buffers have their position or limit modified.</p>
+     *
+     * @param vertexIndex the vertex index
+     * @param bindX the vertex's X coordinate in the bind pose
+     * @param bindY the vertex's Y coordinate in the bind pose
+     * @param bindZ the vertex's Z coordinate in the bind pose
+     * @param boneIndices the mesh's bone-index reader (not null)
+     * @param boneWeights the mesh's bone-weight buffer (not null)
+     * @param maxWeightsPerVert the number of weights to consider per vertex
+     * @param offsetMatrices the armature's current skinning palette (not null)
+     * @param store storage for the result (modified)
+     */
+    private static void skinPosition(int vertexIndex, float bindX, float bindY, float bindZ,
+            BoneIndexReader boneIndices, FloatBuffer boneWeights, int maxWeightsPerVert,
+            Matrix4f[] offsetMatrices, Vector3f store) {
+        int base = vertexIndex * 4;
+        if (boneWeights.get(base) == 0f) {
+            // Mirror the software-skinning rule: a vertex whose first weight
+            // is zero stays at its bind-pose position.
+            store.set(bindX, bindY, bindZ);
+            return;
+        }
+
+        float rx = 0f, ry = 0f, rz = 0f;
+        for (int w = 0; w < maxWeightsPerVert; ++w) {
+            int weightIndex = base + w;
+            float weight = boneWeights.get(weightIndex);
+            int boneIndex = boneIndices.get(weightIndex);
+            if (boneIndex < 0 || boneIndex >= offsetMatrices.length) {
+                throw new IllegalArgumentException("Bone index " + boneIndex
+                        + " at vertex " + vertexIndex + " is out of range [0, "
+                        + offsetMatrices.length + ").");
+            }
+            Matrix4f mat = offsetMatrices[boneIndex];
+            rx += (mat.m00 * bindX + mat.m01 * bindY + mat.m02 * bindZ + mat.m03) * weight;
+            ry += (mat.m10 * bindX + mat.m11 * bindY + mat.m12 * bindZ + mat.m13) * weight;
+            rz += (mat.m20 * bindX + mat.m21 * bindY + mat.m22 * bindZ + mat.m23) * weight;
+        }
+        store.set(rx, ry, rz);
+    }
+
+    /**
+     * Absolute-index reader for a mesh's bone-index buffer. Unlike a wrapped
+     * index buffer, this never alters the underlying buffer's position or
+     * limit, and it supports 8-, 16-, and 32-bit index storage.
+     */
+    private static final class BoneIndexReader {
+        private final ByteBuffer bytes;
+        private final ShortBuffer shorts;
+        private final IntBuffer ints;
+        private final int size;
+
+        private BoneIndexReader(VertexBuffer buffer) {
+            if (buffer == null) {
+                throw new IllegalArgumentException("The mesh has no bone-index buffer.");
+            }
+            Buffer data = buffer.getData();
+            int componentSize = buffer.getFormat().getComponentSize();
+            if (data instanceof ByteBuffer && componentSize == 1) {
+                bytes = (ByteBuffer) data;
+                shorts = null;
+                ints = null;
+            } else if (data instanceof ShortBuffer && componentSize == 2) {
+                bytes = null;
+                shorts = (ShortBuffer) data;
+                ints = null;
+            } else if (data instanceof IntBuffer && componentSize == 4) {
+                bytes = null;
+                shorts = null;
+                ints = (IntBuffer) data;
+            } else {
+                throw new IllegalArgumentException(
+                        "Unsupported bone-index buffer type: " + data.getClass()
+                        + " format=" + buffer.getFormat());
+            }
+            size = data.limit();
+        }
+
+        int get(int index) {
+            if (bytes != null) {
+                return bytes.get(index) & 0xFF;
+            }
+            if (shorts != null) {
+                return shorts.get(index) & 0xFFFF;
+            }
+            return ints.get(index);
+        }
+
+        int size() {
+            return size;
+        }
+    }
+
+    /**
+     * Computes the transform from the source geometry's local space to this
+     * control's node local space by composing every local transform on the
+     * ancestor chain, including the source geometry itself.
+     *
+     * @param source one of this control's target geometries (not null)
+     * @return the composed matrix (a new instance)
+     */
+    private Matrix4f computeSourceToNodeTransform(Geometry source) {
+        Matrix4f chain = new Matrix4f();
+        Spatial current = source;
+        while (current != null && current != spatial) {
+            Transform local = current.getLocalTransform();
+            validateLocalTransform(local, current);
+            chain = local.toTransformMatrix().mult(chain);
+            current = current.getParent();
+        }
+        if (current != spatial) {
+            throw new IllegalArgumentException(
+                    "The source geometry is not a descendant of the controlled node.");
+        }
+        return chain;
+    }
+
+    /**
+     * Computes the local transform of a surface attachment from the current
+     * armature palette. The position follows the barycentric combination of
+     * the three deformed triangle vertices at all times. The orientation is
+     * derived from the deformed edges whenever they are non-degenerate and
+     * falls back to the last valid orientation otherwise.
+     *
+     * @param attachment the attachment to evaluate (not null)
+     * @param sourceToNode the source-to-node transform (not null)
+     * @param palette the current skinning palette (not null)
+     * @param store storage for the resulting local transform (modified)
+     */
+    private void computeSurfaceTransform(SurfaceAttachment attachment, Matrix4f sourceToNode,
+            Matrix4f[] palette, Transform store) {
+        Mesh mesh = attachment.source.getMesh();
+        if (mesh != attachment.mesh) {
+            throw new IllegalStateException("The mesh of surface attachment '"
+                    + attachment.name + "' was replaced.");
+        }
+
+        VertexBuffer bindPosBuffer = mesh.getBuffer(Type.BindPosePosition);
+        FloatBuffer bindPos = requireFloatPositionBuffer(bindPosBuffer, "BindPosePosition");
+        VertexBuffer boneIndexBuffer = mesh.getBuffer(Type.BoneIndex);
+        VertexBuffer boneWeightBuffer = mesh.getBuffer(Type.BoneWeight);
+        if (boneIndexBuffer == null || boneWeightBuffer == null) {
+            throw new IllegalStateException(
+                    "The mesh is missing bone index/weight buffers.");
+        }
+        int maxWeights = mesh.getMaxNumWeights();
+        if (maxWeights <= 0) {
+            maxWeights = 4;
+        }
+        // The engine stores at most four weights per vertex.
+        maxWeights = Math.min(maxWeights, 4);
+        BoneIndexReader boneIndices = new BoneIndexReader(boneIndexBuffer);
+        if (boneWeightBuffer.getFormat() != VertexBuffer.Format.Float) {
+            throw new IllegalStateException("Bone weights are not stored as floats.");
+        }
+        FloatBuffer boneWeights = (FloatBuffer) boneWeightBuffer.getData();
+
+        int[] indices = attachment.indices;
+        for (int index : indices) {
+            validateVertexIndex(mesh, index);
+            if ((long) index * 3 + 2 >= bindPos.limit()
+                    || (long) index * 4 + 3 >= boneWeights.limit()
+                    || (long) index * 4 + 3 >= boneIndices.size()) {
+                throw new IllegalStateException(
+                        "A triangle vertex is outside the mesh's skinning data.");
+            }
+        }
+
+        Vector3f deformedA = skinVertex(mesh, indices[0], bindPos, boneIndices,
+                boneWeights, maxWeights, palette, sourceToNode);
+        Vector3f deformedB = skinVertex(mesh, indices[1], bindPos, boneIndices,
+                boneWeights, maxWeights, palette, sourceToNode);
+        Vector3f deformedC = skinVertex(mesh, indices[2], bindPos, boneIndices,
+                boneWeights, maxWeights, palette, sourceToNode);
+
+        if (!isFinite(deformedA) || !isFinite(deformedB) || !isFinite(deformedC)) {
+            throw new IllegalArgumentException(
+                    "The deformed triangle contains non-finite positions.");
+        }
+
+        Vector3f bary = attachment.barycentric;
+        Vector3f centroid = new Vector3f(
+                deformedA.x * bary.x + deformedB.x * bary.y + deformedC.x * bary.z,
+                deformedA.y * bary.x + deformedB.y * bary.y + deformedC.y * bary.z,
+                deformedA.z * bary.x + deformedB.z * bary.y + deformedC.z * bary.z);
+
+        Vector3f edge1 = deformedB.subtract(deformedA);
+        Vector3f edge2 = deformedC.subtract(deformedA);
+
+        Quaternion rotation;
+        if (isDegenerate(edge1, edge2)) {
+            if (attachment.hasValidRotation) {
+                rotation = attachment.lastValidRotation;
+            } else {
+                rotation = computeBindPoseRotation(attachment, bindPos, sourceToNode);
+            }
+        } else {
+            Vector3f xAxis = edge1.normalizeLocal();
+            Vector3f zAxis = edge1.cross(edge2).normalizeLocal();
+            if (!isFinite(xAxis) || !isFinite(zAxis)) {
+                throw new IllegalArgumentException(
+                        "The deformed triangle produced a non-finite frame.");
+            }
+            Vector3f yAxis = zAxis.cross(xAxis);
+            rotation = quaternionFromAxes(xAxis, yAxis, zAxis);
+            if (!Quaternion.isValidQuaternion(rotation)) {
+                throw new IllegalArgumentException(
+                        "The deformed triangle produced a non-finite rotation.");
+            }
+            attachment.lastValidRotation = rotation.clone();
+            attachment.hasValidRotation = true;
+        }
+
+        float scale = attachment.offsetScale;
+        // local = frame * offset, where frame = T(centroid) * R(frame) and
+        // offset = T(offsetTranslation) * R(offset) * S(scale). The offset
+        // translation is rotated by the frame but not scaled by the offset's
+        // own scale.
+        Vector3f offsetTranslation = attachment.offset.getTranslation();
+        Vector3f translated = rotation.mult(offsetTranslation, null);
+        Vector3f translation = centroid.addLocal(translated);
+        Quaternion combined = rotation.mult(attachment.offset.getRotation(), new Quaternion());
+        combined.normalizeLocal();
+
+        if (!isFinite(translation) || !Quaternion.isValidQuaternion(combined)
+                || !Float.isFinite(scale)) {
+            throw new IllegalArgumentException(
+                    "The surface attachment produced a non-finite transform.");
+        }
+
+        store.setTranslation(translation);
+        store.setRotation(combined);
+        store.setScale(scale, scale, scale);
+    }
+
+    /**
+     * Evaluates one triangle vertex: bind-pose position through the shared
+     * skinning path, then through the source-to-node ancestor chain.
+     */
+    private static Vector3f skinVertex(Mesh mesh, int vertexIndex, FloatBuffer bindPos,
+            BoneIndexReader boneIndices, FloatBuffer boneWeights, int maxWeights,
+            Matrix4f[] palette, Matrix4f sourceToNode) {
+        int offset = vertexIndex * 3;
+        float bx = bindPos.get(offset);
+        float by = bindPos.get(offset + 1);
+        float bz = bindPos.get(offset + 2);
+        Vector3f skinned = new Vector3f();
+        skinPosition(vertexIndex, bx, by, bz, boneIndices, boneWeights, maxWeights,
+                palette, skinned);
+        return sourceToNode.mult(skinned, skinned);
+    }
+
+    /**
+     * Computes the fallback rotation from the bind-pose triangle after applying
+     * the current source-to-node ancestor chain.
+     */
+    private Quaternion computeBindPoseRotation(SurfaceAttachment attachment, FloatBuffer bindPos,
+            Matrix4f sourceToNode) {
+        int[] indices = attachment.indices;
+        Vector3f a = sourceToNode.mult(readVector(bindPos, indices[0], new Vector3f()), new Vector3f());
+        Vector3f b = sourceToNode.mult(readVector(bindPos, indices[1], new Vector3f()), new Vector3f());
+        Vector3f c = sourceToNode.mult(readVector(bindPos, indices[2], new Vector3f()), new Vector3f());
+
+        Vector3f edge1 = b.subtract(a);
+        Vector3f edge2 = c.subtract(a);
+        if (isDegenerate(edge1, edge2)) {
+            return new Quaternion();
+        }
+        Vector3f xAxis = edge1.normalizeLocal();
+        Vector3f zAxis = edge1.cross(edge2).normalizeLocal();
+        Vector3f yAxis = zAxis.cross(xAxis);
+        Quaternion rotation = quaternionFromAxes(xAxis, yAxis, zAxis);
+        return Quaternion.isValidQuaternion(rotation) ? rotation : new Quaternion();
+    }
+
+    /**
+     * Builds a quaternion from a right-handed, orthonormal set of axis
+     * column vectors.
+     */
+    private static Quaternion quaternionFromAxes(Vector3f xAxis, Vector3f yAxis, Vector3f zAxis) {
+        Matrix3f matrix = new Matrix3f();
+        matrix.fromAxes(xAxis, yAxis, zAxis);
+        Quaternion rotation = new Quaternion();
+        rotation.fromRotationMatrix(matrix);
+        rotation.normalizeLocal();
+        return rotation;
+    }
+
+    private static void validateBarycentric(float[] bary) {
+        float sum = 0f;
+        for (float value : bary) {
+            if (!Float.isFinite(value) || value < 0f) {
+                throw new IllegalArgumentException(
+                        "Barycentric coordinates must be finite and non-negative.");
+            }
+            sum += value;
+        }
+        if (Math.abs(sum - 1f) > 1e-4f) {
+            throw new IllegalArgumentException(
+                    "Barycentric coordinates must sum to 1 (got " + sum + ").");
+        }
+    }
+
+    /**
+     * Resolves the vertex indices of one triangle without altering any buffer's
+     * position or limit. Unlike {@link Mesh#getTriangle(int, int[])}, this
+     * method reads the index data absolutely and also supports strip and fan
+     * modes.
+     *
+     * @param mesh the mesh to read from (not null)
+     * @param triangle the triangle index (&ge;0, &lt; triangle count)
+     * @param out storage for the three vertex indices (length=3, modified)
+     */
+    private static void readTriangleIndices(Mesh mesh, int triangle, int[] out) {
+        Mesh.Mode mode = mesh.getMode();
+        VertexBuffer indexBuffer = mesh.getBuffer(Type.Index);
+        int base = triangle * 3;
+        if (mode == Mesh.Mode.Triangles) {
+            for (int k = 0; k < 3; k++) {
+                out[k] = readRawIndex(indexBuffer, base + k);
+            }
+            return;
+        }
+        // TriangleStrip / TriangleFan: map the list position to a "virtual"
+        // sequential index, then optionally resolve through the raw buffer.
+        for (int k = 0; k < 3; k++) {
+            int listIndex = base + k;
+            int superIndex;
+            if (mode == Mesh.Mode.TriangleStrip) {
+                int triIndex = listIndex / 3;
+                int vertIndex = listIndex % 3;
+                boolean isBack = triIndex % 2 == 1;
+                if (!isBack) {
+                    superIndex = triIndex + vertIndex;
+                } else {
+                    switch (vertIndex) {
+                        case 0:
+                            superIndex = triIndex + 1;
+                            break;
+                        case 1:
+                            superIndex = triIndex;
+                            break;
+                        default:
+                            superIndex = triIndex + 2;
+                            break;
+                    }
+                }
+            } else if (mode == Mesh.Mode.TriangleFan) {
+                int vertIndex = listIndex % 3;
+                superIndex = vertIndex == 0 ? 0 : (listIndex / 3) + vertIndex;
+            } else {
+                throw new IllegalArgumentException(
+                        "Surface attachments require a triangle mesh mode.");
+            }
+            out[k] = readRawIndex(indexBuffer, superIndex);
+        }
+    }
+
+    /**
+     * Reads one raw index value absolutely. A null buffer means the mesh has no
+     * index buffer, in which case indices are sequential.
+     */
+    private static int readRawIndex(VertexBuffer indexBuffer, int index) {
+        if (indexBuffer == null) {
+            return index;
+        }
+        Buffer data = indexBuffer.getData();
+        if (data instanceof ByteBuffer) {
+            // Mesh indices are stored unsigned; mask off sign extension.
+            return ((ByteBuffer) data).get(index) & 0xFF;
+        } else if (data instanceof ShortBuffer) {
+            return ((ShortBuffer) data).get(index) & 0xFFFF;
+        } else if (data instanceof IntBuffer) {
+            return ((IntBuffer) data).get(index);
+        }
+        throw new IllegalArgumentException(
+                "Unsupported index buffer type: " + data.getClass());
+    }
+
+    private static void validateSurfaceMesh(Mesh mesh) {
+        if (mesh == null) {
+            throw new IllegalArgumentException("The source geometry has no mesh.");
+        }
+        if (mesh.hasMorphTargets()) {
+            throw new IllegalArgumentException(
+                    "Surface attachments are not supported for morph meshes.");
+        }
+        if (!mesh.isAnimated()) {
+            throw new IllegalArgumentException("The source mesh is not animated.");
+        }
+        Mesh.Mode mode = mesh.getMode();
+        if (mode != Mesh.Mode.Triangles && mode != Mesh.Mode.TriangleStrip
+                && mode != Mesh.Mode.TriangleFan) {
+            throw new IllegalArgumentException(
+                    "Surface attachments require a triangle mesh mode.");
+        }
+        if (mesh.getBuffer(Type.BindPosePosition) == null
+                || mesh.getBuffer(Type.BoneIndex) == null
+                || mesh.getBuffer(Type.BoneWeight) == null) {
+            throw new IllegalArgumentException(
+                    "The source mesh lacks bind-pose or bone data.");
+        }
+    }
+
+    private static void validateOffset(Transform offset) {
+        Vector3f translation = offset.getTranslation();
+        Vector3f scale = offset.getScale();
+        Quaternion rotation = offset.getRotation();
+        if (!isFinite(translation) || !isFinite(scale)
+                || !Quaternion.isValidQuaternion(rotation)) {
+            throw new IllegalArgumentException("The offset transform is not finite.");
+        }
+        if (!(scale.x > 0f) || !(scale.y > 0f) || !(scale.z > 0f)) {
+            throw new IllegalArgumentException(
+                    "The offset scale must be positive and non-zero.");
+        }
+        float tolerance = 1e-5f * Math.max(1f, scale.x);
+        if (Math.abs(scale.x - scale.y) > tolerance
+                || Math.abs(scale.x - scale.z) > tolerance) {
+            throw new IllegalArgumentException(
+                    "The offset scale must be uniform.");
+        }
+    }
+
+    private static void validateLocalTransform(Transform local, Spatial owner) {
+        Vector3f translation = local.getTranslation();
+        Vector3f scale = local.getScale();
+        Quaternion rotation = local.getRotation();
+        if (!isFinite(translation) || !isFinite(scale)
+                || !Quaternion.isValidQuaternion(rotation)) {
+            throw new IllegalArgumentException("The local transform of spatial '"
+                    + owner.getName() + "' is not finite.");
+        }
+        if (scale.x == 0f || scale.y == 0f || scale.z == 0f) {
+            throw new IllegalArgumentException("The local transform of spatial '"
+                    + owner.getName() + "' has a zero scale.");
+        }
+    }
+
+    private static FloatBuffer requireFloatPositionBuffer(VertexBuffer buffer, String name) {
+        if (buffer == null) {
+            throw new IllegalArgumentException("The mesh has no " + name + " buffer.");
+        }
+        if (buffer.getFormat() != VertexBuffer.Format.Float
+                || buffer.getNumComponents() != 3) {
+            throw new IllegalArgumentException(
+                    "The " + name + " buffer is not a 3-component float buffer.");
+        }
+        return (FloatBuffer) buffer.getData();
+    }
+
+    private static Vector3f readVector(FloatBuffer buffer, int vertexIndex, Vector3f store) {
+        int offset = vertexIndex * 3;
+        return store.set(buffer.get(offset), buffer.get(offset + 1), buffer.get(offset + 2));
+    }
+
+    private static void validateVertexIndex(Mesh mesh, int vertexIndex) {
+        if (vertexIndex < 0 || vertexIndex >= mesh.getVertexCount()) {
+            throw new IllegalArgumentException("Vertex index " + vertexIndex
+                    + " is out of range [0, " + mesh.getVertexCount() + ").");
+        }
+    }
+
+    private static boolean isDegenerate(Vector3f edge1, Vector3f edge2) {
+        return edge1.length() < MIN_SURFACE_EDGE_LENGTH
+                || edge2.length() < MIN_SURFACE_EDGE_LENGTH
+                || edge1.cross(edge2).length() < MIN_SURFACE_CROSS_LENGTH;
+    }
+
+    private static boolean isFinite(Vector3f vector) {
+        return Float.isFinite(vector.x) && Float.isFinite(vector.y)
+                && Float.isFinite(vector.z);
+    }
+
+    /**
+     * One surface attachment: a triangle of a skinned mesh plus the offset
+     * applied on top of the resulting surface frame.
+     */
+    private static class SurfaceAttachment {
+        String name;
+        Geometry source;
+        Mesh mesh;
+        int triangle;
+        int[] indices;
+        Vector3f barycentric;
+        Transform offset;
+        float offsetScale;
+        Node node;
+        Quaternion lastValidRotation;
+        boolean hasValidRotation;
+
+        /**
+         * Creates an independent copy of this attachment for a cloned scene
+         * graph, resolving the source and node through the cloner so they line
+         * up with the rest of the cloned graph.
+         *
+         * @param cloner the cloner performing the deep clone (not null)
+         * @return a new attachment owned by the clone (not null)
+         */
+        SurfaceAttachment cloneFor(Cloner cloner) {
+            SurfaceAttachment copy = new SurfaceAttachment();
+            copy.name = name;
+            copy.source = cloner.clone(source);
+            copy.mesh = copy.source == null ? null : copy.source.getMesh();
+            copy.triangle = triangle;
+            copy.indices = indices == null ? null : indices.clone();
+            copy.barycentric = barycentric == null ? null : barycentric.clone();
+            copy.offset = offset == null ? null : offset.clone();
+            copy.offsetScale = offsetScale;
+            copy.node = cloner.clone(node);
+            copy.lastValidRotation = lastValidRotation == null
+                    ? null : lastValidRotation.clone();
+            copy.hasValidRotation = hasValidRotation;
+            return copy;
+        }
+    }
+
+    /**
      * Applies software skinning transformations to the given mesh using the
      * provided bone offset matrices.
      *
@@ -512,94 +1354,64 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
         if (maxWeightsPerVert <= 0) {
             throw new IllegalStateException("Max weights per vert is incorrectly set!");
         }
-        int fourMinusMaxWeights = 4 - maxWeightsPerVert;
+        int maxWeights = Math.min(4, maxWeightsPerVert);
 
         // NOTE: This code assumes the vertex buffer is in bind pose
         // resetToBind() has been called this frame
         VertexBuffer vb = mesh.getBuffer(Type.Position);
         FloatBuffer fvb = (FloatBuffer) vb.getData();
-        fvb.rewind();
 
         VertexBuffer nb = mesh.getBuffer(Type.Normal);
         FloatBuffer fnb = (nb == null) ? null : (FloatBuffer) nb.getData();
-        if (fnb != null) {
-            fnb.rewind();
-        }
 
         // get boneIndexes and weights for mesh
-        IndexBuffer ib = IndexBuffer.wrapIndexBuffer(mesh.getBuffer(Type.BoneIndex).getData());
+        BoneIndexReader ib = new BoneIndexReader(mesh.getBuffer(Type.BoneIndex));
         FloatBuffer wb = (FloatBuffer) mesh.getBuffer(Type.BoneWeight).getData();
 
-        wb.rewind();
-
-        float[] weights = wb.array();
-        int idxWeights = 0;
+        int vertexCount = fvb.limit() / 3;
 
         TempVars vars = TempVars.get();
+        Vector3f position = vars.vect1;
 
-        float[] posBuf = vars.skinPositions;
-        float[] normBuf = vars.skinNormals;
-
-        int iterations = (int) FastMath.ceil(fvb.limit() / ((float) posBuf.length));
-        int bufLength = posBuf.length;
-        for (int i = iterations - 1; i >= 0; i--) {
-            // read next set of positions and normals from native buffer
-            bufLength = Math.min(posBuf.length, fvb.remaining());
-            fvb.get(posBuf, 0, bufLength);
-            if (fnb != null) {
-                fnb.get(normBuf, 0, bufLength);
+        // iterate vertices and apply skinning transform for each effecting bone
+        for (int vert = 0; vert < vertexCount; vert++) {
+            int weightBase = vert * 4;
+            // Skip this vertex if the first weight is zero.
+            if (wb.get(weightBase) == 0f) {
+                continue;
             }
-            int verts = bufLength / 3;
-            int idxPositions = 0;
 
-            // iterate vertices and apply skinning transform for each effecting bone
-            for (int vert = verts - 1; vert >= 0; vert--) {
-                // Skip this vertex if the first weight is zero.
-                if (weights[idxWeights] == 0) {
-                    idxPositions += 3;
-                    idxWeights += 4;
-                    continue;
-                }
+            int idxPositions = vert * 3;
+            float vtx = fvb.get(idxPositions);
+            float vty = fvb.get(idxPositions + 1);
+            float vtz = fvb.get(idxPositions + 2);
 
-                float nmx = normBuf[idxPositions];
-                float vtx = posBuf[idxPositions++];
-                float nmy = normBuf[idxPositions];
-                float vty = posBuf[idxPositions++];
-                float nmz = normBuf[idxPositions];
-                float vtz = posBuf[idxPositions++];
+            // Shared production evaluation of the skinned position.
+            skinPosition(vert, vtx, vty, vtz, ib, wb, maxWeights, offsetMatrices, position);
 
-                float rx = 0, ry = 0, rz = 0, rnx = 0, rny = 0, rnz = 0;
+            if (fnb != null) {
+                float nmx = fnb.get(idxPositions);
+                float nmy = fnb.get(idxPositions + 1);
+                float nmz = fnb.get(idxPositions + 2);
 
-                for (int w = maxWeightsPerVert - 1; w >= 0; w--) {
-                    float weight = weights[idxWeights];
-                    Matrix4f mat = offsetMatrices[ib.get(idxWeights++)];
-
-                    rx += (mat.m00 * vtx + mat.m01 * vty + mat.m02 * vtz + mat.m03) * weight;
-                    ry += (mat.m10 * vtx + mat.m11 * vty + mat.m12 * vtz + mat.m13) * weight;
-                    rz += (mat.m20 * vtx + mat.m21 * vty + mat.m22 * vtz + mat.m23) * weight;
+                float rnx = 0, rny = 0, rnz = 0;
+                for (int w = maxWeights - 1; w >= 0; w--) {
+                    float weight = wb.get(weightBase + w);
+                    Matrix4f mat = offsetMatrices[ib.get(weightBase + w)];
 
                     rnx += (nmx * mat.m00 + nmy * mat.m01 + nmz * mat.m02) * weight;
                     rny += (nmx * mat.m10 + nmy * mat.m11 + nmz * mat.m12) * weight;
                     rnz += (nmx * mat.m20 + nmy * mat.m21 + nmz * mat.m22) * weight;
                 }
 
-                idxWeights += fourMinusMaxWeights;
-
-                idxPositions -= 3;
-                normBuf[idxPositions] = rnx;
-                posBuf[idxPositions++] = rx;
-                normBuf[idxPositions] = rny;
-                posBuf[idxPositions++] = ry;
-                normBuf[idxPositions] = rnz;
-                posBuf[idxPositions++] = rz;
+                fnb.put(idxPositions, rnx);
+                fnb.put(idxPositions + 1, rny);
+                fnb.put(idxPositions + 2, rnz);
             }
 
-            fvb.position(fvb.position() - bufLength);
-            fvb.put(posBuf, 0, bufLength);
-            if (fnb != null) {
-                fnb.position(fnb.position() - bufLength);
-                fnb.put(normBuf, 0, bufLength);
-            }
+            fvb.put(idxPositions, position.x);
+            fvb.put(idxPositions + 1, position.y);
+            fvb.put(idxPositions + 2, position.z);
         }
 
         vars.release();
@@ -625,128 +1437,83 @@ public class SkinningControl extends AbstractControl implements JmeCloneable {
         if (maxWeightsPerVert <= 0) {
             throw new IllegalStateException("Max weights per vert is incorrectly set!");
         }
-
-        int fourMinusMaxWeights = 4 - maxWeightsPerVert;
+        int maxWeights = Math.min(4, maxWeightsPerVert);
 
         // NOTE: This code assumes the vertex buffer is in bind pose
         // resetToBind() has been called this frame
         VertexBuffer vb = mesh.getBuffer(Type.Position);
         FloatBuffer fvb = (FloatBuffer) vb.getData();
-        fvb.rewind();
 
         VertexBuffer nb = mesh.getBuffer(Type.Normal);
-
         FloatBuffer fnb = (nb == null) ? null : (FloatBuffer) nb.getData();
-        if (fnb != null) {
-            fnb.rewind();
-        }
 
         FloatBuffer ftb = (FloatBuffer) tb.getData();
-        ftb.rewind();
 
         // get boneIndexes and weights for mesh
-        IndexBuffer ib = IndexBuffer.wrapIndexBuffer(mesh.getBuffer(Type.BoneIndex).getData());
+        BoneIndexReader ib = new BoneIndexReader(mesh.getBuffer(Type.BoneIndex));
         FloatBuffer wb = (FloatBuffer) mesh.getBuffer(Type.BoneWeight).getData();
 
-        wb.rewind();
-
-        float[] weights = wb.array();
-        int idxWeights = 0;
+        int vertexCount = fvb.limit() / 3;
 
         TempVars vars = TempVars.get();
-        float[] posBuf = vars.skinPositions;
-        float[] normBuf = vars.skinNormals;
-        float[] tanBuf = vars.skinTangents;
+        Vector3f position = vars.vect1;
 
-        int iterations = (int) FastMath.ceil(fvb.limit() / ((float) posBuf.length));
-        int bufLength = 0;
-        int tanLength = 0;
-        for (int i = iterations - 1; i >= 0; i--) {
-            // read next set of positions and normals from native buffer
-            bufLength = Math.min(posBuf.length, fvb.remaining());
-            tanLength = Math.min(tanBuf.length, ftb.remaining());
-            fvb.get(posBuf, 0, bufLength);
-            if (fnb != null) {
-                fnb.get(normBuf, 0, bufLength);
+        // iterate vertices and apply skinning transform for each effecting bone
+        for (int vert = 0; vert < vertexCount; vert++) {
+            int weightBase = vert * 4;
+            int idxPositions = vert * 3;
+            int idxTangents = vert * 4;
+
+            // Skip this vertex if the first weight is zero.
+            if (wb.get(weightBase) == 0f) {
+                continue;
             }
-            ftb.get(tanBuf, 0, tanLength);
-            int verts = bufLength / 3;
-            int idxPositions = 0;
-            // Tangents have their own index because they have 4 components.
-            int idxTangents = 0;
 
-            // iterate vertices and apply skinning transform for each effecting bone
-            for (int vert = verts - 1; vert >= 0; vert--) {
-                // Skip this vertex if the first weight is zero.
-                if (weights[idxWeights] == 0) {
-                    idxTangents += 4;
-                    idxPositions += 3;
-                    idxWeights += 4;
-                    continue;
-                }
+            float vtx = fvb.get(idxPositions);
+            float vty = fvb.get(idxPositions + 1);
+            float vtz = fvb.get(idxPositions + 2);
 
-                float nmx = normBuf[idxPositions];
-                float vtx = posBuf[idxPositions++];
-                float nmy = normBuf[idxPositions];
-                float vty = posBuf[idxPositions++];
-                float nmz = normBuf[idxPositions];
-                float vtz = posBuf[idxPositions++];
+            // Shared production evaluation of the skinned position.
+            skinPosition(vert, vtx, vty, vtz, ib, wb, maxWeights, offsetMatrices, position);
 
-                float tnx = tanBuf[idxTangents++];
-                float tny = tanBuf[idxTangents++];
-                float tnz = tanBuf[idxTangents++];
+            float tnx = ftb.get(idxTangents);
+            float tny = ftb.get(idxTangents + 1);
+            float tnz = ftb.get(idxTangents + 2);
 
-                // skipping the 4th component of the tangent since it doesn't have to be transformed
-                idxTangents++;
+            float rnx = 0, rny = 0, rnz = 0, rtx = 0, rty = 0, rtz = 0;
+            for (int w = maxWeights - 1; w >= 0; w--) {
+                float weight = wb.get(weightBase + w);
+                Matrix4f mat = offsetMatrices[ib.get(weightBase + w)];
 
-                float rx = 0, ry = 0, rz = 0, rnx = 0, rny = 0, rnz = 0, rtx = 0, rty = 0, rtz = 0;
-
-                for (int w = maxWeightsPerVert - 1; w >= 0; w--) {
-                    float weight = weights[idxWeights];
-                    Matrix4f mat = offsetMatrices[ib.get(idxWeights++)];
-
-                    rx += (mat.m00 * vtx + mat.m01 * vty + mat.m02 * vtz + mat.m03) * weight;
-                    ry += (mat.m10 * vtx + mat.m11 * vty + mat.m12 * vtz + mat.m13) * weight;
-                    rz += (mat.m20 * vtx + mat.m21 * vty + mat.m22 * vtz + mat.m23) * weight;
+                if (fnb != null) {
+                    float nmx = fnb.get(idxPositions);
+                    float nmy = fnb.get(idxPositions + 1);
+                    float nmz = fnb.get(idxPositions + 2);
 
                     rnx += (nmx * mat.m00 + nmy * mat.m01 + nmz * mat.m02) * weight;
                     rny += (nmx * mat.m10 + nmy * mat.m11 + nmz * mat.m12) * weight;
                     rnz += (nmx * mat.m20 + nmy * mat.m21 + nmz * mat.m22) * weight;
-
-                    rtx += (tnx * mat.m00 + tny * mat.m01 + tnz * mat.m02) * weight;
-                    rty += (tnx * mat.m10 + tny * mat.m11 + tnz * mat.m12) * weight;
-                    rtz += (tnx * mat.m20 + tny * mat.m21 + tnz * mat.m22) * weight;
                 }
 
-                idxWeights += fourMinusMaxWeights;
-
-                idxPositions -= 3;
-
-                normBuf[idxPositions] = rnx;
-                posBuf[idxPositions++] = rx;
-                normBuf[idxPositions] = rny;
-                posBuf[idxPositions++] = ry;
-                normBuf[idxPositions] = rnz;
-                posBuf[idxPositions++] = rz;
-
-                idxTangents -= 4;
-
-                tanBuf[idxTangents++] = rtx;
-                tanBuf[idxTangents++] = rty;
-                tanBuf[idxTangents++] = rtz;
-
-                //once again skipping the 4th component of the tangent
-                idxTangents++;
+                rtx += (tnx * mat.m00 + tny * mat.m01 + tnz * mat.m02) * weight;
+                rty += (tnx * mat.m10 + tny * mat.m11 + tnz * mat.m12) * weight;
+                rtz += (tnx * mat.m20 + tny * mat.m21 + tnz * mat.m22) * weight;
             }
 
-            fvb.position(fvb.position() - bufLength);
-            fvb.put(posBuf, 0, bufLength);
             if (fnb != null) {
-                fnb.position(fnb.position() - bufLength);
-                fnb.put(normBuf, 0, bufLength);
+                fnb.put(idxPositions, rnx);
+                fnb.put(idxPositions + 1, rny);
+                fnb.put(idxPositions + 2, rnz);
             }
-            ftb.position(ftb.position() - tanLength);
-            ftb.put(tanBuf, 0, tanLength);
+
+            fvb.put(idxPositions, position.x);
+            fvb.put(idxPositions + 1, position.y);
+            fvb.put(idxPositions + 2, position.z);
+
+            // skipping the 4th component of the tangent since it doesn't have to be transformed
+            ftb.put(idxTangents, rtx);
+            ftb.put(idxTangents + 1, rty);
+            ftb.put(idxTangents + 2, rtz);
         }
 
         vars.release();

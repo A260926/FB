@@ -40,6 +40,8 @@ import com.jme3.export.JmeImporter;
 import com.jme3.light.Light;
 import com.jme3.light.LightList;
 import com.jme3.material.Material;
+import com.jme3.scene.control.Control;
+import com.jme3.scene.control.PostLogicalControl;
 import com.jme3.scene.threadwarden.SceneGraphThreadWarden;
 import com.jme3.util.SafeArrayList;
 import com.jme3.util.clone.Cloner;
@@ -253,8 +255,30 @@ public class Node extends Spatial {
             return;
         }
 
-        for (Spatial s : getUpdateList().getArray()) {
+        // Snapshot of everything that gets an ordinary update this round.
+        // Keeping the same snapshot for the post-logical pass ensures the
+        // post pass sees exactly the spatials that were updated, even if a
+        // control mutates the scene graph while being updated.
+        Spatial[] updated = getUpdateList().getArray();
+        for (Spatial s : updated) {
             s.updateLogicalState(tpf);
+        }
+
+        // Second phase: after every ordinary control in the tree has run,
+        // give post-logical controls a consistent view of the frame. The
+        // root's own controls are included since the root is not part of
+        // its own update list.
+        runPostLogicalUpdate(this, tpf);
+        for (Spatial s : updated) {
+            runPostLogicalUpdate(s, tpf);
+        }
+    }
+
+    private static void runPostLogicalUpdate(Spatial spatial, float tpf) {
+        for (Control c : spatial.controls.getArray()) {
+            if (c instanceof PostLogicalControl) {
+                ((PostLogicalControl) c).postLogicalUpdate(tpf);
+            }
         }
     }
 
