@@ -6,6 +6,9 @@
 #define LIBNURBS_LIBNURBS_HPP
 
 /* Algotithm */
+#include "libnurbs/Algorithm/DegreeAlgo.hpp"
+#include "libnurbs/Algorithm/KnotInsertion.hpp"
+#include "libnurbs/Algorithm/KnotRemoval.hpp"
 #include "libnurbs/Algorithm/MathUtils.hpp"
 
 /* Basis */
@@ -25,5 +28,6 @@
 
 /* Surface */
 #include "libnurbs/Surface/Surface.hpp"
+#include "libnurbs/Surface/SurfaceMesh.hpp"
 
 #endif //LIBNURBS_LIBNURBS_HPP

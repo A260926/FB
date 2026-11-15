@@ -22,6 +22,20 @@ namespace libnurbs
         int ph = degree + times;
         int ph2 = ph / 2;
 
+        // The final control point count depends on the number of distinct
+        // interior knot values: every one of them gains `times` control
+        // points, so a single-segment size formula is not enough.
+        int distinct_knot_count = 0;
+        {
+            auto pairs = knot_vector.GetKnotPairs();
+            if (pairs.size() > 2)
+            {
+                distinct_knot_count = (int)pairs.size() - 2;
+            }
+        }
+        const int final_point_count = (int)points.size() + times * (distinct_knot_count + 1);
+        const int final_knot_count = final_point_count + ph + 1;
+
         std::vector bezalfs(degree + times + 1, std::vector<Numeric>(degree + 1));
         bezalfs[0][0] = bezalfs[ph][degree] = 1.0;
 
@@ -53,10 +67,10 @@ namespace libnurbs
         int cind = 1;
         double ua = knots[0];
 
-        std::vector<Vec4> Qw((n + times) * 2);
+        std::vector<Vec4> Qw(final_point_count);
         Qw[0] = points[0];
 
-        std::vector<Numeric> Uh((n + times) * 2 + ph + 1);
+        std::vector<Numeric> Uh(final_knot_count + ph + 1);
         std::fill(Uh.begin(), Uh.begin() + ph + 1, ua);
 
         std::vector<Vec4> bpts(points.begin(), points.begin() + degree + 1);

@@ -1,0 +1,24 @@
+CASE domain knot_domain_bounds checks=19
+CASE domain curve_analytic_derivatives checks=51
+CASE domain surface_analytic_derivatives checks=64
+CASE domain affine_reparameterization checks=48
+CASE domain out_of_domain_and_illegal_knots checks=5
+CASE domain curve_inverse_monotone_quadratic checks=10
+CASE domain surface_inverse_rational_cylinder checks=30
+CASE domain wide_domain_inverse checks=150
+GROUP domain cases=8 checks=377 COMPLETE
+CASE editing insert_knot_curve checks=50
+CASE editing insert_knot_surface_both_axes checks=50
+CASE editing elevate_degree_multi_span checks=22
+CASE editing elevate_degree_surface_multi_span checks=52
+CASE editing reverse_axis checks=44
+CASE editing surface_file_roundtrip checks=210
+CASE editing curve_file_roundtrip checks=50
+GROUP editing cases=7 checks=478 COMPLETE
+CASE mesh mesh_plane checks=32
+CASE mesh mesh_merges_interior_knots checks=4
+CASE mesh mesh_crease_normals checks=8
+CASE mesh mesh_position_identity checks=4
+CASE mesh mesh_invalid_and_degenerate checks=9
+GROUP mesh cases=5 checks=57 COMPLETE
+TARGET_COMPLETE cases=20

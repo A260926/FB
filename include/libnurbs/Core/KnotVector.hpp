@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <libnurbs/Core/Typedefs.hpp>
+#include <utility>
 #include <vector>
 
 using std::vector;
@@ -11,7 +12,7 @@ namespace libnurbs
     class KnotVector
     {
     private:
-        vector <Numeric> m_Values{};
+        vector<Numeric> m_Values{};
 
     public:
         struct KnotPair;
@@ -20,13 +21,13 @@ namespace libnurbs
     public:
         KnotVector() = default;
 
-        explicit KnotVector(const vector <Numeric>& values);
+        explicit KnotVector(const vector<Numeric>& values);
 
-        explicit KnotVector(const vector <KnotPair>& knots);
+        explicit KnotVector(const vector<KnotPair>& knots);
 
         static KnotVector Uniform(int degree, int knots_count);
 
-        [[nodiscard]] vector <KnotPair> GetKnotPairs() const;
+        [[nodiscard]] vector<KnotPair> GetKnotPairs() const;
 
         [[nodiscard]] auto& Values() const
         {
@@ -55,15 +56,46 @@ namespace libnurbs
 
         [[nodiscard]] bool IsValid() const;
 
+        /**
+         * @brief Validate the raw knot values only (no degree information).
+         *
+         * Checks finiteness, numeric bounds, non-decreasing order, minimum
+         * spacing between distinct knots and matching end multiplicities.
+         *
+         * @throws std::invalid_argument when the values are not usable.
+         */
+        void ValidateValues() const;
+
+        /**
+         * @brief Validate this knot vector for evaluation with the given degree.
+         *
+         * A valid knot vector is finite, non-decreasing, stays within the
+         * supported numeric range, has distinct knots separated by at least
+         * 1e-6 and is clamped at both ends. Interior knot multiplicities must
+         * not exceed the degree.
+         *
+         * @throws std::invalid_argument when the vector is not usable.
+         */
+        void Validate(int degree) const;
+
+        /**
+         * @brief Return the effective parameter domain [knots[degree], knots[count-degree-1]].
+         * @throws std::invalid_argument when the knot vector is invalid for the degree.
+         */
+        [[nodiscard]] std::pair<Numeric, Numeric> GetDomain(int degree) const;
+
         [[nodiscard]] bool IsClamped() const;
+
+        [[nodiscard]] bool IsClamped(int degree) const;
 
         [[nodiscard]] bool IsUniform() const;
 
         /**
          * @brief Find the index of the span contains u into the knot vector.
          * @param degree
-         * @param u
+         * @param u Parameter in the effective domain of the knot vector.
          * @return Span1, [Span1,Span2).
+         * @throws std::invalid_argument when u lies outside the effective domain.
          */
         [[nodiscard]] int FindSpanIndex(int degree, Numeric u) const;
 
@@ -75,12 +107,17 @@ namespace libnurbs
 
         /**
          * \brief Insert a knot value into the knot vector.
-         * \param value
+         * \param value Parameter strictly inside the effective domain.
          * \param times
          * \return Span index in original KnotVector that contains the new knot value.
+         * \throws std::invalid_argument when the value is not strictly interior.
          */
         int InsertKnot(Numeric value, int times = 1);
 
+        /**
+         * \brief Reverse the parameter direction using u -> a + b - u,
+         *        where [a, b] is the knot vector's domain.
+         */
         void Reverse();
     };
 

@@ -31,6 +31,14 @@ namespace libnurbs
 
         void SaveToFile(std::ostream& os, bool binary_mode = false) const;
 
+        /**
+         * @brief Effective parameter domain [knots[degree], knots[count-degree-1]].
+         * @throws std::invalid_argument when the knot vector is invalid.
+         */
+        [[nodiscard]] std::pair<Numeric, Numeric> GetDomain() const
+        {
+            return Knots.GetDomain(Degree);
+        }
 
         [[nodiscard]] Vec3 Evaluate(Numeric x) const;
 
@@ -48,7 +56,6 @@ namespace libnurbs
         [[nodiscard]] Numeric BinarySearchParameter(const Vec3& point,
                                                     Numeric epsilon         = 1e-8,
                                                     int max_iteration_count = 512) const;
-
 
         [[nodiscard]] Curve InsertKnot(Numeric knot_value) const;
 

@@ -16,6 +16,8 @@ namespace libnurbs
 
     using Numeric = double;
 
+    using Vec2 = Eigen::Vector<Numeric, 2>;
+
     using Vec3 = Eigen::Vector<Numeric, 3>;
 
     using Vec4 = Eigen::Vector<Numeric, 4>;

@@ -1,9 +1,12 @@
 #include "libnurbs/Surface/Surface.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 
 #include "libnurbs/Algorithm/DegreeAlgo.hpp"
+#include "libnurbs/Algorithm/KnotInsertion.hpp"
 #include "libnurbs/Algorithm/KnotRemoval.hpp"
 #include "libnurbs/Algorithm/MathUtils.hpp"
 #include "libnurbs/Basis/BSplineBasis.hpp"
@@ -89,6 +92,8 @@ Surface& Surface::LoadFromFile(std::istream& is)
         {
             Utils::ReadVec4FromStream(ControlPoints.Values[i], is);
         }
+        KnotsU.ValidateValues();
+        KnotsV.ValidateValues();
     }
     else
     {
@@ -254,6 +259,8 @@ Surface& Surface::LoadFromFile(std::istream& is)
             process_key(current_key, content_lines);
         }
     }
+    KnotsU.ValidateValues();
+    KnotsV.ValidateValues();
     return *this;
 }
 
@@ -370,8 +377,6 @@ void Surface::SaveToFile(std::ostream& os, bool binary_mode) const
 
 Vec3 Surface::Evaluate(Numeric u, Numeric v) const
 {
-    assert(u >= 0 && u <= 1);
-    assert(v >= 0 && v <= 1);
     int index_span_u = KnotsU.FindSpanIndex(DegreeU, u);
     int index_span_v = KnotsV.FindSpanIndex(DegreeV, v);
     VecX basis_u = BSplineBasis::Evaluate(DegreeU, KnotsU.Values(), index_span_u, u);
@@ -459,26 +464,43 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
                               Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
-    assert(init_u >= 0 && init_u <= 1);
-    assert(init_v >= 0 && init_v <= 1);
-    using Vec2 = Eigen::Vector2<Numeric>;
+    const auto [u_begin, u_end] = GetDomainU();
+    const auto [v_begin, v_end] = GetDomainV();
+    // Initial guesses outside the domain are projected onto the nearest boundary.
+    const Numeric init_u_clamped = std::clamp(init_u, u_begin, u_end);
+    const Numeric init_v_clamped = std::clamp(init_v, v_begin, v_end);
+
+    // Search in normalised coordinates s_u, s_v in [0, 1] so that the BFGS
+    // step scaling is independent of the original domain widths. All
+    // residuals remain spatial and the public signature is unchanged.
+    const Numeric u_span = u_end - u_begin;
+    const Numeric v_span = v_end - v_begin;
+
+    auto to_uv = [&](const Vec2& s) -> Vec2
+    {
+        return Vec2{u_begin + s.x() * u_span, v_begin + s.y() * v_span};
+    };
+
     using Mat2x2 = Eigen::Matrix<Numeric, 2, 2>;
 
-    auto Ri = [&point, this](Numeric u, Numeric v) -> Vec3
+    auto Ri = [&point, this, &to_uv](const Vec2& s) -> Vec3
     {
-        return Evaluate(u, v) - point;
+        const Vec2 uv = to_uv(s);
+        return Evaluate(uv.x(), uv.y()) - point;
     };
 
-    auto Ki = [this, &Ri](Numeric u, Numeric v) -> Vec2
+    // Chain rule: d/ds = d/du * span_u, d/dv * span_v.
+    auto Ki = [this, &Ri, &to_uv, u_span, v_span](const Vec2& s) -> Vec2
     {
-        auto ri = Ri(u, v);
-        auto Su = EvaluateDerivative(u, v, 1, 0);
-        auto Sv = EvaluateDerivative(u, v, 0, 1);
-        return Vec2{ri.dot(Su), ri.dot(Sv)};
+        const Vec2 uv = to_uv(s);
+        auto ri = Ri(s);
+        auto Su = EvaluateDerivative(uv.x(), uv.y(), 1, 0);
+        auto Sv = EvaluateDerivative(uv.x(), uv.y(), 0, 1);
+        return Vec2{ri.dot(Su) * u_span, ri.dot(Sv) * v_span};
     };
 
-    Numeric u_last = init_u, v_last = init_v;
-    Numeric current_residual = std::numeric_limits<Numeric>::max();
+    Vec2 s_last{ (init_u_clamped - u_begin) / u_span, (init_v_clamped - v_begin) / v_span };
+    Numeric current_residual = Ri(s_last).norm();
     Mat2x2 Hk = Mat2x2::Identity();
 
     auto line_search = [&](const Vec2& gk) -> Vec2
@@ -491,30 +513,30 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
 
         while (ls_count++ < max_line_search_iterations)
         {
-            Vec2 uv_trial = Vec2{u_last, v_last} - alpha * Hk * gk;
-            uv_trial.x() = std::clamp(uv_trial.x(), Numeric(0), Numeric(1));
-            uv_trial.y() = std::clamp(uv_trial.y(), Numeric(0), Numeric(1));
+            Vec2 s_trial = s_last - alpha * Hk * gk;
+            s_trial.x() = std::clamp(s_trial.x(), Numeric(0), Numeric(1));
+            s_trial.y() = std::clamp(s_trial.y(), Numeric(0), Numeric(1));
 
-            if (Ri(uv_trial.x(), uv_trial.y()).norm() <= current_residual - c1 * alpha * gk.dot(Hk * gk))
+            if (Ri(s_trial).norm() <= current_residual - c1 * alpha * gk.dot(Hk * gk))
             {
-                return uv_trial;
+                return s_trial;
             }
             alpha *= beta;
         }
-        Vec2 uv_last = Vec2{u_last, v_last} - alpha * Hk * gk;
-        uv_last.x() = std::clamp(uv_last.x(), Numeric(0), Numeric(1));
-        uv_last.y() = std::clamp(uv_last.y(), Numeric(0), Numeric(1));
-        return uv_last;
+        Vec2 s_final = s_last - alpha * Hk * gk;
+        s_final.x() = std::clamp(s_final.x(), Numeric(0), Numeric(1));
+        s_final.y() = std::clamp(s_final.y(), Numeric(0), Numeric(1));
+        return s_final;
     };
 
     int count = 0;
     while (!((current_residual < epsilon) || (count++ >= max_iteration_count)))
     {
-        auto gk = Ki(u_last, v_last);
-        Vec2 uv_last = line_search(gk);
+        auto gk = Ki(s_last);
+        Vec2 s_new = line_search(gk);
 
-        Vec2 sk = uv_last - Vec2{u_last, v_last};
-        Vec2 gk_new = Ki(uv_last.x(), uv_last.y());
+        Vec2 sk = s_new - s_last;
+        Vec2 gk_new = Ki(s_new);
         Vec2 yk = gk_new - gk;
 
         Numeric yk_dot_sk = yk.dot(sk);
@@ -528,11 +550,11 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
         Mat2x2 I = Mat2x2::Identity();
         Hk = (I - rho * sk * yk.transpose()) * Hk * (I - rho * yk * sk.transpose()) + rho * sk * sk.transpose();
 
-        u_last = uv_last.x();
-        v_last = uv_last.y();
-        current_residual = Ri(u_last, v_last).norm();
+        s_last = s_new;
+        current_residual = Ri(s_last).norm();
     }
-    return {u_last, v_last};
+    const Vec2 result = to_uv(s_last);
+    return {result.x(), result.y()};
 }
 
 auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric constant,
@@ -540,26 +562,46 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
                                 Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
-    auto Ri = [&point, this, direction, constant](Numeric val) -> Vec3
+    const auto [u_begin, u_end] = GetDomainU();
+    const auto [v_begin, v_end] = GetDomainV();
+    const Numeric begin = direction == 0 ? v_begin : u_begin;
+    const Numeric end   = direction == 0 ? v_end : u_end;
+
+    if (!(constant >= (direction == 0 ? u_begin : v_begin) &&
+          constant <= (direction == 0 ? u_end : v_end)))
     {
+        throw std::invalid_argument("constant parameter outside of the surface domain");
+    }
+
+    // Search in a normalised coordinate s in [0, 1] for the same reason as
+    // the 2D search: the step scaling must not depend on the original domain
+    // width, and an affine reparameterisation must not change the iteration.
+    const Numeric span = end - begin;
+    auto to_value = [begin, span](Numeric s) { return begin + s * span; };
+    auto to_normalized = [begin, span](Numeric val) { return (val - begin) / span; };
+
+    auto Ri = [&point, this, direction, constant, &to_value](Numeric s) -> Vec3
+    {
+        const Numeric val = to_value(s);
         Numeric u = direction == 0 ? constant : val;
         Numeric v = direction == 1 ? constant : val;
         return Evaluate(u, v) - point;
     };
 
-    auto fi = [this, &Ri, direction, constant](Numeric val) -> Numeric
+    auto fi = [this, &Ri, direction, constant, span, &to_value](Numeric s) -> Numeric
     {
+        const Numeric val = to_value(s);
         Numeric u = direction == 0 ? constant : val;
         Numeric v = direction == 1 ? constant : val;
-        auto ri = Ri(val);
+        auto ri = Ri(s);
         auto Cu = direction == 1
                       ? EvaluateDerivative(u, v, 1, 0)
                       : EvaluateDerivative(u, v, 0, 1);
-        return ri.dot(Cu);
+        return ri.dot(Cu) * span;
     };
 
-    Numeric val_last = init_value;
-    Numeric current_residual = std::numeric_limits<Numeric>::max();
+    Numeric s_last = to_normalized(std::clamp(init_value, begin, end));
+    Numeric current_residual = Ri(s_last).norm();
     Numeric Hk = 1.0;
 
     auto line_search = [&](Numeric gk) -> Numeric
@@ -567,32 +609,32 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
         Numeric alpha = 1.0;
         Numeric c1 = 1e-4;
         Numeric beta = 0.9;
-        int max_line_search_iterations = 0;
+        int max_line_search_iterations = 20;
         int ls_count = 0;
 
         while (ls_count++ < max_line_search_iterations)
         {
-            Numeric u_trial = val_last - alpha * Hk * gk;
-            u_trial = std::clamp(u_trial, Numeric(0), Numeric(1));
+            Numeric s_trial = s_last - alpha * Hk * gk;
+            s_trial = std::clamp(s_trial, Numeric(0), Numeric(1));
 
-            if (Ri(u_trial).norm() <= current_residual - c1 * alpha * gk * Hk * gk)
+            if (Ri(s_trial).norm() <= current_residual - c1 * alpha * gk * Hk * gk)
             {
-                return u_trial;
+                return s_trial;
             }
             alpha *= beta;
         }
-        Numeric u_final = val_last - alpha * Hk * gk;
-        return std::clamp(u_final, Numeric(0), Numeric(1));
+        Numeric s_final = s_last - alpha * Hk * gk;
+        return std::clamp(s_final, Numeric(0), Numeric(1));
     };
 
     int count = 0;
     while (!((current_residual < epsilon) || (count++ >= max_iteration_count)))
     {
-        Numeric gk = fi(val_last);
-        Numeric u_new = line_search(gk);
+        Numeric gk = fi(s_last);
+        Numeric s_new = line_search(gk);
 
-        Numeric sk = u_new - val_last;
-        Numeric gk_new = fi(u_new);
+        Numeric sk = s_new - s_last;
+        Numeric gk_new = fi(s_new);
         Numeric yk = gk_new - gk;
 
         Numeric yk_dot_sk = yk * sk;
@@ -605,20 +647,71 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
         Numeric rho = 1.0 / yk_dot_sk;
         Hk = (1.0 - rho * yk * sk) * Hk * (1.0 - rho * sk * yk) + rho * sk * sk;
 
-        val_last = u_new;
-        current_residual = Ri(val_last).norm();
+        s_last = s_new;
+        current_residual = Ri(s_last).norm();
     }
+
+    // If the gradient step did not reach a spatial residual within epsilon,
+    // fall back to a residual-driven interval reduction and keep whichever
+    // candidate is spatially closer. Both are spatial measures, never raw UV
+    // step sizes.
+    if (!(current_residual < epsilon))
+    {
+        Numeric low  = Numeric(0);
+        Numeric high = Numeric(1);
+        int fallback_count = 0;
+        while (fallback_count++ < max_iteration_count)
+        {
+            Numeric width = high - low;
+            if (width <= 0) break;
+            Numeric third = width / 3.0;
+            Numeric m1    = low + third;
+            Numeric m2    = high - third;
+            if (!(m1 > low && m2 < high)) break;
+
+            Numeric left_residual  = Ri(m1).norm();
+            Numeric right_residual = Ri(m2).norm();
+            if (left_residual <= right_residual)
+            {
+                high = m2;
+            }
+            else
+            {
+                low = m1;
+            }
+            if (width <= 1e-13) break;
+        }
+        Numeric candidates[3] = {low, (low + high) / 2.0, high};
+        for (Numeric candidate : candidates)
+        {
+            Numeric residual = Ri(candidate).norm();
+            if (residual < current_residual)
+            {
+                current_residual = residual;
+                s_last           = candidate;
+            }
+        }
+    }
+    const Numeric val_final = to_value(s_last);
     return direction == 0
-               ? std::make_pair(constant, val_last)
-               : std::make_pair(val_last, constant);
+               ? std::make_pair(constant, val_final)
+               : std::make_pair(val_final, constant);
 }
 
 auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric constant,
                                       Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
-    Numeric low = 0.0;
-    Numeric high = 1.0;
+    const auto [u_begin, u_end] = GetDomainU();
+    const auto [v_begin, v_end] = GetDomainV();
+    const Numeric begin = direction == 0 ? v_begin : u_begin;
+    const Numeric end   = direction == 0 ? v_end : u_end;
+
+    if (!(constant >= (direction == 0 ? u_begin : v_begin) &&
+          constant <= (direction == 0 ? u_end : v_end)))
+    {
+        throw std::invalid_argument("constant parameter outside of the surface domain");
+    }
 
     auto Ri = [&point, this, direction, constant](Numeric val) -> Numeric
     {
@@ -627,83 +720,107 @@ auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric 
         return (Evaluate(u, v) - point).norm();
     };
 
+    // Minimise the spatial residual over the original-domain interval. The
+    // bracket is compared by residual value only; epsilon is only ever
+    // compared against a spatial residual, never used as a parameter step.
+    const Numeric domain_width = end - begin;
+    Numeric low  = begin;
+    Numeric high = end;
+
+    Numeric best          = begin;
+    Numeric best_residual = Ri(best);
+    auto consider = [&](Numeric candidate)
+    {
+        Numeric residual = Ri(candidate);
+        if (residual < best_residual)
+        {
+            best_residual = residual;
+            best          = candidate;
+        }
+    };
+    consider(end);
+    auto make_result = [&](Numeric val)
+    {
+        return direction == 0 ? std::make_pair(constant, val) : std::make_pair(val, constant);
+    };
+    if (best_residual < epsilon) return make_result(best);
+
     int count = 0;
-    Numeric mid_residual;
     while (count++ < max_iteration_count)
     {
-        Numeric mid = (low + high) / 2.0;
+        Numeric width = high - low;
+        if (width <= 0) break;
+        Numeric third = width / 3.0;
+        Numeric m1    = low + third;
+        Numeric m2    = high - third;
+        if (!(m1 > low && m2 < high)) break;
 
-        mid_residual = Ri(mid);
-
-        Numeric left_mid = mid - epsilon;
-        Numeric right_mid = mid + epsilon;
-
-        if (left_mid < low) left_mid = low;
-        if (right_mid > high) right_mid = high;
-
-        Numeric left_residual = Ri(left_mid);
-        Numeric right_residual = Ri(right_mid);
-
-        if (left_residual < mid_residual)
+        Numeric left_residual  = Ri(m1);
+        Numeric right_residual = Ri(m2);
+        if (left_residual < best_residual)
         {
-            high = mid;
+            best_residual = left_residual;
+            best          = m1;
         }
-        else if (right_residual < mid_residual)
+        if (right_residual < best_residual)
         {
-            low = mid;
+            best_residual = right_residual;
+            best          = m2;
+        }
+        if (best_residual < epsilon) return make_result(best);
+        if (left_residual <= right_residual)
+        {
+            high = m2;
         }
         else
         {
-            if (std::abs(high - low) < epsilon || mid_residual < epsilon)
-            {
-                return direction == 0
-                           ? std::make_pair(constant, mid)
-                           : std::make_pair(mid, constant);
-            }
-            low = left_mid;
-            high = right_mid;
+            low = m1;
         }
+        if (width <= 1e-13 * std::max(Numeric(1), domain_width)) break;
     }
 
-    Numeric final_val = (low + high) / 2.0;
-    return direction == 0
-               ? std::make_pair(constant, final_val)
-               : std::make_pair(final_val, constant);
+    return make_result(best);
 }
 
 
 Surface Surface::InsertKnotU(Numeric knot_value) const
 {
-    Surface result{*this};
-    int k = result.KnotsU.InsertKnot(knot_value);
-    result.ControlPoints.InsertU(k, Vec4::Zero());
-    const auto& knots = this->KnotsU.Values();
-    vector<Numeric> alpha_list(result.DegreeU);
-    for (int i = k - DegreeU + 1; i <= k; i++)
-    {
-        int idx = i - k + DegreeU - 1;
-        alpha_list[idx] = (knot_value - knots[i]) / (knots[i + DegreeU] - knots[i]);
-    }
-
-    for (int j = 0; j < result.ControlPoints.VCount; j++)
-    {
-        for (int i = k - DegreeU + 1; i <= k; i++)
-        {
-            Vec4 point_i = ToHomo(this->ControlPoints.Get(i, j));
-            Vec4 point_im1 = ToHomo(this->ControlPoints.Get(i - 1, j));
-            int idx = i - k + DegreeU - 1;
-            Numeric alpha = alpha_list[idx];
-            Vec4& point_new = result.ControlPoints.Get(i, j);
-            point_new = FromHomo(alpha * point_i + (1 - alpha) * point_im1);
-        }
-    }
-    return result;
+    return InsertKnotU(knot_value, 1);
 }
 
 Surface Surface::InsertKnotU(Numeric knot_value, int times) const
 {
-    std::vector list(times, knot_value);
-    return InsertKnotU(list);
+    KnotsU.Validate(DegreeU);
+    if (times < 1) throw std::invalid_argument("times");
+    if (ControlPoints.UCount != KnotsU.Count() - DegreeU - 1)
+    {
+        throw std::invalid_argument("U control point count does not match the knot vector");
+    }
+    Surface result{*this};
+    KnotVector knots;
+    std::vector<std::vector<Vec4>> rows;
+    rows.reserve(ControlPoints.VCount);
+    for (int j = 0; j < ControlPoints.VCount; ++j)
+    {
+        std::vector<Vec4> row = ControlPoints.GetV(j);
+        KnotVector row_knots = KnotsU;
+        InsertKnotCurve(row_knots, row, DegreeU, knot_value, times);
+        if (j == 0) knots = row_knots;
+        rows.push_back(std::move(row));
+    }
+
+    const int new_u_count = rows.empty() ? 0 : (int)rows.front().size();
+    Grid<Vec4> new_grid(new_u_count, ControlPoints.VCount);
+    for (int j = 0; j < ControlPoints.VCount; ++j)
+    {
+        for (int i = 0; i < new_u_count; ++i)
+        {
+            new_grid.Get(i, j) = rows[j][i];
+        }
+    }
+    result.KnotsU = std::move(knots);
+    result.ControlPoints = std::move(new_grid);
+    return result;
 }
 
 Surface Surface::InsertKnotU(std::span<Numeric> knots_to_insert) const
@@ -718,37 +835,43 @@ Surface Surface::InsertKnotU(std::span<Numeric> knots_to_insert) const
 
 Surface Surface::InsertKnotV(Numeric knot_value) const
 {
-    Surface result{*this};
-    int k = result.KnotsV.InsertKnot(knot_value);
-    result.ControlPoints.InsertV(k, Vec4::Zero());
-    const auto& knots = this->KnotsV.Values();
-    vector<Numeric> alpha_list(result.DegreeV);
-    for (int i = k - DegreeV + 1; i <= k; i++)
-    {
-        int idx = i - k + DegreeV - 1;
-        alpha_list[idx] = (knot_value - knots[i]) / (knots[i + DegreeV] - knots[i]);
-    }
-
-    for (int j = 0; j < result.ControlPoints.UCount; j++)
-    {
-        for (int i = k - DegreeV + 1; i <= k; i++)
-        {
-            Vec4 point_i = ToHomo(this->ControlPoints.Get(j, i));
-            Vec4 point_im1 = ToHomo(this->ControlPoints.Get(j, i - 1));
-
-            int idx = i - k + DegreeV - 1;
-            Numeric alpha = alpha_list[idx];
-            Vec4& point_new = result.ControlPoints.Get(j, i);
-            point_new = FromHomo(alpha * point_i + (1 - alpha) * point_im1);
-        }
-    }
-    return result;
+    return InsertKnotV(knot_value, 1);
 }
 
 Surface Surface::InsertKnotV(Numeric knot_value, int times) const
 {
-    std::vector list(times, knot_value);
-    return InsertKnotV(list);
+    KnotsV.Validate(DegreeV);
+    if (times < 1) throw std::invalid_argument("times");
+    if (ControlPoints.VCount != KnotsV.Count() - DegreeV - 1)
+    {
+        throw std::invalid_argument("V control point count does not match the knot vector");
+    }
+    Surface result{*this};
+    KnotVector knots;
+
+    std::vector<std::vector<Vec4>> columns;
+    columns.reserve(ControlPoints.UCount);
+    for (int i = 0; i < ControlPoints.UCount; ++i)
+    {
+        std::vector<Vec4> column = ControlPoints.GetU(i);
+        KnotVector column_knots = KnotsV;
+        InsertKnotCurve(column_knots, column, DegreeV, knot_value, times);
+        if (i == 0) knots = column_knots;
+        columns.push_back(std::move(column));
+    }
+
+    const int new_v_count = (int)columns.front().size();
+    Grid<Vec4> new_grid(ControlPoints.UCount, new_v_count);
+    for (int i = 0; i < ControlPoints.UCount; ++i)
+    {
+        for (int j = 0; j < new_v_count; ++j)
+        {
+            new_grid.Get(i, j) = columns[i][j];
+        }
+    }
+    result.KnotsV = std::move(knots);
+    result.ControlPoints = std::move(new_grid);
+    return result;
 }
 
 Surface Surface::InsertKnotV(std::span<Numeric> knots_to_insert) const
@@ -763,6 +886,12 @@ Surface Surface::InsertKnotV(std::span<Numeric> knots_to_insert) const
 
 std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Numeric tolerance) const
 {
+    if (times < 1) throw std::invalid_argument("times");
+    const auto [domain_begin, domain_end] = GetDomainU();
+    if (!(knot_remove > domain_begin && knot_remove < domain_end))
+    {
+        throw std::invalid_argument("knot to remove must lie strictly inside the parameter domain");
+    }
     Surface result{*this};
     auto& points_ref = result.ControlPoints;
     points_ref = {points_ref.UCount - times, points_ref.VCount};
@@ -782,6 +911,12 @@ std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Nu
 
 std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Numeric tolerance) const
 {
+    if (times < 1) throw std::invalid_argument("times");
+    const auto [domain_begin, domain_end] = GetDomainV();
+    if (!(knot_remove > domain_begin && knot_remove < domain_end))
+    {
+        throw std::invalid_argument("knot to remove must lie strictly inside the parameter domain");
+    }
     Surface result{*this};
     auto& points_ref = result.ControlPoints;
     points_ref = {points_ref.UCount, points_ref.VCount - times};
@@ -801,43 +936,71 @@ std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Nu
 
 Surface Surface::ElevateDegreeU(int times) const
 {
+    if (times < 1) throw std::invalid_argument("times");
     Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount + times, points_ref.VCount};
+    KnotsU.Validate(DegreeU);
+
+    std::vector<std::vector<Vec4>> rows;
+    rows.reserve(ControlPoints.VCount);
+    KnotVector knots;
     for (int it_v = 0; it_v < ControlPoints.VCount; ++it_v)
     {
-        auto degree = result.DegreeU;
-        auto knots = result.KnotsU;
-        auto points = this->ControlPoints.GetV(it_v);
-        NurbsDegreeElevation(knots, points, degree, times);
-        if (it_v == ControlPoints.VCount - 1)
-        {
-            result.KnotsU = knots;
-            result.DegreeU = degree;
-        }
-        points_ref.SetV(it_v, points);
+        std::vector<Vec4> row = ControlPoints.GetV(it_v);
+        KnotVector row_knots = KnotsU;
+        int degree = DegreeU;
+        NurbsDegreeElevation(row_knots, row, degree, times);
+        if (it_v == 0) knots = row_knots;
+        rows.push_back(std::move(row));
     }
+    const int new_degree_u = DegreeU + times;
+
+    const int new_u_count = rows.empty() ? 0 : (int)rows.front().size();
+    Grid<Vec4> new_grid(new_u_count, ControlPoints.VCount);
+    for (int j = 0; j < ControlPoints.VCount; ++j)
+    {
+        for (int i = 0; i < new_u_count; ++i)
+        {
+            new_grid.Get(i, j) = rows[j][i];
+        }
+    }
+    result.KnotsU = std::move(knots);
+    result.DegreeU = new_degree_u;
+    result.ControlPoints = std::move(new_grid);
     return result;
 }
 
 Surface Surface::ElevateDegreeV(int times) const
 {
+    if (times < 1) throw std::invalid_argument("times");
     Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount, points_ref.VCount + times};
+    KnotsV.Validate(DegreeV);
+
+    std::vector<std::vector<Vec4>> columns;
+    columns.reserve(ControlPoints.UCount);
+    KnotVector knots;
     for (int it_u = 0; it_u < ControlPoints.UCount; ++it_u)
     {
-        auto degree = result.DegreeV;
-        auto knots = result.KnotsV;
-        auto points = this->ControlPoints.GetU(it_u);
-        NurbsDegreeElevation(knots, points, degree, times);
-        if (it_u == ControlPoints.UCount - 1)
-        {
-            result.KnotsV = knots;
-            result.DegreeV = degree;
-        }
-        points_ref.SetU(it_u, points);
+        std::vector<Vec4> column = ControlPoints.GetU(it_u);
+        KnotVector column_knots = KnotsV;
+        int degree = DegreeV;
+        NurbsDegreeElevation(column_knots, column, degree, times);
+        if (it_u == 0) knots = column_knots;
+        columns.push_back(std::move(column));
     }
+    const int new_degree_v = DegreeV + times;
+
+    const int new_v_count = columns.empty() ? 0 : (int)columns.front().size();
+    Grid<Vec4> new_grid(ControlPoints.UCount, new_v_count);
+    for (int i = 0; i < ControlPoints.UCount; ++i)
+    {
+        for (int j = 0; j < new_v_count; ++j)
+        {
+            new_grid.Get(i, j) = columns[i][j];
+        }
+    }
+    result.KnotsV = std::move(knots);
+    result.DegreeV = new_degree_v;
+    result.ControlPoints = std::move(new_grid);
     return result;
 }
 
@@ -1149,8 +1312,6 @@ Surface Surface::AlignParameterDomain(AlignAxis u_axis, AlignAxis v_axis)
 
 Grid<Vec4> Surface::HomogeneousDerivative(Numeric u, Numeric v, int order_u, int order_v) const
 {
-    assert(u >= 0 && u <= 1);
-    assert(v >= 0 && v <= 1);
     int index_span_u = KnotsU.FindSpanIndex(DegreeU, u);
     int index_span_v = KnotsV.FindSpanIndex(DegreeV, v);
     MatX basis_u = BSplineBasis::EvaluateAll(DegreeU, KnotsU.Values(), index_span_u, u, order_u);

@@ -27,6 +27,24 @@ namespace libnurbs
 
         void SaveToFile(std::ostream& os, bool binary_mode = false) const;
 
+        /**
+         * @brief Effective parameter domain of the U direction.
+         * @throws std::invalid_argument when KnotsU is invalid for DegreeU.
+         */
+        [[nodiscard]] std::pair<Numeric, Numeric> GetDomainU() const
+        {
+            return KnotsU.GetDomain(DegreeU);
+        }
+
+        /**
+         * @brief Effective parameter domain of the V direction.
+         * @throws std::invalid_argument when KnotsV is invalid for DegreeV.
+         */
+        [[nodiscard]] std::pair<Numeric, Numeric> GetDomainV() const
+        {
+            return KnotsV.GetDomain(DegreeV);
+        }
+
         [[nodiscard]] Vec3 Evaluate(Numeric u, Numeric v) const;
 
         [[nodiscard]] Vec3 EvaluateDerivative(Numeric u, Numeric v, int order_u, int order_v) const;
