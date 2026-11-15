@@ -1,0 +1,24 @@
+{
+	"github.com/fogleman/ln/ln": {
+		"unreachable": [
+			{
+				"posn": "/Volumes/UserFBWorkspace/questions/FSCEC694EDC88DU11608/attempts/20261115T161021142335Z/repo/ln/cube.go:69:2",
+				"end": "/Volumes/UserFBWorkspace/questions/FSCEC694EDC88DU11608/attempts/20261115T161021142335Z/repo/ln/cube.go:69:19",
+				"message": "unreachable code",
+				"suggested_fixes": [
+					{
+						"message": "Remove",
+						"edits": [
+							{
+								"filename": "/Volumes/UserFBWorkspace/questions/FSCEC694EDC88DU11608/attempts/20261115T161021142335Z/repo/ln/cube.go",
+								"start": 1385,
+								"end": 1404,
+								"new": ""
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+}

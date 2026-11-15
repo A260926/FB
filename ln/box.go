@@ -64,23 +64,32 @@ func (a Box) Extend(b Box) Box {
 }
 
 func (b *Box) Intersect(r Ray) (float64, float64) {
-	x1 := (b.Min.X - r.Origin.X) / r.Direction.X
-	y1 := (b.Min.Y - r.Origin.Y) / r.Direction.Y
-	z1 := (b.Min.Z - r.Origin.Z) / r.Direction.Z
-	x2 := (b.Max.X - r.Origin.X) / r.Direction.X
-	y2 := (b.Max.Y - r.Origin.Y) / r.Direction.Y
-	z2 := (b.Max.Z - r.Origin.Z) / r.Direction.Z
-	if x1 > x2 {
-		x1, x2 = x2, x1
+	t1 := math.Inf(-1)
+	t2 := math.Inf(1)
+	slab := func(origin, direction, min, max float64) bool {
+		if direction == 0 {
+			// The ray is parallel to this pair of planes. It either lies
+			// between them for every t, or it misses the slab entirely.
+			return origin >= min && origin <= max
+		}
+		a := (min - origin) / direction
+		c := (max - origin) / direction
+		if a > c {
+			a, c = c, a
+		}
+		if a > t1 {
+			t1 = a
+		}
+		if c < t2 {
+			t2 = c
+		}
+		return true
 	}
-	if y1 > y2 {
-		y1, y2 = y2, y1
+	if !slab(r.Origin.X, r.Direction.X, b.Min.X, b.Max.X) ||
+		!slab(r.Origin.Y, r.Direction.Y, b.Min.Y, b.Max.Y) ||
+		!slab(r.Origin.Z, r.Direction.Z, b.Min.Z, b.Max.Z) {
+		return math.Inf(1), math.Inf(-1)
 	}
-	if z1 > z2 {
-		z1, z2 = z2, z1
-	}
-	t1 := math.Max(math.Max(x1, y1), z1)
-	t2 := math.Min(math.Min(x2, y2), z2)
 	return t1, t2
 }
 

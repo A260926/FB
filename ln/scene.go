@@ -3,6 +3,8 @@ package ln
 type Scene struct {
 	Shapes []Shape
 	Tree   *Tree
+
+	lastEdit EditStats
 }
 
 func (s *Scene) Compile() {
@@ -11,14 +13,20 @@ func (s *Scene) Compile() {
 	}
 	if s.Tree == nil {
 		s.Tree = NewTree(s.Shapes)
+	} else {
+		s.Tree.reindex(s.Shapes)
 	}
 }
 
 func (s *Scene) Add(shape Shape) {
 	s.Shapes = append(s.Shapes, shape)
+	s.addToTree(shape)
 }
 
 func (s *Scene) Intersect(r Ray) Hit {
+	if s.Tree == nil {
+		return NoHit
+	}
 	return s.Tree.Intersect(r)
 }
 
