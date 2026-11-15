@@ -61,7 +61,7 @@
 ------------------------------------------------------------------------------*/
 
 static u32 RefPicListReordering(strmData_t *, refPicListReordering_t *,
-    u32, u32);
+    u32, u32, u32);
 
 static u32 NumSliceGroupChangeCycleBits(u32 picSizeInMbs,
     u32 sliceGroupChangeRate);
@@ -131,12 +131,16 @@ u32 h264bsdDecodeSliceHeader(strmData_t *pStrmData, sliceHeader_t *pSliceHeader,
     if (tmp != HANTRO_OK)
         return(tmp);
     pSliceHeader->sliceType = value;
-    /* slice type has to be either I or P slice. P slice is not allowed when
-     * current NAL unit is an IDR NAL unit or num_ref_frames is 0 */
+    /* slice type has to be I, P or B. Inter slices are not allowed when the
+     * current NAL unit is an IDR NAL unit or num_ref_frames is 0. B slices
+     * require at least two reference pictures to build both lists */
     if ( !IS_I_SLICE(pSliceHeader->sliceType) &&
-         ( !IS_P_SLICE(pSliceHeader->sliceType) ||
+         ( !(IS_P_SLICE(pSliceHeader->sliceType) ||
+            IS_B_SLICE(pSliceHeader->sliceType)) ||
            IS_IDR_NAL_UNIT(pNalUnit) ||
-           !pSeqParamSet->numRefFrames ) )
+           !pSeqParamSet->numRefFrames ||
+           (IS_B_SLICE(pSliceHeader->sliceType) &&
+            pSeqParamSet->numRefFrames < 2) ) )
     {
         EPRINT("slice_type");
         return(HANTRO_NOK);
@@ -256,7 +260,8 @@ u32 h264bsdDecodeSliceHeader(strmData_t *pStrmData, sliceHeader_t *pSliceHeader,
         }
     }
 
-    if (IS_P_SLICE(pSliceHeader->sliceType))
+    if (IS_P_SLICE(pSliceHeader->sliceType) ||
+        IS_B_SLICE(pSliceHeader->sliceType))
     {
         tmp = h264bsdGetBits(pStrmData, 1);
         if (tmp == END_OF_STREAM)
@@ -274,19 +279,44 @@ u32 h264bsdDecodeSliceHeader(strmData_t *pStrmData, sliceHeader_t *pSliceHeader,
                 return(HANTRO_NOK);
             }
             pSliceHeader->numRefIdxL0Active = value + 1;
+
+            if (IS_B_SLICE(pSliceHeader->sliceType))
+            {
+                tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
+                if (tmp != HANTRO_OK)
+                    return(tmp);
+                if (value > 15)
+                {
+                    EPRINT("num_ref_idx_l1_active_minus1");
+                    return(HANTRO_NOK);
+                }
+                pSliceHeader->numRefIdxL1Active = value + 1;
+            }
         }
-        /* set numRefIdxL0Active from pic param set */
+        /* set active reference counts from pic param set */
         else
         {
             /* if value (minus1) in picture parameter set exceeds 15 it should
              * have been overridden here */
-            if (pPicParamSet->numRefIdxL0Active > 16)
+            if (pPicParamSet->numRefIdxL0Active > 16 ||
+                pPicParamSet->numRefIdxL1Active > 16)
             {
                 EPRINT("num_ref_idx_active_override_flag");
                 return(HANTRO_NOK);
             }
             pSliceHeader->numRefIdxL0Active = pPicParamSet->numRefIdxL0Active;
+            pSliceHeader->numRefIdxL1Active = pPicParamSet->numRefIdxL1Active;
         }
+    }
+
+    if (IS_B_SLICE(pSliceHeader->sliceType))
+    {
+        /* direct_spatial_mv_pred_flag: only the explicit modes are in
+         * scope, but the syntax element still has to be consumed */
+        tmp = h264bsdGetBits(pStrmData, 1);
+        if (tmp == END_OF_STREAM)
+            return(HANTRO_NOK);
+        pSliceHeader->directSpatialMvPredFlag = tmp;
     }
 
     if (IS_P_SLICE(pSliceHeader->sliceType))
@@ -294,7 +324,23 @@ u32 h264bsdDecodeSliceHeader(strmData_t *pStrmData, sliceHeader_t *pSliceHeader,
         tmp = RefPicListReordering(pStrmData,
             &pSliceHeader->refPicListReordering,
             pSliceHeader->numRefIdxL0Active,
-            pSeqParamSet->maxFrameNum);
+            pSeqParamSet->maxFrameNum, HANTRO_FALSE);
+        if (tmp != HANTRO_OK)
+            return(tmp);
+    }
+    else if (IS_B_SLICE(pSliceHeader->sliceType))
+    {
+        tmp = RefPicListReordering(pStrmData,
+            &pSliceHeader->refPicListReordering,
+            pSliceHeader->numRefIdxL0Active,
+            pSeqParamSet->maxFrameNum, HANTRO_FALSE);
+        if (tmp != HANTRO_OK)
+            return(tmp);
+
+        tmp = RefPicListReordering(pStrmData,
+            &pSliceHeader->refPicListReordering,
+            pSliceHeader->numRefIdxL1Active,
+            pSeqParamSet->maxFrameNum, HANTRO_TRUE);
         if (tmp != HANTRO_OK)
             return(tmp);
     }
@@ -467,13 +513,14 @@ u32 NumSliceGroupChangeCycleBits(u32 picSizeInMbs, u32 sliceGroupChangeRate)
 
 u32 RefPicListReordering(strmData_t *pStrmData,
     refPicListReordering_t *pRefPicListReordering, u32 numRefIdxActive,
-    u32 maxPicNum)
+    u32 maxPicNum, u32 isL1)
 {
 
 /* Variables */
 
     u32 tmp, value, i;
     u32 command;
+    refPicListReorderingOperation_t *cmd;
 
 /* Code */
 
@@ -487,60 +534,69 @@ u32 RefPicListReordering(strmData_t *pStrmData,
     if (tmp == END_OF_STREAM)
         return(HANTRO_NOK);
 
-    pRefPicListReordering->refPicListReorderingFlagL0 = tmp;
+    if (isL1)
+        pRefPicListReordering->refPicListReorderingFlagL1 = tmp;
+    else
+        pRefPicListReordering->refPicListReorderingFlagL0 = tmp;
 
-    if (pRefPicListReordering->refPicListReorderingFlagL0)
+    if ((isL1 && !pRefPicListReordering->refPicListReorderingFlagL1) ||
+        (!isL1 && !pRefPicListReordering->refPicListReorderingFlagL0))
     {
-        i = 0;
+        return(HANTRO_OK);
+    }
 
-        do
+    cmd = isL1 ? pRefPicListReordering->commandL1 :
+                 pRefPicListReordering->commandL0;
+
+    i = 0;
+
+    do
+    {
+        if (i > numRefIdxActive)
         {
-            if (i > numRefIdxActive)
-            {
-                EPRINT("Too many reordering commands");
-                return(HANTRO_NOK);
-            }
-
-            tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &command);
-            if (tmp != HANTRO_OK)
-                return(tmp);
-            if (command > 3)
-            {
-                EPRINT("reordering_of_pic_nums_idc");
-                return(HANTRO_NOK);
-            }
-
-            pRefPicListReordering->command[i].reorderingOfPicNumsIdc = command;
-
-            if ((command == 0) || (command == 1))
-            {
-                tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
-                if (tmp != HANTRO_OK)
-                    return(tmp);
-                if (value >= maxPicNum)
-                {
-                    EPRINT("abs_diff_pic_num_minus1");
-                    return(HANTRO_NOK);
-                }
-                pRefPicListReordering->command[i].absDiffPicNum = value + 1;
-                            }
-            else if (command == 2)
-            {
-                tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
-                if (tmp != HANTRO_OK)
-                    return(tmp);
-                pRefPicListReordering->command[i].longTermPicNum = value;
-                            }
-            i++;
-        } while (command != 3);
-
-        /* there shall be at least one reordering command if
-         * refPicListReorderingFlagL0 was set */
-        if (i == 1)
-        {
-            EPRINT("ref_pic_list_reordering");
+            EPRINT("Too many reordering commands");
             return(HANTRO_NOK);
         }
+
+        tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &command);
+        if (tmp != HANTRO_OK)
+            return(tmp);
+        if (command > 3)
+        {
+            EPRINT("reordering_of_pic_nums_idc");
+            return(HANTRO_NOK);
+        }
+
+        cmd[i].reorderingOfPicNumsIdc = command;
+
+        if ((command == 0) || (command == 1))
+        {
+            tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            if (value >= maxPicNum)
+            {
+                EPRINT("abs_diff_pic_num_minus1");
+                return(HANTRO_NOK);
+            }
+            cmd[i].absDiffPicNum = value + 1;
+                        }
+        else if (command == 2)
+        {
+            tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            cmd[i].longTermPicNum = value;
+                        }
+        i++;
+    } while (command != 3);
+
+    /* there shall be at least one reordering command if the reordering
+     * flag was set */
+    if (i == 1)
+    {
+        EPRINT("ref_pic_list_reordering");
+        return(HANTRO_NOK);
     }
 
     return(HANTRO_OK);

@@ -55,5 +55,12 @@ u32 h264bsdDecodeResidualBlockCavlc(
   i32 nc,
   u32 maxNumCoeff);
 
+/* table-driven CAVLC primitives, also reused by the test stream generator
+ * to search for matching code words without duplicating the tables */
+u32 DecodeCoeffToken(u32 bits, u32 nc);
+u32 DecodeLevelPrefix(u32 bits);
+u32 DecodeTotalZeros(u32 bits, u32 totalCoeff, u32 isChromaDC);
+u32 DecodeRunBefore(u32 bits, u32 zerosLeft);
+
 #endif /* #ifdef H264SWDEC_CAVLC_H */
 

@@ -54,6 +54,7 @@
 #include "h264bsd_transform.h"
 #include "h264bsd_intra_prediction.h"
 #include "h264bsd_inter_prediction.h"
+#include "h264bsd_b_inter_prediction.h"
 
 #ifdef H264DEC_OMXDL
 #include "omxtypes.h"
@@ -85,8 +86,12 @@ static const u32 dcCoeffIndex[16] =
 
 static u32 DecodeMbPred(strmData_t *pStrmData, mbPred_t *pMbPred,
     mbType_e mbType, u32 numRefIdxActive);
+static u32 DecodeBMbPred(strmData_t *pStrmData, mbPred_t *pMbPred,
+    u32 mbType, u32 numRefIdxL0Active, u32 numRefIdxL1Active);
 static u32 DecodeSubMbPred(strmData_t *pStrmData, subMbPred_t *pSubMbPred,
     mbType_e mbType, u32 numRefIdxActive);
+static u32 DecodeBSubMbPred(strmData_t *pStrmData, subMbPred_t *pSubMbPred,
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active);
 static u32 DecodeResidual(strmData_t *pStrmData, residual_t *pResidual,
     mbStorage_t *pMb, mbType_e mbType, u32 codedBlockPattern);
 
@@ -133,7 +138,7 @@ static u32 ProcessResidual(mbStorage_t *pMb, i32 residualLevel[][16], u32 *);
 
 u32 h264bsdDecodeMacroblockLayer(strmData_t *pStrmData,
     macroblockLayer_t *pMbLayer, mbStorage_t *pMb, u32 sliceType,
-    u32 numRefIdxActive)
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active)
 {
 
 /* Variables */
@@ -141,6 +146,7 @@ u32 h264bsdDecodeMacroblockLayer(strmData_t *pStrmData,
     u32 tmp, i, value;
     i32 itmp;
     mbPartPredMode_e partMode;
+    u32 isBSlice = IS_B_SLICE(sliceType) ? HANTRO_TRUE : HANTRO_FALSE;
 
 /* Code */
 
@@ -153,9 +159,40 @@ u32 h264bsdDecodeMacroblockLayer(strmData_t *pStrmData,
     memset(pMbLayer, 0, sizeof(macroblockLayer_t));
 #endif
 
+    pMbLayer->bSliceFlag = isBSlice;
+
     tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
 
-    if (IS_I_SLICE(sliceType))
+    if (isBSlice)
+    {
+        /* B slice mb_type values 0..31, table 7-11 */
+        if (value > 31 || tmp != HANTRO_OK)
+            return(HANTRO_NOK);
+        /* direct prediction and B skip are not in scope */
+        if (value == (u32)B_Direct_16x16)
+        {
+            EPRINT("B direct macroblock");
+            return(HANTRO_NOK);
+        }
+        if (value <= (u32)B_LAST_INTER_MB)
+        {
+            pMbLayer->mbType = (mbType_e)value;
+        }
+        else if (value == (u32)B_I_NxN)
+        {
+            pMbLayer->mbType = I_4x4;
+        }
+        else if (value < (u32)B_I_PCM)
+        {
+            /* I_16x16 types, map 24..30 onto 7..13 */
+            pMbLayer->mbType = (mbType_e)(I_16x16_0_0_0 + (value - 24));
+        }
+        else
+        {
+            pMbLayer->mbType = I_PCM;
+        }
+    }
+    else if (IS_I_SLICE(sliceType))
     {
         if ((value + 6) > 31 || tmp != HANTRO_OK)
             return(HANTRO_NOK);
@@ -190,17 +227,28 @@ u32 h264bsdDecodeMacroblockLayer(strmData_t *pStrmData,
     }
     else
     {
-        partMode = h264bsdMbPartPredMode(pMbLayer->mbType);
-        if ( (partMode == PRED_MODE_INTER) &&
-             (h264bsdNumMbPart(pMbLayer->mbType) == 4) )
+        partMode = h264bsdMbPartPredModeEx((u32)pMbLayer->mbType, isBSlice);
+        if (isBSlice && (pMbLayer->mbType == (mbType_e)B_8x8))
+        {
+            tmp = DecodeBSubMbPred(pStrmData, &pMbLayer->subMbPred,
+                numRefIdxL0Active, numRefIdxL1Active);
+        }
+        else if ( (!isBSlice) &&
+                  (partMode == PRED_MODE_INTER) &&
+                  (h264bsdNumMbPart(pMbLayer->mbType) == 4) )
         {
             tmp = DecodeSubMbPred(pStrmData, &pMbLayer->subMbPred,
-                pMbLayer->mbType, numRefIdxActive);
+                pMbLayer->mbType, numRefIdxL0Active);
+        }
+        else if (isBSlice && partMode == PRED_MODE_INTER)
+        {
+            tmp = DecodeBMbPred(pStrmData, &pMbLayer->mbPred,
+                (u32)pMbLayer->mbType, numRefIdxL0Active, numRefIdxL1Active);
         }
         else
         {
             tmp = DecodeMbPred(pStrmData, &pMbLayer->mbPred,
-                pMbLayer->mbType, numRefIdxActive);
+                pMbLayer->mbType, numRefIdxL0Active);
         }
         if (tmp != HANTRO_OK)
             return(tmp);
@@ -272,6 +320,38 @@ mbPartPredMode_e h264bsdMbPartPredMode(mbType_e mbType)
 
 /*------------------------------------------------------------------------------
 
+    Function: h264bsdMbPartPredModeEx
+
+        Functional description:
+          Returns the prediction mode of a macroblock type, taking the slice
+          kind into account. In a B slice the inter mb_type values reach up to
+          B_8x8 (22) while the intra macroblock types are stored using the
+          I_4x4 / I_16x16 enum values (6..13), so the numeric type alone is
+          ambiguous.
+
+------------------------------------------------------------------------------*/
+
+mbPartPredMode_e h264bsdMbPartPredModeEx(u32 mbType, u32 bSliceFlag)
+{
+
+/* Code */
+
+    if (bSliceFlag)
+    {
+        if (mbType <= B_LAST_INTER_MB)
+            return(PRED_MODE_INTER);
+        else if (mbType == (u32)I_4x4)
+            return(PRED_MODE_INTRA4x4);
+        else
+            return(PRED_MODE_INTRA16x16);
+    }
+
+    return(h264bsdMbPartPredMode((mbType_e)mbType));
+
+}
+
+/*------------------------------------------------------------------------------
+
     Function: h264bsdNumMbPart
 
         Functional description:
@@ -337,6 +417,204 @@ u32 h264bsdNumSubMbPart(subMbType_e subMbType)
         /* P_L0_4x4 */
         default:
             return(4);
+    }
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdBNumMbPart
+
+        Functional description:
+          Number of macroblock partitions for a B slice mb_type (table 7-11)
+
+------------------------------------------------------------------------------*/
+
+u32 h264bsdBNumMbPart(u32 mbType)
+{
+
+/* Code */
+
+    ASSERT(mbType <= B_8x8);
+
+    /* B_L0/L1/Bi_16x16 */
+    if (mbType <= B_Bi_16x16)
+        return(1);
+
+    /* B_8x8 */
+    if (mbType == B_8x8)
+        return(4);
+
+    /* all 16x8 and 8x16 types */
+    return(2);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdBMbPartMode
+
+        Functional description:
+          Partition geometry for a B slice mb_type
+
+------------------------------------------------------------------------------*/
+
+mbPartMode_e h264bsdBMbPartMode(u32 mbType)
+{
+
+/* Code */
+
+    if (mbType <= B_Bi_16x16)
+        return(MB_P_16x16);
+    if (mbType == B_8x8)
+        return(MB_P_8x8);
+
+    /* types 4,6,8,10,12,14,16,18,20 are the 16x8 variants */
+    if ((mbType & 0x1u) == 0)
+        return(MB_P_16x8);
+
+    return(MB_P_8x16);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdBMbPartPredMode
+
+        Functional description:
+          Prediction mode (B_PRED_L0/L1/BI) of partition 'partition' of a B
+          macroblock type (table 7-11)
+
+------------------------------------------------------------------------------*/
+
+u32 h264bsdBMbPartPredMode(u32 mbType, u32 partition)
+{
+
+/* Table of the prediction mode per partition for the two-partition types.
+ * 16x16 types use a single mode and B_8x8 is handled at sub-mb level. */
+    static const u32 partMode[2][18] = {
+        /* first partition  (types 4..21) */
+        { B_PRED_L0, B_PRED_L0, B_PRED_L1, B_PRED_L1, B_PRED_L0, B_PRED_L0,
+          B_PRED_L1, B_PRED_L1, B_PRED_L0, B_PRED_L0, B_PRED_L1, B_PRED_L1,
+          B_PRED_BI, B_PRED_BI, B_PRED_BI, B_PRED_BI, B_PRED_BI, B_PRED_BI },
+        /* second partition */
+        { B_PRED_L0, B_PRED_L0, B_PRED_L1, B_PRED_L1, B_PRED_L1, B_PRED_L1,
+          B_PRED_L0, B_PRED_L0, B_PRED_BI, B_PRED_BI, B_PRED_BI, B_PRED_BI,
+          B_PRED_L0, B_PRED_L0, B_PRED_L1, B_PRED_L1, B_PRED_BI, B_PRED_BI }
+    };
+
+/* Code */
+
+    ASSERT(mbType <= B_8x8);
+    ASSERT(partition < 4);
+
+    if (mbType == B_L0_16x16)
+        return(B_PRED_L0);
+    if (mbType == B_L1_16x16)
+        return(B_PRED_L1);
+    if (mbType == B_Bi_16x16)
+        return(B_PRED_BI);
+
+    /* B_8x8: not meaningful at this level */
+    if (mbType == B_8x8)
+        return(B_PRED_L0);
+
+    return(partMode[partition & 1u][mbType - 4]);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdBNumSubMbPart / h264bsdBSubMbPartMode
+              h264bsdBSubMbPartPredMode
+
+        Functional description:
+          Geometry and prediction mode for B sub-macroblock types (table 7-13)
+
+------------------------------------------------------------------------------*/
+
+u32 h264bsdBNumSubMbPart(u32 subMbType)
+{
+
+/* Code */
+
+    ASSERT(subMbType <= B_B_Bi_4x4);
+
+    switch (subMbType)
+    {
+        case B_B_L0_8x8:
+        case B_B_L1_8x8:
+        case B_B_Bi_8x8:
+            return(1);
+
+        case B_B_L0_8x4:
+        case B_B_L0_4x8:
+        case B_B_L1_8x4:
+        case B_B_L1_4x8:
+        case B_B_Bi_8x4:
+        case B_B_Bi_4x8:
+            return(2);
+
+        default: /* 4x4 types */
+            return(4);
+    }
+
+}
+
+subMbPartMode_e h264bsdBSubMbPartMode(u32 subMbType)
+{
+
+/* Code */
+
+    ASSERT(subMbType <= B_B_Bi_4x4);
+
+    switch (subMbType)
+    {
+        case B_B_L0_8x8:
+        case B_B_L1_8x8:
+        case B_B_Bi_8x8:
+            return(MB_SP_8x8);
+
+        case B_B_L0_8x4:
+        case B_B_L1_8x4:
+        case B_B_Bi_8x4:
+            return(MB_SP_8x4);
+
+        case B_B_L0_4x8:
+        case B_B_L1_4x8:
+        case B_B_Bi_4x8:
+            return(MB_SP_4x8);
+
+        default:
+            return(MB_SP_4x4);
+    }
+
+}
+
+u32 h264bsdBSubMbPartPredMode(u32 subMbType)
+{
+
+/* Code */
+
+    ASSERT(subMbType <= B_B_Bi_4x4);
+
+    /* L0: 1,4,5,8 ; L1: 2,6,7,9 ; the rest are Bi */
+    switch (subMbType)
+    {
+        case B_B_L0_8x8:
+        case B_B_L0_8x4:
+        case B_B_L0_4x8:
+        case B_B_L0_4x4:
+            return(B_PRED_L0);
+
+        case B_B_L1_8x8:
+        case B_B_L1_8x4:
+        case B_B_L1_4x8:
+        case B_B_L1_4x4:
+            return(B_PRED_L1);
+
+        default:
+            return(B_PRED_BI);
     }
 
 }
@@ -489,6 +767,177 @@ u32 DecodeSubMbPred(strmData_t *pStrmData, subMbPred_t *pSubMbPred,
             if (tmp != HANTRO_OK)
                 return(tmp);
             pSubMbPred->mvdL0[i][j].ver = (i16)itmp;
+        }
+    }
+
+    return(HANTRO_OK);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: DecodeBMbPred
+
+        Functional description:
+          Parse B slice macroblock prediction information. Per partition the
+          syntax elements of list 0 precede those of list 1; a list that is
+          not used by the partition contributes no syntax elements.
+
+------------------------------------------------------------------------------*/
+
+u32 DecodeBMbPred(strmData_t *pStrmData, mbPred_t *pMbPred, u32 mbType,
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active)
+{
+
+/* Variables */
+
+    u32 tmp, i, value, numPart, mode;
+    i32 itmp;
+
+/* Code */
+
+    ASSERT(pStrmData);
+    ASSERT(pMbPred);
+    ASSERT(mbType <= B_8x8);
+
+    numPart = h264bsdBNumMbPart(mbType);
+
+    for (i = 0; i < numPart; i++)
+    {
+        mode = h264bsdBMbPartPredMode(mbType, i);
+
+        if (mode == B_PRED_L0 || mode == B_PRED_BI)
+        {
+            if (numRefIdxL0Active > 1)
+            {
+                tmp = h264bsdDecodeExpGolombTruncated(pStrmData, &value,
+                    (u32)(numRefIdxL0Active > 2));
+                if (tmp != HANTRO_OK || value >= numRefIdxL0Active)
+                    return(HANTRO_NOK);
+                pMbPred->refIdxL0[i] = value;
+            }
+            tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            pMbPred->mvdL0[i].hor = (i16)itmp;
+            tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            pMbPred->mvdL0[i].ver = (i16)itmp;
+        }
+
+        if (mode == B_PRED_L1 || mode == B_PRED_BI)
+        {
+            if (numRefIdxL1Active > 1)
+            {
+                tmp = h264bsdDecodeExpGolombTruncated(pStrmData, &value,
+                    (u32)(numRefIdxL1Active > 2));
+                if (tmp != HANTRO_OK || value >= numRefIdxL1Active)
+                    return(HANTRO_NOK);
+                pMbPred->refIdxL1[i] = value;
+            }
+            tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            pMbPred->mvdL1[i].hor = (i16)itmp;
+            tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+            if (tmp != HANTRO_OK)
+                return(tmp);
+            pMbPred->mvdL1[i].ver = (i16)itmp;
+        }
+    }
+
+    return(HANTRO_OK);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: DecodeBSubMbPred
+
+        Functional description:
+          Parse B slice sub-macroblock prediction information. The direct
+          sub-macroblock type (0) is outside the supported scope.
+
+------------------------------------------------------------------------------*/
+
+u32 DecodeBSubMbPred(strmData_t *pStrmData, subMbPred_t *pSubMbPred,
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active)
+{
+
+/* Variables */
+
+    u32 tmp, i, j, value, mode;
+    i32 itmp;
+
+/* Code */
+
+    ASSERT(pStrmData);
+    ASSERT(pSubMbPred);
+
+    for (i = 0; i < 4; i++)
+    {
+        tmp = h264bsdDecodeExpGolombUnsigned(pStrmData, &value);
+        if (tmp != HANTRO_OK || value > (u32)B_B_Bi_4x4)
+            return(HANTRO_NOK);
+        if (value == (u32)B_B_Direct_8x8)
+        {
+            EPRINT("B direct sub-macroblock");
+            return(HANTRO_NOK);
+        }
+        pSubMbPred->subMbType[i] = value;
+
+        mode = h264bsdBSubMbPartPredMode(value);
+
+        if ((mode == B_PRED_L0 || mode == B_PRED_BI) &&
+            numRefIdxL0Active > 1)
+        {
+            tmp = h264bsdDecodeExpGolombTruncated(pStrmData, &value,
+                (u32)(numRefIdxL0Active > 2));
+            if (tmp != HANTRO_OK || value >= numRefIdxL0Active)
+                return(HANTRO_NOK);
+            pSubMbPred->refIdxL0[i] = value;
+        }
+        if ((mode == B_PRED_L1 || mode == B_PRED_BI) &&
+            numRefIdxL1Active > 1)
+        {
+            tmp = h264bsdDecodeExpGolombTruncated(pStrmData, &value,
+                (u32)(numRefIdxL1Active > 2));
+            if (tmp != HANTRO_OK || value >= numRefIdxL1Active)
+                return(HANTRO_NOK);
+            pSubMbPred->refIdxL1[i] = value;
+        }
+    }
+
+    for (i = 0; i < 4; i++)
+    {
+        mode = h264bsdBSubMbPartPredMode(pSubMbPred->subMbType[i]);
+        j = 0;
+        for (value = h264bsdBNumSubMbPart(pSubMbPred->subMbType[i]);
+             value--; j++)
+        {
+            if (mode == B_PRED_L0 || mode == B_PRED_BI)
+            {
+                tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+                if (tmp != HANTRO_OK)
+                    return(tmp);
+                pSubMbPred->mvdL0[i][j].hor = (i16)itmp;
+                tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+                if (tmp != HANTRO_OK)
+                    return(tmp);
+                pSubMbPred->mvdL0[i][j].ver = (i16)itmp;
+            }
+            if (mode == B_PRED_L1 || mode == B_PRED_BI)
+            {
+                tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+                if (tmp != HANTRO_OK)
+                    return(tmp);
+                pSubMbPred->mvdL1[i][j].hor = (i16)itmp;
+                tmp = h264bsdDecodeExpGolombSigned(pStrmData, &itmp);
+                if (tmp != HANTRO_OK)
+                    return(tmp);
+                pSubMbPred->mvdL1[i][j].ver = (i16)itmp;
+            }
         }
     }
 
@@ -984,6 +1433,10 @@ u32 h264bsdDecodeMacroblock(mbStorage_t *pMb, macroblockLayer_t *pMbLayer,
 
     mbType = pMbLayer->mbType;
     pMb->mbType = mbType;
+    pMb->bSliceFlag = pMbLayer->bSliceFlag;
+    pMb->intraFlag =
+        (h264bsdMbPartPredModeEx((u32)mbType, pMbLayer->bSliceFlag) !=
+         PRED_MODE_INTER) ? HANTRO_TRUE : HANTRO_FALSE;
 
     pMb->decoded++;
 
@@ -1112,10 +1565,17 @@ u32 h264bsdDecodeMacroblock(mbStorage_t *pMb, macroblockLayer_t *pMbLayer,
 
         h264bsdWriteMacroblock(currImage, data);
 #else
-        if (h264bsdMbPartPredMode(mbType) != PRED_MODE_INTER)
+        if (h264bsdMbPartPredModeEx((u32)mbType, pMbLayer->bSliceFlag) !=
+            PRED_MODE_INTER)
         {
             tmp = h264bsdIntraPrediction(pMb, pMbLayer, currImage, mbNum,
                 constrainedIntraPredFlag, (u8*)data);
+            if (tmp != HANTRO_OK) return (tmp);
+        }
+        else if (pMbLayer->bSliceFlag)
+        {
+            tmp = h264bsdBInterPrediction(pMb, pMbLayer, dpb, mbNum,
+                currImage, (u8*)data);
             if (tmp != HANTRO_OK) return (tmp);
         }
         else
@@ -1360,7 +1820,8 @@ u32 ProcessResidual(mbStorage_t *pMb, i32 residualLevel[][16], u32 *coeffMap)
 
     blockData = residualLevel;
     totalCoeff = pMb->totalCoeff;
-    if (h264bsdMbPartPredMode(pMb->mbType) == PRED_MODE_INTRA16x16)
+    if (h264bsdMbPartPredModeEx((u32)pMb->mbType, pMb->bSliceFlag) ==
+        PRED_MODE_INTRA16x16)
     {
         if (totalCoeff[24])
         {

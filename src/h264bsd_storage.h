@@ -105,6 +105,12 @@ typedef struct storage
     /* picId given by application */
     u32 currentPicId;
 
+    /* cached picture order count of the current picture and a flag that it
+     * has already been derived, so the POC history advances once per picture
+     * even when a picture contains several slices */
+    i32 currPicOrderCnt;
+    u32 currPicOrderCntValid;
+
     /* macroblock specific storages, size determined by image dimensions */
     mbStorage_t *mb;
 

@@ -65,8 +65,9 @@ size_t task_fixture(uint8_t *dst,size_t capacity,int include_b) {
     }
     if(include_b) {
         ue(&w,0);ue(&w,1);ue(&w,0);fixed(&w,2,4);fixed(&w,2,4);
-        bit(&w,1); /* direct_spatial flag (no direct MBs) */
-        bit(&w,0);bit(&w,0);bit(&w,0); /* default counts, no reordering */
+        bit(&w,0); /* num_ref_idx_active_override_flag: use PPS defaults */
+        bit(&w,1); /* direct_spatial_mv_pred_flag (no direct MBs) */
+        bit(&w,0);bit(&w,0); /* ref_pic_list_modification flags L0, L1 */
         se(&w,0);ue(&w,1);
         for(unsigned mb=0;mb<4;mb++) {
             ue(&w,0);ue(&w,3); /* no skip, B_Bi_16x16 */

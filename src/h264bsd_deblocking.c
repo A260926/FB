@@ -410,6 +410,118 @@ u32 EdgeBoundaryStrength(mbStorage_t *mb1, mbStorage_t *mb2,
         return 0;
 }
 
+/*------------------------------------------------------------------------------
+
+    Function: BEdgeBoundaryStrength
+
+        Functional description:
+            Boundary strength for an edge between two B slice macroblocks.
+            Follows H.264 8.7.2.1: the blocks differ in reference when they do
+            not use the same picture in either list (the list-swap case where
+            L0 and L1 point at the same two pictures counts as equal). The
+            motion vector comparison covers both lists actually used.
+
+------------------------------------------------------------------------------*/
+
+static u32 BRefsDiffer(mbStorage_t *mb1, mbStorage_t *mb2,
+    u32 ind1, u32 ind2)
+{
+
+    u32 s1 = ind1 >> 2;
+    u32 s2 = ind2 >> 2;
+    u8 *a0 = mb1->refAddr[s1], *a1 = mb1->refAddrL1[s1];
+    u8 *b0 = mb2->refAddr[s2], *b1 = mb2->refAddrL1[s2];
+    u32 u1 = mb1->listUsage[ind1];
+    u32 u2 = mb2->listUsage[ind2];
+    u32 common;
+
+    /* the same single reference picture on both sides */
+    common = 0;
+    if ((u1 & 1) && (u2 & 1) && a0 && a0 == b0)
+        common = 1;
+    if ((u1 & 2) && (u2 & 2) && a1 && a1 == b1)
+        common = 1;
+    /* list exchange: mb1 L0 == mb2 L1 and mb1 L1 == mb2 L0 */
+    if ((u1 & 1) && (u1 & 2) && (u2 & 1) && (u2 & 2) &&
+        a0 && a1 && a0 == b1 && a1 == b0)
+        common = 1;
+    /* one side uses one list that matches a picture the other side uses */
+    if ((u1 & 1) && a0 && (((u2 & 1) && a0 == b0) ||
+                           ((u2 & 2) && a0 == b1)))
+        common = 1;
+    if ((u1 & 2) && a1 && (((u2 & 1) && a1 == b0) ||
+                           ((u2 & 2) && a1 == b1)))
+        common = 1;
+
+    return(common ? 0 : 1);
+
+}
+
+static u32 BMvDiffers(mbStorage_t *mb1, mbStorage_t *mb2,
+    u32 ind1, u32 ind2)
+{
+
+    u32 u1 = mb1->listUsage[ind1];
+    u32 u2 = mb2->listUsage[ind2];
+
+    if ((u1 & 1) && (u2 & 1))
+    {
+        if ((u32)ABS(mb1->mv[ind1].hor - mb2->mv[ind2].hor) >= 4 ||
+            (u32)ABS(mb1->mv[ind1].ver - mb2->mv[ind2].ver) >= 4)
+            return 1;
+    }
+    if ((u1 & 2) && (u2 & 2))
+    {
+        if ((u32)ABS(mb1->mvL1[ind1].hor - mb2->mvL1[ind2].hor) >= 4 ||
+            (u32)ABS(mb1->mvL1[ind1].ver - mb2->mvL1[ind2].ver) >= 4)
+            return 1;
+    }
+    /* cross-list comparison for the list-exchange arrangement */
+    if ((u1 & 1) && (u2 & 2))
+    {
+        if ((u32)ABS(mb1->mv[ind1].hor - mb2->mvL1[ind2].hor) >= 4 ||
+            (u32)ABS(mb1->mv[ind1].ver - mb2->mvL1[ind2].ver) >= 4)
+            return 1;
+    }
+    if ((u1 & 2) && (u2 & 1))
+    {
+        if ((u32)ABS(mb1->mvL1[ind1].hor - mb2->mv[ind2].hor) >= 4 ||
+            (u32)ABS(mb1->mvL1[ind1].ver - mb2->mv[ind2].ver) >= 4)
+            return 1;
+    }
+
+    return 0;
+
+}
+
+u32 BEdgeBoundaryStrength(mbStorage_t *mb1, mbStorage_t *mb2,
+    u32 ind1, u32 ind2)
+{
+
+    if (mb1->totalCoeff[ind1] || mb2->totalCoeff[ind2])
+        return 2;
+    if (BRefsDiffer(mb1, mb2, ind1, ind2) ||
+        BMvDiffers(mb1, mb2, ind1, ind2))
+        return 1;
+
+    return 0;
+
+}
+
+/* inner edge of a B slice macroblock; both 4x4 blocks belong to the same mb */
+u32 BInnerBoundaryStrength(mbStorage_t *mb1, u32 ind1, u32 ind2)
+{
+
+    if (mb1->totalCoeff[ind1] || mb1->totalCoeff[ind2])
+        return 2;
+    if (BRefsDiffer(mb1, mb1, ind1, ind2) ||
+        BMvDiffers(mb1, mb1, ind1, ind2))
+        return 1;
+
+    return 0;
+
+}
+
 #else /* H264DEC_OMXDL */
 
 /*------------------------------------------------------------------------------
@@ -1202,6 +1314,96 @@ u32 GetBoundaryStrengths(mbStorage_t *mb, bS_t *bS, u32 flags)
 //    if (sample ++ % (1024 * 128) == 0) {
 //        printf("Hash A: %d, Hash B: %d, Hash C: %d, Hash D: %d\n", hashA, hashB, hashC, hashD);
 //    }
+
+    /* B slice: both reference lists have to be considered and reference
+     * identity is based on the picture data pointers rather than indices */
+    if (mb->bSliceFlag && !IS_INTRA_MB(*mb))
+    {
+        u32 k;
+
+        if (flags & FILTER_TOP_EDGE)
+        {
+            if (IS_INTRA_MB(*mb->mbB))
+            {
+                bS[0].top = bS[1].top = bS[2].top = bS[3].top = 4;
+                nonZeroBs = HANTRO_TRUE;
+            }
+            else
+            {
+                bS[0].top = BEdgeBoundaryStrength(mb, mb->mbB, 0, 10);
+                bS[1].top = BEdgeBoundaryStrength(mb, mb->mbB, 1, 11);
+                bS[2].top = BEdgeBoundaryStrength(mb, mb->mbB, 4, 14);
+                bS[3].top = BEdgeBoundaryStrength(mb, mb->mbB, 5, 15);
+                if (bS[0].top || bS[1].top || bS[2].top || bS[3].top)
+                    nonZeroBs = HANTRO_TRUE;
+            }
+        }
+        else
+        {
+            bS[0].top = bS[1].top = bS[2].top = bS[3].top = 0;
+        }
+
+        if (flags & FILTER_LEFT_EDGE)
+        {
+            if (IS_INTRA_MB(*mb->mbA))
+            {
+                bS[0].left = bS[4].left = bS[8].left = bS[12].left = 4;
+                nonZeroBs = HANTRO_TRUE;
+            }
+            else
+            {
+                bS[0].left = BEdgeBoundaryStrength(mb, mb->mbA, 0, 5);
+                bS[4].left = BEdgeBoundaryStrength(mb, mb->mbA, 2, 7);
+                bS[8].left = BEdgeBoundaryStrength(mb, mb->mbA, 8, 13);
+                bS[12].left = BEdgeBoundaryStrength(mb, mb->mbA, 10, 15);
+                if (bS[0].left || bS[4].left || bS[8].left || bS[12].left)
+                    nonZeroBs = HANTRO_TRUE;
+            }
+        }
+        else
+        {
+            bS[0].left = bS[4].left = bS[8].left = bS[12].left = 0;
+        }
+
+        /* generic inner strengths: coefficients first, then reference
+         * identity and both-list motion vector differences */
+        bS[4].top  = BInnerBoundaryStrength(mb, mb4x4Index[4], mb4x4Index[0]);
+        bS[5].top  = BInnerBoundaryStrength(mb, mb4x4Index[5], mb4x4Index[1]);
+        bS[6].top  = BInnerBoundaryStrength(mb, mb4x4Index[6], mb4x4Index[2]);
+        bS[7].top  = BInnerBoundaryStrength(mb, mb4x4Index[7], mb4x4Index[3]);
+        bS[8].top  = BInnerBoundaryStrength(mb, mb4x4Index[8], mb4x4Index[4]);
+        bS[9].top  = BInnerBoundaryStrength(mb, mb4x4Index[9], mb4x4Index[5]);
+        bS[10].top = BInnerBoundaryStrength(mb, mb4x4Index[10], mb4x4Index[6]);
+        bS[11].top = BInnerBoundaryStrength(mb, mb4x4Index[11], mb4x4Index[7]);
+        bS[12].top = BInnerBoundaryStrength(mb, mb4x4Index[12], mb4x4Index[8]);
+        bS[13].top = BInnerBoundaryStrength(mb, mb4x4Index[13], mb4x4Index[9]);
+        bS[14].top = BInnerBoundaryStrength(mb, mb4x4Index[14], mb4x4Index[10]);
+        bS[15].top = BInnerBoundaryStrength(mb, mb4x4Index[15], mb4x4Index[11]);
+
+        bS[1].left  = BInnerBoundaryStrength(mb, mb4x4Index[1], mb4x4Index[0]);
+        bS[2].left  = BInnerBoundaryStrength(mb, mb4x4Index[2], mb4x4Index[1]);
+        bS[3].left  = BInnerBoundaryStrength(mb, mb4x4Index[3], mb4x4Index[2]);
+        bS[5].left  = BInnerBoundaryStrength(mb, mb4x4Index[5], mb4x4Index[4]);
+        bS[6].left  = BInnerBoundaryStrength(mb, mb4x4Index[6], mb4x4Index[5]);
+        bS[7].left  = BInnerBoundaryStrength(mb, mb4x4Index[7], mb4x4Index[6]);
+        bS[9].left  = BInnerBoundaryStrength(mb, mb4x4Index[9], mb4x4Index[8]);
+        bS[10].left = BInnerBoundaryStrength(mb, mb4x4Index[10], mb4x4Index[9]);
+        bS[11].left = BInnerBoundaryStrength(mb, mb4x4Index[11], mb4x4Index[10]);
+        bS[13].left = BInnerBoundaryStrength(mb, mb4x4Index[13], mb4x4Index[12]);
+        bS[14].left = BInnerBoundaryStrength(mb, mb4x4Index[14], mb4x4Index[13]);
+        bS[15].left = BInnerBoundaryStrength(mb, mb4x4Index[15], mb4x4Index[14]);
+
+        for (k = 1; k < 16; k++)
+        {
+            if (bS[k].top || bS[k].left)
+            {
+                nonZeroBs = HANTRO_TRUE;
+                break;
+            }
+        }
+
+        return(nonZeroBs);
+    }
 
     /* top edges */
     if (flags & FILTER_TOP_EDGE)

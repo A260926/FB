@@ -79,6 +79,9 @@ typedef struct {
 typedef struct {
     dpbPicture_t *buffer;
     dpbPicture_t **list;
+    /* second reference picture list used by B slices; 'list' remains the
+     * L0 list for the existing P slice path */
+    dpbPicture_t **list1;
     dpbPicture_t *currentOut;
     dpbOutPicture_t *outBuf;
     u32 numOut;
@@ -93,6 +96,9 @@ typedef struct {
     u32 lastContainsMmco5;
     u32 noReordering;
     u32 flushed;
+    /* picture order count of the picture currently being decoded, used for
+     * motion vector temporal scaling in B slices */
+    i32 currPicOrderCnt;
 } dpbStorage_t;
 
 /*------------------------------------------------------------------------------
@@ -117,9 +123,26 @@ u32 h264bsdResetDpb(
 
 void h264bsdInitRefPicList(dpbStorage_t *dpb);
 
+/* build the initial L0 and L1 reference lists for a B slice from the short
+ * term reference pictures, ordered by picture order count relative to the
+ * current picture POC, including the L1 first-two-entries swap */
+u32 h264bsdInitBRefPicLists(dpbStorage_t *dpb, i32 currPicOrderCnt);
+
+/* apply the L0 and L1 reordering commands of a B slice */
+u32 h264bsdReorderBRefPicLists(dpbStorage_t *dpb,
+    refPicListReordering_t *order, u32 currFrameNum,
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active);
+
 u8* h264bsdAllocateDpbImage(dpbStorage_t *dpb);
 
 u8* h264bsdGetRefPicData(dpbStorage_t *dpb, u32 index);
+
+/* fetch reference picture data from the L1 list */
+u8* h264bsdGetRefPicDataL1(dpbStorage_t *dpb, u32 index);
+
+/* return the picture order count of the reference picture whose image data
+ * pointer matches, or 0 if the picture is not an existing reference */
+i32 h264bsdRefPicOrderCnt(dpbStorage_t *dpb, u8 *data, u32 *found);
 
 u32 h264bsdReorderRefPicList(
   dpbStorage_t *dpb,

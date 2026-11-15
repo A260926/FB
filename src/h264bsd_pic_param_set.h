@@ -60,6 +60,7 @@ typedef struct
     u32 picSizeInMapUnits;
     u32 *sliceGroupId;
     u32 numRefIdxL0Active;
+    u32 numRefIdxL1Active;
     u32 picInitQp;
     i32 chromaQpIndexOffset;
     u32 deblockingFilterControlPresentFlag;

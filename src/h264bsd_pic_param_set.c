@@ -261,6 +261,7 @@ u32 h264bsdDecodePicParamSet(strmData_t *pStrmData, picParamSet_t *pPicParamSet)
         EPRINT("num_ref_idx_l1_active_minus1");
         return(HANTRO_NOK);
     }
+    pPicParamSet->numRefIdxL1Active = value + 1;
 
     /* weighted_pred_flag, this shall be 0 for baseline profile */
     tmp = h264bsdGetBits(pStrmData, 1);
@@ -270,9 +271,10 @@ u32 h264bsdDecodePicParamSet(strmData_t *pStrmData, picParamSet_t *pPicParamSet)
         return(HANTRO_NOK);
     }
 
-    /* weighted_bipred_idc */
+    /* weighted_bipred_idc: implicit/explicit weighted biprediction is not
+     * supported, only the default average (value 0) is in scope */
     tmp = h264bsdGetBits(pStrmData, 2);
-    if (tmp > 2)
+    if (tmp)
     {
         EPRINT("weighted_bipred_idc");
         return(HANTRO_NOK);

@@ -314,6 +314,7 @@ u32 h264bsdDecode(storage_t *pStorage, u8 *byteStrm, u32 len, u32 picId,
                 {
                     pStorage->numConcealedMbs = 0;
                     pStorage->currentPicId    = picId;
+                    pStorage->currPicOrderCntValid = HANTRO_FALSE;
 
                     tmp = h264bsdCheckPpsId(&strm, &ppsId);
                     ASSERT(tmp == HANTRO_OK);
@@ -431,15 +432,52 @@ u32 h264bsdDecode(storage_t *pStorage, u8 *byteStrm, u32 len, u32 picId,
                 h264bsdComputeSliceGroupMap(pStorage,
                     pStorage->sliceHeader->sliceGroupChangeCycle);
 
-                h264bsdInitRefPicList(pStorage->dpb);
-                tmp = h264bsdReorderRefPicList(pStorage->dpb,
-                    &pStorage->sliceHeader->refPicListReordering,
-                    pStorage->sliceHeader->frameNum,
-                    pStorage->sliceHeader->numRefIdxL0Active);
-                if (tmp != HANTRO_OK)
+                if (IS_B_SLICE(pStorage->sliceHeader->sliceType))
                 {
-                    EPRINT("Reordering");
-                    return(H264BSD_ERROR);
+                    /* derive the current picture POC once per picture; it is
+                     * needed to build the B reference lists before the first
+                     * slice is decoded */
+                    if (!pStorage->currPicOrderCntValid)
+                    {
+                        pStorage->currPicOrderCnt =
+                            h264bsdDecodePicOrderCnt(pStorage->poc,
+                                pStorage->activeSps, pStorage->sliceHeader,
+                                pStorage->prevNalUnit);
+                        pStorage->currPicOrderCntValid = HANTRO_TRUE;
+                    }
+                    pStorage->dpb->currPicOrderCnt =
+                        pStorage->currPicOrderCnt;
+
+                    tmp = h264bsdInitBRefPicLists(pStorage->dpb,
+                        pStorage->currPicOrderCnt);
+                    if (tmp != HANTRO_OK)
+                    {
+                        EPRINT("B reference list init");
+                        return(H264BSD_ERROR);
+                    }
+                    tmp = h264bsdReorderBRefPicLists(pStorage->dpb,
+                        &pStorage->sliceHeader->refPicListReordering,
+                        pStorage->sliceHeader->frameNum,
+                        pStorage->sliceHeader->numRefIdxL0Active,
+                        pStorage->sliceHeader->numRefIdxL1Active);
+                    if (tmp != HANTRO_OK)
+                    {
+                        EPRINT("B reference list reordering");
+                        return(H264BSD_ERROR);
+                    }
+                }
+                else
+                {
+                    h264bsdInitRefPicList(pStorage->dpb);
+                    tmp = h264bsdReorderRefPicList(pStorage->dpb,
+                        &pStorage->sliceHeader->refPicListReordering,
+                        pStorage->sliceHeader->frameNum,
+                        pStorage->sliceHeader->numRefIdxL0Active);
+                    if (tmp != HANTRO_OK)
+                    {
+                        EPRINT("Reordering");
+                        return(H264BSD_ERROR);
+                    }
                 }
 
                 DEBUG(("SLICE DATA, FIRST %d\n",
@@ -476,8 +514,15 @@ u32 h264bsdDecode(storage_t *pStorage, u8 *byteStrm, u32 len, u32 picId,
 
         h264bsdResetStorage(pStorage);
 
-         picOrderCnt = h264bsdDecodePicOrderCnt(pStorage->poc,
-            pStorage->activeSps, pStorage->sliceHeader, pStorage->prevNalUnit);
+        /* the picture order count was derived once when the first slice was
+         * processed; reuse it so a multi-slice picture does not advance the
+         * POC history more than once */
+        if (pStorage->currPicOrderCntValid)
+            picOrderCnt = pStorage->currPicOrderCnt;
+        else
+            picOrderCnt = h264bsdDecodePicOrderCnt(pStorage->poc,
+                pStorage->activeSps, pStorage->sliceHeader,
+                pStorage->prevNalUnit);
 
         if (pStorage->validSliceInAccessUnit)
         {
@@ -503,6 +548,9 @@ u32 h264bsdDecode(storage_t *pStorage, u8 *byteStrm, u32 len, u32 picId,
                     pStorage->currentPicId, pStorage->numConcealedMbs);
             }
         }
+
+        /* the cached POC belongs to the picture that has now been completed */
+        pStorage->currPicOrderCntValid = HANTRO_FALSE;
 
         pStorage->picStarted = HANTRO_FALSE;
         pStorage->validSliceInAccessUnit = HANTRO_FALSE;

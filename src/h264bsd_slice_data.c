@@ -37,6 +37,7 @@
 #include "h264bsd_slice_data.h"
 #include "h264bsd_util.h"
 #include "h264bsd_vlc.h"
+#include "h264bsd_macroblock_layer.h"
 
 /*------------------------------------------------------------------------------
     2. External compiler flags
@@ -154,6 +155,13 @@ u32 h264bsdDecodeSliceData(strmData_t *pStrmData, storage_t *pStorage,
                     EPRINT("skip_run");
                     return(HANTRO_NOK);
                 }
+                /* B skip (B_Skip / direct) is not within the supported
+                 * scope, reject rather than interpret it as a P skip */
+                if (skipRun && IS_B_SLICE(pSliceHeader->sliceType))
+                {
+                    EPRINT("B skip macroblock");
+                    return(HANTRO_NOK);
+                }
                 if (skipRun)
                 {
                     prevSkipped = HANTRO_TRUE;
@@ -174,7 +182,8 @@ u32 h264bsdDecodeSliceData(strmData_t *pStrmData, storage_t *pStorage,
             prevSkipped = HANTRO_FALSE;
             tmp = h264bsdDecodeMacroblockLayer(pStrmData, mbLayer,
                 pStorage->mb + currMbAddr, pSliceHeader->sliceType,
-                pSliceHeader->numRefIdxL0Active);
+                pSliceHeader->numRefIdxL0Active,
+                pSliceHeader->numRefIdxL1Active);
             if (tmp != HANTRO_OK)
             {
                 EPRINT("macroblock_layer");

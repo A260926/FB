@@ -46,6 +46,7 @@
 
 enum {
     P_SLICE = 0,
+    B_SLICE = 1,
     I_SLICE = 2
 };
 
@@ -54,6 +55,10 @@ enum {NO_LONG_TERM_FRAME_INDICES = 0xFFFF};
 /* macro to determine if slice is an inter slice, sliceTypes 0 and 5 */
 #define IS_P_SLICE(sliceType) (((sliceType) == P_SLICE) || \
     ((sliceType) == P_SLICE + 5))
+
+/* macro to determine if slice is a B slice, sliceTypes 1 and 6 */
+#define IS_B_SLICE(sliceType) (((sliceType) == B_SLICE) || \
+    ((sliceType) == B_SLICE + 5))
 
 /* macro to determine if slice is an intra slice, sliceTypes 2 and 7 */
 #define IS_I_SLICE(sliceType) (((sliceType) == I_SLICE) || \
@@ -75,7 +80,9 @@ typedef struct
 typedef struct
 {
     u32 refPicListReorderingFlagL0;
-    refPicListReorderingOperation_t command[MAX_NUM_REF_PICS+1];
+    u32 refPicListReorderingFlagL1;
+    refPicListReorderingOperation_t commandL0[MAX_NUM_REF_PICS+1];
+    refPicListReorderingOperation_t commandL1[MAX_NUM_REF_PICS+1];
 } refPicListReordering_t;
 
 /* structure to store data of one DPB memory management control operation */
@@ -119,6 +126,8 @@ typedef struct
     u32 redundantPicCnt;
     u32 numRefIdxActiveOverrideFlag;
     u32 numRefIdxL0Active;
+    u32 numRefIdxL1Active;
+    u32 directSpatialMvPredFlag;
     i32 sliceQpDelta;
     u32 disableDeblockingFilterIdc;
     i32 sliceAlphaC0Offset;

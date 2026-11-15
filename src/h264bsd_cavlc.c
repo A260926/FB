@@ -369,13 +369,13 @@ static const u8 runBefore_1[2] = {0x11,0x01};
     4. Local function prototypes
 ------------------------------------------------------------------------------*/
 
-static u32 DecodeCoeffToken(u32 bits, u32 nc);
+u32 DecodeCoeffToken(u32 bits, u32 nc);
 
-static u32 DecodeLevelPrefix(u32 bits);
+u32 DecodeLevelPrefix(u32 bits);
 
-static u32 DecodeTotalZeros(u32 bits, u32 totalCoeff, u32 isChromaDC);
+u32 DecodeTotalZeros(u32 bits, u32 totalCoeff, u32 isChromaDC);
 
-static u32 DecodeRunBefore(u32 bits,u32 zerosLeft);
+u32 DecodeRunBefore(u32 bits,u32 zerosLeft);
 
 /*------------------------------------------------------------------------------
 

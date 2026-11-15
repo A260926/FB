@@ -89,6 +89,10 @@
 
 static i32 ComparePictures(const void *ptr1, const void *ptr2);
 
+static u32 ReorderOneList(dpbStorage_t *dpb, dpbPicture_t **list,
+    refPicListReorderingOperation_t *command, u32 currFrameNum,
+    u32 numRefIdxActive);
+
 static u32 Mmcop1(dpbStorage_t *dpb, u32 currPicNum, u32 differenceOfPicNums);
 
 static u32 Mmcop2(dpbStorage_t *dpb, u32 longTermPicNum);
@@ -229,12 +233,6 @@ u32 h264bsdReorderRefPicList(
   u32 numRefIdxActive)
 {
 
-/* Variables */
-
-    u32 i, j, k, picNumPred, refIdx;
-    i32 picNum, picNumNoWrap, index;
-    u32 isShortTerm;
-
 /* Code */
 
     ASSERT(order);
@@ -247,26 +245,58 @@ u32 h264bsdReorderRefPicList(
     if (!order->refPicListReorderingFlagL0)
         return(HANTRO_OK);
 
+    return ReorderOneList(dpb, dpb->list, order->commandL0, currFrameNum,
+        numRefIdxActive);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: ReorderOneList
+
+        Functional description:
+            Apply one reference picture list reordering command sequence to
+            the given list. Shared by the P slice L0 path and both B slice
+            lists.
+
+------------------------------------------------------------------------------*/
+
+u32 ReorderOneList(dpbStorage_t *dpb, dpbPicture_t **list,
+    refPicListReorderingOperation_t *command, u32 currFrameNum,
+    u32 numRefIdxActive)
+{
+
+/* Variables */
+
+    u32 i, j, k, picNumPred, refIdx;
+    i32 picNum, picNumNoWrap, index;
+    u32 isShortTerm;
+
+/* Code */
+
+    ASSERT(currFrameNum <= dpb->maxFrameNum);
+    ASSERT(numRefIdxActive <= MAX_NUM_REF_IDX_L0_ACTIVE);
+
     refIdx     = 0;
     picNumPred = currFrameNum;
 
     i = 0;
-    while (order->command[i].reorderingOfPicNumsIdc < 3)
+    while (command[i].reorderingOfPicNumsIdc < 3)
     {
         /* short term */
-        if (order->command[i].reorderingOfPicNumsIdc < 2)
+        if (command[i].reorderingOfPicNumsIdc < 2)
         {
-            if (order->command[i].reorderingOfPicNumsIdc == 0)
+            if (command[i].reorderingOfPicNumsIdc == 0)
             {
                 picNumNoWrap =
-                    (i32)picNumPred - (i32)order->command[i].absDiffPicNum;
+                    (i32)picNumPred - (i32)command[i].absDiffPicNum;
                 if (picNumNoWrap < 0)
                     picNumNoWrap += (i32)dpb->maxFrameNum;
             }
             else
             {
                 picNumNoWrap =
-                    (i32)(picNumPred + order->command[i].absDiffPicNum);
+                    (i32)(picNumPred + command[i].absDiffPicNum);
                 if (picNumNoWrap >= (i32)dpb->maxFrameNum)
                     picNumNoWrap -= (i32)dpb->maxFrameNum;
             }
@@ -279,7 +309,7 @@ u32 h264bsdReorderRefPicList(
         /* long term */
         else
         {
-            picNum = (i32)order->command[i].longTermPicNum;
+            picNum = (i32)command[i].longTermPicNum;
             isShortTerm = HANTRO_FALSE;
 
         }
@@ -290,13 +320,13 @@ u32 h264bsdReorderRefPicList(
 
         /* shift pictures */
         for (j = numRefIdxActive; j > refIdx; j--)
-            dpb->list[j] = dpb->list[j-1];
+            list[j] = list[j-1];
         /* put picture into the list */
-        dpb->list[refIdx++] = &dpb->buffer[index];
+        list[refIdx++] = &dpb->buffer[index];
         /* remove later references to the same picture */
         for (j = k = refIdx; j <= numRefIdxActive; j++)
-            if(dpb->list[j] != &dpb->buffer[index])
-                dpb->list[k++] = dpb->list[j];
+            if(list[j] != &dpb->buffer[index])
+                list[k++] = list[j];
 
         i++;
     }
@@ -862,6 +892,56 @@ u8* h264bsdGetRefPicData(dpbStorage_t *dpb, u32 index)
 
 /*------------------------------------------------------------------------------
 
+    Function: h264bsdGetRefPicDataL1
+
+        Functional description:
+            Reference picture data from the B slice L1 list.
+
+------------------------------------------------------------------------------*/
+
+u8* h264bsdGetRefPicDataL1(dpbStorage_t *dpb, u32 index)
+{
+
+/* Code */
+
+    if(index > 16 || dpb->list1[index] == NULL)
+        return(NULL);
+    else if(!IS_EXISTING(*dpb->list1[index]))
+        return(NULL);
+    else
+        return(dpb->list1[index]->data);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdRefPicOrderCnt
+
+------------------------------------------------------------------------------*/
+
+i32 h264bsdRefPicOrderCnt(dpbStorage_t *dpb, u8 *data, u32 *found)
+{
+
+    u32 i;
+
+/* Code */
+
+    *found = HANTRO_FALSE;
+    for (i = 0; i <= dpb->dpbSize; i++)
+    {
+        if (IS_EXISTING(dpb->buffer[i]) && dpb->buffer[i].data == data)
+        {
+            *found = HANTRO_TRUE;
+            return(dpb->buffer[i].picOrderCnt);
+        }
+    }
+
+    return(0);
+
+}
+
+/*------------------------------------------------------------------------------
+
     Function: h264bsdAllocateDpbImage
 
         Functional description:
@@ -1031,12 +1111,15 @@ u32 h264bsdInitDpb(
     }
 
     ALLOCATE(dpb->list, MAX_NUM_REF_IDX_L0_ACTIVE + 1, dpbPicture_t*);
+    ALLOCATE(dpb->list1, MAX_NUM_REF_IDX_L0_ACTIVE + 1, dpbPicture_t*);
     ALLOCATE(dpb->outBuf, dpb->dpbSize+1, dpbOutPicture_t);
 
-    if (dpb->list == NULL || dpb->outBuf == NULL)
+    if (dpb->list == NULL || dpb->list1 == NULL || dpb->outBuf == NULL)
         return(MEMORY_ALLOCATION_ERROR);
 
     memset(dpb->list, 0,
+            ((MAX_NUM_REF_IDX_L0_ACTIVE + 1) * sizeof(dpbPicture_t*)) );
+    memset(dpb->list1, 0,
             ((MAX_NUM_REF_IDX_L0_ACTIVE + 1) * sizeof(dpbPicture_t*)) );
 
     dpb->numOut = dpb->outIndex = 0;
@@ -1113,6 +1196,186 @@ void h264bsdInitRefPicList(dpbStorage_t *dpb)
 
     for (i = 0; i < dpb->numRefFrames; i++)
         dpb->list[i] = &dpb->buffer[i];
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdInitBRefPicLists
+
+        Functional description:
+            Build the initial reference picture lists RefPicList0 and
+            RefPicList1 of a B slice from the short term reference pictures
+            in the DPB, ordered by picture order count relative to the
+            current picture (H.264 8.2.4.2.3). Only short term frame
+            references are in scope.
+
+            L0: reference pictures with POC smaller than the current one,
+                descending POC, followed by the ones with greater POC,
+                ascending POC.
+            L1: the opposite ordering.
+            When the two lists are identical and contain more than one entry
+            the first two entries of RefPicList1 are exchanged.
+
+------------------------------------------------------------------------------*/
+
+u32 h264bsdInitBRefPicLists(dpbStorage_t *dpb, i32 currPicOrderCnt)
+{
+
+/* Variables */
+
+    dpbPicture_t *pics[MAX_NUM_REF_IDX_L0_ACTIVE + 1];
+    u32 n, i, a, b;
+    dpbPicture_t *tmp;
+    u32 identical;
+
+/* Code */
+
+    ASSERT(dpb);
+
+    /* gather existing short term reference pictures */
+    n = 0;
+    for (i = 0; i < dpb->maxRefFrames && n < MAX_NUM_REF_IDX_L0_ACTIVE; i++)
+    {
+        if (IS_EXISTING(dpb->buffer[i]) &&
+            IS_SHORT_TERM(dpb->buffer[i]))
+        {
+            pics[n++] = &dpb->buffer[i];
+        }
+    }
+
+    if (n < 2)
+        return(HANTRO_NOK);
+
+    /* L0: smaller POC descending, then greater POC ascending */
+    for (a = 0; a < n; a++)
+    {
+        for (b = a + 1; b < n; b++)
+        {
+            i32 pa = pics[a]->picOrderCnt;
+            i32 pb = pics[b]->picOrderCnt;
+            u32 swap = HANTRO_FALSE;
+
+            if (pa < currPicOrderCnt && pb < currPicOrderCnt)
+                swap = (pb > pa);
+            else if (pa > currPicOrderCnt && pb > currPicOrderCnt)
+                swap = (pb < pa);
+            else
+                swap = (pa > currPicOrderCnt); /* past picture first */
+
+            if (swap)
+            {
+                tmp = pics[a];
+                pics[a] = pics[b];
+                pics[b] = tmp;
+            }
+        }
+    }
+
+    for (i = 0; i < n; i++)
+        dpb->list[i] = pics[i];
+
+    /* L1 is not the reverse of L0 in general. Per H.264 8.2.4.2.3 it lists
+     * the future pictures (POC greater than current) in ascending POC,
+     * followed by the past pictures in descending POC. */
+    for (a = 0; a < n; a++)
+    {
+        for (b = a + 1; b < n; b++)
+        {
+            i32 pa = pics[a]->picOrderCnt;
+            i32 pb = pics[b]->picOrderCnt;
+            u32 swap = HANTRO_FALSE;
+
+            if (pa > currPicOrderCnt && pb > currPicOrderCnt)
+                swap = (pb < pa);
+            else if (pa < currPicOrderCnt && pb < currPicOrderCnt)
+                swap = (pb > pa);
+            else
+                swap = (pa < currPicOrderCnt); /* future picture first */
+
+            if (swap)
+            {
+                tmp = pics[a];
+                pics[a] = pics[b];
+                pics[b] = tmp;
+            }
+        }
+    }
+
+    for (i = 0; i < n; i++)
+        dpb->list1[i] = pics[i];
+
+    /* clear any stale entries beyond the populated range */
+    for (i = 0; i <= MAX_NUM_REF_IDX_L0_ACTIVE; i++)
+    {
+        if (i >= n)
+        {
+            dpb->list[i] = NULL;
+            dpb->list1[i] = NULL;
+        }
+    }
+
+    /* exchange first two L1 entries when the lists are identical */
+    identical = HANTRO_TRUE;
+    for (i = 0; i < n; i++)
+    {
+        if (dpb->list[i] != dpb->list1[i])
+        {
+            identical = HANTRO_FALSE;
+            break;
+        }
+    }
+    if (identical && n > 1)
+    {
+        tmp = dpb->list1[0];
+        dpb->list1[0] = dpb->list1[1];
+        dpb->list1[1] = tmp;
+    }
+
+    return(HANTRO_OK);
+
+}
+
+/*------------------------------------------------------------------------------
+
+    Function: h264bsdReorderBRefPicLists
+
+        Functional description:
+            Apply the L0 and L1 reordering commands of a B slice.
+
+------------------------------------------------------------------------------*/
+
+u32 h264bsdReorderBRefPicLists(dpbStorage_t *dpb,
+    refPicListReordering_t *order, u32 currFrameNum,
+    u32 numRefIdxL0Active, u32 numRefIdxL1Active)
+{
+
+    u32 tmp;
+
+/* Code */
+
+    ASSERT(dpb);
+    ASSERT(order);
+
+    SetPicNums(dpb, currFrameNum);
+
+    if (order->refPicListReorderingFlagL0)
+    {
+        tmp = ReorderOneList(dpb, dpb->list, order->commandL0, currFrameNum,
+            numRefIdxL0Active);
+        if (tmp != HANTRO_OK)
+            return(tmp);
+    }
+
+    if (order->refPicListReorderingFlagL1)
+    {
+        tmp = ReorderOneList(dpb, dpb->list1, order->commandL1, currFrameNum,
+            numRefIdxL1Active);
+        if (tmp != HANTRO_OK)
+            return(tmp);
+    }
+
+    return(HANTRO_OK);
 
 }
 
@@ -1541,6 +1804,7 @@ void h264bsdFreeDpb(dpbStorage_t *dpb)
     }
     FREE(dpb->buffer);
     FREE(dpb->list);
+    FREE(dpb->list1);
     FREE(dpb->outBuf);
 
 }
