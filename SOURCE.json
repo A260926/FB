@@ -1,0 +1,31 @@
+{
+  "repo": "https://github.com/jkuhlmann/cgltf",
+  "commit": "85cd62382dfea638278962690cf515023f33ed00",
+  "files": [
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "599d9341a7d681d7f68b614625c0664c949a6a90",
+      "sha256": "f619925f80ef862497aaf8e8155ef218fa6a2190055129523ca3df9119a9ba95"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "e647ecb3189250102b590209dad9ee575f03b873",
+      "sha256": "2d0c3896305afea67de1bc06a041cea4bb9adadb506bf0b3efb0222bba8ccdc9"
+    },
+    {
+      "path": "cgltf.h",
+      "mode": "100644",
+      "git_blob": "316a11dfd89e1ff69348a3cacb21709ad1e29bd8",
+      "sha256": "efb169dee911696b5d35fc8e3f7ea0c56d679debc529eba9ca6aa6443ba9d5e9"
+    },
+    {
+      "path": "cgltf_write.h",
+      "mode": "100644",
+      "git_blob": "4c060da792a3f31f6a7ebb3a8c59eafe5791bc86",
+      "sha256": "42199ef8b43d6784dde2ac6ea70b0b1053ec6b19136670687a189ce5df840084"
+    }
+  ],
+  "exclusions": "Unused upstream CI, fuzz and test assets."
+}
