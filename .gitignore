@@ -1,0 +1,5 @@
+# Build and run artifacts
+.task-build/
+out.ppm
+preview_out/
+*.o
