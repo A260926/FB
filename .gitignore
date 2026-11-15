@@ -1,0 +1,11 @@
+!include/
+!include/**
+!.deps/
+!.deps/**
+!task_support/
+!task_support/**
+!tests/
+!tests/**
+!tutorial/
+!tutorial/**
+.task-build/
