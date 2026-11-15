@@ -1,0 +1,83 @@
+Fujiyama Renderer
+=================
+
+  Overview
+-----------------
+Fujiyama is free and open source, distribution oriented ray-tracing renderer
+designed to handle production image rendering. 
+* Compatibility - written in C++11
+* Portability - depends on no external library (x)
+* Simplicity - requires only single C++ header file and library
+* Compact - the core library is small and easy to embed
+* Open Source - licensed under the terms of MIT License (See LICENSE)
+   (x) some external tools require OpenEXR and OpneGL/GLUT
+
+  Features
+-----------------
+* Platforms
+  + Linux
+  + Mac OSX
+  + Windows
+
+* Rendering
+  + Multi-threaded rendering - dynamic assignement of tile rendering per theread
+  + Rendering preview - fbview shows rendering progress
+  + Region rendering - accelerates distribution rendering pipeline
+  + Tile based rendering
+
+* Supported Primitives
+  + Triangle Mesh - Compact representation
+  + Bezier Curves - Unlimited smoothness subdividing in render time 
+  + Volume Primitive - Ray traced self-shadowing
+  + Point Cloud - Can be rendered as particles
+
+* Procedure Plugin
+  + Volume Filling Procedure - Pyroclastic clouds procedure provided
+  + Volume Filling Procedure - Spline wisps procedure provided
+  + Volume Filling Procedure - Surface wisps procedure provided
+
+* File format
+  + Original mipmap format - hdr2mip is provided
+  + Original framebuffer format - fb2exr is provided
+  + Command-like scene description language - works with text filter tools
+  + Python Binding scene description - can utilize control structures and libraries
+  + FrameBuffer Viewer - displays *.fb and *.mip 
+  + Input format - *.ply, *.obj, *.mip, *.hdr, *.jpg (through Python API)
+  + Output format - *.fb, *.exr (through Python API)
+
+
+* Lighting
+  + Point light - traditional point light
+  + Grid light - typical area light with single/double-sided option
+  + Sphere light - another area light
+  + Dome light - supports IBL with environment map
+
+* Animation
+  + Camera motion blur - sampling non-linear camera motion
+  + Transform motion blur - sampling non-linear object transformation
+  + Velocity attribute motion blur - useful for point count
+    changing geometry
+
+* Shading and Texture
+  + On demand reading of mipmap - unlimited number of texture images
+  + Pluggable shader DSO - shaders can be written in C/C++ 
+  + Subsurface scattering - implemented in shader
+  + Bump mapping - perturb normals based on mipmap images
+  + Primitive groups - multiple shader assignment on triangle mesh
+
+* Acceleratotion structure
+  + Grid accelerator - for meshes (dense distribution)
+  + BVH accelerator - for object instances (sparse distribution)
+  + Object instance - saves memory usage
+
+* Sampling and Filtering
+  + Gaussian and Box pixel filters - supports filter width bigger than 1 pixel
+  + Adaptive grid pixel sampling - subdivides pixels based on color threshold
+  + Uniform grid pixel sampling
+  + Jittered pixel sampling 
+
+* Extensibility
+  + Rendering callbacks - 5 points to hook rendering process
+
+http://fujiyama-renderer.com/
+Copyright (c) 2011-2020 Hiroshi Tsubokawa

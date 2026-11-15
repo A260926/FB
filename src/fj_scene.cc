@@ -1,0 +1,236 @@
+// Copyright (c) 2011-2020 Hiroshi Tsubokawa
+// See LICENSE and README
+
+#include "fj_scene.h"
+#include "fj_grid_accelerator.h"
+#include "fj_bvh_accelerator.h"
+
+#include "fj_rectangle_light.h"
+#include "fj_sphere_light.h"
+#include "fj_point_light.h"
+#include "fj_dome_light.h"
+
+#include <cassert>
+
+#define DEFINE_LIST_FUNCTIONS(Type) \
+size_t Scene::Get##Type##Count() const \
+{ \
+  return Type##List.size(); \
+} \
+Type **Scene::Get##Type##List() const \
+{ \
+  return (Type **) &Type##List[0]; \
+} \
+Type *Scene::Get##Type(int index) const \
+{ \
+  if((index) < 0 || (index) >= (int) Get##Type##Count()) return NULL; \
+  return Get##Type##List()[(index)]; \
+}
+
+namespace fj {
+
+template<typename T>
+static inline
+void delete_entries(std::vector<T *> &entry_list)
+{
+  for (size_t i = 0; i < entry_list.size(); i++) {
+    delete entry_list[i];
+  }
+}
+
+template<typename T>
+static inline
+T *push_entry_(std::vector<T *> &entry_list, T *entry)
+{
+  entry_list.push_back(entry);
+  return entry;
+}
+
+Scene::Scene()
+{
+}
+
+Scene::~Scene()
+{
+  free_all_node_list();
+}
+
+// ObjectInstance
+ObjectInstance *Scene::NewObjectInstance()
+{
+  ObjectInstance *object = new ObjectInstance();
+  return push_entry_(ObjectInstanceList, object);
+}
+
+// Accelerator
+Accelerator *Scene::NewGridAccelerator()
+{
+  Accelerator *acc = new GridAccelerator();
+  return push_entry_(AcceleratorList, acc);
+}
+
+Accelerator *Scene::NewBVHAccelerator()
+{
+  Accelerator *acc = new BVHAccelerator();
+  return push_entry_(AcceleratorList, acc);
+}
+
+// FrameBuffer
+FrameBuffer *Scene::NewFrameBuffer()
+{
+  FrameBuffer *framebuffer = new FrameBuffer();
+  return push_entry_(FrameBufferList, framebuffer);
+}
+
+// ObjectGroup
+ObjectGroup *Scene::NewObjectGroup()
+{
+  ObjectGroup *group = new ObjectGroup();
+  return push_entry_(ObjectGroupList, group);
+}
+
+// PointCloud
+PointCloud *Scene::NewPointCloud()
+{
+  PointCloud *ptc = new PointCloud();
+  return push_entry_(PointCloudList, ptc);
+}
+
+// Turbulence
+Turbulence *Scene::NewTurbulence()
+{
+  Turbulence *turbulence = new Turbulence();
+  return push_entry_(TurbulenceList, turbulence);
+}
+
+// Procedure
+Procedure *Scene::NewProcedure(Plugin *plugin)
+{
+  void *instance = plugin->CreateInstance();
+  Procedure *procedure = reinterpret_cast<Procedure *>(instance);
+  return push_entry_(ProcedureList, procedure);
+}
+
+// Renderer
+Renderer *Scene::NewRenderer()
+{
+  Renderer *renderer = new Renderer();
+  return push_entry_(RendererList, renderer);
+}
+
+// Texture
+Texture *Scene::NewTexture()
+{
+  Texture *texture = new Texture();
+  return push_entry_(TextureList, texture);
+}
+
+// Camera
+Camera *Scene::NewCamera(const char *type)
+{
+  Camera *camera = new Camera();
+  return push_entry_(CameraList, camera);
+}
+
+// Plugin
+Plugin *Scene::OpenPlugin(const char *filename)
+{
+  Plugin *plugin = new Plugin();
+  plugin->Open(filename);
+  return push_entry_(PluginList, plugin);
+}
+
+// Shader
+Shader *Scene::NewShader(Plugin *plugin)
+{
+  void *instance = plugin->CreateInstance();
+  Shader *shader = reinterpret_cast<Shader *>(instance);
+  return push_entry_(ShaderList, shader);
+}
+
+// Volume
+Volume *Scene::NewVolume()
+{
+  Volume *volume = new Volume();
+  return push_entry_(VolumeList, volume);
+}
+
+// Curve
+Curve *Scene::NewCurve()
+{
+  Curve *curve = new Curve();
+  return push_entry_(CurveList, curve);
+}
+
+// Light
+Light *Scene::NewRectangleLight()
+{
+  Light *light = new RectangleLight();
+  return push_entry_(LightList, light);
+}
+
+Light *Scene::NewSphereLight()
+{
+  Light *light = new SphereLight();
+  return push_entry_(LightList, light);
+}
+
+Light *Scene::NewPointLight()
+{
+  Light *light = new PointLight();
+  return push_entry_(LightList, light);
+}
+
+Light *Scene::NewDomeLight()
+{
+  Light *light = new DomeLight();
+  return push_entry_(LightList, light);
+}
+
+// Mesh
+Mesh *Scene::NewMesh()
+{
+  Mesh *mesh = new Mesh();
+  return push_entry_(MeshList, mesh);
+}
+
+DEFINE_LIST_FUNCTIONS(ObjectInstance)
+DEFINE_LIST_FUNCTIONS(Accelerator)
+DEFINE_LIST_FUNCTIONS(FrameBuffer)
+DEFINE_LIST_FUNCTIONS(ObjectGroup)
+DEFINE_LIST_FUNCTIONS(PointCloud)
+DEFINE_LIST_FUNCTIONS(Turbulence)
+DEFINE_LIST_FUNCTIONS(Procedure)
+DEFINE_LIST_FUNCTIONS(Renderer)
+DEFINE_LIST_FUNCTIONS(Texture)
+DEFINE_LIST_FUNCTIONS(Camera)
+DEFINE_LIST_FUNCTIONS(Plugin)
+DEFINE_LIST_FUNCTIONS(Shader)
+DEFINE_LIST_FUNCTIONS(Volume)
+DEFINE_LIST_FUNCTIONS(Curve)
+DEFINE_LIST_FUNCTIONS(Light)
+DEFINE_LIST_FUNCTIONS(Mesh)
+
+void Scene::free_all_node_list()
+{
+  delete_entries(ObjectInstanceList);
+  delete_entries(AcceleratorList);
+  delete_entries(FrameBufferList);
+  delete_entries(ObjectGroupList);
+  delete_entries(PointCloudList);
+  delete_entries(TurbulenceList);
+  //delete_entries(ProcedureList);
+  delete_entries(RendererList);
+  delete_entries(TextureList);
+  delete_entries(CameraList);
+  //delete_entries(ShaderList);
+  delete_entries(VolumeList);
+  delete_entries(CurveList);
+  delete_entries(LightList);
+  delete_entries(MeshList);
+
+  // plugins should be freed the last since they contain freeing functions for others
+  delete_entries(PluginList);
+}
+
+} // namespace xxx
