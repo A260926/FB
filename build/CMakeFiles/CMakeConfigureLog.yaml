@@ -1,0 +1,2781 @@
+
+---
+events:
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineSystem.cmake:12 (find_program)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_UNAME"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "uname"
+    candidate_directories:
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/Users/solo/.local/bin/uname"
+      - "/Users/solo/pro/UserFB/.tools/bin/uname"
+      - "/Users/solo/pro/UserFB/.venv/bin/uname"
+      - "/opt/homebrew/bin/uname"
+      - "/usr/local/bin/uname"
+      - "/System/Cryptexes/App/usr/bin/uname"
+    found: "/usr/bin/uname"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineSystem.cmake:218 (message)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      The system is: Darwin - 27.0.0 - arm64
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeUnixFindMake.cmake:5 (find_program)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_MAKE_PROGRAM"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "gmake"
+      - "make"
+      - "smake"
+    candidate_directories:
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/Users/solo/.local/bin/gmake"
+      - "/Users/solo/pro/UserFB/.tools/bin/gmake"
+      - "/Users/solo/pro/UserFB/.venv/bin/gmake"
+      - "/opt/homebrew/bin/gmake"
+      - "/usr/local/bin/gmake"
+      - "/System/Cryptexes/App/usr/bin/gmake"
+      - "/usr/bin/gmake"
+      - "/bin/gmake"
+      - "/usr/sbin/gmake"
+      - "/sbin/gmake"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/gmake"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/gmake"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/gmake"
+      - "/pkg/env/global/bin/gmake"
+      - "/Users/solo/.docker/bin/gmake"
+      - "/Users/solo/.local/bin/make"
+      - "/Users/solo/pro/UserFB/.tools/bin/make"
+      - "/Users/solo/pro/UserFB/.venv/bin/make"
+      - "/opt/homebrew/bin/make"
+      - "/usr/local/bin/make"
+      - "/System/Cryptexes/App/usr/bin/make"
+    found: "/usr/bin/make"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompiler.cmake:73 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:64 (_cmake_find_compiler)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_C_COMPILER"
+    description: "C compiler"
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "cc"
+      - "gcc"
+      - "cl"
+      - "bcc"
+      - "xlc"
+      - "icx"
+      - "clang"
+    candidate_directories:
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/Users/solo/.local/bin/cc"
+      - "/Users/solo/pro/UserFB/.tools/bin/cc"
+      - "/Users/solo/pro/UserFB/.venv/bin/cc"
+      - "/opt/homebrew/bin/cc"
+      - "/usr/local/bin/cc"
+      - "/System/Cryptexes/App/usr/bin/cc"
+    found: "/usr/bin/cc"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:122 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCCompilerId.c.in"
+    candidate_directories:
+      - "/opt/homebrew/share/cmake/Modules/"
+    found: "/opt/homebrew/share/cmake/Modules/CMakeCCompilerId.c.in"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:122 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: /usr/bin/cc 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+      
+      The C compiler identification is AppleClang, found in:
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/4.4.5/CompilerIdC/a.out
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:323 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:122 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Detecting C compiler apple sysroot: "/usr/bin/cc" "-E" "apple-sdk.c"
+        # 1 "apple-sdk.c"
+        # 1 "<built-in>" 1
+        # 1 "<built-in>" 3
+        # 484 "<built-in>" 3
+        # 1 "<command line>" 1
+        # 1 "<built-in>" 2
+        # 1 "apple-sdk.c" 2
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 1 3 4
+        # 89 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 90 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/TargetConditionals.h" 1 3 4
+        # 91 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 207 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 1 3 4
+        # 196 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 197 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 1 3 4
+        # 33 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 34 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 2 3 4
+        # 198 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 1 3 4
+        # 34 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 1 3 4
+        # 35 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 2 3 4
+        # 199 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 208 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 2 "apple-sdk.c" 2
+        
+        
+      Found apple sysroot: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_AR"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "ar"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/ar"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_RANLIB"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "ranlib"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/ranlib"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_STRIP"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "strip"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/strip"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_LINKER"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "ld"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/ld"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_NM"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "nm"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/nm"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_OBJDUMP"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "objdump"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    found: "/usr/bin/objdump"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_OBJCOPY"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "objcopy"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/usr/bin/objcopy"
+      - "/Users/solo/.local/bin/objcopy"
+      - "/Users/solo/pro/UserFB/.tools/bin/objcopy"
+      - "/Users/solo/pro/UserFB/.venv/bin/objcopy"
+      - "/opt/homebrew/bin/objcopy"
+      - "/usr/local/bin/objcopy"
+      - "/System/Cryptexes/App/usr/bin/objcopy"
+      - "/bin/objcopy"
+      - "/usr/sbin/objcopy"
+      - "/sbin/objcopy"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/objcopy"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/objcopy"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/objcopy"
+      - "/pkg/env/global/bin/objcopy"
+      - "/Users/solo/.docker/bin/objcopy"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_READELF"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "readelf"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/usr/bin/readelf"
+      - "/Users/solo/.local/bin/readelf"
+      - "/Users/solo/pro/UserFB/.tools/bin/readelf"
+      - "/Users/solo/pro/UserFB/.venv/bin/readelf"
+      - "/opt/homebrew/bin/readelf"
+      - "/usr/local/bin/readelf"
+      - "/System/Cryptexes/App/usr/bin/readelf"
+      - "/bin/readelf"
+      - "/usr/sbin/readelf"
+      - "/sbin/readelf"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/readelf"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/readelf"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/readelf"
+      - "/pkg/env/global/bin/readelf"
+      - "/Users/solo/.docker/bin/readelf"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_DLLTOOL"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "dlltool"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/usr/bin/dlltool"
+      - "/Users/solo/.local/bin/dlltool"
+      - "/Users/solo/pro/UserFB/.tools/bin/dlltool"
+      - "/Users/solo/pro/UserFB/.venv/bin/dlltool"
+      - "/opt/homebrew/bin/dlltool"
+      - "/usr/local/bin/dlltool"
+      - "/System/Cryptexes/App/usr/bin/dlltool"
+      - "/bin/dlltool"
+      - "/usr/sbin/dlltool"
+      - "/sbin/dlltool"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/dlltool"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/dlltool"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/dlltool"
+      - "/pkg/env/global/bin/dlltool"
+      - "/Users/solo/.docker/bin/dlltool"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_ADDR2LINE"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "addr2line"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/usr/bin/addr2line"
+      - "/Users/solo/.local/bin/addr2line"
+      - "/Users/solo/pro/UserFB/.tools/bin/addr2line"
+      - "/Users/solo/pro/UserFB/.venv/bin/addr2line"
+      - "/opt/homebrew/bin/addr2line"
+      - "/usr/local/bin/addr2line"
+      - "/System/Cryptexes/App/usr/bin/addr2line"
+      - "/bin/addr2line"
+      - "/usr/sbin/addr2line"
+      - "/sbin/addr2line"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/addr2line"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/addr2line"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/addr2line"
+      - "/pkg/env/global/bin/addr2line"
+      - "/Users/solo/.docker/bin/addr2line"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_TAPI"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "tapi"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/usr/bin/tapi"
+      - "/Users/solo/.local/bin/tapi"
+      - "/Users/solo/pro/UserFB/.tools/bin/tapi"
+      - "/Users/solo/pro/UserFB/.venv/bin/tapi"
+      - "/opt/homebrew/bin/tapi"
+      - "/usr/local/bin/tapi"
+      - "/System/Cryptexes/App/usr/bin/tapi"
+      - "/bin/tapi"
+      - "/usr/sbin/tapi"
+      - "/sbin/tapi"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/tapi"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/tapi"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/tapi"
+      - "/pkg/env/global/bin/tapi"
+      - "/Users/solo/.docker/bin/tapi"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Platform/Darwin.cmake:66 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
+      - "CMakeLists.txt:39 (project)"
+    mode: "program"
+    variable: "CMAKE_INSTALL_NAME_TOOL"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "install_name_tool"
+    candidate_directories:
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+    searched_directories:
+      - "/Users/solo/.local/bin/install_name_tool"
+      - "/Users/solo/pro/UserFB/.tools/bin/install_name_tool"
+      - "/Users/solo/pro/UserFB/.venv/bin/install_name_tool"
+      - "/opt/homebrew/bin/install_name_tool"
+      - "/usr/local/bin/install_name_tool"
+      - "/System/Cryptexes/App/usr/bin/install_name_tool"
+    found: "/usr/bin/install_name_tool"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:123 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:39 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: false
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_29af8/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_29af8.dir/build.make CMakeFiles/cmTC_29af8.dir/build
+        Building C object CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o
+        /usr/bin/cc   -v -Wl,-v -MD -MT CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -c /opt/homebrew/share/cmake/Modules/CMakeCCompilerABI.c
+        Apple clang version 21.0.0 (clang-2100.3.34.2)
+        Target: arm64-apple-darwin27.0.0
+        Thread model: posix
+        InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+        clang: warning: -Wl,-v: 'linker' input unused [-Wunused-command-line-argument]
+         "/Library/Developer/CommandLineTools/usr/bin/clang" -cc1 -triple arm64-apple-macosx27.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -fno-sized-deallocation -target-sdk-version=27.0 -fdepfile-entry=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json -fvisibility-inlines-hidden-static-local-var -fno-modulemap-allow-subdirectory-search -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -enable-tlsdesc -target-cpu apple-m1 -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +ccpp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +flagm -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ -target-linker-version 1166.2 -v -fcoverage-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ -resource-dir /Library/Developer/CommandLineTools/usr/lib/clang/21 -dependency-file CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -sys-header-deps -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/usr/lib/clang/21/include -internal-externc-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Library/Developer/CommandLineTools/usr/include -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks -Wno-elaborated-enum-base -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -Wno-error=allocator-wrappers -fdwarf2-cfi-asm -o CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -x c /opt/homebrew/share/cmake/Modules/CMakeCCompilerABI.c
+        clang -cc1 version 21.0.0 (clang-2100.3.34.2) default target arm64-apple-darwin27.0.0
+        ignoring nonexistent directory "/usr/local/include"
+        ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"
+        ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /Library/Developer/CommandLineTools/usr/lib/clang/21/include
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+         /Library/Developer/CommandLineTools/usr/include
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks (framework directory)
+        End of search list.
+        Linking C executable cmTC_29af8
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_29af8.dir/link.txt --verbose=1
+        Apple clang version 21.0.0 (clang-2100.3.34.2)
+        Target: arm64-apple-darwin27.0.0
+        Thread model: posix
+        InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+         "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_29af8 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a
+        @(#)PROGRAM:ld PROJECT:ld-27037.1
+        BUILD 21:17:51 Aug 25 2026
+        configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em armv8m.main armv8.1m.main
+        LTO support using: LLVM version 21.0.0 (static support for 30, runtime is 30)
+        TAPI support using: Apple TAPI version 21.0.0 (tapi-2100.3.8.1)
+        Library search paths:
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift
+        Framework search paths:
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names  -v -Wl,-v CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -o cmTC_29af8
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:160 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Effective list of requested architectures (possibly empty)  : ""
+      Effective list of architectures found in the ABI info binary: "arm64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:255 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+          add: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+          add: [/Library/Developer/CommandLineTools/usr/include]
+        end of search list found
+        collapse include dir [/Library/Developer/CommandLineTools/usr/lib/clang/21/include] ==> [/Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+        collapse include dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+        collapse include dir [/Library/Developer/CommandLineTools/usr/include] ==> [/Library/Developer/CommandLineTools/usr/include]
+        implicit include dirs: [/Library/Developer/CommandLineTools/usr/lib/clang/21/include;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include;/Library/Developer/CommandLineTools/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:291 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
+        ignore line: [Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ']
+        ignore line: []
+        ignore line: [Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_29af8/fast]
+        ignore line: [/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_29af8.dir/build.make CMakeFiles/cmTC_29af8.dir/build]
+        ignore line: [Building C object CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o]
+        ignore line: [/usr/bin/cc   -v -Wl -v -MD -MT CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -c /opt/homebrew/share/cmake/Modules/CMakeCCompilerABI.c]
+        ignore line: [Apple clang version 21.0.0 (clang-2100.3.34.2)]
+        ignore line: [Target: arm64-apple-darwin27.0.0]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /Library/Developer/CommandLineTools/usr/bin]
+        ignore line: [clang: warning: -Wl -v: 'linker' input unused [-Wunused-command-line-argument]]
+        ignore line: [ "/Library/Developer/CommandLineTools/usr/bin/clang" -cc1 -triple arm64-apple-macosx27.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -fno-sized-deallocation -target-sdk-version=27.0 -fdepfile-entry=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json -fvisibility-inlines-hidden-static-local-var -fno-modulemap-allow-subdirectory-search -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -enable-tlsdesc -target-cpu apple-m1 -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +ccpp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +flagm -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ -target-linker-version 1166.2 -v -fcoverage-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-RAiqjZ -resource-dir /Library/Developer/CommandLineTools/usr/lib/clang/21 -dependency-file CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -sys-header-deps -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/usr/lib/clang/21/include -internal-externc-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Library/Developer/CommandLineTools/usr/include -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks -Wno-elaborated-enum-base -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -Wno-error=allocator-wrappers -fdwarf2-cfi-asm -o CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -x c /opt/homebrew/share/cmake/Modules/CMakeCCompilerABI.c]
+        ignore line: [clang -cc1 version 21.0.0 (clang-2100.3.34.2) default target arm64-apple-darwin27.0.0]
+        ignore line: [ignoring nonexistent directory "/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+        ignore line: [ /Library/Developer/CommandLineTools/usr/include]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks (framework directory)]
+        ignore line: [End of search list.]
+        ignore line: [Linking C executable cmTC_29af8]
+        ignore line: [/opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_29af8.dir/link.txt --verbose=1]
+        ignore line: [Apple clang version 21.0.0 (clang-2100.3.34.2)]
+        ignore line: [Target: arm64-apple-darwin27.0.0]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /Library/Developer/CommandLineTools/usr/bin]
+        link line: [ "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_29af8 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a] ==> linker [/Library/Developer/CommandLineTools/usr/bin/ld]
+        link line: [ "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_29af8 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+          arg [/Library/Developer/CommandLineTools/usr/bin/ld] ==> ignore
+          arg [-demangle] ==> ignore
+          arg [-lto_library] ==> ignore, skip following value
+          arg [/Library/Developer/CommandLineTools/usr/lib/libLTO.dylib] ==> skip value of -lto_library
+          arg [-dynamic] ==> ignore
+          arg [-arch] ==> ignore
+          arg [arm64] ==> ignore
+          arg [-platform_version] ==> ignore
+          arg [macos] ==> ignore
+          arg [27.0.0] ==> ignore
+          arg [27.0] ==> ignore
+          arg [-syslibroot] ==> ignore
+          arg [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk] ==> ignore
+          arg [-mllvm] ==> ignore
+          arg [-enable-linkonceodr-outlining] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_29af8] ==> ignore
+          arg [-L/usr/local/lib] ==> dir [/usr/local/lib]
+          arg [-search_paths_first] ==> ignore
+          arg [-headerpad_max_install_names] ==> ignore
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_29af8.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [-lSystem] ==> lib [System]
+          arg [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a] ==> lib [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+        linker tool for 'C': /Library/Developer/CommandLineTools/usr/bin/ld 
+        Library search paths: [;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        Framework search paths: [;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+        remove lib [System]
+        remove lib [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+        collapse library dir [/usr/local/lib] ==> [/usr/local/lib]
+        collapse library dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib]
+        collapse library dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        collapse framework dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: [/usr/local/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        implicit fwks: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake:41 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:337 (cmake_determine_linker_id)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:39 (project)"
+    message: |
+      Running the C compiler's linker: "/Library/Developer/CommandLineTools/usr/bin/ld" "-v"
+      @(#)PROGRAM:ld PROJECT:ld-27037.1
+      BUILD 21:17:51 Aug 25 2026
+      configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em armv8m.main armv8.1m.main
+      LTO support using: LLVM version 21.0.0 (static support for 30, runtime is 30)
+      TAPI support using: Apple TAPI version 21.0.0 (tapi-2100.3.8.1)
+  -
+    kind: "find-v1"
+    backtrace:
+      - "CMakeLists.txt:66 (find_program)"
+    mode: "program"
+    variable: "DOCBOOK_TO_MAN"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "docbook2x-man"
+      - "db2x_docbook2man"
+      - "docbook2man"
+      - "docbook-to-man"
+    candidate_directories:
+      - "/Users/solo/.local/bin/"
+      - "/Users/solo/pro/UserFB/.tools/bin/"
+      - "/Users/solo/pro/UserFB/.venv/bin/"
+      - "/opt/homebrew/bin/"
+      - "/usr/local/bin/"
+      - "/System/Cryptexes/App/usr/bin/"
+      - "/usr/bin/"
+      - "/bin/"
+      - "/usr/sbin/"
+      - "/sbin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/"
+      - "/pkg/env/global/bin/"
+      - "/Users/solo/.docker/bin/"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/bin/"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/sbin/"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/"
+      - "/opt/homebrew/bin/"
+      - "/opt/homebrew/sbin/"
+      - "/opt/homebrew/"
+      - "/usr/local/bin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/"
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/"
+      - "/bin/"
+      - "/sbin/"
+      - "/usr/X11R6/bin/"
+      - "/usr/X11R6/sbin/"
+      - "/usr/X11R6/"
+      - "/usr/pkg/bin/"
+      - "/usr/pkg/sbin/"
+      - "/usr/pkg/"
+      - "/opt/bin/"
+      - "/opt/sbin/"
+      - "/opt/"
+      - "/sw/bin/"
+      - "/sw/sbin/"
+      - "/sw/"
+      - "/opt/local/bin/"
+      - "/opt/local/sbin/"
+      - "/opt/local/"
+      - "/Applications/"
+    searched_directories:
+      - "/Users/solo/.local/bin/docbook2x-man"
+      - "/Users/solo/pro/UserFB/.tools/bin/docbook2x-man"
+      - "/Users/solo/pro/UserFB/.venv/bin/docbook2x-man"
+      - "/opt/homebrew/bin/docbook2x-man"
+      - "/usr/local/bin/docbook2x-man"
+      - "/System/Cryptexes/App/usr/bin/docbook2x-man"
+      - "/usr/bin/docbook2x-man"
+      - "/bin/docbook2x-man"
+      - "/usr/sbin/docbook2x-man"
+      - "/sbin/docbook2x-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/docbook2x-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/docbook2x-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/docbook2x-man"
+      - "/pkg/env/global/bin/docbook2x-man"
+      - "/Users/solo/.docker/bin/docbook2x-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/bin/docbook2x-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/sbin/docbook2x-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/docbook2x-man"
+      - "/opt/homebrew/bin/docbook2x-man"
+      - "/opt/homebrew/sbin/docbook2x-man"
+      - "/opt/homebrew/docbook2x-man"
+      - "/usr/local/bin/docbook2x-man"
+      - "/usr/local/sbin/docbook2x-man"
+      - "/usr/local/docbook2x-man"
+      - "/usr/bin/docbook2x-man"
+      - "/usr/sbin/docbook2x-man"
+      - "/usr/docbook2x-man"
+      - "/bin/docbook2x-man"
+      - "/sbin/docbook2x-man"
+      - "/usr/X11R6/bin/docbook2x-man"
+      - "/usr/X11R6/sbin/docbook2x-man"
+      - "/usr/X11R6/docbook2x-man"
+      - "/usr/pkg/bin/docbook2x-man"
+      - "/usr/pkg/sbin/docbook2x-man"
+      - "/usr/pkg/docbook2x-man"
+      - "/opt/bin/docbook2x-man"
+      - "/opt/sbin/docbook2x-man"
+      - "/opt/docbook2x-man"
+      - "/sw/bin/docbook2x-man"
+      - "/sw/sbin/docbook2x-man"
+      - "/sw/docbook2x-man"
+      - "/opt/local/bin/docbook2x-man"
+      - "/opt/local/sbin/docbook2x-man"
+      - "/opt/local/docbook2x-man"
+      - "/Applications/docbook2x-man"
+      - "/Users/solo/.local/bin/db2x_docbook2man"
+      - "/Users/solo/pro/UserFB/.tools/bin/db2x_docbook2man"
+      - "/Users/solo/pro/UserFB/.venv/bin/db2x_docbook2man"
+      - "/opt/homebrew/bin/db2x_docbook2man"
+      - "/usr/local/bin/db2x_docbook2man"
+      - "/System/Cryptexes/App/usr/bin/db2x_docbook2man"
+      - "/usr/bin/db2x_docbook2man"
+      - "/bin/db2x_docbook2man"
+      - "/usr/sbin/db2x_docbook2man"
+      - "/sbin/db2x_docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/db2x_docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/db2x_docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/db2x_docbook2man"
+      - "/pkg/env/global/bin/db2x_docbook2man"
+      - "/Users/solo/.docker/bin/db2x_docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/bin/db2x_docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/sbin/db2x_docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/db2x_docbook2man"
+      - "/opt/homebrew/bin/db2x_docbook2man"
+      - "/opt/homebrew/sbin/db2x_docbook2man"
+      - "/opt/homebrew/db2x_docbook2man"
+      - "/usr/local/bin/db2x_docbook2man"
+      - "/usr/local/sbin/db2x_docbook2man"
+      - "/usr/local/db2x_docbook2man"
+      - "/usr/bin/db2x_docbook2man"
+      - "/usr/sbin/db2x_docbook2man"
+      - "/usr/db2x_docbook2man"
+      - "/bin/db2x_docbook2man"
+      - "/sbin/db2x_docbook2man"
+      - "/usr/X11R6/bin/db2x_docbook2man"
+      - "/usr/X11R6/sbin/db2x_docbook2man"
+      - "/usr/X11R6/db2x_docbook2man"
+      - "/usr/pkg/bin/db2x_docbook2man"
+      - "/usr/pkg/sbin/db2x_docbook2man"
+      - "/usr/pkg/db2x_docbook2man"
+      - "/opt/bin/db2x_docbook2man"
+      - "/opt/sbin/db2x_docbook2man"
+      - "/opt/db2x_docbook2man"
+      - "/sw/bin/db2x_docbook2man"
+      - "/sw/sbin/db2x_docbook2man"
+      - "/sw/db2x_docbook2man"
+      - "/opt/local/bin/db2x_docbook2man"
+      - "/opt/local/sbin/db2x_docbook2man"
+      - "/opt/local/db2x_docbook2man"
+      - "/Applications/db2x_docbook2man"
+      - "/Users/solo/.local/bin/docbook2man"
+      - "/Users/solo/pro/UserFB/.tools/bin/docbook2man"
+      - "/Users/solo/pro/UserFB/.venv/bin/docbook2man"
+      - "/opt/homebrew/bin/docbook2man"
+      - "/usr/local/bin/docbook2man"
+      - "/System/Cryptexes/App/usr/bin/docbook2man"
+      - "/usr/bin/docbook2man"
+      - "/bin/docbook2man"
+      - "/usr/sbin/docbook2man"
+      - "/sbin/docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/docbook2man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/docbook2man"
+      - "/pkg/env/global/bin/docbook2man"
+      - "/Users/solo/.docker/bin/docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/bin/docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/sbin/docbook2man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/docbook2man"
+      - "/opt/homebrew/bin/docbook2man"
+      - "/opt/homebrew/sbin/docbook2man"
+      - "/opt/homebrew/docbook2man"
+      - "/usr/local/bin/docbook2man"
+      - "/usr/local/sbin/docbook2man"
+      - "/usr/local/docbook2man"
+      - "/usr/bin/docbook2man"
+      - "/usr/sbin/docbook2man"
+      - "/usr/docbook2man"
+      - "/bin/docbook2man"
+      - "/sbin/docbook2man"
+      - "/usr/X11R6/bin/docbook2man"
+      - "/usr/X11R6/sbin/docbook2man"
+      - "/usr/X11R6/docbook2man"
+      - "/usr/pkg/bin/docbook2man"
+      - "/usr/pkg/sbin/docbook2man"
+      - "/usr/pkg/docbook2man"
+      - "/opt/bin/docbook2man"
+      - "/opt/sbin/docbook2man"
+      - "/opt/docbook2man"
+      - "/sw/bin/docbook2man"
+      - "/sw/sbin/docbook2man"
+      - "/sw/docbook2man"
+      - "/opt/local/bin/docbook2man"
+      - "/opt/local/sbin/docbook2man"
+      - "/opt/local/docbook2man"
+      - "/Applications/docbook2man"
+      - "/Users/solo/.local/bin/docbook-to-man"
+      - "/Users/solo/pro/UserFB/.tools/bin/docbook-to-man"
+      - "/Users/solo/pro/UserFB/.venv/bin/docbook-to-man"
+      - "/opt/homebrew/bin/docbook-to-man"
+      - "/usr/local/bin/docbook-to-man"
+      - "/System/Cryptexes/App/usr/bin/docbook-to-man"
+      - "/usr/bin/docbook-to-man"
+      - "/bin/docbook-to-man"
+      - "/usr/sbin/docbook-to-man"
+      - "/sbin/docbook-to-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin/docbook-to-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin/docbook-to-man"
+      - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin/docbook-to-man"
+      - "/pkg/env/global/bin/docbook-to-man"
+      - "/Users/solo/.docker/bin/docbook-to-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/bin/docbook-to-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/sbin/docbook-to-man"
+      - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/docbook-to-man"
+      - "/opt/homebrew/bin/docbook-to-man"
+      - "/opt/homebrew/sbin/docbook-to-man"
+      - "/opt/homebrew/docbook-to-man"
+      - "/usr/local/bin/docbook-to-man"
+      - "/usr/local/sbin/docbook-to-man"
+      - "/usr/local/docbook-to-man"
+      - "/usr/bin/docbook-to-man"
+      - "/usr/sbin/docbook-to-man"
+      - "/usr/docbook-to-man"
+      - "/bin/docbook-to-man"
+      - "/sbin/docbook-to-man"
+      - "/usr/X11R6/bin/docbook-to-man"
+      - "/usr/X11R6/sbin/docbook-to-man"
+      - "/usr/X11R6/docbook-to-man"
+      - "/usr/pkg/bin/docbook-to-man"
+      - "/usr/pkg/sbin/docbook-to-man"
+      - "/usr/pkg/docbook-to-man"
+      - "/opt/bin/docbook-to-man"
+      - "/opt/sbin/docbook-to-man"
+      - "/opt/docbook-to-man"
+      - "/sw/bin/docbook-to-man"
+      - "/sw/sbin/docbook-to-man"
+      - "/sw/docbook-to-man"
+      - "/opt/local/bin/docbook-to-man"
+      - "/opt/local/sbin/docbook-to-man"
+      - "/opt/local/docbook-to-man"
+      - "/Applications/docbook-to-man"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr"
+        - "/"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr/X11R6"
+        - "/usr/pkg"
+        - "/opt"
+        - "/sw"
+        - "/opt/local"
+      CMAKE_SYSTEM_APPBUNDLE_PATH:
+        - "/Applications"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompiler.cmake:54 (find_program)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:69 (_cmake_find_compiler)"
+      - "CMakeLists.txt:171 (enable_language)"
+    mode: "program"
+    variable: "CMAKE_CXX_COMPILER"
+    description: "CXX compiler"
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "c++"
+      - "g++"
+      - "cl"
+      - "bcc"
+      - "icpx"
+      - "icx"
+      - "clang++"
+    candidate_directories:
+      - "/usr/bin/"
+    found: "/usr/bin/c++"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr"
+        - "/"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr/X11R6"
+        - "/usr/pkg"
+        - "/opt"
+        - "/sw"
+        - "/opt/local"
+      CMAKE_SYSTEM_APPBUNDLE_PATH:
+        - "/Applications"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:171 (enable_language)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "FIRST"
+      SearchAppBundle: "FIRST"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "/opt/homebrew/share/cmake/Modules/"
+    found: "/opt/homebrew/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/pro/UserFB/.tools/bin"
+        - "/Users/solo/pro/UserFB/.venv/bin"
+        - "/usr/local/bin"
+        - "/System/Cryptexes/App/usr/bin"
+        - "/usr/bin"
+        - "/bin"
+        - "/usr/sbin"
+        - "/sbin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin"
+        - "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin"
+        - "/pkg/env/global/bin"
+        - "/opt/homebrew/bin"
+        - "/Users/solo/.local/bin"
+        - "/Users/solo/.docker/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr"
+        - "/"
+        - "/opt/homebrew"
+        - "/usr/local"
+        - "/usr/X11R6"
+        - "/usr/pkg"
+        - "/opt"
+        - "/sw"
+        - "/opt/local"
+      CMAKE_SYSTEM_INCLUDE_PATH:
+        - "/usr/include/X11"
+      CMAKE_SYSTEM_FRAMEWORK_PATH:
+        - "~/Library/Frameworks"
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Network/Library/Frameworks"
+        - "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+        - "/Library/Developer/CommandLineTools/Library/Frameworks"
+        - "/Library/Developer/CommandLineTools/Library/Frameworks"
+        - "/Library/Frameworks"
+        - "/Network/Library/Frameworks"
+        - "/System/Library/Frameworks"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /usr/bin/c++ 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+      
+      The CXX compiler identification is AppleClang, found in:
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/4.4.5/CompilerIdCXX/a.out
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerId.cmake:323 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Detecting CXX compiler apple sysroot: "/usr/bin/c++" "-E" "apple-sdk.cpp"
+        # 1 "apple-sdk.cpp"
+        # 1 "<built-in>" 1
+        # 1 "<built-in>" 3
+        # 533 "<built-in>" 3
+        # 1 "<command line>" 1
+        # 1 "<built-in>" 2
+        # 1 "apple-sdk.cpp" 2
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 1 3 4
+        # 89 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 90 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/TargetConditionals.h" 1 3 4
+        # 91 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 207 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 1 3 4
+        # 196 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 197 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 1 3 4
+        # 33 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h" 1 3 4
+        # 34 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 2 3 4
+        # 198 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 1 3 4
+        # 34 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 3 4
+        # 1 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h" 1 3 4
+        # 35 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h" 2 3 4
+        # 199 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h" 2 3 4
+        # 208 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityMacros.h" 2 3 4
+        # 2 "apple-sdk.cpp" 2
+        
+        
+      Found apple sysroot: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:123 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:171 (enable_language)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: false
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_6b1f2/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_6b1f2.dir/build.make CMakeFiles/cmTC_6b1f2.dir/build
+        Building CXX object CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o
+        /usr/bin/c++   -v -Wl,-v -MD -MT CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+        Apple clang version 21.0.0 (clang-2100.3.34.2)
+        Target: arm64-apple-darwin27.0.0
+        Thread model: posix
+        InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+        clang++: warning: -Wl,-v: 'linker' input unused [-Wunused-command-line-argument]
+        ignoring nonexistent directory "/Library/Developer/CommandLineTools/usr/bin/../include/c++/v1"
+         "/Library/Developer/CommandLineTools/usr/bin/clang" -cc1 -triple arm64-apple-macosx27.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -fno-sized-deallocation -target-sdk-version=27.0 -fdepfile-entry=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json -fvisibility-inlines-hidden-static-local-var -fno-modulemap-allow-subdirectory-search -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -enable-tlsdesc -target-cpu apple-m1 -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +ccpp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +flagm -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ -target-linker-version 1166.2 -v -fcoverage-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ -resource-dir /Library/Developer/CommandLineTools/usr/lib/clang/21 -dependency-file CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/usr/lib/clang/21/include -internal-externc-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Library/Developer/CommandLineTools/usr/include -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks -Wno-elaborated-enum-base -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -Wno-error=allocator-wrappers -fdwarf2-cfi-asm -o CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+        clang -cc1 version 21.0.0 (clang-2100.3.34.2) default target arm64-apple-darwin27.0.0
+        ignoring nonexistent directory "/usr/local/include"
+        ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"
+        ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
+         /Library/Developer/CommandLineTools/usr/lib/clang/21/include
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+         /Library/Developer/CommandLineTools/usr/include
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+         /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks (framework directory)
+        End of search list.
+        Linking CXX executable cmTC_6b1f2
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6b1f2.dir/link.txt --verbose=1
+        Apple clang version 21.0.0 (clang-2100.3.34.2)
+        Target: arm64-apple-darwin27.0.0
+        Thread model: posix
+        InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+         "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_6b1f2 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a
+        @(#)PROGRAM:ld PROJECT:ld-27037.1
+        BUILD 21:17:51 Aug 25 2026
+        configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em armv8m.main armv8.1m.main
+        LTO support using: LLVM version 21.0.0 (static support for 30, runtime is 30)
+        TAPI support using: Apple TAPI version 21.0.0 (tapi-2100.3.8.1)
+        Library search paths:
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift
+        Framework search paths:
+        	/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks
+        /usr/bin/c++ -Wl,-search_paths_first -Wl,-headerpad_max_install_names  -v -Wl,-v CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_6b1f2
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:160 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Effective list of requested architectures (possibly empty)  : ""
+      Effective list of architectures found in the ABI info binary: "arm64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:255 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1]
+          add: [/Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+          add: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+          add: [/Library/Developer/CommandLineTools/usr/include]
+        end of search list found
+        collapse include dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1]
+        collapse include dir [/Library/Developer/CommandLineTools/usr/lib/clang/21/include] ==> [/Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+        collapse include dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+        collapse include dir [/Library/Developer/CommandLineTools/usr/include] ==> [/Library/Developer/CommandLineTools/usr/include]
+        implicit include dirs: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1;/Library/Developer/CommandLineTools/usr/lib/clang/21/include;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include;/Library/Developer/CommandLineTools/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:291 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
+        ignore line: [Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ']
+        ignore line: []
+        ignore line: [Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_6b1f2/fast]
+        ignore line: [/Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_6b1f2.dir/build.make CMakeFiles/cmTC_6b1f2.dir/build]
+        ignore line: [Building CXX object CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/usr/bin/c++   -v -Wl -v -MD -MT CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -c /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Apple clang version 21.0.0 (clang-2100.3.34.2)]
+        ignore line: [Target: arm64-apple-darwin27.0.0]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /Library/Developer/CommandLineTools/usr/bin]
+        ignore line: [clang++: warning: -Wl -v: 'linker' input unused [-Wunused-command-line-argument]]
+        ignore line: [ignoring nonexistent directory "/Library/Developer/CommandLineTools/usr/bin/../include/c++/v1"]
+        ignore line: [ "/Library/Developer/CommandLineTools/usr/bin/clang" -cc1 -triple arm64-apple-macosx27.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -fno-sized-deallocation -target-sdk-version=27.0 -fdepfile-entry=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json -fvisibility-inlines-hidden-static-local-var -fno-modulemap-allow-subdirectory-search -fdefine-target-os-macros -fno-assume-unique-vtables -fno-modulemap-allow-subdirectory-search -enable-tlsdesc -target-cpu apple-m1 -target-feature +v8.5a -target-feature +aes -target-feature +altnzcv -target-feature +ccdp -target-feature +ccpp -target-feature +complxnum -target-feature +crc -target-feature +dotprod -target-feature +flagm -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +fptoint -target-feature +fullfp16 -target-feature +jsconv -target-feature +lse -target-feature +neon -target-feature +pauth -target-feature +perfmon -target-feature +predres -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sb -target-feature +sha2 -target-feature +sha3 -target-feature +specrestrict -target-feature +ssbs -target-abi darwinpcs -debugger-tuning=lldb -fdebug-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ -target-linker-version 1166.2 -v -fcoverage-compilation-dir=/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-SB8dqJ -resource-dir /Library/Developer/CommandLineTools/usr/lib/clang/21 -dependency-file CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o.d -skip-unused-modulemap-deps -MT CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/usr/lib/clang/21/include -internal-externc-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Library/Developer/CommandLineTools/usr/include -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks -internal-iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks -Wno-elaborated-enum-base -fdeprecated-macro -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -Wno-error=allocator-wrappers -fdwarf2-cfi-asm -o CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -x c++ /opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [clang -cc1 version 21.0.0 (clang-2100.3.34.2) default target arm64-apple-darwin27.0.0]
+        ignore line: [ignoring nonexistent directory "/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1]
+        ignore line: [ /Library/Developer/CommandLineTools/usr/lib/clang/21/include]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include]
+        ignore line: [ /Library/Developer/CommandLineTools/usr/include]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)]
+        ignore line: [ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks (framework directory)]
+        ignore line: [End of search list.]
+        ignore line: [Linking CXX executable cmTC_6b1f2]
+        ignore line: [/opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6b1f2.dir/link.txt --verbose=1]
+        ignore line: [Apple clang version 21.0.0 (clang-2100.3.34.2)]
+        ignore line: [Target: arm64-apple-darwin27.0.0]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /Library/Developer/CommandLineTools/usr/bin]
+        link line: [ "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_6b1f2 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a] ==> linker [/Library/Developer/CommandLineTools/usr/bin/ld]
+        link line: [ "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -dynamic -arch arm64 -platform_version macos 27.0.0 27.0 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -mllvm -enable-linkonceodr-outlining -o cmTC_6b1f2 -L/usr/local/lib -search_paths_first -headerpad_max_install_names -v CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+          arg [/Library/Developer/CommandLineTools/usr/bin/ld] ==> ignore
+          arg [-demangle] ==> ignore
+          arg [-lto_library] ==> ignore, skip following value
+          arg [/Library/Developer/CommandLineTools/usr/lib/libLTO.dylib] ==> skip value of -lto_library
+          arg [-dynamic] ==> ignore
+          arg [-arch] ==> ignore
+          arg [arm64] ==> ignore
+          arg [-platform_version] ==> ignore
+          arg [macos] ==> ignore
+          arg [27.0.0] ==> ignore
+          arg [27.0] ==> ignore
+          arg [-syslibroot] ==> ignore
+          arg [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk] ==> ignore
+          arg [-mllvm] ==> ignore
+          arg [-enable-linkonceodr-outlining] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_6b1f2] ==> ignore
+          arg [-L/usr/local/lib] ==> dir [/usr/local/lib]
+          arg [-search_paths_first] ==> ignore
+          arg [-headerpad_max_install_names] ==> ignore
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_6b1f2.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lc++] ==> lib [c++]
+          arg [-lSystem] ==> lib [System]
+          arg [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a] ==> lib [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+        linker tool for 'CXX': /Library/Developer/CommandLineTools/usr/bin/ld 
+        Library search paths: [;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        Framework search paths: [;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+        remove lib [System]
+        remove lib [/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a]
+        collapse library dir [/usr/local/lib] ==> [/usr/local/lib]
+        collapse library dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib]
+        collapse library dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        collapse framework dir [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks] ==> [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+        implicit libs: [c++]
+        implicit objs: []
+        implicit dirs: [/usr/local/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib;/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/swift]
+        implicit fwks: [/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake:41 (message)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:337 (cmake_determine_linker_id)"
+      - "/opt/homebrew/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:171 (enable_language)"
+    message: |
+      Running the CXX compiler's linker: "/Library/Developer/CommandLineTools/usr/bin/ld" "-v"
+      @(#)PROGRAM:ld PROJECT:ld-27037.1
+      BUILD 21:17:51 Aug 25 2026
+      configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em armv8m.main armv8.1m.main
+      LTO support using: LLVM version 21.0.0 (static support for 30, runtime is 30)
+      TAPI support using: Apple TAPI version 21.0.0 (tapi-2100.3.8.1)
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:9 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for dlfcn.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-rtCJE2"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-rtCJE2"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_DLFCN_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-rtCJE2'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_7478e/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_7478e.dir/build.make CMakeFiles/cmTC_7478e.dir/build
+        Building C object CMakeFiles/cmTC_7478e.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_7478e.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_7478e.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_7478e.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-rtCJE2/CheckIncludeFile.c
+        Linking C executable cmTC_7478e
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7478e.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_7478e.dir/CheckIncludeFile.c.o -o cmTC_7478e
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:10 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for fcntl.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-EWIMGt"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-EWIMGt"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_FCNTL_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-EWIMGt'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_3c5b9/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_3c5b9.dir/build.make CMakeFiles/cmTC_3c5b9.dir/build
+        Building C object CMakeFiles/cmTC_3c5b9.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_3c5b9.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_3c5b9.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_3c5b9.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-EWIMGt/CheckIncludeFile.c
+        Linking C executable cmTC_3c5b9
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_3c5b9.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_3c5b9.dir/CheckIncludeFile.c.o -o cmTC_3c5b9
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:11 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for inttypes.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-2A9esX"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-2A9esX"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_INTTYPES_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-2A9esX'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_978d7/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_978d7.dir/build.make CMakeFiles/cmTC_978d7.dir/build
+        Building C object CMakeFiles/cmTC_978d7.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_978d7.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_978d7.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_978d7.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-2A9esX/CheckIncludeFile.c
+        Linking C executable cmTC_978d7
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_978d7.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_978d7.dir/CheckIncludeFile.c.o -o cmTC_978d7
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:12 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for memory.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-8mF7Er"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-8mF7Er"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_MEMORY_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-8mF7Er'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_4574b/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_4574b.dir/build.make CMakeFiles/cmTC_4574b.dir/build
+        Building C object CMakeFiles/cmTC_4574b.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_4574b.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_4574b.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_4574b.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-8mF7Er/CheckIncludeFile.c
+        Linking C executable cmTC_4574b
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_4574b.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_4574b.dir/CheckIncludeFile.c.o -o cmTC_4574b
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:13 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for stdint.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-qtbsgA"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-qtbsgA"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_STDINT_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-qtbsgA'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_36d47/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_36d47.dir/build.make CMakeFiles/cmTC_36d47.dir/build
+        Building C object CMakeFiles/cmTC_36d47.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_36d47.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_36d47.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_36d47.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-qtbsgA/CheckIncludeFile.c
+        Linking C executable cmTC_36d47
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_36d47.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_36d47.dir/CheckIncludeFile.c.o -o cmTC_36d47
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:14 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for stdlib.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ek3tvZ"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ek3tvZ"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_STDLIB_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ek3tvZ'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_50959/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_50959.dir/build.make CMakeFiles/cmTC_50959.dir/build
+        Building C object CMakeFiles/cmTC_50959.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_50959.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_50959.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_50959.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ek3tvZ/CheckIncludeFile.c
+        Linking C executable cmTC_50959
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_50959.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_50959.dir/CheckIncludeFile.c.o -o cmTC_50959
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:15 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for strings.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-eHtsCa"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-eHtsCa"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_STRINGS_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-eHtsCa'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_e13b6/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_e13b6.dir/build.make CMakeFiles/cmTC_e13b6.dir/build
+        Building C object CMakeFiles/cmTC_e13b6.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_e13b6.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_e13b6.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_e13b6.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-eHtsCa/CheckIncludeFile.c
+        Linking C executable cmTC_e13b6
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e13b6.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_e13b6.dir/CheckIncludeFile.c.o -o cmTC_e13b6
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:16 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for string.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-99PxVE"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-99PxVE"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_STRING_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-99PxVE'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_a115a/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_a115a.dir/build.make CMakeFiles/cmTC_a115a.dir/build
+        Building C object CMakeFiles/cmTC_a115a.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_a115a.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_a115a.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_a115a.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-99PxVE/CheckIncludeFile.c
+        Linking C executable cmTC_a115a
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_a115a.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_a115a.dir/CheckIncludeFile.c.o -o cmTC_a115a
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:17 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for sys/stat.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NYpjjh"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NYpjjh"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_SYS_STAT_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NYpjjh'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_9162d/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_9162d.dir/build.make CMakeFiles/cmTC_9162d.dir/build
+        Building C object CMakeFiles/cmTC_9162d.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_9162d.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_9162d.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_9162d.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NYpjjh/CheckIncludeFile.c
+        Linking C executable cmTC_9162d
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_9162d.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_9162d.dir/CheckIncludeFile.c.o -o cmTC_9162d
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:18 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for sys/types.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-QffE7D"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-QffE7D"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_SYS_TYPES_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-QffE7D'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_d32ff/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_d32ff.dir/build.make CMakeFiles/cmTC_d32ff.dir/build
+        Building C object CMakeFiles/cmTC_d32ff.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_d32ff.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_d32ff.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_d32ff.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-QffE7D/CheckIncludeFile.c
+        Linking C executable cmTC_d32ff
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d32ff.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_d32ff.dir/CheckIncludeFile.c.o -o cmTC_d32ff
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFile.cmake:157 (try_compile)"
+      - "ConfigureChecks.cmake:19 (check_include_file)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for unistd.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-IPhGVK"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-IPhGVK"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_UNISTD_H"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-IPhGVK'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_09ba7/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_09ba7.dir/build.make CMakeFiles/cmTC_09ba7.dir/build
+        Building C object CMakeFiles/cmTC_09ba7.dir/CheckIncludeFile.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_09ba7.dir/CheckIncludeFile.c.o -MF CMakeFiles/cmTC_09ba7.dir/CheckIncludeFile.c.o.d -o CMakeFiles/cmTC_09ba7.dir/CheckIncludeFile.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-IPhGVK/CheckIncludeFile.c
+        Linking C executable cmTC_09ba7
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_09ba7.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_09ba7.dir/CheckIncludeFile.c.o -o cmTC_09ba7
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:21 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for getpagesize"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-LosU9q"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-LosU9q"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_GETPAGESIZE"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-LosU9q'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_21588/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_21588.dir/build.make CMakeFiles/cmTC_21588.dir/build
+        Building C object CMakeFiles/cmTC_21588.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_21588.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_21588.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_21588.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-LosU9q/CheckSymbolExists.c
+        Linking C executable cmTC_21588
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_21588.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_21588.dir/CheckSymbolExists.c.o -o cmTC_21588
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:22 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for mmap"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-05EgqO"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-05EgqO"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_MMAP"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-05EgqO'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_9b4d6/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_9b4d6.dir/build.make CMakeFiles/cmTC_9b4d6.dir/build
+        Building C object CMakeFiles/cmTC_9b4d6.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_9b4d6.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_9b4d6.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_9b4d6.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-05EgqO/CheckSymbolExists.c
+        Linking C executable cmTC_9b4d6
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_9b4d6.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_9b4d6.dir/CheckSymbolExists.c.o -o cmTC_9b4d6
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:23 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for getrandom"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-WW8OLs"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-WW8OLs"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_GETRANDOM"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-WW8OLs'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_5dbcc/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_5dbcc.dir/build.make CMakeFiles/cmTC_5dbcc.dir/build
+        Building C object CMakeFiles/cmTC_5dbcc.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_5dbcc.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_5dbcc.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_5dbcc.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-WW8OLs/CheckSymbolExists.c
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-WW8OLs/CheckSymbolExists.c:8:19: error: use of undeclared identifier 'getrandom'
+            8 |   return ((int*)(&getrandom))[argc];
+              |                   ^~~~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_5dbcc.dir/CheckSymbolExists.c.o] Error 1
+        make: *** [cmTC_5dbcc/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:31 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for arc4random_buf"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-gSKCQ1"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-gSKCQ1"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_ARC4RANDOM_BUF"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-gSKCQ1'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_716a2/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_716a2.dir/build.make CMakeFiles/cmTC_716a2.dir/build
+        Building C object CMakeFiles/cmTC_716a2.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_716a2.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_716a2.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_716a2.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-gSKCQ1/CheckSymbolExists.c
+        Linking C executable cmTC_716a2
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_716a2.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_716a2.dir/CheckSymbolExists.c.o -o cmTC_716a2
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckIncludeFiles.cmake:184 (try_compile)"
+      - "ConfigureChecks.cmake:38 (check_include_files)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for 4 include files stdlib.h, ..., float.h"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-FALPSo"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-FALPSo"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "STDC_HEADERS"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-FALPSo'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_18b59/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_18b59.dir/build.make CMakeFiles/cmTC_18b59.dir/build
+        Building C object CMakeFiles/cmTC_18b59.dir/STDC_HEADERS.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_18b59.dir/STDC_HEADERS.c.o -MF CMakeFiles/cmTC_18b59.dir/STDC_HEADERS.c.o.d -o CMakeFiles/cmTC_18b59.dir/STDC_HEADERS.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-FALPSo/STDC_HEADERS.c
+        Linking C executable cmTC_18b59
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_18b59.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_18b59.dir/STDC_HEADERS.c.o -o cmTC_18b59
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:49 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for off_t"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ZOxhes"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ZOxhes"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OFF_T"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ZOxhes'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_e7fe0/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_e7fe0.dir/build.make CMakeFiles/cmTC_e7fe0.dir/build
+        Building C object CMakeFiles/cmTC_e7fe0.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_e7fe0.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_e7fe0.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_e7fe0.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ZOxhes/CheckSymbolExists.c
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ZOxhes/CheckSymbolExists.c:8:19: error: unexpected type name 'off_t': expected expression
+            8 |   return ((int*)(&off_t))[argc];
+              |                   ^
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_e7fe0.dir/CheckSymbolExists.c.o] Error 1
+        make: *** [cmTC_e7fe0/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:171 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckSymbolExists.cmake:99 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "ConfigureChecks.cmake:50 (check_symbol_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for size_t"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-7PYxg6"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-7PYxg6"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "SIZE_T"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-7PYxg6'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_66028/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_66028.dir/build.make CMakeFiles/cmTC_66028.dir/build
+        Building C object CMakeFiles/cmTC_66028.dir/CheckSymbolExists.c.o
+        /usr/bin/cc    -MD -MT CMakeFiles/cmTC_66028.dir/CheckSymbolExists.c.o -MF CMakeFiles/cmTC_66028.dir/CheckSymbolExists.c.o.d -o CMakeFiles/cmTC_66028.dir/CheckSymbolExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-7PYxg6/CheckSymbolExists.c
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-7PYxg6/CheckSymbolExists.c:8:19: error: unexpected type name 'size_t': expected expression
+            8 |   return ((int*)(&size_t))[argc];
+              |                   ^
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_66028.dir/CheckSymbolExists.c.o] Error 1
+        make: *** [cmTC_66028/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckSourceCompiles.cmake:81 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckCSourceCompiles.cmake:103 (cmake_check_source_compiles)"
+      - "ConfigureChecks.cmake:56 (check_c_source_compiles)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Performing Test HAVE_SYSCALL_GETRANDOM"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "HAVE_SYSCALL_GETRANDOM"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_2d99f/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_2d99f.dir/build.make CMakeFiles/cmTC_2d99f.dir/build
+        Building C object CMakeFiles/cmTC_2d99f.dir/src.c.o
+        /usr/bin/cc -DHAVE_SYSCALL_GETRANDOM   -MD -MT CMakeFiles/cmTC_2d99f.dir/src.c.o -MF CMakeFiles/cmTC_2d99f.dir/src.c.o.d -o CMakeFiles/cmTC_2d99f.dir/src.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh/src.c
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh/src.c:6:13: warning: 'syscall' is deprecated: first deprecated in macOS 10.12 - syscall(2) is unsupported; please switch to a supported interface. For SYS_kdebug_trace use kdebug_signpost(). [-Wdeprecated-declarations]
+            6 |             syscall(SYS_getrandom, NULL, 0, 0);
+              |             ^
+        /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:754:6: note: 'syscall' has been explicitly marked deprecated here
+          754 | int      syscall(int, ...);
+              |          ^
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-NMR9rh/src.c:6:21: error: use of undeclared identifier 'SYS_getrandom'
+            6 |             syscall(SYS_getrandom, NULL, 0, 0);
+              |                     ^~~~~~~~~~~~~
+        1 warning and 1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_2d99f.dir/src.c.o] Error 1
+        make: *** [cmTC_2d99f/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckSourceCompiles.cmake:81 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "/opt/homebrew/share/cmake/Modules/CheckCCompilerFlag.cmake:105 (cmake_check_compiler_flag)"
+      - "ConfigureChecks.cmake:66 (check_c_compiler_flag)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Performing Test FLAG_NO_STRICT_ALIASING"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-u1hxtY"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-u1hxtY"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "FLAG_NO_STRICT_ALIASING"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-u1hxtY'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_4b6df/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_4b6df.dir/build.make CMakeFiles/cmTC_4b6df.dir/build
+        Building C object CMakeFiles/cmTC_4b6df.dir/src.c.o
+        /usr/bin/cc -DFLAG_NO_STRICT_ALIASING  -fno-strict-aliasing -MD -MT CMakeFiles/cmTC_4b6df.dir/src.c.o -MF CMakeFiles/cmTC_4b6df.dir/src.c.o.d -o CMakeFiles/cmTC_4b6df.dir/src.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-u1hxtY/src.c
+        Linking C executable cmTC_4b6df
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_4b6df.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_4b6df.dir/src.c.o -o cmTC_4b6df
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckSourceCompiles.cmake:81 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "/opt/homebrew/share/cmake/Modules/CheckCCompilerFlag.cmake:105 (cmake_check_compiler_flag)"
+      - "ConfigureChecks.cmake:67 (check_c_compiler_flag)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Performing Test FLAG_VISIBILITY"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ADVCmo"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ADVCmo"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "FLAG_VISIBILITY"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ADVCmo'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_20319/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_20319.dir/build.make CMakeFiles/cmTC_20319.dir/build
+        Building C object CMakeFiles/cmTC_20319.dir/src.c.o
+        /usr/bin/cc -DFLAG_VISIBILITY  -fvisibility=hidden -MD -MT CMakeFiles/cmTC_20319.dir/src.c.o -MF CMakeFiles/cmTC_20319.dir/src.c.o.d -o CMakeFiles/cmTC_20319.dir/src.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-ADVCmo/src.c
+        Linking C executable cmTC_20319
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_20319.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_20319.dir/src.c.o -o cmTC_20319
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/CheckLibraryExists.cmake:142 (try_compile)"
+      - "ConfigureChecks.cmake:69 (check_library_exists)"
+      - "CMakeLists.txt:264 (include)"
+    checks:
+      - "Looking for cos in m"
+    directories:
+      source: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw"
+      binary: "/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw"
+    cmakeVariables:
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_C_FLAGS: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "_EXPAT_LIBM_FOUND"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_67660/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_67660.dir/build.make CMakeFiles/cmTC_67660.dir/build
+        Building C object CMakeFiles/cmTC_67660.dir/CheckFunctionExists.c.o
+        /usr/bin/cc -DCHECK_FUNCTION_EXISTS=cos   -MD -MT CMakeFiles/cmTC_67660.dir/CheckFunctionExists.c.o -MF CMakeFiles/cmTC_67660.dir/CheckFunctionExists.c.o.d -o CMakeFiles/cmTC_67660.dir/CheckFunctionExists.c.o -c /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw/CheckFunctionExists.c
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw/CheckFunctionExists.c:7:3: warning: incompatible redeclaration of library function 'cos' [-Wincompatible-library-redeclaration]
+            7 |   CHECK_FUNCTION_EXISTS(void);
+              |   ^
+        <command line>:1:31: note: expanded from macro 'CHECK_FUNCTION_EXISTS'
+            1 | #define CHECK_FUNCTION_EXISTS cos
+              |                               ^
+        /Users/solo/pro/UserFB/workspace/FS46ABB6909E3CU6629/attempts/20261115T160920414606Z/repo/build/CMakeFiles/CMakeScratch/TryCompile-VPpAKw/CheckFunctionExists.c:7:3: note: 'cos' is a builtin with type 'double (double)'
+        <command line>:1:31: note: expanded from macro 'CHECK_FUNCTION_EXISTS'
+            1 | #define CHECK_FUNCTION_EXISTS cos
+              |                               ^
+        1 warning generated.
+        Linking C executable cmTC_67660
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_67660.dir/link.txt --verbose=1
+        /usr/bin/cc -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cmTC_67660.dir/CheckFunctionExists.c.o -o cmTC_67660  -lm
+        
+      exitCode: 0
+...

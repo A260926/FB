@@ -562,6 +562,17 @@ static XML_Parser parserCreate(const XML_Char *encodingName,
 
 static void parserInit(XML_Parser parser, const XML_Char *encodingName);
 
+/* Reparse deferral: keep the cumulative work of rescanning an
+   incomplete token linear in the token's final length by only
+   rescanning once the available input has grown geometrically. */
+static void reparseDeferralClear(XML_Parser parser);
+static void reparseDeferralInit(XML_Parser parser);
+static XML_Bool reparseDeferralGate(XML_Parser parser, const char *start,
+                                    const char *end, XML_Bool isFinal);
+static void reparseDeferralObserve(XML_Parser parser,
+                                   const char *unconsumedStart,
+                                   const char *parseEnd);
+
 #ifdef XML_DTD
 static float accountingGetCurrentAmplification(XML_Parser rootParser);
 static void accountingReportStats(XML_Parser originParser, const char *epilog);
@@ -707,6 +718,18 @@ struct XML_ParserStruct {
   ACCOUNTING m_accounting;
   ENTITY_STATS m_entity_stats;
 #endif
+  /* Reparse deferral (geometric re-scan of an incomplete token).
+     m_reparseDeferralEnabled masters the feature.  When the tokenizer
+     cannot finish the last token of a non-final buffer, the token's
+     absolute start offset (m_reparseTokenStartIndex) and a geometric
+     threshold (m_reparseNextAttempt) are recorded.  The token is only
+     scanned again once the parse end index reaches the threshold.
+     Offsets, rather than raw pointers, are kept on purpose so that
+     XML_GetBuffer buffer moves and reallocations cannot invalidate
+     the state.  A negative start index means "no deferred token". */
+  XML_Bool m_reparseDeferralEnabled;
+  XML_Index m_reparseTokenStartIndex;
+  XML_Index m_reparseNextAttempt;
 };
 
 #define MALLOC(parser, s) (parser->m_mem.malloc_fcn((s)))
@@ -1174,6 +1197,10 @@ parserInit(XML_Parser parser, const XML_Char *encodingName) {
   memset(&parser->m_entity_stats, 0, sizeof(ENTITY_STATS));
   parser->m_entity_stats.debugLevel = getDebugLevel("EXPAT_ENTITY_DEBUG", 0u);
 #endif
+
+  /* Reparse deferral is enabled by default for freshly created parsers
+     and after XML_ParserReset; no incomplete token is pending. */
+  reparseDeferralInit(parser);
 }
 
 /* moves list of bindings to m_freeBindingList */
@@ -1395,6 +1422,12 @@ XML_ExternalEntityParserCreate(XML_Parser oldParser, const XML_Char *context,
   parser->m_ns_triplets = oldns_triplets;
   parser->m_hash_secret_salt = oldhash_secret_salt;
   parser->m_parentParser = oldParser;
+  /* The external entity parser inherits the parent's deferral switch
+     but starts with no pending token of its own; the parent's water
+     mark is never copied.  Each parser's switch can then be toggled
+     independently. */
+  parser->m_reparseDeferralEnabled = oldParser->m_reparseDeferralEnabled;
+  reparseDeferralClear(parser);
 #ifdef XML_DTD
   parser->m_paramEntityParsing = oldParamEntityParsing;
   parser->m_prologState.inEntityValue = oldInEntityValue;
@@ -1824,6 +1857,145 @@ XML_SetHashSalt(XML_Parser parser, unsigned long hash_salt) {
   return 1;
 }
 
+/* ------------------------------------------------------------------
+ * Reparse deferral
+ *
+ * When the last token of a non-final buffer cannot be completed, Expat
+ * has to scan that token again on every subsequent feed until it
+ * completes.  With small chunk sizes this makes the cumulative work
+ * quadratic in the token length.
+ *
+ * The deferral keeps the cumulative re-scan work linear: an incomplete
+ * token is only scanned again once the bytes available for it have
+ * grown geometrically.  All state is expressed in absolute byte
+ * offsets, so moving or reallocating the input buffer in
+ * XML_GetBuffer cannot leave dangling pointers behind.
+ * ------------------------------------------------------------------ */
+
+/* Tokens smaller than this keep the original immediate rescan
+   behaviour so that ordinary small documents pay no deferral cost. */
+#define REPARSE_DEFERRAL_MIN_TOKEN_BYTES 128
+#define REPARSE_DEFERRAL_GROW_FACTOR 2
+#define REPARSE_DEFERRAL_NO_TOKEN (-1)
+
+static void
+reparseDeferralClear(XML_Parser parser) {
+  parser->m_reparseTokenStartIndex = REPARSE_DEFERRAL_NO_TOKEN;
+  parser->m_reparseNextAttempt = 0;
+}
+
+static void
+reparseDeferralInit(XML_Parser parser) {
+  parser->m_reparseDeferralEnabled = XML_TRUE;
+  reparseDeferralClear(parser);
+}
+
+/* Returns XML_TRUE when the interval [start, end), whose end has the
+   absolute byte index parser->m_parseEndByteIndex, may be scanned now.
+   A XML_FALSE result means the incomplete token must be left untouched
+   on this non-final feed (O(1) work, no callbacks, no errors). */
+static XML_Bool
+reparseDeferralGate(XML_Parser parser, const char *start, const char *end,
+                    XML_Bool isFinal) {
+  XML_Index span;
+  XML_Index tokenStartIndex;
+  if (isFinal || ! parser->m_reparseDeferralEnabled
+      || parser->m_reparseTokenStartIndex == REPARSE_DEFERRAL_NO_TOKEN)
+    return XML_TRUE;
+  span = (XML_Index)(end - start);
+  tokenStartIndex = parser->m_parseEndByteIndex - span;
+  if (tokenStartIndex != parser->m_reparseTokenStartIndex) {
+    /* The recorded water mark belongs to different input; drop it
+       rather than throttling an unrelated token. */
+    reparseDeferralClear(parser);
+    return XML_TRUE;
+  }
+  if (parser->m_parseEndByteIndex >= parser->m_reparseNextAttempt)
+    return XML_TRUE;
+  return XML_FALSE;
+}
+
+/* Records the re-scan water mark after an actual scan.  unconsumedStart
+   is the parse position returned by the processor and parseEnd the end
+   of the interval that was scanned. */
+static void
+reparseDeferralObserve(XML_Parser parser, const char *unconsumedStart,
+                       const char *parseEnd) {
+  XML_Index span;
+  XML_Index tokenStartIndex;
+  if (! parser->m_reparseDeferralEnabled || parseEnd <= unconsumedStart) {
+    reparseDeferralClear(parser);
+    return;
+  }
+  span = (XML_Index)(parseEnd - unconsumedStart);
+  if (span < REPARSE_DEFERRAL_MIN_TOKEN_BYTES) {
+    reparseDeferralClear(parser);
+    return;
+  }
+  tokenStartIndex = parser->m_parseEndByteIndex - span;
+  parser->m_reparseTokenStartIndex = tokenStartIndex;
+  parser->m_reparseNextAttempt
+      = tokenStartIndex + REPARSE_DEFERRAL_GROW_FACTOR * span;
+}
+
+XML_Bool XMLCALL
+XML_SetReparseDeferralEnabled(XML_Parser parser, XML_Bool enabled) {
+  XML_Index span;
+  if (parser == NULL)
+    return XML_FALSE;
+  parser->m_reparseDeferralEnabled = enabled ? XML_TRUE : XML_FALSE;
+  if (! enabled) {
+    /* The next feed rescans immediately. */
+    reparseDeferralClear(parser);
+    return XML_TRUE;
+  }
+  /* Re-enabling: build the state from the input currently unconsumed;
+     never inherit a water mark left over from another token. */
+  if (parser->m_bufferPtr && parser->m_bufferEnd > parser->m_bufferPtr) {
+    span = (XML_Index)(parser->m_bufferEnd - parser->m_bufferPtr);
+    if (span >= REPARSE_DEFERRAL_MIN_TOKEN_BYTES) {
+      parser->m_reparseTokenStartIndex
+          = parser->m_parseEndByteIndex - span;
+      parser->m_reparseNextAttempt
+          = parser->m_reparseTokenStartIndex
+            + REPARSE_DEFERRAL_GROW_FACTOR * span;
+      return XML_TRUE;
+    }
+  }
+  reparseDeferralClear(parser);
+  return XML_TRUE;
+}
+
+/* Invokes the current processor on [start, end) while honoring reparse
+   deferral.  When the incomplete token is throttled on a non-final feed
+   the processor is not entered at all: the feed behaves exactly like a
+   tokenizer report of "incomplete token, more input follows", i.e. O(1)
+   work, no handler, no error and the parse position left at start.  That
+   mirrors the existing PARTIAL/XML_TOK_NONE handling of every processor
+   and avoids advancing any processor state on an empty interval.  The
+   returned parse position goes into *endPtr. */
+static enum XML_Error
+reparseDeferralRunProcessor(XML_Parser parser, const char *start,
+                            const char *end, XML_Bool isFinal,
+                            const char **endPtr) {
+  enum XML_Error errorCode;
+  if (! reparseDeferralGate(parser, start, end, isFinal)) {
+    *endPtr = start;
+    return XML_ERROR_NONE;
+  }
+  errorCode = parser->m_processor(parser, start, end, endPtr);
+  if (isFinal || errorCode != XML_ERROR_NONE
+      || parser->m_parsingStatus.parsing != XML_PARSING) {
+    /* Final feeds, parse errors, suspensions and non-resumable stops
+       all leave this token behind; never carry its water mark into
+       another token, parser or document. */
+    reparseDeferralClear(parser);
+  } else {
+    reparseDeferralObserve(parser, *endPtr, end);
+  }
+  return errorCode;
+}
+
 enum XML_Status XMLCALL
 XML_Parse(XML_Parser parser, const char *s, int len, int isFinal) {
   if ((parser == NULL) || (len < 0) || ((s == NULL) && (len != 0))) {
@@ -1857,8 +2029,10 @@ XML_Parse(XML_Parser parser, const char *s, int len, int isFinal) {
 
     /* If data are left over from last buffer, and we now know that these
        data are the final chunk of input, then we have to check them again
-       to detect errors based on that fact.
+       to detect errors based on that fact.  A final feed always rescans,
+       regardless of the deferral water mark.
     */
+    reparseDeferralClear(parser);
     parser->m_errorCode
         = parser->m_processor(parser, parser->m_bufferPtr,
                               parser->m_parseEndPtr, &parser->m_bufferPtr);
@@ -1911,8 +2085,8 @@ XML_Parse(XML_Parser parser, const char *s, int len, int isFinal) {
     parser->m_positionPtr = s;
     parser->m_parsingStatus.finalBuffer = (XML_Bool)isFinal;
 
-    parser->m_errorCode
-        = parser->m_processor(parser, s, parser->m_parseEndPtr = s + len, &end);
+    parser->m_errorCode = reparseDeferralRunProcessor(
+        parser, s, parser->m_parseEndPtr = s + len, (XML_Bool)isFinal, &end);
 
     if (parser->m_errorCode != XML_ERROR_NONE) {
       parser->m_eventEndPtr = parser->m_eventPtr;
@@ -2015,8 +2189,9 @@ XML_ParseBuffer(XML_Parser parser, int len, int isFinal) {
   parser->m_parseEndByteIndex += len;
   parser->m_parsingStatus.finalBuffer = (XML_Bool)isFinal;
 
-  parser->m_errorCode = parser->m_processor(
-      parser, start, parser->m_parseEndPtr, &parser->m_bufferPtr);
+  parser->m_errorCode = reparseDeferralRunProcessor(
+      parser, start, parser->m_parseEndPtr, (XML_Bool)isFinal,
+      &parser->m_bufferPtr);
 
   if (parser->m_errorCode != XML_ERROR_NONE) {
     parser->m_eventEndPtr = parser->m_eventPtr;
@@ -2208,8 +2383,19 @@ XML_ResumeParser(XML_Parser parser) {
   }
   parser->m_parsingStatus.parsing = XML_PARSING;
 
+  /* Resuming must process whatever was already available at suspension
+     time even when no new bytes have arrived, so it bypasses the
+     deferral gate and drops any pending water mark. */
+  reparseDeferralClear(parser);
   parser->m_errorCode = parser->m_processor(
       parser, parser->m_bufferPtr, parser->m_parseEndPtr, &parser->m_bufferPtr);
+  if (parser->m_errorCode == XML_ERROR_NONE
+      && parser->m_parsingStatus.parsing == XML_PARSING
+      && ! parser->m_parsingStatus.finalBuffer) {
+    /* Re-arm the geometric water mark from whatever remains unconsumed. */
+    reparseDeferralObserve(parser, parser->m_bufferPtr,
+                           parser->m_parseEndPtr);
+  }
 
   if (parser->m_errorCode != XML_ERROR_NONE) {
     parser->m_eventEndPtr = parser->m_eventPtr;

@@ -1,0 +1,1 @@
+/usr/bin/cc   -fno-strict-aliasing -fvisibility=hidden -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/reparse_contract.dir/tests/reparse_contract.c.o -o tests/reparse_contract  libexpat.a -lm

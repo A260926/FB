@@ -1,0 +1,6 @@
+# Hashes of file build rules.
+8d79b5cdb71fd43ef1420d50591133eb CMakeFiles/xmltest-log-fixed
+85bdd3855dde65a9e67fa7233780d0d5 CMakeFiles/xmltest-log-verified
+0f4c21bf0bc5eae5d6e4d4d8c647c763 CMakeFiles/xmltest-sh-been-run
+90e20caf9a7a2e6a7d16e8a815b89c80 CMakeFiles/xmlts-zip-downloaded
+06624fd587f9bffc4e58bc1f97d9394a CMakeFiles/xmlts-zip-extracted

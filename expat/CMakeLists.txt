@@ -156,6 +156,8 @@ expat_shy_set(EXPAT_LARGE_SIZE OFF CACHE BOOL "Make XML_GetCurrent* functions re
 mark_as_advanced(EXPAT_LARGE_SIZE)
 expat_shy_set(EXPAT_MIN_SIZE OFF CACHE BOOL "Get a smaller (but slower) parser (in particular avoid multiple copies of the tokenizer)")
 mark_as_advanced(EXPAT_MIN_SIZE)
+expat_shy_set(EXPAT_CHECK_SCAN_PROBE OFF CACHE BOOL "Define CHECK_SCAN_PROBE to count attribute value scan loop iterations in unit_scan_work (test instrumentation only; parsing decisions are unchanged)")
+mark_as_advanced(EXPAT_CHECK_SCAN_PROBE)
 if(MSVC OR _EXPAT_HELP)
     expat_shy_set(EXPAT_MSVC_STATIC_CRT OFF CACHE BOOL "Use /MT flag (static CRT) when compiling in MSVC")
 endif()
@@ -215,6 +217,10 @@ endif()
 
 if(EXPAT_MIN_SIZE)
     add_definitions(-DXML_MIN_SIZE)
+endif()
+
+if(EXPAT_CHECK_SCAN_PROBE)
+    add_definitions(-DCHECK_SCAN_PROBE)
 endif()
 
 if(EXPAT_CHAR_TYPE STREQUAL "char")
@@ -622,6 +628,9 @@ if(EXPAT_BUILD_TESTS)
     add_executable(runtests   tests/runtests.c     ${test_SRCS})
     add_executable(runtestspp tests/runtestspp.cpp ${test_SRCS})
 
+    add_executable(reparse_contract tests/reparse_contract.c)
+    target_link_libraries(reparse_contract expat)
+
     foreach(_target ${_EXPAT_TEST_TARGETS})
         set_property(TARGET ${_target} PROPERTY RUNTIME_OUTPUT_DIRECTORY tests)
         expat_add_test(${_target} $<TARGET_FILE:${_target}>)
@@ -634,6 +643,12 @@ if(EXPAT_BUILD_TESTS)
             target_link_libraries(${_target} ${LIB_BSD})
         endif()
     endforeach()
+
+    set_property(TARGET reparse_contract PROPERTY RUNTIME_OUTPUT_DIRECTORY tests)
+    if(_EXPAT_LIBM_FOUND)
+        target_link_libraries(reparse_contract m)
+    endif()
+    expat_add_test(reparse_contract $<TARGET_FILE:reparse_contract>)
 endif()
 
 #

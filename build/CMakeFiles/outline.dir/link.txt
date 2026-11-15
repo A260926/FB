@@ -1,0 +1,1 @@
+/usr/bin/cc   -fno-strict-aliasing -fvisibility=hidden -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/outline.dir/examples/outline.c.o -o examples/outline  libexpat.a -lm

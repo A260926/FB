@@ -1,0 +1,1 @@
+/usr/bin/cc   -fno-strict-aliasing -fvisibility=hidden -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/elements.dir/examples/elements.c.o -o examples/elements  libexpat.a -lm

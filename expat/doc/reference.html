@@ -105,6 +105,7 @@ interface.</p>
       <li><a href="#XML_StopParser">XML_StopParser</a></li>
       <li><a href="#XML_ResumeParser">XML_ResumeParser</a></li>
       <li><a href="#XML_GetParsingStatus">XML_GetParsingStatus</a></li>
+      <li><a href="#XML_SetReparseDeferralEnabled">XML_SetReparseDeferralEnabled</a></li>
     </ul>
     </li>
     <li><a href="#setting">Handler Setting Functions</a>
@@ -1278,6 +1279,74 @@ processed.  The <code>status</code> parameter <em>must not</em> be
 NULL.</p>
 
 <p>New in Expat 1.95.8.</p>
+</div>
+
+<h4 id="XML_SetReparseDeferralEnabled">XML_SetReparseDeferralEnabled</h4>
+<pre class="fcndec">
+XML_Bool XMLCALL
+XML_SetReparseDeferralEnabled(XML_Parser p,
+                              XML_Bool enabled);
+</pre>
+<div class="fcndef">
+<p>Controls <em>reparse deferral</em>.  When a document is fed in many
+small pieces and the last piece ends in the middle of a token (for
+example a very long attribute value, comment or declaration), Expat has
+to rescan the bytes of that unfinished token on every subsequent call
+to <code><a href="#XML_Parse">XML_Parse</a></code> or
+<code><a href="#XML_ParseBuffer">XML_ParseBuffer</a></code> until the
+token completes.  With small chunk sizes the cumulative work of these
+rescans grows quadratically with the length of the token, even though
+each individual byte is only ever reported once.  Reparse deferral
+removes that amplification: while it is enabled, an unfinished token is
+only scanned again once the bytes available for it have grown
+geometrically, so the total scanning work stays linear in the token's
+final length.  It does not limit the legal length of any token and does
+not require larger input chunks or buffering the whole document
+up-front.</p>
+
+<p>Reparse deferral is enabled by default for every newly created
+parser and again after
+<code><a href="#XML_ParserReset">XML_ParserReset</a></code>.  The switch
+may be toggled at any time, including while a parse is in progress.
+Turning it off makes the next feed rescan the unfinished token
+immediately, restoring the historical per-feed behaviour.  Turning it
+back on rebuilds the deferral state from the input that is currently
+unconsumed rather than reusing a water mark that belonged to another
+token.  A parser created with
+<code><a href="#XML_ExternalEntityParserCreate"
+>XML_ExternalEntityParserCreate</a></code> inherits the parent's
+setting at creation time but not its pending token state; the parent
+and the external entity parser can then be toggled independently.</p>
+
+<p><strong>Effect on callback timing.</strong> While deferral is
+enabled, a token that cannot yet be completed is simply left
+untouched: the corresponding handlers are not called and any
+non-final error inside that token is not reported on the feeds whose
+re-scan is skipped.  Such callbacks and errors are delivered on a
+later feed, as soon as enough new bytes have accumulated, or on the
+final feed.  The final input is always processed immediately no
+matter how little it grows, including the zero-length final calls
+<code>XML_Parse(p, NULL, 0, 1)</code> and
+<code>XML_ParseBuffer(p, 0, 1)</code>.  Consequently the finished
+document is drained completely, and the eventual sequence of events,
+the byte/line/column positions and the error codes are identical to a
+parse with deferral disabled; only <em>when</em> some of them are
+reported changes.</p>
+
+<p>Callers that rely on a handler running during the same
+<code>XML_Parse</code>/<code>XML_ParseBuffer</code> call that supplies
+the relevant bytes &mdash; for example code that drives progress
+indicators, inspects parser state after every feed, or interleaves
+other work with individual callbacks &mdash; should be aware that
+those handlers can now be delayed until a later, geometrically larger
+feed (or the final feed).  Such applications can disable the feature
+with <code>XML_SetReparseDeferralEnabled(p, XML_FALSE)</code> to get
+the historical immediate-callback timing.  Callers that only consume
+the completed event stream, and that always finish a document with a
+final feed, need no changes.</p>
+
+<p>Returns <code>XML_FALSE</code> when <code>p</code> is NULL and
+<code>XML_TRUE</code> for every valid parser.</p>
 </div>
 
 

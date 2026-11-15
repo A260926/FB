@@ -2,6 +2,23 @@ NOTE: We are looking for help with a few things:
       https://github.com/libexpat/libexpat/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+In development
+        New features:
+            #--  Add XML_SetReparseDeferralEnabled() to cap the CPU
+                 amplification of feeding a document in small chunks
+                 when the chunks end inside a long, still-incomplete
+                 token (e.g. a long attribute value, comment or DTD
+                 declaration).  Reparse deferral is enabled by default
+                 for new parsers and after XML_ParserReset; it rescans
+                 the unfinished token only once the input available
+                 for it has grown geometrically, keeping cumulative
+                 scan work linear in the token length without limiting
+                 legal token lengths.  Final input is always processed
+                 immediately, so events, positions and error codes are
+                 unchanged; only the timing of some callbacks/errors on
+                 non-final feeds differs.  External entity parsers
+                 inherit the parent's switch but not its token state.
+
 Release 2.5.0 Tue October 25 2022
         Security fixes:
   #616 #649 #650  CVE-2022-43680 -- Fix heap use-after-free after overeager

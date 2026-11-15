@@ -1050,6 +1050,34 @@ XML_SetBillionLaughsAttackProtectionActivationThreshold(
     XML_Parser parser, unsigned long long activationThresholdBytes);
 #endif
 
+/* Controls reparse deferral for an incomplete token at the end of a
+   non-final buffer.
+
+   When enabled (the default for a freshly created parser and after
+   XML_ParserReset), a token that the tokenizer cannot complete is only
+   scanned again once the buffered input available for it has grown
+   geometrically.  This keeps the cumulative scanning work linear in
+   the eventual length of the token instead of quadratic when the
+   document is fed in small chunks, at the cost of delaying callbacks
+   and non-final errors for the incomplete token until a later feed.
+   Final input is always processed immediately, regardless of this
+   setting, so completed documents and end-of-input errors are reported
+   with the same contents, positions and error codes as with deferral
+   disabled.
+
+   The switch may be toggled while parsing.  Disabling makes the next
+   feed rescan immediately; re-enabling builds the deferral state from
+   the input currently unconsumed rather than reusing another token's
+   water mark.  Parsers created with XML_ExternalEntityParserCreate
+   inherit the parent's setting but not its pending token state, and
+   the two parsers' switches may then be changed independently.
+
+   Passing a NULL parser returns XML_FALSE; every valid parser returns
+   XML_TRUE.
+*/
+XMLPARSEAPI(XML_Bool)
+XML_SetReparseDeferralEnabled(XML_Parser parser, XML_Bool enabled);
+
 /* Expat follows the semantic versioning convention.
    See http://semver.org.
 */

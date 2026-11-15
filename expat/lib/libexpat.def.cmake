@@ -77,3 +77,5 @@ EXPORTS
 ; added with version 2.4.0
 @_EXPAT_COMMENT_DTD@ XML_SetBillionLaughsAttackProtectionActivationThreshold @69
 @_EXPAT_COMMENT_DTD@ XML_SetBillionLaughsAttackProtectionMaximumAmplification @70
+; added with reparse deferral
+  XML_SetReparseDeferralEnabled @71
