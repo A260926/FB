@@ -44,4 +44,16 @@ namespace CalPhysique {
         const BoneTransform* boneTransforms,
         const CalSubmesh* pSubmesh,
         float* pVertexBuffer);
+
+    // Linearly blends the bone palettes named by one vertex's influence run.
+    // The run is interpreted exactly as the scalar skinning path interprets it
+    // (the entry carrying lastInfluenceForThisVertex terminates the run) and the
+    // weighted affine accumulation uses the same ScaleMatrix/AddScaledMatrix
+    // steps, so callers that need the palette without skinning cannot diverge
+    // from production on the final influence or on the inverse-bind pose already
+    // baked into each BoneTransform.
+    CAL3D_API BoneTransform calculateVertexPalette(
+        const BoneTransform* boneTransforms,
+        const CalCoreSubmesh::Influence* influences,
+        size_t influenceCount);
 };

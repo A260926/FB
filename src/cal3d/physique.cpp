@@ -91,21 +91,36 @@ void CalPhysique::calculateVerticesAndNormals_x87(
     CalVector4* output_vertex
 ) {
 
-    BoneTransform total_transform;
-
     // calculate all submesh vertices
     while (vertexCount--) {
-        ScaleMatrix(total_transform, boneTransforms[influences->boneId], influences->weight);
-
+        const CalCoreSubmesh::Influence* runStart = influences;
         while (!influences++->lastInfluenceForThisVertex) {
-            AddScaledMatrix(total_transform, boneTransforms[influences->boneId], influences->weight);
         }
+
+        BoneTransform total_transform = CalPhysique::calculateVertexPalette(
+            boneTransforms, runStart, static_cast<size_t>(influences - runStart));
 
         TransformPoint(output_vertex[0], total_transform, vertices->position);
         TransformVector(output_vertex[1], total_transform, vertices->normal);
         ++vertices;
         output_vertex += 2;
     }
+}
+
+BoneTransform CalPhysique::calculateVertexPalette(
+    const BoneTransform* boneTransforms,
+    const CalCoreSubmesh::Influence* influences,
+    size_t influenceCount)
+{
+    // A vertex always carries at least one influence; mirror the scalar path,
+    // which seeds the accumulator from the first entry and folds in the rest.
+    BoneTransform total_transform;
+    ScaleMatrix(total_transform, boneTransforms[influences->boneId], influences->weight);
+
+    for (size_t i = 1; i < influenceCount; ++i) {
+        AddScaledMatrix(total_transform, boneTransforms[influences[i].boneId], influences[i].weight);
+    }
+    return total_transform;
 }
 
 
