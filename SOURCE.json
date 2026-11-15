@@ -1,0 +1,15 @@
+{
+  "repo": "https://github.com/cnr-isti-vclab/vcglib",
+  "commit": "5cae2abc2f9056785b0537dcbe156c40da2aea20",
+  "license": "GPL-3.0-or-later; bundled Eigen MPL-2.0/BSD headers",
+  "retained_roots": [
+    "vcg",
+    "wrap",
+    "eigenlib",
+    "LICENSE.txt",
+    "README.md",
+    "CMakeLists.txt"
+  ],
+  "private_manifest": "private/source-manifest.json",
+  "support": "task_support为通用测试协议及现有能力探针，无目标实现"
+}
