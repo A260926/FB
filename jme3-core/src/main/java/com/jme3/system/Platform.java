@@ -1,0 +1,282 @@
+/*
+ * Copyright (c) 2009-2022 jMonkeyEngine
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ * * Neither the name of 'jMonkeyEngine' nor the names of its contributors
+ *   may be used to endorse or promote products derived from this software
+ *   without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+package com.jme3.system;
+
+/**
+ * Enumerate known operating system/architecture pairs.
+ */
+public enum Platform {
+
+    /**
+     * Microsoft Windows 32-bit AMD/Intel
+     *
+     * @deprecated 32-bit Windows is no longer supported.
+     */
+    @Deprecated
+    Windows32(Os.Windows),
+
+    /**
+     * Microsoft Windows 64-bit AMD/Intel
+     */
+    Windows64(Os.Windows, true),
+
+    /**
+     * Microsoft Windows 32-bit ARM
+     *
+     * @deprecated 32-bit Windows is no longer supported.
+     */
+    @Deprecated
+    Windows_ARM32(Os.Windows),
+
+    /**
+     * Microsoft Windows 64-bit ARM
+     */
+    Windows_ARM64(Os.Windows, true),
+
+    /**
+     * Linux 32-bit Intel
+     *
+     * @deprecated 32-bit Linux is no longer supported.
+     */
+    @Deprecated
+    Linux32(Os.Linux),
+
+    /**
+     * Linux 64-bit Intel
+     */
+    Linux64(Os.Linux, true),
+
+    /**
+     * Linux 32-bit ARM
+     *
+     * @deprecated 32-bit Linux is no longer supported.
+     */
+    @Deprecated
+    Linux_ARM32(Os.Linux),
+
+    /**
+     * Linux 64-bit ARM
+     */
+    Linux_ARM64(Os.Linux, true),
+
+    /**
+     * Apple Mac OS X 32-bit Intel
+     *
+     * @deprecated 32-bit macOS is no longer supported.
+     */
+    @Deprecated
+    MacOSX32(Os.MacOS),
+
+    /**
+     * Apple Mac OS X 64-bit Intel
+     */
+    MacOSX64(Os.MacOS, true),
+
+    /**
+     * Apple Mac OS X 64-bit ARM
+     */
+    MacOSX_ARM64(Os.MacOS, true),
+
+    /**
+     * Apple Mac OS X 32 bit PowerPC
+     *
+     * @deprecated PowerPC macOS is no longer supported.
+     */
+    @Deprecated
+    MacOSX_PPC32(Os.MacOS),
+
+    /**
+     * Apple Mac OS X 64 bit PowerPC
+     *
+     * @deprecated PowerPC macOS is no longer supported.
+     */
+    @Deprecated
+    MacOSX_PPC64(Os.MacOS, true),
+
+    /**
+     * Android ARM5
+     *
+     * @deprecated 32-bit Android is no longer supported.
+     */
+    @Deprecated
+    Android_ARM5(Os.Android),
+
+    /**
+     * Android ARM6
+     *
+     * @deprecated 32-bit Android is no longer supported.
+     */
+    @Deprecated
+    Android_ARM6(Os.Android),
+
+    /**
+     * Android ARM7
+     *
+     * @deprecated 32-bit Android is no longer supported.
+     */
+    @Deprecated
+    Android_ARM7(Os.Android),
+
+    /**
+     * Android ARM8
+     */
+    Android_ARM8(Os.Android, true),
+
+    /**
+     * Android x86
+     *
+     * @deprecated 32-bit Android is no longer supported.
+     */
+    @Deprecated
+    Android_X86(Os.Android),
+
+    /**
+     * Android x86_64
+     */
+    Android_X86_64(Os.Android, true),
+
+    /**
+     * iOS on x86_64 (simulator)
+     */
+    iOS_X86(Os.iOS, true),
+
+    /**
+     * iOS on ARM
+     */
+    iOS_ARM(Os.iOS, true),
+
+    /**
+     * Android running on unknown platform (could be x86 or mips for example).
+     *
+     * @deprecated Android platforms with unknown architectures are no longer supported.
+     */
+    @Deprecated
+    Android_Other(Os.Android),
+
+    /**
+     * Generic web platform on unknown architecture
+     */
+    Web(Os.Web, true) // assume always 64-bit, it shouldn't matter for web
+    ;
+
+    
+    /**
+     * Enumerate generic names of operating systems
+     */
+    public enum Os {
+        /**
+         * Linux operating systems
+         */
+        Linux,
+        /**
+         * Microsoft Windows operating systems
+         */
+        Windows,
+        /**
+         * iOS operating systems
+         */
+        iOS,
+        /**
+         * macOS operating systems
+         */
+        MacOS,
+        /**
+         * Android operating systems
+         */
+        Android,
+        /**
+         * Generic web platform
+         */
+        Web
+    }
+
+    private final boolean is64bit;
+    private final Os os;
+    private static final boolean NATIVE_IMAGE_RUNTIME = detectNativeImageRuntime();
+    private static final boolean WINE_PROTON_RUNTIME = detectWineProtonRuntime();
+
+    /**
+     * Test for a 64-bit address space.
+     *
+     * @return true if 64 bits, otherwise false
+     */
+    public boolean is64Bit() {
+        return is64bit;
+    }
+
+    /**
+     * Returns the operating system of this platform.
+     *
+     * @return the generic name of the operating system of this platform
+     */
+    public Os getOs() {
+        return os;
+    }
+
+    /**
+     * Test whether this process is running as a GraalVM native-image executable.
+     *
+     * @return true if running inside a native-image runtime, otherwise false
+     */
+    public boolean isGraalVMNativeImage() {
+        return NATIVE_IMAGE_RUNTIME;
+    }
+
+    /**
+     * Test whether this process is running through Wine or Proton.
+     *
+     * @return true if running through Wine or Proton, otherwise false
+     */
+    public boolean isWineProton() {
+        return os == Os.Windows && WINE_PROTON_RUNTIME;
+    }
+
+    private static boolean detectNativeImageRuntime() {
+        return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
+    }
+
+    private static boolean detectWineProtonRuntime() {
+        return System.getenv("WINEPREFIX") != null
+                || System.getenv("WINELOADERNOEXEC") != null
+                || System.getenv("STEAM_COMPAT_DATA_PATH") != null
+                || System.getenv("PROTON_VERB") != null;
+    }
+
+    private Platform(Os os, boolean is64bit) {
+        this.os = os;
+        this.is64bit = is64bit;
+    }
+
+    private Platform(Os os) {
+        this(os, false);
+    }
+}

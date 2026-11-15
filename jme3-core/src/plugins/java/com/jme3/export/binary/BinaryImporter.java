@@ -1,0 +1,446 @@
+/*
+ * Copyright (c) 2009-2021 jMonkeyEngine
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ * * Neither the name of 'jMonkeyEngine' nor the names of its contributors
+ *   may be used to endorse or promote products derived from this software
+ *   without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+package com.jme3.export.binary;
+
+import com.jme3.asset.AssetInfo;
+import com.jme3.asset.AssetManager;
+import com.jme3.export.*;
+import com.jme3.math.FastMath;
+import com.jme3.util.IntMap;
+import java.io.*;
+import java.net.URL;
+import java.nio.ByteOrder;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * @author Joshua Slack
+ * @author Kirill Vainer - Version number, Fast buffer reading
+ */
+public final class BinaryImporter implements JmeImporter {
+    private static final Logger logger = Logger.getLogger(BinaryImporter.class
+            .getName());
+
+    private AssetManager assetManager;
+    private SavableClassFilter classFilter = SavableClassFilter.ACCEPT_ALL;
+
+    //Key - alias, object - bco
+    private final IntMap<BinaryClassObject> classes = new IntMap<>();
+    //Key - id, object - the savable
+    private final HashMap<Integer, Savable> contentTable
+            = new HashMap<>();
+    //Key - savable, object - capsule
+    private final IdentityHashMap<Savable, BinaryInputCapsule> capsuleTable
+             = new IdentityHashMap<>();
+    //Key - id, object - location in the file
+    private final HashMap<Integer, Integer> locationTable
+             = new HashMap<>();
+
+    public static boolean debug = false;
+
+    private byte[] dataArray;
+    private int aliasWidth;
+    private int formatVersion;
+
+    private static final boolean fastRead = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
+    
+    public BinaryImporter() {
+    }
+    
+    @Override
+    public int getFormatVersion(){
+        return formatVersion;
+    }
+    
+    public static boolean canUseFastBuffers(){
+        return fastRead;
+    }
+
+    public static BinaryImporter getInstance() {
+        return new BinaryImporter();
+    }
+
+    public void setAssetManager(AssetManager manager){
+        this.assetManager = manager;
+    }
+
+    @Override
+    public AssetManager getAssetManager(){
+        return assetManager;
+    }
+
+    /**
+     * Sets the policy used before this importer instantiates classes named by
+     * a J3O file. The default accepts all classes for backward compatibility.
+     * Use a restrictive filter when loading assets from untrusted sources.
+     *
+     * @param classFilter the filter to apply
+     */
+    public void setClassFilter(SavableClassFilter classFilter) {
+        if (classFilter == null) {
+            throw new NullPointerException("classFilter");
+        }
+        this.classFilter = classFilter;
+    }
+
+    /**
+     * @return the current class filter
+     */
+    public SavableClassFilter getClassFilter() {
+        return classFilter;
+    }
+
+    @Override
+    public Object load(AssetInfo info){
+//        if (!(info.getKey() instanceof ModelKey))
+//            throw new IllegalArgumentException("Model assets must be loaded using a ModelKey");
+
+        assetManager = info.getManager();
+
+        InputStream is = null;
+        try {
+            is = info.openStream();
+            Savable s = load(is);
+            
+            return s;
+        } catch (IOException ex) {
+            logger.log(Level.SEVERE, "An error occurred while loading jME binary object", ex);
+        } finally {
+            if (is != null){
+                try {
+                    is.close();
+                } catch (IOException ex) {}
+            }
+        }
+        return null;
+    }
+
+    public Savable load(InputStream is) throws IOException {
+        return load(is, null, null);
+    }
+
+    public Savable load(InputStream is, ReadListener listener) throws IOException {
+        return load(is, listener, null);
+    }
+
+    public Savable load(InputStream is, ReadListener listener, ByteArrayOutputStream baos) throws IOException {
+        contentTable.clear();
+        BufferedInputStream bis = new BufferedInputStream(is);
+        
+        int numClasses;
+        
+        // Try to read signature
+        int maybeSignature = ByteUtils.readInt(bis);
+        if (maybeSignature == FormatVersion.SIGNATURE){
+            // this is a new version J3O file
+            formatVersion = ByteUtils.readInt(bis);
+            numClasses = ByteUtils.readInt(bis);
+            
+            if (formatVersion < 0) {
+                throw new IOException("Invalid J3O format version: " + formatVersion);
+            }
+            // check if this binary is from the future
+            if (formatVersion > FormatVersion.VERSION){
+                throw new IOException("The binary file is of newer version than expected! " + 
+                                      formatVersion + " > " + FormatVersion.VERSION);
+            }
+        }else{
+            // this is an old version J3O file
+            // the signature was actually the class count
+            numClasses = maybeSignature;
+            
+            // 0 indicates version before we started adding
+            // version numbers
+            formatVersion = 0; 
+        }
+        
+        int bytes = 4;
+        if (numClasses <= 0) {
+            throw new IOException("Invalid J3O class count: " + numClasses);
+        }
+        aliasWidth = ((int)FastMath.log(numClasses, 256) + 1);
+
+        classes.clear();
+        for(int i = 0; i < numClasses; i++) {
+            int alias = readClassAlias(bis);
+            
+            // jME3 NEW: Read class version number
+            int[] classHierarchyVersions;
+            if (formatVersion >= 1){
+                int classHierarchySize = readUnsignedByte(bis, "class hierarchy size");
+                classHierarchyVersions = new int[classHierarchySize];
+                for (int j = 0; j < classHierarchySize; j++){
+                    classHierarchyVersions[j] = ByteUtils.readInt(bis);
+                }
+            }else{
+                classHierarchyVersions = new int[]{ 0 };
+            }
+            
+            // read classname and classname size
+            int classLength = ByteUtils.readInt(bis);
+            checkLength(classLength);
+            String className = readString(bis, classLength);
+            if (!classFilter.isAllowed(SavableClassUtil.remapClass(className))) {
+                throw new IOException("J3O class rejected by filter: " + className);
+            }
+            
+            BinaryClassObject bco = new BinaryClassObject();
+            bco.className = className;
+            bco.classHierarchyVersions = classHierarchyVersions;
+            
+            int fields = ByteUtils.readInt(bis);
+            checkLength(fields);
+            bytes += (8 + aliasWidth + classLength);
+
+            bco.nameFields = new HashMap<String, BinaryClassField>(fields);
+            bco.aliasFields = new HashMap<Byte, BinaryClassField>(fields);
+            for (int x = 0; x < fields; x++) {
+                byte fieldAlias = (byte) readUnsignedByte(bis, "field alias");
+                byte fieldType = (byte) readUnsignedByte(bis, "field type");
+
+                int fieldNameLength = ByteUtils.readInt(bis);
+                checkLength(fieldNameLength);
+                String fieldName = readString(bis, fieldNameLength);
+                BinaryClassField bcf = new BinaryClassField(fieldName, fieldAlias, fieldType);
+                bco.nameFields.put(fieldName, bcf);
+                bco.aliasFields.put(fieldAlias, bcf);
+                bytes += (6 + fieldNameLength);
+            }
+            classes.put(alias, bco);
+        }
+        if (listener != null) listener.readBytes(bytes);
+
+        int numLocs = ByteUtils.readInt(bis);
+        checkLength(numLocs);
+        bytes = 4;
+
+        capsuleTable.clear();
+        locationTable.clear();
+        for(int i = 0; i < numLocs; i++) {
+            int id = ByteUtils.readInt(bis);
+            int loc = ByteUtils.readInt(bis);
+            if (loc < 0) {
+                throw new IOException("Invalid negative J3O object location: " + loc);
+            }
+            locationTable.put(id, loc);
+            bytes += 8;
+        }
+
+        @SuppressWarnings("unused")
+        int numbIDs = ByteUtils.readInt(bis); // XXX: NOT CURRENTLY USED
+        int id = ByteUtils.readInt(bis);
+        bytes += 8;
+        if (listener != null) listener.readBytes(bytes);
+
+        if (baos == null) {
+                baos = new ByteArrayOutputStream(bytes);
+        } else {
+                baos.reset();
+        }
+        int size = -1;
+        byte[] cache = new byte[4096];
+        while((size = bis.read(cache)) != -1) {
+            baos.write(cache, 0, size);
+            if (listener != null) listener.readBytes(size);
+        }
+        bis = null;
+
+        dataArray = baos.toByteArray();
+        baos = null;
+
+        Savable rVal = readObject(id);
+        if (debug) {
+            logger.fine("Importer Stats: ");
+            logger.log(Level.FINE, "Tags: {0}", numClasses);
+            logger.log(Level.FINE, "Objects: {0}", numLocs);
+            logger.log(Level.FINE, "Data Size: {0}", dataArray.length);
+        }
+        dataArray = null;
+        return rVal;
+    }
+
+    public Savable load(URL f) throws IOException {
+        return load(f, null);
+    }
+
+    public Savable load(URL f, ReadListener listener) throws IOException {
+        InputStream is = f.openStream();
+        Savable rVal = load(is, listener);
+        is.close();
+        return rVal;
+    }
+
+    public Savable load(File f) throws IOException {
+        return load(f, null);
+    }
+
+    public Savable load(File f, ReadListener listener) throws IOException {
+        FileInputStream fis = new FileInputStream(f);
+        try {
+            return load(fis, listener);
+        } finally {
+            fis.close();
+        }
+    }
+
+    public Savable load(byte[] data) throws IOException {
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        Savable rVal = load(bais);
+        bais.close();
+        return rVal;
+    }
+
+    @Override
+    public InputCapsule getCapsule(Savable id) {
+        return capsuleTable.get(id);
+    }
+
+    protected String readString(InputStream f, int length) throws IOException {
+        checkLength(length);
+        byte[] data = new byte[length];
+        for(int j = 0; j < length; j++) {
+            data[j] = (byte) readUnsignedByte(f, "string");
+        }
+
+        return new String(data);
+    }
+
+    protected String readString(int length, int offset) throws IOException {
+        checkLength(length);
+        if (offset < 0 || offset + length < offset || offset + length > dataArray.length) {
+            throw new IOException("String outside J3O payload: offset=" + offset + ", length=" + length);
+        }
+        byte[] data = new byte[length];
+        for(int j = 0; j < length; j++) {
+            data[j] = dataArray[j+offset];
+        }
+
+        return new String(data);
+    }
+
+    /**
+     * Reads a raw numeric class ID in the exporter's big-endian byte order.
+     * Class IDs are not text and must not be decoded through a charset.
+     */
+    private int readClassAlias(InputStream input) throws IOException {
+        int alias = 0;
+        for (int i = 0; i < aliasWidth; i++) {
+            alias = (alias << 8) | readUnsignedByte(input, "class alias");
+        }
+        return alias;
+    }
+
+    /**
+     * Uses the same numeric decoding as the class table when looking up an object.
+     */
+    private int readClassAlias(int offset) throws IOException {
+        if (offset < 0 || offset > dataArray.length - aliasWidth) {
+            throw new IOException("Class alias outside J3O payload: offset=" + offset + ", width=" + aliasWidth);
+        }
+        int alias = 0;
+        for (int i = 0; i < aliasWidth; i++) {
+            alias = (alias << 8) | (dataArray[offset + i] & 0xff);
+        }
+        return alias;
+    }
+
+    private void checkLength(int length) throws IOException {
+        if (length < 0) {
+            throw new IOException("Invalid negative J3O length/count: " + length);
+        }
+    }
+
+    private int readUnsignedByte(InputStream input, String label) throws IOException {
+        int value = input.read();
+        if (value < 0) {
+            throw new EOFException("Unexpected end of J3O while reading " + label);
+        }
+        return value;
+    }
+
+    public Savable readObject(int id) {
+
+        if(contentTable.get(id) != null) {
+            return contentTable.get(id);
+        }
+
+        try {
+            Integer objectLocation = locationTable.get(id);
+            if (objectLocation == null) {
+                throw new IOException("Missing J3O object location for id: " + id);
+            }
+            int loc = objectLocation;
+            if (loc < 0 || loc >= dataArray.length) {
+                throw new IOException("J3O object location outside payload: " + loc);
+            }
+
+            int alias = readClassAlias(loc);
+            loc+=aliasWidth;
+
+            BinaryClassObject bco = classes.get(alias);
+
+            if(bco == null) {
+                logger.logp(Level.SEVERE, this.getClass().toString(), "readObject(int id)", "NULL class object: " + alias);
+                return null;
+            }
+
+            if (loc + 4 > dataArray.length) {
+                throw new IOException("Truncated J3O object length at payload offset: " + loc);
+            }
+            int dataLength = ByteUtils.convertIntFromBytes(dataArray, loc);
+            loc+=4;
+            if (dataLength < 0 || loc + dataLength < loc || loc + dataLength > dataArray.length) {
+                throw new IOException("Invalid J3O object data length: " + dataLength);
+            }
+
+            Savable  out = SavableClassUtil.fromName(bco.className, classFilter, assetManager == null ? null : assetManager.getClassLoaders());
+
+            BinaryInputCapsule cap = new BinaryInputCapsule(this, out, bco);
+            cap.setContent(dataArray, loc, loc+dataLength);
+
+            capsuleTable.put(out, cap);
+            contentTable.put(id, out);
+
+            out.read(this);
+
+            capsuleTable.remove(out);
+
+            return out;
+
+        } catch (Exception e) {
+            logger.logp(Level.SEVERE, this.getClass().toString(), "readObject(int id)", "Exception", e);
+            return null;
+        }
+    }
+}
