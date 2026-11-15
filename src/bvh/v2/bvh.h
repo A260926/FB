@@ -10,6 +10,7 @@
 #include <utility>
 #include <tuple>
 #include <algorithm>
+#include <limits>
 
 namespace bvh::v2 {
 
@@ -21,6 +22,15 @@ struct Bvh {
 
     std::vector<Node> nodes;
     std::vector<size_t> prim_ids;
+
+    /// Parent table of this BVH. It contains exactly one entry per node, in the same order as
+    /// `nodes`, and stores the index of the parent of each node. The parent of the root node is
+    /// 0, and an empty BVH has an empty parent table. The table is maintained by the builders and
+    /// by the serialization/optimization/subtree-extraction routines; it only has to be rebuilt
+    /// manually when `nodes` is modified directly (see `rebuild_parent_ids()`). Queries only read
+    /// this table and never allocate, so any number of them may run concurrently on a BVH that is
+    /// not being modified.
+    std::vector<size_t> parent_ids;
 
     Bvh() = default;
     Bvh(Bvh&&) = default;
@@ -55,6 +65,24 @@ struct Bvh {
 
     /// Extracts the BVH rooted at the given node index.
     [[nodiscard]] inline Bvh extract_bvh(size_t root_id) const;
+
+    /// Rebuilds `parent_ids` from the current contents of `nodes`. This has to be called after
+    /// directly modifying the public `nodes` array. The parent table contains one entry per node,
+    /// the parent of the root is 0, and an empty BVH produces an empty parent table.
+    inline void rebuild_parent_ids();
+
+    /// Stackless ray traversal. This behaves like `intersect()`, but never allocates memory, is
+    /// not recursive, and does not use any stack (fixed size or dynamically grown). Instead, it
+    /// relies on the read-only `parent_ids` table to walk back up the tree. Traversal starts at
+    /// `root_node_id`, which does not have to be the actual root of the BVH; in that case only the
+    /// subtree rooted at that node is visited. At every inner node, for closest-hit queries, the
+    /// child with the smallest ray entry distance is visited first (the left child wins ties),
+    /// and the far child is re-tested against the current `ray.tmax` before being entered, so
+    /// that a tighter `tmax` set by a leaf callback can cull it. When `IsAnyHit` is true, the
+    /// traversal ends as soon as the leaf callback returns true. The leaf callback receives the
+    /// half-open range `[begin, end)` of entries in `prim_ids` that make up the leaf.
+    template <bool IsAnyHit, bool IsRobust, typename LeafFn>
+    inline void intersect_stackless(const Ray& ray, size_t root_node_id, LeafFn&& leaf_fn) const;
 
     /// Traverses the BVH from the given index in `start` using the provided stack. Every leaf
     /// encountered on the way is processed using the given `LeafFn` function, and every pair of
@@ -118,7 +146,19 @@ Bvh<Node> Bvh<Node>::extract_bvh(size_t root_id) const {
             bvh.nodes.emplace_back();
         }
     }
+    bvh.rebuild_parent_ids();
     return bvh;
+}
+
+template <typename Node>
+void Bvh<Node>::rebuild_parent_ids() {
+    parent_ids.assign(nodes.size(), 0);
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (nodes[i].is_leaf())
+            continue;
+        parent_ids[nodes[i].index.first_id() + 0] = i;
+        parent_ids[nodes[i].index.first_id() + 1] = i;
+    }
 }
 
 template <typename Node>
@@ -182,6 +222,118 @@ void Bvh<Node>::intersect(const Ray& ray, Index start, Stack& stack, LeafFn&& le
 }
 
 template <typename Node>
+template <bool IsAnyHit, bool IsRobust, typename LeafFn>
+void Bvh<Node>::intersect_stackless(const Ray& ray, size_t root_node_id, LeafFn&& leaf_fn) const {
+    if (nodes.empty() || root_node_id >= nodes.size())
+        return;
+
+    // Everything in this function is scalar state: there is no recursion, no stack and no
+    // allocation, so the per-ray footprint is independent of the tree depth and of its number of
+    // nodes. Only the read-only `parent_ids` table is used to walk back up, and never to jump
+    // back to the global root to relocate a node. Starting from a non-root node therefore only
+    // visits that subtree.
+    auto inv_dir = ray.template get_inv_dir<!IsRobust>();
+    auto inv_org = -inv_dir * ray.org;
+    auto inv_dir_pad = ray.pad_inv_dir(inv_dir);
+    auto octant = ray.get_octant();
+
+    auto intersect_node = [&] (const Node& node) {
+        if constexpr (IsRobust)
+            return node.intersect_robust(ray, inv_dir, inv_dir_pad, octant);
+        else
+            return node.intersect_fast(ray, inv_dir, inv_org, octant);
+    };
+
+    // Computes the near and far children of `node`: in closest-hit mode the child with the
+    // smallest entry distance comes first (the left child wins ties), in any-hit mode the static
+    // left-to-right order is kept. Children whose box is missed with the current tmax are
+    // reported through the booleans.
+    auto order_children = [&] (const Node& node, size_t& near_id, size_t& far_id,
+                               bool& near_hit, bool& far_hit)
+    {
+        const auto first_child = static_cast<size_t>(node.index.first_id());
+        const Node& left  = nodes[first_child + 0];
+        const Node& right = nodes[first_child + 1];
+        auto intr_left  = intersect_node(left);
+        auto intr_right = intersect_node(right);
+        bool hit_left  = intr_left.first  <= intr_left.second;
+        bool hit_right = intr_right.first <= intr_right.second;
+
+        bool swap_children = false;
+        if constexpr (!IsAnyHit)
+            swap_children = hit_left && hit_right && intr_left.first > intr_right.first;
+
+        near_id = first_child + (swap_children ? 1 : 0);
+        far_id  = first_child + (swap_children ? 0 : 1);
+        near_hit = swap_children ? hit_right : hit_left;
+        far_hit  = swap_children ? hit_left  : hit_right;
+    };
+
+    // `previous` is the node visited just before `current`. It distinguishes a descent (previous
+    // is the parent) from a return (previous is a child), which is what makes the parent-link
+    // walk a continuation rather than a brand new descent: a subtree that has already been fully
+    // processed is never entered a second time.
+    constexpr size_t invalid = std::numeric_limits<size_t>::max();
+    size_t current = root_node_id;
+    size_t previous = invalid;
+    bool first_entry = true;
+
+    while (true) {
+        const Node& node = nodes[current];
+        bool arriving_from_above = first_entry || previous == parent_ids[current];
+        first_entry = false;
+
+        if (node.is_leaf()) {
+            if (leaf_fn(node.index.first_id(), node.index.first_id() + node.index.prim_count())) {
+                if constexpr (IsAnyHit)
+                    return;
+            }
+        } else if (arriving_from_above) {
+            size_t near_id, far_id;
+            bool near_hit, far_hit;
+            order_children(node, near_id, far_id, near_hit, far_hit);
+            if (near_hit) {
+                previous = current;
+                current = near_id;
+                continue;
+            }
+            if (far_hit) {
+                previous = current;
+                current = far_id;
+                continue;
+            }
+            // Neither child is intersected with the current tmax: climb out of this subtree.
+        } else {
+            // Returning from the fully processed child `previous`. Re-deriving the near/far
+            // ordering here is only an identity check and not a fresh descent: the completed
+            // child is never entered again, so near leaves are not replayed. Box entry distances
+            // do not depend on `ray.tmax`, so this ordering matches the one used on the way down.
+            size_t near_id, far_id;
+            bool near_hit, far_hit;
+            order_children(node, near_id, far_id, near_hit, far_hit);
+            if (previous == near_id) {
+                // The far child has not been visited yet. Re-test it with the latest tmax right
+                // before entering, so a tighter tmax installed by a near leaf can cull it and no
+                // far leaf is missed.
+                auto intr = intersect_node(nodes[far_id]);
+                if (intr.first <= intr.second) {
+                    previous = current;
+                    current = far_id;
+                    continue;
+                }
+            }
+            // Otherwise `previous` is the far child (both children are done), or the far child
+            // was just culled: climb to the parent.
+        }
+
+        if (current == root_node_id)
+            return;
+        previous = current;
+        current = parent_ids[current];
+    }
+}
+
+template <typename Node>
 template <typename LeafFn, typename InnerFn>
 void Bvh<Node>::traverse_bottom_up(LeafFn&& leaf_fn, InnerFn&& inner_fn) {
     std::vector<size_t> parents(nodes.size(), 0);
@@ -238,6 +390,9 @@ Bvh<Node> Bvh<Node>::deserialize(InputStream& stream) {
         node = Node::deserialize(stream);
     for (auto& prim_id : bvh.prim_ids)
         prim_id = stream.read<IndexType>();
+    // The parent table is not part of the archive format; it is reconstructed on load instead,
+    // keeping the serialized byte layout unchanged.
+    bvh.rebuild_parent_ids();
     return bvh;
 }
 

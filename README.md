@@ -48,6 +48,45 @@ Here is a list of features supported by this library (changes from `v1` are indi
 - [NEW] Only depends on the standard library (parallelization uses a custom thread pool based on
   `std::thread`),
 - [NEW] C API for the high-level parts of the library is available.
+- [NEW] Stackless, allocation-free ray traversal driven by a per-node parent table
+  (`Bvh::intersect_stackless`), supporting closest-hit and any-hit queries, fast and robust
+  ray-box tests, and traversal restricted to an arbitrary subtree.
+
+## Stackless traversal and the parent table
+
+Each `Bvh` stores a `std::vector<size_t> parent_ids` that parallels `nodes`: entry `i` is the
+index of the parent of node `i`, the parent of the root is `0`, and an empty BVH has an empty
+parent table. The table is what allows `intersect_stackless<IsAnyHit, IsRobust>(ray,
+root_node_id, leaf_fn)` to walk back up the tree without a per-ray stack. A query uses only
+scalar state, never allocates, is not recursive, and does not depend on the tree depth or on the
+number of nodes; many queries can therefore run concurrently on a BVH that is no longer being
+modified. Starting from a non-root node only visits that subtree.
+
+The parent table is maintained automatically and requires no extra work from the caller after:
+
+- the Sweep/Binned SAH, mini-tree and default builders (including the thread-pool entry point),
+- `ReinsertionOptimizer::optimize`,
+- `Bvh::extract_bvh`,
+- `Bvh::deserialize` (the table is rebuilt on load and is not part of the archive format),
+- `Bvh::refit` (the topology, and therefore the parent table, is unchanged).
+
+If the public `nodes` array is modified directly, call `bvh.rebuild_parent_ids()` afterwards to
+recompute the table; external raw writes are otherwise not detected. The on-disk format produced
+by `serialize` is unchanged: the node, index and primitive-id byte layout is preserved and the
+parent table is simply reconstructed after loading.
+
+The legacy stack-based `Bvh::intersect` and the C API remain available and unchanged.
+
+## Running the regression suite
+
+The stackless traversal regression cases live in `checks/stackless_cases.cpp` and are registered
+in the `ordering`, `topology`, `storage` and `render` groups. Run them together with the
+production baseline (which also compiles every non-`c_api` production source under
+`src/bvh/v2`) with:
+
+    bash task_support/run.sh target
+
+The `render` group additionally writes a small P3 PPM image to `.task-build/stackless_render.ppm`.
 
 ## Building
 

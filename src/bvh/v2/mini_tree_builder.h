@@ -307,6 +307,9 @@ private:
                 }
             });
 
+        // Nodes were copied from several independent mini trees with patched indices, so the
+        // parent table cannot be inherited from any of them; rebuild it over the final layout.
+        bvh.rebuild_parent_ids();
         return bvh;
     }
 };

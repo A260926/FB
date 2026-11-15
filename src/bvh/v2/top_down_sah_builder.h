@@ -128,6 +128,7 @@ protected:
 
         bvh.prim_ids = std::move(get_prim_ids());
         bvh.nodes.shrink_to_fit();
+        bvh.rebuild_parent_ids();
         return bvh;
     }
 

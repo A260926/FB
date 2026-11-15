@@ -65,7 +65,11 @@ private:
     template <typename Derived>
     static void optimize(Executor<Derived>& executor, Bvh<Node>& bvh, const Config& config) {
         auto parents = compute_parents(executor, bvh);
-        ReinsertionOptimizer<Node>(bvh, std::move(parents)).optimize(executor, config);
+        ReinsertionOptimizer<Node> optimizer(bvh, std::move(parents));
+        optimizer.optimize(executor, config);
+        // Every reinsertion keeps the private table up to date; publish it so that callers do not
+        // have to rebuild `bvh.parent_ids` themselves.
+        bvh.parent_ids = std::move(optimizer.parents_);
     }
 
     template <typename Derived>
