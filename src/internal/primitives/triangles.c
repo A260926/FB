@@ -52,7 +52,47 @@ static PFboolean Process_ProjectAndClipTriangle(PFIvertex* polygon, int_fast8_t*
 
 static void Rasterize_Triangle(PFface faceToRender, PFboolean is3D,
                                const PFIvertex* v1, const PFIvertex* v2, const PFIvertex* v3,
+                               const PFIgiVertex* g1, const PFIgiVertex* g2, const PFIgiVertex* g3,
                                const PFMvec3 viewPos);
+
+/* Builds the reciprocal clip-w interpolation data needed by voxel GI.
+ * The position is still in object space here and is brought to world space
+ * with the model transform; the normal has already been transformed by the
+ * inverse transpose model matrix when lighting is enabled. */
+static void BuildGIVertex(PFIgiVertex* dst, const PFIvertex* v)
+{
+    PFMvec3 objPos;
+    memcpy(objPos, v->position, sizeof(PFMvec3));
+    if (G_currentCtx->modelMatrixUsed) {
+        pfmVec3Transform(dst->posOverW, objPos, G_currentCtx->matModel);
+    } else {
+        memcpy(dst->posOverW, objPos, sizeof(PFMvec3));
+    }
+
+    memcpy(dst->nrmOverW, v->normal, sizeof(PFMvec3));
+
+    PFfloat invW = 1.0f;
+    if (v->homogeneous[3] != 0.0f) {
+        invW = 1.0f / v->homogeneous[3];
+    }
+    dst->invW = invW;
+
+    for (int_fast8_t a = 0; a < 3; ++a) {
+        dst->posOverW[a] *= invW;
+        dst->nrmOverW[a] *= invW;
+    }
+}
+
+#if !PF_SIMD_SUPPORT
+static void pfiLerpGIVertex(PFIgiVertex* dst, const PFIgiVertex* a, const PFIgiVertex* b, PFfloat t)
+{
+    for (int_fast8_t k = 0; k < 3; ++k) {
+        dst->posOverW[k] = a->posOverW[k] + t * (b->posOverW[k] - a->posOverW[k]);
+        dst->nrmOverW[k] = a->nrmOverW[k] + t * (b->nrmOverW[k] - a->nrmOverW[k]);
+    }
+    dst->invW = a->invW + t * (b->invW - a->invW);
+}
+#endif //!PF_SIMD_SUPPORT
 
 
 /* Line Process And Rasterize Function */
@@ -72,6 +112,10 @@ static void pfiProcessRasterize_TRIANGLE_IMPL(PFface faceToRender, PFIvertex pro
     PFboolean lighting = (G_currentCtx->state & PF_LIGHTING) &&
                          (G_currentCtx->activeLights != NULL);
 
+    // Voxel GI needs world-space normals (inverse transpose model) and the
+    // material diffuse tint even when no direct light is enabled.
+    PFboolean gi = pfiVoxelGIActive();
+
     int_fast8_t processedCounter = 3;
 
     // Performs certain operations that must be done before
@@ -79,11 +123,13 @@ static void pfiProcessRasterize_TRIANGLE_IMPL(PFface faceToRender, PFIvertex pro
 
     PFMvec3 viewPos = { 0 };
 
-    if (lighting) {
-        // Get camera position
-        PFMmat4 invMatView;
-        pfmMat4Invert(invMatView, G_currentCtx->matView);
-        pfmVec3Copy(viewPos, invMatView + 12);
+    if (lighting || gi) {
+        if (lighting) {
+            // Get camera position
+            PFMmat4 invMatView;
+            pfmMat4Invert(invMatView, G_currentCtx->matView);
+            pfmVec3Copy(viewPos, invMatView + 12);
+        }
 
         // Transform normals
         // And multiply vertex color with diffuse color
@@ -92,7 +138,7 @@ static void pfiProcessRasterize_TRIANGLE_IMPL(PFface faceToRender, PFIvertex pro
             pfmVec3Normalize(processed[i].normal, processed[i].normal); // REVIEW: Only with PF_NORMALIZE state??
             processed[i].color = pfiBlendMultiplicative(processed[i].color, G_currentCtx->faceMaterial[faceToRender].diffuse);
 
-            if (G_currentCtx->lightingMode == PF_GOURAUD) {
+            if (lighting && G_currentCtx->lightingMode == PF_GOURAUD) {
                 PFfloat NdotV = pfmVec3Dot(processed[i].normal, G_currentCtx->matView + 8);
                 processed[i].color = pfiLightingProcess(G_currentCtx->activeLights,
                     &G_currentCtx->faceMaterial[(NdotV < 0) ? PF_FRONT : PF_BACK],
@@ -108,10 +154,22 @@ static void pfiProcessRasterize_TRIANGLE_IMPL(PFface faceToRender, PFIvertex pro
     PFboolean is3D = Process_ProjectAndClipTriangle(processed, &processedCounter);
     if (processedCounter < 3) return;
 
+    // Reciprocal clip-w interpolation data for voxel GI
+    PFIgiVertex giVertices[PF_MAX_CLIPPED_POLYGON_VERTICES];
+    if (gi) {
+        for (int_fast8_t i = 0; i < processedCounter; ++i) {
+            BuildGIVertex(&giVertices[i], &processed[i]);
+        }
+    }
+
     // Rasterize filled triangles
 
     for (int_fast8_t i = 0; i < processedCounter - 2; i++) {
-        Rasterize_Triangle(faceToRender, is3D, &processed[0], &processed[i + 1], &processed[i + 2], viewPos);
+        Rasterize_Triangle(faceToRender, is3D, &processed[0], &processed[i + 1], &processed[i + 2],
+                           gi ? &giVertices[0] : NULL,
+                           gi ? &giVertices[i + 1] : NULL,
+                           gi ? &giVertices[i + 2] : NULL,
+                           viewPos);
     }
 }
 
@@ -120,6 +178,29 @@ void pfiProcessRasterize_TRIANGLE(PFface faceToRender)
     PFIvertex processed[PF_MAX_CLIPPED_POLYGON_VERTICES];
     memcpy(processed, G_currentCtx->vertexBuffer, 3 * sizeof(PFIvertex));
     pfiProcessRasterize_TRIANGLE_IMPL(faceToRender, processed);
+}
+
+void pfiCaptureCurrentTriangleToVoxel(void)
+{
+    // The capture ignores the camera, face culling, polygon mode and the
+    // depth/color buffers: only the world-space voxel volume is updated.
+    PFMmat4 model;
+    if (G_currentCtx->modelMatrixUsed) {
+        memcpy(model, G_currentCtx->matModel, sizeof(PFMmat4));
+    } else {
+        pfmMat4Identity(model);
+    }
+
+    PFMvec4 positions[3];
+    for (int_fast8_t i = 0; i < 3; ++i) {
+        memcpy(positions[i], G_currentCtx->vertexBuffer[i].position, sizeof(PFMvec4));
+    }
+
+    pfiVoxelCaptureTriangle(
+        G_currentCtx->captureVolume,
+        positions,
+        model,
+        G_currentCtx->faceMaterial[PF_FRONT].emission);
 }
 
 void pfiProcessRasterize_TRIANGLE_FAN(PFface faceToRender, int_fast8_t numTriangles)
@@ -284,7 +365,8 @@ PFboolean Process_ProjectAndClipTriangle(PFIvertex* polygon, int_fast8_t* vertex
 
 #if PF_TRIANGLE_RASTER_MODE == PF_TRIANGLE_RASTER_BARYCENTRIC
 
-void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1, const PFIvertex* v2, const PFIvertex* v3, const PFMvec3 viewPos)
+void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1, const PFIvertex* v2, const PFIvertex* v3,
+                        const PFIgiVertex* g1, const PFIgiVertex* g2, const PFIgiVertex* g3, const PFMvec3 viewPos)
 {
     PFsizei xMin, yMin, xMax, yMax;
     PFint w1Row, w2Row, w3Row;
@@ -368,6 +450,21 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
     pfiVec2Load_simd(tc2V, v2->texcoord);
     pfiVec2Load_simd(tc3V, v3->texcoord);
 
+    // Voxel GI perspective-correct world quantities (NULL when GI is inactive)
+    PFIsimdv3f giP1V, giP2V, giP3V, giN1V, giN2V, giN3V;
+    PFIsimdvf giW1V, giW2V, giW3V;
+    if (g1 != NULL) {
+        pfiVec3Load_simd(giP1V, g1->posOverW);
+        pfiVec3Load_simd(giP2V, g2->posOverW);
+        pfiVec3Load_simd(giP3V, g3->posOverW);
+        pfiVec3Load_simd(giN1V, g1->nrmOverW);
+        pfiVec3Load_simd(giN2V, g2->nrmOverW);
+        pfiVec3Load_simd(giN3V, g3->nrmOverW);
+        giW1V = pfiSimdSet1_F32(g1->invW);
+        giW2V = pfiSimdSet1_F32(g2->invW);
+        giW3V = pfiSimdSet1_F32(g3->invW);
+    }
+
     /* Get some contextual values */
 
     struct PFItex *texDst = G_currentCtx->currentFramebuffer->texture;
@@ -394,6 +491,7 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
     PFIdepthfunc_simd depthFunction = (G_currentCtx->state & PF_DEPTH_TEST) ? G_currentCtx->depthSimdFunction : NULL;
     PFItexturesampler_simd texSampler = ((G_currentCtx->state & PF_TEXTURE_2D) && texSrc) ? texSrc->samplerSimd : NULL;
     const PFIlight *lights = ((G_currentCtx->state & PF_LIGHTING) && G_currentCtx->lightingMode == PF_PHONG) ? G_currentCtx->activeLights : NULL;
+    PFboolean gi = pfiVoxelGIActive();
 
     /* Loop macro definition */
 
@@ -520,6 +618,31 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
         fragments = pfiSimdLightingProcess(fragments, lights, &G_currentCtx->faceMaterial[faceToRender], viewPosV, positions, normals); \
     }
 
+#   define VOXEL_GI_ADD() \
+    if (gi) { \
+        /* Base diffuse color (vertex color, material and texture) before direct lighting */ \
+        PFIsimdv4f baseCol; pfiColorSIMDToVecF_simd(baseCol, fragments, 4); \
+        PFIsimdv3f giP, giN; \
+        pfiVec3BaryInterpSmoothR_simd(giP, giP1V, giP2V, giP3V, w1NormV, w2NormV, w3NormV); \
+        pfiVec3BaryInterpSmoothR_simd(giN, giN1V, giN2V, giN3V, w1NormV, w2NormV, w3NormV); \
+        PFIsimdvf iwV; { \
+            PFIsimdvf iwA = pfiSimdMul_F32(giW1V, w1NormV); \
+            PFIsimdvf iwB = pfiSimdMul_F32(giW2V, w2NormV); \
+            PFIsimdvf iwC = pfiSimdMul_F32(giW3V, w3NormV); \
+            iwV = pfiSimdAdd_F32(pfiSimdAdd_F32(iwA, iwB), iwC); \
+        } \
+        pfiVoxelGIAdd_simd(giAddV, baseCol, giP, giN, iwV, mask); \
+    }
+
+#   define VOXEL_GI_APPLY() \
+    if (gi) { \
+        PFIsimdv4f finalCol; pfiColorSIMDToVecF_simd(finalCol, fragments, 4); \
+        finalCol[0] = pfiSimdAdd_F32(finalCol[0], giAddV[0]); \
+        finalCol[1] = pfiSimdAdd_F32(finalCol[1], giAddV[1]); \
+        finalCol[2] = pfiSimdAdd_F32(finalCol[2], giAddV[2]); \
+        fragments = pfiColorSIMDFromVecF_simd(finalCol, 4); \
+    }
+
 #   define SET_FRAG() \
         if (blendFunction) { \
             PFIsimdvi dstCol = fbGetter(pbDst, pfiSimdAdd_I32(pfiSimdSet1_I32(yOffset + x), pixOffsetV)); \
@@ -530,28 +653,38 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
 
     /* Loop rasterization */
 
+    PFIsimdv3f giAddV; // Additive voxel GI for the current group of pixels
+
     if (texSampler && lights) {
         PF_TRIANGLE_TRAVEL_SIMD({
             GET_FRAG();
             TEXTURING();
+            VOXEL_GI_ADD();
             LIGHTING();
+            VOXEL_GI_APPLY();
             SET_FRAG();
         })
     } else if (texSampler) {
         PF_TRIANGLE_TRAVEL_SIMD({
             GET_FRAG();
             TEXTURING();
+            VOXEL_GI_ADD();
+            VOXEL_GI_APPLY();
             SET_FRAG();
         })
     } else if (lights) {
         PF_TRIANGLE_TRAVEL_SIMD({
             GET_FRAG();
+            VOXEL_GI_ADD();
             LIGHTING();
+            VOXEL_GI_APPLY();
             SET_FRAG();
         })
     } else {
         PF_TRIANGLE_TRAVEL_SIMD({
             GET_FRAG();
+            VOXEL_GI_ADD();
+            VOXEL_GI_APPLY();
             SET_FRAG();
         })
     }
@@ -559,8 +692,11 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
 
 #else // PF_TRIANGLE_RASTER_MODE == PR_TRIANGLE_RASTER_SCANLINES
 
-void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1, const PFIvertex* v2, const PFIvertex* v3, const PFMvec3 viewPos)
+void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1, const PFIvertex* v2, const PFIvertex* v3,
+                        const PFIgiVertex* g1, const PFIgiVertex* g2, const PFIgiVertex* g3, const PFMvec3 viewPos)
 {
+    PFboolean gi = pfiVoxelGIActive();
+
     /* Check if the face can be rendered, if not, skip */
     {
         PFfloat signedArea = pfmGeo2DSignedTriangleArea(v1->screen, v2->screen, v3->screen);
@@ -569,12 +705,13 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
         }
     }
 
-    /* Sort vertices in ascending order of y coordinates */
+    /* Sort vertices in ascending order of y coordinates (GI vertices follow their primitives) */
     {
         const PFIvertex* vTmp;
-        if (v2->screen[1] < v1->screen[1]) { vTmp = v1; v1 = v2; v2 = vTmp; }
-        if (v3->screen[1] < v1->screen[1]) { vTmp = v1; v1 = v3; v3 = vTmp; }
-        if (v3->screen[1] < v2->screen[1]) { vTmp = v2; v2 = v3; v3 = vTmp; }
+        const PFIgiVertex* gTmp;
+        if (v2->screen[1] < v1->screen[1]) { vTmp = v1; v1 = v2; v2 = vTmp; gTmp = g1; g1 = g2; g2 = gTmp; }
+        if (v3->screen[1] < v1->screen[1]) { vTmp = v1; v1 = v3; v3 = vTmp; gTmp = g1; g1 = g3; g3 = gTmp; }
+        if (v3->screen[1] < v2->screen[1]) { vTmp = v2; v2 = v3; v3 = vTmp; gTmp = g2; g2 = g3; g3 = gTmp; }
     }
 
     /* Cache vertex data */
@@ -648,6 +785,7 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
         PFcolor cA, cB;
         PFMvec2 uvA, uvB;
         PFMvec3 pA, pB, nA, nB;
+        PFIgiVertex gA, gB; // Row endpoints for the reciprocal clip-w GI quantities
 
         if (y < y2) { // First half
             xA = (PFint)(x1 + (x3 - x1) * alpha);
@@ -666,6 +804,10 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
                 pfmVec3LerpR(nA, n1, n3, alpha);
                 pfmVec3LerpR(nB, n1, n2, beta1);
             }
+            if (gi) {
+                pfiLerpGIVertex(&gA, g1, g3, alpha);
+                pfiLerpGIVertex(&gB, g1, g2, beta1);
+            }
         } else { // Second half
             xA = (PFint)(x1 + (x3 - x1) * alpha);
             xB = (PFint)(x2 + (x3 - x2) * beta2);
@@ -683,6 +825,10 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
                 pfmVec3LerpR(nA, n1, n3, alpha);
                 pfmVec3LerpR(nB, n2, n3, beta2);
             }
+            if (gi) {
+                pfiLerpGIVertex(&gA, g1, g3, alpha);
+                pfiLerpGIVertex(&gB, g2, g3, beta2);
+            }
         }
 
         /* Swap endpoints if necessary to ensure xA <= xB */
@@ -694,6 +840,9 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
             pfmVec2Swap(uvA, uvB);
             pfmVec3Swap(pA, pB);
             pfmVec3Swap(nA, nB);
+            if (gi) {
+                PFIgiVertex gTmp = gA; gA = gB; gB = gTmp;
+            }
         }
 
         /*  */
@@ -725,6 +874,28 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
                     PFcolor texel = texSampler(texSrc, uv[0], uv[1]);
                     fragment = pfiBlendMultiplicative(texel, fragment);
                 }
+
+                // Voxel GI uses the diffuse base color before the direct lighting pass
+                PFfloat giAdd[3] = { 0.0f, 0.0f, 0.0f };
+                if (gi) {
+                    // Reciprocal clip-w interpolation along the row endpoints
+                    PFIgiVertex g;
+                    pfiLerpGIVertex(&g, &gA, &gB, gamma);
+                    if (g.invW > 0.0f) {
+                        PFMvec3 worldPos, worldN;
+                        for (int a = 0; a < 3; ++a) {
+                            worldPos[a] = g.posOverW[a] / g.invW;
+                            worldN[a]   = g.nrmOverW[a] / g.invW;
+                        }
+                        PFfloat base[3] = {
+                            fragment.r * PF_INV_255,
+                            fragment.g * PF_INV_255,
+                            fragment.b * PF_INV_255
+                        };
+                        pfiVoxelGIFragment(worldPos, worldN, base, giAdd);
+                    }
+                }
+
                 if (lights) {
                     PFMvec3 position; pfmVec3LerpR(position, pA, pB, gamma);
                     PFMvec3 normal; pfmVec3LerpR(normal, nA, nB, gamma);
@@ -732,6 +903,18 @@ void Rasterize_Triangle(PFface faceToRender, PFboolean is3D, const PFIvertex* v1
                         &G_currentCtx->faceMaterial[faceToRender], fragment,
                         viewPos, position, normal);
                 }
+
+                // Additive voxel GI, after the existing lighting and before saturation/quantization
+                if (gi) {
+                    // Explicit clamp: the additive term is non-negative
+                    PFint sr = (PFint)(fragment.r + 255.0f * giAdd[0]);
+                    PFint sg = (PFint)(fragment.g + 255.0f * giAdd[1]);
+                    PFint sb = (PFint)(fragment.b + 255.0f * giAdd[2]);
+                    fragment.r = (PFubyte)(sr > 255 ? 255 : sr);
+                    fragment.g = (PFubyte)(sg > 255 ? 255 : sg);
+                    fragment.b = (PFubyte)(sb > 255 ? 255 : sb);
+                }
+
                 if (blendFunction) fragment = blendFunction(fragment, texDst->getter(texDst->pixels, xyOffset));
                 texDst->setter(texDst->pixels, xyOffset, fragment);
                 zbDst[xyOffset] = z;

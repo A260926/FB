@@ -32,4 +32,8 @@ void pfiProcessRasterize_TRIANGLE(PFface faceToRender);
 void pfiProcessRasterize_TRIANGLE_FAN(PFface faceToRender, int_fast8_t numTriangles);
 void pfiProcessRasterize_TRIANGLE_STRIP(PFface faceToRender, int_fast8_t numTriangles);
 
+/* Voxelizes the triangle currently held in the context vertex buffer,
+ * bypassing face culling, polygon mode, clipping and every 2D buffer write. */
+void pfiCaptureCurrentTriangleToVoxel(void);
+
 #endif //PF_PRIMITIVES_H

@@ -25,6 +25,7 @@
 #include "../vector.h"
 #include "../../pfm.h"
 #include "../simd.h"
+#include "../voxel/voxel.h"
 
 /*
     This file contains all the internal structures and functions
@@ -372,6 +373,7 @@ typedef struct {
 
     PFIrenderlist *currentRenderList;                       ///< Pointer to the render list where we are currently writing (NULL if no list is currently being written)
     PFIctxbackup ctxBackup;                                 ///< Used to store some context data before writing in a render list, and restore these values ​​after writing
+    PFIctxbackup captureBackup;                             ///< Context state saved around a voxel capture (distinct slot so render list replay can nest)
 
     PFMmat4 matProjection;                                  ///< Projection matrix, user adjustable
     PFMmat4 matTexture;                                     ///< Texture matrix, user adjustable
@@ -398,6 +400,12 @@ typedef struct {
     PFerrcode errCode;                                      ///< Last error code
     PFuint state;                                           ///< Current context state
 
+    PFIvoxelvolume *voxelVolumes;                           ///< Head of the voxel volumes owned by this context
+    PFIvoxelvolume *boundVolume;                            ///< Voxel volume providing the GI contribution (NULL disables it)
+    PFIvoxelvolume *captureVolume;                          ///< Voxel volume currently capturing triangles (NULL outside of Begin/End)
+    PFfloat voxelStrength;                                  ///< Scaling factor of the voxel GI contribution (0 by default)
+    PFfloat voxelMaxDistance;                               ///< Maximum cone trace distance
+
 } PFIctx;
 
 
@@ -410,6 +418,8 @@ extern PF_CTX_DECL PFIctx *G_currentCtx;
 
 void pfiMakeContextBackup(void);
 void pfiRestoreContext(void);
+void pfiMakeContextBackupTo(PFIctxbackup* backup);
+void pfiRestoreContextFrom(const PFIctxbackup* backup);
 
 void pfiHomogeneousToScreen(PFIvertex* v);
 PFIvertex pfiLerpVertex(const PFIvertex* start, const PFIvertex* end, PFfloat t);

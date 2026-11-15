@@ -43,6 +43,12 @@ pfNewList(PFrenderlist renderList)
         return;
     }
 
+    if (G_currentCtx->captureVolume != NULL) {
+        // Starting a render list recording while a voxel capture is active is invalid
+        G_currentCtx->errCode = PF_INVALID_OPERATION;
+        return;
+    }
+
     PFIrenderlist *list = renderList;
 
     while (list->size > 0) {

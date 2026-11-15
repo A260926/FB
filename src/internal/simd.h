@@ -626,7 +626,7 @@ pfiSimdSetZero_F32(void)
 #   define pfiSimdFloor_F32(x) \
         _mm256_floor_ps(x)
 #elif defined(__SSE2__)
-#   define pfiSimdRound_F32(x) \
+#   define pfiSimdFloor_F32(x) \
         _mm_floor_ps(x)
 #endif
 
@@ -634,7 +634,7 @@ pfiSimdSetZero_F32(void)
 #   define pfiSimdCeil_F32(x) \
         _mm256_ceil_ps(x)
 #elif defined(__SSE2__)
-#   define pfiSimdRound_F32(x) \
+#   define pfiSimdCeil_F32(x) \
         _mm_ceil_ps(x)
 #endif
 

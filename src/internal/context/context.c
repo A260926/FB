@@ -23,9 +23,8 @@
 /* Backup context functions */
 
 void
-pfiMakeContextBackup(void)
+pfiMakeContextBackupTo(PFIctxbackup *bck)
 {
-    PFIctxbackup *bck = &G_currentCtx->ctxBackup;
     memcpy(bck->faceMaterial, G_currentCtx->faceMaterial, 2 * sizeof(PFImaterial));
     memcpy(bck->currentTexcoord, G_currentCtx->currentTexcoord, sizeof(PFMvec2));
     memcpy(bck->currentNormal, G_currentCtx->currentNormal, sizeof(PFMvec3));
@@ -35,15 +34,26 @@ pfiMakeContextBackup(void)
 }
 
 void
-pfiRestoreContext(void)
+pfiRestoreContextFrom(const PFIctxbackup *bck)
 {
-    PFIctxbackup *bck = &G_currentCtx->ctxBackup;
     memcpy(G_currentCtx->faceMaterial, bck->faceMaterial, 2 * sizeof(PFImaterial));
     memcpy(G_currentCtx->currentTexcoord, bck->currentTexcoord, sizeof(PFMvec2));
     memcpy(G_currentCtx->currentNormal, bck->currentNormal, sizeof(PFMvec3));
     G_currentCtx->currentColor = bck->currentColor;
     G_currentCtx->currentTexture = bck->currentTexture;
     G_currentCtx->state = bck->state;
+}
+
+void
+pfiMakeContextBackup(void)
+{
+    pfiMakeContextBackupTo(&G_currentCtx->ctxBackup);
+}
+
+void
+pfiRestoreContext(void)
+{
+    pfiRestoreContextFrom(&G_currentCtx->ctxBackup);
 }
 
 /* Internal vertex processing function definitions */
@@ -102,6 +112,13 @@ pfiProcessAndRasterize(void)
             pfiProcessRasterize_LINE();
             break;
         case PF_TRIANGLES: {
+            // Voxel captures only consume PF_TRIANGLES and bypass culling,
+            // polygon mode, clipping and every screen buffer operation.
+            if (G_currentCtx->captureVolume != NULL) {
+                pfiCaptureCurrentTriangleToVoxel();
+                break;
+            }
+
             // Get faces to render
             // NOTE: Here we invert cullFace, because PF_FRONT = 0,
             //       !PF_FRONT = PF_BACK, and vice versa.

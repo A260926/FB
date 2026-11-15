@@ -421,7 +421,11 @@ typedef void* PFtexture;
 
 /* Rendering List defintiions */
 
-typedef void* PFrenderlist; 
+typedef void* PFrenderlist;
+
+/* Voxel volume definitions (voxel cone tracing global illumination) */
+
+typedef void* PFvoxelvolume;
 
 /* Framebuffer defintions */
 
@@ -2086,6 +2090,99 @@ PF_API void*
 pfGetTexturePixels(const PFtexture texture,
                    PFsizei* width, PFsizei* height,
                    PFpixelformat* format, PFdatatype* type);
+
+
+/* Voxel cone tracing GI functions */
+
+/**
+ * @brief Creates a voxel volume: a cubic world-space region of 'side' starting at 'min',
+ *        subdivided into 'resolution' voxels per axis (a power of two from 8 to 128).
+ *
+ * The returned handle is owned by the current context. The volume starts empty and
+ * cannot be sampled until a capture has been completed with pfBeginVoxelVolume/pfEndVoxelVolume.
+ *
+ * @param min        Minimal corner of the cube; all coordinates must be finite.
+ * @param side       Edge length of the cube; must be finite and strictly positive.
+ * @param resolution Voxels per axis; 8, 16, 32, 64 or 128.
+ *
+ * @return The opaque voxel volume handle, or NULL on error (see pfGetError).
+ */
+PF_API PFvoxelvolume
+pfGenVoxelVolume(const PFfloat min[3], PFfloat side, PFsizei resolution);
+
+/**
+ * @brief Deletes a voxel volume and releases its storage.
+ *
+ * Deleting the currently bound volume unbinds it. It is invalid (PF_INVALID_OPERATION)
+ * to delete a volume while it is capturing, or to use a handle owned by another context.
+ *
+ * @param volume Pointer to the handle; set to NULL on success. NULL pointers are ignored.
+ */
+PF_API void
+pfDeleteVoxelVolume(PFvoxelvolume* volume);
+
+/**
+ * @brief Begins capturing PF_TRIANGLES submissions into the given voxel volume.
+ *
+ * The volume is cleared on success. Submitted triangles are transformed to world space
+ * by the current model transform, voxelized independently of the camera, face culling
+ * and depth testing, and never affect any 2D color or depth buffer. Only one capture
+ * may be active at a time and captures cannot be nested or started during render list
+ * recording.
+ */
+PF_API void
+pfBeginVoxelVolume(PFvoxelvolume volume);
+
+/**
+ * @brief Ends the active capture and builds every mip level; sampling becomes legal.
+ */
+PF_API void
+pfEndVoxelVolume(void);
+
+/**
+ * @brief Binds a completed voxel volume as the source of the GI contribution.
+ *        Binding NULL disables the contribution.
+ */
+PF_API void
+pfBindVoxelVolume(PFvoxelvolume volume);
+
+/**
+ * @brief Configures the voxel GI contribution.
+ *
+ * @param strength    Non-negative finite multiplier; 0 (the default) keeps the legacy output.
+ * @param maxDistance Finite strictly positive maximum cone trace distance.
+ */
+PF_API void
+pfVoxelGI(PFfloat strength, PFfloat maxDistance);
+
+/**
+ * @brief Samples the premultiplied RGBA channels of a voxel volume, trilinearly in space
+ *        and blending between adjacent LODs. Texels outside the volume evaluate to zero.
+ *
+ * @param volume   A completed volume owned by the current context.
+ * @param position Finite world-space sample position.
+ * @param lod      Finite level of detail, clamped to the existing level range.
+ * @param rgba     Output premultiplied RGBA (four floats).
+ */
+PF_API void
+pfSampleVoxelVolume(PFvoxelvolume volume, const PFfloat position[3],
+                    PFfloat lod, PFfloat rgba[4]);
+
+/**
+ * @brief Traces a single voxel cone (fixed half angle pi/12) and returns the accumulated
+ *        premultiplied radiance divided back into RGB.
+ *
+ * @param volume      A completed volume owned by the current context.
+ * @param origin      Finite cone start position.
+ * @param direction   Direction whose squared length differs from 1 by at most 1e-4;
+ *                    it is normalized internally.
+ * @param maxDistance Finite strictly positive trace distance.
+ * @param rgb         Output radiance; left untouched on error.
+ */
+PF_API void
+pfTraceVoxelCone(PFvoxelvolume volume, const PFfloat origin[3],
+                 const PFfloat direction[3], PFfloat maxDistance,
+                 PFfloat rgb[3]);
 
 #if defined(__cplusplus)
 }

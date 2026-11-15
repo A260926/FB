@@ -246,15 +246,39 @@ PFcontext pfCreateContext(void* targetBuffer, PFsizei width, PFsizei height, PFp
     ctx->cullFace = PF_BACK;
     ctx->errCode = PF_NO_ERROR;
 
+    /* Voxel GI defaults: no bound volume, zero strength, finite positive distance */
+
+    ctx->voxelVolumes = NULL;
+    ctx->boundVolume = NULL;
+    ctx->captureVolume = NULL;
+    ctx->voxelStrength = 0.0f;
+    ctx->voxelMaxDistance = 1.0f;
+
     return ctx;
 }
 
 void pfDeleteContext(PFcontext ctx)
 {
     if (ctx) {
-        if (((PFIctx*)ctx)->mainFramebuffer.zbuffer) {
-            PF_FREE(((PFIctx*)ctx)->mainFramebuffer.zbuffer);
-            ((PFIctx*)ctx)->mainFramebuffer = (PFframebuffer) { 0 };
+        PFIctx *pfiCtx = (PFIctx*)ctx;
+
+        // Releasing the context frees every voxel resource it owns
+        while (pfiCtx->voxelVolumes != NULL) {
+            PFIvoxelvolume *vol = pfiCtx->voxelVolumes;
+            pfiCtx->voxelVolumes = vol->next;
+            for (PFsizei level = 0; level < PF_VOXEL_MAX_LEVELS; ++level) {
+                if (vol->level[level]) {
+                    PF_FREE(vol->level[level]);
+                }
+            }
+            PF_FREE(vol);
+        }
+        pfiCtx->boundVolume = NULL;
+        pfiCtx->captureVolume = NULL;
+
+        if (pfiCtx->mainFramebuffer.zbuffer) {
+            PF_FREE(pfiCtx->mainFramebuffer.zbuffer);
+            pfiCtx->mainFramebuffer = (PFframebuffer) { 0 };
         }
         PF_FREE(ctx);
     }
