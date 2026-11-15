@@ -1,0 +1,134 @@
+{
+  "repo": "https://github.com/dominikwodniok/dualmc",
+  "commit": "caa01599e29f5fc128facd0c1fdfd26d546a8109",
+  "license": "BSD-3-Clause",
+  "exclusions": [],
+  "files": [
+    {
+      "path": ".gitignore",
+      "git_mode": "100644",
+      "git_blob": "736acb5d381ed7fcd15e632f01090889ce47b58d",
+      "sha256": "c6f5e34303f48c5fe293377b794a85e47a7a91d41e8ae7c48510a7eeb834fdf4"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "git_mode": "100644",
+      "git_blob": "26a692a23bc3a9358742136d9d95b5f94f7ec9fb",
+      "sha256": "395de286c0e5c888856e561239e01bcc1b2ffdcbd895867c7734553e4b0ade00"
+    },
+    {
+      "path": "LICENSE",
+      "git_mode": "100644",
+      "git_blob": "0c47150314e84290d9010626731f852c6f915491",
+      "sha256": "db1f3f787c02823604b518acec105a4b4aa946e8ab931469302d1341637992fc"
+    },
+    {
+      "path": "Makefile",
+      "git_mode": "100644",
+      "git_blob": "026580245e4ca58a67b3102298bb278585cbdf1d",
+      "sha256": "ddc39896385240b2519690437c3fa7b939a7b8c7d0a54ce0e7a15c5004fa21e2"
+    },
+    {
+      "path": "Makefile.inc",
+      "git_mode": "100644",
+      "git_blob": "2769a2d316cb950740954dd8646a46db09786496",
+      "sha256": "602b3b1aec3031ef09ce6809837194c4349948b7f8b9fc8795150ecc3f779cfd"
+    },
+    {
+      "path": "README.md",
+      "git_mode": "100644",
+      "git_blob": "d9d37db2dbcb269c527c5f9f0d3d44e09b1bfd15",
+      "sha256": "aee49cc1b624aabbf03f2a5d397c1b6c1aeebe370e52aca5a385b46a4f4edd31"
+    },
+    {
+      "path": "apps/Makefile",
+      "git_mode": "100644",
+      "git_blob": "b8205c1b662cd1aaf25126d925cc605e87663a00",
+      "sha256": "3db6e4d3e0f7753030129170ded242337cf08e6a3a00bcad634d45f251dade9f"
+    },
+    {
+      "path": "apps/example/Makefile",
+      "git_mode": "100644",
+      "git_blob": "6e32791e2adde393c6674a0212d3f74e2be21a9b",
+      "sha256": "ea4dd6975c0cc5ad965764462da73a07bb3203fedd57687e746b9e877af90929"
+    },
+    {
+      "path": "apps/example/example.cpp",
+      "git_mode": "100644",
+      "git_blob": "de19fda4d2420c1c2b3bd98db3ca71a4b711b69c",
+      "sha256": "5356031a1131e7d7b43ceafedbcbf6965c3cb553fe025eb0320c6aeda1f2b7ac"
+    },
+    {
+      "path": "apps/example/example.h",
+      "git_mode": "100644",
+      "git_blob": "b2664ce32a6d00c2fe7bb21d72fd6ba880f19a01",
+      "sha256": "3be49ed5ac695f68ac6f7f4811bf493b5276609f8b2cea21c1b0c75099e870e7"
+    },
+    {
+      "path": "apps/example/main.cpp",
+      "git_mode": "100644",
+      "git_blob": "55d081a244022cbe335d94cde885a95e0e3e0fe0",
+      "sha256": "ae4552633781f208ddd720955a2394d9e5ac9a4b73d5f95599d4809b2704c824"
+    },
+    {
+      "path": "apps/gentables/Makefile",
+      "git_mode": "100644",
+      "git_blob": "ccbcee974c3986905c072d5b3fd1ec90e715638b",
+      "sha256": "4a6d92ac30fe30d510637d94b609f3e7765f709430641fddcb81f0e2dd921728"
+    },
+    {
+      "path": "apps/gentables/gentables.cpp",
+      "git_mode": "100644",
+      "git_blob": "bc09ebfd996993b309c7df03e2534d9cc40a29eb",
+      "sha256": "dd2c3486058e66ca51f79281cdb3f26e2c0c29e1a7922a88a1f61beeb1107df3"
+    },
+    {
+      "path": "apps/gentables/gentables.h",
+      "git_mode": "100644",
+      "git_blob": "5dfd9630918cad93f563488e531e6d6b37fde6ab",
+      "sha256": "ba4bc687bd45a699e8b16544bd7dff0ac8805b39b073cc8f704b4868eaf0d508"
+    },
+    {
+      "path": "apps/gentables/main.cpp",
+      "git_mode": "100644",
+      "git_blob": "bd8d3978ef1582d82e8e3ced6aa7550d75a2baa2",
+      "sha256": "df2638cc438dca7f0ac902890067af5cc0565e72818921dfc167cf69295493be"
+    },
+    {
+      "path": "data/cube.raw",
+      "git_mode": "100644",
+      "git_blob": "01ce58bb0be059600a9f0d77bd926cfa190f92ab",
+      "sha256": "9a43bf1ed130fbf8f4ddfceb5c3f7ce0926a3756ceade467baebb1c2439e9518"
+    },
+    {
+      "path": "data/cube.txt",
+      "git_mode": "100644",
+      "git_blob": "f2e9db3a369393ddf1b8240d2563117fff7885b4",
+      "sha256": "f1f525c43df86088c8b7559e7e38b1f71ffe11a26011614ca677ec102258319b"
+    },
+    {
+      "path": "example.png",
+      "git_mode": "100644",
+      "git_blob": "a515306351e567e8a8c67c445ef2cb4f90d21af6",
+      "sha256": "3aca2d261f7a26edd8d41759e9b43e7392713ba540db21cc2621514923edabe9"
+    },
+    {
+      "path": "include/dualmc.h",
+      "git_mode": "100644",
+      "git_blob": "497dab8832f9d1f0db49e84df79702c05a7e5e04",
+      "sha256": "09fad9b8ed88de91f14ffea0da956e6db8b479f87da2bc9aeb94361a19c43b2c"
+    },
+    {
+      "path": "include/dualmc.tpp",
+      "git_mode": "100644",
+      "git_blob": "d190f505527dfcb5f24990f37516cf1087348cd5",
+      "sha256": "208b93d793424ca6fae3161fafc508ddf5508ba52bbbc5742283de6e3bbf0b53"
+    },
+    {
+      "path": "include/dualmc_tables.tpp",
+      "git_mode": "100644",
+      "git_blob": "0714846817261f15e620e88d246100487f9d4bd6",
+      "sha256": "7f0586e85f265c6359686d127b351c0dc8cc0f9d1402368c79b23857371d2cd4"
+    }
+  ]
+}

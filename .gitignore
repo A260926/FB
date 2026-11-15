@@ -1,0 +1,7 @@
+dmc
+dmc.exe
+gentables
+gentables.exe
+*.obj
+*.o
+*.dep
