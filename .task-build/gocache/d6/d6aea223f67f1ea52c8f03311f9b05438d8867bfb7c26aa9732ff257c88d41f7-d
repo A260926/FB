@@ -1,0 +1,11 @@
+./face.go
+./matrix.go
+./mesh.go
+./pair.go
+./queue.go
+./simplify.go
+./stl.go
+./triangle.go
+./util.go
+./vector.go
+./vertex.go
