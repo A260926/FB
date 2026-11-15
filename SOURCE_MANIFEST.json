@@ -1,0 +1,157 @@
+{
+  "repo": "https://github.com/jtsiomb/libanim",
+  "commit": "536ab7d98dbb07b018b7eeecb256d7b99efb4a4d",
+  "license": "LGPL-3.0-or-later",
+  "gitlinks": [],
+  "source_files": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "23210373d21691eff584742ca1dd64eb36cd4b1b",
+      "sha256": "71539a5b7ee3a2e5f2fcfac9146a97012b52dd5f67faf6602eb81ccbe21a2492"
+    },
+    {
+      "path": "COPYING",
+      "mode": "100644",
+      "git_blob": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "path": "COPYING.LESSER",
+      "mode": "100644",
+      "git_blob": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
+      "path": "Makefile.in",
+      "mode": "100644",
+      "git_blob": "3509455687f8c30e4fb3d44f72f3596335cd1dd1",
+      "sha256": "725992605c8050bc8df407feebf107c0df706e53fb0734e99e1d0b97760f5ac9"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "f8ae05d68ce02fe7bb50ba6dc68b30ac3dff17f6",
+      "sha256": "54c6c21761dde8e7c792df954820daf1c56a63962ee2f699db05ba92a9c85007"
+    },
+    {
+      "path": "configure",
+      "mode": "100755",
+      "git_blob": "d906f5d6a7bf46907f4aedae68e2a87001f2c5ab",
+      "sha256": "3555410e1b95871fe1311e2b32011880f456819eb5237468b157c6c523abf1e3"
+    },
+    {
+      "path": "example/Makefile",
+      "mode": "100644",
+      "git_blob": "c6e7db8d541bad4479b87700f1b78b027826134e",
+      "sha256": "72d69bfdea12d850fac3168d929de38e83eca7846a4371fa5a41af0beb7d06ef"
+    },
+    {
+      "path": "example/test.c",
+      "mode": "100644",
+      "git_blob": "ee29a6062b8f950046e3181bf40d6b60dd6b64a9",
+      "sha256": "e898b11d652319d1c130999ae0ec4dc77b59bef317857d99319da27239a1efcf"
+    },
+    {
+      "path": "src/anim.c",
+      "mode": "100644",
+      "git_blob": "06514e2db1bb675d9f828e6104d03d69ce6d042f",
+      "sha256": "134d053748d85d79135b6f7a7562f22eeea8615c527e4b3f181d5201591c6cfe"
+    },
+    {
+      "path": "src/anim.h",
+      "mode": "100644",
+      "git_blob": "13d0348663853716540264df537269c440bf5200",
+      "sha256": "767c6ab4f7bf810b57c452224ebf83421d54bef4c2f527d432ed0b02a4af862a"
+    },
+    {
+      "path": "src/cgmath/cgmath.h",
+      "mode": "100644",
+      "git_blob": "7e8ff9f325716421c864e275684f0af94469c2c1",
+      "sha256": "f925e87c2d5c74c95f29135da587589a5776c170d37f81153290d38a95fb1b2d"
+    },
+    {
+      "path": "src/cgmath/cgmmat.inl",
+      "mode": "100644",
+      "git_blob": "c369b848a74250aa7eb4bf8aca868de62ad4fe3f",
+      "sha256": "99b149281aea658377d7ee3cf9a2a6ed5f0d9477e83a4bec89b335d83471b02d"
+    },
+    {
+      "path": "src/cgmath/cgmmisc.inl",
+      "mode": "100644",
+      "git_blob": "6cfa37d0e418a90ecca10359a4fbe8d21e5bbabf",
+      "sha256": "9454c161ac0f72a4294d78e7b6ac1ead06a94971ab12fc8b5e3be139edbdcd30"
+    },
+    {
+      "path": "src/cgmath/cgmquat.inl",
+      "mode": "100644",
+      "git_blob": "743d818ab4670a894cac0c185e0f9d5e922ba833",
+      "sha256": "4f6ba19fbdc223ab6ec2fdd364e7adbbf6a9ef6041a2a7b849f45b55954a2695"
+    },
+    {
+      "path": "src/cgmath/cgmray.inl",
+      "mode": "100644",
+      "git_blob": "063a7e0c82f7ae321345a4ebba55e9ec3aa06254",
+      "sha256": "d1c9a8cf0426f49b5ae25b6b96ecab8c7ba31635d22a3e1bd0dae47f5a5be42d"
+    },
+    {
+      "path": "src/cgmath/cgmvec3.inl",
+      "mode": "100644",
+      "git_blob": "3747029b1011ac404049853adfc10e310b34d67a",
+      "sha256": "7a176c6078a575b4aee1f86d125f7bafcfb4638350cf3504c9b72a308237e7e1"
+    },
+    {
+      "path": "src/cgmath/cgmvec4.inl",
+      "mode": "100644",
+      "git_blob": "1c143c23da1e2ba860dbe913ca523b44ebc4f14f",
+      "sha256": "55e7dd2a3903d0f591ddd9c4a056e3d004cbf0ea9caa697e583983cfa1541ea0"
+    },
+    {
+      "path": "src/config.h",
+      "mode": "100644",
+      "git_blob": "f00310ceceb72ebedf5bf44d818a913db8aea69c",
+      "sha256": "0bf6cbc64e30461d0e564b1cecdce6c74b92f2a012476d80387edc4c1f1ca13e"
+    },
+    {
+      "path": "src/dynarr.c",
+      "mode": "100644",
+      "git_blob": "9a51f4cad1081f2cd98622d47042b151e0ee255c",
+      "sha256": "0bfc8fc0dc4d004cdb478b6a20b291a8cf9eddc6181deecbc122d6b451dbd0cb"
+    },
+    {
+      "path": "src/dynarr.h",
+      "mode": "100644",
+      "git_blob": "3d8459f7e89573938390e818c96d55b5141ef3e5",
+      "sha256": "bbe2c83ffeb2a95df53b97530182435de3af301051501f027795366b36d870b6"
+    },
+    {
+      "path": "src/track.c",
+      "mode": "100644",
+      "git_blob": "63b49b234733346cd3441c88932d06ed853d807d",
+      "sha256": "3536484144d929a996de039a7d885617a8eb87d5f752104d6a063dbbcf04fd98"
+    },
+    {
+      "path": "src/track.h",
+      "mode": "100644",
+      "git_blob": "a041b5e104356311976ca873acf1fd75cf80b6bb",
+      "sha256": "254a668b33960eedae0cceb7834942e6d796debcb10b193754d52d850de042fb"
+    }
+  ],
+  "excluded": [],
+  "dependencies": [
+    {
+      "name": "gph-cmath",
+      "scope": "上游已内嵌src/cgmath，原代码未改；仅补随附MIT许可",
+      "source_commit": "744c78166677b2aa45b882f8990c7e0e6e716d71",
+      "source": "https://github.com/jtsiomb/gph-cmath",
+      "license": "MIT",
+      "license_file": "THIRD_PARTY/gph-cmath-LICENSE",
+      "license_sha256": "8b033cc28bc59c65166f2ea82ba7459171986e4997b2d69c7c27a2a61fb1fd40"
+    },
+    {
+      "name": "C standard library and POSIX pthread",
+      "scope": "系统编译工具链；无第三方包缓存或运行下载"
+    }
+  ],
+  "support_scope": "仅正常路径和真实旧缺陷探针，以及标准C测试包装；无目标修复/目标测试/目标示例。"
+}
