@@ -143,6 +143,12 @@ type DualContouring struct {
 
 	// TriangleMode controls how quads are triangulated.
 	TriangleMode DualContouringTriangleMode
+
+	// ProcessStats, if set, is invoked exactly once before
+	// MeshProcess returns. The argument is a copy of the
+	// statistics for that call and never aliases internal
+	// state.
+	ProcessStats func(DCProcessStats)
 }
 
 // Mesh computes a mesh for the surface.
@@ -195,13 +201,22 @@ func (d *DualContouring) mesh(interior *[]Coord3D) *Mesh {
 		}
 
 		if d.Repair {
-			orig := d.repairSingularEdges(mesh, layout)
-			d.repairSingularVertices(mesh, layout, orig)
-			mesh.clearVertexToFace()
+			d.meshRepair(mesh, layout)
 		}
 
 		return mesh
 	}
+}
+
+// meshRepair runs the global singular edge and vertex
+// repair passes. It is shared by the in-process Mesh()
+// algorithm and the multi-process MeshProcess() driver,
+// where the layout describes the complete global grid so
+// that geometry constraints are evaluated globally.
+func (d *DualContouring) meshRepair(mesh *Mesh, layout *dcCubeLayout) {
+	orig := d.repairSingularEdges(mesh, layout)
+	d.repairSingularVertices(mesh, layout, orig)
+	mesh.clearVertexToFace()
 }
 
 func (d *DualContouring) populateCorners(layout *dcCubeLayout) {
@@ -296,7 +311,11 @@ func (d *DualContouring) populateCubes(
 			if _, ok := mustClipCoords.Load(p); ok {
 				p = d.clipCube(layout, p, dcCubeIdx(i))
 			}
-			if usedCoords.Add(p, 1) > 1 {
+			// A nil used-coordinate table means duplicate
+			// detection is delegated to the caller, which is
+			// how slab workers leave global must-clip
+			// retries to the parent process.
+			if usedCoords != nil && usedCoords.Add(p, 1) > 1 {
 				mustClipCoords.Store(p, struct{}{})
 			}
 			usedLock.Unlock()
@@ -555,6 +574,14 @@ type dcCubeLayout struct {
 }
 
 func newDcCubeLayout(min, max Coord3D, delta float64, noJitter bool, bufSize int) *dcCubeLayout {
+	xs, ys, zs := dcGridCoordinates(min, max, delta, noJitter)
+	bufRows := dcDefaultBufferRows(bufSize, len(xs), len(ys), len(zs))
+	return newDcCubeLayoutWithRows(xs, ys, zs, bufRows)
+}
+
+// dcGridCoordinates computes the global grid point positions
+// shared by every full and slabbed dual contouring run.
+func dcGridCoordinates(min, max Coord3D, delta float64, noJitter bool) (xs, ys, zs []float64) {
 	jitter := delta * 0.012923982
 	if noJitter {
 		jitter = 0
@@ -567,40 +594,53 @@ func newDcCubeLayout(min, max Coord3D, delta float64, noJitter bool, bufSize int
 	countY := int(math.Round(count.Y)) + 1
 	countZ := int(math.Round(count.Z)) + 1
 
-	res := &dcCubeLayout{
-		Xs: make([]float64, countX),
-		Ys: make([]float64, countY),
-		Zs: make([]float64, countZ),
-	}
+	xs = make([]float64, countX)
+	ys = make([]float64, countY)
+	zs = make([]float64, countZ)
 	for i := 0; i < countX; i++ {
-		res.Xs[i] = min.X + float64(i)*delta + jitter
+		xs[i] = min.X + float64(i)*delta + jitter
 	}
 	for i := 0; i < countY; i++ {
-		res.Ys[i] = min.Y + float64(i)*delta + jitter
+		ys[i] = min.Y + float64(i)*delta + jitter
 	}
 	for i := 0; i < countZ; i++ {
-		res.Zs[i] = min.Z + float64(i)*delta + jitter
+		zs[i] = min.Z + float64(i)*delta + jitter
 	}
+	return
+}
 
+// dcDefaultBufferRows implements the BufferSize soft limit,
+// including the minimum of four buffered z layers.
+func dcDefaultBufferRows(bufSize, countX, countY, countZ int) int {
 	if bufSize == 0 {
 		bufSize = DefaultDualContouringBufferSize
 	}
-	bufRows := bufSize / (len(res.Xs) * len(res.Ys))
-	bufRows = essentials.MinInt(essentials.MaxInt(bufRows, 4), len(res.Zs))
-	res.BufRows = bufRows
-	res.Corners = make([]dcCorner, 0, len(res.Xs)*len(res.Ys)*bufRows)
-	res.Cubes = make([]dcCube, (len(res.Xs)-1)*(len(res.Ys)-1)*(bufRows-1))
+	bufRows := bufSize / (countX * countY)
+	return essentials.MinInt(essentials.MaxInt(bufRows, 4), countZ)
+}
 
-	xCount := (len(res.Xs) - 1) * len(res.Ys)
-	yCount := (len(res.Ys) - 1) * len(res.Xs)
-	zCount := len(res.Xs) * len(res.Ys)
+// newDcCubeLayoutWithRows builds a layout covering the given
+// grid coordinate slices with the given number of z rows.
+func newDcCubeLayoutWithRows(xs, ys, zs []float64, bufRows int) *dcCubeLayout {
+	res := &dcCubeLayout{
+		Xs:      xs,
+		Ys:      ys,
+		Zs:      zs,
+		BufRows: bufRows,
+	}
+	res.Corners = make([]dcCorner, 0, len(xs)*len(ys)*bufRows)
+	res.Cubes = make([]dcCube, (len(xs)-1)*(len(ys)-1)*(bufRows-1))
+
+	xCount := (len(xs) - 1) * len(ys)
+	yCount := (len(ys) - 1) * len(xs)
+	zCount := len(xs) * len(ys)
 	res.Edges = make([]dcEdge, (xCount+yCount)*bufRows+zCount*(bufRows-1))
 
 	for i := 0; i < bufRows; i++ {
-		for j := 0; j < len(res.Ys); j++ {
-			for k := 0; k < len(res.Xs); k++ {
+		for j := 0; j < len(ys); j++ {
+			for k := 0; k < len(xs); k++ {
 				res.Corners = append(res.Corners, dcCorner{
-					Coord: XYZ(res.Xs[k], res.Ys[j], res.Zs[i]),
+					Coord: XYZ(xs[k], ys[j], zs[i]),
 				})
 			}
 		}

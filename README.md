@@ -58,3 +58,83 @@ That rendering was created with this one line of code:
 ```go
 render3d.SaveRandomGrid("rendering_box.png", mesh, 3, 3, 300, nil)
 ```
+
+# Multi-process dual contouring
+
+`DualContouring.Mesh` runs entirely inside one process. When the field is
+expensive to sample, `DualContouring.MeshProcess` splits the global grid into
+z-axis slabs and extracts each slab in a separate worker process, while the
+parent process only reads the `Solid`'s bounds and assembles the final surface.
+
+```go
+dc := &model3d.DualContouring{
+    S:     model3d.SolidSurfaceEstimator{Solid: solid},
+    Delta: 0.1,
+    // Repair runs globally in the parent after every slab reports.
+    Repair: true,
+}
+mesh, err := dc.MeshProcess(ctx, command, field, workers, slabRows)
+```
+
+* `command` is a fully-specified command line that starts a worker program.
+  The `cmd/dcprocess` example is both a parent and a worker (its `-worker`
+  flag); worker programs call
+  `model3d.ServeDualContourWorker(os.Stdin, os.Stdout, factory)`.
+* `field` is an opaque byte description passed unchanged to the worker's
+  `factory func([]byte) (SolidSurfaceEstimator, error)`. **The caller owns the
+  field encoding and is responsible for rebuilding the `Solid` inside the
+  factory.** The `model3d` package never interprets these bytes. The rebuilt
+  field's `Min()`/`Max()` must match the parent's bounds or the call fails.
+* `workers` bounds the number of concurrently running processes; `slabRows`
+  is the number of global z-axis cube layers owned by each slab. Every slab
+  shares the same global grid origin, padding, jitter and grid-edge identity,
+  so each face is generated exactly once even though neighboring slabs
+  recompute a one-layer halo. No floating-point coordinate welding is used.
+* All geometry sampling, Hermite data and per-cube QEF solves happen in the
+  workers. The parent keeps the final mesh and the global identity table only.
+  When `Repair` is set, singular edges and vertices are repaired once, in the
+  parent, against the full global grid after every unrepaired face has been
+  collected.
+
+## Wire protocol
+
+The protocol runs over the worker's stdout as length-prefixed binary frames
+(`1` message-type byte, a big-endian `uint32` length, then a JSON payload);
+stderr is drained separately and can never be parsed as a response.
+
+1. The parent sends a `hello` frame containing the full DC configuration
+   (bounds, grid coordinates, repair/clipping/QEF/triangulation settings and
+   the estimator tuning from the parent's `SolidSurfaceEstimator`) plus the
+   opaque field bytes.
+2. The worker rebuilds the field through the factory, verifies the bounds and
+   answers with a `ready` frame carrying its `min`/`max`.
+3. The parent sends `request` frames describing one slab each (z range and the
+   current global must-clip coordinate set). The worker answers with a
+   `result` frame of owned cube positions and triangles, or an `error` frame.
+4. With `Repair` enabled and `Clip` disabled, duplicate cube coordinates drive
+   the same global must-clip retry loop as the in-process algorithm: the
+   parent gathers every slab's coordinates, records new clip coordinates and
+   re-dispatches all slabs until a round adds none.
+
+## Statistics
+
+Set the optional `DualContouring.ProcessStats func(DCProcessStats)` callback to
+receive one `DCProcessStats` value before every `MeshProcess` return, including
+failures and up-front validation errors:
+
+```go
+type DCProcessStats struct {
+    Slabs           int   // slabs actually dispatched
+    Retries         int   // global must-clip retry rounds
+    PeakActiveSlabs int   // largest number of simultaneously running workers
+    PIDs            []int // worker PIDs, sorted ascending and unique
+}
+```
+
+The delivered `PIDs` slice is a copy, so mutating it cannot affect internal
+state. Cancellation, worker crashes and protocol corruption all return a `nil`
+mesh plus an error after every started worker has been reaped; independent
+calls share no pending jobs and a failed call can be retried with a fresh one.
+`RandomSearchNormals` is not supported across processes and is rejected before
+any worker starts.
+
