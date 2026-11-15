@@ -1,0 +1,76 @@
+{
+  "repo": "georgy-khachatryan/meshdecimationtools",
+  "commit": "de059edad0f0e7480cc507e5da96ff20ffb8a1c5",
+  "files": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "4941f91b9e00e570f15339dd9b156a108a7172d2",
+      "sha256": "a5c73f9b18b2b02a0f1ee7d3176728bba9239051d578eab03c08ef49479866c9"
+    },
+    {
+      "path": "LICENSE.md",
+      "mode": "100644",
+      "git_blob": "2ef0bd66a7d0a4042dafcde5ae6471c96b1e75bd",
+      "sha256": "7c43185cd3ba079ff68b29a7bca32427c19437f8ca5515d1aef8629ddcff85f9"
+    },
+    {
+      "path": "MeshDecimationTools.cpp",
+      "mode": "100644",
+      "git_blob": "7cd5b96dd81817944c34243f0e9c8095709fe777",
+      "sha256": "ec5fc6731675eede91a57636e99ae4d2dc038e951ca2f17e417dafaedae37c9d"
+    },
+    {
+      "path": "MeshDecimationTools.h",
+      "mode": "100644",
+      "git_blob": "f9dabf38895e61daa65f08be8ecc83e401d734b8",
+      "sha256": "6e422c2bbe0ee57c1e8a8b3ed849710dba8c7b93ed08d79ea6ec350236487e75"
+    },
+    {
+      "path": "MeshDecimationToolsErrorMetric.hlsl",
+      "mode": "100644",
+      "git_blob": "ce3aa45d98a906d3bba89dc0d648a2415624bca0",
+      "sha256": "defe476a9aec84cacdf505096753c8f6f202ebf27e57003364719ac2d4cb7f92"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "64b9f1d5cdac09361b50ed63c32d7bdc1b8e1dfa",
+      "sha256": "0d640dd062294255b344763049577c3a99b0240e034f47e16842570fa09b6834"
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES.md",
+      "mode": "100644",
+      "git_blob": "c857ca79e40cef01db6c935339b65d9b179fbff7",
+      "sha256": "7ac6677e7c364ba7970d2932977e166150cf966018ee146833c7a9f5d70330f2"
+    },
+    {
+      "path": "example/CLOD_DAG.dot",
+      "mode": "100644",
+      "git_blob": "c352e1a2652028b792ec8f82c0a866e2aad00be8",
+      "sha256": "a192c22b8e84397b75abe2eb6628abc0c157a4c271bc61db3559016bd66abe63"
+    },
+    {
+      "path": "example/CLOD_DAG.svg",
+      "mode": "100644",
+      "git_blob": "e10585d7d8cf0d50b52211507481391a001a2059",
+      "sha256": "02758c36f6fcbeb900ab7b84fd31a83b306b8c90ee9c464bb584fab6e9e68e16"
+    },
+    {
+      "path": "example/CompileAsC.c",
+      "mode": "100644",
+      "git_blob": "6b695d8ab50dc26e2e41c9dc5c3e4d3cccfd148f",
+      "sha256": "0801dc366f5aed3dabdd388e9390ec90b683249464d38c2f2eafe1bac90bf9ec"
+    },
+    {
+      "path": "example/main.cpp",
+      "mode": "100644",
+      "git_blob": "451d484067afd9ecf0619f14c9f2386c3b4f9a94",
+      "sha256": "e9f12a543dfc106a75a21be83542510aa7bacf5d48e870588cdd5720af5083f2"
+    }
+  ],
+  "excluded": [],
+  "gitlinks": [],
+  "symlinks": [],
+  "binary_paths": []
+}
