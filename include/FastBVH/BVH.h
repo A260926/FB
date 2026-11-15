@@ -81,6 +81,41 @@ class BVH final {
   //! \return An iterable container of the primitive array.
   inline auto getPrimitives() const noexcept { return primitives; }
 
+  //! Refreshes every bounding box in place without changing the tree
+  //! topology, the node connections, or the primitive ordering.
+  //! Leaf boxes are recomputed from the primitives through \p converter;
+  //! internal boxes are merged bottom-up from their children.
+  //! An empty tree is a no-op. The flattened tree stores every subtree
+  //! contiguously in preorder, so iterating the node array in reverse
+  //! visits all descendants before their parent.
+  //! \tparam BoxConverter The type of the primitive-to-box converter.
+  //! \param converter The converter used to recompute leaf boxes.
+  template <typename BoxConverter>
+  void refit(const BoxConverter& converter) {
+    if (nodes.empty()) {
+      return;
+    }
+
+    for (std::size_t k = nodes.size(); k-- > 0;) {
+      Node<Float>& node = nodes[k];
+
+      if (node.isLeaf()) {
+        if (node.primitive_count == 0) {
+          continue;
+        }
+
+        auto bb = converter(primitives[node.start]);
+        for (uint32_t p = 1; p < node.primitive_count; ++p) {
+          bb.expandToInclude(converter(primitives[node.start + p]));
+        }
+        node.bbox = bb;
+      } else {
+        node.bbox = nodes[k + 1].bbox;
+        node.bbox.expandToInclude(nodes[k + node.right_offset].bbox);
+      }
+    }
+  }
+
  protected:
   //! Build the BVH tree out of build_prims
   //! \param converter The primitive to bounding box converter.

@@ -15,3 +15,95 @@ The included example code renders a million spheres distributed inside of a cube
 
 I have attempted to comment this code well and make everything well-understood. If there is an issue 
 with the code, a question as to how something works, or if you use this in a project, please let me know!
+
+================================================================================
+Hierarchical Scene Graph (FastBVH::SceneGraph)
+================================================================================
+
+Header: include/FastBVH/SceneGraph.h (also pulled in by include/FastBVH.h).
+Everything is header-only, uses double and the C++14 standard library, and
+lives in namespace FastBVH::SceneGraph. It builds a directed acyclic graph on
+top of the existing single-level BVH: a group references meshes or other
+groups through affine edges, and the same child may have many parents.
+Shared children are stored once and are never expanded into per-instance
+copies of the tree or the world-space triangles.
+
+Types
+-----
+  NodeId       uint32_t stable handle returned by add_mesh / add_group.
+  Triangle     Vec3 a, b, c plus uint32_t material. Winding a->b->c defines
+               the front face; vertices must be finite and non-degenerate.
+  Edge         uint32_t id; NodeId child; std::array<double,12> transform
+               (row-major 3x4 affine); uint32_t mask; int64_t
+               material_override (-1 = no override, a non-negative value that
+               fits in uint32_t overrides the face material).
+  Hit          std::vector<uint32_t> path (edge ids root->mesh); NodeId mesh;
+               uint32_t primitive_id, material; double t; Vec3 position,
+               normal. normal is unit length and follows the actual world
+               winding (mirroring flips it). primitive_id is the triangle's
+               index in the original add_mesh input regardless of BVH order.
+  QueryStats   uint64_t node_visits, edge_tests, triangle_tests. Zeroed at
+               the start of every call.
+  StorageStats uint64_t mesh_count, group_count, stored_edges,
+               stored_triangles. Counts owned objects once, never per path.
+
+Scene construction
+------------------
+  NodeId add_mesh(std::vector<Triangle>);
+  NodeId add_group(std::vector<Edge>);
+Both take the container by value and move it, so the Scene owns its data and
+the caller's container may be destroyed afterwards. Empty meshes and empty
+groups are legal and get empty (no-op) BVHs. Every child edge must reference
+an existing node, edge ids must be unique within a group, and each transform
+must be finite with a non-zero (hence invertible) determinant. Any invalid
+add throws std::invalid_argument and allocates no node.
+
+Queries
+-------
+  bool closest(NodeId root, const Ray<double>&, double tmin, double tmax,
+               uint32_t mask, Hit&, QueryStats* = nullptr);
+  bool occluded(NodeId root, const Ray<double>&, double tmin, double tmax,
+                uint32_t mask, QueryStats* = nullptr);
+The distance window is the finite closed interval 0 <= tmin <= tmax. The ray
+direction must be finite and non-zero but need not be unit length; it is
+never normalized, so t is always the original world parameter. Intersections
+are double sided. closest leaves its output Hit untouched on a miss. Exact
+distance ties are resolved by the lexicographically smallest
+(path, primitive_id). Along a path the effective mask is the query mask
+AND-ed with every edge mask, and the first non-negative material override on
+the root-to-leaf path wins, otherwise the triangle material is used. Each
+group and mesh is traversed through its own BVH (node pruning), never by
+line-scanning edges or faces. All path-dependent state (mask, override,
+path, transforms) lives on the traversal stack, so multiple read-only
+queries may run concurrently.
+
+Frame updates
+-------------
+  bool replace_edges(NodeId group, std::vector<Edge>);
+Intended for inter-frame edits. On any invalid input (unknown group, mesh
+handle, duplicate edge id, non-finite/singular transform, out-of-range
+override, unknown child, or a cycle including an indirect one) it returns
+false and changes nothing: old edges, bounds, query results and storage
+counters are preserved. On success the group identity is unchanged and the
+new edges are queryable immediately with no caller-side rebuild. Only the
+replaced group's edge BVH is rebuilt; every still-dependent shared ancestor
+keeps its node connections and edge ordering and is refitted bottom-up in
+dependency order via the new native BVH::refit(BoxConverter) (an empty tree
+is a no-op). Unrelated sub-groups and mesh BLAS are not rebuilt. Groups and
+roots may be emptied and later refilled; removing edges drops their old
+reverse dependencies, so no stale parent relationship survives.
+
+Diagnostics
+-----------
+  GroupBvhDiagnostic diagnose_group_bvh(NodeId group);
+  StorageStats storage_stats();
+The diagnostic snapshots the flattened group BVH nodes (bounding box,
+primitive start/count, right offset, leaf flag) and the concatenated leaf
+edge ids, so node connections and edge-id ordering can be compared across
+replace_edges calls (bounds themselves change during a refit).
+storage_stats counts objects the Scene actually owns; a mesh or group
+referenced through many parent paths is still counted once.
+
+The original DefaultBuilder, BVH and Traverser remain unchanged and source
+compatible; BVH gains only the additional refit() template method. No
+external models or third-party dependencies are used.

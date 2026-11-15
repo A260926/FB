@@ -7,5 +7,6 @@
 #include <FastBVH/Intersection.h>
 #include <FastBVH/Iterable.h>
 #include <FastBVH/Ray.h>
+#include <FastBVH/SceneGraph.h>
 #include <FastBVH/Traverser.h>
 #include <FastBVH/Vector3.h>
