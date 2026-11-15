@@ -15,7 +15,7 @@ use crate::pdbi::PDBInformation;
 use crate::pe::ImageSectionHeader;
 use crate::source::Source;
 use crate::strings::StringTable;
-use crate::symbol::SymbolTable;
+use crate::symbol::{IndexStream, SymbolTable};
 use crate::tpi::{IdInformation, TypeInformation};
 
 // Some streams have a fixed stream index.
@@ -175,7 +175,28 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
             .raw_stream(dbi_header.symbol_records_stream)?
             .ok_or(Error::GlobalSymbolsNotFound)?;
 
-        Ok(SymbolTable::new(stream))
+        // Load the optional indexes. A declared stream that is missing from the MSF is treated as
+        // absent; the corresponding query then reports the index as unavailable.
+        let global_index = match self.load_index(dbi_header.gs_symbols_stream)? {
+            Some(stream) => Some(IndexStream::new(dbi_header.gs_symbols_stream, stream)),
+            None => None,
+        };
+        let public_index = match self.load_index(dbi_header.ps_symbols_stream)? {
+            Some(stream) => Some(IndexStream::new(dbi_header.ps_symbols_stream, stream)),
+            None => None,
+        };
+
+        Ok(SymbolTable::with_indexes(stream, global_index, public_index))
+    }
+
+    /// Loads an optional index stream, treating a stream number that is declared but not present
+    /// in the MSF as absent.
+    fn load_index(&mut self, index: StreamIndex) -> Result<Option<Stream<'s>>> {
+        match self.raw_stream(index) {
+            Ok(stream) => Ok(stream),
+            Err(Error::StreamNotFound(_)) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     /// Retrieve the module info stream for a specific `Module`.

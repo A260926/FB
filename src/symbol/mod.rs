@@ -15,6 +15,11 @@ use crate::FallibleIterator;
 
 mod annotations;
 mod constants;
+mod index;
+
+pub use self::index::{gsi_bucket, SymbolIndexKind};
+pub(crate) use self::index::IndexStream;
+use self::index::IndexCache;
 
 use self::constants::*;
 pub use self::constants::{CPUType, SourceLanguage};
@@ -38,6 +43,11 @@ pub struct Symbol<'t> {
 }
 
 impl<'t> Symbol<'t> {
+    /// Constructs a symbol from its index and raw record data.
+    pub(crate) fn from_parts(index: SymbolIndex, data: &'t [u8]) -> Self {
+        Symbol { index, data }
+    }
+
     /// The index of this symbol in the containing symbol stream.
     #[inline]
     pub fn index(&self) -> SymbolIndex {
@@ -1538,12 +1548,27 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SeparatedCodeSymbol {
 #[derive(Debug)]
 pub struct SymbolTable<'s> {
     stream: Stream<'s>,
+    /// The global symbol index stream, if the DBI stream declared one.
+    global_index: Option<IndexStream<'s>>,
+    /// The public symbol index stream, if the DBI stream declared one.
+    public_index: Option<IndexStream<'s>>,
+    /// Lazily built record boundaries and parsed indexes.
+    cache: IndexCache,
 }
 
 impl<'s> SymbolTable<'s> {
-    /// Parses a symbol table from raw stream data.
-    pub(crate) fn new(stream: Stream<'s>) -> Self {
-        SymbolTable { stream }
+    /// Parses a symbol table from raw stream data, attaching the optional indexes.
+    pub(crate) fn with_indexes(
+        stream: Stream<'s>,
+        global_index: Option<IndexStream<'s>>,
+        public_index: Option<IndexStream<'s>>,
+    ) -> Self {
+        SymbolTable {
+            stream,
+            global_index,
+            public_index,
+            cache: IndexCache::default(),
+        }
     }
 
     /// Returns an iterator that can traverse the symbol table in sequential order.

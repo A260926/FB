@@ -54,6 +54,24 @@ pub enum Error {
     /// The global shared symbol table is missing.
     GlobalSymbolsNotFound,
 
+    /// The requested symbol index is not declared by this PDB's debug information stream.
+    ///
+    /// The string names the missing index (`"global"` or `"public"`).
+    SymbolIndexUnavailable(&'static str),
+
+    /// A symbol index stream was structurally invalid.
+    ///
+    /// `stream` is the index stream number, `offset` is the logical offset within that stream at
+    /// which the problem was detected.
+    InvalidSymbolIndex {
+        /// The stream number of the offending index.
+        stream: u32,
+        /// The logical offset within the index stream.
+        offset: u32,
+        /// A human-readable description of the problem.
+        reason: &'static str,
+    },
+
     /// A symbol record's length value was impossibly small.
     SymbolTooShort,
 
@@ -133,6 +151,20 @@ impl fmt::Display for Error {
             Self::StreamNotFound(s) => {
                 write!(f, "The requested stream ({}) is not stored in this file", s)
             }
+            Self::GlobalSymbolsNotFound => write!(f, "The global symbol table is missing"),
+            Self::SymbolIndexUnavailable(index) => {
+                write!(f, "The {} symbol index is not available in this PDB", index)
+            }
+            Self::InvalidSymbolIndex {
+                stream,
+                offset,
+                reason,
+            } => write!(
+                f,
+                "The symbol index in stream {} is invalid at offset {:#x}: {}",
+                stream, offset, reason
+            ),
+            Self::SymbolTooShort => write!(f, "A symbol record's length is too short"),
             Self::InvalidStreamLength(s) => write!(
                 f,
                 "{} stream has an invalid length or alignment for its records",
