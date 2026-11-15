@@ -1,0 +1,773 @@
+{
+  "repo": "https://github.com/andrew-lim/sw3dcpp",
+  "commit": "45e1a87903058b632597e30d5c3547efab929643",
+  "archive_sha256": "fa0e79b752f93c6d83a4391b72dfbef1970bdc9473f2417d1dad7e9385b1e220",
+  "exclusions": [
+    {
+      "path": "devcpp/Makefile.win",
+      "sha256": "845d69526bb6d3c962438238ef90c74573af13c2b1a383b3b7d41db205cf4088",
+      "mode": "0o644",
+      "bytes": 4060,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "devcpp/sw3dcpp.dev",
+      "sha256": "1904ef0044a65196fd36a91c0ba7d6866ffa23f8fea98eb5c81e4af51b1a4938",
+      "mode": "0o644",
+      "bytes": 5992,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "devcpp/sw3dcpp.layout",
+      "sha256": "648fa9925fa918cc31141864f8a71904c5d607f1f4afcebbe7a9ff94797d3a34",
+      "mode": "0o644",
+      "bytes": 2457,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "devcpp/sw3dcpp_private.h",
+      "sha256": "1a8e8ca3bebeb742f96b655ac345601eef2fb0c363502e5178224c26147e669f",
+      "mode": "0o644",
+      "bytes": 569,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "devcpp/sw3dcpp_private.rc",
+      "sha256": "76c3f9400b3bf3c414b01222f97dbf588c95629d3f1d28c89e457195ace2992a",
+      "mode": "0o644",
+      "bytes": 97,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "devcpp/sw3dcpp_private.res",
+      "sha256": "4578e8045dfea8e46f641034c04010199697782a4a43971d930f87a08defb218",
+      "mode": "0o644",
+      "bytes": 548,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/README.md",
+      "sha256": "8e2bbb36e0fb0860416ed728abcf7e9e85cc6503e16dbae6e6a5f713781a1e5e",
+      "mode": "0o644",
+      "bytes": 716,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/artisans/High.png",
+      "sha256": "9c5bcf07703e0f91d4654ebf693155fff867cce0099697e4dacd3f1c5a9280ba",
+      "mode": "0o644",
+      "bytes": 219121,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/artisans/Low.png",
+      "sha256": "4cbb7c6f0800f8b30a2b4110fe8b135ed1b5c50eb65f4f1c169c50dfe61c4e0b",
+      "mode": "0o644",
+      "bytes": 62686,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/artisans/artisans_hub.mtl",
+      "sha256": "13475ad57026abcabeadc241ed9408dc1a909e2d8b4593c5ab6b013853d5b6a3",
+      "mode": "0o644",
+      "bytes": 218,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/artisans/artisans_hub.obj",
+      "sha256": "d0281e792d8ab81f96b0623c42ec20660d92a833d84d1ccc53c5fbba1da50ac5",
+      "mode": "0o644",
+      "bytes": 336677,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/cube.obj",
+      "sha256": "b9cd7d44667d222be7c2161407fc77fa00f99ee189ee85d6afe917bcfdf24664",
+      "mode": "0o644",
+      "bytes": 425,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BIGDOOR2.PNG",
+      "sha256": "5e889439bb64779f44ed359fd4dd042a38876e1122e25e96319a42c790eebba6",
+      "mode": "0o644",
+      "bytes": 9466,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BIGDOOR4.PNG",
+      "sha256": "5889389ee193fe9d2670c88396a2f1d0e753dda1220a9cb84bd84aa1b78d6534",
+      "mode": "0o644",
+      "bytes": 9144,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BRNBIGC.PNG",
+      "sha256": "e810951b507349c4476a98e3022856cf6e5062c8f255edd6c4b63b25fabf885e",
+      "mode": "0o644",
+      "bytes": 6460,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BRNBIGL.PNG",
+      "sha256": "63ca340f295c600347007cea27e1c55111adc223563e28762ab022030de8421d",
+      "mode": "0o644",
+      "bytes": 2642,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BRNBIGR.PNG",
+      "sha256": "ff9ed6458e10d209995f671bb9680db14e6a440c7aa5d875091dbaa785098cd9",
+      "mode": "0o644",
+      "bytes": 2724,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BROWN1.PNG",
+      "sha256": "b15b82ddcd6158a3cbab22a498543bc21b0ccf6d012c3df52e7a121989fa416a",
+      "mode": "0o644",
+      "bytes": 10255,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BROWN144.PNG",
+      "sha256": "b06b0e0d4bf799fe0647e2756fb24b417f1a8e97fa5a643dad8c9f6619a3e91a",
+      "mode": "0o644",
+      "bytes": 7795,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BROWN96.PNG",
+      "sha256": "bffe6d0f0a1a51c40696d331ae4a1419b5354aa9890a6e4b5e8ec596b1c3857a",
+      "mode": "0o644",
+      "bytes": 8046,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/BROWNGRN.PNG",
+      "sha256": "6e9cbd845ead4c30f4bae4758fe006f065f9267455646118064448b821212c5a",
+      "mode": "0o644",
+      "bytes": 4386,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/CEIL3_5.PNG",
+      "sha256": "780c64f04351187b49675d1124887f0f80009682d6f6c9fad623c252bc8f58e3",
+      "mode": "0o644",
+      "bytes": 1675,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/CEIL5_1.PNG",
+      "sha256": "284dc6a0bd830d76c23ae686f2ae927f05c96c3393d42d4789294915c7088e4a",
+      "mode": "0o644",
+      "bytes": 1500,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/CEIL5_2.PNG",
+      "sha256": "0016ff81040de27228f634996f4338dffa2a6d96d3c42719bd670473a9a0fbed",
+      "mode": "0o644",
+      "bytes": 2298,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/COMPSPAN.PNG",
+      "sha256": "a746f2d76dfbc832c30d40e9a039c77a3f87abf87e4d1af70e50652f801aee16",
+      "mode": "0o644",
+      "bytes": 234,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/COMPTALL.PNG",
+      "sha256": "d232efd8a6482d51d2bfe4230157e104274a2ce006b668e430fed7f8d5dcc5e7",
+      "mode": "0o644",
+      "bytes": 11602,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/COMPTILE.PNG",
+      "sha256": "3d9e8b491a30ddc20fc5f6f1f0793fdbcdfedb6f11034ebb26bd3dd944692fbe",
+      "mode": "0o644",
+      "bytes": 4926,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/COMPUTE2.PNG",
+      "sha256": "85a986e961367fcaf2d6251ca816c64524f6544c02c7c1f769d45a944df5fd42",
+      "mode": "0o644",
+      "bytes": 5710,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/COMPUTE3.PNG",
+      "sha256": "8b02a6f9e1ceaf69b344e20b7900bf06a90963fbadb432a88f3566db73ed18d5",
+      "mode": "0o644",
+      "bytes": 5992,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/DOOR3.PNG",
+      "sha256": "5d692e495ac53b249d947c562e57fe1689847a6ae5480d9f46b4376e5984793f",
+      "mode": "0o644",
+      "bytes": 2026,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/DOORSTOP.PNG",
+      "sha256": "477b44a9177151be4d35472612c4107441e6f6f484052107cd4185a909224c99",
+      "mode": "0o644",
+      "bytes": 624,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/DOORTRAK.PNG",
+      "sha256": "75dfaf0ec9898f3f83ca228f88a5141ca6eadbdd04ae4c0b421c0eba068b05de",
+      "mode": "0o644",
+      "bytes": 573,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/Doom_E1M1.mtl",
+      "sha256": "4043fe3e9751f23be8dda05db5180c907b285853898cb07cd5c7e6398d3346a5",
+      "mode": "0o644",
+      "bytes": 2895,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/Doom_E1M1.obj",
+      "sha256": "4d0bc45c0a7993b99e3d869244971245e35130ca07eb9b62758b4213754d7423",
+      "mode": "0o644",
+      "bytes": 81908,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/EXITDOOR.PNG",
+      "sha256": "dd4f0e7c3f22a00f21ad47dceff1656715bf79f220f6ad6401955b613dadee6e",
+      "mode": "0o644",
+      "bytes": 7853,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/EXITSIGN.PNG",
+      "sha256": "0a54046b1cde9f308c800424eab7064068a629668950fed053a912280fba3e4e",
+      "mode": "0o644",
+      "bytes": 478,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLAT14.PNG",
+      "sha256": "cdcacdab7b7e6dd783463f4d6c84e088519e246e1ebf704620138ce11b096ce4",
+      "mode": "0o644",
+      "bytes": 2645,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLAT18.PNG",
+      "sha256": "7c278a0f382dde44fd7b48b88caa6268e84cb926de9523606547fabda1db6146",
+      "mode": "0o644",
+      "bytes": 2073,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLAT20.PNG",
+      "sha256": "10e35e1dcd109aa704e61bba5997535eefb286b6327cbe38165028fdfe4d97a9",
+      "mode": "0o644",
+      "bytes": 517,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLAT23.PNG",
+      "sha256": "a0cb846a20ee676db6050c14ca5b16c81de285d2f572b331e226fb03914cb0dd",
+      "mode": "0o644",
+      "bytes": 1321,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLAT5_5.PNG",
+      "sha256": "c4be2203c715b50210e8d7b30ca28ddfd0c3d3a81249436c3fb29b36e222cf53",
+      "mode": "0o644",
+      "bytes": 3377,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR1_1.PNG",
+      "sha256": "248a1201e5f3cdcf50e98463740723db79af4610b517079adca488badd9aa165",
+      "mode": "0o644",
+      "bytes": 2466,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR4_8.PNG",
+      "sha256": "4c5167bda9e29d32430695adf7327b39fe09b60bee3b3d5c92fad8bc0b278b06",
+      "mode": "0o644",
+      "bytes": 2594,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR5_1.PNG",
+      "sha256": "8bf38aa9ab43f938387d31371aeb09bd1b51a618fe4d4e7918f8a05e535e51c2",
+      "mode": "0o644",
+      "bytes": 2886,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR5_2.PNG",
+      "sha256": "bf32f3deb0531cfb36626680f0b986c4b40e1ae0aff4c1d81a3db031038394b2",
+      "mode": "0o644",
+      "bytes": 2123,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR6_2.PNG",
+      "sha256": "8249330fdd249585ee9bcd082762417b23fd224d5a63b271f4c0a1558bedc980",
+      "mode": "0o644",
+      "bytes": 3087,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR7_1.PNG",
+      "sha256": "74f71f9366cd863e1efc6c30c7a604af60484fcab6d89912a23fb27e7a6273c0",
+      "mode": "0o644",
+      "bytes": 2534,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/FLOOR7_2.PNG",
+      "sha256": "5dd8a9538206d744f0c60f5bdb96e1c392f1cba4d2603c1faa85579b754d4790",
+      "mode": "0o644",
+      "bytes": 2862,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/F_SKY1.PNG",
+      "sha256": "d81c2cf8ddc9e0ba7662caecf204ef68211cb6a2a5bb6b481e6caa8c58bff404",
+      "mode": "0o644",
+      "bytes": 3515,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/LITE3.PNG",
+      "sha256": "6f03ab7274050cacc584b336b80b34c6990f6928fa314f32b3350a5fa74bd7a0",
+      "mode": "0o644",
+      "bytes": 401,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/NUKAGE3.PNG",
+      "sha256": "187915b1c2dc602aa16203c33360b62d7e4d204aa75bc6d09c94feb957cef382",
+      "mode": "0o644",
+      "bytes": 2312,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/NUKE24.PNG",
+      "sha256": "0b4c37096e624a767369abb3283e3339444a968f086b1dfd2367a6eded123630",
+      "mode": "0o644",
+      "bytes": 1224,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/PLANET1.PNG",
+      "sha256": "5562508980d34715a73dd2d6fb8c45c925d00654989887a03d5c672e3161f3ab",
+      "mode": "0o644",
+      "bytes": 14545,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/SLADWALL.PNG",
+      "sha256": "945a8d80f17c3427b0d7214ce2035a836d1d25c40a1acda6512d66941ca8c0a7",
+      "mode": "0o644",
+      "bytes": 4178,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STARG3.PNG",
+      "sha256": "4b187281ff67a1c348a2d3c9f2c079dd590d08547d51c2931bf1d66273c9ff1f",
+      "mode": "0o644",
+      "bytes": 8868,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STARGR1.PNG",
+      "sha256": "7fbb072e6573f60c4c111c3632286a066f447f87eb378076fd6bbf05cb3f41ba",
+      "mode": "0o644",
+      "bytes": 4151,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STARTAN1.PNG",
+      "sha256": "d14cd90c6b17c5a70bbd7f80de61df0edd44b44b2b328c84e63a79e496c6fabc",
+      "mode": "0o644",
+      "bytes": 3605,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STARTAN3.PNG",
+      "sha256": "8afd25d2580c18b4a641470778335671c37eafb32f884ac7f5122642856390c6",
+      "mode": "0o644",
+      "bytes": 10898,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STEP1.PNG",
+      "sha256": "687b4e0d76c7df3abfbc3c58527031b68a9b39343eabb8257c738cfee7be41fc",
+      "mode": "0o644",
+      "bytes": 285,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STEP2.PNG",
+      "sha256": "fd585a070f77a4597ecdd4910c2ed7dca523faad820696ba11d278c0867219c7",
+      "mode": "0o644",
+      "bytes": 1836,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/STEP6.PNG",
+      "sha256": "8e11818cf1b96d1e2c40e5664f9a5b2f65f5524f12aaa86e44d69fefd03937b5",
+      "mode": "0o644",
+      "bytes": 563,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/SUPPORT2.PNG",
+      "sha256": "178632573b1c7fa252f15adc69a1f5cf6f65a5ab92331d6eb57a3f875e66b753",
+      "mode": "0o644",
+      "bytes": 2164,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/SW1COMP.PNG",
+      "sha256": "5989dae80ab2b1380bdf9ec48b09671b4505a11427a734b0f4f9a2c78cdb4970",
+      "mode": "0o644",
+      "bytes": 3393,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/SW1STRTN.PNG",
+      "sha256": "1e12b989e45e146b3223344c035d37d97f4bda8c3bf9558b648f9758cf704fa7",
+      "mode": "0o644",
+      "bytes": 3872,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TEKWALL1.PNG",
+      "sha256": "12942c532e1f91b7a63804ec27d6cc7e1f512c66bcd8fdb794cf1f88181074c3",
+      "mode": "0o644",
+      "bytes": 15528,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TEKWALL4.PNG",
+      "sha256": "9a362512a51accf6cc937cbdfbabcac06f38ce66b6f79ccaf4eb89d20b3af525",
+      "mode": "0o644",
+      "bytes": 17951,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TLITE6_1.PNG",
+      "sha256": "c2793f370c68197f59db4299e0339891145a30aeec3158539bf3c7bfd57f93c4",
+      "mode": "0o644",
+      "bytes": 1575,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TLITE6_4.PNG",
+      "sha256": "8544f562126bc85faad20f155af7bd8120f69f33b91d641fd70e8642892a7747",
+      "mode": "0o644",
+      "bytes": 2279,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TLITE6_5.PNG",
+      "sha256": "1f62c106258dcebe4ea7044d1a1a9898762cb695f51d1e4c641c7e62e47eb11d",
+      "mode": "0o644",
+      "bytes": 1662,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/doom_e1m1/TLITE6_6.PNG",
+      "sha256": "43ac417843e73c7d9c8f91dcd7f499138c36cd6dee600ac2df7a7d081494b39b",
+      "mode": "0o644",
+      "bytes": 2384,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/INFOmesh.txt",
+      "sha256": "a47b9bb4407bdddccba351ca9df63531b0eb57f9825dcb3584ceb149ae30197c",
+      "mode": "0o644",
+      "bytes": 229,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharryTex0.png",
+      "sha256": "5a7684c8e3f72ffd4360f1d06bcfbf664c46259929fbb00a65b3b5dfcf9e3614",
+      "mode": "0o644",
+      "bytes": 30219,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharryTex1.png",
+      "sha256": "b7abbcd936ba6f21f631ef0692db239ab0f0b6585b777ff54cf05e1ccf39839e",
+      "mode": "0o644",
+      "bytes": 25605,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharryTex2.png",
+      "sha256": "be9ec641b2bcb807e7ba91ea21e7119cd345f97c8994e803e5696792202cc56f",
+      "mode": "0o644",
+      "bytes": 9804,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharryTex3.png",
+      "sha256": "9457cd5badcaf7d3b067d31ff301535d20d31f95ce7f8d38060bf955c1a0c09b",
+      "mode": "0o644",
+      "bytes": 763,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharrymesh.fbx",
+      "sha256": "e023fb23936a48652604188e3043127a3e96f667e895bc0e5e5e05fdd087008b",
+      "mode": "0o644",
+      "bytes": 1029216,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharrymesh.mtl",
+      "sha256": "a7cd9bb24a58091009383a2c8ad72810fb99152084beb18fdf0ffa0d7eb4195d",
+      "mode": "0o644",
+      "bytes": 744,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/harrypotter/skharrymesh.obj",
+      "sha256": "4536c74e19ec701ec258cca6bf07ce1f717556e68e35fbdc347744e6d91b9303",
+      "mode": "0o644",
+      "bytes": 93946,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/jillvalentine/CHAR11.png",
+      "sha256": "92a68dcd04ef9bcab35de6a7c88055495b4c011124604a3be165cf4ce1b5926c",
+      "mode": "0o644",
+      "bytes": 24153,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/jillvalentine/Jill.OBJ",
+      "sha256": "400a72d09216b5966b904809f2f9bf49abd5b63edf16ce78c5124b8364b1db47",
+      "mode": "0o644",
+      "bytes": 60911,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/jillvalentine/Jill.mtl",
+      "sha256": "b8a5aa32b929c759a32d9058328d719b7a15da8d26f60077579addc18b34546e",
+      "mode": "0o644",
+      "bytes": 195,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/laracroft/Lara.mtl",
+      "sha256": "d0e3c10cccf18d59e9352a15c2b6ddfa56804eb6785764d3f4341028132a2e2b",
+      "mode": "0o644",
+      "bytes": 414,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/laracroft/Lara.obj",
+      "sha256": "cbd58fe975f5fb3a8325a7fbb4ee53d2ae9538867518776f90bd3c251e61e489",
+      "mode": "0o644",
+      "bytes": 132450,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/laracroft/Lara.png",
+      "sha256": "f3e51677e02c866b48baab898cb06cf4f2d0873a5ee04268733f99138bd7e599",
+      "mode": "0o644",
+      "bytes": 29689,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/laracroft/ponytail.png",
+      "sha256": "2d000bcfda10c268b0b21a735ddfc092d2b973fb585a292945c51b850b412d32",
+      "mode": "0o644",
+      "bytes": 736,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/megamanlegends/Megaman.mtl",
+      "sha256": "1dd06b481219eae2c0662cd056ef01346e02a22922694c92c20266e3d15e3817",
+      "mode": "0o644",
+      "bytes": 156,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/megamanlegends/Megaman.obj",
+      "sha256": "35fb17267c653427a3621c5de155ac711f99c9fe6448d90e5c73bf1e92b1fb4f",
+      "mode": "0o644",
+      "bytes": 63727,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/megamanlegends/Megaman.png",
+      "sha256": "162a59c65b4ab60c4064e65c8e9d62b7b40e0463fa49066160785e2b41377032",
+      "mode": "0o644",
+      "bytes": 39248,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Eyelids.png",
+      "sha256": "43d28d5ee1022a3cff34bb69d56dce1d05c82c1c1e2c0a46bafd8496857dc0e9",
+      "mode": "0o644",
+      "bytes": 18958,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Eyes.png",
+      "sha256": "e9d03cff1440b47039f54dcc490e8ae2bea624ac8c735df440bfe7bf4cfb3e2b",
+      "mode": "0o644",
+      "bytes": 17467,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Reflection.png",
+      "sha256": "f130eb0e05b8001e62a502a051dd2003f3abd6447831d2f07b5d21d6e21b345c",
+      "mode": "0o644",
+      "bytes": 1078,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Spyro.mtl",
+      "sha256": "4affbb6a6cbd006738fe650b131bf0dc1e81bdeed6ddba44a4194db714e0ec57",
+      "mode": "0o644",
+      "bytes": 1091,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Spyro.obj",
+      "sha256": "ed024cbf49b57bbdc6ad36c429296fc2931c4a9342c9c4925374cebcdd7f1ddf",
+      "mode": "0o644",
+      "bytes": 255213,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Spyro.png",
+      "sha256": "e72fec3febef569983c9fe6cb7183ca2b7416c8d306bcc72c9c1cf64ee4d19ba",
+      "mode": "0o644",
+      "bytes": 114571,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/spyro/Spyro2.png",
+      "sha256": "3dc6c339c35253df18d3fd2c701b80990b0f5cfa8c0b568e36472677171ef75f",
+      "mode": "0o644",
+      "bytes": 21650,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/obj/teapot.obj",
+      "sha256": "1b5396fedd74b577e32cef41146582c2f2e1a050d5b4915193c0ac1ad4187ed4",
+      "mode": "0o644",
+      "bytes": 210614,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/sw3dcpp.exe.manifest",
+      "sha256": "28d440d5df3a500f7a465d552daa3bd44ec4a367068723de5db65afa1a94c771",
+      "mode": "0o644",
+      "bytes": 368,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture1.bmp",
+      "sha256": "bc9060a01a1d49184971ea8837d6ab1168af8d8a1f4c853dea55676a41c91bf4",
+      "mode": "0o644",
+      "bytes": 49206,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture1.png",
+      "sha256": "7eec27ed6bbb0d02463c6af432c8648e58685bc7328ec7b0f258d0928841dfbc",
+      "mode": "0o644",
+      "bytes": 12800,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture2.bmp",
+      "sha256": "8fe7eb02dfe8604b0a4a65d3be32fcc1328908806fc8327bca3a8bbe9110d414",
+      "mode": "0o644",
+      "bytes": 49206,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture3.bmp",
+      "sha256": "0c627d4fdf7f311413c9bfaf100af5966053159cebc44d5b62b823c9cc410367",
+      "mode": "0o644",
+      "bytes": 49206,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture4.bmp",
+      "sha256": "f4f75045d86729a0d064dc3dd77d6544891481987597bc62fe020151bd5a4b67",
+      "mode": "0o644",
+      "bytes": 49206,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture5.bmp",
+      "sha256": "41eeb610556bc1a08792cb21f3209f5c2ec45d0ac94521ae318ad8c4c224cb12",
+      "mode": "0o644",
+      "bytes": 12342,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture6.bmp",
+      "sha256": "0dff4c793ae90273339e3c7d0a5e4636502f12b8b06dad53fb3d89a78ea9dbda",
+      "mode": "0o644",
+      "bytes": 12342,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "res/texture7.bmp",
+      "sha256": "db67320a59d5e468d6bc010b780dc56c09ee3d1912ba4fce3e484daa5d88ce11",
+      "mode": "0o644",
+      "bytes": 12342,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "screenshots/screenshot01.png",
+      "sha256": "7d4b67ed74e6d95fa292fbb9f5bb9dc4e254df1ef6627428f50ae89e94ff441a",
+      "mode": "0o644",
+      "bytes": 124453,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "screenshots/screenshot02.png",
+      "sha256": "e46c4d32aa1ffa5c13428279769fb8894f607d6019ac8db63a8fa2c3b0c5115c",
+      "mode": "0o644",
+      "bytes": 30347,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "screenshots/screenshot03.png",
+      "sha256": "27114a8c85b4cd9824d3666c9699a8352e7d096acd692571c80089f4a6c330fd",
+      "mode": "0o644",
+      "bytes": 307267,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    },
+    {
+      "path": "screenshots/screenshot04.png",
+      "sha256": "6946aeba11c6e313cf7d5bed02c037047f6b738f0d68f98c05b642d52177b40a",
+      "mode": "0o644",
+      "bytes": 219563,
+      "reason": "unused window-demo assets, screenshots or legacy IDE artifacts; headless production core generates all data in memory"
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": false,
+  "runtime": "C++17 standard library; core TriangleDrawer/ClipSpace/ImageData independent of Win32 and unused vendored GLM/loaders; no network"
+}
