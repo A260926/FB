@@ -1,0 +1,223 @@
+# marrow
+
+[![CI](https://github.com/jesta88/marrow/actions/workflows/ci.yml/badge.svg)](https://github.com/jesta88/marrow/actions/workflows/ci.yml)
+
+**A pure-C11, zero-dependency, engine- and renderer-agnostic animation runtime for games.**
+
+![marrow's unified LOD field: 65,536 animated characters — a near CPU Tier-A foreground continuing into a baked Tier-B GPU crowd, the far tail collapsing into a bone-line skeleton horizon](site/hero.jpg)
+
+*The [demo](demo/)'s unified LOD field at 65,536 entities: each character is classified per frame by camera distance into a CPU Tier-A foreground and a baked-GPU Tier-B crowd, the far tail rendered as bone-line skeletons.*
+
+marrow turns skeletons and animation clips into skinning matrices. It is *batch-first*: one
+call animates `N` instances that share a skeleton, so you can drive tens of thousands of
+characters without tens of thousands of per-instance virtual calls.
+
+**Documentation:** **<https://jesta88.github.io/marrow/>**
+
+---
+
+## Features
+
+- **Zero runtime dependencies, zero allocation**: Pure C11, no libc beyond `<math.h>`. Every
+  buffer is sized by a `*_requirements()` query that returns both **size and alignment**; you
+  bring the allocator. Console- and fixed-budget-friendly.
+- **Flat C ABI**: `extern "C"`, compiles as both C11 and C++, out-params + result codes, no SIMD
+  types in public structs. Trivial to bind from any language.
+- **Batch-first and data-oriented (SoA)**: The hot path **fuses**
+  local → model → skinning and writes the canonical 3×4 palette directly, vectorized
+  *across instances* (lane *i* = instance *i*).
+- **Runtime SIMD dispatch**: Scalar, SSE2, and AVX2 (+FMA, +F16C) kernels live
+  in separately-flagged translation units. Backend selection is a small caller-owned, immutable
+  POD value. Buffer sizes never depend on the chosen backend.
+- **Safe loader**: `.mrw` is a byte-defined little-endian format. The loader **validates,
+  then views**. Truncated or corrupt input fails cleanly.
+- **Two tiers, one core**: A CPU runtime tier and a baked-texture GPU crowd tier share the same
+  skeleton/clip formats, decompressor, sampler, and math.
+
+## Performance
+
+> Measured on an **AMD Ryzen 7 7700X** (Zen 4, 8C/16T), Release MSVC x64. marrow **AVX2+FMA** vs
+> **[ozz-animation](https://github.com/guillaumeblanc/ozz-animation) 0.16.0** (AVX2). Producing the per-instance 3×4 skinning palette (`model × inverse_bind`).
+
+**vs ozz — 14-bone lean rig, single-clip palette:**
+
+| Workload | marrow | ozz-animation | Speedup |
+|---|---|---|---|
+| 16 384 instances · 1 thread | **1.85 ms/frame** (8.1 ns/inst·joint) | 7.96 ms/frame (34.7 ns/inst·joint) | **4.3×** |
+| 65 536 instances · 16 threads | **1.09 ms/frame** | 4.68 ms/frame | **4.3×** |
+
+marrow overtakes ozz at **3+** shared-rig instances and is flat at ~2.85× across normal scenes; the gap
+widens to 4.3× at crowd scale, where ozz's per-instance sampling contexts (≈32 MB at 16 k) spill L3 while
+marrow's `O(1)` scratch stays cache-resident. ozz wins only at `N = 1–2`. Wide lanes go to waste on a
+lone instance, which should call the single-instance `mrw_clip_to_palette`.
+
+**f32 vs f16 palette** — the opt-in f16 output halves palette bytes; the win shows up on bandwidth-bound
+crowds (heavy 65-bone rig, 65 536 instances, 16 threads):
+
+| Palette | Bytes/joint | GPU upload/fetch | Heavy crowd (pooled) |
+|---|---|---|---|
+| **f32** (default) | 48 | 1.0× | 7.71 ms/frame |
+| **f16** (opt-in) | 24 | **0.5×** | **5.53 ms/frame** (1.4×) |
+
+f16 stays within ~1 mm of the f32 reference on a 3 m character (gated on skinned-vertex error), trading a
+little precision for half the GPU bandwidth and a write-bound crowd that turns compute-bound.
+
+---
+
+## Two tiers, one core
+
+marrow is one skeletal pipeline with two consumption tiers, related as a fidelity LOD.
+
+```
+                ┌──────────── shared core (C, SoA SIMD, no alloc) ────────────┐
+  .mrw blob ──► │ skeleton │ clip decode │ sample │ blend/additive/mask │ IK  │
+                └──────────────┬──────────────────────────────────┬───────────┘
+                               │                                  │ (offline tool only)
+                   Tier A: CPU runtime pose           Tier B: baked per-bone palettes
+                   full control: blend trees,         fixed clip set, fixed rate,
+                   IK, partial blends, root motion    ≤2-clip cross-fade in shader
+                               │                                  │
+                               ▼                                  ▼
+                  canonical 3×4 skinning palette  ⇄  shader decode (same layout)
+```
+
+- **Tier A (CPU runtime)** samples clips, blends/masks/adds poses, solves IK, runs the hierarchy,
+  and writes the skinning palette.
+- **Tier B (baked GPU crowd tier)** bakes a fixed clip set offline into per-bone `Q+T+scale`
+  textures whose memory scales with `bones × frames`, not vertices. The runtime *consumes and
+  validates* the baked blob; a reference vertex shader decodes it on the GPU.
+
+Tier B is **exact at baked frames** (within half-float quantization)
+and **approximate between them**. It interpolates already-composed transforms (chord, not arc),
+so it is a frozen cache of discrete Tier A palettes with approximate temporal interpolation. It
+is right for distant crowds; promote to Tier A when exact local-space blending matters (near
+camera, gameplay-critical).
+
+---
+
+## Quick start
+
+marrow builds with CMake (+ Ninja recommended). The runtime itself is just the C sources under
+`src/` plus `marrow.h`. It has no third-party dependencies and can be dropped straight into an
+existing build.
+
+### Build & test
+
+```sh
+cmake -S . -B out/build -G Ninja
+cmake --build out/build
+ctest --test-dir out/build --output-on-failure
+```
+
+On Windows with Visual Studio, the supplied [`CMakePresets.json`](CMakePresets.json) wraps this:
+
+```sh
+cmake --preset x64-release
+cmake --build out/build/x64-release
+ctest --test-dir out/build/x64-release --output-on-failure
+```
+
+Notable CMake options (all default-sensible):
+
+| Option | Default | Builds |
+|---|---|---|
+| `MRW_BUILD_TESTS` | `ON` | The CTest suite (parity, golden bytes, malformed-input, fuzz replay, …) |
+| `MRW_BUILD_TOOLS` | `ON` | The offline tools `gltf2marrow` and `marrow-bake` |
+| `MRW_BUILD_DEMO` | `OFF` | The GLFW + Vulkan demo (needs the Vulkan SDK) — see [`demo/`](demo/) |
+| `MRW_BUILD_OZZ_BENCH` | `OFF` | The ozz-animation throughput comparison (fetches ozz; never linked into the runtime) |
+| `MRW_SANITIZE` | *off* | ASan/UBSan/MSan instrumentation, e.g. `-DMRW_SANITIZE=address,undefined` |
+
+### Animate one character (Tier A)
+
+```c
+#include "marrow.h"
+
+/* `data` is a >=64-byte-aligned buffer holding a .mrw file you loaded. */
+mrw_blob blob;
+if (mrw_blob_open(data, size, &blob) != MRW_OK) { /* reject — corrupt/incompatible */ }
+
+mrw_skeleton_view skel;
+mrw_clip_view     clip;
+mrw_blob_skeleton(&blob, &skel);
+mrw_clip_view_at(&blob, /*section index*/ 1, &clip);
+
+/* Caller-owned, >=16-byte-aligned scratch buffers (joint_capacity * 12 floats each). */
+float scratch_model[MAX_JOINTS * 12];
+float palette      [MAX_JOINTS * 12];
+
+/* Fused: sample @ time t -> hierarchy compose -> apply inverse-bind.
+   `palette` now holds joint_count canonical 3×4 skinning matrices. */
+mrw_clip_to_palette(&skel, &clip, /*t=*/1.25f, scratch_model, palette, MAX_JOINTS);
+```
+
+### Animate a crowd (the batch path)
+
+```c
+mrw_dispatch disp;
+mrw_dispatch_detect(&disp);            /* AVX2(+FMA) ▸ SSE2 ▸ scalar */
+
+/* Query sizes + alignments; you provide the memory. */
+mrw_mem_req scratch_req, pal_req;
+mrw_batch_clip_to_palette_requirements(joint_count, N, MRW_PALETTE_F32,
+                                       &scratch_req, &pal_req);
+void  *scratch  = aligned_alloc(scratch_req.align, scratch_req.size);  /* >=64-aligned */
+float *palettes = aligned_alloc(pal_req.align,     pal_req.size);      /* >=16-aligned */
+
+/* One call, N instances sharing this skeleton+clip, each at its own time. Output is the
+   per-instance, joint-contiguous AoS 3×4 palette. Side-effect-free: schedule it across your
+   own threads with shared read-only views and per-thread scratch. */
+mrw_batch_clip_to_palette(&disp, &skel, &clip, times, N,
+                          palettes, pal_req.size, scratch, scratch_req.size);
+```
+
+The batch API also covers **blend / additive-layer cross-fades**
+(`mrw_batch_blend_clips_to_palette`, `mrw_batch_accumulate_to_palette`) and an opt-in **f16
+palette** (`*_f16`, half the upload/fetch bandwidth). Single-pose Tier-A primitives include pose
+`blend` / `make_additive` / `accumulate` / per-joint mask, analytic two-bone and aim **IK**, and
+**root motion**. The scalar backend is the bit-exact reference the SIMD kernels are checked
+against. See [`marrow.h`](marrow.h) for the full, documented surface.
+
+---
+
+## Offline tools
+
+The runtime only *consumes* assets. Producing them lives in separate targets that may use heavy
+libraries and are never linked into the runtime:
+
+- **`gltf2marrow`**: imports a glTF 2.0 skin + animations into a v0 `.mrw` (vendored cgltf;
+  resamples to dense clips; self-validates before emit).
+- **`marrow-bake`**: bakes a `.mrw` clip set into a Tier-B baked texture section, polar-decomposing
+  each bone to `Q+T+uniform-scale`, measuring the reconstruction residual, and **rejecting rigs
+  that can't be represented** (they stay valid Tier-A assets).
+
+Reference GPU skinning shaders (GLSL + HLSL) that decode the baked palette live in
+[`examples/skinning/`](examples/skinning/).
+
+---
+
+## Project layout
+
+```
+marrow.h            The complete public API (single header).
+src/                The runtime: math, dispatch, .mrw loader, pose pipeline,
+                    blend/additive/mask, IK, batch + per-ISA SIMD kernels.
+tools/              Offline tools: gltf2marrow, marrow-bake, the .mrw authoring lib.
+examples/skinning/  Reference GPU vertex shaders for the baked tier (GLSL + HLSL).
+demo/               Optional GLFW + Vulkan demo (-DMRW_BUILD_DEMO=ON).
+bench/              ozz-animation throughput comparison (gated).
+tests/              CTest suite: parity, golden bytes, malformed-input, fuzzing.
+```
+
+## Platforms
+
+Desktop x64 and current/last-gen consoles (little-endian). **AVX2 (+FMA)** is the primary fast
+path; **SSE2** is the portable x64 baseline and fallback (also the right width for Jaguar-class
+PS4/Xbox One); **scalar** is the reference and fallback.
+
+## AI Disclaimer
+
+Claude was used while making this project for several parts (the boring ones). The library runtime wasn't "vibe-coded".
+
+## License
+
+[MIT](LICENSE) © 2026 Jérémie St-Amand.
