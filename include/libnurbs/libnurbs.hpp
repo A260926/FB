@@ -25,5 +25,6 @@
 
 /* Surface */
 #include "libnurbs/Surface/Surface.hpp"
+#include "libnurbs/Surface/SurfaceMesh.hpp"
 
 #endif //LIBNURBS_LIBNURBS_HPP

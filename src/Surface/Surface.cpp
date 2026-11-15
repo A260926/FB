@@ -12,6 +12,43 @@
 using namespace std;
 using namespace libnurbs;
 
+namespace
+{
+    constexpr Numeric MAX_ABS_COORD = 1e4;
+    constexpr Numeric MIN_WEIGHT    = 0.1;
+    constexpr Numeric MAX_WEIGHT    = 10.0;
+}
+
+void Surface::Validate() const
+{
+    KnotsU.Validate(DegreeU);
+    KnotsV.Validate(DegreeV);
+    if (ControlPoints.UCount != KnotsU.Count() - DegreeU - 1 ||
+        ControlPoints.VCount != KnotsV.Count() - DegreeV - 1)
+    {
+        throw invalid_argument("control point grid dimensions inconsistent with knots and degrees");
+    }
+    if ((int)ControlPoints.Values.size() != ControlPoints.UCount * ControlPoints.VCount)
+    {
+        throw invalid_argument("control point count inconsistent with grid dimensions");
+    }
+    for (const auto& point : ControlPoints.Values)
+    {
+        if (!point.allFinite())
+        {
+            throw invalid_argument("control point is not finite");
+        }
+        if (point.head<3>().cwiseAbs().maxCoeff() > MAX_ABS_COORD)
+        {
+            throw invalid_argument("control point coordinate out of range");
+        }
+        if (!(point.w() >= MIN_WEIGHT && point.w() <= MAX_WEIGHT))
+        {
+            throw invalid_argument("weight out of supported range [0.1, 10]");
+        }
+    }
+}
+
 Surface& Surface::LoadFromFile(const std::string& filename)
 {
     std::ifstream file(filename, std::ios::binary);
@@ -89,6 +126,7 @@ Surface& Surface::LoadFromFile(std::istream& is)
         {
             Utils::ReadVec4FromStream(ControlPoints.Values[i], is);
         }
+        Validate();
     }
     else
     {
@@ -253,6 +291,7 @@ Surface& Surface::LoadFromFile(std::istream& is)
         {
             process_key(current_key, content_lines);
         }
+        Validate();
     }
     return *this;
 }
@@ -370,8 +409,7 @@ void Surface::SaveToFile(std::ostream& os, bool binary_mode) const
 
 Vec3 Surface::Evaluate(Numeric u, Numeric v) const
 {
-    assert(u >= 0 && u <= 1);
-    assert(v >= 0 && v <= 1);
+    Validate();
     int index_span_u = KnotsU.FindSpanIndex(DegreeU, u);
     int index_span_v = KnotsV.FindSpanIndex(DegreeV, v);
     VecX basis_u = BSplineBasis::Evaluate(DegreeU, KnotsU.Values(), index_span_u, u);
@@ -459,8 +497,11 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
                               Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
-    assert(init_u >= 0 && init_u <= 1);
-    assert(init_v >= 0 && init_v <= 1);
+    Validate();
+    const Numeric u_min = KnotsU.DomainStart(DegreeU);
+    const Numeric u_max = KnotsU.DomainEnd(DegreeU);
+    const Numeric v_min = KnotsV.DomainStart(DegreeV);
+    const Numeric v_max = KnotsV.DomainEnd(DegreeV);
     using Vec2 = Eigen::Vector2<Numeric>;
     using Mat2x2 = Eigen::Matrix<Numeric, 2, 2>;
 
@@ -477,7 +518,8 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
         return Vec2{ri.dot(Su), ri.dot(Sv)};
     };
 
-    Numeric u_last = init_u, v_last = init_v;
+    Numeric u_last = std::clamp(init_u, u_min, u_max);
+    Numeric v_last = std::clamp(init_v, v_min, v_max);
     Numeric current_residual = std::numeric_limits<Numeric>::max();
     Mat2x2 Hk = Mat2x2::Identity();
 
@@ -492,8 +534,8 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
         while (ls_count++ < max_line_search_iterations)
         {
             Vec2 uv_trial = Vec2{u_last, v_last} - alpha * Hk * gk;
-            uv_trial.x() = std::clamp(uv_trial.x(), Numeric(0), Numeric(1));
-            uv_trial.y() = std::clamp(uv_trial.y(), Numeric(0), Numeric(1));
+            uv_trial.x() = std::clamp(uv_trial.x(), u_min, u_max);
+            uv_trial.y() = std::clamp(uv_trial.y(), v_min, v_max);
 
             if (Ri(uv_trial.x(), uv_trial.y()).norm() <= current_residual - c1 * alpha * gk.dot(Hk * gk))
             {
@@ -502,8 +544,8 @@ auto Surface::SearchParameter(const Vec3& point, Numeric init_u, Numeric init_v,
             alpha *= beta;
         }
         Vec2 uv_last = Vec2{u_last, v_last} - alpha * Hk * gk;
-        uv_last.x() = std::clamp(uv_last.x(), Numeric(0), Numeric(1));
-        uv_last.y() = std::clamp(uv_last.y(), Numeric(0), Numeric(1));
+        uv_last.x() = std::clamp(uv_last.x(), u_min, u_max);
+        uv_last.y() = std::clamp(uv_last.y(), v_min, v_max);
         return uv_last;
     };
 
@@ -540,6 +582,20 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
                                 Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
+    Validate();
+    if (direction != 0 && direction != 1)
+    {
+        throw invalid_argument("direction must be 0 (u) or 1 (v)");
+    }
+    const Numeric var_min = direction == 1 ? KnotsU.DomainStart(DegreeU) : KnotsV.DomainStart(DegreeV);
+    const Numeric var_max = direction == 1 ? KnotsU.DomainEnd(DegreeU) : KnotsV.DomainEnd(DegreeV);
+    const Numeric fix_min = direction == 0 ? KnotsU.DomainStart(DegreeU) : KnotsV.DomainStart(DegreeV);
+    const Numeric fix_max = direction == 0 ? KnotsU.DomainEnd(DegreeU) : KnotsV.DomainEnd(DegreeV);
+    if (!(constant >= fix_min && constant <= fix_max))
+    {
+        throw invalid_argument("constant parameter outside of the knot domain");
+    }
+
     auto Ri = [&point, this, direction, constant](Numeric val) -> Vec3
     {
         Numeric u = direction == 0 ? constant : val;
@@ -558,7 +614,7 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
         return ri.dot(Cu);
     };
 
-    Numeric val_last = init_value;
+    Numeric val_last = std::clamp(init_value, var_min, var_max);
     Numeric current_residual = std::numeric_limits<Numeric>::max();
     Numeric Hk = 1.0;
 
@@ -573,7 +629,7 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
         while (ls_count++ < max_line_search_iterations)
         {
             Numeric u_trial = val_last - alpha * Hk * gk;
-            u_trial = std::clamp(u_trial, Numeric(0), Numeric(1));
+            u_trial = std::clamp(u_trial, var_min, var_max);
 
             if (Ri(u_trial).norm() <= current_residual - c1 * alpha * gk * Hk * gk)
             {
@@ -582,7 +638,7 @@ auto Surface::SearchParameterOn(const Vec3& point, int direction, Numeric consta
             alpha *= beta;
         }
         Numeric u_final = val_last - alpha * Hk * gk;
-        return std::clamp(u_final, Numeric(0), Numeric(1));
+        return std::clamp(u_final, var_min, var_max);
     };
 
     int count = 0;
@@ -617,8 +673,36 @@ auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric 
                                       Numeric epsilon, Numeric max_iteration_count) const
     -> std::pair<Numeric, Numeric>
 {
-    Numeric low = 0.0;
-    Numeric high = 1.0;
+    Validate();
+    if (direction != 0 && direction != 1)
+    {
+        throw invalid_argument("direction must be 0 (u) or 1 (v)");
+    }
+    const Numeric var_min = direction == 1 ? KnotsU.DomainStart(DegreeU) : KnotsV.DomainStart(DegreeV);
+    const Numeric var_max = direction == 1 ? KnotsU.DomainEnd(DegreeU) : KnotsV.DomainEnd(DegreeV);
+    const Numeric fix_min = direction == 0 ? KnotsU.DomainStart(DegreeU) : KnotsV.DomainStart(DegreeV);
+    const Numeric fix_max = direction == 0 ? KnotsU.DomainEnd(DegreeU) : KnotsV.DomainEnd(DegreeV);
+    if (!(constant >= fix_min && constant <= fix_max))
+    {
+        throw invalid_argument("constant parameter outside of the knot domain");
+    }
+
+    // epsilon measures the spatial residual; convert it to a parameter-space
+    // resolution through an estimate of the surface size.
+    Vec3 bb_min = Vec3::Constant(std::numeric_limits<Numeric>::max());
+    Vec3 bb_max = Vec3::Constant(std::numeric_limits<Numeric>::lowest());
+    for (const auto& cp : ControlPoints.Values)
+    {
+        Vec3 p = cp.head<3>() / cp.w();
+        bb_min = bb_min.cwiseMin(p);
+        bb_max = bb_max.cwiseMax(p);
+    }
+    Numeric length = (bb_max - bb_min).norm();
+    if (!(length > 0.0)) length = var_max - var_min;
+    const Numeric uv_epsilon = epsilon * (var_max - var_min) / length;
+
+    Numeric low = var_min;
+    Numeric high = var_max;
 
     auto Ri = [&point, this, direction, constant](Numeric val) -> Numeric
     {
@@ -635,8 +719,8 @@ auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric 
 
         mid_residual = Ri(mid);
 
-        Numeric left_mid = mid - epsilon;
-        Numeric right_mid = mid + epsilon;
+        Numeric left_mid = mid - uv_epsilon;
+        Numeric right_mid = mid + uv_epsilon;
 
         if (left_mid < low) left_mid = low;
         if (right_mid > high) right_mid = high;
@@ -654,7 +738,7 @@ auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric 
         }
         else
         {
-            if (std::abs(high - low) < epsilon || mid_residual < epsilon)
+            if (std::abs(high - low) < uv_epsilon || mid_residual < epsilon)
             {
                 return direction == 0
                            ? std::make_pair(constant, mid)
@@ -674,6 +758,11 @@ auto Surface::BinarySearchParameterOn(const Vec3& point, int direction, Numeric 
 
 Surface Surface::InsertKnotU(Numeric knot_value) const
 {
+    Validate();
+    if (KnotsU.GetMultiplicity(knot_value) >= DegreeU)
+    {
+        throw invalid_argument("knot multiplicity would exceed the degree");
+    }
     Surface result{*this};
     int k = result.KnotsU.InsertKnot(knot_value);
     result.ControlPoints.InsertU(k, Vec4::Zero());
@@ -718,6 +807,11 @@ Surface Surface::InsertKnotU(std::span<Numeric> knots_to_insert) const
 
 Surface Surface::InsertKnotV(Numeric knot_value) const
 {
+    Validate();
+    if (KnotsV.GetMultiplicity(knot_value) >= DegreeV)
+    {
+        throw invalid_argument("knot multiplicity would exceed the degree");
+    }
     Surface result{*this};
     int k = result.KnotsV.InsertKnot(knot_value);
     result.ControlPoints.InsertV(k, Vec4::Zero());
@@ -763,6 +857,7 @@ Surface Surface::InsertKnotV(std::span<Numeric> knots_to_insert) const
 
 std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Numeric tolerance) const
 {
+    Validate();
     Surface result{*this};
     auto& points_ref = result.ControlPoints;
     points_ref = {points_ref.UCount - times, points_ref.VCount};
@@ -782,6 +877,7 @@ std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Nu
 
 std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Numeric tolerance) const
 {
+    Validate();
     Surface result{*this};
     auto& points_ref = result.ControlPoints;
     points_ref = {points_ref.UCount, points_ref.VCount - times};
@@ -801,43 +897,62 @@ std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Nu
 
 Surface Surface::ElevateDegreeU(int times) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount + times, points_ref.VCount};
-    for (int it_v = 0; it_v < ControlPoints.VCount; ++it_v)
+    Validate();
+    if (times < 1)
     {
-        auto degree = result.DegreeU;
-        auto knots = result.KnotsU;
-        auto points = this->ControlPoints.GetV(it_v);
-        NurbsDegreeElevation(knots, points, degree, times);
-        if (it_v == ControlPoints.VCount - 1)
-        {
-            result.KnotsU = knots;
-            result.DegreeU = degree;
-        }
-        points_ref.SetV(it_v, points);
+        throw invalid_argument("elevation times must be positive");
     }
+    Surface result{*this};
+    // Elevate the first row to learn the elevated knot vector, degree and the
+    // actual control net size (which depends on the internal knot structure,
+    // not just on the original control point count).
+    auto knots  = result.KnotsU;
+    int degree  = result.DegreeU;
+    auto points = this->ControlPoints.GetV(0);
+    NurbsDegreeElevation(knots, points, degree, times);
+    const int new_u_count = (int)points.size();
+    ControlPointGrid new_points(new_u_count, ControlPoints.VCount);
+    new_points.SetV(0, points);
+    for (int it_v = 1; it_v < ControlPoints.VCount; ++it_v)
+    {
+        auto knots_row = result.KnotsU;
+        int degree_row = result.DegreeU;
+        auto points_row = this->ControlPoints.GetV(it_v);
+        NurbsDegreeElevation(knots_row, points_row, degree_row, times);
+        new_points.SetV(it_v, points_row);
+    }
+    result.KnotsU        = knots;
+    result.DegreeU       = degree;
+    result.ControlPoints = std::move(new_points);
     return result;
 }
 
 Surface Surface::ElevateDegreeV(int times) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount, points_ref.VCount + times};
-    for (int it_u = 0; it_u < ControlPoints.UCount; ++it_u)
+    Validate();
+    if (times < 1)
     {
-        auto degree = result.DegreeV;
-        auto knots = result.KnotsV;
-        auto points = this->ControlPoints.GetU(it_u);
-        NurbsDegreeElevation(knots, points, degree, times);
-        if (it_u == ControlPoints.UCount - 1)
-        {
-            result.KnotsV = knots;
-            result.DegreeV = degree;
-        }
-        points_ref.SetU(it_u, points);
+        throw invalid_argument("elevation times must be positive");
     }
+    Surface result{*this};
+    auto knots  = result.KnotsV;
+    int degree  = result.DegreeV;
+    auto points = this->ControlPoints.GetU(0);
+    NurbsDegreeElevation(knots, points, degree, times);
+    const int new_v_count = (int)points.size();
+    ControlPointGrid new_points(ControlPoints.UCount, new_v_count);
+    new_points.SetU(0, points);
+    for (int it_u = 1; it_u < ControlPoints.UCount; ++it_u)
+    {
+        auto knots_row = result.KnotsV;
+        int degree_row = result.DegreeV;
+        auto points_row = this->ControlPoints.GetU(it_u);
+        NurbsDegreeElevation(knots_row, points_row, degree_row, times);
+        new_points.SetU(it_u, points_row);
+    }
+    result.KnotsV        = knots;
+    result.DegreeV       = degree;
+    result.ControlPoints = std::move(new_points);
     return result;
 }
 
@@ -1149,8 +1264,7 @@ Surface Surface::AlignParameterDomain(AlignAxis u_axis, AlignAxis v_axis)
 
 Grid<Vec4> Surface::HomogeneousDerivative(Numeric u, Numeric v, int order_u, int order_v) const
 {
-    assert(u >= 0 && u <= 1);
-    assert(v >= 0 && v <= 1);
+    Validate();
     int index_span_u = KnotsU.FindSpanIndex(DegreeU, u);
     int index_span_v = KnotsV.FindSpanIndex(DegreeV, v);
     MatX basis_u = BSplineBasis::EvaluateAll(DegreeU, KnotsU.Values(), index_span_u, u, order_u);

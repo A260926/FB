@@ -40,6 +40,17 @@ namespace libnurbs
 
         [[nodiscard]] bool IsRational() const;
 
+        /**
+         * @brief Validate degree, knot domain and control points (weights in [0.1, 10],
+         *        finite coordinates with |coordinate| <= 1e4, consistent counts).
+         *        Throws std::invalid_argument on any violation.
+         */
+        void Validate() const;
+
+        [[nodiscard]] Numeric DomainStart() const { return Knots.DomainStart(Degree); }
+
+        [[nodiscard]] Numeric DomainEnd() const { return Knots.DomainEnd(Degree); }
+
         [[nodiscard]] Numeric SearchParameter(const Vec3& point,
                                               Numeric init                = 0.5,
                                               Numeric epsilon             = 1e-8,

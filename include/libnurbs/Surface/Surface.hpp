@@ -36,6 +36,21 @@ namespace libnurbs
         [[nodiscard]] bool IsRational() const;
 
         /**
+         * @brief Validate degrees, knot domains and the control point grid (weights in
+         *        [0.1, 10], finite coordinates with |coordinate| <= 1e4, consistent
+         *        counts). Throws std::invalid_argument on any violation.
+         */
+        void Validate() const;
+
+        [[nodiscard]] Numeric DomainStartU() const { return KnotsU.DomainStart(DegreeU); }
+
+        [[nodiscard]] Numeric DomainEndU() const { return KnotsU.DomainEnd(DegreeU); }
+
+        [[nodiscard]] Numeric DomainStartV() const { return KnotsV.DomainStart(DegreeV); }
+
+        [[nodiscard]] Numeric DomainEndV() const { return KnotsV.DomainEnd(DegreeV); }
+
+        /**
          * @brief Searches for the parameter value
          *        corresponding to a point on the surface using the BFGS method.
          * @param point Point on surface

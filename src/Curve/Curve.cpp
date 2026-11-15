@@ -16,6 +16,37 @@
 using namespace std;
 using namespace libnurbs;
 
+namespace
+{
+    constexpr Numeric MAX_ABS_COORD = 1e4;
+    constexpr Numeric MIN_WEIGHT    = 0.1;
+    constexpr Numeric MAX_WEIGHT    = 10.0;
+}
+
+void Curve::Validate() const
+{
+    Knots.Validate(Degree);
+    if ((int)ControlPoints.size() != Knots.Count() - Degree - 1)
+    {
+        throw invalid_argument("control point count inconsistent with knots and degree");
+    }
+    for (const auto& point : ControlPoints)
+    {
+        if (!point.allFinite())
+        {
+            throw invalid_argument("control point is not finite");
+        }
+        if (point.head<3>().cwiseAbs().maxCoeff() > MAX_ABS_COORD)
+        {
+            throw invalid_argument("control point coordinate out of range");
+        }
+        if (!(point.w() >= MIN_WEIGHT && point.w() <= MAX_WEIGHT))
+        {
+            throw invalid_argument("weight out of supported range [0.1, 10]");
+        }
+    }
+}
+
 Curve& Curve::LoadFromFile(const string& filename)
 {
     ifstream file(filename);
@@ -84,6 +115,7 @@ Curve& Curve::LoadFromFile(std::istream& is)
         {
             Utils::ReadVec4FromStream(ControlPoints[i], is);
         }
+        Validate();
         return *this;
     }
 
@@ -197,6 +229,7 @@ Curve& Curve::LoadFromFile(std::istream& is)
     {
         process_key(current_key, content_lines);
     }
+    Validate();
     return *this;
 }
 
@@ -282,7 +315,7 @@ void Curve::SaveToFile(std::ostream& os, bool binary_mode) const
 
 Vec3 Curve::Evaluate(Numeric x) const
 {
-    assert(x >= 0 && x <= 1);
+    Validate();
     int index_span = Knots.FindSpanIndex(Degree, x);
     VecX basis     = BSplineBasis::Evaluate(Degree, Knots.Values(), index_span, x);
     assert(basis.size() == Degree + 1);
@@ -298,7 +331,7 @@ Vec3 Curve::Evaluate(Numeric x) const
 
 vector<Vec4> Curve::HomogeneousDerivative(Numeric x, int order) const
 {
-    assert(x >= 0 && x <= 1);
+    Validate();
     int index_span = Knots.FindSpanIndex(Degree, x);
     MatX basis     = BSplineBasis::EvaluateAll(Degree, Knots.Values(), index_span, x, order);
     assert(basis.rows() == order + 1);
@@ -358,6 +391,10 @@ bool Curve::IsRational() const
 
 Numeric Curve::SearchParameter(const Vec3& point, Numeric init, Numeric epsilon, Numeric max_iteration_count) const
 {
+    Validate();
+    const Numeric u_min = Knots.DomainStart(Degree);
+    const Numeric u_max = Knots.DomainEnd(Degree);
+
     auto Ri = [&point, this](Numeric u) -> Vec3 { return Evaluate(u) - point; };
 
     auto fi = [this, &Ri](Numeric u) -> Numeric
@@ -367,7 +404,7 @@ Numeric Curve::SearchParameter(const Vec3& point, Numeric init, Numeric epsilon,
         return ri.dot(Cu);
     };
 
-    Numeric u_last           = init;
+    Numeric u_last           = std::clamp(init, u_min, u_max);
     Numeric current_residual = std::numeric_limits<Numeric>::max();
     Numeric Hk               = 1.0;
 
@@ -382,7 +419,7 @@ Numeric Curve::SearchParameter(const Vec3& point, Numeric init, Numeric epsilon,
         while (ls_count++ < max_line_search_iterations)
         {
             Numeric u_trial = u_last - alpha * Hk * gk;
-            u_trial         = std::clamp(u_trial, Numeric(0), Numeric(1));
+            u_trial         = std::clamp(u_trial, u_min, u_max);
 
             if (Ri(u_trial).norm() <= current_residual - c1 * alpha * gk * Hk * gk)
             {
@@ -391,7 +428,7 @@ Numeric Curve::SearchParameter(const Vec3& point, Numeric init, Numeric epsilon,
             alpha *= beta;
         }
         Numeric u_final = u_last - alpha * Hk * gk;
-        return std::clamp(u_final, Numeric(0), Numeric(1));
+        return std::clamp(u_final, u_min, u_max);
     };
 
     int count = 0;
@@ -422,8 +459,24 @@ Numeric Curve::SearchParameter(const Vec3& point, Numeric init, Numeric epsilon,
 
 Numeric Curve::BinarySearchParameter(const Vec3& point, Numeric epsilon, int max_iteration_count) const
 {
-    Numeric low  = 0.0;
-    Numeric high = 1.0;
+    Validate();
+    const Numeric low_bound  = Knots.DomainStart(Degree);
+    const Numeric high_bound = Knots.DomainEnd(Degree);
+
+    // epsilon measures the spatial residual; convert it to a parameter-space
+    // resolution through an estimate of the curve length.
+    Numeric length = 0.0;
+    for (size_t i = 1; i < ControlPoints.size(); ++i)
+    {
+        Vec3 p0 = ControlPoints[i - 1].head<3>() / ControlPoints[i - 1].w();
+        Vec3 p1 = ControlPoints[i].head<3>() / ControlPoints[i].w();
+        length += (p1 - p0).norm();
+    }
+    if (!(length > 0.0)) length = high_bound - low_bound;
+    const Numeric uv_epsilon = epsilon * (high_bound - low_bound) / length;
+
+    Numeric low  = low_bound;
+    Numeric high = high_bound;
 
     auto Ri = [&point, this](Numeric u) -> Numeric
     {
@@ -437,8 +490,8 @@ Numeric Curve::BinarySearchParameter(const Vec3& point, Numeric epsilon, int max
 
         Numeric mid_residual = Ri(mid);
 
-        Numeric left_mid  = mid - epsilon;
-        Numeric right_mid = mid + epsilon;
+        Numeric left_mid  = mid - uv_epsilon;
+        Numeric right_mid = mid + uv_epsilon;
 
         if (left_mid < low)
             left_mid = low;
@@ -458,7 +511,7 @@ Numeric Curve::BinarySearchParameter(const Vec3& point, Numeric epsilon, int max
         }
         else
         {
-            if (std::abs(high - low) < epsilon || mid_residual < epsilon)
+            if (std::abs(high - low) < uv_epsilon || mid_residual < epsilon)
                 return mid;
             low  = left_mid;
             high = right_mid;
@@ -470,6 +523,17 @@ Numeric Curve::BinarySearchParameter(const Vec3& point, Numeric epsilon, int max
 
 Curve Curve::InsertKnot(Numeric knot_value) const
 {
+    Validate();
+    const Numeric u_min = Knots.DomainStart(Degree);
+    const Numeric u_max = Knots.DomainEnd(Degree);
+    if (!(knot_value > u_min && knot_value < u_max))
+    {
+        throw invalid_argument("knot to insert must lie inside the open knot domain");
+    }
+    if (Knots.GetMultiplicity(knot_value) >= Degree)
+    {
+        throw invalid_argument("knot multiplicity would exceed the degree");
+    }
     Curve result{*this};
     int k = result.Knots.InsertKnot(knot_value);
     result.ControlPoints.insert(result.ControlPoints.begin() + k, Vec4::Zero());
@@ -493,13 +557,24 @@ Curve Curve::InsertKnot(Numeric knot_value, int times) const
 
 Curve Curve::InsertKnot(std::span<Numeric> knots_to_insert) const
 {
+    Validate();
     Curve result = *this;
     auto& knots  = result.Knots.Values();
     knots.reserve(knots.size() + knots_to_insert.size());
     auto& points = result.ControlPoints;
     points.reserve(points.size() + knots_to_insert.size());
+    const Numeric u_min = Knots.DomainStart(Degree);
+    const Numeric u_max = Knots.DomainEnd(Degree);
     for (auto knot_value : knots_to_insert)
     {
+        if (!(knot_value > u_min && knot_value < u_max))
+        {
+            throw invalid_argument("knot to insert must lie inside the open knot domain");
+        }
+        if (result.Knots.GetMultiplicity(knot_value) >= Degree)
+        {
+            throw invalid_argument("knot multiplicity would exceed the degree");
+        }
         int k = result.Knots.FindSpanIndex(Degree, knot_value);
         points.insert(points.begin() + k, points[k]);
         Vec4 point_last = ToHomo(points[k - Degree]);
@@ -518,8 +593,17 @@ Curve Curve::InsertKnot(std::span<Numeric> knots_to_insert) const
 
 std::tuple<Curve, int> Curve::RemoveKnot(Numeric knot_remove, int times, Numeric tolerance) const
 {
-    assert(knot_remove > 0 && knot_remove < 1);
-    assert(times > 0);
+    Validate();
+    const Numeric u_min = Knots.DomainStart(Degree);
+    const Numeric u_max = Knots.DomainEnd(Degree);
+    if (!(knot_remove > u_min && knot_remove < u_max))
+    {
+        throw invalid_argument("knot to remove must lie inside the open knot domain");
+    }
+    if (times < 1)
+    {
+        throw invalid_argument("removal times must be positive");
+    }
 
     Curve result{*this};
     int degree   = result.Degree;
@@ -530,7 +614,11 @@ std::tuple<Curve, int> Curve::RemoveKnot(Numeric knot_remove, int times, Numeric
 
 Curve Curve::ElevateDegree(int times) const
 {
-    assert(times >= 1);
+    Validate();
+    if (times < 1)
+    {
+        throw invalid_argument("elevation times must be positive");
+    }
 
     Curve result{*this};
     NurbsDegreeElevation(result.Knots, result.ControlPoints, result.Degree, times);
@@ -549,13 +637,16 @@ Curve Curve::Transform(const Mat3x3& R) const
 
 vector<Curve> Curve::ExtractBezier() const
 {
+    Validate();
     Curve bezier = *this;
     auto pairs   = this->Knots.GetKnotPairs();
+    const Numeric u_min = pairs.front().Value;
+    const Numeric u_max = pairs.back().Value;
     for (auto& item : pairs)
     {
         Numeric u = item.Value;
         int mult  = item.Multiplicity;
-        if (u <= Numeric(0.0) || u >= Numeric(1.0))
+        if (u <= u_min || u >= u_max)
             continue;
         if (mult >= Degree)
             continue;
