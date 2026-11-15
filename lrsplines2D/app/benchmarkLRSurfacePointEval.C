@@ -1,0 +1,376 @@
+/*
+ * Copyright (C) 1998, 2000-2007, 2010, 2011, 2012, 2013 SINTEF ICT,
+ * Applied Mathematics, Norway.
+ *
+ * Contact information: E-mail: tor.dokken@sintef.no                      
+ * SINTEF ICT, Department of Applied Mathematics,                         
+ * P.O. Box 124 Blindern,                                                 
+ * 0314 Oslo, Norway.                                                     
+ *
+ * This file is part of GoTools.
+ *
+ * GoTools is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version. 
+ *
+ * GoTools is distributed in the hope that it will be useful,        
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of         
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with GoTools. If not, see
+ * <http://www.gnu.org/licenses/>.
+ *
+ * In accordance with Section 7(b) of the GNU Affero General Public
+ * License, a covered work must retain the producer line in every data
+ * file that is created or manipulated using GoTools.
+ *
+ * Other Usage
+ * You can be released from the requirements of the license by purchasing
+ * a commercial license. Buying such a license is mandatory as soon as you
+ * develop commercial activities involving the GoTools library without
+ * disclosing the source code of your own applications.
+ *
+ * This file may be used in accordance with the terms contained in a
+ * written agreement between you and SINTEF ICT. 
+ */
+
+#include "GoTools/lrsplines2D/LRSplineSurface.h"
+#include "GoTools/lrsplines2D/Mesh2D.h"
+#include "GoTools/lrsplines2D/Direction2D.h"
+#include "GoTools/lrsplines2D/LRBenchmarkUtils.h"
+#include "GoTools/lrsplines2D/LRSplinePlotUtils.h"
+#include "GoTools/lrsplines2D/LRSplineUtils.h"
+#include "GoTools/geometry/ObjectHeader.h"
+#include "GoTools/geometry/SplineSurface.h"
+#include "GoTools/geometry/GeometryTools.h"
+#include "GoTools/geometry/ClassType.h"
+#include "GoTools/utils/config.h"
+#include "GoTools/geometry/PointCloud.h"
+
+
+#include <iostream>
+#include <assert.h>
+#include <fstream>
+#include <string>
+#include "string.h"
+
+
+using Go::ObjectHeader;
+using Go::SplineSurface;
+using Go::LRSplineSurface;
+using std::vector;
+using namespace Go;
+
+
+// Assuming the domain is the same.
+double maxDist(const SplineSurface& spline_sf,
+	       const LRSplineSurface& lr_spline_sf,
+	       int num_samples_u, int num_samples_v,
+	       int der_u, int der_v,
+	       vector<double>& sampled_pts_lr);
+
+double maxDistNormals(const SplineSurface& spline_sf,
+		      const LRSplineSurface& lr_spline_sf,
+		      int num_samples_u, int num_samples_v);
+
+int main(int argc, char *argv[])
+{
+  if (argc != 5)
+  {
+      std::cout << "Usage: (lr)spline_sf.g2 num_dir_samples sum_derivs num_iter" << std::endl;
+      return -1;
+  }
+
+  std::cout.precision(15);
+
+  char* filein_char = argv[1];
+  std::ifstream filein(argv[1]); // Input lr spline.
+  // If input surface is not fine enough we refine.
+  int num_dir_samples = atoi(argv[2]);
+  int sum_derivs = atoi(argv[3]);
+  int num_iter = atoi(argv[4]);
+  if (num_iter != 1)
+      puts("Not using num_iter yet.");
+
+  shared_ptr<SplineSurface> spline_sf;
+  shared_ptr<LRSplineSurface> lr_spline_sf;
+  double knot_tol = 1e-10;
+
+  // If we refine the lr-surface in order to extract a regular
+  // spline-version we must perform the operations on a copy.
+  shared_ptr<LRSplineSurface> lr_spline_sf_copy;
+
+  int order_u, order_v, num_coefs_u, num_coefs_v, dim, num_bases=-1;
+  if (strstr(filein_char, ".g2"))
+    {
+      ObjectHeader header;
+      filein >> header;
+      if (header.classType() == Class_SplineSurface)
+	{
+	  std::cout << "Input was a SplineSurface, creating a LRSplineSurface." << std::endl;
+	  spline_sf = shared_ptr<SplineSurface>(new SplineSurface());
+	  filein >> *spline_sf;
+	  dim = spline_sf->dimension();
+	  // We create the lr-version.
+	  lr_spline_sf = shared_ptr<LRSplineSurface>(new LRSplineSurface(spline_sf.get(), knot_tol));
+	}
+      else if (header.classType() == Class_LRSplineSurface)
+	{
+	  std::cout << "Input was a LRSplineSurface, creating a SplineSurface (refining)." << std::endl;
+	  lr_spline_sf = shared_ptr<LRSplineSurface>(new LRSplineSurface());
+	  filein >> *lr_spline_sf;
+	  dim = lr_spline_sf->dimension();
+
+	  lr_spline_sf_copy = shared_ptr<LRSplineSurface>(lr_spline_sf->clone());
+	  spline_sf = shared_ptr<SplineSurface>(LRSplineUtils::fullTensorProductSurface(*lr_spline_sf));
+	  int num_coefs_u = spline_sf->numCoefs_u();
+	  int num_coefs_v = spline_sf->numCoefs_v();
+	  std::cout << "num_coefs_u = " << num_coefs_u << ", num_coefs_v = " << num_coefs_v << std::endl;
+	  std::ofstream spline_out("tmp/lr_spline_sf_version.g2");
+	  spline_sf->writeStandardHeader(spline_out);
+	  spline_sf->write(spline_out);
+	}
+      else
+	{
+	  std::cout << "Input was not a SplineSurface or a LRSplineSurface, exiting!" << std::endl;
+	}
+    }
+  else
+    {
+      MESSAGE("Input was not a g2-file!");
+      return -1;
+    }
+
+  // We include testing of various functions.
+  bool test_lr_functions = true;
+  if (test_lr_functions)
+    {
+      // We write to file the grid.
+      std::ofstream grid_pre("tmp/lr_grid_pre.ps");
+      writePostscriptMesh(*lr_spline_sf, grid_pre);
+
+      bool use_unit_domain = false;
+      if (use_unit_domain)
+	{ // We rescale to the unit domain.
+	  lr_spline_sf->setParameterDomain(0.0, 1.0, 0.0, 1.0);
+	  std::ofstream lr_spline_out("tmp/lr_spline_sf_unit.g2");
+	  lr_spline_sf->writeStandardHeader(lr_spline_out);
+	  lr_spline_sf->write(lr_spline_out);
+	}
+
+      bool extract_subsurf = false;
+      if (extract_subsurf)
+	{ // We extract a subsurface. Set values manually.
+	  double umin = 498850.13939999999 - 1;//0.0;
+	  double umax = 498858.58250000002 + 1;//1.0;
+	  double vmin = 3875136 - 1;//0.0;
+	  double vmax = 3875144.2230000002 + 1;//1.0;
+	  shared_ptr<LRSplineSurface> sub_sf(lr_spline_sf->subSurface(umin, vmin, umax, vmax, knot_tol));
+	  std::ofstream sub_sf_out("tmp/lr_spline_sub_sf.g2");
+	  sub_sf->writeStandardHeader(sub_sf_out);
+	  sub_sf->write(sub_sf_out);
+	}
+
+      bool create_mirror_surface = false;
+      if (create_mirror_surface)
+	{
+	  Point pos(0.0, 0.0, 0.0);
+	  Point normal(0.0, 0.0, 1.0);
+	  shared_ptr<LRSplineSurface> mirror_sf(lr_spline_sf->mirrorSurface(pos, normal));
+	  std::ofstream mirror_sf_out("tmp/mirror_sf.g2");
+	  mirror_sf->writeStandardHeader(mirror_sf_out);
+	  mirror_sf->write(mirror_sf_out);
+	}
+
+      bool rev_dir_u = false;
+      if (rev_dir_u)
+	{
+	  lr_spline_sf->reverseParameterDirection(true);
+	  spline_sf->reverseParameterDirection(true);
+	}
+      bool rev_dir_v = false;
+      if (rev_dir_v)
+	{
+	  lr_spline_sf->reverseParameterDirection(false);
+	  spline_sf->reverseParameterDirection(false);
+	}
+
+      bool swap_par_dir = false;
+      if (swap_par_dir)
+	{
+	  MESSAGE("Swapping parameter directions!");
+	  lr_spline_sf->swapParameterDirection();
+	  spline_sf->swapParameterDirection();
+	}
+
+      bool test_constParamCurve = true;
+      if (test_constParamCurve)
+	{
+	  double wgt_u = 0.129;
+	  double upar = wgt_u*lr_spline_sf->startparam_u() + (1.0 - wgt_u)*lr_spline_sf->endparam_u();
+	  shared_ptr<SplineCurve> par_cv_u(lr_spline_sf->constParamCurve(upar, false));
+	  std::ofstream cv_out("tmp/const_par_cv.g2");
+	  par_cv_u->writeStandardHeader(cv_out);
+	  par_cv_u->write(cv_out);
+	  double wgt_v = 0.279;
+	  double vpar = wgt_v*lr_spline_sf->startparam_v() + (1.0 - wgt_v)*lr_spline_sf->endparam_v();
+	  shared_ptr<SplineCurve> par_cv_v(lr_spline_sf->constParamCurve(vpar, true));
+	  par_cv_v->writeStandardHeader(cv_out);
+	  par_cv_v->write(cv_out);
+	}
+
+      // We write to file the grid.
+      std::ofstream grid_post("tmp/lr_grid_post.ps");
+      writePostscriptMesh(*lr_spline_sf, grid_post);
+    }
+
+  vector<double> sampled_pts_lr;
+  for (int kj = 0; kj < sum_derivs + 1; ++kj)
+    for (int ki = 0; ki < sum_derivs + 1 - kj; ++ki)
+      {
+	double max_dist = maxDist(*spline_sf, *lr_spline_sf, num_dir_samples, num_dir_samples, ki, kj,
+	  sampled_pts_lr);
+
+	std::cout << "Max dist with der_u=" << ki << " & der_v=" << kj << ": " << max_dist << std::endl;
+      }
+
+  if (sampled_pts_lr.size() > 0 && dim == 3)
+    {
+      std::ofstream fileout_pts("tmp/sampled_pts.g2");
+      int num_pts = sampled_pts_lr.size()/dim;
+      PointCloud3D pt_cl(sampled_pts_lr.begin(), num_pts);
+      pt_cl.writeStandardHeader(fileout_pts);
+      pt_cl.write(fileout_pts);
+
+#if 1
+      double max_dist_normals = maxDistNormals(*spline_sf, *lr_spline_sf, num_dir_samples, num_dir_samples);
+      std::cout << "Max dist normals = " << max_dist_normals << std::endl;
+#endif
+    }
+
+}
+
+
+double maxDist(const SplineSurface& spline_sf,
+	       const LRSplineSurface& lr_spline_sf,
+	       int num_samples_u, int num_samples_v,
+	       int der_u, int der_v,
+	       vector<double>& sampled_pts_lr)
+{
+  const int derivs = std::max(der_u, der_v);
+  const int sum_derivs = der_u + der_v;
+  const int num_pts = (sum_derivs + 1)*(sum_derivs + 2)/2;
+  const int first_pos = (sum_derivs + 1)*sum_derivs/2;
+  const int der_pos = first_pos + der_v;
+  // Assuming the domain is the same.
+  double umin = lr_spline_sf.startparam_u();
+  double umax = lr_spline_sf.endparam_u();
+  double vmin = lr_spline_sf.startparam_v();
+  double vmax = lr_spline_sf.endparam_v();
+  double ustep = (umax - umin)/((double)num_samples_u - 1);
+  double vstep = (vmax - vmin)/((double)num_samples_v - 1);
+  Point go_pt(3), lr_pt(3);
+  double max_dist = -1.0;
+// #ifndef NDEBUG
+  double max_dist_u = 0.0;
+  double max_dist_v = 0.0;
+  Point max_go_pt(3), max_lr_pt(3);
+  vector<Point> go_pts(num_pts), lr_pts(num_pts);
+// #endif
+  for (int kj = 0; kj < num_samples_v; ++kj)
+    {
+      double vpar = vmin + kj*vstep;
+      if (vpar > vmax)
+	vpar = vmax;
+      for (int ki = 0; ki < num_samples_u; ++ki)
+	{
+	  double upar = umin + ki*ustep;
+	  if (upar > umax)
+	    upar = umax;
+	  spline_sf.point(go_pts, upar, vpar, sum_derivs);
+	  go_pt = go_pts[der_pos];
+//	  lr_spline_sf.point(lr_pts, upar, vpar, sum_derivs);
+	  lr_pt = lr_spline_sf(upar, vpar, der_u, der_v);
+//lr_pts[der_pos];
+	  sampled_pts_lr.insert(sampled_pts_lr.end(), lr_pt.begin(), lr_pt.end());
+	  double dist = go_pt.dist(lr_pt);
+	  if (dist > max_dist)
+	    {
+	      max_dist = dist;
+// #ifndef NDEBUG
+	      max_dist_u = upar;
+	      max_dist_v = vpar;
+	      max_go_pt = go_pt;
+	      max_lr_pt = lr_pt;
+// #endif
+	    }
+	}
+    }    
+
+// #ifndef NDEBUG
+  std::cout << "max_dist: u = " << max_dist_u << ", v = " << max_dist_v << std::endl;
+  std::cout << "max_go_pt = " << max_go_pt << std::endl;
+  std::cout << "max_lr_pt = " << max_lr_pt << std::endl;
+// #endif
+
+  return max_dist;
+}
+
+
+double maxDistNormals(const SplineSurface& spline_sf,
+		      const LRSplineSurface& lr_spline_sf,
+		      int num_samples_u, int num_samples_v)
+{
+  // Assuming the domain is the same.
+  double umin = lr_spline_sf.startparam_u();
+  double umax = lr_spline_sf.endparam_u();
+  double vmin = lr_spline_sf.startparam_v();
+  double vmax = lr_spline_sf.endparam_v();
+  double ustep = (umax - umin)/((double)num_samples_u - 1);
+  double vstep = (vmax - vmin)/((double)num_samples_v - 1);
+  Point go_normal(3), lr_normal(3);
+  double max_dist_normals = -1.0;
+// #ifndef NDEBUG
+  double max_dist_u = 0.0;
+  double max_dist_v = 0.0;
+  Point max_go_normal(3), max_lr_normal(3);
+// #endif
+  for (int kj = 0; kj < num_samples_v; ++kj)
+    {
+      double vpar = vmin + kj*vstep;
+      if (vpar > vmax)
+	vpar = vmax;
+      for (int ki = 0; ki < num_samples_u; ++ki)
+	{
+	  double upar = umin + ki*ustep;
+	  if (upar > umax)
+	    upar = umax;
+	  spline_sf.normal(go_normal, upar, vpar);
+//	  lr_spline_sf.point(lr_pts, upar, vpar, sum_derivs);
+	  lr_spline_sf.normal(lr_normal, upar, vpar);
+//lr_pts[der_pos];
+	  double dist_normal = go_normal.dist(lr_normal);
+	  if (dist_normal > max_dist_normals)
+	    {
+	      max_dist_normals = dist_normal;
+// #ifndef NDEBUG
+	      max_dist_u = upar;
+	      max_dist_v = vpar;
+	      max_go_normal = go_normal;
+	      max_lr_normal = lr_normal;
+// #endif
+	    }
+	}
+    }    
+
+// #ifndef NDEBUG
+  std::cout << "max_dist_normal: u = " << max_dist_u << ", v = " << max_dist_v << std::endl;
+  std::cout << "max_go_normal = " << max_go_normal << std::endl;
+  std::cout << "max_lr_normal = " << max_lr_normal << std::endl;
+// #endif
+
+  return max_dist_normals;
+}

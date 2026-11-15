@@ -1,0 +1,169 @@
+PROJECT(GoLRspline2D)
+
+#SET(ENABLE_OPENMP 1)
+
+IF(GoTools_ENABLE_OPENMP)
+  FIND_PACKAGE(OpenMP REQUIRED)
+ENDIF(GoTools_ENABLE_OPENMP)
+#set(Boost_DEBUG ON)
+
+FIND_PACKAGE(Boost COMPONENTS timer REQUIRED)
+
+# Include directories
+INCLUDE_DIRECTORIES(
+  ${GoLRspline2D_SOURCE_DIR}/include
+  ${GoToolsCore_SOURCE_DIR}/include
+  ${GoTools_COMMON_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
+)
+
+ADD_COMPILE_DEFINITIONS(BOOST_TIMER_SOURCE)
+ADD_COMPILE_DEFINITIONS(BOOST_CHRONO_HEADER_ONLY)
+
+# Linked in libraries
+SET(DEPLIBS
+  GoToolsCore
+  sisl
+)
+
+FILE(GLOB_RECURSE GoLRspline2D_SRCS src/*.C include/*.h)
+if (BUILD_AS_SHARED_LIBRARY)
+    ADD_LIBRARY(GoLRspline2D SHARED ${GoLRspline2D_SRCS})
+else ()
+    ADD_LIBRARY(GoLRspline2D ${GoLRspline2D_SRCS})
+endif ()
+TARGET_LINK_LIBRARIES(GoLRspline2D ${DEPLIBS})
+SET_PROPERTY(TARGET GoLRspline2D PROPERTY FOLDER "GoLRspline2D/Libs")
+SET_TARGET_PROPERTIES(GoLRspline2D PROPERTIES SOVERSION ${GoTools_ABI_VERSION})
+IF(GoTools_ENABLE_OPENMP)
+  SET_TARGET_PROPERTIES(GoLRspline2D PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}") 
+  SET_TARGET_PROPERTIES(GoLRspline2D PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
+ENDIF(GoTools_ENABLE_OPENMP)
+
+# Apps and tests
+MACRO(ADD_APPS SUBDIR PROPERTY_FOLDER IS_TEST)
+  FILE(GLOB_RECURSE GoLRspline2D_APPS ${SUBDIR}/*.C)
+  FOREACH(app ${GoLRspline2D_APPS})
+    GET_FILENAME_COMPONENT(appname ${app} NAME_WE)
+    ADD_EXECUTABLE(${appname} ${app})
+    TARGET_LINK_LIBRARIES(${appname} GoLRspline2D ${DEPLIBS})
+    SET_TARGET_PROPERTIES(${appname} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${SUBDIR})
+    SET_PROPERTY(TARGET ${appname} PROPERTY FOLDER "GoLRspline2D/${PROPERTY_FOLDER}")
+    IF(${IS_TEST})
+      ADD_TEST(${appname} ${SUBDIR}/${appname} --log_format=XML --log_level=all --log_sink=../Testing/${appname}.xml)
+      SET_TESTS_PROPERTIES(${appname} PROPERTIES LABELS "${SUBDIR}")
+    ENDIF()
+  ENDFOREACH()
+ENDMACRO()
+
+IF(GoTools_COMPILE_APPS)
+  SET(DEPLIBS ${DEPLIBS} ${Boost_LIBRARIES})
+  FILE(GLOB_RECURSE GoLRspline2D_APPS app/*.C)
+  FOREACH(app ${GoLRspline2D_APPS})
+    GET_FILENAME_COMPONENT(appname ${app} NAME_WE)
+    ADD_EXECUTABLE(${appname} ${app})
+    TARGET_LINK_LIBRARIES(${appname} GoLRspline2D ${DEPLIBS})
+    SET_TARGET_PROPERTIES(${appname} PROPERTIES RUNTIME_OUTPUT_DIRECTORY app)
+    IF(GoTools_ENABLE_OPENMP)
+      SET_TARGET_PROPERTIES(${appname} PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}") 
+      SET_TARGET_PROPERTIES(${appname} PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
+    ENDIF()
+    SET_PROPERTY(TARGET ${appname} PROPERTY FOLDER "GoLRspline2D/Apps")
+  ENDFOREACH()
+
+  FILE(GLOB_RECURSE GoLRspline2D_EXAMPLES examples/*.C)
+  FOREACH(app ${GoLRspline2D_EXAMPLES})
+    GET_FILENAME_COMPONENT(appname ${app} NAME_WE)
+    ADD_EXECUTABLE(${appname} ${app})
+    TARGET_LINK_LIBRARIES(${appname} GoLRspline2D ${DEPLIBS})
+    SET_TARGET_PROPERTIES(${appname} PROPERTIES RUNTIME_OUTPUT_DIRECTORY examples)
+    IF(GoTools_ENABLE_OPENMP)
+      SET_TARGET_PROPERTIES(${appname} PROPERTIES COMPILE_FLAGS "${OpenMP_CXX_FLAGS}") 
+      SET_TARGET_PROPERTIES(${appname} PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
+    ENDIF()
+    SET_PROPERTY(TARGET ${appname} PROPERTY FOLDER "GoLRspline2D/Examples")
+  ENDFOREACH()
+ENDIF()
+
+IF(GoTools_COMPILE_TESTS)
+  SET(DEPLIBS ${DEPLIBS} ${Boost_LIBRARIES})
+  ADD_APPS(test/unit "Unit Tests" TRUE)
+  ADD_APPS(test/integration "Integration Tests" TRUE)
+  ADD_APPS(test/acceptance "Acceptance Tests" TRUE)
+ENDIF()
+
+# Create a tmp directory.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tmp)
+
+# Create the output data directory for the examples.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples/data)
+
+# Copy data
+if (GoTools_COPY_DATA)
+  FILE(COPY ${CMAKE_CURRENT_SOURCE_DIR}/../gotools-data/lrsplines2D/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
+# === Install and Export CMake Config Package ===
+
+include(CMakePackageConfigHelpers)
+
+# 'install' target
+IF(WIN32)
+  # Windows
+  set(CMAKE_INSTALL_LIBDIR ${GoTools_WINDOWS_INSTALL_PREFIX}/lib)
+  set(CMAKE_INSTALL_INCLUDEDIR ${GoTools_WINDOWS_INSTALL_PREFIX}/include)
+  set(CMAKE_INSTALL_BINDIR ${GoTools_WINDOWS_INSTALL_PREFIX}/bin)
+ELSE(WIN32)
+  # Linux
+  include(GNUInstallDirs)
+ENDIF(WIN32)
+
+target_include_directories(GoLRspline2D INTERFACE
+  $<BUILD_INTERFACE:${GoLRspline2D_SOURCE_DIR}/include>
+)
+
+export(TARGETS GoLRspline2D FILE GoLRsplines2DTargets.cmake)
+
+# Install the GoLRspline2D target
+install(TARGETS GoLRspline2D
+    EXPORT GoLRspline2DTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install headers
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Export the target without namespace
+install(EXPORT GoLRspline2DTargets
+    FILE GoLRsplines2DTargets.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GoLRsplines2D
+)
+
+# Generate the version file for find_package()
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/GoLRsplines2DConfigVersion.cmake"
+    VERSION ${GoTools_ABI_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Generate the config file from template
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GoLRsplines2DConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/GoLRsplines2DConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GoLRsplines2D
+)
+
+# Install the generated config files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/GoLRsplines2DConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/GoLRsplines2DConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/GoLRsplines2D
+)
+
+SET(CPACK_STRIP_FILES ${CPACK_STRIP_FILES} libGoLRspline2D.so)
