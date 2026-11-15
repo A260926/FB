@@ -1,0 +1,1 @@
+/usr/bin/cc -fsanitize=address,undefined -fno-omit-frame-pointer -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/genheader.dir/scripts/genheader.c.o -o bin/genheader

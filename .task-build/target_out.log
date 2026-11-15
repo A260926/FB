@@ -1,0 +1,20 @@
+
+  ## ERROR: TENSOR METRIC NOT ALLOWED WITH A PERIODIC BOUNDARY PAIR.
+CASE paired_edits splits checks=13
+CASE paired_edits moves checks=99
+CASE paired_edits noinsert_keeps_seam checks=11
+GROUP paired_edits cases=3 checks=123 COMPLETE
+CASE rejection bad_rotation checks=4
+CASE rejection bad_mapping checks=4
+CASE rejection chain_length_and_duplicates checks=5
+CASE rejection invalid_keeps_state checks=7
+CASE rejection tensor_metric checks=32
+GROUP rejection cases=5 checks=52 COMPLETE
+CASE lifecycle get_set_capacity checks=21
+CASE lifecycle second_call checks=11
+CASE lifecycle clear checks=11
+CASE lifecycle two_meshes checks=17
+CASE lifecycle pack_survival checks=51
+CASE lifecycle closed_chain checks=264
+GROUP lifecycle cases=6 checks=375 COMPLETE
+TARGET_COMPLETE cases=14

@@ -196,6 +196,13 @@ int MMGS_packMesh(MMG5_pMesh mesh,MMG5_pSol sol,MMG5_pSol met) {
     }
   }
 
+  if ( sol && sol->m )
+    sol->np  = np;
+
+  /* re-index the periodic pair using the old-to-new tmp mapping; this must
+   * run before the point slots are compacted */
+  if ( !MMGS_periodic_pack(mesh) ) return 0;
+
   /* compact vertices */
   np  = 0;
   nbl = 1;
@@ -598,6 +605,14 @@ int MMGS_mmgslib(MMG5_pMesh mesh,MMG5_pSol met)
     fprintf(stderr,"\n  ## ERROR: WRONG DATA TYPE.\n");
     _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
   }
+
+  /* periodic pairs only support finite positive scalar target sizes and the
+   * regular adaptation entry (no level-set discretization) */
+  if ( mesh->per && met->size == 6 ) {
+    fprintf(stderr,"\n  ## ERROR: TENSOR METRIC NOT ALLOWED WITH A PERIODIC"
+            " BOUNDARY PAIR.\n");
+    _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
+  }
   /* specific meshing */
 
   if ( met->np ) {
@@ -644,8 +659,21 @@ int MMGS_mmgslib(MMG5_pMesh mesh,MMG5_pSol met)
     }
   }
 
+  /* activate the periodic pair once the mesh is normalized and the scalar
+   * size field is available */
+  if ( mesh->per ) {
+    if ( !MMGS_periodic_begin(mesh,met) ) {
+      fprintf(stderr,"\n  ## ERROR: UNABLE TO INITIALIZE THE PERIODIC"
+              " BOUNDARY PAIR.\n");
+      if ( !MMG5_unscaleMesh(mesh,met,NULL) )
+        _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
+      _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
+    }
+  }
+
   /* mesh analysis */
   if ( !MMGS_analys(mesh) ) {
+    if ( MMGS_periodic_active(mesh) ) MMGS_periodic_end(mesh);
     if ( !MMG5_unscaleMesh(mesh,met,NULL) )
       _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
     MMGS_RETURN_AND_PACK(mesh,met,sol,MMG5_LOWFAILURE);
@@ -682,6 +710,7 @@ int MMGS_mmgslib(MMG5_pMesh mesh,MMG5_pSol met)
   }
 
   if ( !MMG5_mmgs1(mesh,met,NULL) ) {
+    if ( MMGS_periodic_active(mesh) ) MMGS_periodic_end(mesh);
     if ( (!mesh->adja) && !MMGS_hashTria(mesh) ) {
       fprintf(stderr,"\n  ## Hashing problem. Invalid mesh.\n");
       _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
@@ -689,6 +718,7 @@ int MMGS_mmgslib(MMG5_pMesh mesh,MMG5_pSol met)
     if ( !MMG5_unscaleMesh(mesh,met,NULL) )    _LIBMMG5_RETURN(mesh,met,sol,MMG5_STRONGFAILURE);
     MMGS_RETURN_AND_PACK(mesh,met,sol,MMG5_LOWFAILURE);
   }
+  if ( MMGS_periodic_active(mesh) ) MMGS_periodic_end(mesh);
 
   chrono(OFF,&(ctim[3]));
   printim(ctim[3].gdif,stim);

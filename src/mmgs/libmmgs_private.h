@@ -219,6 +219,21 @@ int    MMGS_surfballRotation(MMG5_pMesh,MMG5_pPoint,MMG5_int*,int,double r[3][3]
 int    MMGS_prilen(MMG5_pMesh mesh,MMG5_pSol met,int);
 int    MMGS_set_metricAtPointsOnReqEdges ( MMG5_pMesh,MMG5_pSol,int8_t );
 
+/* periodic boundary pair (periodic_s.c) */
+void   MMGS_periodic_free(MMG5_pMesh mesh);
+int    MMGS_periodic_active(MMG5_pMesh mesh);
+int    MMGS_periodic_begin(MMG5_pMesh mesh,MMG5_pSol met);
+void   MMGS_periodic_end(MMG5_pMesh mesh);
+int    MMGS_periodic_trySplit(MMG5_pMesh mesh,MMG5_pSol met,
+                             MMG5_int k,int8_t i);
+int    MMGS_periodic_tryCollapse(MMG5_pMesh mesh,MMG5_pSol met,
+                                 MMG5_int k,int8_t i);
+int    MMGS_periodic_movridpt(MMG5_pMesh mesh,MMG5_pSol met,
+                              MMG5_int *list,int ilist);
+int    MMGS_periodic_isChainEdge(MMG5_pMesh mesh,MMG5_int u,MMG5_int v);
+void   MMGS_periodic_applyCommonSizes(MMG5_pMesh mesh,MMG5_pSol met);
+int    MMGS_periodic_pack(MMG5_pMesh mesh);
+
 #ifdef __cplusplus
 }
 #endif

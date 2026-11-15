@@ -393,6 +393,9 @@ int MMGS_Free_structures_var(va_list argptr)
 
   MMG5_Free_structures(*mesh,NULL);
 
+  /* periodic pair is owned by the mesh */
+  MMGS_periodic_free(*mesh);
+
   return 1;
 }
 

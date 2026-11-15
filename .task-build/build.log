@@ -1,0 +1,24 @@
+[  0%] Built target mmgmmgcommon_libmmgtypes_header
+[  0%] Built target mmgmmgcommon_mmgcmakedefines_header
+[  1%] Getting git commit hash
+[  4%] Built target genheader
+[  4%] Built target mmgmmgcommon_mmg_export_header
+[  5%] Built target GenerateGitHashMmg
+[  5%] Built target copymmgcommon_mmgcmakedefinesf
+[  5%] Built target mmgmmgcommon_mmgversion_header
+[  7%] Built target mmg_fortran_header
+[  7%] Built target mmgs_mmgs_export_header
+[  7%] Built target mmgs_libmmgs_header
+[  8%] Built target mmgs_fortran_header
+[ 14%] Built target copymmgcommon_libmmgtypes
+[ 14%] Built target copymmgcommon_mmgcmakedefines
+[ 14%] Built target copymmgcommon_mmg_export
+[ 14%] Built target copymmgcommon_mmggithash
+[ 19%] Built target copys_mmgs_export
+[ 19%] Built target copys_libmmgs
+[ 19%] Built target copymmgcommon_mmgversion
+[ 21%] Built target copymmgcommon_libmmgtypesf
+[ 21%] Built target copy_mmgcommon_headers
+[ 23%] Built target copy_libmmgsf
+[ 23%] Built target copy_s_headers
+[100%] Built target libmmgs_a

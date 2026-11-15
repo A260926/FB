@@ -606,6 +606,28 @@ typedef struct {
 } MMG5_Hash;
 
 /**
+ * \struct MMG5_PeriodicPair
+ * \brief One pair of periodic boundary chains (mmgs only).
+ *
+ * The two chains sample the same physical curve: point \c a[k] of the first
+ * chain is mapped onto point \c b[k] of the second one through the rigid
+ * motion \f$ x_b = R x_a + t \f$. Both chains have the same number of
+ * samples, stored in chain order. The structure is owned by the
+ * \ref MMG5_Mesh and follows its reallocations, compactions and destruction.
+ */
+typedef struct {
+  MMG5_int  *a;     /*!< Point indices of the first chain (chain order) */
+  MMG5_int  *b;     /*!< Point indices of the second chain (chain order) */
+  MMG5_int   n;     /*!< Number of points per chain */
+  MMG5_int   namax; /*!< Allocated size of the \c a and \c b arrays */
+  double     R[9];  /*!< Rotation matrix, row major storage */
+  double     t[3];  /*!< Translation vector */
+  int8_t     closed; /*!< 1 for a closed chain, 0 for an open one */
+  int8_t     active; /*!< 1 while a remeshing run uses the pair */
+} MMG5_PeriodicPair;
+typedef MMG5_PeriodicPair * MMG5_pPeriodicPair;
+
+/**
  * \struct MMG5_Mesh
  * \brief MMG mesh structure.
  * \todo try to remove nc1;
@@ -657,6 +679,7 @@ typedef struct {
   MMG5_pEdge     edge; /*!< Pointer toward the \ref MMG5_Edge structure */
   MMG5_HGeom     htab; /*!< \ref MMG5_HGeom structure */
   MMG5_Info      info; /*!< \ref MMG5_Info structure */
+  MMG5_pPeriodicPair per; /*!< Periodic boundary pair (mmgs), or NULL */
   char           *namein; /*!< Input mesh name */
   char           *nameout; /*!< Output mesh name */
 

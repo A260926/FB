@@ -499,7 +499,10 @@ static int movtri(MMG5_pMesh mesh,MMG5_pSol met,int maxit) {
         if ( ilist < 1 ) continue;
 
         if ( MG_EDG(ppt->tag) ) {
-          ier = movridpt(mesh,met,list,ilist);
+          if ( MMGS_periodic_active(mesh) )
+            ier = MMGS_periodic_movridpt(mesh,met,list,ilist);
+          else
+            ier = movridpt(mesh,met,list,ilist);
           if ( ier ) {
             ns++;
           }
@@ -626,6 +629,19 @@ static int anaelt(MMG5_pMesh mesh,MMG5_pSol met,int8_t typchk) {
         }
       }
       if ( !pt->flag )  continue;
+    }
+
+    /* periodic seam edges are handled by the symmetric adaptation wave:
+     * keep them out of the generic hash-based pattern splitting */
+    if ( MMGS_periodic_active(mesh) ) {
+      for (i=0; i<3; i++) {
+        if ( !MG_GET(pt->flag,i) ) continue;
+        i1 = MMG5_inxt2[i];
+        i2 = MMG5_iprv2[i];
+        if ( MMGS_periodic_isChainEdge(mesh,pt->v[i1],pt->v[i2]) )
+          pt->flag &= ~(1 << i);
+      }
+      if ( !pt->flag ) continue;
     }
     ns++;
 
@@ -1090,6 +1106,11 @@ static MMG5_int colelt(MMG5_pMesh mesh,MMG5_pSol met,int8_t typchk) {
       }
 
       /* check if geometry preserved */
+      if ( MMGS_periodic_active(mesh) &&
+           MMGS_periodic_tryCollapse(mesh,met,k,i) ) {
+        nc++;
+        break;
+      }
       ilist = chkcol(mesh,met,k,i,list,typchk,MMGS_lenEdg,MMGS_caltri);
 
       int8_t open = (mesh->adja[3*(k-1)+1+i] == 0);
@@ -1168,6 +1189,13 @@ static MMG5_int adpspl(MMG5_pMesh mesh,MMG5_pSol met) {
     p2 = &mesh->point[pt->v[i2]];
     if ( p1->tag & MG_NOM || p2->tag & MG_NOM )  continue;
 
+    /* periodic seam edge: the split is applied symmetrically on both chains */
+    if ( MMGS_periodic_active(mesh) &&
+         MMGS_periodic_trySplit(mesh,met,k,imax) ) {
+      ns++;
+      continue;
+    }
+
     ip = chkspl(mesh,met,k,imax);
     if ( ip < 0 ) {
       /* Lack of memory, go to collapse step. */
@@ -1238,6 +1266,13 @@ static MMG5_int adpcol(MMG5_pMesh mesh,MMG5_pSol met) {
       p2 = &mesh->point[pt->v[i2]];
       if ( MS_SIN(p1->tag) )  continue;
       else if ( p1->tag > p2->tag || p1->tag > pt->tag[i] )  continue;
+
+      /* periodic seam edge: collapse both chains together */
+      if ( MMGS_periodic_active(mesh) &&
+           MMGS_periodic_tryCollapse(mesh,met,k,i) ) {
+        nc++;
+        break;
+      }
 
       /* check if geometry preserved */
       ilist = chkcol(mesh,met,k,i,list,2,MMG5_lenSurfEdg,MMG5_calelt);
@@ -1496,6 +1531,10 @@ int MMG5_mmgs1(MMG5_pMesh mesh,MMG5_pSol met,MMG5_int *permNodGlob) {
     return 0;
   }
 
+  /* periodic seams: the two chains share the minimum of the two size
+   * fields at every paired point */
+  MMGS_periodic_applyCommonSizes(mesh,met);
+
  /* Debug: export variable MMG_SAVE_DEFSIZ to save adapted mesh at the end of
    * anatet wave */
   if ( getenv("MMG_SAVE_DEFSIZ") ) {
@@ -1515,6 +1554,10 @@ int MMG5_mmgs1(MMG5_pMesh mesh,MMG5_pSol met,MMG5_int *permNodGlob) {
   if ( mesh->info.hgradreq > 0. ) {
     MMGS_gradsizreq(mesh,met);
   }
+
+  /* gradation may have differentiated the two sides of the seam: enforce
+   * the common size field again */
+  MMGS_periodic_applyCommonSizes(mesh,met);
 
   /* Debug: export variable MMG_SAVE_GRADSIZ to save adapted mesh at the end of
    * anatet wave */

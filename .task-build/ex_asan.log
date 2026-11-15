@@ -1,0 +1,4 @@
+periodic pair points before remeshing: 9
+periodic pair points after remeshing:  9
+remeshed mesh: 63 vertices, 98 triangles
+mesh written to .task-build/asan_mesh.mesh

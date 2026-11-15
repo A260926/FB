@@ -2214,6 +2214,56 @@ LIBMMGS_EXPORT int MMGS_Free_names(const int starter,...);
 
 /* library */
 /**
+ * \brief Register a pair of periodic boundary chains.
+ *
+ * \param mesh pointer to the mesh structure.
+ * \param n number of points per chain (0 clears the current configuration).
+ * \param a point numbers of the first chain, in chain order.
+ * \param b point numbers of the second chain, in chain order: \c b[k] is the
+ * image of \c a[k] through the rigid motion.
+ * \param R rotation matrix of the rigid motion, stored row major (double[9]).
+ * \param t translation vector of the rigid motion (double[3]).
+ * \param closed 0 for an open chain (at least 2 points), 1 for a closed one
+ * (at least 3 points, the last point is not repeated).
+ *
+ * \return 1 on success, 0 on failure. On failure the previous configuration
+ * (if any) is kept unchanged.
+ *
+ * The two chains must be made of real, open mesh edges (including the edge
+ * from the last point back to the first one for a closed chain), point
+ * numbers must not be repeated and the two chains must not intersect. \c R
+ * must be a finite orthogonal matrix with positive determinant and the
+ * paired points must coincide through \f$x_b = R x_a + t\f$ up to
+ * \f$10^{-10}\max(1,\text{bbox diagonal})\f$. Only a finite positive scalar
+ * target edge length may be used while a pair is registered: calling
+ * \ref MMGS_mmgslib with a tensorial metric returns \ref MMG5_STRONGFAILURE.
+ *
+ * The input arrays are copied and may be freed by the caller. The pair is
+ * owned by the mesh and released with it. Calling again with \c n == 0
+ * clears the configuration.
+ *
+ */
+LIBMMGS_EXPORT int MMGS_Set_periodicPair(MMG5_pMesh mesh,MMG5_int n,
+    const MMG5_int *a,const MMG5_int *b,const double *R,const double *t,int closed);
+
+/**
+ * \brief Read back the registered periodic boundary pair.
+ *
+ * \param mesh pointer to the mesh structure.
+ * \param capacity number of entries that fit in the \a a and \a b arrays.
+ * \param a output array for the compacted point numbers of the first chain.
+ * \param b output array for the compacted point numbers of the second chain.
+ * \param n mandatory output: number of points per chain (0 if no pair is set).
+ *
+ * \return 1 on success, 0 on failure. The required length is always written
+ * to \c *n first; when \a capacity is too small, \a a and \a b are not
+ * written.
+ *
+ */
+LIBMMGS_EXPORT int MMGS_Get_periodicPair(MMG5_pMesh mesh,MMG5_int capacity,
+    MMG5_int *a,MMG5_int *b,MMG5_int *n);
+
+/**
  * \brief Main "program" for mesh adaptation.
  *
  * \param mesh pointer to the mesh structure.  \param met pointer to the sol

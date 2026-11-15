@@ -208,6 +208,9 @@ int MMGS_Set_meshSize(MMG5_pMesh mesh, MMG5_int np, MMG5_int nt, MMG5_int na) {
   if ( mesh->edge )
     MMG5_DEL_MEM(mesh,mesh->edge);
 
+  /* replacing the mesh invalidates any stored point-number based pair */
+  if ( mesh->per ) MMGS_periodic_free(mesh);
+
   /*tester si -m defini : renvoie 0 si pas ok et met la taille min dans info.mem */
   if( mesh->info.mem > 0) {
     if ( mesh->npmax < mesh->np || mesh->ntmax < mesh->nt) {

@@ -1,0 +1,161 @@
+[  0%] Built target mmgmmgcommon_mmgcmakedefines_header
+[  0%] Built target mmgmmgcommon_libmmgtypes_header
+[  2%] Building C object CMakeFiles/genheader.dir/scripts/genheader.c.o
+[  2%] Getting git commit hash
+[  2%] Built target mmgmmgcommon_mmg_export_header
+[  4%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/mmgcmakedefinesf.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/mmgcmakedefinesf.h
+[  4%] Built target GenerateGitHashMmg
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/scripts/genheader.c:111:3: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  111 |   sprintf(cmd, "perl %s -f %s >> %s;",
+      |   ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+1 warning generated.
+[  4%] Built target copymmgcommon_mmgcmakedefinesf
+[  5%] Linking C executable bin/genheader
+[  5%] Built target mmgmmgcommon_mmgversion_header
+[  5%] Built target mmgs_libmmgs_header
+[  5%] Built target mmgs_mmgs_export_header
+[  8%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/libmmgtypes.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/libmmgtypes.h
+[  8%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/mmgcmakedefines.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/mmgcmakedefines.h
+[  9%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/mmg_export.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/mmg_export.h
+[  9%] Built target copymmgcommon_mmgcmakedefines
+[  9%] Built target copymmgcommon_libmmgtypes
+[  9%] Built target genheader
+[  9%] Built target copymmgcommon_mmg_export
+[ 15%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/git_log_mmg.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/git_log_mmg.h
+[ 15%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/libmmgs.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/mmgs/libmmgs.h
+[ 15%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/mmgs_export.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/mmgs/mmgs_export.h
+[ 15%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/mmgversion.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/mmgversion.h
+[ 15%] Built target copys_mmgs_export
+[ 15%] Built target copymmgcommon_mmgversion
+[ 15%] Built target copys_libmmgs
+[ 15%] Built target copymmgcommon_mmggithash
+[ 18%] Generating Fortran header for mmg
+[ 18%] Generating Fortran header for mmgs
+perl /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/scripts/genfort.pl -f /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/libmmgtypes.h >> /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/libmmgtypesf.h;
+perl /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/scripts/genfort.pl -f /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/libmmgs.h >> /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/mmgs/libmmgsf.h;
+[ 18%] Built target mmg_fortran_header
+[ 18%] Built target mmgs_fortran_header
+[ 19%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/common/libmmgtypesf.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/common/libmmgtypesf.h
+[ 21%] Copying /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/src/mmgs/libmmgsf.h in /Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/.task-build/asan/include/mmg/mmgs/libmmgsf.h
+[ 22%] Built target copymmgcommon_libmmgtypesf
+[ 23%] Built target copy_libmmgsf
+[ 23%] Built target copy_mmgcommon_headers
+[ 23%] Built target copy_s_headers
+[ 28%] Building C object CMakeFiles/libmmgs_a.dir/src/common/anisomovpt.c.o
+[ 28%] Building C object CMakeFiles/libmmgs_a.dir/src/common/API_functionsf.c.o
+[ 29%] Building C object CMakeFiles/libmmgs_a.dir/src/common/analys.c.o
+[ 29%] Building C object CMakeFiles/libmmgs_a.dir/src/common/API_functions.c.o
+[ 30%] Building C object CMakeFiles/libmmgs_a.dir/src/common/anisosiz.c.o
+[ 32%] Building C object CMakeFiles/libmmgs_a.dir/src/common/bezier.c.o
+[ 33%] Building C object CMakeFiles/libmmgs_a.dir/src/common/boulep.c.o
+[ 35%] Building C object CMakeFiles/libmmgs_a.dir/src/common/chrono.c.o
+[ 36%] Building C object CMakeFiles/libmmgs_a.dir/src/common/eigenv.c.o
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/chrono.c:164:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  164 |     sprintf(stim,"%5.3lfs",elps);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/chrono.c:168:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  168 |     sprintf(stim,"%dm%ds (%7.3lfs)",mm,ss,elps);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/common/chrono.c:174:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  174 |     sprintf(stim,"%dh%dm%ds",hh,mm,ss);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+3 warnings generated.
+[ 38%] Building C object CMakeFiles/libmmgs_a.dir/src/common/hash.c.o
+[ 39%] Building C object CMakeFiles/libmmgs_a.dir/src/common/inout.c.o
+[ 40%] Building C object CMakeFiles/libmmgs_a.dir/src/common/intmet.c.o
+[ 42%] Building C object CMakeFiles/libmmgs_a.dir/src/common/isosiz.c.o
+[ 43%] Building C object CMakeFiles/libmmgs_a.dir/src/common/librnbg.c.o
+[ 46%] Building C object CMakeFiles/libmmgs_a.dir/src/common/mettools.c.o
+[ 46%] Building C object CMakeFiles/libmmgs_a.dir/src/common/libtools.c.o
+[ 47%] Building C object CMakeFiles/libmmgs_a.dir/src/common/mmg2.c.o
+[ 50%] Building C object CMakeFiles/libmmgs_a.dir/src/common/mmg2s.c.o
+[ 50%] Building C object CMakeFiles/libmmgs_a.dir/src/common/mmg3.c.o
+[ 52%] Building C object CMakeFiles/libmmgs_a.dir/src/common/mmgexterns.c.o
+[ 53%] Building C object CMakeFiles/libmmgs_a.dir/src/common/quality.c.o
+[ 54%] Building C object CMakeFiles/libmmgs_a.dir/src/common/scalem.c.o
+[ 56%] Building C object CMakeFiles/libmmgs_a.dir/src/common/tools.c.o
+[ 57%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/API_functions_s.c.o
+[ 59%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/API_functionsf_s.c.o
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/API_functions_s.c:166:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  166 |     sprintf(data,"sol_%d",j);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/API_functions_s.c:171:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  171 |     sprintf(data,"sol_%d.o",j);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 60%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/analys_s.c.o
+[ 61%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/anisomovpt_s.c.o
+[ 63%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/anisosiz_s.c.o
+2 warnings generated.
+[ 64%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/bezier_s.c.o
+[ 66%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/boulep_s.c.o
+[ 67%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/chkmsh_s.c.o
+[ 69%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/colver_s.c.o
+[ 70%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/gentools_s.c.o
+[ 71%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/hash_s.c.o
+[ 73%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/inout_s.c.o
+[ 74%] Building CXX object CMakeFiles/libmmgs_a.dir/src/mmgs/inoutcpp_s.cpp.o
+[ 76%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/intmet_s.c.o
+[ 77%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/isosiz_s.c.o
+/Volumes/UserFBWorkspace/questions/FSEAA0B143EEF7U11624/attempts/20261115T161037375964Z/repo/src/mmgs/inout_s.c:1433:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 1433 |     sprintf(data,"sol_%" MMG5_PRId "",j);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 78%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/libmmgs.c.o
+[ 80%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/libmmgs_tools.c.o
+1 warning generated.
+[ 81%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/libmmgs_toolsf.c.o
+[ 83%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/libmmgsf.c.o
+[ 85%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/mmgs1.c.o
+[ 85%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/librnbg_s.c.o
+[ 87%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/mmgs2.c.o
+[ 88%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/mmgsexterns.c.o
+[ 90%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/movpt_s.c.o
+[ 91%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/periodic_s.c.o
+[ 92%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/quality_s.c.o
+[ 94%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/split_s.c.o
+[ 95%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/swapar_s.c.o
+[ 97%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/variadic_s.c.o
+[ 98%] Building C object CMakeFiles/libmmgs_a.dir/src/mmgs/zaldy_s.c.o
+[100%] Linking CXX static library lib/libmmgs.a
+[100%] Built target libmmgs_a
