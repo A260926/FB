@@ -18,7 +18,7 @@ rm -f .task-build/coarse_material.ppm
 test -s .task-build/coarse_material.ppm
 test "$(head -c 2 .task-build/coarse_material.ppm)" = P6
 test "$(wc -c < .task-build/coarse_material.ppm)" -gt 20
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/output_log.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

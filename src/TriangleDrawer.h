@@ -6,6 +6,7 @@
 #include "Grid.h"
 #include "Vertex.h"
 #include "Vector3f.h"
+#include <functional>
 
 typedef Grid<double> ZBuffer;
 
@@ -44,6 +45,31 @@ public:
   {
     lightDirection = G3D::normalize(lightDirection);
   }
+
+  // One pixel covered by the BARYCENTRIC rasterization path.
+  // The barycentric weights are relative to the passed-in window-space
+  // triangle and depth is the perspective-correct w reconstructed exactly
+  // like barycentricTriangle() does.
+  struct Coverage
+  {
+    int x;
+    int y;
+    float alpha;
+    float beta;
+    float gamma;
+    double depth;
+  };
+
+  // Runs the same bounding-box + barycentric traversal as
+  // barycentricTriangle() without shading or depth testing, invoking
+  // visitor once for every pixel inside the window-space triangle.
+  // The triangle must already be in window coordinates and is never
+  // modified. Shared by the coarse shading coverage collection so that
+  // no second scanner has to be maintained.
+  static void forEachBarycentricCoverage(
+    const ImageData& imageData,
+    const Triangle& windowTriangle,
+    const std::function<void(const Coverage&)>& visitor);
 
   void wireframeTriangle(ImageData& imageData,
                          const Triangle& triangle,

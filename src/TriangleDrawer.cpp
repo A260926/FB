@@ -265,6 +265,67 @@ void TriangleDrawer::barycentricPixel(ImageData& imageData,
   } // if (alpha)
 } // barycentricPixel
 
+void TriangleDrawer::forEachBarycentricCoverage(
+  const ImageData& imageData,
+  const Triangle& triangle,
+  const std::function<void(const Coverage&)>& visitor)
+{
+  const Vertex4f& a = triangle.vertices[0];
+  const Vertex4f& b = triangle.vertices[1];
+  const Vertex4f& c = triangle.vertices[2];
+
+  const int w = imageData.width();
+  const int h = imageData.height();
+
+  // Triangle bounding box
+  const float maxXf = std::max(a.x(), std::max(b.x(), c.x()));
+  const float minXf = std::min(a.x(), std::min(b.x(), c.x()));
+  const float maxYf = std::max(a.y(), std::max(b.y(), c.y()));
+  const float minYf = std::min(a.y(), std::min(b.y(), c.y()));
+  const int maxX = std::min(std::ceil(maxXf), (float)w);
+  const int minX = std::max((int)std::floor(minXf), 0);
+  const int maxY = std::min(std::ceil(maxYf), (float)h);
+  const int minY = std::max((int)std::floor(minYf), 0);
+
+  const double area = G3D::crossProduct2D(a.pos, b.pos, c.pos);
+  if (area == 0.0) {
+    return;
+  }
+
+  for (int y = minY; y < maxY; ++y) {
+    for (int x = minX; x < maxX; ++x) {
+      Vector4f p(x + 0.5f, y + 0.5f, 0);
+
+      // crossProduct2D is <= 0 if
+      // 1. Point is in triangle
+      // 2. Vertices are passed in counter-clockwise CCW winding order
+      // 3. Coordinates are y-down screen coordinates
+      float alp = G3D::crossProduct2D(b.pos, c.pos, p);
+      if (alp > 0) continue;
+      float bet = G3D::crossProduct2D(c.pos, a.pos, p);
+      if (bet > 0) continue;
+      float gam = G3D::crossProduct2D(a.pos, b.pos, p);
+      if (gam > 0) continue;
+
+      alp /= area;
+      bet /= area;
+      gam /= area;
+
+      // Same perspective-correct w reconstruction as the shading path
+      const double depth = 1 / (a.w()*alp + b.w()*bet + c.w()*gam);
+
+      Coverage coverage;
+      coverage.x = x;
+      coverage.y = y;
+      coverage.alpha = alp;
+      coverage.beta = bet;
+      coverage.gamma = gam;
+      coverage.depth = depth;
+      visitor(coverage);
+    } // for x
+  } // for y
+}
+
 void TriangleDrawer::
 barycentricTriangle(ImageData& imageData, const Triangle& triangle)
 {
@@ -287,52 +348,18 @@ barycentricTriangle(ImageData& imageData, const Triangle& triangle)
   b.pos.w() = 1.0 / b.pos.w();
   c.pos.w() = 1.0 / c.pos.w();
 
-  const int w = imageData.width();
-  const int h = imageData.height();
-
-  // Triangle bounding box
-  const float maxXf = std::max(a.x(), std::max(b.x(), c.x()));
-  const float minXf = std::min(a.x(), std::min(b.x(), c.x()));
-  const float maxYf = std::max(a.y(), std::max(b.y(), c.y()));
-  const float minYf = std::min(a.y(), std::min(b.y(), c.y()));
-  const int maxX = std::min(std::ceil(maxXf), (float)w);
-  int minX = std::max((int)std::floor(minXf), 0);
-  const int maxY = std::min(std::ceil(maxYf), (float)h);
-  const int minY = std::max((int)std::floor(minYf), 0);
-
-  double area = G3D::crossProduct2D(a.pos, b.pos, c.pos);
-
-  for (int y = minY; y < maxY; ++y) {
-    for (int x = minX; x < maxX; ++x) {
-      Vector4f p(x + 0.5f, y + 0.5f, 0);
-
-      // crossProduct2D is <= 0 if
-      // 1. Point is in triangle
-      // 2. Vertices are passed in counter-clockwise CCW winding order
-      // 3. Coordinates are y-down screen coordinates
-      float alp = G3D::crossProduct2D(b.pos, c.pos, p);
-      if (alp > 0) continue;
-      float bet = G3D::crossProduct2D(c.pos, a.pos, p);
-      if (bet > 0) continue;
-      float gam = G3D::crossProduct2D(a.pos, b.pos, p);
-      if (gam > 0) continue;
-
-      alp /= area;
-      bet /= area;
-      gam /= area;
-
-      const double w = 1 / (a.w()*alp + b.w()*bet + c.w()*gam);
-      const double depth = w;
+  forEachBarycentricCoverage(imageData, t,
+    [&](const Coverage& coverage) {
+      const double depth = coverage.depth;
       if (depthBuffer) {
-        if (depth>=depthBuffer->unsafeGet(x,y)) {
-          continue;
+        if (depth>=depthBuffer->unsafeGet(coverage.x,coverage.y)) {
+          return;
         }
       }
 
-      barycentricPixel(imageData, x, y, t, alp, bet, gam, w);
-
-    } // for x
-  } // for y
+      barycentricPixel(imageData, coverage.x, coverage.y, t,
+                       coverage.alpha, coverage.beta, coverage.gamma, depth);
+    });
 } // barycentricTriangle
 
 void TriangleDrawer::

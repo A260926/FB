@@ -2,5 +2,6 @@ src/*.o
 bin/*.dll
 bin/*.exe
 *.zip
+.task-build/
 devcpp/sw3dcpp_private.res
 devcpp/sw3dcpp.layout
