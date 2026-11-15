@@ -228,7 +228,8 @@ static const struct {
 	{
 		RISCV_global_init,
 		RISCV_option,
-		~(CS_MODE_RISCV32 | CS_MODE_RISCV64 | CS_MODE_RISCVC),
+		~(CS_MODE_RISCV32 | CS_MODE_RISCV64 | CS_MODE_RISCVC |
+		  CS_MODE_RISCV_ZCMP),
 	},
 #else
 	{ NULL, NULL, 0 },

@@ -556,7 +556,7 @@ if(CAPSTONE_RISCV_SUPPORT)
         arch/RISCV/RISCVGenSubtargetInfo.inc
         arch/RISCV/RISCVMappingInsn.inc
     )
-    set(TEST_SOURCES ${TEST_SOURCES} test_riscv.c)
+    set(TEST_SOURCES ${TEST_SOURCES} test_riscv.c test_riscv_zcmp.c)
 endif()
 
 if(CAPSTONE_SH_SUPPORT)

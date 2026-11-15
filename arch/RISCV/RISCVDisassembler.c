@@ -291,7 +291,7 @@ static DecodeStatus decodeCLUIImmOperand(MCInst *Inst, uint64_t Imm,
 
 static DecodeStatus decodeFRMArg(MCInst *Inst, uint64_t Imm,
                                  int64_t Address,
-                                 const void *Decoder) 
+                                 const void *Decoder)
 {
   	//CS_ASSERT(isUInt<3>(Imm) && "Invalid immediate");
   	if (!RISCVFPRndMode_isValidRoundingMode(Imm))
@@ -300,6 +300,129 @@ static DecodeStatus decodeFRMArg(MCInst *Inst, uint64_t Imm,
   	//Inst.addOperand(MCOperand::createImm(Imm));
   	MCOperand_CreateImm0(Inst, Imm);
   	return MCDisassembler_Success;
+}
+
+/*
+ * Zcmp 1.0 (cm.push, cm.pop, cm.popret, cm.popretz, cm.mva01s, cm.mvsa01).
+ *
+ * These are 16-bit instructions living in the same encoding space as the
+ * double-precision compressed loads/stores (funct3 = 0b101, quadrant 2).
+ * They are only decoded when CS_MODE_RISCV_ZCMP is combined with RISCVC;
+ * otherwise the overlapping encodings keep their legacy meaning.
+ *
+ * Register list encoding (rlist): the stack is adjusted by
+ *   16 * ceil(nregs * XLEN / 128) + 16 * spimm
+ * bytes, where nregs counts ra plus the encoded s registers.  Note rlist
+ * jumps from {ra, s0-s9} to {ra, s0-s11}: there is no {ra, s0-s10} form.
+ */
+static const unsigned ZcmpSRegs[12] = {
+	8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27
+};
+
+static bool hasZcmpMode(int mode)
+{
+	return (mode & CS_MODE_RISCV_ZCMP) && (mode & CS_MODE_RISCVC);
+}
+
+static unsigned zcmpNumSavedRegs(unsigned rlist)
+{
+	// rlist 4..14 -> {ra, s0..s(rlist-4)}, rlist 15 -> {ra, s0-s11}.
+	return (rlist == 15) ? 13 : (1 + (rlist - 4));
+}
+
+static uint32_t zcmpRegList(unsigned rlist)
+{
+	unsigned i, ns = (rlist == 15) ? 12 : (rlist - 4);
+	// bit n of the list represents xn; ra is always saved/restored.
+	uint32_t list = 1u << 1;
+
+	for (i = 0; i < ns; i++)
+		list |= 1u << ZcmpSRegs[i];
+
+	return list;
+}
+
+static int64_t zcmpStackAdj(unsigned rlist, unsigned spimm, int mode)
+{
+	unsigned nregs = zcmpNumSavedRegs(rlist);
+	unsigned xlen = (mode & CS_MODE_RISCV64) ? 8 : 4;
+	unsigned bytes = nregs * xlen;
+
+	// Signed byte count: 16-byte aligned base for the register list, plus
+	// the spimm field in units of 16 bytes.
+	return (int64_t)(((bytes + 15) / 16) * 16) + (int64_t)(spimm * 16);
+}
+
+static DecodeStatus decodeZcmpInstruction(MCInst *MI, uint32_t Inst, int mode)
+{
+	unsigned rlist, spimm, op;
+	uint32_t reglist;
+	int64_t adj;
+
+	MCInst_clear(MI);
+
+	// cm.mva01s / cm.mvsa01
+	if ((Inst & 0xFC23) == 0xAC22) {
+		unsigned rs1 = (Inst >> 7) & 0x7;
+		unsigned rs2 = (Inst >> 2) & 0x7;
+		unsigned r1 = GPRDecoderTable[ZcmpSRegs[rs1]];
+		unsigned r2 = GPRDecoderTable[ZcmpSRegs[rs2]];
+
+		// The explicit operands are the two s-registers; a0/a1 are
+		// implied and added by the printer so that the public detail
+		// exposes all four ordered operands (two destinations, then
+		// two sources).
+		MCInst_setOpcode(MI, (Inst & 0x40) ? RISCV_CM_MVA01S :
+						    RISCV_CM_MVSA01);
+		MCOperand_CreateReg0(MI, r1);
+		MCOperand_CreateReg0(MI, r2);
+
+		return MCDisassembler_Success;
+	}
+
+	// cm.push/cm.pop/cm.popret/cm.popretz: funct3 = 0b101, quadrant 2,
+	// bit12 = 1.  rlist values 0..3 are reserved (legacy encodings).
+	if ((Inst & 0xF003) != 0xB002)
+		return MCDisassembler_Fail;
+
+	op = (Inst >> 8) & 0xF;
+	if (op != 0x8 && op != 0xA && op != 0xC && op != 0xE)
+		return MCDisassembler_Fail;
+
+	rlist = (Inst >> 4) & 0xF;
+	if (rlist < 4)
+		return MCDisassembler_Fail;
+
+	spimm = (Inst >> 2) & 0x3;
+	adj = zcmpStackAdj(rlist, spimm, mode);
+	reglist = zcmpRegList(rlist);
+
+	switch (op) {
+	default:
+		return MCDisassembler_Fail;
+	case 0x8:
+		MCInst_setOpcode(MI, RISCV_CM_PUSH);
+		MCOperand_CreateImm0(MI, (int64_t)reglist);
+		MCOperand_CreateImm0(MI, -adj);
+		break;
+	case 0xA:
+		MCInst_setOpcode(MI, RISCV_CM_POP);
+		MCOperand_CreateImm0(MI, (int64_t)reglist);
+		MCOperand_CreateImm0(MI, adj);
+		break;
+	case 0xC:
+		MCInst_setOpcode(MI, RISCV_CM_POPRETZ);
+		MCOperand_CreateImm0(MI, (int64_t)reglist);
+		MCOperand_CreateImm0(MI, adj);
+		break;
+	case 0xE:
+		MCInst_setOpcode(MI, RISCV_CM_POPRET);
+		MCOperand_CreateImm0(MI, (int64_t)reglist);
+		MCOperand_CreateImm0(MI, adj);
+		break;
+	}
+
+	return MCDisassembler_Success;
 }
 
 
@@ -364,10 +487,24 @@ static DecodeStatus RISCVDisassembler_getInstruction(int mode, MCInst *MI,
       			return MCDisassembler_Fail;
     		}
 
+		Inst = code[0] | (code[1] << 8);
+
+		// Zcmp shares encoding space with the double-precision compressed
+		// loads/stores.  When the caller enables it, prefer the Zcmp
+		// interpretation; reserved Zcmp encodings fall through to the
+		// legacy tables below.
+		if (hasZcmpMode(mode)) {
+			init_MI_insn_detail(MI);
+			Result = decodeZcmpInstruction(MI, Inst, mode);
+			if (Result != MCDisassembler_Fail) {
+				*Size = 2;
+				return Result;
+			}
+		}
+
 		// If not b4bit.
     		if (! (getFeatureBits(mode) & ((uint64_t)RISCV_Feature64Bit))) {
       			// Trying RISCV32Only_16 table (16-bit Instruction)
-      			Inst = code[0] | (code[1] << 8);
       			init_MI_insn_detail(MI);
       			Result = decodeInstruction(DecoderTableRISCV32Only_16, MI, Inst, Address,
                                  	   	   MRI, mode);
@@ -376,9 +513,8 @@ static DecodeStatus RISCVDisassembler_getInstruction(int mode, MCInst *MI,
         			return Result;
       			}
     		}
-    
+
     		// Trying RISCV_C table (16-bit Instruction)
-    		Inst = code[0] | (code[1] << 8);
     		init_MI_insn_detail(MI);
     		// Calling the auto-generated decoder function.
     		Result = decodeInstruction(DecoderTable16, MI, Inst, Address, MRI, mode);

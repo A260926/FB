@@ -29,6 +29,9 @@ void print_insn_detail_riscv(csh handle, cs_insn *ins)
 			case RISCV_OP_IMM:
 				printf("\t\toperands[%u].type: IMM = 0x%lx\n", i, (long)op->imm);
 				break;
+			case RISCV_OP_REGLIST:
+				printf("\t\toperands[%u].type: REGLIST = 0x%x\n", i, op->reglist);
+				break;
 			case RISCV_OP_MEM:
 				printf("\t\toperands[%u].type: MEM\n", i);
 				if (op->mem.base != RISCV_REG_INVALID)

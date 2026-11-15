@@ -1633,3 +1633,39 @@
 	{ 0 }, { 0 }, { 0 }, 0, 0
 #endif
 },
+{
+	RISCV_CM_PUSH, RISCV_INS_CM_PUSH,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, 0 }, 0, 0
+#endif
+},
+{
+	RISCV_CM_POP, RISCV_INS_CM_POP,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, 0 }, 0, 0
+#endif
+},
+{
+	RISCV_CM_POPRET, RISCV_INS_CM_POPRET,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, RISCV_GRP_RET, 0 }, 0, 0
+#endif
+},
+{
+	RISCV_CM_POPRETZ, RISCV_INS_CM_POPRETZ,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, RISCV_GRP_RET, 0 }, 0, 0
+#endif
+},
+{
+	RISCV_CM_MVA01S, RISCV_INS_CM_MVA01S,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, 0 }, 0, 0
+#endif
+},
+{
+	RISCV_CM_MVSA01, RISCV_INS_CM_MVSA01,
+#ifndef CAPSTONE_DIET
+	{ 0 }, { 0 }, { RISCV_GRP_HASSTDEXTC, 0 }, 0, 0
+#endif
+},

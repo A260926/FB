@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcapstone.a CMakeFiles/capstone.dir/cs.c.o CMakeFiles/capstone.dir/Mapping.c.o CMakeFiles/capstone.dir/MCInst.c.o CMakeFiles/capstone.dir/MCInstrDesc.c.o CMakeFiles/capstone.dir/MCRegisterInfo.c.o CMakeFiles/capstone.dir/SStream.c.o CMakeFiles/capstone.dir/utils.c.o CMakeFiles/capstone.dir/arch/RISCV/RISCVDisassembler.c.o CMakeFiles/capstone.dir/arch/RISCV/RISCVInstPrinter.c.o CMakeFiles/capstone.dir/arch/RISCV/RISCVMapping.c.o CMakeFiles/capstone.dir/arch/RISCV/RISCVModule.c.o
+/usr/bin/ranlib libcapstone.a

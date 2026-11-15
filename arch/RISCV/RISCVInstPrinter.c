@@ -81,30 +81,8 @@ static void fixDetailOfEffectiveAddr(MCInst *MI)
 
 
 //void RISCVInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-//                                 StringRef Annot, const MCSubtargetInfo &STI) 
-void RISCV_printInst(MCInst *MI, SStream *O, void *info) 
-{
-  	MCRegisterInfo *MRI = (MCRegisterInfo *) info;
-  	//bool Res = false;
-  	//MCInst *NewMI = MI;
-  	// TODO: RISCV compressd instructions.
-  	//MCInst UncompressedMI;
-  	//if (!NoAliases)
-    	//Res = uncompressInst(UncompressedMI, *MI, MRI, STI);
-  	//if (Res)
-    	//NewMI = const_cast<MCInst *>(&UncompressedMI);
-  	if (/*NoAliases ||*/ !printAliasInstr(MI, O, info))
-    		printInstruction(MI, O, MRI);
-  		//printAnnotation(O, Annot);
-	// fix load/store type insttuction
-    	if (MI->csh->detail && 
-	    MI->flat_insn->detail->riscv.need_effective_addr)
-		fixDetailOfEffectiveAddr(MI);
-	
-	return;
-}
-
-static void printRegName(SStream *OS, unsigned RegNo) 
+//                                 StringRef Annot, const MCSubtargetInfo &STI)
+static void printRegName(SStream *OS, unsigned RegNo)
 {
   	SStream_concat0(OS, getRegisterName(RegNo, RISCV_ABIRegAltName));
 }
@@ -152,6 +130,143 @@ static void printOperand(MCInst *MI, unsigned OpNo, SStream *O)
 
   	//CS_ASSERT(MO.isExpr() && "Unknown operand kind in printOperand");
 	
+	return;
+}
+
+/*
+ * Zcmp 1.0 instructions.  Their MCInst carries the register list as a bit map
+ * immediate (bit n = xn) plus the signed stack adjustment in bytes; the
+ * printer turns those into the assembly syntax and detail operands.
+ */
+static unsigned GPRForX(unsigned n)
+{
+	// Internal register ids for X0..X31 are contiguous.
+	return RISCV_X0 + n;
+}
+
+/*
+ * Zcmp register lists are always "ra plus the first N saved registers",
+ * encoded as {ra}, {ra, s0}, ..., {ra, s0-s9} or {ra, s0-s11}.  The ABI
+ * range notation names s0..s11, which map to x8, x9 and x18..x27.
+ */
+static unsigned SRegIndexToX(unsigned idx)
+{
+	static const unsigned xs[12] = {
+		8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27
+	};
+	return (idx < 12) ? xs[idx] : 0;
+}
+
+static void printRegList(uint32_t list, SStream *O)
+{
+	unsigned ns = 0;
+	unsigned first, last;
+	bool have_ra = (list & (1u << 1)) != 0;
+
+	while (ns < 12 && (list & (1u << SRegIndexToX(ns))))
+		ns++;
+
+	SStream_concat0(O, "{");
+	if (have_ra) {
+		printRegName(O, GPRForX(1));
+		if (ns)
+			SStream_concat0(O, ", ");
+	}
+	if (ns) {
+		first = 0;
+		last = ns - 1;
+		printRegName(O, GPRForX(SRegIndexToX(first)));
+		if (last > first) {
+			SStream_concat0(O, "-");
+			printRegName(O, GPRForX(SRegIndexToX(last)));
+		}
+	}
+	SStream_concat0(O, "}");
+}
+
+static void printZcmpPushPop(MCInst *MI, SStream *O)
+{
+	uint32_t list = (uint32_t)MCOperand_getImm(MCInst_getOperand(MI, 0));
+	int64_t adj = MCOperand_getImm(MCInst_getOperand(MI, 1));
+	cs_riscv *riscv;
+
+	SStream_concat0(O, MCInst_getOpcode(MI) == RISCV_CM_PUSH ? "cm.push\t" :
+			       MCInst_getOpcode(MI) == RISCV_CM_POP ? "cm.pop\t" :
+			       MCInst_getOpcode(MI) == RISCV_CM_POPRET ? "cm.popret\t" :
+								      "cm.popretz\t");
+	printRegList(list, O);
+	SStream_concat(O, ", ");
+	// Both operands are signed byte counts: push subtracts, pop adds.
+	if (adj < 0)
+		SStream_concat(O, "-%" PRIu64, (uint64_t)(-adj));
+	else
+		SStream_concat(O, "%" PRIu64, (uint64_t)adj);
+
+	if (MI->csh->detail) {
+		riscv = &MI->flat_insn->detail->riscv;
+		riscv->operands[riscv->op_count].type = RISCV_OP_REGLIST;
+		riscv->operands[riscv->op_count].reglist = list;
+		riscv->op_count++;
+		riscv->operands[riscv->op_count].type = RISCV_OP_IMM;
+		riscv->operands[riscv->op_count].imm = adj;
+		riscv->op_count++;
+	}
+}
+
+static void printZcmpMv(MCInst *MI, SStream *O)
+{
+	/* Operands 0 and 1 are the encoded s-registers.  cm.mva01s writes
+	 * a0/a1 from them, while cm.mvsa01 writes them from a0/a1. */
+	unsigned r1 = MCOperand_getReg(MCInst_getOperand(MI, 0));
+	unsigned r2 = MCOperand_getReg(MCInst_getOperand(MI, 1));
+	bool mva = MCInst_getOpcode(MI) == RISCV_CM_MVA01S;
+
+	SStream_concat0(O, mva ? "cm.mva01s\t" : "cm.mvsa01\t");
+	printRegName(O, r1);
+	SStream_concat0(O, ", ");
+	printRegName(O, r2);
+
+	if (MI->csh->detail) {
+		cs_riscv *riscv = &MI->flat_insn->detail->riscv;
+
+		/* Four ordered REG operands: destinations first, sources last. */
+		riscv->operands[riscv->op_count].type = RISCV_OP_REG;
+		riscv->operands[riscv->op_count++].reg = mva ? RISCV_X10 : r1;
+		riscv->operands[riscv->op_count].type = RISCV_OP_REG;
+		riscv->operands[riscv->op_count++].reg = mva ? RISCV_X11 : r2;
+		riscv->operands[riscv->op_count].type = RISCV_OP_REG;
+		riscv->operands[riscv->op_count++].reg = mva ? r1 : RISCV_X10;
+		riscv->operands[riscv->op_count].type = RISCV_OP_REG;
+		riscv->operands[riscv->op_count++].reg = mva ? r2 : RISCV_X11;
+	}
+}
+
+void RISCV_printInst(MCInst *MI, SStream *O, void *info)
+{
+	MCRegisterInfo *MRI = (MCRegisterInfo *) info;
+
+	switch (MCInst_getOpcode(MI)) {
+	case RISCV_CM_PUSH:
+	case RISCV_CM_POP:
+	case RISCV_CM_POPRET:
+	case RISCV_CM_POPRETZ:
+		printZcmpPushPop(MI, O);
+		return;
+	case RISCV_CM_MVA01S:
+	case RISCV_CM_MVSA01:
+		printZcmpMv(MI, O);
+		return;
+	default:
+		break;
+	}
+
+	if (!printAliasInstr(MI, O, info))
+		printInstruction(MI, O, MRI);
+
+	// fix load/store type insttuction
+	if (MI->csh->detail && MI->flat_insn->detail->riscv.need_effective_addr)
+		fixDetailOfEffectiveAddr(MI);
+
 	return;
 }
 

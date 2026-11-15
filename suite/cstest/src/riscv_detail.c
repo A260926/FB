@@ -31,6 +31,9 @@ char *get_detail_riscv(csh *handle, cs_mode mode, cs_insn *ins)
 			case RISCV_OP_IMM:
 				add_str(&result, " ; operands[%u].type: IMM = 0x%x", i, op->imm);
 				break;
+			case RISCV_OP_REGLIST:
+				add_str(&result, " ; operands[%u].type: REGLIST = 0x%x", i, op->reglist);
+				break;
 			case RISCV_OP_MEM:
 				add_str(&result, " ; operands[%u].type: MEM", i);
 				if (op->mem.base != RISCV_REG_INVALID)

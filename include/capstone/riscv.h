@@ -29,7 +29,12 @@ typedef enum riscv_op_type {
 	RISCV_OP_REG, // = CS_OP_REG (Register operand).
 	RISCV_OP_IMM, // = CS_OP_IMM (Immediate operand).
 	RISCV_OP_MEM, // = CS_OP_MEM (Memory operand).
+	RISCV_OP_REGLIST, // register list operand (Zcmp push/pop register lists).
 } riscv_op_type;
+
+/// Register list of a Zcmp push/pop-family instruction.
+/// Bit n represents register xn.
+#define RISCV_REGLIST_REG(list, n) (((list) >> (n)) & 1u)
 
 // Instruction's operand referring to memory
 // This is associated with RISCV_OP_MEM operand type above
@@ -45,6 +50,7 @@ typedef struct cs_riscv_op {
 		unsigned int reg;	// register value for REG operand
 		int64_t imm;		// immediate value for IMM operand
 		riscv_op_mem mem;	// base/disp value for MEM operand
+		uint32_t reglist;	// register list for REGLIST operand
 	};
 } cs_riscv_op;
 
@@ -472,8 +478,14 @@ typedef enum riscv_insn {
   	RISCV_INS_URET,
   	RISCV_INS_WFI,
   	RISCV_INS_XOR,
-  	RISCV_INS_XORI,	
-	
+  	RISCV_INS_XORI,
+  	RISCV_INS_CM_PUSH,
+  	RISCV_INS_CM_POP,
+  	RISCV_INS_CM_POPRET,
+  	RISCV_INS_CM_POPRETZ,
+  	RISCV_INS_CM_MVA01S,
+  	RISCV_INS_CM_MVSA01,
+
   	RISCV_INS_ENDING,
 } riscv_insn;
 

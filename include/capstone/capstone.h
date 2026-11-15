@@ -207,6 +207,8 @@ typedef enum cs_mode {
 	CS_MODE_RISCV32  = 1 << 0,        ///< RISCV RV32G
 	CS_MODE_RISCV64  = 1 << 1,        ///< RISCV RV64G
 	CS_MODE_RISCVC   = 1 << 2,        ///< RISCV compressed instructure mode
+	CS_MODE_RISCV_ZCMP = 1 << 3,      ///< RISCV Zcmp 1.0 extension (push/pop,
+					  ///< popret, popretz, mva01s, mvsa01)
 	CS_MODE_MOS65XX_6502 = 1 << 1, ///< MOS65XXX MOS 6502
 	CS_MODE_MOS65XX_65C02 = 1 << 2, ///< MOS65XXX WDC 65c02
 	CS_MODE_MOS65XX_W65C02 = 1 << 3, ///< MOS65XXX WDC W65c02

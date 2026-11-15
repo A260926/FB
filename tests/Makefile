@@ -116,6 +116,7 @@ endif
 ifneq (,$(findstring riscv,$(CAPSTONE_ARCHS)))
 CFLAGS += -DCAPSTONE_HAS_RISCV
 SOURCES += test_riscv.c
+SOURCES += test_riscv_zcmp.c
 endif
 ifneq (,$(findstring wasm,$(CAPSTONE_ARCHS)))
 CFLAGS += -DCAPSTONE_HAS_WASM

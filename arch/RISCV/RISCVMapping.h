@@ -19,4 +19,9 @@ riscv_reg RISCV_map_insn(const char *name);
 // map internal raw register to 'public' register
 riscv_reg RISCV_map_register(unsigned int r);
 
+// register access for cs_regs_access()
+void RISCV_reg_access(const cs_insn *insn,
+		cs_regs regs_read, uint8_t *regs_read_count,
+		cs_regs regs_write, uint8_t *regs_write_count);
+
 #endif

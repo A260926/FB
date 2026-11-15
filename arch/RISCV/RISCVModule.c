@@ -27,6 +27,7 @@ cs_err RISCV_global_init(cs_struct * ud)
 	ud->insn_id = RISCV_get_insn_id;
 	ud->insn_name = RISCV_insn_name;
 	ud->group_name = RISCV_group_name;
+	ud->reg_access = RISCV_reg_access;
 
 	return CS_ERR_OK;
 }
@@ -35,6 +36,9 @@ cs_err RISCV_option(cs_struct * handle, cs_opt_type type, size_t value)
 {
 	if (type == CS_OPT_SYNTAX)
 		handle->syntax = (int)value;
+	else if (type == CS_OPT_MODE)
+		// Push/pop stack adjustments depend on the current XLEN.
+		handle->mode = (cs_mode)value;
 
 	return CS_ERR_OK;
 }

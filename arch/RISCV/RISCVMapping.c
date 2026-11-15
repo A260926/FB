@@ -228,6 +228,187 @@ static const name_map group_name_maps[] = {
 };
 #endif
 
+/// Adds a register to @arr if it is not present already.
+static void reg_access_add(uint16_t *arr, uint8_t *count, unsigned int reg)
+{
+	if (!reg || arr_exist(arr, *count, reg))
+		return;
+	if (*count >= 64)
+		return;
+	arr[*count] = (uint16_t)reg;
+	(*count)++;
+}
+
+/// Adds every register set in the bit map @list, where bit n is xn.
+static void reg_access_add_list(uint16_t *arr, uint8_t *count, uint32_t list)
+{
+	unsigned n;
+
+	for (n = 0; n < 32; n++) {
+		if (list & (1u << n))
+			reg_access_add(arr, count, RISCV_REG_X0 + n);
+	}
+}
+
+/// Registers written only by store instructions (memory is the destination).
+static bool riscv_is_store(unsigned int id)
+{
+	switch (id) {
+	case RISCV_INS_SB:
+	case RISCV_INS_SH:
+	case RISCV_INS_SW:
+	case RISCV_INS_SD:
+	case RISCV_INS_FSW:
+	case RISCV_INS_FSD:
+	case RISCV_INS_C_SW:
+	case RISCV_INS_C_SD:
+	case RISCV_INS_C_SWSP:
+	case RISCV_INS_C_SDSP:
+	case RISCV_INS_C_FSW:
+	case RISCV_INS_C_FSD:
+	case RISCV_INS_C_FSWSP:
+	case RISCV_INS_C_FSDSP:
+	case RISCV_INS_SC_W:
+	case RISCV_INS_SC_W_AQ:
+	case RISCV_INS_SC_W_AQ_RL:
+	case RISCV_INS_SC_W_RL:
+	case RISCV_INS_SC_D:
+	case RISCV_INS_SC_D_AQ:
+	case RISCV_INS_SC_D_AQ_RL:
+	case RISCV_INS_SC_D_RL:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/// Branch instructions never write a register operand; the compressed jump
+/// forms encode only their source register because the link register is
+/// implicit (and already covered by the instruction map).
+static bool riscv_first_op_is_source(unsigned int id)
+{
+	switch (id) {
+	case RISCV_INS_BEQ:
+	case RISCV_INS_BGE:
+	case RISCV_INS_BGEU:
+	case RISCV_INS_BLT:
+	case RISCV_INS_BLTU:
+	case RISCV_INS_BNE:
+	case RISCV_INS_C_BEQZ:
+	case RISCV_INS_C_BNEZ:
+	case RISCV_INS_C_J:
+	case RISCV_INS_C_JAL:
+	case RISCV_INS_C_JR:
+	case RISCV_INS_C_JALR:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/// Computes the registers read and written by an instruction.  Implicit
+/// registers from the instruction map are included first; explicit operands
+/// follow.  Results are de-duplicated.
+void RISCV_reg_access(const cs_insn *insn, cs_regs regs_read,
+		      uint8_t *regs_read_count, cs_regs regs_write,
+		      uint8_t *regs_write_count)
+{
+#ifndef CAPSTONE_DIET
+	uint8_t read_count, write_count;
+	uint8_t i;
+	const cs_riscv *riscv;
+
+	read_count = insn->detail->regs_read_count;
+	write_count = insn->detail->regs_write_count;
+
+	memcpy(regs_read, insn->detail->regs_read,
+	       read_count * sizeof(insn->detail->regs_read[0]));
+	memcpy(regs_write, insn->detail->regs_write,
+	       write_count * sizeof(insn->detail->regs_write[0]));
+
+	riscv = &insn->detail->riscv;
+
+	switch (insn->id) {
+	case RISCV_INS_CM_PUSH:
+	case RISCV_INS_CM_POP:
+	case RISCV_INS_CM_POPRET:
+	case RISCV_INS_CM_POPRETZ:
+		// Operand 0 is the register list, operand 1 the stack
+		// adjustment in bytes.  The stack pointer is both read and
+		// written; push reads the listed registers, the pop family
+		// writes them back.
+		reg_access_add(regs_read, &read_count, RISCV_REG_SP);
+		reg_access_add(regs_write, &write_count, RISCV_REG_SP);
+		if (riscv->op_count > 0 &&
+		    riscv->operands[0].type == RISCV_OP_REGLIST) {
+			uint32_t list = riscv->operands[0].reglist;
+
+			if (insn->id == RISCV_INS_CM_PUSH)
+				reg_access_add_list(regs_read, &read_count, list);
+			else
+				reg_access_add_list(regs_write, &write_count, list);
+		}
+		if (insn->id == RISCV_INS_CM_POPRET ||
+		    insn->id == RISCV_INS_CM_POPRETZ)
+			// Both variants return through ra; popretz also
+			// zeroes the return value register a0.
+			reg_access_add(regs_read, &read_count, RISCV_REG_RA);
+		if (insn->id == RISCV_INS_CM_POPRETZ)
+			reg_access_add(regs_write, &write_count, RISCV_REG_A0);
+		break;
+
+	case RISCV_INS_CM_MVA01S:
+	case RISCV_INS_CM_MVSA01:
+		// Four ordered REG operands: the first two are destinations,
+		// the last two are sources.  The assignment is simultaneous,
+		// so sources are always read even if they equal a destination.
+		for (i = 0; i < riscv->op_count; i++) {
+			const cs_riscv_op *op = &riscv->operands[i];
+
+			if (op->type != RISCV_OP_REG)
+				continue;
+			if (i < 2)
+				reg_access_add(regs_write, &write_count,
+					       op->reg);
+			else
+				reg_access_add(regs_read, &read_count,
+					       op->reg);
+		}
+		break;
+
+	default:
+		for (i = 0; i < riscv->op_count; i++) {
+			const cs_riscv_op *op = &riscv->operands[i];
+
+			switch (op->type) {
+			case RISCV_OP_REG:
+				// The first operand is the destination unless
+				// this is a store or branch; every other
+				// register operand is a source.
+				if (i == 0 && !riscv_is_store(insn->id) &&
+				    !riscv_first_op_is_source(insn->id))
+					reg_access_add(regs_write,
+						       &write_count, op->reg);
+				else
+					reg_access_add(regs_read, &read_count,
+						       op->reg);
+				break;
+			case RISCV_OP_MEM:
+				reg_access_add(regs_read, &read_count,
+					       op->mem.base);
+				break;
+			default:
+				break;
+			}
+		}
+		break;
+	}
+
+	*regs_read_count = read_count;
+	*regs_write_count = write_count;
+#endif
+}
+
 const char *RISCV_group_name(csh handle, unsigned int id)
 {
 #ifndef CAPSTONE_DIET
