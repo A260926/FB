@@ -1,0 +1,61 @@
+; FBX 7.4.0 project file
+FBXHeaderExtension: { FBXHeaderVersion: 1003
+ FBXVersion: 7400
+}
+Objects: {
+ Model: 1, "Model::Root", "Null" {
+  Properties70: {
+   P: "Lcl Translation", "Lcl Translation", "", "A",3,0,0
+   P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,90
+   P: "Lcl Scaling", "Lcl Scaling", "", "A",2,1,1
+  }
+ }
+ Model: 2, "Model::Bone", "LimbNode" {
+  Properties70: {
+   P: "Lcl Translation", "Lcl Translation", "", "A",1,0,0
+   P: "RotationPivot", "Vector3D", "Vector", "",0.5,0,0
+  }
+ }
+ Model: 3, "Model::Mesh", "Mesh" { }
+ Geometry: 4, "Geometry::Triangle", "Mesh" {
+  Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }
+  PolygonVertexIndex: *3 { a: 0,1,-3 }
+ }
+ Deformer: 5, "Deformer::Skin", "Skin" { Version: 101
+ }
+ Deformer: 6, "SubDeformer::Bone", "Cluster" {
+  Version: 100
+  Indexes: *3 { a: 0,1,2 }
+  Weights: *3 { a: 1,1,1 }
+  Transform: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+  TransformLink: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+ }
+ AnimationStack: 10, "AnimStack::Turn", "" { }
+ AnimationLayer: 11, "AnimLayer::Base", "" { }
+ AnimationCurveNode: 12, "AnimCurveNode::R", "" {
+  Properties70: {
+   P: "d|X", "Number", "", "A",0
+   P: "d|Y", "Number", "", "A",0
+   P: "d|Z", "Number", "", "A",0
+  }
+ }
+ AnimationCurve: 13, "AnimCurve::Z", "" {
+  Default: 0
+  KeyVer: 4008
+  KeyTime: *2 { a: 0,46186158000 }
+  KeyValueFloat: *2 { a: 0,90 }
+ }
+}
+Connections: {
+ C: "OO",1,0
+ C: "OO",2,1
+ C: "OO",3,0
+ C: "OO",4,3
+ C: "OO",5,4
+ C: "OO",6,5
+ C: "OO",2,6
+ C: "OO",11,10
+ C: "OO",12,11
+ C: "OP",12,2,"Lcl Rotation"
+ C: "OP",13,12,"d|Z"
+}

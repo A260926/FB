@@ -1,0 +1,281 @@
+{
+  "repo": "https://github.com/nem0/OpenFBX",
+  "commit": "4d4a45a0ed8f357d11ff83904b087530547a4071",
+  "license": "MIT",
+  "files": [
+    {
+      "path": ".clang-format",
+      "mode": "100644",
+      "git_blob": "bcab1019fdc27f361aab13de92ea9715342e4ae4",
+      "sha256": "1ed3076dbde278549a4e584083909d9cb8d7d5704e36cd756b7f140bff2dd1ca",
+      "included": false
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "mode": "100644",
+      "git_blob": "23a976535037c1525f7163d7f943d10ff1f9067d",
+      "sha256": "ec677f2acd7213609953f351dbdbf0484b2c637558ceade9039fb30927245b01",
+      "included": false
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "a9ba36cb2c902d0d523983e78c0719dc699ac76d",
+      "sha256": "b0e7e614ac79b03d7d5f53b7271291624410e454d451e3979d36eb32e83e6667",
+      "included": false
+    },
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "git_blob": "0eb28e63930694e0705b838baede332fc18cce81",
+      "sha256": "139449d713146f56298d4a7484c53a2fc844a18152738ce0fc6c6741140d8d33",
+      "included": false
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "45cc0d228fd2a467ab4c7e9c7aed9541a64c232e",
+      "sha256": "7771794e50cff1cca0e931526d2af91b3dc9f3834775f2f7c93fdc641c2dc261",
+      "included": true
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "9589bfb98d69572c07298f930b6e480359be8d7c",
+      "sha256": "9108b5a110917a95466ae51dcbc1fe513ec1b8d67eaffb851953556172251790",
+      "included": true
+    },
+    {
+      "path": "demo/demo.cpp",
+      "mode": "100644",
+      "git_blob": "efa21ca3747ccf7d37dd0ad5cdea080b65ff15ea",
+      "sha256": "7147c561bf4891e61f756185e619a69d1f60e518d50e8ed6712a0cb52fac37fc",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/LICENSE",
+      "mode": "100644",
+      "git_blob": "b28ef22539a0d914dbd86eb11c94a90e87ca8afe",
+      "sha256": "0a52f6d4954d4054faa85b1a6e25dc36562283dcb10d9b1f7d6c105e176be253",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/README.md",
+      "mode": "100644",
+      "git_blob": "ce47a092f278e227beb80f8ddc1b2c6183bc171c",
+      "sha256": "d6b4405d22c09ec0f40d1d0ff31942b7565c663f9dc0d60c07286bab7be44e2e",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imconfig.h",
+      "mode": "100644",
+      "git_blob": "b56ba49467ebb388e038f0a23aed46044085bdff",
+      "sha256": "e1a10ba1fa942005454c9700694439e2550a0617cb05fc34ec87311d228d6f5a",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui.cpp",
+      "mode": "100644",
+      "git_blob": "7bce4e4c93df6523a68f54aa2383da55f258a0dc",
+      "sha256": "ab26dad99a0346c2ae94869559f2794a3a8700353803f0719d8fccb2f2348d49",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui.h",
+      "mode": "100644",
+      "git_blob": "080a7afd53fc28e1537f4634ad57c74a9ca8bfde",
+      "sha256": "f1574b44f2149bfc9e4f0393a0e0b66c511b6b24331e1506e498485a0e5f80af",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_demo.cpp",
+      "mode": "100644",
+      "git_blob": "832259ab17dfcdb26d2dd32f303da9d13c2f9a60",
+      "sha256": "720d86a9db02c7ad409a1dcee4f8e2bab010c62c428aec9c0bf94bc6f550d768",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_draw.cpp",
+      "mode": "100644",
+      "git_blob": "7934bb7d9304add1bfdc3c923de65c04ed1da034",
+      "sha256": "af55ea9b8c5cf8c44318a2b70410796011d25b97c412ed32287d5fc631541c86",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_impl_dx11.cpp",
+      "mode": "100644",
+      "git_blob": "b53fa09cafa118208f68e043cadbabc87b1c5c58",
+      "sha256": "43bce90b0f770253906566c91b30636b39ab42d10406aae7ed464a2bf19d5145",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_impl_dx11.h",
+      "mode": "100644",
+      "git_blob": "5737393d6b1d2a67e432edf55cb89e0afdaa3132",
+      "sha256": "2e11815972760bd73d848d58a4aef5bc84bae32846da3b246a9e0ca1726753d5",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_impl_win32.cpp",
+      "mode": "100644",
+      "git_blob": "a685324e42674d1cb447b2cfb74d6d40288b7f82",
+      "sha256": "a8855c86b67acd4ac3cba9470e6ae4fd5aff1bb66556a310193f09bca86f9191",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_impl_win32.h",
+      "mode": "100644",
+      "git_blob": "232ddc13442c883966cfcdeb59179f887926b618",
+      "sha256": "f55b07ebe0ecd57aa674fe816a4b06cfdb18885d3dca7768d78f925dfc85f4b8",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_internal.h",
+      "mode": "100644",
+      "git_blob": "79444e1e3a8dfeff55476b058e322fd2ecb89292",
+      "sha256": "85e7e35babbb9dccc7155deb6ed1ace720b672dbfb221db2d6d0094725a72613",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_tables.cpp",
+      "mode": "100644",
+      "git_blob": "1edfc69927c60e47ae436167aa31f10b410fdac5",
+      "sha256": "989be66ae6d34f02df202a635966dc17ea5e09404feb5dcb8be0ba9436c3e579",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imgui_widgets.cpp",
+      "mode": "100644",
+      "git_blob": "f30c87f1a237c4dd7638962da4f851539ea2fd58",
+      "sha256": "653b355456dca8d19e5bf8032e0a2fb80802fc46f20846484aa173708ef8b0fa",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imstb_rectpack.h",
+      "mode": "100644",
+      "git_blob": "f6917e7a6e56a03dcee169bf4e08c32611b761c9",
+      "sha256": "2efa3d5f7d003c19743b15155dad9f46d9f9fc783a18893d703b431d3c990972",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imstb_textedit.h",
+      "mode": "100644",
+      "git_blob": "a8a823110b0df257e700f6fd1d93599de69359e4",
+      "sha256": "3f4cf71a2b771d938f62ce4225df3ebe429b334fcdb3b89f1fedf43eeb0a3e1e",
+      "included": false
+    },
+    {
+      "path": "demo/imgui/imstb_truetype.h",
+      "mode": "100644",
+      "git_blob": "35c827e6b9ee5f6ecc56e6e6f2ea19dcfd9dddd4",
+      "sha256": "5b7693f174b0458c7bec5522c8d6be4fe606d3f5da5082351959c14e59269b53",
+      "included": false
+    },
+    {
+      "path": "demo/main.cpp",
+      "mode": "100644",
+      "git_blob": "28e2a448d6eb036f74512b65cbfb87d4b34da108",
+      "sha256": "09b27a1b7bbad52ffb24b9d76101a76f813184afb7fb9257dba236fc6ee87a1a",
+      "included": false
+    },
+    {
+      "path": "openfbxConfig.cmake.in",
+      "mode": "100644",
+      "git_blob": "496efc9ca45808627d7a6219a48b9d687f101e37",
+      "sha256": "bc85c44c8ce9b128a9fc210af252b8b3a048abda1b9b0f4b524402d790143de3",
+      "included": false
+    },
+    {
+      "path": "projects/genie",
+      "mode": "100755",
+      "git_blob": "70151e3a4293d74c1a9034e39326f45553e4001e",
+      "sha256": "c744b666259f98bd4a1aaa27c08059c9081bcf02c3789119f97546d1dfa7c653",
+      "included": false
+    },
+    {
+      "path": "projects/genie.exe",
+      "mode": "100644",
+      "git_blob": "28a75ce5eb560a00599f73c3621540372323aa6b",
+      "sha256": "dda9c86d87f04a7041665bd96894641a51456c3efc39c4e9fdea0469f9ff40ce",
+      "included": false
+    },
+    {
+      "path": "projects/genie.lua",
+      "mode": "100644",
+      "git_blob": "bd70bd10ca936abfc5da7e2ae7bdd9b138b3194b",
+      "sha256": "90a92fe61c93f98ee32366ad45fae979611632ed3da509f9b242e20d8a511cf1",
+      "included": false
+    },
+    {
+      "path": "projects/genie_vs19.bat",
+      "mode": "100644",
+      "git_blob": "9d42379654197ae9ee405dd9eaadd579b4d865b5",
+      "sha256": "2954372b18b117de6ce74933b93904ce992776e9842bab224a2bce1637c78495",
+      "included": false
+    },
+    {
+      "path": "runtime/a.FBX",
+      "mode": "100644",
+      "git_blob": "b519fb5ee9b5a658ca1423877e7280fe95c34f9d",
+      "sha256": "02b33923708fac204d67334fb76a8f93bbd4f131afd95d73c1ef05d3b851d06b",
+      "included": false
+    },
+    {
+      "path": "runtime/b.fbx",
+      "mode": "100644",
+      "git_blob": "6b32e1e9b13fc8fcdea7757be089b9a8484b5690",
+      "sha256": "e4353d008b0f3955f6194e69439ce1b8cd8048d4ee025a36eeb7e5d043478ce3",
+      "included": false
+    },
+    {
+      "path": "runtime/c.FBX",
+      "mode": "100644",
+      "git_blob": "c1f7cfcc8dec2c5ba4c9e1513415e3dd050cc099",
+      "sha256": "73ec7f3df0d7eea4786019b7554c4db9cc534fe97ab4ff82afc69b5aa8676293",
+      "included": false
+    },
+    {
+      "path": "runtime/d.fbx",
+      "mode": "100644",
+      "git_blob": "147ec354d2be2eada0da183dc48bfe3e6da36496",
+      "sha256": "bfb4abef1aae8c88ff82398ffd55984edc02e008824156ea6d43d05e5da7998e",
+      "included": false
+    },
+    {
+      "path": "runtime/license.txt",
+      "mode": "100644",
+      "git_blob": "13e998afcf20445aae0cf5be786f5233bd297f11",
+      "sha256": "cc90d6e65e9160156f0589a4e4108305eece2de3250275c0fb5f415c2789ce79",
+      "included": false
+    },
+    {
+      "path": "src/libdeflate.c",
+      "mode": "100644",
+      "git_blob": "e421d7911345c57cee506a375d2950a1d552643c",
+      "sha256": "78c191c7b2efc628ef49a64385178edef3f86416fe0f7e44ba654cba289e0a25",
+      "included": true
+    },
+    {
+      "path": "src/libdeflate.h",
+      "mode": "100644",
+      "git_blob": "382d895de89c237960a6b4d8a5ba32013e67ba53",
+      "sha256": "dac716f0a290f28a9f51cc8af84ede17673efa3afd2d380e066e82c71dca14cf",
+      "included": true
+    },
+    {
+      "path": "src/ofbx.cpp",
+      "mode": "100644",
+      "git_blob": "2081dae2f1ff73c62e53b4ea1876158b289c94d4",
+      "sha256": "dede42b913eb82bc5d1dc1ec1a68739a6967131b973de635c8ae59bd9c3d02bf",
+      "included": true
+    },
+    {
+      "path": "src/ofbx.h",
+      "mode": "100644",
+      "git_blob": "84cc9c7b70206ead3cb09769b720d1ce9819b5e3",
+      "sha256": "b34314f04bd6ab9770b5e8bbd03a0c52fb671e41b2a3ba1b1560c280c9ad467c",
+      "included": true
+    }
+  ],
+  "exclusions": "Unused Windows demo, build generator executables, sample assets and network FetchContent CMake; all production src retained. cgltf dependency copied unchanged from fixed source described in vendor/cgltf/SOURCE.json; only cgltf.h and LICENSE used."
+}
