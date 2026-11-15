@@ -10,9 +10,11 @@
  */
 
 typedef struct Backend Backend;
+typedef struct DeepFrame DeepFrame;
 typedef struct Material Material;
 typedef struct Mesh Mesh;
 typedef struct PingoDepth PingoDepth;
 typedef struct Pixel Pixel;
 typedef struct Renderer Renderer;
+typedef struct ScreenTransmission ScreenTransmission;
 typedef struct Texture Texture;

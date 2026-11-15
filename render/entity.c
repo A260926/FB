@@ -1,4 +1,5 @@
 #include "entity.h"
+#include "deep_internal.h"
 #include "math/mat4.h"
 #include "render/array.h"
 #include "state.h"
@@ -23,6 +24,32 @@ int entity_render(void *this, Mat4 transform, Renderer *renderer) {
 
   return renderable->render(renderable, new_transform, renderer);
 };
+
+// Mirrors entity_render's traversal exactly - same visibility rule, same
+// transform composition, children before the attached renderable - but sends
+// the leaves to the deep capture instead of the framebuffer.
+int entity_capture_layers(Entity *entity, Mat4 transform, Renderer *renderer,
+                          DeepCapture *capture) {
+  IF_NULL_RETURN(entity, RENDER_ERROR);
+  IF_NULL_RETURN(renderer, RENDER_ERROR);
+  IF_NULL_RETURN(capture, RENDER_ERROR);
+
+  if (!entity->visible)
+    return OK;
+
+  Mat4 new_transform = mat4MultiplyM(&entity->transform, &transform);
+
+  for (size_t i = 0; i < entity->children_entities.size; i++) {
+    Entity *child_entity = &((Entity *)entity->children_entities.data)[i];
+    int status = entity_capture_layers(child_entity, new_transform, renderer,
+                                       capture);
+    if (status != OK)
+      return status;
+  }
+
+  return deep_capture_renderable(entity->entity_renderable, new_transform,
+                                 renderer, capture);
+}
 
 int entity_init(Entity *this, Renderable *renderable, Mat4 transform) {
   IF_NULL_RETURN(this, INIT_ERROR);
