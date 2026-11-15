@@ -54,9 +54,34 @@ void RayTracer::Trace(int max_reflections) {
   cam_up_ = (world_bl - world_tl).Unit();
   std::size_t w = camera_.width();
   std::size_t h = camera_.height();
+
+  if (beam_enabled_) {
+    // Primary rays are resolved by the dual screen/object traversal;
+    // every pixel is then shaded from its stored nearest hit.
+    std::vector<Object*> objs;
+    objs.reserve(objects_.size());
+    for (const auto& obj : objects_) objs.push_back(obj.get());
+    beam_traversal_.SyncObjects(objs);
+    beam_traversal_.Run(camera_);
+#pragma omp parallel for schedule(dynamic, 1)
+    for (std::size_t row = 0; row < h; ++row) {
+      for (std::size_t col{}; col < w; ++col) {
+        Ray ray(camera_.center(),
+                beam_traversal_.PixelWorld(row, col));
+        image_.at(row, col) = TracePrimary(ray, beam_traversal_.hit(row, col),
+                                           max_reflections);
+      }
+    }
+    return;
+  }
+
   // row-major order keeps writes to the image buffer sequential
   // dynamic = on demand are rows may take different time each
   // 1 = chunk size (one row at a time)
+  // No beam pass happens this frame, so its per-frame state (hits,
+  // screen depths and work counters) is cleared; the classic path must
+  // not be counted in the beam statistics.
+  beam_traversal_.ResetFrame();
 #pragma omp parallel for schedule(dynamic, 1)
   for (std::size_t row = 0; row < h; ++row) {
     float v = static_cast<float>(row) / static_cast<float>(h - 1);
@@ -70,6 +95,25 @@ void RayTracer::Trace(int max_reflections) {
       image_.at(row, col) = TraceRay(ray, max_reflections).color;
     }
   }
+}
+
+Vec3u8 RayTracer::TracePrimary(const Ray& ray, const beam::Hit& hit,
+                               int max_reflections) const {
+  if (!hit.IsHit()) {
+    // miss: same branch as TraceRay (background + emissive glow)
+    TraceRecord ret;
+    ret.color = (has_background_) ? SampleBackground(ray.dir)
+                                  : background_color_;
+    ret.color = AddScaled(ret.color, EmissiveGlow(ray), 1.0f);
+    return ret.color;
+  }
+  TraceRecord record;
+  record.hit = true;
+  record.t = hit.record.t;
+  record.hit_point = hit.record.where;
+  record.normal = hit.object->NormalAt(hit.record.where);
+  record.obj = hit.object;
+  return ShadeResolved(ray, record, max_reflections, 1.0f).color;
 }
 
 // gamma < 1 brightens the low intensitites of the image,
@@ -177,7 +221,19 @@ TraceRecord RayTracer::TraceRay(const Ray& ray, int depth, float ior_current) co
     ret.color = AddScaled(ret.color, EmissiveGlow(ray), 1.0f);
     return ret;
   }
+  return ShadeResolved(ray, ret, depth, ior_current);
+}
 
+// Shade a hit that has already been resolved to a specific object and
+// hit record.  This is the shared tail of TraceRay's hit branch and is
+// also used by the beam-traversal primary pass, so both paths run the
+// exact same material / light / reflection / refraction / emission
+// code.
+TraceRecord RayTracer::ShadeResolved(const Ray& ray,
+                                     const TraceRecord& hit,
+                                     int depth,
+                                     float ior_current) const {
+  TraceRecord ret = hit;
   // material parameters
   float mat_trans = std::clamp(ret.obj->material.transparency,
                                0.0f, 1.0f);

@@ -7,6 +7,7 @@
 #include "light.hpp"
 #include "camera.hpp"
 #include "ray.hpp"
+#include "beam_traversal.hpp"
 #include <vector>
 #include <memory>
 #include <type_traits>
@@ -45,6 +46,18 @@ public:
 
   void Trace(int max_reflections = 5);
 
+  // Toggle the CPU primary-ray beam traversal (off by default).
+  // When enabled, Trace() obtains each pixel's nearest primary hit
+  // from a screen-quadtree / object-BVH traversal and only then runs
+  // the usual material, lighting, reflection, refraction and emission
+  // code.  Secondary rays and shadow rays keep their original path.
+  void SetBeamTraversal(bool enabled) { beam_enabled_ = enabled; }
+  bool BeamTraversalEnabled() const { return beam_enabled_; }
+  // Work statistics of the last beam-traversal primary pass.
+  const beam::WorkStats& BeamStats() const { return beam_traversal_.stats(); }
+  // Hierarchy inspection (valid after a Trace with beam traversal on).
+  const beam::BeamTraversal& Beam() const { return beam_traversal_; }
+
   // gamma < 1 brightens the low intensitites of the image,
   // gamma > 1 darkens the high intensities
   void GammaCorrect(float gamma);
@@ -57,6 +70,10 @@ public:
   }
 
 private:
+  // Write one primary pixel from an already-resolved nearest hit.
+  // No object scan happens here.
+  Vec3u8 TracePrimary(const Ray& ray, const beam::Hit& hit,
+                     int max_reflections) const;
   // get the corrent IOR (index of refraction) and normal arrangement
   // for refraction calculations
   struct OrientationInfo {
@@ -95,6 +112,13 @@ private:
 
   TraceRecord TraceRay(const Ray& ray, int depth, float ior_current = 1.0f) const;
 
+  // Shade an already-resolved nearest primary hit (or the miss case
+  // when record.hit is false).  The material/light/reflection/
+  // refraction/emission code is the same as the corresponding
+  // branches of TraceRay, but no object scan happens here.
+  TraceRecord ShadeResolved(const Ray& ray, const TraceRecord& record,
+                            int depth, float ior_current = 1.0f) const;
+
   // simple glow halo: add emission for rays that pass near emissive spheres
   Vec3u8 EmissiveGlow(const Ray& ray,
                       float t_max = std::numeric_limits<float>::infinity()) const;
@@ -120,6 +144,9 @@ private:
   bool has_background_{false};
   // solid background color when no background image is used
   Vec3u8 background_color_{0, 0, 0};
+  // CPU primary-ray dual traversal state
+  bool beam_enabled_{false};
+  beam::BeamTraversal beam_traversal_;
 };
 
 #endif // RAY_TRACER_HPP_
