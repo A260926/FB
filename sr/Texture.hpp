@@ -5,6 +5,7 @@
 #ifndef SR_TEXTURE_HPP
 #define SR_TEXTURE_HPP
 
+#include <cassert>
 #include <climits>
 #include <stdexcept>
 #include <vector>
