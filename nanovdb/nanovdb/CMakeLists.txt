@@ -1,0 +1,579 @@
+# Copyright Contributors to the OpenVDB Project
+# SPDX-License-Identifier: Apache-2.0
+#
+#[=======================================================================[
+
+  CMake Configuration for NanoVDB
+
+#]=======================================================================]
+
+cmake_minimum_required(VERSION 3.24)
+project(NanoVDB LANGUAGES C CXX)
+
+include(GNUInstallDirs)
+
+# The top-level OpenVDB CMakeLists sets these. Provide defaults for when
+# NanoVDB is configured on its own.
+foreach(_NANOVDB_INSTALL_DIR BINDIR LIBDIR INCLUDEDIR DOCDIR)
+  if(NOT DEFINED NANOVDB_INSTALL_${_NANOVDB_INSTALL_DIR})
+    set(NANOVDB_INSTALL_${_NANOVDB_INSTALL_DIR} ${CMAKE_INSTALL_${_NANOVDB_INSTALL_DIR}})
+  endif()
+endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/OpenVDBInstallLicenses.cmake")
+openvdb_install_licenses("${NANOVDB_INSTALL_DOCDIR}")
+
+###############################################################################
+
+message(STATUS "----------------------------------------------------")
+message(STATUS "--------------- Configuring NanoVDB ----------------")
+message(STATUS "----------------------------------------------------")
+
+###############################################################################
+# add options
+###############################################################################
+
+option(NANOVDB_BUILD_TOOLS "Build command-line tools" ON)
+option(NANOVDB_BUILD_UNITTESTS "Build Unit tests" OFF)
+option(NANOVDB_BUILD_EXAMPLES "Build examples" OFF)
+#option(NANOVDB_BUILD_BENCHMARK "Build benchmark in examples" OFF)
+option(NANOVDB_BUILD_PYTHON_MODULE "Build the nanovdb Python module" OFF)
+
+option(NANOVDB_USE_INTRINSICS "Build with hardware intrinsics support" OFF)
+option(NANOVDB_USE_CUDA "Build with CUDA support" OFF)
+option(NANOVDB_USE_NCCL "Build with NCCL support in cuda/DeviceMesh.h (requires CUDA)" OFF)
+option(NANOVDB_CUDA_KEEP_PTX "Keep CUDA PTX" OFF)
+option(NANOVDB_CUDA_WERROR "Treat all NVCC diagnostics as errors" ON)
+option(NANOVDB_FETCH_CCCL "Clone CCCL NANOVDB_CCCL_TAG instead of using the CUDA toolkit's CCCL" OFF)
+option(NANOVDB_USE_OLD_ACCESSOR "Use the old (buggy) ReadAccessor instead of the new fixed one" OFF)
+
+option(NANOVDB_USE_OPENVDB "Build with OpenVDB support" OFF)
+option(NANOVDB_USE_BLOSC "Build with BLOSC support, using the private static nanovdb_blosc library" ON)
+option(NANOVDB_USE_ZLIB "Build with ZLIB support" ${USE_ZLIB})
+option(NANOVDB_USE_TBB "Build with TBB support" ${USE_TBB})
+option(NANOVDB_USE_MAGICAVOXEL "Build with MagicaVoxel support" OFF)
+
+option(NANOVDB_ALLOW_FETCHCONTENT
+  "Allow FetchContent to download missing dependencies" OFF)
+
+
+###############################################################################
+
+# sanitize user input
+
+if(NANOVDB_USE_OPENVDB)
+  if(NOT NANOVDB_USE_TBB)
+    message(FATAL_ERROR "Invalid CMake build configuration:
+      NANOVDB_USE_OPENVDB : [ON]
+      NANOVDB_USE_TBB     : [OFF]
+    If you are linking NanoVDB against OpenVDB, then you
+    need to use TBB, (i.e. -DNANOVDB_USE_TBB=ON).")
+  endif()
+endif()
+
+if(NANOVDB_USE_NCCL AND NOT NANOVDB_USE_CUDA)
+  message(FATAL_ERROR "Invalid CMake build configuration:
+    NANOVDB_USE_NCCL : [ON]
+    NANOVDB_USE_CUDA : [OFF]
+  NCCL support requires CUDA, (i.e. -DNANOVDB_USE_CUDA=ON).")
+endif()
+
+
+###############################################################################
+
+enable_testing()
+
+# Add our cmake modules
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../../cmake")
+
+include(OpenVDBUtils)
+
+# Minimum dependency versions. The root CMakeLists includes these for
+# combined builds.
+
+if(NOT DEFINED MINIMUM_CXX_STANDARD)
+  include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/config/OpenVDBVersions.cmake)
+endif()
+
+# The NanoVDB version comes from NanoVDB.h. The major version tracks the ABI
+# and file format.
+
+foreach(_nanovdb_version_part MAJOR MINOR PATCH)
+  OPENVDB_GET_VERSION_DEFINE(${CMAKE_CURRENT_LIST_DIR}/NanoVDB.h
+    NANOVDB_${_nanovdb_version_part}_VERSION_NUMBER
+    NanoVDB_${_nanovdb_version_part}_VERSION)
+endforeach()
+unset(_nanovdb_version_part)
+set(NanoVDB_VERSION
+  "${NanoVDB_MAJOR_VERSION}.${NanoVDB_MINOR_VERSION}.${NanoVDB_PATCH_VERSION}")
+
+# The root CMakeLists sets these for combined builds
+
+if(NOT DEFINED NANOVDB_INSTALL_BINDIR)
+  set(NANOVDB_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+if(NOT DEFINED NANOVDB_INSTALL_LIBDIR)
+  set(NANOVDB_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+endif()
+if(NOT DEFINED NANOVDB_INSTALL_INCLUDEDIR)
+  set(NANOVDB_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+if(NOT DEFINED NANOVDB_INSTALL_DOCDIR)
+  set(NANOVDB_INSTALL_DOCDIR ${CMAKE_INSTALL_DOCDIR})
+endif()
+
+if(UNIX)
+  # For CMake's find Threads module which brings in pthread - This flag
+  # forces the compiler -pthread flag vs -lpthread
+  set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+  find_package(Threads REQUIRED)
+endif()
+
+#if(NANOVDB_BUILD_UNITTESTS OR NANOVDB_BUILD_BENCHMARK)
+if(NANOVDB_BUILD_UNITTESTS)
+  find_package(GTest ${MINIMUM_GOOGLETEST_VERSION} REQUIRED)
+endif()
+
+if(NANOVDB_USE_CUDA)
+  set(CMAKE_CUDA_STANDARD 17)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+  # Allow the user to provide CMAKE_CUDA_ARCHITECTURES
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75)
+  endif()
+
+  enable_language(CUDA)
+
+  set(NANOVDB_CUDA_EXTENDED_LAMBDA "--expt-extended-lambda")
+  if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
+    set(NANOVDB_CUDA_EXTENDED_LAMBDA "--extended-lambda")
+  endif()
+
+  set(CMAKE_CUDA_FLAGS "${NANOVDB_CUDA_EXTENDED_LAMBDA} -use_fast_math -lineinfo ${CMAKE_CUDA_FLAGS}")
+
+  if(NANOVDB_CUDA_WERROR OR OPENVDB_CXX_STRICT)
+    # Device-side analog of the host -Werror configured in OpenVDBCXX.cmake:
+    # every nvcc front-end diagnostic becomes an error. NANOVDB_CUDA_WERROR
+    # enables it independently of the host-side strict flags.
+    set(CMAKE_CUDA_FLAGS "--Werror=all-warnings ${CMAKE_CUDA_FLAGS}")
+  endif()
+
+  if(WIN32)
+    # NVCC analog of the /wd4251 and /wd4275 suppressions in OpenVDBCXX.cmake:
+    # it's not possible to use STL types in DLL interfaces in a portable and
+    # reliable way, so the dll-interface diagnostics (#1394 and #1388) fire on
+    # every include of the OpenVDB core headers from a CUDA source.
+    set(CMAKE_CUDA_FLAGS "--diag-suppress=1388,1394 ${CMAKE_CUDA_FLAGS}")
+  endif()
+
+  # workaround for win32 bug when nvcc "--keep" is used.
+  if(WIN32)
+    if(NANOVDB_CUDA_KEEP_PTX)
+      file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x64/Release")
+      set(CMAKE_CUDA_FLAGS_RELEASE
+          " --source-in-ptx --keep ${CMAKE_CUDA_FLAGS_RELEASE}")
+    endif()
+  endif()
+
+  if(MSVC)
+    # If a CMAKE_MSVC_RUNTIME_LIBRARY has not been provided and we're building
+    # against openvdb, match the CRT that openvdb has been built against. This
+    # setting is automatically propagated to CXX files but not CUDA sources, so
+    # the VDB_MSVC_RUNTIME_SELECTION variables is used on targets with .cu files
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY AND NANOVDB_USE_OPENVDB AND OPENVDB_BUILD_CORE)
+      get_target_property(VDB_MSVC_RUNTIME_SELECTION openvdb MSVC_RUNTIME_LIBRARY)
+    endif()
+  endif()
+
+  find_package(CUDAToolkit ${MINIMUM_CUDA_VERSION} REQUIRED)
+
+  # NanoVDB uses the CCCL a parent project provides, then the CUDA toolkit's
+  # CCCL, and clones the pinned NANOVDB_CCCL_TAG release only when neither
+  # exists or NANOVDB_FETCH_CCCL is set.
+  set(NANOVDB_CCCL_TAG "v3.4.2" CACHE STRING "Git tag of the CCCL release to fetch")
+  if(NOT TARGET CCCL::CCCL AND NOT NANOVDB_FETCH_CCCL)
+    find_package(CCCL CONFIG QUIET
+      HINTS "${CUDAToolkit_TARGET_DIR}/lib/cmake" "${CUDAToolkit_LIBRARY_DIR}/cmake")
+  endif()
+  if(NOT TARGET CCCL::CCCL)
+    include(../../cmake/CPM.cmake)
+    # FORCE stops CPM_USE_LOCAL_PACKAGES from swapping in an installed CCCL
+    CPMAddPackage(
+        NAME CCCL
+        GITHUB_REPOSITORY nvidia/cccl
+        GIT_TAG ${NANOVDB_CCCL_TAG}
+        FORCE ${NANOVDB_FETCH_CCCL}
+    )
+  endif()
+
+  # CCCL's version file only accepts its own major version, so NanoVDB checks
+  # the minimum itself, whichever source provided CCCL::CCCL. CPM records the
+  # version of a CCCL it added in CPM_PACKAGE_CCCL_VERSION.
+  if(CCCL_VERSION)
+    set(_nanovdb_cccl_version ${CCCL_VERSION})
+  else()
+    set(_nanovdb_cccl_version ${CPM_PACKAGE_CCCL_VERSION})
+  endif()
+  if(NOT _nanovdb_cccl_version)
+    message(WARNING "Could not determine the version of CCCL::CCCL, so NanoVDB "
+      "cannot check that it is at least ${MINIMUM_CCCL_VERSION}.")
+  elseif(_nanovdb_cccl_version VERSION_LESS MINIMUM_CCCL_VERSION)
+    message(FATAL_ERROR "NanoVDB requires CCCL ${MINIMUM_CCCL_VERSION} or newer, but found "
+      "${_nanovdb_cccl_version}. Set CCCL_DIR to a newer CCCL, or set "
+      "NANOVDB_FETCH_CCCL=ON to clone CCCL ${NANOVDB_CCCL_TAG}.")
+  endif()
+  unset(_nanovdb_cccl_version)
+
+  if(NANOVDB_USE_NCCL)
+    find_package(NCCL REQUIRED)
+  endif()
+endif()
+
+if(NANOVDB_USE_OPENVDB)
+  if(NOT OPENVDB_BUILD_CORE AND NOT TARGET OpenVDB::openvdb)
+    find_package(OpenVDB REQUIRED COMPONENTS openvdb)
+  endif()
+endif()
+
+if(NANOVDB_USE_TBB AND NOT TARGET TBB::tbb)
+  find_package(TBB ${MINIMUM_TBB_VERSION} REQUIRED)
+endif()
+
+if(NANOVDB_USE_BLOSC AND NOT TARGET nanovdb_blosc)
+  # NanoVDB compiles its own private copy of the vendored blosc/lz4
+  # sources (nanovdb_blosc.c), whose four public symbols are renamed via a
+  # source-level VDB_BLOSC_SYMBOL_PREFIX #define, so it never depends on or
+  # collides with OpenVDB's own (also renamed) copy, regardless of whether
+  # NANOVDB_USE_OPENVDB is on.
+  add_library(nanovdb_blosc STATIC
+    ${CMAKE_CURRENT_LIST_DIR}/../../ext/blosc/openvdb/ext/blosc/nanovdb_blosc.c
+  )
+  target_include_directories(nanovdb_blosc PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../ext/blosc/openvdb/ext/blosc
+  )
+  # The installed header is found through the nanovdb include directory
+  target_include_directories(nanovdb_blosc SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../ext/blosc/openvdb/ext/blosc>
+  )
+  # The archive may be linked into shared libraries
+  set_target_properties(nanovdb_blosc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  # nanovdb/io/IO.h calls into this archive, so installed headers need it
+  install(TARGETS nanovdb_blosc EXPORT NanoVDBTargets
+    ARCHIVE DESTINATION ${NANOVDB_INSTALL_LIBDIR})
+endif()
+
+# NanoVDB headers include zlib.h, so zlib is found independently of OpenVDB
+# (where it is a private dependency).
+if(NANOVDB_USE_ZLIB AND NOT TARGET ZLIB::ZLIB)
+  find_package(ZLIB ${MINIMUM_ZLIB_VERSION} REQUIRED)
+endif()
+
+if(NANOVDB_USE_MAGICAVOXEL)
+  if(NANOVDB_ALLOW_FETCHCONTENT)
+    if(NOT ogt_POPULATED)
+      message(STATUS "Downloading ogt...")
+
+      FetchContent_Declare(
+        ogt
+        GIT_REPOSITORY https://github.com/jpaver/opengametools.git
+        GIT_TAG master)
+
+      FetchContent_GetProperties(ogt)
+      if(NOT ogt_POPULATED)
+        FetchContent_Populate(ogt)
+        set(NANOVDB_OGT_INCLUDE_DIRECTORY ${ogt_SOURCE_DIR}/src)
+      endif()
+    endif()
+  endif()
+endif()
+
+###############################################################################
+# Installation
+###############################################################################
+
+# NanoVDB header files
+set(NANOVDB_INCLUDE_FILES
+  CNanoVDB.h
+  GridHandle.h
+  HostBuffer.h
+  NanoVDB.h
+  NodeManager.h
+  PNanoVDB.h
+)
+
+# NanoVDB cuda header files
+set(NANOVDB_INCLUDE_CUDA_FILES
+  cuda/Buffer.h
+  cuda/DeviceBuffer.h
+  cuda/DeviceMesh.h
+  cuda/DeviceResource.h
+  cuda/DeviceStreamMap.h
+  cuda/GridHandle.cuh
+  cuda/HandleStorage.h
+  cuda/ManagedResource.h
+  cuda/NodeManager.cuh
+  cuda/PinnedResource.h
+  cuda/TempPool.h
+  cuda/UnifiedBuffer.h
+)
+
+# NanoVDB io header files
+set(NANOVDB_INCLUDE_IO_FILES
+  io/IO.h
+)
+
+# NanoVDB math header files
+set(NANOVDB_INCLUDE_MATH_FILES
+  math/CSampleFromVoxels.h
+  math/DitherLUT.h
+  math/HalfLite.h
+  math/HDDA.h
+  math/Math.h
+  math/Proximity.h
+  math/Ray.h
+  math/SampleFromVoxels.h
+  math/Stencils.h
+)
+
+# NanoVDB tools header files
+set(NANOVDB_INCLUDE_TOOLS_FILES
+  tools/CreateNanoGrid.h
+  tools/CreatePrimitives.h
+  tools/GridBuilder.h
+  tools/GridChecksum.h
+  tools/GridStats.h
+  tools/GridValidator.h
+  tools/NanoToOpenVDB.h
+  tools/VoxelBlockManager.h
+)
+
+# NanoVDB tools/cuda header files
+set(NANOVDB_INCLUDE_TOOLS_CUDA_FILES
+  tools/cuda/AddBlindData.cuh
+  tools/cuda/GridChecksum.cuh
+  tools/cuda/GridStats.cuh
+  tools/cuda/GridValidator.cuh
+  tools/cuda/IndexToGrid.cuh
+  tools/cuda/PointsToGrid.cuh
+  tools/cuda/SignedFloodFill.cuh
+  tools/cuda/MergeGrids.cuh
+  tools/cuda/TopologyBuilder.cuh
+  tools/cuda/RefineGrid.cuh
+  tools/cuda/PruneGrid.cuh
+  tools/cuda/DistributedPointsToGrid.cuh
+  tools/cuda/DilateGrid.cuh
+  tools/cuda/CoarsenGrid.cuh
+  tools/cuda/VoxelBlockManager.cuh
+  tools/cuda/MeshToGrid.cuh
+)
+
+# NanoVDB util header files
+set(NANOVDB_INCLUDE_UTIL_FILES
+  util/ForEach.h
+  util/Invoke.h
+  util/PrefixSum.h
+  util/Range.h
+  util/Reduce.h
+  util/Timer.h
+  util/Util.h
+  util/MorphologyHelpers.h
+  util/MaskPrefixSum.h
+)
+
+# NanoVDB util/cuda header files
+set(NANOVDB_INCLUDE_UTIL_CUDA_FILES
+  util/cuda/Timer.h
+  util/cuda/CudaDeviceBuffer.h
+  util/cuda/Util.h
+  util/cuda/Morphology.cuh
+  util/cuda/MorphologyHelpers.cuh
+  util/cuda/DeviceGridTraits.cuh
+  util/cuda/Injection.cuh
+  util/cuda/Rasterization.cuh
+)
+
+# NanoVDB putil header files
+set(NANOVDB_INCLUDE_PUTIL_FILES
+  putil/IO.h
+)
+
+add_library(nanovdb INTERFACE)
+add_library(NanoVDB::nanovdb ALIAS nanovdb)
+target_include_directories(nanovdb INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<INSTALL_INTERFACE:${NANOVDB_INSTALL_INCLUDEDIR}>)
+# NANOVDB_INCLUDE_DIR names the directory holding the nanovdb/ headers, so
+# consumers can bundle them without parsing the include generator expressions.
+# NanoVDBConfig.cmake sets it on the imported target.
+get_filename_component(_nanovdb_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set_target_properties(nanovdb PROPERTIES NANOVDB_INCLUDE_DIR "${_nanovdb_include_dir}")
+unset(_nanovdb_include_dir)
+target_compile_features(nanovdb INTERFACE cxx_std_17)
+# NanoVDB's CUDA headers launch __device__ lambdas, so nvcc consumers need
+# --extended-lambda
+target_compile_options(nanovdb INTERFACE
+  "$<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:--extended-lambda>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-invalid-offsetof>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/bigobj>")
+
+if(WIN32)
+  target_compile_definitions(nanovdb INTERFACE -DNOMINMAX -D_USE_MATH_DEFINES)
+endif()
+
+if(NANOVDB_USE_INTRINSICS)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_INTRINSICS)
+endif()
+
+if(NANOVDB_USE_OLD_ACCESSOR)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_OLD_ACCESSOR)
+endif()
+
+if(NANOVDB_USE_OPENVDB)
+  if(NOT OPENVDB_BUILD_CORE)
+    target_link_libraries(nanovdb INTERFACE OpenVDB::openvdb)
+  else()
+    # OpenVDBConfig provides OpenVDB::openvdb to installed consumers
+    target_link_libraries(nanovdb INTERFACE
+      $<BUILD_INTERFACE:openvdb>
+      $<INSTALL_INTERFACE:OpenVDB::openvdb>)
+  endif()
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_OPENVDB)
+endif()
+
+if(NANOVDB_USE_TBB)
+  target_link_libraries(nanovdb INTERFACE TBB::tbb)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_TBB)
+  if(WIN32)
+    # this prevents tbb_debug.lib issue on windows
+    target_compile_definitions(nanovdb INTERFACE -DTBB_USE_PREVIEW_BINARY)
+  endif()
+endif()
+
+if(NANOVDB_USE_BLOSC)
+  target_link_libraries(nanovdb INTERFACE nanovdb_blosc)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_BLOSC)
+endif()
+
+if(NANOVDB_USE_ZLIB)
+  target_link_libraries(nanovdb INTERFACE ZLIB::ZLIB)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_ZIP)
+endif()
+
+if(NANOVDB_USE_CUDA)
+  target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_CUDA)
+
+  # Add CUDA includes to any C++ units which use NanoVDB
+  target_link_libraries(nanovdb INTERFACE CCCL::CCCL CUDA::cudart)
+
+  if(NANOVDB_USE_NCCL)
+    target_compile_definitions(nanovdb INTERFACE -DNANOVDB_USE_NCCL)
+    target_link_libraries(nanovdb INTERFACE NCCL::NCCL)
+  endif()
+endif()
+
+# MagicaVoxel is only used by the examples, so it is not exported
+if(NANOVDB_USE_MAGICAVOXEL)
+  target_compile_definitions(nanovdb INTERFACE
+    $<BUILD_INTERFACE:NANOVDB_USE_MAGICAVOXEL>)
+  target_include_directories(nanovdb INTERFACE
+    $<BUILD_INTERFACE:${NANOVDB_OGT_INCLUDE_DIRECTORY}>)
+endif()
+
+if(TARGET Threads::Threads)
+  target_link_libraries(nanovdb INTERFACE Threads::Threads)
+endif()
+
+set(NANOVDB_INSTALL_ROOT_DIR ${NANOVDB_INSTALL_INCLUDEDIR}/nanovdb)
+set(NANOVDB_INSTALL_CUDA_DIR ${NANOVDB_INSTALL_ROOT_DIR}/cuda)
+set(NANOVDB_INSTALL_IO_DIR ${NANOVDB_INSTALL_ROOT_DIR}/io)
+set(NANOVDB_INSTALL_MATH_DIR ${NANOVDB_INSTALL_ROOT_DIR}/math)
+set(NANOVDB_INSTALL_TOOLS_DIR ${NANOVDB_INSTALL_ROOT_DIR}/tools)
+set(NANOVDB_INSTALL_TOOLS_CUDA_DIR ${NANOVDB_INSTALL_TOOLS_DIR}/cuda)
+set(NANOVDB_INSTALL_UTIL_DIR ${NANOVDB_INSTALL_ROOT_DIR}/util)
+set(NANOVDB_INSTALL_UTIL_CUDA_DIR ${NANOVDB_INSTALL_UTIL_DIR}/cuda)
+set(NANOVDB_INSTALL_PUTIL_DIR ${NANOVDB_INSTALL_ROOT_DIR}/putil)
+
+# nanovdb/io/IO.h includes <nanovdb_blosc.h> without a nanovdb/ prefix, so
+# install it directly in the include directory. This lets consumers of an
+# installed NanoVDB resolve it without an OpenVDB source checkout.
+if(NANOVDB_USE_BLOSC)
+  install(FILES
+    ${CMAKE_CURRENT_LIST_DIR}/../../ext/blosc/openvdb/ext/blosc/nanovdb_blosc.h
+    DESTINATION ${NANOVDB_INSTALL_INCLUDEDIR}
+  )
+endif()
+
+install(FILES ${NANOVDB_INCLUDE_FILES} DESTINATION ${NANOVDB_INSTALL_ROOT_DIR})
+install(FILES ${NANOVDB_INCLUDE_CUDA_FILES} DESTINATION ${NANOVDB_INSTALL_CUDA_DIR})
+install(FILES ${NANOVDB_INCLUDE_IO_FILES} DESTINATION ${NANOVDB_INSTALL_IO_DIR})
+install(FILES ${NANOVDB_INCLUDE_MATH_FILES} DESTINATION ${NANOVDB_INSTALL_MATH_DIR})
+install(FILES ${NANOVDB_INCLUDE_TOOLS_FILES} DESTINATION ${NANOVDB_INSTALL_TOOLS_DIR})
+install(FILES ${NANOVDB_INCLUDE_TOOLS_CUDA_FILES} DESTINATION ${NANOVDB_INSTALL_TOOLS_CUDA_DIR})
+install(FILES ${NANOVDB_INCLUDE_UTIL_FILES} DESTINATION ${NANOVDB_INSTALL_UTIL_DIR})
+install(FILES ${NANOVDB_INCLUDE_UTIL_CUDA_FILES} DESTINATION ${NANOVDB_INSTALL_UTIL_CUDA_DIR})
+install(FILES ${NANOVDB_INCLUDE_PUTIL_FILES} DESTINATION ${NANOVDB_INSTALL_PUTIL_DIR})
+
+###############################################################################
+# CMake package config (find_package(NanoVDB CONFIG))
+###############################################################################
+
+include(CMakePackageConfigHelpers)
+
+set(NANOVDB_CMAKE_INSTALL_DIR ${NANOVDB_INSTALL_LIBDIR}/cmake/NanoVDB)
+
+install(TARGETS nanovdb EXPORT NanoVDBTargets)
+
+install(EXPORT NanoVDBTargets
+  NAMESPACE NanoVDB::
+  DESTINATION ${NANOVDB_CMAKE_INSTALL_DIR}
+)
+
+configure_package_config_file(
+  ${CMAKE_CURRENT_LIST_DIR}/../../cmake/config/NanoVDBConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/NanoVDBConfig.cmake
+  INSTALL_DESTINATION ${NANOVDB_CMAKE_INSTALL_DIR}
+  PATH_VARS NANOVDB_INSTALL_INCLUDEDIR
+)
+
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/NanoVDBConfigVersion.cmake
+  VERSION ${NanoVDB_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
+
+# The Find modules the config needs are installed next to it, so a NanoVDB
+# install does not depend on the OpenVDB CMake modules.
+
+set(NANOVDB_CMAKE_FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/NanoVDBConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/NanoVDBConfigVersion.cmake)
+if(NANOVDB_USE_TBB)
+  list(APPEND NANOVDB_CMAKE_FILES ${CMAKE_CURRENT_LIST_DIR}/../../cmake/FindTBB.cmake)
+endif()
+if(NANOVDB_USE_NCCL)
+  list(APPEND NANOVDB_CMAKE_FILES ${CMAKE_CURRENT_LIST_DIR}/../../cmake/FindNCCL.cmake)
+endif()
+
+install(FILES ${NANOVDB_CMAKE_FILES} DESTINATION ${NANOVDB_CMAKE_INSTALL_DIR})
+
+###############################################################################
+# Options
+###############################################################################
+
+if(NANOVDB_BUILD_TOOLS)
+  add_subdirectory(cmd)
+endif()
+
+if(NANOVDB_BUILD_UNITTESTS)
+  add_subdirectory(unittest)
+endif()
+
+if(NANOVDB_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()
+
+if(NANOVDB_BUILD_PYTHON_MODULE)
+  add_subdirectory(python)
+endif()
