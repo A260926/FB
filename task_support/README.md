@@ -1,0 +1,1 @@
+baseline运行原Trimesh收缩。target要求tests/surface_correspondence.cpp使用task_support/check.h，注册maps、composition、compaction、rejection四组task_case，每回调实际TASK_CHECK且返回0，不定义main。surface_correspondence.h/.cpp强制非空并把cpp实际链接进测试和例子；例子接收唯一输出目录参数，必须生成original.obj、level1.obj、level2.obj、points.csv。运行器每次创建新目录并检查非空及基本OBJ/CSV内容。实现只用随附源码、标准库和Eigen。
