@@ -11,12 +11,21 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
     std::array<char, 200> s;
     float x, y, z, r, g, b;
     std::vector<Vertex> vertices;
-    std::vector<TexCoord> all_tex_coords; //individual texture coordinates
-    std::vector<int>
-        halfedge_tex_idx; //texture coordinates sorted for halfedges
+    std::vector<TexCoord> all_tex_coords;   // individual texture coordinates
+    std::vector<Normal> all_normals;        // individual normal vectors
+    std::vector<int> halfedge_tex_idx;      // texture coords sorted for halfedges
+    std::vector<int> halfedge_normal_idx;   // normal indices sorted for halfedges
     HalfedgeProperty<TexCoord> tex_coords =
         mesh.halfedge_property<TexCoord>("h:tex");
     bool with_tex_coord = false;
+    HalfedgeProperty<Normal> hnormal =
+        mesh.halfedge_property<Normal>("h:normal");
+    HalfedgeProperty<bool> hnormal_explicit =
+        mesh.halfedge_property<bool>("h:normal_explicit", false);
+    bool with_normal = false;
+    FaceProperty<int> smoothing =
+        mesh.face_property<int>("f:smoothing_group", 0);
+    int current_smoothing = 0;
     VertexProperty<Color> colors;
 
     // open file (in ASCII mode)
@@ -54,10 +63,9 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
         // normal
         else if (strncmp(s.data(), "vn ", 3) == 0)
         {
-            if (sscanf(s.data(), "vn %f %f %f", &x, &y, &z))
+            if (sscanf(s.data(), "vn %f %f %f", &x, &y, &z) == 3)
             {
-                // problematic as it can be either a vertex property when interpolated
-                // or a halfedge property for hard edges
+                all_normals.emplace_back(x, y, z);
             }
         }
 
@@ -70,6 +78,22 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
             }
         }
 
+        // smoothing group
+        else if (strncmp(s.data(), "s ", 2) == 0)
+        {
+            char token[64] = {0};
+            if (sscanf(s.data(), "s %63s", token) == 1)
+            {
+                if (strcmp(token, "off") == 0)
+                    current_smoothing = 0;
+                else
+                {
+                    const int group = atoi(token);
+                    current_smoothing = group > 0 ? group : 0;
+                }
+            }
+        }
+
         // face
         else if (strncmp(s.data(), "f ", 2) == 0)
         {
@@ -79,6 +103,7 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
 
             vertices.clear();
             halfedge_tex_idx.clear();
+            halfedge_normal_idx.clear();
 
             // skip white-spaces
             while (*p1 == ' ')
@@ -129,13 +154,25 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
                         }
                         case 1: // texture coord
                         {
-                            const int idx = atoi(p0) - 1;
-                            halfedge_tex_idx.push_back(idx);
+                            int idx = atoi(p0);
+                            if (idx < 0)
+                                idx =
+                                    static_cast<int>(all_tex_coords.size()) +
+                                    idx + 1;
+                            halfedge_tex_idx.push_back(idx - 1);
                             with_tex_coord = true;
                             break;
                         }
                         case 2: // normal
+                        {
+                            int idx = atoi(p0);
+                            if (idx < 0)
+                                idx = static_cast<int>(all_normals.size()) +
+                                      idx + 1;
+                            halfedge_normal_idx.push_back(idx - 1);
+                            with_normal = true;
                             break;
+                        }
                     }
                 }
 
@@ -145,6 +182,12 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
                 {
                     component = 0;
                     end_of_vertex = false;
+                    // pad the per-corner index domains so that corners which
+                    // omit a texture or normal index stay aligned
+                    if (halfedge_tex_idx.size() < vertices.size())
+                        halfedge_tex_idx.push_back(-1);
+                    if (halfedge_normal_idx.size() < vertices.size())
+                        halfedge_normal_idx.push_back(-1);
                 }
             }
 
@@ -158,19 +201,44 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
                 std::cerr << e.what();
             }
 
-            // add texture coordinates
-            if (with_tex_coord && f.is_valid())
+            if (f.is_valid())
             {
-                auto h_fit = mesh.halfedges(f);
-                auto h_end = h_fit;
-                unsigned v_idx = 0;
-                do
+                smoothing[f] = current_smoothing;
+
+                // add texture coordinates
+                if (with_tex_coord)
                 {
-                    tex_coords[*h_fit] =
-                        all_tex_coords.at(halfedge_tex_idx.at(v_idx));
-                    ++v_idx;
-                    ++h_fit;
-                } while (h_fit != h_end);
+                    auto h_fit = mesh.halfedges(f);
+                    auto h_end = h_fit;
+                    unsigned v_idx = 0;
+                    do
+                    {
+                        const int tidx = halfedge_tex_idx.at(v_idx);
+                        if (tidx >= 0)
+                            tex_coords[*h_fit] = all_tex_coords.at(tidx);
+                        ++v_idx;
+                        ++h_fit;
+                    } while (h_fit != h_end);
+                }
+
+                // add explicit corner normals
+                if (with_normal && !halfedge_normal_idx.empty())
+                {
+                    auto h_fit = mesh.halfedges(f);
+                    auto h_end = h_fit;
+                    unsigned v_idx = 0;
+                    do
+                    {
+                        const int nidx = halfedge_normal_idx.at(v_idx);
+                        if (nidx >= 0)
+                        {
+                            hnormal[*h_fit] = all_normals.at(nidx);
+                            hnormal_explicit[*h_fit] = true;
+                        }
+                        ++v_idx;
+                        ++h_fit;
+                    } while (h_fit != h_end);
+                }
             }
         }
         // clear line
@@ -181,6 +249,13 @@ void read_obj(SurfaceMesh& mesh, const std::filesystem::path& file)
     if (!with_tex_coord)
     {
         mesh.remove_halfedge_property(tex_coords);
+    }
+
+    // if there are no normals, delete the normal properties!
+    if (!with_normal)
+    {
+        mesh.remove_halfedge_property(hnormal);
+        mesh.remove_halfedge_property(hnormal_explicit);
     }
 
     fclose(in);

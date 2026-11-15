@@ -183,4 +183,149 @@ void face_normals(SurfaceMesh& mesh)
         fnormal[f] = face_normal(mesh, f);
 }
 
+namespace {
+
+// interior angle of the corner at the vertex targeted by halfedge \p h
+// (h points to the corner vertex, matching the per-corner halfedge convention
+// used by read_obj and corner_normal)
+Scalar corner_angle(const SurfaceMesh& mesh,
+                    const VertexProperty<Point>& vpoint, Halfedge h)
+{
+    const Vertex v = mesh.to_vertex(h);
+    const Point p0 = vpoint[v];
+    Point p1 = vpoint[mesh.to_vertex(mesh.next_halfedge(h))];
+    p1 -= p0;
+    Point p2 = vpoint[mesh.from_vertex(h)];
+    p2 -= p0;
+
+    const Scalar denom = sqrt(dot(p1, p1) * dot(p2, p2));
+    if (denom <= std::numeric_limits<Scalar>::min())
+        return Scalar(0.0);
+
+    Scalar cosine = dot(p1, p2) / denom;
+    if (cosine < -1.0)
+        cosine = -1.0;
+    else if (cosine > 1.0)
+        cosine = 1.0;
+    return acos(cosine);
+}
+
+} // namespace
+
+void update_corner_normals(SurfaceMesh& mesh)
+{
+    auto hnormal = mesh.halfedge_property<Normal>("h:normal");
+    auto hnormal_explicit =
+        mesh.halfedge_property<bool>("h:normal_explicit", false);
+    auto smoothing = mesh.get_face_property<int>("f:smoothing_group");
+    auto vpoint = mesh.get_vertex_property<Point>("v:point");
+
+    // cache the unit geometric normal of every face
+    FaceProperty<Normal> fnormal =
+        mesh.face_property<Normal>("f:corner-normal-cache");
+    for (auto f : mesh.faces())
+        fnormal[f] = face_normal(mesh, f);
+
+    std::vector<Halfedge> corners;   // halfedges targeting the corner vertex
+    std::vector<Face> faces;
+    std::vector<int> groups;
+    std::vector<bool> visited;
+    std::vector<size_t> queue;
+
+    for (auto v : mesh.vertices())
+    {
+        if (mesh.is_isolated(v))
+            continue;
+
+        corners.clear();
+        faces.clear();
+        groups.clear();
+        for (auto oh : mesh.halfedges(v))
+        {
+            if (!mesh.is_boundary(oh))
+            {
+                // oh leaves v; the halfedge targeting v is its predecessor
+                const Halfedge ch = mesh.prev_halfedge(oh);
+                corners.push_back(ch);
+                faces.push_back(mesh.face(oh));
+                groups.push_back(smoothing ? smoothing[mesh.face(oh)] : 0);
+            }
+        }
+
+        const size_t n = faces.size();
+        visited.assign(n, false);
+
+        for (size_t seed = 0; seed < n; ++seed)
+        {
+            if (visited[seed])
+                continue;
+
+            // collect the smoothing fan containing face 'seed'
+            std::vector<size_t> fan;
+            const int seed_group = groups[seed];
+            queue.clear();
+            queue.push_back(seed);
+            visited[seed] = true;
+
+            while (!queue.empty())
+            {
+                const size_t cur = queue.back();
+                queue.pop_back();
+                fan.push_back(cur);
+
+                // group 0 faces never belong to a shared fan
+                if (seed_group <= 0)
+                    continue;
+
+                // the corner halfedge targets v; the two edges touching v
+                // are the edge of the corner halfedge and the edge of the
+                // following (outgoing) halfedge
+                const Halfedge ch = corners[cur];
+                const Halfedge neighbors[2] = {
+                    mesh.opposite_halfedge(ch),
+                    mesh.opposite_halfedge(mesh.next_halfedge(ch))};
+
+                for (Halfedge nh : neighbors)
+                {
+                    if (mesh.is_boundary(nh))
+                        continue; // a boundary stops the fan
+                    const Face nf = mesh.face(nh);
+                    for (size_t j = 0; j < n; ++j)
+                    {
+                        if (!visited[j] && faces[j] == nf &&
+                            groups[j] == seed_group)
+                        {
+                            visited[j] = true;
+                            queue.push_back(j);
+                        }
+                    }
+                }
+            }
+
+            // angle-weighted sum of the unit face normals of the fan
+            Normal sum(0, 0, 0);
+            for (size_t idx : fan)
+            {
+                const Scalar angle = corner_angle(mesh, vpoint, corners[idx]);
+                sum += fnormal[faces[idx]] * angle;
+            }
+
+            Normal result(0, 0, 0);
+            const Scalar len = norm(sum);
+            if (len > std::numeric_limits<Scalar>::min())
+                result = sum / len;
+
+            // assign to the automatic corners; explicit corners stay untouched
+            for (size_t idx : fan)
+            {
+                const Halfedge ch = corners[idx];
+                if (!hnormal_explicit[ch])
+                    hnormal[ch] = result;
+            }
+        }
+    }
+
+    mesh.remove_face_property(fnormal);
+}
+
 } // namespace pmp

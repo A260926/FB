@@ -16,6 +16,7 @@ struct IOFlags
     bool use_face_normals = false;       //!< Read / write face normals.
     bool use_face_colors = false;        //!< Read / write face colors.
     bool use_halfedge_texcoords = false; //!< Read / write halfedge texcoords.
+    bool use_halfedge_normals = false;   //!< Read / write halfedge normals.
 };
 
 } // namespace pmp

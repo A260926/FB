@@ -16,13 +16,17 @@ target_link_libraries(properties pmp)
 add_executable(eigen eigen.cpp)
 target_link_libraries(eigen pmp)
 
+add_executable(corner_edit corner_edit.cpp)
+target_link_libraries(corner_edit pmp)
+
 add_custom_target(
   examples
   COMMAND
   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
   COMMENT "")
 
-add_dependencies(examples basics io iterators barycenter properties)
+add_dependencies(examples basics io iterators barycenter properties
+                          corner_edit)
 
 # Function to build Emscripten examples with optional preload files
 function(add_emscripten_example NAME SOURCE_FILES)

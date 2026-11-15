@@ -34,6 +34,9 @@ if(NOT PMP_BUILD_REGRESSIONS)
   list(FILTER SOURCES EXCLUDE REGEX ".*regression_test\\.cpp$")
 endif()
 
+# the task driver test has its own C entry point in task_support/driver.c
+list(FILTER SOURCES EXCLUDE REGEX ".*corner_edit_test\\.cpp$")
+
 # build test runner
 add_executable(gtest_runner ${SOURCES})
 
