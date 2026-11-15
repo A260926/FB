@@ -882,6 +882,112 @@ Close the connection to the remote instance.
 
 When `callback` is omitted a `Promise` object is returned.
 
+#### client.observe(methods, options)
+
+Return an `AsyncIterableIterator` over a subset of the CDP notifications.
+Unlike the one-shot event subscriptions above, this is a *pull* based stream:
+it keeps collecting notifications while the consumer does something else and
+hands them back in arrival order, each one exactly once. The legacy
+EventEmitter subscriptions keep working and are not affected by observers.
+
+`methods` is a **non-empty** array of CDP event method names (e.g.
+`['Network.requestWillBeSent', 'Network.loadingFinished']`). The names are
+validated and de-duplicated; any invalid argument throws synchronously and no
+subscription is registered.
+
+`options` is an object with the following fields:
+
+- `capacity` (mandatory): a positive integer, the maximum number of
+  notifications that may be retained while they have not been consumed yet;
+- `sessionId` (optional):
+  - omitted: collect events from every session, the root one included;
+  - `null`: collect only root events (the ones without a `sessionId`);
+  - a non-empty string: collect only the events of that flattened session;
+- `signal` (optional): an `AbortSignal` used to cancel the observer.
+
+Note that domain `*.enable` commands are **not** sent automatically; the
+caller remains responsible for enabling the relevant domains.
+
+Every iteration yields the whole notification, in connection arrival order:
+
+```js
+{method, params, sessionId?}
+```
+
+`sessionId` is present only when the remote instance attached it. Each yielded
+object (including the nested `params`) is an independent snapshot taken before
+the legacy `'event'` listeners run, so a listener mutating its payload cannot
+affect a queued notification and two observers never share objects.
+
+Several `next()` calls may be pending at the same time; they are resolved in
+FIFO order and a notification is never delivered to two of them. Each observer
+owns its own queue.
+
+When a matching notification arrives and the queue already holds `capacity`
+entries, the observer terminates: the retained notifications can still be
+drained in order, and the following `next()` rejects with an `Error` whose
+`code` is `ERR_CDP_EVENT_OVERFLOW` and which also carries `capacity` and the
+offending `method`. Nothing is silently dropped. The same error is returned by
+every subsequent `next()`.
+
+Termination rules:
+
+- `return()` (also used implicitly when a `for await ... of` loop is left with
+  `break` or an exception) means the consumer is done: the queue is cleared and
+  further `next()` calls resolve to `{done: true}`;
+- aborting `options.signal` clears the queue immediately and rejects the
+  waiters with `signal.reason`;
+- a remote disconnection or [`client.close()`](#clientclosecallback) lets the
+  consumer drain the queue first, then rejects with an `Error` whose `code` is
+  `ERR_CDP_EVENT_CONNECTION_CLOSED`.
+
+Observers remove their internal listeners as soon as they terminate, without
+touching the other subscriptions, and a terminated observer ignores any later
+disconnection or abort.
+
+For example, consume every `Runtime` and `Network` notification with
+`for await ... of`:
+
+```js
+const observer = client.observe([
+    'Runtime.consoleAPICalled',
+    'Network.requestWillBeSent',
+    'Network.loadingFinished',
+    'Network.loadingFailed',
+], {capacity: 1024});
+
+for await (const event of observer) {
+    if (event.sessionId) {
+        console.log(`[${event.sessionId}] ${event.method}`);
+    } else {
+        console.log(event.method);
+    }
+}
+```
+
+Cancel it through an `AbortController`, or stop early (the loop below calls
+`return()` automatically):
+
+```js
+const controller = new AbortController();
+const observer = client.observe(['Network.requestWillBeSent'], {
+    capacity: 64,
+    signal: controller.signal,
+});
+setTimeout(() => controller.abort(), 5000);
+
+for await (const {params, sessionId} of observer) {
+    console.log(params.request.url, sessionId || '(root)');
+    if (params.request.url.endsWith('/done')) {
+        break;
+    }
+}
+```
+
+A complete form-automation flow that records the network outcome of every
+`Runtime.evaluate` action is available in
+[`examples/form-automation.js`](examples/form-automation.js).
+
 #### client['`<domain>`.`<name>`']
 
 Just a shorthand for:
