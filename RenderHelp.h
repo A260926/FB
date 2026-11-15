@@ -1205,6 +1205,12 @@ public:
 	inline void SetVertexShader(VertexShader vs) { _vertex_shader = vs; }
 	inline void SetPixelShader(PixelShader ps) { _pixel_shader = ps; }
 
+	// 软光栅通道复用：查询/调用当前 VS，不改变硬绘制状态
+	inline bool HasVertexShader() const { return _vertex_shader != NULL; }
+	inline Vec4f InvokeVertexShader(int index, ShaderContext& output) {
+		return _vertex_shader(index, output);
+	}
+
 	// 保存 FrameBuffer 到 BMP 文件
 	inline void SaveFile(const char *filename) { if (_frame_buffer) _frame_buffer->SaveFile(filename); }
 
