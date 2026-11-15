@@ -14,6 +14,35 @@ void SMesh::Clear() {
     l.Clear();
 }
 
+SMesh::Snapshot SMesh::TakeSnapshot() const {
+    Snapshot snap = {};
+    snap.l.ReserveMore(l.n);
+    for(const STriangle &tr : l) {
+        STriangle copy = tr;
+        snap.l.Add(&copy);
+    }
+    snap.isTransparent          = isTransparent;
+    snap.flipNormal             = flipNormal;
+    snap.keepInsideOtherShell   = keepInsideOtherShell;
+    snap.keepCoplanar           = keepCoplanar;
+    snap.atLeastOneDiscarded    = atLeastOneDiscarded;
+    return snap;
+}
+
+void SMesh::RestoreSnapshot(Snapshot *snap) {
+    l.Clear();
+    l.ReserveMore(snap->l.n);
+    for(const STriangle &tr : snap->l) {
+        STriangle copy = tr;
+        l.Add(&copy);
+    }
+    isTransparent        = snap->isTransparent;
+    flipNormal           = snap->flipNormal;
+    keepInsideOtherShell = snap->keepInsideOtherShell;
+    keepCoplanar         = snap->keepCoplanar;
+    atLeastOneDiscarded  = snap->atLeastOneDiscarded;
+}
+
 void SMesh::AddTriangle(STriMeta meta, Vector n, Vector a, Vector b, Vector c) {
     Vector ab = b.Minus(a), bc = c.Minus(b);
     Vector np = ab.Cross(bc);

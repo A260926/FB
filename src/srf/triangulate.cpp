@@ -4,14 +4,23 @@
 // proceed by ear-clipping; the resulting mesh should be watertight and not
 // awful numerically, but has no special properties (Delaunay, etc.).
 //
+// Every entry point reports a TessellationResult instead of logging and
+// continuing: a trim/polygon/limit/geometry failure is propagated to the
+// caller, and the all-or-nothing callers (SSurface, SShell) keep the target
+// mesh in its pre-call state.
+//
 // Copyright 2008-2013 Jonathan Westhues.
 //-----------------------------------------------------------------------------
 #include "solvespace.h"
 
 namespace SolveSpace {
 
-void SPolygon::UvTriangulateInto(SMesh *m, SSurface *srf) {
-    if(l.n <= 0) return;
+static bool FiniteVector(const Vector &v) {
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+TessellationResult SPolygon::UvTriangulateInto(SMesh *m, SSurface *srf) {
+    if(l.n <= 0) return TessellationResult::Success();
 
     //int64_t in = GetMilliseconds();
 
@@ -31,7 +40,9 @@ void SPolygon::UvTriangulateInto(SMesh *m, SSurface *srf) {
         }
         if(!top) {
             dbp("polygon has no top-level contours?");
-            return;
+            return TessellationResult::Failure(
+                TessellationResult::Code::PolygonFailure, srf->h, {},
+                "polygon has no top-level contour");
         }
 
         // Start with the outer contour
@@ -83,14 +94,26 @@ void SPolygon::UvTriangulateInto(SMesh *m, SSurface *srf) {
 
             if(!merged.BridgeToContour(scmin, &el, &vl)) {
                 dbp("couldn't merge our hole");
-                return;
+                el.Clear();
+                vl.Clear();
+                merged.l.Clear();
+                return TessellationResult::Failure(
+                    TessellationResult::Code::PolygonFailure, srf->h, {},
+                    "could not bridge a hole contour into its outer contour");
             }
 //            dbp("   bridged to contour: %d ms", (int)(GetMilliseconds() - in));
             scmin->tag = 3;
         }
 //        dbp("finished merging holes: %d ms", (int)(GetMilliseconds() - in));
 
-        merged.UvTriangulateInto(m, srf);
+        TessellationResult r = merged.UvTriangulateInto(m, srf);
+        if(!r.Ok()) {
+            el.Clear();
+            vl.Clear();
+            merged.l.Clear();
+            r.surface = srf->h;
+            return r;
+        }
 //        dbp("finished ear clippping: %d ms", (int)(GetMilliseconds() - in));
         merged.l.Clear();
         el.Clear();
@@ -105,6 +128,7 @@ void SPolygon::UvTriangulateInto(SMesh *m, SSurface *srf) {
         }
         l.RemoveTagged();
     }
+    return TessellationResult::Success();
 }
 
 bool SContour::BridgeToContour(SContour *sc,
@@ -341,7 +365,7 @@ bool SContour::IsEar(int bp, double scaledEps) const {
     return true;
 }
 
-void SContour::ClipEarInto(SMesh *m, int bp, double scaledEps) {
+TessellationResult SContour::ClipEarInto(SMesh *m, int bp, double scaledEps) {
     int ap = WRAP(bp-1, l.n),
         cp = WRAP(bp+1, l.n);
 
@@ -349,6 +373,11 @@ void SContour::ClipEarInto(SMesh *m, int bp, double scaledEps) {
     tr.a = l[ap].p;
     tr.b = l[bp].p;
     tr.c = l[cp].p;
+    if(!FiniteVector(tr.a) || !FiniteVector(tr.b) || !FiniteVector(tr.c)) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidGeometry, {}, {},
+            "non-finite point in triangulation contour");
+    }
     if(tr.Normal().MagSquared() < scaledEps*scaledEps) {
         // A vertex with more than two edges will cause us to generate
         // zero-area triangles, which must be culled.
@@ -364,9 +393,10 @@ void SContour::ClipEarInto(SMesh *m, int bp, double scaledEps) {
     l.ClearTags();
     l[bp].tag = 1;
     l.RemoveTagged();
+    return TessellationResult::Success();
 }
 
-void SContour::UvTriangulateInto(SMesh *m, SSurface *srf) {
+TessellationResult SContour::UvTriangulateInto(SMesh *m, SSurface *srf) {
     Vector tu, tv;
     srf->TangentsAt(0.5, 0.5, &tu, &tv);
     double s = sqrt(tu.MagSquared() + tv.MagSquared());
@@ -445,7 +475,7 @@ void SContour::UvTriangulateInto(SMesh *m, SSurface *srf) {
                     tr.a = center;
                     tr.b = l[pstart+j].p;
                     tr.c = l[pstart].p;
-                    m->AddTriangle(&tr);    
+                    m->AddTriangle(&tr);
                 }
                 pstart = i-1;
                 elen = ab.Dot(ab);
@@ -492,12 +522,22 @@ void SContour::UvTriangulateInto(SMesh *m, SSurface *srf) {
         }
         if(bestEar < 0) {
             dbp("couldn't find an ear! fail");
-            return;
+            return TessellationResult::Failure(
+                TessellationResult::Code::PolygonFailure, srf->h, {},
+                "ear clipping could not find an ear");
         }
-        ClipEarInto(m, bestEar, scaledEps);
+        TessellationResult r = ClipEarInto(m, bestEar, scaledEps);
+        if(!r.Ok()) {
+            r.surface = srf->h;
+            return r;
+        }
     }
 
-    ClipEarInto(m, 0, scaledEps); // add the last triangle
+    TessellationResult r = ClipEarInto(m, 0, scaledEps); // add the last triangle
+    if(!r.Ok()) {
+        r.surface = srf->h;
+    }
+    return r;
 }
 
 double SSurface::ChordToleranceForEdge(Vector a, Vector b) const {
@@ -533,9 +573,24 @@ Vector SSurface::NormalAtMaybeSwapped(double u, double v, bool swapped) const {
     return du.Cross(dv).WithMagnitude(1.0);
 }
 
-void SSurface::MakeTriangulationGridInto(List<double> *l, double vs, double vf,
+TessellationResult SSurface::MakeTriangulationGridInto(List<double> *l, double vs, double vf,
                                          bool swapped, int depth) const
 {
+    // The stopping decision is purely geometric: the configured chord
+    // tolerance must be usable, and the segment budget positive.
+    double chordTol = SS.ChordTolMm();
+    int maxSegments = SS.GetMaxSegments();
+    if(!(std::isfinite(chordTol) && chordTol > 0.0) || maxSegments <= 0) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidGeometry, h, {},
+            "invalid chord tolerance or segment budget");
+    }
+    if(!(std::isfinite(vs) && std::isfinite(vf) && vf > vs)) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidGeometry, h, {},
+            "non-finite grid interval");
+    }
+
     double worst = 0;
 
     // Try piecewise linearizing four curves, at u = 0, 1/3, 2/3, 1; choose
@@ -557,28 +612,58 @@ void SSurface::MakeTriangulationGridInto(List<double> *l, double vs, double vf,
         Vector pm1 = PointAtMaybeSwapped(u, vm1, swapped),
                pm2 = PointAtMaybeSwapped(u, vm2, swapped);
 
+        if(!FiniteVector(ps) || !FiniteVector(pf) ||
+           !FiniteVector(pm1) || !FiniteVector(pm2)) {
+            return TessellationResult::Failure(
+                TessellationResult::Code::InvalidGeometry, h, {},
+                "non-finite surface evaluation while building the grid");
+        }
+
         // 0.999 is about 2.5 degrees of twist over the middle 1/3 V-span.
         // we don't check at the ends because the derivative may not be valid there.
         double twist = 1.0;
-        if (degm == 1) twist = NormalAtMaybeSwapped(u, vm1, swapped).Dot(
-                               NormalAtMaybeSwapped(u, vm2, swapped) );
+        if (degm == 1) {
+            Vector n1 = NormalAtMaybeSwapped(u, vm1, swapped),
+                   n2 = NormalAtMaybeSwapped(u, vm2, swapped);
+            if(!FiniteVector(n1) || !FiniteVector(n2)) {
+                return TessellationResult::Failure(
+                    TessellationResult::Code::InvalidGeometry, h, {},
+                    "non-finite surface normal while building the grid");
+            }
+            twist = n1.Dot(n2);
+        }
         if (twist < worst_twist) worst_twist = twist;
 
         worst = max(worst, pm1.DistanceToLine(ps, pf.Minus(ps)));
         worst = max(worst, pm2.DistanceToLine(ps, pf.Minus(ps)));
     }
 
-    double step = 1.0/SS.GetMaxSegments();
-    if( ((vf - vs) < step || worst < SS.ChordTolMm())
-        && ((worst_twist > 0.999) || (depth > 3)) ) {
+    // Accept only on the geometric test: both third-point chord distances
+    // below the tolerance on all four parameter lines, together with the
+    // normal twist test. The interval length and recursion depth never
+    // substitute for this.
+    if(worst < chordTol && worst_twist > 0.999) {
         l->Add(&vf);
-    } else {
-        MakeTriangulationGridInto(l, vs, (vs+vf)/2, swapped, depth+1);
-        MakeTriangulationGridInto(l, (vs+vf)/2, vf, swapped, depth+1);
+        return TessellationResult::Success();
     }
+
+    // Geometry still asks for subdivision. Refuse instead of silently
+    // coarsening when the original minimum interval (the segment budget)
+    // is reached, or when the floating-point midpoint stops splitting.
+    double step = 1.0/maxSegments;
+    double mid = (vs + vf)/2;
+    if((vf - vs) <= step || !(mid > vs && mid < vf)) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::LimitExceeded, h, {},
+            "surface grid cannot be refined to the chord tolerance");
+    }
+
+    TessellationResult r = MakeTriangulationGridInto(l, vs, mid, swapped, depth+1);
+    if(!r.Ok()) return r;
+    return MakeTriangulationGridInto(l, mid, vf, swapped, depth+1);
 }
 
-void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
+TessellationResult SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
     SEdgeList orig = {};
     MakeEdgesInto(&orig);
 
@@ -594,9 +679,23 @@ void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
     lj = {};
     double v[5] = {0.0, 0.25, 0.5, 0.75, 1.0};
     li.Add(&v[0]);
-    srf->MakeTriangulationGridInto(&li, 0, 1, /*swapped=*/true, 0);
+    TessellationResult r = srf->MakeTriangulationGridInto(&li, 0, 1, /*swapped=*/true, 0);
+    if(!r.Ok()) {
+        orig.Clear();
+        holes.Clear();
+        li.Clear();
+        lj.Clear();
+        return r;
+    }
     lj.Add(&v[0]);
-    srf->MakeTriangulationGridInto(&lj, 0, 1, /*swapped=*/false, 0);
+    r = srf->MakeTriangulationGridInto(&lj, 0, 1, /*swapped=*/false, 0);
+    if(!r.Ok()) {
+        orig.Clear();
+        holes.Clear();
+        li.Clear();
+        lj.Clear();
+        return r;
+    }
 
     // force 2nd order grid to have at least 4 segments in each direction
     if ((li.n < 5) && (srf->degm>1)) { // 4 segments minimum
@@ -614,7 +713,7 @@ void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
         // generate two triangles in the mesh, and cut it out of our polygon.
         // Quads around the perimeter would be rejected by AnyEdgeCrossings.
         std::vector<bool> bottom(lj.n, false); // did we use this quad?
-        Vector tu = {}, tv = {}; 
+        Vector tu = {}, tv = {};
         int i, j;
         for(i = 1; i < (li.n-1); i++) {
             bool prev_flag = false;
@@ -630,9 +729,6 @@ void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
 
                 //  |   d-----c
                 //  |   |     |
-                //  |   |     |
-                //  |   a-----b
-                //  |
                 //  +-------------> j/v axis
 
                 if( (i==(li.n-2)) || (j==(lj.n-2)) ||
@@ -649,7 +745,7 @@ void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
                 if(!this->ContainsPoint(a)) {
                     this_flag = false;
                 }
-                
+
                 if (this_flag) {
                     // Add the quad to our mesh
                     srf->TangentsAt(us,vs, &tu,&tv);
@@ -707,7 +803,7 @@ void SPolygon::UvGridTriangulateInto(SMesh *mesh, SSurface *srf) {
     holes.Clear();
     li.Clear();
     lj.Clear();
-    UvTriangulateInto(mesh, srf);
+    return UvTriangulateInto(mesh, srf);
 }
 
 void SPolygon::TriangulateInto(SMesh *m) const {
@@ -725,7 +821,9 @@ void SPolygon::TriangulateInto(SMesh *m) const {
                                        {1.0, 0.0, 0.0},
                                        {0.0, 1.0, 0.0});
     SMesh pm = {};
-    p.UvTriangulateInto(&pm, &srf);
+    // This entry point fills screen-space polygons, not trimmed CAD
+    // surfaces; keep its historical best-effort behavior.
+    (void)p.UvTriangulateInto(&pm, &srf);
     for(STriangle st : pm.l) {
         st = st.Transform(u, v, n);
         m->AddTriangle(&st);

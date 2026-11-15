@@ -15,6 +15,7 @@
 #include "dsc.h"
 #include "handle.h"
 #include "polygon.h"
+#include "tessellation.h"
 
 namespace SolveSpace {
 
@@ -64,21 +65,8 @@ public:
 
 class SShell;
 
-class hSSurface {
-public:
-    uint32_t v;
-};
-
-template<>
-struct IsHandleOracle<hSSurface> : std::true_type {};
-
-class hSCurve {
-public:
-    uint32_t v;
-};
-
-template<>
-struct IsHandleOracle<hSCurve> : std::true_type {};
+// hSSurface and hSCurve are defined in tessellation.h, which is included
+// above, so the shells and triangulation results can share them.
 
 // Stuff for rational polynomial curves, of degree one to three. These are
 // our inputs, and are also calculated for certain exact surface-surface
@@ -380,15 +368,20 @@ public:
     bool IsCylinder(Vector *axis, Vector *center, double *r,
                         Vector *start, Vector *finish) const;
 
-    void TriangulateInto(SShell *shell, SMesh *sm);
+    // On failure the target mesh is left untouched.
+    TessellationResult TriangulateInto(SShell *shell, SMesh *sm);
 
     // these are intended as bitmasks, even though there's just one now
     enum class MakeAs : uint32_t {
        UV  = 0x01,
        XYZ = 0x00
     };
-    void MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags, SCurve *sc, STrimBy *stb);
-    void MakeEdgesInto(SShell *shell, SEdgeList *sel, MakeAs flags,
+    // Validates every trim before projecting any of its points; on failure
+    // returns InvalidTrim with the offending curve handle and appends
+    // nothing to sel.
+    TessellationResult MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
+                                         SCurve *sc, STrimBy *stb);
+    TessellationResult MakeEdgesInto(SShell *shell, SEdgeList *sel, MakeAs flags,
                        SShell *useCurvesFrom=NULL);
 
     Vector ExactSurfaceTangentAt(Vector p, SSurface *srfA, SSurface *srfB,
@@ -396,7 +389,11 @@ public:
     void MakeSectionEdgesInto(SShell *shell, SEdgeList *sel, SBezierList *sbl);
     void MakeClassifyingBsp(SShell *shell, SShell *useCurvesFrom);
     double ChordToleranceForEdge(Vector a, Vector b) const;
-    void MakeTriangulationGridInto(List<double> *l, double vs, double vf,
+    // Adaptive grid with an explicit stop reason. A terminal interval is
+    // accepted only on the geometric chord/normal test; running out of
+    // segments or floating-point resolution returns LimitExceeded, and bad
+    // tolerances or non-finite evaluations return InvalidGeometry.
+    TessellationResult MakeTriangulationGridInto(List<double> *l, double vs, double vf,
                                     bool swapped, int depth) const;
     Vector PointAtMaybeSwapped(double u, double v, bool swapped) const;
     Vector NormalAtMaybeSwapped(double u, double v, bool swapped) const;
@@ -462,7 +459,10 @@ public:
     void MakeFromAssemblyOf(SShell *a, SShell *b);
     void MergeCoincidentSurfaces();
 
-    void TriangulateInto(SMesh *sm);
+    // Surfaces are processed in ascending handle order (deterministic, no
+    // dependence on thread scheduling); the first failing surface is
+    // reported and the target mesh is left in its pre-call state.
+    TessellationResult TriangulateInto(SMesh *sm);
     void MakeEdgesInto(SEdgeList *sel);
     void MakeSectionEdgesInto(Vector n, double d, SEdgeList *sel, SBezierList *sbl);
     bool IsEmpty() const;

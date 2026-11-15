@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "dsc.h"
+#include "srf/tessellation.h"
 
 namespace SolveSpace {
 
@@ -145,8 +146,12 @@ public:
     bool IsEmptyTriangle(int ap, int bp, int cp, double scaledEPS) const;
     bool IsEar(int bp, double scaledEps) const;
     bool BridgeToContour(SContour *sc, SEdgeList *el, List<Vector> *vl);
-    void ClipEarInto(SMesh *m, int bp, double scaledEps);
-    void UvTriangulateInto(SMesh *m, SSurface *srf);
+    // Returns Ok, PolygonFailure (no ear/bridge) or InvalidGeometry
+    // (collapsed triangle). On failure nothing was appended for the
+    // offending step, but earlier triangles stay in the mesh; callers that
+    // need all-or-nothing output triangulate into a scratch mesh.
+    TessellationResult ClipEarInto(SMesh *m, int bp, double scaledEps);
+    TessellationResult UvTriangulateInto(SMesh *m, SSurface *srf);
 };
 
 typedef struct {
@@ -171,8 +176,8 @@ public:
     bool IsEmpty() const;
     Vector AnyPoint() const;
     void OffsetInto(SPolygon *dest, double r) const;
-    void UvTriangulateInto(SMesh *m, SSurface *srf);
-    void UvGridTriangulateInto(SMesh *m, SSurface *srf);
+    TessellationResult UvTriangulateInto(SMesh *m, SSurface *srf);
+    TessellationResult UvGridTriangulateInto(SMesh *m, SSurface *srf);
     void TriangulateInto(SMesh *m) const;
     void InverseTransformInto(SPolygon *sp, Vector u, Vector v, Vector n) const;
 };
@@ -296,6 +301,20 @@ public:
     void RemoveDegenerateTriangles();
     double CalculateVolume() const;
     double CalculateSurfaceArea(const std::vector<uint32_t> &faces) const;
+
+    // A deep copy of everything a triangulation attempt can modify: the
+    // triangles in their order (per-corner normals and face/color meta
+    // included) and the cached flags, notably the transparency state.
+    struct Snapshot {
+        List<STriangle> l;
+        bool isTransparent;
+        bool flipNormal;
+        bool keepInsideOtherShell;
+        bool keepCoplanar;
+        bool atLeastOneDiscarded;
+    };
+    Snapshot TakeSnapshot() const;
+    void RestoreSnapshot(Snapshot *snap);
 
     bool IsEmpty() const;
     void RemapFaces(Group *g, int remap);

@@ -258,11 +258,25 @@ void SShell::MakeFromHelicalRevolutionOf(SBezierLoopSet *sbls, Vector pt, Vector
             // we will need the grid t-values for this entire row of surfaces
             List<double> t_values;
             t_values = {};
-            if (revs[0].v) { 
+            if (revs[0].v) {
                 double ps = 0.0;
                 t_values.Add(&ps);
-                (surface.FindById(revs[0]))->MakeTriangulationGridInto(
+                TessellationResult gridr =
+                    (surface.FindById(revs[0]))->MakeTriangulationGridInto(
                         &t_values, 0.0, 1.0, true, 0);
+                if(!gridr.Ok()) {
+                    // Keep the curve PWL well-formed (a closed interval with
+                    // both endpoints) rather than leaving a single point. The
+                    // precision failure is not swallowed: triangulating this
+                    // surface re-runs the same grid and reports it through
+                    // the TessellationResult chain.
+                    dbp("helical trim grid refinement failed; using endpoints only");
+                    double pf = 1.0;
+                    if(t_values.n < 2 || t_values.Last() == NULL ||
+                       *t_values.Last() != pf) {
+                        t_values.Add(&pf);
+                    }
+                }
             }
             // we generate one more curve than we did surfaces
             for(j = 0; j <= sections; j++) {
@@ -577,7 +591,14 @@ void SShell::MakeFromTransformationOf(SShell *a,
 
 void SShell::MakeEdgesInto(SEdgeList *sel) {
     for(SSurface &s : surface) {
-        s.MakeEdgesInto(this, sel, SSurface::MakeAs::XYZ);
+        TessellationResult r = s.MakeEdgesInto(this, sel, SSurface::MakeAs::XYZ);
+        if(!r.Ok()) {
+            // Historical best-effort callers get the same edge list they
+            // would have produced before the trim walk stopped; the
+            // structured failure is reported by the triangulation entries.
+            dbp("shell edge generation skipped a bad trim");
+            return;
+        }
     }
 }
 
@@ -590,16 +611,34 @@ void SShell::MakeSectionEdgesInto(Vector n, double d, SEdgeList *sel, SBezierLis
     }
 }
 
-void SShell::TriangulateInto(SMesh *sm) {
-#pragma omp parallel for
-    for(int i=0; i<surface.n; i++) {
+TessellationResult SShell::TriangulateInto(SMesh *sm) {
+    if(surface.IsEmpty()) {
+        return TessellationResult::Success();
+    }
+
+    // The IdList is kept sorted by handle, so this traversal is in
+    // ascending surface-handle order and independent of any thread
+    // scheduling: the first failing surface is always the same one.
+    // Triangulate each surface into a private mesh, and snapshot the
+    // caller's mesh so the first failure restores its exact pre-call
+    // content (triangle order, per-corner normals, face/color meta and the
+    // transparency/other cached flags).
+    SMesh::Snapshot snap = sm->TakeSnapshot();
+
+    TessellationResult result = TessellationResult::Success();
+    for(int i = 0; i < surface.n; i++) {
         SSurface *s = &surface[i];
-        SMesh m;
-        s->TriangulateInto(this, &m);
-        #pragma omp critical
+        SMesh m = {};
+        result = s->TriangulateInto(this, &m);
+        if(!result.Ok()) {
+            m.Clear();
+            sm->RestoreSnapshot(&snap);
+            return result;
+        }
         sm->MakeFromCopyOf(&m);
         m.Clear();
     }
+    return result;
 }
 
 bool SShell::IsEmpty() const {

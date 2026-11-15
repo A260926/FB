@@ -30,6 +30,8 @@ void Group::Clear() {
     runningShell.Clear();
     displayMesh.Clear();
     displayOutlines.Clear();
+    lastDisplayResult = TessellationResult::Success();
+    displayResultValid = false;
     impMesh.Clear();
     impShell.Clear();
     impEntity.Clear();

@@ -809,11 +809,26 @@ void VectorFileWriter::BezierAsNonrationalCubic(SBezier *sb, int depth) {
 // Export a triangle mesh, in the requested format.
 //-----------------------------------------------------------------------------
 void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
+    const bool previousExportMode = exportMode;
+    // Restore the caller's mode on every exit path, including failures.
+    struct ExportModeGuard {
+        bool *mode;
+        bool previous;
+        ~ExportModeGuard() { *mode = previous; }
+    } exportModeGuard = { &SS.exportMode, previousExportMode };
     SS.exportMode = true;
     GenerateAll(Generate::ALL);
 
     Group *g = SK.GetGroup(SS.GW.activeGroup);
-    g->GenerateDisplayItems();
+    TessellationResult displayResult = g->GenerateDisplayItems();
+
+    // Check the result before touching the output file: a failed display
+    // generation must neither truncate an existing file nor claim success.
+    if(!displayResult.Ok()) {
+        dbp("mesh export refused; display generation failed: %s",
+            displayResult.detail.c_str());
+        return;
+    }
 
     SMesh *m = &(SK.GetGroup(SS.GW.activeGroup)->displayMesh);
     if(m->IsEmpty()) {
@@ -834,6 +849,7 @@ void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
         FILE *fMtl = OpenFile(mtlFilename, "wb");
         if(!fMtl) {
             Error("Couldn't write to '%s'", filename.raw.c_str());
+            fclose(f);
             return;
         }
 

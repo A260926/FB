@@ -349,6 +349,58 @@ ninja
 [mingw]: http://www.mingw.org/
 [msys2]: https://www.msys2.org/
 
+## Tessellation results and display-cache semantics
+
+Triangulating a trimmed surface, a whole shell, or the display mesh of a
+group can fail for structural reasons (a broken trim loop, a segment budget
+too small for the chord tolerance, invalid surface data). Those failures are
+now reported through a `SolveSpace::TessellationResult`
+(`src/srf/tessellation.h`) instead of being written only to the log:
+
+- `code` is one of `Ok`, `InvalidTrim`, `PolygonFailure`, `LimitExceeded` or
+  `InvalidGeometry`.
+- `surface` is the `hSSurface` the failure is attributed to (zero when there
+  is no source surface), and `curve` is the `hSCurve` of the trim that
+  exposed an `InvalidTrim` (zero otherwise).
+- `detail` carries a human-readable diagnostic, and the same result is stored
+  by `Group` as its most recent display-generation outcome.
+
+`SSurface::TriangulateInto` and `SShell::TriangulateInto` return this result.
+On success they keep the historical append semantics; on failure the target
+`SMesh` is restored to its exact pre-call state — triangle order, per-corner
+normals, face/color metadata and the transparency cache are unchanged. A shell
+processes its surfaces in ascending surface-handle order (so the reported
+first failure is deterministic) and never publishes triangles from the
+surfaces before the failing one.
+
+`MakeTriangulationGridInto` stops only on the geometric test: the points at
+one and two thirds of every sampled interval must lie within `ChordTolMm` of
+the endpoint chord on all four parameter lines, with the normal dot-product
+test above 0.999. Interval size and recursion depth never replace that test.
+When subdivision is still required but the `1/GetMaxSegments()` interval floor
+(or floating-point midpoint resolution) is reached, it returns
+`LimitExceeded`; a non-positive/non-finite `ChordTolMm` or non-positive
+`GetMaxSegments()` returns `InvalidGeometry`. Shared `SCurve` sample points,
+trim directions, surface control nets and geometry are never modified.
+
+`Group::GenerateDisplayItems` returns the result and is all-or-nothing:
+
+- success builds both `displayMesh` and `displayOutlines` in scratch storage,
+  replaces the two caches as a batch, runs the transparency precompute and
+  clears `displayDirty`;
+- failure keeps the previous complete mesh and outline caches, leaves
+  `displayDirty` set and stores the source result, retrievable through
+  `GetLastDisplayResult()` / `DisplayResultAvailable()`;
+- a group without its own geometry inherits the result of its running mesh
+  group, and a shell mixed with `runningMesh` triangles is published only when
+  the whole batch succeeds. A later retry, after the trim is fixed or the
+  segment budget raised, regenerates normally.
+
+`ExportMeshTo` checks that result before opening the output file: on failure
+the existing file is left untouched, no success message is shown and the
+caller's `exportMode` is restored; a successful export restores `exportMode`
+as well.
+
 ## Contributing
 
 See the [guide for contributors](CONTRIBUTING.md) for the best way to file issues, contribute code,

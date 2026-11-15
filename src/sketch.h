@@ -291,6 +291,13 @@ public:
     SMesh           displayMesh;
     SOutlineList    displayOutlines;
 
+    // Outcome of the most recent display generation attempt. A failed
+    // attempt never replaces displayMesh/displayOutlines and leaves
+    // displayDirty set, so the same source diagnosis is reported until a
+    // later regeneration succeeds.
+    TessellationResult lastDisplayResult;
+    bool               displayResultValid;
+
     enum class CombineAs : uint32_t {
         UNION           = 0,
         DIFFERENCE      = 1,
@@ -377,7 +384,16 @@ public:
     template<class T> void GenerateForStepAndRepeat(Sketch *sketch, T *steps, T *outs,
                                                     Group::CombineAs forWhat);
     template<class T> void GenerateForBoolean(T *a, T *b, T *o, Group::CombineAs how);
-    void GenerateDisplayItems();
+    // Returns Ok only when both display caches were rebuilt completely for
+    // the current running shell/mesh. On failure the previous complete
+    // caches survive, displayDirty stays set and the structured result is
+    // queryable through GetLastDisplayResult().
+    TessellationResult GenerateDisplayItems();
+    // The most recent attempt; valid only when DisplayResultAvailable().
+    // Groups with no geometry inherit the result of their running mesh
+    // group.
+    const TessellationResult &GetLastDisplayResult() const;
+    bool DisplayResultAvailable() const { return displayResultValid; }
 
     enum class DrawMeshAs { DEFAULT, HOVERED, SELECTED };
     void DrawMesh(DrawMeshAs how, Canvas *canvas);

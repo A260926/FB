@@ -1,0 +1,12 @@
+#!/bin/bash
+if [ $# -eq 0 ]; then
+  f="$TMPDIR/tasklog.$$.$RANDOM"
+  : > "$f" || exit 1
+  echo "$f"
+elif [ "$1" = "-t" ]; then
+  f="$TMPDIR/$2.$$.$RANDOM"
+  : > "$f" || exit 1
+  echo "$f"
+else
+  exec /usr/bin/mktemp "$@"
+fi

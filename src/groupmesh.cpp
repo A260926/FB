@@ -454,74 +454,123 @@ bool Group::GenerateShellAndMesh(Sketch *sketch) {
     return booleanChanged;
 }
 
-void Group::GenerateDisplayItems() {
+TessellationResult Group::GenerateDisplayItems() {
     // This is potentially slow (since we've got to triangulate a shell, or
     // to find the emphasized edges for a mesh), so we will run it only
     // if its inputs have changed.
-    if(displayDirty) {
-        Group *pg = RunningMeshGroup(&SK);
-        if(pg && thisMesh.IsEmpty() && thisShell.IsEmpty()) {
-            // We don't contribute any new solid model in this group, so our
-            // display items are identical to the previous group's; which means
-            // that we can just display those, and stop ourselves from
-            // recalculating for those every time we get a change in this group.
-            //
-            // Note that this can end up recursing multiple times (if multiple
-            // groups that contribute no solid model exist in sequence), but
-            // that's okay.
-            pg->GenerateDisplayItems();
-
-            displayMesh.Clear();
-            displayMesh.MakeFromCopyOf(&(pg->displayMesh));
-
-            displayOutlines.Clear();
-            if(SS.GW.showEdges || SS.GW.showOutlines) {
-                displayOutlines.MakeFromCopyOf(&pg->displayOutlines);
-            }
-        } else {
-            // We do contribute new solid model, so we have to triangulate the
-            // shell, and edge-find the mesh.
-            displayMesh.Clear();
-            runningShell.TriangulateInto(&displayMesh);
-            STriangle *t;
-            for(t = runningMesh.l.First(); t; t = runningMesh.l.NextAfter(t)) {
-                STriangle trn = *t;
-                Vector n = trn.Normal();
-                trn.an = n;
-                trn.bn = n;
-                trn.cn = n;
-                displayMesh.AddTriangle(&trn);
-            }
-
-            displayOutlines.Clear();
-
-            if(SS.GW.showEdges || SS.GW.showOutlines) {
-                SOutlineList rawOutlines = {};
-                if(!runningMesh.l.IsEmpty()) {
-                    // Triangle mesh only; no shell or emphasized edges.
-                    runningMesh.MakeOutlinesInto(&rawOutlines, EdgeKind::EMPHASIZED);
-                } else {
-                    displayMesh.MakeOutlinesInto(&rawOutlines, EdgeKind::SHARP);
-                }
-
-                PolylineBuilder builder;
-                builder.MakeFromOutlines(rawOutlines);
-                builder.GenerateOutlines(&displayOutlines);
-                rawOutlines.Clear();
-            }
-        }
-
-        // If we render this mesh, we need to know whether it's transparent,
-        // and we'll want all transparent triangles last, to make the depth test
-        // work correctly.
-        displayMesh.PrecomputeTransparency();
-
-        // Recalculate mass center if needed
-        if(SS.centerOfMass.draw && SS.centerOfMass.dirty && h == SS.GW.activeGroup) {
-            SS.UpdateCenterOfMass();
-        }
-        displayDirty = false;
+    if(!displayDirty) {
+        // The cached items are still the current model; report whatever
+        // the last completed attempt produced.
+        if(displayResultValid) return lastDisplayResult;
+        return TessellationResult::Success();
     }
+
+    auto fail = [&](TessellationResult r) -> TessellationResult {
+        // Keep the previous complete mesh/outline caches untouched, stay
+        // dirty, and remember where the failure came from; a later retry
+        // after fixing the trim or raising the budget goes through again.
+        lastDisplayResult = r;
+        displayResultValid = true;
+        displayDirty = true;
+        return r;
+    };
+
+    Group *pg = RunningMeshGroup(&SK);
+    if(pg && thisMesh.IsEmpty() && thisShell.IsEmpty()) {
+        // We don't contribute any new solid model in this group, so our
+        // display items are identical to the previous group's; which means
+        // that we can just display those, and stop ourselves from
+        // recalculating for those every time we get a change in this group.
+        //
+        // Note that this can end up recursing multiple times (if multiple
+        // groups that contribute no solid model exist in sequence), but
+        // that's okay. A failure is inherited: we must not publish a copy
+        // of a cache that was never regenerated successfully.
+        TessellationResult pr = pg->GenerateDisplayItems();
+        if(!pr.Ok()) {
+            return fail(pr);
+        }
+
+        SMesh newMesh = {};
+        newMesh.MakeFromCopyOf(&(pg->displayMesh));
+        SOutlineList newOutlines = {};
+        if(SS.GW.showEdges || SS.GW.showOutlines) {
+            newOutlines.MakeFromCopyOf(&pg->displayOutlines);
+        }
+
+        displayMesh.Clear();
+        displayMesh.MakeFromCopyOf(&newMesh);
+        displayOutlines.Clear();
+        displayOutlines.MakeFromCopyOf(&newOutlines);
+        newMesh.Clear();
+        newOutlines.Clear();
+    } else {
+        // We do contribute new solid model, so we have to triangulate the
+        // shell, and edge-find the mesh. Everything is built in scratch
+        // storage first: neither cache is touched until the whole batch
+        // exists, so a failed triangulation can never publish part of it
+        // (for example just the runningMesh triangles).
+        SMesh newMesh = {};
+        TessellationResult tr = runningShell.TriangulateInto(&newMesh);
+        if(!tr.Ok()) {
+            newMesh.Clear();
+            return fail(tr);
+        }
+
+        STriangle *t;
+        for(t = runningMesh.l.First(); t; t = runningMesh.l.NextAfter(t)) {
+            STriangle trn = *t;
+            Vector n = trn.Normal();
+            trn.an = n;
+            trn.bn = n;
+            trn.cn = n;
+            newMesh.AddTriangle(&trn);
+        }
+
+        SOutlineList newOutlines = {};
+        if(SS.GW.showEdges || SS.GW.showOutlines) {
+            SOutlineList rawOutlines = {};
+            if(!runningMesh.l.IsEmpty()) {
+                // Triangle mesh only; no shell or emphasized edges.
+                runningMesh.MakeOutlinesInto(&rawOutlines, EdgeKind::EMPHASIZED);
+            } else {
+                newMesh.MakeOutlinesInto(&rawOutlines, EdgeKind::SHARP);
+            }
+
+            PolylineBuilder builder;
+            builder.MakeFromOutlines(rawOutlines);
+            builder.GenerateOutlines(&newOutlines);
+            rawOutlines.Clear();
+        }
+
+        // The complete batch exists; only now replace both caches.
+        displayMesh.Clear();
+        displayMesh.MakeFromCopyOf(&newMesh);
+        displayOutlines.Clear();
+        displayOutlines.MakeFromCopyOf(&newOutlines);
+        newMesh.Clear();
+        newOutlines.Clear();
+    }
+
+    // If we render this mesh, we need to know whether it's transparent,
+    // and we'll want all transparent triangles last, to make the depth test
+    // work correctly.
+    displayMesh.PrecomputeTransparency();
+
+    // Recalculate mass center if needed
+    if(SS.centerOfMass.draw && SS.centerOfMass.dirty && h == SS.GW.activeGroup) {
+        SS.UpdateCenterOfMass();
+    }
+
+    displayDirty = false;
+    lastDisplayResult = TessellationResult::Success();
+    displayResultValid = true;
+    return lastDisplayResult;
+}
+
+const TessellationResult &Group::GetLastDisplayResult() const {
+    static const TessellationResult noAttempt = TessellationResult::Success();
+    return displayResultValid ? lastDisplayResult : noAttempt;
 }
 
 Group *Group::PreviousGroup(Sketch *sketch) const {

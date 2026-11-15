@@ -1,0 +1,16 @@
+.task-build/obj/src_util.cpp.o
+.task-build/obj/src_polygon.cpp.o
+.task-build/obj/src_mesh.cpp.o
+.task-build/obj/src_polyline.cpp.o
+.task-build/obj/src_groupmesh.cpp.o
+.task-build/obj/src_export.cpp.o
+.task-build/obj/src_srf_boolean.cpp.o
+.task-build/obj/src_srf_curve.cpp.o
+.task-build/obj/src_srf_merge.cpp.o
+.task-build/obj/src_srf_ratpoly.cpp.o
+.task-build/obj/src_srf_raycast.cpp.o
+.task-build/obj/src_srf_shell.cpp.o
+.task-build/obj/src_srf_surface.cpp.o
+.task-build/obj/src_srf_surfinter.cpp.o
+.task-build/obj/src_srf_triangulate.cpp.o
+.task-build/obj/task_support_host.cpp.o

@@ -242,16 +242,22 @@ bool SSurface::LineEntirelyOutsideBbox(Vector a, Vector b, bool asSegment) const
 
 //-----------------------------------------------------------------------------
 // Generate the piecewise linear approximation of the trim stb, which applies
-// to the curve sc.
+// to the curve sc. Every structural problem with the trim is rejected before
+// any projection (ClosestPointTo) or forced-convergence work happens: a
+// missing curve, non-finite sample points, or start/finish points that do not
+// occur in the order the backwards flag prescribes. The shared curve data is
+// never modified.
 //-----------------------------------------------------------------------------
-void SSurface::MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
+TessellationResult SSurface::MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
                                  SCurve *sc, STrimBy *stb)
 {
-    Vector prev = {};
-    bool inCurve = false, empty = true;
-    double u = 0, v = 0;
+    if(sc == NULL) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidTrim, h, stb->curve,
+            "trim references a curve that does not exist in the shell");
+    }
 
-    int i, first, last, increment;
+    int first, last, increment;
     if(stb->backwards) {
         first = sc->pts.n - 1;
         last = 0;
@@ -261,12 +267,54 @@ void SSurface::MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
         last = sc->pts.n - 1;
         increment = 1;
     }
-    for(i = first; i != (last + increment); i += increment) {
+
+    // Validate the traversal before projecting anything: every sampled point
+    // must be finite, the start point must be encountered before the finish
+    // point in the (possibly reversed) walk, and both must exist at all.
+    int startIndex = -1, finishIndex = -1;
+    for(int i = first; i != (last + increment); i += increment) {
+        Vector pt = sc->pts[i].p;
+        if(!std::isfinite(pt.x) || !std::isfinite(pt.y) ||
+           !std::isfinite(pt.z)) {
+            return TessellationResult::Failure(
+                TessellationResult::Code::InvalidTrim, h, sc->h,
+                "trim curve contains a non-finite point");
+        }
+        if(startIndex < 0 && pt.Equals(stb->start))  startIndex  = i;
+        if(finishIndex < 0 && pt.Equals(stb->finish)) finishIndex = i;
+    }
+    if(startIndex < 0 || finishIndex < 0) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidTrim, h, sc->h,
+            "trim endpoint is not a point of its curve in the traversal order");
+    }
+    bool ordered;
+    if(stb->backwards) {
+        ordered = startIndex >= finishIndex;
+    } else {
+        ordered = startIndex <= finishIndex;
+    }
+    if(!ordered) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidTrim, h, sc->h,
+            "trim endpoints occur in the wrong order for its direction");
+    }
+
+    Vector prev = {};
+    bool inCurve = false, empty = true;
+    double u = 0, v = 0;
+
+    for(int i = first; i != (last + increment); i += increment) {
         Vector tpt, *pt = &(sc->pts[i].p);
 
         if(flags == MakeAs::UV) {
             ClosestPointTo(*pt, &u, &v);
             tpt = {u, v, 0};
+            if(!std::isfinite(tpt.x) || !std::isfinite(tpt.y)) {
+                return TessellationResult::Failure(
+                    TessellationResult::Code::InvalidTrim, h, sc->h,
+                    "trim point did not project to finite uv coordinates");
+            }
         } else {
             tpt = *pt;
         }
@@ -281,8 +329,17 @@ void SSurface::MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
         if(pt->Equals(stb->start)) inCurve = true;
         if(pt->Equals(stb->finish)) inCurve = false;
     }
-    if(inCurve) dbp("trim was unterminated");
-    if(empty)   dbp("trim was empty");
+    if(inCurve) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidTrim, h, sc->h,
+            "trim was unterminated");
+    }
+    if(empty) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidTrim, h, sc->h,
+            "trim was empty");
+    }
+    return TessellationResult::Success();
 }
 
 //-----------------------------------------------------------------------------
@@ -291,23 +348,30 @@ void SSurface::MakeTrimEdgesInto(SEdgeList *sel, MakeAs flags,
 // the split curves from useCurvesFrom instead of the curves in our own
 // shell.
 //-----------------------------------------------------------------------------
-void SSurface::MakeEdgesInto(SShell *shell, SEdgeList *sel, MakeAs flags,
+TessellationResult SSurface::MakeEdgesInto(SShell *shell, SEdgeList *sel, MakeAs flags,
                              SShell *useCurvesFrom)
 {
     STrimBy *stb;
     for(stb = trim.First(); stb; stb = trim.NextAfter(stb)) {
-        SCurve *sc = shell->curve.FindById(stb->curve);
+        SCurve *sc = shell->curve.FindByIdNoOops(stb->curve);
 
         // We have the option to use the curves from another shell; this
         // is relevant when generating the coincident edges while doing the
         // Booleans, since the curves from the output shell will be split
         // against any intersecting surfaces (and the originals aren't).
         if(useCurvesFrom) {
-            sc = useCurvesFrom->curve.FindById(sc->newH);
+            if(sc == NULL) {
+                return TessellationResult::Failure(
+                    TessellationResult::Code::InvalidTrim, h, stb->curve,
+                    "trim references a curve that does not exist in the shell");
+            }
+            sc = useCurvesFrom->curve.FindByIdNoOops(sc->newH);
         }
 
-        MakeTrimEdgesInto(sel, flags, sc, stb);
+        TessellationResult r = MakeTrimEdgesInto(sel, flags, sc, stb);
+        if(!r.Ok()) return r;
     }
+    return TessellationResult::Success();
 }
 
 //-----------------------------------------------------------------------------
@@ -338,7 +402,11 @@ void SSurface::MakeSectionEdgesInto(SShell *shell, SEdgeList *sel, SBezierList *
 {
     STrimBy *stb;
     for(stb = trim.First(); stb; stb = trim.NextAfter(stb)) {
-        SCurve *sc = shell->curve.FindById(stb->curve);
+        SCurve *sc = shell->curve.FindByIdNoOops(stb->curve);
+        if(sc == NULL) {
+            dbp("section edge trim references a missing curve");
+            return;
+        }
         SBezier *sb = &(sc->exact);
 
         if(sbl && sc->isExact && (sb->deg != 1 || !sel)) {
@@ -510,51 +578,143 @@ static void SplitContoursAtRepeatedVertices(SPolygon *poly) {
     }
 }
 
-void SSurface::TriangulateInto(SShell *shell, SMesh *sm) {
-    SEdgeList el = {};
+TessellationResult SSurface::TriangulateInto(SShell *shell, SMesh *sm) {
+    // Validate the surface definition before any evaluation.
+    if(degm < 1 || degm > 3 || degn < 1 || degn > 3) {
+        return TessellationResult::Failure(
+            TessellationResult::Code::InvalidGeometry, h, {},
+            "surface degree outside the supported 1..3 range");
+    }
+    int i, j;
+    for(i = 0; i <= degm; i++) {
+        for(j = 0; j <= degn; j++) {
+            double w = weight[i][j];
+            if(!std::isfinite(w) || w <= 0.0) {
+                return TessellationResult::Failure(
+                    TessellationResult::Code::InvalidGeometry, h, {},
+                    "surface weight is not finite and positive");
+            }
+            Vector c = ctrl[i][j];
+            if(!std::isfinite(c.x) || !std::isfinite(c.y) ||
+               !std::isfinite(c.z)) {
+                return TessellationResult::Failure(
+                    TessellationResult::Code::InvalidGeometry, h, {},
+                    "surface control point is not finite");
+            }
+        }
+    }
 
-    MakeEdgesInto(shell, &el, MakeAs::UV);
+    // Build the uv edge list into a scratch list, so a rejected trim leaves
+    // no partial output anywhere.
+    SEdgeList el = {};
+    TessellationResult r = MakeEdgesInto(shell, &el, MakeAs::UV);
+    if(!r.Ok()) {
+        el.Clear();
+        return r;
+    }
 
     SPolygon poly = {};
-    if(el.AssemblePolygon(&poly, NULL, /*keepDir=*/true)) {
-        SplitContoursAtRepeatedVertices(&poly);
-        int i, start = sm->l.n;
-        if(degm == 1 && degn == 1) {
-            // A surface with curvature along one direction only; so
-            // choose the triangulation with chords that lie as much
-            // as possible within the surface. And since the trim curves
-            // have been pwl'd to within the desired chord tol, that will
-            // produce a surface good to within roughly that tol.
-            //
-            // If this is just a plane (degree (1, 1)) then the triangulation
-            // code will notice that, and not bother checking chord tols.
-            poly.UvTriangulateInto(sm, this);
-        } else {
-            // A surface with compound curvature. So we must overlay a
-            // two-dimensional grid, and triangulate around that.
-            poly.UvGridTriangulateInto(sm, this);
-        }
+    if(!el.AssemblePolygon(&poly, NULL, /*keepDir=*/true)) {
+        el.Clear();
+        poly.Clear();
+        return TessellationResult::Failure(
+            TessellationResult::Code::PolygonFailure, h, {},
+            "trim edges do not assemble into closed loops");
+    }
+    SplitContoursAtRepeatedVertices(&poly);
 
-        STriMeta meta = { face, color };
-        for(i = start; i < sm->l.n; i++) {
-            STriangle *st = &(sm->l[i]);
-            st->meta = meta;
-            st->an = NormalAt(st->a.x, st->a.y);
-            st->bn = NormalAt(st->b.x, st->b.y);
-            st->cn = NormalAt(st->c.x, st->c.y);
-            st->a = PointAt(st->a.x, st->a.y);
-            st->b = PointAt(st->b.x, st->b.y);
-            st->c = PointAt(st->c.x, st->c.y);
-            // Works out that my chosen contour direction is inconsistent with
-            // the triangle direction, sigh.
-            st->FlipNormal();
-        }
+    // Triangulate into a private mesh; only append to the caller's mesh once
+    // the whole surface succeeded, so a limit or polygon failure discards
+    // every triangle generated for this surface.
+    SMesh out = {};
+    if(degm == 1 && degn == 1) {
+        // A surface with curvature along one direction only; so
+        // choose the triangulation with chords that lie as much
+        // as possible within the surface. And since the trim curves
+        // have been pwl'd to within the desired chord tol, that will
+        // produce a surface good to within roughly that tol.
+        //
+        // If this is just a plane (degree (1, 1)) then the triangulation
+        // code will notice that, and not bother checking chord tols.
+        r = poly.UvTriangulateInto(&out, this);
     } else {
-        dbp("failed to assemble polygon to trim nurbs surface in uv space");
+        // A surface with compound curvature. So we must overlay a
+        // two-dimensional grid, and triangulate around that.
+        r = poly.UvGridTriangulateInto(&out, this);
+    }
+    if(!r.Ok()) {
+        el.Clear();
+        poly.Clear();
+        out.Clear();
+        r.surface = h;
+        return r;
+    }
+
+    STriMeta meta = { face, color };
+    for(i = 0; i < out.l.n; i++) {
+        STriangle *st = &(out.l[i]);
+        st->meta = meta;
+        Vector a = PointAt(st->a.x, st->a.y);
+        Vector b = PointAt(st->b.x, st->b.y);
+        Vector c = PointAt(st->c.x, st->c.y);
+        if(!std::isfinite(a.x) || !std::isfinite(a.y) ||
+           !std::isfinite(a.z) ||
+           !std::isfinite(b.x) || !std::isfinite(b.y) ||
+           !std::isfinite(b.z) ||
+           !std::isfinite(c.x) || !std::isfinite(c.y) ||
+           !std::isfinite(c.z)) {
+            el.Clear();
+            poly.Clear();
+            out.Clear();
+            return TessellationResult::Failure(
+                TessellationResult::Code::InvalidGeometry, h, {},
+                "non-finite surface point in a generated triangle");
+        }
+        Vector an = NormalAt(st->a.x, st->a.y);
+        Vector bn = NormalAt(st->b.x, st->b.y);
+        Vector cn = NormalAt(st->c.x, st->c.y);
+        if(!std::isfinite(an.x) || !std::isfinite(an.y) ||
+           !std::isfinite(an.z) ||
+           !std::isfinite(bn.x) || !std::isfinite(bn.y) ||
+           !std::isfinite(bn.z) ||
+           !std::isfinite(cn.x) || !std::isfinite(cn.y) ||
+           !std::isfinite(cn.z)) {
+            el.Clear();
+            poly.Clear();
+            out.Clear();
+            return TessellationResult::Failure(
+                TessellationResult::Code::InvalidGeometry, h, {},
+                "non-finite surface normal in a generated triangle");
+        }
+        st->an = an;
+        st->bn = bn;
+        st->cn = cn;
+        st->a = a;
+        st->b = b;
+        st->c = c;
+        STriangle check = *st;
+        if(check.Normal().MagSquared() <= 0.0) {
+            el.Clear();
+            poly.Clear();
+            out.Clear();
+            return TessellationResult::Failure(
+                TessellationResult::Code::InvalidGeometry, h, {},
+                "zero-area triangle generated for the surface");
+        }
+        // Works out that my chosen contour direction is inconsistent with
+        // the triangle direction, sigh.
+        st->FlipNormal();
+    }
+
+    // The whole surface is good; keep the historical append semantics.
+    for(i = 0; i < out.l.n; i++) {
+        sm->AddTriangle(&(out.l[i]));
     }
 
     el.Clear();
     poly.Clear();
+    out.Clear();
+    return TessellationResult::Success();
 }
 
 //-----------------------------------------------------------------------------
