@@ -1,0 +1,2 @@
+4.4.1, obtained on June 1, 2026
+https://github.com/RenderKit/embree
