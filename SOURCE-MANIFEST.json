@@ -1,0 +1,4854 @@
+{
+  "origins": [
+    {
+      "path": ".",
+      "repo": "https://github.com/PixarAnimationStudios/OpenSubdiv",
+      "commit": "86b1a462e50e25017c6e5b23fada23d42d644d62",
+      "license": "Tomorrow Open Source Technology License 1.0",
+      "license_path": "LICENSE.txt",
+      "notice_path": "NOTICE.txt"
+    }
+  ],
+  "upstream_files_sha256": {
+    "CMakeLists.txt": "7ff2ab66017ddd232ae6e5cca5653d5b7d9245ca47f62b6ddef557c1daa91b29",
+    "LICENSE.txt": "9211071ceaea05cec948f44a025ede3030f41506960d68b50e7ddb6edc2abe5b",
+    "NOTICE.txt": "c9a283f0d3752b74d348a57e1d45e71cf69651ce6cbdce866983e459f6422c7c",
+    "README.md": "167a74bd12d9b77a4c882342cdc433937198f5d7cfb870a1e766440e3b4c135c",
+    "opensubdiv/CMakeLists.txt": "a1d7619b4a9c06cace07814287d7fc4c0d60fbbeb9735cf0527968fac7502116",
+    "opensubdiv/bfr/CMakeLists.txt": "ea772210d7fc37c62987547eb5a20e8e5e8ba2bc911c6e6fa0f985a3d76d2f99",
+    "opensubdiv/bfr/faceSurface.cpp": "33f03601beefbf28c4ee1b46a0411ebb2783a1116f77f0e1861e78361de60b05",
+    "opensubdiv/bfr/faceSurface.h": "126dcf18a8067a4d5997a839244a2512927de9bafb4f665994844b0aec894fd1",
+    "opensubdiv/bfr/faceTopology.cpp": "56446cde87e1b00ba11c9c6b70376f4d1b68cbd502d30a70e7f6ece0e8f5d567",
+    "opensubdiv/bfr/faceTopology.h": "e90e0925449b8297a1772a8deb9e68270b53b237852e5d3388a9c39225bc939c",
+    "opensubdiv/bfr/faceVertex.cpp": "e1e693bb68ac528ca91496f8283f518965a7350864c161ae638d5f05f2503b4e",
+    "opensubdiv/bfr/faceVertex.h": "9e1635a4dcf21fc2ef7210b24c33602caa0ab4734aab81300eb5ba91cf7736a0",
+    "opensubdiv/bfr/faceVertexSubset.h": "87176ebfdd882ab63b58de6f99d0383028417a996070480842cf43c7cea5e49b",
+    "opensubdiv/bfr/hash.cpp": "f3d392aa76085c17243d037227bdd74bf983ebe4ca394e63167f7e5f3ceac372",
+    "opensubdiv/bfr/hash.h": "031ce2976c194d2826945bcec04da7827fee5914d7eb3fa244cf312669eb0c43",
+    "opensubdiv/bfr/irregularPatchBuilder.cpp": "2f7c6cbd2fdf257514aace08314b0a7904505d911461f1ca107566d9c67aed96",
+    "opensubdiv/bfr/irregularPatchBuilder.h": "b7ffa5c94c7de5a9111fa443c953449e5ca042d10bd5da9b0d36dbaacf0b4853",
+    "opensubdiv/bfr/irregularPatchType.h": "b0a970a75d01909c2bcd82fca6e71202a37fdedb317003c120078090e0fd0460",
+    "opensubdiv/bfr/limits.h": "11ce12546cd692fc3dea174acb9ad9117f9b0b089418cdb2223c32f33b04ab98",
+    "opensubdiv/bfr/parameterization.cpp": "3466b43010080b6cf169735abe065c0c8d1fb8c86205d76647bb6ad2b7052614",
+    "opensubdiv/bfr/parameterization.h": "359a2106e4efa1a34bc24c4aca005002dd8595bfbfbd8215dbbe638213f2e0ae",
+    "opensubdiv/bfr/patchTree.cpp": "e081ce43f0a5286c16cf8ef83690720518f969f5b1ea307573c816519e7491c2",
+    "opensubdiv/bfr/patchTree.h": "ce0d5e206a850676c038f85613dd768d2b67d9ece2f3722e5b54d2046f79362d",
+    "opensubdiv/bfr/patchTreeBuilder.cpp": "d796ad93c91c781fedb31ddc13e992c74ed2e4ec942be25f928514721d710c60",
+    "opensubdiv/bfr/patchTreeBuilder.h": "82ef7765fe29706c5772604c4a9b3e1c2c38da94a607149a446d3e1cd323453a",
+    "opensubdiv/bfr/pointOperations.h": "5d18c3041f942a02ed87a97e080c10fbfcdf950ad6909a799c2bc5ba6d538483",
+    "opensubdiv/bfr/refinerSurfaceFactory.cpp": "f9430fb8c984dc1526f2b074661e813827666fc21a13d172b2639472deb5a411",
+    "opensubdiv/bfr/refinerSurfaceFactory.h": "b63f96526790854a339d80103ee6dcb0695f580627ad7f84dd5e9a043741077a",
+    "opensubdiv/bfr/regularPatchBuilder.cpp": "c53531f9829daf7982add32a12543160f9f4d51a85c9af41def7ed490c5f434c",
+    "opensubdiv/bfr/regularPatchBuilder.h": "d49abfe559c055cbb68332487bc3f4bd9ba05b69c0a3d32dae5d8a65ecfa13cd",
+    "opensubdiv/bfr/surface.cpp": "3e52dff8244a169511c59b36ec06884096070d6c3f89d85cc8be3fad5746ebab",
+    "opensubdiv/bfr/surface.h": "cf6ebed3df4adbefcc8e62b117f43ddf257997e66734c9386e60a7e0cb8c3792",
+    "opensubdiv/bfr/surfaceData.cpp": "30ab8a6d7b27cb4b301a985efbf60471a571aec84b8aa5089eabbc869f0f5cf7",
+    "opensubdiv/bfr/surfaceData.h": "65355efec0f6a13380a1ad67bd120e0e76f1859cb6fc0851fe7c85b960c2a97c",
+    "opensubdiv/bfr/surfaceFactory.cpp": "32f33a6cd430ee8dfe614c88f9c26fd6709aa31190cbcc2f137d7f1898a10f2e",
+    "opensubdiv/bfr/surfaceFactory.h": "4f52ef9323fff8b5809af129bb69116fdfec419be5d51eb8a4133a03d8457375",
+    "opensubdiv/bfr/surfaceFactoryCache.cpp": "74323c982378cc035a1caaeceafc36cceef1c6b569f3aa665db1f82f7015830e",
+    "opensubdiv/bfr/surfaceFactoryCache.h": "c6fe35a4a3c38ef27afef896ab569c45ef6b52b91ffb44e0210bcb00cb267b01",
+    "opensubdiv/bfr/surfaceFactoryMeshAdapter.h": "a91605b0cb333972f743f3c62a2f4b35bccbe3bf6caa51447a89e66420258d06",
+    "opensubdiv/bfr/tessellation.cpp": "b02e342084d251f68b2c5329bf7b54e6d93a78f2340fab94a3c52fc4a931eebc",
+    "opensubdiv/bfr/tessellation.h": "164148ee2181815e685ad3a3ed6d9809cb4c617a221cb5cc59bb3acecf302491",
+    "opensubdiv/bfr/vertexDescriptor.cpp": "ca1f2d82c0aea16027676e32b3f7fcccc59351cc7d9fcbddb8d585a38b2ef170",
+    "opensubdiv/bfr/vertexDescriptor.h": "a6af3e96ae42fac4739bd279ad71b1997605892e61a3af5b8a5cb98fd1e8ae16",
+    "opensubdiv/bfr/vertexTag.h": "0c6f9ce32d881bf5e273a076c26034a1790c6835f032166b3c468e6a4a53286f",
+    "opensubdiv/far/CMakeLists.txt": "0d799f8463657114304bb24fec5b926e7a65cc715113d07b995aebfecd59a132",
+    "opensubdiv/far/bilinearPatchBuilder.cpp": "81a363e8d2fa277e3df44cd1d09b973eff50a8ae2756b57540f41f9f83c8d9a3",
+    "opensubdiv/far/bilinearPatchBuilder.h": "0614107b3013ceec174e19489dfee159cd7589d51077f153afc5a198137a78bc",
+    "opensubdiv/far/catmarkPatchBuilder.cpp": "e3f7b183bea72b362ec1a3c4b62362e468e4a5f59aa5b0ab755cbefeeb27c816",
+    "opensubdiv/far/catmarkPatchBuilder.h": "5aa283370e456ab9979faf5083b2ec807d8b27161d8b4a69a3337fd197a25aea",
+    "opensubdiv/far/error.cpp": "a60fe0d94e4c4cae23e601b2129c24045f17f16df20e6b30bd41a2281e9e325f",
+    "opensubdiv/far/error.h": "b79043c07b07e36bb106194b9989070efdfd10a8c4cc302645e69b23f5a547ab",
+    "opensubdiv/far/loopPatchBuilder.cpp": "e362d800de997042f26dba8f6e8290bc92bc29ebfdb5d5c62f79410806ed4c87",
+    "opensubdiv/far/loopPatchBuilder.h": "2dcc5409c329440c0623c9b0ed1936b3dceb2272ed1bf7ddde7fab14ea27c101",
+    "opensubdiv/far/patchBasis.cpp": "b78742d6afe5b44fe5f131d7a0f56416de7987116f47dc5614f78939455816b8",
+    "opensubdiv/far/patchBasis.h": "62cce5474bf58ff647abae2b4981d64b160ecf9d76f704dc39728ecf24ced0e1",
+    "opensubdiv/far/patchBuilder.cpp": "69b0f2942003f45becdcb01170a81f33d7d0aeb803cbc15dfddbd3066c607f95",
+    "opensubdiv/far/patchBuilder.h": "aaddaaee637eb16baa892b96773f156d311e5f2b3a6f4bd311c97dbe7b86789f",
+    "opensubdiv/far/patchDescriptor.cpp": "2dbdb26275ba909ae5672b88713baa320427969b17556e30e49c8329f9df03be",
+    "opensubdiv/far/patchDescriptor.h": "7b2b59419e0c0442fcdf81474f4de7e690cafa1fe96f7045273f4c9812354d44",
+    "opensubdiv/far/patchMap.cpp": "2c3824cc96d038b54f654a18d6097a014dcb7358dcc66ed31edef3170206b90e",
+    "opensubdiv/far/patchMap.h": "7a4514c3d327eff662967048893465b3a22212b0bfde088c206c5b9d8a4e30d3",
+    "opensubdiv/far/patchParam.h": "e855cb4792fa1ea3c1544a93b84f1567d1792344491fa24c3715bf088d0ce42f",
+    "opensubdiv/far/patchTable.cpp": "9b170a4c827d13fa1eab1344b0e7a2a37042fdc9f2bffec468f7e6102ccc1375",
+    "opensubdiv/far/patchTable.h": "367f8f1c25d6f9f158f7bb266e0055a74ae7b28f08aa954328d2c9aea5618f81",
+    "opensubdiv/far/patchTableFactory.cpp": "e5d66e8c8c313d9748deb917b10f06dcfed8316408a05f145f1f1e55a86b7b8e",
+    "opensubdiv/far/patchTableFactory.h": "a1e9f497e9846ef366dacf5671f670dd6981c8baef113d61f4a5f4d6fa211830",
+    "opensubdiv/far/primvarRefiner.h": "f7d8fa46bf1a60e68ca7b72e116a0a400366f3dba0b001601c4556f7e1fbcd45",
+    "opensubdiv/far/ptexIndices.cpp": "3ab0309f3093a4dbb35ef8085335ee28c41959d9fb0287e27d6b90ef04d3ca07",
+    "opensubdiv/far/ptexIndices.h": "e7417162790270cd39f0a806a16ece2e1d234fdb015968adfc5e009019a6d9d6",
+    "opensubdiv/far/sparseMatrix.h": "f62d9dbfa8ace489788809b4ff83a7ecce953f68c6e13972e89179c62312e258",
+    "opensubdiv/far/stencilBuilder.cpp": "e49c407dfe132aaa3e652f6a8f9848becf33cb1e94fdfebba3e2a644c3fbfbd7",
+    "opensubdiv/far/stencilBuilder.h": "5f3ed59b8215d3c116a379956d5b31ec64d561d8c532c65f170de08ac264e3d1",
+    "opensubdiv/far/stencilTable.cpp": "1d0e35ba7a23e3f8fd738cd71e1f61d16a24e37ca07e4b882174921eaab74f6a",
+    "opensubdiv/far/stencilTable.h": "f01db8e35127ade1b185823dc94110cf2a5ed04428c6355bba4fe1a4aabcd422",
+    "opensubdiv/far/stencilTableFactory.cpp": "6c2fd30fc1fc35ae4573328a9d7be5c3530cbc8b5169f0a9b0144a0a4c905fef",
+    "opensubdiv/far/stencilTableFactory.h": "17e6ca57a2a54a5cc9632d408a3c67e2fffa837c68d5937f8fe3b401cf41b0a0",
+    "opensubdiv/far/topologyDescriptor.cpp": "f2772d559174ca26c16e1b22920b4abd68a45d1d48c170b20f87be755a43d5f3",
+    "opensubdiv/far/topologyDescriptor.h": "38dce3452dd5b46007cdca26d7f434da59810dd19b5de67ced9f50941a441e26",
+    "opensubdiv/far/topologyLevel.h": "a570b602ccbd06f72ba1fa013fefe1c0980b882e41c9236d5010e2947839d533",
+    "opensubdiv/far/topologyRefiner.cpp": "8cb6186f7d8a59ab7e383df2fc9e40348cafa067be4ac70c117e61c50ae3f55c",
+    "opensubdiv/far/topologyRefiner.h": "2f8f98b7fb5297c269365983fd84d855739f0268c5d6881bbc5e600ec39c14ce",
+    "opensubdiv/far/topologyRefinerFactory.cpp": "8d2eb95b7c2b13cb4909923d17f9c020bf2e451e0301212c4875e05b2d02ef2f",
+    "opensubdiv/far/topologyRefinerFactory.h": "4e2229b42244c4c1ad3207405419f2a4d5843b1fa491ffbe14020fcfb540d82e",
+    "opensubdiv/far/types.h": "d5ad1d4eee7eb724203b17034af4220d9068bc63558639619c2f78edf123e852",
+    "opensubdiv/hbr/CMakeLists.txt": "1623fc81a3c14e9d11bf1d39e892dfcda5d30842a1f36766e70be5907ee9cb24",
+    "opensubdiv/hbr/allocator.h": "e4812be2c1567c3a68a1f60763080f4197bfa211bec56415cd70ebbec477c4c3",
+    "opensubdiv/hbr/bilinear.h": "bf7a67c7c82db90b542501e5965086b7f3b76fae185532b6e61ebf4db7e9e752",
+    "opensubdiv/hbr/catmark.h": "020df0508233bec174226f7a1a7e098597191c49424191747087aa4fa28fdca1",
+    "opensubdiv/hbr/cornerEdit.h": "e48f20eeb40012b769ec8a39e30a2d2767961a75964e573202cf6ef05a5e6fb6",
+    "opensubdiv/hbr/creaseEdit.h": "0527342c897570c9155461f853575e646db3b72cddcb0ef7f3722e923db529f9",
+    "opensubdiv/hbr/face.h": "bb2c49cf2c55a7d9ad02a9b80ce22062c21fbd3c2df0aa544fd99b67dda8d57e",
+    "opensubdiv/hbr/faceEdit.h": "9f06ddda51d6d0f3a4f7ee4c7aaf0330a86b1aed85c29ae2face43ec5a5a861b",
+    "opensubdiv/hbr/fvarData.h": "2fb7e23eeb4e54ca6d40c459a935d0f6b67795ad954a811c502d291d47849803",
+    "opensubdiv/hbr/fvarEdit.h": "4d54f64022aca43ce288b8e5d59d352eef76f93f6c591a3086fbe00ac33619d3",
+    "opensubdiv/hbr/halfedge.h": "c437f48eefb72f42125047ed058f6795cbe351e962615ab1a971e7e953e32b27",
+    "opensubdiv/hbr/hierarchicalEdit.h": "b6179289335708b493a2d2db23ec2acc9ed478229f8a09e96e8d2b49961ce1ab",
+    "opensubdiv/hbr/holeEdit.h": "cd27ac532f23704df921fbc042ef1768759747c51068f81c9a436181e70f730e",
+    "opensubdiv/hbr/loop.h": "9f9648647283f1744630ebeb521fd8317145c01b9fae0aa4cb0da28a941e7aa4",
+    "opensubdiv/hbr/mesh.h": "5ee96926c713877e7f9e9dfc6f340eb149efc8f716436aed2ae0152424417d41",
+    "opensubdiv/hbr/subdivision.h": "4e860118f6fb1e75ea91c4653ef6c1868a3a95ccd8fd1fca42173dc5dfbf41a7",
+    "opensubdiv/hbr/vertex.h": "1500857e94732750288085d0ee83cab0884b93a4119f4a2697344af0e1aebf05",
+    "opensubdiv/hbr/vertexEdit.h": "08464ce8aeb12237b4a748d530d836531d62fcd070deef469dc19e3cbfe0a7c3",
+    "opensubdiv/osd/Android.mk": "13bdd57376abb90148a0d7cf9d47feb6fc80e3329fa4ad76f06cc28990b315d1",
+    "opensubdiv/osd/CMakeLists.txt": "9aa4a86de8da559a01c01c3b505776a55927a525c4d785f2630d9cd04b5d2e79",
+    "opensubdiv/osd/bufferDescriptor.h": "1b2977161635158a9e18762e928ce9009e10ca58304d7e54e9962766d18b6b28",
+    "opensubdiv/osd/clD3D11VertexBuffer.cpp": "ae10480358a16113c14cbf7d1f593228917e06820c34c4f2b15b0f975900e1fa",
+    "opensubdiv/osd/clD3D11VertexBuffer.h": "8bde3140194f87f4e340f0af6188075e153549adc78dff33d201750dbb76d355",
+    "opensubdiv/osd/clEvaluator.cpp": "f56b8d4c6992af5fe3ad0b28ac0e71490decaafe293f242a47067b00123367fa",
+    "opensubdiv/osd/clEvaluator.h": "4241efd9d0086815485e56b13327cb8c6ba363efdcbd803a86845bf2799ff74b",
+    "opensubdiv/osd/clGLVertexBuffer.cpp": "3781de93967372cd88094d04c85f302af1e5b87549c1491a58f89744597e51c8",
+    "opensubdiv/osd/clGLVertexBuffer.h": "e302990e6d03164efea57161a2fd954479754f8aa38ca5cb55cce40e887190de",
+    "opensubdiv/osd/clKernel.cl": "f61e2450d3741720f36bd16ae1ffd6e4c4202094f149cd75003e8f18289f820c",
+    "opensubdiv/osd/clPatchTable.cpp": "1b3d913d92387292267bef198cf6c2afba4b9744cc5bf08f88bd3b720555dde8",
+    "opensubdiv/osd/clPatchTable.h": "59283004c5b0a2b259d0c5c7c915e1fe614f28b07328415c1db43cefbd60061e",
+    "opensubdiv/osd/clVertexBuffer.cpp": "e28f4afd8e936ced7559ce41931a21e5be21623a10cd224e17f4d590c92d708f",
+    "opensubdiv/osd/clVertexBuffer.h": "9842cab901ff6ea7bdf165c3eba69cdfa7ede28f9238a1f57f9ba7c0e2043a76",
+    "opensubdiv/osd/cpuD3D11VertexBuffer.cpp": "b02b3e1aa2dbbdebcba75524a3381aeb041c754e3e69b6c8f0c3cbb62e5cf977",
+    "opensubdiv/osd/cpuD3D11VertexBuffer.h": "bdf304440cd96f14b31493aa1ae2a2510623d583f487a5c90cbb515ec1143618",
+    "opensubdiv/osd/cpuEvaluator.cpp": "80227eba46baa8a8b66f7dae4a322bb15d2f138a95251c3a850555bba2634b7d",
+    "opensubdiv/osd/cpuEvaluator.h": "2209f94007bc2036d8c2eb0a06c3fafe2e835e2a75bf7e7f4e6046742b4e6037",
+    "opensubdiv/osd/cpuGLVertexBuffer.cpp": "d57675a963a81d5127265a6a4800f3457ce91f2c10f082856418100dfc362da2",
+    "opensubdiv/osd/cpuGLVertexBuffer.h": "b2975dd2eef79d292988c5fa2d30dec3e192fa674df3f580c77c3f71f91d1848",
+    "opensubdiv/osd/cpuKernel.cpp": "c53f87c87afc8eb033af760a5a2c44118d246ad84eed041e3dc9da6daeb1271a",
+    "opensubdiv/osd/cpuKernel.h": "8c77c8fc85af81aea31b343042843013b61720445a6482dc555340242b64533a",
+    "opensubdiv/osd/cpuPatchTable.cpp": "48dcca3fa66a0e980924594f02e9b42c6fc21068e90e932cc97c81c742cf6286",
+    "opensubdiv/osd/cpuPatchTable.h": "e81ef7a34f29c10ebac610a3b40cbf45c6168ac41563b55abf39fa4768c40d5d",
+    "opensubdiv/osd/cpuVertexBuffer.cpp": "d3f1b20ecedb9f2de01d54d1c5d8d5cf9cd0bed01906a2ee79512346fa2f0768",
+    "opensubdiv/osd/cpuVertexBuffer.h": "c3d7cb0b2ec4270bf73dfbce65bd05711c91e658c4600274ada28c80d177f5a2",
+    "opensubdiv/osd/cudaD3D11VertexBuffer.cpp": "3af7f5ad1581ca6883035647456fc8d4bd8e04716517c6a935275ab35622ac64",
+    "opensubdiv/osd/cudaD3D11VertexBuffer.h": "597dbcd1e178081942e3db46784ed1b410569e557313e7221d18d43aa0bad0f2",
+    "opensubdiv/osd/cudaEvaluator.cpp": "8d1759087086e60795218b4129cce837f13ea4895a65eb518a2f6f946ca4f676",
+    "opensubdiv/osd/cudaEvaluator.h": "dfd1992b200d4eeecb1baf8f90b0048e935c0fa500d960659dcdcaefeee63d48",
+    "opensubdiv/osd/cudaGLVertexBuffer.cpp": "c1c7c8f92be9d9048e411ecacebb5b1d8c43f44b26a5758b276e234273dbf9e3",
+    "opensubdiv/osd/cudaGLVertexBuffer.h": "141fa217f32641bb2c761c10b18ac6e5d3f4a6744013dcfe1ea1fc1d4c3567d8",
+    "opensubdiv/osd/cudaKernel.cu": "3399511ba490dae7f172731a2eb1a12340f755786c5daf7ac918ec7e457a729d",
+    "opensubdiv/osd/cudaPatchTable.cpp": "f44ac06d2edeb2e8f5a1b1173aac84350ee4f9bf571a471a40001137a6151136",
+    "opensubdiv/osd/cudaPatchTable.h": "6ceaeaddd043715d96f3e66bbb1f021fac8993749f5bcefcd3797231ae4260d5",
+    "opensubdiv/osd/cudaVertexBuffer.cpp": "cc6bff7cebb171334da65dd20d1fb25811f5cdd9eee4e6e29bf80a7faa49f8b1",
+    "opensubdiv/osd/cudaVertexBuffer.h": "76abb1983d4d7724ec5fb269da888fad9df7d5537beb68f285bc19e95d56a404",
+    "opensubdiv/osd/d3d11ComputeEvaluator.cpp": "393c5455c1e5ce89e16e25db55178f72dcd8c5f42cabafbb85cd1e2bdfcaa30a",
+    "opensubdiv/osd/d3d11ComputeEvaluator.h": "89bd378a34e7dacc71a318142ad58eadd7f9e0dbcfef9af3683efcf601d0ecff",
+    "opensubdiv/osd/d3d11LegacyGregoryPatchTable.cpp": "17d6b6a95457ba49784dc5aa6d0de476e0c1c9e2adf474a58978cc8186ef0a4f",
+    "opensubdiv/osd/d3d11LegacyGregoryPatchTable.h": "e56204022071a2d5e472972f27c65dc20e42c4f172f5a8be1f5dc39f1ab6c2dd",
+    "opensubdiv/osd/d3d11Mesh.h": "b7ff070a8e2b70e985e1c641212bc2398e54ad1a6fd288989e083802f80467ee",
+    "opensubdiv/osd/d3d11PatchTable.cpp": "23e1b5b5d6a31bbee253d5daafd34d9441d92f10e11e2bda7f6dc032e147b7e4",
+    "opensubdiv/osd/d3d11PatchTable.h": "6ad01e5cac8ce44e9e19e979d290221498ca763c6d125d42d096f2a9c9728ded",
+    "opensubdiv/osd/d3d11VertexBuffer.cpp": "5d7f60d4dda9498fa77e6680520a971900cb1c5fd8f2bb6c1088759faf95ce59",
+    "opensubdiv/osd/d3d11VertexBuffer.h": "c886692fb39ee22e53d9db6cfd3716ba2b48392164fc82d414273d955361b1f5",
+    "opensubdiv/osd/glComputeEvaluator.cpp": "f283f0a9b13d2f5bcd8e5bf647f6f379558cf1ac74ec4d3fa170444fbf430289",
+    "opensubdiv/osd/glComputeEvaluator.h": "eff568244dd71edd9fadb82d31d1d16708ac032849a0fe0df3bacc053cfc10e7",
+    "opensubdiv/osd/glLegacyGregoryPatchTable.cpp": "8345d28e4dee2258290b6cda416ffbf9cc11cb2e0a53bc242bc4e92c7c7a577a",
+    "opensubdiv/osd/glLegacyGregoryPatchTable.h": "c507e6b74ea30a427d48049108ca0d665772cf49b6e83d23b5e6fca11023c32c",
+    "opensubdiv/osd/glMesh.h": "60a62735dc58f8646ab844660871ac3f2245f8b1112c38d039dadee077bd9e3c",
+    "opensubdiv/osd/glPatchTable.cpp": "489cf894eff73e62edecebdb86e8bc887a0e8923ef3f1d3cffb609d683031eca",
+    "opensubdiv/osd/glPatchTable.h": "7e97afb53d6344b2358d30fc821becc08d812b95cccb8885dc1986d6e643e310",
+    "opensubdiv/osd/glVertexBuffer.cpp": "f62306aea0e4cadc50a6e70b52665b6814562db6db11ef780352730694d39e52",
+    "opensubdiv/osd/glVertexBuffer.h": "7515be4c1cbbc6aeef380e1c25ff699363d371d196487f4d6417f0c6a4de69c8",
+    "opensubdiv/osd/glXFBEvaluator.cpp": "422ab0b7f0ca635fd0233e1e5bbc37bf4e0b40642e70aad44d4a01d8254e9daf",
+    "opensubdiv/osd/glXFBEvaluator.h": "46337abd1d928cbc875c0901cddfdec4258499f7f44e8e990822d8439e1fc5f4",
+    "opensubdiv/osd/glslComputeKernel.glsl": "c330ccecf3b390facf515a1632a25ef0698ebc22a87eeaeef16ef08a0f3566ff",
+    "opensubdiv/osd/glslPatchBSpline.glsl": "c4b394f138598ddfc114e127f03050ee90d6d38dfbe0dd36816e48d7836d3440",
+    "opensubdiv/osd/glslPatchBoxSplineTriangle.glsl": "4de890049680f6996845cb6005eca4842ede994ff59a49c351a02f95528cf180",
+    "opensubdiv/osd/glslPatchCommon.glsl": "398a4945a9d60551ffd7e7d2e5ee2a5ce2642d82db248008c1e073de68941a6b",
+    "opensubdiv/osd/glslPatchCommonTess.glsl": "ec52eb3b5d8d5edae23eb67fcc5924eb0b87a6e988ef862168111fddfc6321da",
+    "opensubdiv/osd/glslPatchGregory.glsl": "84ac9445eb283f32f421070ea61fc34be1d239a9ef61d0a5ebf87d6d78eaf5b7",
+    "opensubdiv/osd/glslPatchGregoryBasis.glsl": "339508e541894aecbe2e81ab212b0ad7a69aead7664196154ded286bf814ad88",
+    "opensubdiv/osd/glslPatchGregoryTriangle.glsl": "7eab720a0412cb7b0cf913589844eedeb15519d5623e1987b35bd69b6a51592e",
+    "opensubdiv/osd/glslPatchLegacy.glsl": "d96c1f62f8cedf626677b7f6e3d3b59cc02f0bf08c364784d4b5d4573a216080",
+    "opensubdiv/osd/glslPatchShaderSource.cpp": "108dbe7102de033fedabd05fb9e3280ef47f3a27ad5b81008b6e282d4e2adc0e",
+    "opensubdiv/osd/glslPatchShaderSource.h": "f4a22f9fa3d1b1ae6be55b85d8044feeab9430c60f8260ab8ed0c6579f69d7db",
+    "opensubdiv/osd/glslXFBKernel.glsl": "3dd5815641e8da508a76cfa2e973a9cbcb452fd5749bfbea7f66f715a687f985",
+    "opensubdiv/osd/hlslComputeKernel.hlsl": "cea04b446b4fb2fbb91227aabb9be94a83d103bb32c4b0ee830b93cc8b6fb18a",
+    "opensubdiv/osd/hlslPatchBSpline.hlsl": "b5c5c8443ba1768e64b6d429151ca95c3d1461b9868d82c372e0ba12354e04f8",
+    "opensubdiv/osd/hlslPatchBoxSplineTriangle.hlsl": "90557bb6449d81b9d68ca0a9ad7c87f95323d2a981f59cc5ca6b0a43af59f051",
+    "opensubdiv/osd/hlslPatchCommon.hlsl": "c3a84697dcecc380210a6846cf85bbe452d452175b29e17d7112111c7df6c93e",
+    "opensubdiv/osd/hlslPatchCommonTess.hlsl": "c0c334a5e2f751116bce510709c1ae8e6a444f46fad458ffe28070779115c459",
+    "opensubdiv/osd/hlslPatchGregory.hlsl": "b519db6dc4e08c27eacab64087687e3a074ef921b726238fa1df1e4ff7cdec30",
+    "opensubdiv/osd/hlslPatchGregoryBasis.hlsl": "c445af76e1644338ae7eb481d90d6ad0633b448d49e173ac4a1d12df1d69e564",
+    "opensubdiv/osd/hlslPatchGregoryTriangle.hlsl": "d4e377b5dc1e0b9724f101acaab55414e700acab67142ae9dd7c85aeae1dbcca",
+    "opensubdiv/osd/hlslPatchLegacy.hlsl": "8215b2a678a6d5ccf5731376222217dd94c0b49e5243dfa173512e5f9ae66eca",
+    "opensubdiv/osd/hlslPatchShaderSource.cpp": "745108253c55edf3b0b2bcebcea6d94aca46b25d44d16074eb39092b38b52420",
+    "opensubdiv/osd/hlslPatchShaderSource.h": "459c8de870a440c659d23309391bc7303d22d0892babad16c209b74b67e45eae",
+    "opensubdiv/osd/mesh.h": "62504a7c8e80c8327443a9e0c8e50205575b50deaf087fe35b6581d21ec28890",
+    "opensubdiv/osd/mtlCommon.h": "dde44022d9a4835d4c377f0a4669f70ff992504bf0b5d15d3c38cc68c9d48970",
+    "opensubdiv/osd/mtlComputeEvaluator.h": "e943f779f1f932eb432c0aeab04192261e6eddb31c4f34e0b766043c5a1432c0",
+    "opensubdiv/osd/mtlComputeEvaluator.mm": "3b5e76463b325b914616cf65a7b3b21973edbfdee7450c2349a958d742d38e48",
+    "opensubdiv/osd/mtlComputeKernel.metal": "4b659e47072cc6260df3d0e7540e0c31fae9fdf445167079ae617444bf0962c0",
+    "opensubdiv/osd/mtlLegacyGregoryPatchTable.h": "6df7f8303ffd07d04d690a51ec050eab116ad18876b25eab1f5798968c3bde07",
+    "opensubdiv/osd/mtlLegacyGregoryPatchTable.mm": "c554080be3630d2859ba90aded2cf45e95e27ab5b3bfdc744f1dd72722c6ffe7",
+    "opensubdiv/osd/mtlMesh.h": "a3393b178f32e77f9607ef668cdb362d0c49b4ca48570a2d57ab77bf7796c273",
+    "opensubdiv/osd/mtlMesh.mm": "58c1601b49fec8a2d760b003f628955bef55b9eb662fb9752e31bdbee85b0a10",
+    "opensubdiv/osd/mtlPatchBSpline.metal": "aeb1156fbe19c4c8457cfecafe8aa6ab22369a10d765d2f6a5d998de06e05da1",
+    "opensubdiv/osd/mtlPatchBoxSplineTriangle.metal": "91ceac89bfe8636d793234c439acf294fe53b1c5609762c2a136bcc46f69d819",
+    "opensubdiv/osd/mtlPatchCommon.metal": "c5522cdfd573957ee42454a7476839c95f38503665b6723fc27530ec8f294a29",
+    "opensubdiv/osd/mtlPatchCommonTess.metal": "8710cbf4460afe9ea7e02558dbdbe0a402c7fc50be421bbce3cfed8470a9c8e7",
+    "opensubdiv/osd/mtlPatchGregory.metal": "b485306e07696c42e871d49853b8f4beca954f64f8d93d146d57f5fe87e04f64",
+    "opensubdiv/osd/mtlPatchGregoryBasis.metal": "4cfd23ea9c93b6445531d36f9fb03fd4244b53881499cd78a062a49a6eb1397f",
+    "opensubdiv/osd/mtlPatchGregoryTriangle.metal": "d3f30bdb268a22541605a23cd9799ecf1bcac55aee874450da2e708c5d18d2c9",
+    "opensubdiv/osd/mtlPatchLegacy.metal": "0bb0e957e04b2ab73fb8a1e53acc6d9af12d5578b206b5414a05fa05b71739b6",
+    "opensubdiv/osd/mtlPatchShaderSource.h": "6be782f8a084ce67945f673922896648976ccd20ad8221bd4211bd6e7fb8aef0",
+    "opensubdiv/osd/mtlPatchShaderSource.mm": "a1bc8485688344467003496327dd339aee50e58cb5abda6eb3f5b804060cd218",
+    "opensubdiv/osd/mtlPatchTable.h": "0c5e08dee454e1b7e8ae70ea54b1a32fdb0d033feb289bde5dcc83b7fd65fadb",
+    "opensubdiv/osd/mtlPatchTable.mm": "275ad3225aadcdd74bae64a7291dfc42349a7d1d19fec82fab8e3548f78ccc2f",
+    "opensubdiv/osd/mtlVertexBuffer.h": "f3d8735c0e194a2b156628db7ba212bbc49ad68d990d89db72cd95aed82585d2",
+    "opensubdiv/osd/mtlVertexBuffer.mm": "b1e6cd5d3758ec6069e7062ab1a3f68c954ff2478ddb32a9aa64fb0dd9292135",
+    "opensubdiv/osd/nonCopyable.h": "7d57282c5524d4ca4a99e2191371c184bc9543bc8bdbb0a411693e49e97347c4",
+    "opensubdiv/osd/ompEvaluator.cpp": "702ed0f3428036000f17f294de2227943ff6c39b5e9cd641f84207969f08b895",
+    "opensubdiv/osd/ompEvaluator.h": "2595ce8f4c8bd7e102f560ad62416722ee87e24ce7fe957b1980d42157ba28fc",
+    "opensubdiv/osd/ompKernel.cpp": "1621ecb17d3b0f5542beb0f03da7f94274bef8d476591b13a2cbedbe452f4328",
+    "opensubdiv/osd/ompKernel.h": "931ce6ae594a14eda5826cdb9ef4f0c40f080975436a48424d95efb22cf0a3d5",
+    "opensubdiv/osd/opencl.h": "380ce6f655457601e0dfb18c13f4c334640530216acf700739974702851f6428",
+    "opensubdiv/osd/opengl.h": "87001e7f643b2681878658b7ac8124167f5d670cc06442f982b11b8dc5e28feb",
+    "opensubdiv/osd/patchBasis.h": "bbaf755000a7cf86000bba759dc4229c370b35a5a212b2f1c2c0394dcf62e57e",
+    "opensubdiv/osd/patchBasisTypes.h": "ee979a0e05e0773aeb8639c46f8b71eb62a17cf1341cd839c63802d39486e08e",
+    "opensubdiv/osd/tbbEvaluator.cpp": "d4a0b29dfed20f135199278a7f8612e8219cf82f6d45653feaec57db2ca77e3f",
+    "opensubdiv/osd/tbbEvaluator.h": "08d5216d5cbd0dd9f7e70c4f829acddb235241b3c182eba1b886670c62d4e6cb",
+    "opensubdiv/osd/tbbKernel.cpp": "30da662ce48f9c2d286b0710baa2ffcd9b4ad7a5dfa8f58d1e42e322f4173300",
+    "opensubdiv/osd/tbbKernel.h": "6714c4c7df233f531d428138cbfc623ea386d721b6796d4eba04aa52ac90ec7b",
+    "opensubdiv/osd/types.h": "99fa1122ba98e2826ceb640ff62b58065cab123fa1836a9ea4a11aa5d0fb1352",
+    "opensubdiv/sdc/CMakeLists.txt": "6609b8aef9c88737cb265dba6f94ff0e2b656a364f3f13948fb286e1fa2553e7",
+    "opensubdiv/sdc/bilinearScheme.h": "9ceb627dabb6213892173ab743e523d81701b3aa4de4d535781d8f9e6668c714",
+    "opensubdiv/sdc/catmarkScheme.h": "2570665e3066ca54905b20206b8e9465ed0c1106c867ac49b75a0c4d94e7c4ba",
+    "opensubdiv/sdc/crease.cpp": "701954d5670eda782cd036bcca422360972f75d77ebf84288ec5241138fee3bc",
+    "opensubdiv/sdc/crease.h": "459aa819fd3f6f3db4a7a0e5187114fe7bd8a5fc85c01c5f91db4948410202f8",
+    "opensubdiv/sdc/loopScheme.h": "d69a6122c33a158d72bb44b1f727754519b6ba21095b7640db8b551e9661ce93",
+    "opensubdiv/sdc/options.h": "0d5a33be9d6fd78582b729676cd84477177f949d4369bb61dc455f13faff210c",
+    "opensubdiv/sdc/scheme.h": "1a6af0d58bc1b2dbacea7924724e4f7feb479337c732eaa654bde2be1474d76a",
+    "opensubdiv/sdc/typeTraits.cpp": "3f56ec5fd483be6918ce9e44568af6f9be4485d74ec4216ceaef48ba86365576",
+    "opensubdiv/sdc/types.h": "11d325a3a391504993b8894282699e1d6fd051601a9f1a557a8dbed0defdd78b",
+    "opensubdiv/version.cpp": "1f7f74bbd7818692aa886aa3b01ab3c686236fcee7bba028982b1db267a06a4a",
+    "opensubdiv/version.h": "97177aa66d2d8072485334f80a365c338ec9082b764aa4a9244c537fbbd3ff10",
+    "opensubdiv/vtr/CMakeLists.txt": "b9926ed016ab68347c3472d24efbb636f4b79def36253e9a5b58fdaa735596d8",
+    "opensubdiv/vtr/array.h": "7c71d4360993b457cd7d2b092d978323351a0f4e6cae8a00700ffafe6a7b0afb",
+    "opensubdiv/vtr/componentInterfaces.h": "89a51b11a05701b0b901c05d3f9436352e42eb7456d498b14922bce46d8a1888",
+    "opensubdiv/vtr/fvarLevel.cpp": "2190ac560a5e493c31ab426cbdefaebca7617a24b8a91b002b1344113195e7c4",
+    "opensubdiv/vtr/fvarLevel.h": "fb389250a5a1c85cf5feebd6be3458e0ce59573826f5e43d32eb4a443069c2f2",
+    "opensubdiv/vtr/fvarRefinement.cpp": "2f529608124063f0ca8781f467f326be9c7a9e541372838a156c465c665d7b3f",
+    "opensubdiv/vtr/fvarRefinement.h": "97f7d47469a41fd50526cb8b51facecaa9d7a6a75c3129d747de98e02468fff8",
+    "opensubdiv/vtr/level.cpp": "7dd4e0ad3059061041c12fa99a603667e339f4a1b669db6d238d3b570662dda3",
+    "opensubdiv/vtr/level.h": "7abad5dd9c68d95994ff08220b57eb9f7b0e704cc98203af8317ecce85823e37",
+    "opensubdiv/vtr/quadRefinement.cpp": "27b01a382f0ef52bda075448d0686b36505994d9352590b6ac91d94c6a8da234",
+    "opensubdiv/vtr/quadRefinement.h": "3d629e371e1680f0043367a83fbe7270ca1e823662c75e6060cc9d3663dfd59b",
+    "opensubdiv/vtr/refinement.cpp": "07642d5beda691fc0ca85b8d70467c85bfb14a0d9b1dc5245d0729653b6e664b",
+    "opensubdiv/vtr/refinement.h": "e8b983da1513ac8d6ddff0a85fa17b3357735bb0dfd9018b5a98c892aad09f36",
+    "opensubdiv/vtr/sparseSelector.cpp": "1b029843762332770533bd07edc969bea9c236813d3e00252fd9acdb61ef97ba",
+    "opensubdiv/vtr/sparseSelector.h": "41aedeaa44615e69c71d35691d6dc521e1b4f5fb081c596cc016f4322dd19b6a",
+    "opensubdiv/vtr/stackBuffer.h": "0ae883761150d4e28ae6e4ab2aa3959600a18863adcda793e985fd9dd83c5fb0",
+    "opensubdiv/vtr/triRefinement.cpp": "562940777a541b947ff031a58b20d666a2693ce9238b705bcab9d9bf666eb75a",
+    "opensubdiv/vtr/triRefinement.h": "d8daf58e5bc1964bdfc046b3c18190d8044147b29ee169d714a16681ea5f515f",
+    "opensubdiv/vtr/types.h": "4d433c2d286c45c37675d6cc83d33eddb151101b1270e02311187c000b7f5ea6",
+    "regression/bfr_evaluate/CMakeLists.txt": "2096cb02da12cb1f1d66148a994567801880ffdbf5d5ce013e29eb539021ac7c",
+    "regression/bfr_evaluate/bfrSurfaceEvaluator.cpp": "e3042bc2ef610118336742532f7cdea0e54dab4f1addfcae664745437e91e145",
+    "regression/bfr_evaluate/bfrSurfaceEvaluator.h": "01957eabf59a1f6dde740f5b8d2e675d131db10ee680cfeaa4471cba6015c25a",
+    "regression/bfr_evaluate/farPatchEvaluator.cpp": "000007660614ad024dafd5301c0b647b1d64500c163d719ffd0209c2c5f971f3",
+    "regression/bfr_evaluate/farPatchEvaluator.h": "9f03f9424af1a32175a4b6548a1fb95b14a5ca5a57329a04d0794fe6647e041d",
+    "regression/bfr_evaluate/init_shapes.h": "e37bf798da2d7baaed1313f4efd51acdabaad63d2bb311b4d15455d1286db231",
+    "regression/bfr_evaluate/init_shapes_all.h": "d10243ebea5ef712f549c9d4d2d2348dc09afd801a1a86b30d80792abc7670a6",
+    "regression/bfr_evaluate/main.cpp": "b39da0d04278be511aeaccdd3ce4bb825379c3d02f6c4d145f760f429651bba0",
+    "regression/bfr_evaluate/types.h": "ffd93a3f47f3cc27dcb8773cc872b8a995bbc818daee441a3ba81098a932d4e9",
+    "tutorials/bfr/CMakeLists.txt": "4b9a861d6f5ab5c3e6cd3409053c78979b8d759aa6608139d5fffa038d7ec761",
+    "tutorials/bfr/tutorial_1_1/CMakeLists.txt": "e9e889616e37a2609550cb714050a4c0e31fe314d85e439e8586dc4a26c60baa",
+    "tutorials/bfr/tutorial_1_1/bfr_tutorial_1_1.cpp": "48e9b8b8986300dda06ad4e79425dc13ab95ba7c35dbd7fd79866453af792f35",
+    "tutorials/bfr/tutorial_1_1/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_1_1/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_1_2/CMakeLists.txt": "55528f2bc4a5c87b56bf8227626e0e91639b192a7a0a912261b26757f9ee0f20",
+    "tutorials/bfr/tutorial_1_2/bfr_tutorial_1_2.cpp": "1265e83e9205d0a68c7887b01fa486311c520d63a55523265897605686c4254d",
+    "tutorials/bfr/tutorial_1_2/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_1_2/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_1_3/CMakeLists.txt": "d239b768513bc8fff5afdf51dfa94cdaeb1af2a87c3dcc0a362093153c5d63a0",
+    "tutorials/bfr/tutorial_1_3/bfr_tutorial_1_3.cpp": "683aa05b3565e5bdcbbae1bd2d3c9a5e96960940f55c5af2fe02d9319ba2d1f7",
+    "tutorials/bfr/tutorial_1_3/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_1_3/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_1_4/CMakeLists.txt": "cb929adcf72f7fe3ee9fbdc2e0e13c438e5a84d33e594d4e87720a582b046182",
+    "tutorials/bfr/tutorial_1_4/bfr_tutorial_1_4.cpp": "14febbf30db5f4b698cfa75c5e36f406c711adfc95829bbd4d97bb2a5f8cb500",
+    "tutorials/bfr/tutorial_1_4/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_1_4/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_1_5/CMakeLists.txt": "9f8a48f994f779783b4cd47f74b023a6a5737c158aac908653971c548e45a6f1",
+    "tutorials/bfr/tutorial_1_5/bfr_tutorial_1_5.cpp": "f176bcbfa44390e6474a9c0bbefbecc7f9d3616271bfcaf6d69ba201fb62d352",
+    "tutorials/bfr/tutorial_1_5/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_1_5/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_2_1/CMakeLists.txt": "03503f8ba50f45bcc3ce022932e28da2ed945342a1796e27cd0fd15804a7ba8a",
+    "tutorials/bfr/tutorial_2_1/bfr_tutorial_2_1.cpp": "6b48c1c5b131796f3ec004013c2cdf8b1a2d28a99df29b65e7092c88710cc0bc",
+    "tutorials/bfr/tutorial_2_1/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_2_1/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_2_2/CMakeLists.txt": "bf249d55d5db7b7897c28d0fb82953d6d5be50bc264842269794c55e7e610384",
+    "tutorials/bfr/tutorial_2_2/bfr_tutorial_2_2.cpp": "9c2b66d477d4d74d54c410e5f5cd099d6bee7815f83bfd98ecd5faf2b0bab551",
+    "tutorials/bfr/tutorial_2_2/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_2_2/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_3_1/CMakeLists.txt": "d554cd2776e3f75f4cd97ed7b773c35d4b2391ae173e7ad7f95a9e66444cd29a",
+    "tutorials/bfr/tutorial_3_1/bfr_tutorial_3_1.cpp": "88c38ed7396bbea76f71fd3317725c571354ae0b50df6fbb839b13b36eecc81c",
+    "tutorials/bfr/tutorial_3_1/customSurfaceFactory.cpp": "9a0120f42d2322dfa462e5952ea816ed8861f97c42fc3e1f6a0dc5cdd9a28a04",
+    "tutorials/bfr/tutorial_3_1/customSurfaceFactory.h": "7ee3a5637a6ec320f01d146880b340234424417da31f54650e631310e538b22c",
+    "tutorials/bfr/tutorial_3_1/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_3_1/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99",
+    "tutorials/bfr/tutorial_3_2/CMakeLists.txt": "1b710c49d37da7455a1d137c79166f56058c2b44646da825ea5698602ba05d7a",
+    "tutorials/bfr/tutorial_3_2/bfr_tutorial_3_2.cpp": "ea9908d9b10bf83822d605c379e3d1d3a02ff5f7f6729091617f87dae3f1bedd",
+    "tutorials/bfr/tutorial_3_2/meshLoader.h": "9c4428ee307542c739aac62900f3146755372adddc6ad72e11bab6b5179d9b33",
+    "tutorials/bfr/tutorial_3_2/objWriter.h": "843355a39f08e99e26802e077cea6b6548164d94a3ffb89b993c1bf9b4bddc99"
+  },
+  "modes": {
+    "CMakeLists.txt": "100644",
+    "LICENSE.txt": "100644",
+    "NOTICE.txt": "100644",
+    "README.md": "100644",
+    "opensubdiv/CMakeLists.txt": "100644",
+    "opensubdiv/bfr/CMakeLists.txt": "100644",
+    "opensubdiv/bfr/faceSurface.cpp": "100644",
+    "opensubdiv/bfr/faceSurface.h": "100644",
+    "opensubdiv/bfr/faceTopology.cpp": "100644",
+    "opensubdiv/bfr/faceTopology.h": "100644",
+    "opensubdiv/bfr/faceVertex.cpp": "100644",
+    "opensubdiv/bfr/faceVertex.h": "100644",
+    "opensubdiv/bfr/faceVertexSubset.h": "100644",
+    "opensubdiv/bfr/hash.cpp": "100644",
+    "opensubdiv/bfr/hash.h": "100644",
+    "opensubdiv/bfr/irregularPatchBuilder.cpp": "100644",
+    "opensubdiv/bfr/irregularPatchBuilder.h": "100644",
+    "opensubdiv/bfr/irregularPatchType.h": "100644",
+    "opensubdiv/bfr/limits.h": "100644",
+    "opensubdiv/bfr/parameterization.cpp": "100644",
+    "opensubdiv/bfr/parameterization.h": "100644",
+    "opensubdiv/bfr/patchTree.cpp": "100644",
+    "opensubdiv/bfr/patchTree.h": "100644",
+    "opensubdiv/bfr/patchTreeBuilder.cpp": "100644",
+    "opensubdiv/bfr/patchTreeBuilder.h": "100644",
+    "opensubdiv/bfr/pointOperations.h": "100644",
+    "opensubdiv/bfr/refinerSurfaceFactory.cpp": "100644",
+    "opensubdiv/bfr/refinerSurfaceFactory.h": "100644",
+    "opensubdiv/bfr/regularPatchBuilder.cpp": "100644",
+    "opensubdiv/bfr/regularPatchBuilder.h": "100644",
+    "opensubdiv/bfr/surface.cpp": "100644",
+    "opensubdiv/bfr/surface.h": "100644",
+    "opensubdiv/bfr/surfaceData.cpp": "100644",
+    "opensubdiv/bfr/surfaceData.h": "100644",
+    "opensubdiv/bfr/surfaceFactory.cpp": "100644",
+    "opensubdiv/bfr/surfaceFactory.h": "100644",
+    "opensubdiv/bfr/surfaceFactoryCache.cpp": "100644",
+    "opensubdiv/bfr/surfaceFactoryCache.h": "100644",
+    "opensubdiv/bfr/surfaceFactoryMeshAdapter.h": "100644",
+    "opensubdiv/bfr/tessellation.cpp": "100644",
+    "opensubdiv/bfr/tessellation.h": "100644",
+    "opensubdiv/bfr/vertexDescriptor.cpp": "100644",
+    "opensubdiv/bfr/vertexDescriptor.h": "100644",
+    "opensubdiv/bfr/vertexTag.h": "100644",
+    "opensubdiv/far/CMakeLists.txt": "100644",
+    "opensubdiv/far/bilinearPatchBuilder.cpp": "100644",
+    "opensubdiv/far/bilinearPatchBuilder.h": "100644",
+    "opensubdiv/far/catmarkPatchBuilder.cpp": "100644",
+    "opensubdiv/far/catmarkPatchBuilder.h": "100644",
+    "opensubdiv/far/error.cpp": "100644",
+    "opensubdiv/far/error.h": "100644",
+    "opensubdiv/far/loopPatchBuilder.cpp": "100644",
+    "opensubdiv/far/loopPatchBuilder.h": "100644",
+    "opensubdiv/far/patchBasis.cpp": "100644",
+    "opensubdiv/far/patchBasis.h": "100644",
+    "opensubdiv/far/patchBuilder.cpp": "100644",
+    "opensubdiv/far/patchBuilder.h": "100644",
+    "opensubdiv/far/patchDescriptor.cpp": "100644",
+    "opensubdiv/far/patchDescriptor.h": "100644",
+    "opensubdiv/far/patchMap.cpp": "100644",
+    "opensubdiv/far/patchMap.h": "100644",
+    "opensubdiv/far/patchParam.h": "100644",
+    "opensubdiv/far/patchTable.cpp": "100644",
+    "opensubdiv/far/patchTable.h": "100644",
+    "opensubdiv/far/patchTableFactory.cpp": "100644",
+    "opensubdiv/far/patchTableFactory.h": "100644",
+    "opensubdiv/far/primvarRefiner.h": "100644",
+    "opensubdiv/far/ptexIndices.cpp": "100644",
+    "opensubdiv/far/ptexIndices.h": "100644",
+    "opensubdiv/far/sparseMatrix.h": "100644",
+    "opensubdiv/far/stencilBuilder.cpp": "100644",
+    "opensubdiv/far/stencilBuilder.h": "100644",
+    "opensubdiv/far/stencilTable.cpp": "100644",
+    "opensubdiv/far/stencilTable.h": "100644",
+    "opensubdiv/far/stencilTableFactory.cpp": "100644",
+    "opensubdiv/far/stencilTableFactory.h": "100644",
+    "opensubdiv/far/topologyDescriptor.cpp": "100644",
+    "opensubdiv/far/topologyDescriptor.h": "100644",
+    "opensubdiv/far/topologyLevel.h": "100644",
+    "opensubdiv/far/topologyRefiner.cpp": "100644",
+    "opensubdiv/far/topologyRefiner.h": "100644",
+    "opensubdiv/far/topologyRefinerFactory.cpp": "100644",
+    "opensubdiv/far/topologyRefinerFactory.h": "100644",
+    "opensubdiv/far/types.h": "100644",
+    "opensubdiv/hbr/CMakeLists.txt": "100644",
+    "opensubdiv/hbr/allocator.h": "100644",
+    "opensubdiv/hbr/bilinear.h": "100644",
+    "opensubdiv/hbr/catmark.h": "100644",
+    "opensubdiv/hbr/cornerEdit.h": "100644",
+    "opensubdiv/hbr/creaseEdit.h": "100644",
+    "opensubdiv/hbr/face.h": "100644",
+    "opensubdiv/hbr/faceEdit.h": "100644",
+    "opensubdiv/hbr/fvarData.h": "100644",
+    "opensubdiv/hbr/fvarEdit.h": "100644",
+    "opensubdiv/hbr/halfedge.h": "100644",
+    "opensubdiv/hbr/hierarchicalEdit.h": "100644",
+    "opensubdiv/hbr/holeEdit.h": "100644",
+    "opensubdiv/hbr/loop.h": "100644",
+    "opensubdiv/hbr/mesh.h": "100644",
+    "opensubdiv/hbr/subdivision.h": "100644",
+    "opensubdiv/hbr/vertex.h": "100644",
+    "opensubdiv/hbr/vertexEdit.h": "100644",
+    "opensubdiv/osd/Android.mk": "100644",
+    "opensubdiv/osd/CMakeLists.txt": "100644",
+    "opensubdiv/osd/bufferDescriptor.h": "100644",
+    "opensubdiv/osd/clD3D11VertexBuffer.cpp": "100644",
+    "opensubdiv/osd/clD3D11VertexBuffer.h": "100644",
+    "opensubdiv/osd/clEvaluator.cpp": "100644",
+    "opensubdiv/osd/clEvaluator.h": "100644",
+    "opensubdiv/osd/clGLVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/clGLVertexBuffer.h": "100644",
+    "opensubdiv/osd/clKernel.cl": "100644",
+    "opensubdiv/osd/clPatchTable.cpp": "100644",
+    "opensubdiv/osd/clPatchTable.h": "100644",
+    "opensubdiv/osd/clVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/clVertexBuffer.h": "100644",
+    "opensubdiv/osd/cpuD3D11VertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cpuD3D11VertexBuffer.h": "100644",
+    "opensubdiv/osd/cpuEvaluator.cpp": "100644",
+    "opensubdiv/osd/cpuEvaluator.h": "100644",
+    "opensubdiv/osd/cpuGLVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cpuGLVertexBuffer.h": "100644",
+    "opensubdiv/osd/cpuKernel.cpp": "100644",
+    "opensubdiv/osd/cpuKernel.h": "100644",
+    "opensubdiv/osd/cpuPatchTable.cpp": "100644",
+    "opensubdiv/osd/cpuPatchTable.h": "100644",
+    "opensubdiv/osd/cpuVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cpuVertexBuffer.h": "100644",
+    "opensubdiv/osd/cudaD3D11VertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cudaD3D11VertexBuffer.h": "100644",
+    "opensubdiv/osd/cudaEvaluator.cpp": "100644",
+    "opensubdiv/osd/cudaEvaluator.h": "100644",
+    "opensubdiv/osd/cudaGLVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cudaGLVertexBuffer.h": "100644",
+    "opensubdiv/osd/cudaKernel.cu": "100644",
+    "opensubdiv/osd/cudaPatchTable.cpp": "100644",
+    "opensubdiv/osd/cudaPatchTable.h": "100644",
+    "opensubdiv/osd/cudaVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/cudaVertexBuffer.h": "100644",
+    "opensubdiv/osd/d3d11ComputeEvaluator.cpp": "100644",
+    "opensubdiv/osd/d3d11ComputeEvaluator.h": "100644",
+    "opensubdiv/osd/d3d11LegacyGregoryPatchTable.cpp": "100644",
+    "opensubdiv/osd/d3d11LegacyGregoryPatchTable.h": "100644",
+    "opensubdiv/osd/d3d11Mesh.h": "100644",
+    "opensubdiv/osd/d3d11PatchTable.cpp": "100644",
+    "opensubdiv/osd/d3d11PatchTable.h": "100644",
+    "opensubdiv/osd/d3d11VertexBuffer.cpp": "100644",
+    "opensubdiv/osd/d3d11VertexBuffer.h": "100644",
+    "opensubdiv/osd/glComputeEvaluator.cpp": "100644",
+    "opensubdiv/osd/glComputeEvaluator.h": "100644",
+    "opensubdiv/osd/glLegacyGregoryPatchTable.cpp": "100644",
+    "opensubdiv/osd/glLegacyGregoryPatchTable.h": "100644",
+    "opensubdiv/osd/glMesh.h": "100644",
+    "opensubdiv/osd/glPatchTable.cpp": "100644",
+    "opensubdiv/osd/glPatchTable.h": "100644",
+    "opensubdiv/osd/glVertexBuffer.cpp": "100644",
+    "opensubdiv/osd/glVertexBuffer.h": "100644",
+    "opensubdiv/osd/glXFBEvaluator.cpp": "100644",
+    "opensubdiv/osd/glXFBEvaluator.h": "100644",
+    "opensubdiv/osd/glslComputeKernel.glsl": "100644",
+    "opensubdiv/osd/glslPatchBSpline.glsl": "100644",
+    "opensubdiv/osd/glslPatchBoxSplineTriangle.glsl": "100644",
+    "opensubdiv/osd/glslPatchCommon.glsl": "100644",
+    "opensubdiv/osd/glslPatchCommonTess.glsl": "100644",
+    "opensubdiv/osd/glslPatchGregory.glsl": "100644",
+    "opensubdiv/osd/glslPatchGregoryBasis.glsl": "100644",
+    "opensubdiv/osd/glslPatchGregoryTriangle.glsl": "100644",
+    "opensubdiv/osd/glslPatchLegacy.glsl": "100644",
+    "opensubdiv/osd/glslPatchShaderSource.cpp": "100644",
+    "opensubdiv/osd/glslPatchShaderSource.h": "100644",
+    "opensubdiv/osd/glslXFBKernel.glsl": "100644",
+    "opensubdiv/osd/hlslComputeKernel.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchBSpline.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchBoxSplineTriangle.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchCommon.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchCommonTess.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchGregory.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchGregoryBasis.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchGregoryTriangle.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchLegacy.hlsl": "100644",
+    "opensubdiv/osd/hlslPatchShaderSource.cpp": "100644",
+    "opensubdiv/osd/hlslPatchShaderSource.h": "100644",
+    "opensubdiv/osd/mesh.h": "100644",
+    "opensubdiv/osd/mtlCommon.h": "100644",
+    "opensubdiv/osd/mtlComputeEvaluator.h": "100644",
+    "opensubdiv/osd/mtlComputeEvaluator.mm": "100644",
+    "opensubdiv/osd/mtlComputeKernel.metal": "100644",
+    "opensubdiv/osd/mtlLegacyGregoryPatchTable.h": "100644",
+    "opensubdiv/osd/mtlLegacyGregoryPatchTable.mm": "100644",
+    "opensubdiv/osd/mtlMesh.h": "100644",
+    "opensubdiv/osd/mtlMesh.mm": "100644",
+    "opensubdiv/osd/mtlPatchBSpline.metal": "100644",
+    "opensubdiv/osd/mtlPatchBoxSplineTriangle.metal": "100644",
+    "opensubdiv/osd/mtlPatchCommon.metal": "100644",
+    "opensubdiv/osd/mtlPatchCommonTess.metal": "100644",
+    "opensubdiv/osd/mtlPatchGregory.metal": "100644",
+    "opensubdiv/osd/mtlPatchGregoryBasis.metal": "100644",
+    "opensubdiv/osd/mtlPatchGregoryTriangle.metal": "100644",
+    "opensubdiv/osd/mtlPatchLegacy.metal": "100644",
+    "opensubdiv/osd/mtlPatchShaderSource.h": "100644",
+    "opensubdiv/osd/mtlPatchShaderSource.mm": "100644",
+    "opensubdiv/osd/mtlPatchTable.h": "100644",
+    "opensubdiv/osd/mtlPatchTable.mm": "100644",
+    "opensubdiv/osd/mtlVertexBuffer.h": "100644",
+    "opensubdiv/osd/mtlVertexBuffer.mm": "100644",
+    "opensubdiv/osd/nonCopyable.h": "100644",
+    "opensubdiv/osd/ompEvaluator.cpp": "100644",
+    "opensubdiv/osd/ompEvaluator.h": "100644",
+    "opensubdiv/osd/ompKernel.cpp": "100644",
+    "opensubdiv/osd/ompKernel.h": "100644",
+    "opensubdiv/osd/opencl.h": "100644",
+    "opensubdiv/osd/opengl.h": "100644",
+    "opensubdiv/osd/patchBasis.h": "100644",
+    "opensubdiv/osd/patchBasisTypes.h": "100644",
+    "opensubdiv/osd/tbbEvaluator.cpp": "100644",
+    "opensubdiv/osd/tbbEvaluator.h": "100644",
+    "opensubdiv/osd/tbbKernel.cpp": "100644",
+    "opensubdiv/osd/tbbKernel.h": "100644",
+    "opensubdiv/osd/types.h": "100644",
+    "opensubdiv/sdc/CMakeLists.txt": "100644",
+    "opensubdiv/sdc/bilinearScheme.h": "100644",
+    "opensubdiv/sdc/catmarkScheme.h": "100644",
+    "opensubdiv/sdc/crease.cpp": "100644",
+    "opensubdiv/sdc/crease.h": "100644",
+    "opensubdiv/sdc/loopScheme.h": "100644",
+    "opensubdiv/sdc/options.h": "100644",
+    "opensubdiv/sdc/scheme.h": "100644",
+    "opensubdiv/sdc/typeTraits.cpp": "100644",
+    "opensubdiv/sdc/types.h": "100644",
+    "opensubdiv/version.cpp": "100644",
+    "opensubdiv/version.h": "100644",
+    "opensubdiv/vtr/CMakeLists.txt": "100644",
+    "opensubdiv/vtr/array.h": "100644",
+    "opensubdiv/vtr/componentInterfaces.h": "100644",
+    "opensubdiv/vtr/fvarLevel.cpp": "100644",
+    "opensubdiv/vtr/fvarLevel.h": "100644",
+    "opensubdiv/vtr/fvarRefinement.cpp": "100644",
+    "opensubdiv/vtr/fvarRefinement.h": "100644",
+    "opensubdiv/vtr/level.cpp": "100644",
+    "opensubdiv/vtr/level.h": "100644",
+    "opensubdiv/vtr/quadRefinement.cpp": "100644",
+    "opensubdiv/vtr/quadRefinement.h": "100644",
+    "opensubdiv/vtr/refinement.cpp": "100644",
+    "opensubdiv/vtr/refinement.h": "100644",
+    "opensubdiv/vtr/sparseSelector.cpp": "100644",
+    "opensubdiv/vtr/sparseSelector.h": "100644",
+    "opensubdiv/vtr/stackBuffer.h": "100644",
+    "opensubdiv/vtr/triRefinement.cpp": "100644",
+    "opensubdiv/vtr/triRefinement.h": "100644",
+    "opensubdiv/vtr/types.h": "100644",
+    "regression/bfr_evaluate/CMakeLists.txt": "100644",
+    "regression/bfr_evaluate/bfrSurfaceEvaluator.cpp": "100644",
+    "regression/bfr_evaluate/bfrSurfaceEvaluator.h": "100644",
+    "regression/bfr_evaluate/farPatchEvaluator.cpp": "100644",
+    "regression/bfr_evaluate/farPatchEvaluator.h": "100644",
+    "regression/bfr_evaluate/init_shapes.h": "100644",
+    "regression/bfr_evaluate/init_shapes_all.h": "100644",
+    "regression/bfr_evaluate/main.cpp": "100644",
+    "regression/bfr_evaluate/types.h": "100644",
+    "tutorials/bfr/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_1/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_1/bfr_tutorial_1_1.cpp": "100644",
+    "tutorials/bfr/tutorial_1_1/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_1_1/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_1_2/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_2/bfr_tutorial_1_2.cpp": "100644",
+    "tutorials/bfr/tutorial_1_2/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_1_2/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_1_3/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_3/bfr_tutorial_1_3.cpp": "100644",
+    "tutorials/bfr/tutorial_1_3/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_1_3/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_1_4/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_4/bfr_tutorial_1_4.cpp": "100644",
+    "tutorials/bfr/tutorial_1_4/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_1_4/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_1_5/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_1_5/bfr_tutorial_1_5.cpp": "100644",
+    "tutorials/bfr/tutorial_1_5/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_1_5/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_2_1/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_2_1/bfr_tutorial_2_1.cpp": "100644",
+    "tutorials/bfr/tutorial_2_1/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_2_1/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_2_2/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_2_2/bfr_tutorial_2_2.cpp": "100644",
+    "tutorials/bfr/tutorial_2_2/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_2_2/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_3_1/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_3_1/bfr_tutorial_3_1.cpp": "100644",
+    "tutorials/bfr/tutorial_3_1/customSurfaceFactory.cpp": "100644",
+    "tutorials/bfr/tutorial_3_1/customSurfaceFactory.h": "100644",
+    "tutorials/bfr/tutorial_3_1/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_3_1/objWriter.h": "100644",
+    "tutorials/bfr/tutorial_3_2/CMakeLists.txt": "100644",
+    "tutorials/bfr/tutorial_3_2/bfr_tutorial_3_2.cpp": "100644",
+    "tutorials/bfr/tutorial_3_2/meshLoader.h": "100644",
+    "tutorials/bfr/tutorial_3_2/objWriter.h": "100644"
+  },
+  "excluded": [
+    {
+      "path": ".gitignore",
+      "git_mode": "100755",
+      "blob": "fad22d8321e1c48cde10f743f98c5f6a4a158575"
+    },
+    {
+      "path": "OpenSubdivCLA_corporate.pdf",
+      "git_mode": "100644",
+      "blob": "59b343c738755285028fd7cf27e014daada979bd"
+    },
+    {
+      "path": "OpenSubdivCLA_individual.pdf",
+      "git_mode": "100644",
+      "blob": "e068f564cb3b3f831afedcb878b43742188420c3"
+    },
+    {
+      "path": "azure-pipelines.yml",
+      "git_mode": "100644",
+      "blob": "4c44e2da0d4a835b70c32f69abb01732933a7e54"
+    },
+    {
+      "path": "build_scripts/build_osd.py",
+      "git_mode": "100644",
+      "blob": "78bd215e8c71f052147001c1eb85c4cb907cfd61"
+    },
+    {
+      "path": "cmake/FindCLEW.cmake",
+      "git_mode": "100644",
+      "blob": "c51f7b1da1db9cdbff2451b8eb53d90d8292987b"
+    },
+    {
+      "path": "cmake/FindDXSDK.cmake",
+      "git_mode": "100644",
+      "blob": "697a671c0e33fdba5ea0ecd75638fa01c7800339"
+    },
+    {
+      "path": "cmake/FindDocutils.cmake",
+      "git_mode": "100644",
+      "blob": "b267a8992fd20054206fbd6b2feadb1e96b1528c"
+    },
+    {
+      "path": "cmake/FindGLEW.cmake",
+      "git_mode": "100644",
+      "blob": "4e52b56d7223bbae1a68f35e537e286c5b9d72ac"
+    },
+    {
+      "path": "cmake/FindGLFW.cmake",
+      "git_mode": "100644",
+      "blob": "cef090144ce40ab5c354a0323da54bf28e4ed3b3"
+    },
+    {
+      "path": "cmake/FindMetal.cmake",
+      "git_mode": "100644",
+      "blob": "c99267beb2051d093f9018dc530004ffeb2788aa"
+    },
+    {
+      "path": "cmake/FindOpenCL.cmake",
+      "git_mode": "100644",
+      "blob": "7bcdcbe5ae160745a99cb0f3b43aae89c5d82074"
+    },
+    {
+      "path": "cmake/FindOpenGLES.cmake",
+      "git_mode": "100644",
+      "blob": "c25c3cb397baf2554c0af187bac86ea5c566d53f"
+    },
+    {
+      "path": "cmake/FindPTex.cmake",
+      "git_mode": "100644",
+      "blob": "282e2065cda6df4b1de565aef6cba371fb6a9866"
+    },
+    {
+      "path": "documentation/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "80b903bd1e7fa6a8bdb6b2cb03e370d2e6aa3b05"
+    },
+    {
+      "path": "documentation/OpenSubdiv.doxy",
+      "git_mode": "100644",
+      "blob": "425cfc3e1de5027b441c1acb47f58fdc291bced2"
+    },
+    {
+      "path": "documentation/README",
+      "git_mode": "100644",
+      "blob": "8a163f6e76345856b527ed0156591c2fa4e8ea1c"
+    },
+    {
+      "path": "documentation/additional_resources.rst",
+      "git_mode": "100644",
+      "blob": "16dc3b97a9ba69bda4325c1dc6f4492d3afcaa17"
+    },
+    {
+      "path": "documentation/api_overview.rst",
+      "git_mode": "100644",
+      "blob": "7eb6a0d13520d550351b6edcca03766ab7e0cf77"
+    },
+    {
+      "path": "documentation/bfr_overview.rst",
+      "git_mode": "100644",
+      "blob": "3f50e71e390424d4954d111a66e8982e38cde0b5"
+    },
+    {
+      "path": "documentation/cmake_build.rst",
+      "git_mode": "100644",
+      "blob": "e522114e1e17b80796eed341b5230c5b60708b13"
+    },
+    {
+      "path": "documentation/code_examples.rst",
+      "git_mode": "100644",
+      "blob": "186a61e72986ab9615afbc3b55668831c5292ef4"
+    },
+    {
+      "path": "documentation/compatibility.rst",
+      "git_mode": "100644",
+      "blob": "ab170d7e645e2c2898119c88c2912b9a93453bc6"
+    },
+    {
+      "path": "documentation/contributing.rst",
+      "git_mode": "100644",
+      "blob": "3f20f9ca721e707c71a3ee5557a78b5d339ceb62"
+    },
+    {
+      "path": "documentation/css/default.css",
+      "git_mode": "100644",
+      "blob": "346a0062da1b273380b22a8db85acd787090d53d"
+    },
+    {
+      "path": "documentation/css/doxy.css",
+      "git_mode": "100644",
+      "blob": "8c4535d103fd97ebe1cff394094146b82b2d99fe"
+    },
+    {
+      "path": "documentation/css/flavor.css",
+      "git_mode": "100644",
+      "blob": "dafb3ef2e8f853a21b3ce810f42891e600ceaf17"
+    },
+    {
+      "path": "documentation/css/pygments.css",
+      "git_mode": "100644",
+      "blob": "23c290f1310c202d5eab599fabaf76b483813ede"
+    },
+    {
+      "path": "documentation/css/renderman-university.css",
+      "git_mode": "100644",
+      "blob": "4521e44059c4e09ee6ceafe7ea0b2b421a7a4b9f"
+    },
+    {
+      "path": "documentation/css/rst.css",
+      "git_mode": "100644",
+      "blob": "fbfe53daac0cf15e996e4b35de455c1b560fe5dd"
+    },
+    {
+      "path": "documentation/diagrams.odg",
+      "git_mode": "100755",
+      "blob": "6c776d10f2f77c1aa96fd6d5edeb789ea567d3ef"
+    },
+    {
+      "path": "documentation/dxptexviewer.rst",
+      "git_mode": "100644",
+      "blob": "b1e3a94d6b8e462f55612463268750c7c2babf88"
+    },
+    {
+      "path": "documentation/dxviewer.rst",
+      "git_mode": "100644",
+      "blob": "bc5551e4eadf1d5a4ccb3f792b638bfa52a6a2a0"
+    },
+    {
+      "path": "documentation/examples_see_also.rst",
+      "git_mode": "100644",
+      "blob": "0e5cc4c8ffea4d6886c83522ec76a69d63ba5c2e"
+    },
+    {
+      "path": "documentation/far_overview.rst",
+      "git_mode": "100644",
+      "blob": "aa10213a00964bb3047e80b06e483453717c1f49"
+    },
+    {
+      "path": "documentation/getting_started.rst",
+      "git_mode": "100644",
+      "blob": "01bca2b91c4de6e0a335f05bce14e2f76daf8d43"
+    },
+    {
+      "path": "documentation/glevallimit.rst",
+      "git_mode": "100644",
+      "blob": "e8ed3d5b64b493018db736ebf04f2e22d1352fb1"
+    },
+    {
+      "path": "documentation/glfvarviewer.rst",
+      "git_mode": "100644",
+      "blob": "b30d19cfe326e34be65a1e24df88ac8f4f444d8b"
+    },
+    {
+      "path": "documentation/glpainttest.rst",
+      "git_mode": "100644",
+      "blob": "1bb8e9374f81168ba85b8d1765806e6df49f0c94"
+    },
+    {
+      "path": "documentation/glptexviewer.rst",
+      "git_mode": "100644",
+      "blob": "1acb53b50cc3e4c155f74cce58380bfbbc8bb8f0"
+    },
+    {
+      "path": "documentation/glsharetopology.rst",
+      "git_mode": "100644",
+      "blob": "1f0dea1e03e465816a7709e6a0f2caab7eca8307"
+    },
+    {
+      "path": "documentation/glstencilviewer.rst",
+      "git_mode": "100644",
+      "blob": "ab2e9ac626f62ce1a2a5e19b7c01fb7a637570ef"
+    },
+    {
+      "path": "documentation/glviewer.rst",
+      "git_mode": "100644",
+      "blob": "60ab51d201b46cca3011023c49da691dc7eb12e8"
+    },
+    {
+      "path": "documentation/hbr_overview.rst",
+      "git_mode": "100644",
+      "blob": "2bb288b441b19bd0acad9e42062fe3e85fc2d153"
+    },
+    {
+      "path": "documentation/hedits.rst",
+      "git_mode": "100644",
+      "blob": "54f430afa18d87a03fe52bb71a91e013b37995cc"
+    },
+    {
+      "path": "documentation/images/OsdCreateSequence.png",
+      "git_mode": "100644",
+      "blob": "748f8738d2027cd02256c738745a0d029b509b3e"
+    },
+    {
+      "path": "documentation/images/OsdRefineDrawSequence.png",
+      "git_mode": "100644",
+      "blob": "f2beea1b96096b31e4961d0fe18da90f7a05709a"
+    },
+    {
+      "path": "documentation/images/adaptive.gif",
+      "git_mode": "100644",
+      "blob": "81ddd50789560300bddf1fbccbf2e379ed98c908"
+    },
+    {
+      "path": "documentation/images/api_data_flow.png",
+      "git_mode": "100644",
+      "blob": "69a10874071629fd81ff1deb19bf340868b64308"
+    },
+    {
+      "path": "documentation/images/api_layers.png",
+      "git_mode": "100644",
+      "blob": "1dd7fb2224bbfa91f906f3e368434ad35e391c0d"
+    },
+    {
+      "path": "documentation/images/api_layers_3_0.png",
+      "git_mode": "100644",
+      "blob": "104ebd0609eb5d2934e6701a4af812baa8d9cbfd"
+    },
+    {
+      "path": "documentation/images/api_mesh_data.png",
+      "git_mode": "100644",
+      "blob": "f173ee6c30e485b00a5a8f489948d323a48ae090"
+    },
+    {
+      "path": "documentation/images/api_osd_modules.png",
+      "git_mode": "100644",
+      "blob": "71ecd47393b39c5da6bd2039a49777a8d0d2e6e5"
+    },
+    {
+      "path": "documentation/images/api_representations.png",
+      "git_mode": "100644",
+      "blob": "9ffc1c51cde76a67767439a27ba494575cdeba1b"
+    },
+    {
+      "path": "documentation/images/api_serialized_data.png",
+      "git_mode": "100644",
+      "blob": "15836a5bf5d8451baf83ac501a9bbe2d88c76e32"
+    },
+    {
+      "path": "documentation/images/api_workflows.png",
+      "git_mode": "100644",
+      "blob": "80d0fd9aedcc77410b0967638e97a9a87ca7d167"
+    },
+    {
+      "path": "documentation/images/background.jpg",
+      "git_mode": "100644",
+      "blob": "352a18a3a2f591d3b7054cb7e78c99512a9b16bd"
+    },
+    {
+      "path": "documentation/images/barb_1.jpg",
+      "git_mode": "100644",
+      "blob": "6e4843cf5eade3120eeb8c0f3d2ae37f8475db62"
+    },
+    {
+      "path": "documentation/images/basis_bezier.jpg",
+      "git_mode": "100644",
+      "blob": "d87df2b9da494449d7404bf395d40f0019de33cc"
+    },
+    {
+      "path": "documentation/images/basis_bspline.jpg",
+      "git_mode": "100644",
+      "blob": "ff83dfdc3c7ac9db2d879b7c0f5dd41d8a1040e3"
+    },
+    {
+      "path": "documentation/images/bfr_eval_surface.png",
+      "git_mode": "100644",
+      "blob": "05323ade3a1b81a7fcbdcc41cd87c948c35d7f0e"
+    },
+    {
+      "path": "documentation/images/bfr_eval_surfacefactory.png",
+      "git_mode": "100644",
+      "blob": "b3411f56620dba6e17949134200ff1a6c85c70fb"
+    },
+    {
+      "path": "documentation/images/bfr_param_patch_quad.png",
+      "git_mode": "100644",
+      "blob": "55de9361dcc098eeb08145feaf918e652589a9af"
+    },
+    {
+      "path": "documentation/images/bfr_param_patch_tri.png",
+      "git_mode": "100644",
+      "blob": "2fc9d8291d37d7ea4ef4291859bf0aadc8074705"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces.png",
+      "git_mode": "100644",
+      "blob": "9417c14872abde20b6154703bb2dcf39fba572dc"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_3.png",
+      "git_mode": "100644",
+      "blob": "771e239902c64ea71ee9aafe977f85143fecc39f"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_3_uv.png",
+      "git_mode": "100644",
+      "blob": "1a3033098f6b457f0a2a6659b0c8d375a1852a38"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_5.png",
+      "git_mode": "100644",
+      "blob": "dbae87cf2ead158d418cca1063f9edb421adb186"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_5_uv.png",
+      "git_mode": "100644",
+      "blob": "1e8d4f0afac5ab745e8121a7d1a182f7dc28a7c7"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_abc.png",
+      "git_mode": "100644",
+      "blob": "9536a2d24c9d466d866de922d5a527161c28b692"
+    },
+    {
+      "path": "documentation/images/bfr_param_subfaces_abc_uv.png",
+      "git_mode": "100644",
+      "blob": "5fcdb1eb83d7938356e917354312785bfb532775"
+    },
+    {
+      "path": "documentation/images/bfr_release_notes.jpg",
+      "git_mode": "100644",
+      "blob": "dd485c2ca4eda9ef28cdbc777ae67cab94095c2e"
+    },
+    {
+      "path": "documentation/images/bfr_tess_diff_edges_gpu.png",
+      "git_mode": "100644",
+      "blob": "5e232a66033a9559a3fa1f15a45e7b4e8a7caecf"
+    },
+    {
+      "path": "documentation/images/bfr_tess_diff_edges_osd.png",
+      "git_mode": "100644",
+      "blob": "84a32b6bfc01e6ae40113ee52c781c3e92af378b"
+    },
+    {
+      "path": "documentation/images/bfr_tess_diff_tri_gpu.png",
+      "git_mode": "100644",
+      "blob": "3701d92784d8b5ecea24bbb58bfb03db4d807642"
+    },
+    {
+      "path": "documentation/images/bfr_tess_diff_tri_osd.png",
+      "git_mode": "100644",
+      "blob": "67080622a4778efb7ed1705d922db41a8f8346a5"
+    },
+    {
+      "path": "documentation/images/bfr_tess_mXn_quad_A.png",
+      "git_mode": "100644",
+      "blob": "c981b7e26aff857dc100750c271654638fd97917"
+    },
+    {
+      "path": "documentation/images/bfr_tess_mXn_quad_B.png",
+      "git_mode": "100644",
+      "blob": "db806c91474cb0af194e23b685bfb816dae43052"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_pent_A.png",
+      "git_mode": "100644",
+      "blob": "856c722a28303dffaf8bf7d1afb705d3044aa1be"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_pent_B.png",
+      "git_mode": "100644",
+      "blob": "88d21cd1d45fd099125cc31ba630b0c151b9d613"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_quad_A.png",
+      "git_mode": "100644",
+      "blob": "3bad60068b1dda9e031eb29260465fe189e1324c"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_quad_B.png",
+      "git_mode": "100644",
+      "blob": "86a5ad51f3e0112afa48d5624c71d5cd54f1cc13"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_tri_A.png",
+      "git_mode": "100644",
+      "blob": "b8c01adb781089b21a9b329a3a905b14d625d9ed"
+    },
+    {
+      "path": "documentation/images/bfr_tess_nonuni_tri_B.png",
+      "git_mode": "100644",
+      "blob": "dc2aac717d6713f319916211e81a1e971a254302"
+    },
+    {
+      "path": "documentation/images/bfr_tess_pent_quads.png",
+      "git_mode": "100644",
+      "blob": "3611c546ed8753467c5250194cc2a0446c77bd7e"
+    },
+    {
+      "path": "documentation/images/bfr_tess_pent_tris.png",
+      "git_mode": "100644",
+      "blob": "5f54fc7d0df4ff41fa8ea8b950b3fda4b5c6bf8b"
+    },
+    {
+      "path": "documentation/images/bfr_tess_quad_order.png",
+      "git_mode": "100644",
+      "blob": "33399503734d4b28a5829876121e2311b4a388a1"
+    },
+    {
+      "path": "documentation/images/bfr_tess_quad_quads.png",
+      "git_mode": "100644",
+      "blob": "2212d6cd96beb20b6418069e9d413045812380c2"
+    },
+    {
+      "path": "documentation/images/bfr_tess_quad_tris.png",
+      "git_mode": "100644",
+      "blob": "f21b7d7af02ab2f0de4f11681bc4d94629aa8a24"
+    },
+    {
+      "path": "documentation/images/bfr_tess_tri_order.png",
+      "git_mode": "100644",
+      "blob": "80f1ceaa34b8f2700d7da674e7b3b644471831c5"
+    },
+    {
+      "path": "documentation/images/bfr_tess_uni_quad_5.png",
+      "git_mode": "100644",
+      "blob": "9e4d641215492b169824f4cfa5d5dcd5cdca59cf"
+    },
+    {
+      "path": "documentation/images/bfr_tess_uni_quad_8.png",
+      "git_mode": "100644",
+      "blob": "c1c6135f0ba86ce8ed6049f2ea75cd5b0d496590"
+    },
+    {
+      "path": "documentation/images/bfr_tess_uni_tri_5.png",
+      "git_mode": "100644",
+      "blob": "4d318c38031a4e92823bde19fe9ad600feccd207"
+    },
+    {
+      "path": "documentation/images/bfr_tess_uni_tri_8.png",
+      "git_mode": "100644",
+      "blob": "7bad5e3a979df9d72f21ef0e264a2dac47b11d2a"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_1_1.png",
+      "git_mode": "100644",
+      "blob": "09e97d7e62fef359766c93bead4c1da794a93974"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_1_2_a.png",
+      "git_mode": "100644",
+      "blob": "c12a07282f99388cde3f11ef846942f7a74d4c2d"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_1_2_b.png",
+      "git_mode": "100644",
+      "blob": "23d263d6d68b9d6ae17f61cfd60c5265a4b69751"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_1_2_c.png",
+      "git_mode": "100644",
+      "blob": "fd02fc28645f821c99d252685ccea2b99135e757"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_2_1_a.png",
+      "git_mode": "100644",
+      "blob": "430da2ce41917a4bcd4f283bfb3c6d25a9a787a7"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_2_1_b.png",
+      "git_mode": "100644",
+      "blob": "b18c831af5b6111de9325cd6cff978f66d75f53b"
+    },
+    {
+      "path": "documentation/images/bfr_tutorial_2_1_c.png",
+      "git_mode": "100644",
+      "blob": "3971f62aa2b31bfa341195502a2e0ffeb6a15930"
+    },
+    {
+      "path": "documentation/images/bowtie_vertex.png",
+      "git_mode": "100644",
+      "blob": "39487c7d68d46fc6538ae31b9b32fc29391d9019"
+    },
+    {
+      "path": "documentation/images/chaikin.png",
+      "git_mode": "100644",
+      "blob": "f3def024be915da6892c2ef07e928e1adf4d3831"
+    },
+    {
+      "path": "documentation/images/construction.png",
+      "git_mode": "100644",
+      "blob": "aea605fbd38492662264baf7108737ed449fe25d"
+    },
+    {
+      "path": "documentation/images/crease_editor.png",
+      "git_mode": "100644",
+      "blob": "810e25e025522418dc15b687f54ce3fb52bf97b9"
+    },
+    {
+      "path": "documentation/images/data_fvar_uv.jpg",
+      "git_mode": "100644",
+      "blob": "9e005e248d8cc24f98e144bccda99a872c2c3c9d"
+    },
+    {
+      "path": "documentation/images/data_fvar_xyz.jpg",
+      "git_mode": "100644",
+      "blob": "39bb80fe4412bf7c4fe240ed015a824a1e07ee42"
+    },
+    {
+      "path": "documentation/images/data_mesh_1.jpg",
+      "git_mode": "100644",
+      "blob": "6e6272bbeacb6b86f5e3cbf1c1b7927977a1a9ad"
+    },
+    {
+      "path": "documentation/images/data_mesh_2.jpg",
+      "git_mode": "100644",
+      "blob": "2ae178aa5560436e4fe93e9ab4bc3c134e701746"
+    },
+    {
+      "path": "documentation/images/data_mesh_top.png",
+      "git_mode": "100644",
+      "blob": "802e619830d8458529da7abb28b4e3b45bb97c89"
+    },
+    {
+      "path": "documentation/images/data_patch_1.jpg",
+      "git_mode": "100644",
+      "blob": "654b068fb5e82f118dc00fea7c4981fa44e798fe"
+    },
+    {
+      "path": "documentation/images/data_patch_2.jpg",
+      "git_mode": "100644",
+      "blob": "a8f0b81e68e638d57eccc54b76e1d035f09a7570"
+    },
+    {
+      "path": "documentation/images/data_patch_top.png",
+      "git_mode": "100644",
+      "blob": "ac23360cf1233d9620682faf44f4b6dc096fdc66"
+    },
+    {
+      "path": "documentation/images/data_pose_1.jpg",
+      "git_mode": "100644",
+      "blob": "5165eb692a3f170875b766737b03a6750fd0f438"
+    },
+    {
+      "path": "documentation/images/data_pose_2.jpg",
+      "git_mode": "100644",
+      "blob": "eb312c86c6fad7ee52a434e4146e9f4e7ad31f67"
+    },
+    {
+      "path": "documentation/images/data_pose_3.jpg",
+      "git_mode": "100644",
+      "blob": "ba40e10e126c53cb556f6dbd53ff4d21ebf3dced"
+    },
+    {
+      "path": "documentation/images/data_top_fvary.png",
+      "git_mode": "100644",
+      "blob": "f1de5f655d998d0cb7bf59b64a9a764e4787f903"
+    },
+    {
+      "path": "documentation/images/data_top_shape.png",
+      "git_mode": "100644",
+      "blob": "5fc77ef0f8de3aa286ee25a38814cd8662b03f11"
+    },
+    {
+      "path": "documentation/images/data_top_vertex.png",
+      "git_mode": "100644",
+      "blob": "d92b9c1551f0a90fe3e97fec45de0063ab925599"
+    },
+    {
+      "path": "documentation/images/data_varying_uv.jpg",
+      "git_mode": "100644",
+      "blob": "e120151ac9eaef7d29e08b61538578341c7a8826"
+    },
+    {
+      "path": "documentation/images/data_vertex_uv.jpg",
+      "git_mode": "100644",
+      "blob": "fe0faf506857bf4ff56b1a120be9e7e7ae749f02"
+    },
+    {
+      "path": "documentation/images/dxptexviewer.png",
+      "git_mode": "100755",
+      "blob": "5bb342bd5b1c15db5a2ff811b052bf788d060efb"
+    },
+    {
+      "path": "documentation/images/dxviewer.png",
+      "git_mode": "100755",
+      "blob": "de6810ed4e288bc8df937513f1debf8a0e39b6c8"
+    },
+    {
+      "path": "documentation/images/edge_loops.png",
+      "git_mode": "100644",
+      "blob": "dff3b01f06766b5ee3d082133710ad778412c5e5"
+    },
+    {
+      "path": "documentation/images/efficient_subdivision.png",
+      "git_mode": "100644",
+      "blob": "32a974d146cae546d8ef3c1a4dc5910f34b2f12b"
+    },
+    {
+      "path": "documentation/images/evalLimit_hedit0.jpg",
+      "git_mode": "100644",
+      "blob": "32f7955ee8a145eca87757ffd001358ba845080c"
+    },
+    {
+      "path": "documentation/images/eval_facevarying.png",
+      "git_mode": "100644",
+      "blob": "57798668faa24ab0b148b2e10933c69b55db6996"
+    },
+    {
+      "path": "documentation/images/eval_position.png",
+      "git_mode": "100644",
+      "blob": "15f9ad84e05e4b465d06f22aee1140f03e3f149a"
+    },
+    {
+      "path": "documentation/images/eval_varying.png",
+      "git_mode": "100644",
+      "blob": "674a038e946f54e03d3847664242000f2813749f"
+    },
+    {
+      "path": "documentation/images/face_winding.png",
+      "git_mode": "100644",
+      "blob": "e5592982c26e35d1c78a89b7bac6f2094013e87a"
+    },
+    {
+      "path": "documentation/images/far_legacy_sharp_corner_patch_false.png",
+      "git_mode": "100644",
+      "blob": "1b6766f0e6096150ea6d5884987abb343299d0c4"
+    },
+    {
+      "path": "documentation/images/far_legacy_sharp_corner_patch_true.png",
+      "git_mode": "100644",
+      "blob": "c45fdab39173e802ce15f46687e4ad05b455e6a6"
+    },
+    {
+      "path": "documentation/images/far_patchBoundary.png",
+      "git_mode": "100644",
+      "blob": "4f721e5d5a0c236d994bb9f2951dfda72fad92c3"
+    },
+    {
+      "path": "documentation/images/far_patchTransition.png",
+      "git_mode": "100644",
+      "blob": "b36ea8efd9c9ed16389909ff3872612cc4d0e35d"
+    },
+    {
+      "path": "documentation/images/far_patchUV.png",
+      "git_mode": "100644",
+      "blob": "22a3bd5bbfaed92c233a00b103463c846ba6cf8a"
+    },
+    {
+      "path": "documentation/images/far_patchtables.png",
+      "git_mode": "100644",
+      "blob": "7f75ef9b790eebac095f51f1526a50944182ef59"
+    },
+    {
+      "path": "documentation/images/far_patchtransitions.png",
+      "git_mode": "100644",
+      "blob": "adc6cf8acfd7f95d16f887f8781feea5be022f1d"
+    },
+    {
+      "path": "documentation/images/far_patchtypes.png",
+      "git_mode": "100644",
+      "blob": "5c7180bdfae822cf3e2ca612a48dfd45baf86133"
+    },
+    {
+      "path": "documentation/images/far_stencil0.png",
+      "git_mode": "100644",
+      "blob": "725531344a4917a12121ce314f5bea1ba1ac2b8d"
+    },
+    {
+      "path": "documentation/images/far_stencil1.png",
+      "git_mode": "100644",
+      "blob": "58a477940b1e3606dfdc7c7fb28d46cf7dc88b91"
+    },
+    {
+      "path": "documentation/images/far_stencil2.png",
+      "git_mode": "100644",
+      "blob": "26ce71f1d1515f477ace3fd8a62dcc57ea4572b1"
+    },
+    {
+      "path": "documentation/images/far_stencil3.png",
+      "git_mode": "100644",
+      "blob": "16ce92b299a13573f11bc88dbb2e7db47ae8167a"
+    },
+    {
+      "path": "documentation/images/far_stencil4.png",
+      "git_mode": "100644",
+      "blob": "a49cefeca4f367f15c339c0a25995e0592b28016"
+    },
+    {
+      "path": "documentation/images/far_stencil5.png",
+      "git_mode": "100644",
+      "blob": "b9a1e012517798b9aa5dfc7e71abd9726b175494"
+    },
+    {
+      "path": "documentation/images/far_stencil6.png",
+      "git_mode": "100644",
+      "blob": "90689c42eea152a62ebb78e1570c0fa80044d41b"
+    },
+    {
+      "path": "documentation/images/far_stencil7.png",
+      "git_mode": "100644",
+      "blob": "fd5735df2c389e7168f28ebe6e55bb42f45e7f43"
+    },
+    {
+      "path": "documentation/images/far_stencil8.png",
+      "git_mode": "100644",
+      "blob": "50f47fd37b0016c824b19489128701ca23ff5ef3"
+    },
+    {
+      "path": "documentation/images/far_tutorial_1_1.0.png",
+      "git_mode": "100644",
+      "blob": "e18edfd6948575209c3c01bd109d7dc2949702a4"
+    },
+    {
+      "path": "documentation/images/far_tutorial_2_1.0.png",
+      "git_mode": "100644",
+      "blob": "0bc548d818c88a86b0c176538ea7c2ba7e8df4d3"
+    },
+    {
+      "path": "documentation/images/far_tutorial_2_2.0.png",
+      "git_mode": "100644",
+      "blob": "c07dd82600122115b16cdb14fedbfdf470622c32"
+    },
+    {
+      "path": "documentation/images/far_tutorial_5_1.0.png",
+      "git_mode": "100644",
+      "blob": "cca4580786dad73e7c6b6db36b0f803f85f3b47a"
+    },
+    {
+      "path": "documentation/images/fvar_boundaries.png",
+      "git_mode": "100644",
+      "blob": "ab9fe40192a6e871f14f7b3cba26a9781e077e39"
+    },
+    {
+      "path": "documentation/images/fvar_corners_only.png",
+      "git_mode": "100644",
+      "blob": "dd14b99997f1fa8966d938135948c68f586730d7"
+    },
+    {
+      "path": "documentation/images/fvar_corners_plus1.png",
+      "git_mode": "100644",
+      "blob": "b2c8074671b0d16ac34796c2dfc55d1b4edef253"
+    },
+    {
+      "path": "documentation/images/fvar_hbr_dart.png",
+      "git_mode": "100644",
+      "blob": "e24adde05dada38c6e1324d3d3b245874c504e93"
+    },
+    {
+      "path": "documentation/images/fvar_hbr_integer.png",
+      "git_mode": "100644",
+      "blob": "e417a7634c2e359c74e45095e07ccc5d98156d56"
+    },
+    {
+      "path": "documentation/images/fvar_patch_linearall.png",
+      "git_mode": "100644",
+      "blob": "ee99196abb025caa4671686bf450a3d1fa29ac3a"
+    },
+    {
+      "path": "documentation/images/fvar_patch_linearnone.png",
+      "git_mode": "100644",
+      "blob": "f5cb7e7d259ce91b0dfc750c9582283293f09e91"
+    },
+    {
+      "path": "documentation/images/git_flow.png",
+      "git_mode": "100644",
+      "blob": "a8591552e9cded9f94a55af1dbb53942ea0058af"
+    },
+    {
+      "path": "documentation/images/gitflow.jpg",
+      "git_mode": "100644",
+      "blob": "425e13c34d2e2a77da37d6968bbf86d575761149"
+    },
+    {
+      "path": "documentation/images/glevallimit.jpg",
+      "git_mode": "100644",
+      "blob": "61b06fa663a9350f3ab464692e836bada204167c"
+    },
+    {
+      "path": "documentation/images/glsharetopology.png",
+      "git_mode": "100644",
+      "blob": "d367f896dd638bba33f577914b1a69e344374111"
+    },
+    {
+      "path": "documentation/images/glstencilviewer.png",
+      "git_mode": "100644",
+      "blob": "adca476a38c4a3980407cdab53a040b1e9336e3f"
+    },
+    {
+      "path": "documentation/images/glviewer.png",
+      "git_mode": "100644",
+      "blob": "4570ef4e11136b7c8c789ee33ff805896bbf18d6"
+    },
+    {
+      "path": "documentation/images/gtruck.png",
+      "git_mode": "100644",
+      "blob": "1ffb60952c3aabac2ce7cc3c5711cae53a47df52"
+    },
+    {
+      "path": "documentation/images/half_edge.png",
+      "git_mode": "100644",
+      "blob": "ddd4d1910cd7c6064de105addca81c94e53bcea5"
+    },
+    {
+      "path": "documentation/images/half_edge_cycle.png",
+      "git_mode": "100644",
+      "blob": "5ee95cb701592c04be1b9778ce8ddee4d65a4e25"
+    },
+    {
+      "path": "documentation/images/hbr_tutorial_2.0.png",
+      "git_mode": "100644",
+      "blob": "becab91961d676c383297718eaeb1eb7c67911b7"
+    },
+    {
+      "path": "documentation/images/hedit_example1.png",
+      "git_mode": "100644",
+      "blob": "21523248ddfc20827f3f5ac64b4ae8b7dacdf8d2"
+    },
+    {
+      "path": "documentation/images/hedit_example2.png",
+      "git_mode": "100644",
+      "blob": "cd491fb132854150ba1114d4cc93c24746d184e3"
+    },
+    {
+      "path": "documentation/images/hedit_example3.png",
+      "git_mode": "100644",
+      "blob": "33c64f7cced5441e773eca0f6ee82d47d5cf3aaa"
+    },
+    {
+      "path": "documentation/images/hedit_example4.png",
+      "git_mode": "100644",
+      "blob": "486ddfa49f71575c0d75cc5d730a5767d6a48062"
+    },
+    {
+      "path": "documentation/images/hedit_example5.png",
+      "git_mode": "100644",
+      "blob": "3be4e5d694e3429e261ed2f19ca858a0450e0d9d"
+    },
+    {
+      "path": "documentation/images/hedit_path.gif",
+      "git_mode": "100644",
+      "blob": "4320d6cb72abc7108601b4e055082a8e7e082861"
+    },
+    {
+      "path": "documentation/images/icon.png",
+      "git_mode": "100644",
+      "blob": "057051fcfd578ee1aa41e6d18898e4e3ee8d39e3"
+    },
+    {
+      "path": "documentation/images/inf_sharp_a.png",
+      "git_mode": "100644",
+      "blob": "838c9b9ce0880d6f17f5ae609536cfa536daf1d7"
+    },
+    {
+      "path": "documentation/images/inf_sharp_b.png",
+      "git_mode": "100644",
+      "blob": "988b2dbbeb6e016b34f6576e1497357b6e016c5c"
+    },
+    {
+      "path": "documentation/images/inf_sharp_c.png",
+      "git_mode": "100644",
+      "blob": "f093b058f30bf8abc7132bdaa9c977b2c208fa86"
+    },
+    {
+      "path": "documentation/images/loop_cage.jpg",
+      "git_mode": "100644",
+      "blob": "ec78a56ed2a378d642fcddfc3396c6b9dae8f0b6"
+    },
+    {
+      "path": "documentation/images/loop_rel_1.png",
+      "git_mode": "100644",
+      "blob": "578431fc84ce8ed9d8a886b646ba3a8da3d45e9a"
+    },
+    {
+      "path": "documentation/images/loop_rel_2.png",
+      "git_mode": "100644",
+      "blob": "e47c4ed3633ee81863167032d7c30d467471d4a6"
+    },
+    {
+      "path": "documentation/images/loop_rel_3.png",
+      "git_mode": "100644",
+      "blob": "f4cbca63a6416643ea07d67ec2feaabadd637f27"
+    },
+    {
+      "path": "documentation/images/loop_rel_4.png",
+      "git_mode": "100644",
+      "blob": "ff2b06cd52695c3c76b2ae787fb60928f02ccd59"
+    },
+    {
+      "path": "documentation/images/loop_sub1.jpg",
+      "git_mode": "100644",
+      "blob": "1fe16fccb6ae0e3dc7c62aa35cd3876a43b0fb43"
+    },
+    {
+      "path": "documentation/images/loop_sub2.jpg",
+      "git_mode": "100644",
+      "blob": "04edb1531be156145f0f6079f7e5eb329345fe25"
+    },
+    {
+      "path": "documentation/images/loop_surface.jpg",
+      "git_mode": "100644",
+      "blob": "28040d83b7a9a2f8a0e8dcbd25a681e9517ddfe8"
+    },
+    {
+      "path": "documentation/images/mod_notes.0.png",
+      "git_mode": "100644",
+      "blob": "c9bcd53bb81157a9d19755cf8d4ab7909e18a350"
+    },
+    {
+      "path": "documentation/images/mod_notes.1.png",
+      "git_mode": "100644",
+      "blob": "d36b8c47405b68881f54109b62b792f1f02693db"
+    },
+    {
+      "path": "documentation/images/mod_notes.2.png",
+      "git_mode": "100644",
+      "blob": "271c9cc72195b94990c3b99542edbb4b25529876"
+    },
+    {
+      "path": "documentation/images/mod_notes.3.png",
+      "git_mode": "100644",
+      "blob": "d1c84612f2f0cfd2a0f2f54dca780b31d3946114"
+    },
+    {
+      "path": "documentation/images/mod_notes.4.jpg",
+      "git_mode": "100644",
+      "blob": "6a51a53bf372e55c2be54956ffea7122eda762b0"
+    },
+    {
+      "path": "documentation/images/mod_notes.5.png",
+      "git_mode": "100644",
+      "blob": "92db167c7eb8f1f79e276addb26c2735b9d0b04d"
+    },
+    {
+      "path": "documentation/images/mtlptexviewer.png",
+      "git_mode": "100644",
+      "blob": "2d3bc5b7de2198bfd3bfef95390663dbd555ac7f"
+    },
+    {
+      "path": "documentation/images/mtlviewer.png",
+      "git_mode": "100644",
+      "blob": "17cd7ac80e7894c95d389e03073cd2ba8af597b2"
+    },
+    {
+      "path": "documentation/images/mtlviewer_ios.png",
+      "git_mode": "100644",
+      "blob": "f8fbc919fb95dc1b57015cb1ce314d98078a6f85"
+    },
+    {
+      "path": "documentation/images/nonman_fan_cage.jpg",
+      "git_mode": "100644",
+      "blob": "8783ad926793b364c08f41bd33efc01e930708e1"
+    },
+    {
+      "path": "documentation/images/nonman_fan_surface.jpg",
+      "git_mode": "100644",
+      "blob": "34a0f330e7f486fc2535b64e502e0dae76c7a40f"
+    },
+    {
+      "path": "documentation/images/nonman_vert_cage.jpg",
+      "git_mode": "100644",
+      "blob": "47d7fd4a2b5ffa0c513b38dfdfaa03160eb75c63"
+    },
+    {
+      "path": "documentation/images/nonman_vert_surface.jpg",
+      "git_mode": "100644",
+      "blob": "b6261fa3c2641149ea5213ea5026de41ce4db4b8"
+    },
+    {
+      "path": "documentation/images/nonmanifold_fan.png",
+      "git_mode": "100644",
+      "blob": "1837cee7dbb5bdcace02988b2670f1005b98ae56"
+    },
+    {
+      "path": "documentation/images/nonmanifold_vert.png",
+      "git_mode": "100644",
+      "blob": "7b102e5f8d52df70f4193d738452808ebca74dbe"
+    },
+    {
+      "path": "documentation/images/opensubdiv_logo_dark_hires.png",
+      "git_mode": "100644",
+      "blob": "e7fb8964d8f7406918e9bffa4553ce74cc2db454"
+    },
+    {
+      "path": "documentation/images/opensubdiv_logo_header.png",
+      "git_mode": "100644",
+      "blob": "02d0a2f19f0f9a3563076d5190c31921d33a11d3"
+    },
+    {
+      "path": "documentation/images/opensubdiv_logo_light_hires.png",
+      "git_mode": "100644",
+      "blob": "354b2989e4c0f1dd80908ccd07c532e8313b98d6"
+    },
+    {
+      "path": "documentation/images/osd_draw.png",
+      "git_mode": "100644",
+      "blob": "d6a86357419d8c9c82fb729072dd94e527ce0c0f"
+    },
+    {
+      "path": "documentation/images/osd_eval_1st_deriv_normal.png",
+      "git_mode": "100644",
+      "blob": "6b304cf6e5302d7de1982f53357130d8a38fb14c"
+    },
+    {
+      "path": "documentation/images/osd_eval_2nd_deriv_curvature.png",
+      "git_mode": "100644",
+      "blob": "f45ba3c4d0688f634106926e25d49df303faae1b"
+    },
+    {
+      "path": "documentation/images/osd_layers.png",
+      "git_mode": "100644",
+      "blob": "16c02d3c8e38ff7b10988ec7fafee388d1d6fb27"
+    },
+    {
+      "path": "documentation/images/osd_limiteval.png",
+      "git_mode": "100644",
+      "blob": "5e95b980d0e8333c72dca2444b1c27433317dc83"
+    },
+    {
+      "path": "documentation/images/osd_limitstencil.png",
+      "git_mode": "100644",
+      "blob": "02e782582d422f181a298f76598b3a083476b862"
+    },
+    {
+      "path": "documentation/images/osd_metal_eval.png",
+      "git_mode": "100644",
+      "blob": "8e796bee12142439d8ebbc2e5d7bd4e0e3f98b48"
+    },
+    {
+      "path": "documentation/images/osd_metal_tess.png",
+      "git_mode": "100644",
+      "blob": "94c6e9df45e9e1b56eec22ebbca5581ecd3fb684"
+    },
+    {
+      "path": "documentation/images/osd_modules.png",
+      "git_mode": "100644",
+      "blob": "50414628ca4c8e0bd18a9fd4701a8033f0ebe0b8"
+    },
+    {
+      "path": "documentation/images/osd_refinement.png",
+      "git_mode": "100644",
+      "blob": "5a9194975a8a445d801b39a4b3dfb0e3ad6c2c8e"
+    },
+    {
+      "path": "documentation/images/osd_shader_bspline.png",
+      "git_mode": "100644",
+      "blob": "a41a4db7a8947f81a6381a5fa68f37f223d62ed9"
+    },
+    {
+      "path": "documentation/images/osd_shader_gregory.png",
+      "git_mode": "100644",
+      "blob": "4ca938226b3754524b5395abfb48d6335816718b"
+    },
+    {
+      "path": "documentation/images/osd_shader_legacy_gregory.png",
+      "git_mode": "100644",
+      "blob": "c55aaa3b1faebf10c2f3ef21711ef6df1895bd15"
+    },
+    {
+      "path": "documentation/images/osd_shader_param_remap.png",
+      "git_mode": "100644",
+      "blob": "bda50d7b3d0ecc359dea4a2dbc076046736bc776"
+    },
+    {
+      "path": "documentation/images/osd_shader_patch.png",
+      "git_mode": "100644",
+      "blob": "ac7bdf60857a85fc6e527baebe57d4b9e0051681"
+    },
+    {
+      "path": "documentation/images/osd_shader_transition.png",
+      "git_mode": "100644",
+      "blob": "fff893cb2388973be168a6e2848e9f49dc6d756f"
+    },
+    {
+      "path": "documentation/images/osd_splash.png",
+      "git_mode": "100644",
+      "blob": "c03149fdd1da193d06835951dd3d352dec730532"
+    },
+    {
+      "path": "documentation/images/osdpolysmooth.png",
+      "git_mode": "100644",
+      "blob": "18c843eb4b36c9f53e51e00bf304d9bc8ce42d09"
+    },
+    {
+      "path": "documentation/images/painttest.jpg",
+      "git_mode": "100644",
+      "blob": "c2924794ee9af7164c369093bf6c86cf9fc73c69"
+    },
+    {
+      "path": "documentation/images/param_uv.png",
+      "git_mode": "100644",
+      "blob": "640b8eade753bf33aea6b6c91137155eaae2efc3"
+    },
+    {
+      "path": "documentation/images/param_uv2xyz.png",
+      "git_mode": "100644",
+      "blob": "d4804565cbca1c5cdb871f76f76b59e516b5b45d"
+    },
+    {
+      "path": "documentation/images/patch_bezier.jpg",
+      "git_mode": "100644",
+      "blob": "7226ce9e4779dcd8e40c553527f73d588f017009"
+    },
+    {
+      "path": "documentation/images/patch_bspline.jpg",
+      "git_mode": "100644",
+      "blob": "c04356760bf0adeab115499e5e186e99cc236500"
+    },
+    {
+      "path": "documentation/images/ptex_coarse.png",
+      "git_mode": "100644",
+      "blob": "83fb4fc93364c87784df59f3ed0ca5ec6d6ba8db"
+    },
+    {
+      "path": "documentation/images/ptex_quadrangulated.png",
+      "git_mode": "100644",
+      "blob": "8f838941449ae2584395165d060655db6fcf8b23"
+    },
+    {
+      "path": "documentation/images/sec_level_off.png",
+      "git_mode": "100644",
+      "blob": "32cb3dea56a1eebee585c7203af15432ff2097c6"
+    },
+    {
+      "path": "documentation/images/sec_level_on.png",
+      "git_mode": "100644",
+      "blob": "691d6c951b34a37fa657b8936ff353f874be32f7"
+    },
+    {
+      "path": "documentation/images/smoothtriangles.png",
+      "git_mode": "100644",
+      "blob": "6afb4d55b8f1b39c0be8c63ef022818340e58c04"
+    },
+    {
+      "path": "documentation/images/studio-tools.png",
+      "git_mode": "100644",
+      "blob": "934468b2c8925fe915de626e8b61f28eee200bd9"
+    },
+    {
+      "path": "documentation/images/subdiv_faceindex.png",
+      "git_mode": "100644",
+      "blob": "7e4ba0d6a7517c8c2b9feb661a00cc215699082a"
+    },
+    {
+      "path": "documentation/images/surface_bezier.jpg",
+      "git_mode": "100644",
+      "blob": "2f2d153ce987a93dfc24c5774276f4fd3deee45b"
+    },
+    {
+      "path": "documentation/images/surface_bspline.jpg",
+      "git_mode": "100644",
+      "blob": "c279e40970d0e1c59b8e7d8c0e296e4ccabcdaf0"
+    },
+    {
+      "path": "documentation/images/surface_bspline_cage.jpg",
+      "git_mode": "100644",
+      "blob": "fd808ea4658816d26bf062cad9891cf6f78961ab"
+    },
+    {
+      "path": "documentation/images/surface_bspline_complex.jpg",
+      "git_mode": "100644",
+      "blob": "80916c452ba6fcbc49ed68cfe71eaa9937e86b04"
+    },
+    {
+      "path": "documentation/images/surface_bspline_sub1.jpg",
+      "git_mode": "100644",
+      "blob": "0b27d3ea41279f11c7fe6b31db20e395c40b35c2"
+    },
+    {
+      "path": "documentation/images/surface_bspline_sub2.jpg",
+      "git_mode": "100644",
+      "blob": "adb81ac2b8076790b46f4ede78b111718bdb8dcf"
+    },
+    {
+      "path": "documentation/images/surface_bspline_tess1.jpg",
+      "git_mode": "100644",
+      "blob": "b332f07d459115c34491125354114b7853891dfa"
+    },
+    {
+      "path": "documentation/images/surface_bspline_tess2.jpg",
+      "git_mode": "100644",
+      "blob": "f9bbd661b522bf0d1b25aa6cf55905393adee805"
+    },
+    {
+      "path": "documentation/images/tess_snap1.jpg",
+      "git_mode": "100644",
+      "blob": "db2ef1928b3c3931fba00e766acc5d64495a36c7"
+    },
+    {
+      "path": "documentation/images/tess_snap2.jpg",
+      "git_mode": "100644",
+      "blob": "5784b8f2118c5eed2de1ddec2b669eacf4cb54c4"
+    },
+    {
+      "path": "documentation/images/tetra.0.png",
+      "git_mode": "100644",
+      "blob": "2e4d8f597f73da40cc3e6478658671b287173a57"
+    },
+    {
+      "path": "documentation/images/tetra.1.png",
+      "git_mode": "100644",
+      "blob": "6a6cbfa34f609e4af50f748387f8d869cfdc56c5"
+    },
+    {
+      "path": "documentation/images/tetra.2.png",
+      "git_mode": "100644",
+      "blob": "eb59f315efeab2cc11fdd8750475d5e523ec7ee8"
+    },
+    {
+      "path": "documentation/images/tetra.3.png",
+      "git_mode": "100644",
+      "blob": "52af33341d030fd0161ebcbe4b0d0ab2c4a16857"
+    },
+    {
+      "path": "documentation/images/toggler0.gif",
+      "git_mode": "100644",
+      "blob": "c39c5f3b7e8c303eaacf1822d6bd593acd84e387"
+    },
+    {
+      "path": "documentation/images/toggler1.gif",
+      "git_mode": "100644",
+      "blob": "31f11323a8df71b123b3d5d50b7fd7b5351b466a"
+    },
+    {
+      "path": "documentation/images/topology_refiner.png",
+      "git_mode": "100644",
+      "blob": "98b29c4f4f50a73861b32c7b59df4c701143ae5b"
+    },
+    {
+      "path": "documentation/images/torus.png",
+      "git_mode": "100644",
+      "blob": "f45731fb1f2ffd7b367eb3f62b5e8e45467460e6"
+    },
+    {
+      "path": "documentation/images/uniform.gif",
+      "git_mode": "100644",
+      "blob": "3d1db29fd806d456447b86b0e9a083c53b61e620"
+    },
+    {
+      "path": "documentation/images/usecase1.png",
+      "git_mode": "100644",
+      "blob": "db80326731162763c3354eba30a455101abcd7aa"
+    },
+    {
+      "path": "documentation/images/usecase1_image.png",
+      "git_mode": "100644",
+      "blob": "3e4c3bcddbee12404ef4f1740524b7aa12fc923b"
+    },
+    {
+      "path": "documentation/images/usecase2.png",
+      "git_mode": "100644",
+      "blob": "a5be5f1bc4756efc2903aeb0bea725cf81bc139d"
+    },
+    {
+      "path": "documentation/images/uvviewer.jpg",
+      "git_mode": "100644",
+      "blob": "6ea879a5ac2be4c4836d85e0e2f5d352662c5a97"
+    },
+    {
+      "path": "documentation/images/val5_iso_cage.jpg",
+      "git_mode": "100644",
+      "blob": "863f90c242a90a68f890059b977628977550c42e"
+    },
+    {
+      "path": "documentation/images/val5_iso_sub1.jpg",
+      "git_mode": "100644",
+      "blob": "c947dfc6b24def5577bcd0d824512d80e47351d5"
+    },
+    {
+      "path": "documentation/images/val5_iso_sub2.jpg",
+      "git_mode": "100644",
+      "blob": "cfa6445f71e881f970da9c64bba71bc3e4587de2"
+    },
+    {
+      "path": "documentation/images/val6_cage.jpg",
+      "git_mode": "100644",
+      "blob": "a1d87124ab06f8989fb4382a2038e3e9bf283764"
+    },
+    {
+      "path": "documentation/images/val6_irregular.jpg",
+      "git_mode": "100644",
+      "blob": "37fdeb44afa59b8ac15a9cf7d6dccf53090cb4d5"
+    },
+    {
+      "path": "documentation/images/val6_regular.jpg",
+      "git_mode": "100644",
+      "blob": "4396f076f0cea53caadf28ca84875e6ff247b857"
+    },
+    {
+      "path": "documentation/images/val6_surface.jpg",
+      "git_mode": "100644",
+      "blob": "a40cbc8fe15ca9abb8ecac5eb2e5f6a7602d15e3"
+    },
+    {
+      "path": "documentation/images/vertex_boundary.png",
+      "git_mode": "100644",
+      "blob": "36f8942f23153a630f42575f2e29eabf0a2efa22"
+    },
+    {
+      "path": "documentation/images/vertex_subdivide.gif",
+      "git_mode": "100644",
+      "blob": "dd710d95f40fe103bd7c7f7c5eba85b5a82bfc25"
+    },
+    {
+      "path": "documentation/images/vtr_refinement.1.png",
+      "git_mode": "100644",
+      "blob": "20536ef890bf0c44306c7d50fbc096fc9582a3b7"
+    },
+    {
+      "path": "documentation/images/walk_boundary.png",
+      "git_mode": "100644",
+      "blob": "0cb919ee45dca578ee64f0bfe799bcfc63979204"
+    },
+    {
+      "path": "documentation/images/walk_interior.png",
+      "git_mode": "100644",
+      "blob": "95365f79a26e65446181e98b3a5a081c384afa16"
+    },
+    {
+      "path": "documentation/intro.rst",
+      "git_mode": "100644",
+      "blob": "2f425211be3e1eb87f585ccb2ebe5ba110e6468a"
+    },
+    {
+      "path": "documentation/license.rst",
+      "git_mode": "100644",
+      "blob": "d587978f0966de48f256c7b27624fdf74552352c"
+    },
+    {
+      "path": "documentation/mod_notes.rst",
+      "git_mode": "100644",
+      "blob": "c4a48d00c6b4c3bb96d9e1a6f97e88bb18a0bb69"
+    },
+    {
+      "path": "documentation/mtlptexviewer.rst",
+      "git_mode": "100644",
+      "blob": "5330ab40bbf8006511c99bc4d987f4087c106136"
+    },
+    {
+      "path": "documentation/mtlviewer.rst",
+      "git_mode": "100644",
+      "blob": "c97c823542fc26e3dcb69591ed19d21ef3ebe871"
+    },
+    {
+      "path": "documentation/nav_template.txt",
+      "git_mode": "100644",
+      "blob": "b8d78f0b2ddf23f48b93caabcf047fb2b9a03c21"
+    },
+    {
+      "path": "documentation/osd_overview.rst",
+      "git_mode": "100644",
+      "blob": "2f9bb69d04f29290395fc29acaaf23d2dbebc228"
+    },
+    {
+      "path": "documentation/osd_shader_interface.rst",
+      "git_mode": "100644",
+      "blob": "4a5db6f69a2a95f210dbcf99f703da045a9b9280"
+    },
+    {
+      "path": "documentation/porting.rst",
+      "git_mode": "100644",
+      "blob": "65f886f1f34ffdaa1e930ebea89417116915abf1"
+    },
+    {
+      "path": "documentation/processHtml.py",
+      "git_mode": "100644",
+      "blob": "722b7feef1117e912378bfbf74aa8eef62c3c264"
+    },
+    {
+      "path": "documentation/processTutorials.py",
+      "git_mode": "100644",
+      "blob": "3fcb21cf90ffc4593b70a081ce17663d592287c2"
+    },
+    {
+      "path": "documentation/references.rst",
+      "git_mode": "100644",
+      "blob": "29a655c85d48e301d2f85e72da9b81a12bc32842"
+    },
+    {
+      "path": "documentation/release_30.rst",
+      "git_mode": "100644",
+      "blob": "5af72bab13877e4b12d5fb476d149f5ccd969880"
+    },
+    {
+      "path": "documentation/release_31.rst",
+      "git_mode": "100644",
+      "blob": "1b573489c8f1d40225b3b954a4480ef3ec1143c8"
+    },
+    {
+      "path": "documentation/release_32.rst",
+      "git_mode": "100644",
+      "blob": "7f42b9e696128abd9fab769b8f868564d9ca8d27"
+    },
+    {
+      "path": "documentation/release_33.rst",
+      "git_mode": "100644",
+      "blob": "5ef91bb9d92465cb7d3466b661202a8b1faee113"
+    },
+    {
+      "path": "documentation/release_34.rst",
+      "git_mode": "100644",
+      "blob": "f0deed3c29f92a4285325dfd491ed924dc32fbc8"
+    },
+    {
+      "path": "documentation/release_35.rst",
+      "git_mode": "100644",
+      "blob": "579c689645798e7b3fe238cdc90b8c2b6f198d1e"
+    },
+    {
+      "path": "documentation/release_36.rst",
+      "git_mode": "100644",
+      "blob": "9d276c55f7bce50646819dc61ac04da3f4208764"
+    },
+    {
+      "path": "documentation/release_37.rst",
+      "git_mode": "100644",
+      "blob": "cd9c371d5c7247f99e9932db1e1f1c98b7a1d41a"
+    },
+    {
+      "path": "documentation/release_38.rst",
+      "git_mode": "100644",
+      "blob": "edceb9b7917a23a77fa61a1440bdc54dfeb1ea67"
+    },
+    {
+      "path": "documentation/release_notes.rst",
+      "git_mode": "100644",
+      "blob": "d3001f878d64b7621fd868bb8e36fc5d1eac85ed"
+    },
+    {
+      "path": "documentation/release_notes_2x.rst",
+      "git_mode": "100644",
+      "blob": "2e7d93641782d05d4f94a71a1b2cd423f069f72c"
+    },
+    {
+      "path": "documentation/rst_template.txt",
+      "git_mode": "100644",
+      "blob": "f2f1548d925b39326f88d72c331b4dc64618dda3"
+    },
+    {
+      "path": "documentation/sdc_overview.rst",
+      "git_mode": "100644",
+      "blob": "679fb29fe2b44a5907b6cd6e7b99175b5489bd08"
+    },
+    {
+      "path": "documentation/search.html",
+      "git_mode": "100644",
+      "blob": "304d03052a8fb2abaea0742124f7e9b3f7c7f40f"
+    },
+    {
+      "path": "documentation/subdivision_surfaces.rst",
+      "git_mode": "100644",
+      "blob": "fb7bd6d7bd9bf9a32fa08a2925c153160cdb0531"
+    },
+    {
+      "path": "documentation/tipuesearch/img/loader.gif",
+      "git_mode": "100644",
+      "blob": "9c97738a27ad26d4e63494485484f1b5e4a5c73a"
+    },
+    {
+      "path": "documentation/tipuesearch/img/search.png",
+      "git_mode": "100755",
+      "blob": "9ab0f2c1a9f40c054fed086a64cb2ab7ba724761"
+    },
+    {
+      "path": "documentation/tipuesearch/tipuesearch.css",
+      "git_mode": "100644",
+      "blob": "4a7be0114e074afcdfc8f712f774967337150c65"
+    },
+    {
+      "path": "documentation/tipuesearch/tipuesearch.js",
+      "git_mode": "100644",
+      "blob": "26e2edae9018334cd5aaf2561dec5ba07b655904"
+    },
+    {
+      "path": "documentation/tipuesearch/tipuesearch.min.js",
+      "git_mode": "100644",
+      "blob": "582912ba673b828f1c605814bf892ade887135a8"
+    },
+    {
+      "path": "documentation/tipuesearch/tipuesearch_set.js",
+      "git_mode": "100644",
+      "blob": "332dc171c701e75fdc90af23ca49ce93e8cc05d0"
+    },
+    {
+      "path": "documentation/tutorials.rst",
+      "git_mode": "100644",
+      "blob": "674253926555fede21838aa507deb482719e9452"
+    },
+    {
+      "path": "documentation/under_development.rst",
+      "git_mode": "100644",
+      "blob": "ecfbd363a0ca3c5b18bbf58d77092bc04d8b0a7a"
+    },
+    {
+      "path": "documentation/using_osd_hbr.rst",
+      "git_mode": "100644",
+      "blob": "0a89b7045ee20a4269c4a900d3c7846e41361a20"
+    },
+    {
+      "path": "documentation/vtr_overview.rst",
+      "git_mode": "100644",
+      "blob": "33ba59965375581fcb40a65843ab937380bd5488"
+    },
+    {
+      "path": "examples/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "6130b4c1abcba610159b3388030637fac1c0fb6f"
+    },
+    {
+      "path": "examples/common/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "6ae5da640f6d2bef0c3d82f8c4f671f76cc00699"
+    },
+    {
+      "path": "examples/common/clDeviceContext.cpp",
+      "git_mode": "100644",
+      "blob": "f91001bbdc4f50e09fcf3c5efe8f6ba44a2b1f59"
+    },
+    {
+      "path": "examples/common/clDeviceContext.h",
+      "git_mode": "100644",
+      "blob": "677c4d7759f9d1a7c47cdc1ac8f77811b9faaa5c"
+    },
+    {
+      "path": "examples/common/cudaDeviceContext.cpp",
+      "git_mode": "100644",
+      "blob": "1614701a94c87d649f3c0db59fbe5597ee202c97"
+    },
+    {
+      "path": "examples/common/cudaDeviceContext.h",
+      "git_mode": "100644",
+      "blob": "5c1513c88bbdeae78731d63db5cbb6a75de5a709"
+    },
+    {
+      "path": "examples/common/d3d11ControlMeshDisplay.cpp",
+      "git_mode": "100644",
+      "blob": "b99a37c1efa99a0cda34cfaf4d211aa7aec41569"
+    },
+    {
+      "path": "examples/common/d3d11ControlMeshDisplay.h",
+      "git_mode": "100644",
+      "blob": "77df8d478aa0acf80a9717445f94ce9fdaa48ad8"
+    },
+    {
+      "path": "examples/common/d3d11Hud.cpp",
+      "git_mode": "100644",
+      "blob": "3615e4bdaeff8816ad76643d64be4593db01cc6f"
+    },
+    {
+      "path": "examples/common/d3d11Hud.h",
+      "git_mode": "100644",
+      "blob": "bf3f2ff6b9dc590a440db48b3dcf304e270e994f"
+    },
+    {
+      "path": "examples/common/d3d11PtexMipmapTexture.cpp",
+      "git_mode": "100644",
+      "blob": "f25adc050e34f49de9c87754a18cff109a8a30ae"
+    },
+    {
+      "path": "examples/common/d3d11PtexMipmapTexture.h",
+      "git_mode": "100644",
+      "blob": "7c271e19691da91b4a49e1ca2c0d0d573a7c6bc5"
+    },
+    {
+      "path": "examples/common/d3d11ShaderCache.cpp",
+      "git_mode": "100644",
+      "blob": "1cf5809c1f80b9085dd3acaa0f1bb21cafb4bf5e"
+    },
+    {
+      "path": "examples/common/d3d11ShaderCache.h",
+      "git_mode": "100644",
+      "blob": "263625f49ece40e0d554049851f35e4e22de11a3"
+    },
+    {
+      "path": "examples/common/d3d11Utils.cpp",
+      "git_mode": "100644",
+      "blob": "ad48fe1c1031433848068eb3df1bc2e5586d91e7"
+    },
+    {
+      "path": "examples/common/d3d11Utils.h",
+      "git_mode": "100644",
+      "blob": "2f969abac95f35a3deec3cc9fa135c585bb3b04a"
+    },
+    {
+      "path": "examples/common/export_obj.py",
+      "git_mode": "100644",
+      "blob": "54d12da039b9be452497498e6aa0094145855525"
+    },
+    {
+      "path": "examples/common/font.png",
+      "git_mode": "100644",
+      "blob": "0b20d761d95c27c206ef0210d0a5f58217383cff"
+    },
+    {
+      "path": "examples/common/font_image.cpp",
+      "git_mode": "100644",
+      "blob": "0bc1a1e76e09a41eedd7e4f766713ec9c26053df"
+    },
+    {
+      "path": "examples/common/font_image.h",
+      "git_mode": "100644",
+      "blob": "e018a883042cf888240a93c6bbc89dbfe1d3c6e4"
+    },
+    {
+      "path": "examples/common/glControlMeshDisplay.cpp",
+      "git_mode": "100644",
+      "blob": "369ed4fdf4efad270decf90cf076c23902ee3c0f"
+    },
+    {
+      "path": "examples/common/glControlMeshDisplay.h",
+      "git_mode": "100644",
+      "blob": "ea0d8bdc1999d0f9c8a0ea7735625051892fb050"
+    },
+    {
+      "path": "examples/common/glHud.cpp",
+      "git_mode": "100644",
+      "blob": "b7ac7c7f5fb21006acb1afbdb0f38d490fa27fec"
+    },
+    {
+      "path": "examples/common/glHud.h",
+      "git_mode": "100644",
+      "blob": "fa511cd48582190b15043af291317daebb1eddff"
+    },
+    {
+      "path": "examples/common/glPtexMipmapTexture.cpp",
+      "git_mode": "100644",
+      "blob": "325d5293b1b985d3f224731e120645b216a901d3"
+    },
+    {
+      "path": "examples/common/glPtexMipmapTexture.h",
+      "git_mode": "100644",
+      "blob": "794c91ddef174350437c76b24388013a01821a08"
+    },
+    {
+      "path": "examples/common/glShaderCache.cpp",
+      "git_mode": "100644",
+      "blob": "c65286664867c3f99f8b6052e72fcd22ca0c17f0"
+    },
+    {
+      "path": "examples/common/glShaderCache.h",
+      "git_mode": "100644",
+      "blob": "9dbc05e086225ad0f50caacd4f9db3bc3490c06a"
+    },
+    {
+      "path": "examples/common/glUtils.cpp",
+      "git_mode": "100644",
+      "blob": "be83423cbe74749be5b3d8872616c0cb61227bfe"
+    },
+    {
+      "path": "examples/common/glUtils.h",
+      "git_mode": "100644",
+      "blob": "b67e0f2f9a59823d7a12126fe59881bb0e476fd1"
+    },
+    {
+      "path": "examples/common/glslPtexCommon.glsl",
+      "git_mode": "100644",
+      "blob": "9dcaedc06d4036147e5d7098c3e70e43749db62e"
+    },
+    {
+      "path": "examples/common/hdr_reader.cpp",
+      "git_mode": "100644",
+      "blob": "dbd8a5f21eadf516a66f744bade4cedd0f582feb"
+    },
+    {
+      "path": "examples/common/hdr_reader.h",
+      "git_mode": "100644",
+      "blob": "19eed9130a11a82893d257590c69f5ec4e828536"
+    },
+    {
+      "path": "examples/common/hlslPtexCommon.hlsl",
+      "git_mode": "100644",
+      "blob": "68220744a9f8a96ce1272ef07520594085d9ec68"
+    },
+    {
+      "path": "examples/common/hud.cpp",
+      "git_mode": "100644",
+      "blob": "f333f662f2e8f2d32a4eb3ee01fac0764cd447f1"
+    },
+    {
+      "path": "examples/common/hud.h",
+      "git_mode": "100644",
+      "blob": "2df862926a7d8ac96a84866dde94a6af32360012"
+    },
+    {
+      "path": "examples/common/mtlControlMeshDisplay.h",
+      "git_mode": "100644",
+      "blob": "0a1e7e90998ddff317e92b2d1774401e2aa0896f"
+    },
+    {
+      "path": "examples/common/mtlControlMeshDisplay.mm",
+      "git_mode": "100644",
+      "blob": "585ebee59bf0374439fd2c600e435b43d86c9978"
+    },
+    {
+      "path": "examples/common/mtlHud.h",
+      "git_mode": "100644",
+      "blob": "90fd0e528832e5c3891739ad65fe8fad0a8b204c"
+    },
+    {
+      "path": "examples/common/mtlHud.mm",
+      "git_mode": "100644",
+      "blob": "98a9896c078967a07b2bf48a56d5726c8056efdc"
+    },
+    {
+      "path": "examples/common/mtlPtexCommon.metal",
+      "git_mode": "100644",
+      "blob": "fd2833c4e6dc14b70e9760b6a800f78fcec50bdd"
+    },
+    {
+      "path": "examples/common/mtlPtexMipmapTexture.h",
+      "git_mode": "100644",
+      "blob": "71e6a5d24df7e2c60e668b4c999df967514c2a4e"
+    },
+    {
+      "path": "examples/common/mtlPtexMipmapTexture.mm",
+      "git_mode": "100644",
+      "blob": "db40fa8749fd424e9b01aae340fa1602df608c04"
+    },
+    {
+      "path": "examples/common/mtlUtils.h",
+      "git_mode": "100644",
+      "blob": "4ad62f355496e5919b3f8bc461aab00dc2fcfb37"
+    },
+    {
+      "path": "examples/common/mtlUtils.mm",
+      "git_mode": "100644",
+      "blob": "f69e988bcc3d93126294fe43f43bd9f3080980ce"
+    },
+    {
+      "path": "examples/common/objAnim.cpp",
+      "git_mode": "100644",
+      "blob": "db6a273f928e47d210ae8473a3150f818dd7a144"
+    },
+    {
+      "path": "examples/common/objAnim.h",
+      "git_mode": "100644",
+      "blob": "9ab693b34d256554780b43f9ef8df3d86fb48d45"
+    },
+    {
+      "path": "examples/common/patchColors.cpp",
+      "git_mode": "100644",
+      "blob": "04349bce0c9ec6443ca68be2f674a89b52c6717d"
+    },
+    {
+      "path": "examples/common/patchColors.h",
+      "git_mode": "100644",
+      "blob": "4d50a3899ff9614f78a55afd870553d746fc5af5"
+    },
+    {
+      "path": "examples/common/ptexMipmapTextureLoader.cpp",
+      "git_mode": "100644",
+      "blob": "e9d26d076ab7392d677d8f922e8cb857cf1659a9"
+    },
+    {
+      "path": "examples/common/ptexMipmapTextureLoader.h",
+      "git_mode": "100644",
+      "blob": "767d6b1f70e419b5aa282c4751799dc531f51baa"
+    },
+    {
+      "path": "examples/common/shaderCache.h",
+      "git_mode": "100644",
+      "blob": "4eaadaa7e0b7b761ab20562576ef17e929fe5396"
+    },
+    {
+      "path": "examples/common/simple_math.h",
+      "git_mode": "100644",
+      "blob": "4c54a8b690d0d039e640d0ed3c87bb5dccc50929"
+    },
+    {
+      "path": "examples/common/stb_image_write.h",
+      "git_mode": "100644",
+      "blob": "2a47e1e77884f397d59069a1722227d09561c094"
+    },
+    {
+      "path": "examples/common/stopwatch.h",
+      "git_mode": "100644",
+      "blob": "22c79cee8a9b766011269b10a9d7925685dccfdd"
+    },
+    {
+      "path": "examples/common/viewerArgsUtils.cpp",
+      "git_mode": "100644",
+      "blob": "bd8e6bb384a1f0ed2263fa737b84a3693ac6b564"
+    },
+    {
+      "path": "examples/common/viewerArgsUtils.h",
+      "git_mode": "100644",
+      "blob": "417ec003d373e28d7c1c5a7236163bde79fa43dd"
+    },
+    {
+      "path": "examples/dxPtexViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "bc2c46cf07bc3e8e63e28e930d77c0b91b96553d"
+    },
+    {
+      "path": "examples/dxPtexViewer/dxPtexViewer.cpp",
+      "git_mode": "100644",
+      "blob": "bc15cc8721f7163ed59aebe545c049e2d50a83df"
+    },
+    {
+      "path": "examples/dxPtexViewer/shader.hlsl",
+      "git_mode": "100644",
+      "blob": "749dc742ddfe4a0cb78e3173a0aab2142d2f7ceb"
+    },
+    {
+      "path": "examples/dxPtexViewer/sky.cpp",
+      "git_mode": "100644",
+      "blob": "732602b4f3e17cebeee5b4ecfeb54328ecfaa61e"
+    },
+    {
+      "path": "examples/dxPtexViewer/sky.h",
+      "git_mode": "100644",
+      "blob": "39cef9d50a69e7383e69280c25ea6964f9950460"
+    },
+    {
+      "path": "examples/dxPtexViewer/skyshader.hlsl",
+      "git_mode": "100644",
+      "blob": "1d35f5fe44d1a01a8d85ba9bc91418ac365adcdf"
+    },
+    {
+      "path": "examples/dxViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "27c83ad3c664797e61756524a242df6185ce9bb4"
+    },
+    {
+      "path": "examples/dxViewer/dxviewer.cpp",
+      "git_mode": "100644",
+      "blob": "f3ba7105b133e475524e1a62ade348d013550b6c"
+    },
+    {
+      "path": "examples/dxViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/dxViewer/shader.hlsl",
+      "git_mode": "100644",
+      "blob": "57650a80d0700e90358d3b0ef557ff68b84ddf2e"
+    },
+    {
+      "path": "examples/farViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "e5797f0e803ad4b8fd9453ad56e5a0d7bb47555d"
+    },
+    {
+      "path": "examples/farViewer/faceShader.glsl",
+      "git_mode": "100644",
+      "blob": "9bc965c1658dc096c5327fc108dadd396775c818"
+    },
+    {
+      "path": "examples/farViewer/face_texture.cpp",
+      "git_mode": "100644",
+      "blob": "6ecaf185864df62a3a4c8438a98f224a8ec5baa5"
+    },
+    {
+      "path": "examples/farViewer/face_texture.h",
+      "git_mode": "100644",
+      "blob": "08fcf2370c0379ab94916e9b4ebd9e7daea221f0"
+    },
+    {
+      "path": "examples/farViewer/farViewer.cpp",
+      "git_mode": "100644",
+      "blob": "035bbb085412eb033a15e9abacd1fa0c095be560"
+    },
+    {
+      "path": "examples/farViewer/fontShader.glsl",
+      "git_mode": "100644",
+      "blob": "41090be65c9a9f75597dee15dfa71004bfbb4419"
+    },
+    {
+      "path": "examples/farViewer/gl_fontutils.cpp",
+      "git_mode": "100644",
+      "blob": "b1fc35821c59ae11d790a9f7dc109db17c7ac973"
+    },
+    {
+      "path": "examples/farViewer/gl_fontutils.h",
+      "git_mode": "100644",
+      "blob": "5189cc18e3d31b6af2be7436aff18f3e0bf5aca0"
+    },
+    {
+      "path": "examples/farViewer/gl_mesh.cpp",
+      "git_mode": "100644",
+      "blob": "6855fadfc7ddd568e0d39cbe411df9c98d1964d7"
+    },
+    {
+      "path": "examples/farViewer/gl_mesh.h",
+      "git_mode": "100644",
+      "blob": "b36c39447eec7a2c0a6c36efe9491630e0e62f98"
+    },
+    {
+      "path": "examples/farViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "649fdbc6d682c88e4319629bdd67402b025bfb8e"
+    },
+    {
+      "path": "examples/farViewer/simpleShader.glsl",
+      "git_mode": "100644",
+      "blob": "468387b71968a41c97a20dffe084582c5c094867"
+    },
+    {
+      "path": "examples/glEvalLimit/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "797b738fd4d7ffb9fbfd6a497ee9783139c09db8"
+    },
+    {
+      "path": "examples/glEvalLimit/glEvalLimit.cpp",
+      "git_mode": "100644",
+      "blob": "1b688a0c698df7e83de2dfac4405f213054c30b5"
+    },
+    {
+      "path": "examples/glEvalLimit/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/glEvalLimit/particles.cpp",
+      "git_mode": "100644",
+      "blob": "464b1b9624e4f7fc053d3e8704c05bad06b5eba0"
+    },
+    {
+      "path": "examples/glEvalLimit/particles.h",
+      "git_mode": "100644",
+      "blob": "dca3a1b89d2cd715413c428a961a7c4d9a2b0445"
+    },
+    {
+      "path": "examples/glFVarViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "4396b0a0c0975475d3f77ab9696bc71056fdc749"
+    },
+    {
+      "path": "examples/glFVarViewer/glFVarViewer.cpp",
+      "git_mode": "100644",
+      "blob": "358afb9db3e543c09ad44bf848a89a7c3e1bbc9d"
+    },
+    {
+      "path": "examples/glFVarViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "48a4f269122a96018323e52b1fb5dd8a81b3e437"
+    },
+    {
+      "path": "examples/glFVarViewer/shader.glsl",
+      "git_mode": "100644",
+      "blob": "6ad7b2d6ce53d65fdedfd09485e42715550565fe"
+    },
+    {
+      "path": "examples/glImaging/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "563d941942960153933701b085629ace63915c9e"
+    },
+    {
+      "path": "examples/glImaging/glImaging.cpp",
+      "git_mode": "100644",
+      "blob": "02e558f3b4c05d0f6a7f366aa85f7ff57bf61175"
+    },
+    {
+      "path": "examples/glImaging/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/glImaging/shader.glsl",
+      "git_mode": "100644",
+      "blob": "1cd2ea78b14dc7915a188ca8aa08a0816c2ba3fc"
+    },
+    {
+      "path": "examples/glPaintTest/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "223e370ef9bd958488379ea754c88ba700e1b6b9"
+    },
+    {
+      "path": "examples/glPaintTest/glPaintTest.cpp",
+      "git_mode": "100644",
+      "blob": "3dddd984c86b57b660bfb929a160765abfd8f008"
+    },
+    {
+      "path": "examples/glPaintTest/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "527c636597ca8b7813568ee06bd2582b8b36fae2"
+    },
+    {
+      "path": "examples/glPaintTest/paintShader.glsl",
+      "git_mode": "100644",
+      "blob": "e820d92e659a4fbbbec8529e794a61d3571dd503"
+    },
+    {
+      "path": "examples/glPaintTest/shader.glsl",
+      "git_mode": "100644",
+      "blob": "03af6a40c96d5fcbc636552a13c5e31679863441"
+    },
+    {
+      "path": "examples/glPtexViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "b4a9e50089fc292a714e085650f21551a34ba729"
+    },
+    {
+      "path": "examples/glPtexViewer/glPtexViewer.cpp",
+      "git_mode": "100644",
+      "blob": "578e409128cca1d19a2f30352d24c96b2367e465"
+    },
+    {
+      "path": "examples/glPtexViewer/shader.glsl",
+      "git_mode": "100644",
+      "blob": "f1cc04dfeca6a03eacefef43ecf949989b69e14d"
+    },
+    {
+      "path": "examples/glPtexViewer/shader_gl3.glsl",
+      "git_mode": "100644",
+      "blob": "fdbfcfc9a3763a12db585832060380b8c5cc9b60"
+    },
+    {
+      "path": "examples/glPtexViewer/skyshader.glsl",
+      "git_mode": "100644",
+      "blob": "74e7a693aec9862bf875016e8de3a8c77e148257"
+    },
+    {
+      "path": "examples/glShareTopology/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "9bee885e7c92a6e0baa7f84eb5eadaa2d03508c8"
+    },
+    {
+      "path": "examples/glShareTopology/glShareTopology.cpp",
+      "git_mode": "100644",
+      "blob": "08b0970cea81125ae23d1b6efccbd74a0626306f"
+    },
+    {
+      "path": "examples/glShareTopology/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "9cb761fb7b6875f59f11f8bf8376c62bb416ab73"
+    },
+    {
+      "path": "examples/glShareTopology/meshRefiner.h",
+      "git_mode": "100644",
+      "blob": "850bac0ea6886ce3dc472f7efcbee14a61037cb7"
+    },
+    {
+      "path": "examples/glShareTopology/scene.h",
+      "git_mode": "100644",
+      "blob": "36a6648d48e2db0828e5e3ee1f966cc681e92eaa"
+    },
+    {
+      "path": "examples/glShareTopology/sceneBase.cpp",
+      "git_mode": "100644",
+      "blob": "af76d86ef20f7597fb87d1e730ad85f7c606ad1e"
+    },
+    {
+      "path": "examples/glShareTopology/sceneBase.h",
+      "git_mode": "100644",
+      "blob": "368b89e48e26bbb875e5e3c12986eec309018abd"
+    },
+    {
+      "path": "examples/glShareTopology/shader.glsl",
+      "git_mode": "100644",
+      "blob": "f1d8aaa0c689fa7f981fdcf5567bb3e8a857990c"
+    },
+    {
+      "path": "examples/glShareTopology/vbo.h",
+      "git_mode": "100644",
+      "blob": "f8fa916e32a5e5b5e49f7570d8c6313d5cd444ce"
+    },
+    {
+      "path": "examples/glStencilViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "8a3235e42a149110af6d195d6ca98003f0f531a4"
+    },
+    {
+      "path": "examples/glStencilViewer/glStencilViewer.cpp",
+      "git_mode": "100644",
+      "blob": "0437f20ccfa319dccc7a3e465ccc834234c60be7"
+    },
+    {
+      "path": "examples/glStencilViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/glViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "15cbad7baf3f5df502bdca761dc78fc32b32b514"
+    },
+    {
+      "path": "examples/glViewer/glViewer.cpp",
+      "git_mode": "100644",
+      "blob": "c4e4e64eee26ecaeebce553e4522c26354e1cae9"
+    },
+    {
+      "path": "examples/glViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/glViewer/shader.glsl",
+      "git_mode": "100644",
+      "blob": "3b6db7dca0dcfc43a9ec0bf3a56abb320227c5f7"
+    },
+    {
+      "path": "examples/glViewer/shader_gl3.glsl",
+      "git_mode": "100644",
+      "blob": "833c5706d1e37426d7ec7cc96007f08396253b4a"
+    },
+    {
+      "path": "examples/mtlPtexViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "830d8a1d9d96af67ec3b61c6c9b5c7a6fbf9232a"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/AppDelegate.h",
+      "git_mode": "100644",
+      "blob": "c10406343b6f1132ff86caa65428e25a9a57fda1"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/AppDelegate.m",
+      "git_mode": "100644",
+      "blob": "38c42ddf057194a61f2ae5d2ccca3be9f4dc408e"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/AppIcon.appiconset/Contents.json",
+      "git_mode": "100644",
+      "blob": "2db2b1c7c6c316500a7a34807648434289494ba1"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/Info.plist",
+      "git_mode": "100644",
+      "blob": "d993f8d17e58535f66da99b0fe2c93ade94749d9"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/MainMenu.xib",
+      "git_mode": "100644",
+      "blob": "747fda3fe8dceafa6056efd3cb3bfa88ed4f81fc"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/ViewController.h",
+      "git_mode": "100644",
+      "blob": "88e1d2679de5a95c0652de4f315c7b89239f3df9"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/ViewController.mm",
+      "git_mode": "100644",
+      "blob": "11eb12a91ad2287830891c9b0bd07788e8c223ca"
+    },
+    {
+      "path": "examples/mtlPtexViewer/OSX/main.m",
+      "git_mode": "100644",
+      "blob": "8a6799b414684c50c04aa83bdfc147a3d453614b"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/AppDelegate.h",
+      "git_mode": "100644",
+      "blob": "85711f4e042667c3fd6102cc0ec6dc77a57eac11"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/AppDelegate.m",
+      "git_mode": "100644",
+      "blob": "51f73aa0d6b947bfb04130916da1f5d335bb1e15"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "git_mode": "100644",
+      "blob": "eeea76c2db59dbb9faaab2cda4e40c063970101d"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/Base.lproj/LaunchScreen.storyboard",
+      "git_mode": "100644",
+      "blob": "ae2a33c36ae23d8b5796d293840dec224671d957"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/Base.lproj/Main.storyboard",
+      "git_mode": "100644",
+      "blob": "20254e00be2544ef18835e016efcddad82d20cd8"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/Info.plist",
+      "git_mode": "100644",
+      "blob": "6df0024860f874756efe9c83086190b17f95245e"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/ViewController.h",
+      "git_mode": "100644",
+      "blob": "adc2252daad88058d511c6fa59c46b0376a48179"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/ViewController.mm",
+      "git_mode": "100644",
+      "blob": "2f67ccf82e2171dcdf51055cac4449b383d4287c"
+    },
+    {
+      "path": "examples/mtlPtexViewer/iOS/main.m",
+      "git_mode": "100644",
+      "blob": "81e84cbb78185147432ae93d9f69e5acbcd46cdc"
+    },
+    {
+      "path": "examples/mtlPtexViewer/mtlPtexViewer.h",
+      "git_mode": "100644",
+      "blob": "ef2d0ea93a33f1e70feeded9345a31a4ab5e4dfc"
+    },
+    {
+      "path": "examples/mtlPtexViewer/mtlPtexViewer.metal",
+      "git_mode": "100644",
+      "blob": "1f6f9066e511d65fd7bf5201074f339c2dda2807"
+    },
+    {
+      "path": "examples/mtlPtexViewer/mtlPtexViewer.mm",
+      "git_mode": "100644",
+      "blob": "03c1eba3801e4533711b9657bd3be0d1f28898e0"
+    },
+    {
+      "path": "examples/mtlViewer/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "f9b6c3c32cc1e6a59f0444382764ac95d45a3285"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/AppDelegate.h",
+      "git_mode": "100644",
+      "blob": "7dd2a49b321d3cb4d97c75db95f7e7bbc9e9b1b0"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/AppDelegate.m",
+      "git_mode": "100644",
+      "blob": "71e2c2a45acef133a6c30458b79287630e59424e"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/AppIcon.appiconset/Contents.json",
+      "git_mode": "100644",
+      "blob": "2db2b1c7c6c316500a7a34807648434289494ba1"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/Info.plist",
+      "git_mode": "100644",
+      "blob": "d993f8d17e58535f66da99b0fe2c93ade94749d9"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/MainMenu.xib",
+      "git_mode": "100644",
+      "blob": "e3ad1165b1005e40e340617e68c09404175443aa"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/ViewController.h",
+      "git_mode": "100644",
+      "blob": "dce7bec2f6dae6bf941a0310649c7c2fddc643a6"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/ViewController.mm",
+      "git_mode": "100644",
+      "blob": "1a14c0fb3d609b6dde30185dedc52c057cc9997c"
+    },
+    {
+      "path": "examples/mtlViewer/OSX/main.m",
+      "git_mode": "100644",
+      "blob": "8d7fcff3bb9f490a98c2574d0c46fd6195330949"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/AppDelegate.h",
+      "git_mode": "100644",
+      "blob": "85711f4e042667c3fd6102cc0ec6dc77a57eac11"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/AppDelegate.m",
+      "git_mode": "100644",
+      "blob": "51f73aa0d6b947bfb04130916da1f5d335bb1e15"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "git_mode": "100644",
+      "blob": "eeea76c2db59dbb9faaab2cda4e40c063970101d"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/Base.lproj/LaunchScreen.storyboard",
+      "git_mode": "100644",
+      "blob": "ae2a33c36ae23d8b5796d293840dec224671d957"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/Base.lproj/Main.storyboard",
+      "git_mode": "100644",
+      "blob": "06b58f07e661311600bddc39126c080412005e9a"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/Info.plist",
+      "git_mode": "100644",
+      "blob": "8b6431cedf1ea765f2e97219f5cac01ac0262412"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/ViewController.h",
+      "git_mode": "100644",
+      "blob": "499394b97b3dbd5e8fc6b3cee876aac5b889c690"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/ViewController.mm",
+      "git_mode": "100644",
+      "blob": "43f7cac9a06baea941fed4d4aea4f3be5ec059fc"
+    },
+    {
+      "path": "examples/mtlViewer/iOS/main.m",
+      "git_mode": "100644",
+      "blob": "81e84cbb78185147432ae93d9f69e5acbcd46cdc"
+    },
+    {
+      "path": "examples/mtlViewer/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "779db2754492ce15ed738fb22f8ce794dab76678"
+    },
+    {
+      "path": "examples/mtlViewer/mtlViewer.h",
+      "git_mode": "100644",
+      "blob": "03ec64182efe938aa605096a73e75b7d2d05c594"
+    },
+    {
+      "path": "examples/mtlViewer/mtlViewer.metal",
+      "git_mode": "100644",
+      "blob": "233595c074c9d79615a6224e491290fd6b8e1aca"
+    },
+    {
+      "path": "examples/mtlViewer/mtlViewer.mm",
+      "git_mode": "100644",
+      "blob": "0eae77c4ca0722699a1f163e1c89c8a9f113d958"
+    },
+    {
+      "path": "glLoader/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "8f21a754889d574ef11c507c46201b34cf3dc9e9"
+    },
+    {
+      "path": "glLoader/glApi.cpp",
+      "git_mode": "100644",
+      "blob": "8e2195017c845a2e199bc29354553846ffa7def0"
+    },
+    {
+      "path": "glLoader/glApi.h",
+      "git_mode": "100644",
+      "blob": "83b9ca59d8c166c15b5d4ded33b9c6ef11205afe"
+    },
+    {
+      "path": "glLoader/glLoader.cpp",
+      "git_mode": "100644",
+      "blob": "528e79ce7be17fb6a9a7bb210ef9e807ed38dda9"
+    },
+    {
+      "path": "glLoader/glLoader.h",
+      "git_mode": "100644",
+      "blob": "e52b52cecb0a18475e8f58f8a41d08b4b8282ae0"
+    },
+    {
+      "path": "glLoader/khrplatform.h",
+      "git_mode": "100644",
+      "blob": "5b55ea2b9814c22457f20e8b6bbe4c3b4579147e"
+    },
+    {
+      "path": "opensubdiv-config.cmake.in",
+      "git_mode": "100644",
+      "blob": "08a005aafe5756e87cf6995eb140876a60bc516c"
+    },
+    {
+      "path": "regression/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "cd07c817f9fb77a47ad471d58259df9efe8e3e59"
+    },
+    {
+      "path": "regression/common/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "9964cdab00ac9b758057c59d32785925e6df1f63"
+    },
+    {
+      "path": "regression/common/arg_utils.cpp",
+      "git_mode": "100644",
+      "blob": "7d6df7473faa8f9df933e9e49554690744511b79"
+    },
+    {
+      "path": "regression/common/arg_utils.h",
+      "git_mode": "100644",
+      "blob": "ad0474c2260ee8ddc71b4eb8ff35fb0f84f4fc3b"
+    },
+    {
+      "path": "regression/common/cmp_utils.h",
+      "git_mode": "100644",
+      "blob": "769d4a8d1c06c713bdb96ec0bcabcd297842ec89"
+    },
+    {
+      "path": "regression/common/far_utils.cpp",
+      "git_mode": "100644",
+      "blob": "47d75aa0be28b6631e93add682e22cc4e4db42b8"
+    },
+    {
+      "path": "regression/common/far_utils.h",
+      "git_mode": "100644",
+      "blob": "cf45c734e86ba3be1e9930cf30755e6e1177cb70"
+    },
+    {
+      "path": "regression/common/hbr_utils.h",
+      "git_mode": "100644",
+      "blob": "8b3b94cbf6a27398dda955b563c18400233d5c27"
+    },
+    {
+      "path": "regression/common/shape_utils.cpp",
+      "git_mode": "100644",
+      "blob": "851b0b69921f25c4949d5db345c54b780bd63565"
+    },
+    {
+      "path": "regression/common/shape_utils.h",
+      "git_mode": "100644",
+      "blob": "b59f743b5a98680b88acc347bf60ea2cd7e8dcdb"
+    },
+    {
+      "path": "regression/far_perf/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "60a76a921b47b11a293a01572b3ffe2f2d1a6585"
+    },
+    {
+      "path": "regression/far_perf/far_perf.cpp",
+      "git_mode": "100644",
+      "blob": "71a0d919c5ff8c61559a5f9175890b6f27c9e1ae"
+    },
+    {
+      "path": "regression/far_perf/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "1a2b6cb6198b025230c18de1057edcdd3f822182"
+    },
+    {
+      "path": "regression/far_regression/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "89055581d9d35ab32400c1a703f9c28add7aee11"
+    },
+    {
+      "path": "regression/far_regression/example_createMesh.py",
+      "git_mode": "100644",
+      "blob": "f3a692df8cf1d245d4e24461b1a3187a67656744"
+    },
+    {
+      "path": "regression/far_regression/far_regression.cpp",
+      "git_mode": "100644",
+      "blob": "a239b5a1199d0a1bd6d85885f09cf72d0f572777"
+    },
+    {
+      "path": "regression/far_regression/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "78514aefd987b030ff564d80a3673dac563b5e6f"
+    },
+    {
+      "path": "regression/hbr_regression/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "bfe97e7ed64d4499ca97200a4ad8ca4f6555074d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline.cpp",
+      "git_mode": "100644",
+      "blob": "33c0f81b617bc4de4868133c72108a6af487482f"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/bilinear_cube_level0.obj",
+      "git_mode": "100644",
+      "blob": "dd09ae5b8634719a26b943bca5ea22ba152510e7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/bilinear_cube_level1.obj",
+      "git_mode": "100644",
+      "blob": "c37ba64cbf5fe6d64d943d9248134d98fdf03ed1"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/bilinear_cube_level2.obj",
+      "git_mode": "100644",
+      "blob": "d28b9d16c1f07ac766e63293ec25048ae7cd636a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/bilinear_cube_level3.obj",
+      "git_mode": "100644",
+      "blob": "4d5a126627927980d956bee85566e458db2997d1"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/bilinear_cube_level4.obj",
+      "git_mode": "100644",
+      "blob": "7b82b70d82e38c8fcb9e0a3cc8977b8007a874f5"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin0_level0.obj",
+      "git_mode": "100644",
+      "blob": "33e890461a6d2c9b14918a8cfadd9fb10dd55b6e"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin0_level1.obj",
+      "git_mode": "100644",
+      "blob": "2bdba5e4e2b9a7c9e6c013b784e8f31fb31da783"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin0_level2.obj",
+      "git_mode": "100644",
+      "blob": "ab182d79f1bdcb9e03aad417aaad1a5b1c363abe"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin0_level3.obj",
+      "git_mode": "100644",
+      "blob": "6fb403a90a0fc5c26a4fa8ed90d2a98a41e3f3eb"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin0_level4.obj",
+      "git_mode": "100644",
+      "blob": "f3c55f12f51226946c5045b3d03b3da545306131"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin1_level0.obj",
+      "git_mode": "100644",
+      "blob": "33e890461a6d2c9b14918a8cfadd9fb10dd55b6e"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin1_level1.obj",
+      "git_mode": "100644",
+      "blob": "034c5bf8fa40cf7276dcd415b5166c37293924bd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin1_level2.obj",
+      "git_mode": "100644",
+      "blob": "f8b97fd0ef98939697a56e7e70ed6b5ff95d3224"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin1_level3.obj",
+      "git_mode": "100644",
+      "blob": "92e39532135d639c3a0146b47debdcccba6a1622"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_chaikin1_level4.obj",
+      "git_mode": "100644",
+      "blob": "26d0e2b1310ec8ec8b4ee4252edb23b3a3ec8654"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner0_level0.obj",
+      "git_mode": "100644",
+      "blob": "21e7aa981bfa3dc3d3de6cfe7f5145f6b30f3ec9"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner0_level1.obj",
+      "git_mode": "100644",
+      "blob": "9ea0f9a4a86cf621fa189c1034ceff913dbd55e4"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner0_level2.obj",
+      "git_mode": "100644",
+      "blob": "64685fd4fa5d572ca423a1f88f36a69a270740ed"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner0_level3.obj",
+      "git_mode": "100644",
+      "blob": "e3b7c8389d6a97de75f2274c1e2c3905fa4f9e34"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner0_level4.obj",
+      "git_mode": "100644",
+      "blob": "23cd7fc613ab08f50694aa1700ff83060a247547"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner1_level0.obj",
+      "git_mode": "100644",
+      "blob": "4a3cd65c4b1e00dff00ea9ba3adbc681d511ae61"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner1_level1.obj",
+      "git_mode": "100644",
+      "blob": "9d70f66e299d8f2de27d1311ea2bd9caceaa30b4"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner1_level2.obj",
+      "git_mode": "100644",
+      "blob": "b684bbdf51e599a820067bdac9b948028b1900b1"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner1_level3.obj",
+      "git_mode": "100644",
+      "blob": "c26ba53c55bc0de6f056a68c5c7993fe67fa9922"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner1_level4.obj",
+      "git_mode": "100644",
+      "blob": "5e89287b401f946019d802a2154706def5540872"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner2_level0.obj",
+      "git_mode": "100644",
+      "blob": "4a3cd65c4b1e00dff00ea9ba3adbc681d511ae61"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner2_level1.obj",
+      "git_mode": "100644",
+      "blob": "a4175f902d1291eb5542f4338e6cd270aa7d254a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner2_level2.obj",
+      "git_mode": "100644",
+      "blob": "5b231dc838d7d6b0150fa3f7d9c4aace7ab2cbbd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner2_level3.obj",
+      "git_mode": "100644",
+      "blob": "e05ed7507c3c3c1e17cb370dbbce212adefc2b5c"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner2_level4.obj",
+      "git_mode": "100644",
+      "blob": "03876a422718786a62a9afcb45f0720ace554492"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner3_level0.obj",
+      "git_mode": "100644",
+      "blob": "4a3cd65c4b1e00dff00ea9ba3adbc681d511ae61"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner3_level1.obj",
+      "git_mode": "100644",
+      "blob": "a4175f902d1291eb5542f4338e6cd270aa7d254a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner3_level2.obj",
+      "git_mode": "100644",
+      "blob": "ce9885ecb3b2ffe7f239a697d0ca200acd6fcf82"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner3_level3.obj",
+      "git_mode": "100644",
+      "blob": "dc5846f3dc9104667680e807102ac05618f19315"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner3_level4.obj",
+      "git_mode": "100644",
+      "blob": "8315a52d21a09dba6c261276157c824881272bba"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner4_level0.obj",
+      "git_mode": "100644",
+      "blob": "4a3cd65c4b1e00dff00ea9ba3adbc681d511ae61"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner4_level1.obj",
+      "git_mode": "100644",
+      "blob": "a4175f902d1291eb5542f4338e6cd270aa7d254a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner4_level2.obj",
+      "git_mode": "100644",
+      "blob": "ce9885ecb3b2ffe7f239a697d0ca200acd6fcf82"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner4_level3.obj",
+      "git_mode": "100644",
+      "blob": "3c45c7373ea10f9d8e9b08e6c0cdaf628651a9b8"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_corner4_level4.obj",
+      "git_mode": "100644",
+      "blob": "1a27c61570e12556e1dccf50e888ec838f5ef3bd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases0_level0.obj",
+      "git_mode": "100644",
+      "blob": "9311cdb6297fd24c70100c7cb774bd851e42fd23"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases0_level1.obj",
+      "git_mode": "100644",
+      "blob": "bb0a733bb0fe396bb244a278b1956fb92d3a3ebb"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases0_level2.obj",
+      "git_mode": "100644",
+      "blob": "e7971292296b3ba71fa85ee8fcf51d90dff6bf8b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases0_level3.obj",
+      "git_mode": "100644",
+      "blob": "7bf7562f11e74960d37d6aaae72ab67a88abee43"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases0_level4.obj",
+      "git_mode": "100644",
+      "blob": "0f25ebf1f4e573b0f42506beb6d92237d6204cee"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases1_level0.obj",
+      "git_mode": "100644",
+      "blob": "9cabbd0b6ce66c85a5d9fba126090037f361f746"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases1_level1.obj",
+      "git_mode": "100644",
+      "blob": "fc5ed522254f959163c3a2d2bfa57144eda01165"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases1_level2.obj",
+      "git_mode": "100644",
+      "blob": "4b4cca3331507ae537e4992013303ffe2f9ae3af"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases1_level3.obj",
+      "git_mode": "100644",
+      "blob": "d2ce0efaebcf717a905f17e7381ee495f9ed646d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_creases1_level4.obj",
+      "git_mode": "100644",
+      "blob": "64d29ed77a832ba8a4f06ef8f42ac7f577a3f76d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_level0.obj",
+      "git_mode": "100644",
+      "blob": "496740d0139903ba8b9fa49ede55333b3e0386e2"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_level1.obj",
+      "git_mode": "100644",
+      "blob": "af5142650b3a63d4295a7ea8865563d45521fbe7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_level2.obj",
+      "git_mode": "100644",
+      "blob": "fb68c19b257a3d0ff649622772d319c9737b133c"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_level3.obj",
+      "git_mode": "100644",
+      "blob": "efd5679a0d5bf9d0fc9b59fcb45c473dd398a6e5"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_cube_level4.obj",
+      "git_mode": "100644",
+      "blob": "6fefdfcfaa804a07522e22c524cb440a1075ecaf"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgecorner_level0.obj",
+      "git_mode": "100644",
+      "blob": "215a474493c503a56fe73eccf3a5384fb686ff74"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgecorner_level1.obj",
+      "git_mode": "100644",
+      "blob": "f8f48d233f48b7b511c9e8a4636faaeae9263f4d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgecorner_level2.obj",
+      "git_mode": "100644",
+      "blob": "057e454628a4f7af0d67bee8cc55d1ce8bc9f4cc"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgecorner_level3.obj",
+      "git_mode": "100644",
+      "blob": "09728cca77dae6e2a0d8132b33096143bba23bd1"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgecorner_level4.obj",
+      "git_mode": "100644",
+      "blob": "dc9abc09bb86f4913ce81984ec3fa0302c5dbe58"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgeonly_level0.obj",
+      "git_mode": "100644",
+      "blob": "5e6857d2ab839548eb3d372376040040074ee9ac"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgeonly_level1.obj",
+      "git_mode": "100644",
+      "blob": "ef1eb5e887d5f5063eb6068805b3924088a6cf21"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgeonly_level2.obj",
+      "git_mode": "100644",
+      "blob": "de1c8c459106301fb7506c19a620eae948751a59"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgeonly_level3.obj",
+      "git_mode": "100644",
+      "blob": "7b681b4b9a9ce765f8ab39917550d530d4b99015"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_dart_edgeonly_level4.obj",
+      "git_mode": "100644",
+      "blob": "8accedd90cd497fd8e16534ec772d16ba3671d6e"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgecorner_level0.obj",
+      "git_mode": "100644",
+      "blob": "f3e2df2ea3dc439c81497ed8a159ee41a0a9e071"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgecorner_level1.obj",
+      "git_mode": "100644",
+      "blob": "e019db685a7a7aa7b0a168094194621e6a673f76"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgecorner_level2.obj",
+      "git_mode": "100644",
+      "blob": "8bdf5f5995fbd7ec6bae827000b05c8d8a9e3b44"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgecorner_level3.obj",
+      "git_mode": "100644",
+      "blob": "fed4d6969337e5b3d581c28c345165feab3d775d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgecorner_level4.obj",
+      "git_mode": "100644",
+      "blob": "7e9e8990c811eefba669cc1accd9b0a718c8e7eb"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgeonly_level0.obj",
+      "git_mode": "100644",
+      "blob": "7e4c4e35c55cf5305ec11ff6e8a8009cb92ebfe7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgeonly_level1.obj",
+      "git_mode": "100644",
+      "blob": "319a7ea88dfb5c37a1108100565b28a4ccc5a5c6"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgeonly_level2.obj",
+      "git_mode": "100644",
+      "blob": "7510fabf3e6c914aed186299d130f01fddd5d590"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgeonly_level3.obj",
+      "git_mode": "100644",
+      "blob": "5514934c6e1e6cf8f8e408a1ccd58f8120ec26c3"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_edgeonly_level4.obj",
+      "git_mode": "100644",
+      "blob": "5b4859fc03840be6a89661aa655501ea18b3e48d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap2_level0.obj",
+      "git_mode": "100644",
+      "blob": "797c27d561e6185e7fa8862d4fc8c0cb26c7c69f"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap2_level1.obj",
+      "git_mode": "100644",
+      "blob": "e1cdbab836a47ad29578dc6823732c1570f1c6cc"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap2_level2.obj",
+      "git_mode": "100644",
+      "blob": "db9bbfff376d9bdbcbd6cb05e6c58086c4b07c16"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap2_level3.obj",
+      "git_mode": "100644",
+      "blob": "c2541c6dfa682053421ca95dbc67bc7f495d7718"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap2_level4.obj",
+      "git_mode": "100644",
+      "blob": "7113fb6360b8f0661bb5e99be119ff6c5d8ca9d0"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap_level0.obj",
+      "git_mode": "100644",
+      "blob": "2628fd9aac48d168e7269ff5810120a8b6d1841c"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap_level1.obj",
+      "git_mode": "100644",
+      "blob": "21cea0698d38bad8060c120b2c2403d622319596"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap_level2.obj",
+      "git_mode": "100644",
+      "blob": "67a38aebb572f5fa55a14a048fc5a8c86b0aa6e1"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap_level3.obj",
+      "git_mode": "100644",
+      "blob": "83915c2ab093602bbbeb93b3a71a76e510a7c2e2"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_flap_level4.obj",
+      "git_mode": "100644",
+      "blob": "620ad12c3b6e88720ee991747bcd7bc6b000ebb9"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases0_level0.obj",
+      "git_mode": "100644",
+      "blob": "26b9d55907a9ee58f5073652d042e8de364b9ba4"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases0_level1.obj",
+      "git_mode": "100644",
+      "blob": "5b7514b56a7b7ada3dc1d55ddbd88053549b3bc7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases0_level2.obj",
+      "git_mode": "100644",
+      "blob": "b349a2adb2a0198db81add1749adbfa1aed1db8f"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases0_level3.obj",
+      "git_mode": "100644",
+      "blob": "1f5ec2426fc8a1501de7da3bf8056f476f6a11de"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases0_level4.obj",
+      "git_mode": "100644",
+      "blob": "dcd6da2347afd9d6d2984c22f221ad46be3794ff"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases1_level0.obj",
+      "git_mode": "100644",
+      "blob": "e3a86b1a094fee644862d854be3f17f48b790b7d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases1_level1.obj",
+      "git_mode": "100644",
+      "blob": "0c27afbddf829403abdaf878e8733b964dd7416a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases1_level2.obj",
+      "git_mode": "100644",
+      "blob": "7d3bd7eb35e924e6ad8dc93f8a036292a4c1b234"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases1_level3.obj",
+      "git_mode": "100644",
+      "blob": "dc96447b4482dfe044a2f62418182188b80014ba"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_creases1_level4.obj",
+      "git_mode": "100644",
+      "blob": "2c726b66f4e99c847a0c6e70ec1a19dfec112594"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_level0.obj",
+      "git_mode": "100644",
+      "blob": "7a89e6960daf3bb4ef5470a59ba56f54aa4181ef"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_level1.obj",
+      "git_mode": "100644",
+      "blob": "f238cb30298c79de18065ed47af62bcb3a6ee12d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_level2.obj",
+      "git_mode": "100644",
+      "blob": "01947ceef0d4489db393af1142df7cd14a304d55"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_level3.obj",
+      "git_mode": "100644",
+      "blob": "a8a0cfbee4125e1e303357e5ea0b217a70edbdc5"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_pyramid_level4.obj",
+      "git_mode": "100644",
+      "blob": "3ecfc796797e13461d5bacf1f0153866e8fadf84"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit0_level0.obj",
+      "git_mode": "100644",
+      "blob": "25ab254dc150077bd311ded9fc3ea180f29fd7c0"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit0_level1.obj",
+      "git_mode": "100644",
+      "blob": "7f6ca267b9221220ea4ac0e5d292fb8a882882ef"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit0_level2.obj",
+      "git_mode": "100644",
+      "blob": "1aa3f9160844cb85a6e7f4482c0faecc30078e5d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit0_level3.obj",
+      "git_mode": "100644",
+      "blob": "f81570993474572e930e0be95048c0ec3ed7c463"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit0_level4.obj",
+      "git_mode": "100644",
+      "blob": "17fca54360b40a819668ff6b94f49381104a09fe"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit1_level0.obj",
+      "git_mode": "100644",
+      "blob": "25ab254dc150077bd311ded9fc3ea180f29fd7c0"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit1_level1.obj",
+      "git_mode": "100644",
+      "blob": "310caf7e91df89b249aed916e3934b573eb23826"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit1_level2.obj",
+      "git_mode": "100644",
+      "blob": "06c2043303e8197c44185822f6b8408c23e8b93b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit1_level3.obj",
+      "git_mode": "100644",
+      "blob": "ac181ee57b906b334e3368d88d929ba01460b810"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit1_level4.obj",
+      "git_mode": "100644",
+      "blob": "dd3136ea4b2c91a9e0e13da0d3a8993949bb1674"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit2_level0.obj",
+      "git_mode": "100644",
+      "blob": "6daad40b9b149e42b75e06ab828ded25228963c7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit2_level1.obj",
+      "git_mode": "100644",
+      "blob": "81082542cf218a69559e78e44a3145c768dbeed5"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit2_level2.obj",
+      "git_mode": "100644",
+      "blob": "b51968157d8d96bea5c4b8d1a5214dc7fd9a4397"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit2_level3.obj",
+      "git_mode": "100644",
+      "blob": "dde19b82636cac155f65199d216f03df2db06906"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit2_level4.obj",
+      "git_mode": "100644",
+      "blob": "62252b786a228d0134d8c77968a151c0ff9760ee"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit3_level0.obj",
+      "git_mode": "100644",
+      "blob": "6daad40b9b149e42b75e06ab828ded25228963c7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit3_level1.obj",
+      "git_mode": "100644",
+      "blob": "174b7996c1f26d8eee06bbae9d258c258f8635a0"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit3_level2.obj",
+      "git_mode": "100644",
+      "blob": "fbcc74c184476d3f385c48c16ebf4d8350333ccd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit3_level3.obj",
+      "git_mode": "100644",
+      "blob": "78b106e058245c8c7f20482bcb31cae954bee391"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_square_hedit3_level4.obj",
+      "git_mode": "100644",
+      "blob": "e5562fe35eccc3c7f20f1a673b9549c22e3941ba"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases0_level0.obj",
+      "git_mode": "100644",
+      "blob": "445aab7c0616707b1ebd4c2cc7a8588e1e86d571"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases0_level1.obj",
+      "git_mode": "100644",
+      "blob": "7ea5b8a6ddd00d7b07e0eeec48d983cb405fae8d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases0_level2.obj",
+      "git_mode": "100644",
+      "blob": "fd77d841473c93b0deda3361896add1452c2c1bc"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases0_level3.obj",
+      "git_mode": "100644",
+      "blob": "c7e2dd332308cd9be60b08d0ac60e90daeebf7b3"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases0_level4.obj",
+      "git_mode": "100644",
+      "blob": "971ffc61c8a614ac7b53a0bfef7af85461c48e3a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases1_level0.obj",
+      "git_mode": "100644",
+      "blob": "f28ebf1794303a73f2bee032d86a7dcb1636a444"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases1_level1.obj",
+      "git_mode": "100644",
+      "blob": "bdf0649882763edf28e9071f9e751527c4e4af31"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases1_level2.obj",
+      "git_mode": "100644",
+      "blob": "6873ef7c4c4428a177f53c29d072d11160a473ee"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases1_level3.obj",
+      "git_mode": "100644",
+      "blob": "6bbaf1999d7ece00d10f398af561257854d43ffd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_creases1_level4.obj",
+      "git_mode": "100644",
+      "blob": "daa3ef3561962f37d6b69a8d090854713fd3f991"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_level0.obj",
+      "git_mode": "100644",
+      "blob": "38674d183b7e518654d5691e0a168922675bc99a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_level1.obj",
+      "git_mode": "100644",
+      "blob": "95d71e4fa6ef19fe01c55f800ea2de6bc1956287"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_level2.obj",
+      "git_mode": "100644",
+      "blob": "e6e39238d7fb68aa581316053daaef74419ee170"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_level3.obj",
+      "git_mode": "100644",
+      "blob": "565c162df59616f3b383e6e3a67f7e4d30ca2286"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/catmark_tent_level4.obj",
+      "git_mode": "100644",
+      "blob": "a87af9ec5f12b8cffb30cd2d31ab9251a77fd400"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin0_level0.obj",
+      "git_mode": "100644",
+      "blob": "6f2628a6e37e8ff8ad6ef102e9f4ec1bbf04af04"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin0_level1.obj",
+      "git_mode": "100644",
+      "blob": "a5c354dba8b29ef051aa78b2dda0b6ae275bce76"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin0_level2.obj",
+      "git_mode": "100644",
+      "blob": "63ee4250a1b46de84920e7d848225de98e9eff1d"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin0_level3.obj",
+      "git_mode": "100644",
+      "blob": "0552fe59eb82f4409e91f51f7c4835875c389fbd"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin0_level4.obj",
+      "git_mode": "100644",
+      "blob": "a7ff7f36e53cc69209aba3d2ea16e6311c96458b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin1_level0.obj",
+      "git_mode": "100644",
+      "blob": "6f2628a6e37e8ff8ad6ef102e9f4ec1bbf04af04"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin1_level1.obj",
+      "git_mode": "100644",
+      "blob": "653066ae093a5c687ef7e3401e6284b8a61da3bc"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin1_level2.obj",
+      "git_mode": "100644",
+      "blob": "850c3c7d97a03ca8b3349ba13ad1df748ab3984a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin1_level3.obj",
+      "git_mode": "100644",
+      "blob": "10d3486d9bf327ab6f10765fd4f64eee46b1a2ec"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_chaikin1_level4.obj",
+      "git_mode": "100644",
+      "blob": "1ee610215e9c030cd36194513e1f9cb4f0dc2891"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases0_level0.obj",
+      "git_mode": "100644",
+      "blob": "bc52f3a66be68573e1f874422f5eeb6c8a34f678"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases0_level1.obj",
+      "git_mode": "100644",
+      "blob": "d33a0da2d319381c71ebe42ec5862dd7ceea0bc7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases0_level2.obj",
+      "git_mode": "100644",
+      "blob": "cc7c529694d1f0147ed7d1bb277d9df41a6ca669"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases0_level3.obj",
+      "git_mode": "100644",
+      "blob": "a182b518343fc7d2eab9f4ae1ffdc9d78ceaf503"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases0_level4.obj",
+      "git_mode": "100644",
+      "blob": "622b5c51e08dee347eb6746118f0df9c85bbb849"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases1_level0.obj",
+      "git_mode": "100644",
+      "blob": "ca5b726ae7fbfccb734e3ec6ee220fdd51964268"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases1_level1.obj",
+      "git_mode": "100644",
+      "blob": "f692728ae493e6eff324709615e57fda2b97c7f8"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases1_level2.obj",
+      "git_mode": "100644",
+      "blob": "12cac861bb33f14d24822027441500eb8433a2b6"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases1_level3.obj",
+      "git_mode": "100644",
+      "blob": "ccd8279cff0a8c14ac6fd873057c4745d99e4dd0"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_creases1_level4.obj",
+      "git_mode": "100644",
+      "blob": "727d2e1cdffa144c8f01259854c05d517e1efbd6"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_level0.obj",
+      "git_mode": "100644",
+      "blob": "32bd26617e644b0883919e221288cfee1f76f5d4"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_level1.obj",
+      "git_mode": "100644",
+      "blob": "7490cf3a1254a0e259f55354b284a7adaa5ca0df"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_level2.obj",
+      "git_mode": "100644",
+      "blob": "1f647db029f2832d40d7dbb30a965e2fcb8ab8f6"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_level3.obj",
+      "git_mode": "100644",
+      "blob": "91c1ac33a27ddbf44af0ed4038f69c37f9f0b919"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_cube_level4.obj",
+      "git_mode": "100644",
+      "blob": "fb2fbddb9ac12264a572be21d60c5e47c4500182"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_icosahedron_level0.obj",
+      "git_mode": "100644",
+      "blob": "accbb4341dc436931ea54bf38b2cd49e69084220"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_icosahedron_level1.obj",
+      "git_mode": "100644",
+      "blob": "1e99210cc958b39e11be988a35fef35cf70f46ff"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_icosahedron_level2.obj",
+      "git_mode": "100644",
+      "blob": "58ae4b6bba1ca0c73d207b8e1e69c6d8f9df0480"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_icosahedron_level3.obj",
+      "git_mode": "100644",
+      "blob": "f78c08fcc27e5f7d5be3ee83af7d5aec1783e93c"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_icosahedron_level4.obj",
+      "git_mode": "100644",
+      "blob": "ecf0532895a4184f2c7ebdc1825c77b46afd716b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgecorner_level0.obj",
+      "git_mode": "100644",
+      "blob": "5f2856fc16a2e57ac19f78e4f01de19948a6718a"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgecorner_level1.obj",
+      "git_mode": "100644",
+      "blob": "7650b593c67c487fb202e436042068a8ea5466fb"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgecorner_level2.obj",
+      "git_mode": "100644",
+      "blob": "4622d75020da634dd72ca14e81783b36ae6d795e"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgecorner_level3.obj",
+      "git_mode": "100644",
+      "blob": "86a09bd4f90c2b4a43055fe9ec43a68c3c4c506c"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgecorner_level4.obj",
+      "git_mode": "100644",
+      "blob": "0c66d552d0dd7d70e32a4d6c837f1c7eadc28fc2"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgeonly_level0.obj",
+      "git_mode": "100644",
+      "blob": "df5b1673efc6dfa8a78663dfe814df5310c9040b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgeonly_level1.obj",
+      "git_mode": "100644",
+      "blob": "f9ec35dc26d6fc3a085d8fc445b7d3eae9ce2ec7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgeonly_level2.obj",
+      "git_mode": "100644",
+      "blob": "0c46f43626c92710b92b812f85ef5d0e5f4e8e7b"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgeonly_level3.obj",
+      "git_mode": "100644",
+      "blob": "28636a61ebe75ea6a917b112126e4b980ba41d58"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_saddle_edgeonly_level4.obj",
+      "git_mode": "100644",
+      "blob": "6c2cda257f6c96adf1e0095494862406d1aa57e9"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgecorner_level0.obj",
+      "git_mode": "100644",
+      "blob": "821edb0806618a5e70298f301b12a94d11cac572"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgecorner_level1.obj",
+      "git_mode": "100644",
+      "blob": "7c96b27af5799403720b8cf129ad01ad4011a6b7"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgecorner_level2.obj",
+      "git_mode": "100644",
+      "blob": "db489f44525c34ff1ff9840cddc6d932da88aacc"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgecorner_level3.obj",
+      "git_mode": "100644",
+      "blob": "cd1050447df44a8e8db33fdfd5f850f8aa3e03fa"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgecorner_level4.obj",
+      "git_mode": "100644",
+      "blob": "724e564f89d02b7aa6bf93d112ef845dc005104e"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgeonly_level0.obj",
+      "git_mode": "100644",
+      "blob": "b25ec2d81212f39d416f7575f261cf4fcb6673d5"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgeonly_level1.obj",
+      "git_mode": "100644",
+      "blob": "a02e0a9d61d363e3c3c5def8acb5df1f1d9c7104"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgeonly_level2.obj",
+      "git_mode": "100644",
+      "blob": "7b36434226cdb00a554115af9c18942141acc8eb"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgeonly_level3.obj",
+      "git_mode": "100644",
+      "blob": "55d6d3d798a5dd43f18040e6c8f3760ee125f896"
+    },
+    {
+      "path": "regression/hbr_regression/baseline/loop_triangle_edgeonly_level4.obj",
+      "git_mode": "100644",
+      "blob": "41801ce5321b030432423f0e527b37362491a84e"
+    },
+    {
+      "path": "regression/hbr_regression/init_shapes.h",
+      "git_mode": "100644",
+      "blob": "1c80bdae43d597c634737866e891f2bce962d8b2"
+    },
+    {
+      "path": "regression/hbr_regression/main.cpp",
+      "git_mode": "100644",
+      "blob": "a6ea11d603486f640c8e2dd11e7ecbdd64ccd106"
+    },
+    {
+      "path": "regression/osd_regression/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "c89b4263fa89c0570e9e9ec2902edddda37de12f"
+    },
+    {
+      "path": "regression/osd_regression/main.cpp",
+      "git_mode": "100644",
+      "blob": "cc59d65b2f605ce46e9c9a3db81f2e1a3d7f1232"
+    },
+    {
+      "path": "regression/shapes/all.h",
+      "git_mode": "100644",
+      "blob": "861b8d5cbf3267b5767a222735725d4a6c6e18a1"
+    },
+    {
+      "path": "regression/shapes/bilinear_cube.h",
+      "git_mode": "100644",
+      "blob": "27d4727a61dce93df33751887f6147963d948f07"
+    },
+    {
+      "path": "regression/shapes/bilinear_nonplanar.h",
+      "git_mode": "100644",
+      "blob": "1a5ecd85af36ecfd3ebecc24589d3db46a9d02ad"
+    },
+    {
+      "path": "regression/shapes/bilinear_nonquads0.h",
+      "git_mode": "100644",
+      "blob": "6ead04905bef347c7b31ce219affa62832d7540f"
+    },
+    {
+      "path": "regression/shapes/bilinear_nonquads1.h",
+      "git_mode": "100644",
+      "blob": "055e18cf811781e1c741c14207c7b8aeb8252297"
+    },
+    {
+      "path": "regression/shapes/catmark_bishop.h",
+      "git_mode": "100644",
+      "blob": "619cbb78df8e10454da9ef471151754a4a2f9ffd"
+    },
+    {
+      "path": "regression/shapes/catmark_car.h",
+      "git_mode": "100644",
+      "blob": "8d9bd3fe3e1d392ab2e4ebcf50219cd8f28301a7"
+    },
+    {
+      "path": "regression/shapes/catmark_chaikin0.h",
+      "git_mode": "100644",
+      "blob": "23175c73ddd67c12352ac89292d3a1670728054e"
+    },
+    {
+      "path": "regression/shapes/catmark_chaikin1.h",
+      "git_mode": "100644",
+      "blob": "023d019047917acdf787c0a167b1cdd7c439c4a9"
+    },
+    {
+      "path": "regression/shapes/catmark_chaikin2.h",
+      "git_mode": "100644",
+      "blob": "47038949a9fd4a1059ea1698c5d59fa4fbd3f5be"
+    },
+    {
+      "path": "regression/shapes/catmark_cube.h",
+      "git_mode": "100644",
+      "blob": "94c39a5ec340dd88d5db14086b3e343c0bb6bcd0"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_corner0.h",
+      "git_mode": "100644",
+      "blob": "4b7d6512945a5f1625eb1b2bf04a0b4ab0a9e89a"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_corner1.h",
+      "git_mode": "100644",
+      "blob": "d1b7627216ea1d036960fd32bf4939fac7881c63"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_corner2.h",
+      "git_mode": "100644",
+      "blob": "1dd60d0b1242e20b2c8232dcf265eaa389f95d64"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_corner3.h",
+      "git_mode": "100644",
+      "blob": "dc8ff6a526cf7b855b67f2c5b52366a3194170a4"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_corner4.h",
+      "git_mode": "100644",
+      "blob": "98f1d4da4304bf9a0374f1b94464335ff2506af6"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_creases0.h",
+      "git_mode": "100644",
+      "blob": "d76f1842243609e9e219cc9dc6cdecc091583dab"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_creases1.h",
+      "git_mode": "100644",
+      "blob": "ddb8e86a39104e62bd97ad44ab4fc37b16046698"
+    },
+    {
+      "path": "regression/shapes/catmark_cube_creases2.h",
+      "git_mode": "100644",
+      "blob": "a76bc8b7b27cdedbe5c55b46d533f32359db326b"
+    },
+    {
+      "path": "regression/shapes/catmark_cubes_infsharp.h",
+      "git_mode": "100644",
+      "blob": "dcd19cefe0d456277245dc628d3307334c12fb09"
+    },
+    {
+      "path": "regression/shapes/catmark_cubes_semisharp.h",
+      "git_mode": "100644",
+      "blob": "ece545f8e1794a341853f3fec6f2366deb2710b7"
+    },
+    {
+      "path": "regression/shapes/catmark_dart_edgecorner.h",
+      "git_mode": "100644",
+      "blob": "6dc31fccaa3c17680c3dc840ed961b1815a49016"
+    },
+    {
+      "path": "regression/shapes/catmark_dart_edgeonly.h",
+      "git_mode": "100644",
+      "blob": "b09c97f46f960b592c7324899263842790653f34"
+    },
+    {
+      "path": "regression/shapes/catmark_edgecorner.h",
+      "git_mode": "100644",
+      "blob": "1ef3f19078c322323d8138233020522cd3c6e70f"
+    },
+    {
+      "path": "regression/shapes/catmark_edgenone.h",
+      "git_mode": "100644",
+      "blob": "239e35950dc69edda9908c75a790b1227281ca4d"
+    },
+    {
+      "path": "regression/shapes/catmark_edgeonly.h",
+      "git_mode": "100644",
+      "blob": "77f1cb5b502d27dc0eee3f71321a112fd05248e7"
+    },
+    {
+      "path": "regression/shapes/catmark_fan.h",
+      "git_mode": "100644",
+      "blob": "ea49eae2a4d1a3ad07669afd5578414dbef1590d"
+    },
+    {
+      "path": "regression/shapes/catmark_flap.h",
+      "git_mode": "100644",
+      "blob": "7231861b2135710a2a8a740b169e9aec375840bb"
+    },
+    {
+      "path": "regression/shapes/catmark_flap2.h",
+      "git_mode": "100644",
+      "blob": "71f6b50f1ac2d22c3c59836b32f59e8b92aa86ee"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_bound0.h",
+      "git_mode": "100644",
+      "blob": "cd711ba03847e179d8d9dfc93950f3e0933a0e79"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_bound1.h",
+      "git_mode": "100644",
+      "blob": "cf646a9a4b7f131bebe61ced2c34a496fefd36eb"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_bound2.h",
+      "git_mode": "100644",
+      "blob": "88a532f2f4a2259e430aab790865e8e94bba3a61"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_bound3.h",
+      "git_mode": "100644",
+      "blob": "11b493b0f346f4e56e7385e9292d4d479886c826"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_bound4.h",
+      "git_mode": "100644",
+      "blob": "aca97395a56bbc8f996710a55e4fad7594e174cb"
+    },
+    {
+      "path": "regression/shapes/catmark_fvar_project0.h",
+      "git_mode": "100644",
+      "blob": "0debcf0cf287119c3bf564d03de8ef8a52005b5b"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test0.h",
+      "git_mode": "100644",
+      "blob": "f20f72787b1cc1f21e2fa10ea21d4c4c712e75e1"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test1.h",
+      "git_mode": "100644",
+      "blob": "a31610a9d1bb8c30d7114c9a369ef92a27d0480b"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test2.h",
+      "git_mode": "100644",
+      "blob": "03232e5cf1ae550ad02ab1030558377dce24d719"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test3.h",
+      "git_mode": "100644",
+      "blob": "e6d8e915ce28e4acf903296299de6361d5b00496"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test4.h",
+      "git_mode": "100644",
+      "blob": "967a965dbec310e4ac13c1351b2f414553f8b38a"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test5.h",
+      "git_mode": "100644",
+      "blob": "2116f4b3862aa46ac55fc197a0c8a70996eff5b0"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test6.h",
+      "git_mode": "100644",
+      "blob": "94d26363543c660b21e1d85600420e2534c24f31"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test7.h",
+      "git_mode": "100644",
+      "blob": "d9fa632c191735e6799ae053b6877757eae644f9"
+    },
+    {
+      "path": "regression/shapes/catmark_gregory_test8.h",
+      "git_mode": "100644",
+      "blob": "081853c41a74ff769004cba8db14e0de79bded92"
+    },
+    {
+      "path": "regression/shapes/catmark_helmet.h",
+      "git_mode": "100644",
+      "blob": "a98676ff7fe04be05c273864c6e8a91ed512dc68"
+    },
+    {
+      "path": "regression/shapes/catmark_hole_test1.h",
+      "git_mode": "100644",
+      "blob": "515ae1fc580eb3d4df76713084fafafdf477d441"
+    },
+    {
+      "path": "regression/shapes/catmark_hole_test2.h",
+      "git_mode": "100644",
+      "blob": "843e4dc00533cdb45166fa8ab6daa4ed36ed4a04"
+    },
+    {
+      "path": "regression/shapes/catmark_hole_test3.h",
+      "git_mode": "100644",
+      "blob": "c18fbf0177d13779cf79a97941b687fa3576b1a2"
+    },
+    {
+      "path": "regression/shapes/catmark_hole_test4.h",
+      "git_mode": "100644",
+      "blob": "137dee6da11c09b591e540af82b5d1ed9f502eb4"
+    },
+    {
+      "path": "regression/shapes/catmark_inf_crease0.h",
+      "git_mode": "100644",
+      "blob": "bd0390483bd9ccdb86dc081a49b15fae03cf2a64"
+    },
+    {
+      "path": "regression/shapes/catmark_inf_crease1.h",
+      "git_mode": "100644",
+      "blob": "415a101585604f3c33671fca63df27b888a53be8"
+    },
+    {
+      "path": "regression/shapes/catmark_lefthanded.h",
+      "git_mode": "100644",
+      "blob": "3b9fb49cb216ff009188b42d0566064a694a935a"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_bareverts.h",
+      "git_mode": "100644",
+      "blob": "eeb299feaa1d4c32df14e58e63c0cc9f45dfebad"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_creases.h",
+      "git_mode": "100644",
+      "blob": "07a164998f48d7df97664adf29cb2be22a998642"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_edge100.h",
+      "git_mode": "100644",
+      "blob": "433d73b8cdd5be831c1871412ba25d3bb7161551"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_edges.h",
+      "git_mode": "100644",
+      "blob": "d7f76caff41f47cdae906389ecdb62e5b3e16bf3"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_quadpole360.h",
+      "git_mode": "100644",
+      "blob": "417539e7edfabeaf66b0cf96938796453b434b18"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_quadpole64.h",
+      "git_mode": "100644",
+      "blob": "9925eaadfdf37fb7b7ba87bcc5f874e2a30139d4"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_quadpole8.h",
+      "git_mode": "100644",
+      "blob": "bb1ca671f137a3c8913f78aec0a0c131faefcb40"
+    },
+    {
+      "path": "regression/shapes/catmark_nonman_verts.h",
+      "git_mode": "100644",
+      "blob": "64a02055d47ec7855a95304a6b84adc8f6bb67ad"
+    },
+    {
+      "path": "regression/shapes/catmark_nonquads.h",
+      "git_mode": "100644",
+      "blob": "11ec379c32fedd397ca24139776e57d01d941222"
+    },
+    {
+      "path": "regression/shapes/catmark_pawn.h",
+      "git_mode": "100644",
+      "blob": "a265c5342e226a5e86fb58c55df68b2b811ef311"
+    },
+    {
+      "path": "regression/shapes/catmark_pole360.h",
+      "git_mode": "100644",
+      "blob": "bfc22f2f38e7e8284fde7cf4ee9258464b82b084"
+    },
+    {
+      "path": "regression/shapes/catmark_pole64.h",
+      "git_mode": "100644",
+      "blob": "c4bed3b0c1c84e64ecfc8fe90a188ca89c5651d5"
+    },
+    {
+      "path": "regression/shapes/catmark_pole8.h",
+      "git_mode": "100644",
+      "blob": "bd8a8f534a478dee1b75525bebc6d141994e5c48"
+    },
+    {
+      "path": "regression/shapes/catmark_pyramid.h",
+      "git_mode": "100644",
+      "blob": "299f771f822ade80b7910851eca87a1cc9519b9d"
+    },
+    {
+      "path": "regression/shapes/catmark_pyramid_creases0.h",
+      "git_mode": "100644",
+      "blob": "f7747ac485a154842adc075a797d8dbf2df94ee3"
+    },
+    {
+      "path": "regression/shapes/catmark_pyramid_creases1.h",
+      "git_mode": "100644",
+      "blob": "a3eea4edc765f4a1e5f2bde784aca59f7e56deeb"
+    },
+    {
+      "path": "regression/shapes/catmark_pyramid_creases2.h",
+      "git_mode": "100644",
+      "blob": "748454cd1254b54037af6617b67f221448f346f4"
+    },
+    {
+      "path": "regression/shapes/catmark_quadstrips.h",
+      "git_mode": "100644",
+      "blob": "bc1b7c809b4adf3b71b0bc4323272402d79d1bad"
+    },
+    {
+      "path": "regression/shapes/catmark_righthanded.h",
+      "git_mode": "100644",
+      "blob": "e252844ee3bea1662356c15b1ceace795a0800a6"
+    },
+    {
+      "path": "regression/shapes/catmark_rook.h",
+      "git_mode": "100644",
+      "blob": "093901ef5ab65f7266f6edec9c5843f11d58b051"
+    },
+    {
+      "path": "regression/shapes/catmark_single_crease.h",
+      "git_mode": "100644",
+      "blob": "d62c8187cd69b0a529f168c85d0d91ef837440e5"
+    },
+    {
+      "path": "regression/shapes/catmark_smoothtris0.h",
+      "git_mode": "100644",
+      "blob": "4c22797f7a3b81f05e3a5c0988119c4694edd7f6"
+    },
+    {
+      "path": "regression/shapes/catmark_smoothtris1.h",
+      "git_mode": "100644",
+      "blob": "2a8ccbbe909b6d07d201cd7c8c6e3e8b65cad5e5"
+    },
+    {
+      "path": "regression/shapes/catmark_square_hedit0.h",
+      "git_mode": "100644",
+      "blob": "b9150fc50090f8d77a1dcfcc3c976cfc6eb9dc96"
+    },
+    {
+      "path": "regression/shapes/catmark_square_hedit1.h",
+      "git_mode": "100644",
+      "blob": "42ed2cca8a39d1496549de38662cf8fe5af2abf5"
+    },
+    {
+      "path": "regression/shapes/catmark_square_hedit2.h",
+      "git_mode": "100644",
+      "blob": "e917febf57c1fd33621272255854c83f761b3373"
+    },
+    {
+      "path": "regression/shapes/catmark_square_hedit3.h",
+      "git_mode": "100644",
+      "blob": "f5b4ad41d350b6443889121b64f532a6f30b71c4"
+    },
+    {
+      "path": "regression/shapes/catmark_square_hedit4.h",
+      "git_mode": "100644",
+      "blob": "17e52c43038ed2f15e716da8906bed4aad4005ad"
+    },
+    {
+      "path": "regression/shapes/catmark_tent.h",
+      "git_mode": "100644",
+      "blob": "2d9f906c214a6ed2e03c1c727bf4aec78eb02938"
+    },
+    {
+      "path": "regression/shapes/catmark_tent_creases0.h",
+      "git_mode": "100644",
+      "blob": "789c42814a17633ed1356c2fa1b5a1e29b0266b0"
+    },
+    {
+      "path": "regression/shapes/catmark_tent_creases1.h",
+      "git_mode": "100644",
+      "blob": "61e1b778c2e7e1eaf41f9fa458181f279a6eb0ce"
+    },
+    {
+      "path": "regression/shapes/catmark_toroidal_tet.h",
+      "git_mode": "100644",
+      "blob": "72d5a2f891e5ceee8ef7d7a0322129f20f61a237"
+    },
+    {
+      "path": "regression/shapes/catmark_torus.h",
+      "git_mode": "100644",
+      "blob": "f7a2c73767ebcb0d18307b54045b440a112a4535"
+    },
+    {
+      "path": "regression/shapes/catmark_torus_creases0.h",
+      "git_mode": "100644",
+      "blob": "3b3c41fff908d2e3dc74083515d72f5936ea37bd"
+    },
+    {
+      "path": "regression/shapes/catmark_torus_creases1.h",
+      "git_mode": "100644",
+      "blob": "008ad4c707b639fcc9e98e2e2a298452cff8d78e"
+    },
+    {
+      "path": "regression/shapes/catmark_val2_back2back.h",
+      "git_mode": "100644",
+      "blob": "0fdc5a9113a7b2722b2596f0bc7184da142952f1"
+    },
+    {
+      "path": "regression/shapes/catmark_val2_foldover.h",
+      "git_mode": "100644",
+      "blob": "fa0fe67c42b67893d115306a832b96b4647ce293"
+    },
+    {
+      "path": "regression/shapes/catmark_val2_interior.h",
+      "git_mode": "100644",
+      "blob": "77c4469310f0654c36a7a5789094541a55f466b5"
+    },
+    {
+      "path": "regression/shapes/catmark_val2_nonman.h",
+      "git_mode": "100644",
+      "blob": "c2512235fb7aa8ac2f1a4b7caa5c541e1b31c1fa"
+    },
+    {
+      "path": "regression/shapes/catmark_xord_boundary.h",
+      "git_mode": "100644",
+      "blob": "3aaf67e78f7557b14153b8f69e0f7bce7d6857b2"
+    },
+    {
+      "path": "regression/shapes/catmark_xord_interior.h",
+      "git_mode": "100644",
+      "blob": "fabae6d6ab08bd04e3b488ac45614b08135cb62a"
+    },
+    {
+      "path": "regression/shapes/loop_chaikin0.h",
+      "git_mode": "100644",
+      "blob": "00045d97e654cace5baad66a637ae79f92293a9a"
+    },
+    {
+      "path": "regression/shapes/loop_chaikin1.h",
+      "git_mode": "100644",
+      "blob": "0c83dc52699f207a32b7d5bf1d29a92b30565d6c"
+    },
+    {
+      "path": "regression/shapes/loop_cube.h",
+      "git_mode": "100644",
+      "blob": "4aabf5fb6356e7cacaf2c0852595918cebd7456b"
+    },
+    {
+      "path": "regression/shapes/loop_cube_asymmetric.h",
+      "git_mode": "100644",
+      "blob": "bf0b90b6c1f07f447d57a8160d2739551bc54dae"
+    },
+    {
+      "path": "regression/shapes/loop_cube_creases0.h",
+      "git_mode": "100644",
+      "blob": "74e3e15115da280bb62c465205e7e538425e1a17"
+    },
+    {
+      "path": "regression/shapes/loop_cube_creases1.h",
+      "git_mode": "100644",
+      "blob": "359e7dd2e48fd7634afff8c4e312eb6a8e63b8a8"
+    },
+    {
+      "path": "regression/shapes/loop_cubes_infsharp.h",
+      "git_mode": "100644",
+      "blob": "9df126cf38a9dac958f98037c26f396505f0fa3e"
+    },
+    {
+      "path": "regression/shapes/loop_cubes_semisharp.h",
+      "git_mode": "100644",
+      "blob": "f693cb0b08cd881ff14adbe12e9cd07ad2a29a8e"
+    },
+    {
+      "path": "regression/shapes/loop_fvar_bound0.h",
+      "git_mode": "100644",
+      "blob": "196e4747a5214009a4cc84f6b61f5e0991f36f30"
+    },
+    {
+      "path": "regression/shapes/loop_fvar_bound1.h",
+      "git_mode": "100644",
+      "blob": "901936bd42c560fad34a741d3521d3a4bf59b357"
+    },
+    {
+      "path": "regression/shapes/loop_fvar_bound2.h",
+      "git_mode": "100644",
+      "blob": "f882e04201c9729bd0e976cc6917f9dbeb44f0c6"
+    },
+    {
+      "path": "regression/shapes/loop_fvar_bound3.h",
+      "git_mode": "100644",
+      "blob": "af736981567a38c182a39feab94c7c88d92a0326"
+    },
+    {
+      "path": "regression/shapes/loop_icos_infsharp.h",
+      "git_mode": "100644",
+      "blob": "67c411b5fe012b7d81e205d52f3c06cfcbc25244"
+    },
+    {
+      "path": "regression/shapes/loop_icos_semisharp.h",
+      "git_mode": "100644",
+      "blob": "32b5cd8ec542a1561360b1b1e201330f001762d1"
+    },
+    {
+      "path": "regression/shapes/loop_icosahedron.h",
+      "git_mode": "100644",
+      "blob": "96f52f1efe8e69bb4dcf5aa30a49d41084271978"
+    },
+    {
+      "path": "regression/shapes/loop_nonman_edge100.h",
+      "git_mode": "100644",
+      "blob": "1e0dcfef538a3ce7a0232ab3d4286f69d65ff4e2"
+    },
+    {
+      "path": "regression/shapes/loop_nonman_edges.h",
+      "git_mode": "100644",
+      "blob": "c3788f0a10e8d509c562ca0a86ca3b52e38d130d"
+    },
+    {
+      "path": "regression/shapes/loop_nonman_verts.h",
+      "git_mode": "100644",
+      "blob": "6ecc593b5e5881d2920603878c8d267e69263474"
+    },
+    {
+      "path": "regression/shapes/loop_pole360.h",
+      "git_mode": "100644",
+      "blob": "5cfab560f1e8a3b933688b03ba7c8f71d941b4ea"
+    },
+    {
+      "path": "regression/shapes/loop_pole64.h",
+      "git_mode": "100644",
+      "blob": "21d9711225f4ebdbc97963bc3fefd80437239346"
+    },
+    {
+      "path": "regression/shapes/loop_pole8.h",
+      "git_mode": "100644",
+      "blob": "df53b64bcfec301810c421e9d6b8bd290cbf4b08"
+    },
+    {
+      "path": "regression/shapes/loop_saddle_edgecorner.h",
+      "git_mode": "100644",
+      "blob": "9b76036c8b622c4324fa60bcd2901ba347d664b5"
+    },
+    {
+      "path": "regression/shapes/loop_saddle_edgeonly.h",
+      "git_mode": "100644",
+      "blob": "dbe4b9908af0dca9d56f750426d7e67c2e4fcda9"
+    },
+    {
+      "path": "regression/shapes/loop_tetrahedron.h",
+      "git_mode": "100644",
+      "blob": "a6d74a7e296c63ff4fd9fcf2ea425d4ab78419bf"
+    },
+    {
+      "path": "regression/shapes/loop_toroidal_tet.h",
+      "git_mode": "100644",
+      "blob": "0db4e247ae301145552af8b410a62276d378c91a"
+    },
+    {
+      "path": "regression/shapes/loop_triangle_edgecorner.h",
+      "git_mode": "100644",
+      "blob": "dd03b286b88f758da78f6aa57bc4765de2a3bf5b"
+    },
+    {
+      "path": "regression/shapes/loop_triangle_edgenone.h",
+      "git_mode": "100644",
+      "blob": "ecc593cc8605c5204bb803a985e9a21f124e9e52"
+    },
+    {
+      "path": "regression/shapes/loop_triangle_edgeonly.h",
+      "git_mode": "100644",
+      "blob": "d833b2f821875cc06fa7d34c4c9879d8d84e6e2f"
+    },
+    {
+      "path": "regression/shapes/loop_val2_interior.h",
+      "git_mode": "100644",
+      "blob": "b925c2fa27e289300b9af9e641918680c6547c9b"
+    },
+    {
+      "path": "regression/shapes/loop_xord_boundary.h",
+      "git_mode": "100644",
+      "blob": "eebc3f9bccb748138d161a7be95c1d1b03e36bc6"
+    },
+    {
+      "path": "regression/shapes/loop_xord_interior.h",
+      "git_mode": "100644",
+      "blob": "4bd9b42234516019597d0d75b0a17324e12806f6"
+    },
+    {
+      "path": "tools/stringify/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "c502a6e93c32bd14a3384ec1a1f2ef96bdf33ae8"
+    },
+    {
+      "path": "tools/stringify/main.cpp",
+      "git_mode": "100644",
+      "blob": "e30e4a4ba634d8f0d348c1c815625daacfd99ad8"
+    },
+    {
+      "path": "tools/stringify/stringify.py",
+      "git_mode": "100644",
+      "blob": "e0e82bd7e45d9c62a37acd029a5f36e1de5d24e8"
+    },
+    {
+      "path": "tutorials/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "0751b866f85a3f30c53b403d1d1ba6bc47668aa6"
+    },
+    {
+      "path": "tutorials/far/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "264aacdd01b7ae1ea2a22886b55c51bd94ed7f2f"
+    },
+    {
+      "path": "tutorials/far/tutorial_1_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "c0a31171732d1db23e9633913ecbb5bf934e749f"
+    },
+    {
+      "path": "tutorials/far/tutorial_1_1/far_tutorial_1_1.cpp",
+      "git_mode": "100644",
+      "blob": "8b55ebda1236b1e0f8e81d868c3c0bc0ffc0e342"
+    },
+    {
+      "path": "tutorials/far/tutorial_1_2/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "b46a0352887748b0d1b1c00c4f14fe8678bb422a"
+    },
+    {
+      "path": "tutorials/far/tutorial_1_2/far_tutorial_1_2.cpp",
+      "git_mode": "100644",
+      "blob": "2c44d64b1835a0867d71f2f9d31075e617045de9"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "1a12ff42c8edbc80374134333f070e5b7b4e6ea6"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_1/far_tutorial_2_1.cpp",
+      "git_mode": "100644",
+      "blob": "78805d4cab0938fe1e59dadb368ba995ade429cc"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_2/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "267187759e914506a8d59a00f84a2e94f6637870"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_2/far_tutorial_2_2.cpp",
+      "git_mode": "100644",
+      "blob": "83557329a8afc07ee6dbc84460df8b7b9a01c225"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_3/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "5367fef3fb0997fb34b11dd9c306a9ca0d6770a6"
+    },
+    {
+      "path": "tutorials/far/tutorial_2_3/far_tutorial_2_3.cpp",
+      "git_mode": "100644",
+      "blob": "efe482abc47fdcee3333da5f418575710296a4f6"
+    },
+    {
+      "path": "tutorials/far/tutorial_3_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "0cdcb677c2803f142d1d7103ef63e42c1795bbd1"
+    },
+    {
+      "path": "tutorials/far/tutorial_3_1/far_tutorial_3_1.cpp",
+      "git_mode": "100644",
+      "blob": "e3617f29ead1fa42c9ca001b5a1875a55631198b"
+    },
+    {
+      "path": "tutorials/far/tutorial_3_1/hbr_to_vtr.h",
+      "git_mode": "100644",
+      "blob": "abe17c0fde59f1e140352677ed2fb899b591d008"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "91c120d5492cce652a3941d3dd1e69ce71fa6db4"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_1/far_tutorial_4_1.cpp",
+      "git_mode": "100644",
+      "blob": "8d5684a947ae59e6d1900a4ff289e3536985bcda"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_2/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "3dc1ec0c6d66c0bf736c0345c50903c716c6fba0"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_2/far_tutorial_4_2.cpp",
+      "git_mode": "100644",
+      "blob": "f83eb7a71a20e8adbadca65e2a127e6b49e94a85"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_3/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "3cdd1bb85d074e5bed4f0e5c9d34f565ca09c244"
+    },
+    {
+      "path": "tutorials/far/tutorial_4_3/far_tutorial_4_3.cpp",
+      "git_mode": "100644",
+      "blob": "54974570bd36cb2caef2ad13f5946a08148d9e84"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "b349a857bcd8963fc32a288d5c2bfc3ffecd00e9"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_1/far_tutorial_5_1.cpp",
+      "git_mode": "100644",
+      "blob": "e102c0966895ce84c05d33df3e21dec6763b1a97"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_2/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "78b5e7e7483ce28970f3f2050bfaa50bd3007ecb"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_2/far_tutorial_5_2.cpp",
+      "git_mode": "100644",
+      "blob": "a2737c0a5682c5daafa4cccf86601a50cf25ceca"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_3/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "a808183a3ed789eea7a92b64877ef31607e23f01"
+    },
+    {
+      "path": "tutorials/far/tutorial_5_3/far_tutorial_5_3.cpp",
+      "git_mode": "100644",
+      "blob": "83745cd47d5baf781e0d824768a3769a4a305036"
+    },
+    {
+      "path": "tutorials/hbr/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "d93ef922265e573ef6661b8ed4abd7ca9584e1cf"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_0/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "c340c1bb0b6f65a2f2c0833a0d7acaa293daf192"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_0/hbr_tutorial_0.cpp",
+      "git_mode": "100644",
+      "blob": "766720c17e38a8c0d3d4365e7c5423d42afbf091"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_1/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "988a23ad12a75c99d3273cb19a73fe685f7ace8f"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_1/hbr_tutorial_1.cpp",
+      "git_mode": "100644",
+      "blob": "bc7e5607b765a8d3f07c065f67eff6f07bea2730"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_2/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "a4deb53f7c227ca26c78be78436af7389c4c24ca"
+    },
+    {
+      "path": "tutorials/hbr/tutorial_2/hbr_tutorial_2.cpp",
+      "git_mode": "100644",
+      "blob": "dbbdf5d2da0c900b0a653d10583e9f48de031198"
+    },
+    {
+      "path": "tutorials/osd/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "7b523c9e1cb40929718a5fbcdab39516cd7a2c4a"
+    },
+    {
+      "path": "tutorials/osd/tutorial_0/CMakeLists.txt",
+      "git_mode": "100644",
+      "blob": "57acb9c1ef5d9485e34e9f5a5c2bc50b6fb4bbcc"
+    },
+    {
+      "path": "tutorials/osd/tutorial_0/osd_tutorial_0.cpp",
+      "git_mode": "100644",
+      "blob": "b8ce643d32d0bde0bf15349cad92d4a74e24b57d"
+    }
+  ],
+  "excluded_reason": "Unused viewers, shape fixtures, documentation images and CI; complete opensubdiv production directory retained. CPU support compiles only Sdc/Vtr/Far/Bfr with standard library.",
+  "gitlinks_checked": [],
+  "gitmodules_present": false,
+  "binary_files": [],
+  "symlinks": []
+}
