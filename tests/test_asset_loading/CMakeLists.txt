@@ -1,0 +1,6 @@
+add_executable(test_asset_loading
+  test_asset_loading_obj_texture.cpp
+)
+target_link_libraries(test_asset_loading PRIVATE renderer_test_common)
+gtest_discover_tests(test_asset_loading DISCOVERY_TIMEOUT 30
+  PROPERTIES LABELS AssetLoading)
