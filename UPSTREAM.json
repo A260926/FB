@@ -1,0 +1,11 @@
+{
+  "repo": "https://github.com/mmp/pbrt-v2",
+  "commit": "e6f6334f3c26ca29eba2b27af4e60fec9fdc7a8d",
+  "license": "BSD-2-Clause",
+  "gitlink_check": "none; .gitmodules absent",
+  "exclusion_reason": "Unused bundled OpenEXR, scene assets, external exporters, docs and VCS; all src production code outside unused 3rdparty retained. Unused Visual Studio .suo IDE state also omitted.",
+  "portability_only": [
+    "src/core/pbrt.h: arm64 pointer width",
+    "src/core/parallel.h: arm64 compiler atomic builtins; existing semantics retained"
+  ]
+}
