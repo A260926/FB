@@ -3,8 +3,12 @@ package trace
 import "github.com/peterstace/grayt/scene"
 
 func buildScene(proto scene.Scene) (camera, []object) {
+	return newCamera(proto.Camera), buildObjects(proto.Objects)
+}
+
+func buildObjects(protoObjs []scene.Object) []object {
 	var objs []object
-	for _, o := range proto.Objects {
+	for _, o := range protoObjs {
 		add := func(s surface) {
 			objs = append(objs, object{
 				Surface: s,
@@ -40,5 +44,5 @@ func buildScene(proto scene.Scene) (camera, []object) {
 			add(&pipe{C1: x.EndpointA, C2: x.EndpointB, R: x.Radius})
 		}
 	}
-	return newCamera(proto.Camera), objs
+	return objs
 }

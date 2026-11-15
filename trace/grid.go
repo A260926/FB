@@ -20,9 +20,26 @@ func newGrid(lambda float64, objs []object) *grid {
 	boundDiff := maxBound.Sub(minBound)
 	volume := boundDiff.X * boundDiff.Y * boundDiff.Z
 
-	resolutionFactor := math.Pow(lambda*float64(len(objs))/volume, 1.0/3.0)
-	resolution := xmath.Truncate(boundDiff.Scale(resolutionFactor)).Max(xmath.Triple{1, 1, 1})
+	// A degenerate bound (zero extent on any axis, so zero volume) cannot
+	// be subdivided; fall back to a single cell.
+	resolution := xmath.Triple{1, 1, 1}
+	if volume > 0 {
+		resolutionFactor := math.Pow(lambda*float64(len(objs))/volume, 1.0/3.0)
+		resolution = xmath.Truncate(boundDiff.Scale(resolutionFactor)).Max(xmath.Triple{1, 1, 1})
+	}
 	stride := boundDiff.Div(resolution.AsVector())
+	// Give degenerate axes a unit stride so that coordinates along them
+	// collapse onto the single cell rather than producing non-finite cell
+	// coordinates.
+	if boundDiff.X <= 0 {
+		stride.X = 1
+	}
+	if boundDiff.Y <= 0 {
+		stride.Y = 1
+	}
+	if boundDiff.Z <= 0 {
+		stride.Z = 1
+	}
 	data := make([]*link, resolution.X*resolution.Y*resolution.Z)
 
 	grid := &grid{

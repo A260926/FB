@@ -10,6 +10,31 @@ type Scene struct {
 	Objects []Object
 }
 
+// LiveScene is a scene description that can be submitted to a running
+// renderer. Geometry is organised into prototypes, each of which is compiled
+// once per submission. Placements instance a prototype at a transform, so
+// many copies can share the same compiled primitives.
+type LiveScene struct {
+	Camera     Camera      `json:"camera"`
+	Prototypes []Prototype `json:"prototypes"`
+	Placements []Placement `json:"placements"`
+}
+
+// Prototype is a named bundle of geometry that placements can instance.
+type Prototype struct {
+	Objects []Object `json:"objects"`
+}
+
+// Placement instances a prototype into the world. Transform is a row major
+// 3x4 affine matrix (3 rows of 4 columns, the last column being the
+// translation); the identity matrix must be written out explicitly. Hidden
+// placements are not intersected.
+type Placement struct {
+	Prototype int         `json:"prototype"`
+	Transform [12]float64 `json:"transform"`
+	Visible   bool        `json:"visible"`
+}
+
 type Camera struct {
 	Location             xmath.Vector `json:"location"`
 	LookingAt            xmath.Vector `json:"looking_at"`
