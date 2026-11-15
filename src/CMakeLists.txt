@@ -30,6 +30,8 @@ set(SOURCES
 	PDB_ImageSectionStream.h
 	PDB_InfoStream.cpp
 	PDB_InfoStream.h
+	PDB_InlineSource.cpp
+	PDB_InlineSource.h
 	PDB_IPIStream.cpp
 	PDB_IPIStream.h
 	PDB_IPITypes.h

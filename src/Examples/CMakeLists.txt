@@ -5,6 +5,7 @@ set(SOURCES
 	ExampleFunctionSymbols.cpp
 	ExampleFunctionVariables.cpp
 	ExampleIPI.cpp
+	ExampleInlineSource.cpp
 	ExampleLines.cpp
 	ExampleMain.cpp
 	ExampleMemoryMappedFile.cpp

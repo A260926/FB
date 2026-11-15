@@ -30,6 +30,9 @@
     <ClCompile Include="..\src\PDB_InfoStream.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\PDB_InlineSource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\PDB_IPIStream.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -93,6 +96,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\PDB_InfoStream.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PDB_InlineSource.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\PDB_IPIStream.h">

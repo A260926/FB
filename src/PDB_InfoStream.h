@@ -35,6 +35,12 @@ namespace PDB
 			return (m_namesStreamIndex != 0u);
 		}
 
+		// Returns the index of the "/names" stream, or 0 when the file has none.
+		PDB_NO_DISCARD inline uint32_t GetNamesStreamIndex(void) const PDB_NO_EXCEPT
+		{
+			return m_namesStreamIndex;
+		}
+
 		// Returns whether the PDB file was linked using /DEBUG:FASTLINK.
 		PDB_NO_DISCARD inline bool UsesDebugFastLink(void) const PDB_NO_EXCEPT
 		{

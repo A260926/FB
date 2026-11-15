@@ -19,6 +19,7 @@
     <ClCompile Include="..\src\PDB_GlobalSymbolStream.cpp" />
     <ClCompile Include="..\src\PDB_ImageSectionStream.cpp" />
     <ClCompile Include="..\src\PDB_InfoStream.cpp" />
+    <ClCompile Include="..\src\PDB_InlineSource.cpp" />
     <ClCompile Include="..\src\PDB_IPIStream.cpp" />
     <ClCompile Include="..\src\PDB_ModuleInfoStream.cpp" />
     <ClCompile Include="..\src\PDB_ModuleLineStream.cpp" />
@@ -58,6 +59,7 @@
     <ClInclude Include="..\src\PDB_GlobalSymbolStream.h" />
     <ClInclude Include="..\src\PDB_ImageSectionStream.h" />
     <ClInclude Include="..\src\PDB_InfoStream.h" />
+    <ClInclude Include="..\src\PDB_InlineSource.h" />
     <ClInclude Include="..\src\PDB_IPIStream.h" />
     <ClInclude Include="..\src\PDB_IPITypes.h" />
     <ClInclude Include="..\src\PDB_ModuleInfoStream.h" />

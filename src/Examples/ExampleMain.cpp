@@ -94,6 +94,7 @@ extern void ExampleSymbols(const PDB::RawFile&, const PDB::DBIStream&);
 extern void ExampleFunctionSymbols(const PDB::RawFile&, const PDB::DBIStream&);
 extern void ExampleFunctionVariables(const PDB::RawFile& rawPdbFile, const PDB::DBIStream& dbiStream, const PDB::TPIStream&);
 extern void ExampleLines(const PDB::RawFile& rawPdbFile, const PDB::DBIStream& dbiStream, const PDB::InfoStream& infoStream);
+extern void ExampleInlineSource(const PDB::RawFile& rawPdbFile, const PDB::DBIStream& dbiStream, const PDB::InfoStream& infoStream);
 extern void ExampleTypes(const PDB::TPIStream&);
 extern void ExampleIPI(const PDB::RawFile& rawPdbFile, const PDB::InfoStream& infoStream, const PDB::TPIStream& tpiStream, const PDB::IPIStream& ipiStream);
 
@@ -189,6 +190,7 @@ int main(int argc, char** argv)
 	ExampleFunctionSymbols(rawPdbFile, dbiStream);
 	ExampleFunctionVariables(rawPdbFile, dbiStream, tpiStream);
 	ExampleLines(rawPdbFile, dbiStream, infoStream);
+	ExampleInlineSource(rawPdbFile, dbiStream, infoStream);
 	ExampleTypes(tpiStream);
 	ExampleIPI(rawPdbFile, infoStream, tpiStream, ipiStream);
 	// uncomment to dump type sizes to a CSV
