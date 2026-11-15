@@ -574,6 +574,8 @@ AC_CONFIG_FILES([ \
 	examples/c/decode/file/Makefile \
 	examples/c/encode/Makefile \
 	examples/c/encode/file/Makefile \
+	examples/c/splice/Makefile \
+	examples/c/splice/file/Makefile \
 	examples/cpp/Makefile \
 	examples/cpp/decode/Makefile \
 	examples/cpp/decode/file/Makefile \

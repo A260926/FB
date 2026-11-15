@@ -1,5 +1,6 @@
 add_subdirectory("c/decode/file")
 add_subdirectory("c/encode/file")
+add_subdirectory("c/splice/file")
 
 if(BUILD_CXXLIBS)
     add_subdirectory("cpp/decode/file")

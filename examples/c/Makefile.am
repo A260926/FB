@@ -16,4 +16,4 @@
 #  restrictive of those mentioned above.  See the file COPYING.Xiph in this
 #  distribution.
 
-SUBDIRS = decode encode
+SUBDIRS = decode encode splice
