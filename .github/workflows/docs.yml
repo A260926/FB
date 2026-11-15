@@ -1,0 +1,85 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  EMSDK_RELEASE: 3.1.56
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -o Acquire::Retries=3 doxygen texlive-base build-essential flex bison
+
+      - name: Create emscripten build directory
+        run: cmake -E make_directory ${{ runner.workspace }}/embuild
+
+      - name: Fetch emscripten
+        shell: bash
+        working-directory: ${{ runner.workspace }}/embuild
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          git checkout $EMSDK_RELEASE
+          ./emsdk install $EMSDK_RELEASE
+          ./emsdk activate $EMSDK_RELEASE
+
+      - name: Configure emscripten
+        shell: bash
+        working-directory: ${{ runner.workspace }}/embuild
+        run: source ./emsdk/emsdk_env.sh && emcmake cmake -DPMP_BUILD_EXAMPLES=ON $GITHUB_WORKSPACE
+
+      - name: Build emscripten
+        working-directory: ${{ runner.workspace }}/embuild
+        shell: bash
+        run: cmake --build . --parallel
+
+      - name: Create build directory
+        run: cmake -E make_directory ${{ runner.workspace }}/build
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{ runner.workspace }}/build
+        run: cmake -DPMP_BUILD_DOCS=ON -DPMP_BUILD_VIEWERS=OFF $GITHUB_WORKSPACE
+
+      - name: Build docs
+        working-directory: ${{ runner.workspace }}/build
+        shell: bash
+        run: cmake --build . --target docs
+
+      - name: Copy emscripten demos
+        working-directory: ${{ runner.workspace }}/build
+        shell: bash
+        run: mkdir -p docs/html/demos/ && cp ${{ runner.workspace }}/embuild/*.html ${{ runner.workspace }}/embuild/*.js ${{ runner.workspace }}/embuild/*.data ${{ runner.workspace }}/embuild/*.wasm docs/html/demos
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.workspace }}/build/docs/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
