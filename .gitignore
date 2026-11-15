@@ -1,0 +1,8 @@
+/*.png
+/*.gif
+/output
+/*.bin
+/systemtest/actual_*.png
+/systemtest/diff_*.png
+checkpoint
+/data
