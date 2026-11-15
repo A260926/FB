@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cxx: g++
+          - os: macos-latest
+            cxx: clang++
+    runs-on: ${{ matrix.os }}
+    env:
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: build
+        run: cmake --build build -j 4
+      - name: tests
+        run: ./build/softgpu_tests
+      - name: render every scene (tiled, 4 threads, with overlays and depth dump)
+        run: |
+          mkdir -p out
+          for s in cube torus sphere depth blend fill; do
+            ./build/softgpu_render --scene $s --width 640 --height 360 --threads 4 --out out/$s.png --stats
+          done
+          ./build/softgpu_render --scene torus --width 640 --height 360 --wireframe --show-tiles --out out/torus_wire.ppm
+          ./build/softgpu_render --scene depth --width 640 --height 360 --dump-stage depth --out out/depth.ppm
+          ./build/softgpu_render --scene cube --width 320 --height 180 --frames 4 --mode immediate --out out/cube.ppm
+      - name: bench (small)
+        run: ./build/softgpu_bench --width 640 --height 360 --frames 2 --detail 2 --layers 2 --count 4000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renders-${{ matrix.os }}
+          path: out/*.png
+
+  asan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure (ASan + UBSan)
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DSOFTGPU_ASAN=ON
+      - name: build
+        run: cmake --build build-asan -j 4
+      - name: tests
+        run: ./build-asan/softgpu_tests
+      - name: render under sanitizers
+        run: ./build-asan/softgpu_render --scene blend --width 320 --height 200 --threads 4 --wireframe --show-tiles --dump-stage depth --out out.ppm

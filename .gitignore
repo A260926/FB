@@ -1,0 +1,7 @@
+build/
+build-*/
+.venv/
+out/
+*.ppm
+*.pgm
+.DS_Store

@@ -1,0 +1,9 @@
+{
+  "repo": "https://github.com/adarsh-sgh/softgpu",
+  "commit": "9763bf4978719a7a91f1685d61a8279c3a54d25e",
+  "archive_sha256": "cc9f7a8111202a9009b0b2916a203cbd5bd0c3aca9bea379b03e808ebbc2301e",
+  "exclusions": [],
+  "gitlinks": [],
+  "gitmodules": false,
+  "runtime": "C++17 standard library and native thread support; all source and doctest vendored; no network or graphics runtime"
+}
