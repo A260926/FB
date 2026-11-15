@@ -103,11 +103,13 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 					lightPositionOffset[pathLength],
 					lightNumOffset[pathLength],
 					bsdfDirectionOffset[pathLength],
-					bsdfComponentOffset[pathLength]);
+					bsdfComponentOffset[pathLength],
+					ray.time);
 		else
 			L += pathThroughput *
 				UniformSampleOneLight(scene, p, n,
-					wo, bsdf, sample);
+					wo, bsdf, sample, -1, -1, -1, -1,
+					ray.time);
 		// Sample BSDF to get new path direction
 		// Get random numbers for sampling new direction, _bs1_, _bs2_, and _bcs_
 		float bs1, bs2, bcs;
@@ -131,6 +133,10 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 		specularBounce = (flags & BSDF_SPECULAR) != 0;
 		pathThroughput *= f * AbsDot(wi, n) / pdf;
 		ray = RayDifferential(p, wi);
+		// The whole path stays at the camera ray's shutter time
+		ray.time = r.time;
+		ray.rx.time = r.time;
+		ray.ry.time = r.time;
 		// Possibly terminate the path
 		if (pathLength > 3) {
 			float continueProbability = .5f;

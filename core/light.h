@@ -64,6 +64,28 @@ public:
 			const Vector &wi) const {
 		return Pdf(p, wi);
 	}
+	// Time-aware direct lighting entry points.  The original
+	// entry points mean shutter time zero; the _time_-taking
+	// overloads default to that behavior for lights that do not
+	// move and keep the original parameter order with _time_ last.
+	virtual Spectrum Sample_L(const Point &p, const Normal &n,
+			float u1, float u2, Vector *wi, float *pdf,
+			VisibilityTester *visibility, float time) const {
+		return Sample_L(p, n, u1, u2, wi, pdf, visibility);
+	}
+	virtual float Pdf(const Point &p, const Normal &n,
+			const Vector &wi, float time) const {
+		return Pdf(p, n, wi);
+	}
+	virtual Spectrum Sample_L(const Point &p, float u1,
+		float u2, Vector *wi, float *pdf,
+		VisibilityTester *vis, float time) const {
+		return Sample_L(p, u1, u2, wi, pdf, vis);
+	}
+	virtual float Pdf(const Point &p, const Vector &wi,
+			float time) const {
+		return Pdf(p, wi);
+	}
 	virtual Spectrum Sample_L(const Scene *scene, float u1,
 		float u2, float u3, float u4,
 		Ray *ray, float *pdf) const = 0;
@@ -78,8 +100,14 @@ struct COREDLL VisibilityTester {
 	void SetSegment(const Point &p1, const Point &p2) {
 		r = Ray(p1, p2-p1, RAY_EPSILON, 1.f - RAY_EPSILON);
 	}
+	void SetSegment(const Point &p1, const Point &p2, float time) {
+		r = Ray(p1, p2-p1, RAY_EPSILON, 1.f - RAY_EPSILON, time);
+	}
 	void SetRay(const Point &p, const Vector &w) {
 		r = Ray(p, w, RAY_EPSILON);
+	}
+	void SetRay(const Point &p, const Vector &w, float time) {
+		r = Ray(p, w, RAY_EPSILON, INFINITY, time);
 	}
 	bool Unoccluded(const Scene *scene) const;
 	Spectrum Transmittance(const Scene *scene) const;
@@ -100,12 +128,21 @@ public:
 	bool IsDeltaLight() const { return false; }
 	float Pdf(const Point &, const Vector &) const;
 	float Pdf(const Point &, const Normal &, const Vector &) const;
+	float Pdf(const Point &, const Vector &, float time) const;
+	float Pdf(const Point &, const Normal &,
+		const Vector &, float time) const;
 	Spectrum Sample_L(const Point &P, Vector *w, VisibilityTester *visibility) const;
 	virtual Spectrum Sample_L(const Point &P, const Normal &N,
 		float u1, float u2, Vector *wo, float *pdf,
 		VisibilityTester *visibility) const;
 	virtual Spectrum Sample_L(const Point &P, float u1, float u2, Vector *wo,
 		float *pdf, VisibilityTester *visibility) const;
+	virtual Spectrum Sample_L(const Point &P, const Normal &N,
+		float u1, float u2, Vector *wo, float *pdf,
+		VisibilityTester *visibility, float time) const;
+	virtual Spectrum Sample_L(const Point &P,
+		float u1, float u2, Vector *wo, float *pdf,
+		VisibilityTester *visibility, float time) const;
 	Spectrum Sample_L(const Scene *scene, float u1, float u2,
 			float u3, float u4, Ray *ray, float *pdf) const;
 protected:

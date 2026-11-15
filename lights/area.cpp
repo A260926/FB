@@ -66,9 +66,24 @@ Spectrum AreaLight::Sample_L(const Point &p,
 	visibility->SetSegment(p, ps);
 	return L(ps, ns, -*wi);
 }
+Spectrum AreaLight::Sample_L(const Point &p,
+		const Normal &n, float u1, float u2,
+		Vector *wi, float *pdf,
+		VisibilityTester *visibility, float time) const {
+	Normal ns;
+	Point ps = shape->Sample(p, u1, u2, &ns, time);
+	*wi = Normalize(ps - p);
+	*pdf = shape->Pdf(p, *wi, time);
+	visibility->SetSegment(p, ps, time);
+	return L(ps, ns, -*wi);
+}
 float AreaLight::Pdf(const Point &p, const Normal &N,
 		const Vector &wi) const {
 	return shape->Pdf(p, wi);
+}
+float AreaLight::Pdf(const Point &p, const Normal &N,
+		const Vector &wi, float time) const {
+	return shape->Pdf(p, wi, time);
 }
 Spectrum AreaLight::Sample_L(const Point &P,
 		float u1, float u2, Vector *wo, float *pdf,
@@ -78,6 +93,16 @@ Spectrum AreaLight::Sample_L(const Point &P,
 	*wo = Normalize(Ps - P);
 	*pdf = shape->Pdf(P, *wo);
 	visibility->SetSegment(P, Ps);
+	return L(Ps, Ns, -*wo);
+}
+Spectrum AreaLight::Sample_L(const Point &P,
+		float u1, float u2, Vector *wo, float *pdf,
+		VisibilityTester *visibility, float time) const {
+	Normal Ns;
+	Point Ps = shape->Sample(P, u1, u2, &Ns, time);
+	*wo = Normalize(Ps - P);
+	*pdf = shape->Pdf(P, *wo, time);
+	visibility->SetSegment(P, Ps, time);
 	return L(Ps, Ns, -*wo);
 }
 Spectrum AreaLight::Sample_L(const Scene *scene, float u1,
@@ -92,6 +117,10 @@ Spectrum AreaLight::Sample_L(const Scene *scene, float u1,
 }
 float AreaLight::Pdf(const Point &P, const Vector &w) const {
 	return shape->Pdf(P, w);
+}
+float AreaLight::Pdf(const Point &P, const Vector &w,
+		float time) const {
+	return shape->Pdf(P, w, time);
 }
 Spectrum AreaLight::Sample_L(const Point &P, Vector *wo,
 		VisibilityTester *visibility) const {

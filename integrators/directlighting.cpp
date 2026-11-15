@@ -103,26 +103,26 @@ Spectrum DirectLighting::Li(const Scene *scene,
 		// Compute emitted light if ray hit an area light source
 		L += isect.Le(wo);
 		// Compute direct lighting for _DirectLighting_ integrator
-		if (scene->lights.size() > 0) {
-			// Apply direct lighting strategy
-			switch (strategy) {
-				case SAMPLE_ALL_UNIFORM:
-					L += UniformSampleAllLights(scene, p, n, wo, bsdf,
-						sample, lightSampleOffset, bsdfSampleOffset,
-						bsdfComponentOffset);
-					break;
-				case SAMPLE_ONE_UNIFORM:
-					L += UniformSampleOneLight(scene, p, n, wo, bsdf,
-						sample, lightSampleOffset[0], lightNumOffset,
-						bsdfSampleOffset[0], bsdfComponentOffset[0]);
-					break;
-				case SAMPLE_ONE_WEIGHTED:
-					L += WeightedSampleOneLight(scene, p, n, wo, bsdf,
-						sample, lightSampleOffset[0], lightNumOffset,
-						bsdfSampleOffset[0], bsdfComponentOffset[0], avgY,
-						avgYsample, cdf, overallAvgY);
-					break;
-			}
+		// Every light and shadow query keeps the camera ray's
+		// shutter time so deforming geometry is seen consistently.
+		if (scene->lights.size() > 0) switch (strategy) {
+			case SAMPLE_ALL_UNIFORM:
+				L += UniformSampleAllLights(scene, p, n, wo, bsdf,
+					sample, lightSampleOffset, bsdfSampleOffset,
+					bsdfComponentOffset, ray.time);
+				break;
+			case SAMPLE_ONE_UNIFORM:
+				L += UniformSampleOneLight(scene, p, n, wo, bsdf,
+					sample, lightSampleOffset[0], lightNumOffset,
+					bsdfSampleOffset[0], bsdfComponentOffset[0],
+					ray.time);
+				break;
+			case SAMPLE_ONE_WEIGHTED:
+				L += WeightedSampleOneLight(scene, p, n, wo, bsdf,
+					sample, lightSampleOffset[0], lightNumOffset,
+					bsdfSampleOffset[0], bsdfComponentOffset[0], avgY,
+					avgYsample, cdf, overallAvgY, ray.time);
+				break;
 		}
 		if (rayDepth++ < maxDepth) {
 			Vector wi;
@@ -133,6 +133,9 @@ Spectrum DirectLighting::Li(const Scene *scene,
 				// Compute ray differential _rd_ for specular reflection
 				RayDifferential rd(p, wi);
 				rd.hasDifferentials = true;
+				rd.time = ray.time;
+				rd.rx.time = ray.time;
+				rd.ry.time = ray.time;
 				rd.rx.o = p + isect.dg.dpdx;
 				rd.ry.o = p + isect.dg.dpdy;
 				// Compute differential reflected directions
@@ -157,6 +160,9 @@ Spectrum DirectLighting::Li(const Scene *scene,
 				// Compute ray differential _rd_ for specular transmission
 				RayDifferential rd(p, wi);
 				rd.hasDifferentials = true;
+				rd.time = ray.time;
+				rd.rx.time = ray.time;
+				rd.ry.time = ray.time;
 				rd.rx.o = p + isect.dg.dpdx;
 				rd.ry.o = p + isect.dg.dpdy;
 				

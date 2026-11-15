@@ -8,16 +8,8 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.  Note that the text contents of
-    the book "Physically Based Rendering" are *not* licensed under the
-    GNU GPL.
-
-    pbrt is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    the book "Physically Based Rendering" are *not* licensed under
+    the GNU GPL.
 
  */
 
@@ -32,7 +24,7 @@ COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 		const Point &p, const Normal &n, const Vector &wo,
 		BSDF *bsdf, const Sample *sample,
 		int *lightSampleOffset, int *bsdfSampleOffset,
-		int *bsdfComponentOffset) {
+		int *bsdfComponentOffset, float time) {
 	Spectrum L(0.);
 	for (u_int i = 0; i < scene->lights.size(); ++i) {
 		Light *light = scene->lights[i];
@@ -43,7 +35,7 @@ COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 		for (int j = 0; j < nSamples; ++j)
 			Ld += EstimateDirect(scene, light, p, n, wo, bsdf,
 				sample, lightSampleOffset[i], bsdfSampleOffset[i],
-				bsdfComponentOffset[i], j);
+				bsdfComponentOffset[i], j, time);
 		L += Ld / nSamples;
 	}
 	return L;
@@ -52,7 +44,7 @@ COREDLL Spectrum UniformSampleOneLight(const Scene *scene,
 		const Point &p, const Normal &n,
 		const Vector &wo, BSDF *bsdf, const Sample *sample,
 		int lightSampleOffset, int lightNumOffset,
-		int bsdfSampleOffset, int bsdfComponentOffset) {
+		int bsdfSampleOffset, int bsdfComponentOffset, float time) {
 	// Randomly choose a single light to sample, _light_
 	int nLights = int(scene->lights.size());
 	int lightNum;
@@ -66,7 +58,7 @@ COREDLL Spectrum UniformSampleOneLight(const Scene *scene,
 	return (float)nLights *
 		EstimateDirect(scene, light, p, n, wo, bsdf, sample,
 			lightSampleOffset, bsdfSampleOffset,
-			bsdfComponentOffset, 0);
+			bsdfComponentOffset, 0, time);
 }
 COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		const Point &p, const Normal &n,
@@ -75,7 +67,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		int lightNumOffset, int bsdfSampleOffset,
 		int bsdfComponentOffset, float *&avgY,
 		float *&avgYsample, float *&cdf,
-		float &overallAvgY) {
+		float &overallAvgY, float time) {
 	int nLights = int(scene->lights.size());
 	// Initialize _avgY_ array if necessary
 	if (!avgY) {
@@ -91,7 +83,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		L = UniformSampleOneLight(scene, p, n,
 		    wo, bsdf, sample, lightSampleOffset,
 			lightNumOffset, bsdfSampleOffset,
-			bsdfComponentOffset);
+			bsdfComponentOffset, time);
 		float luminance = L.y();
 		overallAvgY = luminance;
 		for (int i = 0; i < nLights; ++i)
@@ -109,7 +101,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		Light *light = scene->lights[lightNum];
 		L = EstimateDirect(scene, light, p, n, wo, bsdf,
 			sample, lightSampleOffset, bsdfSampleOffset,
-			bsdfComponentOffset, 0);
+			bsdfComponentOffset, 0, time);
 		// Update _avgY_ array with reflected radiance due to light
 		float luminance = L.y();
 		avgY[lightNum] =
@@ -124,7 +116,8 @@ Spectrum EstimateDirect(const Scene *scene,
         const Light *light, const Point &p,
 		const Normal &n, const Vector &wo,
 		BSDF *bsdf, const Sample *sample, int lightSamp,
-		int bsdfSamp, int bsdfComponent, u_int sampleNum) {
+		int bsdfSamp, int bsdfComponent, u_int sampleNum,
+		float time) {
 	Spectrum Ld(0.);
 	// Find light and BSDF sample values for direct lighting estimate
 	float ls1, ls2, bs1, bs2, bcs;
@@ -149,7 +142,7 @@ Spectrum EstimateDirect(const Scene *scene,
 	float lightPdf, bsdfPdf;
 	VisibilityTester visibility;
 	Spectrum Li = light->Sample_L(p, n,
-		ls1, ls2, &wi, &lightPdf, &visibility);
+		ls1, ls2, &wi, &lightPdf, &visibility, time);
 	if (lightPdf > 0. && !Li.Black()) {
 		Spectrum f = bsdf->f(wo, wi);
 		if (!f.Black() && visibility.Unoccluded(scene)) {
@@ -170,13 +163,17 @@ Spectrum EstimateDirect(const Scene *scene,
 		Spectrum f = bsdf->Sample_f(wo, &wi,
 			bs1, bs2, bcs, &bsdfPdf, flags);
 		if (!f.Black() && bsdfPdf > 0.) {
-			lightPdf = light->Pdf(p, n, wi);
+			lightPdf = light->Pdf(p, n, wi, time);
 			if (lightPdf > 0.) {
 				// Add light contribution from BSDF sampling
 				float weight = PowerHeuristic(1, bsdfPdf, 1, lightPdf);
 				Intersection lightIsect;
 				Spectrum Li(0.f);
 				RayDifferential ray(p, wi);
+				// Keep the BSDF-sample ray at the same shutter time
+				ray.time = time;
+				ray.rx.time = time;
+				ray.ry.time = time;
 				if (scene->Intersect(ray, &lightIsect)) {
 					if (lightIsect.primitive->GetAreaLight() == light)
 						Li = lightIsect.Le(-wi);

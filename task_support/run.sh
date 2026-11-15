@@ -13,7 +13,7 @@ mkdir -p .task-build/example-output
 rm -f .task-build/example-output/motion.ppm
 .task-build/example .task-build/example-output
 test -s .task-build/example-output/motion.ppm
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/target-log.XXXXXX 2>/dev/null || echo .task-build/target-output.log)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

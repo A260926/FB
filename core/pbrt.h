@@ -263,7 +263,7 @@ COREDLL float Lanczos(float, float tau=2);
 COREDLL Spectrum EstimateDirect(const Scene *scene, const Light *light, const Point &p,
 	const Normal &n, const Vector &wo, BSDF *bsdf,
 	const Sample *sample, int lightSamp, int bsdfSamp,
-	int bsdfComponent, u_int sampleNum);
+	int bsdfComponent, u_int sampleNum, float time = 0.f);
 extern COREDLL void ComputeStep1dCDF(float *f, int nValues, float *c, float *cdf);
 extern COREDLL float SampleStep1d(float *f, float *cdf, float c,
 	int nSteps, float u, float *weight);

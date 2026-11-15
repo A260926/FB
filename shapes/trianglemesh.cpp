@@ -8,8 +8,8 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.  Note that the text contents of
-    the book "Physically Based Rendering" are *not* licensed under the
-    GNU GPL.
+    the book "Physically Based Rendering" are *not* licensed under
+    the GNU GPL.
 
     pbrt is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,19 +24,33 @@
 // trianglemesh.cpp*
 #include "shape.h"
 #include "paramset.h"
+#include <cmath>
+// Deforming triangle mesh helpers
+static bool FinitePoint(const Point &p) {
+	return std::isfinite(p.x) && std::isfinite(p.y) &&
+	       std::isfinite(p.z);
+}
 // TriangleMesh Declarations
 class TriangleMesh : public Shape {
 public:
 	// TriangleMesh Public Methods
 	TriangleMesh(const Transform &o2w, bool ro,
 	             int ntris, int nverts, const int *vptr,
-				 const Point *P, const Normal *N,
-				 const Vector *S, const float *uv);
+				 const Point *P, const Point *P1,
+				 float motionStart, float motionEnd,
+				 const float *uv);
 	~TriangleMesh();
 	BBox ObjectBound() const;
 	BBox WorldBound() const;
 	bool CanIntersect() const { return false; }
 	void Refine(vector<Reference<Shape> > &refined) const;
+	// Interpolate a single world-space vertex at shutter _time_.
+	Point WorldVertex(float time, int index) const {
+		if (!p1) return p[index];
+		float alpha = Clamp((time - motionStart) /
+		                    (motionEnd - motionStart), 0.f, 1.f);
+		return (1.f - alpha) * p[index] + alpha * p1[index];
+	}
 	friend class Triangle;
 	template <class T> friend class VertexTexture;
 protected:
@@ -44,8 +58,8 @@ protected:
 	int ntris, nverts;
 	int *vertexIndex;
 	Point *p;
-	Normal *n;
-	Vector *s;
+	Point *p1;
+	float motionStart, motionEnd;
 	float *uvs;
 };
 class Triangle : public Shape {
@@ -68,70 +82,23 @@ public:
 	bool IntersectP(const Ray &ray) const;
 	void GetUVs(float uv[3][2]) const;
 	float Area() const;
+	float Area(float time) const;
+	Point Sample(float u1, float u2, Normal *Ns) const;
+	Point Sample(float u1, float u2, Normal *Ns,
+		float time) const;
+	// Evaluate the three world-space vertices at _time_
+	void GetTimeVertices(float time, Point p1[3]) const {
+		p1[0] = mesh->WorldVertex(time, v[0]);
+		p1[1] = mesh->WorldVertex(time, v[1]);
+		p1[2] = mesh->WorldVertex(time, v[2]);
+	}
 	virtual void GetShadingGeometry(const Transform &obj2world,
 			const DifferentialGeometry &dg,
 			DifferentialGeometry *dgShading) const {
-		if (!mesh->n && !mesh->s) {
-			*dgShading = dg;
-			return;
-		}
-		// Initialize _Triangle_ shading geometry with _n_ and _s_
-		// Compute barycentric coordinates for point
-		float b[3];
-		// Initialize _A_ and _C_ matrices for barycentrics
-		float uv[3][2];
-		GetUVs(uv);
-		float A[2][2] =
-		    { { uv[1][0] - uv[0][0], uv[2][0] - uv[0][0] },
-		      { uv[1][1] - uv[0][1], uv[2][1] - uv[0][1] } };
-		float C[2] = { dg.u - uv[0][0], dg.v - uv[0][1] };
-		if (!SolveLinearSystem2x2(A, C, &b[1])) {
-			// Handle degenerate parametric mapping
-			b[0] = b[1] = b[2] = 1.f/3.f;
-		}
-		else
-			b[0] = 1.f - b[1] - b[2];
-		// Use _n_ and _s_ to compute shading tangents for triangle, _ss_ and _ts_
-		Normal ns;
-		Vector ss, ts;
-		if (mesh->n) ns = Normalize(obj2world(b[0] * mesh->n[v[0]] +
-			b[1] * mesh->n[v[1]] + b[2] * mesh->n[v[2]]));
-		else   ns = dg.nn;
-		if (mesh->s) ss = Normalize(obj2world(b[0] * mesh->s[v[0]] +
-			b[1] * mesh->s[v[1]] + b[2] * mesh->s[v[2]]));
-		else   ss = Normalize(dg.dpdu);
-		ts = Normalize(Cross(ss, ns));
-		ss = Cross(ts, ns);
-		Vector dndu, dndv;
-		if (mesh->n) {
-			// Compute \dndu and \dndv for triangle shading geometry
-			float uvs[3][2];
-			GetUVs(uvs);
-			// Compute deltas for triangle partial derivatives of normal
-			float du1 = uvs[0][0] - uvs[2][0];
-			float du2 = uvs[1][0] - uvs[2][0];
-			float dv1 = uvs[0][1] - uvs[2][1];
-			float dv2 = uvs[1][1] - uvs[2][1];
-			Vector dn1 = Vector(mesh->n[v[0]] - mesh->n[v[2]]);
-			Vector dn2 = Vector(mesh->n[v[1]] - mesh->n[v[2]]);
-			float determinant = du1 * dv2 - dv1 * du2;
-			if (determinant == 0)
-				dndu = dndv = Vector(0,0,0);
-			else {
-				float invdet = 1.f / determinant;
-				dndu = ( dv2 * dn1 - dv1 * dn2) * invdet;
-				dndv = (-du2 * dn1 + du1 * dn2) * invdet;
-			}
-		}
-		else
-			dndu = dndv = Vector(0,0,0);
-		*dgShading = DifferentialGeometry(dg.p, ss, ts,
-			ObjectToWorld(dndu), ObjectToWorld(dndv), dg.u, dg.v, dg.shape);
-		dgShading->dudx = dg.dudx;  dgShading->dvdx = dg.dvdx; // NOBOOK
-		dgShading->dudy = dg.dudy;  dgShading->dvdy = dg.dvdy; // NOBOOK
-		dgShading->dpdx = dg.dpdx;  dgShading->dpdy = dg.dpdy; // NOBOOK
+		// Deforming meshes never carry _N_/_S_ arrays, so the
+		// geometric differential geometry is used unchanged.
+		*dgShading = dg;
 	}
-	Point Sample(float u1, float u2, Normal *Ns) const;
 private:
 	// Triangle Data
 	Reference<TriangleMesh> mesh;
@@ -140,50 +107,56 @@ private:
 // TriangleMesh Method Definitions
 TriangleMesh::TriangleMesh(const Transform &o2w, bool ro,
 		int nt, int nv, const int *vi, const Point *P,
-		const Normal *N, const Vector *S, const float *uv)
+		const Point *P1, float mstart, float mend,
+		const float *uv)
 	: Shape(o2w, ro) {
 	ntris = nt;
 	nverts = nv;
+	motionStart = mstart;
+	motionEnd = mend;
 	vertexIndex = new int[3 * ntris];
 	memcpy(vertexIndex, vi, 3 * ntris * sizeof(int));
-	// Copy _uv_, _N_, and _S_ vertex data, if present
+	// Copy _uv_ data, if present
 	if (uv) {
 		uvs = new float[2*nverts];
 		memcpy(uvs, uv, 2*nverts*sizeof(float));
 	}
 	else uvs = NULL;
 	p = new Point[nverts];
-	if (N) {
-		n = new Normal[nverts];
-		memcpy(n, N, nverts*sizeof(Normal));
+	if (P1) {
+		p1 = new Point[nverts];
 	}
-	else n = NULL;
-	if (S) {
-		s = new Vector[nverts];
-		memcpy(s, S, nverts*sizeof(Vector));
-	}
-	else s = NULL;
+	else
+		p1 = NULL;
 	// Transform mesh vertices to world space
-	for (int i  = 0; i < nverts; ++i)
+	for (int i  = 0; i < nverts; ++i) {
 		p[i] = ObjectToWorld(P[i]);
+		if (p1)
+			p1[i] = ObjectToWorld(P1[i]);
+	}
 }
 TriangleMesh::~TriangleMesh() {
 	delete[] vertexIndex;
 	delete[] p;
-	delete[] s;
-	delete[] n;
+	delete[] p1;
 	delete[] uvs;
 }
 BBox TriangleMesh::ObjectBound() const {
+	// The bound covers both motion endpoints, so the static grid and
+	// kd-tree accelerators need no per-ray rebuilding.
 	BBox bobj;
-	for (int i = 0; i < nverts; i++)
+	for (int i = 0; i < nverts; i++) {
 		bobj = Union(bobj, WorldToObject(p[i]));
+		if (p1) bobj = Union(bobj, WorldToObject(p1[i]));
+	}
 	return bobj;
 }
 BBox TriangleMesh::WorldBound() const {
 	BBox worldBounds;
-	for (int i = 0; i < nverts; i++)
+	for (int i = 0; i < nverts; i++) {
 		worldBounds = Union(worldBounds, p[i]);
+		if (p1) worldBounds = Union(worldBounds, p1[i]);
+	}
 	return worldBounds;
 }
 void
@@ -192,23 +165,34 @@ const {
 	for (int i = 0; i < ntris; ++i)
 		refined.push_back(new Triangle(ObjectToWorld,
 		                               reverseOrientation,
-                                       (TriangleMesh *)this,
-									   i));
+	                                       (TriangleMesh *)this,
+										   i));
 }
 BBox Triangle::ObjectBound() const {
-	// Get triangle vertices in _p1_, _p2_, and _p3_
-	const Point &p1 = mesh->p[v[0]];
-	const Point &p2 = mesh->p[v[1]];
-	const Point &p3 = mesh->p[v[2]];
-	return Union(BBox(WorldToObject(p1), WorldToObject(p2)),
-		WorldToObject(p3));
+	// Cover both motion endpoints so refined triangles share the
+	// full-motion bound of their parent mesh.
+	BBox bobj;
+	bobj = Union(bobj, WorldToObject(mesh->p[v[0]]));
+	bobj = Union(bobj, WorldToObject(mesh->p[v[1]]));
+	bobj = Union(bobj, WorldToObject(mesh->p[v[2]]));
+	if (mesh->p1) {
+		bobj = Union(bobj, WorldToObject(mesh->p1[v[0]]));
+		bobj = Union(bobj, WorldToObject(mesh->p1[v[1]]));
+		bobj = Union(bobj, WorldToObject(mesh->p1[v[2]]));
+	}
+	return bobj;
 }
 BBox Triangle::WorldBound() const {
-	// Get triangle vertices in _p1_, _p2_, and _p3_
-	const Point &p1 = mesh->p[v[0]];
-	const Point &p2 = mesh->p[v[1]];
-	const Point &p3 = mesh->p[v[2]];
-	return Union(BBox(p1, p2), p3);
+	BBox wb;
+	wb = Union(wb, mesh->p[v[0]]);
+	wb = Union(wb, mesh->p[v[1]]);
+	wb = Union(wb, mesh->p[v[2]]);
+	if (mesh->p1) {
+		wb = Union(wb, mesh->p1[v[0]]);
+		wb = Union(wb, mesh->p1[v[1]]);
+		wb = Union(wb, mesh->p1[v[2]]);
+	}
+	return wb;
 }
 bool Triangle::Intersect(const Ray &ray, float *tHit,
 		DifferentialGeometry *dg) const {
@@ -218,11 +202,12 @@ bool Triangle::Intersect(const Ray &ray, float *tHit,
 	                             "Triangle Ray Intersections");
 	// Update triangle tests count
 	triangleHits.Add(0, 1);
-	// Compute $\VEC{s}_1$
-	// Get triangle vertices in _p1_, _p2_, and _p3_
-	const Point &p1 = mesh->p[v[0]];
-	const Point &p2 = mesh->p[v[1]];
-	const Point &p3 = mesh->p[v[2]];
+	// Get the triangle vertices at the ray's shutter time
+	Point pv[3];
+	GetTimeVertices(ray.time, pv);
+	const Point &p1 = pv[0];
+	const Point &p2 = pv[1];
+	const Point &p3 = pv[2];
 	Vector e1 = p2 - p1;
 	Vector e2 = p3 - p1;
 	Vector s1 = Cross(ray.d, e2);
@@ -283,11 +268,12 @@ bool Triangle::IntersectP(const Ray &ray) const {
 	                             "Triangle Ray Intersections");
 	// Update triangle tests count
 	triangleHits.Add(0, 1);
-	// Compute $\VEC{s}_1$
-	// Get triangle vertices in _p1_, _p2_, and _p3_
-	const Point &p1 = mesh->p[v[0]];
-	const Point &p2 = mesh->p[v[1]];
-	const Point &p3 = mesh->p[v[2]];
+	// Get the triangle vertices at the ray's shutter time
+	Point pv[3];
+	GetTimeVertices(ray.time, pv);
+	const Point &p1 = pv[0];
+	const Point &p2 = pv[1];
+	const Point &p3 = pv[2];
 	Vector e1 = p2 - p1;
 	Vector e2 = p3 - p1;
 	Vector s1 = Cross(ray.d, e2);
@@ -333,18 +319,30 @@ float Triangle::Area() const {
 	const Point &p3 = mesh->p[v[2]];
 	return 0.5f * Cross(p2-p1, p3-p1).Length();
 }
+float Triangle::Area(float time) const {
+	Point pv[3];
+	GetTimeVertices(time, pv);
+	return 0.5f * Cross(pv[1]-pv[0], pv[2]-pv[0]).Length();
+}
 Point Triangle::Sample(float u1, float u2,
 		Normal *Ns) const {
+	return Sample(u1, u2, Ns, 0.f);
+}
+Point Triangle::Sample(float u1, float u2, Normal *Ns,
+		float time) const {
 	float b1, b2;
 	UniformSampleTriangle(u1, u2, &b1, &b2);
-	// Get triangle vertices in _p1_, _p2_, and _p3_
-	const Point &p1 = mesh->p[v[0]];
-	const Point &p2 = mesh->p[v[1]];
-	const Point &p3 = mesh->p[v[2]];
-	Point p = b1 * p1 + b2 * p2 + (1.f - b1 - b2) * p3;
-	Normal n = Normal(Cross(p2-p1, p3-p1));
-	*Ns = Normalize(n);
-	if (reverseOrientation) *Ns *= -1.f;
+	Point pv[3];
+	GetTimeVertices(time, pv);
+	Point p = b1 * pv[0] + b2 * pv[1] +
+	          (1.f - b1 - b2) * pv[2];
+	Normal n = Normal(Cross(pv[1]-pv[0], pv[2]-pv[0]));
+	if (n.LengthSquared() == 0.f)
+		*Ns = Normal(0.f, 0.f, 0.f);
+	else {
+		*Ns = Normalize(n);
+		if (reverseOrientation) *Ns *= -1.f;
+	}
 	return p;
 }
 extern "C" DLLEXPORT Shape *CreateShape(const Transform &o2w,
@@ -352,6 +350,8 @@ extern "C" DLLEXPORT Shape *CreateShape(const Transform &o2w,
 	int nvi, npi, nuvi, nsi, nni;
 	const int *vi = params.FindInt("indices", &nvi);
 	const Point *P = params.FindPoint("P", &npi);
+	int np1i;
+	const Point *P1 = params.FindPoint("P1", &np1i);
 	const float *uvs = params.FindFloat("uv", &nuvi);
 	if (!uvs) uvs = params.FindFloat("st", &nuvi);
 	// XXX should complain if uvs aren't an array of 2...
@@ -363,15 +363,22 @@ extern "C" DLLEXPORT Shape *CreateShape(const Transform &o2w,
 		}
 		else if (nuvi > 2 * npi)
 			Warning("More \"uv\"s provided than will be used for triangle "
-			        "mesh.  (%d expcted, %d found)\n", 2*npi, nuvi);
+			        "mesh.  (%d expcted, %d found)\n", npi, nuvi);
 	}
 	if (!vi || !P) return NULL;
 	const Vector *S = params.FindVector("S", &nsi);
+	const Normal *N = params.FindNormal("N", &nni);
+	// Deforming meshes cannot carry shading normals or tangents:
+	// their values are only defined at a single instant.
+	if (P1 && (N || S)) {
+		Error("Deforming triangle mesh with \"P1\" cannot use "
+		      "\"N\" or \"S\" vertex arrays");
+		return NULL;
+	}
 	if (S && nsi != npi) {
 		Error("Number of \"S\"s for triangle mesh must match \"P\"s");
 		S = NULL;
 	}
-	const Normal *N = params.FindNormal("N", &nni);
 	if (N && nni != npi) {
 		Error("Number of \"N\"s for triangle mesh must match \"P\"s");
 		N = NULL;
@@ -401,6 +408,32 @@ extern "C" DLLEXPORT Shape *CreateShape(const Transform &o2w,
 				vi[i], npi);
 			return NULL;
 		}
+	float motionStart = params.FindOneFloat("motionstart", 0.f);
+	float motionEnd = params.FindOneFloat("motionend", 1.f);
+	if (P1) {
+		// Validate the full motion specification before building
+		if (np1i != npi) {
+			Error("Number of \"P1\"s for triangle mesh must match \"P\"s");
+			return NULL;
+		}
+		if (!std::isfinite(motionStart) || !std::isfinite(motionEnd) ||
+		    !(motionEnd > motionStart)) {
+			Error("Deforming triangle mesh requires finite, strictly "
+			      "increasing motion times (motionstart=%g, motionend=%g)",
+			      motionStart, motionEnd);
+			return NULL;
+		}
+		for (int i = 0; i < nvi; ++i)
+			if (vi[i] < 0) {
+				Error("trianglemesh has negative vertex index %d", vi[i]);
+				return NULL;
+			}
+		for (int i = 0; i < npi; ++i)
+			if (!FinitePoint(P[i]) || !FinitePoint(P1[i])) {
+				Error("Deforming triangle mesh vertex %d is not finite", i);
+				return NULL;
+			}
+	}
 	return new TriangleMesh(o2w, reverseOrientation, nvi/3, npi, vi, P,
-		N, S, uvs);
+		P1, motionStart, motionEnd, uvs);
 }

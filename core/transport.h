@@ -52,15 +52,16 @@ COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 	const Point &p, const Normal &n, const Vector &wo,
 	BSDF *bsdf, const Sample *sample,
 	int *lightSampleOffset, int *bsdfSampleOffset,
-	int *bsdfComponentOffset);
+	int *bsdfComponentOffset, float time = 0.f);
 COREDLL Spectrum UniformSampleOneLight(const Scene *scene, const Point &p,
 	const Normal &n, const Vector &wo, BSDF *bsdf,
 	const Sample *sample, int lightSampleOffset = -1,
 	int lightNumOffset = -1, int bsdfSampleOffset = -1,
-	int bsdfComponentOffset = -1);
+	int bsdfComponentOffset = -1, float time = 0.f);
 COREDLL Spectrum WeightedSampleOneLight(const Scene *scene, const Point &p,
 	const Normal &n, const Vector &wo, BSDF *bsdf,
 	const Sample *sample, int lightSampleOffset, int lightNumOffset,
 	int bsdfSampleOffset, int bsdfComponentOffset, float *&avgY,
-	float *&avgYsample, float *&cdf, float &overallAvgY);
+	float *&avgYsample, float *&cdf, float &overallAvgY,
+	float time = 0.f);
 #endif // PBRT_TRANSPORT_H
