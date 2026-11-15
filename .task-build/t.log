@@ -1,0 +1,15 @@
+CASE tiles multi_grid_corner checks=191
+CASE tiles negative_double_mesh checks=262
+CASE tiles mirror_uv checks=133
+CASE tiles limit_exact_32768 checks=983044
+CASE tiles limit_overflow_atomic checks=4
+GROUP tiles cases=5 checks=983634 COMPLETE
+CASE topology continuous_edge_welding checks=305
+CASE topology seam_one_sided_split checks=139
+CASE topology disconnected_fan_same_cell checks=19
+CASE topology overlapping_disconnected checks=81
+GROUP topology cases=4 checks=544 COMPLETE
+CASE persistence ply_roundtrip_refine checks=383
+CASE persistence failure_keeps_state checks=5
+GROUP persistence cases=2 checks=388 COMPLETE
+TARGET_COMPLETE cases=11
