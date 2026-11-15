@@ -1,0 +1,31 @@
+{
+  "repo": "ufbx/ufbx",
+  "commit": "5955c5c0b042ac2dc6f32955ab206aaec0620cfc",
+  "source_files": [
+    {
+      "path": "LICENSE",
+      "git_blob": "5db259b50e3a49019073b6ad69f9514d60638e8a",
+      "sha256": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391",
+      "mode": "100644"
+    },
+    {
+      "path": "data/maya_transformed_skin_7700_ascii.fbx",
+      "git_blob": "683b74cf082e5adab645082c73dd221e0ff7f281",
+      "sha256": "225589db02340da56c5b36d5c99492525acdb56fc518b7d6fb0743214c8b8759",
+      "mode": "100644"
+    },
+    {
+      "path": "ufbx.c",
+      "git_blob": "f8b25bbdf81768e5f0736da0d7867454a79ecda6",
+      "sha256": "4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d",
+      "mode": "100644"
+    },
+    {
+      "path": "ufbx.h",
+      "git_blob": "3d572e0ae751846aa90f1179aa9fa390701bdc15",
+      "sha256": "f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc",
+      "mode": "100644"
+    }
+  ],
+  "exclusion_manifest": "../seed-export.json"
+}
