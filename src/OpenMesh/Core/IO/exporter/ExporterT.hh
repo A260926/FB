@@ -216,6 +216,22 @@ public:
     return count;
   }
 
+  bool get_fhalfedges(FaceHandle _fh,
+                      std::vector<HalfedgeHandle>& _hehandles) const
+  {
+    _hehandles.clear();
+    for (typename Mesh::CFHIter fh_it=mesh_.cfh_iter(_fh); fh_it.is_valid(); ++fh_it)
+      _hehandles.push_back(*fh_it);
+    return true;
+  }
+
+  Vec2f  texcoord(HalfedgeHandle _heh) const
+  {
+    return (mesh_.has_halfedge_texcoords2D()
+            ? vector_cast<Vec2f>(mesh_.texcoord2D(_heh))
+            : Vec2f(0.0f, 0.0f));
+  }
+
   Vec3f  normal(FaceHandle _fh)   const
   {
     return (mesh_.has_face_normals()
@@ -284,6 +300,7 @@ public:
   bool has_edge_colors()      const { return mesh_.has_edge_colors();      }
   bool has_face_normals()     const { return mesh_.has_face_normals();     }
   bool has_face_colors()      const { return mesh_.has_face_colors();      }
+  bool has_halfedge_texcoords() const { return mesh_.has_halfedge_texcoords2D(); }
 
 private:
 

@@ -282,6 +282,29 @@ public:
     }
   }
 
+  virtual void request_halfedge_texcoords()
+  {
+    if ( !mesh_.has_halfedge_texcoords2D() )
+      mesh_.request_halfedge_texcoords2D();
+  }
+
+  virtual unsigned int face_valence(FaceHandle _fh) const
+  { return mesh_.valence(_fh); }
+
+  virtual void add_face_texcoords( FaceHandle _fh, const std::vector<Vec2f>& _face_texcoords )
+  {
+    if ( !mesh_.has_halfedge_texcoords2D() )
+      return;
+
+    // Corner i of the face belongs to the vertex returned by cfv_iter().  The
+    // halfedge texcoord of a halfedge is the texcoord of its to-vertex, so
+    // walk the face halfedges (same order) and assign one value per corner.
+    typename Mesh::ConstFaceHalfedgeIter fh_it = mesh_.cfh_iter(_fh);
+    unsigned int i = 0;
+    for (; fh_it.is_valid() && i < _face_texcoords.size(); ++fh_it, ++i)
+      set_texcoord(*fh_it, _face_texcoords[i]);
+  }
+
   virtual void add_texture_information( int _id , std::string _name ) {
     OpenMesh::MPropHandleT< std::map< int, std::string > > property;
 

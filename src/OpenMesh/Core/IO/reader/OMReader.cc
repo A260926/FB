@@ -470,7 +470,7 @@ bool _OMReader_::read_binary_edge_chunk(std::istream &_is, BaseImporter &_bi, Op
 
 //-----------------------------------------------------------------------------
 
-bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi, Options &/* _opt */, bool _swap) const
+bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi, Options &_opt, bool _swap) const
 {
   using OMFormat::Chunk;
 
@@ -479,6 +479,61 @@ bool _OMReader_::read_binary_halfedge_chunk(std::istream &_is, BaseImporter &_bi
   size_t b = bytes_;
 
   switch (chunk_header_.type_) {
+    case Chunk::Type_Texcoord:
+    {
+      // Standard halfedge (face corner) texture coordinates.  Values are
+      // stored per face corner in face order and per-face vertex order,
+      // padded with zeros up to 2*E.  Halfedge slot numbers are not assumed
+      // to be stable, so the values are assigned corner by corner while
+      // walking the re-read faces.
+      if ( OMFormat::dimensions(chunk_header_) != size_t(OpenMesh::Vec2f::dim()) )
+      {
+        size_t size_of = OMFormat::chunk_data_size(header_, chunk_header_);
+        _is.ignore(size_of);
+        bytes_ += size_of;
+        return true;
+      }
+
+      fileOptions_ += Options::FaceTexCoord;
+
+      const bool want = _opt.face_has_texcoord();
+      if (want)
+        _bi.request_halfedge_texcoords();
+
+      std::vector<OpenMesh::Vec2f> values;
+      values.reserve(2 * size_t(header_.n_edges_));
+
+      OpenMesh::Vec2f v;
+      for (size_t i = 0; i < 2 * size_t(header_.n_edges_) && !_is.eof(); ++i)
+      {
+        bytes_ += vector_restore(_is, v, _swap);
+        values.push_back(v);
+      }
+
+      if (want)
+      {
+        size_t idx = 0;
+        for (size_t fidx = 0; fidx < header_.n_faces_; ++fidx)
+        {
+          // Faces are numbered by their position in the topology chunk and
+          // are already present at this point (the topology chunk comes
+          // first).  Skip a face only if its valence is unknown.
+          const FaceHandle fh = FaceHandle(int(fidx));
+          const unsigned int val = _bi.face_valence(fh);
+          if (val == 0) continue;
+
+          std::vector<OpenMesh::Vec2f> corner;
+          corner.reserve(val);
+          for (unsigned int c = 0; c < val; ++c, ++idx)
+            corner.push_back(idx < values.size() ? values[idx]
+                                                 : OpenMesh::Vec2f(0.0f, 0.0f));
+
+          _bi.add_face_texcoords(fh, corner);
+        }
+      }
+      break;
+    }
+
     case Chunk::Type_Custom:
 
       bytes_ += restore_binary_custom_data(_is, _bi.kernel()->_get_hprop(property_name_), 2 * header_.n_edges_, _swap);

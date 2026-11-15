@@ -7,7 +7,98 @@
 \li \subpage vdpm_docu
 \li Miscellaneous
     OpenMesh::StripifierT
+    OpenMesh::Utils::bridge_boundaries()
 
+*/
+
+//-----------------------------------------------------------------------------
+
+/** \page boundary_bridge_docu Closing two boundary loops with an optimal strip
+
+\section boundary_bridge_intro Introduction
+
+OpenMesh::Utils::bridge_boundaries() connects two complete boundary loops of
+a triangle mesh with a triangle strip chosen by dynamic programming.  It lives
+in <tt>OpenMesh/Tools/Utils/BoundaryBridgeT.hh</tt> and is a header-only
+template, so it works with any OpenMesh mesh type whose faces are triangles
+(for example OpenMesh::TriMesh_ArrayKernelT<>).
+
+The function never splits edges, never welds vertices and never touches
+vertices or existing faces beyond recomputing already requested normals.  All
+existing handles and point positions remain valid.
+
+\section boundary_bridge_input Input contract
+
+Both input vectors must list one complete boundary loop each, following the
+<tt>next</tt> pointers of the loop's boundary (faceless) halfedges.  The first
+vertex is not repeated at the end.  The edge between the two first vertices is
+the designated seam.  The loops must not share a vertex, must each contain
+distinct vertices, and may have between 3 and 32 vertices.  All coordinates
+must be finite.  \c lambda must be finite and non-negative.
+
+Writing <tt>a = first</tt> and <tt>b</tt> for \c second traversed backwards
+from its first vertex, a legal strip is a monotone lattice path from (0,0) to
+(n,m).  A right step at (i,j) adds the triangle (a_i, a_{i+1}, b_j), an up
+step adds (a_i, b_{j+1}, b_j), with indices taken modulo the loop lengths.  A
+cross-loop vertex pair may be used only once, except for the seam pair which
+closes the strip.  Every new triangle must have area greater than 1e-12, and
+pre-existing cross-loop edges may not be reused.
+
+The selected strip minimises
+
+\f[
+  \sum_{\text{new }f} \operatorname{area}(f)
+  + \lambda \sum_{(f,g)\text{ adjacent}} \lVert n_f - n_g \rVert^2,
+\f]
+
+where the adjacency is cyclic: the first and last new triangle contribute one
+term as well.  The \c lambda term is therefore not dropped at the closure.
+Ties smaller than 1e-9 (relative) are acceptable.
+
+\section boundary_bridge_uv Texture coordinates
+
+On success the standard halfedge attribute <tt>h:texcoords2D</tt> is
+allocated if necessary and filled for all new faces.  Let S be the normalised
+arc length accumulated along each input loop from the seam vertex, with S = 0
+on the first loop and S = 1 on the second loop.  A halfedge texture coordinate
+belongs to the corner at its to-vertex, so the seam vertex receives S = 0 in
+the first triangle and S = 1 in the last triangle, where the same geometric
+vertex appears on both sides of the strip.
+
+\section boundary_bridge_persist OM persistence
+
+The OM binary format stores the standard halfedge texture coordinates in an
+anonymous Halfedge/Texcoord chunk, written only when
+OpenMesh::IO::Options::FaceTexCoord is requested and the attribute exists.  The
+chunk lists one Vec2f per face corner in file face order and per-face vertex
+order.  The remaining entries up to 2E are padded with zeros, so readers can
+consume the chunk sequentially; boundary halfedges without a face are not
+meaningful for rendering and need not be stored.  The reader assigns values
+corner by corner while reconstructing the faces, so it does not rely on
+halfedge slot numbers being stable between writing and reading.  If
+FaceTexCoord is not requested, the chunk is skipped without disturbing later
+chunks.  Files without the chunk remain readable.
+
+\section boundary_bridge_example Example
+
+\code
+#include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
+#include <OpenMesh/Tools/Utils/BoundaryBridgeT.hh>
+
+typedef OpenMesh::TriMesh_ArrayKernelT<>  MyMesh;
+
+// ... fill "mesh" so that "first" and "second" are complete boundary loops
+//     listed in boundary next direction.
+
+OpenMesh::Utils::BoundaryBridgeResultT<MyMesh> result;
+OpenMesh::Utils::bridge_boundaries(mesh, first, second, 1.0, result);
+
+std::cout << result.faces.size() << " new triangles, energy "
+          << result.energy << std::endl;
+\endcode
+
+A complete, buildable example is provided in
+<tt>src/OpenMesh/Examples/boundary_bridge.cc</tt>.
 */
 
 // ----------------------------------------------------------------------------

@@ -97,11 +97,25 @@ public:
   virtual Vec4f colorAf(VertexHandle _vh)   const = 0;
   virtual Vec2f  texcoord(VertexHandle _vh) const = 0;
 
+  /// Halfedge (face corner) texture coordinate, used together with
+  /// get_fhalfedges().  The default implementation returns zero.
+  virtual Vec2f  texcoord(HalfedgeHandle /* _heh */) const
+  { return Vec2f(0.0f, 0.0f); }
+
 
   // get face data
   virtual unsigned int
   get_vhandles(FaceHandle _fh,
 	       std::vector<VertexHandle>& _vhandles) const=0;
+
+  /** Get the halfedges of one face in exactly the same order as
+   *  get_vhandles() returns the face's vertices.  Returns false if the
+   *  exporter cannot provide this information. */
+  virtual bool
+  get_fhalfedges(FaceHandle /* _fh */,
+                 std::vector<HalfedgeHandle>& /* _hehandles */) const
+  { return false; }
+
   virtual Vec3f  normal(FaceHandle _fh)      const = 0;
   virtual Vec3uc color (FaceHandle _fh)      const = 0;
   virtual Vec4uc colorA(FaceHandle _fh)      const = 0;
@@ -136,6 +150,7 @@ public:
   virtual bool has_edge_colors()      const { return false; }
   virtual bool has_face_normals()     const { return false; }
   virtual bool has_face_colors()      const { return false; }
+  virtual bool has_halfedge_texcoords() const { return false; }
 };
 
 

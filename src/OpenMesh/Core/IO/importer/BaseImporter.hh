@@ -96,6 +96,23 @@ public:
   // add texture coordinates per face, _vh references the first texcoord
   virtual void add_face_texcoords( FaceHandle _fh, VertexHandle _vh, const std::vector<Vec2f>& _face_texcoords) = 0;
 
+  /** Add texture coordinates for one face corner by corner.  The values are
+   *  in the same order as the vertices of the face (see get_vhandles()).
+   *  This path (used by the OM reader) does not rely on halfedge indices
+   *  being stable between writing and reading. */
+  virtual void add_face_texcoords( FaceHandle _fh, const std::vector<Vec2f>& _face_texcoords )
+  {
+    (void)_fh; (void)_face_texcoords;
+  }
+
+  /** Allocate the standard halfedge texture coordinate attribute if it does
+   *  not exist yet.  Called by readers when a file carries face corner
+   *  texture coordinates. */
+  virtual void request_halfedge_texcoords() {}
+
+  /// Number of corners (vertices/halfedges) of a face, 0 if unknown.
+  virtual unsigned int face_valence(FaceHandle /*_fh*/) const { return 0; }
+
   // Set the texture index for a face
   virtual void set_face_texindex( FaceHandle _fh, int _texId ) = 0;
 

@@ -379,6 +379,47 @@ bool _OMWriter_::write_binary(std::ostream& _os, BaseExporter& _be,
 #endif
   }
 
+  // ---------- write face corner (halfedge) texture coordinates
+  if ( _opt.check(Options::FaceTexCoord) && _be.has_halfedge_texcoords() &&
+       header.n_edges_ > 0 )
+  {
+    // The standard halfedge texcoord chunk stores one Vec2f per face corner
+    // in file face order and per-face vertex order.  The remaining entries
+    // up to 2*E (the number of halfedges) are padded with zeros, so that a
+    // reader can consume the chunk halfedge by halfedge without knowing the
+    // per-face valences.
+    Vec2f t2 = _be.texcoord(HalfedgeHandle(0));
+
+    chunk_header.name_     = false;
+    chunk_header.entity_   = OMFormat::Chunk::Entity_Halfedge;
+    chunk_header.type_     = OMFormat::Chunk::Type_Texcoord;
+    chunk_header.signed_   = OMFormat::is_signed(t2[0]);
+    chunk_header.float_    = OMFormat::is_float(t2[0]);
+    chunk_header.dim_      = OMFormat::dim(t2);
+    chunk_header.bits_     = OMFormat::bits(t2[0]);
+
+    bytes += store( _os, chunk_header, swap );
+
+    size_t n_stored = 0;
+    std::vector<HalfedgeHandle> fhehs;
+
+    for (i=0, nF=header.n_faces_; i<nF; ++i)
+    {
+      // Map the face corners to halfedges.  Exporters that cannot provide
+      // halfedges get zero texcoords.
+      if (!_be.get_fhalfedges(FaceHandle(i), fhehs))
+        fhehs.clear();
+
+      for (size_t j=0; j<fhehs.size(); ++j, ++n_stored)
+        bytes += vector_store(_os, _be.texcoord(fhehs[j]), swap);
+    }
+
+    const size_t n_halfedges = 2 * size_t(header.n_edges_);
+    const Vec2f zero(0.0f, 0.0f);
+    for (; n_stored < n_halfedges; ++n_stored)
+      bytes += vector_store(_os, zero, swap);
+  }
+
   // -------------------- write custom properties
 
 
