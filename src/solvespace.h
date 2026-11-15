@@ -1,0 +1,898 @@
+//-----------------------------------------------------------------------------
+// All declarations not grouped specially elsewhere.
+//
+// Copyright 2008-2013 Jonathan Westhues.
+//-----------------------------------------------------------------------------
+
+#ifndef SOLVESPACE_H
+#define SOLVESPACE_H
+
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+
+#define EIGEN_NO_DEBUG
+#undef Success
+#include <Eigen/SparseCore>
+
+#include "dsc.h"
+#include "polygon.h"
+#include "srf/surface.h"
+#include "render/render.h"
+#include "expr.h"
+#include "sketch.h"
+#include "ttf.h"
+#include "ui.h"
+
+#include "platform/platform.h"
+
+namespace SolveSpace {
+
+using std::min;
+using std::max;
+using std::swap;
+using std::fabs;
+
+enum class Unit : uint32_t {
+    MM = 0,
+    INCHES,
+    METERS,
+    FEET_INCHES
+};
+
+class Pixmap;
+
+enum class SolveResult : uint32_t {
+    OKAY                     = 0,
+    DIDNT_CONVERGE           = 10,
+    REDUNDANT_OKAY           = 11,
+    REDUNDANT_DIDNT_CONVERGE = 12,
+    TOO_MANY_UNKNOWNS        = 20,
+    UNKNOWN_NAME             = 30
+};
+
+// Utility functions that are provided in the platform-independent code.
+class utf8_iterator {
+    const char *p, *n;
+public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = char32_t;
+    using difference_type = std::ptrdiff_t;
+    using pointer = char32_t*;
+    using reference = char32_t&;
+
+    utf8_iterator(const char *p) : p(p), n(NULL) {}
+    bool           operator==(const utf8_iterator &i) const { return p==i.p; }
+    bool           operator!=(const utf8_iterator &i) const { return p!=i.p; }
+    ptrdiff_t      operator- (const utf8_iterator &i) const { return p -i.p; }
+    utf8_iterator& operator++()    { **this; p=n; n=NULL; return *this; }
+    utf8_iterator  operator++(int) { utf8_iterator t(*this); operator++(); return t; }
+    char32_t       operator*();
+    const char*    ptr() const { return p; }
+};
+class ReadUTF8 {
+    const std::string &str;
+public:
+    ReadUTF8(const std::string &str) : str(str) {}
+    utf8_iterator begin() const { return utf8_iterator(&str[0]); }
+    utf8_iterator end()   const { return utf8_iterator(&str[0] + str.length()); }
+};
+
+class Sketch;
+
+class System {
+public:
+    enum { MAX_UNKNOWNS = 2048 };
+
+    EntityList                      entity;
+    ParamList                       param;
+    IdList<Equation,hEquation>      eq;
+
+    // A list of parameters that are being dragged; these are the ones that
+    // we should put as close as possible to their initial positions.
+    ParamSet                        dragged;
+
+    enum {
+        // In general, the tag indicates the subsys that a variable/equation
+        // has been assigned to; these are exceptions for variables:
+        VAR_SUBSTITUTED      = 10000,
+        VAR_DOF_TEST         = 10001,
+        // and for equations:
+        EQ_SUBSTITUTED       = 20000
+    };
+
+    // The system Jacobian matrix
+    struct {
+        // The corresponding equation for each row
+        std::vector<Equation *> eq;
+
+        // The corresponding parameter for each column
+        std::vector<hParam>     param;
+
+        // We're solving AX = B
+        int m, n;
+        struct {
+            // This only observes the Expr - does not own them!
+            Eigen::SparseMatrix<Expr *> sym;
+            Eigen::SparseMatrix<double> num;
+        } A;
+
+        Eigen::VectorXd X;
+
+        struct {
+            // This only observes the Expr - does not own them!
+            std::vector<Expr *> sym;
+            Eigen::VectorXd     num;
+        } B;
+    } mat;
+
+    static const double CONVERGE_TOLERANCE;
+    int CalculateRank();
+    bool TestRank(int *dof = NULL, int *rank = NULL);
+    static bool SolveLinearSystem(const Eigen::SparseMatrix<double> &A,
+                                  const Eigen::VectorXd &B, Eigen::VectorXd *X);
+    bool SolveLeastSquares();
+
+    bool WriteJacobian(Sketch *sketch, int tag);
+    void EvalJacobian();
+
+    void WriteEquationsExceptFor(Sketch *sketch, hConstraint hc, Group *g);
+    void FindWhichToRemoveToFixJacobian(Sketch *sketch, Group *g, List<hConstraint> *bad,
+                                        bool forceDofCheck);
+    SubstitutionMap SolveBySubstitution();
+
+    bool IsDragged(hParam p);
+
+    bool NewtonSolve();
+
+    void MarkParamsFree(Sketch *sketch, bool findFree);
+
+    // Solve the group's equations, in the sketch that it's in
+    SolveResult Solve(Sketch *sketch, Group *g, int *dof = NULL, List<hConstraint> *bad = NULL,
+                      bool andFindBad = false, bool andFindFree = false,
+                      bool forceDofCheck = false);
+
+    SolveResult SolveRank(Sketch *sketch, Group *g, int *rank = NULL, int *dof = NULL,
+                          List<hConstraint> *bad = NULL,
+                          bool andFindBad = false, bool andFindFree = false);
+
+    void Clear();
+};
+
+class StepFileWriter {
+public:
+    bool HasCartesianPointAnAlias(int number, Vector v, int vertex,
+                                  bool *vertex_has_alias = nullptr);
+    int InsertPoint(int number);
+    int InsertVertex(int number);
+    bool HasBSplineCurveAnAlias(int number, std::vector<int> points);
+    int InsertCurve(int number);
+    bool HasEdgeCurveAnAlias(int number, int prevFinish, int thisFinish, int curveId,
+                        bool *flip = nullptr);
+    int InsertEdgeCurve(int number);
+    bool HasOrientedEdgeAnAlias(int number, int edgeCurveId, bool flip);
+    int InsertOrientedEdge(int number);
+    void ExportSurfacesTo(const Platform::Path &filename);
+    void WriteHeader();
+    void WriteProductHeader();
+    int ExportCurve(SBezier *sb);
+    int ExportCurveLoop(SBezierLoop *loop, bool inner);
+    void ExportSurface(SSurface *ss, SBezierList *sbl);
+    void WriteWireframe();
+    void WriteFooter();
+
+    List<int> curves;
+    List<int> advancedFaces;
+    FILE *f;
+    int id;
+
+    // Structs to keep track of duplicated entities.
+    // Basic alias.
+    typedef struct {
+        int reference;
+        std::vector<int> aliases;
+    } alias_t;
+
+    // Cartesian points.
+    typedef struct {
+        alias_t alias;
+        alias_t vertexAlias;
+        Vector v;
+    } pointAliases_t;
+
+    // Curves.
+    typedef struct {
+        alias_t alias;
+        std::vector<int> memberPoints;
+        RgbaColor color;
+    } curveAliases_t;
+
+    // Edges.
+    typedef struct {
+        alias_t alias;
+        int prevFinish;
+        int thisFinish;
+        int curveId;
+        RgbaColor color;
+    } edgeCurveAliases_t;
+
+    // Edges.
+    typedef struct {
+        alias_t alias;
+        int edgeCurveId;
+        bool flip;
+    } orientedEdgeAliases_t;
+
+    std::vector<pointAliases_t> pointAliases;
+    std::vector<edgeCurveAliases_t> edgeCurveAliases;
+    std::vector<curveAliases_t> curveAliases;
+    std::vector<orientedEdgeAliases_t> orientedEdgeAliases;
+    bool exportParts = true;
+    RgbaColor currentColor;
+};
+
+class VectorFileWriter {
+protected:
+    Vector u, v, n, origin;
+    double cameraTan, scale;
+
+public:
+    FILE *f;
+    Platform::Path filename;
+    Vector ptMin, ptMax;
+
+    static double MmToPts(double mm);
+
+    static VectorFileWriter *ForFile(const Platform::Path &filename);
+
+    void SetModelviewProjection(const Vector &u, const Vector &v, const Vector &n,
+                                const Vector &origin, double cameraTan, double scale);
+    Vector Transform(Vector &pos) const;
+
+    void OutputLinesAndMesh(SBezierLoopSetSet *sblss, SMesh *sm);
+
+    void BezierAsPwl(SBezier *sb);
+    void BezierAsNonrationalCubic(SBezier *sb, int depth=0);
+
+    virtual void StartPath(RgbaColor strokeRgb, double lineWidth,
+                            bool filled, RgbaColor fillRgb, hStyle hs) = 0;
+    virtual void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                            bool filled, RgbaColor fillRgb, hStyle hs, bool closed) = 0;
+    virtual void Bezier(SBezier *sb) = 0;
+    virtual void Triangle(STriangle *tr) = 0;
+    virtual bool OutputConstraints(IdList<Constraint,hConstraint> *) { return false; }
+    virtual void Background(RgbaColor color) = 0;
+    virtual void StartFile() = 0;
+    virtual void FinishAndCloseFile() = 0;
+    virtual bool HasCanvasSize() const = 0;
+    virtual bool CanOutputMesh() const = 0;
+};
+class DxfFileWriter : public VectorFileWriter {
+public:
+    struct BezierPath {
+        std::vector<SBezier *> beziers;
+    };
+
+    std::vector<BezierPath>         paths;
+    IdList<Constraint,hConstraint> *constraint;
+
+    static const char *lineTypeName(StipplePattern stippleType);
+
+    bool OutputConstraints(IdList<Constraint,hConstraint> *constraint) override;
+
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return false; }
+    bool CanOutputMesh() const override { return false; }
+    bool NeedToOutput(Constraint *c);
+};
+class EpsFileWriter : public VectorFileWriter {
+public:
+    Vector prevPt;
+    void MaybeMoveTo(Vector s, Vector f);
+
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return true; }
+    bool CanOutputMesh() const override { return true; }
+};
+class PdfFileWriter : public VectorFileWriter {
+public:
+    uint32_t xref[10];
+    uint32_t bodyStart;
+    Vector prevPt;
+    void MaybeMoveTo(Vector s, Vector f);
+
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return true; }
+    bool CanOutputMesh() const override { return true; }
+};
+class SvgFileWriter : public VectorFileWriter {
+public:
+    Vector prevPt;
+    void MaybeMoveTo(Vector s, Vector f);
+
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return true; }
+    bool CanOutputMesh() const override { return true; }
+};
+class HpglFileWriter : public VectorFileWriter {
+public:
+    static double MmToHpglUnits(double mm);
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return false; }
+    bool CanOutputMesh() const override { return false; }
+};
+class Step2dFileWriter : public VectorFileWriter {
+    StepFileWriter sfw;
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return false; }
+    bool CanOutputMesh() const override { return false; }
+};
+class GCodeFileWriter : public VectorFileWriter {
+public:
+    SEdgeList sel;
+    void StartPath( RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs) override;
+    void FinishPath(RgbaColor strokeRgb, double lineWidth,
+                    bool filled, RgbaColor fillRgb, hStyle hs, bool closed) override;
+    void Triangle(STriangle *tr) override;
+    void Bezier(SBezier *sb) override;
+    void Background(RgbaColor color) override;
+    void StartFile() override;
+    void FinishAndCloseFile() override;
+    bool HasCanvasSize() const override { return false; }
+    bool CanOutputMesh() const override { return false; }
+};
+
+#ifdef LIBRARY
+#   define ENTITY EntityBase
+#   define CONSTRAINT ConstraintBase
+#else
+#   define ENTITY Entity
+#   define CONSTRAINT Constraint
+#endif
+class Sketch {
+public:
+    // These are user-editable, and define the sketch.
+    IdList<Group,hGroup>            group;
+    List<hGroup>                    groupOrder;
+    IdList<CONSTRAINT,hConstraint>  constraint;
+    IdList<Request,hRequest>        request;
+    IdList<Style,hStyle>            style;
+
+    // These are generated from the above.
+    IdList<ENTITY,hEntity>          entity;
+    ParamList                       param;
+
+    inline CONSTRAINT *GetConstraint(hConstraint h)
+        { return constraint.FindById(h); }
+    inline ENTITY  *GetEntity (hEntity  h) { return entity. FindById(h); }
+    inline Param   *GetParam  (hParam   h) { return param.  FindById(h); }
+    inline Request *GetRequest(hRequest h) { return request.FindById(h); }
+    inline Group   *GetGroup  (hGroup   h) { return group.  FindById(h); }
+    // The vector or quaternion that parameters of this sketch hold
+    Vector VectorFrom(hParam x, hParam y, hParam z) {
+        return Vector::From(GetParam(x)->val, GetParam(y)->val, GetParam(z)->val);
+    }
+    Quaternion QuaternionFrom(hParam w, hParam vx, hParam vy, hParam vz) {
+        return Quaternion::From(GetParam(w)->val, GetParam(vx)->val,
+                                GetParam(vy)->val, GetParam(vz)->val);
+    }
+    // Styles are handled a bit differently.
+
+    void Clear();
+
+    BBox CalculateEntityBBox(bool includingInvisible);
+    // The chord tolerance in mm for this sketch, given the tolerance relative
+    // to its size, in percent
+    double ChordTolForSize(double relativeChordTol);
+    Group *GetRunningMeshGroupFor(hGroup h);
+
+    void RegenerateGroupOrder();
+    // Mark the group, and unless onlyThis, the groups after it, as needing
+    // to be solved again
+    void MarkGroupDirty(hGroup hg, bool onlyThis = false);
+
+    // Checks made when regenerating, to find what has to be pruned
+    bool GroupExists(hGroup hg);
+    bool EntityExists(hEntity he);
+    bool GroupsInOrder(hGroup hbefore, hGroup hafter);
+    bool PruneGroup(Group *g);
+    int RemoveTaggedConstraints(bool *tagged);
+    // Set the parameters of the three reference workplanes
+    void ForceReferences();
+    // The values for the parameters of the sketch that a linked group links:
+    // those in values, or, if evaluate, those of their expressions.
+    LinkValues LinkValuesFor(Group *g, ParamList *values, bool evaluate);
+    // Whether a value for a linked sketch's parameter can be given: its
+    // expression, if it has one, is valid, and the linked sketch has it
+    bool LinkParamIsKnown(Group *g, Request *r);
+    // The value of an expression whose parameters are in this sketch
+    double Evaluate(const Expr *e) {
+        return e->DeepCopyWithParamsAsPointers(&param, &param)->Eval();
+    }
+
+    // What is being dragged in the GUI. The solver tries to keep the
+    // parameters of these where they were put.
+    struct Dragged {
+        std::vector<hEntity> points;
+        hEntity              circle;
+        hEntity              normal;
+    };
+    // Solving a group, using the given solver
+    void MarkDraggedParams(System *sys, const Dragged &dragged);
+    void WriteEqSystemForGroup(hGroup hg, System *sys, const Dragged &dragged);
+    void SolveGroup(hGroup hg, System *sys, const Dragged &dragged, bool andFindFree,
+                    int timeoutRedundantConstr);
+    SolveResult TestRankForGroup(hGroup hg, System *sys, int *rank = NULL);
+
+    // How to regenerate the sketch
+    struct GenerateOptions {
+        // The groups to solve, as indices into groupOrder. The others are
+        // regenerated, but assumed to be solved already.
+        int     first;
+        int     last;
+        // Regenerate without solving anything, as for export
+        bool    noSolve;
+        bool    andFindFree;
+        int     timeoutRedundantConstr;
+        System  *sys;
+        Dragged dragged;
+        // Loads what a linked group gets from its linked sketch, with these
+        // values for the sketch's parameters, when they have changed; NULL
+        // to keep what the group has.
+        bool    (*loadLinked)(Group *g, const LinkValues &values);
+    };
+    // A group that was solved, and how it was solved before
+    struct SolvedGroup {
+        hGroup      h;
+        SolveResult before;
+    };
+    // What happened when the sketch was regenerated
+    struct GenerateResult {
+        // The groups to solve, adjusted for any groups that were pruned
+        int     first;
+        int     last;
+        // How much was pruned, because what it depends on doesn't exist
+        int     requests;
+        int     groups;
+        int     constraints;
+        int     nonTrivialConstraints;
+        // The groups that were solved, in order
+        std::vector<SolvedGroup> solved;
+    };
+    // Regenerate the entities and parameters of every group, pruning what
+    // can't be generated, and solve the groups in the range.
+    void GenerateEntities(const GenerateOptions &opts, GenerateResult *result);
+    // Then generate the shells and meshes of the groups in the range, with
+    // the given chord tolerance in mm, and update the reference dimensions.
+    // Returns true if whether a group's Boolean failed has changed.
+    bool GenerateShellsAndMeshes(int first, int last, double chordTolMm);
+    // Bring the sketch, just read from a file saved by an older version, up
+    // to date; it is regenerated, as described by opts, along the way.
+    void UpgradeLegacyData(const GenerateOptions &opts, GenerateResult *result);
+};
+#undef ENTITY
+#undef CONSTRAINT
+
+class SolveSpaceUI {
+public:
+    TextWindow                 *pTW;
+    TextWindow                 &TW;
+    GraphicsWindow              GW;
+
+    // The state for undo/redo
+    typedef struct UndoState {
+        IdList<Group,hGroup>            group;
+        List<hGroup>                    groupOrder;
+        IdList<Request,hRequest>        request;
+        IdList<Constraint,hConstraint>  constraint;
+        ParamList                       param;
+        IdList<Style,hStyle>            style;
+        hGroup                          activeGroup;
+
+        void Clear() {
+            group.Clear();
+            request.Clear();
+            constraint.Clear();
+            param.Clear();
+            style.Clear();
+        }
+    } UndoState;
+    enum { MAX_UNDO = 100 };
+    typedef struct {
+        UndoState   d[MAX_UNDO];
+        int         cnt;
+        int         write;
+    } UndoStack;
+    UndoStack   undo;
+    UndoStack   redo;
+
+    std::map<Platform::Path, std::shared_ptr<Pixmap>, Platform::PathLess> images;
+    bool ReloadLinkedImage(const Platform::Path &saveFile, Platform::Path *filename,
+                           bool canCancel);
+
+    void UndoEnableMenus();
+    void UndoRemember();
+    void UndoUndo();
+    void UndoRedo();
+    void PushFromCurrentOnto(UndoStack *uk);
+    void PopOntoCurrentFrom(UndoStack *uk);
+    void UndoClearState(UndoState *ut);
+    void UndoClearStack(UndoStack *uk);
+
+    // Little bits of extra configuration state
+    enum { MODEL_COLORS = 8 };
+    RgbaColor modelColor[MODEL_COLORS];
+    Vector   lightDir[2];
+    double   lightIntensity[2];
+    double   ambientIntensity;
+    double   chordTol;
+    double   chordTolCalculated;
+    int      maxSegments;
+    double   exportChordTol;
+    int      exportMaxSegments;
+    int      timeoutRedundantConstr; //milliseconds
+    int      animationSpeed; //milliseconds
+    double   cameraTangent;
+    double   gridSpacing;
+    double   exportScale;
+    double   exportOffset;
+    bool     arcDimDefaultDiameter;
+    bool     showFullFilePath;
+    bool     fixExportColors;
+    bool     exportBackgroundColor;
+    bool     drawBackFaces;
+    bool     showContourAreas;
+    bool     checkClosedContour;
+    bool     cameraNav;
+    bool     turntableNav;
+    bool     immediatelyEditDimension;
+    bool     automaticLineConstraints;
+    bool     showToolbar;
+    Platform::Path screenshotFile;
+    RgbaColor backgroundColor;
+    bool     exportShadedTriangles;
+    bool     exportPwlCurves;
+    bool     exportCanvasSizeAuto;
+    bool     exportMode;
+    struct {
+        double  left;
+        double  right;
+        double  bottom;
+        double  top;
+    }        exportMargin;
+    struct {
+        double  width;
+        double  height;
+        double  dx;
+        double  dy;
+    }        exportCanvas;
+    struct {
+        double  depth;
+        double  safeHeight;
+        int     passes;
+        double  feed;
+        double  plungeFeed;
+    }        gCode;
+
+    Unit     viewUnits;
+    int      afterDecimalMm;
+    int      afterDecimalInch;
+    int      afterDecimalDegree;
+    bool     useSIPrefixes;
+    int      autosaveInterval; // in minutes
+    bool     explode;
+    double   explodeDistance;
+
+    std::string MmToString(double v, bool editable=false);
+    std::string MmToStringSI(double v, int dim = 0);
+    std::string DegreeToString(double v);
+    double ExprToMm(Expr *e);
+    double StringToMm(const std::string &s);
+    const char *UnitName();
+    double MmPerUnit();
+    int UnitDigitsAfterDecimal();
+    void SetUnitDigitsAfterDecimal(int v);
+    double ChordTolMm();
+    double ExportChordTolMm();
+    int GetMaxSegments();
+    bool usePerspectiveProj;
+    double CameraTangent();
+
+    // Some stuff relating to the tangent arcs created non-parametrically
+    // as special requests.
+    double tangentArcRadius;
+    bool tangentArcManual;
+    bool tangentArcModify;
+
+    // The platform-dependent code calls this before entering the msg loop
+    void Init();
+    void Exit();
+
+    // File load/save routines, including the additional files that get
+    // loaded when we have link groups.
+    FILE        *fh;
+    void AfterNewFile();
+    void AddToRecentList(const Platform::Path &filename);
+    Platform::Path saveFile;
+    bool        fileLoadError;
+    bool        unsaved;
+    typedef struct {
+        char        type;
+        const char *desc;
+        char        fmt;
+        void       *ptr;
+    } SaveTable;
+    static const SaveTable SAVED[];
+    void SaveUsingTable(const Platform::Path &filename, int type);
+    void LoadUsingTable(const Platform::Path &filename, char *key, char *val);
+    struct {
+        Group        g;
+        Request      r;
+        Entity       e;
+        Param        p;
+        Constraint   c;
+        Style        s;
+    } sv;
+    static void MenuFile(Command id);
+    void Autosave();
+    void RemoveAutosave();
+    static constexpr size_t MAX_RECENT = 8;
+    static constexpr const char *SKETCH_EXT = "slvs";
+    static constexpr const char *BACKUP_EXT = "slvs~";
+    std::vector<Platform::Path> recentFiles;
+    bool Load(const Platform::Path &filename);
+    bool GetFilenameAndSave(bool saveAs);
+    bool OkayToStartNewFile();
+    hGroup CreateDefaultDrawingGroup();
+    void UpdateWindowTitles();
+    void ClearExisting();
+    void NewFile();
+    bool SaveToFile(const Platform::Path &filename);
+    bool LoadAutosaveFor(const Platform::Path &filename);
+    std::function<void(const Platform::Path &filename, bool is_saveAs, bool is_autosave)> OnSaveFinished;
+    // Read a .slvs file into the sketch, and its saved entities, if wanted,
+    // into savedEntities. Returns false if the file can't be read; sets
+    // fileLoadError if it has data that isn't recognized.
+    bool ReadSketchFile(const Platform::Path &filename, Sketch *sketch,
+                        EntityList *savedEntities, bool *isEmpty);
+    bool LoadFromFile(const Platform::Path &filename, bool canCancel = false);
+    void UpgradeLegacyData();
+    bool LoadEntitiesFromFile(const Platform::Path &filename, EntityList *le,
+                              SMesh *m, SShell *sh);
+    // Load what a linked group gets from its file, giving the linked sketch's
+    // parameters these values. If checkFiles, files read before are checked
+    // for changes. Returns false if the file can't be loaded at all.
+    bool LoadLinkedGroup(Group *g, const LinkValues &values, bool checkFiles);
+    // For GenerateOptions::loadLinked
+    static bool LoadLinkedForGeneration(Group *g, const LinkValues &values);
+    // Load a linked .slvs file as a sketch of its own, generate it with these
+    // values for its parameters, and give its entities, the mesh and shell
+    // of its last group, and its parameters. Returns false if it can't be,
+    // for example because it links itself.
+    bool LoadLinkedSketch(const Platform::Path &filename, const LinkValues &values,
+                          EntityList *le, SMesh *m, SShell *sh, LinkValues *params,
+                          bool checkFiles);
+    bool LoadLinkedGroups(Sketch *sketch, bool checkFiles);
+    // The linked files being loaded, outermost first
+    std::vector<Platform::Path> linkedFilesLoading;
+
+    // A linked .slvs file, read and ready to be generated, so that it isn't
+    // read again unless it, or a file it links, changes.
+    struct LinkedFile {
+        Platform::Path  path;
+        size_t          hash;   // of its contents
+    };
+    struct LinkedSketchFile {
+        Sketch                  *sketch;
+        // Its entities as saved, for whether each is visible
+        EntityList              saved;
+        // The parameters of its references group, with its own values
+        LinkValues              params;
+        // It and the files it links
+        std::vector<LinkedFile> madeFrom;
+    };
+    std::map<Platform::Path, LinkedSketchFile, Platform::PathLess> linkedSketchFiles;
+    LinkedSketchFile *ReadLinkedSketch(const Platform::Path &filename, bool checkFiles);
+    void DropLinkedSketchFile(const Platform::Path &filename);
+
+    // What a linked sketch made, for some values of its parameters, by
+    // LinkKey(), so that it isn't generated again (on undo, or for another
+    // group that links it with the same values). Only what linked groups use
+    // is kept; see PruneLinkedSketches().
+    struct LinkedSketch {
+        double                  chordTol;
+        int                     maxSegments;
+        EntityList              entities;
+        SMesh                   mesh;
+        SShell                  shell;
+        IdList<Style,hStyle>    styles;
+    };
+    std::map<std::string, LinkedSketch> linkedSketches;
+    static std::string LinkKey(const Platform::Path &filename, const LinkValues &values);
+    void UseLinkedSketch(LinkedSketch *ls, EntityList *le, SMesh *m, SShell *sh);
+    void ClearLinkedSketch(LinkedSketch *ls);
+    // Drop what no linked group uses any more
+    void PruneLinkedSketches();
+    void ClearLinkedSketches();
+    bool LoadEntitiesFromSlvs(const Platform::Path &filename, EntityList *le,
+                              SMesh *m, SShell *sh);
+    bool ReloadAllLinked(const Platform::Path &filename, bool canCancel = false);
+    // And the various export options
+    void ExportAsPngTo(const Platform::Path &filename);
+    void ExportMeshTo(const Platform::Path &filename);
+    void ExportMeshAsStlTo(FILE *f, SMesh *sm);
+    void ExportMeshAsObjTo(FILE *fObj, FILE *fMtl, SMesh *sm);
+    void ExportMeshAsThreeJsTo(FILE *f, const Platform::Path &filename,
+                               SMesh *sm, SOutlineList *sol);
+    void ExportMeshAsVrmlTo(FILE *f, const Platform::Path &filename, SMesh *sm);
+    void ExportViewOrWireframeTo(const Platform::Path &filename, bool exportWireframe);
+    void ExportSectionTo(const Platform::Path &filename);
+    void ExportWireframeCurves(SEdgeList *sel, SBezierList *sbl,
+                               VectorFileWriter *out);
+    void ExportLinesAndMesh(SEdgeList *sel, SBezierList *sbl, SMesh *sm,
+                            Vector u, Vector v,
+                            Vector n, Vector origin,
+                            double cameraTan,
+                            VectorFileWriter *out);
+
+    static void MenuAnalyze(Command id);
+
+    // Additional display stuff
+    struct {
+        SContour    path;
+        hEntity     point;
+    } traced;
+    SEdgeList nakedEdges;
+    struct {
+        bool        draw;
+        Vector      ptA;
+        Vector      ptB;
+    } extraLine;
+    struct {
+        bool        draw, showOrigin;
+        Vector      pt, u, v;
+    } justExportedInfo;
+    struct {
+        bool   draw;
+        bool   dirty;
+        Vector position;
+    } centerOfMass;
+
+    class Clipboard {
+    public:
+        List<ClipboardRequest>  r;
+        List<Constraint>        c;
+
+        void Clear();
+        bool ContainsEntity(hEntity old);
+        hEntity NewEntityFor(hEntity old);
+    };
+    Clipboard clipboard;
+
+    void MarkGroupDirty(hGroup hg, bool onlyThis = false);
+    void MarkGroupDirtyByEntity(hEntity he);
+
+    // Consistency checking on the sketch: stuff with missing dependencies
+    // will get deleted automatically.
+    struct {
+        int     requests;
+        int     groups;
+        int     constraints;
+        int     nonTrivialConstraints;
+    } deleted;
+    static void ShowNakedEdges(bool reportOnlyWhenNotOkay);
+
+    enum class Generate : uint32_t {
+        DIRTY,
+        ALL,
+        REGEN,
+        UNTIL_ACTIVE,
+    };
+
+    void GenerateAll(Generate type = Generate::DIRTY, bool andFindFree = false);
+    Sketch::Dragged DraggedEntities();
+    void ReportHowGroupSolved(hGroup hg, SolveResult before);
+    SolveResult TestRankForGroup(hGroup hg, int *rank = NULL);
+    void UpdateCenterOfMass();
+
+    bool ActiveGroupsOkay();
+
+    // The system to be solved.
+    System     *pSys;
+    System     &sys;
+
+    // All the TrueType fonts in memory
+    TtfFontList fonts;
+
+    // Everything has been pruned, so we know there's no dangling references
+    // to entities that don't exist. Before that, we mustn't try to display
+    // the sketch!
+    bool allConsistent;
+
+    bool scheduledGenerateAll;
+    bool scheduledShowTW;
+    Platform::TimerRef refreshTimer;
+    Platform::TimerRef autosaveTimer;
+    void Refresh();
+    void ScheduleShowTW();
+    void ScheduleGenerateAll();
+    void ScheduleAutosave();
+
+    static void MenuHelp(Command id);
+
+    void Clear();
+
+    // We allocate TW and sys on the heap to work around an MSVC problem
+    // where it puts zero-initialized global data in the binary (~30M of zeroes)
+    // in release builds.
+    SolveSpaceUI()
+        : pTW(new TextWindow()), TW(*pTW),
+          pSys(new System()), sys(*pSys) {}
+
+    ~SolveSpaceUI() {
+        delete pTW;
+        delete pSys;
+    }
+};
+
+void ImportDxf(const Platform::Path &file);
+void ImportDwg(const Platform::Path &file);
+bool LinkIDF(const Platform::Path &filename, EntityList *le, SMesh *m, SShell *sh);
+bool LinkStl(const Platform::Path &filename, EntityList *le, SMesh *m, SShell *sh);
+
+extern SolveSpaceUI SS;
+extern Sketch SK;
+
+} // namespace SolveSpace
+
+#endif
