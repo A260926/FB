@@ -173,3 +173,131 @@ cmake -B buildDir \
 -DOSD_PATCH_SHADER_SOURCE_MSL=1   // MSL Patch Shader Source
 ````
 
+## Incremental tessellation session and mesh deltas
+
+The CPU Bfr layer adds a persistent, genuinely incremental tessellation
+production path that replaces full-mesh re-export. The subdivision side
+keeps an edit session and emits only the records that changed; a separate
+process with no control cage and no Bfr dependency replays those records
+into an OBJ-exportable triangle mesh.
+
+The implementation is C++17 and the standard library only, split into:
+
+  * `opensubdiv/bfr/tessellationSession.h/.cpp` — `Bfr::TessellationSession`
+  * `opensubdiv/bfr/meshDelta.h/.cpp` — `Bfr::MeshDelta`, `Bfr::MeshMirror`,
+    the snapshots and the on-disk protocol. `meshDelta.*` includes no other
+    OpenSubdiv header.
+
+### Supported input
+
+  * Orientably consistent combinatorial 2-manifold Catmull-Clark quad cages,
+    including open boundaries and multiple disconnected components.
+  * Interior vertices have valence 4; boundary vertices are a single open
+    fan incident to one or two faces. Boundary interpolation is
+    `Sdc::VTX_BOUNDARY_EDGE_ONLY`.
+  * No holes, isolated vertices, explicit creases or corner sharpness.
+  * Topology is fixed for the session lifetime; coarse positions and the
+    per-face sampling rates may change repeatedly.
+
+Each base face requests a rate in `[1, 32]`. The effective rate of a base
+edge is the maximum request of its incident faces; a face's own inner rate
+is its own request. The four effective edge rates plus the inner rate are
+the five rates handed to the existing `Bfr::Tessellation`, which remains the
+only subdivision evaluator and tessellator used.
+
+### Session interface
+
+`TessellationSession` is constructed from a `const Far::TopologyRefiner&`,
+an array of three-`double` control points, and one integer request rate per
+base face. Construction compiles one `Bfr::Surface` per face and the
+`GetControlPointIndices` support dependencies, builds the initial mesh, and
+exposes the bootstrap `0 -> 1` delta through `InitialDelta()`.
+
+`Update()` takes absolute `PositionEdit` and `RateEdit` batches and returns
+the next `MeshDelta`. Edits whose absolute values already equal the current
+state are not changes; a batch with no effective change does not advance the
+revision and returns an empty, same-revision delta. `EvaluatedFaces()` is
+exactly the union of faces supported by changed control points (including
+faces not directly adjacent to the moved coarse vertex) and faces whose
+template changed; `RemeshedFaces()` is exactly the faces whose five effective
+rates changed. Both are ascending and duplicate-free, and reflect the actual
+execution path. Surfaces and support tables are never rebuilt; unrelated
+faces are never re-evaluated, re-meshed or mentioned in a delta.
+
+Failures are transactional. Out-of-range or duplicate edit ids, illegal
+rates or non-finite positions throw `std::invalid_argument`; non-finite
+evaluation or a tangent frame with
+`||Pu x Pv|| / (||Pu|| ||Pv||) <= 1e-12` throws `std::runtime_error`, as does
+a shared-position disagreement above `1e-9`. On any throw the control
+points, rates, mesh, revision and both next-ID allocators roll back, so a
+later retry is identical to a session that never failed.
+
+### Identity, sharing and snapshots
+
+Position IDs and triangle IDs are non-zero `uint64_t` values in independent
+ID spaces. Base vertices and rational stations on the same base edge keep
+their identity while they live (the 2-segment midpoint is the same position
+when the edge becomes 4 segments); edge stations are directed from the
+smaller endpoint id to the larger, and disconnected components are never
+welded by coordinates. A shared position takes the real surface point of the
+lowest-numbered incident base face. Interior sites and triangles of a
+template-changed face may be deleted and recreated; edge sites are deleted
+only once no face references them. Deleted IDs are never reused, and a
+failed update consumes no IDs.
+
+Triangles retain their originating base face, per-corner UVs and analytic
+unit normals; corner data is never merged into per-point data, and local UV
+winding is positive. `Snapshot()` on both the session and `MeshMirror`
+returns an owning, ID-sorted copy that is unaffected by later edits.
+
+### OSDM0001 delta protocol
+
+Each file is one delta. All integers are little-endian unsigned and every
+`double` is IEEE-754 binary64 little-endian; there is no padding and no
+trailing byte. Layout, in fixed order:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| magic | 8 ASCII bytes | literal `OSDM0001` |
+| from, to | two `uint64` | revision span |
+| counts | four `uint64` | sizes of the four record groups below |
+| deleted triangles | count x `uint64` | triangle IDs, ascending |
+| deleted positions | count x `uint64` | position IDs, ascending |
+| position upserts | count x record | `uint64` id + 3 `double` |
+| triangle upserts | count x record | see below |
+
+A triangle record is, in order: `uint64` id, `uint32` base face, three
+`uint64` position IDs, six `double` per-corner UVs (two per corner), and nine
+`double` per-corner unit normals (three per corner).
+
+Readers reject streams larger than 64 MiB, any group above 1,000,000 records,
+bad magic, count overflow, truncation or trailing bytes, non-finite values,
+non-unit normals, ordering/duplicate violations, and malformed records.
+Encoding the same delta is byte deterministic; invalid data is rejected
+before an existing output file is touched.
+
+### MeshMirror
+
+`MeshMirror` starts at revision 0 with an empty mesh and holds only the
+decoded records — never a refiner, `Surface` or control point. A non-empty
+delta must have `from == current revision` and `to == from + 1`; an empty
+delta is legal at the current revision. Each candidate is fully validated
+(versions, record uniqueness, existence of deletes, that every final
+triangle references three distinct surviving positions, non-negative face,
+finite positions/UVs, and normals of length within `1e-9` of one) on a
+scratch copy and committed in a single step; a rejected delta leaves the
+mirror unchanged.
+
+### Programs and tests
+
+  * `examples/session_producer.cpp` builds a curved torus cage, chains local
+    point edits, `2 -> 4 -> 2` rate edits, a combined edit and a no-op, and
+    writes the delta files plus `stream.list` into a directory.
+  * `examples/mesh_consumer.cpp` reads only `stream.list` via `MeshMirror`
+    and writes an OBJ whose `v` records follow live position IDs while `vt`
+    and `vn` preserve per-corner identity. It compiles against
+    `meshDelta.cpp` alone.
+  * `tests/session_contracts.cpp` registers the `dependency`,
+    `retessellation` and `replay` groups with the task driver; geometric
+    references are rebuilt independently from the stock Bfr classes.
+

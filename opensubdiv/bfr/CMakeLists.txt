@@ -15,6 +15,7 @@ set(SOURCE_FILES
      faceVertex.cpp
      hash.cpp
      irregularPatchBuilder.cpp
+     meshDelta.cpp
      parameterization.cpp
      patchTree.cpp
      patchTreeBuilder.cpp
@@ -25,6 +26,7 @@ set(SOURCE_FILES
      surfaceFactory.cpp
      surfaceFactoryCache.cpp
      tessellation.cpp
+     tessellationSession.cpp
      vertexDescriptor.cpp
 )
 
