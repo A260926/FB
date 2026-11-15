@@ -1,0 +1,464 @@
+{
+  "repo": "https://github.com/RayTracing/raytracing.github.io",
+  "commit": "0ab7db4c08fe23f23c0d9d30fed166c83cefed91",
+  "license": "CC0-1.0; bundled stb public domain",
+  "source_files": [
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "f10ae8c4dba53bbce9b3da7de530e6f00388786a1d9060d1c972c048c2672049",
+      "mode": "0o644"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "30e553c46f0846602f5f3e45fbe9541ea3d898ee78d7daa0b797613ea402369b",
+      "mode": "0o644"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "3bd828c17d8de24039314b54a7bddd7ac6ba551d055b97d1e3de3356d6e398a3",
+      "mode": "0o644"
+    },
+    {
+      "path": "COPYING.txt",
+      "sha256": "f4e7f373b9b996950337e8d41a4a2939c2d90b7725e9baf3d5084a22717ad328",
+      "mode": "0o644"
+    },
+    {
+      "path": "README.md",
+      "sha256": "6773c9047fcf43cb38f3193e201366e7a0de87560a81ecb6e3f8149be81db005",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/camera.h",
+      "sha256": "8759caec29f024b822549ba78bce5bd01a241030533f54ea879a41e3f4630b11",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/color.h",
+      "sha256": "0a08271efdffc05cdbf8581182bfc321f3f9d8201002dcc2cb1db3edaefd2363",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/hittable.h",
+      "sha256": "da3583a2327b1b8ee742736999d7a910db43ee57490169c98c6ae822c1b96eba",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/hittable_list.h",
+      "sha256": "218b2d226fd1e78fc2ccb2f4882eb78ce5cafa37d8da8533f95898a672df81e5",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/interval.h",
+      "sha256": "9adf7a011c0bdcf71e69586413c51bce5e1d25455d9b2b5ff1136697e60f0d4d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/main.cc",
+      "sha256": "726ad59db0fe8f56a9c8c31a9461e254f25afc389196c3b2f4161f3eb239bc36",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/material.h",
+      "sha256": "1310e35f7f514a3cf11e23a6827180d58e7a3ce5f6ede536cef50b8f54f9c348",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/ray.h",
+      "sha256": "d5a68511ae8a771609de5dad9ea9441695e10d0d28155d25d3850fbbca2c8547",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/rtweekend.h",
+      "sha256": "06b059f833cc9f8bfbaec484cbb54f3722ce0b679396ca00168c3446606f0720",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/sphere.h",
+      "sha256": "202cdfd0c55cad4234e16c83fcaabe2cfa48e19b22acf41d988556073310b18c",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/InOneWeekend/vec3.h",
+      "sha256": "3499c4b73c8e8a7084afbdbadb85bd0fd67f9beff82371dfcea3cd057cc35c5a",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/aabb.h",
+      "sha256": "8a5acc388874f2355bcf23246d45af90bbf310891a15868cfa9876ba053bbb1d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/bvh.h",
+      "sha256": "fc675c82d295a544b94db9e8ea5cb77b51876b9c42ac25249f76f3cf08dfaeca",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/camera.h",
+      "sha256": "e15ec9c615d67f4beae6bad4e86cc809c8db87bf117655bc37293f2075816a41",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/color.h",
+      "sha256": "4cf55ab3ed4e99bf97c279881f7d5d1aa8b264f59fb6b0038e800362ef37f797",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/constant_medium.h",
+      "sha256": "5cf505b8d4622110f1cfe451ff09459bc87c61bad791b1b4c92781454f0dfaa4",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/hittable.h",
+      "sha256": "25ddc9f10d9ac5d837a742288767550a1d1387bb417f73ba03b47731c0b53563",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/hittable_list.h",
+      "sha256": "b9a36b92a80ac3c266f4c011e2a77041ffe4e9bedae6a03a67c6755aacce9921",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/interval.h",
+      "sha256": "d2f55559a065a53e936b6360148cf2fab5cda7afdde6256dd0a2ecd21a1d7453",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/main.cc",
+      "sha256": "9c03be5d0295ecdf3eb886df567f74b734dcdc7860af5f8046370e57ad6f13a1",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/material.h",
+      "sha256": "663b915bd8aef876031ad5a1c3e2ebee431fcb02fdead93bf1ae8ce28280eebb",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/perlin.h",
+      "sha256": "083a84e6daa288ba14fdde8c73462d84eefefa344a8bbc2586c8561921e3cf6b",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/quad.h",
+      "sha256": "4250f22a7a2bc38092fec4599afcd8f44bbb79e8f12623f728459ef14bad477e",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/ray.h",
+      "sha256": "ac4a35d1f922f5cdb0435edb9d3c8413b9414c740fbfa6b55d3b6c9bbe05ceac",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/rtw_stb_image.h",
+      "sha256": "48683951966e94c4745c087d469cf003c955866a8c4f114e4650af4280785276",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/rtweekend.h",
+      "sha256": "3cc7372970ccb27b19bf8055980fcda4cd578fc751cd6c559b0bafcbe427457e",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/sphere.h",
+      "sha256": "e72fc9a78d903dc01081de8164402490e11f6ef1bc94c61e236aa06627e9274d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/texture.h",
+      "sha256": "c5ed6b291d0202003e00ba8c8c9426c79acc5fc3aa49bc5b1f700822564f19e8",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheNextWeek/vec3.h",
+      "sha256": "495201226f8c13f0c4930d7c2ebbe76c0f7ef65279b3245bed5f6f5a0c102d8c",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/aabb.h",
+      "sha256": "8a5acc388874f2355bcf23246d45af90bbf310891a15868cfa9876ba053bbb1d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/bvh.h",
+      "sha256": "fc675c82d295a544b94db9e8ea5cb77b51876b9c42ac25249f76f3cf08dfaeca",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/camera.h",
+      "sha256": "b11b020dff0affd2ef816b17d574f3238d0e7afcfb773752d0db9ff606467739",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/color.h",
+      "sha256": "889ae057a4ad5c6885723813214ab09091f107e2c84ce4be8ca105087633c909",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/constant_medium.h",
+      "sha256": "5cf505b8d4622110f1cfe451ff09459bc87c61bad791b1b4c92781454f0dfaa4",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/cos_cubed.cc",
+      "sha256": "2997d605af4cead42dbe1fc2baf5db43030b07c9d39b2cebfdf559192dfab47d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/cos_density.cc",
+      "sha256": "b14b92696e33fdd0dfb0a11cd88675aac483f0f8b5375cb8d62e6690699e2d32",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/estimate_halfway.cc",
+      "sha256": "b1986bc90db1ff22294c801bb0ce0aadc0f4a8e1709ff6ad9d9bfb3fa646f7ec",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/hittable.h",
+      "sha256": "6f1ddc2a9140f7ae354ef78a7a05dbf2823a1ace2b38863932b9207fdda7ce79",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/hittable_list.h",
+      "sha256": "82d04e24753fd531ec1cc6e467ef06ea5d9ec970fe3c8c72a6f40340fd7731b2",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/integrate_x_sq.cc",
+      "sha256": "dd98b3bd55a36d457f4cbe6f45f0b2200e95ec1ec8a9eb9bffed80c257e60989",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/interval.h",
+      "sha256": "d2f55559a065a53e936b6360148cf2fab5cda7afdde6256dd0a2ecd21a1d7453",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/main.cc",
+      "sha256": "d69c4950bc8256b2679577ad0f4e52fdce576c71eadb0660d6d37e800510d98f",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/material.h",
+      "sha256": "98692a79bb7929458f96263870ba619a47eb6bb1314b50329ef70b1d5b7ac664",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/onb.h",
+      "sha256": "ceadcb1a6a2fe25a708766355b849c315fe2ef565e801bc697d137a445235833",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/pdf.h",
+      "sha256": "5915fa2cb431e93c9da13c2e4cf0b8adb4e834dec83af2448608fc0d21f1e6c6",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/perlin.h",
+      "sha256": "083a84e6daa288ba14fdde8c73462d84eefefa344a8bbc2586c8561921e3cf6b",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/pi.cc",
+      "sha256": "b9008afb098bfd0e8992f25199d4663624452de9812346fcfe1d1bf72e917e35",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/quad.h",
+      "sha256": "f92ff53ef016d6da3c8aa210db6c375e311bfe8575e654f596bfc8d708c52c6d",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/ray.h",
+      "sha256": "ac4a35d1f922f5cdb0435edb9d3c8413b9414c740fbfa6b55d3b6c9bbe05ceac",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/rtw_stb_image.h",
+      "sha256": "48683951966e94c4745c087d469cf003c955866a8c4f114e4650af4280785276",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/rtweekend.h",
+      "sha256": "3cc7372970ccb27b19bf8055980fcda4cd578fc751cd6c559b0bafcbe427457e",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/sphere.h",
+      "sha256": "5eaea7a9856e64c2b409edc8dcf333e929732aee8c83bb1626a95f99aaee8e44",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/sphere_importance.cc",
+      "sha256": "4fc2a59159082891e95193c09f52f236b0276418e8ae89fb9eb582bfbb630951",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/sphere_plot.cc",
+      "sha256": "83d6b2f0ed5debb49f951306e9472a110559852c083e227ae3e5ba34eede532a",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/texture.h",
+      "sha256": "c5ed6b291d0202003e00ba8c8c9426c79acc5fc3aa49bc5b1f700822564f19e8",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/TheRestOfYourLife/vec3.h",
+      "sha256": "d0b978522a4c2bb802fb1d1d7ff172e2aac38ab6d3d0dbbcf0eae6bec35d819e",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/external/stb_image.h",
+      "sha256": "cc87704be7bca318d1ef900a491296762791eb1fa0b539c8759326fb51cf6898",
+      "mode": "0o644"
+    },
+    {
+      "path": "src/external/stb_image_write.h",
+      "sha256": "53ab00a1d333e78405a7c940a9bd40539bdf468dfe44ce03703c90d7fd8c63f4",
+      "mode": "0o644"
+    }
+  ],
+  "excluded_upstream_paths": [
+    ".gitignore",
+    "PRINTING.md",
+    "books/RayTracingInOneWeekend.html",
+    "books/RayTracingTheNextWeek.html",
+    "books/RayTracingTheRestOfYourLife.html",
+    "books/acknowledgments.md.html",
+    "books/markdeep.min.js",
+    "favicon.png",
+    "images/cover/CoverRTW1-small.jpg",
+    "images/cover/CoverRTW1.jpg",
+    "images/cover/CoverRTW1.psd",
+    "images/cover/CoverRTW2-small.jpg",
+    "images/cover/CoverRTW2.jpg",
+    "images/cover/CoverRTW2.psd",
+    "images/cover/CoverRTW3-small.jpg",
+    "images/cover/CoverRTW3.jpg",
+    "images/cover/CoverRTW3.psd",
+    "images/cover/final-image-1.png",
+    "images/cover/final-image-2.png",
+    "images/cover/final-image-3.png",
+    "images/earthmap.jpg",
+    "images/fig-1.01-ppm.jpg",
+    "images/fig-1.02-lerp.jpg",
+    "images/fig-1.03-cam-geom.jpg",
+    "images/fig-1.04-pixel-grid.jpg",
+    "images/fig-1.05-ray-sphere.jpg",
+    "images/fig-1.06-sphere-normal.jpg",
+    "images/fig-1.07-normal-sides.jpg",
+    "images/fig-1.08-pixel-samples.jpg",
+    "images/fig-1.09-light-bounce.jpg",
+    "images/fig-1.10-random-vec-horizon.jpg",
+    "images/fig-1.11-sphere-vec.jpg",
+    "images/fig-1.12-sphere-unit-vec.jpg",
+    "images/fig-1.13-surface-normal.jpg",
+    "images/fig-1.14-rand-unitvec.jpg",
+    "images/fig-1.15-reflection.jpg",
+    "images/fig-1.16-reflect-fuzzy.jpg",
+    "images/fig-1.17-refraction.jpg",
+    "images/fig-1.18-cam-view-geom.jpg",
+    "images/fig-1.19-cam-view-dir.jpg",
+    "images/fig-1.20-cam-view-up.jpg",
+    "images/fig-1.21-cam-lens.jpg",
+    "images/fig-1.22-cam-film-plane.jpg",
+    "images/fig-2.01-bvol-hierarchy.jpg",
+    "images/fig-2.02-2d-aabb.jpg",
+    "images/fig-2.03-ray-slab.jpg",
+    "images/fig-2.04-ray-slab-interval.jpg",
+    "images/fig-2.05-quad-def.jpg",
+    "images/fig-2.06-ray-plane.jpg",
+    "images/fig-2.07-quad-coords.jpg",
+    "images/fig-2.08-ray-box.jpg",
+    "images/fig-2.09-rot-z.jpg",
+    "images/fig-2.10-ray-vol.jpg",
+    "images/fig-3.01-circ-square.jpg",
+    "images/fig-3.02-jitter.jpg",
+    "images/fig-3.03-histogram.jpg",
+    "images/fig-3.04-linear-pdf.jpg",
+    "images/fig-3.05-uniform-dist.jpg",
+    "images/fig-3.06-nonuniform-dist.jpg",
+    "images/fig-3.07-exp-sin2.jpg",
+    "images/fig-3.08-approx-f.jpg",
+    "images/fig-3.09-solid-angle.jpg",
+    "images/fig-3.10-rand-pts-sphere.jpg",
+    "images/fig-3.11-shape-onto-pdf.jpg",
+    "images/fig-3.12-sphere-enclosing-cone.jpg",
+    "images/img-1.01-first-ppm-image.png",
+    "images/img-1.02-blue-to-white.png",
+    "images/img-1.03-red-sphere.png",
+    "images/img-1.04-normals-sphere.png",
+    "images/img-1.05-normals-sphere-ground.png",
+    "images/img-1.06-antialias-before-after.png",
+    "images/img-1.07-first-diffuse.png",
+    "images/img-1.08-second-diffuse.png",
+    "images/img-1.09-no-acne.png",
+    "images/img-1.10-correct-lambertian.png",
+    "images/img-1.11-linear-gamut.png",
+    "images/img-1.12-gamma-gamut.png",
+    "images/img-1.13-metal-shiny.png",
+    "images/img-1.14-metal-fuzz.png",
+    "images/img-1.15-glass-first.png",
+    "images/img-1.16-glass-always-refract.png",
+    "images/img-1.17-air-bubble-total-reflection.png",
+    "images/img-1.18-glass-hollow.png",
+    "images/img-1.19-wide-view.png",
+    "images/img-1.20-view-distant.png",
+    "images/img-1.21-view-zoom.png",
+    "images/img-1.22-depth-of-field.png",
+    "images/img-1.23-book1-final.jpg",
+    "images/img-2.01-bouncing-spheres.png",
+    "images/img-2.02-checker-ground.png",
+    "images/img-2.03-checker-spheres.png",
+    "images/img-2.05-earth-sphere.png",
+    "images/img-2.06-white-noise.jpg",
+    "images/img-2.07-white-noise-blurred.jpg",
+    "images/img-2.08-tile-random.jpg",
+    "images/img-2.09-hash-random.png",
+    "images/img-2.10-perlin-trilerp.png",
+    "images/img-2.11-perlin-trilerp-smooth.png",
+    "images/img-2.12-perlin-hifreq.png",
+    "images/img-2.13-perlin-shift.png",
+    "images/img-2.14-perlin-turb.png",
+    "images/img-2.15-perlin-marble.png",
+    "images/img-2.16-quads.png",
+    "images/img-2.17-rect-light.png",
+    "images/img-2.18-rect-sphere-light.png",
+    "images/img-2.19-cornell-empty.png",
+    "images/img-2.20-cornell-blocks.png",
+    "images/img-2.21-cornell-standard.png",
+    "images/img-2.22-cornell-smoke.png",
+    "images/img-2.23-book2-final.jpg",
+    "images/img-3.01-cornell-no-strat.png",
+    "images/img-3.02-cornell-strat.png",
+    "images/img-3.03-cornell-refactor1.jpg",
+    "images/img-3.04-cornell-imperfect.jpg",
+    "images/img-3.05-cornell-uniform-hemi.jpg",
+    "images/img-3.06-cornell-ortho.jpg",
+    "images/img-3.07-cornell-sample-light.jpg",
+    "images/img-3.08-cornell-lightdown.jpg",
+    "images/img-3.09-cornell-cos-pdf.jpg",
+    "images/img-3.10-hittable-light.jpg",
+    "images/img-3.11-cosine-and-light.jpg",
+    "images/img-3.12-arbitrary-pdf.jpg",
+    "images/img-3.13-cornell-glass-sphere.jpg",
+    "images/img-3.14-glass-and-light.jpg",
+    "images/img-3.15-book3-final.jpg",
+    "images/test.ppm",
+    "index.html",
+    "style/book-highlight-test.css",
+    "style/book.css",
+    "style/website.css"
+  ],
+  "exclusion_reason": "仅排除本任务真实运行未用的书稿、网站与素材，完整src及CC0许可保留",
+  "support_scope": "Baseline and runner only; requested target implementation, test and example absent",
+  "dependencies": {
+    "bundled": [
+      "src/external/stb_image.h",
+      "src/external/stb_image_write.h"
+    ],
+    "license_location": "public domain notices embedded at the start of original headers",
+    "source_hash_scope": "source_files"
+  }
+}
