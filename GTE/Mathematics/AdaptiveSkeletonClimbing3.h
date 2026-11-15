@@ -52,21 +52,25 @@ namespace gte
         // subimage.  By forcing highest resolution on the boundary,
         // adjacent subimages will not have any cracking problems.
         AdaptiveSkeletonClimbing3(int32_t N, T const* inputVoxels,
-            bool fixBoundary = false)
+            bool fixBoundary = false, bool allowZeroN = false,
+            bool emitFullRootBox = false)
             :
-            mTwoPowerN(1 << N),
+            mTwoPowerN((N >= 0 && N <= 30) ? (1 << N) : 0),
             mSize(mTwoPowerN + 1),
             mSizeSqr(mSize * mSize),
             mInputVoxels(inputVoxels),
             mLevel((Real)0),
             mFixBoundary(fixBoundary),
+            mEmitFullRootBox(emitFullRootBox),
+            mMergeConstraint(nullptr),
             mXMerge(mSize, mSize),
             mYMerge(mSize, mSize),
             mZMerge(mSize, mSize)
         {
             static_assert(std::is_integral<T>::value && sizeof(T) <= 4,
                 "Type T must be int{8,16,32}_t or uint{8,16,32}_t.");
-            if (N <= 0 || mInputVoxels == nullptr)
+            if (N < 0 || N > 30 || (N == 0 && !allowZeroN) ||
+                mInputVoxels == nullptr)
             {
                 LogError("Invalid input.");
             }
@@ -86,6 +90,64 @@ namespace gte
         typedef std::array<Real, 3> Vertex;
         typedef std::array<int32_t, 2> Edge;
         typedef TriangleKey<true> Triangle;
+
+        // A box of the adaptive partition.  The coordinates are local to the
+        // image; the box covers [x0,x1]x[y0,y1]x[z0,z1].
+        struct Box
+        {
+            int32_t x0, y0, z0, x1, y1, z1;
+        };
+
+        // Constraint used by the block-negotiation layer.  During the merge
+        // phase every candidate box is tested; a box for which AllowBox
+        // returns 'false' is not allowed to form, so the merge has to
+        // continue at a finer level.  Unit boxes are expected to be
+        // allowed always.
+        class MergeConstraint
+        {
+        public:
+            virtual ~MergeConstraint() = default;
+            virtual bool AllowBox(int32_t x0, int32_t y0, int32_t z0,
+                int32_t x1, int32_t y1, int32_t z1) const = 0;
+        };
+
+        void SetMergeConstraint(MergeConstraint const* constraint)
+        {
+            mMergeConstraint = constraint;
+        }
+
+        // Run only the merge phase.  This is used by the block-negotiation
+        // layer to inspect the partition without tessellating it.
+        void MergeBoxes(Real level, int32_t depth)
+        {
+            mBoxes.clear();
+            mLevel = level;
+            Merge(depth);
+        }
+
+        // Tessellate the partition computed by a previous call to
+        // MergeBoxes.  The merge trees are untouched here and still hold
+        // the edge information recorded during the merge phase.
+        void TessellateBoxes(std::vector<Vertex>& vertices,
+            std::vector<Triangle>& triangles)
+        {
+            std::vector<Vertex> localVertices;
+            std::vector<Triangle> localTriangles;
+            Tessellate(localVertices, localTriangles);
+            vertices = std::move(localVertices);
+            triangles = std::move(localTriangles);
+        }
+
+        std::vector<Box> GetBoxes() const
+        {
+            std::vector<Box> boxes(mBoxes.size());
+            for (size_t i = 0; i < mBoxes.size(); ++i)
+            {
+                OctBox const& box = mBoxes[i];
+                boxes[i] = Box{ box.x0, box.y0, box.z0, box.x1, box.y1, box.z1 };
+            }
+            return boxes;
+        }
 
         void Extract(Real level, int32_t depth,
             std::vector<Vertex>& vertices, std::vector<Triangle>& triangles)
@@ -749,7 +811,14 @@ namespace gte
                 }
             }
 
-            Merge(0, 0, 0, 0, 0, 0, 0, mTwoPowerN, depth);
+            bool rootMerged = Merge(0, 0, 0, 0, 0, 0, 0, mTwoPowerN, depth);
+            if (rootMerged && mEmitFullRootBox)
+            {
+                // A fully merged root box has to be emitted as well.  The
+                // recursive merge returns 'true' for it without calling
+                // AddBox, so the surface inside the root box would be lost.
+                AddBox(0, 0, 0, mTwoPowerN, mTwoPowerN, mTwoPowerN, 0, 0, 0);
+            }
         }
 
         bool Merge(int32_t v, int32_t LX, int32_t LY, int32_t LZ, int32_t x0, int32_t y0, int32_t z0, int32_t stride, int32_t depth)
@@ -788,62 +857,62 @@ namespace gte
                 {
                     if (m000 && m001)
                     {
-                        DoZMerge(r000, r001, x0, y0, LZ);
+                        DoZMerge(r000, r001, x0, y0, z0, LZ);
                     }
 
                     if (m100 && m101)
                     {
-                        DoZMerge(r100, r101, x1, y0, LZ);
+                        DoZMerge(r100, r101, x1, y0, z0, LZ);
                     }
 
                     if (m010 && m011)
                     {
-                        DoZMerge(r010, r011, x0, y1, LZ);
+                        DoZMerge(r010, r011, x0, y1, z0, LZ);
                     }
 
                     if (m110 && m111)
                     {
-                        DoZMerge(r110, r111, x1, y1, LZ);
+                        DoZMerge(r110, r111, x1, y1, z0, LZ);
                     }
 
                     if (m000 && m010)
                     {
-                        DoYMerge(r000, r010, x0, LY, z0);
+                        DoYMerge(r000, r010, x0, y0, LY, z0);
                     }
 
                     if (m100 && m110)
                     {
-                        DoYMerge(r100, r110, x1, LY, z0);
+                        DoYMerge(r100, r110, x1, y0, LY, z0);
                     }
 
                     if (m001 && m011)
                     {
-                        DoYMerge(r001, r011, x0, LY, z1);
+                        DoYMerge(r001, r011, x0, y1, LY, z1);
                     }
 
                     if (m101 && m111)
                     {
-                        DoYMerge(r101, r111, x1, LY, z1);
+                        DoYMerge(r101, r111, x1, y1, LY, z1);
                     }
 
                     if (m000 && m100)
                     {
-                        DoXMerge(r000, r100, LX, y0, z0);
+                        DoXMerge(r000, r100, x0, y0, z0, LX);
                     }
 
                     if (m010 && m110)
                     {
-                        DoXMerge(r010, r110, LX, y1, z0);
+                        DoXMerge(r010, r110, x0, y1, z0, LX);
                     }
 
                     if (m001 && m101)
                     {
-                        DoXMerge(r001, r101, LX, y0, z1);
+                        DoXMerge(r001, r101, x0, y0, z1, LX);
                     }
 
                     if (m011 && m111)
                     {
-                        DoXMerge(r011, r111, LX, y1, z1);
+                        DoXMerge(r011, r111, x0, y1, z1, LX);
                     }
                 }
 
@@ -1034,6 +1103,16 @@ namespace gte
                     return false;
                 }
 
+                // Do not allow this voxel to take part in a merge that
+                // crosses a negotiated feature.  This is the finest possible
+                // box, so a rejection only prevents merges above it.
+                if (mMergeConstraint &&
+                    !mMergeConstraint->AllowBox(x0, y0, z0, x0 + 1, y0 + 1, z0 + 1))
+                {
+                    AddBox(x0, y0, z0, 1, 1, 1, LX, LY, LZ);
+                    return false;
+                }
+
                 // A leaf box is mergeable with neighbors as long as all its
                 // faces have 0 or 2 sign changes on the edges.  That is, a
                 // face may not have sign changes on all four edges.  If it
@@ -1101,7 +1180,7 @@ namespace gte
             }
         }
 
-        bool DoXMerge(MergeBox& r0, MergeBox& r1, int32_t LX, int32_t y0, int32_t z0)
+        bool DoXMerge(MergeBox& r0, MergeBox& r1, int32_t x0, int32_t y0, int32_t z0, int32_t LX)
         {
             if (!r0.valid || !r1.valid || r0.yStride != r1.yStride || r0.zStride != r1.zStride)
             {
@@ -1134,13 +1213,24 @@ namespace gte
                 return false;
             }
 
+            // The cross-section of the merged box is fixed.  Honor the
+            // boundary constraints of the block negotiation.
+            if (mMergeConstraint)
+            {
+                int32_t x1 = x0 + 2 * r0.xStride;
+                if (!mMergeConstraint->AllowBox(x0, y0, z0, x1, y1, z1))
+                {
+                    return false;
+                }
+            }
+
             // Strongly mono, x-merge the boxes.
             r0.xStride *= 2;
             r1.valid = false;
             return true;
         }
 
-        bool DoYMerge(MergeBox& r0, MergeBox& r1, int32_t x0, int32_t LY, int32_t z0)
+        bool DoYMerge(MergeBox& r0, MergeBox& r1, int32_t x0, int32_t y0, int32_t LY, int32_t z0)
         {
             if (!r0.valid || !r1.valid || r0.xStride != r1.xStride || r0.zStride != r1.zStride)
             {
@@ -1173,13 +1263,24 @@ namespace gte
                 return false;
             }
 
+            // The cross-section of the merged box is fixed.  Honor the
+            // boundary constraints of the block negotiation.
+            if (mMergeConstraint)
+            {
+                int32_t y1 = y0 + 2 * r0.yStride;
+                if (!mMergeConstraint->AllowBox(x0, y0, z0, x1, y1, z1))
+                {
+                    return false;
+                }
+            }
+
             // Strongly mono, y-merge the boxes.
             r0.yStride *= 2;
             r1.valid = false;
             return true;
         }
 
-        bool DoZMerge(MergeBox& r0, MergeBox& r1, int32_t x0, int32_t y0, int32_t LZ)
+        bool DoZMerge(MergeBox& r0, MergeBox& r1, int32_t x0, int32_t y0, int32_t z0, int32_t LZ)
         {
             if (!r0.valid || !r1.valid || r0.xStride != r1.xStride || r0.yStride != r1.yStride)
             {
@@ -1210,6 +1311,17 @@ namespace gte
             if (incr != 0 && decr != 0)
             {
                 return false;
+            }
+
+            // The cross-section of the merged box is fixed.  Honor the
+            // boundary constraints of the block negotiation.
+            if (mMergeConstraint)
+            {
+                int32_t z1 = z0 + 2 * r0.zStride;
+                if (!mMergeConstraint->AllowBox(x0, y0, z0, x1, y1, z1))
+                {
+                    return false;
+                }
             }
 
             // Strongly mono, z-merge the boxes.
@@ -2893,6 +3005,8 @@ namespace gte
         Real mLevel;
 
         bool mFixBoundary;
+        bool mEmitFullRootBox;
+        MergeConstraint const* mMergeConstraint;
 
         // Trees for linear merging.
         Array2<std::shared_ptr<LinearMergeTree>> mXMerge, mYMerge, mZMerge;

@@ -1,0 +1,3 @@
+#!/bin/bash
+if [[ $# -eq 0 ]]; then exec /usr/bin/mktemp "$PWD/.task-build/tmp/tmp.XXXXXXXX"; fi
+exec /usr/bin/mktemp "$@"
