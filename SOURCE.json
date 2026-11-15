@@ -1,0 +1,8 @@
+{
+  "repo": "https://github.com/skywind3000/mini3d",
+  "commit": "4b3e3af226691db920ece1dc58425c4a85c68997",
+  "license": "MIT",
+  "original_mini3d_sha256": "acb43668f5f8ccf376f89034a2d12999183e003afcbaca922b5423913df72d87",
+  "original_license_sha256": "8f64ffe081e6ac91c1a3bcf18dae3965219d74669462090543c634166eafa131",
+  "modification": "Win32 isolation and string.h only; no rendering change"
+}
