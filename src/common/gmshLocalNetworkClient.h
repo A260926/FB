@@ -1,0 +1,86 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef GMSH_LOCAL_NETWORK_CLIENT_H
+#define GMSH_LOCAL_NETWORK_CLIENT_H
+
+#include <vector>
+#include <algorithm>
+#include "GmshConfig.h"
+
+#if defined(HAVE_ONELAB)
+
+#include "onelab.h"
+
+class gmshLocalNetworkClient : public onelab::localNetworkClient {
+private:
+  // a gmsh local network client can launch subclients (e.g. a Python client
+  // running several codes); _clients keeps track of the master (this) and the
+  // subclients.
+  std::vector<gmshLocalNetworkClient *> _clients;
+  // client that launched this one (with GMSH_CONNECT); _father is zero for the
+  // master client (the one created by Gmsh).
+  gmshLocalNetworkClient *_father;
+
+public:
+  gmshLocalNetworkClient(const std::string &name, const std::string &executable,
+                         const std::string &remoteLogin = "",
+                         bool treatExecutableAsFullCommandLine = false)
+    : onelab::localNetworkClient(name, executable, remoteLogin,
+                                 treatExecutableAsFullCommandLine),
+      _father(nullptr)
+  {
+    addClient(this);
+  }
+  void setFather(gmshLocalNetworkClient *father) { _father = father; }
+  gmshLocalNetworkClient *getFather() { return _father; }
+  void addClient(gmshLocalNetworkClient *client) { _clients.push_back(client); }
+  void removeClient(gmshLocalNetworkClient *client)
+  {
+    auto it = std::find(_clients.begin(), _clients.end(), client);
+    if(it != _clients.end()) _clients.erase(it);
+  }
+  int getNumClients() { return _clients.size(); }
+  gmshLocalNetworkClient *getClient(int i)
+  {
+    if(i >= 0 && i < getNumClients()) return _clients[i];
+    return nullptr;
+  }
+  int getNumConnectedClients()
+  {
+    int n = 0;
+    for(int i = 0; i < getNumClients(); i++) {
+      if(_clients[i]->getPid() != -1) n++;
+    }
+    return n;
+  }
+  bool receiveMessage(gmshLocalNetworkClient *master);
+  bool run();
+  bool kill();
+};
+
+// a solver linked in the program (see onelabUtils::setInProcessSolver), run
+// as a function call that shares the ONELAB server: no executable, no socket
+class gmshInProcessClient : public onelab::localNetworkClient {
+private:
+  int (*_solver)(const std::vector<std::string> &args, void *server);
+
+public:
+  gmshInProcessClient(const std::string &name,
+                      int (*solver)(const std::vector<std::string> &args,
+                                    void *server))
+    : onelab::localNetworkClient(name, ""), _solver(solver)
+  {
+  }
+  // the arguments the solver is run with, as the command line of a network
+  // client (see onelabUtils::getCommandLine)
+  std::vector<std::string> commandLine();
+  bool run();
+  bool kill() { return false; }
+};
+
+#endif
+
+#endif

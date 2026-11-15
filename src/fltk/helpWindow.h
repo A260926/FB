@@ -1,0 +1,44 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef HELP_WINDOW_H
+#define HELP_WINDOW_H
+
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Browser.H>
+#include <FL/Fl_Help_View.H>
+
+#include "hintInput.h"
+
+class helpWindow {
+public:
+  Fl_Window *about, *basic, *options;
+  Fl_Help_View *aboutView, *basicView;
+  Fl_Input *basicSearch;
+  searchFilter usageFilter;
+  Fl_Check_Button *modified, *showhelp;
+  Fl_Input *search;
+  searchFilter filter;
+  Fl_Browser *browser;
+
+public:
+  helpWindow();
+  // the texts of the about and usage windows, in the colours of the scheme
+  void resetText();
+  ~helpWindow()
+  {
+    Fl::delete_widget(about);
+    Fl::delete_widget(basic);
+    Fl::delete_widget(options);
+  }
+};
+
+void help_options_cb(Fl_Widget *w, void *data);
+double numberOrStringOptionChooser(const std::string &category, int index,
+                                   const std::string &name,
+                                   bool isNumber = true);
+
+#endif

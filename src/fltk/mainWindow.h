@@ -1,0 +1,66 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef MAIN_WINDOWH
+#define MAIN_WINDOWH
+
+#include <FL/Fl.H>
+#include <FL/Fl_Double_Window.H>
+#include <FL/fl_ask.H>
+#include "windowPlacement.h"
+#include "paletteWindow.h"
+
+// The main graphic window, double buffered like the tool windows: drawn
+// straight to the screen it flickered on Windows and on X11 without a
+// compositor (the dock, the tree, the status bar); the OpenGL subwindow has
+// buffers of its own
+class mainWindow : public gmshWindow {
+public:
+  // called when a window gets the focus (the desktop may have switched
+  // between light and dark meanwhile, see FlGui)
+  inline static void (*focusHook)() = nullptr;
+  mainWindow(int w, int h, bool nonModal, const char *l = nullptr,
+             int *offset = nullptr, int *keptW = nullptr,
+             int *keptH = nullptr)
+    : gmshWindow(w, h, nonModal, l, offset, keptW, keptH)
+  {
+  }
+  virtual int handle(int event)
+  {
+    switch(event) {
+    case FL_FOCUS:
+      if(focusHook) focusHook();
+      break;
+    case FL_PUSH:
+      paletteWindow::dragged = nullptr; // see paletteWindow::handle()
+      break;
+    case FL_DND_ENTER:
+    case FL_DND_DRAG:
+    case FL_DND_LEAVE:
+    case FL_DND_RELEASE:
+    case FL_PASTE:
+      // the drag of a tool to the dock over the main window, and its drop
+      if(paletteWindow::host && paletteWindow::dragged)
+        return paletteWindow::host->toolDrop(event);
+      break;
+    case FL_SHORTCUT:
+    case FL_KEYBOARD:
+      if(_closeKey()) {
+#if !defined(WIN32) // Cmd-W or Ctrl-W, not Alt-F4
+        if(paletteWindow::host && paletteWindow::host->closeTool(this))
+          return 1;
+#endif
+        if(fl_choice("Do you really want to quit?", "Cancel", "Quit", nullptr))
+          do_callback();
+        return 1;
+      }
+      break;
+    }
+    return Fl_Double_Window::handle(event);
+  }
+  virtual void show() { _showOnDesktop(); }
+};
+
+#endif

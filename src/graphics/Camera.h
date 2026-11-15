@@ -1,0 +1,96 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+//
+// Contributed by Gilles Marckmann <gilles.marckmann@ec-nantes.fr>
+
+#ifndef CAMERA_H
+#define CAMERA_H
+
+class Quaternion;
+
+class XYZ {
+public:
+  XYZ() : x(0.), y(0.), z(0.){};
+  ~XYZ(){};
+  XYZ(double _x, double _y, double _z);
+  double x, y, z;
+  void set(const double &_x, const double &_y, const double &_z);
+  XYZ(const Quaternion &R);
+};
+
+double length(XYZ &p);
+void normalize(XYZ &p);
+XYZ operator*(const double &a, const XYZ &T);
+XYZ operator+(const XYZ &L, const XYZ &R);
+XYZ operator-(const XYZ &L, const XYZ &R);
+XYZ operator-(const XYZ &R);
+
+class Quaternion {
+public:
+  double x, y, z, w;
+  Quaternion();
+  Quaternion(const XYZ &R);
+  Quaternion(const XYZ &R, const double &A);
+  ~Quaternion();
+};
+
+double length(Quaternion &quat);
+void normalize(Quaternion &quat);
+Quaternion conjugate(Quaternion quat);
+Quaternion mult(const Quaternion &A, const Quaternion &B);
+Quaternion operator*(const Quaternion &A, const Quaternion &B);
+
+class Camera {
+public:
+  Camera();
+  ~Camera();
+  bool on;
+  XYZ position; /* camera position         */
+  XYZ front; /* View direction vector   */
+  XYZ up; /* View up direction       */
+  XYZ right; /* View right direction    */
+  XYZ target; /* center of rotation and screen   */
+  double focallength; /* Focal Length along vd   */
+  double focallength_ratio;
+  double aperture; /* Camera aperture         */
+  double eyesep; /* Eye separation          */
+  int screenwidth, screenheight;
+  double screenratio, distance, ref_distance;
+  bool button_left_down, button_middle_down, button_right_down;
+  bool stereoEnable;
+  double Lc, eye_sep_ratio, closeness, ndfl, glFnear, glFfar, radians, wd2;
+  double glFleft, glFright, glFtop, glFbottom;
+  void giveViewportDimension(const int &W, const int &H);
+  void lookAtCg();
+  void init();
+  void rotate(double *q);
+  //
+  void move_and_look(double _movfront, double _movright, double _movup,
+                     double _rotfront, double _rotright, double _rotup,
+                     double _azimut, double _elevation);
+  //
+  void moveRight(double &theta);
+  void moveUp(double &theta);
+  void zoom(double &factor);
+  void update();
+  // the whole state of the camera, printed for debugging
+  void affiche();
+  // looking along an axis, and turning up to one: 0, 1, 2 for x, y, z
+  void alongAxis(int axis);
+  void upAxis(int axis);
+  void alongX() { alongAxis(0); }
+  void alongY() { alongAxis(1); }
+  void alongZ() { alongAxis(2); }
+  // looking at the model isometrically, with z up, from the side of +x and +y
+  // or of -x and -y
+  void isometric(bool opposite);
+  void upX() { upAxis(0); }
+  void upY() { upAxis(1); }
+  void upZ() { upAxis(2); }
+  void tiltHeadLeft();
+  void tiltHeadRight();
+};
+
+#endif

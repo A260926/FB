@@ -1,0 +1,50 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef VISIBILITY_WINDOW_H
+#define VISIBILITY_WINDOW_H
+
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Browser.H>
+#include <FL/Fl_Multi_Browser.H>
+#include <FL/Fl_Button.H>
+#include <FL/Fl_Check_Button.H>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Tree.H>
+
+#include "hintInput.h"
+
+class visibilityWindow {
+public:
+  Fl_Window *win;
+  Fl_Choice *browser_type;
+  Fl_Browser *browser;
+  Fl_Multi_Browser *per_window;
+  Fl_Tree *tree;
+  Fl_Button *tree_create;
+  Fl_Check_Button *butt[2];
+  Fl_Input *input[10];
+  Fl_Input *search;
+  searchFilter filter;
+
+public:
+  visibilityWindow(int deltaFontSize = 0);
+  ~visibilityWindow() { Fl::delete_widget(win); }
+  void show(bool redrawOnly);
+  // the list of what the current graphic window shows
+  void updatePerWindow();
+};
+
+// the visibility window shown, with the entities of the model as they are;
+// updated where it is (not raised); or shown with its list only made again
+// (after a change of what it lists or of its sorting)
+void showVisibility();
+void updateVisibility();
+void updateVisibilityList();
+void visibility_save(const std::string &fileName);
+
+#endif

@@ -1,0 +1,205 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef PVIEW_OPTIONS_H
+#define PVIEW_OPTIONS_H
+
+#include <string>
+#include <vector>
+#include "ColorTable.h"
+#include "SBoundingBox3d.h"
+
+class mathEvaluator;
+class PViewData;
+
+// The display options of a post-processing view.
+// The evaluator of the general raise, built from its expressions when the view
+// is drawn: owned by the options, and not copied with them
+class raiseEvaluator {
+private:
+  mathEvaluator *_e = nullptr;
+
+public:
+  raiseEvaluator() = default;
+  raiseEvaluator(const raiseEvaluator &) {}
+  raiseEvaluator &operator=(const raiseEvaluator &)
+  {
+    reset();
+    return *this;
+  }
+  ~raiseEvaluator() { reset(); }
+  void reset(mathEvaluator *e = nullptr);
+  mathEvaluator *operator->() const { return _e; }
+  explicit operator bool() const { return _e != nullptr; }
+};
+
+class PViewOptions {
+public:
+  enum PlotType { Plot3D = 1, Plot2DSpace = 2, Plot2DTime = 3, Plot2D = 4 };
+  enum IntervalsType { Iso = 1, Continuous = 2, Discrete = 3, Numeric = 4 };
+  enum VectorType {
+    Segment = 1,
+    Arrow = 2,
+    Pyramid = 3,
+    Arrow3D = 4,
+    Displacement = 5
+  };
+  enum TensorType {
+    VonMises = 1,
+    MaxEigenValue = 2,
+    MinEigenValue = 3,
+    EigenVectors = 4,
+    Ellipse = 5,
+    Ellipsoid = 6,
+    Frame = 7,
+    FrameVectors = 8,
+  };
+  enum GlyphLocation { COG = 1, Vertex = 2 };
+  enum RangeType { Default = 1, Custom = 2, PerTimeStep = 3 };
+  enum ScaleType { Linear = 1, Logarithmic = 2, SymmetricLogarithmic = 3 };
+
+  int type, autoPosition;
+  double position[2], size[2];
+  std::string format;
+  // How a value is printed: what the user asked for, or, when they asked for
+  // nothing, the automatic format. The scale adapts its labels to the range
+  // it spans; a single value out in the scene has no range to adapt to.
+  std::string getFormat() const { return format.empty() ? "%.3g" : format; }
+  // The scale the values of a range are laid out on: the one that is asked
+  // for, or the linear one when that cannot be done - a logarithmic scale of
+  // a range that reaches zero, whose values have no logarithm. The symmetric
+  // one always can: it is logarithmic on both sides of a threshold around
+  // zero, and linear inside it.
+  int getScaleType(double min, double max) const
+  {
+    if(scaleType == Logarithmic && (min <= 0. || max <= 0.)) return Linear;
+    return scaleType;
+  }
+  // the threshold a symmetric logarithmic scale uses over that range: the
+  // one that is asked for, or four decades below the largest value
+  double getScaleThreshold(double min, double max) const;
+  // where a value falls on that scale, and what falls there
+  double scaleForward(double v, double min, double max) const;
+  double scaleInverse(double u, double min, double max) const;
+  // the last value of View.Axes: none for a 3D plot, a full grid for a 2D
+  // graph, which says nothing without a frame and numbers
+  enum { AutomaticAxes = 6 };
+  int axes, axesAutoPosition, axesMikado;
+  // the axes actually drawn (View.Axes, resolved)
+  int getAxes() const
+  {
+    if(axes != AutomaticAxes) return axes;
+    return (type == Plot3D) ? 0 : 3;
+  }
+  double axesTicks[3];
+  std::string axesFormat[3], axesLabel[3];
+  double axesPosition[6];
+  double customMin, customMax, tmpMin, tmpMax, externalMin, externalMax;
+  double scaleThreshold;
+  double customAbscissaMin, customAbscissaMax;
+  SBoundingBox3d tmpBBox;
+  double offset[3], raise[3], transform[3][3], displacementFactor, normalRaise;
+  double explode;
+  double arrowSizeMin, arrowSizeMax;
+  double normals, tangents;
+  int visible, intervalsType, nbIso;
+  int light, lightTwoSide, lightLines, smoothNormals;
+  double angleSmoothNormals;
+  int saturateValues;
+  int showElement, showTime, showScale;
+  int scaleType, rangeType, abscissaRangeType;
+  int vectorType, tensorType, glyphLocation, centerGlyphs;
+  int timeStep;
+  double currentTime;
+  int drawStrings;
+  int drawPoints, drawLines, drawTriangles, drawQuadrangles, drawPolygons;
+  int drawTetrahedra, drawHexahedra, drawPrisms, drawPyramids, drawTrihedra,
+    drawPolyhedra;
+  int drawScalars, drawVectors, drawTensors;
+  int boundary, pointType, lineType, drawSkinOnly, drawSkinEdgesOnly;
+  double pointSize, lineWidth, outlineWidth;
+  GmshColorTable colorTable;
+  // multiplies the alpha of the colormap (applied by the shader)
+  double transparency;
+  int useStipple, stipple[10][2];
+  std::string stippleString[10];
+  int externalViewIndex, viewIndexForGenRaise;
+  int useGenRaise;
+  double genRaiseFactor;
+  std::string genRaiseX, genRaiseY, genRaiseZ;
+  raiseEvaluator genRaiseEvaluator;
+  int adaptVisualizationGrid, maxRecursionLevel, adaptSkinOnly;
+  double targetError;
+  int clip; // status of clip planes (bit array)
+  int forceNumComponents, componentMap[9];
+  int sampling;
+  std::string attributes, doubleClickedCommand, group;
+  int closed;
+  struct {
+    unsigned int point, line, triangle, quadrangle;
+    unsigned int tetrahedron, hexahedron, prism, pyramid, trihedron;
+    unsigned int polygon, polyhedron;
+    unsigned int tangents, normals;
+    unsigned int text2d, text3d, axes, background2d;
+  } color;
+
+private:
+  // static reference that contains default values
+  static PViewOptions *_reference;
+  // the range of the forced components, computed by looping over all the
+  // values, and what it was computed for
+  std::vector<double> _forcedRangeKey;
+  double _forcedMin, _forcedMax;
+
+public:
+  PViewOptions();
+  static PViewOptions *reference();
+  // return a floating point value in [min, max] corresponding to the
+  // integer iso in [0, numIso - 1]
+  double getScaleValue(int iso, int numIso, double min, double max);
+  // return an integer in [0, numIso - 1] corresponding to the
+  // floating point value val in [min, max]
+  int getScaleIndex(double val, int numIso, double min, double max,
+                    bool forceLinear = false);
+  // get color for val in [min, max] (only use numColors if > 0
+  // instead of all available colors)
+  unsigned int getColor(double val, double min, double max,
+                        bool forceLinear = false, int numColors = -1);
+  // get i-th color amongst nb (i in [0, nb - 1])
+  unsigned int getColor(int i, int nb);
+  // the range of the values of data the options ask for: the custom one, that
+  // of the current time step, or that of all the steps; of the forced
+  // components if the number of components is forced
+  void getRange(PViewData *data, double &min, double &max);
+  // are the faces drawn only those on the skin (DrawSkinOnly, with the values
+  // drawn on them)? and is nothing else drawn of the volumes, so that they can
+  // be refined only there (AdaptSkinOnly)?
+  bool skinOnly() const
+  {
+    return drawSkinOnly && boundary <= 0 &&
+           (intervalsType == Continuous || intervalsType == Discrete);
+  }
+  bool adaptsSkinOnly() const
+  {
+    return adaptSkinOnly && skinOnly() && (!showElement || drawSkinEdgesOnly);
+  }
+  // do the options move the nodes drawn from where the data puts them?
+  bool movesNodes() const
+  {
+    for(int i = 0; i < 3; i++) {
+      if(offset[i] || raise[i]) return true;
+      for(int j = 0; j < 3; j++)
+        if(transform[i][j] != (i == j ? 1. : 0.)) return true;
+    }
+    return explode != 1. || normalRaise || useGenRaise ||
+           vectorType == Displacement;
+  }
+  // create math evaluator for general raise option
+  void createGeneralRaise();
+  // return true if one should not draw elements with type type
+  bool skipElement(int type);
+};
+
+#endif

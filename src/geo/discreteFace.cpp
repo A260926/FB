@@ -1,0 +1,1093 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include <stdlib.h>
+#include <cmath>
+#include <limits>
+#include "GmshMessage.h"
+#include "discreteEdge.h"
+#include "discreteFace.h"
+#include "GModelIO_GEO.h"
+#include "Geo.h"
+#include "Context.h"
+#include "MElementOctree.h"
+#include "GModelParametrize.h"
+
+
+namespace {
+  // the closest point on a triangle, its barycentric weights and its squared
+  // distance
+  struct triangleProjection {
+    SPoint3 point;
+    double w[3] = {0., 0., 0.};
+    double d2 = std::numeric_limits<double>::max();
+  };
+} // namespace
+
+static void setProjection(const SPoint3 &p, const SPoint3 &q, double w0,
+                          double w1, double w2, triangleProjection &r)
+{
+  const SVector3 pq = p - q;
+  r.point = q;
+  r.w[0] = w0;
+  r.w[1] = w1;
+  r.w[2] = w2;
+  r.d2 = dot(pq, pq);
+}
+
+// the closest point on the edges, for flat triangles
+static void projectPointOnEdges(const SPoint3 &p, const SPoint3 x[3],
+                                triangleProjection &r)
+{
+  for(int i = 0; i < 3; i++) {
+    int j = (i + 1) % 3;
+    const SVector3 e = x[j] - x[i];
+    const double l2 = dot(e, e);
+    double t = 0.;
+    if(l2 > 0.) t = std::max(0., std::min(1., dot(p - x[i], e) / l2));
+    double w[3] = {0., 0., 0.};
+    w[i] = 1. - t;
+    w[j] = t;
+    triangleProjection c;
+    setProjection(p, x[i] + t * e, w[0], w[1], w[2], c);
+    if(c.d2 < r.d2) r = c;
+  }
+}
+
+// the exact closest point on a triangle (Ericson, Real-Time Collision
+// Detection, 5.1.5)
+static void projectPointOnTriangle(const SPoint3 &p, const MTriangle &t,
+                                   triangleProjection &r)
+{
+  const SPoint3 x[3] = {t.getVertex(0)->point(), t.getVertex(1)->point(),
+                        t.getVertex(2)->point()};
+  const SPoint3 &a = x[0], &b = x[1], &c = x[2];
+  const SVector3 ab = b - a, ac = c - a;
+  const SVector3 n = crossprod(ab, ac);
+  if(dot(n, n) == 0.) return projectPointOnEdges(p, x, r);
+
+  const SVector3 ap = p - a;
+  const double d1 = dot(ab, ap), d2 = dot(ac, ap);
+  if(d1 <= 0. && d2 <= 0.) return setProjection(p, a, 1., 0., 0., r);
+
+  const SVector3 bp = p - b;
+  const double d3 = dot(ab, bp), d4 = dot(ac, bp);
+  if(d3 >= 0. && d4 <= d3) return setProjection(p, b, 0., 1., 0., r);
+
+  const double vc = d1 * d4 - d3 * d2;
+  if(vc <= 0. && d1 >= 0. && d3 <= 0.) {
+    if(!(d1 - d3 > 0.)) return projectPointOnEdges(p, x, r);
+    const double v = d1 / (d1 - d3);
+    return setProjection(p, a + v * ab, 1. - v, v, 0., r);
+  }
+
+  const SVector3 cp = p - c;
+  const double d5 = dot(ab, cp), d6 = dot(ac, cp);
+  if(d6 >= 0. && d5 <= d6) return setProjection(p, c, 0., 0., 1., r);
+
+  const double vb = d5 * d2 - d1 * d6;
+  if(vb <= 0. && d2 >= 0. && d6 <= 0.) {
+    if(!(d2 - d6 > 0.)) return projectPointOnEdges(p, x, r);
+    const double w = d2 / (d2 - d6);
+    return setProjection(p, a + w * ac, 1. - w, 0., w, r);
+  }
+
+  const double va = d3 * d6 - d5 * d4;
+  if(va <= 0. && d4 - d3 >= 0. && d5 - d6 >= 0.) {
+    if(!(d4 - d3 + d5 - d6 > 0.)) return projectPointOnEdges(p, x, r);
+    const double w = (d4 - d3) / (d4 - d3 + d5 - d6);
+    return setProjection(p, b + w * (c - b), 0., 1. - w, w, r);
+  }
+
+  const double den = va + vb + vc;
+  if(!(den > 0.)) return projectPointOnEdges(p, x, r);
+  const double v = vb / den, w = vc / den;
+  setProjection(p, a + v * ab + w * ac, 1. - v - w, v, w, r);
+}
+
+#if defined(HAVE_EIGEN) && defined(HAVE_GEOMETRYCENTRAL)
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include "geometrycentral/surface/signpost_intrinsic_triangulation.h"
+#include "geometrycentral/surface/vertex_position_geometry.h"
+#endif
+
+discreteFace::param::~param()
+{
+  clear();
+}
+
+void discreteFace::param::clear()
+{
+  if(oct) delete oct;
+  oct = nullptr;
+  rtree3d.RemoveAll();
+  for(auto p : rtree3dData) delete p;
+  rtree3dData.clear();
+  v2d.clear();
+  v3d.clear();
+  bbox = SBoundingBox3d();
+  t2d.clear();
+  t3d.clear();
+  CURV.clear();
+}
+
+bool discreteFace::param::checkPlanar()
+{
+  SBoundingBox3d bb;
+  mean_plane mp;
+  std::vector<SPoint3> v, vp;
+  for(size_t i = 0; i < t3d.size(); i++) {
+    for(int j = 0; j < 3; j++) {
+      SPoint3 p(t3d[i].getVertex(j)->x(), t3d[i].getVertex(j)->y(),
+                t3d[i].getVertex(j)->z());
+      bb += p;
+      v.push_back(p);
+    }
+  }
+
+  computeMeanPlaneSimple(v, mp);
+  projectPointsToPlane(v, vp, mp);
+  for(size_t i = 0; i < v.size(); i++) {
+    double F = mp.a * v[i].x() + mp.b * v[i].y() + mp.c * v[i].z() - mp.d;
+    // this is maybe a bit strict, but it's better this way: wrongly identifying
+    // a very thin (but curved) surface as plane will lead to complete meshing
+    // failure (see e.g. mmbendo.stl in #641)
+    if(fabs(F) > CTX::instance()->geom.matchMeshTolerance * bb.diag()) {
+      return false;
+    }
+  }
+
+  SVector3 VX(mp.plan[0][0], mp.plan[0][1], mp.plan[0][2]);
+  SVector3 VY(mp.plan[1][0], mp.plan[1][1], mp.plan[1][2]);
+  SPoint3 XP(mp.x, mp.y, mp.z);
+
+  umin = 1e200;
+  vmin = 1e200;
+  umax = -1e200;
+  vmax = -1e200;
+
+  int count = 0;
+  for(size_t i = 0; i < t2d.size(); i++) {
+    for(int j = 0; j < 3; j++) {
+      SVector3 DX = vp[count++] - XP;
+      MVertex *v = t2d[i].getVertex(j);
+      v->x() = dot(DX, VX);
+      v->y() = dot(DX, VY);
+      umin = std::min(umin, v->x());
+      vmin = std::min(vmin, v->y());
+      umax = std::max(umax, v->x());
+      vmax = std::max(vmax, v->y());
+    }
+  }
+  return true;
+}
+
+discreteFace::discreteFace(GModel *model, int num, bool geo)
+  : GFace(model, num)
+{
+  meshStatistics.status = GFace::DONE;
+  if(!geo) return;
+  Surface *s = CreateSurface(num, MSH_SURF_DISCRETE);
+  Tree_Add(model->getGEOInternals()->Surfaces, &s);
+}
+
+discreteFace::discreteFace(GModel *model) : GFace(model, 0)
+{
+  // used for temporary discrete faces, that should not lead to the creation of
+  // the corresponding entity in GEO internals
+}
+
+int discreteFace::_locate(double u, double v, double bary[2]) const
+{
+  if(_param.empty()) return -1;
+  MElement *e = _param.oct->find(u, v, 0., -1, true);
+  if(!e) return -1;
+  if(bary) { // (not with xyz2uvw, which does not fail on a flat triangle)
+    const MVertex *p0 = e->getVertex(0), *p1 = e->getVertex(1),
+                  *p2 = e->getVertex(2);
+    double a = p1->x() - p0->x(), b = p2->x() - p0->x();
+    double c = p1->y() - p0->y(), d = p2->y() - p0->y();
+    double det = a * d - b * c;
+    if(det == 0.) return -1;
+    bary[0] = ((u - p0->x()) * d - b * (v - p0->y())) / det;
+    bary[1] = (a * (v - p0->y()) - c * (u - p0->x())) / det;
+    if(!std::isfinite(bary[0]) || !std::isfinite(bary[1])) return -1;
+  }
+  return static_cast<MTriangle *>(e) - &_param.t2d[0];
+}
+
+SVector3 discreteFace::_normal(int position) const
+{
+  const MTriangle &t = _param.t3d[position];
+  SVector3 n = crossprod(t.getVertex(1)->point() - t.getVertex(0)->point(),
+                         t.getVertex(2)->point() - t.getVertex(0)->point());
+  n.normalize();
+  return n;
+}
+
+int discreteFace::trianglePosition(double par1, double par2, double &u,
+                                   double &v) const
+{
+  double bary[2] = {0., 0.};
+  int position = _locate(par1, par2, bary);
+  u = bary[0];
+  v = bary[1];
+  return position;
+}
+
+GPoint discreteFace::point(double par1, double par2) const
+{
+  double xy[3] = {par1, par2, 0};
+  double bary[2];
+  int position = _locate(par1, par2, bary);
+  if(position < 0) {
+    GPoint gp(1.e21, 1.e21, 1.e21, this, xy);
+    gp.setNoSuccess();
+    return gp;
+  }
+  const MTriangle &t3d = _param.t3d[position];
+  double X = 0, Y = 0, Z = 0;
+  double eval[3] = {1. - bary[0] - bary[1], bary[0], bary[1]};
+  for(int io = 0; io < 3; io++) {
+    X += t3d.getVertex(io)->x() * eval[io];
+    Y += t3d.getVertex(io)->y() * eval[io];
+    Z += t3d.getVertex(io)->z() * eval[io];
+  }
+  return GPoint(X, Y, Z, this, xy);
+}
+
+class dfCircleCandidates {
+public:
+  std::vector<std::pair<MTriangle *, MTriangle *> *> triangles;
+};
+
+static bool discreteFace_circle_rtree_callback(
+  std::pair<MTriangle *, MTriangle *> *triangle, void *context)
+{
+  static_cast<dfCircleCandidates *>(context)->triangles.push_back(triangle);
+  return true;
+}
+
+namespace {
+  struct closestPointSearch {
+    const std::vector<MTriangle> *t3d;
+    SPoint3 p;
+    std::size_t best = std::numeric_limits<std::size_t>::max();
+    // the triangle of the guess, preferred in case of ties
+    std::size_t preferred = std::numeric_limits<std::size_t>::max();
+    triangleProjection proj;
+    void consider(std::size_t i)
+    {
+      triangleProjection candidate;
+      projectPointOnTriangle(p, (*t3d)[i], candidate);
+      bool better = candidate.d2 < proj.d2;
+      // ties to the preferred triangle, else to the smallest index, whatever
+      // the order of the visit
+      if(!better && candidate.d2 == proj.d2 && best != preferred)
+        better = i == preferred || i < best;
+      if(better) {
+        best = i;
+        proj = candidate;
+      }
+    }
+  };
+} // namespace
+
+static void closestPointCallback(std::pair<MTriangle *, MTriangle *> *t,
+                                 void *ctx)
+{
+  closestPointSearch *s = static_cast<closestPointSearch *>(ctx);
+  s->consider(t->first - s->t3d->data());
+}
+
+GPoint discreteFace::_closestPoint(const SPoint3 &p, const double guess[2],
+                                   SVector3 *normal) const
+{
+  if(_param.empty()) {
+    GPoint gp;
+    gp.setNoSuccess();
+    return gp;
+  }
+  closestPointSearch s;
+  s.t3d = &_param.t3d;
+  s.p = p;
+  // the triangle containing the guess bounds the distance, and is kept in case
+  // of ties (e.g. on seams); then visit the triangles from the nearest box on,
+  // as long as they can be closer
+  if(guess) {
+    int position = _locate(guess[0], guess[1]);
+    if(position >= 0) {
+      s.preferred = position;
+      s.consider(position);
+    }
+  }
+  double P[3] = {p.x(), p.y(), p.z()};
+  _param.rtree3d.SearchNearest(P, &s.proj.d2, closestPointCallback, &s);
+  if(s.best == std::numeric_limits<std::size_t>::max()) {
+    GPoint gp;
+    gp.setNoSuccess();
+    return gp;
+  }
+
+  if(normal) *normal = _normal(s.best);
+  const MTriangle &t2d = _param.t2d[s.best];
+  SPoint2 uv;
+  for(int i = 0; i < 3; ++i) {
+    uv[0] += s.proj.w[i] * t2d.getVertex(i)->x();
+    uv[1] += s.proj.w[i] * t2d.getVertex(i)->y();
+  }
+  return GPoint(s.proj.point.x(), s.proj.point.y(), s.proj.point.z(), this,
+                uv);
+}
+
+GPoint discreteFace::closestPoint(const SPoint3 &queryPoint,
+                                  const double initialGuess[2]) const
+{
+  return _closestPoint(queryPoint, initialGuess);
+}
+
+GPoint discreteFace::closestPoint(const SPoint3 &queryPoint,
+                                  const double initialGuess[2],
+                                  SVector3 *normal) const
+{
+  return _closestPoint(queryPoint, initialGuess, normal);
+}
+
+SPoint2 discreteFace::parFromPoint(const SPoint3 &p, bool onSurface,
+                                   bool convTestXYZ) const
+{
+  GPoint gp = _closestPoint(p, nullptr);
+  return SPoint2(gp.u(), gp.v());
+}
+
+Range<double> discreteFace::parBounds(int i) const
+{
+  if(i == 0)
+    return Range<double>(_param.umin, _param.umax);
+  else
+    return Range<double>(_param.vmin, _param.vmax);
+}
+
+bool discreteFace::containsParam(const SPoint2 &pt)
+{
+  return _locate(pt.x(), pt.y()) >= 0;
+}
+
+SBoundingBox3d discreteFace::bounds(bool fast)
+{
+  if(_param.empty()) return GFace::bounds(fast);
+  return _param.bbox;
+}
+
+SVector3 discreteFace::normal(const SPoint2 &param) const
+{
+  if(_param.empty()) return SVector3();
+  int position = _locate(param.x(), param.y());
+  if(position < 0) {
+    Msg::Debug("Triangle not found at uv=(%g,%g) on discrete surface %d",
+               param.x(), param.y(), tag());
+    return SVector3(0, 0, 1);
+  }
+  return _normal(position);
+}
+
+bool discreteFace::normalIfContainsParam(const SPoint2 &param,
+                                         SVector3 &normal) const
+{
+  int position = _locate(param.x(), param.y());
+  if(position < 0) return false;
+  normal = _normal(position);
+  return true;
+}
+
+bool discreteFace::normalBoundsForParametricTriangle(
+  const SPoint2 &p0, const SPoint2 &p1, const SPoint2 &p2, SVector3 &nmin,
+  SVector3 &nmax) const
+{
+  // the normals of all the chart triangles whose box overlaps the box of the
+  // given triangle
+  SBoundingBox3d box;
+  box += SPoint3(p0.x(), p0.y(), 0.);
+  box += SPoint3(p1.x(), p1.y(), 0.);
+  box += SPoint3(p2.x(), p2.y(), 0.);
+  bool found = false;
+  for(std::size_t i = 0; i < _param.t2d.size(); i++) {
+    SBoundingBox3d b;
+    for(int j = 0; j < 3; j++) b += _param.t2d[i].getVertex(j)->point();
+    if(b.max().x() < box.min().x() || b.min().x() > box.max().x() ||
+       b.max().y() < box.min().y() || b.min().y() > box.max().y())
+      continue;
+    SVector3 n = _normal(i);
+    if(!(n.norm() > 0.)) continue; // (a flat triangle)
+    for(int k = 0; k < 3; k++) {
+      if(!found || n[k] < nmin[k]) nmin[k] = n[k];
+      if(!found || n[k] > nmax[k]) nmax[k] = n[k];
+    }
+    found = true;
+  }
+  return found;
+}
+
+double discreteFace::curvatureMax(const SPoint2 &param) const
+{
+  if(_param.empty()) return 0.;
+
+  SVector3 dirMax, dirMin;
+  double c, C;
+  if(_param.CURV.empty()) return 0.0;
+  curvatures(param, dirMax, dirMin, C, c);
+  return std::max(c, C);
+}
+
+double discreteFace::curvatures(const SPoint2 &param, SVector3 &dirMax,
+                                SVector3 &dirMin, double &curvMax,
+                                double &curvMin) const
+{
+  if(_param.empty()) return 0.;
+  if(_param.CURV.empty()) return 0.0;
+
+  int position = _locate(param.x(), param.y());
+  if(position < 0) {
+    Msg::Info("Triangle not found for curvatures at uv=(%g,%g) on "
+              "discrete surface %d",
+              param.x(), param.y(), tag());
+    return 0.0;
+  }
+
+  SVector3 c0max = _param.CURV[6 * position + 0];
+  SVector3 c1max = _param.CURV[6 * position + 1];
+  SVector3 c2max = _param.CURV[6 * position + 2];
+  SVector3 c0min = _param.CURV[6 * position + 3];
+  SVector3 c1min = _param.CURV[6 * position + 4];
+  SVector3 c2min = _param.CURV[6 * position + 5];
+
+  curvMax = c0max.norm();
+  curvMin = c0min.norm();
+
+  dirMax = c0max.normalize();
+  dirMin = c0min.normalize();
+
+  return false;
+}
+
+std::pair<SVector3, SVector3> discreteFace::firstDer(const SPoint2 &param) const
+{
+  // the triangle in space times the inverse of the triangle in the chart
+  int position = _locate(param.x(), param.y());
+  if(position < 0) {
+    if(!_param.empty())
+      Msg::Info("Triangle not found for first derivative at uv=(%g,%g) on "
+                "discrete surface %d",
+                param.x(), param.y(), tag());
+    return std::make_pair(SVector3(), SVector3());
+  }
+  const MTriangle &t3d = _param.t3d[position], &t2d = _param.t2d[position];
+  SVector3 x1 = t3d.getVertex(1)->point() - t3d.getVertex(0)->point();
+  SVector3 x2 = t3d.getVertex(2)->point() - t3d.getVertex(0)->point();
+  double a = t2d.getVertex(1)->x() - t2d.getVertex(0)->x();
+  double b = t2d.getVertex(2)->x() - t2d.getVertex(0)->x();
+  double c = t2d.getVertex(1)->y() - t2d.getVertex(0)->y();
+  double d = t2d.getVertex(2)->y() - t2d.getVertex(0)->y();
+  double det = a * d - b * c;
+  if(det == 0.) return std::make_pair(SVector3(), SVector3());
+  SVector3 du = d * x1 - c * x2, dv = a * x2 - b * x1;
+  return std::make_pair(SVector3(du.x() / det, du.y() / det, du.z() / det),
+                        SVector3(dv.x() / det, dv.y() / det, dv.z() / det));
+}
+
+void discreteFace::secondDer(const SPoint2 &param, SVector3 &dudu,
+                             SVector3 &dvdv, SVector3 &dudv) const
+{
+  return;
+}
+
+void discreteFace::_debugParametrization(bool uv)
+{
+  char tmp[256];
+  sprintf(tmp, "discrete_param_%d.pos", tag());
+  FILE *fp = fopen(tmp, "w");
+  if(fp) {
+    fprintf(fp, "View \"uv\" {\n");
+    for(std::size_t i = 0; i < stl_triangles.size(); i += 3) {
+      int i0 = stl_triangles[i + 0];
+      int i1 = stl_triangles[i + 1];
+      int i2 = stl_triangles[i + 2];
+      SPoint3 xyz0 = stl_vertices_xyz[i0];
+      SPoint3 xyz1 = stl_vertices_xyz[i1];
+      SPoint3 xyz2 = stl_vertices_xyz[i2];
+      SPoint2 uv0 = stl_vertices_uv[i0];
+      SPoint2 uv1 = stl_vertices_uv[i1];
+      SPoint2 uv2 = stl_vertices_uv[i2];
+      if(uv) {
+        for(int j = 0; j < 2; j++) {
+          xyz0[j] = uv0[j];
+          xyz1[j] = uv1[j];
+          xyz2[j] = uv2[j];
+        }
+        xyz0[2] = xyz1[2] = xyz2[2] = 0;
+      }
+      fprintf(fp, "ST(%g,%g,%g, %g,%g,%g, %g,%g,%g){%g,%g,%g, %g,%g,%g};\n",
+              xyz0.x(), xyz0.y(), xyz0.z(), xyz1.x(), xyz1.y(), xyz1.z(),
+              xyz2.x(), xyz2.y(), xyz2.z(), uv0.x(), uv1.x(), uv2.x(), uv0.y(),
+              uv1.y(), uv2.y());
+    }
+    fprintf(fp, "};\n");
+    fclose(fp);
+  }
+}
+
+int discreteFace::createGeometry()
+{
+  stl_vertices_uv.clear();
+  stl_vertices_xyz.clear();
+  stl_curvatures.clear();
+  stl_triangles.clear();
+  stl_from_mesh = false;
+  if(triangles.empty()) return 0;
+
+
+  double minq = 1.;
+  for(auto t : triangles) minq = std::min(minq, t->gammaShapeMeasure());
+  if(minq < 1e-3)
+    Msg::Warning("Poor input mesh quality (min gamma = %g) for computing "
+                 "parametrization",
+                 minq);
+
+  std::vector<MVertex *> nodes;
+  computeParametrization(triangles, nodes, stl_vertices_uv, stl_vertices_xyz,
+                         stl_triangles);
+
+  if(model()->getCurvatures().size()) {
+    stl_curvatures.resize(2 * nodes.size());
+    for(std::size_t i = 0; i < nodes.size(); i++) {
+      auto it = model()->getCurvatures().find(nodes[i]);
+      if(it == model()->getCurvatures().end()) {
+        Msg::Error("Curvature not found for node %d", nodes[i]->getNum());
+      }
+      else {
+        stl_curvatures[2 * i] = it->second.first;
+        stl_curvatures[2 * i + 1] = it->second.second;
+      }
+    }
+  }
+
+  _computeSTLNormals();
+  _createGeometryFromSTL();
+
+  //_debugParametrization(false);
+
+  return 0;
+}
+
+void discreteFace::_computeSTLNormals()
+{
+  stl_normals.clear();
+  std::size_t T = stl_triangles.size() / 3;
+  std::size_t N = stl_vertices_xyz.size();
+  if(!N || !T) return;
+  stl_normals.resize(N);
+  for(std::size_t i = 0; i < T; i++) {
+    int a = stl_triangles[3 * i + 0];
+    int b = stl_triangles[3 * i + 1];
+    int c = stl_triangles[3 * i + 2];
+    SPoint3 pa(stl_vertices_xyz[a]);
+    SPoint3 pb(stl_vertices_xyz[b]);
+    SPoint3 pc(stl_vertices_xyz[c]);
+    SVector3 vba = pb - pa;
+    SVector3 vca = pc - pa;
+    SVector3 n = crossprod(vba, vca);
+    stl_normals[a] += n;
+    stl_normals[b] += n;
+    stl_normals[c] += n;
+  }
+  for(std::size_t i = 0; i < N; i++) stl_normals[i].normalize();
+}
+
+void discreteFace::_createGeometryFromSTL()
+{
+  if(stl_triangles.empty() || stl_vertices_uv.empty() ||
+     stl_vertices_xyz.empty())
+    return;
+
+  _param.clear();
+
+  for(size_t i = 0; i < stl_vertices_uv.size(); i++) {
+    _param.v2d.push_back(
+      MVertex(stl_vertices_uv[i].x(), stl_vertices_uv[i].y(), 0.0));
+    _param.v3d.push_back(MVertex(stl_vertices_xyz[i].x(),
+                                 stl_vertices_xyz[i].y(),
+                                 stl_vertices_xyz[i].z()));
+    _param.bbox += _param.v3d.back().point();
+  }
+
+  for(size_t i = 0; i < stl_triangles.size() / 3; i++) {
+    int a = stl_triangles[3 * i];
+    int b = stl_triangles[3 * i + 1];
+    int c = stl_triangles[3 * i + 2];
+    _param.t2d.push_back(
+      MTriangle(&_param.v2d[a], &_param.v2d[b], &_param.v2d[c]));
+    _param.t3d.push_back(
+      MTriangle(&_param.v3d[a], &_param.v3d[b], &_param.v3d[c]));
+    if(!stl_curvatures.empty()) {
+      _param.CURV.push_back(stl_curvatures[2 * a]);
+      _param.CURV.push_back(stl_curvatures[2 * a + 1]);
+      _param.CURV.push_back(stl_curvatures[2 * b]);
+      _param.CURV.push_back(stl_curvatures[2 * b + 1]);
+      _param.CURV.push_back(stl_curvatures[2 * c]);
+      _param.CURV.push_back(stl_curvatures[2 * c + 1]);
+    }
+  }
+  if(_param.checkPlanar())
+    Msg::Info("Discrete surface %d is planar, simplifying parametrization",
+              tag());
+
+  std::vector<MElement *> temp;
+  for(size_t j = 0; j < _param.t2d.size(); j++) {
+    temp.push_back(&_param.t2d[j]);
+    double MIN[3] = {_param.t3d[j].getVertex(0)->x(),
+                     _param.t3d[j].getVertex(0)->y(),
+                     _param.t3d[j].getVertex(0)->z()};
+    double MAX[3] = {_param.t3d[j].getVertex(0)->x(),
+                     _param.t3d[j].getVertex(0)->y(),
+                     _param.t3d[j].getVertex(0)->z()};
+    for(int k = 1; k < 3; k++) {
+      MAX[0] = std::max(MAX[0], _param.t3d[j].getVertex(k)->x());
+      MIN[0] = std::min(MIN[0], _param.t3d[j].getVertex(k)->x());
+      MAX[1] = std::max(MAX[1], _param.t3d[j].getVertex(k)->y());
+      MIN[1] = std::min(MIN[1], _param.t3d[j].getVertex(k)->y());
+      MAX[2] = std::max(MAX[2], _param.t3d[j].getVertex(k)->z());
+      MIN[2] = std::min(MIN[2], _param.t3d[j].getVertex(k)->z());
+    }
+    _param.rtree3dData.push_back
+      (new std::pair<MTriangle *, MTriangle *>(&_param.t3d[j], &_param.t2d[j]));
+    _param.rtree3d.Insert(MIN, MAX, _param.rtree3dData.back());
+  }
+  _param.oct = new MElementOctree(temp);
+
+}
+
+void discreteFace::mesh(bool verbose)
+{
+  if(_param.empty()) return;
+  GFace::mesh(verbose);
+}
+
+GPoint discreteFace::intersectionWithCircle(const SVector3 &n1,
+                                            const SVector3 &n2,
+                                            const SVector3 &p, const double &R,
+                                            double uv[2])
+{
+  if(_param.empty()) return 0.;
+
+  MTriangle *t2d = (MTriangle *)_param.oct->find(uv[0], uv[1], 0.0, -1, true);
+  MTriangle *t3d = nullptr;
+  if(t2d) {
+    int position = (int)(t2d - &_param.t2d[0]);
+    t3d = &_param.t3d[position];
+  }
+
+  SVector3 n = crossprod(n1, n2);
+  n.normalize();
+
+  int N = _param.t3d.size();
+  int start = 0;
+  if(t2d) start = -1;
+  for(int i = start; i < N; i++) {
+    if(i >= 0) {
+      t2d = &_param.t2d[i];
+      t3d = &_param.t3d[i];
+    }
+    SVector3 v0(t3d->getVertex(0)->x(), t3d->getVertex(0)->y(),
+                t3d->getVertex(0)->z());
+    SVector3 v1(t3d->getVertex(1)->x(), t3d->getVertex(1)->y(),
+                t3d->getVertex(1)->z());
+    SVector3 v2(t3d->getVertex(2)->x(), t3d->getVertex(2)->y(),
+                t3d->getVertex(2)->z());
+    SVector3 v0_2d(t2d->getVertex(0)->x(), t2d->getVertex(0)->y(),
+                   t2d->getVertex(0)->z());
+    SVector3 v1_2d(t2d->getVertex(1)->x(), t2d->getVertex(1)->y(),
+                   t2d->getVertex(1)->z());
+    SVector3 v2_2d(t2d->getVertex(2)->x(), t2d->getVertex(2)->y(),
+                   t2d->getVertex(2)->z());
+    SVector3 t1 = v1 - v0;
+    SVector3 t2 = v2 - v0;
+    SVector3 t = crossprod(t1, t2);
+    t.normalize();
+    SVector3 d = crossprod(n, t);
+    if(d.norm() < 1.e-12) continue;
+    d.normalize();
+    double rhs[2] = {dot(n, p), dot(v0, t)};
+    double r[2];
+    double m[2][2];
+    SVector3 x0(0, 0, 0);
+    m[0][0] = n.y();
+    m[0][1] = n.z();
+    m[1][0] = t.y();
+    m[1][1] = t.z();
+    if(fabs(det2x2(m)) > 1.e-12) {
+      sys2x2(m, rhs, r);
+      x0 = SVector3(0, r[0], r[1]);
+    }
+    else {
+      m[0][0] = n.x();
+      m[0][1] = n.z();
+      m[1][0] = t.x();
+      m[1][1] = t.z();
+      if(fabs(det2x2(m)) > 1.e-12) {
+        sys2x2(m, rhs, r);
+        x0 = SVector3(r[0], 0, r[1]);
+      }
+      else {
+        m[0][0] = n.x();
+        m[0][1] = n.y();
+        m[1][0] = t.x();
+        m[1][1] = t.y();
+        if(sys2x2(m, rhs, r)) { x0 = SVector3(r[0], r[1], 0); }
+        else {
+          // printf("mauvaise pioche\n");
+          continue;
+        }
+      }
+    }
+
+    const double a = 1.0;
+    const double b = -2 * dot(d, p - x0);
+    const double c = dot(p - x0, p - x0) - R * R;
+    const double delta = b * b - 4 * a * c;
+    if(delta >= 0) {
+      double sign = (dot(n2, d) > 0) ? 1.0 : -1.0;
+      const double ta = (-b + sign * sqrt(delta)) / (2. * a);
+      const double tb = (-b - sign * sqrt(delta)) / (2. * a);
+      SVector3 s[2] = {x0 + d * ta, x0 + d * tb};
+      for(int IT = 0; IT < 2; IT++) {
+        double mat[2][2], b[2], uv[2];
+        mat[0][0] = dot(t1, t1);
+        mat[1][1] = dot(t2, t2);
+        mat[0][1] = mat[1][0] = dot(t1, t2);
+        b[0] = dot(s[IT] - v0, t1);
+        b[1] = dot(s[IT] - v0, t2);
+        sys2x2(mat, b, uv);
+        // check now if the point is inside the triangle
+        if(uv[0] >= -1.e-6 && uv[1] >= -1.e-6 && 1. - uv[0] - uv[1] >= -1.e-6) {
+          SVector3 pp =
+            v0_2d * (1. - uv[0] - uv[1]) + v1_2d * uv[0] + v2_2d * uv[1];
+          uv[0] = pp.x();
+          uv[1] = pp.y();
+          return GPoint(s[IT].x(), s[IT].y(), s[IT].z(), this, uv);
+        }
+      }
+    }
+  }
+
+  GPoint pp(0);
+  pp.setNoSuccess();
+  // Msg::Warning("Could not intersect with circle");
+  return pp;
+}
+
+GPoint discreteFace::intersectionWithCircleSpatial(const SVector3 &n1,
+                                                   const SVector3 &n2,
+                                                   const SVector3 &p,
+                                                   const double &R,
+                                                   double uv[2])
+{
+  auto failure = []() {
+    GPoint result(0.0);
+    result.setNoSuccess();
+    return result;
+  };
+  if(_param.empty() || R <= 0.0) return failure();
+
+  // Keep the fast frontal estimate: when it lies just outside the
+  // parametrized domain there is no seed triangle, and selecting the first
+  // circle intersection in source-triangle order can jump to another fold of
+  // the discrete surface. Use this estimate to rank all spatial candidates.
+  const double estimatedUV[2] = {uv[0], uv[1]};
+
+  SVector3 circleNormal = crossprod(n1, n2);
+  if(circleNormal.normalize() <= 1.e-14) return failure();
+
+  MTriangle *seed2d =
+    (MTriangle *)_param.oct->find(uv[0], uv[1], 0.0, -1, true);
+  MTriangle *seed3d = nullptr;
+  if(seed2d) {
+    const std::ptrdiff_t position = seed2d - &_param.t2d[0];
+    if(position >= 0 && (std::size_t)position < _param.t3d.size())
+      seed3d = &_param.t3d[(std::size_t)position];
+  }
+
+  // Every possible solution belongs to the 3D AABB of the complete circle.
+  // Query the R-tree already built for closestPoint() instead of scanning all
+  // parametrization triangles. The L1 extent is slightly conservative even
+  // if the supplied circle basis is not perfectly orthonormal.
+  const double scale = std::max(1.0, _param.bbox.diag());
+  const double padding = std::max(1.e-12 * scale, 1.e-10 * std::abs(R));
+  double minimum[3], maximum[3];
+  for(int component = 0; component < 3; component++) {
+    const double extent =
+      std::abs(R) *
+        (std::abs(n1[component]) + std::abs(n2[component])) +
+      padding;
+    minimum[component] = p[component] - extent;
+    maximum[component] = p[component] + extent;
+  }
+  dfCircleCandidates candidates;
+  _param.rtree3d.Search(minimum, maximum,
+                        discreteFace_circle_rtree_callback, &candidates);
+
+  const MTriangle *const triangleBase = &_param.t3d[0];
+  std::sort(candidates.triangles.begin(), candidates.triangles.end(),
+            [triangleBase](const auto *first, const auto *second) {
+              return first->first - triangleBase <
+                     second->first - triangleBase;
+            });
+  candidates.triangles.erase(
+    std::unique(candidates.triangles.begin(), candidates.triangles.end()),
+    candidates.triangles.end());
+
+  auto intersectTriangle = [&](MTriangle *t3d, MTriangle *t2d,
+                               GPoint &result, double resultUV[2],
+                               double &distance2) {
+    const SVector3 v0(t3d->getVertex(0)->x(), t3d->getVertex(0)->y(),
+                      t3d->getVertex(0)->z());
+    const SVector3 v1(t3d->getVertex(1)->x(), t3d->getVertex(1)->y(),
+                      t3d->getVertex(1)->z());
+    const SVector3 v2(t3d->getVertex(2)->x(), t3d->getVertex(2)->y(),
+                      t3d->getVertex(2)->z());
+    const SVector3 edge1 = v1 - v0;
+    const SVector3 edge2 = v2 - v0;
+    SVector3 triangleNormal = crossprod(edge1, edge2);
+    if(triangleNormal.normalize() <= 1.e-14) return false;
+
+    const SVector3 lineDirection =
+      crossprod(circleNormal, triangleNormal);
+    const double lineNorm2 = lineDirection.normSq();
+    if(lineNorm2 <= 1.e-24) return false;
+
+    // A point on the intersection of n.x=n.p and t.x=t.v0. This vector form
+    // replaces the three coordinate-dependent 2x2 solves in the legacy code.
+    const double circlePlane = dot(circleNormal, p);
+    const double trianglePlane = dot(triangleNormal, v0);
+    const SVector3 lineOrigin =
+      (circlePlane * crossprod(triangleNormal, lineDirection) +
+       trianglePlane * crossprod(lineDirection, circleNormal)) *
+      (1.0 / lineNorm2);
+    const SVector3 closest =
+      lineOrigin + lineDirection *
+                     (dot(p - lineOrigin, lineDirection) / lineNorm2);
+    double height2 = R * R - (closest - p).normSq();
+    const double discriminantTolerance =
+      1.e-12 * std::max(R * R, scale * scale);
+    if(height2 < -discriminantTolerance) return false;
+    height2 = std::max(0.0, height2);
+
+    const double gram00 = dot(edge1, edge1);
+    const double gram01 = dot(edge1, edge2);
+    const double gram11 = dot(edge2, edge2);
+    const double gramDet = gram00 * gram11 - gram01 * gram01;
+    if(gramDet <= 1.e-28 * std::max(1.0, gram00 * gram11)) return false;
+
+    const double rootScale = std::sqrt(height2 / lineNorm2);
+    const double preferredSign = dot(n2, lineDirection) >= 0.0 ? 1.0 : -1.0;
+    const SVector3 points[2] = {
+      closest + lineDirection * (preferredSign * rootScale),
+      closest - lineDirection * (preferredSign * rootScale)};
+    bool found = false;
+    for(const SVector3 &point : points) {
+      const double rhs0 = dot(point - v0, edge1);
+      const double rhs1 = dot(point - v0, edge2);
+      const double bary1 = (rhs0 * gram11 - gram01 * rhs1) / gramDet;
+      const double bary2 = (gram00 * rhs1 - gram01 * rhs0) / gramDet;
+      if(bary1 < -1.e-6 || bary2 < -1.e-6 ||
+         1.0 - bary1 - bary2 < -1.e-6)
+        continue;
+
+      const MVertex *uv0 = t2d->getVertex(0);
+      const MVertex *uv1 = t2d->getVertex(1);
+      const MVertex *uv2 = t2d->getVertex(2);
+      const double candidateUV[2] = {
+        uv0->x() * (1.0 - bary1 - bary2) + uv1->x() * bary1 +
+          uv2->x() * bary2,
+        uv0->y() * (1.0 - bary1 - bary2) + uv1->y() * bary1 +
+          uv2->y() * bary2};
+      const double du = candidateUV[0] - estimatedUV[0];
+      const double dv = candidateUV[1] - estimatedUV[1];
+      const double candidateDistance2 = du * du + dv * dv;
+      if(!found || candidateDistance2 < distance2) {
+        distance2 = candidateDistance2;
+        resultUV[0] = candidateUV[0];
+        resultUV[1] = candidateUV[1];
+        result = GPoint(point.x(), point.y(), point.z(), this, resultUV);
+        found = true;
+      }
+    }
+    return found;
+  };
+
+  GPoint result;
+  double resultUV[2], distance2 = std::numeric_limits<double>::max();
+  if(seed3d &&
+     intersectTriangle(seed3d, seed2d, result, resultUV, distance2)) {
+    uv[0] = resultUV[0];
+    uv[1] = resultUV[1];
+    return result;
+  }
+
+  GPoint best;
+  double bestUV[2] = {0.0, 0.0};
+  double bestDistance2 = std::numeric_limits<double>::max();
+  for(const auto *candidate : candidates.triangles) {
+    if(candidate->first == seed3d) continue;
+    double candidateUV[2];
+    double candidateDistance2 = std::numeric_limits<double>::max();
+    if(intersectTriangle(candidate->first, candidate->second, result,
+                         candidateUV, candidateDistance2) &&
+       candidateDistance2 < bestDistance2) {
+      best = result;
+      bestUV[0] = candidateUV[0];
+      bestUV[1] = candidateUV[1];
+      bestDistance2 = candidateDistance2;
+    }
+  }
+  if(bestDistance2 < std::numeric_limits<double>::max()) {
+    uv[0] = bestUV[0];
+    uv[1] = bestUV[1];
+    return best;
+  }
+  return failure();
+}
+
+bool discreteFace::writeParametrization(FILE *fp, bool binary)
+{
+  std::size_t N = stl_vertices_uv.size();
+  std::size_t T = stl_triangles.size() / 3;
+  std::vector<double> d(11 * N, 0.);
+  for(std::size_t i = 0; i < N; i++) {
+    d[11 * i + 0] = stl_vertices_xyz[i].x();
+    d[11 * i + 1] = stl_vertices_xyz[i].y();
+    d[11 * i + 2] = stl_vertices_xyz[i].z();
+    d[11 * i + 3] = stl_vertices_uv[i].x();
+    d[11 * i + 4] = stl_vertices_uv[i].y();
+    if(stl_curvatures.size() == 2 * stl_vertices_uv.size()) {
+      d[11 * i + 5] = stl_curvatures[2 * i].x();
+      d[11 * i + 6] = stl_curvatures[2 * i].y();
+      d[11 * i + 7] = stl_curvatures[2 * i].z();
+      d[11 * i + 8] = stl_curvatures[2 * i + 1].x();
+      d[11 * i + 9] = stl_curvatures[2 * i + 1].y();
+      d[11 * i + 10] = stl_curvatures[2 * i + 1].z();
+    }
+  }
+  if(binary) {
+    fwrite(&N, sizeof(std::size_t), 1, fp);
+    fwrite(&T, sizeof(std::size_t), 1, fp);
+    fwrite(&d[0], sizeof(double), d.size(), fp);
+    fwrite(&stl_triangles[0], sizeof(int), stl_triangles.size(), fp);
+  }
+  else {
+    fprintf(fp, "%zu %zu\n", N, T);
+    for(std::size_t i = 0; i < N; i++)
+      fprintf(fp,
+              "%.16g %.16g %.16g %.16g %.16g %.16g %.16g "
+              "%.16g %.16g %.16g %.16g\n",
+              d[11 * i + 0], d[11 * i + 1], d[11 * i + 2], d[11 * i + 3],
+              d[11 * i + 4], d[11 * i + 5], d[11 * i + 6], d[11 * i + 7],
+              d[11 * i + 8], d[11 * i + 9], d[11 * i + 10]);
+    for(std::size_t i = 0; i < T; i++) {
+      fprintf(fp, "%d %d %d\n", stl_triangles[3 * i + 0],
+              stl_triangles[3 * i + 1], stl_triangles[3 * i + 2]);
+    }
+  }
+  return true;
+}
+
+bool discreteFace::readParametrization(FILE *fp, bool binary)
+{
+  stl_vertices_xyz.clear();
+  stl_vertices_uv.clear();
+  stl_curvatures.clear();
+  stl_triangles.clear();
+
+  std::size_t N, T;
+  if(binary) {
+    if(fread(&N, sizeof(std::size_t), 1, fp) != 1) { return false; }
+    if(fread(&T, sizeof(std::size_t), 1, fp) != 1) { return false; }
+  }
+  else {
+    if(fscanf(fp, "%zu %zu", &N, &T) != 2) { return false; }
+  }
+  std::vector<double> d(11 * N);
+  stl_vertices_xyz.resize(N);
+  stl_vertices_uv.resize(N);
+  stl_curvatures.resize(2 * N);
+  stl_triangles.resize(3 * T);
+
+  if(binary) {
+    if(fread(&d[0], sizeof(double), 11 * N, fp) != 11 * N) { return false; }
+    if(fread(&stl_triangles[0], sizeof(int), 3 * T, fp) != 3 * T) {
+      return false;
+    }
+  }
+  else {
+    for(std::size_t i = 0; i < N; i++) {
+      if(fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
+                &d[11 * i + 0], &d[11 * i + 1], &d[11 * i + 2], &d[11 * i + 3],
+                &d[11 * i + 4], &d[11 * i + 5], &d[11 * i + 6], &d[11 * i + 7],
+                &d[11 * i + 8], &d[11 * i + 9], &d[11 * i + 10]) != 11) {
+        return false;
+      }
+    }
+    for(std::size_t i = 0; i < T; i++) {
+      if(fscanf(fp, "%d %d %d", &stl_triangles[3 * i + 0],
+                &stl_triangles[3 * i + 1], &stl_triangles[3 * i + 2]) != 3) {
+        return false;
+      }
+    }
+  }
+
+  for(std::size_t i = 0; i < N; i++) {
+    stl_vertices_xyz[i] = SPoint3(d[11 * i + 0], d[11 * i + 1], d[11 * i + 2]);
+    stl_vertices_uv[i] = SPoint2(d[11 * i + 3], d[11 * i + 4]);
+    stl_curvatures[2 * i + 0] =
+      SVector3(d[11 * i + 5], d[11 * i + 6], d[11 * i + 7]);
+    stl_curvatures[2 * i + 1] =
+      SVector3(d[11 * i + 8], d[11 * i + 9], d[11 * i + 10]);
+  }
+
+  _computeSTLNormals();
+  _createGeometryFromSTL();
+  return true;
+}
+
+void discreteFace::resetMeshAttributes()
+{
+  Surface *_s = FindSurface(tag());
+  if(!_s) {
+    GFace ::resetMeshAttributes();
+    return;
+  }
+  meshAttributes.recombine = _s->Recombine;
+  meshAttributes.recombineAngle = _s->RecombineAngle;
+  meshAttributes.method = _s->Method;
+  meshAttributes.extrude = _s->Extrude;
+  if(meshAttributes.method == MESH_TRANSFINITE) {
+    meshAttributes.transfiniteArrangement = _s->Recombine_Dir;
+    meshAttributes.transfiniteSmoothing = _s->TransfiniteSmoothing;
+    meshAttributes.corners.clear();
+    for(int i = 0; i < List_Nbr(_s->TrsfPoints); i++) {
+      Vertex *corn;
+      List_Read(_s->TrsfPoints, i, &corn);
+      GVertex *gv = model()->getVertexByTag(corn->Num);
+      if(gv)
+        meshAttributes.corners.push_back(gv);
+      else
+        Msg::Error("Unknown point %d in transfinite attributes", corn->Num);
+    }
+  }
+  meshAttributes.reverseMesh = _s->ReverseMesh;
+  meshAttributes.algorithm = _s->MeshAlgorithm;
+  meshAttributes.meshSizeFromBoundary = _s->MeshSizeFromBoundary;
+  meshAttributes.transfinite3 = false;
+}

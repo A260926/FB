@@ -1,0 +1,357 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+//
+// Contributor(s):
+//   Stephen Guzik
+//
+
+#include <stdio.h>
+#include <string.h>
+#include <FL/Fl_Value_Slider.H>
+#include <FL/Fl_Return_Button.H>
+#include <FL/Fl_Hold_Browser.H>
+#include <FL/Fl_Input_Choice.H>
+#include <FL/Fl_Box.H>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Double_Window.H>
+#include <FL/Fl_Text_Display.H>
+#include <FL/Fl_Text_Editor.H>
+#include <FL/fl_ask.H>
+#include <FL/Fl_Preferences.H>
+#include "FlGui.h"
+#include "paletteWindow.h"
+#include "Options.h"
+#include "drawContext.h"
+#include "GModel.h"
+#include "Context.h"
+#include "PView.h"
+#include "extraDialogs.h"
+
+// Shows the dialog until OK, which calls apply() and returns 1, or Cancel or
+// the close button, which return 0; other(o) is told first of every widget
+// whose callback ran
+int runDialog(Fl_Window *window, Fl_Widget *ok, Fl_Widget *cancel,
+              const std::function<void()> &apply,
+              const std::function<void(Fl_Widget *)> &other)
+{
+  window->show();
+  while(window->shown()) {
+    Fl::wait();
+    for(;;) {
+      Fl_Widget *o = Fl::readqueue();
+      if(!o) break;
+      if(other) other(o);
+      if(o == ok) {
+        apply();
+        window->hide();
+        return 1;
+      }
+      if(o == window || o == cancel) {
+        window->hide();
+        return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+// Arrow editor: its own loop, as Apply leaves the window open for the caller
+// (see optionWindow.cpp)
+
+int arrowEditor(const char *title, double &a, double &b, double &c)
+{
+  struct _editor {
+    Fl_Window *window;
+    Fl_Value_Slider *sa, *sb, *sc;
+    Fl_Button *apply, *cancel;
+  };
+  static _editor *editor = nullptr;
+
+  if(!editor) {
+    editor = new _editor;
+    editor->window =
+      new paletteWindow(2 * BB + 3 * WB, 4 * BH + 3 * WB,
+                        CTX::instance()->nonModalWindows ? true : false);
+    editor->sa = new Fl_Value_Slider(WB, WB, BB, BH, "Head radius");
+    editor->sa->tooltip("General.ArrowHeadRadius");
+    editor->sa->type(FL_HOR_SLIDER);
+    editor->sa->align(FL_ALIGN_RIGHT);
+    editor->sb = new Fl_Value_Slider(WB, WB + BH, BB, BH, "Stem length");
+    editor->sb->tooltip("General.ArrowStemLength");
+    editor->sb->type(FL_HOR_SLIDER);
+    editor->sb->align(FL_ALIGN_RIGHT);
+    editor->sc = new Fl_Value_Slider(WB, WB + 2 * BH, BB, BH, "Stem radius");
+    editor->sc->tooltip("General.ArrowStemRadius");
+    editor->sc->type(FL_HOR_SLIDER);
+    editor->sc->align(FL_ALIGN_RIGHT);
+    editor->apply = new Fl_Return_Button(WB, 2 * WB + 3 * BH, BB, BH, "Apply");
+    editor->cancel =
+      new Fl_Button(2 * WB + BB, 2 * WB + 3 * BH, BB, BH, "Cancel");
+    editor->window->end();
+    editor->window->hotspot(editor->window);
+  }
+
+  editor->window->label(title);
+  editor->sa->value(a);
+  editor->sb->value(b);
+  editor->sc->value(c);
+  editor->window->show();
+
+  while(editor->window->shown()) {
+    Fl::wait();
+    for(;;) {
+      Fl_Widget *o = Fl::readqueue();
+      if(!o) break;
+      if(o == editor->apply) {
+        a = editor->sa->value();
+        b = editor->sb->value();
+        c = editor->sc->value();
+        return 1;
+      }
+      if(o == editor->window || o == editor->cancel) {
+        editor->window->hide();
+        return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+// Connection and pattern choosers
+
+class historyBrowser : public Fl_Hold_Browser {
+  int handle(int event)
+  {
+    switch(event) {
+    case FL_SHORTCUT:
+    case FL_KEYBOARD:
+      if(Fl::test_shortcut(FL_Delete) || Fl::test_shortcut(FL_BackSpace)) {
+        int i = value();
+        if(i) {
+          remove(i);
+          if(i <= size())
+            select(i);
+          else if(i > 1)
+            select(i - 1);
+        }
+        return 1;
+      }
+      break;
+    }
+    return Fl_Hold_Browser::handle(event);
+  };
+
+public:
+  historyBrowser(int x, int y, int w, int h, const char *l = nullptr)
+    : Fl_Hold_Browser(x, y, w, h, l)
+  {
+  }
+};
+
+class historyChooser {
+private:
+  std::string _prefix, _label, _commandLabel, _defaultCommand, _okLabel;
+
+public:
+  Fl_Double_Window *window;
+  Fl_Input *input;
+  historyBrowser *browser;
+  Fl_Return_Button *ok;
+  Fl_Button *cancel;
+
+public:
+  historyChooser(const std::string &prefix, const std::string &label,
+                 const std::string &commandLabel,
+                 const std::string &defaultCommand, const std::string &okLabel)
+    : _prefix(prefix), _label(label), _commandLabel(commandLabel),
+      _defaultCommand(defaultCommand), _okLabel(okLabel)
+  {
+    int h = 4 * WB + 10 * BH, w = 3 * BB + 2 * WB;
+    window = new Fl_Double_Window(w, h);
+    window->set_modal();
+    window->label(_label.c_str());
+    Fl_Box *b1 = new Fl_Box(WB, WB, w, BH, _commandLabel.c_str());
+    b1->align(FL_ALIGN_INSIDE | FL_ALIGN_LEFT);
+    input = new Fl_Input(WB, WB + BH, w - 2 * WB, BH);
+    Fl_Box *b2 = new Fl_Box(WB, 2 * WB + 2 * BH, w, BH, "History:");
+    b2->align(FL_ALIGN_INSIDE | FL_ALIGN_LEFT);
+    browser =
+      new historyBrowser(WB, 2 * WB + 3 * BH, w - 2 * WB, h - 4 * BH - 4 * WB);
+    cancel = new Fl_Button(w - WB - BB, h - WB - BH, BB, BH, "Cancel");
+    ok = new Fl_Return_Button(w - 2 * WB - 2 * BB, h - WB - BH, BB, BH,
+                              _okLabel.c_str());
+    Fl_Box *b3 = new Fl_Box(WB, h - WB - BB, WB, WB);
+    b3->hide();
+    window->resizable(b3);
+    window->end();
+  }
+  void save(Fl_Preferences &prefs)
+  {
+    for(int i = 0; i < 100; i++) {
+      char name[256];
+      sprintf(name, "%s%02d", _prefix.c_str(), i);
+      if(i < browser->size())
+        prefs.set(name, browser->text(i + 1));
+      else if(prefs.entryExists(name))
+        prefs.deleteEntry(name);
+    }
+    int offset[2] = {0, 0};
+    storeWindowOffset(window, offset);
+    prefs.set((_prefix + "OffsetX").c_str(), offset[0]);
+    prefs.set((_prefix + "OffsetY").c_str(), offset[1]);
+    prefs.set((_prefix + "Width").c_str(), window->w());
+    prefs.set((_prefix + "Height").c_str(), window->h());
+  }
+  std::string run()
+  {
+    Fl_Preferences prefs(Fl_Preferences::USER, "fltk.org", "gmsh");
+    int offset[2] = {100, 100}, h = 4 * WB + 10 * BH, w = 3 * BB + 2 * WB;
+    prefs.get((_prefix + "OffsetX").c_str(), offset[0], offset[0]);
+    prefs.get((_prefix + "OffsetY").c_str(), offset[1], offset[1]);
+    prefs.get((_prefix + "Width").c_str(), w, w);
+    prefs.get((_prefix + "Height").c_str(), h, h);
+    window->size(w, h);
+    placeWindow(window, offset);
+    int old = browser->value();
+    browser->clear();
+    for(int i = 0; i < 100; i++) {
+      char name[256], value[1024];
+      sprintf(name, "%s%02d", _prefix.c_str(), i);
+      if(prefs.entryExists(name)) {
+        prefs.get(name, value, "", sizeof(value));
+        browser->add(value);
+      }
+    }
+    int n = browser->size();
+    if(n) {
+      if(old > 0 && old <= n)
+        input->value(browser->text(old));
+      else
+        input->value(browser->text(1));
+    }
+    else
+      input->value(_defaultCommand.c_str());
+    int chosen = runDialog(window, ok, cancel, [&]() {
+      if(strlen(input->value())) {
+        // the value chosen at the top of the history
+        for(int i = 0; i < browser->size(); i++) {
+          if(!strcmp(input->value(), browser->text(i + 1))) {
+            browser->remove(i + 1);
+            break;
+          }
+        }
+        browser->insert(1, input->value());
+      }
+    });
+    save(prefs);
+    return chosen ? input->value() : "";
+  }
+};
+
+static historyChooser *_connectionChooser = nullptr;
+static void connection_select_cb(Fl_Widget *w, void *data)
+{
+  int i = _connectionChooser->browser->value();
+  if(i) _connectionChooser->input->value(_connectionChooser->browser->text(i));
+}
+
+std::string connectionChooser()
+{
+  if(!_connectionChooser) {
+    _connectionChooser =
+      new historyChooser("connection", "Remote Start",
+                         "Command:", "./gmsh ../tutorials/view3.pos", "Run");
+    _connectionChooser->browser->callback(connection_select_cb);
+  }
+  return _connectionChooser->run();
+}
+
+static historyChooser *_patternChooser = nullptr;
+static void pattern_select_cb(Fl_Widget *w, void *data)
+{
+  int i = _patternChooser->browser->value();
+  if(i) _patternChooser->input->value(_patternChooser->browser->text(i));
+}
+
+std::string patternChooser()
+{
+  if(!_patternChooser) {
+    _patternChooser = new historyChooser("pattern", "Watch Pattern",
+                                         "Pattern:", "output/*.msh", "Watch");
+    _patternChooser->browser->callback(pattern_select_cb);
+  }
+  return _patternChooser->run();
+}
+
+// simple text display
+
+int simpleTextDisplay(const char *title, const std::string &text)
+{
+  struct _display {
+    Fl_Window *window;
+    Fl_Text_Buffer *buff;
+    Fl_Text_Display *disp;
+  };
+  static _display *display = nullptr;
+
+  if(!display) {
+    display = new _display;
+    display->window =
+      new paletteWindow(4 * BB + 2 * WB, 5 * BH + 2 * WB,
+                        CTX::instance()->nonModalWindows ? true : false);
+    display->buff = new Fl_Text_Buffer();
+    display->disp = new Fl_Text_Display(WB, WB, 4 * BB, 5 * BH);
+    display->disp->buffer(display->buff);
+    display->disp->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
+    display->window->end();
+    display->window->resizable(display->disp);
+  }
+  display->window->label(title);
+  display->buff->text(text.c_str());
+  display->window->hotspot(display->window);
+  return runDialog(display->window, nullptr, nullptr, [] {});
+}
+
+int simpleTextEditor(const char *title, const std::string &help,
+                     std::string &text)
+{
+  struct _editor {
+    Fl_Window *window;
+    Fl_Text_Buffer *buff;
+    Fl_Text_Editor *edit;
+    Fl_Button *apply, *cancel;
+    Fl_Box *help;
+  };
+  static _editor *editor = nullptr;
+
+  if(!editor) {
+    editor = new _editor;
+    editor->window =
+      new paletteWindow(4 * BB + 2 * WB, 7 * BH + 3 * WB,
+                        CTX::instance()->nonModalWindows ? true : false);
+    editor->help = new Fl_Box(WB, WB / 2, 4 * BB, BH);
+    editor->help->align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
+    editor->buff = new Fl_Text_Buffer();
+    editor->edit = new Fl_Text_Editor(WB, WB + BH, 4 * BB, 5 * BH);
+    editor->edit->buffer(editor->buff);
+    editor->edit->wrap_mode(Fl_Text_Editor::WRAP_AT_BOUNDS, 0);
+    editor->apply =
+      new Fl_Return_Button(4 * BB + WB - BB, 2 * WB + 6 * BH, BB, BH, "Apply");
+    editor->cancel =
+      new Fl_Button(4 * BB - 2 * BB, 2 * WB + 6 * BH, BB, BH, "Cancel");
+    Fl_Box *resize = new Fl_Box(WB, WB + BH, WB, WB);
+    editor->window->end();
+    editor->window->resizable(resize);
+  }
+  editor->window->label(title);
+  editor->help->copy_label(help.c_str());
+  editor->buff->text(text.c_str());
+  editor->window->hotspot(editor->window);
+  return runDialog(editor->window, editor->apply, editor->cancel, [&]() {
+    char *t = editor->buff->text();
+    text = t;
+    free(t);
+  });
+}

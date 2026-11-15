@@ -1,0 +1,55 @@
+# Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+#
+# See the LICENSE.txt file in the Gmsh root directory for license information.
+# Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+set(SRC
+  alphaShapes.cpp
+  Generator.cpp
+  meshGEdge.cpp
+    meshGEdgeExtruded.cpp
+  meshGFace.cpp
+  meshGFacePack.cpp
+    meshGFaceTransfinite.cpp meshGFaceExtruded.cpp
+    meshGFaceBamg.cpp meshGFaceBDS.cpp meshGFaceDelaunay.cpp
+    meshGFaceDelaunayFlat.cpp meshGFaceOptimize.cpp
+    meshGFaceBipartiteLabelling.cpp
+    meshGFaceOrient.cpp meshGFaceQuadHalf.cpp meshGFaceCopy.cpp
+    meshGFaceDirections.cpp meshGFaceBoundaryLayer.cpp
+    meshGFaceParamBoundary.cpp
+  meshGRegion.cpp
+    meshGRegionBoundaryRecovery.cpp
+    meshGRegionHxt.cpp meshGRegionNetgen.cpp
+    meshGRegionParallelDelaunay.cpp meshGRegionParallelOptimize.cpp
+    meshGRegionDelaunay.cpp meshGRegionTet4.cpp
+    meshGRegionDelaunayFlat.cpp meshGRegionOptimize.cpp meshGRegionOptimizeFlat.cpp meshGRegionAdapt.cpp
+    meshGRegionTransfinite.cpp
+    meshGRegionExtruded.cpp meshGRegionCarveHole.cpp
+    meshGRegionLocalMeshMod.cpp meshGRegionMMG.cpp
+  meshGRegionBoundaryLayer.cpp
+  meshQuantize2.cpp
+  meshRelocateVertex.cpp
+  meshUntangling.cpp
+  meshRenumber.cpp
+  meshTriangulation.cpp
+  meshMetric.cpp
+  meshMesquite.cpp
+  BackgroundMesh.cpp BackgroundMeshTools.cpp
+  qualityMeasures.cpp qualityMeasuresJacobian.cpp
+  BoundaryLayers.cpp
+  BDS.cpp
+  HighOrder.cpp
+  meshPartition.cpp
+  meshRefine.cpp
+  DivideAndConquer.cpp
+  Field.cpp
+  filterElements.cpp
+  gmshCrossFields.cpp
+  meshQuadQuasiStructured.cpp
+  meshOctreeLibOL.cpp
+  meshCombine3D.cpp
+  meshDuplicateVertices.cpp
+ )
+
+file(GLOB HDR RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.h)
+append_gmsh_src(src/mesh "${SRC};${HDR}")

@@ -1,0 +1,20 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef SIMPLE_PARTITION_H
+#define SIMPLE_PARTITION_H
+
+#include "Plugin.h"
+
+class GMSH_SimplePartitionPlugin : public GMSH_MeshPlugin {
+public:
+  GMSH_SimplePartitionPlugin();
+  std::string getName() const { return "SimplePartition"; }
+  std::string getShortHelp() const { return "Simple mesh partitioner"; }
+  std::string getHelp() const;
+  int run();
+};
+
+#endif

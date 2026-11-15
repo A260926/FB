@@ -1,0 +1,159 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include <stdlib.h>
+#include "GmshGlobal.h"
+#include "GModel.h"
+#include "MTriangle.h"
+#include "Numeric.h"
+#include "Bubbles.h"
+#include "OS.h"
+
+GMSH_BubblesPlugin::GMSH_BubblesPlugin()
+  : GMSH_PostPlugin(
+      {
+        {GMSH_FULLRC, "ShrinkFactor", nullptr, 0., ""},
+      },
+      {{GMSH_FULLRC, "OutputFile", nullptr, "bubbles.geo", ""}})
+{
+}
+
+std::string GMSH_BubblesPlugin::getHelp() const
+{
+  return "Plugin(Bubbles) constructs a geometry consisting of "
+         "`bubbles' inscribed in the Voronoi of an input triangulation. "
+         "`ShrinkFactor' changes the size of the bubbles. "
+         "The plugin expects a triangulation in the `z = 0' plane to exist "
+         "in the current model.\n\n"
+         "Plugin(Bubbles) creates one `.geo' file.";
+}
+
+static double myangle(double c[3], double p[3])
+{
+  double v[3] = {1, 0, 0};
+  double n[3] = {0, 0, 1};
+  if(fabs(c[0] - p[0]) < 1e-12 && fabs(c[1] - p[1]) < 1e-12 &&
+     fabs(c[2] - p[2]) < 1e-12)
+    return 0.;
+  return angle_plan(c, v, p, n);
+}
+
+class compareAngle {
+private:
+  SPoint3 v;
+
+public:
+  compareAngle(const SPoint3 &vv) : v(vv) {}
+  bool operator()(const SPoint3 &b1, const SPoint3 &b2)
+  {
+    double p1[3] = {b1.x(), b1.y(), b1.z()};
+    double p2[3] = {b2.x(), b2.y(), b2.z()};
+    double c[3] = {v.x(), v.y(), v.z()};
+
+    return myangle(c, p1) < myangle(c, p2);
+  }
+};
+
+PView *GMSH_BubblesPlugin::execute(PView *v)
+{
+  double shrink = (double)option(0);
+  std::string fileName = optionStr(0);
+
+  FILE *fp = Fopen(fileName.c_str(), "w");
+  if(!fp) {
+    Msg::Error("Could not open output file '%s'", fileName.c_str());
+    return v;
+  }
+
+  GModel *m = GModel::current();
+
+  int p = m->getMaxElementaryNumber(0) + 1;
+  int l = m->getMaxElementaryNumber(1) + 1;
+  int s = m->getMaxElementaryNumber(2) + 1;
+  int ll = s, ps = 1;
+
+  SBoundingBox3d bbox = m->bounds();
+  double lc = norm(SVector3(bbox.max(), bbox.min())) / 100;
+  fprintf(fp, "lc = %g;\n", lc);
+
+  for(auto vit = m->firstVertex(); vit != m->lastVertex(); vit++)
+    (*vit)->writeGEO(fp, "lc");
+
+  for(auto eit = m->firstEdge(); eit != m->lastEdge(); eit++)
+    (*eit)->writeGEO(fp);
+
+  for(auto fit = m->firstFace(); fit != m->lastFace(); fit++) {
+    // the cells are cut out of a plane surface written as .geo
+    if((*fit)->geomType() != GEntity::Plane) {
+      Msg::Warning("Plugin(Bubbles) skips surface %d, which is not a plane",
+                   (*fit)->tag());
+      continue;
+    }
+    (*fit)->writeGEO(fp);
+    fprintf(fp, "Delete { Surface {%d}; }\n", (*fit)->tag());
+
+    int sbeg = s;
+    int llbeg = ll;
+
+    // compute vertex-to-triangle_barycenter map, in the order of the node
+    // tags for the output not to depend on where the nodes are in memory
+    std::map<MVertex *, std::vector<SPoint3>, MVertexPtrLessThan> v2t;
+    for(std::size_t i = 0; i < (*fit)->triangles.size(); i++)
+      for(int j = 0; j < 3; j++)
+        v2t[(*fit)->triangles[i]->getVertex(j)].push_back(
+          (*fit)->triangles[i]->barycenter());
+
+    // add boundary vertices in map to get cells "closer" to the boundary
+    for(auto it = v2t.begin(); it != v2t.end(); it++) {
+      MVertex *v = it->first;
+      if(v->onWhat() && v->onWhat()->dim() < 2)
+        it->second.push_back(
+          SPoint3(it->first->x(), it->first->y(), it->first->z()));
+    }
+
+    for(auto it = v2t.begin(); it != v2t.end(); it++) {
+      if(it->second.size() > 2) {
+        // get barycenter of cell boundary points and order them
+        SPoint3 bc;
+        for(std::size_t i = 0; i < it->second.size(); i++) bc += it->second[i];
+        bc *= 1. / (double)it->second.size();
+        compareAngle comp(bc);
+        std::sort(it->second.begin(), it->second.end(), comp);
+        // shrink cells
+        if(shrink) {
+          for(std::size_t i = 0; i < it->second.size(); i++) {
+            double dir[3] = {it->second[i].x() - bc.x(),
+                             it->second[i].y() - bc.y(),
+                             it->second[i].z() - bc.z()};
+            it->second[i][0] -= shrink * dir[0];
+            it->second[i][1] -= shrink * dir[1];
+            it->second[i][2] -= shrink * dir[2];
+          }
+        }
+        // create b-spline bounded surface for each cell
+        int nump = it->second.size();
+        for(int i = 0; i < nump; i++) {
+          SPoint3 &b(it->second[i]);
+          fprintf(fp, "Point(%d) = {%.16g, %.16g, %.16g, lc};\n", p++, b.x(),
+                  b.y(), b.z());
+        }
+        fprintf(fp, "BSpline(%d) = {", l++);
+        for(int i = nump - 1; i >= 0; i--) fprintf(fp, "%d,", p - i - 1);
+        fprintf(fp, "%d};\n", p - nump);
+        fprintf(fp, "Curve Loop(%d) = {%d};\n", ll++, l - 1);
+        fprintf(fp, "Plane Surface(%d) = {%d};\n", s++, ll - 1);
+      }
+    }
+    fprintf(fp, "Physical Surface(%d) = {%d:%d};\n", ps++, sbeg, s - 1);
+
+    fprintf(fp, "Plane Surface(%d) = {%d, %d:%d};\n", s++, (*fit)->tag(), llbeg,
+            ll - 1);
+    fprintf(fp, "Physical Surface(%d) = {%d};\n", ps++, s - 1);
+  }
+
+  fclose(fp);
+
+  return v;
+}

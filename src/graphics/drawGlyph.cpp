@@ -1,0 +1,969 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include <string.h>
+#include "drawContext.h"
+#include "glMatrix.h"
+#include "glShader.h"
+#include "GmshDefines.h"
+#include "Numeric.h"
+#include "StringUtils.h"
+#include "Context.h"
+#include "gl2ps.h"
+#include "SVector3.h"
+#include "glyphList.h"
+#include "GModel.h"
+#include <vector>
+#include <cmath>
+
+namespace {
+  // the glyph shapes as triangles (a core profile has neither GLU quadrics
+  // nor display lists)
+  class Tessellation {
+  public:
+    std::vector<float> pos, nrm;
+    void clear()
+    {
+      pos.clear();
+      nrm.clear();
+    }
+    bool empty() const { return pos.empty(); }
+    void add(double px, double py, double pz, double nx, double ny, double nz)
+    {
+      pos.push_back((float)px);
+      pos.push_back((float)py);
+      pos.push_back((float)pz);
+      nrm.push_back((float)nx);
+      nrm.push_back((float)ny);
+      nrm.push_back((float)nz);
+    }
+    // the side of a cone or a cylinder from z0 to z1, as gluCylinder drew it
+    void side(double r0, double r1, double z0, double z1, int n)
+    {
+      if(z1 == z0 || n < 3) return;
+      double nz = (r0 - r1) / (z1 - z0);
+      double len = std::sqrt(1. + nz * nz);
+      for(int i = 0; i < n; i++) {
+        double a0 = 2. * M_PI * i / n, a1 = 2. * M_PI * (i + 1) / n;
+        double c0 = cos(a0), s0 = sin(a0), c1 = cos(a1), s1 = sin(a1);
+        double n0x = c0 / len, n0y = s0 / len, n1x = c1 / len, n1y = s1 / len;
+        double nzz = nz / len;
+        add(r0 * c0, r0 * s0, z0, n0x, n0y, nzz);
+        add(r0 * c1, r0 * s1, z0, n1x, n1y, nzz);
+        add(r1 * c1, r1 * s1, z1, n1x, n1y, nzz);
+        // a zero far radius closes on a point: the second triangle is
+        // degenerate
+        if(r1 != 0.) {
+          add(r0 * c0, r0 * s0, z0, n0x, n0y, nzz);
+          add(r1 * c1, r1 * s1, z1, n1x, n1y, nzz);
+          add(r1 * c0, r1 * s0, z1, n0x, n0y, nzz);
+        }
+      }
+    }
+    // a disk or an annulus in the plane z, as gluDisk drew it (normal +z)
+    void disk(double rInner, double rOuter, double z, int n)
+    {
+      if(rOuter <= 0. || rOuter == rInner || n < 3) return;
+      for(int i = 0; i < n; i++) {
+        double a0 = 2. * M_PI * i / n, a1 = 2. * M_PI * (i + 1) / n;
+        double c0 = cos(a0), s0 = sin(a0), c1 = cos(a1), s1 = sin(a1);
+        add(rInner * c0, rInner * s0, z, 0., 0., 1.);
+        add(rOuter * c0, rOuter * s0, z, 0., 0., 1.);
+        add(rOuter * c1, rOuter * s1, z, 0., 0., 1.);
+        if(rInner != 0.) {
+          add(rInner * c0, rInner * s0, z, 0., 0., 1.);
+          add(rOuter * c1, rOuter * s1, z, 0., 0., 1.);
+          add(rInner * c1, rInner * s1, z, 0., 0., 1.);
+        }
+      }
+    }
+    // a sphere of radius r in slices and stacks, as gluSphere drew it
+    void sphere(double r, int slices, int stacks)
+    {
+      if(slices < 3 || stacks < 2) return;
+      for(int i = 0; i < stacks; i++) {
+        double t0 = M_PI * i / stacks - M_PI / 2.;
+        double t1 = M_PI * (i + 1) / stacks - M_PI / 2.;
+        double z0 = sin(t0), z1 = sin(t1);
+        double r0 = cos(t0), r1 = cos(t1);
+        for(int j = 0; j < slices; j++) {
+          double a0 = 2. * M_PI * j / slices, a1 = 2. * M_PI * (j + 1) / slices;
+          double c0 = cos(a0), s0 = sin(a0), c1 = cos(a1), s1 = sin(a1);
+          double p[4][3] = {{r0 * c0, r0 * s0, z0},
+                            {r0 * c1, r0 * s1, z0},
+                            {r1 * c1, r1 * s1, z1},
+                            {r1 * c0, r1 * s0, z1}};
+          const int idx[6] = {0, 1, 2, 0, 2, 3};
+          for(int k = 0; k < 6; k++) {
+            const double *q = p[idx[k]];
+            add(r * q[0], r * q[1], r * q[2], q[0], q[1], q[2]);
+          }
+        }
+      }
+    }
+  };
+
+  // the normal matrix: the inverse transpose of the rotation and scaling
+  // part of the transform
+  void normalMatrix(const double m[16], double n[9])
+  {
+    double a[9] = {m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]};
+    double c[9], det = glMatrix::cofactors(a, c), id = det ? 1. / det : 0.;
+    for(int i = 0; i < 9; i++) n[i] = (det != 0.) ? c[i] * id : a[i];
+  }
+
+  // hand a tessellation over, transformed
+  void emit(const Tessellation &t, const double m[16])
+  {
+    if(t.empty()) return;
+    double n[9];
+    normalMatrix(m, n);
+    gmshBegin(GL_TRIANGLES);
+    std::size_t num = t.pos.size() / 3;
+    for(std::size_t i = 0; i < num; i++) {
+      const float *p = &t.pos[3 * i];
+      const float *q = &t.nrm[3 * i];
+      // the normals must be unit length: the transform carries the size of
+      // the glyph, so the inverse transpose scales them by its reciprocal
+      double nx = n[0] * q[0] + n[3] * q[1] + n[6] * q[2];
+      double ny = n[1] * q[0] + n[4] * q[1] + n[7] * q[2];
+      double nz = n[2] * q[0] + n[5] * q[1] + n[8] * q[2];
+      double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+      if(len > 0.) {
+        nx /= len;
+        ny /= len;
+        nz /= len;
+      }
+      gmshNormal3d(nx, ny, nz);
+      gmshVertex3d(m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+                   m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+                   m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]);
+    }
+    gmshEnd();
+  }
+
+  // bumped whenever the templates of a window are built again (what was
+  // expanded from them is then out of date)
+  int templatesVersion = 0;
+
+  // the shapes that only depend on the subdivision count, built once and
+  // indexed by glyph kind
+  class Templates {
+  public:
+    Tessellation shape[GLYPH_NUMKINDS];
+    // the normals encoded as a vertex array stores them, so that they are
+    // not encoded again for every glyph
+    std::vector<normal_type> normals[GLYPH_NUMKINDS];
+    int subdivisions;
+    double headRadius, stemRadius, stemLength;
+    Templates()
+      : subdivisions(0), headRadius(-1.), stemRadius(-1.), stemLength(-1.)
+    {
+    }
+    void update()
+    {
+      int n = CTX::instance()->quadricSubdivisions;
+      if(n < 3) n = 3;
+      if(n == subdivisions &&
+         headRadius == CTX::instance()->arrowRelHeadRadius &&
+         stemRadius == CTX::instance()->arrowRelStemRadius &&
+         stemLength == CTX::instance()->arrowRelStemLength)
+        return;
+      subdivisions = n;
+      templatesVersion++;
+      headRadius = CTX::instance()->arrowRelHeadRadius;
+      stemRadius = CTX::instance()->arrowRelStemRadius;
+      stemLength = CTX::instance()->arrowRelStemLength;
+
+      Tessellation &arrow = shape[GLYPH_ARROW];
+      arrow.clear();
+      if(headRadius > 0. && stemLength < 1.)
+        arrow.side(headRadius, 0., stemLength, 1., n);
+      if(headRadius > stemRadius)
+        arrow.disk(stemRadius, headRadius, stemLength, n);
+      else
+        arrow.disk(headRadius, stemRadius, stemLength, n);
+      if(stemRadius > 0. && stemLength > 0.) {
+        arrow.side(stemRadius, stemRadius, 0., stemLength, n);
+        arrow.disk(0., stemRadius, 0., n);
+      }
+
+      shape[GLYPH_SPHERE].clear();
+      shape[GLYPH_SPHERE].sphere(1., n, n);
+      // a few more subdivisions for the markers, whose outline shows its
+      // facets at their size
+      shape[GLYPH_MARKER].clear();
+      shape[GLYPH_MARKER].sphere(1., n + 4, n + 4);
+
+      shape[GLYPH_DISK].clear();
+      shape[GLYPH_DISK].disk(0., 1., 0., n);
+
+      // the unit cylinder: its corners carry the cosine and sine of their
+      // angle, from which the radii of a glyph are applied when expanded
+      shape[GLYPH_CYLINDER].clear();
+      shape[GLYPH_CYLINDER].side(1., 1., 0., 1., n);
+
+      for(int k = 0; k < GLYPH_NUMKINDS; k++) {
+        normals[k].resize(shape[k].nrm.size());
+        for(std::size_t i = 0; i < shape[k].nrm.size(); i++)
+          normals[k][i] = float2char(shape[k].nrm[i]);
+      }
+    }
+  };
+  Templates _tmpl;
+} // namespace
+
+// moves the anchor (x, y) of something w wide and h high according to the
+// alignment: 0-2 bottom, 3-5 top, 6-8 center; in each row left, center, right
+static void alignOffset(int align, double w, double h, double &x, double &y)
+{
+  if(align < 0 || align > 8) return;
+  const double down[3] = {0., 1., 0.5};
+  x -= (align % 3) * w / 2.;
+  y -= down[align / 3] * h;
+}
+
+void drawContext::drawString(const std::string &s, double x, double y, double z,
+                             const std::string &font_name, int font_enum,
+                             int font_size, int align, int line_num)
+{
+  if(s.empty() || shadowPass) return;
+  if(CTX::instance()->printing && !CTX::instance()->print.text) return;
+
+  // A pick pass draws no text at all, so that a label never hides what is
+  // behind it from a click. It would not be read reliably anyway: an engine
+  // that collects the strings of a frame to draw them at its end left them
+  // for the *next* frame, which then painted what the pass saw over the
+  // picture, the labels of a view hidden in between among them.
+  if(render_mode == GMSH_SELECT) return;
+
+  // a string anchored beyond one of the clipping planes in force goes with
+  // what it names: the quads a string is drawn as live in window
+  // coordinates, where the planes mean nothing, so they are not clipped
+  for(int i = 0; i < 6; i++) {
+    if(!gmshClipPlaneEnabled(i)) continue;
+    const double *p = CTX::instance()->clipPlane[i];
+    if(p[0] * x + p[1] * y + p[2] * z + p[3] < 0.) return;
+  }
+
+  if(s.size() > 8 && s.substr(0, 7) == "file://") {
+    drawImage(s.substr(7), x, y, z, align);
+    return;
+  }
+
+  // where the string goes in window coordinates (a core profile has no
+  // raster position); culled like an invalid raster position when its anchor
+  // is outside the view
+  double xyz[3] = {x, y, z}, w[3];
+  world2Viewport(xyz, w);
+  // in true pixels, as world2Viewport works (drawContext's viewport is in
+  // toolkit coordinates)
+  const int *vp = gmshViewport();
+  if(w[2] < 0. || w[2] > 1. || w[0] < vp[0] || w[0] > vp[0] + vp[2] ||
+     w[1] < vp[1] || w[1] > vp[1] + vp[3])
+    return; // the primitive is culled
+
+  bool moved = (align > 0 || line_num);
+  if(moved) {
+    drawContext::global()->setFont(font_enum, font_size);
+    double width = drawContext::global()->getStringWidth(s.c_str());
+    double height = drawContext::global()->getStringHeight();
+    // width and height must here be computed in true pixel coordinates, because
+    // viewport2world uses the actual, pixel-sized (not FLTK-sized) viewport
+    width *= highResolutionPixelFactor();
+    height *= highResolutionPixelFactor();
+    // alignment for TeX is handled directly by gl2ps
+    if(!CTX::instance()->printing ||
+       CTX::instance()->print.fileFormat != FORMAT_TEX) {
+      alignOffset(align, width, height, w[0], w[1]);
+    }
+    // treat line number also for TeX
+    if(line_num) w[1] -= line_num * (1.1 * height);
+  }
+
+  // The raster position is only used by the native font engine and by
+  // gl2ps; the other engines get the position through win. It is skipped
+  // under the shader pipeline, which uses neither (the native engine is
+  // never picked there, see opt_general_graphics_font_engine, and the files
+  // of gl2ps are written with the fixed function pipeline), as computing it
+  // there crashes some drivers (Mesa/llvmpipe) on gl_VertexID. Only
+  // recomputed when the alignment moved the string.
+  if(!glShader::enabled()) {
+    if(moved) {
+      double where[3];
+      viewport2World(w, where);
+      glRasterPos3d(where[0], where[1], where[2]);
+    }
+    else {
+      glRasterPos3d(x, y, z);
+    }
+  }
+
+  if(!CTX::instance()->printing) {
+    drawContext::global()->setFont(font_enum, font_size);
+    drawContext::global()->drawString(s.c_str(), w);
+  }
+  else {
+    if(CTX::instance()->print.fileFormat == FORMAT_TEX) {
+      std::string tmp =
+        SanitizeTeXString(s.c_str(), CTX::instance()->print.texAsEquation);
+      int opt;
+      switch(align) {
+      case 1:
+        opt = GL2PS_TEXT_B;
+        break; // bottom center
+      case 2:
+        opt = GL2PS_TEXT_BR;
+        break; // bottom right
+      case 3:
+        opt = GL2PS_TEXT_TL;
+        break; // top left
+      case 4:
+        opt = GL2PS_TEXT_T;
+        break; // top center
+      case 5:
+        opt = GL2PS_TEXT_TR;
+        break; // top right
+      case 6:
+        opt = GL2PS_TEXT_CL;
+        break; // center left
+      case 7:
+        opt = GL2PS_TEXT_C;
+        break; // center center
+      case 8:
+        opt = GL2PS_TEXT_CR;
+        break; // center right
+      default:
+        opt = GL2PS_TEXT_BL;
+        break; // bottom left
+      }
+      // the vector picture is the viewport in pixels: the font follows the
+      // pixel factor like everything else sized in the window's units
+      gl2psTextOpt(tmp.c_str(), font_name.c_str(),
+                   (int)(font_size * highResolutionPixelFactor() + 0.5), opt,
+                   0.);
+    }
+    else if(CTX::instance()->print.epsQuality &&
+            (CTX::instance()->print.fileFormat == FORMAT_PS ||
+             CTX::instance()->print.fileFormat == FORMAT_EPS ||
+             CTX::instance()->print.fileFormat == FORMAT_PDF ||
+             CTX::instance()->print.fileFormat == FORMAT_SVG ||
+             CTX::instance()->print.fileFormat == FORMAT_TIKZ)) {
+      gl2psText(s.c_str(), font_name.c_str(),
+                (int)(font_size * highResolutionPixelFactor() + 0.5));
+    }
+    else {
+      drawContext::global()->setFont(font_enum, font_size);
+      drawContext::global()->drawString(s.c_str(), w);
+    }
+  }
+}
+
+void drawContext::drawString(const std::string &s, double x, double y, double z,
+                             int line_num)
+{
+  drawString(s, x, y, z, CTX::instance()->glFont, CTX::instance()->glFontEnum,
+             CTX::instance()->glFontSize, 0, line_num);
+}
+
+void drawContext::drawStringCenter(const std::string &s, double x, double y,
+                                   double z, int line_num)
+{
+  drawString(s, x, y, z, CTX::instance()->glFont, CTX::instance()->glFontEnum,
+             CTX::instance()->glFontSize, 1, line_num);
+}
+
+void drawContext::drawStringRight(const std::string &s, double x, double y,
+                                  double z, int line_num)
+{
+  drawString(s, x, y, z, CTX::instance()->glFont, CTX::instance()->glFontEnum,
+             CTX::instance()->glFontSize, 2, line_num);
+}
+
+void drawContext::drawString(const std::string &s, double x, double y, double z,
+                             double style, int line_num)
+{
+  unsigned int bits = (unsigned int)style;
+
+  if(!bits) { // use defaults
+    drawString(s, x, y, z, line_num);
+  }
+  else {
+    int size = (bits & 0xff);
+    int font = (bits >> 8 & 0xff);
+    int align = (bits >> 16 & 0xff);
+    int font_enum = drawContext::global()->getFontEnum(font);
+    std::string font_name = drawContext::global()->getFontName(font);
+    if(!size) size = CTX::instance()->glFontSize;
+    drawString(s, x, y, z, font_name, font_enum, size, align, line_num);
+  }
+}
+
+void drawContext::drawImage(const std::string &name, double x, double y,
+                            double z, int align)
+{
+  if(shadowPass) return;
+  // format can be "@wxh" or "@wxh,wx,wy,wz,hx,hy,hz", where w and h are the
+  // width and height (in model coordinates for T3 or in pixels for T2) of the
+  // image, wx,wy,wz is the direction of the bottom edge of the image and
+  // hx,hy,hz is the direction of the left edge of the image.
+  size_t p = name.find_last_of('@');
+  std::string file = name, format;
+  if(p != std::string::npos) {
+    format = name.substr(p + 1);
+    file = name.substr(0, p);
+  }
+  double w = 0., h = 0., wx = 1., wy = 0., wz = 0., hx = 0., hy = 1., hz = 0.;
+  bool billboard = false;
+  if(format.size()) {
+    bool ok;
+    if(format.find(',') != std::string::npos)
+      ok = (sscanf(format.c_str(), "%lfx%lf,%lf,%lf,%lf,%lf,%lf,%lf", &w, &h,
+                   &wx, &wy, &wz, &hx, &hy, &hz) == 8);
+    else
+      ok = (sscanf(format.c_str(), "%lfx%lf", &w, &h) == 2);
+    if(!ok)
+      Msg::Warning("Bad image format: use `@wxh' or `@wxh,wx,wy,wz,hx,hy,hz'");
+    if(format.find('#') != std::string::npos)
+      billboard = true; // texture will always face camera
+  }
+
+  // (kept under the name it was asked by, not the path it was found at)
+  bool loaded = _imageTextures.count(file);
+  imgtex *img = &_imageTextures[file];
+  if(!loaded) {
+    file = FixRelativePath(GModel::current()->getFileName(), file);
+    if(!generateTextureForImage(file, 1, img->tex, img->w, img->h)) return;
+  }
+  if(!img->tex) {
+    Msg::Debug("No texture for image - skipping image draw");
+    return;
+  }
+
+  if(w == 0 && h == 0) {
+    w = img->w;
+    h = img->h;
+  }
+  else if(h == 0) {
+    h = w * img->h / img->w;
+  }
+  else if(w == 0) {
+    w = h * img->w / img->h;
+  }
+
+  GLboolean valid = GL_TRUE;
+  int matrixMode = 0;
+  if(billboard) {
+    // where the image is pinned (a core profile has no raster position)
+    double xyz[3] = {x, y, z}, pos[3];
+    world2Viewport(xyz, pos);
+    matrixMode = gmshMatrixMode();
+    gmshMatrixMode(GMSH_PROJECTION);
+    gmshPushMatrix();
+    gmshLoadIdentity();
+    gmshMatrixMode(GMSH_MODELVIEW);
+    gmshPushMatrix();
+    gmshLoadIdentity();
+    double fact = highResolutionPixelFactor();
+    double px[16];
+    glMatrix::ortho(viewport[0], viewport[2] * fact, viewport[1],
+                    viewport[3] * fact, -1., 1., px);
+    gmshLoadMatrix(px);
+    x = pos[0];
+    y = pos[1];
+    z = 0;
+    w *= fact * s[0] / pixel_equiv_x;
+    h *= fact * s[1] / pixel_equiv_y;
+    // nothing is drawn if the anchor is behind the eye or off the window
+    // (an invalid raster position)
+    const int *vp = gmshViewport();
+    if(pos[2] < 0. || pos[2] > 1. || pos[0] < vp[0] || pos[0] > vp[0] + vp[2] ||
+       pos[1] < vp[1] || pos[1] > vp[1] + vp[3])
+      valid = GL_FALSE;
+  }
+  if(valid == GL_TRUE) {
+    alignOffset(align, w, h, x, y);
+    // the transparency pass has a blending of its own
+    bool ownBlend = !glShader::transparentPass();
+    if(ownBlend) {
+      gmshBlend(true);
+      gmshBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    gmshTexture(img->tex, GMSH_TEXTURE_IMAGE);
+    gmshBegin(GL_QUADS);
+    gmshTexCoord2f(1.0f, 1.0f);
+    gmshVertex3d(x + wx * w, y + wy * w, z + wz * w);
+    gmshTexCoord2f(1.0f, 0.0f);
+    gmshVertex3d(x + wx * w + hx * h, y + wy * w + hy * h, z + wz * w + hz * h);
+    gmshTexCoord2f(0.0f, 0.0f);
+    gmshVertex3d(x + hx * h, y + hy * h, z + hz * h);
+    gmshTexCoord2f(0.0f, 1.0f);
+    gmshVertex3d(x, y, z);
+    gmshEnd();
+    gmshTexture(0); // draws what is waiting, as the texture is going away
+    if(ownBlend) gmshBlend(false);
+  }
+  if(billboard) {
+    gmshPopMatrix();
+    gmshMatrixMode(GMSH_PROJECTION);
+    gmshPopMatrix();
+    gmshMatrixMode(matrixMode);
+  }
+}
+
+void drawContext::drawSphere(double R, double x, double y, double z, int n1,
+                             int n2, int light)
+{
+  // the caller says how finely this one is divided, so it is built here
+  Tessellation t;
+  t.sphere(R, n1, n2);
+  double m[16];
+  glMatrix::translate(x, y, z, m);
+  if(light) gmshLighting(true);
+  emit(t, m);
+  gmshLighting(false);
+}
+
+void drawContext::drawSphere(double size, double x, double y, double z,
+                             int light, bool marker)
+{
+  // size is a point size: a diameter
+  double ss = 0.5 * size * pointPixelFactor() * pixel_equiv_x / s[0];
+  double t[16], sc[16], m[16];
+  glMatrix::translate(x, y, z, t);
+  glMatrix::scale(ss, ss, ss, sc);
+  glMatrix::multiply(t, sc, m);
+  _tmpl.update();
+  if(light) gmshLighting(true);
+  emit(_tmpl.shape[marker ? GLYPH_MARKER : GLYPH_SPHERE], m);
+  gmshLighting(false);
+}
+
+void drawContext::drawCylinder(double width, double *x, double *y, double *z,
+                               int light)
+{
+  if(light) gmshLighting(true);
+
+  double dx = x[1] - x[0];
+  double dy = y[1] - y[0];
+  double dz = z[1] - z[0];
+  double const length = std::sqrt(dx * dx + dy * dy + dz * dz);
+  double radius = 0.5 * width * pointPixelFactor() * pixel_equiv_x / s[0];
+  double vdir[3] = {dx / length, dy / length, dz / length};
+
+  Tessellation t;
+  int n = CTX::instance()->quadricSubdivisions;
+  t.side(radius, radius, 0., length, (n < 3) ? 3 : n);
+  double tr[16], r[16], m[16];
+  glMatrix::translate(x[0], y[0], z[0], tr);
+  glMatrix::rotateZTo(vdir, r);
+  glMatrix::multiply(tr, r, m);
+  emit(t, m);
+
+  gmshLighting(false);
+}
+
+static void drawSimpleVector(int arrow, int fill, double x, double y, double z,
+                             double dx, double dy, double dz, double d,
+                             int light)
+{
+  double n[3], t[3], u[3];
+
+  n[0] = dx / d;
+  n[1] = dy / d;
+  n[2] = dz / d;
+
+  if((fabs(n[0]) >= fabs(n[1]) && fabs(n[0]) >= fabs(n[2])) ||
+     (fabs(n[1]) >= fabs(n[0]) && fabs(n[1]) >= fabs(n[2]))) {
+    t[0] = n[1];
+    t[1] = -n[0];
+    t[2] = 0.;
+  }
+  else {
+    t[0] = 0.;
+    t[1] = n[2];
+    t[2] = -n[1];
+  }
+
+  double l = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+  t[0] /= l;
+  t[1] /= l;
+  t[2] /= l;
+
+  u[0] = n[1] * t[2] - n[2] * t[1];
+  u[1] = n[2] * t[0] - n[0] * t[2];
+  u[2] = n[0] * t[1] - n[1] * t[0];
+
+  l = sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+  u[0] /= l;
+  u[1] /= l;
+  u[2] /= l;
+
+  double b = CTX::instance()->arrowRelHeadRadius * d;
+
+  if(arrow) {
+    double f1 = CTX::instance()->arrowRelStemLength;
+    double f2 = (1 - 2. * CTX::instance()->arrowRelStemRadius) * f1; // hack :-)
+
+    if(fill) {
+      gmshBegin(GL_LINES);
+      gmshVertex3d(x, y, z);
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+      gmshEnd();
+
+      if(light) gmshLighting(true);
+      gmshBegin(GL_TRIANGLES);
+      if(light) gmshNormal3dv(u);
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshVertex3d(x + f2 * dx + b * (t[0]), y + f2 * dy + b * (t[1]),
+                 z + f2 * dz + b * (t[2]));
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+      gmshVertex3d(x + f2 * dx + b * (-t[0]), y + f2 * dy + b * (-t[1]),
+                 z + f2 * dz + b * (-t[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+
+      if(light) gmshNormal3dv(t);
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshVertex3d(x + f2 * dx + b * (-u[0]), y + f2 * dy + b * (-u[1]),
+                 z + f2 * dz + b * (-u[2]));
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+      gmshVertex3d(x + f2 * dx + b * (u[0]), y + f2 * dy + b * (u[1]),
+                 z + f2 * dz + b * (u[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshEnd();
+      gmshLighting(false);
+    }
+    else {
+      gmshBegin(GL_LINE_STRIP);
+      gmshVertex3d(x, y, z);
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshVertex3d(x + f2 * dx + b * (t[0]), y + f2 * dy + b * (t[1]),
+                 z + f2 * dz + b * (t[2]));
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+      gmshVertex3d(x + f2 * dx + b * (-t[0]), y + f2 * dy + b * (-t[1]),
+                 z + f2 * dz + b * (-t[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshVertex3d(x + f2 * dx + b * (-u[0]), y + f2 * dy + b * (-u[1]),
+                 z + f2 * dz + b * (-u[2]));
+      gmshVertex3d(x + f1 * dx, y + f1 * dy, z + f1 * dz);
+      gmshVertex3d(x + f2 * dx + b * (u[0]), y + f2 * dy + b * (u[1]),
+                 z + f2 * dz + b * (u[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshEnd();
+    }
+  }
+  else { // simple pyramid
+    if(fill) {
+      double top[3] = {x + dx, y + dy, z + dz};
+      double tp[3] = {x + b * t[0], y + b * t[1], z + b * t[2]};
+      double tm[3] = {x - b * t[0], y - b * t[1], z - b * t[2]};
+      double up[3] = {x + b * u[0], y + b * u[1], z + b * u[2]};
+      double um[3] = {x - b * u[0], y - b * u[1], z - b * u[2]};
+      double nn[3];
+
+      if(light) gmshLighting(true);
+      gmshBegin(GL_TRIANGLES);
+      if(light) {
+        normal3points(tm[0], tm[1], tm[2], um[0], um[1], um[2], top[0], top[1],
+                      top[2], nn);
+        gmshNormal3dv(nn);
+      }
+      gmshVertex3d(tm[0], tm[1], tm[2]);
+      gmshVertex3d(um[0], um[1], um[2]);
+      gmshVertex3d(top[0], top[1], top[2]);
+
+      if(light) {
+        normal3points(um[0], um[1], um[2], tp[0], tp[1], tp[2], top[0], top[1],
+                      top[2], nn);
+        gmshNormal3dv(nn);
+      }
+      gmshVertex3d(um[0], um[1], um[2]);
+      gmshVertex3d(tp[0], tp[1], tp[2]);
+      gmshVertex3d(top[0], top[1], top[2]);
+
+      if(light) {
+        normal3points(tp[0], tp[1], tp[2], up[0], up[1], up[2], top[0], top[1],
+                      top[2], nn);
+        gmshNormal3dv(nn);
+      }
+      gmshVertex3d(tp[0], tp[1], tp[2]);
+      gmshVertex3d(up[0], up[1], up[2]);
+      gmshVertex3d(top[0], top[1], top[2]);
+
+      if(light) {
+        normal3points(up[0], up[1], up[2], tm[0], tm[1], tm[2], top[0], top[1],
+                      top[2], nn);
+        gmshNormal3dv(nn);
+      }
+      gmshVertex3d(up[0], up[1], up[2]);
+      gmshVertex3d(tm[0], tm[1], tm[2]);
+      gmshVertex3d(top[0], top[1], top[2]);
+      gmshEnd();
+      gmshLighting(false);
+    }
+    else {
+      gmshBegin(GL_LINE_LOOP);
+      gmshVertex3d(x + b * (t[0]), y + b * (t[1]), z + b * (t[2]));
+      gmshVertex3d(x + b * (-u[0]), y + b * (-u[1]), z + b * (-u[2]));
+      gmshVertex3d(x + b * (-t[0]), y + b * (-t[1]), z + b * (-t[2]));
+      gmshVertex3d(x + b * (u[0]), y + b * (u[1]), z + b * (u[2]));
+      gmshEnd();
+
+      gmshBegin(GL_LINES);
+      gmshVertex3d(x + b * (t[0]), y + b * (t[1]), z + b * (t[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+
+      gmshVertex3d(x + b * (-u[0]), y + b * (-u[1]), z + b * (-u[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+
+      gmshVertex3d(x + b * (-t[0]), y + b * (-t[1]), z + b * (-t[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+
+      gmshVertex3d(x + b * (u[0]), y + b * (u[1]), z + b * (u[2]));
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshEnd();
+    }
+  }
+}
+
+void drawContext::updateGlyphTemplates() { _tmpl.update(); }
+
+int drawContext::glyphTemplatesVersion()
+{
+  _tmpl.update();
+  return templatesVersion;
+}
+
+const float *drawContext::glyphTemplate(int kind, const float *&normals,
+                                       const normal_type *&encoded,
+                                       int &numVertices)
+{
+  const Tessellation &t = _tmpl.shape[kind];
+  numVertices = (int)(t.pos.size() / 3);
+  if(!numVertices) {
+    normals = nullptr;
+    encoded = nullptr;
+    return nullptr;
+  }
+  normals = &t.nrm[0];
+  encoded = &_tmpl.normals[kind][0];
+  return &t.pos[0];
+}
+
+void drawContext::drawArrow3d(double x, double y, double z, double dx,
+                              double dy, double dz, double length, int light)
+{
+  double vdir[3] = {dx / length, dy / length, dz / length};
+
+  _tmpl.update();
+  if(_tmpl.shape[GLYPH_ARROW].empty()) return;
+
+  // translate, then scale, then rotate, applied to the point from the right
+  double t[16], sc[16], r[16], a[16], m[16];
+  glMatrix::translate(x, y, z, t);
+  glMatrix::scale(length, length, length, sc);
+  glMatrix::rotateZTo(vdir, r);
+  glMatrix::multiply(t, sc, a);
+  glMatrix::multiply(a, r, m);
+
+  if(light) gmshLighting(true);
+  emit(_tmpl.shape[GLYPH_ARROW], m);
+  gmshLighting(false);
+}
+
+void drawContext::drawVector(int Type, int Fill, double x, double y, double z,
+                             double dx, double dy, double dz, int light)
+{
+  double length = sqrt(dx * dx + dy * dy + dz * dz);
+
+  if(length == 0.0) return;
+
+  switch(Type) {
+  case 1:
+    gmshBegin(GL_LINES);
+    gmshVertex3d(x, y, z);
+    gmshVertex3d(x + dx, y + dy, z + dz);
+    gmshEnd();
+    break;
+  case 6:
+    if(CTX::instance()->arrowRelHeadRadius) {
+      gmshBegin(GL_POINTS);
+      gmshVertex3d(x + dx, y + dy, z + dz);
+      gmshEnd();
+    }
+    gmshBegin(GL_LINES);
+    gmshVertex3d(x + dx, y + dy, z + dz);
+    // color gradient
+    gmshColor4ubv((const void *)&CTX::instance()->color.bg);
+    gmshVertex3d(x, y, z);
+    gmshEnd();
+    break;
+  case 2: drawSimpleVector(1, Fill, x, y, z, dx, dy, dz, length, light); break;
+  case 3: drawSimpleVector(0, Fill, x, y, z, dx, dy, dz, length, light); break;
+  case 4:
+  default: drawArrow3d(x, y, z, dx, dy, dz, length, light); break;
+  }
+}
+
+namespace {
+class point {
+public:
+  double x, y, z;
+  bool valid;
+  point() : x(0.), y(0.), z(0.), valid(false) {}
+  point(double xi, double yi, double zi) : x(xi), y(yi), z(zi), valid(true) {}
+};
+
+class plane {
+private:
+  double _a, _b, _c, _d;
+
+public:
+  plane(double a, double b, double c, double d) : _a(a), _b(b), _c(c), _d(d) {}
+  double val(point &p) { return _a * p.x + _b * p.y + _c * p.z + _d; };
+  point intersect(point &p1, point &p2)
+  {
+    double v1 = val(p1), v2 = val(p2);
+    if(fabs(v1) < 1.e-12) {
+      if(fabs(v2) < 1.e-12)
+        return point();
+      else
+        return point(p1.x, p1.y, p1.z);
+    }
+    else if(fabs(v2) < 1.e-12) {
+      return point(p2.x, p2.y, p2.z);
+    }
+    else if(v1 * v2 < 0.) {
+      double coef = -v1 / (v2 - v1);
+      return point(coef * (p2.x - p1.x) + p1.x, coef * (p2.y - p1.y) + p1.y,
+                   coef * (p2.z - p1.z) + p1.z);
+    }
+    else
+      return point();
+  }
+};
+}
+
+void drawContext::drawBox(double xmin, double ymin, double zmin, double xmax,
+                          double ymax, double zmax, bool labels)
+{
+  gmshBegin(GL_LINE_LOOP);
+  gmshVertex3d(xmin, ymin, zmin);
+  gmshVertex3d(xmax, ymin, zmin);
+  gmshVertex3d(xmax, ymax, zmin);
+  gmshVertex3d(xmin, ymax, zmin);
+  gmshEnd();
+  gmshBegin(GL_LINE_LOOP);
+  gmshVertex3d(xmin, ymin, zmax);
+  gmshVertex3d(xmax, ymin, zmax);
+  gmshVertex3d(xmax, ymax, zmax);
+  gmshVertex3d(xmin, ymax, zmax);
+  gmshEnd();
+  gmshBegin(GL_LINES);
+  gmshVertex3d(xmin, ymin, zmin);
+  gmshVertex3d(xmin, ymin, zmax);
+  gmshVertex3d(xmax, ymin, zmin);
+  gmshVertex3d(xmax, ymin, zmax);
+  gmshVertex3d(xmax, ymax, zmin);
+  gmshVertex3d(xmax, ymax, zmax);
+  gmshVertex3d(xmin, ymax, zmin);
+  gmshVertex3d(xmin, ymax, zmax);
+  gmshEnd();
+  if(labels) {
+    char label[256];
+    double offset = 0.3 * CTX::instance()->glFontSize * pixel_equiv_x;
+    snprintf(label, sizeof(label), "(%g,%g,%g)", xmin, ymin, zmin);
+    drawString(label, xmin + offset / s[0], ymin + offset / s[1],
+               zmin + offset / s[2]);
+    snprintf(label, sizeof(label), "(%g,%g,%g)", xmax, ymax, zmax);
+    drawString(label, xmax + offset / s[0], ymax + offset / s[1],
+               zmax + offset / s[2]);
+  }
+}
+
+void drawContext::drawPlaneInBoundingBox(double xmin, double ymin, double zmin,
+                                         double xmax, double ymax, double zmax,
+                                         double a, double b, double c, double d,
+                                         int shade)
+{
+  plane pl(a, b, c, d);
+  point p1(xmin, ymin, zmin), p2(xmax, ymin, zmin);
+  point p3(xmax, ymax, zmin), p4(xmin, ymax, zmin);
+  point p5(xmin, ymin, zmax), p6(xmax, ymin, zmax);
+  point p7(xmax, ymax, zmax), p8(xmin, ymax, zmax);
+
+  point edge[12];
+  edge[0] = pl.intersect(p1, p2);
+  edge[1] = pl.intersect(p1, p4);
+  edge[2] = pl.intersect(p1, p5);
+  edge[3] = pl.intersect(p2, p3);
+  edge[4] = pl.intersect(p2, p6);
+  edge[5] = pl.intersect(p3, p4);
+  edge[6] = pl.intersect(p3, p7);
+  edge[7] = pl.intersect(p4, p8);
+  edge[8] = pl.intersect(p5, p6);
+  edge[9] = pl.intersect(p5, p8);
+  edge[10] = pl.intersect(p6, p7);
+  edge[11] = pl.intersect(p7, p8);
+
+  int face[6][4] = {{0, 2, 4, 8},  {0, 1, 3, 5},  {1, 2, 7, 9},
+                    {3, 4, 6, 10}, {5, 6, 7, 11}, {8, 9, 10, 11}};
+
+  double n[3] = {a, b, c}, ll = 50;
+  norme(n);
+  if(CTX::instance()->arrowRelStemRadius)
+    ll = CTX::instance()->lineWidth / CTX::instance()->arrowRelStemRadius;
+  n[0] *= ll * pixel_equiv_x / s[0];
+  n[1] *= ll * pixel_equiv_x / s[1];
+  n[2] *= ll * pixel_equiv_x / s[2];
+  double length = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+  int n_shade = 0;
+  point p_shade[24];
+
+  for(int i = 0; i < 6; i++) {
+    int nb = 0;
+    point p[4];
+    for(int j = 0; j < 4; j++) {
+      if(edge[face[i][j]].valid == true) p[nb++] = edge[face[i][j]];
+    }
+    if(nb > 1) {
+      for(int j = 1; j < nb; j++) {
+        double xx[2] = {p[j].x, p[j - 1].x};
+        double yy[2] = {p[j].y, p[j - 1].y};
+        double zz[2] = {p[j].z, p[j - 1].z};
+        drawCylinder(CTX::instance()->lineWidth, xx, yy, zz, 1);
+      }
+      for(int j = 0; j < nb; j++) {
+        drawArrow3d(p[j].x, p[j].y, p[j].z, n[0], n[1], n[2], length, 1);
+        if(shade) {
+          p_shade[n_shade].x = p[j].x;
+          p_shade[n_shade].y = p[j].y;
+          p_shade[n_shade].z = p[j].z;
+          n_shade++;
+        }
+      }
+    }
+  }
+
+  if(shade) {
+    // disable two-side lighting beacuse polygon can overlap itself
+    bool twoside = gmshLightTwoSideEnabled();
+    gmshLightTwoSide(false);
+    gmshLighting(true);
+    gmshBegin(GL_POLYGON);
+    gmshNormal3d(n[0], n[1], n[2]);
+    for(int j = 0; j < n_shade; j++) {
+      gmshVertex3d(p_shade[j].x, p_shade[j].y, p_shade[j].z);
+    }
+    gmshEnd();
+    gmshLighting(false);
+    gmshLightTwoSide(twoside);
+  }
+}

@@ -1,0 +1,412 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+//
+// Contributor(s):
+//   Stephen Guzik
+//   Anthony Royer
+//
+
+#include <algorithm>
+#include <limits>
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Value_Input.H>
+#include <FL/Fl_Toggle_Button.H>
+#include <FL/Fl_Check_Button.H>
+#include <FL/Fl_Return_Button.H>
+#include <FL/Fl_Group.H>
+#include <FL/Fl_Box.H>
+#include "GmshConfig.h"
+#include "FlGui.h"
+#include "paletteWindow.h"
+#include "GModel.h"
+#include "drawContext.h"
+#include "Options.h"
+#include "Context.h"
+#include "partitionDialog.h"
+
+#if defined(HAVE_MESH) && defined(HAVE_METIS)
+
+#include "meshPartition.h"
+
+// Forward declarations of some callbacks
+void partition_defaults_cb(Fl_Widget *widget, void *data);
+void partition_partition_cb(Fl_Widget *widget, void *data);
+void partition_cancel_cb(Fl_Widget *widget, void *data);
+void partition_select_groups_cb(Fl_Widget *widget, void *data);
+
+// the weights of the elements for the load balancing, as laid out
+static const struct {
+  const char *label, *option;
+} weights[6] = {
+  {"Triangle", "PartitionTriWeight"},   {"Tetrahedron", "PartitionTetWeight"},
+  {"Prism", "PartitionPrismWeight"},    {"Quadrangle", "PartitionQuadWeight"},
+  {"Hexahedron", "PartitionHexWeight"}, {"Pyramid", "PartitionPyramidWeight"}};
+
+// the item of the Metis algorithm shown for an option value: Multithreaded
+// k-way (3) is shown as K-way without mt-metis
+static int metisItem(Fl_Choice *c, int algorithm)
+{ return std::max(0, std::min(algorithm, c->size() - 1) - 1); }
+
+void partitionWindow::write_all_options()
+{
+  // Group 0
+  CTX::instance()->mesh.numPartitions =
+    static_cast<int>(inputNumPartition->value());
+  CTX::instance()->mesh.partitionCreateGhostCells = setGhostCells->value();
+  CTX::instance()->mesh.partitionCreateTopology = setTopology->value();
+  CTX::instance()->mesh.partitionCreatePhysicals = setPhysical->value();
+
+  // Group 1: the algorithm kept if its item was not changed
+  if(choiceMetisAlg->value() !=
+     metisItem(choiceMetisAlg, CTX::instance()->mesh.metisAlgorithm))
+    CTX::instance()->mesh.metisAlgorithm = choiceMetisAlg->value() + 1;
+
+  // Group 2
+  CTX::instance()->mesh.metisEdgeMatching = choiceEdgeMatch->value() + 1;
+  CTX::instance()->mesh.metisRefinementAlgorithm = choiceRefineAlg->value() + 1;
+
+  for(int i = 0; i < 6; i++) {
+    double v = (int)inputWeight[i]->value();
+    NumberOption(GMSH_SET, "Mesh", 0, weights[i].option, v);
+  }
+}
+
+void partitionWindow::read_all_options(bool defaults)
+{
+  // the value of the option, or its default
+  auto value = [defaults](const char *name) {
+    double v = 0.;
+    NumberOption(defaults ? GMSH_GET_DEFAULT : GMSH_GET, "Mesh", 0, name, v);
+    return v;
+  };
+
+  // Group 0
+  inputNumPartition->value(value("NbPartitions"));
+  setGhostCells->value((int)value("PartitionCreateGhostCells"));
+  setTopology->value((int)value("PartitionCreateTopology"));
+  setPhysical->value((int)value("PartitionCreatePhysicals"));
+
+  // Group 1
+  choiceMetisAlg->value(
+    metisItem(choiceMetisAlg, (int)value("MetisAlgorithm")));
+
+  // Group 2
+  choiceEdgeMatch->value((int)value("MetisEdgeMatching") - 1);
+  choiceRefineAlg->value((int)value("MetisRefinementAlgorithm") - 1);
+
+  for(int i = 0; i < 6; i++) inputWeight[i]->value(value(weights[i].option));
+}
+
+void partition_defaults_cb(Fl_Widget *widget, void *data)
+{
+  // the defaults shown, applied by Partition
+  partitionWindow *dlg = static_cast<partitionWindow *>(data);
+  dlg->read_all_options(true);
+  partition_select_groups_cb(dlg->choicePartitioner, data);
+}
+
+void partition_partition_cb(Fl_Widget *widget, void *data)
+{
+  partitionWindow *dlg = static_cast<partitionWindow *>(data);
+
+  // not during another operation on the model (nothing written then)
+  int ier;
+  {
+    modelLock lock(modelLock::ifFree);
+    if(!lock) return;
+    // Write all options, then partition the mesh
+    dlg->write_all_options();
+    ier = GModel::current()->partitionMesh(CTX::instance()->mesh.numPartitions);
+  }
+
+  // Update the screen, if still there
+  if(!FlGui::available()) return;
+  if(!ier) {
+    opt_mesh_zone_definition(0, GMSH_SET, 2.); // Define zone by partition
+    opt_mesh_color_carousel(0, GMSH_SET | GMSH_GUI, 3.);
+    CTX::instance()->meshChanged();
+    FlGui::instance()->resetVisibility();
+    drawContext::global()->draw();
+  }
+}
+
+void partition_cancel_cb(Fl_Widget *widget, void *data)
+{
+  // only hidden: the window is built once
+  partitionWindow *dlg = static_cast<partitionWindow *>(data);
+  dlg->win->hide();
+}
+
+// Select groups to display
+void partition_select_groups_cb(Fl_Widget *widget, void *data)
+{
+  partitionWindow *dlg = static_cast<partitionWindow *>(data);
+  // If this callback was made by the "Advanced" toggle buttons, set the label
+
+  if(dlg->toggleButtonAdvMetis == widget) {
+    dlg->toggleButtonAdvMetis->label((dlg->toggleButtonAdvMetis->value()) ?
+                                       "Advanced @-28->" :
+                                       "Advanced @-22->");
+  }
+
+  // Get the groups
+  Fl_Widget *const *g = dlg->win->array();
+  int y = g[0]->h();
+  g[1]->show();
+  y += g[1]->h();
+  if(dlg->toggleButtonAdvMetis->value()) {
+    g[2]->show();
+    y += g[2]->h();
+  }
+  else {
+    g[2]->hide();
+  }
+
+  // Reset the vertical position of the termination group [3] and its widgets
+  {
+    int yG = y;
+    g[3]->position(g[3]->x(), yG);
+    Fl_Widget *o = static_cast<Fl_Group *>(g[3])->child(0);
+    o->position(o->x(), yG);
+    yG += WB + o->h();
+    o = static_cast<Fl_Group *>(g[3])->child(1);
+    o->position(o->x(), yG);
+    o = static_cast<Fl_Group *>(g[3])->child(2);
+    o->position(o->x(), yG);
+    yG += WB + o->h();
+  }
+  y += g[3]->h();
+
+  // as tall as what is shown, as wide as one likes
+  ((paletteWindow *)dlg->win)->sizeRange(dlg->width, y, 0, y);
+  dlg->win->size(dlg->win->w(), y);
+  dlg->win->redraw();
+}
+
+partitionWindow::partitionWindow(int deltaFontSize)
+{
+  FL_NORMAL_SIZE -= deltaFontSize;
+
+  static Fl_Menu_Item partitionTypeMenu[] = {{"Metis", 0, nullptr, nullptr},
+                                             {nullptr}};
+
+  static Fl_Menu_Item metisAlgMenu[] = {{"Recursive", 0, nullptr, nullptr},
+                                        {"K-way", 0, nullptr, nullptr},
+#if defined(HAVE_MTMETIS)
+                                        {"Multithreaded k-way", 0, nullptr,
+                                         nullptr},
+#endif
+                                        {nullptr}};
+
+  static Fl_Menu_Item metisEdgeMatchingMenu[] = {
+    {"Random", 0, nullptr, nullptr},
+    {"Sorted heavy-edge", 0, nullptr, nullptr},
+    {nullptr}};
+
+  static Fl_Menu_Item metisRefineAlgMenu[] = {
+    {"FM-based cut", 0, nullptr, nullptr},
+    {"Greedy", 0, nullptr, nullptr},
+    {"Two-sided node FM", 0, nullptr, nullptr},
+    {"One-sided node FM", 0, nullptr, nullptr},
+    {nullptr}};
+
+  // This will be resized based on groups that are displayed
+  const int h = 8 * WB + 5 * BH + 4;
+  // as narrow as the option window, wider as the window is widened
+  const int w = TW;
+  width = w;
+  int y = 0;
+
+  win = new paletteWindow(w, h, CTX::instance()->nonModalWindows ? true : false,
+                          "Partition", CTX::instance()->partOffset);
+  win->box(GMSH_WINDOW_BOX);
+  win->callback((Fl_Callback *)partition_cancel_cb, this);
+
+  // Main options group [0]
+  {
+    const int GH = 4 * BH + 2 + 6 * WB;
+    y += WB;
+    Fl_Group *g = new Fl_Group(0, y, w, GH);
+    // Partitioner
+    {
+      Fl_Choice *const o = new Fl_Choice(WB, y, BB, BH, "Partitioner");
+      choicePartitioner = o;
+      o->menu(partitionTypeMenu);
+      o->callback((Fl_Callback *)partition_select_groups_cb, this);
+      o->align(FL_ALIGN_RIGHT);
+    }
+    y += BH + WB;
+    // Number of partitions
+    {
+      Fl_Value_Input *const o =
+        new Fl_Value_Input(WB, y, IW, BH, "Number of partitions");
+      inputNumPartition = o;
+      o->minimum(0);
+      o->maximum(std::numeric_limits<unsigned short>::max());
+      if(CTX::instance()->inputScrolling) o->step(1);
+      o->align(FL_ALIGN_RIGHT);
+    }
+    y += BH + WB;
+    // Booleans options
+    {
+      Fl_Check_Button *const o = new Fl_Check_Button(2 * WB + 2 * BB, y, 2 * BB,
+                                                     BH, "Create ghost cells");
+      setGhostCells = o;
+    }
+    {
+      Fl_Check_Button *const o =
+        new Fl_Check_Button(WB, y, 2 * BB, BH, "Create partition topology");
+      setTopology = o;
+    }
+    y += BH + WB;
+    {
+      Fl_Check_Button *const o =
+        new Fl_Check_Button(WB, y, 2 * BB, BH, "Create physical groups");
+      setPhysical = o;
+    }
+    y += BH + WB;
+    // Box (line)
+    {
+      Fl_Box *o = new Fl_Box(WB, y, w - 2 * WB, 2);
+      o->box(FL_ENGRAVED_FRAME);
+      o->labeltype(FL_NO_LABEL);
+    }
+    y += 2 + WB;
+    g->end();
+    g->show();
+  }
+  const int yMain = y;
+
+  // Metis options group [1]
+  y = yMain;
+  {
+    const int GH = BH + WB;
+    Fl_Group *g = new Fl_Group(0, y, w, GH);
+    // Algorithm
+    {
+      Fl_Choice *const o = new Fl_Choice(WB, y, BB, BH, "Algorithm");
+      choiceMetisAlg = o;
+      o->menu(metisAlgMenu);
+      o->align(FL_ALIGN_RIGHT);
+    }
+    // Advanced Button
+    {
+      Fl_Toggle_Button *const o =
+        new Fl_Toggle_Button(w - (WB + BB), y, BB, BH, "Advanced @-22->");
+      toggleButtonAdvMetis = o;
+      o->callback((Fl_Callback *)partition_select_groups_cb, this);
+    }
+    y += BH + WB;
+    g->end();
+    g->hide();
+  }
+
+  // Metis advanced option group [2]
+  {
+    const int GH = 2 + WB + 4 * (BH + WB);
+    Fl_Group *g = new Fl_Group(0, y, w, GH);
+    // Box (line)
+    {
+      Fl_Box *const o = new Fl_Box(WB, y, w - 2 * WB, 2);
+      o->box(FL_ENGRAVED_FRAME);
+      o->labeltype(FL_NO_LABEL);
+    }
+    y += 2 + WB;
+    // Edge matching algorithm
+    {
+      Fl_Choice *const o =
+        new Fl_Choice(WB, y, IW + 2 * FL_NORMAL_SIZE, BH, "Edge matching");
+      choiceEdgeMatch = o;
+      o->menu(metisEdgeMatchingMenu);
+      o->align(FL_ALIGN_RIGHT);
+    }
+    y += BH + WB;
+    // Refinement algorithm
+    {
+      Fl_Choice *const o = new Fl_Choice(WB, y, IW + 2 * FL_NORMAL_SIZE, BH,
+                                         "Refinement algorithm");
+      choiceRefineAlg = o;
+      o->menu(metisRefineAlgMenu);
+      o->align(FL_ALIGN_RIGHT);
+    }
+    y += BH + WB;
+    // the element weights, in two rows of three that widen as one
+    for(int row = 0; row < 2; row++) {
+      Fl_Group *r = new Fl_Group(WB, y, w - 2 * WB, BH);
+      for(int col = 0; col < 3; col++) {
+        int i = 3 * row + col;
+        Fl_Value_Input *o = new Fl_Value_Input(
+          (col + 1) * WB + col * (w / 3 - WB), y, BB / 2, BH, weights[i].label);
+        inputWeight[i] = o;
+        o->minimum(-1);
+        o->maximum(std::numeric_limits<int>::max());
+        if(CTX::instance()->inputScrolling) o->step(1);
+        o->align(FL_ALIGN_RIGHT);
+      }
+      r->end();
+      y += BH + WB;
+    }
+    g->end();
+    g->hide();
+  }
+
+  // Dialog termination group [3]
+  {
+    const int GH = 2 + BH + 2 * WB;
+    Fl_Group *g = new Fl_Group(0, y, w, GH);
+    // Box (line) [0]
+    {
+      Fl_Box *const o = new Fl_Box(WB, y, w - 2 * WB, 2);
+      o->box(FL_ENGRAVED_FRAME);
+      o->labeltype(FL_NO_LABEL);
+    }
+    y += 2 + WB;
+    // Defaults Button [1]
+    {
+      Fl_Button *const o = new Fl_Button(WB, y, BB, BH, "Defaults");
+      o->callback((Fl_Callback *)partition_defaults_cb, this);
+    }
+    // Partition Button [2]
+    {
+      Fl_Return_Button *const o =
+        new Fl_Return_Button(w - (WB + BB), y, BB, BH, "Partition");
+      o->callback((Fl_Callback *)partition_partition_cb, this);
+    }
+    y += BH + WB;
+    g->end();
+    g->show();
+  }
+
+  win->end();
+  ((paletteWindow *)win)->followWidth(w / 2, w - WB);
+
+  // Set the groups to be initally displayed
+  read_all_options();
+  partition_select_groups_cb(win, this);
+
+  FL_NORMAL_SIZE += deltaFontSize;
+}
+
+void partitionWindow::show()
+{
+  read_all_options();
+  partition_select_groups_cb(win, this);
+  win->show();
+}
+
+#else
+
+partitionWindow::partitionWindow(int deltaFontSize) : win(nullptr), width(0) {}
+
+void partitionWindow::show()
+{
+  Msg::Error("Gmsh must be compiled with METIS support to partition meshes");
+}
+
+#endif
+
+void partition_dialog() { FlGui::instance()->partition->show(); }

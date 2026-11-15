@@ -1,0 +1,82 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include "GaussPoints.h"
+#include "GModel.h"
+#include "MElement.h"
+#include "PView.h"
+
+GMSH_GaussPointsPlugin::GMSH_GaussPointsPlugin()
+  : GMSH_PostPlugin({{GMSH_FULLRC, "IntegrationOrder", nullptr, 0, ""},
+                     {GMSH_FULLRC, "Dimension", nullptr, 2, ""},
+                     {GMSH_FULLRC, "PhysicalGroup", nullptr, 0, ""}})
+{
+  // its former name, which the parser cannot read (Order is a keyword)
+  addOptionAlias("Order", "IntegrationOrder");
+}
+
+std::string GMSH_GaussPointsPlugin::getHelp() const
+{
+  return "Given an input mesh, Plugin(GaussPoints) creates a list-based view "
+         "containing the Gauss points integrating exactly the polynomials of "
+         "order `IntegrationOrder'.\n\n"
+         "If `PhysicalGroup' is nonzero, the plugin only creates points for "
+         "the elements belonging to the group.";
+}
+
+PView *GMSH_GaussPointsPlugin::execute(PView *v)
+{
+  int order = (int)option(0);
+  int dim = (int)option(1);
+  int physical = (int)option(2);
+
+  if(dim < 0 || dim > 3) {
+    Msg::Error("Invalid dimension %d", dim);
+    return v;
+  }
+
+  GModel *m = GModel::current();
+  std::vector<GEntity *> entities;
+  if(physical) {
+    std::map<int, std::vector<GEntity *> > groups[4];
+    m->getPhysicalGroups(groups);
+    entities = groups[dim][physical];
+  }
+  else {
+    m->getEntities(entities, dim);
+  }
+
+  if(entities.empty()) {
+    Msg::Error("No entities");
+    return v;
+  }
+
+  PView *v2 = new PView();
+  PViewDataList *data2 = getDataList(v2);
+  for(std::size_t i = 0; i < entities.size(); i++) {
+    for(std::size_t j = 0; j < entities[i]->getNumMeshElements(); j++) {
+      MElement *e = entities[i]->getMeshElement(j);
+      int npts;
+      IntPt *gp;
+      e->getIntegrationPoints(order, &npts, &gp);
+      for(int i = 0; i < npts; i++) {
+        double u = gp[i].pt[0];
+        double v = gp[i].pt[1];
+        double w = gp[i].pt[2];
+        // double weight = gp[i].weight;
+        SPoint3 p;
+        e->pnt(u, v, w, p);
+        std::vector<double> *l = data2->incrementList(1, TYPE_PNT);
+        l->insert(l->end(), {p.x(), p.y(), p.z(), (double)e->getNum()});
+      }
+    }
+  }
+
+  data2->setName("GaussPoints");
+  data2->setFileName("GaussPoints.pos");
+  data2->finalize();
+
+  return v2;
+}

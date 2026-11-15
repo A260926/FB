@@ -1,0 +1,28 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef DISCRETE_REGION_H
+#define DISCRETE_REGION_H
+
+#include "GModel.h"
+#include "GRegion.h"
+#include "MFace.h"
+
+class discreteRegion : public GRegion {
+private:
+  bool _geometry;
+
+public:
+  // (geo: also create the volume in the GEO internals, so that scripts can
+  // refer to it)
+  discreteRegion(GModel *model, int num, bool geo = true);
+  discreteRegion(GModel *model);
+  virtual ~discreteRegion() {}
+  virtual GeomType geomType() const { return DiscreteVolume; }
+  virtual bool haveParametrization() { return _geometry; }
+  int createGeometry();
+};
+
+#endif

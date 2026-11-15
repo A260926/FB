@@ -1,0 +1,336 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include <sstream>
+#include <algorithm>
+#include "GModel.h"
+#include "GEntity.h"
+#include "MElement.h"
+#include "VertexArray.h"
+#include "Context.h"
+#include "GVertex.h"
+#include "GEdge.h"
+#include "GFace.h"
+#include "GRegion.h"
+#include "closestVertex.h"
+#include "GmshConfig.h"
+#include "OwnerCache.h"
+
+int GEntity::numSelected = 0;
+std::set<GEntity *> GEntity::selected;
+
+void GEntity::setSelection(char val)
+{
+  if(!_selection != !val) {
+    numSelected += val ? 1 : -1;
+    if(val)
+      selected.insert(this);
+    else
+      selected.erase(this);
+  }
+  _selection = val;
+}
+// The flags are raised only on an actual change.
+void GEntity::setVisibility(char val, bool recursive)
+{
+  if(_visible != val) CTX::instance()->entityVisibilityChanged();
+  _visible = val;
+}
+
+// Derived from the visibility of the elements when the mesh arrays are
+// filled, and what depends on it is filled again with them: raising the flag
+// here asked for the arrays to be filled again once more.
+void GEntity::setOnlySomeElementsVisible(bool val)
+{
+  _onlySomeElementsVisible = val ? 1 : 0;
+}
+
+void GEntity::setColor(unsigned color, bool recursive)
+{
+  if(_color != color) CTX::instance()->entityColorsChanged();
+  _color = color;
+}
+
+GEntity::~GEntity()
+{
+  // a selected entity that goes is no longer selected
+  if(_selection) {
+    numSelected--;
+    selected.erase(this);
+  }
+  // what the drawing keeps for this entity goes with it
+  OwnerCacheBase::release(this);
+}
+
+GEntity::GEntity(GModel *m, int t)
+  : _model(m), _tag(t), _meshMaster(this), _visible(1), _selection(0),
+    _onlySomeElementsVisible(1), _obb(nullptr), va_lines(nullptr),
+    va_triangles(nullptr), va_clip_lines(nullptr),
+    va_clip_triangles(nullptr)
+{
+  // default color when none is explicitly specified - don't change this, as it
+  // is documented and used in scripts to detect if explicit colors are set
+  // (cf. useColor() below)
+  _color = CTX::instance()->packColor(0, 0, 255, 0);
+}
+
+void GEntity::deleteVertexArrays()
+{
+  if(va_lines) delete va_lines;
+  va_lines = nullptr;
+  if(va_triangles) delete va_triangles;
+  va_triangles = nullptr;
+  deleteClipVertexArrays();
+}
+
+void GEntity::deleteClipVertexArrays()
+{
+  if(va_clip_lines) delete va_clip_lines;
+  va_clip_lines = nullptr;
+  if(va_clip_triangles) delete va_clip_triangles;
+  va_clip_triangles = nullptr;
+}
+
+char GEntity::getVisibility()
+{
+  if(CTX::instance()->hideUnselected && !getSelection())
+    return false;
+  return _visible;
+}
+
+bool GEntity::useColor()
+{
+  int r = CTX::instance()->unpackRed(_color);
+  int g = CTX::instance()->unpackGreen(_color);
+  int b = CTX::instance()->unpackBlue(_color);
+  int a = CTX::instance()->unpackAlpha(_color);
+  if(r == 0 && g == 0 && b == 255 && a == 0) return false;
+  return true;
+}
+
+std::string GEntity::getInfoString(bool additional, bool multiline)
+{
+  std::ostringstream sstream;
+  sstream << getTypeString() << " " << tag();
+
+  switch(getNativeType()) {
+  case OpenCascadeModel: sstream << " (OCC)"; break;
+  case AcisModel: sstream << " (ACIS)"; break;
+  case ParasolidModel: sstream << " (Parasolid)"; break;
+  default: break;
+  }
+
+  {
+    std::string name = model()->getElementaryName(dim(), tag());
+    if(name.size()) sstream << ": " << name;
+  }
+
+  if(additional) {
+    std::string info = getAdditionalInfoString(multiline);
+    if(info.size()) {
+      if(multiline)
+        sstream << "\n";
+      else
+        sstream << " ";
+      sstream << info;
+    }
+  }
+
+  if(physicals.size()) {
+    for(std::size_t i = 0; i < physicals.size(); i++) {
+      if(multiline)
+        sstream << "\n";
+      else
+        sstream << ", ";
+      sstream << "Physical ";
+      switch(dim()) {
+      case 0: sstream << "Point"; break;
+      case 1: sstream << "Curve"; break;
+      case 2: sstream << "Surface"; break;
+      case 3: sstream << "Volume"; break;
+      }
+      sstream << " " << std::abs(physicals[i]);
+      std::string name =
+        model()->getPhysicalName(dim(), std::abs(physicals[i]));
+      if(name.size()) sstream << ": " << name;
+    }
+  }
+
+  if(useColor()) {
+    int r = CTX::instance()->unpackRed(_color);
+    int g = CTX::instance()->unpackGreen(_color);
+    int b = CTX::instance()->unpackBlue(_color);
+    if(multiline)
+      sstream << "\n";
+    else
+      sstream << ", ";
+    sstream << "Color (" << r << ", " << g << ", " << b << ")";
+  }
+
+  return sstream.str();
+}
+
+// removes a MeshVertex
+void GEntity::removeMeshVertex(MVertex *v, bool del)
+{
+  auto it = std::find(mesh_vertices.begin(), mesh_vertices.end(), v);
+  if(it != mesh_vertices.end()) {
+    mesh_vertices.erase(it);
+    if(del) delete v;
+  }
+}
+
+GVertex *GEntity::cast2Vertex() { return dynamic_cast<GVertex *>(this); }
+GEdge *GEntity::cast2Edge() { return dynamic_cast<GEdge *>(this); }
+GFace *GEntity::cast2Face() { return dynamic_cast<GFace *>(this); }
+GRegion *GEntity::cast2Region() { return dynamic_cast<GRegion *>(this); }
+
+// sets the entity m from which the mesh will be copied
+void GEntity::setMeshMaster(GEntity *gMaster)
+{
+  if(gMaster->dim() != dim()) {
+    Msg::Error("Model entity %d of dimension %d cannot"
+               "be the mesh master of entity %d of dimension %d",
+               gMaster->tag(), gMaster->dim(), tag(), dim());
+    return;
+  }
+  _meshMaster = gMaster;
+}
+
+void GEntity::setMeshMaster(GEntity *gMaster, const std::vector<double> &tfo,
+                            bool updateCorrespVert)
+{
+  if(gMaster->dim() != dim()) {
+    Msg::Error("Model entity %d of dimension %d cannot"
+               "be the mesh master of entity %d of dimension %d",
+               gMaster->tag(), gMaster->dim(), tag(), dim());
+    return;
+  }
+
+  if(tfo.empty()) {
+    GEntity::setMeshMaster(gMaster);
+    return;
+  }
+
+  if(tfo.size() != 16) {
+    Msg::Error("Periodicity transformation from entity %d to %d (dim %d) has "
+               "%d components, while 16 are required",
+               gMaster->tag(), tag(), gMaster->dim(), tfo.size());
+    return;
+  }
+
+  affineTransform = tfo;
+  _meshMaster = gMaster;
+  if(updateCorrespVert) updateCorrespondingVertices();
+}
+
+void GEntity::addVerticesInSet(std::set<MVertex *> &vtcs, bool closure) const
+{
+  vtcs.insert(mesh_vertices.begin(), mesh_vertices.end());
+
+  if(closure) {
+    switch(dim()) {
+    case 3: {
+      std::vector<GFace *> clos = faces();
+      auto cIter = clos.begin();
+      for(; cIter != clos.end(); ++cIter)
+        (*cIter)->addVerticesInSet(vtcs, true);
+      break;
+    }
+    case 2: {
+      std::vector<GEdge *> clos = edges();
+      auto cIter = clos.begin();
+      for(; cIter != clos.end(); ++cIter)
+        (*cIter)->addVerticesInSet(vtcs, true);
+      break;
+    }
+    case 1: {
+      std::vector<GVertex *> clos = vertices();
+      auto cIter = clos.begin();
+      for(; cIter != clos.end(); ++cIter)
+        (*cIter)->addVerticesInSet(vtcs, true);
+      break;
+    }
+    }
+  }
+}
+
+bool GEntity::updateCorrespondingVertices(double tolerance)
+{
+  if(_meshMaster == this || affineTransform.size() != 16) return true;
+  correspondingVertices.clear();
+  closestVertexFinder cvf(_meshMaster, true);
+  if(!cvf.getNbVtcs()) return true;
+
+  const std::vector<double> &tfo = affineTransform;
+  std::vector<double> inv;
+  invertAffineTransformation(tfo, inv);
+
+  std::set<MVertex *> vtcs;
+  addVerticesInSet(vtcs, true);
+
+  // the image of the closest master node of each node
+  std::vector<std::pair<MVertex *, MVertex *>> pairs;
+  std::vector<SPoint3> images;
+  for(MVertex *tv : vtcs) {
+    MVertex *sv = cvf(tv->point(), inv);
+    double src[4] = {sv->x(), sv->y(), sv->z(), 1};
+    double xyz[3] = {0, 0, 0};
+    int idx = 0;
+    for(int i = 0; i < 3; i++)
+      for(int j = 0; j < 4; j++) xyz[i] += tfo[idx++] * src[j];
+    SPoint3 image(xyz[0], xyz[1], xyz[2]);
+    if(tolerance >= 0 && image.distance(tv->point()) > tolerance) return false;
+    pairs.push_back(std::make_pair(tv, sv));
+    images.push_back(image);
+  }
+
+  for(std::size_t i = 0; i < pairs.size(); i++) {
+    MVertex *tv = pairs[i].first;
+    correspondingVertices[tv] = pairs[i].second;
+    tv->x() = images[i].x();
+    tv->y() = images[i].y();
+    tv->z() = images[i].z();
+  }
+  return true;
+}
+
+void GEntity::copyMasterCoordinates()
+{
+  if(_meshMaster != this && affineTransform.size() == 16) {
+    auto cvIter = correspondingVertices.begin();
+
+    for(; cvIter != correspondingVertices.end(); ++cvIter) {
+      MVertex *tv = cvIter->first;
+      MVertex *sv = cvIter->second;
+      double src[4] = {sv->x(), sv->y(), sv->z(), 1};
+      double tgt[3] = {0, 0, 0};
+      int idx = 0;
+      for(int i = 0; i < 3; i++)
+        for(int j = 0; j < 4; j++) tgt[i] += affineTransform[idx++] * src[j];
+      tv->x() = tgt[0];
+      tv->y() = tgt[1];
+      tv->z() = tgt[2];
+    }
+
+    cvIter = correspondingHighOrderVertices.begin();
+
+    for(; cvIter != correspondingHighOrderVertices.end(); ++cvIter) {
+      MVertex *tv = cvIter->first;
+      MVertex *sv = cvIter->second;
+
+      double src[4] = {sv->x(), sv->y(), sv->z(), 1};
+      double tgt[3] = {0, 0, 0};
+
+      int idx = 0;
+      for(int i = 0; i < 3; i++)
+        for(int j = 0; j < 4; j++) tgt[i] += affineTransform[idx++] * src[j];
+
+      tv->x() = tgt[0];
+      tv->y() = tgt[1];
+      tv->z() = tgt[2];
+    }
+  }
+}

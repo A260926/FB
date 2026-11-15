@@ -1,0 +1,2122 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#include <string>
+#include <cstring>
+#include <cmath>
+#include <stdio.h>
+#include "GmshGlobal.h"
+#include "GmshConfig.h"
+#include "GmshMessage.h"
+#include "drawContext.h"
+#include "glMatrix.h"
+#include "glShader.h"
+#include "Trackball.h"
+#include "Context.h"
+#include "Numeric.h"
+#include "GModel.h"
+#include "MElement.h"
+#include "PView.h"
+#include "PViewOptions.h"
+#include "PViewData.h"
+#include "VertexArray.h"
+#include "StringUtils.h"
+#include "OS.h"
+#include "gl2ps.h"
+
+// the background image is still read with FLTK
+#if defined(HAVE_FLTK)
+#include <FL/Fl_JPEG_Image.H>
+#include <FL/Fl_PNG_Image.H>
+#endif
+
+#if defined(HAVE_POPPLER)
+#include "gmshPopplerWrapper.h"
+#endif
+
+drawContextGlobal *drawContext::_global = nullptr;
+void (*drawContext::drawGeomTransient)(void *) = nullptr;
+
+void drawContext::setDrawGeomTransientFunction(void (*fct)(void *))
+{
+  drawGeomTransient = fct;
+}
+
+drawContext::drawContext(drawTransform *transform)
+  : _transform(transform), _highResolutionPixelFactor(1.), _pickColor(false)
+{
+  // initialize from temp values in global context
+  for(int i = 0; i < 3; i++) {
+    r[i] = CTX::instance()->tmpRotation[i];
+    t[i] = CTX::instance()->tmpTranslation[i];
+    s[i] = CTX::instance()->tmpScale[i];
+  }
+  for(int i = 0; i < 4; i++) {
+    quaternion[i] = CTX::instance()->tmpQuaternion[i];
+  }
+  viewport[0] = viewport[1] = 0;
+  viewport[2] = CTX::instance()->glSize[0];
+  viewport[3] = CTX::instance()->glSize[1];
+
+  render_mode = GMSH_RENDER;
+  transparencyPass = TRANSPARENCY_ALL;
+  shadowPass = false;
+  studioSample = 0;
+  vxmin = vymin = vxmax = vymax = 0.;
+  pixel_equiv_x = pixel_equiv_y = 0.;
+
+  glMatrix::identity(_projection);
+  glMatrix::identity(_modelBase);
+
+  _pickCacheValid = _pickCacheMesh = _pickCachePost = false;
+  _pickCacheX = _pickCacheY = _pickCacheWidth = _pickCacheHeight = 0;
+
+  _bgImageTexture = _bgImageW = _bgImageH = 0;
+
+}
+
+namespace {
+  // in the order of the menu of the options window
+  struct fontName {
+    const char *name;
+    int number;
+  };
+  const fontName fontNames[] = {
+    {"Times-Roman", fontEnum::times},
+    {"Times-Bold", fontEnum::times | fontEnum::bold},
+    {"Times-Italic", fontEnum::times | fontEnum::italic},
+    {"Times-BoldItalic", fontEnum::times | fontEnum::bold | fontEnum::italic},
+    {"Helvetica", fontEnum::helvetica},
+    {"Helvetica-Bold", fontEnum::helvetica | fontEnum::bold},
+    {"Helvetica-Oblique", fontEnum::helvetica | fontEnum::italic},
+    {"Helvetica-BoldOblique",
+     fontEnum::helvetica | fontEnum::bold | fontEnum::italic},
+    {"Courier", fontEnum::courier},
+    {"Courier-Bold", fontEnum::courier | fontEnum::bold},
+    {"Courier-Oblique", fontEnum::courier | fontEnum::italic},
+    {"Courier-BoldOblique",
+     fontEnum::courier | fontEnum::bold | fontEnum::italic},
+    {"Symbol", fontEnum::symbol},
+    {"Screen", fontEnum::screen}};
+  const int numFonts = sizeof(fontNames) / sizeof(fontNames[0]);
+} // namespace
+
+int drawContextGlobal::getFontIndex(const char *fontname)
+{
+  if(fontname) {
+    for(int i = 0; i < numFonts; i++)
+      if(!strcmp(fontNames[i].name, fontname)) return i;
+    // its dingbats had no use in the labels of a model or a view
+    if(!strcmp(fontname, "ZapfDingbats")) {
+      Msg::Warning("Font \"ZapfDingbats\" is deprecated: using \"Helvetica\"");
+      return 4;
+    }
+  }
+  Msg::Error("Unknown font \"%s\" (using \"Helvetica\" instead)", fontname);
+  Msg::Info("Available fonts:");
+  for(int i = 0; i < numFonts; i++) Msg::Info("  \"%s\"", fontNames[i].name);
+  return 4;
+}
+
+int drawContextGlobal::getFontEnum(int index)
+{
+  if(index >= 0 && index < numFonts) return fontNames[index].number;
+  return fontEnum::helvetica;
+}
+
+const char *drawContextGlobal::getFontName(int index)
+{
+  if(index >= 0 && index < numFonts) return fontNames[index].name;
+  return "Helvetica";
+}
+
+int drawContextGlobal::getFontAlign(const char *alignstr)
+{
+  if(alignstr) {
+    if(!strcmp(alignstr, "BottomLeft") || !strcmp(alignstr, "Left") ||
+       !strcmp(alignstr, "left"))
+      return 0;
+    else if(!strcmp(alignstr, "BottomCenter") || !strcmp(alignstr, "Center") ||
+            !strcmp(alignstr, "center"))
+      return 1;
+    else if(!strcmp(alignstr, "BottomRight") || !strcmp(alignstr, "Right") ||
+            !strcmp(alignstr, "right"))
+      return 2;
+    else if(!strcmp(alignstr, "TopLeft"))
+      return 3;
+    else if(!strcmp(alignstr, "TopCenter"))
+      return 4;
+    else if(!strcmp(alignstr, "TopRight"))
+      return 5;
+    else if(!strcmp(alignstr, "CenterLeft"))
+      return 6;
+    else if(!strcmp(alignstr, "CenterCenter"))
+      return 7;
+    else if(!strcmp(alignstr, "CenterRight"))
+      return 8;
+  }
+  Msg::Error("Unknown font alignment \"%s\" (using \"Left\" instead)",
+             alignstr);
+  Msg::Info("Available font alignments:");
+  Msg::Info("  \"Left\" (or \"BottomLeft\")");
+  Msg::Info("  \"Center\" (or \"BottomCenter\")");
+  Msg::Info("  \"Right\" (or \"BottomRight\")");
+  Msg::Info("  \"TopLeft\"");
+  Msg::Info("  \"TopCenter\"");
+  Msg::Info("  \"TopRight\"");
+  Msg::Info("  \"CenterLeft\"");
+  Msg::Info("  \"CenterCenter\"");
+  Msg::Info("  \"CenterRight\"");
+  return 0;
+}
+
+drawContextGlobal *drawContext::global()
+{
+  if(!_global) _global = new drawContextGlobal(); // create dummy default
+  return _global;
+}
+
+void drawContext::buildRotationMatrix()
+{
+  if(CTX::instance()->useTrackball) {
+    build_rotmatrix(rot, quaternion);
+    setEulerAnglesFromRotationMatrix();
+  }
+  else {
+    double x = r[0] * M_PI / 180.;
+    double y = r[1] * M_PI / 180.;
+    double z = r[2] * M_PI / 180.;
+    double A = cos(x);
+    double B = sin(x);
+    double C = cos(y);
+    double D = sin(y);
+    double E = cos(z);
+    double F = sin(z);
+    double AD = A * D;
+    double BD = B * D;
+    rot[0] = C * E;
+    rot[1] = BD * E + A * F;
+    rot[2] = -AD * E + B * F;
+    rot[3] = 0.;
+    rot[4] = -C * F;
+    rot[5] = -BD * F + A * E;
+    rot[6] = AD * F + B * E;
+    rot[7] = 0.;
+    rot[8] = D;
+    rot[9] = -B * C;
+    rot[10] = A * C;
+    rot[11] = 0.;
+    rot[12] = 0.;
+    rot[13] = 0.;
+    rot[14] = 0.;
+    rot[15] = 1.;
+    setQuaternionFromEulerAngles();
+  }
+}
+
+void drawContext::addQuaternion(double p1x, double p1y, double p2x, double p2y)
+{
+  double quat[4];
+  trackball(quat, p1x, p1y, p2x, p2y);
+  add_quats(quat, quaternion, quaternion);
+  if(CTX::instance()->camera) camera.rotate(quat);
+}
+
+void drawContext::addQuaternionFromAxisAndAngle(double axis[3], double angle)
+{
+  double a = angle * M_PI / 180.;
+  double quat[4];
+  axis_to_quat(axis, a, quat);
+  add_quats(quat, quaternion, quaternion);
+}
+
+void drawContext::setQuaternion(double q0, double q1, double q2, double q3)
+{
+  quaternion[0] = q0;
+  quaternion[1] = q1;
+  quaternion[2] = q2;
+  quaternion[3] = q3;
+}
+
+void drawContext::setQuaternionFromEulerAngles()
+{
+  double x = r[0] * M_PI / 180.;
+  double y = r[1] * M_PI / 180.;
+  double z = r[2] * M_PI / 180.;
+  double xx[3] = {1., 0., 0.};
+  double yy[3] = {0., 1., 0.};
+  double zz[3] = {0., 0., 1.};
+  double q1[4], q2[4], q3[4], tmp[4];
+  axis_to_quat(xx, -x, q1);
+  axis_to_quat(yy, -y, q2);
+  axis_to_quat(zz, -z, q3);
+  add_quats(q1, q2, tmp);
+  add_quats(tmp, q3, quaternion);
+}
+
+void drawContext::setEulerAnglesFromRotationMatrix()
+{
+  r[1] = asin(rot[8]); // Calculate Y-axis angle
+  double C = cos(r[1]);
+  r[1] *= 180. / M_PI;
+  if(fabs(C) > 0.005) { // Gimball lock?
+    double tmpx = rot[10] / C; // No, so get X-axis angle
+    double tmpy = -rot[9] / C;
+    r[0] = atan2(tmpy, tmpx) * 180. / M_PI;
+    tmpx = rot[0] / C; // Get Z-axis angle
+    tmpy = -rot[4] / C;
+    r[2] = atan2(tmpy, tmpx) * 180. / M_PI;
+  }
+  else { // Gimball lock has occurred
+    r[0] = 0.; // Set X-axis angle to zero
+    double tmpx = rot[5]; // And calculate Z-axis angle
+    double tmpy = rot[1];
+    r[2] = atan2(tmpy, tmpx) * 180. / M_PI;
+  }
+  // return only positive angles in [0,360]
+  if(r[0] < 0.) r[0] += 360.;
+  if(r[1] < 0.) r[1] += 360.;
+  if(r[2] < 0.) r[2] += 360.;
+}
+
+static int needPolygonOffset()
+{
+  GModel *m = GModel::current();
+  int status = drawMeshStatus(m);
+  if(status == 2 &&
+     (CTX::instance()->mesh.surfaceEdges || CTX::instance()->geom.curves ||
+      CTX::instance()->geom.surfaces))
+    return 1;
+  if(status == 3 && (CTX::instance()->mesh.surfaceEdges ||
+                                 CTX::instance()->mesh.volumeEdges))
+    return 1;
+  for(std::size_t i = 0; i < PView::list.size(); i++) {
+    PViewOptions *opt = PView::list[i]->getOptions();
+    if(opt->visible && opt->showElement) return 1;
+  }
+  return 0;
+}
+
+static bool useVertexBufferObjects()
+{
+  // a core profile has no client arrays: the shader pipeline needs buffer
+  // objects whatever the option says
+  if(glShader::enabled()) return true;
+  return CTX::instance()->vertexBufferObjects && glApi::haveBufferObjects();
+}
+
+// statistics on the data uploaded to the GPU since the last frame
+static double vboBytes = 0., vboTime = 0.;
+
+// delete the buffer objects of the vertex arrays destroyed since the last
+// frame: this needs a current GL context, so it happens here
+static void deleteOrphanVertexArrayBuffers()
+{
+  if(vboBytes > 0.) {
+    Msg::Debug("Uploaded %.1f Mb to buffer objects in %g s",
+               vboBytes / 1024. / 1024., vboTime);
+    vboBytes = vboTime = 0.;
+  }
+
+  if(VertexArray::vboToDelete.empty()) return;
+  if(glApi::haveBufferObjects())
+    glApi::DeleteBuffers((GLsizei)VertexArray::vboToDelete.size(),
+                         &VertexArray::vboToDelete[0]);
+  VertexArray::vboToDelete.clear();
+}
+
+// copy the arrays into buffer objects, if this has not been done yet or if the
+// arrays have changed since
+static void uploadVertexArray(VertexArray *va)
+{
+  unsigned int *id = va->getVboIds();
+  if(id[0] && !va->getVboValid()) {
+    // the context that owned these buffers is gone: the names are stale
+    id[0] = id[1] = id[2] = 0;
+  }
+  if(!id[0]) {
+    glApi::GenBuffers(3, id);
+    va->setVboValid();
+    va->setVboDirty(true);
+  }
+  if(!va->getVboDirty()) return;
+
+  double t1 = TimeOfDay();
+  int n = va->getNumVertices();
+  glApi::BindBuffer(GL_ARRAY_BUFFER, id[0]);
+  glApi::BufferData(GL_ARRAY_BUFFER, n * 3 * sizeof(float),
+                    n ? va->getVertexArray() : nullptr, GL_STATIC_DRAW);
+  if(va->hasNormals()) {
+    glApi::BindBuffer(GL_ARRAY_BUFFER, id[1]);
+    glApi::BufferData(GL_ARRAY_BUFFER, n * 3 * sizeof(normal_type),
+                      va->getNormalArray(), GL_STATIC_DRAW);
+  }
+  if(va->hasColors()) {
+    glApi::BindBuffer(GL_ARRAY_BUFFER, id[2]);
+    glApi::BufferData(GL_ARRAY_BUFFER, n * 4 * sizeof(unsigned char),
+                      va->getColorArray(), GL_STATIC_DRAW);
+  }
+  va->setVboDirty(false);
+
+  vboBytes += n * 3. * sizeof(float) +
+              (va->hasNormals() ? n * 3. * sizeof(normal_type) : 0.) +
+              (va->hasColors() ? n * 4. : 0.);
+  vboTime += TimeOfDay() - t1;
+}
+
+// bind the buffer of the vertices (which = 0), normals (1) or colours (2) of
+// an array (uploaded on first use) and return the offset to pass to the
+// pointer calls (null); without buffer objects, the client-side pointer
+static const GLvoid *vaPointer(VertexArray *va, int which)
+{
+  if(!useVertexBufferObjects()) {
+    // make sure a buffer left bound by a previous frame does not turn the
+    // client-side pointer below into an offset
+    if(glApi::haveBufferObjects()) glApi::BindBuffer(GL_ARRAY_BUFFER, 0);
+    if(which == 0) return va->getVertexArray();
+    if(which == 1) return va->getNormalArray();
+    return va->getColorArray();
+  }
+  uploadVertexArray(va);
+  glApi::BindBuffer(GL_ARRAY_BUFFER, va->getVboIds()[which]);
+  return nullptr;
+}
+static const GLvoid *vaVertexPointer(VertexArray *va) { return vaPointer(va, 0); }
+static const GLvoid *vaNormalPointer(VertexArray *va) { return vaPointer(va, 1); }
+static const GLvoid *vaColorPointer(VertexArray *va) { return vaPointer(va, 2); }
+
+// bind the arrays of a vertex array: the vertices always, the normals and
+// colours if asked (an unbound colour array means the current colour is
+// used); the shader pipeline binds them as vertex attributes
+static void bindVertexArray(VertexArray *va, bool normals, bool colors)
+{
+  if(glShader::enabled()) {
+    // the attributes are recorded in the program's vertex array object,
+    // which must be bound first: on the first frame of a context nothing has
+    // bound it yet, and a core profile drops attributes set with none bound,
+    // so the first array drawn came out with neither colours nor normals
+    if(!glShader::use()) return;
+    glApi::EnableVertexAttribArray(glShader::ATTRIB_VERTEX);
+    glApi::VertexAttribPointer(glShader::ATTRIB_VERTEX, 3, GL_FLOAT, GL_FALSE,
+                               0, vaVertexPointer(va));
+    if(normals) {
+      glApi::EnableVertexAttribArray(glShader::ATTRIB_NORMAL);
+      // the normals are stored as bytes and scaled back to unit vectors
+      glApi::VertexAttribPointer(glShader::ATTRIB_NORMAL, 3, NORMAL_GLTYPE,
+                                 GL_TRUE, 0, vaNormalPointer(va));
+    }
+    else {
+      glApi::DisableVertexAttribArray(glShader::ATTRIB_NORMAL);
+    }
+    if(colors) {
+      glApi::EnableVertexAttribArray(glShader::ATTRIB_COLOR);
+      glApi::VertexAttribPointer(glShader::ATTRIB_COLOR, 4, GL_UNSIGNED_BYTE,
+                                 GL_TRUE, 0, vaColorPointer(va));
+    }
+    else {
+      glApi::DisableVertexAttribArray(glShader::ATTRIB_COLOR);
+    }
+    return;
+  }
+
+  glVertexPointer(3, GL_FLOAT, 0, vaVertexPointer(va));
+  glEnableClientState(GL_VERTEX_ARRAY);
+  if(normals) {
+    glNormalPointer(NORMAL_GLTYPE, 0, vaNormalPointer(va));
+    glEnableClientState(GL_NORMAL_ARRAY);
+  }
+  else {
+    glDisableClientState(GL_NORMAL_ARRAY);
+  }
+  if(colors) {
+    glColorPointer(4, GL_UNSIGNED_BYTE, 0, vaColorPointer(va));
+    glEnableClientState(GL_COLOR_ARRAY);
+  }
+  else {
+    glDisableClientState(GL_COLOR_ARRAY);
+  }
+}
+
+static void unbindVertexArray()
+{
+  if(glShader::enabled()) {
+    glApi::DisableVertexAttribArray(glShader::ATTRIB_VERTEX);
+    glApi::DisableVertexAttribArray(glShader::ATTRIB_NORMAL);
+    glApi::DisableVertexAttribArray(glShader::ATTRIB_COLOR);
+  }
+  else {
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+  }
+  if(useVertexBufferObjects()) glApi::BindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+// is any of these colours transparent, through the Transparency option or
+// through its own alpha?
+static bool anyColorIsTransparent(const unsigned int *colors, int n,
+                                  double transparency)
+{
+  if(!CTX::instance()->alpha) return false;
+  // the Transparency factor is only applied by the shader pipeline
+  if(glShader::enabled() && transparency < 1.) return true;
+  for(int i = 0; i < n; i++)
+    if(CTX::instance()->unpackAlpha(colors[i]) < 255) return true;
+  return false;
+}
+
+// does an entity have a non-opaque colour of its own? Cached, as this is
+// asked several times a frame and walks every entity.
+static bool anyEntityColorIsTransparent()
+{
+  static int stamp = -1;
+  static std::size_t count = 0;
+  static bool result = false;
+  std::size_t n = 0;
+  for(std::size_t i = 0; i < GModel::list.size(); i++) {
+    GModel *m = GModel::list[i];
+    n += m->getNumVertices() + m->getNumEdges() + m->getNumFaces() +
+         m->getNumRegions();
+  }
+  if(stamp == CTX::instance()->entityColorsStamp && count == n) return result;
+  stamp = CTX::instance()->entityColorsStamp;
+  count = n;
+  result = false;
+  CTX *ctx = CTX::instance();
+  for(std::size_t i = 0; i < GModel::list.size() && !result; i++) {
+    std::vector<GEntity *> entities;
+    GModel::list[i]->getEntities(entities);
+    for(std::size_t j = 0; j < entities.size(); j++) {
+      GEntity *e = entities[j];
+      if(e->useColor() && ctx->unpackAlpha(e->getColor()) < 255) {
+        result = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+// is an entity's own colour transparent?
+static bool entityColorIsTransparent(GEntity *e)
+{
+  CTX *ctx = CTX::instance();
+  return ctx->alpha && e->useColor() && ctx->unpackAlpha(e->getColor()) < 255;
+}
+
+bool geometryColorsAreTransparent()
+{
+  CTX *ctx = CTX::instance();
+  const unsigned int c[7] = {
+    ctx->color.geom.point,     ctx->color.geom.curve,
+    ctx->color.geom.surface,   ctx->color.geom.volume,
+    ctx->color.geom.selection, ctx->color.geom.highlight[0],
+    ctx->color.geom.highlight[1]};
+  return anyColorIsTransparent(c, 7, ctx->geom.transparency);
+}
+
+bool geometryIsTransparent()
+{
+  // the colours the entities were given one by one count too
+  return geometryColorsAreTransparent() ||
+         (CTX::instance()->alpha && anyEntityColorIsTransparent());
+}
+
+bool geometryEntityIsTransparent(GEntity *e)
+{
+  return geometryColorsAreTransparent() || entityColorIsTransparent(e);
+}
+
+// the carousel colours the mesh by entity, physical group or partition, and
+// the first two also use the entity colours
+static bool meshUsesEntityColors()
+{
+  int carousel = CTX::instance()->mesh.colorCarousel;
+  return carousel == 1 || carousel == 2;
+}
+
+// this is asked once per entity while a mixed mesh is drawn: the colours are
+// gathered on the stack rather than in a vector allocated every time
+bool meshColorsAreTransparent()
+{
+  CTX *ctx = CTX::instance();
+  unsigned int c[32] = {
+    ctx->color.mesh.line,       ctx->color.mesh.triangle,
+    ctx->color.mesh.quadrangle, ctx->color.mesh.tetrahedron,
+    ctx->color.mesh.hexahedron, ctx->color.mesh.prism,
+    ctx->color.mesh.pyramid,    ctx->color.mesh.trihedron,
+    ctx->color.mesh.polygon,    ctx->color.mesh.polyhedron,
+    ctx->color.fg,              ctx->color.geom.selection};
+  int n = 12;
+  int carousel = ctx->mesh.colorCarousel;
+  if(carousel >= 1 && carousel <= 3)
+    for(int i = 0; i < 20; i++) c[n++] = ctx->color.mesh.carousel[i];
+  return anyColorIsTransparent(c, n, ctx->mesh.transparency);
+}
+
+bool meshIsTransparent()
+{
+  return meshColorsAreTransparent() ||
+         (CTX::instance()->alpha && meshUsesEntityColors() &&
+          anyEntityColorIsTransparent());
+}
+
+bool meshEntityIsTransparent(GEntity *e)
+{
+  return meshColorsAreTransparent() ||
+         (meshUsesEntityColors() && entityColorIsTransparent(e));
+}
+
+// distance along its segment of every vertex of the lines [first, first +
+// count) of an array of independent lines, in pixels, for the dash pattern
+// (restarting at every segment as OpenGL's stipple did for GL_LINES), at the
+// index of the vertex: the attribute is read from the start of the buffer
+static void dashDistances(VertexArray *va, int first, int count,
+                          std::vector<float> &dash)
+{
+  const int *viewport = gmshViewport();
+  const double *modelview = glImmediate::matrix(GMSH_MODELVIEW);
+  const double *projection = glImmediate::matrix(GMSH_PROJECTION);
+  dash.assign(first + count, 0.f);
+  for(int i = first; i + 1 < first + count; i += 2) {
+    float *v0 = va->getVertexArray(3 * i);
+    float *v1 = va->getVertexArray(3 * (i + 1));
+    double p0[3] = {v0[0], v0[1], v0[2]}, p1[3] = {v1[0], v1[1], v1[2]};
+    double w0[3], w1[3];
+    if(!glMatrix::project(p0, modelview, projection, viewport, w0) ||
+       !glMatrix::project(p1, modelview, projection, viewport, w1))
+      continue;
+    double dx = w1[0] - w0[0], dy = w1[1] - w0[1];
+    dash[i + 1] = (float)std::sqrt(dx * dx + dy * dy);
+  }
+}
+
+// the vertices [first, first + count) of the bound array
+static void drawRange(VertexArray *va, GLenum type, bool normals, bool colors,
+                      int first, int count)
+{
+  if(count <= 0) return;
+  if(!glShader::enabled()) {
+    glDrawArrays(type, first, count);
+    return;
+  }
+  if(!glShader::use()) return;
+  glImmediate::pushShaderState();
+  // the transparency may apply to filled surfaces only
+  glShader::setAlphaScale(glImmediate::alphaScaleFor(type));
+  bool dashed = (type == GL_LINES && gmshLineStippleEnabled());
+  // a core profile draws no wide lines: the shader makes quads out of the
+  // segments instead, and computes the dash distances itself
+  if(type == GL_LINES && gmshCurrentLineWidth() > 1. && count > 1) {
+    if(dashed)
+      glShader::setStipple(true, gmshLineStippleFactor(),
+                           gmshLineStipplePattern());
+    bool lit = normals && gmshLightingEnabled();
+    if(glShader::drawWideLines(
+         va->getVertexArray(3 * first),
+         lit ? (const void *)va->getNormalArray(3 * first) : nullptr,
+         NORMAL_GLTYPE, colors ? va->getColorArray(4 * first) : nullptr,
+         count, gmshCurrentLineWidth(), lit)) {
+      // it has bound its own buffers and attributes: bind the array again
+      // for the next range
+      bindVertexArray(va, normals, colors);
+      return;
+    }
+    glImmediate::pushShaderState();
+    glShader::setAlphaScale(glImmediate::alphaScaleFor(type));
+  }
+  glShader::setColorArray(colors);
+  // no texture, but the sampler must still point to a valid one
+  glShader::noTexture();
+  // glImmediate::pushShaderState() leaves the dash pattern off: turned on
+  // here with the distances along the lines
+  std::vector<float> dash;
+  if(dashed) dashDistances(va, first, count, dash);
+  glShader::streamDash(dash.empty() ? nullptr : &dash[0], first + count);
+  if(!dash.empty())
+    glShader::setStipple(true, gmshLineStippleFactor(),
+                         gmshLineStipplePattern());
+  glDrawArrays(type, first, count);
+}
+
+void drawVertexArray(VertexArray *va, GLenum type, int flags,
+                         const std::vector<std::pair<int, int> > *runs)
+{
+  if(!va || !va->getNumVertices()) return;
+  // pending immediate mode primitives come first, and must be drawn before
+  // the attributes are bound: drawing them disables the attribute arrays
+  glImmediate::flush();
+  // a picking pass draws in the colour of the identifier it has set, unless
+  // the array holds the identifiers
+  bool pick = drawContext::pickColorActive();
+  bool normals = !pick && (flags & GMSH_DRAW_LIGHT) && va->hasNormals();
+  bool colors = va->hasColors() && ((flags & GMSH_DRAW_IDENTIFIERS) ||
+                                    (!pick && (flags & GMSH_DRAW_COLORS)));
+  if(normals) gmshLighting(true);
+  if(flags & GMSH_DRAW_OFFSET) glEnable(GL_POLYGON_OFFSET_FILL);
+  bindVertexArray(va, normals, colors);
+  if(runs) {
+    for(auto &r : *runs)
+      drawRange(va, type, normals, colors, r.first, r.second - r.first);
+  }
+  else
+    drawRange(va, type, normals, colors, 0, va->getNumVertices());
+  unbindVertexArray();
+  if(flags & GMSH_DRAW_OFFSET) glDisable(GL_POLYGON_OFFSET_FILL);
+  gmshLighting(false);
+}
+
+// The clipping planes are applied by OpenGL and what they add (the section,
+// the cut elements drawn whole) lives in arrays of its own, so moving a plane
+// rebuilds nothing here. The exception is a view drawn with only the volumes
+// a plane cuts: its arrays are filled through the planes and must be refilled
+// when they move.
+static void checkClipPlanesChanged()
+{
+#if defined(HAVE_POST)
+  // while dragging the fast representation is drawn and the arrays are left
+  // alone; the planes are only remembered once acted upon, so the first
+  // frame afterwards rebuilds once
+  if(drawContext::global()->mouseIsPressed()) return;
+
+  CTX *ctx = CTX::instance();
+  static double planes[6][4] = {{0.}};
+  static int whole = -1, onlyVolume = -1, cutOnly = -1;
+  static std::vector<int> clip;
+
+  bool changed = (whole != ctx->clipWholeElements) ||
+                 (onlyVolume != ctx->clipOnlyVolume) ||
+                 (cutOnly != ctx->clipOnlyDrawIntersectingVolume);
+  // leaving the mode fills them one last time
+  bool wasCutOnly = (whole == 1 && cutOnly == 1);
+  whole = ctx->clipWholeElements;
+  onlyVolume = ctx->clipOnlyVolume;
+  cutOnly = ctx->clipOnlyDrawIntersectingVolume;
+  for(int i = 0; i < 6; i++)
+    for(int j = 0; j < 4; j++)
+      if(planes[i][j] != ctx->clipPlane[i][j]) {
+        planes[i][j] = ctx->clipPlane[i][j];
+        changed = true;
+      }
+  if(clip.size() != PView::list.size()) {
+    clip.resize(PView::list.size(), -1);
+    changed = true;
+  }
+  for(std::size_t i = 0; i < PView::list.size(); i++) {
+    int c = PView::list[i]->getOptions()->clip;
+    if(clip[i] != c) {
+      clip[i] = c;
+      changed = true;
+    }
+  }
+  if(!changed) return;
+
+  if(wasCutOnly || (ctx->clipWholeElements && ctx->clipOnlyDrawIntersectingVolume))
+    for(std::size_t i = 0; i < PView::list.size(); i++)
+      PView::list[i]->setChanged(true);
+#endif
+}
+
+// How many strings a frame may draw: every label of the mesh, and a number
+// on every element of a view that writes them. The native font engine keeps
+// a pile of string textures and recomputes them one by one once it is full,
+// which is slow, so it is told up front how large to be; the other engines
+// hold their strings in an atlas and ignore this. Counting is cheap next to
+// drawing them, and the pile only ever grows.
+static std::size_t stringsInFrame()
+{
+  CTX *ctx = CTX::instance();
+  GModel *m = GModel::current();
+  std::size_t n = m->getNumVertices();
+  if(ctx->mesh.nodeLabels) n = std::max(n, m->getNumMeshVertices());
+  if(ctx->mesh.lineLabels || ctx->mesh.surfaceLabels || ctx->mesh.volumeLabels)
+    n = std::max(n, m->getNumMeshElements());
+  // the larger of the two kinds, twice over: a frame that labels both the
+  // nodes and the elements then still fits (the pile is only a capacity)
+  n *= 2;
+#if defined(HAVE_POST)
+  for(std::size_t i = 0; i < PView::list.size(); i++) {
+    PView *p = PView::list[i];
+    PViewOptions *opt = p->getOptions();
+    if(!opt->visible || opt->intervalsType != PViewOptions::Numeric) continue;
+    PViewData *data = p->getData(true);
+    for(int ent = 0; ent < data->getNumEntities(opt->timeStep); ent++)
+      n += data->getNumElements(opt->timeStep, ent);
+  }
+#endif
+  return n;
+}
+
+void drawContext::draw3d()
+{
+  // the blending and viewport kept by glImmediate, as the host or another
+  // window may have changed OpenGL's
+  glImmediate::syncState();
+
+  checkClipPlanesChanged();
+
+  deleteOrphanVertexArrayBuffers();
+
+  // We should only enable the polygon offset when there is a mix of lines and
+  // polygons to be drawn; enabling it all the time can lead to very small but
+  // annoying artifacts in the picture. Since there are so many ways in Gmsh to
+  // combine polygons and lines (geometries + meshes + views...), we do our best
+  // here to automatically detect if we should enable it. Note: the formula for
+  // the offset is "offset = factor*DZ+r*units", where DZ is a measurement of
+  // the change in depth relative to the screen area of the polygon, and r is
+  // the smallest value that is guaranteed to produce a resolvable offset for a
+  // given implementation.
+  glPolygonOffset((float)CTX::instance()->polygonOffsetFactor,
+                  (float)CTX::instance()->polygonOffsetUnits);
+  if(CTX::instance()->polygonOffsetFactor ||
+     CTX::instance()->polygonOffsetUnits)
+    CTX::instance()->polygonOffset =
+      CTX::instance()->polygonOffsetAlways ? 1 : needPolygonOffset();
+  else
+    CTX::instance()->polygonOffset = 0;
+
+  if(global()->keepsStringTextures())
+    global()->reserveStringTextures(stringsInFrame());
+
+  glDepthFunc(GL_LESS);
+  gmshDepthTest(true);
+  initProjection();
+  initRenderModel();
+
+  if(!CTX::instance()->camera) initPosition(true);
+
+  // everything transparent is drawn after everything else, in one pass, so
+  // that the result does not depend on the drawing order; a picking pass
+  // never splits, as it reads back identifiers rather than blends
+  bool split = (render_mode != GMSH_SELECT) &&
+               (geometryIsTransparent() || meshIsTransparent() ||
+                anyViewIsTransparent());
+
+  // the studio shading casts a shadow, drawn first into a map of its own
+  bool studio = glShader::enabled() && CTX::instance()->shading >= 1 &&
+                render_mode != GMSH_SELECT && !inPickColorMode();
+  gmshShadingModel(studio ? 1 : 0);
+  if(studio)
+    drawShadowMap();
+  else if(glShader::enabled())
+    glShader::setShadowOff();
+
+  drawAxes();
+
+  // the Transparency options; a picking pass must not fade its identifiers
+  double geomScale = inPickColorMode() ? 1. : CTX::instance()->geom.transparency;
+  double meshScale = inPickColorMode() ? 1. : CTX::instance()->mesh.transparency;
+  bool geomFilled = (CTX::instance()->geom.transparencyMode == 0);
+  bool meshFilled = (CTX::instance()->mesh.transparencyMode == 0);
+
+  // everything, or what is opaque
+  transparencyPass = split ? TRANSPARENCY_OPAQUE : TRANSPARENCY_ALL;
+  glImmediate::alphaScale(geomScale, geomFilled);
+  drawGeom();
+  glImmediate::alphaScale(1., false);
+  drawBackgroundImage(true);
+  glImmediate::alphaScale(meshScale, meshFilled);
+  drawMesh();
+  glImmediate::alphaScale(1., false);
+  drawPost();
+  if(studio) drawStudioFloor();
+
+  if(split) {
+    transparencyPass = TRANSPARENCY_TRANSPARENT;
+    // what the opaque pass collected belongs to the window, not to the
+    // buffers the transparent one is summed into
+    glImmediate::flush();
+    bool summed = CTX::instance()->orderIndependentTransparency &&
+                  glShader::beginTransparent();
+    if(!summed) {
+      // no summing buffers: blend in drawing order. The geometry and the
+      // mesh are not sorted, so they must not write depth, or a face in
+      // front would hide what is behind it.
+      gmshBlend(true);
+      gmshBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      gmshDepthMask(false);
+    }
+    glImmediate::alphaScale(geomScale, geomFilled);
+    drawGeom();
+    glImmediate::alphaScale(meshScale, meshFilled);
+    drawMesh();
+    glImmediate::alphaScale(1., false);
+    // the views sort back to front and write depth, as they always did
+    if(!summed) gmshDepthMask(true);
+    drawPost();
+    // and what this pass collected belongs to those buffers
+    glImmediate::flush();
+    if(summed)
+      glShader::endTransparent();
+    else
+      gmshBlend(false);
+    transparencyPass = TRANSPARENCY_ALL;
+  }
+
+  drawMarks();
+
+  drawGraph2d(true);
+}
+
+// the i-th number of the Halton sequence in base b, in [0, 1)
+static double halton(int i, int b)
+{
+  double f = 1., r = 0.;
+  while(i > 0) {
+    f /= b;
+    r += f * (i % b);
+    i /= b;
+  }
+  return r;
+}
+
+// The bounds of what the studio shading lights and stands on: the bounding
+// box of the scene, and of the views as they are drawn, which a raise takes
+// outside it.
+static void studioBounds(double min[3], double max[3])
+{
+  CTX *ctx = CTX::instance();
+  for(int i = 0; i < 3; i++) {
+    min[i] = ctx->min[i];
+    max[i] = ctx->max[i];
+  }
+#if defined(HAVE_POST)
+  for(std::size_t i = 0; i < PView::list.size(); i++) {
+    PViewOptions *opt = PView::list[i]->getOptions();
+    if(!opt->visible || opt->tmpBBox.empty()) continue;
+    SPoint3 lo = opt->tmpBBox.min(), hi = opt->tmpBBox.max();
+    for(int j = 0; j < 3; j++) {
+      min[j] = std::min(min[j], lo[j]);
+      max[j] = std::max(max[j], hi[j]);
+    }
+  }
+#endif
+}
+
+// the up axis of the studio shading, which General.Shading 1, 2 or 3 makes
+// x, y or z: the floor is normal to it, and the dome above it
+static int studioUpAxis()
+{
+  return std::max(0, std::min(2, CTX::instance()->shading - 1));
+}
+
+// the direction of the key light of the studio shading, in model coordinates
+static void studioKeyDirection(double dir[3])
+{
+  CTX *ctx = CTX::instance();
+  for(int i = 0; i < 3; i++) dir[i] = ctx->lightPosition[0][i];
+  double len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+  if(!len) {
+    dir[0] = dir[1] = 0.;
+    dir[2] = len = 1.;
+  }
+  for(int i = 0; i < 3; i++) dir[i] /= len;
+}
+
+// where the floor of the studio shading lies along the up axis: just below
+// the bounds, shifted by General.StudioFloorOffset times the largest
+// dimension of the bounds
+static double studioFloorLevel(const double min[3], const double max[3],
+                               int up)
+{
+  double diag = 0., size = 0.;
+  for(int i = 0; i < 3; i++) {
+    diag += (max[i] - min[i]) * (max[i] - min[i]);
+    size = std::max(size, max[i] - min[i]);
+  }
+  return min[up] - 1.e-3 * sqrt(diag) +
+         CTX::instance()->studioFloorOffset * size;
+}
+
+// Half the side of the floor, around the middle of the bounds: one and a
+// half times the model, or as far as the key light, tilted by its spread,
+// throws the corners of the bounds onto it when that is further - a light
+// oblique to the floor throws the shadow a long way - within
+// General.StudioFloorSize times the model.
+static double studioFloorHalfSize(const double min[3], const double max[3],
+                                  int up, double z0)
+{
+  double d[3], mid[3], dir[3];
+  for(int i = 0; i < 3; i++) {
+    d[i] = max[i] - min[i];
+    mid[i] = 0.5 * (min[i] + max[i]);
+  }
+  int u = (up + 1) % 3, v = (up + 2) % 3;
+  double size = std::max(d[0], std::max(d[1], d[2]));
+  double h = 1.5 * std::max(d[u], d[v]);
+  studioKeyDirection(dir);
+  // the angle from the floor's normal, plus the spread, at most 85 degrees
+  double theta = acos(std::max(-1., std::min(1., dir[up]))) +
+                 CTX::instance()->studioLightSpread * M_PI / 180.;
+  theta = std::min(theta, 85. * M_PI / 180.);
+  if(theta < M_PI / 2.) {
+    double reach = tan(theta);
+    for(int k = 0; k < 8; k++) {
+      double p[3] = {(k & 1) ? max[0] : min[0], (k & 2) ? max[1] : min[1],
+                     (k & 4) ? max[2] : min[2]};
+      double t = (p[up] - z0) * reach;
+      h = std::max(h, 1.1 * (fabs(p[u] - mid[u]) + t));
+      h = std::max(h, 1.1 * (fabs(p[v] - mid[v]) + t));
+    }
+  }
+  return std::min(h, CTX::instance()->studioFloorSize * size);
+}
+
+// The bounding sphere a shadow map from the direction dir has to cover: the
+// model, and the part of the floor its shadow can fall on - the corners of
+// the bounds carried along the light down to the floor plane, kept within
+// the floor, so that a high light keeps the map tight and a low one reaches
+// out; or the whole floor, for the dome, whose samples near the floor's
+// plane throw the longest shadows and need no detail.
+static void studioMapBounds(const double dir[3], bool wholeFloor, double c[3],
+                            double &R)
+{
+  double min[3], max[3], mid[3];
+  studioBounds(min, max);
+  for(int i = 0; i < 3; i++) mid[i] = 0.5 * (min[i] + max[i]);
+  int up = studioUpAxis(), u = (up + 1) % 3, v = (up + 2) % 3;
+  double z0 = studioFloorLevel(min, max, up);
+  double h = studioFloorHalfSize(min, max, up, z0);
+  std::vector<SPoint3> pts;
+  if(wholeFloor) {
+    for(int k = 0; k < 4; k++) {
+      double q[3];
+      q[up] = z0;
+      q[u] = mid[u] + ((k & 1) ? h : -h);
+      q[v] = mid[v] + ((k & 2) ? h : -h);
+      pts.push_back(SPoint3(q[0], q[1], q[2]));
+    }
+  }
+  for(int k = 0; k < 8; k++) {
+    double p[3] = {(k & 1) ? max[0] : min[0], (k & 2) ? max[1] : min[1],
+                   (k & 4) ? max[2] : min[2]};
+    pts.push_back(SPoint3(p[0], p[1], p[2]));
+    if(!wholeFloor && dir[up] > 0.05) {
+      double t = (p[up] - z0) / dir[up], q[3];
+      for(int i = 0; i < 3; i++) q[i] = p[i] - t * dir[i];
+      q[u] = std::max(mid[u] - h, std::min(mid[u] + h, q[u]));
+      q[v] = std::max(mid[v] - h, std::min(mid[v] + h, q[v]));
+      pts.push_back(SPoint3(q[0], q[1], q[2]));
+    }
+  }
+  SBoundingBox3d box;
+  for(std::size_t i = 0; i < pts.size(); i++) box += pts[i];
+  SPoint3 lo = box.min(), hi = box.max();
+  R = 0.;
+  for(int i = 0; i < 3; i++) {
+    c[i] = 0.5 * (lo[i] + hi[i]);
+    double e = 0.5 * (hi[i] - lo[i]);
+    R += e * e;
+  }
+  R = 1.05 * sqrt(R);
+}
+
+// two unit vectors orthogonal to the unit vector d and to each other
+static void studioBasis(const double d[3], double e1[3], double e2[3])
+{
+  int k = (fabs(d[0]) < fabs(d[1])) ? ((fabs(d[0]) < fabs(d[2])) ? 0 : 2) :
+                                      ((fabs(d[1]) < fabs(d[2])) ? 1 : 2);
+  double a[3] = {0., 0., 0.};
+  a[k] = 1.;
+  e1[0] = a[1] * d[2] - a[2] * d[1];
+  e1[1] = a[2] * d[0] - a[0] * d[2];
+  e1[2] = a[0] * d[1] - a[1] * d[0];
+  double n = sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]);
+  for(int i = 0; i < 3; i++) e1[i] /= n;
+  e2[0] = d[1] * e1[2] - d[2] * e1[1];
+  e2[1] = d[2] * e1[0] - d[0] * e1[2];
+  e2[2] = d[0] * e1[1] - d[1] * e1[0];
+}
+
+// a direction in model coordinates taken to eye coordinates
+static void toEye(const double d[3], double e[3])
+{
+  const double *M = glImmediate::matrix(GMSH_MODELVIEW);
+  e[0] = M[0] * d[0] + M[4] * d[1] + M[8] * d[2];
+  e[1] = M[1] * d[0] + M[5] * d[1] + M[9] * d[2];
+  e[2] = M[2] * d[0] + M[6] * d[1] + M[10] * d[2];
+  double n = sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
+  if(n)
+    for(int i = 0; i < 3; i++) e[i] /= n;
+}
+
+// The model drawn from the direction dir (model coordinates) into shadow map
+// `which', which the shader compares against afterwards. The map is
+// orthographic over the bounding sphere of the model.
+bool drawContext::drawOneShadowMap(int which, const double dir[3])
+{
+  CTX *ctx = CTX::instance();
+  double c[3], R;
+  studioMapBounds(dir, which == 1, c, R);
+  if(R <= 0.) return false;
+  double eye[3] = {c[0] + 2. * R * dir[0], c[1] + 2. * R * dir[1],
+                   c[2] + 2. * R * dir[2]};
+  double up[3], e2[3], view[16], proj[16];
+  studioBasis(dir, up, e2);
+  glMatrix::lookAt(eye, c, up, view);
+  glMatrix::ortho(-R, R, -R, R, R, 3. * R, proj);
+
+  // what is pending (the background) must reach the window, not the map
+  glImmediate::flush();
+  if(!glShader::beginShadowPass(which, 2048, studioSample)) return false;
+  shadowPass = true;
+  gmshMatrixMode(GMSH_PROJECTION);
+  gmshPushMatrix();
+  gmshLoadMatrix(proj);
+  gmshMatrixMode(GMSH_MODELVIEW);
+  gmshPushMatrix();
+  gmshLoadMatrix(view);
+  for(int i = 0; i < 6; i++) gmshClipPlane(i, ctx->clipPlane[i]);
+  // everything casts, the transparent in proportion to its opacity, which
+  // the shader has to be given as on the window
+  int pass = transparencyPass;
+  transparencyPass = TRANSPARENCY_ALL;
+  glImmediate::alphaScale(ctx->geom.transparency,
+                          ctx->geom.transparencyMode == 0);
+  drawGeom();
+  glImmediate::alphaScale(ctx->mesh.transparency,
+                          ctx->mesh.transparencyMode == 0);
+  drawMesh();
+  glImmediate::alphaScale(1., false);
+  drawPost();
+  glImmediate::flush();
+  transparencyPass = pass;
+  gmshMatrixMode(GMSH_MODELVIEW);
+  gmshPopMatrix();
+  gmshMatrixMode(GMSH_PROJECTION);
+  gmshPopMatrix();
+  for(int i = 0; i < 6; i++) gmshClipPlane(i, ctx->clipPlane[i]);
+  shadowPass = false;
+
+  // from eye coordinates to the map: back to model coordinates, through the
+  // light's matrices, and from [-1, 1] to [0, 1]
+  double inv[16], a[16], b[16], s[16], t[16], bias[16];
+  if(!glMatrix::invert(glImmediate::matrix(GMSH_MODELVIEW), inv)) {
+    glShader::endShadowPass(which, nullptr);
+    return false;
+  }
+  glMatrix::multiply(view, inv, a);
+  glMatrix::multiply(proj, a, b);
+  glMatrix::translate(0.5, 0.5, 0.5, t);
+  glMatrix::scale(0.5, 0.5, 0.5, s);
+  glMatrix::multiply(t, s, bias);
+  glMatrix::multiply(bias, b, a);
+  glShader::endShadowPass(which, a);
+  return true;
+}
+
+// The shadows of the studio shading. The key light is light 0's direction in
+// model coordinates, so that the shadow stays put when the model is rotated;
+// on the accumulated frames it is jittered inside its cone, which softens the
+// shadow on average, and a second map is drawn from a direction of the dome
+// above the model, which occludes the ambient light on average.
+void drawContext::drawShadowMap()
+{
+  CTX *ctx = CTX::instance();
+  int k = studioSample;
+  double dir[3];
+  studioKeyDirection(dir);
+  if(k > 0 && ctx->studioLightSpread > 0.) {
+    double e1[3], e2[3];
+    studioBasis(dir, e1, e2);
+    double alpha = ctx->studioLightSpread * M_PI / 180.;
+    double ct = 1. - halton(k, 5) * (1. - cos(alpha));
+    double st = sqrt(std::max(0., 1. - ct * ct)), phi = 2. * M_PI * halton(k, 7);
+    for(int i = 0; i < 3; i++)
+      dir[i] = ct * dir[i] + st * (cos(phi) * e1[i] + sin(phi) * e2[i]);
+  }
+  double up[3] = {0., 0., 0.};
+  up[studioUpAxis()] = 1.;
+  double de[3], ue[3];
+  toEye(dir, de);
+  toEye(up, ue);
+  // a texel of the key map, in eye coordinates
+  double c[3], R;
+  studioMapBounds(dir, false, c, R);
+  const double *M = glImmediate::matrix(GMSH_MODELVIEW);
+  double scale = sqrt(M[0] * M[0] + M[1] * M[1] + M[2] * M[2]);
+  glShader::setStudioLight(de, ue, 2. * R * scale / 2048.);
+
+  if(!drawOneShadowMap(0, dir)) glShader::setShadowOff();
+
+  if(k > 0) {
+    // cosine weighted about the up axis
+    double e1[3], e2[3], dome[3];
+    studioBasis(up, e1, e2);
+    double r = sqrt(halton(k, 11)), phi = 2. * M_PI * halton(k, 13);
+    double z = sqrt(std::max(0., 1. - r * r));
+    for(int i = 0; i < 3; i++)
+      dome[i] = r * cos(phi) * e1[i] + r * sin(phi) * e2[i] + z * up[i];
+    double dome_e[3];
+    toEye(dome, dome_e);
+    glShader::setDome(dome_e);
+    if(!drawOneShadowMap(1, dome)) glShader::setDomeOff();
+  }
+  else
+    glShader::setDomeOff();
+}
+
+// The shadow catcher of the studio shading: a plane under the model, at the
+// bottom of its bounding box along z (or along y for a model flat in z),
+// showing nothing but the shadow cast on it.
+void drawContext::drawStudioFloor()
+{
+  double min[3], max[3], d[3], c[3], diag = 0.;
+  studioBounds(min, max);
+  for(int i = 0; i < 3; i++) {
+    d[i] = max[i] - min[i];
+    c[i] = 0.5 * (min[i] + max[i]);
+    diag += d[i] * d[i];
+  }
+  diag = sqrt(diag);
+  if(diag <= 0.) return;
+  int up = studioUpAxis();
+  int u = (up + 1) % 3, v = (up + 2) % 3;
+  double z0 = studioFloorLevel(min, max, up);
+  double h = studioFloorHalfSize(min, max, up, z0);
+  double p[4][3];
+  for(int k = 0; k < 4; k++) {
+    p[k][up] = z0;
+    p[k][u] = c[u] + ((k == 1 || k == 2) ? h : -h);
+    p[k][v] = c[v] + ((k >= 2) ? h : -h);
+  }
+  double n[3] = {0., 0., 0.};
+  n[up] = 1.;
+
+  gmshShadingModel(2);
+  gmshBlend(true);
+  gmshBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  // hidden by the model, but hiding nothing itself: whatever hangs below
+  // it (glyphs, a view raised further than its data) stays visible
+  gmshDepthMask(false);
+  gmshColor4ub(0, 0, 0, 150);
+  gmshNormal3d(n[0], n[1], n[2]);
+  gmshBegin(GL_QUADS);
+  for(int k = 0; k < 4; k++) gmshVertex3d(p[k][0], p[k][1], p[k][2]);
+  gmshEnd();
+  gmshShadingModel(1);
+  gmshDepthMask(true);
+  gmshBlend(false);
+}
+
+void drawContext::draw2d()
+{
+  // the strings of the scene go under the overlay
+  global()->flushString();
+  gmshDepthTest(false);
+  clipPlanes::on(0);
+
+  gmshMatrixMode(GMSH_PROJECTION);
+
+  // in pixels, so we can draw some 3D glyphs, and with a shift that makes the
+  // 2D primitives appear "in front" in GL2PS
+  double px[16], front[16], m[16];
+  glMatrix::ortho(viewport[0], viewport[2], viewport[1], viewport[3], -100.,
+                  100., px);
+  glMatrix::translate(0., 0.,
+                      CTX::instance()->clipFactor > 1. ?
+                        1. / CTX::instance()->clipFactor :
+                        CTX::instance()->clipFactor,
+                      front);
+  glMatrix::multiply(px, front, m);
+  gmshLoadMatrix(m);
+  gmshMatrixMode(GMSH_MODELVIEW);
+
+  gmshLoadIdentity();
+  drawGraph2d(false);
+  drawText2d();
+  if(CTX::instance()->post.draw && !CTX::instance()->stereo) drawScales();
+  if(CTX::instance()->smallAxes) drawSmallAxes();
+}
+
+// the lines of a text: split on newlines, and wrapped at width pixels on the
+// spaces (a word wider than that gets a line of its own)
+static void textBoxLines(const std::string &text, double width,
+                         std::vector<std::string> &lines)
+{
+  std::size_t from = 0;
+  while(from <= text.size()) {
+    std::size_t to = text.find('\n', from);
+    if(to == std::string::npos) to = text.size();
+    std::string raw = text.substr(from, to - from), line;
+    from = to + 1;
+    std::size_t at = 0;
+    while(at < raw.size()) {
+      std::size_t sp = raw.find(' ', at);
+      if(sp == std::string::npos) sp = raw.size();
+      std::string word = raw.substr(at, sp - at);
+      at = sp + 1;
+      std::string next = line.empty() ? word : line + " " + word;
+      if(!line.empty() &&
+         drawContext::global()->getStringWidth(next.c_str()) > width) {
+        lines.push_back(line);
+        line = word;
+      }
+      else
+        line = next;
+    }
+    lines.push_back(line);
+  }
+}
+
+void drawContext::drawTextBox(const std::string &text, double x, double y,
+                              int align, double box[4], bool inside,
+                              unsigned int tint)
+{
+  if(text.empty()) return;
+  // in the font of the graphics at the size of the user interface: the box
+  // is read like a widget, not like a label of the picture
+  CTX *ctx = CTX::instance();
+  int size = drawContext::global()->getFontSize();
+  drawContext::global()->setFont(ctx->glFontEnum, size);
+  double h = drawContext::global()->getStringHeight();
+  // the lines close together, and an empty one half as tall as the others
+  double pad = 0.5 * h, step = 1.15 * h, gap = 0.5 * h;
+  // wrapped at about forty characters, or at the window
+  std::vector<std::string> lines;
+  textBoxLines(text,
+               std::min(28. * h, viewport[2] - viewport[0] - 2. * pad - 4.),
+               lines);
+  double w = 0.;
+  for(auto &l : lines)
+    w = std::max(w, drawContext::global()->getStringWidth(l.c_str()));
+  std::vector<double> at(lines.size());
+  double y0 = 0.;
+  for(std::size_t i = 0; i < lines.size(); i++) {
+    at[i] = y0;
+    y0 += lines[i].empty() ? gap : step;
+  }
+  double bw = w + 2. * pad;
+  double bh = y0 - (lines.back().empty() ? gap : step) + h + 2. * pad;
+  if(align == 1) x -= bw / 2.;
+  if(align == 2) {
+    // clear of the cursor, which points at the top left of its own image
+    double cx = x, cy = y;
+    x = cx + 0.5 * h;
+    y = cy - 1.0 * h;
+    if(y - bh < viewport[1] + 2.) y = cy + 0.5 * h + bh;
+    if(x + bw > viewport[2] - 2.) x = cx - 0.5 * h - bw;
+  }
+  // inside the window, a couple of pixels from its edges
+  if(inside) {
+    x = std::max(viewport[0] + 2., std::min(x, viewport[2] - bw - 2.));
+    y = std::max(viewport[1] + bh + 2., std::min(y, viewport[3] - 2.));
+  }
+  double yb = y - bh;
+
+  // the box: the background colour, letting a little of the picture through,
+  // edged in the text colour. The strings drawn so far are painted first:
+  // they are kept in an atlas and drawn at the end of the frame otherwise,
+  // which would put the labels of a colour scale over the box.
+  global()->flushString();
+  gmshBlend(true);
+  gmshBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  // the tint, when there is one, so that the box is told at a glance from a
+  // box that has none; and it hides what it is on rather than taking the
+  // colour of it, as a note stuck on the picture would
+  unsigned int bg = tint ? tint : ctx->color.bg;
+  gmshColor4ub(ctx->unpackRed(bg), ctx->unpackGreen(bg), ctx->unpackBlue(bg),
+               tint ? 255 : 240);
+  // written in the text colour of the picture, unless the box has a colour
+  // of its own: whichever of black and white is read on it then, as that
+  // colour is the same whatever the colour scheme
+  unsigned int ink = ctx->color.text;
+  if(tint) {
+    double lum = 0.299 * ctx->unpackRed(bg) + 0.587 * ctx->unpackGreen(bg) +
+                 0.114 * ctx->unpackBlue(bg);
+    ink = ctx->packColor(lum > 140 ? 0 : 255, lum > 140 ? 0 : 255,
+                         lum > 140 ? 0 : 255, 255);
+  }
+  gmshBegin(GL_QUADS);
+  gmshVertex2d(x, yb);
+  gmshVertex2d(x + bw, yb);
+  gmshVertex2d(x + bw, y);
+  gmshVertex2d(x, y);
+  gmshEnd();
+  gmshColor4ub(ctx->unpackRed(ink), ctx->unpackGreen(ink),
+               ctx->unpackBlue(ink), 110);
+  gmshLineWidth(1.);
+  gmshBegin(GL_LINES);
+  gmshVertex2d(x, yb);
+  gmshVertex2d(x + bw, yb);
+  gmshVertex2d(x + bw, yb);
+  gmshVertex2d(x + bw, y);
+  gmshVertex2d(x + bw, y);
+  gmshVertex2d(x, y);
+  gmshVertex2d(x, y);
+  gmshVertex2d(x, yb);
+  gmshEnd();
+  glImmediate::flush();
+  gmshBlend(false);
+
+  // the text, a line at a time from the top, with no halo: the box is its
+  // contrast
+  bool halo = drawContext::global()->stringHalo();
+  drawContext::global()->setStringHalo(false);
+  gmshColor4ubv((GLubyte *)&ink);
+  for(std::size_t i = 0; i < lines.size(); i++) {
+    if(lines[i].empty()) continue;
+    // a box centred on what it speaks of (a prompt over the picture) reads
+    // better with its lines centred too; one that hangs from the cursor and
+    // lists what was found does not
+    double dx = 0.;
+    if(align == 1)
+      dx = 0.5 * (w - drawContext::global()->getStringWidth(lines[i].c_str()));
+    drawString(lines[i], x + pad + dx, y - pad - 0.78 * h - at[i], 0.,
+               ctx->glFont, ctx->glFontEnum, size, 0);
+  }
+  drawContext::global()->setStringHalo(halo);
+
+  if(box) {
+    box[0] = x;
+    box[1] = yb;
+    box[2] = bw;
+    box[3] = bh;
+  }
+}
+
+void drawContext::drawBackgroundGradient()
+{
+  if(CTX::instance()->bgGradient == 1) { // vertical
+    gmshBegin(GL_QUADS);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bg);
+    gmshVertex2i(viewport[0], viewport[1]);
+    gmshVertex2i(viewport[2], viewport[1]);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bgGrad);
+    gmshVertex2i(viewport[2], viewport[3]);
+    gmshVertex2i(viewport[0], viewport[3]);
+    gmshEnd();
+  }
+  else if(CTX::instance()->bgGradient == 2) { // horizontal
+    gmshBegin(GL_QUADS);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bg);
+    gmshVertex2i(viewport[2], viewport[1]);
+    gmshVertex2i(viewport[2], viewport[3]);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bgGrad);
+    gmshVertex2i(viewport[0], viewport[3]);
+    gmshVertex2i(viewport[0], viewport[1]);
+    gmshEnd();
+  }
+  else if(CTX::instance()->bgGradient == 3) { // radial
+    double cx = 0.5 * (viewport[0] + viewport[2]);
+    double cy = 0.5 * (viewport[1] + viewport[3]);
+    double r =
+      0.5 * std::max(viewport[2] - viewport[0], viewport[3] - viewport[1]);
+    gmshBegin(GL_TRIANGLE_FAN);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bgGrad);
+    gmshVertex2d(cx, cy);
+    gmshColor4ubv((GLubyte *)&CTX::instance()->color.bg);
+    gmshVertex2d(cx + r, cy);
+    int ntheta = 36;
+    for(int i = 1; i < ntheta + 1; i++) {
+      double theta = i * 2 * M_PI / (double)ntheta;
+      gmshVertex2d(cx + r * cos(theta), cy + r * sin(theta));
+    }
+    gmshEnd();
+  }
+}
+
+void drawContext::invalidateBgImageTexture()
+{
+  // the pages of a PDF are kept by the wrapper, which draws them again
+#if defined(HAVE_POPPLER)
+  if(_bgImageTexture && gmshPopplerWrapper::ownsTexture(_bgImageTexture))
+    _bgImageTexture = 0;
+#endif
+  if(_bgImageTexture) glDeleteTextures(1, &_bgImageTexture);
+  _bgImageTexture = 0;
+}
+
+bool drawContext::generateTextureForImage(const std::string &name, int page,
+                                          GLuint &imageTexture, GLuint &imageW,
+                                          GLuint &imageH)
+{
+  if(StatFile(name)) {
+    Msg::Error("Could not open file `%s'", name.c_str());
+    return false;
+  }
+
+  std::string ext = SplitFileName(name)[2];
+  if(ext == ".pdf" || ext == ".PDF") {
+#if defined(HAVE_POPPLER)
+    if(!imageTexture) {
+      if(!gmshPopplerWrapper::instance()->loadFromFile(name)) {
+        Msg::Error("Could not load PDF file '%s'", name.c_str());
+        return false;
+      }
+    }
+    gmshPopplerWrapper::instance()->setCurrentPage(page);
+    imageTexture = gmshPopplerWrapper::instance()->getTextureForPage(300, 300);
+    imageW = gmshPopplerWrapper::instance()->width();
+    imageH = gmshPopplerWrapper::instance()->height();
+#else
+    Msg::Error("Gmsh must be compiled with Poppler support to load PDFs");
+    return false;
+#endif
+  }
+  else {
+#if defined(HAVE_FLTK)
+    if(!imageTexture) {
+      Fl_RGB_Image *img = nullptr;
+      if(ext == ".jpg" || ext == ".JPG" || ext == ".jpeg" || ext == ".JPEG")
+        img = new Fl_JPEG_Image(name.c_str());
+      else if(ext == ".png" || ext == ".PNG")
+        img = new Fl_PNG_Image(name.c_str());
+      if(!img || img->fail() || img->w() <= 0 || img->h() <= 0) {
+        Msg::Error("Could not load background image '%s'", name.c_str());
+        if(img) delete img;
+        return false;
+      }
+      Fl_RGB_Image *img2 = (Fl_RGB_Image *)img->copy(2048, 2048);
+      glPixelStorei(GL_UNPACK_ROW_LENGTH, img2->w());
+      glGenTextures(1, &imageTexture);
+      glBindTexture(GL_TEXTURE_2D, imageTexture);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img2->w(), img2->h(), 0,
+                   (img2->d() == 4) ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE,
+                   img2->array);
+      glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+      imageW = img->w();
+      imageH = img->h();
+      delete img;
+      delete img2;
+    }
+#else
+    Msg::Error("Gmsh must be compiled with FLTK support to load JPEGs or PNGs");
+    return false;
+#endif
+  }
+  return true;
+}
+
+void drawContext::drawBackgroundImage(bool threeD)
+{
+  if(CTX::instance()->bgImageFileName.empty() ||
+     (CTX::instance()->bgImage3d && !threeD) ||
+     (!CTX::instance()->bgImage3d && threeD))
+    return;
+
+  std::string name = FixRelativePath(GModel::current()->getFileName(),
+                                     CTX::instance()->bgImageFileName);
+
+  double x = CTX::instance()->bgImagePosition[0];
+  double y = CTX::instance()->bgImagePosition[1];
+  double w = CTX::instance()->bgImageSize[0];
+  double h = CTX::instance()->bgImageSize[1];
+
+  if(!generateTextureForImage(name, CTX::instance()->bgImagePage,
+                              _bgImageTexture, _bgImageW, _bgImageH)) {
+    CTX::instance()->bgImageFileName.clear();
+    return;
+  }
+
+  if(!_bgImageTexture) return;
+
+  if(w < 0 && h < 0) {
+    w = viewport[2] - viewport[0];
+    h = viewport[3] - viewport[1];
+  }
+  else if(w < 0 && h == 0) {
+    w = viewport[2] - viewport[0];
+    h = w * _bgImageH / _bgImageW;
+  }
+  else if(w < 0) {
+    w = viewport[2] - viewport[0];
+  }
+  else if(w == 0 && h < 0) {
+    h = viewport[3] - viewport[1];
+    w = h * _bgImageW / _bgImageH;
+  }
+  else if(h < 0) {
+    h = viewport[3] - viewport[1];
+  }
+  else if(w == 0 && h == 0) {
+    w = _bgImageW;
+    h = _bgImageH;
+  }
+  else if(h == 0) {
+    h = w * _bgImageH / _bgImageW;
+  }
+  else if(w == 0) {
+    w = h * _bgImageW / _bgImageH;
+  }
+
+  Msg::Debug("Background image: x=%g y=%g w=%g h=%g", x, y, w, h);
+
+  gmshBlend(true);
+  gmshBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  gmshTexture(_bgImageTexture, GMSH_TEXTURE_IMAGE);
+  gmshBegin(GL_QUADS);
+  if(threeD) {
+    gmshTexCoord2f(1.0f, 1.0f);
+    gmshVertex2d(x + w, y);
+    gmshTexCoord2f(1.0f, 0.0f);
+    gmshVertex2d(x + w, y + h);
+    gmshTexCoord2f(0.0f, 0.0f);
+    gmshVertex2d(x, y + h);
+    gmshTexCoord2f(0.0f, 1.0f);
+    gmshVertex2d(x, y);
+  }
+  else {
+    int c = fix2dCoordinates(&x, &y); // y=0 now means top
+    if(c & 1) x -= w / 2.;
+    if(c & 2) y += h / 2.;
+    if(x < viewport[0]) x = viewport[0];
+    if(y < viewport[1]) y = viewport[1];
+    gmshTexCoord2f(1.0f, 1.0f);
+    gmshVertex2d(x + w, y - h);
+    gmshTexCoord2f(1.0f, 0.0f);
+    gmshVertex2d(x + w, y);
+    gmshTexCoord2f(0.0f, 0.0f);
+    gmshVertex2d(x, y);
+    gmshTexCoord2f(0.0f, 1.0f);
+    gmshVertex2d(x, y - h);
+  }
+  gmshEnd();
+  gmshTexture(0); // draws what is waiting, as the texture is going away
+  gmshBlend(false);
+}
+
+void drawContext::initProjection()
+{
+  double Va =
+    (double)(viewport[3] - viewport[1]) / (double)(viewport[2] - viewport[0]);
+  double Wa = (CTX::instance()->max[1] - CTX::instance()->min[1]) /
+              (CTX::instance()->max[0] - CTX::instance()->min[0]);
+
+  // compute the viewport in World coordinates (with margins)
+  if(Va > Wa) {
+    vxmin = CTX::instance()->min[0];
+    vxmax = CTX::instance()->max[0];
+    vymin = 0.5 * (CTX::instance()->min[1] + CTX::instance()->max[1] -
+                   Va * (CTX::instance()->max[0] - CTX::instance()->min[0]));
+    vymax = 0.5 * (CTX::instance()->min[1] + CTX::instance()->max[1] +
+                   Va * (CTX::instance()->max[0] - CTX::instance()->min[0]));
+  }
+  else {
+    vxmin = 0.5 * (CTX::instance()->min[0] + CTX::instance()->max[0] -
+                   (CTX::instance()->max[1] - CTX::instance()->min[1]) / Va);
+    vxmax = 0.5 * (CTX::instance()->min[0] + CTX::instance()->max[0] +
+                   (CTX::instance()->max[1] - CTX::instance()->min[1]) / Va);
+    vymin = CTX::instance()->min[1];
+    vymax = CTX::instance()->max[1];
+  }
+  double fact = CTX::instance()->displayBorderFactor;
+  double xborder = fact * (vxmax - vxmin), yborder = fact * (vymax - vymin);
+  vxmin -= xborder;
+  vxmax += xborder;
+  vymin -= yborder;
+  vymax += yborder;
+
+  // Put the origin of World coordinates at center of viewport
+  // (this is necessary for the scaling to be applied at center of viewport
+  // instead of at initial position of center of gravity)
+  vxmin -= CTX::instance()->cg[0];
+  vxmax -= CTX::instance()->cg[0];
+  vymin -= CTX::instance()->cg[1];
+  vymax -= CTX::instance()->cg[1];
+
+  // store what one pixel represents in world coordinates
+  pixel_equiv_x = (vxmax - vxmin) / (viewport[2] - viewport[0]);
+  pixel_equiv_y = (vymax - vymin) / (viewport[3] - viewport[1]);
+
+  // no initial translation of the model
+  t_init[0] = t_init[1] = t_init[2] = 0.;
+
+  // set up the near and far clipping planes so that the box is large enough to
+  // manipulate the model and zoom, but not too big (otherwise the z-buffer
+  // resolution e.g. with Mesa can become insufficient)
+  double zmax =
+    std::max(fabs(CTX::instance()->min[2]), fabs(CTX::instance()->max[2]));
+  if(zmax < CTX::instance()->lc) zmax = CTX::instance()->lc;
+
+  double clip_near, clip_far;
+  if(CTX::instance()->ortho) {
+    // (at least as deep as the window is wide: zoomed out, what it shows far
+    // around the model, as the grid of the work plane of a shape being
+    // placed, is not cut by the planes; the depth of an orthographic view
+    // being linear, its resolution is ample)
+    double w = std::max(std::max(fabs(vxmin), fabs(vxmax)),
+                        std::max(fabs(vymin), fabs(vymax)));
+    clip_near = -std::max(zmax * s[2], w) * CTX::instance()->clipFactor;
+    clip_far = -clip_near;
+  }
+  else {
+    clip_near = 0.75 * CTX::instance()->clipFactor * zmax;
+    clip_far = 75. * CTX::instance()->clipFactor * zmax;
+  }
+
+  // The background, in pixel coordinates and behind everything, if it is
+  // asked for and not in a selection pass. Camera mode draws the same one:
+  // it used to paint a gradient of its own in the camera's space, which
+  // ignored General.BackgroundGradient and Print.Background and left no
+  // room for the background image.
+  if(render_mode != GMSH_SELECT &&
+     (CTX::instance()->bgGradient || CTX::instance()->bgImageFileName.size()) &&
+     (!CTX::instance()->printing || CTX::instance()->print.background)) {
+    gmshDepthTest(false);
+    // in pixels, whatever the frame is drawn with: camera mode has the
+    // camera's own view loaded here already
+    gmshMatrixMode(GMSH_MODELVIEW);
+    gmshPushMatrix();
+    gmshLoadIdentity();
+    gmshMatrixMode(GMSH_PROJECTION);
+    gmshPushMatrix();
+    // the z values and the translation are only needed for GL2PS, which does
+    // not understand "no depth test" (hence we must make sure that we draw
+    // the background behind the rest of the scene)
+    double bg[16], back[16], m[16];
+    glMatrix::ortho(viewport[0], viewport[2], viewport[1], viewport[3],
+                    clip_near, clip_far, bg);
+    glMatrix::translate(0., 0., -0.99 * clip_far, back);
+    glMatrix::multiply(bg, back, m);
+    gmshLoadMatrix(m);
+    drawBackgroundGradient();
+    // hack for GL2PS (to make sure that the image is in front of the
+    // gradient)
+    glMatrix::translate(0., 0., -0.98 * clip_far, back);
+    glMatrix::multiply(bg, back, m);
+    gmshLoadMatrix(m);
+    drawBackgroundImage(false);
+    gmshPopMatrix();
+    gmshMatrixMode(GMSH_MODELVIEW);
+    gmshPopMatrix();
+    gmshDepthTest(true);
+  }
+
+  // in camera mode the matrices are the camera's, loaded by
+  // initCameraMatrices() once this has sized the viewport
+  if(CTX::instance()->camera) {
+    gmshMatrixMode(GMSH_MODELVIEW);
+    return;
+  }
+
+  {
+    // setup projection matrix
+    gmshMatrixMode(GMSH_PROJECTION);
+
+    double pick[16];
+    studioJitter(pick);
+
+    double projection[16];
+    if(CTX::instance()->ortho) {
+      glMatrix::ortho(vxmin, vxmax, vymin, vymax, clip_near, clip_far,
+                      projection);
+      glMatrix::multiply(pick, projection, _projection);
+      gmshLoadMatrix(_projection);
+      gmshMatrixMode(GMSH_MODELVIEW);
+      glMatrix::identity(_modelBase);
+      gmshLoadMatrix(_modelBase);
+    }
+    else {
+      // recenter the model such that the perspective is always at the center of
+      // gravity (we should maybe add an option to choose this, as we do for the
+      // rotation center)
+      t_init[0] = CTX::instance()->cg[0];
+      t_init[1] = CTX::instance()->cg[1];
+      vxmin -= t_init[0];
+      vxmax -= t_init[0];
+      vymin -= t_init[1];
+      vymax -= t_init[1];
+      glMatrix::frustum(vxmin, vxmax, vymin, vymax, clip_near, clip_far,
+                        projection);
+      glMatrix::multiply(pick, projection, _projection);
+      gmshLoadMatrix(_projection);
+      gmshMatrixMode(GMSH_MODELVIEW);
+      double coef = (clip_far / clip_near) / 3.;
+      double tr[16], sc[16];
+      glMatrix::translate(-coef * t_init[0], -coef * t_init[1],
+                          -coef * clip_near, tr);
+      glMatrix::scale(coef, coef, coef, sc);
+      glMatrix::multiply(tr, sc, _modelBase);
+      gmshLoadMatrix(_modelBase);
+    }
+  }
+}
+
+bool drawContext::drawStudioFrames(int from, int width, int height,
+                                   double view[16], double budget)
+{
+  int n = CTX::instance()->studioSamples;
+  double start = TimeOfDay();
+  for(int j = from; j < n; j++) {
+    if(budget > 0. && TimeOfDay() - start >= budget) break;
+    studioSample = j;
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    if(CTX::instance()->camera) initCameraMatrices(view);
+    draw3d();
+    draw2d();
+    glImmediate::flush();
+    global()->flushString();
+    if(!glShader::accumulate(width, height, j == 1, j)) {
+      studioSample = 0;
+      return false;
+    }
+    // what is left for the GPU to do counts against the time too
+    if(budget > 0.) glFinish();
+  }
+  return true;
+}
+
+void drawContext::setClearColor()
+{
+  CTX *ctx = CTX::instance();
+  if(ctx->printing && !ctx->print.background)
+    glClearColor(1.0F, 1.0F, 1.0F, 0.0F);
+  else
+    glClearColor((GLclampf)(ctx->unpackRed(ctx->color.bg) / 255.),
+                 (GLclampf)(ctx->unpackGreen(ctx->color.bg) / 255.),
+                 (GLclampf)(ctx->unpackBlue(ctx->color.bg) / 255.), 0.0F);
+}
+
+void drawContext::initCameraMatrices(double view[16])
+{
+  if(!camera.on) camera.init();
+  camera.giveViewportDimension(viewport[2], viewport[3]);
+  double frustum[16], jitter[16], proj[16];
+  glMatrix::frustum(camera.glFleft, camera.glFright, camera.glFbottom,
+                    camera.glFtop, camera.glFnear, camera.glFfar * camera.Lc,
+                    frustum);
+  studioJitter(jitter);
+  glMatrix::multiply(jitter, frustum, proj);
+  gmshMatrixMode(GMSH_PROJECTION);
+  gmshLoadMatrix(proj);
+  gmshMatrixMode(GMSH_MODELVIEW);
+  double eye[3] = {camera.position.x, camera.position.y, camera.position.z};
+  double target[3] = {camera.target.x, camera.target.y, camera.target.z};
+  double up[3] = {camera.up.x, camera.up.y, camera.up.z};
+  glMatrix::lookAt(eye, target, up, view);
+  gmshLoadMatrix(view);
+  // what unproject() and the picked points are read back with (the jitter of
+  // a studio frame is not part of the view)
+  for(int i = 0; i < 16; i++) {
+    model[i] = view[i];
+    this->proj[i] = frustum[i];
+  }
+}
+
+void drawContext::studioJitter(double m[16])
+{
+  glMatrix::identity(m);
+  if(studioSample <= 0 || render_mode == GMSH_SELECT || _pickColor) return;
+  double hr = highResolutionPixelFactor();
+  double w = (viewport[2] - viewport[0]) * hr;
+  double h = (viewport[3] - viewport[1]) * hr;
+  glMatrix::translate(2. * (halton(studioSample, 2) - 0.5) / w,
+                      2. * (halton(studioSample, 3) - 0.5) / h, 0., m);
+}
+
+void drawContext::initRenderModel()
+{
+  gmshPushMatrix();
+  gmshLoadIdentity();
+  gmshScale(s[0], s[1], s[2]);
+  gmshTranslate(t[0], t[1], t[2]);
+
+  // a core profile has no fixed function lighting: the shader gets the lights
+  // as uniforms instead
+  bool fixed = !glShader::enabled();
+  // General.Brightness: the shader applies it itself, the fixed function
+  // pipeline to the colours of its lights and of the global ambient (raised
+  // to 1/2.2 like the shader's classic shading)
+  GLfloat k = (GLfloat)pow(CTX::instance()->brightness, 1. / 2.2);
+
+  for(int i = 0; i < 6; i++) {
+    if(CTX::instance()->light[i]) {
+      GLfloat position[4] = {(GLfloat)CTX::instance()->lightPosition[i][0],
+                             (GLfloat)CTX::instance()->lightPosition[i][1],
+                             (GLfloat)CTX::instance()->lightPosition[i][2],
+                             (GLfloat)CTX::instance()->lightPosition[i][3]};
+      if(fixed) glLightfv((GLenum)(GL_LIGHT0 + i), GL_POSITION, position);
+      // OpenGL transforms the position by the current modelview (the scale
+      // and translation alone, so the lights do not rotate with the model);
+      // the shader is given the same result
+      double pos[4] = {position[0], position[1], position[2], position[3]};
+      double eye[4];
+      glMatrix::transform(glImmediate::matrix(GMSH_MODELVIEW), pos, eye);
+
+      // the colours of the light, and what the fixed function pipeline is
+      // given of them (scaled by k)
+      auto color = [&](unsigned int c, GLfloat out[4], GLenum what) {
+        CTX *x = CTX::instance();
+        out[0] = (GLfloat)(x->unpackRed(c) / 255.);
+        out[1] = (GLfloat)(x->unpackGreen(c) / 255.);
+        out[2] = (GLfloat)(x->unpackBlue(c) / 255.);
+        out[3] = 1.0F;
+        if(fixed) {
+          GLfloat f[4] = {k * out[0], k * out[1], k * out[2], 1.0F};
+          glLightfv((GLenum)(GL_LIGHT0 + i), what, f);
+        }
+      };
+      GLfloat ambient[4], diffuse[4], specular[4];
+      color(CTX::instance()->color.ambientLight[i], ambient, GL_AMBIENT);
+      color(CTX::instance()->color.diffuseLight[i], diffuse, GL_DIFFUSE);
+      color(CTX::instance()->color.specularLight[i], specular, GL_SPECULAR);
+      if(fixed) glEnable((GLenum)(GL_LIGHT0 + i));
+      glShader::setLight(i, eye, ambient, diffuse, specular);
+    }
+    else {
+      if(fixed) glDisable((GLenum)(GL_LIGHT0 + i));
+      glShader::setLightOff(i);
+    }
+  }
+
+  gmshPopMatrix();
+
+  if(fixed) {
+    // ambient and diffuse material colors track the current colour
+    // automatically
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+    glEnable(GL_COLOR_MATERIAL);
+    // the global ambient, OpenGL's 0.2 times the brightness
+    GLfloat global[4] = {0.2F * k, 0.2F * k, 0.2F * k, 1.0F};
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, global);
+    // "white"-only specular material reflection color
+    GLfloat spec[4] = {(GLfloat)CTX::instance()->shine,
+                       (GLfloat)CTX::instance()->shine,
+                       (GLfloat)CTX::instance()->shine, 1.0F};
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, spec);
+    // specular exponent in [0,128] (larger means more "focused"
+    // reflection)
+    glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS,
+                (GLfloat)CTX::instance()->shineExponent);
+
+    glShadeModel(GL_SMOOTH);
+
+    // Normalize the normals automatically. Using glEnable(GL_RESCALE_NORMAL)
+    // instead of glEnable(GL_NORMALIZE) (since we initially specify unit
+    // normals) is more efficient, but will only work with isotropic scalings
+    // (and we allow anistotropic scalings in myZoom...). Note that
+    // GL_RESCALE_NORMAL is only available in GL_VERSION_1_2.
+#if defined(WIN32)
+    glEnable(GL_NORMALIZE);
+#else
+    glEnable(GL_RESCALE_NORMAL);
+#endif
+  }
+
+  // lighting is enabled/disabled for each particular primitive later
+  gmshLighting(false);
+}
+
+double drawContext::fitScale()
+{
+  const double vw = viewport[2] - viewport[0], vh = viewport[3] - viewport[1];
+  if(vw <= 0. || vh <= 0.) return 1.;
+  CTX *c = CTX::instance();
+  // what initProjection() shows at scale 1, without its margins, which hold at
+  // any scale
+  const double w = std::max(c->max[0] - c->min[0],
+                            (c->max[1] - c->min[1]) * vw / vh);
+  const double h = w * vh / vw;
+  // how far from the center of the window the corners of the box go, placed
+  // as in initPosition()
+  buildRotationMatrix();
+  const double *cg = c->cg;
+  const double *rc = c->rotationCenterCg ? cg : c->rotationCenter;
+  double xm = 0., ym = 0.;
+  for(int i = 0; i < 8; i++) {
+    double p[3];
+    for(int j = 0; j < 3; j++)
+      p[j] = ((i >> j) & 1 ? c->max[j] : c->min[j]) - rc[j];
+    xm = std::max(xm, fabs(rot[0] * p[0] + rot[4] * p[1] + rot[8] * p[2] +
+                           rc[0] - cg[0]));
+    ym = std::max(ym, fabs(rot[1] * p[0] + rot[5] * p[1] + rot[9] * p[2] +
+                           rc[1] - cg[1]));
+  }
+  // infinite along a direction in which the box has no size
+  const double s = 0.5 * std::min(w / xm, h / ym);
+  return (s > 0. && std::isfinite(s)) ? s : 1.;
+}
+
+void drawContext::standardView(const std::string &which, bool opposite)
+{
+  bool cam = CTX::instance()->camera;
+  // Euler angles for an axis pointing out of the screen, or into it
+  auto setAngles = [this](double r0, double r1, double r2) {
+    r[0] = r0;
+    r[1] = r1;
+    r[2] = r2;
+    setQuaternionFromEulerAngles();
+  };
+  if(which == "x") {
+    if(cam)
+      camera.alongX();
+    else
+      setAngles(-90., 0., opposite ? 90. : -90.);
+  }
+  else if(which == "y") {
+    if(cam)
+      camera.alongY();
+    else
+      setAngles(-90., 0., opposite ? 0. : 180.);
+  }
+  else if(which == "z") {
+    if(cam)
+      camera.alongZ();
+    else
+      setAngles(0., opposite ? 180. : 0., 0.);
+  }
+  else if(which == "3d") {
+    // X to the left and Y to the right, or the other way round, the axes
+    // equally foreshortened
+    if(cam)
+      camera.isometric(opposite);
+    else {
+      setAngles(-54.7356, 0., opposite ? 45. : -135.);
+      t[0] = t[1] = t[2] = 0.;
+      s[0] = s[1] = s[2] = fitScale();
+    }
+  }
+  else if(which == "1:1") {
+    if(cam)
+      camera.lookAtCg();
+    else {
+      t[0] = t[1] = t[2] = 0.;
+      s[0] = s[1] = s[2] = fitScale();
+    }
+  }
+  else if(which == "reset") {
+    if(cam)
+      camera.init();
+    else {
+      t[0] = t[1] = t[2] = 0.;
+      s[0] = s[1] = s[2] = 1.;
+      setAngles(0., 0., 0.);
+    }
+  }
+}
+
+void drawContext::initPosition(bool saveMatrices)
+{
+  // NB: Those operations are applied to the model in the view coordinates
+  // (in opposite order), on top of the modelview left by initProjection()
+  const double *rc = CTX::instance()->rotationCenterCg ?
+                       CTX::instance()->cg :
+                       CTX::instance()->rotationCenter;
+  double sc[16], tr[16], toCenter[16], fromCenter[16], a[16], b[16];
+  glMatrix::scale(s[0], s[1], s[2], sc);
+  glMatrix::translate(t[0] - CTX::instance()->cg[0],
+                      t[1] - CTX::instance()->cg[1],
+                      t[2] - CTX::instance()->cg[2], tr);
+  glMatrix::translate(rc[0], rc[1], rc[2], toCenter);
+  glMatrix::translate(-rc[0], -rc[1], -rc[2], fromCenter);
+
+  buildRotationMatrix();
+
+  glMatrix::multiply(_modelBase, sc, a);
+  glMatrix::multiply(a, tr, b);
+  glMatrix::multiply(b, toCenter, a);
+  glMatrix::multiply(a, rot, b);
+  glMatrix::multiply(b, fromCenter, a);
+  gmshMatrixMode(GMSH_MODELVIEW);
+  gmshLoadMatrix(a);
+
+  // store the projection and modelview matrices at this precise moment (so that
+  // we can use them at any later time, even if the context has changed, i.e.,
+  // even if we are out of draw())
+  if(saveMatrices) {
+    for(int i = 0; i < 16; i++) {
+      proj[i] = _projection[i];
+      model[i] = a[i];
+    }
+  }
+
+  for(int i = 0; i < 6; i++)
+    gmshClipPlane(i, CTX::instance()->clipPlane[i]);
+}
+
+double drawContext::pointPixelFactor()
+{
+  return glImmediate::pixelScale() / _highResolutionPixelFactor;
+}
+
+bool drawContext::world2Window(const double xyz[3], double win[2])
+{
+  double fact = highResolutionPixelFactor();
+  int vp[4] = {(int)(viewport[0] * fact), (int)(viewport[1] * fact),
+               (int)(viewport[2] * fact), (int)(viewport[3] * fact)};
+  double w[3];
+  if(!glMatrix::project(xyz, model, proj, vp, w)) return false;
+  if(w[2] < 0. || w[2] > 1.) return false;
+  win[0] = w[0] / fact;
+  win[1] = w[1] / fact;
+  return true;
+}
+
+// Takes a cursor position in window coordinates and returns the line (given by
+// a point and a unit direction vector), in real space, that corresponds to that
+// cursor position
+void drawContext::unproject(double winx, double winy, double p[3], double d[3])
+{
+  // get true pixels
+  double fact = highResolutionPixelFactor();
+  winx *= fact;
+  winy *= fact;
+
+  // the viewport of this window in true pixels: asking OpenGL would answer
+  // for whichever window drew last, and this runs outside a draw
+  int vp[4] = {(int)(viewport[0] * fact), (int)(viewport[1] * fact),
+               (int)(viewport[2] * fact), (int)(viewport[3] * fact)};
+
+  winy = vp[3] - winy;
+
+  // we use the stored model and proj matrices instead of directly
+  // getGetDouble'ing the matrices since unproject can be called in or after
+  // draw2d
+  double onNear[3] = {0., 0., 0.}, onFar[3] = {0., 0., 0.};
+  double win[3] = {winx, winy, 0.};
+  // (fails harmlessly in a pane not drawn yet, e.g. on a pointer event sent
+  // while widgets are deleted: no warning, which would process the events)
+  if(!glMatrix::unProject(win, model, proj, vp, onNear))
+    Msg::Debug("unproject1 failed");
+  win[2] = 1.;
+  if(!glMatrix::unProject(win, model, proj, vp, onFar))
+    Msg::Debug("unproject2 failed");
+
+  p[0] = onNear[0];
+  p[1] = onNear[1];
+  p[2] = onNear[2];
+  d[0] = onFar[0] - onNear[0];
+  d[1] = onFar[1] - onNear[1];
+  d[2] = onFar[2] - onNear[2];
+  double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  d[0] /= len;
+  d[1] /= len;
+  d[2] /= len;
+}
+
+// the current matrices are ours (a core profile has no matrix stack)
+void drawContext::viewport2World(double vp[3], double xyz[3])
+{
+  const int *viewport = gmshViewport();
+  glMatrix::unProject(vp, glImmediate::matrix(GMSH_MODELVIEW),
+                      glImmediate::matrix(GMSH_PROJECTION), viewport, xyz);
+}
+
+void drawContext::world2Viewport(double xyz[3], double vp[3])
+{
+  const int *viewport = gmshViewport();
+  glMatrix::project(xyz, glImmediate::matrix(GMSH_MODELVIEW),
+                    glImmediate::matrix(GMSH_PROJECTION), viewport, vp);
+}
+
+void drawContext::recenterForRotationCenterChange(SPoint3 newRotationCenter)
+{
+  // Recompute model translation so that the view is not changed
+  SPoint3 &p = newRotationCenter;
+  double vp[3], xyz[3] = {p.x(), p.y(), p.z()};
+  glMatrix::project(xyz, model, proj, viewport, vp);
+  double wnr[3]; // look at mousePosition::recenter()
+  const double &width = viewport[2];
+  const double &height = viewport[3];
+  wnr[0] =
+    (vxmin + vp[0] / width * (vxmax - vxmin)) / s[0] - t[0] + t_init[0] / s[0];
+  wnr[1] =
+    (vymin + vp[1] / height * (vymax - vymin)) / s[1] - t[1] + t_init[1] / s[1];
+  t[0] += wnr[0] + CTX::instance()->cg[0] - p.x();
+  t[1] += wnr[1] + CTX::instance()->cg[1] - p.y();
+}

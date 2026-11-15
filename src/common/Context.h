@@ -1,0 +1,631 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef CONTEXT_H
+#define CONTEXT_H
+
+#include <vector>
+#include <map>
+#include <string>
+#include "GmshDefines.h"
+
+#define NUM_SOLVERS 10
+
+class GamePad;
+
+struct contextMeshOptions {
+  // what the transparency is applied to: 0 filled surfaces only, 1
+  // everything
+  int transparencyMode;
+  // multiplies the alpha of every mesh colour
+  double transparency;
+  // mesh algorithms
+  int optimize, optimizeNetgen, refineSteps;
+  double optimizePyramids;
+  int smoothCrossField, crossFieldClosestPoint;
+  double lcFactor, randFactor, randFactor3d, lcIntegrationPrecision;
+  double optimizeThreshold, normals, tangents, explode, angleSmoothNormals;
+  double optimizeReconnectionThreshold;
+  int optimizeReconnectionPoints, optimizeReconnectionSearch;
+  double allowSwapEdgeAngle;
+  double qualityInf, qualitySup, radiusInf, radiusSup;
+  double lcMin, lcMax, toleranceEdgeLength, toleranceInitialDelaunay;
+  double anisoMax, smoothRatio;
+  int lcFromPoints, lcFromParametricPoints, lcFromCurvature, lcFromCurvatureIso;
+  int lcExtendFromBoundary, checkSurfaceNormalValidity;
+  int nbSmoothing, algo2d, algo3d, algoSubdivide, algoSwitchOnFailure;
+  int mmg3dCombineDomains;
+  int algoRecombine, recombineAll, recombineOptimizeTopology;
+  int repairSelfIntersecting1dMesh;
+  int packSizemapMethod;
+  int recombineNodeRepositioning;
+  double recombineMinimumQuality;
+  int recombine3DAll, recombine3DPrisms, recombine3DPyramids;
+  int recombine3DSmoothing;
+  double recombine3DMinimumQuality;
+  int flexibleTransfinite, quasiTransfinite, transfiniteTri, maxRetries;
+  int order, secondOrderLinear, secondOrderIncomplete;
+  int meshOnlyVisible, meshOnlyEmpty;
+  int minCircleNodes, minCurveNodes, minLineNodes;
+  int hoOptimize, hoPeriodic, hoNLayers, hoPrimSurfMesh, hoIterMax, hoPassMax;
+  int hoDistCAD, hoSavePeriodic, hoFixBndNodes, hoSkipQualityCheck;
+  double hoThresholdMin, hoThresholdMax, hoPoissonRatio;
+  bool hoNewFastCurvingAlgo;
+  int hoCurveOuterBL;
+  double hoMaxRho, hoMaxAngle, hoMaxInnerAngle;
+  int NewtonConvergenceTestXYZ, maxIterDelaunay3D;
+  int flatRefine2D, flatRefine3D, flatOptimize3D;
+  int ignorePeriodicityMsh2, ignoreParametrizationMsh4, ignoreUnknownSections;
+  int ignoreEdges, ignoreFaces;
+  int boundaryLayerFanElements;
+  int maxNumThreads1D, maxNumThreads2D, maxNumThreads3D;
+  double angleToleranceFacetOverlap, toleranceReferenceElement;
+  int renumber, compoundClassify, reparamMaxTriangles, reproducible;
+  double compoundLcFactor;
+  unsigned int randomSeed;
+  int nLayersPerGap;
+  double gradation;
+  int quadqsSizemapMethod, quadqsTopoOptimMethods;
+  double quadqsRemeshingBoldness, quadqsScalingOnTriangulation;
+  int oldInitialDelaunay2D;
+  // mesh IO
+  int fileFormat, firstElementTag, firstNodeTag;
+  double mshFileVersion, medFileMinorVersion, scalingFactor;
+  int medImportGroupsOfNodes, medSingleModel;
+  int saveAll, saveViews, saveGroupsOfNodes, saveGroupsOfElements;
+  int readGroupsOfElements;
+  int binary, bdfFieldFormat;
+  int unvStrictFormat, stlRemoveBadTriangles, stlOneSolidPerSurface;
+  double stlLinearDeflection, stlAngularDeflection;
+  bool stlLinearDeflectionRelative;
+  int saveParametric, saveTopology, saveWithoutOrphans, zoneDefinition;
+  int saveElementTagType, switchElementTags;
+  int cgnsImportIgnoreBC, cgnsImportIgnoreSolution, cgnsImportOrder;
+  int cgnsConstructTopology, cgnsExportCPEX0045, cgnsExportStructured;
+  int preserveNumberingMsh2, createTopologyMsh2;
+  int createEdges, createFaces;
+  // partitioning
+  int numPartitions, partitionCreateTopology, partitionCreateGhostCells;
+  int partitionCreatePhysicals, partitionSplitMeshFiles, partitionSplitLocalBrep;
+  int partitionSaveTopologyFile, partitionTriWeight, partitionQuaWeight;
+  int partitionTetWeight, partitionHexWeight, partitionLinWeight;
+  int partitionPriWeight, partitionPyrWeight, partitionTrihWeight;
+  int partitionOldStyleMsh2, partitionConvertMsh2;
+  int metisAlgorithm, metisEdgeMatching, metisRefinementAlgorithm;
+  int metisObjective, metisMinConn;
+  double metisMaxLoadImbalance;
+  int overlapLayers;
+  // mesh display
+  // how many times the mesh of each dimension has changed (see
+  // CTX::meshChanged())
+  int stamp[4];
+  int draw, light, lightTwoSide, lightLines, nodeType;
+  int nodes, lines, triangles, quadrangles, tetrahedra, hexahedra, prisms;
+  int pyramids, trihedra, polygons, polyhedra;
+  int surfaceEdges, surfaceFaces, volumeEdges, volumeFaces, numSubEdges;
+  int nodeLabels, lineLabels, surfaceLabels, volumeLabels, qualityType;
+  int labelType;
+  double nodeSize, lineWidth;
+  int dual, voronoi, drawSkinOnly, drawSkinEdgesOnly, colorCarousel;
+  int labelSampling;
+  int drawUniqueEdges;
+  int smoothNormals, clip;
+  // records cpu times for 1D, 2D and 3D mesh generation
+  double timer[3];
+  // records minimal and average mesh quality after 2D and 3D mesh generation
+  double minQuality, avgQuality;
+};
+
+struct contextGeometryOptions {
+  // how many times the geometry of each dimension has changed (see
+  // CTX::geomChanged())
+  int stamp[4];
+  // what the transparency is applied to: 0 filled surfaces only, 1
+  // everything
+  int transparencyMode;
+  // multiplies the alpha of every geometry colour
+  double transparency;
+  // geometry algorithms
+  int oldCircle, oldNewreg, oldRuledSurface;
+  int extrudeSplinePoints, extrudeReturnLateral;
+  std::string pipeDefaultTrihedron;
+  int autoCoherence;
+  int autoExtrude; // FIXME: temporary for auto-extrude testing
+  double tolerance, toleranceBoolean, snap[3], transform[3][3], offset[3];
+  int occAutoFix, occAutoEmbed, occFastUnbind;
+  int occFixDegenerated, occFixSmallEdges, occFixSmallFaces;
+  int occSewFaces, occMakeSolids, occParallel;
+  int occBoundsUseSTL, occDisableSTL, occImportLabels, occExportOnlyVisible;
+  int occWriteParametricCurves, occWriteSTEPNonManifold;
+  int occBooleanCheckInverted, occBooleanGlue, occBooleanNonDestructive;
+  int occBooleanPreserveNumbering, occBooleanSimplify;
+  int occThruSectionsDegree, occUseGenericClosestPoint, occFastProjection;
+  int occBrepFormatVersion;
+  double occScaling;
+  std::string occTargetUnit;
+  // STEP file outputs
+  // header section: FILE_DESCRIPTION
+  std::string occStepDescription;
+  std::string occStepImplementationLevel;
+  // header section: FILE_NAME
+  std::string occStepModelName;
+  std::string occStepTimeStamp;
+  std::string occStepAuthor;
+  std::string occStepOrganization;
+  std::string occStepPreprocessorVersion;
+  std::string occStepOriginatingSystem;
+  std::string occStepAuthorization;
+  // header section: FILE_SCHEMA
+  std::string occStepSchemaIdentifier;
+
+  int copyMeshingMethod, exactExtrusion;
+  int matchGeomAndMesh;
+  double matchMeshScaleFactor;
+  double matchMeshTolerance;
+  int orientedPhysicals;
+  int reparamOnFaceRobust;
+  // geometry display
+  int draw, light, lightTwoSide, points, curves, surfaces, volumes;
+  int pointLabels, curveLabels, surfaceLabels, volumeLabels, labelType;
+  double pointSize, curveWidth, selectedPointSize, selectedCurveWidth;
+  int pointType, curveType, surfaceType, volumeType, numSubEdges;
+  double normals, tangents, scalingFactor;
+  int firstEntityTag, firstPhysicalTag, snapPoints;
+  int highlightOrphans, clip, useTransform;
+  int doubleClickedEntityTag;
+  std::string doubleClickedPointCommand, doubleClickedCurveCommand;
+  std::string doubleClickedSurfaceCommand, doubleClickedVolumeCommand;
+};
+
+// The interface-independent context.
+class CTX {
+private:
+  static CTX *_instance;
+  static CTX *_create();
+
+public:
+  CTX();
+  ~CTX();
+  void init();
+  // called in tight loops in the drawing code: common path inline
+  static CTX *instance() { return _instance ? _instance : _create(); }
+
+  // What is drawn is kept between frames, and rebuilt when what it was built
+  // from changes. The code that changes it says so - the mesh or the geometry
+  // of some dimensions (ENT_* bits), the colours or the visibility of the
+  // entities (for the mesh and the geometry alike) - which bumps a stamp;
+  // what is kept records the stamps it was built with, and compares them
+  // with the current ones (as it records the values of the options it reads
+  // besides). Every reader (the mesh, the geometry, a picking pass, another
+  // window) sees every change: none is cleared by the one that sees it.
+  int entityColorsStamp, entityVisibilityStamp;
+  void meshChanged(int ents = ENT_ALL)
+  {
+    meshOptionsChanged(ents);
+    meshContentStamp++;
+  }
+  // an option changed the way the mesh is drawn, not the mesh: what only
+  // depends on the elements (the skin of a volume, which also records the
+  // options it reads) is kept
+  void meshOptionsChanged(int ents = ENT_ALL)
+  {
+    for(int d = 0; d < 4; d++)
+      if(ents & (1 << d)) mesh.stamp[d]++;
+  }
+  int meshContentStamp;
+  void geomChanged(int ents = ENT_ALL)
+  {
+    for(int d = 0; d < 4; d++)
+      if(ents & (1 << d)) geom.stamp[d]++;
+  }
+  // entities were created or deleted (GModel::add(), remove(), destroy()):
+  // what keeps pointers to entities, as the lists of the GUI do, compares it
+  int entitiesStamp;
+  // the elements and nodes of a mesh deleted or replaced (see
+  // GModel::destroyMeshCaches()), not merely shown otherwise as
+  // meshChanged() says: what keeps pointers to them compares it
+  int meshElementsStamp;
+  void entitiesChanged()
+  {
+    entitiesStamp++;
+    geomChanged();
+  }
+  void entityColorsChanged() { entityColorsStamp++; }
+  void entityVisibilityChanged() { entityVisibilityStamp++; }
+
+  // for debug purposes only, i.e. JF and CG personal use
+  int debugSurface;
+  // files on the command line and various file names
+  std::vector<std::string> files;
+  std::string bgmFileName, outputFileName, defaultFileName, tmpFileName;
+  std::string sessionFileName, optionsFileName, errorFileName;
+  std::string meshStatReportFileName;
+  // filename of the executable, with full path
+  std::string exeFileName;
+  // the home directory
+  std::string homeDir;
+  // file history
+  std::vector<std::string> recentFiles;
+  // default number format in graphics window
+  std::string numberFormat;
+  // create mesh statistics report (0: do nothing, 1: create, 2: append)
+  int createAppendMeshStatReport;
+  // behavior on error
+  int abortOnError;
+  // should we launch a solver at startup?
+  int launchSolverAtStartup;
+  // save session/option file on exit?
+  int sessionSave, optionsSave;
+  // ask confirmation when overwriting files?
+  int confirmOverwrite;
+  // forced display host:0.0 under X11
+  std::string display;
+  // FLTK theme
+  std::string guiTheme;
+  // FLTK color scheme and max refresh rate
+  int guiColorScheme, guiRefreshRate;
+  // the interface drawn dark: the colour scheme resolved, 2 following the
+  // desktop
+  int guiDark;
+  // print messages on to the terminal?
+  int terminal;
+  // number of threads (0 == use system default)
+  int numThreads;
+  // how many threads a loop over num items runs on: General.NumThreads (all
+  // there are if 0), or 1 if there are fewer items than are worth it
+  int numThreadsFor(std::size_t num, std::size_t worthIt) const;
+  // how many threads the 3D meshing stages run on: Mesh.MaxNumThreads3D if
+  // set, else General.NumThreads (all there are if 0)
+  int numThreads3D() const;
+  // detached processes (WIN32)?
+  int detachedProcess;
+  // number of graphical windows/tiles
+  int numWindows, numTiles;
+  // text editor command (with included '%s')
+  std::string editor;
+  // pattern of files to watch out for
+  std::string watchFilePattern;
+  // script generator languages ("geo", "py", ...)
+  std::vector<std::string> scriptLang;
+  // show tootips in the GUI?
+  int tooltips;
+  // enable input field scrolling (moving the mouse to change numbers)
+  int inputScrolling;
+  // position and size of various windows in the GUI
+  int glPosition[2], glSize[2], msgSize, menuSize[2], detachedMenu;
+  // the width of the dock of the tool windows, and the tools kept on the
+  // desktop instead, by name
+  int dockWidth;
+  std::string floatingTools;
+  // positions of the other windows, relative to the graphic window
+  int menuOffset[2], optOffset[2], visOffset[2], hotOffset[2], clipOffset[2],
+    manipOffset[2], statOffset[2], ctxOffset[2], partOffset[2],
+    reclassifyOffset[2];
+  int pluginOffset[2], pluginSize[2], fieldOffset[2], fieldSize[2], optHeight;
+  int fileChooserOffset[2], extraOffset[2], extraSize[2];
+  int editorOffset[2], editorSize[2];
+  // use the system menu bar on macOS?
+  int systemMenuBar;
+  // use the native file chooser?
+  int nativeFileChooser;
+  // show standard Gmsh menu in onelab window
+  int showModuleMenu;
+  // use high-resolution opengl graphics (retina Macs)
+  int highResolutionGraphics;
+  // batch mode (-4: lua session, -3: server daemon, -2: check coherence, -1:
+  // write geo, 0: full gfx, 1: 1D mesh, 2: 2D mesh, 3: 3D mesh, 4: adapt mesh,
+  // 5: refine mesh, 6: reclassify mesh)
+  int batch;
+  // batch operations to apply after meshing (1: partition mesh)
+  int batchAfterMesh;
+  // some option for batch processing
+  double batchSomeValue;
+  // initial menu (0: automatic, 1: geom, 2: mesh, 3: solver, 4: post)
+  int initialContext;
+  // show some windows on startup?
+  int showOptionsOnStartup, showMessagesOnStartup;
+  // never popup dialogs in scripts (use default values instead)?
+  int noPopup;
+  // make all windows "non modal"?
+  int nonModalWindows;
+  // clipping plane distance factor
+  double clipFactor;
+  // display border factor (0 = model fits window size exactly)
+  double displayBorderFactor;
+  // do or do not use the trackball for rotations
+  int useTrackball, trackballHyperbolicSheet;
+  // gamepad controller
+  GamePad *gamepad;
+  // point around which to rotate the scene
+  double rotationCenter[3];
+  // rotate around the center of mass instead of rotationCenter[]
+  int rotationCenterCg;
+  // "overall" x, y and z min used for drawing and lc computation
+  double min[3], max[3];
+  // "center of mass" of the current geometry, used for graphics only
+  double cg[3];
+  // characteristic length for the whole problem, measuring the overall bounding
+  // box (used to set tolerances relative to the overall model size)
+  double lc;
+  // double buffer/antialias/stereo graphics?
+  int db, antialiasing, stereo, camera;
+  bool fileread;
+  double eye_sep_ratio, focallength_ratio, camera_aperture;
+  // orthogonal projection?
+  int ortho;
+  // draw the bounding boxes and the rot center?
+  int drawBBox, drawRotationCenter;
+  // draw simplified model during user interaction?
+  int fastRedraw;
+  // small axes options
+  int smallAxes, smallAxesSize, smallAxesPos[2];
+  // large axes options
+  int axes, axesAutoPosition, axesMikado, axesForceValue;
+  double axesPosition[6], axesValue[6], axesTicks[3];
+  std::string axesLabel[3], axesFormat[3];
+  // simple dynamic lock (should be a mutex)
+  int lock;
+  // enable alpha blending?
+  int alpha;
+  // mouse2 zoom coefficient
+  double zoomFactor;
+  // draw background gradient?
+  int bgGradient;
+  // draw background image?
+  std::string bgImageFileName;
+  double bgImagePosition[2], bgImageSize[2];
+  int bgImage3d, bgImagePage;
+  // fltk font size (and delta for palette windows)
+  int fontSize, deltaFontSize;
+  // font name, FLTK enum and size for opengl graphics
+  std::string glFont, glFontTitle, glFontEngine;
+  int glFontEnum, glFontEnumTitle, glFontSize, glFontSizeTitle;
+  // font size of messages
+  int msgFontSize;
+  // point/line widths
+  double pointSize, lineWidth;
+  double highResolutionPointSizeFactor;
+  // light options
+  int light[6];
+  double lightPosition[6][4], shine, shineExponent;
+  // clipping plane options
+  double clipPlane[6][4];
+  int clipWholeElements, clipOnlyDrawIntersectingVolume, clipOnlyVolume;
+  // fill the section cut by the clipping planes in 3D meshes and views
+  int clipCapping;
+  // Which kinds of element are drawn, for the key of an array kept between
+  // frames: in one place, and so in one order, for every cache that holds
+  // elements of several kinds.
+  void addElementTypesToKey(std::vector<double> &key) const
+  {
+    key.push_back(mesh.triangles);
+    key.push_back(mesh.quadrangles);
+    key.push_back(mesh.polygons);
+    key.push_back(mesh.tetrahedra);
+    key.push_back(mesh.hexahedra);
+    key.push_back(mesh.prisms);
+    key.push_back(mesh.pyramids);
+    key.push_back(mesh.trihedra);
+    key.push_back(mesh.polyhedra);
+  }
+  std::vector<double> elementTypesKey() const
+  {
+    std::vector<double> key;
+    addElementTypesToKey(key);
+    return key;
+  }
+  // What the planes add to the key of an array kept between frames: the modes
+  // the clipping window sets directly (they never mark the mesh as changed)
+  // and the planes themselves. In one place, so that a mode added to the
+  // group is not forgotten by one of the caches.
+  // (mask: the planes that apply, a bit each, the others being left out)
+  void addClipToKey(std::vector<double> &key, int mask = 63) const
+  {
+    key.push_back(mask);
+    key.push_back(clipCapping);
+    key.push_back(clipWholeElements);
+    key.push_back(clipOnlyVolume);
+    key.push_back(clipOnlyDrawIntersectingVolume);
+    for(int i = 0; i < 6; i++)
+      if(mask & (1 << i))
+        for(int j = 0; j < 4; j++) key.push_back(clipPlane[i][j]);
+  }
+  std::vector<double> clipKey(int mask) const
+  {
+    std::vector<double> key;
+    addClipToKey(key, mask);
+    return key;
+  }
+  // draw the vertex arrays from OpenGL buffer objects instead of client memory
+  int vertexBufferObjects;
+  // draw with the shader pipeline instead of the fixed function one
+  // (recreates the OpenGL context)
+  int shaders;
+  // lighting model of the shader pipeline: 0 the fixed function one, 1 to 3
+  // studio (linear light, hemisphere ambient, soft key light, no specular,
+  // shadows) with the floor normal to x, y or z
+  int shading;
+  // a factor on the light of the lit surfaces, in either shading
+  double brightness;
+  // angular radius (degrees) of the studio light, which sets the softness of
+  // its shadow, the offset of the floor from the bottom of the model along
+  // its normal (relative to the size of the bounds), and the number of
+  // frames accumulated while the view is still, and how dark the shadows
+  // are (1: as designed)
+  double studioLightSpread, studioFloorOffset, studioShadowStrength;
+  // the largest half-size of the floor, relative to the model
+  double studioFloorSize;
+  int studioSamples;
+  int phlogiston;
+  // order independent (weighted blended) transparency instead of back to
+  // front sorting
+  int orderIndependentTransparency;
+  // polygon offset options
+  int polygonOffset, polygonOffsetAlways;
+  double polygonOffsetFactor, polygonOffsetUnits;
+  // color scheme
+  int colorScheme;
+  // number of subdivisions for gluQuadrics
+  int quadricSubdivisions;
+  // memory (in MB) each of the caches kept between frames may take, the
+  // glyph triangles and the string atlas (0: automatic, see
+  // graphicsCacheMB())
+  double graphicsCacheSize;
+  // vector display type and options (for normals, etc.)
+  int vectorType;
+  double arrowRelHeadRadius, arrowRelStemRadius, arrowRelStemLength;
+  // dynamic variable tracking if the bbox is currently imposed
+  int forcedBBox;
+  // enable selection/hover using the mouse (whether a pick returns the mesh
+  // element under the point it hit is a parameter of the selection, see
+  // sceneView::beginSelection())
+  int mouseSelection, mouseHoverMeshes, mouseHoverHighlight;
+  // invert sense of mouse wheel zoom
+  int mouseInvertZoom;
+  // disable some warnings for expert users?
+  int expertMode;
+  // Enable heavy visualization capabilities (for development purpose)
+  int heavyVisu;
+  // dynamic: equal to 1 while gmsh is printing
+  int printing;
+  // hide all unselected entities?
+  int hideUnselected;
+  // temporary storage of rotation, translation, scale (until the GUI
+  // is ready)
+  double tmpRotation[3], tmpTranslation[3], tmpScale[3], tmpQuaternion[4];
+  // geometry options
+  contextGeometryOptions geom;
+  // mesh options
+  contextMeshOptions mesh;
+  // post processing options
+  struct {
+    int draw, link, horizontalScales, binary;
+    int smooth, animCycle, animStep;
+    int combineTime, combineRemoveOrig, combineCopyOptions;
+    int fileFormat, plugins, forceNodeData, forceElementData;
+    int saveMesh, saveInterpolationMatrices, saveAdapted;
+    double animDelay;
+    std::string doubleClickedGraphPointCommand;
+    double doubleClickedGraphPointX, doubleClickedGraphPointY;
+    int doubleClickedView;
+  } post;
+  // solver options
+  struct {
+    int plugins, listen;
+    double timeout;
+    std::string socketName, pythonInterpreter, octaveInterpreter;
+    std::string name[NUM_SOLVERS], extension[NUM_SOLVERS];
+    std::string executable[NUM_SOLVERS], remoteLogin[NUM_SOLVERS];
+    int autoSaveDatabase, autoLoadDatabase;
+    int autoArchiveOutputFiles, autoMesh, autoMergeFile;
+    int autoShowViews, autoShowLastStep, autoCheck, showInvisibleParameters;
+  } solver;
+  // print options
+  struct {
+    int fileFormat, epsQuality, epsCompress, epsPS3Shading;
+    int epsOcclusionCulling, epsBestRoot;
+    double epsLineWidthFactor, epsPointSizeFactor;
+    int jpegQuality, jpegSmoothing, geoLabels, geoOnlyPhysicals;
+    int text, texAsEquation, texForceFontSize;
+    double texWidthInMm;
+    int gifDither, gifSort, gifInterlace, gifTransparent;
+    int posElementary, posElement, posGamma, posEta, posSICN, posSIGE, posDisto;
+    int compositeWindows, deleteTmpFiles, background;
+    int width, height, supersampling, scalePixelSizes;
+    double parameter, parameterFirst, parameterLast, parameterSteps;
+    int pgfTwoDim, pgfExportAxis, pgfHorizBar;
+    std::string parameterCommand;
+    int x3dCompatibility, x3dRemoveInnerBorders;
+    double x3dPrecision, x3dTransparency;
+    int x3dSurfaces, x3dEdges, x3dVertices, x3dVolumes, x3dColorize;
+  } print;
+  // color options
+  struct {
+    unsigned int bg, bgGrad, fg, text, axes, smallAxes;
+    // the box a query leaves on the picture (see drawQuery.cpp)
+    unsigned int query;
+    unsigned int ambientLight[6], diffuseLight[6], specularLight[6];
+    struct {
+      unsigned int point, curve, surface, volume;
+      unsigned int selection, highlight[3], projection;
+      unsigned int tangents, normals;
+    } geom;
+    struct {
+      unsigned int node, nodeSup, line, triangle, quadrangle;
+      unsigned int tetrahedron, hexahedron, prism, pyramid, trihedron;
+      unsigned int polygon, polyhedron;
+      unsigned int carousel[20];
+      unsigned int tangents, normals;
+    } mesh;
+  } color;
+  // is the machine big-endian?
+  int bigEndian;
+  // how RGBA values are packed and unpacked into/from an unsigned integer to be
+  // fed to gmshColor4ubv (depends on machine byte ordering!):
+  // the bound set by General.GraphicsCacheSize, or derived from the machine
+  double graphicsCacheMB();
+  unsigned int packColor(int R, int G, int B, int A);
+  int unpackRed(unsigned int X);
+  int unpackGreen(unsigned int X);
+  int unpackBlue(unsigned int X);
+  int unpackAlpha(unsigned int X);
+};
+
+// Whether an operation holds the lock on the model (the GUI processes events
+// during it), saying so if it does: what would change the model does nothing.
+bool modelBusy();
+
+// The lock on the model (CTX::lock) for the span of an operation, given back as
+// it was however the operation ends (an exception: Msg::Error throws without
+// the GUI when General.AbortOnError is 2, the default of the API, and the
+// meshers throw): a part of an operation locking it again, as the meshing a
+// script asks for while it is read, leaves it held. An operation starting
+// takes it only if it is free, in one step:
+//
+//   modelLock lock(modelLock::ifFree);
+//   if(!lock) return; // busy, and said so
+//
+// and a part of the operation holding it takes it unconditionally.
+class modelLock {
+  int _previous;
+  bool _held;
+
+public:
+  enum ifFreeTag { ifFree };
+  modelLock() : _previous(CTX::instance()->lock), _held(true)
+  { CTX::instance()->lock = 1; }
+  explicit modelLock(ifFreeTag)
+    : _previous(CTX::instance()->lock), _held(!modelBusy())
+  {
+    if(_held) CTX::instance()->lock = 1;
+  }
+  ~modelLock()
+  {
+    if(_held) CTX::instance()->lock = _previous;
+  }
+  explicit operator bool() const { return _held; }
+  modelLock(const modelLock &) = delete;
+  modelLock &operator=(const modelLock &) = delete;
+};
+
+// The stamps of the entities and of the mesh elements when pointers to them
+// were kept (by a selection, an editor of the GUI): whether either changed
+// since says whether the pointers may dangle.
+struct modelStamps {
+  int entities, mesh;
+  modelStamps() { record(); }
+  void record()
+  {
+    entities = CTX::instance()->entitiesStamp;
+    mesh = CTX::instance()->meshElementsStamp;
+  }
+  bool changed() const
+  {
+    return entities != CTX::instance()->entitiesStamp ||
+           mesh != CTX::instance()->meshElementsStamp;
+  }
+};
+
+#endif

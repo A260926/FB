@@ -1,0 +1,144 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef DRAW_CONTEXT_FLTK_H
+#define DRAW_CONTEXT_FLTK_H
+
+#include "GmshConfig.h"
+#include <algorithm>
+#include <cstdint>
+#include <FL/x.H>
+#include <FL/gl.h>
+#include "GmshMessage.h"
+#include "FlGui.h"
+#include "drawContext.h"
+#include "graphicWindow.h"
+#include "optionWindow.h"
+#include "openglWindow.h"
+#include "Context.h"
+
+class drawContextFltk : public drawContextGlobal {
+public:
+  void draw(bool rateLimited = true)
+  {
+    if(!FlGui::available()) return;
+    if(FlGui::instance()->fullscreen->shown()) {
+      FlGui::instance()->fullscreen->make_current();
+      FlGui::instance()->fullscreen->redraw();
+    }
+    else {
+      for(std::size_t i = 0; i < FlGui::instance()->graph.size(); i++) {
+        for(std::size_t j = 0; j < FlGui::instance()->graph[i]->gl.size();
+            j++) {
+          FlGui::instance()->graph[i]->gl[j]->make_current();
+          FlGui::instance()->graph[i]->gl[j]->redraw();
+          glFlush();
+          // FIXME: I don't think this should be done here
+          drawContext *ctx =
+            FlGui::instance()->graph[i]->gl[j]->getDrawContext();
+          ctx->camera.update();
+        }
+      }
+    }
+    // the options changed by code that sets them without their names (see
+    // optionWindow::showOptions())
+    if(FlGui::instance()->options->win->shown())
+      FlGui::instance()->options->showOptions(true);
+    FlGui::check(rateLimited);
+  }
+  void drawCurrentOpenglWindow(bool make_current, bool again = false)
+  {
+    if(!FlGui::available()) return;
+    openglWindow *gl = FlGui::instance()->getCurrentOpenglWindow();
+    if(make_current) gl->make_current();
+    gl->setAgain(again);
+    gl->redraw();
+    glFlush();
+    FlGui::check();
+    gl->setAgain(false);
+  }
+  int getFontSize()
+  {
+    if(CTX::instance()->fontSize > 0) { return CTX::instance()->fontSize; }
+    else {
+      // the screen that will show the graphic window
+      int n = Fl::screen_num(CTX::instance()->glPosition[0],
+                             CTX::instance()->glPosition[1]);
+      int x, y, w, h;
+      Fl::screen_work_area(x, y, w, h, n);
+      if(h < 800)
+        return 11;
+      else if(h < 1000)
+        return 12;
+      else if(h < 1200)
+        return 13;
+      else if(h < 1400)
+        return 14;
+      else if(h < 1600)
+        return 15;
+      else if(h < 1800)
+        return 16;
+      float dpih, dpiv;
+      Fl::screen_dpi(dpih, dpiv, n);
+      int s = std::max(16, (int)(dpih / 10.));
+      return s;
+    }
+  }
+  // a font size FLTK can load: a size typed out of all proportion (thousands
+  // of pixels) makes the X11 font code exit
+  static int fontSizeInRange(int fontsize)
+  {
+    return fontsize < 1 ? 1 : fontsize > 512 ? 512 : fontsize;
+  }
+  void setFont(int fontid, int fontsize)
+  {
+    gl_font(fontid, fontSizeInRange(fontsize));
+  }
+  double getStringWidth(const char *str) { return gl_width(str); }
+  int getStringHeight() { return gl_height(); }
+  int getStringDescent() { return gl_descent(); }
+  void drawString(const char *str)
+  {
+    if(!stringHalo()) {
+      gl_draw(str);
+      return;
+    }
+    // eight copies around it in the background colour first, the raster
+    // position moved by a pixel each time (an empty bitmap moves it) and
+    // brought back after each, as drawing advances it
+    GLfloat pos[4], color[4];
+    glGetFloatv(GL_CURRENT_RASTER_POSITION, pos);
+    glGetFloatv(GL_CURRENT_COLOR, color);
+    unsigned int bg = CTX::instance()->color.bg;
+    glColor4ub(CTX::instance()->unpackRed(bg), CTX::instance()->unpackGreen(bg),
+               CTX::instance()->unpackBlue(bg), 255);
+    for(int i = -1; i <= 1; i++)
+      for(int j = -1; j <= 1; j++) {
+        if(!i && !j) continue;
+        glBitmap(0, 0, 0.f, 0.f, (GLfloat)i, (GLfloat)j, nullptr);
+        gl_draw(str);
+        GLfloat now[4];
+        glGetFloatv(GL_CURRENT_RASTER_POSITION, now);
+        glBitmap(0, 0, 0.f, 0.f, pos[0] - now[0], pos[1] - now[1], nullptr);
+      }
+    glColor4fv(color);
+    gl_draw(str);
+  }
+  // FLTK draws a string as a texture, kept in a pile of a fixed height
+  bool keepsStringTextures() { return true; }
+  void resetFontTextures()
+  {
+    // the strings are drawn again: their textures are made again with them
+    gl_texture_pile_height(gl_texture_pile_height());
+  }
+  void reserveStringTextures(std::size_t n)
+  {
+    if(gl_texture_pile_height() < (int)n) gl_texture_pile_height((int)n);
+  }
+  bool mouseIsPressed() { return Fl::pushed() ? true : false; }
+  std::string getName() { return "Fltk"; }
+};
+
+#endif

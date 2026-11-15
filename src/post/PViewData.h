@@ -1,0 +1,433 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+#ifndef PVIEW_DATA_H
+#define PVIEW_DATA_H
+
+#include <string>
+#include <vector>
+#include <map>
+#include <set>
+#include "SBoundingBox3d.h"
+#include "SPoint3KDTree.h"
+
+#define VAL_INF 1.e200
+
+class adaptiveData;
+class GModel;
+class GEntity;
+class MElement;
+class nameData;
+class OctreePost;
+template <class scalar> class fullMatrix;
+
+typedef std::map<int, std::vector<fullMatrix<double> *> > interpolationMatrices;
+
+// The abstract interface to post-processing view data.
+class PViewData {
+private:
+  // flag to mark that the data is 'dirty' and should not be displayed
+  bool _dirty;
+  int _stamp = 0;
+  // name of the view
+  std::string _name;
+  // name of the file the data was loaded from
+  std::string _fileName;
+  std::set<std::string> _fileNames;
+  // index of the view in the file
+  int _fileIndex;
+  // the number of its first step in the files that number the steps, for
+  // data holding the steps of another view from that one on
+  int _firstStep;
+  // octree for rapid search, and kdtree for the nearest node, built on first
+  // use and again when the data has changed (see getStamp()): _getOctree()
+  OctreePost *_octree;
+  SPoint3Cloud _pc;
+  SPoint3CloudAdaptor<SPoint3Cloud> _pc2kdtree;
+  SPoint3KDTree *_kdtree;
+  int _octreeStamp, _kdtreeStamp;
+  OctreePost *_getOctree();
+
+protected:
+  // adaptive visualization data
+  adaptiveData *_adaptive;
+  // interpolation matrices, indexed by the type of element
+  interpolationMatrices _interpolation;
+  // global map of "named" interpolation matrices
+  static std::map<std::string, interpolationMatrices> _interpolationSchemes;
+  // string for the name of the interpolation scheme
+  std::string _interpolationSchemeName;
+
+public:
+  PViewData();
+  virtual ~PViewData();
+
+  // get/set the dirty ("not ready for display") flag
+  virtual bool getDirty() { return _dirty; }
+  virtual void setDirty(bool val)
+  {
+    _dirty = val;
+    if(val) _stamp++;
+  }
+
+  // bumped whenever the data may have changed (made dirty, finalized, added
+  // to): what is derived from the data alone, not from the options of the
+  // view, records it and is kept until it moves
+  int getStamp() const { return _stamp; }
+  void changed() { _stamp++; }
+
+  // finalize the view data (compute min/max, etc.)
+  virtual bool finalize(bool computeMinMax = true,
+                        const std::string &interpolationScheme = "");
+
+  // get/set name
+  virtual std::string getName() { return _name; }
+  virtual void setName(const std::string &val) { _name = val; }
+
+  // get/set (the main) filename containing the data
+  virtual std::string getFileName(int step = -1) { return _fileName; }
+  virtual void setFileName(const std::string &val)
+  {
+    _fileName = val;
+    _fileNames.insert(val);
+  }
+  virtual bool hasFileName(const std::string &val)
+  {
+    return _fileNames.find(val) != _fileNames.end();
+  }
+
+  // get/set index of view data in file
+  virtual int getFileIndex() { return _fileIndex; }
+  virtual void setFileIndex(int val) { _fileIndex = val; }
+
+  // get/set the number of the first step in the files that number the steps
+  int getFirstStep() { return _firstStep; }
+  void setFirstStep(int val) { _firstStep = val; }
+
+  // get number of time steps in the data
+  virtual int getNumTimeSteps() = 0;
+  virtual int getFirstNonEmptyTimeStep(int start = 0) { return start; }
+
+  // get the time value associated with the step-th time step
+  virtual double getTime(int step) { return 0.; }
+
+  // get/set min/max for given step (global over all steps if step=-1)
+  virtual double getMin(int step = -1, bool onlyVisible = false,
+                        int tensorRep = 0, int forceNumComponents = 0,
+                        int componentMap[9] = nullptr) = 0;
+  virtual double getMax(int step = -1, bool onlyVisible = false,
+                        int tensorRep = 0, int forceNumComponents = 0,
+                        int componentMap[9] = nullptr) = 0;
+  virtual void setMin(double min) = 0;
+  virtual void setMax(double max) = 0;
+
+  // get/set the bounding box
+  virtual SBoundingBox3d getBoundingBox(int step = -1) = 0;
+  virtual void setBoundingBox(SBoundingBox3d &box) = 0;
+
+  // get the number of elements of a given type, for a given step
+  virtual int getNumScalars(int step = -1) { return 0; }
+  virtual int getNumVectors(int step = -1) { return 0; }
+  virtual int getNumTensors(int step = -1) { return 0; }
+  virtual int getNumPoints(int step = -1) { return 0; }
+  virtual int getNumLines(int step = -1) { return 0; }
+  virtual int getNumTriangles(int step = -1) { return 0; }
+  virtual int getNumQuadrangles(int step = -1) { return 0; }
+  virtual int getNumPolygons(int step = -1) { return 0; }
+  virtual int getNumTetrahedra(int step = -1) { return 0; }
+  virtual int getNumHexahedra(int step = -1) { return 0; }
+  virtual int getNumPrisms(int step = -1) { return 0; }
+  virtual int getNumPyramids(int step = -1) { return 0; }
+  virtual int getNumTrihedra(int step = -1) { return 0; }
+  virtual int getNumPolyhedra(int step = -1) { return 0; }
+
+  // return the number of geometrical entities in the view
+  virtual int getNumEntities(int step = -1) { return 0; }
+
+  // return the number of elements in the ent-th entity, or the total number of
+  // elements if ent < 0
+  virtual int getNumElements(int step = -1, int ent = -1) { return 0; }
+
+  // cheap "does this view have any elements?" test (counting them walks
+  // every entity of a model-based view)
+  virtual bool hasElements() { return getNumElements() > 0; }
+
+  // return the geometrical dimension of the ele-th element in the ent-th entity
+  virtual int getDimension(int step, int ent, int ele) { return 0; }
+
+  // return the number of nodes of the ele-th element in the ent-th entity
+  virtual int getNumNodes(int step, int ent, int ele) { return 0; }
+
+  // for each element, its faces that are on the skin of the view (a bit
+  // each, ordered as the drawing code orders them), if the data knows them
+  // better than a matching of the faces would find them (null otherwise)
+  virtual const std::vector<unsigned char> *getSkinMasks() { return nullptr; }
+
+  // what tells the entities apart when the skin of the view is taken entity by
+  // entity (a face shared by two entities is kept): their index, or with
+  // partitions together (View.DrawSkinOnly or View.AdaptSkinOnly = 2) that of
+  // their parent entity for the partition entities
+  virtual void getSkinKeys(int step, bool partitionsTogether,
+                           std::vector<int> &keys)
+  {
+    keys.resize(getNumEntities(step));
+    for(std::size_t i = 0; i < keys.size(); i++) keys[i] = (int)i;
+  }
+
+  // a stable identifier for a node of an element, the same for the elements
+  // sharing it; 0 if the data has no node topology
+  virtual std::size_t getNodeId(int step, int ent, int ele, int nod)
+  {
+    return 0;
+  }
+
+  // get/set the coordinates and tag of the nod-th node from the ele-th element
+  // in the ent-th entity (if the node has a tag, getNode returns it)
+  virtual int getNode(int step, int ent, int ele, int nod, double &x, double &y,
+                      double &z)
+  {
+    return 0;
+  }
+  virtual void setNode(int step, int ent, int ele, int nod, double x, double y,
+                       double z);
+
+  // return the number of components available for the ele-th element in the
+  // ent-th entity
+  virtual int getNumComponents(int step, int ent, int ele) { return 0; }
+
+  // return the number of values available for the ele-th element in the ent-th
+  // entity
+  virtual int getNumValues(int step, int ent, int ele) { return 0; }
+
+  // get the idx'th value for the ele-th element in the ent-th entity
+  virtual void getValue(int step, int ent, int ele, int idx, double &val) {}
+
+  // gets/set the comp-th component (at the step-th time step) associated with
+  // the node-th node from the ele-th element in the ent-th entity
+  virtual void getValue(int step, int ent, int ele, int nod, int comp,
+                        double &val)
+  {
+  }
+
+  // what getType(), getDimension(), getNumNodes() and getNumComponents() give,
+  // and the coordinates and the numComp first values of the numNodes nodes:
+  // the same, element by element, in one call (the drawing reads millions)
+  virtual void getElementInfo(int step, int ent, int ele, int &type, int &dim,
+                              int &numNodes, int &numComp)
+  {
+    type = getType(step, ent, ele);
+    dim = getDimension(step, ent, ele);
+    numNodes = getNumNodes(step, ent, ele);
+    numComp = getNumComponents(step, ent, ele);
+  }
+  virtual void getNodesAndValues(int step, int ent, int ele, int numNodes,
+                                 int numComp, double **xyz, double **val)
+  {
+    for(int j = 0; j < numNodes; j++) {
+      getNode(step, ent, ele, j, xyz[j][0], xyz[j][1], xyz[j][2]);
+      for(int k = 0; k < numComp; k++) getValue(step, ent, ele, j, k, val[j][k]);
+    }
+  }
+  virtual void setValue(int step, int ent, int ele, int nod, int comp,
+                        double val);
+
+  // return a scalar value associated with the node-th node from the ele-th
+  // element in the ent-th entity: same as value for scalars, norm for vectors,
+  // Von-Mises (if tensorRep == 0), max eigenvalue (if tensorRep == 1) or min
+  // eigenvalue (if tensorRep == 2) for tensors
+  void getScalarValue(int step, int ent, int ele, int nod, double &val,
+                      int tensorRep = 0, int forceNumComponents = 0,
+                      int componentMap[9] = nullptr);
+
+  // return the number of edges of the ele-th element in the ent-th
+  // entity
+  virtual int getNumEdges(int step, int ent, int ele) { return 0; }
+
+  // return the type of the ele-th element in the ent-th entity
+  virtual int getType(int step, int ent, int ele) { return 0; }
+
+  // return the number of 2D/3D strings in the view
+  virtual int getNumStrings2D() { return 0; }
+  virtual int getNumStrings3D() { return 0; }
+
+  // return the i-th 2D/3D string in the view
+  virtual void getString2D(int i, int step, std::string &str, double &x,
+                           double &y, double &style)
+  {
+  }
+  virtual void getString3D(int i, int step, std::string &str, double &x,
+                           double &y, double &z, double &style)
+  {
+  }
+
+  // change the orientation of the ele-th element
+  virtual void reverseElement(int step, int ent, int ele) {}
+
+  // check if the view is empty
+  virtual bool empty();
+
+  // check if we should skip the given entity/element
+  virtual bool skipEntity(int step, int ent) { return false; }
+  virtual bool skipElement(int step, int ent, int ele,
+                           bool checkVisibility = false, int samplingRate = 1);
+
+  // can the accessors be called concurrently on different elements of the same
+  // data? They cannot when they go through a cache of the last element
+  virtual bool isThreadSafe() { return false; }
+
+  // check if the data has the given step/partition/etc.
+  virtual bool hasTimeStep(int step)
+  {
+    return step >= 0 && step < getNumTimeSteps();
+  }
+  virtual bool hasPartition(int step, int part) { return false; }
+  virtual bool hasMultipleMeshes() { return false; }
+  virtual bool hasModel(GModel *model, int step = -1) { return false; }
+  virtual bool isNodeData() { return false; }
+
+  // true if data is given at Gauss points (instead of vertices)
+  virtual bool useGaussPoints() { return false; }
+
+  // create/destroy adaptive data (see PView::adapt(), which refines it)
+  void initAdaptiveData();
+
+  // adaptive data without data refined for the drawing: to save the view
+  // refined (see PView::getAdaptedSteps()), and for the ParaView plugin
+  void initAdaptiveDataLight(int step, int level, double tol);
+  // (min and max: see adaptiveData::changeResolution())
+  void saveAdaptedViewForVTK(const std::string &fileName, int step, int level,
+                             double tol, int npart, bool isBinary,
+                             double min = 0., double max = -1.);
+
+  void destroyAdaptiveData();
+
+  // return the adaptive data
+  adaptiveData *getAdaptiveData() { return _adaptive; }
+
+  // set/get the interpolation matrices for elements with type "type"
+  // FIXME : too much overload :(
+  void setInterpolationMatrices(int type, const fullMatrix<double> &coefVal,
+                                const fullMatrix<double> &expVal);
+  void setInterpolationMatrices(int type, const fullMatrix<double> &coefVal,
+                                const fullMatrix<double> &expVal,
+                                const fullMatrix<double> &coefGeo,
+                                const fullMatrix<double> &expGeo);
+  int getInterpolationMatrices(int type, std::vector<fullMatrix<double> *> &p);
+  bool haveInterpolationMatrices(int type = 0);
+  // true if the view is interpolated at an order higher than one, in its
+  // values or in its geometry: what adaptation refines
+  bool haveHighOrderInterpolation();
+  // (all of them if type is 0)
+  void deleteInterpolationMatrices(int type = 0);
+
+  // access to global interpolation schemes
+  static void removeInterpolationScheme(const std::string &name);
+  static void removeAllInterpolationSchemes();
+  static void addMatrixToInterpolationScheme(const std::string &name, int type,
+                                             fullMatrix<double> &mat);
+  static int getSizeInterpolationScheme();
+  std::string getInterpolationSchemeName() { return _interpolationSchemeName; }
+  void setInterpolationSchemeName(std::string name)
+  {
+    _interpolationSchemeName = name;
+  }
+
+  // smooth the data in the view (makes it C0)
+  virtual void smooth();
+
+  // combine time steps or elements from multiple datasets
+  virtual bool combineTime(nameData &nd);
+  virtual bool combineSpace(nameData &nd);
+
+  // set simple X-Y data
+  virtual void setXY(std::vector<double> &x, std::vector<double> &y) {}
+
+  // set simple pointwise XYZ data
+  virtual void setXYZV(std::vector<double> &x, std::vector<double> &y,
+                       std::vector<double> &z, std::vector<double> &v)
+  {
+  }
+
+  // ask to fill vertex arrays remotely
+  virtual bool isRemote() { return false; }
+  virtual int fillRemoteVertexArrays(std::string &options) { return 0; }
+
+  // is the view a list-based dataset
+  virtual bool isListBased() { return false; }
+
+  // get (approx) memory used by data in MB
+  virtual double getMemoryInMB() { return 0; }
+
+  // get GModel (if view supports it)
+  virtual GModel *getModel(int step);
+
+  // get GEntity (if view supports it)
+  virtual GEntity *getEntity(int step, int entity);
+
+  // get MElement (if view supports it)
+  virtual MElement *getElement(int step, int entity, int element);
+
+  // find coordinates of closest node to point (xn, yn, zn), with a kdtree
+  double findClosestNode(double &xn, double &yn, double &zn, int step);
+
+  // search for the value of the View at point x, y, z. Values are interpolated
+  // with the shape functions of the elements (first order for list-based
+  // views). If several time steps are present, they are all interpolated
+  // unless time step is set to a different value than -1.
+  bool searchScalar(double x, double y, double z, double *values, int step = -1,
+                    double *size = nullptr, int qn = 0, double *qx = nullptr,
+                    double *qy = nullptr, double *qz = nullptr,
+                    bool grad = false, int dim = -1);
+  bool searchVector(double x, double y, double z, double *values, int step = -1,
+                    double *size = nullptr, int qn = 0, double *qx = nullptr,
+                    double *qy = nullptr, double *qz = nullptr,
+                    bool grad = false, int dim = -1);
+  bool searchTensor(double x, double y, double z, double *values, int step = -1,
+                    double *size = nullptr, int qn = 0, double *qx = nullptr,
+                    double *qy = nullptr, double *qz = nullptr,
+                    bool grad = false, int dim = -1);
+
+  // same as above (when distance == 0), except that if no exact match is found:
+  // - if distance is > 0, return value at closest node if closer than distance
+  // - if distance is < 0, return value at closest node
+  // upon return, distance contains the distance of the match, or -1 if no
+  // match was found
+  bool searchScalarClosest(double x, double y, double z, double &distance,
+                           double *values, int step = -1,
+                           double *size = nullptr, int qn = 0, double *qx = nullptr,
+                           double *qy = nullptr, double *qz = nullptr,
+                           bool grad = false, int dim = -1);
+  bool searchVectorClosest(double x, double y, double z, double &distance,
+                           double *values, int step = -1,
+                           double *size = nullptr, int qn = 0, double *qx = nullptr,
+                           double *qy = nullptr, double *qz = nullptr,
+                           bool grad = false, int dim = -1);
+  bool searchTensorClosest(double x, double y, double z, double &distance,
+                           double *values, int step = -1,
+                           double *size = nullptr, int qn = 0, double *qx = nullptr,
+                           double *qy = nullptr, double *qz = nullptr,
+                           bool grad = false, int dim = -1);
+
+  // I/O routines
+  virtual bool writeSTL(const std::string &fileName);
+  virtual bool writeTXT(const std::string &fileName);
+  virtual bool writePOS(const std::string &fileName, bool binary = false,
+                        bool parsed = true, bool append = false);
+  virtual bool writeMSH(const std::string &fileName, double version = 2.2,
+                        bool binary = false, bool saveMesh = true,
+                        bool multipleView = false, int partitionNum = -1,
+                        bool saveInterpolationMatrices = true,
+                        bool forceNodeData = false,
+                        bool forceElementData = false);
+  // (in the file of the mesh, written before, if saveMesh is false)
+  virtual bool writeMED(const std::string &fileName, bool saveMesh = true);
+  virtual bool toVector(std::vector<std::vector<double> > &vec);
+  virtual bool fromVector(const std::vector<std::vector<double> > &vec);
+  virtual void importLists(int N[24], std::vector<double> *V[24]);
+  virtual void getListPointers(int N[24], std::vector<double> *V[24]);
+  virtual void sendToServer(const std::string &name);
+};
+
+#endif

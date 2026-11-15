@@ -1,0 +1,567 @@
+// Gmsh - Copyright (C) 1997-2026 C. Geuzaine, J.-F. Remacle
+//
+// See the LICENSE.txt file in the Gmsh root directory for license information.
+// Please report all issues on https://gitlab.onelab.info/gmsh/gmsh/issues.
+
+// This class was inspired by the colorbar widget provided in Vis5d, a
+// program for visualizing five dimensional gridded data sets
+// Copyright (C) 1990 - 1995 Bill Hibbard, Brian Paul, Dave Santek,
+// and Andre Battaiola.
+
+#include <vector>
+#include <FL/fl_draw.H>
+#include <FL/Fl_Input_.H>
+#include "colorbarWindow.h"
+#include "ColorTable.h"
+#include "Context.h"
+#include "PView.h"
+#include "PViewOptions.h"
+
+#define EPS 1.e-10
+
+colorbarWindow::colorbarWindow(int x, int y, int w, int h, const char *l)
+  : Fl_Widget(x, y, w, h, l)
+{
+  _viewTag = -1;
+  ct = nullptr;
+  viewchanged = nullptr;
+  help_flag = 0;
+  font_height = FL_NORMAL_SIZE - 1; // use slightly smaller font
+  marker_height = font_height;
+  wedge_height = marker_height;
+  marker_pos = 0;
+  minval = maxval = 0.0;
+}
+
+int colorbarWindow::x_to_index(int x)
+{
+  int index;
+  index = (int)(x * (double)ct->size / (double)w());
+  if(index < 0)
+    index = 0;
+  else if(index >= ct->size)
+    index = ct->size - 1;
+  return index;
+}
+
+int colorbarWindow::index_to_x(int index)
+{
+  int x;
+  // a table of one colour: its entry at the left edge (see redraw_range())
+  if(ct->size < 2) return 0;
+  x = (int)(index * (double)w() / (double)(ct->size - 1));
+  if(x >= w()) x = w() - 1;
+  return x;
+}
+
+int colorbarWindow::y_to_intensity(int y)
+{
+  int intensity;
+  intensity = (int)((wedge_y - y) * 255. / (double)wedge_y);
+  if(intensity < 0)
+    intensity = 0;
+  else if(intensity > 255)
+    intensity = 255;
+  return intensity;
+}
+
+int colorbarWindow::intensity_to_y(int intensity)
+{
+  int y;
+  y = (int)(wedge_y - intensity * (double)wedge_y / 255.);
+  if(y < 0)
+    y = 0;
+  else if(y >= wedge_y)
+    y = wedge_y - 1;
+  return y;
+}
+
+// the keys and buttons of the widget and what they do, shown by 'h'
+static const std::vector<std::pair<const char *, const char *>> &helpLines()
+{
+  static const std::vector<std::pair<const char *, const char *>> lines = {
+    {"0-9, Ctrl+0-9, F1-F7", "Select predefined colormap"},
+    {"Left button", "Draw red or hue channel"},
+    {"Middle button", "Draw green or saturation channel"},
+    {"Right button", "Draw blue or value channel"},
+    {"Ctrl+Left button", "Draw alpha channel"},
+    {"Ctrl+c, Ctrl+v", "Copy or paste colormap"},
+    {"m", "Toggle RGB/HSV mode"},
+    {"Left/Right arrow", "Translate abscissa"},
+    {"Ctrl+left, Ctrl+right", "Rotate abscissa"},
+    {"i, Ctrl+i", "Invert abscissa or ordinate"},
+    {"Up/Down arrow", "Modify color channel curvature"},
+    {"a, Ctrl+a", "Modify alpha coefficient"},
+    {"p, Ctrl+p", "Modify alpha channel power law"},
+    {"b, Ctrl+b", "Modify gamma correction"},
+    {"r", "Reset colormap modifications"},
+    {"h", "Toggle help message"}};
+  return lines;
+}
+
+void colorbarWindow::redraw_range(int a, int b)
+{
+  int i;
+  int x, y, px = 0, py = 0;
+  int x1, y1, x2, y2;
+  int intensity = 0;
+  double H, S, V;
+  int ox = Fl_Widget::x(), oy = Fl_Widget::y();
+
+  if(a < 0) a = 0;
+  if(b >= ct->size) b = ct->size - 1;
+
+  // calculate region to update
+  x1 = index_to_x(a);
+  x2 = index_to_x(b);
+  if(ct->size < 2) x2 = w() - 1; // a table of one colour fills the bar
+  y1 = intensity_to_y(255);
+  y2 = intensity_to_y(0);
+
+  // erase region
+  fl_color(color_bg);
+  fl_rectf(ox + x1, oy + y1, x2 - x1 + 1, y2 - y1 + 1);
+
+  // redraw region of entries in interval [a,b]
+  if(a > 0) a--;
+  if(b < ct->size - 1) b++;
+
+  // draw red or hue levels
+  for(i = a; i <= b; i++) {
+    x = index_to_x(i);
+    if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_RGB)
+      intensity = CTX::instance()->unpackRed(ct->table[i]);
+    else if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_HSV) {
+      RGB_to_HSV(CTX::instance()->unpackRed(ct->table[i]) / 255.,
+                 CTX::instance()->unpackGreen(ct->table[i]) / 255.,
+                 CTX::instance()->unpackBlue(ct->table[i]) / 255., &H, &S, &V);
+      intensity = (int)(H / 6. * 255. + EPS);
+    }
+    y = intensity_to_y(intensity);
+    if(i != a) {
+      fl_color(FL_RED);
+      fl_line(ox + px, oy + py, ox + x, oy + y);
+    }
+    px = x;
+    py = y;
+  }
+
+  // draw green or saturation levels
+  for(i = a; i <= b; i++) {
+    x = index_to_x(i);
+    if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_RGB)
+      intensity = CTX::instance()->unpackGreen(ct->table[i]);
+    else if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_HSV) {
+      RGB_to_HSV(CTX::instance()->unpackRed(ct->table[i]) / 255.,
+                 CTX::instance()->unpackGreen(ct->table[i]) / 255.,
+                 CTX::instance()->unpackBlue(ct->table[i]) / 255., &H, &S, &V);
+      intensity = (int)(S * 255.);
+    }
+    y = intensity_to_y(intensity);
+    if(i != a) {
+      fl_color(FL_GREEN);
+      fl_line(ox + px, oy + py, ox + x, oy + y);
+    }
+    px = x;
+    py = y;
+  }
+
+  // draw blue or value levels
+  for(i = a; i <= b; i++) {
+    x = index_to_x(i);
+    if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_RGB)
+      intensity = CTX::instance()->unpackBlue(ct->table[i]);
+    else if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_HSV) {
+      RGB_to_HSV(CTX::instance()->unpackRed(ct->table[i]) / 255.,
+                 CTX::instance()->unpackGreen(ct->table[i]) / 255.,
+                 CTX::instance()->unpackBlue(ct->table[i]) / 255., &H, &S, &V);
+      intensity = (int)(V * 255.);
+    }
+    y = intensity_to_y(intensity);
+    if(i != a) {
+      fl_color(FL_BLUE);
+      fl_line(ox + px, oy + py, ox + x, oy + y);
+    }
+    px = x;
+    py = y;
+  }
+
+  // draw alpha levels
+  for(i = a; i <= b; i++) {
+    x = index_to_x(i);
+    y = intensity_to_y(CTX::instance()->unpackAlpha(ct->table[i]));
+    if(i != a) {
+      fl_color(fl_contrast(FL_BLACK, color_bg));
+      fl_line(ox + px, oy + py, ox + x, oy + y);
+    }
+    px = x;
+    py = y;
+  }
+
+  // draw the color bar
+  for(x = x1; x <= x2; x++) {
+    int r, g, b;
+    unsigned int color;
+    i = x_to_index(x);
+    color = ct->table[i];
+    r = CTX::instance()->unpackRed(color);
+    g = CTX::instance()->unpackGreen(color);
+    b = CTX::instance()->unpackBlue(color);
+    fl_color(r, g, b);
+    fl_line(ox + x, oy + wedge_y, ox + x, oy + wedge_y + wedge_height - 1);
+  }
+
+  // print colortable mode and help
+  fl_font(FL_HELVETICA, font_height);
+  fl_color(fl_contrast(FL_BLACK, color_bg));
+
+  int fh = font_height + 1;
+  int xx0 = ox + 6, xx1 = ox + 11 * fh, yy0 = oy + 6;
+  if(help_flag) {
+    for(std::size_t k = 0; k < helpLines().size(); k++) {
+      fl_draw(helpLines()[k].first, xx0, yy0 + (k + 1) * fh);
+      fl_draw(helpLines()[k].second, xx1, yy0 + (k + 1) * fh);
+    }
+  }
+  else {
+    // the map and the mode
+    char str[128];
+    sprintf(str, "Colormap %d (%s) - Press h for help",
+            ct->ipar[COLORTABLE_NUMBER],
+            (ct->ipar[COLORTABLE_MODE] == COLORTABLE_HSV) ? "HSV" : "RGB");
+    fl_draw(str, xx0, yy0 + font_height);
+  }
+}
+
+void colorbarWindow::redraw_marker()
+{
+  int x, y0, y1;
+  char str[50];
+  double val;
+  int ox = Fl_Widget::x(), oy = Fl_Widget::y();
+
+  y0 = marker_y;
+  y1 = h() - 1;
+
+  fl_color(color_bg);
+  fl_rectf(ox, oy + y0, w(), y1 - y0 + 1);
+
+  // draw marker below color wedge
+  x = index_to_x(marker_pos);
+  fl_color(fl_contrast(FL_BLACK, color_bg));
+  fl_line(ox + x, oy + marker_y, ox + x, oy + marker_y + marker_height);
+  fl_line(ox + x, oy + marker_y, ox + x - 3, oy + marker_y + 6);
+  fl_line(ox + x, oy + marker_y, ox + x + 3, oy + marker_y + 6);
+
+  // draw marker value
+  fl_font(FL_HELVETICA, font_height);
+  val = minval;
+  if(ct->size > 1)
+    val += (maxval - minval) * ((double)marker_pos / (double)(ct->size - 1));
+  sprintf(str, "%g", val);
+  fl_draw(str, ox + 10, oy + label_y);
+}
+
+int colorbarWindow::helpHeight() const
+{
+  // the lines of the help, from 6 pixels below the top, then the wedge, the
+  // marker and its value
+  int fh = font_height + 1;
+  return 6 + (int)helpLines().size() * fh + fh / 2 + wedge_height +
+         marker_height + font_height + 5;
+}
+
+bool colorbarWindow::lookup()
+{
+  PView *v = (_viewTag < 0) ? nullptr : PView::getViewByTag(_viewTag);
+  ct = v ? &v->getOptions()->colorTable : nullptr;
+  viewchanged = v ? &v->getChanged() : nullptr;
+  return ct && ct->size > 0;
+}
+
+void colorbarWindow::draw()
+{
+  if(!lookup()) return;
+
+  label_y = h() - 5;
+  marker_y = label_y - marker_height - font_height;
+  wedge_y = marker_y - wedge_height;
+  color_bg = fl_color_cube(
+    CTX::instance()->unpackRed(CTX::instance()->color.bg) * FL_NUM_RED / 256,
+    CTX::instance()->unpackGreen(CTX::instance()->color.bg) * FL_NUM_GREEN /
+      256,
+    CTX::instance()->unpackBlue(CTX::instance()->color.bg) * FL_NUM_BLUE / 256);
+  fl_push_clip(x(), y(), w(), h());
+  redraw_range(0, ct->size - 1);
+  redraw_marker();
+  fl_pop_clip();
+}
+
+void colorbarWindow::update(int viewTag, double min, double max)
+{
+  _viewTag = viewTag;
+  minval = min;
+  maxval = max;
+  redraw();
+}
+
+int colorbarWindow::handle(int event)
+{
+  static int p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+  static int pentry, move_marker;
+  if(!lookup()) {
+    // the view gone during a drag: the next press starts afresh
+    if(event == FL_RELEASE) p1 = p2 = p3 = p4 = 0;
+    return Fl_Widget::handle(event);
+  }
+  int i, ibut, xpos, ypos, modify, entry, compute, map;
+
+  modify = 0;
+  compute = 0;
+
+  switch(event) {
+  case FL_FOCUS: // accept focus events when asked
+  case FL_UNFOCUS: return 1;
+
+  case FL_ENTER:
+    // the keyboard as soon as the mouse enters, unless typing in a field
+    if(!dynamic_cast<Fl_Input_ *>(Fl::focus())) take_focus();
+    return 1;
+
+  case FL_LEAVE: return 1;
+
+  case FL_SHORTCUT:
+  case FL_KEYBOARD:
+    // the colour maps: 0-9, Ctrl or Cmd + 0-9, then F1-F7
+    map = -1;
+    for(int k = 0; k < 10 && map < 0; k++)
+      if(Fl::test_shortcut('0' + k)) map = k;
+    for(int k = 0; k < 10 && map < 0; k++)
+      if(Fl::test_shortcut(FL_CTRL + '0' + k) ||
+         Fl::test_shortcut(FL_META + '0' + k))
+        map = 10 + k;
+    for(int k = 1; k <= 7 && map < 0; k++)
+      if(Fl::test_shortcut(FL_F + k)) map = 19 + k;
+    if(map >= 0) {
+      ColorTable_InitParam(map, ct);
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'c') ||
+            Fl::test_shortcut(FL_META + 'c')) {
+      ColorTable_Copy(ct);
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'v') ||
+            Fl::test_shortcut(FL_META + 'v')) {
+      // as computed below, but the table pasted as it is (its entries may have
+      // been edited by hand, which a recomputation from its parameters drops)
+      ColorTable_Paste(ct);
+      redraw();
+      *viewchanged = true;
+      do_callback();
+    }
+    else if(Fl::test_shortcut('h')) {
+      help_flag = !help_flag;
+      redraw();
+    }
+    else if(Fl::test_shortcut('r')) {
+      ColorTable_InitParam(ct->ipar[COLORTABLE_NUMBER], ct);
+      compute = 1;
+    }
+    else if(Fl::test_shortcut('m')) {
+      if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_RGB)
+        ct->ipar[COLORTABLE_MODE] = COLORTABLE_HSV;
+      else
+        ct->ipar[COLORTABLE_MODE] = COLORTABLE_RGB;
+      redraw();
+    }
+    else if(Fl::test_shortcut('i')) {
+      ct->ipar[COLORTABLE_SWAP] = !ct->ipar[COLORTABLE_SWAP];
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'i') ||
+            Fl::test_shortcut(FL_META + 'i')) {
+      ct->ipar[COLORTABLE_INVERT] = !ct->ipar[COLORTABLE_INVERT];
+      compute = 1;
+    }
+    else if(Fl::test_shortcut('b')) {
+      ct->dpar[COLORTABLE_BETA] += 0.05;
+      if(ct->dpar[COLORTABLE_BETA] > 1.0) ct->dpar[COLORTABLE_BETA] = 1.0;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'b') ||
+            Fl::test_shortcut(FL_META + 'b')) {
+      ct->dpar[COLORTABLE_BETA] -= 0.05;
+      if(ct->dpar[COLORTABLE_BETA] < -1.0) ct->dpar[COLORTABLE_BETA] = -1.0;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut('a')) {
+      ct->dpar[COLORTABLE_ALPHA] -= 0.05;
+      if(ct->dpar[COLORTABLE_ALPHA] < 0.0) ct->dpar[COLORTABLE_ALPHA] = 0.0;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'a') ||
+            Fl::test_shortcut(FL_META + 'a')) {
+      ct->dpar[COLORTABLE_ALPHA] += 0.05;
+      if(ct->dpar[COLORTABLE_ALPHA] > 1.0) ct->dpar[COLORTABLE_ALPHA] = 1.0;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut('p')) {
+      ct->dpar[COLORTABLE_ALPHAPOW] += 0.05;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + 'p') ||
+            Fl::test_shortcut(FL_META + 'p')) {
+      ct->dpar[COLORTABLE_ALPHAPOW] -= 0.05;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_Left)) {
+      ct->dpar[COLORTABLE_BIAS] -= 0.05;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + FL_Left) ||
+            Fl::test_shortcut(FL_META + FL_Left)) {
+      ct->ipar[COLORTABLE_ROTATION] += 5;
+      if(ct->ipar[COLORTABLE_ROTATION] > ct->size - 1)
+        ct->ipar[COLORTABLE_ROTATION] -= ct->size - 1;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_Right)) {
+      ct->dpar[COLORTABLE_BIAS] += 0.05;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_CTRL + FL_Right) ||
+            Fl::test_shortcut(FL_META + FL_Right)) {
+      ct->ipar[COLORTABLE_ROTATION] -= 5;
+      if(ct->ipar[COLORTABLE_ROTATION] < -(ct->size - 1))
+        ct->ipar[COLORTABLE_ROTATION] += ct->size - 1;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_Up)) {
+      ct->dpar[COLORTABLE_CURVATURE] -= 0.05;
+      compute = 1;
+    }
+    else if(Fl::test_shortcut(FL_Down)) {
+      ct->dpar[COLORTABLE_CURVATURE] += 0.05;
+      compute = 1;
+    }
+    else {
+      return Fl_Widget::handle(event);
+    }
+
+    if(compute) {
+      ColorTable_Recompute(ct);
+      redraw();
+      *viewchanged = true;
+      do_callback();
+    }
+    return 1;
+
+  case FL_PUSH:
+    ibut = Fl::event_button();
+    xpos = Fl::event_x() - x();
+    ypos = Fl::event_y() - y();
+    if(help_flag) {
+      help_flag = 0;
+      redraw();
+    }
+    // change color function or marker position
+    if(ypos < wedge_y)
+      move_marker = 0;
+    else
+      move_marker = 1;
+
+    // determine which curve to modify
+    if(Fl::event_state(FL_CTRL) || Fl::event_state(FL_META))
+      p4 = 1;
+    else if(ibut == 1 && !Fl::event_state(FL_SHIFT) && !Fl::event_state(FL_ALT))
+      p1 = 1;
+    else if(ibut == 2 || (ibut == 1 && Fl::event_state(FL_SHIFT)))
+      p2 = 1;
+    else
+      p3 = 1;
+    pentry = x_to_index(xpos);
+    modify = 1;
+    break;
+
+  case FL_RELEASE:
+    ibut = Fl::event_button();
+    xpos = Fl::event_x() - x();
+    ypos = Fl::event_y() - y();
+    p1 = 0;
+    p2 = 0;
+    p3 = 0;
+    p4 = 0;
+    if(*viewchanged) do_callback();
+    break;
+
+  case FL_DRAG:
+    ibut = Fl::event_button();
+    xpos = Fl::event_x() - x();
+    ypos = Fl::event_y() - y();
+    modify = 1;
+    break;
+
+  default:
+    // don't know what to do with the event: passing it to parent
+    return Fl_Widget::handle(event);
+  }
+
+  // Modify one or more of the color curves
+
+  if(modify && (p1 || p2 || p3 || p4)) {
+    // calculate which entry in color table to change
+    entry = x_to_index(xpos);
+    // update
+    if(move_marker) {
+      // changing marker position
+      marker_pos = entry;
+    }
+    else {
+      // changing color graph
+      int a, b, value;
+      value = y_to_intensity(ypos);
+      if(pentry <= entry) {
+        a = pentry;
+        b = entry;
+      }
+      else {
+        a = entry;
+        b = pentry;
+      }
+      // update entries from 'pentry' to 'entry'
+      for(i = a; i <= b; i++) {
+        int red, green, blue, alpha;
+        double R, G, B, H, S, V;
+        red = CTX::instance()->unpackRed(ct->table[i]);
+        green = CTX::instance()->unpackGreen(ct->table[i]);
+        blue = CTX::instance()->unpackBlue(ct->table[i]);
+        alpha = CTX::instance()->unpackAlpha(ct->table[i]);
+        if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_RGB) {
+          if(p1) red = value;
+          if(p2) green = value;
+          if(p3) blue = value;
+          if(p4) alpha = value;
+        }
+        else if(ct->ipar[COLORTABLE_MODE] == COLORTABLE_HSV) {
+          RGB_to_HSV((double)red / 255., (double)green / 255.,
+                     (double)blue / 255., &H, &S, &V);
+          if(p1) H = 6. * (double)value / 255. + EPS;
+          if(p2) S = (double)value / 255.;
+          if(p3) V = (double)value / 255.;
+          if(p4) alpha = value;
+          HSV_to_RGB(H, S, V, &R, &G, &B);
+          red = (int)(255 * R);
+          green = (int)(255 * G);
+          blue = (int)(255 * B);
+        }
+        ct->table[i] = CTX::instance()->packColor(red, green, blue, alpha);
+      }
+      pentry = entry;
+      *viewchanged = true;
+    }
+    redraw();
+    return 1;
+  }
+
+  return 1;
+}
