@@ -1,0 +1,52 @@
+{
+  "commit": "851370c96cf86f4f08e47d8c18196fccb459d6b6",
+  "files": {
+    "GTE/Mathematics/AdaptiveSkeletonClimbing3.h": {
+      "mode": "100644",
+      "git_blob": "4725a96a4ce9fc23a40bd181fef50c568b4b9ba9",
+      "sha256": "76c1387edfa2c684e23204f405d4f08a26d7689ce29953e3334f02ed72e2b114"
+    },
+    "GTE/Mathematics/Array2.h": {
+      "mode": "100644",
+      "git_blob": "b79243808eb552de97634aaa495b29f7652cffa3",
+      "sha256": "e41a7ccfb4e1e2bc054c32435022ea8cc524228fef9c52aabcbbea9e11f5b420"
+    },
+    "GTE/Mathematics/FeatureKey.h": {
+      "mode": "100644",
+      "git_blob": "ba177fa97bee962ee85952d7e59e220210163e86",
+      "sha256": "612f7b49f0ef0c4658ba08fa9d0a974689b747213c4e4a025d2cee88646367d4"
+    },
+    "GTE/Mathematics/HashCombine.h": {
+      "mode": "100644",
+      "git_blob": "56d0db8d845abb8c8276e6382e4630d51ae95533",
+      "sha256": "e7ab74286be685f1e746a729795bff9f7abb27e6c3cd0d8f423b9e0b29d9120a"
+    },
+    "GTE/Mathematics/Logger.h": {
+      "mode": "100644",
+      "git_blob": "44c9c6b7a762ba4ff2d768fb969a1842a2c0debe",
+      "sha256": "a3381a35c0c3bfb253d8d3b6b9897498c3278b7e1ea446f69f7b9c6d683834f7"
+    },
+    "GTE/Mathematics/TriangleKey.h": {
+      "mode": "100644",
+      "git_blob": "4e05db9d2681c32bf3285b6f460944eb65d4be3c",
+      "sha256": "306bdc6b76230e2d8b894e71b064c24ee1ad521e0a38ccc55e876b08ef949b6c"
+    },
+    "LICENSE-BOOST": {
+      "mode": "100644",
+      "git_blob": "36b7cd93cdfbac762f5be4c6ce276df2ea6305c2",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+    },
+    "LICENSE-MIT": {
+      "mode": "100644",
+      "git_blob": "71cecb5ecc291fff9699b34a94d85b3a6fd7d9b8",
+      "sha256": "a86c08bd67183a1548c53b09278bc7b4be0d0efab5be3428e5deffa1a21c2c65"
+    },
+    "README.md": {
+      "mode": "100644",
+      "git_blob": "bbdbc8fb20170972953d20226837cd19250cf4f4",
+      "sha256": "8403d0e29546bbc22cc5fdff654e7f7ba53885a368378a51bd28fcd77e3054a2"
+    }
+  },
+  "unresolved_repository_includes": [],
+  "export_policy": "Unmodified transitive source include closure and selected upstream context; unused paths retained in exclusion inventory."
+}

@@ -1,0 +1,1 @@
+运行 bash task_support/run.sh baseline 查看固定生产路径。target要求tests/asc_blocks.cpp注册faces、junctions、adaptivity、compatibility四组task_case，回调使用TASK_CHECK并返回0，不定义main。运行器要求每组实际执行且含断言。新生产ASCBlockMesh.h/.cpp及examples/asc_blocks.cpp必须非空并参与编译；例子接收唯一OBJ输出路径参数，产物写到本次新建目录。seed没有目标实现。
