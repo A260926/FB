@@ -27,6 +27,24 @@
 # include <cairo.h>
 #endif
 
+#if defined(OC_LOOPFILTER_OBSERVER)
+/*Test-only observation point for the loop filter regression tests.
+  This is compiled in only when OC_LOOPFILTER_OBSERVER is defined, which
+   is done solely by the dedicated test build in
+   tests/run_loopfilter_reference.sh; normal library builds never see
+   this symbol and export no extra API.
+  It is called once per plane per stripe right before the loop filter
+   runs, so a test harness can snapshot the reconstructed (not yet
+   filtered) pixels and the coded-fragment map.
+  _state:     The decoder state (current frame is OC_FRAME_SELF).
+  _pli:       The color plane about to be filtered.
+  _fragy0:    First fragment row about to be filtered.
+  _fragy_end: End of the fragment rows about to be filtered.
+  _recon_end: Fragment rows up to this point are fully reconstructed.*/
+void oc_loopfilter_observe(const oc_theora_state *_state,int _pli,
+ int _fragy0,int _fragy_end,int _recon_end);
+#endif
+
 
 /*No post-processing.*/
 #define OC_PP_LEVEL_DISABLED  (0)
@@ -2879,6 +2897,11 @@ int th_decode_packetin(th_dec_ctx *_dec,const ogg_packet *_op,
         if(_dec->pipe.loop_filter){
           sdelay+=notstart;
           edelay+=notdone;
+#if defined(OC_LOOPFILTER_OBSERVER)
+          oc_loopfilter_observe(&_dec->state,pli,
+           _dec->pipe.fragy0[pli]-sdelay,_dec->pipe.fragy_end[pli]-edelay,
+           _dec->pipe.fragy_end[pli]);
+#endif
           oc_state_loop_filter_frag_rows(&_dec->state,
            _dec->pipe.bounding_values,OC_FRAME_SELF,pli,
            _dec->pipe.fragy0[pli]-sdelay,_dec->pipe.fragy_end[pli]-edelay);

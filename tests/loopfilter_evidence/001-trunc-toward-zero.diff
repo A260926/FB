@@ -1,0 +1,20 @@
+--- a/lib/state.c
++++ b/lib/state.c
+@@ -1008,7 +1008,7 @@
+     /*The _bv array is used to compute the function
+       f=OC_CLAMPI(OC_MINI(-_2flimit-f,0),f,OC_MAXI(_2flimit-f,0));
+       where _2flimit=_state->loop_filter_limits[_state->qis[0]]<<1;*/
+-    f=*(_bv+(f+4>>3));
++    f=*(_bv+(f+4)/8);
+     _pix[1]=OC_CLAMP255(_pix[1]+f);
+     _pix[2]=OC_CLAMP255(_pix[2]-f);
+     _pix+=_ystride;
+@@ -1024,7 +1024,7 @@
+     /*The _bv array is used to compute the function
+       f=OC_CLAMPI(OC_MINI(-_2flimit-f,0),f,OC_MAXI(_2flimit-f,0));
+       where _2flimit=_state->loop_filter_limits[_state->qis[0]]<<1;*/
+-    f=*(_bv+(f+4>>3));
++    f=*(_bv+(f+4)/8);
+     _pix[_ystride+x]=OC_CLAMP255(_pix[_ystride+x]+f);
+     _pix[_ystride*2+x]=OC_CLAMP255(_pix[_ystride*2+x]-f);
+   }

@@ -1,0 +1,18 @@
+Mutation 002 (test-only, never applied to the main sources):
+drop the filtering of the boundary between a coded fragment and the
+uncoded fragment below it in oc_state_loop_filter_frag_rows_c
+(lib/state.c).
+
+diff --git a/lib/state.c b/lib/state.c
+--- a/lib/state.c
++++ b/lib/state.c
+@@ -1094,9 +1094,6 @@ void oc_state_loop_filter_frag_rows_c(const oc_theora_state *_state,
+         if(fragi+1<fragi_end&&!frags[fragi+1].coded){
+           loop_filter_h(ref+8,ystride,_bv);
+         }
+-        if(fragi+nhfrags<fragi_bot&&!frags[fragi+nhfrags].coded){
+-          loop_filter_v(ref+(ystride*8),ystride,_bv);
+-        }
+       }
+       fragi++;
+     }

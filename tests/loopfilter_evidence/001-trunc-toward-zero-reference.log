@@ -1,0 +1,2 @@
+THEORA_LOOPFILTER_INFO backend=generic-c native_resolves_to=c
+THEORA_LOOPFILTER_CASE ref_vs_c_impl FAIL fmt=420 map=0 gen=0 L=1 stride=pos impl=c plane=1 pixel=(15,2) frag=(1,0) got=141 want=140

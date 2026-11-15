@@ -1,0 +1,5 @@
+THEORA_LOOPFILTER_INFO backend=generic-c native_resolves_to=c
+THEORA_LOOPFILTER_CASE ref_vs_c_impl PASS
+THEORA_LOOPFILTER_CASE ref_vs_native_impl PASS backend=generic-c
+THEORA_LOOPFILTER_CASE targeted_response_edges PASS runs=1152
+THEORA_LOOPFILTER_CASE batched_vs_whole_plane PASS runs=3840
