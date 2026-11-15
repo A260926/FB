@@ -15,6 +15,46 @@ Various mesh-munging algorithms using TriMeshes
 
 namespace trimesh {
 
+// Result of splitting sheets that share indexed edges into oriented
+// 2-manifold patches.
+//
+// vertex_source maps every output vertex to the input vertex it was copied
+// from.  The first input-vertex-count entries are the identity (all original
+// vertex slots are retained); any further entries are duplicated vertices.
+// Faces keep their original order and their three corners keep their order,
+// so output corner (f,k) corresponds to input corner faces[f][k] and
+// vertex_source[output_face[f][k]] is that input vertex.
+//
+// edge_partner uses the same indexing convention as TriMesh::across_edge:
+// edge_partner[f][k] is the input face paired across the edge opposite local
+// corner k of face f, or -1 when that edge was left as a boundary.  Pairing
+// is selected independently for each input index edge, first maximizing the
+// number of paired face edges, then minimizing the sum of
+// 1 - clamp(dot(nf,ng), -1, 1) over the pairs.
+struct SheetSplitResult {
+	::std::vector<int> vertex_source;
+	::std::vector<TriMesh::Face> edge_partner;
+};
+
+// Split sheets that share indexed edges into oriented 2-manifold patches by
+// duplicating the minimum necessary vertices.  Face order, corner order and
+// vertex positions are preserved; nothing is flipped, no faces are added,
+// and vertices are never welded by spatial position.
+//
+// Returns false, leaving the mesh and result untouched (including lazy
+// connectivity caches, which are never populated just for checking), for:
+// a NULL mesh, invalid face indices, invalid/degenerate geometry, wrong
+// colors/confidences/flags lengths, more than 64 faces on one input edge, or
+// a quotient-edge conflict.  A quotient-edge conflict means the locally
+// optimal pairing makes two distinct input edge copies collapse onto the same
+// output edge; no globally suboptimal matching is attempted and no chosen
+// pairing is silently broken to hide the conflict.
+//
+// On success all derived per-vertex, curvature, area and connectivity data
+// is invalidated (and grid/tstrips are removed) so that need_normals(),
+// need_across_edge(), need_pointareas(), etc. rebuild from the new topology.
+extern bool split_nonmanifold_sheets(TriMesh *mesh, SheetSplitResult &result);
+
 // Optimally re-triangulate a mesh by doing edge flips
 extern void edgeflip(TriMesh *mesh);
 

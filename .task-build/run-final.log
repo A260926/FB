@@ -1,0 +1,167 @@
+In file included from libsrc/split_sheets.cc:15:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from utilsrc/mesh_check.cc:29:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from task_support/baseline.cpp:1:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from tests/split_sheets.cc:11:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from examples/split_sheets.cc:22:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+Computing normals... Done.
+Writing split_sheets_example.ply... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Input:  19 vertices, 12 faces
+Split:  22 vertices, 12 faces (19 input slots retained, 3 duplicates appended)
+Selected 7 paired face edges across all index edges.
+Wrote split_sheets_example.ply
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing normals... Done.
+Computing point areas... Done.
+Computing normals... Done.
+Computing point areas... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing normals... Done.
+Writing /private/tmp/claude-501/sst/split-rt-ascii.ply... Done.
+Writing /private/tmp/claude-501/sst/split-rt-bin.ply... Done.
+Reading /private/tmp/claude-501/sst/split-rt-ascii.ply... 
+  Reading 8 vertices... 
+  Reading 4 faces... Done.
+Reading /private/tmp/claude-501/sst/split-rt-bin.ply... 
+  Reading 8 vertices... 
+  Reading 4 faces... Done.
+Reading /private/tmp/claude-501/sst/split-rt-ascii.ply... 
+  Reading 8 vertices... 
+  Reading 4 faces... Done.
+Reading /private/tmp/claude-501/sst/split-rt-bin.ply... 
+  Reading 8 vertices... 
+  Reading 4 faces... Done.
+Removing faces... 1 faces removed... Done.
+Removing vertices... 1 vertices removed... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing normals... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing point areas... Done.
+Subdividing mesh... Done.
+Computing normals... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing point areas... Done.
+Writing /private/tmp/claude-501/sst/cli-in.ply... Done.
+Computing normals... Done.
+Reading /private/tmp/claude-501/sst/cli-out.ply... 
+  Reading 8 vertices... 
+  Reading 4 faces... Done.
+Writing /private/tmp/claude-501/sst/cli-bad.ply... Done.
+Writing /private/tmp/claude-501/sst/cli-good.ply... Done.
+Writing /private/tmp/claude-501/sst/cli-nm.ply... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+pairing brute_max=2 cost=0.235961162841
+CASE pairing max_and_cost checks=6
+pairing 3x3 optimal=0.219969701 greedy=0.352785155
+CASE pairing three_by_three checks=5
+CASE pairing unequal_and_same_direction checks=12
+CASE pairing large_32 checks=201
+CASE pairing deterministic checks=5
+GROUP pairing cases=5 checks=229 COMPLETE
+CASE fans butterfly checks=23
+CASE fans duplicate_order checks=26
+CASE fans multi_edge checks=19
+CASE fans quotient_conflict checks=6
+CASE fans coincident checks=12
+CASE fans original_manifold checks=1556
+CASE fans attributes checks=45
+GROUP fans cases=7 checks=1687 COMPLETE
+CASE pipeline ply_roundtrip checks=35
+CASE pipeline subdiv checks=18
+CASE pipeline bad_inputs checks=21
+CASE pipeline empty checks=6
+CASE pipeline cli_match checks=50
+CASE pipeline cli_reject checks=10
+CASE pipeline cli_default_unchanged checks=6
+CASE pipeline manifold_compat checks=663
+GROUP pipeline cases=8 checks=809 COMPLETE
+TARGET_COMPLETE cases=20
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Computing normals... Done.
+Computing point areas... Done.
+Writing .task-build/base-ascii.ply... Done.
+Reading .task-build/base-ascii.ply... 
+  Reading 4 vertices... 
+  Reading 2 faces... Done.
+Writing .task-build/base-binary.ply... Done.
+Reading .task-build/base-binary.ply... 
+  Reading 4 vertices... 
+  Reading 2 faces... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Writing .task-build/nonmanifold.ply... Done.
+TRIMESH_BASELINE_OK manifold_faces=2 ply_modes=2 nonreciprocal=2 legacy_check_exit=2

@@ -31,6 +31,7 @@ Return code is:
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 #include <algorithm>
 using namespace std;
@@ -162,14 +163,25 @@ void usage(const char *myname)
 
 int main(int argc, char *argv[])
 {
+	// Split-sheets mode: repair shared indexed edges into oriented
+	// 2-manifold patches before any face-removal logic runs.
+	bool split_sheets = false;
+	int argbase = 1;
+	if (argc >= 2 && !strcmp(argv[1], "--split-sheets")) {
+		split_sheets = true;
+		argbase = 2;
+		if (argc < 4)
+			usage(argv[0]);
+	}
+
 	// Deal with command-line options
-	if (argc < 3 ||
-	    !strncmp(argv[1], "-h", 2) ||
-	    !strncmp(argv[1], "--h", 3)) {
+	if (argc < argbase + 2 ||
+	    !strncmp(argv[argbase], "-h", 2) ||
+	    !strncmp(argv[argbase], "--h", 3)) {
 		usage(argv[0]);
 	}
-	const char *infilename = argv[1];
-	const char *outfilename = argv[2];
+	const char *infilename = argv[argbase];
+	const char *outfilename = argv[argbase + 1];
 	if (!infilename || !outfilename)
 		usage(argv[0]);
 
@@ -178,6 +190,34 @@ int main(int argc, char *argv[])
 	if (!in) {
 		fprintf(stderr, "Couldn't open file %s\n", infilename);
 		exit(1);
+	}
+
+	// Split-sheets mode: split sheets that share indexed edges into oriented
+	// 2-manifold patches before any face-removal logic is applied.  The
+	// repaired mesh is written with fresh normals and preserved per-vertex
+	// colors/confidences; rejection leaves the output untouched.
+	if (split_sheets) {
+		SheetSplitResult result;
+		if (!split_nonmanifold_sheets(in, result)) {
+			fprintf(stderr, "Couldn't split non-manifold sheets in %s\n",
+			        infilename);
+			delete in;
+			exit(2);
+		}
+		bool ok;
+		if (in->vertices.empty()) {
+			FILE *f = fopen(outfilename, "wb");
+			ok = f &&
+			     fprintf(f, "ply\nformat ascii 1.0\n"
+			                "element vertex 0\nend_header\n") > 0;
+			if (f)
+				fclose(f);
+		} else {
+			in->need_normals();
+			ok = in->write(::std::string("norm:cflt:") + outfilename);
+		}
+		delete in;
+		exit(ok ? 0 : 1);
 	}
 
 	// Initial sanity checks

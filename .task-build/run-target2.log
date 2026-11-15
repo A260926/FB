@@ -1,0 +1,74 @@
+In file included from libsrc/split_sheets.cc:15:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from utilsrc/mesh_check.cc:29:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from task_support/baseline.cpp:1:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from tests/split_sheets.cc:11:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+In file included from examples/split_sheets.cc:22:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+Computing normals... Done.
+Writing split_sheets_example.ply... Done.
+Finding vertex to triangle maps... Done.
+Finding across-edge maps... Done.
+Input:  19 vertices, 12 faces
+Split:  22 vertices, 12 faces (19 input slots retained, 3 duplicates appended)
+Selected 7 paired face edges across all index edges.
+Wrote split_sheets_example.ply
+mktemp: mkstemp failed on /var/folders/p2/zw2ndsdj6mz28tl3pxkctzy80000gn/T/tmp.DkljQsyhBv: Operation not permitted

@@ -1,0 +1,13 @@
+Reading .task-build/nonmanifold.ply... 
+  Reading 6 vertices... 
+  Reading 4 faces... Done.
+Looking for bad vertices... Found 0 funny vertices... Done.
+Looking for bad faces... Found 0 bogus triangles... Done.
+Looking for duplicate faces... Finding vertex to triangle maps... Done.
+Found 0 duplicates and fins... Done.
+Checking for non-manifold topology... Edge (0, 1) has 2 forwards and 2 backwards faces.
+Edge (1, 0) has 2 forwards and 1 backwards faces.
+2 one-sided fins... Removing faces... 2 faces removed... Done.
+Removing vertices... 2 vertices removed... Done.
+Writing .task-build/default-check.ply... Done.
+Done.

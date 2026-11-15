@@ -1,0 +1,13 @@
+In file included from libsrc/split_sheets.cc:15:
+In file included from include/TriMesh.h:11:
+In file included from include/Vec.h:104:
+include/mathutil.h:303:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  303 |                 const T scale = T(1) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/mathutil.h:317:9: note: in instantiation of function template specialization 'trimesh::uniform_rnd<float>' requested here
+  317 |         return uniform_rnd(1.0f);
+      |                ^
+include/mathutil.h:306:26: warning: implicit conversion from 'type' (aka 'unsigned int') to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  306 |                 const T scale = T(2) / ::std::numeric_limits<unsigned>::max();
+      |                                      ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.

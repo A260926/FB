@@ -1,0 +1,5 @@
+#!/bin/sh
+if [ "$1" = "-t" ]; then shift; fi
+t=${1:-tmp.XXXXXXXX}
+case "$t" in /*) ;; *) t="${TMPDIR:-/tmp}/$t";; esac
+exec /usr/bin/mktemp "$t"
