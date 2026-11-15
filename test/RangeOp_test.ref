@@ -1,0 +1,209 @@
+mag2(ar1) = 104594
+square(rms(ar1)) * ar1.num() = 104594
+mag(ar2) = 8.83176
+sqrt(var(ar1)) = 116.428
+dist2(ar1, ar2) = 104516
+dist(ar1, ar2) = 323.289
+dot(ar1, ar2) = 78
+int(min(ar1)) = 2
+int(max(ar1)) = 254
+sum(ar1) = 470
+sum(ar2) = 16
+product(ar1) = 8534400
+product(ar2) = 0
+compare(ar1, ar2) = 1
+compare(ar2, ar1) = -1
+compare(ar1, ar1) = 0
+compare(ar2, ar2) = 0
+ar1 == ar2 = 0
+ar2 == ar1 = 0
+ar1 == ar1 = 1
+ar2 == ar2 = 1
+is_zero(ar1) = 0
+is_zero(ar1 - ar1) = 1
+ranges::count(ar2, 0) = 2
+ranges::count(ar2, 3) = 1
+ranges::count(ar2, 99) = 0
+ranges::count_if(ar2, func_gt5) = 1
+ar1 = Array<float>(5) {
+  2.7
+  -3.3
+  5.2
+  -6.2
+  0
+}
+normalize(clone(ar1)) = Array<float>(5) {
+  0.297026
+  -0.363032
+  0.56105
+  -0.68206
+  0
+}
+mag(normalize(clone(ar1))) = 1
+sort(clone(ar1)) = Array<float>(5) {
+  -6.2
+  -3.3
+  0
+  2.7
+  5.1
+}
+sorted(ar1) = Array<float>(5) {
+  -6.2
+  -3.3
+  0
+  2.7
+  5.1
+}
+reverse(sort(clone(ar1))) = Array<float>(5) {
+  5.1
+  2.7
+  0
+  -3.3
+  -6.2
+}
+reverse(sorted(ar1)) = Array<float>(5) {
+  5.1
+  2.7
+  0
+  -3.3
+  -6.2
+}
+max_abs_element(ar1) = 6.2
+sum(ar1) = -1.7
+compare(ar1, ar2) = -1
+compare(ar2, ar1) = 1
+compare(ar1, ar1) = 0
+compare(ar2, ar2) = 0
+ar1 == ar2 = 0
+ar2 == ar1 = 0
+ar1 == ar1 = 1
+ar2 == ar2 = 1
+compare(ar1, ar2, tol) = 0
+compare(ar2, ar1, tol) = 0
+compare(ar1, ar1, tol) = 0
+compare(ar2, ar2, tol) = 0
+mean(ar) = 12.5
+ranges::range<Array<float>> ? 1 : 0 = 1
+ranges::range<std::fstream> ? 1 : 0 = 0
+ranges::range<S> = 0
+type_name<mean_type_t<float>>() = double
+type_name<mean_type_t<double>>() = double
+type_name<mean_type_t<char>>() = float
+type_name<mean_type_t<uchar>>() = float
+type_name<mean_type_t<short>>() = float
+type_name<mean_type_t<ushort>>() = float
+type_name<mean_type_t<int>>() = double
+type_name<mean_type_t<unsigned>>() = double
+type_name<mean_type_t<char*>>() = char*
+ar = Array<float>(5) {
+  5.1
+  -6.2
+  0
+  2.7
+  -3.3
+}
+ar = Array<float>(5) {
+  5.1
+  -6.2
+  0
+  2.7
+  -3.3
+}
+Array(prev_left_range) = Array<float>(2) {
+  2.7
+  -3.3
+}
+i = 36
+i = 16
+i = 4
+i = 100
+i = 121
+result = Array<int>(17) {
+  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+  10
+  11
+  12
+  13
+  14
+  15
+  16
+  17
+}
+ar2 = Array<int>(2) {
+  4
+  5
+}
+indices = Array<int>(3) {
+  0
+  1
+  2
+}
+chars = Array<char>(3) {
+  A
+  B
+  C
+}
+ar = Array<int>(3) {
+  5
+  16
+  27
+}
+pairs = Array<std::pair<int,char>>(3) {
+  [0, A]
+  [1, B]
+  [2, C]
+}
+mean(range(20)) = 9.5
+mean(range(20) | views::filter([](auto e) { return e != 10; })) = 9.47368
+contains(range(20), 13) = 1
+contains(range(20) | views::filter([](auto e) { return e != 10; }), 13) = 1
+contains(range(20) | views::filter([](auto e) { return e != 10; }), 10) = 0
+min(ar)=-7 max(ar)=9 arg_min(ar)=1 arg_max(ar)=2
+min(ar, abs_less)=2 max(ar, abs_less)=9 arg_min(ar, abs_less)=5 arg_max(ar, abs_less)=2
+min(ar, std::greater<>())=9 arg_min(ar, std::greater<>())=2
+max_abs_element(ar)=9 max_abs_element(V(-2.5f))=2.5
+reverse(rotate(ar2, ar2.begin() + 1)) = Array<int>(5) {
+  1
+  5
+  4
+  3
+  2
+}
+sort(ar2, std::greater<>()) = Array<int>(5) {
+  5
+  4
+  3
+  2
+  1
+}
+sum(ar)=4294967294 type_name(sum(ar))=int64
+sum<double>(V(1, 2))=3 type_name(sum<double>(V(1, 2)))=double
+sum(Array<float>{})=0 sum(Array<int>{})=0
+product(V(100'000, 100'000))=10000000000 product(V(2.5f))=2.5 product(V(uchar{200}, uchar{200}))=40000
+mean(Array<uchar>{1, 2})=1.5 type_name(mean(Array<uchar>{1, 2}))=float
+mean<float>(V(1, 2))=1.5 type_name(mean<float>(V(1, 2)))=float
+mag2(Array<int>{})=0 mag2(V(3, 4))=25 mag(V(3, 4))=5 mag(V(3.f, 4.f))=5
+mean(ar)=5 var(ar)=4.57143 rms(ar)=5.38516
+is_unit(V(.6f, .8f))=1 is_unit(V(1.f, 1.f))=0 is_unit(V(1.001f), 1e-2f)=1
+normalize(V(3.f, 0.f, 4.f)) = [0.6, 0, 0.8]
+round_elements(V(1.234567f, -2.5f, 0.000004f))=[1.23457, -2.5, 0] round_elements(V(1.26f, -1.26f), 10.f)=[1.3, -1.3]
+dist2(ar1, ar2)=25 dist(ar1, ar2)=5 dot(ar1, ar2)=25
+dist2(Array<int>{}, Array<int>{})=0 dot(Array<float>{}, Array<float>{})=0
+compare(V(1.f, 2.f), V(1.f, 2.5f), .3f)=-1 compare(V(1.f, 2.5f), V(1.f, 2.f), .3f)=1
+compare(V(1.f, 2.f), V(1.2f, 9.f), .3f) = -1
+compare(Array<int>{}, Array<int>{}) = 0
+convert<float>(V(1, 2))=[1, 2] convert<int>(V(1.7f, -1.7f))=[1, -1]
+convert<int>(Array<float>{2.9f, -0.5f}) = Array<int>(2) {
+  2
+  0
+}
+c.size()=6 ranges::distance(c)=6 sum(c)=21
+cursor1.num_advances()=2 cursor2.num_advances()=3

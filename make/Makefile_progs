@@ -1,0 +1,60 @@
+# For use as:
+#  MeshRoot = ..#  or /hh/git/mesh_processing
+#  include $(MeshRoot)/make/Makefile_progs
+
+# use_vs_libs = 1#  (Optional, use libraries generated from Visual Studio using msbuild).
+
+ifneq ($(defs_loaded),1)
+  include $(MeshRoot)/make/Makefile_defs
+endif
+
+ifneq ($(CONFIG),all)  # For the rest of this file.
+
+exes = $(obj:%.$(extobj)=%)
+outputs = $(exes:%=%.ou)
+
+all: progs
+
+dot_quoted_target =#  No intermediate files produced, so target suffix is blank rather than .$(extobj).
+
+depend $(make_dep): $(MeshRoot)/make/Makefile_defs#  Regenerate if the recipe (cmd_makedep) may have changed.
+	$(cmd_makedep)
+
+ifeq ($(include_make_dep),1)
+  include $(make_dep)
+endif
+
+libs:
+# $(MAKE) -C $(MeshRoot)/libHh
+# The separate "-C dir" commands are useful to follow symbolic links or relative paths (for pch under CONFIG=win).
+	$(MAKE) -C $(MeshRoot) -C libHh
+
+progs: $(exes)
+
+test: $(outputs)
+	$(cmd_diffs_summary)
+
+$(exes): $(foreach n,$(LDLIBS),$(if $(findstring /,$(n)),$(n))) built_ou.$(build_variant)
+built_ou.$(build_variant):
+	@rm -f $(obj) $(exes) $(CRUMBS) $(outputs) $(outputs:%.ou=%.diff) built_ou.*
+	@touch built_ou.$(build_variant)
+
+mostlyclean:
+	rm -f $(obj) built_ou.* $(outputs) $(outputs:%.ou=%.diff) built_as.$(extasm).* $(CRUMBS)
+clean: mostlyclean
+	rm -f $(exes)
+deepclean: clean
+	rm -f $(make_dep)
+
+debug:
+	@echo 'obj=$(obj) exes=$(exes) outputs=$(outputs) .DEFAULT_GOAL=$(.DEFAULT_GOAL)'
+	@if false; then which cl.exe; fi
+	@echo $(filter %.$(extlib),$(LDLIBS))
+	@echo PATH="$(PATH)"
+
+phony_targets += all depend libs progs test mostlyclean clean deepclean debug
+goal_patterns += $(make_dep) $(exes) %.$(extobj) %.$(extasm) %.ou %.diff
+.PHONY: $(phony_targets)
+$(check_goals)
+
+endif  # ifneq ($(CONFIG),all)

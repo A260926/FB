@@ -1,0 +1,50 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_PIXEL_H_
+#define MESH_PROCESSING_LIBHH_PIXEL_H_
+
+#include <bit>
+
+#include "libHh/Vec.h"
+
+namespace hh {
+
+// A pixel using unsigned char for each of four channels: red, green, blue, alpha.
+// It is most often used in conjunction with class Image.
+struct alignas(4) Pixel : Vec4<uint8_t> {
+  Pixel() = default;
+  constexpr Pixel(uint8_t r, uint8_t g, uint8_t b, uint8_t a) : Vec4<uint8_t>(r, g, b, a) {}
+  constexpr Pixel(uint8_t r, uint8_t g, uint8_t b) : Pixel(r, g, b, 255) {}
+  constexpr Pixel(Vec4<uint8_t> p) : Vec4<uint8_t>(p) {}
+  [[nodiscard]] constexpr Pixel to_BGRA() const { return Pixel((*this)[2], (*this)[1], (*this)[0], (*this)[3]); }
+  [[nodiscard]] constexpr Pixel from_BGRA() const { return Pixel((*this)[2], (*this)[1], (*this)[0], (*this)[3]); }
+  [[nodiscard]] static constexpr Pixel gray(uint8_t v) { return Pixel(v, v, v); }
+  [[nodiscard]] static constexpr Pixel white() { return Pixel::gray(255); }
+  [[nodiscard]] static constexpr Pixel black() { return Pixel::gray(0); }
+  [[nodiscard]] static constexpr Pixel red() { return Pixel(255, 0, 0); }
+  [[nodiscard]] static constexpr Pixel green() { return Pixel(0, 255, 0); }
+  [[nodiscard]] static constexpr Pixel blue() { return Pixel(0, 0, 255); }
+  [[nodiscard]] static constexpr Pixel pink() { return Pixel(255, 150, 150); }
+  [[nodiscard]] static constexpr Pixel yellow() { return Pixel(255, 255, 0); }
+  friend std::ostream& operator<<(std::ostream& os, const Pixel& p) {  // Otherwise prints uchars.
+    return os << "Pixel(" << int{p[0]} << ", " << int{p[1]} << ", " << int{p[2]} << ", " << int{p[3]} << ")";
+  }
+};
+
+template <input_range_to<Pixel> R> void convert_rgba_bgra(R&& range) {
+  for (Pixel& p : range) std::swap(p[0], p[2]);
+}
+
+template <input_range_to<Pixel> R> void convert_bgra_rgba(R&& range) {
+  convert_rgba_bgra(std::forward<R>(range));  // Same implementation.
+}
+
+//----------------------------------------------------------------------------
+
+// Faster, specialized version of Vec<>::operator==().
+[[nodiscard]] constexpr bool operator==(const Pixel& pix1, const Pixel& pix2) {
+  return std::bit_cast<uint32_t>(pix1) == std::bit_cast<uint32_t>(pix2);
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_PIXEL_H_

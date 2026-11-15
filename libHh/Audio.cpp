@@ -1,0 +1,47 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#include "libHh/Audio.h"
+
+#include "libHh/RangeOp.h"
+#include "libHh/StringOp.h"  // get_path_extension()
+
+namespace hh {
+
+void swap(Audio& l, Audio& r) noexcept {
+  ranges::swap(implicit_cast<Audio::base&>(l), implicit_cast<Audio::base&>(r));
+  ranges::swap(l._attrib, r._attrib);
+}
+
+string Audio::diagnostic_string() const {
+  string s = sform("nsamples=%d nchannels=%d (%g Hz)", nsamples(), nchannels(), attrib().samplerate);
+  if (attrib().suffix != "") s += " (" + attrib().suffix + ")";
+  const int brate = attrib().bitrate;
+  if (brate)
+    s += (brate > 1'000'000 ? sform(" (%.2f Mbps)", brate / 1'000'000.f)
+          : brate > 1000    ? sform(" (%.2f kbps)", brate / 1000.f)
+                            : sform(" (%d bps)", brate));
+  return s;
+}
+
+bool filename_is_audio(const string& filename) {
+  static constexpr auto k_extensions = to_Vec<std::string_view>({
+      "wav",
+      "mp3",
+      // "pcm",
+  });
+  return contains(k_extensions, to_lower(get_path_extension(filename)));
+}
+
+std::string_view audio_suffix_for_magic_byte(uchar c) {
+  // See also image_suffix_for_magic_byte() and video_suffix_for_magic_byte().
+  // Documentation on prefixes for various audio containers:
+  // *.wav: "RIFF"
+  // *.mp3: "ID3\003\000", "\377\373\220D"   (ID3 is a metadata container often used in conjunction with MP3)
+  switch (c) {
+      // Here, u'\xFF' for "mp3" would be ambiguous with "jpg".
+    case 'R': return "wav";
+    case 'I': return "mp3";
+    default: return "";
+  }
+}
+
+}  // namespace hh

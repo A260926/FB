@@ -1,0 +1,322 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_VERTEXCACHE_H_
+#define MESH_PROCESSING_LIBHH_VERTEXCACHE_H_
+
+#include "libHh/Array.h"
+#include "libHh/IntrusiveList.h"
+#include "libHh/RangeOp.h"
+
+namespace hh {
+
+// Keep track of vertex references during traversal of mesh faces using FIFO or LRU caching strategies.
+class VertexCache : noncopyable {
+ public:
+  enum class EType { notype, fifo, lru };
+  static string type_string(EType type);
+  static unique_ptr<VertexCache> make(EType type, int nverts1, int cs);  // Vertex ids begin at 1.
+
+  virtual ~VertexCache() = default;
+  [[nodiscard]] virtual EType type() const = 0;
+  virtual void init(int nverts1, int cs) = 0;    // Vertex ids begin at 1.
+  virtual void copy(const VertexCache& vc) = 0;  // Must be initialized!
+  virtual bool access_hits(int vi) = 0;
+  [[nodiscard]] virtual bool contains(int vi) const = 0;
+  [[nodiscard]] virtual int location(int vi) const = 0;      // -1 .. cs - 1 (0 == recent) (may be slow).
+  [[nodiscard]] virtual int location_alt(int vi) const = 0;  // 0 .. cs (0 == recent) (may be slow).
+  class Iter : noncopyable {                                 // The ordering of vertices is undefined!
+   public:
+    virtual ~Iter() = default;
+    virtual int next() = 0;  // Returns 0 if there are no more vertices.
+   protected:
+    Iter() = default;
+  };
+  [[nodiscard]] virtual unique_ptr<Iter> make_iterator() const = 0;
+  friend std::ostream& operator<<(std::ostream& os, const VertexCache& vc);
+};
+
+//----------------------------------------------------------------------------
+
+class FifoVertexCache : public VertexCache {
+ public:
+  explicit FifoVertexCache(int nverts1, int cs) { FifoVertexCache::init(nverts1, cs); }
+  [[nodiscard]] EType type() const override { return EType::fifo; }
+  void init(int nverts1, int cs) override {
+    assertx(nverts1 > 0 && cs >= 1);
+    if (_vinqueue.num() != nverts1 || _queuev.num() != cs) {
+      assertx(!_vinqueue.num());
+      _vinqueue.init(nverts1, -1);
+      _queuev.init(cs, k_no_entry);
+    } else {
+      int* q = _queuev.data();
+      for_int(qi, _queuev.num()) {
+        const int vif = q[qi];
+        q[qi] = k_no_entry;
+        ASSERTX(vif == k_no_entry || _vinqueue[vif] == qi);
+        _vinqueue[vif] = -1;  // Here, vif == k_no_entry is OK.
+      }
+    }
+    _iprev = 0;
+  }
+  void copy(const VertexCache& pvc) override {  // The pvc must be a FifoVertexCache!
+    const FifoVertexCache& vc = static_cast<const FifoVertexCache&>(pvc);
+    ASSERTX(vc.type() == type() && vc._vinqueue.num() == _vinqueue.num() && vc._queuev.num() == _queuev.num());
+    if (0) {
+      for_int(qi, _queuev.num()) {  // Copied from init().
+        const int vif = _queuev[qi];
+        ASSERTX(vif == k_no_entry || _vinqueue[vif] == qi);
+        _vinqueue[vif] = -1;  // Here, vif == k_no_entry is OK.
+      }
+      for_int(qi, _queuev.num()) {
+        const int vif = vc._queuev[qi];
+        _vinqueue[vif] = qi;  // Here, vif == k_no_entry is OK.
+        _queuev[qi] = vif;
+      }
+      _iprev = vc._iprev;
+    } else {
+      int* q = _queuev.data();
+      int* vinq = _vinqueue.data();
+      const int* vcq = vc._queuev.data();
+      for_int(qi, _queuev.num()) {
+        const int vif = q[qi];
+        ASSERTX(vif == k_no_entry || _vinqueue[vif] == qi);
+        vinq[vif] = -1;
+      }
+      for_int(qi, _queuev.num()) {
+        const int vif = vcq[qi];
+        q[qi] = vif;
+        vinq[vif] = qi;
+      }
+      _iprev = vc._iprev;
+    }
+  }
+  bool access_hits(int vi) override {
+    ASSERTX(vi >= 1 && vi < _vinqueue.num());
+    if (0) {
+      if (_vinqueue[vi] >= 0) return true;  // If there, do nothing.
+      if (_iprev == 0) {
+        if (!_queuev.num()) return false;
+        _iprev = _queuev.num();
+      }
+      --_iprev;
+      const int vj = _queuev[_iprev];  // Oldest vertex.
+      ASSERTX(vj == k_no_entry || _vinqueue[vj] == _iprev);
+      _vinqueue[vj] = -1;  // Here, vj == k_no_entry is OK.
+      _queuev[_iprev] = vi;
+      _vinqueue[vi] = _iprev;
+    } else {
+      int* q = _queuev.data();
+      int* vinq = _vinqueue.data();
+      if (vinq[vi] >= 0) return true;  // If there, do nothing.
+      _iprev = _iprev - 1 + (_iprev == 0) * _queuev.num();
+      const int vj = q[_iprev];  // Oldest vertex.
+      q[_iprev] = vi;
+      ASSERTX(vj == k_no_entry || vinq[vj] == _iprev);
+      vinq[vj] = -1;  // Here, vj == k_no_entry is OK.
+      vinq[vi] = _iprev;
+    }
+    return false;
+  }
+  [[nodiscard]] bool contains(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinqueue.num());
+    return _vinqueue[vi] >= 0;
+  }
+  [[nodiscard]] int location(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinqueue.num());
+    const int qi = _vinqueue[vi];
+    if (qi < 0) return -1;
+    ASSERTX(_queuev[qi] == vi);
+    int loc = qi - _iprev;
+    if (loc < 0) loc += _queuev.num();
+    return loc;
+  }
+  [[nodiscard]] int location_alt(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinqueue.num());
+    const int qi = _vinqueue[vi];
+    if (qi < 0) return _queuev.num();
+    ASSERTX(_queuev[qi] == vi);
+    int loc = qi - _iprev;
+    if (loc < 0) loc += _queuev.num();
+    return loc;
+  }
+  [[nodiscard]] unique_ptr<VertexCache::Iter> make_iterator() const override { return make_unique<Iter>(*this); }
+
+ private:
+  class Iter : public VertexCache::Iter {
+   public:
+    Iter(const FifoVertexCache& vcache) : _qv(vcache._queuev), _qi(vcache._iprev), _numi(vcache._queuev.num()) {}
+    int next() override {
+      if (!_numi) return 0;
+      --_numi;
+      const int vi = _qv[_qi];
+      _qi++;
+      if (_qi == _qv.num()) _qi = 0;
+      return vi;  // Here, vi == k_no_entry is OK.
+    }
+
+   private:
+    CArrayView<int> _qv;
+    int _qi;
+    int _numi;
+  };
+  static constexpr int k_no_entry = 0;
+  Array<int> _queuev;    // Decreasing circular FIFO queue; may contain k_no_entry's.
+  int _iprev{-1};        // 0 .. cs - 1: entry_last_added.
+  Array<int> _vinqueue;  // Maps vid -> [0 .. cs - 1, -1];  _vinqueue[k_no_entry = 0] is trash.
+};
+
+class LruVertexCache : public VertexCache {
+ public:
+  explicit LruVertexCache(int nverts1, int cs) { LruVertexCache::init(nverts1, cs); }
+  ~LruVertexCache() override {
+    while (!_list.empty()) {
+      IntrusiveListNode* nodee = _list.delim()->next();
+      nodee->unlink();
+    }
+  }
+  [[nodiscard]] EType type() const override { return EType::lru; }
+  void init(int nverts1, int cs) override {
+    assertx(nverts1 > 0 && cs >= 1);
+    if (_vinlist.num() != nverts1 || _cs != cs) {
+      assertx(!_vinlist.num());
+      _vinlist.init(nverts1, nullptr);
+      _cs = cs;
+      _nodes.init(cs);
+      for_int(ci, cs) {
+        Node* node = &_nodes[ci];
+        node->list_node.link_after(_list.delim());
+      }
+    } else {
+      for_int(ci, cs) {
+        Node* node = &_nodes[ci];
+        const int vif = node->vert;
+        ASSERTX(vif == k_no_entry || _vinlist[vif] == node);
+        _vinlist[vif] = nullptr;  // Here, vif == k_no_entry is OK.
+        node->vert = k_no_entry;
+      }
+    }
+  }
+  void copy(const VertexCache& pvc) override {  // The pvc must be a LruVertexCache!
+    const LruVertexCache& vc = static_cast<const LruVertexCache&>(pvc);
+    ASSERTX(vc.type() == type() && vc._vinlist.num() == _vinlist.num() && vc._cs == _cs);
+    init(vc._vinlist.num(), vc._cs);
+    const IntrusiveListNode* onodee = vc._list.delim()->next();
+    const IntrusiveListNode* tnodee = _list.delim()->next();
+    const IntrusiveListNode* tdelime = _list.delim();
+    while (tnodee != tdelime) {
+      const Node* onode = HH_INTRUSIVE_LIST_OUTER(Node, list_node, onodee);
+      Node* tnode = HH_INTRUSIVE_LIST_OUTER(Node, list_node, tnodee);
+      const int vif = onode->vert;
+      tnode->vert = vif;
+      _vinlist[vif] = tnode;  // Here, vif == k_no_entry is OK.
+      tnodee = tnodee->next();
+      onodee = onodee->next();
+    }
+    ASSERTX(onodee == vc._list.delim());
+  }
+  bool access_hits(int vi) override {
+    ASSERTX(vi >= 1 && vi < _vinlist.num());
+    Node* node = _vinlist[vi];
+    if (node) {  // If there, move to the front.
+      ASSERTX(node->vert == vi);
+      node->list_node.relink_after(_list.delim());
+      return true;
+    }
+    IntrusiveListNode* nodee = _list.delim()->prev();  // The rear node.
+    // if (nodee == _list.delim()) return false;  // cs == 0
+    node = HH_INTRUSIVE_LIST_OUTER(Node, list_node, nodee);
+    const int vj = node->vert;
+    ASSERTX(vj == k_no_entry || _vinlist[vj] == node);
+    _vinlist[vj] = nullptr;  // Here, vj == k_no_entry is OK.
+    nodee->relink_after(_list.delim());
+    node->vert = vi;
+    _vinlist[vi] = node;
+    return false;
+  }
+  [[nodiscard]] bool contains(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinlist.num());
+    return !!_vinlist[vi];
+  }
+  [[nodiscard]] int location(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinlist.num());
+    if (!_vinlist[vi]) return -1;
+    const IntrusiveListNode* vinodee = &_vinlist[vi]->list_node;
+    const IntrusiveListNode* delime = _list.delim();
+    int num = 0;
+    for (const IntrusiveListNode* nodee = delime->next(); nodee != vinodee; nodee = nodee->next()) num++;
+    ASSERTX(num < _cs);
+    return num;
+  }
+  [[nodiscard]] int location_alt(int vi) const override {
+    ASSERTX(vi >= 1 && vi < _vinlist.num());
+    if (!_vinlist[vi]) return _cs;
+    const IntrusiveListNode* vinodee = &_vinlist[vi]->list_node;
+    const IntrusiveListNode* delime = _list.delim();
+    int num = 0;
+    for (const IntrusiveListNode* nodee = delime->next(); nodee != vinodee; nodee = nodee->next()) num++;
+    ASSERTX(num < _cs);
+    return num;
+  }
+  [[nodiscard]] unique_ptr<VertexCache::Iter> make_iterator() const override { return make_unique<Iter>(*this); }
+
+ private:
+  class Iter : public VertexCache::Iter {
+   public:
+    Iter(const LruVertexCache& vcache) : _delim(vcache._list.delim()), _n(vcache._list.delim()->next()) {}
+    int next() override {
+      if (_n == _delim) return 0;
+      const int vi = HH_INTRUSIVE_LIST_OUTER(LruVertexCache::Node, list_node, _n)->vert;
+      _n = _n->next();
+      return vi;  // Here, vi == k_no_entry is OK.
+    }
+
+   private:
+    const IntrusiveListNode* _delim;
+    const IntrusiveListNode* _n;
+  };
+  struct Node {
+    IntrusiveListNode list_node;
+    int vert{k_no_entry};  // Set to k_no_entry if the cache entry is empty.
+  };
+  static constexpr int k_no_entry = 0;
+  int _cs{0};
+  Array<Node> _nodes;  // Note: Node is noncopyable but Array is never resized.
+  IntrusiveList _list;
+  Array<Node*> _vinlist;  // Here, _vinlist[k_no_entry = 0] is trash.
+};
+
+//----------------------------------------------------------------------------
+
+// NOLINTNEXTLINE(modernize-use-string-view): the callers need the null-terminated c_str() for showdf().
+inline string VertexCache::type_string(EType type) {
+  switch (type) {
+    case EType::fifo: return "Fifo";
+    case EType::lru: return "Lru";
+    case EType::notype: assertnever("Cache type not specified");
+    default: assertnever("");
+  }
+}
+
+inline unique_ptr<VertexCache> VertexCache::make(EType type, int nverts1, int cs) {
+  switch (type) {
+    case EType::fifo: return make_unique<FifoVertexCache>(nverts1, cs);
+    case EType::lru: return make_unique<LruVertexCache>(nverts1, cs);
+    case EType::notype: assertnever("Cache type not specified");
+    default: assertnever("");
+  }
+}
+
+inline std::ostream& operator<<(std::ostream& os, const VertexCache& vc) {
+  auto up_vci = vc.make_iterator();
+  VertexCache::Iter& vci = *up_vci;
+  os << "{";
+  for (;;) {
+    const int vi = vci.next();
+    if (!vi) break;
+    os << sform(" %d", vi);
+  }
+  return os << "}";
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_VERTEXCACHE_H_

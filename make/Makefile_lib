@@ -1,0 +1,64 @@
+# For use as:
+#  MeshRoot = ..
+#  include $(MeshRoot)/make/Makefile_lib
+
+ifneq ($(defs_loaded),1)
+  include $(MeshRoot)/make/Makefile_defs
+endif
+
+ifneq ($(CONFIG),all)  # For the rest of this file.
+
+troot ?= $(notdir $(abspath .))
+tlib ?= $(troot).$(extlib)
+
+all: $(tlib)
+
+depend $(make_dep): $(MeshRoot)/make/Makefile_defs#  Regenerate if the recipe (cmd_makedep) may have changed.
+	$(cmd_makedep)
+
+ifeq ($(include_make_dep),1)
+  include $(make_dep)
+endif
+
+$(obj): built_ob.$(extobj).$(build_variant)
+built_ob.$(extobj).$(build_variant):
+	@rm -f $(obj) $(tlib) $(CRUMBS) built_ob.$(extobj).*
+	@touch built_ob.$(extobj).$(build_variant)
+
+mostlyclean:
+	rm -f $(obj) $(tlib) built_ob.$(extobj).* built_as.$(extasm).* $(CRUMBS)
+clean: mostlyclean
+deepclean: clean
+	rm -f $(make_dep)
+
+phony_targets += all depend mostlyclean clean deepclean
+goal_patterns += $(make_dep) $(tlib) %.$(extobj) %.$(extasm)
+.PHONY: $(phony_targets)
+$(check_goals)
+
+ifeq ($(CXX),cl)  # (Was: ifeq ($(extobj),obj))
+
+  # Compile library C code using "-Zl" flag to omit reference to standard C (rather than C++) library,
+  c-all += -Zl
+
+  $(tlib): $(obj)
+	lib -nologo $(if $(call file_exists,$(tlib)),$@ $?,-out:$@ $^) $(ltcg)
+  # The above version only rebuilds from scratch if the library does not exist.
+  #	@echo obj=$(obj) mod=$?
+  #	lib -nologo -out:$@ $^
+
+else
+
+  $(tlib): $(obj)  # Note that "ar cr" does a merge; flag "c" only creates library if it does not already exist.
+	@if [ ! -f $(tlib) ]; then \
+	  echo Creating library $@; \
+	  $(AR) cr $@ $(obj); \
+	else \
+	  echo Updating library $@ by merging files $?; \
+	  $(AR) cr $@ $?; \
+	fi
+	@$(RANLIB) $@
+
+endif
+
+endif  # ifneq ($(CONFIG),all)

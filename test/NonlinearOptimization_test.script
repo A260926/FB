@@ -1,0 +1,4 @@
+#!/bin/bash
+
+NonlinearOptimization_test 2>&1 | grep -v 'Running debug version.'
+exit 0

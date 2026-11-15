@@ -1,0 +1,537 @@
+beg 4
+S(4)
+end
+~S(4)
+beg 4 5
+S(4)
+S(5)
+end
+~S(5)
+~S(4)
+beg 4 5 6
+S(4)
+S(5)
+S(6)
+e->_i = 4
+e->_i = 5
+e->_i = 6
+end
+~S(6)
+~S(5)
+~S(4)
+beg 20
+S(0)
+S(1)
+S(2)
+S(3)
+S(4)
+S(5)
+S(6)
+S(7)
+S(8)
+S(9)
+S(10)
+S(11)
+S(12)
+S(13)
+S(14)
+S(15)
+S(16)
+S(17)
+S(18)
+S(19)
+end
+~S(19)
+~S(18)
+~S(17)
+~S(16)
+~S(15)
+~S(14)
+~S(13)
+~S(12)
+~S(11)
+~S(10)
+~S(9)
+~S(8)
+~S(7)
+~S(6)
+~S(5)
+~S(4)
+~S(3)
+~S(2)
+~S(1)
+~S(0)
+beg 100, 2
+S(100)
+S(101)
+end
+~S(101)
+~S(100)
+beg 500
+S(500)
+S(501)
+ar[0]->_i = 500
+beg 600
+S(600)
+S(601)
+S(602)
+~S(501)
+~S(500)
+end
+~S(602)
+~S(601)
+~S(600)
+beg 100, 3
+S(100)
+S(101)
+S(102)
+beg 200, 2
+S(200)
+S(201)
+~S(102)
+~S(101)
+~S(100)
+end
+~S(201)
+~S(200)
+beg 100, 3
+S(100)
+S(101)
+S(102)
+beg 200, 3
+S(200)
+S(201)
+S(202)
+~S(102)
+~S(101)
+~S(100)
+end
+~S(202)
+~S(201)
+~S(200)
+CArrayView<int>({1, 2, 3, 4}) = Array<int>(4) {
+  1
+  2
+  3
+  4
+}
+sum(ar) = 10
+sum(ar2) = 10
+min(ar2) = 1
+max(ar2) = 4
+mean(ar2) = 2.5
+sum(ar) = 197
+min(ar) = a
+mean(ar) = 98.5
+mag2(ar) = 19409
+mag(ar) = 139.316
+rms(ar) = 98.5114
+CArrayView<int>(a) = Array<int>(5) {
+  10
+  11
+  12
+  13
+  14
+}
+CArrayView(a) = Array<int>(5) {
+  10
+  11
+  12
+  13
+  14
+}
+var(ar) = 2.5
+sqrt(var(ar)) = 1.58114
+rms(ar - 12) = 1.41421
+reverse(ArrayView(a)) = Array<int>(5) {
+  14
+  13
+  12
+  11
+  10
+}
+CArrayView(a) = Array<int>(5) {
+  14
+  13
+  12
+  11
+  10
+}
+sort(ArrayView(a)) = Array<int>(5) {
+  10
+  11
+  12
+  13
+  14
+}
+CArrayView(a) = Array<int>(5) {
+  10
+  11
+  12
+  13
+  14
+}
+CArrayView(a) = Array<int>(5) {
+  14
+  13
+  12
+  11
+  10
+}
+CArrayView(a) = Array<int>(5) {
+  16
+  16
+  16
+  16
+  16
+}
+a = [10, 11, 12]
+CArrayView<int>(a) = Array<int>(3) {
+  10
+  11
+  12
+}
+a.view() = Array<int>(3) {
+  10
+  11
+  12
+}
+var(ar) = 1
+sqrt(var(ar)) = 1
+rms(ar - 12) = 1.29099
+sort_unique(V(10, 13, 12, 13, 9, 12, 15, 10)) = Array<int>(5) {
+  9
+  10
+  12
+  13
+  15
+}
+median(V(10, 13, 12, 13, 9, 12, 15, 10)) = 12
+median(V(8, 7, 6, 5, 4, 9, 10)) = 7
+median_two(V(10, 13, 12, 13, 9, 12, 15, 10)) = [12, 12]
+mean(median_two(V(10, 13, 12, 13, 9, 12, 15, 10))) = 12
+median_two(V(8, 7, 6, 5, 4, 9, 10)) = [7, 7]
+mean(median_two(V(8, 7, 6, 5, 4, 9, 10))) = 7
+i=0 rank_element(ar, i)=4
+i=1 rank_element(ar, i)=5
+i=2 rank_element(ar, i)=6
+i=3 rank_element(ar, i)=7
+i=4 rank_element(ar, i)=8
+i=5 rank_element(ar, i)=9
+i=6 rank_element(ar, i)=10
+rankf=0 rankf_element(ar, rankf)=4
+rankf=0.1 rankf_element(ar, rankf)=4
+rankf=0.2 rankf_element(ar, rankf)=5
+rankf=0.3 rankf_element(ar, rankf)=6
+rankf=0.4 rankf_element(ar, rankf)=6
+rankf=0.5 rankf_element(ar, rankf)=7
+rankf=0.6 rankf_element(ar, rankf)=8
+rankf=0.7 rankf_element(ar, rankf)=8
+rankf=0.8 rankf_element(ar, rankf)=9
+rankf=0.9 rankf_element(ar, rankf)=10
+rankf=1 rankf_element(ar, rankf)=10
+ar1 == V(1, 1 + 1).view() = 1
+ar1 == V(1, 2, 3).view() = 0
+ar1 == V(1, 3).view() = 0
+ar = Vec<hh::Array<int>,3> {
+  Array<int>(1) {
+  1
+}
+  Array<int>(0) {
+}
+  Array<int>(0) {
+}
+}
+ar = Array<int>(2) {
+  1
+  2
+}
+Array(ranges::subrange(vec.begin(), vec.end())) = Array<int>(2) {
+  1
+  3
+}
+Array(ranges::subrange(vec)) = Array<int>(2) {
+  1
+  3
+}
+Array(vec) = Array<int>(3) {
+  10
+  10
+  3
+}
+beg
+S(4)
+end
+~S(4)
+beg
+S(4)
+S(5)
+end
+~S(5)
+~S(4)
+beg
+S(4)
+S(5)
+S(6)
+e->_i = 4
+e->_i = 5
+e->_i = 6
+end
+~S(6)
+~S(5)
+~S(4)
+beg
+S(0)
+S(1)
+S(2)
+S(3)
+S(4)
+S(5)
+S(6)
+S(7)
+S(8)
+S(9)
+S(10)
+S(11)
+S(12)
+S(13)
+S(14)
+S(15)
+S(16)
+S(17)
+S(18)
+S(19)
+end
+~S(19)
+~S(18)
+~S(17)
+~S(16)
+~S(15)
+~S(14)
+~S(13)
+~S(12)
+~S(11)
+~S(10)
+~S(9)
+~S(8)
+~S(7)
+~S(6)
+~S(5)
+~S(4)
+~S(3)
+~S(2)
+~S(1)
+~S(0)
+beg
+S(100)
+S(101)
+end
+~S(101)
+~S(100)
+beg
+S(500)
+S(501)
+ar[0]->_i = 500
+S(600)
+S(601)
+S(602)
+end
+~S(602)
+~S(601)
+~S(600)
+~S(501)
+~S(500)
+beg
+S(100)
+S(101)
+S(102)
+mid
+S(200)
+S(201)
+~S(102)
+~S(101)
+~S(100)
+end
+~S(201)
+~S(200)
+beg
+S(100)
+S(101)
+S(102)
+mid
+S(200)
+S(201)
+S(202)
+~S(102)
+~S(101)
+~S(100)
+end
+~S(202)
+~S(201)
+~S(200)
+ar1 = Array<int>(0) {
+}
+ar1 = Array<int>(3) {
+  7
+  6
+  5
+}
+ar1 = Array<int>(5) {
+  7
+  6
+  5
+  4
+  3
+}
+transformed(ar1, func) = Array<float>(5) {
+  10.5
+  9
+  7.5
+  6
+  4.5
+}
+ar2 = Array<int>(2) {
+  11
+  12
+}
+after swap
+ar1 = Array<int>(2) {
+  11
+  12
+}
+ar2 = Array<int>(5) {
+  7
+  6
+  5
+  4
+  3
+}
+after swap back
+ar1 = Array<int>(5) {
+  7
+  6
+  5
+  4
+  3
+}
+ar2 = Array<int>(2) {
+  11
+  12
+}
+ar2 = Array<int>(5) {
+  11
+  12
+  13
+  14
+  15
+}
+after swap
+ar1 = Array<int>(5) {
+  11
+  12
+  13
+  14
+  15
+}
+ar2 = Array<int>(5) {
+  7
+  6
+  5
+  4
+  3
+}
+after swap back
+ar1 = Array<int>(5) {
+  7
+  6
+  5
+  4
+  3
+}
+ar2 = Array<int>(5) {
+  11
+  12
+  13
+  14
+  15
+}
+ar1 = Array<int>(2) {
+  4
+  3
+}
+ar2 = Array<int>(2) {
+  14
+  15
+}
+after swap
+ar1 = Array<int>(2) {
+  14
+  15
+}
+ar2 = Array<int>(2) {
+  4
+  3
+}
+after swap back
+ar1 = Array<int>(2) {
+  4
+  3
+}
+ar2 = Array<int>(2) {
+  14
+  15
+}
+ar1 = Array<int>(1) {
+  1
+}
+ar2 = Array<int>(3) {
+  1
+  2
+  3
+}
+ar3=Array<int>(2) {
+  1
+  2
+}
+ ar1.num()=0 ar3.capacity()=3
+ar4=Array<int>(4) {
+  3
+  4
+  5
+  6
+}
+ ar2.num()=0 ar4.capacity()=4
+ar4=Array<int>(2) {
+  3
+  4
+}
+ ar4.capacity()=3
+ar4=Array<int>(2) {
+  3
+  4
+}
+ ar4.capacity()=10
+ar4.num()=0 ar4.capacity()=3
+extension = Extension{reflect}
+extension = Extension{wrap}
+extension = Extension{clamp}
+extension = Extension{border}
+extension = Extension{reflect_primal}
+Extension::undefined = Extension{undefined}
+extension=Extension{reflect} s=33210012332100
+extension=Extension{wrap} s=30123012301230
+extension=Extension{clamp} s=00000012333333
+extension=Extension{border} s=-----0123-----
+extension=Extension{reflect_primal} s=12321012321012
+interp(f1, f2, f3) = Array<float>(2) {
+  8
+  12
+}
+(1) all=0,1,2   src nulled=111
+(2) tail=gamma,delta   words[2..3]='','' (emptied)
+(3) kept=keep_a,keep_b   pool[0]='' (emptied), pool[1]='drop' (untouched)
+(4) copied=alpha,beta   words[0]='alpha' (intact)
+(1) all=0,1,2   src nulled=111
+(2) tail=gamma,delta   words[2..3]='','' (emptied)
+(3) kept=keep_a,keep_b   pool[0]='' (emptied), pool[1]='drop' (untouched)
+(4) copied=alpha,beta   words[0]='alpha' (intact)

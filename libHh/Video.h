@@ -1,0 +1,209 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_VIDEO_H_
+#define MESH_PROCESSING_LIBHH_VIDEO_H_
+
+#include "libHh/Audio.h"
+#include "libHh/Grid.h"
+#include "libHh/Image.h"  // Nv12View
+#include "libHh/ResampleOptions.h"
+
+#if 0
+{
+  Video video(nframes, V(ysize, xsize)), video2(video.dims()), video3(video.nframes() * 2, video.spatial_dims());
+  Pixel& pixel = video[f, y, x];  // As in Image, [y = 0][x = 0] is at upper-left corner of each image frame.
+  uint8_t c = video[f, y, x][z];  // z = [0..2].
+
+  // Video read/write is performed using: Windows Media Foundation (mf) or ffmpeg (ffmpeg).
+}
+#endif
+
+namespace hh {
+
+class TmpFile;  // From libHh/FileIO.h.
+
+// A Video is a 3D grid of RGB pixels, plus attributes like compression type, frame rate, and bit rate.
+class Video : public Grid<3, Pixel> {
+  using base = Grid<3, Pixel>;
+
+ public:
+  struct Attrib;
+  explicit Video(const Vec3<int>& dims = V(0, 0, 0)) { init(dims); }  // Indexed as [nframes, ysize, xsize].
+  explicit Video(int pnframes, const Vec2<int>& sdims) : Video(V(pnframes, sdims[0], sdims[1])) {}
+  explicit Video(const Video&) = default;
+  explicit Video(const base& video) : base(video.dims()) { base::assign(video); }
+  explicit Video(const string& filename) { read_file(filename); }
+  Video(Video&& v) noexcept { swap(*this, v); }
+  Video(base&& v) noexcept { swap(implicit_cast<base&>(*this), v); }
+  Video& operator=(Video&& v) noexcept { return clear(), swap(*this, v), *this; }
+  void operator=(base&& v) { clear(), swap(implicit_cast<base&>(*this), v); }
+  Video& operator=(const Video&) = default;
+  void operator=(CGridView<3, Pixel> video) { base::assign(video); }
+  void init(const Vec3<int>& dims);
+  void init(int pnframes, const Vec2<int>& sdims) { init(V(pnframes, sdims[0], sdims[1])); }
+  void clear() { init(thrice(0)); }
+  [[nodiscard]] int nframes() const { return dim(0); }
+  [[nodiscard]] const Vec2<int>& spatial_dims() const { return dims().tail<2>(); }
+  [[nodiscard]] int ysize() const { return dim(1); }
+  [[nodiscard]] int xsize() const { return dim(2); }
+  [[nodiscard]] auto& attrib(this auto&& self) { return self._attrib; }
+  void read_file(const string& filename);         // The name may be "-" for std::cin; may throw std::runtime_error.
+  void write_file(const string& filename) const;  // The name may be "-" for std::cout; may throw std::runtime_error.
+
+  // Misc:
+  void scale(const Vec2<float>& syx, const ResizeOptions<2>& options = {}, const Pixel* cval = nullptr);
+  struct Attrib {
+    string suffix;         // E.g. "mp4"; "" if unknown; to identify format of read_file("-") and write_file("-").
+    double framerate{0.};  // Frames per second.
+    int bitrate{0};        // Bits per second.
+    Audio audio;
+  };
+  friend void swap(Video& l, Video& r) noexcept;
+  [[nodiscard]] static string diagnostic_string(const Vec3<int>& dims, const Attrib& attrib);
+
+ private:
+  Attrib _attrib;
+};
+
+// Whether filename suffix identifies it as a video.
+[[nodiscard]] bool filename_is_video(const string& filename);
+
+// Returns the predicted video suffix given the first byte of a file, or "" if unrecognized.
+[[nodiscard]] std::string_view video_suffix_for_magic_byte(uchar c);
+
+// Video consisting of an 8-bit luminance grid and a 2*8-bit chroma grid at half spatial resolution.
+class VideoNv12 : noncopyable {
+ public:
+  VideoNv12() = default;
+  explicit VideoNv12(const Vec3<int>& dims) { init(dims); }
+  VideoNv12(VideoNv12&& vnv12) noexcept { swap(*this, vnv12); }
+  VideoNv12& operator=(VideoNv12&& v) noexcept { return clear(), swap(*this, v), *this; }
+  explicit VideoNv12(Grid<3, uint8_t>&& grid_Y, Grid<3, Vec2<uint8_t>>&& grid_UV)
+      : _grid_Y(std::move(grid_Y)), _grid_UV(std::move(grid_UV)) {
+    ok();
+  }
+  void init(const Vec3<int>& dims) {
+    _grid_Y.init(dims);
+    _grid_UV.init(dims / V(1, 2, 2));
+    ok();
+  }
+  void clear() { init(thrice(0)); }
+  [[nodiscard]] int nframes() const { return _grid_Y.dim(0); }
+  [[nodiscard]] size_t size() const { return _grid_Y.size(); }
+  [[nodiscard]] CNv12View operator[](int f) const { return CNv12View(_grid_Y[f], _grid_UV[f]); }
+  [[nodiscard]] Nv12View operator[](int f) { return Nv12View(_grid_Y[f], _grid_UV[f]); }
+  [[nodiscard]] auto get_Y(this auto&& self) { return grid_view_t<3, decltype(self._grid_Y.data())>(self._grid_Y); }
+  [[nodiscard]] auto get_UV(this auto&& self) { return grid_view_t<3, decltype(self._grid_UV.data())>(self._grid_UV); }
+  void special_reduce_dim0(int i) { _grid_Y.special_reduce_dim0(i), _grid_UV.special_reduce_dim0(i); }
+  void read_file(const string& filename, Video::Attrib* pattrib = nullptr);    // May throw std::runtime_error.
+  void write_file(const string& filename, const Video::Attrib& attrib) const;  // May throw std::runtime_error.
+  friend void swap(VideoNv12& l, VideoNv12& r) noexcept;
+
+ private:
+  Grid<3, uint8_t> _grid_Y;         // Luminance.
+  Grid<3, Vec2<uint8_t>> _grid_UV;  // Chroma at half the spatial resolution.
+  void ok() const { assertx(_grid_Y.dims() == _grid_UV.dims() * V(1, 2, 2)); }
+};
+
+// View of an 8-bit luminance grid and a 2*8-bit chroma grid at half spatial resolution.
+class VideoNv12View {
+ public:
+  explicit VideoNv12View(GridView<3, uint8_t> grid_Y, GridView<3, Vec2<uint8_t>> grid_UV)
+      : _grid_Y(std::move(grid_Y)), _grid_UV(std::move(grid_UV)) {
+    assertx(_grid_Y.dims() == _grid_UV.dims() * V(1, 2, 2));
+  }
+  VideoNv12View(VideoNv12& vnv12) : _grid_Y(vnv12.get_Y()), _grid_UV(vnv12.get_UV()) {}
+  [[nodiscard]] int nframes() const { return _grid_Y.dim(0); }
+  [[nodiscard]] size_t size() const { return _grid_Y.size(); }
+  [[nodiscard]] Nv12View operator[](int f) { return Nv12View(_grid_Y[f], _grid_UV[f]); }
+  [[nodiscard]] auto get_Y(this auto&& self) { return grid_view_t<3, decltype(self._grid_Y.data())>(self._grid_Y); }
+  [[nodiscard]] auto get_UV(this auto&& self) { return grid_view_t<3, decltype(self._grid_UV.data())>(self._grid_UV); }
+
+ private:
+  GridView<3, uint8_t> _grid_Y;         // Luminance.
+  GridView<3, Vec2<uint8_t>> _grid_UV;  // Chroma at half the spatial resolution.
+};
+
+// Constant view of an 8-bit luminance grid and a 2*8-bit chroma grid at half spatial resolution.
+class CVideoNv12View {
+ public:
+  explicit CVideoNv12View(CGridView<3, uint8_t> grid_Y, CGridView<3, Vec2<uint8_t>> grid_UV)
+      : _grid_Y(grid_Y), _grid_UV(grid_UV) {
+    assertx(_grid_Y.dims() == _grid_UV.dims() * V(1, 2, 2));
+  }
+  CVideoNv12View(const VideoNv12& vnv12) : _grid_Y(vnv12.get_Y()), _grid_UV(vnv12.get_UV()) {}
+  [[nodiscard]] int nframes() const { return _grid_Y.dim(0); }
+  [[nodiscard]] size_t size() const { return _grid_Y.size(); }
+  [[nodiscard]] CNv12View operator[](int f) const { return CNv12View(_grid_Y[f], _grid_UV[f]); }
+  [[nodiscard]] CGridView<3, uint8_t> get_Y() const { return _grid_Y; }
+  [[nodiscard]] CGridView<3, Vec2<uint8_t>> get_UV() const { return _grid_UV; }
+
+ private:
+  CGridView<3, uint8_t> _grid_Y;         // Luminance.
+  CGridView<3, Vec2<uint8_t>> _grid_UV;  // Chroma at half the spatial resolution.
+};
+
+void convert_VideoNv12_to_Video(CVideoNv12View vnv12, GridView<3, Pixel> video);
+void convert_Video_to_VideoNv12(CGridView<3, Pixel> video, VideoNv12View vnv12);
+
+// &video == &newvideo is OK.
+[[nodiscard]] Video scale(const Video& video, const Vec2<float>& syx, const ResizeOptions<2>& options = {},
+                          const Pixel* cval = nullptr, Video&& newvideo = Video());
+[[nodiscard]] VideoNv12 scale(const VideoNv12& video_nv12, const Vec2<float>& syx,
+                              const ResizeOptions<2>& options = {}, const Pixel* cval = nullptr,
+                              VideoNv12&& pnewvideo_nv12 = VideoNv12());
+
+// Read a video stream one image frame at a time.  getenv_string("VIDEO_IMPLEMENTATION") may equal "ffmpeg" or "mf".
+class RVideo {
+ public:
+  explicit RVideo(string filename, bool use_nv12 = false);  // May throw std::runtime_error.
+  ~RVideo();
+  [[nodiscard]] const Vec3<int>& dims() const { return _dims; }  // (nframes, ysize, xsize).
+  [[nodiscard]] const Video::Attrib& attrib() const { return _attrib; }
+  [[nodiscard]] int nframes() const { return _dims[0]; }
+  [[nodiscard]] const Vec2<int>& spatial_dims() const { return _dims.tail<2>(); }  // (ysize, xsize).
+  [[nodiscard]] int ysize() const { return _dims[1]; }
+  [[nodiscard]] int xsize() const { return _dims[2]; }
+  [[nodiscard]] bool read(MatrixView<Pixel> frame);  // Needs frame(ysize(), xsize()).  Returns false if EOF.
+  [[nodiscard]] bool read(Nv12View frame);           // Returns false if EOF.
+  [[nodiscard]] bool discard_frame();                // Skips the next frame.  Returns false if EOF.
+  class Implementation;
+
+ private:
+  string _filename;
+  bool _use_nv12;
+  Vec3<int> _dims{0, 0, 0};  // Dimensions [nframes, ysize, xsize].
+  Video::Attrib _attrib;
+  unique_ptr<TmpFile> _tmpfile;
+  unique_ptr<Implementation> _impl;
+  friend class Mf_RVideo_Implementation;
+  friend class Ffmpeg_RVideo_Implementation;
+};
+
+// Write a video stream one image frame at a time.  getenv_string("VIDEO_IMPLEMENTATION") may equal "ffmpeg" or "mf".
+class WVideo {
+ public:
+  explicit WVideo(string filename, const Vec2<int>& spatial_dims, Video::Attrib attrib,
+                  bool use_nv12 = false);  // Dims are (y, x); may throw std::runtime_error.
+  ~WVideo();
+  [[nodiscard]] const Vec2<int>& spatial_dims() const { return _sdims; }
+  [[nodiscard]] int ysize() const { return _sdims[0]; }
+  [[nodiscard]] int xsize() const { return _sdims[1]; }
+  void write(CMatrixView<Pixel> frame);
+  void write(CNv12View frame);
+  class Implementation;
+
+ private:
+  string _filename;
+  Vec2<int> _sdims;  // Spatial dimensions [ysize, xsize].
+  Video::Attrib _attrib;
+  bool _use_nv12;
+  string _pfilename;  // Original name if pipe.
+  unique_ptr<TmpFile> _tmpfile;
+  unique_ptr<Implementation> _impl;
+  friend class Mf_WVideo_Implementation;
+  friend class Ffmpeg_WVideo_Implementation;
+};
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_VIDEO_H_

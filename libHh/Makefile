@@ -1,0 +1,44 @@
+MeshRoot = ..
+include $(MeshRoot)/make/Makefile_lib
+
+Video.$(extobj): includes += $(if $(VisionToolsRoot),-I$(VisionToolsRoot)/inc)
+
+ifeq ($(use_pch),1)
+  pch_root = precompiled_libHh
+  ifeq ($(is_win_base),1)  # CONFIG=win
+    abs_pch_file = $(call add_drive,$(abspath $(pch_root))).h
+    # The precompiled header must be built first, and it holds the -Z7 type information shared by all
+    # objects, so any change to it invalidates their debug info (linker warning LNK4206).
+    $(filter-out $(pch_root).$(extobj),$(obj)) : $(pch_root).$(extobj)
+    # Create precompiled_libHh.pch when compiling this file.
+    $(pch_root).$(extobj) : cxxall += -Yc$(abs_pch_file)
+    # Makefile_base_win already force-includes the pch into all *.cpp files.
+  endif
+  ifeq ($(CXX),g++)
+    abs_pch_file = $(pch_root).h
+    # We must wait until the precompiled header is generated before compiling other files.
+    $(filter-out $(pch_root).$(extobj),$(obj)) : | $(abs_pch_file).gch
+    # Make the precompiled header dependent on the CONFIG, and inherit all dependencies in Makefile.dep.
+    $(abs_pch_file).gch : built_ob.$(extobj).$(build_variant) $(pch_root).$(extobj)
+    # Omit precompiled header when compiling precompiled header file.
+    $(abs_pch_file).gch : cxxall := $(filter-out -include $(MeshRoot)/libHh/precompiled_libHh.h,$(cxxall))
+    # Likewise when compiling $(pch_root).cpp, which is built before the *.gch, so in an incremental build it would
+    #  find the previous *.gch.  Its #include rejects that *.gch because PRECOMPILED_LIBHH_CPP is defined, which
+    #  -Winvalid-pch reports (an error with -Werror).
+    $(pch_root).$(extobj) : cxxall := \
+      $(filter-out -include $(MeshRoot)/libHh/precompiled_libHh.h -Winvalid-pch,$(cxxall))
+  endif
+  ifeq ($(CXX),clang++)
+    abs_pch_file = $(pch_root).h
+    # We must wait until the precompiled header is generated before compiling other files.
+    $(filter-out $(pch_root).$(extobj),$(obj)) : | $(abs_pch_file).pch
+    # Make the precompiled header dependent on the CONFIG, and inherit all dependencies in Makefile.dep.
+    $(abs_pch_file).pch : built_ob.$(extobj).$(build_variant) $(pch_root).$(extobj)
+    # Omit precompiled header when compiling precompiled header file.
+    # No, this misbehaves: it results in errors when compiling ./libHh/Image_libs.o.
+    # Instead, I removed the *.h.pch using a "rm" in the "%.pch : %.h" rule of make/Makefile_base_clang.
+    # $(abs_pch_file).pch : cxxall := $(filter-out -include $(MeshRoot)/libHh/precompiled_libHh.h,$(cxxall))
+    # This is necessary because $(pch_root).$(extobj) gets built before $(abs_pch_file).pch.
+    $(pch_root).$(extobj) : cxxall := $(filter-out -include $(MeshRoot)/libHh/precompiled_libHh.h,$(cxxall))
+  endif
+endif

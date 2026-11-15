@@ -1,0 +1,101 @@
+CXX = clang++
+CC = clang
+AR = ar
+RANLIB = ranlib
+
+ifeq ($(is_mswin),1)
+  LDOUTPUT = -o $@.exe#  Otherwise we get names without extension (unlike with gcc).
+endif
+
+include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_either_gcc_or_clang
+
+ifneq ($(want_plain_compiler),1)
+  cpedantic += -Weverything -Wno-unknown-warning-option -Wno-c++98-compat-pedantic -Wno-comma \
+    -Wno-weak-vtables -Wno-padded -Wno-unsafe-buffer-usage \
+    -Wno-global-constructors -Wno-exit-time-destructors \
+    -Wno-covered-switch-default -Wno-switch-enum -Wno-unreachable-code -Wno-missing-noreturn \
+    -Wno-unreachable-code-return -Wno-unreachable-code-break \
+    -Wno-unused-macros -Wno-disabled-macro-expansion \
+    -Wno-conversion -Wno-sign-conversion -Wno-float-equal -Wno-double-promotion -Wno-ctad-maybe-unsupported
+  # New in clang 23; tolerated by earlier clang thanks to -Wno-unknown-warning-option above.
+  cpedantic += -Wno-unique-object-duplication#  We never build shared libraries.
+  cpedantic += -Wno-c2y-extensions#  For __COUNTER__, newly classified as a C2y extension.
+  cpedantic += -Wno-c++20-compat#  Clang 20 flags pre-C++20 incompatibilities (e.g., implicit typename); we need C++23.
+  # With libc++ (whose std::mutex has thread-safety annotations), -Weverything asks every function that locks a
+  #  mutex to be annotated as REQUIRES(!mutex); we do not use these annotations.
+  cpedantic += -Wno-thread-safety-negative
+
+  # The clang 23.1.1 lifetime-safety analysis crashes the frontend on 15 functions across the tree,
+  #  and its findings here were all reviewed and found to be false positives.  It runs whenever any
+  #  one of its warnings is enabled, and -Wno-lifetime-safety (the group) does not prevent that, so
+  #  every leaf must be named.  Being warning options, these are ignored by an older clang.
+  cpedantic += -Wno-lifetime-safety-cross-tu-constructor-suggestions \
+    -Wno-lifetime-safety-cross-tu-misplaced-lifetimebound -Wno-lifetime-safety-cross-tu-suggestions \
+    -Wno-lifetime-safety-dangling-field -Wno-lifetime-safety-dangling-field-moved \
+    -Wno-lifetime-safety-dangling-global -Wno-lifetime-safety-dangling-global-moved \
+    -Wno-lifetime-safety-inapplicable-lifetimebound -Wno-lifetime-safety-intra-tu-constructor-suggestions \
+    -Wno-lifetime-safety-intra-tu-misplaced-lifetimebound -Wno-lifetime-safety-intra-tu-suggestions \
+    -Wno-lifetime-safety-invalidation -Wno-lifetime-safety-lifetimebound-violation -Wno-lifetime-safety-noescape \
+    -Wno-lifetime-safety-return-stack-addr -Wno-lifetime-safety-return-stack-addr-moved \
+    -Wno-lifetime-safety-use-after-free -Wno-lifetime-safety-use-after-scope \
+    -Wno-lifetime-safety-use-after-scope-moved
+
+  # -Wno-source-uses-openmp -Wno-reserved-id-macro
+  ifeq ($(is_mswin),1)
+    cpedantic += -Wno-language-extension-token -Wno-nonportable-system-include-path -Wno-reserved-identifier
+  endif
+  # Even without $(PEDANTIC):
+  ccommon += -fno-finite-math-only#  Enable NAN support; currently the default, kept in case -ffast-math returns.
+  ccommon += -Wno-overriding-option#  Was -Wno-overriding-t-option in earlier clang version.
+  ccommon += -Wno-constant-logical-operand
+  ccommon += -Wno-pragma-pack#  For Filterterrain.
+endif
+
+# Note that -g does not affect generated code; it only annotates it.
+ifeq ($(is_mswin),1)
+  %.$(extasm) : %.cpp
+	$(COMPILE.cpp) -gdwarf $< -o tmp_$*.$(extobj)
+	llvm-objdump -d -S --x86-asm-syntax=intel tmp_$*.$(extobj) >$@
+	@rm -f tmp_$*.$(extobj)
+else
+  %.$(extasm) : %.cpp
+	$(COMPILE.cpp) -g -masm=intel -fno-integrated-as -Wa,-acdhln $< -o tmp_$*.$(extobj) >$@
+	@rm -f tmp_$*.$(extobj)
+endif
+
+%.h.pch : %.h
+	@echo Making $(@) from $<
+	@rm -f $(@)            # Because we actually "-include" itself to get the right path when building it.
+	@$(COMPILE.cpp) -x c++-header -o $@ $<
+
+ifeq ($(use_pch),1)
+  # Force-include the precompiled header into every *.cpp file if the header is accessed with a relative path.
+  ifeq ($(filter-out /%,$(MeshRoot)),)
+    $(info Disabling precompiled header with non-relative MeshRoot=$(MeshRoot))
+  else
+    cxxall += -include $(MeshRoot)/libHh/precompiled_libHh.h
+    # `-Winvalid-pch` is accepted but ignored by clang; clang nicely dies if the pch file is stale.
+  endif
+endif
+
+## Precompiled headers:
+# clang test.h -o test.h.pch
+# clang -include test.h test.c -o test  # Unlike cl and gcc, clang does not allow header to be included from the cpp
+#  file; it must appear on this command line.
+
+## Sanitize/analyze:
+# clang -O1 -g -fsanitize=address -fno-omit-frame-pointer example_UseAfterFree.cc
+# clang -fsanitize=memory -fno-omit-frame-pointer -g -O2 umr.cc
+#
+# See ~/git/hh_src/test/native/test_sanitize_address.cpp and ~/git/hh_src/test/native/Makefile
+# At this time, MemorySanitizer supports Linux x86_64 only.
+#
+# Address sanitizer:
+# Be warned though that it only works so far on Linux and Mac.  No luck for MinGW.
+
+## Neon:
+# Try Neon on imaginary ARM target, to test Vector4.h using ./test/Vector4_test.ou.
+# cxxall := $(filter-out -march=native -mfpmath=sse,$(cxxall)) -target armv7a-pc-mingw32 -mfpu=neon -mfloat-abi=hard -D__NO_INLINE__=1 -D__MSVCRT__=1
+# On WSL, could try:
+# sudo apt install gcc-arm-none-eabi  # However, requires 2.5 GB disk space.
+# clang++ --target=armv7a-none-eabi -mcpu=cortex-a8 -mfpu=vfp -mfloat-abi=hard -std=c++20 -c main.cpp -o main.o

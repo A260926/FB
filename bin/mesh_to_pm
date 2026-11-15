@@ -1,0 +1,50 @@
+#!/bin/bash
+
+read -r -d '' usage << 'END_USAGE_EXAMPLES' || true
+Usage: mesh_to_pm [-postprog 'args'] [mesh.m] [MeshSimplify_args] >mesh.pm
+
+Simplify a mesh using MeshSimplify while recording its edge collapses, and create a progressive mesh.
+The MeshSimplify arguments are followed by '-prog tmpfile', the '-postprog' arguments, and '-simplify'.
+So a '-simplify' among the arguments pre-simplifies the mesh, truncating the finest levels of the PM.
+Alternatively, '-prog placeholder' within the arguments starts the recording at that point.
+
+Examples:
+mesh_to_pm <file.m >file.pm
+mesh_to_pm file.m >file.pm
+cat file.m | mesh_to_pm -numpts 100000 >file.numpts100000.pm
+mesh_to_pm file.m -nf 100000 -simplify >file.pm
+mesh_to_pm -postprog '-simplify -dihallow -rebuildpq' file.m -minqem -vsgeom >file.pm
+mesh_to_pm planck400k.orig.m -minqem -qemvolume 0 -dihallow -vsgeom -keepglobalv 1 -norfac 0 -trishapeafac 1e1 -prog placeholder -simplify -rebuildpq >planck400k.pm
+END_USAGE_EXAMPLES
+
+if [[ $1 == --help ]]; then echo "$usage"; exit 0; fi
+
+postprog=()
+if [[ $1 == -postprog ]]; then
+  read -r -a postprog <<< "$2"
+  shift 2
+fi
+
+tmpdir=$(tmpd=${TEMP:-${TMPDIR:-/tmp}}; mktemp -d "$tmpd/mesh_to_pm.XXXXXX") || exit
+[[ $OSTYPE == cygwin ]] && tmpdir=$(cygpath -m "$tmpdir")  # Native Windows programs cannot open /tmp.
+trap 'rm -rf "$tmpdir"' EXIT  # Bash also runs this trap on SIGINT.
+tmpprog="$tmpdir"/v.prog
+tmpbase="$tmpdir"/v.base.m
+
+# Replace a '-prog placeholder' in the arguments, or else append a '-prog'.
+args=("$@")
+prog_args=(-prog "$tmpprog")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ ${args[i]} == -prog* ]]; then
+    if [[ ${args[i + 1]} != placeholder ]]; then
+      echo "$0: expected '${args[i]} placeholder' rather than '${args[i]} ${args[i + 1]}'" >&2
+      exit 1
+    fi
+    args[i + 1]=$tmpprog
+    prog_args=()
+  fi
+done
+
+MeshSimplify "${args[@]}" "${prog_args[@]}" "${postprog[@]}" -simplify >"$tmpbase" || exit
+
+Filterprog -fbase "$tmpbase" -fprog "$tmpprog" -pm

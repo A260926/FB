@@ -1,0 +1,204 @@
+Gamma::get("srgb").decode(.5f)=0.214041 Gamma::get("srgb").encode(.25f)=0.537099
+Gamma::get("power22").decode(.5f)=0.217638 Gamma::get("power22").encode(.25f)=0.532521
+options.filter=[Filter{cubic}, Filter{triangle}] options.boundary=[Boundary{clamp}, Boundary{clamp}] options.gamma=Gamma{identity}
+resize(ramp, V(9), ResizeOptions<1>{.gridtype = Gridtype::primal, .filter = "triangle", .boundary = "clamp"}) = Array<float>(9) {
+  0
+  0.5
+  1
+  2.5
+  4
+  6.5
+  9
+  12.5
+  16
+}
+resize(ramp, V(9), ResizeOptions<1>{.gridtype = Gridtype::primal, .filter = "cubic", .boundary = "reflect"}) = Array<float>(9) {
+  0
+  0.25
+  1
+  2.25
+  4
+  6.25
+  9
+  13.25
+  16
+}
+ndims=[7, 2, 6] round_fraction_digits(float(sum(resize(grid, ndims, options))), 100.f)=41.81
+ndims=[4, 9, 1] round_fraction_digits(float(sum(resize(grid, ndims, options))), 100.f)=17.97
+ndims=[2, 2, 2] round_fraction_digits(float(sum(resize(grid, ndims, options))), 100.f)=4.03
+i=0 row.index0=-2 row.indices=Array<int>(4) {
+  1
+  2
+  0
+  1
+}
+ row.weights=Array<float>(4) {
+  -0.0291545
+  0.271137
+  0.830904
+  -0.0728863
+}
+ row.cval_weight=0
+i=1 row.index0=-1 row.indices=Array<int>(4) {
+  2
+  0
+  1
+  2
+}
+ row.weights=Array<float>(4) {
+  -0.0524781
+  0.953353
+  0.107872
+  -0.00874636
+}
+ row.cval_weight=0
+i=2 row.index0=-1 row.indices=Array<int>(4) {
+  2
+  0
+  1
+  2
+}
+ row.weights=Array<float>(4) {
+  -0.0524781
+  0.463557
+  0.658892
+  -0.0699708
+}
+ row.cval_weight=0
+i=3 row.index0=0 row.indices=Array<int>(4) {
+  0
+  1
+  2
+  0
+}
+ row.weights=Array<float>(4) {
+  0
+  1
+  0
+  0
+}
+ row.cval_weight=0
+i=4 row.index0=0 row.indices=Array<int>(4) {
+  0
+  1
+  2
+  0
+}
+ row.weights=Array<float>(4) {
+  -0.0699708
+  0.658892
+  0.463557
+  -0.0524781
+}
+ row.cval_weight=0
+i=5 row.index0=0 row.indices=Array<int>(4) {
+  0
+  1
+  2
+  0
+}
+ row.weights=Array<float>(4) {
+  -0.00874636
+  0.107872
+  0.953353
+  -0.0524781
+}
+ row.cval_weight=0
+i=6 row.index0=1 row.indices=Array<int>(4) {
+  1
+  2
+  0
+  1
+}
+ row.weights=Array<float>(4) {
+  -0.0728863
+  0.830904
+  0.271137
+  -0.0291545
+}
+ row.cval_weight=0
+result = Array<float>(7) {
+  1.71137
+  0.924198
+  1.29155
+  2
+  3.04956
+  3.96793
+  3.39067
+}
+resizer2.apply(grid, &cval) = Array<float>(7) {
+  3.57143
+  1.14286
+  1.57143
+  2
+  2.85714
+  3.71429
+  5.71429
+}
+along = Array<hh::Vector4>(6) {
+  Vector4(0.197324, 0.879215, 0.319736, 1)
+  Vector4(0.0990121, 0.972782, 0.401168, 1)
+  Vector4(0.0364706, 0.49981, 0.211211, 0.5)
+  Vector4(0, 0, 0, 0)
+  Vector4(0, 0, 0, 0)
+  Vector4(0, 0, 0, 0)
+}
+convert<int>(r8) = Array<int>(7) {
+  0
+  36
+  93
+  150
+  204
+  235
+  255
+}
+r16 = Array<unsigned short>(9) {
+  0
+  3200
+  16545
+  31889
+  49643
+  64433
+  65535
+  65535
+  65535
+}
+r32 = Array<unsigned int>(9) {
+  0
+  0
+  0
+  1259836988
+  3128237848
+  4229159375
+  4294967295
+  4294967295
+  4294967259
+}
+resize(gv, V(5), ResizeOptions<1>{.filter = "triangle", .gamma = "srgb"}) = Array<hh::Vec<unsigned short,3>>(5) {
+  [0, 100, 65535]
+  [400, 140, 52280]
+  [1000, 200, 0]
+  [1600, 260, 52280]
+  [2000, 300, 65535]
+}
+sampler2(V(.5f, .5f)) = Pixel(180, 180, 180, 255)
+round_fraction_digits(max_error, 100.f)=0 round_fraction_digits(rms_error, 100.f)=0
+result = Array<double>(5) {
+  1
+  1
+  1
+  1
+  1
+}
+uniform_resize(ones2, V(2, 4), ObjectFit::contain, {.filter = "trapezoid"}) = Matrix<double>(2, 4) {
+  0 1 1 0
+  0 1 1 0
+}
+uniform_resize(ones4, V(2, 7), ObjectFit::contain, {.filter = "trapezoid"}) = Matrix<double>(2, 7) {
+  0 0.5 1 1 1 0.5 0
+  0 0.5 1 1 1 0.5 0
+}
+covered = Matrix<double>(2, 2) {
+  0.5 1.5
+  3.5 4.5
+}

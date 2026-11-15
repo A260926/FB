@@ -1,0 +1,775 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_ARRAY_H_
+#define MESH_PROCESSING_LIBHH_ARRAY_H_
+
+#include "libHh/Hh.h"
+
+#if HH_HAS_ASAN
+#include <sanitizer/common_interface_defs.h>  // __sanitizer_annotate_contiguous_container()
+#endif
+
+// Array is a dynamically resizable 1D array like std::vector, but it is derived from CArrayView and ArrayView
+// and it constructs/destructs elements based on capacity() rather than num().
+//
+// Aliasing: no argument may refer into the array itself, because any operation that changes the size may reallocate
+// the storage and thereby invalidate the argument; e.g. avoid a.push(a[0]), a.push_array(a.head(2)), a = a.tail(3).
+
+#if 0
+{
+  Array<int> ar;
+  for (auto element : container) {
+    ar.init(element.size());
+    process(element, ar);
+  }
+}
+{
+  Array<Point> ar;
+  ar.push(Point(1.f, 2.f, 3.f));
+  SHOW(ar.pop());
+}
+#endif
+
+namespace hh {
+
+// The extension of a 1D range beyond its domain, i.e., how an index outside [0, n - 1] maps to a sample (or to a
+// constant border value).  The names are those of the Python package resampler.
+//  (reflect = Matlab:symmetric / Mathematica:reversed / DirectX:Mirror; formerly "reflected")
+//  (wrap = periodic; clamp = clamped)
+//  (reflect_primal == OpenCV BORDER_REFLECT_101: the reflection of a primal grid; formerly "reflected101")
+enum class Extension { reflect, wrap, clamp, border, reflect_primal, undefined };
+
+// Convert a string ("reflect", "wrap", "clamp", "border", "reflect_primal", their former names "reflected",
+// "periodic", "clamped", "reflected101", or the letters "r", "w" or "p", "c", "b", "1") to an extension.
+[[nodiscard]] constexpr Extension parse_extension(std::string_view s);
+
+// Convert an extension to a string.
+[[nodiscard]] constexpr std::string_view extension_name(Extension extension);
+
+inline std::ostream& operator<<(std::ostream& os, Extension extension) {
+  return os << "Extension{" << extension_name(extension) << "}";
+}
+
+// Map index i into the domain [0, n - 1] through the extension; return false if it is "border" and i is outside.
+[[nodiscard]] constexpr bool map_extension(int& i, int n, Extension extension);
+
+template <typename T> class CArrayView;
+template <typename T> class ArrayView;
+
+// The view type (const or modifiable) corresponding to an element pointer type Ptr.
+template <typename Ptr>
+using array_view_t = std::conditional_t<std::is_const_v<std::remove_pointer_t<Ptr>>,
+                                        CArrayView<std::remove_cv_t<std::remove_pointer_t<Ptr>>>,
+                                        ArrayView<std::remove_pointer_t<Ptr>>>;
+
+// View of a variable-sized 1D array with constant data of type T; e.g. refers to a const C-array,
+//  std::array<T>, std::vector<T>, Vec<T>, Array<T>, InlinedArray<T>, Matrix<T>[row], etc.
+template <typename T> class CArrayView {
+  using type = CArrayView<T>;
+
+ public:
+  explicit CArrayView(const T* a, int n) noexcept : _a(const_cast<T*>(a)), _n(n) { ASSERTXX(n >= 0); }
+  CArrayView(const type& a) = default;
+  template <size_t n> CArrayView(const T (&a)[n]) noexcept : CArrayView(a, narrow_cast<int>(n)) {}  // const T a[n];
+  template <size_t n> CArrayView(T (&a)[n]) noexcept : CArrayView(a, narrow_cast<int>(n)) {}        // For: T a[n];
+  // template <int n> CArrayView(const Vec<T, n>&);  // Implemented as conversion operator in Vec.
+  template <typename T2> [[nodiscard]] friend constexpr bool same_size(type ar1, CArrayView<T2> ar2) {
+    return ar1.num() == ar2.num();
+  }
+  // Reseat the view.  Defined to enable movable<T> for view<T>.  The rvalue source and lvalue-only keep
+  // `arview = array` and `matrix[0] = matrix[1]` ill-formed.  Use assign() to copy elements, reinit() to reseat.
+  type& operator=(type&& a) & noexcept { return _a = a._a, _n = a._n, *this; }
+  void reinit(type a) { *this = std::move(a); }
+  [[HH_GNU_PURE]] [[nodiscard]] constexpr int num() const noexcept { return _n; }
+  [[nodiscard]] constexpr size_t size() const noexcept { return narrow_cast<size_t>(_n); }
+  [[HH_GNU_PURE]] [[nodiscard]] constexpr auto& operator[](this auto&& self, int i) noexcept {
+    HH_CHECK_BOUNDS(i, self.num());
+    return self.data()[i];
+  }
+  [[nodiscard]] constexpr auto& last(this auto&& self) noexcept { return self[self.num() - 1]; }
+  [[nodiscard]] constexpr bool ok(int i) const noexcept { return i >= 0 && i < _n; }
+  [[nodiscard]] constexpr bool ok(const T* e) const noexcept { return ok(narrow_cast<int>(e - _a)); }
+  // Returns false if extension == Border and i is outside.
+  [[nodiscard]] bool map_inside(int& i, Extension extension) const;
+  [[nodiscard]] auto& inside(this auto&& self, int i, Extension extension) {
+    return assertx(self.map_inside(i, extension)), self[i];
+  }
+  [[nodiscard]] const T& inside(int i, Extension extension, const T* cval) const;
+  [[nodiscard]] constexpr bool operator==(type rhs) const;
+  [[nodiscard]] constexpr auto head(this auto&& self, int n) noexcept { return self.segment(0, n); }
+  [[nodiscard]] constexpr auto tail(this auto&& self, int n) noexcept { return self.segment(self.num() - n, n); }
+  [[nodiscard]] constexpr auto segment(this auto&& self, int i, int s) noexcept {
+    ASSERTXX(implicit_cast<const type&>(self).check(i, s));  // Access the protected check() through this base class.
+    return array_view_t<decltype(self.data())>(self.data() + i, s);
+  }
+  [[nodiscard]] constexpr auto slice(this auto&& self, int ib, int ie) noexcept { return self.segment(ib, ie - ib); }
+  [[nodiscard]] constexpr auto slice(this auto&& self, int ib) noexcept { return self.segment(ib, self.num() - ib); }
+  using value_type = T;
+  using iterator = const T*;
+  using const_iterator = const T*;
+  [[nodiscard]] constexpr auto begin(this auto&& self) noexcept { return self.data(); }
+  [[nodiscard]] constexpr auto end(this auto&& self) noexcept { return self.data() + self.num(); }
+  [[nodiscard]] constexpr const T* data() const noexcept { return _a; }
+
+ protected:
+  // The pointer is declared non-const even though CArrayView's elements are logically const.  This lets the derived
+  // ArrayView<T> and Array<T> expose a modifiable data() without a second pointer member, so all three classes share a
+  // single layout and derived-to-base conversion is free.  Const-correctness is therefore not enforced by the type of
+  // _a but by the member function signatures: CArrayView never returns _a as non-const, and there is deliberately no
+  // conversion from CArrayView<T> to ArrayView<T>.  Do not add one, and do not expose _a in a public member.
+  T* _a{nullptr};
+  int _n{0};
+  [[nodiscard]] constexpr bool check(int i, int s) const noexcept {
+    if (i >= 0 && s >= 0 && i + s <= _n) return true;
+    if !consteval {
+      SHOW(i, s, _n);
+    }
+    return false;
+  }
+  CArrayView() = default;
+  type& operator=(const type&) = default;  // Protected to prevent a no-op "matrix[0] = matrix[1]" on a const Matrix!
+};
+
+// View of a variable-sized 1D array with modifiable data of type T, e.g. refers to a C-array,
+//  std::array<T>, std::vector<T>, Vec<T>, Array<T>, InlinedArray<T>, Matrix<T>[row], etc.
+template <typename T> class [[HH_NO_DANGLING]] ArrayView : public CArrayView<T> {
+  using base = CArrayView<T>;
+  using type = ArrayView<T>;
+
+ public:
+  explicit ArrayView(T* a, int n) noexcept : base(a, n) {}
+  template <size_t n> ArrayView(T (&a)[n]) noexcept : base(a, n) {}  // For: T a[n];
+  // The copy source is non-const so that a const Array or const ArrayView cannot yield a modifiable view.
+  ArrayView(type&) = default;  // Because it has explicit copy assignment.
+  ArrayView(type&&) = default;
+  // template <int n> ArrayView(Vec<T, n>&);  // Implemented as conversion operator in Vec.
+  // ArrayView(std::vector<T>& a) : base(a) { }
+  // template <size_t n> ArrayView(std::array<T, n>& a) : base(a) { }
+  //
+  // Reseat the view.  Defined to enable movable<T> for view<T>.  The rvalue source and lvalue-only keep
+  // `arview = array` and `matrix[0] = matrix[1]` ill-formed.  Use assign() to copy elements, reinit() to reseat.
+  type& operator=(type&& a) & noexcept { return base::operator=(std::move(a)), *this; }
+  void reinit(type a) { *this = std::move(a); }
+  void assign(base ar) requires Copyable<T>;
+  using value_type = T;
+  using iterator = T*;
+  using const_iterator = const T*;
+  [[nodiscard]] T* data() noexcept { return _a; }
+  [[nodiscard]] const T* data() const noexcept { return _a; }
+  using base::num;
+  using base::ok;
+  using base::size;
+
+ protected:
+  using base::_a;
+  using base::_n;
+  using base::check;
+  ArrayView() = default;
+  // Protected to prevent a no-op "matrix[0] = matrix[1]" on a modifiable Matrix.
+  type& operator=(const type&) = default;
+};
+
+// Create an ArrayView<T> referencing the single specified element.
+template <typename T> [[nodiscard]] constexpr ArrayView<T> ArView(T& e) { return ArrayView<T>(&e, 1); }
+
+// Determine if two views have any overlap (to avoid aliasing issues).
+template <typename T> [[nodiscard]] constexpr bool have_overlap(CArrayView<T> v1, CArrayView<T> v2) {
+  return v1.begin() < v2.end() && v2.begin() < v1.end();
+}
+
+// Under AddressSanitizer, evaluate an annotation of the array storage (see details::annotate_array_storage());
+// otherwise remove it entirely, because even a call to an empty inline function was measured to change the code that
+// clang -O3 generates for GeneralArray.
+#if HH_HAS_ASAN
+#define HH_ARRAY_ANNOTATE(...) __VA_ARGS__
+#else
+#define HH_ARRAY_ANNOTATE(...) void(0)
+#endif
+
+namespace details {
+
+// Tell AddressSanitizer that, of the array storage a[0, cap), the elements a[0, new_n) are now in use (addressable)
+// and the elements a[new_n, cap) are not (poisoned), where a[0, old_n) were in use before.  The bytes before
+// unannotated_end are left alone (always addressable).
+#if HH_HAS_ASAN
+template <typename T>
+void annotate_array_storage(const T* a, int cap, int old_n, int new_n, const void* unannotated_end = nullptr) {
+  const char* beg = reinterpret_cast<const char*>(a);
+  const char* const end = reinterpret_cast<const char*>(a + cap);
+  if (unannotated_end) beg = std::max(beg, static_cast<const char*>(unannotated_end));
+  const char* const old_mid = std::max(beg, reinterpret_cast<const char*>(a + old_n));
+  const char* const new_mid = std::max(beg, reinterpret_cast<const char*>(a + new_n));
+  if (beg < end && old_mid != new_mid) __sanitizer_annotate_contiguous_container(beg, end, old_mid, new_mid);
+}
+#endif
+
+// The built-in storage of Array<T, inline_capacity>.  It is a class between ArrayView<T> and Array in a single chain
+// of inheritance, rather than a second (private) base class of Array such as Vec<T, inline_capacity>, because:
+// (1) the empty base class optimization, needed so that Array<T> gains no size when inline_capacity == 0, is fragile
+//     under multiple inheritance (MSVC applies it to multiple bases only if the class is __declspec(empty_bases));
+// (2) Vec.h includes Array.h (a Vec converts to an ArrayView), so Array.h cannot depend on Vec.h; and
+// (3) keeping _cap in Array itself, initialized after this base, leaves the code generated for Array<T> unchanged.
+template <typename T, int inline_capacity> class ArrayStorage : public ArrayView<T> {
+ protected:
+  ArrayStorage() : ArrayView<T>(_builtin, 0) {
+    HH_ARRAY_ANNOTATE(annotate_builtin(inline_capacity, 0));  // No element is in use.
+  }
+  T _builtin[inline_capacity];
+#if HH_HAS_ASAN
+  // Annotation of _builtin.  Its first bytes may lie in the tail padding of the base ArrayView<T>, which a copy of
+  // the base reads (e.g. a memcpy of sizeof(ArrayView<T>) bytes when converting the array to a CArrayView<T>), so
+  // the annotation starts after the base.
+  void annotate_builtin(int old_n, int new_n) const {
+    annotate_array_storage(_builtin, inline_capacity, old_n, new_n,
+                           reinterpret_cast<const char*>(this) + sizeof(ArrayView<T>));
+  }
+#endif
+};
+
+template <typename T> class ArrayStorage<T, 0> : public ArrayView<T> {  // Without built-in storage.
+ protected:
+  ArrayStorage() = default;
+  explicit ArrayStorage(T* a, int n) : ArrayView<T>(a, n) {}
+};
+
+}  // namespace details
+
+// Resizable 1D array with elements of type T, with built-in storage for its first inline_capacity elements, which
+// avoids heap allocation while it is small.  Code names it through two aliases: Array<T>, without built-in storage,
+// and InlinedArray<T, n>.  Naming GeneralArray itself is needed only in templates that are generic over
+// inline_capacity (e.g., a function that resizes any such array) and in explicit instantiations.
+// Type T must have a public operator= (which may be operator=(&&)).
+// Unlike std::vector<T>, Array<T> constructs/destructs elements based on capacity() rather than num().
+// Under AddressSanitizer, the elements beyond num() are marked as unaddressable, so that an access to them (e.g.
+// through a pointer or view obtained before the array shrank) is reported.  For an array whose storage is on the
+// heap, the unused built-in storage is entirely unaddressable.
+template <typename T, int inline_capacity = 0> class GeneralArray;
+
+// Heap-allocated resizable 1D array with elements of type T.
+template <typename T> using Array = GeneralArray<T, 0>;
+
+// Resizable 1D array with built-in storage for its first n elements, which avoids heap allocation while it is small.
+template <typename T, int n> using InlinedArray = GeneralArray<T, n>;
+
+template <typename T, int inline_capacity> class GeneralArray : public details::ArrayStorage<T, inline_capacity> {
+  static_assert(inline_capacity >= 0);
+  using base = ArrayView<T>;
+  using storage = details::ArrayStorage<T, inline_capacity>;
+  using type = GeneralArray<T, inline_capacity>;
+
+ public:
+  GeneralArray() = default;
+  explicit GeneralArray(int n) requires(inline_capacity == 0)
+      : storage(n ? new T[narrow_cast<size_t>(n)] : nullptr, n), _cap(n) {
+    ASSERTX(n >= 0);
+  }
+  explicit GeneralArray(int n) requires(inline_capacity > 0) {
+    ASSERTX(n >= 0);
+    if (n > inline_capacity) {
+      _a = new T[narrow_cast<size_t>(n)], _cap = n;
+    } else {
+      HH_ARRAY_ANNOTATE(annotate(_n, n));
+    }
+    _n = n;
+  }
+  explicit GeneralArray(int n, const T& v) requires Copyable<T> : GeneralArray(n) { for_int(i, n) _a[i] = v; }
+  explicit GeneralArray(const type& ar) requires Copyable<T> : GeneralArray(ar.num()) { base::assign(ar); }
+  GeneralArray(std::initializer_list<T> l) requires Copyable<T> : GeneralArray(ranges::subrange(l)) {}
+  GeneralArray(type&& ar) noexcept requires(inline_capacity == 0) : storage(ar._a, ar._n), _cap(ar._cap) {
+    ar._a = nullptr, ar._n = 0, ar._cap = 0;
+  }
+  GeneralArray(type&& ar) noexcept requires(inline_capacity > 0) { *this = std::move(ar); }
+  template <input_range_to<T> R> requires(!std::same_as<std::remove_cvref_t<R>, type>)
+  explicit GeneralArray(R&& range) {  // (Can use ranges::subrange(b, e) if given a (begin(), end()) pair.)
+    if constexpr (ranges::forward_range<R> || ranges::sized_range<R>) {
+      const size_t size = size_t(ranges::distance(range));
+      if constexpr (inline_capacity > 0) {
+        init(narrow_cast<int>(size));
+      } else {
+        _a = new T[size];
+        _n = _cap = narrow_cast<int>(size);
+      }
+      ranges::copy(range, _a);  // Moves elements only if the caller opts in via views::as_rvalue.
+    } else {
+      for (auto&& e : range) push(std::forward<decltype(e)>(e));
+    }
+  }
+  ~GeneralArray() {
+    HH_ARRAY_ANNOTATE(annotate(_n, _cap));  // Unpoison all elements, which get destroyed.
+    if constexpr (inline_capacity > 0) {
+      if (_a != this->_builtin) {
+        delete[] _a;
+        HH_ARRAY_ANNOTATE(this->annotate_builtin(0, inline_capacity));
+      }
+    } else {
+      delete[] _a;
+    }
+  }
+  // E.g.: const auto array = Array<float>::create(n, [](int i) { return i * .5f; }).
+  template <typename Func> requires std::is_invocable_r_v<T, Func, int>
+  [[nodiscard]] static type create(int n, Func func) {
+    return type(range(n) | views::transform(func));
+  }
+  type& operator=(CArrayView<T> ar) requires Copyable<T> {
+    init(ar.num());
+    base::assign(ar);
+    return *this;
+  }
+  type& operator=(const type& ar) requires Copyable<T> {
+    init(ar.num());
+    base::assign(ar);
+    return *this;
+  }
+  type& operator=(type&& ar) noexcept {
+    if constexpr (inline_capacity > 0) {
+      clear();
+      if (ar._a != ar._builtin) {  // Take over its heap storage (whose annotation moves with it).
+        _a = ar._a, _n = ar._n, _cap = ar._cap;
+        ar._a = ar._builtin, ar._n = 0, ar._cap = inline_capacity;
+      } else {
+        HH_ARRAY_ANNOTATE(annotate(0, ar._n));
+        std::move(ar._builtin, ar._builtin + ar._n, this->_builtin);
+        HH_ARRAY_ANNOTATE(ar.annotate(ar._n, 0));
+        _n = ar._n, ar._n = 0;
+      }
+      return *this;
+    } else {
+      return clear(), swap(*this, ar), *this;
+    }
+  }
+  void clear() {
+    if constexpr (inline_capacity > 0) {
+      // Heap elements get destroyed, so unpoison them; the built-in elements are then all poisoned, as for _n == 0.
+      HH_ARRAY_ANNOTATE(annotate(_n, _a != this->_builtin ? _cap : 0));
+      _n = 0;
+      if (_a != this->_builtin) {
+        delete[] _a;
+        _a = this->_builtin, _cap = inline_capacity;
+      }
+    } else {
+      HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+      delete[] _a;
+      _a = nullptr, _n = 0, _cap = 0;
+    }
+  }
+  void init(int n);  // Allocate n, DISCARD old values if too small.
+  void init(int n, const T& v) requires Copyable<T> {
+    init(n);
+    for_int(i, n) _a[i] = v;
+  }
+  void resize(int n) {  // Allocate n, RETAIN old values (using move if too small).
+    ASSERTX(n >= 0);
+    if (n > _cap) grow_to_at_least(n);
+    HH_ARRAY_ANNOTATE(annotate(_n, n));
+    _n = n;
+  }
+  void access(int i);  // Allocate at least i + 1, RETAIN old values (using move if too small).
+  int add(int n) {     // Returns the previous num().
+    ASSERTX(n >= 0);
+    const int t = _n;
+    resize(_n + n);
+    return t;
+  }
+  void sub(int n) {
+    ASSERTX(n >= 0);
+    HH_ARRAY_ANNOTATE(annotate(_n, _n - n));
+    _n -= n;
+    ASSERTX(_n >= 0);
+  }
+  void shrink_to_fit() {
+    if (_n < _cap) set_capacity(_n);
+  }
+  void reserve(int s) {
+    ASSERTX(s >= 0);
+    if (_cap < s) set_capacity(s);
+  }
+  [[nodiscard]] int capacity() const { return _cap; }
+  void insert(int i, int n) { ASSERTX(i >= 0 && i <= _n), insert_i(i, n); }
+  void erase(int i, int n) { ASSERTX(i >= 0 && n >= 0 && i + n <= _n), erase_i(i, n); }
+  void erase(T* b, T* e) { erase(narrow_cast<int>(b - base::begin()), narrow_cast<int>(e - b)); }
+  bool remove_ordered(const T& e);    // Returns true if e was present.
+  bool remove_unordered(const T& e);  // Returns true if e was present.
+  T pop() {
+    ASSERTXX(_n);
+    T e = std::move(_a[_n - 1]);
+    sub(1);
+    return e;
+  }
+  Array<T> pop(int n);
+  void push(const T& e) requires Copyable<T> {  // Avoid a.push(a[..])!
+    if (_n >= _cap) grow_to_at_least(_n + 1);
+    HH_ARRAY_ANNOTATE(annotate(_n, _n + 1));
+    _a[_n++] = e;
+  }
+  void push(T&& e) {
+    if (_n >= _cap) grow_to_at_least(_n + 1);
+    HH_ARRAY_ANNOTATE(annotate(_n, _n + 1));
+    _a[_n++] = std::move(e);
+  }
+  template <ranges::input_range R> requires std::assignable_from<T&, ranges::range_reference_t<R>>
+  void push_array(R&& range) {
+    if constexpr (ranges::forward_range<R> || ranges::sized_range<R>) {
+      const int t = add(narrow_cast<int>(ranges::distance(range)));
+      ranges::copy(range, _a + t);  // Moves elements only if the caller opts in via views::as_rvalue.
+    } else {
+      for (auto&& e : range) push(std::forward<decltype(e)>(e));
+    }
+  }
+  void push_array(type&& ar) { push_array(std::move(ar) | views::as_rvalue); }
+  T shift() {
+    ASSERTX(_n);
+    T e = std::move(_a[0]);
+    erase_i(0, 1);
+    return e;
+  }
+  Array<T> shift(int n);
+  void unshift(const T& e) requires Copyable<T> { insert_i(0, 1), _a[0] = e; }
+  friend void swap(GeneralArray& l, GeneralArray& r) noexcept {
+    if constexpr (inline_capacity > 0) {
+      type t = std::move(l);
+      l = std::move(r);
+      r = std::move(t);
+    } else {
+      std::swap(l._a, r._a), std::swap(l._n, r._n), std::swap(l._cap, r._cap);
+    }
+  }
+  using owns_elements = void;           // Marker for hh::clone().
+  type& operator+=(const T&) = delete;  // Dangerous because meaning is ambiguous (either push() or add to elements).
+
+ private:
+  using base::_a;
+  using base::_n;
+  int _cap{inline_capacity};
+  void set_capacity(int ncap);
+  void grow_to_at_least(int n) { set_capacity(max(_n + (_n / 2) + 3, n)); }
+#if HH_HAS_ASAN
+  // Annotation of the current storage; see details::annotate_array_storage().
+  void annotate(int old_n, int new_n) const {
+    if constexpr (inline_capacity > 0) {
+      if (_a == this->_builtin) return this->annotate_builtin(old_n, new_n);
+    }
+    details::annotate_array_storage(_a, _cap, old_n, new_n);
+  }
+#endif
+  void insert_i(int i, int n) {
+    add(n);
+    for (int j = _n - n - 1; j >= i; --j) _a[j + n] = std::move(_a[j]);
+  }
+  void erase_i(int i, int n) {
+    for_intL(j, i, _n - n) _a[j] = std::move(_a[j + n]);
+    sub(n);
+  }
+  using base::reinit;  // Hide it.
+};
+
+// See also Vec.h and Matrix.h.
+
+// Given container c, evaluate func() on each element (possibly changing the element type) and return new container.
+template <typename T, typename Func> [[nodiscard]] auto transformed(CArrayView<T> c, Func func) {
+  using ResultType = std::decay_t<std::invoke_result_t<Func, const T&>>;
+  return Array<ResultType>(c | views::transform(func));
+}
+
+// For an Array with built-in storage, the result has the same built-in storage.
+template <typename T, int inline_capacity, typename Func> requires(inline_capacity > 0)
+[[nodiscard]] auto transformed(const GeneralArray<T, inline_capacity>& c, Func func) {
+  using ResultType = std::decay_t<std::invoke_result_t<Func, const T&>>;
+  return GeneralArray<ResultType, inline_capacity>(c | views::transform(func));
+}
+
+//----------------------------------------------------------------------------
+
+[[nodiscard]] constexpr Extension parse_extension(const std::string_view s) {
+  constexpr std::pair<std::string_view, Extension> k_names[] = {
+      {"reflect", Extension::reflect},
+      {"reflected", Extension::reflect},
+      {"r", Extension::reflect},
+      {"wrap", Extension::wrap},
+      {"periodic", Extension::wrap},
+      {"w", Extension::wrap},
+      {"p", Extension::wrap},
+      {"clamp", Extension::clamp},
+      {"clamped", Extension::clamp},
+      {"c", Extension::clamp},
+      {"border", Extension::border},
+      {"b", Extension::border},
+      {"reflect_primal", Extension::reflect_primal},
+      {"reflected101", Extension::reflect_primal},
+      {"101reflected", Extension::reflect_primal},
+      {"1", Extension::reflect_primal},
+  };
+  for (const auto& [name, extension] : k_names)
+    if (s == name) return extension;
+  assertnever("Extension '" + string(s) + "' not recognized");
+}
+
+[[nodiscard]] constexpr std::string_view extension_name(Extension extension) {
+  switch (extension) {
+    case Extension::reflect: return "reflect";
+    case Extension::wrap: return "wrap";
+    case Extension::clamp: return "clamp";
+    case Extension::border: return "border";
+    case Extension::reflect_primal: return "reflect_primal";
+    case Extension::undefined: return "undefined";
+    default: assertnever("");
+  }
+}
+
+constexpr bool map_extension(int& i, int n, Extension extension) {
+  ASSERTX(n >= 1);
+  switch (extension) {
+    case Extension::reflect:
+      for (;;) {
+        if (i < 0)
+          i = -i - 1;
+        else if (i >= n)
+          i = 2 * n - i - 1;
+        else
+          break;
+      }
+      break;
+    case Extension::wrap:
+      for (;;) {
+        if (i < 0)
+          i += n;
+        else if (i >= n)
+          i -= n;
+        else
+          break;
+      }
+      break;
+    case Extension::clamp:
+      if (i < 0)
+        i = 0;
+      else if (i >= n)
+        i = n - 1;
+      break;
+    case Extension::border:
+      if (i < 0 || i >= n) return false;
+      break;
+    case Extension::reflect_primal:
+      if (n == 1) {
+        i = 0;
+        break;
+      }
+      for (;;) {
+        if (i < 0)
+          i = -i;
+        else if (i >= n)
+          i = 2 * n - i - 2;
+        else
+          break;
+      }
+      break;
+    default: assertnever("");
+  }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+
+template <typename T> [[nodiscard]] bool CArrayView<T>::map_inside(int& i, Extension extension) const {
+  return map_extension(i, _n, extension);
+}
+
+template <typename T> [[nodiscard]] const T& CArrayView<T>::inside(int i, Extension extension, const T* cval) const {
+  if (!map_inside(i, extension)) {
+    ASSERTX(cval);
+    return *cval;
+  }
+  return (*this)[i];
+}
+
+template <typename T> [[nodiscard]] constexpr bool CArrayView<T>::operator==(type rhs) const {
+  if (_n != rhs._n) return false;
+  for_int(i, _n) {
+    if (_a[i] != rhs._a[i]) return false;
+  }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+
+template <typename T> void ArrayView<T>::assign(base ar) requires Copyable<T> {
+  ASSERTX(_n == ar.num());
+  if (ar.data() == data()) return;
+  ranges::copy(ar, _a);
+}
+
+//----------------------------------------------------------------------------
+
+template <typename T, int inline_capacity> void GeneralArray<T, inline_capacity>::init(int n) {
+  ASSERTX(n >= 0);
+  if (n > _cap) {
+    if constexpr (inline_capacity > 0) {
+      if (_a != this->_builtin) {
+        HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+        delete[] _a;
+      } else {
+        HH_ARRAY_ANNOTATE(annotate(_n, 0));  // The built-in storage becomes unused.
+      }
+    } else {
+      HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+      delete[] _a;
+    }
+    _a = new T[narrow_cast<size_t>(n)];
+    _cap = n;
+  } else {
+    HH_ARRAY_ANNOTATE(annotate(_n, n));
+  }
+  _n = n;
+}
+
+template <typename T, int inline_capacity> void GeneralArray<T, inline_capacity>::access(int i) {
+  ASSERTXX(i >= 0);
+  const int n = i + 1;
+  if (n > _cap) grow_to_at_least(n);
+  if (n > _n) HH_ARRAY_ANNOTATE(annotate(_n, n)), _n = n;
+}
+
+template <typename T, int inline_capacity> void GeneralArray<T, inline_capacity>::set_capacity(int ncap) {
+  if constexpr (inline_capacity > 0) {
+    ASSERTX(_n <= ncap);
+    if (ncap <= inline_capacity) {  // Move the elements back into the built-in storage.
+      if (_a == this->_builtin) return;
+      HH_ARRAY_ANNOTATE(this->annotate_builtin(0, _n));
+      std::move(_a, _a + _n, this->_builtin);
+      HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+      delete[] _a;
+      _a = this->_builtin, _cap = inline_capacity;
+    } else {
+      T* na = new T[narrow_cast<size_t>(ncap)];
+      std::move(_a, _a + _n, na);
+      if (_a != this->_builtin) {
+        HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+        delete[] _a;
+      } else {
+        HH_ARRAY_ANNOTATE(annotate(_n, 0));  // The built-in storage becomes unused.
+      }
+      _a = na, _cap = ncap;
+      HH_ARRAY_ANNOTATE(annotate(_cap, _n));
+    }
+  } else {
+    HH_ARRAY_ANNOTATE(annotate(_n, _cap));
+    _cap = ncap;
+    ASSERTX(_n <= _cap);
+    T* na = _cap ? new T[narrow_cast<size_t>(_cap)] : nullptr;
+    if (na) std::move(_a, _a + _n, na);
+    delete[] _a;
+    _a = na;
+    HH_ARRAY_ANNOTATE(annotate(_cap, _n));
+  }
+}
+
+template <typename T, int inline_capacity> bool GeneralArray<T, inline_capacity>::remove_ordered(const T& e) {
+  for_int(i, _n) {
+    if (_a[i] == e) {
+      erase(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename T, int inline_capacity> bool GeneralArray<T, inline_capacity>::remove_unordered(const T& e) {
+  for_int(i, _n) {
+    if (_a[i] == e) {
+      if (i < _n - 1) _a[i] = std::move(_a[_n - 1]);
+      sub(1);
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename T, int inline_capacity> Array<T> GeneralArray<T, inline_capacity>::shift(int n) {
+  ASSERTX(n >= 0 && n <= _n);
+  Array<T> ar(n);
+  for_int(i, n) ar[i] = std::move(_a[i]);
+  erase_i(0, n);
+  return ar;
+}
+
+template <typename T, int inline_capacity> Array<T> GeneralArray<T, inline_capacity>::pop(int n) {
+  ASSERTX(n >= 0 && n <= _n);
+  Array<T> ar(n);
+  for_int(i, n) ar[i] = std::move(_a[_n - n + i]);
+  sub(n);
+  return ar;
+}
+
+//----------------------------------------------------------------------------
+
+template <typename T> std::ostream& operator<<(std::ostream& os, CArrayView<T> a) {
+  os << "Array<" << type_name<T>() << ">(" << a.num() << ") {\n";
+  for_int(i, a.num()) {
+    os << "  " << a[i] << (has_ostream_eol_v<T> ? "" : "\n");  // Skip linefeed if already printed.
+  }
+  return os << "}\n";
+}
+template <typename T> HH_DECLARE_OSTREAM_EOL(CArrayView<T>);
+template <typename T> HH_DECLARE_OSTREAM_EOL(ArrayView<T>);  // Implemented by CArrayView<T>.
+// Implemented by CArrayView<T>.
+template <typename T, int inline_capacity> HH_DECLARE_OSTREAM_EOL(GeneralArray<T, inline_capacity>);
+
+// Template deduction guides:
+template <typename T> CArrayView(const T*, int) -> CArrayView<T>;
+template <typename T, size_t n> CArrayView(const T (&)[n]) -> CArrayView<T>;
+template <typename T, size_t n> CArrayView(T (&)[n]) -> CArrayView<T>;
+template <typename T> ArrayView(T*, int) -> ArrayView<T>;
+template <typename T, size_t n> ArrayView(T (&)[n]) -> ArrayView<T>;
+template <ranges::input_range R> GeneralArray(R&&) -> GeneralArray<range_value_t<R>>;
+
+//----------------------------------------------------------------------------
+
+// Set of functions common to Array.h, Grid.h, Vec.h.
+// Note that RangeOp.h functions are valid here: mag2(), mag(), dist2(), dist(), dot(), is_zero(), compare().
+#define TT template <typename T>
+#define TTN TT [[nodiscard]]
+#define G Array<T>
+#define CG CArrayView<T>
+#define SS ASSERTXX(same_size(g1, g2))
+#define F(g) for_int(i, g.num())
+// clang-format off
+#define HH_OPERATIONS(OP) \
+  TTN G operator OP(CG g1, CG g2) { SS; G g(g1.num()); F(g) { g[i] = g1[i] OP g2[i]; } return g; } \
+  TTN G operator OP(CG g1, const T& v) { G g(g1.num()); F(g) { g[i] = g1[i] OP v; } return g; } \
+  TTN G operator OP(const T& v, CG g1) { G g(g1.num()); F(g) { g[i] = v OP g1[i]; } return g; } \
+  TT ArrayView<T> operator OP##=(ArrayView<T> g1, CG g2) { SS; F(g1) { g1[i] OP##= g2[i]; } return g1; } \
+  TT ArrayView<T> operator OP##=(ArrayView<T> g1, const T& v) { F(g1) { g1[i] OP##= v; } return g1; } \
+  HH_EAT_SEMICOLON
+
+HH_OPERATIONS(+); HH_OPERATIONS(-); HH_OPERATIONS(*); HH_OPERATIONS(/); HH_OPERATIONS(%);
+
+TTN G operator-(CG g1) { G g(g1.num()); F(g1) { g[i] = -g1[i]; } return g; }
+
+TTN G min(CG g1, CG g2) { SS; G g(g1.num()); F(g) { g[i] = min(g1[i], g2[i]); } return g; }
+TTN G max(CG g1, CG g2) { SS; G g(g1.num()); F(g) { g[i] = max(g1[i], g2[i]); } return g; }
+
+TTN G interp(CG g1, CG g2, float f1 = 0.5f) {
+  SS; G g(g1.num()); F(g) { g[i] = static_cast<T>(f1 * g1[i] + (1.f - f1) * g2[i]); } return g;
+}
+TTN G interp(CG g1, CG g2, CG g3, float f1, float f2) {
+  ASSERTXX(same_size(g1, g2) && same_size(g1, g3));
+  G g(g1.num()); F(g) { g[i] = static_cast<T>(f1 * g1[i] + f2 * g2[i] + (1.f - f1 - f2) * g3[i]); } return g;
+}
+TTN G interp(CG g1, CG g2, CG g3) { return interp(g1, g2, g3, 1.f / 3.f, 1.f / 3.f); }
+// TTN G interp(CG g1, CG g2, CG g3, const Vec3<float>& bary)  // Omit to avoid dependency on Vec.
+
+// clang-format on
+#undef HH_OPERATIONS
+#undef F
+#undef SS
+#undef CG
+#undef G
+#undef TTN
+#undef TT
+
+}  // namespace hh
+
+template <typename T> inline constexpr bool std::ranges::enable_view<hh::CArrayView<T>> = true;
+template <typename T> inline constexpr bool std::ranges::enable_borrowed_range<hh::CArrayView<T>> = true;
+
+template <typename T> inline constexpr bool std::ranges::enable_view<hh::ArrayView<T>> = true;
+template <typename T> inline constexpr bool std::ranges::enable_borrowed_range<hh::ArrayView<T>> = true;
+
+#endif  // MESH_PROCESSING_LIBHH_ARRAY_H_
