@@ -1,0 +1,42 @@
+[  1%] Built target toFloat
+[  7%] Built target zlibstatic
+[  8%] Built target Iex
+[  8%] Built target eLut
+[ 10%] Built target glog
+[ 13%] Built target IlmThread
+[ 17%] Built target Ptex_static
+[ 20%] Built target Imath
+[ 21%] Built target Half
+[ 53%] Built target IlmImf-obj
+[ 53%] Built target CopyIlmBaseLibs
+[ 53%] Built target b44ExpLogTable
+[ 54%] Built target dwaLookups
+[ 57%] Built target IlmImf
+[ 57%] Building CXX object CMakeFiles/pbrt.dir/src/core/api.cpp.o
+[ 57%] Building CXX object CMakeFiles/pbrt.dir/src/media/instancegrid.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/core/api.cpp:55:
+/Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/integrators/bdpt.h:181:38: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+/Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/integrators/bdpt.h:181:38: note: explicitly cast the pointer to silence this warning
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+      |                                      (void*)
+/Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/integrators/bdpt.h:183:16: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+/Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/integrators/bdpt.h:183:16: note: explicitly cast the pointer to silence this warning
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+      |                (void*)
+2 warnings generated.
+[ 57%] Linking CXX static library libpbrt.a
+[ 98%] Built target pbrt
+[ 98%] Building CXX object CMakeFiles/task_target.dir/src/tests/instance_media.cpp.o
+[100%] Building CXX object CMakeFiles/task_target.dir/src/media/instancegrid.cpp.o
+/Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/src/tests/instance_media.cpp:750:5: warning: non-void lambda does not return a value in all control paths [-Wreturn-type]
+  750 |     };
+      |     ^
+1 warning generated.
+[100%] Linking CXX executable /Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/.task-build/target
+[100%] Built target task_target

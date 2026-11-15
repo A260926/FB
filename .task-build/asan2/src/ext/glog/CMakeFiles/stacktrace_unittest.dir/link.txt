@@ -1,0 +1,1 @@
+/usr/bin/c++ -fsanitize=address -fno-omit-frame-pointer -g -O2 -g -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names -fsanitize=address CMakeFiles/stacktrace_unittest.dir/src/stacktrace_unittest.cc.o -o stacktrace_unittest  libglog.a

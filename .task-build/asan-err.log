@@ -1,0 +1,47 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1116 06:13:36.475672 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.478192 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.478379 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.478457 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.478576 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.478631 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.488896 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:36.488942 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:37.323392 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:37.323441 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:38.148280 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:38.148339 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:38.148366 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:13:38.148417 4294672256 film.cpp:60] Created film with full resolution [ 8, 8 ]. Crop window of [ [ 0, 0 ] - [ 1, 1 ] ] -> croppedPixelBounds [ [ 0, 0 ] - [ 8, 8 ] ]
+end-loops
+integrator-destroyed
+r-sampler
+=================================================================
+==78620==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x61a000000098 in thread T0
+    #0 0x000102008558 in _ZdlPv+0x74 (libclang_rt.asan_osx_dynamic.dylib:arm64e+0x50558)
+    #1 0x000100adbed4 in pbrt::Camera::~Camera() camera.cpp:42
+    #2 0x000100a6b3cc in std::__1::__shared_count::__release_shared[abi:nqe220106]() shared_count.h:65
+    #3 0x000100a6b3cc in std::__1::__shared_weak_count::__release_shared[abi:nqe220106]() shared_count.h:100
+    #4 0x000100a6b3cc in std::__1::shared_ptr<pbrt::PerspectiveCamera>::~shared_ptr[abi:nqe220106]() shared_ptr.h:503
+    #5 0x000100a6b3cc in std::__1::shared_ptr<pbrt::PerspectiveCamera>::~shared_ptr[abi:nqe220106]() shared_ptr.h:501
+    #6 0x000100a6b3cc in std::__1::shared_ptr<pbrt::PerspectiveCamera>::reset[abi:nqe220106]() shared_ptr.h:553
+    #7 0x000100a6b3cc in (anonymous namespace)::TestTransportVolPath() instance_media.cpp:913
+    #8 0x000100a81aa8 in main driver.c:21
+    #9 0x00019a0b7e7c in start+0x1a1c (dyld:arm64e+0x31e7c)
+
+0x61a000000098 is located 24 bytes inside of 1192-byte region [0x61a000000080,0x61a000000528)
+allocated by thread T0 here:
+    #0 0x000102008150 in _Znwm+0x74 (libclang_rt.asan_osx_dynamic.dylib:arm64e+0x50150)
+    #1 0x000100a6a9cc in std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>* std::__1::__libcpp_allocate[abi:nqe220106]<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>(std::__1::__element_count, unsigned long) allocate.h:60
+    #2 0x000100a6a9cc in std::__1::allocator<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>::allocate[abi:nqe220106](unsigned long) allocator.h:92
+    #3 0x000100a6a9cc in std::__1::allocator_traits<std::__1::allocator<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>>::allocate[abi:nqe220106](std::__1::allocator<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>&, unsigned long) allocator_traits.h:259
+    #4 0x000100a6a9cc in std::__1::__allocation_guard<std::__1::allocator<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>>::__allocation_guard[abi:nqe220106]<std::__1::allocator<pbrt::Film>>(std::__1::allocator<pbrt::Film>, unsigned long) allocation_guard.h:55
+    #5 0x000100a6a9cc in std::__1::__allocation_guard<std::__1::allocator<std::__1::__shared_ptr_emplace<pbrt::Film, std::__1::allocator<pbrt::Film>>>>::__allocation_guard[abi:nqe220106]<std::__1::allocator<pbrt::Film>>(std::__1::allocator<pbrt::Film>, unsigned long) allocation_guard.h:56
+    #6 0x000100a6a9cc in std::__1::shared_ptr<pbrt::Film> std::__1::allocate_shared[abi:nqe220106]<pbrt::Film, std::__1::allocator<pbrt::Film>, pbrt::Point2<int>&, pbrt::Bounds2<float>, std::__1::unique_ptr<pbrt::Filter, std::__1::default_delete<pbrt::Filter>>, float, char const (&) [1], float, 0>(std::__1::allocator<pbrt::Film> const&, pbrt::Point2<int>&, pbrt::Bounds2<float>&&, std::__1::unique_ptr<pbrt::Filter, std::__1::default_delete<pbrt::Filter>>&&, float&&, char const (&) [1], float&&) shared_ptr.h:683
+    #7 0x000100a6a9cc in std::__1::shared_ptr<pbrt::Film> std::__1::make_shared[abi:nqe220106]<pbrt::Film, pbrt::Point2<int>&, pbrt::Bounds2<float>, std::__1::unique_ptr<pbrt::Filter, std::__1::default_delete<pbrt::Filter>>, float, char const (&) [1], float, 0>(pbrt::Point2<int>&, pbrt::Bounds2<float>&&, std::__1::unique_ptr<pbrt::Filter, std::__1::default_delete<pbrt::Filter>>&&, float&&, char const (&) [1], float&&) shared_ptr.h:692
+    #8 0x000100a6a9cc in (anonymous namespace)::TestTransportVolPath() instance_media.cpp:875
+    #9 0x000100a81aa8 in main driver.c:21
+    #10 0x00019a0b7e7c in start+0x1a1c (dyld:arm64e+0x31e7c)
+
+SUMMARY: AddressSanitizer: bad-free camera.cpp:42 in pbrt::Camera::~Camera()
+==78620==ABORTING

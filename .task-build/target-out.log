@@ -1,0 +1,20 @@
+CASE boundary identity checks=19
+CASE boundary no_material_walk checks=9
+CASE boundary disjoint checks=7
+GROUP boundary cases=3 checks=35 COMPLETE
+METRIC scale case=0 n=4000 tr=0.80998 expected=0.79902 stderr=0.00515
+METRIC scale case=1 n=4000 tr=0.43257 expected=0.40759 stderr=0.00634
+CASE metric scale_optical_thickness checks=4
+METRIC direction n=4000 unit=0.40954 scaled=0.39705 short=0.81005 ref=0.41198 refShort=0.81231 stderr=0.00602
+CASE metric non_unit_direction checks=5
+CASE metric half_voxel_shared checks=137
+CASE metric shear_reflection checks=1064
+CASE metric validation checks=20
+GROUP metric cases=5 checks=1230 COMPLETE
+TRANSPORT intersectTr n=3000 tr=0.51363 independent=0.50173 stderr=0.00645
+CASE transport intersect_tr checks=3001
+TRANSPORT visibilityTr n=3000 tr=0.39057 independent=0.37009 stderr=0.00617
+CASE transport visibility_tr checks=1
+TRANSPORT firstScatter n=4000 events=1586 rate=0.3965 expected=0.4224 meanTauAtEvent=0.2345 totalTau=0.5489 bins=64 chi2=83.3
+CASE transport first_scatter checks=16693
+TRANSPORT volpath nonBlack=83 of 1024 totalRadiance=19.5151

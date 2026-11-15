@@ -94,6 +94,12 @@ class TransformedPrimitive : public Primitive {
     // TransformedPrimitive Public Methods
     TransformedPrimitive(std::shared_ptr<Primitive> &primitive,
                          const AnimatedTransform &PrimitiveToWorld);
+    // An optional medium remap distinguishes the media of different
+    // placements of a shared prototype; when it is null the prototype's
+    // medium identities are used directly.
+    TransformedPrimitive(std::shared_ptr<Primitive> &primitive,
+                         const AnimatedTransform &PrimitiveToWorld,
+                         std::shared_ptr<const MediumRemap> mediumRemap);
     bool Intersect(const Ray &r, SurfaceInteraction *in) const;
     bool IntersectP(const Ray &r) const;
     const AreaLight *GetAreaLight() const { return nullptr; }
@@ -113,6 +119,7 @@ class TransformedPrimitive : public Primitive {
     // TransformedPrimitive Private Data
     std::shared_ptr<Primitive> primitive;
     const AnimatedTransform PrimitiveToWorld;
+    std::shared_ptr<const MediumRemap> mediumRemap;
 };
 
 // Aggregate Declarations

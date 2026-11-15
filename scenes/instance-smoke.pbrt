@@ -1,0 +1,71 @@
+# Instance grid smoke example.
+#
+# A single density grid is defined once, inside the "smoke" prototype, and is
+# shared by both placements below.  Neither the density array nor the
+# prototype BVH is duplicated; each ObjectInstance only carries its own
+# placement transform and its own lightweight medium view.
+
+Film "image" "integer xresolution" [96] "integer yresolution" [64]
+Sampler "random" "integer pixelsamples" [32]
+Integrator "volpath" "integer maxdepth" [6]
+
+LookAt 0 0 -7  0 0 0  0 1 0
+Camera "perspective" "float fov" [38]
+
+WorldBegin
+
+# One lamp illuminates both smoke plumes.
+LightSource "point" "rgb I" [70 70 70] "point from" [0 3 -1.5]
+# A dim environment so the silhhouettes and the lit sides are both visible.
+LightSource "infinite" "rgb L" [.08 .08 .1]
+
+ObjectBegin "smoke"
+# The current transform here maps density coordinates to prototype
+# coordinates.  p0/p1 place the normalized density cube inside that frame.
+MakeNamedMedium "smoke"
+    "string type" ["instancegrid"]
+    "rgb sigma_a" [.1 .1 .1]
+    "rgb sigma_s" [.95 .95 .95]
+    "float g" [.3]
+    "integer nx" [3] "integer ny" [3] "integer nz" [3]
+    "float density" [
+        0.2 0.4 0.2
+        0.4 1.0 0.4
+        0.2 0.4 0.2
+
+        0.4 1.0 0.4
+        1.0 2.0 1.0
+        0.4 1.0 0.4
+
+        0.2 0.4 0.2
+        0.4 1.0 0.4
+        0.2 0.4 0.2
+    ]
+    "point p0" [-1 -1 -1]
+    "point p1" [1 1 1]
+
+AttributeBegin
+MediumInterface "smoke" ""
+Material ""
+Shape "sphere" "float radius" [1]
+AttributeEnd
+ObjectEnd
+
+# First placement: stretched along x.  The density is sampled through the
+# combined transform, so the longer world-space path accumulates more
+# optical thickness without rescaling sigma.
+AttributeBegin
+Translate -1.4 0 0
+Scale 1.3 1 1
+ObjectInstance "smoke"
+AttributeEnd
+
+# Second placement: a rotated, slightly elongated copy of the same density.
+AttributeBegin
+Translate 1.4 0 0
+Rotate 25 0 0 1
+Scale 1 1 1.2
+ObjectInstance "smoke"
+AttributeEnd
+
+WorldEnd

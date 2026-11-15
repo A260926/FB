@@ -1,0 +1,19 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1116 07:44:57.065065 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066671 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066715 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066722 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066735 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066741 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066751 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.066756 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.080753 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:57.080778 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:59.802922 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:44:59.802940 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:45:02.542531 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:45:02.542562 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:45:02.542569 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:45:02.542574 4294672256 film.cpp:60] Created film with full resolution [ 8, 8 ]. Crop window of [ [ 0, 0 ] - [ 1, 1 ] ] -> croppedPixelBounds [ [ 0, 0 ] - [ 8, 8 ] ]
+I1116 07:45:02.553665 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 07:45:02.553674 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB

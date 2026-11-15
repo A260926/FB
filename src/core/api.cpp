@@ -114,6 +114,7 @@
 #include "textures/wrinkled.h"
 #include "media/grid.h"
 #include "media/homogeneous.h"
+#include "media/instancegrid.h"
 
 #include <map>
 #include <stdio.h>
@@ -182,6 +183,19 @@ struct RenderOptions {
     std::map<std::string, std::vector<std::shared_ptr<Primitive>>> instances;
     std::vector<std::shared_ptr<Primitive>> *currentInstance = nullptr;
     bool haveScatteringMedia = false;
+
+    // Instance grid media.  Prototype media are the immutable density
+    // resources plus the density-to-prototype transform, created while an
+    // ObjectBegin block is active.  Each placed instance gets its own views
+    // (InstanceGridMedium placement objects) that share those resources.
+    std::map<std::string, std::shared_ptr<InstanceGridMedium>> prototypeMedia;
+    std::map<std::string, std::vector<std::shared_ptr<InstanceGridMedium>>>
+        instancePrototypeMedia;
+    std::string currentInstanceName;
+    // Set when scene construction encountered an error that must abort the
+    // render rather than produce an image lacking media.
+    bool sceneCreationFailed = false;
+    std::string sceneCreationError;
 };
 
 // MaterialInstance represents both an instance of a material as well as
@@ -1092,7 +1106,63 @@ void pbrtMakeNamedMedium(const std::string &name, const ParamSet &params) {
     std::string type = params.FindOneString("type", "");
     if (type == "")
         Error("No parameter string \"type\" found in MakeNamedMedium");
-    else {
+    else if (type == "instancegrid") {
+        // An instancegrid medium is a prototype resource: it may only be
+        // defined while an ObjectBegin definition is active, and its
+        // current transform maps density coordinates into prototype
+        // coordinates.
+        if (!renderOptions->currentInstance) {
+            Error(
+                "MakeNamedMedium \"%s\": instancegrid media can only be "
+                "defined inside an ObjectBegin definition",
+                name.c_str());
+            renderOptions->sceneCreationFailed = true;
+            renderOptions->sceneCreationError =
+                "instancegrid medium defined outside ObjectBegin";
+        } else if (curTransform.IsAnimated()) {
+            // Check for a genuinely animated transform before validating the
+            // start transform: a singular matrix has a non-finite inverse and
+            // would otherwise be misreported as animated.  Animated is only
+            // true when the two endpoint transforms differ, so distinguish it
+            // from a singular-but-static definition first.
+            std::string error;
+            if (!ValidateInstanceTransform(curTransform[0], &error)) {
+                Error("MakeNamedMedium \"%s\": %s", name.c_str(),
+                      error.c_str());
+                renderOptions->sceneCreationFailed = true;
+                renderOptions->sceneCreationError = error;
+            } else {
+                Error(
+                    "MakeNamedMedium \"%s\": motion-transformed instancegrid "
+                    "media are not supported",
+                    name.c_str());
+                renderOptions->sceneCreationFailed = true;
+                renderOptions->sceneCreationError =
+                    "motion instancegrid medium definition";
+            }
+        } else {
+            std::string error;
+            std::shared_ptr<InstanceGridMedium> medium =
+                CreateInstanceGridMedium(params, curTransform[0], name,
+                                         &error);
+            if (!medium) {
+                Error("MakeNamedMedium \"%s\": %s", name.c_str(),
+                      error.c_str());
+                renderOptions->sceneCreationFailed = true;
+                renderOptions->sceneCreationError = error;
+            } else {
+                // Register the prototype medium under its name, and record
+                // it on the definition being built so that each
+                // ObjectInstance can create its own placement view.
+                renderOptions->namedMedia[name] = medium;
+                renderOptions->prototypeMedia[name] = medium;
+                renderOptions->instancePrototypeMedia[
+                    renderOptions->currentInstanceName]
+                    .push_back(medium);
+                renderOptions->haveScatteringMedia = true;
+            }
+        }
+    } else {
         std::shared_ptr<Medium> medium =
             MakeMedium(type, params, curTransform[0]);
         if (medium) renderOptions->namedMedia[name] = medium;
@@ -1303,6 +1373,19 @@ void pbrtLightSource(const std::string &name, const ParamSet &params) {
     VERIFY_WORLD("LightSource");
     WARN_IF_ANIMATED_TRANSFORM("LightSource");
     MediumInterface mi = graphicsState.CreateMediumInterface();
+    // A standalone light is a world object; it has no placement view to
+    // remap an instancegrid medium to, so reject that combination rather
+    // than silently using the prototype's identity transform.
+    if (dynamic_cast<const InstanceGridMedium *>(mi.inside) != nullptr ||
+        dynamic_cast<const InstanceGridMedium *>(mi.outside) != nullptr) {
+        Error(
+            "LightSource: an instancegrid medium can only be attached to "
+            "shapes inside an ObjectBegin definition");
+        renderOptions->sceneCreationFailed = true;
+        renderOptions->sceneCreationError =
+            "instancegrid medium on a standalone light";
+        return;
+    }
     std::shared_ptr<Light> lt = MakeLight(name, params, curTransform[0], mi);
     if (!lt)
         Error("LightSource: light type \"%s\" unknown.", name.c_str());
@@ -1491,22 +1574,61 @@ std::shared_ptr<Material> GraphicsState::GetMaterialForShape(
 
 MediumInterface GraphicsState::CreateMediumInterface() {
     MediumInterface m;
-    if (currentInsideMedium != "") {
-        if (renderOptions->namedMedia.find(currentInsideMedium) !=
-            renderOptions->namedMedia.end())
-            m.inside = renderOptions->namedMedia[currentInsideMedium].get();
-        else
-            Error("Named medium \"%s\" undefined.",
-                  currentInsideMedium.c_str());
-    }
-    if (currentOutsideMedium != "") {
-        if (renderOptions->namedMedia.find(currentOutsideMedium) !=
-            renderOptions->namedMedia.end())
-            m.outside = renderOptions->namedMedia[currentOutsideMedium].get();
-        else
-            Error("Named medium \"%s\" undefined.",
-                  currentOutsideMedium.c_str());
-    }
+    auto resolve = [&](const std::string &name, const Medium **slot) {
+        if (name == "") return;
+        auto iter = renderOptions->namedMedia.find(name);
+        if (iter == renderOptions->namedMedia.end()) {
+            Error("Named medium \"%s\" undefined.", name.c_str());
+            return;
+        }
+        const Medium *medium = iter->second.get();
+        // An instancegrid medium may only be referenced from shapes and
+        // lights that are part of a prototype definition.  Referencing one
+        // directly from the world block would have no placement to give it
+        // an identity, so reject it rather than render without the medium.
+        if (!renderOptions->currentInstance &&
+            dynamic_cast<const InstanceGridMedium *>(medium) != nullptr) {
+            Error(
+                "Named medium \"%s\" is an instancegrid prototype and can "
+                "only be referenced inside an ObjectBegin definition",
+                name.c_str());
+            renderOptions->sceneCreationFailed = true;
+            renderOptions->sceneCreationError =
+                "instancegrid medium referenced outside ObjectBegin";
+            return;
+        }
+        // Inside an ObjectBegin, an instancegrid medium must belong to the
+        // definition currently being built; a prototype from a different
+        // object has no view that this instance could remap to.
+        if (renderOptions->currentInstance) {
+            const InstanceGridMedium *igm =
+                dynamic_cast<const InstanceGridMedium *>(medium);
+            if (igm) {
+                auto protoIter = renderOptions->instancePrototypeMedia.find(
+                    renderOptions->currentInstanceName);
+                bool own = false;
+                if (protoIter !=
+                    renderOptions->instancePrototypeMedia.end())
+                    for (const auto &p : protoIter->second)
+                        if (p.get() == igm) own = true;
+                if (!own) {
+                    Error(
+                        "Named medium \"%s\" is an instancegrid prototype "
+                        "from a different object definition and cannot be "
+                        "used here",
+                        name.c_str());
+                    renderOptions->sceneCreationFailed = true;
+                    renderOptions->sceneCreationError =
+                        "instancegrid medium referenced from wrong "
+                        "ObjectBegin";
+                    return;
+                }
+            }
+        }
+        *slot = medium;
+    };
+    resolve(currentInsideMedium, &m.inside);
+    resolve(currentOutsideMedium, &m.outside);
     return m;
 }
 
@@ -1524,6 +1646,8 @@ void pbrtObjectBegin(const std::string &name) {
         Error("ObjectBegin called inside of instance definition");
     renderOptions->instances[name] = std::vector<std::shared_ptr<Primitive>>();
     renderOptions->currentInstance = &renderOptions->instances[name];
+    renderOptions->currentInstanceName = name;
+    renderOptions->instancePrototypeMedia[name].clear();
     if (PbrtOptions.cat || PbrtOptions.toPly)
         printf("%*sObjectBegin \"%s\"\n", catIndentCount, "", name.c_str());
 }
@@ -1537,6 +1661,7 @@ void pbrtObjectEnd() {
     if (PbrtOptions.cat || PbrtOptions.toPly)
         printf("%*sObjectEnd\n", catIndentCount, "");
     renderOptions->currentInstance = nullptr;
+    renderOptions->currentInstanceName.clear();
     pbrtAttributeEnd();
     ++nObjectInstancesCreated;
 }
@@ -1579,11 +1704,45 @@ void pbrtObjectInstance(const std::string &name) {
         transformCache.Lookup(curTransform[0]),
         transformCache.Lookup(curTransform[1])
     };
+    // Instance grid media may not be motion-transformed in this version.
+    auto protoIter = renderOptions->instancePrototypeMedia.find(name);
+    std::shared_ptr<const MediumRemap> mediumRemap;
+    if (protoIter != renderOptions->instancePrototypeMedia.end() &&
+        !protoIter->second.empty()) {
+        // Validate the static start transform first so a singular placement
+        // is reported as singular rather than as animated (its inverse is
+        // non-finite).
+        std::string error;
+        if (!ValidateInstanceTransform(curTransform[0], &error)) {
+            Error("ObjectInstance \"%s\": %s", name.c_str(), error.c_str());
+            renderOptions->sceneCreationFailed = true;
+            renderOptions->sceneCreationError = error;
+            return;
+        }
+        if (curTransform.IsAnimated()) {
+            Error(
+                "ObjectInstance \"%s\": motion-transformed instancegrid "
+                "media are not supported",
+                name.c_str());
+            renderOptions->sceneCreationFailed = true;
+            renderOptions->sceneCreationError =
+                "motion instancegrid placement";
+            return;
+        }
+        mediumRemap = CreateInstanceMediumRemap(protoIter->second,
+                                                curTransform[0], name, &error);
+        if (!mediumRemap) {
+            Error("ObjectInstance \"%s\": %s", name.c_str(), error.c_str());
+            renderOptions->sceneCreationFailed = true;
+            renderOptions->sceneCreationError = error;
+            return;
+        }
+    }
     AnimatedTransform animatedInstanceToWorld(
         InstanceToWorld[0], renderOptions->transformStartTime,
         InstanceToWorld[1], renderOptions->transformEndTime);
-    std::shared_ptr<Primitive> prim(
-        std::make_shared<TransformedPrimitive>(in[0], animatedInstanceToWorld));
+    std::shared_ptr<Primitive> prim(std::make_shared<TransformedPrimitive>(
+        in[0], animatedInstanceToWorld, mediumRemap));
     renderOptions->primitives.push_back(prim);
 }
 
@@ -1603,6 +1762,13 @@ void pbrtWorldEnd() {
     // Create scene and render
     if (PbrtOptions.cat || PbrtOptions.toPly) {
         printf("%*sWorldEnd\n", catIndentCount, "");
+    } else if (renderOptions->sceneCreationFailed) {
+        // A medium-related error invalidated scene construction.  Do not
+        // render a scene that is missing media; report and abort.
+        Error(
+            "Aborting render: scene construction failed (%s).",
+            renderOptions->sceneCreationError.c_str());
+        exit(1);
     } else {
         std::unique_ptr<Integrator> integrator(renderOptions->MakeIntegrator());
         std::unique_ptr<Scene> scene(renderOptions->MakeScene());

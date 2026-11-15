@@ -1,0 +1,37 @@
+[  0%] Built target eLut
+[  1%] Built target Iex
+[  2%] Built target toFloat
+[  8%] Built target zlibstatic
+[ 10%] Built target glog
+[ 14%] Built target Imath
+[ 17%] Built target IlmThread
+[ 18%] Built target Half
+[ 21%] Built target Ptex_static
+[ 53%] Built target IlmImf-obj
+[ 53%] Building CXX object CMakeFiles/pbrt.dir/src/media/instancegrid.cpp.o
+[ 53%] Built target CopyIlmBaseLibs
+[ 53%] Built target b44ExpLogTable
+[ 54%] Built target dwaLookups
+[ 57%] Built target IlmImf
+[ 57%] Linking CXX static library libpbrt.a
+[ 98%] Built target pbrt
+[100%] Linking CXX executable pbrt
+[100%] Built target pbrt_exe
+[  6%] Built target zlibstatic
+[  6%] Built target eLut
+[  7%] Built target toFloat
+[  8%] Built target Iex
+[ 10%] Built target glog
+[ 12%] Built target Half
+[ 15%] Built target Ptex_static
+[ 19%] Built target Imath
+[ 21%] Built target IlmThread
+[ 53%] Built target IlmImf-obj
+[ 53%] Built target CopyIlmBaseLibs
+[ 53%] Built target b44ExpLogTable
+[ 54%] Built target dwaLookups
+[ 57%] Built target IlmImf
+[ 98%] Built target pbrt
+[100%] Building CXX object CMakeFiles/task_target.dir/src/media/instancegrid.cpp.o
+[100%] Linking CXX executable /Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/.task-build/target
+[100%] Built target task_target

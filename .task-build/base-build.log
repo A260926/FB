@@ -1,0 +1,18 @@
+[  0%] Built target eLut
+[  1%] Built target toFloat
+[  7%] Built target zlibstatic
+[  8%] Built target Iex
+[  9%] Built target Half
+[ 12%] Built target glog
+[ 15%] Built target Ptex_static
+[ 19%] Built target Imath
+[ 21%] Built target IlmThread
+[ 53%] Built target IlmImf-obj
+[ 95%] Built target pbrt
+[ 95%] Built target CopyIlmBaseLibs
+[ 95%] Built target b44ExpLogTable
+[ 96%] Built target dwaLookups
+[ 98%] Built target IlmImf
+[100%] Building CXX object CMakeFiles/task_baseline.dir/task_support/baseline.cpp.o
+[100%] Linking CXX executable /Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/.task-build/baseline
+[100%] Built target task_baseline

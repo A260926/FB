@@ -1,0 +1,250 @@
+CMake Warning (deprecated) at CMakeLists.txt:5 (CMAKE_MINIMUM_REQUIRED):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- The C compiler identification is AppleClang 21.0.0.21000334
+-- The CXX compiler identification is AppleClang 21.0.0.21000334
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Looking for include file alloca.h
+-- Looking for include file alloca.h - found
+-- Looking for include file memory.h
+-- Looking for include file memory.h - found
+-- Performing Test HAVE_HEX_FP_CONSTANTS
+-- Performing Test HAVE_HEX_FP_CONSTANTS - Success
+-- Performing Test HAVE_BINARY_CONSTANTS
+-- Performing Test HAVE_BINARY_CONSTANTS - Success
+-- Performing Test HAVE_CONSTEXPR
+-- Performing Test HAVE_CONSTEXPR - Success
+-- Performing Test HAVE_ALIGNAS
+-- Performing Test HAVE_ALIGNAS - Success
+-- Performing Test HAVE_ALIGNOF
+-- Performing Test HAVE_ALIGNOF - Success
+-- Performing Test HAVE_ITIMER
+-- Performing Test HAVE_ITIMER - Success
+-- Performing Test HAVE_NONPOD_IN_UNIONS
+-- Performing Test HAVE_NONPOD_IN_UNIONS - Success
+-- Performing Test HAVE_MMAP
+-- Performing Test HAVE_MMAP - Success
+-- Performing Test HAVE_DECLSPEC_NOINLINE
+-- Performing Test HAVE_DECLSPEC_NOINLINE - Failed
+-- Performing Test HAVE_ATTRIBUTE_NOINLINE
+-- Performing Test HAVE_ATTRIBUTE_NOINLINE - Success
+-- Performing Test HAVE__ALIGNED_MALLOC
+-- Performing Test HAVE__ALIGNED_MALLOC - Failed
+-- Performing Test HAVE_POSIX_MEMALIGN
+-- Performing Test HAVE_POSIX_MEMALIGN - Success
+-- Performing Test HAVE_MEMALIGN
+-- Performing Test HAVE_MEMALIGN - Failed
+-- Performing Test HAVE_THREAD_LOCAL
+-- Performing Test HAVE_THREAD_LOCAL - Success
+-- Performing Test HAVE_DECLSPEC_THREAD
+-- Performing Test HAVE_DECLSPEC_THREAD - Failed
+-- Performing Test HAVE___THREAD
+-- Performing Test HAVE___THREAD - Success
+CMake Warning (deprecated) at src/ext/zlib/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- Looking for sys/types.h
+-- Looking for sys/types.h - found
+-- Looking for stdint.h
+-- Looking for stdint.h - found
+-- Looking for stddef.h
+-- Looking for stddef.h - found
+-- Check size of off64_t
+-- Check size of off64_t - failed
+-- Looking for fseeko
+-- Looking for fseeko - found
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+CMake Warning (deprecated) at src/ext/openexr/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+CMake Warning (deprecated) at src/ext/openexr/IlmBase/CMakeLists.txt:2 (CMAKE_MINIMUM_REQUIRED):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+CMake Warning (deprecated) at src/ext/openexr/OpenEXR/CMakeLists.txt:1 (CMAKE_MINIMUM_REQUIRED):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- Found ZLIB: zlibstatic (found version "1.2.8")
+-- Performing Test HAVE_GCC_INLINE_ASM_AVX
+-- Performing Test HAVE_GCC_INLINE_ASM_AVX - Failed
+-- Performing Test HAVE_SYSCONF_NPROCESSORS_ONLN
+-- Performing Test HAVE_SYSCONF_NPROCESSORS_ONLN - Success
+CMake Warning (deprecated) at src/ext/glog/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- Looking for dlfcn.h
+-- Looking for dlfcn.h - found
+-- Looking for execinfo.h
+-- Looking for execinfo.h - found
+-- Looking for glob.h
+-- Looking for glob.h - found
+-- Looking for inttypes.h
+-- Looking for inttypes.h - found
+-- Looking for libunwind.h
+-- Looking for libunwind.h - found
+-- Looking for pwd.h
+-- Looking for pwd.h - found
+-- Looking for stdlib.h
+-- Looking for stdlib.h - found
+-- Looking for string.h
+-- Looking for string.h - found
+-- Looking for strings.h
+-- Looking for strings.h - found
+-- Looking for sys/stat.h
+-- Looking for sys/stat.h - found
+-- Looking for sys/syscall.h
+-- Looking for sys/syscall.h - found
+-- Looking for sys/time.h
+-- Looking for sys/time.h - found
+-- Looking for sys/utsname.h
+-- Looking for sys/utsname.h - found
+-- Looking for syscall.h
+-- Looking for syscall.h - not found
+-- Looking for syslog.h
+-- Looking for syslog.h - found
+-- Looking for ucontext.h
+-- Looking for ucontext.h - not found
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for unwind.h
+-- Looking for unwind.h - found
+-- Looking for C++ include ext/hash_map
+-- Looking for C++ include ext/hash_map - found
+-- Looking for C++ include ext/hash_set
+-- Looking for C++ include ext/hash_set - found
+-- Looking for C++ include ext/slist
+-- Looking for C++ include ext/slist - not found
+-- Looking for C++ include tr1/unordered_map
+-- Looking for C++ include tr1/unordered_map - not found
+-- Looking for C++ include tr1/unordered_set
+-- Looking for C++ include tr1/unordered_set - not found
+-- Looking for C++ include unordered_map
+-- Looking for C++ include unordered_map - found
+-- Looking for C++ include unordered_set
+-- Looking for C++ include unordered_set - found
+-- Check size of unsigned __int16
+-- Check size of unsigned __int16 - failed
+-- Check size of u_int16_t
+-- Check size of u_int16_t - done
+-- Check size of uint16_t
+-- Check size of uint16_t - done
+-- Looking for dladdr
+-- Looking for dladdr - found
+-- Looking for fcntl
+-- Looking for fcntl - found
+-- Looking for pread
+-- Looking for pread - found
+-- Looking for pwrite
+-- Looking for pwrite - found
+-- Looking for sigaction
+-- Looking for sigaction - found
+-- Looking for sigaltstack
+-- Looking for sigaltstack - found
+-- Performing Test HAVE_NO_DEPRECATED
+-- Performing Test HAVE_NO_DEPRECATED - Success
+-- Performing Test HAVE_NO_UNNAMED_TYPE_TEMPLATE_ARGS
+-- Performing Test HAVE_NO_UNNAMED_TYPE_TEMPLATE_ARGS - Success
+-- Looking for snprintf
+-- Looking for snprintf - found
+-- Looking for get_static_proc_name in unwind
+-- Looking for get_static_proc_name in unwind - not found
+-- Performing Test HAVE___ATTRIBUTE__
+-- Performing Test HAVE___ATTRIBUTE__ - Success
+-- Performing Test HAVE___ATTRIBUTE__VISIBILITY_DEFAULT
+-- Performing Test HAVE___ATTRIBUTE__VISIBILITY_DEFAULT - Success
+-- Performing Test HAVE___ATTRIBUTE__VISIBILITY_HIDDEN
+-- Performing Test HAVE___ATTRIBUTE__VISIBILITY_HIDDEN - Success
+-- Performing Test HAVE___BUILTIN_EXPECT
+-- Performing Test HAVE___BUILTIN_EXPECT - Success
+-- Performing Test HAVE___SYNC_VAL_COMPARE_AND_SWAP
+-- Performing Test HAVE___SYNC_VAL_COMPARE_AND_SWAP - Success
+-- Performing Test HAVE_RWLOCK
+-- Performing Test HAVE_RWLOCK - Success
+-- Performing Test HAVE___DECLSPEC
+-- Performing Test HAVE___DECLSPEC - Failed
+-- Performing Test STL_NO_NAMESPACE
+-- Performing Test STL_NO_NAMESPACE - Failed
+-- Performing Test STL_STD_NAMESPACE
+-- Performing Test STL_STD_NAMESPACE - Success
+-- Performing Test HAVE_USING_OPERATOR
+-- Performing Test HAVE_USING_OPERATOR - Success
+-- Performing Test HAVE_NAMESPACES
+-- Performing Test HAVE_NAMESPACES - Success
+CMake Warning at src/ext/glog/CMakeLists.txt:587 (export):
+  Cannot create package registry file:
+
+    /Users/solo/.cmake/packages/glog/842573f95e9aba6172b147357729fa28
+
+  Operation not permitted
+
+
+
+CMake Warning (deprecated) at src/ext/ptex/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+fatal: No names found, cannot describe anything.
+-- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+-- Configuring done (12.4s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS066D145C7435U11592/attempts/20261115T160953783474Z/repo/.task-build/asan2

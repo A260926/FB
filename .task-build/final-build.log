@@ -1,0 +1,32 @@
+[  1%] Built target toFloat
+[  1%] Built target eLut
+[  2%] Built target Iex
+[  8%] Built target zlibstatic
+[  9%] Built target Half
+[ 12%] Built target glog
+[ 14%] Built target IlmThread
+[ 18%] Built target Imath
+[ 50%] Built target IlmImf-obj
+[ 53%] Built target Ptex_static
+[ 95%] Built target pbrt
+[ 95%] Built target CopyIlmBaseLibs
+[ 95%] Built target b44ExpLogTable
+[ 96%] Built target dwaLookups
+[ 98%] Built target IlmImf
+[100%] Built target pbrt_exe
+[  0%] Built target eLut
+[  6%] Built target zlibstatic
+[  7%] Built target toFloat
+[  8%] Built target Iex
+[  9%] Built target Half
+[ 14%] Built target Imath
+[ 17%] Built target Ptex_static
+[ 19%] Built target glog
+[ 21%] Built target IlmThread
+[ 53%] Built target IlmImf-obj
+[ 95%] Built target pbrt
+[ 95%] Built target CopyIlmBaseLibs
+[ 95%] Built target b44ExpLogTable
+[ 96%] Built target dwaLookups
+[ 98%] Built target IlmImf
+[100%] Built target task_target

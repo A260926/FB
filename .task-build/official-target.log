@@ -1,0 +1,46 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1116 06:43:31.717199 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.717545 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.717576 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.717582 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.717592 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.717597 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.731338 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:31.731348 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:34.537323 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:34.537349 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:37.319365 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:37.319392 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:37.319401 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:37.319412 4294672256 film.cpp:60] Created film with full resolution [ 8, 8 ]. Crop window of [ [ 0, 0 ] - [ 1, 1 ] ] -> croppedPixelBounds [ [ 0, 0 ] - [ 8, 8 ] ]
+I1116 06:43:37.319758 4294672256 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1116 06:43:37.319765 4294672256 bvh.cpp:210] BVH created with 3 nodes for 2 primitives (0.00 MB), arena allocated 1.00 MB
+CASE boundary identity checks=19
+CASE boundary no_material_walk checks=9
+CASE boundary disjoint checks=7
+GROUP boundary cases=3 checks=35 COMPLETE
+METRIC scale case=0 n=40000 tr=0.81200 expected=0.81172 stderr=0.00162 tol=0.00912
+METRIC scale case=1 n=40000 tr=0.43342 expected=0.43415 stderr=0.00200 tol=0.01099
+CASE metric scale_optical_thickness checks=4
+METRIC direction n=40000 unit=0.41149 scaled=0.39921 short=0.81127 ref=0.41198 refShort=0.81231 stderr=0.00190
+CASE metric non_unit_direction checks=5
+CASE metric half_voxel_shared checks=137
+CASE metric shear_reflection checks=1064
+METRIC analytic scale=2 n=30000 tr=0.02837 exact=0.03020 stderr=0.00096 tol=0.01175
+METRIC analytic scale=0.5 n=30000 tr=0.41347 exact=0.41686 stderr=0.00284 tol=0.02306
+CASE metric homogeneous_analytic checks=8
+CASE metric validation checks=20
+GROUP metric cases=6 checks=1238 COMPLETE
+TRANSPORT intersectTr n=3000 tr=0.51363 independent=0.51395 stderr=0.00645
+CASE transport intersect_tr checks=3001
+TRANSPORT visibilityTr n=3000 tr=0.39057 independent=0.39381 stderr=0.00617
+CASE transport visibility_tr checks=1
+TRANSPORT firstScatter n=4000 events=1586 rate=0.3965 expected=0.4224 meanTauAtEvent=0.2345 totalTau=0.5489 bins=64 chi2=83.3
+CASE transport first_scatter checks=16693
+TRANSPORT volpath nonBlack=83 of 1024 totalRadiance=19.5151
+CASE transport volpath checks=1
+CASE transport interleaved_identity checks=2000
+TRANSPORT concurrent nThreads=8 perThread=4000 ref=0.60438 stderr=0.00630
+CASE transport concurrent checks=82
+GROUP transport cases=6 checks=21778 COMPLETE
+TARGET_COMPLETE cases=15

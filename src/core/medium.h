@@ -109,6 +109,23 @@ struct MediumInterface {
     const Medium *inside, *outside;
 };
 
+// MediumRemap Declarations
+//
+// A MediumRemap translates the medium pointers stored in a shared prototype's
+// primitives into the medium identities that belong to one particular
+// placement of that prototype.  It is the small, per-instance piece of
+// metadata that lets instanced media keep distinct identities without copying
+// prototype geometry, BVHs, or density data.
+class MediumRemap {
+  public:
+    virtual ~MediumRemap() {}
+    virtual const Medium *Remap(const Medium *medium) const = 0;
+    void RemapInterface(MediumInterface *mi) const {
+        mi->inside = Remap(mi->inside);
+        mi->outside = Remap(mi->outside);
+    }
+};
+
 }  // namespace pbrt
 
 #endif  // PBRT_CORE_MEDIUM_H

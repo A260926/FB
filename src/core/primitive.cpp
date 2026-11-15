@@ -69,7 +69,19 @@ void Aggregate::ComputeScatteringFunctions(SurfaceInteraction *isect,
 // TransformedPrimitive Method Definitions
 TransformedPrimitive::TransformedPrimitive(std::shared_ptr<Primitive> &primitive,
                                            const AnimatedTransform &PrimitiveToWorld)
-    : primitive(primitive), PrimitiveToWorld(PrimitiveToWorld) {
+    : primitive(primitive),
+      PrimitiveToWorld(PrimitiveToWorld),
+      mediumRemap(nullptr) {
+    primitiveMemory += sizeof(*this);
+}
+
+TransformedPrimitive::TransformedPrimitive(
+    std::shared_ptr<Primitive> &primitive,
+    const AnimatedTransform &PrimitiveToWorld,
+    std::shared_ptr<const MediumRemap> mediumRemap)
+    : primitive(primitive),
+      PrimitiveToWorld(PrimitiveToWorld),
+      mediumRemap(std::move(mediumRemap)) {
     primitiveMemory += sizeof(*this);
 }
 
@@ -84,6 +96,8 @@ bool TransformedPrimitive::Intersect(const Ray &r,
     // Transform instance's intersection data to world space
     if (!InterpolatedPrimToWorld.IsIdentity())
         *isect = InterpolatedPrimToWorld(*isect);
+    // Translate the prototype's media to this placement's media
+    if (mediumRemap) mediumRemap->RemapInterface(&isect->mediumInterface);
     CHECK_GE(Dot(isect->n, isect->shading.n), 0);
     return true;
 }

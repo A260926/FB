@@ -1,0 +1,53 @@
+pbrt version 3 (built Nov 16 2026 at 07:39:53) [Detected 10 cores]
+Copyright (c)1998-2018 Matt Pharr, Greg Humphreys, and Wenzel Jakob.
+The source code to pbrt (but *not* the book contents) is covered by the BSD License.
+See the file LICENSE.txt for the conditions of the license.
+Rendering: [                                           ] Rendering: [+++++++++++++++++++++++++++++              ]  (0.3s|0.1s)  Rendering: [+++++++++++++++++++++++++++++++++++++++++++]  (0.5s)       
+Statistics:
+  BVH
+    Interior nodes                                                      1
+    Leaf nodes                                                          2
+    Primitives per leaf node                             2 /            2 (1.00x)
+  Integrator
+    Camera rays traced                                             196608
+    Surface interactions                                           282243
+    Volume interactions                                             42099
+    Path length                                                     0.212 avg [range 0 - 6]
+  Intersections
+    Regular ray intersection tests                                 422807
+  Media
+    InstanceGrid steps per Tr() call                125557 /        49187 (2.55x)
+  Memory
+    BVH tree                                                         0.17 kB
+    Film pixels                                                    192.00 kB
+    Primitives                                                       1.04 kB
+    Texture MIP maps                                                 0.02 kB
+    TransformCache                                                 260.00 kB
+  Scene
+    Lights                                                              2
+    Object instances created                                            1
+    Object instances used                                               2
+    Shapes created                                                      1
+    Probes per TransformCache lookup                                1.000 avg [range 1 - 1]
+    TransformCache hits                                  4 /            8 (50.00%)
+  SpatialLightDistribution
+    Distributions created                                           14395
+    Hash probes per lookup                                          1.031 avg [range 1 - 3]
+    Lookups per distribution                         42099 /        14395 (2.92x)
+  Texture
+    Trilinear lookups                                             2028594
+  Profile
+    Integrator::Render()                                            96.43% (   0:00:00.51)
+      Camera::GenerateRay[Differential]()                            3.57% (   0:00:00.01)
+      SamplerIntegrator::Li()                                       92.86% (   0:00:00.49)
+        Accelerator::Intersect()                                     7.14% (   0:00:00.03)
+          Other Shape::Intersect()                                   7.14% (   0:00:00.03)
+        SpatialLightDistribution lookup                             85.71% (   0:00:00.45)
+          SpatialLightDistribution creation                         85.71% (   0:00:00.45)
+    Scene parsing and creation                                       3.57% (   0:00:00.01)
+  Profile (flattened)
+    SpatialLightDistribution creation                               85.71% (   0:00:00.45)
+    Other Shape::Intersect()                                         7.14% (   0:00:00.03)
+    Camera::GenerateRay[Differential]()                              3.57% (   0:00:00.01)
+    Scene parsing and creation                                       3.57% (   0:00:00.01)
+
