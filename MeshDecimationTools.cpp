@@ -473,7 +473,7 @@ never_inline_function static void ArrayGrow(Array<T>& array, Allocator& allocato
 template<typename T>
 static void ArrayAppendMaybeGrow(Array<T>& array, Allocator& allocator, const T& value) {
 	if (array.count >= array.capacity) ArrayGrow(array, allocator, ArrayComputeNewCapacity(array.capacity, array.count + 1));
-	
+
 	array.data[array.count++] = value;
 }
 
@@ -512,35 +512,40 @@ struct VertexHashTable {
 static VertexID HashTableAddOrFind(VertexHashTable& table, Array<Vertex>& vertices, const Vector3& position) {
 	u32 table_size = table.vertex_ids.count;
 	u32 mod_mask   = table_size - 1u;
-	
+
 	u32 hash  = ComputePositionHash(position);
 	u32 index = (hash & mod_mask);
-	
+
 	for (u32 i = 0; i <= mod_mask; i += 1) {
 		auto vertex_id = table.vertex_ids[index];
-		
+
 		if (vertex_id.index == u32_max) {
 			auto new_vertex_id = VertexID{ vertices.count };
 			table.vertex_ids[index] = new_vertex_id;
-			
+
 			Vertex vertex;
 			vertex.position = position;
 			vertex.corner_list_base.index = u32_max;
 			ArrayAppend(vertices, vertex);
-			
+
 			return new_vertex_id;
 		}
-		
+
 		auto existing_position = vertices[vertex_id.index].position;
 		if (existing_position.x == position.x && existing_position.y == position.y && existing_position.z == position.z) {
 			return vertex_id;
 		}
-		
+
 		index = (index + i + 1) & mod_mask;
 	}
-	
+
 	return VertexID{ u32_max };
 }
+
+// Skinned variant. Vertices are welded only if both position and the full normalized skin signature
+// match. Ordinary attribute wedges are still allowed to share the same geometry vertex.
+// Defined after the skinning helpers.
+static VertexID HashTableAddOrFind(VertexHashTable& table, Array<Vertex>& vertices, Array<MdtSkinInfluences>& vertex_skins, const Vector3& position, const MdtSkinInfluences& skin);
 
 struct EdgeHashTable {
 	Array<EdgeID> edge_ids;
@@ -658,16 +663,377 @@ static EdgeID HashTableAddOrFind(EdgeDuplicateMap& table, Allocator& heap_alloca
 
 static u32 ComputeHashTableSize(u32 max_element_count) {
 	u32 hash_table_size = 1;
-	
+
 	while (hash_table_size < max_element_count + max_element_count / 4) {
 		hash_table_size = hash_table_size * 2;
 	}
-	
+
 	return hash_table_size;
 }
 
 
-static MeshView BuildEditableMesh(Allocator& allocator, const MdtTriangleGeometryDesc* geometry_descs, u32 geometry_desc_count, u32 vertex_stride_bytes) {
+//
+// Skinning helpers.
+//
+// Joint indices are discrete identities which cannot be interpolated as ordinary attributes.
+// Skin influences are always kept in a canonical form: duplicate joints merged, slots sorted by
+// joint index in ascending order, weights normalized to sum to one and stored as doubles until the
+// final conversion to float. Unused slots are set to zero (joint 0, weight 0).
+//
+
+compile_const u32 skin_influence_count = 4;
+compile_const u32 skin_max_joint_count = 256;
+
+struct SkinJointWeight {
+	u32 joint;
+	double weight;
+};
+
+static void SortSkinJointWeights(SkinJointWeight* entries, u32 count) {
+	for (u32 i = 1; i < count; i += 1) {
+		auto entry = entries[i];
+		u32 j = i;
+		while (j > 0 && entries[j - 1].joint > entry.joint) {
+			entries[j] = entries[j - 1];
+			j -= 1;
+		}
+		entries[j] = entry;
+	}
+}
+
+// Merges entries sorted by joint index. Returns the number of unique joints.
+static u32 MergeSkinJointWeights(SkinJointWeight* entries, u32 count) {
+	u32 merged_count = 0;
+	for (u32 i = 0; i < count; i += 1) {
+		if (merged_count > 0 && entries[merged_count - 1].joint == entries[i].joint) {
+			entries[merged_count - 1].weight += entries[i].weight;
+		} else {
+			entries[merged_count++] = entries[i];
+		}
+	}
+	return merged_count;
+}
+
+// Normalize a validated set of influences. Assumes that all positive weights reference valid joints.
+static void NormalizeSkinInfluences(const MdtSkinInfluences& source, MdtSkinInfluences& destination) {
+	SkinJointWeight entries[skin_influence_count];
+	u32 entry_count = 0;
+
+	for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+		float weight = source.weights[slot_index];
+		if (weight > 0.f) {
+			entries[entry_count].joint  = source.joints[slot_index];
+			entries[entry_count].weight = (double)weight;
+			entry_count += 1;
+		}
+	}
+
+	SortSkinJointWeights(entries, entry_count);
+	entry_count = MergeSkinJointWeights(entries, entry_count);
+
+	double weight_sum = 0.0;
+	for (u32 i = 0; i < entry_count; i += 1) weight_sum += entries[i].weight;
+
+	memset(&destination, 0, sizeof(destination));
+	if (weight_sum <= 0.0) return;
+
+	for (u32 i = 0; i < entry_count; i += 1) {
+		destination.joints[i]  = entries[i].joint;
+		destination.weights[i] = (float)(entries[i].weight / weight_sum);
+	}
+}
+
+// Blend two canonical skins with the given factors. Returns false if the result would reference
+// more than four joints with positive weight (rejected candidates must not be forced to fit).
+static bool BlendSkinInfluences(const MdtSkinInfluences& source_0, const MdtSkinInfluences& source_1, double factor_0, double factor_1, MdtSkinInfluences& destination) {
+	SkinJointWeight entries[skin_influence_count * 2];
+	u32 entry_count = 0;
+
+	if (factor_0 > 0.0) {
+		for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+			if (source_0.weights[slot_index] <= 0.f) continue;
+			entries[entry_count].joint  = source_0.joints[slot_index];
+			entries[entry_count].weight = factor_0 * (double)source_0.weights[slot_index];
+			entry_count += 1;
+		}
+	}
+
+	if (factor_1 > 0.0) {
+		for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+			if (source_1.weights[slot_index] <= 0.f) continue;
+			entries[entry_count].joint  = source_1.joints[slot_index];
+			entries[entry_count].weight = factor_1 * (double)source_1.weights[slot_index];
+			entry_count += 1;
+		}
+	}
+
+	SortSkinJointWeights(entries, entry_count);
+	entry_count = MergeSkinJointWeights(entries, entry_count);
+
+	if (entry_count > skin_influence_count) return false;
+
+	double weight_sum = 0.0;
+	for (u32 i = 0; i < entry_count; i += 1) weight_sum += entries[i].weight;
+
+	memset(&destination, 0, sizeof(destination));
+	if (weight_sum <= 0.0) return false;
+
+	for (u32 i = 0; i < entry_count; i += 1) {
+		destination.joints[i]  = entries[i].joint;
+		destination.weights[i] = (float)(entries[i].weight / weight_sum);
+	}
+
+	return true;
+}
+
+static bool SkinInfluencesEqual(const MdtSkinInfluences& lhs, const MdtSkinInfluences& rhs) {
+	for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+		if (lhs.joints[slot_index]  != rhs.joints[slot_index])  return false;
+		if (lhs.weights[slot_index] != rhs.weights[slot_index]) return false;
+	}
+	return true;
+}
+
+static bool SkinInfluencesAreFiniteAndNonNegative(const MdtSkinInfluences& skin) {
+	for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+		float weight = skin.weights[slot_index];
+		if (!isfinite(weight) || weight < 0.f) return false;
+	}
+	return true;
+}
+
+// Skinned variant. Vertices are welded only if both position and the full normalized skin signature
+// match. Ordinary attribute wedges are still allowed to share the same geometry vertex.
+static VertexID HashTableAddOrFind(VertexHashTable& table, Array<Vertex>& vertices, Array<MdtSkinInfluences>& vertex_skins, const Vector3& position, const MdtSkinInfluences& skin) {
+	u32 table_size = table.vertex_ids.count;
+	u32 mod_mask   = table_size - 1u;
+
+	u32 hash  = ComputePositionHash(position);
+	u32 index = (hash & mod_mask);
+
+	for (u32 i = 0; i <= mod_mask; i += 1) {
+		auto vertex_id = table.vertex_ids[index];
+
+		if (vertex_id.index == u32_max) {
+			auto new_vertex_id = VertexID{ vertices.count };
+			table.vertex_ids[index] = new_vertex_id;
+
+			Vertex vertex;
+			vertex.position = position;
+			vertex.corner_list_base.index = u32_max;
+			ArrayAppend(vertices, vertex);
+			ArrayAppend(vertex_skins, skin);
+
+			return new_vertex_id;
+		}
+
+		auto existing_position = vertices[vertex_id.index].position;
+		if (existing_position.x == position.x && existing_position.y == position.y && existing_position.z == position.z &&
+			SkinInfluencesEqual(vertex_skins[vertex_id.index], skin)) {
+			return vertex_id;
+		}
+
+		index = (index + i + 1) & mod_mask;
+	}
+
+	return VertexID{ u32_max };
+}
+
+// Small fixed capacity set of joint indices used to track joint unions.
+struct JointSet {
+	u32 joints[skin_max_joint_count];
+	u32 count = 0;
+
+	void Clear() { count = 0; }
+
+	bool Contains(u32 joint) const {
+		for (u32 i = 0; i < count; i += 1) {
+			if (joints[i] == joint) return true;
+		}
+		return false;
+	}
+
+	bool Add(u32 joint) {
+		if (Contains(joint)) return true;
+		if (count >= skin_max_joint_count) return false;
+		joints[count++] = joint;
+		return true;
+	}
+
+	// Adds joints with positive weights. Returns false if the set would exceed max_joint_count.
+	bool AddSkin(const MdtSkinInfluences& skin, u32 max_joint_count) {
+		for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+			if (skin.weights[slot_index] <= 0.f) continue;
+			if (Add(skin.joints[slot_index]) == false) return false;
+			if (count > max_joint_count) return false;
+		}
+		return true;
+	}
+
+	void Sort() {
+		for (u32 i = 1; i < count; i += 1) {
+			u32 joint = joints[i];
+			u32 j = i;
+			while (j > 0 && joints[j - 1] > joint) {
+				joints[j] = joints[j - 1];
+				j -= 1;
+			}
+			joints[j] = joint;
+		}
+	}
+
+	u32 Find(u32 joint) const {
+		for (u32 i = 0; i < count; i += 1) {
+			if (joints[i] == joint) return i;
+		}
+		return u32_max;
+	}
+};
+
+// Per build skinning state. 'vertex_skins' is indexed by welded vertex index and is mutated by decimation.
+struct SkinContext {
+	MdtSkinInfluences* vertex_skins = nullptr;
+
+	// Maximum number of positively weighted joints referenced by a meshlet or a triangle.
+	// Zero disables the constraint (used by discrete LOD).
+	u32 max_meshlet_joints = 0;
+};
+
+// Computes the projection ratio t of 'position' onto the segment [p0, p1], clamped to [0, 1].
+static double ComputeCollapseProjectionRatio(const Vector3& p0, const Vector3& p1, const Vector3& position) {
+	double segment_x = (double)p1.x - (double)p0.x;
+	double segment_y = (double)p1.y - (double)p0.y;
+	double segment_z = (double)p1.z - (double)p0.z;
+	double segment_length_sq = segment_x * segment_x + segment_y * segment_y + segment_z * segment_z;
+	if (segment_length_sq <= 0.0) return 0.5;
+
+	double projection = ((double)position.x - (double)p0.x) * segment_x +
+	                    ((double)position.y - (double)p0.y) * segment_y +
+	                    ((double)position.z - (double)p0.z) * segment_z;
+
+	double ratio = projection / segment_length_sq;
+	return ratio < 0.0 ? 0.0 : (ratio > 1.0 ? 1.0 : ratio);
+}
+
+// Returns true if the union of positively weighted joints of a surviving triangle around the
+// collapsed edge would exceed 'max_meshlet_joints'.
+static bool SkinTriangleJointUnionExceeds(
+	MeshView mesh,
+	const SkinContext& skin_context,
+	Edge edge,
+	const MdtSkinInfluences& new_skin) {
+
+	u32 max_joint_count = skin_context.max_meshlet_joints;
+
+	// Zero means the joint limit is not enforced (discrete LOD).
+	if (max_joint_count == 0) return false;
+
+	bool exceeds_limit = false;
+	auto check_vertex = [&](VertexID vertex_id) {
+		if (exceeds_limit) return;
+
+		IterateCornerList<VertexID>(mesh, mesh[vertex_id].corner_list_base, [&](CornerID corner_id) {
+			if (exceeds_limit) return;
+
+			auto& c1 = mesh[corner_id];
+			auto v0 = mesh[c1.corner_list_around[(u32)ElementType::Face].prev].vertex_id;
+			auto v1 = c1.vertex_id;
+			auto v2 = mesh[c1.corner_list_around[(u32)ElementType::Face].next].vertex_id;
+
+			u32 replaced_vertex_count = 0;
+			if (v0.index == edge.vertex_0.index || v0.index == edge.vertex_1.index) replaced_vertex_count += 1;
+			if (v1.index == edge.vertex_0.index || v1.index == edge.vertex_1.index) replaced_vertex_count += 1;
+			if (v2.index == edge.vertex_0.index || v2.index == edge.vertex_1.index) replaced_vertex_count += 1;
+
+			// Triangles with two replaced vertices get collapsed. Triangles with no replaced vertices are unaffected.
+			if (replaced_vertex_count != 1) return;
+
+			VertexID triangle_vertex_ids[3] = { v0, v1, v2 };
+			JointSet joint_set;
+			for (u32 i = 0; i < 3; i += 1) {
+				auto triangle_vertex_id = triangle_vertex_ids[i];
+				bool is_replaced = triangle_vertex_id.index == edge.vertex_0.index || triangle_vertex_id.index == edge.vertex_1.index;
+				auto& skin = is_replaced ? new_skin : skin_context.vertex_skins[triangle_vertex_id.index];
+				if (joint_set.AddSkin(skin, max_joint_count) == false) {
+					exceeds_limit = true;
+					return;
+				}
+			}
+		});
+	};
+
+	check_vertex(edge.vertex_0);
+	check_vertex(edge.vertex_1);
+
+	return exceeds_limit;
+}
+
+static bool ValidateInitialTriangleJointUnion(MeshView mesh, const SkinContext& skin_context) {
+	u32 max_joint_count = skin_context.max_meshlet_joints;
+
+	for (FaceID face_id = { 0 }; face_id.index < mesh.face_count; face_id.index += 1) {
+		auto& face = mesh[face_id];
+
+		JointSet joint_set;
+		bool is_valid = true;
+		IterateCornerList<FaceID>(mesh, face.corner_list_base, [&](CornerID corner_id) {
+			if (is_valid == false) return;
+			auto& corner = mesh[corner_id];
+			if (joint_set.AddSkin(skin_context.vertex_skins[corner.vertex_id.index], max_joint_count) == false) {
+				is_valid = false;
+			}
+		});
+		if (is_valid == false) return false;
+	}
+
+	return true;
+}
+
+// Validates skinned mesh descriptor and all input influences. All positive weights must reference
+// joints in [0, joint_count). Weights must be finite and non-negative with a positive sum.
+static bool ValidateSkinnedMeshDesc(const MdtSkinnedMeshDesc& mesh_desc) {
+	auto& mesh = mesh_desc.mesh;
+
+	if (mesh.geometry_desc_count == 0 || mesh.geometry_descs == nullptr) return false;
+	if (mesh_desc.geometry_skins == nullptr) return false;
+
+	u32 vertex_stride_dwords = mesh.vertex_stride_bytes / sizeof(u32);
+	if (vertex_stride_dwords < 3 || (mesh.vertex_stride_bytes % sizeof(u32)) != 0) return false;
+	if (vertex_stride_dwords - 3 > MDT_MAX_ATTRIBUTE_STRIDE_DWORDS) return false;
+
+	for (u32 geometry_index = 0; geometry_index < mesh.geometry_desc_count; geometry_index += 1) {
+		auto& desc = mesh.geometry_descs[geometry_index];
+
+		if (desc.indices == nullptr && desc.index_count != 0) return false;
+		if (desc.vertices == nullptr && desc.vertex_count != 0) return false;
+		if ((desc.index_count % 3) != 0) return false;
+
+		auto* skins = mesh_desc.geometry_skins[geometry_index];
+		if (skins == nullptr) return false;
+
+		for (u32 index = 0; index < desc.index_count; index += 1) {
+			if (desc.indices[index] >= desc.vertex_count) return false;
+		}
+
+		for (u32 geometry_vertex_index = 0; geometry_vertex_index < desc.vertex_count; geometry_vertex_index += 1) {
+			auto& skin = skins[geometry_vertex_index];
+			if (SkinInfluencesAreFiniteAndNonNegative(skin) == false) return false;
+
+			double weight_sum = 0.0;
+			for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+				if (skin.weights[slot_index] <= 0.f) continue;
+				if (skin.joints[slot_index] >= mesh_desc.joint_count) return false;
+				weight_sum += (double)skin.weights[slot_index];
+			}
+			if (weight_sum <= 0.0) return false;
+		}
+	}
+
+	return true;
+}
+
+
+static MeshView BuildEditableMesh(Allocator& allocator, const MdtTriangleGeometryDesc* geometry_descs, u32 geometry_desc_count, u32 vertex_stride_bytes, const MdtSkinInfluences* const* geometry_skins = nullptr, Array<MdtSkinInfluences>* vertex_skins = nullptr) {
 	u32 vertex_stride_dwords    = vertex_stride_bytes / sizeof(u32);
 	u32 attribute_stride_dwords = vertex_stride_dwords - 3;
 	
@@ -695,6 +1061,7 @@ static MeshView BuildEditableMesh(Allocator& allocator, const MdtTriangleGeometr
 	ArrayReserve(faces, allocator, triangle_count);
 	ArrayReserve(edges, allocator, indices_count);
 	ArrayResize(attributes, allocator, vertices_count * attribute_stride_dwords);
+	if (vertex_skins) ArrayReserve(*vertex_skins, allocator, vertices_count);
 	
 	MeshView mesh;
 	mesh.faces           = faces.data;
@@ -722,14 +1089,22 @@ static MeshView BuildEditableMesh(Allocator& allocator, const MdtTriangleGeometr
 	
 	for (u32 geometry_index = 0, base_vertex_index = 0; geometry_index < geometry_desc_count; geometry_index += 1) {
 		auto& desc = geometry_descs[geometry_index];
-		
+
 		for (u32 geometry_vertex_index = 0; geometry_vertex_index < desc.vertex_count; geometry_vertex_index += 1) {
 			u32 vertex_index = base_vertex_index + geometry_vertex_index;
-			
+
 			auto* vertex = &desc.vertices[geometry_vertex_index * vertex_stride_dwords];
 			memcpy(mesh[AttributesID{ vertex_index }], vertex + 3, attribute_stride_dwords * sizeof(u32));
-			
-			auto vertex_id = HashTableAddOrFind(vertex_table, vertices, *(Vector3*)vertex);
+
+			VertexID vertex_id;
+			if (geometry_skins) {
+				// Normalize a copy of the source influences. Validated by the caller.
+				MdtSkinInfluences skin;
+				NormalizeSkinInfluences(geometry_skins[geometry_index][geometry_vertex_index], skin);
+				vertex_id = HashTableAddOrFind(vertex_table, vertices, *vertex_skins, *(Vector3*)vertex, skin);
+			} else {
+				vertex_id = HashTableAddOrFind(vertex_table, vertices, *(Vector3*)vertex);
+			}
 			src_vertex_index_to_vertex_id[vertex_index] = vertex_id;
 		}
 		base_vertex_index += desc.vertex_count;
@@ -1436,9 +1811,16 @@ struct alignas(MDT_CACHE_LINE_SIZE) MeshDecimationState {
 struct EdgeCollapseError {
 	float min_error;
 	Vector3 new_position;
+	MdtSkinInfluences new_skin;
+	// Set when every candidate was rejected by the skin joint limit. Such edges must never be collapsed,
+	// even if the target error limit is infinite.
+	bool is_rejected = false;
 };
 
-static EdgeCollapseError ComputeEdgeCollapseError(MeshView mesh, Allocator& heap_allocator, MeshDecimationState& state, EdgeID edge_id) {
+// When 'skin_context' is provided the candidate skin influences are computed and used to reject
+// candidates that would exceed the meshlet joint limit. Skin influences do not contribute to the
+// error value itself.
+static EdgeCollapseError ComputeEdgeCollapseErrorInternal(MeshView mesh, Allocator& heap_allocator, MeshDecimationState& state, EdgeID edge_id, const SkinContext* skin_context) {
 	state.wedge_quadrics.count       = 0;
 	state.wedge_attributes_ids.count = 0;
 	state.wedge_attribute_set.count  = 0;
@@ -1490,7 +1872,8 @@ static EdgeCollapseError ComputeEdgeCollapseError(MeshView mesh, Allocator& heap
 	IterateCornerList<VertexID>(mesh, v1.corner_list_base, accumulate_quadrics);
 	
 	EdgeCollapseError collapse_error;
-	collapse_error.min_error = FLT_MAX;
+	collapse_error.min_error   = FLT_MAX;
+	collapse_error.is_rejected = false;
 	{
 		auto edge_quadrics = state.vertex_edge_quadrics[edge.vertex_0.index];
 		AccumulateQuadric(edge_quadrics, state.vertex_edge_quadrics[edge.vertex_1.index]);
@@ -1518,27 +1901,68 @@ static EdgeCollapseError ComputeEdgeCollapseError(MeshView mesh, Allocator& heap
 		
 		// ~30% of the execution time.
 		u32 valid_position_mask = ValidateEdgeCollapsePositions(mesh, edge, candidate_positions, candidate_position_count);
-		
+
+		//
+		// Compute new skin influences for each valid candidate position and reject candidates that would
+		// make some surviving triangle reference more joints than the limit allows. Joint IDs are discrete
+		// identities and don't participate in the error value.
+		//
+		MdtSkinInfluences candidate_skins[candidate_position_count];
+		bool skin_candidate_is_valid[candidate_position_count] = { true, true, true };
+		if (skin_context) {
+			auto& skin_0 = skin_context->vertex_skins[edge.vertex_0.index];
+			auto& skin_1 = skin_context->vertex_skins[edge.vertex_1.index];
+
+			for (u32 i = 0; i < candidate_position_count; i += 1) {
+				double ratio = ComputeCollapseProjectionRatio(v0.position, v1.position, candidate_positions[i]);
+
+				if (BlendSkinInfluences(skin_0, skin_1, 1.0 - ratio, ratio, candidate_skins[i]) == false) {
+					skin_candidate_is_valid[i] = false;
+					continue;
+				}
+
+				if (SkinTriangleJointUnionExceeds(mesh, *skin_context, edge, candidate_skins[i])) {
+					skin_candidate_is_valid[i] = false;
+				}
+			}
+		}
+
 		for (u32 i = 0; i < candidate_position_count; i += 1) {
 			float error = valid_position_mask & (1u << i) ? 0.f : total_quadric.weight;
 			if (error > collapse_error.min_error) continue;
-			
+
+			// Skin-space limit rejections can't be overridden by a lower error.
+			if (skin_context && skin_candidate_is_valid[i] == false) continue;
+
 			auto p = candidate_positions[i] * state.position_weight;
 			error += ComputeQuadricError(edge_quadrics, p);
 			if (error > collapse_error.min_error) continue;
-			
+
 			for (u32 wedge_index = 0; wedge_index < wedge_count; wedge_index += 1) {
 				error += ComputeQuadricErrorWithAttributes(state.wedge_quadrics[wedge_index], p, attribute_stride_dwords);
 			}
 			if (error > collapse_error.min_error) continue;
-			
-			
+
+
 			collapse_error.min_error    = error;
 			collapse_error.new_position = candidate_positions[i];
+			if (skin_context) {
+				collapse_error.new_skin = candidate_skins[i];
+			}
+		}
+
+		// All candidates were rejected by the joint limit. Mark the edge as uncollapsible so that it is
+		// never picked regardless of the target error limit.
+		if (skin_context && collapse_error.min_error == FLT_MAX) {
+			collapse_error.is_rejected = true;
 		}
 	}
-	
+
 	return collapse_error;
+}
+
+static EdgeCollapseError ComputeEdgeCollapseError(MeshView mesh, Allocator& heap_allocator, MeshDecimationState& state, EdgeID edge_id) {
+	return ComputeEdgeCollapseErrorInternal(mesh, heap_allocator, state, edge_id, nullptr);
 }
 
 struct EdgeCollapseHeap {
@@ -1800,55 +2224,66 @@ static float DecimateMeshFaceGroup(
 	u8* changed_vertex_mask,
 	u32 target_face_count,
 	u32 active_face_count,
-	float target_error_limit = FLT_MAX) {
-	
+	float target_error_limit = FLT_MAX,
+	const SkinContext* skin_context = nullptr) {
+
 	target_error_limit = target_error_limit * state.position_weight;
 	target_error_limit = target_error_limit * target_error_limit;
-	
+
 	float max_error = 0.f;
 	while (active_face_count > target_face_count && edge_collapse_heap.edge_collapse_errors.count) {
 		// ~80% of the execution time.
 		for (auto& key_value : state.edge_duplicate_map) {
 			if (key_value.edge_key == u64_max) continue;
-			
+
 			u32 heap_index = edge_collapse_heap.edge_id_to_heap_index[key_value.edge_id.index];
 			if (heap_index == u32_max) continue;
-			
-			auto collapse_error = ComputeEdgeCollapseError(mesh, heap_allocator, state, key_value.edge_id);
-			
+
+			auto collapse_error = ComputeEdgeCollapseErrorInternal(mesh, heap_allocator, state, key_value.edge_id, skin_context);
+
 			EdgeCollapseHeapUpdate(edge_collapse_heap, heap_index, collapse_error.min_error);
 		}
 		HashTableClear(state.edge_duplicate_map);
-		
-		
+
+
 		auto edge_id = EdgeCollapseHeapPop(edge_collapse_heap);
-		
+
 		// 2% of the execution time
-		auto collapse_error = ComputeEdgeCollapseError(mesh, heap_allocator, state, edge_id);
+		auto collapse_error = ComputeEdgeCollapseErrorInternal(mesh, heap_allocator, state, edge_id, skin_context);
+
+		// The edge has been popped from the heap either way.
+		if (collapse_error.is_rejected) continue;
 		if (collapse_error.min_error > target_error_limit) break;
-		
+
 		max_error = max_error < collapse_error.min_error ? collapse_error.min_error : max_error;
-		
+
 		// 15% of the execution time
 		auto collapse_result = PerformEdgeCollapse(mesh, edge_id, heap_allocator, state.edge_duplicate_map, state.removed_edge_array);
 		active_face_count -= collapse_result.removed_face_count;
-		
+
 		for (auto removed_edge_id : state.removed_edge_array) {
 			u32 heap_index = edge_collapse_heap.edge_id_to_heap_index[removed_edge_id.index];
 			if (heap_index != u32_max) EdgeCollapseHeapRemove(edge_collapse_heap, heap_index);
 		}
-		
+
 		// Update vertices.
 		{
 			auto& edge = mesh[edge_id];
 			mesh[edge.vertex_0].position = collapse_error.new_position;
 			mesh[edge.vertex_1].position = collapse_error.new_position;
-			
+
 			Quadric quadric = state.vertex_edge_quadrics[edge.vertex_0.index];
 			AccumulateQuadric(quadric, state.vertex_edge_quadrics[edge.vertex_1.index]);
-			
+
 			state.vertex_edge_quadrics[edge.vertex_0.index] = quadric;
 			state.vertex_edge_quadrics[edge.vertex_1.index] = quadric;
+
+			if (skin_context) {
+				// Both endpoints are merged into a single vertex. Keep the new influences on both so that
+				// either of them yields the same data after the mesh is compacted.
+				skin_context->vertex_skins[edge.vertex_0.index] = collapse_error.new_skin;
+				skin_context->vertex_skins[edge.vertex_1.index] = collapse_error.new_skin;
+			}
 		}
 		
 #if MDT_ENABLE_ATTRIBUTE_SUPPORT
@@ -1895,7 +2330,8 @@ static void DecimateMeshFaceGroups(
 	Array<FaceID> meshlet_group_faces,
 	Array<u32> meshlet_group_face_prefix_sum,
 	Array<MdtErrorMetric> meshlet_group_error_metrics,
-	Array<u8> changed_vertex_mask) {
+	Array<u8> changed_vertex_mask,
+	const SkinContext* skin_context) {
 	
 	u32 allocator_high_water = allocator.memory_block_count;
 	u32 heap_allocator_high_water = heap_allocator.memory_block_count;
@@ -2008,17 +2444,17 @@ static void DecimateMeshFaceGroups(
 		for (u32 edge_index = begin_edge_index; edge_index < end_edge_index; edge_index += 1) {
 			auto edge_id = meshlet_group_edge_ids[edge_index];
 			u32 local_edge_index = edge_index - begin_edge_index;
-			
-			auto collapse_error = ComputeEdgeCollapseError(mesh, heap_allocator, state, edge_id);
-			
+
+			auto collapse_error = ComputeEdgeCollapseErrorInternal(mesh, heap_allocator, state, edge_id, skin_context);
+
 			edge_collapse_heap.edge_collapse_errors[local_edge_index]  = collapse_error.min_error;
 			edge_collapse_heap.edge_id_to_heap_index[edge_id.index]    = local_edge_index;
 			edge_collapse_heap.heap_index_to_edge_id[local_edge_index] = edge_id;
 		}
-		
+
 		EdgeCollapseHeapInitialize(edge_collapse_heap);
-		
-		
+
+
 		u32 target_face_count = face_count / 2;
 		u32 active_face_count = face_count;
 		float decimation_error = DecimateMeshFaceGroup(
@@ -2029,7 +2465,9 @@ static void DecimateMeshFaceGroups(
 			mesh_desc.normalize_vertex_attributes,
 			changed_vertex_mask.data,
 			target_face_count,
-			active_face_count
+			active_face_count,
+			FLT_MAX,
+			skin_context
 		);
 		
 		auto& error_metric = meshlet_group_error_metrics[group_index];
@@ -2319,57 +2757,80 @@ static void BuildMeshletsForFaceGroup(
 	Array<u8>& meshlet_triangles,
 	Array<u32>& meshlet_face_prefix_sum,
 	Array<CornerID>& meshlet_corners,
-	Array<u32>& meshlet_corner_prefix_sum) {
-	
+	Array<u32>& meshlet_corner_prefix_sum,
+	const SkinContext* skin_context) {
+
 	compile_const u32 candidates_per_face = 4;
 	FixedSizeArray<AttributesID, meshlet_max_face_count * meshlet_max_face_degree> meshlet_vertices;
 	FixedSizeArray<FaceID, meshlet_max_face_count * candidates_per_face> meshlet_candidate_elements;
-	
+
 	auto meshlet_aabb_min = Vector3{ +FLT_MAX, +FLT_MAX, +FLT_MAX };
 	auto meshlet_aabb_max = Vector3{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
 	u32  meshlet_vertex_count = 0;
 	u32  meshlet_face_count   = 0;
 	u32  meshlet_geometry_index = u32_max;
-	
+	JointSet meshlet_joints;
+
+	// Returns true if adding 'face_id' to the current meshlet keeps the joint palette within the limit.
+	auto face_fits_meshlet_joints = [&](FaceID face_id) {
+		if (skin_context == nullptr) return true;
+
+		JointSet joint_set = meshlet_joints;
+		bool fits = true;
+		IterateCornerList<FaceID>(mesh, mesh[face_id].corner_list_base, [&](CornerID corner_id) {
+			if (fits == false) return;
+			if (joint_set.AddSkin(skin_context->vertex_skins[mesh[corner_id].vertex_id.index], skin_context->max_meshlet_joints) == false) {
+				fits = false;
+			}
+		});
+		return fits;
+	};
+
 #if COUNT_KD_TREE_LOOKUPS
 	u32 kd_tree_lookup_count = 0;
 #endif // COUNT_KD_TREE_LOOKUPS
-	
+
 	while (true) {
 		u32 best_candidate_face_index = u32_max;
 		float smallest_distance_to_face = FLT_MAX;
-		
+
 		auto bounds_center = (meshlet_aabb_max + meshlet_aabb_min) * 0.5f;
-		
+
 		for (u32 i = 0; i < meshlet_candidate_elements.count;) {
 			auto face_id = meshlet_candidate_elements[i];
-			
+
 			auto& element = kd_tree.elements[face_id.index];
 			if (element.is_active_element == 0) {
 				ArrayEraseSwap(meshlet_candidate_elements, i);
 				continue;
 			}
-			
+
+			// Faces that don't fit into the current meshlet joint palette are left for other meshlets.
+			if (face_fits_meshlet_joints(face_id) == false) {
+				i += 1;
+				continue;
+			}
+
 			auto bounds_center_to_face_center = (bounds_center - element.position);
 			float distance_to_face = DotProduct(bounds_center_to_face_center, bounds_center_to_face_center);
-			
+
 			if (smallest_distance_to_face > distance_to_face) {
 				smallest_distance_to_face = distance_to_face;
 				best_candidate_face_index = i;
 			}
-			
+
 			u32 new_vertex_count = 0;
 			IterateCornerList<FaceID>(mesh, mesh[face_id].corner_list_base, [&](CornerID corner_id) {
 				auto& corner = mesh[corner_id];
 				u8 vertex_index = vertex_usage_map[corner.attributes_id.index];
 				if (vertex_index == 0xFF) new_vertex_count += 1;
 			});
-			
+
 			if (new_vertex_count == 0) {
 				best_candidate_face_index = i;
 				break;
 			}
-			
+
 			i += 1;
 		}
 		
@@ -2386,7 +2847,14 @@ static void BuildMeshletsForFaceGroup(
 			
 			float min_distance = FLT_MAX;
 			kd_tree_is_empty = KdTreeFindClosestActiveElement(kd_tree, center, meshlet_geometry_index, best_face_id.index, min_distance);
-			
+
+			// The closest face may not fit into the current joint palette. Flush the current meshlet and
+			// retry with an empty palette (a standalone triangle always satisfies the initial limit).
+			if (best_face_id.index != u32_max && meshlet_face_count > 0 && face_fits_meshlet_joints(best_face_id) == false) {
+				best_face_id.index = u32_max;
+				restart_meshlet = true;
+			}
+
 			if (best_face_id.index != u32_max && meshlet_face_count >= meshlet_min_face_count) {
 				auto& element = kd_tree.elements[best_face_id.index];
 				
@@ -2423,30 +2891,31 @@ static void BuildMeshletsForFaceGroup(
 		if (restart_meshlet || best_face_id.index == u32_max || (meshlet_vertex_count + new_vertex_count > meshlet_target_vertex_count) || (meshlet_face_count + 1 > meshlet_target_face_count)) {
 			MDT_ASSERT(meshlet_face_count   <= meshlet_target_face_count);
 			MDT_ASSERT(meshlet_vertex_count <= meshlet_target_vertex_count);
-			
+
 			for (auto attributes_id : meshlet_vertices) {
 				vertex_usage_map[attributes_id.index] = 0xFF;
 			}
 			meshlet_vertices.count = 0;
-			
+
 			meshlet_vertex_count = 0;
 			meshlet_face_count   = 0;
 			meshlet_geometry_index = u32_max;
-			
+			meshlet_joints.Clear();
+
 			meshlet_aabb_min = Vector3{ +FLT_MAX, +FLT_MAX, +FLT_MAX };
 			meshlet_aabb_max = Vector3{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-			
+
 			ArrayAppend(meshlet_face_prefix_sum, meshlet_faces.count);
 			ArrayAppend(meshlet_corner_prefix_sum, meshlet_corners.count);
-			
+
 			meshlet_candidate_elements.count = 0;
 		}
-		
+
 		if (best_face_id.index == u32_max) continue;
-		
+
 		u32 best_face_geometry_index = mesh[best_face_id].geometry_index;
 		MDT_ASSERT(meshlet_face_count == 0 || meshlet_geometry_index == best_face_geometry_index);
-		
+
 		new_vertex_count = 0;
 		IterateCornerList<FaceID>(mesh, mesh[best_face_id].corner_list_base, [&](CornerID corner_id) {
 			auto& corner = mesh[corner_id];
@@ -2454,15 +2923,20 @@ static void BuildMeshletsForFaceGroup(
 			if (vertex_index == 0xFF) {
 				vertex_index = (u8)(meshlet_vertex_count + new_vertex_count);
 				vertex_usage_map[corner.attributes_id.index] = vertex_index;
-				
+
 				new_vertex_count += 1;
-				
+
 				ArrayAppend(meshlet_vertices, corner.attributes_id);
 				ArrayAppend(meshlet_corners, corner_id);
 			}
-			
+
 			ArrayAppend(meshlet_triangles, vertex_index);
-			
+
+			if (skin_context) {
+				// The face was verified to fit, so this can't fail.
+				meshlet_joints.AddSkin(skin_context->vertex_skins[corner.vertex_id.index], skin_context->max_meshlet_joints);
+			}
+
 			IterateCornerList<VertexID>(mesh, corner_id, [&](CornerID corner_id) {
 				auto face_id = mesh[corner_id].face_id;
 				auto& element = kd_tree.elements[face_id.index];
@@ -2521,7 +2995,8 @@ static MeshletBuildResult BuildMeshletsForFaceGroups(
 	Array<MdtErrorMetric> meshlet_group_error_metrics,
 	u32 meshlet_target_face_count,
 	u32 meshlet_target_vertex_count,
-	u32 meshlet_group_base_index) {
+	u32 meshlet_group_base_index,
+	const SkinContext* skin_context) {
 	
 	KdTree kd_tree;
 	KdTreeBuildElementsForFaces(mesh, allocator, kd_tree.elements);
@@ -2578,7 +3053,8 @@ static MeshletBuildResult BuildMeshletsForFaceGroups(
 			meshlet_triangles,
 			meshlet_face_prefix_sum,
 			meshlet_corners,
-			meshlet_corner_prefix_sum
+			meshlet_corner_prefix_sum,
+			skin_context
 		);
 		
 		ArrayAppend(meshlet_group_meshlet_prefix_sum, meshlet_face_prefix_sum.count);
@@ -2933,7 +3409,7 @@ static void ConvertMeshletGroupsToFaceGroups(
 	}
 }
 
-static void AppendNewMeshletsAndMeshletGroups(Allocator& heap_allocator, MeshletBuildResult meshlet_build_result, MeshletGroupBuildResult meshlet_group_build_result, Array<MdtErrorMetric> meshlet_group_error_metrics, Array<MdtMeshletGroup>& meshlet_groups, Array<MdtMeshlet>& meshlets, u32 level_index) {
+static void AppendNewMeshletsAndMeshletGroups(Allocator& heap_allocator, MeshletBuildResult meshlet_build_result, MeshletGroupBuildResult meshlet_group_build_result, Array<MdtErrorMetric> meshlet_group_error_metrics, Array<MdtMeshletGroup>& meshlet_groups, Array<MdtMeshlet>& meshlets, u32 level_index, Array<u32>* meshlet_source_indices = nullptr) {
 	if (meshlet_groups.capacity == 0) {
 		ArrayReserve(meshlet_groups, heap_allocator, meshlet_group_build_result.prefix_sum.count * 4);
 	}
@@ -2966,8 +3442,9 @@ static void AppendNewMeshletsAndMeshletGroups(Allocator& heap_allocator, Meshlet
 			meshlet_group_aabb_max = VectorMax(meshlet_group_aabb_max, meshlet.aabb_max);
 			
 			ArrayAppend(meshlet_sphere_bounds, meshlet.geometric_sphere_bounds);
-			
+
 			ArrayAppendMaybeGrow(meshlets, heap_allocator, meshlet);
+			if (meshlet_source_indices) ArrayAppendMaybeGrow(*meshlet_source_indices, heap_allocator, meshlet_index);
 		}
 		u32 end_meshlet_index = meshlets.count;
 		
@@ -3067,52 +3544,120 @@ static void CompactMeshletGroupFaces(MeshElementRemap remap, Array<FaceID>& mesh
 }
 
 // TODO: We could write this data directly into the output buffers from BuildMeshletsForFaceGroups.
+// Palettes are written in build (meshlet index) order into level-local arrays. The caller reorders them
+// to match the final meshlet array order. Local joints are written in meshlet_vertex_indices order.
 static void BuildMeshletVertexAndIndexBuffers(
 	MeshView mesh,
 	Allocator& heap_allocator,
 	MeshletBuildResult meshlet_build_result,
 	Array<u32> attributes_id_to_vertex_index,
 	Array<u32>& meshlet_vertex_indices,
-	Array<MdtMeshletTriangle>& meshlet_triangles) {
-	
+	Array<MdtMeshletTriangle>& meshlet_triangles,
+	Array<MdtSkinInfluences>* output_vertex_skins = nullptr,
+	Array<u32>* meshlet_palette_offsets = nullptr,
+	Array<u32>* meshlet_joint_palette = nullptr,
+	Array<u8>* meshlet_local_joints = nullptr) {
+
 	auto meshlet_corner_prefix_sum = meshlet_build_result.meshlet_corner_prefix_sum;
-	
+
 	if (meshlet_vertex_indices.count + meshlet_build_result.meshlet_corners.count > meshlet_vertex_indices.capacity) {
 		ArrayGrow(meshlet_vertex_indices, heap_allocator, ArrayComputeNewCapacity(meshlet_vertex_indices.capacity, meshlet_vertex_indices.count + meshlet_build_result.meshlet_corners.count));
 	}
-	
+
 	u32 new_meshlets_triangle_count = (meshlet_build_result.meshlet_triangles.count / 3);
 	if (meshlet_triangles.count + new_meshlets_triangle_count > meshlet_triangles.capacity) {
 		ArrayGrow(meshlet_triangles, heap_allocator, ArrayComputeNewCapacity(meshlet_triangles.capacity, meshlet_triangles.count + new_meshlets_triangle_count));
 	}
-	
+
+	if (meshlet_palette_offsets && meshlet_joint_palette && meshlet_local_joints) {
+		// Level-local palette and offset arrays. They are fully rebuilt on each call.
+		meshlet_palette_offsets->count = 0;
+		meshlet_joint_palette->count   = 0;
+
+		u32 required_offset_capacity = meshlet_corner_prefix_sum.count + 1;
+		if (required_offset_capacity > meshlet_palette_offsets->capacity) {
+			ArrayGrow(*meshlet_palette_offsets, heap_allocator, ArrayComputeNewCapacity(meshlet_palette_offsets->capacity, required_offset_capacity));
+		}
+
+		u32 required_palette_capacity = meshlet_build_result.meshlet_corners.count * skin_influence_count;
+		if (required_palette_capacity > meshlet_joint_palette->capacity) {
+			ArrayGrow(*meshlet_joint_palette, heap_allocator, ArrayComputeNewCapacity(meshlet_joint_palette->capacity, required_palette_capacity));
+		}
+
+		// Local joints match meshlet_vertex_indices order and are appended to the result directly.
+		u32 required_local_joints_capacity = meshlet_local_joints->count + meshlet_build_result.meshlet_corners.count * skin_influence_count;
+		if (required_local_joints_capacity > meshlet_local_joints->capacity) {
+			ArrayGrow(*meshlet_local_joints, heap_allocator, ArrayComputeNewCapacity(meshlet_local_joints->capacity, required_local_joints_capacity));
+		}
+	}
+
 	u32 begin_corner_index = 0;
 	for (u32 meshlet_index = 0; meshlet_index < meshlet_corner_prefix_sum.count; meshlet_index += 1) {
 		u32 end_corner_index = meshlet_corner_prefix_sum[meshlet_index];
-		
+
 		u32 begin_vertex_indices_index = meshlet_vertex_indices.count;
+
 		for (u32 corner_index = begin_corner_index; corner_index < end_corner_index; corner_index += 1) {
 			auto corner_id = meshlet_build_result.meshlet_corners[corner_index];
 			auto attributes_id = mesh[corner_id].attributes_id;
-			
+
 			u32 vertex_index = attributes_id_to_vertex_index[attributes_id.index];
 			ArrayAppend(meshlet_vertex_indices, vertex_index);
 		}
 		u32 end_vertex_indices_index = meshlet_vertex_indices.count;
 
+		if (meshlet_palette_offsets && meshlet_joint_palette && meshlet_local_joints) {
+			MDT_ASSERT(output_vertex_skins != nullptr);
+
+			// Collect the palette of positively weighted global joints referenced by this meshlet.
+			// Palettes and local slots are built from the per output vertex skin data so that local slots
+			// always reconstruct vertex_skins.
+			JointSet meshlet_joints;
+			for (u32 vertex_indices_index = begin_vertex_indices_index; vertex_indices_index < end_vertex_indices_index; vertex_indices_index += 1) {
+				u32 vertex_index = meshlet_vertex_indices[vertex_indices_index];
+				MDT_ASSERT(vertex_index < output_vertex_skins->count);
+				meshlet_joints.AddSkin((*output_vertex_skins)[vertex_index], skin_max_joint_count);
+			}
+			meshlet_joints.Sort();
+
+			ArrayAppend(*meshlet_palette_offsets, meshlet_joint_palette->count);
+			for (u32 joint_index = 0; joint_index < meshlet_joints.count; joint_index += 1) {
+				ArrayAppend(*meshlet_joint_palette, meshlet_joints.joints[joint_index]);
+			}
+
+			for (u32 vertex_indices_index = begin_vertex_indices_index; vertex_indices_index < end_vertex_indices_index; vertex_indices_index += 1) {
+				auto& skin = (*output_vertex_skins)[meshlet_vertex_indices[vertex_indices_index]];
+
+				for (u32 slot_index = 0; slot_index < skin_influence_count; slot_index += 1) {
+					u8 local_joint = 0;
+					if (skin.weights[slot_index] > 0.f) {
+						u32 local_joint_index = meshlet_joints.Find(skin.joints[slot_index]);
+						MDT_ASSERT(local_joint_index != u32_max && local_joint_index <= 0xFF);
+						local_joint = (u8)local_joint_index;
+					}
+					ArrayAppend(*meshlet_local_joints, local_joint);
+				}
+			}
+		}
+
 		auto& meshlet = meshlet_build_result.meshlets[meshlet_index];
 		meshlet.begin_vertex_indices_index = begin_vertex_indices_index;
 		meshlet.end_vertex_indices_index   = end_vertex_indices_index;
-		
+
 		begin_corner_index = end_corner_index;
 	}
-	
+
+	if (meshlet_palette_offsets && meshlet_joint_palette && meshlet_local_joints) {
+		// Palette range terminator for the last meshlet of this level.
+		ArrayAppend(*meshlet_palette_offsets, meshlet_joint_palette->count);
+	}
+
 	auto meshlet_face_prefix_sum = meshlet_build_result.meshlet_face_prefix_sum;
-	
+
 	u32 begin_face_index = 0;
 	for (u32 meshlet_index = 0; meshlet_index < meshlet_face_prefix_sum.count; meshlet_index += 1) {
 		u32 end_face_index = meshlet_face_prefix_sum[meshlet_index];
-		
+
 		u32 begin_meshlet_triangles_index = meshlet_triangles.count;
 		for (u32 face_index = begin_face_index; face_index < end_face_index; face_index += 1) {
 			MdtMeshletTriangle triangle;
@@ -3123,11 +3668,11 @@ static void BuildMeshletVertexAndIndexBuffers(
 			ArrayAppend(meshlet_triangles, triangle);
 		}
 		u32 end_meshlet_triangles_index = meshlet_triangles.count;
-		
+
 		auto& meshlet = meshlet_build_result.meshlets[meshlet_index];
 		meshlet.begin_meshlet_triangles_index = begin_meshlet_triangles_index;
 		meshlet.end_meshlet_triangles_index   = end_meshlet_triangles_index;
-		
+
 		begin_face_index = end_face_index;
 	}
 }
@@ -3138,16 +3683,18 @@ static void AppendChangedVertices(
 	Allocator& heap_allocator,
 	Array<u8> changed_vertex_mask,
 	Array<u32> attributes_id_to_vertex_index,
-	Array<float>& vertices) {
-	
+	Array<float>& vertices,
+	Array<MdtSkinInfluences>* source_vertex_skins = nullptr,
+	Array<MdtSkinInfluences>* output_vertex_skins = nullptr) {
+
 	Array<VertexID> attributes_id_to_vertex_id;
 	ArrayResizeMemset(attributes_id_to_vertex_id, allocator, mesh.attribute_count, 0xFF);
-	
+
 	for (VertexID vertex_id = { 0 }; vertex_id.index < mesh.vertex_count; vertex_id.index += 1) {
 		auto& vertex = mesh[vertex_id];
 		if (vertex.corner_list_base.index == u32_max)  continue;
 		if (changed_vertex_mask[vertex_id.index] == 0) continue;
-		
+
 		IterateCornerList<VertexID>(mesh, vertex.corner_list_base, [&](CornerID corner_id) {
 			auto attributes_ids = mesh[corner_id].attributes_id;
 			attributes_id_to_vertex_id[attributes_ids.index] = vertex_id;
@@ -3160,27 +3707,40 @@ static void AppendChangedVertices(
 		auto vertex_id = attributes_id_to_vertex_id[attributes_id.index];
 		changed_vertex_count += vertex_id.index != u32_max ? 1 : 0;
 	}
-	
+
 	u32 attribute_stride_dwords = mesh.attribute_stride_dwords;
 	u32 vertex_stride_dwords    = (attribute_stride_dwords + 3);
 	u32 new_array_size          = vertices.count + changed_vertex_count * vertex_stride_dwords;
-	
+
 	if (new_array_size > vertices.capacity) {
 		ArrayGrow(vertices, heap_allocator, new_array_size * 3 / 2);
 	}
-	
+
+	if (output_vertex_skins) {
+		MDT_ASSERT(source_vertex_skins != nullptr);
+		u32 required_capacity = output_vertex_skins->count + changed_vertex_count;
+		if (required_capacity > output_vertex_skins->capacity) {
+			ArrayGrow(*output_vertex_skins, heap_allocator, ArrayComputeNewCapacity(output_vertex_skins->capacity, required_capacity));
+		}
+	}
+
 	u32 output_vertex_index = vertices.count / vertex_stride_dwords;
 	vertices.count = new_array_size;
-	
+
 	for (AttributesID attributes_id = { 0 }; attributes_id.index < mesh.attribute_count; attributes_id.index += 1) {
 		auto vertex_id = attributes_id_to_vertex_id[attributes_id.index];
 		if (vertex_id.index == u32_max) continue;
-		
+
 		attributes_id_to_vertex_index[attributes_id.index] = output_vertex_index;
-		
+
 		auto* vertex = &vertices[output_vertex_index * vertex_stride_dwords];
 		memcpy(vertex + 0, &mesh[vertex_id].position, sizeof(Vector3));
 		memcpy(vertex + 3, mesh[attributes_id], attribute_stride_dwords * sizeof(u32));
+
+		if (output_vertex_skins) {
+			ArrayAppend(*output_vertex_skins, (*source_vertex_skins)[vertex_id.index]);
+		}
+
 		output_vertex_index += 1;
 	}
 
@@ -3190,62 +3750,94 @@ static void AppendChangedVertices(
 } // namespace MeshDecimationTools
 
 
-void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinuousLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+static bool MdtBuildContinuousLodInternal(
+	const MdtTriangleMeshDesc& mesh_desc,
+	uint32_t target_meshlet_triangle_count,
+	uint32_t target_meshlet_vertex_count,
+	const MdtSkinInfluences* const* geometry_skins,
+	uint32_t max_meshlet_joints,
+	MdtContinuousLodBuildResult* result,
+	MeshDecimationTools::Array<MdtSkinInfluences>* result_vertex_skins,
+	MeshDecimationTools::Array<uint32_t>* result_meshlet_palette_offsets,
+	MeshDecimationTools::Array<uint32_t>* result_meshlet_joint_palette,
+	MeshDecimationTools::Array<uint8_t>* result_meshlet_local_joints,
+	const MdtSystemCallbacks* callbacks) {
+
 	using namespace MeshDecimationTools;
-	
-	MDT_ASSERT(inputs);
-	MDT_ASSERT(result);
-	
+
 	Allocator allocator;
 	InitializeAllocator(allocator, callbacks ? &callbacks->temp_allocator : nullptr);
 
 	Allocator heap_allocator;
 	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
-	
-	auto mesh = BuildEditableMesh(allocator, inputs->mesh.geometry_descs, inputs->mesh.geometry_desc_count, inputs->mesh.vertex_stride_bytes);
-	
-	u32 meshlet_target_face_count   = Clamp(inputs->meshlet_target_triangle_count, 1u, meshlet_max_face_count);
-	u32 meshlet_target_vertex_count = Clamp(inputs->meshlet_target_vertex_count, 3u, meshlet_max_vertex_count);
-	
+
+	Array<MdtSkinInfluences> vertex_skins;
+	auto mesh = BuildEditableMesh(allocator, mesh_desc.geometry_descs, mesh_desc.geometry_desc_count, mesh_desc.vertex_stride_bytes, geometry_skins, &vertex_skins);
+
+	SkinContext skin_context;
+	skin_context.vertex_skins       = vertex_skins.data;
+	skin_context.max_meshlet_joints = max_meshlet_joints;
+	const SkinContext* skin_context_ptr = geometry_skins ? &skin_context : nullptr;
+
+	// Triangles that already exceed the joint limit invalidate the whole build.
+	if (skin_context_ptr && ValidateInitialTriangleJointUnion(mesh, skin_context) == false) {
+		AllocatorFreeMemoryBlocks(allocator);
+		return false;
+	}
+
+	u32 meshlet_target_face_count   = Clamp(target_meshlet_triangle_count, 1u, meshlet_max_face_count);
+	u32 meshlet_target_vertex_count = Clamp(target_meshlet_vertex_count, 3u, meshlet_max_vertex_count);
+
 	Array<FaceID> meshlet_group_faces;
 	Array<u32> meshlet_group_face_prefix_sum;
 	Array<MdtErrorMetric> meshlet_group_error_metrics;
 	ArrayResize(meshlet_group_faces, allocator, mesh.face_count);
 	ArrayReserve(meshlet_group_face_prefix_sum, allocator, mesh.face_count);
 	ArrayReserve(meshlet_group_error_metrics, allocator, mesh.face_count);
-	
+
 	// Note that we're not adding an initial error metric to meshlet_group_error_metrics.
 	// Meshlets built from the first group will use current_level_error_metric.bounds set to the geometric_sphere_bounds with zero error.
 	for (u32 i = 0; i < meshlet_group_faces.count; i += 1) {
 		meshlet_group_faces[i].index = i;
 	}
 	ArrayAppend(meshlet_group_face_prefix_sum, meshlet_group_faces.count);
-	
+
 	u32 meshlet_group_base_index = 0;
 	u32 last_level_meshlet_count = u32_max;
-	
-	
+
+
 	Array<u32> attributes_id_to_vertex_index;
 	ArrayResizeMemset(attributes_id_to_vertex_index, allocator, mesh.attribute_count, 0xFF);
-	
+
 	Array<u8> changed_vertex_mask;
 	ArrayResizeMemset(changed_vertex_mask, allocator, mesh.attribute_count, 0xFF);
-	
+
 	Array<float> vertices;
-	AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices);
-	
+	AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices,
+		geometry_skins ? &vertex_skins : nullptr, result_vertex_skins);
+
 	Array<MdtContinuousLodLevel> levels;
 	ArrayReserve(levels, heap_allocator, continuous_lod_max_levels_of_details);
-	
+
 	Array<MdtMeshletGroup> meshlet_groups;
 	Array<MdtMeshlet>      meshlets;
-	
+
 	Array<u32> meshlet_vertex_indices;
 	Array<MdtMeshletTriangle> meshlet_triangles;
-	
+
+	// Palette offsets are filled one entry per meshlet, plus a final terminator for the whole result.
+	Array<u32> level_palette_offsets;
+	Array<u32> level_joint_palette;
+	Array<u32> meshlet_source_indices;
+	bool build_skin_palettes = (result_meshlet_palette_offsets != nullptr);
+
+	if (build_skin_palettes) {
+		ArrayReserve(*result_meshlet_palette_offsets, heap_allocator, 1);
+	}
+
 	for (u32 level_index = 0; level_index < continuous_lod_max_levels_of_details; level_index += 1) {
 		u32 allocator_high_water = allocator.memory_block_count;
-		
+
 		auto meshlet_build_result = BuildMeshletsForFaceGroups(
 			mesh,
 			allocator,
@@ -3254,25 +3846,30 @@ void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinu
 			meshlet_group_error_metrics,
 			meshlet_target_face_count,
 			meshlet_target_vertex_count,
-			meshlet_group_base_index
+			meshlet_group_base_index,
+			skin_context_ptr
 		);
-		
+
 		BuildMeshletVertexAndIndexBuffers(
 			mesh,
 			heap_allocator,
 			meshlet_build_result,
 			attributes_id_to_vertex_index,
 			meshlet_vertex_indices,
-			meshlet_triangles
+			meshlet_triangles,
+			result_vertex_skins,
+			build_skin_palettes ? &level_palette_offsets : nullptr,
+			build_skin_palettes ? &level_joint_palette   : nullptr,
+			result_meshlet_local_joints
 		);
-		
-		
+
+
 		auto meshlet_group_build_result = BuildMeshletGroups(
 			allocator,
 			meshlet_build_result.meshlets,
 			meshlet_build_result.meshlet_adjacency
 		);
-		
+
 		ConvertMeshletGroupsToFaceGroups(
 			meshlet_build_result,
 			meshlet_group_build_result,
@@ -3280,25 +3877,27 @@ void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinu
 			meshlet_group_face_prefix_sum,
 			meshlet_group_error_metrics
 		);
-		
-		
+
+
 		bool is_last_level = (level_index + 1 == continuous_lod_max_levels_of_details) || (mesh.face_count <= meshlet_target_face_count) || (last_level_meshlet_count == meshlet_build_result.meshlets.count);
 		last_level_meshlet_count = meshlet_build_result.meshlets.count;
-		
+
 		if (is_last_level == false) {
 			DecimateMeshFaceGroups(
 				mesh,
 				allocator,
 				heap_allocator,
-				inputs->mesh,
+				mesh_desc,
 				meshlet_group_faces,
 				meshlet_group_face_prefix_sum,
 				meshlet_group_error_metrics,
-				changed_vertex_mask
+				changed_vertex_mask,
+				skin_context_ptr
 			);
-			
-			AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices);
-			
+
+			AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices,
+				geometry_skins ? &vertex_skins : nullptr, result_vertex_skins);
+
 			// Compact the mesh after decimation to remove unused faces and edges.
 			auto remap = CompactMesh(mesh, allocator);
 			CompactMeshletGroupFaces(remap, meshlet_group_faces, meshlet_group_face_prefix_sum);
@@ -3311,8 +3910,9 @@ void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinu
 		MdtContinuousLodLevel level;
 		level.begin_meshlet_groups_index = meshlet_groups.count;
 		level.begin_meshlets_index       = meshlets.count;
-		
+
 		meshlet_group_base_index = meshlet_groups.count;
+		if (build_skin_palettes) meshlet_source_indices.count = 0;
 		AppendNewMeshletsAndMeshletGroups(
 			heap_allocator,
 			meshlet_build_result,
@@ -3320,15 +3920,47 @@ void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinu
 			meshlet_group_error_metrics,
 			meshlet_groups,
 			meshlets,
-			level_index
+			level_index,
+			build_skin_palettes ? &meshlet_source_indices : nullptr
 		);
-		
+
 		level.end_meshlet_groups_index = meshlet_groups.count;
 		level.end_meshlets_index  = meshlets.count;
 		ArrayAppend(levels, level);
-		
+
+		if (build_skin_palettes) {
+			// meshlets are appended in group order, so reorder level palettes from build order into the
+			// final meshlet order and append them to the result.
+			u32 meshlet_count = meshlet_source_indices.count;
+
+			u32 total_palette_joint_count = 0;
+			for (u32 i = 0; i < meshlet_count; i += 1) {
+				u32 source_index = meshlet_source_indices[i];
+				total_palette_joint_count += level_palette_offsets[source_index + 1] - level_palette_offsets[source_index];
+			}
+
+			if (result_meshlet_joint_palette->count + total_palette_joint_count > result_meshlet_joint_palette->capacity) {
+				ArrayGrow(*result_meshlet_joint_palette, heap_allocator, ArrayComputeNewCapacity(result_meshlet_joint_palette->capacity, result_meshlet_joint_palette->count + total_palette_joint_count));
+			}
+			if (result_meshlet_palette_offsets->count + meshlet_count > result_meshlet_palette_offsets->capacity) {
+				ArrayGrow(*result_meshlet_palette_offsets, heap_allocator, ArrayComputeNewCapacity(result_meshlet_palette_offsets->capacity, result_meshlet_palette_offsets->count + meshlet_count));
+			}
+
+			for (u32 i = 0; i < meshlet_count; i += 1) {
+				u32 source_index = meshlet_source_indices[i];
+				u32 begin = level_palette_offsets[source_index];
+				u32 end   = level_palette_offsets[source_index + 1];
+
+				// Offsets store the begin of each meshlet palette range.
+				ArrayAppend(*result_meshlet_palette_offsets, result_meshlet_joint_palette->count);
+				for (u32 j = begin; j < end; j += 1) {
+					ArrayAppend(*result_meshlet_joint_palette, level_joint_palette[j]);
+				}
+			}
+		}
+
 		AllocatorFreeMemoryBlocks(allocator, allocator_high_water);
-		
+
 		if (is_last_level) break;
 	}
 	
@@ -3342,19 +3974,111 @@ void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinu
 	result->meshlet_count          = meshlets.count;
 	result->meshlet_vertex_index_count = meshlet_vertex_indices.count;
 	result->meshlet_triangle_count = meshlet_triangles.count;
-	result->vertex_count           = vertices.count / (inputs->mesh.vertex_stride_bytes / sizeof(u32));
+	result->vertex_count           = vertices.count / (mesh_desc.vertex_stride_bytes / sizeof(u32));
 	result->level_count            = levels.count;
-	MDT_ASSERT(heap_allocator.memory_block_count == 6);
-	
+
+	if (result_meshlet_palette_offsets) {
+		// Final palette range terminator. Offsets has meshlet_count + 1 entries.
+		u32 required_offset_capacity = result_meshlet_palette_offsets->count + 1;
+		if (required_offset_capacity > result_meshlet_palette_offsets->capacity) {
+			ArrayGrow(*result_meshlet_palette_offsets, heap_allocator, ArrayComputeNewCapacity(result_meshlet_palette_offsets->capacity, required_offset_capacity));
+		}
+		ArrayAppend(*result_meshlet_palette_offsets, result_meshlet_joint_palette->count);
+		MDT_ASSERT(result_meshlet_palette_offsets->count == result->meshlet_count + 1);
+	}
+
+	MDT_ASSERT(geometry_skins == nullptr || result_meshlet_local_joints->count == result->meshlet_vertex_index_count * skin_influence_count);
+	MDT_ASSERT(result_vertex_skins == nullptr || result_vertex_skins->count == result->vertex_count);
+
 	AllocatorFreeMemoryBlocks(allocator);
+
+	return true;
+}
+
+void MdtBuildContinuousLod(const MdtContinuousLodBuildInputs* inputs, MdtContinuousLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+	MdtBuildContinuousLodInternal(
+		inputs->mesh,
+		inputs->meshlet_target_triangle_count,
+		inputs->meshlet_target_vertex_count,
+		nullptr,
+		0,
+		result,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		callbacks
+	);
+}
+
+int MdtBuildSkinnedContinuousLod(const MdtSkinnedContinuousLodBuildInputs* inputs, MdtSkinnedContinuousLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+	using namespace MeshDecimationTools;
+
+	if (inputs == nullptr || result == nullptr) return 0;
+	if (MeshDecimationTools::ValidateSkinnedMeshDesc(inputs->mesh) == false) return 0;
+
+	if (inputs->max_meshlet_joints < 4 || inputs->max_meshlet_joints > skin_max_joint_count) return 0;
+
+	// Build into temporary result storage. Only commit on success. Temporary arrays use the heap
+	// allocator so their ownership transfers to the result.
+	MdtSkinnedContinuousLodBuildResult temporary_result = {};
+	MeshDecimationTools::Array<MdtSkinInfluences> vertex_skins2;
+	MeshDecimationTools::Array<uint32_t> meshlet_palette_offsets;
+	MeshDecimationTools::Array<uint32_t> meshlet_joint_palette;
+	MeshDecimationTools::Array<uint8_t>  meshlet_local_joints;
+
+	bool is_built = MdtBuildContinuousLodInternal(
+		inputs->mesh.mesh,
+		inputs->meshlet_target_triangle_count,
+		inputs->meshlet_target_vertex_count,
+		inputs->mesh.geometry_skins,
+		inputs->max_meshlet_joints,
+		&temporary_result.base,
+		&vertex_skins2,
+		&meshlet_palette_offsets,
+		&meshlet_joint_palette,
+		&meshlet_local_joints,
+		callbacks
+	);
+
+	if (is_built == false) {
+		// Free anything that may have been allocated before the failure. The caller's result is untouched.
+		MeshDecimationTools::Allocator heap_allocator;
+		MeshDecimationTools::InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
+
+		void* allocated_blocks[] = {
+			temporary_result.base.meshlet_groups,
+			temporary_result.base.meshlets,
+			temporary_result.base.meshlet_vertex_indices,
+			temporary_result.base.meshlet_triangles,
+			temporary_result.base.vertices,
+			temporary_result.base.levels,
+			vertex_skins2.data,
+			meshlet_palette_offsets.data,
+			meshlet_joint_palette.data,
+			meshlet_local_joints.data,
+		};
+		for (void* allocated_block : allocated_blocks) {
+			if (allocated_block) heap_allocator.callbacks.reallocate(allocated_block, 0, heap_allocator.callbacks.user_data);
+		}
+		return 0;
+	}
+
+	temporary_result.vertex_skins            = vertex_skins2.data;
+	temporary_result.meshlet_palette_offsets = meshlet_palette_offsets.data;
+	temporary_result.meshlet_joint_palette   = meshlet_joint_palette.data;
+	temporary_result.meshlet_local_joints    = meshlet_local_joints.data;
+
+	*result = temporary_result;
+	return 1;
 }
 
 void MdtFreeContinuousLodBuildResult(const MdtContinuousLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
 	using namespace MeshDecimationTools;
-	
+
 	Allocator heap_allocator;
 	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
-	
+
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->meshlet_groups;
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->meshlets;
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->meshlet_vertex_indices;
@@ -3364,135 +4088,171 @@ void MdtFreeContinuousLodBuildResult(const MdtContinuousLodBuildResult* result, 
 	AllocatorFreeMemoryBlocks(heap_allocator);
 }
 
-
-void MdtBuildDiscreteLod(const MdtDiscreteLodBuildInputs* inputs, MdtDiscreteLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+void MdtFreeSkinnedContinuousLodBuildResult(const MdtSkinnedContinuousLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
 	using namespace MeshDecimationTools;
-	
-	MDT_ASSERT(inputs);
-	MDT_ASSERT(result);
-	
+
+	Allocator heap_allocator;
+	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
+
+	// Null pointers are skipped so that a zero initialized result can be freed safely.
+	void* memory_blocks[] = {
+		result->base.meshlet_groups,
+		result->base.meshlets,
+		result->base.meshlet_vertex_indices,
+		result->base.meshlet_triangles,
+		result->base.vertices,
+		result->base.levels,
+		result->vertex_skins,
+		result->meshlet_palette_offsets,
+		result->meshlet_joint_palette,
+		result->meshlet_local_joints,
+	};
+	for (void* memory_block : memory_blocks) {
+		if (memory_block) heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = memory_block;
+	}
+	AllocatorFreeMemoryBlocks(heap_allocator);
+}
+
+
+void MdtBuildDiscreteLodInternal(
+	const MdtTriangleMeshDesc& mesh_desc,
+	const MdtLevelOfDetailTargetDesc* level_of_detail_descs,
+	uint32_t level_of_detail_count,
+	const MdtSkinInfluences* const* geometry_skins,
+	MdtDiscreteLodBuildResult* result,
+	MeshDecimationTools::Array<MdtSkinInfluences>* result_vertex_skins,
+	const MdtSystemCallbacks* callbacks) {
+
+	using namespace MeshDecimationTools;
+
 	Allocator allocator;
 	InitializeAllocator(allocator, callbacks ? &callbacks->temp_allocator : nullptr);
 
 	Allocator heap_allocator;
 	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
-	
-	auto mesh = BuildEditableMesh(allocator, inputs->mesh.geometry_descs, inputs->mesh.geometry_desc_count, inputs->mesh.vertex_stride_bytes);
-	
+
+	Array<MdtSkinInfluences> vertex_skins;
+	auto mesh = BuildEditableMesh(allocator, mesh_desc.geometry_descs, mesh_desc.geometry_desc_count, mesh_desc.vertex_stride_bytes, geometry_skins, &vertex_skins);
+
+	SkinContext skin_context;
+	skin_context.vertex_skins       = vertex_skins.data;
+	skin_context.max_meshlet_joints = 0; // Discrete LOD does not enforce a meshlet joint limit.
+	const SkinContext* skin_context_ptr = geometry_skins ? &skin_context : nullptr;
+
 	Array<MdtDecimatedGeometryDesc> geometry_descs;
-	ArrayResize(geometry_descs, heap_allocator, inputs->mesh.geometry_desc_count * inputs->level_of_detail_count);
-	
+	ArrayResize(geometry_descs, heap_allocator, mesh_desc.geometry_desc_count * level_of_detail_count);
+
 	Array<MdtDiscreteLodLevel> level_of_detail_result_descs;
-	ArrayResize(level_of_detail_result_descs, heap_allocator, inputs->level_of_detail_count);
-	
+	ArrayResize(level_of_detail_result_descs, heap_allocator, level_of_detail_count);
+
 	Array<u32> attributes_id_to_vertex_index;
 	ArrayResizeMemset(attributes_id_to_vertex_index, allocator, mesh.attribute_count, 0xFF);
-	
+
 	Array<u8> changed_vertex_mask;
 	ArrayResizeMemset(changed_vertex_mask, allocator, mesh.attribute_count, 0xFF);
-	
+
 	Array<u32>   indices;
 	Array<float> vertices;
-	
-	for (u32 level_index = 0; level_index < inputs->level_of_detail_count; level_index += 1) {
-		auto& level_of_detail_target = inputs->level_of_detail_descs[level_index];
-		
+
+	for (u32 level_index = 0; level_index < level_of_detail_count; level_index += 1) {
+		auto& level_of_detail_target = level_of_detail_descs[level_index];
+
 		u32 allocator_high_water = allocator.memory_block_count;
-		
+
 		float max_error = 0.f;
 		// Level of detail 0 commonly has the same number of faces as the source mesh.
 		if (level_of_detail_target.target_face_count < mesh.face_count) {
 			u32 heap_allocator_high_water = heap_allocator.memory_block_count;
-			
+
 			MeshDecimationState state;
-			InitializeMeshDecimationState(mesh, inputs->mesh, allocator, heap_allocator, state);
-			
-			
+			InitializeMeshDecimationState(mesh, mesh_desc, allocator, heap_allocator, state);
+
+
 			EdgeCollapseHeap edge_collapse_heap;
 			ArrayResize(edge_collapse_heap.edge_collapse_errors,  allocator, mesh.edge_count);
 			ArrayResize(edge_collapse_heap.edge_id_to_heap_index, allocator, mesh.edge_count);
 			ArrayResize(edge_collapse_heap.heap_index_to_edge_id, allocator, mesh.edge_count);
-			
+
 			for (EdgeID edge_id = { 0 }; edge_id.index < mesh.edge_count; edge_id.index += 1) {
 				auto collapse_error = ComputeEdgeCollapseError(mesh, heap_allocator, state, edge_id);
-				
+
 				edge_collapse_heap.edge_collapse_errors[edge_id.index]  = collapse_error.min_error;
 				edge_collapse_heap.edge_id_to_heap_index[edge_id.index] = edge_id.index;
 				edge_collapse_heap.heap_index_to_edge_id[edge_id.index] = edge_id;
 			}
-			
+
 			EdgeCollapseHeapInitialize(edge_collapse_heap);
-			
-			
+
+
 			max_error = DecimateMeshFaceGroup(
 				mesh,
 				heap_allocator,
 				state,
 				edge_collapse_heap,
-				inputs->mesh.normalize_vertex_attributes,
+				mesh_desc.normalize_vertex_attributes,
 				changed_vertex_mask.data,
 				level_of_detail_target.target_face_count,
 				mesh.face_count,
-				level_of_detail_target.target_error_limit
+				level_of_detail_target.target_error_limit,
+				skin_context_ptr
 			);
-			
+
 			AllocatorFreeMemoryBlocks(heap_allocator, heap_allocator_high_water);
 		}
-		
-		AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices);
-		
+
+		AppendChangedVertices(mesh, allocator, heap_allocator, changed_vertex_mask, attributes_id_to_vertex_index, vertices,
+			geometry_skins ? &vertex_skins : nullptr, result_vertex_skins);
+
 		CompactMesh(mesh, allocator);
-		
+
 		AllocatorFreeMemoryBlocks(allocator, allocator_high_water);
-		
-		
+
+
 		if (indices.count + mesh.face_count * 3 > indices.capacity) {
 			ArrayGrow(indices, heap_allocator, ArrayComputeNewCapacity(indices.capacity, indices.count + mesh.face_count * 3));
 		}
-		
+
 		auto& level_of_detail_result = level_of_detail_result_descs[level_index];
 		level_of_detail_result.max_error = max_error;
-		level_of_detail_result.begin_geometry_index = level_index * inputs->mesh.geometry_desc_count;
-		level_of_detail_result.end_geometry_index   = level_of_detail_result.begin_geometry_index + inputs->mesh.geometry_desc_count;
-		
+		level_of_detail_result.begin_geometry_index = level_index * mesh_desc.geometry_desc_count;
+		level_of_detail_result.end_geometry_index   = level_of_detail_result.begin_geometry_index + mesh_desc.geometry_desc_count;
+
 		auto level_geometry_descs = CreateArrayView(geometry_descs, level_of_detail_result.begin_geometry_index, level_of_detail_result.end_geometry_index);
-		
+
 		u32 geometry_index = u32_max;
 		for (FaceID face_id = { 0 }; face_id.index < mesh.face_count; face_id.index += 1) {
 			auto& face = mesh[face_id];
-			
+
 			if (geometry_index != face.geometry_index) {
 				MDT_ASSERT(geometry_index == u32_max || geometry_index < face.geometry_index);
-				
+
 				if (geometry_index != u32_max) {
 					auto& geometry_desc = level_geometry_descs[geometry_index];
 					geometry_desc.end_indices_index = indices.count;
 				}
 				geometry_index = face.geometry_index;
-				
+
 				auto& geometry_desc = level_geometry_descs[geometry_index];
 				geometry_desc.begin_indices_index   = indices.count;
 				geometry_desc.end_indices_index     = indices.count;
 			}
-			
+
 			IterateCornerList<FaceID>(mesh, face.corner_list_base, [&](CornerID corner_id) {
 				auto attributes_id = mesh[corner_id].attributes_id;
-				
+
 				u32 vertex_index = attributes_id_to_vertex_index[attributes_id.index];
 				ArrayAppend(indices, vertex_index);
 			});
 		}
-		
+
 		if (geometry_index != u32_max) {
 			auto& geometry_desc = level_geometry_descs[geometry_index];
 			geometry_desc.end_indices_index = indices.count;
 		}
 	}
 
-	MDT_ASSERT(heap_allocator.memory_block_count == 4);
-	
 	u32 vertex_stride_dwords = (mesh.attribute_stride_dwords + 3);
-	
+
 	result->level_of_detail_descs = level_of_detail_result_descs.data;
 	result->geometry_descs        = geometry_descs.data;
 	result->indices               = indices.data;
@@ -3501,20 +4261,79 @@ void MdtBuildDiscreteLod(const MdtDiscreteLodBuildInputs* inputs, MdtDiscreteLod
 	result->geometry_desc_count   = geometry_descs.count;
 	result->index_count           = indices.count;
 	result->vertex_count          = vertices.count / vertex_stride_dwords;
-	
+
 	AllocatorFreeMemoryBlocks(allocator);
+}
+
+void MdtBuildDiscreteLod(const MdtDiscreteLodBuildInputs* inputs, MdtDiscreteLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+	MdtBuildDiscreteLodInternal(
+		inputs->mesh,
+		inputs->level_of_detail_descs,
+		inputs->level_of_detail_count,
+		nullptr,
+		result,
+		nullptr,
+		callbacks
+	);
+}
+
+int MdtBuildSkinnedDiscreteLod(const MdtSkinnedDiscreteLodBuildInputs* inputs, MdtSkinnedDiscreteLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+	using namespace MeshDecimationTools;
+
+	if (inputs == nullptr || result == nullptr) return 0;
+	if (MeshDecimationTools::ValidateSkinnedMeshDesc(inputs->mesh) == false) return 0;
+	if (inputs->mesh.mesh.geometry_desc_count == 0) return 0;
+	if (inputs->level_of_detail_count == 0 || inputs->level_of_detail_descs == nullptr) return 0;
+
+	MdtSkinnedDiscreteLodBuildResult temporary_result = {};
+	MeshDecimationTools::Array<MdtSkinInfluences> vertex_skins2;
+
+	MdtBuildDiscreteLodInternal(
+		inputs->mesh.mesh,
+		inputs->level_of_detail_descs,
+		inputs->level_of_detail_count,
+		inputs->mesh.geometry_skins,
+		&temporary_result.base,
+		&vertex_skins2,
+		callbacks
+	);
+
+	temporary_result.vertex_skins = vertex_skins2.data;
+
+	*result = temporary_result;
+	return 1;
 }
 
 void MdtFreeDiscreteLodBuildResult(const MdtDiscreteLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
 	using namespace MeshDecimationTools;
-	
+
 	Allocator heap_allocator;
 	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
-	
+
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->level_of_detail_descs;
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->geometry_descs;
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->indices;
 	heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = result->vertices;
+	AllocatorFreeMemoryBlocks(heap_allocator);
+}
+
+void MdtFreeSkinnedDiscreteLodBuildResult(const MdtSkinnedDiscreteLodBuildResult* result, const MdtSystemCallbacks* callbacks) {
+	using namespace MeshDecimationTools;
+
+	Allocator heap_allocator;
+	InitializeAllocator(heap_allocator, callbacks ? &callbacks->heap_allocator : nullptr);
+
+	// Null pointers are skipped so that a zero initialized result can be freed safely.
+	void* memory_blocks[] = {
+		result->base.level_of_detail_descs,
+		result->base.geometry_descs,
+		result->base.indices,
+		result->base.vertices,
+		result->vertex_skins,
+	};
+	for (void* memory_block : memory_blocks) {
+		if (memory_block) heap_allocator.memory_blocks[heap_allocator.memory_block_count++] = memory_block;
+	}
 	AllocatorFreeMemoryBlocks(heap_allocator);
 }
 

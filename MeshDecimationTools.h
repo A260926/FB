@@ -390,11 +390,108 @@ struct MdtDiscreteLodBuildResult {
 	uint32_t vertex_count;
 };
 
+//
+// Skinning data.
+//
+// Joint indices are discrete identities, they're not interpolated as ordinary float attributes.
+// Each vertex can be influenced by up to four joints. Slots with zero weight are considered empty
+// and their joint index does not participate in vertex identity.
+//
+struct MdtSkinInfluences {
+	uint32_t joints[4];
+	float    weights[4];
+};
+
+//
+// Triangle mesh with per vertex skinning influences.
+//
+// 'geometry_skins' is an array of 'mesh.geometry_desc_count' pointers. Each pointer references an array
+// of 'MdtSkinInfluences' of the same length as the matching geometry vertex count. Input influences are
+// validated and normalized (duplicate joints are merged, slots are sorted by joint index, weights are
+// normalized to sum to one) before any processing.
+//
+struct MdtSkinnedMeshDesc {
+	struct MdtTriangleMeshDesc mesh;
+
+	const struct MdtSkinInfluences* const* geometry_skins;
+
+	// Number of joints. All joints with positive weight must be in [0, joint_count).
+	uint32_t joint_count;
+};
+
+struct MdtSkinnedDiscreteLodBuildInputs {
+	struct MdtSkinnedMeshDesc mesh;
+
+	// Array of target limits for each level of detail.
+	struct MdtLevelOfDetailTargetDesc* level_of_detail_descs;
+
+	// Size of 'level_of_detail_descs' array.
+	uint32_t level_of_detail_count;
+};
+
+struct MdtSkinnedContinuousLodBuildInputs {
+	struct MdtSkinnedMeshDesc mesh;
+
+	// Target triangle count for meshlet builder. See MdtContinuousLodBuildInputs definition for reference.
+	uint32_t meshlet_target_triangle_count;
+
+	// Target vertex count for meshlet builder. See MdtContinuousLodBuildInputs definition for reference.
+	uint32_t meshlet_target_vertex_count;
+
+	//
+	// Maximum number of distinct positively weighted joints referenced by a single meshlet.
+	// Must be in [4, 256]. Edge collapses that would make the union of positively weighted joints
+	// of a surviving triangle exceed this limit are rejected. If any source triangle exceeds the
+	// limit the build fails.
+	//
+	uint32_t max_meshlet_joints;
+};
+
+struct MdtSkinnedDiscreteLodBuildResult {
+	struct MdtDiscreteLodBuildResult base;
+
+	// Per output vertex skinning influences. Size matches base.vertex_count.
+	struct MdtSkinInfluences* vertex_skins;
+};
+
+struct MdtSkinnedContinuousLodBuildResult {
+	struct MdtContinuousLodBuildResult base;
+
+	// Per output vertex skinning influences. Size matches base.vertex_count.
+	struct MdtSkinInfluences* vertex_skins;
+
+	//
+	// Meshlet joint palettes. 'meshlet_palette_offsets' has base.meshlet_count + 1 entries.
+	// Meshlet palette is stored in 'meshlet_joint_palette' as a range
+	// [meshlet_palette_offsets[i], meshlet_palette_offsets[i + 1]) of ascending global joint indices.
+	//
+	uint32_t* meshlet_palette_offsets;
+	uint32_t* meshlet_joint_palette;
+
+	//
+	// Per meshlet vertex local joint indices. Has 4 * base.meshlet_vertex_index_count entries.
+	// Four entries per meshlet local vertex (in the same order as meshlet_vertex_indices) match the
+	// four slots of the corresponding vertex skin. Slots with zero weight are set to zero.
+	//
+	uint8_t* meshlet_local_joints;
+};
+
 void MdtBuildContinuousLod(const struct MdtContinuousLodBuildInputs* inputs, struct MdtContinuousLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
 void MdtBuildDiscreteLod(const struct MdtDiscreteLodBuildInputs* inputs, struct MdtDiscreteLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
 
 void MdtFreeContinuousLodBuildResult(const struct MdtContinuousLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
 void MdtFreeDiscreteLodBuildResult(const struct MdtDiscreteLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
+
+//
+// Skinned build entries. Return 1 on success and 0 if the inputs are invalid. On failure the inputs and
+// the contents of 'result' are left unchanged. 'result' must be zero initialized before the call.
+// A successful result owns all of its data and must be released with the matching free function.
+//
+int MdtBuildSkinnedContinuousLod(const struct MdtSkinnedContinuousLodBuildInputs* inputs, struct MdtSkinnedContinuousLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
+int MdtBuildSkinnedDiscreteLod(const struct MdtSkinnedDiscreteLodBuildInputs* inputs, struct MdtSkinnedDiscreteLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
+
+void MdtFreeSkinnedContinuousLodBuildResult(const struct MdtSkinnedContinuousLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
+void MdtFreeSkinnedDiscreteLodBuildResult(const struct MdtSkinnedDiscreteLodBuildResult* result, const struct MdtSystemCallbacks* callbacks);
 
 struct MdtSphereBounds MdtComputeSphereBoundsUnion(const struct MdtSphereBounds* source_sphere_bounds, uint32_t source_sphere_bounds_count);
 

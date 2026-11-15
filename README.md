@@ -105,6 +105,94 @@ MdtBuildDiscreteLod(&inputs, &result, &callbacks);
 MdtFreeDiscreteLodBuildResult(&result, &callbacks);
 ```
 
+### Skinned level of detail
+Skinned meshes use dedicated build entries. Joint indices are discrete identities and are never
+interpolated as ordinary float attributes. Each vertex has up to four influences:
+```
+struct MdtSkinInfluences {
+    uint32_t joints[4];
+    float    weights[4];
+};
+```
+Skinning influences are passed per geometry, one array per geometry, each with the same length as
+that geometry's vertex count:
+```
+const MdtSkinInfluences* geometry_skins[1] = { skin_influences.data() };
+
+MdtSkinnedMeshDesc skinned_mesh = {};
+skinned_mesh.mesh              = mesh_desc;
+skinned_mesh.geometry_skins    = geometry_skins;
+skinned_mesh.joint_count       = joint_count;
+```
+Both skinned build entries return `int`: `1` on success and `0` if the inputs are invalid. On failure
+the inputs and the result are left unchanged, and the result must be zero initialized before the call.
+The original non-skinned `MdtBuildContinuousLod`, `MdtBuildDiscreteLod`, their free functions, the
+attribute normalization callback and per geometry material segmentation are unchanged.
+```
+MdtSkinnedDiscreteLodBuildInputs discrete_inputs = {};
+discrete_inputs.mesh                  = skinned_mesh;
+discrete_inputs.level_of_detail_descs = level_of_detail_descs;
+discrete_inputs.level_of_detail_count = 1;
+
+MdtSkinnedDiscreteLodBuildResult discrete_result = {};
+MdtBuildSkinnedDiscreteLod(&discrete_inputs, &discrete_result, &callbacks);
+...
+MdtFreeSkinnedDiscreteLodBuildResult(&discrete_result, &callbacks);
+```
+Continuous LOD additionally bounds the number of joints a single meshlet may reference:
+```
+MdtSkinnedContinuousLodBuildInputs continuous_inputs = {};
+continuous_inputs.mesh                          = skinned_mesh;
+continuous_inputs.meshlet_target_triangle_count = 128;
+continuous_inputs.meshlet_target_vertex_count   = 128;
+continuous_inputs.max_meshlet_joints            = 4; // [4, 256]
+
+MdtSkinnedContinuousLodBuildResult continuous_result = {};
+MdtBuildSkinnedContinuousLod(&continuous_inputs, &continuous_result, &callbacks);
+...
+MdtFreeSkinnedContinuousLodBuildResult(&continuous_result, &callbacks);
+```
+`MdtSkinnedDiscreteLodBuildResult` contains the original `MdtDiscreteLodBuildResult` as `base` plus a
+per output vertex `MdtSkinInfluences* vertex_skins`. `MdtSkinnedContinuousLodBuildResult` contains the
+original `MdtContinuousLodBuildResult` as `base` plus `vertex_skins`, `meshlet_palette_offsets`,
+`meshlet_joint_palette` and `meshlet_local_joints`. `meshlet_palette_offsets` has `meshlet_count + 1`
+entries giving each meshlet's range in the flat ascending array of global joint indices.
+`meshlet_local_joints` has `4 * meshlet_vertex_index_count` entries, four per meshlet local vertex in
+the same order as `meshlet_vertex_indices`, matching the four slots of the vertex skin. Zero weight
+slots are written as zero. Every successful result owns its data independently.
+
+#### Skinning normalization
+Every input influence slot's weight must be finite and non-negative, every joint with positive weight
+must be less than `joint_count`, and the positive weights of a vertex must sum to more than zero.
+Influences are canonicalized before any processing: duplicate joints are merged, slots are sorted by
+joint index in ascending order, weights are accumulated in double precision and normalized to sum to
+one, then converted to float. Empty slots are zeroed. The joint index of a zero weight slot does not
+participate in vertex identity.
+
+Vertices weld only if both their position and their full normalized skin signature match. Ordinary
+attribute wedges that differ only in UV or normal still share the same geometric vertex, exactly as in
+the non-skinned builds. Two geometries that share a seam with matching skins keep their geometric
+coordination across the seam.
+
+#### Candidate rejection
+Edge collapses first compute a position with the existing QEM. The projection ratio `t` of that
+position onto the segment between the two original positions is clamped to `[0, 1]`; zero length
+segments use `t = 0.5`. New weights are `(1 - t) * w_a + t * w_b`, then merged, sorted and normalized
+as above. A candidate whose positively weighted joint set would exceed four joints is rejected: the
+library never truncates weights, drops small influences or renumbers joints to make a candidate fit.
+Joint IDs never become a continuous error term; the existing geometric and ordinary attribute costs
+and validity checks continue to apply unchanged.
+
+For continuous LOD, any collapse that would make a surviving triangle's positively weighted joint
+union exceed `max_meshlet_joints` is rejected before it is committed. A source triangle that already
+exceeds the limit fails the whole build with a return value of `0`. Meshlet growth respects the
+existing point and face caps together with the joint cap; each meshlet's palette is the ascending set
+of positively weighted global joints actually referenced by that meshlet.
+
+The motion of the skeleton is not taken into account: error guarantees are only valid for the bind
+position of the mesh. The existing error metrics and their meaning are otherwise unchanged in both
+skinned and non-skinned builds.
+
 ### Memory allocation
 By default all memory is allocated via C `realloc`. This behavior can be overridden by providing custom `realloc` callbacks for temporary and/or heap allocators.
 ```
