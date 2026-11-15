@@ -140,6 +140,18 @@ static inline int mrw_clip_frame(const mrw_clip_view *clip, float t, uint32_t *i
 #define MRW_PALETTE_FLOATS 12u
 #define MRW_MODEL_AT(model, j, c, l) ((model)[((size_t)(j) * MRW_PALETTE_FLOATS + (c)) * MRW_LANES + (l)])
 
+/* ---- model-space mesh-blend rotation scratch ----
+ * Per joint the hierarchy-rotation recurrence keeps THREE model-space rotation channels - QA
+ * (input A), QB (input B) and QO (the blended output) - so a child can restore its local rotation
+ * against its parent's output. Each is a quaternion (4 floats), so 12 floats/joint. The batch
+ * layout is across-instance SoA (lane innermost, exactly like the model scratch) so a `wide` load
+ * grabs MRW_LANES instances of one component; the single-pose layout is the same 12 floats/joint
+ * with no lane axis. `state`: 0 = QA, 1 = QB, 2 = QO. */
+#define MRW_MESH_ROT_FLOATS 12u
+#define MRW_MESH_ROT_POS(j, st, c) ((((size_t)(j) * 3u + (st)) * 4u) + (c))
+#define MRW_MESH_ROT_AT(rot, j, st, c, l) \
+    ((rot)[(((size_t)(j) * 3u + (st)) * 4u + (c)) * MRW_LANES + (l)])
+
 /* SIMD batch kernels (defined in the ISA-flagged TUs marrow_batch_{sse2,avx2,avx2_fma}.c;
  * called by the dispatcher in marrow_batch.c AFTER it has validated all inputs). `out_palettes` is
  * float* (MRW_PALETTE_F32) or uint16_t* (MRW_PALETTE_F16); `use_f16c` lets the AVX2 store narrow with
@@ -184,5 +196,21 @@ MRW_DECL_BLEND_KERNEL(mrw_blend_kernel_avx2_fma);
 MRW_DECL_ACCUM_KERNEL(mrw_accum_kernel_sse2);
 MRW_DECL_ACCUM_KERNEL(mrw_accum_kernel_avx2);
 MRW_DECL_ACCUM_KERNEL(mrw_accum_kernel_avx2_fma);
+
+/* model-space mesh-blend SIMD kernels (defined in the ISA-flagged TUs marrow_mesh_blend_{sse2,
+ * avx2,avx2_fma}.c via the shared marrow_mesh_blend_simd.h; called by the dispatcher in
+ * marrow_mesh_blend.c AFTER it has validated all inputs). Same SoA layout as the blend kernels:
+ * `model` is joint_count × 12 × MRW_LANES floats, and `rot` is the hierarchy-rotation scratch,
+ * joint_count × 12 × MRW_LANES floats (three model-space quats QA/QB/QO per joint, lane innermost).
+ * Not public ABI. */
+#define MRW_DECL_MESH_BLEND_KERNEL(name) \
+    mrw_result name(const mrw_skeleton_view *skel, \
+                    const mrw_clip_view *clipA, const mrw_clip_view *clipB, \
+                    const float *timesA, const float *timesB, const float *weights, const float *mask, \
+                    uint32_t instance_count, void *out_palettes, mrw_palette_format out_format, \
+                    int use_f16c, float *model, float *rot)
+MRW_DECL_MESH_BLEND_KERNEL(mrw_mesh_blend_kernel_sse2);
+MRW_DECL_MESH_BLEND_KERNEL(mrw_mesh_blend_kernel_avx2);
+MRW_DECL_MESH_BLEND_KERNEL(mrw_mesh_blend_kernel_avx2_fma);
 
 #endif /* MRW_INTERNAL_H */

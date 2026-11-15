@@ -177,6 +177,56 @@ palette** (`*_f16`, half the upload/fetch bandwidth). Single-pose Tier-A primiti
 **root motion**. The scalar backend is the bit-exact reference the SIMD kernels are checked
 against. See [`marrow.h`](marrow.h) for the full, documented surface.
 
+### Two blending modes: local-space vs. model-space
+
+marrow's default blend (`mrw_pose_blend` / `mrw_batch_blend_clips_to_palette`, and the additive
+layer) is a **local-space TRS blend**: each joint's local rotation, translation and scale are
+interpolated independently, then the hierarchy is composed. It is the right model for blend trees
+and is what the batch crowd path optimizes.
+
+It has one geometric blind spot. Because each joint's direction in model space is the product of
+all its ancestors' rotations, two inputs whose *parent* rotations differ will carry a child's
+local-space blend to a model-space direction that is **not** the blend of the two inputs'
+model-space directions. Masking the torso and blending only the arms is the canonical case: the
+arms are supposed to keep their own directions, but the two inputs' torso rotations steer them
+differently, so the cross-fade visibly drifts.
+
+For near-camera characters and same-skeleton crowds that need direction-faithful cross-fades,
+use the explicit **model-space mesh blend**:
+
+```c
+/* Single pose: local TRS in, local TRS out. */
+mrw_mem_req msr;
+mrw_pose_mesh_blend_requirements(joint_count, &msr);
+mrw_pose_mesh_blend(&skel, localA, localB, weight, mask, out_local,
+                    joint_count, joint_count, msr_scratch, msr.size);
+
+/* Crowd: the same math fused into the palette path, two clips + per-instance weights and a
+   shared per-joint mask. */
+mrw_mem_req scr, pal;
+mrw_batch_mesh_blend_clips_to_palette_requirements(joint_count, N, MRW_PALETTE_F32, &scr, &pal);
+mrw_batch_mesh_blend_clips_to_palette(&disp, &skel, &clipA, &clipB,
+                                      timesA, timesB, weights, mask, N,
+                                      palettes, pal.size, scratch, scr.size);
+```
+
+Per joint, the two inputs' rotations are composed **up the parent chain in quaternion space** to
+model-space unit quaternions QA / QB (never extracted from a scale/shear-bearing affine), nlerped
+at the same `clamp(weight)·clamp(mask)` weight, and then restored to a local rotation against the
+**output** parent. So a `mask=0` child under a blended ancestor keeps input A's model-space
+direction and its local rotation compensates for the moved parent. Translation and scale stay
+local-space lerps, and the full local TRS affine (non-uniform scale ⇒ shear) still builds the
+palette. The model-space sweep is independent of the mask; only the blend weight sees it.
+
+Which to pick: use the **local-space** blend for ordinary blend trees and additive layers, where
+per-joint local interpolation is the intended semantics and it is the cheapest. Use the
+**model-space mesh blend** when the *direction* a limb points in model space must be the blend of
+the two inputs' directions - near-camera characters and same-skeleton crowds mid-cross-fade. It is
+a little more work per joint (one quaternion chain + restore), but the batch form fuses it into
+the same cross-instance SoA kernel, so it stays within the crowd path's tiling and
+`O(joint_count·MRW_LANES)` scratch budget. Both modes and the file format are unchanged for
+existing callers; the local-space entries keep their exact numerics.
+
 ---
 
 ## Offline tools

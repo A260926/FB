@@ -59,7 +59,7 @@ set(AVX_MARKERS "ymm|zmm|vmovaps|vmovups|vmulps|vaddps|vsubps|vdivps|vsqrtps|van
 
 # The clip-batch (marrow_batch_*) and the pose-combine (marrow_blend_*) SIMD TUs share the same
 # per-ISA contract and the same `wide` source, so both stems are scanned with identical rules.
-foreach(stem "marrow_batch_sse2" "marrow_blend_sse2")
+foreach(stem "marrow_batch_sse2" "marrow_blend_sse2" "marrow_mesh_blend_sse2")
   find_obj("${stem}" obj)
   if(obj)
     disasm("${obj}" d)
@@ -73,7 +73,7 @@ foreach(stem "marrow_batch_sse2" "marrow_blend_sse2")
   endif()
 endforeach()
 
-foreach(stem "marrow_batch_avx2" "marrow_blend_avx2")   # exact stem; does NOT match *_avx2_fma
+foreach(stem "marrow_batch_avx2" "marrow_blend_avx2" "marrow_mesh_blend_avx2")   # exact stem; does NOT match *_avx2_fma
   find_obj("${stem}" obj)
   if(obj)
     disasm("${obj}" d)
@@ -87,7 +87,7 @@ foreach(stem "marrow_batch_avx2" "marrow_blend_avx2")   # exact stem; does NOT m
   endif()
 endforeach()
 
-foreach(stem "marrow_batch_avx2_fma" "marrow_blend_avx2_fma")
+foreach(stem "marrow_batch_avx2_fma" "marrow_blend_avx2_fma" "marrow_mesh_blend_avx2_fma")
   find_obj("${stem}" obj)
   if(obj)
     disasm("${obj}" d)

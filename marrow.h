@@ -365,6 +365,59 @@ mrw_result mrw_pose_accumulate(const mrw_trs *base, const mrw_trs *delta, float 
 /** @} */
 
 /**
+ * @defgroup mesh_blend Model-space mesh blend
+ *
+ * An explicit MODEL-SPACE rotation blend of two same-skeleton local poses - the near-camera
+ * character / same-skeleton crowd companion to the local-space blend above, for the cases where
+ * local TRS blending has the wrong direction. mrw_pose_blend blends each joint's LOCAL rotation:
+ * masking the torso and blending only the arms still lets the two inputs' PARENT rotations carry
+ * each arm to a different model-space direction, so the result's arm direction is not the blend of
+ * the two inputs' arm directions. This entry blends the model-space rotations instead.
+ *
+ * Per joint j (parents before children):
+ *   QA[j] = model-space unit quaternion of input A = normalize(QA[parent] ⊗ a[j].rot)
+ *   QB[j] = likewise for input B                          (root: normalize(a[0].rot))
+ *   we    = clamp(weight, 0, 1) · clamp(mask[j], 0, 1)    (mask NULL ⇒ 1)
+ *   QO[j] = hemisphere-corrected nlerp(QA[j], QB[j], we)
+ *   out[j].rot   = root ? QO[j] : normalize(conj(QO[parent]) ⊗ QO[j])
+ *   out[j].trans = lerp(a, b, we); out[j].scale = lerp(a, b, we)
+ *
+ * The model-space sweep is INDEPENDENT of the mask - only the nlerp weight sees it. So a child with
+ * mask=0 under a blended ancestor keeps input A's model-space DIRECTION and its output LOCAL
+ * rotation compensates for the changed ancestor; its trans/scale still follow the same we. Rotations
+ * are composed purely as quaternions (never extracted from a scale/shear-bearing affine matrix);
+ * the hierarchy compose and inverse-bind still use each joint's FULL local TRS affine, so shear
+ * from non-uniform scale survives into the palette. Translation is blended locally, not in model
+ * space. Quaternion sign flips do not change the result (q ≡ −q); input rotations are assumed
+ * near-unit, as everywhere else in the pose algebra.
+ *
+ * Shared contract: out-param + mrw_result; zero-alloc; joint_count==0 ⇒ MRW_OK; a NULL input ⇒
+ * MRW_E_RANGE; joint_count != skeleton/`joint_count` mismatch ⇒ MRW_E_INCOMPATIBLE; joint_count >
+ * joint_capacity or scratch smaller than the requirements query ⇒ MRW_E_CAPACITY; misaligned
+ * scratch or output ⇒ MRW_E_ALIGN; ANY non-finite pose component / mask / weight ⇒ MRW_E_RANGE and
+ * NO output written (all validation precedes the first store). scratch is caller-owned (the runtime
+ * never allocates). `out` MAY exactly alias `a` and/or `b`; partial overlap is undefined.
+ * Skeleton topology and the single-root convention are the loader's (parent[j] < j, joint 0 is the
+ * root) - the same constraints the rest of the runtime relies on.
+ * @{
+ */
+
+/** Scratch sizing for mrw_pose_mesh_blend: one model-space rotation state per joint (QA/QB/QO),
+ * 64-byte aligned. Dispatch-independent; overflow-checked → MRW_E_OVERFLOW. joint_count==0 ⇒ size 0. */
+mrw_result mrw_pose_mesh_blend_requirements(uint32_t joint_count, mrw_mem_req *out_scratch);
+
+/** Model-space blend of the two local poses `a`/`b` for `skel`, writing `joint_count` local
+ * mrw_trs entries to `out` (subject to joint_capacity). `mask` is per-joint and nullable. */
+mrw_result mrw_pose_mesh_blend(const mrw_skeleton_view *skel,
+                               const mrw_trs *a, const mrw_trs *b, float weight,
+                               const float *mask /*nullable, joint_count*/,
+                               mrw_trs *out, uint32_t joint_count, uint32_t joint_capacity,
+                               void *scratch, size_t scratch_capacity);
+
+/** @} */
+
+
+/**
  * @defgroup ik Inverse kinematics
  *
  * Analytic single-chain IK that adjusts LOCAL rotations to meet a model-space goal (CPU only;
@@ -525,6 +578,57 @@ mrw_result mrw_batch_accumulate_to_palette_f16(
     void     *scratch,      size_t scratch_capacity);      /* bytes */
 
 /** @} */
+
+/**
+ * @defgroup batch_mesh_blend Batch model-space mesh blend
+ *
+ * The model-space mesh blend (@ref mesh_blend) fused into the batch palette path, for same-skeleton
+ * crowds: `instance_count` instances sharing one skeleton, two clips, and the output layout. Same
+ * contract as mrw_batch_blend_clips_to_palette (validated dispatch; caller-owned SoA scratch from
+ * the _requirements query; AoS output; f32 + f16; instance_count==0 no-op; overflow-checked;
+ * same alignment/aliasing rules; both codecs, looping/clamping, tail instances and every implemented
+ * backend). Per instance i it samples clipA at timesA[i] and clipB at timesB[i], blends the
+ * MODEL-SPACE rotations at clamp(weights[i],0,1)·clamp(mask[j],0,1) (mask shared across the batch,
+ * nullable), restores the local rotation against the OUTPUT parent, blends trans/scale locally,
+ * then composes the hierarchy and applies inverse-bind. The SCALAR backend is bit-for-bit equal to
+ * looping the single-pose mrw_pose_mesh_blend + mrw_local_to_model + mrw_model_to_palette; the
+ * SSE2/AVX2(+FMA) backends vectorize the SAME recurrence across instances (within a small
+ * tolerance) and never call the scalar entry per instance. The scratch query accounts for the
+ * model, the dual-input/output rotation state, and the output palette; the hierarchy recurrence is
+ * tiled so the working set is O(joint_count·MRW_LANES), never three full poses per instance.
+ * @{
+ */
+
+/** Scratch (model + rotation state; 64-byte aligned) and palette (AoS; 16-byte aligned) sizing.
+ * Either out-param MAY be NULL. Dispatch-independent; overflow-checked → MRW_E_OVERFLOW;
+ * out-of-range out_format → MRW_E_RANGE. scratch size is instance_count-independent and grows as
+ * joint_count·MRW_LANES; the output scales with instance_count. */
+mrw_result mrw_batch_mesh_blend_clips_to_palette_requirements(
+    uint32_t joint_count, uint32_t instance_count, mrw_palette_format out_format,
+    mrw_mem_req *out_scratch, mrw_mem_req *out_palettes);
+
+/** Per instance i: mesh_blend(sample(clipA, timesA[i]), sample(clipB, timesB[i]), weights[i],
+ * mask) → palette i. clipA and clipB MUST both pair with `skel` (matching ids; else
+ * MRW_E_INCOMPATIBLE). Any non-finite time/weight/mask ⇒ MRW_E_RANGE (no output written). */
+mrw_result mrw_batch_mesh_blend_clips_to_palette(
+    const mrw_dispatch *disp, const mrw_skeleton_view *skel,
+    const mrw_clip_view *clipA, const mrw_clip_view *clipB,
+    const float *timesA, const float *timesB, const float *weights,
+    const float *mask /*joint_count, or NULL*/, uint32_t instance_count,
+    float *out_palettes, size_t out_palettes_capacity,  /* bytes */
+    void  *scratch,      size_t scratch_capacity);       /* bytes */
+/** f16 (binary16) output twin - same args and contract, uint16_t* output, 2-byte alignment for
+ * out_palettes (the f16 scatter is fully unaligned). */
+mrw_result mrw_batch_mesh_blend_clips_to_palette_f16(
+    const mrw_dispatch *disp, const mrw_skeleton_view *skel,
+    const mrw_clip_view *clipA, const mrw_clip_view *clipB,
+    const float *timesA, const float *timesB, const float *weights,
+    const float *mask /*joint_count, or NULL*/, uint32_t instance_count,
+    uint16_t *out_palettes, size_t out_palettes_capacity, /* bytes */
+    void     *scratch,      size_t scratch_capacity);      /* bytes */
+
+/** @} */
+
 
 /**
  * @defgroup root_motion Root motion

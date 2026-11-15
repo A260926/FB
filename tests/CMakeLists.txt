@@ -30,6 +30,10 @@ mrw_test(test_additive)
 mrw_test(test_ik)
 mrw_test(test_blend_batch)
 
+# NOTE: tests/mesh_blend_target.c is the task's model-space mesh-blend regression. It has no main
+# and is linked with task_support/driver.c by task_support/run.sh (registering task_cases groups),
+# so it is deliberately NOT an mrw_test() here.
+
 # f16 encoder bit-identity gate vs the F16C vcvtps2ph instruction. Compiled with F16C so the
 # intrinsic is available; the test self-skips at runtime when the host lacks F16C.
 if (MSVC)

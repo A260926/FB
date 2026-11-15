@@ -83,6 +83,10 @@ set(MRW_RUNTIME_SOURCES
   src/marrow_blend_sse2.c
   src/marrow_blend_avx2.c
   src/marrow_blend_avx2_fma.c
+  src/marrow_mesh_blend.c
+  src/marrow_mesh_blend_sse2.c
+  src/marrow_mesh_blend_avx2.c
+  src/marrow_mesh_blend_avx2_fma.c
 )
 add_library(marrow ${MRW_RUNTIME_SOURCES})
 target_include_directories(marrow
@@ -105,9 +109,9 @@ if (MSVC)
 else()
   # -mf16c lets the AVX2 TUs emit vcvtps2ph for the f16 store; the SSE2/baseline TU keeps -mno-avx
   # (and never compiles the F16C branch), so vcvtps2ph can never appear there (isa_scan enforces it).
-  set_source_files_properties(src/marrow_batch_sse2.c src/marrow_blend_sse2.c         PROPERTIES COMPILE_OPTIONS "-msse2;-mno-avx;-mno-avx2;-mno-fma;-mno-f16c")
-  set_source_files_properties(src/marrow_batch_avx2.c src/marrow_blend_avx2.c         PROPERTIES COMPILE_OPTIONS "-mavx2;-mf16c;-mno-fma;-ffp-contract=off")
-  set_source_files_properties(src/marrow_batch_avx2_fma.c src/marrow_blend_avx2_fma.c PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
+  set_source_files_properties(src/marrow_batch_sse2.c src/marrow_blend_sse2.c src/marrow_mesh_blend_sse2.c         PROPERTIES COMPILE_OPTIONS "-msse2;-mno-avx;-mno-avx2;-mno-fma;-mno-f16c")
+  set_source_files_properties(src/marrow_batch_avx2.c src/marrow_blend_avx2.c src/marrow_mesh_blend_avx2.c         PROPERTIES COMPILE_OPTIONS "-mavx2;-mf16c;-mno-fma;-ffp-contract=off")
+  set_source_files_properties(src/marrow_batch_avx2_fma.c src/marrow_blend_avx2_fma.c src/marrow_mesh_blend_avx2_fma.c PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c")
 endif()
 
 # Per-target µarch knob (src/marrow_batch_simd.h "AVX2 defaults to hardware vgather"): build the AVX2
@@ -118,6 +122,7 @@ option(MRW_AVX2_GATHER_SCALAR "Build the AVX2 kernels with scalar deinterleave i
 if (MRW_AVX2_GATHER_SCALAR)
   set_source_files_properties(src/marrow_batch_avx2.c src/marrow_batch_avx2_fma.c
                               src/marrow_blend_avx2.c src/marrow_blend_avx2_fma.c
+                              src/marrow_mesh_blend_avx2.c src/marrow_mesh_blend_avx2_fma.c
     PROPERTIES COMPILE_DEFINITIONS MRW_AVX2_GATHER_SCALAR)
 endif()
 
