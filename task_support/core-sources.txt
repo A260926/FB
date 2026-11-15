@@ -1,0 +1,4 @@
+src/polymesh/Mesh.cc
+src/polymesh/assert.cc
+src/polymesh/debug.cc
+src/polymesh/formats/obj.cc
