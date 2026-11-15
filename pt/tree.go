@@ -6,6 +6,28 @@ import (
 	"sort"
 )
 
+// intersectMode selects which shapes a tree query is allowed to return.
+type intersectMode int
+
+const (
+	// intersectVisible skips LinkedInstances whose Visible flag is false.
+	intersectVisible intersectMode = iota
+	// intersectSingle returns hits only from the one named shape.
+	intersectSingle
+	// intersectOccluders ignores the named light shape entirely and returns
+	// the nearest hit among shapes allowed to cast a shadow toward it.
+	intersectOccluders
+)
+
+// intersectQuery carries the parameters of a filtered tree traversal. It is
+// passed explicitly through every node so that concurrent reads never share
+// state through package-level variables.
+type intersectQuery struct {
+	mode      intersectMode
+	target    Shape  // the single shape (intersectSingle) or target light
+	lightMask uint64 // EmitMask of the target light
+}
+
 type Tree struct {
 	Box  Box
 	Root *Node
@@ -28,6 +50,16 @@ func (tree *Tree) Intersect(r Ray) Hit {
 	return tree.Root.Intersect(r, tmin, tmax)
 }
 
+// IntersectQuery runs a filtered ray query against the tree, reusing the
+// same splitting and pruning logic as Intersect.
+func (tree *Tree) IntersectQuery(r Ray, query *intersectQuery) Hit {
+	tmin, tmax := tree.Box.Intersect(r)
+	if tmax < tmin || tmax <= 0 {
+		return NoHit
+	}
+	return tree.Root.IntersectQuery(r, tmin, tmax, query)
+}
+
 type Node struct {
 	Axis   Axis
 	Point  float64
@@ -41,11 +73,15 @@ func NewNode(shapes []Shape) *Node {
 }
 
 func (node *Node) Intersect(r Ray, tmin, tmax float64) Hit {
+	return node.IntersectQuery(r, tmin, tmax, nil)
+}
+
+func (node *Node) IntersectQuery(r Ray, tmin, tmax float64, query *intersectQuery) Hit {
 	var tsplit float64
 	var leftFirst bool
 	switch node.Axis {
 	case AxisNone:
-		return node.IntersectShapes(r)
+		return node.IntersectShapesQuery(r, query)
 	case AxisX:
 		tsplit = (node.Point - r.Origin.X) / r.Direction.X
 		leftFirst = (r.Origin.X < node.Point) || (r.Origin.X == node.Point && r.Direction.X <= 0)
@@ -65,15 +101,15 @@ func (node *Node) Intersect(r Ray, tmin, tmax float64) Hit {
 		second = node.Left
 	}
 	if tsplit > tmax || tsplit <= 0 {
-		return first.Intersect(r, tmin, tmax)
+		return first.IntersectQuery(r, tmin, tmax, query)
 	} else if tsplit < tmin {
-		return second.Intersect(r, tmin, tmax)
+		return second.IntersectQuery(r, tmin, tmax, query)
 	} else {
-		h1 := first.Intersect(r, tmin, tsplit)
+		h1 := first.IntersectQuery(r, tmin, tsplit, query)
 		if h1.T <= tsplit {
 			return h1
 		}
-		h2 := second.Intersect(r, tsplit, math.Min(tmax, h1.T))
+		h2 := second.IntersectQuery(r, tsplit, math.Min(tmax, h1.T), query)
 		if h1.T <= h2.T {
 			return h1
 		} else {
@@ -83,8 +119,46 @@ func (node *Node) Intersect(r Ray, tmin, tmax float64) Hit {
 }
 
 func (node *Node) IntersectShapes(r Ray) Hit {
+	return node.IntersectShapesQuery(r, nil)
+}
+
+// shapeAllowed reports whether a shape participates in a filtered query.
+func shapeAllowed(shape Shape, query *intersectQuery) bool {
+	if query == nil {
+		return true
+	}
+	switch query.mode {
+	case intersectSingle:
+		return shape == query.target
+	case intersectOccluders:
+		// the target light never occludes itself; a different instance of
+		// the same source remains a regular shape and is judged on its own
+		if shape == query.target {
+			return false
+		}
+		if instance, ok := shape.(*LinkedInstance); ok {
+			// visibility does not matter for shadow casting, only CastMask
+			return instance.links.CastMask&query.lightMask != 0
+		}
+		// unwrapped shapes carry every bit
+		return true
+	case intersectVisible:
+		if instance, ok := shape.(*LinkedInstance); ok {
+			return instance.links.Visible
+		}
+		return true
+	}
+	return true
+}
+
+func (node *Node) IntersectShapesQuery(r Ray, query *intersectQuery) Hit {
 	hit := NoHit
 	for _, shape := range node.Shapes {
+		if !shapeAllowed(shape, query) {
+			// a filtered shape is skipped but never ends the search: the
+			// remaining shapes in this leaf can still block the ray
+			continue
+		}
 		h := shape.Intersect(r)
 		if h.T < hit.T {
 			hit = h

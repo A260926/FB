@@ -81,8 +81,51 @@ func main() {
 
 ![Hello World](http://i.imgur.com/FyAmeMx.png)
 
-### Adaptive Sampling
+### Per-Instance Light Links
 
+`NewLinkedInstance` places a shared source shape in the world with its own
+affine transform and a set of `InstanceLinks`. Geometry, materials and
+textures are shared between instances; only the transform and the links are
+per instance. Three 64-bit masks plus a visibility flag control the
+relationships:
+
+- `ReceiveMask` & `EmitMask`: a receiver is lit by a light only when the two
+  masks share a bit.
+- `CastMask` & the light's `EmitMask`: an object casts a shadow toward a light
+  only when the two masks share a bit. Visibility is irrelevant to shadowing.
+- `Visible`: when false, the instance is skipped by camera and all recursive
+  (reflection/refraction/diffuse) rays, but it can still light and shadow
+  others. A hidden near surface never blocks a visible object behind it.
+
+`DefaultInstanceLinks()` sets every mask to all-bits and `Visible=true`, so a
+linked instance behaves like a normal shape. An explicitly zero mask is a
+real zero (use it to opt out), and an `EmitMask` of zero only removes the
+light from explicit direct lighting — its directly visible self-emission is
+unchanged. Unwrapped shapes always act as all-bits.
+
+```go
+links := pt.InstanceLinks{
+    ReceiveMask: 1 << 0, // only receives lights whose EmitMask has bit 0
+    CastMask:    ^uint64(0),
+    Visible:     true,
+}
+instance := pt.NewLinkedInstance(sphere, pt.Translate(pt.V(0, 0, 2)), links)
+instance.SetTransform(newMatrix) // update between frames
+instance.SetLinks(newLinks)
+scene.Compile()                   // rebuild bounds, tree and light list
+```
+
+Direct lighting honors the links: `LightModeAll` accumulates every compatible
+light, while `LightModeRandom` picks one uniformly from the compatible set
+(using the `rnd` passed to `Sample`) and compensates only for that set's size.
+`Scene.OccludedForLight` runs the per-light shadow test through the same
+k-d tree, ignoring visibility and applying the `CastMask`/`EmitMask` test.
+A runnable example that writes a small P3 PPM lives in
+`examples/linked_lights.go`:
+
+    go run examples/linked_lights.go output.ppm
+
+### Adaptive Sampling
 There are several sampling options that can reduce the amount of time needed to converge to an acceptable noise level. Both images below were rendered in 60 seconds. On the left, no advanced features were enabled. On the right, the features listed below were used.
 
 ![Gopher](http://i.imgur.com/nidccRU.png)

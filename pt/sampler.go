@@ -99,7 +99,7 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 					indirect := s.sample(scene, newRay, reflected, 1, depth+1, rnd)
 					direct := Black
 					if s.DirectLighting {
-						direct = s.sampleLights(scene, info.Ray, rnd)
+						direct = s.sampleLights(scene, &info, rnd)
 					}
 					result = result.Add(material.Color.Mul(direct.Add(indirect)).MulScalar(p))
 				}
@@ -121,26 +121,42 @@ func (s *DefaultSampler) sampleEnvironment(scene *Scene, ray Ray) Color {
 	return scene.Color
 }
 
-func (s *DefaultSampler) sampleLights(scene *Scene, n Ray, rnd *rand.Rand) Color {
-	nLights := len(scene.Lights)
-	if nLights == 0 {
+// compatibleLights returns the lights whose EmitMask shares at least one bit
+// with the receiving hit's ReceiveMask. Unwrapped receivers and lights carry
+// every bit, so scenes without LinkedInstances keep their original behavior.
+func (s *DefaultSampler) compatibleLights(scene *Scene, info *HitInfo) []Shape {
+	mask := receiveMask(info)
+	lights := make([]Shape, 0, len(scene.Lights))
+	for _, light := range scene.Lights {
+		if emitMask(light)&mask != 0 {
+			lights = append(lights, light)
+		}
+	}
+	return lights
+}
+
+func (s *DefaultSampler) sampleLights(scene *Scene, info *HitInfo, rnd *rand.Rand) Color {
+	lights := s.compatibleLights(scene, info)
+	if len(lights) == 0 {
+		// no compatible light: return black without drawing any randomness
 		return Black
 	}
 
 	if s.LightMode == LightModeAll {
 		var result Color
-		for _, light := range scene.Lights {
-			result = result.Add(s.sampleLight(scene, n, rnd, light))
+		for _, light := range lights {
+			result = result.Add(s.sampleLight(scene, info, rnd, light))
 		}
 		return result
-	} else {
-		// pick a random light
-		light := scene.Lights[rand.Intn(nLights)]
-		return s.sampleLight(scene, n, rnd, light).MulScalar(float64(nLights))
 	}
+	// pick one light uniformly from the compatible set using the supplied
+	// random source, and compensate only for the compatible set size
+	light := lights[rnd.Intn(len(lights))]
+	return s.sampleLight(scene, info, rnd, light).MulScalar(float64(len(lights)))
 }
 
-func (s *DefaultSampler) sampleLight(scene *Scene, n Ray, rnd *rand.Rand, light Shape) Color {
+func (s *DefaultSampler) sampleLight(scene *Scene, info *HitInfo, rnd *rand.Rand, light Shape) Color {
+	n := info.Ray
 	// get bounding sphere center and radius
 	var center Vector
 	var radius float64
@@ -148,6 +164,12 @@ func (s *DefaultSampler) sampleLight(scene *Scene, n Ray, rnd *rand.Rand, light 
 	case *Sphere:
 		radius = t.Radius
 		center = t.Center
+	case *LinkedInstance:
+		// a linked light's sampling geometry matches a TransformedShape of
+		// the same source and matrix: use its world-space bounding box
+		box := t.BoundingBox()
+		radius = box.OuterRadius()
+		center = box.Center()
 	default:
 		// get bounding sphere from bounding box
 		box := t.BoundingBox()
@@ -183,9 +205,18 @@ func (s *DefaultSampler) sampleLight(scene *Scene, n Ray, rnd *rand.Rand, light 
 		return Black
 	}
 
-	// check for light visibility
-	hit := scene.Intersect(ray)
-	if !hit.Ok() || hit.Shape != light {
+	// phase 1: intersect the light itself to confirm it is hit and measure
+	// the finite distance to it. This query sees only the target shape.
+	lightHit := scene.intersectShape(ray, light)
+	if !lightHit.Ok() {
+		return Black
+	}
+	maxDistance := lightHit.T
+
+	// phase 2: search the same tree for a compatible occluder in front of
+	// the light. A rejected near occluder does not end the search, so a
+	// farther occluder can still block the light.
+	if scene.OccludedForLight(ray, maxDistance, light) {
 		return Black
 	}
 

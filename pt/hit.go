@@ -13,6 +13,10 @@ type HitInfo struct {
 	Ray      Ray
 	Material Material
 	Inside   bool
+	// Instance is the LinkedInstance that produced the hit, or nil when the
+	// hit came from an unwrapped shape. Shape always points at the original
+	// leaf geometry; Position, Normal and Material keep their usual meanings.
+	Instance *LinkedInstance
 }
 
 var NoHit = Hit{nil, INF, nil}
@@ -39,5 +43,5 @@ func (hit *Hit) Info(r Ray) HitInfo {
 		}
 	}
 	ray := Ray{position, normal}
-	return HitInfo{shape, position, normal, ray, material, inside}
+	return HitInfo{shape, position, normal, ray, material, inside, nil}
 }
